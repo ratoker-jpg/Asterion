@@ -38,6 +38,7 @@ const POSITION_COUNT = 24;
 type Point = { x: number; y: number };
 type PlanetNode = Point & { slot: number; name: string; art: string; owned: boolean };
 type AsteroidNode = Point & { id: number; art: string };
+type BeltRock = Point & { id: number; size: number; opacity: number };
 
 type UniverseViewProps = {
   onNotice: (message: string) => void;
@@ -52,15 +53,22 @@ function mulberry32(seed: number) {
   };
 }
 
+/**
+ * Stable 24-position orbital map: four rings, six addressable slots per ring.
+ * A slot always stays in the same visual place in every system, so [G:S:P]
+ * remains readable instead of planets appearing in arbitrary screen positions.
+ */
 function slotPoint(slot: number): Point {
   const ring = Math.floor((slot - 1) / 6);
   const index = (slot - 1) % 6;
-  const radiusX = [18, 27, 36, 44][ring];
-  const radiusY = [13, 20, 27, 34][ring];
-  const angle = ((index * 60) + (ring % 2 ? 30 : 0) - 90) * Math.PI / 180;
+  const radiusX = [19, 28, 36, 44][ring];
+  const radiusY = [22, 27, 32, 37][ring];
+  const offset = [-30, 0, -15, 15][ring];
+  const angle = ((index * 60) + offset) * Math.PI / 180;
+
   return {
     x: 50 + Math.cos(angle) * radiusX,
-    y: 53 + Math.sin(angle) * radiusY,
+    y: 52 + Math.sin(angle) * radiusY,
   };
 }
 
@@ -92,13 +100,26 @@ function makeSystem(system: number) {
   const asteroidCount = 2 + system % 3;
   const asteroids: AsteroidNode[] = Array.from({ length: asteroidCount }, (_, index) => {
     const angle = random() * Math.PI * 2;
-    const radiusX = 27 + random() * 20;
-    const radiusY = 20 + random() * 15;
+    const radiusX = 30 + random() * 16;
+    const radiusY = 24 + random() * 11;
     return {
       id: index,
       x: 50 + Math.cos(angle) * radiusX,
-      y: 53 + Math.sin(angle) * radiusY,
+      y: 52 + Math.sin(angle) * radiusY,
       art: asteroidArts[(system + index) % asteroidArts.length],
+    };
+  });
+
+  const belt: BeltRock[] = Array.from({ length: 38 }, (_, index) => {
+    const angle = (index / 38) * Math.PI * 2 + random() * 0.055;
+    const radiusX = 31.5 + (random() - 0.5) * 2.8;
+    const radiusY = 27.5 + (random() - 0.5) * 2.2;
+    return {
+      id: index,
+      x: 50 + Math.cos(angle) * radiusX,
+      y: 52 + Math.sin(angle) * radiusY,
+      size: 2 + Math.round(random() * 4),
+      opacity: 0.18 + random() * 0.34,
     };
   });
 
@@ -106,13 +127,14 @@ function makeSystem(system: number) {
     star: starArts[(system - 1) % starArts.length],
     planets,
     asteroids,
+    belt,
   };
 }
 
 export function UniverseView({ onNotice }: UniverseViewProps) {
   const [system, setSystem] = useState(1);
   const [showCoords, setShowCoords] = useState(true);
-  const [showEmpty, setShowEmpty] = useState(false);
+  const [focusEmpty, setFocusEmpty] = useState(false);
   const [showAsteroids, setShowAsteroids] = useState(true);
   const systemData = useMemo(() => makeSystem(system), [system]);
   const occupiedSlots = useMemo(() => new Set(systemData.planets.map((planet) => planet.slot)), [systemData]);
@@ -133,47 +155,68 @@ export function UniverseView({ onNotice }: UniverseViewProps) {
         <div className="universe-jump">
           <div className="nav-coordinate nav-coordinate--disabled">
             <span>ГАЛАКТИКА</span>
-            <button className="step" type="button" disabled={GALAXY_COUNT === 1}>‹</button>
+            <button className="step" type="button" disabled aria-label="Предыдущая галактика">◀</button>
             <strong>{GALAXY}<small>/ {GALAXY_COUNT}</small></strong>
-            <button className="step" type="button" disabled={GALAXY_COUNT === 1}>›</button>
+            <button className="step" type="button" disabled aria-label="Следующая галактика">▶</button>
           </div>
-          <div className="nav-coordinate">
+          <div className="nav-coordinate nav-coordinate--system">
             <span>СИСТЕМА</span>
-            <button className="step" type="button" onClick={() => goSystem(system - 1)} disabled={system === 1}>‹</button>
-            <select value={system} onChange={(event) => goSystem(Number(event.target.value))}>
-              {Array.from({ length: SYSTEM_COUNT }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}
+            <button className="step" type="button" onClick={() => goSystem(system - 1)} disabled={system === 1} aria-label="Предыдущая система">◀</button>
+            <select value={system} onChange={(event) => goSystem(Number(event.target.value))} aria-label="Солнечная система">
+              {Array.from({ length: SYSTEM_COUNT }, (_, index) => <option key={index + 1} value={index + 1}>{String(index + 1).padStart(2, '0')}</option>)}
             </select>
             <small>/ {SYSTEM_COUNT}</small>
-            <button className="step" type="button" onClick={() => goSystem(system + 1)} disabled={system === SYSTEM_COUNT}>›</button>
+            <button className="step" type="button" onClick={() => goSystem(system + 1)} disabled={system === SYSTEM_COUNT} aria-label="Следующая система">▶</button>
           </div>
         </div>
       </div>
 
-      <div className="system-index" aria-label="Солнечные системы галактики 1">
-        {Array.from({ length: SYSTEM_COUNT }, (_, index) => {
-          const number = index + 1;
-          return <button key={number} type="button" className={number === system ? 'active' : ''} onClick={() => goSystem(number)}>{number}</button>;
-        })}
-      </div>
-
       <div className="system-scene">
-        <div className="system-caption"><span>ГАЛАКТИКА {GALAXY}</span><strong>СИСТЕМА {String(system).padStart(2, '0')}</strong><small>24 ПЛАНЕТАРНЫЕ ПОЗИЦИИ · ЗВЕЗДА [0]</small></div>
+        <div className="system-caption"><span>ГАЛАКТИКА {GALAXY}</span><strong>СИСТЕМА {String(system).padStart(2, '0')}</strong><small>24 ПЛАНЕТАРНЫЕ ПОЗИЦИИ · ЦЕНТРАЛЬНАЯ ЗВЕЗДА</small></div>
 
         {[0, 1, 2, 3].map((ring) => <div key={ring} className={`system-orbit ring-${ring + 1}`} />)}
-        <img className="system-star" src={systemData.star} alt={`Звезда системы ${system}`} draggable={false} />
-        <span className="star-coordinate">[1:{system}:0]</span>
 
-        {showEmpty ? Array.from({ length: POSITION_COUNT }, (_, index) => index + 1).filter((slot) => !occupiedSlots.has(slot)).map((slot) => {
+        {showAsteroids ? (
+          <div className="procedural-asteroid-belt" aria-hidden="true">
+            {systemData.belt.map((rock) => (
+              <i
+                key={rock.id}
+                className="belt-rock"
+                style={{ '--x': `${rock.x}%`, '--y': `${rock.y}%`, '--size': `${rock.size}px`, '--opacity': rock.opacity, '--delay': `${-(rock.id % 11) * 0.31}s` } as CSSProperties}
+              />
+            ))}
+          </div>
+        ) : null}
+
+        <div className="system-star-wrap" aria-label={`Звезда солнечной системы ${system}`}>
+          <span className="star-aura star-aura--outer" />
+          <span className="star-aura star-aura--inner" />
+          <img className="system-star" src={systemData.star} alt={`Звезда системы ${system}`} draggable={false} />
+        </div>
+
+        {Array.from({ length: POSITION_COUNT }, (_, index) => index + 1).filter((slot) => !occupiedSlots.has(slot)).map((slot) => {
           const point = slotPoint(slot);
-          return <button key={slot} type="button" className="empty-slot" style={{ '--x': `${point.x}%`, '--y': `${point.y}%` } as CSSProperties} onClick={() => onNotice(`Свободная позиция [1:${system}:${slot}].`)}><span>{slot}</span></button>;
-        }) : null}
+          return (
+            <button
+              key={slot}
+              type="button"
+              className={`empty-slot ${focusEmpty ? 'emphasized' : ''}`}
+              style={{ '--x': `${point.x}%`, '--y': `${point.y}%` } as CSSProperties}
+              title={`Свободная позиция [1:${system}:${slot}]`}
+              onClick={() => onNotice(`Свободная позиция [1:${system}:${slot}].`)}
+            >
+              <span>{slot}</span>
+              <small>[1:{system}:{slot}]</small>
+            </button>
+          );
+        })}
 
         {systemData.planets.map((planet) => (
           <button
             type="button"
             key={planet.slot}
             className={`system-planet ${planet.owned ? 'owned' : ''}`}
-            style={{ '--x': `${planet.x}%`, '--y': `${planet.y}%` } as CSSProperties}
+            style={{ '--x': `${planet.x}%`, '--y': `${planet.y}%`, '--delay': `${-(planet.slot % 7) * 0.47}s`, '--spin': `${150 + planet.slot * 3}s` } as CSSProperties}
             onClick={() => onNotice(`${planet.name} · [1:${system}:${planet.slot}]`)}
           >
             <img src={planet.art} alt="" draggable={false} />
@@ -192,9 +235,9 @@ export function UniverseView({ onNotice }: UniverseViewProps) {
       </div>
 
       <aside className="universe-tools">
-        <button type="button" className={showEmpty ? 'active' : ''} onClick={() => setShowEmpty((value) => !value)}><b>▽</b><span>Фильтры</span><small>Свободные слоты</small></button>
+        <button type="button" className={focusEmpty ? 'active' : ''} onClick={() => setFocusEmpty((value) => !value)}><b>▽</b><span>Фильтры</span><small>Свободные позиции</small></button>
         <button type="button" className={showCoords ? 'active' : ''} onClick={() => setShowCoords((value) => !value)}><b>⌖</b><span>Метки</span><small>Координаты</small></button>
-        <button type="button" className={showAsteroids ? 'active' : ''} onClick={() => setShowAsteroids((value) => !value)}><b>◌</b><span>Астероиды</span><small>Поля</small></button>
+        <button type="button" className={showAsteroids ? 'active' : ''} onClick={() => setShowAsteroids((value) => !value)}><b>◌</b><span>Астероиды</span><small>Пояс и поля</small></button>
         <button type="button" onClick={() => onNotice('Маршруты флотов появятся после модуля «Флоты».')}><b>⇄</b><span>Маршруты</span><small>Скоро</small></button>
         <button type="button" onClick={() => onNotice('Глубокий сканер будет связан с технологиями и разведкой.')}><b>◎</b><span>Сканер</span><small>Скоро</small></button>
       </aside>
