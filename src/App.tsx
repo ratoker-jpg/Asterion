@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import './planet-skins.css';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import planetColonized from '../assets/source/starter/planets/planet_colonized.png';
+import planetTerran from '../assets/source/starter/planets/planet_terran.png';
+import planetOceanic from '../assets/source/starter/planets/planet_oceanic.png';
+import planetDesert from '../assets/source/starter/planets/planet_desert.png';
+import planetIce from '../assets/source/starter/planets/planet_ice.png';
+import planetVolcanic from '../assets/source/starter/planets/planet_volcanic.png';
+import planetToxic from '../assets/source/starter/planets/planet_toxic.png';
+import planetBarren from '../assets/source/starter/planets/planet_barren_rocky.png';
+import planetGas from '../assets/source/starter/planets/planet_gas_giant.png';
 import panelLarge from '../assets/source/ui-generated-v1/aegis/panel_frame_large.png';
 import panelMedium from '../assets/source/ui-generated-v1/aegis/panel_frame_medium.png';
 import panelSmall from '../assets/source/ui-generated-v1/aegis/panel_frame_small.png';
@@ -16,6 +25,19 @@ import queueLocked from '../assets/source/ui-generated-v1/aegis/queue_slot_locke
 import resourceChip from '../assets/source/ui-generated-v1/aegis/resource_chip.png';
 import selectionRing from '../assets/source/ui-generated-v1/aegis/selection_ring.png';
 
+const planetSkins = [
+  { id: 'colonized', label: 'Колония', art: planetColonized },
+  { id: 'terran', label: 'Терран', art: planetTerran },
+  { id: 'oceanic', label: 'Океан', art: planetOceanic },
+  { id: 'desert', label: 'Пустыня', art: planetDesert },
+  { id: 'ice', label: 'Ледяная', art: planetIce },
+  { id: 'volcanic', label: 'Вулкан', art: planetVolcanic },
+  { id: 'toxic', label: 'Токсичная', art: planetToxic },
+  { id: 'barren', label: 'Каменная', art: planetBarren },
+  { id: 'gas', label: 'Газовый гигант', art: planetGas },
+] as const;
+
+type PlanetSkin = (typeof planetSkins)[number]['id'];
 type Zone = 'resource' | 'industry' | 'military';
 type QueueItem = { id: 'solar-station'; name: string; startedAt: number; finishAt: number };
 type SaveState = {
@@ -25,6 +47,7 @@ type SaveState = {
   energy: number;
   population: number;
   solarStations: number;
+  planetSkin: PlanetSkin;
   queue: QueueItem | null;
 };
 
@@ -38,14 +61,18 @@ const initialState: SaveState = {
   energy: 140,
   population: 4,
   solarStations: 0,
+  planetSkin: 'colonized',
   queue: null,
 };
-const tabs = ['Планета', 'Вселенная', 'Флоты', 'Операции', 'Наука', 'Командование', 'Отчёты'];
+const tabs = ['Планета', 'Вселенная', 'Флоты', 'Операции', 'Наука', 'Командование', 'Отчёты', 'Рейтинг', 'Настройки'];
 
 function readSave(): SaveState {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
-    return raw ? ({ ...initialState, ...JSON.parse(raw) } as SaveState) : initialState;
+    if (!raw) return initialState;
+    const parsed = JSON.parse(raw) as Partial<SaveState>;
+    const planetSkin = planetSkins.some((skin) => skin.id === parsed.planetSkin) ? parsed.planetSkin as PlanetSkin : 'colonized';
+    return { ...initialState, ...parsed, planetSkin };
   } catch {
     return initialState;
   }
@@ -120,6 +147,7 @@ export function App() {
   const [state, setState] = useState<SaveState>(readSave);
   const [now, setNow] = useState(Date.now());
   const [notice, setNotice] = useState('Система готова. Локальное сохранение активно.');
+  const [skinOpen, setSkinOpen] = useState(false);
 
   useEffect(() => localStorage.setItem(SAVE_KEY, JSON.stringify(state)), [state]);
   useEffect(() => {
@@ -133,6 +161,11 @@ export function App() {
       : current);
     setNotice('Солнечная станция построена. Производство энергии увеличено.');
   }, [now, state.queue]);
+
+  const selectedPlanet = useMemo(
+    () => planetSkins.find((skin) => skin.id === state.planetSkin) ?? planetSkins[0],
+    [state.planetSkin],
+  );
 
   const progress = useMemo(() => {
     if (!state.queue) return 0;
@@ -154,12 +187,20 @@ export function App() {
   const reset = () => {
     localStorage.removeItem(SAVE_KEY);
     setState(initialState);
+    setSkinOpen(false);
     setNotice('Сохранение прототипа сброшено.');
   };
 
   const chooseTab = (tab: string) => {
     setActiveTab(tab);
+    setSkinOpen(false);
     if (tab !== 'Планета') setNotice(`Экран «${tab}» будет следующим модулем.`);
+  };
+
+  const chooseSkin = (skin: (typeof planetSkins)[number]) => {
+    setState((current) => ({ ...current, planetSkin: skin.id }));
+    setSkinOpen(false);
+    setNotice(`Облик Helion 01 изменён: ${skin.label}.`);
   };
 
   const zoneLabel = zone === 'resource' ? 'РЕСУРСНАЯ ЗОНА' : zone === 'industry' ? 'ПРОМЫШЛЕННАЯ ЗОНА' : 'ВОЕННАЯ ЗОНА';
@@ -211,7 +252,24 @@ export function App() {
 
           <Frame art={panelMedium} className="passport-panel">
             <p className="eyebrow">ПАСПОРТ ПЛАНЕТЫ</p>
-            <div className="planet-selector"><span className="mini-planet"><img src={planetColonized} alt="" /></span><span><strong>Helion 01</strong><small>SYSTEM-1-1</small></span><i>⌄</i></div>
+            <button className="planet-selector" type="button" onClick={() => setSkinOpen((open) => !open)}>
+              <span className="mini-planet"><img src={selectedPlanet.art} alt="" /></span>
+              <span><strong>Helion 01</strong><small>ОБЛИК: {selectedPlanet.label.toUpperCase()}</small></span>
+              <i>{skinOpen ? '⌃' : '⌄'}</i>
+            </button>
+            {skinOpen ? (
+              <div className="planet-skin-menu">
+                <p>ВЫБРАТЬ ОБЛИК ПЛАНЕТЫ</p>
+                <div>
+                  {planetSkins.map((skin) => (
+                    <button key={skin.id} type="button" className={state.planetSkin === skin.id ? 'active' : ''} onClick={() => chooseSkin(skin)}>
+                      <img src={skin.art} alt="" />
+                      <span>{skin.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <dl>
               <div><dt>Тип</dt><dd>Колонизированная</dd></div>
               <div><dt>Фракция</dt><dd>Aegis</dd></div>
@@ -228,7 +286,7 @@ export function App() {
           <div className="scene-title"><small>{zoneLabel}</small><h1>HELION 01</h1><p>SYSTEM-1-1 • AEGIS COLONY</p></div>
           <div className="orbit orbit--outer" /><div className="orbit orbit--inner" />
           <img className="selection-ring" src={selectionRing} alt="" draggable={false} />
-          <img className="planet-image" src={planetColonized} alt="Helion 01" draggable={false} />
+          <img className="planet-image" src={selectedPlanet.art} alt="Helion 01" draggable={false} />
           <div className="planet-status"><span>◆</span> СТАБИЛЬНО <i /> ONLINE</div>
           <Frame art={panelLarge} className="notice-panel"><span>{notice}</span><button onClick={reset}>СБРОСИТЬ ПРОТОТИП</button></Frame>
         </main>
