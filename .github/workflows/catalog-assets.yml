@@ -1,0 +1,153 @@
+name: Catalog assets
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/catalog-assets.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Asterion
+        uses: actions/checkout@v4
+
+      - name: Generate asset catalog
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from collections import Counter, defaultdict
+          import csv
+
+          root = Path('assets/source')
+          docs = Path('docs')
+          docs.mkdir(exist_ok=True)
+
+          files = sorted(p for p in root.rglob('*') if p.is_file())
+          total_bytes = sum(p.stat().st_size for p in files)
+
+          def human(n):
+              units = ['B','KB','MB','GB']
+              x = float(n)
+              for u in units:
+                  if x < 1024 or u == units[-1]:
+                      return f'{x:.1f} {u}' if u != 'B' else f'{int(x)} B'
+                  x /= 1024
+
+          top = Counter()
+          second = Counter()
+          ext = Counter()
+          visual = Counter()
+          faction_like = defaultdict(set)
+
+          visual_terms = {
+              'buildings':'buildings', 'building':'buildings',
+              'ships':'ships', 'ship':'ships', 'fleets':'ships', 'fleet':'ships',
+              'planets':'planets', 'planet':'planets',
+              'defense':'defense', 'defence':'defense', 'defenses':'defense', 'defences':'defense',
+              'background':'backgrounds', 'backgrounds':'backgrounds', 'space':'backgrounds',
+              'ui':'ui', 'icons':'icons', 'icon':'icons',
+              'portraits':'portraits', 'portrait':'portraits',
+              'research':'research', 'technology':'research', 'technologies':'research',
+              'resources':'resources', 'resource':'resources',
+              'effects':'effects', 'effect':'effects', 'fx':'effects',
+              'weapons':'weapons', 'weapon':'weapons',
+              'stations':'stations', 'station':'stations'
+          }
+
+          rows = []
+          for p in files:
+              rel = p.relative_to(root)
+              parts = rel.parts
+              top[parts[0] if parts else '.'] += 1
+              if len(parts) >= 2:
+                  second[f'{parts[0]}/{parts[1]}'] += 1
+              suffix = p.suffix.lower() or '(none)'
+              ext[suffix] += 1
+
+              lowered_parts = [x.lower() for x in parts]
+              matched = set()
+              for part in lowered_parts:
+                  norm = part.replace('_','-').replace(' ','-')
+                  for key, category in visual_terms.items():
+                      if key in norm:
+                          matched.add(category)
+              for category in matched:
+                  visual[category] += 1
+
+              if len(parts) >= 3 and lowered_parts[1] in {'buildings','ships','defense','defence','planets','portraits'}:
+                  faction_like[lowered_parts[1]].add(parts[2])
+
+              rows.append([
+                  str(rel).replace('\\','/'),
+                  parts[0] if parts else '',
+                  parts[1] if len(parts) > 1 else '',
+                  suffix,
+                  p.stat().st_size,
+                  human(p.stat().st_size)
+              ])
+
+          with (docs/'assets-inventory.tsv').open('w', encoding='utf-8', newline='') as f:
+              w = csv.writer(f, delimiter='\t')
+              w.writerow(['path','top_level','second_level','extension','bytes','size'])
+              w.writerows(rows)
+
+          lines = []
+          lines += ['# Asterion asset catalog', '',
+                    '> Generated from `assets/source`. This is a factual inventory of the imported source assets.', '',
+                    '## Summary', '',
+                    f'- Files: **{len(files):,}**',
+                    f'- Total size: **{human(total_bytes)}**',
+                    f'- Top-level source groups: **{len(top)}**', '',
+                    '## Top-level groups', '',
+                    '| Group | Files |', '|---|---:|']
+          for k,v in top.most_common():
+              lines.append(f'| `{k}` | {v:,} |')
+
+          lines += ['', '## Second-level groups', '', '| Group | Files |', '|---|---:|']
+          for k,v in second.most_common():
+              lines.append(f'| `{k}` | {v:,} |')
+
+          lines += ['', '## File types', '', '| Extension | Files |', '|---|---:|']
+          for k,v in ext.most_common():
+              lines.append(f'| `{k}` | {v:,} |')
+
+          lines += ['', '## Visual categories detected from paths', '',
+                    'These counts are path-based and may overlap: one file can match more than one category.', '',
+                    '| Category | Matching files |', '|---|---:|']
+          for k,v in visual.most_common():
+              lines.append(f'| `{k}` | {v:,} |')
+
+          if faction_like:
+              lines += ['', '## Faction / variant directories detected', '']
+              for category in sorted(faction_like):
+                  vals = ', '.join(f'`{x}`' for x in sorted(faction_like[category]))
+                  lines.append(f'- **{category}**: {vals}')
+
+          lines += ['', '## Full inventory', '',
+                    'See [`assets-inventory.tsv`](./assets-inventory.tsv) for every file, its source group, extension and byte size.', '',
+                    '## Working rule for Asterion', '',
+                    '- `assets/source` remains the raw imported library.',
+                    '- Runtime-ready assets should later be copied/processed into a separate `assets/runtime` tree.',
+                    '- Do not rename or delete source files until the first playable slice confirms what is actually used.', '']
+
+          (docs/'assets-catalog.md').write_text('\n'.join(lines), encoding='utf-8')
+          PY
+
+      - name: Commit catalog
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/assets-catalog.md docs/assets-inventory.tsv
+          if git diff --cached --quiet; then
+            echo "No catalog changes."
+            exit 0
+          fi
+          git commit -m "docs: catalog imported Asterion assets"
+          git push
