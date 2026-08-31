@@ -1,96 +1,268 @@
-# Asterion asset catalog
+# Asterion — Asset Library
 
-> Generated from `assets/source`. This is a factual inventory of the imported source assets.
+Полный рабочий каталог исходных ассетов проекта. Источник: `assets/source`.
 
-## Summary
+## Общая сводка
 
-- Files: **437**
-- Total size: **607.8 MB**
-- Top-level source groups: **6**
+- **437 файлов**
+- **607.8 MB**
+- **434 PNG**
+- **3 Markdown-файла**
+- основные фракции: **Aegis**, **Synod**, **Veyra**
 
-## Top-level groups
+Полный построчный список всех файлов находится в [`assets-inventory.tsv`](./assets-inventory.tsv).
 
-| Group | Files |
+---
+
+## 1. `New assets` — расширенный игровой набор
+
+**174 PNG**.
+
+| Категория | Файлов | Назначение |
+|---|---:|---|
+| `buildings` | 72 | здания трёх фракций |
+| `ship` | 39 | корабли трёх фракций |
+| `defenses` | 27 | оборонительные сооружения / системы |
+| `technologies` | 23 | изображения технологий |
+| `comander_ship` | 13 | командирские корабли |
+
+### Фракционная структура
+
+Здания и корабли разложены по трём отдельным вариантам:
+
+- `aegis`
+- `synod`
+- `veyra`
+
+### Роль в Asterion
+
+Это основной расширенный набор для игровых каталогов: здания, корабли, оборона, технологии и командирские корабли.
+
+---
+
+## 2. `faction-delivery-v1` — основной согласованный фракционный пакет
+
+**108 файлов**.
+
+| Категория | Файлов | Содержание |
+|---|---:|---|
+| `ships` | 39 | 13 игровых семейств × 3 фракции |
+| `building_sheets` | 54 | 18 ролей × 3 фракции; L1–L4 на одном sheet |
+| `ui` | 9 | первые фракционные UI-скины |
+| `territories` | 3 | resource / industry / military |
+| `previews` | 2 | QA / preview изображения |
+| `PACKAGE_NOTES.md` | 1 | описание пакета |
+
+### Корабли — 13 семейств на каждую фракцию
+
+Пакет покрывает следующие игровые семейства:
+
+- satellite
+- scout / spy
+- cargo
+- large cargo
+- colony
+- recycler
+- fighter
+- interceptor
+- shield bot
+- frigate / armada line
+- goliath
+- bomber
+- titan
+
+Итого: **39 кораблей = 13 × Aegis/Synod/Veyra**.
+
+### Здания
+
+В пакете **18 семейств зданий × 3 фракции = 54 sheets**:
+
+- command centre
+- research lab
+- shipyard
+- defence platform
+- bank
+- robotics factory
+- missile battery
+- shield generator
+- metal extractor
+- crystal refinery
+- gas extractor
+- solar plant
+- storage hub
+- water processor
+- hydroponics dome
+- ore processor
+- crystal vault
+- gas reservoir
+
+Каждый building sheet содержит **L1–L4** в четырёх кадрах `512×512`.
+
+### Фракционный визуальный язык
+
+- **Aegis** — navy steel, угловатая броня, cyan-сигналы, restrained amber accents.
+- **Synod** — ivory ceramic, teal crystal/glass, gold structure, симметричная high-tech архитектура.
+- **Veyra** — crimson-black bio-mechanical/chitin стиль, красная внутренняя энергия, асимметрия.
+
+### UI
+
+Сейчас есть только первые **9 UI assets**:
+
+- `panel_frame`
+- `primary_button`
+- `active_tab`
+
+по одному варианту на каждую из трёх фракций.
+
+Изначально планировалось 63 UI-ассета, поэтому **полный UI-пак пока не закончен**.
+
+### Роль в Asterion
+
+Этот пакет считаем **главным эталоном фракционной стилистики**.
+
+---
+
+## 3. `universe-navigation` — карта вселенной и систем
+
+**90 PNG**.
+
+| Категория | Файлов |
 |---|---:|
-| `New assets` | 174 |
-| `faction-delivery-v1` | 108 |
-| `universe-navigation` | 90 |
-| `starter` | 54 |
-| `generated-factions-v1` | 10 |
-| `README.md` | 1 |
+| `planets` | 24 |
+| `galaxies` | 20 |
+| `system-stars` | 12 |
+| `active-suns` | 8 |
+| `asteroids` | 8 |
+| `debris` | 6 |
+| `renegades` | 6 |
+| `markers` | 2 |
+| `protostars` | 2 |
+| `stellar-remnants` | 2 |
 
-## Second-level groups
+### Роль в Asterion
 
-| Group | Files |
+Это основной набор для:
+
+- экрана Вселенной;
+- солнечных систем;
+- планет;
+- звёзд;
+- астероидных объектов;
+- обломков;
+- нейтральных / враждебных объектов;
+- маркеров карты.
+
+Для первого vertical slice новый набор планет генерировать **не требуется** — уже есть 24 варианта только в этом пакете.
+
+---
+
+## 4. `starter` — базовый прототипный набор
+
+**54 файла:** 53 PNG + `manifest.md`.
+
+| Категория | Файлов |
 |---|---:|
-| `New assets/buildings` | 72 |
-| `faction-delivery-v1/building_sheets` | 54 |
-| `New assets/ship` | 39 |
-| `faction-delivery-v1/ships` | 39 |
-| `New assets/defenses` | 27 |
-| `universe-navigation/planets` | 24 |
-| `New assets/technologies` | 23 |
-| `universe-navigation/galaxies` | 20 |
-| `New assets/comander_ship` | 13 |
-| `universe-navigation/system-stars` | 12 |
-| `faction-delivery-v1/ui` | 9 |
-| `generated-factions-v1/factions` | 9 |
-| `starter/factions` | 9 |
-| `starter/planets` | 9 |
-| `starter/asteroids` | 8 |
-| `starter/buildings` | 8 |
-| `universe-navigation/active-suns` | 8 |
-| `universe-navigation/asteroids` | 8 |
-| `starter/ships` | 6 |
-| `starter/stars` | 6 |
-| `universe-navigation/debris` | 6 |
-| `universe-navigation/renegades` | 6 |
-| `starter/pirates` | 4 |
-| `faction-delivery-v1/territories` | 3 |
-| `faction-delivery-v1/previews` | 2 |
-| `starter/backgrounds` | 2 |
-| `universe-navigation/markers` | 2 |
-| `universe-navigation/protostars` | 2 |
-| `universe-navigation/stellar-remnants` | 2 |
-| `faction-delivery-v1/PACKAGE_NOTES.md` | 1 |
-| `generated-factions-v1/previews` | 1 |
-| `starter/manifest.md` | 1 |
-| `starter/preview` | 1 |
+| `factions` | 9 |
+| `planets` | 9 |
+| `asteroids` | 8 |
+| `buildings` | 8 |
+| `ships` | 6 |
+| `stars` | 6 |
+| `pirates` | 4 |
+| `backgrounds` | 2 |
+| `preview` | 1 |
+| `manifest.md` | 1 |
 
-## File types
+### Faction art
 
-| Extension | Files |
-|---|---:|
-| `.png` | 434 |
-| `.md` | 3 |
+Для каждой из трёх фракций есть:
 
-## Visual categories detected from paths
+- `hero`
+- `emblem`
+- `card_bg`
 
-These counts are path-based and may overlap: one file can match more than one category.
+то есть **3 изображения × 3 фракции = 9**.
 
-| Category | Matching files |
-|---|---:|
-| `ui` | 144 |
-| `buildings` | 134 |
-| `ships` | 107 |
-| `planets` | 38 |
-| `defense` | 32 |
-| `research` | 30 |
-| `backgrounds` | 6 |
-| `resources` | 1 |
+### Прочее
 
-## Faction / variant directories detected
+- 2 готовых background: galaxy + system;
+- 6 типов звёзд;
+- 8 типов планет + colonized planet;
+- 8 астероидов;
+- 4 пиратских объекта;
+- 6 базовых кораблей;
+- 8 building sheets с L1–L4.
 
-- **buildings**: `aegis`, `command_center_sheet.png`, `crystal_refinery_sheet.png`, `defense_platform_sheet.png`, `gas_extractor_sheet.png`, `metal_extractor_sheet.png`, `research_lab_sheet.png`, `shipyard_sheet.png`, `solar_plant_sheet.png`, `synod`, `veyra`
-- **planets**: `planet.variant-01.png`, `planet.variant-02.png`, `planet.variant-03.png`, `planet.variant-04.png`, `planet.variant-05.png`, `planet.variant-06.png`, `planet.variant-07.png`, `planet.variant-08.png`, `planet.variant-09.png`, `planet.variant-10.png`, `planet.variant-11.png`, `planet.variant-12.png`, `planet.variant-13.png`, `planet.variant-14.png`, `planet.variant-15.png`, `planet.variant-16.png`, `planet.variant-17.png`, `planet.variant-18.png`, `planet.variant-19.png`, `planet.variant-20.png`, `planet.variant-21.png`, `planet.variant-22.png`, `planet.variant-23.png`, `planet.variant-24.png`, `planet_barren_rocky.png`, `planet_colonized.png`, `planet_desert.png`, `planet_gas_giant.png`, `planet_ice.png`, `planet_oceanic.png`, `planet_terran.png`, `planet_toxic.png`, `planet_volcanic.png`
-- **ships**: `aegis_bomber_ship.png`, `aegis_cargo_ship.png`, `aegis_colony_ship.png`, `aegis_fighter_ship.png`, `aegis_frigate_ship.png`, `aegis_goliath_ship.png`, `aegis_interceptor_ship.png`, `aegis_large_cargo_ship.png`, `aegis_recycler_ship.png`, `aegis_scout_ship.png`, `aegis_shield_bot_ship.png`, `aegis_solar_satellite_ship.png`, `aegis_titan_ship.png`, `cargo_ship.png`, `colony_ship.png`, `fighter_ship.png`, `frigate_ship.png`, `recycler_ship.png`, `scout_ship.png`, `synod_bomber_ship.png`, `synod_cargo_ship.png`, `synod_colony_ship.png`, `synod_fighter_ship.png`, `synod_frigate_ship.png`, `synod_goliath_ship.png`, `synod_interceptor_ship.png`, `synod_large_cargo_ship.png`, `synod_recycler_ship.png`, `synod_scout_ship.png`, `synod_shield_bot_ship.png`, `synod_solar_satellite_ship.png`, `synod_titan_ship.png`, `veyra_bomber_ship.png`, `veyra_cargo_ship.png`, `veyra_colony_ship.png`, `veyra_fighter_ship.png`, `veyra_frigate_ship.png`, `veyra_goliath_ship.png`, `veyra_interceptor_ship.png`, `veyra_large_cargo_ship.png`, `veyra_recycler_ship.png`, `veyra_scout_ship.png`, `veyra_shield_bot_ship.png`, `veyra_solar_satellite_ship.png`, `veyra_titan_ship.png`
+### Роль в Asterion
 
-## Full inventory
+Используем как **fallback / быстрый прототипный пакет**, когда для экрана ещё не выбран финальный расширенный ассет.
 
-See [`assets-inventory.tsv`](./assets-inventory.tsv) for every file, its source group, extension and byte size.
+---
 
-## Working rule for Asterion
+## 5. `generated-factions-v1` — альтернативные faction arts
 
-- `assets/source` remains the raw imported library.
-- Runtime-ready assets should later be copied/processed into a separate `assets/runtime` tree.
-- Do not rename or delete source files until the first playable slice confirms what is actually used.
+**10 PNG**.
+
+- 9 faction images;
+- 1 preview.
+
+Для **Aegis / Synod / Veyra** снова присутствуют:
+
+- `hero`
+- `emblem`
+- `card_bg`
+
+Названия пересекаются со `starter/factions`, поэтому этот каталог считаем **альтернативной версией**, а не отдельным новым набором сущностей.
+
+Ничего отсюда пока не удаляем — финальный вариант выберем визуально при сборке экрана выбора расы.
+
+---
+
+## Что у нас уже закрыто ассетами
+
+На текущем этапе уже есть достаточная база для:
+
+- выбора одной из 3 рас;
+- главного экрана планеты;
+- разных типов планет;
+- экрана Вселенной;
+- звёздных систем;
+- астероидов и космических объектов;
+- ресурсной / промышленной / военной территории;
+- строительства зданий;
+- уровней зданий L1–L4;
+- каталога кораблей;
+- каталога обороны;
+- технологий;
+- командирских кораблей;
+- пиратов / нейтральных целей;
+- первых faction-specific UI элементов.
+
+## Чего пока объективно не хватает / требует проверки
+
+### 1. Полный UI kit
+
+Фракционный пакет содержит только **9 из планировавшихся 63 UI assets**. Сам интерфейс Asterion разумнее строить HTML/CSS, поэтому недостающую часть не обязательно дорисовывать картинками: рамки, табы, кнопки, состояния и панели можно реализовать кодом.
+
+### 2. Финальный выбор дублирующихся faction arts
+
+`starter/factions` и `generated-factions-v1/factions` содержат одинаковые классы изображений с разными версиями. Выбор делаем визуально, не удаляя исходники.
+
+### 3. Runtime-оптимизация
+
+Исходные PNG крупные. `assets/source` не должен напрямую стать production/runtime-папкой приложения.
+
+---
+
+## Правило структуры Asterion
+
+```text
+assets/
+├── source/      # исходная библиотека; не ломаем и не переименовываем
+├── manifests/   # импортированные метаданные / старые привязки
+└── runtime/     # позже: только выбранные и оптимизированные игровые ассеты
+```
+
+`assets/runtime` создаём только когда начнём первый реальный экран игры.
+
+До этого момента **ничего из `assets/source` не удаляем**.
