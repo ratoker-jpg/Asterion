@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "auditRoots": [
+    {
+      "path": "assets/source",
+      "classification": "source"
+    },
+    {
+      "path": "public/assets",
+      "classification": "runtime-existing"
+    }
+  ],
+  "classificationOverrides": [
+    {
+      "prefix": "assets/source/universe-navigation",
+      "classification": "source-intake"
+    },
+    {
+      "prefix": "public/assets/generated",
+      "classification": "generated-runtime"
+    }
+  ],
+  "generatedRuntimeRoot": "public/assets/generated",
+  "auditManifestPath": "assets/manifests/source-asset-audit.json",
+  "auditReportPath": "docs/assets/generated-asset-audit.md",
+  "processingPlanPath": "assets/manifests/runtime-processing-plan.json",
+  "atlasPlanPath": "assets/manifests/runtime-atlas-plan.json",
+  "runtimeManifestPath": "public/assets/generated/runtime-asset-manifest.json",
+  "supportedExtensions": [
+    ".png",
+    ".webp",
+    ".jpg",
+    ".jpeg",
+    ".svg"
+  ],
+  "expectedIntake": {
+    "newAssetsCount": 174,
+    "universeCount": 90
+  },
+  "budgets": {
+    "generatedRuntimeTotalBytes": 50331648,
+    "generatedRuntimeDecodedBytes": 201326592,
+    "generatedRuntimeTextureCount": 512,
+    "singleRuntimeTexturePixels": 4194304
+  },
+  "families": {
+    "building": {
+      "runtimeSizes": [
+        256,
+        384
+      ],
+      "preferredFormat": "webp",
+      "quality": 88
+    },
+    "technology": {
+      "runtimeSizes": [
+        128,
+        192,
+        256
+      ],
+      "preferredFormat": "webp",
+      "quality": 88
+    },
+    "ship": {
+      "runtimeSizes": [
+        256,
+        384,
+        512
+      ],
+      "preferredFormat": "webp",
+      "quality": 90
+    },
+    "defense": {
+      "runtimeSizes": [
+        256,
+        384
+      ],
+      "preferredFormat": "webp",
+      "quality": 90
+    },
+    "commander": {
+      "runtimeSizes": [
+        384,
+        512
+      ],
+      "preferredFormat": "webp",
+      "quality": 91
+    },
+    "universe-galaxy": {
+      "runtimeSizes": [
+        256
+      ],
+      "preferredFormat": "webp",
+      "quality": 88
+    },
+    "universe-system-star": {
+      "runtimeSizes": [
+        128
+      ],
+      "preferredFormat": "webp",
+      "quality": 88
+    },
+    "universe-sun": {
+      "runtimeSizes": [
+        128,
+        512
+      ],
+      "preferredFormat": "webp",
+      "quality": 90
+    },
+    "universe-planet": {
+      "runtimeSizes": [
+        256
+      ],
+      "preferredFormat": "webp",
+      "quality": 90
+    },
+    "universe-object": {
+      "runtimeSizes": [
+        192,
+        256
+      ],
+      "preferredFormat": "webp",
+      "quality": 88
+    },
+    "universe-marker": {
+      "runtimeSizes": [
+        128
+      ],
+      "preferredFormat": "webp",
+      "quality": 90
+    },
+    "runtime-other": {
+      "runtimeSizes": [],
+      "preferredFormat": "source",
+      "quality": 0
+    }
+  },
+  "legacyDirectSourceReferences": [
+    "src/assets/galaxyFleetRuntimeAssets.ts",
+    "src/assets/generatedFactionIdentityAssets.ts",
+    "src/assets/planetIndustryRuntimeAssets.ts"
+  ],
+  "mechanicalBindingsPath": "assets/manifests/mechanical-runtime-bindings.json",
+  "runtimeTypeScriptManifestPath": "src/assets/generated/runtimeAssetManifest.generated.ts",
+  "universeSourceRoot": "assets/source/universe-navigation",
+  "spaceMapBindingsPath": "assets/manifests/space-map-runtime-bindings.json",
+  "spaceMapTypeScriptManifestPath": "src/assets/generated/spaceMapAssetManifest.generated.ts",
+  "spaceMapQaRoot": "docs/assets/qa/universe",
+  "spaceMapQaContactSheetCount": 18,
+  "spaceMapBudgets": {
+    "sourceFiles": 90,
+    "runtimeTextures": 102,
+    "transferBytes": 16777216,
+    "decodedBytes": 29458432,
+    "universeViewDecodedBytes": 8388608,
+    "galaxyViewDecodedBytes": 6291456,
+    "solarSystemViewDecodedBytes": 20971520,
+    "totalTransferBytes": 16777216,
+    "totalDecodedBytes": 29458432,
+    "minimumTransparentMarginRatio": 0.03,
+    "viewDecodedBytes": {
+      "universe": 8388608,
+      "galaxy": 6291456,
+      "solar-system": 20971520
+    }
+  },
+  "spaceMapRuntimeTypeScriptManifestPath": "src/assets/generated/spaceMapAssetManifest.generated.ts"
+}

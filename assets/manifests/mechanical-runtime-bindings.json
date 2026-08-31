@@ -1,0 +1,2175 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "mechanicalId": "building.aegis.aksum-obelisk",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.galactic-obelisk",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.galactic-obelisk.png",
+      "runtimeSemanticId": "building.aegis.aksum-obelisk",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/aksum-obelisk.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.bank",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.bank",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.bank.png",
+      "runtimeSemanticId": "building.aegis.bank",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/bank.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.bunker",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.hangar",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.hangar.png",
+      "runtimeSemanticId": "building.aegis.bunker",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/bunker.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.construction",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.construction",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.construction.png",
+      "runtimeSemanticId": "building.aegis.construction",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/construction.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.control-chamber",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.planetary-government",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.planetary-government.png",
+      "runtimeSemanticId": "building.aegis.control-chamber",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/control-chamber.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.experimental-center",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.research",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.research.png",
+      "runtimeSemanticId": "building.aegis.experimental-center",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/experimental-center.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.gas-chamber",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.gas-storage",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.gas-storage.png",
+      "runtimeSemanticId": "building.aegis.gas-chamber",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/gas-chamber.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.gas-probe-1",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.gas-production-1",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.gas-production-1.png",
+      "runtimeSemanticId": "building.aegis.gas-probe-1",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/gas-probe-1.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.gas-probe-2",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.gas-production-2",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.gas-production-2.png",
+      "runtimeSemanticId": "building.aegis.gas-probe-2",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/gas-probe-2.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.infrared-bot",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.basic-energy",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.basic-energy.png",
+      "runtimeSemanticId": "building.aegis.infrared-bot",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/infrared-bot.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.metal-bot-1",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.metal-production-1",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.metal-production-1.png",
+      "runtimeSemanticId": "building.aegis.metal-bot-1",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/metal-bot-1.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.metal-bot-2",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.metal-production-2",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.metal-production-2.png",
+      "runtimeSemanticId": "building.aegis.metal-bot-2",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/metal-bot-2.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.metal-bot-3",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.metal-production-3",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.metal-production-3.png",
+      "runtimeSemanticId": "building.aegis.metal-bot-3",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/metal-bot-3.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.metal-vault",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.metal-storage",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.metal-storage.png",
+      "runtimeSemanticId": "building.aegis.metal-vault",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/metal-vault.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.mineral-bot-1",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.mineral-production-1",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.mineral-production-1.png",
+      "runtimeSemanticId": "building.aegis.mineral-bot-1",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/mineral-bot-1.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.mineral-bot-2",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.mineral-production-2",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.mineral-production-2.png",
+      "runtimeSemanticId": "building.aegis.mineral-bot-2",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/mineral-bot-2.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.mineral-treasury",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.mineral-storage",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.mineral-storage.png",
+      "runtimeSemanticId": "building.aegis.mineral-treasury",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/mineral-treasury.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.scrapyard",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.recycling",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.recycling.png",
+      "runtimeSemanticId": "building.aegis.scrapyard",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/scrapyard.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.shipyard",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.shipyard",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.shipyard.png",
+      "runtimeSemanticId": "building.aegis.shipyard",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/shipyard.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.spaceport",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.spaceport",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.spaceport.png",
+      "runtimeSemanticId": "building.aegis.spaceport",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/spaceport.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.supreme-galactic-gates",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.supreme-galactic-gates",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.supreme-galactic-gates.png",
+      "runtimeSemanticId": "building.aegis.supreme-galactic-gates",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/supreme-galactic-gates.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.teret-factory",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.advanced-factory",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.advanced-factory.png",
+      "runtimeSemanticId": "building.aegis.teret-factory",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/teret-factory.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.trade-center",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.trade-center",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.trade-center.png",
+      "runtimeSemanticId": "building.aegis.trade-center",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/trade-center.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.aegis.uranium-bot",
+      "category": "building",
+      "sourceSemanticId": "building.aegis.advanced-energy",
+      "sourcePath": "assets/source/New assets/buildings/aegis/building.aegis.advanced-energy.png",
+      "runtimeSemanticId": "building.aegis.uranium-bot",
+      "outputPath": "public/assets/generated/catalog/buildings/aegis/uranium-bot.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.aksum-obelisk",
+      "category": "building",
+      "sourceSemanticId": "building.synod.galactic-obelisk",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.galactic-obelisk.png",
+      "runtimeSemanticId": "building.synod.aksum-obelisk",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/aksum-obelisk.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.bank",
+      "category": "building",
+      "sourceSemanticId": "building.synod.bank",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.bank.png",
+      "runtimeSemanticId": "building.synod.bank",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/bank.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.bunker",
+      "category": "building",
+      "sourceSemanticId": "building.synod.hangar",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.hangar.png",
+      "runtimeSemanticId": "building.synod.bunker",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/bunker.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.construction",
+      "category": "building",
+      "sourceSemanticId": "building.synod.construction",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.construction.png",
+      "runtimeSemanticId": "building.synod.construction",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/construction.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.control-chamber",
+      "category": "building",
+      "sourceSemanticId": "building.synod.planetary-government",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.planetary-government.png",
+      "runtimeSemanticId": "building.synod.control-chamber",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/control-chamber.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.experimental-center",
+      "category": "building",
+      "sourceSemanticId": "building.synod.research",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.research.png",
+      "runtimeSemanticId": "building.synod.experimental-center",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/experimental-center.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.gas-chamber",
+      "category": "building",
+      "sourceSemanticId": "building.synod.gas-storage",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.gas-storage.png",
+      "runtimeSemanticId": "building.synod.gas-chamber",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/gas-chamber.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.gas-probe-1",
+      "category": "building",
+      "sourceSemanticId": "building.synod.gas-production-1",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.gas-production-1.png",
+      "runtimeSemanticId": "building.synod.gas-probe-1",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/gas-probe-1.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.gas-probe-2",
+      "category": "building",
+      "sourceSemanticId": "building.synod.gas-production-2",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.gas-production-2.png",
+      "runtimeSemanticId": "building.synod.gas-probe-2",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/gas-probe-2.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.infrared-bot",
+      "category": "building",
+      "sourceSemanticId": "building.synod.basic-energy",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.basic-energy.png",
+      "runtimeSemanticId": "building.synod.infrared-bot",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/infrared-bot.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.metal-bot-1",
+      "category": "building",
+      "sourceSemanticId": "building.synod.metal-production-1",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.metal-production-1.png",
+      "runtimeSemanticId": "building.synod.metal-bot-1",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/metal-bot-1.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.metal-bot-2",
+      "category": "building",
+      "sourceSemanticId": "building.synod.metal-production-2",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.metal-production-2.png",
+      "runtimeSemanticId": "building.synod.metal-bot-2",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/metal-bot-2.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.metal-bot-3",
+      "category": "building",
+      "sourceSemanticId": "building.synod.metal-production-3",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.metal-production-3.png",
+      "runtimeSemanticId": "building.synod.metal-bot-3",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/metal-bot-3.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.metal-vault",
+      "category": "building",
+      "sourceSemanticId": "building.synod.metal-storage",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.metal-storage.png",
+      "runtimeSemanticId": "building.synod.metal-vault",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/metal-vault.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.mineral-bot-1",
+      "category": "building",
+      "sourceSemanticId": "building.synod.mineral-production-1",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.mineral-production-1.png",
+      "runtimeSemanticId": "building.synod.mineral-bot-1",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/mineral-bot-1.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.mineral-bot-2",
+      "category": "building",
+      "sourceSemanticId": "building.synod.mineral-production-2",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.mineral-production-2.png",
+      "runtimeSemanticId": "building.synod.mineral-bot-2",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/mineral-bot-2.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.mineral-treasury",
+      "category": "building",
+      "sourceSemanticId": "building.synod.mineral-storage",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.mineral-storage.png",
+      "runtimeSemanticId": "building.synod.mineral-treasury",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/mineral-treasury.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.scrapyard",
+      "category": "building",
+      "sourceSemanticId": "building.synod.recycling",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.recycling.png",
+      "runtimeSemanticId": "building.synod.scrapyard",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/scrapyard.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.shipyard",
+      "category": "building",
+      "sourceSemanticId": "building.synod.shipyard",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.shipyard.png",
+      "runtimeSemanticId": "building.synod.shipyard",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/shipyard.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.spaceport",
+      "category": "building",
+      "sourceSemanticId": "building.synod.spaceport",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.spaceport.png",
+      "runtimeSemanticId": "building.synod.spaceport",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/spaceport.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.supreme-galactic-gates",
+      "category": "building",
+      "sourceSemanticId": "building.synod.supreme-galactic-gates",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.supreme-galactic-gates.png",
+      "runtimeSemanticId": "building.synod.supreme-galactic-gates",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/supreme-galactic-gates.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.teret-factory",
+      "category": "building",
+      "sourceSemanticId": "building.synod.advanced-factory",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.advanced-factory.png",
+      "runtimeSemanticId": "building.synod.teret-factory",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/teret-factory.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.trade-center",
+      "category": "building",
+      "sourceSemanticId": "building.synod.trade-center",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.trade-center.png",
+      "runtimeSemanticId": "building.synod.trade-center",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/trade-center.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.synod.uranium-bot",
+      "category": "building",
+      "sourceSemanticId": "building.synod.advanced-energy",
+      "sourcePath": "assets/source/New assets/buildings/synod/building.synod.advanced-energy.png",
+      "runtimeSemanticId": "building.synod.uranium-bot",
+      "outputPath": "public/assets/generated/catalog/buildings/synod/uranium-bot.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.aksum-obelisk",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.galactic-obelisk",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.galactic-obelisk.png",
+      "runtimeSemanticId": "building.veyra.aksum-obelisk",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/aksum-obelisk.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.bank",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.bank",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.bank.png",
+      "runtimeSemanticId": "building.veyra.bank",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/bank.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.bunker",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.hangar",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.hangar.png",
+      "runtimeSemanticId": "building.veyra.bunker",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/bunker.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.construction",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.construction",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.construction.png",
+      "runtimeSemanticId": "building.veyra.construction",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/construction.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.control-chamber",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.planetary-government",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.planetary-government.png",
+      "runtimeSemanticId": "building.veyra.control-chamber",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/control-chamber.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.experimental-center",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.research",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.research.png",
+      "runtimeSemanticId": "building.veyra.experimental-center",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/experimental-center.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.gas-chamber",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.gas-storage",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.gas-storage.png",
+      "runtimeSemanticId": "building.veyra.gas-chamber",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/gas-chamber.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.gas-probe-1",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.gas-production-1",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.gas-production-1.png",
+      "runtimeSemanticId": "building.veyra.gas-probe-1",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/gas-probe-1.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.gas-probe-2",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.gas-production-2",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.gas-production-2.png",
+      "runtimeSemanticId": "building.veyra.gas-probe-2",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/gas-probe-2.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.infrared-bot",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.basic-energy",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.basic-energy.png",
+      "runtimeSemanticId": "building.veyra.infrared-bot",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/infrared-bot.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.metal-bot-1",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.metal-production-1",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.metal-production-1.png",
+      "runtimeSemanticId": "building.veyra.metal-bot-1",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/metal-bot-1.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.metal-bot-2",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.metal-production-2",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.metal-production-2.png",
+      "runtimeSemanticId": "building.veyra.metal-bot-2",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/metal-bot-2.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.metal-bot-3",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.metal-production-3",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.metal-production-3.png",
+      "runtimeSemanticId": "building.veyra.metal-bot-3",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/metal-bot-3.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.metal-vault",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.metal-storage",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.metal-storage.png",
+      "runtimeSemanticId": "building.veyra.metal-vault",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/metal-vault.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.mineral-bot-1",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.mineral-production-1",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.mineral-production-1.png",
+      "runtimeSemanticId": "building.veyra.mineral-bot-1",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/mineral-bot-1.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.mineral-bot-2",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.mineral-production-2",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.mineral-production-2.png",
+      "runtimeSemanticId": "building.veyra.mineral-bot-2",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/mineral-bot-2.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.mineral-treasury",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.mineral-storage",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.mineral-storage.png",
+      "runtimeSemanticId": "building.veyra.mineral-treasury",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/mineral-treasury.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.scrapyard",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.recycling",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.recycling.png",
+      "runtimeSemanticId": "building.veyra.scrapyard",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/scrapyard.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.shipyard",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.shipyard",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.shipyard.png",
+      "runtimeSemanticId": "building.veyra.shipyard",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/shipyard.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.spaceport",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.spaceport",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.spaceport.png",
+      "runtimeSemanticId": "building.veyra.spaceport",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/spaceport.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.supreme-galactic-gates",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.supreme-galactic-gates",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.supreme-galactic-gates.png",
+      "runtimeSemanticId": "building.veyra.supreme-galactic-gates",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/supreme-galactic-gates.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.teret-factory",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.advanced-factory",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.advanced-factory.png",
+      "runtimeSemanticId": "building.veyra.teret-factory",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/teret-factory.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.trade-center",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.trade-center",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.trade-center.png",
+      "runtimeSemanticId": "building.veyra.trade-center",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/trade-center.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "building.veyra.uranium-bot",
+      "category": "building",
+      "sourceSemanticId": "building.veyra.advanced-energy",
+      "sourcePath": "assets/source/New assets/buildings/veyra/building.veyra.advanced-energy.png",
+      "runtimeSemanticId": "building.veyra.uranium-bot",
+      "outputPath": "public/assets/generated/catalog/buildings/veyra/uranium-bot.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "commander.shared.annihilator",
+      "category": "commander",
+      "sourceSemanticId": "commander.shared.annihilator",
+      "sourcePath": "assets/source/New assets/comander_ship/commander-ship.annihilator.png",
+      "runtimeSemanticId": "commander.shared.annihilator",
+      "outputPath": "public/assets/generated/catalog/commanders/shared/annihilator.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "commander.shared.argo",
+      "category": "commander",
+      "sourceSemanticId": "commander.shared.argo",
+      "sourcePath": "assets/source/New assets/comander_ship/commander-ship.argo.png",
+      "runtimeSemanticId": "commander.shared.argo",
+      "outputPath": "public/assets/generated/catalog/commanders/shared/argo.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "commander.shared.corsair",
+      "category": "commander",
+      "sourceSemanticId": "commander.shared.corsair",
+      "sourcePath": "assets/source/New assets/comander_ship/commander-ship.corsair.png",
+      "runtimeSemanticId": "commander.shared.corsair",
+      "outputPath": "public/assets/generated/catalog/commanders/shared/corsair.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "commander.shared.executor",
+      "category": "commander",
+      "sourceSemanticId": "commander.shared.executor",
+      "sourcePath": "assets/source/New assets/comander_ship/commander-ship.executioner.png",
+      "runtimeSemanticId": "commander.shared.executor",
+      "outputPath": "public/assets/generated/catalog/commanders/shared/executor.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "commander.shared.hunter",
+      "category": "commander",
+      "sourceSemanticId": "commander.shared.hunter",
+      "sourcePath": "assets/source/New assets/comander_ship/commander-ship.hunter.png",
+      "runtimeSemanticId": "commander.shared.hunter",
+      "outputPath": "public/assets/generated/catalog/commanders/shared/hunter.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "commander.shared.judge",
+      "category": "commander",
+      "sourceSemanticId": "commander.shared.judge",
+      "sourcePath": "assets/source/New assets/comander_ship/commander-ship.judge.png",
+      "runtimeSemanticId": "commander.shared.judge",
+      "outputPath": "public/assets/generated/catalog/commanders/shared/judge.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "commander.shared.juggernaut",
+      "category": "commander",
+      "sourceSemanticId": "commander.shared.juggernaut",
+      "sourcePath": "assets/source/New assets/comander_ship/commander-ship.juggernaut.png",
+      "runtimeSemanticId": "commander.shared.juggernaut",
+      "outputPath": "public/assets/generated/catalog/commanders/shared/juggernaut.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "commander.shared.phantom",
+      "category": "commander",
+      "sourceSemanticId": "commander.shared.phantom",
+      "sourcePath": "assets/source/New assets/comander_ship/commander-ship.phantom.png",
+      "runtimeSemanticId": "commander.shared.phantom",
+      "outputPath": "public/assets/generated/catalog/commanders/shared/phantom.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "commander.shared.polias",
+      "category": "commander",
+      "sourceSemanticId": "commander.shared.polias",
+      "sourcePath": "assets/source/New assets/comander_ship/commander-ship.polias.png",
+      "runtimeSemanticId": "commander.shared.polias",
+      "outputPath": "public/assets/generated/catalog/commanders/shared/polias.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "commander.shared.regenerator",
+      "category": "commander",
+      "sourceSemanticId": "commander.shared.regenerator",
+      "sourcePath": "assets/source/New assets/comander_ship/commander-ship.reanimator.png",
+      "runtimeSemanticId": "commander.shared.regenerator",
+      "outputPath": "public/assets/generated/catalog/commanders/shared/regenerator.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "commander.shared.scorpion",
+      "category": "commander",
+      "sourceSemanticId": "commander.shared.scorpion",
+      "sourcePath": "assets/source/New assets/comander_ship/commander-ship.scorpion.png",
+      "runtimeSemanticId": "commander.shared.scorpion",
+      "outputPath": "public/assets/generated/catalog/commanders/shared/scorpion.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "commander.shared.typhoon",
+      "category": "commander",
+      "sourceSemanticId": "commander.shared.typhoon",
+      "sourcePath": "assets/source/New assets/comander_ship/commander-ship.typhoon.png",
+      "runtimeSemanticId": "commander.shared.typhoon",
+      "outputPath": "public/assets/generated/catalog/commanders/shared/typhoon.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "commander.shared.viper",
+      "category": "commander",
+      "sourceSemanticId": "commander.shared.viper",
+      "sourcePath": "assets/source/New assets/comander_ship/commander-ship.viper.png",
+      "runtimeSemanticId": "commander.shared.viper",
+      "outputPath": "public/assets/generated/catalog/commanders/shared/viper.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "defense.aegis.ballistic-turret",
+      "category": "defense",
+      "sourceSemanticId": "defense.aegis.ballistic-turret",
+      "sourcePath": "assets/source/New assets/defenses/aegis/defense.aegis.ballistic-turret.png",
+      "runtimeSemanticId": "defense.aegis.ballistic-turret",
+      "outputPath": "public/assets/generated/catalog/defenses/aegis/ballistic-turret.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.aegis.ion-plasma-battery",
+      "category": "defense",
+      "sourceSemanticId": "defense.aegis.ion-plasma-battery",
+      "sourcePath": "assets/source/New assets/defenses/aegis/defense.aegis.ion-plasma-battery.png",
+      "runtimeSemanticId": "defense.aegis.ion-plasma-battery",
+      "outputPath": "public/assets/generated/catalog/defenses/aegis/ion-plasma-battery.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.aegis.ion-turret",
+      "category": "defense",
+      "sourceSemanticId": "defense.aegis.ion-turret",
+      "sourcePath": "assets/source/New assets/defenses/aegis/defense.aegis.ion-turret.png",
+      "runtimeSemanticId": "defense.aegis.ion-turret",
+      "outputPath": "public/assets/generated/catalog/defenses/aegis/ion-turret.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.aegis.laser-ion-battery",
+      "category": "defense",
+      "sourceSemanticId": "defense.aegis.laser-ion-battery",
+      "sourcePath": "assets/source/New assets/defenses/aegis/defense.aegis.laser-ion-battery.png",
+      "runtimeSemanticId": "defense.aegis.laser-ion-battery",
+      "outputPath": "public/assets/generated/catalog/defenses/aegis/laser-ion-battery.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.aegis.laser-turret",
+      "category": "defense",
+      "sourceSemanticId": "defense.aegis.laser-turret",
+      "sourcePath": "assets/source/New assets/defenses/aegis/defense.aegis.laser-turret.png",
+      "runtimeSemanticId": "defense.aegis.laser-turret",
+      "outputPath": "public/assets/generated/catalog/defenses/aegis/laser-turret.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.aegis.planetary-shield",
+      "category": "defense",
+      "sourceSemanticId": "defense.aegis.planetary-shield",
+      "sourcePath": "assets/source/New assets/defenses/aegis/defense.aegis.planetary-shield.png",
+      "runtimeSemanticId": "defense.aegis.planetary-shield",
+      "outputPath": "public/assets/generated/catalog/defenses/aegis/planetary-shield.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.aegis.plasma-laser-battery",
+      "category": "defense",
+      "sourceSemanticId": "defense.aegis.plasma-laser-battery",
+      "sourcePath": "assets/source/New assets/defenses/aegis/defense.aegis.plasma-laser-battery.png",
+      "runtimeSemanticId": "defense.aegis.plasma-laser-battery",
+      "outputPath": "public/assets/generated/catalog/defenses/aegis/plasma-laser-battery.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.aegis.plasma-turret",
+      "category": "defense",
+      "sourceSemanticId": "defense.aegis.plasma-turret",
+      "sourcePath": "assets/source/New assets/defenses/aegis/defense.aegis.plasma-turret.png",
+      "runtimeSemanticId": "defense.aegis.plasma-turret",
+      "outputPath": "public/assets/generated/catalog/defenses/aegis/plasma-turret.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.aegis.tower-shield",
+      "category": "defense",
+      "sourceSemanticId": "defense.aegis.tower-shield",
+      "sourcePath": "assets/source/New assets/defenses/aegis/defense.aegis.tower-shield.png",
+      "runtimeSemanticId": "defense.aegis.tower-shield",
+      "outputPath": "public/assets/generated/catalog/defenses/aegis/tower-shield.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.synod.defense-matrix",
+      "category": "defense",
+      "sourceSemanticId": "defense.synod.defense-matrix",
+      "sourcePath": "assets/source/New assets/defenses/synod/defense.synod.defense-matrix.png",
+      "runtimeSemanticId": "defense.synod.defense-matrix",
+      "outputPath": "public/assets/generated/catalog/defenses/synod/defense-matrix.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.synod.ion-matrix",
+      "category": "defense",
+      "sourceSemanticId": "defense.synod.ion-matrix",
+      "sourcePath": "assets/source/New assets/defenses/synod/defense.synod.ion-matrix.png",
+      "runtimeSemanticId": "defense.synod.ion-matrix",
+      "outputPath": "public/assets/generated/catalog/defenses/synod/ion-matrix.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.synod.ion-plasma-matrix",
+      "category": "defense",
+      "sourceSemanticId": "defense.synod.ion-plasma-matrix",
+      "sourcePath": "assets/source/New assets/defenses/synod/defense.synod.ion-plasma-matrix.png",
+      "runtimeSemanticId": "defense.synod.ion-plasma-matrix",
+      "outputPath": "public/assets/generated/catalog/defenses/synod/ion-plasma-matrix.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.synod.laser-ion-matrix",
+      "category": "defense",
+      "sourceSemanticId": "defense.synod.laser-ion-matrix",
+      "sourcePath": "assets/source/New assets/defenses/synod/defense.synod.laser-ion-matrix.png",
+      "runtimeSemanticId": "defense.synod.laser-ion-matrix",
+      "outputPath": "public/assets/generated/catalog/defenses/synod/laser-ion-matrix.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.synod.laser-matrix",
+      "category": "defense",
+      "sourceSemanticId": "defense.synod.laser-matrix",
+      "sourcePath": "assets/source/New assets/defenses/synod/defense.synod.laser-matrix.png",
+      "runtimeSemanticId": "defense.synod.laser-matrix",
+      "outputPath": "public/assets/generated/catalog/defenses/synod/laser-matrix.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.synod.matrix-shield",
+      "category": "defense",
+      "sourceSemanticId": "defense.synod.matrix-shield",
+      "sourcePath": "assets/source/New assets/defenses/synod/defense.synod.matrix-shield.png",
+      "runtimeSemanticId": "defense.synod.matrix-shield",
+      "outputPath": "public/assets/generated/catalog/defenses/synod/matrix-shield.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.synod.planetary-matrix",
+      "category": "defense",
+      "sourceSemanticId": "defense.synod.planetary-matrix",
+      "sourcePath": "assets/source/New assets/defenses/synod/defense.synod.planetary-matrix.png",
+      "runtimeSemanticId": "defense.synod.planetary-matrix",
+      "outputPath": "public/assets/generated/catalog/defenses/synod/planetary-matrix.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.synod.plasma-laser-matrix",
+      "category": "defense",
+      "sourceSemanticId": "defense.synod.plasma-laser-matrix",
+      "sourcePath": "assets/source/New assets/defenses/synod/defense.synod.plasma-laser-matrix.png",
+      "runtimeSemanticId": "defense.synod.plasma-laser-matrix",
+      "outputPath": "public/assets/generated/catalog/defenses/synod/plasma-laser-matrix.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.synod.plasma-matrix",
+      "category": "defense",
+      "sourceSemanticId": "defense.synod.plasma-matrix",
+      "sourcePath": "assets/source/New assets/defenses/synod/defense.synod.plasma-matrix.png",
+      "runtimeSemanticId": "defense.synod.plasma-matrix",
+      "outputPath": "public/assets/generated/catalog/defenses/synod/plasma-matrix.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.veyra.chitin-shield",
+      "category": "defense",
+      "sourceSemanticId": "defense.veyra.chitin-shield",
+      "sourcePath": "assets/source/New assets/defenses/veyra/defense.veyra.chitin-shield.png",
+      "runtimeSemanticId": "defense.veyra.chitin-shield",
+      "outputPath": "public/assets/generated/catalog/defenses/veyra/chitin-shield.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.veyra.ion-plasma-turret",
+      "category": "defense",
+      "sourceSemanticId": "defense.veyra.ion-plasma-turret",
+      "sourcePath": "assets/source/New assets/defenses/veyra/defense.veyra.ion-plasma-turret.png",
+      "runtimeSemanticId": "defense.veyra.ion-plasma-turret",
+      "outputPath": "public/assets/generated/catalog/defenses/veyra/ion-plasma-turret.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.veyra.ion-weave",
+      "category": "defense",
+      "sourceSemanticId": "defense.veyra.ion-weave",
+      "sourcePath": "assets/source/New assets/defenses/veyra/defense.veyra.ion-weave.png",
+      "runtimeSemanticId": "defense.veyra.ion-weave",
+      "outputPath": "public/assets/generated/catalog/defenses/veyra/ion-weave.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.veyra.laser-ion-turret",
+      "category": "defense",
+      "sourceSemanticId": "defense.veyra.laser-ion-turret",
+      "sourcePath": "assets/source/New assets/defenses/veyra/defense.veyra.laser-ion-turret.png",
+      "runtimeSemanticId": "defense.veyra.laser-ion-turret",
+      "outputPath": "public/assets/generated/catalog/defenses/veyra/laser-ion-turret.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.veyra.laser-matter",
+      "category": "defense",
+      "sourceSemanticId": "defense.veyra.laser-matter",
+      "sourcePath": "assets/source/New assets/defenses/veyra/defense.veyra.laser-matter.png",
+      "runtimeSemanticId": "defense.veyra.laser-matter",
+      "outputPath": "public/assets/generated/catalog/defenses/veyra/laser-matter.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.veyra.nox-archer",
+      "category": "defense",
+      "sourceSemanticId": "defense.veyra.nox-archer",
+      "sourcePath": "assets/source/New assets/defenses/veyra/defense.veyra.nox-archer.png",
+      "runtimeSemanticId": "defense.veyra.nox-archer",
+      "outputPath": "public/assets/generated/catalog/defenses/veyra/nox-archer.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.veyra.plasma-laser-turret",
+      "category": "defense",
+      "sourceSemanticId": "defense.veyra.plasma-laser-turret",
+      "sourcePath": "assets/source/New assets/defenses/veyra/defense.veyra.plasma-laser-turret.png",
+      "runtimeSemanticId": "defense.veyra.plasma-laser-turret",
+      "outputPath": "public/assets/generated/catalog/defenses/veyra/plasma-laser-turret.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.veyra.plasma-weave",
+      "category": "defense",
+      "sourceSemanticId": "defense.veyra.plasma-weave",
+      "sourcePath": "assets/source/New assets/defenses/veyra/defense.veyra.plasma-weave.png",
+      "runtimeSemanticId": "defense.veyra.plasma-weave",
+      "outputPath": "public/assets/generated/catalog/defenses/veyra/plasma-weave.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "defense.veyra.surface-shield",
+      "category": "defense",
+      "sourceSemanticId": "defense.veyra.surface-shield",
+      "sourcePath": "assets/source/New assets/defenses/veyra/defense.veyra.surface-shield.png",
+      "runtimeSemanticId": "defense.veyra.surface-shield",
+      "outputPath": "public/assets/generated/catalog/defenses/veyra/surface-shield.webp",
+      "width": 384,
+      "height": 384
+    },
+    {
+      "mechanicalId": "ship.aegis.battleship",
+      "category": "ship",
+      "sourceSemanticId": "ship.aegis.battleship",
+      "sourcePath": "assets/source/New assets/ship/aegis/ship.aegis.battleship.png",
+      "runtimeSemanticId": "ship.aegis.battleship",
+      "outputPath": "public/assets/generated/catalog/ships/aegis/battleship.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.aegis.bomber",
+      "category": "ship",
+      "sourceSemanticId": "ship.aegis.bomber",
+      "sourcePath": "assets/source/New assets/ship/aegis/ship.aegis.bomber.png",
+      "runtimeSemanticId": "ship.aegis.bomber",
+      "outputPath": "public/assets/generated/catalog/ships/aegis/bomber.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.aegis.colonizer",
+      "category": "ship",
+      "sourceSemanticId": "ship.aegis.colonizer",
+      "sourcePath": "assets/source/New assets/ship/aegis/ship.aegis.colonizer.png",
+      "runtimeSemanticId": "ship.aegis.colonizer",
+      "outputPath": "public/assets/generated/catalog/ships/aegis/colonizer.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.aegis.cruiser",
+      "category": "ship",
+      "sourceSemanticId": "ship.aegis.cruiser",
+      "sourcePath": "assets/source/New assets/ship/aegis/ship.aegis.cruiser.png",
+      "runtimeSemanticId": "ship.aegis.cruiser",
+      "outputPath": "public/assets/generated/catalog/ships/aegis/cruiser.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.aegis.death-star",
+      "category": "ship",
+      "sourceSemanticId": "ship.aegis.death-star",
+      "sourcePath": "assets/source/New assets/ship/aegis/ship.aegis.death-star.png",
+      "runtimeSemanticId": "ship.aegis.death-star",
+      "outputPath": "public/assets/generated/catalog/ships/aegis/death-star.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.aegis.defender",
+      "category": "ship",
+      "sourceSemanticId": "ship.aegis.defender",
+      "sourcePath": "assets/source/New assets/ship/aegis/ship.aegis.defender.png",
+      "runtimeSemanticId": "ship.aegis.defender",
+      "outputPath": "public/assets/generated/catalog/ships/aegis/defender.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.aegis.destroyer",
+      "category": "ship",
+      "sourceSemanticId": "ship.aegis.destroyer",
+      "sourcePath": "assets/source/New assets/ship/aegis/ship.aegis.destroyer.png",
+      "runtimeSemanticId": "ship.aegis.destroyer",
+      "outputPath": "public/assets/generated/catalog/ships/aegis/destroyer.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.aegis.mega-transporter",
+      "category": "ship",
+      "sourceSemanticId": "ship.aegis.mega-transporter",
+      "sourcePath": "assets/source/New assets/ship/aegis/ship.aegis.mega-transporter.png",
+      "runtimeSemanticId": "ship.aegis.mega-transporter",
+      "outputPath": "public/assets/generated/catalog/ships/aegis/mega-transporter.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.aegis.recycler",
+      "category": "ship",
+      "sourceSemanticId": "ship.aegis.recycler",
+      "sourcePath": "assets/source/New assets/ship/aegis/ship.aegis.recycler.png",
+      "runtimeSemanticId": "ship.aegis.recycler",
+      "outputPath": "public/assets/generated/catalog/ships/aegis/recycler.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.aegis.scout",
+      "category": "ship",
+      "sourceSemanticId": "ship.aegis.scout",
+      "sourcePath": "assets/source/New assets/ship/aegis/ship.aegis.scout.png",
+      "runtimeSemanticId": "ship.aegis.scout",
+      "outputPath": "public/assets/generated/catalog/ships/aegis/scout.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.aegis.solar-satellite",
+      "category": "ship",
+      "sourceSemanticId": "ship.aegis.solar-satellite",
+      "sourcePath": "assets/source/New assets/ship/aegis/ship.aegis.solar-satellite.png",
+      "runtimeSemanticId": "ship.aegis.solar-satellite",
+      "outputPath": "public/assets/generated/catalog/ships/aegis/solar-satellite.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.aegis.spy-probe",
+      "category": "ship",
+      "sourceSemanticId": "ship.aegis.spy-probe",
+      "sourcePath": "assets/source/New assets/ship/aegis/ship.aegis.spy-probe.png",
+      "runtimeSemanticId": "ship.aegis.spy-probe",
+      "outputPath": "public/assets/generated/catalog/ships/aegis/spy-probe.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.aegis.transporter",
+      "category": "ship",
+      "sourceSemanticId": "ship.aegis.transporter",
+      "sourcePath": "assets/source/New assets/ship/aegis/ship.aegis.transporter.png",
+      "runtimeSemanticId": "ship.aegis.transporter",
+      "outputPath": "public/assets/generated/catalog/ships/aegis/transporter.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.synod.bomberbot",
+      "category": "ship",
+      "sourceSemanticId": "ship.synod.bomberbot",
+      "sourcePath": "assets/source/New assets/ship/synod/ship.synod.bomberbot.png",
+      "runtimeSemanticId": "ship.synod.bomberbot",
+      "outputPath": "public/assets/generated/catalog/ships/synod/bomberbot.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.synod.cargo-bot",
+      "category": "ship",
+      "sourceSemanticId": "ship.synod.cargo-bot",
+      "sourcePath": "assets/source/New assets/ship/synod/ship.synod.cargo-bot.png",
+      "runtimeSemanticId": "ship.synod.cargo-bot",
+      "outputPath": "public/assets/generated/catalog/ships/synod/cargo-bot.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.synod.colonizer-bot",
+      "category": "ship",
+      "sourceSemanticId": "ship.synod.colonizer-bot",
+      "sourcePath": "assets/source/New assets/ship/synod/ship.synod.colonizer-bot.png",
+      "runtimeSemanticId": "ship.synod.colonizer-bot",
+      "outputPath": "public/assets/generated/catalog/ships/synod/colonizer-bot.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.synod.fighter",
+      "category": "ship",
+      "sourceSemanticId": "ship.synod.fighter",
+      "sourcePath": "assets/source/New assets/ship/synod/ship.synod.fighter.png",
+      "runtimeSemanticId": "ship.synod.fighter",
+      "outputPath": "public/assets/generated/catalog/ships/synod/fighter.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.synod.goliath",
+      "category": "ship",
+      "sourceSemanticId": "ship.synod.goliath",
+      "sourcePath": "assets/source/New assets/ship/synod/ship.synod.goliath.png",
+      "runtimeSemanticId": "ship.synod.goliath",
+      "outputPath": "public/assets/generated/catalog/ships/synod/goliath.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.synod.interceptor",
+      "category": "ship",
+      "sourceSemanticId": "ship.synod.interceptor",
+      "sourcePath": "assets/source/New assets/ship/synod/ship.synod.interceptor.png",
+      "runtimeSemanticId": "ship.synod.interceptor",
+      "outputPath": "public/assets/generated/catalog/ships/synod/interceptor.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.synod.large-cargo-bot",
+      "category": "ship",
+      "sourceSemanticId": "ship.synod.large-cargo-bot",
+      "sourcePath": "assets/source/New assets/ship/synod/ship.synod.large-cargo-bot.png",
+      "runtimeSemanticId": "ship.synod.large-cargo-bot",
+      "outputPath": "public/assets/generated/catalog/ships/synod/large-cargo-bot.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.synod.recycler",
+      "category": "ship",
+      "sourceSemanticId": "ship.synod.recycler",
+      "sourcePath": "assets/source/New assets/ship/synod/ship.synod.recycler.png",
+      "runtimeSemanticId": "ship.synod.recycler",
+      "outputPath": "public/assets/generated/catalog/ships/synod/recycler.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.synod.shield-bot",
+      "category": "ship",
+      "sourceSemanticId": "ship.synod.shield-bot",
+      "sourcePath": "assets/source/New assets/ship/synod/ship.synod.shield-bot.png",
+      "runtimeSemanticId": "ship.synod.shield-bot",
+      "outputPath": "public/assets/generated/catalog/ships/synod/shield-bot.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.synod.solar-satellite",
+      "category": "ship",
+      "sourceSemanticId": "ship.synod.solar-satellite",
+      "sourcePath": "assets/source/New assets/ship/synod/ship.synod.solar-satellite.png",
+      "runtimeSemanticId": "ship.synod.solar-satellite",
+      "outputPath": "public/assets/generated/catalog/ships/synod/solar-satellite.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.synod.spy-bot",
+      "category": "ship",
+      "sourceSemanticId": "ship.synod.spy-bot",
+      "sourcePath": "assets/source/New assets/ship/synod/ship.synod.spy-bot.png",
+      "runtimeSemanticId": "ship.synod.spy-bot",
+      "outputPath": "public/assets/generated/catalog/ships/synod/spy-bot.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.synod.star-armada",
+      "category": "ship",
+      "sourceSemanticId": "ship.synod.star-armada",
+      "sourcePath": "assets/source/New assets/ship/synod/ship.synod.star-armada.png",
+      "runtimeSemanticId": "ship.synod.star-armada",
+      "outputPath": "public/assets/generated/catalog/ships/synod/star-armada.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.synod.titan",
+      "category": "ship",
+      "sourceSemanticId": "ship.synod.titan",
+      "sourcePath": "assets/source/New assets/ship/synod/ship.synod.titan.png",
+      "runtimeSemanticId": "ship.synod.titan",
+      "outputPath": "public/assets/generated/catalog/ships/synod/titan.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.veyra.absorber",
+      "category": "ship",
+      "sourceSemanticId": "ship.veyra.absorber",
+      "sourcePath": "assets/source/New assets/ship/veyra/ship.veyra.absorber.png",
+      "runtimeSemanticId": "ship.veyra.absorber",
+      "outputPath": "public/assets/generated/catalog/ships/veyra/absorber.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.veyra.bomber",
+      "category": "ship",
+      "sourceSemanticId": "ship.veyra.bomber",
+      "sourcePath": "assets/source/New assets/ship/veyra/ship.veyra.bomber.png",
+      "runtimeSemanticId": "ship.veyra.bomber",
+      "outputPath": "public/assets/generated/catalog/ships/veyra/bomber.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.veyra.ghost",
+      "category": "ship",
+      "sourceSemanticId": "ship.veyra.ghost",
+      "sourcePath": "assets/source/New assets/ship/veyra/ship.veyra.ghost.png",
+      "runtimeSemanticId": "ship.veyra.ghost",
+      "outputPath": "public/assets/generated/catalog/ships/veyra/ghost.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.veyra.hornet",
+      "category": "ship",
+      "sourceSemanticId": "ship.veyra.hornet",
+      "sourcePath": "assets/source/New assets/ship/veyra/ship.veyra.hornet.png",
+      "runtimeSemanticId": "ship.veyra.hornet",
+      "outputPath": "public/assets/generated/catalog/ships/veyra/hornet.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.veyra.mega-transporter",
+      "category": "ship",
+      "sourceSemanticId": "ship.veyra.mega-transporter",
+      "sourcePath": "assets/source/New assets/ship/veyra/ship.veyra.mega-transporter.png",
+      "runtimeSemanticId": "ship.veyra.mega-transporter",
+      "outputPath": "public/assets/generated/catalog/ships/veyra/mega-transporter.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.veyra.nemesis",
+      "category": "ship",
+      "sourceSemanticId": "ship.veyra.nemesis",
+      "sourcePath": "assets/source/New assets/ship/veyra/ship.veyra.nemesis.png",
+      "runtimeSemanticId": "ship.veyra.nemesis",
+      "outputPath": "public/assets/generated/catalog/ships/veyra/nemesis.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.veyra.nox-dart",
+      "category": "ship",
+      "sourceSemanticId": "ship.veyra.nox-dart",
+      "sourcePath": "assets/source/New assets/ship/veyra/ship.veyra.nox-dart.png",
+      "runtimeSemanticId": "ship.veyra.nox-dart",
+      "outputPath": "public/assets/generated/catalog/ships/veyra/nox-dart.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.veyra.nox-mind",
+      "category": "ship",
+      "sourceSemanticId": "ship.veyra.nox-mind",
+      "sourcePath": "assets/source/New assets/ship/veyra/ship.veyra.nox-mind.png",
+      "runtimeSemanticId": "ship.veyra.nox-mind",
+      "outputPath": "public/assets/generated/catalog/ships/veyra/nox-mind.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.veyra.nox-queen",
+      "category": "ship",
+      "sourceSemanticId": "ship.veyra.nox-queen",
+      "sourcePath": "assets/source/New assets/ship/veyra/ship.veyra.nox-queen.png",
+      "runtimeSemanticId": "ship.veyra.nox-queen",
+      "outputPath": "public/assets/generated/catalog/ships/veyra/nox-queen.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.veyra.organic-satellite",
+      "category": "ship",
+      "sourceSemanticId": "ship.veyra.organic-satellite",
+      "sourcePath": "assets/source/New assets/ship/veyra/ship.veyra.organic-satellite.png",
+      "runtimeSemanticId": "ship.veyra.organic-satellite",
+      "outputPath": "public/assets/generated/catalog/ships/veyra/organic-satellite.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.veyra.recycler-drone",
+      "category": "ship",
+      "sourceSemanticId": "ship.veyra.recycler-drone",
+      "sourcePath": "assets/source/New assets/ship/veyra/ship.veyra.recycler-drone.png",
+      "runtimeSemanticId": "ship.veyra.recycler-drone",
+      "outputPath": "public/assets/generated/catalog/ships/veyra/recycler-drone.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.veyra.settler",
+      "category": "ship",
+      "sourceSemanticId": "ship.veyra.settler",
+      "sourcePath": "assets/source/New assets/ship/veyra/ship.veyra.settler.png",
+      "runtimeSemanticId": "ship.veyra.settler",
+      "outputPath": "public/assets/generated/catalog/ships/veyra/settler.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "ship.veyra.transporter",
+      "category": "ship",
+      "sourceSemanticId": "ship.veyra.transporter",
+      "sourcePath": "assets/source/New assets/ship/veyra/ship.veyra.transporter.png",
+      "runtimeSemanticId": "ship.veyra.transporter",
+      "outputPath": "public/assets/generated/catalog/ships/veyra/transporter.webp",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "mechanicalId": "technology.aegis.astronomy",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.astronomy",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.astronomy.png",
+      "runtimeSemanticId": "technology.shared.astronomy",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/astronomy.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.chemistry",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.chemistry",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.chemistry.png",
+      "runtimeSemanticId": "technology.shared.chemistry",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/chemistry.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.computer-systems",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.computer-systems",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.computer-systems.png",
+      "runtimeSemanticId": "technology.shared.computer-systems",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/computer-systems.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.critical-hit",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.critical-hit",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.critical-hit.png",
+      "runtimeSemanticId": "technology.shared.critical-hit",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/critical-hit.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.ecology",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.ecology",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.ecology.png",
+      "runtimeSemanticId": "technology.shared.ecology",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/ecology.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.espionage",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.espionage",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.espionage.png",
+      "runtimeSemanticId": "technology.shared.espionage",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/espionage.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.fuel-cells",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.fuel-cells",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.fuel-cells.png",
+      "runtimeSemanticId": "technology.shared.fuel-cells",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/fuel-cells.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.heavy-armor",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.heavy-armor",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.heavy-armor.png",
+      "runtimeSemanticId": "technology.shared.heavy-armor",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/heavy-armor.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.hyperspace",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.hyperspace",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.hyperspace.png",
+      "runtimeSemanticId": "technology.shared.hyperspace",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/hyperspace.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.improved-construction",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.improved-construction",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.improved-construction.png",
+      "runtimeSemanticId": "technology.shared.improved-construction",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/improved-construction.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.ion-science",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.ion-science",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.ion-science.png",
+      "runtimeSemanticId": "technology.shared.ion-science",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/ion-science.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.jet-engines",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.jet-engines",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.jet-engines.png",
+      "runtimeSemanticId": "technology.shared.jet-engines",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/jet-engines.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.laser-science",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.laser-science",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.laser-science.png",
+      "runtimeSemanticId": "technology.shared.laser-science",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/laser-science.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.light-armor",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.light-armor",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.light-armor.png",
+      "runtimeSemanticId": "technology.shared.light-armor",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/light-armor.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.maneuver-defense",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.maneuver-defense",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.maneuver-defense.png",
+      "runtimeSemanticId": "technology.shared.maneuver-defense",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/maneuver-defense.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.mathematics",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.mathematics",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.mathematics.png",
+      "runtimeSemanticId": "technology.shared.mathematics",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/mathematics.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.medium-armor",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.medium-armor",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.medium-armor.png",
+      "runtimeSemanticId": "technology.shared.medium-armor",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/medium-armor.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.parallel-universes",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.parallel-universes",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.parallel-universes.png",
+      "runtimeSemanticId": "technology.shared.parallel-universes",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/parallel-universes.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.physics",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.physics",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.physics.png",
+      "runtimeSemanticId": "technology.shared.physics",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/physics.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.piercing-attack",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.piercing-attack",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.piercing-attack.png",
+      "runtimeSemanticId": "technology.shared.piercing-attack",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/piercing-attack.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.plasma-science",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.plasma-science",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.plasma-science.png",
+      "runtimeSemanticId": "technology.shared.plasma-science",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/plasma-science.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.aegis.ship-armor",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.ship-armor",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.ship-armor.png",
+      "runtimeSemanticId": "technology.shared.ship-armor",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/ship-armor.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.astronomy",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.astronomy",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.astronomy.png",
+      "runtimeSemanticId": "technology.shared.astronomy",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/astronomy.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.chemistry",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.chemistry",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.chemistry.png",
+      "runtimeSemanticId": "technology.shared.chemistry",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/chemistry.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.computer-systems",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.computer-systems",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.computer-systems.png",
+      "runtimeSemanticId": "technology.shared.computer-systems",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/computer-systems.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.critical-hit",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.critical-hit",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.critical-hit.png",
+      "runtimeSemanticId": "technology.shared.critical-hit",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/critical-hit.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.ecology",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.ecology",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.ecology.png",
+      "runtimeSemanticId": "technology.shared.ecology",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/ecology.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.espionage",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.espionage",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.espionage.png",
+      "runtimeSemanticId": "technology.shared.espionage",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/espionage.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.fuel-cells",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.fuel-cells",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.fuel-cells.png",
+      "runtimeSemanticId": "technology.shared.fuel-cells",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/fuel-cells.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.heavy-armor",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.heavy-armor",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.heavy-armor.png",
+      "runtimeSemanticId": "technology.shared.heavy-armor",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/heavy-armor.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.hyperspace",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.hyperspace",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.hyperspace.png",
+      "runtimeSemanticId": "technology.shared.hyperspace",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/hyperspace.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.improved-construction",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.improved-construction",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.improved-construction.png",
+      "runtimeSemanticId": "technology.shared.improved-construction",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/improved-construction.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.ion-science",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.ion-science",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.ion-science.png",
+      "runtimeSemanticId": "technology.shared.ion-science",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/ion-science.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.jet-engines",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.jet-engines",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.jet-engines.png",
+      "runtimeSemanticId": "technology.shared.jet-engines",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/jet-engines.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.laser-science",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.laser-science",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.laser-science.png",
+      "runtimeSemanticId": "technology.shared.laser-science",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/laser-science.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.light-armor",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.light-armor",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.light-armor.png",
+      "runtimeSemanticId": "technology.shared.light-armor",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/light-armor.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.maneuver-defense",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.maneuver-defense",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.maneuver-defense.png",
+      "runtimeSemanticId": "technology.shared.maneuver-defense",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/maneuver-defense.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.mathematics",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.mathematics",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.mathematics.png",
+      "runtimeSemanticId": "technology.shared.mathematics",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/mathematics.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.medium-armor",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.medium-armor",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.medium-armor.png",
+      "runtimeSemanticId": "technology.shared.medium-armor",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/medium-armor.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.parallel-universes",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.parallel-universes",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.parallel-universes.png",
+      "runtimeSemanticId": "technology.shared.parallel-universes",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/parallel-universes.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.physics",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.physics",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.physics.png",
+      "runtimeSemanticId": "technology.shared.physics",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/physics.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.piercing-attack",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.piercing-attack",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.piercing-attack.png",
+      "runtimeSemanticId": "technology.shared.piercing-attack",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/piercing-attack.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.plasma-science",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.plasma-science",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.plasma-science.png",
+      "runtimeSemanticId": "technology.shared.plasma-science",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/plasma-science.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.synod.ship-armor",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.ship-armor",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.ship-armor.png",
+      "runtimeSemanticId": "technology.shared.ship-armor",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/ship-armor.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.astronomy",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.astronomy",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.astronomy.png",
+      "runtimeSemanticId": "technology.shared.astronomy",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/astronomy.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.chemistry",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.chemistry",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.chemistry.png",
+      "runtimeSemanticId": "technology.shared.chemistry",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/chemistry.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.computer-systems",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.computer-systems",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.computer-systems.png",
+      "runtimeSemanticId": "technology.shared.computer-systems",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/computer-systems.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.critical-hit",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.critical-hit",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.critical-hit.png",
+      "runtimeSemanticId": "technology.shared.critical-hit",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/critical-hit.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.ecology",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.ecology",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.ecology.png",
+      "runtimeSemanticId": "technology.shared.ecology",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/ecology.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.espionage",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.espionage",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.espionage.png",
+      "runtimeSemanticId": "technology.shared.espionage",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/espionage.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.fuel-cells",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.fuel-cells",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.fuel-cells.png",
+      "runtimeSemanticId": "technology.shared.fuel-cells",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/fuel-cells.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.heavy-armor",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.heavy-armor",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.heavy-armor.png",
+      "runtimeSemanticId": "technology.shared.heavy-armor",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/heavy-armor.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.hyperspace",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.hyperspace",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.hyperspace.png",
+      "runtimeSemanticId": "technology.shared.hyperspace",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/hyperspace.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.improved-construction",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.improved-construction",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.improved-construction.png",
+      "runtimeSemanticId": "technology.shared.improved-construction",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/improved-construction.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.ion-science",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.ion-science",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.ion-science.png",
+      "runtimeSemanticId": "technology.shared.ion-science",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/ion-science.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.jet-engines",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.jet-engines",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.jet-engines.png",
+      "runtimeSemanticId": "technology.shared.jet-engines",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/jet-engines.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.laser-science",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.laser-science",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.laser-science.png",
+      "runtimeSemanticId": "technology.shared.laser-science",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/laser-science.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.light-armor",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.light-armor",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.light-armor.png",
+      "runtimeSemanticId": "technology.shared.light-armor",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/light-armor.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.maneuver-defense",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.maneuver-defense",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.maneuver-defense.png",
+      "runtimeSemanticId": "technology.shared.maneuver-defense",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/maneuver-defense.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.mathematics",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.mathematics",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.mathematics.png",
+      "runtimeSemanticId": "technology.shared.mathematics",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/mathematics.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.medium-armor",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.medium-armor",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.medium-armor.png",
+      "runtimeSemanticId": "technology.shared.medium-armor",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/medium-armor.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.parallel-universes",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.parallel-universes",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.parallel-universes.png",
+      "runtimeSemanticId": "technology.shared.parallel-universes",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/parallel-universes.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.physics",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.physics",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.physics.png",
+      "runtimeSemanticId": "technology.shared.physics",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/physics.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.piercing-attack",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.piercing-attack",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.piercing-attack.png",
+      "runtimeSemanticId": "technology.shared.piercing-attack",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/piercing-attack.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.plasma-science",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.plasma-science",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.plasma-science.png",
+      "runtimeSemanticId": "technology.shared.plasma-science",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/plasma-science.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "mechanicalId": "technology.veyra.ship-armor",
+      "category": "technology",
+      "sourceSemanticId": "technology.shared.ship-armor",
+      "sourcePath": "assets/source/New assets/technologies/technology.shared.ship-armor.png",
+      "runtimeSemanticId": "technology.shared.ship-armor",
+      "outputPath": "public/assets/generated/catalog/technologies/shared/ship-armor.webp",
+      "width": 256,
+      "height": 256
+    }
+  ]
+}
