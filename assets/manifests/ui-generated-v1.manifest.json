@@ -1,0 +1,498 @@
+{
+  "version": "ui-generated-v1",
+  "created_at": "2026-08-31T18:08:51.979194Z",
+  "source_pack": "assets/source/ui-generated-v1",
+  "factions": [
+    "aegis",
+    "synod",
+    "veyra"
+  ],
+  "assets": [
+    {
+      "id": "panel_frame_large",
+      "faction": "aegis",
+      "relative_path": "assets/source/ui-generated-v1/aegis/panel_frame_large.png",
+      "width": 1600,
+      "height": 900,
+      "transparent_background": true,
+      "intended_use": "main screen panel shell / large scene container"
+    },
+    {
+      "id": "panel_frame_medium",
+      "faction": "aegis",
+      "relative_path": "assets/source/ui-generated-v1/aegis/panel_frame_medium.png",
+      "width": 1024,
+      "height": 768,
+      "transparent_background": true,
+      "intended_use": "standard content panel"
+    },
+    {
+      "id": "panel_frame_small",
+      "faction": "aegis",
+      "relative_path": "assets/source/ui-generated-v1/aegis/panel_frame_small.png",
+      "width": 640,
+      "height": 480,
+      "transparent_background": true,
+      "intended_use": "small information panel"
+    },
+    {
+      "id": "modal_frame",
+      "faction": "aegis",
+      "relative_path": "assets/source/ui-generated-v1/aegis/modal_frame.png",
+      "width": 1200,
+      "height": 800,
+      "transparent_background": true,
+      "intended_use": "modal dialog frame"
+    },
+    {
+      "id": "tooltip_frame",
+      "faction": "aegis",
+      "relative_path": "assets/source/ui-generated-v1/aegis/tooltip_frame.png",
+      "width": 700,
+      "height": 220,
+      "transparent_background": true,
+      "intended_use": "tooltip / compact description popup"
+    },
+    {
+      "id": "tab_idle",
+      "faction": "aegis",
+      "relative_path": "assets/source/ui-generated-v1/aegis/tab_idle.png",
+      "width": 512,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "inactive tab"
+    },
+    {
+      "id": "tab_active",
+      "faction": "aegis",
+      "relative_path": "assets/source/ui-generated-v1/aegis/tab_active.png",
+      "width": 512,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "active selected tab"
+    },
+    {
+      "id": "button_primary_idle",
+      "faction": "aegis",
+      "relative_path": "assets/source/ui-generated-v1/aegis/button_primary_idle.png",
+      "width": 448,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "primary button default"
+    },
+    {
+      "id": "button_primary_hover",
+      "faction": "aegis",
+      "relative_path": "assets/source/ui-generated-v1/aegis/button_primary_hover.png",
+      "width": 448,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "primary button hover"
+    },
+    {
+      "id": "button_primary_pressed",
+      "faction": "aegis",
+      "relative_path": "assets/source/ui-generated-v1/aegis/button_primary_pressed.png",
+      "width": 448,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "primary button pressed"
+    },
+    {
+      "id": "button_secondary_idle",
+      "faction": "aegis",
+      "relative_path": "assets/source/ui-generated-v1/aegis/button_secondary_idle.png",
+      "width": 448,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "secondary button default"
+    },
+    {
+      "id": "button_secondary_hover",
+      "faction": "aegis",
+      "relative_path": "assets/source/ui-generated-v1/aegis/button_secondary_hover.png",
+      "width": 448,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "secondary button hover"
+    },
+    {
+      "id": "button_secondary_pressed",
+      "faction": "aegis",
+      "relative_path": "assets/source/ui-generated-v1/aegis/button_secondary_pressed.png",
+      "width": 448,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "secondary button pressed"
+    },
+    {
+      "id": "queue_slot_empty",
+      "faction": "aegis",
+      "relative_path": "assets/source/ui-generated-v1/aegis/queue_slot_empty.png",
+      "width": 512,
+      "height": 160,
+      "transparent_background": true,
+      "intended_use": "empty production queue slot"
+    },
+    {
+      "id": "queue_slot_busy",
+      "faction": "aegis",
+      "relative_path": "assets/source/ui-generated-v1/aegis/queue_slot_busy.png",
+      "width": 512,
+      "height": 160,
+      "transparent_background": true,
+      "intended_use": "active / occupied production queue slot"
+    },
+    {
+      "id": "queue_slot_locked",
+      "faction": "aegis",
+      "relative_path": "assets/source/ui-generated-v1/aegis/queue_slot_locked.png",
+      "width": 512,
+      "height": 160,
+      "transparent_background": true,
+      "intended_use": "locked production queue slot"
+    },
+    {
+      "id": "resource_chip",
+      "faction": "aegis",
+      "relative_path": "assets/source/ui-generated-v1/aegis/resource_chip.png",
+      "width": 320,
+      "height": 96,
+      "transparent_background": true,
+      "intended_use": "small resource display shell / chip"
+    },
+    {
+      "id": "selection_ring",
+      "faction": "aegis",
+      "relative_path": "assets/source/ui-generated-v1/aegis/selection_ring.png",
+      "width": 512,
+      "height": 512,
+      "transparent_background": true,
+      "intended_use": "circular or elliptical selection marker / highlight ring"
+    },
+    {
+      "id": "panel_frame_large",
+      "faction": "synod",
+      "relative_path": "assets/source/ui-generated-v1/synod/panel_frame_large.png",
+      "width": 1600,
+      "height": 900,
+      "transparent_background": true,
+      "intended_use": "main screen panel shell / large scene container"
+    },
+    {
+      "id": "panel_frame_medium",
+      "faction": "synod",
+      "relative_path": "assets/source/ui-generated-v1/synod/panel_frame_medium.png",
+      "width": 1024,
+      "height": 768,
+      "transparent_background": true,
+      "intended_use": "standard content panel"
+    },
+    {
+      "id": "panel_frame_small",
+      "faction": "synod",
+      "relative_path": "assets/source/ui-generated-v1/synod/panel_frame_small.png",
+      "width": 640,
+      "height": 480,
+      "transparent_background": true,
+      "intended_use": "small information panel"
+    },
+    {
+      "id": "modal_frame",
+      "faction": "synod",
+      "relative_path": "assets/source/ui-generated-v1/synod/modal_frame.png",
+      "width": 1200,
+      "height": 800,
+      "transparent_background": true,
+      "intended_use": "modal dialog frame"
+    },
+    {
+      "id": "tooltip_frame",
+      "faction": "synod",
+      "relative_path": "assets/source/ui-generated-v1/synod/tooltip_frame.png",
+      "width": 700,
+      "height": 220,
+      "transparent_background": true,
+      "intended_use": "tooltip / compact description popup"
+    },
+    {
+      "id": "tab_idle",
+      "faction": "synod",
+      "relative_path": "assets/source/ui-generated-v1/synod/tab_idle.png",
+      "width": 512,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "inactive tab"
+    },
+    {
+      "id": "tab_active",
+      "faction": "synod",
+      "relative_path": "assets/source/ui-generated-v1/synod/tab_active.png",
+      "width": 512,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "active selected tab"
+    },
+    {
+      "id": "button_primary_idle",
+      "faction": "synod",
+      "relative_path": "assets/source/ui-generated-v1/synod/button_primary_idle.png",
+      "width": 448,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "primary button default"
+    },
+    {
+      "id": "button_primary_hover",
+      "faction": "synod",
+      "relative_path": "assets/source/ui-generated-v1/synod/button_primary_hover.png",
+      "width": 448,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "primary button hover"
+    },
+    {
+      "id": "button_primary_pressed",
+      "faction": "synod",
+      "relative_path": "assets/source/ui-generated-v1/synod/button_primary_pressed.png",
+      "width": 448,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "primary button pressed"
+    },
+    {
+      "id": "button_secondary_idle",
+      "faction": "synod",
+      "relative_path": "assets/source/ui-generated-v1/synod/button_secondary_idle.png",
+      "width": 448,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "secondary button default"
+    },
+    {
+      "id": "button_secondary_hover",
+      "faction": "synod",
+      "relative_path": "assets/source/ui-generated-v1/synod/button_secondary_hover.png",
+      "width": 448,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "secondary button hover"
+    },
+    {
+      "id": "button_secondary_pressed",
+      "faction": "synod",
+      "relative_path": "assets/source/ui-generated-v1/synod/button_secondary_pressed.png",
+      "width": 448,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "secondary button pressed"
+    },
+    {
+      "id": "queue_slot_empty",
+      "faction": "synod",
+      "relative_path": "assets/source/ui-generated-v1/synod/queue_slot_empty.png",
+      "width": 512,
+      "height": 160,
+      "transparent_background": true,
+      "intended_use": "empty production queue slot"
+    },
+    {
+      "id": "queue_slot_busy",
+      "faction": "synod",
+      "relative_path": "assets/source/ui-generated-v1/synod/queue_slot_busy.png",
+      "width": 512,
+      "height": 160,
+      "transparent_background": true,
+      "intended_use": "active / occupied production queue slot"
+    },
+    {
+      "id": "queue_slot_locked",
+      "faction": "synod",
+      "relative_path": "assets/source/ui-generated-v1/synod/queue_slot_locked.png",
+      "width": 512,
+      "height": 160,
+      "transparent_background": true,
+      "intended_use": "locked production queue slot"
+    },
+    {
+      "id": "resource_chip",
+      "faction": "synod",
+      "relative_path": "assets/source/ui-generated-v1/synod/resource_chip.png",
+      "width": 320,
+      "height": 96,
+      "transparent_background": true,
+      "intended_use": "small resource display shell / chip"
+    },
+    {
+      "id": "selection_ring",
+      "faction": "synod",
+      "relative_path": "assets/source/ui-generated-v1/synod/selection_ring.png",
+      "width": 512,
+      "height": 512,
+      "transparent_background": true,
+      "intended_use": "circular or elliptical selection marker / highlight ring"
+    },
+    {
+      "id": "panel_frame_large",
+      "faction": "veyra",
+      "relative_path": "assets/source/ui-generated-v1/veyra/panel_frame_large.png",
+      "width": 1600,
+      "height": 900,
+      "transparent_background": true,
+      "intended_use": "main screen panel shell / large scene container"
+    },
+    {
+      "id": "panel_frame_medium",
+      "faction": "veyra",
+      "relative_path": "assets/source/ui-generated-v1/veyra/panel_frame_medium.png",
+      "width": 1024,
+      "height": 768,
+      "transparent_background": true,
+      "intended_use": "standard content panel"
+    },
+    {
+      "id": "panel_frame_small",
+      "faction": "veyra",
+      "relative_path": "assets/source/ui-generated-v1/veyra/panel_frame_small.png",
+      "width": 640,
+      "height": 480,
+      "transparent_background": true,
+      "intended_use": "small information panel"
+    },
+    {
+      "id": "modal_frame",
+      "faction": "veyra",
+      "relative_path": "assets/source/ui-generated-v1/veyra/modal_frame.png",
+      "width": 1200,
+      "height": 800,
+      "transparent_background": true,
+      "intended_use": "modal dialog frame"
+    },
+    {
+      "id": "tooltip_frame",
+      "faction": "veyra",
+      "relative_path": "assets/source/ui-generated-v1/veyra/tooltip_frame.png",
+      "width": 700,
+      "height": 220,
+      "transparent_background": true,
+      "intended_use": "tooltip / compact description popup"
+    },
+    {
+      "id": "tab_idle",
+      "faction": "veyra",
+      "relative_path": "assets/source/ui-generated-v1/veyra/tab_idle.png",
+      "width": 512,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "inactive tab"
+    },
+    {
+      "id": "tab_active",
+      "faction": "veyra",
+      "relative_path": "assets/source/ui-generated-v1/veyra/tab_active.png",
+      "width": 512,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "active selected tab"
+    },
+    {
+      "id": "button_primary_idle",
+      "faction": "veyra",
+      "relative_path": "assets/source/ui-generated-v1/veyra/button_primary_idle.png",
+      "width": 448,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "primary button default"
+    },
+    {
+      "id": "button_primary_hover",
+      "faction": "veyra",
+      "relative_path": "assets/source/ui-generated-v1/veyra/button_primary_hover.png",
+      "width": 448,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "primary button hover"
+    },
+    {
+      "id": "button_primary_pressed",
+      "faction": "veyra",
+      "relative_path": "assets/source/ui-generated-v1/veyra/button_primary_pressed.png",
+      "width": 448,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "primary button pressed"
+    },
+    {
+      "id": "button_secondary_idle",
+      "faction": "veyra",
+      "relative_path": "assets/source/ui-generated-v1/veyra/button_secondary_idle.png",
+      "width": 448,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "secondary button default"
+    },
+    {
+      "id": "button_secondary_hover",
+      "faction": "veyra",
+      "relative_path": "assets/source/ui-generated-v1/veyra/button_secondary_hover.png",
+      "width": 448,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "secondary button hover"
+    },
+    {
+      "id": "button_secondary_pressed",
+      "faction": "veyra",
+      "relative_path": "assets/source/ui-generated-v1/veyra/button_secondary_pressed.png",
+      "width": 448,
+      "height": 128,
+      "transparent_background": true,
+      "intended_use": "secondary button pressed"
+    },
+    {
+      "id": "queue_slot_empty",
+      "faction": "veyra",
+      "relative_path": "assets/source/ui-generated-v1/veyra/queue_slot_empty.png",
+      "width": 512,
+      "height": 160,
+      "transparent_background": true,
+      "intended_use": "empty production queue slot"
+    },
+    {
+      "id": "queue_slot_busy",
+      "faction": "veyra",
+      "relative_path": "assets/source/ui-generated-v1/veyra/queue_slot_busy.png",
+      "width": 512,
+      "height": 160,
+      "transparent_background": true,
+      "intended_use": "active / occupied production queue slot"
+    },
+    {
+      "id": "queue_slot_locked",
+      "faction": "veyra",
+      "relative_path": "assets/source/ui-generated-v1/veyra/queue_slot_locked.png",
+      "width": 512,
+      "height": 160,
+      "transparent_background": true,
+      "intended_use": "locked production queue slot"
+    },
+    {
+      "id": "resource_chip",
+      "faction": "veyra",
+      "relative_path": "assets/source/ui-generated-v1/veyra/resource_chip.png",
+      "width": 320,
+      "height": 96,
+      "transparent_background": true,
+      "intended_use": "small resource display shell / chip"
+    },
+    {
+      "id": "selection_ring",
+      "faction": "veyra",
+      "relative_path": "assets/source/ui-generated-v1/veyra/selection_ring.png",
+      "width": 512,
+      "height": 512,
+      "transparent_background": true,
+      "intended_use": "circular or elliptical selection marker / highlight ring"
+    }
+  ]
+}
