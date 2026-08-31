@@ -31,6 +31,7 @@ const asteroidArts = [asteroid01, asteroid02, asteroid03, asteroid04];
 const names = ['Helion', 'Lemiar', 'Varkon', 'Irmen', 'Ostorna', 'Emphria', 'Galaus', 'Lunaris', 'Kealir', 'Rinor', 'Velion', 'Nexar', 'Tekron', 'Astra', 'Orpheon', 'Talos', 'Meridia', 'Cyrene', 'Drakon', 'Erebus', 'Vega', 'Saros', 'Nyx', 'Ceres'];
 
 const GALAXY = 1;
+const GALAXY_COUNT = 1;
 const SYSTEM_COUNT = 40;
 const POSITION_COUNT = 24;
 
@@ -110,7 +111,6 @@ function makeSystem(system: number) {
 
 export function UniverseView({ onNotice }: UniverseViewProps) {
   const [system, setSystem] = useState(1);
-  const [position, setPosition] = useState(1);
   const [showCoords, setShowCoords] = useState(true);
   const [showEmpty, setShowEmpty] = useState(false);
   const [showAsteroids, setShowAsteroids] = useState(true);
@@ -120,34 +120,32 @@ export function UniverseView({ onNotice }: UniverseViewProps) {
   const goSystem = (next: number) => {
     const bounded = Math.min(SYSTEM_COUNT, Math.max(1, next));
     setSystem(bounded);
-    setPosition(1);
     onNotice(`Галактика ${GALAXY} · Солнечная система ${bounded}.`);
-  };
-
-  const goCoordinates = () => {
-    const target = systemData.planets.find((planet) => planet.slot === position);
-    if (target) {
-      onNotice(`${target.name} · [${GALAXY}:${system}:${position}]`);
-    } else {
-      onNotice(`Позиция [${GALAXY}:${system}:${position}] свободна.`);
-    }
   };
 
   return (
     <main className="universe-view">
       <div className="universe-nav">
         <div className="universe-breadcrumb">
-          <button type="button">Вселенная</button><b>›</b><button type="button">Галактика {GALAXY}</button><b>›</b><strong>Солнечная система {system}</strong>
+          <strong>Галактика {GALAXY}</strong><b>›</b><strong>Солнечная система {system}</strong>
         </div>
 
         <div className="universe-jump">
-          <button className="step" type="button" onClick={() => goSystem(system - 1)} disabled={system === 1}>‹</button>
-          <span className="system-counter">{system}<small>/ {SYSTEM_COUNT}</small></span>
-          <button className="step" type="button" onClick={() => goSystem(system + 1)} disabled={system === SYSTEM_COUNT}>›</button>
-          <label>G<select value={GALAXY} disabled><option value={1}>1</option></select></label>
-          <label>S<select value={system} onChange={(event) => goSystem(Number(event.target.value))}>{Array.from({ length: SYSTEM_COUNT }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}</select></label>
-          <label>P<select value={position} onChange={(event) => setPosition(Number(event.target.value))}>{Array.from({ length: POSITION_COUNT }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}</select></label>
-          <button className="go" type="button" onClick={goCoordinates}>ПЕРЕЙТИ</button>
+          <div className="nav-coordinate nav-coordinate--disabled">
+            <span>ГАЛАКТИКА</span>
+            <button className="step" type="button" disabled={GALAXY_COUNT === 1}>‹</button>
+            <strong>{GALAXY}<small>/ {GALAXY_COUNT}</small></strong>
+            <button className="step" type="button" disabled={GALAXY_COUNT === 1}>›</button>
+          </div>
+          <div className="nav-coordinate">
+            <span>СИСТЕМА</span>
+            <button className="step" type="button" onClick={() => goSystem(system - 1)} disabled={system === 1}>‹</button>
+            <select value={system} onChange={(event) => goSystem(Number(event.target.value))}>
+              {Array.from({ length: SYSTEM_COUNT }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}
+            </select>
+            <small>/ {SYSTEM_COUNT}</small>
+            <button className="step" type="button" onClick={() => goSystem(system + 1)} disabled={system === SYSTEM_COUNT}>›</button>
+          </div>
         </div>
       </div>
 
@@ -167,7 +165,7 @@ export function UniverseView({ onNotice }: UniverseViewProps) {
 
         {showEmpty ? Array.from({ length: POSITION_COUNT }, (_, index) => index + 1).filter((slot) => !occupiedSlots.has(slot)).map((slot) => {
           const point = slotPoint(slot);
-          return <button key={slot} type="button" className="empty-slot" style={{ '--x': `${point.x}%`, '--y': `${point.y}%` } as CSSProperties} onClick={() => { setPosition(slot); onNotice(`Свободная позиция [1:${system}:${slot}].`); }}><span>{slot}</span></button>;
+          return <button key={slot} type="button" className="empty-slot" style={{ '--x': `${point.x}%`, '--y': `${point.y}%` } as CSSProperties} onClick={() => onNotice(`Свободная позиция [1:${system}:${slot}].`)}><span>{slot}</span></button>;
         }) : null}
 
         {systemData.planets.map((planet) => (
@@ -176,7 +174,7 @@ export function UniverseView({ onNotice }: UniverseViewProps) {
             key={planet.slot}
             className={`system-planet ${planet.owned ? 'owned' : ''}`}
             style={{ '--x': `${planet.x}%`, '--y': `${planet.y}%` } as CSSProperties}
-            onClick={() => { setPosition(planet.slot); onNotice(`${planet.name} · [1:${system}:${planet.slot}]`); }}
+            onClick={() => onNotice(`${planet.name} · [1:${system}:${planet.slot}]`)}
           >
             <img src={planet.art} alt="" draggable={false} />
             <span className="planet-slot">{planet.slot}</span>
