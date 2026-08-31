@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import './planet-skins.css';
+import './universe.css';
+import { UniverseView } from './UniverseView';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import planetColonized from '../assets/source/starter/planets/planet_colonized.png';
@@ -194,7 +196,11 @@ export function App() {
   const chooseTab = (tab: string) => {
     setActiveTab(tab);
     setSkinOpen(false);
-    if (tab !== 'Планета') setNotice(`Экран «${tab}» будет следующим модулем.`);
+    if (tab === 'Вселенная') {
+      setNotice('Галактика 1 загружена. Доступно 40 солнечных систем.');
+    } else if (tab !== 'Планета') {
+      setNotice(`Экран «${tab}» будет следующим модулем.`);
+    }
   };
 
   const chooseSkin = (skin: (typeof planetSkins)[number]) => {
@@ -254,7 +260,7 @@ export function App() {
             <p className="eyebrow">ПАСПОРТ ПЛАНЕТЫ</p>
             <button className="planet-selector" type="button" onClick={() => setSkinOpen((open) => !open)}>
               <span className="mini-planet"><img src={selectedPlanet.art} alt="" /></span>
-              <span><strong>Helion 01</strong><small>ОБЛИК: {selectedPlanet.label.toUpperCase()}</small></span>
+              <span><strong>Helion 01</strong><small>[1:1:1] · {selectedPlanet.label.toUpperCase()}</small></span>
               <i>{skinOpen ? '⌃' : '⌄'}</i>
             </button>
             {skinOpen ? (
@@ -271,9 +277,9 @@ export function App() {
               </div>
             ) : null}
             <dl>
-              <div><dt>Тип</dt><dd>Колонизированная</dd></div>
+              <div><dt>Статус</dt><dd>Основная планета</dd></div>
               <div><dt>Фракция</dt><dd>Aegis</dd></div>
-              <div><dt>Координаты</dt><dd>01:01:01</dd></div>
+              <div><dt>Координаты</dt><dd>[1:1:1]</dd></div>
               <div><dt>Население</dt><dd>{state.population} / 70</dd></div>
               <div><dt>Энергия</dt><dd>{state.energy}</dd></div>
               <div><dt>Солнечные станции</dt><dd>{state.solarStations}</dd></div>
@@ -282,46 +288,52 @@ export function App() {
           </Frame>
         </aside>
 
-        <main className="planet-view">
-          <div className="scene-title"><small>{zoneLabel}</small><h1>HELION 01</h1><p>SYSTEM-1-1 • AEGIS COLONY</p></div>
-          <div className="orbit orbit--outer" /><div className="orbit orbit--inner" />
-          <img className="selection-ring" src={selectionRing} alt="" draggable={false} />
-          <img className="planet-image" src={selectedPlanet.art} alt="Helion 01" draggable={false} />
-          <div className="planet-status"><span>◆</span> СТАБИЛЬНО <i /> ONLINE</div>
-          <Frame art={panelLarge} className="notice-panel"><span>{notice}</span><button onClick={reset}>СБРОСИТЬ ПРОТОТИП</button></Frame>
-        </main>
+        {activeTab === 'Вселенная' ? (
+          <UniverseView onNotice={setNotice} />
+        ) : (
+          <main className="planet-view">
+            <div className="scene-title"><small>{zoneLabel}</small><h1>HELION 01</h1><p>[1:1:1] • AEGIS HOMEWORLD</p></div>
+            <div className="orbit orbit--outer" /><div className="orbit orbit--inner" />
+            <img className="selection-ring" src={selectionRing} alt="" draggable={false} />
+            <img className="planet-image" src={selectedPlanet.art} alt="Helion 01" draggable={false} />
+            <div className="planet-status"><span>◆</span> СТАБИЛЬНО <i /> ONLINE</div>
+            <Frame art={panelLarge} className="notice-panel"><span>{notice}</span><button onClick={reset}>СБРОСИТЬ ПРОТОТИП</button></Frame>
+          </main>
+        )}
 
-        <aside className="right-column">
-          <Frame art={panelMedium} className="queue-panel">
-            <div className="panel-heading"><span><small>ПРОИЗВОДСТВО</small><strong>ОЧЕРЕДЬ СТРОИТЕЛЬСТВА</strong></span><b>{state.queue ? 1 : 0} / 4</b></div>
+        {activeTab === 'Планета' ? (
+          <aside className="right-column">
+            <Frame art={panelMedium} className="queue-panel">
+              <div className="panel-heading"><span><small>ПРОИЗВОДСТВО</small><strong>ОЧЕРЕДЬ СТРОИТЕЛЬСТВА</strong></span><b>{state.queue ? 1 : 0} / 4</b></div>
 
-            <div className={`queue-card ${state.queue ? 'busy' : ''}`}>
-              <img src={state.queue ? queueBusy : queueEmpty} alt="" draggable={false} />
-              <div className="queue-card__body">
-                <span className="queue-icon">☼</span>
-                <span><strong>{state.queue?.name ?? 'Свободный слот'}</strong><small>{state.queue ? `Осталось ${formatCountdown(remaining)}` : 'Готов к строительству'}</small></span>
-                <b>{state.queue ? 'I' : '+'}</b>
+              <div className={`queue-card ${state.queue ? 'busy' : ''}`}>
+                <img src={state.queue ? queueBusy : queueEmpty} alt="" draggable={false} />
+                <div className="queue-card__body">
+                  <span className="queue-icon">☼</span>
+                  <span><strong>{state.queue?.name ?? 'Свободный слот'}</strong><small>{state.queue ? `Осталось ${formatCountdown(remaining)}` : 'Готов к строительству'}</small></span>
+                  <b>{state.queue ? 'I' : '+'}</b>
+                </div>
+                {state.queue ? <div className="queue-progress"><i style={{ width: `${progress}%` }} /></div> : null}
               </div>
-              {state.queue ? <div className="queue-progress"><i style={{ width: `${progress}%` }} /></div> : null}
-            </div>
 
-            {[2, 3, 4].map((slot) => (
-              <div className="queue-card locked" key={slot}>
-                <img src={queueLocked} alt="" draggable={false} />
-                <div className="queue-card__body"><span className="queue-icon">◇</span><span><strong>Слот 0{slot}</strong><small>Заблокирован</small></span><b>⌑</b></div>
+              {[2, 3, 4].map((slot) => (
+                <div className="queue-card locked" key={slot}>
+                  <img src={queueLocked} alt="" draggable={false} />
+                  <div className="queue-card__body"><span className="queue-icon">◇</span><span><strong>Слот 0{slot}</strong><small>Заблокирован</small></span><b>⌑</b></div>
+                </div>
+              ))}
+
+              <div className="build-preview">
+                <span className="build-icon">☀</span>
+                <div><strong>Солнечная станция I</strong><small>+25 энергии после завершения</small></div>
+                <b>◆ {formatNumber(BUILD_COST)}</b>
               </div>
-            ))}
+              <AegisButton onClick={build} disabled={Boolean(state.queue)}>ПОСТРОИТЬ</AegisButton>
+            </Frame>
+          </aside>
+        ) : null}
 
-            <div className="build-preview">
-              <span className="build-icon">☀</span>
-              <div><strong>Солнечная станция I</strong><small>+25 энергии после завершения</small></div>
-              <b>◆ {formatNumber(BUILD_COST)}</b>
-            </div>
-            <AegisButton onClick={build} disabled={Boolean(state.queue)}>ПОСТРОИТЬ</AegisButton>
-          </Frame>
-        </aside>
-
-        <footer className="footer-status"><span>ASTERION // PLANET VERTICAL SLICE</span><span>1920×1080 BASE CANVAS</span><span>ESC — WINDOWED • F11 — FULLSCREEN</span></footer>
+        <footer className="footer-status"><span>ASTERION // {activeTab === 'Вселенная' ? 'UNIVERSE NAVIGATION V1' : 'PLANET VERTICAL SLICE'}</span><span>1920×1080 BASE CANVAS</span><span>ESC — WINDOWED • F11 — FULLSCREEN</span></footer>
       </div>
     </div>
   );
