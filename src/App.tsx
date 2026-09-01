@@ -514,7 +514,6 @@ export function App() {
             <span className="campaign-icon">✦</span>
             <div className="campaign-status"><strong>КАМПАНИЯ АКТИВНА</strong></div>
             <time>{new Date(now).toLocaleTimeString('ru-RU', { hour12: false })}</time>
-            <span className="campaign-chevron" aria-hidden="true">⌄</span>
             <nav className="utility-navigation" aria-label="Служебная навигация">
               {utilityTabs.map(({ label, icon }) => (
                 <button key={label} type="button" aria-label={label} className={activeTab === label ? 'active' : ''} onClick={() => chooseTab(label)}>

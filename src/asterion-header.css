@@ -369,8 +369,7 @@
 }
 .campaign-status{position:absolute;z-index:1;left:42px;top:15px}
 .campaign-status strong{font-size:12px;letter-spacing:.8px;color:#eafff2;white-space:nowrap}
-.campaign-module time{position:absolute;z-index:1;left:42px;top:42px;font-size:22px;line-height:1;font-weight:800;color:#fff;letter-spacing:.1px;white-space:nowrap}
-.campaign-chevron{position:absolute;z-index:1;right:18px;top:48px;color:#8fd3e0;font-size:18px;line-height:1}
+.campaign-module time{position:absolute;z-index:1;left:50%;top:37px;transform:translateX(-50%);font-size:22px;line-height:1;font-weight:800;color:#fff;letter-spacing:.1px;white-space:nowrap}
 .utility-navigation{
   position:absolute;
   z-index:4;
