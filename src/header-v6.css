@@ -1,334 +1,317 @@
-/* Asterion header v6 — implementation of the approved wide command-bar reference. */
+/* Asterion header v7 — fixed reference geometry. The DOM still contains 9 tabs,
+   but six primary modules stay in the lower rail while Science/Rating/Settings
+   are pinned into the compact campaign utility area. */
 
 .persistent-header-v4{
-  left:22px;
-  right:22px;
-  top:18px;
-  height:188px;
-  display:grid;
-  grid-template-columns:330px minmax(0,1fr) 270px;
-  grid-template-rows:88px 84px;
-  gap:10px 12px;
-  align-items:stretch;
+  position:absolute!important;
+  left:22px!important;
+  right:22px!important;
+  top:18px!important;
+  height:214px!important;
+  display:block!important;
+  overflow:visible!important;
 }
 
-/* Left permanent planet module spans both header rows. */
+/* Planet + zone cluster. */
 .persistent-header__planet-v4{
-  grid-column:1;
-  grid-row:1 / 3;
-  width:auto;
-  height:182px;
-  padding:0;
-  overflow:visible;
+  position:absolute!important;
+  left:0!important;
+  top:0!important;
+  width:480px!important;
+  height:214px!important;
+  padding:0!important;
+  margin:0!important;
+  overflow:visible!important;
+  border:0!important;
+  background:transparent!important;
+  clip-path:none!important;
+  box-shadow:none!important;
 }
-
 .header-planet-orbit-v4{
-  position:absolute;
-  left:0;
-  top:1px;
-  width:160px;
-  height:160px;
-  margin:0;
+  position:absolute!important;
+  left:0!important;
+  top:0!important;
+  width:218px!important;
+  height:204px!important;
+  margin:0!important;
 }
 .header-planet-orbit-v4:before{
-  left:19px;
-  top:7px;
-  width:126px;
-  height:126px;
-  border-color:rgba(58,218,252,.44);
-  box-shadow:0 0 0 7px rgba(1,12,20,.88),0 0 30px rgba(0,199,246,.24),inset 0 0 25px rgba(0,183,232,.1);
+  left:29px!important;
+  top:10px!important;
+  width:154px!important;
+  height:154px!important;
+  border:1px solid rgba(69,225,255,.52)!important;
+  box-shadow:0 0 0 8px rgba(1,10,17,.93),0 0 36px rgba(0,198,246,.28),inset 0 0 28px rgba(0,183,232,.12)!important;
 }
 .header-planet-orbit-v4:after{
-  left:29px;
-  top:17px;
-  width:106px;
-  height:106px;
-  border-color:rgba(89,228,255,.28);
+  left:41px!important;
+  top:22px!important;
+  width:130px!important;
+  height:130px!important;
+  border:1px dashed rgba(102,232,255,.27)!important;
 }
 .header-planet-world-v4{
-  left:25px;
-  top:13px;
-  width:114px;
-  height:114px;
+  left:35px!important;
+  top:16px!important;
+  width:142px!important;
+  height:142px!important;
+  filter:drop-shadow(0 0 22px rgba(33,200,255,.42))!important;
 }
-
 .header-zone-v4{
-  width:42px;
-  height:42px;
-  background:radial-gradient(circle at 45% 35%,rgba(8,72,92,.98),rgba(2,14,22,.99) 72%);
-  border-color:rgba(75,224,253,.55);
-  box-shadow:0 0 0 4px rgba(1,10,17,.95),0 0 15px rgba(0,205,247,.16);
+  width:46px!important;
+  height:46px!important;
+  display:grid!important;
+  place-items:center!important;
+  border-radius:50%!important;
+  border:1px solid rgba(78,223,252,.56)!important;
+  background:radial-gradient(circle at 45% 35%,rgba(8,72,92,.98),rgba(2,14,22,.99) 72%)!important;
+  box-shadow:0 0 0 5px rgba(1,9,16,.96),0 0 16px rgba(0,205,247,.17)!important;
 }
-.header-zone-v4 svg{width:22px;height:22px}
-.header-zone-v4--resource{left:3px;top:38px}
-.header-zone-v4--industry{left:119px;top:28px}
-.header-zone-v4--military{left:62px;top:120px}
+.header-zone-v4 svg{width:24px!important;height:24px!important}
+.header-zone-v4--resource{left:5px!important;top:52px!important}
+.header-zone-v4--industry{left:161px!important;top:43px!important;color:#ffd255!important;border-color:rgba(255,190,68,.54)!important}
+.header-zone-v4--military{left:82px!important;top:151px!important;color:#ff746d!important;border-color:rgba(255,105,96,.55)!important}
 
+/* Current planet selector lives beside the large planet, exactly like the approved concept. */
 .current-planet-control-v4{
-  left:154px;
-  right:auto;
-  top:27px;
-  bottom:auto;
-  width:174px;
-  height:66px;
+  position:absolute!important;
+  left:216px!important;
+  top:18px!important;
+  right:auto!important;
+  bottom:auto!important;
+  width:258px!important;
+  height:86px!important;
+  margin:0!important;
 }
 .current-planet-select-v4{
-  height:66px;
-  grid-template-columns:46px minmax(0,1fr) 18px;
-  gap:8px;
-  padding:7px 9px;
-  border:1px solid rgba(70,211,242,.28);
-  background:linear-gradient(180deg,rgba(5,31,45,.92),rgba(2,17,27,.94));
-  clip-path:polygon(0 0,94% 0,100% 18%,100% 100%,0 100%);
+  width:100%!important;
+  height:86px!important;
+  display:grid!important;
+  grid-template-columns:54px minmax(0,1fr) 20px!important;
+  align-items:center!important;
+  gap:10px!important;
+  padding:9px 12px!important;
+  border:1px solid rgba(72,215,245,.34)!important;
+  background:linear-gradient(180deg,rgba(5,31,45,.96),rgba(2,16,26,.97))!important;
+  clip-path:polygon(0 0,94% 0,100% 18%,100% 100%,0 100%)!important;
+  box-shadow:inset 0 0 24px rgba(0,188,235,.035)!important;
 }
-.current-planet-select-v4 img{width:44px;height:44px}
-.current-planet-select-v4 span small{font-size:9px;letter-spacing:1.1px;color:#67cde5}
-.current-planet-select-v4 span strong{font-size:15px;margin-top:4px}
-.current-planet-select-v4 span em{font-size:9px}
-.current-planet-select-v4 i{font-size:14px}
-
+.current-planet-select-v4 img{width:50px!important;height:50px!important}
+.current-planet-select-v4 span small{font-size:10px!important;letter-spacing:1.2px!important;color:#69cfe7!important}
+.current-planet-select-v4 span strong{font-size:16px!important;line-height:1.1!important;margin-top:6px!important}
+.current-planet-select-v4 span em{font-size:10px!important;color:#7999a4!important}
+.current-planet-select-v4 i{font-size:16px!important;color:#69e7ff!important}
 .planet-list-popover-v4{
-  left:154px;
-  right:auto;
-  top:99px;
-  width:174px;
+  left:216px!important;
+  right:auto!important;
+  top:108px!important;
+  width:258px!important;
+  z-index:240!important;
 }
 
-/* Flatten the center wrapper so resources and tabs can occupy separate rows. */
-.persistent-header__center-v4{
-  display:contents;
-  margin:0;
-}
+/* The wrapper must not contribute layout of its own. */
+.persistent-header__center-v4{display:contents!important;margin:0!important}
 
-/* Top resource rail. */
+/* Top resource rail starts AFTER the current-planet selector. */
 .shell-resources{
-  grid-column:2;
-  grid-row:1;
-  height:88px;
-  display:grid;
-  grid-template-columns:repeat(5,minmax(0,1fr));
-  gap:0;
-  border:1px solid rgba(65,205,236,.24);
-  background:linear-gradient(180deg,rgba(4,24,36,.94),rgba(2,13,22,.96));
-  clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);
-  overflow:hidden;
+  position:absolute!important;
+  left:480px!important;
+  right:258px!important;
+  top:0!important;
+  width:auto!important;
+  height:104px!important;
+  display:grid!important;
+  grid-template-columns:repeat(5,minmax(0,1fr))!important;
+  gap:0!important;
+  overflow:hidden!important;
+  border:1px solid rgba(66,207,237,.28)!important;
+  background:linear-gradient(180deg,rgba(5,27,39,.96),rgba(2,14,23,.98))!important;
+  clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px)!important;
+  box-shadow:inset 0 0 30px rgba(0,185,230,.025)!important;
 }
 .shell-resources .resource-chip{
-  height:88px;
-  min-width:0;
-  display:grid;
-  grid-template-columns:50px minmax(0,1fr);
-  align-items:center;
-  padding:0 13px;
-  overflow:hidden;
-  border:0;
-  border-right:1px solid rgba(63,179,209,.14);
-  background:linear-gradient(90deg,rgba(7,36,49,.45),rgba(2,18,28,.2));
+  position:relative!important;
+  height:104px!important;
+  min-width:0!important;
+  display:grid!important;
+  grid-template-columns:54px minmax(0,1fr)!important;
+  align-items:center!important;
+  padding:0 15px!important;
+  border:0!important;
+  border-right:1px solid rgba(68,185,214,.14)!important;
+  background:linear-gradient(90deg,rgba(6,34,47,.42),rgba(2,18,28,.16))!important;
+  overflow:hidden!important;
 }
-.shell-resources .resource-chip:last-child{border-right:0}
+.shell-resources .resource-chip:last-child{border-right:0!important}
 .shell-resources .resource-chip__icon{
-  position:static;
-  width:38px;
-  height:38px;
-  transform:none;
-  display:grid;
-  place-items:center;
-  color:#59e7ff;
-  filter:drop-shadow(0 0 7px rgba(0,205,255,.36));
+  position:static!important;
+  transform:none!important;
+  width:42px!important;
+  height:42px!important;
+  display:grid!important;
+  place-items:center!important;
+  filter:drop-shadow(0 0 8px rgba(0,205,255,.34))!important;
 }
-.shell-resources .resource-chip__icon svg{width:30px;height:30px}
-.shell-resources .resource-chip__text{
-  position:static;
-  min-width:0;
-}
-.shell-resources .resource-chip small{
-  font-size:10px;
-  letter-spacing:1px;
-  color:#769aa7;
-}
-.shell-resources .resource-chip strong{
-  margin-top:3px;
-  font-size:17px;
-  line-height:1.1;
-  color:#f1fcff;
-}
-.shell-resources .resource-chip em{
-  display:block;
-  margin-top:4px;
-  font-size:10px;
-  color:#55eba0;
-}
-.shell-resources .resource-chip--mineral .resource-chip__icon{color:#9da8ff}
-.shell-resources .resource-chip--gas .resource-chip__icon{color:#49f0a5}
-.shell-resources .resource-chip--energy .resource-chip__icon{color:#ffd34f}
-.shell-resources .resource-chip--population .resource-chip__icon{color:#dffaff}
-/* Energy is capacity/production state, not a passive hourly resource. */
+.shell-resources .resource-chip__icon svg{width:32px!important;height:32px!important}
+.shell-resources .resource-chip__text{position:static!important;min-width:0!important}
+.shell-resources .resource-chip small{font-size:10px!important;letter-spacing:1px!important;color:#769aa7!important}
+.shell-resources .resource-chip strong{display:block!important;margin-top:4px!important;font-size:18px!important;line-height:1.05!important;color:#f2fcff!important;white-space:nowrap!important}
+.shell-resources .resource-chip em{display:block!important;margin-top:6px!important;font-size:10px!important;color:#55eba0!important}
+.shell-resources .resource-chip--mineral .resource-chip__icon{color:#a6adff!important}
+.shell-resources .resource-chip--gas .resource-chip__icon{color:#4df0a7!important}
+.shell-resources .resource-chip--energy .resource-chip__icon{color:#ffd34f!important}
+.shell-resources .resource-chip--population .resource-chip__icon{color:#dffaff!important}
+/* Energy intentionally has no hourly gain. */
 .shell-resources .resource-chip--energy em{display:none!important}
 
-/* Campaign/time occupies only the top-right rail. */
+/* Compact campaign status + clock in the upper-right. */
 .shell-campaign-v4{
-  grid-column:3;
-  grid-row:1;
-  position:relative;
-  margin:0;
-  width:auto;
-  height:88px;
-  padding:12px 14px!important;
+  position:absolute!important;
+  right:0!important;
+  top:0!important;
+  left:auto!important;
+  width:246px!important;
+  height:104px!important;
+  margin:0!important;
+  padding:0!important;
   display:block!important;
-  border:1px solid rgba(65,205,236,.24)!important;
-  background:linear-gradient(180deg,rgba(4,25,37,.96),rgba(2,14,23,.98))!important;
-  clip-path:polygon(10px 0,100% 0,100% 100%,0 100%,0 10px)!important;
+  border:1px solid rgba(66,207,237,.28)!important;
+  background:linear-gradient(180deg,rgba(5,28,40,.97),rgba(2,14,23,.99))!important;
+  clip-path:polygon(14px 0,100% 0,100% 100%,0 100%,0 14px)!important;
+  box-shadow:inset 0 0 28px rgba(0,185,230,.03)!important;
 }
 .shell-campaign-v4 .campaign-icon{
-  position:absolute;
-  left:15px;
-  top:18px;
-  width:11px;
-  height:11px;
-  border-radius:50%;
+  position:absolute!important;
+  left:18px!important;
+  top:18px!important;
+  width:11px!important;
+  height:11px!important;
+  border-radius:50%!important;
   font-size:0!important;
-  background:#38ee7e;
-  box-shadow:0 0 8px #38ee7e,0 0 18px rgba(56,238,126,.5);
+  background:#38ee7e!important;
+  box-shadow:0 0 8px #38ee7e,0 0 18px rgba(56,238,126,.5)!important;
 }
-.shell-campaign-v4 div{
-  position:absolute;
-  left:34px;
-  top:13px;
-}
-.shell-campaign-v4 strong{
-  font-size:11px!important;
-  letter-spacing:.8px;
-  color:#eafff2;
-}
+.shell-campaign-v4 div{position:absolute!important;left:39px!important;top:13px!important}
+.shell-campaign-v4 strong{font-size:11px!important;letter-spacing:.8px!important;color:#eafff2!important}
 .shell-campaign-v4 small{display:none!important}
-.shell-campaign-v4 time{
-  position:absolute;
-  left:34px;
-  bottom:12px;
-  font-size:22px!important;
-  line-height:1;
-  font-weight:750;
-  color:#fff;
-}
+.shell-campaign-v4 time{position:absolute!important;left:39px!important;top:41px!important;font-size:23px!important;line-height:1!important;font-weight:760!important;color:#fff!important}
 
-/* Bottom row: six primary modules. */
+/* Lower rail: exactly six primary modules. */
 .shell-tabs{
-  grid-column:2 / 4;
-  grid-row:2;
-  position:static;
-  height:84px;
-  display:grid;
-  grid-template-columns:repeat(6,minmax(0,1fr));
-  gap:0;
-  border:1px solid rgba(64,202,234,.25);
-  background:linear-gradient(180deg,rgba(4,25,37,.96),rgba(2,13,22,.98));
-  clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);
-  overflow:visible;
+  position:absolute!important;
+  left:286px!important;
+  right:0!important;
+  top:114px!important;
+  width:auto!important;
+  height:92px!important;
+  display:flex!important;
+  align-items:stretch!important;
+  gap:0!important;
+  overflow:visible!important;
+  border:1px solid rgba(65,205,236,.28)!important;
+  background:linear-gradient(180deg,rgba(5,28,40,.98),rgba(2,14,23,.99))!important;
+  clip-path:polygon(15px 0,100% 0,100% calc(100% - 15px),calc(100% - 15px) 100%,0 100%,0 15px)!important;
 }
 .shell-tabs button{
-  position:relative;
-  height:84px;
-  min-width:0;
-  display:grid;
-  grid-template-columns:44px minmax(0,1fr);
-  align-items:center;
-  justify-content:center;
-  gap:10px;
-  padding:0 18px;
-  border:0;
-  border-right:1px solid rgba(66,185,213,.14);
-  background:linear-gradient(180deg,rgba(5,31,44,.26),rgba(1,14,23,.1));
-  color:#c0d3da;
-  overflow:hidden;
+  position:relative!important;
+  flex:1 1 0!important;
+  width:auto!important;
+  height:92px!important;
+  min-width:0!important;
+  display:flex!important;
+  flex-direction:row!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:14px!important;
+  padding:0 18px!important;
+  margin:0!important;
+  border:0!important;
+  border-right:1px solid rgba(68,188,216,.14)!important;
+  background:linear-gradient(180deg,rgba(6,35,48,.24),rgba(1,14,23,.08))!important;
+  color:#c8d8de!important;
+  overflow:hidden!important;
 }
-.shell-tabs button:nth-child(7){border-right:0}
 .shell-tabs button span{
-  font-size:14px;
-  font-weight:650;
-  letter-spacing:.25px;
-  text-align:left;
+  position:static!important;
+  display:block!important;
+  font-size:15px!important;
+  line-height:1!important;
+  font-weight:650!important;
+  letter-spacing:.2px!important;
+  text-align:left!important;
+  white-space:nowrap!important;
 }
 .shell-tabs button::before{
   content:"";
-  width:34px;
-  height:34px;
-  display:block;
-  background-position:center;
-  background-size:contain;
-  background-repeat:no-repeat;
-  opacity:.88;
-  filter:drop-shadow(0 0 5px rgba(117,235,255,.18));
+  flex:0 0 38px!important;
+  width:38px!important;
+  height:38px!important;
+  display:block!important;
+  background-position:center!important;
+  background-size:contain!important;
+  background-repeat:no-repeat!important;
+  opacity:.9!important;
+  filter:drop-shadow(0 0 6px rgba(120,235,255,.2))!important;
 }
-.shell-tabs button:hover{
-  color:#effdff;
-  background:linear-gradient(180deg,rgba(8,49,65,.66),rgba(2,20,30,.32));
-}
-.shell-tabs button.active{
-  color:#fff;
-  background:linear-gradient(180deg,rgba(7,65,86,.82),rgba(2,25,36,.45));
-  box-shadow:inset 0 -3px #39ddff,inset 0 -10px 22px rgba(0,205,255,.08);
-  text-shadow:0 0 10px rgba(61,224,255,.26);
-}
-.shell-tabs button.active::before{opacity:1;filter:drop-shadow(0 0 8px rgba(70,225,255,.55))}
+.shell-tabs button:hover{color:#f4fdff!important;background:linear-gradient(180deg,rgba(8,51,67,.68),rgba(2,20,30,.3))!important}
+.shell-tabs button.active{color:#fff!important;background:linear-gradient(180deg,rgba(7,67,88,.86),rgba(2,26,37,.48))!important;box-shadow:inset 0 -4px #38ddff,inset 0 -14px 28px rgba(0,205,255,.1)!important;text-shadow:0 0 10px rgba(61,224,255,.26)!important}
+.shell-tabs button.active::before{opacity:1!important;filter:drop-shadow(0 0 10px rgba(70,225,255,.62))!important}
 
-/* Primary navigation SVG masks, matching the approved concept. */
-.shell-tabs button:nth-child(1)::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%238deeff' stroke-width='2'%3E%3Cellipse cx='16' cy='16' rx='10' ry='6'/%3E%3Ccircle cx='16' cy='16' r='5'/%3E%3Cpath d='M5 13c4-5 18-8 23-2M5 19c5 5 19 6 23 0'/%3E%3C/svg%3E")}
-.shell-tabs button:nth-child(2)::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23d9faff' stroke-width='2'%3E%3Ccircle cx='16' cy='16' r='2'/%3E%3Cellipse cx='16' cy='16' rx='12' ry='5' transform='rotate(25 16 16)'/%3E%3Cellipse cx='16' cy='16' rx='12' ry='5' transform='rotate(-35 16 16)'/%3E%3C/svg%3E")}
-.shell-tabs button:nth-child(3)::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23d9faff' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M16 3 24 26l-8-5-8 5L16 3Z'/%3E%3Cpath d='M11 19H4l5-6M21 19h7l-5-6M16 8v13'/%3E%3C/svg%3E")}
-.shell-tabs button:nth-child(4)::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23d9faff' stroke-width='2'%3E%3Ccircle cx='16' cy='16' r='10'/%3E%3Ccircle cx='16' cy='16' r='4'/%3E%3Cpath d='M16 2v6M16 24v6M2 16h6M24 16h6'/%3E%3C/svg%3E")}
-.shell-tabs button:nth-child(6)::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23d9faff' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='m16 8 4 5-4 5-4-5 4-5Z'/%3E%3Cpath d='M12 13 3 9l6 9 7 7M20 13l9-4-6 9-7 7'/%3E%3C/svg%3E")}
-.shell-tabs button:nth-child(7)::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23d9faff' stroke-width='2'%3E%3Cpath d='M9 3h11l4 4v22H9V3Z'/%3E%3Cpath d='M20 3v5h5M13 13h8M13 18h8M13 23h6'/%3E%3C/svg%3E")}
+/* Six primary icons. */
+.shell-tabs button:nth-child(1)::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%238deeff' stroke-width='2'%3E%3Cellipse cx='16' cy='16' rx='10' ry='6'/%3E%3Ccircle cx='16' cy='16' r='5'/%3E%3Cpath d='M5 13c4-5 18-8 23-2M5 19c5 5 19 6 23 0'/%3E%3C/svg%3E")!important}
+.shell-tabs button:nth-child(2)::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23d9faff' stroke-width='2'%3E%3Ccircle cx='16' cy='16' r='2'/%3E%3Cellipse cx='16' cy='16' rx='12' ry='5' transform='rotate(25 16 16)'/%3E%3Cellipse cx='16' cy='16' rx='12' ry='5' transform='rotate(-35 16 16)'/%3E%3C/svg%3E")!important}
+.shell-tabs button:nth-child(3)::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23d9faff' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M16 3 24 26l-8-5-8 5L16 3Z'/%3E%3Cpath d='M11 19H4l5-6M21 19h7l-5-6M16 8v13'/%3E%3C/svg%3E")!important}
+.shell-tabs button:nth-child(4)::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23d9faff' stroke-width='2'%3E%3Ccircle cx='16' cy='16' r='10'/%3E%3Ccircle cx='16' cy='16' r='4'/%3E%3Cpath d='M16 2v6M16 24v6M2 16h6M24 16h6'/%3E%3C/svg%3E")!important}
+.shell-tabs button:nth-child(6)::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23d9faff' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='m16 8 4 5-4 5-4-5 4-5Z'/%3E%3Cpath d='M12 13 3 9l6 9 7 7M20 13l9-4-6 9-7 7'/%3E%3C/svg%3E")!important}
+.shell-tabs button:nth-child(7)::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23d9faff' stroke-width='2'%3E%3Cpath d='M9 3h11l4 4v22H9V3Z'/%3E%3Cpath d='M20 3v5h5M13 13h8M13 18h8M13 23h6'/%3E%3C/svg%3E")!important}
 
-/* Science / Rating / Settings are compact utility buttons in the campaign rail. */
+/* Utility tabs are removed from primary flow and pinned into the campaign block. */
 .shell-tabs button:nth-child(5),
 .shell-tabs button:nth-child(8),
 .shell-tabs button:nth-child(9){
-  position:absolute;
-  z-index:8;
-  top:41px;
-  width:42px;
-  height:38px;
-  display:grid;
-  grid-template-columns:1fr;
-  place-items:center;
-  padding:0;
-  border:0;
-  border-left:1px solid rgba(74,195,221,.16);
-  background:transparent;
-  overflow:visible;
+  position:absolute!important;
+  z-index:30!important;
+  top:-46px!important;
+  flex:none!important;
+  width:42px!important;
+  height:36px!important;
+  display:grid!important;
+  place-items:center!important;
+  padding:0!important;
+  border:0!important;
+  border-left:1px solid rgba(72,196,224,.16)!important;
+  background:transparent!important;
+  overflow:visible!important;
 }
-.shell-tabs button:nth-child(5){right:110px}
-.shell-tabs button:nth-child(8){right:66px}
-.shell-tabs button:nth-child(9){right:22px}
+.shell-tabs button:nth-child(5){right:150px!important}
+.shell-tabs button:nth-child(8){right:103px!important}
+.shell-tabs button:nth-child(9){right:56px!important}
 .shell-tabs button:nth-child(5) span,
 .shell-tabs button:nth-child(8) span,
-.shell-tabs button:nth-child(9) span{display:none}
+.shell-tabs button:nth-child(9) span{display:none!important}
 .shell-tabs button:nth-child(5)::before,
 .shell-tabs button:nth-child(8)::before,
-.shell-tabs button:nth-child(9)::before{width:23px;height:23px}
-.shell-tabs button:nth-child(5)::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23d9faff' stroke-width='2'%3E%3Cpath d='M12 3h8M14 3v8L7 25c-1 2 0 4 3 4h12c3 0 4-2 3-4l-7-14V3'/%3E%3Cpath d='M10 22h13M12 18h8'/%3E%3C/svg%3E")}
-.shell-tabs button:nth-child(8)::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23d9faff' stroke-width='2'%3E%3Cpath d='m16 3 4 8 9 1-7 6 2 9-8-4-8 4 2-9-7-6 9-1 4-8Z'/%3E%3C/svg%3E")}
-.shell-tabs button:nth-child(9)::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23d9faff' stroke-width='2'%3E%3Ccircle cx='16' cy='16' r='5'/%3E%3Cpath d='M16 3v4M16 25v4M3 16h4M25 16h4M7 7l3 3M22 22l3 3M25 7l-3 3M10 22l-3 3'/%3E%3C/svg%3E")}
+.shell-tabs button:nth-child(9)::before{width:24px!important;height:24px!important;flex:none!important;opacity:.95!important}
+.shell-tabs button:nth-child(5)::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23d9faff' stroke-width='2'%3E%3Cpath d='M12 3h8M14 3v8L7 25c-1 2 0 4 3 4h12c3 0 4-2 3-4l-7-14V3'/%3E%3Cpath d='M10 21h12'/%3E%3C/svg%3E")!important}
+.shell-tabs button:nth-child(8)::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23d9faff' stroke-width='2'%3E%3Cpath d='m16 3 3.6 7.3 8 .9-5.8 5.6 1.5 8-7.3-3.8-7.3 3.8 1.5-8-5.8-5.6 8-.9L16 3Z'/%3E%3C/svg%3E")!important}
+.shell-tabs button:nth-child(9)::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23d9faff' stroke-width='2'%3E%3Ccircle cx='16' cy='16' r='5'/%3E%3Cpath d='M16 2v5M16 25v5M2 16h5M25 16h5M6 6l4 4M22 22l4 4M26 6l-4 4M10 22l-4 4'/%3E%3C/svg%3E")!important}
 .shell-tabs button:nth-child(5):hover,
 .shell-tabs button:nth-child(8):hover,
 .shell-tabs button:nth-child(9):hover,
 .shell-tabs button:nth-child(5).active,
 .shell-tabs button:nth-child(8).active,
-.shell-tabs button:nth-child(9).active{
-  background:rgba(6,49,65,.58);
-  box-shadow:inset 0 0 18px rgba(0,205,255,.08);
-}
+.shell-tabs button:nth-child(9).active{background:rgba(6,49,65,.64)!important;box-shadow:inset 0 0 16px rgba(0,205,255,.08)!important}
 .shell-tabs button:nth-child(5)::after,
 .shell-tabs button:nth-child(8)::after,
 .shell-tabs button:nth-child(9)::after{
   position:absolute;
-  top:42px;
+  top:39px;
   left:50%;
   transform:translateX(-50%);
-  padding:5px 8px;
-  border:1px solid rgba(80,219,247,.28);
-  background:rgba(1,14,22,.97);
-  color:#cceef5;
+  padding:5px 7px;
+  border:1px solid rgba(73,205,233,.24);
+  background:#031720;
+  color:#d9f8ff;
   font-size:9px;
   white-space:nowrap;
   opacity:0;
@@ -342,17 +325,12 @@
 .shell-tabs button:nth-child(8):hover::after,
 .shell-tabs button:nth-child(9):hover::after{opacity:1}
 
-/* Readability pass for a 1920x1080 base canvas. */
-.shell-tabs button span,
-.current-planet-select-v4 span strong,
-.shell-resources .resource-chip strong{
-  -webkit-font-smoothing:antialiased;
-  text-rendering:geometricPrecision;
-}
+/* Move workspace below the taller fixed HUD. */
+.workspace-v4{top:246px!important}
+.shell-notice-v4{left:520px!important;right:520px!important}
+.planet-page-v4 .planet-stage-v3{top:56%!important}
 
-.workspace-v4{top:224px}
-
-@media (prefers-reduced-motion:reduce){
+@media (prefers-reduced-motion: reduce){
   .header-planet-orbit-v4:after,
   .header-planet-world-v4 img{animation:none!important}
 }
