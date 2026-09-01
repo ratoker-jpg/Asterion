@@ -13,6 +13,20 @@ import planetVolcanic from '../assets/source/starter/planets/planet_volcanic.png
 import planetToxic from '../assets/source/starter/planets/planet_toxic.png';
 import planetBarren from '../assets/source/starter/planets/planet_barren_rocky.png';
 import planetGas from '../assets/source/starter/planets/planet_gas_giant.png';
+
+import generated002 from '../assets/source/planets/skins/planet-002.png';
+import generated003 from '../assets/source/planets/skins/planet-003.png';
+import generated005 from '../assets/source/planets/skins/planet-005.png';
+import generated011 from '../assets/source/planets/skins/planet-011.png';
+import generated012 from '../assets/source/planets/skins/planet-012.png';
+import generated015 from '../assets/source/planets/skins/planet-015.png';
+import generated016 from '../assets/source/planets/skins/planet-016.png';
+import generated026 from '../assets/source/planets/skins/planet-026.png';
+import generated027 from '../assets/source/planets/skins/planet-027.png';
+import generated028 from '../assets/source/planets/skins/planet-028.png';
+import generated030 from '../assets/source/planets/skins/planet-030.png';
+import generated032 from '../assets/source/planets/skins/planet-032.png';
+
 import panelLarge from '../assets/source/ui-generated-v1/aegis/panel_frame_large.png';
 import panelMedium from '../assets/source/ui-generated-v1/aegis/panel_frame_medium.png';
 import panelSmall from '../assets/source/ui-generated-v1/aegis/panel_frame_small.png';
@@ -37,6 +51,18 @@ const planetSkins = [
   { id: 'toxic', label: 'Токсичная', art: planetToxic },
   { id: 'barren', label: 'Каменная', art: planetBarren },
   { id: 'gas', label: 'Газовый гигант', art: planetGas },
+  { id: 'skin-002', label: 'Облик 002', art: generated002 },
+  { id: 'skin-003', label: 'Облик 003', art: generated003 },
+  { id: 'skin-005', label: 'Облик 005', art: generated005 },
+  { id: 'skin-011', label: 'Облик 011', art: generated011 },
+  { id: 'skin-012', label: 'Облик 012', art: generated012 },
+  { id: 'skin-015', label: 'Облик 015', art: generated015 },
+  { id: 'skin-016', label: 'Облик 016', art: generated016 },
+  { id: 'skin-026', label: 'Облик 026', art: generated026 },
+  { id: 'skin-027', label: 'Облик 027', art: generated027 },
+  { id: 'skin-028', label: 'Облик 028', art: generated028 },
+  { id: 'skin-030', label: 'Облик 030', art: generated030 },
+  { id: 'skin-032', label: 'Облик 032', art: generated032 },
 ] as const;
 
 type PlanetSkin = (typeof planetSkins)[number]['id'];
@@ -289,7 +315,7 @@ export function App() {
         </aside>
 
         {activeTab === 'Вселенная' ? (
-          <UniverseView onNotice={setNotice} />
+          <UniverseView onNotice={setNotice} ownedPlanetArt={selectedPlanet.art} />
         ) : (
           <main className="planet-view">
             <div className="scene-title"><small>{zoneLabel}</small><h1>HELION 01</h1><p>[1:1:1] • AEGIS HOMEWORLD</p></div>
@@ -333,7 +359,7 @@ export function App() {
           </aside>
         ) : null}
 
-        <footer className="footer-status"><span>ASTERION // {activeTab === 'Вселенная' ? 'UNIVERSE NAVIGATION V1' : 'PLANET VERTICAL SLICE'}</span><span>1920×1080 BASE CANVAS</span><span>ESC — WINDOWED • F11 — FULLSCREEN</span></footer>
+        <footer className="footer-status"><span>ASTERION // {activeTab === 'Вселенная' ? 'UNIVERSE NAVIGATION V2' : 'PLANET VERTICAL SLICE'}</span><span>1920×1080 BASE CANVAS</span><span>ESC — WINDOWED • F11 — FULLSCREEN</span></footer>
       </div>
     </div>
   );
