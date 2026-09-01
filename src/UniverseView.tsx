@@ -41,11 +41,12 @@ const starArts = [star01, star02, star03, star04, star05, star06];
 const names = ['Helion', 'Lemiar', 'Varkon', 'Irmen', 'Ostorna', 'Emphria', 'Galaus', 'Lunaris', 'Kealir', 'Rinor', 'Velion', 'Nexar', 'Tekron', 'Astra', 'Orpheon', 'Talos', 'Meridia', 'Cyrene', 'Drakon', 'Erebus', 'Vega', 'Saros', 'Nyx', 'Ceres'];
 
 const GALAXY = 1;
-const GALAXY_COUNT = 1;
 const SYSTEM_COUNT = 40;
 const POSITION_COUNT = 24;
-const ORBIT_PERIODS = [260_000, 350_000, 455_000, 580_000];
-const ORBIT_DIRECTIONS = [1, 1, -1, 1];
+
+// Intentionally very slow. The motion should be perceived over time rather than
+// compete with navigation. All rings rotate in one direction like one system.
+const ORBIT_PERIODS = [1_800_000, 2_520_000, 3_360_000, 4_320_000];
 
 type Point = { x: number; y: number };
 type PlanetNode = { slot: number; name: string; art: string; owned: boolean };
@@ -64,14 +65,14 @@ function mulberry32(seed: number) {
   };
 }
 
-/** Stable 24-position address map with a very slow live orbital phase. */
+/** Stable 24-position address map with a subtle live orbital phase. */
 function slotPoint(slot: number, now: number): Point {
   const ring = Math.floor((slot - 1) / 6);
   const index = (slot - 1) % 6;
   const radiusX = [19, 28, 36, 44][ring];
   const radiusY = [22, 27, 32, 37][ring];
   const offset = [-30, 0, -15, 15][ring];
-  const phase = ((now % ORBIT_PERIODS[ring]) / ORBIT_PERIODS[ring]) * 360 * ORBIT_DIRECTIONS[ring];
+  const phase = ((now % ORBIT_PERIODS[ring]) / ORBIT_PERIODS[ring]) * 360;
   const angle = ((index * 60) + offset + phase) * Math.PI / 180;
 
   return {
@@ -119,7 +120,7 @@ export function UniverseView({ onNotice, ownedPlanetArt }: UniverseViewProps) {
 
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
-    const timer = window.setInterval(() => setOrbitNow(Date.now()), 250);
+    const timer = window.setInterval(() => setOrbitNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -130,27 +131,19 @@ export function UniverseView({ onNotice, ownedPlanetArt }: UniverseViewProps) {
   };
 
   return (
-    <main className="universe-view">
-      <div className="universe-nav">
+    <main className="universe-view universe-view-v3">
+      <div className="universe-nav universe-nav-v3">
         <div className="universe-breadcrumb">
-          <strong>Галактика {GALAXY}</strong><b>›</b><strong>Солнечная система {system}</strong>
+          <span>ВСЕЛЕННАЯ</span><b>›</b><strong>Галактика {GALAXY}</strong><b>›</b><strong>Солнечная система {system}</strong>
         </div>
 
-        <div className="universe-jump">
-          <div className="nav-coordinate nav-coordinate--disabled">
-            <span>ГАЛАКТИКА</span>
-            <button className="step" type="button" disabled aria-label="Предыдущая галактика">◀</button>
-            <strong>{GALAXY}<small>/ {GALAXY_COUNT}</small></strong>
-            <button className="step" type="button" disabled aria-label="Следующая галактика">▶</button>
-          </div>
-          <div className="nav-coordinate nav-coordinate--system">
-            <span>СИСТЕМА</span>
-            <button className="step" type="button" onClick={() => goSystem(system - 1)} disabled={system === 1} aria-label="Предыдущая система">◀</button>
-            <select value={system} onChange={(event) => goSystem(Number(event.target.value))} aria-label="Солнечная система">
-              {Array.from({ length: SYSTEM_COUNT }, (_, index) => <option key={index + 1} value={index + 1}>{String(index + 1).padStart(2, '0')}</option>)}
-            </select>
-            <small>/ {SYSTEM_COUNT}</small>
-            <button className="step" type="button" onClick={() => goSystem(system + 1)} disabled={system === SYSTEM_COUNT} aria-label="Следующая система">▶</button>
+        <div className="universe-jump universe-jump-v3">
+          <div className="galaxy-readout"><small>ГАЛАКТИКА</small><strong>01</strong></div>
+          <div className="system-stepper">
+            <button type="button" onClick={() => goSystem(system - 1)} disabled={system === 1} aria-label="Предыдущая система">‹</button>
+            <label><small>СИСТЕМА</small><select value={system} onChange={(event) => goSystem(Number(event.target.value))} aria-label="Солнечная система">{Array.from({ length: SYSTEM_COUNT }, (_, index) => <option key={index + 1} value={index + 1}>{String(index + 1).padStart(2, '0')}</option>)}</select></label>
+            <em>/ {SYSTEM_COUNT}</em>
+            <button type="button" onClick={() => goSystem(system + 1)} disabled={system === SYSTEM_COUNT} aria-label="Следующая система">›</button>
           </div>
         </div>
       </div>
@@ -188,7 +181,7 @@ export function UniverseView({ onNotice, ownedPlanetArt }: UniverseViewProps) {
               type="button"
               key={planet.slot}
               className={`system-planet ${planet.owned ? 'owned' : ''}`}
-              style={{ '--x': `${point.x}%`, '--y': `${point.y}%`, '--delay': `${-(planet.slot % 7) * 0.47}s` } as CSSProperties}
+              style={{ '--x': `${point.x}%`, '--y': `${point.y}%` } as CSSProperties}
               onClick={() => onNotice(`${planet.name} · [1:${system}:${planet.slot}]`)}
             >
               <img src={planet.art} alt="" draggable={false} />
