@@ -1,0 +1,14 @@
+/* Single-homeworld editor additions. */
+.planet-editor-modal-v5{max-height:86vh;overflow:hidden;display:flex;flex-direction:column}
+.planet-editor-name-v5{margin:14px 18px 10px;padding:14px;border:1px solid rgba(70,207,238,.24);background:linear-gradient(180deg,rgba(6,34,47,.88),rgba(2,18,27,.9))}
+.planet-editor-name-v5>label{display:block;margin-bottom:8px;color:#69dff6;font-size:9px;font-weight:700;letter-spacing:1.4px}
+.planet-editor-name-v5>div{display:grid;grid-template-columns:minmax(0,1fr) 128px;gap:9px}
+.planet-editor-name-v5 input{height:40px;min-width:0;padding:0 12px;border:1px solid rgba(78,213,241,.34);outline:0;background:#031823;color:#effcff;font:700 15px/1 inherit;letter-spacing:.3px;box-shadow:inset 0 0 18px rgba(0,172,220,.04)}
+.planet-editor-name-v5 input:focus{border-color:#52dcf7;box-shadow:0 0 0 1px rgba(82,220,247,.12),inset 0 0 20px rgba(0,172,220,.08)}
+.planet-editor-name-v5 button{height:40px;border:1px solid rgba(69,218,249,.55);background:linear-gradient(180deg,#0a5b72,#063548);color:#eaffff;font-size:9px;font-weight:800;letter-spacing:1px;cursor:pointer;clip-path:polygon(8% 0,100% 0,100% 78%,92% 100%,0 100%,0 22%)}
+.planet-editor-name-v5 button:hover{background:linear-gradient(180deg,#0d728e,#07465b);box-shadow:inset 0 0 18px rgba(77,226,255,.12)}
+.planet-editor-name-v5>small{display:block;margin-top:7px;color:#668b96;font-size:8px}
+.planet-editor-skins-title-v5{display:flex;align-items:end;justify-content:space-between;margin:8px 18px 0;padding:0 2px 8px;border-bottom:1px solid rgba(71,185,213,.14)}
+.planet-editor-skins-title-v5 strong{color:#cceff6;font-size:10px;letter-spacing:1.4px}.planet-editor-skins-title-v5 small{color:#5d8490;font-size:8px}
+.planet-editor-modal-v5 .skin-picker-grid{overflow:auto;padding-top:12px}
+.planet-list-popover-v4>div{padding:9px 8px 3px;color:#587b86;font-size:8px;line-height:1.45}
