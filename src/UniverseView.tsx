@@ -54,6 +54,7 @@ type PlanetNode = { slot: number; name: string; art: string; owned: boolean };
 type UniverseViewProps = {
   onNotice: (message: string) => void;
   ownedPlanetArt: string;
+  ownedPlanetName: string;
 };
 
 function mulberry32(seed: number) {
@@ -81,7 +82,7 @@ function slotPoint(slot: number, now: number): Point {
   };
 }
 
-function makeSystem(system: number, ownedPlanetArt: string) {
+function makeSystem(system: number, ownedPlanetArt: string, ownedPlanetName: string) {
   const random = mulberry32(10_000 + system * 977);
   const slots = Array.from({ length: POSITION_COUNT }, (_, index) => index + 1);
   for (let i = slots.length - 1; i > 0; i -= 1) {
@@ -99,7 +100,7 @@ function makeSystem(system: number, ownedPlanetArt: string) {
     return {
       slot,
       owned,
-      name: owned ? 'Helion 01' : `${names[(system * 7 + slot) % names.length]} ${String(system).padStart(2, '0')}`,
+      name: owned ? ownedPlanetName : `${names[(system * 7 + slot) % names.length]} ${String(system).padStart(2, '0')}`,
       art: owned ? ownedPlanetArt : planetArts[(system * 5 + slot) % planetArts.length],
     };
   });
@@ -110,12 +111,15 @@ function makeSystem(system: number, ownedPlanetArt: string) {
   };
 }
 
-export function UniverseView({ onNotice, ownedPlanetArt }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName }: UniverseViewProps) {
   const [system, setSystem] = useState(1);
   const [showCoords, setShowCoords] = useState(true);
   const [focusEmpty, setFocusEmpty] = useState(false);
   const [orbitNow, setOrbitNow] = useState(Date.now());
-  const systemData = useMemo(() => makeSystem(system, ownedPlanetArt), [system, ownedPlanetArt]);
+  const systemData = useMemo(
+    () => makeSystem(system, ownedPlanetArt, ownedPlanetName),
+    [system, ownedPlanetArt, ownedPlanetName],
+  );
   const occupiedSlots = useMemo(() => new Set(systemData.planets.map((planet) => planet.slot)), [systemData]);
 
   useEffect(() => {
