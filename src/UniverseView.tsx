@@ -13,6 +13,19 @@ import planet10 from '../assets/source/universe-navigation/planets/planet.varian
 import planet11 from '../assets/source/universe-navigation/planets/planet.variant-11.png';
 import planet12 from '../assets/source/universe-navigation/planets/planet.variant-12.png';
 
+import generated002 from '../assets/source/planets/skins/planet-002.png';
+import generated003 from '../assets/source/planets/skins/planet-003.png';
+import generated005 from '../assets/source/planets/skins/planet-005.png';
+import generated011 from '../assets/source/planets/skins/planet-011.png';
+import generated012 from '../assets/source/planets/skins/planet-012.png';
+import generated015 from '../assets/source/planets/skins/planet-015.png';
+import generated016 from '../assets/source/planets/skins/planet-016.png';
+import generated026 from '../assets/source/planets/skins/planet-026.png';
+import generated027 from '../assets/source/planets/skins/planet-027.png';
+import generated028 from '../assets/source/planets/skins/planet-028.png';
+import generated030 from '../assets/source/planets/skins/planet-030.png';
+import generated032 from '../assets/source/planets/skins/planet-032.png';
+
 import star01 from '../assets/source/universe-navigation/system-stars/system-star.variant-01.png';
 import star02 from '../assets/source/universe-navigation/system-stars/system-star.variant-02.png';
 import star03 from '../assets/source/universe-navigation/system-stars/system-star.variant-03.png';
@@ -20,14 +33,31 @@ import star04 from '../assets/source/universe-navigation/system-stars/system-sta
 import star05 from '../assets/source/universe-navigation/system-stars/system-star.variant-05.png';
 import star06 from '../assets/source/universe-navigation/system-stars/system-star.variant-06.png';
 
+import corona01 from '../assets/source/universe-navigation/star-coronas/star-corona.variant-01.png';
+import corona02 from '../assets/source/universe-navigation/star-coronas/star-corona.variant-02.png';
+import corona03 from '../assets/source/universe-navigation/star-coronas/star-corona.variant-03.png';
+import corona04 from '../assets/source/universe-navigation/star-coronas/star-corona.variant-04.png';
+import corona05 from '../assets/source/universe-navigation/star-coronas/star-corona.variant-05.png';
+import corona06 from '../assets/source/universe-navigation/star-coronas/star-corona.variant-06.png';
+
 import asteroid01 from '../assets/source/universe-navigation/asteroids/asteroid.variant-01.png';
 import asteroid02 from '../assets/source/universe-navigation/asteroids/asteroid.variant-02.png';
 import asteroid03 from '../assets/source/universe-navigation/asteroids/asteroid.variant-03.png';
 import asteroid04 from '../assets/source/universe-navigation/asteroids/asteroid.variant-04.png';
 
-const planetArts = [planet01, planet02, planet03, planet04, planet05, planet06, planet07, planet08, planet09, planet10, planet11, planet12];
+import debris01 from '../assets/source/universe-navigation/orbital-debris/orbital-debris.variant-01.png';
+import debris02 from '../assets/source/universe-navigation/orbital-debris/orbital-debris.variant-02.png';
+import debris03 from '../assets/source/universe-navigation/orbital-debris/orbital-debris.variant-03.png';
+import debris04 from '../assets/source/universe-navigation/orbital-debris/orbital-debris.variant-04.png';
+
+const planetArts = [
+  planet01, planet02, planet03, planet04, planet05, planet06, planet07, planet08, planet09, planet10, planet11, planet12,
+  generated002, generated003, generated005, generated011, generated012, generated015, generated016, generated026, generated027, generated028, generated030, generated032,
+];
 const starArts = [star01, star02, star03, star04, star05, star06];
+const coronaArts = [corona01, corona02, corona03, corona04, corona05, corona06];
 const asteroidArts = [asteroid01, asteroid02, asteroid03, asteroid04];
+const debrisArts = [debris01, debris02, debris03, debris04];
 const names = ['Helion', 'Lemiar', 'Varkon', 'Irmen', 'Ostorna', 'Emphria', 'Galaus', 'Lunaris', 'Kealir', 'Rinor', 'Velion', 'Nexar', 'Tekron', 'Astra', 'Orpheon', 'Talos', 'Meridia', 'Cyrene', 'Drakon', 'Erebus', 'Vega', 'Saros', 'Nyx', 'Ceres'];
 
 const GALAXY = 1;
@@ -38,10 +68,10 @@ const POSITION_COUNT = 24;
 type Point = { x: number; y: number };
 type PlanetNode = Point & { slot: number; name: string; art: string; owned: boolean };
 type AsteroidNode = Point & { id: number; art: string };
-type BeltRock = Point & { id: number; size: number; opacity: number };
 
 type UniverseViewProps = {
   onNotice: (message: string) => void;
+  ownedPlanetArt: string;
 };
 
 function mulberry32(seed: number) {
@@ -72,7 +102,7 @@ function slotPoint(slot: number): Point {
   };
 }
 
-function makeSystem(system: number) {
+function makeSystem(system: number, ownedPlanetArt: string) {
   const random = mulberry32(10_000 + system * 977);
   const slots = Array.from({ length: POSITION_COUNT }, (_, index) => index + 1);
   for (let i = slots.length - 1; i > 0; i -= 1) {
@@ -93,7 +123,7 @@ function makeSystem(system: number) {
       slot,
       owned,
       name: owned ? 'Helion 01' : `${names[(system * 7 + slot) % names.length]} ${String(system).padStart(2, '0')}`,
-      art: planetArts[(system * 5 + slot) % planetArts.length],
+      art: owned ? ownedPlanetArt : planetArts[(system * 5 + slot) % planetArts.length],
     };
   });
 
@@ -110,33 +140,24 @@ function makeSystem(system: number) {
     };
   });
 
-  const belt: BeltRock[] = Array.from({ length: 38 }, (_, index) => {
-    const angle = (index / 38) * Math.PI * 2 + random() * 0.055;
-    const radiusX = 31.5 + (random() - 0.5) * 2.8;
-    const radiusY = 27.5 + (random() - 0.5) * 2.2;
-    return {
-      id: index,
-      x: 50 + Math.cos(angle) * radiusX,
-      y: 52 + Math.sin(angle) * radiusY,
-      size: 2 + Math.round(random() * 4),
-      opacity: 0.18 + random() * 0.34,
-    };
-  });
+  const starIndex = (system - 1) % starArts.length;
 
   return {
-    star: starArts[(system - 1) % starArts.length],
+    star: starArts[starIndex],
+    corona: coronaArts[starIndex],
     planets,
     asteroids,
-    belt,
+    debris: debrisArts,
+    beltAngle: (system * 17) % 360,
   };
 }
 
-export function UniverseView({ onNotice }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownedPlanetArt }: UniverseViewProps) {
   const [system, setSystem] = useState(1);
   const [showCoords, setShowCoords] = useState(true);
   const [focusEmpty, setFocusEmpty] = useState(false);
   const [showAsteroids, setShowAsteroids] = useState(true);
-  const systemData = useMemo(() => makeSystem(system), [system]);
+  const systemData = useMemo(() => makeSystem(system, ownedPlanetArt), [system, ownedPlanetArt]);
   const occupiedSlots = useMemo(() => new Set(systemData.planets.map((planet) => planet.slot)), [systemData]);
 
   const goSystem = (next: number) => {
@@ -177,20 +198,15 @@ export function UniverseView({ onNotice }: UniverseViewProps) {
         {[0, 1, 2, 3].map((ring) => <div key={ring} className={`system-orbit ring-${ring + 1}`} />)}
 
         {showAsteroids ? (
-          <div className="procedural-asteroid-belt" aria-hidden="true">
-            {systemData.belt.map((rock) => (
-              <i
-                key={rock.id}
-                className="belt-rock"
-                style={{ '--x': `${rock.x}%`, '--y': `${rock.y}%`, '--size': `${rock.size}px`, '--opacity': rock.opacity, '--delay': `${-(rock.id % 11) * 0.31}s` } as CSSProperties}
-              />
+          <div className="generated-asteroid-belt" style={{ '--belt-angle': `${systemData.beltAngle}deg` } as CSSProperties} aria-hidden="true">
+            {systemData.debris.map((art, index) => (
+              <img key={art} className={`orbital-debris-cluster orbital-debris-cluster--${index + 1}`} src={art} alt="" draggable={false} />
             ))}
           </div>
         ) : null}
 
         <div className="system-star-wrap" aria-label={`Звезда солнечной системы ${system}`}>
-          <span className="star-aura star-aura--outer" />
-          <span className="star-aura star-aura--inner" />
+          <img className="star-corona" src={systemData.corona} alt="" draggable={false} />
           <img className="system-star" src={systemData.star} alt={`Звезда системы ${system}`} draggable={false} />
         </div>
 
