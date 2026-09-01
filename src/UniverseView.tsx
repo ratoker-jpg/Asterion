@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 
 import planet01 from '../assets/source/universe-navigation/planets/planet.variant-01.png';
 import planet02 from '../assets/source/universe-navigation/planets/planet.variant-02.png';
@@ -44,9 +44,11 @@ const GALAXY = 1;
 const GALAXY_COUNT = 1;
 const SYSTEM_COUNT = 40;
 const POSITION_COUNT = 24;
+const ORBIT_PERIODS = [260_000, 350_000, 455_000, 580_000];
+const ORBIT_DIRECTIONS = [1, 1, -1, 1];
 
 type Point = { x: number; y: number };
-type PlanetNode = Point & { slot: number; name: string; art: string; owned: boolean };
+type PlanetNode = { slot: number; name: string; art: string; owned: boolean };
 
 type UniverseViewProps = {
   onNotice: (message: string) => void;
@@ -62,18 +64,15 @@ function mulberry32(seed: number) {
   };
 }
 
-/**
- * Stable 24-position orbital map: four rings, six addressable slots per ring.
- * A slot always stays in the same visual place in every system, so [G:S:P]
- * remains readable instead of planets appearing in arbitrary screen positions.
- */
-function slotPoint(slot: number): Point {
+/** Stable 24-position address map with a very slow live orbital phase. */
+function slotPoint(slot: number, now: number): Point {
   const ring = Math.floor((slot - 1) / 6);
   const index = (slot - 1) % 6;
   const radiusX = [19, 28, 36, 44][ring];
   const radiusY = [22, 27, 32, 37][ring];
   const offset = [-30, 0, -15, 15][ring];
-  const angle = ((index * 60) + offset) * Math.PI / 180;
+  const phase = ((now % ORBIT_PERIODS[ring]) / ORBIT_PERIODS[ring]) * 360 * ORBIT_DIRECTIONS[ring];
+  const angle = ((index * 60) + offset + phase) * Math.PI / 180;
 
   return {
     x: 50 + Math.cos(angle) * radiusX,
@@ -95,10 +94,8 @@ function makeSystem(system: number, ownedPlanetArt: string) {
   occupied.sort((a, b) => a - b);
 
   const planets: PlanetNode[] = occupied.map((slot) => {
-    const point = slotPoint(slot);
     const owned = system === 1 && slot === 1;
     return {
-      ...point,
       slot,
       owned,
       name: owned ? 'Helion 01' : `${names[(system * 7 + slot) % names.length]} ${String(system).padStart(2, '0')}`,
@@ -106,10 +103,8 @@ function makeSystem(system: number, ownedPlanetArt: string) {
     };
   });
 
-  const starIndex = (system - 1) % starArts.length;
-
   return {
-    star: starArts[starIndex],
+    star: starArts[(system - 1) % starArts.length],
     planets,
   };
 }
@@ -118,8 +113,15 @@ export function UniverseView({ onNotice, ownedPlanetArt }: UniverseViewProps) {
   const [system, setSystem] = useState(1);
   const [showCoords, setShowCoords] = useState(true);
   const [focusEmpty, setFocusEmpty] = useState(false);
+  const [orbitNow, setOrbitNow] = useState(Date.now());
   const systemData = useMemo(() => makeSystem(system, ownedPlanetArt), [system, ownedPlanetArt]);
   const occupiedSlots = useMemo(() => new Set(systemData.planets.map((planet) => planet.slot)), [systemData]);
+
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    const timer = window.setInterval(() => setOrbitNow(Date.now()), 250);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const goSystem = (next: number) => {
     const bounded = Math.min(SYSTEM_COUNT, Math.max(1, next));
@@ -163,7 +165,7 @@ export function UniverseView({ onNotice, ownedPlanetArt }: UniverseViewProps) {
         </div>
 
         {Array.from({ length: POSITION_COUNT }, (_, index) => index + 1).filter((slot) => !occupiedSlots.has(slot)).map((slot) => {
-          const point = slotPoint(slot);
+          const point = slotPoint(slot, orbitNow);
           return (
             <button
               key={slot}
@@ -179,26 +181,29 @@ export function UniverseView({ onNotice, ownedPlanetArt }: UniverseViewProps) {
           );
         })}
 
-        {systemData.planets.map((planet) => (
-          <button
-            type="button"
-            key={planet.slot}
-            className={`system-planet ${planet.owned ? 'owned' : ''}`}
-            style={{ '--x': `${planet.x}%`, '--y': `${planet.y}%`, '--delay': `${-(planet.slot % 7) * 0.47}s`, '--spin': `${150 + planet.slot * 3}s` } as CSSProperties}
-            onClick={() => onNotice(`${planet.name} · [1:${system}:${planet.slot}]`)}
-          >
-            <img src={planet.art} alt="" draggable={false} />
-            <span className="planet-slot">{planet.slot}</span>
-            <span className="planet-name">{planet.owned ? '★ ' : ''}{planet.name}</span>
-            {showCoords ? <small>[1:{system}:{planet.slot}]</small> : null}
-          </button>
-        ))}
+        {systemData.planets.map((planet) => {
+          const point = slotPoint(planet.slot, orbitNow);
+          return (
+            <button
+              type="button"
+              key={planet.slot}
+              className={`system-planet ${planet.owned ? 'owned' : ''}`}
+              style={{ '--x': `${point.x}%`, '--y': `${point.y}%`, '--delay': `${-(planet.slot % 7) * 0.47}s` } as CSSProperties}
+              onClick={() => onNotice(`${planet.name} · [1:${system}:${planet.slot}]`)}
+            >
+              <img src={planet.art} alt="" draggable={false} />
+              <span className="planet-slot">{planet.slot}</span>
+              <span className="planet-name">{planet.owned ? '★ ' : ''}{planet.name}</span>
+              {showCoords ? <small>[1:{system}:{planet.slot}]</small> : null}
+            </button>
+          );
+        })}
       </div>
 
       <aside className="universe-tools">
         <button type="button" className={focusEmpty ? 'active' : ''} onClick={() => setFocusEmpty((value) => !value)}><b>▽</b><span>Фильтры</span><small>Свободные позиции</small></button>
         <button type="button" className={showCoords ? 'active' : ''} onClick={() => setShowCoords((value) => !value)}><b>⌖</b><span>Метки</span><small>Координаты</small></button>
-        <button type="button" onClick={() => onNotice('Астероидные пояса вернутся после отдельной привязки к орбитальным линиям.')}><b>◌</b><span>Астероиды</span><small>Позже</small></button>
+        <button type="button" onClick={() => onNotice('Астероидные пояса вернутся позже и будут жёстко привязаны к орбитальным линиям.')}><b>◌</b><span>Астероиды</span><small>Позже</small></button>
         <button type="button" onClick={() => onNotice('Маршруты флотов появятся после модуля «Флоты».')}><b>⇄</b><span>Маршруты</span><small>Скоро</small></button>
         <button type="button" onClick={() => onNotice('Глубокий сканер будет связан с технологиями и разведкой.')}><b>◎</b><span>Сканер</span><small>Скоро</small></button>
       </aside>
