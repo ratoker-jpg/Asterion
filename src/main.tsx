@@ -5,6 +5,7 @@ import './styles.css';
 import './universe-nav.css';
 import './universe-polish-v2.css';
 import './planet-visual-v2.css';
+import './shell-v3.css';
 import './web-preview.css';
 
 const isElectron = navigator.userAgent.includes('Electron');

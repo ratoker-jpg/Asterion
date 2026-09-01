@@ -79,6 +79,7 @@ const initialState: SaveState = {
   planetSkin: 'colonized',
   queue: null,
 };
+
 const tabs = ['Планета', 'Вселенная', 'Флоты', 'Операции', 'Наука', 'Командование', 'Отчёты', 'Рейтинг', 'Настройки'];
 const zoneMeta: Record<Zone, { title: string; subtitle: string; accent: string }> = {
   resource: { title: 'РЕСУРСНАЯ ЗОНА', subtitle: 'Добыча и энергия', accent: '#38c8ff' },
@@ -121,27 +122,13 @@ function useStageScale() {
 function GameIcon({ kind }: { kind: IconKind }) {
   const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.65, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
 
-  if (kind === 'metal') {
-    return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M4 7 12 3l8 4-8 4-8-4Z"/><path {...common} d="m4 7 8 4v10l-8-4V7Zm16 0-8 4v10l8-4V7Z"/></svg>;
-  }
-  if (kind === 'mineral') {
-    return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m12 2 7 7-7 13L5 9l7-7Z"/><path {...common} d="M5 9h14M12 2v20"/></svg>;
-  }
-  if (kind === 'gas') {
-    return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M12 3c4 4.7 6 7.6 6 11a6 6 0 1 1-12 0c0-3.4 2-6.3 6-11Z"/><circle {...common} cx="10" cy="13" r="1.8"/><circle {...common} cx="14.5" cy="15.5" r="1.2"/></svg>;
-  }
-  if (kind === 'energy') {
-    return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m13 2-7 12h6l-1 8 7-12h-6l1-8Z"/></svg>;
-  }
-  if (kind === 'population') {
-    return <svg viewBox="0 0 24 24" aria-hidden="true"><circle {...common} cx="9" cy="8" r="3"/><circle {...common} cx="16.5" cy="9.5" r="2.3"/><path {...common} d="M3.5 20c.5-4.2 2.5-6.3 5.5-6.3s5 2.1 5.5 6.3M14 14.6c3.5-.5 5.6 1.3 6.5 5.4"/></svg>;
-  }
-  if (kind === 'resource') {
-    return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m12 2 4 6-4 6-4-6 4-6Zm-6 9 3 4-3 5-3-5 3-4Zm12 0 3 4-3 5-3-5 3-4Z"/></svg>;
-  }
-  if (kind === 'industry') {
-    return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M3 21V10l6 3v-3l6 3V6h4v15H3Z"/><path {...common} d="M6 17h2m3 0h2m3 0h2M16 6V3h3v3"/></svg>;
-  }
+  if (kind === 'metal') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M4 7 12 3l8 4-8 4-8-4Z"/><path {...common} d="m4 7 8 4v10l-8-4V7Zm16 0-8 4v10l8-4V7Z"/></svg>;
+  if (kind === 'mineral') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m12 2 7 7-7 13L5 9l7-7Z"/><path {...common} d="M5 9h14M12 2v20"/></svg>;
+  if (kind === 'gas') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M12 3c4 4.7 6 7.6 6 11a6 6 0 1 1-12 0c0-3.4 2-6.3 6-11Z"/><circle {...common} cx="10" cy="13" r="1.8"/><circle {...common} cx="14.5" cy="15.5" r="1.2"/></svg>;
+  if (kind === 'energy') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m13 2-7 12h6l-1 8 7-12h-6l1-8Z"/></svg>;
+  if (kind === 'population') return <svg viewBox="0 0 24 24" aria-hidden="true"><circle {...common} cx="9" cy="8" r="3"/><circle {...common} cx="16.5" cy="9.5" r="2.3"/><path {...common} d="M3.5 20c.5-4.2 2.5-6.3 5.5-6.3s5 2.1 5.5 6.3M14 14.6c3.5-.5 5.6 1.3 6.5 5.4"/></svg>;
+  if (kind === 'resource') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m12 2 4 6-4 6-4-6 4-6Zm-6 9 3 4-3 5-3-5 3-4Zm12 0 3 4-3 5-3-5 3-4Z"/></svg>;
+  if (kind === 'industry') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M3 21V10l6 3v-3l6 3V6h4v15H3Z"/><path {...common} d="M6 17h2m3 0h2m3 0h2M16 6V3h3v3"/></svg>;
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M4 19h16M7 19v-4l4-2V8l2-2 2 2v5l3 2v4M11 10h4M9 19v-3m6 3v-4"/><path {...common} d="m12 6 1-4 1 4"/></svg>;
 }
 
@@ -170,6 +157,7 @@ export function App() {
   const [now, setNow] = useState(Date.now());
   const [notice, setNotice] = useState('Система готова. Локальное сохранение активно.');
   const [skinOpen, setSkinOpen] = useState(false);
+  const [planetMenuOpen, setPlanetMenuOpen] = useState(false);
 
   useEffect(() => localStorage.setItem(SAVE_KEY, JSON.stringify(state)), [state]);
   useEffect(() => {
@@ -210,20 +198,23 @@ export function App() {
     localStorage.removeItem(SAVE_KEY);
     setState(initialState);
     setSkinOpen(false);
+    setPlanetMenuOpen(false);
     setNotice('Сохранение прототипа сброшено.');
   };
 
   const chooseTab = (tab: string) => {
     setActiveTab(tab);
     setSkinOpen(false);
+    setPlanetMenuOpen(false);
     if (tab === 'Вселенная') setNotice('Галактика 1 загружена. Доступно 40 солнечных систем.');
-    else if (tab !== 'Планета') setNotice(`Экран «${tab}» будет следующим модулем.`);
+    else if (tab !== 'Планета') setNotice(`Экран «${tab}» пока в разработке.`);
   };
 
   const chooseZone = (nextZone: Zone) => {
     setZone(nextZone);
     setActiveTab('Планета');
     setSkinOpen(false);
+    setPlanetMenuOpen(false);
     setNotice(`${zoneMeta[nextZone].title}: модуль выбран.`);
   };
 
@@ -238,135 +229,140 @@ export function App() {
 
   return (
     <div className="viewport">
-      <div className="stage" style={{ transform: `scale(${scale})`, '--space-bg': `url(${systemBackground})` } as CSSProperties}>
-        <header className="topbar topbar-v2">
-          <div className="corner-planet">
-            <button className="corner-planet__world" type="button" onClick={() => setSkinOpen((open) => !open)} aria-label="Выбрать облик планеты">
-              <span className="corner-planet__halo" />
-              <img src={selectedPlanet.art} alt="Helion 01" draggable={false} />
-            </button>
-            {(['resource', 'industry', 'military'] as Zone[]).map((item) => (
-              <button
-                key={item}
-                type="button"
-                className={`corner-zone corner-zone--${item} ${zone === item && activeTab === 'Планета' ? 'active' : ''}`}
-                onClick={() => chooseZone(item)}
-                aria-label={zoneMeta[item].title}
-              >
-                <GameIcon kind={item} />
+      <div className="stage stage-shell-v3" style={{ transform: `scale(${scale})`, '--space-bg': `url(${systemBackground})` } as CSSProperties}>
+        <header className="persistent-header">
+          <section className="persistent-header__planet">
+            <div className="shell-brand"><strong>ASTERION</strong><small>AEGIS COMMAND</small></div>
+            <div className="current-planet-control">
+              <button className="current-planet-select" type="button" onClick={() => setPlanetMenuOpen((open) => !open)}>
+                <img src={selectedPlanet.art} alt="Helion 01" draggable={false} />
+                <span><small>ТЕКУЩАЯ ПЛАНЕТА</small><strong>Helion 01 <em>[1:1:1]</em></strong></span>
+                <i>{planetMenuOpen ? '⌃' : '⌄'}</i>
               </button>
-            ))}
-            <div className="corner-planet__label"><strong>HELION 01</strong><small>[1:1:1] · AEGIS</small></div>
-          </div>
+              <button className="planet-edit-button" type="button" aria-label="Изменить облик планеты" onClick={() => { setSkinOpen(true); setPlanetMenuOpen(false); }}>✎</button>
+            </div>
+            {planetMenuOpen ? (
+              <div className="planet-list-popover">
+                <button type="button" onClick={() => setPlanetMenuOpen(false)}><img src={selectedPlanet.art} alt=""/><span><strong>Helion 01</strong><small>[1:1:1] · Основная планета</small></span><b>✓</b></button>
+                <div>Новые колонии появятся здесь после колонизации.</div>
+              </div>
+            ) : null}
+          </section>
 
-          <div className="topbar-main">
-            <nav className="main-tabs">
+          <section className="persistent-header__center">
+            <nav className="main-tabs shell-tabs">
               {tabs.map((tab) => (
                 <button key={tab} className={activeTab === tab ? 'active' : ''} onClick={() => chooseTab(tab)}><span>{tab}</span></button>
               ))}
             </nav>
-            <div className="resources">
+            <div className="resources shell-resources">
               <Resource kind="metal" label="МЕТАЛЛ" value={`${formatNumber(state.metal)} / 60 000`} gain="+774/ч" />
               <Resource kind="mineral" label="МИНЕРАЛЫ" value={`${formatNumber(state.minerals)} / 60 000`} gain="+510/ч" />
               <Resource kind="gas" label="ГАЗ" value={`${formatNumber(state.gas)} / 60 000`} gain="+312/ч" />
               <Resource kind="energy" label="ЭНЕРГИЯ" value={formatNumber(state.energy)} gain="+22/ч" />
               <Resource kind="population" label="НАСЕЛЕНИЕ" value={`${state.population} / 70`} />
             </div>
-          </div>
+          </section>
 
-          <div className="campaign-block campaign-v2">
+          <section className="campaign-block shell-campaign">
             <span className="campaign-icon">✦</span>
             <div><strong>КАМПАНИЯ АКТИВНА</strong><small>F11 — полный экран</small></div>
             <time>{new Date(now).toLocaleTimeString('ru-RU', { hour12: false })}</time>
-          </div>
+          </section>
         </header>
 
-        <aside className="left-column left-column-v2">
-          <section className="passport-panel-v2">
-            <div className="panel-title-v2"><span>ПАСПОРТ ПЛАНЕТЫ</span><b>AEGIS</b></div>
-            <button className="planet-selector planet-selector-v2" type="button" onClick={() => setSkinOpen((open) => !open)}>
-              <span className="mini-planet"><img src={selectedPlanet.art} alt="" /></span>
-              <span><strong>Helion 01</strong><small>[1:1:1]</small></span>
-              <i>{skinOpen ? '⌃' : '⌄'}</i>
-            </button>
-            {skinOpen ? (
-              <div className="planet-skin-menu">
-                <p>ВЫБРАТЬ ОБЛИК ПЛАНЕТЫ</p>
-                <div>
-                  {planetSkins.map((skin) => (
-                    <button key={skin.id} type="button" className={state.planetSkin === skin.id ? 'active' : ''} onClick={() => chooseSkin(skin)}>
-                      <img src={skin.art} alt="" />
-                      <span>{skin.label}</span>
+        <section className={`workspace workspace--${activeTab === 'Вселенная' ? 'universe' : activeTab === 'Планета' ? 'planet' : 'module'}`}>
+          {activeTab === 'Вселенная' ? (
+            <UniverseView onNotice={setNotice} ownedPlanetArt={selectedPlanet.art} />
+          ) : activeTab === 'Планета' ? (
+            <div className="planet-page-v3">
+              <aside className="planet-summary-v3">
+                <div className="page-panel-title"><strong>ПЛАНЕТА</strong><small>HELION 01</small></div>
+                <div className="summary-planet-row"><img src={selectedPlanet.art} alt=""/><span><strong>Helion 01</strong><small>[1:1:1] · {selectedPlanet.label}</small></span></div>
+                <dl>
+                  <div><dt>Статус</dt><dd>★ Основная планета</dd></div>
+                  <div><dt>Фракция</dt><dd>Aegis</dd></div>
+                  <div><dt>Население</dt><dd>{state.population} / 70</dd></div>
+                  <div><dt>Энергия</dt><dd>{state.energy}</dd></div>
+                  <div><dt>Солнечные станции</dt><dd>{state.solarStations}</dd></div>
+                  <div><dt>Стабильность</dt><dd className="summary-stable">100%</dd></div>
+                </dl>
+                <div className="summary-zone-list">
+                  {(['resource', 'industry', 'military'] as Zone[]).map((item) => (
+                    <button key={item} type="button" className={zone === item ? 'active' : ''} onClick={() => chooseZone(item)}>
+                      <span><GameIcon kind={item}/></span><b>{zoneMeta[item].title}</b><small>{zoneMeta[item].subtitle}</small>
                     </button>
                   ))}
                 </div>
-              </div>
-            ) : null}
-            <dl>
-              <div><dt>Статус</dt><dd className="status-home">★ Основная планета</dd></div>
-              <div><dt>Фракция</dt><dd>Aegis</dd></div>
-              <div><dt>Координаты</dt><dd>[1:1:1]</dd></div>
-              <div><dt>Население</dt><dd>{state.population} / 70</dd></div>
-              <div><dt>Энергия</dt><dd>{state.energy}</dd></div>
-              <div><dt>Солнечные станции</dt><dd>{state.solarStations}</dd></div>
-            </dl>
-            <div className="stability-v2"><span>СТАБИЛЬНОСТЬ</span><b>100%</b><i><em /></i></div>
-            <button className="details-button" type="button" onClick={() => setNotice('Расширенный паспорт планеты появится позже.')}>ПОДРОБНЕЕ</button>
-          </section>
-        </aside>
+              </aside>
 
-        {activeTab === 'Вселенная' ? (
-          <UniverseView onNotice={setNotice} ownedPlanetArt={selectedPlanet.art} />
-        ) : (
-          <main className="planet-view planet-view-v2">
-            <div className="scene-title scene-title-v2"><small>{zoneInfo.title}</small><h1>HELION 01</h1><p>[1:1:1] • AEGIS HOMEWORLD</p></div>
-            <div className="planet-stage-v2">
-              <div className="planet-atmosphere" />
-              <img className="planet-image planet-image-v2" src={selectedPlanet.art} alt="Helion 01" draggable={false} />
-              {(['resource', 'industry', 'military'] as Zone[]).map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  className={`zone-hotspot zone-hotspot--${item} ${zone === item ? 'active' : ''}`}
-                  style={{ '--zone-accent': zoneMeta[item].accent } as CSSProperties}
-                  onClick={() => chooseZone(item)}
-                >
-                  <span className="zone-hotspot__icon"><GameIcon kind={item} /></span>
-                  <span className="zone-hotspot__label"><strong>{zoneMeta[item].title.replace(' ЗОНА', '')}</strong><small>ЗОНА</small></span>
-                </button>
-              ))}
-            </div>
-            <div className="planet-status planet-status-v2"><span>●</span> СТАБИЛЬНО <i /> ONLINE</div>
-            <div className="notice-panel-v2"><span>{notice}</span><button onClick={reset}>СБРОСИТЬ ПРОТОКОЛ</button></div>
-          </main>
-        )}
-
-        {activeTab === 'Планета' ? (
-          <aside className="right-column right-column-v2">
-            <section className="queue-panel-v2">
-              <div className="panel-title-v2 queue-heading"><span>ОЧЕРЕДЬ СТРОИТЕЛЬСТВА</span><b>{state.queue ? 1 : 0} / 4</b></div>
-              <div className={`queue-card-v2 ${state.queue ? 'busy' : ''}`}>
-                <span className="queue-card-v2__icon"><GameIcon kind="energy" /></span>
-                <span><strong>{state.queue?.name ?? 'Свободный слот'}</strong><small>{state.queue ? `Осталось ${formatCountdown(remaining)}` : 'Готов к строительству'}</small></span>
-                <b>{state.queue ? 'I' : '+'}</b>
-                {state.queue ? <div className="queue-progress-v2"><i style={{ width: `${progress}%` }} /></div> : null}
-              </div>
-              {[2, 3, 4].map((slot) => (
-                <div className="queue-card-v2 locked" key={slot}>
-                  <span className="queue-card-v2__lock">▣</span><span><strong>Слот 0{slot}</strong><small>Заблокирован</small></span>
+              <main className="planet-canvas-v3">
+                <div className="scene-title scene-title-v3"><small>{zoneInfo.title}</small><h1>HELION 01</h1><p>[1:1:1] • AEGIS HOMEWORLD</p></div>
+                <div className="planet-stage-v3">
+                  <div className="planet-atmosphere" />
+                  <img className="planet-image-v3" src={selectedPlanet.art} alt="Helion 01" draggable={false} />
+                  {(['resource', 'industry', 'military'] as Zone[]).map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      className={`zone-hotspot zone-hotspot--${item} ${zone === item ? 'active' : ''}`}
+                      style={{ '--zone-accent': zoneMeta[item].accent } as CSSProperties}
+                      onClick={() => chooseZone(item)}
+                    >
+                      <span className="zone-hotspot__icon"><GameIcon kind={item} /></span>
+                      <span className="zone-hotspot__label"><strong>{zoneMeta[item].title.replace(' ЗОНА', '')}</strong><small>ЗОНА</small></span>
+                    </button>
+                  ))}
                 </div>
-              ))}
-              <div className="build-preview-v2">
-                <span className="build-preview-v2__icon"><GameIcon kind="energy" /></span>
-                <div><strong>Солнечная станция I</strong><small>+25 энергии после завершения</small></div>
-                <b><GameIcon kind="metal" /> {formatNumber(BUILD_COST)}</b>
+                <div className="planet-status planet-status-v2"><span>●</span> СТАБИЛЬНО <i /> ONLINE</div>
+              </main>
+
+              <aside className="queue-panel-v3">
+                <div className="page-panel-title"><strong>ОЧЕРЕДЬ СТРОИТЕЛЬСТВА</strong><small>{state.queue ? 1 : 0} / 4</small></div>
+                <div className={`queue-card-v2 ${state.queue ? 'busy' : ''}`}>
+                  <span className="queue-card-v2__icon"><GameIcon kind="energy" /></span>
+                  <span><strong>{state.queue?.name ?? 'Свободный слот'}</strong><small>{state.queue ? `Осталось ${formatCountdown(remaining)}` : 'Готов к строительству'}</small></span>
+                  <b>{state.queue ? 'I' : '+'}</b>
+                  {state.queue ? <div className="queue-progress-v2"><i style={{ width: `${progress}%` }} /></div> : null}
+                </div>
+                {[2, 3, 4].map((slot) => (
+                  <div className="queue-card-v2 locked" key={slot}><span className="queue-card-v2__lock">▣</span><span><strong>Слот 0{slot}</strong><small>Заблокирован</small></span></div>
+                ))}
+                <div className="build-preview-v2">
+                  <span className="build-preview-v2__icon"><GameIcon kind="energy" /></span>
+                  <div><strong>Солнечная станция I</strong><small>+25 энергии после завершения</small></div>
+                  <b><GameIcon kind="metal" /> {formatNumber(BUILD_COST)}</b>
+                </div>
+                <AegisButton onClick={build} disabled={Boolean(state.queue)}>ПОСТРОИТЬ</AegisButton>
+              </aside>
+            </div>
+          ) : (
+            <main className="module-placeholder-v3">
+              <span>ASTERION COMMAND MODULE</span>
+              <h1>{activeTab.toUpperCase()}</h1>
+              <p>Верхняя командная панель остаётся неизменной. Этот рабочий экран будет реализован отдельным модулем.</p>
+            </main>
+          )}
+        </section>
+
+        <div className="shell-notice"><span>{notice}</span><button type="button" onClick={reset}>СБРОСИТЬ ПРОТОТИП</button></div>
+
+        {skinOpen ? (
+          <div className="skin-picker-backdrop" onMouseDown={() => setSkinOpen(false)}>
+            <section className="skin-picker-modal" onMouseDown={(event) => event.stopPropagation()}>
+              <header><div><small>РЕДАКТИРОВАТЬ ПЛАНЕТУ</small><h2>Helion 01</h2><p>[1:1:1] · Основная планета</p></div><button type="button" onClick={() => setSkinOpen(false)}>×</button></header>
+              <div className="skin-picker-grid">
+                {planetSkins.map((skin) => (
+                  <button key={skin.id} type="button" className={state.planetSkin === skin.id ? 'active' : ''} onClick={() => chooseSkin(skin)}>
+                    <img src={skin.art} alt=""/><span>{skin.label}</span><small>{state.planetSkin === skin.id ? 'АКТИВИРОВАНА' : 'ИСПОЛЬЗОВАТЬ'}</small>
+                  </button>
+                ))}
               </div>
-              <AegisButton onClick={build} disabled={Boolean(state.queue)}>ПОСТРОИТЬ</AegisButton>
             </section>
-          </aside>
+          </div>
         ) : null}
 
-        <footer className="footer-status"><span>ASTERION // {activeTab === 'Вселенная' ? 'UNIVERSE NAVIGATION V3' : 'PLANET VISUAL V2'}</span><span>1920×1080 BASE CANVAS</span><span>ESC — WINDOWED • F11 — FULLSCREEN</span></footer>
+        <footer className="footer-status"><span>ASTERION // STATIC COMMAND SHELL V3</span><span>1920×1080 BASE CANVAS</span><span>ESC — WINDOWED • F11 — FULLSCREEN</span></footer>
       </div>
     </div>
   );
