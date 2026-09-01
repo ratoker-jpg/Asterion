@@ -52,7 +52,7 @@ const planetSkins = [
 ] as const;
 
 type PlanetSkin = (typeof planetSkins)[number]['id'];
-type PlanetId = 'helion-01' | 'lemay-07' | 'ostrogo-19';
+type PlanetId = 'helion-01';
 type Zone = 'resource' | 'industry' | 'military';
 type IconKind = 'metal' | 'mineral' | 'gas' | 'energy' | 'population' | Zone;
 
@@ -65,6 +65,7 @@ type QueueItem = {
 };
 
 type PlanetRuntime = {
+  name: string;
   skin: PlanetSkin;
   population: number;
   populationMax: number;
@@ -84,21 +85,19 @@ type SaveState = {
 
 type PlanetDefinition = {
   id: PlanetId;
-  name: string;
   coords: string;
-  status: 'Основная планета' | 'Колония';
+  status: 'Основная планета';
   faction: 'Aegis';
 };
 
 const ownedPlanets: PlanetDefinition[] = [
-  { id: 'helion-01', name: 'Helion 01', coords: '[1:1:1]', status: 'Основная планета', faction: 'Aegis' },
-  { id: 'lemay-07', name: 'Lemay', coords: '[1:7:12]', status: 'Колония', faction: 'Aegis' },
-  { id: 'ostrogo-19', name: 'Ostrogo', coords: '[1:19:4]', status: 'Колония', faction: 'Aegis' },
+  { id: 'helion-01', coords: '[1:1:1]', status: 'Основная планета', faction: 'Aegis' },
 ];
 
 const SAVE_KEY = 'asterion.vertical-slice.v1';
 const BUILD_TIME_MS = 45_000;
 const BUILD_COST = 1200;
+const DEFAULT_PLANET_NAME = 'Helion 01';
 
 const initialState: SaveState = {
   metal: 15_880,
@@ -106,14 +105,18 @@ const initialState: SaveState = {
   gas: 6_421,
   currentPlanetId: 'helion-01',
   planets: {
-    'helion-01': { skin: 'colonized', population: 4, populationMax: 70, energy: 140, solarStations: 0, stability: 100 },
-    'lemay-07': { skin: 'skin-026', population: 12, populationMax: 90, energy: 210, solarStations: 2, stability: 96 },
-    'ostrogo-19': { skin: 'desert', population: 3, populationMax: 60, energy: 95, solarStations: 0, stability: 91 },
+    'helion-01': {
+      name: DEFAULT_PLANET_NAME,
+      skin: 'colonized',
+      population: 4,
+      populationMax: 70,
+      energy: 140,
+      solarStations: 0,
+      stability: 100,
+    },
   },
   queues: {
     'helion-01': null,
-    'lemay-07': null,
-    'ostrogo-19': null,
   },
 };
 
@@ -124,8 +127,6 @@ const zoneMeta: Record<Zone, { title: string; subtitle: string; accent: string }
   military: { title: 'ВОЕННАЯ ЗОНА', subtitle: 'Оборона и флот', accent: '#ee665d' },
 };
 
-const planetIds = ownedPlanets.map((planet) => planet.id);
-const isPlanetId = (value: unknown): value is PlanetId => typeof value === 'string' && planetIds.includes(value as PlanetId);
 const isPlanetSkin = (value: unknown): value is PlanetSkin => planetSkins.some((skin) => skin.id === value);
 
 function readSave(): SaveState {
@@ -141,41 +142,40 @@ function readSave(): SaveState {
       queue?: Omit<QueueItem, 'planetId'> | QueueItem | null;
     };
 
-    const currentPlanetId = isPlanetId(parsed.currentPlanetId) ? parsed.currentPlanetId : 'helion-01';
-    const planets = { ...initialState.planets };
+    const savedHomeworld = parsed.planets?.['helion-01'];
+    const homeworld: PlanetRuntime = {
+      ...initialState.planets['helion-01'],
+      ...(savedHomeworld ?? {}),
+      name: typeof savedHomeworld?.name === 'string' && savedHomeworld.name.trim()
+        ? savedHomeworld.name.trim().slice(0, 28)
+        : DEFAULT_PLANET_NAME,
+      skin: isPlanetSkin(savedHomeworld?.skin)
+        ? savedHomeworld.skin
+        : initialState.planets['helion-01'].skin,
+    };
 
-    for (const definition of ownedPlanets) {
-      const saved = parsed.planets?.[definition.id];
-      if (!saved) continue;
-      planets[definition.id] = {
-        ...planets[definition.id],
-        ...saved,
-        skin: isPlanetSkin(saved.skin) ? saved.skin : planets[definition.id].skin,
-      };
-    }
-
+    // Migration from the original single-planet save format.
     if (parsed.planetSkin && isPlanetSkin(parsed.planetSkin)) {
-      planets['helion-01'] = {
-        ...planets['helion-01'],
-        skin: parsed.planetSkin,
-        population: parsed.population ?? planets['helion-01'].population,
-        energy: parsed.energy ?? planets['helion-01'].energy,
-        solarStations: parsed.solarStations ?? planets['helion-01'].solarStations,
-      };
+      homeworld.skin = parsed.planetSkin;
+      homeworld.population = parsed.population ?? homeworld.population;
+      homeworld.energy = parsed.energy ?? homeworld.energy;
+      homeworld.solarStations = parsed.solarStations ?? homeworld.solarStations;
     }
 
-    const queues = { ...initialState.queues, ...(parsed.queues ?? {}) };
-    if (parsed.queue && !parsed.queues) {
-      queues['helion-01'] = { ...parsed.queue, planetId: 'helion-01' };
-    }
+    const savedQueue = parsed.queues?.['helion-01'] ?? parsed.queue ?? null;
+    const queue: QueueItem | null = savedQueue
+      ? { ...savedQueue, planetId: 'helion-01' }
+      : null;
 
+    // Any temporary test colonies from the previous prototype are intentionally
+    // discarded here. The next save writes the canonical single-homeworld model.
     return {
       metal: parsed.metal ?? initialState.metal,
       minerals: parsed.minerals ?? initialState.minerals,
       gas: parsed.gas ?? initialState.gas,
-      currentPlanetId,
-      planets,
-      queues,
+      currentPlanetId: 'helion-01',
+      planets: { 'helion-01': homeworld },
+      queues: { 'helion-01': queue },
     };
   } catch {
     return initialState;
@@ -242,6 +242,7 @@ export function App() {
   const [planetMenuOpen, setPlanetMenuOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(true);
   const [editingPlanetId, setEditingPlanetId] = useState<PlanetId | null>(null);
+  const [editingName, setEditingName] = useState(DEFAULT_PLANET_NAME);
 
   useEffect(() => localStorage.setItem(SAVE_KEY, JSON.stringify(state)), [state]);
   useEffect(() => {
@@ -249,77 +250,85 @@ export function App() {
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => {
-    const completed = ownedPlanets.find((planet) => {
-      const queue = state.queues[planet.id];
-      return queue && now >= queue.finishAt;
-    });
-    if (!completed) return;
+    const queue = state.queues['helion-01'];
+    if (!queue || now < queue.finishAt) return;
 
     setState((current) => {
-      const queue = current.queues[completed.id];
-      if (!queue || Date.now() < queue.finishAt) return current;
+      const currentQueue = current.queues['helion-01'];
+      if (!currentQueue || Date.now() < currentQueue.finishAt) return current;
       return {
         ...current,
         planets: {
-          ...current.planets,
-          [completed.id]: {
-            ...current.planets[completed.id],
-            solarStations: current.planets[completed.id].solarStations + 1,
-            energy: current.planets[completed.id].energy + 25,
+          'helion-01': {
+            ...current.planets['helion-01'],
+            solarStations: current.planets['helion-01'].solarStations + 1,
+            energy: current.planets['helion-01'].energy + 25,
           },
         },
-        queues: { ...current.queues, [completed.id]: null },
+        queues: { 'helion-01': null },
       };
     });
-    setNotice(`${completed.name}: солнечная станция построена. Производство энергии увеличено.`);
-  }, [now, state.queues]);
+    setNotice(`${state.planets['helion-01'].name}: солнечная станция построена. Производство энергии увеличено.`);
+  }, [now, state.queues, state.planets]);
 
-  const currentPlanet = useMemo(
-    () => ownedPlanets.find((planet) => planet.id === state.currentPlanetId) ?? ownedPlanets[0],
-    [state.currentPlanetId],
-  );
-  const currentPlanetState = state.planets[currentPlanet.id];
+  const currentPlanet = ownedPlanets[0];
+  const currentPlanetState = state.planets['helion-01'];
+  const currentPlanetName = currentPlanetState.name;
   const currentSkin = useMemo(
     () => planetSkins.find((skin) => skin.id === currentPlanetState.skin) ?? planetSkins[0],
     [currentPlanetState.skin],
   );
-  const helionSkin = planetSkins.find((skin) => skin.id === state.planets['helion-01'].skin) ?? planetSkins[0];
-  const currentQueue = state.queues[currentPlanet.id];
+  const currentQueue = state.queues['helion-01'];
 
-  const editingPlanet = editingPlanetId ? ownedPlanets.find((planet) => planet.id === editingPlanetId) ?? null : null;
-  const editingPlanetState = editingPlanet ? state.planets[editingPlanet.id] : null;
+  const editingPlanet = editingPlanetId ? currentPlanet : null;
+  const editingPlanetState = editingPlanet ? state.planets['helion-01'] : null;
 
   const progress = useMemo(() => {
     if (!currentQueue) return 0;
     return Math.min(100, Math.max(0, ((now - currentQueue.startedAt) / (currentQueue.finishAt - currentQueue.startedAt)) * 100));
   }, [now, currentQueue]);
 
-  const selectPlanet = (planetId: PlanetId) => {
-    const planet = ownedPlanets.find((item) => item.id === planetId) ?? ownedPlanets[0];
-    setState((current) => ({ ...current, currentPlanetId: planet.id }));
+  const selectPlanet = (_planetId: PlanetId) => {
+    setState((current) => ({ ...current, currentPlanetId: 'helion-01' }));
     setPlanetMenuOpen(false);
-    setNotice(`${planet.name} ${planet.coords} выбрана как текущая планета.`);
+    setNotice(`${currentPlanetName} ${currentPlanet.coords} выбрана как текущая планета.`);
   };
 
   const openPlanetEditor = (planetId: PlanetId) => {
-    setState((current) => ({ ...current, currentPlanetId: planetId }));
+    setState((current) => ({ ...current, currentPlanetId: 'helion-01' }));
     setActiveTab('Планета');
     setPlanetMenuOpen(false);
+    setEditingName(state.planets[planetId].name);
     setEditingPlanetId(planetId);
+  };
+
+  const savePlanetName = () => {
+    if (!editingPlanetId) return;
+    const trimmed = editingName.trim().replace(/\s+/g, ' ');
+    if (trimmed.length < 2) {
+      setNotice('Название планеты должно содержать минимум 2 символа.');
+      return;
+    }
+    const safeName = trimmed.slice(0, 28);
+    setState((current) => ({
+      ...current,
+      planets: {
+        'helion-01': { ...current.planets['helion-01'], name: safeName },
+      },
+    }));
+    setEditingName(safeName);
+    setNotice(`Планета переименована: ${safeName}.`);
   };
 
   const chooseSkin = (skin: (typeof planetSkins)[number]) => {
     if (!editingPlanetId) return;
-    const planet = ownedPlanets.find((item) => item.id === editingPlanetId) ?? ownedPlanets[0];
     setState((current) => ({
       ...current,
       planets: {
-        ...current.planets,
-        [editingPlanetId]: { ...current.planets[editingPlanetId], skin: skin.id },
+        'helion-01': { ...current.planets['helion-01'], skin: skin.id },
       },
     }));
-    setEditingPlanetId(null);
-    setNotice(`Облик ${planet.name} изменён: ${skin.label}.`);
+    setNotice(`Облик ${state.planets['helion-01'].name} изменён: ${skin.label}.`);
   };
 
   const build = () => {
@@ -330,17 +339,21 @@ export function App() {
       ...current,
       metal: current.metal - BUILD_COST,
       queues: {
-        ...current.queues,
-        [currentPlanet.id]: {
+        'helion-01': {
           id: 'solar-station',
           name: 'Солнечная станция',
-          planetId: currentPlanet.id,
+          planetId: 'helion-01',
           startedAt,
           finishAt: startedAt + BUILD_TIME_MS,
         },
       },
     }));
-    setNotice(`${currentPlanet.name}: солнечная станция добавлена в очередь. −${formatNumber(BUILD_COST)} металла.`);
+    setNotice(`${currentPlanetName}: солнечная станция добавлена в очередь. −${formatNumber(BUILD_COST)} металла.`);
+  };
+
+  const closePlanetEditor = () => {
+    setEditingPlanetId(null);
+    setEditingName(state.planets['helion-01'].name);
   };
 
   const reset = () => {
@@ -348,6 +361,7 @@ export function App() {
     setState(initialState);
     setPlanetMenuOpen(false);
     setEditingPlanetId(null);
+    setEditingName(DEFAULT_PLANET_NAME);
     setDetailsOpen(true);
     setNotice('Сохранение прототипа сброшено.');
   };
@@ -355,7 +369,7 @@ export function App() {
   const chooseTab = (tab: string) => {
     setActiveTab(tab);
     setPlanetMenuOpen(false);
-    setEditingPlanetId(null);
+    closePlanetEditor();
     if (tab === 'Вселенная') setNotice('Галактика 1 загружена. Доступно 40 солнечных систем.');
     else if (tab !== 'Планета') setNotice(`Экран «${tab}» пока в разработке.`);
   };
@@ -364,8 +378,8 @@ export function App() {
     setZone(nextZone);
     setActiveTab('Планета');
     setPlanetMenuOpen(false);
-    setEditingPlanetId(null);
-    setNotice(`${zoneMeta[nextZone].title}: модуль выбран для ${currentPlanet.name}.`);
+    closePlanetEditor();
+    setNotice(`${zoneMeta[nextZone].title}: модуль выбран для ${currentPlanetName}.`);
   };
 
   const remaining = currentQueue ? currentQueue.finishAt - now : 0;
@@ -377,8 +391,8 @@ export function App() {
         <header className="persistent-header persistent-header-v4">
           <section className="persistent-header__planet persistent-header__planet-v4">
             <div className="header-planet-orbit-v4">
-              <button className="header-planet-world-v4" type="button" onClick={() => chooseTab('Планета')} aria-label={`Открыть ${currentPlanet.name}`}>
-                <img src={currentSkin.art} alt={currentPlanet.name} draggable={false} />
+              <button className="header-planet-world-v4" type="button" onClick={() => chooseTab('Планета')} aria-label={`Открыть ${currentPlanetName}`}>
+                <img src={currentSkin.art} alt={currentPlanetName} draggable={false} />
               </button>
               {(['resource', 'industry', 'military'] as Zone[]).map((item) => (
                 <button
@@ -395,10 +409,10 @@ export function App() {
 
             <div className="current-planet-control current-planet-control-v4">
               <button className="current-planet-select current-planet-select-v4" type="button" onClick={() => setPlanetMenuOpen((open) => !open)}>
-                <img src={currentSkin.art} alt={currentPlanet.name} draggable={false} />
+                <img src={currentSkin.art} alt={currentPlanetName} draggable={false} />
                 <span>
                   <small>ТЕКУЩАЯ ПЛАНЕТА</small>
-                  <strong>{currentPlanet.name} <em>{currentPlanet.coords}</em></strong>
+                  <strong>{currentPlanetName} <em>{currentPlanet.coords}</em></strong>
                 </span>
                 <i>{planetMenuOpen ? '⌃' : '⌄'}</i>
               </button>
@@ -406,17 +420,12 @@ export function App() {
 
             {planetMenuOpen ? (
               <div className="planet-list-popover planet-list-popover-v4">
-                {ownedPlanets.map((planet) => {
-                  const planetState = state.planets[planet.id];
-                  const skin = planetSkins.find((item) => item.id === planetState.skin) ?? planetSkins[0];
-                  return (
-                    <button key={planet.id} type="button" className={planet.id === currentPlanet.id ? 'active' : ''} onClick={() => selectPlanet(planet.id)}>
-                      <img src={skin.art} alt="" />
-                      <span><strong>{planet.name}</strong><small>{planet.coords} · {planet.status}</small></span>
-                      <b>{planet.id === currentPlanet.id ? '✓' : ''}</b>
-                    </button>
-                  );
-                })}
+                <button type="button" className="active" onClick={() => selectPlanet('helion-01')}>
+                  <img src={currentSkin.art} alt="" />
+                  <span><strong>{currentPlanetName}</strong><small>{currentPlanet.coords} · {currentPlanet.status}</small></span>
+                  <b>✓</b>
+                </button>
+                <div>Новые планеты появятся здесь только после реальной колонизации.</div>
               </div>
             ) : null}
           </section>
@@ -445,36 +454,30 @@ export function App() {
 
         <section className={`workspace workspace-v4 workspace--${activeTab === 'Вселенная' ? 'universe' : activeTab === 'Планета' ? 'planet' : 'module'}`}>
           {activeTab === 'Вселенная' ? (
-            <UniverseView onNotice={setNotice} ownedPlanetArt={helionSkin.art} />
+            <UniverseView onNotice={setNotice} ownedPlanetArt={currentSkin.art} ownedPlanetName={currentPlanetName} />
           ) : activeTab === 'Планета' ? (
             <div className="planet-page-v3 planet-page-v4">
               <aside className="planet-summary-v3 planet-list-panel-v4">
-                <div className="page-panel-title"><strong>ПЛАНЕТЫ</strong><small>{ownedPlanets.length} КОЛОНИИ</small></div>
+                <div className="page-panel-title"><strong>ПЛАНЕТЫ</strong><small>1 ПЛАНЕТА</small></div>
 
                 <div className="owned-planets-v4">
-                  {ownedPlanets.map((planet) => {
-                    const planetState = state.planets[planet.id];
-                    const skin = planetSkins.find((item) => item.id === planetState.skin) ?? planetSkins[0];
-                    return (
-                      <div key={planet.id} className={`owned-planet-row-v4 ${planet.id === currentPlanet.id ? 'active' : ''}`}>
-                        <button className="owned-planet-main-v4" type="button" onClick={() => selectPlanet(planet.id)}>
-                          <img src={skin.art} alt="" />
-                          <span><strong>{planet.name}</strong><small>{planet.coords} · {planet.status}</small></span>
-                        </button>
-                        <button className="owned-planet-edit-v4" type="button" title={`Изменить облик ${planet.name}`} onClick={() => openPlanetEditor(planet.id)}>✎</button>
-                      </div>
-                    );
-                  })}
+                  <div className="owned-planet-row-v4 active">
+                    <button className="owned-planet-main-v4" type="button" onClick={() => selectPlanet('helion-01')}>
+                      <img src={currentSkin.art} alt="" />
+                      <span><strong>{currentPlanetName}</strong><small>{currentPlanet.coords} · {currentPlanet.status}</small></span>
+                    </button>
+                    <button className="owned-planet-edit-v4" type="button" title={`Редактировать ${currentPlanetName}`} onClick={() => openPlanetEditor('helion-01')}>✎</button>
+                  </div>
                 </div>
 
                 <button className={`planet-details-toggle-v4 ${detailsOpen ? 'open' : ''}`} type="button" onClick={() => setDetailsOpen((open) => !open)}>
-                  <span>ПОДРОБНЕЕ О {currentPlanet.name.toUpperCase()}</span><b>{detailsOpen ? '⌃' : '⌄'}</b>
+                  <span>ПОДРОБНЕЕ О {currentPlanetName.toUpperCase()}</span><b>{detailsOpen ? '⌃' : '⌄'}</b>
                 </button>
 
                 {detailsOpen ? (
                   <div className="planet-details-v4">
                     <dl>
-                      <div><dt>Статус</dt><dd>{currentPlanet.status === 'Основная планета' ? '★ ' : ''}{currentPlanet.status}</dd></div>
+                      <div><dt>Статус</dt><dd>★ {currentPlanet.status}</dd></div>
                       <div><dt>Фракция</dt><dd>{currentPlanet.faction}</dd></div>
                       <div><dt>Координаты</dt><dd>{currentPlanet.coords}</dd></div>
                       <div><dt>Население</dt><dd>{currentPlanetState.population} / {currentPlanetState.populationMax}</dd></div>
@@ -489,12 +492,12 @@ export function App() {
               <main className="planet-canvas-v3">
                 <div className="scene-title scene-title-v3">
                   <small>{zoneInfo.title}</small>
-                  <h1>{currentPlanet.name.toUpperCase()}</h1>
-                  <p>{currentPlanet.coords} • {currentPlanet.status === 'Основная планета' ? 'AEGIS HOMEWORLD' : 'AEGIS COLONY'}</p>
+                  <h1>{currentPlanetName.toUpperCase()}</h1>
+                  <p>{currentPlanet.coords} • AEGIS HOMEWORLD</p>
                 </div>
                 <div className="planet-stage-v3">
                   <div className="planet-atmosphere" />
-                  <img className="planet-image-v3" src={currentSkin.art} alt={currentPlanet.name} draggable={false} />
+                  <img className="planet-image-v3" src={currentSkin.art} alt={currentPlanetName} draggable={false} />
                   {(['resource', 'industry', 'military'] as Zone[]).map((item) => (
                     <button
                       key={item}
@@ -542,12 +545,30 @@ export function App() {
         <div className="shell-notice shell-notice-v4"><span>{notice}</span><button type="button" onClick={reset}>СБРОСИТЬ ПРОТОТИП</button></div>
 
         {editingPlanet && editingPlanetState ? (
-          <div className="skin-picker-backdrop" onMouseDown={() => setEditingPlanetId(null)}>
-            <section className="skin-picker-modal" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="skin-picker-backdrop" onMouseDown={closePlanetEditor}>
+            <section className="skin-picker-modal planet-editor-modal-v5" onMouseDown={(event) => event.stopPropagation()}>
               <header>
-                <div><small>РЕДАКТИРОВАТЬ ПЛАНЕТУ</small><h2>{editingPlanet.name}</h2><p>{editingPlanet.coords} · {editingPlanet.status}</p></div>
-                <button type="button" onClick={() => setEditingPlanetId(null)}>×</button>
+                <div><small>РЕДАКТИРОВАТЬ ПЛАНЕТУ</small><h2>{editingPlanetState.name}</h2><p>{editingPlanet.coords} · {editingPlanet.status}</p></div>
+                <button type="button" onClick={closePlanetEditor}>×</button>
               </header>
+
+              <form className="planet-editor-name-v5" onSubmit={(event) => { event.preventDefault(); savePlanetName(); }}>
+                <label htmlFor="planet-name-input">НАЗВАНИЕ ПЛАНЕТЫ</label>
+                <div>
+                  <input
+                    id="planet-name-input"
+                    value={editingName}
+                    maxLength={28}
+                    autoComplete="off"
+                    spellCheck={false}
+                    onChange={(event) => setEditingName(event.target.value)}
+                  />
+                  <button type="submit">СОХРАНИТЬ</button>
+                </div>
+                <small>2–28 символов. Название отображается в шапке, на планете и во Вселенной.</small>
+              </form>
+
+              <div className="planet-editor-skins-title-v5"><strong>ОБЛИК ПЛАНЕТЫ</strong><small>Можно менять независимо от названия</small></div>
               <div className="skin-picker-grid">
                 {planetSkins.map((skin) => (
                   <button key={skin.id} type="button" className={editingPlanetState.skin === skin.id ? 'active' : ''} onClick={() => chooseSkin(skin)}>
@@ -559,7 +580,7 @@ export function App() {
           </div>
         ) : null}
 
-        <footer className="footer-status"><span>ASTERION // COMMAND SHELL V4</span><span>1920×1080 BASE CANVAS</span><span>ESC — WINDOWED • F11 — FULLSCREEN</span></footer>
+        <footer className="footer-status"><span>ASTERION // COMMAND SHELL V5</span><span>1920×1080 BASE CANVAS</span><span>ESC — WINDOWED • F11 — FULLSCREEN</span></footer>
       </div>
     </div>
   );
