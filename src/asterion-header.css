@@ -1,0 +1,410 @@
+/* Asterion canonical command header. All permanent HUD geometry belongs here. */
+
+.asterion-header{
+  position:absolute;
+  z-index:110;
+  inset:20px 24px auto;
+  height:220px;
+  color:#e9fbff;
+  pointer-events:none;
+}
+.asterion-header button,
+.asterion-header .resource-chip{
+  pointer-events:auto;
+}
+
+/* Planet cluster and current-planet selector. */
+.header-planet-module{
+  position:absolute;
+  left:0;
+  top:0;
+  width:470px;
+  height:220px;
+  overflow:visible;
+}
+.header-planet-orbit{
+  position:absolute;
+  left:0;
+  top:0;
+  width:230px;
+  height:220px;
+}
+.header-planet-orbit::before,
+.header-planet-orbit::after{
+  content:"";
+  position:absolute;
+  border-radius:50%;
+  pointer-events:none;
+}
+.header-planet-orbit::before{
+  left:16px;
+  top:3px;
+  width:190px;
+  height:190px;
+  border:1px solid rgba(69,225,255,.52);
+  box-shadow:0 0 0 8px rgba(1,10,17,.93),0 0 36px rgba(0,198,246,.28),inset 0 0 28px rgba(0,183,232,.12);
+}
+.header-planet-orbit::after{
+  left:27px;
+  top:14px;
+  width:168px;
+  height:168px;
+  border:1px dashed rgba(102,232,255,.27);
+  animation:asterion-header-orbit 72s linear infinite;
+}
+.header-planet-world{
+  position:absolute;
+  z-index:2;
+  left:36px;
+  top:23px;
+  width:150px;
+  height:150px;
+  padding:0;
+  border:0;
+  border-radius:50%;
+  background:transparent;
+  cursor:pointer;
+  filter:drop-shadow(0 0 22px rgba(33,200,255,.42));
+}
+.header-planet-world img{
+  width:100%;
+  height:100%;
+  object-fit:contain;
+  animation:asterion-header-planet-float 10s ease-in-out infinite;
+}
+.header-zone{
+  position:absolute;
+  z-index:5;
+  width:48px;
+  height:48px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border:1px solid rgba(78,223,252,.56);
+  border-radius:50%;
+  background:radial-gradient(circle at 45% 35%,rgba(8,72,92,.98),rgba(2,14,22,.99) 72%);
+  color:#7ee8ff;
+  cursor:pointer;
+  box-shadow:0 0 0 5px rgba(1,9,16,.96),0 0 16px rgba(0,205,247,.17);
+  transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease,color .15s ease;
+}
+.header-zone svg{width:25px;height:25px}
+.header-zone:hover,
+.header-zone.active{
+  transform:scale(1.08);
+  color:#fff;
+  border-color:#65e8ff;
+  box-shadow:0 0 0 5px rgba(1,9,16,.96),0 0 22px rgba(0,208,255,.36);
+}
+.header-zone--resource{left:4px;top:59px}
+.header-zone--industry{left:173px;top:49px;color:#ffd255;border-color:rgba(255,190,68,.54)}
+.header-zone--military{left:87px;top:161px;color:#ff746d;border-color:rgba(255,105,96,.55)}
+
+.current-planet-control{
+  position:absolute;
+  z-index:8;
+  left:228px;
+  top:10px;
+  width:242px;
+  height:90px;
+}
+.current-planet-select{
+  width:100%;
+  height:90px;
+  min-width:0;
+  display:grid;
+  grid-template-columns:56px minmax(0,1fr) 20px;
+  align-items:center;
+  gap:10px;
+  padding:10px 12px;
+  border:1px solid rgba(72,215,245,.38);
+  background:linear-gradient(180deg,rgba(5,31,45,.98),rgba(2,16,26,.98));
+  color:#dff7ff;
+  cursor:pointer;
+  text-align:left;
+  clip-path:polygon(0 0,94% 0,100% 18%,100% 100%,0 100%);
+  box-shadow:inset 0 0 24px rgba(0,188,235,.035);
+}
+.current-planet-select:hover,
+.current-planet-select:focus-visible{
+  border-color:rgba(78,229,255,.76);
+  background:linear-gradient(180deg,rgba(7,46,62,.98),rgba(2,23,34,.98));
+  outline:0;
+}
+.current-planet-select img{width:54px;height:54px;object-fit:contain;filter:drop-shadow(0 0 10px rgba(50,201,255,.38))}
+.current-planet-select span{min-width:0}
+.current-planet-select small{display:block;color:#69cfe7;font-size:10px;letter-spacing:1.2px;white-space:nowrap}
+.current-planet-select strong{display:block;margin-top:6px;font-size:16px;line-height:1.1;white-space:nowrap}
+.current-planet-select em{font-style:normal;color:#7999a4;font-size:10px;font-weight:500;margin-left:5px}
+.current-planet-select i{font-style:normal;color:#69e7ff;font-size:18px;text-align:center}
+.planet-list-popover{
+  position:absolute;
+  z-index:240;
+  left:228px;
+  top:108px;
+  width:242px;
+  padding:8px;
+  border:1px solid rgba(65,215,246,.44);
+  background:rgba(2,14,23,.99);
+  box-shadow:0 18px 42px rgba(0,0,0,.58),inset 0 0 20px rgba(0,187,236,.04);
+}
+.planet-list-popover button{
+  width:100%;
+  height:64px;
+  display:grid;
+  grid-template-columns:48px minmax(0,1fr) 22px;
+  align-items:center;
+  gap:8px;
+  padding:5px 8px;
+  border:1px solid rgba(68,188,218,.22);
+  background:rgba(5,29,42,.8);
+  color:#dffaff;
+  text-align:left;
+  cursor:pointer;
+}
+.planet-list-popover button:hover{border-color:#4dddf8}
+.planet-list-popover img{width:44px;height:44px;object-fit:contain}
+.planet-list-popover span strong{display:block;font-size:13px}
+.planet-list-popover span small{display:block;margin-top:4px;font-size:8px;color:#7396a2}
+.planet-list-popover b{color:#6ef1b4}
+.planet-list-popover>div{padding:8px 5px 2px;color:#547480;font-size:8px;line-height:1.45}
+
+/* Resource rail. Its frame is decorative; overflow stays visible for tooltips. */
+.header-main{display:contents}
+.header-resource-rail{
+  position:absolute;
+  z-index:4;
+  left:470px;
+  right:258px;
+  top:0;
+  height:108px;
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  overflow:visible;
+  border:1px solid rgba(66,207,237,.3);
+  background:linear-gradient(180deg,rgba(5,27,39,.98),rgba(2,14,23,.99));
+  clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px);
+  box-shadow:inset 0 0 30px rgba(0,185,230,.025);
+}
+.header-resource-rail .resource-chip{
+  position:relative;
+  min-width:0;
+  height:106px;
+  display:grid;
+  grid-template-columns:54px minmax(0,1fr);
+  align-items:center;
+  gap:8px;
+  padding:0 15px;
+  border:0;
+  border-right:1px solid rgba(68,185,214,.14);
+  background:linear-gradient(90deg,rgba(6,34,47,.42),rgba(2,18,28,.16));
+  overflow:visible;
+  cursor:default;
+  outline:0;
+}
+.header-resource-rail .resource-chip:last-child{border-right:0}
+.resource-chip__icon{
+  position:static;
+  width:42px;
+  height:42px;
+  display:grid;
+  place-items:center;
+  transform:none;
+  filter:drop-shadow(0 0 8px rgba(0,205,255,.34));
+}
+.resource-chip__icon svg{width:34px;height:34px}
+.resource-chip--metal .resource-chip__icon{color:#55e6ff}
+.resource-chip--mineral .resource-chip__icon{color:#a6adff}
+.resource-chip--gas .resource-chip__icon{color:#4df0a7}
+.resource-chip--energy .resource-chip__icon{color:#ffd34f}
+.resource-chip--population .resource-chip__icon{color:#dffaff}
+.resource-chip__text{position:static;min-width:0}
+.resource-chip small{display:block;color:#769aa7;font-size:10px;letter-spacing:1.15px;white-space:nowrap}
+.resource-chip strong{display:block;margin-top:5px;color:#f2fcff;font-size:20px;line-height:1.05;font-weight:700;white-space:nowrap}
+.resource-fill{
+  display:block;
+  width:100%;
+  height:4px;
+  margin-top:10px;
+  overflow:hidden;
+  background:rgba(4,29,42,.96);
+  border:1px solid rgba(71,197,222,.16);
+  box-shadow:inset 0 0 8px rgba(0,0,0,.36);
+}
+.resource-fill i{
+  display:block;
+  width:var(--fill);
+  height:100%;
+  background:#1ed2f5;
+  box-shadow:0 0 8px rgba(30,210,245,.45);
+  transition:width .25s ease,background .25s ease,box-shadow .25s ease;
+}
+.resource-fill--watch i{background:#ffe27b;box-shadow:0 0 8px rgba(255,226,123,.42)}
+.resource-fill--warning i{background:#ff9b4a;box-shadow:0 0 8px rgba(255,155,74,.46)}
+.resource-fill--critical i{background:#ff5f69;box-shadow:0 0 9px rgba(255,95,105,.54)}
+.resource-tooltip{
+  position:absolute;
+  z-index:300;
+  left:50%;
+  top:calc(100% + 10px);
+  width:198px;
+  padding:11px 12px;
+  display:grid;
+  gap:5px;
+  border:1px solid rgba(67,211,242,.42);
+  background:rgba(2,16,26,.985);
+  box-shadow:0 14px 30px rgba(0,0,0,.48),inset 0 0 18px rgba(0,180,229,.05);
+  color:#9abcc6;
+  font-size:10px;
+  line-height:1.3;
+  opacity:0;
+  transform:translate(-50%,4px);
+  pointer-events:none;
+  transition:opacity .14s ease,transform .14s ease;
+}
+.resource-tooltip strong{margin:0;color:#e9fbff;font-size:12px}
+.resource-chip:hover .resource-tooltip,
+.resource-chip:focus-visible .resource-tooltip{opacity:1;transform:translate(-50%,0)}
+
+/* Main navigation is a dedicated six-button rail. */
+.primary-navigation{
+  position:absolute;
+  z-index:6;
+  left:238px;
+  right:0;
+  top:120px;
+  height:96px;
+  display:grid;
+  grid-template-columns:repeat(6,minmax(0,1fr));
+  overflow:visible;
+  border:1px solid rgba(65,205,236,.3);
+  background:linear-gradient(180deg,rgba(5,28,40,.98),rgba(2,14,23,.99));
+  clip-path:polygon(15px 0,100% 0,100% calc(100% - 15px),calc(100% - 15px) 100%,0 100%,0 15px);
+}
+.primary-navigation button{
+  position:relative;
+  min-width:0;
+  height:94px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:14px;
+  padding:0 18px;
+  border:0;
+  border-right:1px solid rgba(68,188,216,.14);
+  background:linear-gradient(180deg,rgba(6,35,48,.24),rgba(1,14,23,.08));
+  color:#c8d8de;
+  cursor:pointer;
+  overflow:hidden;
+  transition:color .15s ease,background .15s ease,box-shadow .15s ease;
+}
+.primary-navigation button:last-child{border-right:0}
+.primary-navigation button:hover,
+.primary-navigation button:focus-visible{color:#f4fdff;background:linear-gradient(180deg,rgba(8,51,67,.68),rgba(2,20,30,.3));outline:0}
+.primary-navigation button.active{
+  color:#fff;
+  background:linear-gradient(180deg,rgba(7,67,88,.9),rgba(2,26,37,.55));
+  box-shadow:inset 0 -4px #38ddff,inset 0 -14px 28px rgba(0,205,255,.1);
+  text-shadow:0 0 10px rgba(61,224,255,.26);
+}
+.primary-navigation button.active::after{
+  content:"";
+  position:absolute;
+  left:15%;
+  right:15%;
+  bottom:0;
+  height:2px;
+  background:#61eaff;
+  box-shadow:0 0 16px rgba(61,224,255,.86);
+}
+.primary-navigation svg{flex:0 0 42px;width:42px;height:42px;filter:drop-shadow(0 0 6px rgba(120,235,255,.2))}
+.primary-navigation button.active svg{filter:drop-shadow(0 0 10px rgba(70,225,255,.68))}
+.primary-navigation button span{font-size:16px;line-height:1;font-weight:700;letter-spacing:.2px;white-space:nowrap}
+
+/* Campaign status and a separate utility navigation row. */
+.campaign-module{
+  position:absolute;
+  z-index:7;
+  right:0;
+  top:0;
+  width:258px;
+  height:108px;
+  padding:0;
+  display:block;
+  border:1px solid rgba(66,207,237,.3);
+  background:linear-gradient(180deg,rgba(5,28,40,.98),rgba(2,14,23,.99));
+  clip-path:polygon(14px 0,100% 0,100% 100%,0 100%,0 14px);
+  box-shadow:inset 0 0 28px rgba(0,185,230,.03);
+  overflow:visible;
+}
+.campaign-icon{
+  position:absolute;
+  left:18px;
+  top:19px;
+  width:12px;
+  height:12px;
+  border-radius:50%;
+  font-size:0;
+  background:#38ee7e;
+  box-shadow:0 0 8px #38ee7e,0 0 18px rgba(56,238,126,.5);
+}
+.campaign-status{position:absolute;left:42px;top:15px}
+.campaign-status strong{font-size:12px;letter-spacing:.8px;color:#eafff2;white-space:nowrap}
+.campaign-module time{position:absolute;left:42px;top:48px;font-size:25px;line-height:1;font-weight:800;color:#fff;letter-spacing:.3px}
+.campaign-chevron{position:absolute;right:18px;top:48px;color:#8fd3e0;font-size:18px;line-height:1}
+.utility-navigation{
+  position:absolute;
+  z-index:4;
+  left:0;
+  right:0;
+  bottom:0;
+  height:42px;
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  border-top:1px solid rgba(70,195,222,.2);
+  overflow:visible;
+}
+.utility-navigation button{
+  position:relative;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border:0;
+  border-right:1px solid rgba(70,195,222,.16);
+  background:rgba(3,26,38,.54);
+  color:#d9faff;
+  cursor:pointer;
+}
+.utility-navigation button:last-child{border-right:0}
+.utility-navigation button:hover,
+.utility-navigation button:focus-visible,
+.utility-navigation button.active{color:#fff;background:rgba(7,61,80,.78);box-shadow:inset 0 0 18px rgba(0,205,255,.12);outline:0}
+.utility-navigation svg{width:27px;height:27px;filter:drop-shadow(0 0 6px rgba(120,235,255,.2))}
+.utility-navigation button span{
+  position:absolute;
+  z-index:20;
+  top:calc(100% + 8px);
+  left:50%;
+  padding:5px 8px;
+  border:1px solid rgba(69,210,238,.35);
+  background:#061722;
+  box-shadow:0 8px 18px rgba(0,0,0,.35);
+  color:#dffaff;
+  font-size:11px;
+  line-height:1;
+  white-space:nowrap;
+  opacity:0;
+  transform:translate(-50%,4px);
+  pointer-events:none;
+  transition:opacity .12s ease,transform .12s ease;
+}
+.utility-navigation button:hover span,
+.utility-navigation button:focus-visible span{opacity:1;transform:translate(-50%,0)}
+
+@keyframes asterion-header-orbit{to{transform:rotate(360deg)}}
+@keyframes asterion-header-planet-float{50%{transform:translateY(-2px) scale(1.012)}}
+
+@media (prefers-reduced-motion:reduce){
+  .header-planet-orbit::after,
+  .header-planet-world img{animation:none}
+}
