@@ -7,6 +7,7 @@ import './universe-polish-v2.css';
 import './planet-visual-v2.css';
 import './shell-v3.css';
 import './shell-v4.css';
+import './single-planet-v5.css';
 import './web-preview.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
