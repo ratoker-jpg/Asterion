@@ -22,10 +22,11 @@ html.asterion-long-page .viewport {
 }
 
 html.asterion-long-page .stage {
-  position: relative !important;
-  left: auto !important;
-  top: auto !important;
-  margin: 0 auto !important;
+  position: absolute !important;
+  left: 50% !important;
+  top: 0 !important;
+  margin-left: -960px !important;
+  margin-top: 0 !important;
   height: 2700px !important;
   overflow: visible !important;
   transform-origin: top center !important;
