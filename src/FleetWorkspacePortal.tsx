@@ -6,6 +6,38 @@ import './fleet-workspace.css';
 const SCOUT_POPULATION = 2;
 const SCOUT_AVAILABLE = 10;
 const FLEET_POPULATION = SCOUT_AVAILABLE * SCOUT_POPULATION;
+const SAVE_KEY = 'asterion.vertical-slice.v1';
+
+type StoredSave = {
+  planets?: Record<string, { population?: number; [key: string]: unknown }>;
+  [key: string]: unknown;
+};
+
+function migrateFleetPopulation() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    const parsed = (raw ? JSON.parse(raw) : {}) as StoredSave;
+    const planets = parsed.planets ?? {};
+    const homeworld = planets['helion-01'] ?? {};
+
+    if (homeworld.population === FLEET_POPULATION) return;
+
+    parsed.planets = {
+      ...planets,
+      'helion-01': {
+        ...homeworld,
+        population: FLEET_POPULATION,
+      },
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(parsed));
+  } catch {
+    // A malformed legacy save will be handled by App.readSave().
+  }
+}
+
+// This module is evaluated before <App /> renders in main.tsx, so App.readSave()
+// receives the canonical starting fleet population and every HUD/passport view stays in sync.
+migrateFleetPopulation();
 
 type FleetSection =
   | 'Корабли'
@@ -68,18 +100,6 @@ function MissionIcon({ id }: { id: MissionId }) {
   if (id === 'gas') return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="M16 5c5 6 8 10 8 15a8 8 0 1 1-16 0c0-5 3-9 8-15Z"/><circle {...common} cx="13" cy="20" r="2"/><circle {...common} cx="19" cy="17" r="1.5"/></svg>;
   if (id === 'sun-support') return <svg viewBox="0 0 32 32" aria-hidden="true"><circle {...common} cx="16" cy="16" r="6"/><path {...common} d="M16 3v5M16 24v5M3 16h5M24 16h5M7 7l4 4M21 21l4 4M25 7l-4 4M11 21l-4 4"/></svg>;
   return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="m16 4 5 10-5 14-5-14 5-10Z"/><path {...common} d="M11 14 5 19l6 2M21 14l6 5-6 2M16 9v12"/></svg>;
-}
-
-function syncPopulationHud() {
-  const populationChip = document.querySelector('.resource-chip--population');
-  if (!populationChip) return;
-
-  const currentValue = populationChip.querySelector('.resource-chip__text strong');
-  if (currentValue && currentValue.textContent !== String(FLEET_POPULATION)) currentValue.textContent = String(FLEET_POPULATION);
-
-  const tooltipSpans = populationChip.querySelectorAll('.resource-tooltip span');
-  if (tooltipSpans[0] && tooltipSpans[0].textContent !== `${FLEET_POPULATION} / 70`) tooltipSpans[0].textContent = `${FLEET_POPULATION} / 70`;
-  if (tooltipSpans[1] && tooltipSpans[1].textContent !== 'Заполнено: 28,6%') tooltipSpans[1].textContent = 'Заполнено: 28,6%';
 }
 
 function FleetWorkspace({ planetName, coords }: { planetName: string; coords: string }) {
@@ -262,7 +282,6 @@ export function FleetWorkspacePortal() {
       setActive(activeLabel === 'Флоты');
       setTarget(document.querySelector('.workspace'));
       setPlanet(readCurrentPlanet());
-      syncPopulationHud();
     };
 
     sync();
