@@ -1,0 +1,316 @@
+.fleet-workspace-v1 {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: grid;
+  grid-template-columns: 310px minmax(0, 1fr);
+  gap: 22px;
+  padding: 26px 34px 34px;
+  background:
+    radial-gradient(circle at 74% 18%, rgba(19, 128, 174, .08), transparent 28%),
+    linear-gradient(180deg, rgba(1, 10, 17, .44), rgba(1, 7, 12, .78));
+  color: #dff8ff;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.fleet-sidebar-v1,
+.fleet-panel-v1 {
+  border: 1px solid rgba(67, 210, 255, .2);
+  background: linear-gradient(180deg, rgba(4, 29, 43, .94), rgba(3, 17, 27, .96));
+  box-shadow: inset 0 0 40px rgba(0, 151, 214, .045), 0 14px 34px rgba(0, 0, 0, .28);
+}
+
+.fleet-sidebar-v1 {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 18px;
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%);
+}
+
+.fleet-sidebar-title-v1,
+.fleet-panel-header-v1 {
+  border-bottom: 1px solid rgba(55, 205, 255, .22);
+}
+
+.fleet-sidebar-title-v1 {
+  padding: 2px 2px 14px;
+}
+
+.fleet-sidebar-title-v1 span,
+.fleet-panel-header-v1 h2 {
+  color: #eefcff;
+  letter-spacing: .12em;
+}
+
+.fleet-sidebar-title-v1 span {
+  display: block;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.fleet-sidebar-title-v1 small,
+.fleet-panel-header-v1 small,
+.fleet-ship-info-v1 small,
+.fleet-selection-summary-v1 small {
+  color: #6bb9d3;
+  letter-spacing: .14em;
+  font-size: 10px;
+}
+
+.fleet-yard-card-v1 {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 12px;
+  align-items: center;
+  margin: 16px 0;
+  padding: 12px;
+  border: 1px solid rgba(50, 205, 255, .16);
+  background: rgba(4, 42, 59, .55);
+}
+
+.fleet-yard-emblem-v1 {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border: 1px solid #21c4f6;
+  color: #50dfff;
+  font-size: 22px;
+  font-weight: 900;
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  background: rgba(7, 94, 126, .25);
+}
+
+.fleet-yard-card-v1 strong,
+.fleet-yard-card-v1 span,
+.fleet-yard-card-v1 small {
+  display: block;
+}
+
+.fleet-yard-card-v1 strong { font-size: 14px; margin: 3px 0; }
+.fleet-yard-card-v1 span { color: #83aec0; font-size: 11px; }
+
+.fleet-menu-group-v1 { margin-top: 8px; }
+.fleet-menu-group-v1 h3 {
+  margin: 0 0 6px;
+  padding: 9px 10px;
+  background: linear-gradient(90deg, #0795bf, rgba(7, 149, 191, .17));
+  color: #fff;
+  font-size: 12px;
+  letter-spacing: .08em;
+}
+
+.fleet-menu-group-v1 button {
+  width: 100%;
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: 26px 1fr 16px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-bottom: 1px solid rgba(63, 196, 234, .12);
+  background: transparent;
+  color: #8bc4d8;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fleet-menu-group-v1 button:hover,
+.fleet-menu-group-v1 button.active {
+  color: #effcff;
+  background: linear-gradient(90deg, rgba(0, 172, 226, .18), transparent);
+}
+
+.fleet-menu-group-v1 button.active { box-shadow: inset 3px 0 #19cdfd; }
+.fleet-menu-group-v1 strong { font-size: 12px; font-weight: 650; }
+.fleet-menu-group-v1 i { color: #29c6f2; font-style: normal; font-size: 20px; }
+.fleet-menu-icon-v1 { color: #49cef2; font-size: 18px; }
+
+.fleet-main-v1 {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 300px minmax(0, 1fr);
+  gap: 20px;
+}
+
+.fleet-panel-v1 {
+  min-height: 0;
+  padding: 18px 20px;
+  clip-path: polygon(0 0, calc(100% - 24px) 0, 100% 24px, 100% 100%, 0 100%);
+}
+
+.fleet-panel-header-v1 {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  min-height: 54px;
+  padding-bottom: 12px;
+}
+
+.fleet-panel-header-v1 h2 { margin: 2px 0 0; font-size: 23px; }
+.fleet-panel-header-v1 > span { color: #5aaac6; font-size: 11px; letter-spacing: .08em; }
+.fleet-panel-header-v1.compact h2 { font-size: 19px; }
+
+.fleet-flight-table-v1 {
+  margin-top: 14px;
+  border: 1px solid rgba(42, 193, 238, .18);
+}
+
+.fleet-flight-row-v1 {
+  display: grid;
+  grid-template-columns: 1.1fr 1.1fr 1fr 1fr 1fr .9fr;
+}
+
+.fleet-flight-head-v1 {
+  min-height: 34px;
+  align-items: center;
+  background: rgba(17, 95, 123, .38);
+  color: #8cc7d9;
+  font-size: 10px;
+  letter-spacing: .08em;
+}
+
+.fleet-flight-head-v1 span { padding: 0 10px; }
+
+.fleet-flight-empty-v1 {
+  min-height: 68px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 4px;
+  color: #a9c4ce;
+}
+
+.fleet-flight-empty-v1 strong { color: #eefbff; font-size: 13px; }
+.fleet-flight-empty-v1 span { font-size: 11px; }
+
+.fleet-flight-actions-v1 {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.fleet-flight-actions-v1 button,
+.fleet-compose-footer-v1 button,
+.fleet-max-v1 {
+  border: 1px solid #168cb3;
+  background: linear-gradient(180deg, #087ca5, #064864);
+  color: #eafbff;
+  box-shadow: inset 0 1px rgba(255,255,255,.08), 0 5px 12px rgba(0,0,0,.24);
+  cursor: pointer;
+}
+
+.fleet-flight-actions-v1 button { min-height: 38px; padding: 0 16px; font-size: 11px; }
+
+.fleet-compose-v1 {
+  display: grid;
+  grid-template-rows: auto auto auto auto 1fr;
+  gap: 14px;
+}
+
+.fleet-ship-card-v1 {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr) 210px;
+  gap: 18px;
+  align-items: center;
+  min-height: 150px;
+  padding: 14px;
+  border: 1px solid rgba(63, 202, 245, .19);
+  background: linear-gradient(90deg, rgba(9, 67, 91, .6), rgba(4, 24, 35, .38));
+}
+
+.fleet-ship-art-v1 {
+  display: grid;
+  place-items: center;
+  height: 120px;
+  border-right: 1px solid rgba(50, 190, 235, .13);
+}
+
+.fleet-ship-art-v1 img { width: 116px; height: 116px; object-fit: contain; filter: drop-shadow(0 0 12px rgba(39, 169, 255, .34)); }
+.fleet-ship-info-v1 h3 { margin: 5px 0 7px; font-size: 20px; }
+.fleet-ship-info-v1 p { margin: 0; max-width: 620px; color: #9fbcc7; font-size: 12px; line-height: 1.45; }
+.fleet-ship-meta-v1 { display: flex; gap: 18px; margin-top: 12px; color: #75abc0; font-size: 11px; }
+.fleet-ship-meta-v1 b { color: #eefcff; }
+
+.fleet-quantity-v1 { display: grid; gap: 8px; justify-items: stretch; }
+.fleet-quantity-v1 > span { color: #70b4cb; font-size: 10px; letter-spacing: .1em; }
+.fleet-quantity-v1 > div { display: grid; grid-template-columns: 38px 1fr 38px; }
+.fleet-quantity-v1 button,
+.fleet-quantity-v1 input {
+  height: 40px;
+  border: 1px solid #16799c;
+  background: rgba(2, 24, 35, .92);
+  color: #fff;
+}
+.fleet-quantity-v1 input { width: 100%; box-sizing: border-box; text-align: center; font-size: 16px; outline: none; }
+.fleet-quantity-v1 button { cursor: pointer; font-size: 18px; }
+.fleet-max-v1 { min-height: 30px !important; font-size: 10px !important; }
+
+.fleet-selection-summary-v1 {
+  display: grid;
+  grid-template-columns: 180px 210px minmax(240px, 1fr);
+  gap: 10px;
+}
+
+.fleet-selection-summary-v1 > div,
+.fleet-selection-summary-v1 > label {
+  min-height: 62px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 14px;
+  border: 1px solid rgba(64, 199, 240, .15);
+  background: rgba(4, 35, 49, .62);
+}
+
+.fleet-selection-summary-v1 strong { font-size: 22px; }
+.fleet-selection-summary-v1 .accent strong { color: #42e6ff; }
+.fleet-selection-summary-v1 select {
+  height: 30px;
+  border: 1px solid #16799c;
+  background: #031d2a;
+  color: #eaffff;
+  padding: 0 8px;
+}
+
+.fleet-mission-strip-v1 {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+
+.fleet-mission-strip-v1 span {
+  display: grid;
+  place-items: center;
+  min-height: 38px;
+  border: 1px solid rgba(63, 192, 232, .14);
+  background: rgba(5, 39, 54, .48);
+  color: #75aebe;
+  font-size: 10px;
+  letter-spacing: .05em;
+}
+
+.fleet-compose-footer-v1 {
+  align-self: end;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(45, 196, 240, .14);
+}
+
+.fleet-compose-footer-v1 span { color: #6ea8bb; font-size: 11px; }
+.fleet-compose-footer-v1 button { min-width: 190px; height: 44px; font-weight: 800; letter-spacing: .08em; }
+.fleet-compose-footer-v1 button:disabled { opacity: .35; cursor: default; }
+
+@media (max-width: 1400px) {
+  .fleet-workspace-v1 { grid-template-columns: 280px minmax(0, 1fr); gap: 16px; padding-inline: 24px; }
+  .fleet-ship-card-v1 { grid-template-columns: 108px minmax(0, 1fr) 180px; }
+  .fleet-ship-art-v1 img { width: 96px; height: 96px; }
+}
