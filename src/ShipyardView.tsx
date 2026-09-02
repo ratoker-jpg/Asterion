@@ -1,16 +1,36 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import solarSatelliteArt from '../assets/source/New assets/ship/aegis/ship.aegis.solar-satellite.png';
+import spyProbeArt from '../assets/source/New assets/ship/aegis/ship.aegis.spy-probe.png';
 import transporterArt from '../assets/source/New assets/ship/aegis/ship.aegis.transporter.png';
 import megaTransporterArt from '../assets/source/New assets/ship/aegis/ship.aegis.mega-transporter.png';
 import colonizerArt from '../assets/source/New assets/ship/aegis/ship.aegis.colonizer.png';
 import recyclerArt from '../assets/source/New assets/ship/aegis/ship.aegis.recycler.png';
-import spyProbeArt from '../assets/source/New assets/ship/aegis/ship.aegis.spy-probe.png';
-import solarSatelliteArt from '../assets/source/New assets/ship/aegis/ship.aegis.solar-satellite.png';
+import scoutArt from '../assets/source/New assets/ship/aegis/ship.aegis.scout.png';
+import cruiserArt from '../assets/source/New assets/ship/aegis/ship.aegis.cruiser.png';
+import defenderArt from '../assets/source/New assets/ship/aegis/ship.aegis.defender.png';
+import battleshipArt from '../assets/source/New assets/ship/aegis/ship.aegis.battleship.png';
+import destroyerArt from '../assets/source/New assets/ship/aegis/ship.aegis.destroyer.png';
+import bomberArt from '../assets/source/New assets/ship/aegis/ship.aegis.bomber.png';
+import deathStarArt from '../assets/source/New assets/ship/aegis/ship.aegis.death-star.png';
 
 const SAVE_KEY = 'asterion.vertical-slice.v1';
 const SHIPYARD_LEVEL = 1;
 
-type ShipId = 'solar-satellite' | 'spy-probe' | 'transporter' | 'mega-transporter' | 'colonizer' | 'recycler';
+type ShipId =
+  | 'solar-satellite'
+  | 'spy-probe'
+  | 'transporter'
+  | 'mega-transporter'
+  | 'colonizer'
+  | 'recycler'
+  | 'scout'
+  | 'cruiser'
+  | 'defender'
+  | 'battleship'
+  | 'destroyer'
+  | 'bomber'
+  | 'death-star';
 
 type ShipDefinition = {
   id: ShipId;
@@ -42,13 +62,16 @@ type StoredSave = {
   planets?: Record<string, { population?: number; populationMax?: number }>;
 };
 
-// Aegis names come from the Stellar catalog. Cost/time/requirements follow the
-// blue Confederation production slots captured from Nemexia Auto v2.
+// Display order intentionally follows the Nemexia shipyard layout requested for Asterion:
+// satellite/probe, transporters, colonizer/recycler, scout/cruiser,
+// defender/battleship, destroyer/bomber, then the faction super-heavy ship.
+// Aegis names/art come from the Stellar catalog; production values follow the
+// corresponding blue Confederation production slots captured from Nemexia Auto v2.
 const ships: ShipDefinition[] = [
   {
     id: 'solar-satellite',
     name: 'Спутник «Гелиос»',
-    role: 'Обслуживающий корабль',
+    role: 'Солнечный спутник',
     art: solarSatelliteArt,
     owned: 0,
     metal: 500,
@@ -62,7 +85,7 @@ const ships: ShipDefinition[] = [
   {
     id: 'spy-probe',
     name: 'Зонд «Призма»',
-    role: 'Разведывательный зонд',
+    role: 'Шпионский зонд',
     art: spyProbeArt,
     owned: 0,
     metal: 0,
@@ -76,7 +99,7 @@ const ships: ShipDefinition[] = [
   {
     id: 'transporter',
     name: 'Транспорт «Тракт»',
-    role: 'Малый транспорт',
+    role: 'Транспортировщик',
     art: transporterArt,
     owned: 0,
     metal: 2_400,
@@ -90,7 +113,7 @@ const ships: ShipDefinition[] = [
   {
     id: 'mega-transporter',
     name: 'Мегатранспорт «Артерия»',
-    role: 'Тяжёлый транспорт',
+    role: 'Мегатранспортировщик',
     art: megaTransporterArt,
     owned: 0,
     metal: 6_400,
@@ -118,7 +141,7 @@ const ships: ShipDefinition[] = [
   {
     id: 'recycler',
     name: 'Переработчик «Сборщик»',
-    role: 'Сборщик обломков',
+    role: 'Переработчик обломков',
     art: recyclerArt,
     owned: 0,
     metal: 10_500,
@@ -128,6 +151,104 @@ const ships: ShipDefinition[] = [
     time: '00:41:40',
     requiredShipyardLevel: 4,
     requirements: ['Верфь · уровень 4', 'Топливные элементы · уровень 6', 'Броня кораблей · уровень 2'],
+  },
+  {
+    id: 'scout',
+    name: 'Скаут «Вектор»',
+    role: 'Лёгкий боевой разведчик',
+    art: scoutArt,
+    owned: 10,
+    metal: 2_400,
+    minerals: 1_600,
+    gas: 0,
+    population: 2,
+    time: '00:20:00',
+    requiredShipyardLevel: 1,
+    requirements: ['Верфь · уровень 1', 'Астрономия · уровень 1'],
+  },
+  {
+    id: 'cruiser',
+    name: 'Крейсер «Копьё»',
+    role: 'Крейсер',
+    art: cruiserArt,
+    owned: 0,
+    metal: 10_200,
+    minerals: 8_400,
+    gas: 0,
+    population: 7,
+    time: '00:25:40',
+    requiredShipyardLevel: 3,
+    requirements: ['Верфь · уровень 3', 'Броня кораблей · уровень 2', 'Топливные элементы · уровень 2'],
+  },
+  {
+    id: 'defender',
+    name: 'Защитник «Эгида»',
+    role: 'Защитный корабль',
+    art: defenderArt,
+    owned: 0,
+    metal: 5_300,
+    minerals: 15_900,
+    gas: 0,
+    population: 6,
+    time: '00:35:00',
+    requiredShipyardLevel: 5,
+    requirements: ['Верфь · уровень 5', 'Ионная наука · уровень 2', 'Топливные элементы · уровень 4'],
+  },
+  {
+    id: 'battleship',
+    name: 'Линкор «Бастион»',
+    role: 'Линкор',
+    art: battleshipArt,
+    owned: 0,
+    metal: 49_400,
+    minerals: 21_200,
+    gas: 0,
+    population: 15,
+    time: '00:55:00',
+    requiredShipyardLevel: 7,
+    requirements: ['Верфь · уровень 7', 'Реактивные двигатели · уровень 4'],
+  },
+  {
+    id: 'destroyer',
+    name: 'Разрушитель «Цитадель»',
+    role: 'Тяжёлый эсминец',
+    art: destroyerArt,
+    owned: 0,
+    metal: 93_900,
+    minerals: 84_500,
+    gas: 9_400,
+    population: 30,
+    time: '01:20:00',
+    requiredShipyardLevel: 9,
+    requirements: ['Верфь · уровень 9', 'Реактивные двигатели · уровень 6', 'Гиперпространство · уровень 5'],
+  },
+  {
+    id: 'bomber',
+    name: 'Бомбардировщик «Молот»',
+    role: 'Бомбардировщик',
+    art: bomberArt,
+    owned: 0,
+    metal: 44_000,
+    minerals: 55_000,
+    gas: 11_000,
+    population: 22,
+    time: '00:55:00',
+    requiredShipyardLevel: 8,
+    requirements: ['Верфь · уровень 8', 'Лазерная наука · уровень 8', 'Плазменная наука · уровень 5'],
+  },
+  {
+    id: 'death-star',
+    name: 'Планетолом «Немезида»',
+    role: 'Сверхтяжёлый корабль',
+    art: deathStarArt,
+    owned: 0,
+    metal: 2_327_500,
+    minerals: 1_862_000,
+    gas: 465_500,
+    population: 700,
+    time: '175:00:00',
+    requiredShipyardLevel: 14,
+    requirements: ['Верфь · уровень 14', 'Гиперпространство · уровень 13', 'Параллельные вселенные · уровень 1', 'Тяжёлая броня · уровень 10'],
   },
 ];
 
@@ -270,7 +391,7 @@ export function ShipyardView({ planetName, coords, onBack }: { planetName: strin
         <div>
           <small>ОРБИТАЛЬНАЯ ВЕРФЬ · УРОВЕНЬ {SHIPYARD_LEVEL}</small>
           <h2>КОРАБЛИ</h2>
-          <p>{planetName} {coords} · гражданские и обслуживающие корпуса Aegis</p>
+          <p>{planetName} {coords} · полный каталог стандартных корпусов Aegis</p>
         </div>
         <button type="button" onClick={onBack}>← К ФЛОТАМ</button>
       </header>
@@ -294,7 +415,7 @@ export function ShipyardView({ planetName, coords, onBack }: { planetName: strin
       </div>
 
       <footer className="shipyard-page-foot-v1">
-        <span>Корабли боевого класса будут вынесены в отдельный раздел «Боевые корабли».</span>
+        <span>13 стандартных корпусов Aegis · командирские корабли находятся в отдельном разделе.</span>
         <span>Свободно населения: {Math.max(0, budget.populationMax - budget.population)} / {budget.populationMax}</span>
       </footer>
     </section>
