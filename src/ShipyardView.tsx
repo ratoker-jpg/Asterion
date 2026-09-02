@@ -47,6 +47,18 @@ type ShipDefinition = {
   requirements: string[];
 };
 
+type ShipCombatStats = {
+  category: string;
+  attack: number;
+  life: number;
+  weaponType: string;
+  armorType: string;
+  armorStrength: number;
+  cargo: number;
+  speed: number;
+  fuel: number;
+};
+
 type ShipyardBudget = {
   metal: number;
   minerals: number;
@@ -252,6 +264,50 @@ const ships: ShipDefinition[] = [
   },
 ];
 
+// Exact race-1 standard-ship tooltip values captured in Nemexia Auto v2:
+// SafePages_Nemexia/312313/Game_nemexia/page_2026-07-26_14-06-48.html.
+const shipCombatStats: Record<ShipId, ShipCombatStats> = {
+  'solar-satellite': {
+    category: 'Обслуживающий корабль', attack: 1, life: 2_200, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6, cargo: 0, speed: 200, fuel: 10,
+  },
+  'spy-probe': {
+    category: 'Гражданский корабль', attack: 1, life: 1, weaponType: 'Лазер', armorType: 'Легкая Броня', armorStrength: 3, cargo: 1, speed: 200_000_000, fuel: 1,
+  },
+  transporter: {
+    category: 'Гражданский корабль', attack: 10, life: 2_000, weaponType: 'Лазер', armorType: 'Легкая Броня', armorStrength: 3, cargo: 5_000, speed: 24_000, fuel: 12,
+  },
+  'mega-transporter': {
+    category: 'Гражданский корабль', attack: 10, life: 7_800, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6, cargo: 20_000, speed: 19_000, fuel: 45,
+  },
+  colonizer: {
+    category: 'Гражданский корабль', attack: 600, life: 2_400, weaponType: 'Лазер', armorType: 'Тяжелая Броня', armorStrength: 9, cargo: 7_500, speed: 5_000, fuel: 1_500,
+  },
+  recycler: {
+    category: 'Гражданский корабль', attack: 50, life: 2_200, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6, cargo: 40_000, speed: 7_000, fuel: 120,
+  },
+  scout: {
+    category: 'Боевой корабль', attack: 800, life: 2_400, weaponType: 'Лазер', armorType: 'Легкая Броня', armorStrength: 3, cargo: 250, speed: 28_000, fuel: 25,
+  },
+  cruiser: {
+    category: 'Боевой корабль', attack: 3_080, life: 9_200, weaponType: 'Ион', armorType: 'Легкая Броня', armorStrength: 3, cargo: 800, speed: 32_000, fuel: 315,
+  },
+  defender: {
+    category: 'Боевой корабль', attack: 2_760, life: 8_300, weaponType: 'Лазер', armorType: 'Легкая Броня', armorStrength: 3, cargo: 1_500, speed: 20_000, fuel: 280,
+  },
+  battleship: {
+    category: 'Боевой корабль', attack: 9_000, life: 27_000, weaponType: 'Ион', armorType: 'Средняя Броня', armorStrength: 6, cargo: 1_500, speed: 20_000, fuel: 480,
+  },
+  destroyer: {
+    category: 'Боевой корабль', attack: 19_500, life: 58_500, weaponType: 'Плазма', armorType: 'Тяжелая Броня', armorStrength: 9, cargo: 2_000, speed: 13_000, fuel: 900,
+  },
+  bomber: {
+    category: 'Боевой корабль', attack: 13_200, life: 39_600, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6, cargo: 500, speed: 20_000, fuel: 800,
+  },
+  'death-star': {
+    category: 'Боевой корабль', attack: 700_000, life: 2_100_000, weaponType: 'Ион', armorType: 'Тяжелая Броня', armorStrength: 9, cargo: 1_000_000, speed: 200, fuel: 60_000,
+  },
+};
+
 const formatNumber = (value: number) => new Intl.NumberFormat('ru-RU').format(value);
 
 function readBudget(): ShipyardBudget {
@@ -307,6 +363,8 @@ function ShipCard({
 }) {
   const unlocked = ship.requiredShipyardLevel <= SHIPYARD_LEVEL;
   const max = unlocked ? calculateMax(ship, budget) : 0;
+  const stats = shipCombatStats[ship.id];
+  const tooltipId = `ship-stats-${ship.id}`;
 
   return (
     <article className={`shipyard-card-v1 ${unlocked ? '' : 'locked'}`}>
@@ -318,7 +376,27 @@ function ShipCard({
 
       <div className="shipyard-card-body-v1">
         <div className="shipyard-art-v1">
-          <img src={ship.art} alt={ship.name} draggable={false} />
+          <div
+            className="shipyard-art-hover-v1"
+            tabIndex={0}
+            aria-label={`Характеристики корабля ${ship.name}`}
+            aria-describedby={tooltipId}
+          >
+            <img src={ship.art} alt={ship.name} draggable={false} />
+            <div className="shipyard-stats-tooltip-v1" id={tooltipId} role="tooltip">
+              <strong>{stats.category}</strong>
+              <dl>
+                <div><dt>Атака</dt><dd>{formatNumber(stats.attack)}</dd></div>
+                <div><dt>Жизнь</dt><dd>{formatNumber(stats.life)}</dd></div>
+                <div><dt>Тип оружия</dt><dd>{stats.weaponType}</dd></div>
+                <div><dt>Тип брони</dt><dd>{stats.armorType}</dd></div>
+                <div><dt>Сила брони</dt><dd>{stats.armorStrength}%</dd></div>
+                <div><dt>Грузоподъемность</dt><dd>{formatNumber(stats.cargo)}</dd></div>
+                <div><dt>Скорость</dt><dd>{formatNumber(stats.speed)}</dd></div>
+                <div><dt>Расход топлива</dt><dd>{formatNumber(stats.fuel)}</dd></div>
+              </dl>
+            </div>
+          </div>
           <small>Время за единицу</small>
           <b>{ship.time}</b>
         </div>
