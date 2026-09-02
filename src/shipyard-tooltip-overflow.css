@@ -1,0 +1,23 @@
+/* Keep the hover stats panel above neighboring ship cards.
+   The base card uses overflow clipping + clip-path for its angled frame, which
+   also clips the taller tooltip. While a card is hovered, temporarily release
+   that clipping and raise the card in the grid stacking order. */
+
+.shipyard-grid-v1 {
+  overflow: visible;
+}
+
+.shipyard-card-v1:hover {
+  z-index: 40;
+  overflow: visible;
+  clip-path: none;
+}
+
+.shipyard-card-v1:hover .shipyard-art-v1,
+.shipyard-card-v1:hover .shipyard-art-hover-v1 {
+  overflow: visible;
+}
+
+.shipyard-card-v1:hover .shipyard-stats-tooltip-v1 {
+  z-index: 100;
+}
