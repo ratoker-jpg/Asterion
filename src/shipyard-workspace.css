@@ -236,6 +236,16 @@ html.web-preview.asterion-long-page .stage {
   background: radial-gradient(circle at 50% 42%, rgba(25, 147, 190, .13), transparent 57%);
 }
 
+.shipyard-art-hover-v1 {
+  position: relative;
+  width: 100%;
+  height: 156px;
+  display: grid;
+  place-items: center;
+  outline: none;
+  cursor: help;
+}
+
 .shipyard-art-v1 img {
   width: 93%;
   height: 156px;
@@ -246,6 +256,77 @@ html.web-preview.asterion-long-page .stage {
 .shipyard-card-v1.locked .shipyard-art-v1 img {
   opacity: .66;
   filter: grayscale(.25) brightness(.72) drop-shadow(0 0 8px rgba(28, 128, 167, .15));
+}
+
+.shipyard-art-hover-v1:focus-visible {
+  outline: 1px solid rgba(103, 221, 249, .72);
+  outline-offset: -3px;
+}
+
+.shipyard-stats-tooltip-v1 {
+  position: absolute;
+  z-index: 6;
+  top: 6px;
+  left: 50%;
+  width: min(268px, calc(100% - 10px));
+  box-sizing: border-box;
+  padding: 9px 11px 10px;
+  transform: translate(-50%, 5px);
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  border: 1px solid rgba(218, 246, 255, .9);
+  border-radius: 7px;
+  background: rgba(0, 7, 11, .97);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .55), inset 0 0 18px rgba(32, 174, 213, .06);
+  color: #f4fcff;
+  font-size: 9px;
+  line-height: 1.22;
+  transition: opacity 100ms ease, transform 100ms ease, visibility 100ms ease;
+}
+
+.shipyard-stats-tooltip-v1 > strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.shipyard-stats-tooltip-v1 dl {
+  margin: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.shipyard-stats-tooltip-v1 dl > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.shipyard-stats-tooltip-v1 dt {
+  min-width: 0;
+  color: #a9cbd5;
+  white-space: nowrap;
+}
+
+.shipyard-stats-tooltip-v1 dd {
+  margin: 0;
+  color: #fff;
+  font-weight: 750;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.shipyard-art-hover-v1:hover .shipyard-stats-tooltip-v1,
+.shipyard-art-hover-v1:focus .shipyard-stats-tooltip-v1,
+.shipyard-art-hover-v1:focus-within .shipyard-stats-tooltip-v1 {
+  visibility: visible;
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .shipyard-art-v1 small {
@@ -388,6 +469,7 @@ html.web-preview.asterion-long-page .stage {
 
 @media (max-width: 1400px) {
   .shipyard-card-v1 { min-height: 258px; }
+  .shipyard-art-hover-v1,
   .shipyard-art-v1 img { height: 142px; }
   .shipyard-cost-row-v1 strong { font-size: 11px; }
 }
