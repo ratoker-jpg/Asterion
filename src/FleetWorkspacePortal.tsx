@@ -168,7 +168,7 @@ export function FleetWorkspacePortal() {
     const sync = () => {
       const activeLabel = document.querySelector('.primary-navigation button.active span')?.textContent?.trim();
       setActive(activeLabel === 'Флоты');
-      setTarget(document.querySelector('.workspace'));
+      setTarget(document.querySelector<HTMLElement>('.workspace'));
       setPlanet(readCurrentPlanet());
     };
 
