@@ -1,0 +1,393 @@
+/* Shipyard v1 — long-form Fleet workspace. The Asterion header is deliberately
+   NOT sticky/fixed: the whole stage scrolls away exactly like the Nemexia pages. */
+
+html.asterion-long-page,
+html.asterion-long-page body,
+html.asterion-long-page #root {
+  height: auto !important;
+  min-height: 100%;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  background: #010307;
+}
+
+html.asterion-long-page .viewport {
+  position: relative !important;
+  inset: auto !important;
+  width: 100% !important;
+  height: 1540px !important;
+  min-height: 1540px !important;
+  display: block !important;
+  overflow: visible !important;
+}
+
+html.asterion-long-page .stage {
+  position: relative !important;
+  left: auto !important;
+  top: auto !important;
+  margin: 0 auto !important;
+  height: 1540px !important;
+  overflow: visible !important;
+  transform-origin: top center !important;
+}
+
+html.asterion-long-page .workspace {
+  top: 246px;
+  bottom: auto;
+  height: 1225px;
+  overflow: visible;
+}
+
+html.asterion-long-page .fleet-workspace-v1 {
+  overflow: visible;
+  align-items: start;
+  min-height: 1225px;
+}
+
+html.asterion-long-page .fleet-sidebar-v1 {
+  align-self: start;
+  height: max-content;
+  min-height: 0;
+}
+
+html.asterion-long-page .fleet-main-v1--shipyard {
+  display: block;
+  min-height: 0;
+  overflow: visible;
+}
+
+/* Browser preview normally pins/centres the 1920×1080 stage. Long pages instead
+   anchor the stage at the document top so normal browser scrolling can occur. */
+html.web-preview.asterion-long-page .viewport {
+  position: relative !important;
+  inset: auto !important;
+  height: 1540px !important;
+  min-height: 1540px !important;
+  overflow: visible !important;
+}
+
+html.web-preview.asterion-long-page .stage {
+  position: absolute !important;
+  left: 50% !important;
+  top: 0 !important;
+  margin-left: -960px !important;
+  margin-top: 0 !important;
+  transform-origin: top center !important;
+}
+
+.shipyard-view-v1 {
+  min-height: 1180px;
+  padding: 0 2px 28px;
+  color: #dff8ff;
+}
+
+.shipyard-page-head-v1 {
+  min-height: 82px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 10px 18px 13px;
+  border: 1px solid rgba(65, 205, 242, .19);
+  border-top: 2px solid rgba(74, 220, 255, .34);
+  background: linear-gradient(180deg, rgba(6, 38, 53, .94), rgba(3, 20, 31, .96));
+  clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 0 100%);
+}
+
+.shipyard-page-head-v1 small {
+  color: #62b7ce;
+  font-size: 9px;
+  letter-spacing: .14em;
+}
+
+.shipyard-page-head-v1 h2 {
+  margin: 4px 0 3px;
+  color: #effcff;
+  font-size: 23px;
+  letter-spacing: .1em;
+}
+
+.shipyard-page-head-v1 p {
+  margin: 0;
+  color: #7199a7;
+  font-size: 10px;
+}
+
+.shipyard-page-head-v1 > button {
+  min-width: 124px;
+  height: 34px;
+  border: 1px solid rgba(55, 191, 229, .38);
+  background: rgba(3, 31, 43, .88);
+  color: #8fdcf0;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.shipyard-page-head-v1 > button:hover {
+  color: #fff;
+  border-color: #42d9fb;
+}
+
+.shipyard-processes-v1 {
+  min-height: 54px;
+  margin: 12px 0 16px;
+  display: grid;
+  grid-template-columns: 205px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 0 17px;
+  border: 1px solid rgba(64, 190, 221, .16);
+  background: linear-gradient(90deg, rgba(7, 61, 77, .66), rgba(3, 25, 36, .88));
+}
+
+.shipyard-processes-v1 strong {
+  color: #d8f8ff;
+  font-size: 11px;
+  letter-spacing: .07em;
+}
+
+.shipyard-processes-v1 span {
+  color: #7da7b4;
+  font-size: 10px;
+}
+
+.shipyard-grid-v1 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 20px;
+}
+
+.shipyard-card-v1 {
+  position: relative;
+  min-height: 273px;
+  overflow: hidden;
+  border: 1px solid rgba(64, 203, 239, .25);
+  background:
+    linear-gradient(180deg, rgba(7, 42, 57, .96), rgba(3, 22, 33, .98));
+  box-shadow: inset 0 0 30px rgba(0, 176, 224, .035), 0 12px 24px rgba(0, 0, 0, .22);
+  clip-path: polygon(0 0, calc(100% - 24px) 0, 100% 24px, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%);
+}
+
+.shipyard-card-v1::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 28%;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #31d6fc, rgba(49, 214, 252, .16), transparent);
+}
+
+.shipyard-card-v1.locked {
+  border-color: rgba(77, 144, 162, .19);
+}
+
+.shipyard-card-title-v1 {
+  height: 38px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 26px;
+  align-items: center;
+  padding: 0 11px;
+  border-bottom: 1px solid rgba(64, 189, 221, .16);
+  background: rgba(8, 47, 62, .74);
+}
+
+.shipyard-card-title-v1 > span {
+  color: #8eeaff;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.shipyard-card-title-v1 strong {
+  color: #f0fdff;
+  font-size: 15px;
+  font-style: italic;
+  font-weight: 650;
+  text-align: center;
+}
+
+.shipyard-card-title-v1 button {
+  width: 20px;
+  height: 20px;
+  justify-self: end;
+  border: 1px solid rgba(74, 185, 213, .28);
+  border-radius: 50%;
+  background: rgba(1, 16, 24, .82);
+  color: #8eb9c5;
+  font: 700 11px/1 Arial, sans-serif;
+  cursor: help;
+}
+
+.shipyard-card-body-v1 {
+  min-height: 234px;
+  display: grid;
+  grid-template-columns: 44% minmax(0, 1fr);
+}
+
+.shipyard-art-v1 {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 18px 20px;
+  place-items: center;
+  padding: 7px 8px 8px;
+  border-right: 1px solid rgba(68, 185, 214, .18);
+  background: radial-gradient(circle at 50% 42%, rgba(25, 147, 190, .13), transparent 57%);
+}
+
+.shipyard-art-v1 img {
+  width: 93%;
+  height: 156px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 13px rgba(36, 176, 240, .28));
+}
+
+.shipyard-card-v1.locked .shipyard-art-v1 img {
+  opacity: .66;
+  filter: grayscale(.25) brightness(.72) drop-shadow(0 0 8px rgba(28, 128, 167, .15));
+}
+
+.shipyard-art-v1 small {
+  color: #91b2bc;
+  font-size: 9px;
+}
+
+.shipyard-art-v1 b {
+  color: #fff;
+  font-size: 11px;
+}
+
+.shipyard-card-data-v1 {
+  min-width: 0;
+  padding: 13px 14px 11px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 9px;
+}
+
+.shipyard-costs-v1 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+}
+
+.shipyard-cost-row-v1 {
+  min-height: 27px;
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  align-items: center;
+  gap: 6px;
+}
+
+.shipyard-cost-row-v1 > span {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(65, 191, 224, .27);
+  background: rgba(4, 37, 51, .84);
+  color: #68dcf6;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.shipyard-cost-row-v1 strong {
+  color: #edfaff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.shipyard-build-v1 {
+  align-self: end;
+  display: grid;
+  gap: 8px;
+}
+
+.shipyard-count-v1 {
+  display: grid;
+  grid-template-columns: minmax(70px, 1fr) 82px 54px;
+  gap: 6px;
+}
+
+.shipyard-count-v1 input,
+.shipyard-count-v1 button {
+  height: 31px;
+  border: 1px solid rgba(45, 166, 199, .62);
+  background: #031c28;
+  color: #e9fbff;
+  text-align: center;
+  outline: 0;
+}
+
+.shipyard-count-v1 button {
+  color: #9dccda;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.shipyard-count-v1 button:hover {
+  color: #fff;
+  border-color: #46dcfb;
+}
+
+.shipyard-build-button-v1 {
+  height: 40px;
+  border: 1px solid #1aa4cd;
+  background: linear-gradient(180deg, #0a91ba, #07516f);
+  color: #f4fdff;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .06em;
+  cursor: pointer;
+  box-shadow: inset 0 1px rgba(255,255,255,.08), 0 5px 12px rgba(0,0,0,.25);
+}
+
+.shipyard-build-button-v1:disabled {
+  opacity: .35;
+  cursor: default;
+}
+
+.shipyard-requirements-v1 {
+  align-self: end;
+  min-height: 91px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 9px 11px;
+  border: 1px solid rgba(232, 93, 73, .66);
+  background: linear-gradient(180deg, rgba(100, 31, 27, .74), rgba(64, 23, 23, .88));
+  color: #ffd9d1;
+}
+
+.shipyard-requirements-v1 strong {
+  margin-bottom: 2px;
+  color: #fff;
+  font-size: 10px;
+  letter-spacing: .07em;
+}
+
+.shipyard-requirements-v1 span {
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.shipyard-page-foot-v1 {
+  min-height: 46px;
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 15px;
+  border-top: 1px solid rgba(57, 181, 213, .15);
+  color: #5e8794;
+  font-size: 9px;
+}
+
+@media (max-width: 1400px) {
+  .shipyard-card-v1 { min-height: 258px; }
+  .shipyard-art-v1 img { height: 142px; }
+  .shipyard-cost-row-v1 strong { font-size: 11px; }
+}
