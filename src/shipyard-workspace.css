@@ -15,8 +15,8 @@ html.asterion-long-page .viewport {
   position: relative !important;
   inset: auto !important;
   width: 100% !important;
-  height: 1540px !important;
-  min-height: 1540px !important;
+  height: 2700px !important;
+  min-height: 2700px !important;
   display: block !important;
   overflow: visible !important;
 }
@@ -26,7 +26,7 @@ html.asterion-long-page .stage {
   left: auto !important;
   top: auto !important;
   margin: 0 auto !important;
-  height: 1540px !important;
+  height: 2700px !important;
   overflow: visible !important;
   transform-origin: top center !important;
 }
@@ -34,14 +34,14 @@ html.asterion-long-page .stage {
 html.asterion-long-page .workspace {
   top: 246px;
   bottom: auto;
-  height: 1225px;
+  height: 2395px;
   overflow: visible;
 }
 
 html.asterion-long-page .fleet-workspace-v1 {
   overflow: visible;
   align-items: start;
-  min-height: 1225px;
+  min-height: 2395px;
 }
 
 html.asterion-long-page .fleet-sidebar-v1 {
@@ -61,8 +61,8 @@ html.asterion-long-page .fleet-main-v1--shipyard {
 html.web-preview.asterion-long-page .viewport {
   position: relative !important;
   inset: auto !important;
-  height: 1540px !important;
-  min-height: 1540px !important;
+  height: 2700px !important;
+  min-height: 2700px !important;
   overflow: visible !important;
 }
 
@@ -76,7 +76,7 @@ html.web-preview.asterion-long-page .stage {
 }
 
 .shipyard-view-v1 {
-  min-height: 1180px;
+  min-height: 2335px;
   padding: 0 2px 28px;
   color: #dff8ff;
 }
@@ -162,8 +162,7 @@ html.web-preview.asterion-long-page .stage {
   min-height: 273px;
   overflow: hidden;
   border: 1px solid rgba(64, 203, 239, .25);
-  background:
-    linear-gradient(180deg, rgba(7, 42, 57, .96), rgba(3, 22, 33, .98));
+  background: linear-gradient(180deg, rgba(7, 42, 57, .96), rgba(3, 22, 33, .98));
   box-shadow: inset 0 0 30px rgba(0, 176, 224, .035), 0 12px 24px rgba(0, 0, 0, .22);
   clip-path: polygon(0 0, calc(100% - 24px) 0, 100% 24px, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%);
 }
