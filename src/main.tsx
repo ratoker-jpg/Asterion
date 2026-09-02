@@ -11,6 +11,7 @@ import './shell-v4.css';
 import './single-planet-v5.css';
 import './asterion-header.css';
 import './web-preview.css';
+import './shipyard-workspace.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
 
