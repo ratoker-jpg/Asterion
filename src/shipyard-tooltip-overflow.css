@@ -1,0 +1,53 @@
+/* Keep the hover stats panel above neighboring ship cards.
+   The card frame clips overflowing children, so release that clipping only
+   while the card is hovered and raise it above the next grid row. */
+
+.shipyard-grid-v1 {
+  overflow: visible;
+}
+
+.shipyard-card-v1:hover {
+  z-index: 40;
+  overflow: visible;
+  clip-path: none;
+}
+
+.shipyard-card-v1:hover .shipyard-art-v1,
+.shipyard-card-v1:hover .shipyard-art-hover-v1 {
+  overflow: visible;
+}
+
+.shipyard-card-v1:hover .shipyard-stats-tooltip-v1 {
+  z-index: 100;
+}
+
+/* Long shipyard pages keep the same shell backdrop as the normal Fleet
+   screen. Extending .stage to ~2860px would otherwise make background-size:
+   cover recrop the 1920x1080 starfield. Pin it to the base canvas instead. */
+html.asterion-long-page .stage,
+html.web-preview.asterion-long-page .stage {
+  background-size: 1920px 1080px !important;
+  background-position: center top !important;
+  background-repeat: repeat-y !important;
+}
+
+/* Keep the normal Fleet translucency instead of an opaque shipyard-only layer. */
+html.asterion-long-page .fleet-workspace-v1 {
+  background:
+    radial-gradient(circle at 74% 18%, rgba(19, 128, 174, .06), transparent 28%),
+    linear-gradient(180deg, rgba(1, 10, 17, .38), rgba(1, 7, 12, .74));
+}
+
+/* The App-level placeholder sits underneath the Fleet portal. Hide only that
+   placeholder while the long shipyard is open, so its old “ФЛОТЫ” text cannot
+   bleed through while the actual starfield remains visible. */
+html.asterion-long-page .module-placeholder-v3 {
+  visibility: hidden;
+}
+
+/* The browser vertical scrollbar reduces document content width, so left:50%
+   shifts the 1920px stage sideways by half a scrollbar. 50vw remains tied to
+   the full viewport and matches the non-scrolling Fleet screen. */
+html.web-preview.asterion-long-page .stage {
+  left: 50vw !important;
+}
