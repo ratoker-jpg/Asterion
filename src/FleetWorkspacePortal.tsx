@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import scoutArt from '../assets/source/New assets/ship/aegis/ship.aegis.scout.png';
+import { ShipyardView } from './ShipyardView';
 import './fleet-workspace.css';
 
 const SCOUT_POPULATION = 2;
@@ -107,6 +108,7 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
   const [missionId, setMissionId] = useState<MissionId>('transport');
   const [hoveredMissionId, setHoveredMissionId] = useState<MissionId | null>(null);
   const [selectedSection, setSelectedSection] = useState<FleetSection>('Корабли');
+  const [shipyardOpen, setShipyardOpen] = useState(false);
   const [status, setStatus] = useState('Выберите корабли и миссию. Отправка флота будет подключена следующим этапом.');
 
   const selectedPopulation = useMemo(() => quantity * SCOUT_POPULATION, [quantity]);
@@ -115,10 +117,9 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
 
   const chooseSection = (section: FleetSection) => {
     setSelectedSection(section);
+    setShipyardOpen(section === 'Корабли');
     if (section !== 'Корабли') {
       setStatus(`Раздел «${section}» пока сохранён как навигационный каркас.`);
-    } else {
-      setStatus('Раздел формирования флота открыт.');
     }
   };
 
@@ -148,99 +149,105 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
         <FleetMenuGroup title="УПРАВЛЕНИЕ ФЛОТОМ" items={managementSections} selected={selectedSection} onSelect={chooseSection} />
       </aside>
 
-      <main className="fleet-main-v1">
-        <section className="fleet-panel-v1 fleet-flights-v1">
-          <header className="fleet-panel-header-v1">
-            <div><small>ОПЕРАЦИОННЫЙ ЦЕНТР</small><h2>ФЛОТЫ</h2></div>
-            <span>{planetName} {coords}</span>
-          </header>
+      <main className={`fleet-main-v1 ${shipyardOpen ? 'fleet-main-v1--shipyard' : ''}`}>
+        {shipyardOpen ? (
+          <ShipyardView planetName={planetName} coords={coords} onBack={() => setShipyardOpen(false)} />
+        ) : (
+          <>
+            <section className="fleet-panel-v1 fleet-flights-v1">
+              <header className="fleet-panel-header-v1">
+                <div><small>ОПЕРАЦИОННЫЙ ЦЕНТР</small><h2>ФЛОТЫ</h2></div>
+                <span>{planetName} {coords}</span>
+              </header>
 
-          <div className="fleet-flight-table-v1">
-            <div className="fleet-flight-row-v1 fleet-flight-head-v1">
-              <span>ОТКУДА</span><span>КУДА</span><span>ПРИБЫТИЕ</span><span>ВОЗВРАЩЕНИЕ</span><span>МИССИЯ</span><span>ДЕЙСТВИЯ</span>
-            </div>
-            <div className="fleet-flight-empty-v1">
-              <strong>Активных полётов нет</strong>
-              <span>Флоты, находящиеся в пути, будут отображаться здесь.</span>
-            </div>
-          </div>
-
-          <div className="fleet-flight-actions-v1">
-            <button type="button" onClick={() => setStatus('Сейчас активных шпионских флотов нет.')}>ОТОЗВАТЬ ВСЕХ ШПИОНОВ</button>
-            <button type="button" onClick={() => setStatus('Выбранных шпионских флотов сейчас нет.')}>ОТОЗВАТЬ ВЫБРАННЫХ</button>
-            <button type="button" onClick={() => setStatus('Шпионские отчёты будут подключены вместе с системой отчётов.')}>ШПИОНСКИЕ ОТЧЁТЫ</button>
-          </div>
-        </section>
-
-        <section className="fleet-panel-v1 fleet-compose-v1">
-          <header className="fleet-panel-header-v1 compact">
-            <div><small>ФОРМИРОВАНИЕ</small><h2>ВЫБЕРИ КОРАБЛИ</h2></div>
-            <span>1 СКАУТ = {SCOUT_POPULATION} НАСЕЛЕНИЯ</span>
-          </header>
-
-          <div className="fleet-ship-line-v1">
-            <div className="fleet-ship-art-v1"><img src={scoutArt} alt="Скаут Вектор" draggable={false} /></div>
-            <div className="fleet-ship-info-v1">
-              <small>ЛЁГКИЙ БОЕВОЙ РАЗВЕДЧИК</small>
-              <h3>Скаут «Вектор»</h3>
-              <div className="fleet-ship-meta-v1"><span>В наличии <b>{SCOUT_AVAILABLE}</b></span><span>Население / ед. <b>{SCOUT_POPULATION}</b></span></div>
-            </div>
-            <div className="fleet-quantity-v1">
-              <span>КОЛИЧЕСТВО</span>
-              <input aria-label="Количество скаутов" type="number" min="0" max={SCOUT_AVAILABLE} value={quantity} onChange={(event) => setScoutQuantity(Number(event.target.value))} />
-              <div className="fleet-quantity-shortcuts-v1">
-                <button type="button" onClick={() => setScoutQuantity(SCOUT_AVAILABLE)}>МАКС.</button>
-                <button type="button" onClick={() => setScoutQuantity(0)}>МИН.</button>
+              <div className="fleet-flight-table-v1">
+                <div className="fleet-flight-row-v1 fleet-flight-head-v1">
+                  <span>ОТКУДА</span><span>КУДА</span><span>ПРИБЫТИЕ</span><span>ВОЗВРАЩЕНИЕ</span><span>МИССИЯ</span><span>ДЕЙСТВИЯ</span>
+                </div>
+                <div className="fleet-flight-empty-v1">
+                  <strong>Активных полётов нет</strong>
+                  <span>Флоты, находящиеся в пути, будут отображаться здесь.</span>
+                </div>
               </div>
-            </div>
-          </div>
 
-          <div className="fleet-selection-line-v1">
-            <span>Выберите</span>
-            <button type="button" onClick={() => setScoutQuantity(SCOUT_AVAILABLE)}>Макс.</button>
-            <span>/</span>
-            <button type="button" onClick={() => setScoutQuantity(0)}>Мин.</button>
-            <i />
-            <span>Выбрано кораблей</span><strong>{quantity}</strong>
-            <i />
-            <span>Выбрано населения</span><strong className="accent">{selectedPopulation}</strong>
-          </div>
+              <div className="fleet-flight-actions-v1">
+                <button type="button" onClick={() => setStatus('Сейчас активных шпионских флотов нет.')}>ОТОЗВАТЬ ВСЕХ ШПИОНОВ</button>
+                <button type="button" onClick={() => setStatus('Выбранных шпионских флотов сейчас нет.')}>ОТОЗВАТЬ ВЫБРАННЫХ</button>
+                <button type="button" onClick={() => setStatus('Шпионские отчёты будут подключены вместе с системой отчётов.')}>ШПИОНСКИЕ ОТЧЁТЫ</button>
+              </div>
+            </section>
 
-          <div className="fleet-mission-picker-v1">
-            <div className="fleet-mission-select-v1">
-              <label htmlFor="fleet-mission">МИССИЯ</label>
-              <select id="fleet-mission" value={missionId} onChange={(event) => setMissionId(event.target.value as MissionId)}>
-                {missions.map((mission) => <option key={mission.id} value={mission.id}>{mission.label}</option>)}
-              </select>
-            </div>
+            <section className="fleet-panel-v1 fleet-compose-v1">
+              <header className="fleet-panel-header-v1 compact">
+                <div><small>ФОРМИРОВАНИЕ</small><h2>ВЫБЕРИ КОРАБЛИ</h2></div>
+                <span>1 СКАУТ = {SCOUT_POPULATION} НАСЕЛЕНИЯ</span>
+              </header>
 
-            <div className="fleet-mission-icons-v1" aria-label="Выбор миссии">
-              {missions.map((mission) => (
-                <button
-                  key={mission.id}
-                  type="button"
-                  className={mission.id === missionId ? 'active' : ''}
-                  aria-label={mission.label}
-                  title={mission.label}
-                  onMouseEnter={() => setHoveredMissionId(mission.id)}
-                  onMouseLeave={() => setHoveredMissionId(null)}
-                  onFocus={() => setHoveredMissionId(mission.id)}
-                  onBlur={() => setHoveredMissionId(null)}
-                  onClick={() => setMissionId(mission.id)}
-                >
-                  <MissionIcon id={mission.id} />
-                  <span>{mission.label}</span>
-                </button>
-              ))}
-            </div>
-            <p className="fleet-mission-description-v1"><strong>{describedMission.label}.</strong> {describedMission.description}</p>
-          </div>
+              <div className="fleet-ship-line-v1">
+                <div className="fleet-ship-art-v1"><img src={scoutArt} alt="Скаут Вектор" draggable={false} /></div>
+                <div className="fleet-ship-info-v1">
+                  <small>ЛЁГКИЙ БОЕВОЙ РАЗВЕДЧИК</small>
+                  <h3>Скаут «Вектор»</h3>
+                  <div className="fleet-ship-meta-v1"><span>В наличии <b>{SCOUT_AVAILABLE}</b></span><span>Население / ед. <b>{SCOUT_POPULATION}</b></span></div>
+                </div>
+                <div className="fleet-quantity-v1">
+                  <span>КОЛИЧЕСТВО</span>
+                  <input aria-label="Количество скаутов" type="number" min="0" max={SCOUT_AVAILABLE} value={quantity} onChange={(event) => setScoutQuantity(Number(event.target.value))} />
+                  <div className="fleet-quantity-shortcuts-v1">
+                    <button type="button" onClick={() => setScoutQuantity(SCOUT_AVAILABLE)}>МАКС.</button>
+                    <button type="button" onClick={() => setScoutQuantity(0)}>МИН.</button>
+                  </div>
+                </div>
+              </div>
 
-          <footer className="fleet-compose-footer-v1">
-            <span>{status}</span>
-            <button type="button" disabled={quantity === 0} onClick={() => setStatus(`${quantity} × Скаут «Вектор» подготовлены. Выбрано населения: ${selectedPopulation}. Миссия: ${selectedMission.label}.`)}>ПРОДОЛЖИТЬ</button>
-          </footer>
-        </section>
+              <div className="fleet-selection-line-v1">
+                <span>Выберите</span>
+                <button type="button" onClick={() => setScoutQuantity(SCOUT_AVAILABLE)}>Макс.</button>
+                <span>/</span>
+                <button type="button" onClick={() => setScoutQuantity(0)}>Мин.</button>
+                <i />
+                <span>Выбрано кораблей</span><strong>{quantity}</strong>
+                <i />
+                <span>Выбрано населения</span><strong className="accent">{selectedPopulation}</strong>
+              </div>
+
+              <div className="fleet-mission-picker-v1">
+                <div className="fleet-mission-select-v1">
+                  <label htmlFor="fleet-mission">МИССИЯ</label>
+                  <select id="fleet-mission" value={missionId} onChange={(event) => setMissionId(event.target.value as MissionId)}>
+                    {missions.map((mission) => <option key={mission.id} value={mission.id}>{mission.label}</option>)}
+                  </select>
+                </div>
+
+                <div className="fleet-mission-icons-v1" aria-label="Выбор миссии">
+                  {missions.map((mission) => (
+                    <button
+                      key={mission.id}
+                      type="button"
+                      className={mission.id === missionId ? 'active' : ''}
+                      aria-label={mission.label}
+                      title={mission.label}
+                      onMouseEnter={() => setHoveredMissionId(mission.id)}
+                      onMouseLeave={() => setHoveredMissionId(null)}
+                      onFocus={() => setHoveredMissionId(mission.id)}
+                      onBlur={() => setHoveredMissionId(null)}
+                      onClick={() => setMissionId(mission.id)}
+                    >
+                      <MissionIcon id={mission.id} />
+                      <span>{mission.label}</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="fleet-mission-description-v1"><strong>{describedMission.label}.</strong> {describedMission.description}</p>
+              </div>
+
+              <footer className="fleet-compose-footer-v1">
+                <span>{status}</span>
+                <button type="button" disabled={quantity === 0} onClick={() => setStatus(`${quantity} × Скаут «Вектор» подготовлены. Выбрано населения: ${selectedPopulation}. Миссия: ${selectedMission.label}.`)}>ПРОДОЛЖИТЬ</button>
+              </footer>
+            </section>
+          </>
+        )}
       </main>
     </div>
   );
