@@ -1,0 +1,22 @@
+/* Keep the hover stats panel above neighboring ship cards.
+   The card frame clips overflowing children, so release that clipping only
+   while the card is hovered and raise it above the next grid row. */
+
+.shipyard-grid-v1 {
+  overflow: visible;
+}
+
+.shipyard-card-v1:hover {
+  z-index: 40;
+  overflow: visible;
+  clip-path: none;
+}
+
+.shipyard-card-v1:hover .shipyard-art-v1,
+.shipyard-card-v1:hover .shipyard-art-hover-v1 {
+  overflow: visible;
+}
+
+.shipyard-card-v1:hover .shipyard-stats-tooltip-v1 {
+  z-index: 100;
+}
