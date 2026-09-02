@@ -20,3 +20,36 @@
 .shipyard-card-v1:hover .shipyard-stats-tooltip-v1 {
   z-index: 100;
 }
+
+/* Long shipyard pages must keep the same shell backdrop as the normal Fleet
+   screen. Extending .stage to ~2860px used to make background-size: cover
+   recrop the 1920x1080 starfield, so pin the texture to the base canvas size
+   and repeat it vertically instead. */
+html.asterion-long-page .stage,
+html.web-preview.asterion-long-page .stage {
+  background-size: 1920px 1080px !important;
+  background-position: center top !important;
+  background-repeat: repeat-y !important;
+}
+
+/* Match the normal Fleet workspace translucency instead of painting an opaque
+   shipyard-only backdrop over the shell starfield. */
+html.asterion-long-page .fleet-workspace-v1 {
+  background:
+    radial-gradient(circle at 74% 18%, rgba(19, 128, 174, .06), transparent 28%),
+    linear-gradient(180deg, rgba(1, 10, 17, .38), rgba(1, 7, 12, .74));
+}
+
+/* The App-level placeholder sits underneath the Fleet portal. Hide only that
+   placeholder while the long shipyard is open, so its old “ФЛОТЫ” text cannot
+   bleed through while the actual starfield remains visible. */
+html.asterion-long-page .module-placeholder-v3 {
+  visibility: hidden;
+}
+
+/* A vertical scrollbar reduces the document content width, so left:50% moves
+   the 1920px stage by roughly half a scrollbar. 50vw stays tied to the browser
+   viewport and therefore matches the non-scrolling Fleet screen exactly. */
+html.web-preview.asterion-long-page .stage {
+  left: 50vw !important;
+}
