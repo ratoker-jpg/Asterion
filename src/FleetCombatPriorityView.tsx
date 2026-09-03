@@ -1,4 +1,4 @@
-import { useMemo, useState, type DragEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useState, type DragEvent, type KeyboardEvent } from 'react';
 
 import { COMMANDER_ABILITIES, type CommanderId } from './domain/combat/commanders.ts';
 import { COMMANDER_COMBAT_CATALOG } from './domain/combat/catalog.ts';
@@ -144,6 +144,15 @@ export function FleetCombatPriorityView({
   const [priority, setPriority] = useState<CombatPriorityState>(() => readCombatPriority());
   const [dragState, setDragState] = useState<DragState>(null);
   const [saveState, setSaveState] = useState<SaveState>({ kind: 'saved', message: '✓ Сохранено' });
+
+  useEffect(() => {
+    document.documentElement.classList.add('asterion-long-page', 'asterion-combat-priority-page');
+    window.scrollTo(0, 0);
+    return () => {
+      document.documentElement.classList.remove('asterion-long-page', 'asterion-combat-priority-page');
+      window.scrollTo(0, 0);
+    };
+  }, []);
 
   const commanderCount = useMemo(() => new Set([...priority.attack, ...priority.defense]).size, [priority]);
 
