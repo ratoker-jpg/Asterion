@@ -22,15 +22,40 @@ import veyraGhostArt from '../assets/source/New assets/ship/veyra/ship.veyra.gho
 import veyraHornetArt from '../assets/source/New assets/ship/veyra/ship.veyra.hornet.png';
 import veyraBomberArt from '../assets/source/New assets/ship/veyra/ship.veyra.bomber.png';
 import veyraQueenArt from '../assets/source/New assets/ship/veyra/ship.veyra.nox-queen.png';
+
+import aegisBallisticDefenseArt from '../assets/source/New assets/defenses/aegis/defense.aegis.ballistic-turret.png';
+import aegisLaserDefenseArt from '../assets/source/New assets/defenses/aegis/defense.aegis.laser-turret.png';
+import aegisIonDefenseArt from '../assets/source/New assets/defenses/aegis/defense.aegis.ion-turret.png';
+import aegisPlasmaDefenseArt from '../assets/source/New assets/defenses/aegis/defense.aegis.plasma-turret.png';
+import aegisLaserIonDefenseArt from '../assets/source/New assets/defenses/aegis/defense.aegis.laser-ion-battery.png';
+import aegisPlasmaLaserDefenseArt from '../assets/source/New assets/defenses/aegis/defense.aegis.plasma-laser-battery.png';
+import aegisIonPlasmaDefenseArt from '../assets/source/New assets/defenses/aegis/defense.aegis.ion-plasma-battery.png';
+import synodBallisticDefenseArt from '../assets/source/New assets/defenses/synod/defense.synod.defense-matrix.png';
+import synodLaserDefenseArt from '../assets/source/New assets/defenses/synod/defense.synod.laser-matrix.png';
+import synodIonDefenseArt from '../assets/source/New assets/defenses/synod/defense.synod.ion-matrix.png';
+import synodPlasmaDefenseArt from '../assets/source/New assets/defenses/synod/defense.synod.plasma-matrix.png';
+import synodLaserIonDefenseArt from '../assets/source/New assets/defenses/synod/defense.synod.laser-ion-matrix.png';
+import synodPlasmaLaserDefenseArt from '../assets/source/New assets/defenses/synod/defense.synod.plasma-laser-matrix.png';
+import synodIonPlasmaDefenseArt from '../assets/source/New assets/defenses/synod/defense.synod.ion-plasma-matrix.png';
+import veyraBallisticDefenseArt from '../assets/source/New assets/defenses/veyra/defense.veyra.nox-archer.png';
+import veyraLaserDefenseArt from '../assets/source/New assets/defenses/veyra/defense.veyra.laser-matter.png';
+import veyraIonDefenseArt from '../assets/source/New assets/defenses/veyra/defense.veyra.ion-weave.png';
+import veyraPlasmaDefenseArt from '../assets/source/New assets/defenses/veyra/defense.veyra.plasma-weave.png';
+import veyraLaserIonDefenseArt from '../assets/source/New assets/defenses/veyra/defense.veyra.laser-ion-turret.png';
+import veyraPlasmaLaserDefenseArt from '../assets/source/New assets/defenses/veyra/defense.veyra.plasma-laser-turret.png';
+import veyraIonPlasmaDefenseArt from '../assets/source/New assets/defenses/veyra/defense.veyra.ion-plasma-turret.png';
+
 import './ship-info-modal.css';
 
 type ShipInfoKind = 'ship' | 'commander';
 type ShipInfoFaction = 'Aegis' | 'Synod' | 'Veyra' | 'Общий флот';
+type TargetType = 'Корабль' | 'Оборона';
 
 type ShipTarget = {
   name: string;
   faction: Exclude<ShipInfoFaction, 'Общий флот'>;
   art: string;
+  type?: TargetType;
 };
 
 type ShipAbility = {
@@ -38,16 +63,20 @@ type ShipAbility = {
   description: string;
   scaling?: string;
   note?: string;
+  source?: 'NEMEXIA' | 'ASTERION';
+};
+
+type DamageTargets = {
+  label: string;
+  targets: ShipTarget[];
 };
 
 type ShipInfoDefinition = {
   kind: ShipInfoKind;
   ability: ShipAbility;
   priorityTargets?: ShipTarget[];
-  bonusDamage?: {
-    label: string;
-    targets: ShipTarget[];
-  };
+  bonusDamage?: DamageTargets;
+  penaltyDamage?: DamageTargets;
   targetsNote?: string;
 };
 
@@ -66,62 +95,124 @@ type OpenShipInfo = {
   definition: ShipInfoDefinition;
 };
 
+const shipTarget = (
+  name: string,
+  faction: Exclude<ShipInfoFaction, 'Общий флот'>,
+  art: string,
+): ShipTarget => ({ name, faction, art, type: 'Корабль' });
+
+const defenseTarget = (
+  name: string,
+  faction: Exclude<ShipInfoFaction, 'Общий флот'>,
+  art: string,
+): ShipTarget => ({ name, faction, art, type: 'Оборона' });
+
+const combineTargets = (...groups: ShipTarget[][]) => groups.flat();
+
 const scoutTargets: ShipTarget[] = [
-  { name: 'Скаут «Вектор»', faction: 'Aegis', art: aegisScoutArt },
-  { name: 'Истребитель «Ланцет»', faction: 'Synod', art: synodFighterArt },
-  { name: 'Нокс Дарт «Жало»', faction: 'Veyra', art: veyraNoxDartArt },
+  shipTarget('Скаут «Вектор»', 'Aegis', aegisScoutArt),
+  shipTarget('Истребитель «Ланцет»', 'Synod', synodFighterArt),
+  shipTarget('Нокс Дарт «Жало»', 'Veyra', veyraNoxDartArt),
 ];
 
 const cruiserTargets: ShipTarget[] = [
-  { name: 'Крейсер «Копьё»', faction: 'Aegis', art: aegisCruiserArt },
-  { name: 'Перехватчик «Фаза»', faction: 'Synod', art: synodInterceptorArt },
-  { name: 'Немезис «Стрекоза»', faction: 'Veyra', art: veyraNemesisArt },
+  shipTarget('Крейсер «Копьё»', 'Aegis', aegisCruiserArt),
+  shipTarget('Перехватчик «Фаза»', 'Synod', synodInterceptorArt),
+  shipTarget('Немезис «Стрекоза»', 'Veyra', veyraNemesisArt),
 ];
 
 const defenderTargets: ShipTarget[] = [
-  { name: 'Защитник «Эгида»', faction: 'Aegis', art: aegisDefenderArt },
-  { name: 'Щитовой бот «Оберег»', faction: 'Synod', art: synodShieldBotArt },
-  { name: 'Абсорбатор «Завеса»', faction: 'Veyra', art: veyraAbsorberArt },
+  shipTarget('Защитник «Эгида»', 'Aegis', aegisDefenderArt),
+  shipTarget('Щитовой бот «Оберег»', 'Synod', synodShieldBotArt),
+  shipTarget('Абсорбатор «Завеса»', 'Veyra', veyraAbsorberArt),
 ];
 
 const battleshipTargets: ShipTarget[] = [
-  { name: 'Линкор «Бастион»', faction: 'Aegis', art: aegisBattleshipArt },
-  { name: 'Звёздная армада', faction: 'Synod', art: synodStarArmadaArt },
-  { name: 'Призрак', faction: 'Veyra', art: veyraGhostArt },
+  shipTarget('Линкор «Бастион»', 'Aegis', aegisBattleshipArt),
+  shipTarget('Звёздная армада', 'Synod', synodStarArmadaArt),
+  shipTarget('Призрак', 'Veyra', veyraGhostArt),
 ];
 
 const destroyerTargets: ShipTarget[] = [
-  { name: 'Разрушитель «Цитадель»', faction: 'Aegis', art: aegisDestroyerArt },
-  { name: 'Голиаф', faction: 'Synod', art: synodGoliathArt },
-  { name: 'Шмель', faction: 'Veyra', art: veyraHornetArt },
+  shipTarget('Разрушитель «Цитадель»', 'Aegis', aegisDestroyerArt),
+  shipTarget('Голиаф', 'Synod', synodGoliathArt),
+  shipTarget('Шмель', 'Veyra', veyraHornetArt),
 ];
 
 const bomberTargets: ShipTarget[] = [
-  { name: 'Бомбардировщик «Молот»', faction: 'Aegis', art: aegisBomberArt },
-  { name: 'Бомбербот', faction: 'Synod', art: synodBomberArt },
-  { name: 'Бомбардировщик', faction: 'Veyra', art: veyraBomberArt },
+  shipTarget('Бомбардировщик «Молот»', 'Aegis', aegisBomberArt),
+  shipTarget('Бомбербот', 'Synod', synodBomberArt),
+  shipTarget('Бомбардировщик', 'Veyra', veyraBomberArt),
 ];
 
 const planetDestroyerTargets: ShipTarget[] = [
-  { name: 'Планетолом «Немезида»', faction: 'Aegis', art: aegisDeathStarArt },
-  { name: 'Титан', faction: 'Synod', art: synodTitanArt },
-  { name: 'Нокс Царица', faction: 'Veyra', art: veyraQueenArt },
+  shipTarget('Планетолом «Немезида»', 'Aegis', aegisDeathStarArt),
+  shipTarget('Титан', 'Synod', synodTitanArt),
+  shipTarget('Нокс Царица', 'Veyra', veyraQueenArt),
+];
+
+const ballisticDefenses: ShipTarget[] = [
+  defenseTarget('Баллистическая турель', 'Aegis', aegisBallisticDefenseArt),
+  defenseTarget('Защитная матрица', 'Synod', synodBallisticDefenseArt),
+  defenseTarget('Нокс Стрелок', 'Veyra', veyraBallisticDefenseArt),
+];
+
+const laserDefenses: ShipTarget[] = [
+  defenseTarget('Лазерная турель', 'Aegis', aegisLaserDefenseArt),
+  defenseTarget('Лазерная матрица', 'Synod', synodLaserDefenseArt),
+  defenseTarget('Лазерная материя', 'Veyra', veyraLaserDefenseArt),
+];
+
+const ionDefenses: ShipTarget[] = [
+  defenseTarget('Ионная турель', 'Aegis', aegisIonDefenseArt),
+  defenseTarget('Ионная матрица', 'Synod', synodIonDefenseArt),
+  defenseTarget('Ионная ткань', 'Veyra', veyraIonDefenseArt),
+];
+
+const plasmaDefenses: ShipTarget[] = [
+  defenseTarget('Плазменная турель', 'Aegis', aegisPlasmaDefenseArt),
+  defenseTarget('Плазменная матрица', 'Synod', synodPlasmaDefenseArt),
+  defenseTarget('Плазменная ткань', 'Veyra', veyraPlasmaDefenseArt),
+];
+
+const laserIonDefenses: ShipTarget[] = [
+  defenseTarget('Лазер-ионная батарея', 'Aegis', aegisLaserIonDefenseArt),
+  defenseTarget('Лазер-ионная матрица', 'Synod', synodLaserIonDefenseArt),
+  defenseTarget('Лазер-ионная турель', 'Veyra', veyraLaserIonDefenseArt),
+];
+
+const plasmaLaserDefenses: ShipTarget[] = [
+  defenseTarget('Плазма-лазерная батарея', 'Aegis', aegisPlasmaLaserDefenseArt),
+  defenseTarget('Плазма-лазерная матрица', 'Synod', synodPlasmaLaserDefenseArt),
+  defenseTarget('Плазма-лазерная турель', 'Veyra', veyraPlasmaLaserDefenseArt),
+];
+
+const ionPlasmaDefenses: ShipTarget[] = [
+  defenseTarget('Ион-плазменная батарея', 'Aegis', aegisIonPlasmaDefenseArt),
+  defenseTarget('Ион-плазменная матрица', 'Synod', synodIonPlasmaDefenseArt),
+  defenseTarget('Ион-плазменная турель', 'Veyra', veyraIonPlasmaDefenseArt),
 ];
 
 const nemexiaCombatNote =
-  'Корабельные приоритеты и +70% урона сверены по сохранённым страницам синей расы Nemexia. У отдельных классов в оригинале также есть приоритетные оборонные установки; их вынесем в оборонный справочник.';
+  'Приоритеты, +70% и −30% полностью сверены по сохранённым страницам синей расы Nemexia. Названия и изображения целей сопоставлены с кораблями и обороной Asterion.';
 
 function combatShip(
   ability: ShipAbility,
   priorityTargets: ShipTarget[],
+  bonusTargets: ShipTarget[],
+  penaltyTargets: ShipTarget[],
 ): ShipInfoDefinition {
   return {
     kind: 'ship',
-    ability,
+    ability: { ...ability, source: 'NEMEXIA' },
     priorityTargets,
     bonusDamage: {
       label: 'Дополнительный урон +70% против',
-      targets: priorityTargets,
+      targets: bonusTargets,
+    },
+    penaltyDamage: {
+      label: 'Штрафной урон −30% против',
+      targets: penaltyTargets,
     },
     targetsNote: nemexiaCombatNote,
   };
@@ -134,6 +225,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       name: 'Солнечный массив',
       description: 'Орбитальная энергетическая платформа. Её ключевая роль — поддержка энергетической инфраструктуры планеты.',
       note: 'Стационарный обслуживающий аппарат.',
+      source: 'ASTERION',
     },
   },
   'Зонд «Призма»': {
@@ -142,6 +234,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       name: 'Глубокое сканирование',
       description: 'Открывает разведывательные миссии и повышает качество наблюдения за целью.',
       note: 'Разведывательная способность.',
+      source: 'ASTERION',
     },
   },
   'Транспорт «Тракт»': {
@@ -150,6 +243,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       name: 'Грузовая сеть',
       description: 'Оптимизирован для перевозки ресурсов и быстрого снабжения флотов и колоний.',
       note: 'Логистическая способность.',
+      source: 'ASTERION',
     },
   },
   'Мегатранспорт «Артерия»': {
@@ -158,6 +252,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       name: 'Грузовая сеть',
       description: 'Перевозит крупные партии ресурсов и используется как тяжёлая логистическая платформа.',
       note: 'Логистическая способность.',
+      source: 'ASTERION',
     },
   },
   'Колонизатор «Форпост»': {
@@ -166,6 +261,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       name: 'Колониальное ядро',
       description: 'Разворачивает базовую инфраструктуру новой колонии и расходуется при успешной колонизации.',
       note: 'Специальная миссионная способность.',
+      source: 'ASTERION',
     },
   },
   'Переработчик «Сборщик»': {
@@ -174,65 +270,80 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       name: 'Сборочный массив',
       description: 'Позволяет извлекать ресурсы из полей обломков после сражений.',
       note: 'Специальная миссионная способность.',
+      source: 'ASTERION',
     },
   },
+
   'Скаут «Вектор»': combatShip(
     {
-      name: 'Пробитие брони',
-      description: 'Группа лёгких боевых кораблей концентрирует огонь по уязвимым участкам защиты цели.',
-      scaling: 'Эффект способности Asterion усиливается с количеством кораблей в соединении.',
-      note: 'Приоритеты целей ниже взяты из оригинальной таблицы Nemexia для Скаута.',
+      name: 'Игнорирование брони',
+      description: 'Применяется к дружественной группе кораблей и даёт возможность нанести врагу урон сквозь броню.',
+      scaling: 'Шанс за корабль: 0,035%. Максимальный шанс: 70%.',
     },
-    defenderTargets,
+    combineTargets(defenderTargets, ionDefenses),
+    combineTargets(defenderTargets, battleshipTargets),
+    combineTargets(scoutTargets, planetDestroyerTargets),
   ),
   'Крейсер «Копьё»': combatShip(
     {
       name: 'Сокрушение',
-      description: 'Согласованный залп повышает атакующий потенциал ударной группы.',
-      scaling: 'Эффект способности Asterion усиливается с количеством кораблей в соединении.',
+      description: 'Применяется к дружественной группе кораблей и увеличивает её атаку с ×2 до ×2,5. Не работает одновременно с критическим ударом.',
+      scaling: 'Шанс за корабль: 0,05%. Максимальный шанс: 50%.',
     },
-    scoutTargets,
+    combineTargets(scoutTargets, ballisticDefenses),
+    combineTargets(scoutTargets, defenderTargets),
+    combineTargets(cruiserTargets, battleshipTargets),
   ),
   'Защитник «Эгида»': combatShip(
     {
-      name: 'Резерв живучести',
-      description: 'Поддерживает соседние корабли и повышает общую устойчивость дружественного соединения.',
-      scaling: 'Эффект способности Asterion усиливается с количеством кораблей поддержки.',
+      name: 'Бонусные жизни',
+      description: 'Применяется ко всем дружественным группам кораблей и увеличивает запас их жизней.',
+      scaling: 'Бонус за корабль: 0,05%. Максимальный бонус: 30%.',
     },
-    bomberTargets,
+    combineTargets(bomberTargets, plasmaLaserDefenses),
+    combineTargets(bomberTargets, planetDestroyerTargets),
+    combineTargets(scoutTargets, defenderTargets),
   ),
   'Линкор «Бастион»': combatShip(
     {
-      name: 'Связка брони',
-      description: 'Тяжёлые корабли формируют устойчивую защитную связку и повышают живучесть строя.',
-      scaling: 'Эффект способности Asterion усиливается с количеством линкоров в соединении.',
+      name: 'Улучшенная броня',
+      description: 'Применяется ко всем дружественным группам кораблей и предоставляет бонус к броне.',
+      scaling: 'Бонус за корабль: 0,038%. Максимальный бонус: 30%.',
     },
-    cruiserTargets,
+    combineTargets(cruiserTargets, laserDefenses),
+    combineTargets(cruiserTargets, defenderTargets),
+    combineTargets(battleshipTargets, destroyerTargets),
   ),
   'Разрушитель «Цитадель»': combatShip(
     {
-      name: 'Боевая рекуперация',
-      description: 'Резервные системы снижают необратимые потери тяжёлой ударной группы.',
-      scaling: 'Эффект способности Asterion зависит от количества кораблей этого класса.',
+      name: 'Возрождение',
+      description: 'Даёт шанс возродить часть потерянных дружественных кораблей во время раунда сражения.',
+      scaling: 'Бонус за корабль: 0,08% (макс. 40%). Шанс за корабль: 0,14% (макс. 70%).',
     },
-    battleshipTargets,
+    combineTargets(battleshipTargets, plasmaDefenses),
+    combineTargets(battleshipTargets, planetDestroyerTargets),
+    combineTargets(destroyerTargets, bomberTargets),
   ),
   'Бомбардировщик «Молот»': combatShip(
     {
       name: 'Артиллерия',
-      description: 'Специализирован для нанесения усиленного урона стационарным и планетарным целям.',
-      scaling: 'Эффект способности Asterion зависит от количества бомбардировщиков.',
+      description: 'Применяется ко всем дружественным группам кораблей и предоставляет +50% к атаке против обороны.',
+      scaling: 'Шанс за корабль: 0,1%. Максимальный шанс: 70%.',
     },
-    destroyerTargets,
+    combineTargets(destroyerTargets, laserIonDefenses),
+    combineTargets(destroyerTargets, planetDestroyerTargets),
+    combineTargets(cruiserTargets, bomberTargets),
   ),
   'Планетолом «Немезида»': combatShip(
     {
-      name: 'Разрушитель мира',
-      description: 'Сверхтяжёлая осадная платформа для операций против планетарной инфраструктуры и самой планеты.',
-      scaling: 'Nemexia: шанс уничтожения планеты — 3% за корабль, максимальный шанс — 30%.',
-      note: 'Сохранённая страница Nemexia отдельно указывает, что итог зависит от уровня модернизации юнита.',
+      name: 'Уничтожение планеты',
+      description: 'Даёт шанс уничтожить вражескую планету. Результат зависит от уровня модернизации юнитов.',
+      scaling: 'Шанс за корабль: 3%. Максимальный шанс: 30%.',
+      note: 'Nemexia также задаёт отдельную способность «Детонация» для уничтожения уровней зданий.',
     },
-    planetDestroyerTargets,
+    combineTargets(planetDestroyerTargets, ionPlasmaDefenses),
+    combineTargets(planetDestroyerTargets, cruiserTargets),
+    defenderTargets,
   ),
 
   Корсар: {
@@ -242,6 +353,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       description: 'Позволяет проводить пиратские вылеты и увеличивает долю ресурсов, которую флот может захватить после победы.',
       scaling: '+1,25% украденных ресурсов за каждый уровень.',
       note: 'Данные способности сверены с сохранённой страницей Nemexia.',
+      source: 'NEMEXIA',
     },
   },
   Охотник: {
@@ -251,6 +363,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       description: 'Обнаруживает вражеские шпионские зонды при входе в атмосферу и мешает им получить разведданные.',
       scaling: '+1,75% к шансу обнаружения за каждый уровень.',
       note: 'Данные способности сверены с сохранённой страницей Nemexia.',
+      source: 'NEMEXIA',
     },
   },
   Палач: {
@@ -260,6 +373,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       description: 'Усиливает атакующий потенциал всего флота, когда командирский корабль ведёт соединение в бой.',
       scaling: '+0,15% к атаке флота за каждый уровень.',
       note: 'Данные способности сверены с сохранённой страницей Nemexia.',
+      source: 'NEMEXIA',
     },
   },
   Джаггернаут: {
@@ -269,6 +383,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       description: 'Повышает запас жизненных очков каждого корабля во флоте.',
       scaling: '+0,15% к жизненным очкам кораблей за каждый уровень.',
       note: 'Данные способности сверены с сохранённой страницей Nemexia.',
+      source: 'NEMEXIA',
     },
   },
   Тайфун: {
@@ -278,6 +393,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       description: 'Синхронизирует двигатели соединения и увеличивает скорость кораблей флота.',
       scaling: '+0,1% к скорости кораблей за каждый уровень.',
       note: 'Данные способности сверены с сохранённой страницей Nemexia.',
+      source: 'NEMEXIA',
     },
   },
   Вайпер: {
@@ -287,6 +403,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       description: 'Ищет уязвимые точки в кораблях противника и направляет туда концентрированный огонь флота.',
       scaling: '+0,075% к шансу критического урона за каждый уровень.',
       note: 'Данные способности сверены с сохранённой страницей Nemexia.',
+      source: 'NEMEXIA',
     },
   },
   Фантом: {
@@ -296,6 +413,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       description: 'Пытается взломать систему управления вражеского флота и отправить противника назад, не допустив сражения.',
       scaling: '+0,75% к шансу успешного взлома за каждый уровень.',
       note: 'Данные способности сверены с сохранённой страницей Nemexia.',
+      source: 'NEMEXIA',
     },
   },
   Скорпион: {
@@ -305,6 +423,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       description: 'Инфицирует системы противника и при успешном срабатывании парализует его орудия на текущий ход.',
       scaling: '+0,1% к шансу парализации за каждый уровень.',
       note: 'Данные способности сверены с сохранённой страницей Nemexia.',
+      source: 'NEMEXIA',
     },
   },
   Аннигилятор: {
@@ -314,6 +433,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       description: 'Усиливает осадный показатель детонации, используемый в разрушительных операциях.',
       scaling: '+0,5% к показателю детонации за каждый уровень.',
       note: 'Данные способности сверены с сохранённой страницей Nemexia.',
+      source: 'NEMEXIA',
     },
   },
   Реаниматор: {
@@ -323,6 +443,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       description: 'Ищет среди уничтоженных кораблей те, которые ещё можно вернуть в строй прямо во время боя. За один ход может восстановить до 15 кораблей.',
       scaling: '+0,4% к шансу восстановления за каждый уровень.',
       note: 'Данные способности сверены с сохранённой страницей Nemexia.',
+      source: 'NEMEXIA',
     },
   },
   Арго: {
@@ -332,6 +453,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       description: 'Повышает награду очками усовершенствования в боях с Отступниками и одновременно расширяет грузовые возможности флота.',
       scaling: '+1% очков усовершенствования и +1% грузоподъёмности кораблей за каждый уровень.',
       note: 'Данные способности сверены с сохранённой страницей Nemexia.',
+      source: 'NEMEXIA',
     },
   },
   Судья: {
@@ -341,6 +463,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       description: 'Вмешивается в защитные системы противника и снижает броню всех вражеских единиц.',
       scaling: '−0,15% брони всех вражеских единиц за каждый уровень.',
       note: 'Данные способности сверены с сохранённой страницей Nemexia.',
+      source: 'NEMEXIA',
     },
   },
   Полиас: {
@@ -350,6 +473,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       description: 'Пассивно снижает вероятность уничтожения защищаемой планеты. Эффект действует весь бой, даже если командирский корабль будет уничтожен раньше его окончания.',
       scaling: '−0,25% к вероятности уничтожения планеты за каждый уровень.',
       note: 'В архиве Nemexia корабль подписан как Polias; в Asterion используется «Полиас».',
+      source: 'NEMEXIA',
     },
   },
 };
@@ -386,16 +510,41 @@ function resolveFaction(definition: ShipInfoDefinition): ShipInfoFaction {
 }
 
 function ShipTargetCard({ target }: { target: ShipTarget }) {
+  const type = target.type ?? 'Корабль';
   return (
-    <div className="ship-info-target-v1" title={`${target.name} · ${target.faction}`}>
+    <div className="ship-info-target-v1" title={`${target.name} · ${target.faction} · ${type}`}>
       <div className="ship-info-target-art-v1">
         <img src={target.art} alt="" draggable={false} />
       </div>
       <div>
         <strong>{target.name}</strong>
-        <span>{target.faction}</span>
+        <span>{target.faction} · {type}</span>
       </div>
     </div>
+  );
+}
+
+function TargetSection({
+  number,
+  title,
+  targets,
+  note,
+}: {
+  number: string;
+  title: string;
+  targets: ShipTarget[];
+  note?: string;
+}) {
+  return (
+    <section className="ship-info-section-v1">
+      <div className="ship-info-section-title-v1"><span>{number}</span><h3>{title}</h3></div>
+      <div className="ship-info-target-grid-v1">
+        {targets.map((target) => (
+          <ShipTargetCard key={`${number}:${target.faction}:${target.type}:${target.name}`} target={target} />
+        ))}
+      </div>
+      {note ? <small className="ship-info-note-v1">{note}</small> : null}
+    </section>
   );
 }
 
@@ -469,7 +618,7 @@ function ShipInfoModal({ data, onClose }: { data: OpenShipInfo; onClose: () => v
               <div className="ship-info-ability-v1">
                 <div className="ship-info-ability-head-v1">
                   <div><small>СПЕЦИАЛЬНЫЙ ЭФФЕКТ</small><strong>{data.definition.ability.name}</strong></div>
-                  <span>{data.definition.kind === 'commander' ? 'NEMEXIA' : 'ASTERION'}</span>
+                  <span>{data.definition.ability.source ?? (data.definition.kind === 'commander' ? 'NEMEXIA' : 'ASTERION')}</span>
                 </div>
                 <p>{data.definition.ability.description}</p>
                 {data.definition.ability.scaling ? <div className="ship-info-scaling-v1">{data.definition.ability.scaling}</div> : null}
@@ -478,22 +627,24 @@ function ShipInfoModal({ data, onClose }: { data: OpenShipInfo; onClose: () => v
             </section>
 
             {data.definition.priorityTargets?.length ? (
-              <section className="ship-info-section-v1">
-                <div className="ship-info-section-title-v1"><span>03</span><h3>ПРИОРИТЕТНЫЕ ЦЕЛИ</h3></div>
-                <div className="ship-info-target-grid-v1">
-                  {data.definition.priorityTargets.map((target) => <ShipTargetCard key={`${target.faction}:${target.name}`} target={target} />)}
-                </div>
-              </section>
+              <TargetSection number="03" title="ПРИОРИТЕТНЫЕ ЦЕЛИ" targets={data.definition.priorityTargets} />
             ) : null}
 
             {data.definition.bonusDamage ? (
-              <section className="ship-info-section-v1">
-                <div className="ship-info-section-title-v1"><span>04</span><h3>{data.definition.bonusDamage.label}</h3></div>
-                <div className="ship-info-target-grid-v1">
-                  {data.definition.bonusDamage.targets.map((target) => <ShipTargetCard key={`bonus:${target.faction}:${target.name}`} target={target} />)}
-                </div>
-                {data.definition.targetsNote ? <small className="ship-info-note-v1">{data.definition.targetsNote}</small> : null}
-              </section>
+              <TargetSection
+                number="04"
+                title={data.definition.bonusDamage.label}
+                targets={data.definition.bonusDamage.targets}
+              />
+            ) : null}
+
+            {data.definition.penaltyDamage ? (
+              <TargetSection
+                number="05"
+                title={data.definition.penaltyDamage.label}
+                targets={data.definition.penaltyDamage.targets}
+                note={data.definition.targetsNote}
+              />
             ) : null}
           </div>
         </div>
