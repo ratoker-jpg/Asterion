@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import scoutArt from '../assets/source/New assets/ship/aegis/ship.aegis.scout.png';
+import { BattleReportsView } from './BattleReportsView';
 import { ConstructionCatalogView, type ConstructionCatalogMode } from './ConstructionCatalogView';
 import { FleetCombatPriorityView } from './FleetCombatPriorityView';
+import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
 import { ShipyardView } from './ShipyardView';
 import './fleet-workspace.css';
 
@@ -10,6 +12,7 @@ const SCOUT_POPULATION = 2;
 const SCOUT_AVAILABLE = 10;
 const FLEET_POPULATION = SCOUT_AVAILABLE * SCOUT_POPULATION;
 const SAVE_KEY = 'asterion.vertical-slice.v1';
+const FLEET_ROOT_STATUS = 'Выберите корабли и миссию. Отправка флота будет подключена следующим этапом.';
 
 type StoredSave = {
   planets?: Record<string, { population?: number; [key: string]: unknown }>;
@@ -111,11 +114,23 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
   const [hoveredMissionId, setHoveredMissionId] = useState<MissionId | null>(null);
   const [selectedSection, setSelectedSection] = useState<FleetSection>('Корабли');
   const [constructionView, setConstructionView] = useState<ConstructionView>(null);
-  const [status, setStatus] = useState('Выберите корабли и миссию. Отправка флота будет подключена следующим этапом.');
+  const [status, setStatus] = useState(FLEET_ROOT_STATUS);
 
   const selectedPopulation = useMemo(() => quantity * SCOUT_POPULATION, [quantity]);
   const selectedMission = missions.find((mission) => mission.id === missionId) ?? missions[0];
   const describedMission = missions.find((mission) => mission.id === hoveredMissionId) ?? selectedMission;
+
+  const openFleetRoot = () => {
+    setSelectedSection('Корабли');
+    setConstructionView(null);
+    setStatus(FLEET_ROOT_STATUS);
+  };
+
+  useEffect(() => {
+    const onRootRequest = () => openFleetRoot();
+    window.addEventListener(FLEET_ROOT_REQUEST_EVENT, onRootRequest);
+    return () => window.removeEventListener(FLEET_ROOT_REQUEST_EVENT, onRootRequest);
+  }, []);
 
   const chooseSection = (section: FleetSection) => {
     setSelectedSection(section);
@@ -134,8 +149,8 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
     }
 
     setConstructionView(null);
-    if (section !== 'Боевой приоритет') {
-      setStatus(`Раздел «${section}» пока сохранён как навигационный каркас.`);
+    if (section === 'Симулятор') {
+      setStatus('Раздел «Симулятор» намеренно оставлен вне PR #30.');
     }
   };
 
@@ -145,10 +160,12 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
   };
 
   const closeConstructionView = () => setConstructionView(null);
-  const closeCombatPriority = () => {
-    setSelectedSection('Корабли');
-    setConstructionView(null);
-  };
+
+  const mainClassName = [
+    'fleet-main-v1',
+    constructionView ? 'fleet-main-v1--shipyard' : '',
+    selectedSection === 'Битвы' ? 'fleet-main-v1--battles' : '',
+  ].filter(Boolean).join(' ');
 
   return (
     <div className="fleet-workspace-v1">
@@ -171,13 +188,15 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
         <FleetMenuGroup title="УПРАВЛЕНИЕ ФЛОТОМ" items={managementSections} selected={selectedSection} onSelect={chooseSection} />
       </aside>
 
-      <main className={`fleet-main-v1 ${constructionView ? 'fleet-main-v1--shipyard' : ''}`}>
+      <main className={mainClassName}>
         {constructionView === 'ships' ? (
           <ShipyardView planetName={planetName} coords={coords} onBack={closeConstructionView} />
         ) : constructionView === 'defense' || constructionView === 'commander' ? (
           <ConstructionCatalogView mode={constructionView} planetName={planetName} coords={coords} onBack={closeConstructionView} />
         ) : selectedSection === 'Боевой приоритет' ? (
-          <FleetCombatPriorityView planetName={planetName} coords={coords} onBack={closeCombatPriority} />
+          <FleetCombatPriorityView planetName={planetName} coords={coords} onBack={openFleetRoot} />
+        ) : selectedSection === 'Битвы' ? (
+          <BattleReportsView planetName={planetName} coords={coords} onBack={openFleetRoot} />
         ) : (
           <>
             <section className="fleet-panel-v1 fleet-flights-v1">
