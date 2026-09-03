@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { FleetWorkspacePortal } from './FleetWorkspacePortal';
+import { FleetRootNavigationController } from './FleetRootNavigationController';
 import { RepairWorkshopPortal } from './RepairWorkshopPortal';
 import { ShipInfoController } from './ShipInfoController';
 import { DefenseInfoController } from './DefenseInfoController';
@@ -46,6 +47,7 @@ if (!isElectron) {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
+    <FleetRootNavigationController />
     <FleetWorkspacePortal />
     <RepairWorkshopPortal />
     <ShipInfoController />
