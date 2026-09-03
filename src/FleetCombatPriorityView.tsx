@@ -11,6 +11,7 @@ import {
   type CombatPriorityState,
 } from './domain/combat/priority.ts';
 import './fleet-combat-priority.css';
+import './fleet-combat-priority-scroll.css';
 
 type PrioritySide = keyof CombatPriorityState;
 type SaveState = { kind: 'saved'; message: string } | { kind: 'error'; message: string };
@@ -175,7 +176,7 @@ export function FleetCombatPriorityView({
         </div>
         <div className="combat-priority-page-actions-v1">
           <span className={`combat-priority-save-v1 ${saveState.kind}`} role="status" aria-live="polite">{saveState.message}</span>
-          <button type="button" onClick={onBack}>← К ФЛОТАМ</button>
+          <button className="combat-priority-back-v1" type="button" onClick={onBack}>← К ФЛОТАМ</button>
         </div>
       </header>
 
