@@ -25,6 +25,18 @@ export type BattleStackSnapshot = {
   shield?: number;
 };
 
+type ShieldTransition =
+  | { shieldBefore: number; shieldAfter: number }
+  | { shieldBefore?: never; shieldAfter?: never };
+
+type ArmorTransition =
+  | { armorBefore: number; armorAfter: number }
+  | { armorBefore?: never; armorAfter?: never };
+
+type LifeTransition =
+  | { lifeBefore: number; lifeAfter: number }
+  | { lifeBefore?: never; lifeAfter?: never };
+
 export type CombatEvent = {
   sequence: number;
   actorSide: BattleSide;
@@ -36,16 +48,10 @@ export type CombatEvent = {
   targetCount?: number;
   attackValue?: number;
   damage?: number;
-  shieldBefore?: number;
-  shieldAfter?: number;
-  armorBefore?: number;
-  armorAfter?: number;
-  lifeBefore?: number;
-  lifeAfter?: number;
   destroyedCount?: number;
   commanderAbilityId?: CommanderId;
   note?: string;
-};
+} & ShieldTransition & ArmorTransition & LifeTransition;
 
 export type CombatRoundSnapshot = {
   stacks: BattleStackSnapshot[];
