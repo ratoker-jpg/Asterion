@@ -5,6 +5,7 @@ import { COMMANDER_COMBAT_CATALOG } from './domain/combat/catalog.ts';
 import {
   moveCommanderBefore,
   moveCommanderByOffset,
+  moveCommanderToEnd,
   persistCombatPriority,
   readCombatPriority,
   type CombatPriorityState,
@@ -51,8 +52,16 @@ function PriorityList({
 
   const dropBefore = (event: DragEvent<HTMLElement>, beforeCommanderId: CommanderId) => {
     event.preventDefault();
+    event.stopPropagation();
     if (!dragState || dragState.side !== side) return;
     onReorder(side, moveCommanderBefore(order, dragState.commanderId, beforeCommanderId));
+    onDragState(null);
+  };
+
+  const dropAtEnd = (event: DragEvent<HTMLOListElement>) => {
+    event.preventDefault();
+    if (!dragState || dragState.side !== side) return;
+    onReorder(side, moveCommanderToEnd(order, dragState.commanderId));
     onDragState(null);
   };
 
@@ -64,7 +73,15 @@ function PriorityList({
         <b>{order.length}</b>
       </header>
 
-      <ol className="combat-priority-list-v1">
+      <ol
+        className="combat-priority-list-v1"
+        onDragOver={(event) => {
+          if (dragState?.side !== side) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+        }}
+        onDrop={dropAtEnd}
+      >
         {order.map((commanderId, index) => {
           const commander = commanderById.get(commanderId);
           const ability = COMMANDER_ABILITIES[commanderId];
