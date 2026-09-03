@@ -44,7 +44,6 @@ migrateFleetPopulation();
 type FleetSection =
   | 'Корабли'
   | 'Оборона'
-  | 'Боевые корабли'
   | 'Командирские корабли'
   | 'Ремонтная мастерская'
   | 'Боевой приоритет'
@@ -73,7 +72,6 @@ type ConstructionView = 'ships' | ConstructionCatalogMode | null;
 const constructionSections: FleetSection[] = [
   'Корабли',
   'Оборона',
-  'Боевые корабли',
   'Командирские корабли',
   'Ремонтная мастерская',
 ];
