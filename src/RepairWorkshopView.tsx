@@ -1,10 +1,7 @@
 import { useMemo, useState } from 'react';
 
-import scoutArt from '../assets/source/New assets/ship/aegis/ship.aegis.scout.png';
-import cruiserArt from '../assets/source/New assets/ship/aegis/ship.aegis.cruiser.png';
-import battleshipArt from '../assets/source/New assets/ship/aegis/ship.aegis.battleship.png';
-import ballisticTurretArt from '../assets/source/New assets/defenses/aegis/defense.aegis.ballistic-turret.png';
-import laserTurretArt from '../assets/source/New assets/defenses/aegis/defense.aegis.laser-turret.png';
+import { getCombatEntity } from './domain/combat/catalog.ts';
+import type { DefenseId, ShipId } from './domain/combat/ids.ts';
 import './repair-workshop.css';
 import './repair-workshop-feedback-v2.css';
 
@@ -15,7 +12,7 @@ type ResourceKind = 'metal' | 'minerals' | 'gas' | 'population';
 type RepairCost = Record<ResourceKind, number>;
 
 type RepairUnit = {
-  id: string;
+  id: ShipId | DefenseId;
   category: RepairCategory;
   name: string;
   role: string;
@@ -26,64 +23,33 @@ type RepairUnit = {
   tokenCost: number;
 };
 
-// Until battle resolution is connected, these casualties are a deterministic preview pool.
-const repairUnits: RepairUnit[] = [
-  {
-    id: 'scout',
-    category: 'ship',
-    name: 'Скаут',
-    role: 'Лёгкий боевой разведчик',
-    art: scoutArt,
-    destroyed: 4,
-    initialSelected: 2,
-    repairCost: { metal: 2_400, minerals: 1_600, gas: 0, population: 2 },
-    tokenCost: 1,
-  },
-  {
-    id: 'battleship',
-    category: 'ship',
-    name: 'Линкор',
-    role: 'Тяжёлый боевой корабль',
-    art: battleshipArt,
-    destroyed: 6,
-    initialSelected: 3,
-    repairCost: { metal: 49_400, minerals: 21_200, gas: 0, population: 15 },
-    tokenCost: 1,
-  },
-  {
-    id: 'cruiser',
-    category: 'ship',
-    name: 'Крейсер',
-    role: 'Боевой крейсер',
-    art: cruiserArt,
-    destroyed: 14,
-    initialSelected: 4,
-    repairCost: { metal: 10_200, minerals: 8_400, gas: 0, population: 7 },
-    tokenCost: 1,
-  },
-  {
-    id: 'ballistic-turret',
-    category: 'defense',
-    name: 'Баллистическая турель',
-    role: 'Базовая оборонная установка',
-    art: ballisticTurretArt,
-    destroyed: 8,
-    initialSelected: 4,
-    repairCost: { metal: 2_500, minerals: 1_000, gas: 0, population: 1 },
-    tokenCost: 1,
-  },
-  {
-    id: 'laser-turret',
-    category: 'defense',
-    name: 'Лазерная турель',
-    role: 'Лазерная оборонная установка',
-    art: laserTurretArt,
-    destroyed: 4,
-    initialSelected: 2,
-    repairCost: { metal: 2_000, minerals: 2_500, gas: 0, population: 1 },
-    tokenCost: 1,
-  },
+type RepairPreviewDefinition = Pick<RepairUnit, 'id' | 'destroyed' | 'initialSelected' | 'tokenCost'>;
+
+// Until battle resolution is connected, only casualty counts remain deterministic preview data.
+// Immutable unit identity, visuals and resource costs come from the shared combat catalog.
+const repairPreview: readonly RepairPreviewDefinition[] = [
+  { id: 'scout', destroyed: 4, initialSelected: 2, tokenCost: 1 },
+  { id: 'battleship', destroyed: 6, initialSelected: 3, tokenCost: 1 },
+  { id: 'cruiser', destroyed: 14, initialSelected: 4, tokenCost: 1 },
+  { id: 'ballistic-turret', destroyed: 8, initialSelected: 4, tokenCost: 1 },
+  { id: 'laser-turret', destroyed: 4, initialSelected: 2, tokenCost: 1 },
 ];
+
+const repairUnits: RepairUnit[] = repairPreview.map((preview) => {
+  const entity = getCombatEntity(preview.id);
+  if (entity.kind === 'commander') throw new Error(`Commander ${entity.id} cannot enter repair workshop`);
+  return {
+    ...preview,
+    category: entity.kind,
+    name: entity.name,
+    role: entity.role,
+    art: entity.art,
+    repairCost: {
+      ...entity.cost,
+      population: entity.population,
+    },
+  };
+});
 
 const formatNumber = (value: number) => new Intl.NumberFormat('ru-RU').format(value);
 const recoverableFromDestroyed = (destroyed: number) => Math.round(Math.max(0, destroyed) * 0.5);
