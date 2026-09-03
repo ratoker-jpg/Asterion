@@ -22,6 +22,9 @@ type DragState = {
 } | null;
 
 const commanderById = new Map(COMMANDER_COMBAT_CATALOG.map((commander) => [commander.id, commander]));
+const WORKSPACE_TOP = 246;
+const WORKSPACE_BOTTOM_GAP = 58;
+const FLEET_VERTICAL_PADDING = 52;
 
 function PriorityList({
   side,
@@ -147,10 +150,63 @@ export function FleetCombatPriorityView({
   const [saveState, setSaveState] = useState<SaveState>({ kind: 'saved', message: '✓ Сохранено' });
 
   useEffect(() => {
-    document.documentElement.classList.add('asterion-long-page', 'asterion-combat-priority-page');
+    const root = document.documentElement;
+    let resizeObserver: ResizeObserver | null = null;
+
+    const syncPageGeometry = () => {
+      const view = document.querySelector<HTMLElement>('.combat-priority-view-v1');
+      if (!view) return;
+
+      const contentHeight = Math.ceil(view.scrollHeight);
+      const workspaceHeight = contentHeight + FLEET_VERTICAL_PADDING;
+      const stageHeight = WORKSPACE_TOP + workspaceHeight + WORKSPACE_BOTTOM_GAP;
+      const rawScale = Number.parseFloat(getComputedStyle(root).getPropertyValue('--web-stage-scale'));
+      const previewScale = root.classList.contains('web-preview') && Number.isFinite(rawScale) ? rawScale : 1;
+
+      root.style.setProperty('--combat-priority-workspace-height', `${workspaceHeight}px`);
+      root.style.setProperty('--combat-priority-stage-height', `${stageHeight}px`);
+      root.style.setProperty('--combat-priority-viewport-height', `${Math.ceil(stageHeight * previewScale)}px`);
+    };
+
+    const activateLongPage = () => {
+      root.classList.add('asterion-long-page', 'asterion-combat-priority-page');
+      syncPageGeometry();
+    };
+
+    activateLongPage();
     window.scrollTo(0, 0);
+
+    // Re-apply after sibling page cleanup effects. This avoids losing scrolling when the user
+    // switches directly from Ships / Defense / Commander Ships / Repair Workshop to Priority.
+    const delayedActivation = window.setTimeout(activateLongPage, 0);
+    const geometryFrame = window.requestAnimationFrame(() => {
+      syncPageGeometry();
+      const view = document.querySelector<HTMLElement>('.combat-priority-view-v1');
+      if (view && typeof ResizeObserver !== 'undefined') {
+        resizeObserver = new ResizeObserver(syncPageGeometry);
+        resizeObserver.observe(view);
+      }
+    });
+
+    window.addEventListener('resize', syncPageGeometry);
+
     return () => {
-      document.documentElement.classList.remove('asterion-long-page', 'asterion-combat-priority-page');
+      window.clearTimeout(delayedActivation);
+      window.cancelAnimationFrame(geometryFrame);
+      window.removeEventListener('resize', syncPageGeometry);
+      resizeObserver?.disconnect();
+
+      root.classList.remove('asterion-combat-priority-page');
+      root.style.removeProperty('--combat-priority-workspace-height');
+      root.style.removeProperty('--combat-priority-stage-height');
+      root.style.removeProperty('--combat-priority-viewport-height');
+
+      // Defer generic long-page cleanup so a destination section can claim it first.
+      window.requestAnimationFrame(() => {
+        const destinationNeedsLongPage = Boolean(document.querySelector('.shipyard-view-v1, .repair-workshop-v1, .combat-priority-view-v1'))
+          || root.classList.contains('asterion-repair-page');
+        if (!destinationNeedsLongPage) root.classList.remove('asterion-long-page');
+      });
       window.scrollTo(0, 0);
     };
   }, []);
