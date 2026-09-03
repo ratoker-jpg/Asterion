@@ -26,6 +26,15 @@ function findFleetSectionButton(label: string) {
   );
 }
 
+function activeFleetSection() {
+  return normalizeText(document.querySelector('.fleet-menu-group-v1 button.active strong')?.textContent);
+}
+
+function destinationNeedsLongPage() {
+  return ['Корабли', 'Оборона', 'Командирские корабли'].includes(activeFleetSection())
+    || Boolean(document.querySelector('.shipyard-view-v1'));
+}
+
 function openFleetRoot() {
   const shipsButton = findFleetSectionButton('Корабли');
   if (!shipsButton) return;
@@ -85,7 +94,13 @@ export function RepairWorkshopPortal() {
 
     return () => {
       document.removeEventListener('click', handlePrimaryNavigation, true);
-      document.documentElement.classList.remove('asterion-repair-page', 'asterion-long-page');
+      document.documentElement.classList.remove('asterion-repair-page');
+
+      // Shipyard/defense/commander screens use the same long-page class for page scrolling.
+      // Do not remove it during the transition, otherwise the destination loses its scrollbar.
+      if (!destinationNeedsLongPage()) {
+        document.documentElement.classList.remove('asterion-long-page');
+      }
       window.scrollTo(0, 0);
     };
   }, [active, target]);
