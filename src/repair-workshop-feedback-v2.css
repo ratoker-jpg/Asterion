@@ -1,12 +1,13 @@
 /* Repair workshop feedback pass: keep the help panel above content and make summary values resource-oriented. */
 
-/* The workshop must use the exact same workspace background as Ships / Defense / Commander Ships. */
+/* Match the same translucent fleet substrate used by the other fleet sections. */
 html.asterion-repair-page .fleet-workspace-v1 {
   background:
-    radial-gradient(circle at 72% 14%, rgba(18, 119, 160, .09), transparent 30%),
-    linear-gradient(180deg, #031019 0%, #01080e 72%, #01060b 100%) !important;
+    radial-gradient(circle at 74% 18%, rgba(19, 128, 174, .06), transparent 28%),
+    linear-gradient(180deg, rgba(1, 10, 17, .38), rgba(1, 7, 12, .74)) !important;
 }
 
+/* Keep the help tooltip available without changing the catalog-style header silhouette. */
 html.asterion-repair-page .repair-page-head-v1 {
   position: relative;
   z-index: 30;
@@ -14,10 +15,30 @@ html.asterion-repair-page .repair-page-head-v1 {
   clip-path: none;
 }
 
+html.asterion-repair-page .repair-page-head-v1::after {
+  content: '';
+  position: absolute;
+  z-index: 31;
+  top: -2px;
+  right: -1px;
+  width: 23px;
+  height: 23px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 74% 18%, rgba(19, 128, 174, .06), transparent 28%),
+    linear-gradient(180deg, rgba(1, 10, 17, .38), rgba(1, 7, 12, .74));
+  clip-path: polygon(100% 0, 100% 100%, 0 0);
+}
+
 html.asterion-repair-page .repair-head-actions-v1,
 html.asterion-repair-page .repair-help-v1 {
   position: relative;
   z-index: 32;
+}
+
+html.asterion-repair-page .repair-back-v1 {
+  min-width: 124px;
+  background: rgba(3, 31, 43, .92);
 }
 
 html.asterion-repair-page .repair-help-popover-v1 {
