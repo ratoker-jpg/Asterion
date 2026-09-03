@@ -1,0 +1,9 @@
+/* Combat priority uses the same document-level long-page scrolling model as the shipyard.
+   The Fleet main area must leave its normal two-row dashboard grid while this page is open,
+   otherwise the commander lists overflow the first 252px grid row. */
+html.asterion-long-page.asterion-combat-priority-page .fleet-main-v1 {
+  display: block;
+  min-height: 0;
+  overflow: visible;
+  isolation: isolate;
+}
