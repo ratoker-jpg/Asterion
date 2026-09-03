@@ -11,6 +11,12 @@ function returnToFleetRoot() {
     return;
   }
 
+  const priorityBack = document.querySelector<HTMLButtonElement>('.combat-priority-back-v1');
+  if (priorityBack) {
+    priorityBack.click();
+    return;
+  }
+
   const catalogBack = document.querySelector<HTMLButtonElement>('.shipyard-page-head-v1 > button');
   catalogBack?.click();
 }
@@ -24,8 +30,8 @@ export function FleetRootNavigationController() {
       if (normalizeText(button.querySelector('span')?.textContent) !== 'Флоты') return;
 
       // The top-level Fleet tab is the global home action for the whole Fleet module.
-      // When already inside Ships / Defense / Commander Ships / Repair Workshop,
-      // use the active subpage's own back action so FleetWorkspace remains the source of truth.
+      // When already inside a Fleet subpage, use that page's own back action so
+      // FleetWorkspace remains the source of truth for returning to the Fleet root.
       window.setTimeout(returnToFleetRoot, 0);
     };
 

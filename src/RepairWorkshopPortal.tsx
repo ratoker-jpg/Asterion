@@ -31,8 +31,8 @@ function activeFleetSection() {
 }
 
 function destinationNeedsLongPage() {
-  return ['Корабли', 'Оборона', 'Командирские корабли'].includes(activeFleetSection())
-    || Boolean(document.querySelector('.shipyard-view-v1'));
+  return ['Корабли', 'Оборона', 'Командирские корабли', 'Боевой приоритет'].includes(activeFleetSection())
+    || Boolean(document.querySelector('.shipyard-view-v1, .combat-priority-view-v1'));
 }
 
 function openFleetRoot() {
@@ -83,8 +83,8 @@ export function RepairWorkshopPortal() {
     return () => {
       document.documentElement.classList.remove('asterion-repair-page');
 
-      // Shipyard/defense/commander screens use the same long-page class for page scrolling.
-      // Do not remove it during the transition, otherwise the destination loses its scrollbar.
+      // Ships, defense, commander construction and combat priority all use the same
+      // document-level long-page class. Preserve it during direct Fleet section transitions.
       if (!destinationNeedsLongPage()) {
         document.documentElement.classList.remove('asterion-long-page');
       }
