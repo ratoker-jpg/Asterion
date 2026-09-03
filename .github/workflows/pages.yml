@@ -4,37 +4,73 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    types: [opened, synchronize, reopened, edited, closed]
   workflow_dispatch:
 
 permissions:
   contents: read
+  pull-requests: read
   pages: write
   id-token: write
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     environment:
-      name: github-pages
+      name: ${{ github.event_name == 'pull_request' && 'github-pages-preview' || 'github-pages' }}
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Checkout
+      - name: Checkout main
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
 
-      - name: Install dependencies
+      - name: Install main dependencies
         run: npm install
 
-      - name: Build web preview
+      - name: Build main site
         run: npm run build
+
+      - name: Prepare Pages tree
+        shell: bash
+        run: |
+          rm -rf "${RUNNER_TEMP}/pages-site"
+          mkdir -p "${RUNNER_TEMP}/pages-site"
+          cp -a dist/. "${RUNNER_TEMP}/pages-site/"
+
+      - name: Checkout pull request head
+        if: github.event_name == 'pull_request' && github.event.action != 'closed'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          clean: true
+
+      - name: Install pull request dependencies
+        if: github.event_name == 'pull_request' && github.event.action != 'closed'
+        run: npm install
+
+      - name: Build pull request preview
+        if: github.event_name == 'pull_request' && github.event.action != 'closed'
+        run: npm run build
+
+      - name: Add pull request preview to Pages tree
+        if: github.event_name == 'pull_request' && github.event.action != 'closed'
+        shell: bash
+        run: |
+          PREVIEW_DIR="${RUNNER_TEMP}/pages-site/pr/${{ github.event.pull_request.number }}"
+          mkdir -p "${PREVIEW_DIR}"
+          cp -a dist/. "${PREVIEW_DIR}/"
+          printf '%s\n' '${{ github.event.pull_request.head.sha }}' > "${PREVIEW_DIR}/preview-sha.txt"
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -42,7 +78,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./dist
+          path: ${{ runner.temp }}/pages-site
 
       - name: Deploy to GitHub Pages
         id: deployment
