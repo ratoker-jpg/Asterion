@@ -1,0 +1,75 @@
+/* Repair workshop follows the same full-page scrolling model as ships/defense.
+   Only page height differs here. Background/substrate is inherited from the shared fleet long-page styles. */
+
+html.asterion-long-page.asterion-repair-page .viewport {
+  height: 1840px !important;
+  min-height: 1840px !important;
+}
+
+html.asterion-long-page.asterion-repair-page .stage {
+  height: 1840px !important;
+}
+
+html.asterion-long-page.asterion-repair-page .workspace {
+  height: 1535px !important;
+}
+
+html.asterion-long-page.asterion-repair-page .fleet-workspace-v1 {
+  min-height: 1535px !important;
+}
+
+html.asterion-long-page.asterion-repair-page .repair-workshop-v1 {
+  min-height: 1470px;
+}
+
+/* Match the catalog header silhouette without clipping the help tooltip.
+   The header itself stays transparent; two clipped layers draw the frame and fill. */
+html.asterion-repair-page .repair-page-head-v1 {
+  min-height: 82px;
+  padding: 10px 18px 13px;
+  border: 0 !important;
+  background: transparent !important;
+  clip-path: none !important;
+  isolation: isolate;
+}
+
+html.asterion-repair-page .repair-page-head-v1::before,
+html.asterion-repair-page .repair-page-head-v1::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+}
+
+html.asterion-repair-page .repair-page-head-v1::before {
+  z-index: 0;
+  inset: 0;
+  background: rgba(65, 205, 242, .24);
+  clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 0 100%);
+}
+
+html.asterion-repair-page .repair-page-head-v1::after {
+  z-index: 0;
+  top: 2px;
+  right: 1px;
+  bottom: 1px;
+  left: 1px;
+  width: auto;
+  height: auto;
+  background: linear-gradient(180deg, rgba(6, 38, 53, .98), rgba(3, 20, 31, .99));
+  clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 0 100%);
+}
+
+html.asterion-repair-page .repair-page-head-v1 > * {
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 1280px) {
+  .repair-summary-v1 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .repair-grid-v1 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

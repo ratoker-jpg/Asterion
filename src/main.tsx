@@ -2,6 +2,8 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { FleetWorkspacePortal } from './FleetWorkspacePortal';
+import { FleetRootNavigationController } from './FleetRootNavigationController';
+import { RepairWorkshopPortal } from './RepairWorkshopPortal';
 import { ShipInfoController } from './ShipInfoController';
 import { DefenseInfoController } from './DefenseInfoController';
 import './styles.css';
@@ -16,6 +18,7 @@ import './web-preview.css';
 import './shipyard-workspace.css';
 import './shipyard-tooltip-overflow.css';
 import './fleet-root-active-fix.css';
+import './repair-workshop-fixed-layout.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
 
@@ -44,7 +47,9 @@ if (!isElectron) {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
+    <FleetRootNavigationController />
     <FleetWorkspacePortal />
+    <RepairWorkshopPortal />
     <ShipInfoController />
     <DefenseInfoController />
   </StrictMode>,

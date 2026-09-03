@@ -13,3 +13,10 @@
   button:first-of-type.active:hover {
   box-shadow: none;
 }
+
+/* The App-level module placeholder used to remain behind the fleet portal and bleed
+   through translucent fleet panels as the large ghost label “ФЛОТЫ”. Once the
+   real fleet workspace is mounted, the placeholder must not render visually. */
+.workspace:has(.fleet-workspace-v1) > .module-placeholder-v3 {
+  display: none !important;
+}
