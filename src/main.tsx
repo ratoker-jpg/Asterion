@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { FleetWorkspacePortal } from './FleetWorkspacePortal';
+import { ShipInfoController } from './ShipInfoController';
 import './styles.css';
 import './universe-nav.css';
 import './universe-polish-v2.css';
@@ -42,5 +43,6 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
     <FleetWorkspacePortal />
+    <ShipInfoController />
   </StrictMode>,
 );
