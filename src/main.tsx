@@ -2,6 +2,8 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { FleetWorkspacePortal } from './FleetWorkspacePortal';
+import { ShipInfoController } from './ShipInfoController';
+import { DefenseInfoController } from './DefenseInfoController';
 import './styles.css';
 import './universe-nav.css';
 import './universe-polish-v2.css';
@@ -13,6 +15,7 @@ import './asterion-header.css';
 import './web-preview.css';
 import './shipyard-workspace.css';
 import './shipyard-tooltip-overflow.css';
+import './fleet-root-active-fix.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
 
@@ -42,5 +45,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
     <FleetWorkspacePortal />
+    <ShipInfoController />
+    <DefenseInfoController />
   </StrictMode>,
 );

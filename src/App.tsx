@@ -88,11 +88,11 @@ type PlanetDefinition = {
   id: PlanetId;
   coords: string;
   status: 'Основная планета';
-  faction: 'Aegis';
+  faction: 'Астеры';
 };
 
 const ownedPlanets: PlanetDefinition[] = [
-  { id: 'helion-01', coords: '[1:1:1]', status: 'Основная планета', faction: 'Aegis' },
+  { id: 'helion-01', coords: '[1:1:1]', status: 'Основная планета', faction: 'Астеры' },
 ];
 
 const SAVE_KEY = 'asterion.vertical-slice.v1';
@@ -566,7 +566,7 @@ export function App() {
                 <div className="scene-title scene-title-v3">
                   <small>{zoneInfo.title}</small>
                   <h1>{currentPlanetName.toUpperCase()}</h1>
-                  <p>{currentPlanet.coords} • AEGIS HOMEWORLD</p>
+                  <p>{currentPlanet.coords} • РОДНОЙ МИР АСТЕРОВ</p>
                 </div>
                 <div className="planet-stage-v3">
                   <div className="planet-atmosphere" />

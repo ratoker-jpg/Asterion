@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import scoutArt from '../assets/source/New assets/ship/aegis/ship.aegis.scout.png';
+import { ConstructionCatalogView, type ConstructionCatalogMode } from './ConstructionCatalogView';
 import { ShipyardView } from './ShipyardView';
 import './fleet-workspace.css';
 
@@ -43,8 +44,7 @@ migrateFleetPopulation();
 type FleetSection =
   | 'Корабли'
   | 'Оборона'
-  | 'Боевые корабли'
-  | 'Командирский корабль'
+  | 'Командирские корабли'
   | 'Ремонтная мастерская'
   | 'Боевой приоритет'
   | 'Битвы'
@@ -67,11 +67,12 @@ type MissionDefinition = {
   description: string;
 };
 
+type ConstructionView = 'ships' | ConstructionCatalogMode | null;
+
 const constructionSections: FleetSection[] = [
   'Корабли',
   'Оборона',
-  'Боевые корабли',
-  'Командирский корабль',
+  'Командирские корабли',
   'Ремонтная мастерская',
 ];
 
@@ -108,7 +109,7 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
   const [missionId, setMissionId] = useState<MissionId>('transport');
   const [hoveredMissionId, setHoveredMissionId] = useState<MissionId | null>(null);
   const [selectedSection, setSelectedSection] = useState<FleetSection>('Корабли');
-  const [shipyardOpen, setShipyardOpen] = useState(false);
+  const [constructionView, setConstructionView] = useState<ConstructionView>(null);
   const [status, setStatus] = useState('Выберите корабли и миссию. Отправка флота будет подключена следующим этапом.');
 
   const selectedPopulation = useMemo(() => quantity * SCOUT_POPULATION, [quantity]);
@@ -117,10 +118,22 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
 
   const chooseSection = (section: FleetSection) => {
     setSelectedSection(section);
-    setShipyardOpen(section === 'Корабли');
-    if (section !== 'Корабли') {
-      setStatus(`Раздел «${section}» пока сохранён как навигационный каркас.`);
+
+    if (section === 'Корабли') {
+      setConstructionView('ships');
+      return;
     }
+    if (section === 'Оборона') {
+      setConstructionView('defense');
+      return;
+    }
+    if (section === 'Командирские корабли') {
+      setConstructionView('commander');
+      return;
+    }
+
+    setConstructionView(null);
+    setStatus(`Раздел «${section}» пока сохранён как навигационный каркас.`);
   };
 
   const setScoutQuantity = (raw: number) => {
@@ -128,12 +141,14 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
     setQuantity(next);
   };
 
+  const closeConstructionView = () => setConstructionView(null);
+
   return (
     <div className="fleet-workspace-v1">
       <aside className="fleet-sidebar-v1">
         <div className="fleet-sidebar-title-v1">
           <span>ФЛОТЫ</span>
-          <small>AEGIS FLEET CONTROL</small>
+          <small>ФЛОТ АСТЕРОВ</small>
         </div>
 
         <div className="fleet-yard-card-v1">
@@ -149,9 +164,11 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
         <FleetMenuGroup title="УПРАВЛЕНИЕ ФЛОТОМ" items={managementSections} selected={selectedSection} onSelect={chooseSection} />
       </aside>
 
-      <main className={`fleet-main-v1 ${shipyardOpen ? 'fleet-main-v1--shipyard' : ''}`}>
-        {shipyardOpen ? (
-          <ShipyardView planetName={planetName} coords={coords} onBack={() => setShipyardOpen(false)} />
+      <main className={`fleet-main-v1 ${constructionView ? 'fleet-main-v1--shipyard' : ''}`}>
+        {constructionView === 'ships' ? (
+          <ShipyardView planetName={planetName} coords={coords} onBack={closeConstructionView} />
+        ) : constructionView === 'defense' || constructionView === 'commander' ? (
+          <ConstructionCatalogView mode={constructionView} planetName={planetName} coords={coords} onBack={closeConstructionView} />
         ) : (
           <>
             <section className="fleet-panel-v1 fleet-flights-v1">
@@ -184,10 +201,10 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
               </header>
 
               <div className="fleet-ship-line-v1">
-                <div className="fleet-ship-art-v1"><img src={scoutArt} alt="Скаут Вектор" draggable={false} /></div>
+                <div className="fleet-ship-art-v1"><img src={scoutArt} alt="Скаут" draggable={false} /></div>
                 <div className="fleet-ship-info-v1">
                   <small>ЛЁГКИЙ БОЕВОЙ РАЗВЕДЧИК</small>
-                  <h3>Скаут «Вектор»</h3>
+                  <h3>Скаут</h3>
                   <div className="fleet-ship-meta-v1"><span>В наличии <b>{SCOUT_AVAILABLE}</b></span><span>Население / ед. <b>{SCOUT_POPULATION}</b></span></div>
                 </div>
                 <div className="fleet-quantity-v1">
@@ -243,7 +260,7 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
 
               <footer className="fleet-compose-footer-v1">
                 <span>{status}</span>
-                <button type="button" disabled={quantity === 0} onClick={() => setStatus(`${quantity} × Скаут «Вектор» подготовлены. Выбрано населения: ${selectedPopulation}. Миссия: ${selectedMission.label}.`)}>ПРОДОЛЖИТЬ</button>
+                <button type="button" disabled={quantity === 0} onClick={() => setStatus(`${quantity} × Скаут подготовлены. Выбрано населения: ${selectedPopulation}. Миссия: ${selectedMission.label}.`)}>ПРОДОЛЖИТЬ</button>
               </footer>
             </section>
           </>
