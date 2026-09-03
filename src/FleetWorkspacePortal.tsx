@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import scoutArt from '../assets/source/New assets/ship/aegis/ship.aegis.scout.png';
 import { ConstructionCatalogView, type ConstructionCatalogMode } from './ConstructionCatalogView';
+import { FleetCombatPriorityView } from './FleetCombatPriorityView';
 import { ShipyardView } from './ShipyardView';
 import './fleet-workspace.css';
 
@@ -133,7 +134,9 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
     }
 
     setConstructionView(null);
-    setStatus(`Раздел «${section}» пока сохранён как навигационный каркас.`);
+    if (section !== 'Боевой приоритет') {
+      setStatus(`Раздел «${section}» пока сохранён как навигационный каркас.`);
+    }
   };
 
   const setScoutQuantity = (raw: number) => {
@@ -142,6 +145,10 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
   };
 
   const closeConstructionView = () => setConstructionView(null);
+  const closeCombatPriority = () => {
+    setSelectedSection('Корабли');
+    setConstructionView(null);
+  };
 
   return (
     <div className="fleet-workspace-v1">
@@ -169,6 +176,8 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
           <ShipyardView planetName={planetName} coords={coords} onBack={closeConstructionView} />
         ) : constructionView === 'defense' || constructionView === 'commander' ? (
           <ConstructionCatalogView mode={constructionView} planetName={planetName} coords={coords} onBack={closeConstructionView} />
+        ) : selectedSection === 'Боевой приоритет' ? (
+          <FleetCombatPriorityView planetName={planetName} coords={coords} onBack={closeCombatPriority} />
         ) : (
           <>
             <section className="fleet-panel-v1 fleet-flights-v1">
