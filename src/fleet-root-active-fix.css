@@ -1,0 +1,15 @@
+.fleet-workspace-v1:has(> .fleet-main-v1:not(.fleet-main-v1--shipyard))
+  > .fleet-sidebar-v1
+  .fleet-menu-group-v1:first-of-type
+  button:first-of-type.active:not(:hover) {
+  color: #8bc4d8;
+  background: transparent;
+  box-shadow: none;
+}
+
+.fleet-workspace-v1:has(> .fleet-main-v1:not(.fleet-main-v1--shipyard))
+  > .fleet-sidebar-v1
+  .fleet-menu-group-v1:first-of-type
+  button:first-of-type.active:hover {
+  box-shadow: none;
+}
