@@ -3,6 +3,12 @@ import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
 import {
+  BATTLE_HISTORY_CHANGED_EVENT,
+  createDefaultBattleHistory,
+  migrateBattleHistory,
+  type BattleHistoryState,
+} from './domain/combat/battle-repository.ts';
+import {
   COMBAT_PRIORITY_CHANGED_EVENT,
   COMBAT_SAVE_SCHEMA_VERSION,
   createDefaultCombatPriority,
@@ -91,6 +97,7 @@ type SaveState = {
   planets: Record<PlanetId, PlanetRuntime>;
   queues: Record<PlanetId, QueueItem | null>;
   combatPriority: CombatPriorityState;
+  combat: BattleHistoryState;
 };
 
 type PlanetDefinition = {
@@ -130,6 +137,7 @@ const initialState: SaveState = {
     'helion-01': null,
   },
   combatPriority: createDefaultCombatPriority(),
+  combat: createDefaultBattleHistory(),
 };
 
 const primaryTabs: ReadonlyArray<{ label: string; icon: NavigationIconKind }> = [
@@ -202,6 +210,7 @@ function readSave(): SaveState {
       planets: { 'helion-01': homeworld },
       queues: { 'helion-01': queue },
       combatPriority: migrateCombatPriority(parsed.combatPriority),
+      combat: migrateBattleHistory(parsed.combat),
     };
   } catch {
     return initialState;
@@ -332,6 +341,19 @@ export function App() {
 
     window.addEventListener(COMBAT_PRIORITY_CHANGED_EVENT, onCombatPriorityChanged);
     return () => window.removeEventListener(COMBAT_PRIORITY_CHANGED_EVENT, onCombatPriorityChanged);
+  }, []);
+  useEffect(() => {
+    const onBattleHistoryChanged = (event: Event) => {
+      const history = (event as CustomEvent<BattleHistoryState>).detail;
+      setState((current) => ({
+        ...current,
+        schemaVersion: COMBAT_SAVE_SCHEMA_VERSION,
+        combat: migrateBattleHistory(history),
+      }));
+    };
+
+    window.addEventListener(BATTLE_HISTORY_CHANGED_EVENT, onBattleHistoryChanged);
+    return () => window.removeEventListener(BATTLE_HISTORY_CHANGED_EVENT, onBattleHistoryChanged);
   }, []);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
