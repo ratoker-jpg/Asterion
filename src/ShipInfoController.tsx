@@ -45,6 +45,7 @@ import veyraLaserIonDefenseArt from '../assets/source/New assets/defenses/veyra/
 import veyraPlasmaLaserDefenseArt from '../assets/source/New assets/defenses/veyra/defense.veyra.plasma-laser-turret.png';
 import veyraIonPlasmaDefenseArt from '../assets/source/New assets/defenses/veyra/defense.veyra.ion-plasma-turret.png';
 
+import { COMMANDER_ABILITIES, COMMANDER_IDS } from './domain/combat/commanders.ts';
 import './ship-info-modal.css';
 
 type ShipInfoKind = 'ship' | 'commander';
@@ -152,43 +153,43 @@ const planetDestroyerTargets: ShipTarget[] = [
 ];
 
 const ballisticDefenses: ShipTarget[] = [
-  defenseTarget('Баллистическая турель', 'Астеры', aegisBallisticDefenseArt),
+  defenseTarget('Защитная матрица', 'Астеры', aegisBallisticDefenseArt),
   defenseTarget('Ударная матрица', 'Илары', synodBallisticDefenseArt),
   defenseTarget('Шипомёт', 'Рой', veyraBallisticDefenseArt),
 ];
 
 const laserDefenses: ShipTarget[] = [
-  defenseTarget('Лазерная турель', 'Астеры', aegisLaserDefenseArt),
+  defenseTarget('Лазерная матрица', 'Астеры', aegisLaserDefenseArt),
   defenseTarget('Лазерная матрица', 'Илары', synodLaserDefenseArt),
   defenseTarget('Лазерная железа', 'Рой', veyraLaserDefenseArt),
 ];
 
 const ionDefenses: ShipTarget[] = [
-  defenseTarget('Ионная турель', 'Астеры', aegisIonDefenseArt),
+  defenseTarget('Ионная матрица', 'Астеры', aegisIonDefenseArt),
   defenseTarget('Ионная матрица', 'Илары', synodIonDefenseArt),
   defenseTarget('Ионное плетение', 'Рой', veyraIonDefenseArt),
 ];
 
 const plasmaDefenses: ShipTarget[] = [
-  defenseTarget('Плазменная турель', 'Астеры', aegisPlasmaDefenseArt),
+  defenseTarget('Плазменная матрица', 'Астеры', aegisPlasmaDefenseArt),
   defenseTarget('Плазменная матрица', 'Илары', synodPlasmaDefenseArt),
   defenseTarget('Плазменное плетение', 'Рой', veyraPlasmaDefenseArt),
 ];
 
 const laserIonDefenses: ShipTarget[] = [
-  defenseTarget('Лазерно-ионная батарея', 'Астеры', aegisLaserIonDefenseArt),
+  defenseTarget('Лазер-ионная матрица', 'Астеры', aegisLaserIonDefenseArt),
   defenseTarget('Лазерно-ионная матрица', 'Илары', synodLaserIonDefenseArt),
   defenseTarget('Лазерно-ионный орган', 'Рой', veyraLaserIonDefenseArt),
 ];
 
 const plasmaLaserDefenses: ShipTarget[] = [
-  defenseTarget('Плазменно-лазерная батарея', 'Астеры', aegisPlasmaLaserDefenseArt),
+  defenseTarget('Плазма-лазерная матрица', 'Астеры', aegisPlasmaLaserDefenseArt),
   defenseTarget('Плазменно-лазерная матрица', 'Илары', synodPlasmaLaserDefenseArt),
   defenseTarget('Плазменно-лазерный орган', 'Рой', veyraPlasmaLaserDefenseArt),
 ];
 
 const ionPlasmaDefenses: ShipTarget[] = [
-  defenseTarget('Ионно-плазменная батарея', 'Астеры', aegisIonPlasmaDefenseArt),
+  defenseTarget('Ион-плазменная матрица', 'Астеры', aegisIonPlasmaDefenseArt),
   defenseTarget('Ионно-плазменная матрица', 'Илары', synodIonPlasmaDefenseArt),
   defenseTarget('Ионно-плазменный орган', 'Рой', veyraIonPlasmaDefenseArt),
 ];
@@ -217,6 +218,22 @@ function combatShip(
     targetsNote: nemexiaCombatNote,
   };
 }
+
+const commanderInfoByName: Readonly<Record<string, ShipInfoDefinition>> = Object.fromEntries(
+  COMMANDER_IDS.map((commanderId) => {
+    const ability = COMMANDER_ABILITIES[commanderId];
+    return [ability.commanderName, {
+      kind: 'commander',
+      ability: {
+        name: ability.ability,
+        description: ability.description,
+        scaling: ability.ratePerLevel,
+        note: ability.note ?? 'Способность хранится в едином typed commander catalog. Математическое применение в бою пока не реализовано.',
+        source: 'NEMEXIA',
+      },
+    } satisfies ShipInfoDefinition] as const;
+  }),
+);
 
 const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
   Спутник: {
@@ -273,7 +290,6 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       source: 'ASTERION',
     },
   },
-
   Скаут: combatShip(
     {
       name: 'Игнорирование брони',
@@ -345,137 +361,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
     combineTargets(planetDestroyerTargets, cruiserTargets),
     defenderTargets,
   ),
-
-  Корсар: {
-    kind: 'commander',
-    ability: {
-      name: 'Пиратский рейд',
-      description: 'Позволяет проводить пиратские вылеты и увеличивает долю ресурсов, которую флот может захватить после победы.',
-      scaling: '+1,25% украденных ресурсов за каждый уровень.',
-      note: 'Данные способности сверены с сохранённой страницей Nemexia.',
-      source: 'NEMEXIA',
-    },
-  },
-  Охотник: {
-    kind: 'commander',
-    ability: {
-      name: 'Контрразведка',
-      description: 'Обнаруживает вражеские шпионские зонды при входе в атмосферу и мешает им получить разведданные.',
-      scaling: '+1,75% к шансу обнаружения за каждый уровень.',
-      note: 'Данные способности сверены с сохранённой страницей Nemexia.',
-      source: 'NEMEXIA',
-    },
-  },
-  Палач: {
-    kind: 'commander',
-    ability: {
-      name: 'Приказ на уничтожение',
-      description: 'Усиливает атакующий потенциал всего флота, когда командирский корабль ведёт соединение в бой.',
-      scaling: '+0,15% к атаке флота за каждый уровень.',
-      note: 'Данные способности сверены с сохранённой страницей Nemexia.',
-      source: 'NEMEXIA',
-    },
-  },
-  Джаггернаут: {
-    kind: 'commander',
-    ability: {
-      name: 'Несокрушимый строй',
-      description: 'Повышает запас жизненных очков каждого корабля во флоте.',
-      scaling: '+0,15% к жизненным очкам кораблей за каждый уровень.',
-      note: 'Данные способности сверены с сохранённой страницей Nemexia.',
-      source: 'NEMEXIA',
-    },
-  },
-  Тайфун: {
-    kind: 'commander',
-    ability: {
-      name: 'Форсаж флота',
-      description: 'Синхронизирует двигатели соединения и увеличивает скорость кораблей флота.',
-      scaling: '+0,1% к скорости кораблей за каждый уровень.',
-      note: 'Данные способности сверены с сохранённой страницей Nemexia.',
-      source: 'NEMEXIA',
-    },
-  },
-  Вайпер: {
-    kind: 'commander',
-    ability: {
-      name: 'Критическое наведение',
-      description: 'Ищет уязвимые точки в кораблях противника и направляет туда концентрированный огонь флота.',
-      scaling: '+0,075% к шансу критического урона за каждый уровень.',
-      note: 'Данные способности сверены с сохранённой страницей Nemexia.',
-      source: 'NEMEXIA',
-    },
-  },
-  Фантом: {
-    kind: 'commander',
-    ability: {
-      name: 'Системный взлом',
-      description: 'Пытается взломать систему управления вражеского флота и отправить противника назад, не допустив сражения.',
-      scaling: '+0,75% к шансу успешного взлома за каждый уровень.',
-      note: 'Данные способности сверены с сохранённой страницей Nemexia.',
-      source: 'NEMEXIA',
-    },
-  },
-  Скорпион: {
-    kind: 'commander',
-    ability: {
-      name: 'Парализующий вирус',
-      description: 'Инфицирует системы противника и при успешном срабатывании парализует его орудия на текущий ход.',
-      scaling: '+0,1% к шансу парализации за каждый уровень.',
-      note: 'Данные способности сверены с сохранённой страницей Nemexia.',
-      source: 'NEMEXIA',
-    },
-  },
-  Аннигилятор: {
-    kind: 'commander',
-    ability: {
-      name: 'Детонация',
-      description: 'Усиливает осадный показатель детонации, используемый в разрушительных операциях.',
-      scaling: '+0,5% к показателю детонации за каждый уровень.',
-      note: 'Данные способности сверены с сохранённой страницей Nemexia.',
-      source: 'NEMEXIA',
-    },
-  },
-  Реаниматор: {
-    kind: 'commander',
-    ability: {
-      name: 'Полевое восстановление',
-      description: 'Ищет среди уничтоженных кораблей те, которые ещё можно вернуть в строй прямо во время боя. За один ход может восстановить до 15 кораблей.',
-      scaling: '+0,4% к шансу восстановления за каждый уровень.',
-      note: 'Данные способности сверены с сохранённой страницей Nemexia.',
-      source: 'NEMEXIA',
-    },
-  },
-  Арго: {
-    kind: 'commander',
-    ability: {
-      name: 'Экспедиционный анализ',
-      description: 'Повышает награду очками усовершенствования в боях с Отступниками и одновременно расширяет грузовые возможности флота.',
-      scaling: '+1% очков усовершенствования и +1% грузоподъёмности кораблей за каждый уровень.',
-      note: 'Данные способности сверены с сохранённой страницей Nemexia.',
-      source: 'NEMEXIA',
-    },
-  },
-  Судья: {
-    kind: 'commander',
-    ability: {
-      name: 'Приговор броне',
-      description: 'Вмешивается в защитные системы противника и снижает броню всех вражеских единиц.',
-      scaling: '−0,15% брони всех вражеских единиц за каждый уровень.',
-      note: 'Данные способности сверены с сохранённой страницей Nemexia.',
-      source: 'NEMEXIA',
-    },
-  },
-  Полиас: {
-    kind: 'commander',
-    ability: {
-      name: 'Планетарный хранитель',
-      description: 'Пассивно снижает вероятность уничтожения защищаемой планеты. Эффект действует весь бой, даже если командирский корабль будет уничтожен раньше его окончания.',
-      scaling: '−0,25% к вероятности уничтожения планеты за каждый уровень.',
-      note: 'В архиве Nemexia корабль подписан как Polias; в Asterion используется «Полиас».',
-      source: 'NEMEXIA',
-    },
-  },
+  ...commanderInfoByName,
 };
 
 function normalizeText(value: string | null | undefined) {
