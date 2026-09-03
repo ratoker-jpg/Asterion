@@ -30,10 +30,24 @@ html.asterion-repair-page .repair-page-head-v1::after {
   clip-path: polygon(100% 0, 100% 100%, 0 0);
 }
 
-html.asterion-repair-page .repair-head-actions-v1,
-html.asterion-repair-page .repair-help-v1 {
-  position: relative;
+/* The right side now matches Ships / Defense / Commander Ships: only the back button stays there. */
+html.asterion-repair-page .repair-head-actions-v1 {
+  position: static;
   z-index: 32;
+  display: block;
+}
+
+html.asterion-repair-page .repair-help-v1 {
+  position: absolute;
+  z-index: 32;
+  top: 28px;
+  left: 390px;
+}
+
+html.asterion-repair-page .repair-help-v1 > button {
+  width: 26px;
+  height: 26px;
+  font-size: 12px;
 }
 
 html.asterion-repair-page .repair-back-v1 {
@@ -43,8 +57,9 @@ html.asterion-repair-page .repair-back-v1 {
 
 html.asterion-repair-page .repair-help-popover-v1 {
   z-index: 1000;
-  top: 44px;
-  right: 0;
+  top: 32px;
+  left: 0;
+  right: auto;
 }
 
 html.asterion-repair-page .repair-summary-v1,
