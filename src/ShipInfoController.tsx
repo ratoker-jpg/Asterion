@@ -129,32 +129,32 @@ const defenderTargets: ShipTarget[] = [
 
 const battleshipTargets: ShipTarget[] = [
   shipTarget('Линкор «Бастион»', 'Aegis', aegisBattleshipArt),
-  shipTarget('Звёздная армада', 'Synod', synodStarArmadaArt),
-  shipTarget('Призрак', 'Veyra', veyraGhostArt),
+  shipTarget('Линкор «Армада»', 'Synod', synodStarArmadaArt),
+  shipTarget('Призрак «Манта»', 'Veyra', veyraGhostArt),
 ];
 
 const destroyerTargets: ShipTarget[] = [
   shipTarget('Разрушитель «Цитадель»', 'Aegis', aegisDestroyerArt),
-  shipTarget('Голиаф', 'Synod', synodGoliathArt),
-  shipTarget('Шмель', 'Veyra', veyraHornetArt),
+  shipTarget('Голиаф «Резонанс»', 'Synod', synodGoliathArt),
+  shipTarget('Шмель «Левиафан»', 'Veyra', veyraHornetArt),
 ];
 
 const bomberTargets: ShipTarget[] = [
   shipTarget('Бомбардировщик «Молот»', 'Aegis', aegisBomberArt),
-  shipTarget('Бомбербот', 'Synod', synodBomberArt),
-  shipTarget('Бомбардировщик', 'Veyra', veyraBomberArt),
+  shipTarget('Бомбербот «Дуга»', 'Synod', synodBomberArt),
+  shipTarget('Бомбардировщик «Спора»', 'Veyra', veyraBomberArt),
 ];
 
 const planetDestroyerTargets: ShipTarget[] = [
   shipTarget('Планетолом «Немезида»', 'Aegis', aegisDeathStarArt),
-  shipTarget('Титан', 'Synod', synodTitanArt),
-  shipTarget('Нокс Царица', 'Veyra', veyraQueenArt),
+  shipTarget('Титан «Оракул»', 'Synod', synodTitanArt),
+  shipTarget('Нокс Царица «Матка»', 'Veyra', veyraQueenArt),
 ];
 
 const ballisticDefenses: ShipTarget[] = [
   defenseTarget('Баллистическая турель', 'Aegis', aegisBallisticDefenseArt),
-  defenseTarget('Защитная матрица', 'Synod', synodBallisticDefenseArt),
-  defenseTarget('Нокс Стрелок', 'Veyra', veyraBallisticDefenseArt),
+  defenseTarget('Матрица обороны', 'Synod', synodBallisticDefenseArt),
+  defenseTarget('Стрелок Нокса', 'Veyra', veyraBallisticDefenseArt),
 ];
 
 const laserDefenses: ShipTarget[] = [
@@ -166,31 +166,31 @@ const laserDefenses: ShipTarget[] = [
 const ionDefenses: ShipTarget[] = [
   defenseTarget('Ионная турель', 'Aegis', aegisIonDefenseArt),
   defenseTarget('Ионная матрица', 'Synod', synodIonDefenseArt),
-  defenseTarget('Ионная ткань', 'Veyra', veyraIonDefenseArt),
+  defenseTarget('Ионное плетение', 'Veyra', veyraIonDefenseArt),
 ];
 
 const plasmaDefenses: ShipTarget[] = [
   defenseTarget('Плазменная турель', 'Aegis', aegisPlasmaDefenseArt),
   defenseTarget('Плазменная матрица', 'Synod', synodPlasmaDefenseArt),
-  defenseTarget('Плазменная ткань', 'Veyra', veyraPlasmaDefenseArt),
+  defenseTarget('Плазменное плетение', 'Veyra', veyraPlasmaDefenseArt),
 ];
 
 const laserIonDefenses: ShipTarget[] = [
   defenseTarget('Лазер-ионная батарея', 'Aegis', aegisLaserIonDefenseArt),
-  defenseTarget('Лазер-ионная матрица', 'Synod', synodLaserIonDefenseArt),
-  defenseTarget('Лазер-ионная турель', 'Veyra', veyraLaserIonDefenseArt),
+  defenseTarget('Лазерно-ионная матрица', 'Synod', synodLaserIonDefenseArt),
+  defenseTarget('Лазерно-ионная турель', 'Veyra', veyraLaserIonDefenseArt),
 ];
 
 const plasmaLaserDefenses: ShipTarget[] = [
   defenseTarget('Плазма-лазерная батарея', 'Aegis', aegisPlasmaLaserDefenseArt),
-  defenseTarget('Плазма-лазерная матрица', 'Synod', synodPlasmaLaserDefenseArt),
-  defenseTarget('Плазма-лазерная турель', 'Veyra', veyraPlasmaLaserDefenseArt),
+  defenseTarget('Плазменно-лазерная матрица', 'Synod', synodPlasmaLaserDefenseArt),
+  defenseTarget('Плазменно-лазерная турель', 'Veyra', veyraPlasmaLaserDefenseArt),
 ];
 
 const ionPlasmaDefenses: ShipTarget[] = [
   defenseTarget('Ион-плазменная батарея', 'Aegis', aegisIonPlasmaDefenseArt),
-  defenseTarget('Ион-плазменная матрица', 'Synod', synodIonPlasmaDefenseArt),
-  defenseTarget('Ион-плазменная турель', 'Veyra', veyraIonPlasmaDefenseArt),
+  defenseTarget('Ионно-плазменная матрица', 'Synod', synodIonPlasmaDefenseArt),
+  defenseTarget('Ионно-плазменная турель', 'Veyra', veyraIonPlasmaDefenseArt),
 ];
 
 const nemexiaCombatNote =
