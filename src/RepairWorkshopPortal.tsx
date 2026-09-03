@@ -80,20 +80,7 @@ export function RepairWorkshopPortal() {
     document.documentElement.classList.add('asterion-repair-page', 'asterion-long-page');
     window.scrollTo(0, 0);
 
-    const handlePrimaryNavigation = (event: MouseEvent) => {
-      const element = event.target instanceof Element ? event.target : null;
-      const button = element?.closest<HTMLButtonElement>('.primary-navigation button');
-      if (!button) return;
-      if (normalizeText(button.querySelector('span')?.textContent) !== 'Флоты') return;
-
-      // The top-level Fleet tab can be clicked while already active; it must still return to Fleet root.
-      window.setTimeout(openFleetRoot, 0);
-    };
-
-    document.addEventListener('click', handlePrimaryNavigation, true);
-
     return () => {
-      document.removeEventListener('click', handlePrimaryNavigation, true);
       document.documentElement.classList.remove('asterion-repair-page');
 
       // Shipyard/defense/commander screens use the same long-page class for page scrolling.
