@@ -1,0 +1,88 @@
+/* Repair workshop feedback pass: keep the help panel above content and make summary values resource-oriented. */
+html.asterion-repair-page .repair-page-head-v1 {
+  position: relative;
+  z-index: 30;
+  overflow: visible;
+  clip-path: none;
+}
+
+html.asterion-repair-page .repair-head-actions-v1,
+html.asterion-repair-page .repair-help-v1 {
+  position: relative;
+  z-index: 32;
+}
+
+html.asterion-repair-page .repair-help-popover-v1 {
+  z-index: 1000;
+  top: 44px;
+  right: 0;
+}
+
+html.asterion-repair-page .repair-summary-v1,
+html.asterion-repair-page .repair-notice-v1,
+html.asterion-repair-page .repair-section-v1 {
+  position: relative;
+  z-index: 1;
+}
+
+.repair-summary-card-v1 {
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  align-content: initial;
+  gap: 11px;
+}
+
+.repair-summary-icon-v2 {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(70, 211, 243, .34);
+  background: rgba(3, 39, 52, .9);
+  color: #71ddf7;
+  box-sizing: border-box;
+}
+
+.repair-summary-icon-v2--tokens {
+  border-color: rgba(67, 221, 255, .54);
+  background: linear-gradient(180deg, rgba(6, 90, 112, .7), rgba(3, 39, 52, .92));
+  color: #8cecff;
+}
+
+.repair-summary-icon-v2--population {
+  color: #7bd9c7;
+}
+
+.repair-summary-icon-v2 svg {
+  width: 23px;
+  height: 23px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.55;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.repair-summary-copy-v2 {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.repair-summary-copy-v2 > small {
+  overflow: hidden;
+  color: #77aec0;
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: .1em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repair-summary-copy-v2 .repair-summary-value-v1 strong {
+  font-size: 23px;
+}
+
+.repair-summary-copy-v2 .repair-summary-value-v1 span {
+  font-size: 9px;
+}
