@@ -17,6 +17,8 @@ type SaveEnvelope = {
   [key: string]: unknown;
 };
 
+const DEMO_REPORT_ID_SET = new Set(DEMO_BATTLE_REPORTS.map((report) => report.id));
+
 function isBattleReport(value: unknown): value is BattleReport {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Partial<BattleReport>;
@@ -53,7 +55,7 @@ export function migrateBattleHistory(value: unknown): BattleHistoryState {
 
   if (Array.isArray(candidate.reports)) {
     candidate.reports.forEach((report) => {
-      if (!isBattleReport(report)) return;
+      if (!isBattleReport(report) || DEMO_REPORT_ID_SET.has(report.id)) return;
       reportById.set(report.id, report);
     });
   }
