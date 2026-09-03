@@ -101,6 +101,15 @@ export function moveCommanderBefore(
   return next;
 }
 
+export function moveCommanderToEnd(
+  priority: readonly CommanderId[],
+  commanderId: CommanderId,
+): CommanderId[] {
+  const normalized = normalizePriorityOrder(priority);
+  if (!normalized.includes(commanderId)) return normalized;
+  return [...normalized.filter((id) => id !== commanderId), commanderId];
+}
+
 function resolveStorage(storage?: StorageLike): StorageLike | null {
   if (storage) return storage;
   if (typeof window === 'undefined') return null;
