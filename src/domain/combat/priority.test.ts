@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { COMMANDER_ABILITIES, COMMANDER_IDS } from './commanders.ts';
+import { ALL_COMBAT_ENTITY_IDS } from './ids.ts';
 import {
   ASTERION_SAVE_KEY,
   COMBAT_SAVE_SCHEMA_VERSION,
@@ -29,6 +30,11 @@ test('commander catalog contains all 13 unique commander ids', () => {
   assert.equal(COMMANDER_IDS.length, 13);
   assert.equal(new Set(COMMANDER_IDS).size, 13);
   COMMANDER_IDS.forEach((id) => assert.equal(COMMANDER_ABILITIES[id].commanderId, id));
+});
+
+test('all canonical combat entity ids are unique', () => {
+  assert.equal(ALL_COMBAT_ENTITY_IDS.length, 35);
+  assert.equal(new Set(ALL_COMBAT_ENTITY_IDS).size, ALL_COMBAT_ENTITY_IDS.length);
 });
 
 test('attack and defense default orders are independent arrays', () => {
