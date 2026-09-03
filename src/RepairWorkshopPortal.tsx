@@ -26,6 +26,17 @@ function findFleetSectionButton(label: string) {
   );
 }
 
+function openFleetRoot() {
+  const shipsButton = findFleetSectionButton('Корабли');
+  if (!shipsButton) return;
+
+  // Let FleetWorkspace own the state transition: enter shipyard, then use its existing back action.
+  shipsButton.click();
+  requestAnimationFrame(() => {
+    document.querySelector<HTMLButtonElement>('.shipyard-page-head-v1 > button')?.click();
+  });
+}
+
 export function RepairWorkshopPortal() {
   const [target, setTarget] = useState<Element | null>(null);
   const [active, setActive] = useState(false);
@@ -60,7 +71,20 @@ export function RepairWorkshopPortal() {
     document.documentElement.classList.add('asterion-repair-page', 'asterion-long-page');
     window.scrollTo(0, 0);
 
+    const handlePrimaryNavigation = (event: MouseEvent) => {
+      const element = event.target instanceof Element ? event.target : null;
+      const button = element?.closest<HTMLButtonElement>('.primary-navigation button');
+      if (!button) return;
+      if (normalizeText(button.querySelector('span')?.textContent) !== 'Флоты') return;
+
+      // The top-level Fleet tab can be clicked while already active; it must still return to Fleet root.
+      window.setTimeout(openFleetRoot, 0);
+    };
+
+    document.addEventListener('click', handlePrimaryNavigation, true);
+
     return () => {
+      document.removeEventListener('click', handlePrimaryNavigation, true);
       document.documentElement.classList.remove('asterion-repair-page', 'asterion-long-page');
       window.scrollTo(0, 0);
     };
@@ -68,10 +92,8 @@ export function RepairWorkshopPortal() {
 
   if (!active || !target) return null;
 
-  const openShips = () => findFleetSectionButton('Корабли')?.click();
-
   return createPortal(
-    <RepairWorkshopView planetName={planet.name} coords={planet.coords} onBack={openShips} />,
+    <RepairWorkshopView planetName={planet.name} coords={planet.coords} onBack={openFleetRoot} />,
     target,
   );
 }
