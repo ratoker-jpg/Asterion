@@ -55,17 +55,14 @@ export function RepairWorkshopPortal() {
   }, []);
 
   useEffect(() => {
-    if (!active || !target) {
-      document.documentElement.classList.remove('asterion-repair-page');
-      return;
-    }
+    if (!active || !target) return;
 
-    document.documentElement.classList.add('asterion-repair-page');
-    const scroller = target as HTMLElement;
-    scroller.scrollTop = 0;
+    document.documentElement.classList.add('asterion-repair-page', 'asterion-long-page');
+    window.scrollTo(0, 0);
 
     return () => {
-      document.documentElement.classList.remove('asterion-repair-page');
+      document.documentElement.classList.remove('asterion-repair-page', 'asterion-long-page');
+      window.scrollTo(0, 0);
     };
   }, [active, target]);
 
