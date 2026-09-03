@@ -48,7 +48,7 @@ import veyraIonPlasmaDefenseArt from '../assets/source/New assets/defenses/veyra
 import './ship-info-modal.css';
 
 type ShipInfoKind = 'ship' | 'commander';
-type ShipInfoFaction = 'Aegis' | 'Synod' | 'Veyra' | 'Общий флот';
+type ShipInfoFaction = 'Астеры' | 'Илары' | 'Рой' | 'Общий флот';
 type TargetType = 'Корабль' | 'Оборона';
 
 type ShipTarget = {
@@ -110,87 +110,87 @@ const defenseTarget = (
 const combineTargets = (...groups: ShipTarget[][]) => groups.flat();
 
 const scoutTargets: ShipTarget[] = [
-  shipTarget('Скаут «Вектор»', 'Aegis', aegisScoutArt),
-  shipTarget('Истребитель «Ланцет»', 'Synod', synodFighterArt),
-  shipTarget('Нокс Дарт «Жало»', 'Veyra', veyraNoxDartArt),
+  shipTarget('Скаут', 'Астеры', aegisScoutArt),
+  shipTarget('Ланцет', 'Илары', synodFighterArt),
+  shipTarget('Жало', 'Рой', veyraNoxDartArt),
 ];
 
 const cruiserTargets: ShipTarget[] = [
-  shipTarget('Крейсер «Копьё»', 'Aegis', aegisCruiserArt),
-  shipTarget('Перехватчик «Фаза»', 'Synod', synodInterceptorArt),
-  shipTarget('Немезис «Стрекоза»', 'Veyra', veyraNemesisArt),
+  shipTarget('Крейсер', 'Астеры', aegisCruiserArt),
+  shipTarget('Импульс', 'Илары', synodInterceptorArt),
+  shipTarget('Стрекоза', 'Рой', veyraNemesisArt),
 ];
 
 const defenderTargets: ShipTarget[] = [
-  shipTarget('Защитник «Эгида»', 'Aegis', aegisDefenderArt),
-  shipTarget('Щитовой бот «Оберег»', 'Synod', synodShieldBotArt),
-  shipTarget('Абсорбатор «Завеса»', 'Veyra', veyraAbsorberArt),
+  shipTarget('Защитник', 'Астеры', aegisDefenderArt),
+  shipTarget('Барьер', 'Илары', synodShieldBotArt),
+  shipTarget('Панцирник', 'Рой', veyraAbsorberArt),
 ];
 
 const battleshipTargets: ShipTarget[] = [
-  shipTarget('Линкор «Бастион»', 'Aegis', aegisBattleshipArt),
-  shipTarget('Линкор «Армада»', 'Synod', synodStarArmadaArt),
-  shipTarget('Призрак «Манта»', 'Veyra', veyraGhostArt),
+  shipTarget('Линкор', 'Астеры', aegisBattleshipArt),
+  shipTarget('Монолит', 'Илары', synodStarArmadaArt),
+  shipTarget('Скарабей', 'Рой', veyraGhostArt),
 ];
 
 const destroyerTargets: ShipTarget[] = [
-  shipTarget('Разрушитель «Цитадель»', 'Aegis', aegisDestroyerArt),
-  shipTarget('Голиаф «Резонанс»', 'Synod', synodGoliathArt),
-  shipTarget('Шмель «Левиафан»', 'Veyra', veyraHornetArt),
+  shipTarget('Разрушитель', 'Астеры', aegisDestroyerArt),
+  shipTarget('Голиаф', 'Илары', synodGoliathArt),
+  shipTarget('Шмель', 'Рой', veyraHornetArt),
 ];
 
 const bomberTargets: ShipTarget[] = [
-  shipTarget('Бомбардировщик «Молот»', 'Aegis', aegisBomberArt),
-  shipTarget('Бомбербот «Дуга»', 'Synod', synodBomberArt),
-  shipTarget('Бомбардировщик «Спора»', 'Veyra', veyraBomberArt),
+  shipTarget('Бомбардировщик', 'Астеры', aegisBomberArt),
+  shipTarget('Пульсар', 'Илары', synodBomberArt),
+  shipTarget('Спороносец', 'Рой', veyraBomberArt),
 ];
 
 const planetDestroyerTargets: ShipTarget[] = [
-  shipTarget('Планетолом «Немезида»', 'Aegis', aegisDeathStarArt),
-  shipTarget('Титан «Оракул»', 'Synod', synodTitanArt),
-  shipTarget('Нокс Царица «Матка»', 'Veyra', veyraQueenArt),
+  shipTarget('Планетолом', 'Астеры', aegisDeathStarArt),
+  shipTarget('Разлом', 'Илары', synodTitanArt),
+  shipTarget('Пожиратель', 'Рой', veyraQueenArt),
 ];
 
 const ballisticDefenses: ShipTarget[] = [
-  defenseTarget('Баллистическая турель', 'Aegis', aegisBallisticDefenseArt),
-  defenseTarget('Матрица обороны', 'Synod', synodBallisticDefenseArt),
-  defenseTarget('Стрелок Нокса', 'Veyra', veyraBallisticDefenseArt),
+  defenseTarget('Баллистическая турель', 'Астеры', aegisBallisticDefenseArt),
+  defenseTarget('Ударная матрица', 'Илары', synodBallisticDefenseArt),
+  defenseTarget('Шипомёт', 'Рой', veyraBallisticDefenseArt),
 ];
 
 const laserDefenses: ShipTarget[] = [
-  defenseTarget('Лазерная турель', 'Aegis', aegisLaserDefenseArt),
-  defenseTarget('Лазерная матрица', 'Synod', synodLaserDefenseArt),
-  defenseTarget('Лазерная материя', 'Veyra', veyraLaserDefenseArt),
+  defenseTarget('Лазерная турель', 'Астеры', aegisLaserDefenseArt),
+  defenseTarget('Лазерная матрица', 'Илары', synodLaserDefenseArt),
+  defenseTarget('Лазерная железа', 'Рой', veyraLaserDefenseArt),
 ];
 
 const ionDefenses: ShipTarget[] = [
-  defenseTarget('Ионная турель', 'Aegis', aegisIonDefenseArt),
-  defenseTarget('Ионная матрица', 'Synod', synodIonDefenseArt),
-  defenseTarget('Ионное плетение', 'Veyra', veyraIonDefenseArt),
+  defenseTarget('Ионная турель', 'Астеры', aegisIonDefenseArt),
+  defenseTarget('Ионная матрица', 'Илары', synodIonDefenseArt),
+  defenseTarget('Ионное плетение', 'Рой', veyraIonDefenseArt),
 ];
 
 const plasmaDefenses: ShipTarget[] = [
-  defenseTarget('Плазменная турель', 'Aegis', aegisPlasmaDefenseArt),
-  defenseTarget('Плазменная матрица', 'Synod', synodPlasmaDefenseArt),
-  defenseTarget('Плазменное плетение', 'Veyra', veyraPlasmaDefenseArt),
+  defenseTarget('Плазменная турель', 'Астеры', aegisPlasmaDefenseArt),
+  defenseTarget('Плазменная матрица', 'Илары', synodPlasmaDefenseArt),
+  defenseTarget('Плазменное плетение', 'Рой', veyraPlasmaDefenseArt),
 ];
 
 const laserIonDefenses: ShipTarget[] = [
-  defenseTarget('Лазер-ионная батарея', 'Aegis', aegisLaserIonDefenseArt),
-  defenseTarget('Лазерно-ионная матрица', 'Synod', synodLaserIonDefenseArt),
-  defenseTarget('Лазерно-ионная турель', 'Veyra', veyraLaserIonDefenseArt),
+  defenseTarget('Лазерно-ионная батарея', 'Астеры', aegisLaserIonDefenseArt),
+  defenseTarget('Лазерно-ионная матрица', 'Илары', synodLaserIonDefenseArt),
+  defenseTarget('Лазерно-ионный орган', 'Рой', veyraLaserIonDefenseArt),
 ];
 
 const plasmaLaserDefenses: ShipTarget[] = [
-  defenseTarget('Плазма-лазерная батарея', 'Aegis', aegisPlasmaLaserDefenseArt),
-  defenseTarget('Плазменно-лазерная матрица', 'Synod', synodPlasmaLaserDefenseArt),
-  defenseTarget('Плазменно-лазерная турель', 'Veyra', veyraPlasmaLaserDefenseArt),
+  defenseTarget('Плазменно-лазерная батарея', 'Астеры', aegisPlasmaLaserDefenseArt),
+  defenseTarget('Плазменно-лазерная матрица', 'Илары', synodPlasmaLaserDefenseArt),
+  defenseTarget('Плазменно-лазерный орган', 'Рой', veyraPlasmaLaserDefenseArt),
 ];
 
 const ionPlasmaDefenses: ShipTarget[] = [
-  defenseTarget('Ион-плазменная батарея', 'Aegis', aegisIonPlasmaDefenseArt),
-  defenseTarget('Ионно-плазменная матрица', 'Synod', synodIonPlasmaDefenseArt),
-  defenseTarget('Ионно-плазменная турель', 'Veyra', veyraIonPlasmaDefenseArt),
+  defenseTarget('Ионно-плазменная батарея', 'Астеры', aegisIonPlasmaDefenseArt),
+  defenseTarget('Ионно-плазменная матрица', 'Илары', synodIonPlasmaDefenseArt),
+  defenseTarget('Ионно-плазменный орган', 'Рой', veyraIonPlasmaDefenseArt),
 ];
 
 const nemexiaCombatNote =
@@ -219,7 +219,7 @@ function combatShip(
 }
 
 const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
-  'Спутник «Гелиос»': {
+  Спутник: {
     kind: 'ship',
     ability: {
       name: 'Солнечный массив',
@@ -228,7 +228,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       source: 'ASTERION',
     },
   },
-  'Зонд «Призма»': {
+  Зонд: {
     kind: 'ship',
     ability: {
       name: 'Глубокое сканирование',
@@ -237,7 +237,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       source: 'ASTERION',
     },
   },
-  'Транспорт «Тракт»': {
+  Транспорт: {
     kind: 'ship',
     ability: {
       name: 'Грузовая сеть',
@@ -246,7 +246,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       source: 'ASTERION',
     },
   },
-  'Мегатранспорт «Артерия»': {
+  Мегатранспорт: {
     kind: 'ship',
     ability: {
       name: 'Грузовая сеть',
@@ -255,7 +255,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       source: 'ASTERION',
     },
   },
-  'Колонизатор «Форпост»': {
+  Колонизатор: {
     kind: 'ship',
     ability: {
       name: 'Колониальное ядро',
@@ -264,7 +264,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       source: 'ASTERION',
     },
   },
-  'Переработчик «Сборщик»': {
+  Переработчик: {
     kind: 'ship',
     ability: {
       name: 'Сборочный массив',
@@ -274,7 +274,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
     },
   },
 
-  'Скаут «Вектор»': combatShip(
+  Скаут: combatShip(
     {
       name: 'Игнорирование брони',
       description: 'Применяется к дружественной группе кораблей и даёт возможность нанести врагу урон сквозь броню.',
@@ -284,7 +284,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
     combineTargets(defenderTargets, battleshipTargets),
     combineTargets(scoutTargets, planetDestroyerTargets),
   ),
-  'Крейсер «Копьё»': combatShip(
+  Крейсер: combatShip(
     {
       name: 'Сокрушение',
       description: 'Применяется к дружественной группе кораблей и увеличивает её атаку с ×2 до ×2,5. Не работает одновременно с критическим ударом.',
@@ -294,7 +294,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
     combineTargets(scoutTargets, defenderTargets),
     combineTargets(cruiserTargets, battleshipTargets),
   ),
-  'Защитник «Эгида»': combatShip(
+  Защитник: combatShip(
     {
       name: 'Бонусные жизни',
       description: 'Применяется ко всем дружественным группам кораблей и увеличивает запас их жизней.',
@@ -304,7 +304,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
     combineTargets(bomberTargets, planetDestroyerTargets),
     combineTargets(scoutTargets, defenderTargets),
   ),
-  'Линкор «Бастион»': combatShip(
+  Линкор: combatShip(
     {
       name: 'Улучшенная броня',
       description: 'Применяется ко всем дружественным группам кораблей и предоставляет бонус к броне.',
@@ -314,7 +314,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
     combineTargets(cruiserTargets, defenderTargets),
     combineTargets(battleshipTargets, destroyerTargets),
   ),
-  'Разрушитель «Цитадель»': combatShip(
+  Разрушитель: combatShip(
     {
       name: 'Возрождение',
       description: 'Даёт шанс возродить часть потерянных дружественных кораблей во время раунда сражения.',
@@ -324,7 +324,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
     combineTargets(battleshipTargets, planetDestroyerTargets),
     combineTargets(destroyerTargets, bomberTargets),
   ),
-  'Бомбардировщик «Молот»': combatShip(
+  Бомбардировщик: combatShip(
     {
       name: 'Артиллерия',
       description: 'Применяется ко всем дружественным группам кораблей и предоставляет +50% к атаке против обороны.',
@@ -334,7 +334,7 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
     combineTargets(destroyerTargets, planetDestroyerTargets),
     combineTargets(cruiserTargets, bomberTargets),
   ),
-  'Планетолом «Немезида»': combatShip(
+  Планетолом: combatShip(
     {
       name: 'Уничтожение планеты',
       description: 'Даёт шанс уничтожить вражескую планету. Результат зависит от уровня модернизации юнитов.',
@@ -506,7 +506,7 @@ function readStats(card: Element): { category: string; stats: StatPair[] } {
 }
 
 function resolveFaction(definition: ShipInfoDefinition): ShipInfoFaction {
-  return definition.kind === 'commander' ? 'Общий флот' : 'Aegis';
+  return definition.kind === 'commander' ? 'Общий флот' : 'Астеры';
 }
 
 function ShipTargetCard({ target }: { target: ShipTarget }) {
