@@ -26,13 +26,8 @@ function findFleetSectionButton(label: string) {
   );
 }
 
-function activeFleetSection() {
-  return normalizeText(document.querySelector('.fleet-menu-group-v1 button.active strong')?.textContent);
-}
-
 function destinationNeedsLongPage() {
-  return ['Корабли', 'Оборона', 'Командирские корабли', 'Боевой приоритет'].includes(activeFleetSection())
-    || Boolean(document.querySelector('.shipyard-view-v1, .combat-priority-view-v1'));
+  return Boolean(document.querySelector('.shipyard-view-v1, .combat-priority-view-v1'));
 }
 
 function openFleetRoot() {
@@ -83,8 +78,9 @@ export function RepairWorkshopPortal() {
     return () => {
       document.documentElement.classList.remove('asterion-repair-page');
 
-      // Ships, defense, commander construction and combat priority all use the same
-      // document-level long-page class. Preserve it during direct Fleet section transitions.
+      // Preserve the long-page state only when the destination that actually needs it
+      // is mounted. A selected sidebar label alone is not enough: Fleet root also keeps
+      // «Корабли» selected, and preserving the class there creates a 2860px empty page.
       if (!destinationNeedsLongPage()) {
         document.documentElement.classList.remove('asterion-long-page');
       }
