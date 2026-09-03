@@ -1,5 +1,5 @@
 /* Repair workshop follows the same full-page scrolling model as ships/defense.
-   The game canvas stays 1920px wide and the repair grid stays two columns. */
+   Only page height differs here. Background/substrate is inherited from the shared fleet long-page styles. */
 
 html.asterion-long-page.asterion-repair-page .viewport {
   height: 1840px !important;
@@ -12,14 +12,10 @@ html.asterion-long-page.asterion-repair-page .stage {
 
 html.asterion-long-page.asterion-repair-page .workspace {
   height: 1535px !important;
-  background: #01080e !important;
 }
 
 html.asterion-long-page.asterion-repair-page .fleet-workspace-v1 {
   min-height: 1535px !important;
-  background:
-    radial-gradient(circle at 72% 14%, rgba(18, 119, 160, .09), transparent 30%),
-    linear-gradient(180deg, #031019 0%, #01080e 72%, #01060b 100%) !important;
 }
 
 html.asterion-long-page.asterion-repair-page .repair-workshop-v1 {
