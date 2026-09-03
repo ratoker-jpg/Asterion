@@ -1,4 +1,12 @@
 /* Repair workshop feedback pass: keep the help panel above content and make summary values resource-oriented. */
+
+/* The workshop must use the exact same workspace background as Ships / Defense / Commander Ships. */
+html.asterion-repair-page .fleet-workspace-v1 {
+  background:
+    radial-gradient(circle at 72% 14%, rgba(18, 119, 160, .09), transparent 30%),
+    linear-gradient(180deg, #031019 0%, #01080e 72%, #01060b 100%) !important;
+}
+
 html.asterion-repair-page .repair-page-head-v1 {
   position: relative;
   z-index: 30;
