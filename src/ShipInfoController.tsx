@@ -1,9 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import aegisScoutArt from '../assets/source/New assets/ship/aegis/ship.aegis.scout.png';
+import aegisCruiserArt from '../assets/source/New assets/ship/aegis/ship.aegis.cruiser.png';
 import aegisDefenderArt from '../assets/source/New assets/ship/aegis/ship.aegis.defender.png';
+import aegisBattleshipArt from '../assets/source/New assets/ship/aegis/ship.aegis.battleship.png';
+import aegisDestroyerArt from '../assets/source/New assets/ship/aegis/ship.aegis.destroyer.png';
+import aegisBomberArt from '../assets/source/New assets/ship/aegis/ship.aegis.bomber.png';
+import aegisDeathStarArt from '../assets/source/New assets/ship/aegis/ship.aegis.death-star.png';
+import synodFighterArt from '../assets/source/New assets/ship/synod/ship.synod.fighter.png';
+import synodInterceptorArt from '../assets/source/New assets/ship/synod/ship.synod.interceptor.png';
 import synodShieldBotArt from '../assets/source/New assets/ship/synod/ship.synod.shield-bot.png';
+import synodStarArmadaArt from '../assets/source/New assets/ship/synod/ship.synod.star-armada.png';
+import synodGoliathArt from '../assets/source/New assets/ship/synod/ship.synod.goliath.png';
+import synodBomberArt from '../assets/source/New assets/ship/synod/ship.synod.bomberbot.png';
+import synodTitanArt from '../assets/source/New assets/ship/synod/ship.synod.titan.png';
+import veyraNoxDartArt from '../assets/source/New assets/ship/veyra/ship.veyra.nox-dart.png';
+import veyraNemesisArt from '../assets/source/New assets/ship/veyra/ship.veyra.nemesis.png';
 import veyraAbsorberArt from '../assets/source/New assets/ship/veyra/ship.veyra.absorber.png';
+import veyraGhostArt from '../assets/source/New assets/ship/veyra/ship.veyra.ghost.png';
+import veyraHornetArt from '../assets/source/New assets/ship/veyra/ship.veyra.hornet.png';
+import veyraBomberArt from '../assets/source/New assets/ship/veyra/ship.veyra.bomber.png';
+import veyraQueenArt from '../assets/source/New assets/ship/veyra/ship.veyra.nox-queen.png';
 import './ship-info-modal.css';
 
 type ShipInfoKind = 'ship' | 'commander';
@@ -30,6 +48,7 @@ type ShipInfoDefinition = {
     label: string;
     targets: ShipTarget[];
   };
+  targetsNote?: string;
 };
 
 type StatPair = {
@@ -47,11 +66,66 @@ type OpenShipInfo = {
   definition: ShipInfoDefinition;
 };
 
-const scoutPriorityTargets: ShipTarget[] = [
+const scoutTargets: ShipTarget[] = [
+  { name: 'Скаут «Вектор»', faction: 'Aegis', art: aegisScoutArt },
+  { name: 'Истребитель «Ланцет»', faction: 'Synod', art: synodFighterArt },
+  { name: 'Нокс Дарт «Жало»', faction: 'Veyra', art: veyraNoxDartArt },
+];
+
+const cruiserTargets: ShipTarget[] = [
+  { name: 'Крейсер «Копьё»', faction: 'Aegis', art: aegisCruiserArt },
+  { name: 'Перехватчик «Фаза»', faction: 'Synod', art: synodInterceptorArt },
+  { name: 'Немезис «Стрекоза»', faction: 'Veyra', art: veyraNemesisArt },
+];
+
+const defenderTargets: ShipTarget[] = [
   { name: 'Защитник «Эгида»', faction: 'Aegis', art: aegisDefenderArt },
   { name: 'Щитовой бот «Оберег»', faction: 'Synod', art: synodShieldBotArt },
   { name: 'Абсорбатор «Завеса»', faction: 'Veyra', art: veyraAbsorberArt },
 ];
+
+const battleshipTargets: ShipTarget[] = [
+  { name: 'Линкор «Бастион»', faction: 'Aegis', art: aegisBattleshipArt },
+  { name: 'Звёздная армада', faction: 'Synod', art: synodStarArmadaArt },
+  { name: 'Призрак', faction: 'Veyra', art: veyraGhostArt },
+];
+
+const destroyerTargets: ShipTarget[] = [
+  { name: 'Разрушитель «Цитадель»', faction: 'Aegis', art: aegisDestroyerArt },
+  { name: 'Голиаф', faction: 'Synod', art: synodGoliathArt },
+  { name: 'Шмель', faction: 'Veyra', art: veyraHornetArt },
+];
+
+const bomberTargets: ShipTarget[] = [
+  { name: 'Бомбардировщик «Молот»', faction: 'Aegis', art: aegisBomberArt },
+  { name: 'Бомбербот', faction: 'Synod', art: synodBomberArt },
+  { name: 'Бомбардировщик', faction: 'Veyra', art: veyraBomberArt },
+];
+
+const planetDestroyerTargets: ShipTarget[] = [
+  { name: 'Планетолом «Немезида»', faction: 'Aegis', art: aegisDeathStarArt },
+  { name: 'Титан', faction: 'Synod', art: synodTitanArt },
+  { name: 'Нокс Царица', faction: 'Veyra', art: veyraQueenArt },
+];
+
+const nemexiaCombatNote =
+  'Корабельные приоритеты и +70% урона сверены по сохранённым страницам синей расы Nemexia. У отдельных классов в оригинале также есть приоритетные оборонные установки; их вынесем в оборонный справочник.';
+
+function combatShip(
+  ability: ShipAbility,
+  priorityTargets: ShipTarget[],
+): ShipInfoDefinition {
+  return {
+    kind: 'ship',
+    ability,
+    priorityTargets,
+    bonusDamage: {
+      label: 'Дополнительный урон +70% против',
+      targets: priorityTargets,
+    },
+    targetsNote: nemexiaCombatNote,
+  };
+}
 
 const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
   'Спутник «Гелиос»': {
@@ -102,69 +176,64 @@ const shipInfoByName: Readonly<Record<string, ShipInfoDefinition>> = {
       note: 'Специальная миссионная способность.',
     },
   },
-  'Скаут «Вектор»': {
-    kind: 'ship',
-    ability: {
+  'Скаут «Вектор»': combatShip(
+    {
       name: 'Пробитие брони',
       description: 'Группа лёгких боевых кораблей концентрирует огонь по уязвимым участкам защиты цели.',
-      scaling: 'Эффект усиливается с количеством кораблей в соединении.',
-      note: 'Точный числовой баланс способности будет синхронизирован с боевой моделью.',
+      scaling: 'Эффект способности Asterion усиливается с количеством кораблей в соединении.',
+      note: 'Приоритеты целей ниже взяты из оригинальной таблицы Nemexia для Скаута.',
     },
-    priorityTargets: scoutPriorityTargets,
-    bonusDamage: {
-      label: 'Дополнительный урон +70% против защитного класса',
-      targets: scoutPriorityTargets,
-    },
-  },
-  'Крейсер «Копьё»': {
-    kind: 'ship',
-    ability: {
+    defenderTargets,
+  ),
+  'Крейсер «Копьё»': combatShip(
+    {
       name: 'Сокрушение',
       description: 'Согласованный залп повышает атакующий потенциал ударной группы.',
-      scaling: 'Эффект усиливается с количеством кораблей в соединении.',
+      scaling: 'Эффект способности Asterion усиливается с количеством кораблей в соединении.',
     },
-  },
-  'Защитник «Эгида»': {
-    kind: 'ship',
-    ability: {
+    scoutTargets,
+  ),
+  'Защитник «Эгида»': combatShip(
+    {
       name: 'Резерв живучести',
       description: 'Поддерживает соседние корабли и повышает общую устойчивость дружественного соединения.',
-      scaling: 'Эффект усиливается с количеством кораблей поддержки.',
+      scaling: 'Эффект способности Asterion усиливается с количеством кораблей поддержки.',
     },
-  },
-  'Линкор «Бастион»': {
-    kind: 'ship',
-    ability: {
+    bomberTargets,
+  ),
+  'Линкор «Бастион»': combatShip(
+    {
       name: 'Связка брони',
       description: 'Тяжёлые корабли формируют устойчивую защитную связку и повышают живучесть строя.',
-      scaling: 'Эффект усиливается с количеством линкоров в соединении.',
+      scaling: 'Эффект способности Asterion усиливается с количеством линкоров в соединении.',
     },
-  },
-  'Разрушитель «Цитадель»': {
-    kind: 'ship',
-    ability: {
+    cruiserTargets,
+  ),
+  'Разрушитель «Цитадель»': combatShip(
+    {
       name: 'Боевая рекуперация',
       description: 'Резервные системы снижают необратимые потери тяжёлой ударной группы.',
-      scaling: 'Эффект зависит от количества кораблей этого класса.',
+      scaling: 'Эффект способности Asterion зависит от количества кораблей этого класса.',
     },
-  },
-  'Бомбардировщик «Молот»': {
-    kind: 'ship',
-    ability: {
+    battleshipTargets,
+  ),
+  'Бомбардировщик «Молот»': combatShip(
+    {
       name: 'Артиллерия',
       description: 'Специализирован для нанесения усиленного урона стационарным и планетарным целям.',
-      scaling: 'Эффект зависит от количества бомбардировщиков.',
+      scaling: 'Эффект способности Asterion зависит от количества бомбардировщиков.',
     },
-  },
-  'Планетолом «Немезида»': {
-    kind: 'ship',
-    ability: {
+    destroyerTargets,
+  ),
+  'Планетолом «Немезида»': combatShip(
+    {
       name: 'Разрушитель мира',
       description: 'Сверхтяжёлая осадная платформа для операций против планетарной инфраструктуры и самой планеты.',
-      scaling: 'Результат осадной операции зависит от числа выживших планетоломов и боевых улучшений.',
-      note: 'Конкретный шанс уничтожения планеты не показываем до финальной сверки формулы Nemexia.',
+      scaling: 'Nemexia: шанс уничтожения планеты — 3% за корабль, максимальный шанс — 30%.',
+      note: 'Сохранённая страница Nemexia отдельно указывает, что итог зависит от уровня модернизации юнита.',
     },
-  },
+    planetDestroyerTargets,
+  ),
 
   Корсар: {
     kind: 'commander',
@@ -423,6 +492,7 @@ function ShipInfoModal({ data, onClose }: { data: OpenShipInfo; onClose: () => v
                 <div className="ship-info-target-grid-v1">
                   {data.definition.bonusDamage.targets.map((target) => <ShipTargetCard key={`bonus:${target.faction}:${target.name}`} target={target} />)}
                 </div>
+                {data.definition.targetsNote ? <small className="ship-info-note-v1">{data.definition.targetsNote}</small> : null}
               </section>
             ) : null}
           </div>
@@ -453,6 +523,9 @@ export function ShipInfoController() {
       const art = (card.querySelector('.shipyard-art-v1 img') ?? card.querySelector('img')) as HTMLImageElement | null;
       const role = normalizeText(button.getAttribute('title'));
       const { category, stats } = readStats(card);
+      const visibleStats = definition.kind === 'commander'
+        ? stats.filter((stat) => stat.label !== 'Приоритет')
+        : stats;
 
       setOpenInfo({
         name,
@@ -460,7 +533,7 @@ export function ShipInfoController() {
         category,
         faction: resolveFaction(definition),
         art: art?.src ?? '',
-        stats,
+        stats: visibleStats,
         definition,
       });
     };
