@@ -9,6 +9,7 @@ import {
   createDefaultCombatPriority,
   migrateCombatPriority,
   moveCommanderBefore,
+  moveCommanderToEnd,
   persistCombatPriority,
   readCombatPriority,
   selectActiveCommander,
@@ -53,6 +54,14 @@ test('reordering one list does not change the other list', () => {
 
   assert.notDeepEqual(attackAfter, priority.attack);
   assert.deepEqual(priority.defense, defenseBefore);
+});
+
+test('commander can be moved to the final priority slot', () => {
+  const priority = moveCommanderToEnd(COMMANDER_IDS, 'corsair');
+
+  assert.equal(priority.at(-1), 'corsair');
+  assert.equal(priority.length, COMMANDER_IDS.length);
+  assert.equal(new Set(priority).size, COMMANDER_IDS.length);
 });
 
 test('selectActiveCommander picks the first present commander in priority order', () => {
