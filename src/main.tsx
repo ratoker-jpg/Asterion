@@ -15,6 +15,7 @@ import './asterion-header.css';
 import './web-preview.css';
 import './shipyard-workspace.css';
 import './shipyard-tooltip-overflow.css';
+import './fleet-root-active-fix.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
 
