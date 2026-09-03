@@ -6,6 +6,7 @@ import battleshipArt from '../assets/source/New assets/ship/aegis/ship.aegis.bat
 import ballisticTurretArt from '../assets/source/New assets/defenses/aegis/defense.aegis.ballistic-turret.png';
 import laserTurretArt from '../assets/source/New assets/defenses/aegis/defense.aegis.laser-turret.png';
 import './repair-workshop.css';
+import './repair-workshop-feedback-v2.css';
 
 type RepairCategory = 'ship' | 'defense';
 type PaymentMethod = 'resources' | 'tokens';
@@ -213,11 +214,11 @@ function RepairCard({
   );
 }
 
-function SectionTitle({ title, units, total }: { title: string; units: number; total: number }) {
+function SectionTitle({ title, units, population }: { title: string; units: number; population: number }) {
   return (
     <div className="repair-section-title-v1">
       <div><span>{title}</span><i /></div>
-      <small>{units} ТИПА · {total} ЕД.</small>
+      <small>{units} ТИПА · {formatNumber(population)} НАС.</small>
     </div>
   );
 }
@@ -236,11 +237,18 @@ function WorkshopHelp() {
   );
 }
 
-function SummaryCard({ label, value, unit }: { label: string; value: number; unit: string }) {
+type SummaryIcon = 'tokens' | 'population';
+
+function SummaryCard({ label, value, unit, icon }: { label: string; value: number; unit: string; icon: SummaryIcon }) {
   return (
     <div className="repair-summary-card-v1">
-      <small>{label}</small>
-      <div className="repair-summary-value-v1"><strong>{value}</strong><span>{unit}</span></div>
+      <span className={`repair-summary-icon-v2 repair-summary-icon-v2--${icon}`}>
+        {icon === 'tokens' ? <TicketIcon /> : <ResourceIcon kind="population" />}
+      </span>
+      <div className="repair-summary-copy-v2">
+        <small>{label}</small>
+        <div className="repair-summary-value-v1"><strong>{formatNumber(value)}</strong><span>{unit}</span></div>
+      </div>
     </div>
   );
 }
@@ -260,9 +268,20 @@ export function RepairWorkshopView({ planetName, coords, onBack }: { planetName:
 
   const visibleShips = useMemo(() => repairUnits.filter((unit) => unit.category === 'ship' && (remaining[unit.id] ?? 0) > 0), [remaining]);
   const visibleDefense = useMemo(() => repairUnits.filter((unit) => unit.category === 'defense' && (remaining[unit.id] ?? 0) > 0), [remaining]);
-  const shipTotal = visibleShips.reduce((sum, unit) => sum + (remaining[unit.id] ?? 0), 0);
-  const defenseTotal = visibleDefense.reduce((sum, unit) => sum + (remaining[unit.id] ?? 0), 0);
-  const totalAvailable = shipTotal + defenseTotal;
+
+  const shipUnits = visibleShips.reduce((sum, unit) => sum + (remaining[unit.id] ?? 0), 0);
+  const defenseUnits = visibleDefense.reduce((sum, unit) => sum + (remaining[unit.id] ?? 0), 0);
+  const totalUnits = shipUnits + defenseUnits;
+
+  const shipPopulation = visibleShips.reduce(
+    (sum, unit) => sum + (remaining[unit.id] ?? 0) * unit.repairCost.population,
+    0,
+  );
+  const defensePopulation = visibleDefense.reduce(
+    (sum, unit) => sum + (remaining[unit.id] ?? 0) * unit.repairCost.population,
+    0,
+  );
+  const totalPopulation = shipPopulation + defensePopulation;
 
   const setQuantity = (unit: RepairUnit, raw: number) => {
     const available = remaining[unit.id] ?? 0;
@@ -313,34 +332,34 @@ export function RepairWorkshopView({ planetName, coords, onBack }: { planetName:
         </div>
         <div className="repair-head-actions-v1">
           <WorkshopHelp />
-          <button className="repair-back-v1" type="button" onClick={onBack}>← К КОРАБЛЯМ</button>
+          <button className="repair-back-v1" type="button" onClick={onBack}>← К ФЛОТАМ</button>
         </div>
       </header>
 
       <section className="repair-summary-v1" aria-label="Сводка ремонтной мастерской">
-        <SummaryCard label="ЖЕТОНЫ" value={tokens} unit={tokenWord(tokens)} />
-        <SummaryCard label="ДОСТУПНО К ВОССТАНОВЛЕНИЮ" value={totalAvailable} unit="ЕД." />
-        <SummaryCard label="КОРАБЛИ" value={shipTotal} unit="ЕД." />
-        <SummaryCard label="ОБОРОНА" value={defenseTotal} unit="ЕД." />
+        <SummaryCard label="ЖЕТОНЫ" value={tokens} unit={tokenWord(tokens)} icon="tokens" />
+        <SummaryCard label="ДОСТУПНО К ВОССТАНОВЛЕНИЮ" value={totalPopulation} unit="НАС." icon="population" />
+        <SummaryCard label="КОРАБЛИ" value={shipPopulation} unit="НАС." icon="population" />
+        <SummaryCard label="ОБОРОНА" value={defensePopulation} unit="НАС." icon="population" />
       </section>
 
       <div className="repair-notice-v1"><span>●</span><strong>{notice}</strong></div>
 
       {visibleShips.length > 0 ? (
         <section className="repair-section-v1">
-          <SectionTitle title="КОРАБЛИ" units={visibleShips.length} total={shipTotal} />
+          <SectionTitle title="КОРАБЛИ" units={visibleShips.length} population={shipPopulation} />
           <div className="repair-grid-v1">{renderCards(visibleShips)}</div>
         </section>
       ) : null}
 
       {visibleDefense.length > 0 ? (
         <section className="repair-section-v1">
-          <SectionTitle title="ОБОРОНА" units={visibleDefense.length} total={defenseTotal} />
+          <SectionTitle title="ОБОРОНА" units={visibleDefense.length} population={defensePopulation} />
           <div className="repair-grid-v1">{renderCards(visibleDefense)}</div>
         </section>
       ) : null}
 
-      {totalAvailable === 0 ? (
+      {totalUnits === 0 ? (
         <section className="repair-empty-v1">
           <strong>РЕМОНТНАЯ МАСТЕРСКАЯ ПУСТА</strong>
           <span>После следующего оборонительного боя доступная для восстановления техника появится здесь.</span>
