@@ -26,7 +26,6 @@ type RepairUnit = {
 };
 
 // Until battle resolution is connected, these casualties are a deterministic preview pool.
-// The workshop itself already applies the agreed 50% recovery rule with mathematical rounding.
 const repairUnits: RepairUnit[] = [
   {
     id: 'scout',
@@ -87,6 +86,15 @@ const repairUnits: RepairUnit[] = [
 
 const formatNumber = (value: number) => new Intl.NumberFormat('ru-RU').format(value);
 const recoverableFromDestroyed = (destroyed: number) => Math.round(Math.max(0, destroyed) * 0.5);
+
+function tokenWord(value: number) {
+  const mod100 = value % 100;
+  const mod10 = value % 10;
+  if (mod100 >= 11 && mod100 <= 14) return 'ЖЕТОНОВ';
+  if (mod10 === 1) return 'ЖЕТОН';
+  if (mod10 >= 2 && mod10 <= 4) return 'ЖЕТОНА';
+  return 'ЖЕТОНОВ';
+}
 
 function ResourceIcon({ kind }: { kind: ResourceKind }) {
   if (kind === 'metal') {
@@ -159,10 +167,6 @@ function RepairCard({
       <div className="repair-card-body-v1">
         <div className="repair-card-art-v1">
           <img src={unit.art} alt={unit.name} draggable={false} />
-          <div className="repair-origin-v1">
-            <small>ПОСЛЕ ОБОРОНЫ</small>
-            <strong>Уничтожено {unit.destroyed} → ремонт {recoverableFromDestroyed(unit.destroyed)}</strong>
-          </div>
         </div>
 
         <div className="repair-card-data-v1">
@@ -196,11 +200,11 @@ function RepairCard({
 
           <div className="repair-payment-v1">
             <button className="repair-button-v1 repair-button-v1--resources" type="button" onClick={() => onRepair(unit, 'resources')}>
-              <span>ВОССТАНОВИТЬ ЗА РЕСУРСЫ</span>
+              ВОССТАНОВИТЬ ЗА РЕСУРСЫ
             </button>
             <button className="repair-button-v1 repair-button-v1--tokens" type="button" disabled={tokenTotal > tokens} onClick={() => onRepair(unit, 'tokens')}>
-              <span><TicketIcon /> РЕМОНТ ЗА ЖЕТОНЫ</span>
-              <small>{tokenTotal} жет.</small>
+              <TicketIcon />
+              <span>РЕМОНТ ЗА {tokenTotal} {tokenWord(tokenTotal)}</span>
             </button>
           </div>
         </div>
@@ -214,6 +218,29 @@ function SectionTitle({ title, units, total }: { title: string; units: number; t
     <div className="repair-section-title-v1">
       <div><span>{title}</span><i /></div>
       <small>{units} ТИПА · {total} ЕД.</small>
+    </div>
+  );
+}
+
+function WorkshopHelp() {
+  return (
+    <div className="repair-help-v1">
+      <button type="button" aria-label="Правила ремонтной мастерской">i</button>
+      <div className="repair-help-popover-v1" role="tooltip">
+        <strong>ПРАВИЛА РЕМОНТА</strong>
+        <span><b>50%</b> После оборонительного боя в мастерскую попадает 50% уничтоженной техники с математическим округлением.</span>
+        <span><b>Мгновенно</b> Очереди ремонта нет: выбранные единицы возвращаются на планету сразу после оплаты.</span>
+        <span><b>Без командирских</b> Командирские корабли не попадают в мастерскую и не восстанавливаются.</span>
+      </div>
+    </div>
+  );
+}
+
+function SummaryCard({ label, value, unit }: { label: string; value: number; unit: string }) {
+  return (
+    <div className="repair-summary-card-v1">
+      <small>{label}</small>
+      <div className="repair-summary-value-v1"><strong>{value}</strong><span>{unit}</span></div>
     </div>
   );
 }
@@ -284,34 +311,17 @@ export function RepairWorkshopView({ planetName, coords, onBack }: { planetName:
           <h2>РЕМОНТНАЯ МАСТЕРСКАЯ</h2>
           <p>{planetName} {coords} · корабли и планетарная оборона</p>
         </div>
-        <button type="button" onClick={onBack}>← К КОРАБЛЯМ</button>
+        <div className="repair-head-actions-v1">
+          <WorkshopHelp />
+          <button className="repair-back-v1" type="button" onClick={onBack}>← К КОРАБЛЯМ</button>
+        </div>
       </header>
 
       <section className="repair-summary-v1" aria-label="Сводка ремонтной мастерской">
-        <div className="repair-summary-card-v1 repair-summary-card-v1--tokens">
-          <span className="repair-summary-icon-v1"><TicketIcon /></span>
-          <div><small>ЖЕТОНЫ</small><strong>{tokens}</strong></div>
-        </div>
-        <div className="repair-summary-card-v1">
-          <div><small>ДОСТУПНО К ВОССТАНОВЛЕНИЮ</small><strong>{totalAvailable}</strong></div>
-          <span>ЕД.</span>
-        </div>
-        <div className="repair-summary-card-v1">
-          <div><small>КОРАБЛИ</small><strong>{shipTotal}</strong></div>
-          <span>ЕД.</span>
-        </div>
-        <div className="repair-summary-card-v1">
-          <div><small>ОБОРОНА</small><strong>{defenseTotal}</strong></div>
-          <span>ЕД.</span>
-        </div>
-      </section>
-
-      <section className="repair-info-v1">
-        <div><strong>50%</strong><span>После оборонительного боя в мастерскую попадает 50% уничтоженной техники с математическим округлением.</span></div>
-        <i />
-        <div><strong>МГНОВЕННО</strong><span>Очереди ремонта нет: выбранные единицы возвращаются на планету сразу после оплаты.</span></div>
-        <i />
-        <div><strong>БЕЗ КОМАНДИРСКИХ</strong><span>Командирские корабли в мастерскую не попадают и восстановлению не подлежат.</span></div>
+        <SummaryCard label="ЖЕТОНЫ" value={tokens} unit={tokenWord(tokens)} />
+        <SummaryCard label="ДОСТУПНО К ВОССТАНОВЛЕНИЮ" value={totalAvailable} unit="ЕД." />
+        <SummaryCard label="КОРАБЛИ" value={shipTotal} unit="ЕД." />
+        <SummaryCard label="ОБОРОНА" value={defenseTotal} unit="ЕД." />
       </section>
 
       <div className="repair-notice-v1"><span>●</span><strong>{notice}</strong></div>
@@ -336,11 +346,6 @@ export function RepairWorkshopView({ planetName, coords, onBack }: { planetName:
           <span>После следующего оборонительного боя доступная для восстановления техника появится здесь.</span>
         </section>
       ) : null}
-
-      <footer className="repair-foot-v1">
-        <span>Прототип: ресурсная цена временно повторяет текущую стоимость единицы в каталоге.</span>
-        <span>Жетоны: временно 1 жетон за единицу до отдельной настройки баланса.</span>
-      </footer>
     </section>
   );
 }
