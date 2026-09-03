@@ -78,67 +78,67 @@ type ResourceKind = 'metal' | 'minerals' | 'gas' | 'population';
 
 const ships: ShipDefinition[] = [
   {
-    id: 'solar-satellite', name: 'Спутник «Гелиос»', role: 'Солнечный спутник', art: solarSatelliteArt, owned: 0,
+    id: 'solar-satellite', name: 'Спутник', role: 'Солнечный спутник', art: solarSatelliteArt, owned: 0,
     metal: 500, minerals: 2_000, gas: 500, population: 1, time: '00:02:30', requiredShipyardLevel: 1,
     requirements: ['Верфь · уровень 1'],
   },
   {
-    id: 'spy-probe', name: 'Зонд «Призма»', role: 'Шпионский зонд', art: spyProbeArt, owned: 0,
+    id: 'spy-probe', name: 'Зонд', role: 'Шпионский зонд', art: spyProbeArt, owned: 0,
     metal: 0, minerals: 1_000, gas: 0, population: 1, time: '00:01:00', requiredShipyardLevel: 3,
     requirements: ['Верфь · уровень 3', 'Топливные элементы · уровень 3', 'Шпионаж · уровень 2'],
   },
   {
-    id: 'transporter', name: 'Транспорт «Тракт»', role: 'Транспортировщик', art: transporterArt, owned: 0,
+    id: 'transporter', name: 'Транспорт', role: 'Транспортировщик', art: transporterArt, owned: 0,
     metal: 2_400, minerals: 1_400, gas: 0, population: 1, time: '00:10:00', requiredShipyardLevel: 2,
     requirements: ['Верфь · уровень 2', 'Математика · уровень 2'],
   },
   {
-    id: 'mega-transporter', name: 'Мегатранспорт «Артерия»', role: 'Мегатранспортировщик', art: megaTransporterArt, owned: 0,
+    id: 'mega-transporter', name: 'Мегатранспорт', role: 'Мегатранспортировщик', art: megaTransporterArt, owned: 0,
     metal: 6_400, minerals: 5_000, gas: 0, population: 3, time: '00:20:00', requiredShipyardLevel: 4,
     requirements: ['Верфь · уровень 4', 'Астрономия · уровень 6'],
   },
   {
-    id: 'colonizer', name: 'Колонизатор «Форпост»', role: 'Колониальный корабль', art: colonizerArt, owned: 0,
+    id: 'colonizer', name: 'Колонизатор', role: 'Колониальный корабль', art: colonizerArt, owned: 0,
     metal: 12_500, minerals: 25_000, gas: 10_600, population: 12, time: '00:58:00', requiredShipyardLevel: 4,
     requirements: ['Верфь · уровень 4', 'Топливные элементы · уровень 3'],
   },
   {
-    id: 'recycler', name: 'Переработчик «Сборщик»', role: 'Переработчик обломков', art: recyclerArt, owned: 0,
+    id: 'recycler', name: 'Переработчик', role: 'Переработчик обломков', art: recyclerArt, owned: 0,
     metal: 10_500, minerals: 5_300, gas: 1_800, population: 5, time: '00:41:40', requiredShipyardLevel: 4,
     requirements: ['Верфь · уровень 4', 'Топливные элементы · уровень 6', 'Броня кораблей · уровень 2'],
   },
   {
-    id: 'scout', name: 'Скаут «Вектор»', role: 'Лёгкий боевой разведчик', art: scoutArt, owned: 10,
+    id: 'scout', name: 'Скаут', role: 'Лёгкий боевой разведчик', art: scoutArt, owned: 10,
     metal: 2_400, minerals: 1_600, gas: 0, population: 2, time: '00:20:00', requiredShipyardLevel: 1,
     requirements: ['Верфь · уровень 1', 'Астрономия · уровень 1'],
   },
   {
-    id: 'cruiser', name: 'Крейсер «Копьё»', role: 'Крейсер', art: cruiserArt, owned: 0,
+    id: 'cruiser', name: 'Крейсер', role: 'Крейсер', art: cruiserArt, owned: 0,
     metal: 10_200, minerals: 8_400, gas: 0, population: 7, time: '00:25:40', requiredShipyardLevel: 3,
     requirements: ['Верфь · уровень 3', 'Броня кораблей · уровень 2', 'Топливные элементы · уровень 2'],
   },
   {
-    id: 'defender', name: 'Защитник «Эгида»', role: 'Защитный корабль', art: defenderArt, owned: 0,
+    id: 'defender', name: 'Защитник', role: 'Защитный корабль', art: defenderArt, owned: 0,
     metal: 5_300, minerals: 15_900, gas: 0, population: 6, time: '00:35:00', requiredShipyardLevel: 5,
     requirements: ['Верфь · уровень 5', 'Ионная наука · уровень 2', 'Топливные элементы · уровень 4'],
   },
   {
-    id: 'battleship', name: 'Линкор «Бастион»', role: 'Линкор', art: battleshipArt, owned: 0,
+    id: 'battleship', name: 'Линкор', role: 'Линкор', art: battleshipArt, owned: 0,
     metal: 49_400, minerals: 21_200, gas: 0, population: 15, time: '00:55:00', requiredShipyardLevel: 7,
     requirements: ['Верфь · уровень 7', 'Реактивные двигатели · уровень 4'],
   },
   {
-    id: 'destroyer', name: 'Разрушитель «Цитадель»', role: 'Тяжёлый эсминец', art: destroyerArt, owned: 0,
+    id: 'destroyer', name: 'Разрушитель', role: 'Тяжёлый эсминец', art: destroyerArt, owned: 0,
     metal: 93_900, minerals: 84_500, gas: 9_400, population: 30, time: '01:20:00', requiredShipyardLevel: 9,
     requirements: ['Верфь · уровень 9', 'Реактивные двигатели · уровень 6', 'Гиперпространство · уровень 5'],
   },
   {
-    id: 'bomber', name: 'Бомбардировщик «Молот»', role: 'Бомбардировщик', art: bomberArt, owned: 0,
+    id: 'bomber', name: 'Бомбардировщик', role: 'Бомбардировщик', art: bomberArt, owned: 0,
     metal: 44_000, minerals: 55_000, gas: 11_000, population: 22, time: '00:55:00', requiredShipyardLevel: 8,
     requirements: ['Верфь · уровень 8', 'Лазерная наука · уровень 8', 'Плазменная наука · уровень 5'],
   },
   {
-    id: 'death-star', name: 'Планетолом «Немезида»', role: 'Сверхтяжёлый корабль', art: deathStarArt, owned: 0,
+    id: 'death-star', name: 'Планетолом', role: 'Сверхтяжёлый корабль', art: deathStarArt, owned: 0,
     metal: 2_327_500, minerals: 1_862_000, gas: 465_500, population: 700, time: '175:00:00', requiredShipyardLevel: 14,
     requirements: ['Верфь · уровень 14', 'Гиперпространство · уровень 13', 'Параллельные вселенные · уровень 1', 'Тяжёлая броня · уровень 10'],
   },
@@ -352,7 +352,7 @@ export function ShipyardView({ planetName, coords, onBack }: { planetName: strin
         <div>
           <small>ОРБИТАЛЬНАЯ ВЕРФЬ · УРОВЕНЬ {SHIPYARD_LEVEL}</small>
           <h2>КОРАБЛИ</h2>
-          <p>{planetName} {coords} · полный каталог стандартных корпусов Aegis</p>
+          <p>{planetName} {coords} · полный каталог стандартных корпусов Астеров</p>
         </div>
         <button type="button" onClick={onBack}>← К ФЛОТАМ</button>
       </header>
@@ -376,7 +376,7 @@ export function ShipyardView({ planetName, coords, onBack }: { planetName: strin
       </div>
 
       <footer className="shipyard-page-foot-v1">
-        <span>13 стандартных корпусов Aegis · командирские корабли находятся в отдельном разделе.</span>
+        <span>13 стандартных корпусов Астеров · командирские корабли находятся в отдельном разделе.</span>
         <span>Свободно населения: {Math.max(0, budget.populationMax - budget.population)} / {budget.populationMax}</span>
       </footer>
     </section>
