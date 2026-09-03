@@ -148,7 +148,7 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
       <aside className="fleet-sidebar-v1">
         <div className="fleet-sidebar-title-v1">
           <span>ФЛОТЫ</span>
-          <small>AEGIS FLEET CONTROL</small>
+          <small>ФЛОТ АСТЕРОВ</small>
         </div>
 
         <div className="fleet-yard-card-v1">
@@ -201,10 +201,10 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
               </header>
 
               <div className="fleet-ship-line-v1">
-                <div className="fleet-ship-art-v1"><img src={scoutArt} alt="Скаут Вектор" draggable={false} /></div>
+                <div className="fleet-ship-art-v1"><img src={scoutArt} alt="Скаут" draggable={false} /></div>
                 <div className="fleet-ship-info-v1">
                   <small>ЛЁГКИЙ БОЕВОЙ РАЗВЕДЧИК</small>
-                  <h3>Скаут «Вектор»</h3>
+                  <h3>Скаут</h3>
                   <div className="fleet-ship-meta-v1"><span>В наличии <b>{SCOUT_AVAILABLE}</b></span><span>Население / ед. <b>{SCOUT_POPULATION}</b></span></div>
                 </div>
                 <div className="fleet-quantity-v1">
@@ -260,7 +260,7 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
 
               <footer className="fleet-compose-footer-v1">
                 <span>{status}</span>
-                <button type="button" disabled={quantity === 0} onClick={() => setStatus(`${quantity} × Скаут «Вектор» подготовлены. Выбрано населения: ${selectedPopulation}. Миссия: ${selectedMission.label}.`)}>ПРОДОЛЖИТЬ</button>
+                <button type="button" disabled={quantity === 0} onClick={() => setStatus(`${quantity} × Скаут подготовлены. Выбрано населения: ${selectedPopulation}. Миссия: ${selectedMission.label}.`)}>ПРОДОЛЖИТЬ</button>
               </footer>
             </section>
           </>
