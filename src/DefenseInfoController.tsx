@@ -105,15 +105,15 @@ const noPriorityNote =
   'В сохранённой странице Nemexia для этой щитовой системы блок «Приоритетные цели» отсутствует.';
 
 const defenseInfoByName: Readonly<Record<string, DefenseDefinition>> = {
-  'Баллистическая турель': { priorityTargets: defenderTargets, sourceNote: nemexiaPriorityNote },
-  'Лазерная турель': { priorityTargets: scoutTargets, sourceNote: nemexiaPriorityNote },
-  'Ионная турель': { priorityTargets: cruiserTargets, sourceNote: nemexiaPriorityNote },
-  'Плазменная турель': { priorityTargets: bomberTargets, sourceNote: nemexiaPriorityNote },
-  'Лазерно-ионная батарея': { priorityTargets: battleshipTargets, sourceNote: nemexiaPriorityNote },
-  'Плазменно-лазерная батарея': { priorityTargets: destroyerTargets, sourceNote: nemexiaPriorityNote },
-  'Ионно-плазменная батарея': { priorityTargets: planetDestroyerTargets, sourceNote: nemexiaPriorityNote },
-  'Башенный щит': { priorityTargets: [], sourceNote: noPriorityNote },
-  'Планетарный щит': { priorityTargets: [], sourceNote: noPriorityNote },
+  'Защитная матрица': { priorityTargets: defenderTargets, sourceNote: nemexiaPriorityNote },
+  'Лазерная матрица': { priorityTargets: scoutTargets, sourceNote: nemexiaPriorityNote },
+  'Ионная матрица': { priorityTargets: cruiserTargets, sourceNote: nemexiaPriorityNote },
+  'Плазменная матрица': { priorityTargets: bomberTargets, sourceNote: nemexiaPriorityNote },
+  'Лазер-ионная матрица': { priorityTargets: battleshipTargets, sourceNote: nemexiaPriorityNote },
+  'Плазма-лазерная матрица': { priorityTargets: destroyerTargets, sourceNote: nemexiaPriorityNote },
+  'Ион-плазменная матрица': { priorityTargets: planetDestroyerTargets, sourceNote: nemexiaPriorityNote },
+  'Матричный щит': { priorityTargets: [], sourceNote: noPriorityNote },
+  'Планетарная матрица': { priorityTargets: [], sourceNote: noPriorityNote },
 };
 
 function normalizeText(value: string | null | undefined) {
