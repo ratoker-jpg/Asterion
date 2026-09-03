@@ -2,6 +2,13 @@ import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from
 import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
+import {
+  COMBAT_PRIORITY_CHANGED_EVENT,
+  COMBAT_SAVE_SCHEMA_VERSION,
+  createDefaultCombatPriority,
+  migrateCombatPriority,
+  type CombatPriorityState,
+} from './domain/combat/priority.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import planetColonized from '../assets/source/starter/planets/planet_colonized.png';
@@ -76,12 +83,14 @@ type PlanetRuntime = {
 };
 
 type SaveState = {
+  schemaVersion: number;
   metal: number;
   minerals: number;
   gas: number;
   currentPlanetId: PlanetId;
   planets: Record<PlanetId, PlanetRuntime>;
   queues: Record<PlanetId, QueueItem | null>;
+  combatPriority: CombatPriorityState;
 };
 
 type PlanetDefinition = {
@@ -101,6 +110,7 @@ const BUILD_COST = 1200;
 const DEFAULT_PLANET_NAME = 'Helion 01';
 
 const initialState: SaveState = {
+  schemaVersion: COMBAT_SAVE_SCHEMA_VERSION,
   metal: 15_880,
   minerals: 12_712,
   gas: 6_421,
@@ -119,6 +129,7 @@ const initialState: SaveState = {
   queues: {
     'helion-01': null,
   },
+  combatPriority: createDefaultCombatPriority(),
 };
 
 const primaryTabs: ReadonlyArray<{ label: string; icon: NavigationIconKind }> = [
@@ -183,12 +194,14 @@ function readSave(): SaveState {
     // Any temporary test colonies from the previous prototype are intentionally
     // discarded here. The next save writes the canonical single-homeworld model.
     return {
+      schemaVersion: COMBAT_SAVE_SCHEMA_VERSION,
       metal: parsed.metal ?? initialState.metal,
       minerals: parsed.minerals ?? initialState.minerals,
       gas: parsed.gas ?? initialState.gas,
       currentPlanetId: 'helion-01',
       planets: { 'helion-01': homeworld },
       queues: { 'helion-01': queue },
+      combatPriority: migrateCombatPriority(parsed.combatPriority),
     };
   } catch {
     return initialState;
@@ -307,6 +320,19 @@ export function App() {
   const [editingName, setEditingName] = useState(DEFAULT_PLANET_NAME);
 
   useEffect(() => localStorage.setItem(SAVE_KEY, JSON.stringify(state)), [state]);
+  useEffect(() => {
+    const onCombatPriorityChanged = (event: Event) => {
+      const priority = (event as CustomEvent<CombatPriorityState>).detail;
+      setState((current) => ({
+        ...current,
+        schemaVersion: COMBAT_SAVE_SCHEMA_VERSION,
+        combatPriority: migrateCombatPriority(priority),
+      }));
+    };
+
+    window.addEventListener(COMBAT_PRIORITY_CHANGED_EVENT, onCombatPriorityChanged);
+    return () => window.removeEventListener(COMBAT_PRIORITY_CHANGED_EVENT, onCombatPriorityChanged);
+  }, []);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
