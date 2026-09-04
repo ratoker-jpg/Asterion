@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 
 const BASE_STAGE_WIDTH = 1920;
 const BASE_WORKSPACE_HEIGHT = 1080 - 176 - 58;
+const BASE_FLEET_VERTICAL_PADDING = 22 + 30;
 const LONG_WORKSPACE_TOP = 246;
 const STAGE_BOTTOM_GAP = 58;
 const PAGE_BOTTOM_PADDING = 52;
@@ -26,6 +27,10 @@ function getPageRoots(workspace: HTMLElement) {
   );
 }
 
+function isFleetRoot(roots: readonly HTMLElement[]) {
+  return roots.length === 2 && roots.every((element) => element.classList.contains('fleet-panel-v1'));
+}
+
 function measureContentHeight(workspace: HTMLElement, stageScale: number, roots: readonly HTMLElement[]) {
   const workspaceRect = workspace.getBoundingClientRect();
 
@@ -38,13 +43,25 @@ function measureContentHeight(workspace: HTMLElement, stageScale: number, roots:
   }, 0));
 }
 
+function pageIdentity(roots: readonly HTMLElement[]) {
+  const primary = roots[0];
+  if (!primary) return 'empty';
+  const title = primary.querySelector('h2')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  return `${primary.className}|${title}`;
+}
+
+function sameRoots(left: readonly HTMLElement[], right: readonly HTMLElement[]) {
+  return left.length === right.length && left.every((element, index) => element === right[index]);
+}
+
 export function GlobalPageScrollController() {
   useEffect(() => {
     const root = document.documentElement;
     let frame = 0;
     let delayed = 0;
     let resizeObserver: ResizeObserver | null = null;
-    let lastPageRoot: HTMLElement | null = null;
+    let observedRoots: HTMLElement[] = [];
+    let lastPageIdentity = '';
 
     const clearGeometry = () => {
       root.style.removeProperty('--asterion-scroll-workspace-height');
@@ -52,9 +69,20 @@ export function GlobalPageScrollController() {
       root.style.removeProperty('--asterion-scroll-page-height');
     };
 
+    const schedule = () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(delayed);
+      frame = window.requestAnimationFrame(sync);
+      delayed = window.setTimeout(sync, 32);
+    };
+
     const observeCurrentPage = (roots: readonly HTMLElement[]) => {
+      if (sameRoots(observedRoots, roots)) return;
+
       resizeObserver?.disconnect();
-      if (typeof ResizeObserver === 'undefined') return;
+      observedRoots = [...roots];
+      if (typeof ResizeObserver === 'undefined' || roots.length === 0) return;
+
       resizeObserver = new ResizeObserver(() => schedule());
       roots.forEach((element) => resizeObserver?.observe(element));
     };
@@ -63,27 +91,27 @@ export function GlobalPageScrollController() {
       const workspace = document.querySelector<HTMLElement>('.workspace');
       const stage = document.querySelector<HTMLElement>('.stage');
       if (!workspace || !stage) {
-        root.classList.remove('asterion-long-page', 'asterion-combat-priority-page');
+        resizeObserver?.disconnect();
+        observedRoots = [];
+        root.classList.remove('asterion-long-page');
         clearGeometry();
-        lastPageRoot = null;
+        lastPageIdentity = '';
         return;
       }
 
-      const wasLong = root.classList.contains('asterion-long-page');
-
-      // Always measure against the normal one-screen shell. This prevents an already
-      // expanded page from measuring its own expanded wrapper and growing forever.
-      root.classList.remove('asterion-long-page', 'asterion-combat-priority-page');
-      clearGeometry();
-
       const stageScale = getStageScale(stage);
       const pageRoots = getPageRoots(workspace);
-      const primaryPageRoot = pageRoots[0] ?? null;
-      const pageChanged = primaryPageRoot !== lastPageRoot;
-      lastPageRoot = primaryPageRoot;
+      const identity = pageIdentity(pageRoots);
+      const pageChanged = identity !== lastPageIdentity;
+      lastPageIdentity = identity;
 
+      const fleetMain = workspace.querySelector<HTMLElement>('.fleet-main-v1');
+      const availableHeight = fleetMain
+        ? BASE_WORKSPACE_HEIGHT - BASE_FLEET_VERTICAL_PADDING
+        : BASE_WORKSPACE_HEIGHT;
       const contentHeight = measureContentHeight(workspace, stageScale, pageRoots);
-      const needsScroll = contentHeight > BASE_WORKSPACE_HEIGHT + OVERFLOW_EPSILON;
+      const needsScroll = !isFleetRoot(pageRoots)
+        && contentHeight > availableHeight + OVERFLOW_EPSILON;
 
       if (needsScroll) {
         const workspaceHeight = Math.ceil(contentHeight + PAGE_BOTTOM_PADDING);
@@ -93,31 +121,32 @@ export function GlobalPageScrollController() {
         root.style.setProperty('--asterion-scroll-workspace-height', `${workspaceHeight}px`);
         root.style.setProperty('--asterion-scroll-stage-height', `${stageHeight}px`);
         root.style.setProperty('--asterion-scroll-page-height', `${pageHeight}px`);
-        root.classList.add('asterion-long-page');
+
+        // Do not remove/re-add this class while measuring. That was the source of the
+        // visible flashing and ResizeObserver loop on long Fleet pages.
+        if (!root.classList.contains('asterion-long-page')) {
+          root.classList.add('asterion-long-page');
+        }
+      } else {
+        if (root.classList.contains('asterion-long-page')) {
+          root.classList.remove('asterion-long-page');
+        }
+        clearGeometry();
       }
 
       observeCurrentPage(pageRoots);
 
-      // A new screen always opens from its top, including long → long transitions.
-      if (pageChanged || wasLong !== needsScroll) {
+      // Reset scroll only for an actual screen change. Content growth inside a page
+      // (for example opening a battle round) must never yank the scrollbar back to top.
+      if (pageChanged) {
         window.scrollTo(0, 0);
       }
-    };
-
-    const schedule = () => {
-      window.cancelAnimationFrame(frame);
-      window.clearTimeout(delayed);
-      frame = window.requestAnimationFrame(sync);
-      // Page-specific legacy cleanup effects can run just after a route commit. A second
-      // pass makes the global controller the final source of truth for scrolling.
-      delayed = window.setTimeout(sync, 32);
     };
 
     const mutationObserver = new MutationObserver(schedule);
     mutationObserver.observe(document.body, {
       subtree: true,
       childList: true,
-      characterData: true,
     });
 
     window.addEventListener('resize', schedule);
@@ -131,7 +160,7 @@ export function GlobalPageScrollController() {
       window.clearTimeout(delayed);
       window.removeEventListener('resize', schedule);
       window.visualViewport?.removeEventListener('resize', schedule);
-      root.classList.remove('asterion-long-page', 'asterion-combat-priority-page');
+      root.classList.remove('asterion-long-page');
       clearGeometry();
     };
   }, []);
