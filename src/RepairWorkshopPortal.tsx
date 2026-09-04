@@ -26,10 +26,6 @@ function findFleetSectionButton(label: string) {
   );
 }
 
-function destinationNeedsLongPage() {
-  return Boolean(document.querySelector('.shipyard-view-v1, .combat-priority-view-v1'));
-}
-
 function openFleetRoot() {
   const shipsButton = findFleetSectionButton('Корабли');
   if (!shipsButton) return;
@@ -72,18 +68,13 @@ export function RepairWorkshopPortal() {
   useEffect(() => {
     if (!active || !target) return;
 
-    document.documentElement.classList.add('asterion-repair-page', 'asterion-long-page');
+    // Repair-specific styling is still local, but document scrolling is owned exclusively
+    // by GlobalPageScrollController. Do not add/remove asterion-long-page here.
+    document.documentElement.classList.add('asterion-repair-page');
     window.scrollTo(0, 0);
 
     return () => {
       document.documentElement.classList.remove('asterion-repair-page');
-
-      // Preserve the long-page state only when the destination that actually needs it
-      // is mounted. A selected sidebar label alone is not enough: Fleet root also keeps
-      // «Корабли» selected, and preserving the class there creates a 2860px empty page.
-      if (!destinationNeedsLongPage()) {
-        document.documentElement.classList.remove('asterion-long-page');
-      }
       window.scrollTo(0, 0);
     };
   }, [active, target]);
