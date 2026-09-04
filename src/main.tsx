@@ -21,6 +21,7 @@ import './shipyard-tooltip-overflow.css';
 import './fleet-root-active-fix.css';
 import './repair-workshop-fixed-layout.css';
 import './global-page-scroll.css';
+import './fleet-ui-standard.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
 
