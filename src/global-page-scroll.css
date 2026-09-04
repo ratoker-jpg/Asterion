@@ -1,6 +1,14 @@
-/* Global Asterion page scrolling.
-   The controller enables this only when the current workspace content is taller than one screen.
-   Geometry follows the existing Ships/Defense document-level scroll model, but page height is dynamic. */
+/* GLOBAL PAGE SCROLL CONTRACT
+   ---------------------------
+   This is the default overflow behavior for Asterion screens.
+
+   Rule for current and future pages:
+   - if workspace content fits into one 1920×1080 screen, the shell stays fixed and has no page scrollbar;
+   - if content is taller, GlobalPageScrollController automatically switches to the same document-level
+     scrolling model originally used by Ships/Defense;
+   - page authors must not hardcode a page height or create a nested vertical scrollbar for the whole screen.
+
+   Geometry is dynamic, so a long page ends shortly after its real content instead of inheriting a 2860px tail. */
 
 /* Battles used to own an internal scrollbar. Keep the page itself un-clipped so the global
    controller can detect its natural height and switch to the shared document scrollbar. */
