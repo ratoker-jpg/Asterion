@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { FleetWorkspacePortal } from './FleetWorkspacePortal';
 import { FleetRootNavigationController } from './FleetRootNavigationController';
+import { GlobalPageScrollController } from './GlobalPageScrollController';
 import { RepairWorkshopPortal } from './RepairWorkshopPortal';
 import { ShipInfoController } from './ShipInfoController';
 import { DefenseInfoController } from './DefenseInfoController';
@@ -48,6 +49,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
     <FleetRootNavigationController />
+    <GlobalPageScrollController />
     <FleetWorkspacePortal />
     <RepairWorkshopPortal />
     <ShipInfoController />
