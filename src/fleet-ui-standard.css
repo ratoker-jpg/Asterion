@@ -25,9 +25,14 @@ html {
   width: 100% !important;
 }
 
-/* Every Fleet subpage owns the same content width. No subpage gets its own inset scrollbar. */
+/* Every Fleet subpage owns the same content width. No subpage gets its own inset scrollbar.
+   :has() keeps legacy pages aligned without requiring each old screen to invent another modifier. */
 .fleet-main-v1--subpage,
-.fleet-main-v1.fleet-main-v1--battles {
+.fleet-main-v1.fleet-main-v1--battles,
+.fleet-main-v1:has(> .shipyard-view-v1),
+.fleet-main-v1:has(> .repair-workshop-v1),
+.fleet-main-v1:has(> .combat-priority-view-v1),
+.fleet-main-v1:has(> .battle-view-v1) {
   display: block !important;
   min-width: 0;
   min-height: 0;
