@@ -1,0 +1,83 @@
+/* Global Asterion page scrolling.
+   The controller enables this only when the current workspace content is taller than one screen.
+   Geometry follows the existing Ships/Defense document-level scroll model, but page height is dynamic. */
+
+html.asterion-long-page,
+html.asterion-long-page body,
+html.asterion-long-page #root {
+  width: 100%;
+  height: auto !important;
+  min-height: 100%;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  scrollbar-gutter: stable;
+  background: #010307;
+}
+
+html.asterion-long-page .viewport,
+html.web-preview.asterion-long-page .viewport,
+html.asterion-long-page.asterion-repair-page .viewport,
+html.asterion-long-page.asterion-combat-priority-page .viewport {
+  position: relative !important;
+  inset: auto !important;
+  width: 100% !important;
+  height: var(--asterion-scroll-page-height, 1080px) !important;
+  min-height: var(--asterion-scroll-page-height, 1080px) !important;
+  display: block !important;
+  overflow: visible !important;
+  background: #01070c;
+}
+
+html.asterion-long-page .stage,
+html.web-preview.asterion-long-page .stage,
+html.asterion-long-page.asterion-repair-page .stage,
+html.asterion-long-page.asterion-combat-priority-page .stage {
+  position: absolute !important;
+  left: 50% !important;
+  top: 0 !important;
+  margin-left: -960px !important;
+  margin-top: 0 !important;
+  height: var(--asterion-scroll-stage-height, 1080px) !important;
+  overflow: visible !important;
+  transform-origin: top center !important;
+}
+
+html.asterion-long-page .workspace,
+html.asterion-long-page.asterion-repair-page .workspace,
+html.asterion-long-page.asterion-combat-priority-page .workspace {
+  top: 246px !important;
+  bottom: auto !important;
+  height: var(--asterion-scroll-workspace-height, 846px) !important;
+  overflow: visible !important;
+}
+
+html.asterion-long-page .fleet-workspace-v1,
+html.asterion-long-page.asterion-repair-page .fleet-workspace-v1,
+html.asterion-long-page.asterion-combat-priority-page .fleet-workspace-v1 {
+  min-height: var(--asterion-scroll-workspace-height, 846px) !important;
+  overflow: visible !important;
+  align-items: start;
+  background:
+    radial-gradient(circle at 72% 14%, rgba(18, 119, 160, .09), transparent 30%),
+    linear-gradient(180deg, #031019 0%, #01080e 72%, #01060b 100%);
+}
+
+html.asterion-long-page .fleet-sidebar-v1 {
+  align-self: start;
+  height: max-content;
+  min-height: 0;
+}
+
+html.asterion-long-page .fleet-main-v1,
+html.asterion-long-page .fleet-main-v1.fleet-main-v1--battles,
+html.asterion-long-page .fleet-main-v1--shipyard,
+html.asterion-long-page.asterion-combat-priority-page .fleet-main-v1 {
+  display: block !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  isolation: isolate;
+  scrollbar-gutter: auto;
+}
+
+/* A page that fits remains on the normal fixed 1920×1080 shell with no document scrollbar.
+   No page-specific height constant is required for future screens. */
