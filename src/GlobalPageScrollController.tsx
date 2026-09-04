@@ -26,9 +26,8 @@ function getPageRoots(workspace: HTMLElement) {
   );
 }
 
-function measureContentHeight(workspace: HTMLElement, stageScale: number) {
+function measureContentHeight(workspace: HTMLElement, stageScale: number, roots: readonly HTMLElement[]) {
   const workspaceRect = workspace.getBoundingClientRect();
-  const roots = getPageRoots(workspace);
 
   return Math.ceil(roots.reduce((maxBottom, element) => {
     const rect = element.getBoundingClientRect();
@@ -45,6 +44,7 @@ export function GlobalPageScrollController() {
     let frame = 0;
     let delayed = 0;
     let resizeObserver: ResizeObserver | null = null;
+    let lastPageRoot: HTMLElement | null = null;
 
     const clearGeometry = () => {
       root.style.removeProperty('--asterion-scroll-workspace-height');
@@ -52,11 +52,11 @@ export function GlobalPageScrollController() {
       root.style.removeProperty('--asterion-scroll-page-height');
     };
 
-    const observeCurrentPage = (workspace: HTMLElement) => {
+    const observeCurrentPage = (roots: readonly HTMLElement[]) => {
       resizeObserver?.disconnect();
       if (typeof ResizeObserver === 'undefined') return;
       resizeObserver = new ResizeObserver(() => schedule());
-      getPageRoots(workspace).forEach((element) => resizeObserver?.observe(element));
+      roots.forEach((element) => resizeObserver?.observe(element));
     };
 
     const sync = () => {
@@ -65,6 +65,7 @@ export function GlobalPageScrollController() {
       if (!workspace || !stage) {
         root.classList.remove('asterion-long-page', 'asterion-combat-priority-page');
         clearGeometry();
+        lastPageRoot = null;
         return;
       }
 
@@ -76,7 +77,12 @@ export function GlobalPageScrollController() {
       clearGeometry();
 
       const stageScale = getStageScale(stage);
-      const contentHeight = measureContentHeight(workspace, stageScale);
+      const pageRoots = getPageRoots(workspace);
+      const primaryPageRoot = pageRoots[0] ?? null;
+      const pageChanged = primaryPageRoot !== lastPageRoot;
+      lastPageRoot = primaryPageRoot;
+
+      const contentHeight = measureContentHeight(workspace, stageScale, pageRoots);
       const needsScroll = contentHeight > BASE_WORKSPACE_HEIGHT + OVERFLOW_EPSILON;
 
       if (needsScroll) {
@@ -90,9 +96,10 @@ export function GlobalPageScrollController() {
         root.classList.add('asterion-long-page');
       }
 
-      observeCurrentPage(workspace);
+      observeCurrentPage(pageRoots);
 
-      if (wasLong !== needsScroll) {
+      // A new screen always opens from its top, including long → long transitions.
+      if (pageChanged || wasLong !== needsScroll) {
         window.scrollTo(0, 0);
       }
     };
