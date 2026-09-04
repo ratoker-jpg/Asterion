@@ -15,12 +15,7 @@
   --fleet-page-surface-bottom: rgba(3, 20, 31, 1);
 }
 
-/* Reserve the scrollbar lane permanently so the 1920px stage does not jump sideways
-   when a short page becomes a long page. 100% also avoids the classic 100vw scrollbar shift. */
-html {
-  scrollbar-gutter: stable;
-}
-
+/* 100% avoids 100vw overflow without reserving a permanent scrollbar gutter on short pages. */
 .viewport {
   width: 100% !important;
 }
