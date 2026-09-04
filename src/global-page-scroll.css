@@ -48,7 +48,7 @@ html.web-preview.asterion-long-page .stage,
 html.asterion-long-page.asterion-repair-page .stage,
 html.asterion-long-page.asterion-combat-priority-page .stage {
   position: absolute !important;
-  left: 50% !important;
+  left: 50vw !important;
   top: 0 !important;
   margin-left: -960px !important;
   margin-top: 0 !important;
