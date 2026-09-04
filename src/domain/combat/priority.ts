@@ -1,7 +1,7 @@
 import { COMMANDER_IDS, isCommanderId, type CommanderId } from './commanders.ts';
 
 export const ASTERION_SAVE_KEY = 'asterion.vertical-slice.v1';
-export const COMBAT_SAVE_SCHEMA_VERSION = 2;
+export const COMBAT_SAVE_SCHEMA_VERSION = 3;
 export const COMBAT_PRIORITY_CHANGED_EVENT = 'asterion:combat-priority-changed';
 
 export type CombatPriorityState = {

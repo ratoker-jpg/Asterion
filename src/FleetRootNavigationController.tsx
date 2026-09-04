@@ -1,24 +1,9 @@
 import { useEffect } from 'react';
 
+export const FLEET_ROOT_REQUEST_EVENT = 'asterion:fleet-root-request';
+
 function normalizeText(value: string | null | undefined) {
   return value?.replace(/\s+/g, ' ').trim() ?? '';
-}
-
-function returnToFleetRoot() {
-  const repairBack = document.querySelector<HTMLButtonElement>('.repair-back-v1');
-  if (repairBack) {
-    repairBack.click();
-    return;
-  }
-
-  const priorityBack = document.querySelector<HTMLButtonElement>('.combat-priority-back-v1');
-  if (priorityBack) {
-    priorityBack.click();
-    return;
-  }
-
-  const catalogBack = document.querySelector<HTMLButtonElement>('.shipyard-page-head-v1 > button');
-  catalogBack?.click();
 }
 
 export function FleetRootNavigationController() {
@@ -29,10 +14,9 @@ export function FleetRootNavigationController() {
       if (!button) return;
       if (normalizeText(button.querySelector('span')?.textContent) !== 'Флоты') return;
 
-      // The top-level Fleet tab is the global home action for the whole Fleet module.
-      // When already inside a Fleet subpage, use that page's own back action so
-      // FleetWorkspace remains the source of truth for returning to the Fleet root.
-      window.setTimeout(returnToFleetRoot, 0);
+      // FleetWorkspace owns the actual screen state. The global Fleet tab only asks it
+      // to return home; it does not synthesize clicks into individual subpages.
+      window.setTimeout(() => window.dispatchEvent(new Event(FLEET_ROOT_REQUEST_EVENT)), 0);
     };
 
     document.addEventListener('click', handlePrimaryNavigation, true);

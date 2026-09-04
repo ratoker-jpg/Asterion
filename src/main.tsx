@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { FleetWorkspacePortal } from './FleetWorkspacePortal';
 import { FleetRootNavigationController } from './FleetRootNavigationController';
+import { GlobalPageScrollController } from './GlobalPageScrollController';
+import { PrototypeResetController } from './PrototypeResetController';
 import { RepairWorkshopPortal } from './RepairWorkshopPortal';
 import { ShipInfoController } from './ShipInfoController';
 import { DefenseInfoController } from './DefenseInfoController';
@@ -19,6 +21,8 @@ import './shipyard-workspace.css';
 import './shipyard-tooltip-overflow.css';
 import './fleet-root-active-fix.css';
 import './repair-workshop-fixed-layout.css';
+import './global-page-scroll.css';
+import './fleet-ui-standard.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
 
@@ -48,6 +52,8 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
     <FleetRootNavigationController />
+    <PrototypeResetController />
+    <GlobalPageScrollController />
     <FleetWorkspacePortal />
     <RepairWorkshopPortal />
     <ShipInfoController />

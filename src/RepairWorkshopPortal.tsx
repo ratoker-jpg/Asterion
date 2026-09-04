@@ -26,15 +26,6 @@ function findFleetSectionButton(label: string) {
   );
 }
 
-function activeFleetSection() {
-  return normalizeText(document.querySelector('.fleet-menu-group-v1 button.active strong')?.textContent);
-}
-
-function destinationNeedsLongPage() {
-  return ['Корабли', 'Оборона', 'Командирские корабли', 'Боевой приоритет'].includes(activeFleetSection())
-    || Boolean(document.querySelector('.shipyard-view-v1, .combat-priority-view-v1'));
-}
-
 function openFleetRoot() {
   const shipsButton = findFleetSectionButton('Корабли');
   if (!shipsButton) return;
@@ -77,17 +68,13 @@ export function RepairWorkshopPortal() {
   useEffect(() => {
     if (!active || !target) return;
 
-    document.documentElement.classList.add('asterion-repair-page', 'asterion-long-page');
+    // Repair-specific styling is still local, but document scrolling is owned exclusively
+    // by GlobalPageScrollController. Do not add/remove asterion-long-page here.
+    document.documentElement.classList.add('asterion-repair-page');
     window.scrollTo(0, 0);
 
     return () => {
       document.documentElement.classList.remove('asterion-repair-page');
-
-      // Ships, defense, commander construction and combat priority all use the same
-      // document-level long-page class. Preserve it during direct Fleet section transitions.
-      if (!destinationNeedsLongPage()) {
-        document.documentElement.classList.remove('asterion-long-page');
-      }
       window.scrollTo(0, 0);
     };
   }, [active, target]);
