@@ -19,10 +19,12 @@ function getStageScale(stage: HTMLElement) {
   return Number.isFinite(scale) && scale > 0 ? scale : 1;
 }
 
-function getPageRoots(workspace: HTMLElement) {
-  const fleetMain = workspace.querySelector<HTMLElement>('.fleet-main-v1');
-  const parent = fleetMain ?? workspace;
-  return Array.from(parent.children).filter(
+function getPageContainer(workspace: HTMLElement) {
+  return workspace.querySelector<HTMLElement>('.fleet-main-v1') ?? workspace;
+}
+
+function getPageRoots(container: HTMLElement) {
+  return Array.from(container.children).filter(
     (child): child is HTMLElement => child instanceof HTMLElement && isVisible(child),
   );
 }
@@ -31,12 +33,12 @@ function isFleetRoot(roots: readonly HTMLElement[]) {
   return roots.length === 2 && roots.every((element) => element.classList.contains('fleet-panel-v1'));
 }
 
-function measureContentHeight(workspace: HTMLElement, stageScale: number, roots: readonly HTMLElement[]) {
-  const workspaceRect = workspace.getBoundingClientRect();
+function measureContentHeight(container: HTMLElement, stageScale: number, roots: readonly HTMLElement[]) {
+  const containerRect = container.getBoundingClientRect();
 
   return Math.ceil(roots.reduce((maxBottom, element) => {
     const rect = element.getBoundingClientRect();
-    const top = (rect.top - workspaceRect.top) / stageScale;
+    const top = (rect.top - containerRect.top) / stageScale;
     const renderedHeight = rect.height / stageScale;
     const naturalHeight = Math.max(renderedHeight, element.scrollHeight);
     return Math.max(maxBottom, Math.max(0, top) + naturalHeight);
@@ -100,16 +102,17 @@ export function GlobalPageScrollController() {
       }
 
       const stageScale = getStageScale(stage);
-      const pageRoots = getPageRoots(workspace);
+      const pageContainer = getPageContainer(workspace);
+      const pageRoots = getPageRoots(pageContainer);
       const identity = pageIdentity(pageRoots);
       const pageChanged = identity !== lastPageIdentity;
       lastPageIdentity = identity;
 
-      const fleetMain = workspace.querySelector<HTMLElement>('.fleet-main-v1');
-      const availableHeight = fleetMain
+      const isFleetPage = pageContainer.classList.contains('fleet-main-v1');
+      const availableHeight = isFleetPage
         ? BASE_WORKSPACE_HEIGHT - BASE_FLEET_VERTICAL_PADDING
         : BASE_WORKSPACE_HEIGHT;
-      const contentHeight = measureContentHeight(workspace, stageScale, pageRoots);
+      const contentHeight = measureContentHeight(pageContainer, stageScale, pageRoots);
       const needsScroll = !isFleetRoot(pageRoots)
         && contentHeight > availableHeight + OVERFLOW_EPSILON;
 
