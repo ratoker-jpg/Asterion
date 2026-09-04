@@ -4,6 +4,7 @@ import { App } from './App';
 import { FleetWorkspacePortal } from './FleetWorkspacePortal';
 import { FleetRootNavigationController } from './FleetRootNavigationController';
 import { GlobalPageScrollController } from './GlobalPageScrollController';
+import { PrototypeResetController } from './PrototypeResetController';
 import { RepairWorkshopPortal } from './RepairWorkshopPortal';
 import { ShipInfoController } from './ShipInfoController';
 import { DefenseInfoController } from './DefenseInfoController';
@@ -51,6 +52,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
     <FleetRootNavigationController />
+    <PrototypeResetController />
     <GlobalPageScrollController />
     <FleetWorkspacePortal />
     <RepairWorkshopPortal />
