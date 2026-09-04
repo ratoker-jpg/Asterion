@@ -2,6 +2,13 @@
    The controller enables this only when the current workspace content is taller than one screen.
    Geometry follows the existing Ships/Defense document-level scroll model, but page height is dynamic. */
 
+/* Battles used to own an internal scrollbar. Keep the page itself un-clipped so the global
+   controller can detect its natural height and switch to the shared document scrollbar. */
+.fleet-main-v1.fleet-main-v1--battles {
+  overflow: visible;
+  scrollbar-gutter: auto;
+}
+
 html.asterion-long-page,
 html.asterion-long-page body,
 html.asterion-long-page #root {
