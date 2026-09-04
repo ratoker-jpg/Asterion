@@ -1,7 +1,5 @@
 import { useEffect } from 'react';
 
-import './global-page-scroll.css';
-
 const BASE_STAGE_WIDTH = 1920;
 const BASE_WORKSPACE_HEIGHT = 1080 - 176 - 58;
 const LONG_WORKSPACE_TOP = 246;
