@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { COMMANDER_ABILITIES } from './domain/combat/commanders.ts';
 import { getCombatEntity } from './domain/combat/catalog.ts';
 import {
+  BATTLE_HISTORY_CHANGED_EVENT,
   persistBattleHistory,
   readBattleHistory,
   setBattleReportSaved,
@@ -244,15 +245,7 @@ function EventCard({ event }: { event: CombatEvent }) {
   );
 }
 
-function RoundLog({
-  report,
-  openRounds,
-  onToggle,
-}: {
-  report: BattleReport;
-  openRounds: Set<number>;
-  onToggle: (round: number) => void;
-}) {
+function RoundLog({ report, openRounds, onToggle }: { report: BattleReport; openRounds: Set<number>; onToggle: (round: number) => void }) {
   return (
     <section className="battle-section-v1 battle-rounds-v1">
       <header className="battle-section-head-v1"><div><small>ХОД БОЯ</small><h3>РАУНДОВЫЙ ЛОГ</h3></div><span>{report.roundCount} РАУНДОВ</span></header>
@@ -301,20 +294,44 @@ function BattleOutcome({ report }: { report: BattleReport }) {
   );
 }
 
-export function BattleReportsView({
-  planetName,
-  coords,
-  onBack,
-}: {
-  planetName: string;
-  coords: string;
-  onBack: () => void;
-}) {
+export function BattleReportDetailBody({ report }: { report: BattleReport }) {
+  const [openRounds, setOpenRounds] = useState<Set<number>>(() => new Set(report.rounds[0] ? [report.rounds[0].index] : []));
+
+  useEffect(() => {
+    setOpenRounds(new Set(report.rounds[0] ? [report.rounds[0].index] : []));
+  }, [report.id]);
+
+  const toggleRound = (roundIndex: number) => {
+    setOpenRounds((current) => {
+      const next = new Set(current);
+      if (next.has(roundIndex)) next.delete(roundIndex);
+      else next.add(roundIndex);
+      return next;
+    });
+  };
+
+  return (
+    <>
+      <PopulationPanel report={report} />
+      <BattleComposition report={report} />
+      <CommanderSnapshot report={report} />
+      <RoundLog report={report} openRounds={openRounds} onToggle={toggleRound} />
+      <BattleOutcome report={report} />
+    </>
+  );
+}
+
+export function BattleReportsView({ planetName, coords, onBack }: { planetName: string; coords: string; onBack: () => void }) {
   const [history, setHistory] = useState<BattleHistoryState>(() => readBattleHistory());
   const [mode, setMode] = useState<BattleListMode>('recent');
   const [openReportId, setOpenReportId] = useState<string | null>(null);
-  const [openRounds, setOpenRounds] = useState<Set<number>>(new Set());
   const [saveNotice, setSaveNotice] = useState<SaveNotice>({ kind: 'saved', message: '✓ Автосохранение активно' });
+
+  useEffect(() => {
+    const sync = () => setHistory(readBattleHistory());
+    window.addEventListener(BATTLE_HISTORY_CHANGED_EVENT, sync);
+    return () => window.removeEventListener(BATTLE_HISTORY_CHANGED_EVENT, sync);
+  }, []);
 
   const visibleReports = useMemo(
     () => filterBattleReports(history.reports, history.savedReportIds, mode),
@@ -332,56 +349,32 @@ export function BattleReportsView({
       : { kind: 'error', message: `⚠ ${result.error}` });
   };
 
-  const openReportDetails = (reportId: string) => {
-    const report = history.reports.find((item) => item.id === reportId);
-    setOpenReportId(reportId);
-    setOpenRounds(new Set(report?.rounds[0] ? [report.rounds[0].index] : []));
-  };
-
-  const closeReportDetails = () => {
-    setOpenReportId(null);
-    setOpenRounds(new Set());
-  };
-
-  const toggleRound = (roundIndex: number) => {
-    setOpenRounds((current) => {
-      const next = new Set(current);
-      if (next.has(roundIndex)) next.delete(roundIndex);
-      else next.add(roundIndex);
-      return next;
-    });
-  };
-
   if (openReport) {
     const saved = history.savedReportIds.includes(openReport.id);
     return (
-      <section className="battle-view-v1 battle-report-detail-v1">
-        <header className="battle-page-head-v1">
+      <section className="battle-view-v1 battle-report-detail-v1 fleet-page-shell-v1">
+        <header className="battle-page-head-v1 fleet-page-head-v1">
           <div>
             <small>БОЕВОЙ ОТЧЁТ · {planetName} {coords}</small>
             <h2>БОЕВОЙ ОТЧЁТ</h2>
             <p><time dateTime={openReport.timestamp}>{formatBattleDate(openReport.timestamp)}</time> · {participantLabel(openReport, 'attacker')} → {participantLabel(openReport, 'defender')}</p>
           </div>
-          <div className="battle-page-actions-v1">
-            <button type="button" className="battle-list-back-v1" onClick={closeReportDetails}>← К СПИСКУ БИТВ</button>
+          <div className="battle-page-actions-v1 fleet-page-actions-v1">
+            <button type="button" className="battle-list-back-v1 fleet-page-back-v1" onClick={() => setOpenReportId(null)}>← К СПИСКУ БИТВ</button>
             <SaveButton saved={saved} onToggle={() => toggleSaved(openReport.id)} reportId={openReport.id} />
           </div>
         </header>
         <div className={`battle-save-notice-v1 ${saveNotice.kind}`} role="status" aria-live="polite">{saveNotice.message}</div>
-        <PopulationPanel report={openReport} />
-        <BattleComposition report={openReport} />
-        <CommanderSnapshot report={openReport} />
-        <RoundLog report={openReport} openRounds={openRounds} onToggle={toggleRound} />
-        <BattleOutcome report={openReport} />
+        <BattleReportDetailBody report={openReport} />
       </section>
     );
   }
 
   return (
-    <section className="battle-view-v1">
-      <header className="battle-page-head-v1">
+    <section className="battle-view-v1 fleet-page-shell-v1">
+      <header className="battle-page-head-v1 fleet-page-head-v1">
         <div><small>УПРАВЛЕНИЕ ФЛОТОМ · {planetName} {coords}</small><h2>БИТВЫ</h2><p>Боевые отчёты флота</p></div>
-        <div className="battle-page-actions-v1"><span className={`battle-save-notice-v1 ${saveNotice.kind}`} role="status" aria-live="polite">{saveNotice.message}</span><button type="button" className="battle-back-v1" onClick={onBack}>← К ФЛОТАМ</button></div>
+        <div className="battle-page-actions-v1 fleet-page-actions-v1"><span className={`battle-save-notice-v1 ${saveNotice.kind}`} role="status" aria-live="polite">{saveNotice.message}</span><button type="button" className="battle-back-v1 fleet-page-back-v1" onClick={onBack}>← К ФЛОТАМ</button></div>
       </header>
 
       <div className="battle-tabs-v1" role="tablist" aria-label="Фильтр боевых отчётов">
@@ -396,7 +389,7 @@ export function BattleReportsView({
             report={report}
             saved={history.savedReportIds.includes(report.id)}
             onToggleSaved={() => toggleSaved(report.id)}
-            onOpen={() => openReportDetails(report.id)}
+            onOpen={() => setOpenReportId(report.id)}
           />
         )) : (
           <div className="battle-empty-v1"><span>◇</span><strong>{mode === 'recent' ? 'Боевых отчётов пока нет.' : 'Нет сохранённых боевых отчётов.'}</strong><p>{mode === 'saved' ? 'Отметь нужный отчёт звездой во вкладке «Последние».' : 'Новые результаты появятся здесь после появления настоящего боевого pipeline.'}</p></div>

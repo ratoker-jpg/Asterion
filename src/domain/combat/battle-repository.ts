@@ -138,6 +138,16 @@ export function setBattleReportSaved(
   };
 }
 
+export function addBattleReportSaved(history: BattleHistoryState, report: BattleReport): BattleHistoryState {
+  const exists = history.reports.some((item) => item.id === report.id);
+  const savedIds = new Set(history.savedReportIds);
+  savedIds.add(report.id);
+  return {
+    reports: exists ? history.reports : [...history.reports, report],
+    savedReportIds: [...savedIds],
+  };
+}
+
 export function isBattleReportSaved(history: BattleHistoryState, reportId: string) {
   return history.savedReportIds.includes(reportId);
 }

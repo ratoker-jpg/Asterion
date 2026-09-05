@@ -15,6 +15,12 @@ import {
   migrateCombatPriority,
   type CombatPriorityState,
 } from './domain/combat/priority.ts';
+import {
+  SIMULATOR_STATE_CHANGED_EVENT,
+  createDefaultSimulatorState,
+  migrateSimulatorState,
+  type SimulatorState,
+} from './domain/combat/simulator-repository.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import planetColonized from '../assets/source/starter/planets/planet_colonized.png';
@@ -98,6 +104,7 @@ type SaveState = {
   queues: Record<PlanetId, QueueItem | null>;
   combatPriority: CombatPriorityState;
   combat: BattleHistoryState;
+  combatSimulator: SimulatorState;
 };
 
 type PlanetDefinition = {
@@ -138,6 +145,7 @@ const initialState: SaveState = {
   },
   combatPriority: createDefaultCombatPriority(),
   combat: createDefaultBattleHistory(),
+  combatSimulator: createDefaultSimulatorState(),
 };
 
 const primaryTabs: ReadonlyArray<{ label: string; icon: NavigationIconKind }> = [
@@ -211,6 +219,7 @@ function readSave(): SaveState {
       queues: { 'helion-01': queue },
       combatPriority: migrateCombatPriority(parsed.combatPriority),
       combat: migrateBattleHistory(parsed.combat),
+      combatSimulator: migrateSimulatorState(parsed.combatSimulator),
     };
   } catch {
     return initialState;
@@ -354,6 +363,19 @@ export function App() {
 
     window.addEventListener(BATTLE_HISTORY_CHANGED_EVENT, onBattleHistoryChanged);
     return () => window.removeEventListener(BATTLE_HISTORY_CHANGED_EVENT, onBattleHistoryChanged);
+  }, []);
+  useEffect(() => {
+    const onSimulatorStateChanged = (event: Event) => {
+      const simulator = (event as CustomEvent<SimulatorState>).detail;
+      setState((current) => ({
+        ...current,
+        schemaVersion: COMBAT_SAVE_SCHEMA_VERSION,
+        combatSimulator: migrateSimulatorState(simulator),
+      }));
+    };
+
+    window.addEventListener(SIMULATOR_STATE_CHANGED_EVENT, onSimulatorStateChanged);
+    return () => window.removeEventListener(SIMULATOR_STATE_CHANGED_EVENT, onSimulatorStateChanged);
   }, []);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
