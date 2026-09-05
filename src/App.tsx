@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from
 import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
+import { OperationsView } from './OperationsView';
+import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
 import {
   BATTLE_HISTORY_CHANGED_EVENT,
   createDefaultBattleHistory,
@@ -21,6 +23,14 @@ import {
   migrateSimulatorState,
   type SimulatorState,
 } from './domain/combat/simulator-repository.ts';
+import {
+  acceptOperation,
+  cancelOperation,
+  createDefaultOperationsState,
+  migrateOperationsState,
+  revealOperation,
+} from './domain/operations/repository.ts';
+import type { OperationId, OperationsState } from './domain/operations/types.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import planetColonized from '../assets/source/starter/planets/planet_colonized.png';
@@ -105,6 +115,7 @@ type SaveState = {
   combatPriority: CombatPriorityState;
   combat: BattleHistoryState;
   combatSimulator: SimulatorState;
+  operations: OperationsState;
 };
 
 type PlanetDefinition = {
@@ -123,7 +134,7 @@ const BUILD_TIME_MS = 45_000;
 const BUILD_COST = 1200;
 const DEFAULT_PLANET_NAME = 'Helion 01';
 
-const initialState: SaveState = {
+const createInitialState = (): SaveState => ({
   schemaVersion: COMBAT_SAVE_SCHEMA_VERSION,
   metal: 15_880,
   minerals: 12_712,
@@ -146,7 +157,10 @@ const initialState: SaveState = {
   combatPriority: createDefaultCombatPriority(),
   combat: createDefaultBattleHistory(),
   combatSimulator: createDefaultSimulatorState(),
-};
+  operations: createDefaultOperationsState(),
+});
+
+const initialState = createInitialState();
 
 const primaryTabs: ReadonlyArray<{ label: string; icon: NavigationIconKind }> = [
   { label: 'Планета', icon: 'planet' },
@@ -172,7 +186,7 @@ const isPlanetSkin = (value: unknown): value is PlanetSkin => planetSkins.some((
 function readSave(): SaveState {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return initialState;
+    if (!raw) return createInitialState();
 
     const parsed = JSON.parse(raw) as Partial<SaveState> & {
       planetSkin?: PlanetSkin;
@@ -220,9 +234,10 @@ function readSave(): SaveState {
       combatPriority: migrateCombatPriority(parsed.combatPriority),
       combat: migrateBattleHistory(parsed.combat),
       combatSimulator: migrateSimulatorState(parsed.combatSimulator),
+      operations: migrateOperationsState(parsed.operations),
     };
   } catch {
-    return initialState;
+    return createInitialState();
   }
 }
 
@@ -490,7 +505,7 @@ export function App() {
 
   const reset = () => {
     localStorage.removeItem(SAVE_KEY);
-    setState(initialState);
+    setState(createInitialState());
     setPlanetMenuOpen(false);
     setEditingPlanetId(null);
     setEditingName(DEFAULT_PLANET_NAME);
@@ -498,11 +513,35 @@ export function App() {
     setNotice('Сохранение прототипа сброшено.');
   };
 
+  const acceptOperationsOperation = (operationId: OperationId) => {
+    setState((current) => ({ ...current, operations: acceptOperation(current.operations, operationId) }));
+    setNotice('Операция принята. Подготовьте флот для выполнения.');
+  };
+
+  const cancelOperationsOperation = (operationId: OperationId) => {
+    setState((current) => ({ ...current, operations: cancelOperation(current.operations, operationId) }));
+    setNotice('Операция отменена и возвращена в доступные без штрафа.');
+  };
+
+  const revealOperationsOperation = (operationId: OperationId) => {
+    setState((current) => ({ ...current, operations: revealOperation(current.operations, operationId) }));
+    setNotice('Сигнал просканирован. Классификация операции обновлена.');
+  };
+
+  const openFleetRootFromOperations = () => {
+    setActiveTab('Флоты');
+    setPlanetMenuOpen(false);
+    closePlanetEditor();
+    setNotice('Флоты: подготовьте состав для принятой операции.');
+    window.setTimeout(() => window.dispatchEvent(new Event(FLEET_ROOT_REQUEST_EVENT)), 0);
+  };
+
   const chooseTab = (tab: string) => {
     setActiveTab(tab);
     setPlanetMenuOpen(false);
     closePlanetEditor();
     if (tab === 'Вселенная') setNotice('Галактика 1 загружена. Доступно 40 солнечных систем.');
+    else if (tab === 'Операции') setNotice('Операции: доступные PvE-сценарии загружены.');
     else if (tab !== 'Планета') setNotice(`Экран «${tab}» пока в разработке.`);
   };
 
@@ -595,9 +634,17 @@ export function App() {
           </section>
         </header>
 
-        <section className={`workspace workspace-v4 workspace--${activeTab === 'Вселенная' ? 'universe' : activeTab === 'Планета' ? 'planet' : 'module'}`}>
+        <section className={`workspace workspace-v4 workspace--${activeTab === 'Вселенная' ? 'universe' : activeTab === 'Планета' ? 'planet' : activeTab === 'Операции' ? 'operations' : 'module'}`}>
           {activeTab === 'Вселенная' ? (
             <UniverseView onNotice={setNotice} ownedPlanetArt={currentSkin.art} ownedPlanetName={currentPlanetName} />
+          ) : activeTab === 'Операции' ? (
+            <OperationsView
+              state={state.operations}
+              onAccept={acceptOperationsOperation}
+              onCancel={cancelOperationsOperation}
+              onReveal={revealOperationsOperation}
+              onOpenFleets={openFleetRootFromOperations}
+            />
           ) : activeTab === 'Планета' ? (
             <div className="planet-page-v3 planet-page-v4">
               <aside className="planet-summary-v3 planet-list-panel-v4">
