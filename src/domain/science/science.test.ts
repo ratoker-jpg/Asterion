@@ -1,82 +1,90 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { COMBAT_TECHNOLOGIES, COMBAT_TECHNOLOGY_IDS } from '../combat/technologies.ts';
-import { SCIENCE_CATALOG, SCIENCE_CATEGORIES, SCIENCE_VISUAL_LINKS } from './catalog.ts';
+import { COMBAT_TECHNOLOGIES } from '../combat/technologies.ts';
+import { SCIENCE_CATALOG, SCIENCE_CATEGORIES, SCIENCE_VISUAL_LINKS, STELLAR_RESEARCH_SOURCE } from './catalog.ts';
 import { getConfirmedPrerequisites, getScienceNodesByCategory, searchScienceCatalog } from './selectors.ts';
 
-test('confirmed source science ids are unique', () => {
-  const ids = SCIENCE_CATALOG.map((item) => item.sourceScienceId);
-  assert.equal(new Set(ids).size, ids.length);
+const EXPECTED_STELLAR_NAMES = [
+  'Физика',
+  'Химия',
+  'Математика',
+  'Астрономия',
+  'Шпионаж',
+  'Компьютерные системы',
+  'Корабельная броня',
+  'Топливные элементы',
+  'Реактивные двигатели',
+  'Лазерная технология',
+  'Ионная технология',
+  'Плазменная технология',
+  'Экология',
+  'Гиперпространство',
+  'Параллельные вселенные',
+  'Улучшенное строительство',
+  'Пробивающая атака',
+  'Маневренная защита',
+  'Критический удар',
+  'Лёгкая броня',
+  'Средняя броня',
+  'Тяжёлая броня',
+];
+
+test('science catalog mirrors all 22 current Stellar research templates', () => {
+  assert.equal(SCIENCE_CATALOG.length, 22);
+  assert.deepEqual(SCIENCE_CATALOG.map((item) => item.name), EXPECTED_STELLAR_NAMES);
+  assert.equal(STELLAR_RESEARCH_SOURCE.repository, 'ratoker-jpg/stellar-empires');
+  assert.equal(STELLAR_RESEARCH_SOURCE.commit, '466ec55f1751d36fd4a30175f7669f89ebe9a6a6');
 });
 
-test('science catalog maps one-to-one to existing CombatTechnologyId values', () => {
-  assert.deepEqual(
-    [...SCIENCE_CATALOG.map((item) => item.combatTechnologyId)].sort(),
-    [...COMBAT_TECHNOLOGY_IDS].sort(),
-  );
+test('science uses all six canonical Stellar research categories', () => {
+  assert.deepEqual(SCIENCE_CATEGORIES.map((category) => category.id), [
+    'energy', 'infrastructure', 'navigation', 'intelligence', 'defense', 'weapons',
+  ]);
+  const represented = new Set(SCIENCE_CATALOG.map((item) => item.categoryId));
+  assert.equal(represented.size, SCIENCE_CATEGORIES.length);
+  assert.ok(SCIENCE_CATEGORIES.every((category) => getScienceNodesByCategory(category.id).length > 0));
 });
 
-test('every referenced CombatTechnologyId exists in the combat contract', () => {
-  const ids = new Set<string>(COMBAT_TECHNOLOGY_IDS);
-  assert.ok(SCIENCE_CATALOG.every((item) => ids.has(item.combatTechnologyId)));
-});
-
-test('science domain does not introduce combat multipliers or invented effect values', () => {
-  for (const item of SCIENCE_CATALOG) {
-    const keys = Object.keys(item);
-    assert.equal(keys.some((key) => /multiplier|bonus|effect|maxLevel|cost|time/i.test(key)), false);
-  }
-});
-
-test('visual node ids are unique and stable source-derived ids', () => {
-  const ids = SCIENCE_CATALOG.map((item) => item.id);
-  assert.equal(new Set(ids).size, ids.length);
-  assert.ok(SCIENCE_CATALOG.every((item) => item.id === `science-${item.sourceScienceId}`));
-});
-
-test('confirmed prerequisites reference valid nodes', () => {
+test('all source-backed prerequisites resolve to valid science nodes', () => {
   const ids = new Set(SCIENCE_CATALOG.map((item) => item.id));
   for (const item of SCIENCE_CATALOG) {
-    assert.ok(item.confirmedPrerequisites.every((id) => ids.has(id)));
+    assert.ok(item.requirements.every((requirement) => ids.has(requirement.scienceId)));
+    assert.deepEqual(getConfirmedPrerequisites(item), item.requirements);
+  }
+  assert.equal(SCIENCE_VISUAL_LINKS.length, SCIENCE_CATALOG.reduce((sum, item) => sum + item.requirements.length, 0));
+  assert.ok(SCIENCE_VISUAL_LINKS.every((link) => link.sourceBacked && ids.has(link.from) && ids.has(link.to)));
+});
+
+test('source research metadata stays sane and non-negative', () => {
+  for (const item of SCIENCE_CATALOG) {
+    assert.ok(item.maxLevel > 0 && Number.isInteger(item.maxLevel));
+    assert.ok(item.requiredLaboratoryLevel > 0 && Number.isInteger(item.requiredLaboratoryLevel));
+    assert.ok(item.baseSeconds > 0 && Number.isFinite(item.baseSeconds));
+    assert.ok(item.baseCost.metal >= 0 && item.baseCost.crystal >= 0 && item.baseCost.gas >= 0);
+    assert.equal(item.sourceStatus, 'stellar-current');
   }
 });
 
-test('visual-only links never participate in gameplay prerequisite selectors', () => {
-  assert.deepEqual(SCIENCE_VISUAL_LINKS, []);
-  assert.ok(SCIENCE_CATALOG.every((item) => getConfirmedPrerequisites(item).length === 0));
+test('the ten combat-overlap sciences retain current Asterion Combat mappings', () => {
+  const mapped = SCIENCE_CATALOG.filter((item) => item.combatTechnologyId);
+  assert.equal(mapped.length, COMBAT_TECHNOLOGIES.length);
+  for (const technology of COMBAT_TECHNOLOGIES) {
+    const science = mapped.find((item) => item.combatTechnologyId === technology.id);
+    assert.ok(science);
+    assert.equal(science.sourceScienceId, technology.sourceScienceId);
+  }
 });
 
-test('science catalog and category selectors are deterministic', () => {
-  const first = SCIENCE_CATEGORIES.flatMap((category) => getScienceNodesByCategory(category.id).map((item) => item.id));
-  const second = SCIENCE_CATEGORIES.flatMap((category) => getScienceNodesByCategory(category.id).map((item) => item.id));
-  assert.deepEqual(first, second);
-  assert.equal(new Set(first).size, SCIENCE_CATALOG.length);
+test('science search covers Stellar names, slugs and existing combat aliases', () => {
+  assert.equal(searchScienceCatalog('параллельные').length, 1);
+  assert.equal(searchScienceCatalog('computer-systems')[0]?.name, 'Компьютерные системы');
+  assert.equal(searchScienceCatalog('criticalHit')[0]?.name, 'Критический удар');
+  assert.equal(searchScienceCatalog('лазерная')[0]?.name, 'Лазерная технология');
 });
 
-test('source metadata from current combat technology contract is preserved', () => {
-  assert.deepEqual(
-    SCIENCE_CATALOG.map((item) => ({ id: item.combatTechnologyId, sourceScienceId: item.sourceScienceId, name: item.name })),
-    COMBAT_TECHNOLOGIES.map((technology) => ({ id: technology.id, sourceScienceId: technology.sourceScienceId, name: technology.name })),
-  );
-  assert.ok(SCIENCE_CATALOG.every((item) => item.sourceStatus === 'confirmed'));
-});
-
-test('all ten current Asterion combat technologies are represented and searchable', () => {
-  assert.equal(SCIENCE_CATALOG.length, 10);
-  const expectedNames = [
-    'Лазерная наука',
-    'Ионная наука',
-    'Плазменная наука',
-    'Пробивающая атака',
-    'Лёгкая броня',
-    'Средняя броня',
-    'Тяжёлая броня',
-    'Броня кораблей',
-    'Маневренная защита',
-    'Критический удар',
-  ];
-  assert.deepEqual(SCIENCE_CATALOG.map((item) => item.name), expectedNames);
-  assert.equal(searchScienceCatalog('лазерная').length, 1);
-  assert.equal(searchScienceCatalog('20')[0]?.name, 'Критический удар');
+test('science ids are unique and stable slug-derived ids', () => {
+  const ids = SCIENCE_CATALOG.map((item) => item.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.ok(SCIENCE_CATALOG.every((item) => item.id === `science-${item.slug}`));
 });
