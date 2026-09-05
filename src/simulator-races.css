@@ -37,6 +37,99 @@
   border-color: #42d9fb;
 }
 
+.sim-tech-section-v1 {
+  margin-top: 8px;
+}
+
+.sim-tech-list-v1 {
+  display: grid;
+  gap: 1px;
+  background: rgba(49, 178, 215, .13);
+}
+
+.sim-tech-row-v1 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 52px;
+  padding: 7px 10px;
+  background: rgba(2, 23, 33, .98);
+  box-sizing: border-box;
+}
+
+.sim-tech-row-v1 > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sim-tech-row-v1 strong {
+  color: #d9f6ff;
+  font-size: 10px;
+}
+
+.sim-tech-row-v1 small {
+  color: #6895a4;
+  font-size: 8px;
+  line-height: 1.35;
+}
+
+.sim-tech-controls-v1 {
+  display: grid;
+  grid-template-columns: 28px 48px 34px 28px 52px;
+  align-items: center;
+  gap: 4px;
+}
+
+.sim-tech-controls-v1 button,
+.sim-tech-controls-v1 input {
+  height: 28px;
+  border: 1px solid rgba(51, 185, 222, .38);
+  background: rgba(2, 22, 31, .95);
+  color: #dff9ff;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.sim-tech-controls-v1 button {
+  cursor: pointer;
+}
+
+.sim-tech-controls-v1 button:disabled {
+  opacity: .35;
+  cursor: default;
+}
+
+.sim-tech-controls-v1 input {
+  width: 48px;
+  padding: 0 3px;
+}
+
+.sim-tech-controls-v1 span {
+  color: #638f9f;
+  font-size: 8px;
+  text-align: center;
+}
+
+.sim-tech-controls-v1 .sim-max-v1 {
+  width: 52px;
+  color: #7ec7d9;
+}
+
+.sim-tech-note-v1 {
+  margin: 0;
+  padding: 9px 10px;
+  border-top: 1px solid rgba(54, 190, 227, .18);
+  background: rgba(7, 38, 49, .96);
+  color: #78a8b7;
+  font-size: 8px;
+  line-height: 1.45;
+}
+
 .sim-race-mechanics-note-v1 {
   display: flex;
   align-items: center;
@@ -65,6 +158,14 @@
   .sim-race-v1 {
     grid-template-columns: 1fr;
     gap: 5px;
+  }
+
+  .sim-tech-row-v1 {
+    grid-template-columns: 1fr;
+  }
+
+  .sim-tech-controls-v1 {
+    justify-content: start;
   }
 
   .sim-race-mechanics-note-v1 {
