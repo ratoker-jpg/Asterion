@@ -1,10 +1,14 @@
-/* Source rebuild v2 visual correction pass after first rendered QA. */
+/* Source rebuild v2 visual correction pass after rendered QA. */
 
-/* The 1920×1080 stage is scaled by React in Electron. Force unsafe centering below
-   the baseline so the transformed stage remains centered instead of being shifted
-   down/right by safe grid alignment when the unscaled 1920px child overflows. */
+/* Utility screens keep the existing 1920×1080 shell, but below the baseline Chromium's
+   safe grid alignment positions the unscaled oversized stage at the top-left before the
+   React scale transform. Center the unscaled stage explicitly only while a rebuilt utility
+   screen is active; after scaling it lands exactly inside the smaller viewport. */
 @media (max-width:1919px){
-  html:not(.web-preview) .viewport{place-items:unsafe center}
+  html:not(.web-preview) .viewport:has(.utility-screen-host){position:relative;display:block}
+  html:not(.web-preview) .viewport:has(.utility-screen-host)>.stage{
+    position:absolute;left:50%;top:50%;margin-left:-960px;margin-top:-540px
+  }
 }
 
 /* Utility screens fully replace the workspace; hide the legacy placeholder notice
