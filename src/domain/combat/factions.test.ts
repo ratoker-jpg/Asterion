@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { getFactionDefenseCatalog, getFactionShipCatalog } from './faction-catalog.ts';
 import { COMBAT_FACTIONS, getCombatFactionName } from './factions.ts';
 import { createDefaultCombatPriority } from './priority.ts';
 import {
@@ -12,6 +13,7 @@ import {
   scenarioToCombatInput,
   setScenarioFaction,
 } from './simulator.ts';
+import { normalizeCombatTechnologies } from './technologies.ts';
 
 const populatedScenario = {
   ...createEmptySimulatorScenario(),
@@ -34,7 +36,29 @@ test('simulator exposes exactly the three Asterion player races', () => {
   ]);
 });
 
-test('legacy simulator scenario migrates to Asters versus Asters', () => {
+test('race selection swaps presentation roster while preserving canonical mechanical IDs', () => {
+  const asterScout = getFactionShipCatalog('aegis').find((entity) => entity.id === 'scout');
+  const ilarScout = getFactionShipCatalog('synod').find((entity) => entity.id === 'scout');
+  const swarmScout = getFactionShipCatalog('veyra').find((entity) => entity.id === 'scout');
+  assert.equal(asterScout?.name, 'Скаут');
+  assert.equal(ilarScout?.name, 'Истребитель');
+  assert.equal(swarmScout?.name, 'Глайд');
+  assert.notEqual(asterScout?.art, ilarScout?.art);
+  assert.notEqual(ilarScout?.art, swarmScout?.art);
+  assert.equal(asterScout?.combat.attack, ilarScout?.combat.attack);
+  assert.equal(ilarScout?.combat.attack, swarmScout?.combat.attack);
+
+  const asterDefense = getFactionDefenseCatalog('aegis').find((entity) => entity.id === 'ballistic-turret');
+  const ilarDefense = getFactionDefenseCatalog('synod').find((entity) => entity.id === 'ballistic-turret');
+  const swarmDefense = getFactionDefenseCatalog('veyra').find((entity) => entity.id === 'ballistic-turret');
+  assert.equal(asterDefense?.name, 'Защитная матрица');
+  assert.equal(ilarDefense?.name, 'Защитная матрица');
+  assert.equal(swarmDefense?.name, 'Нокс-лучник');
+  assert.notEqual(asterDefense?.art, ilarDefense?.art);
+  assert.notEqual(ilarDefense?.art, swarmDefense?.art);
+});
+
+test('legacy simulator scenario migrates to Asters versus Asters with zero technologies', () => {
   const migrated = normalizeSimulatorScenario({
     attacker: { ships: [{ entityId: 'scout', count: 2 }], commanders: [] },
     defender: { ships: [{ entityId: 'cruiser', count: 1 }], commanders: [], defenses: [] },
@@ -45,6 +69,8 @@ test('legacy simulator scenario migrates to Asters versus Asters', () => {
   assert.equal(migrated.defenderFactionId, 'aegis');
   assert.equal(migrated.attacker.ships[0]?.count, 2);
   assert.equal(migrated.defender.ships[0]?.count, 1);
+  assert.deepEqual(migrated.attackerTechnologies, normalizeCombatTechnologies(undefined));
+  assert.deepEqual(migrated.defenderTechnologies, normalizeCombatTechnologies(undefined));
 });
 
 test('attacker and defender race selections are independent', () => {
@@ -66,11 +92,13 @@ test('changing to the already selected race does not clear the side', () => {
   assert.equal(unchanged, populatedScenario);
 });
 
-test('presets and last scenario retain independent race selections', () => {
+test('presets and last scenario retain independent race and technology selections', () => {
   const mixed = {
     ...populatedScenario,
     attackerFactionId: 'synod' as const,
     defenderFactionId: 'veyra' as const,
+    attackerTechnologies: normalizeCombatTechnologies({ laserScience: 7, lightArmor: 4 }),
+    defenderTechnologies: normalizeCombatTechnologies({ plasmaScience: 9, heavyArmor: 6 }),
   };
   const migrated = migrateSimulatorState({
     lastScenario: mixed,
@@ -79,15 +107,21 @@ test('presets and last scenario retain independent race selections', () => {
 
   assert.equal(migrated.lastScenario?.attackerFactionId, 'synod');
   assert.equal(migrated.lastScenario?.defenderFactionId, 'veyra');
+  assert.equal(migrated.lastScenario?.attackerTechnologies?.laserScience, 7);
+  assert.equal(migrated.lastScenario?.defenderTechnologies?.heavyArmor, 6);
   assert.equal(migrated.presets[0]?.input.attackerFactionId, 'synod');
   assert.equal(migrated.presets[0]?.input.defenderFactionId, 'veyra');
+  assert.equal(migrated.presets[0]?.input.attackerTechnologies?.lightArmor, 4);
+  assert.equal(migrated.presets[0]?.input.defenderTechnologies?.plasmaScience, 9);
 });
 
-test('combat input and BattleReport participant metadata receive selected race names', () => {
+test('combat input receives selected race names and technology levels', () => {
   const mixed = {
     ...populatedScenario,
     attackerFactionId: 'synod' as const,
     defenderFactionId: 'veyra' as const,
+    attackerTechnologies: normalizeCombatTechnologies({ ionScience: 5 }),
+    defenderTechnologies: normalizeCombatTechnologies({ shipDefense: 8 }),
   };
   const input = scenarioToCombatInput(mixed, {
     scenarioId: 'race-test',
@@ -101,4 +135,6 @@ test('combat input and BattleReport participant metadata receive selected race n
   assert.equal(input.defender.participant.race, getCombatFactionName('veyra'));
   assert.equal(input.attacker.participant.race, 'Илары');
   assert.equal(input.defender.participant.race, 'Рой');
+  assert.equal(input.attackerTechnologies?.ionScience, 5);
+  assert.equal(input.defenderTechnologies?.shipDefense, 8);
 });
