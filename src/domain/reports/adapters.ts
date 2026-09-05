@@ -1,5 +1,9 @@
-import type { BattleReport, BattleSide } from '../combat/report.ts';
-import { getBattleResultForPlayer } from '../combat/report.ts';
+import {
+  ASTERION_LOCAL_PLAYER_ID,
+  getBattleResultForPlayer,
+  type BattleReport,
+  type BattleSide,
+} from '../combat/report.ts';
 import type { CommandState, JointOperation } from '../command/types.ts';
 import type { OperationInstance, OperationsState } from '../operations/types.ts';
 import type {
@@ -9,8 +13,6 @@ import type {
   ReportsState,
   ReportUnreadCounts,
 } from './types.ts';
-
-export const ASTERION_LOCAL_PLAYER_ID = 'player-aster';
 
 const CATEGORY_TYPE_LABEL: Record<ReportItem['category'], string> = {
   system: 'Система',
