@@ -1,7 +1,7 @@
 export const ASTERION_PREFERENCES_KEY = 'asterion.preferences.v1';
 export const ASTERION_CAMPAIGN_KEY = 'asterion.vertical-slice.v1';
 
-export const TEXT_SCALES = [0.9, 1, 1.1, 1.2, 1.3] as const;
+export const TEXT_SCALES = [0.9, 1, 1.1, 1.2, 1.3, 1.5, 1.7] as const;
 export const WINDOW_RESOLUTIONS = ['1280x720', '1600x900', '1920x1080', '2560x1440'] as const;
 export const WINDOW_MODES = ['fullscreen', 'windowed'] as const;
 
@@ -48,7 +48,7 @@ function isWindowMode(value: unknown): value is WindowMode {
 
 export function normalizeTextScale(value: unknown): TextScale {
   if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_PREFERENCES.textScale;
-  const clamped = Math.min(TEXT_SCALES.at(-1) ?? 1.3, Math.max(TEXT_SCALES[0], value));
+  const clamped = Math.min(TEXT_SCALES.at(-1) ?? 1.7, Math.max(TEXT_SCALES[0], value));
   return TEXT_SCALES.reduce((best, candidate) => (
     Math.abs(candidate - clamped) < Math.abs(best - clamped) ? candidate : best
   ), DEFAULT_PREFERENCES.textScale);
