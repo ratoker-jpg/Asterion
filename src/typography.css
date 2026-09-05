@@ -1,0 +1,40 @@
+:root{
+  --text-scale-hud:1;
+  --text-scale-page-title:1;
+  --text-scale-section-title:1;
+  --text-scale-body:1;
+  --text-scale-table:1;
+  --text-scale-control:1;
+  --text-scale-secondary:1;
+  --text-scale-helper:1;
+}
+
+/* Semantic typography contract: only the named category changes. */
+.asterion-header .current-planet-select small{font-size:calc(10px * var(--text-scale-hud))}
+.asterion-header .current-planet-select strong{font-size:calc(16px * var(--text-scale-hud))}
+.asterion-header .current-planet-select em{font-size:calc(10px * var(--text-scale-hud))}
+.asterion-header .resource-chip small{font-size:calc(10px * var(--text-scale-hud))}
+.asterion-header .resource-chip strong{font-size:calc(20px * var(--text-scale-hud))}
+.asterion-header .resource-tooltip{font-size:calc(10px * var(--text-scale-hud))}
+.asterion-header .resource-tooltip strong{font-size:calc(12px * var(--text-scale-hud))}
+.asterion-header .primary-navigation button span{font-size:calc(16px * var(--text-scale-hud))}
+.asterion-header .campaign-status strong{font-size:calc(12px * var(--text-scale-hud))}
+.asterion-header .campaign-module time{font-size:calc(22px * var(--text-scale-hud))}
+.asterion-header .utility-navigation button span{font-size:calc(11px * var(--text-scale-hud))}
+
+.utility-page-title{font-size:calc(34px * var(--text-scale-page-title));line-height:1.05}
+.utility-section-title{font-size:calc(14px * var(--text-scale-section-title))}
+.utility-body-text{font-size:calc(12px * var(--text-scale-body));line-height:1.55}
+.utility-data-text{font-size:calc(12px * var(--text-scale-table))}
+.utility-control{font-size:calc(11px * var(--text-scale-control))}
+.utility-secondary{font-size:calc(9px * var(--text-scale-secondary))}
+.utility-helper{font-size:calc(9px * var(--text-scale-helper));line-height:1.45}
+
+.preview-hud-v2{font-size:calc(12px * var(--text-scale-hud))}
+.preview-page-title-v2{font-size:calc(26px * var(--text-scale-page-title))}
+.preview-section-title-v2{font-size:calc(14px * var(--text-scale-section-title))}
+.preview-body-v2{font-size:calc(11px * var(--text-scale-body))}
+.preview-table-v2{font-size:calc(12px * var(--text-scale-table))}
+.preview-control-v2{font-size:calc(10px * var(--text-scale-control))}
+.preview-secondary-v2{font-size:calc(9px * var(--text-scale-secondary))}
+.preview-helper-v2{font-size:calc(8px * var(--text-scale-helper))}
