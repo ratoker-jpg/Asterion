@@ -28,9 +28,9 @@ type OperationDefinition = {
 
 export const OPERATION_MODIFIER_LABELS: Record<OperationModifier, string> = {
   sensor_interference: 'Помехи сенсоров',
-  fortified_position: 'Усиленная позиция',
-  unstable_signal: 'Нестабильный сигнал',
-  ion_storm: 'Ионная буря',
+  fortified_position: 'Усиленное боевое построение',
+  unstable_signal: 'Нестабильная сигнатура',
+  ion_storm: 'Ионные возмущения',
   unknown_contact: 'Неизвестный контакт',
 };
 
@@ -46,7 +46,7 @@ export const OPERATION_DEFINITIONS: Record<OperationArchetype, OperationDefiniti
     archetype: 'pirate_elimination',
     category: 'combat',
     title: 'ПИРАТСКАЯ ЭСКАДРА',
-    briefing: 'Сенсоры обнаружили враждебную эскадру в пределах системы.',
+    briefing: 'Патрульные сенсоры обнаружили мобильную пиратскую группу. Контакт подтверждён, противник сохраняет боевой порядок и не покидает систему.',
     objective: { label: 'Уничтожить вражескую эскадру' },
     source: 'patrol_scan',
     location: { kind: 'system', galaxy: 1, system: 7 },
@@ -58,9 +58,9 @@ export const OPERATION_DEFINITIONS: Record<OperationArchetype, OperationDefiniti
   pirate_outpost: {
     archetype: 'pirate_outpost',
     category: 'combat',
-    title: 'ПИРАТСКИЙ ОПОРНЫЙ ПУНКТ',
-    briefing: 'Обнаружена укреплённая враждебная позиция. Ожидается повышенное сопротивление.',
-    objective: { label: 'Ликвидировать опорный пункт' },
+    title: 'РЕЙДЕРСКАЯ ГРУППА',
+    briefing: 'Сенсорная сеть засекла усиленный рейдерский отряд. Сигнатуры указывают на более плотное боевое построение и повышенную угрозу, но не подтверждают наличие постоянной базы.',
+    objective: { label: 'Ликвидировать усиленную рейдерскую группу' },
     source: 'sensor_network',
     location: { kind: 'system', galaxy: 1, system: 12 },
     threat: 5,
@@ -86,7 +86,7 @@ export const OPERATION_DEFINITIONS: Record<OperationArchetype, OperationDefiniti
     archetype: 'derelict_recovery',
     category: 'exploration',
     title: 'ЗАБРОШЕННЫЙ КОРАБЛЬ',
-    briefing: 'Сигнал классифицирован как заброшенный корабль. Объект доступен для дальнейшей операции.',
+    briefing: 'После глубокого сканирования контакт классифицирован как дрейфующий корабль без подтверждённой активности экипажа. Остаточная энергетическая сигнатура нестабильна.',
     objective: { label: 'Исследовать и обезопасить объект' },
     source: 'deep_scan',
     location: { kind: 'coordinates', coordinates: '[1:12:8]' },
@@ -98,9 +98,9 @@ export const OPERATION_DEFINITIONS: Record<OperationArchetype, OperationDefiniti
   anomaly_scan: {
     archetype: 'anomaly_scan',
     category: 'science',
-    title: 'ПРОСТРАНСТВЕННАЯ АНОМАЛИЯ',
-    briefing: 'Сенсоры зарегистрировали устойчивое пространственное искажение, доступное для исследования.',
-    objective: { label: 'Провести сканирование аномалии' },
+    title: 'ПРОСТРАНСТВЕННОЕ ИСКАЖЕНИЕ',
+    briefing: 'Научные сенсоры зарегистрировали устойчивое локальное искажение. Контакт не классифицирован как противник; уровень отражает риск исследования, а не силу боевой группы.',
+    objective: { label: 'Провести дистанционное сканирование искажения' },
     source: 'science_scan',
     location: { kind: 'abstract', label: 'Внешний сектор' },
     threat: 4,
