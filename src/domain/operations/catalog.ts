@@ -59,7 +59,7 @@ export const OPERATION_DEFINITIONS: Record<OperationArchetype, OperationDefiniti
     archetype: 'pirate_outpost',
     category: 'combat',
     title: 'ПИРАТСКИЙ ОПОРНЫЙ ПУНКТ',
-    briefing: 'Обнаружена укреплённая враждебная позиция. Боевые параметры позиции пока не изменяют resolver.',
+    briefing: 'Обнаружена укреплённая враждебная позиция. Ожидается повышенное сопротивление.',
     objective: { label: 'Ликвидировать опорный пункт' },
     source: 'sensor_network',
     location: { kind: 'system', galaxy: 1, system: 12 },
