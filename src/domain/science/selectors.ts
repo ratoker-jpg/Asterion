@@ -15,7 +15,11 @@ export function getScienceNode(nodeId: string) {
 
 export function getConfirmedPrerequisites(item: ScienceCatalogItem) {
   const ids = new Set(SCIENCE_CATALOG.map((candidate) => candidate.id));
-  return item.confirmedPrerequisites.filter((id) => ids.has(id));
+  return item.requirements.filter((requirement) => ids.has(requirement.scienceId));
+}
+
+export function getScienceDependents(nodeId: string) {
+  return SCIENCE_CATALOG.filter((item) => item.requirements.some((requirement) => requirement.scienceId === nodeId));
 }
 
 export function searchScienceCatalog(query: string) {
@@ -23,7 +27,9 @@ export function searchScienceCatalog(query: string) {
   if (!needle) return [...SCIENCE_CATALOG];
   return SCIENCE_CATALOG.filter((item) => (
     item.name.toLocaleLowerCase('ru-RU').includes(needle)
-    || item.combatTechnologyId.toLocaleLowerCase('ru-RU').includes(needle)
-    || String(item.sourceScienceId).includes(needle)
+    || item.slug.toLocaleLowerCase('ru-RU').includes(needle)
+    || item.categoryId.toLocaleLowerCase('ru-RU').includes(needle)
+    || item.combatTechnologyId?.toLocaleLowerCase('ru-RU').includes(needle)
+    || (item.sourceScienceId != null && String(item.sourceScienceId).includes(needle))
   ));
 }
