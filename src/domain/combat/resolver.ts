@@ -287,7 +287,6 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
     const attackerStartCounts = new Map(sortRuntime(attacker).map((stack) => [stack.entityId, stack.count]));
     const defenderStartCounts = new Map(sortRuntime(defender).map((stack) => [stack.entityId, stack.count]));
 
-    // Simultaneous planning: both sides plan from the same round-start snapshot.
     const planned = [
       ...planSideAttacks(attacker, defender),
       ...planSideAttacks(defender, attacker),
@@ -355,7 +354,7 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
     rounds,
     metadata: {
       source: 'combat-resolver',
-      note: 'Asterion Combat Resolver v1 · verified combat sciences applied',
+      note: 'Asterion Combat Resolver v1',
       maxRounds: normalized.maxRounds,
     },
   };
