@@ -68,7 +68,11 @@ export function migratePreferences(value: unknown): AsterionPreferences {
 function resolveStorage(storage?: StorageLike): StorageLike | null {
   if (storage) return storage;
   if (typeof window === 'undefined') return null;
-  return window.localStorage;
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
 }
 
 export function readPreferences(storage?: StorageLike): AsterionPreferences {

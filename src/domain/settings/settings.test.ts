@@ -88,6 +88,31 @@ test('unsupported web environment is explicit and does not throw', async () => {
   });
 });
 
+test('blocked browser localStorage getter falls back without aborting preferences', () => {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const blockedWindow = Object.defineProperty({}, 'localStorage', {
+    configurable: true,
+    get() { throw new Error('SecurityError'); },
+  });
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: blockedWindow,
+  });
+
+  try {
+    assert.deepEqual(readPreferences(), DEFAULT_PREFERENCES);
+    assert.deepEqual(resetPreferences(), DEFAULT_PREFERENCES);
+    assert.deepEqual(persistPreferences(DEFAULT_PREFERENCES), {
+      ok: false,
+      value: { ...DEFAULT_PREFERENCES },
+      error: 'Локальное хранилище настроек недоступно.',
+    });
+  } finally {
+    if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow);
+    else Reflect.deleteProperty(globalThis, 'window');
+  }
+});
+
 test('reduced motion and tooltip preferences remain deterministic booleans', () => {
   const first = migratePreferences({ ...DEFAULT_PREFERENCES, reducedMotion: true, tooltipsEnabled: false });
   const second = migratePreferences(first);
