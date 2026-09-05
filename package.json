@@ -11,6 +11,9 @@
     "test:operations": "node --experimental-strip-types --test src/domain/operations/operations.test.ts",
     "test:command": "node --experimental-strip-types --test src/domain/command/command.test.ts",
     "test:reports": "node --experimental-strip-types --test src/domain/reports/reports.test.ts",
+    "test:settings": "node --experimental-strip-types --test src/domain/settings/settings.test.ts electron/window-settings.test.cjs",
+    "test:rating": "node --experimental-strip-types --test src/domain/rating/rating.test.ts",
+    "test:science": "node --experimental-strip-types --test src/domain/science/science.test.ts",
     "desktop": "npm run build && electron .",
     "dist:win": "npm run build && electron-builder --win nsis --publish never"
   },
