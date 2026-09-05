@@ -5,37 +5,50 @@ import { ASTERION_LOCAL_PLAYER_ID } from '../combat/report.ts';
 import { createDefaultCommandState, updateAllianceSettings } from '../command/repository.ts';
 import {
   buildRatingFoundation,
+  getDisplayedRank,
   getLocalAlliance,
   getLocalPlayer,
   getRankDelta,
+  getRatingScore,
   searchAllianceRows,
   searchPlayerRows,
   sortAllianceRows,
   sortPlayerRows,
 } from './selectors.ts';
+import type { RatingScoreKind } from './types.ts';
+
+const SCORE_KINDS: readonly RatingScoreKind[] = ['total', 'resource', 'combat', 'achievement'];
 
 test('rating fixtures are deterministic', () => {
   const command = createDefaultCommandState();
   assert.deepEqual(buildRatingFoundation(command), buildRatingFoundation(command));
 });
 
-test('player and alliance ranks are unique', () => {
+test('canonical total score is exactly resource plus combat and excludes achievements', () => {
+  const model = buildRatingFoundation(createDefaultCommandState());
+  for (const row of [...model.players, ...model.alliances]) {
+    assert.equal(getRatingScore(row, 'total'), row.scores.resource + row.scores.combat);
+    assert.notEqual(getRatingScore(row, 'total'), row.scores.resource + row.scores.combat + row.scores.achievement);
+  }
+});
+
+test('all four score dimensions sort deterministically', () => {
+  const model = buildRatingFoundation(createDefaultCommandState());
+  for (const kind of SCORE_KINDS) {
+    const players = sortPlayerRows(model.players, 'score', kind);
+    const alliances = sortAllianceRows(model.alliances, 'score', kind);
+    assert.ok(players.every((row, index) => index === 0 || getRatingScore(players[index - 1], kind) >= getRatingScore(row, kind)));
+    assert.ok(alliances.every((row, index) => index === 0 || getRatingScore(alliances[index - 1], kind) >= getRatingScore(row, kind)));
+    assert.equal(new Set(players.map((row) => getDisplayedRank(model.players, row.id, kind))).size, model.players.length);
+    assert.equal(new Set(alliances.map((row) => getDisplayedRank(model.alliances, row.id, kind))).size, model.alliances.length);
+  }
+});
+
+test('legacy total ranks remain unique and stable', () => {
   const model = buildRatingFoundation(createDefaultCommandState());
   assert.equal(new Set(model.players.map((row) => row.rank)).size, model.players.length);
   assert.equal(new Set(model.alliances.map((row) => row.rank)).size, model.alliances.length);
-});
-
-test('tables sort correctly by rank and score', () => {
-  const model = buildRatingFoundation(createDefaultCommandState());
-  const playersByRank = sortPlayerRows(model.players, 'rank');
-  const playersByScore = sortPlayerRows(model.players, 'score');
-  const alliancesByRank = sortAllianceRows(model.alliances, 'rank');
-  const alliancesByScore = sortAllianceRows(model.alliances, 'score');
-
-  assert.ok(playersByRank.every((row, index) => index === 0 || playersByRank[index - 1].rank < row.rank));
-  assert.ok(playersByScore.every((row, index) => index === 0 || playersByScore[index - 1].score >= row.score));
-  assert.ok(alliancesByRank.every((row, index) => index === 0 || alliancesByRank[index - 1].rank < row.rank));
-  assert.ok(alliancesByScore.every((row, index) => index === 0 || alliancesByScore[index - 1].score >= row.score));
+  assert.ok(sortPlayerRows(model.players, 'rank', 'total').every((row, index, rows) => index === 0 || rows[index - 1].rank < row.rank));
 });
 
 test('rank delta is positive for upward movement, negative for downward movement and zero when unchanged', () => {
@@ -83,7 +96,7 @@ test('local alliance identity and member count come from current Command state',
 test('scores and ranks never contain NaN or negative values', () => {
   const model = buildRatingFoundation(createDefaultCommandState());
   for (const row of [...model.players, ...model.alliances]) {
-    assert.ok(Number.isFinite(row.score) && row.score >= 0);
+    for (const kind of SCORE_KINDS) assert.ok(Number.isFinite(getRatingScore(row, kind)) && getRatingScore(row, kind) >= 0);
     assert.ok(Number.isInteger(row.rank) && row.rank > 0);
     assert.ok(Number.isInteger(row.previousRank) && row.previousRank > 0);
   }
