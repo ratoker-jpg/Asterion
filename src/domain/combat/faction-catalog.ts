@@ -1,30 +1,30 @@
-import synodSatelliteArt from '../../../assets/source/New assets/ship/synod/ship.synod.satellite.png';
-import synodSpyProbeArt from '../../../assets/source/New assets/ship/synod/ship.synod.spy-probe.png';
-import synodTransportArt from '../../../assets/source/New assets/ship/synod/ship.synod.transport.png';
-import synodMegatransportArt from '../../../assets/source/New assets/ship/synod/ship.synod.megatransport.png';
-import synodColonizerArt from '../../../assets/source/New assets/ship/synod/ship.synod.colonizer.png';
+import synodSatelliteArt from '../../../assets/source/New assets/ship/synod/ship.synod.solar-satellite.png';
+import synodSpyProbeArt from '../../../assets/source/New assets/ship/synod/ship.synod.spy-bot.png';
+import synodTransportArt from '../../../assets/source/New assets/ship/synod/ship.synod.cargo-bot.png';
+import synodMegatransportArt from '../../../assets/source/New assets/ship/synod/ship.synod.large-cargo-bot.png';
+import synodColonizerArt from '../../../assets/source/New assets/ship/synod/ship.synod.colonizer-bot.png';
 import synodRecyclerArt from '../../../assets/source/New assets/ship/synod/ship.synod.recycler.png';
 import synodFighterArt from '../../../assets/source/New assets/ship/synod/ship.synod.fighter.png';
-import synodCruiserArt from '../../../assets/source/New assets/ship/synod/ship.synod.cruiser.png';
-import synodAssaultShipArt from '../../../assets/source/New assets/ship/synod/ship.synod.assault-ship.png';
-import synodBattleshipArt from '../../../assets/source/New assets/ship/synod/ship.synod.battleship.png';
-import synodDestroyerArt from '../../../assets/source/New assets/ship/synod/ship.synod.destroyer.png';
-import synodBomberArt from '../../../assets/source/New assets/ship/synod/ship.synod.bomber.png';
+import synodInterceptorArt from '../../../assets/source/New assets/ship/synod/ship.synod.interceptor.png';
+import synodShieldBotArt from '../../../assets/source/New assets/ship/synod/ship.synod.shield-bot.png';
+import synodStarArmadaArt from '../../../assets/source/New assets/ship/synod/ship.synod.star-armada.png';
+import synodGoliathArt from '../../../assets/source/New assets/ship/synod/ship.synod.goliath.png';
+import synodBomberbotArt from '../../../assets/source/New assets/ship/synod/ship.synod.bomberbot.png';
 import synodTitanArt from '../../../assets/source/New assets/ship/synod/ship.synod.titan.png';
 
-import veyraSatelliteArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.satellite.png';
-import veyraSpyProbeArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.spy-probe.png';
-import veyraTransportArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.transport.png';
-import veyraMegatransportArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.megatransport.png';
-import veyraColonizerArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.colonizer.png';
-import veyraRecyclerArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.recycler.png';
-import veyraGlideArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.glide.png';
-import veyraCruiserArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.cruiser.png';
-import veyraGuardianArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.guardian.png';
-import veyraBattleshipArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.battleship.png';
-import veyraDestroyerArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.destroyer.png';
+import veyraSatelliteArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.organic-satellite.png';
+import veyraSpyProbeArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.nox-mind.png';
+import veyraTransportArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.transporter.png';
+import veyraMegatransportArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.mega-transporter.png';
+import veyraColonizerArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.settler.png';
+import veyraRecyclerArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.recycler-drone.png';
+import veyraNoxDartArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.nox-dart.png';
+import veyraHornetArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.hornet.png';
+import veyraAbsorberArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.absorber.png';
+import veyraGhostArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.ghost.png';
+import veyraNemesisArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.nemesis.png';
 import veyraBomberArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.bomber.png';
-import veyraLeviathanArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.leviathan.png';
+import veyraNoxQueenArt from '../../../assets/source/New assets/ship/veyra/ship.veyra.nox-queen.png';
 
 import synodDefenseMatrixArt from '../../../assets/source/New assets/defenses/synod/defense.synod.defense-matrix.png';
 import synodLaserMatrixArt from '../../../assets/source/New assets/defenses/synod/defense.synod.laser-matrix.png';
@@ -50,16 +50,12 @@ import {
   COMMANDER_COMBAT_CATALOG,
   DEFENSE_COMBAT_CATALOG,
   SHIP_COMBAT_CATALOG,
+  getCombatEntity,
   type CatalogEntity,
 } from './catalog.ts';
 import type { CombatFactionId } from './factions.ts';
 import type { CombatEntityId, DefenseId, ShipId } from './ids.ts';
 
-/**
- * Faction rosters are a presentation layer over the canonical mechanical IDs.
- * This lets the simulator display the correct faction art/name without inventing
- * unsourced faction stat tables. Resolver v1 still consumes the canonical stats.
- */
 type PresentationOverride = {
   id: CombatEntityId;
   name: string;
@@ -78,36 +74,39 @@ function applyOverrides<TId extends CombatEntityId>(
   });
 }
 
+// These rosters are presentation bindings to the faction assets already present in Asterion.
+// Until verified race-specific stat tables are available, each slot keeps its canonical
+// mechanical ID and combat stats rather than inventing hidden faction coefficients.
 const SYNOD_SHIPS = applyOverrides<ShipId>(SHIP_COMBAT_CATALOG, [
-  { id: 'solar-satellite', name: 'Спутник', role: 'Орбитальный спутник Иларов', art: synodSatelliteArt },
-  { id: 'spy-probe', name: 'Зонд', role: 'Разведывательный зонд Иларов', art: synodSpyProbeArt },
-  { id: 'transporter', name: 'Транспорт', role: 'Транспортировщик Иларов', art: synodTransportArt },
-  { id: 'mega-transporter', name: 'Мегатранспорт', role: 'Тяжёлый транспортировщик Иларов', art: synodMegatransportArt },
-  { id: 'colonizer', name: 'Колонизатор', role: 'Колониальный корабль Иларов', art: synodColonizerArt },
-  { id: 'recycler', name: 'Переработчик', role: 'Переработчик обломков Иларов', art: synodRecyclerArt },
+  { id: 'solar-satellite', name: 'Солнечный спутник', role: 'Орбитальный спутник Иларов', art: synodSatelliteArt },
+  { id: 'spy-probe', name: 'Шпион-бот', role: 'Разведывательный бот Иларов', art: synodSpyProbeArt },
+  { id: 'transporter', name: 'Грузовой бот', role: 'Транспорт Иларов', art: synodTransportArt },
+  { id: 'mega-transporter', name: 'Большой грузовой бот', role: 'Тяжёлый транспорт Иларов', art: synodMegatransportArt },
+  { id: 'colonizer', name: 'Колонизатор-бот', role: 'Колониальный бот Иларов', art: synodColonizerArt },
+  { id: 'recycler', name: 'Переработчик', role: 'Переработчик Иларов', art: synodRecyclerArt },
   { id: 'scout', name: 'Истребитель', role: 'Лёгкий боевой корабль Иларов', art: synodFighterArt },
-  { id: 'cruiser', name: 'Крейсер', role: 'Боевой крейсер Иларов', art: synodCruiserArt },
-  { id: 'defender', name: 'Штурмовой корабль', role: 'Штурмовой корабль Иларов', art: synodAssaultShipArt },
-  { id: 'battleship', name: 'Линкор', role: 'Линкор Иларов', art: synodBattleshipArt },
-  { id: 'destroyer', name: 'Разрушитель', role: 'Тяжёлый корабль Иларов', art: synodDestroyerArt },
-  { id: 'bomber', name: 'Бомбардировщик', role: 'Бомбардировщик Иларов', art: synodBomberArt },
+  { id: 'cruiser', name: 'Перехватчик', role: 'Боевой корабль Иларов', art: synodInterceptorArt },
+  { id: 'defender', name: 'Щит-бот', role: 'Защитный корабль Иларов', art: synodShieldBotArt },
+  { id: 'battleship', name: 'Звёздная армада', role: 'Тяжёлый корабль Иларов', art: synodStarArmadaArt },
+  { id: 'destroyer', name: 'Голиаф', role: 'Тяжёлый штурмовой корабль Иларов', art: synodGoliathArt },
+  { id: 'bomber', name: 'Бомбербот', role: 'Осадный корабль Иларов', art: synodBomberbotArt },
   { id: 'death-star', name: 'Титан', role: 'Сверхтяжёлый корабль Иларов', art: synodTitanArt },
 ]);
 
 const VEYRA_SHIPS = applyOverrides<ShipId>(SHIP_COMBAT_CATALOG, [
   { id: 'solar-satellite', name: 'Органический спутник', role: 'Орбитальный организм Роя', art: veyraSatelliteArt },
-  { id: 'spy-probe', name: 'Зонд Роя', role: 'Разведывательный организм', art: veyraSpyProbeArt },
-  { id: 'transporter', name: 'Транспорт Роя', role: 'Транспортный организм', art: veyraTransportArt },
-  { id: 'mega-transporter', name: 'Мегатранспорт Роя', role: 'Тяжёлый транспортный организм', art: veyraMegatransportArt },
-  { id: 'colonizer', name: 'Колонизатор Роя', role: 'Колонизационный организм', art: veyraColonizerArt },
-  { id: 'recycler', name: 'Переработчик Роя', role: 'Организм-переработчик', art: veyraRecyclerArt },
-  { id: 'scout', name: 'Глайд', role: 'Лёгкий боевой организм Роя', art: veyraGlideArt },
-  { id: 'cruiser', name: 'Крейсер Роя', role: 'Боевой организм', art: veyraCruiserArt },
-  { id: 'defender', name: 'Страж', role: 'Защитный организм Роя', art: veyraGuardianArt },
-  { id: 'battleship', name: 'Линкор Роя', role: 'Тяжёлый боевой организм', art: veyraBattleshipArt },
-  { id: 'destroyer', name: 'Разрушитель Роя', role: 'Тяжёлый штурмовой организм', art: veyraDestroyerArt },
-  { id: 'bomber', name: 'Бомбардировщик Роя', role: 'Осадный организм', art: veyraBomberArt },
-  { id: 'death-star', name: 'Левиафан', role: 'Сверхтяжёлый организм Роя', art: veyraLeviathanArt },
+  { id: 'spy-probe', name: 'Нокс-разум', role: 'Разведывательный организм Роя', art: veyraSpyProbeArt },
+  { id: 'transporter', name: 'Транспортёр', role: 'Транспортный организм Роя', art: veyraTransportArt },
+  { id: 'mega-transporter', name: 'Мегатранспортёр', role: 'Тяжёлый транспортный организм Роя', art: veyraMegatransportArt },
+  { id: 'colonizer', name: 'Поселенец', role: 'Колонизационный организм Роя', art: veyraColonizerArt },
+  { id: 'recycler', name: 'Дрон-переработчик', role: 'Переработчик Роя', art: veyraRecyclerArt },
+  { id: 'scout', name: 'Нокс-дротик', role: 'Лёгкий боевой организм Роя', art: veyraNoxDartArt },
+  { id: 'cruiser', name: 'Шершень', role: 'Боевой организм Роя', art: veyraHornetArt },
+  { id: 'defender', name: 'Поглотитель', role: 'Защитный организм Роя', art: veyraAbsorberArt },
+  { id: 'battleship', name: 'Призрак', role: 'Тяжёлый боевой организм Роя', art: veyraGhostArt },
+  { id: 'destroyer', name: 'Немезида', role: 'Тяжёлый штурмовой организм Роя', art: veyraNemesisArt },
+  { id: 'bomber', name: 'Бомбардировщик', role: 'Осадный организм Роя', art: veyraBomberArt },
+  { id: 'death-star', name: 'Нокс-королева', role: 'Сверхтяжёлый организм Роя', art: veyraNoxQueenArt },
 ]);
 
 const SYNOD_DEFENSES = applyOverrides<DefenseId>(DEFENSE_COMBAT_CATALOG, [
@@ -124,7 +123,7 @@ const SYNOD_DEFENSES = applyOverrides<DefenseId>(DEFENSE_COMBAT_CATALOG, [
 
 const VEYRA_DEFENSES = applyOverrides<DefenseId>(DEFENSE_COMBAT_CATALOG, [
   { id: 'ballistic-turret', name: 'Нокс-лучник', role: 'Базовая защитная форма Роя', art: veyraNoxArcherArt },
-  { id: 'laser-turret', name: 'Лазерная ткань', role: 'Лазерная защитная форма Роя', art: veyraLaserMatterArt },
+  { id: 'laser-turret', name: 'Лазерная материя', role: 'Лазерная защитная форма Роя', art: veyraLaserMatterArt },
   { id: 'ion-turret', name: 'Ионное плетение', role: 'Ионная защитная форма Роя', art: veyraIonWeaveArt },
   { id: 'plasma-turret', name: 'Плазменное плетение', role: 'Плазменная защитная форма Роя', art: veyraPlasmaWeaveArt },
   { id: 'laser-ion-battery', name: 'Лазер-ионная турель', role: 'Комбинированная форма Роя', art: veyraLaserIonTurretArt },
@@ -158,7 +157,5 @@ export function getFactionCombatEntity(factionId: CombatFactionId, entityId: Com
   return getFactionShipCatalog(factionId).find((entity) => entity.id === entityId)
     ?? getFactionDefenseCatalog(factionId).find((entity) => entity.id === entityId)
     ?? COMMANDER_COMBAT_CATALOG.find((entity) => entity.id === entityId)
-    ?? SHIP_COMBAT_CATALOG.find((entity) => entity.id === entityId)
-    ?? DEFENSE_COMBAT_CATALOG.find((entity) => entity.id === entityId)
-    ?? COMMANDER_COMBAT_CATALOG[0];
+    ?? getCombatEntity(entityId);
 }
