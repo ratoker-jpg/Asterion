@@ -1,6 +1,13 @@
 export type RatingDataTruth = 'deterministic-local-fixture';
 export type RatingSort = 'rank' | 'score';
 export type RatingMode = 'players' | 'alliances';
+export type RatingScoreKind = 'total' | 'resource' | 'combat' | 'achievement';
+
+export type RatingScores = {
+  resource: number;
+  combat: number;
+  achievement: number;
+};
 
 export type RatingAllianceIdentity = {
   name: string;
@@ -14,7 +21,7 @@ export type PlayerRatingRow = {
   sector: string;
   rank: number;
   previousRank: number;
-  score: number;
+  scores: RatingScores;
   isLocal: boolean;
   dataTruth: RatingDataTruth;
 };
@@ -26,7 +33,7 @@ export type AllianceRatingRow = {
   members: number;
   rank: number;
   previousRank: number;
-  score: number;
+  scores: RatingScores;
   isLocal: boolean;
   dataTruth: RatingDataTruth;
 };
