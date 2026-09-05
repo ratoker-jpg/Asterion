@@ -19,6 +19,8 @@ jobs:
         run: npm run test:combat
       - name: Operations domain tests
         run: npm run test:operations
+      - name: Command domain tests
+        run: npm run test:command
       - name: Build renderer
         run: npm run build
       - name: Package Windows app
