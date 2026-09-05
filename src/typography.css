@@ -38,3 +38,15 @@
 .preview-control-v2{font-size:calc(10px * var(--text-scale-control))}
 .preview-secondary-v2{font-size:calc(9px * var(--text-scale-secondary))}
 .preview-helper-v2{font-size:calc(8px * var(--text-scale-helper))}
+
+/* Legacy/current screens are tagged once by GlobalTypographyController with a semantic
+   category and their original computed font size. Preferences then remain pure CSS-variable
+   multipliers; no stylesheet rule mutation is used. */
+[data-asterion-typography="hud"]{font-size:calc(var(--asterion-base-font-size) * var(--text-scale-hud))!important}
+[data-asterion-typography="pageTitle"]{font-size:calc(var(--asterion-base-font-size) * var(--text-scale-page-title))!important}
+[data-asterion-typography="sectionTitle"]{font-size:calc(var(--asterion-base-font-size) * var(--text-scale-section-title))!important}
+[data-asterion-typography="body"]{font-size:calc(var(--asterion-base-font-size) * var(--text-scale-body))!important}
+[data-asterion-typography="table"]{font-size:calc(var(--asterion-base-font-size) * var(--text-scale-table))!important}
+[data-asterion-typography="control"]{font-size:calc(var(--asterion-base-font-size) * var(--text-scale-control))!important}
+[data-asterion-typography="secondary"]{font-size:calc(var(--asterion-base-font-size) * var(--text-scale-secondary))!important}
+[data-asterion-typography="helper"]{font-size:calc(var(--asterion-base-font-size) * var(--text-scale-helper))!important}
