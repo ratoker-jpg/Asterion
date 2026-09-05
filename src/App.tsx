@@ -577,6 +577,14 @@ export function App() {
     window.setTimeout(() => window.dispatchEvent(new Event(FLEET_ROOT_REQUEST_EVENT)), 0);
   };
 
+  const openFleetRootFromReports = () => {
+    setActiveTab('Флоты');
+    setPlanetMenuOpen(false);
+    closePlanetEditor();
+    setNotice('Флоты: выберите состав для союзной операции из отчётов.');
+    window.setTimeout(() => window.dispatchEvent(new Event(FLEET_ROOT_REQUEST_EVENT)), 0);
+  };
+
   const chooseTab = (tab: string) => {
     setActiveTab(tab);
     setPlanetMenuOpen(false);
@@ -699,8 +707,11 @@ export function App() {
           ) : activeTab === 'Отчёты' ? (
             <ReportsView
               battleReports={state.combat.reports}
+              operations={state.operations}
+              command={state.command}
               state={state.reports}
               onStateChange={(reports) => setState((current) => ({ ...current, reports }))}
+              onOpenFleets={openFleetRootFromReports}
             />
           ) : activeTab === 'Планета' ? (
             <div className="planet-page-v3 planet-page-v4">
