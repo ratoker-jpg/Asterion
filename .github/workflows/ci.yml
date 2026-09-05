@@ -23,6 +23,12 @@ jobs:
         run: npm run test:command
       - name: Reports domain tests
         run: npm run test:reports
+      - name: Settings foundation tests
+        run: npm run test:settings
+      - name: Rating foundation tests
+        run: npm run test:rating
+      - name: Science foundation tests
+        run: npm run test:science
       - name: Build renderer
         run: npm run build
       - name: Package Windows app
