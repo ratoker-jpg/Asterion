@@ -13,7 +13,7 @@ import {
   scenarioToCombatInput,
   setScenarioFaction,
 } from './simulator.ts';
-import { normalizeCombatTechnologies } from './technologies.ts';
+import { COMBAT_TECHNOLOGIES, normalizeCombatTechnologies } from './technologies.ts';
 
 const populatedScenario = {
   ...createEmptySimulatorScenario(),
@@ -33,6 +33,21 @@ test('simulator exposes exactly the three Asterion player races', () => {
     { id: 'aegis', name: 'Астеры' },
     { id: 'synod', name: 'Илары' },
     { id: 'veyra', name: 'Рой' },
+  ]);
+});
+
+test('simulator science fields match the saved Nemexia fleet simulator', () => {
+  assert.deepEqual(COMBAT_TECHNOLOGIES.map(({ sourceScienceId, name }) => [sourceScienceId, name]), [
+    [10, 'Лазерная наука'],
+    [11, 'Ионная наука'],
+    [12, 'Плазменная наука'],
+    [18, 'Пробивающая атака'],
+    [21, 'Лёгкая броня'],
+    [22, 'Средняя броня'],
+    [23, 'Тяжёлая броня'],
+    [7, 'Броня кораблей'],
+    [19, 'Маневренная защита'],
+    [20, 'Критический удар'],
   ]);
 });
 
