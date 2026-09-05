@@ -33,7 +33,7 @@ async function waitFor(win, expression, timeoutMs = 6000) {
 async function activateScreen(win, label) {
   const encoded = JSON.stringify(label);
   await win.webContents.executeJavaScript(`(() => {
-    const button = document.querySelector('.utility-navigation button[aria-label=' + ${encoded}.replace(/"/g, '\\"') + ']');
+    const button = Array.from(document.querySelectorAll('.utility-navigation button')).find((item) => item.getAttribute('aria-label') === ${encoded});
     if (!button) return false;
     button.click();
     return true;
