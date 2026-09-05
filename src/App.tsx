@@ -5,6 +5,9 @@ import { UniverseView } from './UniverseView';
 import { OperationsView } from './OperationsView';
 import { CommandView } from './CommandView';
 import { ReportsView } from './ReportsView';
+import { SettingsView } from './SettingsView';
+import { RatingView } from './RatingView';
+import { ScienceView } from './ScienceView';
 import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
 import {
   BATTLE_HISTORY_CHANGED_EVENT,
@@ -45,6 +48,15 @@ import {
 import type { AllianceSettingsInput, CommandState } from './domain/command/types.ts';
 import { createDefaultReportsState, migrateReportsState } from './domain/reports/repository.ts';
 import type { ReportsState } from './domain/reports/types.ts';
+import { applyDesktopPreferences } from './domain/settings/desktop.ts';
+import {
+  applyPreferencesToDocument,
+  migratePreferences,
+  persistPreferences,
+  readPreferences,
+  resetPreferences,
+  type AsterionPreferences,
+} from './domain/settings/preferences.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import planetColonized from '../assets/source/starter/planets/planet_colonized.png';
@@ -226,7 +238,6 @@ function readSave(): SaveState {
         : initialState.planets['helion-01'].skin,
     };
 
-    // Migration from the original single-planet save format.
     if (parsed.planetSkin && isPlanetSkin(parsed.planetSkin)) {
       homeworld.skin = parsed.planetSkin;
       homeworld.population = parsed.population ?? homeworld.population;
@@ -239,8 +250,6 @@ function readSave(): SaveState {
       ? { ...savedQueue, planetId: 'helion-01' }
       : null;
 
-    // Any temporary test colonies from the previous prototype are intentionally
-    // discarded here. The next save writes the canonical single-homeworld model.
     return {
       schemaVersion: COMBAT_SAVE_SCHEMA_VERSION,
       metal: parsed.metal ?? initialState.metal,
@@ -365,6 +374,7 @@ export function App() {
   const [zone, setZone] = useState<Zone>('resource');
   const [activeTab, setActiveTab] = useState('Планета');
   const [state, setState] = useState<SaveState>(readSave);
+  const [preferences, setPreferences] = useState<AsterionPreferences>(readPreferences);
   const [now, setNow] = useState(Date.now());
   const [notice, setNotice] = useState('Система готова. Локальное сохранение активно.');
   const [planetMenuOpen, setPlanetMenuOpen] = useState(false);
@@ -373,6 +383,12 @@ export function App() {
   const [editingName, setEditingName] = useState(DEFAULT_PLANET_NAME);
 
   useEffect(() => localStorage.setItem(SAVE_KEY, JSON.stringify(state)), [state]);
+  useEffect(() => {
+    const normalized = migratePreferences(preferences);
+    persistPreferences(normalized);
+    applyPreferencesToDocument(normalized);
+    void applyDesktopPreferences(normalized);
+  }, [preferences]);
   useEffect(() => {
     const onCombatPriorityChanged = (event: Event) => {
       const priority = (event as CustomEvent<CombatPriorityState>).detail;
@@ -530,7 +546,18 @@ export function App() {
     setEditingPlanetId(null);
     setEditingName(DEFAULT_PLANET_NAME);
     setDetailsOpen(true);
-    setNotice('Сохранение прототипа сброшено.');
+    setNotice('Сохранение прототипа сброшено. Настройки устройства сохранены.');
+  };
+
+  const resetSettings = () => {
+    const next = resetPreferences();
+    setPreferences(next);
+    applyPreferencesToDocument(next);
+    setNotice('Настройки интерфейса сброшены. Кампания и прогресс сохранены.');
+  };
+
+  const updatePreferences = (next: AsterionPreferences) => {
+    setPreferences(migratePreferences(next));
   };
 
   const acceptOperationsOperation = (operationId: OperationId) => {
@@ -607,6 +634,9 @@ export function App() {
     else if (tab === 'Операции') setNotice('Операции: доступные PvE-сценарии загружены.');
     else if (tab === 'Командование') setNotice('Командование: союзный контур загружен.');
     else if (tab === 'Отчёты') setNotice('Отчёты: центр сообщений и боевых журналов загружен.');
+    else if (tab === 'Настройки') setNotice('Настройки: параметры устройства и интерфейса загружены.');
+    else if (tab === 'Рейтинг') setNotice('Рейтинг: локальный foundation игроков и союзов загружен.');
+    else if (tab === 'Наука') setNotice('Наука: подтверждённый каталог текущих combat technologies загружен.');
     else if (tab !== 'Планета') setNotice(`Экран «${tab}» пока в разработке.`);
   };
 
@@ -635,7 +665,7 @@ export function App() {
                   key={item}
                   type="button"
                   className={`header-zone header-zone--${item} ${zone === item && activeTab === 'Планета' ? 'active' : ''}`}
-                  title={zoneMeta[item].title}
+                  title={preferences.tooltipsEnabled ? zoneMeta[item].title : undefined}
                   onClick={() => chooseZone(item)}
                 >
                   <GameIcon kind={item} />
@@ -699,7 +729,7 @@ export function App() {
           </section>
         </header>
 
-        <section className={`workspace workspace-v4 workspace--${activeTab === 'Вселенная' ? 'universe' : activeTab === 'Планета' ? 'planet' : activeTab === 'Операции' ? 'operations' : activeTab === 'Командование' ? 'command' : activeTab === 'Отчёты' ? 'reports' : 'module'}`}>
+        <section className={`workspace workspace-v4 workspace--${activeTab === 'Вселенная' ? 'universe' : activeTab === 'Планета' ? 'planet' : activeTab === 'Операции' ? 'operations' : activeTab === 'Командование' ? 'command' : activeTab === 'Отчёты' ? 'reports' : activeTab === 'Настройки' ? 'settings' : activeTab === 'Рейтинг' ? 'rating' : activeTab === 'Наука' ? 'science' : 'module'}`}>
           {activeTab === 'Вселенная' ? (
             <UniverseView onNotice={setNotice} ownedPlanetArt={currentSkin.art} ownedPlanetName={currentPlanetName} />
           ) : activeTab === 'Операции' ? (
@@ -729,6 +759,12 @@ export function App() {
               onToggleBattleSaved={toggleBattleSavedFromReports}
               onOpenFleets={openFleetRootFromReports}
             />
+          ) : activeTab === 'Настройки' ? (
+            <SettingsView preferences={preferences} onChange={updatePreferences} onReset={resetSettings} />
+          ) : activeTab === 'Рейтинг' ? (
+            <RatingView command={state.command} />
+          ) : activeTab === 'Наука' ? (
+            <ScienceView />
           ) : activeTab === 'Планета' ? (
             <div className="planet-page-v3 planet-page-v4">
               <aside className="planet-summary-v3 planet-list-panel-v4">
@@ -740,7 +776,7 @@ export function App() {
                       <img src={currentSkin.art} alt="" />
                       <span><strong>{currentPlanetName}</strong><small>{currentPlanet.coords} · {currentPlanet.status}</small></span>
                     </button>
-                    <button className="owned-planet-edit-v4" type="button" title={`Редактировать ${currentPlanetName}`} onClick={() => openPlanetEditor('helion-01')}>✎</button>
+                    <button className="owned-planet-edit-v4" type="button" title={preferences.tooltipsEnabled ? `Редактировать ${currentPlanetName}` : undefined} onClick={() => openPlanetEditor('helion-01')}>✎</button>
                   </div>
                 </div>
 
