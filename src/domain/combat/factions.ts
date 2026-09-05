@@ -27,6 +27,7 @@ export function normalizeCombatFactionId(value: unknown): CombatFactionId {
   return isCombatFactionId(value) ? value : DEFAULT_COMBAT_FACTION_ID;
 }
 
-export function getCombatFactionName(id: CombatFactionId) {
-  return COMBAT_FACTION_BY_ID.get(id)?.name ?? COMBAT_FACTION_BY_ID.get(DEFAULT_COMBAT_FACTION_ID)!.name;
+export function getCombatFactionName(id: unknown) {
+  const normalized = normalizeCombatFactionId(id);
+  return COMBAT_FACTION_BY_ID.get(normalized)?.name ?? COMBAT_FACTION_BY_ID.get(DEFAULT_COMBAT_FACTION_ID)!.name;
 }
