@@ -4,6 +4,7 @@ import './universe.css';
 import { UniverseView } from './UniverseView';
 import { OperationsView } from './OperationsView';
 import { CommandView } from './CommandView';
+import { ReportsView } from './ReportsView';
 import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
 import {
   BATTLE_HISTORY_CHANGED_EVENT,
@@ -40,6 +41,8 @@ import {
   updateAllianceSettings,
 } from './domain/command/repository.ts';
 import type { AllianceSettingsInput, CommandState } from './domain/command/types.ts';
+import { createDefaultReportsState, migrateReportsState } from './domain/reports/repository.ts';
+import type { ReportsState } from './domain/reports/types.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import planetColonized from '../assets/source/starter/planets/planet_colonized.png';
@@ -126,6 +129,7 @@ type SaveState = {
   combatSimulator: SimulatorState;
   operations: OperationsState;
   command: CommandState;
+  reports: ReportsState;
 };
 
 type PlanetDefinition = {
@@ -169,6 +173,7 @@ const createInitialState = (): SaveState => ({
   combatSimulator: createDefaultSimulatorState(),
   operations: createDefaultOperationsState(),
   command: createDefaultCommandState(),
+  reports: createDefaultReportsState(),
 });
 
 const initialState = createInitialState();
@@ -247,6 +252,7 @@ function readSave(): SaveState {
       combatSimulator: migrateSimulatorState(parsed.combatSimulator),
       operations: migrateOperationsState(parsed.operations),
       command: migrateCommandState(parsed.command),
+      reports: migrateReportsState(parsed.reports),
     };
   } catch {
     return createInitialState();
@@ -578,6 +584,7 @@ export function App() {
     if (tab === 'Вселенная') setNotice('Галактика 1 загружена. Доступно 40 солнечных систем.');
     else if (tab === 'Операции') setNotice('Операции: доступные PvE-сценарии загружены.');
     else if (tab === 'Командование') setNotice('Командование: союзный контур загружен.');
+    else if (tab === 'Отчёты') setNotice('Отчёты: центр сообщений и боевых журналов загружен.');
     else if (tab !== 'Планета') setNotice(`Экран «${tab}» пока в разработке.`);
   };
 
@@ -670,7 +677,7 @@ export function App() {
           </section>
         </header>
 
-        <section className={`workspace workspace-v4 workspace--${activeTab === 'Вселенная' ? 'universe' : activeTab === 'Планета' ? 'planet' : activeTab === 'Операции' ? 'operations' : activeTab === 'Командование' ? 'command' : 'module'}`}>
+        <section className={`workspace workspace-v4 workspace--${activeTab === 'Вселенная' ? 'universe' : activeTab === 'Планета' ? 'planet' : activeTab === 'Операции' ? 'operations' : activeTab === 'Командование' ? 'command' : activeTab === 'Отчёты' ? 'reports' : 'module'}`}>
           {activeTab === 'Вселенная' ? (
             <UniverseView onNotice={setNotice} ownedPlanetArt={currentSkin.art} ownedPlanetName={currentPlanetName} />
           ) : activeTab === 'Операции' ? (
@@ -688,6 +695,12 @@ export function App() {
               onReviewRequest={reviewCommandRequest}
               onSaveSettings={saveCommandSettings}
               onOpenFleets={openFleetRootFromCommand}
+            />
+          ) : activeTab === 'Отчёты' ? (
+            <ReportsView
+              battleReports={state.combat.reports}
+              state={state.reports}
+              onStateChange={(reports) => setState((current) => ({ ...current, reports }))}
             />
           ) : activeTab === 'Планета' ? (
             <div className="planet-page-v3 planet-page-v4">
