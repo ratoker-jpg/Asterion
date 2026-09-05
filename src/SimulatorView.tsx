@@ -1,16 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type SetStateAction } from 'react';
 
 import { BattleReportDetailBody } from './BattleReportsView';
-import {
-  COMMANDER_COMBAT_CATALOG,
-  DEFENSE_COMBAT_CATALOG,
-  SHIP_COMBAT_CATALOG,
-  type CatalogEntity,
-} from './domain/combat/catalog.ts';
+import { COMMANDER_COMBAT_CATALOG, DEFENSE_COMBAT_CATALOG, SHIP_COMBAT_CATALOG, type CatalogEntity } from './domain/combat/catalog.ts';
 import { COMMANDER_ABILITIES, type CommanderId } from './domain/combat/commanders.ts';
+import { getFactionDefenseCatalog, getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
 import {
   COMBAT_FACTIONS,
   getCombatFactionName,
+  normalizeCombatFactionId,
   type CombatFactionId,
 } from './domain/combat/factions.ts';
 import {
@@ -21,7 +18,6 @@ import {
 import { readCombatPriority, selectActiveCommander } from './domain/combat/priority.ts';
 import { resolveCombat } from './domain/combat/resolver.ts';
 import {
-  createDefaultSimulatorState,
   deleteSimulatorPreset,
   persistSimulatorState,
   readSimulatorState,
@@ -40,6 +36,13 @@ import {
   type CombatStackInput,
   type SimulatorScenario,
 } from './domain/combat/simulator.ts';
+import {
+  COMBAT_TECHNOLOGIES,
+  normalizeCombatTechnologies,
+  normalizeTechnologyLevel,
+  type CombatTechnologyId,
+  type CombatTechnologyLevels,
+} from './domain/combat/technologies.ts';
 import type { BattleReport } from './domain/combat/report.ts';
 import './simulator.css';
 
@@ -51,7 +54,7 @@ function nextIdentity(prefix: string) {
 }
 
 function formatNumber(value: number) {
-  return new Intl.NumberFormat('ru-RU').format(value);
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(value);
 }
 
 type ScenarioSide = 'attacker' | 'defender';
@@ -60,17 +63,21 @@ type ScenarioCategory = 'ships' | 'commanders' | 'defenses';
 type ExpandedState = {
   attackerShips: boolean;
   attackerCommanders: boolean;
+  attackerTechnologies: boolean;
   defenderShips: boolean;
   defenderCommanders: boolean;
   defenderDefenses: boolean;
+  defenderTechnologies: boolean;
 };
 
 const DEFAULT_EXPANDED: ExpandedState = {
   attackerShips: true,
   attackerCommanders: false,
+  attackerTechnologies: false,
   defenderShips: true,
   defenderCommanders: false,
   defenderDefenses: false,
+  defenderTechnologies: false,
 };
 
 function getStacks(scenario: SimulatorScenario, side: ScenarioSide, category: ScenarioCategory): CombatStackInput[] {
@@ -99,16 +106,10 @@ function replaceStackCount(
 
   if (side === 'attacker') {
     if (category === 'defenses') return scenario;
-    return {
-      ...scenario,
-      attacker: { ...scenario.attacker, [category]: next },
-    };
+    return { ...scenario, attacker: { ...scenario.attacker, [category]: next } };
   }
 
-  return {
-    ...scenario,
-    defender: { ...scenario.defender, [category]: next },
-  };
+  return { ...scenario, defender: { ...scenario.defender, [category]: next } };
 }
 
 function categoryPopulation(scenario: SimulatorScenario, side: ScenarioSide, category: ScenarioCategory) {
@@ -228,6 +229,71 @@ function UnitSection({
   );
 }
 
+function TechnologySection({
+  id,
+  open,
+  levels,
+  onToggle,
+  onChange,
+}: {
+  id: string;
+  open: boolean;
+  levels?: CombatTechnologyLevels;
+  onToggle: () => void;
+  onChange: (levels: CombatTechnologyLevels) => void;
+}) {
+  const normalized = normalizeCombatTechnologies(levels);
+  const activeCount = COMBAT_TECHNOLOGIES.filter((technology) => normalized[technology.id] > 0).length;
+
+  const updateLevel = (technologyId: CombatTechnologyId, nextValue: number) => {
+    onChange({
+      ...normalized,
+      [technologyId]: normalizeTechnologyLevel(technologyId, nextValue),
+    });
+  };
+
+  return (
+    <section className={`sim-unit-section-v1 sim-tech-section-v1 ${open ? 'open' : ''}`}>
+      <button type="button" className="sim-section-toggle-v1" aria-expanded={open} aria-controls={id} onClick={onToggle}>
+        <span><strong>ТЕХНОЛОГИИ</strong><small>{activeCount ? `Активно: ${activeCount}` : 'Все уровни 0'}</small></span>
+        <b aria-hidden="true">{open ? '−' : '+'}</b>
+      </button>
+      {open ? (
+        <div id={id} className="sim-tech-list-v1">
+          {COMBAT_TECHNOLOGIES.map((technology) => {
+            const level = normalized[technology.id];
+            return (
+              <div className="sim-tech-row-v1" key={technology.id}>
+                <div>
+                  <strong>{technology.name}</strong>
+                  <small>{technology.effect}</small>
+                </div>
+                <div className="sim-tech-controls-v1">
+                  <button type="button" disabled={level <= 0} onClick={() => updateLevel(technology.id, level - 1)}>−</button>
+                  <input
+                    type="number"
+                    min="0"
+                    max={technology.maxLevel}
+                    value={level}
+                    aria-label={`${technology.name}, уровень`}
+                    onChange={(event) => updateLevel(technology.id, Number(event.target.value))}
+                  />
+                  <span>/ {technology.maxLevel}</span>
+                  <button type="button" disabled={level >= technology.maxLevel} onClick={() => updateLevel(technology.id, level + 1)}>+</button>
+                  <button type="button" className="sim-max-v1" disabled={level >= technology.maxLevel} onClick={() => updateLevel(technology.id, technology.maxLevel)}>МАКС.</button>
+                </div>
+              </div>
+            );
+          })}
+          <p className="sim-tech-note-v1">
+            Критический урон не применяется в Combat Resolver v1: проверенная механика существует, но она вероятностная (RNG), а текущий resolver детерминированный.
+          </p>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function PopulationMeter({ label, value }: { label: string; value: number }) {
   const overflow = value > SIMULATOR_POPULATION_LIMIT;
   return (
@@ -238,17 +304,7 @@ function PopulationMeter({ label, value }: { label: string; value: number }) {
   );
 }
 
-function RaceSelector({
-  id,
-  label,
-  value,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  value?: CombatFactionId;
-  onChange: (factionId: CombatFactionId) => void;
-}) {
+function RaceSelector({ id, label, value, onChange }: { id: string; label: string; value?: CombatFactionId; onChange: (factionId: CombatFactionId) => void }) {
   return (
     <label className="sim-race-v1" htmlFor={id}>
       <span>{label}</span>
@@ -270,26 +326,26 @@ export function SimulatorView({ planetName, coords, onBack }: { planetName: stri
   const [resultSaved, setResultSaved] = useState(false);
   const [notice, setNotice] = useState('Готов к расчёту. Combat Resolver v1 не использует RNG.');
 
+  const updateScenario = (next: SetStateAction<SimulatorScenario>) => {
+    setScenario(next);
+    setResult(null);
+    setResultSaved(false);
+  };
+
+  const attackerFactionId = normalizeCombatFactionId(scenario.attackerFactionId);
+  const defenderFactionId = normalizeCombatFactionId(scenario.defenderFactionId);
+  const attackerShips = useMemo(() => getFactionShipCatalog(attackerFactionId), [attackerFactionId]);
+  const defenderShips = useMemo(() => getFactionShipCatalog(defenderFactionId), [defenderFactionId]);
+  const defenderDefenses = useMemo(() => getFactionDefenseCatalog(defenderFactionId), [defenderFactionId]);
   const population = useMemo(() => calculateScenarioPopulation(scenario), [scenario]);
+
   const validationInput = useMemo(() => scenarioToCombatInput(scenario, {
     scenarioId: 'simulator-validation',
     timestamp: '2026-01-01T00:00:00.000Z',
-    attacker: {
-      playerId: 'sim-attacker',
-      playerName: getCombatFactionName(scenario.attackerFactionId),
-      planetName,
-      coordinates: coords,
-      side: 'attacker',
-    },
-    defender: {
-      playerId: 'sim-defender',
-      playerName: getCombatFactionName(scenario.defenderFactionId),
-      planetName: 'Цель симулятора',
-      coordinates: '[SIM]',
-      side: 'defender',
-    },
+    attacker: { playerId: 'sim-attacker', playerName: getCombatFactionName(attackerFactionId), planetName, coordinates: coords, side: 'attacker' },
+    defender: { playerId: 'sim-defender', playerName: getCombatFactionName(defenderFactionId), planetName: 'Цель симулятора', coordinates: '[SIM]', side: 'defender' },
     priority: readCombatPriority(),
-  }), [scenario, planetName, coords]);
+  }), [scenario, planetName, coords, attackerFactionId, defenderFactionId]);
   const validation = useMemo(() => validateCombatInput(validationInput), [validationInput]);
 
   const activeCommanders = useMemo(() => {
@@ -308,32 +364,31 @@ export function SimulatorView({ planetName, coords, onBack }: { planetName: stri
     if (persisted.ok) setSimulatorState(persisted.value);
   }, [scenario]);
 
-  const toggleExpanded = (key: keyof ExpandedState) => {
-    setExpanded((current) => ({ ...current, [key]: !current[key] }));
-  };
+  const toggleExpanded = (key: keyof ExpandedState) => setExpanded((current) => ({ ...current, [key]: !current[key] }));
 
   const clearSide = (side: ScenarioSide) => {
-    setScenario((current) => side === 'attacker'
+    updateScenario((current) => side === 'attacker'
       ? { ...current, attacker: { ships: [], commanders: [] } }
       : { ...current, defender: { ships: [], commanders: [], defenses: [] } });
-    setResult(null);
-    setResultSaved(false);
     setNotice(side === 'attacker' ? 'Атакующая сторона очищена.' : 'Защищающаяся сторона очищена.');
   };
 
   const changeFaction = (side: ScenarioSide, factionId: CombatFactionId) => {
-    setScenario((current) => setScenarioFaction(current, side, factionId));
-    setResult(null);
-    setResultSaved(false);
+    updateScenario((current) => setScenarioFaction(current, side, factionId));
     const sideLabel = side === 'attacker' ? 'атакующего' : 'защитника';
-    setNotice(`Раса ${sideLabel} изменена на «${getCombatFactionName(factionId)}». Состав этой стороны очищен.`);
+    setNotice(`Раса ${sideLabel} изменена на «${getCombatFactionName(factionId)}». Показан её набор кораблей${side === 'defender' ? ' и обороны' : ''}; состав стороны очищен.`);
+  };
+
+  const changeTechnologies = (side: ScenarioSide, levels: CombatTechnologyLevels) => {
+    updateScenario((current) => side === 'attacker'
+      ? { ...current, attackerTechnologies: levels }
+      : { ...current, defenderTechnologies: levels });
+    setNotice(`Технологии ${side === 'attacker' ? 'атакующего' : 'защитника'} изменены. Предыдущий результат сброшен.`);
   };
 
   const clearAll = () => {
-    setScenario(createEmptySimulatorScenario());
-    setResult(null);
-    setResultSaved(false);
-    setNotice('Сценарий очищен. Обе стороны возвращены к расе «Астеры».');
+    updateScenario(createEmptySimulatorScenario());
+    setNotice('Сценарий очищен. Обе стороны возвращены к расе «Астеры», технологии — к уровню 0.');
   };
 
   const runSimulation = () => {
@@ -341,20 +396,8 @@ export function SimulatorView({ planetName, coords, onBack }: { planetName: stri
     const combatInput = scenarioToCombatInput(scenario, {
       scenarioId: nextIdentity('scenario'),
       timestamp,
-      attacker: {
-        playerId: 'sim-attacker',
-        playerName: getCombatFactionName(scenario.attackerFactionId),
-        planetName,
-        coordinates: coords,
-        side: 'attacker',
-      },
-      defender: {
-        playerId: 'sim-defender',
-        playerName: getCombatFactionName(scenario.defenderFactionId),
-        planetName: 'Цель симулятора',
-        coordinates: '[SIM]',
-        side: 'defender',
-      },
+      attacker: { playerId: 'sim-attacker', playerName: getCombatFactionName(attackerFactionId), planetName, coordinates: coords, side: 'attacker' },
+      defender: { playerId: 'sim-defender', playerName: getCombatFactionName(defenderFactionId), planetName: 'Цель симулятора', coordinates: '[SIM]', side: 'defender' },
       priority: readCombatPriority(),
     });
     const checked = validateCombatInput(combatInput);
@@ -378,12 +421,7 @@ export function SimulatorView({ planetName, coords, onBack }: { planetName: stri
 
   const savePreset = () => {
     const name = presetName.trim() || `Сценарий ${simulatorState.presets.length + 1}`;
-    const preset = {
-      id: nextIdentity('preset'),
-      name,
-      createdAt: new Date().toISOString(),
-      input: scenario,
-    };
+    const preset = { id: nextIdentity('preset'), name, createdAt: new Date().toISOString(), input: scenario };
     const next = upsertSimulatorPreset(readSimulatorState(), preset);
     const persisted = persistSimulatorState(next);
     if (persisted.ok) {
@@ -391,17 +429,13 @@ export function SimulatorView({ planetName, coords, onBack }: { planetName: stri
       setSelectedPresetId(preset.id);
       setPresetName('');
       setNotice(`Preset «${preset.name}» сохранён.`);
-    } else {
-      setNotice(`⚠ ${persisted.error}`);
-    }
+    } else setNotice(`⚠ ${persisted.error}`);
   };
 
   const loadPreset = () => {
     const preset = simulatorState.presets.find((item) => item.id === selectedPresetId);
     if (!preset) return;
-    setScenario(preset.input);
-    setResult(null);
-    setResultSaved(false);
+    updateScenario(preset.input);
     setNotice(`Preset «${preset.name}» загружен.`);
   };
 
@@ -414,9 +448,7 @@ export function SimulatorView({ planetName, coords, onBack }: { planetName: stri
       setSimulatorState(persisted.value);
       setSelectedPresetId('');
       setNotice(preset ? `Preset «${preset.name}» удалён.` : 'Preset удалён.');
-    } else {
-      setNotice(`⚠ ${persisted.error}`);
-    }
+    } else setNotice(`⚠ ${persisted.error}`);
   };
 
   const activeCommanderLabel = (id: CommanderId | null) => id
@@ -426,11 +458,7 @@ export function SimulatorView({ planetName, coords, onBack }: { planetName: stri
   return (
     <section className="simulator-view-v1 fleet-page-shell-v1">
       <header className="fleet-page-head-v1">
-        <div>
-          <small>УПРАВЛЕНИЕ ФЛОТОМ · {planetName} {coords}</small>
-          <h2>СИМУЛЯТОР</h2>
-          <p>Детерминированный расчёт по правилам Combat Resolver v1.</p>
-        </div>
+        <div><small>УПРАВЛЕНИЕ ФЛОТОМ · {planetName} {coords}</small><h2>СИМУЛЯТОР</h2><p>Детерминированный расчёт по правилам Combat Resolver v1.</p></div>
         <button type="button" className="fleet-page-back-v1" onClick={onBack}>← К ФЛОТАМ</button>
       </header>
 
@@ -438,61 +466,42 @@ export function SimulatorView({ planetName, coords, onBack }: { planetName: stri
         <div className="sim-rounds-v1" role="group" aria-label="Максимум раундов">
           <span>МАКС. РАУНДОВ</span>
           {SIMULATOR_MAX_ROUNDS.map((rounds) => (
-            <button
-              key={rounds}
-              type="button"
-              className={scenario.maxRounds === rounds ? 'active' : ''}
-              aria-pressed={scenario.maxRounds === rounds}
-              onClick={() => setScenario((current) => ({ ...current, maxRounds: rounds }))}
-            >{rounds}</button>
+            <button key={rounds} type="button" className={scenario.maxRounds === rounds ? 'active' : ''} aria-pressed={scenario.maxRounds === rounds} onClick={() => updateScenario((current) => ({ ...current, maxRounds: rounds }))}>{rounds}</button>
           ))}
         </div>
         <button type="button" className="sim-clear-v1" onClick={clearAll}>ОЧИСТИТЬ ВСЁ</button>
       </section>
 
       <section className="sim-presets-v1" aria-label="Presets симулятора">
-        <div>
-          <label htmlFor="sim-preset-name">НАЗВАНИЕ PRESET</label>
-          <input id="sim-preset-name" value={presetName} maxLength={48} placeholder="Например: Линкоры против матриц" onChange={(event) => setPresetName(event.target.value)} />
-          <button type="button" onClick={savePreset}>СОХРАНИТЬ СЦЕНАРИЙ</button>
-        </div>
-        <div>
-          <label htmlFor="sim-preset-select">СОХРАНЁННЫЕ</label>
-          <select id="sim-preset-select" value={selectedPresetId} onChange={(event) => setSelectedPresetId(event.target.value)}>
-            <option value="">Выбери preset</option>
-            {simulatorState.presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
-          </select>
-          <button type="button" disabled={!selectedPresetId} onClick={loadPreset}>ЗАГРУЗИТЬ</button>
-          <button type="button" disabled={!selectedPresetId} onClick={deletePreset}>УДАЛИТЬ</button>
-        </div>
+        <div><label htmlFor="sim-preset-name">НАЗВАНИЕ PRESET</label><input id="sim-preset-name" value={presetName} maxLength={48} placeholder="Например: Линкоры против матриц" onChange={(event) => setPresetName(event.target.value)} /><button type="button" onClick={savePreset}>СОХРАНИТЬ СЦЕНАРИЙ</button></div>
+        <div><label htmlFor="sim-preset-select">СОХРАНЁННЫЕ</label><select id="sim-preset-select" value={selectedPresetId} onChange={(event) => setSelectedPresetId(event.target.value)}><option value="">Выбери preset</option>{simulatorState.presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}</select><button type="button" disabled={!selectedPresetId} onClick={loadPreset}>ЗАГРУЗИТЬ</button><button type="button" disabled={!selectedPresetId} onClick={deletePreset}>УДАЛИТЬ</button></div>
       </section>
 
       <div className="sim-sides-v1">
         <section className="sim-side-v1">
           <header><div><small>СТОРОНА 01</small><h3>АТАКУЮЩИЙ</h3></div><button type="button" onClick={() => clearSide('attacker')}>ОЧИСТИТЬ СТОРОНУ</button></header>
-          <RaceSelector id="sim-attacker-race" label="РАСА АТАКУЮЩЕГО" value={scenario.attackerFactionId} onChange={(factionId) => changeFaction('attacker', factionId)} />
+          <RaceSelector id="sim-attacker-race" label="РАСА АТАКУЮЩЕГО" value={attackerFactionId} onChange={(factionId) => changeFaction('attacker', factionId)} />
           <PopulationMeter label="ФЛОТ" value={population.attackerFleet} />
           <div className="sim-active-commander-v1"><span>Ведущий командир</span><strong>{activeCommanderLabel(activeCommanders.attacker)}</strong></div>
-          <UnitSection id="sim-attacker-ships" title={`КОРАБЛИ · ${getCombatFactionName(scenario.attackerFactionId).toUpperCase()}`} open={expanded.attackerShips} entities={SHIP_COMBAT_CATALOG} scenario={scenario} side="attacker" category="ships" onToggle={() => toggleExpanded('attackerShips')} onScenario={setScenario} />
-          <UnitSection id="sim-attacker-commanders" title="КОМАНДИРСКИЕ" open={expanded.attackerCommanders} entities={COMMANDER_COMBAT_CATALOG} scenario={scenario} side="attacker" category="commanders" onToggle={() => toggleExpanded('attackerCommanders')} onScenario={setScenario} />
+          <TechnologySection id="sim-attacker-technologies" open={expanded.attackerTechnologies} levels={scenario.attackerTechnologies} onToggle={() => toggleExpanded('attackerTechnologies')} onChange={(levels) => changeTechnologies('attacker', levels)} />
+          <UnitSection id="sim-attacker-ships" title={`КОРАБЛИ · ${getCombatFactionName(attackerFactionId).toUpperCase()}`} open={expanded.attackerShips} entities={attackerShips} scenario={scenario} side="attacker" category="ships" onToggle={() => toggleExpanded('attackerShips')} onScenario={updateScenario} />
+          <UnitSection id="sim-attacker-commanders" title="КОМАНДИРСКИЕ" open={expanded.attackerCommanders} entities={COMMANDER_COMBAT_CATALOG} scenario={scenario} side="attacker" category="commanders" onToggle={() => toggleExpanded('attackerCommanders')} onScenario={updateScenario} />
         </section>
 
         <section className="sim-side-v1">
           <header><div><small>СТОРОНА 02</small><h3>ЗАЩИТНИК</h3></div><button type="button" onClick={() => clearSide('defender')}>ОЧИСТИТЬ СТОРОНУ</button></header>
-          <RaceSelector id="sim-defender-race" label="РАСА ЗАЩИТНИКА" value={scenario.defenderFactionId} onChange={(factionId) => changeFaction('defender', factionId)} />
+          <RaceSelector id="sim-defender-race" label="РАСА ЗАЩИТНИКА" value={defenderFactionId} onChange={(factionId) => changeFaction('defender', factionId)} />
           <PopulationMeter label="ФЛОТ" value={population.defenderFleet} />
           <PopulationMeter label="ОБОРОНА" value={population.defenderDefense} />
           <div className="sim-active-commander-v1"><span>Ведущий командир</span><strong>{activeCommanderLabel(activeCommanders.defender)}</strong></div>
-          <UnitSection id="sim-defender-ships" title={`КОРАБЛИ · ${getCombatFactionName(scenario.defenderFactionId).toUpperCase()}`} open={expanded.defenderShips} entities={SHIP_COMBAT_CATALOG} scenario={scenario} side="defender" category="ships" onToggle={() => toggleExpanded('defenderShips')} onScenario={setScenario} />
-          <UnitSection id="sim-defender-commanders" title="КОМАНДИРСКИЕ" open={expanded.defenderCommanders} entities={COMMANDER_COMBAT_CATALOG} scenario={scenario} side="defender" category="commanders" onToggle={() => toggleExpanded('defenderCommanders')} onScenario={setScenario} />
-          <UnitSection id="sim-defender-defenses" title={`ОБОРОНА · ${getCombatFactionName(scenario.defenderFactionId).toUpperCase()}`} open={expanded.defenderDefenses} entities={DEFENSE_COMBAT_CATALOG} scenario={scenario} side="defender" category="defenses" onToggle={() => toggleExpanded('defenderDefenses')} onScenario={setScenario} />
+          <TechnologySection id="sim-defender-technologies" open={expanded.defenderTechnologies} levels={scenario.defenderTechnologies} onToggle={() => toggleExpanded('defenderTechnologies')} onChange={(levels) => changeTechnologies('defender', levels)} />
+          <UnitSection id="sim-defender-ships" title={`КОРАБЛИ · ${getCombatFactionName(defenderFactionId).toUpperCase()}`} open={expanded.defenderShips} entities={defenderShips} scenario={scenario} side="defender" category="ships" onToggle={() => toggleExpanded('defenderShips')} onScenario={updateScenario} />
+          <UnitSection id="sim-defender-commanders" title="КОМАНДИРСКИЕ" open={expanded.defenderCommanders} entities={COMMANDER_COMBAT_CATALOG} scenario={scenario} side="defender" category="commanders" onToggle={() => toggleExpanded('defenderCommanders')} onScenario={updateScenario} />
+          <UnitSection id="sim-defender-defenses" title={`ОБОРОНА · ${getCombatFactionName(defenderFactionId).toUpperCase()}`} open={expanded.defenderDefenses} entities={defenderDefenses} scenario={scenario} side="defender" category="defenses" onToggle={() => toggleExpanded('defenderDefenses')} onScenario={updateScenario} />
         </section>
       </div>
 
-      <section className="sim-race-mechanics-note-v1">
-        <strong>РАСЫ В СИМУЛЯТОРЕ</strong>
-        <span>Атакующий и защитник выбираются независимо. В Combat Resolver v1 отдельные расовые коэффициенты не применяются: расчёт использует текущий общий combat catalog.</span>
-      </section>
+      <section className="sim-race-mechanics-note-v1"><strong>РАСЫ И МЕХАНИКА</strong><span>Выбор расы теперь меняет набор и арт кораблей/обороны. Пока отдельные проверенные таблицы базовых статов Иларов и Роя не найдены, Resolver v1 использует канонический механический эквивалент роли и не выдумывает расовые коэффициенты.</span></section>
 
       <section className={`sim-validation-v1 ${validation.ok ? 'ok' : 'error'}`} aria-live="polite">
         <div><strong>{validation.ok ? 'СЦЕНАРИЙ ГОТОВ' : 'НУЖНО ИСПРАВИТЬ СЦЕНАРИЙ'}</strong><span>{notice}</span></div>
@@ -502,13 +511,7 @@ export function SimulatorView({ planetName, coords, onBack }: { planetName: stri
 
       {result ? (
         <section className="sim-result-v1">
-          <header className="sim-result-head-v1">
-            <div><small>COMBAT RESOLVER V1</small><h3>РЕЗУЛЬТАТ СИМУЛЯЦИИ</h3><span>{result.metadata?.note}</span></div>
-            <div>
-              <button type="button" disabled={resultSaved} onClick={saveResultToBattles}>{resultSaved ? '✓ СОХРАНЕНО В БИТВЫ' : 'СОХРАНИТЬ В БИТВЫ'}</button>
-              <button type="button" onClick={() => { setResult(null); setResultSaved(false); setNotice('Результат очищен. Сценарий сохранён.'); }}>ОЧИСТИТЬ РЕЗУЛЬТАТ</button>
-            </div>
-          </header>
+          <header className="sim-result-head-v1"><div><small>COMBAT RESOLVER V1</small><h3>РЕЗУЛЬТАТ СИМУЛЯЦИИ</h3><span>{result.metadata?.note}</span></div><div><button type="button" disabled={resultSaved} onClick={saveResultToBattles}>{resultSaved ? '✓ СОХРАНЕНО В БИТВЫ' : 'СОХРАНИТЬ В БИТВЫ'}</button><button type="button" onClick={() => { setResult(null); setResultSaved(false); setNotice('Результат очищен. Сценарий сохранён.'); }}>ОЧИСТИТЬ РЕЗУЛЬТАТ</button></div></header>
           <BattleReportDetailBody report={result} />
         </section>
       ) : null}
