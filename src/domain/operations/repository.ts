@@ -130,6 +130,12 @@ function normalizeOperation(value: unknown): OperationInstance | null {
   const modifiers = Array.isArray(value.modifiers)
     ? value.modifiers.filter(isModifier).filter((modifier, index, all) => all.indexOf(modifier) === index)
     : [...definition.modifiers];
+  const originSignalId = typeof value.originSignalId === 'string' && value.originSignalId.trim()
+    ? value.originSignalId.trim().slice(0, 80)
+    : null;
+  const battleReportId = typeof value.battleReportId === 'string' && value.battleReportId.trim()
+    ? value.battleReportId.trim().slice(0, 120)
+    : null;
 
   return {
     id,
@@ -146,12 +152,8 @@ function normalizeOperation(value: unknown): OperationInstance | null {
     objective: { ...definition.objective },
     modifiers,
     rewardPreview: normalizeReward(value.rewardPreview, definition.rewardPreview),
-    originSignalId: typeof value.originSignalId === 'string' && value.originSignalId.trim()
-      ? value.originSignalId.trim().slice(0, 80)
-      : undefined,
-    battleReportId: typeof value.battleReportId === 'string' && value.battleReportId.trim()
-      ? value.battleReportId.trim().slice(0, 120)
-      : undefined,
+    ...(originSignalId ? { originSignalId } : {}),
+    ...(battleReportId ? { battleReportId } : {}),
   };
 }
 
