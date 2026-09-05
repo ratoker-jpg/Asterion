@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
-    "test:combat": "node --experimental-strip-types --test src/domain/combat/priority.test.ts src/domain/combat/report.test.ts",
+    "test:combat": "node --experimental-strip-types --test src/domain/combat/priority.test.ts src/domain/combat/report.test.ts src/domain/combat/resolver.test.ts",
     "desktop": "npm run build && electron .",
     "dist:win": "npm run build && electron-builder --win nsis --publish never"
   },
