@@ -246,13 +246,13 @@ function RaceSelector({
 }: {
   id: string;
   label: string;
-  value: CombatFactionId;
+  value?: CombatFactionId;
   onChange: (factionId: CombatFactionId) => void;
 }) {
   return (
     <label className="sim-race-v1" htmlFor={id}>
       <span>{label}</span>
-      <select id={id} value={value} onChange={(event) => onChange(event.target.value as CombatFactionId)}>
+      <select id={id} value={value ?? 'aegis'} onChange={(event) => onChange(event.target.value as CombatFactionId)}>
         {COMBAT_FACTIONS.map((faction) => <option key={faction.id} value={faction.id}>{faction.name}</option>)}
       </select>
     </label>
