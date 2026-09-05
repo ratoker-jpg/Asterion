@@ -23,41 +23,28 @@ function makeInput(overrides: Partial<CombatInput> = {}): CombatInput {
   };
 }
 
-test('resolver applies weapon science and force attack to raw attack value', () => {
-  const report = resolveCombat(makeInput({
-    attackerTechnologies: normalizeCombatTechnologies({ laserScience: 2, forceAttack: 3 }),
-  }), { reportId: 'attack-science' });
+test('stored science levels do not alter resolver math until coefficients are verified', () => {
+  const baseline = resolveCombat(makeInput(), { reportId: 'baseline' });
+  const configured = resolveCombat(makeInput({
+    attackerTechnologies: normalizeCombatTechnologies({
+      laserScience: 12,
+      piercingAttack: 8,
+      criticalHit: 7,
+    }),
+    defenderTechnologies: normalizeCombatTechnologies({
+      mediumArmor: 9,
+      shipArmor: 10,
+      maneuverDefense: 6,
+    }),
+  }), { reportId: 'configured' });
 
-  const attack = report.rounds[0]?.events.find((event) => event.actorSide === 'attacker');
-  assert.ok(attack);
-  assert.ok(Math.abs((attack.attackValue ?? 0) - 1160) < 1e-9);
-});
-
-test('resolver applies armor science before damage reduction', () => {
-  const withoutArmor = resolveCombat(makeInput(), { reportId: 'without-armor' });
-  const withArmor = resolveCombat(makeInput({
-    defenderTechnologies: normalizeCombatTechnologies({ mediumArmor: 5 }),
-  }), { reportId: 'with-armor' });
-
-  const baseDamage = withoutArmor.rounds[0]?.events.find((event) => event.actorSide === 'attacker')?.damage ?? 0;
-  const armoredDamage = withArmor.rounds[0]?.events.find((event) => event.actorSide === 'attacker')?.damage ?? 0;
-  assert.ok(armoredDamage < baseDamage);
-});
-
-test('resolver applies ship defense and prompt defense to runtime life', () => {
-  const withoutLifeScience = resolveCombat(makeInput({
-    attacker: { participant: attackerParticipant, ships: [{ entityId: 'spy-probe', count: 1 }], commanders: [] },
-    defender: { participant: defenderParticipant, ships: [{ entityId: 'scout', count: 1 }], commanders: [], defenses: [] },
-  }), { reportId: 'without-life' });
-  const withLifeScience = resolveCombat(makeInput({
-    attacker: { participant: attackerParticipant, ships: [{ entityId: 'spy-probe', count: 1 }], commanders: [] },
-    defender: { participant: defenderParticipant, ships: [{ entityId: 'scout', count: 1 }], commanders: [], defenses: [] },
-    defenderTechnologies: normalizeCombatTechnologies({ shipDefense: 5, promptDefense: 2 }),
-  }), { reportId: 'with-life' });
-
-  const baseLifeBefore = withoutLifeScience.rounds[0]?.events.find((event) => event.targetSide === 'defender')?.lifeBefore ?? 0;
-  const boostedLifeBefore = withLifeScience.rounds[0]?.events.find((event) => event.targetSide === 'defender')?.lifeBefore ?? 0;
-  assert.ok(boostedLifeBefore > baseLifeBefore);
+  const baselineAttack = baseline.rounds[0]?.events.find((event) => event.actorSide === 'attacker');
+  const configuredAttack = configured.rounds[0]?.events.find((event) => event.actorSide === 'attacker');
+  assert.ok(baselineAttack);
+  assert.ok(configuredAttack);
+  assert.equal(configuredAttack.attackValue, baselineAttack.attackValue);
+  assert.equal(configuredAttack.damage, baselineAttack.damage);
+  assert.equal(configuredAttack.lifeBefore, baselineAttack.lifeBefore);
 });
 
 test('validator reports malformed attacker defense stacks instead of silently discarding them', () => {
