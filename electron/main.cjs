@@ -21,6 +21,12 @@ function getDisplaySettings(win) {
   };
 }
 
+function publishDisplaySettings(win) {
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
+  const settings = getDisplaySettings(win);
+  if (settings) win.webContents.send('asterion:display-settings-changed', settings);
+}
+
 ipcMain.handle('asterion:get-display-settings', (event) => {
   const win = getSenderWindow(event);
   return getDisplaySettings(win);
@@ -68,6 +74,20 @@ function createWindow() {
       sandbox: true,
     },
   });
+
+  let displayPublishScheduled = false;
+  const scheduleDisplayPublish = () => {
+    if (displayPublishScheduled) return;
+    displayPublishScheduled = true;
+    setImmediate(() => {
+      displayPublishScheduled = false;
+      publishDisplaySettings(win);
+    });
+  };
+
+  win.on('enter-full-screen', scheduleDisplayPublish);
+  win.on('leave-full-screen', scheduleDisplayPublish);
+  win.on('resize', scheduleDisplayPublish);
 
   win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
 

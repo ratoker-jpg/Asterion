@@ -12,10 +12,17 @@ export type DesktopActionResult = {
   reason?: string;
 };
 
+export type DesktopApplyOptions = {
+  force?: boolean;
+};
+
+type DesktopDisplaySettingsListener = (settings: DesktopDisplaySettings) => void;
+
 type AsterionDesktopBridge = {
   getDisplaySettings: () => Promise<DesktopDisplaySettings>;
   setWindowMode: (mode: WindowMode) => Promise<DesktopActionResult>;
   setWindowSize: (resolution: WindowResolution) => Promise<DesktopActionResult>;
+  onDisplaySettingsChanged?: (listener: DesktopDisplaySettingsListener) => () => void;
 };
 
 declare global {
@@ -43,6 +50,17 @@ export async function getDesktopDisplaySettings(): Promise<DesktopDisplaySetting
   }
 }
 
+export function subscribeDesktopDisplaySettings(listener: DesktopDisplaySettingsListener) {
+  if (!isDesktopBridgeAvailable()) return () => {};
+  const subscribe = window.asterionDesktop!.onDisplaySettingsChanged;
+  if (!subscribe) return () => {};
+  try {
+    return subscribe(listener);
+  } catch {
+    return () => {};
+  }
+}
+
 /**
  * Window settings are Electron-only. Web/Pages returns an explicit unavailable
  * result rather than pretending that browser JavaScript changed the desktop.
@@ -51,12 +69,17 @@ export async function getDesktopDisplaySettings(): Promise<DesktopDisplaySetting
  * signature prevents unrelated text/tooltips/motion changes from reapplying a
  * stale saved fullscreen mode after the user toggled the real window with F11
  * or Escape. A genuine window-mode/resolution preference change produces a new
- * signature and still reaches Electron.
+ * signature and still reaches Electron. Explicit reset flows may pass force so
+ * canonical desktop defaults are reapplied even when the saved signature did
+ * not change.
  */
-export async function applyDesktopPreferences(preferences: AsterionPreferences): Promise<DesktopActionResult> {
+export async function applyDesktopPreferences(
+  preferences: AsterionPreferences,
+  options: DesktopApplyOptions = {},
+): Promise<DesktopActionResult> {
   if (!isDesktopBridgeAvailable()) return { ok: false, reason: 'desktop-unavailable' };
   const preferenceKey = getWindowPreferenceKey(preferences);
-  if (preferenceKey === lastAppliedWindowPreferenceKey) {
+  if (!options.force && preferenceKey === lastAppliedWindowPreferenceKey) {
     const settings = await getDesktopDisplaySettings();
     return settings ? { ok: true, settings, reason: 'window-preferences-unchanged' } : { ok: true, reason: 'window-preferences-unchanged' };
   }

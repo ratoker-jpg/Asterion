@@ -1,9 +1,16 @@
 import { useEffect, useState, type ReactNode } from 'react';
 
-import { getDesktopDisplaySettings, isDesktopBridgeAvailable, type DesktopDisplaySettings } from './domain/settings/desktop.ts';
+import {
+  applyDesktopPreferences,
+  getDesktopDisplaySettings,
+  isDesktopBridgeAvailable,
+  subscribeDesktopDisplaySettings,
+  type DesktopDisplaySettings,
+} from './domain/settings/desktop.ts';
 import {
   ASTERION_CAMPAIGN_KEY,
   ASTERION_PREFERENCES_KEY,
+  DEFAULT_PREFERENCES,
   TEXT_SCALES,
   WINDOW_RESOLUTIONS,
   type AsterionPreferences,
@@ -55,10 +62,23 @@ export function SettingsView({ preferences, onChange, onReset }: {
   useEffect(() => {
     let cancelled = false;
     void getDesktopDisplaySettings().then((value) => { if (!cancelled) setDesktopState(value); });
-    return () => { cancelled = true; };
-  }, [preferences.windowMode, preferences.windowResolution]);
+    const unsubscribe = subscribeDesktopDisplaySettings((value) => {
+      if (!cancelled) setDesktopState(value);
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [desktopAvailable]);
 
   const patch = (next: Partial<AsterionPreferences>) => onChange({ ...preferences, ...next });
+  const handleReset = () => {
+    onReset();
+    if (!desktopAvailable) return;
+    void applyDesktopPreferences({ ...DEFAULT_PREFERENCES }, { force: true }).then((result) => {
+      if (result.settings) setDesktopState(result.settings);
+    });
+  };
 
   return (
     <main className="settings-view">
@@ -101,7 +121,7 @@ export function SettingsView({ preferences, onChange, onReset }: {
 
           {section === 'system' ? <Panel title="СОХРАНЕНИЕ / СИСТЕМА" note="LOCAL STORAGE">
             <div className="settings-system-grid"><div><small>КАМПАНИЯ</small><strong>Локальное автосохранение</strong><code>{ASTERION_CAMPAIGN_KEY}</code><p>Игровое состояние. Сбрасывается отдельной кнопкой «СБРОСИТЬ ПРОТОТИП».</p></div><div><small>НАСТРОЙКИ УСТРОЙСТВА</small><strong>Отдельное хранилище</strong><code>{ASTERION_PREFERENCES_KEY}</code><p>Размер текста, motion, подсказки и desktop window preferences не принадлежат кампании.</p></div></div>
-            <button className="settings-reset-button" type="button" onClick={onReset}><span>СБРОСИТЬ НАСТРОЙКИ</span><small>Кампания и прогресс не удаляются</small></button>
+            <button className="settings-reset-button" type="button" onClick={handleReset}><span>СБРОСИТЬ НАСТРОЙКИ</span><small>Кампания и прогресс не удаляются</small></button>
           </Panel> : null}
         </div>
       </div>
