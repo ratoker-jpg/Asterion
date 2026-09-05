@@ -27,7 +27,8 @@
 .fleet-main-v1:has(> .shipyard-view-v1),
 .fleet-main-v1:has(> .repair-workshop-v1),
 .fleet-main-v1:has(> .combat-priority-view-v1),
-.fleet-main-v1:has(> .battle-view-v1) {
+.fleet-main-v1:has(> .battle-view-v1),
+.fleet-main-v1:has(> .simulator-view-v1) {
   display: block !important;
   min-width: 0;
   min-height: 0;
@@ -40,7 +41,8 @@
 .shipyard-view-v1,
 .repair-workshop-v1,
 .combat-priority-view-v1,
-.battle-view-v1 {
+.battle-view-v1,
+.simulator-view-v1 {
   width: 100%;
   min-width: 0;
   min-height: 0 !important;
