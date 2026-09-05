@@ -2,24 +2,25 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { DEMO_BATTLE_REPORTS } from '../combat/battle-fixtures.ts';
+import { ASTERION_SAVE_KEY } from '../combat/priority.ts';
 import type { BattleReport } from '../combat/report.ts';
-import { NON_COMBAT_REPORT_FIXTURES } from './catalog.ts';
+import { createDefaultCommandState } from '../command/repository.ts';
+import { createDefaultOperationsState, revealOperation } from '../operations/repository.ts';
 import {
   battleReportToReportItem,
   buildReportsFeed,
   filterReportItems,
-  getBattleRewardEntries,
+  getReportCategoryCounts,
+  operationIntelToReportItem,
 } from './adapters.ts';
+import { NON_COMBAT_REPORT_FIXTURES } from './catalog.ts';
 import {
-  archiveReport,
   createDefaultReportsState,
   markAllReportsRead,
   markReportRead,
   migrateReportsState,
   persistReportsState,
   readReportsState,
-  toggleReportFavorite,
-  unarchiveReport,
 } from './repository.ts';
 
 class MemoryStorage {
@@ -28,175 +29,114 @@ class MemoryStorage {
   setItem(key: string, value: string) { this.values.set(key, value); }
 }
 
-const SAVE_KEY = 'asterion.vertical-slice.v1';
-const firstBattle = DEMO_BATTLE_REPORTS[0];
-
-function query(overrides: Partial<Parameters<typeof filterReportItems>[2]> = {}) {
-  return { category: 'all' as const, filter: 'all' as const, search: '', ...overrides };
+function commandWithoutJointOperations() {
+  return { ...createDefaultCommandState(), jointOperations: [] };
 }
 
-test('default Reports state is deterministic', () => {
-  assert.deepEqual(createDefaultReportsState(), createDefaultReportsState());
+test('Reports does not fabricate non-combat runtime history', () => {
+  assert.deepEqual(NON_COMBAT_REPORT_FIXTURES, []);
+  const counts = getReportCategoryCounts(buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations()));
+  assert.equal(counts.system, 0);
+  assert.equal(counts.battle, 0);
+  assert.equal(counts.command, 0);
+  assert.equal(counts.arena, 0);
+  assert.equal(counts.flights, 0);
+  assert.equal(counts.alliances, 0);
+  assert.equal(counts.achievements, 0);
 });
 
-test('default Reports factories do not share mutable references', () => {
-  const first = createDefaultReportsState();
-  const second = createDefaultReportsState();
-  first.readIds.push('changed');
-  assert.notDeepEqual(first, second);
-  assert.deepEqual(second, createDefaultReportsState());
+test('Доклады uses BattleReport and excludes simulator and Arena output', () => {
+  const base = DEMO_BATTLE_REPORTS[0];
+  const simulation: BattleReport = { ...base, id: 'reports-simulation', missionType: 'simulation' };
+  const arena: BattleReport = { ...base, id: 'reports-arena', missionType: 'arena' };
+  const feed = buildReportsFeed([base, simulation, arena], createDefaultOperationsState(), commandWithoutJointOperations());
+  const battleItems = feed.filter((item) => item.category === 'battle');
+
+  assert.equal(battleItems.length, 1);
+  assert.equal(battleItems[0].battleReportId, base.id);
+  assert.equal(battleItems[0].source, 'combat');
 });
 
-test('missing reports state migrates to canonical default', () => {
-  assert.deepEqual(migrateReportsState(undefined), createDefaultReportsState());
-  assert.deepEqual(migrateReportsState({}), createDefaultReportsState());
+test('operation battle remains canonical BattleReport but receives operation context', () => {
+  const report = DEMO_BATTLE_REPORTS[0];
+  const operations = createDefaultOperationsState();
+  const operation = operations.items.find((item) => item.category === 'combat');
+  assert.ok(operation);
+  operation.battleReportId = report.id;
+
+  const feed = buildReportsFeed([report], operations, commandWithoutJointOperations());
+  const item = feed.find((candidate) => candidate.battleReportId === report.id);
+  assert.ok(item);
+  assert.equal(item.operationId, operation.id);
+  assert.equal(item.typeLabel, 'Доклад операции');
+  assert.match(item.title, /Операция:/);
 });
 
-test('malformed reports state migrates safely and deduplicates ids', () => {
-  assert.deepEqual(migrateReportsState({ readIds: 'broken', favoriteIds: [1, 'a', 'a'], archivedIds: [null, 'b'] }), {
-    readIds: [], favoriteIds: ['a'], archivedIds: ['b'],
-  });
+test('revealed Operations information appears in System without inventing a timestamp', () => {
+  const initial = createDefaultOperationsState();
+  const signal = initial.items.find((item) => item.archetype === 'unknown_signal');
+  assert.ok(signal);
+  const revealed = revealOperation(initial, signal.id);
+  const revealedOperation = revealed.items.find((item) => item.originSignalId === signal.id);
+  assert.ok(revealedOperation);
+
+  const item = operationIntelToReportItem(revealedOperation);
+  assert.ok(item);
+  assert.equal(item.category, 'system');
+  assert.equal(item.source, 'operations');
+  assert.equal(item.timestamp, undefined);
 });
 
-test('mark read is idempotent', () => {
-  const first = markReportRead(createDefaultReportsState(), 'report-a');
-  const second = markReportRead(first, 'report-a');
-  assert.deepEqual(first, second);
-  assert.deepEqual(first.readIds, ['report-a']);
+test('current Command joint operation produces an Alliances invitation with Fleets action', () => {
+  const command = createDefaultCommandState();
+  const feed = buildReportsFeed([], createDefaultOperationsState(), command);
+  const sunInvite = feed.find((item) => item.commandOperationId === 'joint-sun-raid');
+
+  assert.ok(sunInvite);
+  assert.equal(sunInvite.category, 'alliances');
+  assert.equal(sunInvite.action?.kind, 'open_fleets');
+  assert.match(sunInvite.title, /Рейд на Солнце/);
+  assert.equal(sunInvite.timestamp, undefined);
 });
 
-test('mark all read adds every supplied report id without duplicates', () => {
-  const next = markAllReportsRead({ readIds: ['a'], favoriteIds: [], archivedIds: [] }, ['a', 'b', 'c']);
-  assert.deepEqual(new Set(next.readIds), new Set(['a', 'b', 'c']));
-});
-
-test('favorite toggle adds and removes the same report cleanly', () => {
-  const initial = createDefaultReportsState();
-  const favorite = toggleReportFavorite(initial, 'report-a');
-  assert.deepEqual(favorite.favoriteIds, ['report-a']);
-  assert.deepEqual(toggleReportFavorite(favorite, 'report-a'), initial);
-});
-
-test('archive marks read and unarchive restores normal visibility state', () => {
-  const archived = archiveReport(createDefaultReportsState(), 'report-a');
-  assert.ok(archived.archivedIds.includes('report-a'));
-  assert.ok(archived.readIds.includes('report-a'));
-  const restored = unarchiveReport(archived, 'report-a');
-  assert.ok(!restored.archivedIds.includes('report-a'));
-  assert.ok(restored.readIds.includes('report-a'));
-});
-
-test('ordinary feed excludes archived while Archive shows it', () => {
-  const items = buildReportsFeed(DEMO_BATTLE_REPORTS);
-  const target = items[0];
-  const state = archiveReport(createDefaultReportsState(), target.id);
-  assert.ok(!filterReportItems(items, state, query()).some((item) => item.id === target.id));
-  assert.ok(filterReportItems(items, state, query({ category: 'archive' })).some((item) => item.id === target.id));
-});
-
-test('category filtering returns only the selected category', () => {
-  const items = buildReportsFeed(DEMO_BATTLE_REPORTS);
-  const recon = filterReportItems(items, createDefaultReportsState(), query({ category: 'recon' }));
-  assert.ok(recon.length > 0);
-  assert.ok(recon.every((item) => item.category === 'recon'));
-});
-
-test('unread filter excludes ids marked read', () => {
-  const items = buildReportsFeed(DEMO_BATTLE_REPORTS);
-  const state = markReportRead(createDefaultReportsState(), items[0].id);
-  const visible = filterReportItems(items, state, query({ filter: 'unread' }));
-  assert.ok(!visible.some((item) => item.id === items[0].id));
-});
-
-test('favorite filter returns only favorited ids', () => {
-  const items = buildReportsFeed(DEMO_BATTLE_REPORTS);
-  const target = items[0];
-  const state = toggleReportFavorite(createDefaultReportsState(), target.id);
-  const visible = filterReportItems(items, state, query({ filter: 'favorite' }));
-  assert.deepEqual(visible.map((item) => item.id), [target.id]);
-});
-
-test('search is case-insensitive across title, body, participant, planet and coordinates', () => {
-  const items = buildReportsFeed(DEMO_BATTLE_REPORTS);
+test('saved filter uses canonical BattleHistory saved ids, not Reports metadata', () => {
+  const report = DEMO_BATTLE_REPORTS[0];
+  const item = battleReportToReportItem(report);
   const state = createDefaultReportsState();
-  assert.ok(filterReportItems(items, state, query({ search: 'VARCON' })).some((item) => item.id === 'report-recon-varcon'));
-  assert.ok(filterReportItems(items, state, query({ search: 'командование ФЛОТА' })).some((item) => item.id === 'report-inbox-command'));
-  assert.ok(filterReportItems(items, state, query({ search: '[1:1:1]' })).length > 0);
-  assert.ok(filterReportItems(items, state, query({ search: 'aster command' })).some((item) => item.id === firstBattle.id));
+
+  assert.equal(filterReportItems([item], state, { category: 'battle', filter: 'saved', search: '' }, []).length, 0);
+  assert.equal(filterReportItems([item], state, { category: 'battle', filter: 'saved', search: '' }, [report.id]).length, 1);
 });
 
-test('BattleReport adapter preserves canonical id and timestamp', () => {
-  const item = battleReportToReportItem(firstBattle);
-  assert.equal(item.id, firstBattle.id);
-  assert.equal(item.battleReportId, firstBattle.id);
-  assert.equal(item.timestamp, firstBattle.timestamp);
+test('read/unread metadata is explicit and legacy favorites/archive are ignored', () => {
+  const migrated = migrateReportsState({ readIds: [' one ', 'one', 'two'], favoriteIds: ['legacy'], archivedIds: ['legacy'] });
+  assert.deepEqual(migrated, { readIds: ['one', 'two'] });
+
+  const once = markReportRead(createDefaultReportsState(), 'battle:one');
+  assert.deepEqual(once.readIds, ['battle:one']);
+  const all = markAllReportsRead(once, ['battle:two', 'battle:three']);
+  assert.deepEqual(all.readIds, ['battle:one', 'battle:two', 'battle:three']);
 });
 
-test('BattleReport adapter preserves attacker and defender names and coordinates', () => {
-  const item = battleReportToReportItem(firstBattle);
-  assert.deepEqual(item.participantNames, [firstBattle.attacker.playerName, firstBattle.defender.playerName]);
-  assert.ok(item.coordinates.includes(firstBattle.attacker.coordinates ?? ''));
-  assert.ok(item.coordinates.includes(firstBattle.defender.coordinates ?? ''));
+test('read metadata keeps the newest 500 ids', () => {
+  const input = Array.from({ length: 505 }, (_, index) => `report-${index}`);
+  const state = migrateReportsState({ readIds: input });
+  assert.equal(state.readIds.length, 500);
+  assert.equal(state.readIds[0], 'report-5');
+  assert.equal(state.readIds.at(-1), 'report-504');
 });
 
-test('BattleReport adapter determines local-player victory without inventing a power metric', () => {
-  const item = battleReportToReportItem(firstBattle);
-  assert.equal(item.statusLabel, 'ПОБЕДА');
-  assert.match(item.title, /^Победа при атаке/);
-  assert.equal(Object.hasOwn(item, 'power'), false);
-});
-
-test('missing BattleReport rewards are not invented', () => {
-  const report: BattleReport = { ...firstBattle, id: 'battle-no-rewards', resources: undefined, experience: undefined, debris: undefined };
-  assert.deepEqual(getBattleRewardEntries(report), []);
-});
-
-test('BattleReport rewards expose only fields present in canonical data', () => {
-  const entries = getBattleRewardEntries(firstBattle);
-  const keys = entries.map((entry) => entry.key);
-  assert.ok(keys.includes('metal'));
-  assert.ok(keys.includes('minerals'));
-  assert.ok(keys.includes('gas'));
-  assert.ok(keys.includes('experience'));
-  assert.ok(keys.includes('debris'));
-  assert.equal(keys.includes('energy' as never), false);
-});
-
-test('a newly added BattleReport automatically appears in the reports feed', () => {
-  const newReport: BattleReport = { ...firstBattle, id: 'battle-new-runtime-report', timestamp: '2026-09-05T14:59:00.000Z' };
-  const before = buildReportsFeed(DEMO_BATTLE_REPORTS);
-  const after = buildReportsFeed([...DEMO_BATTLE_REPORTS, newReport]);
-  assert.equal(before.some((item) => item.id === newReport.id), false);
-  assert.equal(after[0].id, newReport.id);
-});
-
-test('fixture catalog is deterministic and contains no combat duplicates', () => {
-  assert.deepEqual(NON_COMBAT_REPORT_FIXTURES, NON_COMBAT_REPORT_FIXTURES.map((item) => item));
-  assert.ok(NON_COMBAT_REPORT_FIXTURES.every((item) => item.source === 'fixture' && item.category !== 'battle'));
-  assert.equal(new Set(NON_COMBAT_REPORT_FIXTURES.map((item) => item.id)).size, NON_COMBAT_REPORT_FIXTURES.length);
-});
-
-test('Reports persistence uses existing save envelope and preserves unrelated fields', () => {
+test('reports persistence preserves unrelated Asterion save envelope fields', () => {
   const storage = new MemoryStorage();
-  storage.setItem(SAVE_KEY, JSON.stringify({
-    schemaVersion: 4,
-    metal: 777,
-    combat: { reports: ['keep-combat'] },
-    operations: { items: ['keep-operations'] },
-    command: { alliance: { name: 'keep-command' } },
-  }));
-  const reports = archiveReport(toggleReportFavorite(createDefaultReportsState(), 'report-a'), 'report-b');
-  assert.equal(persistReportsState(reports, storage).ok, true);
-  const saved = JSON.parse(storage.getItem(SAVE_KEY) ?? '{}') as Record<string, unknown>;
-  assert.equal(saved.metal, 777);
-  assert.deepEqual(saved.combat, { reports: ['keep-combat'] });
-  assert.deepEqual(saved.operations, { items: ['keep-operations'] });
-  assert.deepEqual(saved.command, { alliance: { name: 'keep-command' } });
-  assert.deepEqual(readReportsState(storage), reports);
-});
+  storage.setItem(ASTERION_SAVE_KEY, JSON.stringify({ metal: 123, operations: { marker: true } }));
+  const result = persistReportsState({ readIds: ['battle:one'] }, storage);
+  assert.equal(result.ok, true);
 
-test('reset is the canonical Reports metadata state', () => {
-  const changed = archiveReport(toggleReportFavorite(markReportRead(createDefaultReportsState(), 'a'), 'b'), 'c');
-  assert.notDeepEqual(changed, createDefaultReportsState());
-  assert.deepEqual(createDefaultReportsState(), { readIds: [], favoriteIds: [], archivedIds: [] });
+  const raw = storage.getItem(ASTERION_SAVE_KEY);
+  assert.ok(raw);
+  const saved = JSON.parse(raw) as { metal: number; operations: unknown; reports: unknown };
+  assert.equal(saved.metal, 123);
+  assert.deepEqual(saved.operations, { marker: true });
+  assert.deepEqual(saved.reports, { readIds: ['battle:one'] });
+  assert.deepEqual(readReportsState(storage), { readIds: ['battle:one'] });
 });
