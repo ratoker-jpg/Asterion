@@ -109,22 +109,19 @@
   padding: 0 3px;
 }
 
-/* The saved Nemexia simulator exposes science level inputs, but not their maxima.
-   Keep the technical guards in code, while hiding any UI that would imply a
-   source-backed maximum exists. */
+/* The saved Nemexia simulator confirms editable science levels, but not an
+   authoritative maximum. Keep the technical input guard internal and never
+   render it as a game rule. */
 .sim-tech-controls-v1 span,
 .sim-tech-controls-v1 .sim-max-v1 {
   display: none;
 }
 
+/* Older Simulator markup contained a critical-hit explanation that went beyond
+   the facts available in the saved page. Per-technology copy now states the
+   supported fact precisely, so suppress that provisional note. */
 .sim-tech-note-v1 {
-  margin: 0;
-  padding: 9px 10px;
-  border-top: 1px solid rgba(49, 178, 215, .13);
-  background: rgba(2, 19, 28, .96);
-  color: #729eac;
-  font-size: 8px;
-  line-height: 1.45;
+  display: none;
 }
 
 .sim-race-mechanics-note-v1 {
