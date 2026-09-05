@@ -1,0 +1,75 @@
+.sim-race-v1 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 42%);
+  gap: 12px;
+  align-items: center;
+  min-height: 46px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border: 1px solid rgba(56, 185, 222, .2);
+  background: linear-gradient(90deg, rgba(4, 39, 53, .82), rgba(2, 24, 35, .72));
+  box-sizing: border-box;
+}
+
+.sim-race-v1 > span {
+  color: #8bc9da;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .12em;
+}
+
+.sim-race-v1 select {
+  width: 100%;
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid rgba(55, 191, 229, .46);
+  background: rgba(2, 21, 31, .98);
+  color: #effcff;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.sim-race-v1 select:hover,
+.sim-race-v1 select:focus-visible {
+  border-color: #42d9fb;
+}
+
+.sim-race-mechanics-note-v1 {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid rgba(65, 205, 242, .16);
+  background: rgba(3, 24, 34, .82);
+  box-sizing: border-box;
+}
+
+.sim-race-mechanics-note-v1 strong {
+  flex: 0 0 auto;
+  color: #79bdd0;
+  font-size: 9px;
+  letter-spacing: .11em;
+}
+
+.sim-race-mechanics-note-v1 span {
+  color: #628f9f;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+@media (max-width: 1120px) {
+  .sim-race-v1 {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .sim-race-mechanics-note-v1 {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+}
