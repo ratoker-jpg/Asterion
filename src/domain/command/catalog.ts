@@ -117,7 +117,7 @@ export const DEFAULT_JOINT_OPERATIONS: readonly JointOperation[] = [
   {
     id: 'joint-sun-raid', title: 'Рейд на Солнце', kind: 'sun_raid',
     objective: 'Сформировать ударную группу для выхода к корональному узлу Корон-7.', state: 'mustering',
-    participants: 18, recommendedParticipants: 24, windowLabel: 'Сбор сил · окно 00:54:00',
+    participants: 9, recommendedParticipants: 12, windowLabel: 'Сбор сил · окно 00:54:00',
     description: 'Флагманская союзная операция. Сейчас работает только участие и подготовительный статус; исполнение рейда отложено.',
     joinedByPlayer: false,
   },
