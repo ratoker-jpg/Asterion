@@ -6,6 +6,7 @@ import { ConstructionCatalogView, type ConstructionCatalogMode } from './Constru
 import { FleetCombatPriorityView } from './FleetCombatPriorityView';
 import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
 import { ShipyardView } from './ShipyardView';
+import { SimulatorView } from './SimulatorView';
 import './fleet-workspace.css';
 
 const SCOUT_POPULATION = 2;
@@ -149,9 +150,6 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
     }
 
     setConstructionView(null);
-    if (section === 'Симулятор') {
-      setStatus('Раздел «Симулятор» намеренно оставлен вне PR #30.');
-    }
   };
 
   const setScoutQuantity = (raw: number) => {
@@ -165,6 +163,7 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
     'fleet-main-v1',
     constructionView ? 'fleet-main-v1--shipyard' : '',
     selectedSection === 'Битвы' ? 'fleet-main-v1--battles' : '',
+    selectedSection === 'Симулятор' ? 'fleet-main-v1--subpage' : '',
   ].filter(Boolean).join(' ');
 
   return (
@@ -197,6 +196,8 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
           <FleetCombatPriorityView planetName={planetName} coords={coords} onBack={openFleetRoot} />
         ) : selectedSection === 'Битвы' ? (
           <BattleReportsView planetName={planetName} coords={coords} onBack={openFleetRoot} />
+        ) : selectedSection === 'Симулятор' ? (
+          <SimulatorView planetName={planetName} coords={coords} onBack={openFleetRoot} />
         ) : (
           <>
             <section className="fleet-panel-v1 fleet-flights-v1">
