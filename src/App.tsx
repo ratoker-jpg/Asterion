@@ -3,6 +3,7 @@ import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
 import { OperationsView } from './OperationsView';
+import { CommandView } from './CommandView';
 import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
 import {
   BATTLE_HISTORY_CHANGED_EVENT,
@@ -31,6 +32,14 @@ import {
   revealOperation,
 } from './domain/operations/repository.ts';
 import type { OperationId, OperationsState } from './domain/operations/types.ts';
+import {
+  createDefaultCommandState,
+  joinJointOperation,
+  markResourceRequestReviewing,
+  migrateCommandState,
+  updateAllianceSettings,
+} from './domain/command/repository.ts';
+import type { AllianceSettingsInput, CommandState } from './domain/command/types.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import planetColonized from '../assets/source/starter/planets/planet_colonized.png';
@@ -116,6 +125,7 @@ type SaveState = {
   combat: BattleHistoryState;
   combatSimulator: SimulatorState;
   operations: OperationsState;
+  command: CommandState;
 };
 
 type PlanetDefinition = {
@@ -158,6 +168,7 @@ const createInitialState = (): SaveState => ({
   combat: createDefaultBattleHistory(),
   combatSimulator: createDefaultSimulatorState(),
   operations: createDefaultOperationsState(),
+  command: createDefaultCommandState(),
 });
 
 const initialState = createInitialState();
@@ -235,6 +246,7 @@ function readSave(): SaveState {
       combat: migrateBattleHistory(parsed.combat),
       combatSimulator: migrateSimulatorState(parsed.combatSimulator),
       operations: migrateOperationsState(parsed.operations),
+      command: migrateCommandState(parsed.command),
     };
   } catch {
     return createInitialState();
@@ -536,12 +548,36 @@ export function App() {
     window.setTimeout(() => window.dispatchEvent(new Event(FLEET_ROOT_REQUEST_EVENT)), 0);
   };
 
+  const joinCommandOperation = (operationId: string) => {
+    setState((current) => ({ ...current, command: joinJointOperation(current.command, operationId) }));
+    setNotice('Совместная операция добавлена в ваш союзный контур. Подготовка флота выполняется через раздел «Флоты».');
+  };
+
+  const reviewCommandRequest = (requestId: string) => {
+    setState((current) => ({ ...current, command: markResourceRequestReviewing(current.command, requestId) }));
+    setNotice('Запрос ресурсов принят к рассмотрению. Реальная транспортировка выполняется через раздел «Флоты».');
+  };
+
+  const saveCommandSettings = (input: AllianceSettingsInput) => {
+    setState((current) => ({ ...current, command: updateAllianceSettings(current.command, input) }));
+    setNotice('Настройки союза сохранены в локальном прототипе.');
+  };
+
+  const openFleetRootFromCommand = () => {
+    setActiveTab('Флоты');
+    setPlanetMenuOpen(false);
+    closePlanetEditor();
+    setNotice('Флоты: подготовьте состав для союзной задачи. Отправка не запускается автоматически.');
+    window.setTimeout(() => window.dispatchEvent(new Event(FLEET_ROOT_REQUEST_EVENT)), 0);
+  };
+
   const chooseTab = (tab: string) => {
     setActiveTab(tab);
     setPlanetMenuOpen(false);
     closePlanetEditor();
     if (tab === 'Вселенная') setNotice('Галактика 1 загружена. Доступно 40 солнечных систем.');
     else if (tab === 'Операции') setNotice('Операции: доступные PvE-сценарии загружены.');
+    else if (tab === 'Командование') setNotice('Командование: союзный контур загружен.');
     else if (tab !== 'Планета') setNotice(`Экран «${tab}» пока в разработке.`);
   };
 
@@ -634,7 +670,7 @@ export function App() {
           </section>
         </header>
 
-        <section className={`workspace workspace-v4 workspace--${activeTab === 'Вселенная' ? 'universe' : activeTab === 'Планета' ? 'planet' : activeTab === 'Операции' ? 'operations' : 'module'}`}>
+        <section className={`workspace workspace-v4 workspace--${activeTab === 'Вселенная' ? 'universe' : activeTab === 'Планета' ? 'planet' : activeTab === 'Операции' ? 'operations' : activeTab === 'Командование' ? 'command' : 'module'}`}>
           {activeTab === 'Вселенная' ? (
             <UniverseView onNotice={setNotice} ownedPlanetArt={currentSkin.art} ownedPlanetName={currentPlanetName} />
           ) : activeTab === 'Операции' ? (
@@ -644,6 +680,14 @@ export function App() {
               onCancel={cancelOperationsOperation}
               onReveal={revealOperationsOperation}
               onOpenFleets={openFleetRootFromOperations}
+            />
+          ) : activeTab === 'Командование' ? (
+            <CommandView
+              state={state.command}
+              onJoinOperation={joinCommandOperation}
+              onReviewRequest={reviewCommandRequest}
+              onSaveSettings={saveCommandSettings}
+              onOpenFleets={openFleetRootFromCommand}
             />
           ) : activeTab === 'Планета' ? (
             <div className="planet-page-v3 planet-page-v4">

@@ -9,6 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "test:combat": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/combat/priority.test.ts src/domain/combat/report.test.ts src/domain/combat/resolver.test.ts src/domain/combat/factions.test.ts src/domain/combat/technologies.test.ts src/domain/combat/technology-resolver.test.ts",
     "test:operations": "node --experimental-strip-types --test src/domain/operations/operations.test.ts",
+    "test:command": "node --experimental-strip-types --test src/domain/command/command.test.ts",
     "desktop": "npm run build && electron .",
     "dist:win": "npm run build && electron-builder --win nsis --publish never"
   },
