@@ -10,6 +10,7 @@ import {
   type BattleHistoryState,
 } from './domain/combat/battle-repository.ts';
 import {
+  ASTERION_LOCAL_PLAYER_ID,
   calculatePopulationLoss,
   createBattleSummary,
   filterBattleReports,
@@ -20,8 +21,6 @@ import {
   type CombatEvent,
 } from './domain/combat/report.ts';
 import './battle-reports.css';
-
-const LOCAL_PLAYER_ID = 'player-aster';
 
 type SaveNotice = { kind: 'saved' | 'error'; message: string };
 
@@ -46,7 +45,7 @@ function participantLabel(report: BattleReport, side: 'attacker' | 'defender') {
 }
 
 function resultLabel(report: BattleReport) {
-  const result = getBattleResultForPlayer(report, LOCAL_PLAYER_ID);
+  const result = getBattleResultForPlayer(report, ASTERION_LOCAL_PLAYER_ID);
   if (result === 'draw') return { label: 'НИЧЬЯ', tone: 'draw' } as const;
   if (result === 'victory') return { label: 'ПОБЕДА', tone: 'victory' } as const;
   if (result === 'defeat') return { label: 'ПОРАЖЕНИЕ', tone: 'defeat' } as const;
