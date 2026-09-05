@@ -17,11 +17,13 @@ import {
 import type { AllianceRatingRow, PlayerRatingRow, RatingMode, RatingScoreKind } from './domain/rating/types.ts';
 import './rating.css';
 
-const SCORE_META: ReadonlyArray<{ id: RatingScoreKind; label: string; short: string }> = [
-  { id: 'total', label: 'Общие очки', short: 'ОБЩИЕ' },
-  { id: 'resource', label: 'Ресурсные очки', short: 'РЕСУРСЫ' },
-  { id: 'combat', label: 'Боевые очки', short: 'БОЕВЫЕ' },
-  { id: 'achievement', label: 'Очки достижений', short: 'ДОСТИЖ.' },
+const PAGE_SIZE = 8;
+
+const SCORE_META: ReadonlyArray<{ id: RatingScoreKind; label: string; short: string; hint: string }> = [
+  { id: 'achievement', label: 'Очки достижений', short: 'ДОСТИЖ.', hint: 'Отдельный рейтинг' },
+  { id: 'total', label: 'Общие очки', short: 'ОБЩИЕ', hint: 'Ресурсные + боевые' },
+  { id: 'resource', label: 'Ресурсные очки', short: 'РЕСУРСЫ', hint: 'Экономический рейтинг' },
+  { id: 'combat', label: 'Боевые очки', short: 'БОЕВЫЕ', hint: 'Боевой рейтинг' },
 ];
 
 function formatScore(value: number) {
@@ -47,21 +49,23 @@ function RatingMark({ tag, local = false }: { tag: string; local?: boolean }) {
   return <span className={`rating-mark ${local ? 'local' : ''}`} aria-hidden="true"><i /><b>{tag.slice(0, 2)}</b></span>;
 }
 
-function ScoreDeck({ row, active }: { row: PlayerRatingRow | AllianceRatingRow; active: RatingScoreKind }) {
-  return <div className="rating-score-deck">{SCORE_META.map((metric) => <div key={metric.id} className={active === metric.id ? 'active' : ''}><span><ScoreGlyph kind={metric.id} /></span><small>{metric.label}</small><strong>{formatScore(getRatingScore(row, metric.id))}</strong></div>)}</div>;
-}
-
-function PlayerDossier({ row, scoreKind, rank }: { row: PlayerRatingRow; scoreKind: RatingScoreKind; rank: number }) {
-  return <aside className="rating-dossier"><header><small>ПРОФИЛЬ ИГРОКА</small><span>{row.isLocal ? 'ВЫ' : 'FIXTURE'}</span></header><div className="rating-dossier-hero"><RatingMark tag={row.alliance.tag} local={row.isLocal} /><div><strong>{row.name}</strong><small>{row.sector}</small><em>{row.alliance.name} [{row.alliance.tag}]</em></div></div><div className="rating-dossier-rank"><span>МЕСТО · {SCORE_META.find((item) => item.id === scoreKind)?.short}</span><strong>#{rank}</strong><RankDelta current={row.rank} previous={row.previousRank} enabled={scoreKind === 'total'} /></div><ScoreDeck row={row} active={scoreKind} /><p>Общие очки считаются строго как ресурсные + боевые. Достижения идут отдельным показателем и в общую сумму не входят.</p></aside>;
-}
-
-function AllianceDossier({ row, scoreKind, rank }: { row: AllianceRatingRow; scoreKind: RatingScoreKind; rank: number }) {
-  return <aside className="rating-dossier"><header><small>ПРОФИЛЬ СОЮЗА</small><span>{row.isLocal ? 'ВАШ СОЮЗ' : 'FIXTURE'}</span></header><div className="rating-dossier-hero"><RatingMark tag={row.tag} local={row.isLocal} /><div><strong>{row.name}</strong><small>[{row.tag}]</small><em>{row.members} участников</em></div></div><div className="rating-dossier-rank"><span>МЕСТО · {SCORE_META.find((item) => item.id === scoreKind)?.short}</span><strong>#{rank}</strong><RankDelta current={row.rank} previous={row.previousRank} enabled={scoreKind === 'total'} /></div><ScoreDeck row={row} active={scoreKind} /><p>Союзный рейтинг пока использует детерминированный локальный срез. Формулы начисления очков будут подключены отдельным игровым контрактом.</p></aside>;
-}
-
 function ScoreHeader({ kind, active, onSelect }: { kind: RatingScoreKind; active: boolean; onSelect: () => void }) {
   const meta = SCORE_META.find((item) => item.id === kind)!;
-  return <button type="button" className={`rating-score-head ${active ? 'active' : ''}`} onClick={onSelect} title={meta.label}><ScoreGlyph kind={kind} /><span>{meta.short}</span><b>↓</b></button>;
+  return <button type="button" className={`rating-score-head ${active ? 'active' : ''}`} onClick={onSelect} title={meta.label}><ScoreGlyph kind={kind}/><span>{meta.short}</span><b>{active ? '▼' : ''}</b></button>;
+}
+
+function LocalPosition({ mode, player, alliance, scoreKind, playerRank, allianceRank }: {
+  mode: RatingMode;
+  player: PlayerRatingRow | null;
+  alliance: AllianceRatingRow | null;
+  scoreKind: RatingScoreKind;
+  playerRank: number | null;
+  allianceRank: number | null;
+}) {
+  const meta = SCORE_META.find((item) => item.id === scoreKind)!;
+  if (mode === 'players' && player) return <section className="rating-local-position"><small>МОЯ ПОЗИЦИЯ</small><strong>#{playerRank ?? player.rank}</strong><div><b>{player.name}</b><span>{player.alliance.name} [{player.alliance.tag}] · {player.sector}</span></div><em>{formatScore(getRatingScore(player, scoreKind))}<small>{meta.short}</small></em></section>;
+  if (mode === 'alliances' && alliance) return <section className="rating-local-position"><small>МОЙ СОЮЗ</small><strong>#{allianceRank ?? alliance.rank}</strong><div><b>{alliance.name} [{alliance.tag}]</b><span>{alliance.members} участников</span></div><em>{formatScore(getRatingScore(alliance, scoreKind))}<small>{meta.short}</small></em></section>;
+  return <section className="rating-local-position rating-local-position--empty">Локальная позиция недоступна.</section>;
 }
 
 export function RatingView({ command }: { command: CommandState }) {
@@ -69,52 +73,62 @@ export function RatingView({ command }: { command: CommandState }) {
   const [mode, setMode] = useState<RatingMode>('players');
   const [scoreKind, setScoreKind] = useState<RatingScoreKind>('total');
   const [search, setSearch] = useState('');
-  const [selectedPlayerId, setSelectedPlayerId] = useState(ASTERION_LOCAL_PLAYER_ID);
-  const [selectedAllianceId, setSelectedAllianceId] = useState('rating-alliance-local');
+  const [page, setPage] = useState(0);
 
   const rankedPlayers = useMemo(() => sortPlayerRows(model.players, 'score', scoreKind), [model.players, scoreKind]);
   const rankedAlliances = useMemo(() => sortAllianceRows(model.alliances, 'score', scoreKind), [model.alliances, scoreKind]);
   const visiblePlayers = useMemo(() => searchPlayerRows(rankedPlayers, search), [rankedPlayers, search]);
   const visibleAlliances = useMemo(() => searchAllianceRows(rankedAlliances, search), [rankedAlliances, search]);
-  const selectedPlayer = visiblePlayers.find((row) => row.id === selectedPlayerId) ?? visiblePlayers[0] ?? null;
-  const selectedAlliance = visibleAlliances.find((row) => row.id === selectedAllianceId) ?? visibleAlliances[0] ?? null;
+  const activeRows = mode === 'players' ? visiblePlayers : visibleAlliances;
+  const pageCount = Math.max(1, Math.ceil(activeRows.length / PAGE_SIZE));
+  const pageStart = page * PAGE_SIZE;
+  const pagePlayers = visiblePlayers.slice(pageStart, pageStart + PAGE_SIZE);
+  const pageAlliances = visibleAlliances.slice(pageStart, pageStart + PAGE_SIZE);
   const localPlayer = getLocalPlayer(model.players);
   const localAlliance = getLocalAlliance(model.alliances);
+  const localPlayerRank = localPlayer ? getDisplayedRank(model.players, localPlayer.id, scoreKind) ?? localPlayer.rank : null;
+  const localAllianceRank = localAlliance ? getDisplayedRank(model.alliances, localAlliance.id, scoreKind) ?? localAlliance.rank : null;
 
   useEffect(() => {
-    if (mode === 'players' && selectedPlayer && selectedPlayer.id !== selectedPlayerId) setSelectedPlayerId(selectedPlayer.id);
-    if (mode === 'alliances' && selectedAlliance && selectedAlliance.id !== selectedAllianceId) setSelectedAllianceId(selectedAlliance.id);
-  }, [mode, selectedAlliance, selectedAllianceId, selectedPlayer, selectedPlayerId]);
+    if (page >= pageCount) setPage(Math.max(0, pageCount - 1));
+  }, [page, pageCount]);
 
   const switchMode = (next: RatingMode) => {
     setMode(next);
     setSearch('');
+    setPage(0);
   };
 
-  const localPlayerRank = localPlayer ? getDisplayedRank(model.players, localPlayer.id, scoreKind) ?? localPlayer.rank : null;
-  const localAllianceRank = localAlliance ? getDisplayedRank(model.alliances, localAlliance.id, scoreKind) ?? localAlliance.rank : null;
+  const selectScore = (next: RatingScoreKind) => {
+    setScoreKind(next);
+    setPage(0);
+  };
+
+  const updateSearch = (value: string) => {
+    setSearch(value);
+    setPage(0);
+  };
 
   return <main className="rating-view">
-    <header className="utility-view-heading rating-heading"><div><small>РЕЙТИНГ ИМПЕРИЙ</small><h1>РЕЙТИНГ</h1><p>{model.season.label} · выбери тип очков — таблица перестроится по нему</p></div><div className="utility-truth-badge limited"><i />DETERMINISTIC FIXTURE</div></header>
+    <header className="utility-view-heading rating-heading"><div><small>ТАБЕЛЬ ИМПЕРИЙ · NEMEXIA RANKING STRUCTURE</small><h1>РЕЙТИНГ</h1><p>{model.season.label} · игроки и союзы · четыре реальных типа рейтинговых очков</p></div><div className="utility-truth-badge limited"><i />LOCAL FIXTURE</div></header>
 
-    <div className="rating-tabs"><button type="button" className={mode === 'players' ? 'active' : ''} onClick={() => switchMode('players')}>ИГРОКИ</button><button type="button" className={mode === 'alliances' ? 'active' : ''} onClick={() => switchMode('alliances')}>СОЮЗЫ</button><span>{model.season.statusLabel}</span></div>
+    <nav className="rating-tabs" aria-label="Тип рейтинга"><button type="button" className={mode === 'players' ? 'active' : ''} onClick={() => switchMode('players')}><span>01</span><strong>ИГРОКИ</strong><small>{model.players.length} участников</small></button><button type="button" className={mode === 'alliances' ? 'active' : ''} onClick={() => switchMode('alliances')}><span>02</span><strong>СОЮЗЫ</strong><small>{model.alliances.length} объединений</small></button><div><small>СОСТОЯНИЕ</small><strong>{model.season.statusLabel}</strong></div></nav>
 
-    <section className="rating-score-switcher" aria-label="Тип рейтинговых очков">{SCORE_META.map((metric) => <button type="button" key={metric.id} className={scoreKind === metric.id ? 'active' : ''} onClick={() => setScoreKind(metric.id)}><ScoreGlyph kind={metric.id} /><span><strong>{metric.label}</strong><small>{metric.id === 'total' ? 'Ресурсные + боевые' : metric.id === 'achievement' ? 'Не входят в общие' : 'Отдельный рейтинг'}</small></span></button>)}</section>
+    <section className="rating-controlbar">
+      <label className="rating-search"><span>ПОИСК</span><input value={search} onChange={(event) => updateSearch(event.target.value)} placeholder={mode === 'players' ? 'Игрок, союз или сектор…' : 'Название союза или тег…'}/><b>{activeRows.length}</b></label>
+      <div className="rating-score-switcher">{SCORE_META.map((metric) => <button type="button" key={metric.id} className={scoreKind === metric.id ? 'active' : ''} onClick={() => selectScore(metric.id)}><ScoreGlyph kind={metric.id}/><span><strong>{metric.label}</strong><small>{metric.hint}</small></span></button>)}</div>
+    </section>
 
-    <div className="rating-layout">
-      <aside className="rating-filters"><header>ФИЛЬТРЫ</header><label><small>ПОИСК</small><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={mode === 'players' ? 'Игрок, союз, сектор…' : 'Союз или тег…'} /></label><div className="rating-active-filter"><small>АКТИВНЫЙ РЕЙТИНГ</small><span><ScoreGlyph kind={scoreKind} /></span><strong>{SCORE_META.find((item) => item.id === scoreKind)?.label}</strong><p>{scoreKind === 'total' ? 'Общие = ресурсные + боевые.' : scoreKind === 'achievement' ? 'Достижения считаются отдельно.' : 'Таблица отсортирована по выбранному типу очков.'}</p></div><div className="rating-source-note"><b>DATA TRUTH</b><span>Числа пока локальный fixture. Структура четырёх типов очков зафиксирована; правила начисления будут добавлены позже.</span></div></aside>
+    <section className="rating-table-panel">
+      <header className="rating-table-title"><div><small>{mode === 'players' ? 'РЕЙТИНГ ИГРОКОВ' : 'РЕЙТИНГ СОЮЗОВ'}</small><strong>{SCORE_META.find((item) => item.id === scoreKind)?.label}</strong></div><span>Страница {page + 1} / {pageCount}</span></header>
+      {mode === 'players' ? <><div className="rating-table-head rating-table-head--players"><span>МЕСТО</span><span>ИГРОК</span><span>СОЮЗ</span><ScoreHeader kind="achievement" active={scoreKind === 'achievement'} onSelect={() => selectScore('achievement')}/><ScoreHeader kind="total" active={scoreKind === 'total'} onSelect={() => selectScore('total')}/><ScoreHeader kind="resource" active={scoreKind === 'resource'} onSelect={() => selectScore('resource')}/><ScoreHeader kind="combat" active={scoreKind === 'combat'} onSelect={() => selectScore('combat')}/><span>ИЗМ.</span></div><div className="rating-table-body">{pagePlayers.map((row) => { const rank = getDisplayedRank(model.players, row.id, scoreKind) ?? row.rank; return <div key={row.id} className={`rating-row rating-row--players ${row.isLocal ? 'local' : ''}`}><b className="rating-place">{rank}</b><span className="rating-player-cell"><RatingMark tag={row.alliance.tag} local={row.isLocal}/><span><strong>{row.name}{row.id === ASTERION_LOCAL_PLAYER_ID ? <em>ВЫ</em> : null}</strong><small>{row.sector}</small></span></span><span className="rating-alliance-cell"><strong>{row.alliance.name}</strong><small>[{row.alliance.tag}]</small></span>{(['achievement', 'total', 'resource', 'combat'] as RatingScoreKind[]).map((kind) => <b key={kind} className={`rating-score ${scoreKind === kind ? 'active' : ''}`}>{formatScore(getRatingScore(row, kind))}</b>)}<RankDelta current={row.rank} previous={row.previousRank} enabled={scoreKind === 'total'}/></div>; })}</div></> : <><div className="rating-table-head rating-table-head--alliances"><span>МЕСТО</span><span>СОЮЗ</span><span>УЧ.</span><ScoreHeader kind="achievement" active={scoreKind === 'achievement'} onSelect={() => selectScore('achievement')}/><ScoreHeader kind="total" active={scoreKind === 'total'} onSelect={() => selectScore('total')}/><ScoreHeader kind="resource" active={scoreKind === 'resource'} onSelect={() => selectScore('resource')}/><ScoreHeader kind="combat" active={scoreKind === 'combat'} onSelect={() => selectScore('combat')}/><span>ИЗМ.</span></div><div className="rating-table-body">{pageAlliances.map((row) => { const rank = getDisplayedRank(model.alliances, row.id, scoreKind) ?? row.rank; return <div key={row.id} className={`rating-row rating-row--alliances ${row.isLocal ? 'local' : ''}`}><b className="rating-place">{rank}</b><span className="rating-player-cell"><RatingMark tag={row.tag} local={row.isLocal}/><span><strong>{row.name}{row.isLocal ? <em>ВАШ</em> : null}</strong><small>[{row.tag}]</small></span></span><b className="rating-members">{row.members}</b>{(['achievement', 'total', 'resource', 'combat'] as RatingScoreKind[]).map((kind) => <b key={kind} className={`rating-score ${scoreKind === kind ? 'active' : ''}`}>{formatScore(getRatingScore(row, kind))}</b>)}<RankDelta current={row.rank} previous={row.previousRank} enabled={scoreKind === 'total'}/></div>; })}</div></>}
+      {!activeRows.length ? <div className="rating-empty">По текущему фильтру ничего не найдено.</div> : null}
+      <footer className="rating-pagination"><button type="button" disabled={page <= 0} onClick={() => setPage((value) => Math.max(0, value - 1))}>‹ НАЗАД</button><div>{Array.from({ length: pageCount }, (_, index) => <button type="button" key={index} className={index === page ? 'active' : ''} onClick={() => setPage(index)}>{index + 1}</button>)}</div><button type="button" disabled={page >= pageCount - 1} onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}>ВПЕРЁД ›</button></footer>
+    </section>
 
-      <section className="rating-table-panel">
-        {mode === 'players' ? <><div className="rating-table-head rating-table-head--players"><span>МЕСТО</span><span>ИГРОК</span><span>СОЮЗ</span><ScoreHeader kind="achievement" active={scoreKind === 'achievement'} onSelect={() => setScoreKind('achievement')} /><ScoreHeader kind="total" active={scoreKind === 'total'} onSelect={() => setScoreKind('total')} /><ScoreHeader kind="resource" active={scoreKind === 'resource'} onSelect={() => setScoreKind('resource')} /><ScoreHeader kind="combat" active={scoreKind === 'combat'} onSelect={() => setScoreKind('combat')} /><span>ИЗМ.</span></div><div className="rating-table-body">{visiblePlayers.map((row) => { const rank = getDisplayedRank(model.players, row.id, scoreKind) ?? row.rank; return <button type="button" key={row.id} className={`rating-row rating-row--players ${row.isLocal ? 'local' : ''} ${selectedPlayer?.id === row.id ? 'active' : ''}`} onClick={() => setSelectedPlayerId(row.id)}><b className="rating-place">{rank}</b><span className="rating-player-cell"><RatingMark tag={row.alliance.tag} local={row.isLocal} /><span><strong>{row.name}{row.isLocal ? <em>ВЫ</em> : null}</strong><small>{row.sector}</small></span></span><span className="rating-alliance-cell"><strong>{row.alliance.name}</strong><small>[{row.alliance.tag}]</small></span>{(['achievement', 'total', 'resource', 'combat'] as RatingScoreKind[]).map((kind) => <b key={kind} className={`rating-score ${scoreKind === kind ? 'active' : ''}`}>{formatScore(getRatingScore(row, kind))}</b>)}<RankDelta current={row.rank} previous={row.previousRank} enabled={scoreKind === 'total'} /></button>; })}</div></> : <><div className="rating-table-head rating-table-head--alliances"><span>МЕСТО</span><span>СОЮЗ</span><span>УЧ.</span><ScoreHeader kind="achievement" active={scoreKind === 'achievement'} onSelect={() => setScoreKind('achievement')} /><ScoreHeader kind="total" active={scoreKind === 'total'} onSelect={() => setScoreKind('total')} /><ScoreHeader kind="resource" active={scoreKind === 'resource'} onSelect={() => setScoreKind('resource')} /><ScoreHeader kind="combat" active={scoreKind === 'combat'} onSelect={() => setScoreKind('combat')} /><span>ИЗМ.</span></div><div className="rating-table-body">{visibleAlliances.map((row) => { const rank = getDisplayedRank(model.alliances, row.id, scoreKind) ?? row.rank; return <button type="button" key={row.id} className={`rating-row rating-row--alliances ${row.isLocal ? 'local' : ''} ${selectedAlliance?.id === row.id ? 'active' : ''}`} onClick={() => setSelectedAllianceId(row.id)}><b className="rating-place">{rank}</b><span className="rating-player-cell"><RatingMark tag={row.tag} local={row.isLocal} /><span><strong>{row.name}{row.isLocal ? <em>ВАШ</em> : null}</strong><small>[{row.tag}]</small></span></span><b>{row.members}</b>{(['achievement', 'total', 'resource', 'combat'] as RatingScoreKind[]).map((kind) => <b key={kind} className={`rating-score ${scoreKind === kind ? 'active' : ''}`}>{formatScore(getRatingScore(row, kind))}</b>)}<RankDelta current={row.rank} previous={row.previousRank} enabled={scoreKind === 'total'} /></button>; })}</div></>}
-        {((mode === 'players' && !visiblePlayers.length) || (mode === 'alliances' && !visibleAlliances.length)) ? <div className="rating-empty">По текущему фильтру ничего не найдено.</div> : null}
-      </section>
-
-      {mode === 'players' ? (selectedPlayer ? <PlayerDossier row={selectedPlayer} scoreKind={scoreKind} rank={getDisplayedRank(model.players, selectedPlayer.id, scoreKind) ?? selectedPlayer.rank} /> : <div className="rating-dossier" />) : (selectedAlliance ? <AllianceDossier row={selectedAlliance} scoreKind={scoreKind} rank={getDisplayedRank(model.alliances, selectedAlliance.id, scoreKind) ?? selectedAlliance.rank} /> : <div className="rating-dossier" />)}
+    <div className="rating-bottom">
+      <LocalPosition mode={mode} player={localPlayer ?? null} alliance={localAlliance ?? null} scoreKind={scoreKind} playerRank={localPlayerRank} allianceRank={localAllianceRank}/>
+      <section className="rating-data-truth"><div><small>DATA TRUTH</small><strong>DETERMINISTIC LOCAL FIXTURE</strong></div><p>Структура таблицы и типы очков повторяют сохранённый Nemexia Ranking. Общие очки = ресурсные + боевые; достижения идут отдельно. Серверный рейтинг и правила начисления пока не подключены.</p></section>
     </div>
-
-    <footer className="rating-bottom">
-      <section className="rating-my-place"><small>МОЁ МЕСТО</small>{localPlayer && localPlayerRank ? <><strong>#{localPlayerRank}</strong><span>{localPlayer.name}<em>{formatScore(getRatingScore(localPlayer, scoreKind))} · {SCORE_META.find((item) => item.id === scoreKind)?.short}</em></span><RankDelta current={localPlayer.rank} previous={localPlayer.previousRank} enabled={scoreKind === 'total'} /></> : null}</section>
-      <section className="rating-alliance-strip"><header><small>РЕЙТИНГ СОЮЗОВ · {SCORE_META.find((item) => item.id === scoreKind)?.short}</small>{localAllianceRank ? <b>Ваш союз: #{localAllianceRank}</b> : null}</header><div>{rankedAlliances.slice(0, 5).map((row, index) => <button type="button" key={row.id} onClick={() => { setMode('alliances'); setSearch(''); setSelectedAllianceId(row.id); }}><span>#{index + 1}</span><RatingMark tag={row.tag} /><strong>{row.name}<small>{formatScore(getRatingScore(row, scoreKind))}</small></strong></button>)}</div></section>
-    </footer>
   </main>;
 }
