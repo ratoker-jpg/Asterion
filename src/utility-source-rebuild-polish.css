@@ -26,7 +26,6 @@
    own a nested vertical scrollbar anymore. */
 .settings-view-v2{min-height:846px;height:auto}
 .settings-nav-v2,.settings-content-v2{height:auto;overflow:visible}
-.settings-content-v2{overflow-x:hidden}
 .typography-preview-v2{position:static}
 
 /* Rating keeps pagination, but the page itself can now continue below the baseline when
