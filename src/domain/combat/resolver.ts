@@ -18,13 +18,22 @@ import {
   type CombatInput,
   type CombatStackInput,
 } from './simulator.ts';
+import {
+  getTechnologyArmorPercent,
+  getTechnologyAttackMultiplier,
+  getTechnologyLifeMultiplier,
+  normalizeCombatTechnologies,
+  type CombatTechnologyLevels,
+} from './technologies.ts';
 
 /**
  * Asterion Combat Resolver v1 is a deterministic Asterion rule set.
- * It is not a reconstruction of the undisclosed Nemexia server combat formula.
+ * It is not a reconstruction of the complete Nemexia server combat formula.
  *
- * v1 intentionally has no RNG, criticals, shield pool/regeneration, weapon-vs-armor
- * matchup, commander ability mathematics, science or equipment modifiers.
+ * v1 applies only documented deterministic science bonuses: weapon sciences,
+ * ship defense, armor sciences, Force Attack and Prompt Defense. It still has no
+ * RNG/critical damage, shield pool/regeneration, weapon-vs-armor matchup,
+ * commander ability mathematics or equipment modifiers.
  */
 
 export type CombatResolverContext = {
@@ -116,19 +125,23 @@ function runtimeFromInput(
   side: BattleSide,
   bucket: RuntimeBucket,
   stacks: readonly CombatStackInput[],
+  technologies: CombatTechnologyLevels,
 ): RuntimeStack[] {
   return stacks.map((stack) => {
     const entity = getCombatEntity(stack.entityId);
+    const lifePerUnit = entity.combat.life * getTechnologyLifeMultiplier(entity, technologies);
+    const attackPerUnit = entity.combat.attack * getTechnologyAttackMultiplier(entity, technologies);
+    const armorPercent = clamp(getTechnologyArmorPercent(entity, technologies), 0, 80);
     return {
       side,
       bucket,
       entityId: stack.entityId,
       startingCount: stack.count,
       count: stack.count,
-      hpPool: stack.count * entity.combat.life,
-      lifePerUnit: entity.combat.life,
-      attackPerUnit: entity.combat.attack,
-      armorPercent: clamp(entity.combat.armorStrength, 0, 80),
+      hpPool: stack.count * lifePerUnit,
+      lifePerUnit,
+      attackPerUnit,
+      armorPercent,
       populationPerUnit: entity.population,
     };
   });
@@ -161,13 +174,15 @@ function planSideAttacks(
   const targetSnapshot: TargetSelectionCandidate[] = targetStacks
     .filter((stack) => stack.count > 0)
     .map((stack) => ({ entityId: stack.entityId, currentCount: stack.count }));
+  const targetById = new Map(targetStacks.map((stack) => [stack.entityId, stack]));
 
   return sortRuntime(actorStacks)
     .filter((actor) => actor.count > 0 && actor.attackPerUnit > 0)
     .flatMap((actor) => {
       const target = selectCombatTarget(targetSnapshot);
       if (!target) return [];
-      const targetEntity = getCombatEntity(target.entityId);
+      const targetRuntime = targetById.get(target.entityId);
+      if (!targetRuntime) return [];
       const rawDamage = actor.count * actor.attackPerUnit;
       return [{
         actorSide: actor.side,
@@ -176,7 +191,7 @@ function planSideAttacks(
         targetSide: actor.side === 'attacker' ? 'defender' : 'attacker',
         targetEntityId: target.entityId,
         rawDamage,
-        effectiveDamage: calculateEffectiveDamage(rawDamage, targetEntity.combat.armorStrength),
+        effectiveDamage: calculateEffectiveDamage(rawDamage, targetRuntime.armorPercent),
       } satisfies PlannedAttack];
     });
 }
@@ -242,15 +257,17 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
   const validation = validateCombatInput(input);
   if (!validation.ok) throw new CombatInputValidationError(validation.errors);
   const normalized = validation.value;
+  const attackerTechnologies = normalizeCombatTechnologies(normalized.attackerTechnologies);
+  const defenderTechnologies = normalizeCombatTechnologies(normalized.defenderTechnologies);
 
   const attacker = [
-    ...runtimeFromInput('attacker', 'stacks', normalized.attacker.ships),
-    ...runtimeFromInput('attacker', 'stacks', normalized.attacker.commanders),
+    ...runtimeFromInput('attacker', 'stacks', normalized.attacker.ships, attackerTechnologies),
+    ...runtimeFromInput('attacker', 'stacks', normalized.attacker.commanders, attackerTechnologies),
   ];
   const defender = [
-    ...runtimeFromInput('defender', 'stacks', normalized.defender.ships),
-    ...runtimeFromInput('defender', 'stacks', normalized.defender.commanders),
-    ...runtimeFromInput('defender', 'defenses', normalized.defender.defenses ?? []),
+    ...runtimeFromInput('defender', 'stacks', normalized.defender.ships, defenderTechnologies),
+    ...runtimeFromInput('defender', 'stacks', normalized.defender.commanders, defenderTechnologies),
+    ...runtimeFromInput('defender', 'defenses', normalized.defender.defenses ?? [], defenderTechnologies),
   ];
 
   const attackerCommanderIds = normalized.attacker.commanders
@@ -338,7 +355,7 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
     rounds,
     metadata: {
       source: 'combat-resolver',
-      note: 'Asterion Combat Resolver v1',
+      note: 'Asterion Combat Resolver v1 · verified combat sciences applied',
       maxRounds: normalized.maxRounds,
     },
   };
