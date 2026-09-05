@@ -113,9 +113,18 @@
    Keep the technical guards in code, while hiding any UI that would imply a
    source-backed maximum exists. */
 .sim-tech-controls-v1 span,
-.sim-tech-controls-v1 .sim-max-v1,
-.sim-tech-note-v1 {
+.sim-tech-controls-v1 .sim-max-v1 {
   display: none;
+}
+
+.sim-tech-note-v1 {
+  margin: 0;
+  padding: 9px 10px;
+  border-top: 1px solid rgba(49, 178, 215, .13);
+  background: rgba(2, 19, 28, .96);
+  color: #729eac;
+  font-size: 8px;
+  line-height: 1.45;
 }
 
 .sim-race-mechanics-note-v1 {
