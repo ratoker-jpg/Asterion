@@ -58,13 +58,23 @@ function isModifier(value: unknown): value is OperationModifier {
   return typeof value === 'string' && (OPERATION_MODIFIERS as readonly string[]).includes(value);
 }
 
-function normalizeLocation(value: unknown, fallback: OperationLocation): OperationLocation {
-  if (!isRecord(value) || typeof value.kind !== 'string') return { ...fallback } as OperationLocation;
+function cloneLocation(location: OperationLocation): OperationLocation {
+  return { ...location } as OperationLocation;
+}
 
-  if (value.kind === 'system' && Number.isInteger(value.galaxy) && Number.isInteger(value.system)) {
-    const galaxy = value.galaxy as number;
-    const system = value.system as number;
-    if (galaxy > 0 && system > 0) return { kind: 'system', galaxy, system };
+function normalizeLocation(value: unknown, fallback: OperationLocation): OperationLocation {
+  if (!isRecord(value) || typeof value.kind !== 'string') return cloneLocation(fallback);
+
+  if (
+    value.kind === 'system'
+    && typeof value.galaxy === 'number'
+    && typeof value.system === 'number'
+    && Number.isInteger(value.galaxy)
+    && Number.isInteger(value.system)
+    && value.galaxy > 0
+    && value.system > 0
+  ) {
+    return { kind: 'system', galaxy: value.galaxy, system: value.system };
   }
 
   if (value.kind === 'coordinates' && typeof value.coordinates === 'string' && value.coordinates.trim()) {
@@ -75,7 +85,7 @@ function normalizeLocation(value: unknown, fallback: OperationLocation): Operati
     return { kind: 'abstract', label: value.label.trim().slice(0, 64) };
   }
 
-  return { ...fallback } as OperationLocation;
+  return cloneLocation(fallback);
 }
 
 function normalizeReward(value: unknown, fallback: OperationRewardPreview): OperationRewardPreview {
