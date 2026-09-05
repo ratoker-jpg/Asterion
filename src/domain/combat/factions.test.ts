@@ -36,13 +36,68 @@ test('simulator exposes exactly the three Asterion player races', () => {
   ]);
 });
 
+test('race presentation uses the naming contract approved in Asterion PR #26', () => {
+  assert.deepEqual(getFactionShipCatalog('synod').map((entity) => entity.name), [
+    'Энергосфера',
+    'Сканер',
+    'Транспортный дрон',
+    'Транспортный модуль',
+    'Ковчег',
+    'Репликатор',
+    'Ланцет',
+    'Импульс',
+    'Барьер',
+    'Монолит',
+    'Голиаф',
+    'Пульсар',
+    'Разлом',
+  ]);
+  assert.deepEqual(getFactionShipCatalog('veyra').map((entity) => entity.name), [
+    'Симбионт',
+    'Глаз',
+    'Носильщик',
+    'Тяжеловоз',
+    'Зародыш',
+    'Падальщик',
+    'Жало',
+    'Стрекоза',
+    'Панцирник',
+    'Скарабей',
+    'Шмель',
+    'Спороносец',
+    'Пожиратель',
+  ]);
+  assert.deepEqual(getFactionDefenseCatalog('synod').map((entity) => entity.name), [
+    'Ударная матрица',
+    'Лазерная матрица',
+    'Ионная матрица',
+    'Плазменная матрица',
+    'Лазерно-ионная матрица',
+    'Плазменно-лазерная матрица',
+    'Ионно-плазменная матрица',
+    'Матричный щит',
+    'Планетарная матрица',
+  ]);
+  assert.deepEqual(getFactionDefenseCatalog('veyra').map((entity) => entity.name), [
+    'Шипомёт',
+    'Лазерная железа',
+    'Ионное плетение',
+    'Плазменное плетение',
+    'Лазерно-ионный орган',
+    'Плазменно-лазерный орган',
+    'Ионно-плазменный орган',
+    'Хитиновый щит',
+    'Планетарная мембрана',
+  ]);
+});
+
 test('race selection swaps presentation roster while preserving canonical mechanical IDs', () => {
   const asterScout = getFactionShipCatalog('aegis').find((entity) => entity.id === 'scout');
   const ilarScout = getFactionShipCatalog('synod').find((entity) => entity.id === 'scout');
   const swarmScout = getFactionShipCatalog('veyra').find((entity) => entity.id === 'scout');
   assert.equal(asterScout?.name, 'Скаут');
-  assert.equal(ilarScout?.name, 'Истребитель');
-  assert.equal(swarmScout?.name, 'Нокс-дротик');
+  assert.equal(ilarScout?.name, 'Ланцет');
+  assert.equal(swarmScout?.name, 'Жало');
   assert.notEqual(asterScout?.art, ilarScout?.art);
   assert.notEqual(ilarScout?.art, swarmScout?.art);
   assert.equal(asterScout?.combat.attack, ilarScout?.combat.attack);
@@ -52,8 +107,8 @@ test('race selection swaps presentation roster while preserving canonical mechan
   const ilarDefense = getFactionDefenseCatalog('synod').find((entity) => entity.id === 'ballistic-turret');
   const swarmDefense = getFactionDefenseCatalog('veyra').find((entity) => entity.id === 'ballistic-turret');
   assert.equal(asterDefense?.name, 'Защитная матрица');
-  assert.equal(ilarDefense?.name, 'Защитная матрица');
-  assert.equal(swarmDefense?.name, 'Нокс-лучник');
+  assert.equal(ilarDefense?.name, 'Ударная матрица');
+  assert.equal(swarmDefense?.name, 'Шипомёт');
   assert.notEqual(asterDefense?.art, ilarDefense?.art);
   assert.notEqual(ilarDefense?.art, swarmDefense?.art);
 });
