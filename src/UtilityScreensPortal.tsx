@@ -10,8 +10,8 @@ import {
   readPreferences,
   resetPreferences,
 } from './domain/settings/preferences.ts';
-import { getDesktopBridge } from './domain/settings/desktop.ts';
-import type { UiPreferencesV2 } from './domain/settings/types.ts';
+import { getDesktopBridge, getWindowPresetDimensions } from './domain/settings/desktop.ts';
+import { WINDOW_PRESETS, type DesktopDisplayState, type UiPreferencesV2 } from './domain/settings/types.ts';
 
 type UtilityScreen = 'Настройки' | 'Рейтинг' | 'Наука';
 
@@ -33,16 +33,55 @@ function readCurrentAlliance(): AllianceIdentity | null {
   }
 }
 
+function presetForDisplayState(state: DesktopDisplayState, fallback: UiPreferencesV2['display']['preset']) {
+  if (state.mode !== 'windowed') return fallback;
+  return WINDOW_PRESETS.find((preset) => {
+    const [width, height] = getWindowPresetDimensions(preset);
+    return width === state.width && height === state.height;
+  }) ?? fallback;
+}
+
 export function UtilityScreensPortal() {
   const [target, setTarget] = useState<Element | null>(null);
   const [active, setActive] = useState<UtilityScreen | null>(null);
   const [preferences, setPreferences] = useState<UiPreferencesV2>(() => readPreferences());
   const [currentAlliance, setCurrentAlliance] = useState<AllianceIdentity | null>(() => readCurrentAlliance());
   const allianceSignature = useRef(JSON.stringify(currentAlliance));
+  const preferencesRef = useRef(preferences);
 
   useEffect(() => {
+    preferencesRef.current = preferences;
     applyTypographyPreferences(preferences);
   }, [preferences]);
+
+  useEffect(() => {
+    const bridge = getDesktopBridge();
+    if (!bridge) return undefined;
+
+    let active = true;
+    const syncDisplayState = (state: DesktopDisplayState) => {
+      if (!active) return;
+      const current = preferencesRef.current;
+      const display = {
+        mode: state.mode,
+        preset: presetForDisplayState(state, current.display.preset),
+      } satisfies UiPreferencesV2['display'];
+      if (display.mode === current.display.mode && display.preset === current.display.preset) return;
+
+      const next = { ...current, display };
+      preferencesRef.current = next;
+      setPreferences(next);
+      persistPreferences(next);
+    };
+
+    void bridge.getDisplayState().then(syncDisplayState).catch(() => undefined);
+    const unsubscribe = bridge.onDisplayState?.(syncDisplayState);
+
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, []);
 
   useEffect(() => {
     const sync = () => {
@@ -70,6 +109,7 @@ export function UtilityScreensPortal() {
   }, []);
 
   const updatePreferences = (next: UiPreferencesV2) => {
+    preferencesRef.current = next;
     setPreferences(next);
     persistPreferences(next);
     applyTypographyPreferences(next);
@@ -77,6 +117,7 @@ export function UtilityScreensPortal() {
 
   const resetUiPreferences = () => {
     const defaults = resetPreferences();
+    preferencesRef.current = defaults;
     setPreferences(defaults);
     applyTypographyPreferences(defaults);
     void getDesktopBridge()?.setDisplay(defaults.display).catch(() => undefined);
