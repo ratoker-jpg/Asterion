@@ -77,7 +77,7 @@
 
 .sim-tech-controls-v1 {
   display: grid;
-  grid-template-columns: 28px 48px 34px 28px 52px;
+  grid-template-columns: 28px 56px 28px;
   align-items: center;
   gap: 4px;
 }
@@ -105,29 +105,17 @@
 }
 
 .sim-tech-controls-v1 input {
-  width: 48px;
+  width: 56px;
   padding: 0 3px;
 }
 
-.sim-tech-controls-v1 span {
-  color: #638f9f;
-  font-size: 8px;
-  text-align: center;
-}
-
-.sim-tech-controls-v1 .sim-max-v1 {
-  width: 52px;
-  color: #7ec7d9;
-}
-
+/* The saved Nemexia simulator exposes science level inputs, but not their maxima.
+   Keep the technical guards in code, while hiding any UI that would imply a
+   source-backed maximum exists. */
+.sim-tech-controls-v1 span,
+.sim-tech-controls-v1 .sim-max-v1,
 .sim-tech-note-v1 {
-  margin: 0;
-  padding: 9px 10px;
-  border-top: 1px solid rgba(54, 190, 227, .18);
-  background: rgba(7, 38, 49, .96);
-  color: #78a8b7;
-  font-size: 8px;
-  line-height: 1.45;
+  display: none;
 }
 
 .sim-race-mechanics-note-v1 {
