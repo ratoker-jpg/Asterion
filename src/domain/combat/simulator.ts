@@ -1,5 +1,10 @@
 import { COMBAT_ENTITY_BY_ID, getCombatEntity } from './catalog.ts';
 import type { CommanderId } from './commanders.ts';
+import {
+  DEFAULT_COMBAT_FACTION_ID,
+  getCombatFactionName,
+  type CombatFactionId,
+} from './factions.ts';
 import type { CombatEntityId } from './ids.ts';
 import type { CombatPriorityState } from './priority.ts';
 import type { BattleParticipant } from './report.ts';
@@ -32,6 +37,8 @@ export type CombatInput = {
 };
 
 export type SimulatorScenario = {
+  attackerFactionId: CombatFactionId;
+  defenderFactionId: CombatFactionId;
   attacker: {
     ships: CombatStackInput[];
     commanders: CombatStackInput[];
@@ -69,9 +76,33 @@ export type CombatValidationResult = {
 
 export function createEmptySimulatorScenario(): SimulatorScenario {
   return {
+    attackerFactionId: DEFAULT_COMBAT_FACTION_ID,
+    defenderFactionId: DEFAULT_COMBAT_FACTION_ID,
     attacker: { ships: [], commanders: [] },
     defender: { ships: [], commanders: [], defenses: [] },
     maxRounds: 8,
+  };
+}
+
+export function setScenarioFaction(
+  scenario: SimulatorScenario,
+  side: 'attacker' | 'defender',
+  factionId: CombatFactionId,
+): SimulatorScenario {
+  if (side === 'attacker') {
+    if (scenario.attackerFactionId === factionId) return scenario;
+    return {
+      ...scenario,
+      attackerFactionId: factionId,
+      attacker: { ships: [], commanders: [] },
+    };
+  }
+
+  if (scenario.defenderFactionId === factionId) return scenario;
+  return {
+    ...scenario,
+    defenderFactionId: factionId,
+    defender: { ships: [], commanders: [], defenses: [] },
   };
 }
 
@@ -252,12 +283,20 @@ export function scenarioToCombatInput(
     scenarioId: context.scenarioId,
     timestamp: context.timestamp,
     attacker: {
-      participant: { ...context.attacker, side: 'attacker' },
+      participant: {
+        ...context.attacker,
+        side: 'attacker',
+        race: getCombatFactionName(scenario.attackerFactionId),
+      },
       ships: scenario.attacker.ships.map((stack) => ({ ...stack })),
       commanders: scenario.attacker.commanders.map((stack) => ({ ...stack })),
     },
     defender: {
-      participant: { ...context.defender, side: 'defender' },
+      participant: {
+        ...context.defender,
+        side: 'defender',
+        race: getCombatFactionName(scenario.defenderFactionId),
+      },
       ships: scenario.defender.ships.map((stack) => ({ ...stack })),
       commanders: scenario.defender.commanders.map((stack) => ({ ...stack })),
       defenses: scenario.defender.defenses.map((stack) => ({ ...stack })),
