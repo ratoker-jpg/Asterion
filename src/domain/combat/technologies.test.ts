@@ -10,6 +10,10 @@ import {
   normalizeCombatTechnologies,
 } from './technologies.ts';
 
+function approximately(actual: number, expected: number) {
+  assert.ok(Math.abs(actual - expected) < 1e-9, `expected ${actual} to be approximately ${expected}`);
+}
+
 test('combat technology levels default to zero and clamp to documented maxima', () => {
   assert.deepEqual(createDefaultCombatTechnologies(), {
     shipDefense: 0,
@@ -49,15 +53,15 @@ test('combat technology levels default to zero and clamp to documented maxima', 
 test('weapon science and force attack add their documented deterministic attack bonuses', () => {
   const scout = getCombatEntity('scout');
   const levels = normalizeCombatTechnologies({ laserScience: 2, forceAttack: 3 });
-  assert.equal(getTechnologyAttackMultiplier(scout, levels), 1.45);
+  approximately(getTechnologyAttackMultiplier(scout, levels), 1.45);
 
   const laserDefense = getCombatEntity('laser-turret');
-  assert.equal(getTechnologyAttackMultiplier(laserDefense, levels), 1.30);
+  approximately(getTechnologyAttackMultiplier(laserDefense, levels), 1.30);
 });
 
 test('ship defense and prompt defense increase ship life but not planetary defense life', () => {
   const levels = normalizeCombatTechnologies({ shipDefense: 5, promptDefense: 2 });
-  assert.equal(getTechnologyLifeMultiplier(getCombatEntity('scout'), levels), 1.6);
+  approximately(getTechnologyLifeMultiplier(getCombatEntity('scout'), levels), 1.6);
   assert.equal(getTechnologyLifeMultiplier(getCombatEntity('laser-turret'), levels), 1);
 });
 
