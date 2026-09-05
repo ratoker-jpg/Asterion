@@ -2,71 +2,88 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { COMBAT_TECHNOLOGIES } from '../combat/technologies.ts';
-import { SCIENCE_CATALOG, SCIENCE_CATEGORIES, SCIENCE_VISUAL_LINKS, STELLAR_RESEARCH_SOURCE } from './catalog.ts';
-import { getConfirmedPrerequisites, getScienceNodesByCategory, searchScienceCatalog } from './selectors.ts';
+import { NEMEXIA_SCIENCE_SOURCE, SCIENCE_CATALOG, SCIENCE_CATEGORIES } from './catalog.ts';
+import { getConfirmedPrerequisites, getScienceNodeBySourceId, getScienceNodesByCategory, searchScienceCatalog } from './selectors.ts';
 
-const EXPECTED_STELLAR_NAMES = [
+const EXPECTED_NEMEXIA_NAMES = [
   'Физика',
   'Химия',
   'Математика',
   'Астрономия',
   'Шпионаж',
   'Компьютерные системы',
-  'Корабельная броня',
+  'Броня кораблей',
   'Топливные элементы',
   'Реактивные двигатели',
-  'Лазерная технология',
-  'Ионная технология',
-  'Плазменная технология',
+  'Лазерная наука',
+  'Ионная наука',
+  'Плазменная наука',
   'Экология',
   'Гиперпространство',
   'Параллельные вселенные',
   'Улучшенное строительство',
+  'Легкая Броня',
+  'Средняя Броня',
+  'Тяжелая Броня',
   'Пробивающая атака',
   'Маневренная защита',
   'Критический удар',
-  'Лёгкая броня',
-  'Средняя броня',
-  'Тяжёлая броня',
 ];
 
-test('science catalog mirrors all 22 current Stellar research templates', () => {
+const EXPECTED_SOURCE_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 21, 22, 23, 18, 19, 20];
+
+test('science catalog mirrors the 22 sciences in the saved Nemexia laboratory page', () => {
   assert.equal(SCIENCE_CATALOG.length, 22);
-  assert.deepEqual(SCIENCE_CATALOG.map((item) => item.name), EXPECTED_STELLAR_NAMES);
-  assert.equal(STELLAR_RESEARCH_SOURCE.repository, 'ratoker-jpg/stellar-empires');
-  assert.equal(STELLAR_RESEARCH_SOURCE.commit, '466ec55f1751d36fd4a30175f7669f89ebe9a6a6');
+  assert.deepEqual(SCIENCE_CATALOG.map((item) => item.name), EXPECTED_NEMEXIA_NAMES);
+  assert.deepEqual(SCIENCE_CATALOG.map((item) => item.sourceScienceId), EXPECTED_SOURCE_IDS);
+  assert.equal(NEMEXIA_SCIENCE_SOURCE.repository, 'ratoker-jpg/Nemexia_auto_v2');
+  assert.equal(NEMEXIA_SCIENCE_SOURCE.page, 'saved_pages/наука/page_2026-09-05_22-49-20.html');
+  assert.ok(SCIENCE_CATALOG.every((item) => item.sourceStatus === 'nemexia-saved-page'));
 });
 
-test('science uses all six canonical Stellar research categories', () => {
-  assert.deepEqual(SCIENCE_CATEGORIES.map((category) => category.id), [
-    'energy', 'infrastructure', 'navigation', 'intelligence', 'defense', 'weapons',
-  ]);
-  const represented = new Set(SCIENCE_CATALOG.map((item) => item.categoryId));
-  assert.equal(represented.size, SCIENCE_CATEGORIES.length);
-  assert.ok(SCIENCE_CATEGORIES.every((category) => getScienceNodesByCategory(category.id).length > 0));
+test('science uses the four real Nemexia laboratory sections', () => {
+  assert.deepEqual(SCIENCE_CATEGORIES.map((category) => category.id), ['basic', 'advanced', 'master', 'additional']);
+  assert.deepEqual(getScienceNodesByCategory('basic').map((item) => item.sourceScienceId), [1, 2, 3, 4]);
+  assert.deepEqual(getScienceNodesByCategory('advanced').map((item) => item.sourceScienceId), [5, 6, 7, 8, 9, 10, 11, 12, 13]);
+  assert.deepEqual(getScienceNodesByCategory('master').map((item) => item.sourceScienceId), [14, 15, 17, 21, 22, 23]);
+  assert.deepEqual(getScienceNodesByCategory('additional').map((item) => item.sourceScienceId), [18, 19, 20]);
+  assert.equal(SCIENCE_CATEGORIES.find((category) => category.id === 'additional')?.exclusiveChoice, true);
 });
 
-test('all source-backed prerequisites resolve to valid science nodes', () => {
+test('source-backed science prerequisites resolve and preserve the saved requirement levels', () => {
   const ids = new Set(SCIENCE_CATALOG.map((item) => item.id));
   for (const item of SCIENCE_CATALOG) {
-    assert.ok(item.requirements.every((requirement) => ids.has(requirement.scienceId)));
     assert.deepEqual(getConfirmedPrerequisites(item), item.requirements);
+    assert.ok(item.requirements.every((requirement) => ids.has(requirement.scienceId) && requirement.level > 0));
+    assert.ok(item.requiredLaboratoryLevel > 0);
   }
-  assert.equal(SCIENCE_VISUAL_LINKS.length, SCIENCE_CATALOG.reduce((sum, item) => sum + item.requirements.length, 0));
-  assert.ok(SCIENCE_VISUAL_LINKS.every((link) => link.sourceBacked && ids.has(link.from) && ids.has(link.to)));
+  assert.deepEqual(getScienceNodeBySourceId(12)?.requirements, [
+    { scienceId: 'science-3', level: 7 },
+    { scienceId: 'science-10', level: 10 },
+    { scienceId: 'science-11', level: 5 },
+  ]);
+  assert.deepEqual(getScienceNodeBySourceId(19)?.requirements, [
+    { scienceId: 'science-7', level: 10 },
+    { scienceId: 'science-23', level: 5 },
+  ]);
 });
 
-test('source research metadata stays sane and non-negative', () => {
+test('snapshot costs, time and levels are explicitly saved-page values', () => {
   for (const item of SCIENCE_CATALOG) {
-    assert.ok(item.maxLevel > 0 && Number.isInteger(item.maxLevel));
-    assert.ok(item.requiredLaboratoryLevel > 0 && Number.isInteger(item.requiredLaboratoryLevel));
-    assert.ok(item.baseSeconds > 0 && Number.isFinite(item.baseSeconds));
-    assert.ok(item.baseCost.metal >= 0 && item.baseCost.crystal >= 0 && item.baseCost.gas >= 0);
-    assert.equal(item.sourceStatus, 'stellar-current');
+    assert.equal(item.snapshotNextLevel, item.snapshotLevel + 1);
+    assert.ok(item.snapshotLevel >= 0);
+    assert.ok(/^\d{2,3}:\d{2}:\d{2}$/.test(item.snapshotTime));
+    assert.ok(item.snapshotCost.metal >= 0);
+    assert.ok(item.snapshotCost.crystal >= 0);
+    assert.ok(item.snapshotCost.gas >= 0);
+    assert.ok(item.snapshotCost.energy >= 0);
+    assert.match(item.sourceNote, /сохранённого снимка Nemexia/);
   }
+  assert.deepEqual(getScienceNodeBySourceId(15)?.snapshotCost, { metal: 0, crystal: 0, gas: 0, energy: 250000 });
+  assert.equal(getScienceNodeBySourceId(15)?.snapshotTime, '205:24:00');
 });
 
-test('the ten combat-overlap sciences retain current Asterion Combat mappings', () => {
+test('the ten existing Asterion Combat technologies map to the same Nemexia science ids', () => {
   const mapped = SCIENCE_CATALOG.filter((item) => item.combatTechnologyId);
   assert.equal(mapped.length, COMBAT_TECHNOLOGIES.length);
   for (const technology of COMBAT_TECHNOLOGIES) {
@@ -76,16 +93,16 @@ test('the ten combat-overlap sciences retain current Asterion Combat mappings', 
   }
 });
 
-test('science search covers names, slugs, descriptions and existing combat aliases', () => {
-  assert.equal(searchScienceCatalog('параллельные').length, 1);
-  assert.equal(searchScienceCatalog('computer-systems')[0]?.name, 'Компьютерные системы');
+test('science search covers Nemexia names, effects, ids and combat aliases', () => {
+  assert.equal(searchScienceCatalog('параллельные')[0]?.sourceScienceId, 15);
+  assert.equal(searchScienceCatalog('доход озона')[0]?.sourceScienceId, 13);
+  assert.equal(searchScienceCatalog('23')[0]?.name, 'Тяжелая Броня');
   assert.equal(searchScienceCatalog('criticalHit')[0]?.name, 'Критический удар');
-  assert.equal(searchScienceCatalog('лазерная')[0]?.name, 'Лазерная технология');
-  assert.equal(searchScienceCatalog('фундаментальная')[0]?.name, 'Физика');
 });
 
-test('science ids are unique and stable slug-derived ids', () => {
+test('science ids remain unique and source-id derived', () => {
   const ids = SCIENCE_CATALOG.map((item) => item.id);
   assert.equal(new Set(ids).size, ids.length);
-  assert.ok(SCIENCE_CATALOG.every((item) => item.id === `science-${item.slug}`));
+  assert.equal(new Set(SCIENCE_CATALOG.map((item) => item.sourceScienceId)).size, SCIENCE_CATALOG.length);
+  assert.ok(SCIENCE_CATALOG.every((item) => item.id === `science-${item.sourceScienceId}`));
 });

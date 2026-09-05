@@ -1,13 +1,15 @@
 import type { CombatTechnologyId } from '../combat/technologies.ts';
 
-export type ScienceCategoryId = 'energy' | 'infrastructure' | 'navigation' | 'intelligence' | 'defense' | 'weapons';
-export type ScienceSourceStatus = 'stellar-current';
+export type ScienceCategoryId = 'basic' | 'advanced' | 'master' | 'additional';
+export type ScienceSourceStatus = 'nemexia-saved-page';
 
 export type ScienceCategory = {
   id: ScienceCategoryId;
   label: string;
   shortLabel: string;
   description: string;
+  sourceTab: string;
+  exclusiveChoice?: boolean;
 };
 
 export type ScienceRequirement = {
@@ -15,36 +17,27 @@ export type ScienceRequirement = {
   level: number;
 };
 
-export type ScienceEffectMeta = {
-  type: string;
-  valueLabel: string;
+export type ScienceSnapshotCost = {
+  metal: number;
+  crystal: number;
+  gas: number;
+  energy: number;
 };
 
 export type ScienceCatalogItem = {
   id: string;
+  sourceScienceId: number;
   slug: string;
   name: string;
   categoryId: ScienceCategoryId;
   description: string;
-  maxLevel: number;
-  baseCost: {
-    metal: number;
-    crystal: number;
-    gas: number;
-  };
-  baseSeconds: number;
+  snapshotLevel: number;
+  snapshotNextLevel: number;
+  snapshotCost: ScienceSnapshotCost;
+  snapshotTime: string;
   requiredLaboratoryLevel: number;
   requirements: readonly ScienceRequirement[];
-  effects: readonly ScienceEffectMeta[];
   sourceStatus: ScienceSourceStatus;
   sourceNote: string;
   combatTechnologyId?: CombatTechnologyId;
-  sourceScienceId?: number;
-};
-
-export type ScienceVisualLink = {
-  from: string;
-  to: string;
-  requiredLevel: number;
-  sourceBacked: true;
 };
