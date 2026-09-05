@@ -1,4 +1,5 @@
 import { COMBAT_ENTITY_BY_ID, getCombatEntity } from './catalog.ts';
+import { normalizeCombatFactionId } from './factions.ts';
 import type { CombatEntityId } from './ids.ts';
 import { ASTERION_SAVE_KEY, COMBAT_SAVE_SCHEMA_VERSION } from './priority.ts';
 import {
@@ -63,12 +64,16 @@ function normalizeStacks(value: unknown, kind: CombatEntityKind): CombatStackInp
 export function normalizeSimulatorScenario(value: unknown): SimulatorScenario {
   if (!value || typeof value !== 'object') return createEmptySimulatorScenario();
   const candidate = value as {
+    attackerFactionId?: unknown;
+    defenderFactionId?: unknown;
     attacker?: { ships?: unknown; commanders?: unknown };
     defender?: { ships?: unknown; commanders?: unknown; defenses?: unknown };
     maxRounds?: unknown;
   };
 
   return {
+    attackerFactionId: normalizeCombatFactionId(candidate.attackerFactionId),
+    defenderFactionId: normalizeCombatFactionId(candidate.defenderFactionId),
     attacker: {
       ships: normalizeStacks(candidate.attacker?.ships, 'ship'),
       commanders: normalizeStacks(candidate.attacker?.commanders, 'commander'),
