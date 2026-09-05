@@ -1,5 +1,49 @@
-const { app, BrowserWindow, Menu } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain } = require('electron');
 const path = require('path');
+const {
+  formatWindowResolution,
+  isWindowMode,
+  parseWindowResolution,
+} = require('./window-settings.cjs');
+
+function getSenderWindow(event) {
+  return BrowserWindow.fromWebContents(event.sender);
+}
+
+function getDisplaySettings(win) {
+  if (!win || win.isDestroyed()) return null;
+  const [width, height] = win.getContentSize();
+  const fullscreen = win.isFullScreen();
+  return {
+    mode: fullscreen ? 'fullscreen' : 'windowed',
+    resolution: formatWindowResolution(width, height),
+    fullscreen,
+  };
+}
+
+ipcMain.handle('asterion:get-display-settings', (event) => {
+  const win = getSenderWindow(event);
+  return getDisplaySettings(win);
+});
+
+ipcMain.handle('asterion:set-window-mode', (event, mode) => {
+  const win = getSenderWindow(event);
+  if (!win || win.isDestroyed()) return { ok: false, reason: 'window-unavailable' };
+  if (!isWindowMode(mode)) return { ok: false, reason: 'invalid-window-mode', settings: getDisplaySettings(win) };
+  win.setFullScreen(mode === 'fullscreen');
+  return { ok: true, settings: getDisplaySettings(win) };
+});
+
+ipcMain.handle('asterion:set-window-size', (event, resolution) => {
+  const win = getSenderWindow(event);
+  if (!win || win.isDestroyed()) return { ok: false, reason: 'window-unavailable' };
+  const parsed = parseWindowResolution(resolution);
+  if (!parsed) return { ok: false, reason: 'invalid-window-resolution', settings: getDisplaySettings(win) };
+  if (win.isFullScreen()) return { ok: false, reason: 'fullscreen', settings: getDisplaySettings(win) };
+  win.setContentSize(parsed.width, parsed.height, true);
+  win.center();
+  return { ok: true, settings: getDisplaySettings(win) };
+});
 
 function createWindow() {
   Menu.setApplicationMenu(null);
@@ -18,6 +62,7 @@ function createWindow() {
     resizable: true,
     show: false,
     webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
