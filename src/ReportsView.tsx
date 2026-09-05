@@ -1,9 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { BattleReportDetailBody } from './BattleReportsView';
+import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
+import {
+  BATTLE_HISTORY_CHANGED_EVENT,
+  persistBattleHistory,
+  readBattleHistory,
+  setBattleReportSaved,
+} from './domain/combat/battle-repository.ts';
+import { ASTERION_SAVE_KEY } from './domain/combat/priority.ts';
 import type { BattleReport } from './domain/combat/report.ts';
-import type { CommandState } from './domain/command/types.ts';
-import type { OperationsState } from './domain/operations/types.ts';
+import { migrateCommandState } from './domain/command/repository.ts';
+import { migrateOperationsState } from './domain/operations/repository.ts';
 import {
   buildReportsFeed,
   filterReportItems,
@@ -12,12 +20,7 @@ import {
   getReportUnreadCounts,
 } from './domain/reports/adapters.ts';
 import { markAllReportsRead, markReportRead } from './domain/reports/repository.ts';
-import type {
-  ReportCategory,
-  ReportFilter,
-  ReportItem,
-  ReportsState,
-} from './domain/reports/types.ts';
+import type { ReportCategory, ReportFilter, ReportItem, ReportsState } from './domain/reports/types.ts';
 import './reports.css';
 
 const PAGE_SIZE = 7;
@@ -39,41 +42,28 @@ const FILTER_LABELS: Record<ReportFilter, string> = {
 };
 
 const EMPTY_COPY: Record<ReportCategory, { title: string; body: string }> = {
-  system: {
-    title: 'Системных данных пока нет',
-    body: 'Сюда попадут шпионские отчёты и результаты операций, которые дают новую информацию. Текущая отправка шпионских флотов ещё не подключена.',
-  },
-  battle: {
-    title: 'Боевых докладов пока нет',
-    body: 'Здесь хранятся реальные боевые отчёты и бои из операций. Симуляции и Арена в этот канал не попадают.',
-  },
-  command: {
-    title: 'Командных докладов пока нет',
-    body: 'Здесь будут отчёты об атаках на союзников и результаты атак на Солнце, когда эти события появятся в боевом контуре.',
-  },
-  arena: {
-    title: 'Арена — пока пусто',
-    body: 'Отчёты и очки Арены появятся здесь вместе с реализацией самой Арены.',
-  },
-  flights: {
-    title: 'Завершённых полётов пока нет',
-    body: 'После подключения реальной отправки флотов сюда будут сохраняться завершённые рейсы, прибытия и возвраты флота на ваши планеты.',
-  },
-  alliances: {
-    title: 'Союзных приглашений пока нет',
-    body: 'Здесь появляются доступные совместные операции союза. Из приглашения можно сразу перейти к выбору флота.',
-  },
-  achievements: {
-    title: 'Достижения — пока пусто',
-    body: 'Этот канал зарезервирован под будущую систему достижений.',
-  },
+  system: { title: 'Системных данных пока нет', body: 'Сюда попадут шпионские отчёты и результаты операций, которые дают новую информацию. Текущая отправка шпионских флотов ещё не подключена.' },
+  battle: { title: 'Боевых докладов пока нет', body: 'Здесь хранятся реальные боевые отчёты и бои из операций. Симуляции и Арена в этот канал не попадают.' },
+  command: { title: 'Командных докладов пока нет', body: 'Здесь будут отчёты об атаках на союзников и результаты атак на Солнце, когда эти события появятся в боевом контуре.' },
+  arena: { title: 'Арена — пока пусто', body: 'Отчёты и очки Арены появятся здесь вместе с реализацией самой Арены.' },
+  flights: { title: 'Завершённых полётов пока нет', body: 'После подключения реальной отправки флотов сюда будут сохраняться завершённые рейсы, прибытия и возвраты флота на ваши планеты.' },
+  alliances: { title: 'Союзных приглашений пока нет', body: 'Здесь появляются доступные совместные операции союза. Из приглашения можно сразу перейти к выбору флота.' },
+  achievements: { title: 'Достижения — пока пусто', body: 'Этот канал зарезервирован под будущую систему достижений.' },
 };
+
+function readCrossDomainContext() {
+  try {
+    const raw = typeof window !== 'undefined' ? window.localStorage.getItem(ASTERION_SAVE_KEY) : null;
+    const parsed = raw ? JSON.parse(raw) as { operations?: unknown; command?: unknown } : {};
+    return { operations: migrateOperationsState(parsed.operations), command: migrateCommandState(parsed.command) };
+  } catch {
+    return { operations: migrateOperationsState(undefined), command: migrateCommandState(undefined) };
+  }
+}
 
 function formatDate(timestamp?: string) {
   if (!timestamp) return 'ТЕКУЩЕЕ';
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
-  }).format(new Date(timestamp));
+  return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(timestamp));
 }
 
 function formatTime(timestamp?: string) {
@@ -107,13 +97,7 @@ function StatusBadge({ item }: { item: ReportItem }) {
   return <span className={`reports-status reports-status--${item.statusTone}`}>{item.statusLabel}</span>;
 }
 
-function ReportListItem({ item, active, read, saved, onOpen }: {
-  item: ReportItem;
-  active: boolean;
-  read: boolean;
-  saved: boolean;
-  onOpen: () => void;
-}) {
+function ReportListItem({ item, active, read, saved, onOpen }: { item: ReportItem; active: boolean; read: boolean; saved: boolean; onOpen: () => void }) {
   return (
     <button type="button" className={`reports-list-item ${active ? 'active' : ''} ${read ? 'read' : 'unread'}`} onClick={onOpen}>
       <span className={`reports-list-icon reports-list-icon--${item.category}`}><ReportGlyph kind={item.category} /></span>
@@ -136,10 +120,7 @@ function GenericDossier({ item }: { item: ReportItem }) {
         <div><small>ASTERION REPORT CHANNEL</small><strong>{item.typeLabel.toUpperCase()}</strong><span>{item.statusLabel}</span></div>
         <i />
       </section>
-      <section className="reports-generic-details">
-        <header>ДЕТАЛИ</header>
-        <dl>{item.details.map((detail) => <div key={`${detail.label}-${detail.value}`}><dt>{detail.label}</dt><dd>{detail.value}</dd></div>)}</dl>
-      </section>
+      <section className="reports-generic-details"><header>ДЕТАЛИ</header><dl>{item.details.map((detail) => <div key={`${detail.label}-${detail.value}`}><dt>{detail.label}</dt><dd>{detail.value}</dd></div>)}</dl></section>
       <section className="reports-generic-body"><small>СВОДКА</small><p>{item.body}</p></section>
     </div>
   );
@@ -160,47 +141,32 @@ function BattleDossier({ item, report }: { item: ReportItem; report: BattleRepor
 
 function EmptyDossier({ category, savedOnly }: { category: ReportCategory; savedOnly: boolean }) {
   const copy = EMPTY_COPY[category];
-  return (
-    <div className="reports-empty-dossier">
-      <ReportGlyph kind={category} />
-      <strong>{savedOnly ? 'СОХРАНЁННЫХ БОЁВ НЕТ' : copy.title.toUpperCase()}</strong>
-      <span>{savedOnly ? 'Сохрани нужный бой звездой в «Докладах» или во вкладке Флоты → Битвы.' : copy.body}</span>
-    </div>
-  );
+  return <div className="reports-empty-dossier"><ReportGlyph kind={category} /><strong>{savedOnly ? 'СОХРАНЁННЫХ БОЁВ НЕТ' : copy.title.toUpperCase()}</strong><span>{savedOnly ? 'Сохрани нужный бой звездой в «Докладах» или во вкладке Флоты → Битвы.' : copy.body}</span></div>;
 }
 
-export function ReportsView({
-  battleReports,
-  savedBattleReportIds,
-  operations,
-  command,
-  state,
-  onStateChange,
-  onToggleBattleSaved,
-  onOpenFleets,
-}: {
+export function ReportsView({ battleReports, state, onStateChange }: {
   battleReports: readonly BattleReport[];
-  savedBattleReportIds: readonly string[];
-  operations: OperationsState;
-  command: CommandState;
   state: ReportsState;
   onStateChange: (next: ReportsState) => void;
-  onToggleBattleSaved: (reportId: string, saved: boolean) => void;
-  onOpenFleets: () => void;
 }) {
+  const [{ operations, command }] = useState(readCrossDomainContext);
+  const [savedBattleReportIds, setSavedBattleReportIds] = useState<string[]>(() => readBattleHistory().savedReportIds);
   const [category, setCategory] = useState<ReportCategory>('system');
   const [filter, setFilter] = useState<ReportFilter>('all');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState('');
 
+  useEffect(() => {
+    const sync = () => setSavedBattleReportIds(readBattleHistory().savedReportIds);
+    window.addEventListener(BATTLE_HISTORY_CHANGED_EVENT, sync);
+    return () => window.removeEventListener(BATTLE_HISTORY_CHANGED_EVENT, sync);
+  }, []);
+
   const items = useMemo(() => buildReportsFeed(battleReports, operations, command), [battleReports, operations, command]);
   const counts = useMemo(() => getReportCategoryCounts(items), [items]);
   const unreadCounts = useMemo(() => getReportUnreadCounts(items, state), [items, state]);
-  const visibleItems = useMemo(
-    () => filterReportItems(items, state, { category, filter, search }, savedBattleReportIds),
-    [items, state, category, filter, search, savedBattleReportIds],
-  );
+  const visibleItems = useMemo(() => filterReportItems(items, state, { category, filter, search }, savedBattleReportIds), [items, state, category, filter, search, savedBattleReportIds]);
   const pageCount = Math.max(1, Math.ceil(visibleItems.length / PAGE_SIZE));
   const pagedItems = visibleItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const selectedItem = visibleItems.find((item) => item.id === selectedId) ?? null;
@@ -208,12 +174,8 @@ export function ReportsView({
   const selectedBattleSaved = selectedItem?.battleReportId ? savedBattleReportIds.includes(selectedItem.battleReportId) : false;
 
   useEffect(() => setPage(1), [category, filter, search]);
-  useEffect(() => {
-    if (category !== 'battle' && filter === 'saved') setFilter('all');
-  }, [category, filter]);
-  useEffect(() => {
-    if (page > pageCount) setPage(pageCount);
-  }, [page, pageCount]);
+  useEffect(() => { if (category !== 'battle' && filter === 'saved') setFilter('all'); }, [category, filter]);
+  useEffect(() => { if (page > pageCount) setPage(pageCount); }, [page, pageCount]);
   useEffect(() => {
     if (!visibleItems.length) {
       if (selectedId) setSelectedId('');
@@ -227,6 +189,19 @@ export function ReportsView({
     const index = visibleItems.findIndex((candidate) => candidate.id === item.id);
     if (index >= 0) setPage(Math.floor(index / PAGE_SIZE) + 1);
     if (!state.readIds.includes(item.id)) onStateChange(markReportRead(state, item.id));
+  };
+
+  const toggleBattleSaved = (reportId: string, saved: boolean) => {
+    const history = readBattleHistory();
+    const result = persistBattleHistory(setBattleReportSaved(history, reportId, saved));
+    setSavedBattleReportIds(result.value.savedReportIds);
+  };
+
+  const openFleets = () => {
+    const fleetButton = [...document.querySelectorAll<HTMLButtonElement>('.primary-navigation button')]
+      .find((button) => button.textContent?.replace(/\s+/g, ' ').trim() === 'Флоты');
+    fleetButton?.click();
+    window.setTimeout(() => window.dispatchEvent(new Event(FLEET_ROOT_REQUEST_EVENT)), 0);
   };
 
   const navigateSelected = (direction: -1 | 1) => {
@@ -247,16 +222,12 @@ export function ReportsView({
         <nav aria-label="Категории отчётов">
           {CATEGORY_META.map((entry) => (
             <button key={entry.key} type="button" className={category === entry.key ? 'active' : ''} onClick={() => setCategory(entry.key)}>
-              <span><ReportGlyph kind={entry.key} /></span>
-              <strong>{entry.label}</strong>
-              <b>{unreadCounts[entry.key]}/{counts[entry.key]}</b>
+              <span><ReportGlyph kind={entry.key} /></span><strong>{entry.label}</strong><b>{unreadCounts[entry.key]}/{counts[entry.key]}</b>
               {unreadCounts[entry.key] > 0 ? <i className="reports-category-unread" title={`${unreadCounts[entry.key]} непрочитанных`} /> : null}
             </button>
           ))}
         </nav>
-        <button className="reports-mark-all" type="button" disabled={!items.some((item) => !state.readIds.includes(item.id))} onClick={() => onStateChange(markAllReportsRead(state, items.map((item) => item.id)))}>
-          <span>✓</span> ОТМЕТИТЬ ВСЕ ПРОЧИТАННЫМИ
-        </button>
+        <button className="reports-mark-all" type="button" disabled={!items.some((item) => !state.readIds.includes(item.id))} onClick={() => onStateChange(markAllReportsRead(state, items.map((item) => item.id)))}><span>✓</span> ОТМЕТИТЬ ВСЕ ПРОЧИТАННЫМИ</button>
         <div className="reports-ai-note"><small>REPORTS CORE</small><strong>БЕЗ ФАЛЬШИВЫХ СОБЫТИЙ</strong><span>Доклады читают BattleHistory. Остальные каналы наполняются только из существующих игровых контуров.</span></div>
       </aside>
 
@@ -264,49 +235,21 @@ export function ReportsView({
         <header className="reports-feed-head"><div><small>REPORT CHANNEL</small><h2>{categoryLabel.toUpperCase()}</h2></div><select value={filter} onChange={(event) => setFilter(event.target.value as ReportFilter)} aria-label="Фильтр отчётов">{availableFilters.map((key) => <option key={key} value={key}>{FILTER_LABELS[key]}</option>)}</select></header>
         <label className="reports-search"><span aria-hidden="true"><SearchGlyph /></span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск в канале..." /></label>
         <div className="reports-list">
-          {pagedItems.length ? pagedItems.map((item) => (
-            <ReportListItem
-              key={item.id}
-              item={item}
-              active={item.id === selectedId}
-              read={state.readIds.includes(item.id)}
-              saved={Boolean(item.battleReportId && savedBattleReportIds.includes(item.battleReportId))}
-              onOpen={() => openItem(item)}
-            />
-          )) : <EmptyDossier category={category} savedOnly={filter === 'saved'} />}
+          {pagedItems.length ? pagedItems.map((item) => <ReportListItem key={item.id} item={item} active={item.id === selectedId} read={state.readIds.includes(item.id)} saved={Boolean(item.battleReportId && savedBattleReportIds.includes(item.battleReportId))} onOpen={() => openItem(item)} />) : <EmptyDossier category={category} savedOnly={filter === 'saved'} />}
         </div>
-        <footer className="reports-pagination">
-          <button type="button" aria-label="Предыдущая страница" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}><ActionGlyph kind="prev" /></button>
-          <span><b>{page}</b> / {pageCount}<small>{visibleItems.length} сообщений</small></span>
-          <button type="button" aria-label="Следующая страница" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}><ActionGlyph kind="next" /></button>
-        </footer>
+        <footer className="reports-pagination"><button type="button" aria-label="Предыдущая страница" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}><ActionGlyph kind="prev" /></button><span><b>{page}</b> / {pageCount}<small>{visibleItems.length} сообщений</small></span><button type="button" aria-label="Следующая страница" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}><ActionGlyph kind="next" /></button></footer>
       </section>
 
       <section className="reports-preview">
         <header className="reports-preview-head">
           <div><small>REPORT DOSSIER</small><h2>ПРОСМОТР ОТЧЁТА</h2></div>
           <div className="reports-preview-actions">
-            <button
-              type="button"
-              aria-label={selectedBattleSaved ? 'Убрать бой из сохранённых' : 'Сохранить бой'}
-              aria-pressed={selectedBattleSaved}
-              disabled={!selectedItem?.battleReportId}
-              className={selectedBattleSaved ? 'active' : ''}
-              onClick={() => selectedItem?.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)}
-            ><ActionGlyph kind="save" /></button>
-            <span />
-            <button type="button" aria-label="Предыдущий отчёт" disabled={selectedIndex <= 0} onClick={() => navigateSelected(-1)}><ActionGlyph kind="prev" /></button>
-            <button type="button" aria-label="Следующий отчёт" disabled={selectedIndex < 0 || selectedIndex >= visibleItems.length - 1} onClick={() => navigateSelected(1)}><ActionGlyph kind="next" /></button>
+            <button type="button" aria-label={selectedBattleSaved ? 'Убрать бой из сохранённых' : 'Сохранить бой'} aria-pressed={selectedBattleSaved} disabled={!selectedItem?.battleReportId} className={selectedBattleSaved ? 'active' : ''} onClick={() => selectedItem?.battleReportId && toggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)}><ActionGlyph kind="save" /></button>
+            <span /><button type="button" aria-label="Предыдущий отчёт" disabled={selectedIndex <= 0} onClick={() => navigateSelected(-1)}><ActionGlyph kind="prev" /></button><button type="button" aria-label="Следующий отчёт" disabled={selectedIndex < 0 || selectedIndex >= visibleItems.length - 1} onClick={() => navigateSelected(1)}><ActionGlyph kind="next" /></button>
           </div>
         </header>
-        <div className="reports-preview-scroll">
-          {selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} /> : <GenericDossier item={selectedItem} />) : <EmptyDossier category={category} savedOnly={filter === 'saved'} />}
-        </div>
-        {selectedItem?.action?.kind === 'open_fleets' ? (
-          <footer className="reports-preview-footer"><span>Выбери состав флота для совместной операции.</span><button type="button" onClick={onOpenFleets}>{selectedItem.action.label}</button></footer>
-        ) : selectedItem?.battleReportId ? (
-          <footer className="reports-preview-footer"><span>{selectedBattleSaved ? 'Бой находится в сохранённых.' : 'Этот бой можно сохранить и открыть позже во Флоты → Битвы.'}</span><button type="button" className={selectedBattleSaved ? 'restore' : ''} onClick={() => onToggleBattleSaved(selectedItem.battleReportId!, !selectedBattleSaved)}>{selectedBattleSaved ? 'УБРАТЬ ИЗ СОХРАНЁННЫХ' : 'СОХРАНИТЬ БОЙ'}</button></footer>
-        ) : null}
+        <div className="reports-preview-scroll">{selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} /> : <GenericDossier item={selectedItem} />) : <EmptyDossier category={category} savedOnly={filter === 'saved'} />}</div>
+        {selectedItem?.action?.kind === 'open_fleets' ? <footer className="reports-preview-footer"><span>Выбери состав флота для совместной операции.</span><button type="button" onClick={openFleets}>{selectedItem.action.label}</button></footer> : selectedItem?.battleReportId ? <footer className="reports-preview-footer"><span>{selectedBattleSaved ? 'Бой находится в сохранённых.' : 'Этот бой можно сохранить и открыть позже во Флоты → Битвы.'}</span><button type="button" className={selectedBattleSaved ? 'restore' : ''} onClick={() => toggleBattleSaved(selectedItem.battleReportId!, !selectedBattleSaved)}>{selectedBattleSaved ? 'УБРАТЬ ИЗ СОХРАНЁННЫХ' : 'СОХРАНИТЬ БОЙ'}</button></footer> : null}
       </section>
     </main>
   );
