@@ -114,7 +114,7 @@ export function RatingView({ command }: { command: CommandState }) {
 
     <footer className="rating-bottom">
       <section className="rating-my-place"><small>МОЁ МЕСТО</small>{localPlayer && localPlayerRank ? <><strong>#{localPlayerRank}</strong><span>{localPlayer.name}<em>{formatScore(getRatingScore(localPlayer, scoreKind))} · {SCORE_META.find((item) => item.id === scoreKind)?.short}</em></span><RankDelta current={localPlayer.rank} previous={localPlayer.previousRank} enabled={scoreKind === 'total'} /></> : null}</section>
-      <section className="rating-alliance-strip"><header><small>РЕЙТИНГ СОЮЗОВ · {SCORE_META.find((item) => item.id === scoreKind)?.short}</small>{localAllianceRank ? <b>Ваш союз: #{localAllianceRank}</b> : null}</header><div>{rankedAlliances.slice(0, 5).map((row, index) => <button type="button" key={row.id} onClick={() => { setMode('alliances'); setSelectedAllianceId(row.id); }}><span>#{index + 1}</span><RatingMark tag={row.tag} /><strong>{row.name}<small>{formatScore(getRatingScore(row, scoreKind))}</small></strong></button>)}</div></section>
+      <section className="rating-alliance-strip"><header><small>РЕЙТИНГ СОЮЗОВ · {SCORE_META.find((item) => item.id === scoreKind)?.short}</small>{localAllianceRank ? <b>Ваш союз: #{localAllianceRank}</b> : null}</header><div>{rankedAlliances.slice(0, 5).map((row, index) => <button type="button" key={row.id} onClick={() => { setMode('alliances'); setSearch(''); setSelectedAllianceId(row.id); }}><span>#{index + 1}</span><RatingMark tag={row.tag} /><strong>{row.name}<small>{formatScore(getRatingScore(row, scoreKind))}</small></strong></button>)}</div></section>
     </footer>
   </main>;
 }
