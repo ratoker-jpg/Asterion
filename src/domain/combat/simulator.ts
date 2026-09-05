@@ -37,8 +37,8 @@ export type CombatInput = {
 };
 
 export type SimulatorScenario = {
-  attackerFactionId: CombatFactionId;
-  defenderFactionId: CombatFactionId;
+  attackerFactionId?: CombatFactionId;
+  defenderFactionId?: CombatFactionId;
   attacker: {
     ships: CombatStackInput[];
     commanders: CombatStackInput[];
