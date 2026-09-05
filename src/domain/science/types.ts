@@ -1,29 +1,50 @@
 import type { CombatTechnologyId } from '../combat/technologies.ts';
 
-export type ScienceCategoryId = 'weapon-sciences' | 'armor-sciences' | 'maneuver-sciences';
-export type ScienceSourceStatus = 'confirmed';
+export type ScienceCategoryId = 'energy' | 'infrastructure' | 'navigation' | 'intelligence' | 'defense' | 'weapons';
+export type ScienceSourceStatus = 'stellar-current';
 
 export type ScienceCategory = {
   id: ScienceCategoryId;
   label: string;
+  shortLabel: string;
   description: string;
-  presentationOnly: true;
+};
+
+export type ScienceRequirement = {
+  scienceId: string;
+  level: number;
+};
+
+export type ScienceEffectMeta = {
+  type: string;
+  valueLabel: string;
 };
 
 export type ScienceCatalogItem = {
   id: string;
-  combatTechnologyId: CombatTechnologyId;
-  sourceScienceId: number;
+  slug: string;
   name: string;
   categoryId: ScienceCategoryId;
+  description: string;
+  maxLevel: number;
+  baseCost: {
+    metal: number;
+    crystal: number;
+    gas: number;
+  };
+  baseSeconds: number;
+  requiredLaboratoryLevel: number;
+  requirements: readonly ScienceRequirement[];
+  effects: readonly ScienceEffectMeta[];
   sourceStatus: ScienceSourceStatus;
-  position: { x: number; y: number };
-  confirmedPrerequisites: readonly string[];
   sourceNote: string;
+  combatTechnologyId?: CombatTechnologyId;
+  sourceScienceId?: number;
 };
 
 export type ScienceVisualLink = {
   from: string;
   to: string;
-  presentationOnly: true;
+  requiredLevel: number;
+  sourceBacked: true;
 };
