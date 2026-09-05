@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 
 import { COMBAT_ENTITY_BY_ID } from './domain/combat/catalog.ts';
 import type { BattleForceSnapshot, BattleReport, BattleSide, BattleStackSnapshot } from './domain/combat/report.ts';
@@ -83,6 +83,10 @@ function ReportGlyph({ kind }: { kind: ReportCategory | 'all' | 'archive' }) {
   if (kind === 'inbox') return <svg viewBox="0 0 32 32" aria-hidden="true"><rect {...common} x="4" y="7" width="24" height="18" rx="2" /><path {...common} d="m5 9 11 9L27 9" /></svg>;
   if (kind === 'archive') return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="M5 8h22v6H5V8Zm3 6h16v13H8V14Z" /><path {...common} d="M13 19h6" /></svg>;
   return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="M8 4h12l4 4v20H8V4Z" /><path {...common} d="M20 4v5h5M12 14h8M12 19h8M12 24h6" /></svg>;
+}
+
+function SearchGlyph() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.6" /><path d="m15.5 15.5 5 5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>;
 }
 
 function ActionGlyph({ kind }: { kind: 'favorite' | 'archive' | 'restore' | 'prev' | 'next' }) {
@@ -334,10 +338,6 @@ export function ReportsView({
     }
     if (!visibleItems.some((item) => item.id === selectedId)) setSelectedId(visibleItems[0].id);
   }, [visibleItems, selectedId]);
-  useEffect(() => {
-    if (!selectedItem || state.readIds.includes(selectedItem.id)) return;
-    onStateChange(markReportRead(state, selectedItem.id));
-  }, [selectedItem, state, onStateChange]);
 
   const openItem = (item: ReportItem) => {
     setSelectedId(item.id);
@@ -378,7 +378,7 @@ export function ReportsView({
 
       <section className="reports-feed">
         <header className="reports-feed-head"><div><small>REPORT CHANNEL</small><h2>{heading}</h2></div><select value={filter} onChange={(event) => setFilter(event.target.value as ReportFilter)} aria-label="Фильтр отчётов">{(Object.keys(FILTER_LABELS) as ReportFilter[]).map((key) => <option key={key} value={key}>{FILTER_LABELS[key]}</option>)}</select></header>
-        <label className="reports-search"><span aria-hidden="true">⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск отчёта..." /></label>
+        <label className="reports-search"><span aria-hidden="true"><SearchGlyph /></span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск отчёта..." /></label>
         <div className="reports-list">
           {pagedItems.length ? pagedItems.map((item) => <ReportListItem key={item.id} item={item} active={item.id === selectedId} read={state.readIds.includes(item.id)} favorite={state.favoriteIds.includes(item.id)} onOpen={() => openItem(item)} />) : <div className="reports-list-empty"><ReportGlyph kind="all" /><strong>Ничего не найдено</strong><span>Измени фильтр или поисковый запрос.</span></div>}
         </div>
