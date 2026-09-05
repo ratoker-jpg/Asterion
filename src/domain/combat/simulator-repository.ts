@@ -9,6 +9,7 @@ import {
   type SimulatorMaxRounds,
   type SimulatorScenario,
 } from './simulator.ts';
+import { normalizeCombatTechnologies } from './technologies.ts';
 import type { CombatEntityKind } from './types.ts';
 
 export const SIMULATOR_STATE_CHANGED_EVENT = 'asterion:combat-simulator-changed';
@@ -66,6 +67,8 @@ export function normalizeSimulatorScenario(value: unknown): SimulatorScenario {
   const candidate = value as {
     attackerFactionId?: unknown;
     defenderFactionId?: unknown;
+    attackerTechnologies?: unknown;
+    defenderTechnologies?: unknown;
     attacker?: { ships?: unknown; commanders?: unknown };
     defender?: { ships?: unknown; commanders?: unknown; defenses?: unknown };
     maxRounds?: unknown;
@@ -74,6 +77,8 @@ export function normalizeSimulatorScenario(value: unknown): SimulatorScenario {
   return {
     attackerFactionId: normalizeCombatFactionId(candidate.attackerFactionId),
     defenderFactionId: normalizeCombatFactionId(candidate.defenderFactionId),
+    attackerTechnologies: normalizeCombatTechnologies(candidate.attackerTechnologies),
+    defenderTechnologies: normalizeCombatTechnologies(candidate.defenderTechnologies),
     attacker: {
       ships: normalizeStacks(candidate.attacker?.ships, 'ship'),
       commanders: normalizeStacks(candidate.attacker?.commanders, 'commander'),
