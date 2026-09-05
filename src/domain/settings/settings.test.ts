@@ -35,10 +35,12 @@ test('malformed preferences migrate safely', () => {
   }), DEFAULT_PREFERENCES);
 });
 
-test('textScale clamps and snaps to supported values', () => {
+test('textScale clamps and snaps to supported values including accessibility scales', () => {
   assert.equal(normalizeTextScale(-20), 0.9);
-  assert.equal(normalizeTextScale(99), 1.3);
+  assert.equal(normalizeTextScale(99), 1.7);
   assert.equal(normalizeTextScale(1.17), 1.2);
+  assert.equal(normalizeTextScale(1.48), 1.5);
+  assert.equal(normalizeTextScale(1.68), 1.7);
   assert.equal(normalizeTextScale(Number.NaN), 1);
 });
 
@@ -50,7 +52,7 @@ test('invalid resolution falls back to canonical desktop default', () => {
 test('reset settings restores defaults and removes only the preferences key', () => {
   const storage = new MemoryStorage();
   storage.setItem(ASTERION_CAMPAIGN_KEY, JSON.stringify({ metal: 777 }));
-  persistPreferences({ ...DEFAULT_PREFERENCES, textScale: 1.3 }, storage);
+  persistPreferences({ ...DEFAULT_PREFERENCES, textScale: 1.7 }, storage);
 
   assert.deepEqual(resetPreferences(storage), DEFAULT_PREFERENCES);
   assert.equal(storage.getItem(ASTERION_PREFERENCES_KEY), null);
@@ -70,11 +72,11 @@ test('preferences persistence does not touch campaign save', () => {
 
 test('campaign reset does not destroy device preferences', () => {
   const storage = new MemoryStorage();
-  persistPreferences({ ...DEFAULT_PREFERENCES, textScale: 1.2, tooltipsEnabled: false }, storage);
+  persistPreferences({ ...DEFAULT_PREFERENCES, textScale: 1.5, tooltipsEnabled: false }, storage);
   storage.setItem(ASTERION_CAMPAIGN_KEY, JSON.stringify({ metal: 1 }));
   storage.removeItem(ASTERION_CAMPAIGN_KEY);
 
-  assert.equal(readPreferences(storage).textScale, 1.2);
+  assert.equal(readPreferences(storage).textScale, 1.5);
   assert.equal(readPreferences(storage).tooltipsEnabled, false);
 });
 
