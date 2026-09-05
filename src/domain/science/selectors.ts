@@ -28,6 +28,7 @@ export function searchScienceCatalog(query: string) {
   return SCIENCE_CATALOG.filter((item) => (
     item.name.toLocaleLowerCase('ru-RU').includes(needle)
     || item.slug.toLocaleLowerCase('ru-RU').includes(needle)
+    || item.description.toLocaleLowerCase('ru-RU').includes(needle)
     || item.categoryId.toLocaleLowerCase('ru-RU').includes(needle)
     || item.combatTechnologyId?.toLocaleLowerCase('ru-RU').includes(needle)
     || (item.sourceScienceId != null && String(item.sourceScienceId).includes(needle))

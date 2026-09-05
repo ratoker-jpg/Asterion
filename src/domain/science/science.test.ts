@@ -76,11 +76,12 @@ test('the ten combat-overlap sciences retain current Asterion Combat mappings', 
   }
 });
 
-test('science search covers Stellar names, slugs and existing combat aliases', () => {
+test('science search covers names, slugs, descriptions and existing combat aliases', () => {
   assert.equal(searchScienceCatalog('параллельные').length, 1);
   assert.equal(searchScienceCatalog('computer-systems')[0]?.name, 'Компьютерные системы');
   assert.equal(searchScienceCatalog('criticalHit')[0]?.name, 'Критический удар');
   assert.equal(searchScienceCatalog('лазерная')[0]?.name, 'Лазерная технология');
+  assert.equal(searchScienceCatalog('фундаментальная')[0]?.name, 'Физика');
 });
 
 test('science ids are unique and stable slug-derived ids', () => {
