@@ -1,20 +1,45 @@
 /* Source rebuild v2 visual correction pass after rendered QA. */
 
-/* Utility screens keep the existing 1920×1080 shell, but below the baseline Chromium's
-   safe grid alignment positions the unscaled oversized stage at the top-left before the
-   React scale transform. Center the unscaled stage explicitly only while a rebuilt utility
-   screen is active; after scaling it lands exactly inside the smaller viewport. */
+/* Utility screens replace the placeholder in normal workspace flow so the existing
+   GlobalPageScrollController can measure their real content height. */
+.workspace:has(.utility-screen-host)>.module-placeholder-v3{display:none}
+.utility-screen-host{
+  position:relative;inset:auto;width:100%;min-height:846px;height:auto;overflow:visible
+}
+.utility-view{
+  position:relative;inset:auto;min-height:846px;height:auto;overflow:visible
+}
+
+/* When a utility screen is short enough to stay on the fixed shell, keep the scaled stage
+   centered on sub-1920 viewports. Long pages are positioned by global-page-scroll.css. */
 @media (max-width:1919px){
-  html:not(.web-preview) .viewport:has(.utility-screen-host){position:relative;display:block}
-  html:not(.web-preview) .viewport:has(.utility-screen-host)>.stage{
+  html:not(.web-preview):not(.asterion-long-page) .viewport:has(.utility-screen-host){position:relative;display:block}
+  html:not(.web-preview):not(.asterion-long-page) .viewport:has(.utility-screen-host)>.stage{
     position:absolute;left:50%;top:50%;margin-left:-960px;margin-top:-540px
   }
 }
 
-/* Utility screens fully replace the workspace; hide the legacy placeholder notice
-   so no "screen is under development" status leaks through below the real UI. */
+/* The legacy prototype notice is not part of the rebuilt utility page. */
 .stage:has(.utility-screen-host) .shell-notice{visibility:hidden}
 
-/* Twelve ranking rows + header must fit the table grid instead of clipping the last
-   two rows behind the footer pagination. Keep the table as one fixed, non-scrollable block. */
-.rating-row-v2,.rating-head-v2{min-height:0}
+/* Settings follows the shared document/page scroll. Individual settings panels do not
+   own a nested vertical scrollbar anymore. */
+.settings-view-v2{min-height:846px;height:auto}
+.settings-nav-v2,.settings-content-v2{height:auto;overflow:visible}
+.settings-content-v2{overflow-x:hidden}
+.typography-preview-v2{position:static}
+
+/* Rating keeps pagination, but the page itself can now continue below the baseline when
+   twelve readable rows need more vertical room. This makes the common global scrollbar
+   available instead of clipping rows inside the fixed workspace. */
+.rating-view-v2{min-height:846px;height:auto;grid-template-rows:74px 58px auto;overflow:visible}
+.rating-panel-v2{min-height:0;height:auto;grid-template-rows:44px auto 54px;overflow:visible}
+.rating-table-v2{min-height:0;height:auto;overflow:visible}
+.rating-row-v2,.rating-head-v2{height:50px;min-height:50px}
+
+/* Science uses the same page-level scroll contract. The laboratory sidebar keeps the
+   baseline workspace height while the science catalog contributes its full natural height. */
+.science-view-v2{min-height:846px;height:auto;align-items:start;overflow:visible}
+.science-sidebar-v2{height:846px;min-height:846px;align-self:start;overflow:visible}
+.science-main-v2{min-height:846px;height:auto;grid-template-rows:76px auto auto;overflow:visible}
+.science-catalog-v2{min-height:0;height:auto;overflow:visible}
