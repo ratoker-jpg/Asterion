@@ -1,6 +1,8 @@
 import type { CommanderId } from './commanders.ts';
 import type { CombatEntityId } from './ids.ts';
 
+export const ASTERION_LOCAL_PLAYER_ID = 'player-aster';
+
 export type BattleSide = 'attacker' | 'defender';
 export type BattleWinner = BattleSide | 'draw';
 export type BattleMissionType = 'attack' | 'raid' | 'defense' | 'arena' | 'simulation';
