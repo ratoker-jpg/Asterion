@@ -1,20 +1,24 @@
 export type ReportCategory =
-  | 'battle'
-  | 'flights'
-  | 'recon'
-  | 'economy'
-  | 'construction'
-  | 'diplomacy'
   | 'system'
-  | 'inbox';
+  | 'battle'
+  | 'command'
+  | 'arena'
+  | 'flights'
+  | 'alliances'
+  | 'achievements';
 
-export type ReportFilter = 'all' | 'unread' | 'favorite';
+export type ReportFilter = 'all' | 'unread' | 'saved';
 export type ReportStatusTone = 'success' | 'danger' | 'warning' | 'info' | 'neutral';
-export type ReportSource = 'combat' | 'fixture';
+export type ReportSource = 'combat' | 'operations' | 'command';
 
 export type ReportDetail = {
   label: string;
   value: string;
+};
+
+export type ReportAction = {
+  kind: 'open_fleets';
+  label: string;
 };
 
 export type ReportItem = {
@@ -25,7 +29,7 @@ export type ReportItem = {
   title: string;
   preview: string;
   body: string;
-  timestamp: string;
+  timestamp?: string;
   statusLabel: string;
   statusTone: ReportStatusTone;
   participantNames: string[];
@@ -33,15 +37,16 @@ export type ReportItem = {
   coordinates: string[];
   details: ReportDetail[];
   battleReportId?: string;
+  operationId?: string;
+  commandOperationId?: string;
+  action?: ReportAction;
 };
 
 export type ReportsState = {
   readIds: string[];
-  favoriteIds: string[];
-  archivedIds: string[];
 };
 
-export type ReportsCategoryKey = 'all' | ReportCategory | 'archive';
+export type ReportsCategoryKey = ReportCategory;
 
 export type ReportQuery = {
   category: ReportsCategoryKey;
@@ -51,19 +56,3 @@ export type ReportQuery = {
 
 export type ReportCategoryCounts = Record<ReportsCategoryKey, number>;
 export type ReportUnreadCounts = Record<ReportsCategoryKey, number>;
-
-export type BattlePerspectiveSide = 'attacker' | 'defender';
-
-export type BattlePerspective = {
-  localSide: BattlePerspectiveSide | null;
-  leftSide: BattlePerspectiveSide;
-  rightSide: BattlePerspectiveSide;
-  leftLabel: string;
-  rightLabel: string;
-};
-
-export type BattleRewardEntry = {
-  key: 'metal' | 'minerals' | 'gas' | 'experience' | 'debris';
-  label: string;
-  value: number;
-};
