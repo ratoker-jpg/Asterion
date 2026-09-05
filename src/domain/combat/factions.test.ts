@@ -176,7 +176,7 @@ test('combat input receives selected race names and technology levels', () => {
     attackerFactionId: 'synod' as const,
     defenderFactionId: 'veyra' as const,
     attackerTechnologies: normalizeCombatTechnologies({ ionScience: 5 }),
-    defenderTechnologies: normalizeCombatTechnologies({ shipDefense: 8 }),
+    defenderTechnologies: normalizeCombatTechnologies({ shipArmor: 8 }),
   };
   const input = scenarioToCombatInput(mixed, {
     scenarioId: 'race-test',
@@ -191,5 +191,5 @@ test('combat input receives selected race names and technology levels', () => {
   assert.equal(input.attacker.participant.race, 'Илары');
   assert.equal(input.defender.participant.race, 'Рой');
   assert.equal(input.attackerTechnologies?.ionScience, 5);
-  assert.equal(input.defenderTechnologies?.shipDefense, 8);
+  assert.equal(input.defenderTechnologies?.shipArmor, 8);
 });
