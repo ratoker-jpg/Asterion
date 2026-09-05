@@ -8,6 +8,7 @@ import { PrototypeResetController } from './PrototypeResetController';
 import { RepairWorkshopPortal } from './RepairWorkshopPortal';
 import { ShipInfoController } from './ShipInfoController';
 import { DefenseInfoController } from './DefenseInfoController';
+import { UtilityScreensPortal } from './UtilityScreensPortal';
 import './styles.css';
 import './universe-nav.css';
 import './universe-polish-v2.css';
@@ -24,6 +25,10 @@ import './repair-workshop-fixed-layout.css';
 import './global-page-scroll.css';
 import './fleet-ui-standard.css';
 import './simulator-races.css';
+import './typography.css';
+import './settings.css';
+import './rating.css';
+import './science.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
 
@@ -56,6 +61,7 @@ createRoot(document.getElementById('root')!).render(
     <PrototypeResetController />
     <GlobalPageScrollController />
     <FleetWorkspacePortal />
+    <UtilityScreensPortal />
     <RepairWorkshopPortal />
     <ShipInfoController />
     <DefenseInfoController />
