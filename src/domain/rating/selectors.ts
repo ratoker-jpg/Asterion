@@ -7,7 +7,14 @@ import {
   RATING_PLAYER_FIXTURES,
   RATING_SEASON_FOUNDATION,
 } from './fixtures.ts';
-import type { AllianceRatingRow, PlayerRatingRow, RatingFoundation, RatingSort } from './types.ts';
+import type {
+  AllianceRatingRow,
+  PlayerRatingRow,
+  RatingFoundation,
+  RatingScoreKind,
+  RatingScores,
+  RatingSort,
+} from './types.ts';
 
 const RELATION_IDS = {
   aurora: 'relation-aurora',
@@ -19,6 +26,7 @@ const RELATION_IDS = {
 
 type RelationKey = keyof typeof RELATION_IDS;
 type AllianceLookupKey = RelationKey | 'local';
+type RatingRow = PlayerRatingRow | AllianceRatingRow;
 
 function findRelation(command: CommandState, key: RelationKey): DiplomaticRelation {
   const id = RELATION_IDS[key];
@@ -33,6 +41,15 @@ function resolveAllianceIdentity(command: CommandState, key: AllianceLookupKey) 
   return { name: relation.allianceName, tag: relation.tag };
 }
 
+function cloneScores(scores: RatingScores): RatingScores {
+  return { resource: scores.resource, combat: scores.combat, achievement: scores.achievement };
+}
+
+export function getRatingScore(row: RatingRow, kind: RatingScoreKind): number {
+  if (kind === 'total') return row.scores.resource + row.scores.combat;
+  return row.scores[kind];
+}
+
 export function buildRatingFoundation(command: CommandState): RatingFoundation {
   const fixturePlayers: PlayerRatingRow[] = RATING_PLAYER_FIXTURES.map((fixture) => ({
     id: fixture.id,
@@ -41,7 +58,7 @@ export function buildRatingFoundation(command: CommandState): RatingFoundation {
     sector: fixture.sector,
     rank: fixture.rank,
     previousRank: fixture.previousRank,
-    score: fixture.score,
+    scores: cloneScores(fixture.scores),
     isLocal: false,
     dataTruth: 'deterministic-local-fixture',
   }));
@@ -53,7 +70,7 @@ export function buildRatingFoundation(command: CommandState): RatingFoundation {
     sector: LOCAL_PLAYER_FIXTURE.sector,
     rank: LOCAL_PLAYER_FIXTURE.rank,
     previousRank: LOCAL_PLAYER_FIXTURE.previousRank,
-    score: LOCAL_PLAYER_FIXTURE.score,
+    scores: cloneScores(LOCAL_PLAYER_FIXTURE.scores),
     isLocal: true,
     dataTruth: 'deterministic-local-fixture',
   };
@@ -66,7 +83,7 @@ export function buildRatingFoundation(command: CommandState): RatingFoundation {
       members: fixture.members,
       rank: fixture.rank,
       previousRank: fixture.previousRank,
-      score: fixture.score,
+      scores: cloneScores(fixture.scores),
       isLocal: false,
       dataTruth: 'deterministic-local-fixture',
     };
@@ -79,7 +96,7 @@ export function buildRatingFoundation(command: CommandState): RatingFoundation {
     members: command.members.length,
     rank: LOCAL_ALLIANCE_RATING_FIXTURE.rank,
     previousRank: LOCAL_ALLIANCE_RATING_FIXTURE.previousRank,
-    score: LOCAL_ALLIANCE_RATING_FIXTURE.score,
+    scores: cloneScores(LOCAL_ALLIANCE_RATING_FIXTURE.scores),
     isLocal: true,
     dataTruth: 'deterministic-local-fixture',
   };
@@ -87,8 +104,8 @@ export function buildRatingFoundation(command: CommandState): RatingFoundation {
   return {
     provider: 'deterministic-local-fixture',
     season: { ...RATING_SEASON_FOUNDATION },
-    players: sortPlayerRows([...fixturePlayers, localPlayer], 'rank'),
-    alliances: sortAllianceRows([...fixtureAlliances, localAlliance], 'rank'),
+    players: sortPlayerRows([...fixturePlayers, localPlayer], 'rank', 'total'),
+    alliances: sortAllianceRows([...fixtureAlliances, localAlliance], 'rank', 'total'),
   };
 }
 
@@ -110,16 +127,24 @@ export function searchAllianceRows(rows: readonly AllianceRatingRow[], query: st
     .some((value) => value.toLocaleLowerCase('ru-RU').includes(needle)));
 }
 
-export function sortPlayerRows(rows: readonly PlayerRatingRow[], sort: RatingSort) {
-  return [...rows].sort((a, b) => sort === 'score'
-    ? b.score - a.score || a.rank - b.rank
-    : a.rank - b.rank || b.score - a.score);
+export function sortPlayerRows(rows: readonly PlayerRatingRow[], sort: RatingSort, kind: RatingScoreKind = 'total') {
+  return [...rows].sort((a, b) => {
+    if (sort === 'rank' && kind === 'total') return a.rank - b.rank || getRatingScore(b, kind) - getRatingScore(a, kind);
+    return getRatingScore(b, kind) - getRatingScore(a, kind) || a.rank - b.rank;
+  });
 }
 
-export function sortAllianceRows(rows: readonly AllianceRatingRow[], sort: RatingSort) {
-  return [...rows].sort((a, b) => sort === 'score'
-    ? b.score - a.score || a.rank - b.rank
-    : a.rank - b.rank || b.score - a.score);
+export function sortAllianceRows(rows: readonly AllianceRatingRow[], sort: RatingSort, kind: RatingScoreKind = 'total') {
+  return [...rows].sort((a, b) => {
+    if (sort === 'rank' && kind === 'total') return a.rank - b.rank || getRatingScore(b, kind) - getRatingScore(a, kind);
+    return getRatingScore(b, kind) - getRatingScore(a, kind) || a.rank - b.rank;
+  });
+}
+
+export function getDisplayedRank<T extends RatingRow>(rows: readonly T[], rowId: string, kind: RatingScoreKind): number | null {
+  const sorted = [...rows].sort((a, b) => getRatingScore(b, kind) - getRatingScore(a, kind) || a.rank - b.rank);
+  const index = sorted.findIndex((row) => row.id === rowId);
+  return index < 0 ? null : index + 1;
 }
 
 export function getRankDelta(currentRank: number, previousRank: number) {
