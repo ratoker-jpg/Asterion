@@ -35,4 +35,5 @@ export type DesktopDisplayState = {
 export type AsterionDesktopBridge = {
   getDisplayState: () => Promise<DesktopDisplayState>;
   setDisplay: (request: DesktopDisplayRequest) => Promise<DesktopDisplayState>;
+  onDisplayState?: (listener: (state: DesktopDisplayState) => void) => () => void;
 };
