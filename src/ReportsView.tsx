@@ -1,12 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { BattleReportDetailBody } from './BattleReportsView';
-import {
-  BATTLE_HISTORY_CHANGED_EVENT,
-  persistBattleHistory,
-  readBattleHistory,
-  setBattleReportSaved,
-} from './domain/combat/battle-repository.ts';
 import type { BattleReport } from './domain/combat/report.ts';
 import type { CommandState } from './domain/command/types.ts';
 import type { OperationsState } from './domain/operations/types.ts';
@@ -132,26 +126,21 @@ function EmptyDossier({ category, savedOnly }: { category: ReportCategory; saved
   return <div className="reports-empty-dossier"><ReportGlyph kind={category} /><strong>{savedOnly ? 'СОХРАНЁННЫХ БОЁВ НЕТ' : copy.title.toUpperCase()}</strong><span>{savedOnly ? 'Сохрани нужный бой звездой в «Докладах» или во вкладке Флоты → Битвы.' : copy.body}</span></div>;
 }
 
-export function ReportsView({ battleReports, operations, command, state, onStateChange, onOpenFleets }: {
+export function ReportsView({ battleReports, savedBattleReportIds, operations, command, state, onStateChange, onToggleBattleSaved, onOpenFleets }: {
   battleReports: readonly BattleReport[];
+  savedBattleReportIds: readonly string[];
   operations: OperationsState;
   command: CommandState;
   state: ReportsState;
   onStateChange: (next: ReportsState) => void;
+  onToggleBattleSaved: (reportId: string, saved: boolean) => void;
   onOpenFleets: () => void;
 }) {
-  const [savedBattleReportIds, setSavedBattleReportIds] = useState<string[]>(() => readBattleHistory().savedReportIds);
   const [category, setCategory] = useState<ReportCategory>('system');
   const [filter, setFilter] = useState<ReportFilter>('all');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState('');
-
-  useEffect(() => {
-    const sync = () => setSavedBattleReportIds(readBattleHistory().savedReportIds);
-    window.addEventListener(BATTLE_HISTORY_CHANGED_EVENT, sync);
-    return () => window.removeEventListener(BATTLE_HISTORY_CHANGED_EVENT, sync);
-  }, []);
 
   const items = useMemo(() => buildReportsFeed(battleReports, operations, command), [battleReports, operations, command]);
   const counts = useMemo(() => getReportCategoryCounts(items), [items]);
@@ -179,12 +168,6 @@ export function ReportsView({ battleReports, operations, command, state, onState
     const index = visibleItems.findIndex((candidate) => candidate.id === item.id);
     if (index >= 0) setPage(Math.floor(index / PAGE_SIZE) + 1);
     if (!state.readIds.includes(item.id)) onStateChange(markReportRead(state, item.id));
-  };
-
-  const toggleBattleSaved = (reportId: string, saved: boolean) => {
-    const history = readBattleHistory();
-    const result = persistBattleHistory(setBattleReportSaved(history, reportId, saved));
-    setSavedBattleReportIds(result.value.savedReportIds);
   };
 
   const navigateSelected = (direction: -1 | 1) => {
@@ -227,12 +210,12 @@ export function ReportsView({ battleReports, operations, command, state, onState
         <header className="reports-preview-head">
           <div><small>REPORT DOSSIER</small><h2>ПРОСМОТР ОТЧЁТА</h2></div>
           <div className="reports-preview-actions">
-            <button type="button" aria-label={selectedBattleSaved ? 'Убрать бой из сохранённых' : 'Сохранить бой'} aria-pressed={selectedBattleSaved} disabled={!selectedItem?.battleReportId} className={selectedBattleSaved ? 'active' : ''} onClick={() => selectedItem?.battleReportId && toggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)}><ActionGlyph kind="save" /></button>
+            <button type="button" aria-label={selectedBattleSaved ? 'Убрать бой из сохранённых' : 'Сохранить бой'} aria-pressed={selectedBattleSaved} disabled={!selectedItem?.battleReportId} className={selectedBattleSaved ? 'active' : ''} onClick={() => selectedItem?.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)}><ActionGlyph kind="save" /></button>
             <span /><button type="button" aria-label="Предыдущий отчёт" disabled={selectedIndex <= 0} onClick={() => navigateSelected(-1)}><ActionGlyph kind="prev" /></button><button type="button" aria-label="Следующий отчёт" disabled={selectedIndex < 0 || selectedIndex >= visibleItems.length - 1} onClick={() => navigateSelected(1)}><ActionGlyph kind="next" /></button>
           </div>
         </header>
         <div className="reports-preview-scroll">{selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} /> : <GenericDossier item={selectedItem} />) : <EmptyDossier category={category} savedOnly={filter === 'saved'} />}</div>
-        {selectedItem?.action?.kind === 'open_fleets' ? <footer className="reports-preview-footer"><span>Выбери состав флота для совместной операции.</span><button type="button" onClick={onOpenFleets}>{selectedItem.action.label}</button></footer> : selectedItem?.battleReportId ? <footer className="reports-preview-footer"><span>{selectedBattleSaved ? 'Бой находится в сохранённых.' : 'Этот бой можно сохранить и открыть позже во Флоты → Битвы.'}</span><button type="button" className={selectedBattleSaved ? 'restore' : ''} onClick={() => toggleBattleSaved(selectedItem.battleReportId!, !selectedBattleSaved)}>{selectedBattleSaved ? 'УБРАТЬ ИЗ СОХРАНЁННЫХ' : 'СОХРАНИТЬ БОЙ'}</button></footer> : null}
+        {selectedItem?.action?.kind === 'open_fleets' ? <footer className="reports-preview-footer"><span>Выбери состав флота для совместной операции.</span><button type="button" onClick={onOpenFleets}>{selectedItem.action.label}</button></footer> : selectedItem?.battleReportId ? <footer className="reports-preview-footer"><span>{selectedBattleSaved ? 'Бой находится в сохранённых.' : 'Этот бой можно сохранить и открыть позже во Флоты → Битвы.'}</span><button type="button" className={selectedBattleSaved ? 'restore' : ''} onClick={() => onToggleBattleSaved(selectedItem.battleReportId!, !selectedBattleSaved)}>{selectedBattleSaved ? 'УБРАТЬ ИЗ СОХРАНЁННЫХ' : 'СОХРАНИТЬ БОЙ'}</button></footer> : null}
       </section>
     </main>
   );
