@@ -8,6 +8,11 @@ import {
 import type { CombatEntityId } from './ids.ts';
 import type { CombatPriorityState } from './priority.ts';
 import type { BattleParticipant } from './report.ts';
+import {
+  createDefaultCombatTechnologies,
+  normalizeCombatTechnologies,
+  type CombatTechnologyLevels,
+} from './technologies.ts';
 import type { CombatEntityKind } from './types.ts';
 
 export const SIMULATOR_POPULATION_LIMIT = 35_000;
@@ -34,11 +39,15 @@ export type CombatInput = {
   maxRounds: SimulatorMaxRounds;
   attackerPriority: CommanderId[];
   defenderPriority: CommanderId[];
+  attackerTechnologies?: CombatTechnologyLevels;
+  defenderTechnologies?: CombatTechnologyLevels;
 };
 
 export type SimulatorScenario = {
   attackerFactionId?: CombatFactionId;
   defenderFactionId?: CombatFactionId;
+  attackerTechnologies?: CombatTechnologyLevels;
+  defenderTechnologies?: CombatTechnologyLevels;
   attacker: {
     ships: CombatStackInput[];
     commanders: CombatStackInput[];
@@ -78,6 +87,8 @@ export function createEmptySimulatorScenario(): SimulatorScenario {
   return {
     attackerFactionId: DEFAULT_COMBAT_FACTION_ID,
     defenderFactionId: DEFAULT_COMBAT_FACTION_ID,
+    attackerTechnologies: createDefaultCombatTechnologies(),
+    defenderTechnologies: createDefaultCombatTechnologies(),
     attacker: { ships: [], commanders: [] },
     defender: { ships: [], commanders: [], defenses: [] },
     maxRounds: 8,
@@ -137,6 +148,8 @@ export function normalizeCombatInput(input: CombatInput): CombatInput {
     },
     attackerPriority: [...input.attackerPriority],
     defenderPriority: [...input.defenderPriority],
+    attackerTechnologies: normalizeCombatTechnologies(input.attackerTechnologies),
+    defenderTechnologies: normalizeCombatTechnologies(input.defenderTechnologies),
   };
 }
 
@@ -206,11 +219,12 @@ export function validateCombatInput(input: CombatInput): CombatValidationResult 
 
   validateStackCollection(input.attacker.ships, 'ship', 'attacker.ships', errors);
   validateStackCollection(input.attacker.commanders, 'commander', 'attacker.commanders', errors);
+  validateStackCollection(input.attacker.defenses, 'defense', 'attacker.defenses', errors);
   validateStackCollection(input.defender.ships, 'ship', 'defender.ships', errors);
   validateStackCollection(input.defender.commanders, 'commander', 'defender.commanders', errors);
   validateStackCollection(input.defender.defenses, 'defense', 'defender.defenses', errors);
 
-  if ((input.attacker.defenses ?? []).some((stack) => stack.count > 0)) {
+  if ((input.attacker.defenses ?? []).length > 0) {
     errors.push({
       code: 'attacker-defense',
       path: 'attacker.defenses',
@@ -304,5 +318,7 @@ export function scenarioToCombatInput(
     maxRounds: scenario.maxRounds,
     attackerPriority: [...context.priority.attack],
     defenderPriority: [...context.priority.defense],
+    attackerTechnologies: normalizeCombatTechnologies(scenario.attackerTechnologies),
+    defenderTechnologies: normalizeCombatTechnologies(scenario.defenderTechnologies),
   };
 }
