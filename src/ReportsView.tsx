@@ -1,17 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { BattleReportDetailBody } from './BattleReportsView';
-import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
 import {
   BATTLE_HISTORY_CHANGED_EVENT,
   persistBattleHistory,
   readBattleHistory,
   setBattleReportSaved,
 } from './domain/combat/battle-repository.ts';
-import { ASTERION_SAVE_KEY } from './domain/combat/priority.ts';
 import type { BattleReport } from './domain/combat/report.ts';
-import { migrateCommandState } from './domain/command/repository.ts';
-import { migrateOperationsState } from './domain/operations/repository.ts';
+import type { CommandState } from './domain/command/types.ts';
+import type { OperationsState } from './domain/operations/types.ts';
 import {
   buildReportsFeed,
   filterReportItems,
@@ -50,16 +48,6 @@ const EMPTY_COPY: Record<ReportCategory, { title: string; body: string }> = {
   alliances: { title: 'Союзных приглашений пока нет', body: 'Здесь появляются доступные совместные операции союза. Из приглашения можно сразу перейти к выбору флота.' },
   achievements: { title: 'Достижения — пока пусто', body: 'Этот канал зарезервирован под будущую систему достижений.' },
 };
-
-function readCrossDomainContext() {
-  try {
-    const raw = typeof window !== 'undefined' ? window.localStorage.getItem(ASTERION_SAVE_KEY) : null;
-    const parsed = raw ? JSON.parse(raw) as { operations?: unknown; command?: unknown } : {};
-    return { operations: migrateOperationsState(parsed.operations), command: migrateCommandState(parsed.command) };
-  } catch {
-    return { operations: migrateOperationsState(undefined), command: migrateCommandState(undefined) };
-  }
-}
 
 function formatDate(timestamp?: string) {
   if (!timestamp) return 'ТЕКУЩЕЕ';
@@ -144,12 +132,14 @@ function EmptyDossier({ category, savedOnly }: { category: ReportCategory; saved
   return <div className="reports-empty-dossier"><ReportGlyph kind={category} /><strong>{savedOnly ? 'СОХРАНЁННЫХ БОЁВ НЕТ' : copy.title.toUpperCase()}</strong><span>{savedOnly ? 'Сохрани нужный бой звездой в «Докладах» или во вкладке Флоты → Битвы.' : copy.body}</span></div>;
 }
 
-export function ReportsView({ battleReports, state, onStateChange }: {
+export function ReportsView({ battleReports, operations, command, state, onStateChange, onOpenFleets }: {
   battleReports: readonly BattleReport[];
+  operations: OperationsState;
+  command: CommandState;
   state: ReportsState;
   onStateChange: (next: ReportsState) => void;
+  onOpenFleets: () => void;
 }) {
-  const [{ operations, command }] = useState(readCrossDomainContext);
   const [savedBattleReportIds, setSavedBattleReportIds] = useState<string[]>(() => readBattleHistory().savedReportIds);
   const [category, setCategory] = useState<ReportCategory>('system');
   const [filter, setFilter] = useState<ReportFilter>('all');
@@ -197,13 +187,6 @@ export function ReportsView({ battleReports, state, onStateChange }: {
     setSavedBattleReportIds(result.value.savedReportIds);
   };
 
-  const openFleets = () => {
-    const fleetButton = [...document.querySelectorAll<HTMLButtonElement>('.primary-navigation button')]
-      .find((button) => button.textContent?.replace(/\s+/g, ' ').trim() === 'Флоты');
-    fleetButton?.click();
-    window.setTimeout(() => window.dispatchEvent(new Event(FLEET_ROOT_REQUEST_EVENT)), 0);
-  };
-
   const navigateSelected = (direction: -1 | 1) => {
     if (!visibleItems.length) return;
     const currentIndex = Math.max(0, visibleItems.findIndex((item) => item.id === selectedId));
@@ -249,7 +232,7 @@ export function ReportsView({ battleReports, state, onStateChange }: {
           </div>
         </header>
         <div className="reports-preview-scroll">{selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} /> : <GenericDossier item={selectedItem} />) : <EmptyDossier category={category} savedOnly={filter === 'saved'} />}</div>
-        {selectedItem?.action?.kind === 'open_fleets' ? <footer className="reports-preview-footer"><span>Выбери состав флота для совместной операции.</span><button type="button" onClick={openFleets}>{selectedItem.action.label}</button></footer> : selectedItem?.battleReportId ? <footer className="reports-preview-footer"><span>{selectedBattleSaved ? 'Бой находится в сохранённых.' : 'Этот бой можно сохранить и открыть позже во Флоты → Битвы.'}</span><button type="button" className={selectedBattleSaved ? 'restore' : ''} onClick={() => toggleBattleSaved(selectedItem.battleReportId!, !selectedBattleSaved)}>{selectedBattleSaved ? 'УБРАТЬ ИЗ СОХРАНЁННЫХ' : 'СОХРАНИТЬ БОЙ'}</button></footer> : null}
+        {selectedItem?.action?.kind === 'open_fleets' ? <footer className="reports-preview-footer"><span>Выбери состав флота для совместной операции.</span><button type="button" onClick={onOpenFleets}>{selectedItem.action.label}</button></footer> : selectedItem?.battleReportId ? <footer className="reports-preview-footer"><span>{selectedBattleSaved ? 'Бой находится в сохранённых.' : 'Этот бой можно сохранить и открыть позже во Флоты → Битвы.'}</span><button type="button" className={selectedBattleSaved ? 'restore' : ''} onClick={() => toggleBattleSaved(selectedItem.battleReportId!, !selectedBattleSaved)}>{selectedBattleSaved ? 'УБРАТЬ ИЗ СОХРАНЁННЫХ' : 'СОХРАНИТЬ БОЙ'}</button></footer> : null}
       </section>
     </main>
   );
