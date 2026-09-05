@@ -1,57 +1,63 @@
-# Rating foundation v1
+# Rating foundation v1 — Nemexia-backed correction
 
-## Scope
+## Source pattern
 
-`Рейтинг` replaces the utility placeholder with a local visual/read-model foundation. The supplied Asterion and Nemexia screenshots are composition/interaction references: the score-type icon semantics and sortable score dimensions are reused, while names and numeric values remain local Asterion fixtures until a canonical backend exists.
+The rating screen was rechecked against the saved Nemexia ranking page in `ratoker-jpg/Nemexia_auto_v2/saved_pages`:
 
-V1 exposes:
+- `saved_pages/page_2026-09-05_22-54-33.html` — Players selected.
+- `saved_pages/page_2026-09-05_22-54-46.html` — Alliances selected.
+- original recorded page: `https://game.ares.nemexia.com/ranking.php`.
 
-- Players.
-- Alliances.
+The source confirms the core interaction pattern used by Asterion:
+
+- Players / Alliances top-level modes.
 - Search.
-- Four score dimensions with matching semantic glyphs.
-- Clickable score headers / active score filter.
-- Row selection and dossier.
-- Local player highlighting / `ВЫ`.
-- Local player's place strip.
-- Alliance summary strip.
-- Global workspace scrolling only; the rating table has no nested scrollbar.
+- “Show my position”.
+- A central ranking table.
+- Sortable score columns.
+- Achievement points.
+- Total points.
+- Resource points.
+- Battle points.
+
+Nemexia also exposes Championships and Hall of Fame. Asterion shows those labels as unavailable reference modes only; no fake tournament/hall data is created in this foundation.
 
 ## Score contract
 
-The read-model has three stored score components:
+Asterion keeps three stored fixture components:
 
-- `resource` — resource score.
-- `combat` — combat score.
-- `achievement` — achievement score.
+- `resource`
+- `combat`
+- `achievement`
 
-`total` is derived, never stored independently:
+`total` is derived as:
 
 `total = resource + combat`
 
-Achievement score is deliberately excluded from total. This invariant is covered by tests.
+Achievement score remains separate. Selecting any score header reorders the visible table by that metric.
 
-The exact earning rules are not defined in this PR. The current values remain deterministic fixtures and must not be interpreted as a live scoring formula.
+## Visual correction
 
-## Ranking behavior
+The previous heavy three-column dashboard is replaced with the ranking-first layout seen in Nemexia:
 
-Selecting Total / Resource / Combat / Achievement reorders the table by that dimension. Displayed place for non-total dimensions is derived from the selected score ordering. Historical movement (`previousRank`) is only meaningful for the existing total fixture; other score dimensions show no fabricated movement.
-
-The table shows all four score columns at once, matching the reference pattern where the same score glyphs are used both in the personal score summary and in ranking column controls.
+- slim mode tabs;
+- search and “my position” controls;
+- one large central table;
+- score icons directly in sortable headers;
+- local player/alliance highlight;
+- compact selected-row summary below the table;
+- no nested table scrollbar.
 
 ## Data truth
 
-There is no canonical multiplayer leaderboard backend or server season runtime in current Asterion. `src/domain/rating/` therefore identifies every rating row and the provider as `deterministic-local-fixture`.
+The UI semantics come from the saved Nemexia page, but the numeric Asterion leaderboard is still `deterministic-local-fixture` because there is no canonical multiplayer leaderboard backend or scoring runtime yet.
 
-The local player ID reuses `ASTERION_LOCAL_PLAYER_ID` from Combat. The local alliance name, tag and current member count are projected from current `CommandState`; non-local identities reuse current Command diplomacy names/tags where available.
-
-## Scroll ownership
-
-The previous implementation put `overflow:auto` on `.rating-table-body`, creating an inner scrollbar. The rating workspace now owns vertical scrolling through `.workspace--rating`; table body and dossiers grow naturally with the screen content.
+The local player continues to reuse `ASTERION_LOCAL_PLAYER_ID`. The local alliance identity continues to project from current `CommandState`.
 
 ## Deferred
 
 - Real score earning rules.
 - Multiplayer/server leaderboard.
-- Real season lifecycle/countdown.
-- Server-sourced player profiles.
+- Season lifecycle/runtime.
+- Championships.
+- Hall of Fame.
