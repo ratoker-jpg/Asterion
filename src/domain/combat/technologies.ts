@@ -1,15 +1,16 @@
 import type { CombatEntityDefinition } from './types.ts';
 
 export const COMBAT_TECHNOLOGY_IDS = [
-  'shipDefense',
   'laserScience',
   'ionScience',
   'plasmaScience',
+  'piercingAttack',
   'lightArmor',
   'mediumArmor',
   'heavyArmor',
-  'forceAttack',
-  'promptDefense',
+  'shipArmor',
+  'maneuverDefense',
+  'criticalHit',
 ] as const;
 
 export type CombatTechnologyId = (typeof COMBAT_TECHNOLOGY_IDS)[number];
@@ -18,96 +19,100 @@ export type CombatTechnologyLevels = Record<CombatTechnologyId, number>;
 
 export type CombatTechnologyDefinition = {
   id: CombatTechnologyId;
+  sourceScienceId: number;
   name: string;
   maxLevel: number;
   effect: string;
 };
 
+const UNKNOWN_SCIENCE_EFFECT = 'Поле подтверждено сохранённым симулятором Nemexia. Точный боевой коэффициент в доступном исходнике не найден.';
+const TECHNICAL_EDITOR_LIMIT = Number.MAX_SAFE_INTEGER;
+
 /**
- * Mechanics below are restricted to deterministic combat sciences whose effects
- * are explicitly documented by the Nemexia help section. We intentionally do
- * not apply Critical damage: its documented effect is probabilistic and Resolver
- * v1 has no RNG contract yet.
+ * Exact science inputs present in the saved Nemexia fleet simulator.
+ * The page exposes science names and ids, but does not expose their maximum levels
+ * or battle coefficients. Those values must not be inferred from asset names or UI.
  */
 export const COMBAT_TECHNOLOGIES: readonly CombatTechnologyDefinition[] = [
-  { id: 'shipDefense', name: 'Защита кораблей', maxLevel: 20, effect: '+10% жизни кораблей за уровень' },
-  { id: 'laserScience', name: 'Лазерная наука', maxLevel: 15, effect: '+15% лазерной атаки за уровень' },
-  { id: 'ionScience', name: 'Ионная наука', maxLevel: 15, effect: '+15% ионной атаки за уровень' },
-  { id: 'plasmaScience', name: 'Плазменная наука', maxLevel: 15, effect: '+15% плазменной атаки за уровень' },
-  { id: 'lightArmor', name: 'Лёгкая броня', maxLevel: 10, effect: '+1 п.п. брони за уровень' },
-  { id: 'mediumArmor', name: 'Средняя броня', maxLevel: 10, effect: '+2 п.п. брони за уровень' },
-  { id: 'heavyArmor', name: 'Тяжёлая броня', maxLevel: 10, effect: '+3 п.п. брони за уровень' },
-  { id: 'forceAttack', name: 'Форсированная атака', maxLevel: 10, effect: '+5% атаки кораблей за уровень' },
-  { id: 'promptDefense', name: 'Форсированная защита', maxLevel: 10, effect: '+5% жизни кораблей за уровень' },
+  { id: 'laserScience', sourceScienceId: 10, name: 'Лазерная наука', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT },
+  { id: 'ionScience', sourceScienceId: 11, name: 'Ионная наука', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT },
+  { id: 'plasmaScience', sourceScienceId: 12, name: 'Плазменная наука', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT },
+  { id: 'piercingAttack', sourceScienceId: 18, name: 'Пробивающая атака', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT },
+  { id: 'lightArmor', sourceScienceId: 21, name: 'Лёгкая броня', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT },
+  { id: 'mediumArmor', sourceScienceId: 22, name: 'Средняя броня', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT },
+  { id: 'heavyArmor', sourceScienceId: 23, name: 'Тяжёлая броня', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT },
+  { id: 'shipArmor', sourceScienceId: 7, name: 'Броня кораблей', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT },
+  { id: 'maneuverDefense', sourceScienceId: 19, name: 'Маневренная защита', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT },
+  { id: 'criticalHit', sourceScienceId: 20, name: 'Критический удар', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT },
 ];
 
 const TECHNOLOGY_BY_ID = new Map(COMBAT_TECHNOLOGIES.map((technology) => [technology.id, technology]));
 
 export function createDefaultCombatTechnologies(): CombatTechnologyLevels {
   return {
-    shipDefense: 0,
     laserScience: 0,
     ionScience: 0,
     plasmaScience: 0,
+    piercingAttack: 0,
     lightArmor: 0,
     mediumArmor: 0,
     heavyArmor: 0,
-    forceAttack: 0,
-    promptDefense: 0,
+    shipArmor: 0,
+    maneuverDefense: 0,
+    criticalHit: 0,
   };
 }
 
 export function normalizeTechnologyLevel(id: CombatTechnologyId, value: unknown) {
-  const max = TECHNOLOGY_BY_ID.get(id)?.maxLevel ?? 0;
+  const max = TECHNOLOGY_BY_ID.get(id)?.maxLevel ?? TECHNICAL_EDITOR_LIMIT;
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
   return Math.min(max, Math.max(0, Math.floor(value)));
 }
 
 export function normalizeCombatTechnologies(value: unknown): CombatTechnologyLevels {
-  const candidate = value && typeof value === 'object' ? value as Partial<Record<CombatTechnologyId, unknown>> : {};
+  const candidate = value && typeof value === 'object'
+    ? value as Partial<Record<CombatTechnologyId, unknown>> & {
+      shipDefense?: unknown;
+      forceAttack?: unknown;
+      promptDefense?: unknown;
+    }
+    : {};
   const result = createDefaultCombatTechnologies();
   COMBAT_TECHNOLOGY_IDS.forEach((id) => {
-    result[id] = normalizeTechnologyLevel(id, candidate[id]);
+    const legacyValue = id === 'shipArmor'
+      ? candidate.shipDefense
+      : id === 'piercingAttack'
+        ? candidate.forceAttack
+        : id === 'maneuverDefense'
+          ? candidate.promptDefense
+          : undefined;
+    result[id] = normalizeTechnologyLevel(id, candidate[id] ?? legacyValue);
   });
   return result;
 }
 
-export function getWeaponScienceBonus(entity: Pick<CombatEntityDefinition, 'combat'>, levels: CombatTechnologyLevels) {
-  const weapon = entity.combat.weaponType.toLocaleLowerCase('ru-RU');
-  if (weapon.includes('лазер')) return levels.laserScience * 0.15;
-  if (weapon.includes('ион')) return levels.ionScience * 0.15;
-  if (weapon.includes('плазм')) return levels.plasmaScience * 0.15;
-  return 0;
-}
-
-export function getArmorScienceBonus(entity: Pick<CombatEntityDefinition, 'combat'>, levels: CombatTechnologyLevels) {
-  const armor = entity.combat.armorType.toLocaleLowerCase('ru-RU');
-  if (armor.includes('легк')) return levels.lightArmor * 1;
-  if (armor.includes('сред')) return levels.mediumArmor * 2;
-  if (armor.includes('тяж')) return levels.heavyArmor * 3;
-  return 0;
-}
-
+/**
+ * The exact battle coefficients for these sciences were not found in the saved
+ * Nemexia simulator source. Resolver v1 therefore keeps them neutral rather than
+ * inventing balance values. The editor still stores their levels for future use.
+ */
 export function getTechnologyAttackMultiplier(
-  entity: Pick<CombatEntityDefinition, 'kind' | 'combat'>,
-  levels: CombatTechnologyLevels,
+  _entity: Pick<CombatEntityDefinition, 'kind' | 'combat'>,
+  _levels: CombatTechnologyLevels,
 ) {
-  const weaponBonus = getWeaponScienceBonus(entity, levels);
-  const forceAttackBonus = entity.kind === 'defense' ? 0 : levels.forceAttack * 0.05;
-  return 1 + weaponBonus + forceAttackBonus;
+  return 1;
 }
 
 export function getTechnologyLifeMultiplier(
-  entity: Pick<CombatEntityDefinition, 'kind'>,
-  levels: CombatTechnologyLevels,
+  _entity: Pick<CombatEntityDefinition, 'kind'>,
+  _levels: CombatTechnologyLevels,
 ) {
-  if (entity.kind === 'defense') return 1;
-  return 1 + levels.shipDefense * 0.10 + levels.promptDefense * 0.05;
+  return 1;
 }
 
 export function getTechnologyArmorPercent(
   entity: Pick<CombatEntityDefinition, 'combat'>,
-  levels: CombatTechnologyLevels,
+  _levels: CombatTechnologyLevels,
 ) {
-  return entity.combat.armorStrength + getArmorScienceBonus(entity, levels);
+  return entity.combat.armorStrength;
 }
