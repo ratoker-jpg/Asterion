@@ -10,6 +10,8 @@ import {
   BATTLE_HISTORY_CHANGED_EVENT,
   createDefaultBattleHistory,
   migrateBattleHistory,
+  persistBattleHistory,
+  setBattleReportSaved,
   type BattleHistoryState,
 } from './domain/combat/battle-repository.ts';
 import {
@@ -585,6 +587,18 @@ export function App() {
     window.setTimeout(() => window.dispatchEvent(new Event(FLEET_ROOT_REQUEST_EVENT)), 0);
   };
 
+  const toggleBattleSavedFromReports = (reportId: string, saved: boolean) => {
+    const result = persistBattleHistory(setBattleReportSaved(state.combat, reportId, saved));
+    setState((current) => ({
+      ...current,
+      schemaVersion: COMBAT_SAVE_SCHEMA_VERSION,
+      combat: migrateBattleHistory(result.value),
+    }));
+    setNotice(result.ok
+      ? (saved ? 'Боевой доклад сохранён.' : 'Боевой доклад удалён из сохранённых.')
+      : `Не удалось обновить сохранённые бои: ${result.error}`);
+  };
+
   const chooseTab = (tab: string) => {
     setActiveTab(tab);
     setPlanetMenuOpen(false);
@@ -707,10 +721,12 @@ export function App() {
           ) : activeTab === 'Отчёты' ? (
             <ReportsView
               battleReports={state.combat.reports}
+              savedBattleReportIds={state.combat.savedReportIds}
               operations={state.operations}
               command={state.command}
               state={state.reports}
               onStateChange={(reports) => setState((current) => ({ ...current, reports }))}
+              onToggleBattleSaved={toggleBattleSavedFromReports}
               onOpenFleets={openFleetRootFromReports}
             />
           ) : activeTab === 'Планета' ? (
