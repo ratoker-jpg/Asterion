@@ -42,7 +42,7 @@ test('race selection swaps presentation roster while preserving canonical mechan
   const swarmScout = getFactionShipCatalog('veyra').find((entity) => entity.id === 'scout');
   assert.equal(asterScout?.name, 'Скаут');
   assert.equal(ilarScout?.name, 'Истребитель');
-  assert.equal(swarmScout?.name, 'Глайд');
+  assert.equal(swarmScout?.name, 'Нокс-дротик');
   assert.notEqual(asterScout?.art, ilarScout?.art);
   assert.notEqual(ilarScout?.art, swarmScout?.art);
   assert.equal(asterScout?.combat.attack, ilarScout?.combat.attack);
