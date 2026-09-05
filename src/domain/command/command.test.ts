@@ -25,6 +25,7 @@ class MemoryStorage {
 }
 
 const SAVE_KEY = 'asterion.vertical-slice.v1';
+const MAX_ALLIANCE_MEMBERS = 15;
 
 test('default command state is deterministic', () => {
   assert.deepEqual(createDefaultCommandState(), createDefaultCommandState());
@@ -108,10 +109,17 @@ test('joining a shared operation changes only that operation and is idempotent',
   const sun = joined.jointOperations.find((item) => item.id === 'joint-sun-raid');
 
   assert.equal(sun?.joinedByPlayer, true);
-  assert.equal(sun?.participants, 19);
+  assert.equal(sun?.participants, 10);
   assert.deepEqual(joinedAgain, joined);
   assert.deepEqual(joined.jointOperations.find((item) => item.id === 'joint-mirage-evac'), beforeOther);
   assert.equal(initial.jointOperations.find((item) => item.id === 'joint-sun-raid')?.joinedByPlayer, false);
+});
+
+test('joint operation fixtures stay within the canonical 15-member alliance cap', () => {
+  const operations = createDefaultCommandState().jointOperations;
+
+  assert.ok(operations.every((operation) => operation.participants <= MAX_ALLIANCE_MEMBERS));
+  assert.ok(operations.every((operation) => operation.recommendedParticipants <= MAX_ALLIANCE_MEMBERS));
 });
 
 test('resource request action moves only an open request to reviewing', () => {
