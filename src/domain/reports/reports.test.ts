@@ -153,6 +153,40 @@ test('saved filter uses canonical BattleHistory saved ids, not Reports metadata'
   assert.ok(battleHistory.savedReportIds.includes(report.id));
 });
 
+test('saved battle projection follows passed combat state and clears immediately on reset', () => {
+  const report = DEMO_BATTLE_REPORTS[0];
+  const item = battleReportToReportItem(report);
+  const reportsState = createDefaultReportsState();
+
+  const savedHistory = setBattleReportSaved(createDefaultBattleHistory(), report.id, true);
+  const beforeReset = filterReportItems(
+    [item],
+    reportsState,
+    { category: 'battle', filter: 'saved', search: '' },
+    savedHistory.savedReportIds,
+  );
+  assert.equal(beforeReset.length, 1);
+
+  const resetHistory = createDefaultBattleHistory();
+  const afterReset = filterReportItems(
+    [item],
+    reportsState,
+    { category: 'battle', filter: 'saved', search: '' },
+    resetHistory.savedReportIds,
+  );
+  assert.equal(afterReset.length, 0);
+});
+
+test('save and unsave stay in canonical BattleHistoryState', () => {
+  const report = DEMO_BATTLE_REPORTS[0];
+  const initial = createDefaultBattleHistory();
+  const saved = setBattleReportSaved(initial, report.id, true);
+  assert.deepEqual(saved.savedReportIds, [report.id]);
+
+  const unsaved = setBattleReportSaved(saved, report.id, false);
+  assert.deepEqual(unsaved.savedReportIds, []);
+});
+
 test('read/unread metadata is explicit and legacy favorites/archive are ignored', () => {
   const migrated = migrateReportsState({ readIds: [' one ', 'one', 'two'], favoriteIds: ['legacy'], archivedIds: ['legacy'] });
   assert.deepEqual(migrated, { readIds: ['one', 'two'] });
