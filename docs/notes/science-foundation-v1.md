@@ -1,69 +1,104 @@
 # Science foundation v1
 
-## Sources inspected
+## Current source of truth
 
-Pre-flight used live Asterion `main` at `881ee51c3d9db8f885ae076cf1995739d92184a5` and inspected current `src/domain/combat/technologies.ts` plus its tests/history. That contract records science names and `sourceScienceId` values extracted from the saved Nemexia simulator.
+The Science screen now mirrors the complete current research catalog from:
 
-The source archive `ratoker-jpg/Nemexia_auto_v2` was also inspected at its current main commit `3def0fe38a4f2df4203ce57262ac7d5324b55edc` (`Add Nemexia safe page archive`). The archive contains saved Nemexia pages/resources. The inspected archive/search did not establish authoritative research costs, research times, maximum levels, prerequisite rules or exact battle coefficients beyond the science-field identity already preserved by current Asterion.
+- repository: `ratoker-jpg/stellar-empires`
+- main commit inspected: `466ec55f1751d36fd4a30175f7669f89ebe9a6a6`
+- source file: `src/simulation/research/completeResearchCatalog.ts`
 
-This distinction is deliberate: absence of a confirmed value is not filled with memory, a screenshot value or an inferred rule.
+That file defines one shared 22-technology template set and materializes it for Aegis, Synod and Veyra. The Asterion Science screen therefore uses the 22 universal research templates rather than the earlier incomplete 10-item Combat-only subset.
 
-## Confirmed current Asterion science inputs
+## Six source-backed sections
 
-| CombatTechnologyId | Source science ID | Name |
-| --- | ---: | --- |
-| `laserScience` | 10 | Лазерная наука |
-| `ionScience` | 11 | Ионная наука |
-| `plasmaScience` | 12 | Плазменная наука |
-| `piercingAttack` | 18 | Пробивающая атака |
-| `lightArmor` | 21 | Лёгкая броня |
-| `mediumArmor` | 22 | Средняя броня |
-| `heavyArmor` | 23 | Тяжёлая броня |
-| `shipArmor` | 7 | Броня кораблей |
-| `maneuverDefense` | 19 | Маневренная защита |
-| `criticalHit` | 20 | Критический удар |
+The sections are the actual Stellar `ResearchCategory` values:
 
-These ten items are not duplicated as a second independent combat catalog. `src/domain/science/catalog.ts` derives names/IDs from `COMBAT_TECHNOLOGIES` and only adds Science-view presentation metadata.
+- `energy` — Энергетика
+- `infrastructure` — Инфраструктура
+- `navigation` — Навигация
+- `intelligence` — Разведка
+- `defense` — Оборона
+- `weapons` — Вооружение
 
-## Sections
+They are not presentation inventions.
 
-The user-facing Science screen groups the current ten sciences into three readable visual sections:
+## Full current catalog
 
-- `ОРУЖЕЙНЫЕ НАУКИ`
-- `БРОНЕЗАЩИТА`
-- `МАНЕВРЕННАЯ ЗАЩИТА`
+1. Физика
+2. Химия
+3. Математика
+4. Астрономия
+5. Шпионаж
+6. Компьютерные системы
+7. Корабельная броня
+8. Топливные элементы
+9. Реактивные двигатели
+10. Лазерная технология
+11. Ионная технология
+12. Плазменная технология
+13. Экология
+14. Гиперпространство
+15. Параллельные вселенные
+16. Улучшенное строительство
+17. Пробивающая атака
+18. Маневренная защита
+19. Критический удар
+20. Лёгкая броня
+21. Средняя броня
+22. Тяжёлая броня
 
-These group labels and node x/y positions are explicitly `presentationOnly`. They organize the screen; they are not Nemexia/Asterion gameplay categories and do not create prerequisites.
+## Source-backed metadata
 
-## Dependencies and visual links
+For every item the Asterion Science catalog snapshots the verified Stellar fields:
 
-No prerequisite relation was confirmed by the inspected sources. Therefore every `confirmedPrerequisites` list is empty and `SCIENCE_VISUAL_LINKS` is empty. The UI intentionally does not draw progression lines that could be mistaken for research rules.
+- category;
+- description;
+- max level;
+- base metal / crystal / gas cost;
+- base research seconds;
+- required laboratory level;
+- prerequisite technology + required level;
+- declared research effect metadata.
 
-## Combat boundary
+The constellation links are built from actual Stellar prerequisites. They are no longer decorative/presentation-only relations.
 
-Current `src/domain/combat/technologies.ts` explicitly keeps unverified technology effects neutral in Combat Resolver v1. Science does not add:
+## Asterion Combat overlap
 
-- attack/life/armor multipliers;
-- critical-hit behavior;
-- max-level rules;
-- unlock rules;
-- research costs/times.
+Ten of the 22 sciences overlap the current `src/domain/combat/technologies.ts` contract. Those nodes retain an explicit `CombatTechnologyId` / `sourceScienceId` mapping without replacing the Combat catalog:
 
-The Science domain exposes no combat multiplier/effect field. Its stable mapping is `ScienceCatalogItem.combatTechnologyId -> CombatTechnologyId`.
+- laser / ion / plasma;
+- piercing attack;
+- light / medium / heavy armor;
+- ship armor;
+- maneuver defense;
+- critical hit.
 
-## Research runtime
+The Stellar-facing names are used on the Science screen (`Лазерная технология`, `Ионная технология`, `Плазменная технология`, `Корабельная броня`), while the existing Combat identifiers remain stable.
 
-There is no real research economy/runtime in this PR. The screen does not spend metal/minerals/gas, start research, enforce prerequisites, tick timers or alter combat. The queue region explicitly says `RUNTIME НЕ ПОДКЛЮЧЁН` and contains only empty preview slots with no countdown.
+## Visual system
 
-## Visual interpretation
+Science was rebuilt as a six-lane research constellation:
 
-The supplied Science screenshot is a visual/layout reference only. Its category names, node names, costs, timers and tree dependencies are not copied as data. The Asterion screen uses the real ten current science inputs above and separates them into presentation sections without adding gameplay semantics.
+- left rail: real science sections + catalog search + source provenance;
+- center: full 22-node dependency matrix with source-backed links;
+- focus mode: one category or the full matrix;
+- selected and directly linked nodes receive stronger visual emphasis;
+- right dossier: verified source metadata, requirements, dependents and optional Combat link;
+- bottom: explicit empty research queue foundation.
+
+The screen uses the Asterion dark/cyan HUD language but gives each science section a distinct accent to make the tree readable.
+
+## Runtime boundary
+
+This PR does **not** start a new Asterion research economy. Displaying Stellar research metadata does not mean the Asterion campaign currently spends resources, advances timers or mutates Combat from this screen.
+
+The bottom queue explicitly remains `runtime not connected`; there is no fake countdown and no fake resource spending.
 
 ## Deferred
 
-- Canonical research progression state.
-- Research slots/queue lifecycle.
-- Resource costs and research duration.
-- Confirmed max levels and prerequisites.
-- Confirmed battle coefficients/effects.
-- Production unlocks and laboratories.
+- Asterion research progression state.
+- Research queue lifecycle and persistence.
+- Resource spending integration.
+- Runtime unlock application.
+- Combat/economy effect application from research levels.
