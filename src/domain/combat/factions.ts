@@ -27,6 +27,15 @@ export function normalizeCombatFactionId(value: unknown): CombatFactionId {
   return isCombatFactionId(value) ? value : DEFAULT_COMBAT_FACTION_ID;
 }
 
+export function getCombatFactionId(value: unknown): CombatFactionId {
+  if (isCombatFactionId(value)) return value;
+  if (typeof value === 'string') {
+    const byName = COMBAT_FACTIONS.find((faction) => faction.name === value);
+    if (byName) return byName.id;
+  }
+  return DEFAULT_COMBAT_FACTION_ID;
+}
+
 export function getCombatFactionName(id: unknown) {
   const normalized = normalizeCombatFactionId(id);
   return COMBAT_FACTION_BY_ID.get(normalized)?.name ?? COMBAT_FACTION_BY_ID.get(DEFAULT_COMBAT_FACTION_ID)!.name;
