@@ -15,9 +15,10 @@ import {
   startRecyclingJob,
   type RecyclingJob,
   type RecyclingState,
+  type ResourceAllocationPercent,
 } from './recycling.ts';
 
-const allocation = { metal: 60, minerals: 40, gas: 0 } as const;
+const allocation: ResourceAllocationPercent = { metal: 60, minerals: 40, gas: 0 };
 
 function start(
   state: RecyclingState,
@@ -25,7 +26,7 @@ function start(
   debrisAmount: number,
   startedAt: number,
   id: string,
-  split = allocation,
+  split: ResourceAllocationPercent = allocation,
 ) {
   return startRecyclingJob(state, level, debrisAmount, split, startedAt, id);
 }
