@@ -91,16 +91,23 @@ export const RESOURCE_BASE_INCOME_PER_HOUR = {
 export const RESOURCE_PROTOTYPE_DATA_NOTE =
   'Цена, время и лимит уровня — локальные данные вертикального среза Asterion. Баланс и эффекты добывающих зданий будут определены на следующем этапе.';
 
-const art = (fileName: string) => new URL(
-  `../../../assets/source/New assets/buildings/aegis/${fileName}`,
-  import.meta.url,
-).href;
+const RESOURCE_BUILDING_ART: Record<ResourceBuildingRole, string> = {
+  'metal-production-1': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.metal-production-1.png', import.meta.url).href,
+  'metal-production-2': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.metal-production-2.png', import.meta.url).href,
+  'metal-production-3': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.metal-production-3.png', import.meta.url).href,
+  'mineral-production-1': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.mineral-production-1.png', import.meta.url).href,
+  'mineral-production-2': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.mineral-production-2.png', import.meta.url).href,
+  'gas-production-1': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.gas-production-1.png', import.meta.url).href,
+  'gas-production-2': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.gas-production-2.png', import.meta.url).href,
+  'basic-energy': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.basic-energy.png', import.meta.url).href,
+  'advanced-energy': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.advanced-energy.png', import.meta.url).href,
+  hangar: new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.hangar.png', import.meta.url).href,
+};
 
 const baseDefinition = (
   assetRole: ResourceBuildingRole,
   name: string,
   purpose: string,
-  fileName: string,
   effect?: BuildingEffect,
 ): BuildingDefinition => ({
   zone: 'resource',
@@ -108,7 +115,7 @@ const baseDefinition = (
   faction: 'aegis',
   name,
   purpose,
-  art: art(fileName),
+  art: RESOURCE_BUILDING_ART[assetRole],
   maxLevel: VERTICAL_SLICE_MAX_LEVEL,
   prototypeCost: { ...EXISTING_PROTOTYPE_COST },
   prototypeTimeMs: EXISTING_PROTOTYPE_TIME_MS,
@@ -116,22 +123,21 @@ const baseDefinition = (
 });
 
 export const ASTER_RESOURCE_BUILDINGS: readonly BuildingDefinition[] = [
-  baseDefinition('metal-production-1', 'Металлическая шахта I', 'Базовая добыча металла.', 'building.aegis.metal-production-1.png'),
-  baseDefinition('metal-production-2', 'Металлическая шахта II', 'Улучшенная добыча металла.', 'building.aegis.metal-production-2.png'),
-  baseDefinition('metal-production-3', 'Металлическая шахта III', 'Высшая ступень добычи металла.', 'building.aegis.metal-production-3.png'),
-  baseDefinition('mineral-production-1', 'Минеральная шахта I', 'Базовая добыча минералов.', 'building.aegis.mineral-production-1.png'),
-  baseDefinition('mineral-production-2', 'Минеральная шахта II', 'Улучшенная добыча минералов.', 'building.aegis.mineral-production-2.png'),
-  baseDefinition('gas-production-1', 'Газовая скважина I', 'Базовая добыча газа.', 'building.aegis.gas-production-1.png'),
-  baseDefinition('gas-production-2', 'Газовая скважина II', 'Улучшенная добыча газа.', 'building.aegis.gas-production-2.png'),
+  baseDefinition('metal-production-1', 'Металлическая шахта I', 'Базовая добыча металла.'),
+  baseDefinition('metal-production-2', 'Металлическая шахта II', 'Улучшенная добыча металла.'),
+  baseDefinition('metal-production-3', 'Металлическая шахта III', 'Высшая ступень добычи металла.'),
+  baseDefinition('mineral-production-1', 'Минеральная шахта I', 'Базовая добыча минералов.'),
+  baseDefinition('mineral-production-2', 'Минеральная шахта II', 'Улучшенная добыча минералов.'),
+  baseDefinition('gas-production-1', 'Газовая скважина I', 'Базовая добыча газа.'),
+  baseDefinition('gas-production-2', 'Газовая скважина II', 'Улучшенная добыча газа.'),
   baseDefinition(
     'basic-energy',
     'Солнечная электростанция',
     'Базовая генерация энергии.',
-    'building.aegis.basic-energy.png',
     { kind: 'energy', amountPerLevel: 25, label: 'Энергия планеты' },
   ),
-  baseDefinition('advanced-energy', 'Ядерный реактор', 'Продвинутая генерация энергии.', 'building.aegis.advanced-energy.png'),
-  baseDefinition('hangar', 'Ангар', 'Хранение и увеличение доступной вместимости кораблей/юнитов.', 'building.aegis.hangar.png'),
+  baseDefinition('advanced-energy', 'Ядерный реактор', 'Продвинутая генерация энергии.'),
+  baseDefinition('hangar', 'Ангар', 'Хранение и увеличение доступной вместимости кораблей/юнитов.'),
 ] as const;
 
 const definitionByRole = new Map<ResourceBuildingRole, BuildingDefinition>(
