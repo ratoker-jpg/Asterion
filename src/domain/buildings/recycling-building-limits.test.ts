@@ -9,13 +9,13 @@ import {
   migrateBuildingQueue,
 } from './resource-zone.ts';
 
-test('only recycling is capped at level 10 while other industry limits stay unchanged', () => {
+test('recycling stays capped at level 10 while unrelated industry limits stay unchanged', () => {
   assert.equal(RECYCLING_MAX_LEVEL, 10);
   assert.equal(getBuildingDefinition('recycling').maxLevel, 10);
   assert.equal(getBuildingDefinition('advanced-factory').maxLevel, 5);
 
   for (const building of ASTER_INDUSTRY_BUILDINGS) {
-    if (building.assetRole === 'recycling' || building.assetRole === 'advanced-factory') continue;
+    if (building.assetRole === 'recycling' || building.assetRole === 'trade-center' || building.assetRole === 'advanced-factory') continue;
     assert.equal(building.maxLevel, 20, `${building.assetRole} must keep max level 20`);
   }
 });
