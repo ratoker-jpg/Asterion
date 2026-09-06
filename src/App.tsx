@@ -5,7 +5,7 @@ import { UniverseView } from './UniverseView';
 import { OperationsView } from './OperationsView';
 import { CommandView } from './CommandView';
 import { ReportsView } from './ReportsView';
-import { ResourceZoneView } from './ResourceZoneView';
+import { ZoneView } from './ZoneView';
 import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
 import {
   BATTLE_HISTORY_CHANGED_EVENT,
@@ -48,18 +48,20 @@ import { createDefaultReportsState, migrateReportsState } from './domain/reports
 import type { ReportsState } from './domain/reports/types.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import {
+  BUILDING_QUEUE_CAPACITY,
   RESOURCE_BASE_INCOME_PER_HOUR,
-  RESOURCE_BUILDING_QUEUE_CAPACITY,
-  completeResourceBuildingProject,
-  createDefaultResourceBuildingLevels,
-  evaluateResourceBuildingBuild,
-  getResourceBuildingDefinition,
-  migrateResourceBuildingLevels,
-  migrateResourceBuildingQueue,
-  startResourceBuildingProject,
+  RESOURCE_BUILDING_ROLES,
+  completeBuildingProject,
+  createDefaultBuildingLevels,
+  evaluateBuildingBuild,
+  getBuildingDefinition,
+  migrateBuildingLevels,
+  migrateBuildingQueue,
+  startBuildingProject,
+  type BuildingLevels,
   type BuildingQueueItem,
-  type ResourceBuildingLevels,
-  type ResourceBuildingRole,
+  type BuildingRole,
+  type BuildingZone,
   type ResourceWallet,
   type ScienceLevels,
 } from './domain/buildings/resource-zone.ts';
@@ -114,8 +116,8 @@ const planetSkins = [
 
 type PlanetSkin = (typeof planetSkins)[number]['id'];
 type PlanetId = 'helion-01';
-type Zone = 'resource' | 'industry' | 'military';
-type PlanetViewMode = 'overview' | 'resource-zone';
+type Zone = BuildingZone;
+type PlanetViewMode = 'overview' | Zone;
 type IconKind = 'metal' | 'mineral' | 'gas' | 'energy' | 'population' | Zone;
 type NavigationIconKind = 'planet' | 'universe' | 'fleets' | 'operations' | 'command' | 'reports' | 'settings' | 'rating' | 'science';
 
@@ -125,7 +127,7 @@ type PlanetRuntime = {
   population: number;
   populationMax: number;
   energy: number;
-  buildings: ResourceBuildingLevels;
+  buildings: BuildingLevels;
   stability: number;
 };
 
@@ -206,7 +208,7 @@ const createInitialState = (): SaveState => ({
       population: 4,
       populationMax: 70,
       energy: 140,
-      buildings: createDefaultResourceBuildingLevels(),
+      buildings: createDefaultBuildingLevels(),
       stability: 100,
     },
   },
@@ -265,12 +267,12 @@ function readSave(): SaveState {
       population: numberOr(savedHomeworld?.population, numberOr(parsed.population, initialState.planets['helion-01'].population)),
       populationMax: numberOr(savedHomeworld?.populationMax, initialState.planets['helion-01'].populationMax),
       energy: numberOr(savedHomeworld?.energy, numberOr(parsed.energy, initialState.planets['helion-01'].energy)),
-      buildings: migrateResourceBuildingLevels(savedHomeworld?.buildings, legacySolarStations),
+      buildings: migrateBuildingLevels(savedHomeworld?.buildings, legacySolarStations),
       stability: numberOr(savedHomeworld?.stability, initialState.planets['helion-01'].stability),
     };
 
     const savedQueue = parsed.queues?.['helion-01'] ?? parsed.queue ?? null;
-    const queue = migrateResourceBuildingQueue(savedQueue, 'helion-01', homeworld.buildings);
+    const queue = migrateBuildingQueue(savedQueue, 'helion-01', homeworld.buildings);
 
     return {
       schemaVersion: COMBAT_SAVE_SCHEMA_VERSION,
@@ -450,13 +452,13 @@ export function App() {
   useEffect(() => {
     const activeQueueItem = state.queues['helion-01'][0];
     if (!activeQueueItem || now < activeQueueItem.finishAt) return;
-    const completedDefinition = getResourceBuildingDefinition(activeQueueItem.assetRole);
+    const completedDefinition = getBuildingDefinition(activeQueueItem.assetRole);
 
     setState((current) => {
       const currentActiveItem = current.queues['helion-01'][0];
       if (!currentActiveItem || Date.now() < currentActiveItem.finishAt) return current;
       const currentPlanet = current.planets['helion-01'];
-      const completed = completeResourceBuildingProject({
+      const completed = completeBuildingProject({
         resources: {
           metal: current.metal,
           minerals: current.minerals,
@@ -496,7 +498,7 @@ export function App() {
   );
   const currentQueue = state.queues['helion-01'];
   const currentActiveQueueItem = currentQueue[0] ?? null;
-  const currentQueueDefinition = currentActiveQueueItem ? getResourceBuildingDefinition(currentActiveQueueItem.assetRole) : null;
+  const currentQueueDefinition = currentActiveQueueItem ? getBuildingDefinition(currentActiveQueueItem.assetRole) : null;
   const resourceWallet: ResourceWallet = {
     metal: state.metal,
     minerals: state.minerals,
@@ -513,7 +515,7 @@ export function App() {
   }, [now, currentActiveQueueItem]);
 
   const resourceBuildingCount = useMemo(
-    () => Object.values(currentPlanetState.buildings).filter((level) => level > 0).length,
+    () => RESOURCE_BUILDING_ROLES.filter((role) => currentPlanetState.buildings[role] > 0).length,
     [currentPlanetState.buildings],
   );
 
@@ -562,24 +564,24 @@ export function App() {
     setNotice(`Облик ${state.planets['helion-01'].name} изменён: ${skin.label}.`);
   };
 
-  const buildResourceBuilding = (assetRole: ResourceBuildingRole) => {
+  const buildBuilding = (assetRole: BuildingRole) => {
     const snapshot = {
       resources: resourceWallet,
       buildings: currentPlanetState.buildings,
       queue: currentQueue,
       scienceLevels: CURRENT_SCIENCE_LEVELS,
     };
-    const availability = evaluateResourceBuildingBuild(snapshot, assetRole);
+    const availability = evaluateBuildingBuild(snapshot, assetRole);
     if (!availability.canBuild) {
       setNotice(availability.reason ?? 'Строительство сейчас недоступно.');
       return false;
     }
 
     const enqueuedAt = Date.now();
-    const definition = getResourceBuildingDefinition(assetRole);
+    const definition = getBuildingDefinition(assetRole);
     setState((current) => {
       const currentPlanet = current.planets['helion-01'];
-      const transition = startResourceBuildingProject({
+      const transition = startBuildingProject({
         resources: {
           metal: current.metal,
           minerals: current.minerals,
@@ -711,12 +713,10 @@ export function App() {
 
   const chooseZone = (nextZone: Zone) => {
     setActiveTab('Планета');
-    setPlanetViewMode(nextZone === 'resource' ? 'resource-zone' : 'overview');
+    setPlanetViewMode(nextZone);
     setPlanetMenuOpen(false);
     closePlanetEditor();
-    setNotice(nextZone === 'resource'
-      ? `${zoneMeta[nextZone].title}: сцена открыта для ${currentPlanetName}.`
-      : `${zoneMeta[nextZone].title}: отдельный модуль пока не реализован.`);
+    setNotice(`${zoneMeta[nextZone].title}: сцена открыта для ${currentPlanetName}.`);
   };
 
   const remaining = currentActiveQueueItem ? currentActiveQueueItem.finishAt - now : 0;
@@ -731,7 +731,7 @@ export function App() {
                 <img src={currentSkin.art} alt={currentPlanetName} draggable={false} />
               </button>
               {(['resource', 'industry', 'military'] as Zone[]).map((item) => {
-                const isActive = activeTab === 'Планета' && planetViewMode === 'resource-zone' && item === 'resource';
+                const isActive = activeTab === 'Планета' && planetViewMode === item;
                 return (
                   <button
                     key={item}
@@ -779,7 +779,7 @@ export function App() {
             </div>
             <nav className="primary-navigation" aria-label="Основная навигация">
               {primaryTabs.map(({ label, icon }) => (
-                <button key={label} type="button" className={activeTab === label && !(label === 'Планета' && planetViewMode === 'resource-zone') ? 'active' : ''} onClick={() => chooseTab(label)}>
+                <button key={label} type="button" className={activeTab === label && !(label === 'Планета' && planetViewMode !== 'overview') ? 'active' : ''} onClick={() => chooseTab(label)}>
                   <NavigationIcon kind={icon} />
                   <span>{label}</span>
                 </button>
@@ -802,7 +802,7 @@ export function App() {
           </section>
         </header>
 
-        <section className={`workspace workspace-v4 workspace--${activeTab === 'Вселенная' ? 'universe' : activeTab === 'Планета' && planetViewMode === 'resource-zone' ? 'resource-zone' : activeTab === 'Планета' ? 'planet' : activeTab === 'Операции' ? 'operations' : activeTab === 'Командование' ? 'command' : activeTab === 'Отчёты' ? 'reports' : 'module'}`}>
+        <section className={`workspace workspace-v4 workspace--${activeTab === 'Вселенная' ? 'universe' : activeTab === 'Планета' && planetViewMode !== 'overview' ? 'resource-zone' : activeTab === 'Планета' ? 'planet' : activeTab === 'Операции' ? 'operations' : activeTab === 'Командование' ? 'command' : activeTab === 'Отчёты' ? 'reports' : 'module'}`}>
           {activeTab === 'Вселенная' ? (
             <UniverseView onNotice={setNotice} ownedPlanetArt={currentSkin.art} ownedPlanetName={currentPlanetName} />
           ) : activeTab === 'Операции' ? (
@@ -832,8 +832,9 @@ export function App() {
               onToggleBattleSaved={toggleBattleSavedFromReports}
               onOpenFleets={openFleetRootFromReports}
             />
-          ) : activeTab === 'Планета' && planetViewMode === 'resource-zone' ? (
-            <ResourceZoneView
+          ) : activeTab === 'Планета' && planetViewMode !== 'overview' ? (
+            <ZoneView
+              zone={planetViewMode}
               planetName={currentPlanetName}
               planetCoords={currentPlanet.coords}
               resources={resourceWallet}
@@ -841,7 +842,7 @@ export function App() {
               queue={currentQueue}
               scienceLevels={CURRENT_SCIENCE_LEVELS}
               now={now}
-              onBuild={buildResourceBuilding}
+              onBuild={buildBuilding}
             />
           ) : activeTab === 'Планета' ? (
             <div className="planet-page-v3 planet-page-v4">
@@ -903,7 +904,7 @@ export function App() {
               </main>
 
               <aside className="queue-panel-v3">
-                <div className="page-panel-title"><strong>ОЧЕРЕДЬ СТРОИТЕЛЬСТВА</strong><small>{currentQueue.length} / {RESOURCE_BUILDING_QUEUE_CAPACITY}</small></div>
+                <div className="page-panel-title"><strong>ОЧЕРЕДЬ СТРОИТЕЛЬСТВА</strong><small>{currentQueue.length} / {BUILDING_QUEUE_CAPACITY}</small></div>
                 <div className={`queue-card-v2 ${currentActiveQueueItem ? 'busy' : ''}`}>
                   {currentQueueDefinition ? <img src={currentQueueDefinition.art} alt="" style={{ width: 44, height: 44, objectFit: 'contain' }} /> : <span className="queue-card-v2__icon"><GameIcon kind="resource" /></span>}
                   <span><strong>{currentQueueDefinition?.name ?? 'Свободный слот'}</strong><small>{currentActiveQueueItem ? `Осталось ${formatCountdown(remaining)}` : 'Готов к строительству'}</small></span>
