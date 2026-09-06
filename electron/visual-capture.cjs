@@ -58,6 +58,9 @@ async function metrics(win, screen) {
     const stage=document.querySelector('.stage'), workspace=document.querySelector('.workspace'), host=document.querySelector('.utility-screen-host');
     const scienceCatalog=document.querySelector('[data-qa-scroll="science-catalog"]');
     const settingsContent=document.querySelector('[data-qa-scroll="settings-content"]');
+    const ratingTable=document.querySelector('.rating-table-v2');
+    const ratingPinnedCurrent=document.querySelector('.rating-table-v2--players .rating-row-v2.pinned-current.current');
+    const ratingSelfSeparator=document.querySelector('.rating-table-v2--players .rating-self-separator-v2');
     const rect=(element)=>element?(()=>{const r=element.getBoundingClientRect();return{x:r.x,y:r.y,width:r.width,height:r.height};})():null;
     return {
       screen:${JSON.stringify(screen)},
@@ -67,6 +70,9 @@ async function metrics(win, screen) {
       utilityViewClass:host?.firstElementChild?.className ?? '',
       scienceCatalog:scienceCatalog?{clientHeight:scienceCatalog.clientHeight,scrollHeight:scienceCatalog.scrollHeight,overflowY:getComputedStyle(scienceCatalog).overflowY}:null,
       settingsContent:settingsContent?{clientHeight:settingsContent.clientHeight,scrollHeight:settingsContent.scrollHeight,overflowY:getComputedStyle(settingsContent).overflowY}:null,
+      ratingTable:ratingTable?{clientHeight:ratingTable.clientHeight,scrollHeight:ratingTable.scrollHeight,overflowY:getComputedStyle(ratingTable).overflowY}:null,
+      ratingPinnedCurrent:Boolean(ratingPinnedCurrent),
+      ratingSelfSeparator:Boolean(ratingSelfSeparator),
       typography:{hud:getComputedStyle(root).getPropertyValue('--text-scale-hud').trim(),helper:getComputedStyle(root).getPropertyValue('--text-scale-helper').trim()},
     };
   })()`);
@@ -100,11 +106,17 @@ async function capture(win, directory, name) {
   fs.writeFileSync(path.join(directory,`${name}.png`),Buffer.from(result.data,'base64'));
 }
 
+function ownsNestedVerticalScroll(item) {
+  return item && (item.overflowY === 'auto' || item.overflowY === 'scroll');
+}
+
 async function verifyCommon(item, label, name, width, height) {
   if(item.viewport.width!==width || item.viewport.height!==height) throw new Error(`${label}/${name}: viewport mismatch ${item.viewport.width}x${item.viewport.height}`);
-  if(item.document.verticalScroll || item.document.longPageClass) throw new Error(`${label}/${name}: global vertical scroll detected`);
-  if(name==='science' && item.scienceCatalog?.overflowY!=='auto') throw new Error(`${label}/${name}: science catalog is not the internal scroll container`);
-  if(name==='settings' && item.settingsContent?.overflowY!=='auto') throw new Error(`${label}/${name}: settings content is not the internal scroll container`);
+  if(item.document.verticalScroll && !item.document.longPageClass) throw new Error(`${label}/${name}: document scroll is not owned by GlobalPageScrollController`);
+  if(name==='science' && ownsNestedVerticalScroll(item.scienceCatalog)) throw new Error(`${label}/${name}: science still owns a nested vertical scrollbar`);
+  if(name==='settings' && ownsNestedVerticalScroll(item.settingsContent)) throw new Error(`${label}/${name}: settings still owns a nested vertical scrollbar`);
+  if(name==='rating' && ownsNestedVerticalScroll(item.ratingTable)) throw new Error(`${label}/${name}: rating table still owns a nested vertical scrollbar`);
+  if(name==='rating' && (!item.ratingPinnedCurrent || !item.ratingSelfSeparator)) throw new Error(`${label}/${name}: current player is not pinned below the visible page like Nemexia`);
 }
 
 app.whenReady().then(async()=>{
@@ -124,6 +136,13 @@ app.whenReady().then(async()=>{
       for(const [name,screenLabel,expectedClass] of SCREENS){
         await activateScreen(win,screenLabel,expectedClass);
         const item=await metrics(win,name); await verifyCommon(item,label,name,width,height); results.push(item); await capture(win,directory,name);
+        if(name==='rating'){
+          await win.webContents.executeJavaScript('window.scrollTo(0, document.documentElement.scrollHeight)');
+          await settle(win);
+          await capture(win,directory,'rating-bottom');
+          await win.webContents.executeJavaScript('window.scrollTo(0, 0)');
+          await settle(win);
+        }
       }
       if(width===1920 && height===1080){
         await activateScreen(win,'Настройки','settings-view-v2');
