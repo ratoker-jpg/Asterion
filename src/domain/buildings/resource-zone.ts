@@ -222,17 +222,17 @@ export const ASTER_RESOURCE_BUILDINGS: readonly BuildingDefinition[] = [
 
 export const ASTER_INDUSTRY_BUILDINGS: readonly BuildingDefinition[] = [
   definition('industry', 'construction', 'Фабрика', 'Базовое производство и строительство.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
-  definition('industry', 'advanced-factory', 'Промышленный комплекс', 'Продвинутое производство.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
-  definition('industry', 'metal-storage', 'Склад металла', 'Хранение металла.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
-  definition('industry', 'mineral-storage', 'Склад минералов', 'Хранение минералов.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
-  definition('industry', 'gas-storage', 'Газовое хранилище', 'Хранение газа.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
-  definition('industry', 'recycling', 'Перерабатывающий центр', 'Переработка и утилизация ресурсов/обломков.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
+  definition('industry', 'advanced-factory', 'Промышленный комплекс', 'Продвинутое производство.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel, [reqBuilding('construction', 10)]),
+  definition('industry', 'metal-storage', 'Склад металла', 'Хранение металла.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel, [reqBuilding('metal-production-1', 1)]),
+  definition('industry', 'mineral-storage', 'Склад минералов', 'Хранение минералов.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel, [reqBuilding('mineral-production-1', 1)]),
+  definition('industry', 'gas-storage', 'Газовое хранилище', 'Хранение газа.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel, [reqBuilding('gas-production-1', 1)]),
+  definition('industry', 'recycling', 'Перерабатывающий центр', 'Переработка и утилизация ресурсов/обломков.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel, [reqBuilding('shipyard', 5), reqScience(2, 6)]),
   definition('industry', 'trade-center', 'Торговый центр', 'Торговля и обмен ресурсами.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
 ];
 
 export const ASTER_MILITARY_BUILDINGS: readonly BuildingDefinition[] = [
   definition('military', 'shipyard', 'Верфь', 'Производство и обслуживание кораблей.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
-  definition('military', 'research', 'Лаборатория', 'Исследования и развитие технологий.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
+  definition('military', 'research', 'Лаборатория', 'Исследования и развитие технологий.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel, [reqBuilding('construction', 1)]),
   definition('military', 'spaceport', 'Космодром', 'Космическая инфраструктура и операции с флотом.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
   definition('military', 'planetary-government', 'Палата управления', 'Управленческое и союзное здание планеты.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
   definition('military', 'bank', 'Банк', 'Финансовая инфраструктура и экономические операции.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
