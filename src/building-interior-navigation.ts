@@ -19,7 +19,6 @@ export type BuildingInteriorRole = (typeof BUILDING_INTERIOR_ROLES)[number];
 export type BuildingInteriorZone = 'industry' | 'military';
 
 export type BuildingInteriorTarget =
-  | { kind: 'production-bots' }
   | { kind: 'fleet-construction' }
   | { kind: 'science' }
   | { kind: 'command' }
@@ -35,8 +34,8 @@ export type BuildingInteriorContext<PlanetId extends string> = {
 export const FLEET_CONSTRUCTION_REQUEST_EVENT = 'asterion:fleet-construction-request';
 
 const targets: Readonly<Record<BuildingInteriorRole, BuildingInteriorTarget>> = {
-  construction: { kind: 'production-bots' },
-  'advanced-factory': { kind: 'production-bots' },
+  construction: { kind: 'host', moduleTitle: 'ПРОИЗВОДСТВЕННЫЕ БОТЫ' },
+  'advanced-factory': { kind: 'host', moduleTitle: 'ПРОИЗВОДСТВЕННЫЕ БОТЫ' },
   recycling: { kind: 'host', moduleTitle: 'ПЕРЕРАБОТКА' },
   'trade-center': { kind: 'host', moduleTitle: 'ТОРГОВЛЯ' },
   shipyard: { kind: 'fleet-construction' },
