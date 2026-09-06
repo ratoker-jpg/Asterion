@@ -5,13 +5,17 @@ import {
   SPACEPORT_UPGRADE_QUEUE_CAPACITY,
   getSpaceportUpgradeCatalog,
   getSpaceportUpgradeEntity,
+  getSpaceportUpgradeMaxLevel,
   previewSpaceportUpgrade,
+  type SpaceportRequirementState,
   type SpaceportUpgradeState,
   type SpaceportUpgradeTrack,
   type SpaceportUpgradeWallet,
 } from './domain/buildings/spaceport-upgrades.ts';
 import { getBuildingDefinition, type BuildingLevels, type ScienceLevels } from './domain/buildings/resource-zone.ts';
+import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import './spaceport-upgrades.css';
+import './spaceport-upgrades-enhancements.css';
 
 type SpaceportUpgradeViewProps = {
   planetName: string;
@@ -47,6 +51,11 @@ const RESOURCE_SHORT_LABELS: Readonly<Record<keyof SpaceportUpgradeWallet, strin
   gas: 'ГАЗ',
 };
 
+const SCIENCE_ARTS = import.meta.glob('../assets/source/New assets/technologies/*.png', {
+  eager: true,
+  import: 'default',
+}) as Record<string, string>;
+
 const formatNumber = (value: number) => new Intl.NumberFormat('ru-RU').format(value);
 
 function formatCountdown(ms: number) {
@@ -74,6 +83,98 @@ function queueOf(upgrades: SpaceportUpgradeState, track: SpaceportUpgradeTrack) 
 function requirementBlocker(label: string, requiredLevel: number, currentLevel: number | null) {
   if (currentLevel == null) return `Нужна ${label} ур. ${requiredLevel} · текущий уровень не подключён`;
   return `Нужна ${label} ур. ${requiredLevel} · сейчас ${currentLevel}`;
+}
+
+function requirementArt(requirement: SpaceportRequirementState): string | null {
+  if (requirement.buildingRole) return getBuildingDefinition(requirement.buildingRole).art;
+  if (requirement.scienceId == null) return null;
+  const science = SCIENCE_CATALOG.find((item) => item.id === requirement.scienceId);
+  if (!science) return null;
+  return SCIENCE_ARTS[`../assets/source/New assets/technologies/${science.artSlug}`] ?? null;
+}
+
+function RequirementBadge({ requirement }: { requirement: SpaceportRequirementState }) {
+  const art = requirementArt(requirement);
+  const status = requirement.met ? 'выполнено' : 'не выполнено';
+  const current = requirement.currentLevel == null ? 'неизвестно' : String(requirement.currentLevel);
+  const tooltip = `${requirement.label}\nТекущий уровень: ${current}\nТребуется: ${requirement.requiredLevel}\nСтатус: ${status}`;
+
+  if (!art) {
+    return (
+      <span
+        className="spaceport-requirement-fallback-v2"
+        data-qa-spaceport-requirement-fallback={requirement.label}
+      >
+        {requirement.label} · ур. {requirement.requiredLevel} · asset не найден
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={`spaceport-requirement-badge-v2 ${requirement.met ? 'is-met' : 'is-missing'}`}
+      data-qa-spaceport-requirement-badge={requirement.label}
+      data-qa-spaceport-requirement-status={requirement.met ? 'met' : 'missing'}
+      data-tooltip={tooltip}
+      title={tooltip}
+      tabIndex={0}
+      aria-label={`${requirement.label}. Текущий уровень ${current}. Требуется ${requirement.requiredLevel}. Статус: ${status}.`}
+    >
+      <img src={art} alt="" draggable={false} />
+      <b>{requirement.requiredLevel}</b>
+    </span>
+  );
+}
+
+function LevelProgress({
+  track,
+  currentLevel,
+  projectedLevel,
+  queuedCount,
+  nextLevel,
+}: {
+  track: SpaceportUpgradeTrack;
+  currentLevel: number;
+  projectedLevel: number;
+  queuedCount: number;
+  nextLevel: number | null;
+}) {
+  const maxLevel = getSpaceportUpgradeMaxLevel(track);
+  const isMax = currentLevel >= maxLevel;
+
+  return (
+    <section
+      className={`spaceport-level-progress-v2 ${isMax ? 'is-max' : ''}`}
+      data-qa-spaceport-level-progress
+      data-qa-current-level={currentLevel}
+      data-qa-projected-level={projectedLevel}
+      data-qa-max-level={maxLevel}
+      aria-label={`Текущий уровень ${currentLevel} из ${maxLevel}. Заказано уровней: ${queuedCount}.`}
+    >
+      <div className="spaceport-level-progress-meta-v2">
+        <span>Получено <b>{currentLevel}</b> / {maxLevel}</span>
+        {isMax ? (
+          <strong>Максимальный уровень</strong>
+        ) : (
+          <>
+            <span>Заказано <b>+{queuedCount}</b> → {projectedLevel}</span>
+            <span>Следующий заказ <b>{nextLevel ?? 'MAX'}</b></span>
+          </>
+        )}
+      </div>
+      <div className="spaceport-level-segments-v2" aria-hidden="true">
+        {Array.from({ length: maxLevel }, (_, index) => {
+          const level = index + 1;
+          const className = level <= currentLevel
+            ? 'is-complete'
+            : level <= projectedLevel
+              ? 'is-queued'
+              : 'is-future';
+          return <i key={level} className={className} data-level={level} />;
+        })}
+      </div>
+    </section>
+  );
 }
 
 function SelectedQueue({
@@ -218,28 +319,24 @@ export function SpaceportUpgradeView({
               scienceLevels,
               spaceportLevel: buildingLevel,
             }, activeTrack, entity.id);
-            const queueIndex = selectedQueue.findIndex((task) => task.shipId === entity.id);
-            const queuedTask = queueIndex >= 0 ? selectedQueue[queueIndex] : null;
-            const isQueued = queuedTask != null;
+            const queuedTasks = selectedQueue
+              .map((task, index) => ({ task, index }))
+              .filter(({ task }) => task.shipId === entity.id);
+            const isQueued = queuedTasks.length > 0;
             const missingRequirements = preview.requirements.filter((requirement) => !requirement.met);
             const missingResources = (Object.keys(preview.cost) as (keyof SpaceportUpgradeWallet)[])
               .filter((key) => wallet[key] < preview.cost[key]);
-            const uiCanStart = !isQueued && preview.canStart;
-            const targetLevel = queuedTask?.toLevel ?? preview.nextLevel;
+            const uiCanStart = preview.canStart;
             const ctaText = preview.status === 'max-level'
               ? 'МАКСИМАЛЬНЫЙ УРОВЕНЬ'
-              : isQueued
-                ? `В ОЧЕРЕДИ · ПОЗИЦИЯ ${queueIndex + 1}`
-                : preview.status === 'queue-full'
-                  ? 'ОЧЕРЕДЬ ЗАПОЛНЕНА'
-                  : `УЛУЧШИТЬ УРОВЕНЬ ${preview.nextLevel ?? preview.currentLevel}`;
-            const actionReason = isQueued
-              ? `Корабль уже находится в очереди, позиция ${queueIndex + 1}.`
-              : missingRequirements.length > 0
-                ? missingRequirements.map((requirement) => requirementBlocker(requirement.label, requirement.requiredLevel, requirement.currentLevel)).join('. ')
-                : missingResources.length > 0
-                  ? missingResources.map((key) => `Недостаточно ${RESOURCE_LABELS[key]}`).join('. ')
-                  : preview.reason ?? undefined;
+              : preview.status === 'queue-full'
+                ? 'ОЧЕРЕДЬ УЛУЧШЕНИЙ ЗАПОЛНЕНА'
+                : `ЗАКАЗАТЬ УРОВЕНЬ ${preview.nextLevel ?? preview.currentLevel}`;
+            const actionReason = missingRequirements.length > 0
+              ? missingRequirements.map((requirement) => requirementBlocker(requirement.label, requirement.requiredLevel, requirement.currentLevel)).join('. ')
+              : missingResources.length > 0
+                ? missingResources.map((key) => `Недостаточно ${RESOURCE_LABELS[key]}`).join('. ')
+                : preview.reason ?? undefined;
 
             return (
               <article
@@ -247,7 +344,7 @@ export function SpaceportUpgradeView({
                 className={`spaceport-row-v2 ${uiCanStart ? 'is-available' : 'is-blocked'} ${isQueued ? 'is-queued' : ''}`}
                 data-qa-spaceport-card={entity.id}
                 data-qa-spaceport-row={entity.id}
-                data-qa-spaceport-queued={isQueued ? 'true' : 'false'}
+                data-qa-spaceport-queued-count={queuedTasks.length}
               >
                 <div className="spaceport-row-art-v2">
                   <img src={entity.art} alt={entity.name} draggable={false} />
@@ -261,10 +358,20 @@ export function SpaceportUpgradeView({
                     <p>{entity.role} · {entity.category}</p>
                   </header>
 
+                  <LevelProgress
+                    track={activeTrack}
+                    currentLevel={preview.currentLevel}
+                    projectedLevel={preview.projectedLevel}
+                    queuedCount={preview.queuedCount}
+                    nextLevel={preview.nextLevel}
+                  />
+
                   <div className="spaceport-level-line-v2">
-                    <span>Текущий уровень <b>{preview.currentLevel}</b></span>
+                    <span>Фактический уровень <b>{preview.currentLevel}</b></span>
                     <i aria-hidden="true">→</i>
-                    <span>Следующий уровень <b>{targetLevel ?? 'MAX'}</b></span>
+                    <span>После очереди <b>{preview.projectedLevel}</b></span>
+                    <i aria-hidden="true">→</i>
+                    <span>Следующий клик <b>{preview.nextLevel ?? 'MAX'}</b></span>
                   </div>
 
                   <div className="spaceport-cost-line-v2" aria-label="Стоимость улучшения">
@@ -280,28 +387,30 @@ export function SpaceportUpgradeView({
 
                   <div className="spaceport-requirement-line-v2">
                     <span className="spaceport-line-label-v2">ТРЕБОВАНИЯ</span>
-                    <div>
-                      {preview.requirements.length === 0 ? <span className="is-met">Нет дополнительных требований</span> : null}
+                    <div className="spaceport-requirement-badges-v2">
+                      {preview.requirements.length === 0 ? <span className="spaceport-no-requirements-v2">Нет дополнительных требований</span> : null}
                       {preview.requirements.map((requirement) => (
-                        <span
+                        <RequirementBadge
                           key={`${entity.id}-${requirement.kind}-${requirement.label}`}
-                          className={requirement.met ? 'is-met' : 'is-missing'}
-                        >
-                          {requirement.label} ур. {requirement.requiredLevel}
-                          <small>{requirement.currentLevel == null ? ' · уровень не подключён' : ` · сейчас ${requirement.currentLevel}`}</small>
-                        </span>
+                          requirement={requirement}
+                        />
                       ))}
                     </div>
                   </div>
 
-                  {isQueued ? (
-                    <div className="spaceport-state-strip-v2 queued" data-qa-spaceport-blocker="queued">
-                      В очереди · позиция {queueIndex + 1} · ур. {queuedTask.fromLevel} → {queuedTask.toLevel}
-                      {queueIndex === 0 ? ` · осталось ${formatCountdown(queuedTask.finishAt - now)}` : ' · ожидает'}
+                  {queuedTasks.map(({ task, index }) => (
+                    <div
+                      className="spaceport-state-strip-v2 queued"
+                      data-qa-spaceport-queued-task={entity.id}
+                      data-qa-spaceport-queued-position={index + 1}
+                      key={task.id}
+                    >
+                      Заказано · позиция {index + 1} в общей очереди · ур. {task.fromLevel} → {task.toLevel}
+                      {index === 0 ? ` · осталось ${formatCountdown(task.finishAt - now)}` : ' · ожидает'}
                     </div>
-                  ) : null}
+                  ))}
 
-                  {!isQueued && missingRequirements.map((requirement) => (
+                  {missingRequirements.map((requirement) => (
                     <div
                       className="spaceport-state-strip-v2 blocked"
                       data-qa-spaceport-blocker="requirement"
@@ -311,24 +420,24 @@ export function SpaceportUpgradeView({
                     </div>
                   ))}
 
-                  {!isQueued && missingResources.map((key) => (
+                  {missingResources.map((key) => (
                     <div className="spaceport-state-strip-v2 blocked" data-qa-spaceport-blocker="resource" key={`${entity.id}-resource-${key}`}>
                       Недостаточно {RESOURCE_LABELS[key]} · нужно {formatNumber(preview.cost[key])}, есть {formatNumber(wallet[key])}
                     </div>
                   ))}
 
-                  {!isQueued && preview.status === 'queue-full' && missingRequirements.length === 0 ? (
-                    <div className="spaceport-state-strip-v2 muted" data-qa-spaceport-blocker="queue">Очередь заполнена · 3 / 3</div>
+                  {preview.status === 'queue-full' && missingRequirements.length === 0 ? (
+                    <div className="spaceport-state-strip-v2 muted" data-qa-spaceport-blocker="queue">Очередь улучшений заполнена · 3 / 3</div>
                   ) : null}
 
-                  {!isQueued && preview.status === 'max-level' ? (
-                    <div className="spaceport-state-strip-v2 muted" data-qa-spaceport-blocker="max">Достигнут максимальный уровень корабля</div>
+                  {preview.status === 'max-level' ? (
+                    <div className="spaceport-state-strip-v2 max" data-qa-spaceport-blocker="max">Максимальный уровень</div>
                   ) : null}
                 </div>
 
                 <aside className="spaceport-row-action-v2">
-                  <span>СЛЕДУЮЩИЙ УРОВЕНЬ</span>
-                  <strong>{targetLevel ?? 'MAX'}</strong>
+                  <span>СЛЕДУЮЩИЙ ЗАКАЗ</span>
+                  <strong>{preview.nextLevel ?? 'MAX'}</strong>
                   <div className="spaceport-row-time-v2">
                     <small>ВРЕМЯ НОВОЙ ЗАДАЧИ</small>
                     <time>{formatTaskTime(preview.effectiveDurationMs)}</time>
@@ -340,10 +449,7 @@ export function SpaceportUpgradeView({
                     data-qa-spaceport-upgrade={entity.id}
                     disabled={!uiCanStart}
                     title={actionReason}
-                    onClick={() => {
-                      if (isQueued) return;
-                      onUpgrade(activeTrack, entity.id);
-                    }}
+                    onClick={() => onUpgrade(activeTrack, entity.id)}
                   >
                     {ctaText}
                   </button>

@@ -5,11 +5,14 @@ import {
 } from '../combat/catalog.ts';
 import { SCIENCE_CATALOG } from '../science/catalog.ts';
 import type { ScienceId } from '../science/types.ts';
-import type { BuildingLevels, ScienceLevels } from './resource-zone.ts';
+import type { BuildingLevels, BuildingRole, ScienceLevels } from './resource-zone.ts';
 
 export const SPACEPORT_UPGRADE_QUEUE_CAPACITY = 3;
 export const PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS = 15 * 60 * 1000;
-export const PROTOTYPE_SPACEPORT_UPGRADE_MAX_LEVEL = 10;
+export const SPACEPORT_UPGRADE_MAX_LEVEL_BY_TRACK = Object.freeze({
+  ships: 10,
+  commanders: 40,
+} as const);
 export const PROTOTYPE_SPACEPORT_UPGRADE_COST = Object.freeze({
   metal: 500,
   minerals: 250,
@@ -17,9 +20,7 @@ export const PROTOTYPE_SPACEPORT_UPGRADE_COST = Object.freeze({
 });
 
 export const SPACEPORT_UPGRADE_PROTOTYPE_NOTE =
-  'PROTOTYPE: стоимость, индивидуальная длительность, максимальный уровень кораблей и правило повторной постановки ещё не являются каноническим балансом.';
-export const SPACEPORT_DUPLICATE_POLICY_TBD =
-  'TBD: общий каталог не задаёт запрет повторной постановки одной цели, поэтому очередь допускает последовательные N → N+1 задачи одного корабля.';
+  'PROTOTYPE: стоимость и индивидуальная длительность улучшения остаются прототипными. Лимиты уровней: корабли 10, командирские корабли 40.';
 
 export type SpaceportUpgradeTrack = 'ships' | 'commanders';
 export type SpaceportUpgradeStatus =
@@ -59,6 +60,7 @@ export type SpaceportRequirementState = {
   requiredLevel: number;
   currentLevel: number | null;
   met: boolean;
+  buildingRole?: BuildingRole;
   scienceId?: ScienceId;
 };
 
@@ -100,10 +102,21 @@ export type SpaceportReconciliation = {
   completed: SpaceportUpgradeTask[];
 };
 
+const EXCLUDED_SHIP_UPGRADE_IDS = new Set<string>([
+  'solar-satellite',
+  'spy-probe',
+  'colonizer',
+  'recycler',
+]);
+
+const SHIP_UPGRADE_CATALOG = SHIP_COMBAT_CATALOG.filter((entity) => !EXCLUDED_SHIP_UPGRADE_IDS.has(entity.id));
+
 const CATALOG_BY_TRACK: Readonly<Record<SpaceportUpgradeTrack, readonly CatalogEntity[]>> = {
-  ships: SHIP_COMBAT_CATALOG,
+  ships: SHIP_UPGRADE_CATALOG,
   commanders: COMMANDER_COMBAT_CATALOG,
 };
+
+const commanderIds = new Set<string>(COMMANDER_COMBAT_CATALOG.map((entity) => entity.id));
 
 const normalizeRequirementName = (value: string) => value
   .toLocaleLowerCase('ru-RU')
@@ -117,13 +130,26 @@ for (const science of SCIENCE_CATALOG) {
   scienceByNormalizedName.set(normalizeRequirementName(science.sourceName), science);
 }
 
-function safeLevel(value: unknown, maxLevel = PROTOTYPE_SPACEPORT_UPGRADE_MAX_LEVEL): number {
+export function getSpaceportUpgradeMaxLevel(track: SpaceportUpgradeTrack): number {
+  return SPACEPORT_UPGRADE_MAX_LEVEL_BY_TRACK[track];
+}
+
+function safeTrackLevel(value: unknown, track: SpaceportUpgradeTrack): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
-  return Math.min(maxLevel, Math.max(0, Math.floor(value)));
+  return Math.min(getSpaceportUpgradeMaxLevel(track), Math.max(0, Math.floor(value)));
+}
+
+function safeSpaceportLevel(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  return Math.min(10, Math.max(0, Math.floor(value)));
 }
 
 function safeTimestamp(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function trackForEntityId(id: string): SpaceportUpgradeTrack {
+  return commanderIds.has(id) ? 'commanders' : 'ships';
 }
 
 function queueForTrack(state: SpaceportUpgradeState, track: SpaceportUpgradeTrack) {
@@ -162,8 +188,8 @@ export function calculateSpaceportEffectiveDuration(
   spaceportLevel: number,
 ): number {
   const safeBase = Math.max(1, Math.round(baseDurationMs));
-  const safeSpaceportLevel = Math.min(10, Math.max(0, Math.floor(spaceportLevel)));
-  return Math.max(1, Math.round(safeBase * (1 - 0.05 * safeSpaceportLevel)));
+  const safeLevel = safeSpaceportLevel(spaceportLevel);
+  return Math.max(1, Math.round(safeBase * (1 - 0.05 * safeLevel)));
 }
 
 export function hasFreeSpaceportQueueSlot(state: SpaceportUpgradeState, track: SpaceportUpgradeTrack): boolean {
@@ -196,6 +222,7 @@ function parseCatalogRequirement(
       requiredLevel,
       currentLevel,
       met: currentLevel >= requiredLevel,
+      buildingRole: 'shipyard',
     };
   }
 
@@ -243,6 +270,7 @@ export function evaluateSpaceportUpgradeRequirements(
       requiredLevel: entity.construction.requiredShipyardLevel,
       currentLevel,
       met: currentLevel >= entity.construction.requiredShipyardLevel,
+      buildingRole: 'shipyard',
     });
   }
 
@@ -264,10 +292,11 @@ export function previewSpaceportUpgrade(
   const entity = getSpaceportUpgradeEntity(track, shipId);
   if (!entity) throw new Error(`Unknown ${track} upgrade target: ${shipId}`);
 
+  const maxLevel = getSpaceportUpgradeMaxLevel(track);
   const queue = queueForTrack(context.state, track);
-  const currentLevel = safeLevel(context.state.shipLevels[shipId]);
+  const currentLevel = safeTrackLevel(context.state.shipLevels[shipId], track);
   const queuedCount = queue.filter((task) => task.shipId === shipId).length;
-  const projectedLevel = Math.min(PROTOTYPE_SPACEPORT_UPGRADE_MAX_LEVEL, currentLevel + queuedCount);
+  const projectedLevel = Math.min(maxLevel, currentLevel + queuedCount);
   const requirements = evaluateSpaceportUpgradeRequirements(track, shipId, context.buildings, context.scienceLevels);
   const effectiveDurationMs = calculateSpaceportEffectiveDuration(
     PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS,
@@ -278,7 +307,7 @@ export function previewSpaceportUpgrade(
     shipId,
     currentLevel,
     projectedLevel,
-    nextLevel: projectedLevel < PROTOTYPE_SPACEPORT_UPGRADE_MAX_LEVEL ? projectedLevel + 1 : null,
+    nextLevel: projectedLevel < maxLevel ? projectedLevel + 1 : null,
     queuedCount,
     requirements,
     cost: { ...PROTOTYPE_SPACEPORT_UPGRADE_COST },
@@ -286,8 +315,8 @@ export function previewSpaceportUpgrade(
     effectiveDurationMs,
   };
 
-  if (projectedLevel >= PROTOTYPE_SPACEPORT_UPGRADE_MAX_LEVEL) {
-    return { ...base, status: 'max-level', canStart: false, reason: 'Достигнут prototype-максимум уровня корабля.' };
+  if (projectedLevel >= maxLevel) {
+    return { ...base, status: 'max-level', canStart: false, reason: 'Достигнут максимальный уровень корабля.' };
   }
 
   const missingRequirements = requirements.filter((requirement) => !requirement.met);
@@ -301,7 +330,7 @@ export function previewSpaceportUpgrade(
   }
 
   if (!hasFreeSpaceportQueueSlot(context.state, track)) {
-    return { ...base, status: 'queue-full', canStart: false, reason: 'Очередь заполнена.' };
+    return { ...base, status: 'queue-full', canStart: false, reason: 'Очередь улучшений заполнена.' };
   }
 
   const missingResource = (Object.keys(PROTOTYPE_SPACEPORT_UPGRADE_COST) as (keyof SpaceportUpgradeWallet)[])
@@ -330,6 +359,16 @@ export function enqueueSpaceportUpgrade(
   now: number,
   taskId: string,
 ): SpaceportUpgradeTransition {
+  if (!getSpaceportUpgradeEntity(track, shipId)) {
+    return {
+      ok: false,
+      state: context.state,
+      wallet: context.wallet,
+      task: null,
+      reason: 'Эта позиция недоступна для улучшения в Космодроме.',
+    };
+  }
+
   const preview = previewSpaceportUpgrade(context, track, shipId);
   if (!preview.canStart || preview.nextLevel == null) {
     return {
@@ -353,7 +392,7 @@ export function enqueueSpaceportUpgrade(
     toLevel: preview.nextLevel,
     startedAt,
     finishAt: startedAt + effectiveDurationMs,
-    spaceportLevelAtStart: Math.min(10, Math.max(0, Math.floor(context.spaceportLevel))),
+    spaceportLevelAtStart: safeSpaceportLevel(context.spaceportLevel),
     effectiveDurationMs,
   };
   const wallet: SpaceportUpgradeWallet = {
@@ -379,11 +418,13 @@ function reconcileTrack(
   let nextState = state;
   let queue = [...queueForTrack(nextState, track)];
   const completed: SpaceportUpgradeTask[] = [];
+  const maxLevel = getSpaceportUpgradeMaxLevel(track);
 
   while (queue[0] && now >= queue[0].finishAt) {
     const task = queue[0];
-    const currentLevel = safeLevel(nextState.shipLevels[task.shipId]);
-    const nextLevel = Math.min(PROTOTYPE_SPACEPORT_UPGRADE_MAX_LEVEL, currentLevel + 1);
+    const currentLevel = safeTrackLevel(nextState.shipLevels[task.shipId], track);
+    const taskTarget = safeTrackLevel(task.toLevel, track);
+    const nextLevel = Math.min(maxLevel, Math.max(currentLevel, taskTarget));
     nextState = {
       ...nextState,
       shipLevels: {
@@ -421,6 +462,7 @@ function migrateQueue(
   const result: SpaceportUpgradeTask[] = [];
   const queuedPerTarget: Record<string, number> = {};
   let previousFinishAt: number | null = null;
+  const maxLevel = getSpaceportUpgradeMaxLevel(track);
 
   for (const raw of source) {
     if (result.length >= SPACEPORT_UPGRADE_QUEUE_CAPACITY) break;
@@ -431,10 +473,10 @@ function migrateQueue(
 
     const queuedBefore = queuedPerTarget[shipId] ?? 0;
     const fromLevel = Math.min(
-      PROTOTYPE_SPACEPORT_UPGRADE_MAX_LEVEL,
-      safeLevel(levels[shipId]) + queuedBefore,
+      maxLevel,
+      safeTrackLevel(levels[shipId], track) + queuedBefore,
     );
-    if (fromLevel >= PROTOTYPE_SPACEPORT_UPGRADE_MAX_LEVEL) continue;
+    if (fromLevel >= maxLevel) continue;
 
     const rawStartedAt = safeTimestamp(item.startedAt) ?? previousFinishAt ?? 0;
     const effectiveDurationMs = typeof item.effectiveDurationMs === 'number'
@@ -447,7 +489,7 @@ function migrateQueue(
     const finishAt: number = rawFinishAt != null && rawFinishAt >= startedAt
       ? rawFinishAt
       : startedAt + effectiveDurationMs;
-    const spaceportLevelAtStart = safeLevel(item.spaceportLevelAtStart, 10);
+    const spaceportLevelAtStart = safeSpaceportLevel(item.spaceportLevelAtStart);
     const id = typeof item.id === 'string' && item.id.trim()
       ? item.id
       : `migrated-${track}-${result.length}-${shipId}-${startedAt}`;
@@ -480,7 +522,9 @@ export function migrateSpaceportUpgradeState(value: unknown): SpaceportUpgradeSt
       ? source.levels as Record<string, unknown>
       : {};
   const shipLevels = { ...defaults.shipLevels };
-  for (const id of Object.keys(shipLevels)) shipLevels[id] = safeLevel(rawLevels[id]);
+  for (const id of Object.keys(shipLevels)) {
+    shipLevels[id] = safeTrackLevel(rawLevels[id], trackForEntityId(id));
+  }
 
   return {
     shipLevels,
