@@ -132,14 +132,36 @@
   color: #ef929a;
 }
 
+/*
+ * Tooltip is a real DOM node driven by hover/focus state. The zero-size ::after
+ * marker mirrors that state only for deterministic Electron focus QA and is not visible.
+ */
 .spaceport-requirement-badge-v2::after {
-  content: attr(data-tooltip);
+  content: '';
   position: absolute;
-  z-index: 40;
+  width: 0;
+  height: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.spaceport-requirement-badge-v2.is-tooltip-open::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+.spaceport-requirement-tooltip-v2 {
+  position: absolute;
+  z-index: 50;
   left: 50%;
   bottom: calc(100% + 8px);
   width: max-content;
   max-width: 240px;
+  display: grid;
+  gap: 2px;
   padding: 8px 10px;
   transform: translate(-50%, 4px);
   border: 1px solid rgba(72, 203, 231, .36);
@@ -150,16 +172,26 @@
   font-weight: 600;
   line-height: 1.45;
   text-align: left;
-  white-space: pre-line;
+  white-space: nowrap;
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
   transition: opacity .12s ease, transform .12s ease;
 }
 
-.spaceport-requirement-badge-v2:hover::after,
-.spaceport-requirement-badge-v2:focus-visible::after,
-.spaceport-requirement-badge-v2:focus::after {
+.spaceport-requirement-tooltip-v2 strong {
+  color: #e7fbff;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.spaceport-requirement-tooltip-v2 span {
+  color: #a8cbd3;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.spaceport-requirement-badge-v2.is-tooltip-open > .spaceport-requirement-tooltip-v2 {
   opacity: 1;
   visibility: visible;
   transform: translate(-50%, 0);

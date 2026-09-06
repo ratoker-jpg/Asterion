@@ -94,6 +94,7 @@ function requirementArt(requirement: SpaceportRequirementState): string | null {
 }
 
 function RequirementBadge({ requirement }: { requirement: SpaceportRequirementState }) {
+  const [tooltipOpen, setTooltipOpen] = useState(false);
   const art = requirementArt(requirement);
   const status = requirement.met ? 'выполнено' : 'не выполнено';
   const current = requirement.currentLevel == null ? 'неизвестно' : String(requirement.currentLevel);
@@ -112,16 +113,30 @@ function RequirementBadge({ requirement }: { requirement: SpaceportRequirementSt
 
   return (
     <span
-      className={`spaceport-requirement-badge-v2 ${requirement.met ? 'is-met' : 'is-missing'}`}
+      className={`spaceport-requirement-badge-v2 ${requirement.met ? 'is-met' : 'is-missing'} ${tooltipOpen ? 'is-tooltip-open' : ''}`}
       data-qa-spaceport-requirement-badge={requirement.label}
       data-qa-spaceport-requirement-status={requirement.met ? 'met' : 'missing'}
       data-tooltip={tooltip}
-      title={tooltip}
       tabIndex={0}
       aria-label={`${requirement.label}. Текущий уровень ${current}. Требуется ${requirement.requiredLevel}. Статус: ${status}.`}
+      onMouseEnter={() => setTooltipOpen(true)}
+      onMouseLeave={() => setTooltipOpen(false)}
+      onFocus={() => setTooltipOpen(true)}
+      onBlur={() => setTooltipOpen(false)}
     >
       <img src={art} alt="" draggable={false} />
       <b>{requirement.requiredLevel}</b>
+      <span
+        className="spaceport-requirement-tooltip-v2"
+        data-qa-spaceport-requirement-tooltip={requirement.label}
+        role="tooltip"
+        aria-hidden={!tooltipOpen}
+      >
+        <strong>{requirement.label}</strong>
+        <span>Текущий уровень: {current}</span>
+        <span>Требуется: {requirement.requiredLevel}</span>
+        <span>Статус: {status}</span>
+      </span>
     </span>
   );
 }
