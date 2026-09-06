@@ -55,29 +55,8 @@ function scan(root: ParentNode) {
   root.querySelectorAll<HTMLElement>('*').forEach(tagElement);
 }
 
-function refreshBases() {
-  const managed = Array.from(document.querySelectorAll<HTMLElement>(`[${CATEGORY_ATTR}]`));
-  for (const element of managed) {
-    const category = element.getAttribute(CATEGORY_ATTR);
-    element.removeAttribute(CATEGORY_ATTR);
-    element.style.removeProperty(BASE_SIZE_PROPERTY);
-    const baseSize = Number.parseFloat(getComputedStyle(element).fontSize);
-    if (category && Number.isFinite(baseSize) && baseSize > 0) {
-      element.style.setProperty(BASE_SIZE_PROPERTY, `${baseSize}px`);
-      element.setAttribute(CATEGORY_ATTR, category);
-    }
-  }
-  scan(document.body);
-}
-
 export function GlobalTypographyController() {
   useEffect(() => {
-    let frame = 0;
-    const scheduleScan = (root: ParentNode = document.body) => {
-      window.cancelAnimationFrame(frame);
-      frame = window.requestAnimationFrame(() => scan(root));
-    };
-
     scan(document.body);
 
     const observer = new MutationObserver((mutations) => {
@@ -89,19 +68,7 @@ export function GlobalTypographyController() {
     });
     observer.observe(document.body, { childList: true, subtree: true });
 
-    const onResize = () => {
-      window.cancelAnimationFrame(frame);
-      frame = window.requestAnimationFrame(refreshBases);
-    };
-    window.addEventListener('resize', onResize);
-    window.visualViewport?.addEventListener('resize', onResize);
-
-    return () => {
-      observer.disconnect();
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener('resize', onResize);
-      window.visualViewport?.removeEventListener('resize', onResize);
-    };
+    return () => observer.disconnect();
   }, []);
 
   return null;
