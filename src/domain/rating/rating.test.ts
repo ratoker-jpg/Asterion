@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createAllianceRatingEntries, createPlayerRatingEntries, CURRENT_PLAYER_ID } from './fixtures.ts';
+import {
+  CURRENT_PLAYER_ID,
+  RATING_PROTOTYPE_RESOURCE_POINTS,
+  createAllianceRatingEntries,
+  createDefaultRatingPrototypeState,
+  createPlayerRatingEntries,
+  migrateRatingPrototypeState,
+} from './fixtures.ts';
 import { clampPage, filterAlliances, filterPlayers, pageForEntry, paginate, sortPlayers } from './selectors.ts';
 
 test('player display provider is deterministic with unique ids and ranks', () => {
@@ -19,6 +26,18 @@ test('player scores are finite non-negative and source relation total = resource
     }
     assert.equal(entry.totalPoints, entry.resourcePoints + entry.battlePoints);
   }
+});
+
+test('current resource rating is one explicit prototype fixture and supports persisted override', () => {
+  assert.equal(RATING_PROTOTYPE_RESOURCE_POINTS, 855_880);
+  assert.deepEqual(createDefaultRatingPrototypeState(), { resourcePoints: 855_880 });
+  assert.deepEqual(migrateRatingPrototypeState(undefined), { resourcePoints: 855_880 });
+  assert.deepEqual(migrateRatingPrototypeState({ resourcePoints: 900_001.9 }), { resourcePoints: 900_001 });
+  assert.deepEqual(migrateRatingPrototypeState({ resourcePoints: -1 }), { resourcePoints: 855_880 });
+
+  const current = createPlayerRatingEntries(900_001).find((entry) => entry.id === CURRENT_PLAYER_ID);
+  assert.equal(current?.resourcePoints, 900_001);
+  assert.equal(current?.totalPoints, (current?.battlePoints ?? 0) + 900_001);
 });
 
 test('search is case-insensitive and score sorting works', () => {
