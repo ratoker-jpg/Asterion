@@ -31,6 +31,7 @@ export function RatingView({ currentAlliance }: { currentAlliance?: AllianceIden
 
   const players = useMemo(() => createPlayerRatingEntries(), []);
   const alliances = useMemo(() => createAllianceRatingEntries(currentAlliance), [currentAlliance]);
+  const currentPlayer = useMemo(() => players.find((entry) => entry.isCurrentPlayer) ?? null, [players]);
 
   const playerResults = useMemo(
     () => sortPlayers(filterPlayers(players, query), playerSort, direction),
@@ -131,6 +132,7 @@ export function RatingView({ currentAlliance }: { currentAlliance?: AllianceIden
         {mode === 'players' ? (
           <PlayerTable
             entries={results.items as PlayerRatingEntry[]}
+            currentPlayer={currentPlayer}
             selectedId={selectedId}
             sortKey={playerSort}
             direction={direction}
@@ -159,6 +161,7 @@ export function RatingView({ currentAlliance }: { currentAlliance?: AllianceIden
 
 function PlayerTable({
   entries,
+  currentPlayer,
   selectedId,
   sortKey,
   direction,
@@ -166,12 +169,16 @@ function PlayerTable({
   onSort,
 }: {
   entries: readonly PlayerRatingEntry[];
+  currentPlayer: PlayerRatingEntry | null;
   selectedId: string | null;
   sortKey: PlayerScoreKey;
   direction: SortDirection;
   onSelect: (id: string) => void;
   onSort: (key: PlayerScoreKey) => void;
 }) {
+  const currentPlayerAlreadyVisible = Boolean(currentPlayer && entries.some((entry) => entry.id === currentPlayer.id));
+  const showPinnedCurrentPlayer = Boolean(currentPlayer && !currentPlayerAlreadyVisible);
+
   return (
     <div className="rating-table-v2 rating-table-v2--players" role="table" aria-label="Рейтинг игроков">
       <div className="rating-row-v2 rating-head-v2" role="row">
@@ -182,28 +189,50 @@ function PlayerTable({
         <ScoreHead label="БОЕВЫЕ" scoreKey="battlePoints" selected={sortKey === 'battlePoints'} direction={direction} onSort={onSort} />
       </div>
       {entries.map((entry) => (
-        <button
-          type="button"
-          role="row"
-          key={entry.id}
-          className={[
-            'rating-row-v2',
-            entry.rank <= 3 ? `top-${entry.rank}` : '',
-            entry.isCurrentPlayer ? 'current' : '',
-            selectedId === entry.id ? 'selected' : '',
-          ].filter(Boolean).join(' ')}
-          onClick={() => onSelect(entry.id)}
-        >
-          <span className="rank-v2"><b>{entry.rank}</b></span>
-          <span className="identity-v2"><RaceEmblem race={entry.race} /><strong className="utility-data-text">{entry.name}</strong></span>
-          <span className="alliance-tag-v2">{entry.allianceTag ? `[${entry.allianceTag}]` : '—'}</span>
-          <Value value={entry.achievementPoints} />
-          <Value value={entry.totalPoints} />
-          <Value value={entry.resourcePoints} />
-          <Value value={entry.battlePoints} />
-        </button>
+        <PlayerRow key={entry.id} entry={entry} selectedId={selectedId} onSelect={onSelect} />
       ))}
+      {showPinnedCurrentPlayer && currentPlayer ? (
+        <>
+          <div className="rating-self-separator-v2" role="row" aria-hidden="true"><span>…</span></div>
+          <PlayerRow entry={currentPlayer} selectedId={selectedId} onSelect={onSelect} pinned />
+        </>
+      ) : null}
     </div>
+  );
+}
+
+function PlayerRow({
+  entry,
+  selectedId,
+  onSelect,
+  pinned = false,
+}: {
+  entry: PlayerRatingEntry;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  pinned?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="row"
+      className={[
+        'rating-row-v2',
+        entry.rank <= 3 ? `top-${entry.rank}` : '',
+        entry.isCurrentPlayer ? 'current' : '',
+        pinned ? 'pinned-current' : '',
+        selectedId === entry.id ? 'selected' : '',
+      ].filter(Boolean).join(' ')}
+      onClick={() => onSelect(entry.id)}
+    >
+      <span className="rank-v2"><b>{entry.rank}</b></span>
+      <span className="identity-v2"><RaceEmblem race={entry.race} /><strong className="utility-data-text">{entry.name}</strong></span>
+      <span className="alliance-tag-v2">{entry.allianceTag ? `[${entry.allianceTag}]` : '—'}</span>
+      <Value value={entry.achievementPoints} />
+      <Value value={entry.totalPoints} />
+      <Value value={entry.resourcePoints} />
+      <Value value={entry.battlePoints} />
+    </button>
   );
 }
 
