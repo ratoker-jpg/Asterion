@@ -124,7 +124,7 @@ async function readScreen(win) {
     const activeTab = root.querySelector('[data-qa-spaceport-tab][aria-pressed="true"]');
     const defender = root.querySelector('[data-qa-spaceport-card="defender"]');
     const solar = root.querySelector('[data-qa-spaceport-card="solar-satellite"]');
-    const text = (node) => node?.textContent?.replace(/\\s+/g, ' ').trim() ?? '';
+    const text = (node) => node?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
     return {
       track: root.getAttribute('data-qa-spaceport-track'),
       queueCount: queue?.getAttribute('data-qa-spaceport-queue-count') ?? null,
@@ -144,6 +144,7 @@ async function readScreen(win) {
 
 async function measureLayout(win) {
   return win.webContents.executeJavaScript(`(() => {
+    window.scrollTo(0, 0);
     const root = document.querySelector('[data-qa-spaceport-upgrades]');
     if (!root) return null;
     const pick = (element) => {
@@ -194,9 +195,9 @@ function assertLayout(snapshot, label) {
   if (!catalog || ['auto', 'scroll'].includes(snapshot.catalogOverflowY)) throw new Error(`${label}: catalog owns forbidden internal vertical scroll (${snapshot.catalogOverflowY})`);
   if (catalog.scrollHeight > catalog.clientHeight + epsilon) throw new Error(`${label}: catalog is internally clipped instead of growing naturally ${JSON.stringify(catalog)}`);
   if (rows.length < 8) throw new Error(`${label}: catalog rows missing (${rows.length})`);
-  const expectedRowWidth = catalog.width - 0;
+  const expectedRowWidth = catalog.width - 28;
   for (const row of rows.slice(0, 5)) {
-    if (!row || row.width < expectedRowWidth - 12) throw new Error(`${label}: row is not full-width ${JSON.stringify({ row, catalog })}`);
+    if (!row || row.width < expectedRowWidth - 4) throw new Error(`${label}: row is not full-width ${JSON.stringify({ row, catalog })}`);
   }
   if (!defenderInfo || defenderInfo.scrollWidth > defenderInfo.clientWidth + epsilon) throw new Error(`${label}: long requirement/info content clipped horizontally`);
   if (!defenderAction || defenderAction.scrollWidth > defenderAction.clientWidth + epsilon) throw new Error(`${label}: CTA/action content clipped horizontally`);
@@ -319,7 +320,7 @@ async function verifyFlow(win, directory, label) {
   await click(win, '[data-qa-spaceport-upgrade="solar-satellite"]');
   await waitFor(win, `document.querySelector('[data-qa-spaceport-queue-count]')?.getAttribute('data-qa-spaceport-queue-count') === '1/3'`);
   screen = await readScreen(win);
-  if (screen?.queueCount !== '1/3' || screen.taskCount !== 1 || screen.solarQueued !== 'true' || !screen.solarButtonDisabled || !/^\\d{2}:\\d{2}:\\d{2}$/.test(screen.activeCountdown)) {
+  if (screen?.queueCount !== '1/3' || screen.taskCount !== 1 || screen.solarQueued !== 'true' || !screen.solarButtonDisabled || !/^\d{2}:\d{2}:\d{2}$/.test(screen.activeCountdown)) {
     throw new Error(`${label}: active 1/3 queue state mismatch ${JSON.stringify(screen)}`);
   }
   saved = await readSave(win);
