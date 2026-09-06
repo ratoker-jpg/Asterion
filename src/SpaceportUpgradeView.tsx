@@ -147,7 +147,7 @@ function RequirementBadge({ requirement }: { requirement: SpaceportRequirementSt
         className="spaceport-requirement-tooltip-v2"
         data-qa-spaceport-requirement-tooltip={requirement.label}
         role="tooltip"
-        aria-hidden={!tooltipOpen}
+        aria-hidden={false}
       >
         <strong>{requirement.label}</strong>
         <span>Текущий уровень: {current}</span>
