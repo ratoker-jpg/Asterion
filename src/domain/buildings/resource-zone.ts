@@ -1,3 +1,6 @@
+import { findScience } from '../science/catalog.ts';
+import type { ScienceId } from '../science/types.ts';
+
 export const RESOURCE_BUILDING_ROLES = [
   'metal-production-1',
   'metal-production-2',
@@ -11,6 +14,8 @@ export const RESOURCE_BUILDING_ROLES = [
   'hangar',
 ] as const;
 
+export const RESOURCE_BUILDING_QUEUE_CAPACITY = 3;
+
 export type ResourceBuildingRole = (typeof RESOURCE_BUILDING_ROLES)[number];
 export type BuildingZone = 'resource' | 'industry' | 'military';
 export type BuildingFaction = 'aegis';
@@ -19,11 +24,26 @@ export type ResourceKey = 'metal' | 'minerals' | 'gas' | 'energy';
 export type ResourceCost = Record<ResourceKey, number>;
 export type ResourceWallet = Record<ResourceKey, number>;
 export type ResourceBuildingLevels = Record<ResourceBuildingRole, number>;
+export type ScienceLevels = Partial<Record<ScienceId, number>>;
 
 export type BuildingEffect = {
   kind: 'energy';
   amountPerLevel: number;
   label: string;
+};
+
+export type BuildingRequirement =
+  | { kind: 'building-level'; assetRole: ResourceBuildingRole; level: number }
+  | { kind: 'science-level'; scienceId: ScienceId; level: number };
+
+export type BuildingRequirementState = {
+  kind: BuildingRequirement['kind'];
+  label: string;
+  requiredLevel: number;
+  currentLevel: number;
+  met: boolean;
+  assetRole?: ResourceBuildingRole;
+  scienceId?: ScienceId;
 };
 
 export type BuildingDefinition = {
@@ -36,6 +56,7 @@ export type BuildingDefinition = {
   maxLevel: number;
   prototypeCost: ResourceCost;
   prototypeTimeMs: number;
+  requirements: readonly BuildingRequirement[];
   effect?: BuildingEffect;
 };
 
@@ -43,21 +64,24 @@ export type BuildingQueueItem = {
   kind: 'building';
   assetRole: ResourceBuildingRole;
   planetId: string;
+  enqueuedAt: number;
   startedAt: number;
   finishAt: number;
+  targetLevel: number;
 };
 
 export type ResourceEconomyState = {
   resources: ResourceWallet;
   buildings: ResourceBuildingLevels;
-  queue: BuildingQueueItem | null;
+  queue: BuildingQueueItem[];
+  scienceLevels: ScienceLevels;
 };
 
 export type BuildAvailabilityStatus =
   | 'available'
   | 'insufficient-resource'
-  | 'queue-busy'
-  | 'already-building'
+  | 'requirements-unmet'
+  | 'queue-full'
   | 'max-level';
 
 export type BuildAvailability = {
@@ -65,11 +89,13 @@ export type BuildAvailability = {
   canBuild: boolean;
   reason: string | null;
   currentLevel: number;
+  projectedLevel: number;
   nextLevel: number | null;
   maxLevel: number;
   cost: ResourceCost;
   timeMs: number;
   missing: Partial<Record<ResourceKey, number>>;
+  requirements: readonly BuildingRequirementState[];
 };
 
 const EXISTING_PROTOTYPE_COST: ResourceCost = {
@@ -80,7 +106,6 @@ const EXISTING_PROTOTYPE_COST: ResourceCost = {
 };
 
 const EXISTING_PROTOTYPE_TIME_MS = 45_000;
-const VERTICAL_SLICE_MAX_LEVEL = 1;
 
 export const RESOURCE_BASE_INCOME_PER_HOUR = {
   metal: 774,
@@ -89,7 +114,7 @@ export const RESOURCE_BASE_INCOME_PER_HOUR = {
 } as const;
 
 export const RESOURCE_PROTOTYPE_DATA_NOTE =
-  'Цена, время и лимит уровня — локальные данные вертикального среза Asterion. Баланс и эффекты добывающих зданий будут определены на следующем этапе.';
+  'Цена и время остаются локальными данными текущего прототипа. Дополнительные требования и баланс добавляются только после подтверждения.';
 
 const RESOURCE_BUILDING_ART: Record<ResourceBuildingRole, string> = {
   'metal-production-1': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.metal-production-1.png', import.meta.url).href,
@@ -104,10 +129,15 @@ const RESOURCE_BUILDING_ART: Record<ResourceBuildingRole, string> = {
   hangar: new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.hangar.png', import.meta.url).href,
 };
 
+const reqBuilding = (assetRole: ResourceBuildingRole, level: number): BuildingRequirement => ({ kind: 'building-level', assetRole, level });
+const reqScience = (scienceId: ScienceId, level: number): BuildingRequirement => ({ kind: 'science-level', scienceId, level });
+
 const baseDefinition = (
   assetRole: ResourceBuildingRole,
   name: string,
   purpose: string,
+  maxLevel: number,
+  requirements: readonly BuildingRequirement[] = [],
   effect?: BuildingEffect,
 ): BuildingDefinition => ({
   zone: 'resource',
@@ -116,28 +146,37 @@ const baseDefinition = (
   name,
   purpose,
   art: RESOURCE_BUILDING_ART[assetRole],
-  maxLevel: VERTICAL_SLICE_MAX_LEVEL,
+  maxLevel,
   prototypeCost: { ...EXISTING_PROTOTYPE_COST },
   prototypeTimeMs: EXISTING_PROTOTYPE_TIME_MS,
+  requirements,
   ...(effect ? { effect } : {}),
 });
 
 export const ASTER_RESOURCE_BUILDINGS: readonly BuildingDefinition[] = [
-  baseDefinition('metal-production-1', 'Металлическая шахта I', 'Базовая добыча металла.'),
-  baseDefinition('metal-production-2', 'Металлическая шахта II', 'Улучшенная добыча металла.'),
-  baseDefinition('metal-production-3', 'Металлическая шахта III', 'Высшая ступень добычи металла.'),
-  baseDefinition('mineral-production-1', 'Минеральная шахта I', 'Базовая добыча минералов.'),
-  baseDefinition('mineral-production-2', 'Минеральная шахта II', 'Улучшенная добыча минералов.'),
-  baseDefinition('gas-production-1', 'Газовая скважина I', 'Базовая добыча газа.'),
-  baseDefinition('gas-production-2', 'Газовая скважина II', 'Улучшенная добыча газа.'),
+  baseDefinition('metal-production-1', 'Металлическая шахта I', 'Базовая добыча металла.', 30),
+  baseDefinition('metal-production-2', 'Металлическая шахта II', 'Улучшенная добыча металла.', 30, [reqBuilding('metal-production-1', 10)]),
+  baseDefinition('metal-production-3', 'Металлическая шахта III', 'Высшая ступень добычи металла.', 30, [reqBuilding('metal-production-1', 15)]),
+  baseDefinition('mineral-production-1', 'Минеральная шахта I', 'Базовая добыча минералов.', 30),
+  baseDefinition('mineral-production-2', 'Минеральная шахта II', 'Улучшенная добыча минералов.', 30),
+  baseDefinition('gas-production-1', 'Газовая скважина I', 'Базовая добыча газа.', 30),
+  baseDefinition('gas-production-2', 'Газовая скважина II', 'Улучшенная добыча газа.', 30),
   baseDefinition(
     'basic-energy',
     'Солнечная электростанция',
     'Базовая генерация энергии.',
+    30,
+    [],
     { kind: 'energy', amountPerLevel: 25, label: 'Энергия планеты' },
   ),
-  baseDefinition('advanced-energy', 'Ядерный реактор', 'Продвинутая генерация энергии.'),
-  baseDefinition('hangar', 'Ангар', 'Хранение и увеличение доступной вместимости кораблей/юнитов.'),
+  baseDefinition(
+    'advanced-energy',
+    'Ядерный реактор',
+    'Продвинутая генерация энергии.',
+    20,
+    [reqBuilding('basic-energy', 10), reqScience(2, 5), reqScience(1, 5)],
+  ),
+  baseDefinition('hangar', 'Ангар', 'Хранение и увеличение доступной вместимости кораблей/юнитов.', 20),
 ] as const;
 
 const definitionByRole = new Map<ResourceBuildingRole, BuildingDefinition>(
@@ -189,26 +228,69 @@ function isFiniteTimestamp(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
-export function migrateResourceBuildingQueue(value: unknown, planetId: string): BuildingQueueItem | null {
+function migrateQueueItem(
+  value: unknown,
+  planetId: string,
+  index: number,
+  previousFinishAt: number | null,
+  buildings: ResourceBuildingLevels,
+  queuedRoleCounts: Partial<Record<ResourceBuildingRole, number>>,
+): BuildingQueueItem | null {
   if (!value || typeof value !== 'object') return null;
   const source = value as Record<string, unknown>;
-  if (!isFiniteTimestamp(source.startedAt) || !isFiniteTimestamp(source.finishAt)) return null;
-
   const role = isResourceBuildingRole(source.assetRole)
     ? source.assetRole
     : source.id === 'solar-station'
       ? 'basic-energy'
       : null;
-
   if (!role) return null;
+
+  const definition = getResourceBuildingDefinition(role);
+  const rawStartedAt = isFiniteTimestamp(source.startedAt) ? source.startedAt : null;
+  const rawFinishAt = isFiniteTimestamp(source.finishAt) ? source.finishAt : null;
+  const duration = rawStartedAt != null && rawFinishAt != null
+    ? Math.max(1, rawFinishAt - rawStartedAt)
+    : definition.prototypeTimeMs;
+  const startedAt = index === 0
+    ? (rawStartedAt ?? 0)
+    : (previousFinishAt ?? rawStartedAt ?? 0);
+  const finishAt = index === 0 && rawFinishAt != null
+    ? Math.max(startedAt, rawFinishAt)
+    : startedAt + duration;
+  const queuedBefore = queuedRoleCounts[role] ?? 0;
+  const fallbackTarget = Math.min(definition.maxLevel, (buildings[role] ?? 0) + queuedBefore + 1);
+  const targetLevel = toSafeLevel(source.targetLevel, definition.maxLevel) || fallbackTarget;
+  queuedRoleCounts[role] = queuedBefore + 1;
 
   return {
     kind: 'building',
     assetRole: role,
     planetId,
-    startedAt: source.startedAt,
-    finishAt: Math.max(source.startedAt, source.finishAt),
+    enqueuedAt: isFiniteTimestamp(source.enqueuedAt) ? source.enqueuedAt : startedAt,
+    startedAt,
+    finishAt,
+    targetLevel,
   };
+}
+
+export function migrateResourceBuildingQueue(
+  value: unknown,
+  planetId: string,
+  buildings: ResourceBuildingLevels = createDefaultResourceBuildingLevels(),
+): BuildingQueueItem[] {
+  const sourceItems = Array.isArray(value) ? value : value ? [value] : [];
+  const migrated: BuildingQueueItem[] = [];
+  const queuedRoleCounts: Partial<Record<ResourceBuildingRole, number>> = {};
+  let previousFinishAt: number | null = null;
+
+  for (const source of sourceItems.slice(0, RESOURCE_BUILDING_QUEUE_CAPACITY)) {
+    const item = migrateQueueItem(source, planetId, migrated.length, previousFinishAt, buildings, queuedRoleCounts);
+    if (!item) continue;
+    migrated.push(item);
+    previousFinishAt = item.finishAt;
+  }
+
+  return migrated;
 }
 
 const resourceLabel: Record<ResourceKey, string> = {
@@ -218,30 +300,77 @@ const resourceLabel: Record<ResourceKey, string> = {
   energy: 'энергии',
 };
 
+export function evaluateBuildingRequirements(
+  state: Pick<ResourceEconomyState, 'buildings' | 'scienceLevels'>,
+  assetRole: ResourceBuildingRole,
+): BuildingRequirementState[] {
+  const definition = getResourceBuildingDefinition(assetRole);
+  return definition.requirements.map((requirement) => {
+    if (requirement.kind === 'building-level') {
+      const requiredDefinition = getResourceBuildingDefinition(requirement.assetRole);
+      const currentLevel = state.buildings[requirement.assetRole] ?? 0;
+      return {
+        kind: requirement.kind,
+        assetRole: requirement.assetRole,
+        label: requiredDefinition.name,
+        requiredLevel: requirement.level,
+        currentLevel,
+        met: currentLevel >= requirement.level,
+      };
+    }
+
+    const currentLevel = state.scienceLevels[requirement.scienceId] ?? 0;
+    return {
+      kind: requirement.kind,
+      scienceId: requirement.scienceId,
+      label: findScience(requirement.scienceId)?.name ?? `Наука ${requirement.scienceId}`,
+      requiredLevel: requirement.level,
+      currentLevel,
+      met: currentLevel >= requirement.level,
+    };
+  });
+}
+
+export function formatBuildingRequirement(requirement: BuildingRequirementState): string {
+  return `${requirement.label} — ур. ${requirement.requiredLevel}; сейчас ${requirement.currentLevel}`;
+}
+
 export function evaluateResourceBuildingBuild(
   state: ResourceEconomyState,
   assetRole: ResourceBuildingRole,
 ): BuildAvailability {
   const definition = getResourceBuildingDefinition(assetRole);
   const currentLevel = state.buildings[assetRole] ?? 0;
+  const queuedLevels = state.queue.filter((item) => item.assetRole === assetRole).length;
+  const projectedLevel = Math.min(definition.maxLevel, currentLevel + queuedLevels);
+  const requirements = evaluateBuildingRequirements(state, assetRole);
   const base = {
     currentLevel,
-    nextLevel: currentLevel < definition.maxLevel ? currentLevel + 1 : null,
+    projectedLevel,
+    nextLevel: projectedLevel < definition.maxLevel ? projectedLevel + 1 : null,
     maxLevel: definition.maxLevel,
     cost: { ...definition.prototypeCost },
     timeMs: definition.prototypeTimeMs,
+    requirements,
   };
 
-  if (currentLevel >= definition.maxLevel) {
-    return { ...base, status: 'max-level', canBuild: false, reason: 'Достигнут максимум вертикального среза.', missing: {} };
+  if (projectedLevel >= definition.maxLevel) {
+    return { ...base, status: 'max-level', canBuild: false, reason: 'Достигнут максимальный уровень.', missing: {} };
   }
 
-  if (state.queue?.assetRole === assetRole) {
-    return { ...base, status: 'already-building', canBuild: false, reason: 'Это здание уже находится в общей очереди.', missing: {} };
+  const missingRequirements = requirements.filter((requirement) => !requirement.met);
+  if (missingRequirements.length > 0) {
+    return {
+      ...base,
+      status: 'requirements-unmet',
+      canBuild: false,
+      reason: `Требуется: ${missingRequirements.map(formatBuildingRequirement).join('; ')}.`,
+      missing: {},
+    };
   }
 
-  if (state.queue) {
-    return { ...base, status: 'queue-busy', canBuild: false, reason: 'Общая очередь строительства занята.', missing: {} };
+  if (state.queue.length >= RESOURCE_BUILDING_QUEUE_CAPACITY) {
+    return { ...base, status: 'queue-full', canBuild: false, reason: 'Очередь заполнена.', missing: {} };
   }
 
   const missing: Partial<Record<ResourceKey, number>> = {};
@@ -274,10 +403,10 @@ export function startResourceBuildingProject(
   state: ResourceEconomyState,
   assetRole: ResourceBuildingRole,
   planetId: string,
-  startedAt: number,
+  enqueuedAt: number,
 ): ResourceBuildTransition {
   const availability = evaluateResourceBuildingBuild(state, assetRole);
-  if (!availability.canBuild) return { ok: false, state, reason: availability.reason };
+  if (!availability.canBuild || availability.nextLevel == null) return { ok: false, state, reason: availability.reason };
 
   const definition = getResourceBuildingDefinition(assetRole);
   const resources: ResourceWallet = { ...state.resources };
@@ -285,19 +414,25 @@ export function startResourceBuildingProject(
     resources[key] -= definition.prototypeCost[key];
   }
 
+  const previous = state.queue[state.queue.length - 1] ?? null;
+  const startedAt = previous ? previous.finishAt : enqueuedAt;
+  const item: BuildingQueueItem = {
+    kind: 'building',
+    assetRole,
+    planetId,
+    enqueuedAt,
+    startedAt,
+    finishAt: startedAt + definition.prototypeTimeMs,
+    targetLevel: availability.nextLevel,
+  };
+
   return {
     ok: true,
     reason: null,
     state: {
       ...state,
       resources,
-      queue: {
-        kind: 'building',
-        assetRole,
-        planetId,
-        startedAt,
-        finishAt: startedAt + definition.prototypeTimeMs,
-      },
+      queue: [...state.queue, item],
     },
   };
 }
@@ -311,33 +446,34 @@ export function completeResourceBuildingProject(
   state: ResourceEconomyState,
   now: number,
 ): ResourceCompletionTransition {
-  const queue = state.queue;
-  if (!queue || now < queue.finishAt) return { completedRole: null, state };
+  const active = state.queue[0];
+  if (!active || now < active.finishAt) return { completedRole: null, state };
 
-  const definition = getResourceBuildingDefinition(queue.assetRole);
-  const currentLevel = state.buildings[queue.assetRole] ?? 0;
-  const nextLevel = Math.min(definition.maxLevel, currentLevel + 1);
+  const definition = getResourceBuildingDefinition(active.assetRole);
+  const currentLevel = state.buildings[active.assetRole] ?? 0;
+  const nextLevel = Math.min(definition.maxLevel, Math.max(currentLevel + 1, active.targetLevel));
   const resources = { ...state.resources };
 
   if (nextLevel > currentLevel && definition.effect?.kind === 'energy') {
-    resources.energy += definition.effect.amountPerLevel;
+    resources.energy += definition.effect.amountPerLevel * (nextLevel - currentLevel);
   }
 
   return {
-    completedRole: queue.assetRole,
+    completedRole: active.assetRole,
     state: {
+      ...state,
       resources,
       buildings: {
         ...state.buildings,
-        [queue.assetRole]: nextLevel,
+        [active.assetRole]: nextLevel,
       },
-      queue: null,
+      queue: state.queue.slice(1),
     },
   };
 }
 
 export function getBuildingEffectText(definition: BuildingDefinition, currentLevel: number): string {
-  if (!definition.effect) return 'Механика следующего этапа';
+  if (!definition.effect) return 'Эффект будет определён после утверждения баланса.';
   const current = definition.effect.amountPerLevel * currentLevel;
   const next = definition.effect.amountPerLevel * Math.min(definition.maxLevel, currentLevel + 1);
   return `${definition.effect.label}: +${current} → +${next}`;
