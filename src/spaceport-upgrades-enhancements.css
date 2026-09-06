@@ -179,7 +179,7 @@
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
-  transition: opacity .12s ease, transform .12s ease;
+  transition: none;
 }
 
 .spaceport-requirement-tooltip-v2 strong {
