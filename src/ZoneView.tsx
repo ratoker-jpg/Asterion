@@ -4,7 +4,6 @@ import { canEnterBuildingInterior } from './building-interior-navigation.ts';
 import { getZoneScenePlacement } from './zone-scene.ts';
 import {
   BUILDING_QUEUE_CAPACITY,
-  RESOURCE_BASE_INCOME_PER_HOUR,
   evaluateBuildingBuild,
   getBuildingDefinition,
   getBuildingEffectText,
@@ -18,6 +17,7 @@ import {
   type ResourceWallet,
   type ScienceLevels,
 } from './domain/buildings/resource-zone.ts';
+import type { ProductionResourceIncome } from './domain/buildings/production-bots.ts';
 
 export const ZONE_VIEW_META: Readonly<Record<BuildingZone, {
   title: string;
@@ -52,7 +52,7 @@ const resourceLabels = {
   energy: 'Энергия',
 } as const;
 
-const formatNumber = (value: number) => new Intl.NumberFormat('ru-RU').format(value);
+const formatNumber = (value: number) => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(value);
 
 function formatDuration(ms: number) {
   const seconds = Math.max(0, Math.ceil(ms / 1000));
@@ -130,6 +130,7 @@ export type ZoneViewProps = {
   planetName: string;
   planetCoords: string;
   resources: ResourceWallet;
+  resourceIncomePerHour: ProductionResourceIncome;
   buildings: BuildingLevels;
   queue: BuildingQueueItem[];
   scienceLevels: ScienceLevels;
@@ -145,6 +146,7 @@ export function ZoneView({
   planetName,
   planetCoords,
   resources,
+  resourceIncomePerHour,
   buildings,
   queue,
   scienceLevels,
@@ -238,17 +240,17 @@ export function ZoneView({
               <div className="resource-zone-income-row" data-resource-income="metal">
                 <span className="resource-zone-income-icon"><ResourceIncomeIcon kind="metal" /></span>
                 <span className="resource-zone-income-name">Металл</span>
-                <strong>{formatNumber(RESOURCE_BASE_INCOME_PER_HOUR.metal)}</strong>
+                <strong>{formatNumber(resourceIncomePerHour.metal)}</strong>
               </div>
               <div className="resource-zone-income-row" data-resource-income="minerals">
                 <span className="resource-zone-income-icon"><ResourceIncomeIcon kind="mineral" /></span>
                 <span className="resource-zone-income-name">Минералы</span>
-                <strong>{formatNumber(RESOURCE_BASE_INCOME_PER_HOUR.minerals)}</strong>
+                <strong>{formatNumber(resourceIncomePerHour.minerals)}</strong>
               </div>
               <div className="resource-zone-income-row" data-resource-income="gas">
                 <span className="resource-zone-income-icon"><ResourceIncomeIcon kind="gas" /></span>
                 <span className="resource-zone-income-name">Газ</span>
-                <strong>{formatNumber(RESOURCE_BASE_INCOME_PER_HOUR.gas)}</strong>
+                <strong>{formatNumber(resourceIncomePerHour.gas)}</strong>
               </div>
             </div>
           </section>
