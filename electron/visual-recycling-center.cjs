@@ -75,7 +75,7 @@ async function seedPlanet(win) {
     const save = raw ? JSON.parse(raw) : null;
     const planet = save?.planets?.['helion-01'];
     if (!planet?.buildings) return false;
-    planet.buildings.recycling = 1;
+    planet.buildings.recycling = 3;
     planet.buildings.shipyard = Math.max(5, Number(planet.buildings.shipyard) || 0);
     planet.recycling = { availableDebris: 100000, jobs: [] };
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 6);
@@ -102,24 +102,30 @@ async function readScreen(win) {
   return win.webContents.executeJavaScript(`(() => {
     const root = document.querySelector('[data-qa-recycling-center]');
     if (!root) return null;
-    const text = (selector) => root.querySelector(selector)?.textContent?.replace(/\\s+/g, ' ').trim() ?? '';
+    const text = (selector, scope = root) => scope.querySelector(selector)?.textContent?.replace(/\\s+/g, ' ').trim() ?? '';
     const attrNum = (selector, attribute) => {
       const raw = root.querySelector(selector)?.getAttribute(attribute);
       return raw == null ? null : Number(raw);
     };
     const disabled = (selector) => Boolean(root.querySelector(selector)?.disabled);
-    const job = root.querySelector('[data-qa-recycling-job]');
+    const jobs = Array.from(root.querySelectorAll('[data-qa-recycling-job]')).map((job) => ({
+      id: job.getAttribute('data-qa-recycling-job'),
+      status: job.getAttribute('data-qa-recycling-status'),
+      timer: text('[data-qa-recycling-job-timer]', job),
+      allocation: text('[data-qa-recycling-job-allocation]', job),
+      output: text('[data-qa-recycling-job-output]', job),
+      collectDisabled: Boolean(job.querySelector('[data-qa-recycling-collect]')?.disabled),
+    }));
     return {
       freeDebris: attrNum('[data-qa-recycling-free-debris]', 'data-qa-recycling-free-debris'),
       totalDebris: attrNum('[data-qa-recycling-total-debris]', 'data-qa-recycling-total-debris'),
       jobs: attrNum('[data-qa-recycling-job-count]', 'data-qa-recycling-job-count'),
+      maxJobs: attrNum('[data-qa-recycling-max-jobs]', 'data-qa-recycling-max-jobs'),
       allocationTotal: attrNum('[data-qa-recycling-allocation-total]', 'data-qa-recycling-allocation-total'),
       validation: text('[data-qa-recycling-validation]'),
       startDisabled: disabled('[data-qa-recycling-start]'),
-      jobId: job?.getAttribute('data-qa-recycling-job') ?? null,
-      jobStatus: job?.getAttribute('data-qa-recycling-status') ?? null,
-      jobTimer: text('[data-qa-recycling-job-timer]'),
-      collectDisabled: job ? Boolean(job.querySelector('[data-qa-recycling-collect]')?.disabled) : null,
+      nextEfficiency: text('[data-qa-recycling-next-efficiency]'),
+      jobRows: jobs,
       toast: text('[data-qa-recycling-toast]'),
     };
   })()`);
@@ -140,10 +146,10 @@ async function readSave(win) {
   })()`);
 }
 
-async function makeReady(win) {
+async function makeReady(win, jobIndex = 0) {
   const ok = await win.webContents.executeJavaScript(`(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
-    const job = save.planets?.['helion-01']?.recycling?.jobs?.[0];
+    const job = save.planets?.['helion-01']?.recycling?.jobs?.[${jobIndex}];
     if (!job) return false;
     const duration = Math.max(1000, Math.ceil((job.debrisAmount / 1000000 * 3 * 60 * 60 * 1000) / 1000) * 1000);
     job.startedAt = Date.now() - duration - 2000;
@@ -165,6 +171,7 @@ async function measure(win) {
     const stage = document.querySelector('.stage');
     if (!root || !stage) return null;
     const pick = (element) => {
+      if (!element) return null;
       const rect = element.getBoundingClientRect();
       return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height };
     };
@@ -175,6 +182,9 @@ async function measure(win) {
       plus: pick(row.querySelector('[data-qa-recycling-allocation-plus]')),
       percent: pick(row.querySelector('[data-qa-recycling-allocation-value]')),
     }));
+    const jobScrollElement = root.querySelector('[data-qa-recycling-job-list]');
+    const jobHeaderElement = root.querySelector('[data-qa-recycling-job-table-header]');
+    const jobRowElements = Array.from(root.querySelectorAll('[data-qa-recycling-job]'));
     return {
       viewport: { width: window.innerWidth, height: window.innerHeight },
       document: { width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight },
@@ -183,15 +193,24 @@ async function measure(win) {
       debrisSlider: pick(root.querySelector('[data-qa-recycling-debris-slider]')),
       start: pick(root.querySelector('[data-qa-recycling-start]')),
       rows,
+      jobScroll: pick(jobScrollElement),
+      jobScrollWidth: jobScrollElement?.scrollWidth ?? 0,
+      jobClientWidth: jobScrollElement?.clientWidth ?? 0,
+      jobHeader: pick(jobHeaderElement),
+      jobHeaderCells: jobHeaderElement ? Array.from(jobHeaderElement.children).map(pick) : [],
+      jobRows: jobRowElements.map((job) => ({
+        row: pick(job),
+        cells: Array.from(job.children).map(pick),
+      })),
     };
   })()`);
 }
 
-function assertGeometry(snapshot, label) {
+function assertGeometry(snapshot, label, expectedJobRows = 0) {
   if (!snapshot) throw new Error(`${label}: missing geometry`);
   const epsilon = 2;
-  const { viewport, document, stage, root, debrisSlider, start, rows } = snapshot;
-  if (document.width > viewport.width + epsilon) throw new Error(`${label}: horizontal scroll ${JSON.stringify(snapshot)}`);
+  const { viewport, document, stage, root, debrisSlider, start, rows, jobScroll, jobScrollWidth, jobClientWidth, jobHeader, jobHeaderCells, jobRows } = snapshot;
+  if (document.width > viewport.width + epsilon) throw new Error(`${label}: horizontal page scroll ${JSON.stringify(snapshot)}`);
   if (Math.abs(stage.left) > epsilon || Math.abs(stage.top) > epsilon || Math.abs(stage.right - viewport.width) > epsilon || Math.abs(stage.bottom - viewport.height) > epsilon) {
     throw new Error(`${label}: stage not viewport aligned ${JSON.stringify(snapshot)}`);
   }
@@ -201,6 +220,20 @@ function assertGeometry(snapshot, label) {
   for (const item of rows) {
     if (item.minus.width < 26 || item.plus.width < 26 || item.slider.width < 90 || item.percent.width < 28) throw new Error(`${label}: resource controls too small ${JSON.stringify(item)}`);
     if (item.minus.right > item.slider.left + epsilon || item.slider.right > item.plus.left + epsilon || item.plus.right > item.percent.left + epsilon) throw new Error(`${label}: resource controls overlap ${JSON.stringify(item)}`);
+  }
+  if (expectedJobRows === 0) return;
+  if (!jobScroll || !jobHeader || jobRows.length !== expectedJobRows) throw new Error(`${label}: process table missing rows ${JSON.stringify(snapshot)}`);
+  if (jobScroll.left < root.left - epsilon || jobScroll.right > root.right + epsilon) throw new Error(`${label}: process list escapes root`);
+  if (jobScrollWidth < jobClientWidth) throw new Error(`${label}: process table does not fill list width`);
+  if (jobHeaderCells.length !== 5) throw new Error(`${label}: process header does not have five columns`);
+  for (const item of jobRows) {
+    if (!item.row || item.cells.length !== 5) throw new Error(`${label}: process row does not have five columns ${JSON.stringify(item)}`);
+    if (Math.abs(item.row.left - jobHeader.left) > epsilon || Math.abs(item.row.right - jobHeader.right) > epsilon) throw new Error(`${label}: process row/header widths differ`);
+    for (let index = 0; index < 5; index += 1) {
+      if (Math.abs(item.cells[index].left - jobHeaderCells[index].left) > epsilon || Math.abs(item.cells[index].right - jobHeaderCells[index].right) > epsilon) {
+        throw new Error(`${label}: process column ${index} misaligned`);
+      }
+    }
   }
 }
 
@@ -216,18 +249,30 @@ async function verifyReturn(win) {
   await waitFor(win, `document.querySelector('[data-qa-building-dialog="recycling"]')`);
 }
 
+async function startConfiguredJob(win, debrisAmount, metal, minerals, gas) {
+  await setRange(win, '[data-qa-recycling-debris-slider]', debrisAmount);
+  await setRange(win, '[data-qa-recycling-allocation-slider="metal"]', metal);
+  await setRange(win, '[data-qa-recycling-allocation-slider="minerals"]', minerals);
+  await setRange(win, '[data-qa-recycling-allocation-slider="gas"]', gas);
+  const screen = await readScreen(win);
+  if (screen?.startDisabled || screen.allocationTotal !== 100) throw new Error(`Configured job should be startable: ${JSON.stringify(screen)}`);
+  await click(win, '[data-qa-recycling-start]');
+  await settle(win);
+}
+
 async function verifyFlow(win, directory, label) {
   await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);
   await reload(win);
   await seedPlanet(win);
   const seeded = await readSave(win);
-  if (Number(seeded.schemaVersion) < 6 || Number(seeded.recyclingLevel) !== 1) throw new Error(`${label}: seed migration mismatch ${JSON.stringify(seeded)}`);
+  if (Number(seeded.schemaVersion) < 6 || Number(seeded.recyclingLevel) !== 3) throw new Error(`${label}: seed migration mismatch ${JSON.stringify(seeded)}`);
   const queueBefore = JSON.stringify(seeded.queue);
 
   await activateIndustry(win);
   await openCenter(win);
   let screen = await readScreen(win);
-  if (!screen || screen.freeDebris !== 100000 || screen.totalDebris !== 100000 || screen.jobs !== 0) throw new Error(`${label}: initial recycling state mismatch ${JSON.stringify(screen)}`);
+  if (!screen || screen.freeDebris !== 100000 || screen.totalDebris !== 100000 || screen.jobs !== 0 || screen.maxJobs !== 3) throw new Error(`${label}: initial recycling state mismatch ${JSON.stringify(screen)}`);
+  if (screen.nextEfficiency !== '90%') throw new Error(`${label}: next efficiency must not include plus sign ${JSON.stringify(screen)}`);
   assertGeometry(await measure(win), label);
   await capture(win, directory, 'recycling-empty');
 
@@ -241,52 +286,72 @@ async function verifyFlow(win, directory, label) {
   screen = await readScreen(win);
   if (screen?.startDisabled || screen.allocationTotal !== 100) throw new Error(`${label}: 60/40 should enable start ${JSON.stringify(screen)}`);
   await click(win, '[data-qa-recycling-start]');
-  await waitFor(win, `document.querySelector('[data-qa-recycling-job]')`);
+  await waitFor(win, `document.querySelectorAll('[data-qa-recycling-job]').length === 1`);
   screen = await readScreen(win);
-  if (screen?.freeDebris !== 90000 || screen.jobs !== 1 || screen.jobStatus !== 'processing' || !screen.collectDisabled) throw new Error(`${label}: processing state mismatch ${JSON.stringify(screen)}`);
-  const afterStart = await readSave(win);
-  if (JSON.stringify(afterStart.queue) !== queueBefore) throw new Error(`${label}: building FIFO changed during recycling`);
-  if (afterStart.recycling?.jobs?.length !== 1) throw new Error(`${label}: recycling job not persisted`);
+  if (screen?.freeDebris !== 90000 || screen.jobs !== 1 || screen.jobRows[0]?.status !== 'processing' || !screen.jobRows[0]?.collectDisabled) throw new Error(`${label}: first processing state mismatch ${JSON.stringify(screen)}`);
+  if (screen.jobRows[0]?.allocation !== '60% металл · 40% минералы · 0% газ') throw new Error(`${label}: allocation text must show all resources ${JSON.stringify(screen)}`);
+  if (!screen.jobRows[0]?.output.includes('М 5') || !screen.jobRows[0]?.output.includes('Мин 3') || !screen.jobRows[0]?.output.includes('Газ 0')) throw new Error(`${label}: output text must show all resources ${JSON.stringify(screen)}`);
+  if (!screen.jobRows[0]?.timer.startsWith('Осталось:')) throw new Error(`${label}: processing timer label mismatch ${JSON.stringify(screen)}`);
+  const firstJobId = screen.jobRows[0].id;
+  const afterFirstStart = await readSave(win);
+  if (JSON.stringify(afterFirstStart.queue) !== queueBefore) throw new Error(`${label}: building FIFO changed during recycling`);
+  if (afterFirstStart.recycling?.jobs?.length !== 1) throw new Error(`${label}: recycling job not persisted`);
+
+  await startConfiguredJob(win, 6000, 0, 0, 100);
+  await waitFor(win, `document.querySelectorAll('[data-qa-recycling-job]').length === 2`);
+  await startConfiguredJob(win, 4000, 100, 0, 0);
+  await waitFor(win, `document.querySelectorAll('[data-qa-recycling-job]').length === 3`);
+  screen = await readScreen(win);
+  if (screen?.freeDebris !== 80000 || screen.jobs !== 3 || screen.jobRows.some((job) => job.status !== 'processing')) throw new Error(`${label}: multi-processing state mismatch ${JSON.stringify(screen)}`);
 
   await setRange(win, '[data-qa-recycling-debris-slider]', 1000);
   screen = await readScreen(win);
   if (!screen?.startDisabled || screen.validation !== 'Все процессы заняты') throw new Error(`${label}: concurrent limit not enforced ${JSON.stringify(screen)}`);
-  assertGeometry(await measure(win), label);
-  await capture(win, directory, 'recycling-processing');
+  assertGeometry(await measure(win), label, 3);
+  await capture(win, directory, 'recycling-processing-list');
 
-  await makeReady(win);
+  await makeReady(win, 0);
   screen = await readScreen(win);
-  if (screen?.jobStatus !== 'ready' || screen.collectDisabled || !screen.jobTimer.startsWith('Получить до ')) throw new Error(`${label}: ready state mismatch ${JSON.stringify(screen)}`);
-  if (!screen.jobTimer.includes('23:') && !screen.jobTimer.includes('24:')) throw new Error(`${label}: 24-hour collect timer missing ${JSON.stringify(screen)}`);
-  assertGeometry(await measure(win), label);
-  await capture(win, directory, 'recycling-ready');
+  const readyRows = screen?.jobRows.filter((job) => job.status === 'ready') ?? [];
+  const processingRows = screen?.jobRows.filter((job) => job.status === 'processing') ?? [];
+  if (readyRows.length !== 1 || processingRows.length !== 2) throw new Error(`${label}: mixed ready/processing list mismatch ${JSON.stringify(screen)}`);
+  if (readyRows[0].collectDisabled || !readyRows[0].timer.startsWith('Получить до:')) throw new Error(`${label}: ready row state mismatch ${JSON.stringify(screen)}`);
+  if (!readyRows[0].timer.includes('23:') && !readyRows[0].timer.includes('24:')) throw new Error(`${label}: 24-hour collect timer missing ${JSON.stringify(screen)}`);
+  if (processingRows.some((job) => !job.collectDisabled || !job.timer.startsWith('Осталось:'))) throw new Error(`${label}: processing rows changed in mixed list ${JSON.stringify(screen)}`);
+  assertGeometry(await measure(win), label, 3);
+  await capture(win, directory, 'recycling-ready-processing-list');
 
-  await click(win, '[data-qa-recycling-collect]');
-  await waitFor(win, `!document.querySelector('[data-qa-recycling-job]')`);
+  const collectSelector = `[data-qa-recycling-collect="${firstJobId}"]`;
+  await click(win, collectSelector);
+  await waitFor(win, `!document.querySelector('[data-qa-recycling-job="${firstJobId}"]')`);
   await waitFor(win, `document.querySelector('[data-qa-recycling-toast]')?.textContent?.includes('Ресурсы получены')`);
   const collected = await readSave(win);
-  if (collected.recycling?.jobs?.length !== 0) throw new Error(`${label}: collected job not removed`);
-  if (Number(collected.metal) !== 20380 || Number(collected.minerals) !== 15712 || Number(collected.gas) !== 6421) throw new Error(`${label}: wallet output mismatch ${JSON.stringify(collected)}`);
+  if (collected.recycling?.jobs?.length !== 2) throw new Error(`${label}: collected job not removed exactly once`);
+  if (Number(collected.metal) !== 20980 || Number(collected.minerals) !== 16112 || Number(collected.gas) !== 6421) throw new Error(`${label}: wallet output mismatch ${JSON.stringify(collected)}`);
   if (JSON.stringify(collected.queue) !== queueBefore) throw new Error(`${label}: building FIFO changed after collect`);
 
   await verifyReturn(win);
   return {
     viewport: label,
-    screenshots: ['recycling-empty.png', 'recycling-processing.png', 'recycling-ready.png'],
+    screenshots: ['recycling-empty.png', 'recycling-processing-list.png', 'recycling-ready-processing-list.png'],
     walletAfterCollect: { metal: collected.metal, minerals: collected.minerals, gas: collected.gas },
     verified: [
       'temporary-100000-debris-stock',
       '60-30-disabled-with-exact-remainder',
       '60-40-starts',
       'debris-reserved-immediately',
-      'processing-card-and-disabled-collect',
-      'concurrent-limit',
+      'three-processing-rows-use-five-column-table',
+      'processing-disabled-collect',
+      'concurrent-limit-at-level-three',
+      'mixed-ready-and-processing-rows',
       'absolute-time-ready-state',
       '24-hour-collect-timer',
       'collect-updates-wallet-once',
       'building-fifo-unchanged',
+      'next-efficiency-without-plus-prefix',
       'back-and-escape-restore-industry-modal',
       'no-horizontal-page-overflow-or-control-overlap',
+      'process-table-columns-remain-aligned',
     ],
   };
 }
