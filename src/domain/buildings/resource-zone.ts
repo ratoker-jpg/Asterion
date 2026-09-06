@@ -42,6 +42,7 @@ export const BUILDING_QUEUE_CAPACITY = 3;
 export const RESOURCE_BUILDING_QUEUE_CAPACITY = BUILDING_QUEUE_CAPACITY;
 export const ADVANCED_FACTORY_MAX_LEVEL = 5;
 export const RECYCLING_MAX_LEVEL = 10;
+export const TRADE_CENTER_MAX_LEVEL = 10;
 
 export type ResourceBuildingRole = (typeof RESOURCE_BUILDING_ROLES)[number];
 export type IndustryBuildingRole = (typeof INDUSTRY_BUILDING_ROLES)[number];
@@ -229,7 +230,7 @@ export const ASTER_INDUSTRY_BUILDINGS: readonly BuildingDefinition[] = [
   definition('industry', 'mineral-storage', 'Склад минералов', 'Хранение минералов.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel, [reqBuilding('mineral-production-1', 1)]),
   definition('industry', 'gas-storage', 'Газовое хранилище', 'Хранение газа.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel, [reqBuilding('gas-production-1', 1)]),
   definition('industry', 'recycling', 'Перерабатывающий центр', 'Переработка и утилизация ресурсов/обломков.', RECYCLING_MAX_LEVEL, [reqBuilding('shipyard', 5), reqScience(2, 6)]),
-  definition('industry', 'trade-center', 'Торговый центр', 'Торговля и обмен ресурсами.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
+  definition('industry', 'trade-center', 'Торговый центр', 'Торговля и обмен ресурсами.', TRADE_CENTER_MAX_LEVEL),
 ];
 
 export const ASTER_MILITARY_BUILDINGS: readonly BuildingDefinition[] = [

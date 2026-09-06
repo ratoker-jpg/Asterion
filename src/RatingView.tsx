@@ -20,7 +20,13 @@ import type {
 
 const PAGE_SIZE = 12;
 
-export function RatingView({ currentAlliance }: { currentAlliance?: AllianceIdentity | null }) {
+export function RatingView({
+  currentAlliance,
+  currentPlayerResourcePoints,
+}: {
+  currentAlliance?: AllianceIdentity | null;
+  currentPlayerResourcePoints?: number;
+}) {
   const [mode, setMode] = useState<RatingMode>('players');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -29,7 +35,7 @@ export function RatingView({ currentAlliance }: { currentAlliance?: AllianceIden
   const [direction, setDirection] = useState<SortDirection>('desc');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const players = useMemo(() => createPlayerRatingEntries(), []);
+  const players = useMemo(() => createPlayerRatingEntries(currentPlayerResourcePoints), [currentPlayerResourcePoints]);
   const alliances = useMemo(() => createAllianceRatingEntries(currentAlliance), [currentAlliance]);
   const currentPlayer = useMemo(() => players.find((entry) => entry.isCurrentPlayer) ?? null, [players]);
 

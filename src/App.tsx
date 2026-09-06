@@ -56,6 +56,11 @@ import { createDefaultReportsState, migrateReportsState } from './domain/reports
 import type { ReportsState } from './domain/reports/types.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import {
+  createDefaultRatingPrototypeState,
+  migrateRatingPrototypeState,
+  type RatingPrototypeState,
+} from './domain/rating/fixtures.ts';
+import {
   BUILDING_QUEUE_CAPACITY,
   RESOURCE_BASE_INCOME_PER_HOUR,
   RESOURCE_BUILDING_ROLES,
@@ -88,6 +93,16 @@ import {
   type RecyclingState,
   type ResourceAllocationPercent,
 } from './domain/buildings/recycling.ts';
+import {
+  createDefaultTradeState,
+  executeTrade,
+  migrateTradeState,
+  reconcileTradeState,
+  type TradeExecution,
+  type TradeRequest,
+  type TradeState,
+  type TradeWallet,
+} from './domain/buildings/trade.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import planetColonized from '../assets/source/starter/planets/planet_colonized.png';
@@ -154,6 +169,7 @@ type PlanetRuntime = {
   buildings: BuildingLevels;
   productionBots: BotAssignment;
   recycling: RecyclingState;
+  trade: TradeState;
   stability: number;
 };
 
@@ -165,6 +181,7 @@ type SaveState = {
   currentPlanetId: PlanetId;
   planets: Record<PlanetId, PlanetRuntime>;
   queues: Record<PlanetId, BuildingQueueItem[]>;
+  rating: RatingPrototypeState;
   combatPriority: CombatPriorityState;
   combat: BattleHistoryState;
   combatSimulator: SimulatorState;
@@ -182,6 +199,7 @@ type StoredPlanetRuntime = {
   buildings?: unknown;
   productionBots?: unknown;
   recycling?: unknown;
+  trade?: unknown;
   solarStations?: unknown;
   stability?: unknown;
 };
@@ -198,6 +216,7 @@ type StoredSave = {
   planets?: Record<string, StoredPlanetRuntime>;
   queues?: Record<string, unknown>;
   queue?: unknown;
+  rating?: unknown;
   combatPriority?: unknown;
   combat?: unknown;
   combatSimulator?: unknown;
@@ -218,7 +237,7 @@ const ownedPlanets: PlanetDefinition[] = [
 ];
 
 const SAVE_KEY = 'asterion.vertical-slice.v1';
-const SAVE_SCHEMA_VERSION = Math.max(COMBAT_SAVE_SCHEMA_VERSION, 6);
+const SAVE_SCHEMA_VERSION = Math.max(COMBAT_SAVE_SCHEMA_VERSION, 7);
 const DEFAULT_PLANET_NAME = 'Helion 01';
 const CURRENT_SCIENCE_LEVELS = Object.fromEntries(
   SCIENCE_CATALOG.map((science) => [science.id, science.capturedLevel]),
@@ -240,12 +259,14 @@ const createInitialState = (): SaveState => ({
       buildings: createDefaultBuildingLevels(),
       productionBots: createEmptyBotAssignment(),
       recycling: createDefaultRecyclingState(),
+      trade: createDefaultTradeState(),
       stability: 100,
     },
   },
   queues: {
     'helion-01': [],
   },
+  rating: createDefaultRatingPrototypeState(),
   combatPriority: createDefaultCombatPriority(),
   combat: createDefaultBattleHistory(),
   combatSimulator: createDefaultSimulatorState(),
@@ -287,6 +308,7 @@ function readSave(): SaveState {
     const savedHomeworld = parsed.planets?.['helion-01'];
     const legacySolarStations = numberOr(savedHomeworld?.solarStations, numberOr(parsed.solarStations, 0));
     const buildings = migrateBuildingLevels(savedHomeworld?.buildings, legacySolarStations);
+    const now = Date.now();
     const homeworld: PlanetRuntime = {
       name: typeof savedHomeworld?.name === 'string' && savedHomeworld.name.trim()
         ? savedHomeworld.name.trim().slice(0, 28)
@@ -301,7 +323,8 @@ function readSave(): SaveState {
       energy: numberOr(savedHomeworld?.energy, numberOr(parsed.energy, initialState.planets['helion-01'].energy)),
       buildings,
       productionBots: migrateProductionBotAssignment(savedHomeworld?.productionBots, buildings),
-      recycling: migrateRecyclingState(savedHomeworld?.recycling, buildings.recycling, Date.now()),
+      recycling: migrateRecyclingState(savedHomeworld?.recycling, buildings.recycling, now),
+      trade: migrateTradeState(savedHomeworld?.trade, buildings['trade-center'], now),
       stability: numberOr(savedHomeworld?.stability, initialState.planets['helion-01'].stability),
     };
 
@@ -316,6 +339,7 @@ function readSave(): SaveState {
       currentPlanetId: 'helion-01',
       planets: { 'helion-01': homeworld },
       queues: { 'helion-01': queue },
+      rating: migrateRatingPrototypeState(parsed.rating),
       combatPriority: migrateCombatPriority(parsed.combatPriority),
       combat: migrateBattleHistory(parsed.combat),
       combatSimulator: migrateSimulatorState(parsed.combatSimulator),
@@ -552,6 +576,24 @@ export function App() {
     if (snapshot.autoCollectedJobIds.length > 0) setNotice('Результат переработки автоматически зачислен');
   }, [now, state.planets]);
 
+  useEffect(() => {
+    const snapshot = reconcileTradeState(state.planets['helion-01'].trade, state.planets['helion-01'].buildings['trade-center'], now);
+    if (!snapshot.changed) return;
+    setState((current) => {
+      const currentPlanet = current.planets['helion-01'];
+      const reconciled = reconcileTradeState(currentPlanet.trade, currentPlanet.buildings['trade-center'], now);
+      if (!reconciled.changed) return current;
+      return {
+        ...current,
+        schemaVersion: SAVE_SCHEMA_VERSION,
+        planets: {
+          ...current.planets,
+          'helion-01': { ...currentPlanet, trade: reconciled.state },
+        },
+      };
+    });
+  }, [now, state.planets]);
+
   const currentPlanet = ownedPlanets[0];
   const currentPlanetState = state.planets['helion-01'];
   const currentPlanetName = currentPlanetState.name;
@@ -567,6 +609,12 @@ export function App() {
     minerals: state.minerals,
     gas: state.gas,
     energy: currentPlanetState.energy,
+  };
+  const tradeWallet: TradeWallet = {
+    metal: state.metal,
+    minerals: state.minerals,
+    gas: state.gas,
+    debris: currentPlanetState.recycling.availableDebris,
   };
   const resourceIncomePerHour = useMemo(
     () => getProductionBotIncomePerHour(RESOURCE_BASE_INCOME_PER_HOUR, currentPlanetState.productionBots),
@@ -744,6 +792,61 @@ export function App() {
     });
     setNotice('Ресурсы получены');
     return true;
+  };
+
+  const tradeResources = (request: TradeRequest): TradeExecution => {
+    const tradedAt = Date.now();
+    const preview = executeTrade(
+      { wallet: tradeWallet, trade: currentPlanetState.trade },
+      currentPlanetState.buildings['trade-center'],
+      state.rating.resourcePoints,
+      request,
+      tradedAt,
+    );
+    if (!preview.ok) {
+      setNotice(preview.reason ?? 'Обмен сейчас недоступен');
+      return preview;
+    }
+
+    setState((current) => {
+      const planet = current.planets['helion-01'];
+      const transition = executeTrade(
+        {
+          wallet: {
+            metal: current.metal,
+            minerals: current.minerals,
+            gas: current.gas,
+            debris: planet.recycling.availableDebris,
+          },
+          trade: planet.trade,
+        },
+        planet.buildings['trade-center'],
+        current.rating.resourcePoints,
+        request,
+        tradedAt,
+      );
+      if (!transition.ok) return current;
+      return {
+        ...current,
+        schemaVersion: SAVE_SCHEMA_VERSION,
+        metal: transition.state.wallet.metal,
+        minerals: transition.state.wallet.minerals,
+        gas: transition.state.wallet.gas,
+        planets: {
+          ...current.planets,
+          'helion-01': {
+            ...planet,
+            trade: transition.state.trade,
+            recycling: {
+              ...planet.recycling,
+              availableDebris: transition.state.wallet.debris,
+            },
+          },
+        },
+      };
+    });
+    setNotice('Обмен выполнен');
+    return preview;
   };
 
   const buildBuilding = (assetRole: BuildingRole) => {
@@ -1088,10 +1191,14 @@ export function App() {
               buildings={currentPlanetState.buildings}
               productionBots={currentPlanetState.productionBots}
               recycling={currentPlanetState.recycling}
+              trade={currentPlanetState.trade}
+              tradeWallet={tradeWallet}
+              resourceRatingPoints={state.rating.resourcePoints}
               now={now}
               onProductionBotsApply={applyProductionBots}
               onRecyclingStart={startRecycling}
               onRecyclingCollect={collectRecycling}
+              onTrade={tradeResources}
               onBack={returnToBuilding}
             />
           ) : activeTab === 'Вселенная' ? (

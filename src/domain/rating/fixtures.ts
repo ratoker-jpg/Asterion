@@ -5,12 +5,35 @@ const ALLIANCE_TAGS = ['ARC', 'NEX', 'VOID', 'AUR', 'ION', 'HEX', 'SOL', 'DRK'];
 
 export const CURRENT_PLAYER_ID = 'player-current';
 
-export function createPlayerRatingEntries(): PlayerRatingEntry[] {
+// Prototype fixture until the multiplayer rating backend computes this value from live campaign data.
+export const RATING_PROTOTYPE_RESOURCE_POINTS = 855_880;
+
+export type RatingPrototypeState = {
+  resourcePoints: number;
+};
+
+export function createDefaultRatingPrototypeState(): RatingPrototypeState {
+  return { resourcePoints: RATING_PROTOTYPE_RESOURCE_POINTS };
+}
+
+export function migrateRatingPrototypeState(value: unknown): RatingPrototypeState {
+  const source = value && typeof value === 'object' ? value as { resourcePoints?: unknown } : null;
+  const resourcePoints = source?.resourcePoints;
+  return {
+    resourcePoints: typeof resourcePoints === 'number' && Number.isFinite(resourcePoints) && resourcePoints >= 0
+      ? Math.floor(resourcePoints)
+      : RATING_PROTOTYPE_RESOURCE_POINTS,
+  };
+}
+
+export function createPlayerRatingEntries(currentPlayerResourcePoints = RATING_PROTOTYPE_RESOURCE_POINTS): PlayerRatingEntry[] {
+  const safeCurrentResourcePoints = Math.max(0, Math.floor(Number.isFinite(currentPlayerResourcePoints) ? currentPlayerResourcePoints : RATING_PROTOTYPE_RESOURCE_POINTS));
   return Array.from({ length: 84 }, (_, index) => {
     const standing = index + 1;
-    const resourcePoints = 1_150_000 - index * 8_170;
+    const fixtureResourcePoints = 1_150_000 - index * 8_170;
     const battlePoints = 610_000 - index * 3_910;
     const isCurrentPlayer = standing === 37;
+    const resourcePoints = isCurrentPlayer ? safeCurrentResourcePoints : fixtureResourcePoints;
     return {
       id: isCurrentPlayer ? CURRENT_PLAYER_ID : `player-${String(standing).padStart(3, '0')}`,
       rank: standing,
