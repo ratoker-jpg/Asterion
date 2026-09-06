@@ -15,6 +15,8 @@ jobs:
           node-version: 24
       - name: Install dependencies
         run: npm install
+      - name: Resource building domain tests
+        run: npm run test:buildings
       - name: Combat domain tests
         run: npm run test:combat
       - name: Operations domain tests
@@ -31,7 +33,7 @@ jobs:
         run: npm run test:science
       - name: Build renderer
         run: npm run build
-      - name: Capture utility-screen visual QA
+      - name: Capture utility and resource-zone visual QA
         run: npm run qa:visual
       - name: Upload visual QA artifact
         if: always()

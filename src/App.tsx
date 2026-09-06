@@ -5,6 +5,7 @@ import { UniverseView } from './UniverseView';
 import { OperationsView } from './OperationsView';
 import { CommandView } from './CommandView';
 import { ReportsView } from './ReportsView';
+import { ResourceZoneView } from './ResourceZoneView';
 import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
 import {
   BATTLE_HISTORY_CHANGED_EVENT,
@@ -45,6 +46,23 @@ import {
 import type { AllianceSettingsInput, CommandState } from './domain/command/types.ts';
 import { createDefaultReportsState, migrateReportsState } from './domain/reports/repository.ts';
 import type { ReportsState } from './domain/reports/types.ts';
+import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
+import {
+  RESOURCE_BASE_INCOME_PER_HOUR,
+  RESOURCE_BUILDING_QUEUE_CAPACITY,
+  completeResourceBuildingProject,
+  createDefaultResourceBuildingLevels,
+  evaluateResourceBuildingBuild,
+  getResourceBuildingDefinition,
+  migrateResourceBuildingLevels,
+  migrateResourceBuildingQueue,
+  startResourceBuildingProject,
+  type BuildingQueueItem,
+  type ResourceBuildingLevels,
+  type ResourceBuildingRole,
+  type ResourceWallet,
+  type ScienceLevels,
+} from './domain/buildings/resource-zone.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import planetColonized from '../assets/source/starter/planets/planet_colonized.png';
@@ -97,16 +115,9 @@ const planetSkins = [
 type PlanetSkin = (typeof planetSkins)[number]['id'];
 type PlanetId = 'helion-01';
 type Zone = 'resource' | 'industry' | 'military';
+type PlanetViewMode = 'overview' | 'resource-zone';
 type IconKind = 'metal' | 'mineral' | 'gas' | 'energy' | 'population' | Zone;
 type NavigationIconKind = 'planet' | 'universe' | 'fleets' | 'operations' | 'command' | 'reports' | 'settings' | 'rating' | 'science';
-
-type QueueItem = {
-  id: 'solar-station';
-  name: string;
-  planetId: PlanetId;
-  startedAt: number;
-  finishAt: number;
-};
 
 type PlanetRuntime = {
   name: string;
@@ -114,7 +125,7 @@ type PlanetRuntime = {
   population: number;
   populationMax: number;
   energy: number;
-  solarStations: number;
+  buildings: ResourceBuildingLevels;
   stability: number;
 };
 
@@ -125,13 +136,44 @@ type SaveState = {
   gas: number;
   currentPlanetId: PlanetId;
   planets: Record<PlanetId, PlanetRuntime>;
-  queues: Record<PlanetId, QueueItem | null>;
+  queues: Record<PlanetId, BuildingQueueItem[]>;
   combatPriority: CombatPriorityState;
   combat: BattleHistoryState;
   combatSimulator: SimulatorState;
   operations: OperationsState;
   command: CommandState;
   reports: ReportsState;
+};
+
+type StoredPlanetRuntime = {
+  name?: unknown;
+  skin?: unknown;
+  population?: unknown;
+  populationMax?: unknown;
+  energy?: unknown;
+  buildings?: unknown;
+  solarStations?: unknown;
+  stability?: unknown;
+};
+
+type StoredSave = {
+  schemaVersion?: unknown;
+  metal?: unknown;
+  minerals?: unknown;
+  gas?: unknown;
+  planetSkin?: unknown;
+  population?: unknown;
+  energy?: unknown;
+  solarStations?: unknown;
+  planets?: Record<string, StoredPlanetRuntime>;
+  queues?: Record<string, unknown>;
+  queue?: unknown;
+  combatPriority?: unknown;
+  combat?: unknown;
+  combatSimulator?: unknown;
+  operations?: unknown;
+  command?: unknown;
+  reports?: unknown;
 };
 
 type PlanetDefinition = {
@@ -146,9 +188,10 @@ const ownedPlanets: PlanetDefinition[] = [
 ];
 
 const SAVE_KEY = 'asterion.vertical-slice.v1';
-const BUILD_TIME_MS = 45_000;
-const BUILD_COST = 1200;
 const DEFAULT_PLANET_NAME = 'Helion 01';
+const CURRENT_SCIENCE_LEVELS = Object.fromEntries(
+  SCIENCE_CATALOG.map((science) => [science.id, science.capturedLevel]),
+) as ScienceLevels;
 
 const createInitialState = (): SaveState => ({
   schemaVersion: COMBAT_SAVE_SCHEMA_VERSION,
@@ -163,12 +206,12 @@ const createInitialState = (): SaveState => ({
       population: 4,
       populationMax: 70,
       energy: 140,
-      solarStations: 0,
+      buildings: createDefaultResourceBuildingLevels(),
       stability: 100,
     },
   },
   queues: {
-    'helion-01': null,
+    'helion-01': [],
   },
   combatPriority: createDefaultCombatPriority(),
   combat: createDefaultBattleHistory(),
@@ -200,52 +243,40 @@ const zoneMeta: Record<Zone, { title: string; subtitle: string; accent: string }
 };
 
 const isPlanetSkin = (value: unknown): value is PlanetSkin => planetSkins.some((skin) => skin.id === value);
+const numberOr = (value: unknown, fallback: number) => typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 
 function readSave(): SaveState {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return createInitialState();
 
-    const parsed = JSON.parse(raw) as Partial<SaveState> & {
-      planetSkin?: PlanetSkin;
-      population?: number;
-      energy?: number;
-      solarStations?: number;
-      queue?: Omit<QueueItem, 'planetId'> | QueueItem | null;
-    };
-
+    const parsed = JSON.parse(raw) as StoredSave;
     const savedHomeworld = parsed.planets?.['helion-01'];
+    const legacySolarStations = numberOr(savedHomeworld?.solarStations, numberOr(parsed.solarStations, 0));
     const homeworld: PlanetRuntime = {
-      ...initialState.planets['helion-01'],
-      ...(savedHomeworld ?? {}),
       name: typeof savedHomeworld?.name === 'string' && savedHomeworld.name.trim()
         ? savedHomeworld.name.trim().slice(0, 28)
         : DEFAULT_PLANET_NAME,
       skin: isPlanetSkin(savedHomeworld?.skin)
         ? savedHomeworld.skin
-        : initialState.planets['helion-01'].skin,
+        : isPlanetSkin(parsed.planetSkin)
+          ? parsed.planetSkin
+          : initialState.planets['helion-01'].skin,
+      population: numberOr(savedHomeworld?.population, numberOr(parsed.population, initialState.planets['helion-01'].population)),
+      populationMax: numberOr(savedHomeworld?.populationMax, initialState.planets['helion-01'].populationMax),
+      energy: numberOr(savedHomeworld?.energy, numberOr(parsed.energy, initialState.planets['helion-01'].energy)),
+      buildings: migrateResourceBuildingLevels(savedHomeworld?.buildings, legacySolarStations),
+      stability: numberOr(savedHomeworld?.stability, initialState.planets['helion-01'].stability),
     };
 
-    // Migration from the original single-planet save format.
-    if (parsed.planetSkin && isPlanetSkin(parsed.planetSkin)) {
-      homeworld.skin = parsed.planetSkin;
-      homeworld.population = parsed.population ?? homeworld.population;
-      homeworld.energy = parsed.energy ?? homeworld.energy;
-      homeworld.solarStations = parsed.solarStations ?? homeworld.solarStations;
-    }
-
     const savedQueue = parsed.queues?.['helion-01'] ?? parsed.queue ?? null;
-    const queue: QueueItem | null = savedQueue
-      ? { ...savedQueue, planetId: 'helion-01' }
-      : null;
+    const queue = migrateResourceBuildingQueue(savedQueue, 'helion-01', homeworld.buildings);
 
-    // Any temporary test colonies from the previous prototype are intentionally
-    // discarded here. The next save writes the canonical single-homeworld model.
     return {
       schemaVersion: COMBAT_SAVE_SCHEMA_VERSION,
-      metal: parsed.metal ?? initialState.metal,
-      minerals: parsed.minerals ?? initialState.minerals,
-      gas: parsed.gas ?? initialState.gas,
+      metal: numberOr(parsed.metal, initialState.metal),
+      minerals: numberOr(parsed.minerals, initialState.minerals),
+      gas: numberOr(parsed.gas, initialState.gas),
       currentPlanetId: 'helion-01',
       planets: { 'helion-01': homeworld },
       queues: { 'helion-01': queue },
@@ -362,7 +393,7 @@ function AegisButton({ children, onClick, disabled = false }: { children: ReactN
 
 export function App() {
   const scale = useStageScale();
-  const [zone, setZone] = useState<Zone>('resource');
+  const [planetViewMode, setPlanetViewMode] = useState<PlanetViewMode>('overview');
   const [activeTab, setActiveTab] = useState('Планета');
   const [state, setState] = useState<SaveState>(readSave);
   const [now, setNow] = useState(Date.now());
@@ -417,25 +448,43 @@ export function App() {
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => {
-    const queue = state.queues['helion-01'];
-    if (!queue || now < queue.finishAt) return;
+    const activeQueueItem = state.queues['helion-01'][0];
+    if (!activeQueueItem || now < activeQueueItem.finishAt) return;
+    const completedDefinition = getResourceBuildingDefinition(activeQueueItem.assetRole);
 
     setState((current) => {
-      const currentQueue = current.queues['helion-01'];
-      if (!currentQueue || Date.now() < currentQueue.finishAt) return current;
+      const currentActiveItem = current.queues['helion-01'][0];
+      if (!currentActiveItem || Date.now() < currentActiveItem.finishAt) return current;
+      const currentPlanet = current.planets['helion-01'];
+      const completed = completeResourceBuildingProject({
+        resources: {
+          metal: current.metal,
+          minerals: current.minerals,
+          gas: current.gas,
+          energy: currentPlanet.energy,
+        },
+        buildings: currentPlanet.buildings,
+        queue: current.queues['helion-01'],
+        scienceLevels: CURRENT_SCIENCE_LEVELS,
+      }, Date.now());
+      if (!completed.completedRole) return current;
+
       return {
         ...current,
+        metal: completed.state.resources.metal,
+        minerals: completed.state.resources.minerals,
+        gas: completed.state.resources.gas,
         planets: {
           'helion-01': {
-            ...current.planets['helion-01'],
-            solarStations: current.planets['helion-01'].solarStations + 1,
-            energy: current.planets['helion-01'].energy + 25,
+            ...currentPlanet,
+            energy: completed.state.resources.energy,
+            buildings: completed.state.buildings,
           },
         },
-        queues: { 'helion-01': null },
+        queues: { 'helion-01': completed.state.queue },
       };
     });
-    setNotice(`${state.planets['helion-01'].name}: солнечная станция построена. Производство энергии увеличено.`);
+    setNotice(`${state.planets['helion-01'].name}: ${completedDefinition.name} завершено.`);
   }, [now, state.queues, state.planets]);
 
   const currentPlanet = ownedPlanets[0];
@@ -446,24 +495,39 @@ export function App() {
     [currentPlanetState.skin],
   );
   const currentQueue = state.queues['helion-01'];
+  const currentActiveQueueItem = currentQueue[0] ?? null;
+  const currentQueueDefinition = currentActiveQueueItem ? getResourceBuildingDefinition(currentActiveQueueItem.assetRole) : null;
+  const resourceWallet: ResourceWallet = {
+    metal: state.metal,
+    minerals: state.minerals,
+    gas: state.gas,
+    energy: currentPlanetState.energy,
+  };
 
   const editingPlanet = editingPlanetId ? currentPlanet : null;
   const editingPlanetState = editingPlanet ? state.planets['helion-01'] : null;
 
   const progress = useMemo(() => {
-    if (!currentQueue) return 0;
-    return Math.min(100, Math.max(0, ((now - currentQueue.startedAt) / (currentQueue.finishAt - currentQueue.startedAt)) * 100));
-  }, [now, currentQueue]);
+    if (!currentActiveQueueItem) return 0;
+    return Math.min(100, Math.max(0, ((now - currentActiveQueueItem.startedAt) / Math.max(1, currentActiveQueueItem.finishAt - currentActiveQueueItem.startedAt)) * 100));
+  }, [now, currentActiveQueueItem]);
+
+  const resourceBuildingCount = useMemo(
+    () => Object.values(currentPlanetState.buildings).filter((level) => level > 0).length,
+    [currentPlanetState.buildings],
+  );
 
   const selectPlanet = (_planetId: PlanetId) => {
     setState((current) => ({ ...current, currentPlanetId: 'helion-01' }));
     setPlanetMenuOpen(false);
+    setPlanetViewMode('overview');
     setNotice(`${currentPlanetName} ${currentPlanet.coords} выбрана как текущая планета.`);
   };
 
   const openPlanetEditor = (planetId: PlanetId) => {
     setState((current) => ({ ...current, currentPlanetId: 'helion-01' }));
     setActiveTab('Планета');
+    setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
     setEditingName(state.planets[planetId].name);
     setEditingPlanetId(planetId);
@@ -498,24 +562,53 @@ export function App() {
     setNotice(`Облик ${state.planets['helion-01'].name} изменён: ${skin.label}.`);
   };
 
-  const build = () => {
-    if (currentQueue) return setNotice('Очередь этой планеты уже занята.');
-    if (state.metal < BUILD_COST) return setNotice('Недостаточно металла.');
-    const startedAt = Date.now();
-    setState((current) => ({
-      ...current,
-      metal: current.metal - BUILD_COST,
-      queues: {
-        'helion-01': {
-          id: 'solar-station',
-          name: 'Солнечная станция',
-          planetId: 'helion-01',
-          startedAt,
-          finishAt: startedAt + BUILD_TIME_MS,
+  const buildResourceBuilding = (assetRole: ResourceBuildingRole) => {
+    const snapshot = {
+      resources: resourceWallet,
+      buildings: currentPlanetState.buildings,
+      queue: currentQueue,
+      scienceLevels: CURRENT_SCIENCE_LEVELS,
+    };
+    const availability = evaluateResourceBuildingBuild(snapshot, assetRole);
+    if (!availability.canBuild) {
+      setNotice(availability.reason ?? 'Строительство сейчас недоступно.');
+      return false;
+    }
+
+    const enqueuedAt = Date.now();
+    const definition = getResourceBuildingDefinition(assetRole);
+    setState((current) => {
+      const currentPlanet = current.planets['helion-01'];
+      const transition = startResourceBuildingProject({
+        resources: {
+          metal: current.metal,
+          minerals: current.minerals,
+          gas: current.gas,
+          energy: currentPlanet.energy,
         },
-      },
-    }));
-    setNotice(`${currentPlanetName}: солнечная станция добавлена в очередь. −${formatNumber(BUILD_COST)} металла.`);
+        buildings: currentPlanet.buildings,
+        queue: current.queues['helion-01'],
+        scienceLevels: CURRENT_SCIENCE_LEVELS,
+      }, assetRole, 'helion-01', enqueuedAt);
+      if (!transition.ok) return current;
+
+      return {
+        ...current,
+        metal: transition.state.resources.metal,
+        minerals: transition.state.resources.minerals,
+        gas: transition.state.resources.gas,
+        planets: {
+          'helion-01': {
+            ...currentPlanet,
+            energy: transition.state.resources.energy,
+            buildings: transition.state.buildings,
+          },
+        },
+        queues: { 'helion-01': transition.state.queue },
+      };
+    });
+    setNotice(`${currentPlanetName}: ${definition.name} добавлено в общую очередь.`);
+    return true;
   };
 
   const closePlanetEditor = () => {
@@ -530,6 +623,7 @@ export function App() {
     setEditingPlanetId(null);
     setEditingName(DEFAULT_PLANET_NAME);
     setDetailsOpen(true);
+    setPlanetViewMode('overview');
     setNotice('Сохранение прототипа сброшено.');
   };
 
@@ -550,6 +644,7 @@ export function App() {
 
   const openFleetRootFromOperations = () => {
     setActiveTab('Флоты');
+    setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
     closePlanetEditor();
     setNotice('Флоты: подготовьте состав для принятой операции.');
@@ -573,6 +668,7 @@ export function App() {
 
   const openFleetRootFromCommand = () => {
     setActiveTab('Флоты');
+    setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
     closePlanetEditor();
     setNotice('Флоты: подготовьте состав для союзной задачи. Отправка не запускается автоматически.');
@@ -581,6 +677,7 @@ export function App() {
 
   const openFleetRootFromReports = () => {
     setActiveTab('Флоты');
+    setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
     closePlanetEditor();
     setNotice('Флоты: выберите состав для союзной операции из отчётов.');
@@ -601,25 +698,28 @@ export function App() {
 
   const chooseTab = (tab: string) => {
     setActiveTab(tab);
+    setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
     closePlanetEditor();
     if (tab === 'Вселенная') setNotice('Галактика 1 загружена. Доступно 40 солнечных систем.');
     else if (tab === 'Операции') setNotice('Операции: доступные PvE-сценарии загружены.');
     else if (tab === 'Командование') setNotice('Командование: союзный контур загружен.');
     else if (tab === 'Отчёты') setNotice('Отчёты: центр сообщений и боевых журналов загружен.');
-    else if (tab !== 'Планета') setNotice(`Экран «${tab}» пока в разработке.`);
+    else if (tab === 'Планета') setNotice(`${currentPlanetName}: обзор планеты.`);
+    else setNotice(`Экран «${tab}» пока в разработке.`);
   };
 
   const chooseZone = (nextZone: Zone) => {
-    setZone(nextZone);
     setActiveTab('Планета');
+    setPlanetViewMode(nextZone === 'resource' ? 'resource-zone' : 'overview');
     setPlanetMenuOpen(false);
     closePlanetEditor();
-    setNotice(`${zoneMeta[nextZone].title}: модуль выбран для ${currentPlanetName}.`);
+    setNotice(nextZone === 'resource'
+      ? `${zoneMeta[nextZone].title}: сцена открыта для ${currentPlanetName}.`
+      : `${zoneMeta[nextZone].title}: отдельный модуль пока не реализован.`);
   };
 
-  const remaining = currentQueue ? currentQueue.finishAt - now : 0;
-  const zoneInfo = zoneMeta[zone];
+  const remaining = currentActiveQueueItem ? currentActiveQueueItem.finishAt - now : 0;
 
   return (
     <div className="viewport">
@@ -630,17 +730,20 @@ export function App() {
               <button className="header-planet-world" type="button" onClick={() => chooseTab('Планета')} aria-label={`Открыть ${currentPlanetName}`}>
                 <img src={currentSkin.art} alt={currentPlanetName} draggable={false} />
               </button>
-              {(['resource', 'industry', 'military'] as Zone[]).map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  className={`header-zone header-zone--${item} ${zone === item && activeTab === 'Планета' ? 'active' : ''}`}
-                  title={zoneMeta[item].title}
-                  onClick={() => chooseZone(item)}
-                >
-                  <GameIcon kind={item} />
-                </button>
-              ))}
+              {(['resource', 'industry', 'military'] as Zone[]).map((item) => {
+                const isActive = activeTab === 'Планета' && planetViewMode === 'resource-zone' && item === 'resource';
+                return (
+                  <button
+                    key={item}
+                    type="button"
+                    className={`header-zone header-zone--${item} ${isActive ? 'active' : ''}`}
+                    title={zoneMeta[item].title}
+                    onClick={() => chooseZone(item)}
+                  >
+                    <GameIcon kind={item} />
+                  </button>
+                );
+              })}
             </div>
 
             <div className="current-planet-control">
@@ -668,15 +771,15 @@ export function App() {
 
           <section className="header-main">
             <div className="resources header-resource-rail" aria-label="Ресурсы планеты">
-              <Resource kind="metal" label="МЕТАЛЛ" value={state.metal} capacity={60_000} hourlyGain={774} />
-              <Resource kind="mineral" label="МИНЕРАЛЫ" value={state.minerals} capacity={60_000} hourlyGain={510} />
-              <Resource kind="gas" label="ГАЗ" value={state.gas} capacity={60_000} hourlyGain={312} />
-              <Resource kind="energy" label="ЭНЕРГИЯ" value={currentPlanetState.energy} description="Энергия увеличивается от солнечных станций и других зданий." />
+              <Resource kind="metal" label="МЕТАЛЛ" value={state.metal} capacity={60_000} hourlyGain={RESOURCE_BASE_INCOME_PER_HOUR.metal} />
+              <Resource kind="mineral" label="МИНЕРАЛЫ" value={state.minerals} capacity={60_000} hourlyGain={RESOURCE_BASE_INCOME_PER_HOUR.minerals} />
+              <Resource kind="gas" label="ГАЗ" value={state.gas} capacity={60_000} hourlyGain={RESOURCE_BASE_INCOME_PER_HOUR.gas} />
+              <Resource kind="energy" label="ЭНЕРГИЯ" value={currentPlanetState.energy} description="Энергия планеты. Солнечная электростанция увеличивает запас после завершения строительства." />
               <Resource kind="population" label="НАСЕЛЕНИЕ" value={currentPlanetState.population} capacity={currentPlanetState.populationMax} />
             </div>
             <nav className="primary-navigation" aria-label="Основная навигация">
               {primaryTabs.map(({ label, icon }) => (
-                <button key={label} type="button" className={activeTab === label ? 'active' : ''} onClick={() => chooseTab(label)}>
+                <button key={label} type="button" className={activeTab === label && !(label === 'Планета' && planetViewMode === 'resource-zone') ? 'active' : ''} onClick={() => chooseTab(label)}>
                   <NavigationIcon kind={icon} />
                   <span>{label}</span>
                 </button>
@@ -699,7 +802,7 @@ export function App() {
           </section>
         </header>
 
-        <section className={`workspace workspace-v4 workspace--${activeTab === 'Вселенная' ? 'universe' : activeTab === 'Планета' ? 'planet' : activeTab === 'Операции' ? 'operations' : activeTab === 'Командование' ? 'command' : activeTab === 'Отчёты' ? 'reports' : 'module'}`}>
+        <section className={`workspace workspace-v4 workspace--${activeTab === 'Вселенная' ? 'universe' : activeTab === 'Планета' && planetViewMode === 'resource-zone' ? 'resource-zone' : activeTab === 'Планета' ? 'planet' : activeTab === 'Операции' ? 'operations' : activeTab === 'Командование' ? 'command' : activeTab === 'Отчёты' ? 'reports' : 'module'}`}>
           {activeTab === 'Вселенная' ? (
             <UniverseView onNotice={setNotice} ownedPlanetArt={currentSkin.art} ownedPlanetName={currentPlanetName} />
           ) : activeTab === 'Операции' ? (
@@ -729,6 +832,17 @@ export function App() {
               onToggleBattleSaved={toggleBattleSavedFromReports}
               onOpenFleets={openFleetRootFromReports}
             />
+          ) : activeTab === 'Планета' && planetViewMode === 'resource-zone' ? (
+            <ResourceZoneView
+              planetName={currentPlanetName}
+              planetCoords={currentPlanet.coords}
+              resources={resourceWallet}
+              buildings={currentPlanetState.buildings}
+              queue={currentQueue}
+              scienceLevels={CURRENT_SCIENCE_LEVELS}
+              now={now}
+              onBuild={buildResourceBuilding}
+            />
           ) : activeTab === 'Планета' ? (
             <div className="planet-page-v3 planet-page-v4">
               <aside className="planet-summary-v3 planet-list-panel-v4">
@@ -756,7 +870,7 @@ export function App() {
                       <div><dt>Координаты</dt><dd>{currentPlanet.coords}</dd></div>
                       <div><dt>Население</dt><dd>{currentPlanetState.population} / {currentPlanetState.populationMax}</dd></div>
                       <div><dt>Энергия</dt><dd>{currentPlanetState.energy}</dd></div>
-                      <div><dt>Солнечные станции</dt><dd>{currentPlanetState.solarStations}</dd></div>
+                      <div><dt>Ресурсные здания</dt><dd>{resourceBuildingCount} / 10</dd></div>
                       <div><dt>Стабильность</dt><dd className="summary-stable">{currentPlanetState.stability}%</dd></div>
                     </dl>
                   </div>
@@ -765,7 +879,7 @@ export function App() {
 
               <main className="planet-canvas-v3">
                 <div className="scene-title scene-title-v3">
-                  <small>{zoneInfo.title}</small>
+                  <small>ОБЗОР ПЛАНЕТЫ</small>
                   <h1>{currentPlanetName.toUpperCase()}</h1>
                   <p>{currentPlanet.coords} • РОДНОЙ МИР АСТЕРОВ</p>
                 </div>
@@ -776,7 +890,7 @@ export function App() {
                     <button
                       key={item}
                       type="button"
-                      className={`zone-hotspot zone-hotspot--${item} ${zone === item ? 'active' : ''}`}
+                      className={`zone-hotspot zone-hotspot--${item}`}
                       style={{ '--zone-accent': zoneMeta[item].accent } as CSSProperties}
                       onClick={() => chooseZone(item)}
                     >
@@ -789,22 +903,18 @@ export function App() {
               </main>
 
               <aside className="queue-panel-v3">
-                <div className="page-panel-title"><strong>ОЧЕРЕДЬ СТРОИТЕЛЬСТВА</strong><small>{currentQueue ? 1 : 0} / 4</small></div>
-                <div className={`queue-card-v2 ${currentQueue ? 'busy' : ''}`}>
-                  <span className="queue-card-v2__icon"><GameIcon kind="energy" /></span>
-                  <span><strong>{currentQueue?.name ?? 'Свободный слот'}</strong><small>{currentQueue ? `Осталось ${formatCountdown(remaining)}` : 'Готов к строительству'}</small></span>
-                  <b>{currentQueue ? 'I' : '+'}</b>
-                  {currentQueue ? <div className="queue-progress-v2"><i style={{ width: `${progress}%` }} /></div> : null}
+                <div className="page-panel-title"><strong>ОЧЕРЕДЬ СТРОИТЕЛЬСТВА</strong><small>{currentQueue.length} / {RESOURCE_BUILDING_QUEUE_CAPACITY}</small></div>
+                <div className={`queue-card-v2 ${currentActiveQueueItem ? 'busy' : ''}`}>
+                  {currentQueueDefinition ? <img src={currentQueueDefinition.art} alt="" style={{ width: 44, height: 44, objectFit: 'contain' }} /> : <span className="queue-card-v2__icon"><GameIcon kind="resource" /></span>}
+                  <span><strong>{currentQueueDefinition?.name ?? 'Свободный слот'}</strong><small>{currentActiveQueueItem ? `Осталось ${formatCountdown(remaining)}` : 'Готов к строительству'}</small></span>
+                  <b>{currentActiveQueueItem ? 'I' : '+'}</b>
+                  {currentActiveQueueItem ? <div className="queue-progress-v2"><i style={{ width: `${progress}%` }} /></div> : null}
                 </div>
-                {[2, 3, 4].map((slot) => (
-                  <div className="queue-card-v2 locked" key={slot}><span className="queue-card-v2__lock">▣</span><span><strong>Слот 0{slot}</strong><small>Заблокирован</small></span></div>
-                ))}
                 <div className="build-preview-v2">
-                  <span className="build-preview-v2__icon"><GameIcon kind="energy" /></span>
-                  <div><strong>Солнечная станция I</strong><small>+25 энергии после завершения</small></div>
-                  <b><GameIcon kind="metal" /> {formatNumber(BUILD_COST)}</b>
+                  <span className="build-preview-v2__icon"><GameIcon kind="resource" /></span>
+                  <div><strong>Ресурсная зона</strong><small>Добыча и энергетика планеты</small></div>
                 </div>
-                <AegisButton onClick={build} disabled={Boolean(currentQueue)}>ПОСТРОИТЬ</AegisButton>
+                <AegisButton onClick={() => chooseZone('resource')}>ОТКРЫТЬ РЕСУРСНУЮ ЗОНУ</AegisButton>
               </aside>
             </div>
           ) : (

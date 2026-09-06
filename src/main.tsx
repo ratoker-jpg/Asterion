@@ -18,6 +18,7 @@ import './shell-v3.css';
 import './shell-v4.css';
 import './single-planet-v5.css';
 import './asterion-header.css';
+import './resource-zone.css';
 import './web-preview.css';
 import './shipyard-workspace.css';
 import './shipyard-tooltip-overflow.css';
