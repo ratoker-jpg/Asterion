@@ -38,6 +38,10 @@ function isUtilityRoot(roots: readonly HTMLElement[]) {
   return roots.some((element) => element.classList.contains('utility-screen-host'));
 }
 
+function usesCompactWorkspaceHeight(workspace: HTMLElement) {
+  return workspace.classList.contains('workspace--command');
+}
+
 function measureContentHeight(container: HTMLElement, stageScale: number, roots: readonly HTMLElement[]) {
   const containerRect = container.getBoundingClientRect();
 
@@ -113,9 +117,20 @@ export function GlobalPageScrollController() {
       const pageChanged = identity !== lastPageIdentity;
       lastPageIdentity = identity;
 
+      // A long page may have already enlarged .workspace when navigation swaps its
+      // contents. Measure the incoming page from the normal shell first; otherwise
+      // a root with min-height: 100% can inherit the previous page's height and keep
+      // the global scroll mode alive indefinitely.
+      if (pageChanged && root.classList.contains('asterion-long-page')) {
+        root.classList.remove('asterion-long-page');
+        clearGeometry();
+        schedule();
+        return;
+      }
+
       const isFleetPage = pageContainer.classList.contains('fleet-main-v1');
       const utilityPage = !isFleetPage && isUtilityRoot(pageRoots);
-      const availableHeight = utilityPage
+      const availableHeight = utilityPage || usesCompactWorkspaceHeight(workspace)
         ? BASE_UTILITY_WORKSPACE_HEIGHT
         : isFleetPage
           ? BASE_WORKSPACE_HEIGHT - BASE_FLEET_VERTICAL_PADDING

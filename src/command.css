@@ -16,7 +16,10 @@
   --command-text: #dcecf3;
   --command-muted: #7894a2;
   width: 100%;
-  min-height: 100%;
+  /* The global page-scroll controller grows .workspace for genuinely long pages.
+     Do not mirror that calculated height here: it makes the controller measure its
+     own previous result and grows the document again on every observer pass. */
+  min-height: 0;
   padding: 18px 24px 28px;
   box-sizing: border-box;
   color: var(--command-text);
