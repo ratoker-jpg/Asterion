@@ -4,7 +4,7 @@
 
 `Настройки` заменяет utility placeholder, сохраняя принятую композицию: навигация секций слева, рабочая панель справа, текущий dark/cyan Asterion HUD language.
 
-Главные исправления этой версии — семантическая типографика и корректный scroll/viewport contract.
+Главные исправления этой версии — семантическая типографика, которая реально действует на существующие игровые экраны, и единый Asterion page-scroll contract.
 
 ## Rejected global scaling approach
 
@@ -22,6 +22,10 @@
 - `--text-scale-helper`
 
 Каждая категория нормализуется независимо в диапазоне `80–180%` с шагом `5%`.
+
+Новые utility screens используют явные semantic classes. Существующие игровые экраны подключаются через `GlobalTypographyController`: он классифицирует реальные text-bearing DOM elements один раз, сохраняет их исходный computed `font-size` в CSS custom property и далее применяет тот же semantic token. Это не мутирует stylesheet rules и не создаёт общий `textScale`.
+
+HUD остаётся отдельной категорией и применяется к существующему global header напрямую через semantic CSS. Таким образом изменение, например, `pageTitle` влияет и на существующий экран Планеты, а изменение `HUD` — на текущую верхнюю панель игры, при этом helper/body остаются независимыми.
 
 ## Persistence ownership
 
@@ -61,14 +65,27 @@ Windowed presets:
 
 ## Scroll / viewport contract
 
-Utility host занимает ровно существующий `.workspace`:
+После controller visual review utility screens используют тот же document-level scrolling contract, что и остальные длинные экраны Asterion.
 
-- `position: absolute; inset: 0`;
-- `min-height: 0`;
-- global host `overflow: hidden`;
-- settings content использует только внутренний `overflow-y: auto`.
+- `.workspace` остаётся частью существующего global shell;
+- `GlobalPageScrollController` измеряет реальную высоту активного screen content;
+- если экран выше доступного workspace, включается общий `html.asterion-long-page` scrollbar;
+- Settings не создаёт собственный `overflow-y: auto`;
+- при коротком контенте лишний scrollbar не появляется;
+- высота страницы вычисляется по реальному контенту, поэтому пустого гигантского хвоста ниже интерфейса нет.
 
-Settings не увеличивает высоту stage/document и не создаёт пустую страницу под игровым экраном.
+Это заменяет ранний internal-scroll вариант, который был отклонён после проверки реального поведения общего Asterion scroll.
+
+## QA contract
+
+Electron visual QA проверяет:
+
+- 1920×1080, 1600×900, 1280×720, 2560×1440;
+- document scrollbar, если он нужен, принадлежит `GlobalPageScrollController`;
+- Settings не владеет nested vertical scrollbar;
+- helper 180% не изменяет HUD;
+- HUD 130% реально изменяет существующий global header;
+- page-title 130% реально изменяет существующий экран Планеты через global semantic typography.
 
 ## Deferred
 
