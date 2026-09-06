@@ -1,5 +1,6 @@
 import { ProductionBotsView } from './ProductionBotsView';
 import { RecyclingCenterView } from './RecyclingCenterView';
+import { TradeCenterView } from './TradeCenterView';
 import { getBuildingDefinition, type BuildingLevels } from './domain/buildings/resource-zone.ts';
 import {
   getAvailableProductionBots,
@@ -7,6 +8,7 @@ import {
   type BotAssignment,
 } from './domain/buildings/production-bots.ts';
 import type { RecyclingState, ResourceAllocationPercent } from './domain/buildings/recycling.ts';
+import type { TradeExecution, TradeRequest, TradeState, TradeWallet } from './domain/buildings/trade.ts';
 import type { BuildingInteriorContext } from './building-interior-navigation.ts';
 import './building-interiors.css';
 
@@ -17,10 +19,14 @@ type BuildingInteriorHostProps<PlanetId extends string> = {
   buildings: BuildingLevels;
   productionBots: BotAssignment;
   recycling: RecyclingState;
+  trade: TradeState;
+  tradeWallet: TradeWallet;
+  resourceRatingPoints: number;
   now: number;
   onProductionBotsApply: (assignment: BotAssignment) => void;
   onRecyclingStart: (debrisAmount: number, allocation: ResourceAllocationPercent) => boolean;
   onRecyclingCollect: (jobId: string) => boolean;
+  onTrade: (request: TradeRequest) => TradeExecution;
   onBack: () => void;
 };
 
@@ -31,10 +37,14 @@ export function BuildingInteriorHost<PlanetId extends string>({
   buildings,
   productionBots,
   recycling,
+  trade,
+  tradeWallet,
+  resourceRatingPoints,
   now,
   onProductionBotsApply,
   onRecyclingStart,
   onRecyclingCollect,
+  onTrade,
   onBack,
 }: BuildingInteriorHostProps<PlanetId>) {
   if (context.buildingRole === 'recycling') {
@@ -46,6 +56,21 @@ export function BuildingInteriorHost<PlanetId extends string>({
         now={now}
         onStart={onRecyclingStart}
         onCollect={onRecyclingCollect}
+        onBack={onBack}
+      />
+    );
+  }
+
+  if (context.buildingRole === 'trade-center') {
+    return (
+      <TradeCenterView
+        planetName={planetName}
+        buildingLevel={buildings['trade-center']}
+        trade={trade}
+        wallet={tradeWallet}
+        resourceRatingPoints={resourceRatingPoints}
+        now={now}
+        onTrade={onTrade}
         onBack={onBack}
       />
     );
