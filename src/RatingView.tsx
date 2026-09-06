@@ -260,15 +260,15 @@ function AllianceTable({
   return (
     <div className="rating-table-v2 rating-table-v2--alliances" role="table" aria-label="Рейтинг альянсов">
       <div className="rating-row-v2 rating-head-v2" role="row">
-        <span>МЕСТО</span><span>АЛЬЯНС</span><span>ТЕГ</span><span>УР.</span>
-        <AllianceScoreHead label="ОЧКИ АЛЬЯНСА" scoreKey="alliancePoints" selected={sortKey === 'alliancePoints'} direction={direction} onSort={onSort} />
-        <AllianceScoreHead label="ОБЩИЕ ОЧКИ" scoreKey="totalPoints" selected={sortKey === 'totalPoints'} direction={direction} onSort={onSort} />
+        <span>МЕСТО</span><span>АЛЬЯНС</span><span>ТЕГ</span><span>УРОВЕНЬ</span>
+        <ScoreHead label="ОЧКИ АЛЬЯНСА" scoreKey="alliancePoints" selected={sortKey === 'alliancePoints'} direction={direction} onSort={onSort} />
+        <ScoreHead label="ОБЩИЕ ОЧКИ" scoreKey="totalPoints" selected={sortKey === 'totalPoints'} direction={direction} onSort={onSort} />
       </div>
       {entries.map((entry) => (
         <button
-          key={entry.id}
           type="button"
           role="row"
+          key={entry.id}
           className={[
             'rating-row-v2',
             entry.rank <= 3 ? `top-${entry.rank}` : '',
@@ -278,7 +278,7 @@ function AllianceTable({
           onClick={() => onSelect(entry.id)}
         >
           <span className="rank-v2"><b>{entry.rank}</b></span>
-          <span className="identity-v2"><RaceEmblem race="alliance" /><strong className="utility-data-text">{entry.name}</strong></span>
+          <span className="identity-v2"><span className="alliance-emblem-v2">{entry.tag.slice(0, 1)}</span><strong className="utility-data-text">{entry.name}</strong></span>
           <span className="alliance-tag-v2">[{entry.tag}]</span>
           <span className="utility-data-text">{entry.level}</span>
           <Value value={entry.alliancePoints} />
@@ -289,7 +289,7 @@ function AllianceTable({
   );
 }
 
-function ScoreHead({
+function ScoreHead<K extends string>({
   label,
   scoreKey,
   selected,
@@ -297,53 +297,49 @@ function ScoreHead({
   onSort,
 }: {
   label: string;
-  scoreKey: PlayerScoreKey;
+  scoreKey: K;
   selected: boolean;
   direction: SortDirection;
-  onSort: (key: PlayerScoreKey) => void;
+  onSort: (key: K) => void;
 }) {
-  return <button type="button" className={selected ? 'active' : ''} onClick={() => onSort(scoreKey)}>{label}<b>{selected ? (direction === 'desc' ? '↓' : '↑') : '↕'}</b></button>;
-}
-
-function AllianceScoreHead({
-  label,
-  scoreKey,
-  selected,
-  direction,
-  onSort,
-}: {
-  label: string;
-  scoreKey: AllianceScoreKey;
-  selected: boolean;
-  direction: SortDirection;
-  onSort: (key: AllianceScoreKey) => void;
-}) {
-  return <button type="button" className={selected ? 'active' : ''} onClick={() => onSort(scoreKey)}>{label}<b>{selected ? (direction === 'desc' ? '↓' : '↑') : '↕'}</b></button>;
+  return <button type="button" className={`utility-control score-head-v2 ${selected ? 'selected' : ''}`} onClick={() => onSort(scoreKey)}>{label}<b>{selected ? (direction === 'desc' ? '▼' : '▲') : '◇'}</b></button>;
 }
 
 function Value({ value }: { value: number }) {
-  return <span className="utility-data-text">{new Intl.NumberFormat('ru-RU').format(value)}</span>;
+  return <span className="utility-data-text score-value-v2">{new Intl.NumberFormat('ru-RU').format(value)}</span>;
+}
+
+function RaceEmblem({ race }: { race: PlayerRatingEntry['race'] }) {
+  const label = race === 'aster' ? 'A' : race === 'cyber' ? 'C' : 'X';
+  return <span className={`race-emblem-v2 race-${race}`} aria-label={race}>{label}</span>;
 }
 
 function Pagination({ page, pageCount, onPage }: { page: number; pageCount: number; onPage: (page: number) => void }) {
+  const pages = Array.from({ length: pageCount }, (_, index) => index + 1);
   return (
     <nav className="rating-pagination-v2" aria-label="Страницы рейтинга">
-      <button className="utility-control" type="button" disabled={page <= 1} onClick={() => onPage(page - 1)}>‹</button>
-      <span>{page} / {pageCount}</span>
-      <button className="utility-control" type="button" disabled={page >= pageCount} onClick={() => onPage(page + 1)}>›</button>
+      {pages.map((item) => <button type="button" className={`utility-control ${item === page ? 'active' : ''}`} key={item} onClick={() => onPage(item)}>{item}</button>)}
     </nav>
   );
 }
 
 function SelectionStrip({ selected }: { selected: PlayerRatingEntry | AllianceRatingEntry | null }) {
-  if (!selected) return <span className="rating-selection-v2 utility-secondary">Выберите строку для деталей</span>;
-  if ('resourcePoints' in selected) {
-    return <span className="rating-selection-v2"><b>{selected.name}</b> · Ресурс. {new Intl.NumberFormat('ru-RU').format(selected.resourcePoints)} · Боевые {new Intl.NumberFormat('ru-RU').format(selected.battlePoints)}</span>;
+  if (!selected) return <div className="rating-selection-v2 utility-helper">Выбери строку, чтобы закрепить краткие данные.</div>;
+  if ('achievementPoints' in selected) {
+    return (
+      <div className="rating-selection-v2">
+        <strong className="utility-section-title">{selected.name}</strong>
+        <span className="utility-secondary">#{selected.rank}</span>
+        <span className="utility-data-text">Общие: {new Intl.NumberFormat('ru-RU').format(selected.totalPoints)}</span>
+        <span className="utility-data-text">Боевые: {new Intl.NumberFormat('ru-RU').format(selected.battlePoints)}</span>
+      </div>
+    );
   }
-  return <span className="rating-selection-v2"><b>{selected.name}</b> [{selected.tag}] · Ур. {selected.level}</span>;
-}
-
-function RaceEmblem({ race }: { race: PlayerRatingEntry['race'] | 'alliance' }) {
-  const symbol = race === 'aster' ? 'A' : race === 'cyber' ? 'C' : race === 'xeno' ? 'X' : '◇';
-  return <span className={`rating-race-emblem-v2 race-${race}`} aria-hidden="true">{symbol}</span>;
+  return (
+    <div className="rating-selection-v2">
+      <strong className="utility-section-title">{selected.name}</strong>
+      <span className="utility-secondary">[{selected.tag}] · #{selected.rank}</span>
+      <span className="utility-data-text">Очки альянса: {new Intl.NumberFormat('ru-RU').format(selected.alliancePoints)}</span>
+    </div>
+  );
 }
