@@ -254,6 +254,40 @@ async function verifyCommon(item, label, name, width, height) {
   if(name==='rating' && (!item.ratingPinnedCurrent || !item.ratingSelfSeparator)) throw new Error(`${label}/${name}: current player is not pinned below the visible page like Nemexia`);
 }
 
+async function commandScrollSnapshot(win) {
+  return win.webContents.executeJavaScript(`(() => {
+    const root=document.documentElement;
+    const workspace=document.querySelector('.workspace');
+    const command=document.querySelector('.command-view');
+    const rect=(element)=>element?element.getBoundingClientRect():null;
+    return {
+      longPage:root.classList.contains('asterion-long-page'),
+      documentHeight:Math.max(root.scrollHeight,document.body.scrollHeight),
+      workspaceHeight:rect(workspace)?.height ?? 0,
+      commandHeight:rect(command)?.height ?? 0,
+    };
+  })()`);
+}
+
+async function verifyCommandScrollStability(win, directory, label) {
+  await activateMainScreen(win,'Командование','.command-view');
+  const before=await commandScrollSnapshot(win);
+  await sleep(180);
+  await settle(win);
+  const after=await commandScrollSnapshot(win);
+  const stable=(left,right)=>Math.abs(left-right)<=2;
+  if(!stable(before.documentHeight,after.documentHeight)||!stable(before.workspaceHeight,after.workspaceHeight)||!stable(before.commandHeight,after.commandHeight)){
+    throw new Error(`${label}/command: page geometry keeps growing: ${JSON.stringify({before,after})}`);
+  }
+  await capture(win,directory,'command');
+
+  await activateMainScreen(win,'Планета','.planet-page-v3 .scene-title h1');
+  await sleep(180);
+  await settle(win);
+  const reset=await commandScrollSnapshot(win);
+  if(reset.longPage) throw new Error(`${label}/command: long-page state leaked after leaving Command: ${JSON.stringify(reset)}`);
+}
+
 async function verifyResourceZoneFlow(win, directory) {
   await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);
   await reload(win);
@@ -459,6 +493,7 @@ app.whenReady().then(async()=>{
           await settle(win);
         }
       }
+      await verifyCommandScrollStability(win,directory,label);
       if(width===1920 && height===1080){
         await activateScreen(win,'Настройки','settings-view-v2');
         await clickTypography(win,'Подсказки и пояснения',16);
