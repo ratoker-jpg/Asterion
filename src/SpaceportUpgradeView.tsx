@@ -107,16 +107,25 @@ function RequirementBadge({ requirement }: { requirement: SpaceportRequirementSt
 
     const openTooltip = () => setTooltipOpen(true);
     const closeTooltip = () => setTooltipOpen(false);
+    const syncKeyboardFocus = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      window.requestAnimationFrame(() => setTooltipOpen(document.activeElement === badge));
+    };
+
     badge.addEventListener('focus', openTooltip);
     badge.addEventListener('blur', closeTooltip);
     badge.addEventListener('mouseenter', openTooltip);
     badge.addEventListener('mouseleave', closeTooltip);
+    window.addEventListener('keydown', syncKeyboardFocus, true);
+    window.addEventListener('keyup', syncKeyboardFocus, true);
 
     return () => {
       badge.removeEventListener('focus', openTooltip);
       badge.removeEventListener('blur', closeTooltip);
       badge.removeEventListener('mouseenter', openTooltip);
       badge.removeEventListener('mouseleave', closeTooltip);
+      window.removeEventListener('keydown', syncKeyboardFocus, true);
+      window.removeEventListener('keyup', syncKeyboardFocus, true);
     };
   }, []);
 
