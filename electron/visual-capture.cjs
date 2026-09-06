@@ -306,7 +306,8 @@ async function verifyResourceZoneFlow(win, directory) {
   const persisted=await win.webContents.executeJavaScript(`(() => {
     const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
     const node=document.querySelector('[data-resource-building-role="basic-energy"]');
-    return {level:save.planets?.['helion-01']?.buildings?.['basic-energy']??null,queue:save.queues?.['helion-01']??'missing',energy:save.planets?.['helion-01']?.energy??null,aria:node?.getAttribute('aria-label')??''};
+    const hasQueue=Object.prototype.hasOwnProperty.call(save.queues??{},'helion-01');
+    return {level:save.planets?.['helion-01']?.buildings?.['basic-energy']??null,queue:hasQueue?save.queues['helion-01']:'missing',energy:save.planets?.['helion-01']?.energy??null,aria:node?.getAttribute('aria-label')??''};
   })()`);
   if(persisted.level!==1 || persisted.queue!==null || persisted.energy!==165 || !persisted.aria.includes('Уровень 1')) throw new Error(`Reload persistence failed: ${JSON.stringify(persisted)}`);
 
