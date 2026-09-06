@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { getPlanetZoneTerrainUrl } from './assets/planetZoneTerrainAssets.ts';
 import {
   ASTER_RESOURCE_BUILDINGS,
   RESOURCE_BASE_INCOME_PER_HOUR,
-  RESOURCE_PROTOTYPE_DATA_NOTE,
   evaluateResourceBuildingBuild,
   getBuildingEffectText,
   getResourceBuildingDefinition,
+  type BuildingDefinition,
   type BuildingQueueItem,
   type ResourceBuildingLevels,
   type ResourceBuildingRole,
@@ -13,17 +14,36 @@ import {
   type ResourceWallet,
 } from './domain/buildings/resource-zone.ts';
 
-const scenePositions: Record<ResourceBuildingRole, { left: string; top: string }> = {
-  'metal-production-1': { left: '7%', top: '17%' },
-  'metal-production-2': { left: '26%', top: '8%' },
-  'metal-production-3': { left: '47%', top: '14%' },
-  'mineral-production-1': { left: '69%', top: '8%' },
-  'mineral-production-2': { left: '82%', top: '27%' },
-  'gas-production-1': { left: '10%', top: '58%' },
-  'gas-production-2': { left: '30%', top: '68%' },
-  'basic-energy': { left: '49%', top: '55%' },
-  'advanced-energy': { left: '69%', top: '65%' },
-  hangar: { left: '83%', top: '55%' },
+type ScenePlacement = {
+  left: string;
+  top: string;
+  width: number;
+};
+
+const scenePlacements: Record<ResourceBuildingRole, ScenePlacement> = {
+  'metal-production-1': { left: '16%', top: '34%', width: 190 },
+  'metal-production-2': { left: '37%', top: '28%', width: 172 },
+  'metal-production-3': { left: '61%', top: '31%', width: 204 },
+  'mineral-production-1': { left: '81%', top: '36%', width: 178 },
+  'mineral-production-2': { left: '27%', top: '55%', width: 186 },
+  'gas-production-1': { left: '52%', top: '53%', width: 182 },
+  'gas-production-2': { left: '75%', top: '56%', width: 194 },
+  'basic-energy': { left: '17%', top: '75%', width: 184 },
+  'advanced-energy': { left: '45%', top: '75%', width: 196 },
+  hangar: { left: '73%', top: '76%', width: 216 },
+};
+
+const selectorLabels: Record<ResourceBuildingRole, string> = {
+  'metal-production-1': 'Металл I',
+  'metal-production-2': 'Металл II',
+  'metal-production-3': 'Металл III',
+  'mineral-production-1': 'Минералы I',
+  'mineral-production-2': 'Минералы II',
+  'gas-production-1': 'Газ I',
+  'gas-production-2': 'Газ II',
+  'basic-energy': 'Солнце',
+  'advanced-energy': 'Реактор',
+  hangar: 'Ангар',
 };
 
 const resourceLabels = {
@@ -52,8 +72,14 @@ function stateFor(
   if (level >= definition.maxLevel) return { className: 'maxed', label: 'МАКСИМУМ' };
   const availability = evaluateResourceBuildingBuild(economy, role);
   if (level > 0) return { className: 'active', label: 'АКТИВНО' };
-  if (availability.canBuild) return { className: 'unbuilt', label: 'НЕ ПОСТРОЕНО' };
+  if (availability.canBuild) return { className: 'unbuilt', label: 'ДОСТУПНО' };
   return { className: 'blocked', label: 'НЕДОСТУПНО' };
+}
+
+function playerEffectText(definition: BuildingDefinition, currentLevel: number) {
+  return definition.effect
+    ? getBuildingEffectText(definition, currentLevel)
+    : 'Эффект будет определён после утверждения баланса.';
 }
 
 export type ResourceZoneViewProps = {
@@ -84,6 +110,7 @@ export function ResourceZoneView({
   const queueDuration = queue ? Math.max(1, queue.finishAt - queue.startedAt) : 1;
   const queueProgress = queue ? Math.min(100, Math.max(0, ((now - queue.startedAt) / queueDuration) * 100)) : 0;
   const activeCount = ASTER_RESOURCE_BUILDINGS.filter((building) => buildings[building.assetRole] > 0).length;
+  const terrainUrl = getPlanetZoneTerrainUrl('resource');
 
   useEffect(() => {
     if (!selectedRole) return;
@@ -108,7 +135,7 @@ export function ResourceZoneView({
         </header>
 
         <section className="resource-zone-economy" aria-label="Экономика ресурсной зоны">
-          <div className="resource-zone-section-label">СВОДКА</div>
+          <div className="resource-zone-section-label">РЕСУРСЫ</div>
           <div className="resource-zone-income-grid">
             <div><small>Металл / ч</small><strong>+{formatNumber(RESOURCE_BASE_INCOME_PER_HOUR.metal)}</strong></div>
             <div><small>Минералы / ч</small><strong>+{formatNumber(RESOURCE_BASE_INCOME_PER_HOUR.minerals)}</strong></div>
@@ -117,53 +144,72 @@ export function ResourceZoneView({
           </div>
         </section>
 
-        <section className="resource-zone-building-list" aria-label="Состояние зданий">
+        <section className="resource-zone-building-selector" aria-label="Выбор здания">
           <div className="resource-zone-section-label">ЗДАНИЯ</div>
-          {ASTER_RESOURCE_BUILDINGS.map((building) => {
-            const status = stateFor(economy, building.assetRole);
-            return (
-              <button
-                key={building.assetRole}
-                type="button"
-                className={`resource-zone-list-row ${status.className}`}
-                onClick={() => setSelectedRole(building.assetRole)}
-              >
-                <span><strong>{building.name}</strong><small>{status.label}</small></span>
-                <b>ур. {buildings[building.assetRole]} / {building.maxLevel}</b>
-                <i>Подробнее</i>
-              </button>
-            );
-          })}
+          <div className="resource-zone-selector-grid">
+            {ASTER_RESOURCE_BUILDINGS.map((building) => {
+              const status = stateFor(economy, building.assetRole);
+              const selectedClass = selectedRole === building.assetRole ? 'selected' : '';
+              return (
+                <button
+                  key={building.assetRole}
+                  type="button"
+                  data-resource-selector-role={building.assetRole}
+                  className={`resource-zone-selector-tile ${status.className} ${selectedClass}`}
+                  aria-label={`${building.name}. ${status.label}. Уровень ${buildings[building.assetRole]} из ${building.maxLevel}`}
+                  onClick={() => setSelectedRole(building.assetRole)}
+                >
+                  <img src={building.art} alt="" draggable={false} />
+                  <span><strong>{selectorLabels[building.assetRole]}</strong><small>{status.label}</small></span>
+                  <b>{buildings[building.assetRole]}/{building.maxLevel}</b>
+                </button>
+              );
+            })}
+          </div>
         </section>
       </aside>
 
       <main className="resource-zone-scene">
+        <img
+          className="resource-zone-terrain"
+          src={terrainUrl}
+          alt=""
+          draggable={false}
+          data-qa-zone-terrain
+          data-zone="resource"
+          data-terrain-source="resource-terrain.png"
+        />
+        <div className="resource-zone-scene-shade" aria-hidden="true" />
         <div className="resource-zone-scene-copy">
           <small>АСТЕРЫ · {planetCoords}</small>
           <h1>РЕСУРСНАЯ ЗОНА</h1>
-          <p>Выбери здание на территории, чтобы открыть сведения и действие строительства.</p>
+          <p>Добыча, энергия и инфраструктура планеты</p>
         </div>
-        <div className="resource-zone-grid-lines" aria-hidden="true" />
-        <div className="resource-zone-horizon" aria-hidden="true" />
-
-        {ASTER_RESOURCE_BUILDINGS.map((building) => {
-          const status = stateFor(economy, building.assetRole);
-          const position = scenePositions[building.assetRole];
-          return (
-            <button
-              key={building.assetRole}
-              type="button"
-              data-resource-building-role={building.assetRole}
-              className={`resource-building-node ${status.className}`}
-              style={{ left: position.left, top: position.top } as CSSProperties}
-              aria-label={`${building.name}. Уровень ${buildings[building.assetRole]} из ${building.maxLevel}. ${status.label}`}
-              onClick={() => setSelectedRole(building.assetRole)}
-            >
-              <span className="resource-building-art"><img src={building.art} alt="" draggable={false} /></span>
-              <span className="resource-building-caption"><strong>{building.name}</strong><small>{status.label} · ур. {buildings[building.assetRole]}</small></span>
-            </button>
-          );
-        })}
+        <div className="resource-zone-building-layer" aria-label="Территория ресурсной зоны">
+          {ASTER_RESOURCE_BUILDINGS.map((building) => {
+            const status = stateFor(economy, building.assetRole);
+            const placement = scenePlacements[building.assetRole];
+            const selectedClass = selectedRole === building.assetRole ? 'selected' : '';
+            return (
+              <button
+                key={building.assetRole}
+                type="button"
+                data-resource-building-role={building.assetRole}
+                className={`resource-building-node ${status.className} ${selectedClass}`}
+                style={{
+                  left: placement.left,
+                  top: placement.top,
+                  '--building-width': `${placement.width}px`,
+                } as CSSProperties}
+                aria-label={`${building.name}. Уровень ${buildings[building.assetRole]} из ${building.maxLevel}. ${status.label}`}
+                onClick={() => setSelectedRole(building.assetRole)}
+              >
+                <span className="resource-building-art"><img src={building.art} alt="" draggable={false} /></span>
+                <span className="resource-building-caption"><strong>{building.name}</strong><small>{status.label} · ур. {buildings[building.assetRole]}</small></span>
+              </button>
+            );
+          })}
+        </div>
       </main>
 
       <aside className="resource-zone-queue">
@@ -180,18 +226,11 @@ export function ResourceZoneView({
             <i><span style={{ width: `${queueProgress}%` }} /></i>
           </button>
         ) : (
-          <div className="resource-zone-queue-card empty"><span>+</span><div><small>СВОБОДНО</small><strong>Очередь готова</strong><em>Выбери здание на карте</em></div></div>
+          <div className="resource-zone-queue-card empty">
+            <span>+</span>
+            <div><small>СВОБОДНЫЙ СЛОТ</small><strong>Очередь готова</strong><em>Выбери объект на территории</em></div>
+          </div>
         )}
-
-        <div className="resource-zone-queue-note">
-          <strong>Правило вертикального среза</strong>
-          <p>Одновременно выполняется один строительный процесс. Прогресс хранится по абсолютному времени и переживает перезагрузку.</p>
-        </div>
-
-        <div className="resource-zone-prototype-note">
-          <small>ДАННЫЕ ПРОТОТИПА</small>
-          <p>{RESOURCE_PROTOTYPE_DATA_NOTE}</p>
-        </div>
       </aside>
 
       {selected && selectedRole && availability ? (
@@ -218,8 +257,8 @@ export function ResourceZoneView({
               </div>
 
               <div className="resource-building-effect">
-                <small>ИЗМЕНЕНИЕ ЭФФЕКТА</small>
-                <strong>{getBuildingEffectText(selected, availability.currentLevel)}</strong>
+                <small>ЭФФЕКТ</small>
+                <strong>{playerEffectText(selected, availability.currentLevel)}</strong>
               </div>
 
               <div className="resource-building-costs">
@@ -249,7 +288,6 @@ export function ResourceZoneView({
               >
                 {availability.currentLevel > 0 ? 'УЛУЧШИТЬ' : 'ПОСТРОИТЬ'}
               </button>
-              <small className="resource-building-balance-note">{RESOURCE_PROTOTYPE_DATA_NOTE}</small>
             </div>
           </section>
         </div>
