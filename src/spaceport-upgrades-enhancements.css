@@ -133,8 +133,8 @@
 }
 
 /*
- * Tooltip is a real DOM node driven by hover/focus state. The zero-size ::after
- * marker mirrors that state only for deterministic Electron focus QA and is not visible.
+ * Tooltip is a real DOM node. CSS :hover/:focus is the source of truth for
+ * visible interaction; the state class remains as a browser compatibility aid.
  */
 .spaceport-requirement-badge-v2::after {
   content: '';
@@ -148,7 +148,10 @@
   pointer-events: none;
 }
 
-.spaceport-requirement-badge-v2.is-tooltip-open::after {
+.spaceport-requirement-badge-v2.is-tooltip-open::after,
+.spaceport-requirement-badge-v2:hover::after,
+.spaceport-requirement-badge-v2:focus::after,
+.spaceport-requirement-badge-v2:focus-visible::after {
   opacity: 1;
   visibility: visible;
 }
@@ -191,7 +194,10 @@
   line-height: 1.35;
 }
 
-.spaceport-requirement-badge-v2.is-tooltip-open > .spaceport-requirement-tooltip-v2 {
+.spaceport-requirement-badge-v2.is-tooltip-open > .spaceport-requirement-tooltip-v2,
+.spaceport-requirement-badge-v2:hover > .spaceport-requirement-tooltip-v2,
+.spaceport-requirement-badge-v2:focus > .spaceport-requirement-tooltip-v2,
+.spaceport-requirement-badge-v2:focus-visible > .spaceport-requirement-tooltip-v2 {
   opacity: 1;
   visibility: visible;
   transform: translate(-50%, 0);
