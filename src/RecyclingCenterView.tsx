@@ -28,8 +28,8 @@ type RecyclingCenterViewProps = {
 
 const RESOURCE_META: Readonly<Record<RecyclingResource, { label: string; short: string }>> = {
   metal: { label: 'Металл', short: 'М' },
-  minerals: { label: 'Минералы', short: 'К' },
-  gas: { label: 'Газ', short: 'Г' },
+  minerals: { label: 'Минералы', short: 'Мин' },
+  gas: { label: 'Газ', short: 'Газ' },
 };
 
 function formatNumber(value: number) {
@@ -46,16 +46,14 @@ function formatClock(ms: number) {
 
 function formatAllocation(allocation: ResourceAllocationPercent) {
   return RECYCLING_RESOURCES
-    .filter((resource) => allocation[resource] > 0)
-    .map((resource) => `${allocation[resource]}% ${RESOURCE_META[resource].label}`)
+    .map((resource) => `${allocation[resource]}% ${RESOURCE_META[resource].label.toLocaleLowerCase('ru-RU')}`)
     .join(' · ');
 }
 
 function formatOutput(output: { metal: number; minerals: number; gas: number }) {
   return RECYCLING_RESOURCES
-    .filter((resource) => output[resource] > 0)
     .map((resource) => `${RESOURCE_META[resource].short} ${formatNumber(output[resource])}`)
-    .join(' · ') || '0 ресурсов';
+    .join(' · ');
 }
 
 function ResourceIcon({ resource }: { resource: RecyclingResource }) {
@@ -155,7 +153,7 @@ export function RecyclingCenterView({
 
         <dl className="recycling-info-stats">
           <div><dt>Выход после переработки</dt><dd data-qa-recycling-efficiency>{efficiencyPercent}%</dd></div>
-          {buildingLevel < building.maxLevel ? <div><dt>Следующий уровень</dt><dd>+{Math.min(120, efficiencyPercent + 5)}%</dd></div> : null}
+          {buildingLevel < building.maxLevel ? <div><dt>Следующий уровень</dt><dd data-qa-recycling-next-efficiency>{Math.min(120, efficiencyPercent + 5)}%</dd></div> : null}
           <div><dt>Максимум процессов</dt><dd data-qa-recycling-max-jobs>{maxJobs}</dd></div>
           <div><dt>Всего обломков</dt><dd data-qa-recycling-total-debris={totalDebris}>{formatNumber(totalDebris)}</dd></div>
           <div><dt>Свободный остаток</dt><dd data-qa-recycling-free-debris={recycling.availableDebris}>{formatNumber(recycling.availableDebris)}</dd></div>
@@ -179,31 +177,51 @@ export function RecyclingCenterView({
               <span>◇</span><div><strong>Нет активных процессов</strong><small>Выбери обломки и распределение ресурсов ниже.</small></div>
             </div>
           ) : (
-            <div className="recycling-job-list" data-qa-recycling-job-list>
-              {recycling.jobs.map((job) => {
-                const ready = job.status === 'ready' || now >= job.finishAt;
-                const progress = ready
-                  ? 100
-                  : Math.min(100, Math.max(0, ((now - job.startedAt) / Math.max(1, job.finishAt - job.startedAt)) * 100));
-                const expiresAt = job.collectExpiresAt ?? job.finishAt + 24 * 60 * 60 * 1000;
-                const timerText = ready
-                  ? `Получить до ${formatClock(expiresAt - now)}`
-                  : `Осталось ${formatClock(job.finishAt - now)}`;
+            <div className="recycling-job-scroll" data-qa-recycling-job-list>
+              <div className="recycling-job-table">
+                <div className="recycling-job-table__header" data-qa-recycling-job-table-header>
+                  <span>ВРЕМЯ</span>
+                  <span>ОБЛОМКИ</span>
+                  <span>ПЕРЕРАБОТКА / ВЫХОД</span>
+                  <span>СТАТУС</span>
+                  <span>ДЕЙСТВИЕ</span>
+                </div>
+                <div className="recycling-job-rows">
+                  {recycling.jobs.map((job) => {
+                    const ready = job.status === 'ready' || now >= job.finishAt;
+                    const progress = ready
+                      ? 100
+                      : Math.min(100, Math.max(0, ((now - job.startedAt) / Math.max(1, job.finishAt - job.startedAt)) * 100));
+                    const expiresAt = job.collectExpiresAt ?? job.finishAt + 24 * 60 * 60 * 1000;
+                    const timerLabel = ready ? 'Получить до:' : 'Осталось:';
+                    const timerValue = ready ? formatClock(expiresAt - now) : formatClock(job.finishAt - now);
 
-                return (
-                  <article className={`recycling-job-card ${ready ? 'ready' : 'processing'}`} key={job.id} data-qa-recycling-job={job.id} data-qa-recycling-status={ready ? 'ready' : 'processing'}>
-                    <div className="recycling-job-card__top">
-                      <span className="recycling-job-state">{ready ? 'ГОТОВО' : 'В ПРОЦЕССЕ'}</span>
-                      <strong>{formatNumber(job.debrisAmount)} <small>обломков</small></strong>
-                    </div>
-                    <p>{formatAllocation(job.allocationPercent)}</p>
-                    <div className="recycling-job-output"><small>ОЖИДАЕМЫЙ ВЫХОД</small><strong>{formatOutput(job.output)}</strong></div>
-                    <div className="recycling-job-timer" data-qa-recycling-job-timer>{timerText}</div>
-                    <div className="recycling-job-progress" aria-hidden="true"><i style={{ width: `${progress}%` }} /></div>
-                    <button type="button" data-qa-recycling-collect={job.id} disabled={!ready} onClick={() => collect(job.id)}>ВЗЯТЬ РЕСУРС</button>
-                  </article>
-                );
-              })}
+                    return (
+                      <article className={`recycling-job-row ${ready ? 'ready' : 'processing'}`} key={job.id} data-qa-recycling-job={job.id} data-qa-recycling-status={ready ? 'ready' : 'processing'}>
+                        <div className="recycling-job-cell recycling-job-time" data-qa-recycling-job-timer>
+                          <small>{timerLabel}</small>
+                          <strong>{timerValue}</strong>
+                        </div>
+                        <div className="recycling-job-cell recycling-job-debris">
+                          <strong>{formatNumber(job.debrisAmount)}</strong>
+                          <small>обломков</small>
+                        </div>
+                        <div className="recycling-job-cell recycling-job-conversion">
+                          <span className="recycling-job-allocation" data-qa-recycling-job-allocation>{formatAllocation(job.allocationPercent)}</span>
+                          <strong className="recycling-job-output" data-qa-recycling-job-output>{formatOutput(job.output)}</strong>
+                        </div>
+                        <div className="recycling-job-cell recycling-job-status">
+                          <span className="recycling-job-state">{ready ? 'ГОТОВО' : 'В ПРОЦЕССЕ'}</span>
+                          <div className="recycling-job-progress" aria-hidden="true"><i style={{ width: `${progress}%` }} /></div>
+                        </div>
+                        <div className="recycling-job-cell recycling-job-action">
+                          <button type="button" data-qa-recycling-collect={job.id} disabled={!ready} onClick={() => collect(job.id)}>ВЗЯТЬ РЕСУРС</button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
         </section>
