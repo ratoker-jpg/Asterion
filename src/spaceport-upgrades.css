@@ -1,0 +1,348 @@
+.spaceport-upgrades {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100%;
+  padding: 28px 32px 54px;
+  color: #e9f7ff;
+  background:
+    radial-gradient(circle at 15% 0%, rgba(23, 150, 207, 0.16), transparent 31%),
+    linear-gradient(180deg, rgba(5, 20, 35, 0.98), rgba(4, 13, 24, 0.99));
+  overflow-x: clip;
+}
+
+.spaceport-upgrades *,
+.spaceport-upgrades *::before,
+.spaceport-upgrades *::after { box-sizing: border-box; }
+
+.spaceport-hero {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) auto;
+  gap: 22px;
+  align-items: center;
+  padding: 18px 20px;
+  border: 1px solid rgba(77, 199, 245, 0.24);
+  background: linear-gradient(110deg, rgba(8, 39, 61, 0.92), rgba(5, 20, 34, 0.84));
+  box-shadow: inset 0 1px rgba(255,255,255,0.04), 0 18px 42px rgba(0,0,0,0.2);
+}
+
+.spaceport-hero-art {
+  width: 112px;
+  height: 92px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(77, 199, 245, 0.18);
+  background: rgba(3, 16, 28, 0.68);
+}
+
+.spaceport-hero-art img { width: 100%; height: 100%; object-fit: contain; }
+.spaceport-hero-copy { min-width: 0; }
+.spaceport-hero-copy small,
+.spaceport-catalog-head small { color: #62d8ff; letter-spacing: 0.16em; font-size: 11px; }
+.spaceport-hero-copy h1 { margin: 4px 0 2px; font-size: clamp(24px, 2vw, 34px); line-height: 1; letter-spacing: 0.04em; }
+.spaceport-hero-copy p { margin: 6px 0; color: #b8dced; font-weight: 700; }
+.spaceport-hero-copy span { display: block; color: #82a8bd; line-height: 1.35; max-width: 780px; }
+
+.spaceport-back {
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid rgba(98, 216, 255, 0.38);
+  background: rgba(10, 45, 67, 0.66);
+  color: #dff7ff;
+  font-weight: 800;
+  cursor: pointer;
+}
+.spaceport-back:hover { background: rgba(18, 72, 99, 0.78); }
+
+.spaceport-queues {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.spaceport-queue-section {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(77, 199, 245, 0.19);
+  background: rgba(7, 28, 43, 0.82);
+}
+
+.spaceport-queue-section > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(107, 191, 222, 0.13);
+}
+.spaceport-queue-section > header strong { font-size: 12px; letter-spacing: 0.1em; }
+.spaceport-queue-section > header span { color: #66dbff; font-weight: 900; font-variant-numeric: tabular-nums; }
+
+.spaceport-queue-slots { display: grid; gap: 8px; margin-top: 10px; }
+.spaceport-queue-slot {
+  min-width: 0;
+  min-height: 62px;
+  display: grid;
+  grid-template-columns: 24px 52px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid rgba(88, 173, 207, 0.16);
+  background: rgba(4, 19, 31, 0.78);
+}
+.spaceport-queue-slot.empty { grid-template-columns: 24px minmax(0, 1fr); opacity: 0.58; }
+.spaceport-queue-slot.active { border-color: rgba(70, 215, 255, 0.45); box-shadow: inset 3px 0 #38c8ff; }
+.spaceport-queue-slot.waiting { border-color: rgba(90, 141, 166, 0.22); }
+.spaceport-queue-slot img { width: 50px; height: 46px; object-fit: contain; }
+.spaceport-slot-index { color: #5e8fa5; font-size: 11px; font-weight: 900; text-align: center; }
+.spaceport-queue-copy { min-width: 0; display: grid; gap: 2px; }
+.spaceport-queue-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spaceport-queue-copy small { color: #8fb5c7; }
+.spaceport-queue-copy b {
+  color: #68ddff;
+  font-size: 17px;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+.spaceport-queue-copy span {
+  color: #789aab;
+  font-size: 11px;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.spaceport-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 20px 0 14px;
+}
+.spaceport-tabs button {
+  min-height: 48px;
+  padding: 10px 16px;
+  border: 1px solid rgba(89, 159, 190, 0.22);
+  background: rgba(8, 28, 43, 0.72);
+  color: #7fa7ba;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.spaceport-tabs button.active {
+  color: #eaffff;
+  border-color: rgba(77, 214, 255, 0.55);
+  background: linear-gradient(180deg, rgba(18, 77, 105, 0.92), rgba(8, 38, 59, 0.92));
+  box-shadow: inset 0 -3px #35cef9;
+}
+
+.spaceport-catalog-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 10px 0 12px;
+}
+.spaceport-catalog-head h2 { margin: 4px 0 0; font-size: 20px; letter-spacing: 0.04em; }
+.spaceport-catalog-head p { margin: 0; max-width: 720px; color: #708fa0; font-size: 11px; line-height: 1.35; text-align: right; }
+
+.spaceport-catalog {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+
+.spaceport-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  border: 1px solid rgba(80, 169, 204, 0.2);
+  background: linear-gradient(180deg, rgba(8, 31, 48, 0.92), rgba(4, 20, 32, 0.95));
+  box-shadow: inset 0 1px rgba(255,255,255,0.025);
+}
+.spaceport-card.status-requirements-unmet { border-color: rgba(210, 113, 89, 0.25); }
+.spaceport-card.status-available { border-color: rgba(62, 196, 234, 0.34); }
+
+.spaceport-card-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+.spaceport-card-title > div { min-width: 0; display: grid; gap: 3px; }
+.spaceport-card-title strong { font-size: 16px; }
+.spaceport-card-title small { color: #7f9eae; line-height: 1.25; }
+.spaceport-status {
+  flex: 0 0 auto;
+  max-width: 46%;
+  padding: 5px 7px;
+  border: 1px solid rgba(96, 180, 211, 0.22);
+  color: #87b7c9;
+  font-size: 10px;
+  font-weight: 900;
+  text-align: right;
+}
+.spaceport-status.status-available { color: #70e7ff; border-color: rgba(63, 211, 242, 0.38); }
+.spaceport-status.status-requirements-unmet { color: #ffb191; border-color: rgba(255, 143, 97, 0.32); }
+.spaceport-status.status-queue-full { color: #e7c07e; }
+
+.spaceport-card-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 112px;
+  gap: 12px;
+  align-items: stretch;
+  min-height: 142px;
+  margin-top: 12px;
+}
+.spaceport-ship-art {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(77, 174, 208, 0.14);
+  background: radial-gradient(circle, rgba(45, 148, 185, 0.12), rgba(1, 12, 21, 0.7) 68%);
+  overflow: hidden;
+}
+.spaceport-ship-art > img { width: 100%; height: 128px; object-fit: contain; }
+.spaceport-level-badge {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  display: grid;
+  gap: 1px;
+  padding: 6px 8px;
+  background: rgba(2, 13, 22, 0.88);
+  border: 1px solid rgba(83, 189, 224, 0.25);
+}
+.spaceport-level-badge small { color: #7ea2b3; font-size: 8px; letter-spacing: .08em; }
+.spaceport-level-badge strong { font-size: 18px; color: #dff9ff; }
+
+.spaceport-next-level {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid rgba(74, 195, 230, 0.19);
+  background: rgba(10, 43, 61, 0.5);
+  text-align: center;
+}
+.spaceport-next-level small { color: #77a5b8; font-size: 9px; }
+.spaceport-next-level strong { color: #65ddff; font-size: 34px; line-height: 1; }
+.spaceport-next-level span { color: #7496a7; font-size: 9px; line-height: 1.2; }
+
+.spaceport-economy {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 9px;
+}
+.spaceport-economy > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: 7px;
+  border: 1px solid rgba(90, 158, 184, 0.13);
+  background: rgba(2, 15, 25, 0.55);
+}
+.spaceport-economy small { color: #658798; font-size: 8px; }
+.spaceport-economy strong { font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.spaceport-speed-note {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 7px;
+  color: #7398a8;
+  font-size: 10px;
+}
+.spaceport-speed-note strong { color: #7ddff7; font-variant-numeric: tabular-nums; }
+
+.spaceport-requirements {
+  margin-top: 10px;
+  border-top: 1px solid rgba(93, 151, 177, 0.12);
+  padding-top: 9px;
+}
+.spaceport-requirements > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #6f93a4;
+  font-size: 9px;
+}
+.spaceport-requirements > header span { text-align: right; }
+.spaceport-requirements > div { display: grid; gap: 5px; margin-top: 7px; }
+.spaceport-requirements > div > span {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+}
+.spaceport-requirements b {
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 9px;
+}
+.spaceport-requirements em { min-width: 0; color: #a8c1ce; font-style: normal; }
+.spaceport-requirements small { color: #668493; text-align: right; }
+.spaceport-requirements .met { color: #63d7c4; }
+.spaceport-requirements .missing { color: #f09a7c; }
+
+.spaceport-upgrade-cta {
+  width: 100%;
+  min-height: 42px;
+  margin-top: auto;
+  padding: 9px 12px;
+  border: 1px solid rgba(55, 210, 249, 0.54);
+  background: linear-gradient(180deg, rgba(18, 116, 151, 0.92), rgba(8, 69, 98, 0.94));
+  color: #edfcff;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.spaceport-upgrade-cta:not(:disabled):hover { filter: brightness(1.12); }
+.spaceport-upgrade-cta:disabled {
+  cursor: not-allowed;
+  color: #58717d;
+  border-color: rgba(86, 119, 132, 0.2);
+  background: rgba(25, 43, 52, 0.58);
+}
+.spaceport-block-reason { margin: 7px 0 0; color: #9d796b; font-size: 9px; line-height: 1.3; }
+
+@media (max-width: 1440px) {
+  .spaceport-upgrades { padding: 20px 22px 44px; }
+  .spaceport-hero { grid-template-columns: 98px minmax(0, 1fr) auto; }
+  .spaceport-hero-art { width: 94px; height: 80px; }
+  .spaceport-card-main { grid-template-columns: minmax(0, 1fr) 94px; }
+  .spaceport-economy { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1100px) {
+  .spaceport-queues { grid-template-columns: minmax(0, 1fr); }
+  .spaceport-queue-slots { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .spaceport-queue-slot,
+  .spaceport-queue-slot.empty { grid-template-columns: 20px minmax(0, 1fr); }
+  .spaceport-queue-slot img { display: none; }
+  .spaceport-catalog-head { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .spaceport-catalog-head p { text-align: left; }
+}
+
+@media (max-width: 760px) {
+  .spaceport-upgrades { padding: 14px 12px 36px; }
+  .spaceport-hero { grid-template-columns: 76px minmax(0, 1fr); gap: 12px; }
+  .spaceport-hero-art { width: 72px; height: 68px; }
+  .spaceport-back { grid-column: 1 / -1; width: 100%; }
+  .spaceport-tabs { grid-template-columns: minmax(0, 1fr); }
+  .spaceport-queue-slots { grid-template-columns: minmax(0, 1fr); }
+  .spaceport-card-main { grid-template-columns: minmax(0, 1fr) 82px; }
+  .spaceport-requirements > div > span { grid-template-columns: 18px minmax(0, 1fr); }
+  .spaceport-requirements small { grid-column: 2; text-align: left; }
+  .spaceport-speed-note { flex-direction: column; gap: 2px; }
+}
