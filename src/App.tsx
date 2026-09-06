@@ -73,6 +73,12 @@ import {
   type ResourceWallet,
   type ScienceLevels,
 } from './domain/buildings/resource-zone.ts';
+import {
+  createEmptyBotAssignment,
+  getProductionBotIncomePerHour,
+  migrateProductionBotAssignment,
+  type BotAssignment,
+} from './domain/buildings/production-bots.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import planetColonized from '../assets/source/starter/planets/planet_colonized.png';
@@ -137,6 +143,7 @@ type PlanetRuntime = {
   populationMax: number;
   energy: number;
   buildings: BuildingLevels;
+  productionBots: BotAssignment;
   stability: number;
 };
 
@@ -163,6 +170,7 @@ type StoredPlanetRuntime = {
   populationMax?: unknown;
   energy?: unknown;
   buildings?: unknown;
+  productionBots?: unknown;
   solarStations?: unknown;
   stability?: unknown;
 };
@@ -199,13 +207,14 @@ const ownedPlanets: PlanetDefinition[] = [
 ];
 
 const SAVE_KEY = 'asterion.vertical-slice.v1';
+const SAVE_SCHEMA_VERSION = Math.max(COMBAT_SAVE_SCHEMA_VERSION, 5);
 const DEFAULT_PLANET_NAME = 'Helion 01';
 const CURRENT_SCIENCE_LEVELS = Object.fromEntries(
   SCIENCE_CATALOG.map((science) => [science.id, science.capturedLevel]),
 ) as ScienceLevels;
 
 const createInitialState = (): SaveState => ({
-  schemaVersion: COMBAT_SAVE_SCHEMA_VERSION,
+  schemaVersion: SAVE_SCHEMA_VERSION,
   metal: 15_880,
   minerals: 12_712,
   gas: 6_421,
@@ -218,6 +227,7 @@ const createInitialState = (): SaveState => ({
       populationMax: 70,
       energy: 140,
       buildings: createDefaultBuildingLevels(),
+      productionBots: createEmptyBotAssignment(),
       stability: 100,
     },
   },
@@ -264,6 +274,7 @@ function readSave(): SaveState {
     const parsed = JSON.parse(raw) as StoredSave;
     const savedHomeworld = parsed.planets?.['helion-01'];
     const legacySolarStations = numberOr(savedHomeworld?.solarStations, numberOr(parsed.solarStations, 0));
+    const buildings = migrateBuildingLevels(savedHomeworld?.buildings, legacySolarStations);
     const homeworld: PlanetRuntime = {
       name: typeof savedHomeworld?.name === 'string' && savedHomeworld.name.trim()
         ? savedHomeworld.name.trim().slice(0, 28)
@@ -276,7 +287,8 @@ function readSave(): SaveState {
       population: numberOr(savedHomeworld?.population, numberOr(parsed.population, initialState.planets['helion-01'].population)),
       populationMax: numberOr(savedHomeworld?.populationMax, initialState.planets['helion-01'].populationMax),
       energy: numberOr(savedHomeworld?.energy, numberOr(parsed.energy, initialState.planets['helion-01'].energy)),
-      buildings: migrateBuildingLevels(savedHomeworld?.buildings, legacySolarStations),
+      buildings,
+      productionBots: migrateProductionBotAssignment(savedHomeworld?.productionBots, buildings),
       stability: numberOr(savedHomeworld?.stability, initialState.planets['helion-01'].stability),
     };
 
@@ -284,7 +296,7 @@ function readSave(): SaveState {
     const queue = migrateBuildingQueue(savedQueue, 'helion-01', homeworld.buildings);
 
     return {
-      schemaVersion: COMBAT_SAVE_SCHEMA_VERSION,
+      schemaVersion: SAVE_SCHEMA_VERSION,
       metal: numberOr(parsed.metal, initialState.metal),
       minerals: numberOr(parsed.minerals, initialState.minerals),
       gas: numberOr(parsed.gas, initialState.gas),
@@ -422,7 +434,7 @@ export function App() {
       const priority = (event as CustomEvent<CombatPriorityState>).detail;
       setState((current) => ({
         ...current,
-        schemaVersion: COMBAT_SAVE_SCHEMA_VERSION,
+        schemaVersion: SAVE_SCHEMA_VERSION,
         combatPriority: migrateCombatPriority(priority),
       }));
     };
@@ -435,7 +447,7 @@ export function App() {
       const history = (event as CustomEvent<BattleHistoryState>).detail;
       setState((current) => ({
         ...current,
-        schemaVersion: COMBAT_SAVE_SCHEMA_VERSION,
+        schemaVersion: SAVE_SCHEMA_VERSION,
         combat: migrateBattleHistory(history),
       }));
     };
@@ -448,7 +460,7 @@ export function App() {
       const simulator = (event as CustomEvent<SimulatorState>).detail;
       setState((current) => ({
         ...current,
-        schemaVersion: COMBAT_SAVE_SCHEMA_VERSION,
+        schemaVersion: SAVE_SCHEMA_VERSION,
         combatSimulator: migrateSimulatorState(simulator),
       }));
     };
@@ -516,6 +528,10 @@ export function App() {
     gas: state.gas,
     energy: currentPlanetState.energy,
   };
+  const resourceIncomePerHour = useMemo(
+    () => getProductionBotIncomePerHour(RESOURCE_BASE_INCOME_PER_HOUR, currentPlanetState.productionBots),
+    [currentPlanetState.productionBots],
+  );
   const buildingInteriorTarget = buildingInterior
     ? getBuildingInteriorTarget(buildingInterior.buildingRole)
     : null;
@@ -586,6 +602,25 @@ export function App() {
       },
     }));
     setNotice(`Облик ${state.planets['helion-01'].name} изменён: ${skin.label}.`);
+  };
+
+  const applyProductionBots = (assignment: BotAssignment) => {
+    setState((current) => {
+      const currentPlanet = current.planets['helion-01'];
+      const productionBots = migrateProductionBotAssignment(assignment, currentPlanet.buildings);
+      return {
+        ...current,
+        schemaVersion: SAVE_SCHEMA_VERSION,
+        planets: {
+          ...current.planets,
+          'helion-01': {
+            ...currentPlanet,
+            productionBots,
+          },
+        },
+      };
+    });
+    setNotice('Роботы перераспределены');
   };
 
   const buildBuilding = (assetRole: BuildingRole) => {
@@ -719,7 +754,7 @@ export function App() {
     const result = persistBattleHistory(setBattleReportSaved(state.combat, reportId, saved));
     setState((current) => ({
       ...current,
-      schemaVersion: COMBAT_SAVE_SCHEMA_VERSION,
+      schemaVersion: SAVE_SCHEMA_VERSION,
       combat: migrateBattleHistory(result.value),
     }));
     setNotice(result.ok
@@ -878,9 +913,9 @@ export function App() {
 
           <section className="header-main">
             <div className="resources header-resource-rail" aria-label="Ресурсы планеты">
-              <Resource kind="metal" label="МЕТАЛЛ" value={state.metal} capacity={60_000} hourlyGain={RESOURCE_BASE_INCOME_PER_HOUR.metal} />
-              <Resource kind="mineral" label="МИНЕРАЛЫ" value={state.minerals} capacity={60_000} hourlyGain={RESOURCE_BASE_INCOME_PER_HOUR.minerals} />
-              <Resource kind="gas" label="ГАЗ" value={state.gas} capacity={60_000} hourlyGain={RESOURCE_BASE_INCOME_PER_HOUR.gas} />
+              <Resource kind="metal" label="МЕТАЛЛ" value={state.metal} capacity={60_000} hourlyGain={resourceIncomePerHour.metal} />
+              <Resource kind="mineral" label="МИНЕРАЛЫ" value={state.minerals} capacity={60_000} hourlyGain={resourceIncomePerHour.minerals} />
+              <Resource kind="gas" label="ГАЗ" value={state.gas} capacity={60_000} hourlyGain={resourceIncomePerHour.gas} />
               <Resource kind="energy" label="ЭНЕРГИЯ" value={currentPlanetState.energy} description="Энергия планеты. Солнечная электростанция увеличивает запас после завершения строительства." />
               <Resource kind="population" label="НАСЕЛЕНИЕ" value={currentPlanetState.population} capacity={currentPlanetState.populationMax} />
             </div>
@@ -927,6 +962,9 @@ export function App() {
               context={buildingInterior}
               planetName={currentPlanetName}
               moduleTitle={buildingInteriorTarget.moduleTitle}
+              buildings={currentPlanetState.buildings}
+              productionBots={currentPlanetState.productionBots}
+              onProductionBotsApply={applyProductionBots}
               onBack={returnToBuilding}
             />
           ) : activeTab === 'Вселенная' ? (
@@ -964,6 +1002,7 @@ export function App() {
               planetName={currentPlanetName}
               planetCoords={currentPlanet.coords}
               resources={resourceWallet}
+              resourceIncomePerHour={resourceIncomePerHour}
               buildings={currentPlanetState.buildings}
               queue={currentQueue}
               scienceLevels={CURRENT_SCIENCE_LEVELS}
