@@ -172,6 +172,7 @@ export function validateTrade(
   const invalid = (reason: string): TradeValidation => ({ canTrade: false, reason, amountLimit, received: 0, refill });
 
   if (tradeCenterLevel < 1 || refill.maxSlots <= 0) return invalid('Торговый центр не построен');
+  if (refill.availableSlots <= 0) return invalid('Нет доступных сделок');
   if (!isTradeResource(source)) return invalid('Выберите ресурс продажи');
   if (target === 'debris') return invalid('Нельзя купить обломки');
   if (!isTradeTargetResource(target)) return invalid('Выберите ресурс покупки');
@@ -179,7 +180,6 @@ export function validateTrade(
   if (!Number.isInteger(amount) || amount <= 0) return invalid('Введите целое положительное количество');
   if (amount > amountLimit) return invalid('Превышен лимит одной сделки');
   if (amount > getTradeSourceBalance(state.wallet, source)) return invalid('Недостаточно ресурса');
-  if (refill.availableSlots <= 0) return invalid('Нет доступных сделок');
 
   return {
     canTrade: true,
