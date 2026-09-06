@@ -73,18 +73,22 @@ No combat coefficient, max-level formula or resolver behavior is added by this r
 
 The UI follows the saved Laboratory information hierarchy rather than a tree/constellation:
 
-- fixed left laboratory sidebar;
+- left laboratory sidebar;
 - four source-backed sections;
 - compact research queue;
 - large science rows in the main panel;
 - row art, level, effect, costs, time, lab requirement and prerequisites;
 - disabled research action with a small in-game hint.
 
-The main catalog is the only Science vertical scroll region. Sidebar and queue remain fixed inside the existing Asterion workspace.
+After visual review, Science follows the shared Asterion document-scroll model rather than owning a nested catalog scrollbar. The laboratory content contributes its natural height to `GlobalPageScrollController`; if it exceeds the available workspace, the common game scrollbar moves the whole page. This keeps Science consistent with other long Asterion screens and avoids a second vertical scroll channel inside the catalog.
 
 ## Additional Science rule
 
 The saved page explicitly warns that only one direction from Additional Science may be researched. The warning is shown as an in-game hint, but no gameplay enforcement is implemented because real research progression is deferred.
+
+## QA contract
+
+Visual QA verifies all four target viewports and rejects a nested Science vertical scrollbar. If the laboratory content is taller than the workspace, document scrolling must be owned by `GlobalPageScrollController`.
 
 ## Deferred
 
