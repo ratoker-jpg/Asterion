@@ -5,6 +5,7 @@ import { BattleReportsView } from './BattleReportsView';
 import { ConstructionCatalogView, type ConstructionCatalogMode } from './ConstructionCatalogView';
 import { FleetCombatPriorityView } from './FleetCombatPriorityView';
 import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
+import { FLEET_CONSTRUCTION_REQUEST_EVENT } from './building-interior-navigation.ts';
 import { ShipyardView } from './ShipyardView';
 import { SimulatorView } from './SimulatorView';
 import './fleet-workspace.css';
@@ -109,7 +110,17 @@ function MissionIcon({ id }: { id: MissionId }) {
   return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="m16 4 5 10-5 14-5-14 5-10Z"/><path {...common} d="M11 14 5 19l6 2M21 14l6 5-6 2M16 9v12"/></svg>;
 }
 
-function FleetWorkspace({ planetName, coords }: { planetName: string; coords: string }) {
+function FleetWorkspace({
+  planetName,
+  coords,
+  openConstruction,
+  onConstructionOpened,
+}: {
+  planetName: string;
+  coords: string;
+  openConstruction: boolean;
+  onConstructionOpened: () => void;
+}) {
   const [quantity, setQuantity] = useState(0);
   const [missionId, setMissionId] = useState<MissionId>('transport');
   const [hoveredMissionId, setHoveredMissionId] = useState<MissionId | null>(null);
@@ -132,6 +143,13 @@ function FleetWorkspace({ planetName, coords }: { planetName: string; coords: st
     window.addEventListener(FLEET_ROOT_REQUEST_EVENT, onRootRequest);
     return () => window.removeEventListener(FLEET_ROOT_REQUEST_EVENT, onRootRequest);
   }, []);
+
+  useEffect(() => {
+    if (!openConstruction) return;
+    setSelectedSection('Корабли');
+    setConstructionView('ships');
+    onConstructionOpened();
+  }, [onConstructionOpened, openConstruction]);
 
   const chooseSection = (section: FleetSection) => {
     setSelectedSection(section);
@@ -328,6 +346,7 @@ export function FleetWorkspacePortal() {
   const [target, setTarget] = useState<Element | null>(null);
   const [active, setActive] = useState(false);
   const [planet, setPlanet] = useState({ name: 'Helion 01', coords: '[1:1:1]' });
+  const [constructionRequested, setConstructionRequested] = useState(false);
 
   useEffect(() => {
     const sync = () => {
@@ -343,6 +362,20 @@ export function FleetWorkspacePortal() {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    const onConstructionRequest = () => setConstructionRequested(true);
+    window.addEventListener(FLEET_CONSTRUCTION_REQUEST_EVENT, onConstructionRequest);
+    return () => window.removeEventListener(FLEET_CONSTRUCTION_REQUEST_EVENT, onConstructionRequest);
+  }, []);
+
   if (!active || !target) return null;
-  return createPortal(<FleetWorkspace planetName={planet.name} coords={planet.coords} />, target);
+  return createPortal(
+    <FleetWorkspace
+      planetName={planet.name}
+      coords={planet.coords}
+      openConstruction={constructionRequested}
+      onConstructionOpened={() => setConstructionRequested(false)}
+    />,
+    target,
+  );
 }

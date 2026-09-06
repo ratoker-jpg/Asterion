@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, type CSSProperties } from 'react';
 import { getPlanetZoneTerrainUrl } from './assets/planetZoneTerrainAssets.ts';
+import { canEnterBuildingInterior } from './building-interior-navigation.ts';
 import { getZoneScenePlacement } from './zone-scene.ts';
 import {
   BUILDING_QUEUE_CAPACITY,
@@ -102,6 +103,22 @@ function ResourceIncomeIcon({ kind }: { kind: 'metal' | 'mineral' | 'gas' }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M12 3c4 4.7 6 7.6 6 11a6 6 0 1 1-12 0c0-3.4 2-6.3 6-11Z"/><circle {...common} cx="10" cy="13" r="1.8"/><circle {...common} cx="14.5" cy="15.5" r="1.2"/></svg>;
 }
 
+function EnterIcon() {
+  const common = {
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.6,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+  };
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path {...common} d="M4 4h9v16H4zM13 12h7M17 8l4 4-4 4" />
+      <path {...common} d="M8 12h.01" />
+    </svg>
+  );
+}
+
 function playerEffectText(item: BuildingDefinition, currentLevel: number) {
   return item.effect
     ? getBuildingEffectText(item, currentLevel)
@@ -117,7 +134,10 @@ export type ZoneViewProps = {
   queue: BuildingQueueItem[];
   scienceLevels: ScienceLevels;
   now: number;
+  selectedRole: BuildingRole | null;
+  onSelectedRoleChange: (role: BuildingRole | null) => void;
   onBuild: (assetRole: BuildingRole) => boolean;
+  onEnterBuilding: (assetRole: BuildingRole) => void;
 };
 
 export function ZoneView({
@@ -129,9 +149,11 @@ export function ZoneView({
   queue,
   scienceLevels,
   now,
+  selectedRole,
+  onSelectedRoleChange,
   onBuild,
+  onEnterBuilding,
 }: ZoneViewProps) {
-  const [selectedRole, setSelectedRole] = useState<BuildingRole | null>(null);
   const economy = useMemo<BuildingEconomyState>(
     () => ({ resources, buildings, queue, scienceLevels }),
     [resources, buildings, queue, scienceLevels],
@@ -142,23 +164,22 @@ export function ZoneView({
   const availability = selectedRole ? evaluateBuildingBuild(economy, selectedRole) : null;
   const activeCount = zoneBuildings.filter((building) => buildings[building.assetRole] > 0).length;
   const terrainUrl = getPlanetZoneTerrainUrl(zone);
-
-  useEffect(() => {
-    setSelectedRole(null);
-  }, [zone]);
+  const canEnterSelected = selectedRole
+    ? canEnterBuildingInterior(selectedRole, buildings[selectedRole])
+    : false;
 
   useEffect(() => {
     if (!selectedRole) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setSelectedRole(null);
+      if (event.key === 'Escape') onSelectedRoleChange(null);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedRole]);
+  }, [onSelectedRoleChange, selectedRole]);
 
   const submitBuild = () => {
     if (!selectedRole || !availability?.canBuild) return;
-    if (onBuild(selectedRole)) setSelectedRole(null);
+    if (onBuild(selectedRole)) onSelectedRoleChange(null);
   };
 
   return (
@@ -192,7 +213,7 @@ export function ZoneView({
                   className={`resource-zone-selector-tile ${status.className} ${selectedClass}`}
                   aria-label={`${building.name}. Уровень ${level} из ${building.maxLevel}. ${statusText}.`}
                   aria-describedby={tooltipId}
-                  onClick={() => setSelectedRole(building.assetRole)}
+                  onClick={() => onSelectedRoleChange(building.assetRole)}
                 >
                   <img src={building.art} alt="" draggable={false} />
                   <b className="resource-zone-selector-level">{level}/{building.maxLevel}</b>
@@ -270,7 +291,7 @@ export function ZoneView({
                   '--ground-shadow-width': `${placement.shadowWidth}px`,
                 } as CSSProperties}
                 aria-label={`${building.name}. Уровень ${level} из ${building.maxLevel}${status.label ? `. ${status.label}` : ''}`}
-                onClick={() => setSelectedRole(building.assetRole)}
+                onClick={() => onSelectedRoleChange(building.assetRole)}
               >
                 <span className="resource-building-ground-shadow" aria-hidden="true" />
                 <span className="resource-building-art"><img src={building.art} alt="" draggable={false} /></span>
@@ -315,7 +336,7 @@ export function ZoneView({
                 data-qa-queue-slot={index + 1}
                 data-qa-queue-role={item.assetRole}
                 data-qa-queue-zone={queueDefinition.zone}
-                onClick={() => setSelectedRole(item.assetRole)}
+                onClick={() => onSelectedRoleChange(item.assetRole)}
               >
                 <img src={queueDefinition.art} alt="" />
                 <span>
@@ -336,7 +357,7 @@ export function ZoneView({
       </aside>
 
       {selected && selectedRole && availability ? (
-        <div className="resource-building-dialog-backdrop" onMouseDown={() => setSelectedRole(null)}>
+        <div className="resource-building-dialog-backdrop" onMouseDown={() => onSelectedRoleChange(null)}>
           <section
             className="resource-building-dialog"
             role="dialog"
@@ -346,7 +367,7 @@ export function ZoneView({
             data-qa-building-zone={selected.zone}
             onMouseDown={(event) => event.stopPropagation()}
           >
-            <button className="resource-building-dialog-close" type="button" aria-label="Закрыть сведения о здании" onClick={() => setSelectedRole(null)}>×</button>
+            <button className="resource-building-dialog-close" type="button" aria-label="Закрыть сведения о здании" onClick={() => onSelectedRoleChange(null)}>×</button>
             <div className="resource-building-dialog-art"><img src={selected.art} alt={selected.name} draggable={false} /></div>
             <div className="resource-building-dialog-copy">
               <small>{ZONE_VIEW_META[selected.zone].title} · АСТЕРЫ</small>
@@ -403,6 +424,18 @@ export function ZoneView({
               >
                 {availability.currentLevel > 0 || availability.projectedLevel > 0 ? 'УЛУЧШИТЬ' : 'ПОСТРОИТЬ'}
               </button>
+
+              {canEnterSelected ? (
+                <button
+                  className="resource-building-enter-button"
+                  type="button"
+                  data-qa-enter-building={selectedRole}
+                  onClick={() => onEnterBuilding(selectedRole)}
+                >
+                  <EnterIcon />
+                  <span>ВОЙТИ</span>
+                </button>
+              ) : null}
             </div>
           </section>
         </div>
