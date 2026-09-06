@@ -168,23 +168,48 @@ async function assertStableHeight(win, label) {
   return heights;
 }
 
-async function assertCatalogAndRequirements(win, label) {
-  const focused = await win.webContents.executeJavaScript(`(() => {
+async function openRequirementTooltip(win, interaction) {
+  const activated = await win.webContents.executeJavaScript(`(() => {
     const defender = document.querySelector('[data-qa-spaceport-card="defender"]');
     const badges = Array.from(defender?.querySelectorAll('[data-qa-spaceport-requirement-badge]') ?? []);
-    const missing = badges.find((badge) => badge.getAttribute('data-qa-spaceport-requirement-status') === 'missing') ?? badges[0];
-    missing?.focus();
-    return Boolean(missing && document.activeElement === missing);
+    const target = badges.find((badge) => badge.getAttribute('data-qa-spaceport-requirement-status') === 'missing') ?? badges[0];
+    if (!target) return false;
+    target.scrollIntoView({ block: 'center', inline: 'center' });
+    if (${JSON.stringify(interaction)} === 'focus') {
+      target.focus();
+      return document.activeElement === target;
+    }
+    target.blur();
+    target.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, cancelable: true, relatedTarget: document.body }));
+    target.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, relatedTarget: null }));
+    return true;
   })()`);
-  if (!focused) throw new Error(`${label}: requirement badge cannot receive focus`);
+  if (!activated) throw new Error(`Requirement badge could not activate via ${interaction}`);
   await settle(win);
 
-  const snapshot = await win.webContents.executeJavaScript(`(() => {
+  return win.webContents.executeJavaScript(`(() => {
     const excluded = ['solar-satellite','spy-probe','colonizer','recycler'];
     const defender = document.querySelector('[data-qa-spaceport-card="defender"]');
     const badges = Array.from(defender?.querySelectorAll('[data-qa-spaceport-requirement-badge]') ?? []);
-    const missing = badges.find((badge) => badge === document.activeElement) ?? badges.find((badge) => badge.getAttribute('data-qa-spaceport-requirement-status') === 'missing');
-    const pseudo = missing ? getComputedStyle(missing, '::after') : null;
+    const target = badges.find((badge) => badge.getAttribute('data-qa-spaceport-requirement-status') === 'missing') ?? badges[0];
+    const tooltip = target?.querySelector('[role="tooltip"]') ?? null;
+    const style = tooltip ? getComputedStyle(tooltip) : null;
+    const rect = tooltip?.getBoundingClientRect() ?? null;
+    const clippedBy = [];
+    if (tooltip && rect) {
+      for (let ancestor = tooltip.parentElement; ancestor && ancestor !== document.documentElement; ancestor = ancestor.parentElement) {
+        const ancestorStyle = getComputedStyle(ancestor);
+        const ancestorRect = ancestor.getBoundingClientRect();
+        const clipsX = ['hidden', 'clip', 'auto', 'scroll'].includes(ancestorStyle.overflowX);
+        const clipsY = ['hidden', 'clip', 'auto', 'scroll'].includes(ancestorStyle.overflowY);
+        if ((clipsX && (rect.left < ancestorRect.left - 1 || rect.right > ancestorRect.right + 1)) ||
+            (clipsY && (rect.top < ancestorRect.top - 1 || rect.bottom > ancestorRect.bottom + 1))) {
+          clippedBy.push(ancestor.getAttribute('class') || ancestor.tagName);
+        }
+      }
+    }
+    const text = tooltip?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    const details = Array.from(tooltip?.querySelectorAll(':scope > span') ?? []).map((node) => node.textContent?.replace(/\s+/g, ' ').trim() ?? '');
     return {
       excludedVisible: excluded.filter((id) => document.querySelector('[data-qa-spaceport-card="' + id + '"]')),
       transporter: Boolean(document.querySelector('[data-qa-spaceport-card="transporter"]')),
@@ -192,17 +217,51 @@ async function assertCatalogAndRequirements(win, label) {
       badgeCount: badges.length,
       badgeArts: badges.map((badge) => badge.querySelector('img')?.getAttribute('src') ?? ''),
       fallbackCount: defender?.querySelectorAll('[data-qa-spaceport-requirement-fallback]').length ?? 0,
-      focused: Boolean(missing && document.activeElement === missing),
-      tooltip: missing?.getAttribute('data-tooltip') ?? '',
-      tooltipVisibility: pseudo?.visibility ?? '',
-      tooltipOpacity: pseudo?.opacity ?? '',
+      focused: Boolean(target && document.activeElement === target),
+      exists: Boolean(tooltip),
+      ariaHidden: tooltip?.getAttribute('aria-hidden') ?? null,
+      visibility: style?.visibility ?? '',
+      opacity: style?.opacity ?? '',
+      rect: rect ? { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height } : null,
+      inViewport: Boolean(rect && rect.left >= -1 && rect.top >= -1 && rect.right <= innerWidth + 1 && rect.bottom <= innerHeight + 1),
+      clippedBy,
+      text,
+      name: tooltip?.querySelector('strong')?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+      details,
+      expectedName: target?.getAttribute('data-qa-spaceport-requirement-badge') ?? '',
+      expectedStatus: target?.getAttribute('data-qa-spaceport-requirement-status') ?? '',
       blockers: Array.from(defender?.querySelectorAll('[data-qa-spaceport-blocker="requirement"]') ?? []).map((node) => node.textContent?.replace(/\s+/g, ' ').trim() ?? ''),
     };
   })()`);
+}
+
+function assertRequirementTooltip(snapshot, label, interaction) {
   if (snapshot.excludedVisible.length || !snapshot.transporter || !snapshot.megaTransporter) throw new Error(`${label}: catalog filter mismatch ${JSON.stringify(snapshot)}`);
   if (snapshot.badgeCount < 3 || snapshot.badgeArts.some((src) => !src) || snapshot.fallbackCount !== 0) throw new Error(`${label}: known requirements are not asset badges ${JSON.stringify(snapshot)}`);
-  if (!snapshot.focused || !snapshot.tooltip.includes('Статус:') || snapshot.tooltipVisibility !== 'visible' || snapshot.tooltipOpacity !== '1') throw new Error(`${label}: focus tooltip missing ${JSON.stringify(snapshot)}`);
-  if (!snapshot.blockers.some((value) => value.includes('Ионная наука')) || !snapshot.blockers.some((value) => value.includes('Топливные элементы'))) throw new Error(`${label}: blocker strips missing ${JSON.stringify(snapshot)}`);
+  if (!snapshot.exists || snapshot.ariaHidden !== 'false' || snapshot.visibility !== 'visible' || snapshot.opacity !== '1') {
+    throw new Error(`${label}: DOM tooltip is not visible via ${interaction} ${JSON.stringify(snapshot)}`);
+  }
+  if (!snapshot.rect || snapshot.rect.width <= 0 || snapshot.rect.height <= 0 || !snapshot.inViewport || snapshot.clippedBy.length > 0) {
+    throw new Error(`${label}: DOM tooltip geometry/clipping failed via ${interaction} ${JSON.stringify(snapshot)}`);
+  }
+  const expectedStatusText = snapshot.expectedStatus === 'missing' ? 'Статус: не выполнено' : 'Статус: выполнено';
+  if (!snapshot.expectedName || snapshot.name !== snapshot.expectedName || !snapshot.text.includes(snapshot.expectedName) ||
+      !snapshot.details.some((value) => value.startsWith('Текущий уровень:')) ||
+      !snapshot.details.some((value) => value.startsWith('Требуется:')) ||
+      !snapshot.details.includes(expectedStatusText)) {
+    throw new Error(`${label}: DOM tooltip text is incomplete via ${interaction} ${JSON.stringify(snapshot)}`);
+  }
+}
+
+async function assertCatalogAndRequirements(win, label) {
+  const focusSnapshot = await openRequirementTooltip(win, 'focus');
+  if (!focusSnapshot.focused) throw new Error(`${label}: requirement badge cannot retain keyboard focus ${JSON.stringify(focusSnapshot)}`);
+  assertRequirementTooltip(focusSnapshot, label, 'keyboard focus');
+
+  const hoverSnapshot = await openRequirementTooltip(win, 'hover');
+  assertRequirementTooltip(hoverSnapshot, label, 'hover');
+
+  if (!hoverSnapshot.blockers.some((value) => value.includes('Ионная наука')) || !hoverSnapshot.blockers.some((value) => value.includes('Топливные элементы'))) throw new Error(`${label}: blocker strips missing ${JSON.stringify(hoverSnapshot)}`);
 }
 
 async function enqueueThree(win, shipId) {
@@ -309,7 +368,8 @@ async function verifyFlow(win, directory, label) {
       'four-utility-ships-excluded-from-upgrade-catalog',
       'transporter-and-mega-transporter-remain',
       'known-requirements-use-asset-badges',
-      'requirement-hover-focus-tooltip',
+      'requirement-dom-tooltip-keyboard-focus-and-hover',
+      'requirement-tooltip-visible-nonzero-in-viewport-unclipped',
       'concrete-red-requirement-blockers',
       'ordinary-repeated-queue-0-1-2-3-visual-state',
       'commander-repeated-queue-0-1-2-3-visual-state',

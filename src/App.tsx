@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
@@ -474,6 +474,8 @@ export function App() {
   const [planetViewMode, setPlanetViewMode] = useState<PlanetViewMode>('overview');
   const [activeTab, setActiveTab] = useState('Планета');
   const [state, setState] = useState<SaveState>(readSave);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const [now, setNow] = useState(Date.now());
   const [notice, setNotice] = useState('Система готова. Локальное сохранение активно.');
   const [planetMenuOpen, setPlanetMenuOpen] = useState(false);
@@ -897,40 +899,33 @@ export function App() {
   const startSpaceportUpgrade = (track: SpaceportUpgradeTrack, shipId: string) => {
     const enqueuedAt = Date.now();
     const taskId = globalThis.crypto?.randomUUID?.() ?? `spaceport-${track}-${shipId}-${enqueuedAt}-${Math.random().toString(36).slice(2, 9)}`;
-    const preview = enqueueSpaceportUpgrade({
-      state: currentPlanetState.spaceportUpgrades,
-      wallet: spaceportWallet,
-      buildings: currentPlanetState.buildings,
+    const current = stateRef.current;
+    const planet = current.planets['helion-01'];
+    const transition = enqueueSpaceportUpgrade({
+      state: planet.spaceportUpgrades,
+      wallet: { metal: current.metal, minerals: current.minerals, gas: current.gas },
+      buildings: planet.buildings,
       scienceLevels: CURRENT_SCIENCE_LEVELS,
-      spaceportLevel: currentPlanetState.buildings.spaceport,
+      spaceportLevel: planet.buildings.spaceport,
     }, track, shipId, enqueuedAt, taskId);
-    if (!preview.ok) {
-      setNotice(preview.reason ?? 'Улучшение сейчас недоступно.');
+    if (!transition.ok) {
+      setNotice(transition.reason ?? 'Улучшение сейчас недоступно.');
       return false;
     }
 
-    setState((current) => {
-      const planet = current.planets['helion-01'];
-      const transition = enqueueSpaceportUpgrade({
-        state: planet.spaceportUpgrades,
-        wallet: { metal: current.metal, minerals: current.minerals, gas: current.gas },
-        buildings: planet.buildings,
-        scienceLevels: CURRENT_SCIENCE_LEVELS,
-        spaceportLevel: planet.buildings.spaceport,
-      }, track, shipId, enqueuedAt, taskId);
-      if (!transition.ok) return current;
-      return {
-        ...current,
-        schemaVersion: SAVE_SCHEMA_VERSION,
-        metal: transition.wallet.metal,
-        minerals: transition.wallet.minerals,
-        gas: transition.wallet.gas,
-        planets: {
-          ...current.planets,
-          'helion-01': { ...planet, spaceportUpgrades: transition.state },
-        },
-      };
-    });
+    const nextState: SaveState = {
+      ...current,
+      schemaVersion: SAVE_SCHEMA_VERSION,
+      metal: transition.wallet.metal,
+      minerals: transition.wallet.minerals,
+      gas: transition.wallet.gas,
+      planets: {
+        ...current.planets,
+        'helion-01': { ...planet, spaceportUpgrades: transition.state },
+      },
+    };
+    stateRef.current = nextState;
+    setState(nextState);
     const entity = getSpaceportUpgradeEntity(track, shipId);
     setNotice(`Космодром: ${entity?.name ?? shipId} добавлен в очередь улучшений.`);
     return true;

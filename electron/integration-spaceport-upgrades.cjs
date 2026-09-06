@@ -187,44 +187,114 @@ async function assertMaxRow(win, shipId, expectedMax, label) {
   }
 }
 
-async function assertRequirementBadges(win) {
-  const focused = await win.webContents.executeJavaScript(`(() => {
+async function openRequirementTooltip(win, interaction) {
+  const activated = await win.webContents.executeJavaScript(`(() => {
     const row = document.querySelector('[data-qa-spaceport-card="defender"]');
     const badges = Array.from(row?.querySelectorAll('[data-qa-spaceport-requirement-badge]') ?? []);
     const target = badges.find((badge) => badge.getAttribute('data-qa-spaceport-requirement-status') === 'missing') ?? badges[0];
-    target?.focus();
-    return Boolean(target && document.activeElement === target);
+    if (!target) return false;
+    target.scrollIntoView({ block: 'center', inline: 'center' });
+    if (${JSON.stringify(interaction)} === 'focus') {
+      target.focus();
+      return document.activeElement === target;
+    }
+    target.blur();
+    target.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, cancelable: true, relatedTarget: document.body }));
+    target.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, relatedTarget: null }));
+    return true;
   })()`);
-  if (!focused) throw new Error('Requirement badge could not receive keyboard focus');
+  if (!activated) throw new Error(`Requirement badge could not activate via ${interaction}`);
   await settle(win);
 
-  const snapshot = await win.webContents.executeJavaScript(`(() => {
+  return win.webContents.executeJavaScript(`(() => {
     const row = document.querySelector('[data-qa-spaceport-card="defender"]');
     if (!row) return null;
     const badges = Array.from(row.querySelectorAll('[data-qa-spaceport-requirement-badge]'));
-    const target = badges.find((badge) => badge === document.activeElement) ?? badges.find((badge) => badge.getAttribute('data-qa-spaceport-requirement-status') === 'missing') ?? badges[0];
-    const pseudo = target ? getComputedStyle(target, '::after') : null;
+    const target = badges.find((badge) => badge.getAttribute('data-qa-spaceport-requirement-status') === 'missing') ?? badges[0];
+    const tooltip = target?.querySelector('[role="tooltip"]') ?? null;
+    const style = tooltip ? getComputedStyle(tooltip) : null;
+    const rect = tooltip?.getBoundingClientRect() ?? null;
+    const clippedBy = [];
+    if (tooltip && rect) {
+      for (let ancestor = tooltip.parentElement; ancestor && ancestor !== document.documentElement; ancestor = ancestor.parentElement) {
+        const ancestorStyle = getComputedStyle(ancestor);
+        const ancestorRect = ancestor.getBoundingClientRect();
+        const clipsX = ['hidden', 'clip', 'auto', 'scroll'].includes(ancestorStyle.overflowX);
+        const clipsY = ['hidden', 'clip', 'auto', 'scroll'].includes(ancestorStyle.overflowY);
+        if ((clipsX && (rect.left < ancestorRect.left - 1 || rect.right > ancestorRect.right + 1)) ||
+            (clipsY && (rect.top < ancestorRect.top - 1 || rect.bottom > ancestorRect.bottom + 1))) {
+          clippedBy.push(ancestor.getAttribute('class') || ancestor.tagName);
+        }
+      }
+    }
+    const text = tooltip?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    const details = Array.from(tooltip?.querySelectorAll(':scope > span') ?? []).map((node) => node.textContent?.replace(/\s+/g, ' ').trim() ?? '');
     return {
       count: badges.length,
       allHaveArt: badges.every((badge) => Boolean(badge.querySelector('img')?.getAttribute('src'))),
       allFocusable: badges.every((badge) => badge.tabIndex === 0),
-      focused: Boolean(target && document.activeElement === target),
-      tooltip: target?.getAttribute('data-tooltip') ?? '',
-      tooltipVisibility: pseudo?.visibility ?? '',
-      tooltipOpacity: pseudo?.opacity ?? '',
-      blockers: Array.from(row.querySelectorAll('[data-qa-spaceport-blocker="requirement"]')).map((node) => node.textContent?.replace(/\s+/g, ' ').trim() ?? ''),
       fallbackCount: row.querySelectorAll('[data-qa-spaceport-requirement-fallback]').length,
+      focused: Boolean(target && document.activeElement === target),
+      exists: Boolean(tooltip),
+      ariaHidden: tooltip?.getAttribute('aria-hidden') ?? null,
+      visibility: style?.visibility ?? '',
+      opacity: style?.opacity ?? '',
+      rect: rect ? { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height } : null,
+      inViewport: Boolean(rect && rect.left >= -1 && rect.top >= -1 && rect.right <= innerWidth + 1 && rect.bottom <= innerHeight + 1),
+      clippedBy,
+      text,
+      name: tooltip?.querySelector('strong')?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+      details,
+      expectedName: target?.getAttribute('data-qa-spaceport-requirement-badge') ?? '',
+      expectedStatus: target?.getAttribute('data-qa-spaceport-requirement-status') ?? '',
+      blockers: Array.from(row.querySelectorAll('[data-qa-spaceport-blocker="requirement"]')).map((node) => node.textContent?.replace(/\s+/g, ' ').trim() ?? ''),
     };
   })()`);
+}
+
+function assertRequirementTooltip(snapshot, interaction) {
   if (!snapshot || snapshot.count < 3 || !snapshot.allHaveArt || !snapshot.allFocusable || snapshot.fallbackCount !== 0) {
-    throw new Error(`Known Defender requirements are not asset badges ${JSON.stringify(snapshot)}`);
+    throw new Error(`Known Defender requirements are not asset badges (${interaction}) ${JSON.stringify(snapshot)}`);
   }
-  if (!snapshot.focused || !snapshot.tooltip.includes('Текущий уровень:') || !snapshot.tooltip.includes('Требуется:') || !snapshot.tooltip.includes('Статус:') || snapshot.tooltipVisibility !== 'visible' || snapshot.tooltipOpacity !== '1') {
-    throw new Error(`Requirement hover/focus tooltip is not available ${JSON.stringify(snapshot)}`);
+  if (!snapshot.exists || snapshot.ariaHidden !== 'false' || snapshot.visibility !== 'visible' || snapshot.opacity !== '1') {
+    throw new Error(`Requirement DOM tooltip is not visible via ${interaction} ${JSON.stringify(snapshot)}`);
   }
-  if (!snapshot.blockers.some((value) => value.includes('Ионная наука')) || !snapshot.blockers.some((value) => value.includes('Топливные элементы'))) {
-    throw new Error(`Concrete requirement blockers missing ${JSON.stringify(snapshot)}`);
+  if (!snapshot.rect || snapshot.rect.width <= 0 || snapshot.rect.height <= 0 || !snapshot.inViewport || snapshot.clippedBy.length > 0) {
+    throw new Error(`Requirement DOM tooltip geometry/clipping failed via ${interaction} ${JSON.stringify(snapshot)}`);
   }
+  const expectedStatusText = snapshot.expectedStatus === 'missing' ? 'Статус: не выполнено' : 'Статус: выполнено';
+  if (!snapshot.expectedName || snapshot.name !== snapshot.expectedName || !snapshot.text.includes(snapshot.expectedName) ||
+      !snapshot.details.some((value) => value.startsWith('Текущий уровень:')) ||
+      !snapshot.details.some((value) => value.startsWith('Требуется:')) ||
+      !snapshot.details.includes(expectedStatusText)) {
+    throw new Error(`Requirement DOM tooltip text is incomplete via ${interaction} ${JSON.stringify(snapshot)}`);
+  }
+}
+
+async function assertRequirementBadges(win) {
+  const focusSnapshot = await openRequirementTooltip(win, 'focus');
+  if (!focusSnapshot.focused) throw new Error(`Requirement badge lost keyboard focus ${JSON.stringify(focusSnapshot)}`);
+  assertRequirementTooltip(focusSnapshot, 'keyboard focus');
+
+  const hoverSnapshot = await openRequirementTooltip(win, 'hover');
+  assertRequirementTooltip(hoverSnapshot, 'hover');
+
+  if (!hoverSnapshot.blockers.some((value) => value.includes('Ионная наука')) || !hoverSnapshot.blockers.some((value) => value.includes('Топливные элементы'))) {
+    throw new Error(`Concrete requirement blockers missing ${JSON.stringify(hoverSnapshot)}`);
+  }
+}
+
+async function invokeRapidUpgradeHandler(win, shipId, attempts = 4) {
+  return win.webContents.executeJavaScript(`(() => {
+    const button = document.querySelector('[data-qa-spaceport-upgrade=${JSON.stringify(shipId)}]');
+    if (!button) return { error: 'button-missing', results: [] };
+    const reactPropsKey = Object.getOwnPropertyNames(button).find((key) => key.startsWith('__reactProps$'));
+    const handler = reactPropsKey ? button[reactPropsKey]?.onClick : null;
+    if (typeof handler !== 'function') return { error: 'react-onClick-missing', results: [] };
+    const results = [];
+    for (let index = 0; index < ${attempts}; index += 1) results.push(handler());
+    return { error: null, results };
+  })()`);
 }
 
 async function verify(win) {
@@ -244,15 +314,24 @@ async function verify(win) {
   await assertRepeatedRow(win, 'transporter', 10, 'ordinary ship row');
 
   await click(win, '[data-qa-spaceport-tab="commanders"]');
-  for (let index = 0; index < 3; index += 1) {
-    await click(win, '[data-qa-spaceport-upgrade="corsair"]');
-    await waitFor(win, `document.querySelector('[data-qa-spaceport-queue-count]')?.getAttribute('data-qa-spaceport-queue-count') === '${index + 1}/3'`);
+  const beforeRapidCorsair = saved;
+  const rapidCorsair = await invokeRapidUpgradeHandler(win, 'corsair', 4);
+  if (rapidCorsair.error || JSON.stringify(rapidCorsair.results) !== JSON.stringify([true, true, true, false])) {
+    throw new Error(`Corsair rapid enqueue return contract mismatch ${JSON.stringify(rapidCorsair)}`);
   }
+  await settle(win);
+  await waitFor(win, `document.querySelector('[data-qa-spaceport-queue-count]')?.getAttribute('data-qa-spaceport-queue-count') === '3/3'`);
   saved = await readSave(win);
-  assertChain(saved.commanderQueue, 'corsair', 'Corsair UI enqueue');
+  assertChain(saved.commanderQueue, 'corsair', 'Corsair rapid UI enqueue');
   if (saved.shipQueue.length !== 3) throw new Error('Commander enqueue mutated ordinary queue');
-  if (saved.metal !== 97000 || saved.minerals !== 98500 || saved.gas !== 100000) throw new Error(`commander resource deduction mismatch ${JSON.stringify(saved)}`);
-  await assertRepeatedRow(win, 'corsair', 40, 'Corsair row');
+  if (saved.metal !== beforeRapidCorsair.metal - 1500 || saved.minerals !== beforeRapidCorsair.minerals - 750 || saved.gas !== beforeRapidCorsair.gas) {
+    throw new Error(`Corsair rapid enqueue charged resources more/less than three times ${JSON.stringify({ beforeRapidCorsair, saved })}`);
+  }
+  const rapidNotice = await win.webContents.executeJavaScript(`document.querySelector('.shell-notice span')?.textContent?.replace(/\s+/g, ' ').trim() ?? ''`);
+  if (!rapidNotice.includes('Очередь улучшений заполнена') || rapidNotice.includes('добавлен в очередь улучшений')) {
+    throw new Error(`Fourth rapid Corsair enqueue reported false success ${JSON.stringify({ rapidNotice, rapidCorsair })}`);
+  }
+  await assertRepeatedRow(win, 'corsair', 40, 'Corsair rapid row');
 
   await forceOfflineCompletion(win);
   await reopenSpaceport(win, 'ships');
