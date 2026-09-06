@@ -536,6 +536,9 @@ export function App() {
       return {
         ...current,
         schemaVersion: SAVE_SCHEMA_VERSION,
+        metal: current.metal + advanced.autoCollectedOutput.metal,
+        minerals: current.minerals + advanced.autoCollectedOutput.minerals,
+        gas: current.gas + advanced.autoCollectedOutput.gas,
         planets: {
           ...current.planets,
           'helion-01': {
@@ -546,7 +549,7 @@ export function App() {
       };
     });
 
-    if (snapshot.expiredJobIds.length > 0) setNotice('Срок хранения результата истёк');
+    if (snapshot.autoCollectedJobIds.length > 0) setNotice('Результат переработки автоматически зачислен');
   }, [now, state.planets]);
 
   const currentPlanet = ownedPlanets[0];
@@ -1248,7 +1251,7 @@ export function App() {
               <div className="planet-editor-skins-title-v5"><strong>ОБЛИК ПЛАНЕТЫ</strong><small>Можно менять независимо от названия</small></div>
               <div className="skin-picker-grid">
                 {planetSkins.map((skin) => (
-                  <button key={skin.id} type="button" className={editingPlanetState.skin === skin.id ? 'active' : ''} onClick={() => chooseSkin(skin)}>
+                  <button key={skin.id} type="button" className={editingPlanetState.skin === skin.id ? 'active' : ''} onClick={() => chooseSkin(skin.id === editingPlanetState.skin ? skin : skin)}>
                     <img src={skin.art} alt="" /><span>{skin.label}</span><small>{editingPlanetState.skin === skin.id ? 'АКТИВИРОВАНА' : 'ИСПОЛЬЗОВАТЬ'}</small>
                   </button>
                 ))}
