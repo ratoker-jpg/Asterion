@@ -70,6 +70,8 @@ export function ProductionBotsView({
     return () => window.clearTimeout(timer);
   }, [toastVisible]);
 
+  const appliedTotal = useMemo(() => getProductionBotAssignmentTotal(appliedAssignment), [appliedAssignment]);
+  const appliedFree = useMemo(() => getProductionBotFreeCount(appliedAssignment, availableBots), [appliedAssignment, availableBots]);
   const draftTotal = useMemo(() => getProductionBotAssignmentTotal(draft), [draft]);
   const draftFree = useMemo(() => getProductionBotFreeCount(draft, availableBots), [draft, availableBots]);
   const draftValid = useMemo(() => isProductionBotAssignmentValid(draft, availableBots), [draft, availableBots]);
@@ -123,10 +125,10 @@ export function ProductionBotsView({
             <div className="production-bots-building-level">УРОВЕНЬ <strong>{buildingLevel}</strong></div>
           </div>
 
-          <section className="production-bots-pool" aria-label="Пул производственных роботов">
+          <section className="production-bots-pool" aria-label="Применённое распределение производственных роботов">
             <div><small>ДОСТУПНО РОБОТОВ</small><strong data-qa-bots-available>{availableBots}</strong></div>
-            <div><small>РАСПРЕДЕЛЕНО <em>ЧЕРНОВИК</em></small><strong data-qa-bots-draft-total>{draftTotal} / {availableBots}</strong></div>
-            <div><small>СВОБОДНО</small><strong data-qa-bots-draft-free>{draftFree}</strong></div>
+            <div><small>РАСПРЕДЕЛЕНО</small><strong data-qa-bots-applied-total>{appliedTotal} / {availableBots}</strong></div>
+            <div><small>СВОБОДНО</small><strong data-qa-bots-applied-free>{appliedFree}</strong></div>
           </section>
 
           <section className="production-bots-applied" aria-label="Применённый бонус от роботов">
@@ -146,7 +148,7 @@ export function ProductionBotsView({
               <small>РАСПРЕДЕЛЕНИЕ РОБОТОВ</small>
               <h2>ЦЕЛЕВЫЕ РЕСУРСЫ</h2>
             </div>
-            <span>до {MAX_PRODUCTION_BOTS_PER_RESOURCE} на ресурс</span>
+            <span data-qa-bots-draft-total>ЧЕРНОВИК {draftTotal} / {availableBots} · ДО 10 НА РЕСУРС</span>
           </header>
 
           <div className="production-bots-target-list">
@@ -210,8 +212,8 @@ export function ProductionBotsView({
 
           <footer className="production-bots-targets-footer">
             <div>
-              <small>СВОБОДНЫЕ РОБОТЫ</small>
-              <strong>{draftFree}</strong>
+              <small>СВОБОДНО В ЧЕРНОВИКЕ</small>
+              <strong data-qa-bots-draft-free>{draftFree}</strong>
             </div>
             <button
               type="button"
