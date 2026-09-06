@@ -14,7 +14,10 @@ The source information hierarchy is ranking-first:
 3. compact search and “show my position”;
 4. pagination/status;
 5. one large ranking table;
-6. pagination/status below the table.
+6. the current player row repeated below the visible page when the player is outside that page, separated by an ellipsis row;
+7. pagination/status below the table.
+
+The saved Players page explicitly shows positions 1–20, then an ellipsis row, then the logged-in player at their real rank before the pagination panel. Asterion mirrors that behavior: the current player remains visible below the current page whenever they are not already part of the page slice. If the current player is already visible in the page slice, the row is not duplicated.
 
 ## Source-derived semantics
 
@@ -40,6 +43,7 @@ Implemented interactions:
 - supported score sorting;
 - deterministic pagination, 12 rows per page;
 - `Показать мою позицию`;
+- persistent current-player row below the visible Players page when needed;
 - current player/current alliance highlighting;
 - top-3 states;
 - row selection with a compact lower strip only.
