@@ -15,21 +15,35 @@ import { WINDOW_PRESETS, type DesktopDisplayState, type UiPreferencesV2 } from '
 
 type UtilityScreen = 'Настройки' | 'Рейтинг' | 'Наука';
 
+type RuntimeIdentity = {
+  alliance: AllianceIdentity | null;
+  resourcePoints: number | undefined;
+};
+
 function isUtilityScreen(value: string | undefined): value is UtilityScreen {
   return value === 'Настройки' || value === 'Рейтинг' || value === 'Наука';
 }
 
-function readCurrentAlliance(): AllianceIdentity | null {
+function readRuntimeIdentity(): RuntimeIdentity {
   try {
     const raw = localStorage.getItem('asterion.vertical-slice.v1');
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { command?: { alliance?: { name?: unknown; tag?: unknown } } };
+    if (!raw) return { alliance: null, resourcePoints: undefined };
+    const parsed = JSON.parse(raw) as {
+      command?: { alliance?: { name?: unknown; tag?: unknown } };
+      rating?: { resourcePoints?: unknown };
+    };
     const name = parsed.command?.alliance?.name;
     const tag = parsed.command?.alliance?.tag;
-    if (typeof name !== 'string' || typeof tag !== 'string' || !name.trim() || !tag.trim()) return null;
-    return { name: name.trim(), tag: tag.trim() };
+    const alliance = typeof name === 'string' && typeof tag === 'string' && name.trim() && tag.trim()
+      ? { name: name.trim(), tag: tag.trim() }
+      : null;
+    const rawResourcePoints = parsed.rating?.resourcePoints;
+    const resourcePoints = typeof rawResourcePoints === 'number' && Number.isFinite(rawResourcePoints) && rawResourcePoints >= 0
+      ? Math.floor(rawResourcePoints)
+      : undefined;
+    return { alliance, resourcePoints };
   } catch {
-    return null;
+    return { alliance: null, resourcePoints: undefined };
   }
 }
 
@@ -45,8 +59,10 @@ export function UtilityScreensPortal() {
   const [target, setTarget] = useState<Element | null>(null);
   const [active, setActive] = useState<UtilityScreen | null>(null);
   const [preferences, setPreferences] = useState<UiPreferencesV2>(() => readPreferences());
-  const [currentAlliance, setCurrentAlliance] = useState<AllianceIdentity | null>(() => readCurrentAlliance());
-  const allianceSignature = useRef(JSON.stringify(currentAlliance));
+  const initialIdentity = useRef(readRuntimeIdentity());
+  const [currentAlliance, setCurrentAlliance] = useState<AllianceIdentity | null>(initialIdentity.current.alliance);
+  const [currentPlayerResourcePoints, setCurrentPlayerResourcePoints] = useState<number | undefined>(initialIdentity.current.resourcePoints);
+  const identitySignature = useRef(JSON.stringify(initialIdentity.current));
   const preferencesRef = useRef(preferences);
 
   useEffect(() => {
@@ -88,11 +104,12 @@ export function UtilityScreensPortal() {
       const label = document.querySelector('.utility-navigation button.active span')?.textContent?.trim();
       setActive(isUtilityScreen(label) ? label : null);
       setTarget(document.querySelector('.workspace'));
-      const alliance = readCurrentAlliance();
-      const signature = JSON.stringify(alliance);
-      if (signature !== allianceSignature.current) {
-        allianceSignature.current = signature;
-        setCurrentAlliance(alliance);
+      const identity = readRuntimeIdentity();
+      const signature = JSON.stringify(identity);
+      if (signature !== identitySignature.current) {
+        identitySignature.current = signature;
+        setCurrentAlliance(identity.alliance);
+        setCurrentPlayerResourcePoints(identity.resourcePoints);
       }
     };
 
@@ -130,7 +147,7 @@ export function UtilityScreensPortal() {
       {active === 'Настройки' ? (
         <SettingsView preferences={preferences} onPreferencesChange={updatePreferences} onReset={resetUiPreferences} />
       ) : active === 'Рейтинг' ? (
-        <RatingView currentAlliance={currentAlliance} />
+        <RatingView currentAlliance={currentAlliance} currentPlayerResourcePoints={currentPlayerResourcePoints} />
       ) : (
         <ScienceView />
       )}
