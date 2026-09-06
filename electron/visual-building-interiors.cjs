@@ -21,6 +21,7 @@ const BUILT_INTERIOR_ROLES = [
   'planetary-government',
   'bank',
 ];
+const BOT_PERCENTAGES = { metal: 6, minerals: 5, gas: 4 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitFor(win, expression, timeoutMs = 7000) {
@@ -121,24 +122,112 @@ async function closeDialog(win) {
   await waitFor(win, `!document.querySelector('[data-qa-building-dialog]')`);
 }
 
+async function readResourceIncome(win) {
+  return win.webContents.executeJavaScript(`(() => {
+    const value = (resource) => document.querySelector('[data-resource-income="' + resource + '"] strong')?.textContent?.replace(/\\s+/g, '').trim() ?? '';
+    return { metal: value('metal'), minerals: value('minerals'), gas: value('gas') };
+  })()`);
+}
+
+async function verifyProductionBotsScreen(win, role, expectedBuildingName) {
+  await waitFor(win, `document.querySelector('[data-qa-production-bots=${JSON.stringify(role)}]')`);
+  await waitFor(win, `(() => {
+    const image = document.querySelector('[data-qa-production-bots=${JSON.stringify(role)}] .production-bots-building-art img');
+    return image?.complete && image.naturalWidth > 0;
+  })()`);
+
+  const snapshot = await win.webContents.executeJavaScript(`(() => {
+    const root = document.querySelector('[data-qa-production-bots=${JSON.stringify(role)}]');
+    const read = (selector) => root?.querySelector(selector)?.textContent?.replace(/\\s+/g, ' ').trim() ?? '';
+    const card = (resource) => root?.querySelector('[data-qa-production-bot-resource="' + resource + '"]');
+    const rect = root?.getBoundingClientRect();
+    const cards = Array.from(root?.querySelectorAll('[data-qa-production-bot-resource]') ?? []).map((item) => {
+      const box = item.getBoundingClientRect();
+      return { left: box.left, right: box.right, width: box.width };
+    });
+    return {
+      title: read('.production-bots-header__copy h1'),
+      context: read('.production-bots-header__copy p'),
+      building: read('.production-bots-building-copy h2'),
+      level: read('.production-bots-building-level'),
+      artAlt: root?.querySelector('.production-bots-building-art img')?.getAttribute('alt') ?? '',
+      back: read('[data-qa-production-bots-back]'),
+      percentages: {
+        metal: read('[data-qa-bot-percent="metal"]'),
+        minerals: read('[data-qa-bot-percent="minerals"]'),
+        gas: read('[data-qa-bot-percent="gas"]'),
+      },
+      assigned: {
+        metal: read('[data-qa-bot-assigned="metal"]'),
+        minerals: read('[data-qa-bot-assigned="minerals"]'),
+        gas: read('[data-qa-bot-assigned="gas"]'),
+      },
+      current: {
+        metal: read('[data-qa-bot-current-bonus="metal"]'),
+        minerals: read('[data-qa-bot-current-bonus="minerals"]'),
+        gas: read('[data-qa-bot-current-bonus="gas"]'),
+      },
+      empty: ['metal', 'minerals', 'gas'].map((resource) => card(resource)?.querySelector('.production-bot-card__empty')?.textContent?.trim() ?? ''),
+      pending: ['metal', 'minerals', 'gas'].map((resource) => card(resource)?.querySelector('.production-bot-card__pending')?.textContent?.replace(/\\s+/g, ' ').trim() ?? ''),
+      note: read('[data-qa-production-bots-economy-note]'),
+      bounds: rect ? { left: rect.left, right: rect.right } : null,
+      cards,
+    };
+  })()`);
+
+  if (snapshot.title !== 'ПРОИЗВОДСТВЕННЫЕ БОТЫ') throw new Error(`Production bots title mismatch: ${JSON.stringify(snapshot)}`);
+  if (!snapshot.context.includes(expectedBuildingName) || !snapshot.context.includes('Helion 01')) throw new Error(`Production bots context mismatch: ${JSON.stringify(snapshot)}`);
+  if (snapshot.building !== expectedBuildingName || snapshot.artAlt !== expectedBuildingName || !snapshot.level.includes('1')) throw new Error(`Production building identity mismatch: ${JSON.stringify(snapshot)}`);
+  if (!snapshot.back.includes(expectedBuildingName === 'Фабрика' ? 'Фабрику' : 'Промышленный комплекс')) throw new Error(`Production bots return target mismatch: ${JSON.stringify(snapshot)}`);
+  if (snapshot.percentages.metal !== `+${BOT_PERCENTAGES.metal}%` || snapshot.percentages.minerals !== `+${BOT_PERCENTAGES.minerals}%` || snapshot.percentages.gas !== `+${BOT_PERCENTAGES.gas}%`) {
+    throw new Error(`Production bot percentages mismatch: ${JSON.stringify(snapshot.percentages)}`);
+  }
+  if (Object.values(snapshot.assigned).some((value) => value !== '0') || Object.values(snapshot.current).some((value) => value !== '+0%')) {
+    throw new Error(`Production bot empty assignment mismatch: ${JSON.stringify(snapshot)}`);
+  }
+  if (snapshot.empty.some((value) => value !== 'Боты пока не назначены')) throw new Error(`Production bot empty state mismatch: ${JSON.stringify(snapshot.empty)}`);
+  if (snapshot.pending.some((value) => !value.includes('Не утверждены') || !value.includes('Не утверждена'))) throw new Error(`Production bot pending copy mismatch: ${JSON.stringify(snapshot.pending)}`);
+  if (!snapshot.note.includes('не меняет показатели /ч') || !snapshot.note.includes('не списывает ресурсы')) throw new Error(`Production bot economy disclaimer missing: ${snapshot.note}`);
+  if (!snapshot.bounds || snapshot.cards.some((card) => card.left < snapshot.bounds.left - 1 || card.right > snapshot.bounds.right + 1 || card.width <= 0)) {
+    throw new Error(`Production bot card overflow: ${JSON.stringify(snapshot)}`);
+  }
+
+  return snapshot;
+}
+
 async function verifyFlow(win, directory) {
   await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);
   await reload(win);
   await setBuiltInteriorSave(win);
+
+  await activateZone(win, 'resource');
+  const incomeBefore = await readResourceIncome(win);
 
   await activateZone(win, 'industry');
   await openBuildingDialog(win, 'construction');
   await assertEnterVisible(win, 'construction');
   await capture(win, directory, 'building-interior-industry-modal');
   await enterBuilding(win, 'construction');
-  await waitFor(win, `document.querySelector('[data-qa-building-interior-host="construction"]')`);
-  const hostText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-building-interior-host="construction"]')?.textContent ?? ''`);
-  if (!hostText.includes('Модуль будет доступен в следующем обновлении')) {
-    throw new Error(`Future host empty state missing: ${hostText}`);
-  }
-  await click(win, '[data-qa-building-interior-back]');
+  const factory = await verifyProductionBotsScreen(win, 'construction', 'Фабрика');
+  await capture(win, directory, 'production-bots-factory-empty');
+  await click(win, '[data-qa-production-bots-back]');
   await assertReturned(win, 'industry', 'construction');
   await closeDialog(win);
+
+  await openBuildingDialog(win, 'advanced-factory');
+  await assertEnterVisible(win, 'advanced-factory');
+  await enterBuilding(win, 'advanced-factory');
+  const advancedFactory = await verifyProductionBotsScreen(win, 'advanced-factory', 'Промышленный комплекс');
+  await capture(win, directory, 'production-bots-advanced-factory-empty');
+  await click(win, '[data-qa-production-bots-back]');
+  await assertReturned(win, 'industry', 'advanced-factory');
+  await closeDialog(win);
+
+  await activateZone(win, 'resource');
+  const incomeAfter = await readResourceIncome(win);
+  if (JSON.stringify(incomeAfter) !== JSON.stringify(incomeBefore)) {
+    throw new Error(`Resource income changed after production bot flow: ${JSON.stringify({ incomeBefore, incomeAfter })}`);
+  }
 
   await activateZone(win, 'military');
   await openBuildingDialog(win, 'shipyard');
@@ -169,12 +258,32 @@ async function verifyFlow(win, directory) {
   await capture(win, directory, 'building-interior-command-from-government');
   await pressEscape(win);
   await assertReturned(win, 'military', 'planetary-government');
+  await closeDialog(win);
+
+  await openBuildingDialog(win, 'spaceport');
+  await enterBuilding(win, 'spaceport');
+  await waitFor(win, `document.querySelector('[data-qa-building-interior-host="spaceport"]')`);
+  const hostText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-building-interior-host="spaceport"]')?.textContent ?? ''`);
+  if (!hostText.includes('Модуль будет доступен в следующем обновлении')) throw new Error(`Future host empty state missing: ${hostText}`);
+  await click(win, '[data-qa-building-interior-back]');
+  await assertReturned(win, 'military', 'spaceport');
 
   return {
     screen: 'building-interiors-navigation',
     roles: BUILT_INTERIOR_ROLES,
+    productionBots: {
+      percentages: BOT_PERCENTAGES,
+      factory,
+      advancedFactory,
+      incomeBefore,
+      incomeAfter,
+    },
     verified: [
-      'industry-modal-enter',
+      'factory-production-bots-empty',
+      'advanced-factory-production-bots-empty',
+      'production-bots-percentages-6-5-4',
+      'production-bots-income-unchanged',
+      'production-bots-return-context',
       'future-host-back',
       'shipyard-fleet-construction-deep-link',
       'shipyard-escape-return',
