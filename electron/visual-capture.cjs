@@ -8,11 +8,24 @@ app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'visual-qa');
+const SAVE_KEY = 'asterion.vertical-slice.v1';
 const VIEWPORTS = [[1920,1080],[1600,900],[1280,720],[2560,1440]];
 const SCREENS = [
   ['settings','Настройки','settings-view-v2'],
   ['rating','Рейтинг','rating-view-v2'],
   ['science','Наука','science-view-v2'],
+];
+const RESOURCE_ROLES = [
+  'metal-production-1',
+  'metal-production-2',
+  'metal-production-3',
+  'mineral-production-1',
+  'mineral-production-2',
+  'gas-production-1',
+  'gas-production-2',
+  'basic-energy',
+  'advanced-energy',
+  'hangar',
 ];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -62,6 +75,47 @@ async function activateMainScreen(win, label, expectedSelector) {
   })()`);
   if (!clicked) throw new Error(`Primary navigation button not found: ${label}`);
   await waitFor(win, `document.querySelector(${JSON.stringify(expectedSelector)}) && !document.querySelector('.utility-screen-host')`);
+  await settle(win);
+}
+
+async function activateResourceZone(win) {
+  const clicked = await win.webContents.executeJavaScript(`(() => {
+    const button=document.querySelector('.header-zone--resource');
+    if(!button)return false;
+    button.click();
+    return true;
+  })()`);
+  if (!clicked) throw new Error('Resource zone header button not found');
+  await waitFor(win, `document.querySelector('[data-qa-resource-zone]')`);
+  await waitFor(win, `(() => {
+    const images=Array.from(document.querySelectorAll('[data-resource-building-role] img'));
+    return images.length===10 && images.every((image)=>image.complete && image.naturalWidth>0);
+  })()`);
+  await settle(win);
+}
+
+async function openResourceBuilding(win, role) {
+  const encoded = JSON.stringify(role);
+  const clicked = await win.webContents.executeJavaScript(`(() => {
+    const button=document.querySelector('[data-resource-building-role="'+${encoded}+'"]');
+    if(!button)return false;
+    button.click();
+    return true;
+  })()`);
+  if (!clicked) throw new Error(`Resource building button not found: ${role}`);
+  await waitFor(win, `document.querySelector('[data-qa-building-dialog="${role}"]')`);
+  await settle(win);
+}
+
+async function closeResourceBuilding(win) {
+  const clicked = await win.webContents.executeJavaScript(`(() => {
+    const button=document.querySelector('.resource-building-dialog-close');
+    if(!button)return false;
+    button.click();
+    return true;
+  })()`);
+  if (!clicked) throw new Error('Resource building dialog close button not found');
+  await waitFor(win, `!document.querySelector('.resource-building-dialog')`);
   await settle(win);
 }
 
@@ -161,6 +215,118 @@ async function verifyCommon(item, label, name, width, height) {
   if(name==='rating' && (!item.ratingPinnedCurrent || !item.ratingSelfSeparator)) throw new Error(`${label}/${name}: current player is not pinned below the visible page like Nemexia`);
 }
 
+async function verifyResourceZoneFlow(win, directory) {
+  await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);
+  await reload(win);
+
+  await activateMainScreen(win,'Планета','.planet-page-v3 .scene-title h1');
+  const hotspotOpened = await win.webContents.executeJavaScript(`(() => {
+    const button=document.querySelector('.zone-hotspot--resource');
+    if(!button)return false;
+    button.click();
+    return true;
+  })()`);
+  if(!hotspotOpened) throw new Error('Resource zone hotspot not found');
+  await waitFor(win, `document.querySelector('[data-qa-resource-zone]')`);
+  await settle(win);
+
+  await activateMainScreen(win,'Планета','.planet-page-v3 .scene-title h1');
+  await activateResourceZone(win);
+
+  const visibleRoles = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-resource-building-role]')).map((item)=>item.getAttribute('data-resource-building-role'))`);
+  if(JSON.stringify(visibleRoles)!==JSON.stringify(RESOURCE_ROLES)) throw new Error(`Resource role set mismatch: ${JSON.stringify(visibleRoles)}`);
+
+  const dialogSnapshots=[];
+  for(const role of RESOURCE_ROLES){
+    await openResourceBuilding(win,role);
+    const snapshot=await win.webContents.executeJavaScript(`(() => {
+      const dialog=document.querySelector('.resource-building-dialog');
+      const button=dialog?.querySelector('[data-qa-build-button]');
+      return {title:dialog?.querySelector('h2')?.textContent?.trim()??'',status:dialog?.querySelector('[data-qa-build-status]')?.getAttribute('data-qa-build-status')??'',disabled:Boolean(button?.disabled)};
+    })()`);
+    if(!snapshot.title || snapshot.status!=='available' || snapshot.disabled) throw new Error(`Unexpected initial dialog state for ${role}: ${JSON.stringify(snapshot)}`);
+    dialogSnapshots.push({role,...snapshot});
+    await closeResourceBuilding(win);
+  }
+  await capture(win,directory,'resource-zone');
+
+  await win.webContents.executeJavaScript(`(() => {
+    const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
+    save.metal=0;
+    localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
+  })()`);
+  await reload(win);
+  await activateResourceZone(win);
+  await openResourceBuilding(win,'metal-production-1');
+  await waitFor(win, `document.querySelector('[data-qa-build-status="insufficient-resource"]')`);
+  const insufficient=await win.webContents.executeJavaScript(`(() => {
+    const status=document.querySelector('[data-qa-build-status]');
+    const button=document.querySelector('[data-qa-build-button]');
+    return {status:status?.getAttribute('data-qa-build-status')??'',disabled:Boolean(button?.disabled),text:status?.textContent?.trim()??''};
+  })()`);
+  if(insufficient.status!=='insufficient-resource' || !insufficient.disabled) throw new Error(`Insufficient-resource dialog failed: ${JSON.stringify(insufficient)}`);
+  await capture(win,directory,'resource-zone-insufficient');
+
+  await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);
+  await reload(win);
+  await activateResourceZone(win);
+  await openResourceBuilding(win,'basic-energy');
+  const buildClicked=await win.webContents.executeJavaScript(`(() => {
+    const button=document.querySelector('[data-qa-build-button]');
+    if(!button || button.disabled)return false;
+    button.click();
+    return true;
+  })()`);
+  if(!buildClicked) throw new Error('Basic-energy build button did not activate');
+  await waitFor(win, `document.querySelector('.resource-zone-queue-card.busy')`);
+  await waitFor(win, `(() => { try { return JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}').queues?.['helion-01']?.assetRole==='basic-energy'; } catch { return false; } })()`);
+  await settle(win);
+  const queued=await win.webContents.executeJavaScript(`(() => {
+    const card=document.querySelector('.resource-zone-queue-card.busy');
+    const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
+    return {text:card?.textContent?.replace(/\s+/g,' ').trim()??'',metal:save.metal,role:save.queues?.['helion-01']?.assetRole??null,energy:save.planets?.['helion-01']?.energy??null};
+  })()`);
+  if(queued.role!=='basic-energy' || queued.metal!==14680 || queued.energy!==140 || !queued.text.includes('Осталось')) throw new Error(`Active queue state failed: ${JSON.stringify(queued)}`);
+  await capture(win,directory,'resource-zone-queue');
+
+  await win.webContents.executeJavaScript(`(() => {
+    const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
+    save.queues['helion-01'].startedAt=Date.now()-1000;
+    save.queues['helion-01'].finishAt=Date.now()-10;
+    localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
+  })()`);
+  await reload(win);
+  await waitFor(win, `(() => { try { const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}'); return save.queues?.['helion-01']===null && save.planets?.['helion-01']?.buildings?.['basic-energy']===1 && save.planets?.['helion-01']?.energy===165; } catch { return false; } })()`,8000);
+  await activateResourceZone(win);
+  await waitFor(win, `document.querySelector('[data-resource-building-role="basic-energy"]')?.getAttribute('aria-label')?.includes('Уровень 1')`);
+  await capture(win,directory,'resource-zone-completed');
+
+  await reload(win);
+  await activateResourceZone(win);
+  const persisted=await win.webContents.executeJavaScript(`(() => {
+    const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
+    const node=document.querySelector('[data-resource-building-role="basic-energy"]');
+    return {level:save.planets?.['helion-01']?.buildings?.['basic-energy']??null,queue:save.queues?.['helion-01']??'missing',energy:save.planets?.['helion-01']?.energy??null,aria:node?.getAttribute('aria-label')??''};
+  })()`);
+  if(persisted.level!==1 || persisted.queue!==null || persisted.energy!==165 || !persisted.aria.includes('Уровень 1')) throw new Error(`Reload persistence failed: ${JSON.stringify(persisted)}`);
+
+  const result={
+    screen:'resource-zone-flow',
+    openings:{hotspot:true,header:true},
+    roles:visibleRoles,
+    dialogs:dialogSnapshots,
+    insufficient,
+    queued,
+    completed:{level:1,energy:165,queue:null},
+    persisted,
+  };
+  console.log(`Resource zone QA passed: ${RESOURCE_ROLES.length} buildings, insufficient state, queue timer, completion and reload persistence.`);
+
+  await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);
+  await reload(win);
+  return result;
+}
+
 app.whenReady().then(async()=>{
   let win;
   try {
@@ -215,6 +381,8 @@ app.whenReady().then(async()=>{
         if(!legacyTitleAfter||legacyTitleAfter.category!=='pageTitle'||!approximately(legacyTitleAfter.size,legacyTitleBefore.size*1.3)) throw new Error(`Page-title typography did not reach the existing game screen: ${JSON.stringify({legacyTitleBefore,legacyTitleAfter})}`);
         results.push({screen:'legacy-typography-global',coverage:coverageBefore,pageTitle:{before:legacyTitleBefore,after:legacyTitleAfter}});
         await capture(win,directory,'planet-page-title-130');
+
+        results.push(await verifyResourceZoneFlow(win,directory));
       }
       fs.writeFileSync(path.join(directory,'metrics.json'),JSON.stringify(results,null,2));
     }
