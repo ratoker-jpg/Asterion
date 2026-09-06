@@ -52,6 +52,19 @@ async function activateScreen(win, label, expectedClass) {
   await settle(win);
 }
 
+async function activateMainScreen(win, label, expectedSelector) {
+  const encoded = JSON.stringify(label);
+  const clicked = await win.webContents.executeJavaScript(`(() => {
+    const button = Array.from(document.querySelectorAll('.primary-navigation button')).find((item) => item.textContent?.trim() === ${encoded});
+    if (!button) return false;
+    button.click();
+    return true;
+  })()`);
+  if (!clicked) throw new Error(`Primary navigation button not found: ${label}`);
+  await waitFor(win, `document.querySelector(${JSON.stringify(expectedSelector)}) && !document.querySelector('.utility-screen-host')`);
+  await settle(win);
+}
+
 async function metrics(win, screen) {
   return win.webContents.executeJavaScript(`(() => {
     const root=document.documentElement, body=document.body;
@@ -75,6 +88,31 @@ async function metrics(win, screen) {
       ratingSelfSeparator:Boolean(ratingSelfSeparator),
       typography:{hud:getComputedStyle(root).getPropertyValue('--text-scale-hud').trim(),helper:getComputedStyle(root).getPropertyValue('--text-scale-helper').trim()},
     };
+  })()`);
+}
+
+async function fontSnapshot(win, selector) {
+  return win.webContents.executeJavaScript(`(() => {
+    const element=document.querySelector(${JSON.stringify(selector)});
+    if(!element)return null;
+    return {
+      size:Number.parseFloat(getComputedStyle(element).fontSize),
+      category:element.getAttribute('data-asterion-typography'),
+      base:element.style.getPropertyValue('--asterion-base-font-size') || null,
+      text:element.textContent?.trim() ?? '',
+    };
+  })()`);
+}
+
+async function typographyCoverage(win) {
+  return win.webContents.executeJavaScript(`(() => {
+    const managed=Array.from(document.querySelectorAll('[data-asterion-typography]'));
+    const counts={};
+    for(const element of managed){
+      const key=element.getAttribute('data-asterion-typography');
+      counts[key]=(counts[key]||0)+1;
+    }
+    return { total:managed.length, counts };
   })()`);
 }
 
@@ -108,6 +146,10 @@ async function capture(win, directory, name) {
 
 function ownsNestedVerticalScroll(item) {
   return item && (item.overflowY === 'auto' || item.overflowY === 'scroll');
+}
+
+function approximately(actual, expected, tolerance = 0.08) {
+  return Number.isFinite(actual) && Math.abs(actual - expected) <= Math.max(0.5, expected * tolerance);
 }
 
 async function verifyCommon(item, label, name, width, height) {
@@ -151,10 +193,28 @@ app.whenReady().then(async()=>{
         if(helper180.typography.helper!=='1.8'||helper180.typography.hud!=='1') throw new Error(`Typography isolation failed: ${JSON.stringify(helper180.typography)}`);
         await verifyCommon(helper180,label,'settings-helper-180',width,height); results.push(helper180); await capture(win,directory,'settings-helper-180');
         await resetTypography(win,'Подсказки и пояснения');
+
+        const hudBefore=await fontSnapshot(win,'.asterion-header .resource-chip strong');
         await clickTypography(win,'HUD / верхняя панель',6);
+        const hudAfter=await fontSnapshot(win,'.asterion-header .resource-chip strong');
         const hud130=await metrics(win,'settings-hud-130');
         if(hud130.typography.hud!=='1.3'||hud130.typography.helper!=='1') throw new Error(`Typography isolation failed: ${JSON.stringify(hud130.typography)}`);
-        await verifyCommon(hud130,label,'settings-hud-130',width,height); results.push(hud130); await capture(win,directory,'settings-hud-130');
+        if(!hudBefore||!hudAfter||!approximately(hudAfter.size,hudBefore.size*1.3)) throw new Error(`HUD typography did not reach the global header: ${JSON.stringify({hudBefore,hudAfter})}`);
+        await verifyCommon(hud130,label,'settings-hud-130',width,height); results.push({...hud130,hudFont:{before:hudBefore,after:hudAfter}}); await capture(win,directory,'settings-hud-130');
+        await resetTypography(win,'HUD / верхняя панель');
+
+        await activateMainScreen(win,'Планета','.planet-page-v3 .scene-title h1');
+        const legacyTitleBefore=await fontSnapshot(win,'.planet-page-v3 .scene-title h1');
+        const coverageBefore=await typographyCoverage(win);
+        if(!legacyTitleBefore||legacyTitleBefore.category!=='pageTitle'||coverageBefore.total<12) throw new Error(`Legacy typography controller did not classify the game screen: ${JSON.stringify({legacyTitleBefore,coverageBefore})}`);
+
+        await activateScreen(win,'Настройки','settings-view-v2');
+        await clickTypography(win,'Заголовки экранов',6);
+        await activateMainScreen(win,'Планета','.planet-page-v3 .scene-title h1');
+        const legacyTitleAfter=await fontSnapshot(win,'.planet-page-v3 .scene-title h1');
+        if(!legacyTitleAfter||legacyTitleAfter.category!=='pageTitle'||!approximately(legacyTitleAfter.size,legacyTitleBefore.size*1.3)) throw new Error(`Page-title typography did not reach the existing game screen: ${JSON.stringify({legacyTitleBefore,legacyTitleAfter})}`);
+        results.push({screen:'legacy-typography-global',coverage:coverageBefore,pageTitle:{before:legacyTitleBefore,after:legacyTitleAfter}});
+        await capture(win,directory,'planet-page-title-130');
       }
       fs.writeFileSync(path.join(directory,'metrics.json'),JSON.stringify(results,null,2));
     }
