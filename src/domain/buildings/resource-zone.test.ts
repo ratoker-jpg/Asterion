@@ -63,7 +63,6 @@ test('all twelve new roles match canonical names, zones and real Aegis PNG paths
     assert.equal(item.zone, zone);
     assert.equal(item.art.includes(fileName.replace('.png', '')), true);
     assert.equal(item.prototypeBalance, true);
-    assert.deepEqual(item.requirements, []);
   }
 });
 
@@ -73,6 +72,18 @@ test('confirmed resource max levels and requirements are preserved unchanged', (
   }
   assert.equal(getBuildingDefinition('advanced-energy').maxLevel, 20);
   assert.equal(getBuildingDefinition('hangar').maxLevel, 20);
+
+  assert.deepEqual(getBuildingDefinition('metal-production-2').requirements, [
+    { kind: 'building-level', assetRole: 'metal-production-1', level: 10 },
+  ]);
+  assert.deepEqual(getBuildingDefinition('metal-production-3').requirements, [
+    { kind: 'building-level', assetRole: 'metal-production-1', level: 15 },
+  ]);
+  assert.deepEqual(getBuildingDefinition('advanced-energy').requirements, [
+    { kind: 'building-level', assetRole: 'basic-energy', level: 10 },
+    { kind: 'science-level', scienceId: 2, level: 5 },
+    { kind: 'science-level', scienceId: 1, level: 5 },
+  ]);
 
   const levels = createDefaultBuildingLevels();
   levels['metal-production-1'] = 4;
@@ -90,6 +101,125 @@ test('confirmed resource max levels and requirements are preserved unchanged', (
     ['Химия', 5, 5, true],
     ['Физика', 5, 4, false],
   ]);
+});
+
+test('advanced-factory requires construction level 10', () => {
+  assert.deepEqual(getBuildingDefinition('advanced-factory').requirements, [
+    { kind: 'building-level', assetRole: 'construction', level: 10 },
+  ]);
+  const levels = createDefaultBuildingLevels();
+  levels.construction = 9;
+  const blocked = evaluateBuildingBuild(createState({ buildings: levels }), 'advanced-factory');
+  assert.equal(blocked.status, 'requirements-unmet');
+  assert.equal(blocked.canBuild, false);
+  assert.match(blocked.reason ?? '', /Фабрика — ур\. 10; сейчас 9/);
+  levels.construction = 10;
+  assert.equal(evaluateBuildingBuild(createState({ buildings: levels }), 'advanced-factory').status, 'available');
+});
+
+test('metal-storage requires metal-production-1 level 1', () => {
+  assert.deepEqual(getBuildingDefinition('metal-storage').requirements, [
+    { kind: 'building-level', assetRole: 'metal-production-1', level: 1 },
+  ]);
+  const levels = createDefaultBuildingLevels();
+  assert.equal(evaluateBuildingBuild(createState({ buildings: levels }), 'metal-storage').status, 'requirements-unmet');
+  levels['metal-production-1'] = 1;
+  assert.equal(evaluateBuildingBuild(createState({ buildings: levels }), 'metal-storage').status, 'available');
+});
+
+test('mineral-storage requires mineral-production-1 level 1', () => {
+  assert.deepEqual(getBuildingDefinition('mineral-storage').requirements, [
+    { kind: 'building-level', assetRole: 'mineral-production-1', level: 1 },
+  ]);
+  const levels = createDefaultBuildingLevels();
+  assert.equal(evaluateBuildingBuild(createState({ buildings: levels }), 'mineral-storage').status, 'requirements-unmet');
+  levels['mineral-production-1'] = 1;
+  assert.equal(evaluateBuildingBuild(createState({ buildings: levels }), 'mineral-storage').status, 'available');
+});
+
+test('gas-storage requires gas-production-1 level 1', () => {
+  assert.deepEqual(getBuildingDefinition('gas-storage').requirements, [
+    { kind: 'building-level', assetRole: 'gas-production-1', level: 1 },
+  ]);
+  const levels = createDefaultBuildingLevels();
+  assert.equal(evaluateBuildingBuild(createState({ buildings: levels }), 'gas-storage').status, 'requirements-unmet');
+  levels['gas-production-1'] = 1;
+  assert.equal(evaluateBuildingBuild(createState({ buildings: levels }), 'gas-storage').status, 'available');
+});
+
+test('recycling requires shipyard level 5 and Chemistry ScienceId 2 level 6', () => {
+  assert.deepEqual(getBuildingDefinition('recycling').requirements, [
+    { kind: 'building-level', assetRole: 'shipyard', level: 5 },
+    { kind: 'science-level', scienceId: 2, level: 6 },
+  ]);
+  const levels = createDefaultBuildingLevels();
+  levels.shipyard = 5;
+  const chemistryBlocked = evaluateBuildingBuild(createState({ buildings: levels, scienceLevels: { 2: 5 } }), 'recycling');
+  assert.equal(chemistryBlocked.status, 'requirements-unmet');
+  assert.match(chemistryBlocked.reason ?? '', /Химия — ур\. 6; сейчас 5/);
+  assert.equal(evaluateBuildingBuild(createState({ buildings: levels, scienceLevels: { 2: 6 } }), 'recycling').status, 'available');
+});
+
+test('trade-center has no requirements', () => {
+  assert.deepEqual(getBuildingDefinition('trade-center').requirements, []);
+  assert.equal(evaluateBuildingBuild(createState(), 'trade-center').status, 'available');
+});
+
+test('research requires construction level 1', () => {
+  assert.deepEqual(getBuildingDefinition('research').requirements, [
+    { kind: 'building-level', assetRole: 'construction', level: 1 },
+  ]);
+  const levels = createDefaultBuildingLevels();
+  assert.equal(evaluateBuildingBuild(createState({ buildings: levels }), 'research').status, 'requirements-unmet');
+  levels.construction = 1;
+  assert.equal(evaluateBuildingBuild(createState({ buildings: levels }), 'research').status, 'available');
+});
+
+test('recycling reports several simultaneously unmet requirements with current and required levels', () => {
+  const levels = createDefaultBuildingLevels();
+  levels.shipyard = 2;
+  const availability = evaluateBuildingBuild(createState({ buildings: levels, scienceLevels: { 2: 4 } }), 'recycling');
+  assert.equal(availability.status, 'requirements-unmet');
+  assert.equal(availability.canBuild, false);
+  assert.deepEqual(availability.requirements.map((item) => [item.label, item.requiredLevel, item.currentLevel, item.met]), [
+    ['Верфь', 5, 2, false],
+    ['Химия', 6, 4, false],
+  ]);
+  assert.match(availability.reason ?? '', /Верфь — ур\. 5; сейчас 2/);
+  assert.match(availability.reason ?? '', /Химия — ур\. 6; сейчас 4/);
+});
+
+test('recycling can be enqueued immediately after all requirements become satisfied', () => {
+  const levels = createDefaultBuildingLevels();
+  const state = createState({ buildings: levels, scienceLevels: { 2: 5 } });
+  assert.equal(evaluateBuildingBuild(state, 'recycling').status, 'requirements-unmet');
+
+  state.buildings.shipyard = 5;
+  state.scienceLevels[2] = 6;
+  const available = evaluateBuildingBuild(state, 'recycling');
+  assert.equal(available.status, 'available');
+  assert.equal(available.canBuild, true);
+
+  const transition = startBuildingProject(state, 'recycling', 'helion-01', 10_000);
+  assert.equal(transition.ok, true);
+  assert.deepEqual(transition.state.queue.map((item) => item.assetRole), ['recycling']);
+});
+
+test('blocked building is not queued and does not deduct resources', () => {
+  const state = createState();
+  const before = { ...state.resources };
+  const transition = startBuildingProject(state, 'advanced-factory', 'helion-01', 10_000);
+  assert.equal(transition.ok, false);
+  assert.equal(transition.state.queue.length, 0);
+  assert.deepEqual(transition.state.resources, before);
+  assert.equal(state.queue.length, 0);
+  assert.deepEqual(state.resources, before);
+});
+
+test('trade-center, construction, shipyard, spaceport, planetary-government and bank explicitly have no requirements', () => {
+  for (const role of ['trade-center', 'construction', 'shipyard', 'spaceport', 'planetary-government', 'bank'] as const) {
+    assert.deepEqual(getBuildingDefinition(role).requirements, [], `${role} must stay requirement-free at this stage`);
+  }
 });
 
 test('one shared three-slot FIFO queue accepts projects from all three zones and charges once per slot', () => {
