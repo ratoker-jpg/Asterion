@@ -43,6 +43,11 @@ export const RESOURCE_BUILDING_QUEUE_CAPACITY = BUILDING_QUEUE_CAPACITY;
 export const ADVANCED_FACTORY_MAX_LEVEL = 5;
 export const RECYCLING_MAX_LEVEL = 10;
 export const TRADE_CENTER_MAX_LEVEL = 10;
+export const SPACEPORT_MAX_LEVEL = 10;
+
+export function getSpaceportMaxLevel() {
+  return SPACEPORT_MAX_LEVEL;
+}
 
 export type ResourceBuildingRole = (typeof RESOURCE_BUILDING_ROLES)[number];
 export type IndustryBuildingRole = (typeof INDUSTRY_BUILDING_ROLES)[number];
@@ -236,7 +241,7 @@ export const ASTER_INDUSTRY_BUILDINGS: readonly BuildingDefinition[] = [
 export const ASTER_MILITARY_BUILDINGS: readonly BuildingDefinition[] = [
   definition('military', 'shipyard', 'Верфь', 'Производство и обслуживание кораблей.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
   definition('military', 'research', 'Лаборатория', 'Исследования и развитие технологий.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel, [reqBuilding('construction', 1)]),
-  definition('military', 'spaceport', 'Космодром', 'Космическая инфраструктура и операции с флотом.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
+  definition('military', 'spaceport', 'Космодром', 'Космическая инфраструктура и операции с флотом.', SPACEPORT_MAX_LEVEL),
   definition('military', 'planetary-government', 'Палата управления', 'Управленческое и союзное здание планеты.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
   definition('military', 'bank', 'Банк', 'Финансовая инфраструктура и экономические операции.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
 ];
