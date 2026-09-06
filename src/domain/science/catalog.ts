@@ -12,7 +12,7 @@ const req = (scienceId: ScienceId, level: number) => ({ scienceId, level });
 
 export const SCIENCE_CATALOG: readonly ScienceCatalogDefinition[] = [
   { id: 1, section: 'basic', name: 'Физика', sourceName: 'Физика', description: 'Повышает доход энергии на 5%', artSlug: 'technology.shared.physics.png', capturedLevel: 6, capturedNextLevel: 7, capturedCost: costs(64000, 32000, 5000), capturedTime: '02:08:59', laboratoryLevel: 1, prerequisites: [] },
-  { id: 2, section: 'basic', name: 'Химия', sourceName: 'Химия', description: 'Снижает потребление газа при отправке экипажей на 5%', artSlug: 'technology.shared.chemistry.png', capturedLevel: 5, capturedNextLevel: 6, capturedCost: costs(12800, 6400, 1600), capturedTime: '00:16:58', laboratoryLevel: 3, prerequisites: [] },
+  { id: 2, section: 'basic', name: 'Химия', sourceName: 'Химия', description: 'Снижает потребление газа при отправке экипажей на 5%', artSlug: 'technology.shared.chemistry.png', capturedLevel: 6, capturedNextLevel: 7, capturedCost: costs(12800, 6400, 1600), capturedTime: '00:16:58', laboratoryLevel: 3, prerequisites: [] },
   { id: 3, section: 'basic', name: 'Математика', sourceName: 'Математика', description: 'Повышает доход ресурсов на 5%', artSlug: 'technology.shared.mathematics.png', capturedLevel: 6, capturedNextLevel: 7, capturedCost: costs(64000, 25600, 4000), capturedTime: '00:32:52', laboratoryLevel: 1, prerequisites: [] },
   { id: 4, section: 'basic', name: 'Астрономия', sourceName: 'Астрономия', description: 'Повышает скорость кораблей на 10%', artSlug: 'technology.shared.astronomy.png', capturedLevel: 6, capturedNextLevel: 7, capturedCost: costs(32000, 0, 32000), capturedTime: '00:54:47', laboratoryLevel: 2, prerequisites: [] },
 

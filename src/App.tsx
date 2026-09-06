@@ -79,6 +79,15 @@ import {
   migrateProductionBotAssignment,
   type BotAssignment,
 } from './domain/buildings/production-bots.ts';
+import {
+  advanceRecyclingState,
+  collectRecyclingJob,
+  createDefaultRecyclingState,
+  migrateRecyclingState,
+  startRecyclingJob,
+  type RecyclingState,
+  type ResourceAllocationPercent,
+} from './domain/buildings/recycling.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import planetColonized from '../assets/source/starter/planets/planet_colonized.png';
@@ -144,6 +153,7 @@ type PlanetRuntime = {
   energy: number;
   buildings: BuildingLevels;
   productionBots: BotAssignment;
+  recycling: RecyclingState;
   stability: number;
 };
 
@@ -171,6 +181,7 @@ type StoredPlanetRuntime = {
   energy?: unknown;
   buildings?: unknown;
   productionBots?: unknown;
+  recycling?: unknown;
   solarStations?: unknown;
   stability?: unknown;
 };
@@ -207,7 +218,7 @@ const ownedPlanets: PlanetDefinition[] = [
 ];
 
 const SAVE_KEY = 'asterion.vertical-slice.v1';
-const SAVE_SCHEMA_VERSION = Math.max(COMBAT_SAVE_SCHEMA_VERSION, 5);
+const SAVE_SCHEMA_VERSION = Math.max(COMBAT_SAVE_SCHEMA_VERSION, 6);
 const DEFAULT_PLANET_NAME = 'Helion 01';
 const CURRENT_SCIENCE_LEVELS = Object.fromEntries(
   SCIENCE_CATALOG.map((science) => [science.id, science.capturedLevel]),
@@ -228,6 +239,7 @@ const createInitialState = (): SaveState => ({
       energy: 140,
       buildings: createDefaultBuildingLevels(),
       productionBots: createEmptyBotAssignment(),
+      recycling: createDefaultRecyclingState(),
       stability: 100,
     },
   },
@@ -289,6 +301,7 @@ function readSave(): SaveState {
       energy: numberOr(savedHomeworld?.energy, numberOr(parsed.energy, initialState.planets['helion-01'].energy)),
       buildings,
       productionBots: migrateProductionBotAssignment(savedHomeworld?.productionBots, buildings),
+      recycling: migrateRecyclingState(savedHomeworld?.recycling, buildings.recycling, Date.now()),
       stability: numberOr(savedHomeworld?.stability, initialState.planets['helion-01'].stability),
     };
 
@@ -512,6 +525,33 @@ export function App() {
     setNotice(`${state.planets['helion-01'].name}: ${completedDefinition.name} завершено.`);
   }, [now, state.queues, state.planets]);
 
+  useEffect(() => {
+    const snapshot = advanceRecyclingState(state.planets['helion-01'].recycling, now);
+    if (!snapshot.changed) return;
+
+    setState((current) => {
+      const currentPlanet = current.planets['helion-01'];
+      const advanced = advanceRecyclingState(currentPlanet.recycling, now);
+      if (!advanced.changed) return current;
+      return {
+        ...current,
+        schemaVersion: SAVE_SCHEMA_VERSION,
+        metal: current.metal + advanced.autoCollectedOutput.metal,
+        minerals: current.minerals + advanced.autoCollectedOutput.minerals,
+        gas: current.gas + advanced.autoCollectedOutput.gas,
+        planets: {
+          ...current.planets,
+          'helion-01': {
+            ...currentPlanet,
+            recycling: advanced.state,
+          },
+        },
+      };
+    });
+
+    if (snapshot.autoCollectedJobIds.length > 0) setNotice('Результат переработки автоматически зачислен');
+  }, [now, state.planets]);
+
   const currentPlanet = ownedPlanets[0];
   const currentPlanetState = state.planets['helion-01'];
   const currentPlanetName = currentPlanetState.name;
@@ -623,6 +663,89 @@ export function App() {
     setNotice('Роботы перераспределены');
   };
 
+  const startRecycling = (debrisAmount: number, allocation: ResourceAllocationPercent) => {
+    const startedAt = Date.now();
+    const jobId = globalThis.crypto?.randomUUID?.() ?? `recycling-${startedAt}-${Math.random().toString(36).slice(2, 9)}`;
+    const preview = startRecyclingJob(
+      currentPlanetState.recycling,
+      currentPlanetState.buildings.recycling,
+      debrisAmount,
+      allocation,
+      startedAt,
+      jobId,
+    );
+    if (!preview.canStart) {
+      setNotice(preview.reason ?? 'Переработка сейчас недоступна');
+      return false;
+    }
+
+    setState((current) => {
+      const currentPlanetStateForUpdate = current.planets['helion-01'];
+      const transition = startRecyclingJob(
+        currentPlanetStateForUpdate.recycling,
+        currentPlanetStateForUpdate.buildings.recycling,
+        debrisAmount,
+        allocation,
+        startedAt,
+        jobId,
+      );
+      if (!transition.canStart) return current;
+      return {
+        ...current,
+        schemaVersion: SAVE_SCHEMA_VERSION,
+        planets: {
+          ...current.planets,
+          'helion-01': {
+            ...currentPlanetStateForUpdate,
+            recycling: transition.state,
+          },
+        },
+      };
+    });
+    setNotice('Переработка запущена');
+    return true;
+  };
+
+  const collectRecycling = (jobId: string) => {
+    const collectedAt = Date.now();
+    const preview = collectRecyclingJob(currentPlanetState.recycling, jobId, collectedAt);
+    if (!preview.ok || !preview.output) {
+      setNotice(preview.reason ?? 'Ресурс пока недоступен');
+      if (preview.state !== currentPlanetState.recycling) {
+        setState((current) => ({
+          ...current,
+          planets: {
+            ...current.planets,
+            'helion-01': { ...current.planets['helion-01'], recycling: preview.state },
+          },
+        }));
+      }
+      return false;
+    }
+
+    setState((current) => {
+      const currentPlanetStateForUpdate = current.planets['helion-01'];
+      const transition = collectRecyclingJob(currentPlanetStateForUpdate.recycling, jobId, collectedAt);
+      if (!transition.ok || !transition.output) return current;
+      return {
+        ...current,
+        schemaVersion: SAVE_SCHEMA_VERSION,
+        metal: current.metal + transition.output.metal,
+        minerals: current.minerals + transition.output.minerals,
+        gas: current.gas + transition.output.gas,
+        planets: {
+          ...current.planets,
+          'helion-01': {
+            ...currentPlanetStateForUpdate,
+            recycling: transition.state,
+          },
+        },
+      };
+    });
+    setNotice('Ресурсы получены');
+    return true;
+  };
+
   const buildBuilding = (assetRole: BuildingRole) => {
     const snapshot = {
       resources: resourceWallet,
@@ -639,15 +762,15 @@ export function App() {
     const enqueuedAt = Date.now();
     const definition = getBuildingDefinition(assetRole);
     setState((current) => {
-      const currentPlanet = current.planets['helion-01'];
+      const currentPlanetStateForBuild = current.planets['helion-01'];
       const transition = startBuildingProject({
         resources: {
           metal: current.metal,
           minerals: current.minerals,
           gas: current.gas,
-          energy: currentPlanet.energy,
+          energy: currentPlanetStateForBuild.energy,
         },
-        buildings: currentPlanet.buildings,
+        buildings: currentPlanetStateForBuild.buildings,
         queue: current.queues['helion-01'],
         scienceLevels: CURRENT_SCIENCE_LEVELS,
       }, assetRole, 'helion-01', enqueuedAt);
@@ -660,7 +783,7 @@ export function App() {
         gas: transition.state.resources.gas,
         planets: {
           'helion-01': {
-            ...currentPlanet,
+            ...currentPlanetStateForBuild,
             energy: transition.state.resources.energy,
             buildings: transition.state.buildings,
           },
@@ -964,7 +1087,11 @@ export function App() {
               moduleTitle={buildingInteriorTarget.moduleTitle}
               buildings={currentPlanetState.buildings}
               productionBots={currentPlanetState.productionBots}
+              recycling={currentPlanetState.recycling}
+              now={now}
               onProductionBotsApply={applyProductionBots}
+              onRecyclingStart={startRecycling}
+              onRecyclingCollect={collectRecycling}
               onBack={returnToBuilding}
             />
           ) : activeTab === 'Вселенная' ? (
