@@ -188,6 +188,24 @@ async function makeReady(win, jobIndex = 0) {
   await openCenter(win);
 }
 
+async function makeExpiredForAutoCollect(win, jobIndex = 0) {
+  const ok = await win.webContents.executeJavaScript(`(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+    const job = save.planets?.['helion-01']?.recycling?.jobs?.[${jobIndex}];
+    if (!job) return false;
+    const duration = Math.max(1000, Math.ceil((job.debrisAmount / 1000000 * 3 * 60 * 60 * 1000) / 1000) * 1000);
+    const storage = 24 * 60 * 60 * 1000;
+    job.startedAt = Date.now() - duration - storage - 2000;
+    job.finishAt = job.startedAt + duration;
+    job.collectExpiresAt = job.finishAt + storage;
+    job.status = 'ready';
+    localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    return true;
+  })()`);
+  if (!ok) throw new Error('Could not move recycling job beyond auto-collect boundary');
+  await reload(win);
+}
+
 async function measure(win) {
   return win.webContents.executeJavaScript(`(() => {
     const root = document.querySelector('[data-qa-recycling-center]');
@@ -381,11 +399,30 @@ async function verifyFlow(win, directory, label) {
   if (Number(collected.metal) !== 20980 || Number(collected.minerals) !== 16112 || Number(collected.gas) !== 6421) throw new Error(`${label}: wallet output mismatch ${JSON.stringify(collected)}`);
   if (JSON.stringify(collected.queue) !== queueBefore) throw new Error(`${label}: building FIFO changed after collect`);
 
+  await makeExpiredForAutoCollect(win, 0);
+  await waitFor(win, `(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+    return save.planets?.['helion-01']?.recycling?.jobs?.length === 1 && Number(save.gas) === 11521;
+  })()`);
+  const autoCollected = await readSave(win);
+  if (autoCollected.recycling?.jobs?.length !== 1) throw new Error(`${label}: auto-collected job was not removed ${JSON.stringify(autoCollected)}`);
+  if (Number(autoCollected.metal) !== 20980 || Number(autoCollected.minerals) !== 16112 || Number(autoCollected.gas) !== 11521) throw new Error(`${label}: 24h auto-collect did not atomically credit wallet ${JSON.stringify(autoCollected)}`);
+  if (JSON.stringify(autoCollected.queue) !== queueBefore) throw new Error(`${label}: building FIFO changed after auto-collect`);
+
+  await reload(win);
+  await settle(win);
+  const afterRepeatReload = await readSave(win);
+  if (Number(afterRepeatReload.metal) !== 20980 || Number(afterRepeatReload.minerals) !== 16112 || Number(afterRepeatReload.gas) !== 11521) throw new Error(`${label}: auto-collect paid twice after reload ${JSON.stringify(afterRepeatReload)}`);
+  if (afterRepeatReload.recycling?.jobs?.length !== 1) throw new Error(`${label}: auto-collect state changed on repeated reload ${JSON.stringify(afterRepeatReload)}`);
+
+  await activateIndustry(win);
+  await openCenter(win);
   await verifyReturn(win);
   return {
     viewport: label,
     screenshots: ['recycling-empty.png', 'recycling-processing-list.png', 'recycling-ready-processing-list.png'],
     walletAfterCollect: { metal: collected.metal, minerals: collected.minerals, gas: collected.gas },
+    walletAfterAutoCollect: { metal: autoCollected.metal, minerals: autoCollected.minerals, gas: autoCollected.gas },
     verified: [
       'temporary-100000-debris-stock',
       'manual-debris-input-and-compact-duration',
@@ -402,6 +439,8 @@ async function verifyFlow(win, directory, label) {
       'absolute-time-ready-state',
       '24-hour-collect-timer',
       'collect-updates-wallet-once',
+      '24-hour-auto-collect-credits-wallet-once',
+      'offline-auto-collect-survives-repeat-reload-without-double-payout',
       'building-fifo-unchanged',
       'next-efficiency-without-plus-prefix',
       'back-and-escape-restore-industry-modal',
