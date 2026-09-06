@@ -40,6 +40,7 @@ export const BUILDING_ROLES = [
 
 export const BUILDING_QUEUE_CAPACITY = 3;
 export const RESOURCE_BUILDING_QUEUE_CAPACITY = BUILDING_QUEUE_CAPACITY;
+export const ADVANCED_FACTORY_MAX_LEVEL = 5;
 
 export type ResourceBuildingRole = (typeof RESOURCE_BUILDING_ROLES)[number];
 export type IndustryBuildingRole = (typeof INDUSTRY_BUILDING_ROLES)[number];
@@ -222,7 +223,7 @@ export const ASTER_RESOURCE_BUILDINGS: readonly BuildingDefinition[] = [
 
 export const ASTER_INDUSTRY_BUILDINGS: readonly BuildingDefinition[] = [
   definition('industry', 'construction', 'Фабрика', 'Базовое производство и строительство.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
-  definition('industry', 'advanced-factory', 'Промышленный комплекс', 'Продвинутое производство.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel, [reqBuilding('construction', 10)]),
+  definition('industry', 'advanced-factory', 'Промышленный комплекс', 'Продвинутое производство.', ADVANCED_FACTORY_MAX_LEVEL, [reqBuilding('construction', 10)]),
   definition('industry', 'metal-storage', 'Склад металла', 'Хранение металла.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel, [reqBuilding('metal-production-1', 1)]),
   definition('industry', 'mineral-storage', 'Склад минералов', 'Хранение минералов.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel, [reqBuilding('mineral-production-1', 1)]),
   definition('industry', 'gas-storage', 'Газовое хранилище', 'Хранение газа.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel, [reqBuilding('gas-production-1', 1)]),
@@ -328,6 +329,9 @@ function migrateQueueItem(
   if (!role) return null;
 
   const item = getBuildingDefinition(role);
+  const queuedBefore = queuedRoleCounts[role] ?? 0;
+  if ((buildings[role] ?? 0) + queuedBefore >= item.maxLevel) return null;
+
   const rawStartedAt = isFiniteTimestamp(source.startedAt) ? source.startedAt : null;
   const rawFinishAt = isFiniteTimestamp(source.finishAt) ? source.finishAt : null;
   const duration = rawStartedAt != null && rawFinishAt != null
@@ -339,7 +343,6 @@ function migrateQueueItem(
   const finishAt = index === 0 && rawFinishAt != null
     ? Math.max(startedAt, rawFinishAt)
     : startedAt + duration;
-  const queuedBefore = queuedRoleCounts[role] ?? 0;
   const fallbackTarget = Math.min(item.maxLevel, (buildings[role] ?? 0) + queuedBefore + 1);
   const targetLevel = toSafeLevel(source.targetLevel, item.maxLevel) || fallbackTarget;
   queuedRoleCounts[role] = queuedBefore + 1;
