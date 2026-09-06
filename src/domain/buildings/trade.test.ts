@@ -104,6 +104,11 @@ test('validation rejects same resource, debris target, zero/fraction, limit, wal
     assert.equal(result.ok, true);
     full = result.state;
   }
+  const emptyAmountBlocked = validateTrade(full, 1, 10_000, request({ amount: 0 }), now);
+  assert.equal(emptyAmountBlocked.canTrade, false);
+  assert.equal(emptyAmountBlocked.refill.availableSlots, 0);
+  assert.equal(emptyAmountBlocked.reason, 'Нет доступных сделок');
+
   const blocked = executeTrade(full, 1, 10_000, request({ amount: 1 }), now);
   assert.equal(blocked.ok, false);
   assert.equal(blocked.reason, 'Нет доступных сделок');
