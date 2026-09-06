@@ -112,6 +112,7 @@ const planetSkins = [
 type PlanetSkin = (typeof planetSkins)[number]['id'];
 type PlanetId = 'helion-01';
 type Zone = 'resource' | 'industry' | 'military';
+type PlanetViewMode = 'overview' | 'resource-zone';
 type IconKind = 'metal' | 'mineral' | 'gas' | 'energy' | 'population' | Zone;
 type NavigationIconKind = 'planet' | 'universe' | 'fleets' | 'operations' | 'command' | 'reports' | 'settings' | 'rating' | 'science';
 
@@ -386,8 +387,7 @@ function AegisButton({ children, onClick, disabled = false }: { children: ReactN
 
 export function App() {
   const scale = useStageScale();
-  const [zone, setZone] = useState<Zone>('resource');
-  const [resourceZoneOpen, setResourceZoneOpen] = useState(false);
+  const [planetViewMode, setPlanetViewMode] = useState<PlanetViewMode>('overview');
   const [activeTab, setActiveTab] = useState('Планета');
   const [state, setState] = useState<SaveState>(readSave);
   const [now, setNow] = useState(Date.now());
@@ -512,14 +512,14 @@ export function App() {
   const selectPlanet = (_planetId: PlanetId) => {
     setState((current) => ({ ...current, currentPlanetId: 'helion-01' }));
     setPlanetMenuOpen(false);
-    setResourceZoneOpen(false);
+    setPlanetViewMode('overview');
     setNotice(`${currentPlanetName} ${currentPlanet.coords} выбрана как текущая планета.`);
   };
 
   const openPlanetEditor = (planetId: PlanetId) => {
     setState((current) => ({ ...current, currentPlanetId: 'helion-01' }));
     setActiveTab('Планета');
-    setResourceZoneOpen(false);
+    setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
     setEditingName(state.planets[planetId].name);
     setEditingPlanetId(planetId);
@@ -613,7 +613,7 @@ export function App() {
     setEditingPlanetId(null);
     setEditingName(DEFAULT_PLANET_NAME);
     setDetailsOpen(true);
-    setResourceZoneOpen(false);
+    setPlanetViewMode('overview');
     setNotice('Сохранение прототипа сброшено.');
   };
 
@@ -634,7 +634,7 @@ export function App() {
 
   const openFleetRootFromOperations = () => {
     setActiveTab('Флоты');
-    setResourceZoneOpen(false);
+    setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
     closePlanetEditor();
     setNotice('Флоты: подготовьте состав для принятой операции.');
@@ -658,7 +658,7 @@ export function App() {
 
   const openFleetRootFromCommand = () => {
     setActiveTab('Флоты');
-    setResourceZoneOpen(false);
+    setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
     closePlanetEditor();
     setNotice('Флоты: подготовьте состав для союзной задачи. Отправка не запускается автоматически.');
@@ -667,7 +667,7 @@ export function App() {
 
   const openFleetRootFromReports = () => {
     setActiveTab('Флоты');
-    setResourceZoneOpen(false);
+    setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
     closePlanetEditor();
     setNotice('Флоты: выберите состав для союзной операции из отчётов.');
@@ -688,7 +688,7 @@ export function App() {
 
   const chooseTab = (tab: string) => {
     setActiveTab(tab);
-    setResourceZoneOpen(false);
+    setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
     closePlanetEditor();
     if (tab === 'Вселенная') setNotice('Галактика 1 загружена. Доступно 40 солнечных систем.');
@@ -700,9 +700,8 @@ export function App() {
   };
 
   const chooseZone = (nextZone: Zone) => {
-    setZone(nextZone);
     setActiveTab('Планета');
-    setResourceZoneOpen(nextZone === 'resource');
+    setPlanetViewMode(nextZone === 'resource' ? 'resource-zone' : 'overview');
     setPlanetMenuOpen(false);
     closePlanetEditor();
     setNotice(nextZone === 'resource'
@@ -711,7 +710,6 @@ export function App() {
   };
 
   const remaining = currentQueue ? currentQueue.finishAt - now : 0;
-  const zoneInfo = zoneMeta[zone];
 
   return (
     <div className="viewport">
@@ -723,7 +721,7 @@ export function App() {
                 <img src={currentSkin.art} alt={currentPlanetName} draggable={false} />
               </button>
               {(['resource', 'industry', 'military'] as Zone[]).map((item) => {
-                const isActive = activeTab === 'Планета' && (item === 'resource' ? resourceZoneOpen : !resourceZoneOpen && zone === item);
+                const isActive = activeTab === 'Планета' && planetViewMode === 'resource-zone' && item === 'resource';
                 return (
                   <button
                     key={item}
@@ -766,12 +764,12 @@ export function App() {
               <Resource kind="metal" label="МЕТАЛЛ" value={state.metal} capacity={60_000} hourlyGain={RESOURCE_BASE_INCOME_PER_HOUR.metal} />
               <Resource kind="mineral" label="МИНЕРАЛЫ" value={state.minerals} capacity={60_000} hourlyGain={RESOURCE_BASE_INCOME_PER_HOUR.minerals} />
               <Resource kind="gas" label="ГАЗ" value={state.gas} capacity={60_000} hourlyGain={RESOURCE_BASE_INCOME_PER_HOUR.gas} />
-              <Resource kind="energy" label="ЭНЕРГИЯ" value={currentPlanetState.energy} description="В этом срезе подтверждён только эффект солнечной электростанции: +25 энергии после завершения." />
+              <Resource kind="energy" label="ЭНЕРГИЯ" value={currentPlanetState.energy} description="Энергия планеты. Солнечная электростанция увеличивает запас после завершения строительства." />
               <Resource kind="population" label="НАСЕЛЕНИЕ" value={currentPlanetState.population} capacity={currentPlanetState.populationMax} />
             </div>
             <nav className="primary-navigation" aria-label="Основная навигация">
               {primaryTabs.map(({ label, icon }) => (
-                <button key={label} type="button" className={activeTab === label && !(label === 'Планета' && resourceZoneOpen) ? 'active' : ''} onClick={() => chooseTab(label)}>
+                <button key={label} type="button" className={activeTab === label && !(label === 'Планета' && planetViewMode === 'resource-zone') ? 'active' : ''} onClick={() => chooseTab(label)}>
                   <NavigationIcon kind={icon} />
                   <span>{label}</span>
                 </button>
@@ -794,7 +792,7 @@ export function App() {
           </section>
         </header>
 
-        <section className={`workspace workspace-v4 workspace--${activeTab === 'Вселенная' ? 'universe' : activeTab === 'Планета' && resourceZoneOpen ? 'resource-zone' : activeTab === 'Планета' ? 'planet' : activeTab === 'Операции' ? 'operations' : activeTab === 'Командование' ? 'command' : activeTab === 'Отчёты' ? 'reports' : 'module'}`}>
+        <section className={`workspace workspace-v4 workspace--${activeTab === 'Вселенная' ? 'universe' : activeTab === 'Планета' && planetViewMode === 'resource-zone' ? 'resource-zone' : activeTab === 'Планета' ? 'planet' : activeTab === 'Операции' ? 'operations' : activeTab === 'Командование' ? 'command' : activeTab === 'Отчёты' ? 'reports' : 'module'}`}>
           {activeTab === 'Вселенная' ? (
             <UniverseView onNotice={setNotice} ownedPlanetArt={currentSkin.art} ownedPlanetName={currentPlanetName} />
           ) : activeTab === 'Операции' ? (
@@ -824,7 +822,7 @@ export function App() {
               onToggleBattleSaved={toggleBattleSavedFromReports}
               onOpenFleets={openFleetRootFromReports}
             />
-          ) : activeTab === 'Планета' && resourceZoneOpen ? (
+          ) : activeTab === 'Планета' && planetViewMode === 'resource-zone' ? (
             <ResourceZoneView
               planetName={currentPlanetName}
               planetCoords={currentPlanet.coords}
@@ -870,7 +868,7 @@ export function App() {
 
               <main className="planet-canvas-v3">
                 <div className="scene-title scene-title-v3">
-                  <small>{zoneInfo.title}</small>
+                  <small>ОБЗОР ПЛАНЕТЫ</small>
                   <h1>{currentPlanetName.toUpperCase()}</h1>
                   <p>{currentPlanet.coords} • РОДНОЙ МИР АСТЕРОВ</p>
                 </div>
@@ -881,7 +879,7 @@ export function App() {
                     <button
                       key={item}
                       type="button"
-                      className={`zone-hotspot zone-hotspot--${item} ${zone === item ? 'active' : ''}`}
+                      className={`zone-hotspot zone-hotspot--${item}`}
                       style={{ '--zone-accent': zoneMeta[item].accent } as CSSProperties}
                       onClick={() => chooseZone(item)}
                     >
@@ -903,7 +901,7 @@ export function App() {
                 </div>
                 <div className="build-preview-v2">
                   <span className="build-preview-v2__icon"><GameIcon kind="resource" /></span>
-                  <div><strong>Ресурсная зона</strong><small>10 канонических зданий Астеров</small></div>
+                  <div><strong>Ресурсная зона</strong><small>Добыча и энергетика планеты</small></div>
                 </div>
                 <AegisButton onClick={() => chooseZone('resource')}>ОТКРЫТЬ РЕСУРСНУЮ ЗОНУ</AegisButton>
               </aside>
