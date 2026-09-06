@@ -42,9 +42,19 @@ The display catalog contains exactly the 22 sciences visible in the saved page:
 19. Маневренная защита
 20. Критический удар
 
-Captured saved-page values include current/next level, next-level resource cost, captured research time, Experimental Center requirement and science prerequisites where the page exposes them. These are presentation/snapshot values, not live Asterion campaign progression.
+Captured saved-page values include current/next level, next-level resource cost, captured research time, laboratory requirement and science prerequisites where the page exposes them. These are presentation/snapshot values, not live Asterion campaign progression.
 
-## Asterion technology art mapping
+## Asterion canon and assets
+
+The project building canon is committed as:
+
+`docs/asterion_buildings_canon_v1.md`
+
+For the current Asters presentation, the canonical research building is **Лаборатория**, role `research`, using the existing asset:
+
+`assets/source/New assets/buildings/aegis/building.aegis.research.png`
+
+The old player-facing label `Экспериментальный центр` is not used on the current Asters Science screen.
 
 Every catalog entry maps to one existing asset under:
 
@@ -74,11 +84,17 @@ No combat coefficient, max-level formula or resolver behavior is added by this r
 The UI follows the saved Laboratory information hierarchy rather than a tree/constellation:
 
 - left laboratory sidebar;
+- real Asterion Laboratory building art in the sidebar;
 - four source-backed sections;
 - compact research queue;
 - large science rows in the main panel;
-- row art, level, effect, costs, time, lab requirement and prerequisites;
-- disabled research action with a small in-game hint.
+- row art, level, effect, costs and time;
+- compact requirement icons below each science, matching the Nemexia pattern;
+- each requirement icon exposes its name/current level/required level through a tooltip;
+- fulfilled requirements remain colored;
+- missing requirements are desaturated/dimmed;
+- blocked sciences show a red missing-requirement banner and no upgrade CTA;
+- sciences whose captured requirements are satisfied keep the visual `Повысить уровень` CTA, but the button remains non-functional until real research runtime exists.
 
 After visual review, Science follows the shared Asterion document-scroll model rather than owning a nested catalog scrollbar. The laboratory content contributes its natural height to `GlobalPageScrollController`; if it exceeds the available workspace, the common game scrollbar moves the whole page. This keeps Science consistent with other long Asterion screens and avoids a second vertical scroll channel inside the catalog.
 
