@@ -23,8 +23,24 @@ jobs:
         run: npm run test:command
       - name: Reports domain tests
         run: npm run test:reports
+      - name: Settings domain tests
+        run: npm run test:settings
+      - name: Rating domain tests
+        run: npm run test:rating
+      - name: Science domain tests
+        run: npm run test:science
       - name: Build renderer
         run: npm run build
+      - name: Capture utility-screen visual QA
+        run: npm run qa:visual
+      - name: Upload visual QA artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: Asterion-Utility-Visual-QA
+          path: visual-qa/**/*
+          if-no-files-found: warn
+          retention-days: 14
       - name: Package Windows app
         run: npm run dist:win
       - name: Upload Windows installer
