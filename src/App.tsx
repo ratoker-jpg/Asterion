@@ -94,6 +94,16 @@ import {
   type ResourceAllocationPercent,
 } from './domain/buildings/recycling.ts';
 import {
+  createDefaultSpaceportUpgradeState,
+  enqueueSpaceportUpgrade,
+  getSpaceportUpgradeEntity,
+  migrateSpaceportUpgradeState,
+  reconcileSpaceportUpgradeState,
+  type SpaceportUpgradeState,
+  type SpaceportUpgradeTrack,
+  type SpaceportUpgradeWallet,
+} from './domain/buildings/spaceport-upgrades.ts';
+import {
   createDefaultTradeState,
   executeTrade,
   migrateTradeState,
@@ -170,6 +180,7 @@ type PlanetRuntime = {
   productionBots: BotAssignment;
   recycling: RecyclingState;
   trade: TradeState;
+  spaceportUpgrades: SpaceportUpgradeState;
   stability: number;
 };
 
@@ -200,6 +211,7 @@ type StoredPlanetRuntime = {
   productionBots?: unknown;
   recycling?: unknown;
   trade?: unknown;
+  spaceportUpgrades?: unknown;
   solarStations?: unknown;
   stability?: unknown;
 };
@@ -237,7 +249,7 @@ const ownedPlanets: PlanetDefinition[] = [
 ];
 
 const SAVE_KEY = 'asterion.vertical-slice.v1';
-const SAVE_SCHEMA_VERSION = Math.max(COMBAT_SAVE_SCHEMA_VERSION, 7);
+const SAVE_SCHEMA_VERSION = Math.max(COMBAT_SAVE_SCHEMA_VERSION, 8);
 const DEFAULT_PLANET_NAME = 'Helion 01';
 const CURRENT_SCIENCE_LEVELS = Object.fromEntries(
   SCIENCE_CATALOG.map((science) => [science.id, science.capturedLevel]),
@@ -260,6 +272,7 @@ const createInitialState = (): SaveState => ({
       productionBots: createEmptyBotAssignment(),
       recycling: createDefaultRecyclingState(),
       trade: createDefaultTradeState(),
+      spaceportUpgrades: createDefaultSpaceportUpgradeState(),
       stability: 100,
     },
   },
@@ -309,6 +322,10 @@ function readSave(): SaveState {
     const legacySolarStations = numberOr(savedHomeworld?.solarStations, numberOr(parsed.solarStations, 0));
     const buildings = migrateBuildingLevels(savedHomeworld?.buildings, legacySolarStations);
     const now = Date.now();
+    const spaceportUpgrades = reconcileSpaceportUpgradeState(
+      migrateSpaceportUpgradeState(savedHomeworld?.spaceportUpgrades),
+      now,
+    ).state;
     const homeworld: PlanetRuntime = {
       name: typeof savedHomeworld?.name === 'string' && savedHomeworld.name.trim()
         ? savedHomeworld.name.trim().slice(0, 28)
@@ -325,6 +342,7 @@ function readSave(): SaveState {
       productionBots: migrateProductionBotAssignment(savedHomeworld?.productionBots, buildings),
       recycling: migrateRecyclingState(savedHomeworld?.recycling, buildings.recycling, now),
       trade: migrateTradeState(savedHomeworld?.trade, buildings['trade-center'], now),
+      spaceportUpgrades,
       stability: numberOr(savedHomeworld?.stability, initialState.planets['helion-01'].stability),
     };
 
@@ -594,6 +612,28 @@ export function App() {
     });
   }, [now, state.planets]);
 
+  useEffect(() => {
+    const snapshot = reconcileSpaceportUpgradeState(state.planets['helion-01'].spaceportUpgrades, now);
+    if (!snapshot.changed) return;
+    setState((current) => {
+      const currentPlanet = current.planets['helion-01'];
+      const reconciled = reconcileSpaceportUpgradeState(currentPlanet.spaceportUpgrades, Date.now());
+      if (!reconciled.changed) return current;
+      return {
+        ...current,
+        schemaVersion: SAVE_SCHEMA_VERSION,
+        planets: {
+          ...current.planets,
+          'helion-01': { ...currentPlanet, spaceportUpgrades: reconciled.state },
+        },
+      };
+    });
+    const names = snapshot.completed
+      .map((task) => getSpaceportUpgradeEntity(task.track, task.shipId)?.name ?? task.shipId)
+      .join(', ');
+    setNotice(`Космодром: улучшение завершено — ${names}.`);
+  }, [now, state.planets]);
+
   const currentPlanet = ownedPlanets[0];
   const currentPlanetState = state.planets['helion-01'];
   const currentPlanetName = currentPlanetState.name;
@@ -615,6 +655,11 @@ export function App() {
     minerals: state.minerals,
     gas: state.gas,
     debris: currentPlanetState.recycling.availableDebris,
+  };
+  const spaceportWallet: SpaceportUpgradeWallet = {
+    metal: state.metal,
+    minerals: state.minerals,
+    gas: state.gas,
   };
   const resourceIncomePerHour = useMemo(
     () => getProductionBotIncomePerHour(RESOURCE_BASE_INCOME_PER_HOUR, currentPlanetState.productionBots),
@@ -847,6 +892,48 @@ export function App() {
     });
     setNotice('Обмен выполнен');
     return preview;
+  };
+
+  const startSpaceportUpgrade = (track: SpaceportUpgradeTrack, shipId: string) => {
+    const enqueuedAt = Date.now();
+    const taskId = globalThis.crypto?.randomUUID?.() ?? `spaceport-${track}-${shipId}-${enqueuedAt}-${Math.random().toString(36).slice(2, 9)}`;
+    const preview = enqueueSpaceportUpgrade({
+      state: currentPlanetState.spaceportUpgrades,
+      wallet: spaceportWallet,
+      buildings: currentPlanetState.buildings,
+      scienceLevels: CURRENT_SCIENCE_LEVELS,
+      spaceportLevel: currentPlanetState.buildings.spaceport,
+    }, track, shipId, enqueuedAt, taskId);
+    if (!preview.ok) {
+      setNotice(preview.reason ?? 'Улучшение сейчас недоступно.');
+      return false;
+    }
+
+    setState((current) => {
+      const planet = current.planets['helion-01'];
+      const transition = enqueueSpaceportUpgrade({
+        state: planet.spaceportUpgrades,
+        wallet: { metal: current.metal, minerals: current.minerals, gas: current.gas },
+        buildings: planet.buildings,
+        scienceLevels: CURRENT_SCIENCE_LEVELS,
+        spaceportLevel: planet.buildings.spaceport,
+      }, track, shipId, enqueuedAt, taskId);
+      if (!transition.ok) return current;
+      return {
+        ...current,
+        schemaVersion: SAVE_SCHEMA_VERSION,
+        metal: transition.wallet.metal,
+        minerals: transition.wallet.minerals,
+        gas: transition.wallet.gas,
+        planets: {
+          ...current.planets,
+          'helion-01': { ...planet, spaceportUpgrades: transition.state },
+        },
+      };
+    });
+    const entity = getSpaceportUpgradeEntity(track, shipId);
+    setNotice(`Космодром: ${entity?.name ?? shipId} добавлен в очередь улучшений.`);
+    return true;
   };
 
   const buildBuilding = (assetRole: BuildingRole) => {
@@ -1189,16 +1276,20 @@ export function App() {
               planetName={currentPlanetName}
               moduleTitle={buildingInteriorTarget.moduleTitle}
               buildings={currentPlanetState.buildings}
+              scienceLevels={CURRENT_SCIENCE_LEVELS}
               productionBots={currentPlanetState.productionBots}
               recycling={currentPlanetState.recycling}
               trade={currentPlanetState.trade}
               tradeWallet={tradeWallet}
+              spaceportUpgrades={currentPlanetState.spaceportUpgrades}
+              spaceportWallet={spaceportWallet}
               resourceRatingPoints={state.rating.resourcePoints}
               now={now}
               onProductionBotsApply={applyProductionBots}
               onRecyclingStart={startRecycling}
               onRecyclingCollect={collectRecycling}
               onTrade={tradeResources}
+              onSpaceportUpgrade={startSpaceportUpgrade}
               onBack={returnToBuilding}
             />
           ) : activeTab === 'Вселенная' ? (
@@ -1359,7 +1450,7 @@ export function App() {
               <div className="skin-picker-grid">
                 {planetSkins.map((skin) => (
                   <button key={skin.id} type="button" className={editingPlanetState.skin === skin.id ? 'active' : ''} onClick={() => chooseSkin(skin)}>
-                    <img src={skin.art} alt="" /><span>{skin.label}</span><small>{editingPlanetState.skin === skin.id ? 'АКТИВИРОВАНА' : 'ИСПОЛЬЗОВАТЬ'}</small>
+                    <img src={skin.art} alt="" /><span>{skin.label}</span><small>{editingPlanetState.skin === skin.id ? 'АКТИВИРОВАНА' : 'ИСПОЛЬЗОВАТЬ'}</small></span>
                   </button>
                 ))}
               </div>
