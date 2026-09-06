@@ -1,10 +1,12 @@
 import { ProductionBotsView } from './ProductionBotsView';
+import { RecyclingCenterView } from './RecyclingCenterView';
 import { getBuildingDefinition, type BuildingLevels } from './domain/buildings/resource-zone.ts';
 import {
   getAvailableProductionBots,
   isProductionBotBuildingRole,
   type BotAssignment,
 } from './domain/buildings/production-bots.ts';
+import type { RecyclingState, ResourceAllocationPercent } from './domain/buildings/recycling.ts';
 import type { BuildingInteriorContext } from './building-interior-navigation.ts';
 import './building-interiors.css';
 
@@ -14,7 +16,11 @@ type BuildingInteriorHostProps<PlanetId extends string> = {
   moduleTitle: string;
   buildings: BuildingLevels;
   productionBots: BotAssignment;
+  recycling: RecyclingState;
+  now: number;
   onProductionBotsApply: (assignment: BotAssignment) => void;
+  onRecyclingStart: (debrisAmount: number, allocation: ResourceAllocationPercent) => boolean;
+  onRecyclingCollect: (jobId: string) => boolean;
   onBack: () => void;
 };
 
@@ -24,9 +30,27 @@ export function BuildingInteriorHost<PlanetId extends string>({
   moduleTitle,
   buildings,
   productionBots,
+  recycling,
+  now,
   onProductionBotsApply,
+  onRecyclingStart,
+  onRecyclingCollect,
   onBack,
 }: BuildingInteriorHostProps<PlanetId>) {
+  if (context.buildingRole === 'recycling') {
+    return (
+      <RecyclingCenterView
+        planetName={planetName}
+        buildingLevel={buildings.recycling}
+        recycling={recycling}
+        now={now}
+        onStart={onRecyclingStart}
+        onCollect={onRecyclingCollect}
+        onBack={onBack}
+      />
+    );
+  }
+
   if (isProductionBotBuildingRole(context.buildingRole)) {
     return (
       <ProductionBotsView
