@@ -1,8 +1,15 @@
+import { useEffect, useMemo, useState } from 'react';
 import { getBuildingDefinition } from './domain/buildings/resource-zone.ts';
 import {
+  MAX_PRODUCTION_BOTS_PER_RESOURCE,
   PRODUCTION_BOT_BONUSES,
-  createEmptyBotAssignment,
+  getProductionBotAssignmentTotal,
   getProductionBotBonusPercent,
+  getProductionBotFreeCount,
+  isProductionBotAssignmentValid,
+  productionBotAssignmentsEqual,
+  setProductionBotDraftResource,
+  type BotAssignment,
   type BotResource,
   type ProductionBotBuildingRole,
 } from './domain/buildings/production-bots.ts';
@@ -12,6 +19,9 @@ type ProductionBotsViewProps = {
   buildingRole: ProductionBotBuildingRole;
   planetName: string;
   buildingLevel: number;
+  availableBots: number;
+  appliedAssignment: BotAssignment;
+  onApply: (assignment: BotAssignment) => void;
   onBack: () => void;
 };
 
@@ -37,9 +47,45 @@ function backLabel(role: ProductionBotBuildingRole) {
   return role === 'construction' ? 'Назад в Фабрику' : 'Назад в Промышленный комплекс';
 }
 
-export function ProductionBotsView({ buildingRole, planetName, buildingLevel, onBack }: ProductionBotsViewProps) {
+export function ProductionBotsView({
+  buildingRole,
+  planetName,
+  buildingLevel,
+  availableBots,
+  appliedAssignment,
+  onApply,
+  onBack,
+}: ProductionBotsViewProps) {
   const building = getBuildingDefinition(buildingRole);
-  const assignment = createEmptyBotAssignment();
+  const [draft, setDraft] = useState<BotAssignment>(() => ({ ...appliedAssignment }));
+  const [toastVisible, setToastVisible] = useState(false);
+
+  useEffect(() => {
+    setDraft({ ...appliedAssignment });
+  }, [appliedAssignment]);
+
+  useEffect(() => {
+    if (!toastVisible) return;
+    const timer = window.setTimeout(() => setToastVisible(false), 2400);
+    return () => window.clearTimeout(timer);
+  }, [toastVisible]);
+
+  const draftTotal = useMemo(() => getProductionBotAssignmentTotal(draft), [draft]);
+  const draftFree = useMemo(() => getProductionBotFreeCount(draft, availableBots), [draft, availableBots]);
+  const draftValid = useMemo(() => isProductionBotAssignmentValid(draft, availableBots), [draft, availableBots]);
+  const hasChanges = useMemo(() => !productionBotAssignmentsEqual(draft, appliedAssignment), [draft, appliedAssignment]);
+  const canApply = draftValid && hasChanges;
+
+  const changeDraft = (resource: BotResource, requestedValue: number) => {
+    setDraft((current) => setProductionBotDraftResource(current, resource, requestedValue, availableBots));
+  };
+
+  const distribute = () => {
+    if (!canApply) return;
+    onApply({ ...draft });
+    setToastVisible(false);
+    window.requestAnimationFrame(() => setToastVisible(true));
+  };
 
   return (
     <main
@@ -70,58 +116,119 @@ export function ProductionBotsView({ buildingRole, planetName, buildingLevel, on
           <div className="production-bots-building-art">
             <img src={building.art} alt={building.name} draggable={false} />
           </div>
+
           <div className="production-bots-building-copy">
             <small>ТЕКУЩИЙ КОНТЕКСТ</small>
             <h2>{building.name}</h2>
             <div className="production-bots-building-level">УРОВЕНЬ <strong>{buildingLevel}</strong></div>
-            <p>{building.purpose}</p>
           </div>
-          <div className="production-bots-building-state">
-            <span aria-hidden="true">◇</span>
-            <div><small>СОСТОЯНИЕ</small><strong>Боты пока не назначены</strong></div>
-          </div>
+
+          <section className="production-bots-pool" aria-label="Пул производственных роботов">
+            <div><small>ДОСТУПНО РОБОТОВ</small><strong data-qa-bots-available>{availableBots}</strong></div>
+            <div><small>РАСПРЕДЕЛЕНО <em>ЧЕРНОВИК</em></small><strong data-qa-bots-draft-total>{draftTotal} / {availableBots}</strong></div>
+            <div><small>СВОБОДНО</small><strong data-qa-bots-draft-free>{draftFree}</strong></div>
+          </section>
+
+          <section className="production-bots-applied" aria-label="Применённый бонус от роботов">
+            <div className="production-bots-section-label">БОНУС ОТ РОБОТОВ <span>ПРИМЕНЕНО</span></div>
+            {PRODUCTION_BOT_BONUSES.map((definition) => (
+              <div className="production-bots-applied-row" key={definition.resource}>
+                <span>{definition.label}</span>
+                <strong data-qa-bot-current-bonus={definition.resource}>+{getProductionBotBonusPercent(appliedAssignment, definition.resource)}%</strong>
+              </div>
+            ))}
+          </section>
         </aside>
 
-        <section className="production-bots-cards" aria-label="Производственные боты по ресурсам">
-          {PRODUCTION_BOT_BONUSES.map((definition) => {
-            const assigned = assignment[definition.resource];
-            const currentBonus = getProductionBotBonusPercent(assignment, definition.resource);
-            return (
-              <article
-                className={`production-bot-card production-bot-card--${definition.resource}`}
-                key={definition.resource}
-                data-qa-production-bot-resource={definition.resource}
-              >
-                <header className="production-bot-card__header">
-                  <span className="production-bot-card__icon"><BotResourceIcon resource={definition.resource} /></span>
-                  <div><small>ПРОИЗВОДСТВЕННЫЙ БОТ</small><h2>{definition.label}</h2></div>
-                </header>
+        <section className="production-bots-targets" aria-label="Целевые ресурсы">
+          <header className="production-bots-targets-header">
+            <div>
+              <small>РАСПРЕДЕЛЕНИЕ РОБОТОВ</small>
+              <h2>ЦЕЛЕВЫЕ РЕСУРСЫ</h2>
+            </div>
+            <span>до {MAX_PRODUCTION_BOTS_PER_RESOURCE} на ресурс</span>
+          </header>
 
-                <div className="production-bot-card__stats">
-                  <div><small>НАЗНАЧЕНО</small><strong data-qa-bot-assigned={definition.resource}>{assigned}</strong></div>
-                  <div><small>ТЕКУЩИЙ БОНУС</small><strong data-qa-bot-current-bonus={definition.resource}>+{currentBonus}%</strong></div>
-                  <div className="accent"><small>ЗА 1 БОТА</small><strong data-qa-bot-percent={definition.resource}>+{definition.percentPerBot}%</strong></div>
+          <div className="production-bots-target-list">
+            {PRODUCTION_BOT_BONUSES.map((definition) => {
+              const assigned = draft[definition.resource];
+              const draftBonus = getProductionBotBonusPercent(draft, definition.resource);
+              const canDecrease = assigned > 0;
+              const canIncrease = assigned < MAX_PRODUCTION_BOTS_PER_RESOURCE && draftTotal < availableBots;
+
+              return (
+                <div
+                  className={`production-bot-target production-bot-target--${definition.resource}`}
+                  key={definition.resource}
+                  data-qa-production-bot-resource={definition.resource}
+                >
+                  <div className="production-bot-target__resource">
+                    <span className="production-bot-target__icon"><BotResourceIcon resource={definition.resource} /></span>
+                    <span><small>РЕСУРС</small><strong>{definition.label}</strong></span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="production-bot-step"
+                    aria-label={`Уменьшить: ${definition.label}`}
+                    data-qa-bot-minus={definition.resource}
+                    disabled={!canDecrease}
+                    onClick={() => changeDraft(definition.resource, assigned - 1)}
+                  >−</button>
+
+                  <input
+                    className="production-bot-range"
+                    type="range"
+                    min={0}
+                    max={MAX_PRODUCTION_BOTS_PER_RESOURCE}
+                    step={1}
+                    value={assigned}
+                    aria-label={`Роботы: ${definition.label}`}
+                    aria-valuetext={`${assigned} из ${MAX_PRODUCTION_BOTS_PER_RESOURCE}`}
+                    data-qa-bot-slider={definition.resource}
+                    onChange={(event) => changeDraft(definition.resource, Number(event.target.value))}
+                  />
+
+                  <button
+                    type="button"
+                    className="production-bot-step"
+                    aria-label={`Увеличить: ${definition.label}`}
+                    data-qa-bot-plus={definition.resource}
+                    disabled={!canIncrease}
+                    onClick={() => changeDraft(definition.resource, assigned + 1)}
+                  >+</button>
+
+                  <strong className="production-bot-target__count" data-qa-bot-draft={definition.resource}>{assigned}</strong>
+
+                  <div className="production-bot-target__effect" data-qa-bot-draft-effect={definition.resource}>
+                    {assigned} {assigned === 1 ? 'бот' : assigned >= 2 && assigned <= 4 ? 'бота' : 'ботов'} · +{draftBonus}%
+                  </div>
                 </div>
+              );
+            })}
+          </div>
 
-                <div className="production-bot-card__empty">Боты пока не назначены</div>
-
-                <dl className="production-bot-card__pending">
-                  <div><dt>УСЛОВИЯ</dt><dd>Не утверждены</dd></div>
-                  <div><dt>СТОИМОСТЬ</dt><dd>Не утверждена</dd></div>
-                </dl>
-              </article>
-            );
-          })}
+          <footer className="production-bots-targets-footer">
+            <div>
+              <small>СВОБОДНЫЕ РОБОТЫ</small>
+              <strong>{draftFree}</strong>
+            </div>
+            <button
+              type="button"
+              className="production-bots-distribute"
+              data-qa-production-bots-distribute
+              disabled={!canApply}
+              onClick={distribute}
+            >
+              РАСПРЕДЕЛИТЬ
+            </button>
+          </footer>
         </section>
       </div>
 
-      <section className="production-bots-note" data-qa-production-bots-economy-note>
-        <span aria-hidden="true">i</span>
-        <div>
-          <strong>Модель назначения ещё не утверждена</strong>
-          <p>После утверждения модели бонусы будут применяться к добыче ресурсов. Сейчас этот экран не меняет показатели /ч, не списывает ресурсы и не использует общую очередь строительства.</p>
-        </div>
-      </section>
+      <div className={`production-bots-toast ${toastVisible ? 'visible' : ''}`} aria-live="polite" aria-atomic="true" data-qa-production-bots-toast>
+        {toastVisible ? <span><b aria-hidden="true">✓</b> Роботы перераспределены</span> : null}
+      </div>
     </main>
   );
 }
