@@ -168,23 +168,57 @@ async function assertStableHeight(win, label) {
   return heights;
 }
 
-async function openRequirementTooltip(win, interaction) {
-  const activated = await win.webContents.executeJavaScript(`(() => {
+async function prepareRequirementTarget(win) {
+  return win.webContents.executeJavaScript(`(() => {
     const defender = document.querySelector('[data-qa-spaceport-card="defender"]');
     const badges = Array.from(defender?.querySelectorAll('[data-qa-spaceport-requirement-badge]') ?? []);
     const target = badges.find((badge) => badge.getAttribute('data-qa-spaceport-requirement-status') === 'missing') ?? badges[0];
-    if (!target) return false;
+    const targetIndex = badges.indexOf(target);
+    if (!target || targetIndex < 0) return null;
     target.scrollIntoView({ block: 'center', inline: 'center' });
-    if (${JSON.stringify(interaction)} === 'focus') {
-      target.focus();
-      return document.activeElement === target;
-    }
-    target.blur();
-    target.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, cancelable: true, relatedTarget: document.body }));
-    target.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, relatedTarget: null }));
-    return true;
+    const rect = target.getBoundingClientRect();
+    return {
+      targetIndex,
+      hasPreviousBadge: targetIndex > 0,
+      center: { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) },
+      viewport: { width: innerWidth, height: innerHeight },
+    };
   })()`);
-  if (!activated) throw new Error(`Requirement badge could not activate via ${interaction}`);
+}
+
+async function openRequirementTooltip(win, interaction) {
+  const prepared = await prepareRequirementTarget(win);
+  if (!prepared) throw new Error('Requirement badge target is missing');
+  await settle(win);
+
+  if (interaction === 'focus') {
+    if (!prepared.hasPreviousBadge) throw new Error('Requirement keyboard-focus QA needs a preceding badge');
+    const predecessorFocused = await win.webContents.executeJavaScript(`(() => {
+      const defender = document.querySelector('[data-qa-spaceport-card="defender"]');
+      const badges = Array.from(defender?.querySelectorAll('[data-qa-spaceport-requirement-badge]') ?? []);
+      const target = badges.find((badge) => badge.getAttribute('data-qa-spaceport-requirement-status') === 'missing') ?? badges[0];
+      const index = badges.indexOf(target);
+      const predecessor = index > 0 ? badges[index - 1] : null;
+      predecessor?.focus();
+      return Boolean(predecessor && document.activeElement === predecessor);
+    })()`);
+    if (!predecessorFocused) throw new Error('Could not prepare preceding requirement badge for Tab navigation');
+    await settle(win);
+    win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' });
+    win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' });
+  } else {
+    await win.webContents.executeJavaScript('document.activeElement?.blur()');
+    await settle(win);
+    win.webContents.sendInputEvent({ type: 'mouseMove', x: 1, y: 1, movementX: 0, movementY: 0 });
+    await sleep(50);
+    win.webContents.sendInputEvent({
+      type: 'mouseMove',
+      x: Math.max(1, Math.min(prepared.viewport.width - 2, prepared.center.x)),
+      y: Math.max(1, Math.min(prepared.viewport.height - 2, prepared.center.y)),
+      movementX: 0,
+      movementY: 0,
+    });
+  }
   await settle(win);
 
   return win.webContents.executeJavaScript(`(() => {
@@ -255,7 +289,7 @@ function assertRequirementTooltip(snapshot, label, interaction) {
 
 async function assertCatalogAndRequirements(win, label) {
   const focusSnapshot = await openRequirementTooltip(win, 'focus');
-  if (!focusSnapshot.focused) throw new Error(`${label}: requirement badge cannot retain keyboard focus ${JSON.stringify(focusSnapshot)}`);
+  if (!focusSnapshot.focused) throw new Error(`${label}: requirement badge did not receive keyboard Tab focus ${JSON.stringify(focusSnapshot)}`);
   assertRequirementTooltip(focusSnapshot, label, 'keyboard focus');
 
   const hoverSnapshot = await openRequirementTooltip(win, 'hover');
