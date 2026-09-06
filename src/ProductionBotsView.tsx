@@ -126,7 +126,7 @@ export function ProductionBotsView({
           </div>
 
           <section className="production-bots-pool" aria-label="Применённое распределение производственных роботов">
-            <div><small>ДОСТУПНО РОБОТОВ</small><strong data-qa-bots-available>{availableBots}</strong></div>
+            <div><small>ДОСТУПНО РОБОТОВ</small><strong data-qa-bots-available={availableBots}>{availableBots}</strong></div>
             <div><small>РАСПРЕДЕЛЕНО</small><strong data-qa-bots-applied-total>{appliedTotal} / {availableBots}</strong></div>
             <div><small>СВОБОДНО</small><strong data-qa-bots-applied-free>{appliedFree}</strong></div>
           </section>
@@ -148,7 +148,7 @@ export function ProductionBotsView({
               <small>РАСПРЕДЕЛЕНИЕ РОБОТОВ</small>
               <h2>ЦЕЛЕВЫЕ РЕСУРСЫ</h2>
             </div>
-            <span data-qa-bots-draft-total>ЧЕРНОВИК {draftTotal} / {availableBots} · ДО 10 НА РЕСУРС</span>
+            <span data-qa-bots-draft-total={draftTotal}>ЧЕРНОВИК {draftTotal} / {availableBots} · ДО 10 НА РЕСУРС</span>
           </header>
 
           <div className="production-bots-target-list">
@@ -213,7 +213,7 @@ export function ProductionBotsView({
           <footer className="production-bots-targets-footer">
             <div>
               <small>СВОБОДНО В ЧЕРНОВИКЕ</small>
-              <strong data-qa-bots-draft-free>{draftFree}</strong>
+              <strong data-qa-bots-draft-free={draftFree}>{draftFree}</strong>
             </div>
             <button
               type="button"
