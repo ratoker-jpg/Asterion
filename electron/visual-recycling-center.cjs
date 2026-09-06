@@ -60,7 +60,23 @@ async function setRange(win, selector, value) {
   await settle(win);
 }
 
+async function setNumberInput(win, selector, value) {
+  const changed = await win.webContents.executeJavaScript(`(() => {
+    const input = document.querySelector(${JSON.stringify(selector)});
+    if (!(input instanceof HTMLInputElement)) return false;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, ${JSON.stringify(String(value))});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`);
+  if (!changed) throw new Error(`Number input not found: ${selector}`);
+  await settle(win);
+}
+
 async function capture(win, directory, name) {
+  await win.webContents.executeJavaScript('window.scrollTo(0, 0)');
+  await settle(win);
   const result = await win.webContents.debugger.sendCommand('Page.captureScreenshot', {
     format: 'png',
     fromSurface: true,
@@ -96,6 +112,8 @@ async function openCenter(win) {
   await waitFor(win, `document.querySelector('[data-qa-building-dialog="recycling"]')`);
   await click(win, '[data-qa-enter-building="recycling"]');
   await waitFor(win, `document.querySelector('[data-qa-recycling-center]')`);
+  await waitFor(win, `document.documentElement.classList.contains('asterion-long-page')`);
+  await settle(win);
 }
 
 async function readScreen(win) {
@@ -108,6 +126,7 @@ async function readScreen(win) {
       return raw == null ? null : Number(raw);
     };
     const disabled = (selector) => Boolean(root.querySelector(selector)?.disabled);
+    const debrisInput = root.querySelector('[data-qa-recycling-debris-input]');
     const jobs = Array.from(root.querySelectorAll('[data-qa-recycling-job]')).map((job) => ({
       id: job.getAttribute('data-qa-recycling-job'),
       status: job.getAttribute('data-qa-recycling-status'),
@@ -119,12 +138,16 @@ async function readScreen(win) {
     return {
       freeDebris: attrNum('[data-qa-recycling-free-debris]', 'data-qa-recycling-free-debris'),
       totalDebris: attrNum('[data-qa-recycling-total-debris]', 'data-qa-recycling-total-debris'),
+      debrisValue: attrNum('[data-qa-recycling-debris-input]', 'data-qa-recycling-debris-value'),
+      debrisInputValue: debrisInput instanceof HTMLInputElement ? Number(debrisInput.value) : null,
       jobs: attrNum('[data-qa-recycling-job-count]', 'data-qa-recycling-job-count'),
       maxJobs: attrNum('[data-qa-recycling-max-jobs]', 'data-qa-recycling-max-jobs'),
       allocationTotal: attrNum('[data-qa-recycling-allocation-total]', 'data-qa-recycling-allocation-total'),
       validation: text('[data-qa-recycling-validation]'),
       startDisabled: disabled('[data-qa-recycling-start]'),
       nextEfficiency: text('[data-qa-recycling-next-efficiency]'),
+      duration: text('[data-qa-recycling-duration]'),
+      hasLargePreviewStrip: Boolean(root.querySelector('.recycling-preview-strip')),
       jobRows: jobs,
       toast: text('[data-qa-recycling-toast]'),
     };
@@ -188,14 +211,18 @@ async function measure(win) {
     return {
       viewport: { width: window.innerWidth, height: window.innerHeight },
       document: { width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight },
+      longPage: document.documentElement.classList.contains('asterion-long-page'),
       stage: pick(stage),
       root: pick(root),
+      debrisInput: pick(root.querySelector('[data-qa-recycling-debris-input]')),
       debrisSlider: pick(root.querySelector('[data-qa-recycling-debris-slider]')),
       start: pick(root.querySelector('[data-qa-recycling-start]')),
       rows,
       jobScroll: pick(jobScrollElement),
       jobScrollWidth: jobScrollElement?.scrollWidth ?? 0,
       jobClientWidth: jobScrollElement?.clientWidth ?? 0,
+      jobScrollHeight: jobScrollElement?.scrollHeight ?? 0,
+      jobClientHeight: jobScrollElement?.clientHeight ?? 0,
       jobHeader: pick(jobHeaderElement),
       jobHeaderCells: jobHeaderElement ? Array.from(jobHeaderElement.children).map(pick) : [],
       jobRows: jobRowElements.map((job) => ({
@@ -209,13 +236,16 @@ async function measure(win) {
 function assertGeometry(snapshot, label, expectedJobRows = 0) {
   if (!snapshot) throw new Error(`${label}: missing geometry`);
   const epsilon = 2;
-  const { viewport, document, stage, root, debrisSlider, start, rows, jobScroll, jobScrollWidth, jobClientWidth, jobHeader, jobHeaderCells, jobRows } = snapshot;
+  const { viewport, document, longPage, stage, root, debrisInput, debrisSlider, start, rows, jobScroll, jobScrollWidth, jobClientWidth, jobScrollHeight, jobClientHeight, jobHeader, jobHeaderCells, jobRows } = snapshot;
+  if (!longPage) throw new Error(`${label}: recycling center did not activate global page scroll`);
   if (document.width > viewport.width + epsilon) throw new Error(`${label}: horizontal page scroll ${JSON.stringify(snapshot)}`);
-  if (Math.abs(stage.left) > epsilon || Math.abs(stage.top) > epsilon || Math.abs(stage.right - viewport.width) > epsilon || Math.abs(stage.bottom - viewport.height) > epsilon) {
-    throw new Error(`${label}: stage not viewport aligned ${JSON.stringify(snapshot)}`);
+  if (document.height <= viewport.height + epsilon) throw new Error(`${label}: document did not become vertically scrollable ${JSON.stringify(snapshot)}`);
+  if (Math.abs(stage.left) > epsilon || Math.abs(stage.right - viewport.width) > epsilon || Math.abs(stage.top) > epsilon) {
+    throw new Error(`${label}: long-page stage not top-aligned ${JSON.stringify(snapshot)}`);
   }
-  if (root.left < -epsilon || root.right > viewport.width + epsilon || root.top < -epsilon || root.bottom > viewport.height + epsilon) throw new Error(`${label}: root clipped`);
-  if (debrisSlider.width < 100 || start.width < 180) throw new Error(`${label}: primary controls too small`);
+  if (stage.bottom <= viewport.height + epsilon) throw new Error(`${label}: long-page stage did not grow below viewport`);
+  if (root.left < -epsilon || root.right > viewport.width + epsilon || root.top < -epsilon) throw new Error(`${label}: root clipped horizontally or above viewport`);
+  if (!debrisInput || debrisInput.width < 110 || debrisSlider.width < 100 || start.width < 180) throw new Error(`${label}: primary controls too small`);
   if (rows.length !== 3) throw new Error(`${label}: expected three resource rows`);
   for (const item of rows) {
     if (item.minus.width < 26 || item.plus.width < 26 || item.slider.width < 90 || item.percent.width < 28) throw new Error(`${label}: resource controls too small ${JSON.stringify(item)}`);
@@ -225,6 +255,7 @@ function assertGeometry(snapshot, label, expectedJobRows = 0) {
   if (!jobScroll || !jobHeader || jobRows.length !== expectedJobRows) throw new Error(`${label}: process table missing rows ${JSON.stringify(snapshot)}`);
   if (jobScroll.left < root.left - epsilon || jobScroll.right > root.right + epsilon) throw new Error(`${label}: process list escapes root`);
   if (jobScrollWidth < jobClientWidth) throw new Error(`${label}: process table does not fill list width`);
+  if (jobScrollHeight > jobClientHeight + epsilon) throw new Error(`${label}: process list created nested vertical scroll`);
   if (jobHeaderCells.length !== 5) throw new Error(`${label}: process header does not have five columns`);
   for (const item of jobRows) {
     if (!item.row || item.cells.length !== 5) throw new Error(`${label}: process row does not have five columns ${JSON.stringify(item)}`);
@@ -237,12 +268,24 @@ function assertGeometry(snapshot, label, expectedJobRows = 0) {
   }
 }
 
+async function verifyGlobalScroll(win, label) {
+  const maxScroll = await win.webContents.executeJavaScript(`Math.max(0, document.documentElement.scrollHeight - window.innerHeight)`);
+  if (maxScroll <= 0) throw new Error(`${label}: no global scroll range`);
+  await win.webContents.executeJavaScript('window.scrollTo(0, document.documentElement.scrollHeight)');
+  await settle(win);
+  const scrollY = await win.webContents.executeJavaScript('window.scrollY');
+  if (scrollY <= 0) throw new Error(`${label}: global page scroll did not move`);
+  await win.webContents.executeJavaScript('window.scrollTo(0, 0)');
+  await settle(win);
+}
+
 async function verifyReturn(win) {
   await click(win, '[data-qa-recycling-back]');
   await waitFor(win, `document.querySelector('[data-qa-zone-view][data-zone="industry"]')`);
   await waitFor(win, `document.querySelector('[data-qa-building-dialog="recycling"]')`);
   await click(win, '[data-qa-enter-building="recycling"]');
   await waitFor(win, `document.querySelector('[data-qa-recycling-center]')`);
+  await waitFor(win, `document.documentElement.classList.contains('asterion-long-page')`);
   await win.webContents.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`);
   await settle(win);
   await waitFor(win, `document.querySelector('[data-qa-zone-view][data-zone="industry"]')`);
@@ -250,11 +293,12 @@ async function verifyReturn(win) {
 }
 
 async function startConfiguredJob(win, debrisAmount, metal, minerals, gas) {
-  await setRange(win, '[data-qa-recycling-debris-slider]', debrisAmount);
+  await setNumberInput(win, '[data-qa-recycling-debris-input]', debrisAmount);
   await setRange(win, '[data-qa-recycling-allocation-slider="metal"]', metal);
   await setRange(win, '[data-qa-recycling-allocation-slider="minerals"]', minerals);
   await setRange(win, '[data-qa-recycling-allocation-slider="gas"]', gas);
   const screen = await readScreen(win);
+  if (screen?.debrisInputValue !== debrisAmount || screen.debrisValue !== debrisAmount) throw new Error(`Manual debris input did not update state: ${JSON.stringify(screen)}`);
   if (screen?.startDisabled || screen.allocationTotal !== 100) throw new Error(`Configured job should be startable: ${JSON.stringify(screen)}`);
   await click(win, '[data-qa-recycling-start]');
   await settle(win);
@@ -273,10 +317,14 @@ async function verifyFlow(win, directory, label) {
   let screen = await readScreen(win);
   if (!screen || screen.freeDebris !== 100000 || screen.totalDebris !== 100000 || screen.jobs !== 0 || screen.maxJobs !== 3) throw new Error(`${label}: initial recycling state mismatch ${JSON.stringify(screen)}`);
   if (screen.nextEfficiency !== '90%') throw new Error(`${label}: next efficiency must not include plus sign ${JSON.stringify(screen)}`);
+  if (screen.hasLargePreviewStrip) throw new Error(`${label}: obsolete large time/efficiency/output strip still exists`);
   assertGeometry(await measure(win), label);
+  await verifyGlobalScroll(win, label);
   await capture(win, directory, 'recycling-empty');
 
-  await setRange(win, '[data-qa-recycling-debris-slider]', 10000);
+  await setNumberInput(win, '[data-qa-recycling-debris-input]', 10000);
+  screen = await readScreen(win);
+  if (screen?.debrisInputValue !== 10000 || screen.debrisValue !== 10000 || screen.duration !== '00:01:48') throw new Error(`${label}: manual debris amount or compact duration mismatch ${JSON.stringify(screen)}`);
   await setRange(win, '[data-qa-recycling-allocation-slider="metal"]', 60);
   await setRange(win, '[data-qa-recycling-allocation-slider="minerals"]', 30);
   screen = await readScreen(win);
@@ -304,10 +352,11 @@ async function verifyFlow(win, directory, label) {
   screen = await readScreen(win);
   if (screen?.freeDebris !== 80000 || screen.jobs !== 3 || screen.jobRows.some((job) => job.status !== 'processing')) throw new Error(`${label}: multi-processing state mismatch ${JSON.stringify(screen)}`);
 
-  await setRange(win, '[data-qa-recycling-debris-slider]', 1000);
+  await setNumberInput(win, '[data-qa-recycling-debris-input]', 1000);
   screen = await readScreen(win);
   if (!screen?.startDisabled || screen.validation !== 'Все процессы заняты') throw new Error(`${label}: concurrent limit not enforced ${JSON.stringify(screen)}`);
   assertGeometry(await measure(win), label, 3);
+  await verifyGlobalScroll(win, label);
   await capture(win, directory, 'recycling-processing-list');
 
   await makeReady(win, 0);
@@ -337,6 +386,10 @@ async function verifyFlow(win, directory, label) {
     walletAfterCollect: { metal: collected.metal, minerals: collected.minerals, gas: collected.gas },
     verified: [
       'temporary-100000-debris-stock',
+      'manual-debris-input-and-compact-duration',
+      'global-document-scroll-with-growing-recycling-window',
+      'no-nested-vertical-process-scroll',
+      'large-preview-strip-removed',
       '60-30-disabled-with-exact-remainder',
       '60-40-starts',
       'debris-reserved-immediately',
