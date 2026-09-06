@@ -57,6 +57,24 @@ function selectorStatusText(className: string, level: number) {
   return level > 0 ? 'Доступно к улучшению' : 'Доступно';
 }
 
+function ResourceIncomeIcon({ kind }: { kind: 'metal' | 'mineral' | 'gas' }) {
+  const common = {
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.65,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+  };
+
+  if (kind === 'metal') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M4 7 12 3l8 4-8 4-8-4Z"/><path {...common} d="m4 7 8 4v10l-8-4V7Zm16 0-8 4v10l8-4V7Z"/></svg>;
+  }
+  if (kind === 'mineral') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m12 2 7 7-7 13L5 9l7-7Z"/><path {...common} d="M5 9h14M12 2v20"/></svg>;
+  }
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M12 3c4 4.7 6 7.6 6 11a6 6 0 1 1-12 0c0-3.4 2-6.3 6-11Z"/><circle {...common} cx="10" cy="13" r="1.8"/><circle {...common} cx="14.5" cy="15.5" r="1.2"/></svg>;
+}
+
 function playerEffectText(definition: BuildingDefinition, currentLevel: number) {
   return definition.effect
     ? getBuildingEffectText(definition, currentLevel)
@@ -151,12 +169,24 @@ export function ResourceZoneView({
           </div>
         </section>
 
-        <section className="resource-zone-economy" aria-label="Добыча ресурсов за 1 час">
-          <div className="resource-zone-economy-title">ДОБЫЧА РЕСУРСОВ ЗА 1 ЧАС</div>
-          <div className="resource-zone-income-grid">
-            <div><small>Металл</small><strong>+{formatNumber(RESOURCE_BASE_INCOME_PER_HOUR.metal)}</strong></div>
-            <div><small>Минералы</small><strong>+{formatNumber(RESOURCE_BASE_INCOME_PER_HOUR.minerals)}</strong></div>
-            <div><small>Газ</small><strong>+{formatNumber(RESOURCE_BASE_INCOME_PER_HOUR.gas)}</strong></div>
+        <section className="resource-zone-economy" aria-label="Добыча за 1 час">
+          <div className="resource-zone-economy-title">ДОБЫЧА ЗА 1 ЧАС</div>
+          <div className="resource-zone-income-list">
+            <div className="resource-zone-income-row" data-resource-income="metal">
+              <span className="resource-zone-income-icon"><ResourceIncomeIcon kind="metal" /></span>
+              <span className="resource-zone-income-name">Металл</span>
+              <strong>{formatNumber(RESOURCE_BASE_INCOME_PER_HOUR.metal)}</strong>
+            </div>
+            <div className="resource-zone-income-row" data-resource-income="minerals">
+              <span className="resource-zone-income-icon"><ResourceIncomeIcon kind="mineral" /></span>
+              <span className="resource-zone-income-name">Минералы</span>
+              <strong>{formatNumber(RESOURCE_BASE_INCOME_PER_HOUR.minerals)}</strong>
+            </div>
+            <div className="resource-zone-income-row" data-resource-income="gas">
+              <span className="resource-zone-income-icon"><ResourceIncomeIcon kind="gas" /></span>
+              <span className="resource-zone-income-name">Газ</span>
+              <strong>{formatNumber(RESOURCE_BASE_INCOME_PER_HOUR.gas)}</strong>
+            </div>
           </div>
         </section>
       </aside>
