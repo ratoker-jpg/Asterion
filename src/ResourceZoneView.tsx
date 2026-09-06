@@ -49,6 +49,14 @@ function stateFor(
   return { className: 'unbuilt', label: null };
 }
 
+function selectorStatusText(className: string, level: number) {
+  if (className === 'building') return 'Строится';
+  if (className === 'queued') return 'В очереди';
+  if (className === 'blocked') return 'Требования не выполнены';
+  if (className === 'maxed') return 'Максимальный уровень';
+  return level > 0 ? 'Доступно к улучшению' : 'Доступно';
+}
+
 function playerEffectText(definition: BuildingDefinition, currentLevel: number) {
   return definition.effect
     ? getBuildingEffectText(definition, currentLevel)
@@ -115,21 +123,28 @@ export function ResourceZoneView({
               const status = stateFor(economy, building.assetRole);
               const selectedClass = selectedRole === building.assetRole ? 'selected' : '';
               const level = buildings[building.assetRole];
+              const statusText = selectorStatusText(status.className, level);
+              const tooltipId = `resource-selector-tooltip-${building.assetRole}`;
               return (
                 <button
                   key={building.assetRole}
                   type="button"
                   data-resource-selector-role={building.assetRole}
                   className={`resource-zone-selector-tile ${status.className} ${selectedClass}`}
-                  aria-label={`${building.name}. Уровень ${level} из ${building.maxLevel}${status.label ? `. ${status.label}` : ''}`}
+                  aria-label={`${building.name}. Уровень ${level} из ${building.maxLevel}. ${statusText}.`}
+                  aria-describedby={tooltipId}
                   onClick={() => setSelectedRole(building.assetRole)}
                 >
                   <img src={building.art} alt="" draggable={false} />
-                  <span>
+                  <b className="resource-zone-selector-level">{level}/{building.maxLevel}</b>
+                  {status.className === 'blocked' ? <span className="resource-zone-selector-lock" aria-hidden="true" /> : null}
+                  {status.className === 'building' || status.className === 'queued' ? (
+                    <span className={`resource-zone-selector-queue-indicator ${status.className}`} aria-hidden="true" />
+                  ) : null}
+                  <span className="resource-zone-selector-tooltip" id={tooltipId} role="tooltip">
                     <strong>{building.name}</strong>
-                    {status.label ? <small>{status.label}</small> : null}
+                    <small>Уровень {level}/{building.maxLevel} · {statusText}</small>
                   </span>
-                  <b>{level}/{building.maxLevel}</b>
                 </button>
               );
             })}
@@ -137,7 +152,7 @@ export function ResourceZoneView({
         </section>
 
         <section className="resource-zone-economy" aria-label="Добыча ресурсов за 1 час">
-          <div className="resource-zone-section-label">ДОБЫЧА РЕСУРСОВ ЗА 1 ЧАС</div>
+          <div className="resource-zone-economy-title">ДОБЫЧА РЕСУРСОВ ЗА 1 ЧАС</div>
           <div className="resource-zone-income-grid">
             <div><small>Металл</small><strong>+{formatNumber(RESOURCE_BASE_INCOME_PER_HOUR.metal)}</strong></div>
             <div><small>Минералы</small><strong>+{formatNumber(RESOURCE_BASE_INCOME_PER_HOUR.minerals)}</strong></div>
