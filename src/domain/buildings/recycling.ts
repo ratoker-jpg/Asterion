@@ -50,7 +50,8 @@ export type RecyclingStartTransition = RecyclingStartValidation & {
 export type RecyclingAdvanceTransition = {
   state: RecyclingState;
   changed: boolean;
-  expiredJobIds: string[];
+  autoCollectedJobIds: string[];
+  autoCollectedOutput: RecyclingOutput;
 };
 
 export type RecyclingCollectTransition = {
@@ -78,6 +79,16 @@ function toSafePercent(value: unknown): number {
 function toSafeEfficiency(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 75;
   return Math.min(120, Math.max(75, Math.floor(value)));
+}
+
+function createEmptyRecyclingOutput(): RecyclingOutput {
+  return { metal: 0, minerals: 0, gas: 0 };
+}
+
+function addRecyclingOutput(target: RecyclingOutput, output: RecyclingOutput) {
+  target.metal += output.metal;
+  target.minerals += output.minerals;
+  target.gas += output.gas;
 }
 
 export function createEmptyRecyclingAllocation(): ResourceAllocationPercent {
@@ -176,8 +187,6 @@ function migrateRecyclingJob(value: unknown, index: number, now: number): Recycl
   const startedAt = toSafeTimestamp(source.startedAt);
   const finishAt = startedAt + getRecyclingDurationMs(debrisAmount);
   const canonicalExpiresAt = finishAt + RECYCLING_STORAGE_MS;
-  if (now >= canonicalExpiresAt) return null;
-
   const status: RecyclingJob['status'] = now >= finishAt ? 'ready' : 'processing';
   const id = typeof source.id === 'string' && source.id.trim()
     ? source.id.trim().slice(0, 120)
@@ -220,20 +229,22 @@ export function migrateRecyclingState(
 
 export function advanceRecyclingState(state: RecyclingState, now: number): RecyclingAdvanceTransition {
   const jobs: RecyclingJob[] = [];
-  const expiredJobIds: string[] = [];
+  const autoCollectedJobIds: string[] = [];
+  const autoCollectedOutput = createEmptyRecyclingOutput();
   let changed = false;
 
   for (const job of state.jobs) {
-    const expiresAt = job.finishAt + RECYCLING_STORAGE_MS;
-    if (now >= expiresAt) {
-      expiredJobIds.push(job.id);
+    const autoCollectAt = job.finishAt + RECYCLING_STORAGE_MS;
+    if (now >= autoCollectAt) {
+      autoCollectedJobIds.push(job.id);
+      addRecyclingOutput(autoCollectedOutput, job.output);
       changed = true;
       continue;
     }
 
     if (now >= job.finishAt) {
-      const alreadyCanonical = job.status === 'ready' && job.collectExpiresAt === expiresAt;
-      jobs.push(alreadyCanonical ? job : { ...job, status: 'ready', collectExpiresAt: expiresAt });
+      const alreadyCanonical = job.status === 'ready' && job.collectExpiresAt === autoCollectAt;
+      jobs.push(alreadyCanonical ? job : { ...job, status: 'ready', collectExpiresAt: autoCollectAt });
       if (!alreadyCanonical) changed = true;
       continue;
     }
@@ -246,7 +257,8 @@ export function advanceRecyclingState(state: RecyclingState, now: number): Recyc
   return {
     state: changed ? { ...state, jobs } : state,
     changed,
-    expiredJobIds,
+    autoCollectedJobIds,
+    autoCollectedOutput,
   };
 }
 
@@ -282,9 +294,8 @@ export function startRecyclingJob(
   startedAt: number,
   jobId: string,
 ): RecyclingStartTransition {
-  const advanced = advanceRecyclingState(state, startedAt).state;
-  const validation = getRecyclingStartValidation(advanced, recyclingLevel, debrisAmount, allocationPercent);
-  if (!validation.canStart) return { ...validation, state: advanced, job: null };
+  const validation = getRecyclingStartValidation(state, recyclingLevel, debrisAmount, allocationPercent);
+  if (!validation.canStart) return { ...validation, state, job: null };
 
   const amount = toNonNegativeInteger(debrisAmount);
   const allocation = { ...allocationPercent };
@@ -307,8 +318,8 @@ export function startRecyclingJob(
     reason: null,
     job,
     state: {
-      availableDebris: advanced.availableDebris - amount,
-      jobs: [...advanced.jobs, job],
+      availableDebris: state.availableDebris - amount,
+      jobs: [...state.jobs, job],
     },
   };
 }
@@ -318,32 +329,22 @@ export function collectRecyclingJob(
   jobId: string,
   now: number,
 ): RecyclingCollectTransition {
-  const advanced = advanceRecyclingState(state, now);
-  const job = advanced.state.jobs.find((candidate) => candidate.id === jobId);
+  const job = state.jobs.find((candidate) => candidate.id === jobId);
   if (!job) {
     return {
       ok: false,
-      state: advanced.state,
+      state,
       output: null,
-      reason: advanced.expiredJobIds.includes(jobId) ? 'Срок хранения результата истёк' : 'Процесс не найден',
+      reason: 'Процесс не найден',
     };
   }
-  if (job.status !== 'ready' || now < job.finishAt) {
-    return { ok: false, state: advanced.state, output: null, reason: 'Переработка ещё не завершена' };
-  }
-  const expiresAt = job.collectExpiresAt ?? job.finishAt + RECYCLING_STORAGE_MS;
-  if (now >= expiresAt) {
-    return {
-      ok: false,
-      state: { ...advanced.state, jobs: advanced.state.jobs.filter((candidate) => candidate.id !== job.id) },
-      output: null,
-      reason: 'Срок хранения результата истёк',
-    };
+  if (now < job.finishAt) {
+    return { ok: false, state, output: null, reason: 'Переработка ещё не завершена' };
   }
 
   return {
     ok: true,
-    state: { ...advanced.state, jobs: advanced.state.jobs.filter((candidate) => candidate.id !== job.id) },
+    state: { ...state, jobs: state.jobs.filter((candidate) => candidate.id !== job.id) },
     output: { ...job.output },
     reason: null,
   };
