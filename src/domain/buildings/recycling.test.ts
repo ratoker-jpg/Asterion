@@ -122,22 +122,30 @@ test('collect is disabled before finish, succeeds once after finish and never pa
   assert.equal(duplicate.state.jobs.length, 0);
 });
 
-test('ready result expires after 24 hours and disappears without payout', () => {
-  const started = start(createDefaultRecyclingState(), 1, 1_000, 100_000, 'expiring');
+test('ready result auto-collects after 24 hours and emits its payout exactly once', () => {
+  const started = start(createDefaultRecyclingState(), 1, 1_000, 100_000, 'auto-collect', { metal: 100, minerals: 0, gas: 0 });
   const job = started.job!;
   const ready = advanceRecyclingState(started.state, job.finishAt);
   assert.equal(ready.state.jobs[0].status, 'ready');
   assert.equal(ready.state.jobs[0].collectExpiresAt, job.finishAt + RECYCLING_STORAGE_MS);
+  assert.deepEqual(ready.autoCollectedJobIds, []);
+  assert.deepEqual(ready.autoCollectedOutput, { metal: 0, minerals: 0, gas: 0 });
 
-  const expiredAt = job.finishAt + RECYCLING_STORAGE_MS;
-  const expired = collectRecyclingJob(ready.state, job.id, expiredAt);
-  assert.equal(expired.ok, false);
-  assert.equal(expired.output, null);
-  assert.equal(expired.reason, 'Срок хранения результата истёк');
-  assert.equal(expired.state.jobs.length, 0);
+  const autoCollectAt = job.finishAt + RECYCLING_STORAGE_MS;
+  const autoCollected = advanceRecyclingState(ready.state, autoCollectAt);
+  assert.equal(autoCollected.changed, true);
+  assert.deepEqual(autoCollected.autoCollectedJobIds, [job.id]);
+  assert.deepEqual(autoCollected.autoCollectedOutput, { metal: 750, minerals: 0, gas: 0 });
+  assert.equal(autoCollected.state.jobs.length, 0);
+
+  const repeated = advanceRecyclingState(autoCollected.state, autoCollectAt + 1);
+  assert.equal(repeated.changed, false);
+  assert.deepEqual(repeated.autoCollectedJobIds, []);
+  assert.deepEqual(repeated.autoCollectedOutput, { metal: 0, minerals: 0, gas: 0 });
+  assert.equal(repeated.state.jobs.length, 0);
 });
 
-test('processing, ready and expiry are derived from absolute timestamps after migration', () => {
+test('processing, ready and auto-collect boundary are derived from absolute timestamps after migration', () => {
   const processingStartedAt = 1_000_000;
   const readyStartedAt = 500_000;
   const processingDuration = getRecyclingDurationMs(100_000);
@@ -171,8 +179,13 @@ test('processing, ready and expiry are derived from absolute timestamps after mi
   assert.equal(migrated.jobs[1].finishAt, readyStartedAt + readyDuration);
   assert.equal(migrated.jobs[1].collectExpiresAt, readyStartedAt + readyDuration + RECYCLING_STORAGE_MS);
 
-  const afterExpiry = migrateRecyclingState(source, 2, readyStartedAt + readyDuration + RECYCLING_STORAGE_MS);
-  assert.equal(afterExpiry.jobs.some((job) => job.id === 'ready'), false);
+  const autoCollectAt = readyStartedAt + readyDuration + RECYCLING_STORAGE_MS;
+  const afterOfflineReload = migrateRecyclingState(source, 2, autoCollectAt);
+  assert.equal(afterOfflineReload.jobs.some((job) => job.id === 'ready'), true);
+  const advanced = advanceRecyclingState(afterOfflineReload, autoCollectAt);
+  assert.deepEqual(advanced.autoCollectedJobIds, ['ready']);
+  assert.deepEqual(advanced.autoCollectedOutput, getRecyclingOutput(10_000, 75, { metal: 100, minerals: 0, gas: 0 }));
+  assert.equal(advanced.state.jobs.some((job) => job.id === 'ready'), false);
 });
 
 test('damaged recycling save is sanitized and jobs above the level slot limit are dropped', () => {
