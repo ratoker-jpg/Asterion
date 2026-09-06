@@ -9,7 +9,6 @@ import {
   getRecyclingOutput,
   getRecyclingPreviewResourceOutput,
   getRecyclingStartValidation,
-  getRecyclingTotalOutput,
   type RecyclingResource,
   type RecyclingState,
   type ResourceAllocationPercent,
@@ -102,7 +101,6 @@ export function RecyclingCenterView({
   const maxJobs = getRecyclingMaxConcurrentJobs(buildingLevel);
   const allocationTotal = getRecyclingAllocationTotal(allocation);
   const totalDebris = recycling.availableDebris + recycling.jobs.reduce((total, job) => total + job.debrisAmount, 0);
-  const totalOutput = getRecyclingTotalOutput(debrisAmount, efficiencyPercent);
   const durationMs = getRecyclingDurationMs(debrisAmount);
   const validation = getRecyclingStartValidation(recycling, buildingLevel, debrisAmount, allocation);
   const exactPreview = allocationTotal === 100 ? getRecyclingOutput(debrisAmount, efficiencyPercent, allocation) : null;
@@ -232,7 +230,25 @@ export function RecyclingCenterView({
             <strong data-qa-recycling-free-slots>{Math.max(0, maxJobs - recycling.jobs.length)} СВОБ. СЛОТОВ</strong>
           </header>
           <div className="recycling-debris-control">
-            <div className="recycling-debris-label"><small>ОБЛОМКИ</small><strong data-qa-recycling-debris-value={debrisAmount}>{formatNumber(debrisAmount)}</strong></div>
+            <label className="recycling-debris-field">
+              <small>ОБЛОМКИ</small>
+              <input
+                type="number"
+                min={0}
+                max={recycling.availableDebris}
+                step={1}
+                value={debrisAmount}
+                inputMode="numeric"
+                aria-label="Количество обломков вручную"
+                data-qa-recycling-debris-input
+                data-qa-recycling-debris-value={debrisAmount}
+                onChange={(event) => changeDebris(Number(event.target.value))}
+              />
+            </label>
+            <div className="recycling-debris-time">
+              <small>ВРЕМЯ</small>
+              <strong data-qa-recycling-duration>{debrisAmount > 0 ? formatClock(durationMs) : '00:00:00'}</strong>
+            </div>
             <button type="button" data-qa-recycling-debris-minus disabled={debrisAmount <= 0} onClick={() => changeDebris(debrisAmount - 1000)}>−</button>
             <input
               type="range"
@@ -246,11 +262,6 @@ export function RecyclingCenterView({
             />
             <button type="button" data-qa-recycling-debris-plus disabled={debrisAmount >= recycling.availableDebris} onClick={() => changeDebris(debrisAmount + 1000)}>+</button>
             <button type="button" className="recycling-max-button" data-qa-recycling-debris-max disabled={recycling.availableDebris <= 0} onClick={() => changeDebris(recycling.availableDebris)}>МАКС.</button>
-          </div>
-          <div className="recycling-preview-strip">
-            <div><small>ВРЕМЯ</small><strong data-qa-recycling-duration>{debrisAmount > 0 ? formatClock(durationMs) : '00:00:00'}</strong></div>
-            <div><small>ЭФФЕКТИВНОСТЬ</small><strong>{efficiencyPercent}%</strong></div>
-            <div><small>ОБЩИЙ ВЫХОД</small><strong data-qa-recycling-total-output={totalOutput}>{formatNumber(totalOutput)}</strong></div>
           </div>
         </section>
 
