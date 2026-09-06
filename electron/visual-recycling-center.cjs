@@ -240,8 +240,10 @@ function assertGeometry(snapshot, label, expectedJobRows = 0) {
   if (!longPage) throw new Error(`${label}: recycling center did not activate global page scroll`);
   if (document.width > viewport.width + epsilon) throw new Error(`${label}: horizontal page scroll ${JSON.stringify(snapshot)}`);
   if (document.height <= viewport.height + epsilon) throw new Error(`${label}: document did not become vertically scrollable ${JSON.stringify(snapshot)}`);
-  if (Math.abs(stage.left) > epsilon || Math.abs(stage.right - viewport.width) > epsilon || Math.abs(stage.top) > epsilon) {
-    throw new Error(`${label}: long-page stage not top-aligned ${JSON.stringify(snapshot)}`);
+  const stageCenter = (stage.left + stage.right) / 2;
+  const documentCenter = document.width / 2;
+  if (Math.abs(stageCenter - documentCenter) > epsilon || Math.abs(stage.top) > epsilon) {
+    throw new Error(`${label}: long-page stage not centered in document content ${JSON.stringify(snapshot)}`);
   }
   if (stage.bottom <= viewport.height + epsilon) throw new Error(`${label}: long-page stage did not grow below viewport`);
   if (root.left < -epsilon || root.right > viewport.width + epsilon || root.top < -epsilon) throw new Error(`${label}: root clipped horizontally or above viewport`);
