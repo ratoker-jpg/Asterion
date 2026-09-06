@@ -10,6 +10,7 @@ const ROOT = path.join(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'visual-qa');
 const SAVE_KEY = 'asterion.vertical-slice.v1';
 const VIEWPORTS = [[1920,1080],[1600,900],[1280,720],[2560,1440]];
+const RESOURCE_QA_VIEWPORTS = new Set(['1920x1080','1600x900','1280x720']);
 const SCREENS = [
   ['settings','Настройки','settings-view-v2'],
   ['rating','Рейтинг','rating-view-v2'],
@@ -88,8 +89,9 @@ async function activateResourceZone(win) {
   if (!clicked) throw new Error('Resource zone header button not found');
   await waitFor(win, `document.querySelector('[data-qa-resource-zone]')`);
   await waitFor(win, `(() => {
+    const terrain=document.querySelector('[data-qa-zone-terrain]');
     const images=Array.from(document.querySelectorAll('[data-resource-building-role] img'));
-    return images.length===10 && images.every((image)=>image.complete && image.naturalWidth>0);
+    return terrain?.complete && terrain.naturalWidth>0 && images.length===10 && images.every((image)=>image.complete && image.naturalWidth>0);
   })()`);
   await settle(win);
 }
@@ -233,8 +235,28 @@ async function verifyResourceZoneFlow(win, directory) {
   await activateMainScreen(win,'Планета','.planet-page-v3 .scene-title h1');
   await activateResourceZone(win);
 
+  const terrain = await win.webContents.executeJavaScript(`(() => {
+    const item=document.querySelector('[data-qa-zone-terrain]');
+    return item ? {
+      zone:item.getAttribute('data-zone'),
+      source:item.getAttribute('data-terrain-source'),
+      src:item.currentSrc||item.src||'',
+      naturalWidth:item.naturalWidth,
+      naturalHeight:item.naturalHeight,
+      hasGrid:Boolean(document.querySelector('.resource-zone-grid-lines')),
+      hasHorizon:Boolean(document.querySelector('.resource-zone-horizon')),
+    } : null;
+  })()`);
+  if(!terrain || terrain.zone!=='resource' || terrain.source!=='resource-terrain.png' || !terrain.src.includes('resource-terrain') || terrain.naturalWidth<=0 || terrain.naturalHeight<=0 || terrain.hasGrid || terrain.hasHorizon){
+    throw new Error(`Resource terrain contract failed: ${JSON.stringify(terrain)}`);
+  }
+
   const visibleRoles = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-resource-building-role]')).map((item)=>item.getAttribute('data-resource-building-role'))`);
   if(JSON.stringify(visibleRoles)!==JSON.stringify(RESOURCE_ROLES)) throw new Error(`Resource role set mismatch: ${JSON.stringify(visibleRoles)}`);
+  const selectorRoles = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-resource-selector-role]')).map((item)=>item.getAttribute('data-resource-selector-role'))`);
+  if(JSON.stringify(selectorRoles)!==JSON.stringify(RESOURCE_ROLES)) throw new Error(`Resource selector role set mismatch: ${JSON.stringify(selectorRoles)}`);
+
+  await capture(win,directory,'resource-zone');
 
   const dialogSnapshots=[];
   for(const role of RESOURCE_ROLES){
@@ -246,9 +268,9 @@ async function verifyResourceZoneFlow(win, directory) {
     })()`);
     if(!snapshot.title || snapshot.status!=='available' || snapshot.disabled) throw new Error(`Unexpected initial dialog state for ${role}: ${JSON.stringify(snapshot)}`);
     dialogSnapshots.push({role,...snapshot});
+    if(role===RESOURCE_ROLES[0]) await capture(win,directory,'resource-zone-selected');
     await closeResourceBuilding(win);
   }
-  await capture(win,directory,'resource-zone');
 
   await win.webContents.executeJavaScript(`(() => {
     const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
@@ -314,14 +336,16 @@ async function verifyResourceZoneFlow(win, directory) {
   const result={
     screen:'resource-zone-flow',
     openings:{hotspot:true,header:true},
+    terrain,
     roles:visibleRoles,
+    selectorRoles,
     dialogs:dialogSnapshots,
     insufficient,
     queued,
     completed:{level:1,energy:165,queue:null},
     persisted,
   };
-  console.log(`Resource zone QA passed: ${RESOURCE_ROLES.length} buildings, insufficient state, queue timer, completion and reload persistence.`);
+  console.log(`Resource zone QA passed: terrain, ${RESOURCE_ROLES.length} buildings, selector, insufficient state, queue timer, completion and reload persistence.`);
 
   await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);
   await reload(win);
@@ -382,7 +406,8 @@ app.whenReady().then(async()=>{
         if(!legacyTitleAfter||legacyTitleAfter.category!=='pageTitle'||!approximately(legacyTitleAfter.size,legacyTitleBefore.size*1.3)) throw new Error(`Page-title typography did not reach the existing game screen: ${JSON.stringify({legacyTitleBefore,legacyTitleAfter})}`);
         results.push({screen:'legacy-typography-global',coverage:coverageBefore,pageTitle:{before:legacyTitleBefore,after:legacyTitleAfter}});
         await capture(win,directory,'planet-page-title-130');
-
+      }
+      if(RESOURCE_QA_VIEWPORTS.has(label)){
         results.push(await verifyResourceZoneFlow(win,directory));
       }
       fs.writeFileSync(path.join(directory,'metrics.json'),JSON.stringify(results,null,2));
