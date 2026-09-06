@@ -146,6 +146,12 @@ function ScienceRow({ science }: { science: ScienceCatalogDefinition }) {
         </header>
         <p className="utility-body-text">{science.description}</p>
 
+        {!requirements.available ? (
+          <div className="science-missing-banner-v2" role="note">
+            Вам необходимо: {requirements.missing.join(' · ')}
+          </div>
+        ) : null}
+
         <div className="science-costs-v2" aria-label="Стоимость следующего уровня">
           <ResourceCost kind="M" label="Металл" value={science.capturedCost.metal} />
           <ResourceCost kind="K" label="Минералы" value={science.capturedCost.minerals} />
@@ -155,24 +161,21 @@ function ScienceRow({ science }: { science: ScienceCatalogDefinition }) {
         </div>
 
         <div className="science-requirements-v2">
-          <span className="science-requirements-label-v2 utility-secondary">ТРЕБОВАНИЯ</span>
-          <div className="science-requirement-list-v2">
+          <RequirementBadge
+            label="Лаборатория"
+            art={laboratoryArt}
+            requiredLevel={science.laboratoryLevel}
+            currentLevel={SCIENCE_PROTOTYPE_DISPLAY_STATE.laboratoryLevel}
+          />
+          {requirements.prerequisites.map((requirement) => (
             <RequirementBadge
-              label="Лаборатория"
-              art={laboratoryArt}
-              requiredLevel={science.laboratoryLevel}
-              currentLevel={SCIENCE_PROTOTYPE_DISPLAY_STATE.laboratoryLevel}
+              key={requirement.id}
+              label={requirement.name}
+              art={requirement.art}
+              requiredLevel={requirement.requiredLevel}
+              currentLevel={requirement.currentLevel}
             />
-            {requirements.prerequisites.map((requirement) => (
-              <RequirementBadge
-                key={requirement.id}
-                label={requirement.name}
-                art={requirement.art}
-                requiredLevel={requirement.requiredLevel}
-                currentLevel={requirement.currentLevel}
-              />
-            ))}
-          </div>
+          ))}
         </div>
       </div>
 
@@ -189,13 +192,10 @@ function ScienceRow({ science }: { science: ScienceCatalogDefinition }) {
             >
               ПОВЫСИТЬ УРОВЕНЬ ({science.capturedNextLevel})
             </button>
-            <small className="science-ready-note-v2 utility-helper">Условия выполнены · запуск пока не подключён</small>
+            <small className="science-ready-note-v2 utility-helper">Условия выполнены</small>
           </>
         ) : (
-          <div className="science-blocked-v2" role="note" aria-label="Причина блокировки">
-            <strong>ТРЕБУЕТСЯ</strong>
-            {requirements.missing.map((reason) => <span key={reason}>{reason}</span>)}
-          </div>
+          <small className="science-blocked-note-v2 utility-helper">Условия исследования не выполнены</small>
         )}
       </div>
     </article>
@@ -214,16 +214,15 @@ function RequirementBadge({
   currentLevel: number;
 }) {
   const met = currentLevel >= requiredLevel;
+  const tooltip = `${label}\nУровень: ${currentLevel}\nТребуется: ${requiredLevel}`;
   return (
     <span
       className={`science-requirement-badge-v2 ${met ? 'is-met' : 'is-missing'}`}
-      title={`${label} / Уровень: ${currentLevel} / Требуется: ${requiredLevel}`}
+      title={tooltip}
+      aria-label={`${label}. Текущий уровень ${currentLevel}. Требуется ${requiredLevel}.`}
     >
       <img src={art} alt="" draggable={false} />
-      <span>
-        <b>{label}</b>
-        <small>ур. {requiredLevel}</small>
-      </span>
+      <b className="utility-data-text">{requiredLevel}</b>
     </span>
   );
 }
@@ -244,8 +243,8 @@ function getRequirementState(science: ScienceCatalogDefinition) {
   });
 
   const missing = [
-    ...(!laboratoryMet ? [`Лаборатория — ур. ${science.laboratoryLevel}`] : []),
-    ...prerequisites.filter((requirement) => !requirement.met).map((requirement) => `${requirement.name} — ур. ${requirement.requiredLevel}`),
+    ...(!laboratoryMet ? [`Лаборатория ур. ${science.laboratoryLevel}`] : []),
+    ...prerequisites.filter((requirement) => !requirement.met).map((requirement) => `${requirement.name} ур. ${requirement.requiredLevel}`),
   ];
 
   return {
