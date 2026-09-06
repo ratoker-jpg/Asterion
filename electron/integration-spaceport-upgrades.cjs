@@ -188,18 +188,30 @@ async function assertMaxRow(win, shipId, expectedMax, label) {
 }
 
 async function assertRequirementBadges(win) {
+  const focused = await win.webContents.executeJavaScript(`(() => {
+    const row = document.querySelector('[data-qa-spaceport-card="defender"]');
+    const badges = Array.from(row?.querySelectorAll('[data-qa-spaceport-requirement-badge]') ?? []);
+    const target = badges.find((badge) => badge.getAttribute('data-qa-spaceport-requirement-status') === 'missing') ?? badges[0];
+    target?.focus();
+    return Boolean(target && document.activeElement === target);
+  })()`);
+  if (!focused) throw new Error('Requirement badge could not receive keyboard focus');
+  await settle(win);
+
   const snapshot = await win.webContents.executeJavaScript(`(() => {
     const row = document.querySelector('[data-qa-spaceport-card="defender"]');
     if (!row) return null;
     const badges = Array.from(row.querySelectorAll('[data-qa-spaceport-requirement-badge]'));
-    const target = badges.find((badge) => badge.getAttribute('data-qa-spaceport-requirement-status') === 'missing') ?? badges[0];
-    target?.focus();
+    const target = badges.find((badge) => badge === document.activeElement) ?? badges.find((badge) => badge.getAttribute('data-qa-spaceport-requirement-status') === 'missing') ?? badges[0];
+    const pseudo = target ? getComputedStyle(target, '::after') : null;
     return {
       count: badges.length,
       allHaveArt: badges.every((badge) => Boolean(badge.querySelector('img')?.getAttribute('src'))),
       allFocusable: badges.every((badge) => badge.tabIndex === 0),
+      focused: Boolean(target && document.activeElement === target),
       tooltip: target?.getAttribute('data-tooltip') ?? '',
-      tooltipVisibility: target ? getComputedStyle(target, '::after').visibility : '',
+      tooltipVisibility: pseudo?.visibility ?? '',
+      tooltipOpacity: pseudo?.opacity ?? '',
       blockers: Array.from(row.querySelectorAll('[data-qa-spaceport-blocker="requirement"]')).map((node) => node.textContent?.replace(/\s+/g, ' ').trim() ?? ''),
       fallbackCount: row.querySelectorAll('[data-qa-spaceport-requirement-fallback]').length,
     };
@@ -207,7 +219,7 @@ async function assertRequirementBadges(win) {
   if (!snapshot || snapshot.count < 3 || !snapshot.allHaveArt || !snapshot.allFocusable || snapshot.fallbackCount !== 0) {
     throw new Error(`Known Defender requirements are not asset badges ${JSON.stringify(snapshot)}`);
   }
-  if (!snapshot.tooltip.includes('Текущий уровень:') || !snapshot.tooltip.includes('Требуется:') || !snapshot.tooltip.includes('Статус:') || snapshot.tooltipVisibility !== 'visible') {
+  if (!snapshot.focused || !snapshot.tooltip.includes('Текущий уровень:') || !snapshot.tooltip.includes('Требуется:') || !snapshot.tooltip.includes('Статус:') || snapshot.tooltipVisibility !== 'visible' || snapshot.tooltipOpacity !== '1') {
     throw new Error(`Requirement hover/focus tooltip is not available ${JSON.stringify(snapshot)}`);
   }
   if (!snapshot.blockers.some((value) => value.includes('Ионная наука')) || !snapshot.blockers.some((value) => value.includes('Топливные элементы'))) {

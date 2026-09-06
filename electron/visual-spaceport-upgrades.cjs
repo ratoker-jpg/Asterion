@@ -169,12 +169,22 @@ async function assertStableHeight(win, label) {
 }
 
 async function assertCatalogAndRequirements(win, label) {
+  const focused = await win.webContents.executeJavaScript(`(() => {
+    const defender = document.querySelector('[data-qa-spaceport-card="defender"]');
+    const badges = Array.from(defender?.querySelectorAll('[data-qa-spaceport-requirement-badge]') ?? []);
+    const missing = badges.find((badge) => badge.getAttribute('data-qa-spaceport-requirement-status') === 'missing') ?? badges[0];
+    missing?.focus();
+    return Boolean(missing && document.activeElement === missing);
+  })()`);
+  if (!focused) throw new Error(`${label}: requirement badge cannot receive focus`);
+  await settle(win);
+
   const snapshot = await win.webContents.executeJavaScript(`(() => {
     const excluded = ['solar-satellite','spy-probe','colonizer','recycler'];
     const defender = document.querySelector('[data-qa-spaceport-card="defender"]');
     const badges = Array.from(defender?.querySelectorAll('[data-qa-spaceport-requirement-badge]') ?? []);
-    const missing = badges.find((badge) => badge.getAttribute('data-qa-spaceport-requirement-status') === 'missing');
-    missing?.focus();
+    const missing = badges.find((badge) => badge === document.activeElement) ?? badges.find((badge) => badge.getAttribute('data-qa-spaceport-requirement-status') === 'missing');
+    const pseudo = missing ? getComputedStyle(missing, '::after') : null;
     return {
       excludedVisible: excluded.filter((id) => document.querySelector('[data-qa-spaceport-card="' + id + '"]')),
       transporter: Boolean(document.querySelector('[data-qa-spaceport-card="transporter"]')),
@@ -182,14 +192,16 @@ async function assertCatalogAndRequirements(win, label) {
       badgeCount: badges.length,
       badgeArts: badges.map((badge) => badge.querySelector('img')?.getAttribute('src') ?? ''),
       fallbackCount: defender?.querySelectorAll('[data-qa-spaceport-requirement-fallback]').length ?? 0,
+      focused: Boolean(missing && document.activeElement === missing),
       tooltip: missing?.getAttribute('data-tooltip') ?? '',
-      tooltipVisibility: missing ? getComputedStyle(missing, '::after').visibility : '',
+      tooltipVisibility: pseudo?.visibility ?? '',
+      tooltipOpacity: pseudo?.opacity ?? '',
       blockers: Array.from(defender?.querySelectorAll('[data-qa-spaceport-blocker="requirement"]') ?? []).map((node) => node.textContent?.replace(/\s+/g, ' ').trim() ?? ''),
     };
   })()`);
   if (snapshot.excludedVisible.length || !snapshot.transporter || !snapshot.megaTransporter) throw new Error(`${label}: catalog filter mismatch ${JSON.stringify(snapshot)}`);
   if (snapshot.badgeCount < 3 || snapshot.badgeArts.some((src) => !src) || snapshot.fallbackCount !== 0) throw new Error(`${label}: known requirements are not asset badges ${JSON.stringify(snapshot)}`);
-  if (!snapshot.tooltip.includes('Статус:') || snapshot.tooltipVisibility !== 'visible') throw new Error(`${label}: focus tooltip missing ${JSON.stringify(snapshot)}`);
+  if (!snapshot.focused || !snapshot.tooltip.includes('Статус:') || snapshot.tooltipVisibility !== 'visible' || snapshot.tooltipOpacity !== '1') throw new Error(`${label}: focus tooltip missing ${JSON.stringify(snapshot)}`);
   if (!snapshot.blockers.some((value) => value.includes('Ионная наука')) || !snapshot.blockers.some((value) => value.includes('Топливные элементы'))) throw new Error(`${label}: blocker strips missing ${JSON.stringify(snapshot)}`);
 }
 
