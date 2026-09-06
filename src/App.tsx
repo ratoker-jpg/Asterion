@@ -1276,7 +1276,7 @@ export function App() {
               planetName={currentPlanetName}
               moduleTitle={buildingInteriorTarget.moduleTitle}
               buildings={currentPlanetState.buildings}
-              scienceLevels={CURRENT_SCIENCE_LEVELS}
+              scienceLevels={CURRENT_SIENCE_LEVELS}
               productionBots={currentPlanetState.productionBots}
               recycling={currentPlanetState.recycling}
               trade={currentPlanetState.trade}
@@ -1450,7 +1450,7 @@ export function App() {
               <div className="skin-picker-grid">
                 {planetSkins.map((skin) => (
                   <button key={skin.id} type="button" className={editingPlanetState.skin === skin.id ? 'active' : ''} onClick={() => chooseSkin(skin)}>
-                    <img src={skin.art} alt="" /><span>{skin.label}</span><small>{editingPlanetState.skin === skin.id ? 'АКТИВИРОВАНА' : 'ИСПОЛЬЗОВАТЬ'}</small></span>
+                    <img src={skin.art} alt="" /><span>{skin.label}</span><small>{editingPlanetState.skin === skin.id ? 'АКТИВИРОВАНА' : 'ИСПОЛЬЗОВАТЬ'}</small>
                   </button>
                 ))}
               </div>
