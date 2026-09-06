@@ -34,8 +34,8 @@ export type BuildingInteriorContext<PlanetId extends string> = {
 export const FLEET_CONSTRUCTION_REQUEST_EVENT = 'asterion:fleet-construction-request';
 
 const targets: Readonly<Record<BuildingInteriorRole, BuildingInteriorTarget>> = {
-  construction: { kind: 'host', moduleTitle: 'ПРОИЗВОДСТВО' },
-  'advanced-factory': { kind: 'host', moduleTitle: 'ПРОМЫШЛЕННОЕ ПРОИЗВОДСТВО' },
+  construction: { kind: 'host', moduleTitle: 'ПРОИЗВОДСТВЕННЫЕ БОТЫ' },
+  'advanced-factory': { kind: 'host', moduleTitle: 'ПРОИЗВОДСТВЕННЫЕ БОТЫ' },
   recycling: { kind: 'host', moduleTitle: 'ПЕРЕРАБОТКА' },
   'trade-center': { kind: 'host', moduleTitle: 'ТОРГОВЛЯ' },
   shipyard: { kind: 'fleet-construction' },

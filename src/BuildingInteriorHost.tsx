@@ -1,4 +1,10 @@
-import { getBuildingDefinition } from './domain/buildings/resource-zone.ts';
+import { ProductionBotsView } from './ProductionBotsView';
+import { getBuildingDefinition, type BuildingLevels } from './domain/buildings/resource-zone.ts';
+import {
+  getAvailableProductionBots,
+  isProductionBotBuildingRole,
+  type BotAssignment,
+} from './domain/buildings/production-bots.ts';
 import type { BuildingInteriorContext } from './building-interior-navigation.ts';
 import './building-interiors.css';
 
@@ -6,6 +12,9 @@ type BuildingInteriorHostProps<PlanetId extends string> = {
   context: BuildingInteriorContext<PlanetId>;
   planetName: string;
   moduleTitle: string;
+  buildings: BuildingLevels;
+  productionBots: BotAssignment;
+  onProductionBotsApply: (assignment: BotAssignment) => void;
   onBack: () => void;
 };
 
@@ -13,8 +22,25 @@ export function BuildingInteriorHost<PlanetId extends string>({
   context,
   planetName,
   moduleTitle,
+  buildings,
+  productionBots,
+  onProductionBotsApply,
   onBack,
 }: BuildingInteriorHostProps<PlanetId>) {
+  if (isProductionBotBuildingRole(context.buildingRole)) {
+    return (
+      <ProductionBotsView
+        buildingRole={context.buildingRole}
+        planetName={planetName}
+        buildingLevel={buildings[context.buildingRole]}
+        availableBots={getAvailableProductionBots(buildings)}
+        appliedAssignment={productionBots}
+        onApply={onProductionBotsApply}
+        onBack={onBack}
+      />
+    );
+  }
+
   const building = getBuildingDefinition(context.buildingRole);
 
   return (

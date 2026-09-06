@@ -58,24 +58,29 @@ async function capture(win, directory, name) {
 async function click(win, selector) {
   const clicked = await win.webContents.executeJavaScript(`(() => {
     const element = document.querySelector(${JSON.stringify(selector)});
-    if (!element) return false;
+    if (!element || element.disabled) return false;
     element.click();
     return true;
   })()`);
-  if (!clicked) throw new Error(`Element not found: ${selector}`);
+  if (!clicked) throw new Error(`Element not found/enabled: ${selector}`);
   await settle(win);
 }
 
 async function setBuiltInteriorSave(win) {
-  await win.webContents.executeJavaScript(`(() => {
+  const ok = await win.webContents.executeJavaScript(`(() => {
     const raw = localStorage.getItem(${JSON.stringify(SAVE_KEY)});
     const save = raw ? JSON.parse(raw) : null;
-    if (!save?.planets?.['helion-01']?.buildings) return false;
-    const buildings = save.planets['helion-01'].buildings;
-    for (const role of ${JSON.stringify(BUILT_INTERIOR_ROLES)}) buildings[role] = 1;
+    const planet = save?.planets?.['helion-01'];
+    if (!planet?.buildings) return false;
+    for (const role of ${JSON.stringify(BUILT_INTERIOR_ROLES)}) planet.buildings[role] = 1;
+    planet.buildings.construction = 10;
+    planet.buildings['advanced-factory'] = 2;
+    planet.productionBots = { metal: 0, minerals: 0, gas: 0 };
+    save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 5);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     return true;
   })()`);
+  if (!ok) throw new Error('Could not seed building interiors');
   await reload(win);
 }
 
@@ -87,14 +92,11 @@ async function activateZone(win, zone) {
 async function openBuildingDialog(win, role) {
   await click(win, `[data-zone-building-role="${role}"]`);
   await waitFor(win, `document.querySelector('[data-qa-building-dialog=${JSON.stringify(role)}]')`);
-}
-
-async function assertEnterVisible(win, role) {
   await waitFor(win, `document.querySelector('[data-qa-building-dialog=${JSON.stringify(role)}] [data-qa-enter-building=${JSON.stringify(role)}]')`);
 }
 
 async function enterBuilding(win, role) {
-  await assertEnterVisible(win, role);
+  await openBuildingDialog(win, role);
   await click(win, `[data-qa-enter-building="${role}"]`);
 }
 
@@ -121,29 +123,26 @@ async function closeDialog(win) {
   await waitFor(win, `!document.querySelector('[data-qa-building-dialog]')`);
 }
 
-async function verifyFlow(win, directory) {
-  await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);
-  await reload(win);
-  await setBuiltInteriorSave(win);
-
+async function verifyProductionHost(win, directory) {
   await activateZone(win, 'industry');
-  await openBuildingDialog(win, 'construction');
-  await assertEnterVisible(win, 'construction');
-  await capture(win, directory, 'building-interior-industry-modal');
+
   await enterBuilding(win, 'construction');
-  await waitFor(win, `document.querySelector('[data-qa-building-interior-host="construction"]')`);
-  const hostText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-building-interior-host="construction"]')?.textContent ?? ''`);
-  if (!hostText.includes('Модуль будет доступен в следующем обновлении')) {
-    throw new Error(`Future host empty state missing: ${hostText}`);
-  }
-  await click(win, '[data-qa-building-interior-back]');
+  await waitFor(win, `document.querySelector('[data-qa-production-bots="construction"]')`);
+  await capture(win, directory, 'building-interior-production-factory');
+  await click(win, '[data-qa-production-bots-back]');
   await assertReturned(win, 'industry', 'construction');
   await closeDialog(win);
 
+  await enterBuilding(win, 'advanced-factory');
+  await waitFor(win, `document.querySelector('[data-qa-production-bots="advanced-factory"]')`);
+  await pressEscape(win);
+  await assertReturned(win, 'industry', 'advanced-factory');
+  await closeDialog(win);
+}
+
+async function verifyMilitaryDeepLinks(win, directory) {
   await activateZone(win, 'military');
-  await openBuildingDialog(win, 'shipyard');
-  await assertEnterVisible(win, 'shipyard');
-  await capture(win, directory, 'building-interior-military-modal');
+
   await enterBuilding(win, 'shipyard');
   await waitFor(win, `document.querySelector('.primary-navigation button.active span')?.textContent?.trim() === 'Флоты'`);
   await waitFor(win, `document.querySelector('.fleet-main-v1--shipyard')`);
@@ -153,35 +152,45 @@ async function verifyFlow(win, directory) {
   await assertReturned(win, 'military', 'shipyard');
   await closeDialog(win);
 
-  await openBuildingDialog(win, 'research');
   await enterBuilding(win, 'research');
   await waitFor(win, `document.querySelector('.science-view-v2')`);
   await waitFor(win, `document.querySelector('[data-qa-building-interior-back]')`);
-  await capture(win, directory, 'building-interior-science-from-laboratory');
   await click(win, '[data-qa-building-interior-back]');
   await assertReturned(win, 'military', 'research');
   await closeDialog(win);
 
-  await openBuildingDialog(win, 'planetary-government');
   await enterBuilding(win, 'planetary-government');
   await waitFor(win, `document.querySelector('.command-view')`);
   await waitFor(win, `document.querySelector('[data-qa-building-interior-back]')`);
-  await capture(win, directory, 'building-interior-command-from-government');
   await pressEscape(win);
   await assertReturned(win, 'military', 'planetary-government');
+  await closeDialog(win);
+
+  await enterBuilding(win, 'spaceport');
+  await waitFor(win, `document.querySelector('[data-qa-building-interior-host="spaceport"]')`);
+  const hostText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-building-interior-host="spaceport"]')?.textContent ?? ''`);
+  if (!hostText.includes('Модуль будет доступен в следующем обновлении')) throw new Error(`Future host empty state missing: ${hostText}`);
+  await click(win, '[data-qa-building-interior-back]');
+  await assertReturned(win, 'military', 'spaceport');
+}
+
+async function verifyFlow(win, directory) {
+  await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);
+  await reload(win);
+  await setBuiltInteriorSave(win);
+
+  await verifyProductionHost(win, directory);
+  await verifyMilitaryDeepLinks(win, directory);
 
   return {
     screen: 'building-interiors-navigation',
-    roles: BUILT_INTERIOR_ROLES,
     verified: [
-      'industry-modal-enter',
-      'future-host-back',
-      'shipyard-fleet-construction-deep-link',
-      'shipyard-escape-return',
-      'research-science-deep-link',
-      'research-back-return',
-      'government-command-deep-link',
-      'government-escape-return',
+      'factory-enter-back-return',
+      'advanced-factory-enter-escape-return',
+      'shipyard-fleet-deep-link-escape-return',
+      'research-science-deep-link-back-return',
+      'government-command-deep-link-escape-return',
+      'future-host-back-return',
     ],
   };
 }
@@ -218,6 +227,7 @@ app.whenReady().then(async () => {
         screenWidth: width,
         screenHeight: height,
       });
+      await settle(win);
       const result = await verifyFlow(win, directory);
       fs.writeFileSync(path.join(directory, 'building-interiors-metrics.json'), JSON.stringify(result, null, 2));
     }

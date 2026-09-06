@@ -34,6 +34,11 @@ test('Enter is hidden for an unbuilt approved building and independent from upgr
   assert.equal(canEnterBuildingInterior('advanced-factory', 20), true);
 });
 
+test('production buildings reuse one production-bots host module', () => {
+  assert.deepEqual(getBuildingInteriorTarget('construction'), { kind: 'host', moduleTitle: 'ПРОИЗВОДСТВЕННЫЕ БОТЫ' });
+  assert.deepEqual(getBuildingInteriorTarget('advanced-factory'), { kind: 'host', moduleTitle: 'ПРОИЗВОДСТВЕННЫЕ БОТЫ' });
+});
+
 test('approved deep links reuse fleets construction, science and command targets', () => {
   assert.deepEqual(getBuildingInteriorTarget('shipyard'), { kind: 'fleet-construction' });
   assert.deepEqual(getBuildingInteriorTarget('research'), { kind: 'science' });
@@ -45,6 +50,12 @@ test('return context preserves planet, zone and building role', () => {
     planetId: 'helion-01',
     zone: 'industry',
     buildingRole: 'construction',
+    returnTo: 'zone',
+  });
+  assert.deepEqual(createBuildingInteriorContext('helion-01', 'advanced-factory'), {
+    planetId: 'helion-01',
+    zone: 'industry',
+    buildingRole: 'advanced-factory',
     returnTo: 'zone',
   });
   assert.deepEqual(createBuildingInteriorContext('helion-01', 'shipyard'), {
