@@ -154,7 +154,7 @@ export function RecyclingCenterView({
         <dl className="recycling-info-stats">
           <div><dt>Выход после переработки</dt><dd data-qa-recycling-efficiency>{efficiencyPercent}%</dd></div>
           {buildingLevel < building.maxLevel ? <div><dt>Следующий уровень</dt><dd data-qa-recycling-next-efficiency>{Math.min(120, efficiencyPercent + 5)}%</dd></div> : null}
-          <div><dt>Максимум процессов</dt><dd data-qa-recycling-max-jobs>{maxJobs}</dd></div>
+          <div><dt>Максимум процессов</dt><dd data-qa-recycling-max-jobs={maxJobs}>{maxJobs}</dd></div>
           <div><dt>Всего обломков</dt><dd data-qa-recycling-total-debris={totalDebris}>{formatNumber(totalDebris)}</dd></div>
           <div><dt>Свободный остаток</dt><dd data-qa-recycling-free-debris={recycling.availableDebris}>{formatNumber(recycling.availableDebris)}</dd></div>
           <div><dt>Занято процессов</dt><dd data-qa-recycling-job-count={recycling.jobs.length}>{recycling.jobs.length} / {maxJobs}</dd></div>
