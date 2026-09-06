@@ -1,0 +1,51 @@
+.building-interior-host{
+  position:relative;
+  width:100%;
+  height:100%;
+  min-height:0;
+  display:grid;
+  grid-template-rows:auto 1fr auto;
+  padding:34px 42px 32px;
+  overflow:hidden;
+  background:radial-gradient(circle at 50% 36%,rgba(39,187,220,.08),transparent 42%),linear-gradient(180deg,rgba(3,23,34,.98),rgba(1,11,18,.995));
+  color:#e7faff;
+}
+.building-interior-header{
+  min-height:104px;
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:32px;
+  padding-bottom:22px;
+  border-bottom:1px solid rgba(68,203,231,.2);
+}
+.building-interior-header small{font-size:8px;letter-spacing:2.2px;color:#67cbe0}
+.building-interior-header h1{margin:8px 0 0;font-size:28px;letter-spacing:3px;color:#effcff}
+.building-interior-header dl{display:grid;grid-template-columns:repeat(2,minmax(150px,1fr));gap:10px;margin:0}
+.building-interior-header dl>div{padding:12px 14px;border:1px solid rgba(66,189,216,.18);background:rgba(4,31,43,.62)}
+.building-interior-header dt{font-size:6px;letter-spacing:1.2px;color:#6f9ca7}
+.building-interior-header dd{margin:7px 0 0;font-size:10px;color:#dff7fc}
+.building-interior-empty{align-self:center;justify-self:center;min-width:520px;padding:52px 58px;text-align:center;border:1px solid rgba(67,196,224,.2);background:rgba(4,29,41,.56);box-shadow:inset 0 0 36px rgba(54,210,240,.035)}
+.building-interior-empty>span{display:grid;place-items:center;width:54px;height:54px;margin:0 auto 16px;border:1px solid rgba(77,219,248,.34);color:#71e5fb;font-size:25px}
+.building-interior-empty strong{display:block;font-size:18px;letter-spacing:1px;color:#eaffff}
+.building-interior-empty p{margin:12px 0 0;font-size:10px;letter-spacing:.4px;color:#789fa9}
+.building-interior-back,.building-interior-return-overlay{
+  border:1px solid rgba(70,215,244,.52);
+  background:linear-gradient(180deg,rgba(5,60,76,.94),rgba(3,36,49,.96));
+  color:#eaffff;
+  font-weight:700;
+  letter-spacing:1px;
+  cursor:pointer;
+}
+.building-interior-back{justify-self:start;min-width:240px;height:42px;padding:0 18px;font-size:9px;text-align:left}
+.building-interior-back span{margin-right:10px;color:#72e7ff}
+.building-interior-back:hover,.building-interior-back:focus-visible,.building-interior-return-overlay:hover,.building-interior-return-overlay:focus-visible{outline:none;border-color:#70eaff;box-shadow:inset 0 0 18px rgba(62,216,245,.1)}
+.building-interior-return-overlay{position:absolute;z-index:520;right:22px;top:18px;min-width:210px;height:38px;padding:0 15px;font-size:8px;text-align:left;box-shadow:0 10px 28px rgba(0,0,0,.32)}
+.building-interior-return-overlay span{margin-right:9px;color:#72e7ff}
+
+@media (max-width:1350px){
+  .building-interior-host{padding:26px 30px 26px}
+  .building-interior-header{min-height:90px}
+  .building-interior-header h1{font-size:23px}
+  .building-interior-empty{min-width:440px;padding:42px 46px}
+}
