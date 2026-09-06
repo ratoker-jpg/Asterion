@@ -1276,7 +1276,7 @@ export function App() {
               planetName={currentPlanetName}
               moduleTitle={buildingInteriorTarget.moduleTitle}
               buildings={currentPlanetState.buildings}
-              scienceLevels={CURRENT_SIENCE_LEVELS}
+              scienceLevels={CURRENT_SCIENCE_LEVELS}
               productionBots={currentPlanetState.productionBots}
               recycling={currentPlanetState.recycling}
               trade={currentPlanetState.trade}

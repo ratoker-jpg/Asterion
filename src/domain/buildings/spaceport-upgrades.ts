@@ -442,9 +442,9 @@ function migrateQueue(
       && item.effectiveDurationMs > 0
       ? Math.round(item.effectiveDurationMs)
       : PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS;
-    const startedAt = previousFinishAt == null ? rawStartedAt : previousFinishAt;
+    const startedAt: number = previousFinishAt == null ? rawStartedAt : previousFinishAt;
     const rawFinishAt = safeTimestamp(item.finishAt);
-    const finishAt = rawFinishAt != null && rawFinishAt >= startedAt
+    const finishAt: number = rawFinishAt != null && rawFinishAt >= startedAt
       ? rawFinishAt
       : startedAt + effectiveDurationMs;
     const spaceportLevelAtStart = safeLevel(item.spaceportLevelAtStart, 10);
