@@ -137,10 +137,14 @@ async function readBotScreen(win, role) {
     if (!root) return null;
     const text = (selector) => root.querySelector(selector)?.textContent?.replace(/\\s+/g, ' ').trim() ?? '';
     const disabled = (selector) => Boolean(root.querySelector(selector)?.disabled);
+    const numberAttr = (selector, attribute) => {
+      const raw = root.querySelector(selector)?.getAttribute(attribute);
+      return raw == null ? null : Number(raw);
+    };
     return {
-      available: text('[data-qa-bots-available]'),
-      total: text('[data-qa-bots-draft-total]'),
-      free: text('[data-qa-bots-draft-free]'),
+      available: numberAttr('[data-qa-bots-available]', 'data-qa-bots-available'),
+      total: numberAttr('[data-qa-bots-draft-total]', 'data-qa-bots-draft-total'),
+      free: numberAttr('[data-qa-bots-draft-free]', 'data-qa-bots-draft-free'),
       draft: {
         metal: text('[data-qa-bot-draft="metal"]'),
         minerals: text('[data-qa-bot-draft="minerals"]'),
@@ -237,7 +241,7 @@ async function verifyFlow(win, directory, label) {
   await enterProductionBots(win, 'construction');
 
   let screen = await readBotScreen(win, 'construction');
-  if (!screen || screen.available !== '14' || screen.total !== '0 / 14' || screen.free !== '14') throw new Error(`${label}: initial pool mismatch ${JSON.stringify(screen)}`);
+  if (!screen || screen.available !== 14 || screen.total !== 0 || screen.free !== 14) throw new Error(`${label}: initial pool mismatch ${JSON.stringify(screen)}`);
   if (JSON.stringify(screen.applied) !== JSON.stringify({ metal: '+0%', minerals: '+0%', gas: '+0%' })) throw new Error(`${label}: initial applied bonus mismatch ${JSON.stringify(screen)}`);
   if (!screen.distributeDisabled || !screen.minusMetalDisabled) throw new Error(`${label}: initial controls mismatch ${JSON.stringify(screen)}`);
 
@@ -252,7 +256,7 @@ async function verifyFlow(win, directory, label) {
 
   screen = await readBotScreen(win, 'construction');
   if (JSON.stringify(screen?.draft) !== JSON.stringify({ metal: '6', minerals: '4', gas: '0' })) throw new Error(`${label}: draft mismatch ${JSON.stringify(screen)}`);
-  if (screen.total !== '10 / 14' || screen.free !== '4' || screen.effects.metal !== '6 ботов · +36%' || screen.effects.minerals !== '4 бота · +20%') {
+  if (screen.total !== 10 || screen.free !== 4 || screen.effects.metal !== '6 ботов · +36%' || screen.effects.minerals !== '4 бота · +20%') {
     throw new Error(`${label}: draft summary mismatch ${JSON.stringify(screen)}`);
   }
   if (screen.distributeDisabled) throw new Error(`${label}: distribute should be enabled`);
@@ -287,7 +291,7 @@ async function verifyFlow(win, directory, label) {
   await click(win, '.resource-building-dialog-close');
   await enterProductionBots(win, 'advanced-factory');
   screen = await readBotScreen(win, 'advanced-factory');
-  if (screen?.available !== '14' || JSON.stringify(screen.applied) !== JSON.stringify({ metal: '+36%', minerals: '+20%', gas: '+0%' })) {
+  if (screen?.available !== 14 || JSON.stringify(screen.applied) !== JSON.stringify({ metal: '+36%', minerals: '+20%', gas: '+0%' })) {
     throw new Error(`${label}: shared assignment missing from advanced factory ${JSON.stringify(screen)}`);
   }
   assertGeometry(await measure(win, 'advanced-factory'), label, 'advanced-factory');
