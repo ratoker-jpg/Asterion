@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import laboratoryArt from '../assets/source/New assets/buildings/aegis/building.aegis.research.png';
 import astronomyArt from '../assets/source/New assets/technologies/technology.shared.astronomy.png';
 import chemistryArt from '../assets/source/New assets/technologies/technology.shared.chemistry.png';
 import computerSystemsArt from '../assets/source/New assets/technologies/technology.shared.computer-systems.png';
@@ -27,7 +28,7 @@ import {
   SCIENCE_SECTIONS,
 } from './domain/science/catalog.ts';
 import { SCIENCE_PROTOTYPE_DISPLAY_STATE } from './domain/science/prototype-state.ts';
-import { scienceName, sciencesForSection } from './domain/science/selectors.ts';
+import { sciencesForSection } from './domain/science/selectors.ts';
 import type { ScienceCatalogDefinition, ScienceSectionId } from './domain/science/types.ts';
 
 const SCIENCE_ARTS: Record<string, string> = {
@@ -71,9 +72,9 @@ export function ScienceView() {
         </header>
 
         <div className="science-lab-card-v2">
-          <span className="science-lab-emblem-v2">EC</span>
+          <img className="science-lab-art-v2" src={laboratoryArt} alt="Лаборатория" draggable={false} />
           <div>
-            <small className="utility-secondary">ЭКСПЕРИМЕНТАЛЬНЫЙ ЦЕНТР</small>
+            <small className="utility-secondary">ЛАБОРАТОРИЯ</small>
             <strong className="utility-section-title">УРОВЕНЬ {SCIENCE_PROTOTYPE_DISPLAY_STATE.laboratoryLevel}</strong>
           </div>
         </div>
@@ -127,9 +128,10 @@ export function ScienceView() {
 }
 
 function ScienceRow({ science }: { science: ScienceCatalogDefinition }) {
-  const prerequisites = science.prerequisites.map((item) => `${scienceName(item.scienceId)} ур. ${item.level}`);
+  const requirements = getRequirementState(science);
+
   return (
-    <article className="science-row-v2">
+    <article className={`science-row-v2 ${requirements.available ? 'is-available' : 'is-blocked'}`} data-qa-science-available={requirements.available ? 'true' : 'false'}>
       <div className="science-art-v2">
         <img src={SCIENCE_ARTS[science.artSlug]} alt={science.name} draggable={false} />
         <span className="utility-data-text">УР. {science.capturedLevel}</span>
@@ -153,19 +155,104 @@ function ScienceRow({ science }: { science: ScienceCatalogDefinition }) {
         </div>
 
         <div className="science-requirements-v2">
-          <span className="utility-secondary">ЭКСП. ЦЕНТР: <b>ур. {science.laboratoryLevel}</b></span>
-          <span className="utility-secondary">ТРЕБОВАНИЯ: <b>{prerequisites.length ? prerequisites.join(' · ') : 'нет'}</b></span>
+          <span className="science-requirements-label-v2 utility-secondary">ТРЕБОВАНИЯ</span>
+          <div className="science-requirement-list-v2">
+            <RequirementBadge
+              label="Лаборатория"
+              art={laboratoryArt}
+              requiredLevel={science.laboratoryLevel}
+              currentLevel={SCIENCE_PROTOTYPE_DISPLAY_STATE.laboratoryLevel}
+            />
+            {requirements.prerequisites.map((requirement) => (
+              <RequirementBadge
+                key={requirement.id}
+                label={requirement.name}
+                art={requirement.art}
+                requiredLevel={requirement.requiredLevel}
+                currentLevel={requirement.currentLevel}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
       <div className="science-action-v2">
         <span className="utility-secondary">СЛЕДУЮЩИЙ УРОВЕНЬ</span>
         <strong className="utility-data-text">{science.capturedNextLevel}</strong>
-        <button type="button" className="utility-control" disabled title="Исследования будут подключены позже">ПОВЫСИТЬ УРОВЕНЬ</button>
-        <small className="utility-helper">Исследования будут подключены позже</small>
+        {requirements.available ? (
+          <>
+            <button
+              type="button"
+              className="utility-control science-ready-action-v2"
+              disabled
+              title="Условия выполнены. Реальное исследование и списание ресурсов пока не подключены."
+            >
+              ПОВЫСИТЬ УРОВЕНЬ ({science.capturedNextLevel})
+            </button>
+            <small className="science-ready-note-v2 utility-helper">Условия выполнены · запуск пока не подключён</small>
+          </>
+        ) : (
+          <div className="science-blocked-v2" role="note" aria-label="Причина блокировки">
+            <strong>ТРЕБУЕТСЯ</strong>
+            {requirements.missing.map((reason) => <span key={reason}>{reason}</span>)}
+          </div>
+        )}
       </div>
     </article>
   );
+}
+
+function RequirementBadge({
+  label,
+  art,
+  requiredLevel,
+  currentLevel,
+}: {
+  label: string;
+  art: string;
+  requiredLevel: number;
+  currentLevel: number;
+}) {
+  const met = currentLevel >= requiredLevel;
+  return (
+    <span
+      className={`science-requirement-badge-v2 ${met ? 'is-met' : 'is-missing'}`}
+      title={`${label} / Уровень: ${currentLevel} / Требуется: ${requiredLevel}`}
+    >
+      <img src={art} alt="" draggable={false} />
+      <span>
+        <b>{label}</b>
+        <small>ур. {requiredLevel}</small>
+      </span>
+    </span>
+  );
+}
+
+function getRequirementState(science: ScienceCatalogDefinition) {
+  const laboratoryMet = SCIENCE_PROTOTYPE_DISPLAY_STATE.laboratoryLevel >= science.laboratoryLevel;
+  const prerequisites = science.prerequisites.map((requirement) => {
+    const definition = SCIENCE_CATALOG.find((item) => item.id === requirement.scienceId);
+    const currentLevel = definition?.capturedLevel ?? 0;
+    return {
+      id: requirement.scienceId,
+      name: definition?.name ?? `Наука ${requirement.scienceId}`,
+      art: definition ? SCIENCE_ARTS[definition.artSlug] : '',
+      requiredLevel: requirement.level,
+      currentLevel,
+      met: currentLevel >= requirement.level,
+    };
+  });
+
+  const missing = [
+    ...(!laboratoryMet ? [`Лаборатория — ур. ${science.laboratoryLevel}`] : []),
+    ...prerequisites.filter((requirement) => !requirement.met).map((requirement) => `${requirement.name} — ур. ${requirement.requiredLevel}`),
+  ];
+
+  return {
+    available: laboratoryMet && prerequisites.every((requirement) => requirement.met),
+    prerequisites,
+    missing,
+  };
 }
 
 function ResourceCost({ kind, label, value }: { kind: string; label: string; value: number }) {
