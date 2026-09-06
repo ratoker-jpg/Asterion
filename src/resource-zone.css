@@ -209,39 +209,60 @@
   background:linear-gradient(180deg,transparent,rgba(4,29,40,.2));
 }
 .resource-zone-economy-title{
-  margin:0 0 10px;
+  margin:0 0 9px;
   font-size:9px;
   line-height:1.2;
   letter-spacing:1.35px;
   color:#9cdce9;
   font-weight:700;
 }
-.resource-zone-income-grid{
+.resource-zone-income-list{
   display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:6px;
+  gap:7px;
 }
-.resource-zone-income-grid>div{
-  min-height:72px;
-  padding:12px 8px 10px;
-  border:1px solid rgba(68,190,217,.24);
-  background:linear-gradient(180deg,rgba(5,36,49,.88),rgba(3,25,37,.82));
-  box-shadow:inset 0 0 15px rgba(38,187,219,.035);
+.resource-zone-income-row{
+  min-width:0;
+  min-height:54px;
+  display:grid;
+  grid-template-columns:28px minmax(0,1fr) auto;
+  align-items:center;
+  gap:10px;
+  padding:8px 12px;
+  border:1px solid rgba(68,190,217,.22);
+  background:linear-gradient(90deg,rgba(5,42,56,.88),rgba(3,25,37,.82));
+  box-shadow:inset 2px 0 rgba(72,211,239,.11),inset 0 0 14px rgba(38,187,219,.025);
 }
-.resource-zone-income-grid small{
-  display:block;
-  font-size:7.3px;
+.resource-zone-income-icon{
+  width:25px;
+  height:25px;
+  display:grid;
+  place-items:center;
+  color:#7edcf0;
+  filter:drop-shadow(0 0 7px rgba(70,216,247,.12));
+}
+.resource-zone-income-icon svg{width:23px;height:23px}
+.resource-zone-income-name{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:8px;
   line-height:1.2;
-  color:#7daab5;
+  color:#8fb8c2;
 }
-.resource-zone-income-grid strong{
-  display:block;
-  margin-top:9px;
-  font-size:20px;
+.resource-zone-income-row strong{
+  min-width:0;
+  max-width:138px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  justify-self:end;
+  font-size:17px;
   line-height:1;
   color:#e8fcff;
   font-weight:800;
   letter-spacing:.2px;
+  font-variant-numeric:tabular-nums;
   text-shadow:0 0 14px rgba(70,216,247,.12);
 }
 
