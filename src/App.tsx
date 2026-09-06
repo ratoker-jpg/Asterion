@@ -6,7 +6,15 @@ import { OperationsView } from './OperationsView';
 import { CommandView } from './CommandView';
 import { ReportsView } from './ReportsView';
 import { ZoneView } from './ZoneView';
+import { BuildingInteriorHost } from './BuildingInteriorHost';
 import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
+import {
+  FLEET_CONSTRUCTION_REQUEST_EVENT,
+  canEnterBuildingInterior,
+  createBuildingInteriorContext,
+  getBuildingInteriorTarget,
+  type BuildingInteriorContext as BuildingInteriorNavigationContext,
+} from './building-interior-navigation.ts';
 import {
   BATTLE_HISTORY_CHANGED_EVENT,
   createDefaultBattleHistory,
@@ -120,6 +128,7 @@ type Zone = BuildingZone;
 type PlanetViewMode = 'overview' | Zone;
 type IconKind = 'metal' | 'mineral' | 'gas' | 'energy' | 'population' | Zone;
 type NavigationIconKind = 'planet' | 'universe' | 'fleets' | 'operations' | 'command' | 'reports' | 'settings' | 'rating' | 'science';
+type BuildingInteriorContext = BuildingInteriorNavigationContext<PlanetId>;
 
 type PlanetRuntime = {
   name: string;
@@ -404,6 +413,8 @@ export function App() {
   const [detailsOpen, setDetailsOpen] = useState(true);
   const [editingPlanetId, setEditingPlanetId] = useState<PlanetId | null>(null);
   const [editingName, setEditingName] = useState(DEFAULT_PLANET_NAME);
+  const [selectedBuildingRole, setSelectedBuildingRole] = useState<BuildingRole | null>(null);
+  const [buildingInterior, setBuildingInterior] = useState<BuildingInteriorContext | null>(null);
 
   useEffect(() => localStorage.setItem(SAVE_KEY, JSON.stringify(state)), [state]);
   useEffect(() => {
@@ -505,6 +516,12 @@ export function App() {
     gas: state.gas,
     energy: currentPlanetState.energy,
   };
+  const buildingInteriorTarget = buildingInterior
+    ? getBuildingInteriorTarget(buildingInterior.buildingRole)
+    : null;
+  const buildingInteriorDefinition = buildingInterior
+    ? getBuildingDefinition(buildingInterior.buildingRole)
+    : null;
 
   const editingPlanet = editingPlanetId ? currentPlanet : null;
   const editingPlanetState = editingPlanet ? state.planets['helion-01'] : null;
@@ -519,7 +536,13 @@ export function App() {
     [currentPlanetState.buildings],
   );
 
+  const clearBuildingInterior = () => {
+    setBuildingInterior(null);
+    setSelectedBuildingRole(null);
+  };
+
   const selectPlanet = (_planetId: PlanetId) => {
+    clearBuildingInterior();
     setState((current) => ({ ...current, currentPlanetId: 'helion-01' }));
     setPlanetMenuOpen(false);
     setPlanetViewMode('overview');
@@ -527,6 +550,7 @@ export function App() {
   };
 
   const openPlanetEditor = (planetId: PlanetId) => {
+    clearBuildingInterior();
     setState((current) => ({ ...current, currentPlanetId: 'helion-01' }));
     setActiveTab('Планета');
     setPlanetViewMode('overview');
@@ -626,6 +650,8 @@ export function App() {
     setEditingName(DEFAULT_PLANET_NAME);
     setDetailsOpen(true);
     setPlanetViewMode('overview');
+    setSelectedBuildingRole(null);
+    setBuildingInterior(null);
     setNotice('Сохранение прототипа сброшено.');
   };
 
@@ -645,6 +671,7 @@ export function App() {
   };
 
   const openFleetRootFromOperations = () => {
+    clearBuildingInterior();
     setActiveTab('Флоты');
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
@@ -669,6 +696,7 @@ export function App() {
   };
 
   const openFleetRootFromCommand = () => {
+    clearBuildingInterior();
     setActiveTab('Флоты');
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
@@ -678,6 +706,7 @@ export function App() {
   };
 
   const openFleetRootFromReports = () => {
+    clearBuildingInterior();
     setActiveTab('Флоты');
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
@@ -698,7 +727,57 @@ export function App() {
       : `Не удалось обновить сохранённые бои: ${result.error}`);
   };
 
+  const returnToBuilding = () => {
+    if (!buildingInterior) return;
+    const context = buildingInterior;
+    const definition = getBuildingDefinition(context.buildingRole);
+    setBuildingInterior(null);
+    setState((current) => current.currentPlanetId === context.planetId
+      ? current
+      : { ...current, currentPlanetId: context.planetId });
+    setActiveTab('Планета');
+    setPlanetViewMode(context.zone);
+    setSelectedBuildingRole(context.buildingRole);
+    setPlanetMenuOpen(false);
+    closePlanetEditor();
+    setNotice(`${definition.name}: возвращение в ${zoneMeta[context.zone].title.toLowerCase()}.`);
+  };
+
+  const enterBuilding = (assetRole: BuildingRole) => {
+    if (!canEnterBuildingInterior(assetRole, currentPlanetState.buildings[assetRole])) return;
+    const context = createBuildingInteriorContext(state.currentPlanetId, assetRole);
+    const target = getBuildingInteriorTarget(assetRole);
+    if (!context || !target) return;
+
+    setBuildingInterior(context);
+    setSelectedBuildingRole(assetRole);
+    setPlanetMenuOpen(false);
+    closePlanetEditor();
+
+    if (target.kind === 'host') {
+      setActiveTab('Планета');
+      setPlanetViewMode(context.zone);
+      setNotice(`${getBuildingDefinition(assetRole).name}: внутренний модуль открыт.`);
+      return;
+    }
+    if (target.kind === 'fleet-construction') {
+      setActiveTab('Флоты');
+      setNotice('Верфь: открыт существующий раздел строительства флота.');
+      window.setTimeout(() => window.dispatchEvent(new Event(FLEET_CONSTRUCTION_REQUEST_EVENT)), 0);
+      return;
+    }
+    if (target.kind === 'science') {
+      setActiveTab('Наука');
+      setNotice('Лаборатория: открыт существующий раздел «Наука».');
+      return;
+    }
+
+    setActiveTab('Командование');
+    setNotice('Палата управления: открыт существующий раздел «Командование».');
+  };
+
   const chooseTab = (tab: string) => {
+    clearBuildingInterior();
     setActiveTab(tab);
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
@@ -712,6 +791,7 @@ export function App() {
   };
 
   const chooseZone = (nextZone: Zone) => {
+    clearBuildingInterior();
     setActiveTab('Планета');
     setPlanetViewMode(nextZone);
     setPlanetMenuOpen(false);
@@ -719,7 +799,34 @@ export function App() {
     setNotice(`${zoneMeta[nextZone].title}: сцена открыта для ${currentPlanetName}.`);
   };
 
+  useEffect(() => {
+    if (!buildingInterior) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      returnToBuilding();
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [buildingInterior]);
+
   const remaining = currentActiveQueueItem ? currentActiveQueueItem.finishAt - now : 0;
+  const workspaceKind = buildingInteriorTarget?.kind === 'host'
+    ? 'building-interior'
+    : activeTab === 'Вселенная'
+      ? 'universe'
+      : activeTab === 'Планета' && planetViewMode !== 'overview'
+        ? 'resource-zone'
+        : activeTab === 'Планета'
+          ? 'planet'
+          : activeTab === 'Операции'
+            ? 'operations'
+            : activeTab === 'Командование'
+              ? 'command'
+              : activeTab === 'Отчёты'
+                ? 'reports'
+                : 'module';
 
   return (
     <div className="viewport">
@@ -802,8 +909,27 @@ export function App() {
           </section>
         </header>
 
-        <section className={`workspace workspace-v4 workspace--${activeTab === 'Вселенная' ? 'universe' : activeTab === 'Планета' && planetViewMode !== 'overview' ? 'resource-zone' : activeTab === 'Планета' ? 'planet' : activeTab === 'Операции' ? 'operations' : activeTab === 'Командование' ? 'command' : activeTab === 'Отчёты' ? 'reports' : 'module'}`}>
-          {activeTab === 'Вселенная' ? (
+        <section className={`workspace workspace-v4 workspace--${workspaceKind}`}>
+          {buildingInterior && buildingInteriorTarget && buildingInteriorTarget.kind !== 'host' && buildingInteriorDefinition ? (
+            <button
+              className="building-interior-return-overlay"
+              type="button"
+              data-qa-building-interior-back
+              onClick={returnToBuilding}
+            >
+              <span aria-hidden="true">←</span>
+              Назад в {buildingInteriorDefinition.name}
+            </button>
+          ) : null}
+
+          {buildingInterior && buildingInteriorTarget?.kind === 'host' ? (
+            <BuildingInteriorHost
+              context={buildingInterior}
+              planetName={currentPlanetName}
+              moduleTitle={buildingInteriorTarget.moduleTitle}
+              onBack={returnToBuilding}
+            />
+          ) : activeTab === 'Вселенная' ? (
             <UniverseView onNotice={setNotice} ownedPlanetArt={currentSkin.art} ownedPlanetName={currentPlanetName} />
           ) : activeTab === 'Операции' ? (
             <OperationsView
@@ -842,7 +968,10 @@ export function App() {
               queue={currentQueue}
               scienceLevels={CURRENT_SCIENCE_LEVELS}
               now={now}
+              selectedRole={selectedBuildingRole}
+              onSelectedRoleChange={setSelectedBuildingRole}
               onBuild={buildBuilding}
+              onEnterBuilding={enterBuilding}
             />
           ) : activeTab === 'Планета' ? (
             <div className="planet-page-v3 planet-page-v4">
