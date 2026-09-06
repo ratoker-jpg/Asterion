@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   SPACEPORT_UPGRADE_PROTOTYPE_NOTE,
@@ -95,10 +95,30 @@ function requirementArt(requirement: SpaceportRequirementState): string | null {
 
 function RequirementBadge({ requirement }: { requirement: SpaceportRequirementState }) {
   const [tooltipOpen, setTooltipOpen] = useState(false);
+  const badgeRef = useRef<HTMLSpanElement>(null);
   const art = requirementArt(requirement);
   const status = requirement.met ? 'выполнено' : 'не выполнено';
   const current = requirement.currentLevel == null ? 'неизвестно' : String(requirement.currentLevel);
   const tooltip = `${requirement.label}\nТекущий уровень: ${current}\nТребуется: ${requirement.requiredLevel}\nСтатус: ${status}`;
+
+  useEffect(() => {
+    const badge = badgeRef.current;
+    if (!badge) return;
+
+    const openTooltip = () => setTooltipOpen(true);
+    const closeTooltip = () => setTooltipOpen(false);
+    badge.addEventListener('focus', openTooltip);
+    badge.addEventListener('blur', closeTooltip);
+    badge.addEventListener('mouseenter', openTooltip);
+    badge.addEventListener('mouseleave', closeTooltip);
+
+    return () => {
+      badge.removeEventListener('focus', openTooltip);
+      badge.removeEventListener('blur', closeTooltip);
+      badge.removeEventListener('mouseenter', openTooltip);
+      badge.removeEventListener('mouseleave', closeTooltip);
+    };
+  }, []);
 
   if (!art) {
     return (
@@ -113,16 +133,13 @@ function RequirementBadge({ requirement }: { requirement: SpaceportRequirementSt
 
   return (
     <span
+      ref={badgeRef}
       className={`spaceport-requirement-badge-v2 ${requirement.met ? 'is-met' : 'is-missing'} ${tooltipOpen ? 'is-tooltip-open' : ''}`}
       data-qa-spaceport-requirement-badge={requirement.label}
       data-qa-spaceport-requirement-status={requirement.met ? 'met' : 'missing'}
       data-tooltip={tooltip}
       tabIndex={0}
       aria-label={`${requirement.label}. Текущий уровень ${current}. Требуется ${requirement.requiredLevel}. Статус: ${status}.`}
-      onMouseEnter={() => setTooltipOpen(true)}
-      onMouseLeave={() => setTooltipOpen(false)}
-      onFocus={() => setTooltipOpen(true)}
-      onBlur={() => setTooltipOpen(false)}
     >
       <img src={art} alt="" draggable={false} />
       <b>{requirement.requiredLevel}</b>
