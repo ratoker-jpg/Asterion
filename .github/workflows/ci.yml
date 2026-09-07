@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -46,7 +47,9 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: Asterion-Utility-Visual-QA
-          path: visual-qa/**/*
+          path: |
+            visual-qa/**/*
+            artifacts-pass1/test-mode-qa/**/*
           if-no-files-found: warn
           retention-days: 14
       - name: Package Windows app

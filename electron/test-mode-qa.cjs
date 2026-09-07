@@ -23,7 +23,9 @@ async function waitFor(win, expression, timeoutMs = 10_000) {
 }
 
 async function settle(win) {
-  await win.webContents.executeJavaScript('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+  // requestAnimationFrame can remain pending while Chromium lays out a very
+  // tall long-page workspace. A bounded delay keeps QA deterministic; callers
+  // that need a concrete state use waitFor immediately afterwards.
   await sleep(100);
 }
 
@@ -71,11 +73,19 @@ async function clickText(win, selector, text) {
 
 async function capture(win, directory, name) {
   await win.webContents.executeJavaScript('window.scrollTo(0, 0)');
-  await settle(win);
+  // Long-page mode deliberately exposes the document's natural height. Waiting
+  // for another animation frame here makes Chromium lay out and paint the
+  // entire page before a screenshot is requested. Navigation and interaction
+  // helpers already settle the state before capture.
+  await sleep(100);
+  const { width, height } = await win.webContents.executeJavaScript('({ width: innerWidth, height: innerHeight })');
   const result = await win.webContents.debugger.sendCommand('Page.captureScreenshot', {
     format: 'png',
-    fromSurface: true,
+    fromSurface: false,
     captureBeyondViewport: false,
+    // Capture only the visible viewport. Long-page behavior is asserted via
+    // DOM geometry and overflow checks below.
+    clip: { x: 0, y: 0, width, height, scale: 1 },
   });
   fs.writeFileSync(path.join(directory, `${name}.png`), Buffer.from(result.data, 'base64'));
 }
