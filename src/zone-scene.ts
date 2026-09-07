@@ -36,7 +36,6 @@ export const ZONE_SCENE_PLACEMENTS: Readonly<Record<BuildingZone, ZonePlacementM
     research: { left: '50%', top: '39%', width: 192, shadowWidth: 130 },
     spaceport: { left: '76%', top: '43%', width: 216, shadowWidth: 146 },
     'planetary-government': { left: '36%', top: '66%', width: 204, shadowWidth: 138 },
-    bank: { left: '64%', top: '66%', width: 190, shadowWidth: 128 },
   },
 };
 

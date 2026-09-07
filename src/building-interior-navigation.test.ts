@@ -8,8 +8,8 @@ import {
 } from './building-interior-navigation.ts';
 import { BUILDING_ROLES } from './domain/buildings/resource-zone.ts';
 
-test('building interiors expose Enter for exactly the nine approved roles', () => {
-  assert.equal(BUILDING_INTERIOR_ROLES.length, 9);
+test('building interiors expose Enter for exactly the eight approved roles', () => {
+  assert.equal(BUILDING_INTERIOR_ROLES.length, 8);
   assert.deepEqual(BUILDING_INTERIOR_ROLES, [
     'construction',
     'advanced-factory',
@@ -19,7 +19,6 @@ test('building interiors expose Enter for exactly the nine approved roles', () =
     'research',
     'spaceport',
     'planetary-government',
-    'bank',
   ]);
 
   const allowed = BUILDING_ROLES.filter((role) => canEnterBuildingInterior(role, 1));
