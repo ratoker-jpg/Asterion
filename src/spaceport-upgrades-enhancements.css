@@ -1,0 +1,256 @@
+.spaceport-level-progress-v2 {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  padding: 8px 9px;
+  border: 1px solid rgba(65, 177, 205, .14);
+  background: rgba(3, 25, 36, .62);
+}
+
+.spaceport-level-progress-meta-v2 {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: #7697a2;
+  font-size: 9px;
+  line-height: 1.25;
+}
+
+.spaceport-level-progress-meta-v2 span,
+.spaceport-level-progress-meta-v2 strong {
+  min-width: 0;
+}
+
+.spaceport-level-progress-meta-v2 b {
+  color: #e6fbff;
+  font-variant-numeric: tabular-nums;
+}
+
+.spaceport-level-progress-meta-v2 strong {
+  color: #8de8f7;
+  font-size: 10px;
+  letter-spacing: .35px;
+  text-transform: uppercase;
+}
+
+.spaceport-level-segments-v2 {
+  min-width: 0;
+  height: 10px;
+  display: flex;
+  gap: 2px;
+}
+
+.spaceport-level-segments-v2 i {
+  min-width: 2px;
+  flex: 1 1 0;
+  height: 100%;
+  border: 1px solid rgba(79, 141, 157, .16);
+  background: rgba(48, 76, 85, .28);
+}
+
+.spaceport-level-segments-v2 i.is-complete {
+  border-color: rgba(70, 216, 241, .56);
+  background: linear-gradient(180deg, rgba(78, 228, 249, .94), rgba(25, 132, 159, .86));
+  box-shadow: 0 0 5px rgba(51, 210, 239, .18);
+}
+
+.spaceport-level-segments-v2 i.is-queued {
+  border-color: rgba(231, 187, 78, .58);
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(231, 187, 78, .86) 0,
+    rgba(231, 187, 78, .86) 3px,
+    rgba(129, 98, 33, .78) 3px,
+    rgba(129, 98, 33, .78) 6px
+  );
+}
+
+.spaceport-level-progress-v2.is-max {
+  border-color: rgba(72, 217, 241, .34);
+  background: linear-gradient(90deg, rgba(7, 61, 75, .72), rgba(3, 31, 42, .62));
+}
+
+.spaceport-requirement-line-v2 > .spaceport-requirement-badges-v2 {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.spaceport-requirement-line-v2 > div > .spaceport-requirement-badge-v2 {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(67, 180, 207, .25);
+  background: rgba(3, 23, 33, .92);
+  color: #dff9ff;
+  overflow: visible;
+  outline: none;
+}
+
+.spaceport-requirement-badge-v2 img {
+  width: 42px;
+  height: 42px;
+  display: block;
+  object-fit: contain;
+  opacity: .9;
+}
+
+.spaceport-requirement-badge-v2 b {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  min-width: 19px;
+  height: 19px;
+  display: grid;
+  place-items: center;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  background: #041923;
+  color: inherit;
+  font-size: 9px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.spaceport-requirement-line-v2 > div > .spaceport-requirement-badge-v2.is-met {
+  border-color: rgba(70, 218, 240, .58);
+  box-shadow: inset 0 0 12px rgba(44, 199, 226, .12);
+  color: #84e9f9;
+}
+
+.spaceport-requirement-line-v2 > div > .spaceport-requirement-badge-v2.is-missing {
+  border-color: rgba(210, 73, 83, .62);
+  box-shadow: inset 0 0 12px rgba(151, 35, 45, .15);
+  color: #ef929a;
+}
+
+/*
+ * Tooltip is a real DOM node. CSS :hover/:focus is the source of truth for
+ * visible interaction; the state class remains as a browser compatibility aid.
+ */
+.spaceport-requirement-badge-v2::after {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.spaceport-requirement-badge-v2.is-tooltip-open::after,
+.spaceport-requirement-badge-v2:hover::after,
+.spaceport-requirement-badge-v2:focus::after,
+.spaceport-requirement-badge-v2:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+.spaceport-requirement-tooltip-v2 {
+  position: absolute;
+  z-index: 50;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: 240px;
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  transform: translate(-50%, 4px);
+  border: 1px solid rgba(72, 203, 231, .36);
+  background: rgba(2, 17, 25, .98);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+  color: #ccecf3;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.45;
+  text-align: left;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: none;
+}
+
+.spaceport-requirement-tooltip-v2 strong {
+  color: #e7fbff;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.spaceport-requirement-tooltip-v2 span {
+  color: #a8cbd3;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.spaceport-requirement-badge-v2.is-tooltip-open > .spaceport-requirement-tooltip-v2,
+.spaceport-requirement-badge-v2:hover > .spaceport-requirement-tooltip-v2,
+.spaceport-requirement-badge-v2:focus > .spaceport-requirement-tooltip-v2,
+.spaceport-requirement-badge-v2:focus-visible > .spaceport-requirement-tooltip-v2 {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+
+.spaceport-requirement-badge-v2:focus-visible {
+  outline: 1px solid #79e8fb;
+  outline-offset: 2px;
+}
+
+.spaceport-requirement-line-v2 > div > .spaceport-requirement-fallback-v2,
+.spaceport-requirement-line-v2 > div > .spaceport-no-requirements-v2 {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px dashed rgba(120, 146, 154, .26);
+  background: rgba(17, 31, 37, .64);
+  color: #80949b;
+  font-size: 8px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.spaceport-requirement-line-v2 > div > .spaceport-requirement-fallback-v2 {
+  border-color: rgba(183, 78, 87, .38);
+  color: #c38b91;
+}
+
+.spaceport-state-strip-v2.max {
+  border-left: 3px solid #42d8ef;
+  background: linear-gradient(90deg, rgba(7, 77, 94, .76), rgba(4, 35, 46, .34));
+  color: #9beaf5;
+  text-transform: uppercase;
+  letter-spacing: .35px;
+}
+
+@media (max-width: 1280px) {
+  .spaceport-level-progress-meta-v2 {
+    gap: 7px;
+    font-size: 8px;
+  }
+
+  .spaceport-level-segments-v2 {
+    gap: 1px;
+  }
+
+  .spaceport-requirement-line-v2 > div > .spaceport-requirement-badge-v2 {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+  }
+
+  .spaceport-requirement-badge-v2 img {
+    width: 38px;
+    height: 38px;
+  }
+}

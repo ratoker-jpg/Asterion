@@ -1,13 +1,19 @@
 import { ProductionBotsView } from './ProductionBotsView';
 import { RecyclingCenterView } from './RecyclingCenterView';
+import { SpaceportUpgradeView } from './SpaceportUpgradeView';
 import { TradeCenterView } from './TradeCenterView';
-import { getBuildingDefinition, type BuildingLevels } from './domain/buildings/resource-zone.ts';
+import { getBuildingDefinition, type BuildingLevels, type ScienceLevels } from './domain/buildings/resource-zone.ts';
 import {
   getAvailableProductionBots,
   isProductionBotBuildingRole,
   type BotAssignment,
 } from './domain/buildings/production-bots.ts';
 import type { RecyclingState, ResourceAllocationPercent } from './domain/buildings/recycling.ts';
+import type {
+  SpaceportUpgradeState,
+  SpaceportUpgradeTrack,
+  SpaceportUpgradeWallet,
+} from './domain/buildings/spaceport-upgrades.ts';
 import type { TradeExecution, TradeRequest, TradeState, TradeWallet } from './domain/buildings/trade.ts';
 import type { BuildingInteriorContext } from './building-interior-navigation.ts';
 import './building-interiors.css';
@@ -17,16 +23,20 @@ type BuildingInteriorHostProps<PlanetId extends string> = {
   planetName: string;
   moduleTitle: string;
   buildings: BuildingLevels;
+  scienceLevels: ScienceLevels;
   productionBots: BotAssignment;
   recycling: RecyclingState;
   trade: TradeState;
   tradeWallet: TradeWallet;
+  spaceportUpgrades: SpaceportUpgradeState;
+  spaceportWallet: SpaceportUpgradeWallet;
   resourceRatingPoints: number;
   now: number;
   onProductionBotsApply: (assignment: BotAssignment) => void;
   onRecyclingStart: (debrisAmount: number, allocation: ResourceAllocationPercent) => boolean;
   onRecyclingCollect: (jobId: string) => boolean;
   onTrade: (request: TradeRequest) => TradeExecution;
+  onSpaceportUpgrade: (track: SpaceportUpgradeTrack, shipId: string) => boolean;
   onBack: () => void;
 };
 
@@ -35,16 +45,20 @@ export function BuildingInteriorHost<PlanetId extends string>({
   planetName,
   moduleTitle,
   buildings,
+  scienceLevels,
   productionBots,
   recycling,
   trade,
   tradeWallet,
+  spaceportUpgrades,
+  spaceportWallet,
   resourceRatingPoints,
   now,
   onProductionBotsApply,
   onRecyclingStart,
   onRecyclingCollect,
   onTrade,
+  onSpaceportUpgrade,
   onBack,
 }: BuildingInteriorHostProps<PlanetId>) {
   if (context.buildingRole === 'recycling') {
@@ -71,6 +85,22 @@ export function BuildingInteriorHost<PlanetId extends string>({
         resourceRatingPoints={resourceRatingPoints}
         now={now}
         onTrade={onTrade}
+        onBack={onBack}
+      />
+    );
+  }
+
+  if (context.buildingRole === 'spaceport') {
+    return (
+      <SpaceportUpgradeView
+        planetName={planetName}
+        buildingLevel={buildings.spaceport}
+        buildings={buildings}
+        scienceLevels={scienceLevels}
+        upgrades={spaceportUpgrades}
+        wallet={spaceportWallet}
+        now={now}
+        onUpgrade={onSpaceportUpgrade}
         onBack={onBack}
       />
     );

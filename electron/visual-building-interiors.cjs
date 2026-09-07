@@ -167,9 +167,8 @@ async function verifyMilitaryDeepLinks(win, directory) {
   await closeDialog(win);
 
   await enterBuilding(win, 'spaceport');
-  await waitFor(win, `document.querySelector('[data-qa-building-interior-host="spaceport"]')`);
-  const hostText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-building-interior-host="spaceport"]')?.textContent ?? ''`);
-  if (!hostText.includes('Модуль будет доступен в следующем обновлении')) throw new Error(`Future host empty state missing: ${hostText}`);
+  await waitFor(win, `document.querySelector('[data-qa-spaceport-upgrades]')`);
+  await waitFor(win, `document.querySelector('[data-qa-spaceport-tab="ships"]')`);
   await click(win, '[data-qa-building-interior-back]');
   await assertReturned(win, 'military', 'spaceport');
 }
@@ -190,7 +189,7 @@ async function verifyFlow(win, directory) {
       'shipyard-fleet-deep-link-escape-return',
       'research-science-deep-link-back-return',
       'government-command-deep-link-escape-return',
-      'future-host-back-return',
+      'spaceport-specialized-host-back-return',
     ],
   };
 }
