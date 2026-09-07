@@ -5,6 +5,7 @@ import { EmblemGlyph } from './CommandView';
 import aegisProfileAvatar from '../assets/source/generated-factions-v1/factions/aegis_profile_avatar.png';
 import type { BattleReport } from './domain/combat/report.ts';
 import type { CommandState } from './domain/command/types.ts';
+import { selectCurrentAlliance } from './domain/command/selectors.ts';
 import type { OperationsState } from './domain/operations/types.ts';
 import {
   buildReportsFeed,
@@ -202,12 +203,7 @@ function MetricGlyph({ metric }: { metric: string }) {
 
 function PlayerProfile({ profile, rating, command, onOpenCommand }: { profile: PlayerProfileState; rating: RatingPrototypeState; command: CommandState; onOpenCommand: () => void }) {
   const metrics = selectPlayerProfileMetrics(profile, rating);
-  const alliance = command.alliance ? {
-    id: 'alliance-current',
-    name: command.alliance.name,
-    tag: command.alliance.tag,
-    emblem: command.alliance.emblem,
-  } : null;
+  const alliance = selectCurrentAlliance(command);
   return (
     <section className="reports-profile-view" data-qa-profile aria-labelledby="reports-profile-title">
       <header className="reports-profile-title-plate"><span className="reports-profile-title-plate__side">PLAYER PROFILE</span><h2 id="reports-profile-title">ПРОФИЛЬ ИГРОКА</h2><span className="reports-profile-title-plate__side reports-profile-title-plate__side--right">ASTERION // IDENTITY</span></header>

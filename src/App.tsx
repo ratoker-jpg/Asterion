@@ -79,6 +79,7 @@ import {
   TEST_TIME_SCALE,
   type RuntimeMode,
 } from './domain/runtime/mode.ts';
+import { publishRuntimeStateSnapshot } from './domain/runtime/state-store.ts';
 import {
   createCanonicalStartingFleet,
   getFleetSummary,
@@ -656,6 +657,7 @@ export function App() {
       RUNTIME_MODE,
     );
     window.dispatchEvent(new CustomEvent(SCIENCE_RUNTIME_CHANGED_EVENT, { detail: snapshot }));
+    publishRuntimeStateSnapshot({ command: state.command, rating: state.rating });
     window.dispatchEvent(new CustomEvent(RUNTIME_STATE_CHANGED_EVENT, { detail: state }));
   }, [now, state]);
   useEffect(() => {

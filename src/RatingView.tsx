@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react';
+import { EmblemGlyph } from './CommandView';
 import { createAllianceRatingEntries, createPlayerRatingEntries } from './domain/rating/fixtures.ts';
+import { selectCurrentAlliance } from './domain/command/selectors.ts';
+import type { CommandState } from './domain/command/types.ts';
 import {
   filterAlliances,
   filterPlayers,
@@ -9,7 +12,6 @@ import {
   sortPlayers,
 } from './domain/rating/selectors.ts';
 import type {
-  AllianceIdentity,
   AllianceRatingEntry,
   AllianceScoreKey,
   PlayerRatingEntry,
@@ -21,10 +23,10 @@ import type {
 const PAGE_SIZE = 12;
 
 export function RatingView({
-  currentAlliance,
+  command,
   currentPlayerResourcePoints,
 }: {
-  currentAlliance?: AllianceIdentity | null;
+  command: CommandState;
   currentPlayerResourcePoints?: number;
 }) {
   const [mode, setMode] = useState<RatingMode>('players');
@@ -35,6 +37,7 @@ export function RatingView({
   const [direction, setDirection] = useState<SortDirection>('desc');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  const currentAlliance = useMemo(() => selectCurrentAlliance(command), [command]);
   const players = useMemo(() => createPlayerRatingEntries(currentPlayerResourcePoints), [currentPlayerResourcePoints]);
   const alliances = useMemo(() => createAllianceRatingEntries(currentAlliance), [currentAlliance]);
   const currentPlayer = useMemo(() => players.find((entry) => entry.isCurrentPlayer) ?? null, [players]);
@@ -278,7 +281,7 @@ function AllianceTable({
           onClick={() => onSelect(entry.id)}
         >
           <span className="rank-v2"><b>{entry.rank}</b></span>
-          <span className="identity-v2"><span className="alliance-emblem-v2">{entry.tag.slice(0, 1)}</span><strong className="utility-data-text">{entry.name}</strong></span>
+          <span className="identity-v2"><span className="alliance-emblem-v2">{entry.emblem ? <EmblemGlyph compact emblem={entry.emblem} /> : entry.tag.slice(0, 1)}</span><strong className="utility-data-text">{entry.name}</strong></span>
           <span className="alliance-tag-v2">[{entry.tag}]</span>
           <span className="utility-data-text">{entry.level}</span>
           <Value value={entry.alliancePoints} />

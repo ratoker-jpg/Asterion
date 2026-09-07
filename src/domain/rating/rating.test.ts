@@ -10,6 +10,8 @@ import {
   migrateRatingPrototypeState,
 } from './fixtures.ts';
 import { clampPage, filterAlliances, filterPlayers, pageForEntry, paginate, sortPlayers } from './selectors.ts';
+import { createDefaultCommandState, updateAllianceSettings } from '../command/repository.ts';
+import { selectCurrentAlliance } from '../command/selectors.ts';
 
 test('player display provider is deterministic with unique ids and ranks', () => {
   const a = createPlayerRatingEntries();
@@ -63,8 +65,16 @@ test('pagination clamps and show-current resolves the correct page', () => {
 });
 
 test('alliance mode is deterministic and can reuse current Command alliance identity', () => {
-  const first = createAllianceRatingEntries({ name: 'Asterion Guard', tag: 'AST' });
-  const second = createAllianceRatingEntries({ name: 'Asterion Guard', tag: 'AST' });
+  const command = updateAllianceSettings(createDefaultCommandState(), {
+    name: '  Asterion Guard  ',
+    tag: ' ast ',
+    motto: 'Маяк.',
+    description: 'Контур.',
+    emblem: { glyph: 'orbit', accent: 'violet' },
+  });
+  const currentAlliance = selectCurrentAlliance(command);
+  const first = createAllianceRatingEntries(currentAlliance);
+  const second = createAllianceRatingEntries(currentAlliance);
   assert.deepEqual(first, second);
   const current = first.find((entry) => entry.isCurrentAlliance);
   assert.equal(current?.name, 'Asterion Guard');

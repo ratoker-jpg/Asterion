@@ -1,4 +1,5 @@
 import type { AllianceIdentity, AllianceRatingEntry, PlayerRatingEntry } from './types.ts';
+import { CURRENT_COMMAND_ALLIANCE_ID } from '../command/selectors.ts';
 
 const CALLSIGNS = ['Vega', 'Orion', 'Helios', 'Nyx', 'Astra', 'Kepler', 'Titan', 'Nova', 'Cygnus', 'Draco', 'Altair', 'Rigel'];
 const ALLIANCE_TAGS = ['ARC', 'NEX', 'VOID', 'AUR', 'ION', 'HEX', 'SOL', 'DRK'];
@@ -70,6 +71,6 @@ export function createAllianceRatingEntries(currentAlliance?: AllianceIdentity |
   if (!currentAlliance?.name?.trim() || !currentAlliance.tag?.trim()) return base;
   const slot = 15;
   return base.map((entry, index) => index === slot
-    ? { ...entry, id: 'alliance-current', name: currentAlliance.name.trim(), tag: currentAlliance.tag.trim(), isCurrentAlliance: true }
+    ? { ...entry, id: currentAlliance.id || CURRENT_COMMAND_ALLIANCE_ID, name: currentAlliance.name, tag: currentAlliance.tag, emblem: { ...currentAlliance.emblem }, isCurrentAlliance: true }
     : entry);
 }
