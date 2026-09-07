@@ -56,6 +56,19 @@ import { createDefaultReportsState, migrateReportsState } from './domain/reports
 import type { ReportsState } from './domain/reports/types.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import {
+  SCIENCE_RUNTIME_CHANGED_EVENT,
+  SCIENCE_SAVE_KEY,
+  SCIENCE_SAVE_SCHEMA_VERSION,
+  SCIENCE_START_REQUEST_EVENT,
+  createDefaultScienceState,
+  createScienceRuntimeSnapshot,
+  migrateScienceState,
+  reconcileScienceState,
+  startScienceResearch,
+  type ScienceStartRequest,
+  type ScienceState,
+} from './domain/science/runtime.ts';
+import {
   createDefaultRatingPrototypeState,
   migrateRatingPrototypeState,
   type RatingPrototypeState,
@@ -76,7 +89,6 @@ import {
   type BuildingRole,
   type BuildingZone,
   type ResourceWallet,
-  type ScienceLevels,
 } from './domain/buildings/resource-zone.ts';
 import {
   createEmptyBotAssignment,
@@ -199,6 +211,7 @@ type SaveState = {
   operations: OperationsState;
   command: CommandState;
   reports: ReportsState;
+  science: ScienceState;
 };
 
 type StoredPlanetRuntime = {
@@ -235,6 +248,7 @@ type StoredSave = {
   operations?: unknown;
   command?: unknown;
   reports?: unknown;
+  science?: unknown;
 };
 
 type PlanetDefinition = {
@@ -248,12 +262,9 @@ const ownedPlanets: PlanetDefinition[] = [
   { id: 'helion-01', coords: '[1:1:1]', status: 'Основная планета', faction: 'Астеры' },
 ];
 
-const SAVE_KEY = 'asterion.vertical-slice.v1';
-const SAVE_SCHEMA_VERSION = Math.max(COMBAT_SAVE_SCHEMA_VERSION, 8);
+const SAVE_KEY = SCIENCE_SAVE_KEY;
+const SAVE_SCHEMA_VERSION = Math.max(COMBAT_SAVE_SCHEMA_VERSION, SCIENCE_SAVE_SCHEMA_VERSION);
 const DEFAULT_PLANET_NAME = 'Helion 01';
-const CURRENT_SCIENCE_LEVELS = Object.fromEntries(
-  SCIENCE_CATALOG.map((science) => [science.id, science.capturedLevel]),
-) as ScienceLevels;
 
 const createInitialState = (): SaveState => ({
   schemaVersion: SAVE_SCHEMA_VERSION,
@@ -286,6 +297,7 @@ const createInitialState = (): SaveState => ({
   operations: createDefaultOperationsState(),
   command: createDefaultCommandState(),
   reports: createDefaultReportsState(),
+  science: createDefaultScienceState(),
 });
 
 const initialState = createInitialState();
@@ -326,6 +338,7 @@ function readSave(): SaveState {
       migrateSpaceportUpgradeState(savedHomeworld?.spaceportUpgrades),
       now,
     ).state;
+    const science = migrateScienceState(parsed.science);
     const homeworld: PlanetRuntime = {
       name: typeof savedHomeworld?.name === 'string' && savedHomeworld.name.trim()
         ? savedHomeworld.name.trim().slice(0, 28)
@@ -364,6 +377,7 @@ function readSave(): SaveState {
       operations: migrateOperationsState(parsed.operations),
       command: migrateCommandState(parsed.command),
       reports: migrateReportsState(parsed.reports),
+      science,
     };
   } catch {
     return createInitialState();
@@ -485,7 +499,6 @@ export function App() {
   const [selectedBuildingRole, setSelectedBuildingRole] = useState<BuildingRole | null>(null);
   const [buildingInterior, setBuildingInterior] = useState<BuildingInteriorContext | null>(null);
 
-  useEffect(() => localStorage.setItem(SAVE_KEY, JSON.stringify(state)), [state]);
   useEffect(() => {
     const onCombatPriorityChanged = (event: Event) => {
       const priority = (event as CustomEvent<CombatPriorityState>).detail;
@@ -530,6 +543,85 @@ export function App() {
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => {
+    const onScienceStartRequest = (event: Event) => {
+      const request = (event as CustomEvent<ScienceStartRequest>).detail;
+      if (!request || !Number.isInteger(request.scienceId)) return;
+
+      const current = stateRef.current;
+      const planet = current.planets['helion-01'];
+      const researchStartedAt = Number.isFinite(request.now) ? request.now : Date.now();
+      const taskId = globalThis.crypto?.randomUUID?.()
+        ?? `science-${request.scienceId}-${researchStartedAt}-${Math.random().toString(36).slice(2, 9)}`;
+      const transition = startScienceResearch({
+        state: current.science,
+        wallet: {
+          metal: current.metal,
+          minerals: current.minerals,
+          gas: current.gas,
+          energy: planet.energy,
+        },
+        laboratoryLevel: planet.buildings.research,
+        now: researchStartedAt,
+      }, request.scienceId, taskId);
+
+      if (!transition.ok) {
+        setNotice(transition.reason ?? 'Исследование сейчас недоступно.');
+        return;
+      }
+
+      const nextState: SaveState = {
+        ...current,
+        schemaVersion: SAVE_SCHEMA_VERSION,
+        metal: transition.wallet.metal,
+        minerals: transition.wallet.minerals,
+        gas: transition.wallet.gas,
+        planets: {
+          ...current.planets,
+          'helion-01': { ...planet, energy: transition.wallet.energy },
+        },
+        science: transition.state,
+      };
+      stateRef.current = nextState;
+      setState(nextState);
+      setNotice('Исследование добавлено в очередь.');
+    };
+
+    window.addEventListener(SCIENCE_START_REQUEST_EVENT, onScienceStartRequest);
+    return () => window.removeEventListener(SCIENCE_START_REQUEST_EVENT, onScienceStartRequest);
+  }, []);
+  useEffect(() => {
+    const snapshot = reconcileScienceState(state.science, now);
+    if (!snapshot.changed) return;
+
+    setState((current) => {
+      const reconciled = reconcileScienceState(current.science, now);
+      if (!reconciled.changed) return current;
+      return {
+        ...current,
+        schemaVersion: SAVE_SCHEMA_VERSION,
+        science: reconciled.state,
+      };
+    });
+
+    if (snapshot.completed.length > 0) {
+      const names = snapshot.completed
+        .map((task) => SCIENCE_CATALOG.find((science) => science.id === task.scienceId)?.name ?? `Наука ${task.scienceId}`)
+        .join(', ');
+      setNotice(`Наука: исследование завершено — ${names}.`);
+    }
+  }, [now, state.science]);
+  useEffect(() => {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+    const planet = state.planets['helion-01'];
+    const snapshot = createScienceRuntimeSnapshot(
+      state.science,
+      { metal: state.metal, minerals: state.minerals, gas: state.gas, energy: planet.energy },
+      planet.buildings.research,
+      now,
+    );
+    window.dispatchEvent(new CustomEvent(SCIENCE_RUNTIME_CHANGED_EVENT, { detail: snapshot }));
+  }, [now, state]);
+  useEffect(() => {
     const activeQueueItem = state.queues['helion-01'][0];
     if (!activeQueueItem || now < activeQueueItem.finishAt) return;
     const completedDefinition = getBuildingDefinition(activeQueueItem.assetRole);
@@ -547,7 +639,7 @@ export function App() {
         },
         buildings: currentPlanet.buildings,
         queue: current.queues['helion-01'],
-        scienceLevels: CURRENT_SCIENCE_LEVELS,
+        scienceLevels: current.science.levels,
       }, Date.now());
       if (!completed.completedRole) return current;
 
@@ -905,7 +997,7 @@ export function App() {
       state: planet.spaceportUpgrades,
       wallet: { metal: current.metal, minerals: current.minerals, gas: current.gas },
       buildings: planet.buildings,
-      scienceLevels: CURRENT_SCIENCE_LEVELS,
+      scienceLevels: current.science.levels,
       spaceportLevel: planet.buildings.spaceport,
     }, track, shipId, enqueuedAt, taskId);
     if (!transition.ok) {
@@ -936,7 +1028,7 @@ export function App() {
       resources: resourceWallet,
       buildings: currentPlanetState.buildings,
       queue: currentQueue,
-      scienceLevels: CURRENT_SCIENCE_LEVELS,
+      scienceLevels: state.science.levels,
     };
     const availability = evaluateBuildingBuild(snapshot, assetRole);
     if (!availability.canBuild) {
@@ -957,7 +1049,7 @@ export function App() {
         },
         buildings: currentPlanetStateForBuild.buildings,
         queue: current.queues['helion-01'],
-        scienceLevels: CURRENT_SCIENCE_LEVELS,
+        scienceLevels: current.science.levels,
       }, assetRole, 'helion-01', enqueuedAt);
       if (!transition.ok) return current;
 
@@ -1271,7 +1363,7 @@ export function App() {
               planetName={currentPlanetName}
               moduleTitle={buildingInteriorTarget.moduleTitle}
               buildings={currentPlanetState.buildings}
-              scienceLevels={CURRENT_SCIENCE_LEVELS}
+              scienceLevels={state.science.levels}
               productionBots={currentPlanetState.productionBots}
               recycling={currentPlanetState.recycling}
               trade={currentPlanetState.trade}
@@ -1325,7 +1417,7 @@ export function App() {
               resourceIncomePerHour={resourceIncomePerHour}
               buildings={currentPlanetState.buildings}
               queue={currentQueue}
-              scienceLevels={CURRENT_SCIENCE_LEVELS}
+              scienceLevels={state.science.levels}
               now={now}
               selectedRole={selectedBuildingRole}
               onSelectedRoleChange={setSelectedBuildingRole}

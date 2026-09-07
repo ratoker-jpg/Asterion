@@ -15,6 +15,7 @@
     "test:settings": "node --experimental-strip-types --test src/domain/settings/settings.test.ts",
     "test:rating": "node --experimental-strip-types --test src/domain/rating/rating.test.ts",
     "test:science": "node --experimental-strip-types --test src/domain/science/science.test.ts",
+    "test:science-ui": "electron electron/visual-science.cjs",
     "test:spaceport-ui": "electron electron/integration-spaceport-upgrades.cjs",
     "qa:visual": "electron electron/visual-capture.cjs && electron electron/visual-industry-requirements.cjs && electron electron/visual-building-interiors.cjs && electron electron/visual-production-bots.cjs && electron electron/visual-recycling-center.cjs && electron electron/visual-trade-center.cjs && npm run test:spaceport-ui && electron electron/visual-spaceport-upgrades.cjs",
     "desktop": "npm run build && electron .",
