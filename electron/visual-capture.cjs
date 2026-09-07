@@ -364,7 +364,9 @@ async function verifyResourceZoneFlow(win, directory) {
     dialogSnapshots.push({role,...snapshot});
     if(role==='metal-production-1') await capture(win,directory,'resource-zone-selected');
     if(role==='metal-production-2'){
-      if(!snapshot.requirements.includes('Металлическая шахта I') || !snapshot.requirements.includes('сейчас 0')) throw new Error(`Metal II requirements missing: ${JSON.stringify(snapshot)}`);
+      // The canonical starting fixture includes Metal Mine I at level 1;
+      // Metal Mine II requires level 10, so the dialog must report current 1.
+      if(!snapshot.requirements.includes('Металлическая шахта I') || !snapshot.requirements.includes('сейчас 1')) throw new Error(`Metal II requirements missing: ${JSON.stringify(snapshot)}`);
       await capture(win,directory,'resource-zone-requirements');
     }
     await closeResourceBuilding(win);
