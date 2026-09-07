@@ -29,7 +29,6 @@ export const MILITARY_BUILDING_ROLES = [
   'research',
   'spaceport',
   'planetary-government',
-  'bank',
 ] as const;
 
 export const BUILDING_ROLES = [
@@ -185,7 +184,6 @@ const BUILDING_ART: Record<BuildingRole, string> = {
   research: new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.research.png', import.meta.url).href,
   spaceport: new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.spaceport.png', import.meta.url).href,
   'planetary-government': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.planetary-government.png', import.meta.url).href,
-  bank: new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.bank.png', import.meta.url).href,
 };
 
 const reqBuilding = (assetRole: BuildingRole, level: number): BuildingRequirement => ({ kind: 'building-level', assetRole, level });
@@ -243,7 +241,6 @@ export const ASTER_MILITARY_BUILDINGS: readonly BuildingDefinition[] = [
   definition('military', 'research', 'Лаборатория', 'Исследования и развитие технологий.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel, [reqBuilding('construction', 1)]),
   definition('military', 'spaceport', 'Космодром', 'Космическая инфраструктура и операции с флотом.', SPACEPORT_MAX_LEVEL),
   definition('military', 'planetary-government', 'Палата управления', 'Управленческое и союзное здание планеты.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
-  definition('military', 'bank', 'Банк', 'Финансовая инфраструктура и экономические операции.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
 ];
 
 export const ASTER_BUILDINGS: readonly BuildingDefinition[] = [

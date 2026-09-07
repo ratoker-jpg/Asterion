@@ -60,7 +60,6 @@
 | Астеры | **Лаборатория** | Исследования и развитие технологий. | `research` | `assets/source/New assets/buildings/aegis/building.aegis.research.png` |
 | Астеры | **Космодром** | Космическая инфраструктура и операции с флотом. | `spaceport` | `assets/source/New assets/buildings/aegis/building.aegis.spaceport.png` |
 | Астеры | **Палата управления** | Управленческое и союзное здание планеты. | `planetary-government` | `assets/source/New assets/buildings/aegis/building.aegis.planetary-government.png` |
-| Астеры | **Банк** | Финансовая инфраструктура и экономические операции. | `bank` | `assets/source/New assets/buildings/aegis/building.aegis.bank.png` |
 
 ## Особые здания
 
@@ -108,7 +107,6 @@
 | Илары | **Экспериментальный центр** | Исследования и развитие технологий. | `research` | `assets/source/New assets/buildings/synod/building.synod.research.png` |
 | Илары | **Звёздный портал** | Космическая инфраструктура и операции с флотом. | `spaceport` | `assets/source/New assets/buildings/synod/building.synod.spaceport.png` |
 | Илары | **Регулятор** | Управленческое и союзное здание планеты. | `planetary-government` | `assets/source/New assets/buildings/synod/building.synod.planetary-government.png` |
-| Илары | **Расчётный центр** | Финансовая инфраструктура и экономические операции. | `bank` | `assets/source/New assets/buildings/synod/building.synod.bank.png` |
 
 ## Особые здания
 
@@ -156,7 +154,6 @@
 | Рой | **Генетическая камера** | Исследования и развитие технологий Роя. | `research` | `assets/source/New assets/buildings/veyra/building.veyra.research.png` |
 | Рой | **Звёздное гнездо** | Космическая инфраструктура и операции с флотом. | `spaceport` | `assets/source/New assets/buildings/veyra/building.veyra.spaceport.png` |
 | Рой | **Маточное ядро** | Управленческое и союзное здание планеты. | `planetary-government` | `assets/source/New assets/buildings/veyra/building.veyra.planetary-government.png` |
-| Рой | **Казна Роя** | Финансовая инфраструктура и экономические операции. | `bank` | `assets/source/New assets/buildings/veyra/building.veyra.bank.png` |
 
 ## Особые здания
 
@@ -192,7 +189,6 @@
 | Исследования | Лаборатория | Экспериментальный центр | Генетическая камера |
 | Космическая инфраструктура | Космодром | Звёздный портал | Звёздное гнездо |
 | Управление / союз | Палата управления | Регулятор | Маточное ядро |
-| Финансы | Банк | Расчётный центр | Казна Роя |
 | Особое здание | Галактический обелиск | Монолит | Шпиль Роя |
 | Финальные врата | Галактические врата | Врата сингулярности | Врата Праматери |
 

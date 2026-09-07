@@ -29,19 +29,19 @@ const createState = (overrides: Partial<BuildingEconomyState> = {}): BuildingEco
   ...overrides,
 });
 
-test('Aster ordinary catalog exposes exactly 10 resource, 7 industry and 5 military roles without duplicates', () => {
+test('Aster ordinary catalog exposes exactly 10 resource, 7 industry and 4 military roles without duplicates', () => {
   assert.equal(ASTER_RESOURCE_BUILDINGS.length, 10);
   assert.equal(ASTER_INDUSTRY_BUILDINGS.length, 7);
-  assert.equal(ASTER_MILITARY_BUILDINGS.length, 5);
-  assert.equal(ASTER_BUILDINGS.length, 22);
+  assert.equal(ASTER_MILITARY_BUILDINGS.length, 4);
+  assert.equal(ASTER_BUILDINGS.length, 21);
   assert.deepEqual(ASTER_RESOURCE_BUILDINGS.map((item) => item.assetRole), RESOURCE_BUILDING_ROLES);
   assert.deepEqual(ASTER_INDUSTRY_BUILDINGS.map((item) => item.assetRole), INDUSTRY_BUILDING_ROLES);
   assert.deepEqual(ASTER_MILITARY_BUILDINGS.map((item) => item.assetRole), MILITARY_BUILDING_ROLES);
   assert.deepEqual(ASTER_BUILDINGS.map((item) => item.assetRole), BUILDING_ROLES);
-  assert.equal(new Set(BUILDING_ROLES).size, 22);
+  assert.equal(new Set(BUILDING_ROLES).size, 21);
 });
 
-test('all twelve new roles match canonical names, zones and real Aegis PNG paths', () => {
+test('all eleven new roles match canonical names, zones and real Aegis PNG paths', () => {
   const expected = {
     construction: ['Фабрика', 'industry', 'building.aegis.construction.png'],
     'advanced-factory': ['Промышленный комплекс', 'industry', 'building.aegis.advanced-factory.png'],
@@ -54,7 +54,6 @@ test('all twelve new roles match canonical names, zones and real Aegis PNG paths
     research: ['Лаборатория', 'military', 'building.aegis.research.png'],
     spaceport: ['Космодром', 'military', 'building.aegis.spaceport.png'],
     'planetary-government': ['Палата управления', 'military', 'building.aegis.planetary-government.png'],
-    bank: ['Банк', 'military', 'building.aegis.bank.png'],
   } as const;
 
   for (const [role, [name, zone, fileName]] of Object.entries(expected)) {
@@ -216,8 +215,8 @@ test('blocked building is not queued and does not deduct resources', () => {
   assert.deepEqual(state.resources, before);
 });
 
-test('trade-center, construction, shipyard, spaceport, planetary-government and bank explicitly have no requirements', () => {
-  for (const role of ['trade-center', 'construction', 'shipyard', 'spaceport', 'planetary-government', 'bank'] as const) {
+test('trade-center, construction, shipyard, spaceport and planetary-government explicitly have no requirements', () => {
+  for (const role of ['trade-center', 'construction', 'shipyard', 'spaceport', 'planetary-government'] as const) {
     assert.deepEqual(getBuildingDefinition(role).requirements, [], `${role} must stay requirement-free at this stage`);
   }
 });
@@ -239,7 +238,7 @@ test('one shared three-slot FIFO queue accepts projects from all three zones and
   assert.equal(state.queue[1].startedAt, state.queue[0].finishAt);
   assert.equal(state.queue[2].startedAt, state.queue[1].finishAt);
 
-  const fourth = startBuildingProject(state, 'bank', 'helion-01', 11_000);
+  const fourth = startBuildingProject(state, 'spaceport', 'helion-01', 11_000);
   assert.equal(fourth.ok, false);
   assert.equal(fourth.reason, 'Очередь заполнена.');
   assert.equal(fourth.state.resources.metal, state.resources.metal);
@@ -280,7 +279,7 @@ test('new-zone projects use the same catalog values in availability and charging
   assert.equal(availability.missing.metal, 1);
 });
 
-test('legacy resource save normalizes to all 22 roles and initializes new zones to zero', () => {
+test('legacy resource save normalizes to all 21 roles and initializes new zones to zero', () => {
   const migrated = migrateBuildingLevels({
     'metal-production-1': 4,
     'basic-energy': 2,

@@ -19,7 +19,6 @@ const BUILT_INTERIOR_ROLES = [
   'research',
   'spaceport',
   'planetary-government',
-  'bank',
 ];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

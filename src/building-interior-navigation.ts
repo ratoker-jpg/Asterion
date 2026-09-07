@@ -12,7 +12,6 @@ export const BUILDING_INTERIOR_ROLES = [
   'research',
   'spaceport',
   'planetary-government',
-  'bank',
 ] as const satisfies readonly BuildingRole[];
 
 export type BuildingInteriorRole = (typeof BUILDING_INTERIOR_ROLES)[number];
@@ -42,7 +41,6 @@ const targets: Readonly<Record<BuildingInteriorRole, BuildingInteriorTarget>> = 
   research: { kind: 'science' },
   spaceport: { kind: 'host', moduleTitle: 'КОСМОДРОМ' },
   'planetary-government': { kind: 'command' },
-  bank: { kind: 'host', moduleTitle: 'ФИНАНСЫ' },
 };
 
 export function isBuildingInteriorRole(role: BuildingRole): role is BuildingInteriorRole {
