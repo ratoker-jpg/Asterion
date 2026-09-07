@@ -4,11 +4,12 @@ import type {
   ScienceId,
   ScienceResourceCost,
 } from './types.ts';
+import { ACTIVE_RUNTIME_MODE, getRuntimeSaveKey, scaleRuntimeDuration, type RuntimeMode } from '../runtime/mode.ts';
 
 export type { ScienceId } from './types.ts';
 
-export const SCIENCE_SAVE_KEY = 'asterion.vertical-slice.v1';
-export const SCIENCE_SAVE_SCHEMA_VERSION = 9;
+export const SCIENCE_SAVE_KEY = getRuntimeSaveKey('production');
+export const SCIENCE_SAVE_SCHEMA_VERSION = 10;
 export const SCIENCE_QUEUE_CAPACITY = 3;
 
 /**
@@ -16,8 +17,12 @@ export const SCIENCE_QUEUE_CAPACITY = 3;
  * but does not establish a final campaign maximum. This cap is intentionally
  * temporary and must be source-validated before balance is considered final.
  */
-export const SCIENCE_CAPTURED_VALUES_NOTE =
-  'PROTOTYPE: captured next-level values are used as a temporary research cap until source validation.';
+export const SCIENCE_PROTOTYPE_CONFIG = Object.freeze({
+  maxLevel: 20,
+  note: 'PROTOTYPE/TBD: one reachable runtime cap is used until authoritative campaign balances are confirmed; captured values remain presentation-only.',
+});
+
+export const SCIENCE_CAPTURED_VALUES_NOTE = SCIENCE_PROTOTYPE_CONFIG.note;
 
 export type ScienceLevels = Partial<Record<ScienceId, number>>;
 
@@ -53,6 +58,7 @@ export type ScienceAvailabilityStatus =
   | 'requirements-unmet'
   | 'insufficient-resource'
   | 'queue-full'
+  | 'additional-direction-blocked'
   | 'max-level';
 
 export type SciencePreview = {
@@ -75,6 +81,7 @@ export type ScienceRuntimeContext = {
   wallet: ScienceWallet;
   laboratoryLevel: number;
   now: number;
+  mode?: RuntimeMode;
 };
 
 export type ScienceStartTransition = {
@@ -97,6 +104,7 @@ export type ScienceRuntimeSnapshot = {
   wallet: ScienceWallet;
   laboratoryLevel: number;
   now: number;
+  mode: RuntimeMode;
 };
 
 export type ScienceStartRequest = {
@@ -163,12 +171,13 @@ function cloneCost(cost: ScienceResourceCost): ScienceResourceCost {
 }
 
 export function getSciencePrototypeMaxLevel(science: ScienceCatalogDefinition): number {
-  return Math.max(science.capturedLevel, science.capturedNextLevel);
+  void science;
+  return SCIENCE_PROTOTYPE_CONFIG.maxLevel;
 }
 
 export function createDefaultScienceLevels(): ScienceLevels {
   return Object.fromEntries(
-    SCIENCE_CATALOG.map((science) => [science.id, safeLevel(science.capturedLevel, getSciencePrototypeMaxLevel(science))]),
+    SCIENCE_CATALOG.map((science) => [science.id, 0]),
   ) as ScienceLevels;
 }
 
@@ -182,7 +191,7 @@ export function migrateScienceLevels(value: unknown): ScienceLevels {
     SCIENCE_CATALOG.map((science) => [
       science.id,
       safeLevel(
-        source[String(science.id)] === undefined ? science.capturedLevel : source[String(science.id)],
+        source[String(science.id)],
         getSciencePrototypeMaxLevel(science),
       ),
     ]),
@@ -236,7 +245,7 @@ export function previewScience(context: ScienceRuntimeContext, scienceId: Scienc
   const projectedLevel = Math.min(maxLevel, currentLevel + queuedCount);
   const requirements = requirementsFor(science, context.state.levels, Math.max(0, Math.floor(context.laboratoryLevel)));
   const cost = cloneCost(science.capturedCost);
-  const durationMs = parseCapturedTime(science.capturedTime);
+  const durationMs = scaleRuntimeDuration(parseCapturedTime(science.capturedTime), context.mode ?? 'production');
   const base = {
     scienceId,
     currentLevel,
@@ -261,6 +270,22 @@ export function previewScience(context: ScienceRuntimeContext, scienceId: Scienc
       canStart: false,
       reason: `Требуется: ${missingRequirements.map(formatRequirement).join('; ')}.`,
     };
+  }
+
+  const additionalDirectionIds = new Set<ScienceId>([18, 19, 20]);
+  if (additionalDirectionIds.has(scienceId)) {
+    const competingDirection = [...additionalDirectionIds].find((id) => id !== scienceId && (
+      (context.state.levels[id] ?? 0) > 0
+      || context.state.queue.some((task) => task.scienceId === id)
+    ));
+    if (competingDirection != null) {
+      return {
+        ...base,
+        status: 'additional-direction-blocked',
+        canStart: false,
+        reason: 'Дополнительная наука доступна только в одном направлении за кампанию.',
+      };
+    }
   }
 
   if (context.state.queue.length >= SCIENCE_QUEUE_CAPACITY) {
@@ -352,7 +377,8 @@ function migrateQueue(value: unknown, levels: ScienceLevels): ScienceQueueTask[]
   let previousFinishAt: number | null = null;
 
   for (const raw of source) {
-    if (result.length >= SCIENCE_QUEUE_CAPACITY || !isRecord(raw)) break;
+    if (result.length >= SCIENCE_QUEUE_CAPACITY) break;
+    if (!isRecord(raw)) continue;
     const scienceId = scienceIdFromUnknown(raw.scienceId);
     if (scienceId == null) continue;
     const science = findScience(scienceId);
@@ -424,21 +450,23 @@ export function createScienceRuntimeSnapshot(
   wallet: ScienceWallet,
   laboratoryLevel: number,
   now: number,
+  mode: RuntimeMode = 'production',
 ): ScienceRuntimeSnapshot {
   return {
     science,
     wallet: cloneCost(wallet),
     laboratoryLevel: Math.max(0, Math.floor(laboratoryLevel)),
     now,
+    mode,
   };
 }
 
 export function readScienceRuntimeSnapshot(): ScienceRuntimeSnapshot {
-  const fallback = createScienceRuntimeSnapshot(createDefaultScienceState(), { metal: 0, minerals: 0, gas: 0, energy: 0 }, 0, Date.now());
+  const fallback = createScienceRuntimeSnapshot(createDefaultScienceState(), { metal: 0, minerals: 0, gas: 0, energy: 0 }, 0, Date.now(), ACTIVE_RUNTIME_MODE);
   if (typeof localStorage === 'undefined') return fallback;
 
   try {
-    const raw = localStorage.getItem(SCIENCE_SAVE_KEY);
+    const raw = localStorage.getItem(getRuntimeSaveKey());
     if (!raw) return fallback;
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const planets = isRecord(parsed.planets) ? parsed.planets : {};
@@ -454,6 +482,7 @@ export function readScienceRuntimeSnapshot(): ScienceRuntimeSnapshot {
       },
       safeNonNegativeNumber(buildings.research, 0),
       Date.now(),
+      ACTIVE_RUNTIME_MODE,
     );
   } catch {
     return fallback;

@@ -12,6 +12,7 @@ import {
 } from './domain/settings/preferences.ts';
 import { getDesktopBridge, getWindowPresetDimensions } from './domain/settings/desktop.ts';
 import { WINDOW_PRESETS, type DesktopDisplayState, type UiPreferencesV2 } from './domain/settings/types.ts';
+import { getRuntimeSaveKey } from './domain/runtime/mode.ts';
 
 type UtilityScreen = 'Настройки' | 'Рейтинг' | 'Наука';
 
@@ -26,7 +27,7 @@ function isUtilityScreen(value: string | undefined): value is UtilityScreen {
 
 function readRuntimeIdentity(): RuntimeIdentity {
   try {
-    const raw = localStorage.getItem('asterion.vertical-slice.v1');
+    const raw = localStorage.getItem(getRuntimeSaveKey());
     if (!raw) return { alliance: null, resourcePoints: undefined };
     const parsed = JSON.parse(raw) as {
       command?: { alliance?: { name?: unknown; tag?: unknown } };

@@ -31,8 +31,14 @@ jobs:
         run: npm run test:rating
       - name: Science domain tests
         run: npm run test:science
+      - name: Runtime mode domain tests
+        run: npm run test:runtime
+      - name: Fleet domain tests
+        run: npm run test:fleet
       - name: Build renderer
         run: npm run build
+      - name: Test Mode Electron QA
+        run: npm run test:test-mode-ui
       - name: Capture utility and resource-zone visual QA
         run: npm run qa:visual
       - name: Upload visual QA artifact

@@ -61,17 +61,19 @@ test('all prerequisites reference valid source science ids', () => {
   }
 });
 
-test('default science state seeds captured levels and explicit zero survives migration', () => {
+test('new science state starts at zero and explicit levels survive migration', () => {
   const state = createDefaultScienceState();
   assert.equal(state.queue.length, 0);
-  assert.equal(state.levels[1], 6);
+  assert.equal(state.levels[1], 0);
   assert.equal(migrateScienceLevels({ 1: 0 })[1], 0);
+  assert.equal(migrateScienceLevels({ 1: 6 })[1], 6);
   assert.equal(state.levels[1]! < getSciencePrototypeMaxLevel(SCIENCE_CATALOG[0]), true);
 });
 
 test('science start validates runtime laboratory/prerequisites and atomically deducts resources', () => {
   const state = createDefaultScienceState();
   state.levels[5] = 4;
+  state.levels[4] = 2;
   const blockedByLab = previewScience(context(state, 3), 5);
   assert.equal(blockedByLab.status, 'requirements-unmet');
   assert.match(blockedByLab.reason ?? '', /Лаборатория/);
@@ -108,7 +110,7 @@ test('science queue accepts three sequential tasks and rejects the fourth', () =
   assert.equal(fourth.canStart, false);
 });
 
-test('science preview exposes max state from the captured prototype cap', () => {
+test('science preview exposes max state from the single prototype cap', () => {
   const state = createDefaultScienceState();
   state.levels[1] = getSciencePrototypeMaxLevel(SCIENCE_CATALOG.find((science) => science.id === 1)!);
   const preview = previewScience(context(state, 1), 1);
@@ -147,19 +149,31 @@ test('malformed and legacy science saves migrate safely, including stale tasks',
       { id: 'stale', scienceId: 1, fromLevel: 0, toLevel: 1, startedAt: 1_000, finishAt: 2_000 },
       { id: 'legacy', scienceId: 1, startedAt: 2_000, finishAt: 3_000 },
       null,
+      { id: 'later-valid', scienceId: 2, fromLevel: 0, toLevel: 1, startedAt: 3_000, finishAt: 4_000 },
     ],
   });
 
   assert.equal(migrated.levels[1], 1);
   assert.equal(migrated.levels[7], getSciencePrototypeMaxLevel(SCIENCE_CATALOG.find((science) => science.id === 7)!));
   assert.equal(migrated.levels[2], 0);
-  assert.equal(migrated.queue.length, 1);
+  assert.equal(migrated.queue.length, 2);
   assert.deepEqual([migrated.queue[0].fromLevel, migrated.queue[0].toLevel], [1, 2]);
   const reconciled = reconcileScienceState(migrated, 3_000);
   assert.equal(reconciled.state.levels[1], 2);
   assert.equal(reconciled.completed.length, 1);
   assert.equal(migrateScienceState({ queue: 'not-an-array' }).queue.length, 0);
   assert.equal(migrateScienceState(null).queue.length, 0);
+  assert.equal(migrateScienceState({ queue: [null, { scienceId: 1, startedAt: 1, finishAt: 2 }] }).queue.length, 1);
+});
+
+test('additional science directions are mutually exclusive at runtime', () => {
+  const state = createDefaultScienceState();
+  state.levels[18] = 1;
+  state.levels[7] = 10;
+  state.levels[23] = 5;
+  const blocked = previewScience(context(state, 20), 19);
+  assert.equal(blocked.status, 'additional-direction-blocked');
+  assert.equal(blocked.canStart, false);
 });
 
 test('science definitions contain no combat coefficient or reducer contract', () => {

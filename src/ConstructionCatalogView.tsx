@@ -5,9 +5,10 @@ import {
   DEFENSE_COMBAT_CATALOG,
   type CatalogEntity,
 } from './domain/combat/catalog.ts';
+import { getRuntimeSaveKey } from './domain/runtime/mode.ts';
+import { createCanonicalStartingFleet, getFleetSummary, migrateFleetState } from './domain/fleet/runtime.ts';
 
-const SAVE_KEY = 'asterion.vertical-slice.v1';
-const SHIPYARD_LEVEL = 1;
+const SAVE_KEY = getRuntimeSaveKey();
 
 export type ConstructionCatalogMode = 'defense' | 'commander';
 
@@ -43,13 +44,16 @@ type ShipyardBudget = {
   gas: number;
   population: number;
   populationMax: number;
+  shipyardLevel: number;
+  hangarLevel: number;
+  fleet: ReturnType<typeof migrateFleetState>;
 };
 
 type StoredSave = {
   metal?: number;
   minerals?: number;
   gas?: number;
-  planets?: Record<string, { population?: number; populationMax?: number }>;
+  planets?: Record<string, { population?: number; populationMax?: number; buildings?: Record<string, unknown>; fleet?: unknown }>;
 };
 
 type ResourceKind = 'metal' | 'minerals' | 'gas' | 'population';
@@ -102,7 +106,10 @@ const catalogConfig: Record<ConstructionCatalogMode, { title: string; kicker: st
 const formatNumber = (value: number) => new Intl.NumberFormat('ru-RU').format(value);
 
 function readBudget(): ShipyardBudget {
-  const fallback: ShipyardBudget = { metal: 15_880, minerals: 12_712, gas: 6_421, population: 20, populationMax: 70 };
+  const fallback: ShipyardBudget = {
+    metal: 15_880, minerals: 12_712, gas: 6_421, population: 58, populationMax: 70,
+    shipyardLevel: 0, hangarLevel: 1, fleet: createCanonicalStartingFleet(),
+  };
 
   try {
     const raw = localStorage.getItem(SAVE_KEY);
@@ -113,8 +120,11 @@ function readBudget(): ShipyardBudget {
       metal: typeof parsed.metal === 'number' ? parsed.metal : fallback.metal,
       minerals: typeof parsed.minerals === 'number' ? parsed.minerals : fallback.minerals,
       gas: typeof parsed.gas === 'number' ? parsed.gas : fallback.gas,
-      population: typeof homeworld?.population === 'number' ? homeworld.population : fallback.population,
-      populationMax: typeof homeworld?.populationMax === 'number' ? homeworld.populationMax : fallback.populationMax,
+      population: getFleetSummary(migrateFleetState(homeworld?.fleet), Number(homeworld?.buildings?.hangar ?? 0)).population,
+      populationMax: getFleetSummary(migrateFleetState(homeworld?.fleet), Number(homeworld?.buildings?.hangar ?? 0)).capacity,
+      shipyardLevel: typeof homeworld?.buildings?.shipyard === 'number' ? homeworld.buildings.shipyard : fallback.shipyardLevel,
+      hangarLevel: typeof homeworld?.buildings?.hangar === 'number' ? homeworld.buildings.hangar : fallback.hangarLevel,
+      fleet: migrateFleetState(homeworld?.fleet),
     };
   } catch {
     return fallback;
@@ -182,6 +192,7 @@ function CatalogCard({
   item,
   quantity,
   budget,
+  shipyardLevel,
   mode,
   onQuantity,
   onBuild,
@@ -189,11 +200,12 @@ function CatalogCard({
   item: CatalogItem;
   quantity: number;
   budget: ShipyardBudget;
+  shipyardLevel: number;
   mode: ConstructionCatalogMode;
   onQuantity: (item: CatalogItem, quantity: number) => void;
   onBuild: (item: CatalogItem, quantity: number) => void;
 }) {
-  const unlocked = item.requiredShipyardLevel <= SHIPYARD_LEVEL;
+  const unlocked = item.requiredShipyardLevel <= shipyardLevel;
   const max = unlocked ? calculateMax(item, budget) : 0;
   const unavailableLabel = mode === 'defense' ? 'КОМПЛЕКС НЕДОСТУПЕН' : 'КОРПУС НЕДОСТУПЕН';
 
@@ -276,6 +288,14 @@ export function ConstructionCatalogView({
 }) {
   const budget = useMemo(readBudget, []);
   const config = catalogConfig[mode];
+  const fleetSummary = useMemo(() => getFleetSummary(budget.fleet, budget.hangarLevel), [budget.fleet, budget.hangarLevel]);
+  const items = useMemo(
+    () => config.items.map((item) => ({
+      ...item,
+      owned: mode === 'commander' ? budget.fleet.commanders[item.id as keyof typeof budget.fleet.commanders] ?? 0 : item.owned,
+    })),
+    [budget.fleet, config.items, mode],
+  );
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [process, setProcess] = useState<string | null>(null);
 
@@ -308,7 +328,7 @@ export function ConstructionCatalogView({
     <section className="shipyard-view-v1">
       <header className="shipyard-page-head-v1">
         <div>
-          <small>{config.kicker} · ВЕРФЬ УРОВНЯ {SHIPYARD_LEVEL}</small>
+          <small>{config.kicker} · ВЕРФЬ УРОВНЯ {budget.shipyardLevel}</small>
           <h2>{config.title}</h2>
           <p>{planetName} {coords} · {config.description}</p>
         </div>
@@ -321,12 +341,13 @@ export function ConstructionCatalogView({
       </section>
 
       <div className="shipyard-grid-v1">
-        {config.items.map((item) => (
+        {items.map((item) => (
           <CatalogCard
             key={item.id}
             item={item}
             quantity={quantities[item.id] ?? 0}
             budget={budget}
+            shipyardLevel={budget.shipyardLevel}
             mode={mode}
             onQuantity={setQuantity}
             onBuild={prepareBuild}
@@ -336,7 +357,7 @@ export function ConstructionCatalogView({
 
       <footer className="shipyard-page-foot-v1">
         <span>{config.footer}</span>
-        <span>Свободно населения: {Math.max(0, budget.populationMax - budget.population)} / {budget.populationMax}</span>
+        <span>Популяция флота: {formatNumber(fleetSummary.population)} / {formatNumber(fleetSummary.capacity)} · свободно {formatNumber(fleetSummary.available)}</span>
       </footer>
     </section>
   );

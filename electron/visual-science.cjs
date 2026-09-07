@@ -177,7 +177,7 @@ async function runViewport(width, height) {
   await openScience(win);
   await waitFor(win, `document.querySelector('[data-qa-science-queue-count]')?.textContent === '0/3'`);
   const offline = await readScreen(win);
-  if (offline.scienceQueueLength !== 0 || offline.scienceLevel !== 1 || offline.level !== 'УР. 1 / 7') throw new Error(`${label}: offline completion mismatch ${JSON.stringify(offline)}`);
+  if (offline.scienceQueueLength !== 0 || offline.scienceLevel !== 1 || offline.level !== 'УР. 1 / 20') throw new Error(`${label}: offline completion mismatch ${JSON.stringify(offline)}`);
   await capture(win, directory, 'science-offline-completed', '[data-qa-science-id="1"]');
   stage('offline completion');
 
@@ -193,7 +193,7 @@ async function runViewport(width, height) {
   await capture(win, directory, 'science-blocked-requirements', '[data-qa-science-id="5"]');
   stage('blocked requirements');
 
-  await seed(win, { level: 7, queue: [] });
+  await seed(win, { level: 20, queue: [] });
   stage('seed max');
   await openScience(win);
   stage('open max');

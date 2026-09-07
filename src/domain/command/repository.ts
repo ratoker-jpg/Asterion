@@ -18,8 +18,9 @@ import type {
   ResourceRequestState,
   ResourceType,
 } from './types.ts';
+import { getRuntimeSaveKey } from '../runtime/mode.ts';
 
-const ASTERION_SAVE_KEY = 'asterion.vertical-slice.v1';
+const ASTERION_SAVE_KEY = getRuntimeSaveKey();
 const EMBLEM_GLYPHS: readonly AllianceEmblemGlyph[] = ['starforge', 'orbit', 'vanguard'];
 const EMBLEM_ACCENTS: readonly AllianceAccent[] = ['cyan', 'amber', 'violet'];
 const RESOURCE_TYPES: readonly ResourceType[] = ['metal', 'minerals', 'gas', 'energy'];

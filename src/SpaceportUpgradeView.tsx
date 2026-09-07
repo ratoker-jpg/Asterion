@@ -14,6 +14,7 @@ import {
 } from './domain/buildings/spaceport-upgrades.ts';
 import { getBuildingDefinition, type BuildingLevels, type ScienceLevels } from './domain/buildings/resource-zone.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
+import { ACTIVE_RUNTIME_MODE } from './domain/runtime/mode.ts';
 import './spaceport-upgrades.css';
 import './spaceport-upgrades-enhancements.css';
 
@@ -359,6 +360,7 @@ export function SpaceportUpgradeView({
               buildings,
               scienceLevels,
               spaceportLevel: buildingLevel,
+              mode: ACTIVE_RUNTIME_MODE,
             }, activeTrack, entity.id);
             const queuedTasks = selectedQueue
               .map((task, index) => ({ task, index }))
@@ -386,6 +388,7 @@ export function SpaceportUpgradeView({
                 data-qa-spaceport-card={entity.id}
                 data-qa-spaceport-row={entity.id}
                 data-qa-spaceport-queued-count={queuedTasks.length}
+                data-qa-spaceport-duration-ms={preview.effectiveDurationMs}
               >
                 <div className="spaceport-row-art-v2">
                   <img src={entity.art} alt={entity.name} draggable={false} />

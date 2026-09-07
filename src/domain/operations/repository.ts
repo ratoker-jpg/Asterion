@@ -13,8 +13,9 @@ import {
   type OperationState,
   type OperationThreatTier,
 } from './types.ts';
+import { getRuntimeSaveKey } from '../runtime/mode.ts';
 
-const ASTERION_SAVE_KEY = 'asterion.vertical-slice.v1';
+const ASTERION_SAVE_KEY = getRuntimeSaveKey();
 const OPERATION_STATES: readonly OperationState[] = ['available', 'active', 'completed'];
 const OPERATION_INTEL_LEVELS: readonly OperationIntelLevel[] = [0, 1, 2, 3];
 const OPERATION_THREAT_TIERS: readonly OperationThreatTier[] = [1, 2, 3, 4, 5, 6];

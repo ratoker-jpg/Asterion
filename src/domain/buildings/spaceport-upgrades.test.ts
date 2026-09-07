@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { SCIENCE_CATALOG } from '../science/catalog.ts';
+import { TEST_TIME_SCALE } from '../runtime/mode.ts';
 import { createDefaultBuildingLevels, type ScienceLevels } from './resource-zone.ts';
 import {
   PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS,
@@ -88,6 +89,13 @@ test('prototype duration is 15 minutes; Spaceport level 1 = 95% and level 10 = 5
   assert.equal(PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS, 900_000);
   assert.equal(calculateSpaceportEffectiveDuration(PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS, 1), 855_000);
   assert.equal(calculateSpaceportEffectiveDuration(PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS, 10), 450_000);
+});
+
+test('Test Mode snapshots the same Spaceport speed policy with accelerated absolute timestamps', () => {
+  const queued = enqueueSpaceportUpgrade({ ...context(), mode: 'test' }, 'ships', 'transporter', 5_000, 'test-speed');
+  assert.equal(queued.ok, true);
+  assert.equal(queued.task?.effectiveDurationMs, 855_000 / TEST_TIME_SCALE);
+  assert.equal(queued.task?.finishAt, 5_000 + 855_000 / TEST_TIME_SCALE);
 });
 
 test('queued task snapshots Spaceport speed and does not recalculate after building upgrade', () => {
@@ -220,6 +228,8 @@ test('reconciliation is idempotent when a legacy task target was already applied
   const reconciled = reconcileSpaceportUpgradeState(state, 3_000);
   assert.equal(reconciled.state.shipLevels.transporter, 1);
   assert.equal(reconciled.state.shipQueue.length, 0);
+  assert.equal(reconciled.changed, true);
+  assert.equal(reconciled.completed.length, 0);
 });
 
 test('migration drops an already-applied persisted task before read-save reconciliation', () => {
@@ -241,6 +251,15 @@ test('migration drops an already-applied persisted task before read-save reconci
   const reconciled = reconcileSpaceportUpgradeState(migrated, 3_000);
   assert.equal(reconciled.state.shipLevels.transporter, 1);
   assert.equal(reconciled.completed.length, 0);
+});
+
+test('malformed queue entries are skipped and valid later Spaceport tasks survive migration', () => {
+  const migrated = migrateSpaceportUpgradeState({
+    shipLevels: { transporter: 0 },
+    shipQueue: [null, { id: 'later-valid', shipId: 'transporter', fromLevel: 0, toLevel: 1, startedAt: 10, finishAt: 20 }],
+  });
+  assert.equal(migrated.shipQueue.length, 1);
+  assert.equal(migrated.shipQueue[0].id, 'later-valid');
 });
 
 test('Defender upgrade uses the same shipyard, ion science and fuel-cell requirements as the shared catalog', () => {

@@ -11,6 +11,7 @@ import {
   MILITARY_BUILDING_ROLES,
   RESOURCE_BUILDING_ROLES,
   completeBuildingProject,
+  createCanonicalStartingBuildingLevels,
   createDefaultBuildingLevels,
   evaluateBuildingBuild,
   evaluateBuildingRequirements,
@@ -27,6 +28,23 @@ const createState = (overrides: Partial<BuildingEconomyState> = {}): BuildingEco
   queue: [],
   scienceLevels: { 1: 6, 2: 5 },
   ...overrides,
+});
+
+test('new players receive the canonical Phase 1 building levels', () => {
+  const levels = createCanonicalStartingBuildingLevels();
+  assert.deepEqual(
+    Object.fromEntries(BUILDING_ROLES.map((role) => [role, levels[role]])),
+    {
+      'metal-production-1': 1,
+      'mineral-production-1': 1,
+      'gas-production-1': 1,
+      'basic-energy': 1,
+      hangar: 1,
+      ...Object.fromEntries(BUILDING_ROLES
+        .filter((role) => !['metal-production-1', 'mineral-production-1', 'gas-production-1', 'basic-energy', 'hangar'].includes(role))
+        .map((role) => [role, 0])),
+    },
+  );
 });
 
 test('Aster ordinary catalog exposes exactly 10 resource, 7 industry and 4 military roles without duplicates', () => {

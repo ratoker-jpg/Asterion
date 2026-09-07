@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import scoutArt from '../assets/source/New assets/ship/aegis/ship.aegis.scout.png';
+import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
+import { createCanonicalStartingFleet, getFleetSummary, migrateFleetState } from './domain/fleet/runtime.ts';
+import { getRuntimeSaveKey, RUNTIME_STATE_CHANGED_EVENT } from './domain/runtime/mode.ts';
 import { BattleReportsView } from './BattleReportsView';
 import { ConstructionCatalogView, type ConstructionCatalogMode } from './ConstructionCatalogView';
 import { FleetCombatPriorityView } from './FleetCombatPriorityView';
@@ -10,42 +13,30 @@ import { ShipyardView } from './ShipyardView';
 import { SimulatorView } from './SimulatorView';
 import './fleet-workspace.css';
 
-const SCOUT_POPULATION = 2;
-const SCOUT_AVAILABLE = 10;
-const FLEET_POPULATION = SCOUT_AVAILABLE * SCOUT_POPULATION;
-const SAVE_KEY = 'asterion.vertical-slice.v1';
 const FLEET_ROOT_STATUS = 'Выберите корабли и миссию. Отправка флота будет подключена следующим этапом.';
 
-type StoredSave = {
-  planets?: Record<string, { population?: number; [key: string]: unknown }>;
-  [key: string]: unknown;
+type FleetSnapshot = {
+  fleet: ReturnType<typeof migrateFleetState>;
+  hangarLevel: number;
+  shipyardLevel: number;
 };
 
-function migrateFleetPopulation() {
+function readFleetSnapshot(): FleetSnapshot {
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    const parsed = (raw ? JSON.parse(raw) : {}) as StoredSave;
-    const planets = parsed.planets ?? {};
-    const homeworld = planets['helion-01'] ?? {};
-
-    if (homeworld.population === FLEET_POPULATION) return;
-
-    parsed.planets = {
-      ...planets,
-      'helion-01': {
-        ...homeworld,
-        population: FLEET_POPULATION,
-      },
+    const raw = localStorage.getItem(getRuntimeSaveKey());
+    const parsed = raw ? JSON.parse(raw) as { planets?: Record<string, { buildings?: Record<string, unknown>; fleet?: unknown }> } : null;
+    const homeworld = parsed?.planets?.['helion-01'];
+    return {
+      fleet: homeworld?.fleet ? migrateFleetState(homeworld.fleet) : createCanonicalStartingFleet(),
+      hangarLevel: typeof homeworld?.buildings?.hangar === 'number' ? homeworld.buildings.hangar : 1,
+      shipyardLevel: typeof homeworld?.buildings?.shipyard === 'number' ? homeworld.buildings.shipyard : 0,
     };
-    localStorage.setItem(SAVE_KEY, JSON.stringify(parsed));
   } catch {
-    // A malformed legacy save will be handled by App.readSave().
+    return { fleet: createCanonicalStartingFleet(), hangarLevel: 1, shipyardLevel: 0 };
   }
 }
 
-// This module is evaluated before <App /> renders in main.tsx, so App.readSave()
-// receives the canonical starting fleet population and every HUD/passport view stays in sync.
-migrateFleetPopulation();
+const scoutDefinition = getFactionShipCatalog('aegis').find((entity) => entity.id === 'scout')!;
 
 type FleetSection =
   | 'Корабли'
@@ -127,8 +118,14 @@ function FleetWorkspace({
   const [selectedSection, setSelectedSection] = useState<FleetSection>('Корабли');
   const [constructionView, setConstructionView] = useState<ConstructionView>(null);
   const [status, setStatus] = useState(FLEET_ROOT_STATUS);
+  const [fleetSnapshot, setFleetSnapshot] = useState<FleetSnapshot>(readFleetSnapshot);
+  const fleetSummary = useMemo(
+    () => getFleetSummary(fleetSnapshot.fleet, fleetSnapshot.hangarLevel),
+    [fleetSnapshot.fleet, fleetSnapshot.hangarLevel],
+  );
+  const scoutAvailable = fleetSnapshot.fleet.ships.scout ?? 0;
 
-  const selectedPopulation = useMemo(() => quantity * SCOUT_POPULATION, [quantity]);
+  const selectedPopulation = useMemo(() => quantity * scoutDefinition.population, [quantity]);
   const selectedMission = missions.find((mission) => mission.id === missionId) ?? missions[0];
   const describedMission = missions.find((mission) => mission.id === hoveredMissionId) ?? selectedMission;
 
@@ -142,6 +139,16 @@ function FleetWorkspace({
     const onRootRequest = () => openFleetRoot();
     window.addEventListener(FLEET_ROOT_REQUEST_EVENT, onRootRequest);
     return () => window.removeEventListener(FLEET_ROOT_REQUEST_EVENT, onRootRequest);
+  }, []);
+
+  useEffect(() => {
+    const refresh = () => setFleetSnapshot(readFleetSnapshot());
+    window.addEventListener(RUNTIME_STATE_CHANGED_EVENT, refresh);
+    window.addEventListener('storage', refresh);
+    return () => {
+      window.removeEventListener(RUNTIME_STATE_CHANGED_EVENT, refresh);
+      window.removeEventListener('storage', refresh);
+    };
   }, []);
 
   useEffect(() => {
@@ -171,7 +178,7 @@ function FleetWorkspace({
   };
 
   const setScoutQuantity = (raw: number) => {
-    const next = Number.isFinite(raw) ? Math.max(0, Math.min(SCOUT_AVAILABLE, Math.floor(raw))) : 0;
+    const next = Number.isFinite(raw) ? Math.max(0, Math.min(scoutAvailable, Math.floor(raw))) : 0;
     setQuantity(next);
   };
 
@@ -197,7 +204,7 @@ function FleetWorkspace({
           <div>
             <small>БАЗА ФЛОТА</small>
             <strong>Орбитальная верфь</strong>
-            <span>Уровень 1</span>
+            <span>Ангар {fleetSnapshot.hangarLevel} · Верфь {fleetSnapshot.shipyardLevel}</span>
           </div>
         </div>
 
@@ -244,7 +251,7 @@ function FleetWorkspace({
             <section className="fleet-panel-v1 fleet-compose-v1">
               <header className="fleet-panel-header-v1 compact">
                 <div><small>ФОРМИРОВАНИЕ</small><h2>ВЫБЕРИ КОРАБЛИ</h2></div>
-                <span>1 СКАУТ = {SCOUT_POPULATION} НАСЕЛЕНИЯ</span>
+                <span data-qa-fleet-population>ФЛОТ: {fleetSummary.population} / {fleetSummary.capacity} · 1 СКАУТ = {scoutDefinition.population} НАСЕЛЕНИЯ</span>
               </header>
 
               <div className="fleet-ship-line-v1">
@@ -252,13 +259,13 @@ function FleetWorkspace({
                 <div className="fleet-ship-info-v1">
                   <small>ЛЁГКИЙ БОЕВОЙ РАЗВЕДЧИК</small>
                   <h3>Скаут</h3>
-                  <div className="fleet-ship-meta-v1"><span>В наличии <b>{SCOUT_AVAILABLE}</b></span><span>Население / ед. <b>{SCOUT_POPULATION}</b></span></div>
+                  <div className="fleet-ship-meta-v1"><span>В наличии <b>{scoutAvailable}</b></span><span>Население / ед. <b>{scoutDefinition.population}</b></span></div>
                 </div>
                 <div className="fleet-quantity-v1">
                   <span>КОЛИЧЕСТВО</span>
-                  <input aria-label="Количество скаутов" type="number" min="0" max={SCOUT_AVAILABLE} value={quantity} onChange={(event) => setScoutQuantity(Number(event.target.value))} />
+                  <input aria-label="Количество скаутов" type="number" min="0" max={scoutAvailable} value={quantity} onChange={(event) => setScoutQuantity(Number(event.target.value))} />
                   <div className="fleet-quantity-shortcuts-v1">
-                    <button type="button" onClick={() => setScoutQuantity(SCOUT_AVAILABLE)}>МАКС.</button>
+                    <button type="button" onClick={() => setScoutQuantity(scoutAvailable)}>МАКС.</button>
                     <button type="button" onClick={() => setScoutQuantity(0)}>МИН.</button>
                   </div>
                 </div>
@@ -266,7 +273,7 @@ function FleetWorkspace({
 
               <div className="fleet-selection-line-v1">
                 <span>Выберите</span>
-                <button type="button" onClick={() => setScoutQuantity(SCOUT_AVAILABLE)}>Макс.</button>
+                <button type="button" onClick={() => setScoutQuantity(scoutAvailable)}>Макс.</button>
                 <span>/</span>
                 <button type="button" onClick={() => setScoutQuantity(0)}>Мин.</button>
                 <i />

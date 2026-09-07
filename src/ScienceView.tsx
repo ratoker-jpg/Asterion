@@ -185,7 +185,7 @@ function ScienceRow({
   runtime: ScienceRuntimeSnapshot;
   onStart: (scienceId: ScienceId) => void;
 }) {
-  const preview = previewScience({ state: runtime.science, wallet: runtime.wallet, laboratoryLevel: runtime.laboratoryLevel, now: runtime.now }, science.id);
+  const preview = previewScience({ state: runtime.science, wallet: runtime.wallet, laboratoryLevel: runtime.laboratoryLevel, now: runtime.now, mode: runtime.mode }, science.id);
   const currentLevel = preview.currentLevel;
   const actionLabel = preview.status === 'max-level'
     ? 'МАКСИМАЛЬНЫЙ УРОВЕНЬ'
@@ -193,7 +193,9 @@ function ScienceRow({
       ? 'ОЧЕРЕДЬ ЗАПОЛНЕНА'
       : preview.status === 'insufficient-resource'
         ? 'НЕДОСТАТОЧНО РЕСУРСОВ'
-        : `ПОВЫСИТЬ УРОВЕНЬ (${preview.nextLevel ?? science.capturedNextLevel})`;
+        : preview.status === 'additional-direction-blocked'
+          ? 'НАПРАВЛЕНИЕ ЗАБЛОКИРОВАНО'
+          : `ПОВЫСИТЬ УРОВЕНЬ (${preview.nextLevel ?? currentLevel + 1})`;
   const note = preview.canStart
     ? `Условия выполнены · очередь ${preview.queuedCount}/${SCIENCE_QUEUE_CAPACITY}`
     : preview.reason ?? 'Исследование недоступно.';

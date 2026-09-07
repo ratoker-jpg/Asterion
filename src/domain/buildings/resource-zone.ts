@@ -283,6 +283,16 @@ export function createDefaultBuildingLevels(): BuildingLevels {
   return Object.fromEntries(BUILDING_ROLES.map((role) => [role, 0])) as BuildingLevels;
 }
 
+export function createCanonicalStartingBuildingLevels(): BuildingLevels {
+  const levels = createDefaultBuildingLevels();
+  levels['metal-production-1'] = 1;
+  levels['mineral-production-1'] = 1;
+  levels['gas-production-1'] = 1;
+  levels['basic-energy'] = 1;
+  levels.hangar = 1;
+  return levels;
+}
+
 export const createDefaultResourceBuildingLevels = createDefaultBuildingLevels;
 
 function toSafeLevel(value: unknown, maxLevel: number): number {
@@ -496,11 +506,15 @@ export function startBuildingProject(
   assetRole: BuildingRole,
   planetId: string,
   enqueuedAt: number,
+  durationMs?: number,
 ): BuildTransition {
   const availability = evaluateBuildingBuild(state, assetRole);
   if (!availability.canBuild || availability.nextLevel == null) return { ok: false, state, reason: availability.reason };
 
   const item = getBuildingDefinition(assetRole);
+  const effectiveDurationMs = durationMs == null
+    ? item.prototypeTimeMs
+    : Math.max(1, Math.round(durationMs));
   const resources: ResourceWallet = { ...state.resources };
   for (const key of Object.keys(item.prototypeCost) as ResourceKey[]) {
     resources[key] -= item.prototypeCost[key];
@@ -514,7 +528,7 @@ export function startBuildingProject(
     planetId,
     enqueuedAt,
     startedAt,
-    finishAt: startedAt + item.prototypeTimeMs,
+    finishAt: startedAt + effectiveDurationMs,
     targetLevel: availability.nextLevel,
   };
 
