@@ -101,7 +101,11 @@
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: 190px minmax(0, 1fr);
+  /* Both Fleet panels stay in normal flow. The flight actions are future
+     dispatch controls, but they must remain visible instead of being clipped
+     by a fixed-height first grid row. */
+  grid-template-rows: max-content max-content;
+  align-content: start;
   gap: 16px;
 }
 .fleet-panel-v1 {

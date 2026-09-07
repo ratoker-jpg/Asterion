@@ -4,6 +4,7 @@ const BASE_STAGE_WIDTH = 1920;
 const BASE_WORKSPACE_HEIGHT = 1080 - 176 - 58;
 const BASE_UTILITY_WORKSPACE_HEIGHT = 1080 - 246 - 58;
 const BASE_FLEET_VERTICAL_PADDING = 22 + 30;
+const BASE_FLEET_CONTENT_HEIGHT = BASE_UTILITY_WORKSPACE_HEIGHT - BASE_FLEET_VERTICAL_PADDING;
 const LONG_WORKSPACE_TOP = 246;
 const STAGE_BOTTOM_GAP = 58;
 const PAGE_BOTTOM_PADDING = 52;
@@ -129,7 +130,7 @@ export function GlobalPageScrollController() {
       const availableHeight = utilityPage || usesCompactWorkspaceHeight(workspace)
         ? BASE_UTILITY_WORKSPACE_HEIGHT
         : isFleetPage
-          ? BASE_WORKSPACE_HEIGHT - BASE_FLEET_VERTICAL_PADDING
+          ? BASE_FLEET_CONTENT_HEIGHT
           : BASE_WORKSPACE_HEIGHT;
       const contentHeight = measureContentHeight(pageContainer, stageScale, pageRoots);
       const needsScroll = contentHeight > availableHeight + OVERFLOW_EPSILON;

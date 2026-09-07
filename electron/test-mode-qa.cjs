@@ -152,6 +152,12 @@ async function readQaState(win) {
       populationChips: Array.from(document.querySelectorAll('.header-resource-rail .resource-chip--population'))
         .map((node) => node.textContent?.replace(/\s+/g, ' ').trim() ?? ''),
       fleetPopulation: document.querySelector('[data-qa-fleet-population]')?.textContent?.trim() ?? '',
+      fleetFlightActions: Array.from(document.querySelectorAll('.fleet-flight-actions-v1 button')).map((node) => ({
+        text: node.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+        top: node.getBoundingClientRect().top,
+        bottom: node.getBoundingClientRect().bottom,
+      })),
+      fleetFlightPanelBottom: document.querySelector('.fleet-flights-v1')?.getBoundingClientRect().bottom ?? -1,
       fleetRosterOverflow: (() => {
         const node = document.querySelector('[data-qa-fleet-roster]');
         return node ? node.scrollHeight > node.clientHeight + 2 : false;
@@ -323,6 +329,9 @@ async function runViewport(width, height) {
     ];
     if (JSON.stringify(fleetRoot.fleetRoster) !== JSON.stringify(expectedFleetRoster)) throw new Error(`${label}: current fleet roster UI mismatch ${JSON.stringify(fleetRoot.fleetRoster)}`);
     if (fleetRoot.fleetRosterOverflow || fleetRoot.fleetRosterOverflowY !== 'visible') throw new Error(`${label}: fleet roster still owns an internal scrollbar ${JSON.stringify(fleetRoot)}`);
+    if (fleetRoot.fleetFlightActions.length !== 3 || fleetRoot.fleetFlightActions.some((action) => action.bottom > fleetRoot.fleetFlightPanelBottom + 2 || action.bottom <= action.top)) {
+      throw new Error(`${label}: fleet flight action buttons are clipped or missing ${JSON.stringify(fleetRoot)}`);
+    }
     await capture(win, directory, 'test-fleet-roster');
 
     await win.webContents.executeJavaScript(`(() => {
@@ -355,7 +364,7 @@ async function runViewport(width, height) {
     await reload(win, 'test');
     await openFleet(win);
     const restoredFleet = await readQaState(win);
-    if (restoredFleet.fleetPageLong || restoredFleet.fleetRosterOverflow || restoredFleet.fleetRosterOverflowY !== 'visible' || !restoredFleet.fleetPopulation.includes('58 / 70')) {
+    if (!restoredFleet.fleetPageLong || restoredFleet.fleetRosterOverflow || restoredFleet.fleetRosterOverflowY !== 'visible' || !restoredFleet.fleetPopulation.includes('58 / 70')) {
       throw new Error(`${label}: canonical fleet restore after global-scroll QA failed ${JSON.stringify(restoredFleet)}`);
     }
     await clickText(win, '.fleet-sidebar-v1 button', 'Корабли');
