@@ -52,6 +52,9 @@ async function seed(win) {
     planet.buildings.spaceport = 1;
     planet.buildings.shipyard = 20;
     planet.spaceportUpgrades = { shipLevels: {}, shipQueue: [], commanderQueue: [] };
+    save.science = save.science || { levels: {}, queue: [] };
+    save.science.levels = save.science.levels || {};
+    save.science.levels[3] = 2;
     save.metal = 100000;
     save.minerals = 100000;
     save.gas = 100000;

@@ -101,7 +101,11 @@
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: 252px minmax(0, 1fr);
+  /* Both Fleet panels stay in normal flow. The flight actions are future
+     dispatch controls, but they must remain visible instead of being clipped
+     by a fixed-height first grid row. */
+  grid-template-rows: max-content max-content;
+  align-content: start;
   gap: 16px;
 }
 .fleet-panel-v1 {
@@ -154,29 +158,47 @@
 
 .fleet-compose-v1 {
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto auto auto;
   gap: 10px;
   overflow: visible;
 }
 
-/* Nemexia-inspired compact ship row: art, data, one numeric input, Max/Min. */
+/* Nemexia-inspired roster: every owned ordinary ship gets its own selectable row. */
+.fleet-ship-roster-v1 {
+  min-height: auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-content: start;
+  overflow: visible;
+  padding-right: 4px;
+}
+.fleet-ship-roster-empty-v1 {
+  grid-column: 1 / -1;
+  min-height: 86px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(58, 196, 236, .14);
+  color: #8bb7c7;
+  font-size: 11px;
+}
 .fleet-ship-line-v1 {
   display: grid;
   grid-template-columns: 104px minmax(0, 1fr) 188px;
   gap: 14px;
   align-items: center;
-  min-height: 108px;
-  padding: 9px 12px;
+  min-height: 82px;
+  padding: 7px 12px;
   border-bottom: 1px solid rgba(58, 196, 236, .18);
   background: linear-gradient(90deg, rgba(8, 61, 83, .38), rgba(3, 25, 36, .12));
 }
 .fleet-ship-art-v1 {
   display: grid;
   place-items: center;
-  height: 92px;
+  height: 68px;
   border-right: 1px solid rgba(50, 190, 235, .11);
 }
-.fleet-ship-art-v1 img { width: 88px; height: 88px; object-fit: contain; filter: drop-shadow(0 0 10px rgba(39, 169, 255, .28)); }
+.fleet-ship-art-v1 img { width: 64px; height: 64px; object-fit: contain; filter: drop-shadow(0 0 10px rgba(39, 169, 255, .28)); }
 .fleet-ship-info-v1 h3 { margin: 4px 0 7px; font-size: 17px; }
 .fleet-ship-meta-v1 { display: flex; gap: 16px; color: #75abc0; font-size: 10px; }
 .fleet-ship-meta-v1 b { color: #eefcff; }
@@ -333,6 +355,17 @@
 .fleet-compose-footer-v1 span { color: #6ea8bb; font-size: 10px; }
 .fleet-compose-footer-v1 button { min-width: 170px; height: 38px; font-weight: 800; font-size: 11px; letter-spacing: .07em; }
 .fleet-compose-footer-v1 button:disabled { opacity: .35; cursor: default; }
+
+/* Once the shared controller promotes the page to document scrolling, keep every
+   roster row in normal flow so adding ships grows the page instead of creating a
+   nested scrollbar inside the formation panel. */
+html.asterion-long-page .fleet-compose-v1 {
+  grid-template-rows: auto auto auto auto auto;
+}
+html.asterion-long-page .fleet-ship-roster-v1 {
+  min-height: auto;
+  overflow: visible;
+}
 
 @media (max-width: 1400px) {
   .fleet-workspace-v1 { grid-template-columns: 260px minmax(0, 1fr); gap: 14px; padding-inline: 22px; }

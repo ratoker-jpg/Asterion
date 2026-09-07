@@ -1,0 +1,98 @@
+import { COMMANDER_COMBAT_CATALOG } from '../combat/catalog.ts';
+import { getFactionShipCatalog } from '../combat/faction-catalog.ts';
+import { COMMANDER_IDS, type CommanderId } from '../combat/commanders.ts';
+import { SHIP_IDS, type ShipId } from '../combat/ids.ts';
+import type { CombatFactionId } from '../combat/factions.ts';
+
+export type OwnedFleetState = {
+  ships: Record<ShipId, number>;
+  commanders: Record<CommanderId, number>;
+};
+
+export const FLEET_CAPACITY_CONFIG = Object.freeze({
+  baseCapacity: 50,
+  hangarCapacityPerLevel: 20,
+  maxHangarLevel: 20,
+  note: 'PROTOTYPE/TBD: capacity values require source confirmation; Hangar is the single capacity resolver.',
+});
+
+export const CANONICAL_STARTING_FLEET = Object.freeze({
+  scout: 20,
+  transporter: 10,
+  recycler: 1,
+  'spy-probe': 3,
+});
+
+function emptyRecord<T extends string>(ids: readonly T[]): Record<T, number> {
+  return Object.fromEntries(ids.map((id) => [id, 0])) as Record<T, number>;
+}
+
+export function createEmptyFleetState(): OwnedFleetState {
+  return {
+    ships: emptyRecord(SHIP_IDS),
+    commanders: emptyRecord(COMMANDER_IDS),
+  };
+}
+
+export function createCanonicalStartingFleet(): OwnedFleetState {
+  const fleet = createEmptyFleetState();
+  for (const [id, quantity] of Object.entries(CANONICAL_STARTING_FLEET)) {
+    fleet.ships[id as ShipId] = quantity;
+  }
+  return fleet;
+}
+
+function safeOwnedQuantity(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.floor(value));
+}
+
+export function migrateFleetState(value: unknown): OwnedFleetState {
+  const migrated = createEmptyFleetState();
+  if (!value || typeof value !== 'object') return migrated;
+  const source = value as Record<string, unknown>;
+  const ships = source.ships && typeof source.ships === 'object' ? source.ships as Record<string, unknown> : {};
+  const commanders = source.commanders && typeof source.commanders === 'object'
+    ? source.commanders as Record<string, unknown>
+    : {};
+
+  for (const id of SHIP_IDS) migrated.ships[id] = safeOwnedQuantity(ships[id]);
+  for (const id of COMMANDER_IDS) migrated.commanders[id] = safeOwnedQuantity(commanders[id]);
+  return migrated;
+}
+
+/**
+ * Legacy saves did not have a fleet field. A missing field means the canonical
+ * starting fleet; an explicitly saved value (including an empty object) is
+ * preserved through normal migration.
+ */
+export function resolveSavedFleetState(value: unknown): OwnedFleetState {
+  return value === undefined ? createCanonicalStartingFleet() : migrateFleetState(value);
+}
+
+export function calculateFleetPopulation(
+  fleet: OwnedFleetState,
+  factionId: CombatFactionId = 'aegis',
+): number {
+  const ships = getFactionShipCatalog(factionId);
+  const shipPopulation = ships.reduce((total, entity) => total + (fleet.ships[entity.id as ShipId] ?? 0) * entity.population, 0);
+  const commanderPopulation = COMMANDER_COMBAT_CATALOG.reduce(
+    (total, entity) => total + (fleet.commanders[entity.id as CommanderId] ?? 0) * entity.population,
+    0,
+  );
+  return shipPopulation + commanderPopulation;
+}
+
+export function calculateFleetCapacity(hangarLevel: number): number {
+  const level = Math.min(
+    FLEET_CAPACITY_CONFIG.maxHangarLevel,
+    Math.max(0, Math.floor(Number.isFinite(hangarLevel) ? hangarLevel : 0)),
+  );
+  return FLEET_CAPACITY_CONFIG.baseCapacity + level * FLEET_CAPACITY_CONFIG.hangarCapacityPerLevel;
+}
+
+export function getFleetSummary(fleet: OwnedFleetState, hangarLevel: number, factionId: CombatFactionId = 'aegis') {
+  const population = calculateFleetPopulation(fleet, factionId);
+  const capacity = calculateFleetCapacity(hangarLevel);
+  return { population, capacity, available: Math.max(0, capacity - population) };
+}

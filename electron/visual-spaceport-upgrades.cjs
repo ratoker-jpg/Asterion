@@ -70,6 +70,9 @@ async function seedSpaceport(win) {
     if (!planet?.buildings) return false;
     planet.buildings.spaceport = 1;
     planet.buildings.shipyard = 20;
+    save.science = save.science || { levels: {}, queue: [] };
+    save.science.levels = save.science.levels || {};
+    save.science.levels[3] = 2;
     planet.spaceportUpgrades = { shipLevels: {}, shipQueue: [], commanderQueue: [] };
     save.metal = 100000;
     save.minerals = 100000;

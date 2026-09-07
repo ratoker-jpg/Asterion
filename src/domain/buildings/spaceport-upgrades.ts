@@ -6,6 +6,7 @@ import {
 import { SCIENCE_CATALOG } from '../science/catalog.ts';
 import type { ScienceId } from '../science/types.ts';
 import type { BuildingLevels, BuildingRole, ScienceLevels } from './resource-zone.ts';
+import { scaleRuntimeDuration, type RuntimeMode } from '../runtime/mode.ts';
 
 export const SPACEPORT_UPGRADE_QUEUE_CAPACITY = 3;
 export const PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS = 15 * 60 * 1000;
@@ -86,6 +87,7 @@ export type SpaceportUpgradeContext = {
   buildings: BuildingLevels;
   scienceLevels: ScienceLevels;
   spaceportLevel: number;
+  mode?: RuntimeMode;
 };
 
 export type SpaceportUpgradeTransition = {
@@ -298,10 +300,10 @@ export function previewSpaceportUpgrade(
   const queuedCount = queue.filter((task) => task.shipId === shipId).length;
   const projectedLevel = Math.min(maxLevel, currentLevel + queuedCount);
   const requirements = evaluateSpaceportUpgradeRequirements(track, shipId, context.buildings, context.scienceLevels);
-  const effectiveDurationMs = calculateSpaceportEffectiveDuration(
+  const effectiveDurationMs = scaleRuntimeDuration(calculateSpaceportEffectiveDuration(
     PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS,
     context.spaceportLevel,
-  );
+  ), context.mode ?? 'production');
   const base = {
     track,
     shipId,
@@ -414,29 +416,33 @@ function reconcileTrack(
   state: SpaceportUpgradeState,
   track: SpaceportUpgradeTrack,
   now: number,
-): { state: SpaceportUpgradeState; completed: SpaceportUpgradeTask[] } {
+): { state: SpaceportUpgradeState; completed: SpaceportUpgradeTask[]; removed: number } {
   let nextState = state;
   let queue = [...queueForTrack(nextState, track)];
   const completed: SpaceportUpgradeTask[] = [];
+  let removed = 0;
   const maxLevel = getSpaceportUpgradeMaxLevel(track);
 
   while (queue[0] && now >= queue[0].finishAt) {
     const task = queue[0];
     const currentLevel = safeTrackLevel(nextState.shipLevels[task.shipId], track);
     const taskTarget = safeTrackLevel(task.toLevel, track);
-    const nextLevel = Math.min(maxLevel, Math.max(currentLevel, taskTarget));
-    nextState = {
-      ...nextState,
-      shipLevels: {
-        ...nextState.shipLevels,
-        [task.shipId]: nextLevel,
-      },
-    };
-    completed.push(task);
+    if (currentLevel < taskTarget) {
+      const nextLevel = Math.min(maxLevel, taskTarget);
+      nextState = {
+        ...nextState,
+        shipLevels: {
+          ...nextState.shipLevels,
+          [task.shipId]: nextLevel,
+        },
+      };
+      completed.push(task);
+    }
     queue = queue.slice(1);
+    removed += 1;
   }
 
-  return { state: withQueue(nextState, track, queue), completed };
+  return { state: withQueue(nextState, track, queue), completed, removed };
 }
 
 export function reconcileSpaceportUpgradeState(
@@ -447,7 +453,7 @@ export function reconcileSpaceportUpgradeState(
   const commanders = reconcileTrack(ships.state, 'commanders', now);
   const completed = [...ships.completed, ...commanders.completed];
   return {
-    changed: completed.length > 0,
+    changed: ships.removed + commanders.removed > 0,
     state: commanders.state,
     completed,
   };

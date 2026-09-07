@@ -1,7 +1,8 @@
 import { TYPOGRAPHY_KEYS, type TypographyKey, type TypographyScales, type UiPreferencesV2, WINDOW_PRESETS } from './types.ts';
+import { getRuntimeSaveKey } from '../runtime/mode.ts';
 
 export const PREFERENCES_KEY = 'asterion.preferences.v2';
-export const CAMPAIGN_SAVE_KEY = 'asterion.vertical-slice.v1';
+export const CAMPAIGN_SAVE_KEY = getRuntimeSaveKey();
 export const TYPOGRAPHY_MIN = 80;
 export const TYPOGRAPHY_MAX = 180;
 export const TYPOGRAPHY_STEP = 5;

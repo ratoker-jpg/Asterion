@@ -1,6 +1,7 @@
 import { COMMANDER_IDS, isCommanderId, type CommanderId } from './commanders.ts';
+import { getRuntimeSaveKey } from '../runtime/mode.ts';
 
-export const ASTERION_SAVE_KEY = 'asterion.vertical-slice.v1';
+export const ASTERION_SAVE_KEY = getRuntimeSaveKey();
 export const COMBAT_SAVE_SCHEMA_VERSION = 4;
 export const COMBAT_PRIORITY_CHANGED_EVENT = 'asterion:combat-priority-changed';
 

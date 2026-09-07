@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,8 +32,19 @@ jobs:
         run: npm run test:rating
       - name: Science domain tests
         run: npm run test:science
+      - name: Runtime mode domain tests
+        run: npm run test:runtime
+      - name: Fleet domain tests
+        run: npm run test:fleet
       - name: Build renderer
         run: npm run build
+      - name: Test Mode Electron QA
+        env:
+          # GitHub's hidden Windows compositor can block viewport captures on
+          # long pages. Functional DOM/queue assertions still run; local QA
+          # retains screenshots by leaving this unset.
+          ASTERION_SKIP_SCREENSHOTS: '1'
+        run: npm run test:test-mode-ui
       - name: Capture utility and resource-zone visual QA
         run: npm run qa:visual
       - name: Upload visual QA artifact
@@ -40,7 +52,9 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: Asterion-Utility-Visual-QA
-          path: visual-qa/**/*
+          path: |
+            visual-qa/**/*
+            artifacts-pass1/test-mode-qa/**/*
           if-no-files-found: warn
           retention-days: 14
       - name: Package Windows app

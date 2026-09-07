@@ -486,7 +486,7 @@ function SettingsTab({ state, onSaveSettings }: { state: CommandState; onSaveSet
         </div>
         {error ? <div className="command-form-error">{error}</div> : null}
         <div className="command-detail-actions"><button type="button" className="primary" onClick={submit}>СОХРАНИТЬ</button><button type="button" onClick={resetDraft}>ОТМЕНИТЬ</button></div>
-        <p className="command-foundation-note">Настройки сохраняются внутри существующего save `asterion.vertical-slice.v1` и сбрасываются общим Prototype Reset.</p>
+        <p className="command-foundation-note">Настройки сохраняются внутри активного versioned save и сбрасываются общим Prototype Reset.</p>
       </section>
     </div>
   );

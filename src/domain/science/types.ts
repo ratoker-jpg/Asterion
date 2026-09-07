@@ -27,6 +27,7 @@ export type ScienceCatalogDefinition = {
   capturedCost: ScienceResourceCost;
   capturedTime: string;
   laboratoryLevel: number;
+  maxLevel: number;
   prerequisites: readonly SciencePrerequisite[];
   combatTechnologyId?: CombatTechnologyId;
 };
