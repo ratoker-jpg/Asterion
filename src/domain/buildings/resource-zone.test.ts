@@ -183,6 +183,7 @@ test('trade-center has no requirements', () => {
 });
 
 test('research requires construction level 1', () => {
+  assert.equal(getBuildingDefinition('research').maxLevel, 20);
   assert.deepEqual(getBuildingDefinition('research').requirements, [
     { kind: 'building-level', assetRole: 'construction', level: 1 },
   ]);

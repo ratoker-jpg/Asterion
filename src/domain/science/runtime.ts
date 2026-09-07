@@ -12,17 +12,15 @@ export const SCIENCE_SAVE_KEY = getRuntimeSaveKey('production');
 export const SCIENCE_SAVE_SCHEMA_VERSION = 10;
 export const SCIENCE_QUEUE_CAPACITY = 3;
 
-/**
- * The source capture exposes the currently visible level and its next level,
- * but does not establish a final campaign maximum. This cap is intentionally
- * temporary and must be source-validated before balance is considered final.
- */
 export const SCIENCE_PROTOTYPE_CONFIG = Object.freeze({
-  maxLevel: 20,
-  note: 'PROTOTYPE/TBD: one reachable runtime cap is used until authoritative campaign balances are confirmed; captured values remain presentation-only.',
+  laboratoryMaxLevel: 20,
+  laboratoryTimeReductionPerLevel: 0.05,
+  note: 'Канонические максимумы науки заданы в каталоге; стоимость и время исследования пока остаются captured/prototype-значениями.',
 });
 
 export const SCIENCE_CAPTURED_VALUES_NOTE = SCIENCE_PROTOTYPE_CONFIG.note;
+export const SCIENCE_LABORATORY_MAX_LEVEL = SCIENCE_PROTOTYPE_CONFIG.laboratoryMaxLevel;
+export const SCIENCE_LABORATORY_TIME_REDUCTION_PER_LEVEL = SCIENCE_PROTOTYPE_CONFIG.laboratoryTimeReductionPerLevel;
 
 export type ScienceLevels = Partial<Record<ScienceId, number>>;
 
@@ -170,9 +168,25 @@ function cloneCost(cost: ScienceResourceCost): ScienceResourceCost {
   return { metal: cost.metal, minerals: cost.minerals, gas: cost.gas, energy: cost.energy };
 }
 
-export function getSciencePrototypeMaxLevel(science: ScienceCatalogDefinition): number {
-  void science;
-  return SCIENCE_PROTOTYPE_CONFIG.maxLevel;
+export function getScienceMaxLevel(science: ScienceCatalogDefinition): number {
+  return science.maxLevel;
+}
+
+/** @deprecated Use getScienceMaxLevel; retained for save/test compatibility. */
+export const getSciencePrototypeMaxLevel = getScienceMaxLevel;
+
+export function calculateScienceDurationMs(
+  baseDurationMs: number,
+  laboratoryLevel: number,
+  mode: RuntimeMode = 'production',
+): number {
+  const safeBaseDuration = Math.max(1, Math.round(baseDurationMs));
+  const safeLaboratoryLevel = Math.min(
+    SCIENCE_LABORATORY_MAX_LEVEL,
+    Math.max(0, Math.floor(laboratoryLevel)),
+  );
+  const laboratoryFactor = (1 - SCIENCE_LABORATORY_TIME_REDUCTION_PER_LEVEL) ** safeLaboratoryLevel;
+  return scaleRuntimeDuration(Math.max(1, Math.round(safeBaseDuration * laboratoryFactor)), mode);
 }
 
 export function createDefaultScienceLevels(): ScienceLevels {
@@ -192,7 +206,7 @@ export function migrateScienceLevels(value: unknown): ScienceLevels {
       science.id,
       safeLevel(
         source[String(science.id)],
-        getSciencePrototypeMaxLevel(science),
+        getScienceMaxLevel(science),
       ),
     ]),
   ) as ScienceLevels;
@@ -239,13 +253,17 @@ export function previewScience(context: ScienceRuntimeContext, scienceId: Scienc
   const science = findScience(scienceId);
   if (!science) throw new Error(`Unknown science id: ${scienceId}`);
 
-  const maxLevel = getSciencePrototypeMaxLevel(science);
+  const maxLevel = getScienceMaxLevel(science);
   const currentLevel = safeLevel(context.state.levels[scienceId], maxLevel);
   const queuedCount = context.state.queue.filter((task) => task.scienceId === scienceId).length;
   const projectedLevel = Math.min(maxLevel, currentLevel + queuedCount);
   const requirements = requirementsFor(science, context.state.levels, Math.max(0, Math.floor(context.laboratoryLevel)));
   const cost = cloneCost(science.capturedCost);
-  const durationMs = scaleRuntimeDuration(parseCapturedTime(science.capturedTime), context.mode ?? 'production');
+  const durationMs = calculateScienceDurationMs(
+    parseCapturedTime(science.capturedTime),
+    context.laboratoryLevel,
+    context.mode ?? 'production',
+  );
   const base = {
     scienceId,
     currentLevel,
@@ -356,7 +374,7 @@ export function reconcileScienceState(state: ScienceState, now: number): Science
       continue;
     }
 
-    const maxLevel = getSciencePrototypeMaxLevel(science);
+    const maxLevel = getScienceMaxLevel(science);
     const currentLevel = safeLevel(levels[task.scienceId], maxLevel);
     if (currentLevel >= task.toLevel) {
       discarded.push(task);
@@ -384,7 +402,7 @@ function migrateQueue(value: unknown, levels: ScienceLevels): ScienceQueueTask[]
     const science = findScience(scienceId);
     if (!science) continue;
 
-    const maxLevel = getSciencePrototypeMaxLevel(science);
+    const maxLevel = getScienceMaxLevel(science);
     const currentLevel = safeLevel(levels[scienceId], maxLevel);
     const queuedBefore = queuedPerScience[scienceId] ?? 0;
     const expectedFromLevel = Math.min(maxLevel, currentLevel + queuedBefore);
@@ -455,7 +473,7 @@ export function createScienceRuntimeSnapshot(
   return {
     science,
     wallet: cloneCost(wallet),
-    laboratoryLevel: Math.max(0, Math.floor(laboratoryLevel)),
+    laboratoryLevel: Math.min(SCIENCE_LABORATORY_MAX_LEVEL, Math.max(0, Math.floor(laboratoryLevel))),
     now,
     mode,
   };

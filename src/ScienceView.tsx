@@ -29,6 +29,8 @@ import {
 } from './domain/science/catalog.ts';
 import {
   SCIENCE_CAPTURED_VALUES_NOTE,
+  SCIENCE_LABORATORY_MAX_LEVEL,
+  SCIENCE_LABORATORY_TIME_REDUCTION_PER_LEVEL,
   SCIENCE_QUEUE_CAPACITY,
   SCIENCE_RUNTIME_CHANGED_EVENT,
   SCIENCE_START_REQUEST_EVENT,
@@ -111,7 +113,8 @@ export function ScienceView() {
           <img className="science-lab-art-v2" src={laboratoryArt} alt="Лаборатория" draggable={false} />
           <div>
             <small className="utility-secondary">ЛАБОРАТОРИЯ</small>
-            <strong className="utility-section-title" data-qa-science-laboratory-level>УРОВЕНЬ {effectiveRuntime.laboratoryLevel}</strong>
+            <strong className="utility-section-title" data-qa-science-laboratory-level>УРОВЕНЬ {effectiveRuntime.laboratoryLevel} / {SCIENCE_LABORATORY_MAX_LEVEL}</strong>
+            <small className="science-lab-speed-v2" data-qa-science-laboratory-speed>−{Math.round(SCIENCE_LABORATORY_TIME_REDUCTION_PER_LEVEL * 100)}% времени за уровень</small>
           </div>
         </div>
 
@@ -216,6 +219,14 @@ function ScienceRow({
         </header>
         <p className="utility-body-text">{science.description}</p>
 
+        <ScienceLevelProgress
+          currentLevel={currentLevel}
+          projectedLevel={preview.projectedLevel}
+          queuedCount={preview.queuedCount}
+          nextLevel={preview.nextLevel}
+          maxLevel={preview.maxLevel}
+        />
+
         {!preview.canStart && preview.status !== 'max-level' ? (
           <div className="science-missing-banner-v2" role="note">{preview.reason}</div>
         ) : null}
@@ -259,6 +270,56 @@ function ScienceRow({
         </small>
       </div>
     </article>
+  );
+}
+
+function ScienceLevelProgress({
+  currentLevel,
+  projectedLevel,
+  queuedCount,
+  nextLevel,
+  maxLevel,
+}: {
+  currentLevel: number;
+  projectedLevel: number;
+  queuedCount: number;
+  nextLevel: number | null;
+  maxLevel: number;
+}) {
+  const isMax = currentLevel >= maxLevel;
+
+  return (
+    <section
+      className={`science-level-progress-v2 ${isMax ? 'is-max' : ''}`}
+      data-qa-science-level-progress
+      data-qa-current-level={currentLevel}
+      data-qa-projected-level={projectedLevel}
+      data-qa-max-level={maxLevel}
+      aria-label={`Текущий уровень ${currentLevel} из ${maxLevel}. Заказано уровней: ${queuedCount}.`}
+    >
+      <div className="science-level-progress-meta-v2">
+        <span>Фактический уровень <b>{currentLevel}</b> / {maxLevel}</span>
+        {isMax ? (
+          <strong>Максимальный уровень</strong>
+        ) : (
+          <>
+            <span>Заказано <b>+{queuedCount}</b> → {projectedLevel}</span>
+            <span>Следующий <b>{nextLevel ?? 'MAX'}</b></span>
+          </>
+        )}
+      </div>
+      <div className="science-level-segments-v2" aria-hidden="true">
+        {Array.from({ length: maxLevel }, (_, index) => {
+          const level = index + 1;
+          const className = level <= currentLevel
+            ? 'is-complete'
+            : level <= projectedLevel
+              ? 'is-queued'
+              : 'is-future';
+          return <i key={level} className={className} data-level={level} />;
+        })}
+      </div>
+    </section>
   );
 }
 

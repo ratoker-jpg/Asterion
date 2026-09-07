@@ -12,7 +12,8 @@ import {
 test('runtime mode accepts only the explicit test query and keeps save keys isolated', () => {
   assert.equal(resolveRuntimeMode('?mode=test'), 'test');
   assert.equal(resolveRuntimeMode('?mode=production'), 'production');
-  assert.equal(resolveRuntimeMode('?mode=test&other=1'), 'test');
+  assert.equal(resolveRuntimeMode('?mode=test&other=1'), 'production');
+  assert.equal(resolveRuntimeMode('mode=test'), 'production');
   assert.equal(resolveRuntimeMode('?mode=TEST'), 'production');
   assert.equal(getRuntimeSaveKey('production'), PRODUCTION_SAVE_KEY);
   assert.equal(getRuntimeSaveKey('test'), TEST_SAVE_KEY);

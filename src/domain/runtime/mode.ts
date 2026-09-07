@@ -11,11 +11,7 @@ export const RUNTIME_STATE_CHANGED_EVENT = 'asterion:runtime-state-changed';
 
 export function resolveRuntimeMode(search?: string): RuntimeMode {
   const source = search ?? (typeof window !== 'undefined' ? window.location.search : '');
-  try {
-    return new URLSearchParams(source).get('mode') === 'test' ? 'test' : 'production';
-  } catch {
-    return 'production';
-  }
+  return source === '?mode=test' ? 'test' : 'production';
 }
 
 export const ACTIVE_RUNTIME_MODE: RuntimeMode = resolveRuntimeMode();

@@ -4,6 +4,7 @@ import { COMBAT_TECHNOLOGY_IDS } from '../combat/technologies.ts';
 import { SCIENCE_CATALOG, SCIENCE_SECTIONS } from './catalog.ts';
 import {
   SCIENCE_QUEUE_CAPACITY,
+  calculateScienceDurationMs,
   createDefaultScienceState,
   getSciencePrototypeMaxLevel,
   migrateScienceState,
@@ -70,6 +71,28 @@ test('new science state starts at zero and explicit levels survive migration', (
   assert.equal(state.levels[1]! < getSciencePrototypeMaxLevel(SCIENCE_CATALOG[0]), true);
 });
 
+test('canonical science maxima are per technology and the laboratory is level 20', () => {
+  assert.deepEqual(
+    Object.fromEntries(SCIENCE_CATALOG.map((science) => [science.id, science.maxLevel])),
+    {
+      1: 10, 2: 15, 3: 10, 4: 15, 5: 20, 6: 20, 7: 15, 8: 15, 9: 15,
+      10: 15, 11: 15, 12: 15, 13: 15, 14: 2, 15: 1, 17: 20,
+      18: 10, 19: 10, 20: 10, 21: 10, 22: 10, 23: 10,
+    },
+  );
+  assert.equal(migrateScienceLevels({ 1: 999, 14: 999, 15: 999 })[1], 10);
+  assert.equal(migrateScienceLevels({ 1: 999, 14: 999, 15: 999 })[14], 2);
+  assert.equal(migrateScienceLevels({ 1: 999, 14: 999, 15: 999 })[15], 1);
+});
+
+test('laboratory reduces current research time by 5 percent per level', () => {
+  const base = 15 * 60 * 1_000;
+  assert.equal(calculateScienceDurationMs(base, 0), base);
+  assert.equal(calculateScienceDurationMs(base, 1), Math.round(base * 0.95));
+  assert.equal(calculateScienceDurationMs(base, 2), Math.round(base * 0.95 ** 2));
+  assert.equal(calculateScienceDurationMs(base, 20), Math.round(base * 0.95 ** 20));
+});
+
 test('science start validates runtime laboratory/prerequisites and atomically deducts resources', () => {
   const state = createDefaultScienceState();
   state.levels[5] = 4;
@@ -110,7 +133,7 @@ test('science queue accepts three sequential tasks and rejects the fourth', () =
   assert.equal(fourth.canStart, false);
 });
 
-test('science preview exposes max state from the single prototype cap', () => {
+test('science preview exposes the catalog maximum state', () => {
   const state = createDefaultScienceState();
   state.levels[1] = getSciencePrototypeMaxLevel(SCIENCE_CATALOG.find((science) => science.id === 1)!);
   const preview = previewScience(context(state, 1), 1);
@@ -179,6 +202,6 @@ test('additional science directions are mutually exclusive at runtime', () => {
 test('science definitions contain no combat coefficient or reducer contract', () => {
   for (const science of SCIENCE_CATALOG) {
     const keys = Object.keys(science);
-    assert.equal(keys.some((key) => /multiplier|coefficient|maxLevel|reducer|spend/i.test(key)), false);
+    assert.equal(keys.some((key) => /multiplier|coefficient|reducer|spend/i.test(key)), false);
   }
 });

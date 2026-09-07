@@ -73,7 +73,7 @@ async function seed(win, science) {
     planet.energy = 1_000_000;
     save.science.levels[1] = ${science.level};
     save.science.queue = ${JSON.stringify(science.queue)};
-    save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 9);
+    save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 10);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     return true;
   })()`);
@@ -98,6 +98,12 @@ async function readScreen(win) {
       root: Boolean(root),
       queue: document.querySelector('[data-qa-science-queue-count]')?.textContent?.trim() ?? '',
       level: row?.querySelector('[data-qa-science-level]')?.textContent?.replace(/\\s+/g, ' ').trim() ?? '',
+      levelProgress: {
+        current: row?.querySelector('[data-qa-science-level-progress]')?.getAttribute('data-qa-current-level') ?? '',
+        max: row?.querySelector('[data-qa-science-level-progress]')?.getAttribute('data-qa-max-level') ?? '',
+      },
+      laboratory: document.querySelector('[data-qa-science-laboratory-level]')?.textContent?.replace(/\\s+/g, ' ').trim() ?? '',
+      laboratorySpeed: document.querySelector('[data-qa-science-laboratory-speed]')?.textContent?.replace(/\\s+/g, ' ').trim() ?? '',
       status: row?.getAttribute('data-qa-science-status') ?? '',
       actionDisabled: Boolean(action?.disabled),
       actionText: action?.textContent?.replace(/\\s+/g, ' ').trim() ?? '',
@@ -113,7 +119,7 @@ async function readScreen(win) {
 
 async function assertInitial(win, label) {
   const screen = await readScreen(win);
-  if (!screen.root || screen.queue !== '0/3' || screen.actionDisabled || screen.fixtureText || screen.horizontalOverflow) {
+  if (!screen.root || screen.queue !== '0/3' || screen.actionDisabled || screen.levelProgress.max !== '10' || screen.laboratory !== 'УРОВЕНЬ 1 / 20' || screen.laboratorySpeed !== '−5% времени за уровень' || screen.fixtureText || screen.horizontalOverflow) {
     throw new Error(`${label}: initial Science state mismatch ${JSON.stringify(screen)}`);
   }
 }
@@ -177,7 +183,7 @@ async function runViewport(width, height) {
   await openScience(win);
   await waitFor(win, `document.querySelector('[data-qa-science-queue-count]')?.textContent === '0/3'`);
   const offline = await readScreen(win);
-  if (offline.scienceQueueLength !== 0 || offline.scienceLevel !== 1 || offline.level !== 'УР. 1 / 20') throw new Error(`${label}: offline completion mismatch ${JSON.stringify(offline)}`);
+  if (offline.scienceQueueLength !== 0 || offline.scienceLevel !== 1 || offline.level !== 'УР. 1 / 10' || offline.levelProgress.max !== '10') throw new Error(`${label}: offline completion mismatch ${JSON.stringify(offline)}`);
   await capture(win, directory, 'science-offline-completed', '[data-qa-science-id="1"]');
   stage('offline completion');
 
@@ -193,7 +199,7 @@ async function runViewport(width, height) {
   await capture(win, directory, 'science-blocked-requirements', '[data-qa-science-id="5"]');
   stage('blocked requirements');
 
-  await seed(win, { level: 20, queue: [] });
+  await seed(win, { level: 10, queue: [] });
   stage('seed max');
   await openScience(win);
   stage('open max');
