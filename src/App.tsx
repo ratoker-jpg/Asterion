@@ -54,6 +54,9 @@ import {
 import type { AllianceSettingsInput, CommandState } from './domain/command/types.ts';
 import { createDefaultReportsState, migrateReportsState } from './domain/reports/repository.ts';
 import type { ReportsState } from './domain/reports/types.ts';
+import { buildReportsFeed } from './domain/reports/adapters.ts';
+import { createDefaultPlayerProfileState, migratePlayerProfileState } from './domain/profile/repository.ts';
+import type { PlayerProfileState } from './domain/profile/types.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import {
   SCIENCE_RUNTIME_CHANGED_EVENT,
@@ -218,6 +221,7 @@ type SaveState = {
   planets: Record<PlanetId, PlanetRuntime>;
   queues: Record<PlanetId, BuildingQueueItem[]>;
   rating: RatingPrototypeState;
+  profile: PlayerProfileState;
   combatPriority: CombatPriorityState;
   combat: BattleHistoryState;
   combatSimulator: SimulatorState;
@@ -256,6 +260,7 @@ type StoredSave = {
   queues?: Record<string, unknown>;
   queue?: unknown;
   rating?: unknown;
+  profile?: unknown;
   combatPriority?: unknown;
   combat?: unknown;
   combatSimulator?: unknown;
@@ -305,6 +310,7 @@ const createInitialState = (mode: RuntimeMode = RUNTIME_MODE): SaveState => ({
     'helion-01': [],
   },
   rating: createDefaultRatingPrototypeState(),
+  profile: createDefaultPlayerProfileState(),
   combatPriority: createDefaultCombatPriority(),
   combat: createDefaultBattleHistory(),
   combatSimulator: createDefaultSimulatorState(),
@@ -316,13 +322,13 @@ const createInitialState = (mode: RuntimeMode = RUNTIME_MODE): SaveState => ({
 
 const initialState = createInitialState(RUNTIME_MODE);
 
-const primaryTabs: ReadonlyArray<{ label: string; icon: NavigationIconKind }> = [
-  { label: 'Планета', icon: 'planet' },
-  { label: 'Вселенная', icon: 'universe' },
-  { label: 'Флоты', icon: 'fleets' },
-  { label: 'Операции', icon: 'operations' },
-  { label: 'Командование', icon: 'command' },
-  { label: 'Отчёты', icon: 'reports' },
+const primaryTabs: ReadonlyArray<{ id: string; label: string; icon: NavigationIconKind }> = [
+  { id: 'Планета', label: 'Планета', icon: 'planet' },
+  { id: 'Вселенная', label: 'Вселенная', icon: 'universe' },
+  { id: 'Флоты', label: 'Флоты', icon: 'fleets' },
+  { id: 'Операции', label: 'Операции', icon: 'operations' },
+  { id: 'Командование', label: 'Командование', icon: 'command' },
+  { id: 'Отчёты', label: 'Сообщения', icon: 'reports' },
 ];
 const utilityTabs: ReadonlyArray<{ label: string; icon: NavigationIconKind }> = [
   { label: 'Настройки', icon: 'settings' },
@@ -353,6 +359,10 @@ function readSave(): SaveState {
       now,
     ).state;
     const science = migrateScienceState(parsed.science);
+    const combat = migrateBattleHistory(parsed.combat);
+    const operations = migrateOperationsState(parsed.operations);
+    const command = migrateCommandState(parsed.command);
+    const reportIds = buildReportsFeed(combat.reports, operations, command).map((item) => item.id);
     const homeworld: PlanetRuntime = {
       name: typeof savedHomeworld?.name === 'string' && savedHomeworld.name.trim()
         ? savedHomeworld.name.trim().slice(0, 28)
@@ -385,11 +395,12 @@ function readSave(): SaveState {
       queues: { 'helion-01': queue },
       rating: migrateRatingPrototypeState(parsed.rating),
       combatPriority: migrateCombatPriority(parsed.combatPriority),
-      combat: migrateBattleHistory(parsed.combat),
+      combat,
       combatSimulator: migrateSimulatorState(parsed.combatSimulator),
-      operations: migrateOperationsState(parsed.operations),
-      command: migrateCommandState(parsed.command),
-      reports: migrateReportsState(parsed.reports),
+      operations,
+      command,
+      profile: migratePlayerProfileState(parsed.profile),
+      reports: migrateReportsState(parsed.reports, reportIds),
       science,
     };
   } catch {
@@ -1174,6 +1185,15 @@ export function App() {
     window.setTimeout(() => window.dispatchEvent(new Event(FLEET_ROOT_REQUEST_EVENT)), 0);
   };
 
+  const openCommandFromReports = () => {
+    clearBuildingInterior();
+    setActiveTab('Командование');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    closePlanetEditor();
+    setNotice('Командование: профиль союза открыт из центра сообщений.');
+  };
+
   const toggleBattleSavedFromReports = (reportId: string, saved: boolean) => {
     const result = persistBattleHistory(setBattleReportSaved(state.combat, reportId, saved));
     setState((current) => ({
@@ -1344,8 +1364,8 @@ export function App() {
               <Resource kind="population" label="НАСЕЛЕНИЕ" value={fleetSummary.population} capacity={fleetSummary.capacity} showCapacity />
             </div>
             <nav className="primary-navigation" aria-label="Основная навигация">
-              {primaryTabs.map(({ label, icon }) => (
-                <button key={label} type="button" className={activeTab === label && !(label === 'Планета' && planetViewMode !== 'overview') ? 'active' : ''} onClick={() => chooseTab(label)}>
+              {primaryTabs.map(({ id, label, icon }) => (
+                <button key={id} type="button" className={activeTab === id && !(id === 'Планета' && planetViewMode !== 'overview') ? 'active' : ''} onClick={() => chooseTab(id)}>
                   <NavigationIcon kind={icon} />
                   <span>{label}</span>
                 </button>
@@ -1433,10 +1453,13 @@ export function App() {
               savedBattleReportIds={state.combat.savedReportIds}
               operations={state.operations}
               command={state.command}
+              profile={state.profile}
+              rating={state.rating}
               state={state.reports}
               onStateChange={(reports) => setState((current) => ({ ...current, reports }))}
               onToggleBattleSaved={toggleBattleSavedFromReports}
               onOpenFleets={openFleetRootFromReports}
+              onOpenCommand={openCommandFromReports}
             />
           ) : activeTab === 'Планета' && planetViewMode !== 'overview' ? (
             <ZoneView

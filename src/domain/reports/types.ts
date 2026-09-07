@@ -44,6 +44,7 @@ export type ReportItem = {
 
 export type ReportsState = {
   readIds: string[];
+  hiddenIds: string[];
 };
 
 export type ReportsCategoryKey = ReportCategory;

@@ -1,0 +1,116 @@
+{
+  "results": [
+    {
+      "viewport": "1920x1080",
+      "profile": {
+        "visible": true,
+        "name": "Dendrilion",
+        "faction": "Илары",
+        "alliance": "Без Союза",
+        "metricValues": [
+          "Ресурсные очки855 880",
+          "Боевые очки469 240",
+          "Общие очки1 325 120",
+          "Очки достижений72 332"
+        ],
+        "folderIds": [
+          "system",
+          "battle",
+          "command",
+          "arena",
+          "flights",
+          "alliances",
+          "achievements"
+        ],
+        "folderLabels": [
+          "Система",
+          "Доклады",
+          "Командные доклады",
+          "Арена",
+          "Полёты",
+          "Союзы",
+          "Достижения"
+        ],
+        "focusableMetrics": 4,
+        "viewport": {
+          "innerWidth": 1920,
+          "innerHeight": 1080,
+          "devicePixelRatio": 1
+        },
+        "stageRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1080
+        },
+        "horizontalOverflow": false,
+        "bodyHorizontalOverflow": false
+      },
+      "metricFocus": "resourcePoints",
+      "allianceBefore": {
+        "total": 2,
+        "deleteAllDisabled": false,
+        "deleteSelectedDisabled": true
+      },
+      "canonicalBattleId": "battle-demo-attacker-victory",
+      "horizontalOverflow": false,
+      "persistedTombstone": true
+    },
+    {
+      "viewport": "1280x720",
+      "profile": {
+        "visible": true,
+        "name": "Dendrilion",
+        "faction": "Илары",
+        "alliance": "Без Союза",
+        "metricValues": [
+          "Ресурсные очки855 880",
+          "Боевые очки469 240",
+          "Общие очки1 325 120",
+          "Очки достижений72 332"
+        ],
+        "folderIds": [
+          "system",
+          "battle",
+          "command",
+          "arena",
+          "flights",
+          "alliances",
+          "achievements"
+        ],
+        "folderLabels": [
+          "Система",
+          "Доклады",
+          "Командные доклады",
+          "Арена",
+          "Полёты",
+          "Союзы",
+          "Достижения"
+        ],
+        "focusableMetrics": 4,
+        "viewport": {
+          "innerWidth": 1280,
+          "innerHeight": 720,
+          "devicePixelRatio": 1
+        },
+        "stageRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 720
+        },
+        "horizontalOverflow": false,
+        "bodyHorizontalOverflow": false
+      },
+      "metricFocus": "resourcePoints",
+      "allianceBefore": {
+        "total": 2,
+        "deleteAllDisabled": false,
+        "deleteSelectedDisabled": true
+      },
+      "canonicalBattleId": "battle-demo-attacker-victory",
+      "horizontalOverflow": false,
+      "persistedTombstone": true
+    }
+  ]
+}

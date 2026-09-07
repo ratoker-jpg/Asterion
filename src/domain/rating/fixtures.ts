@@ -4,6 +4,7 @@ const CALLSIGNS = ['Vega', 'Orion', 'Helios', 'Nyx', 'Astra', 'Kepler', 'Titan',
 const ALLIANCE_TAGS = ['ARC', 'NEX', 'VOID', 'AUR', 'ION', 'HEX', 'SOL', 'DRK'];
 
 export const CURRENT_PLAYER_ID = 'player-current';
+export const CURRENT_PLAYER_DISPLAY_NAME = 'Dendrilion';
 
 // Prototype fixture until the multiplayer rating backend computes this value from live campaign data.
 export const RATING_PROTOTYPE_RESOURCE_POINTS = 855_880;
@@ -37,7 +38,7 @@ export function createPlayerRatingEntries(currentPlayerResourcePoints = RATING_P
     return {
       id: isCurrentPlayer ? CURRENT_PLAYER_ID : `player-${String(standing).padStart(3, '0')}`,
       rank: standing,
-      name: isCurrentPlayer ? 'Aster Prime' : `${CALLSIGNS[index % CALLSIGNS.length]}-${String(standing).padStart(2, '0')}`,
+      name: isCurrentPlayer ? CURRENT_PLAYER_DISPLAY_NAME : `${CALLSIGNS[index % CALLSIGNS.length]}-${String(standing).padStart(2, '0')}`,
       race: (['aster', 'cyber', 'xeno'] as const)[index % 3],
       allianceTag: standing % 7 === 0 ? null : ALLIANCE_TAGS[index % ALLIANCE_TAGS.length],
       achievementPoints: Math.max(0, 98_000 - index * 713),

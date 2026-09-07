@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   CURRENT_PLAYER_ID,
+  CURRENT_PLAYER_DISPLAY_NAME,
   RATING_PROTOTYPE_RESOURCE_POINTS,
   createAllianceRatingEntries,
   createDefaultRatingPrototypeState,
@@ -16,6 +17,11 @@ test('player display provider is deterministic with unique ids and ranks', () =>
   assert.deepEqual(a, b);
   assert.equal(new Set(a.map((entry) => entry.id)).size, a.length);
   assert.equal(new Set(a.map((entry) => entry.rank)).size, a.length);
+});
+
+test('current rating row uses the profile fixture display name', () => {
+  const current = createPlayerRatingEntries().find((entry) => entry.id === CURRENT_PLAYER_ID);
+  assert.equal(current?.name, CURRENT_PLAYER_DISPLAY_NAME);
 });
 
 test('player scores are finite non-negative and source relation total = resource + battle holds', () => {
