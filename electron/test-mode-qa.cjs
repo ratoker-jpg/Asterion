@@ -12,6 +12,7 @@ const PRODUCTION_KEY = 'asterion.vertical-slice.v1';
 const TEST_KEY = 'asterion.vertical-slice.test.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const skipScreenshots = process.env.ASTERION_SKIP_SCREENSHOTS === '1';
 
 async function waitFor(win, expression, timeoutMs = 10_000) {
   const started = Date.now();
@@ -72,6 +73,10 @@ async function clickText(win, selector, text) {
 }
 
 async function capture(win, directory, name) {
+  if (skipScreenshots) {
+    console.log(`[test-mode-qa] screenshot skipped: ${name}`);
+    return;
+  }
   await win.webContents.executeJavaScript('window.scrollTo(0, 0)');
   // Long-page mode deliberately exposes the document's natural height. Waiting
   // for another animation frame here makes Chromium lay out and paint the
@@ -385,7 +390,12 @@ async function runViewport(width, height) {
 
     const final = await readQaState(win);
     if (final.horizontalOverflow) throw new Error(`${label}: horizontal overflow detected`);
-    return { viewport: label, screenshots: fs.readdirSync(directory).filter((name) => name.endsWith('.png')).sort(), final };
+    return {
+      viewport: label,
+      screenshots: skipScreenshots ? [] : fs.readdirSync(directory).filter((name) => name.endsWith('.png')).sort(),
+      screenshotsSkipped: skipScreenshots,
+      final,
+    };
   } finally {
     if (!win.isDestroyed()) {
       try { win.webContents.debugger.detach(); } catch {}

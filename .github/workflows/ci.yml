@@ -39,6 +39,11 @@ jobs:
       - name: Build renderer
         run: npm run build
       - name: Test Mode Electron QA
+        env:
+          # GitHub's hidden Windows compositor can block viewport captures on
+          # long pages. Functional DOM/queue assertions still run; local QA
+          # retains screenshots by leaving this unset.
+          ASTERION_SKIP_SCREENSHOTS: '1'
         run: npm run test:test-mode-ui
       - name: Capture utility and resource-zone visual QA
         run: npm run qa:visual
