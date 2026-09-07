@@ -77,9 +77,9 @@ import {
   type RuntimeMode,
 } from './domain/runtime/mode.ts';
 import {
-  calculateFleetCapacity,
   createCanonicalStartingFleet,
-  migrateFleetState,
+  getFleetSummary,
+  resolveSavedFleetState,
   type OwnedFleetState,
 } from './domain/fleet/runtime.ts';
 import {
@@ -199,8 +199,6 @@ type BuildingInteriorContext = BuildingInteriorNavigationContext<PlanetId>;
 type PlanetRuntime = {
   name: string;
   skin: PlanetSkin;
-  population: number;
-  populationMax: number;
   fleet: OwnedFleetState;
   energy: number;
   buildings: BuildingLevels;
@@ -293,8 +291,6 @@ const createInitialState = (mode: RuntimeMode = RUNTIME_MODE): SaveState => ({
     'helion-01': {
       name: DEFAULT_PLANET_NAME,
       skin: 'colonized',
-      population: 4,
-      populationMax: calculateFleetCapacity(1),
       energy: mode === 'test' ? 1_000_000 : 140,
       buildings: createCanonicalStartingBuildingLevels(),
       fleet: createCanonicalStartingFleet(),
@@ -366,9 +362,7 @@ function readSave(): SaveState {
         : isPlanetSkin(parsed.planetSkin)
           ? parsed.planetSkin
           : initialState.planets['helion-01'].skin,
-      population: numberOr(savedHomeworld?.population, numberOr(parsed.population, initialState.planets['helion-01'].population)),
-      populationMax: calculateFleetCapacity(buildings.hangar),
-      fleet: migrateFleetState(savedHomeworld?.fleet),
+      fleet: resolveSavedFleetState(savedHomeworld?.fleet),
       energy: numberOr(savedHomeworld?.energy, numberOr(parsed.energy, initialState.planets['helion-01'].energy)),
       buildings,
       productionBots: migrateProductionBotAssignment(savedHomeworld?.productionBots, buildings),
@@ -470,11 +464,12 @@ type ResourceProps = {
   label: string;
   value: number;
   capacity?: number;
+  showCapacity?: boolean;
   hourlyGain?: number;
   description?: string;
 };
 
-function Resource({ kind, label, value, capacity, hourlyGain, description }: ResourceProps) {
+function Resource({ kind, label, value, capacity, showCapacity = false, hourlyGain, description }: ResourceProps) {
   const fill = capacity ? Math.min(100, Math.max(0, (value / capacity) * 100)) : 0;
   const fillTone = fill >= 85 ? 'critical' : fill >= 75 ? 'warning' : fill >= 65 ? 'watch' : 'normal';
 
@@ -483,7 +478,7 @@ function Resource({ kind, label, value, capacity, hourlyGain, description }: Res
       <span className="resource-chip__icon"><GameIcon kind={kind} /></span>
       <span className="resource-chip__text">
         <small>{label}</small>
-        <strong>{formatNumber(value)}</strong>
+        <strong>{showCapacity && capacity ? `${formatNumber(value)} / ${formatNumber(capacity)}` : formatNumber(value)}</strong>
         {capacity ? <span className={`resource-fill resource-fill--${fillTone}`}><i style={{ '--fill': `${fill}%` } as CSSProperties} /></span> : null}
       </span>
       <span className="resource-tooltip" role="tooltip">
@@ -755,6 +750,10 @@ export function App() {
   const currentPlanet = ownedPlanets[0];
   const currentPlanetState = state.planets['helion-01'];
   const currentPlanetName = currentPlanetState.name;
+  const fleetSummary = useMemo(
+    () => getFleetSummary(currentPlanetState.fleet, currentPlanetState.buildings.hangar),
+    [currentPlanetState.buildings.hangar, currentPlanetState.fleet],
+  );
   const currentSkin = useMemo(
     () => planetSkins.find((skin) => skin.id === currentPlanetState.skin) ?? planetSkins[0],
     [currentPlanetState.skin],
@@ -1342,7 +1341,7 @@ export function App() {
               <Resource kind="mineral" label="МИНЕРАЛЫ" value={state.minerals} capacity={60_000} hourlyGain={resourceIncomePerHour.minerals} />
               <Resource kind="gas" label="ГАЗ" value={state.gas} capacity={60_000} hourlyGain={resourceIncomePerHour.gas} />
               <Resource kind="energy" label="ЭНЕРГИЯ" value={currentPlanetState.energy} description="Энергия планеты. Солнечная электростанция увеличивает запас после завершения строительства." />
-              <Resource kind="population" label="НАСЕЛЕНИЕ" value={currentPlanetState.population} capacity={currentPlanetState.populationMax} />
+              <Resource kind="population" label="НАСЕЛЕНИЕ" value={fleetSummary.population} capacity={fleetSummary.capacity} showCapacity />
             </div>
             <nav className="primary-navigation" aria-label="Основная навигация">
               {primaryTabs.map(({ label, icon }) => (
@@ -1480,7 +1479,7 @@ export function App() {
                       <div><dt>Статус</dt><dd>★ {currentPlanet.status}</dd></div>
                       <div><dt>Фракция</dt><dd>{currentPlanet.faction}</dd></div>
                       <div><dt>Координаты</dt><dd>{currentPlanet.coords}</dd></div>
-                      <div><dt>Население</dt><dd>{currentPlanetState.population} / {currentPlanetState.populationMax}</dd></div>
+                      <div><dt>Население</dt><dd>{fleetSummary.population} / {fleetSummary.capacity}</dd></div>
                       <div><dt>Энергия</dt><dd>{currentPlanetState.energy}</dd></div>
                       <div><dt>Ресурсные здания</dt><dd>{resourceBuildingCount} / 10</dd></div>
                       <div><dt>Стабильность</dt><dd className="summary-stable">{currentPlanetState.stability}%</dd></div>

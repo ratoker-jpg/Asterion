@@ -6,7 +6,7 @@ import {
   type CatalogEntity,
 } from './domain/combat/catalog.ts';
 import { getRuntimeSaveKey } from './domain/runtime/mode.ts';
-import { createCanonicalStartingFleet, getFleetSummary, migrateFleetState } from './domain/fleet/runtime.ts';
+import { createCanonicalStartingFleet, getFleetSummary, migrateFleetState, resolveSavedFleetState } from './domain/fleet/runtime.ts';
 
 const SAVE_KEY = getRuntimeSaveKey();
 
@@ -120,11 +120,11 @@ function readBudget(): ShipyardBudget {
       metal: typeof parsed.metal === 'number' ? parsed.metal : fallback.metal,
       minerals: typeof parsed.minerals === 'number' ? parsed.minerals : fallback.minerals,
       gas: typeof parsed.gas === 'number' ? parsed.gas : fallback.gas,
-      population: getFleetSummary(migrateFleetState(homeworld?.fleet), Number(homeworld?.buildings?.hangar ?? 0)).population,
-      populationMax: getFleetSummary(migrateFleetState(homeworld?.fleet), Number(homeworld?.buildings?.hangar ?? 0)).capacity,
+      population: getFleetSummary(resolveSavedFleetState(homeworld?.fleet), Number(homeworld?.buildings?.hangar ?? 0)).population,
+      populationMax: getFleetSummary(resolveSavedFleetState(homeworld?.fleet), Number(homeworld?.buildings?.hangar ?? 0)).capacity,
       shipyardLevel: typeof homeworld?.buildings?.shipyard === 'number' ? homeworld.buildings.shipyard : fallback.shipyardLevel,
       hangarLevel: typeof homeworld?.buildings?.hangar === 'number' ? homeworld.buildings.hangar : fallback.hangarLevel,
-      fleet: migrateFleetState(homeworld?.fleet),
+      fleet: resolveSavedFleetState(homeworld?.fleet),
     };
   } catch {
     return fallback;

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import scoutArt from '../assets/source/New assets/ship/aegis/ship.aegis.scout.png';
 import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
-import { createCanonicalStartingFleet, getFleetSummary, migrateFleetState } from './domain/fleet/runtime.ts';
+import type { ShipId } from './domain/combat/ids.ts';
+import { createCanonicalStartingFleet, getFleetSummary, migrateFleetState, resolveSavedFleetState } from './domain/fleet/runtime.ts';
 import { getRuntimeSaveKey, RUNTIME_STATE_CHANGED_EVENT } from './domain/runtime/mode.ts';
 import { BattleReportsView } from './BattleReportsView';
 import { ConstructionCatalogView, type ConstructionCatalogMode } from './ConstructionCatalogView';
@@ -27,7 +27,7 @@ function readFleetSnapshot(): FleetSnapshot {
     const parsed = raw ? JSON.parse(raw) as { planets?: Record<string, { buildings?: Record<string, unknown>; fleet?: unknown }> } : null;
     const homeworld = parsed?.planets?.['helion-01'];
     return {
-      fleet: homeworld?.fleet ? migrateFleetState(homeworld.fleet) : createCanonicalStartingFleet(),
+      fleet: resolveSavedFleetState(homeworld?.fleet),
       hangarLevel: typeof homeworld?.buildings?.hangar === 'number' ? homeworld.buildings.hangar : 1,
       shipyardLevel: typeof homeworld?.buildings?.shipyard === 'number' ? homeworld.buildings.shipyard : 0,
     };
@@ -36,7 +36,7 @@ function readFleetSnapshot(): FleetSnapshot {
   }
 }
 
-const scoutDefinition = getFactionShipCatalog('aegis').find((entity) => entity.id === 'scout')!;
+const shipDefinitions = getFactionShipCatalog('aegis');
 
 type FleetSection =
   | 'Корабли'
@@ -112,7 +112,7 @@ function FleetWorkspace({
   openConstruction: boolean;
   onConstructionOpened: () => void;
 }) {
-  const [quantity, setQuantity] = useState(0);
+  const [selectedQuantities, setSelectedQuantities] = useState<Partial<Record<ShipId, number>>>({});
   const [missionId, setMissionId] = useState<MissionId>('transport');
   const [hoveredMissionId, setHoveredMissionId] = useState<MissionId | null>(null);
   const [selectedSection, setSelectedSection] = useState<FleetSection>('Корабли');
@@ -123,9 +123,23 @@ function FleetWorkspace({
     () => getFleetSummary(fleetSnapshot.fleet, fleetSnapshot.hangarLevel),
     [fleetSnapshot.fleet, fleetSnapshot.hangarLevel],
   );
-  const scoutAvailable = fleetSnapshot.fleet.ships.scout ?? 0;
+  const ownedShipDefinitions = useMemo(
+    () => shipDefinitions.filter((ship) => (fleetSnapshot.fleet.ships[ship.id] ?? 0) > 0),
+    [fleetSnapshot.fleet],
+  );
+  const availableShipCount = useMemo(
+    () => ownedShipDefinitions.reduce((total, ship) => total + (fleetSnapshot.fleet.ships[ship.id] ?? 0), 0),
+    [fleetSnapshot.fleet, ownedShipDefinitions],
+  );
 
-  const selectedPopulation = useMemo(() => quantity * scoutDefinition.population, [quantity]);
+  const selectedShipCount = useMemo(
+    () => ownedShipDefinitions.reduce((total, ship) => total + (selectedQuantities[ship.id] ?? 0), 0),
+    [ownedShipDefinitions, selectedQuantities],
+  );
+  const selectedPopulation = useMemo(
+    () => ownedShipDefinitions.reduce((total, ship) => total + (selectedQuantities[ship.id] ?? 0) * ship.population, 0),
+    [ownedShipDefinitions, selectedQuantities],
+  );
   const selectedMission = missions.find((mission) => mission.id === missionId) ?? missions[0];
   const describedMission = missions.find((mission) => mission.id === hoveredMissionId) ?? selectedMission;
 
@@ -177,9 +191,16 @@ function FleetWorkspace({
     setConstructionView(null);
   };
 
-  const setScoutQuantity = (raw: number) => {
-    const next = Number.isFinite(raw) ? Math.max(0, Math.min(scoutAvailable, Math.floor(raw))) : 0;
-    setQuantity(next);
+  const setShipQuantity = (shipId: ShipId, raw: number) => {
+    const available = fleetSnapshot.fleet.ships[shipId] ?? 0;
+    const next = Number.isFinite(raw) ? Math.max(0, Math.min(available, Math.floor(raw))) : 0;
+    setSelectedQuantities((current) => ({ ...current, [shipId]: next }));
+  };
+
+  const setAllShipQuantities = (maximum: boolean) => {
+    setSelectedQuantities(Object.fromEntries(
+      ownedShipDefinitions.map((ship) => [ship.id, maximum ? fleetSnapshot.fleet.ships[ship.id] ?? 0 : 0]),
+    ) as Partial<Record<ShipId, number>>);
   };
 
   const closeConstructionView = () => setConstructionView(null);
@@ -251,33 +272,48 @@ function FleetWorkspace({
             <section className="fleet-panel-v1 fleet-compose-v1">
               <header className="fleet-panel-header-v1 compact">
                 <div><small>ФОРМИРОВАНИЕ</small><h2>ВЫБЕРИ КОРАБЛИ</h2></div>
-                <span data-qa-fleet-population>ФЛОТ: {fleetSummary.population} / {fleetSummary.capacity} · 1 СКАУТ = {scoutDefinition.population} НАСЕЛЕНИЯ</span>
+                <span data-qa-fleet-population>ФЛОТ: {fleetSummary.population} / {fleetSummary.capacity} · В НАЛИЧИИ {availableShipCount} КОРАБЛЯ</span>
               </header>
 
-              <div className="fleet-ship-line-v1">
-                <div className="fleet-ship-art-v1"><img src={scoutArt} alt="Скаут" draggable={false} /></div>
-                <div className="fleet-ship-info-v1">
-                  <small>ЛЁГКИЙ БОЕВОЙ РАЗВЕДЧИК</small>
-                  <h3>Скаут</h3>
-                  <div className="fleet-ship-meta-v1"><span>В наличии <b>{scoutAvailable}</b></span><span>Население / ед. <b>{scoutDefinition.population}</b></span></div>
-                </div>
-                <div className="fleet-quantity-v1">
-                  <span>КОЛИЧЕСТВО</span>
-                  <input aria-label="Количество скаутов" type="number" min="0" max={scoutAvailable} value={quantity} onChange={(event) => setScoutQuantity(Number(event.target.value))} />
-                  <div className="fleet-quantity-shortcuts-v1">
-                    <button type="button" onClick={() => setScoutQuantity(scoutAvailable)}>МАКС.</button>
-                    <button type="button" onClick={() => setScoutQuantity(0)}>МИН.</button>
-                  </div>
-                </div>
+              <div className="fleet-ship-roster-v1" data-qa-fleet-roster>
+                {ownedShipDefinitions.map((ship) => {
+                  const available = fleetSnapshot.fleet.ships[ship.id] ?? 0;
+                  const selected = selectedQuantities[ship.id] ?? 0;
+                  return (
+                    <div className="fleet-ship-line-v1" key={ship.id} data-qa-fleet-ship={ship.id}>
+                      <div className="fleet-ship-art-v1"><img src={ship.art} alt={ship.name} draggable={false} /></div>
+                      <div className="fleet-ship-info-v1">
+                        <small>{ship.role.toUpperCase()}</small>
+                        <h3>{ship.name}</h3>
+                        <div className="fleet-ship-meta-v1">
+                          <span>В наличии <b data-qa-fleet-owned>{available}</b></span>
+                          <span>Население / ед. <b data-qa-fleet-unit-population>{ship.population}</b></span>
+                          <span>Выбрано <b>{selected}</b></span>
+                        </div>
+                      </div>
+                      <div className="fleet-quantity-v1">
+                        <span>КОЛИЧЕСТВО</span>
+                        <input aria-label={`Количество ${ship.name}`} type="number" min="0" max={available} value={selected} onChange={(event) => setShipQuantity(ship.id, Number(event.target.value))} />
+                        <div className="fleet-quantity-shortcuts-v1">
+                          <button type="button" onClick={() => setShipQuantity(ship.id, available)}>МАКС.</button>
+                          <button type="button" onClick={() => setShipQuantity(ship.id, 0)}>МИН.</button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {ownedShipDefinitions.length === 0 ? (
+                  <div className="fleet-ship-roster-empty-v1">В наличии нет готовых кораблей.</div>
+                ) : null}
               </div>
 
               <div className="fleet-selection-line-v1">
                 <span>Выберите</span>
-                <button type="button" onClick={() => setScoutQuantity(scoutAvailable)}>Макс.</button>
+                <button type="button" onClick={() => setAllShipQuantities(true)}>Макс.</button>
                 <span>/</span>
-                <button type="button" onClick={() => setScoutQuantity(0)}>Мин.</button>
+                <button type="button" onClick={() => setAllShipQuantities(false)}>Мин.</button>
                 <i />
-                <span>Выбрано кораблей</span><strong>{quantity}</strong>
+                <span>Выбрано кораблей</span><strong>{selectedShipCount}</strong>
                 <i />
                 <span>Выбрано населения</span><strong className="accent">{selectedPopulation}</strong>
               </div>
@@ -314,7 +350,7 @@ function FleetWorkspace({
 
               <footer className="fleet-compose-footer-v1">
                 <span>{status}</span>
-                <button type="button" disabled={quantity === 0} onClick={() => setStatus(`${quantity} × Скаут подготовлены. Выбрано населения: ${selectedPopulation}. Миссия: ${selectedMission.label}.`)}>ПРОДОЛЖИТЬ</button>
+                <button type="button" disabled={selectedShipCount === 0} onClick={() => setStatus(`${selectedShipCount} кораблей подготовлены. Выбрано населения: ${selectedPopulation}. Миссия: ${selectedMission.label}.`)}>ПРОДОЛЖИТЬ</button>
               </footer>
             </section>
           </>

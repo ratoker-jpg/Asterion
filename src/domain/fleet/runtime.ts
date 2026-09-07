@@ -1,3 +1,4 @@
+import { COMMANDER_COMBAT_CATALOG } from '../combat/catalog.ts';
 import { getFactionShipCatalog } from '../combat/faction-catalog.ts';
 import { COMMANDER_IDS, type CommanderId } from '../combat/commanders.ts';
 import { SHIP_IDS, type ShipId } from '../combat/ids.ts';
@@ -60,13 +61,26 @@ export function migrateFleetState(value: unknown): OwnedFleetState {
   return migrated;
 }
 
+/**
+ * Legacy saves did not have a fleet field. A missing field means the canonical
+ * starting fleet; an explicitly saved value (including an empty object) is
+ * preserved through normal migration.
+ */
+export function resolveSavedFleetState(value: unknown): OwnedFleetState {
+  return value === undefined ? createCanonicalStartingFleet() : migrateFleetState(value);
+}
+
 export function calculateFleetPopulation(
   fleet: OwnedFleetState,
   factionId: CombatFactionId = 'aegis',
 ): number {
   const ships = getFactionShipCatalog(factionId);
   const shipPopulation = ships.reduce((total, entity) => total + (fleet.ships[entity.id as ShipId] ?? 0) * entity.population, 0);
-  return shipPopulation;
+  const commanderPopulation = COMMANDER_COMBAT_CATALOG.reduce(
+    (total, entity) => total + (fleet.commanders[entity.id as CommanderId] ?? 0) * entity.population,
+    0,
+  );
+  return shipPopulation + commanderPopulation;
 }
 
 export function calculateFleetCapacity(hangarLevel: number): number {

@@ -148,7 +148,14 @@ async function readQaState(win) {
       shipQueue: planet?.spaceportUpgrades?.shipQueue?.length ?? -1,
       commanderQueue: planet?.spaceportUpgrades?.commanderQueue?.length ?? -1,
       horizontalOverflow,
+      populationChips: Array.from(document.querySelectorAll('.header-resource-rail .resource-chip--population'))
+        .map((node) => node.textContent?.replace(/\s+/g, ' ').trim() ?? ''),
       fleetPopulation: document.querySelector('[data-qa-fleet-population]')?.textContent?.trim() ?? '',
+      fleetRoster: Array.from(document.querySelectorAll('[data-qa-fleet-ship]')).map((node) => ({
+        id: node.getAttribute('data-qa-fleet-ship'),
+        owned: Number(node.querySelector('[data-qa-fleet-owned]')?.textContent || 0),
+        population: Number(node.querySelector('[data-qa-fleet-unit-population]')?.textContent || 0),
+      })),
     };
   })()`);
 }
@@ -179,7 +186,17 @@ async function runViewport(width, height) {
     if (initial.mode !== 'test' || !initial.banner || !initial.scale.includes('×15') || initial.testResources.metal !== 1_000_000 || initial.buildingQueue !== 0 || initial.scienceQueue !== 0 || initial.shipQueue !== 0 || initial.commanderQueue !== 0) {
       throw new Error(`${label}: Test Mode fixture mismatch ${JSON.stringify(initial)}`);
     }
-    if (initial.buildings?.hangar !== 1 || initial.fleet?.ships?.scout !== 20 || initial.fleet?.ships?.transporter !== 10 || initial.fleet?.ships?.recycler !== 1 || initial.fleet?.ships?.['spy-probe'] !== 3) {
+    if (initial.populationChips.length !== 1 || !initial.populationChips[0].includes('58 / 70')) {
+      throw new Error(`${label}: population must use the unified fleet entity/capacity display ${JSON.stringify(initial.populationChips)}`);
+    }
+    const canonicalBuildingLevelOne = new Set(['metal-production-1', 'mineral-production-1', 'gas-production-1', 'basic-energy', 'hangar']);
+    const canonicalBuildingsOnly = canonicalBuildingLevelOne.size === Object.values(initial.buildings || {}).filter((level) => level === 1).length
+      && [...canonicalBuildingLevelOne].every((id) => initial.buildings?.[id] === 1)
+      && Object.entries(initial.buildings || {}).every(([id, level]) => canonicalBuildingLevelOne.has(id) ? level === 1 : level === 0);
+    const canonicalFleetShips = { scout: 20, transporter: 10, recycler: 1, 'spy-probe': 3 };
+    const canonicalFleetOnly = Object.entries(initial.fleet?.ships || {}).every(([id, count]) => count === (canonicalFleetShips[id] || 0))
+      && Object.values(initial.fleet?.commanders || {}).every((count) => count === 0);
+    if (!canonicalBuildingsOnly || !canonicalFleetOnly || initial.buildings?.hangar !== 1 || initial.fleet?.ships?.scout !== 20 || initial.fleet?.ships?.transporter !== 10 || initial.fleet?.ships?.recycler !== 1 || initial.fleet?.ships?.['spy-probe'] !== 3) {
       throw new Error(`${label}: canonical building/fleet mismatch ${JSON.stringify(initial)}`);
     }
     await capture(win, directory, 'test-overview');
@@ -188,6 +205,34 @@ async function runViewport(width, height) {
     const afterTestReset = await readQaState(win);
     const productionAfterReset = await readEnvelope(win, PRODUCTION_KEY);
     if (afterTestReset.testResources.metal !== 1_000_000 || productionAfterReset.metal !== productionBeforeTest.metal) throw new Error(`${label}: Test Mode reset crossed save keys`);
+
+    await win.webContents.executeJavaScript(`(() => {
+      const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
+      const fleet = save?.planets?.['helion-01']?.fleet;
+      if (!fleet) return false;
+      fleet.commanders = { ...(fleet.commanders || {}), corsair: 1 };
+      localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
+      return true;
+    })()`);
+    await reload(win, 'test');
+    await openFleet(win);
+    const commanderFleet = await readQaState(win);
+    if (!commanderFleet.fleetPopulation.includes('66 / 70')) throw new Error(`${label}: commander population was not included in fleet capacity ${JSON.stringify(commanderFleet)}`);
+
+    await win.webContents.executeJavaScript(`(() => {
+      const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
+      const fleet = save?.planets?.['helion-01']?.fleet;
+      if (!fleet) return false;
+      fleet.commanders = { ...(fleet.commanders || {}), corsair: 0 };
+      delete save.planets['helion-01'].fleet;
+      localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
+      return true;
+    })()`);
+    await reload(win, 'test');
+    const legacyFleet = await readQaState(win);
+    if (legacyFleet.fleet?.ships?.scout !== 20 || legacyFleet.fleet?.ships?.transporter !== 10 || legacyFleet.fleet?.ships?.recycler !== 1 || legacyFleet.fleet?.ships?.['spy-probe'] !== 3) {
+      throw new Error(`${label}: legacy save without fleet did not receive canonical fleet ${JSON.stringify(legacyFleet)}`);
+    }
 
     await openScience(win);
     const scienceBlocked = await win.webContents.executeJavaScript(`(() => { const row = document.querySelector('[data-qa-science-id="1"]'); return { status: row?.getAttribute('data-qa-science-status'), disabled: Boolean(row?.querySelector('[data-qa-science-action]')?.disabled) }; })()`);
@@ -261,6 +306,14 @@ async function runViewport(width, height) {
     await openFleet(win);
     const fleetRoot = await readQaState(win);
     if (!fleetRoot.fleetPopulation.includes('58 / 70')) throw new Error(`${label}: fleet population resolver UI mismatch ${JSON.stringify(fleetRoot)}`);
+    const expectedFleetRoster = [
+      { id: 'spy-probe', owned: 3, population: 1 },
+      { id: 'transporter', owned: 10, population: 1 },
+      { id: 'recycler', owned: 1, population: 5 },
+      { id: 'scout', owned: 20, population: 2 },
+    ];
+    if (JSON.stringify(fleetRoot.fleetRoster) !== JSON.stringify(expectedFleetRoster)) throw new Error(`${label}: current fleet roster UI mismatch ${JSON.stringify(fleetRoot.fleetRoster)}`);
+    await capture(win, directory, 'test-fleet-roster');
     await clickText(win, '.fleet-sidebar-v1 button', 'Корабли');
     await waitFor(win, `document.querySelector('[data-qa-fleet-summary]')`);
     const fleetUi = await readQaState(win);
