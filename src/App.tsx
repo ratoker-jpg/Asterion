@@ -1442,7 +1442,14 @@ export function App() {
               onBack={returnToBuilding}
             />
           ) : activeTab === 'Вселенная' ? (
-            <UniverseView onNotice={setNotice} ownedPlanetArt={currentSkin.art} ownedPlanetName={currentPlanetName} />
+            <UniverseView
+              onNotice={setNotice}
+              ownedPlanetArt={currentSkin.art}
+              ownedPlanetName={currentPlanetName}
+              profile={state.profile}
+              rating={state.rating}
+              command={state.command}
+            />
           ) : activeTab === 'Операции' ? (
             <OperationsView
               state={state.operations}

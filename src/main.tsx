@@ -32,6 +32,7 @@ import './settings.css';
 import './rating.css';
 import './science.css';
 import './utility-source-rebuild-polish.css';
+import './universe-interaction.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
 

@@ -32,6 +32,8 @@ jobs:
         run: npm run test:rating
       - name: Science domain tests
         run: npm run test:science
+      - name: Universe interaction domain tests
+        run: npm run test:universe
       - name: Runtime mode domain tests
         run: npm run test:runtime
       - name: Fleet domain tests
@@ -45,6 +47,10 @@ jobs:
           # retains screenshots by leaving this unset.
           ASTERION_SKIP_SCREENSHOTS: '1'
         run: npm run test:test-mode-ui
+      - name: Universe planet interaction Electron QA
+        env:
+          ASTERION_SKIP_SCREENSHOTS: '1'
+        run: npm run test:universe-ui
       - name: Capture utility and resource-zone visual QA
         run: npm run qa:visual
       - name: Upload visual QA artifact
@@ -55,6 +61,7 @@ jobs:
           path: |
             visual-qa/**/*
             artifacts-pass1/test-mode-qa/**/*
+            artifacts/universe-planet-qa/**/*
           if-no-files-found: warn
           retention-days: 14
       - name: Package Windows app
