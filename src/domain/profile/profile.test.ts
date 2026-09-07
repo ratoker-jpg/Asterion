@@ -4,16 +4,19 @@ import test from 'node:test';
 import { CURRENT_PLAYER_DISPLAY_NAME, createDefaultRatingPrototypeState, createPlayerRatingEntries } from '../rating/fixtures.ts';
 import {
   createDefaultPlayerProfileState,
+  CURRENT_PLAYER_FACTION_ID,
   migratePlayerProfileState,
   playerFactionLabel,
+  syncPlayerProfileWithAlliance,
+  syncPlayerProfileWithFaction,
 } from './repository.ts';
 import { selectPlayerProfileMetrics, selectPlayerRatingEntry } from './selectors.ts';
 
-test('default player profile is a persisted prototype fixture without alliance membership', () => {
+test('default player profile uses the current Aegis fixture before Command sync', () => {
   assert.deepEqual(createDefaultPlayerProfileState(), {
     playerId: 'player-current',
     displayName: 'Dendrilion',
-    factionId: 'synod',
+    factionId: 'aegis',
     allianceId: null,
     alliance: null,
     protectionMode: false,
@@ -31,7 +34,7 @@ test('profile migration fills missing fields and rejects malformed alliance memb
   }), {
     playerId: 'player-custom',
     displayName: 'Dendrilion Prime',
-    factionId: 'synod',
+    factionId: 'aegis',
     allianceId: null,
     alliance: null,
     protectionMode: false,
@@ -42,7 +45,7 @@ test('active alliance keeps only explicitly saved identity and emblem', () => {
   const profile = migratePlayerProfileState({
     playerId: 'player-current',
     displayName: 'Dendrilion',
-    factionId: 'synod',
+    factionId: 'aegis',
     allianceId: 'alliance-ion',
     alliance: { id: 'alliance-ion', name: 'Ion Pact', tag: 'ION', emblem: { glyph: 'orbit', accent: 'violet' } },
     protectionMode: false,
@@ -57,6 +60,31 @@ test('compatibility faction ids use visible Russian labels', () => {
   assert.equal(playerFactionLabel('veyra'), 'Рой');
 });
 
+test('profile alliance identity syncs from the existing Command alliance', () => {
+  const profile = syncPlayerProfileWithAlliance(createDefaultPlayerProfileState(), {
+    name: 'Содружество Гелион',
+    tag: 'HLN',
+    emblem: { glyph: 'starforge', accent: 'cyan' },
+  });
+
+  assert.equal(profile.allianceId, 'alliance-current');
+  assert.deepEqual(profile.alliance, {
+    id: 'alliance-current',
+    name: 'Содружество Гелион',
+    tag: 'HLN',
+    emblem: { glyph: 'starforge', accent: 'cyan' },
+  });
+});
+
+test('profile faction sync repairs the legacy fixture to the current Aegis player', () => {
+  const profile = syncPlayerProfileWithFaction({
+    ...createDefaultPlayerProfileState(),
+    factionId: 'synod',
+  }, CURRENT_PLAYER_FACTION_ID);
+
+  assert.equal(profile.factionId, 'aegis');
+});
+
 test('profile metrics come from the rating selector and stay in sync with the current rating row', () => {
   const rating = createDefaultRatingPrototypeState();
   const profile = createDefaultPlayerProfileState();
@@ -68,4 +96,3 @@ test('profile metrics come from the rating selector and stay in sync with the cu
   assert.equal(entry?.id, current?.id);
   assert.deepEqual(metrics.map((metric) => metric.value), [855_880, 469_240, 1_325_120, 72_332]);
 });
-

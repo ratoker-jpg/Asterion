@@ -55,7 +55,7 @@ import type { AllianceSettingsInput, CommandState } from './domain/command/types
 import { createDefaultReportsState, migrateReportsState } from './domain/reports/repository.ts';
 import type { ReportsState } from './domain/reports/types.ts';
 import { buildReportsFeed } from './domain/reports/adapters.ts';
-import { createDefaultPlayerProfileState, migratePlayerProfileState } from './domain/profile/repository.ts';
+import { createDefaultPlayerProfileState, CURRENT_PLAYER_FACTION_ID, migratePlayerProfileState, syncPlayerProfileWithAlliance, syncPlayerProfileWithFaction } from './domain/profile/repository.ts';
 import type { PlayerProfileState } from './domain/profile/types.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import {
@@ -286,39 +286,42 @@ const SAVE_KEY = getRuntimeSaveKey(RUNTIME_MODE);
 const SAVE_SCHEMA_VERSION = Math.max(COMBAT_SAVE_SCHEMA_VERSION, SCIENCE_SAVE_SCHEMA_VERSION, RUNTIME_SAVE_SCHEMA_VERSION);
 const DEFAULT_PLANET_NAME = 'Helion 01';
 
-const createInitialState = (mode: RuntimeMode = RUNTIME_MODE): SaveState => ({
-  schemaVersion: SAVE_SCHEMA_VERSION,
-  metal: mode === 'test' ? 1_000_000 : 15_880,
-  minerals: mode === 'test' ? 1_000_000 : 12_712,
-  gas: mode === 'test' ? 1_000_000 : 6_421,
-  currentPlanetId: 'helion-01',
-  planets: {
-    'helion-01': {
-      name: DEFAULT_PLANET_NAME,
-      skin: 'colonized',
-      energy: mode === 'test' ? 1_000_000 : 140,
-      buildings: createCanonicalStartingBuildingLevels(),
-      fleet: createCanonicalStartingFleet(),
-      productionBots: createEmptyBotAssignment(),
-      recycling: createDefaultRecyclingState(),
-      trade: createDefaultTradeState(),
-      spaceportUpgrades: createDefaultSpaceportUpgradeState(),
-      stability: 100,
+const createInitialState = (mode: RuntimeMode = RUNTIME_MODE): SaveState => {
+  const command = createDefaultCommandState();
+  return {
+    schemaVersion: SAVE_SCHEMA_VERSION,
+    metal: mode === 'test' ? 1_000_000 : 15_880,
+    minerals: mode === 'test' ? 1_000_000 : 12_712,
+    gas: mode === 'test' ? 1_000_000 : 6_421,
+    currentPlanetId: 'helion-01',
+    planets: {
+      'helion-01': {
+        name: DEFAULT_PLANET_NAME,
+        skin: 'colonized',
+        energy: mode === 'test' ? 1_000_000 : 140,
+        buildings: createCanonicalStartingBuildingLevels(),
+        fleet: createCanonicalStartingFleet(),
+        productionBots: createEmptyBotAssignment(),
+        recycling: createDefaultRecyclingState(),
+        trade: createDefaultTradeState(),
+        spaceportUpgrades: createDefaultSpaceportUpgradeState(),
+        stability: 100,
+      },
     },
-  },
-  queues: {
-    'helion-01': [],
-  },
-  rating: createDefaultRatingPrototypeState(),
-  profile: createDefaultPlayerProfileState(),
-  combatPriority: createDefaultCombatPriority(),
-  combat: createDefaultBattleHistory(),
-  combatSimulator: createDefaultSimulatorState(),
-  operations: createDefaultOperationsState(),
-  command: createDefaultCommandState(),
-  reports: createDefaultReportsState(),
-  science: createDefaultScienceState(),
-});
+    queues: {
+      'helion-01': [],
+    },
+    rating: createDefaultRatingPrototypeState(),
+    profile: syncPlayerProfileWithAlliance(createDefaultPlayerProfileState(), command.alliance),
+    combatPriority: createDefaultCombatPriority(),
+    combat: createDefaultBattleHistory(),
+    combatSimulator: createDefaultSimulatorState(),
+    operations: createDefaultOperationsState(),
+    command,
+    reports: createDefaultReportsState(),
+    science: createDefaultScienceState(),
+  };
+};
 
 const initialState = createInitialState(RUNTIME_MODE);
 
@@ -362,6 +365,10 @@ function readSave(): SaveState {
     const combat = migrateBattleHistory(parsed.combat);
     const operations = migrateOperationsState(parsed.operations);
     const command = migrateCommandState(parsed.command);
+    const profile = syncPlayerProfileWithAlliance(
+      syncPlayerProfileWithFaction(migratePlayerProfileState(parsed.profile), CURRENT_PLAYER_FACTION_ID),
+      command.alliance,
+    );
     const reportIds = buildReportsFeed(combat.reports, operations, command).map((item) => item.id);
     const homeworld: PlanetRuntime = {
       name: typeof savedHomeworld?.name === 'string' && savedHomeworld.name.trim()
@@ -399,7 +406,7 @@ function readSave(): SaveState {
       combatSimulator: migrateSimulatorState(parsed.combatSimulator),
       operations,
       command,
-      profile: migratePlayerProfileState(parsed.profile),
+      profile,
       reports: migrateReportsState(parsed.reports, reportIds),
       science,
     };
@@ -1161,7 +1168,10 @@ export function App() {
   };
 
   const saveCommandSettings = (input: AllianceSettingsInput) => {
-    setState((current) => ({ ...current, command: updateAllianceSettings(current.command, input) }));
+    setState((current) => {
+      const command = updateAllianceSettings(current.command, input);
+      return { ...current, command, profile: syncPlayerProfileWithAlliance(current.profile, command.alliance) };
+    });
     setNotice('Настройки союза сохранены в локальном прототипе.');
   };
 

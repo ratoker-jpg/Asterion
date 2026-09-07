@@ -74,8 +74,8 @@ async function profileSnapshot(win) {
     return {
       visible: Boolean(profile),
       name: profile?.querySelector('h3')?.textContent?.trim() ?? '',
-      faction: profile?.querySelector('.reports-profile-identity-copy > span')?.textContent?.trim() ?? '',
-      alliance: profile?.querySelector('.reports-profile-no-alliance strong')?.textContent?.trim() ?? '',
+      avatar: profile?.querySelector('.reports-profile-avatar img')?.getAttribute('src') ?? '',
+      alliance: profile?.querySelector('.reports-profile-alliance-link strong')?.textContent?.trim() ?? '',
       metricValues,
       folderIds: Array.from(document.querySelectorAll('[data-message-folder]')).map((item) => item.getAttribute('data-message-folder') || ''),
       folderLabels: Array.from(document.querySelectorAll('[data-message-folder] strong')).map((item) => item.textContent?.trim() || ''),
@@ -105,7 +105,7 @@ async function runViewport(win, width, height) {
   await clickPrimary(win, 'Сообщения');
 
   const profile = await profileSnapshot(win);
-  if (!profile.visible || profile.name !== 'Dendrilion' || profile.faction !== 'Илары' || profile.alliance !== 'Без Союза') throw new Error(`Profile contract failed at ${label}: ${JSON.stringify(profile)}`);
+  if (!profile.visible || profile.name !== 'Dendrilion' || !profile.avatar.includes('aegis_profile_avatar') || profile.alliance !== 'Содружество Гелион') throw new Error(`Profile contract failed at ${label}: ${JSON.stringify(profile)}`);
   if (JSON.stringify(profile.folderIds) !== JSON.stringify(EXPECTED_FOLDER_IDS) || JSON.stringify(profile.folderLabels) !== JSON.stringify(EXPECTED_FOLDER_LABELS)) throw new Error(`Reports folder contract failed at ${label}: ${JSON.stringify(profile)}`);
   if (profile.metricValues.length !== 4 || profile.focusableMetrics !== 4 || profile.horizontalOverflow || profile.bodyHorizontalOverflow) throw new Error(`Profile geometry/metrics contract failed at ${label}: ${JSON.stringify(profile)}`);
   await win.webContents.executeJavaScript(`document.querySelector('[data-qa-profile-metric="resourcePoints"]')?.focus()`);
@@ -116,7 +116,7 @@ async function runViewport(win, width, height) {
   const beforeActiveAlliance = await savedState(win);
   await win.webContents.executeJavaScript(`(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
-    save.profile = { playerId: 'player-current', displayName: 'Dendrilion', factionId: 'synod', allianceId: 'alliance-ion', alliance: { id: 'alliance-ion', name: 'Ion Pact', tag: 'ION', emblem: { glyph: 'orbit', accent: 'violet' } }, protectionMode: false };
+    save.profile = { playerId: 'player-current', displayName: 'Dendrilion', factionId: 'aegis', allianceId: 'alliance-ion', alliance: { id: 'alliance-ion', name: 'Ion Pact', tag: 'ION', emblem: { glyph: 'orbit', accent: 'violet' } }, protectionMode: false };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
   })()`);
   await reload(win);
@@ -183,7 +183,7 @@ app.whenReady().then(async () => {
     const results = [];
     for (const [width, height] of VIEWPORTS) results.push(await runViewport(win, width, height));
     fs.writeFileSync(path.join(OUTPUT, 'results.json'), JSON.stringify({ results }, null, 2));
-    console.log('Reports/profile QA passed: profile landing, faction/rating data, alliance command route, folder deletion, tombstone reload and canonical battle preservation at both viewports.');
+    console.log('Reports/profile QA passed: profile landing, Aegis avatar/rating data, live alliance command route, folder deletion, tombstone reload and canonical battle preservation at both viewports.');
     win.destroy();
     app.exit(0);
   } catch (error) {

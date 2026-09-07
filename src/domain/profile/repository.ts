@@ -1,11 +1,13 @@
 import { CURRENT_PLAYER_DISPLAY_NAME, CURRENT_PLAYER_ID } from '../rating/fixtures.ts';
-import type { AllianceEmblemGlyph, AllianceAccent } from '../command/types.ts';
+import type { AllianceAccent, AllianceEmblemGlyph, AllianceProfile } from '../command/types.ts';
 import type { PlayerFactionId, PlayerProfileAlliance, PlayerProfileState } from './types.ts';
 
 const MAX_PROFILE_TEXT = 96;
 const FACTION_IDS: readonly PlayerFactionId[] = ['aegis', 'synod', 'veyra'];
 const EMBLEM_GLYPHS: readonly AllianceEmblemGlyph[] = ['starforge', 'orbit', 'vanguard'];
 const EMBLEM_ACCENTS: readonly AllianceAccent[] = ['cyan', 'amber', 'violet'];
+export const CURRENT_PLAYER_FACTION_ID: PlayerFactionId = 'aegis';
+export const CURRENT_PLAYER_ALLIANCE_ID = 'alliance-current';
 
 export const PLAYER_FACTION_LABELS: Record<PlayerFactionId, string> = {
   aegis: 'Астеры',
@@ -45,7 +47,7 @@ export function createDefaultPlayerProfileState(): PlayerProfileState {
   return {
     playerId: CURRENT_PLAYER_ID,
     displayName: CURRENT_PLAYER_DISPLAY_NAME,
-    factionId: 'synod',
+    factionId: CURRENT_PLAYER_FACTION_ID,
     allianceId: null,
     alliance: null,
     protectionMode: false,
@@ -78,3 +80,26 @@ export function playerFactionLabel(factionId: PlayerFactionId) {
   return PLAYER_FACTION_LABELS[factionId];
 }
 
+export function syncPlayerProfileWithFaction(profile: PlayerProfileState, factionId: PlayerFactionId): PlayerProfileState {
+  return { ...profile, factionId };
+}
+
+export function syncPlayerProfileWithAlliance(
+  profile: PlayerProfileState,
+  alliance: Pick<AllianceProfile, 'name' | 'tag' | 'emblem'>,
+): PlayerProfileState {
+  const name = normalizedText(alliance.name, '');
+  const tag = normalizedText(alliance.tag, '');
+  if (!name || !tag) return { ...profile, allianceId: null, alliance: null };
+
+  return {
+    ...profile,
+    allianceId: CURRENT_PLAYER_ALLIANCE_ID,
+    alliance: {
+      id: CURRENT_PLAYER_ALLIANCE_ID,
+      name,
+      tag,
+      emblem: { glyph: alliance.emblem.glyph, accent: alliance.emblem.accent },
+    },
+  };
+}

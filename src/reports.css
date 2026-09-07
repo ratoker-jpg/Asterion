@@ -1582,3 +1582,145 @@
   .reports-profile-alliance { min-height: 220px; }
   .reports-profile-asterion-mark { top: 30%; }
 }
+
+/* Avatar and profile composition follow the reference screen: one readable
+   character plate on the left, a calm vertical score rail in the middle, and
+   the live alliance card on the right. */
+.reports-profile-title-plate__side--right { color: #75c8d6 !important; }
+
+.reports-profile-card {
+  grid-template-columns: 278px minmax(0, 1fr) 252px;
+  min-height: 430px;
+}
+
+.reports-profile-identity {
+  align-items: center;
+  justify-content: flex-end;
+  padding: 22px 20px 26px;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(28, 119, 181, .2), transparent 47%),
+    linear-gradient(180deg, rgba(4, 28, 45, .62), rgba(1, 12, 21, .95));
+}
+
+.reports-profile-avatar {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  transform: translateY(-34px);
+}
+
+.reports-profile-avatar__art {
+  position: relative;
+  width: min(100%, 214px);
+  height: 288px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 78%, rgba(35, 158, 220, .2), transparent 58%);
+}
+
+.reports-profile-avatar__art::after {
+  content: '';
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  bottom: 2px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(74, 190, 239, .8), transparent);
+  box-shadow: 0 0 16px rgba(44, 176, 235, .55);
+}
+
+.reports-profile-avatar__art img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 0 16px rgba(34, 158, 238, .35));
+}
+
+.reports-profile-avatar > strong {
+  position: relative;
+  z-index: 1;
+  min-width: 184px;
+  margin-top: -1px;
+  padding: 8px 22px 7px;
+  border: 1px solid rgba(63, 210, 247, .72);
+  background: linear-gradient(180deg, rgba(10, 112, 151, .96), rgba(3, 63, 91, .98));
+  clip-path: polygon(5% 0, 95% 0, 100% 24%, 100% 100%, 0 100%, 0 24%);
+  color: #f0fdff;
+  font-size: 16px;
+  line-height: 1;
+  letter-spacing: .04em;
+  text-align: center;
+  text-shadow: 0 0 10px rgba(180, 247, 255, .2);
+  box-shadow: inset 0 0 14px rgba(66, 220, 255, .1), 0 0 18px rgba(0, 155, 219, .16);
+}
+
+.reports-profile-metrics {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: repeat(4, minmax(64px, 1fr));
+  align-content: center;
+  gap: 10px;
+  padding: 34px 28px;
+  background: rgba(1, 14, 23, .3);
+}
+
+.reports-profile-metric {
+  min-height: 0;
+  padding: 11px 18px;
+  border-color: rgba(68, 190, 222, .25);
+  background: linear-gradient(90deg, rgba(5, 57, 79, .74), rgba(2, 27, 40, .72));
+  box-shadow: inset 4px 0 0 rgba(46, 194, 236, .18), inset 0 0 20px rgba(39, 190, 233, .04);
+}
+
+.reports-profile-metric__glyph { flex-basis: 38px; width: 38px; height: 38px; }
+.reports-profile-metric strong { font-size: 19px; }
+
+.reports-profile-alliance {
+  justify-content: flex-start;
+  padding: 25px 18px;
+  background: linear-gradient(270deg, rgba(1, 12, 20, .96), rgba(3, 36, 50, .62));
+}
+
+.reports-profile-alliance-link {
+  min-height: 230px;
+  border-style: dashed;
+  border-color: rgba(76, 192, 221, .38);
+  background: radial-gradient(circle at 50% 25%, rgba(44, 166, 211, .17), transparent 52%), rgba(2, 19, 29, .64);
+}
+
+.reports-profile-alliance-link .command-emblem { width: 78px; height: 92px; }
+.reports-profile-alliance-link strong { font-size: 13px; }
+.reports-profile-alliance-link b { margin-top: 4px; color: #6ed7ed; }
+
+.reports-profile-asterion-mark {
+  width: 300px;
+  height: 360px;
+  opacity: .1;
+}
+
+.reports-profile-asterion-mark .command-emblem { width: 270px; height: 330px; }
+
+@media (max-width: 1500px) {
+  .reports-profile-card { grid-template-columns: 230px minmax(0, 1fr) 220px; }
+  .reports-profile-identity { padding: 18px 14px 22px; }
+  .reports-profile-avatar__art { height: 238px; }
+  .reports-profile-avatar > strong { min-width: 162px; font-size: 14px; }
+  .reports-profile-metrics { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(4, minmax(58px, 1fr)); padding: 24px 16px; }
+  .reports-profile-metric { padding: 9px 12px; }
+  .reports-profile-metric strong { font-size: 16px; }
+  .reports-profile-alliance { padding: 18px 12px; }
+  .reports-profile-alliance-link { min-height: 190px; }
+}
+
+@media (max-width: 1100px) {
+  .reports-profile-card { grid-template-columns: 1fr; }
+  .reports-profile-identity { min-height: 280px; border-right: 0; border-bottom: 1px solid rgba(57, 185, 211, .16); }
+  .reports-profile-avatar__art { height: 240px; }
+  .reports-profile-metrics { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(4, minmax(64px, 1fr)); }
+  .reports-profile-alliance { min-height: 250px; border-left: 0; border-top: 1px solid rgba(57, 185, 211, .16); }
+}

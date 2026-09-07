@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { BattleReportDetailBody } from './BattleReportsView';
 import { EmblemGlyph } from './CommandView';
+import aegisProfileAvatar from '../assets/source/generated-factions-v1/factions/aegis_profile_avatar.png';
 import type { BattleReport } from './domain/combat/report.ts';
 import type { CommandState } from './domain/command/types.ts';
 import type { OperationsState } from './domain/operations/types.ts';
@@ -20,7 +21,6 @@ import {
   markReportRead,
 } from './domain/reports/repository.ts';
 import type { ReportCategory, ReportFilter, ReportItem, ReportsState } from './domain/reports/types.ts';
-import { playerFactionLabel } from './domain/profile/repository.ts';
 import type { PlayerProfileState } from './domain/profile/types.ts';
 import { selectPlayerProfileMetrics } from './domain/profile/selectors.ts';
 import type { RatingPrototypeState } from './domain/rating/fixtures.ts';
@@ -182,21 +182,13 @@ function EmptyFolder({ folder }: { folder: MessageFolder }) {
   return <div className="reports-empty-dossier reports-empty-folder" data-qa-empty-folder><ReportGlyph kind={folder.glyph} /><strong>{title.toUpperCase()}</strong><span>{body}</span></div>;
 }
 
-const PROFILE_ACCENTS = { aegis: '#55bfff', synod: '#4fe0a2', veyra: '#d88cff' } as const;
 const PROFILE_EMBLEM = { glyph: 'starforge', accent: 'cyan' } as const;
 
-function ProfileSilhouette({ factionId }: { factionId: PlayerProfileState['factionId'] }) {
+function ProfileAvatar({ displayName }: { displayName: string }) {
   return (
-    <div className={`reports-profile-silhouette reports-profile-silhouette--${factionId}`} style={{ '--profile-accent': PROFILE_ACCENTS[factionId] } as CSSProperties} aria-hidden="true">
-      <svg viewBox="0 0 180 220">
-        <path className="reports-profile-silhouette__halo" d="M90 9C42 9 17 39 17 91c0 55 26 103 73 120 47-17 73-65 73-120C163 39 138 9 90 9Z" />
-        <path className="reports-profile-silhouette__cloak" d="M26 204c7-38 27-61 64-68 37 7 57 30 64 68H26Z" />
-        <path className="reports-profile-silhouette__body" d="M42 204c5-29 18-51 48-59 30 8 43 30 48 59H42Z" />
-        <path className="reports-profile-silhouette__head" d="M55 90c0-30 14-48 35-48s35 18 35 48c0 25-14 44-35 44S55 115 55 90Z" />
-        <path className="reports-profile-silhouette__hood" d="M51 90c0-39 16-61 39-61 24 0 39 22 39 61M63 65c8-12 17-17 27-17s20 5 27 17" />
-        <path className="reports-profile-silhouette__detail" d="M67 90c7 5 13 7 23 7s16-2 23-7M74 111c10 5 22 5 32 0M64 151l26-12 26 12M90 139v65M55 147l-15 35 16-5m69-30 15 35-16-5M70 176h40" />
-        <path className="reports-profile-silhouette__crest" d="M90 28v28M78 39h24" />
-      </svg>
+    <div className="reports-profile-avatar">
+      <div className="reports-profile-avatar__art"><img src={aegisProfileAvatar} alt="" /></div>
+      <strong>{displayName}</strong>
     </div>
   );
 }
@@ -208,19 +200,21 @@ function MetricGlyph({ metric }: { metric: string }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.6 5.3 5.9.8-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.8L12 3Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>;
 }
 
-function PlayerProfile({ profile, rating, onOpenCommand }: { profile: PlayerProfileState; rating: RatingPrototypeState; onOpenCommand: () => void }) {
+function PlayerProfile({ profile, rating, command, onOpenCommand }: { profile: PlayerProfileState; rating: RatingPrototypeState; command: CommandState; onOpenCommand: () => void }) {
   const metrics = selectPlayerProfileMetrics(profile, rating);
-  const alliance = profile.allianceId && profile.alliance ? profile.alliance : null;
+  const alliance = command.alliance ? {
+    id: 'alliance-current',
+    name: command.alliance.name,
+    tag: command.alliance.tag,
+    emblem: command.alliance.emblem,
+  } : null;
   return (
     <section className="reports-profile-view" data-qa-profile aria-labelledby="reports-profile-title">
-      <header className="reports-profile-title-plate"><span className="reports-profile-title-plate__side">PLAYER PROFILE</span><h2 id="reports-profile-title">ПРОФИЛЬ ИГРОКА</h2><span className="reports-profile-title-plate__side reports-profile-title-plate__side--right">{playerFactionLabel(profile.factionId)}</span></header>
+      <header className="reports-profile-title-plate"><span className="reports-profile-title-plate__side">PLAYER PROFILE</span><h2 id="reports-profile-title">ПРОФИЛЬ ИГРОКА</h2><span className="reports-profile-title-plate__side reports-profile-title-plate__side--right">ASTERION // IDENTITY</span></header>
       <div className="reports-profile-name-plate"><small>ИМЯ ИГРОКА</small><h3>{profile.displayName}</h3><span>{profile.playerId}</span></div>
       <div className="reports-profile-card">
         <div className="reports-profile-asterion-mark" aria-hidden="true"><EmblemGlyph emblem={PROFILE_EMBLEM} /></div>
-        <section className="reports-profile-identity" aria-label="Идентичность игрока">
-          <ProfileSilhouette factionId={profile.factionId} />
-          <div className="reports-profile-identity-copy"><small>ФРАКЦИЯ ИГРОКА</small><span>{playerFactionLabel(profile.factionId)}</span></div>
-        </section>
+        <section className="reports-profile-identity" aria-label="Аватар игрока"><ProfileAvatar displayName={profile.displayName} /></section>
         <section className="reports-profile-metrics" aria-label="Рейтинг игрока">
           {metrics.map((metric) => <div key={metric.key} className="reports-profile-metric" data-qa-profile-metric={metric.key} tabIndex={0} role="img" title={metric.description} aria-label={`${metric.label}: ${metric.value == null ? 'нет данных' : numberFormat.format(metric.value)}. ${metric.description}`}><span className="reports-profile-metric__glyph"><MetricGlyph metric={metric.key} /></span><span><small>{metric.label}</small><strong>{metric.value == null ? '—' : numberFormat.format(metric.value)}</strong></span></div>)}
         </section>
@@ -356,7 +350,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
         <div className="reports-ai-note"><small>MESSAGE CENTER CORE</small><strong>БЕЗ ФАЛЬШИВЫХ СОБЫТИЙ</strong><span>Доклады читают BattleHistory. Остальные каналы наполняются только из существующих игровых контуров.</span></div>
       </aside>
 
-      {activeFolder === 'profile' ? <PlayerProfile profile={profile} rating={rating} onOpenCommand={onOpenCommand} /> : <section className="reports-folder-workspace" data-qa-folder-view={activeFolder}>
+      {activeFolder === 'profile' ? <PlayerProfile profile={profile} rating={rating} command={command} onOpenCommand={onOpenCommand} /> : <section className="reports-folder-workspace" data-qa-folder-view={activeFolder}>
         <section className="reports-feed" data-qa-message-folder-view={activeFolder}>
           <header className="reports-feed-head"><div><small>MESSAGE FOLDER</small><h2>{activeFolderMeta.label.toUpperCase()}</h2></div>{activeCategory ? <div className="reports-feed-head-tools"><span className="reports-folder-count">{counts[activeCategory]} СООБЩЕНИЙ</span><select value={filter} onChange={(event) => setFilter(event.target.value as ReportFilter)} aria-label="Фильтр сообщений">{availableFilters.map((key) => <option key={key} value={key}>{FILTER_LABELS[key]}</option>)}</select></div> : null}</header>
           {activeCategory ? <FolderActions folder={activeFolderMeta} items={folderItems} selectedIds={selectedIds} onSelectAll={selectAll} onDeleteAll={deleteAll} onDeleteSelected={deleteSelected} /> : null}
