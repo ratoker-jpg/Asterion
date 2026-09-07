@@ -222,6 +222,27 @@ test('reconciliation is idempotent when a legacy task target was already applied
   assert.equal(reconciled.state.shipQueue.length, 0);
 });
 
+test('migration drops an already-applied persisted task before read-save reconciliation', () => {
+  const migrated = migrateSpaceportUpgradeState({
+    shipLevels: { transporter: 1 },
+    shipQueue: [{
+      id: 'already-applied',
+      shipId: 'transporter',
+      fromLevel: 0,
+      toLevel: 1,
+      startedAt: 1_000,
+      finishAt: 2_000,
+      spaceportLevelAtStart: 1,
+      effectiveDurationMs: 1_000,
+    }],
+  });
+
+  assert.equal(migrated.shipQueue.length, 0);
+  const reconciled = reconcileSpaceportUpgradeState(migrated, 3_000);
+  assert.equal(reconciled.state.shipLevels.transporter, 1);
+  assert.equal(reconciled.completed.length, 0);
+});
+
 test('Defender upgrade uses the same shipyard, ion science and fuel-cell requirements as the shared catalog', () => {
   const buildings = createDefaultBuildingLevels();
   buildings.spaceport = 1;

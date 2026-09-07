@@ -472,10 +472,31 @@ function migrateQueue(
     if (!getSpaceportUpgradeEntity(track, shipId)) continue;
 
     const queuedBefore = queuedPerTarget[shipId] ?? 0;
-    const fromLevel = Math.min(
+    const currentLevel = safeTrackLevel(levels[shipId], track);
+    const expectedFromLevel = Math.min(
       maxLevel,
-      safeTrackLevel(levels[shipId], track) + queuedBefore,
+      currentLevel + queuedBefore,
     );
+    const persistedFromLevel = typeof item.fromLevel === 'number' && Number.isFinite(item.fromLevel)
+      ? Math.floor(item.fromLevel)
+      : null;
+    const persistedToLevel = typeof item.toLevel === 'number' && Number.isFinite(item.toLevel)
+      ? Math.floor(item.toLevel)
+      : null;
+
+    // Current saves contain explicit level transitions. Drop a task whose
+    // persisted target is already applied before rebuilding legacy fields;
+    // otherwise readSave() would replay it as the next level.
+    if (persistedToLevel != null && safeTrackLevel(persistedToLevel, track) <= currentLevel) continue;
+
+    const persistedTransitionIsValid = persistedFromLevel != null
+      && persistedToLevel != null
+      && persistedToLevel === persistedFromLevel + 1
+      && persistedFromLevel === expectedFromLevel
+      && safeTrackLevel(persistedToLevel, track) === expectedFromLevel + 1;
+    const fromLevel = persistedTransitionIsValid
+      ? safeTrackLevel(persistedFromLevel, track)
+      : expectedFromLevel;
     if (fromLevel >= maxLevel) continue;
 
     const rawStartedAt = safeTimestamp(item.startedAt) ?? previousFinishAt ?? 0;
