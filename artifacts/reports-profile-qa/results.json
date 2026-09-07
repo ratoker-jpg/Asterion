@@ -1,0 +1,334 @@
+{
+  "results": [
+    {
+      "viewport": "1920x1080",
+      "profile": {
+        "visible": true,
+        "name": "Dendrilion",
+        "avatar": "file:///D:/Desktop/Asterion/reports-profile-worktree/dist/assets/aegis_profile_avatar-duxxz0g4.png",
+        "alliance": "Содружество Гелион",
+        "allianceTag": "HLN",
+        "metricValues": [
+          "Ресурсные очки855 880",
+          "Боевые очки469 240",
+          "Общие очки1 325 120",
+          "Очки достижений72 332"
+        ],
+        "folderIds": [
+          "system",
+          "battle",
+          "command",
+          "arena",
+          "flights",
+          "alliances",
+          "achievements"
+        ],
+        "folderLabels": [
+          "Система",
+          "Доклады",
+          "Командные доклады",
+          "Арена",
+          "Полёты",
+          "Союзы",
+          "Достижения"
+        ],
+        "focusableMetrics": 4,
+        "viewport": {
+          "innerWidth": 1920,
+          "innerHeight": 1080,
+          "devicePixelRatio": 1
+        },
+        "stageRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1080
+        },
+        "horizontalOverflow": false,
+        "bodyHorizontalOverflow": false
+      },
+      "initialRating": {
+        "name": "Содружество Гелион",
+        "tag": "[HLN]",
+        "emblem": "command-emblem command-emblem--starforge command-emblem--compact",
+        "visible": true
+      },
+      "updatedProfile": {
+        "visible": true,
+        "name": "Dendrilion",
+        "avatar": "file:///D:/Desktop/Asterion/reports-profile-worktree/dist/assets/aegis_profile_avatar-duxxz0g4.png",
+        "alliance": "Содружество Север",
+        "allianceTag": "NORTH",
+        "metricValues": [
+          "Ресурсные очки855 880",
+          "Боевые очки469 240",
+          "Общие очки1 325 120",
+          "Очки достижений72 332"
+        ],
+        "folderIds": [
+          "system",
+          "battle",
+          "command",
+          "arena",
+          "flights",
+          "alliances",
+          "achievements"
+        ],
+        "folderLabels": [
+          "Система",
+          "Доклады",
+          "Командные доклады",
+          "Арена",
+          "Полёты",
+          "Союзы",
+          "Достижения"
+        ],
+        "focusableMetrics": 4,
+        "viewport": {
+          "innerWidth": 1920,
+          "innerHeight": 1080,
+          "devicePixelRatio": 1
+        },
+        "stageRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1080
+        },
+        "horizontalOverflow": false,
+        "bodyHorizontalOverflow": false
+      },
+      "updatedRating": {
+        "name": "Содружество Север",
+        "tag": "[NORTH]",
+        "emblem": "command-emblem command-emblem--vanguard command-emblem--compact",
+        "visible": true
+      },
+      "reloadedProfile": {
+        "visible": true,
+        "name": "Dendrilion",
+        "avatar": "file:///D:/Desktop/Asterion/reports-profile-worktree/dist/assets/aegis_profile_avatar-duxxz0g4.png",
+        "alliance": "Содружество Север",
+        "allianceTag": "NORTH",
+        "metricValues": [
+          "Ресурсные очки855 880",
+          "Боевые очки469 240",
+          "Общие очки1 325 120",
+          "Очки достижений72 332"
+        ],
+        "folderIds": [
+          "system",
+          "battle",
+          "command",
+          "arena",
+          "flights",
+          "alliances",
+          "achievements"
+        ],
+        "folderLabels": [
+          "Система",
+          "Доклады",
+          "Командные доклады",
+          "Арена",
+          "Полёты",
+          "Союзы",
+          "Достижения"
+        ],
+        "focusableMetrics": 4,
+        "viewport": {
+          "innerWidth": 1920,
+          "innerHeight": 1080,
+          "devicePixelRatio": 1
+        },
+        "stageRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1080
+        },
+        "horizontalOverflow": false,
+        "bodyHorizontalOverflow": false
+      },
+      "reloadedRating": {
+        "name": "Содружество Север",
+        "tag": "[NORTH]",
+        "emblem": "command-emblem command-emblem--vanguard command-emblem--compact",
+        "visible": true
+      },
+      "metricFocus": "resourcePoints",
+      "allianceBefore": {
+        "total": 2,
+        "deleteAllDisabled": false,
+        "deleteSelectedDisabled": true
+      },
+      "canonicalBattleId": "battle-demo-attacker-victory",
+      "horizontalOverflow": false,
+      "persistedTombstone": true
+    },
+    {
+      "viewport": "1280x720",
+      "profile": {
+        "visible": true,
+        "name": "Dendrilion",
+        "avatar": "file:///D:/Desktop/Asterion/reports-profile-worktree/dist/assets/aegis_profile_avatar-duxxz0g4.png",
+        "alliance": "Содружество Гелион",
+        "allianceTag": "HLN",
+        "metricValues": [
+          "Ресурсные очки855 880",
+          "Боевые очки469 240",
+          "Общие очки1 325 120",
+          "Очки достижений72 332"
+        ],
+        "folderIds": [
+          "system",
+          "battle",
+          "command",
+          "arena",
+          "flights",
+          "alliances",
+          "achievements"
+        ],
+        "folderLabels": [
+          "Система",
+          "Доклады",
+          "Командные доклады",
+          "Арена",
+          "Полёты",
+          "Союзы",
+          "Достижения"
+        ],
+        "focusableMetrics": 4,
+        "viewport": {
+          "innerWidth": 1280,
+          "innerHeight": 720,
+          "devicePixelRatio": 1
+        },
+        "stageRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 720
+        },
+        "horizontalOverflow": false,
+        "bodyHorizontalOverflow": false
+      },
+      "initialRating": {
+        "name": "Содружество Гелион",
+        "tag": "[HLN]",
+        "emblem": "command-emblem command-emblem--starforge command-emblem--compact",
+        "visible": true
+      },
+      "updatedProfile": {
+        "visible": true,
+        "name": "Dendrilion",
+        "avatar": "file:///D:/Desktop/Asterion/reports-profile-worktree/dist/assets/aegis_profile_avatar-duxxz0g4.png",
+        "alliance": "Содружество Север",
+        "allianceTag": "NORTH",
+        "metricValues": [
+          "Ресурсные очки855 880",
+          "Боевые очки469 240",
+          "Общие очки1 325 120",
+          "Очки достижений72 332"
+        ],
+        "folderIds": [
+          "system",
+          "battle",
+          "command",
+          "arena",
+          "flights",
+          "alliances",
+          "achievements"
+        ],
+        "folderLabels": [
+          "Система",
+          "Доклады",
+          "Командные доклады",
+          "Арена",
+          "Полёты",
+          "Союзы",
+          "Достижения"
+        ],
+        "focusableMetrics": 4,
+        "viewport": {
+          "innerWidth": 1280,
+          "innerHeight": 720,
+          "devicePixelRatio": 1
+        },
+        "stageRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 720
+        },
+        "horizontalOverflow": false,
+        "bodyHorizontalOverflow": false
+      },
+      "updatedRating": {
+        "name": "Содружество Север",
+        "tag": "[NORTH]",
+        "emblem": "command-emblem command-emblem--vanguard command-emblem--compact",
+        "visible": true
+      },
+      "reloadedProfile": {
+        "visible": true,
+        "name": "Dendrilion",
+        "avatar": "file:///D:/Desktop/Asterion/reports-profile-worktree/dist/assets/aegis_profile_avatar-duxxz0g4.png",
+        "alliance": "Содружество Север",
+        "allianceTag": "NORTH",
+        "metricValues": [
+          "Ресурсные очки855 880",
+          "Боевые очки469 240",
+          "Общие очки1 325 120",
+          "Очки достижений72 332"
+        ],
+        "folderIds": [
+          "system",
+          "battle",
+          "command",
+          "arena",
+          "flights",
+          "alliances",
+          "achievements"
+        ],
+        "folderLabels": [
+          "Система",
+          "Доклады",
+          "Командные доклады",
+          "Арена",
+          "Полёты",
+          "Союзы",
+          "Достижения"
+        ],
+        "focusableMetrics": 4,
+        "viewport": {
+          "innerWidth": 1280,
+          "innerHeight": 720,
+          "devicePixelRatio": 1
+        },
+        "stageRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 720
+        },
+        "horizontalOverflow": false,
+        "bodyHorizontalOverflow": false
+      },
+      "reloadedRating": {
+        "name": "Содружество Север",
+        "tag": "[NORTH]",
+        "emblem": "command-emblem command-emblem--vanguard command-emblem--compact",
+        "visible": true
+      },
+      "metricFocus": "resourcePoints",
+      "allianceBefore": {
+        "total": 2,
+        "deleteAllDisabled": false,
+        "deleteSelectedDisabled": true
+      },
+      "canonicalBattleId": "battle-demo-attacker-victory",
+      "horizontalOverflow": false,
+      "persistedTombstone": true
+    }
+  ]
+}

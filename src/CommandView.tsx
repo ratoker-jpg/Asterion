@@ -93,7 +93,7 @@ function operationById(state: CommandState, operationId: string | null) {
   return state.jointOperations.find((operation) => operation.id === operationId) ?? null;
 }
 
-function EmblemGlyph({ emblem, compact = false }: { emblem: AllianceEmblem; compact?: boolean }) {
+export function EmblemGlyph({ emblem, compact = false }: { emblem: AllianceEmblem; compact?: boolean }) {
   const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.55, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
   const style = { '--command-emblem': ACCENT_COLORS[emblem.accent] } as CSSProperties;
   return (

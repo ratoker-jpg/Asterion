@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   CURRENT_PLAYER_ID,
+  CURRENT_PLAYER_DISPLAY_NAME,
   RATING_PROTOTYPE_RESOURCE_POINTS,
   createAllianceRatingEntries,
   createDefaultRatingPrototypeState,
@@ -9,6 +10,8 @@ import {
   migrateRatingPrototypeState,
 } from './fixtures.ts';
 import { clampPage, filterAlliances, filterPlayers, pageForEntry, paginate, sortPlayers } from './selectors.ts';
+import { createDefaultCommandState, updateAllianceSettings } from '../command/repository.ts';
+import { selectCurrentAlliance } from '../command/selectors.ts';
 
 test('player display provider is deterministic with unique ids and ranks', () => {
   const a = createPlayerRatingEntries();
@@ -16,6 +19,11 @@ test('player display provider is deterministic with unique ids and ranks', () =>
   assert.deepEqual(a, b);
   assert.equal(new Set(a.map((entry) => entry.id)).size, a.length);
   assert.equal(new Set(a.map((entry) => entry.rank)).size, a.length);
+});
+
+test('current rating row uses the profile fixture display name', () => {
+  const current = createPlayerRatingEntries().find((entry) => entry.id === CURRENT_PLAYER_ID);
+  assert.equal(current?.name, CURRENT_PLAYER_DISPLAY_NAME);
 });
 
 test('player scores are finite non-negative and source relation total = resource + battle holds', () => {
@@ -57,8 +65,16 @@ test('pagination clamps and show-current resolves the correct page', () => {
 });
 
 test('alliance mode is deterministic and can reuse current Command alliance identity', () => {
-  const first = createAllianceRatingEntries({ name: 'Asterion Guard', tag: 'AST' });
-  const second = createAllianceRatingEntries({ name: 'Asterion Guard', tag: 'AST' });
+  const command = updateAllianceSettings(createDefaultCommandState(), {
+    name: '  Asterion Guard  ',
+    tag: ' ast ',
+    motto: 'Маяк.',
+    description: 'Контур.',
+    emblem: { glyph: 'orbit', accent: 'violet' },
+  });
+  const currentAlliance = selectCurrentAlliance(command);
+  const first = createAllianceRatingEntries(currentAlliance);
+  const second = createAllianceRatingEntries(currentAlliance);
   assert.deepEqual(first, second);
   const current = first.find((entry) => entry.isCurrentAlliance);
   assert.equal(current?.name, 'Asterion Guard');

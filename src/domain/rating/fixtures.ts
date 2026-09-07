@@ -1,9 +1,11 @@
 import type { AllianceIdentity, AllianceRatingEntry, PlayerRatingEntry } from './types.ts';
+import { CURRENT_COMMAND_ALLIANCE_ID } from '../command/selectors.ts';
 
 const CALLSIGNS = ['Vega', 'Orion', 'Helios', 'Nyx', 'Astra', 'Kepler', 'Titan', 'Nova', 'Cygnus', 'Draco', 'Altair', 'Rigel'];
 const ALLIANCE_TAGS = ['ARC', 'NEX', 'VOID', 'AUR', 'ION', 'HEX', 'SOL', 'DRK'];
 
 export const CURRENT_PLAYER_ID = 'player-current';
+export const CURRENT_PLAYER_DISPLAY_NAME = 'Dendrilion';
 
 // Prototype fixture until the multiplayer rating backend computes this value from live campaign data.
 export const RATING_PROTOTYPE_RESOURCE_POINTS = 855_880;
@@ -37,7 +39,7 @@ export function createPlayerRatingEntries(currentPlayerResourcePoints = RATING_P
     return {
       id: isCurrentPlayer ? CURRENT_PLAYER_ID : `player-${String(standing).padStart(3, '0')}`,
       rank: standing,
-      name: isCurrentPlayer ? 'Aster Prime' : `${CALLSIGNS[index % CALLSIGNS.length]}-${String(standing).padStart(2, '0')}`,
+      name: isCurrentPlayer ? CURRENT_PLAYER_DISPLAY_NAME : `${CALLSIGNS[index % CALLSIGNS.length]}-${String(standing).padStart(2, '0')}`,
       race: (['aster', 'cyber', 'xeno'] as const)[index % 3],
       allianceTag: standing % 7 === 0 ? null : ALLIANCE_TAGS[index % ALLIANCE_TAGS.length],
       achievementPoints: Math.max(0, 98_000 - index * 713),
@@ -69,6 +71,6 @@ export function createAllianceRatingEntries(currentAlliance?: AllianceIdentity |
   if (!currentAlliance?.name?.trim() || !currentAlliance.tag?.trim()) return base;
   const slot = 15;
   return base.map((entry, index) => index === slot
-    ? { ...entry, id: 'alliance-current', name: currentAlliance.name.trim(), tag: currentAlliance.tag.trim(), isCurrentAlliance: true }
+    ? { ...entry, id: currentAlliance.id || CURRENT_COMMAND_ALLIANCE_ID, name: currentAlliance.name, tag: currentAlliance.tag, emblem: { ...currentAlliance.emblem }, isCurrentAlliance: true }
     : entry);
 }

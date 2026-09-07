@@ -1,5 +1,5 @@
 import { ASTERION_SAVE_KEY } from '../combat/priority.ts';
-import type { ReportsState } from './types.ts';
+import type { ReportCategory, ReportItem, ReportsState } from './types.ts';
 
 const REPORT_METADATA_LIMIT = 500;
 
@@ -10,13 +10,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function normalizeIds(value: unknown) {
+function normalizeIds(value: unknown, knownIds?: readonly string[]) {
   if (!Array.isArray(value)) return [];
+  const known = knownIds ? new Set(knownIds) : null;
   const unique = [...new Set(
     value
       .filter((id): id is string => typeof id === 'string' && Boolean(id.trim()))
       .map((id) => id.trim().slice(0, 160)),
-  )];
+  )].filter((id) => !known || known.has(id));
   return unique.length > REPORT_METADATA_LIMIT ? unique.slice(-REPORT_METADATA_LIMIT) : unique;
 }
 
@@ -33,19 +34,22 @@ function resolveStorage(storage?: StorageLike): StorageLike | null {
 }
 
 export function createDefaultReportsState(): ReportsState {
-  return { readIds: [] };
+  return { readIds: [], hiddenIds: [] };
 }
 
-export function migrateReportsState(value: unknown): ReportsState {
+export function migrateReportsState(value: unknown, knownIds?: readonly string[]): ReportsState {
   if (!isRecord(value)) return createDefaultReportsState();
-  return { readIds: normalizeIds(value.readIds) };
+  return {
+    readIds: normalizeIds(value.readIds, knownIds),
+    hiddenIds: normalizeIds(value.hiddenIds, knownIds),
+  };
 }
 
 export function markReportRead(state: ReportsState, reportId: string): ReportsState {
   const normalized = migrateReportsState(state);
   const id = reportId.trim();
   if (!id || normalized.readIds.includes(id)) return normalized;
-  return { readIds: appendNewestId(normalized.readIds, id) };
+  return { ...normalized, readIds: appendNewestId(normalized.readIds, id) };
 }
 
 export function markAllReportsRead(state: ReportsState, reportIds: readonly string[]): ReportsState {
@@ -55,7 +59,44 @@ export function markAllReportsRead(state: ReportsState, reportIds: readonly stri
     const clean = id.trim();
     if (clean) readIds = appendNewestId(readIds, clean);
   });
-  return { readIds };
+  return { ...normalized, readIds };
+}
+
+function appendIds(ids: readonly string[], additions: readonly string[]) {
+  return additions.reduce((result, id) => appendNewestId(result, id), [...ids]);
+}
+
+function visibleFolderIds(items: readonly ReportItem[], state: ReportsState, category: ReportCategory) {
+  const hidden = new Set(state.hiddenIds);
+  return items
+    .filter((item) => item.category === category && !hidden.has(item.id))
+    .map((item) => item.id);
+}
+
+export function deleteAllReports(state: ReportsState, items: readonly ReportItem[], category: ReportCategory): ReportsState {
+  const normalized = migrateReportsState(state);
+  return {
+    ...normalized,
+    hiddenIds: appendIds(normalized.hiddenIds, visibleFolderIds(items, normalized, category)),
+  };
+}
+
+export function deleteSelectedReports(
+  state: ReportsState,
+  items: readonly ReportItem[],
+  category: ReportCategory,
+  selectedIds: readonly string[],
+): ReportsState {
+  const normalized = migrateReportsState(state);
+  const allowed = new Set(visibleFolderIds(items, normalized, category));
+  const selected = selectedIds
+    .filter((id): id is string => typeof id === 'string')
+    .map((id) => id.trim())
+    .filter((id) => allowed.has(id));
+  return {
+    ...normalized,
+    hiddenIds: appendIds(normalized.hiddenIds, selected),
+  };
 }
 
 export function readReportsState(storage?: StorageLike): ReportsState {

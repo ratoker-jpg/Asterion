@@ -221,8 +221,10 @@ export function filterReportItems(
   const read = new Set(state.readIds);
   const saved = new Set(savedBattleReportIds);
   const needle = query.search.trim().toLocaleLowerCase('ru-RU');
+  const hidden = new Set(state.hiddenIds);
 
   return items.filter((item) => {
+    if (hidden.has(item.id)) return false;
     if (item.category !== query.category) return false;
     if (query.filter === 'unread' && read.has(item.id)) return false;
     if (query.filter === 'saved' && (!item.battleReportId || !saved.has(item.battleReportId))) return false;
@@ -231,16 +233,21 @@ export function filterReportItems(
   });
 }
 
-export function getReportCategoryCounts(items: readonly ReportItem[]): ReportCategoryCounts {
+export function getVisibleReportItems(items: readonly ReportItem[], state: ReportsState): ReportItem[] {
+  const hidden = new Set(state.hiddenIds);
+  return items.filter((item) => !hidden.has(item.id));
+}
+
+export function getReportCategoryCounts(items: readonly ReportItem[], state?: ReportsState): ReportCategoryCounts {
   const counts = EMPTY_COUNTS();
-  items.forEach((item) => { counts[item.category] += 1; });
+  (state ? getVisibleReportItems(items, state) : items).forEach((item) => { counts[item.category] += 1; });
   return counts;
 }
 
 export function getReportUnreadCounts(items: readonly ReportItem[], state: ReportsState): ReportUnreadCounts {
   const counts = EMPTY_COUNTS() as ReportUnreadCounts;
   const read = new Set(state.readIds);
-  items.forEach((item) => {
+  getVisibleReportItems(items, state).forEach((item) => {
     if (!read.has(item.id)) counts[item.category] += 1;
   });
   return counts;

@@ -17,6 +17,8 @@ import {
 import { NON_COMBAT_REPORT_FIXTURES } from './catalog.ts';
 import {
   createDefaultReportsState,
+  deleteAllReports,
+  deleteSelectedReports,
   markAllReportsRead,
   markReportRead,
   migrateReportsState,
@@ -147,7 +149,7 @@ test('saved filter uses canonical BattleHistory saved ids, not Reports metadata'
   const reportsState = createDefaultReportsState();
   const battleHistory = setBattleReportSaved(createDefaultBattleHistory(), report.id, true);
 
-  assert.deepEqual(reportsState, { readIds: [] });
+  assert.deepEqual(reportsState, { readIds: [], hiddenIds: [] });
   assert.equal(filterReportItems([item], reportsState, { category: 'battle', filter: 'saved', search: '' }, []).length, 0);
   assert.equal(filterReportItems([item], reportsState, { category: 'battle', filter: 'saved', search: '' }, battleHistory.savedReportIds).length, 1);
   assert.ok(battleHistory.savedReportIds.includes(report.id));
@@ -189,7 +191,7 @@ test('save and unsave stay in canonical BattleHistoryState', () => {
 
 test('read/unread metadata is explicit and legacy favorites/archive are ignored', () => {
   const migrated = migrateReportsState({ readIds: [' one ', 'one', 'two'], favoriteIds: ['legacy'], archivedIds: ['legacy'] });
-  assert.deepEqual(migrated, { readIds: ['one', 'two'] });
+  assert.deepEqual(migrated, { readIds: ['one', 'two'], hiddenIds: [] });
 
   const once = markReportRead(createDefaultReportsState(), 'battle:one');
   assert.deepEqual(once.readIds, ['battle:one']);
@@ -205,10 +207,10 @@ test('read metadata keeps the newest 500 ids', () => {
   assert.equal(state.readIds.at(-1), 'report-504');
 });
 
-test('reports persistence preserves unrelated Asterion save envelope fields and writes only readIds', () => {
+test('reports persistence preserves unrelated Asterion save envelope fields and writes report metadata', () => {
   const storage = new MemoryStorage();
   storage.setItem(ASTERION_SAVE_KEY, JSON.stringify({ metal: 123, operations: { marker: true } }));
-  const result = persistReportsState({ readIds: ['battle:one'] }, storage);
+  const result = persistReportsState({ readIds: ['battle:one'], hiddenIds: ['battle:two'] }, storage);
   assert.equal(result.ok, true);
 
   const raw = storage.getItem(ASTERION_SAVE_KEY);
@@ -216,6 +218,40 @@ test('reports persistence preserves unrelated Asterion save envelope fields and 
   const saved = JSON.parse(raw) as { metal: number; operations: unknown; reports: unknown };
   assert.equal(saved.metal, 123);
   assert.deepEqual(saved.operations, { marker: true });
-  assert.deepEqual(saved.reports, { readIds: ['battle:one'] });
-  assert.deepEqual(readReportsState(storage), { readIds: ['battle:one'] });
+  assert.deepEqual(saved.reports, { readIds: ['battle:one'], hiddenIds: ['battle:two'] });
+  assert.deepEqual(readReportsState(storage), { readIds: ['battle:one'], hiddenIds: ['battle:two'] });
+});
+
+test('reports migration normalizes hidden ids and drops unknown ids when current feed is supplied', () => {
+  assert.deepEqual(migrateReportsState({
+    readIds: ['battle:one', 'unknown', 'battle:one', 7],
+    hiddenIds: [' battle:two ', 'unknown', 'battle:two'],
+  }, ['battle:one', 'battle:two']), {
+    readIds: ['battle:one'],
+    hiddenIds: ['battle:two'],
+  });
+});
+
+test('delete all and selected are limited to one folder and do not mutate canonical reports', () => {
+  const first = battleReportToReportItem(DEMO_BATTLE_REPORTS[0]);
+  const second = { ...first, id: 'system:other', category: 'system' as const };
+  const items = [first, second];
+  const initial = createDefaultReportsState();
+  const deletedAll = deleteAllReports(initial, items, 'battle');
+  assert.deepEqual(deletedAll.hiddenIds, [first.id]);
+  assert.deepEqual(initial, { readIds: [], hiddenIds: [] });
+  assert.equal(DEMO_BATTLE_REPORTS.some((report) => report.id === first.battleReportId), true);
+
+  const deletedSelected = deleteSelectedReports(initial, items, 'system', [first.id, second.id, 'unknown']);
+  assert.deepEqual(deletedSelected.hiddenIds, [second.id]);
+});
+
+test('hidden reports disappear from counts and regenerated feed without hiding future ids', () => {
+  const first = battleReportToReportItem(DEMO_BATTLE_REPORTS[0]);
+  const second = { ...first, id: 'battle:future', battleReportId: 'future' };
+  const state = deleteSelectedReports(createDefaultReportsState(), [first], 'battle', [first.id]);
+  const feed = [first, second];
+  assert.equal(getReportCategoryCounts(feed, state).battle, 1);
+  assert.equal(filterReportItems(feed, state, { category: 'battle', filter: 'all', search: '' }).length, 1);
+  assert.equal(filterReportItems(feed, state, { category: 'battle', filter: 'all', search: '' })[0].id, second.id);
 });

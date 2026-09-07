@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { RatingView } from './RatingView';
 import { ScienceView } from './ScienceView';
 import { SettingsView } from './SettingsView';
-import type { AllianceIdentity } from './domain/rating/types.ts';
+import { getRuntimeStateSnapshot, subscribeRuntimeStateSnapshot, type RuntimeStateSnapshot } from './domain/runtime/state-store.ts';
 import {
   applyTypographyPreferences,
   persistPreferences,
@@ -12,40 +12,11 @@ import {
 } from './domain/settings/preferences.ts';
 import { getDesktopBridge, getWindowPresetDimensions } from './domain/settings/desktop.ts';
 import { WINDOW_PRESETS, type DesktopDisplayState, type UiPreferencesV2 } from './domain/settings/types.ts';
-import { getRuntimeSaveKey } from './domain/runtime/mode.ts';
 
 type UtilityScreen = 'Настройки' | 'Рейтинг' | 'Наука';
 
-type RuntimeIdentity = {
-  alliance: AllianceIdentity | null;
-  resourcePoints: number | undefined;
-};
-
 function isUtilityScreen(value: string | undefined): value is UtilityScreen {
   return value === 'Настройки' || value === 'Рейтинг' || value === 'Наука';
-}
-
-function readRuntimeIdentity(): RuntimeIdentity {
-  try {
-    const raw = localStorage.getItem(getRuntimeSaveKey());
-    if (!raw) return { alliance: null, resourcePoints: undefined };
-    const parsed = JSON.parse(raw) as {
-      command?: { alliance?: { name?: unknown; tag?: unknown } };
-      rating?: { resourcePoints?: unknown };
-    };
-    const name = parsed.command?.alliance?.name;
-    const tag = parsed.command?.alliance?.tag;
-    const alliance = typeof name === 'string' && typeof tag === 'string' && name.trim() && tag.trim()
-      ? { name: name.trim(), tag: tag.trim() }
-      : null;
-    const rawResourcePoints = parsed.rating?.resourcePoints;
-    const resourcePoints = typeof rawResourcePoints === 'number' && Number.isFinite(rawResourcePoints) && rawResourcePoints >= 0
-      ? Math.floor(rawResourcePoints)
-      : undefined;
-    return { alliance, resourcePoints };
-  } catch {
-    return { alliance: null, resourcePoints: undefined };
-  }
 }
 
 function presetForDisplayState(state: DesktopDisplayState, fallback: UiPreferencesV2['display']['preset']) {
@@ -60,16 +31,19 @@ export function UtilityScreensPortal() {
   const [target, setTarget] = useState<Element | null>(null);
   const [active, setActive] = useState<UtilityScreen | null>(null);
   const [preferences, setPreferences] = useState<UiPreferencesV2>(() => readPreferences());
-  const initialIdentity = useRef(readRuntimeIdentity());
-  const [currentAlliance, setCurrentAlliance] = useState<AllianceIdentity | null>(initialIdentity.current.alliance);
-  const [currentPlayerResourcePoints, setCurrentPlayerResourcePoints] = useState<number | undefined>(initialIdentity.current.resourcePoints);
-  const identitySignature = useRef(JSON.stringify(initialIdentity.current));
+  const [runtimeState, setRuntimeState] = useState<RuntimeStateSnapshot | null>(() => getRuntimeStateSnapshot());
   const preferencesRef = useRef(preferences);
 
   useEffect(() => {
     preferencesRef.current = preferences;
     applyTypographyPreferences(preferences);
   }, [preferences]);
+
+  useEffect(() => {
+    const syncRuntimeState = () => setRuntimeState(getRuntimeStateSnapshot());
+    syncRuntimeState();
+    return subscribeRuntimeStateSnapshot(syncRuntimeState);
+  }, []);
 
   useEffect(() => {
     const bridge = getDesktopBridge();
@@ -105,13 +79,6 @@ export function UtilityScreensPortal() {
       const label = document.querySelector('.utility-navigation button.active span')?.textContent?.trim();
       setActive(isUtilityScreen(label) ? label : null);
       setTarget(document.querySelector('.workspace'));
-      const identity = readRuntimeIdentity();
-      const signature = JSON.stringify(identity);
-      if (signature !== identitySignature.current) {
-        identitySignature.current = signature;
-        setCurrentAlliance(identity.alliance);
-        setCurrentPlayerResourcePoints(identity.resourcePoints);
-      }
     };
 
     sync();
@@ -148,7 +115,7 @@ export function UtilityScreensPortal() {
       {active === 'Настройки' ? (
         <SettingsView preferences={preferences} onPreferencesChange={updatePreferences} onReset={resetUiPreferences} />
       ) : active === 'Рейтинг' ? (
-        <RatingView currentAlliance={currentAlliance} currentPlayerResourcePoints={currentPlayerResourcePoints} />
+        runtimeState ? <RatingView command={runtimeState.command} currentPlayerResourcePoints={runtimeState.rating.resourcePoints} /> : null
       ) : (
         <ScienceView />
       )}
