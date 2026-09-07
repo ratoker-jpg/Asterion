@@ -10,8 +10,8 @@
 
    Geometry is dynamic, so a long page ends shortly after its real content instead of inheriting a 2860px tail. */
 
-/* Battles used to own an internal scrollbar. Keep the page itself un-clipped so the global
-   controller can detect its natural height and switch to the shared document scrollbar. */
+/* Fleet pages must stay un-clipped so the global controller can detect their natural height
+   and switch to the shared document scrollbar when roster rows are added. */
 .fleet-main-v1.fleet-main-v1--battles {
   overflow: visible;
   scrollbar-gutter: auto;

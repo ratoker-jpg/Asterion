@@ -30,10 +30,6 @@ function getPageRoots(container: HTMLElement) {
   );
 }
 
-function isFleetRoot(roots: readonly HTMLElement[]) {
-  return roots.length === 2 && roots.every((element) => element.classList.contains('fleet-panel-v1'));
-}
-
 function isUtilityRoot(roots: readonly HTMLElement[]) {
   return roots.some((element) => element.classList.contains('utility-screen-host'));
 }
@@ -136,8 +132,7 @@ export function GlobalPageScrollController() {
           ? BASE_WORKSPACE_HEIGHT - BASE_FLEET_VERTICAL_PADDING
           : BASE_WORKSPACE_HEIGHT;
       const contentHeight = measureContentHeight(pageContainer, stageScale, pageRoots);
-      const needsScroll = !isFleetRoot(pageRoots)
-        && contentHeight > availableHeight + OVERFLOW_EPSILON;
+      const needsScroll = contentHeight > availableHeight + OVERFLOW_EPSILON;
 
       if (needsScroll) {
         const workspaceHeight = Math.ceil(contentHeight + PAGE_BOTTOM_PADDING);

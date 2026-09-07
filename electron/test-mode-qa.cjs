@@ -148,9 +148,18 @@ async function readQaState(win) {
       shipQueue: planet?.spaceportUpgrades?.shipQueue?.length ?? -1,
       commanderQueue: planet?.spaceportUpgrades?.commanderQueue?.length ?? -1,
       horizontalOverflow,
+      fleetPageLong: document.documentElement.classList.contains('asterion-long-page'),
       populationChips: Array.from(document.querySelectorAll('.header-resource-rail .resource-chip--population'))
         .map((node) => node.textContent?.replace(/\s+/g, ' ').trim() ?? ''),
       fleetPopulation: document.querySelector('[data-qa-fleet-population]')?.textContent?.trim() ?? '',
+      fleetRosterOverflow: (() => {
+        const node = document.querySelector('[data-qa-fleet-roster]');
+        return node ? node.scrollHeight > node.clientHeight + 2 : false;
+      })(),
+      fleetRosterOverflowY: (() => {
+        const node = document.querySelector('[data-qa-fleet-roster]');
+        return node ? getComputedStyle(node).overflowY : '';
+      })(),
       fleetRoster: Array.from(document.querySelectorAll('[data-qa-fleet-ship]')).map((node) => ({
         id: node.getAttribute('data-qa-fleet-ship'),
         owned: Number(node.querySelector('[data-qa-fleet-owned]')?.textContent || 0),
@@ -313,7 +322,42 @@ async function runViewport(width, height) {
       { id: 'scout', owned: 20, population: 2 },
     ];
     if (JSON.stringify(fleetRoot.fleetRoster) !== JSON.stringify(expectedFleetRoster)) throw new Error(`${label}: current fleet roster UI mismatch ${JSON.stringify(fleetRoot.fleetRoster)}`);
+    if (fleetRoot.fleetRosterOverflow || fleetRoot.fleetRosterOverflowY !== 'visible') throw new Error(`${label}: fleet roster still owns an internal scrollbar ${JSON.stringify(fleetRoot)}`);
     await capture(win, directory, 'test-fleet-roster');
+
+    await win.webContents.executeJavaScript(`(() => {
+      const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
+      const fleet = save?.planets?.['helion-01']?.fleet;
+      if (!fleet) return false;
+      for (const id of Object.keys(fleet.ships || {})) {
+        if (id !== 'death-star') fleet.ships[id] = Math.max(1, Number(fleet.ships[id] || 0));
+      }
+      localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
+      return true;
+    })()`);
+    await reload(win, 'test');
+    await openFleet(win);
+    const expandedFleet = await readQaState(win);
+    if (!expandedFleet.fleetPageLong || expandedFleet.fleetRoster.length < 8 || expandedFleet.fleetRosterOverflow || expandedFleet.fleetRosterOverflowY !== 'visible') {
+      throw new Error(`${label}: expanded fleet did not use the global page scroll ${JSON.stringify(expandedFleet)}`);
+    }
+    await capture(win, directory, 'test-fleet-roster-expanded');
+
+    await win.webContents.executeJavaScript(`(() => {
+      const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
+      const fleet = save?.planets?.['helion-01']?.fleet;
+      if (!fleet) return false;
+      for (const id of Object.keys(fleet.ships || {})) fleet.ships[id] = 0;
+      Object.assign(fleet.ships, { scout: 20, transporter: 10, recycler: 1, 'spy-probe': 3 });
+      localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
+      return true;
+    })()`);
+    await reload(win, 'test');
+    await openFleet(win);
+    const restoredFleet = await readQaState(win);
+    if (restoredFleet.fleetPageLong || restoredFleet.fleetRosterOverflow || restoredFleet.fleetRosterOverflowY !== 'visible' || !restoredFleet.fleetPopulation.includes('58 / 70')) {
+      throw new Error(`${label}: canonical fleet restore after global-scroll QA failed ${JSON.stringify(restoredFleet)}`);
+    }
     await clickText(win, '.fleet-sidebar-v1 button', 'Корабли');
     await waitFor(win, `document.querySelector('[data-qa-fleet-summary]')`);
     const fleetUi = await readQaState(win);
