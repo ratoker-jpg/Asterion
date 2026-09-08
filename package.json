@@ -18,6 +18,8 @@
     "test:fleet": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/fleet/runtime.test.ts",
     "test:science": "node --experimental-strip-types --test src/domain/science/science.test.ts",
     "test:universe": "node --experimental-strip-types --test src/domain/universe/universe.test.ts",
+    "test:header": "node --experimental-strip-types --test src/faction-header.test.ts",
+    "test:header-ui": "npm run build && electron electron/faction-header-qa.cjs",
     "test:science-ui": "electron electron/visual-science.cjs",
     "test:spaceport-ui": "electron electron/integration-spaceport-upgrades.cjs",
     "test:test-mode-ui": "electron electron/test-mode-qa.cjs",

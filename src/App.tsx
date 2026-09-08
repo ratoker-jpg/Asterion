@@ -56,7 +56,8 @@ import { createDefaultReportsState, migrateReportsState } from './domain/reports
 import type { ReportsState } from './domain/reports/types.ts';
 import { buildReportsFeed } from './domain/reports/adapters.ts';
 import { createDefaultPlayerProfileState, CURRENT_PLAYER_FACTION_ID, migratePlayerProfileState, syncPlayerProfileWithAlliance, syncPlayerProfileWithFaction } from './domain/profile/repository.ts';
-import type { PlayerProfileState } from './domain/profile/types.ts';
+import type { PlayerFactionId, PlayerProfileState } from './domain/profile/types.ts';
+import { FACTION_HEADER_THEMES, getResourceFillPercent, getResourceFillTone, resolveFactionHeaderId } from './faction-header.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import {
   SCIENCE_RUNTIME_CHANGED_EVENT,
@@ -167,6 +168,18 @@ import generated027 from '../assets/source/planets/skins/planet-027.png';
 import generated028 from '../assets/source/planets/skins/planet-028.png';
 import generated030 from '../assets/source/planets/skins/planet-030.png';
 import generated032 from '../assets/source/planets/skins/planet-032.png';
+import aegisEmblem from '../assets/source/generated-factions-v1/factions/aegis_emblem.png';
+import synodEmblem from '../assets/source/generated-factions-v1/factions/synod_emblem.png';
+import veyraEmblem from '../assets/source/generated-factions-v1/factions/veyra_emblem.png';
+import aegisPanelFrame from '../assets/source/faction-delivery-v1/ui/aegis_panel_frame.png';
+import aegisPrimaryButton from '../assets/source/faction-delivery-v1/ui/aegis_primary_button.png';
+import aegisActiveTab from '../assets/source/faction-delivery-v1/ui/aegis_active_tab.png';
+import synodPanelFrame from '../assets/source/faction-delivery-v1/ui/synod_panel_frame.png';
+import synodPrimaryButton from '../assets/source/faction-delivery-v1/ui/synod_primary_button.png';
+import synodActiveTab from '../assets/source/faction-delivery-v1/ui/synod_active_tab.png';
+import veyraPanelFrame from '../assets/source/faction-delivery-v1/ui/veyra_panel_frame.png';
+import veyraPrimaryButton from '../assets/source/faction-delivery-v1/ui/veyra_primary_button.png';
+import veyraActiveTab from '../assets/source/faction-delivery-v1/ui/veyra_active_tab.png';
 
 const planetSkins = [
   { id: 'colonized', label: 'Колония', art: planetColonized },
@@ -199,6 +212,19 @@ type PlanetViewMode = 'overview' | Zone;
 type IconKind = 'metal' | 'mineral' | 'gas' | 'energy' | 'population' | Zone;
 type NavigationIconKind = 'planet' | 'universe' | 'fleets' | 'operations' | 'command' | 'reports' | 'settings' | 'rating' | 'science';
 type BuildingInteriorContext = BuildingInteriorNavigationContext<PlanetId>;
+
+const RESOURCE_STORAGE_CAPACITY = 60_000;
+
+const FACTION_HEADER_ASSETS: Record<PlayerFactionId, {
+  emblem: string;
+  panelFrame: string;
+  primaryButton: string;
+  activeTab: string;
+}> = {
+  aegis: { emblem: aegisEmblem, panelFrame: aegisPanelFrame, primaryButton: aegisPrimaryButton, activeTab: aegisActiveTab },
+  synod: { emblem: synodEmblem, panelFrame: synodPanelFrame, primaryButton: synodPrimaryButton, activeTab: synodActiveTab },
+  veyra: { emblem: veyraEmblem, panelFrame: veyraPanelFrame, primaryButton: veyraPrimaryButton, activeTab: veyraActiveTab },
+};
 
 type PlanetRuntime = {
   name: string;
@@ -483,21 +509,27 @@ type ResourceProps = {
   label: string;
   value: number;
   capacity?: number;
-  showCapacity?: boolean;
   hourlyGain?: number;
   description?: string;
 };
 
-function Resource({ kind, label, value, capacity, showCapacity = false, hourlyGain, description }: ResourceProps) {
-  const fill = capacity ? Math.min(100, Math.max(0, (value / capacity) * 100)) : 0;
-  const fillTone = fill >= 85 ? 'critical' : fill >= 75 ? 'warning' : fill >= 65 ? 'watch' : 'normal';
+function Resource({ kind, label, value, capacity, hourlyGain, description }: ResourceProps) {
+  const fill = getResourceFillPercent(value, capacity);
+  const fillTone = getResourceFillTone(value, capacity);
+  const accessibleValue = capacity ? `${formatNumber(value)} из ${formatNumber(capacity)}` : formatNumber(value);
 
   return (
-    <div className={`resource-chip resource-chip--${kind}`} tabIndex={0}>
+    <div
+      className={`resource-chip resource-chip--${kind}`}
+      tabIndex={0}
+      data-qa-resource={kind}
+      data-qa-fill-tone={fillTone}
+      aria-label={`${label}: ${accessibleValue}`}
+    >
       <span className="resource-chip__icon"><GameIcon kind={kind} /></span>
       <span className="resource-chip__text">
         <small>{label}</small>
-        <strong>{showCapacity && capacity ? `${formatNumber(value)} / ${formatNumber(capacity)}` : formatNumber(value)}</strong>
+        <strong>{formatNumber(value)}</strong>
         {capacity ? <span className={`resource-fill resource-fill--${fillTone}`}><i style={{ '--fill': `${fill}%` } as CSSProperties} /></span> : null}
       </span>
       <span className="resource-tooltip" role="tooltip">
@@ -1318,11 +1350,33 @@ export function App() {
               : activeTab === 'Отчёты'
                 ? 'reports'
                 : 'module';
+  const headerFactionId = resolveFactionHeaderId(state.profile.factionId);
+  const headerTheme = FACTION_HEADER_THEMES[headerFactionId];
+  const headerAssets = FACTION_HEADER_ASSETS[headerFactionId];
+  const headerStyle = {
+    '--faction-accent': headerTheme.accent,
+    '--faction-accent-strong': headerTheme.accentStrong,
+    '--faction-border': headerTheme.border,
+    '--faction-surface-top': headerTheme.surfaceTop,
+    '--faction-surface-bottom': headerTheme.surfaceBottom,
+    '--faction-glow': headerTheme.glow,
+    '--faction-icon': headerTheme.icon,
+    '--faction-panel-frame': `url("${headerAssets.panelFrame}")`,
+    '--faction-primary-button': `url("${headerAssets.primaryButton}")`,
+    '--faction-active-tab': `url("${headerAssets.activeTab}")`,
+  } as CSSProperties;
 
   return (
     <div className="viewport">
       <div className="stage stage-shell-v3 stage-shell-v4" style={{ transform: `scale(${scale})`, '--space-bg': `url(${systemBackground})` } as CSSProperties}>
-        <header className="asterion-header">
+        <header className="asterion-header" data-faction={headerFactionId} data-qa-header-theme={headerTheme.label} style={headerStyle}>
+          <div className="header-faction-bar" aria-label={`Фракция игрока: ${headerTheme.label}`}>
+            <span className="header-faction-identity">
+              <img src={headerAssets.emblem} alt="" draggable={false} />
+              <strong>{headerTheme.label}</strong>
+            </span>
+            <small>ФРАКЦИЯ ИГРОКА</small>
+          </div>
           <section className="header-planet-module">
             <div className="header-planet-orbit">
               <button className="header-planet-world" type="button" onClick={() => chooseTab('Планета')} aria-label={`Открыть ${currentPlanetName}`}>
@@ -1345,7 +1399,7 @@ export function App() {
             </div>
 
             <div className="current-planet-control">
-              <button className="current-planet-select" type="button" onClick={() => setPlanetMenuOpen((open) => !open)}>
+              <button className="current-planet-select" type="button" aria-expanded={planetMenuOpen} onClick={() => setPlanetMenuOpen((open) => !open)}>
                 <img src={currentSkin.art} alt={currentPlanetName} draggable={false} />
                 <span>
                   <small>ТЕКУЩАЯ ПЛАНЕТА</small>
@@ -1369,11 +1423,11 @@ export function App() {
 
           <section className="header-main">
             <div className="resources header-resource-rail" aria-label="Ресурсы планеты">
-              <Resource kind="metal" label="МЕТАЛЛ" value={state.metal} capacity={60_000} hourlyGain={resourceIncomePerHour.metal} />
-              <Resource kind="mineral" label="МИНЕРАЛЫ" value={state.minerals} capacity={60_000} hourlyGain={resourceIncomePerHour.minerals} />
-              <Resource kind="gas" label="ГАЗ" value={state.gas} capacity={60_000} hourlyGain={resourceIncomePerHour.gas} />
-              <Resource kind="energy" label="ЭНЕРГИЯ" value={currentPlanetState.energy} description="Энергия планеты. Солнечная электростанция увеличивает запас после завершения строительства." />
-              <Resource kind="population" label="НАСЕЛЕНИЕ" value={fleetSummary.population} capacity={fleetSummary.capacity} showCapacity />
+              <Resource kind="metal" label="МЕТАЛЛ" value={state.metal} capacity={RESOURCE_STORAGE_CAPACITY} hourlyGain={resourceIncomePerHour.metal} />
+              <Resource kind="mineral" label="МИНЕРАЛЫ" value={state.minerals} capacity={RESOURCE_STORAGE_CAPACITY} hourlyGain={resourceIncomePerHour.minerals} />
+              <Resource kind="gas" label="ГАЗ" value={state.gas} capacity={RESOURCE_STORAGE_CAPACITY} hourlyGain={resourceIncomePerHour.gas} />
+              <Resource kind="energy" label="ЭНЕРГИЯ" value={currentPlanetState.energy} capacity={RESOURCE_STORAGE_CAPACITY} description="Энергия планеты. Солнечная электростанция увеличивает запас после завершения строительства." />
+              <Resource kind="population" label="НАСЕЛЕНИЕ" value={fleetSummary.population} capacity={fleetSummary.capacity} />
             </div>
             <nav className="primary-navigation" aria-label="Основная навигация">
               {primaryTabs.map(({ id, label, icon }) => (

@@ -4,9 +4,13 @@
   position:absolute;
   z-index:110;
   inset:20px 24px auto;
-  height:220px;
+  height:248px;
   color:#e9fbff;
   pointer-events:none;
+  --status-normal:var(--faction-accent);
+  --status-watch:#ffe27b;
+  --status-warning:#ff9b4a;
+  --status-full:#ff5f69;
 }
 .asterion-header button,
 .asterion-header .resource-chip{
@@ -17,7 +21,7 @@
 .header-planet-module{
   position:absolute;
   left:0;
-  top:0;
+  top:28px;
   width:470px;
   height:220px;
   overflow:visible;
@@ -176,7 +180,7 @@
   z-index:8;
   left:470px;
   right:258px;
-  top:0;
+  top:28px;
   height:108px;
   display:grid;
   grid-template-columns:repeat(5,minmax(0,1fr));
@@ -282,7 +286,7 @@
   z-index:6;
   left:238px;
   right:0;
-  top:120px;
+  top:148px;
   height:96px;
   display:grid;
   grid-template-columns:repeat(6,minmax(0,1fr));
@@ -336,7 +340,7 @@
   position:absolute;
   z-index:7;
   right:0;
-  top:0;
+  top:28px;
   width:258px;
   height:108px;
   padding:0;
@@ -425,5 +429,121 @@
 
 @media (prefers-reduced-motion:reduce){
   .header-planet-orbit::after,
-  .header-planet-world img{animation:none}
+  .header-planet-world img,
+  .asterion-header *,
+  .asterion-header *::before,
+  .asterion-header *::after{
+    animation:none !important;
+    transition:none !important;
+  }
 }
+
+/* Faction theme registry. The layout stays shared; only material, light and
+   frame language change. Status colours remain semantic and are not faction-owned. */
+.header-faction-bar{
+  position:absolute;
+  z-index:12;
+  inset:0 0 auto;
+  height:28px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 10px 0 8px;
+  border-bottom:1px solid color-mix(in srgb,var(--faction-accent) 28%,transparent);
+  color:var(--faction-accent-strong);
+  pointer-events:auto;
+}
+.header-faction-identity{display:flex;align-items:center;gap:8px;min-width:0}
+.header-faction-identity img{width:22px;height:22px;object-fit:contain;filter:drop-shadow(0 0 7px var(--faction-glow))}
+.header-faction-identity strong{font-size:17px;line-height:1;letter-spacing:.2px;white-space:nowrap}
+.header-faction-bar>small{color:color-mix(in srgb,var(--faction-accent) 72%,#a8c7ce);font-size:8px;letter-spacing:2px;white-space:nowrap}
+
+.asterion-header .header-planet-orbit::before{
+  border-color:var(--faction-border);
+  box-shadow:0 0 0 8px rgba(1,10,17,.93),0 0 36px var(--faction-glow),inset 0 0 28px var(--faction-glow);
+}
+.asterion-header .header-planet-orbit::after{border-color:color-mix(in srgb,var(--faction-accent-strong) 48%,transparent)}
+.asterion-header .header-planet-world{filter:drop-shadow(0 0 22px var(--faction-glow))}
+.asterion-header .header-zone,
+.asterion-header .header-zone--industry,
+.asterion-header .header-zone--military{
+  border-color:var(--faction-border);
+  color:var(--faction-icon);
+  box-shadow:0 0 0 5px rgba(1,9,16,.96),0 0 16px var(--faction-glow);
+}
+.asterion-header .header-zone:hover,
+.asterion-header .header-zone.active{border-color:var(--faction-accent-strong);box-shadow:0 0 0 5px rgba(1,9,16,.96),0 0 22px var(--faction-glow)}
+
+.asterion-header .current-planet-select{
+  border-color:var(--faction-border);
+  background-image:var(--faction-primary-button),linear-gradient(180deg,var(--faction-surface-top),var(--faction-surface-bottom));
+  background-size:100% 100%,100% 100%;
+}
+.asterion-header .current-planet-select:hover,
+.asterion-header .current-planet-select:focus-visible{border-color:var(--faction-accent-strong);background-image:var(--faction-primary-button),linear-gradient(180deg,var(--faction-surface-top),var(--faction-surface-bottom))}
+.asterion-header .current-planet-select small{color:var(--faction-accent)}
+.asterion-header .current-planet-select i{color:var(--faction-accent-strong)}
+.asterion-header .current-planet-select img{filter:drop-shadow(0 0 10px var(--faction-glow))}
+.asterion-header .planet-list-popover{border-color:var(--faction-border);box-shadow:0 18px 42px rgba(0,0,0,.58),inset 0 0 20px var(--faction-glow)}
+
+.asterion-header .header-resource-rail::before,
+.asterion-header .campaign-module::before{
+  border-color:var(--faction-border);
+  background-image:var(--faction-panel-frame),linear-gradient(180deg,var(--faction-surface-top),var(--faction-surface-bottom));
+  background-size:100% 100%,100% 100%;
+  box-shadow:inset 0 0 30px var(--faction-glow);
+}
+.asterion-header .header-resource-rail .resource-chip{border-right-color:color-mix(in srgb,var(--faction-accent) 24%,transparent)}
+.asterion-header .resource-chip__icon,
+.asterion-header .resource-chip--metal .resource-chip__icon,
+.asterion-header .resource-chip--mineral .resource-chip__icon,
+.asterion-header .resource-chip--gas .resource-chip__icon,
+.asterion-header .resource-chip--energy .resource-chip__icon,
+.asterion-header .resource-chip--population .resource-chip__icon{color:var(--faction-icon);filter:drop-shadow(0 0 8px var(--faction-glow))}
+.asterion-header .resource-chip small{color:color-mix(in srgb,var(--faction-accent) 64%,#9abcc6)}
+.asterion-header .resource-chip strong{font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1}
+.asterion-header .resource-fill i{background:var(--status-normal);box-shadow:0 0 8px var(--faction-glow)}
+.asterion-header .resource-fill--watch i{background:var(--status-watch);box-shadow:0 0 8px rgba(255,226,123,.42)}
+.asterion-header .resource-fill--warning i{background:var(--status-warning);box-shadow:0 0 8px rgba(255,155,74,.46)}
+.asterion-header .resource-fill--critical i{background:var(--status-full);box-shadow:0 0 9px rgba(255,95,105,.54)}
+.asterion-header .resource-tooltip{border-color:var(--faction-border);box-shadow:0 14px 30px rgba(0,0,0,.48),inset 0 0 18px var(--faction-glow)}
+
+.asterion-header .primary-navigation{
+  border-color:var(--faction-border);
+  background-image:var(--faction-panel-frame),linear-gradient(180deg,var(--faction-surface-top),var(--faction-surface-bottom));
+  background-size:100% 100%,100% 100%;
+}
+.asterion-header .primary-navigation::before{
+  content:"";
+  position:absolute;
+  z-index:4;
+  inset:0;
+  background:var(--faction-panel-frame) center/100% 100% no-repeat;
+  pointer-events:none;
+}
+.asterion-header .primary-navigation button{z-index:1;border-right-color:color-mix(in srgb,var(--faction-accent) 24%,transparent)}
+.asterion-header .primary-navigation button:hover,
+.asterion-header .primary-navigation button:focus-visible{background:linear-gradient(180deg,color-mix(in srgb,var(--faction-accent) 18%,transparent),rgba(2,20,30,.3))}
+.asterion-header .primary-navigation button.active{
+  background-image:var(--faction-active-tab),linear-gradient(180deg,color-mix(in srgb,var(--faction-accent) 28%,transparent),rgba(2,26,37,.55));
+  background-size:100% 100%,100% 100%;
+  box-shadow:inset 0 -4px var(--faction-accent),inset 0 -14px 28px var(--faction-glow);
+  text-shadow:0 0 10px var(--faction-glow);
+}
+.asterion-header .primary-navigation button.active::after{background:var(--faction-accent-strong);box-shadow:0 0 16px var(--faction-glow)}
+.asterion-header .primary-navigation svg{filter:drop-shadow(0 0 6px var(--faction-glow))}
+.asterion-header .primary-navigation button.active svg{filter:drop-shadow(0 0 10px var(--faction-glow))}
+
+.asterion-header .campaign-module::before{box-shadow:inset 0 0 28px var(--faction-glow)}
+.asterion-header .campaign-status strong{color:var(--faction-accent-strong)}
+.asterion-header .campaign-module time{font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1}
+.asterion-header .utility-navigation{border-top-color:color-mix(in srgb,var(--faction-accent) 32%,transparent)}
+.asterion-header .utility-navigation button{border-right-color:color-mix(in srgb,var(--faction-accent) 24%,transparent);color:var(--faction-accent-strong)}
+.asterion-header .utility-navigation button:hover,
+.asterion-header .utility-navigation button:focus-visible,
+.asterion-header .utility-navigation button.active{background:color-mix(in srgb,var(--faction-accent) 20%,rgba(3,26,38,.54));box-shadow:inset 0 0 18px var(--faction-glow)}
+.asterion-header .utility-navigation svg{filter:drop-shadow(0 0 6px var(--faction-glow))}
+.asterion-header .utility-navigation button span{border-color:var(--faction-border);background:var(--faction-surface-bottom)}
+
+.asterion-header button:focus-visible,
+.asterion-header .resource-chip:focus-visible{outline:2px solid var(--faction-accent-strong);outline-offset:2px}
