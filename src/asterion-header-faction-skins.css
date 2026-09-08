@@ -20,6 +20,12 @@
   --header-frame-image:url('../assets/source/faction-delivery-v1/ui/aegis_panel_frame.png');
   --header-button-image:url('../assets/source/faction-delivery-v1/ui/aegis_primary_button.png');
   --header-active-image:url('../assets/source/faction-delivery-v1/ui/aegis_active_tab.png');
+  --header-planet-frame-image:none;
+  --header-selector-image:var(--header-frame-image);
+  --header-resource-cell-image:var(--header-button-image);
+  --header-campaign-image:var(--header-frame-image);
+  --header-nav-button-image:var(--header-button-image);
+  --header-nav-active-image:var(--header-active-image);
 }
 
 :root[data-header-faction='synod']{
@@ -35,6 +41,12 @@
   --header-frame-image:url('../assets/source/faction-delivery-v1/ui/synod_panel_frame.png');
   --header-button-image:url('../assets/source/faction-delivery-v1/ui/synod_primary_button.png');
   --header-active-image:url('../assets/source/faction-delivery-v1/ui/synod_active_tab.png');
+  --header-planet-frame-image:none;
+  --header-selector-image:var(--header-frame-image);
+  --header-resource-cell-image:var(--header-button-image);
+  --header-campaign-image:var(--header-frame-image);
+  --header-nav-button-image:var(--header-button-image);
+  --header-nav-active-image:var(--header-active-image);
 }
 
 :root[data-header-faction='veyra']{
@@ -50,6 +62,12 @@
   --header-frame-image:url('../assets/source/faction-delivery-v1/ui/veyra_panel_frame.png');
   --header-button-image:url('../assets/source/faction-delivery-v1/ui/veyra_primary_button.png');
   --header-active-image:url('../assets/source/faction-delivery-v1/ui/veyra_active_tab.png');
+  --header-planet-frame-image:none;
+  --header-selector-image:var(--header-frame-image);
+  --header-resource-cell-image:var(--header-button-image);
+  --header-campaign-image:var(--header-frame-image);
+  --header-nav-button-image:var(--header-button-image);
+  --header-nav-active-image:var(--header-active-image);
 }
 
 .asterion-header{
@@ -75,7 +93,6 @@
   position:absolute;
   z-index:-1;
   inset:0;
-  background-image:var(--header-button-image);
   background-repeat:no-repeat;
   background-position:center;
   background-size:100% 100%;
@@ -83,14 +100,28 @@
   pointer-events:none;
 }
 
-.current-planet-select::before,
+.current-planet-select::before{
+  background-image:var(--header-selector-image);
+  opacity:.17;
+}
+.header-resource-rail .resource-chip::before{
+  background-image:var(--header-resource-cell-image);
+}
+.primary-navigation button::before,
+.utility-navigation button::before{
+  background-image:var(--header-nav-button-image);
+}
 .campaign-module::after{
-  background-image:var(--header-frame-image);
+  background-image:var(--header-campaign-image);
   opacity:.17;
 }
 
 .header-planet-orbit::before{
   border-color:var(--header-line);
+  background-image:var(--header-planet-frame-image);
+  background-repeat:no-repeat;
+  background-position:center;
+  background-size:100% 100%;
   box-shadow:
     0 0 0 8px rgba(1,8,14,.94),
     0 0 34px rgba(var(--header-accent-rgb),.26),
@@ -183,7 +214,7 @@
   text-shadow:0 0 10px rgba(var(--header-accent-rgb),.34);
 }
 .primary-navigation button.active::before{
-  background-image:var(--header-active-image);
+  background-image:var(--header-nav-active-image);
   opacity:.34;
 }
 .primary-navigation button.active::after{
