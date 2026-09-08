@@ -173,20 +173,26 @@ export function getUniverseSlotPoint(slot: number): UniversePoint {
   return getOrbitPoint(slot, 0);
 }
 
-function getAsteroidOrbitOffset(slot: number): UniversePoint {
-  const safeSlot = Number.isFinite(slot) ? Math.min(POSITION_COUNT, Math.max(1, Math.floor(slot))) : 1;
-  const ring = Math.floor((safeSlot - 1) / 6);
-  const index = (safeSlot - 1) % 6;
-  const ringOffset = [-30, 0, -15, 15][ring];
-  const angle = ((index * 60 + ringOffset) + 90) * Math.PI / 180;
-  return { x: Math.cos(angle) * 4.2, y: Math.sin(angle) * 5.4 };
+/** Offset that places an asteroid's visual center over an occupied node's upper-left corner. */
+const ASTEROID_OCCUPIED_ANCHOR_OFFSET = { x: -3.6, y: -5.6 };
+
+function getUniverseAsteroidAnchorPoint(slot: number, attachedTo?: UniversePlanetNode): UniversePoint {
+  const point = getUniverseSlotPoint(slot);
+  if (!attachedTo || attachedTo.kind === 'empty') return point;
+  return {
+    x: point.x + ASTEROID_OCCUPIED_ANCHOR_OFFSET.x,
+    y: point.y + ASTEROID_OCCUPIED_ANCHOR_OFFSET.y,
+  };
 }
 
-/** Asteroids keep their numbered coordinate but render as a nearby companion, like a local orbital object. */
-function getUniverseAsteroidAnchorPoint(slot: number): UniversePoint {
-  const point = getUniverseSlotPoint(slot);
-  const offset = getAsteroidOrbitOffset(slot);
-  return { x: point.x + offset.x, y: point.y + offset.y };
+function findAsteroidAttachmentTarget(
+  coordinate: UniverseCoordinate,
+  occupiedNodes: readonly UniversePlanetNode[] | undefined,
+  asteroidId: string,
+) {
+  if (!occupiedNodes?.length) return undefined;
+  const key = universeCoordinateKey(coordinate);
+  return occupiedNodes.find((node) => node.id !== asteroidId && node.kind !== 'empty' && universeCoordinateKey(node.coordinate) === key);
 }
 
 /**
@@ -232,15 +238,17 @@ function getOrbitPoint(slot: number, progress: number): UniversePoint {
   };
 }
 
-/** The asteroid glides briefly between two numbered coordinates at a dwell boundary. */
-export function getUniverseAsteroidPoint(node: UniversePlanetNode, nowMs: number): UniversePoint {
-  const current = getUniverseAsteroidAnchorPoint(node.coordinate.position);
+/** The asteroid glides briefly between coordinate/target anchors at a dwell boundary. */
+export function getUniverseAsteroidPoint(node: UniversePlanetNode, nowMs: number, occupiedNodes?: readonly UniversePlanetNode[]): UniversePoint {
+  const currentTarget = findAsteroidAttachmentTarget(node.coordinate, occupiedNodes, node.id);
+  const current = getUniverseAsteroidAnchorPoint(node.coordinate.position, currentTarget);
   const state = node.asteroid;
   if (!state?.nextCoordinate || !Number.isFinite(nowMs)) return current;
   const transitStart = state.nextMoveAt - ASTEROID_TRANSIT_MS;
   const progress = Math.min(1, Math.max(0, (nowMs - transitStart) / ASTEROID_TRANSIT_MS));
   if (progress <= 0) return current;
-  const next = getUniverseAsteroidAnchorPoint(state.nextCoordinate.position);
+  const nextTarget = findAsteroidAttachmentTarget(state.nextCoordinate, occupiedNodes, node.id);
+  const next = getUniverseAsteroidAnchorPoint(state.nextCoordinate.position, nextTarget);
   return {
     x: current.x + (next.x - current.x) * progress,
     y: current.y + (next.y - current.y) * progress,
@@ -387,7 +395,9 @@ export function getUniverseAsteroidDwellMs(spawnIndex: number, movementIndex: nu
   return randomInt(random, ASTEROID_MIN_DWELL_MS, ASTEROID_MAX_DWELL_MS);
 }
 
-export function getUniverseAsteroidState(spawnIndex: number, nowMs: number, galaxyCount = 1): UniverseAsteroidState & { coordinate: UniverseCoordinate } | null {
+type UniverseAsteroidRuntimeState = UniverseAsteroidState & { coordinate: UniverseCoordinate };
+
+export function getUniverseAsteroidState(spawnIndex: number, nowMs: number, galaxyCount = 1): UniverseAsteroidRuntimeState | null {
   const safeNow = normalizeNow(nowMs);
   if (!Number.isInteger(spawnIndex) || spawnIndex < 0) return null;
   const spawnedAt = ASTEROID_SCHEDULE_EPOCH_MS + spawnIndex * ASTEROID_SPAWN_INTERVAL_MS;
@@ -411,6 +421,7 @@ export function getUniverseAsteroidState(spawnIndex: number, nowMs: number, gala
   return {
     spawnIndex,
     spawnedAt,
+    movementIndex,
     previousMoveAt,
     nextMoveAt,
     nextCoordinate,
@@ -419,7 +430,54 @@ export function getUniverseAsteroidState(spawnIndex: number, nowMs: number, gala
   };
 }
 
-function createAsteroidNode(state: UniverseAsteroidState & { coordinate: UniverseCoordinate }, assets: UniverseAssetCatalog): UniversePlanetNode {
+function advanceAsteroidAfterCollision(state: UniverseAsteroidRuntimeState, nowMs: number, galaxyCount: number): UniverseAsteroidRuntimeState | null {
+  const coordinate = advanceUniverseAsteroidCoordinate(state.coordinate, 1, galaxyCount);
+  if (!coordinate) return null;
+  const movementIndex = state.movementIndex + 1;
+  const nextMoveAt = nowMs + getUniverseAsteroidDwellMs(state.spawnIndex, movementIndex);
+  return {
+    ...state,
+    coordinate,
+    movementIndex,
+    previousMoveAt: nowMs,
+    nextMoveAt,
+    nextCoordinate: advanceUniverseAsteroidCoordinate(coordinate, 1, galaxyCount) ?? undefined,
+  };
+}
+
+/**
+ * Resolve same-coordinate arrivals deterministically. The asteroid arriving
+ * later keeps the coordinate; the earlier occupant is pushed one position
+ * forward and receives a fresh dwell timer from the collision moment.
+ */
+export function resolveUniverseAsteroidCollisions(
+  states: readonly UniverseAsteroidRuntimeState[],
+  nowMs: number,
+  galaxyCount = 1,
+): UniverseAsteroidRuntimeState[] {
+  const safeNow = normalizeNow(nowMs);
+  const resolvedBySpawn = new Map<number, UniverseAsteroidRuntimeState>();
+  const occupied = new Map<string, UniverseAsteroidRuntimeState>();
+  const ordered = [...states].sort((left, right) => left.previousMoveAt - right.previousMoveAt || left.spawnIndex - right.spawnIndex);
+
+  const place = (state: UniverseAsteroidRuntimeState): void => {
+    const key = universeCoordinateKey(state.coordinate);
+    const occupant = occupied.get(key);
+    if (occupant && occupant.spawnIndex !== state.spawnIndex) {
+      occupied.delete(key);
+      const displaced = advanceAsteroidAfterCollision(occupant, safeNow, galaxyCount);
+      if (displaced) place(displaced);
+      else resolvedBySpawn.delete(occupant.spawnIndex);
+    }
+    occupied.set(key, state);
+    resolvedBySpawn.set(state.spawnIndex, state);
+  };
+
+  for (const state of ordered) place({ ...state });
+  return states.map((state) => resolvedBySpawn.get(state.spawnIndex)).filter((state): state is UniverseAsteroidRuntimeState => Boolean(state));
+}
+
+function createAsteroidNode(state: UniverseAsteroidRuntimeState, assets: UniverseAssetCatalog): UniversePlanetNode {
   return {
     id: `asteroid-${state.coordinate.galaxy}-${state.spawnIndex}`,
     coordinate: state.coordinate,
@@ -435,13 +493,18 @@ function createAsteroidNode(state: UniverseAsteroidState & { coordinate: Univers
 
 function createActiveAsteroidsBySystem(galaxy: number, nowMs: number, galaxyCount: number, assets: UniverseAssetCatalog) {
   const grouped = Array.from({ length: SYSTEM_COUNT }, () => [] as UniversePlanetNode[]);
+  const states: UniverseAsteroidRuntimeState[] = [];
   const currentSpawnIndex = asteroidSpawnIndexAt(nowMs);
   if (currentSpawnIndex < 0) return grouped;
   const maxRouteMs = galaxyCount * SYSTEM_COUNT * POSITION_COUNT * ASTEROID_MAX_DWELL_MS;
   const firstSpawnIndex = Math.max(0, currentSpawnIndex - Math.ceil(maxRouteMs / ASTEROID_SPAWN_INTERVAL_MS) - 1);
   for (let spawnIndex = firstSpawnIndex; spawnIndex <= currentSpawnIndex; spawnIndex += 1) {
     const state = getUniverseAsteroidState(spawnIndex, nowMs, galaxyCount);
-    if (state?.coordinate.galaxy === galaxy) grouped[state.coordinate.system - 1].push(createAsteroidNode(state, assets));
+    if (state) states.push(state);
+  }
+  const resolvedStates = resolveUniverseAsteroidCollisions(states, nowMs, galaxyCount);
+  for (const state of resolvedStates) {
+    if (state.coordinate.galaxy === galaxy) grouped[state.coordinate.system - 1].push(createAsteroidNode(state, assets));
   }
   return grouped;
 }

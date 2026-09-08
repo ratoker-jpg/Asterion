@@ -24,6 +24,7 @@ export type UniversePoint = {
 export type UniverseAsteroidState = {
   spawnIndex: number;
   spawnedAt: number;
+  movementIndex: number;
   previousMoveAt: number;
   nextMoveAt: number;
   nextCoordinate?: UniverseCoordinate;

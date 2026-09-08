@@ -318,14 +318,14 @@ function SpecialInspector({ node, nowMs }: { node: UniversePlanetNode; nowMs: nu
 
 // The clock belongs to the map, not to a render or a selected object. Toggling
 // the layer and visiting another system must not restart orbital motion.
-function MovingAsteroid({ node, nowMs, onSelect }: { node: UniversePlanetNode; nowMs: number; onSelect: (node: UniversePlanetNode) => void }) {
+function MovingAsteroid({ node, nowMs, occupiedNodes, onSelect }: { node: UniversePlanetNode; nowMs: number; occupiedNodes: readonly UniversePlanetNode[]; onSelect: (node: UniversePlanetNode) => void }) {
   const ref = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    const point = getUniverseAsteroidPoint(node, nowMs);
+    const point = getUniverseAsteroidPoint(node, nowMs, occupiedNodes);
     ref.current?.style.setProperty('--x', `${point.x}%`);
     ref.current?.style.setProperty('--y', `${point.y}%`);
-  }, [node, nowMs]);
-  const point = getUniverseAsteroidPoint(node, nowMs);
+  }, [node, nowMs, occupiedNodes]);
+  const point = getUniverseAsteroidPoint(node, nowMs, occupiedNodes);
   const nextCoordinate = node.asteroid?.nextCoordinate ? formatUniverseCoordinate(node.asteroid.nextCoordinate) : 'маршрут завершён';
   return <button ref={ref} type="button" className="system-asteroid" style={toStyle(point)}
     title={`${node.name} · ${formatUniverseCoordinate(node.coordinate)} · далее ${nextCoordinate}`} aria-label={`${node.name} · ${formatUniverseCoordinate(node.coordinate)}`}
@@ -379,6 +379,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
     galaxyCount: 1,
   }), [nowMs, ownedPlanetArt, ownedPlanetName, owner.id]);
   const systemData = galaxyData.systems[system - 1];
+  const asteroidAttachmentNodes = useMemo(() => [...systemData.positions, ...systemData.asteroids], [systemData]);
   const nodesById = useMemo(() => new Map(galaxyData.systems.flatMap((item) => [...item.positions, ...item.asteroids]).map((node) => [node.id, node])), [galaxyData]);
   const selectedNode = selectedNodeId ? nodesById.get(selectedNodeId) ?? null : null;
 
@@ -513,7 +514,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
           );
         })}
 
-        {showAsteroids ? systemData.asteroids.map((asteroid) => <MovingAsteroid key={asteroid.id} node={asteroid} nowMs={nowMs} onSelect={selectNode} />) : null}
+        {showAsteroids ? systemData.asteroids.map((asteroid) => <MovingAsteroid key={asteroid.id} node={asteroid} nowMs={nowMs} occupiedNodes={asteroidAttachmentNodes} onSelect={selectNode} />) : null}
         <div className="universe-map-hint">Выберите мир, чтобы открыть сведения <span>Астероиды стоят 15–30 мин и переходят к следующей позиции</span></div>
       </div>
 

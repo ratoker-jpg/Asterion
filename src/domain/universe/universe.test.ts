@@ -32,11 +32,13 @@ import {
   formatUniverseCoordinate,
   getUniverseActionState,
   getUniverseAsteroidDwellMs,
+  getUniverseAsteroidPoint,
   getUniverseAsteroidState,
   getUniverseNodeCaption,
   getUniverseOwnerRelation,
   getUniverseSlotPoint,
   getUniverseTimedObjectSchedule,
+  resolveUniverseAsteroidCollisions,
   UNIVERSE_NPC_OWNER_ID,
 } from './runtime.ts';
 import type { UniverseOwnerAlliance, UniversePlanetNode } from './types.ts';
@@ -201,6 +203,43 @@ test('asteroid state stays on a coordinate for 15–30 minutes and keeps gas hid
   assert.equal(state.coordinate.system, 1);
   assert.ok(state.nextCoordinate);
   assert.equal(state.nextCoordinate.position, state.coordinate.position === POSITION_COUNT ? 1 : state.coordinate.position + 1);
+});
+
+test('asteroid attaches to an occupied node corner and to the exact slot when empty', () => {
+  const state = getUniverseAsteroidState(0, ASTEROID_SCHEDULE_EPOCH_MS + 1)!;
+  const { coordinate, ...asteroidState } = state;
+  const asteroid: UniversePlanetNode = {
+    id: 'asteroid-test', coordinate, kind: 'asteroid', name: 'Астероид', art: 'asteroid', statusLabel: 'Астероид', description: 'Астероид', asteroid: asteroidState,
+  };
+  const occupied: UniversePlanetNode = {
+    id: 'planet-test', coordinate, kind: 'uninhabited', name: 'Мир', art: 'planet', statusLabel: 'Необитаемая', description: 'Мир',
+  };
+  const empty = { ...occupied, id: 'empty-test', kind: 'empty' as const, art: '' };
+  const slotPoint = getUniverseSlotPoint(coordinate.position);
+  const emptyPoint = getUniverseAsteroidPoint(asteroid, state.previousMoveAt, [empty]);
+  const occupiedPoint = getUniverseAsteroidPoint(asteroid, state.previousMoveAt, [occupied]);
+
+  assert.deepEqual(emptyPoint, slotPoint);
+  assert.ok(occupiedPoint.x < slotPoint.x);
+  assert.ok(occupiedPoint.y < slotPoint.y);
+});
+
+test('a later asteroid arrival pushes an earlier occupant forward and resets its dwell timer', () => {
+  const nowMs = ASTEROID_SCHEDULE_EPOCH_MS + 2 * 60 * 60 * 1_000;
+  const first = getUniverseAsteroidState(0, nowMs)!;
+  const second = getUniverseAsteroidState(1, nowMs)!;
+  const collisionCoordinate = { galaxy: 1, system: 2, position: 18 };
+  const firstState = { ...first, coordinate: collisionCoordinate, previousMoveAt: nowMs - 20_000, nextMoveAt: nowMs + 200_000, nextCoordinate: advanceUniverseAsteroidCoordinate(collisionCoordinate, 1, 1)! };
+  const secondState = { ...second, coordinate: collisionCoordinate, previousMoveAt: nowMs - 10_000, nextMoveAt: nowMs + 200_000, nextCoordinate: advanceUniverseAsteroidCoordinate(collisionCoordinate, 1, 1)! };
+  const resolved = resolveUniverseAsteroidCollisions([firstState, secondState], nowMs, 1);
+  const displaced = resolved.find((state) => state.spawnIndex === first.spawnIndex)!;
+  const arriving = resolved.find((state) => state.spawnIndex === second.spawnIndex)!;
+
+  assert.deepEqual(arriving.coordinate, collisionCoordinate);
+  assert.deepEqual(displaced.coordinate, { galaxy: 1, system: 2, position: 19 });
+  assert.equal(displaced.previousMoveAt, nowMs);
+  assert.ok(displaced.nextMoveAt > nowMs);
+  assert.notEqual(displaced.nextMoveAt, firstState.nextMoveAt);
 });
 
 test('timed object schedules use the confirmed lifetime, quiet period, and chance ramp', () => {
