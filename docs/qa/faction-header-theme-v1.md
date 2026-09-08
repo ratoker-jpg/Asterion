@@ -24,7 +24,6 @@ The `?faction=` query parameter is a preview-only QA override. It does not mutat
 
 The implementation reuses the repository's delivered faction assets instead of creating replacement artwork:
 
-- `assets/source/faction-delivery-v1/ui/{aegis,synod,veyra}_panel_frame.png`
 - `assets/source/faction-delivery-v1/ui/{aegis,synod,veyra}_primary_button.png`
 - `assets/source/faction-delivery-v1/ui/{aegis,synod,veyra}_active_tab.png`
 - `assets/source/generated-factions-v1/factions/{aegis,synod,veyra}_emblem.png`

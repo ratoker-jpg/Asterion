@@ -171,13 +171,10 @@ import generated032 from '../assets/source/planets/skins/planet-032.png';
 import aegisEmblem from '../assets/source/generated-factions-v1/factions/aegis_emblem.png';
 import synodEmblem from '../assets/source/generated-factions-v1/factions/synod_emblem.png';
 import veyraEmblem from '../assets/source/generated-factions-v1/factions/veyra_emblem.png';
-import aegisPanelFrame from '../assets/source/faction-delivery-v1/ui/aegis_panel_frame.png';
 import aegisPrimaryButton from '../assets/source/faction-delivery-v1/ui/aegis_primary_button.png';
 import aegisActiveTab from '../assets/source/faction-delivery-v1/ui/aegis_active_tab.png';
-import synodPanelFrame from '../assets/source/faction-delivery-v1/ui/synod_panel_frame.png';
 import synodPrimaryButton from '../assets/source/faction-delivery-v1/ui/synod_primary_button.png';
 import synodActiveTab from '../assets/source/faction-delivery-v1/ui/synod_active_tab.png';
-import veyraPanelFrame from '../assets/source/faction-delivery-v1/ui/veyra_panel_frame.png';
 import veyraPrimaryButton from '../assets/source/faction-delivery-v1/ui/veyra_primary_button.png';
 import veyraActiveTab from '../assets/source/faction-delivery-v1/ui/veyra_active_tab.png';
 
@@ -217,13 +214,12 @@ const RESOURCE_STORAGE_CAPACITY = 60_000;
 
 const FACTION_HEADER_ASSETS: Record<PlayerFactionId, {
   emblem: string;
-  panelFrame: string;
   primaryButton: string;
   activeTab: string;
 }> = {
-  aegis: { emblem: aegisEmblem, panelFrame: aegisPanelFrame, primaryButton: aegisPrimaryButton, activeTab: aegisActiveTab },
-  synod: { emblem: synodEmblem, panelFrame: synodPanelFrame, primaryButton: synodPrimaryButton, activeTab: synodActiveTab },
-  veyra: { emblem: veyraEmblem, panelFrame: veyraPanelFrame, primaryButton: veyraPrimaryButton, activeTab: veyraActiveTab },
+  aegis: { emblem: aegisEmblem, primaryButton: aegisPrimaryButton, activeTab: aegisActiveTab },
+  synod: { emblem: synodEmblem, primaryButton: synodPrimaryButton, activeTab: synodActiveTab },
+  veyra: { emblem: veyraEmblem, primaryButton: veyraPrimaryButton, activeTab: veyraActiveTab },
 };
 
 type PlanetRuntime = {
@@ -1361,7 +1357,6 @@ export function App() {
     '--faction-surface-bottom': headerTheme.surfaceBottom,
     '--faction-glow': headerTheme.glow,
     '--faction-icon': headerTheme.icon,
-    '--faction-panel-frame': `url("${headerAssets.panelFrame}")`,
     '--faction-primary-button': `url("${headerAssets.primaryButton}")`,
     '--faction-active-tab': `url("${headerAssets.activeTab}")`,
   } as CSSProperties;
