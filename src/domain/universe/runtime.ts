@@ -26,6 +26,16 @@ const DEFAULT_ASSETS: UniverseAssetCatalog = {
 
 const NPC_OWNER_ID = 'npc-bot-01';
 
+const BOT_PLANET_PRESETS = [
+  { name: 'Аурелия', artIndex: 12 },
+  { name: 'Кальдера', artIndex: 13 },
+  { name: 'Вейлора', artIndex: 14 },
+  { name: 'Мицелия', artIndex: 15 },
+  { name: 'Механика', artIndex: 16 },
+  { name: 'Элизиум', artIndex: 17 },
+  { name: 'Ноктис', artIndex: 18 },
+] as const;
+
 const SYSTEM_ONE_FIXTURES: Readonly<Record<number, { kind: UniversePlanetNode['kind']; name?: string; ownerId?: string; id?: string; artIndex?: number; known?: boolean }>> = {
   1: { kind: 'player', id: 'player-planet-helion-01', ownerId: 'player-current', known: true },
   8: { kind: 'pirate', name: 'Пиратский объект «Клык»', artIndex: 0, known: true },
@@ -46,7 +56,8 @@ const NPC_PLANET_FIXTURES = shuffle(Array.from({ length: SYSTEM_COUNT }, (_, ind
       id: index === 0 ? 'npc-bot-01-prime' : `npc-bot-01-planet-${index + 1}`,
       system,
       position: slots[Math.floor(npcRandom() * slots.length)],
-      name: `Мир Бота 01 · ${index + 1}`,
+      name: BOT_PLANET_PRESETS[index].name,
+      artIndex: BOT_PLANET_PRESETS[index].artIndex,
     };
   });
 
@@ -170,7 +181,7 @@ export type CreateUniverseSystemOptions = {
 
 function fixtureFor(system: number, slot: number) {
   const npc = NPC_PLANET_FIXTURES.find((planet) => planet.system === system && planet.position === slot);
-  if (npc) return { ...npc, kind: 'npc' as const, ownerId: NPC_OWNER_ID, known: true, artIndex: undefined };
+  if (npc) return { ...npc, kind: 'npc' as const, ownerId: NPC_OWNER_ID, known: true };
   if (system === 1) return SYSTEM_ONE_FIXTURES[slot];
   return undefined;
 }

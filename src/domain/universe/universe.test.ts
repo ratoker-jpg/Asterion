@@ -86,6 +86,8 @@ test('one seeded owner has exactly seven planets across seven systems, without e
   assert.equal(prime.id, 'npc-bot-01-prime');
   assert.equal(prime.known, true);
   assert.equal(prime.kind, 'npc');
+  assert.equal(new Set(planets.map((node) => node.name)).size, MAX_PLANETS_PER_OWNER);
+  assert.ok(planets.every((node) => !node.name.includes('Бота 01')));
   for (const system of map.systems) {
     assert.deepEqual(createUniverseSystem({ system: system.system }), system);
     for (const node of system.positions) {
@@ -114,6 +116,10 @@ test('asset catalogs select the correct kinds and unique art has a default fallb
   const uniques = createUniverseMap({ assets: { uniqueArts: specialArts } }).systems
     .flatMap((system) => system.positions).filter((node) => node.kind === 'unique');
   assert.deepEqual([...new Set(uniques.map((node) => node.art))].sort(), [...specialArts].sort());
+  const botAssetCatalog = Array.from({ length: 25 }, (_, index) => `planet-${index}`);
+  const botPlanets = createUniverseMap({ assets: { planetArts: botAssetCatalog } }).systems
+    .flatMap((system) => system.positions).filter((node) => node.kind === 'npc');
+  assert.equal(new Set(botPlanets.map((node) => node.art)).size, MAX_PLANETS_PER_OWNER);
 });
 
 test('asteroids move forward through numbered slots and wrap on their own ellipse', () => {
