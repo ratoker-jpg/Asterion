@@ -386,11 +386,22 @@ async function runViewport(width, height) {
     const pirateAnimation = await win.webContents.executeJavaScript(`(() => {
       const pirate = document.querySelector('[data-qa-universe-kind="pirate"]');
       const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      return pirate
-        ? { reducedMotion, image: getComputedStyle(pirate.querySelector('img')).animationName, before: getComputedStyle(pirate, '::before').animationName }
-        : { reducedMotion, image: 'none', before: 'none' };
+      const image = pirate?.querySelector('img');
+      return {
+        reducedMotion,
+        present: Boolean(pirate),
+        image: image ? getComputedStyle(image).animationName : 'none',
+        before: pirate ? getComputedStyle(pirate, '::before').animationName : 'none',
+      };
     })()`);
-    if (!pirateAnimation.reducedMotion && [pirateAnimation.image, pirateAnimation.before].some((name) => name === 'none')) {
+    if (!pirateAnimation.present) {
+      throw new Error(`${label}: pirate visual missing ${JSON.stringify(pirateAnimation)}`);
+    }
+    const pirateAnimationNames = [pirateAnimation.image, pirateAnimation.before];
+    if (pirateAnimation.reducedMotion && pirateAnimationNames.some((name) => name !== 'none')) {
+      throw new Error(`${label}: reduced-motion pirate visual must disable animation ${JSON.stringify(pirateAnimation)}`);
+    }
+    if (!pirateAnimation.reducedMotion && pirateAnimationNames.some((name) => name === 'none')) {
       throw new Error(`${label}: pirate visual animation missing ${JSON.stringify(pirateAnimation)}`);
     }
 
