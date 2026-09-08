@@ -20,10 +20,11 @@ The `?faction=` query parameter is a preview-only QA override. It does not mutat
 - `electron/faction-header-qa.cjs` — reproducible six-viewport Electron QA runner and screenshot capture.
 - `package.json` / `package-lock.json` — header test and UI QA scripts.
 
-## Reused assets
+## Header assets
 
-The implementation reuses the repository's delivered faction assets instead of creating replacement artwork:
+The implementation uses generated transparent card frames sized for the header card geometry plus the repository's delivered faction assets:
 
+- `assets/source/faction-delivery-v1/ui/generated/{aegis,synod,veyra}_header_card_frame_v2.png` — generated card frames
 - `assets/source/faction-delivery-v1/ui/{aegis,synod,veyra}_primary_button.png`
 - `assets/source/faction-delivery-v1/ui/{aegis,synod,veyra}_active_tab.png`
 - `assets/source/generated-factions-v1/factions/{aegis,synod,veyra}_emblem.png`

@@ -440,24 +440,6 @@
 
 /* Faction theme registry. The layout stays shared; only material, light and
    frame language change. Status colours remain semantic and are not faction-owned. */
-.header-faction-bar{
-  position:absolute;
-  z-index:12;
-  inset:0 0 auto;
-  height:28px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding:0 10px 0 8px;
-  border-bottom:0;
-  color:var(--faction-accent-strong);
-  pointer-events:auto;
-}
-.header-faction-identity{display:flex;align-items:center;gap:8px;min-width:0}
-.header-faction-identity img{width:22px;height:22px;object-fit:contain;filter:drop-shadow(0 0 7px var(--faction-glow))}
-.header-faction-identity strong{font-size:17px;line-height:1;letter-spacing:.2px;white-space:nowrap}
-.header-faction-bar>small{color:color-mix(in srgb,var(--faction-accent) 72%,#a8c7ce);font-size:8px;letter-spacing:2px;white-space:nowrap}
-
 .asterion-header .header-planet-orbit::before{
   border-color:var(--faction-border);
   box-shadow:0 0 0 8px rgba(1,10,17,.93),0 0 36px var(--faction-glow),inset 0 0 28px var(--faction-glow);
@@ -492,7 +474,11 @@
   background-image:linear-gradient(180deg,var(--faction-surface-top),var(--faction-surface-bottom));
   box-shadow:inset 0 0 30px var(--faction-glow);
 }
-.asterion-header .header-resource-rail .resource-chip{border-right-color:color-mix(in srgb,var(--faction-accent) 24%,transparent)}
+.asterion-header .header-resource-rail .resource-chip{
+  border-right-color:color-mix(in srgb,var(--faction-accent) 24%,transparent);
+  background-image:var(--faction-card-frame),linear-gradient(180deg,var(--faction-surface-top),var(--faction-surface-bottom));
+  background-size:100% 100%,100% 100%;
+}
 .asterion-header .resource-chip__icon,
 .asterion-header .resource-chip--metal .resource-chip__icon,
 .asterion-header .resource-chip--mineral .resource-chip__icon,
@@ -511,7 +497,12 @@
   border-color:var(--faction-border);
   background-image:linear-gradient(180deg,var(--faction-surface-top),var(--faction-surface-bottom));
 }
-.asterion-header .primary-navigation button{z-index:1;border-right-color:color-mix(in srgb,var(--faction-accent) 24%,transparent)}
+.asterion-header .primary-navigation button{
+  z-index:1;
+  border-right-color:color-mix(in srgb,var(--faction-accent) 24%,transparent);
+  background-image:var(--faction-card-frame),linear-gradient(180deg,var(--faction-surface-top),var(--faction-surface-bottom));
+  background-size:100% 100%,100% 100%;
+}
 .asterion-header .primary-navigation button:hover,
 .asterion-header .primary-navigation button:focus-visible{background:linear-gradient(180deg,color-mix(in srgb,var(--faction-accent) 18%,transparent),rgba(2,20,30,.3))}
 .asterion-header .primary-navigation button.active{
@@ -524,7 +515,11 @@
 .asterion-header .primary-navigation svg{filter:drop-shadow(0 0 6px var(--faction-glow))}
 .asterion-header .primary-navigation button.active svg{filter:drop-shadow(0 0 10px var(--faction-glow))}
 
-.asterion-header .campaign-module::before{box-shadow:inset 0 0 28px var(--faction-glow)}
+.asterion-header .campaign-module::before{
+  box-shadow:inset 0 0 28px var(--faction-glow);
+  background-image:var(--faction-card-frame),linear-gradient(180deg,var(--faction-surface-top),var(--faction-surface-bottom));
+  background-size:100% 100%,100% 100%;
+}
 .asterion-header .campaign-status strong{color:var(--faction-accent-strong)}
 .asterion-header .campaign-module time{font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1}
 .asterion-header .utility-navigation{border-top-color:color-mix(in srgb,var(--faction-accent) 32%,transparent)}

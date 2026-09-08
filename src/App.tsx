@@ -173,10 +173,13 @@ import synodEmblem from '../assets/source/generated-factions-v1/factions/synod_e
 import veyraEmblem from '../assets/source/generated-factions-v1/factions/veyra_emblem.png';
 import aegisPrimaryButton from '../assets/source/faction-delivery-v1/ui/aegis_primary_button.png';
 import aegisActiveTab from '../assets/source/faction-delivery-v1/ui/aegis_active_tab.png';
+import aegisHeaderCardFrame from '../assets/source/faction-delivery-v1/ui/generated/aegis_header_card_frame_v2.png';
 import synodPrimaryButton from '../assets/source/faction-delivery-v1/ui/synod_primary_button.png';
 import synodActiveTab from '../assets/source/faction-delivery-v1/ui/synod_active_tab.png';
+import synodHeaderCardFrame from '../assets/source/faction-delivery-v1/ui/generated/synod_header_card_frame_v2.png';
 import veyraPrimaryButton from '../assets/source/faction-delivery-v1/ui/veyra_primary_button.png';
 import veyraActiveTab from '../assets/source/faction-delivery-v1/ui/veyra_active_tab.png';
+import veyraHeaderCardFrame from '../assets/source/faction-delivery-v1/ui/generated/veyra_header_card_frame_v2.png';
 
 const planetSkins = [
   { id: 'colonized', label: 'Колония', art: planetColonized },
@@ -214,12 +217,13 @@ const RESOURCE_STORAGE_CAPACITY = 60_000;
 
 const FACTION_HEADER_ASSETS: Record<PlayerFactionId, {
   emblem: string;
+  cardFrame: string;
   primaryButton: string;
   activeTab: string;
 }> = {
-  aegis: { emblem: aegisEmblem, primaryButton: aegisPrimaryButton, activeTab: aegisActiveTab },
-  synod: { emblem: synodEmblem, primaryButton: synodPrimaryButton, activeTab: synodActiveTab },
-  veyra: { emblem: veyraEmblem, primaryButton: veyraPrimaryButton, activeTab: veyraActiveTab },
+  aegis: { emblem: aegisEmblem, cardFrame: aegisHeaderCardFrame, primaryButton: aegisPrimaryButton, activeTab: aegisActiveTab },
+  synod: { emblem: synodEmblem, cardFrame: synodHeaderCardFrame, primaryButton: synodPrimaryButton, activeTab: synodActiveTab },
+  veyra: { emblem: veyraEmblem, cardFrame: veyraHeaderCardFrame, primaryButton: veyraPrimaryButton, activeTab: veyraActiveTab },
 };
 
 type PlanetRuntime = {
@@ -1357,6 +1361,7 @@ export function App() {
     '--faction-surface-bottom': headerTheme.surfaceBottom,
     '--faction-glow': headerTheme.glow,
     '--faction-icon': headerTheme.icon,
+    '--faction-card-frame': `url("${headerAssets.cardFrame}")`,
     '--faction-primary-button': `url("${headerAssets.primaryButton}")`,
     '--faction-active-tab': `url("${headerAssets.activeTab}")`,
   } as CSSProperties;
@@ -1365,13 +1370,6 @@ export function App() {
     <div className="viewport">
       <div className="stage stage-shell-v3 stage-shell-v4" style={{ transform: `scale(${scale})`, '--space-bg': `url(${systemBackground})` } as CSSProperties}>
         <header className="asterion-header" data-faction={headerFactionId} data-qa-header-theme={headerTheme.label} style={headerStyle}>
-          <div className="header-faction-bar" aria-label={`Фракция игрока: ${headerTheme.label}`}>
-            <span className="header-faction-identity">
-              <img src={headerAssets.emblem} alt="" draggable={false} />
-              <strong>{headerTheme.label}</strong>
-            </span>
-            <small>ФРАКЦИЯ ИГРОКА</small>
-          </div>
           <section className="header-planet-module">
             <div className="header-planet-orbit">
               <button className="header-planet-world" type="button" onClick={() => chooseTab('Планета')} aria-label={`Открыть ${currentPlanetName}`}>
