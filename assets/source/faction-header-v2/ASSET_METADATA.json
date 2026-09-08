@@ -1,0 +1,110 @@
+{
+  "aegis/campaign_utility.png": {
+    "alpha_fraction": 0.0776,
+    "bytes": 548257,
+    "fallback_black_key": false,
+    "height": 589,
+    "sha256": "8f2f2967ea3529bdb2de9fa3f27e2f62b1146e51ab0d77f8dadf8185bd06e7c4",
+    "task": "40f15951-b585-446e-b731-216963077621",
+    "width": 800
+  },
+  "aegis/navigation_active.png": {
+    "alpha_fraction": 0.9086,
+    "bytes": 47676,
+    "fallback_black_key": false,
+    "height": 248,
+    "sha256": "34019e97538641b6106066a6a605ed832ab05085bbce8bf7693d4033c0e49828",
+    "task": "7ed9d807-acab-4b77-b1fb-5b678d70d43d",
+    "width": 800
+  },
+  "aegis/planet_selector.png": {
+    "alpha_fraction": 0.1093,
+    "bytes": 389187,
+    "fallback_black_key": false,
+    "height": 290,
+    "sha256": "0efd3dcb4973d3f264d48497795721512ce9da98b1afc5246129ac7cdab42299",
+    "task": "1feb8860-7fd7-46ad-b432-6b266f57365b",
+    "width": 1024
+  },
+  "aegis/resource_cell.png": {
+    "alpha_fraction": 0.1384,
+    "bytes": 242667,
+    "fallback_black_key": true,
+    "height": 312,
+    "sha256": "aa8d07aecfc6c06d53755e1ec652aaf130e8f48b9b2e1a245e2c33d2c201156c",
+    "task": "db4ec53c-b1f7-48a3-affe-fad35aff4b4b",
+    "width": 640
+  },
+  "synod/campaign_utility.png": {
+    "alpha_fraction": 0.1282,
+    "bytes": 745829,
+    "fallback_black_key": true,
+    "height": 605,
+    "sha256": "6a665d3a9f0670e40541bcccab5b2aff6a3242cf53ec09db455a2e38b4b3fc8f",
+    "task": "3ed70adb-7fd8-4a12-9661-31bbbff8382b",
+    "width": 800
+  },
+  "synod/navigation_rail.png": {
+    "alpha_fraction": 0.4867,
+    "bytes": 850573,
+    "fallback_black_key": false,
+    "height": 560,
+    "sha256": "abd9cb2735d44a206d518b4bd6306956ec3fdcc34bc9245b03bb66ffcc0ddf3b",
+    "task": "d6da4315-092f-4870-9420-e8df3b873163",
+    "width": 1519
+  },
+  "synod/planet_frame.png": {
+    "alpha_fraction": 0.519,
+    "bytes": 777243,
+    "fallback_black_key": false,
+    "height": 723,
+    "sha256": "0a42a44d0a54ec5c85286c0f49a37a09497fd86484122b95d7d6a6d928e52405",
+    "task": "4506ce16-0a95-440a-956e-e575913aac16",
+    "width": 720
+  },
+  "synod/planet_selector.png": {
+    "alpha_fraction": 0.2254,
+    "bytes": 676746,
+    "fallback_black_key": false,
+    "height": 421,
+    "sha256": "cb25a8bab49e8a1a3057564532a33d2eb87497b0928613c67b194d9f2a09b08d",
+    "task": "cc9f91fd-d834-4416-bcba-97308e974b0e",
+    "width": 1024
+  },
+  "veyra/campaign_utility.png": {
+    "alpha_fraction": 0.2938,
+    "bytes": 796553,
+    "fallback_black_key": true,
+    "height": 604,
+    "sha256": "3905ce1a066148d1f8a6c045fd70d7171e36de60707a4520be463449ce4bb09c",
+    "task": "213558fa-c788-42f6-9270-36237449d23a",
+    "width": 800
+  },
+  "veyra/navigation_rail.png": {
+    "alpha_fraction": 0.5779,
+    "bytes": 757350,
+    "fallback_black_key": false,
+    "height": 544,
+    "sha256": "83ae3752b149601d420bf6be2cd5a16a95f0f3a60a7ad550167bb818f2b538a3",
+    "task": "c4770c58-9e25-4daf-b7d1-a1fe0c009a52",
+    "width": 1474
+  },
+  "veyra/planet_frame.png": {
+    "alpha_fraction": 0.5096,
+    "bytes": 647647,
+    "fallback_black_key": false,
+    "height": 724,
+    "sha256": "b3db2f53b7c890c17d623aac0bcae163e366e7fd53e51f72bc60f52179ef239f",
+    "task": "83bea2b6-5115-4e3c-869a-5a6d54622730",
+    "width": 720
+  },
+  "veyra/planet_selector.png": {
+    "alpha_fraction": 0.4252,
+    "bytes": 500670,
+    "fallback_black_key": false,
+    "height": 355,
+    "sha256": "19992890f9facb8f7c614a9742f2bb7c87f22282d56017a3a584b4ce0233dcd0",
+    "task": "e41e8be3-85cb-424f-a717-4028bf719706",
+    "width": 1024
+  }
+}
