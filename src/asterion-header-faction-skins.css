@@ -1,0 +1,232 @@
+/*
+ * Faction skin layer for the permanent Asterion command header.
+ *
+ * Runtime geometry and interaction stay in asterion-header.css.
+ * This file only changes visual tokens / decorative image layers.
+ * `data-header-faction` is set in main.tsx for visual QA without changing domain state.
+ */
+
+:root,
+:root[data-header-faction='aegis']{
+  --header-accent:#25d8ff;
+  --header-accent-strong:#74efff;
+  --header-accent-rgb:37,216,255;
+  --header-surface:#03131f;
+  --header-surface-2:#071f2d;
+  --header-line:rgba(77,218,247,.42);
+  --header-line-soft:rgba(70,188,216,.18);
+  --header-text:#eefcff;
+  --header-muted:#78a4b3;
+  --header-frame-image:url('../assets/source/faction-delivery-v1/ui/aegis_panel_frame.png');
+  --header-button-image:url('../assets/source/faction-delivery-v1/ui/aegis_primary_button.png');
+  --header-active-image:url('../assets/source/faction-delivery-v1/ui/aegis_active_tab.png');
+}
+
+:root[data-header-faction='synod']{
+  --header-accent:#20f2aa;
+  --header-accent-strong:#9ffff0;
+  --header-accent-rgb:32,242,170;
+  --header-surface:#031b17;
+  --header-surface-2:#082b24;
+  --header-line:rgba(93,241,193,.48);
+  --header-line-soft:rgba(118,225,191,.2);
+  --header-text:#f5fff9;
+  --header-muted:#8fb8a9;
+  --header-frame-image:url('../assets/source/faction-delivery-v1/ui/synod_panel_frame.png');
+  --header-button-image:url('../assets/source/faction-delivery-v1/ui/synod_primary_button.png');
+  --header-active-image:url('../assets/source/faction-delivery-v1/ui/synod_active_tab.png');
+}
+
+:root[data-header-faction='veyra']{
+  --header-accent:#ff334b;
+  --header-accent-strong:#ff8b8f;
+  --header-accent-rgb:255,51,75;
+  --header-surface:#190609;
+  --header-surface-2:#2a090e;
+  --header-line:rgba(255,70,88,.52);
+  --header-line-soft:rgba(224,70,84,.22);
+  --header-text:#fff3f3;
+  --header-muted:#bd8589;
+  --header-frame-image:url('../assets/source/faction-delivery-v1/ui/veyra_panel_frame.png');
+  --header-button-image:url('../assets/source/faction-delivery-v1/ui/veyra_primary_button.png');
+  --header-active-image:url('../assets/source/faction-delivery-v1/ui/veyra_active_tab.png');
+}
+
+.asterion-header{
+  color:var(--header-text);
+  filter:drop-shadow(0 10px 24px rgba(0,0,0,.32));
+}
+
+/* Keep generated/painted decoration behind live DOM content. */
+.current-planet-select,
+.header-resource-rail .resource-chip,
+.primary-navigation button,
+.campaign-module,
+.utility-navigation button{
+  isolation:isolate;
+}
+
+.current-planet-select::before,
+.header-resource-rail .resource-chip::before,
+.primary-navigation button::before,
+.campaign-module::after,
+.utility-navigation button::before{
+  content:"";
+  position:absolute;
+  z-index:-1;
+  inset:0;
+  background-image:var(--header-button-image);
+  background-repeat:no-repeat;
+  background-position:center;
+  background-size:100% 100%;
+  opacity:.14;
+  pointer-events:none;
+}
+
+.current-planet-select::before,
+.campaign-module::after{
+  background-image:var(--header-frame-image);
+  opacity:.17;
+}
+
+.header-planet-orbit::before{
+  border-color:var(--header-line);
+  box-shadow:
+    0 0 0 8px rgba(1,8,14,.94),
+    0 0 34px rgba(var(--header-accent-rgb),.26),
+    inset 0 0 30px rgba(var(--header-accent-rgb),.13);
+}
+.header-planet-orbit::after{border-color:rgba(var(--header-accent-rgb),.28)}
+.header-planet-world{filter:drop-shadow(0 0 22px rgba(var(--header-accent-rgb),.38))}
+
+.header-zone{
+  border-color:var(--header-line);
+  background:radial-gradient(circle at 45% 35%,rgba(var(--header-accent-rgb),.2),rgba(2,12,18,.99) 72%);
+  color:var(--header-accent-strong);
+  box-shadow:0 0 0 5px rgba(1,8,14,.96),0 0 17px rgba(var(--header-accent-rgb),.2);
+}
+.header-zone:hover,
+.header-zone.active{
+  color:#fff;
+  border-color:var(--header-accent-strong);
+  box-shadow:0 0 0 5px rgba(1,8,14,.96),0 0 24px rgba(var(--header-accent-rgb),.42);
+}
+/* Functional zone semantics stay fixed across factions. */
+.header-zone--industry{color:#ffd255;border-color:rgba(255,190,68,.58)}
+.header-zone--military{color:#ff746d;border-color:rgba(255,105,96,.62)}
+
+.current-planet-select,
+.header-resource-rail::before,
+.primary-navigation,
+.campaign-module::before{
+  border-color:var(--header-line);
+  background:linear-gradient(180deg,color-mix(in srgb,var(--header-surface-2) 94%,black),var(--header-surface));
+  box-shadow:inset 0 0 28px rgba(var(--header-accent-rgb),.045);
+}
+.current-planet-select:hover,
+.current-planet-select:focus-visible{
+  border-color:var(--header-accent-strong);
+  background:linear-gradient(180deg,color-mix(in srgb,var(--header-surface-2) 90%,var(--header-accent) 10%),var(--header-surface));
+}
+.current-planet-select small,
+.current-planet-select i{color:var(--header-accent-strong)}
+.current-planet-select strong{color:var(--header-text)}
+
+.planet-list-popover{
+  border-color:var(--header-line);
+  background:color-mix(in srgb,var(--header-surface) 97%,black);
+  box-shadow:0 18px 42px rgba(0,0,0,.58),inset 0 0 20px rgba(var(--header-accent-rgb),.06);
+}
+.planet-list-popover button{
+  border-color:var(--header-line-soft);
+  background:color-mix(in srgb,var(--header-surface-2) 78%,transparent);
+  color:var(--header-text);
+}
+.planet-list-popover button:hover{border-color:var(--header-accent-strong)}
+
+.header-resource-rail .resource-chip{
+  border-right-color:var(--header-line-soft);
+  background:linear-gradient(90deg,rgba(var(--header-accent-rgb),.055),transparent 74%);
+}
+.resource-chip__icon{filter:drop-shadow(0 0 8px rgba(var(--header-accent-rgb),.36))}
+.resource-chip small{color:var(--header-muted)}
+.resource-chip strong{color:var(--header-text)}
+.resource-fill{border-color:var(--header-line-soft)}
+.resource-fill i{background:var(--header-accent);box-shadow:0 0 9px rgba(var(--header-accent-rgb),.55)}
+.resource-fill--watch i{background:#ffe27b;box-shadow:0 0 8px rgba(255,226,123,.42)}
+.resource-fill--warning i{background:#ff9b4a;box-shadow:0 0 8px rgba(255,155,74,.46)}
+.resource-fill--critical i{background:#ff5f69;box-shadow:0 0 9px rgba(255,95,105,.54)}
+
+.resource-tooltip{
+  border-color:var(--header-line);
+  background:color-mix(in srgb,var(--header-surface) 97%,black);
+  box-shadow:0 14px 30px rgba(0,0,0,.48),inset 0 0 18px rgba(var(--header-accent-rgb),.06);
+  color:var(--header-muted);
+}
+.resource-tooltip strong{color:var(--header-text)}
+
+.primary-navigation{border-color:var(--header-line)}
+.primary-navigation button{
+  border-right-color:var(--header-line-soft);
+  color:color-mix(in srgb,var(--header-text) 78%,var(--header-muted));
+  background:linear-gradient(180deg,rgba(var(--header-accent-rgb),.035),rgba(0,0,0,.04));
+}
+.primary-navigation button:hover,
+.primary-navigation button:focus-visible{
+  color:#fff;
+  background:linear-gradient(180deg,rgba(var(--header-accent-rgb),.16),rgba(var(--header-accent-rgb),.045));
+}
+.primary-navigation button.active{
+  color:#fff;
+  background:linear-gradient(180deg,rgba(var(--header-accent-rgb),.24),rgba(var(--header-accent-rgb),.08));
+  box-shadow:inset 0 -4px var(--header-accent),inset 0 -16px 30px rgba(var(--header-accent-rgb),.13);
+  text-shadow:0 0 10px rgba(var(--header-accent-rgb),.34);
+}
+.primary-navigation button.active::before{
+  background-image:var(--header-active-image);
+  opacity:.34;
+}
+.primary-navigation button.active::after{
+  background:var(--header-accent-strong);
+  box-shadow:0 0 18px rgba(var(--header-accent-rgb),.9);
+}
+.primary-navigation svg{filter:drop-shadow(0 0 6px rgba(var(--header-accent-rgb),.24))}
+.primary-navigation button.active svg{filter:drop-shadow(0 0 11px rgba(var(--header-accent-rgb),.72))}
+
+.campaign-module::before{border-color:var(--header-line)}
+.campaign-status strong{color:var(--header-text)}
+.utility-navigation{border-top-color:var(--header-line-soft)}
+.utility-navigation button{
+  border-right-color:var(--header-line-soft);
+  background:rgba(var(--header-accent-rgb),.025);
+  color:var(--header-text);
+}
+.utility-navigation button:hover,
+.utility-navigation button:focus-visible,
+.utility-navigation button.active{
+  background:rgba(var(--header-accent-rgb),.15);
+  box-shadow:inset 0 0 18px rgba(var(--header-accent-rgb),.14);
+}
+.utility-navigation svg{filter:drop-shadow(0 0 7px rgba(var(--header-accent-rgb),.26))}
+.utility-navigation button span{
+  border-color:var(--header-line);
+  background:var(--header-surface);
+  color:var(--header-text);
+}
+
+/* Existing Synod art is only a runtime fallback until regenerated alpha assets are committed. */
+:root[data-header-faction='synod'] .header-planet-orbit::before{
+  border-width:2px;
+  box-shadow:0 0 0 8px rgba(3,15,13,.94),0 0 38px rgba(var(--header-accent-rgb),.3),inset 0 0 28px rgba(var(--header-accent-rgb),.15);
+}
+
+/* Veyra intentionally drops the clean dashed engineering orbit. */
+:root[data-header-faction='veyra'] .header-planet-orbit::after{
+  border-style:solid;
+  opacity:.58;
+}
+:root[data-header-faction='veyra'] .primary-navigation,
+:root[data-header-faction='veyra'] .header-resource-rail::before,
+:root[data-header-faction='veyra'] .campaign-module::before{
+  box-shadow:inset 0 0 36px rgba(var(--header-accent-rgb),.065),0 0 18px rgba(var(--header-accent-rgb),.05);
+}
