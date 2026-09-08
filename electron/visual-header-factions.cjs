@@ -226,6 +226,9 @@ app.whenReady().then(async () => {
         partition: 'qa-header-factions',
       },
     });
+
+    await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { query: { headerFaction: FACTIONS[0] } });
+    await waitFor(win, `document.querySelector('.asterion-header') && document.querySelectorAll('.primary-navigation button').length === 6`);
     win.webContents.debugger.attach('1.3');
     await win.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', {
       width: WIDTH,
@@ -238,9 +241,12 @@ app.whenReady().then(async () => {
 
     const results = [];
     let referenceGeometry = null;
-    for (const faction of FACTIONS) {
-      await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { query: { headerFaction: faction } });
-      await waitFor(win, `document.querySelector('.asterion-header') && document.querySelectorAll('.primary-navigation button').length === 6`);
+    for (let index = 0; index < FACTIONS.length; index += 1) {
+      const faction = FACTIONS[index];
+      if (index > 0) {
+        await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { query: { headerFaction: faction } });
+        await waitFor(win, `document.querySelector('.asterion-header') && document.querySelectorAll('.primary-navigation button').length === 6`);
+      }
       await settle(win);
 
       const snapshot = await inspectHeader(win, faction);
