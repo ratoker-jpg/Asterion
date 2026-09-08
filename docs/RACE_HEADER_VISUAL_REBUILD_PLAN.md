@@ -16,9 +16,11 @@ Runtime behavior, resource values, planet selection, navigation, campaign state,
 
 Generate only text-free decorative assets. No baked-in labels, numbers, planet name, campaign time, resource values, or navigation captions.
 
-Final assets must be PNG with real alpha transparency. Generated backgrounds are removed before runtime integration.
+Final raster assets must be PNG with real alpha transparency. Generated backgrounds are removed before runtime integration.
 
-## Required asset set per faction
+## Required visual roles
+
+The header needs the following visual roles, but not necessarily ten separate raster files per faction. Reuse CSS geometry or one compatible decorative asset when a separate bitmap adds no visible value.
 
 1. `planet_outer_frame`
 2. `planet_inner_ring`
@@ -30,6 +32,8 @@ Final assets must be PNG with real alpha transparency. Generated backgrounds are
 8. `navigation_rail_frame`
 9. `navigation_button_frame`
 10. `navigation_active_overlay`
+
+This avoids wasting generation credits on separators and inactive states that CSS can reproduce cleanly while preserving live DOM content.
 
 ## Aegis visual language
 
@@ -60,52 +64,65 @@ Final assets must be PNG with real alpha transparency. Generated backgrounds are
 
 ## Runtime architecture
 
-One React header structure, skinned by `profile.factionId` (`aegis`, `synod`, `veyra`). Faction changes should switch CSS variables and decorative asset references, not duplicate the component.
+One React header structure, skinned by the faction visual token layer. The current prototype remains Aegis in domain state; `?headerFaction=aegis|synod|veyra` is a visual-only QA override and does not mutate saves or gameplay state.
+
+When faction selection becomes runtime-configurable, the same visual token layer should be driven by `profile.factionId` (`aegis`, `synod`, `veyra`) rather than duplicating the component.
 
 The generated art is decorative only. Labels, resource values, timer, planet name, icons, active state, hover state, focus state and tooltips stay live DOM.
 
 ## Current generation status
 
+The deterministic task mapping and intended local filenames are tracked in `docs/RACE_HEADER_ASSET_MANIFEST.md`.
+
 ### Aegis
 
-Generated / in review:
+Generated:
 
-- full two-row header shell candidate;
-- planet frame candidates;
-- six-slot navigation rail candidate;
-- current-planet selector candidate;
-- reusable resource-cell candidate;
-- campaign + three-utility-slot module candidate;
-- active navigation overlay candidate.
+- current-planet selector;
+- reusable resource-cell frame;
+- campaign + three-utility-slot module;
+- active navigation overlay;
+- supporting full-shell / navigation candidates from the earlier pass.
+
+Alpha-cutout processing has been submitted for the selected high-value modules. The selector already has a completed alpha result.
 
 ### Synod
 
-Generated / in review:
+Generated:
 
-- planet ring candidates;
-- upper rail / resource rail candidates;
-- lower navigation rail candidates;
-- larger utility / campaign frame candidates.
+- planet ring;
+- navigation rail;
+- current-planet selector;
+- campaign + three-utility-slot module.
+
+Alpha-cutout processing has been submitted for all selected modules. The selector already has a completed alpha result.
 
 ### Veyra
 
-Generated / in review:
+Generated:
 
-- planet ring candidates;
-- upper rail / resource rail candidates;
-- lower navigation rail candidates;
-- larger bio-mechanical utility / campaign frame candidates.
+- biomechanical planet ring;
+- biomechanical navigation rail;
+- current-planet selector;
+- campaign + three-utility-slot module.
+
+Alpha-cutout processing has been submitted for all selected modules. The planet ring already has a completed alpha result.
 
 ## Integration order
 
 1. Select the strongest candidate per role; reject duplicates and weak generations.
 2. Convert selected art to true-alpha PNG and verify edges.
-3. Add faction skin registry / CSS token layer without duplicating header markup.
-4. Wire decorative layers with `pointer-events: none`.
-5. Preserve current resource-tooltip behavior and navigation semantics.
-6. Run build / lint / Electron QA that already covers the permanent header.
-7. Compare 1920x1080 screenshots against the supplied faction reference.
-8. Calibrate spacing, glow intensity and frame thickness only after full-header screenshot review.
+3. Keep faction skin registry / CSS token layer separate from geometry and domain logic.
+4. Copy approved PNGs into `assets/source/faction-header-v2/<faction>/`.
+5. Wire decorative layers with `pointer-events: none` and local asset paths only.
+6. Preserve current resource-tooltip behavior and navigation semantics.
+7. Run build / lint / Electron QA that already covers the permanent header.
+8. Compare 1920x1080 screenshots against the supplied faction reference.
+9. Calibrate spacing, glow intensity and frame thickness only after full-header screenshot review.
+
+## Binary transfer constraint
+
+Temporary signed generation URLs must not be used as runtime dependencies. The connected GitHub contents API can update source text but cannot directly copy the remote generated PNG bytes into the repository. Until the binary transfer step is available, the branch uses the existing local faction-delivery images as safe visual fallbacks and keeps the new generated assets tracked by task id in the manifest.
 
 ## QA gates
 
@@ -117,4 +134,5 @@ Generated / in review:
 - 1920x1080 visual comparison against the supplied reference;
 - Aegis/Synod/Veyra geometry remains identical while faction art changes;
 - no generated text or baked-in numeric values survive into runtime assets;
+- no temporary signed generation URL is referenced by runtime CSS;
 - do not merge automatically.
