@@ -152,27 +152,30 @@ async function inspectTooltip(win) {
   return tooltip;
 }
 
+function hasBundledAsset(value, stem) {
+  return typeof value === 'string' && value !== 'none' && value.includes(stem);
+}
+
 function verifyArt(snapshot, faction) {
-  const local = `faction-header-v2/${faction}`;
-  if (!snapshot.art.selector?.includes(`${local}/planet_selector.png`)) {
-    throw new Error(`${faction}: selector is not using local v2 art: ${snapshot.art.selector}`);
+  if (!hasBundledAsset(snapshot.art.selector, 'planet_selector')) {
+    throw new Error(`${faction}: selector is not using bundled v2 art: ${snapshot.art.selector}`);
   }
-  if (!snapshot.art.campaign?.includes(`${local}/campaign_utility.png`)) {
-    throw new Error(`${faction}: campaign is not using local v2 art: ${snapshot.art.campaign}`);
+  if (!hasBundledAsset(snapshot.art.campaign, 'campaign_utility')) {
+    throw new Error(`${faction}: campaign is not using bundled v2 art: ${snapshot.art.campaign}`);
   }
   if (faction === 'aegis') {
-    if (!snapshot.art.resource?.includes('faction-header-v2/aegis/resource_cell.png')) {
-      throw new Error(`aegis: resource cell is not using local v2 art: ${snapshot.art.resource}`);
+    if (!hasBundledAsset(snapshot.art.resource, 'resource_cell')) {
+      throw new Error(`aegis: resource cell is not using bundled v2 art: ${snapshot.art.resource}`);
     }
-    if (!snapshot.art.activeNav?.includes('faction-header-v2/aegis/navigation_active.png')) {
-      throw new Error(`aegis: active navigation is not using local v2 art: ${snapshot.art.activeNav}`);
+    if (!hasBundledAsset(snapshot.art.activeNav, 'navigation_active')) {
+      throw new Error(`aegis: active navigation is not using bundled v2 art: ${snapshot.art.activeNav}`);
     }
   } else {
-    if (!snapshot.art.planet?.includes(`${local}/planet_frame.png`)) {
-      throw new Error(`${faction}: planet frame is not using local v2 art: ${snapshot.art.planet}`);
+    if (!hasBundledAsset(snapshot.art.planet, 'planet_frame')) {
+      throw new Error(`${faction}: planet frame is not using bundled v2 art: ${snapshot.art.planet}`);
     }
-    if (!snapshot.art.navRail?.includes(`${local}/navigation_rail.png`)) {
-      throw new Error(`${faction}: navigation rail is not using local v2 art: ${snapshot.art.navRail}`);
+    if (!hasBundledAsset(snapshot.art.navRail, 'navigation_rail')) {
+      throw new Error(`${faction}: navigation rail is not using bundled v2 art: ${snapshot.art.navRail}`);
     }
   }
 }
@@ -187,6 +190,21 @@ function verifyLiveContent(snapshot, faction) {
     throw new Error(`${faction}: navigation live DOM is incomplete: ${JSON.stringify(snapshot.content.navigationTexts)}`);
   }
   if (!snapshot.content.campaignTime) throw new Error(`${faction}: campaign timer lost live text`);
+}
+
+function verifyFactionAssetsAreDistinct(results) {
+  const assertUnique = (key) => {
+    const values = results.map((item) => item.art[key]);
+    if (new Set(values).size !== values.length) {
+      throw new Error(`${key}: faction art unexpectedly resolves to the same bundled asset: ${JSON.stringify(values)}`);
+    }
+  };
+  assertUnique('selector');
+  assertUnique('campaign');
+  const alienPlanet = results.filter((item) => item.faction !== 'aegis').map((item) => item.art.planet);
+  const alienRail = results.filter((item) => item.faction !== 'aegis').map((item) => item.art.navRail);
+  if (new Set(alienPlanet).size !== alienPlanet.length) throw new Error(`Synod/Veyra planet art is not distinct: ${JSON.stringify(alienPlanet)}`);
+  if (new Set(alienRail).size !== alienRail.length) throw new Error(`Synod/Veyra navigation art is not distinct: ${JSON.stringify(alienRail)}`);
 }
 
 app.whenReady().then(async () => {
@@ -241,6 +259,7 @@ app.whenReady().then(async () => {
       results.push({ ...snapshot, tooltip });
     }
 
+    verifyFactionAssetsAreDistinct(results);
     fs.writeFileSync(path.join(OUTPUT, 'metrics.json'), JSON.stringify(results, null, 2));
     console.log('Faction header visual QA passed for aegis, synod and veyra at 1920x1080.');
     win.webContents.debugger.detach();
