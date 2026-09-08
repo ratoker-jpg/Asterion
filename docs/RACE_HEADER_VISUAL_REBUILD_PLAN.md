@@ -8,7 +8,7 @@ Runtime behavior, resource values, planet selection, navigation, campaign state,
 
 ## Asset decision
 
-- **Aegis / Астеры**: keep the current visual direction and reuse existing good assets where they fit. Do not regenerate by default.
+- **Aegis / Астеры**: generate a dedicated blue-steel header shell as well. Existing Aegis assets remain useful as supporting material, but they are no longer treated as the final visual target.
 - **Synod / Илары**: regenerate the header art. The current green skin reads too generic and does not match the intended ivory ceremonial / emerald crystal language strongly enough.
 - **Veyra / Рой**: regenerate the header art. The current red skin is too generic/fantasy-like; target a stronger black-crimson bio-mechanical/chitin identity.
 
@@ -18,7 +18,7 @@ Generate only text-free decorative assets. No baked-in labels, numbers, planet n
 
 Final assets must be PNG with real alpha transparency. Generated backgrounds are removed before runtime integration.
 
-## Required asset set per regenerated faction
+## Required asset set per faction
 
 1. `planet_outer_frame`
 2. `planet_inner_ring`
@@ -30,6 +30,15 @@ Final assets must be PNG with real alpha transparency. Generated backgrounds are
 8. `navigation_rail_frame`
 9. `navigation_button_frame`
 10. `navigation_active_overlay`
+
+## Aegis visual language
+
+- navy / gunmetal structural shell;
+- brushed steel hard-surface armour;
+- cyan-blue signal light and glass glow;
+- disciplined military engineering and sharp geometry;
+- restrained highlights, no decorative fantasy ornament;
+- avoid green tint, organic forms, or excessive chrome.
 
 ## Synod visual language
 
@@ -53,6 +62,51 @@ Final assets must be PNG with real alpha transparency. Generated backgrounds are
 
 One React header structure, skinned by `profile.factionId` (`aegis`, `synod`, `veyra`). Faction changes should switch CSS variables and decorative asset references, not duplicate the component.
 
+The generated art is decorative only. Labels, resource values, timer, planet name, icons, active state, hover state, focus state and tooltips stay live DOM.
+
+## Current generation status
+
+### Aegis
+
+Generated / in review:
+
+- full two-row header shell candidate;
+- planet frame candidates;
+- six-slot navigation rail candidate;
+- current-planet selector candidate;
+- reusable resource-cell candidate;
+- campaign + three-utility-slot module candidate;
+- active navigation overlay candidate.
+
+### Synod
+
+Generated / in review:
+
+- planet ring candidates;
+- upper rail / resource rail candidates;
+- lower navigation rail candidates;
+- larger utility / campaign frame candidates.
+
+### Veyra
+
+Generated / in review:
+
+- planet ring candidates;
+- upper rail / resource rail candidates;
+- lower navigation rail candidates;
+- larger bio-mechanical utility / campaign frame candidates.
+
+## Integration order
+
+1. Select the strongest candidate per role; reject duplicates and weak generations.
+2. Convert selected art to true-alpha PNG and verify edges.
+3. Add faction skin registry / CSS token layer without duplicating header markup.
+4. Wire decorative layers with `pointer-events: none`.
+5. Preserve current resource-tooltip behavior and navigation semantics.
+6. Run build / lint / Electron QA that already covers the permanent header.
+7. Compare 1920x1080 screenshots against the supplied faction reference.
+8. Calibrate spacing, glow intensity and frame thickness only after full-header screenshot review.
+
 ## QA gates
 
 - no slogans or faction headings above the header;
@@ -62,4 +116,5 @@ One React header structure, skinned by `profile.factionId` (`aegis`, `synod`, `v
 - decorative layers must not intercept pointer events;
 - 1920x1080 visual comparison against the supplied reference;
 - Aegis/Synod/Veyra geometry remains identical while faction art changes;
+- no generated text or baked-in numeric values survive into runtime assets;
 - do not merge automatically.
