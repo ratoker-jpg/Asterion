@@ -172,14 +172,11 @@ import aegisEmblem from '../assets/source/generated-factions-v1/factions/aegis_e
 import synodEmblem from '../assets/source/generated-factions-v1/factions/synod_emblem.png';
 import veyraEmblem from '../assets/source/generated-factions-v1/factions/veyra_emblem.png';
 import aegisPrimaryButton from '../assets/source/faction-delivery-v1/ui/aegis_primary_button.png';
-import aegisActiveTab from '../assets/source/faction-delivery-v1/ui/aegis_active_tab.png';
-import aegisHeaderCardFrame from '../assets/source/faction-delivery-v1/ui/generated/aegis_header_card_frame_v2.png';
+import aegisHeaderCardPanel from '../assets/source/faction-delivery-v1/ui/generated/aegis_header_card_panel_v3.png';
 import synodPrimaryButton from '../assets/source/faction-delivery-v1/ui/synod_primary_button.png';
-import synodActiveTab from '../assets/source/faction-delivery-v1/ui/synod_active_tab.png';
-import synodHeaderCardFrame from '../assets/source/faction-delivery-v1/ui/generated/synod_header_card_frame_v2.png';
+import synodHeaderCardPanel from '../assets/source/faction-delivery-v1/ui/generated/synod_header_card_panel_v3.png';
 import veyraPrimaryButton from '../assets/source/faction-delivery-v1/ui/veyra_primary_button.png';
-import veyraActiveTab from '../assets/source/faction-delivery-v1/ui/veyra_active_tab.png';
-import veyraHeaderCardFrame from '../assets/source/faction-delivery-v1/ui/generated/veyra_header_card_frame_v2.png';
+import veyraHeaderCardPanel from '../assets/source/faction-delivery-v1/ui/generated/veyra_header_card_panel_v3.png';
 
 const planetSkins = [
   { id: 'colonized', label: 'Колония', art: planetColonized },
@@ -219,11 +216,10 @@ const FACTION_HEADER_ASSETS: Record<PlayerFactionId, {
   emblem: string;
   cardFrame: string;
   primaryButton: string;
-  activeTab: string;
 }> = {
-  aegis: { emblem: aegisEmblem, cardFrame: aegisHeaderCardFrame, primaryButton: aegisPrimaryButton, activeTab: aegisActiveTab },
-  synod: { emblem: synodEmblem, cardFrame: synodHeaderCardFrame, primaryButton: synodPrimaryButton, activeTab: synodActiveTab },
-  veyra: { emblem: veyraEmblem, cardFrame: veyraHeaderCardFrame, primaryButton: veyraPrimaryButton, activeTab: veyraActiveTab },
+  aegis: { emblem: aegisEmblem, cardFrame: aegisHeaderCardPanel, primaryButton: aegisPrimaryButton },
+  synod: { emblem: synodEmblem, cardFrame: synodHeaderCardPanel, primaryButton: synodPrimaryButton },
+  veyra: { emblem: veyraEmblem, cardFrame: veyraHeaderCardPanel, primaryButton: veyraPrimaryButton },
 };
 
 type PlanetRuntime = {
@@ -1363,7 +1359,6 @@ export function App() {
     '--faction-icon': headerTheme.icon,
     '--faction-card-frame': `url("${headerAssets.cardFrame}")`,
     '--faction-primary-button': `url("${headerAssets.primaryButton}")`,
-    '--faction-active-tab': `url("${headerAssets.activeTab}")`,
   } as CSSProperties;
 
   return (
@@ -1419,7 +1414,7 @@ export function App() {
               <Resource kind="metal" label="МЕТАЛЛ" value={state.metal} capacity={RESOURCE_STORAGE_CAPACITY} hourlyGain={resourceIncomePerHour.metal} />
               <Resource kind="mineral" label="МИНЕРАЛЫ" value={state.minerals} capacity={RESOURCE_STORAGE_CAPACITY} hourlyGain={resourceIncomePerHour.minerals} />
               <Resource kind="gas" label="ГАЗ" value={state.gas} capacity={RESOURCE_STORAGE_CAPACITY} hourlyGain={resourceIncomePerHour.gas} />
-              <Resource kind="energy" label="ЭНЕРГИЯ" value={currentPlanetState.energy} capacity={RESOURCE_STORAGE_CAPACITY} description="Энергия планеты. Солнечная электростанция увеличивает запас после завершения строительства." />
+              <Resource kind="energy" label="ЭНЕРГИЯ" value={currentPlanetState.energy} description="Энергия планеты. Солнечная электростанция увеличивает запас после завершения строительства." />
               <Resource kind="population" label="НАСЕЛЕНИЕ" value={fleetSummary.population} capacity={fleetSummary.capacity} />
             </div>
             <nav className="primary-navigation" aria-label="Основная навигация">

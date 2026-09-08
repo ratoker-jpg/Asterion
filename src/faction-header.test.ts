@@ -28,5 +28,6 @@ test('full and overflow resource states are always critical', () => {
   assert.equal(getResourceFillTone(45_000, 60_000), 'warning');
   assert.equal(getResourceFillTone(30_000, 60_000), 'normal');
   assert.equal(getResourceFillTone(12_000), 'none');
+  assert.equal(getResourceFillTone(140), 'none');
   assert.equal(getResourceFillPercent(90_000, 60_000), 100);
 });

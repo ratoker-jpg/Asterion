@@ -142,7 +142,8 @@ app.whenReady().then(async () => {
         if (snapshot.viewport.width !== width || snapshot.viewport.height !== height) throw new Error(`${labelName}: viewport mismatch`);
         const normalizedPopulation = snapshot.populationText?.replace(/\s+/g, ' ');
         if (normalizedPopulation !== '25 112' || snapshot.populationHasCapacitySuffix) throw new Error(`${labelName}: population contract failed: ${JSON.stringify(snapshot)}`);
-        if (!Object.values(snapshot.resourceTones).every((tone) => tone === 'critical')) throw new Error(`${labelName}: full/overflow status is not critical: ${JSON.stringify(snapshot.resourceTones)}`);
+        const storageTones = Object.entries(snapshot.resourceTones).filter(([resource]) => resource !== 'energy').map(([, tone]) => tone);
+        if (!storageTones.every((tone) => tone === 'critical') || snapshot.resourceTones.energy !== 'none') throw new Error(`${labelName}: storage or energy status is incorrect: ${JSON.stringify(snapshot.resourceTones)}`);
         if (!snapshot.criticalBarColor?.replace(/\s/g, '').includes('255,95,105')) throw new Error(`${labelName}: critical resource bar is not red: ${JSON.stringify(snapshot)}`);
         if (snapshot.focusOutline === 'none' || snapshot.focusOutline === 'hidden') throw new Error(`${labelName}: focus outline is not visible: ${JSON.stringify(snapshot)}`);
         if (snapshot.header.bottom > snapshot.workspace.y || snapshot.brokenImages.length || !snapshot.focusedHeaderControl || snapshot.resourceRequests === 0) throw new Error(`${labelName}: layout, interaction, or asset contract failed: ${JSON.stringify(snapshot)}`);
