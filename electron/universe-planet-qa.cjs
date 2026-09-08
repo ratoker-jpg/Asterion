@@ -385,9 +385,14 @@ async function runViewport(width, height) {
     await selectSystem(win, pirateSystem);
     const pirateAnimation = await win.webContents.executeJavaScript(`(() => {
       const pirate = document.querySelector('[data-qa-universe-kind="pirate"]');
-      return pirate ? { image: getComputedStyle(pirate.querySelector('img')).animationName, before: getComputedStyle(pirate, '::before').animationName } : { image: 'none', before: 'none' };
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      return pirate
+        ? { reducedMotion, image: getComputedStyle(pirate.querySelector('img')).animationName, before: getComputedStyle(pirate, '::before').animationName }
+        : { reducedMotion, image: 'none', before: 'none' };
     })()`);
-    if (Object.values(pirateAnimation).some((name) => name === 'none')) throw new Error(`${label}: pirate visual animation missing ${JSON.stringify(pirateAnimation)}`);
+    if (!pirateAnimation.reducedMotion && [pirateAnimation.image, pirateAnimation.before].some((name) => name === 'none')) {
+      throw new Error(`${label}: pirate visual animation missing ${JSON.stringify(pirateAnimation)}`);
+    }
 
     const anomalySystem = await findObject(win, '[data-qa-universe-kind="anomaly"]');
     await clickObject(win, '[data-qa-universe-kind="anomaly"]');
