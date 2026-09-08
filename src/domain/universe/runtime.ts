@@ -172,6 +172,22 @@ export function getUniverseSlotPoint(slot: number): UniversePoint {
   return getOrbitPoint(slot, 0);
 }
 
+function getAsteroidOrbitOffset(slot: number): UniversePoint {
+  const safeSlot = Number.isFinite(slot) ? Math.min(POSITION_COUNT, Math.max(1, Math.floor(slot))) : 1;
+  const ring = Math.floor((safeSlot - 1) / 6);
+  const index = (safeSlot - 1) % 6;
+  const ringOffset = [-30, 0, -15, 15][ring];
+  const angle = ((index * 60 + ringOffset) + 90) * Math.PI / 180;
+  return { x: Math.cos(angle) * 4.2, y: Math.sin(angle) * 5.4 };
+}
+
+/** Asteroids keep their numbered coordinate but render as a nearby companion, like a local orbital object. */
+function getUniverseAsteroidAnchorPoint(slot: number): UniversePoint {
+  const point = getUniverseSlotPoint(slot);
+  const offset = getAsteroidOrbitOffset(slot);
+  return { x: point.x + offset.x, y: point.y + offset.y };
+}
+
 /**
  * Move an asteroid through numbered coordinates. The galaxy boundary is
  * explicit: a second galaxy is used only when the caller says its data exists.
@@ -217,13 +233,13 @@ function getOrbitPoint(slot: number, progress: number): UniversePoint {
 
 /** The asteroid glides briefly between two numbered coordinates at a dwell boundary. */
 export function getUniverseAsteroidPoint(node: UniversePlanetNode, nowMs: number): UniversePoint {
-  const current = getUniverseSlotPoint(node.coordinate.position);
+  const current = getUniverseAsteroidAnchorPoint(node.coordinate.position);
   const state = node.asteroid;
   if (!state?.nextCoordinate || !Number.isFinite(nowMs)) return current;
   const transitStart = state.nextMoveAt - ASTEROID_TRANSIT_MS;
   const progress = Math.min(1, Math.max(0, (nowMs - transitStart) / ASTEROID_TRANSIT_MS));
   if (progress <= 0) return current;
-  const next = getUniverseSlotPoint(state.nextCoordinate.position);
+  const next = getUniverseAsteroidAnchorPoint(state.nextCoordinate.position);
   return {
     x: current.x + (next.x - current.x) * progress,
     y: current.y + (next.y - current.y) * progress,
