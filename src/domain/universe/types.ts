@@ -19,6 +19,9 @@ export type UniverseCoordinate = {
 export type UniversePoint = {
   x: number;
   y: number;
+  /** Optional fixed-pixel offset used by attached visual companions. */
+  offsetX?: number;
+  offsetY?: number;
 };
 
 export type UniverseAsteroidState = {

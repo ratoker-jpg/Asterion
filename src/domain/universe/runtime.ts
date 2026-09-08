@@ -173,15 +173,17 @@ export function getUniverseSlotPoint(slot: number): UniversePoint {
   return getOrbitPoint(slot, 0);
 }
 
-/** Offset that places an asteroid's visual center over an occupied node's upper-left corner. */
-const ASTEROID_OCCUPIED_ANCHOR_OFFSET = { x: -3.6, y: -5.6 };
+/** Fixed-pixel offset that places an asteroid's visual center over an occupied node's upper-left corner. */
+const ASTEROID_OCCUPIED_ANCHOR_OFFSET = { x: -40, y: -42 };
 
 function getUniverseAsteroidAnchorPoint(slot: number, attachedTo?: UniversePlanetNode): UniversePoint {
   const point = getUniverseSlotPoint(slot);
   if (!attachedTo || attachedTo.kind === 'empty') return point;
   return {
-    x: point.x + ASTEROID_OCCUPIED_ANCHOR_OFFSET.x,
-    y: point.y + ASTEROID_OCCUPIED_ANCHOR_OFFSET.y,
+    x: point.x,
+    y: point.y,
+    offsetX: ASTEROID_OCCUPIED_ANCHOR_OFFSET.x,
+    offsetY: ASTEROID_OCCUPIED_ANCHOR_OFFSET.y,
   };
 }
 
@@ -252,6 +254,8 @@ export function getUniverseAsteroidPoint(node: UniversePlanetNode, nowMs: number
   return {
     x: current.x + (next.x - current.x) * progress,
     y: current.y + (next.y - current.y) * progress,
+    offsetX: (current.offsetX ?? 0) + ((next.offsetX ?? 0) - (current.offsetX ?? 0)) * progress,
+    offsetY: (current.offsetY ?? 0) + ((next.offsetY ?? 0) - (current.offsetY ?? 0)) * progress,
   };
 }
 

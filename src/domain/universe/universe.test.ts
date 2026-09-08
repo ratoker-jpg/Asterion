@@ -220,8 +220,10 @@ test('asteroid attaches to an occupied node corner and to the exact slot when em
   const occupiedPoint = getUniverseAsteroidPoint(asteroid, state.previousMoveAt, [occupied]);
 
   assert.deepEqual(emptyPoint, slotPoint);
-  assert.ok(occupiedPoint.x < slotPoint.x);
-  assert.ok(occupiedPoint.y < slotPoint.y);
+  assert.equal(occupiedPoint.x, slotPoint.x);
+  assert.equal(occupiedPoint.y, slotPoint.y);
+  assert.equal(occupiedPoint.offsetX, -40);
+  assert.equal(occupiedPoint.offsetY, -42);
 });
 
 test('a later asteroid arrival pushes an earlier occupant forward and resets its dwell timer', () => {

@@ -123,8 +123,13 @@ function currentOwnerPoints(profile: PlayerProfileState, rating: RatingPrototype
   };
 }
 
-function toStyle(point: { x: number; y: number }): CSSProperties {
-  return { '--x': `${point.x}%`, '--y': `${point.y}%` } as CSSProperties;
+function toStyle(point: { x: number; y: number; offsetX?: number; offsetY?: number }): CSSProperties {
+  return {
+    '--x': `${point.x}%`,
+    '--y': `${point.y}%`,
+    '--asteroid-offset-x': `${point.offsetX ?? 0}px`,
+    '--asteroid-offset-y': `${point.offsetY ?? 0}px`,
+  } as CSSProperties;
 }
 
 function countdownLabel(nowMs: number, targetMs?: number) {
@@ -324,6 +329,8 @@ function MovingAsteroid({ node, nowMs, occupiedNodes, onSelect }: { node: Univer
     const point = getUniverseAsteroidPoint(node, nowMs, occupiedNodes);
     ref.current?.style.setProperty('--x', `${point.x}%`);
     ref.current?.style.setProperty('--y', `${point.y}%`);
+    ref.current?.style.setProperty('--asteroid-offset-x', `${point.offsetX ?? 0}px`);
+    ref.current?.style.setProperty('--asteroid-offset-y', `${point.offsetY ?? 0}px`);
   }, [node, nowMs, occupiedNodes]);
   const point = getUniverseAsteroidPoint(node, nowMs, occupiedNodes);
   const nextCoordinate = node.asteroid?.nextCoordinate ? formatUniverseCoordinate(node.asteroid.nextCoordinate) : 'маршрут завершён';
