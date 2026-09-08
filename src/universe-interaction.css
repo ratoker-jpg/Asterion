@@ -1,6 +1,8 @@
 /* Fixed planetary coordinates, independent asteroid motion, screen-sized dialog. */
 .viewport:has(.workspace--universe){position:relative;display:block}
 .viewport:has(.workspace--universe)>.stage{position:absolute;left:50%;top:50%;margin-left:-960px;margin-top:-540px}
+/* The canonical command header owns the stage's top alignment on every tab. */
+.viewport:has(.asterion-header):has(.workspace--universe)>.stage{top:0;margin-top:0;transform-origin:center top !important}
 .universe-view-v3{--universe-self:#55d6ff;--universe-ally:#63d48b;--universe-enemy:#f0646e;--universe-neutral:#718896;--universe-renegade:#f39a57;--universe-unique:#e7c66c;--universe-anomaly:#af8bff}
 .universe-view-v3,.universe-view-v3 *,.universe-modal-backdrop,.universe-modal-backdrop *{box-sizing:border-box}
 .workspace--universe .universe-view-v3{background:radial-gradient(ellipse at 62% 38%,#10243b80,transparent 55%),linear-gradient(145deg,#07121ecc,#02070dde)}

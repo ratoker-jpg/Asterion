@@ -16,6 +16,7 @@ The `?faction=` query parameter is a preview-only QA override. It does not mutat
 - `src/faction-header.ts` — theme registry and resource fill/status helpers.
 - `src/faction-header.test.ts` — theme, preview override, and full/overflow resource tests.
 - `src/asterion-header.css` — shared geometry, faction tokens, generated panel surfaces, status colors, focus and reduced-motion behavior.
+- `src/universe-interaction.css` — preserves the header's top-aligned stage when the Вселенная tab is active.
 - `src/shell-v4.css` — workspace offset for the expanded header.
 - `electron/faction-header-qa.cjs` — reproducible six-viewport Electron QA runner and screenshot capture.
 - `package.json` / `package-lock.json` — header test and UI QA scripts.
