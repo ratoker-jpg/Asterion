@@ -17,10 +17,12 @@
     "test:runtime": "node --experimental-strip-types --test src/domain/runtime/mode.test.ts",
     "test:fleet": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/fleet/runtime.test.ts",
     "test:science": "node --experimental-strip-types --test src/domain/science/science.test.ts",
+    "test:universe": "node --experimental-strip-types --test src/domain/universe/universe.test.ts",
     "test:science-ui": "electron electron/visual-science.cjs",
     "test:spaceport-ui": "electron electron/integration-spaceport-upgrades.cjs",
     "test:test-mode-ui": "electron electron/test-mode-qa.cjs",
     "test:reports-ui": "electron electron/reports-profile-qa.cjs",
+    "test:universe-ui": "electron electron/universe-planet-qa.cjs",
     "qa:visual": "electron electron/visual-capture.cjs && electron electron/visual-industry-requirements.cjs && electron electron/visual-building-interiors.cjs && electron electron/visual-production-bots.cjs && electron electron/visual-recycling-center.cjs && electron electron/visual-trade-center.cjs && npm run test:spaceport-ui && electron electron/visual-spaceport-upgrades.cjs",
     "desktop": "npm run build && electron .",
     "dist:win": "npm run build && electron-builder --win nsis --publish never"
