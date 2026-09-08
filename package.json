@@ -23,7 +23,8 @@
     "test:test-mode-ui": "electron electron/test-mode-qa.cjs",
     "test:reports-ui": "electron electron/reports-profile-qa.cjs",
     "test:universe-ui": "electron electron/universe-planet-qa.cjs",
-    "qa:visual": "electron electron/visual-capture.cjs && electron electron/visual-industry-requirements.cjs && electron electron/visual-building-interiors.cjs && electron electron/visual-production-bots.cjs && electron electron/visual-recycling-center.cjs && electron electron/visual-trade-center.cjs && npm run test:spaceport-ui && electron electron/visual-spaceport-upgrades.cjs",
+    "qa:header-factions": "electron electron/visual-header-factions.cjs",
+    "qa:visual": "electron electron/visual-capture.cjs && electron electron/visual-industry-requirements.cjs && electron electron/visual-building-interiors.cjs && electron electron/visual-production-bots.cjs && electron electron/visual-recycling-center.cjs && electron electron/visual-trade-center.cjs && npm run test:spaceport-ui && electron electron/visual-spaceport-upgrades.cjs && npm run qa:header-factions",
     "desktop": "npm run build && electron .",
     "dist:win": "npm run build && electron-builder --win nsis --publish never"
   },
