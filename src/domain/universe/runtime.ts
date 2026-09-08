@@ -2,18 +2,47 @@ import type {
   UniverseAction,
   UniverseActionState,
   UniverseAssetCatalog,
+  UniverseAsteroidState,
   UniverseCoordinate,
   UniverseMap,
   UniverseOwnerProfile,
   UniversePlanetNode,
   UniversePoint,
+  UniversePirateState,
   UniverseSystem,
+  UniverseTimedObjectState,
 } from './types.ts';
 
 export const GALAXY = 1;
 export const SYSTEM_COUNT = 40;
 export const POSITION_COUNT = 24;
 export const MAX_PLANETS_PER_OWNER = 7;
+
+export const ASTEROID_SPAWN_INTERVAL_MS = 60 * 60 * 1_000;
+export const ASTEROID_MIN_DWELL_MS = 15 * 60 * 1_000;
+export const ASTEROID_MAX_DWELL_MS = 30 * 60 * 1_000;
+export const ASTEROID_GAS_MIN = 1_000;
+export const ASTEROID_GAS_MAX = 200_000;
+export const ASTEROID_TRANSIT_MS = 4_000;
+export const ASTEROID_SCHEDULE_EPOCH_MS = Date.UTC(2026, 0, 1);
+
+export const PIRATE_MIN_LIFETIME_MS = 45 * 60 * 1_000;
+export const PIRATE_MAX_LIFETIME_MS = 75 * 60 * 1_000;
+export const PIRATE_QUIET_MS = 15 * 60 * 1_000;
+export const PIRATE_ABSENCE_PROBABILITY = 0.1;
+export const PIRATE_SCHEDULE_EPOCH_MS = Date.UTC(2026, 0, 1);
+
+export const UNIQUE_MIN_LIFETIME_MS = 15 * 60 * 1_000;
+export const UNIQUE_MAX_LIFETIME_MS = 20 * 60 * 1_000;
+export const UNIQUE_QUIET_MS = 45 * 60 * 1_000;
+export const UNIQUE_INITIAL_SPAWN_CHANCE = 0.25;
+export const UNIQUE_SPAWN_CHANCE_STEP = 0.05;
+
+export const ANOMALY_MIN_LIFETIME_MS = UNIQUE_MIN_LIFETIME_MS;
+export const ANOMALY_MAX_LIFETIME_MS = UNIQUE_MAX_LIFETIME_MS;
+export const ANOMALY_QUIET_MS = UNIQUE_QUIET_MS;
+export const ANOMALY_INITIAL_SPAWN_CHANCE = 0.05;
+export const ANOMALY_SPAWN_CHANCE_STEP = 0.025;
 
 const DEFAULT_ASSETS: UniverseAssetCatalog = {
   planetArts: ['planet-default'],
@@ -38,14 +67,10 @@ const BOT_PLANET_PRESETS = [
 
 const SYSTEM_ONE_FIXTURES: Readonly<Record<number, { kind: UniversePlanetNode['kind']; name?: string; ownerId?: string; id?: string; artIndex?: number; known?: boolean }>> = {
   1: { kind: 'player', id: 'player-planet-helion-01', ownerId: 'player-current', known: true },
-  8: { kind: 'pirate', name: 'Пиратский объект «Клык»', artIndex: 0, known: true },
-  13: { kind: 'anomaly', name: 'Аномалия «Люмен»', artIndex: 0, known: true },
-  17: { kind: 'unique', name: 'Осколки Эдема', artIndex: 0, known: true },
   21: { kind: 'uninhabited', name: 'Необитаемый мир', artIndex: 8, known: true },
 };
 
 // Seeded once for a stable atlas: every bot system and position is sampled.
-// Reserve authored landmarks without replacing them with an NPC world.
 const npcRandom = mulberry32(10_701);
 const NPC_PLANET_FIXTURES = shuffle(Array.from({ length: SYSTEM_COUNT }, (_, index) => index + 1), npcRandom)
   .slice(0, MAX_PLANETS_PER_OWNER)
@@ -64,24 +89,29 @@ const NPC_PLANET_FIXTURES = shuffle(Array.from({ length: SYSTEM_COUNT }, (_, ind
 const KIND_LABELS: Record<UniversePlanetNode['kind'], string> = {
   empty: 'Свободная позиция',
   player: 'Планета игрока',
-  npc: 'Планета Бота 01',
+  npc: 'Планета владельца',
   uninhabited: 'Необитаемая планета',
   unique: 'Уникальный объект',
   pirate: 'Пиратский объект',
   anomaly: 'Аномалия',
-  asteroid: 'Астероидный пояс',
+  asteroid: 'Астероид',
 };
 
 const KIND_DESCRIPTIONS: Record<UniversePlanetNode['kind'], string> = {
   empty: 'Свободная орбитальная позиция.',
   player: 'Ваша домашняя планета.',
-  npc: 'Один из семи миров, принадлежащих Боту 01.',
+  npc: 'Мир, принадлежащий владельцу этой планеты.',
   uninhabited: 'Необитаемый мир. Сведений о поселениях нет.',
-  unique: 'Необычный мир, заслуживающий отдельного изучения.',
-  pirate: 'Объект, занятый пиратами.',
-  anomaly: 'Необычный сигнал неизвестного происхождения.',
-  asteroid: 'Скопление каменных тел на орбите звезды.',
+  unique: 'Редкий мир, который ненадолго появляется в системе.',
+  pirate: 'Отступник, временно занявший свободную координату.',
+  anomaly: 'Необычный сигнал, который ненадолго проявился в системе.',
+  asteroid: 'Движущийся объект. Траектория видна, запас газа скрыт до миссии переработчика.',
 };
+
+export type TimedObjectKind = 'pirate' | 'unique' | 'anomaly';
+type TimedObjectSchedule = UniverseTimedObjectState & { startAt: number; present: boolean };
+type TimedScheduleCache = { cycles: TimedObjectSchedule[]; nextStartAt: number; nextSpawnChance: number };
+const timedScheduleCaches = new Map<string, TimedScheduleCache>();
 
 function mulberry32(seed: number) {
   return () => {
@@ -90,6 +120,16 @@ function mulberry32(seed: number) {
     value ^= value + Math.imul(value ^ value >>> 7, value | 61);
     return ((value ^ value >>> 14) >>> 0) / 4294967296;
   };
+}
+
+function seededRandom(...parts: number[]) {
+  let seed = 2166136261;
+  for (const part of parts) seed = Math.imul(seed ^ (Math.floor(part) >>> 0), 16777619);
+  return mulberry32(seed >>> 0);
+}
+
+function randomInt(random: () => number, min: number, max: number) {
+  return min + Math.floor(random() * (max - min + 1));
 }
 
 function shuffle<T>(items: T[], random: () => number) {
@@ -115,6 +155,10 @@ function mergeAssets(assets?: Partial<UniverseAssetCatalog>): UniverseAssetCatal
   };
 }
 
+function normalizeNow(nowMs?: number) {
+  return Number.isFinite(nowMs) ? Number(nowMs) : Date.now();
+}
+
 export function formatUniverseCoordinate(coordinate: UniverseCoordinate) {
   return `[${coordinate.galaxy}:${coordinate.system}:${coordinate.position}]`;
 }
@@ -123,15 +167,37 @@ export function universeCoordinateKey(coordinate: UniverseCoordinate) {
   return `${coordinate.galaxy}:${coordinate.system}:${coordinate.position}`;
 }
 
-/** Stable screen position for a slot. It deliberately has no time input. */
+/** Stable screen position for a numbered coordinate, independent of time. */
 export function getUniverseSlotPoint(slot: number): UniversePoint {
   return getOrbitPoint(slot, 0);
 }
 
-/** One minute per numbered slot, wrapping within the same six-slot ring. */
-export function getUniverseAsteroidPoint(slot: number, elapsedMs: number): UniversePoint {
-  const elapsed = Number.isFinite(elapsedMs) ? elapsedMs % 360_000 : 0;
-  return getOrbitPoint(slot, elapsed / 60_000);
+/**
+ * Move an asteroid through numbered coordinates. The galaxy boundary is
+ * explicit: a second galaxy is used only when the caller says its data exists.
+ */
+export function advanceUniverseAsteroidCoordinate(
+  coordinate: UniverseCoordinate,
+  steps = 1,
+  galaxyCount = 1,
+): UniverseCoordinate | null {
+  const safeSteps = Math.max(0, Math.floor(steps));
+  const safeGalaxyCount = Math.max(1, Math.floor(galaxyCount));
+  if (!Number.isInteger(coordinate.galaxy) || !Number.isInteger(coordinate.system) || !Number.isInteger(coordinate.position)) return null;
+  if (coordinate.galaxy < 1 || coordinate.galaxy > safeGalaxyCount || coordinate.system < 1 || coordinate.system > SYSTEM_COUNT || coordinate.position < 1 || coordinate.position > POSITION_COUNT) return null;
+  const positionsPerGalaxy = SYSTEM_COUNT * POSITION_COUNT;
+  const linear = (coordinate.galaxy - 1) * positionsPerGalaxy
+    + (coordinate.system - 1) * POSITION_COUNT
+    + coordinate.position - 1
+    + safeSteps;
+  if (linear >= safeGalaxyCount * positionsPerGalaxy) return null;
+  const galaxy = Math.floor(linear / positionsPerGalaxy) + 1;
+  const galaxyOffset = linear % positionsPerGalaxy;
+  return {
+    galaxy,
+    system: Math.floor(galaxyOffset / POSITION_COUNT) + 1,
+    position: (galaxyOffset % POSITION_COUNT) + 1,
+  };
 }
 
 function getOrbitPoint(slot: number, progress: number): UniversePoint {
@@ -149,12 +215,33 @@ function getOrbitPoint(slot: number, progress: number): UniversePoint {
   };
 }
 
+/** The asteroid glides briefly between two numbered coordinates at a dwell boundary. */
+export function getUniverseAsteroidPoint(node: UniversePlanetNode, nowMs: number): UniversePoint {
+  const current = getUniverseSlotPoint(node.coordinate.position);
+  const state = node.asteroid;
+  if (!state?.nextCoordinate || !Number.isFinite(nowMs)) return current;
+  const transitStart = state.nextMoveAt - ASTEROID_TRANSIT_MS;
+  const progress = Math.min(1, Math.max(0, (nowMs - transitStart) / ASTEROID_TRANSIT_MS));
+  if (progress <= 0) return current;
+  const next = getUniverseSlotPoint(state.nextCoordinate.position);
+  return {
+    x: current.x + (next.x - current.x) * progress,
+    y: current.y + (next.y - current.y) * progress,
+  };
+}
+
 export function getUniverseObjectKindLabel(kind: UniversePlanetNode['kind']) {
   return KIND_LABELS[kind];
 }
 
-export function getUniverseNodeCaption(node: UniversePlanetNode, currentPlayerName: string) {
-  return node.isHomeworld ? `★ ${currentPlayerName}` : node.name;
+export function getUniverseNodeCaption(node: UniversePlanetNode, currentPlayerName: string, ownerDisplayName = 'Бот 01') {
+  if (node.isHomeworld) return `★ ${currentPlayerName}`;
+  if (node.kind === 'npc') return ownerDisplayName;
+  if (node.kind === 'uninhabited') return 'Необитаемая';
+  if (node.kind === 'unique') return 'Уникальная';
+  if (node.kind === 'pirate') return 'Отступник';
+  if (node.kind === 'anomaly') return 'Аномалия';
+  return node.name;
 }
 
 export function enforceUniversePlanetLimit(planetIds: readonly string[]) {
@@ -177,6 +264,8 @@ export type CreateUniverseSystemOptions = {
   currentPlanetName?: string;
   currentPlanetArt?: string;
   assets?: Partial<UniverseAssetCatalog>;
+  nowMs?: number;
+  galaxyCount?: number;
 };
 
 function fixtureFor(system: number, slot: number) {
@@ -186,10 +275,7 @@ function fixtureFor(system: number, slot: number) {
   return undefined;
 }
 
-function generatedKind(system: number, slot: number): UniversePlanetNode['kind'] {
-  if ((system * 11 + slot * 7) % 29 === 0) return 'pirate';
-  if ((system * 13 + slot * 5) % 31 === 0) return 'anomaly';
-  if ((system * 17 + slot * 3) % 47 === 0) return 'unique';
+function generatedKind(): UniversePlanetNode['kind'] {
   return 'uninhabited';
 }
 
@@ -202,25 +288,15 @@ function createPositionNode(
 ): UniversePlanetNode {
   const fixture = fixtureFor(system, slot);
   const coordinate = { galaxy, system, position: slot };
-  const kind = fixture?.kind ?? generatedKind(system, slot);
+  const kind = fixture?.kind ?? generatedKind();
   const ownerId = fixture?.ownerId;
   const isHomeworld = kind === 'player' && system === 1 && slot === 1;
   const name = isHomeworld
     ? options.currentPlanetName?.trim() || 'Helion 01'
-    : fixture?.name
-      ?? (kind === 'pirate' ? `Пиратский объект ${String(slot).padStart(2, '0')}`
-        : kind === 'anomaly' ? `Аномалия ${String(slot).padStart(2, '0')}`
-          : kind === 'unique' ? ['Осколки Эдема', 'Сердце Бездны', 'Кристаллический разлом'][(system + slot) % 3]
-            : `Планета ${String(system).padStart(2, '0')}-${String(slot).padStart(2, '0')}`);
+    : fixture?.name ?? `Планета ${String(system).padStart(2, '0')}-${String(slot).padStart(2, '0')}`;
   const art = isHomeworld
     ? options.currentPlanetArt?.trim() || pickAsset(assets.planetArts, slot, 'planet-home')
-    : kind === 'pirate'
-      ? pickAsset(assets.pirateArts, fixture?.artIndex ?? system + slot, 'pirate-default')
-      : kind === 'anomaly'
-        ? pickAsset(assets.anomalyArts, fixture?.artIndex ?? system + slot, 'anomaly-default')
-        : kind === 'unique'
-          ? pickAsset(assets.uniqueArts, fixture?.artIndex ?? system + slot, 'unique-default')
-          : pickAsset(assets.planetArts, fixture?.artIndex ?? system * 5 + slot, 'planet-default');
+    : pickAsset(assets.planetArts, fixture?.artIndex ?? system * 5 + slot, 'planet-default');
 
   return {
     id: fixture?.id ?? `universe-${galaxy}-${system}-${slot}`,
@@ -232,14 +308,13 @@ function createPositionNode(
     isHomeworld,
     statusLabel: KIND_LABELS[kind],
     description: KIND_DESCRIPTIONS[kind],
-    known: fixture?.known ?? (kind !== 'anomaly' || system % 2 === 0),
+    known: fixture?.known ?? true,
   };
 }
 
-export function createUniverseSystem(options: CreateUniverseSystemOptions): UniverseSystem {
+function createUniverseSystemBase(options: CreateUniverseSystemOptions, assets: UniverseAssetCatalog): UniverseSystem {
   const galaxy = Math.max(1, Math.floor(options.galaxy ?? GALAXY));
   const system = Math.min(SYSTEM_COUNT, Math.max(1, Math.floor(options.system)));
-  const assets = mergeAssets(options.assets);
   const random = mulberry32(10_000 + galaxy * 977 + system * 1_003);
   const fixtureSlots = Array.from({ length: POSITION_COUNT }, (_, index) => index + 1)
     .filter((slot) => fixtureFor(system, slot));
@@ -262,35 +337,243 @@ export function createUniverseSystem(options: CreateUniverseSystemOptions): Univ
       known: true,
     });
 
-  const emptySlots = positions.filter((node) => node.kind === 'empty').map((node) => node.coordinate.position);
-  const asteroidCount = 3 + ((galaxy + system) % 3);
-  const asteroidSlots = shuffle([...emptySlots], random).slice(0, asteroidCount);
-  const asteroids = asteroidSlots.map((position, index): UniversePlanetNode => ({
-    id: `asteroid-${galaxy}-${system}-${index + 1}`,
-    coordinate: { galaxy, system, position },
-    kind: 'asteroid',
-    name: `Астероидный пояс ${String(index + 1).padStart(2, '0')}`,
-    art: pickAsset(assets.asteroidArts, galaxy * 17 + system * 3 + index, 'asteroid-default'),
-    statusLabel: KIND_LABELS.asteroid,
-    description: KIND_DESCRIPTIONS.asteroid,
-    known: true,
-  }));
-
   return {
     galaxy,
     system,
     starArt: pickAsset(assets.starArts, system - 1, 'star-default'),
     positions,
-    asteroids,
+    asteroids: [],
+  };
+}
+
+function asteroidSpawnIndexAt(nowMs: number) {
+  return Math.floor((nowMs - ASTEROID_SCHEDULE_EPOCH_MS) / ASTEROID_SPAWN_INTERVAL_MS);
+}
+
+export function getUniverseAsteroidDwellMs(spawnIndex: number, movementIndex: number) {
+  const random = seededRandom(0xA57E, spawnIndex, movementIndex);
+  return randomInt(random, ASTEROID_MIN_DWELL_MS, ASTEROID_MAX_DWELL_MS);
+}
+
+export function getUniverseAsteroidState(spawnIndex: number, nowMs: number, galaxyCount = 1): UniverseAsteroidState & { coordinate: UniverseCoordinate } | null {
+  const safeNow = normalizeNow(nowMs);
+  if (!Number.isInteger(spawnIndex) || spawnIndex < 0) return null;
+  const spawnedAt = ASTEROID_SCHEDULE_EPOCH_MS + spawnIndex * ASTEROID_SPAWN_INTERVAL_MS;
+  if (spawnedAt > safeNow) return null;
+  const random = seededRandom(0xA570, spawnIndex);
+  let coordinate: UniverseCoordinate = { galaxy: GALAXY, system: 1, position: randomInt(random, 1, POSITION_COUNT) };
+  let movementIndex = 0;
+  let previousMoveAt = spawnedAt;
+  let nextMoveAt = spawnedAt + getUniverseAsteroidDwellMs(spawnIndex, movementIndex);
+  while (safeNow >= nextMoveAt) {
+    previousMoveAt = nextMoveAt;
+    const nextCoordinate = advanceUniverseAsteroidCoordinate(coordinate, 1, galaxyCount);
+    if (!nextCoordinate) return null;
+    coordinate = nextCoordinate;
+    movementIndex += 1;
+    nextMoveAt = previousMoveAt + getUniverseAsteroidDwellMs(spawnIndex, movementIndex);
+  }
+  const nextCoordinate = advanceUniverseAsteroidCoordinate(coordinate, 1, galaxyCount) ?? undefined;
+  const gasRandom = seededRandom(0x6A5, spawnIndex);
+  const gasYield = randomInt(gasRandom, ASTEROID_GAS_MIN, ASTEROID_GAS_MAX);
+  return {
+    spawnIndex,
+    spawnedAt,
+    previousMoveAt,
+    nextMoveAt,
+    nextCoordinate,
+    gasYield,
+    coordinate,
+  };
+}
+
+function createAsteroidNode(state: UniverseAsteroidState & { coordinate: UniverseCoordinate }, assets: UniverseAssetCatalog): UniversePlanetNode {
+  return {
+    id: `asteroid-${state.coordinate.galaxy}-${state.spawnIndex}`,
+    coordinate: state.coordinate,
+    kind: 'asteroid',
+    name: `Астероид ${String(state.spawnIndex + 1).padStart(4, '0')}`,
+    art: pickAsset(assets.asteroidArts, state.spawnIndex, 'asteroid-default'),
+    statusLabel: KIND_LABELS.asteroid,
+    description: KIND_DESCRIPTIONS.asteroid,
+    known: true,
+    asteroid: state,
+  };
+}
+
+function createActiveAsteroidsBySystem(galaxy: number, nowMs: number, galaxyCount: number, assets: UniverseAssetCatalog) {
+  const grouped = Array.from({ length: SYSTEM_COUNT }, () => [] as UniversePlanetNode[]);
+  const currentSpawnIndex = asteroidSpawnIndexAt(nowMs);
+  if (currentSpawnIndex < 0) return grouped;
+  const maxRouteMs = galaxyCount * SYSTEM_COUNT * POSITION_COUNT * ASTEROID_MAX_DWELL_MS;
+  const firstSpawnIndex = Math.max(0, currentSpawnIndex - Math.ceil(maxRouteMs / ASTEROID_SPAWN_INTERVAL_MS) - 1);
+  for (let spawnIndex = firstSpawnIndex; spawnIndex <= currentSpawnIndex; spawnIndex += 1) {
+    const state = getUniverseAsteroidState(spawnIndex, nowMs, galaxyCount);
+    if (state?.coordinate.galaxy === galaxy) grouped[state.coordinate.system - 1].push(createAsteroidNode(state, assets));
+  }
+  return grouped;
+}
+
+function timedObjectConfig(kind: TimedObjectKind) {
+  if (kind === 'pirate') return {
+    epoch: PIRATE_SCHEDULE_EPOCH_MS,
+    seed: 0xB1A,
+    minLifetimeMs: PIRATE_MIN_LIFETIME_MS,
+    maxLifetimeMs: PIRATE_MAX_LIFETIME_MS,
+    quietMs: PIRATE_QUIET_MS,
+    initialChance: 1 - PIRATE_ABSENCE_PROBABILITY,
+    chanceStep: 0,
+  };
+  if (kind === 'unique') return {
+    epoch: PIRATE_SCHEDULE_EPOCH_MS,
+    seed: 0xC01,
+    minLifetimeMs: UNIQUE_MIN_LIFETIME_MS,
+    maxLifetimeMs: UNIQUE_MAX_LIFETIME_MS,
+    quietMs: UNIQUE_QUIET_MS,
+    initialChance: UNIQUE_INITIAL_SPAWN_CHANCE,
+    chanceStep: UNIQUE_SPAWN_CHANCE_STEP,
+  };
+  return {
+    epoch: PIRATE_SCHEDULE_EPOCH_MS,
+    seed: 0xA01,
+    minLifetimeMs: ANOMALY_MIN_LIFETIME_MS,
+    maxLifetimeMs: ANOMALY_MAX_LIFETIME_MS,
+    quietMs: ANOMALY_QUIET_MS,
+    initialChance: ANOMALY_INITIAL_SPAWN_CHANCE,
+    chanceStep: ANOMALY_SPAWN_CHANCE_STEP,
+  };
+}
+
+function timedCacheKey(kind: TimedObjectKind, galaxy: number, system: number) {
+  return `${kind}:${galaxy}:${system}`;
+}
+
+function ensureTimedCycles(kind: TimedObjectKind, galaxy: number, system: number, throughMs: number) {
+  const config = timedObjectConfig(kind);
+  const key = timedCacheKey(kind, galaxy, system);
+  let cache = timedScheduleCaches.get(key);
+  if (!cache) {
+    const offsetRandom = seededRandom(config.seed, galaxy, system, 0);
+    cache = {
+      cycles: [],
+      nextStartAt: config.epoch + randomInt(offsetRandom, 0, 60 * 60 * 1_000),
+      nextSpawnChance: config.initialChance,
+    };
+    timedScheduleCaches.set(key, cache);
+  }
+  while (cache.nextStartAt <= throughMs + config.maxLifetimeMs) {
+    const cycleIndex = cache.cycles.length;
+    const random = seededRandom(config.seed, galaxy, system, cycleIndex + 1);
+    const lifetimeMs = randomInt(random, config.minLifetimeMs, config.maxLifetimeMs);
+    const startAt = cache.nextStartAt;
+    const spawnChance = cache.nextSpawnChance;
+    const present = random() < spawnChance;
+    const expiresAt = present ? startAt + lifetimeMs : startAt;
+    const respawnAt = (present ? expiresAt : startAt) + config.quietMs;
+    cache.cycles.push({ cycleIndex, startAt, expiresAt, respawnAt, lifetimeMs, spawnChance, present });
+    cache.nextSpawnChance = present || config.chanceStep === 0
+      ? config.initialChance
+      : Math.min(1, spawnChance + config.chanceStep);
+    cache.nextStartAt = respawnAt;
+  }
+  return cache.cycles;
+}
+
+export type UniverseTimedObjectSchedule = TimedObjectSchedule;
+
+export function getUniverseTimedObjectSchedule(kind: TimedObjectKind, galaxy: number, system: number, cycleIndex: number): UniverseTimedObjectSchedule {
+  const config = timedObjectConfig(kind);
+  const safeIndex = Math.max(0, Math.floor(cycleIndex));
+  const cycles = ensureTimedCycles(kind, galaxy, system, config.epoch + (safeIndex + 1) * (config.maxLifetimeMs + config.quietMs));
+  return cycles[safeIndex] ?? cycles[0];
+}
+
+function activeTimedObjectSchedule(kind: TimedObjectKind, galaxy: number, system: number, nowMs: number) {
+  const cycles = ensureTimedCycles(kind, galaxy, system, nowMs);
+  for (let index = cycles.length - 1; index >= 0; index -= 1) {
+    const cycle = cycles[index];
+    if (cycle.startAt > nowMs) continue;
+    if (nowMs < cycle.respawnAt) return cycle;
+  }
+  return null;
+}
+
+function timedState(schedule: TimedObjectSchedule): UniverseTimedObjectState {
+  return {
+    cycleIndex: schedule.cycleIndex,
+    expiresAt: schedule.expiresAt,
+    respawnAt: schedule.respawnAt,
+    lifetimeMs: schedule.lifetimeMs,
+    spawnChance: schedule.spawnChance,
+  };
+}
+
+function injectTimedObject(system: UniverseSystem, kind: TimedObjectKind, nowMs: number, assets: UniverseAssetCatalog): UniverseSystem {
+  const schedule = activeTimedObjectSchedule(kind, system.galaxy, system.system, nowMs);
+  if (!schedule?.present || nowMs >= schedule.expiresAt) return system;
+  const emptySlots = system.positions.filter((node) => node.kind === 'empty');
+  if (!emptySlots.length) return system;
+  const random = seededRandom(timedObjectConfig(kind).seed + 0x55, system.galaxy, system.system, schedule.cycleIndex);
+  const target = emptySlots[Math.floor(random() * emptySlots.length)];
+  const state = timedState(schedule);
+  const node: UniversePlanetNode = kind === 'pirate'
+    ? {
+      id: `pirate-${system.galaxy}-${system.system}`,
+      coordinate: target.coordinate,
+      kind: 'pirate',
+      name: 'Пиратский объект «Клык»',
+      art: pickAsset(assets.pirateArts, system.system + schedule.cycleIndex, 'pirate-default'),
+      statusLabel: KIND_LABELS.pirate,
+      description: KIND_DESCRIPTIONS.pirate,
+      known: true,
+      pirate: state as UniversePirateState,
+    }
+    : {
+      id: `${kind}-${system.galaxy}-${system.system}`,
+      coordinate: target.coordinate,
+      kind,
+      name: kind === 'unique' ? ['Осколки Эдема', 'Сердце Бездны', 'Кристаллический разлом'][(system.system + schedule.cycleIndex) % 3] : 'Аномалия «Люмен»',
+      art: pickAsset(kind === 'unique' ? assets.uniqueArts : assets.anomalyArts, system.system + schedule.cycleIndex, `${kind}-default`),
+      statusLabel: KIND_LABELS[kind],
+      description: KIND_DESCRIPTIONS[kind],
+      known: true,
+      special: state,
+    };
+  return {
+    ...system,
+    positions: system.positions.map((item) => item.id === target.id ? node : item),
+  };
+}
+
+export function createUniverseSystem(options: CreateUniverseSystemOptions): UniverseSystem {
+  const assets = mergeAssets(options.assets);
+  const nowMs = normalizeNow(options.nowMs);
+  const galaxyCount = Math.max(1, Math.floor(options.galaxyCount ?? 1));
+  const asteroidNodes = createActiveAsteroidsBySystem(Math.max(1, Math.floor(options.galaxy ?? GALAXY)), nowMs, galaxyCount, assets);
+  let system = createUniverseSystemBase(options, assets);
+  system = injectTimedObject(system, 'pirate', nowMs, assets);
+  system = injectTimedObject(system, 'unique', nowMs, assets);
+  system = injectTimedObject(system, 'anomaly', nowMs, assets);
+  return {
+    ...system,
+    asteroids: asteroidNodes[system.system - 1],
   };
 }
 
 export function createUniverseMap(options: Omit<CreateUniverseSystemOptions, 'system'> = {}): UniverseMap {
   const galaxy = Math.max(1, Math.floor(options.galaxy ?? GALAXY));
-  return {
-    galaxy,
-    systems: Array.from({ length: SYSTEM_COUNT }, (_, index) => createUniverseSystem({ ...options, galaxy, system: index + 1 })),
-  };
+  const nowMs = normalizeNow(options.nowMs);
+  const galaxyCount = Math.max(1, Math.floor(options.galaxyCount ?? 1));
+  const assets = mergeAssets(options.assets);
+  const asteroidNodes = createActiveAsteroidsBySystem(galaxy, nowMs, galaxyCount, assets);
+  const systems = Array.from({ length: SYSTEM_COUNT }, (_, index) => {
+    let system = createUniverseSystemBase({ ...options, galaxy, system: index + 1 }, assets);
+    system = injectTimedObject(system, 'pirate', nowMs, assets);
+    system = injectTimedObject(system, 'unique', nowMs, assets);
+    system = injectTimedObject(system, 'anomaly', nowMs, assets);
+    return { ...system, asteroids: asteroidNodes[index] };
+  });
+  return { galaxy, systems };
 }
 
 export function getUniverseActionState(

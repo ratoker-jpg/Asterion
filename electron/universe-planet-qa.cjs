@@ -126,11 +126,12 @@ async function mapSnapshot(win) {
     const animated = Object.fromEntries(animatedSelectors.map((selector) => [selector, document.querySelector(selector) ? getComputedStyle(document.querySelector(selector)).animationName : null]));
     const rects = () => objects.map((node) => {
       const rect = node.getBoundingClientRect();
-      return { id: node.getAttribute('data-qa-universe-object'), kind: node.getAttribute('data-qa-universe-kind'), x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+      return { id: node.getAttribute('data-qa-universe-object'), kind: node.getAttribute('data-qa-universe-kind'), position: node.getAttribute('data-qa-universe-asteroid-position') || '', x: rect.x, y: rect.y, width: rect.width, height: rect.height };
     });
     return {
       system: document.querySelector('[data-qa-universe]')?.getAttribute('data-qa-universe-system') || '',
       systemOptions: document.querySelectorAll('.universe-jump select option').length,
+      systemOptionTexts: Array.from(document.querySelectorAll('.universe-jump select option')).map((option) => option.textContent?.trim() || ''),
       positionCount: positions.length,
       objectKinds: [...new Set(objects.map((node) => node.getAttribute('data-qa-universe-kind')))].sort(),
       asteroidCount: document.querySelectorAll('[data-qa-universe-kind="asteroid"]').length,
@@ -160,7 +161,7 @@ async function stableObjectRects(win, before) {
       const node = document.querySelector('[data-qa-universe-object="' + id + '"]');
       if (!node) return null;
       const rect = node.getBoundingClientRect();
-      return { id, kind: node.getAttribute('data-qa-universe-kind'), x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+      return { id, kind: node.getAttribute('data-qa-universe-kind'), position: node.getAttribute('data-qa-universe-asteroid-position') || '', x: rect.x, y: rect.y, width: rect.width, height: rect.height };
     });
   })()`);
 }
@@ -279,8 +280,8 @@ async function runViewport(width, height) {
     await clickPrimary(win, 'Вселенная');
 
     const map = await mapSnapshot(win);
-    if (map.system !== '1' || map.systemOptions !== 40 || map.positionCount !== 24 || map.viewport.innerWidth !== width || map.viewport.innerHeight !== height) throw new Error(`${label}: map cardinality/viewport failed ${JSON.stringify(map)}`);
-    if (!map.objectKinds.includes('empty') || !map.objectKinds.includes('pirate') || !map.objectKinds.includes('anomaly') || !map.objectKinds.includes('player') || map.asteroidCount < 3) {
+    if (map.system !== '1' || map.systemOptions !== 40 || map.systemOptionTexts.some((text, index) => text !== String(index + 1).padStart(2, '0')) || map.positionCount !== 24 || map.viewport.innerWidth !== width || map.viewport.innerHeight !== height) throw new Error(`${label}: map cardinality/viewport failed ${JSON.stringify(map)}`);
+    if (!map.objectKinds.includes('empty') || !map.objectKinds.includes('player') || map.asteroidCount < 3) {
       throw new Error(`${label}: object fixture coverage failed ${JSON.stringify(map)}`);
     }
     if (map.homeCaption !== '★ Dendrilion' || map.coordinateLineCount !== 0 || map.mapCaptions.some((caption) => /\\[\\d+:\\d+:\\d+\\]/.test(caption))) throw new Error(`${label}: map caption contract failed ${JSON.stringify(map)}`);
@@ -293,16 +294,11 @@ async function runViewport(width, height) {
     const stationary = map.rects.filter((rect) => rect.kind !== 'asteroid');
     const stationaryAfter = stableRects.filter((rect) => rect.kind !== 'asteroid');
     if (JSON.stringify(stationaryAfter) !== JSON.stringify(stationary)) throw new Error(`${label}: planet positions moved after 1.1s`);
-    const asteroidsMoved = map.rects.filter((rect) => rect.kind === 'asteroid').every((before) => {
+    const asteroidsHoldPosition = map.rects.filter((rect) => rect.kind === 'asteroid').every((before) => {
       const after = stableRects.find((rect) => rect.id === before.id);
-      return Math.hypot(after.x - before.x, after.y - before.y) > 0.1;
+      return after && after.position === before.position;
     });
-    if (!asteroidsMoved) throw new Error(`${label}: asteroid positions did not move after 1.1s`);
-    const pirateAnimation = await win.webContents.executeJavaScript(`(() => {
-      const pirate = document.querySelector('[data-qa-universe-kind="pirate"]');
-      return { image: getComputedStyle(pirate.querySelector('img')).animationName, before: getComputedStyle(pirate, '::before').animationName };
-    })()`);
-    if (Object.values(pirateAnimation).some((name) => name === 'none')) throw new Error(`${label}: pirate visual animation missing ${JSON.stringify(pirateAnimation)}`);
+    if (!asteroidsHoldPosition) throw new Error(`${label}: asteroid changed its numbered position during a dwell window`);
     await capture(win, directory, 'static-map');
 
     await clickObject(win, '[data-qa-universe-object="player-planet-helion-01"]');
@@ -360,22 +356,46 @@ async function runViewport(width, height) {
     await capture(win, directory, 'empty-inspector');
     await dismissInspector(win);
 
+    const asteroidId = await win.webContents.executeJavaScript(`(() => {
+      const asteroids = [...document.querySelectorAll('[data-qa-universe-kind="asteroid"]')];
+      return (asteroids.find((node) => { const rect = node.getBoundingClientRect(); const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2); return hit === node || node.contains(hit); }) || asteroids[0])?.getAttribute('data-qa-universe-object') || '';
+    })()`);
+    await clickObject(win, `[data-qa-universe-object="${asteroidId}"]`);
+    const asteroid = await inspectorSnapshot(win);
+    checkCopy(asteroid);
+    await checkModal(win);
+    if (asteroid.kind !== 'asteroid' || !asteroid.text.includes('СКРЫТ ДО ПЕРЕРАБОТКИ') || !asteroid.text.includes('Следующее перемещение через') || !asteroid.specialActionDisabled) throw new Error(`${label}: asteroid inspector contract failed ${JSON.stringify(asteroid)}`);
+    await capture(win, directory, 'asteroid-inspector');
+    await dismissInspector(win);
+
+    const pirateSystem = await findObject(win, '[data-qa-universe-kind="pirate"]');
     await clickObject(win, '[data-qa-universe-kind="pirate"]');
     const pirate = await inspectorSnapshot(win);
     checkCopy(pirate);
-    if (pirate.kind !== 'pirate' || !pirate.text.includes('Пиратский объект') || !pirate.specialActionDisabled) throw new Error(`${label}: pirate inspector contract failed ${JSON.stringify(pirate)}`);
+    await checkModal(win);
+    if (pirate.kind !== 'pirate' || !pirate.text.includes('Пиратский объект') || !pirate.text.includes('исчезнет через') || !pirate.specialActionDisabled) throw new Error(`${label}: pirate inspector contract failed ${JSON.stringify(pirate)}`);
     await capture(win, directory, 'pirate-inspector');
     await dismissInspector(win);
+    await selectSystem(win, pirateSystem);
+    const pirateAnimation = await win.webContents.executeJavaScript(`(() => {
+      const pirate = document.querySelector('[data-qa-universe-kind="pirate"]');
+      return pirate ? { image: getComputedStyle(pirate.querySelector('img')).animationName, before: getComputedStyle(pirate, '::before').animationName } : { image: 'none', before: 'none' };
+    })()`);
+    if (Object.values(pirateAnimation).some((name) => name === 'none')) throw new Error(`${label}: pirate visual animation missing ${JSON.stringify(pirateAnimation)}`);
 
+    const anomalySystem = await findObject(win, '[data-qa-universe-kind="anomaly"]');
     await clickObject(win, '[data-qa-universe-kind="anomaly"]');
     const anomaly = await inspectorSnapshot(win);
     checkCopy(anomaly);
-    if (anomaly.kind !== 'anomaly' || !anomaly.text.includes('Аномалия') || !anomaly.specialActionDisabled) throw new Error(`${label}: anomaly inspector contract failed ${JSON.stringify(anomaly)}`);
+    await checkModal(win);
+    if (anomaly.kind !== 'anomaly' || !anomaly.text.includes('Аномалия') || !anomaly.text.includes('исчезнет через') || !anomaly.specialActionDisabled) throw new Error(`${label}: anomaly inspector contract failed ${JSON.stringify(anomaly)}`);
     await capture(win, directory, 'anomaly-inspector');
     await dismissInspector(win);
 
+    let uniqueSystem = 1;
     for (const kind of ['uninhabited', 'unique']) {
-      await findObject(win, `[data-qa-universe-kind="${kind}"]`);
+      const foundSystem = await findObject(win, `[data-qa-universe-kind="${kind}"]`);
+      if (kind === 'unique') uniqueSystem = foundSystem;
       await clickObject(win, `[data-qa-universe-kind="${kind}"]`);
       const special = await inspectorSnapshot(win);
       checkCopy(special);
@@ -407,8 +427,9 @@ async function runViewport(width, height) {
       layout: { htmlClass: map.htmlClass, webStageScale: map.webStageScale, visualViewport: map.visualViewport, stageRect: map.stageRect },
       player: { ownerName: player.ownerName, points: player.points, planetRows: player.planetRows },
       npc: { ownerName: npc.ownerName, planetRows: npc.planetRows, rows: npc.rows, prototypeNotice },
-      specialInspectors: { empty: empty.kind, pirate: pirate.kind, anomaly: anomaly.kind, uninhabited: 'uninhabited', unique: 'unique' },
-      asteroidsMoved,
+      specialInspectors: { empty: empty.kind, asteroid: asteroid.kind, pirate: pirate.kind, anomaly: anomaly.kind, uninhabited: 'uninhabited', unique: 'unique' },
+      asteroidsHoldPosition,
+      timedObjectSystems: { pirate: pirateSystem, anomaly: anomalySystem, unique: uniqueSystem },
       pirateAnimation,
       stableAfterMs: 1_100,
       horizontalOverflow: false,

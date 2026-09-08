@@ -21,6 +21,25 @@ export type UniversePoint = {
   y: number;
 };
 
+export type UniverseAsteroidState = {
+  spawnIndex: number;
+  spawnedAt: number;
+  previousMoveAt: number;
+  nextMoveAt: number;
+  nextCoordinate?: UniverseCoordinate;
+  gasYield: number;
+};
+
+export type UniverseTimedObjectState = {
+  cycleIndex: number;
+  expiresAt: number;
+  respawnAt: number;
+  lifetimeMs: number;
+  spawnChance: number;
+};
+
+export type UniversePirateState = UniverseTimedObjectState;
+
 export type UniversePlanetNode = {
   id: string;
   coordinate: UniverseCoordinate;
@@ -32,6 +51,9 @@ export type UniversePlanetNode = {
   statusLabel: string;
   description: string;
   known?: boolean;
+  asteroid?: UniverseAsteroidState;
+  pirate?: UniversePirateState;
+  special?: UniverseTimedObjectState;
 };
 
 export type UniverseSystem = {
