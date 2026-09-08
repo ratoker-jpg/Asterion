@@ -131,7 +131,6 @@
 .primary-navigation button > span,
 .utility-navigation button > svg,
 .utility-navigation button > span{
-  position:relative;
   z-index:2;
 }
 
