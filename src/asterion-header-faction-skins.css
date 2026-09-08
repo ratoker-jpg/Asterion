@@ -21,11 +21,12 @@
   --header-button-image:url('../assets/source/faction-delivery-v1/ui/aegis_primary_button.png');
   --header-active-image:url('../assets/source/faction-delivery-v1/ui/aegis_active_tab.png');
   --header-planet-frame-image:none;
-  --header-selector-image:var(--header-frame-image);
-  --header-resource-cell-image:var(--header-button-image);
-  --header-campaign-image:var(--header-frame-image);
+  --header-selector-image:url('../assets/source/faction-header-v2/aegis/planet_selector.png');
+  --header-resource-cell-image:url('../assets/source/faction-header-v2/aegis/resource_cell.png');
+  --header-campaign-image:url('../assets/source/faction-header-v2/aegis/campaign_utility.png');
   --header-nav-button-image:var(--header-button-image);
-  --header-nav-active-image:var(--header-active-image);
+  --header-nav-active-image:url('../assets/source/faction-header-v2/aegis/navigation_active.png');
+  --header-nav-rail-image:none;
 }
 
 :root[data-header-faction='synod']{
@@ -41,12 +42,13 @@
   --header-frame-image:url('../assets/source/faction-delivery-v1/ui/synod_panel_frame.png');
   --header-button-image:url('../assets/source/faction-delivery-v1/ui/synod_primary_button.png');
   --header-active-image:url('../assets/source/faction-delivery-v1/ui/synod_active_tab.png');
-  --header-planet-frame-image:none;
-  --header-selector-image:var(--header-frame-image);
+  --header-planet-frame-image:url('../assets/source/faction-header-v2/synod/planet_frame.png');
+  --header-selector-image:url('../assets/source/faction-header-v2/synod/planet_selector.png');
   --header-resource-cell-image:var(--header-button-image);
-  --header-campaign-image:var(--header-frame-image);
+  --header-campaign-image:url('../assets/source/faction-header-v2/synod/campaign_utility.png');
   --header-nav-button-image:var(--header-button-image);
   --header-nav-active-image:var(--header-active-image);
+  --header-nav-rail-image:url('../assets/source/faction-header-v2/synod/navigation_rail.png');
 }
 
 :root[data-header-faction='veyra']{
@@ -62,12 +64,13 @@
   --header-frame-image:url('../assets/source/faction-delivery-v1/ui/veyra_panel_frame.png');
   --header-button-image:url('../assets/source/faction-delivery-v1/ui/veyra_primary_button.png');
   --header-active-image:url('../assets/source/faction-delivery-v1/ui/veyra_active_tab.png');
-  --header-planet-frame-image:none;
-  --header-selector-image:var(--header-frame-image);
+  --header-planet-frame-image:url('../assets/source/faction-header-v2/veyra/planet_frame.png');
+  --header-selector-image:url('../assets/source/faction-header-v2/veyra/planet_selector.png');
   --header-resource-cell-image:var(--header-button-image);
-  --header-campaign-image:var(--header-frame-image);
+  --header-campaign-image:url('../assets/source/faction-header-v2/veyra/campaign_utility.png');
   --header-nav-button-image:var(--header-button-image);
   --header-nav-active-image:var(--header-active-image);
+  --header-nav-rail-image:url('../assets/source/faction-header-v2/veyra/navigation_rail.png');
 }
 
 .asterion-header{
@@ -75,7 +78,10 @@
   filter:drop-shadow(0 10px 24px rgba(0,0,0,.32));
 }
 
-/* Keep generated/painted decoration behind live DOM content. */
+/*
+ * Decorative art is painted above each control's CSS background, but below all
+ * live labels/icons/tooltips. Generated pixels never own interaction.
+ */
 .current-planet-select,
 .header-resource-rail .resource-chip,
 .primary-navigation button,
@@ -91,37 +97,65 @@
 .utility-navigation button::before{
   content:"";
   position:absolute;
-  z-index:-1;
+  z-index:0;
   inset:0;
   background-repeat:no-repeat;
   background-position:center;
   background-size:100% 100%;
-  opacity:.14;
   pointer-events:none;
 }
 
 .current-planet-select::before{
   background-image:var(--header-selector-image);
-  opacity:.17;
+  opacity:.72;
 }
 .header-resource-rail .resource-chip::before{
   background-image:var(--header-resource-cell-image);
+  opacity:.28;
 }
 .primary-navigation button::before,
 .utility-navigation button::before{
   background-image:var(--header-nav-button-image);
+  opacity:.12;
 }
 .campaign-module::after{
+  z-index:1;
   background-image:var(--header-campaign-image);
-  opacity:.17;
+  opacity:.58;
 }
+
+.current-planet-select > *,
+.resource-chip__icon,
+.resource-chip__text,
+.primary-navigation button > svg,
+.primary-navigation button > span,
+.utility-navigation button > svg,
+.utility-navigation button > span{
+  position:relative;
+  z-index:2;
+}
+
+/* A whole-rail frame is useful for the strongly shaped Synod and Veyra shells. */
+.primary-navigation::before{
+  content:"";
+  position:absolute;
+  z-index:0;
+  inset:0;
+  background-image:var(--header-nav-rail-image);
+  background-repeat:no-repeat;
+  background-position:center;
+  background-size:100% 100%;
+  opacity:.48;
+  pointer-events:none;
+}
+.primary-navigation button{z-index:1}
 
 .header-planet-orbit::before{
   border-color:var(--header-line);
   background-image:var(--header-planet-frame-image);
   background-repeat:no-repeat;
   background-position:center;
-  background-size:100% 100%;
+  background-size:contain;
   box-shadow:
     0 0 0 8px rgba(1,8,14,.94),
     0 0 34px rgba(var(--header-accent-rgb),.26),
@@ -215,7 +249,7 @@
 }
 .primary-navigation button.active::before{
   background-image:var(--header-nav-active-image);
-  opacity:.34;
+  opacity:.7;
 }
 .primary-navigation button.active::after{
   background:var(--header-accent-strong);
@@ -225,8 +259,11 @@
 .primary-navigation button.active svg{filter:drop-shadow(0 0 11px rgba(var(--header-accent-rgb),.72))}
 
 .campaign-module::before{border-color:var(--header-line)}
+.campaign-icon,
+.campaign-status,
+.campaign-module time{z-index:2}
 .campaign-status strong{color:var(--header-text)}
-.utility-navigation{border-top-color:var(--header-line-soft)}
+.utility-navigation{z-index:3;border-top-color:var(--header-line-soft)}
 .utility-navigation button{
   border-right-color:var(--header-line-soft);
   background:rgba(var(--header-accent-rgb),.025);
@@ -245,16 +282,25 @@
   color:var(--header-text);
 }
 
-/* Existing Synod art is only a runtime fallback until regenerated alpha assets are committed. */
-:root[data-header-faction='synod'] .header-planet-orbit::before{
-  border-width:2px;
-  box-shadow:0 0 0 8px rgba(3,15,13,.94),0 0 38px rgba(var(--header-accent-rgb),.3),inset 0 0 28px rgba(var(--header-accent-rgb),.15);
+/*
+ * Generated outer rings replace the clean engineering circle for the two alien
+ * factions. The planet and zone controls retain the canonical coordinates.
+ */
+:root[data-header-faction='synod'] .header-planet-orbit::before,
+:root[data-header-faction='veyra'] .header-planet-orbit::before{
+  border-color:transparent;
+  border-radius:0;
+  box-shadow:none;
+  filter:drop-shadow(0 0 18px rgba(var(--header-accent-rgb),.32));
+}
+:root[data-header-faction='synod'] .header-planet-orbit::after{
+  border-color:rgba(var(--header-accent-rgb),.2);
 }
 
 /* Veyra intentionally drops the clean dashed engineering orbit. */
 :root[data-header-faction='veyra'] .header-planet-orbit::after{
   border-style:solid;
-  opacity:.58;
+  opacity:.42;
 }
 :root[data-header-faction='veyra'] .primary-navigation,
 :root[data-header-faction='veyra'] .header-resource-rail::before,
