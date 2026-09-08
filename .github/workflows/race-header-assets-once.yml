@@ -1,0 +1,276 @@
+name: One-time faction header asset import
+
+on:
+  push:
+    branches:
+      - codex/race-header-reference-rebuild
+
+permissions:
+  contents: write
+
+jobs:
+  integrate-assets:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install image tooling
+        run: python -m pip install --disable-pip-version-check pillow
+      - name: Download and prepare faction header assets
+        shell: bash
+        run: |
+          cat > /tmp/integrate_header_assets.py <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import io
+          import json
+          import urllib.request
+          from collections import deque
+          from pathlib import Path
+          from statistics import median
+
+          from PIL import Image, ImageFilter
+
+          ROOT = Path('assets/source/faction-header-v2')
+
+          ASSETS = {
+              'aegis/planet_selector.png': {
+                  'url': 'https://dnznrvs05pmza.cloudfront.net/sam3_image_segmentation/1feb8860-7fd7-46ad-b432-6b266f57365b/445cc24d-045e-462c-84f5-562ab183d9f5.png?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiMTc1ZmVlMmU0NzQ2NTMxNCIsImJ1Y2tldCI6InJ1bndheS10YXNrLWFydGlmYWN0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc4OTA3ODA2Mn0.tuwg3KopGxkKzZeiOoMMrJa_ithSEJFZoEzp70JzYCU',
+                  'task': '1feb8860-7fd7-46ad-b432-6b266f57365b', 'fallback': False, 'max_width': 1024,
+              },
+              'aegis/resource_cell.png': {
+                  'url': 'https://dnznrvs05pmza.cloudfront.net/gemini/gemini-3.1-flash-image/images/db4ec53c-b1f7-48a3-affe-fad35aff4b4b/91e18ab8-04b2-4360-b298-30d4356346a7/Single_standalone_reusable_Aegis_Aster_resource_tile_frame_f.png?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiODFiOTlhMDdlNWMxZWRjMiIsImJ1Y2tldCI6InJ1bndheS10YXNrLWFydGlmYWN0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc4OTAwNjg1NX0.PF-NWlUaB7TFrIZNzVrTsZXxmkTkq_dUUwC73eLBQdw',
+                  'task': 'db4ec53c-b1f7-48a3-affe-fad35aff4b4b', 'fallback': True, 'max_width': 640,
+              },
+              'aegis/campaign_utility.png': {
+                  'url': 'https://dnznrvs05pmza.cloudfront.net/sam3_image_segmentation/40f15951-b585-446e-b731-216963077621/ec6e4b6a-013c-49d4-9b7c-3b0fa5ac1c04.png?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiZDYxZGY1NDUwN2Q1Zjc2OCIsImJ1Y2tldCI6InJ1bndheS10YXNrLWFydGlmYWN0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc4OTAzMzE1N30.Uxs19IVb8hSI_Eupp8wCQ4yPSnVXZxJBIAB86MetQWw',
+                  'task': '40f15951-b585-446e-b731-216963077621', 'fallback': False, 'max_width': 800,
+              },
+              'aegis/navigation_active.png': {
+                  'url': 'https://dnznrvs05pmza.cloudfront.net/sam3_image_segmentation/7ed9d807-acab-4b77-b1fb-5b678d70d43d/02237fa7-e825-44d0-b51f-6047703f3256.png?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiZDFhNGNkNzE5OWI5YTQyZSIsImJ1Y2tldCI6InJ1bndheS10YXNrLWFydGlmYWN0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc4OTA2NTg0MX0.SPjeuODQgXRP3Kq5m3yqLZhhqG7U7lCk8xxTC9FC9fM',
+                  'task': '7ed9d807-acab-4b77-b1fb-5b678d70d43d', 'fallback': False, 'max_width': 800,
+              },
+              'synod/planet_frame.png': {
+                  'url': 'https://dnznrvs05pmza.cloudfront.net/sam3_image_segmentation/4506ce16-0a95-440a-956e-e575913aac16/fd2c3372-7823-434b-91f3-9a7612f442e2.png?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiNTZiYzU1YzhjOGRiNzUwMSIsImJ1Y2tldCI6InJ1bndheS10YXNrLWFydGlmYWN0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc4OTAzMjkwNH0.uG6sXKo0xr5nCl-9GruXuCMHaHabJ5uPzpGrHlt89cE',
+                  'task': '4506ce16-0a95-440a-956e-e575913aac16', 'fallback': False, 'max_width': 720,
+              },
+              'synod/navigation_rail.png': {
+                  'url': 'https://dnznrvs05pmza.cloudfront.net/sam3_image_segmentation/d6da4315-092f-4870-9420-e8df3b873163/0fce3c23-8a26-43fd-bb27-133d1455bf19.png?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiMmE4Nzc0YTc1N2EyMjVjNiIsImJ1Y2tldCI6InJ1bndheS10YXNrLWFydGlmYWN0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc4OTAyNzQ5NX0.7tUvUbrM3_aJpzTlvgHt9GDOosDIU99hxN7MyOWAD4c',
+                  'task': 'd6da4315-092f-4870-9420-e8df3b873163', 'fallback': False, 'max_width': 1600,
+              },
+              'synod/planet_selector.png': {
+                  'url': 'https://dnznrvs05pmza.cloudfront.net/sam3_image_segmentation/cc9f91fd-d834-4416-bcba-97308e974b0e/50e55168-f05d-4454-b01b-496125655e4a.png?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiMThhODM3MDM3ZTExZGI3MyIsImJ1Y2tldCI6InJ1bndheS10YXNrLWFydGlmYWN0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc4OTA3ODkxNX0.ZDNRomgI2XN9IELyLeYYQezhDiEgvVhuRCwUNjPSsvg',
+                  'task': 'cc9f91fd-d834-4416-bcba-97308e974b0e', 'fallback': False, 'max_width': 1024,
+              },
+              'synod/campaign_utility.png': {
+                  'url': 'https://dnznrvs05pmza.cloudfront.net/gemini/gemini-3.1-flash-image/images/3ed70adb-7fd8-4a12-9661-31bbbff8382b/dfb44c15-765a-4868-a3ca-4b39ae6542ef/Single_standalone_campaign_status_and_utility_HUD_module_for.png?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiMDNlNmFmODk5MWRhNDM0ZiIsImJ1Y2tldCI6InJ1bndheS10YXNrLWFydGlmYWN0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc4OTA0MzQ2NX0.dy9Z2f1-CVb-lMs449XkXEtnXJyMg1YUav4iNn6DG_8',
+                  'task': '3ed70adb-7fd8-4a12-9661-31bbbff8382b', 'fallback': True, 'max_width': 800,
+              },
+              'veyra/planet_frame.png': {
+                  'url': 'https://dnznrvs05pmza.cloudfront.net/sam3_image_segmentation/83bea2b6-5115-4e3c-869a-5a6d54622730/c4c5e24f-c647-4795-bcb3-4129dfe18cd7.png?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiYjcwODE0ZDgxNTIyZjgwMSIsImJ1Y2tldCI6InJ1bndheS10YXNrLWFydGlmYWN0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc4OTAxNjE1Mn0.Z1s1-cuGA7NovmIA8GkVAYuKTtmlwKpBUwvwMuJ8Pic',
+                  'task': '83bea2b6-5115-4e3c-869a-5a6d54622730', 'fallback': False, 'max_width': 720,
+              },
+              'veyra/navigation_rail.png': {
+                  'url': 'https://dnznrvs05pmza.cloudfront.net/sam3_image_segmentation/c4770c58-9e25-4daf-b7d1-a1fe0c009a52/ae2f41fb-3d5c-4c14-aec7-7ddeb5c7a021.png?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiNjVhMjcyOGM4ZWY4YWI4ZiIsImJ1Y2tldCI6InJ1bndheS10YXNrLWFydGlmYWN0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc4OTAzOTM3Mn0.o4__GyCJRyaJQalfo2RvAmY_v9hS-kjGIsyOoCGFZco',
+                  'task': 'c4770c58-9e25-4daf-b7d1-a1fe0c009a52', 'fallback': False, 'max_width': 1600,
+              },
+              'veyra/planet_selector.png': {
+                  'url': 'https://dnznrvs05pmza.cloudfront.net/sam3_image_segmentation/e41e8be3-85cb-424f-a717-4028bf719706/218e25bf-2375-4195-8696-100306090ca2.png?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiZWQyYTNmNDE5NTI4YzdhYyIsImJ1Y2tldCI6InJ1bndheS10YXNrLWFydGlmYWN0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc4OTA3NDQ5N30.T9Bj2VT9nNz2OTENdWXOx4RFj-K00sdHo6JY8YCvrtI',
+                  'task': 'e41e8be3-85cb-424f-a717-4028bf719706', 'fallback': False, 'max_width': 1024,
+              },
+              'veyra/campaign_utility.png': {
+                  'url': 'https://dnznrvs05pmza.cloudfront.net/gemini/gemini-3.1-flash-image/images/213558fa-c788-42f6-9270-36237449d23a/031ebaae-4200-4c3b-a6fd-00545138c08b/Single_standalone_campaign_status_and_utility_HUD_module_for.png?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiYTM5MTI3OTQ4NWMyOGQyYiIsImJ1Y2tldCI6InJ1bndheS10YXNrLWFydGlmYWN0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc4OTA0NzA2MH0.ZN81jOwTcxCXKEx7ZxgTQ3cpzx1nId7wfBD-0DC1d30',
+                  'task': '213558fa-c788-42f6-9270-36237449d23a', 'fallback': True, 'max_width': 800,
+              },
+          }
+
+          def download(url: str) -> bytes:
+              request = urllib.request.Request(url, headers={'User-Agent': 'Asterion-asset-import/1.0'})
+              with urllib.request.urlopen(request, timeout=60) as response:
+                  data = response.read()
+              if len(data) < 1000:
+                  raise RuntimeError(f'downloaded asset is unexpectedly small: {len(data)} bytes')
+              return data
+
+          def connected_black_to_alpha(image: Image.Image, threshold: int = 30) -> Image.Image:
+              image = image.convert('RGBA')
+              pixels = image.load()
+              width, height = image.size
+              background = bytearray(width * height)
+              queue: deque[tuple[int, int]] = deque()
+
+              def dark(x: int, y: int) -> bool:
+                  r, g, b, a = pixels[x, y]
+                  return a > 0 and max(r, g, b) <= threshold
+
+              def seed(x: int, y: int) -> None:
+                  idx = y * width + x
+                  if not background[idx] and dark(x, y):
+                      background[idx] = 1
+                      queue.append((x, y))
+
+              for x in range(width):
+                  seed(x, 0)
+                  seed(x, height - 1)
+              for y in range(height):
+                  seed(0, y)
+                  seed(width - 1, y)
+
+              while queue:
+                  x, y = queue.popleft()
+                  for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+                      if 0 <= nx < width and 0 <= ny < height:
+                          idx = ny * width + nx
+                          if not background[idx] and dark(nx, ny):
+                              background[idx] = 1
+                              queue.append((nx, ny))
+
+              mask = Image.new('L', (width, height), 0)
+              mask_pixels = mask.load()
+              for y in range(height):
+                  row = y * width
+                  for x in range(width):
+                      if background[row + x]:
+                          mask_pixels[x, y] = 255
+                          r, g, b, _ = pixels[x, y]
+                          pixels[x, y] = (r, g, b, 0)
+
+              # Feather only the immediate exterior edge; enclosed dark panel interiors remain opaque.
+              dilated = mask.filter(ImageFilter.MaxFilter(5))
+              dilated_pixels = dilated.load()
+              for y in range(height):
+                  row = y * width
+                  for x in range(width):
+                      if background[row + x] or dilated_pixels[x, y] == 0:
+                          continue
+                      r, g, b, a = pixels[x, y]
+                      peak = max(r, g, b)
+                      if peak < 68:
+                          feather = max(0, min(255, int((peak - threshold) * 255 / max(1, 68 - threshold))))
+                          pixels[x, y] = (r, g, b, min(a, feather))
+              return image
+
+          def alpha_fraction(image: Image.Image) -> float:
+              alpha = image.getchannel('A')
+              histogram = alpha.histogram()
+              transparent = sum(histogram[:250])
+              return transparent / (image.width * image.height)
+
+          def crop_and_pad(image: Image.Image, pad: int = 8) -> Image.Image:
+              bbox = image.getchannel('A').getbbox()
+              if bbox is None:
+                  raise RuntimeError('asset is fully transparent')
+              left, top, right, bottom = bbox
+              left = max(0, left - pad)
+              top = max(0, top - pad)
+              right = min(image.width, right + pad)
+              bottom = min(image.height, bottom + pad)
+              return image.crop((left, top, right, bottom))
+
+          def scrub_selector_glyph(image: Image.Image) -> Image.Image:
+              # Generated selector art occasionally invents a dropdown glyph even though the live DOM owns it.
+              # Remove only bright accent pixels in the small interior where that glyph appears; keep the frame.
+              image = image.copy().convert('RGBA')
+              px = image.load()
+              w, h = image.size
+              x0, x1 = int(w * 0.865), int(w * 0.925)
+              y0, y1 = int(h * 0.34), int(h * 0.66)
+              sample = []
+              sx0, sx1 = int(w * 0.73), int(w * 0.80)
+              sy0, sy1 = int(h * 0.42), int(h * 0.58)
+              for y in range(sy0, sy1):
+                  for x in range(sx0, sx1):
+                      r, g, b, a = px[x, y]
+                      if a > 220 and max(r, g, b) < 90:
+                          sample.append((r, g, b))
+              if sample:
+                  fill = tuple(int(median([c[i] for c in sample])) for i in range(3))
+              else:
+                  fill = (6, 16, 24)
+              for y in range(y0, y1):
+                  for x in range(x0, x1):
+                      r, g, b, a = px[x, y]
+                      if a == 0:
+                          continue
+                      peak = max(r, g, b)
+                      trough = min(r, g, b)
+                      if peak > 82 and peak - trough > 22:
+                          px[x, y] = (*fill, a)
+              return image
+
+          metadata = {}
+          for relative, spec in ASSETS.items():
+              raw = download(spec['url'])
+              image = Image.open(io.BytesIO(raw)).convert('RGBA')
+              if spec['fallback'] or alpha_fraction(image) < 0.03:
+                  image = connected_black_to_alpha(image)
+              image = crop_and_pad(image)
+              if relative.endswith('planet_selector.png'):
+                  image = scrub_selector_glyph(image)
+              max_width = int(spec['max_width'])
+              if image.width > max_width:
+                  target_height = max(1, round(image.height * max_width / image.width))
+                  image = image.resize((max_width, target_height), Image.Resampling.LANCZOS)
+              output = ROOT / relative
+              output.parent.mkdir(parents=True, exist_ok=True)
+              image.save(output, 'PNG', optimize=True, compress_level=9)
+              digest = hashlib.sha256(output.read_bytes()).hexdigest()
+              metadata[relative] = {
+                  'task': spec['task'],
+                  'fallback_black_key': bool(spec['fallback']),
+                  'width': image.width,
+                  'height': image.height,
+                  'alpha_fraction': round(alpha_fraction(image), 4),
+                  'bytes': output.stat().st_size,
+                  'sha256': digest,
+              }
+              print(relative, metadata[relative])
+
+          (ROOT / 'ASSET_METADATA.json').write_text(
+              json.dumps(metadata, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          PY
+          python /tmp/integrate_header_assets.py
+      - name: Verify generated files
+        shell: bash
+        run: |
+          test -f assets/source/faction-header-v2/aegis/planet_selector.png
+          test -f assets/source/faction-header-v2/aegis/resource_cell.png
+          test -f assets/source/faction-header-v2/aegis/campaign_utility.png
+          test -f assets/source/faction-header-v2/aegis/navigation_active.png
+          test -f assets/source/faction-header-v2/synod/planet_frame.png
+          test -f assets/source/faction-header-v2/synod/navigation_rail.png
+          test -f assets/source/faction-header-v2/synod/planet_selector.png
+          test -f assets/source/faction-header-v2/synod/campaign_utility.png
+          test -f assets/source/faction-header-v2/veyra/planet_frame.png
+          test -f assets/source/faction-header-v2/veyra/navigation_rail.png
+          test -f assets/source/faction-header-v2/veyra/planet_selector.png
+          test -f assets/source/faction-header-v2/veyra/campaign_utility.png
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          for path in sorted(Path('assets/source/faction-header-v2').glob('*/*.png')):
+              with Image.open(path) as image:
+                  if image.mode != 'RGBA':
+                      raise SystemExit(f'{path}: expected RGBA, got {image.mode}')
+                  extrema = image.getchannel('A').getextrema()
+                  if extrema[0] != 0 or extrema[1] != 255:
+                      raise SystemExit(f'{path}: alpha channel is not full-range: {extrema}')
+                  print(path, image.size, extrema)
+          PY
+      - name: Commit imported binary assets
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add assets/source/faction-header-v2
+          git rm .github/workflows/race-header-assets-once.yml
+          git commit -m 'feat(ui): import faction header binary assets'
+          git push origin HEAD:codex/race-header-reference-rebuild
