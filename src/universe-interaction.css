@@ -1,6 +1,7 @@
 /* Fixed planetary coordinates, independent asteroid motion, screen-sized dialog. */
 .viewport:has(.workspace--universe){position:relative;display:block}
 .viewport:has(.workspace--universe)>.stage{position:absolute;left:50%;top:50%;margin-left:-960px;margin-top:-540px}
+.universe-view-v3{--universe-self:#55d6ff;--universe-ally:#63d48b;--universe-enemy:#f0646e;--universe-neutral:#718896;--universe-renegade:#f39a57;--universe-unique:#e7c66c;--universe-anomaly:#af8bff}
 .universe-view-v3,.universe-view-v3 *,.universe-modal-backdrop,.universe-modal-backdrop *{box-sizing:border-box}
 .workspace--universe .universe-view-v3{background:radial-gradient(ellipse at 62% 38%,#10243b80,transparent 55%),linear-gradient(145deg,#07121ecc,#02070dde)}
 .workspace--universe .universe-view-v3 .system-scene{inset:64px 0 0;background:radial-gradient(ellipse at 50% 52%,#10465a33,transparent 48%)}
@@ -18,15 +19,25 @@
 .workspace--universe .universe-view-v3 .system-planet{width:130px;height:116px;isolation:isolate}
 .workspace--universe .universe-view-v3 .system-planet img{width:88px;height:88px;top:0;object-fit:contain;filter:drop-shadow(0 7px 9px #0009);transition:filter .2s}
 .workspace--universe .universe-view-v3 .system-planet:hover img{transform:translateX(-50%);filter:drop-shadow(0 0 15px #79dcff77)}
-.workspace--universe .universe-view-v3 .system-planet.owned img,.workspace--universe .universe-view-v3 .system-planet--npc img{filter:drop-shadow(0 0 12px #ff756d66) drop-shadow(0 0 22px #d83f4933)}
+.workspace--universe .universe-view-v3 .system-planet--self img{filter:drop-shadow(0 0 12px #55d6ff66) drop-shadow(0 0 22px #55d6ff22)}
+.workspace--universe .universe-view-v3 .system-planet--ally img{filter:drop-shadow(0 0 12px #63d48b66) drop-shadow(0 0 22px #63d48b22)}
+.workspace--universe .universe-view-v3 .system-planet--enemy img{filter:drop-shadow(0 0 12px #f0646e66) drop-shadow(0 0 22px #f0646e22)}
+.workspace--universe .universe-view-v3 .system-planet--neutral img{filter:drop-shadow(0 0 12px #71889666) drop-shadow(0 0 22px #71889622)}
 .workspace--universe .universe-view-v3 .planet-name{top:90px;height:23px;line-height:21px;font-size:13px;font-weight:500;color:#bdd2dc;background:#07111abf;border:0;border-radius:4px;padding:0 5px}
 .workspace--universe .universe-view-v3 .planet-slot{right:9px;top:4px;font-size:12px;width:23px;height:23px;border-color:#6f9db155;border-radius:4px}
-.workspace--universe .universe-view-v3 .system-planet.owned::after{left:20px;top:-2px;width:90px;height:90px;border:1px solid #ff756daa;box-shadow:0 0 18px #ff514633}
-.workspace--universe .universe-view-v3 .system-planet.owned .planet-name,.workspace--universe .universe-view-v3 .system-planet--npc .planet-name{color:#ffaaa0;border:1px solid #ff756d77;background:#4a1d24cc;height:23px}
-.workspace--universe .universe-view-v3 .system-planet--unique .planet-name{color:#e6d19f;border-bottom:1px solid #d3b57388}
+.workspace--universe .universe-view-v3 .system-planet--self::after{left:20px;top:-2px;width:90px;height:90px;border:1px solid #55d6ffaa;box-shadow:0 0 18px #55d6ff33}
+.workspace--universe .universe-view-v3 .system-planet--ally::after{left:20px;top:-2px;width:90px;height:90px;border:1px solid #63d48baa;box-shadow:0 0 18px #63d48b33}
+.workspace--universe .universe-view-v3 .system-planet--enemy::after{left:20px;top:-2px;width:90px;height:90px;border:1px solid #f0646eaa;box-shadow:0 0 18px #f0646e33}
+.workspace--universe .universe-view-v3 .system-planet--neutral::after{left:20px;top:-2px;width:90px;height:90px;border:1px solid #71889688;box-shadow:0 0 18px #71889622}
+.workspace--universe .universe-view-v3 .system-planet--self .planet-name{color:#55d6ff;border:1px solid #55d6ff77;background:#0a3342cc;height:23px}
+.workspace--universe .universe-view-v3 .system-planet--ally .planet-name{color:#63d48b;border:1px solid #63d48b77;background:#103927cc;height:23px}
+.workspace--universe .universe-view-v3 .system-planet--enemy .planet-name{color:#f0646e;border:1px solid #f0646e77;background:#431f29cc;height:23px}
+.workspace--universe .universe-view-v3 .system-planet--neutral .planet-name{color:#a9bbc4;border:1px solid #71889666;background:#17242bcc;height:23px}
+.workspace--universe .universe-view-v3 .system-planet--uninhabited .planet-name{color:#718896;border-bottom:1px solid #71889688}
+.workspace--universe .universe-view-v3 .system-planet--unique .planet-name{color:#e7c66c;border-bottom:1px solid #e7c66c88}
 .workspace--universe .universe-view-v3 .system-planet--unique img{width:104px;height:94px;top:-6px;filter:drop-shadow(0 0 12px #9c8ad84d)}
-.workspace--universe .universe-view-v3 .system-planet--pirate .planet-name{color:#ffb195;background:#341812b8}
-.workspace--universe .universe-view-v3 .system-planet--anomaly .planet-name{color:#96e9da}
+.workspace--universe .universe-view-v3 .system-planet--pirate .planet-name{color:#f39a57;background:#3f2918cc;border-color:#f39a5766}
+.workspace--universe .universe-view-v3 .system-planet--anomaly .planet-name{color:#af8bff;background:#281c46cc;border-color:#af8bff66}
 .workspace--universe .universe-view-v3 .system-planet--pirate::before{content:'';position:absolute;z-index:-1;width:98px;height:98px;left:16px;top:-5px;border:1px solid #ff704b80;border-radius:50%;background:radial-gradient(circle,transparent 45%,#da421e25 64%,transparent 70%);animation:universe-pirate-signal 3.8s ease-out infinite;pointer-events:none}
 .workspace--universe .universe-view-v3 .system-planet--pirate img{animation:universe-pirate-embers 4s ease-in-out infinite}
 .workspace--universe .universe-view-v3 .empty-slot{width:30px;height:30px;font-size:12px;color:#7795a7;border-color:#7ca9bd36;background:#07172288}
@@ -34,9 +45,9 @@
 .workspace--universe .universe-view-v3 .system-asteroid{width:52px;height:50px;z-index:7}
 .workspace--universe .universe-view-v3 .system-asteroid img{width:43px;height:38px}
 .workspace--universe .universe-view-v3 .system-asteroid span{font-size:8px;letter-spacing:.5px;color:#8fa1ad}
-.universe-map-legend{position:absolute;top:27px;right:28px;display:flex;gap:20px;font-size:12px;color:#94aebb}
+.universe-map-legend{position:absolute;top:27px;right:28px;display:flex;gap:14px;font-size:12px;color:#94aebb}
 .universe-map-legend span::before{content:'';display:inline-block;width:6px;height:6px;background:#82929c;border-radius:50%;margin-right:7px}
-.universe-map-legend .legend-owners::before{background:#ff756d}.universe-map-legend .legend-unique::before{background:#ebcc84}.universe-map-legend .legend-pirate::before{background:#f58a64}
+.universe-map-legend .legend-self::before{background:#55d6ff}.universe-map-legend .legend-ally::before{background:#63d48b}.universe-map-legend .legend-enemy::before{background:#f0646e}.universe-map-legend .legend-neutral::before{background:#718896}.universe-map-legend .legend-wild::before{background:#718896}.universe-map-legend .legend-unique::before{background:#e7c66c}.universe-map-legend .legend-pirate::before{background:#f39a57}.universe-map-legend .legend-anomaly::before{background:#af8bff}
 .universe-map-hint{position:absolute;bottom:20px;left:30px;right:30px;display:flex;justify-content:space-between;color:#8aa3b3;font-size:12px;letter-spacing:.4px;pointer-events:none}.universe-map-hint span{color:#647e90}
 .workspace--universe .universe-view-v3 .universe-tools{top:auto;bottom:13px;left:50%;right:auto;width:auto;height:48px;transform:translateX(-50%);display:flex;border:1px solid #62859833;background:#061521cc;border-radius:8px;overflow:hidden}
 .workspace--universe .universe-view-v3 .universe-tools button{min-width:122px;padding:7px 14px;flex-direction:row;gap:9px;border:0}
@@ -46,7 +57,7 @@
 /* Portal escapes stage scaling so dialogs retain actual readable pixels. */
 .universe-modal-backdrop{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:24px;background:#01060bb3;backdrop-filter:blur(7px);font-family:Arial,sans-serif;color:#dfeaf1}
 .universe-inspector{--object-accent:#7bd5df;position:relative;width:min(1040px,100%);max-height:calc(100dvh - 48px);display:flex;flex-direction:column;overflow:hidden;border:1px solid #6e99ad66;border-radius:14px;background:radial-gradient(ellipse at 15% 20%,#1b3d5266,transparent 55%),#08121e;box-shadow:0 28px 110px #000c,0 0 0 1px #ffffff08 inset}
-.universe-inspector--npc{--object-accent:#c2a4f3}.universe-inspector--pirate{--object-accent:#ff9f77}.universe-inspector--unique{--object-accent:#e4c686}.universe-inspector--anomaly{--object-accent:#80e0ca}
+.universe-inspector--player{--object-accent:#55d6ff}.universe-inspector--npc{--object-accent:#718896}.universe-inspector--uninhabited{--object-accent:#718896}.universe-inspector--asteroid{--object-accent:#a7c3d1}.universe-inspector--pirate{--object-accent:#f39a57}.universe-inspector--unique{--object-accent:#e7c66c}.universe-inspector--anomaly{--object-accent:#af8bff}
 .universe-inspector-header{display:flex;align-items:center;justify-content:space-between;padding:22px 28px;border-bottom:1px solid #7c9bab26;background:linear-gradient(90deg,#ffffff04,transparent)}
 .universe-inspector-header>div{display:grid;grid-template-columns:1fr auto;column-gap:24px;align-items:end;flex:1;margin-right:24px}.universe-inspector-header small{grid-column:1 / -1;color:var(--object-accent);font-size:10px;letter-spacing:1.8px;text-transform:uppercase}
 .universe-inspector-header h2{margin:8px 0 0;font-size:25px;font-weight:500;letter-spacing:.2px}.universe-inspector-header span{font-size:13px;font-variant-numeric:tabular-nums;color:#96afc0}

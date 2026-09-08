@@ -69,6 +69,7 @@ import {
   getUniverseObjectKindLabel,
   getUniverseSlotPoint,
   getUniverseAsteroidPoint,
+  getUniverseOwnerRelation,
   normalizeUniverseOwnerProfile,
 } from './domain/universe/runtime.ts';
 import type {
@@ -459,7 +460,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
 
       <div className="system-scene" data-qa-universe-scene>
         <div className="system-caption"><span>ГАЛАКТИКА {String(GALAXY).padStart(2, '0')} / ЗВЁЗДНЫЙ АТЛАС</span><strong>Система {String(system).padStart(2, '0')}</strong><small>24 позиции · 4 орбиты</small></div>
-        <div className="universe-map-legend" aria-label="Обозначения карты"><span className="legend-owners">Игроки / боты</span><span className="legend-wild">Необитаемые</span><span className="legend-unique">Уникальные</span><span className="legend-pirate">Пираты</span></div>
+        <div className="universe-map-legend" aria-label="Обозначения карты"><span className="legend-self">Ваш мир</span><span className="legend-ally">Союзная</span><span className="legend-enemy">Вражеская</span><span className="legend-neutral">Нейтральная</span><span className="legend-wild">Необитаемые</span><span className="legend-unique">Уникальные</span><span className="legend-pirate">Отступники</span><span className="legend-anomaly">Аномалии</span></div>
 
         {[0, 1, 2, 3].map((ring) => <div key={ring} className={`system-orbit ring-${ring + 1}`} />)}
 
@@ -471,6 +472,9 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
           const point = getUniverseSlotPoint(node.coordinate.position);
           const coordinate = formatUniverseCoordinate(node.coordinate);
           const caption = getUniverseNodeCaption(node, profile.displayName, owners.get(node.ownerId ?? '')?.displayName);
+          const relation = node.kind === 'player' || node.kind === 'npc'
+            ? getUniverseOwnerRelation(node, owner.id, owner.alliance, owners.get(node.ownerId ?? ''))
+            : null;
           const ariaLabel = `${caption} · ${getUniverseObjectKindLabel(node.kind)} · ${coordinate}`;
           if (node.kind === 'empty') {
             return (
@@ -493,12 +497,13 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
             <button
               type="button"
               key={node.id}
-              className={`system-planet system-planet--${node.kind} ${node.isHomeworld ? 'owned' : ''}`}
+              className={`system-planet system-planet--${node.kind} ${relation ? `system-planet--${relation}` : ''} ${node.isHomeworld ? 'owned' : ''}`}
               style={toStyle(point)}
               title={`${node.name} · ${node.statusLabel} · ${coordinate}`}
               aria-label={ariaLabel}
               data-qa-universe-object={node.id}
               data-qa-universe-kind={node.kind}
+              data-qa-universe-relation={relation ?? undefined}
               onClick={() => selectNode(node)}
             >
               <img src={node.art} alt="" draggable={false} />

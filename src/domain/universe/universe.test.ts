@@ -34,11 +34,12 @@ import {
   getUniverseAsteroidDwellMs,
   getUniverseAsteroidState,
   getUniverseNodeCaption,
+  getUniverseOwnerRelation,
   getUniverseSlotPoint,
   getUniverseTimedObjectSchedule,
   UNIVERSE_NPC_OWNER_ID,
 } from './runtime.ts';
-import type { UniversePlanetNode } from './types.ts';
+import type { UniverseOwnerAlliance, UniversePlanetNode } from './types.ts';
 
 test('planet coordinates remain unchanged while asteroid clock advances', () => {
   const points = Array.from({ length: POSITION_COUNT }, (_, index) => getUniverseSlotPoint(index + 1));
@@ -64,6 +65,25 @@ test('homeworld caption uses player nickname while its planet name stays in node
   assert.equal(homeworld.name, 'Helion 01');
   assert.equal(getUniverseNodeCaption(homeworld, 'Dendrilion'), '★ Dendrilion');
   assert.equal(formatUniverseCoordinate(homeworld.coordinate), '[1:1:1]');
+});
+
+test('owner color relation follows ownership and alliance status instead of bot identity', () => {
+  const homeworld = createUniverseSystem({ system: 1, currentOwnerId: 'player-current' }).positions.find((node) => node.isHomeworld)!;
+  const botPlanet = createUniverseMap().systems.flatMap((system) => system.positions).find((node) => node.kind === 'npc')!;
+  const alliance = (id: string, tag: string): UniverseOwnerAlliance => ({
+    id,
+    name: id,
+    tag,
+    emblem: { glyph: 'orbit', accent: 'cyan' },
+    glyph: 'orbit',
+  });
+  const currentAlliance = alliance('alliance-a', 'A');
+  const bot = createUniverseNpcOwnerProfile();
+
+  assert.equal(getUniverseOwnerRelation(homeworld, 'player-current', currentAlliance, undefined), 'self');
+  assert.equal(getUniverseOwnerRelation(botPlanet, 'player-current', currentAlliance, bot), 'neutral');
+  assert.equal(getUniverseOwnerRelation(botPlanet, 'player-current', currentAlliance, { ...bot, alliance: currentAlliance }), 'ally');
+  assert.equal(getUniverseOwnerRelation(botPlanet, 'player-current', currentAlliance, { ...bot, alliance: alliance('alliance-b', 'B') }), 'enemy');
 });
 
 test('dynamic objects are scheduled independently and never duplicate within a system', () => {

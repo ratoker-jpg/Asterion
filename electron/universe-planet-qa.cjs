@@ -137,6 +137,8 @@ async function mapSnapshot(win) {
       asteroidCount: document.querySelectorAll('[data-qa-universe-kind="asteroid"]').length,
       asteroidToggle: document.querySelector('[data-qa-universe-asteroids-toggle]')?.getAttribute('aria-pressed') || '',
       homeCaption: document.querySelector('[data-qa-universe-object="player-planet-helion-01"] [data-qa-map-caption]')?.textContent?.trim() || '',
+      legend: Array.from(document.querySelectorAll('.universe-map-legend span')).map((node) => ({ text: node.textContent?.trim() || '', className: node.className })),
+      ownerRelations: Array.from(document.querySelectorAll('[data-qa-universe-kind="player"], [data-qa-universe-kind="npc"]')).map((node) => ({ id: node.getAttribute('data-qa-universe-object'), relation: node.getAttribute('data-qa-universe-relation') || '', className: node.className })),
       mapCaptions: Array.from(document.querySelectorAll('[data-qa-map-caption]')).map((node) => node.textContent?.trim() || ''),
       coordinateLineCount: document.querySelectorAll('.system-planet small, .empty-slot small').length,
       animated,
@@ -285,6 +287,8 @@ async function runViewport(width, height) {
       throw new Error(`${label}: object fixture coverage failed ${JSON.stringify(map)}`);
     }
     if (map.homeCaption !== '★ Dendrilion' || map.coordinateLineCount !== 0 || map.mapCaptions.some((caption) => /\\[\\d+:\\d+:\\d+\\]/.test(caption))) throw new Error(`${label}: map caption contract failed ${JSON.stringify(map)}`);
+    const expectedLegend = ['Ваш мир', 'Союзная', 'Вражеская', 'Нейтральная', 'Необитаемые', 'Уникальные', 'Отступники', 'Аномалии'];
+    if (JSON.stringify(map.legend.map((item) => item.text)) !== JSON.stringify(expectedLegend) || map.ownerRelations.find((item) => item.id === 'player-planet-helion-01')?.relation !== 'self') throw new Error(`${label}: relation color legend contract failed ${JSON.stringify({ legend: map.legend, ownerRelations: map.ownerRelations })}`);
     if (Object.values(map.animated).some((name) => name !== null && name !== 'none')) throw new Error(`${label}: map wrappers must remain static ${JSON.stringify(map.animated)}`);
     if (map.horizontalOverflow || map.bodyHorizontalOverflow || !map.stageRect || Math.abs(map.stageRect.x) > 2 || Math.abs(map.stageRect.y) > 2 || Math.abs(map.stageRect.width - width) > 2 || Math.abs(map.stageRect.height - height) > 2) throw new Error(`${label}: map layout/overflow failed ${JSON.stringify(map)}`);
     if (!map.localStorageKeys.includes(SAVE_KEY) || map.localStorageKeys.some((key) => /universe/i.test(key))) throw new Error(`${label}: unexpected universe save key ${JSON.stringify(map.localStorageKeys)}`);
@@ -315,6 +319,8 @@ async function runViewport(width, height) {
 
     const npcSystem = await findObject(win, '[data-qa-universe-kind="npc"]');
     const npcId = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-universe-kind="npc"]').getAttribute('data-qa-universe-object')`);
+    const npcRelation = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-universe-kind="npc"]').getAttribute('data-qa-universe-relation')`);
+    if (npcRelation !== 'neutral') throw new Error(`${label}: unassigned bot must remain neutral, got ${npcRelation}`);
     await clickObject(win, '[data-qa-universe-kind="npc"]');
     const npc = await inspectorSnapshot(win);
     checkCopy(npc);

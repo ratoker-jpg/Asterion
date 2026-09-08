@@ -5,6 +5,7 @@ import type {
   UniverseAsteroidState,
   UniverseCoordinate,
   UniverseMap,
+  UniverseOwnerAlliance,
   UniverseOwnerProfile,
   UniversePlanetNode,
   UniversePoint,
@@ -248,6 +249,21 @@ export function getUniverseAsteroidPoint(node: UniversePlanetNode, nowMs: number
 
 export function getUniverseObjectKindLabel(kind: UniversePlanetNode['kind']) {
   return KIND_LABELS[kind];
+}
+
+export type UniverseOwnerRelation = 'self' | 'ally' | 'enemy' | 'neutral';
+
+export function getUniverseOwnerRelation(
+  node: UniversePlanetNode,
+  currentOwnerId: string,
+  currentAlliance?: UniverseOwnerAlliance | null,
+  targetOwner?: UniverseOwnerProfile,
+): UniverseOwnerRelation {
+  if (node.isHomeworld || node.ownerId === currentOwnerId) return 'self';
+
+  const targetAlliance = targetOwner?.alliance;
+  if (!currentAlliance || !targetAlliance) return 'neutral';
+  return currentAlliance.id === targetAlliance.id || currentAlliance.tag === targetAlliance.tag ? 'ally' : 'enemy';
 }
 
 export function getUniverseNodeCaption(node: UniversePlanetNode, currentPlayerName: string, ownerDisplayName = 'Бот 01') {
