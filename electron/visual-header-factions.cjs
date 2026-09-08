@@ -49,7 +49,7 @@ function assertSameRect(reference, actual, key) {
   }
 }
 
-async function inspectHeader(win, faction) {
+async function inspectHeader(win) {
   return win.webContents.executeJavaScript(`(() => {
     const rect = (selector) => {
       const element = document.querySelector(selector);
@@ -96,37 +96,44 @@ async function inspectHeader(win, faction) {
   })()`);
 }
 
-async function inspectTooltip(win) {
-  const focused = await win.webContents.executeJavaScript(`(() => {
-    const chip = document.querySelector('.header-resource-rail .resource-chip');
-    if (!chip) return false;
-    chip.focus();
-    return document.activeElement === chip;
+async function prepareTooltipTarget(win) {
+  return win.webContents.executeJavaScript(`(() => {
+    const chips = Array.from(document.querySelectorAll('.header-resource-rail .resource-chip'));
+    const predecessor = chips[0];
+    const target = chips[1];
+    if (!predecessor || !target) return null;
+    predecessor.focus();
+    const rect = target.getBoundingClientRect();
+    return {
+      predecessorFocused: document.activeElement === predecessor,
+      center: { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) },
+      viewport: { width: innerWidth, height: innerHeight },
+    };
   })()`);
-  if (!focused) throw new Error('Resource chip could not receive focus for tooltip QA');
-  await settle(win);
+}
 
-  const tooltip = await win.webContents.executeJavaScript(`(() => {
-    const item = document.querySelector('.header-resource-rail .resource-chip .resource-tooltip');
+async function readTooltip(win) {
+  return win.webContents.executeJavaScript(`(() => {
+    const chips = Array.from(document.querySelectorAll('.header-resource-rail .resource-chip'));
+    const target = chips[1];
+    const item = target?.querySelector('.resource-tooltip') ?? null;
     if (!item) return null;
     const style = getComputedStyle(item);
     const r = item.getBoundingClientRect();
-    let clippedBy = null;
-    let parent = item.parentElement;
-    while (parent && parent !== document.body) {
+    const clippedBy = [];
+    for (let parent = item.parentElement; parent && parent !== document.documentElement; parent = parent.parentElement) {
       const parentStyle = getComputedStyle(parent);
-      const overflowX = parentStyle.overflowX;
-      const overflowY = parentStyle.overflowY;
-      if (overflowX !== 'visible' || overflowY !== 'visible') {
-        const pr = parent.getBoundingClientRect();
-        if (r.left < pr.left - 0.5 || r.right > pr.right + 0.5 || r.top < pr.top - 0.5 || r.bottom > pr.bottom + 0.5) {
-          clippedBy = { className: parent.className, overflowX, overflowY };
-          break;
-        }
+      const parentRect = parent.getBoundingClientRect();
+      const clipsX = ['hidden','clip','auto','scroll'].includes(parentStyle.overflowX);
+      const clipsY = ['hidden','clip','auto','scroll'].includes(parentStyle.overflowY);
+      if ((clipsX && (r.left < parentRect.left - 1 || r.right > parentRect.right + 1)) ||
+          (clipsY && (r.top < parentRect.top - 1 || r.bottom > parentRect.bottom + 1))) {
+        clippedBy.push(parent.getAttribute('class') || parent.tagName);
       }
-      parent = parent.parentElement;
     }
     return {
+      focused: document.activeElement === target,
+      visibility: style.visibility,
       opacity: style.opacity,
       width: r.width,
       height: r.height,
@@ -140,16 +147,46 @@ async function inspectTooltip(win) {
       text: item.textContent?.replace(/\\s+/g, ' ').trim() || '',
     };
   })()`);
+}
 
-  if (!tooltip) throw new Error('Resource tooltip missing');
-  if (tooltip.opacity !== '1') throw new Error(`Resource tooltip is not visible after focus: ${JSON.stringify(tooltip)}`);
-  if (tooltip.width <= 0 || tooltip.height <= 0) throw new Error(`Resource tooltip has zero size: ${JSON.stringify(tooltip)}`);
-  if (tooltip.left < 0 || tooltip.right > tooltip.viewportWidth || tooltip.top < 0 || tooltip.bottom > tooltip.viewportHeight) {
-    throw new Error(`Resource tooltip escapes viewport: ${JSON.stringify(tooltip)}`);
+function assertTooltip(snapshot, faction, interaction, requireFocus = false) {
+  if (!snapshot) throw new Error(`${faction}: resource tooltip missing via ${interaction}`);
+  if (requireFocus && !snapshot.focused) throw new Error(`${faction}: resource chip did not receive keyboard Tab focus: ${JSON.stringify(snapshot)}`);
+  if (snapshot.visibility !== 'visible' || snapshot.opacity !== '1') {
+    throw new Error(`${faction}: resource tooltip is not visible via ${interaction}: ${JSON.stringify(snapshot)}`);
   }
-  if (tooltip.clippedBy) throw new Error(`Resource tooltip is clipped by ancestor: ${JSON.stringify(tooltip)}`);
-  if (!tooltip.text) throw new Error('Resource tooltip has no live text');
-  return tooltip;
+  if (snapshot.width <= 0 || snapshot.height <= 0) throw new Error(`${faction}: resource tooltip has zero size via ${interaction}: ${JSON.stringify(snapshot)}`);
+  if (snapshot.left < 0 || snapshot.right > snapshot.viewportWidth || snapshot.top < 0 || snapshot.bottom > snapshot.viewportHeight) {
+    throw new Error(`${faction}: resource tooltip escapes viewport via ${interaction}: ${JSON.stringify(snapshot)}`);
+  }
+  if (snapshot.clippedBy.length) throw new Error(`${faction}: resource tooltip is clipped via ${interaction}: ${JSON.stringify(snapshot)}`);
+  if (!snapshot.text) throw new Error(`${faction}: resource tooltip has no live text via ${interaction}`);
+}
+
+async function inspectTooltipInteractions(win, faction) {
+  const prepared = await prepareTooltipTarget(win);
+  if (!prepared?.predecessorFocused) throw new Error(`${faction}: could not prepare preceding resource chip for keyboard navigation`);
+  await settle(win);
+  win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' });
+  win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' });
+  await settle(win);
+  const focus = await readTooltip(win);
+  assertTooltip(focus, faction, 'keyboard focus', true);
+
+  await win.webContents.executeJavaScript('document.activeElement?.blur()');
+  win.webContents.sendInputEvent({ type: 'mouseMove', x: 1, y: 1, movementX: 0, movementY: 0 });
+  await sleep(50);
+  win.webContents.sendInputEvent({
+    type: 'mouseMove',
+    x: Math.max(1, Math.min(prepared.viewport.width - 2, prepared.center.x)),
+    y: Math.max(1, Math.min(prepared.viewport.height - 2, prepared.center.y)),
+    movementX: 0,
+    movementY: 0,
+  });
+  await settle(win);
+  const hover = await readTooltip(win);
+  assertTooltip(hover, faction, 'hover');
+  return { focus, hover };
 }
 
 function hasBundledAsset(value, stem) {
@@ -157,50 +194,30 @@ function hasBundledAsset(value, stem) {
 }
 
 function verifyArt(snapshot, faction) {
-  if (!hasBundledAsset(snapshot.art.selector, 'planet_selector')) {
-    throw new Error(`${faction}: selector is not using bundled v2 art: ${snapshot.art.selector}`);
-  }
-  if (!hasBundledAsset(snapshot.art.campaign, 'campaign_utility')) {
-    throw new Error(`${faction}: campaign is not using bundled v2 art: ${snapshot.art.campaign}`);
-  }
+  if (!hasBundledAsset(snapshot.art.selector, 'planet_selector')) throw new Error(`${faction}: selector is not using bundled v2 art: ${snapshot.art.selector}`);
+  if (!hasBundledAsset(snapshot.art.campaign, 'campaign_utility')) throw new Error(`${faction}: campaign is not using bundled v2 art: ${snapshot.art.campaign}`);
   if (faction === 'aegis') {
-    if (!hasBundledAsset(snapshot.art.resource, 'resource_cell')) {
-      throw new Error(`aegis: resource cell is not using bundled v2 art: ${snapshot.art.resource}`);
-    }
-    if (!hasBundledAsset(snapshot.art.activeNav, 'navigation_active')) {
-      throw new Error(`aegis: active navigation is not using bundled v2 art: ${snapshot.art.activeNav}`);
-    }
+    if (!hasBundledAsset(snapshot.art.resource, 'resource_cell')) throw new Error(`aegis: resource cell is not using bundled v2 art: ${snapshot.art.resource}`);
+    if (!hasBundledAsset(snapshot.art.activeNav, 'navigation_active')) throw new Error(`aegis: active navigation is not using bundled v2 art: ${snapshot.art.activeNav}`);
   } else {
-    if (!hasBundledAsset(snapshot.art.planet, 'planet_frame')) {
-      throw new Error(`${faction}: planet frame is not using bundled v2 art: ${snapshot.art.planet}`);
-    }
-    if (!hasBundledAsset(snapshot.art.navRail, 'navigation_rail')) {
-      throw new Error(`${faction}: navigation rail is not using bundled v2 art: ${snapshot.art.navRail}`);
-    }
+    if (!hasBundledAsset(snapshot.art.planet, 'planet_frame')) throw new Error(`${faction}: planet frame is not using bundled v2 art: ${snapshot.art.planet}`);
+    if (!hasBundledAsset(snapshot.art.navRail, 'navigation_rail')) throw new Error(`${faction}: navigation rail is not using bundled v2 art: ${snapshot.art.navRail}`);
   }
 }
 
 function verifyLiveContent(snapshot, faction) {
   if (snapshot.faction !== faction) throw new Error(`${faction}: root faction mismatch: ${snapshot.faction}`);
   if (!snapshot.content.selectorText) throw new Error(`${faction}: current planet selector lost live text`);
-  if (snapshot.content.resourceCount !== 5 || snapshot.content.resourceTexts.some((text) => !text)) {
-    throw new Error(`${faction}: resource live DOM is incomplete: ${JSON.stringify(snapshot.content.resourceTexts)}`);
-  }
-  if (snapshot.content.navigationCount !== 6 || snapshot.content.navigationTexts.some((text) => !text)) {
-    throw new Error(`${faction}: navigation live DOM is incomplete: ${JSON.stringify(snapshot.content.navigationTexts)}`);
-  }
+  if (snapshot.content.resourceCount !== 5 || snapshot.content.resourceTexts.some((text) => !text)) throw new Error(`${faction}: resource live DOM is incomplete`);
+  if (snapshot.content.navigationCount !== 6 || snapshot.content.navigationTexts.some((text) => !text)) throw new Error(`${faction}: navigation live DOM is incomplete`);
   if (!snapshot.content.campaignTime) throw new Error(`${faction}: campaign timer lost live text`);
 }
 
 function verifyFactionAssetsAreDistinct(results) {
-  const assertUnique = (key) => {
+  for (const key of ['selector', 'campaign']) {
     const values = results.map((item) => item.art[key]);
-    if (new Set(values).size !== values.length) {
-      throw new Error(`${key}: faction art unexpectedly resolves to the same bundled asset: ${JSON.stringify(values)}`);
-    }
-  };
-  assertUnique('selector');
-  assertUnique('campaign');
+    if (new Set(values).size !== values.length) throw new Error(`${key}: faction art unexpectedly resolves to the same bundled asset: ${JSON.stringify(values)}`);
+  }
   const alienPlanet = results.filter((item) => item.faction !== 'aegis').map((item) => item.art.planet);
   const alienRail = results.filter((item) => item.faction !== 'aegis').map((item) => item.art.navRail);
   if (new Set(alienPlanet).size !== alienPlanet.length) throw new Error(`Synod/Veyra planet art is not distinct: ${JSON.stringify(alienPlanet)}`);
@@ -249,7 +266,7 @@ app.whenReady().then(async () => {
       }
       await settle(win);
 
-      const snapshot = await inspectHeader(win, faction);
+      const snapshot = await inspectHeader(win);
       verifyArt(snapshot, faction);
       verifyLiveContent(snapshot, faction);
       if (!referenceGeometry) referenceGeometry = snapshot.geometry;
@@ -260,7 +277,7 @@ app.whenReady().then(async () => {
         }
       }
 
-      const tooltip = await inspectTooltip(win);
+      const tooltip = await inspectTooltipInteractions(win, faction);
       await capture(win, faction);
       results.push({ ...snapshot, tooltip });
     }
