@@ -4,6 +4,8 @@ export type UniverseObjectKind =
   | 'empty'
   | 'player'
   | 'npc'
+  | 'uninhabited'
+  | 'unique'
   | 'pirate'
   | 'anomaly'
   | 'asteroid';
@@ -75,6 +77,7 @@ export type UniverseAssetCatalog = {
   asteroidArts: readonly string[];
   pirateArts: readonly string[];
   anomalyArts: readonly string[];
+  uniqueArts: readonly string[];
   starArts: readonly string[];
 };
 

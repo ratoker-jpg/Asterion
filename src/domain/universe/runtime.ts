@@ -20,41 +20,56 @@ const DEFAULT_ASSETS: UniverseAssetCatalog = {
   asteroidArts: ['asteroid-default'],
   pirateArts: ['pirate-default'],
   anomalyArts: ['anomaly-default'],
+  uniqueArts: ['unique-default'],
   starArts: ['star-default'],
 };
 
 const NPC_OWNER_ID = 'npc-bot-01';
-const NPC_PLANET_FIXTURES = [
-  { id: 'npc-bot-01-prime', position: 4, name: 'Bot 01 Prime' },
-  { id: 'npc-bot-01-relay', position: 17, name: 'Bot 01 Relay' },
-  { id: 'npc-bot-01-deep', position: 21, name: 'Bot 01 Deep' },
-] as const;
 
 const SYSTEM_ONE_FIXTURES: Readonly<Record<number, { kind: UniversePlanetNode['kind']; name?: string; ownerId?: string; id?: string; artIndex?: number; known?: boolean }>> = {
   1: { kind: 'player', id: 'player-planet-helion-01', ownerId: 'player-current', known: true },
-  4: { kind: 'npc', id: 'npc-bot-01-prime', ownerId: NPC_OWNER_ID, name: 'Bot 01 Prime', artIndex: 2, known: true },
   8: { kind: 'pirate', name: 'Пиратский объект «Клык»', artIndex: 0, known: true },
   13: { kind: 'anomaly', name: 'Аномалия «Люмен»', artIndex: 0, known: true },
-  17: { kind: 'npc', id: 'npc-bot-01-relay', ownerId: NPC_OWNER_ID, name: 'Bot 01 Relay', artIndex: 5, known: true },
-  21: { kind: 'npc', id: 'npc-bot-01-deep', ownerId: NPC_OWNER_ID, name: 'Bot 01 Deep', artIndex: 8, known: true },
+  17: { kind: 'unique', name: 'Осколки Эдема', artIndex: 0, known: true },
+  21: { kind: 'uninhabited', name: 'Необитаемый мир', artIndex: 8, known: true },
 };
+
+// Seeded once for a stable atlas: every bot system and position is sampled.
+// Reserve authored landmarks without replacing them with an NPC world.
+const npcRandom = mulberry32(10_701);
+const NPC_PLANET_FIXTURES = shuffle(Array.from({ length: SYSTEM_COUNT }, (_, index) => index + 1), npcRandom)
+  .slice(0, MAX_PLANETS_PER_OWNER)
+  .map((system, index) => {
+    const slots = Array.from({ length: POSITION_COUNT }, (_, slot) => slot + 1)
+      .filter((slot) => system !== 1 || !SYSTEM_ONE_FIXTURES[slot]);
+    return {
+      id: index === 0 ? 'npc-bot-01-prime' : `npc-bot-01-planet-${index + 1}`,
+      system,
+      position: slots[Math.floor(npcRandom() * slots.length)],
+      name: `Мир Бота 01 · ${index + 1}`,
+    };
+  });
 
 const KIND_LABELS: Record<UniversePlanetNode['kind'], string> = {
   empty: 'Свободная позиция',
   player: 'Планета игрока',
-  npc: 'NPC-планета · fixture',
+  npc: 'Планета Бота 01',
+  uninhabited: 'Необитаемая планета',
+  unique: 'Уникальный объект',
   pirate: 'Пиратский объект',
   anomaly: 'Аномалия',
   asteroid: 'Астероидный пояс',
 };
 
 const KIND_DESCRIPTIONS: Record<UniversePlanetNode['kind'], string> = {
-  empty: 'Позиция не занята. Колонизация появится только после подключения настоящего runtime.',
-  player: 'Домашняя планета текущего игрока в локальном прототипе.',
-  npc: 'Детерминированная карточка NPC для демонстрации интерфейса. Production bot не запускается.',
-  pirate: 'Нейтральный пиратский объект. Боевой runtime и награды не подключены.',
-  anomaly: 'Специальный сигнал с визуальным fixture-ассетом. Стоимость, добыча и эффекты не определены.',
-  asteroid: 'Видимый объект астероидного пояса. Добыча и операции не подключены.',
+  empty: 'Свободная орбитальная позиция.',
+  player: 'Ваша домашняя планета.',
+  npc: 'Один из семи миров, принадлежащих Боту 01.',
+  uninhabited: 'Необитаемый мир. Сведений о поселениях нет.',
+  unique: 'Необычный мир, заслуживающий отдельного изучения.',
+  pirate: 'Объект, занятый пиратами.',
+  anomaly: 'Необычный сигнал неизвестного происхождения.',
+  asteroid: 'Скопление каменных тел на орбите звезды.',
 };
 
 function mulberry32(seed: number) {
@@ -84,6 +99,7 @@ function mergeAssets(assets?: Partial<UniverseAssetCatalog>): UniverseAssetCatal
     asteroidArts: assets?.asteroidArts?.length ? assets.asteroidArts : DEFAULT_ASSETS.asteroidArts,
     pirateArts: assets?.pirateArts?.length ? assets.pirateArts : DEFAULT_ASSETS.pirateArts,
     anomalyArts: assets?.anomalyArts?.length ? assets.anomalyArts : DEFAULT_ASSETS.anomalyArts,
+    uniqueArts: assets?.uniqueArts?.length ? assets.uniqueArts : DEFAULT_ASSETS.uniqueArts,
     starArts: assets?.starArts?.length ? assets.starArts : DEFAULT_ASSETS.starArts,
   };
 }
@@ -98,13 +114,23 @@ export function universeCoordinateKey(coordinate: UniverseCoordinate) {
 
 /** Stable screen position for a slot. It deliberately has no time input. */
 export function getUniverseSlotPoint(slot: number): UniversePoint {
-  const safeSlot = Math.min(POSITION_COUNT, Math.max(1, Math.floor(slot)));
+  return getOrbitPoint(slot, 0);
+}
+
+/** One minute per numbered slot, wrapping within the same six-slot ring. */
+export function getUniverseAsteroidPoint(slot: number, elapsedMs: number): UniversePoint {
+  const elapsed = Number.isFinite(elapsedMs) ? elapsedMs % 360_000 : 0;
+  return getOrbitPoint(slot, elapsed / 60_000);
+}
+
+function getOrbitPoint(slot: number, progress: number): UniversePoint {
+  const safeSlot = Number.isFinite(slot) ? Math.min(POSITION_COUNT, Math.max(1, Math.floor(slot))) : 1;
   const ring = Math.floor((safeSlot - 1) / 6);
   const index = (safeSlot - 1) % 6;
   const radiusX = [19, 28, 36, 44][ring];
   const radiusY = [22, 27, 32, 37][ring];
   const offset = [-30, 0, -15, 15][ring];
-  const angle = ((index * 60) + offset) * Math.PI / 180;
+  const angle = (((index + progress) * 60) + offset) * Math.PI / 180;
 
   return {
     x: 50 + Math.cos(angle) * radiusX,
@@ -143,6 +169,8 @@ export type CreateUniverseSystemOptions = {
 };
 
 function fixtureFor(system: number, slot: number) {
+  const npc = NPC_PLANET_FIXTURES.find((planet) => planet.system === system && planet.position === slot);
+  if (npc) return { ...npc, kind: 'npc' as const, ownerId: NPC_OWNER_ID, known: true, artIndex: undefined };
   if (system === 1) return SYSTEM_ONE_FIXTURES[slot];
   return undefined;
 }
@@ -150,7 +178,8 @@ function fixtureFor(system: number, slot: number) {
 function generatedKind(system: number, slot: number): UniversePlanetNode['kind'] {
   if ((system * 11 + slot * 7) % 29 === 0) return 'pirate';
   if ((system * 13 + slot * 5) % 31 === 0) return 'anomaly';
-  return 'npc';
+  if ((system * 17 + slot * 3) % 47 === 0) return 'unique';
+  return 'uninhabited';
 }
 
 function createPositionNode(
@@ -163,14 +192,14 @@ function createPositionNode(
   const fixture = fixtureFor(system, slot);
   const coordinate = { galaxy, system, position: slot };
   const kind = fixture?.kind ?? generatedKind(system, slot);
-  const ownerId = fixture?.ownerId ?? (kind === 'npc' ? `npc-${String(system).padStart(2, '0')}` : undefined);
+  const ownerId = fixture?.ownerId;
   const isHomeworld = kind === 'player' && system === 1 && slot === 1;
   const name = isHomeworld
     ? options.currentPlanetName?.trim() || 'Helion 01'
     : fixture?.name
       ?? (kind === 'pirate' ? `Пиратский объект ${String(slot).padStart(2, '0')}`
         : kind === 'anomaly' ? `Аномалия ${String(slot).padStart(2, '0')}`
-          : kind === 'npc' ? `NPC ${String(system).padStart(2, '0')} · ${String(slot).padStart(2, '0')}`
+          : kind === 'unique' ? ['Осколки Эдема', 'Сердце Бездны', 'Кристаллический разлом'][(system + slot) % 3]
             : `Планета ${String(system).padStart(2, '0')}-${String(slot).padStart(2, '0')}`);
   const art = isHomeworld
     ? options.currentPlanetArt?.trim() || pickAsset(assets.planetArts, slot, 'planet-home')
@@ -178,7 +207,9 @@ function createPositionNode(
       ? pickAsset(assets.pirateArts, fixture?.artIndex ?? system + slot, 'pirate-default')
       : kind === 'anomaly'
         ? pickAsset(assets.anomalyArts, fixture?.artIndex ?? system + slot, 'anomaly-default')
-        : pickAsset(assets.planetArts, system * 5 + slot, 'planet-default');
+        : kind === 'unique'
+          ? pickAsset(assets.uniqueArts, fixture?.artIndex ?? system + slot, 'unique-default')
+          : pickAsset(assets.planetArts, fixture?.artIndex ?? system * 5 + slot, 'planet-default');
 
   return {
     id: fixture?.id ?? `universe-${galaxy}-${system}-${slot}`,
@@ -199,7 +230,8 @@ export function createUniverseSystem(options: CreateUniverseSystemOptions): Univ
   const system = Math.min(SYSTEM_COUNT, Math.max(1, Math.floor(options.system)));
   const assets = mergeAssets(options.assets);
   const random = mulberry32(10_000 + galaxy * 977 + system * 1_003);
-  const fixtureSlots = system === 1 ? Object.keys(SYSTEM_ONE_FIXTURES).map(Number) : [];
+  const fixtureSlots = Array.from({ length: POSITION_COUNT }, (_, index) => index + 1)
+    .filter((slot) => fixtureFor(system, slot));
   const planetCount = 8 + ((galaxy + system) % 7);
   const remainingSlots = shuffle(
     Array.from({ length: POSITION_COUNT }, (_, index) => index + 1).filter((slot) => !fixtureSlots.includes(slot)),
@@ -286,9 +318,7 @@ export function getUniverseActionState(
 export function createUniverseNpcOwnerProfile(): UniverseOwnerProfile {
   return normalizeUniverseOwnerProfile({
     id: NPC_OWNER_ID,
-    displayName: 'Bot 01',
-    raceId: 'synod',
-    alliance: null,
+    displayName: 'Бот 01',
     planetIds: NPC_PLANET_FIXTURES.map((planet) => planet.id),
   });
 }

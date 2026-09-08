@@ -51,15 +51,42 @@ async function clickPrimary(win, label) {
 }
 
 async function clickObject(win, selector) {
-  const clicked = await win.webContents.executeJavaScript(`(() => {
-    const element = document.querySelector(${JSON.stringify(selector)});
-    if (!element) return false;
-    element.click();
-    return true;
-  })()`);
-  if (!clicked) throw new Error(`Universe object not found: ${selector}`);
+  await clickAt(win, selector);
   await waitFor(win, `document.querySelector('[data-qa-universe-inspector]')`);
   await settle(win);
+}
+
+async function clickAt(win, selector, backdrop = false) {
+  const point = await win.webContents.executeJavaScript(`(() => {
+    const element = document.querySelector(${JSON.stringify(selector)});
+    if (!element) throw new Error('Click target missing');
+    element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    const rect = element.getBoundingClientRect();
+    const x = ${backdrop} ? rect.left + 3 : rect.left + rect.width / 2;
+    const y = ${backdrop} ? rect.top + 3 : rect.top + rect.height / 2;
+    const hit = document.elementFromPoint(x, y);
+    if (${backdrop} ? hit !== element : !element.contains(hit)) throw new Error('Click target occluded: ' + ${JSON.stringify(selector)});
+    return { x, y };
+  })()`);
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mousePressed', ...point, button: 'left', clickCount: 1 });
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseReleased', ...point, button: 'left', clickCount: 1 });
+  await settle(win);
+}
+
+async function pressKey(win, key, modifiers = 0) {
+  const code = key === 'Tab' ? 9 : 27;
+  await win.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'rawKeyDown', key, code: key, windowsVirtualKeyCode: code, modifiers });
+  await win.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'keyUp', key, code: key, windowsVirtualKeyCode: code, modifiers });
+  await settle(win);
+}
+
+async function findObject(win, selector) {
+  for (let system = 1; system <= 40; system += 1) {
+    await selectSystem(win, system);
+    if (await win.webContents.executeJavaScript(`Boolean(document.querySelector(${JSON.stringify(selector)}))`)) return system;
+  }
+  throw new Error(`Object absent from all 40 systems: ${selector}`);
 }
 
 async function capture(win, directory, name) {
@@ -96,10 +123,10 @@ async function mapSnapshot(win) {
     const objects = Array.from(document.querySelectorAll('[data-qa-universe-scene] [data-qa-universe-object]'));
     const positions = Array.from(document.querySelectorAll('[data-qa-universe-scene] [data-qa-universe-kind]:not([data-qa-universe-kind="asteroid"])'));
     const animatedSelectors = ['.system-star', '.system-planet', '.system-asteroid', '.empty-slot'];
-    const animated = Object.fromEntries(animatedSelectors.map((selector) => [selector, getComputedStyle(document.querySelector(selector)).animationName]));
+    const animated = Object.fromEntries(animatedSelectors.map((selector) => [selector, document.querySelector(selector) ? getComputedStyle(document.querySelector(selector)).animationName : null]));
     const rects = () => objects.map((node) => {
       const rect = node.getBoundingClientRect();
-      return { id: node.getAttribute('data-qa-universe-object'), x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
+      return { id: node.getAttribute('data-qa-universe-object'), kind: node.getAttribute('data-qa-universe-kind'), x: rect.x, y: rect.y, width: rect.width, height: rect.height };
     });
     return {
       system: document.querySelector('[data-qa-universe]')?.getAttribute('data-qa-universe-system') || '',
@@ -133,7 +160,7 @@ async function stableObjectRects(win, before) {
       const node = document.querySelector('[data-qa-universe-object="' + id + '"]');
       if (!node) return null;
       const rect = node.getBoundingClientRect();
-      return { id, x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
+      return { id, kind: node.getAttribute('data-qa-universe-kind'), x: rect.x, y: rect.y, width: rect.width, height: rect.height };
     });
   })()`);
 }
@@ -155,6 +182,12 @@ async function inspectorSnapshot(win) {
       avatar: document.querySelector('[data-qa-universe-avatar] img')?.getAttribute('src') || '',
       points,
       planetRows: document.querySelectorAll('[data-qa-universe-planet-row]').length,
+      ownerId: document.querySelector('[data-qa-universe-owner]')?.getAttribute('data-qa-universe-owner'),
+      rows: Array.from(document.querySelectorAll('[data-qa-universe-planet-row]')).map((row) => ({
+        id: row.getAttribute('data-qa-universe-planet-row'),
+        coordinate: row.querySelector('[data-qa-universe-visit] small span')?.textContent?.match(/\\[\\d+:\\d+:\\d+\\]/)?.[0] || '',
+        visitId: row.querySelector('[data-qa-universe-visit]')?.getAttribute('data-qa-universe-visit'),
+      })),
       actions,
       specialActionDisabled: Boolean(document.querySelector('[data-qa-universe-special-action]')?.disabled),
     };
@@ -162,9 +195,42 @@ async function inspectorSnapshot(win) {
 }
 
 async function dismissInspector(win) {
-  await win.webContents.executeJavaScript(`document.querySelector('[data-qa-universe-inspector] .universe-inspector-close')?.click()`);
+  await clickAt(win, '[data-qa-universe-inspector] .universe-inspector-close');
   await waitFor(win, `!document.querySelector('[data-qa-universe-inspector]')`);
   await settle(win);
+}
+
+async function checkModal(win) {
+  const state = await win.webContents.executeJavaScript(`(() => {
+    const dialog = document.querySelector('[data-qa-universe-inspector]');
+    const rect = dialog.getBoundingClientRect();
+    return { role: dialog.getAttribute('role'), modal: dialog.getAttribute('aria-modal'),
+      portal: dialog.parentElement.parentElement === document.body, inert: document.querySelector('.stage').inert,
+      focused: dialog.contains(document.activeElement),
+      centered: Math.abs(rect.x + rect.width / 2 - innerWidth / 2) <= 2 && Math.abs(rect.y + rect.height / 2 - innerHeight / 2) <= 2,
+      fits: rect.x >= 0 && rect.y >= 0 && rect.right <= innerWidth + 1 && rect.bottom <= innerHeight + 1 };
+  })()`);
+  if (state.role !== 'dialog' || state.modal !== 'true' || !state.portal || !state.inert || !state.focused || !state.centered || !state.fits) throw new Error(`Modal contract failed: ${JSON.stringify(state)}`);
+  for (const reverse of [true, false]) {
+    await win.webContents.executeJavaScript(`(() => {
+      const controls = [...document.querySelectorAll('[data-qa-universe-inspector] button:not(:disabled), [data-qa-universe-inspector] [tabindex="0"]')];
+      controls[${reverse} ? 0 : controls.length - 1].focus();
+    })()`);
+    await pressKey(win, 'Tab', reverse ? 8 : 0);
+    const trapped = await win.webContents.executeJavaScript(`(() => {
+      const controls = [...document.querySelectorAll('[data-qa-universe-inspector] button:not(:disabled), [data-qa-universe-inspector] [tabindex="0"]')];
+      return document.activeElement === controls[${reverse} ? controls.length - 1 : 0];
+    })()`);
+    if (!trapped) throw new Error(`Modal focus trap failed: ${reverse ? 'Shift+Tab' : 'Tab'}`);
+  }
+}
+
+async function checkRestoredFocus(win, id) {
+  await waitFor(win, `!document.querySelector('[data-qa-universe-inspector]') && !document.querySelector('.stage').inert && document.activeElement?.getAttribute('data-qa-universe-object') === ${JSON.stringify(id)}`);
+}
+
+function checkCopy(snapshot) {
+  if (/runtime|fixture|рантайм|фикстур/i.test(snapshot.text)) throw new Error(`Implementation jargon in inspector: ${snapshot.text}`);
 }
 
 async function runViewport(width, height) {
@@ -187,7 +253,8 @@ async function runViewport(width, height) {
       partition: `qa-universe-${label}`,
     },
   });
-  win.webContents.on('console-message', (_event, _level, message) => {
+  win.webContents.on('console-message', (event) => {
+    const message = event.message || '';
     if (/error/i.test(message)) console.warn(`[${label}] renderer: ${message}`);
   });
 
@@ -213,56 +280,111 @@ async function runViewport(width, height) {
 
     const map = await mapSnapshot(win);
     if (map.system !== '1' || map.systemOptions !== 40 || map.positionCount !== 24 || map.viewport.innerWidth !== width || map.viewport.innerHeight !== height) throw new Error(`${label}: map cardinality/viewport failed ${JSON.stringify(map)}`);
-    if (!map.objectKinds.includes('empty') || !map.objectKinds.includes('npc') || !map.objectKinds.includes('pirate') || !map.objectKinds.includes('anomaly') || !map.objectKinds.includes('player') || map.asteroidCount < 3) {
+    if (!map.objectKinds.includes('empty') || !map.objectKinds.includes('pirate') || !map.objectKinds.includes('anomaly') || !map.objectKinds.includes('player') || map.asteroidCount < 3) {
       throw new Error(`${label}: object fixture coverage failed ${JSON.stringify(map)}`);
     }
     if (map.homeCaption !== '★ Dendrilion' || map.coordinateLineCount !== 0 || map.mapCaptions.some((caption) => /\\[\\d+:\\d+:\\d+\\]/.test(caption))) throw new Error(`${label}: map caption contract failed ${JSON.stringify(map)}`);
-    if (Object.values(map.animated).some((name) => name !== 'none')) throw new Error(`${label}: universe motion must be disabled ${JSON.stringify(map.animated)}`);
+    if (Object.values(map.animated).some((name) => name !== null && name !== 'none')) throw new Error(`${label}: map wrappers must remain static ${JSON.stringify(map.animated)}`);
     if (map.horizontalOverflow || map.bodyHorizontalOverflow || !map.stageRect || Math.abs(map.stageRect.x) > 2 || Math.abs(map.stageRect.y) > 2 || Math.abs(map.stageRect.width - width) > 2 || Math.abs(map.stageRect.height - height) > 2) throw new Error(`${label}: map layout/overflow failed ${JSON.stringify(map)}`);
     if (!map.localStorageKeys.includes(SAVE_KEY) || map.localStorageKeys.some((key) => /universe/i.test(key))) throw new Error(`${label}: unexpected universe save key ${JSON.stringify(map.localStorageKeys)}`);
 
     const stableRects = await stableObjectRects(win, map.rects);
-    if (JSON.stringify(stableRects) !== JSON.stringify(map.rects)) throw new Error(`${label}: map moved after 1.1s ${JSON.stringify({ before: map.rects, after: stableRects })}`);
+    if (stableRects.some((rect) => !rect)) throw new Error(`${label}: map objects disappeared`);
+    const stationary = map.rects.filter((rect) => rect.kind !== 'asteroid');
+    const stationaryAfter = stableRects.filter((rect) => rect.kind !== 'asteroid');
+    if (JSON.stringify(stationaryAfter) !== JSON.stringify(stationary)) throw new Error(`${label}: planet positions moved after 1.1s`);
+    const asteroidsMoved = map.rects.filter((rect) => rect.kind === 'asteroid').every((before) => {
+      const after = stableRects.find((rect) => rect.id === before.id);
+      return Math.hypot(after.x - before.x, after.y - before.y) > 0.1;
+    });
+    if (!asteroidsMoved) throw new Error(`${label}: asteroid positions did not move after 1.1s`);
+    const pirateAnimation = await win.webContents.executeJavaScript(`(() => {
+      const pirate = document.querySelector('[data-qa-universe-kind="pirate"]');
+      return { image: getComputedStyle(pirate.querySelector('img')).animationName, before: getComputedStyle(pirate, '::before').animationName };
+    })()`);
+    if (Object.values(pirateAnimation).some((name) => name === 'none')) throw new Error(`${label}: pirate visual animation missing ${JSON.stringify(pirateAnimation)}`);
     await capture(win, directory, 'static-map');
 
     await clickObject(win, '[data-qa-universe-object="player-planet-helion-01"]');
     const player = await inspectorSnapshot(win);
+    checkCopy(player);
+    await checkModal(win);
     if (player.kind !== 'player' || player.ownerName !== 'Dendrilion' || !player.avatar.includes('aegis_profile_avatar') || player.points.length !== 4 || player.planetRows !== 1 || player.actions.length !== 2 || player.actions.some((action) => !action.disabled || action.status !== 'disabled' || !action.title.includes('Это ваша планета'))) {
       throw new Error(`${label}: player inspector contract failed ${JSON.stringify(player)}`);
     }
     if (!player.text.includes('Астеры') || !player.text.includes('Содружество Гелион') || !player.text.includes('[HLN]')) throw new Error(`${label}: player profile identity contract failed ${JSON.stringify(player)}`);
     await capture(win, directory, 'player-inspector');
     await dismissInspector(win);
+    await checkRestoredFocus(win, 'player-planet-helion-01');
 
-    await clickObject(win, '[data-qa-universe-object="npc-bot-01-prime"]');
+    const npcSystem = await findObject(win, '[data-qa-universe-kind="npc"]');
+    const npcId = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-universe-kind="npc"]').getAttribute('data-qa-universe-object')`);
+    await clickObject(win, '[data-qa-universe-kind="npc"]');
     const npc = await inspectorSnapshot(win);
-    if (npc.kind !== 'npc' || npc.ownerName !== 'Bot 01' || npc.planetRows !== 3 || npc.actions.length !== 6 || npc.actions.some((action) => action.disabled || action.status !== 'prototype')) throw new Error(`${label}: NPC action/list contract failed ${JSON.stringify(npc)}`);
+    checkCopy(npc);
+    await checkModal(win);
+    if (npc.kind !== 'npc' || npc.ownerName !== 'Бот 01' || !npc.ownerId || npc.planetRows !== 7 || npc.actions.length !== 14 || npc.actions.some((action) => action.disabled || action.status !== 'prototype')) throw new Error(`${label}: NPC action/list contract failed ${JSON.stringify(npc)}`);
+    const systems = npc.rows.map((row) => Number(row.coordinate.slice(1, -1).split(':')[1]));
+    if (new Set(systems).size !== 7 || systems.some((system) => !Number.isInteger(system) || system < 1 || system > 40) || new Set(npc.rows.map((row) => row.id)).size !== 7 || npc.rows.some((row) => row.visitId !== row.id || !/^\[1:\d+:\d+\]$/.test(row.coordinate) || Number(row.coordinate.slice(1, -1).split(':')[2]) < 1 || Number(row.coordinate.slice(1, -1).split(':')[2]) > 24)) throw new Error(`${label}: NPC coordinates/visit targets failed ${JSON.stringify(npc.rows)}`);
+    await capture(win, directory, 'npc-inspector');
     const beforePrototypeAction = await win.webContents.executeJavaScript(`localStorage.getItem(${JSON.stringify(SAVE_KEY)})`);
-    await win.webContents.executeJavaScript(`document.querySelector('[data-qa-universe-action="fleet"]')?.click()`);
+    await clickAt(win, '[data-qa-universe-action="fleet"]');
     await waitFor(win, `document.querySelector('.shell-notice span')?.textContent?.includes('Прототип — отправка не подключена')`);
     const prototypeNotice = await win.webContents.executeJavaScript(`document.querySelector('.shell-notice span')?.textContent?.replace(/\\s+/g, ' ').trim() || ''`);
-    if (!prototypeNotice.includes('[1:1:4]')) throw new Error(`${label}: prototype action target missing ${prototypeNotice}`);
+    if (!prototypeNotice.includes(npc.rows[0].coordinate)) throw new Error(`${label}: prototype action target missing ${prototypeNotice}`);
     const afterPrototypeAction = await win.webContents.executeJavaScript(`localStorage.getItem(${JSON.stringify(SAVE_KEY)})`);
     if (beforePrototypeAction !== afterPrototypeAction) throw new Error(`${label}: prototype action mutated the save envelope`);
     await dismissInspector(win);
+    await checkRestoredFocus(win, npcId);
+
+    // Visit every holding through its row, then reopen the actual map planet.
+    await clickObject(win, `[data-qa-universe-object="${npcId}"]`);
+    for (const row of [...npc.rows.filter((row) => systems[npc.rows.indexOf(row)] !== npcSystem), ...npc.rows.filter((row) => systems[npc.rows.indexOf(row)] === npcSystem)]) {
+      const targetSystem = Number(row.coordinate.slice(1, -1).split(':')[1]);
+      await clickAt(win, `[data-qa-universe-visit="${row.id}"]`);
+      await waitFor(win, `!document.querySelector('[data-qa-universe-inspector]') && !document.querySelector('.stage').inert && document.querySelector('[data-qa-universe]')?.getAttribute('data-qa-universe-system') === ${JSON.stringify(String(targetSystem))}`);
+      await clickObject(win, `[data-qa-universe-object="${row.id}"]`);
+      const reopened = await inspectorSnapshot(win);
+      if (reopened.ownerId !== npc.ownerId || reopened.ownerName !== 'Бот 01' || JSON.stringify(reopened.rows) !== JSON.stringify(npc.rows) || reopened.actions.length !== 14 || reopened.actions.some((action) => action.disabled || action.status !== 'prototype')) throw new Error(`${label}: visit did not reopen the same seven holdings ${JSON.stringify(reopened)}`);
+      const selectedCoordinate = await win.webContents.executeJavaScript(`document.querySelector('.universe-inspector-header span')?.textContent`);
+      if (selectedCoordinate !== row.coordinate) throw new Error(`${label}: visited planet coordinate mismatch ${selectedCoordinate}`);
+    }
+    await clickAt(win, '.universe-modal-backdrop', true);
+    await checkRestoredFocus(win, npc.rows.find((row) => Number(row.coordinate.slice(1, -1).split(':')[1]) === npcSystem).id);
+    await selectSystem(win, 1);
 
     await clickObject(win, '[data-qa-universe-kind="empty"]');
     const empty = await inspectorSnapshot(win);
-    if (empty.kind !== 'empty' || !empty.text.includes('Свободная позиция') || !empty.text.includes('Колонизация появится') || !empty.specialActionDisabled) throw new Error(`${label}: empty inspector contract failed ${JSON.stringify(empty)}`);
+    checkCopy(empty);
+    if (empty.kind !== 'empty' || !empty.text.includes('Свободная позиция') || !empty.text.includes('Свободная орбитальная позиция') || !empty.specialActionDisabled) throw new Error(`${label}: empty inspector contract failed ${JSON.stringify(empty)}`);
     await capture(win, directory, 'empty-inspector');
     await dismissInspector(win);
 
     await clickObject(win, '[data-qa-universe-kind="pirate"]');
     const pirate = await inspectorSnapshot(win);
-    if (pirate.kind !== 'pirate' || !pirate.text.includes('Пиратский объект') || !pirate.text.includes('Боевой runtime') || !pirate.specialActionDisabled) throw new Error(`${label}: pirate inspector contract failed ${JSON.stringify(pirate)}`);
+    checkCopy(pirate);
+    if (pirate.kind !== 'pirate' || !pirate.text.includes('Пиратский объект') || !pirate.specialActionDisabled) throw new Error(`${label}: pirate inspector contract failed ${JSON.stringify(pirate)}`);
     await capture(win, directory, 'pirate-inspector');
     await dismissInspector(win);
 
     await clickObject(win, '[data-qa-universe-kind="anomaly"]');
     const anomaly = await inspectorSnapshot(win);
-    if (anomaly.kind !== 'anomaly' || !anomaly.text.includes('Аномалия') || !anomaly.text.includes('Стоимость, добыча и эффекты') || !anomaly.specialActionDisabled) throw new Error(`${label}: anomaly inspector contract failed ${JSON.stringify(anomaly)}`);
+    checkCopy(anomaly);
+    if (anomaly.kind !== 'anomaly' || !anomaly.text.includes('Аномалия') || !anomaly.specialActionDisabled) throw new Error(`${label}: anomaly inspector contract failed ${JSON.stringify(anomaly)}`);
     await capture(win, directory, 'anomaly-inspector');
     await dismissInspector(win);
+
+    for (const kind of ['uninhabited', 'unique']) {
+      await findObject(win, `[data-qa-universe-kind="${kind}"]`);
+      await clickObject(win, `[data-qa-universe-kind="${kind}"]`);
+      const special = await inspectorSnapshot(win);
+      checkCopy(special);
+      await checkModal(win);
+      if (special.kind !== kind || !special.text.includes('Владелец отсутствует') || !special.specialActionDisabled) throw new Error(`${label}: ${kind} inspector contract failed ${JSON.stringify(special)}`);
+      await capture(win, directory, `${kind}-inspector`);
+      await dismissInspector(win);
+    }
+    await selectSystem(win, 1);
 
     const toggle = '[data-qa-universe-asteroids-toggle]';
     await win.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(toggle)})?.click()`);
@@ -275,8 +397,8 @@ async function runViewport(width, height) {
     if (lastSystem.system !== '40' || lastSystem.positionCount !== 24 || lastSystem.horizontalOverflow || lastSystem.bodyHorizontalOverflow) throw new Error(`${label}: system navigation contract failed ${JSON.stringify(lastSystem)}`);
     await selectSystem(win, 1);
     await clickObject(win, '[data-qa-universe-object="player-planet-helion-01"]');
-    await win.webContents.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`);
-    await waitFor(win, `!document.querySelector('[data-qa-universe-inspector]')`);
+    await pressKey(win, 'Escape');
+    await checkRestoredFocus(win, 'player-planet-helion-01');
 
     const screenshots = skipScreenshots ? [] : fs.readdirSync(directory).filter((name) => name.endsWith('.png')).sort();
     return {
@@ -284,8 +406,10 @@ async function runViewport(width, height) {
       map: { system: map.system, systemOptions: map.systemOptions, positionCount: map.positionCount, asteroidCount: map.asteroidCount, objectKinds: map.objectKinds, homeCaption: map.homeCaption },
       layout: { htmlClass: map.htmlClass, webStageScale: map.webStageScale, visualViewport: map.visualViewport, stageRect: map.stageRect },
       player: { ownerName: player.ownerName, points: player.points, planetRows: player.planetRows },
-      npc: { ownerName: npc.ownerName, planetRows: npc.planetRows, prototypeNotice },
-      specialInspectors: { empty: empty.kind, pirate: pirate.kind, anomaly: anomaly.kind },
+      npc: { ownerName: npc.ownerName, planetRows: npc.planetRows, rows: npc.rows, prototypeNotice },
+      specialInspectors: { empty: empty.kind, pirate: pirate.kind, anomaly: anomaly.kind, uninhabited: 'uninhabited', unique: 'unique' },
+      asteroidsMoved,
+      pirateAnimation,
       stableAfterMs: 1_100,
       horizontalOverflow: false,
       stageRect: map.stageRect,
@@ -301,7 +425,6 @@ async function runViewport(width, height) {
 }
 
 async function main() {
-  fs.rmSync(OUTPUT, { recursive: true, force: true });
   fs.mkdirSync(OUTPUT, { recursive: true });
   const results = [];
   try {

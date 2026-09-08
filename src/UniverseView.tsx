@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
+import { EmblemGlyph } from './CommandView';
 
 import aegisProfileAvatar from '../assets/source/generated-factions-v1/factions/aegis_profile_avatar.png';
 import asteroid01 from '../assets/source/universe-navigation/asteroids/asteroid.variant-01.png';
@@ -14,6 +16,10 @@ import anomaly02 from '../assets/source/universe-navigation/stellar-remnants/ste
 import pirate01 from '../assets/source/planets/pirate/pirate-planet-01-graveyard.png';
 import pirate02 from '../assets/source/planets/pirate/pirate-planet-02-corsair-ocean.png';
 import pirate03 from '../assets/source/planets/pirate/pirate-planet-03-treasure-vault.png';
+import pirateSkull from '../assets/source/planets/pirate/planet-020.png';
+import uniqueIslands from '../assets/source/planets/skins/planet-010.png';
+import uniqueVortex from '../assets/source/planets/skins/planet-013.png';
+import uniqueCrystal from '../assets/source/planets/skins/planet-021.png';
 import planet01 from '../assets/source/universe-navigation/planets/planet.variant-01.png';
 import planet02 from '../assets/source/universe-navigation/planets/planet.variant-02.png';
 import planet03 from '../assets/source/universe-navigation/planets/planet.variant-03.png';
@@ -56,12 +62,13 @@ import {
   MAX_PLANETS_PER_OWNER,
   SYSTEM_COUNT,
   createUniverseNpcOwnerProfile,
-  createUniverseSystem,
+  createUniverseMap,
   formatUniverseCoordinate,
   getUniverseActionState,
   getUniverseNodeCaption,
   getUniverseObjectKindLabel,
   getUniverseSlotPoint,
+  getUniverseAsteroidPoint,
   normalizeUniverseOwnerProfile,
 } from './domain/universe/runtime.ts';
 import type {
@@ -79,9 +86,9 @@ const planetArts = [
 ];
 const starArts = [star01, star02, star03, star04, star05, star06];
 const asteroidArts = [asteroid01, asteroid02, asteroid03, asteroid04, asteroid05, asteroid06, asteroid07, asteroid08];
-const pirateArts = [pirate01, pirate02, pirate03];
+const pirateArts = [pirateSkull, pirate01, pirate02, pirate03];
 const anomalyArts = [anomaly01, anomaly02];
-const assets: UniverseAssetCatalog = { planetArts, starArts, asteroidArts, pirateArts, anomalyArts };
+const assets: UniverseAssetCatalog = { planetArts, starArts, asteroidArts, pirateArts, anomalyArts, uniqueArts: [uniqueIslands, uniqueVortex, uniqueCrystal] };
 
 type UniverseViewProps = {
   onNotice: (message: string) => void;
@@ -131,12 +138,13 @@ function OwnerAvatar({ owner }: { owner: UniverseOwnerProfile }) {
 }
 
 function AllianceMark({ alliance }: { alliance?: UniverseOwnerAlliance | null }) {
+  if (alliance) return <span aria-label={`${alliance.name} [${alliance.tag}]`}><EmblemGlyph emblem={alliance.emblem} compact /></span>;
   return (
     <span
-      className={`universe-alliance-mark universe-alliance-mark--${alliance?.emblem.glyph ?? 'none'}`}
-      aria-label={alliance ? `${alliance.name} [${alliance.tag}]` : 'Без союза'}
+      className="universe-alliance-mark"
+      aria-label="Без союза"
     >
-      {alliance ? alliance.tag.slice(0, 3) : '—'}
+      —
     </span>
   );
 }
@@ -187,28 +195,32 @@ function OwnerInspector({
   planets,
   currentOwnerId,
   onAction,
+  onVisit,
 }: {
   node: UniversePlanetNode;
   owner: UniverseOwnerProfile;
   planets: UniversePlanetNode[];
   currentOwnerId: string;
   onAction: (action: UniverseAction, node: UniversePlanetNode) => void;
+  onVisit: (node: UniversePlanetNode) => void;
 }) {
   const alliance = owner.alliance;
   return (
     <div className="universe-inspector-owner" data-qa-universe-owner={owner.id} data-qa-universe-owner-profile>
+      <div className="universe-profile-summary">
+      <div className={`universe-world-hero universe-world-hero--${node.kind}`}><img src={node.art} alt={node.name} /><span>{formatUniverseCoordinate(node.coordinate)}</span></div>
       <section className="universe-owner-card">
         <div className="universe-owner-avatar" data-qa-universe-avatar><OwnerAvatar owner={owner} /></div>
         <div className="universe-owner-identity">
           <small>ВЛАДЕЛЕЦ ОБЪЕКТА</small>
           <h3 data-qa-universe-owner-name>{owner.displayName}</h3>
           <span>{raceLabel(owner.raceId)}</span>
-          <strong>{owner.id === currentOwnerId ? 'ТЕКУЩИЙ ИГРОК' : 'ПРОТОТИПНЫЙ ВЛАДЕЛЕЦ'}</strong>
+          <strong>{owner.id === currentOwnerId ? 'ВАШ ПРОФИЛЬ' : 'БОТ · ДЕМОНСТРАЦИОННЫЙ ПРОФИЛЬ'}</strong>
         </div>
         <div className="universe-owner-alliance">
           <AllianceMark alliance={alliance} />
           <span>{alliance ? alliance.name : 'Без союза'}</span>
-          {alliance ? <small>[{alliance.tag}]</small> : <small>эмблема не подключена</small>}
+          {alliance ? <small>[{alliance.tag}]</small> : null}
         </div>
       </section>
 
@@ -219,23 +231,25 @@ function OwnerInspector({
       </section>
 
       <section className="universe-points-card" data-qa-universe-points>
-        <header><small>РЕЙТИНГ ВЛАДЕЛЬЦА</small><span>{owner.points ? 'LIVE SELECTOR' : 'PROTOTYPE DATA'}</span></header>
+        <header><small>РЕЙТИНГ ВЛАДЕЛЬЦА</small></header>
         {owner.points ? (
           <dl>
             {POINT_LABELS.map(({ key, label }) => <div key={key}><dt>{label}</dt><dd>{numberFormat.format(owner.points?.[key] ?? 0)}</dd></div>)}
           </dl>
-        ) : <p>Очки владельца не подключены к production runtime.</p>}
+        ) : <p>Рейтинг не задан. Бот показан только для знакомства с картой.</p>}
       </section>
+      </div>
 
       <section className="universe-planets-card">
-        <header><div><small>ПЛАНЕТЫ</small><strong>{planets.length} / {MAX_PLANETS_PER_OWNER}</strong></div><span>ПЛАНЕТЫ ВЛАДЕЛЬЦА</span></header>
+        <header><div><small>ВЛАДЕНИЯ В ГАЛАКТИКЕ</small><strong>{planets.length} {planets.length === 1 ? 'планета' : 'планет'}</strong></div><span>01 / ГАЛАКТИКА</span></header>
         <ul>
           {planets.slice(0, MAX_PLANETS_PER_OWNER).map((planet) => (
             <li key={planet.id} className={planet.id === node.id ? 'active' : ''} data-qa-universe-planet-row={planet.id}>
-              <div className="universe-planet-row-copy">
+              <img className="universe-row-art" src={planet.art} alt="" />
+              <button type="button" className="universe-planet-row-copy" data-qa-universe-visit={planet.id} onClick={() => onVisit(planet)} title={`Показать на карте ${formatUniverseCoordinate(planet.coordinate)}`}>
                 <strong>{planet.name}</strong>
-                <small>{owner.displayName} · {planet.isHomeworld ? 'Домашняя планета' : planet.statusLabel} · {formatUniverseCoordinate(planet.coordinate)}</small>
-              </div>
+                <small>Система {String(planet.coordinate.system).padStart(2, '0')} <span>{formatUniverseCoordinate(planet.coordinate)} ↗</span></small>
+              </button>
               <div className="universe-planet-row-actions">
                 <UniverseActionButton action="spy" node={planet} currentOwnerId={currentOwnerId} onAction={onAction} />
                 <UniverseActionButton action="fleet" node={planet} currentOwnerId={currentOwnerId} onAction={onAction} />
@@ -243,7 +257,7 @@ function OwnerInspector({
             </li>
           ))}
         </ul>
-        <p className="universe-data-note">Действия сохраняют цель, но не запускают отправку до подключения fleet/spy runtime.</p>
+        <p className="universe-data-note">Нажмите на планету, чтобы перейти к её системе. Отправка флота и разведка пока недоступны.</p>
       </section>
     </div>
   );
@@ -258,12 +272,12 @@ function SpecialInspector({ node }: { node: UniversePlanetNode }) {
     <div className={`universe-inspector-special universe-inspector-special--${node.kind}`} data-qa-universe-special={node.kind}>
       <section className="universe-special-preview">
         {node.art ? <img src={node.art} alt="" draggable={false} /> : <span className="universe-special-symbol" aria-hidden="true">{isEmpty ? '＋' : '◌'}</span>}
-        <div><small>{getUniverseObjectKindLabel(node.kind)}</small><h3>{title}</h3><span>{node.known === false ? 'Объект не классифицирован' : 'Объект известен в fixture'}</span></div>
+        <div><small>{getUniverseObjectKindLabel(node.kind)}</small><h3>{title}</h3><span>{node.known === false ? 'Неизученный сигнал' : node.kind === 'uninhabited' || node.kind === 'unique' ? 'Владелец отсутствует' : 'Галактика 01 · Система ' + String(node.coordinate.system).padStart(2, '0')}</span></div>
       </section>
 
       <dl className="universe-special-details">
         <div><dt>ТИП ПОЗИЦИИ</dt><dd>{getUniverseObjectKindLabel(node.kind)}</dd></div>
-        <div><dt>КООРДИНАТЫ</dt><dd>{formatUniverseCoordinate(node.coordinate)}</dd></div>
+        <div><dt>{node.kind === 'asteroid' ? 'ОРБИТА' : 'КООРДИНАТЫ'}</dt><dd>{node.kind === 'asteroid' ? `Кольцо ${Math.ceil(node.coordinate.position / 6)} · Система ${node.coordinate.system}` : formatUniverseCoordinate(node.coordinate)}</dd></div>
         <div><dt>СТАТУС</dt><dd>{node.statusLabel}</dd></div>
       </dl>
 
@@ -272,24 +286,39 @@ function SpecialInspector({ node }: { node: UniversePlanetNode }) {
       {isEmpty ? (
         <button type="button" className="universe-disabled-operation" disabled title="Колонизация не подключена" data-qa-universe-special-action="colonize">КОЛОНИЗАЦИЯ · СКОРО</button>
       ) : isPirate ? (
-        <button type="button" className="universe-disabled-operation" disabled title="Боевой runtime не подключён" data-qa-universe-special-action="pirate">РАЗВЕДАТЬ · БОЕВОЙ RUNTIME НЕ ПОДКЛЮЧЁН</button>
+        <button type="button" className="universe-disabled-operation" disabled title="Разведка пока недоступна" data-qa-universe-special-action="pirate">РАЗВЕДАТЬ · СКОРО</button>
       ) : isAnomaly ? (
-        <button type="button" className="universe-disabled-operation" disabled title="Операции с аномалиями не подключены" data-qa-universe-special-action="anomaly">ОПЕРАЦИИ · PROTOTYPE</button>
+        <button type="button" className="universe-disabled-operation" disabled title="Исследование пока недоступно" data-qa-universe-special-action="anomaly">ИССЛЕДОВАТЬ · СКОРО</button>
       ) : (
-        <button type="button" className="universe-disabled-operation" disabled data-qa-universe-special-action="disabled">ДЕЙСТВИЕ НЕ ПОДКЛЮЧЕНО</button>
+        <button type="button" className="universe-disabled-operation" disabled data-qa-universe-special-action="disabled">{node.kind === 'uninhabited' ? 'КОЛОНИЗАЦИЯ' : 'ИССЛЕДОВАНИЕ'} · СКОРО</button>
       )}
     </div>
   );
 }
 
-function fallbackOwner(node: UniversePlanetNode): UniverseOwnerProfile {
-  return normalizeUniverseOwnerProfile({
-    id: node.ownerId ?? node.id,
-    displayName: node.kind === 'npc' ? 'NPC 01' : 'Неизвестный владелец',
-    raceId: node.kind === 'npc' ? 'synod' : undefined,
-    alliance: null,
-    planetIds: [node.id],
-  });
+// The clock belongs to the map, not to a render or a selected object. Toggling
+// the layer and visiting another system must not restart orbital motion.
+function MovingAsteroid({ node, epoch, onSelect }: { node: UniversePlanetNode; epoch: number; onSelect: (node: UniversePlanetNode) => void }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let frame = 0;
+    const tick = () => {
+      const point = getUniverseAsteroidPoint(node.coordinate.position, motion.matches ? 0 : performance.now() - epoch);
+      ref.current?.style.setProperty('--x', `${point.x}%`);
+      ref.current?.style.setProperty('--y', `${point.y}%`);
+      if (!motion.matches) frame = requestAnimationFrame(tick);
+    };
+    const onMotionChange = () => { cancelAnimationFrame(frame); tick(); };
+    motion.addEventListener('change', onMotionChange);
+    tick();
+    return () => { cancelAnimationFrame(frame); motion.removeEventListener('change', onMotionChange); };
+  }, [epoch, node.coordinate.position]);
+  return <button ref={ref} type="button" className="system-asteroid" style={toStyle(getUniverseSlotPoint(node.coordinate.position))}
+    title={`${node.name} · кольцо ${Math.ceil(node.coordinate.position / 6)}`} aria-label={`${node.name} · кольцо ${Math.ceil(node.coordinate.position / 6)}`}
+    data-qa-universe-object={node.id} data-qa-universe-kind="asteroid" onClick={() => onSelect(node)}>
+    <img src={node.art} alt="" draggable={false} /><span>АСТЕРОИД</span>
+  </button>;
 }
 
 export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, rating, command }: UniverseViewProps) {
@@ -299,6 +328,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
   const [showAsteroids, setShowAsteroids] = useState(true);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const [orbitEpoch] = useState(() => performance.now());
 
   const alliance = useMemo(() => {
     const selected = selectCurrentAlliance(command);
@@ -317,20 +347,21 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
     const npc = createUniverseNpcOwnerProfile();
     return new Map<string, UniverseOwnerProfile>([[owner.id, owner], [npc.id, npc]]);
   }, [owner]);
-  const systemData = useMemo(() => createUniverseSystem({
+  const galaxyData = useMemo(() => createUniverseMap({
     galaxy: GALAXY,
-    system,
     currentOwnerId: owner.id,
     currentPlanetName: ownedPlanetName,
     currentPlanetArt: ownedPlanetArt,
     assets,
-  }), [ownedPlanetArt, ownedPlanetName, owner.id, system]);
-  const nodesById = useMemo(() => new Map([...systemData.positions, ...systemData.asteroids].map((node) => [node.id, node])), [systemData]);
+  }), [ownedPlanetArt, ownedPlanetName, owner.id]);
+  const systemData = galaxyData.systems[system - 1];
+  const nodesById = useMemo(() => new Map(galaxyData.systems.flatMap((item) => [...item.positions, ...item.asteroids]).map((node) => [node.id, node])), [galaxyData]);
   const selectedNode = selectedNodeId ? nodesById.get(selectedNodeId) ?? null : null;
 
   const ownerPlanets = useMemo(() => {
     if (!selectedNode || (selectedNode.kind !== 'player' && selectedNode.kind !== 'npc')) return [];
-    const selectedOwner = owners.get(selectedNode.ownerId ?? '') ?? fallbackOwner(selectedNode);
+    const selectedOwner = owners.get(selectedNode.ownerId ?? '');
+    if (!selectedOwner) return [];
     const listed = selectedOwner.planetIds
       .map((planetId) => nodesById.get(planetId))
       .filter((planet): planet is UniversePlanetNode => Boolean(planet && (planet.kind === 'player' || planet.kind === 'npc')));
@@ -339,14 +370,30 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
 
   useEffect(() => {
     if (!selectedNodeId) return undefined;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const stage = document.querySelector<HTMLElement>('.stage');
+    const wasInert = stage?.inert ?? false;
+    if (stage) stage.inert = true;
+    closeButtonRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') {
+        const controls = Array.from(document.querySelectorAll<HTMLElement>('[data-qa-universe-inspector] button:not(:disabled), [data-qa-universe-inspector] [tabindex="0"]'));
+        const first = controls[0]; const last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+        return;
+      }
       if (event.key !== 'Escape') return;
       event.preventDefault();
       event.stopPropagation();
       setSelectedNodeId(null);
     };
     window.addEventListener('keydown', onKeyDown, true);
-    return () => window.removeEventListener('keydown', onKeyDown, true);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true);
+      if (stage) stage.inert = wasInert;
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
   }, [selectedNodeId]);
 
   useEffect(() => {
@@ -368,7 +415,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
   };
 
   const selectedOwner = selectedNode && (selectedNode.kind === 'player' || selectedNode.kind === 'npc')
-    ? owners.get(selectedNode.ownerId ?? '') ?? fallbackOwner(selectedNode)
+    ? owners.get(selectedNode.ownerId ?? '') ?? null
     : null;
 
   return (
@@ -381,14 +428,15 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
         <div className="universe-jump nav-coordinate nav-coordinate--system">
           <span>ГАЛАКТИКА</span><strong>01</strong>
           <button type="button" className="step" onClick={() => goSystem(system - 1)} disabled={system === 1} aria-label="Предыдущая система">‹</button>
-          <label><span>СИСТЕМА</span><select value={system} onChange={(event) => goSystem(Number(event.target.value))} aria-label="Солнечная система">{Array.from({ length: SYSTEM_COUNT }, (_, index) => <option key={index + 1} value={index + 1}>{String(index + 1).padStart(2, '0')}</option>)}</select></label>
+          <label><span>СИСТЕМА</span><select value={system} onChange={(event) => goSystem(Number(event.target.value))} aria-label="Солнечная система">{galaxyData.systems.map((item) => <option key={item.system} value={item.system}>{String(item.system).padStart(2, '0')}{item.positions.some((planet) => planet.kind === 'npc') ? ' · Бот 01' : ''}</option>)}</select></label>
           <small>/ {SYSTEM_COUNT}</small>
           <button type="button" className="step" onClick={() => goSystem(system + 1)} disabled={system === SYSTEM_COUNT} aria-label="Следующая система">›</button>
         </div>
       </div>
 
       <div className="system-scene" data-qa-universe-scene>
-        <div className="system-caption"><span>ГАЛАКТИКА {GALAXY}</span><strong>СИСТЕМА {String(system).padStart(2, '0')}</strong><small>24 СЛОТА · СТАТИЧНАЯ КАРТА</small></div>
+        <div className="system-caption"><span>ГАЛАКТИКА {String(GALAXY).padStart(2, '0')} / ЗВЁЗДНЫЙ АТЛАС</span><strong>Система {String(system).padStart(2, '0')}</strong><small>24 позиции · 4 орбиты</small></div>
+        <div className="universe-map-legend" aria-label="Обозначения карты"><span className="legend-home">Ваш мир</span><span className="legend-npc">Бот 01</span><span className="legend-wild">Необитаемые</span><span className="legend-unique">Уникальные</span><span className="legend-pirate">Пираты</span></div>
 
         {[0, 1, 2, 3].map((ring) => <div key={ring} className={`system-orbit ring-${ring + 1}`} />)}
 
@@ -437,48 +485,28 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
           );
         })}
 
-        {showAsteroids ? systemData.asteroids.map((asteroid, index) => {
-          const basePoint = getUniverseSlotPoint(asteroid.coordinate.position);
-          const point = { x: basePoint.x + (index % 2 === 0 ? -2.2 : 2.2), y: basePoint.y + (index % 2 === 0 ? 1.4 : -1.4) };
-          const coordinate = formatUniverseCoordinate(asteroid.coordinate);
-          return (
-            <button
-              key={asteroid.id}
-              type="button"
-              className="system-asteroid"
-              style={toStyle(point)}
-              title={`${asteroid.name} · ${coordinate}`}
-              aria-label={`${asteroid.name} · ${coordinate}`}
-              data-qa-universe-object={asteroid.id}
-              data-qa-universe-kind="asteroid"
-              onClick={() => selectNode(asteroid)}
-            >
-              <img src={asteroid.art} alt="" draggable={false} />
-              <span>АСТЕРОИД</span>
-            </button>
-          );
-        }) : null}
+        {showAsteroids ? systemData.asteroids.map((asteroid) => <MovingAsteroid key={asteroid.id} node={asteroid} epoch={orbitEpoch} onSelect={selectNode} />) : null}
+        <div className="universe-map-hint">Выберите мир, чтобы открыть сведения <span>Астероиды движутся по орбитам</span></div>
       </div>
 
       <aside className="universe-tools" aria-label="Инструменты карты">
         <button type="button" className={focusEmpty ? 'active' : ''} aria-pressed={focusEmpty} title="Подсветить свободные позиции" onClick={() => setFocusEmpty((value) => !value)}><b>▽</b><span>Фильтры</span><small>{focusEmpty ? 'Позиции выделены' : 'Свободные позиции'}</small></button>
         <button type="button" className={showSlotLabels ? 'active' : ''} aria-pressed={showSlotLabels} title="Показывать номера слотов" onClick={() => setShowSlotLabels((value) => !value)}><b>⌖</b><span>Метки</span><small>{showSlotLabels ? 'Номера слотов' : 'Скрыты'}</small></button>
         <button type="button" className={showAsteroids ? 'active' : ''} aria-pressed={showAsteroids} data-qa-universe-asteroids-toggle title="Показать или скрыть астероиды" onClick={() => setShowAsteroids((value) => !value)}><b>◌</b><span>Астероиды</span><small>{showAsteroids ? 'Слой включён' : 'Скрыты'}</small></button>
-        <button type="button" title="Маршруты флотов" onClick={() => onNotice('Маршруты: прототип — отображение полётов не подключено.')}><b>⇄</b><span>Маршруты</span><small>Прототип</small></button>
-        <button type="button" title="Глубокий сканер" onClick={() => onNotice('Сканер: прототип — разведывательный runtime не подключён.')}><b>◎</b><span>Сканер</span><small>Прототип</small></button>
       </aside>
 
-      {selectedNode ? (
-        <aside className={`universe-inspector universe-inspector--${selectedNode.kind}`} role="dialog" aria-modal="false" aria-label={`Инспектор: ${selectedNode.name}`} data-qa-universe-inspector data-qa-inspector-kind={selectedNode.kind}>
+      {selectedNode ? createPortal(
+        <div className="universe-modal-backdrop" onClick={(event) => { if (event.target === event.currentTarget) setSelectedNodeId(null); }}>
+        <aside className={`universe-inspector universe-inspector--${selectedNode.kind}`} role="dialog" aria-modal="true" aria-label={`Инспектор: ${selectedNode.name}`} data-qa-universe-inspector data-qa-inspector-kind={selectedNode.kind}>
           <header className="universe-inspector-header">
-            <div><small>UNIVERSE INSPECTOR</small><h2>{selectedNode.kind === 'player' || selectedNode.kind === 'npc' ? 'ПРОФИЛЬ ВЛАДЕЛЬЦА' : getUniverseObjectKindLabel(selectedNode.kind).toUpperCase()}</h2><span>{formatUniverseCoordinate(selectedNode.coordinate)}</span></div>
+            <div><small>ЗВЁЗДНЫЙ АТЛАС / {getUniverseObjectKindLabel(selectedNode.kind)}</small><h2>{selectedNode.name}</h2><span>{selectedNode.kind === 'asteroid' ? `Кольцо ${Math.ceil(selectedNode.coordinate.position / 6)} · движущийся объект` : formatUniverseCoordinate(selectedNode.coordinate)}</span></div>
             <button ref={closeButtonRef} type="button" className="universe-inspector-close" aria-label="Закрыть инспектор" title="Закрыть инспектор" onClick={() => setSelectedNodeId(null)}>×</button>
           </header>
           <div className="universe-inspector-body">
-            {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} planets={ownerPlanets} currentOwnerId={owner.id} onAction={handleAction} /> : <SpecialInspector node={selectedNode} />}
+            {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} planets={ownerPlanets} currentOwnerId={owner.id} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} />}
           </div>
         </aside>
-      ) : null}
+        </div>, document.body) : null}
     </main>
   );
 }
