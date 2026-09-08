@@ -140,9 +140,12 @@ app.whenReady().then(async () => {
 
         if (snapshot.faction !== faction || snapshot.label !== label) throw new Error(`${labelName}: faction theme did not resolve`);
         if (snapshot.viewport.width !== width || snapshot.viewport.height !== height) throw new Error(`${labelName}: viewport mismatch`);
-        if (snapshot.populationText !== '25 112' || snapshot.populationHasCapacitySuffix) throw new Error(`${labelName}: population contract failed: ${JSON.stringify(snapshot)}`);
+        const normalizedPopulation = snapshot.populationText?.replace(/\s+/g, ' ');
+        if (normalizedPopulation !== '25 112' || snapshot.populationHasCapacitySuffix) throw new Error(`${labelName}: population contract failed: ${JSON.stringify(snapshot)}`);
         if (!Object.values(snapshot.resourceTones).every((tone) => tone === 'critical')) throw new Error(`${labelName}: full/overflow status is not critical: ${JSON.stringify(snapshot.resourceTones)}`);
-        if (snapshot.brokenImages.length || !snapshot.focusedHeaderControl) throw new Error(`${labelName}: interaction or image contract failed: ${JSON.stringify(snapshot)}`);
+        if (!snapshot.criticalBarColor?.replace(/\s/g, '').includes('255,95,105')) throw new Error(`${labelName}: critical resource bar is not red: ${JSON.stringify(snapshot)}`);
+        if (snapshot.focusOutline === 'none' || snapshot.focusOutline === 'hidden') throw new Error(`${labelName}: focus outline is not visible: ${JSON.stringify(snapshot)}`);
+        if (snapshot.header.bottom > snapshot.workspace.y || snapshot.brokenImages.length || !snapshot.focusedHeaderControl || snapshot.resourceRequests === 0) throw new Error(`${labelName}: layout, interaction, or asset contract failed: ${JSON.stringify(snapshot)}`);
 
         await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
         await reload(win);
