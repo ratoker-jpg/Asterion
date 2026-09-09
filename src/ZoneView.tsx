@@ -416,7 +416,7 @@ export function ZoneView({
               <p>{selected.purpose}</p>
 
               <div
-                className="resource-building-levels"
+                className={`resource-building-levels${availability.status === 'max-level' ? ' max-level' : ''}`}
                 data-qa-level-track
                 aria-label={`Уровень ${availability.currentLevel} из ${availability.maxLevel}. Следующий уровень: ${availability.nextLevel ?? 'максимальный уровень'}.`}
                 style={{ '--building-level-count': availability.maxLevel } as CSSProperties}
@@ -451,92 +451,102 @@ export function ZoneView({
                 </div>
               </div>
 
-              {availability.requirements.length > 0 ? (
-                <div className="resource-building-requirements" data-qa-requirements>
-                  <small>ТРЕБОВАНИЯ</small>
-                  {availability.requirements.map((requirement) => (
-                    <div key={`${requirement.kind}-${requirement.label}`} className={requirement.met ? 'met' : 'missing'}>
-                      <strong>{requirement.label} — ур. {requirement.requiredLevel}</strong>
-                      <span>сейчас {requirement.currentLevel}</span>
-                    </div>
-                  ))}
+              {availability.status === 'max-level' ? (
+                <div className="resource-building-max-state" data-qa-max-level-state role="status">
+                  <small>ФИНАЛЬНЫЙ СТАТУС</small>
+                  <strong>ЗДАНИЕ УЛУЧШЕНО ДО МАКСИМАЛЬНОГО УРОВНЯ</strong>
+                  <span>Дальнейшие улучшения недоступны.</span>
                 </div>
-              ) : null}
-
-              <div className="resource-building-effect" data-qa-building-effect>
-                <div className="resource-building-effect-heading">
-                  <small>ЭФФЕКТ УЛУЧШЕНИЯ</small>
-                  <span>СРАВНЕНИЕ УРОВНЕЙ</span>
-                </div>
-                <div className="resource-building-effect-grid">
-                  <div className="resource-building-effect-card current" data-qa-building-effect-current>
-                    <small>ТЕКУЩИЙ УРОВЕНЬ · {availability.currentLevel}</small>
-                    <strong>{currentEffect?.primary}</strong>
-                    {currentEffect?.secondary ? <span>{currentEffect.secondary}</span> : null}
-                  </div>
-                  {availability.nextLevel != null ? (
-                    <div className="resource-building-effect-card next" data-qa-building-effect-next>
-                      <small>СЛЕДУЮЩИЙ УРОВЕНЬ · {availability.nextLevel}</small>
-                      <strong>{nextEffect?.primary}</strong>
-                      {nextEffect?.secondary ? <span>{nextEffect.secondary}</span> : null}
+              ) : (
+                <>
+                  {availability.requirements.length > 0 ? (
+                    <div className="resource-building-requirements" data-qa-requirements>
+                      <small>ТРЕБОВАНИЯ</small>
+                      {availability.requirements.map((requirement) => (
+                        <div key={`${requirement.kind}-${requirement.label}`} className={requirement.met ? 'met' : 'missing'}>
+                          <strong>{requirement.label} — ур. {requirement.requiredLevel}</strong>
+                          <span>сейчас {requirement.currentLevel}</span>
+                        </div>
+                      ))}
                     </div>
                   ) : null}
-                </div>
-              </div>
 
-              <div className="resource-building-costs">
-                <div className="resource-building-time-panel" data-qa-building-time-effective>
-                  <div className="resource-building-time-summary">
-                    <small>ВРЕМЯ СТРОИТЕЛЬСТВА</small>
-                    <strong data-qa-building-time-value>{formatDurationLabel(availability.timeMs)}</strong>
-                    <span>ФАКТИЧЕСКОЕ · С УЧЁТОМ БОНУСОВ</span>
+                  <div className="resource-building-effect" data-qa-building-effect>
+                    <div className="resource-building-effect-heading">
+                      <small>ЭФФЕКТ УЛУЧШЕНИЯ</small>
+                      <span>СРАВНЕНИЕ УРОВНЕЙ</span>
+                    </div>
+                    <div className="resource-building-effect-grid">
+                      <div className="resource-building-effect-card current" data-qa-building-effect-current>
+                        <small>ТЕКУЩИЙ УРОВЕНЬ · {availability.currentLevel}</small>
+                        <strong>{currentEffect?.primary}</strong>
+                        {currentEffect?.secondary ? <span>{currentEffect.secondary}</span> : null}
+                      </div>
+                      {availability.nextLevel != null ? (
+                        <div className="resource-building-effect-card next" data-qa-building-effect-next>
+                          <small>СЛЕДУЮЩИЙ УРОВЕНЬ · {availability.nextLevel}</small>
+                          <strong>{nextEffect?.primary}</strong>
+                          {nextEffect?.secondary ? <span>{nextEffect.secondary}</span> : null}
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="resource-building-time-breakdown">
-                    <div>
-                      <small>БАЗОВОЕ ВРЕМЯ (RAW)</small>
-                      <b data-qa-building-time-raw>{formatDurationLabel(availability.rawTimeMs)}</b>
+
+                  <div className="resource-building-costs">
+                    <div className="resource-building-time-panel" data-qa-building-time-effective>
+                      <div className="resource-building-time-summary">
+                        <small>ВРЕМЯ СТРОИТЕЛЬСТВА</small>
+                        <strong data-qa-building-time-value>{formatDurationLabel(availability.timeMs)}</strong>
+                        <span>ФАКТИЧЕСКОЕ · С УЧЁТОМ БОНУСОВ</span>
+                      </div>
+                      <div className="resource-building-time-breakdown">
+                        <div>
+                          <small>БАЗОВОЕ ВРЕМЯ (RAW)</small>
+                          <b data-qa-building-time-raw>{formatDurationLabel(availability.rawTimeMs)}</b>
+                        </div>
+                        <div>
+                          <small>ФАБРИКА</small>
+                          <b className={constructionBonusPercent > 0 ? 'bonus' : ''} data-qa-building-time-bonus>
+                            {constructionBonusPercent > 0 ? `−${constructionBonusPercent}%` : 'НЕТ'}
+                          </b>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <small>ФАБРИКА</small>
-                      <b className={constructionBonusPercent > 0 ? 'bonus' : ''} data-qa-building-time-bonus>
-                        {constructionBonusPercent > 0 ? `−${constructionBonusPercent}%` : 'НЕТ'}
-                      </b>
+                    <div className="resource-building-cost-title">
+                      <span>СТОИМОСТЬ ПЕРЕХОДА В УР. {availability.nextLevel ?? availability.maxLevel}</span>
+                    </div>
+                    <div className="resource-building-cost-grid">
+                      {(Object.keys(resourceLabels) as Array<keyof typeof resourceLabels>).map((key) => (
+                        <div key={key} className={availability.missing[key] ? 'missing' : ''} data-qa-building-cost={key}>
+                          <span className={`resource-building-cost-icon resource-building-cost-icon--${key}`} data-qa-building-cost-icon>
+                            <ResourceIncomeIcon kind={key === 'minerals' ? 'mineral' : key} />
+                          </span>
+                          <span className="resource-building-cost-copy">
+                            <small>{resourceLabels[key]}</small>
+                            <strong>{availability.cost ? formatNumber(availability.cost[key]) : '—'}</strong>
+                            {availability.missing[key] ? <em>не хватает {formatNumber(availability.missing[key] ?? 0)}</em> : null}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </div>
-                <div className="resource-building-cost-title">
-                  <span>СТОИМОСТЬ ПЕРЕХОДА В УР. {availability.nextLevel ?? availability.maxLevel}</span>
-                </div>
-                <div className="resource-building-cost-grid">
-                  {(Object.keys(resourceLabels) as Array<keyof typeof resourceLabels>).map((key) => (
-                    <div key={key} className={availability.missing[key] ? 'missing' : ''} data-qa-building-cost={key}>
-                      <span className={`resource-building-cost-icon resource-building-cost-icon--${key}`} data-qa-building-cost-icon>
-                        <ResourceIncomeIcon kind={key === 'minerals' ? 'mineral' : key} />
-                      </span>
-                      <span className="resource-building-cost-copy">
-                        <small>{resourceLabels[key]}</small>
-                        <strong>{availability.cost ? formatNumber(availability.cost[key]) : '—'}</strong>
-                        {availability.missing[key] ? <em>не хватает {formatNumber(availability.missing[key] ?? 0)}</em> : null}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
 
-              <div className={`resource-building-availability ${availability.status}`} data-qa-build-status={availability.status}>
-                <strong>{availability.canBuild ? 'МОЖНО ДОБАВИТЬ В ОЧЕРЕДЬ' : availability.status === 'max-level' ? 'МАКСИМАЛЬНЫЙ УРОВЕНЬ' : 'ДЕЙСТВИЕ НЕДОСТУПНО'}</strong>
-                <span>{availability.reason ?? `Свободно слотов: ${BUILDING_QUEUE_CAPACITY - queue.length}.`}</span>
-              </div>
+                  <div className={`resource-building-availability ${availability.status}`} data-qa-build-status={availability.status}>
+                    <strong>{availability.canBuild ? 'МОЖНО ДОБАВИТЬ В ОЧЕРЕДЬ' : 'ДЕЙСТВИЕ НЕДОСТУПНО'}</strong>
+                    <span>{availability.reason ?? `Свободно слотов: ${BUILDING_QUEUE_CAPACITY - queue.length}.`}</span>
+                  </div>
 
-              <button
-                className="resource-building-build-button"
-                type="button"
-                data-qa-build-button
-                disabled={!availability.canBuild}
-                onClick={submitBuild}
-              >
-                {availability.currentLevel > 0 || availability.projectedLevel > 0 ? 'УЛУЧШИТЬ' : 'ПОСТРОИТЬ'}
-              </button>
+                  <button
+                    className="resource-building-build-button"
+                    type="button"
+                    data-qa-build-button
+                    disabled={!availability.canBuild}
+                    onClick={submitBuild}
+                  >
+                    {availability.currentLevel > 0 || availability.projectedLevel > 0 ? 'УЛУЧШИТЬ' : 'ПОСТРОИТЬ'}
+                  </button>
+                </>
+              )}
 
               {canEnterSelected ? (
                 <button
