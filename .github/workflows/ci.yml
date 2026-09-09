@@ -51,6 +51,11 @@ jobs:
         env:
           ASTERION_SKIP_SCREENSHOTS: '1'
         run: npm run test:universe-ui
+      - name: Capture faction header reference QA
+        # Header iteration must keep producing Aegis/Synod/Veyra screenshots even
+        # when a separate universe fixture or another visual suite is flaky.
+        if: always()
+        run: npm run qa:header-factions
       - name: Capture utility and resource-zone visual QA
         # Visual captures are also our iteration artifact. Keep producing them
         # when an unrelated preceding QA is flaky; the job still remains failed
