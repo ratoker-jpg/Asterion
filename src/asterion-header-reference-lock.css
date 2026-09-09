@@ -34,8 +34,8 @@
   padding:9px 12px;
 }
 .asterion-header .current-planet-select img{width:54px;height:54px}
-.asterion-header .current-planet-select small{font-size:9px;letter-spacing:1.2px}
-.asterion-header .current-planet-select strong{margin-top:5px;font-size:16px}
+.asterion-header .current-planet-select small{font-size:calc(9px * var(--text-scale-hud));letter-spacing:1.2px}
+.asterion-header .current-planet-select strong{margin-top:5px;font-size:calc(16px * var(--text-scale-hud))}
 .asterion-header .planet-list-popover{
   left:var(--hdr-selector-left);
   top:calc(var(--hdr-selector-top) + var(--hdr-selector-height) + 8px);
@@ -108,12 +108,12 @@
   text-align:left;
 }
 .asterion-header .header-resource-rail .resource-chip small{
-  font-size:9px;
+  font-size:calc(9px * var(--text-scale-hud));
   letter-spacing:1.15px;
 }
 .asterion-header .header-resource-rail .resource-chip strong{
   margin-top:5px;
-  font-size:18px;
+  font-size:calc(18px * var(--text-scale-hud));
   line-height:1;
   font-variant-numeric:tabular-nums;
 }
@@ -132,8 +132,8 @@
   height:var(--hdr-campaign-height);
 }
 .asterion-header .campaign-status{left:43px;top:14px}
-.asterion-header .campaign-status strong{font-size:12px;letter-spacing:.75px}
-.asterion-header .campaign-module time{top:36px;font-size:22px}
+.asterion-header .campaign-status strong{font-size:calc(12px * var(--text-scale-hud));letter-spacing:.75px}
+.asterion-header .campaign-module time{top:36px;font-size:calc(22px * var(--text-scale-hud))}
 .asterion-header .utility-navigation{height:42px}
 .asterion-header .utility-navigation svg{width:26px;height:26px}
 
@@ -164,7 +164,7 @@
 }
 .asterion-header .primary-navigation button:last-child{border-right:1px solid var(--header-line-soft)}
 .asterion-header .primary-navigation svg{flex-basis:40px;width:40px;height:40px}
-.asterion-header .primary-navigation button span{font-size:15px}
+.asterion-header .primary-navigation button span{font-size:calc(15px * var(--text-scale-hud))}
 .asterion-header .primary-navigation button:hover,
 .asterion-header .primary-navigation button:focus-visible{
   border-color:var(--header-line);
