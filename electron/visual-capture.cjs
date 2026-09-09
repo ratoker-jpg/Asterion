@@ -359,12 +359,16 @@ async function verifyResourceZoneFlow(win, directory) {
       const requirements=dialog?.querySelector('[data-qa-requirements]')?.textContent?.replace(/\s+/g,' ').trim()??'';
       const effectCurrent=dialog?.querySelector('[data-qa-building-effect-current]')?.textContent?.replace(/\s+/g,' ').trim()??'';
       const effectNext=dialog?.querySelector('[data-qa-building-effect-next]')?.textContent?.replace(/\s+/g,' ').trim()??'';
+      const timePanel=dialog?.querySelector('[data-qa-building-time-effective]')?.textContent?.replace(/\s+/g,' ').trim()??'';
+      const timeValue=dialog?.querySelector('[data-qa-building-time-value]')?.textContent?.trim()??'';
+      const timeRaw=dialog?.querySelector('[data-qa-building-time-raw]')?.textContent?.trim()??'';
+      const timeBonus=dialog?.querySelector('[data-qa-building-time-bonus]')?.textContent?.trim()??'';
       const costIcons=dialog?.querySelectorAll('[data-qa-building-cost-icon]').length??0;
-      return {title:dialog?.querySelector('h2')?.textContent?.trim()??'',status:dialog?.querySelector('[data-qa-build-status]')?.getAttribute('data-qa-build-status')??'',disabled:Boolean(button?.disabled),requirements,effectCurrent,effectNext,costIcons};
+      return {title:dialog?.querySelector('h2')?.textContent?.trim()??'',status:dialog?.querySelector('[data-qa-build-status]')?.getAttribute('data-qa-build-status')??'',disabled:Boolean(button?.disabled),requirements,effectCurrent,effectNext,timePanel,timeValue,timeRaw,timeBonus,costIcons};
     })()`);
     if(snapshot.title!==RESOURCE_NAMES[role] || snapshot.status!==INITIAL_STATUS[role]) throw new Error(`Unexpected initial dialog state for ${role}: ${JSON.stringify(snapshot)}`);
     if((snapshot.status==='available' && snapshot.disabled)||(snapshot.status!=='available' && !snapshot.disabled)) throw new Error(`Unexpected build button state for ${role}: ${JSON.stringify(snapshot)}`);
-    if(role==='metal-production-1' && (!snapshot.effectCurrent.includes('ТЕКУЩИЙ УРОВЕНЬ') || !snapshot.effectNext.includes('СЛЕДУЮЩИЙ УРОВЕНЬ') || snapshot.costIcons!==4)) throw new Error(`Building upgrade comparison UI contract failed: ${JSON.stringify(snapshot)}`);
+    if(role==='metal-production-1' && (!snapshot.effectCurrent.includes('ТЕКУЩИЙ УРОВЕНЬ') || !snapshot.effectNext.includes('СЛЕДУЮЩИЙ УРОВЕНЬ') || !snapshot.timePanel.includes('ВРЕМЯ СТРОИТЕЛЬСТВА') || !snapshot.timeValue.includes('мин') || !snapshot.timeRaw.includes('мин') || snapshot.timeBonus!=='НЕТ' || snapshot.costIcons!==4)) throw new Error(`Building upgrade comparison UI contract failed: ${JSON.stringify(snapshot)}`);
     dialogSnapshots.push({role,...snapshot});
     if(role==='metal-production-1') await capture(win,directory,'resource-zone-selected');
     if(role==='metal-production-2'){

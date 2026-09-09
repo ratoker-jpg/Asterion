@@ -63,6 +63,17 @@ function formatDuration(ms: number) {
   return `${String(minutes).padStart(2, '0')}:${String(rest).padStart(2, '0')}`;
 }
 
+function formatDurationLabel(ms: number | null) {
+  if (ms == null) return '—';
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours} ч ${String(minutes).padStart(2, '0')} мин ${String(seconds).padStart(2, '0')} сек`;
+  if (minutes > 0) return `${minutes} мин ${String(seconds).padStart(2, '0')} сек`;
+  return `${seconds} сек`;
+}
+
 function playerEffectForLevel(role: BuildingRole, level: number, productionBots: BotAssignment) {
   const effect = getBuildingEffect(role, level);
   if (effect.kind !== 'resource-income') {
@@ -442,12 +453,27 @@ export function ZoneView({
               </div>
 
               <div className="resource-building-costs">
+                <div className="resource-building-time-panel" data-qa-building-time-effective>
+                  <div className="resource-building-time-summary">
+                    <small>ВРЕМЯ СТРОИТЕЛЬСТВА</small>
+                    <strong data-qa-building-time-value>{formatDurationLabel(availability.timeMs)}</strong>
+                    <span>ФАКТИЧЕСКОЕ · С УЧЁТОМ БОНУСОВ</span>
+                  </div>
+                  <div className="resource-building-time-breakdown">
+                    <div>
+                      <small>БАЗОВОЕ ВРЕМЯ (RAW)</small>
+                      <b data-qa-building-time-raw>{formatDurationLabel(availability.rawTimeMs)}</b>
+                    </div>
+                    <div>
+                      <small>ФАБРИКА</small>
+                      <b className={constructionBonusPercent > 0 ? 'bonus' : ''} data-qa-building-time-bonus>
+                        {constructionBonusPercent > 0 ? `−${constructionBonusPercent}%` : 'НЕТ'}
+                      </b>
+                    </div>
+                  </div>
+                </div>
                 <div className="resource-building-cost-title">
                   <span>СТОИМОСТЬ ПЕРЕХОДА В УР. {availability.nextLevel ?? availability.maxLevel}</span>
-                  <b>{availability.rawTimeMs == null ? '—' : `RAW ${formatDuration(availability.rawTimeMs)}`} · ФАКТ {availability.timeMs == null ? '—' : formatDuration(availability.timeMs)}</b>
-                </div>
-                <div className="resource-building-cost-time" data-qa-building-time-effective>
-                  {constructionBonusPercent > 0 ? `ФАБРИКА УР. ${buildings.construction} · −${constructionBonusPercent}% ОТ RAW` : 'БЕЗ БОНУСА ФАБРИКИ'}
                 </div>
                 <div className="resource-building-cost-grid">
                   {(Object.keys(resourceLabels) as Array<keyof typeof resourceLabels>).map((key) => (
@@ -456,7 +482,7 @@ export function ZoneView({
                         <ResourceIncomeIcon kind={key === 'minerals' ? 'mineral' : key} />
                       </span>
                       <span className="resource-building-cost-copy">
-                        <small>{key === 'energy' ? 'Энергия строительства' : resourceLabels[key]}</small>
+                        <small>{resourceLabels[key]}</small>
                         <strong>{availability.cost ? formatNumber(availability.cost[key]) : '—'}</strong>
                         {availability.missing[key] ? <em>не хватает {formatNumber(availability.missing[key] ?? 0)}</em> : null}
                       </span>

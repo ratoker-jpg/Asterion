@@ -466,9 +466,17 @@ button.resource-zone-queue-card:hover,button.resource-zone-queue-card:focus-visi
 .resource-building-effect-card>span{display:block;margin-top:6px;font-size:8px;line-height:1.35;color:#789da8}
 .resource-building-effect-card.next>span{color:#b89a61}
 .resource-building-costs{margin-top:11px}
-.resource-building-cost-title{display:flex;align-items:center;justify-content:space-between;font-size:8px;letter-spacing:1px;color:#70a3af}
-.resource-building-cost-title b{color:#d6f5fb;font-size:7px;letter-spacing:.6px;white-space:nowrap}
-.resource-building-cost-time{margin-top:5px;color:#d1a75d;font-size:7px;letter-spacing:1px;text-align:right}
+.resource-building-time-panel{display:grid;grid-template-columns:1fr;gap:10px;align-items:stretch;padding:12px 14px;border:1px solid rgba(76,215,245,.42);border-left:3px solid #4cddf7;background:linear-gradient(105deg,rgba(7,59,76,.7),rgba(3,27,40,.84));box-shadow:inset 0 0 20px rgba(37,200,235,.06)}
+.resource-building-time-summary{display:flex;min-width:0;flex-direction:column;justify-content:center;gap:4px}
+.resource-building-time-summary small{font-size:8px;letter-spacing:1.5px;color:#78cfe0}
+.resource-building-time-summary strong{display:block;overflow:hidden;color:#f2fdff;font-size:23px;line-height:1.08;font-variant-numeric:tabular-nums;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 0 14px rgba(75,219,246,.16)}
+.resource-building-time-summary span{font-size:7px;letter-spacing:.65px;color:#9fc8d0}
+.resource-building-time-breakdown{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding-top:10px;border-top:1px solid rgba(90,212,237,.2)}
+.resource-building-time-breakdown>div{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;min-width:0;padding:8px 9px;border:1px solid rgba(63,181,211,.2);background:rgba(2,22,34,.64)}
+.resource-building-time-breakdown small{font-size:7px;line-height:1.25;letter-spacing:.55px;color:#729aa4}
+.resource-building-time-breakdown b{color:#e5fbff;font-size:13px;line-height:1.2;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.resource-building-time-breakdown b.bonus{color:#68e0ee}
+.resource-building-cost-title{display:flex;align-items:center;justify-content:space-between;margin-top:11px;font-size:8px;letter-spacing:1px;color:#70a3af}
 .resource-building-cost-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:7px}
 .resource-building-cost-grid>div{display:grid;grid-template-columns:26px minmax(0,1fr);align-items:center;gap:8px;min-width:0}
 .resource-building-cost-icon{width:24px;height:24px;display:grid;place-items:center;color:#55e6ff}
