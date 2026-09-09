@@ -52,6 +52,10 @@ jobs:
           ASTERION_SKIP_SCREENSHOTS: '1'
         run: npm run test:universe-ui
       - name: Capture utility and resource-zone visual QA
+        # Visual captures are also our iteration artifact. Keep producing them
+        # when an unrelated preceding QA is flaky; the job still remains failed
+        # because the earlier failing step is not ignored.
+        if: always()
         run: npm run qa:visual
       - name: Upload visual QA artifact
         if: always()
