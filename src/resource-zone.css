@@ -398,7 +398,7 @@
   color:#dff8ff;
   text-align:left;
 }
-.resource-zone-queue-card-main{display:grid;grid-template-columns:64px minmax(0,1fr);gap:8px;width:100%;height:100%;min-height:84px;padding:0 35px 0 0;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer}
+.resource-zone-queue-card-main{display:grid;grid-template-columns:64px minmax(0,1fr);gap:8px;width:100%;height:100%;min-height:84px;padding:0 54px 0 0;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer}
 .resource-zone-queue-card-main:hover,.resource-zone-queue-card-main:focus-visible{outline:none}
 .resource-zone-queue-card:has(.resource-zone-queue-card-main:hover),.resource-zone-queue-card:has(.resource-zone-queue-card-main:focus-visible){border-color:rgba(68,222,255,.62)}
 .resource-zone-queue-card.busy{min-height:126px;border-color:rgba(240,182,78,.5);background:linear-gradient(180deg,rgba(36,29,18,.56),rgba(3,24,36,.78))}
@@ -408,10 +408,10 @@
 .resource-zone-queue-card.waiting span small{color:#79b8c8}
 .resource-zone-queue-card span strong,.resource-zone-queue-card div strong{display:block;margin-top:5px;font-size:8.5px;line-height:1.25}
 .resource-zone-queue-card span em,.resource-zone-queue-card div em{display:block;margin-top:5px;font-size:6.5px;font-style:normal;color:#779da7}
-.resource-zone-queue-card-main>b{position:absolute;right:42px;top:8px;font-size:6.4px;color:#8feaff}
+.resource-zone-queue-card-main>b{position:absolute;right:57px;top:8px;font-size:6.4px;color:#8feaff}
 .resource-zone-queue-card-main>i{position:absolute;left:9px;right:9px;bottom:9px;height:3px;background:rgba(50,127,148,.16);overflow:hidden}
 .resource-zone-queue-card-main>i span{display:block;height:100%;background:#47d9f8;box-shadow:0 0 8px rgba(71,217,248,.5)}
-.resource-zone-queue-cancel{position:absolute;z-index:2;right:8px;top:8px;width:25px;height:25px;padding:0;border:1px solid rgba(239,129,94,.46);background:rgba(75,27,25,.64);color:#ffb4a0;font-size:17px;line-height:21px;cursor:pointer}
+.resource-zone-queue-cancel{position:absolute;z-index:2;right:4px;top:4px;width:44px;height:44px;padding:0;border:1px solid rgba(239,129,94,.46);background:rgba(75,27,25,.64);color:#ffb4a0;font-size:21px;line-height:38px;cursor:pointer}
 .resource-zone-queue-cancel:hover,.resource-zone-queue-cancel:focus-visible{outline:none;border-color:#ff967e;background:rgba(120,39,32,.84);color:#fff0ea}
 .resource-zone-queue-card.empty{min-height:88px;display:flex;align-items:center;gap:10px;border-style:dashed;color:#7699a2;background:rgba(2,19,29,.52)}
 .resource-zone-queue-card.empty>span{width:42px;height:42px;display:grid;place-items:center;border:1px solid rgba(71,201,231,.2);font-size:14px;color:#5ecfe7}
@@ -441,7 +441,7 @@
 }
 .resource-building-dialog-close{position:absolute;z-index:3;right:14px;top:14px;width:38px;height:38px;border:1px solid rgba(70,197,225,.28);background:#062535;color:#9cefff;font-size:22px;cursor:pointer}
 .resource-building-dialog-close:hover,.resource-building-dialog-close:focus-visible{outline:none;border-color:#58e2ff;color:#fff}
-.resource-building-destroy-button{position:absolute;z-index:3;right:61px;top:14px;min-height:38px;max-width:calc(100% - 116px);padding:0 12px;border:1px solid rgba(239,129,94,.54);background:linear-gradient(180deg,rgba(112,43,35,.9),rgba(65,27,28,.92));color:#ffc0af;font-size:8px;letter-spacing:.75px;font-weight:800;white-space:nowrap;cursor:pointer}
+.resource-building-destroy-button{position:absolute;z-index:3;right:61px;top:11px;min-height:44px;max-width:calc(100% - 116px);padding:0 14px;border:1px solid rgba(239,129,94,.54);background:linear-gradient(180deg,rgba(112,43,35,.9),rgba(65,27,28,.92));color:#ffc0af;font-size:8.5px;letter-spacing:.65px;font-weight:800;white-space:nowrap;cursor:pointer}
 .resource-building-destroy-button:hover:not(:disabled),.resource-building-destroy-button:focus-visible:not(:disabled){outline:none;border-color:#ff9d87;background:linear-gradient(180deg,rgba(146,53,41,.96),rgba(75,29,29,.96));color:#fff1ec;box-shadow:0 0 15px rgba(239,113,91,.18)}
 .resource-building-destroy-button:disabled{cursor:not-allowed;opacity:.38;filter:saturate(.55)}
 .resource-building-dialog-art{position:absolute;z-index:2;left:31px;top:25px;width:125px;height:105px;display:grid;place-items:center;padding:0;border:1px solid rgba(83,211,229,.58);border-radius:8px;background:linear-gradient(145deg,rgba(11,78,95,.8),rgba(2,25,38,.94));box-shadow:0 0 0 4px rgba(3,35,48,.62),inset 0 0 20px rgba(64,221,243,.12)}

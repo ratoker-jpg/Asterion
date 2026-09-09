@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { getPlanetZoneTerrainUrl } from './assets/planetZoneTerrainAssets.ts';
 import { canEnterBuildingInterior } from './building-interior-navigation.ts';
 import { getZoneScenePlacement } from './zone-scene.ts';
@@ -165,13 +165,13 @@ export type ZoneViewProps = {
   selectedRole: BuildingRole | null;
   onSelectedRoleChange: (role: BuildingRole | null) => void;
   onBuild: (assetRole: BuildingRole) => boolean;
-  onCancelBuilding: (queueIndex: number) => boolean;
+  onCancelBuilding: (queueId: string) => boolean;
   onDestroyBuilding: (assetRole: BuildingRole) => boolean;
   onEnterBuilding: (assetRole: BuildingRole) => void;
 };
 
 type PendingBuildingAction =
-  | { kind: 'cancel'; queueIndex: number; assetRole: BuildingRole; targetLevel: number }
+  | { kind: 'cancel'; queueId: string; assetRole: BuildingRole; targetLevel: number }
   | { kind: 'destroy'; assetRole: BuildingRole; currentLevel: number };
 
 export function ZoneView({
@@ -202,6 +202,8 @@ export function ZoneView({
   const availability = selectedRole ? evaluateBuildingBuild(economy, selectedRole) : null;
   const selectedHasQueue = selectedRole ? queue.some((item) => item.assetRole === selectedRole) : false;
   const [pendingAction, setPendingAction] = useState<PendingBuildingAction | null>(null);
+  const confirmYesRef = useRef<HTMLButtonElement>(null);
+  const confirmNoRef = useRef<HTMLButtonElement>(null);
   const activeCount = zoneBuildings.filter((building) => buildings[building.assetRole] > 0).length;
   const terrainUrl = getPlanetZoneTerrainUrl(zone);
   const canEnterSelected = selectedRole
@@ -232,6 +234,32 @@ export function ZoneView({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onSelectedRoleChange, pendingAction, selectedRole]);
 
+  useEffect(() => {
+    if (!pendingAction) return;
+    const previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusFrame = window.requestAnimationFrame(() => confirmYesRef.current?.focus());
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const controls = [confirmYesRef.current, confirmNoRef.current].filter((control): control is HTMLButtonElement => Boolean(control));
+      if (controls.length === 0) return;
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener('keydown', onKeyDown);
+      if (previousActiveElement?.isConnected) previousActiveElement.focus();
+    };
+  }, [pendingAction]);
+
   const submitBuild = () => {
     if (!selectedRole || !availability?.canBuild) return;
     if (onBuild(selectedRole)) onSelectedRoleChange(null);
@@ -240,7 +268,7 @@ export function ZoneView({
   const confirmPendingAction = () => {
     if (!pendingAction) return;
     const succeeded = pendingAction.kind === 'cancel'
-      ? onCancelBuilding(pendingAction.queueIndex)
+      ? onCancelBuilding(pendingAction.queueId)
       : onDestroyBuilding(pendingAction.assetRole);
     if (succeeded) setPendingAction(null);
   };
@@ -422,7 +450,7 @@ export function ZoneView({
                   data-qa-queue-cancel={index + 1}
                   onClick={(event) => {
                     event.stopPropagation();
-                    setPendingAction({ kind: 'cancel', queueIndex: index, assetRole: item.assetRole, targetLevel: item.targetLevel });
+                    setPendingAction({ kind: 'cancel', queueId: item.id, assetRole: item.assetRole, targetLevel: item.targetLevel });
                   }}
                 >
                   ×
@@ -637,8 +665,8 @@ export function ZoneView({
                 : `Вы уверены, что хотите разрушить 1 уровень здания «${getBuildingDefinition(pendingAction.assetRole).name}»? 50–80% из затраченных ресурсов будут возвращены, остальные ресурсы за этот уровень будут потеряны.`}
             </p>
             <div className="resource-building-action-confirm-actions">
-              <button type="button" data-qa-action-confirm-yes onClick={confirmPendingAction}>ДА</button>
-              <button type="button" data-qa-action-confirm-no onClick={() => setPendingAction(null)}>НЕТ</button>
+              <button ref={confirmYesRef} type="button" data-qa-action-confirm-yes onClick={confirmPendingAction}>ДА</button>
+              <button ref={confirmNoRef} type="button" data-qa-action-confirm-no onClick={() => setPendingAction(null)}>НЕТ</button>
             </div>
           </section>
         </div>

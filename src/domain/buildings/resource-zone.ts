@@ -115,6 +115,7 @@ export type BuildingDefinition = {
 
 export type BuildingQueueItem = {
   kind: 'building';
+  id: string;
   assetRole: BuildingRole;
   planetId: string;
   enqueuedAt: number;
@@ -329,13 +330,17 @@ function migrateQueueItem(
   const finishAt = index === 0 && rawFinishAt != null
     ? Math.max(startedAt, rawFinishAt)
     : startedAt + duration;
+  const enqueuedAt = isFiniteTimestamp(source.enqueuedAt) ? source.enqueuedAt : startedAt;
   queuedRoleCounts[role] = queuedBefore + 1;
 
   return {
     kind: 'building',
+    id: typeof source.id === 'string' && source.id.trim()
+      ? source.id
+      : `building-${planetId}-${role}-${enqueuedAt}-${index}`,
     assetRole: role,
     planetId,
-    enqueuedAt: isFiniteTimestamp(source.enqueuedAt) ? source.enqueuedAt : startedAt,
+    enqueuedAt,
     startedAt,
     finishAt,
     targetLevel,
@@ -357,7 +362,10 @@ export function migrateBuildingQueue(
     if (migrated.length >= BUILDING_QUEUE_CAPACITY) break;
     const item = migrateQueueItem(source, planetId, migrated.length, previousFinishAt, buildings, queuedRoleCounts);
     if (!item) continue;
-    migrated.push(item);
+    const id = migrated.some((queuedItem) => queuedItem.id === item.id)
+      ? `${item.id}-${migrated.length}`
+      : item.id;
+    migrated.push({ ...item, id });
     previousFinishAt = item.finishAt;
   }
 
@@ -507,6 +515,7 @@ export function startBuildingProject(
   const startedAt = previous ? previous.finishAt : enqueuedAt;
   const queueItem: BuildingQueueItem = {
     kind: 'building',
+    id: `building-${planetId}-${assetRole}-${enqueuedAt}-${state.queue.length}`,
     assetRole,
     planetId,
     enqueuedAt,
@@ -585,12 +594,11 @@ export type BuildingCancellationTransition = {
 
 export function cancelBuildingProject(
   state: BuildingEconomyState,
-  queueIndex: number,
+  queueId: string,
   now: number,
 ): BuildingCancellationTransition {
-  const canceled = Number.isInteger(queueIndex) && queueIndex >= 0
-    ? state.queue[queueIndex] ?? null
-    : null;
+  const queueIndex = state.queue.findIndex((item) => item.id === queueId);
+  const canceled = queueIndex >= 0 ? state.queue[queueIndex] ?? null : null;
   if (!canceled) {
     return {
       ok: false,
@@ -681,9 +689,12 @@ export function destroyBuildingLevel(
     };
   }
 
+  const normalizedRefundPercent = Number.isFinite(refundPercent)
+    ? Math.floor(refundPercent)
+    : BUILDING_DESTROY_REFUND_MIN_PERCENT;
   const safeRefundPercent = Math.min(
     BUILDING_DESTROY_REFUND_MAX_PERCENT,
-    Math.max(BUILDING_DESTROY_REFUND_MIN_PERCENT, Math.floor(refundPercent)),
+    Math.max(BUILDING_DESTROY_REFUND_MIN_PERCENT, normalizedRefundPercent),
   );
   const refund = refundCost(balanceRow.cost, safeRefundPercent);
   return {

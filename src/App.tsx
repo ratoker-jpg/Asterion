@@ -1142,7 +1142,7 @@ export function App() {
     return true;
   };
 
-  const cancelBuilding = (queueIndex: number) => {
+  const cancelBuilding = (queueId: string) => {
     const canceledAt = Date.now();
     const current = stateRef.current;
     const planet = current.planets['helion-01'];
@@ -1156,7 +1156,7 @@ export function App() {
       buildings: planet.buildings,
       queue: current.queues['helion-01'],
       scienceLevels: current.science.levels,
-    }, queueIndex, canceledAt);
+    }, queueId, canceledAt);
 
     if (!transition.ok) {
       setNotice(transition.reason ?? 'Отмена строительства сейчас недоступна.');

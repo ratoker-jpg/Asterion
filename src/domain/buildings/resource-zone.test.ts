@@ -272,6 +272,7 @@ test('one shared three-slot FIFO queue accepts projects from all three zones and
   assert.equal(state.resources.metal, initialMetal - 112 - 400 - 500);
   assert.equal(state.queue[1].startedAt, state.queue[0].finishAt);
   assert.equal(state.queue[2].startedAt, state.queue[1].finishAt);
+  assert.equal(new Set(state.queue.map((item) => item.id)).size, BUILDING_QUEUE_CAPACITY);
 
   const fourth = startBuildingProject(state, 'spaceport', 'helion-01', 11_000);
   assert.equal(fourth.ok, false);
@@ -288,7 +289,7 @@ test('any queued slot can be canceled, returns 90 percent and keeps the remainin
   const canceledCost = getBuildingDefinition(canceled.assetRole);
   const balance = evaluateBuildingBuild({ ...state, queue: [] }, canceled.assetRole);
   const before = { ...state.resources };
-  const transition = cancelBuildingProject(state, 1, 2_000);
+  const transition = cancelBuildingProject(state, canceled.id, 2_000);
 
   assert.equal(transition.ok, true);
   assert.equal(transition.canceled?.assetRole, canceled.assetRole);
@@ -302,13 +303,27 @@ test('canceling the active slot starts the next slot at the cancellation time', 
   let state = createState();
   state = startBuildingProject(state, 'construction', 'helion-01', 1_000).state;
   state = startBuildingProject(state, 'shipyard', 'helion-01', 1_000).state;
-  const transition = cancelBuildingProject(state, 0, 5_000);
+  const transition = cancelBuildingProject(state, state.queue[0].id, 5_000);
 
   assert.equal(transition.ok, true);
   assert.equal(transition.state.queue.length, 1);
   assert.equal(transition.state.queue[0].assetRole, 'shipyard');
   assert.equal(transition.state.queue[0].startedAt, 5_000);
   assert.equal(transition.state.queue[0].finishAt, 5_000 + transition.state.queue[0].durationMs);
+});
+
+test('queue cancellation keeps targeting the original project after an earlier slot shifts the queue', () => {
+  let state = createState();
+  for (const role of ['gas-production-1', 'construction', 'shipyard'] as const) {
+    state = startBuildingProject(state, role, 'helion-01', 1_000).state;
+  }
+  const constructionId = state.queue[1].id;
+  state = cancelBuildingProject(state, state.queue[0].id, 5_000).state;
+  const transition = cancelBuildingProject(state, constructionId, 5_000);
+
+  assert.equal(transition.ok, true);
+  assert.equal(transition.canceled?.assetRole, 'construction');
+  assert.deepEqual(transition.state.queue.map((item) => item.assetRole), ['shipyard']);
 });
 
 test('destroying the only built level removes the building and returns the bounded percentage', () => {
@@ -321,7 +336,24 @@ test('destroying the only built level removes the building and returns the bound
   assert.equal(transition.destroyedLevel, 1);
   assert.equal(transition.refundPercent, 65);
   assert.equal(transition.state.buildings.construction, 0);
-  assert.equal(transition.state.resources.metal, state.resources.metal + Math.floor((cost?.metal ?? 0) * 0.65));
+  for (const key of ['metal', 'minerals', 'gas', 'energy'] as const) {
+    assert.equal(transition.state.resources[key], state.resources[key] + Math.floor((cost?.[key] ?? 0) * 0.65));
+  }
+});
+
+test('destroying a higher level uses that level cost and clamps malformed refund input safely', () => {
+  const buildings = { ...createDefaultBuildingLevels(), construction: 2 };
+  const state = createState({ buildings });
+  const cost = evaluateBuildingBuild({ ...state, buildings: { ...buildings, construction: 1 } }, 'construction').cost;
+  const transition = destroyBuildingLevel(state, 'construction', Number.NaN);
+
+  assert.equal(transition.ok, true);
+  assert.equal(transition.destroyedLevel, 2);
+  assert.equal(transition.refundPercent, 50);
+  assert.equal(transition.state.buildings.construction, 1);
+  for (const key of ['metal', 'minerals', 'gas', 'energy'] as const) {
+    assert.equal(transition.state.resources[key], state.resources[key] + Math.floor((cost?.[key] ?? 0) * 0.5));
+  }
 });
 
 test('destroying a queued building level is blocked until its queue is empty', () => {
