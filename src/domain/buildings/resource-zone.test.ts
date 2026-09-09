@@ -240,6 +240,19 @@ test('trade-center, construction, shipyard, spaceport and planetary-government e
   }
 });
 
+test('final shipyard transition 14 → 15 remains available with its published cost', () => {
+  const buildings = { ...createDefaultBuildingLevels(), shipyard: 14 };
+  const availability = evaluateBuildingBuild(createState({
+    buildings,
+    resources: { metal: 100_000_000, minerals: 100_000_000, gas: 100_000_000, energy: 100_000 },
+  }), 'shipyard');
+
+  assert.equal(availability.status, 'available');
+  assert.equal(availability.nextLevel, 15);
+  assert.deepEqual(availability.cost, { metal: 42_611_346, minerals: 21_305_673, gas: 8_522_269, energy: 68 });
+  assert.equal(availability.rawTimeMs, 30 * 60 * 60 * 1000 + 3 * 60 * 1000 + 10 * 1000);
+});
+
 test('one shared three-slot FIFO queue accepts projects from all three zones and charges once per slot', () => {
   let state = createState();
   const initialMetal = state.resources.metal;

@@ -65,9 +65,9 @@ export const PLANETARY_GOVERNMENT_MAX_LEVEL = 10;
 
 /** Balance v1 level-1 fixture kept for callers that need a static bot baseline. */
 export const RESOURCE_BASE_INCOME_PER_HOUR = {
-  metal: 10_150,
-  minerals: 8_735,
-  gas: 375,
+  metal: 150,
+  minerals: 150,
+  gas: 100,
 } as const;
 
 export function getSpaceportMaxLevel() {

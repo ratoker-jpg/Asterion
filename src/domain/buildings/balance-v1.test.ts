@@ -34,8 +34,8 @@ test('Balance v1 exposes a complete sequential table for every role', () => {
     }
     const maxRow = getBuildingBalanceRow(role, maxLevel);
     assert.ok(maxRow);
-    assert.equal(maxRow.cost, null);
-    assert.equal(maxRow.rawTimeMs, null);
+    assert.ok(maxRow.cost, `${role} max level must expose its final transition cost`);
+    assert.ok(maxRow.rawTimeMs != null, `${role} max level must expose its final transition time`);
   }
 });
 
@@ -44,9 +44,28 @@ test('resource and energy income selectors use the current building level', () =
     'metal-production-1': 1,
     'mineral-production-1': 1,
     'gas-production-1': 1,
-  }), { metal: 10_150, minerals: 8_735, gas: 375 });
+  }), { metal: 150, minerals: 150, gas: 100 });
   assert.equal(getBuildingEnergyIncomePerHour({ 'basic-energy': 1, 'advanced-energy': 1 }), 160);
-  assert.deepEqual(getBuildingResourceIncomePerHour({ 'metal-production-1': 999 }), { metal: 161_037, minerals: 0, gas: 0 });
+  assert.deepEqual(getBuildingResourceIncomePerHour({ 'metal-production-1': 999 }), { metal: 74_860, minerals: 0, gas: 0 });
+});
+
+test('published production rows and final transition rows are fully represented', () => {
+  const productionRates = [
+    ['metal-production-1', [150, 210, 290, 410, 580, 810, 1130, 1580, 2210, 3100, 3870, 4840, 6050, 7570, 9460, 11820, 14780, 18470, 23090, 28860, 31750, 34920, 38420, 42260, 46480, 51130, 56250, 61870, 68060, 74860]],
+    ['mineral-production-1', [150, 210, 290, 410, 580, 810, 1130, 1580, 2210, 3100, 3870, 4840, 6050, 7570, 9460, 11820, 14780, 18470, 23090, 28860, 31750, 34920, 38420, 42260, 46480, 51130, 56250, 61870, 68060, 74860]],
+    ['gas-production-1', [100, 140, 200, 270, 380, 540, 750, 1050, 1480, 2070, 2580, 3230, 4040, 5040, 6310, 7880, 9850, 12310, 15390, 19240, 21170, 23280, 25610, 28170, 30990, 34090, 37500, 41250, 45370, 49910]],
+  ] as const;
+  for (const [role, expected] of productionRates) {
+    const actual = expected.map((_, index) => getBuildingEffect(role, index + 1));
+    assert.deepEqual(actual.map((effect) => effect.kind === 'resource-income' ? effect.amountPerHour : null), expected, role);
+  }
+
+  const shipyardFinal = getBuildingBalanceRow('shipyard', 15);
+  assert.deepEqual(shipyardFinal?.cost, { metal: 42_611_346, minerals: 21_305_673, gas: 8_522_269, energy: 68 });
+  assert.equal(shipyardFinal?.rawTimeMs, 30 * 60 * 60 * 1000 + 3 * 60 * 1000 + 10 * 1000);
+  const metalFinal = getBuildingBalanceRow('metal-production-1', 30);
+  assert.deepEqual(metalFinal?.cost, { metal: 3_068_017, minerals: 1_278_340, gas: 0, energy: 374 });
+  assert.equal(metalFinal?.rawTimeMs, 31 * 60 * 60 * 1000 + 24 * 60 * 1000 + 31 * 1000);
 });
 
 test('Balance v1 keeps the clarified planetary storage base separate from building bonuses', () => {
