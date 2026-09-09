@@ -18,6 +18,7 @@ import './shell-v3.css';
 import './shell-v4.css';
 import './single-planet-v5.css';
 import './asterion-header.css';
+import './asterion-header-faction-themes.css';
 import './resource-zone.css';
 import './web-preview.css';
 import './shipyard-workspace.css';
@@ -35,6 +36,11 @@ import './utility-source-rebuild-polish.css';
 import './universe-interaction.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
+const headerFactionPreview = new URLSearchParams(window.location.search).get('headerFaction');
+const headerFaction = headerFactionPreview === 'synod' || headerFactionPreview === 'veyra'
+  ? headerFactionPreview
+  : 'aegis';
+document.documentElement.dataset.headerFaction = headerFaction;
 
 if (!isElectron) {
   document.documentElement.classList.add('web-preview');

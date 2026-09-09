@@ -483,12 +483,11 @@ type ResourceProps = {
   label: string;
   value: number;
   capacity?: number;
-  showCapacity?: boolean;
   hourlyGain?: number;
   description?: string;
 };
 
-function Resource({ kind, label, value, capacity, showCapacity = false, hourlyGain, description }: ResourceProps) {
+function Resource({ kind, label, value, capacity, hourlyGain, description }: ResourceProps) {
   const fill = capacity ? Math.min(100, Math.max(0, (value / capacity) * 100)) : 0;
   const fillTone = fill >= 85 ? 'critical' : fill >= 75 ? 'warning' : fill >= 65 ? 'watch' : 'normal';
 
@@ -497,7 +496,7 @@ function Resource({ kind, label, value, capacity, showCapacity = false, hourlyGa
       <span className="resource-chip__icon"><GameIcon kind={kind} /></span>
       <span className="resource-chip__text">
         <small>{label}</small>
-        <strong>{showCapacity && capacity ? `${formatNumber(value)} / ${formatNumber(capacity)}` : formatNumber(value)}</strong>
+        <strong>{formatNumber(value)}</strong>
         {capacity ? <span className={`resource-fill resource-fill--${fillTone}`}><i style={{ '--fill': `${fill}%` } as CSSProperties} /></span> : null}
       </span>
       <span className="resource-tooltip" role="tooltip">
@@ -1373,7 +1372,7 @@ export function App() {
               <Resource kind="mineral" label="МИНЕРАЛЫ" value={state.minerals} capacity={60_000} hourlyGain={resourceIncomePerHour.minerals} />
               <Resource kind="gas" label="ГАЗ" value={state.gas} capacity={60_000} hourlyGain={resourceIncomePerHour.gas} />
               <Resource kind="energy" label="ЭНЕРГИЯ" value={currentPlanetState.energy} description="Энергия планеты. Солнечная электростанция увеличивает запас после завершения строительства." />
-              <Resource kind="population" label="НАСЕЛЕНИЕ" value={fleetSummary.population} capacity={fleetSummary.capacity} showCapacity />
+              <Resource kind="population" label="НАСЕЛЕНИЕ" value={fleetSummary.population} capacity={fleetSummary.capacity} />
             </div>
             <nav className="primary-navigation" aria-label="Основная навигация">
               {primaryTabs.map(({ id, label, icon }) => (

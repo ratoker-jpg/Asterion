@@ -1,0 +1,109 @@
+/* Decorative faction skins for the shared, live command header.
+ * The query override is visual-only: ?headerFaction=aegis|synod|veyra. */
+:root{
+  --header-accent:#38ddff;
+  --header-accent-rgb:56,221,255;
+  --header-ink:#02131d;
+  --header-surface:#061b28;
+  --header-line:rgba(88,230,255,.72);
+  --header-line-soft:rgba(88,230,255,.24);
+  --header-chrome:url('../assets/source/header-chrome-v3/aegis-chrome.png');
+}
+:root[data-header-faction='synod']{
+  --header-accent:#38e8a2;
+  --header-accent-rgb:56,232,162;
+  --header-ink:#031b13;
+  --header-surface:#09291e;
+  --header-line:rgba(211,255,235,.72);
+  --header-line-soft:rgba(157,255,207,.28);
+}
+:root[data-header-faction='veyra']{
+  --header-accent:#ff3e51;
+  --header-accent-rgb:255,62,81;
+  --header-ink:#1a0207;
+  --header-surface:#35070e;
+  --header-line:rgba(255,80,97,.76);
+  --header-line-soft:rgba(255,80,97,.30);
+}
+
+.asterion-header{isolation:isolate}
+.asterion-header::before{
+  content:"";
+  position:absolute;
+  z-index:-1;
+  left:-12px;
+  top:-42px;
+  width:238px;
+  height:244px;
+  background-color:var(--header-ink);
+  background-image:var(--header-chrome);
+  background-position:left -8px;
+  background-size:1200px auto;
+  background-repeat:no-repeat;
+  clip-path:inset(0);
+  pointer-events:none;
+  opacity:.86;
+}
+
+:root[data-header-faction='synod'] .asterion-header::before,
+:root[data-header-faction='veyra'] .asterion-header::before{display:none}
+
+:root[data-header-faction='synod'] .header-planet-orbit::before{
+  border-color:rgba(221,255,240,.92);
+  box-shadow:0 0 0 7px rgba(4,24,16,.96),0 0 26px rgba(56,232,162,.42),inset 0 0 24px rgba(214,255,233,.18);
+}
+:root[data-header-faction='veyra'] .header-planet-orbit::before{
+  border-color:rgba(255,80,97,.94);
+  box-shadow:0 0 0 6px rgba(26,2,7,.96),0 0 8px rgba(255,62,81,.90),0 0 30px rgba(255,62,81,.38),inset 0 0 26px rgba(255,62,81,.18);
+}
+
+/* Shared geometry remains DOM-first; the asset only adds the faction silhouette. */
+.header-planet-orbit::before{
+  border-color:var(--header-line);
+  box-shadow:0 0 0 8px rgba(1,10,17,.93),0 0 36px rgba(var(--header-accent-rgb),.28),inset 0 0 28px rgba(var(--header-accent-rgb),.12);
+}
+.header-planet-orbit::after{border-color:rgba(var(--header-accent-rgb),.30)}
+.current-planet-select,
+.header-resource-rail::before,
+.primary-navigation,
+.campaign-module::before{
+  border-color:var(--header-line);
+  background:linear-gradient(180deg,color-mix(in srgb,var(--header-surface) 92%,white 4%),var(--header-ink));
+}
+.current-planet-select:hover,
+.current-planet-select:focus-visible{
+  border-color:var(--header-accent);
+  background:linear-gradient(180deg,color-mix(in srgb,var(--header-surface) 88%,var(--header-accent) 12%),var(--header-ink));
+}
+.current-planet-select small,
+.current-planet-select i{color:var(--header-accent)}
+.header-resource-rail .resource-chip,
+.primary-navigation button{
+  border-color:var(--header-line-soft);
+  background:linear-gradient(180deg,rgba(var(--header-accent-rgb),.07),rgba(0,0,0,.16));
+}
+.primary-navigation button:hover,
+.primary-navigation button:focus-visible{
+  color:#f7ffff;
+  background:linear-gradient(180deg,rgba(var(--header-accent-rgb),.24),rgba(0,0,0,.22));
+}
+.primary-navigation button.active{
+  background:linear-gradient(180deg,rgba(var(--header-accent-rgb),.32),rgba(0,0,0,.22));
+  box-shadow:inset 0 -4px var(--header-accent),inset 0 -14px 28px rgba(var(--header-accent-rgb),.14);
+}
+.primary-navigation button.active::after{background:var(--header-accent);box-shadow:0 0 16px rgba(var(--header-accent-rgb),.86)}
+.campaign-module::before{box-shadow:inset 0 0 28px rgba(var(--header-accent-rgb),.10)}
+.utility-navigation{border-color:var(--header-line-soft)}
+.utility-navigation button{border-color:var(--header-line-soft);background:rgba(var(--header-accent-rgb),.06)}
+.utility-navigation button:hover,
+.utility-navigation button:focus-visible,
+.utility-navigation button.active{background:rgba(var(--header-accent-rgb),.18);box-shadow:inset 0 0 18px rgba(var(--header-accent-rgb),.16)}
+.resource-tooltip,
+.planet-list-popover{border-color:var(--header-line);background:color-mix(in srgb,var(--header-ink) 94%,black)}
+
+/* Resource identity is universal: faction skins never recolor these five marks. */
+:root[data-header-faction] .resource-chip--metal .resource-chip__icon{color:#55e6ff}
+:root[data-header-faction] .resource-chip--mineral .resource-chip__icon{color:#a6adff}
+:root[data-header-faction] .resource-chip--gas .resource-chip__icon{color:#4df0a7}
+:root[data-header-faction] .resource-chip--energy .resource-chip__icon{color:#ffd34f}
+:root[data-header-faction] .resource-chip--population .resource-chip__icon{color:#dffaff}
