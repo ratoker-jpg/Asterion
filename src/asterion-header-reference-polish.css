@@ -1,0 +1,158 @@
+/*
+ * Screenshot-driven polish for the approved faction header reference.
+ * Loaded after the geometry lock. This file only changes presentation; live
+ * controls, labels, values, timers, tooltips and layout boxes stay untouched.
+ */
+
+/* The first whole-rail Synod/Veyra rasters visibly smeared across all six live
+ * buttons at runtime. Keep the local assets in the delivery manifest, but do not
+ * render that rejected pass in the permanent header. */
+:root[data-header-faction='synod'] .asterion-header .primary-navigation::before,
+:root[data-header-faction='veyra'] .asterion-header .primary-navigation::before{
+  opacity:0;
+  filter:none;
+  inset:0;
+}
+
+/* Strong double-line framing: the approved reference reads as six independent
+ * hardware bays, not a flat menu strip. */
+.asterion-header .primary-navigation{
+  border-width:2px;
+  box-shadow:
+    inset 0 0 0 2px rgba(0,0,0,.64),
+    inset 0 0 0 3px rgba(var(--header-accent-rgb),.10),
+    inset 0 0 30px rgba(var(--header-accent-rgb),.055),
+    0 0 14px rgba(var(--header-accent-rgb),.07);
+}
+.asterion-header .primary-navigation button{
+  border:1px solid color-mix(in srgb,var(--header-line) 58%,transparent);
+  background:
+    linear-gradient(90deg,var(--header-line),transparent) left top/34px 1px no-repeat,
+    linear-gradient(180deg,var(--header-line),transparent) left top/1px 22px no-repeat,
+    linear-gradient(270deg,var(--header-line),transparent) right bottom/34px 1px no-repeat,
+    linear-gradient(0deg,var(--header-line),transparent) right bottom/1px 22px no-repeat,
+    linear-gradient(180deg,rgba(var(--header-accent-rgb),.07),rgba(1,10,16,.38));
+  box-shadow:
+    inset 0 0 0 2px rgba(0,0,0,.44),
+    inset 0 1px rgba(var(--header-accent-rgb),.14),
+    inset 0 -1px rgba(var(--header-accent-rgb),.13);
+}
+.asterion-header .primary-navigation button:last-child{border-right:1px solid color-mix(in srgb,var(--header-line) 58%,transparent)}
+
+/* Top resources follow the same independent-bay language as the target. */
+.asterion-header .header-resource-rail .resource-chip{
+  border:1px solid color-mix(in srgb,var(--header-line) 58%,transparent);
+  background:
+    linear-gradient(90deg,var(--header-line),transparent) left top/26px 1px no-repeat,
+    linear-gradient(180deg,var(--header-line),transparent) left top/1px 18px no-repeat,
+    linear-gradient(270deg,var(--header-line),transparent) right bottom/26px 1px no-repeat,
+    linear-gradient(0deg,var(--header-line),transparent) right bottom/1px 18px no-repeat,
+    linear-gradient(180deg,rgba(var(--header-accent-rgb),.065),rgba(0,0,0,.10));
+  box-shadow:
+    inset 0 0 0 2px rgba(0,0,0,.42),
+    inset 0 0 14px rgba(var(--header-accent-rgb),.025);
+}
+
+/* Aegis planet ring: thicker segmented engineering shell like the approved blue
+ * reference. The planet and zone controls remain separate live elements. */
+:root[data-header-faction='aegis'] .asterion-header .header-planet-orbit::before{
+  left:0;
+  top:-7px;
+  width:220px;
+  height:220px;
+  border:0;
+  outline:0;
+  border-radius:50%;
+  opacity:1;
+  background:
+    conic-gradient(from -20deg,
+      rgba(98,231,255,.95) 0 2.5%,rgba(10,72,100,.96) 2.5% 8%,transparent 8% 16%,
+      rgba(25,132,171,.90) 16% 21%,transparent 21% 31%,rgba(82,220,250,.88) 31% 35%,
+      rgba(7,50,72,.98) 35% 43%,transparent 43% 54%,rgba(42,172,211,.86) 54% 60%,
+      transparent 60% 69%,rgba(94,230,255,.94) 69% 73%,rgba(7,54,77,.98) 73% 82%,
+      transparent 82% 91%,rgba(46,189,226,.88) 91% 96%,transparent 96% 100%),
+    radial-gradient(circle,
+      transparent 0 58%,
+      rgba(2,18,28,.98) 58.5% 63%,
+      rgba(41,185,222,.92) 63.5% 65%,
+      rgba(6,42,61,.98) 65.5% 72%,
+      rgba(115,237,255,.72) 72.5% 74%,
+      rgba(2,17,26,.98) 74.5% 79%,
+      transparent 79.5% 100%);
+  box-shadow:
+    0 0 0 2px rgba(45,186,222,.48),
+    0 0 0 5px rgba(1,8,13,.94),
+    0 0 25px rgba(0,210,255,.30),
+    inset 0 0 24px rgba(0,210,255,.15);
+}
+:root[data-header-faction='aegis'] .asterion-header .header-planet-orbit::after{
+  left:25px;
+  top:18px;
+  width:170px;
+  height:170px;
+  border-style:solid;
+  border-color:rgba(88,226,251,.28);
+  opacity:.70;
+}
+
+/* Synod: reject the overly leafy first ring and keep a cleaner ivory ceramic /
+ * emerald crystal construction closer to the faction reference. */
+:root[data-header-faction='synod'] .asterion-header .header-planet-orbit::before{
+  left:0;
+  top:-7px;
+  width:220px;
+  height:220px;
+  border:0;
+  outline:0;
+  border-radius:50%;
+  opacity:1;
+  background-image:none;
+  background:
+    conic-gradient(from -15deg,
+      #f3f7f3 0 7%,rgba(18,151,110,.96) 7% 10%,transparent 10% 19%,
+      #dceae4 19% 27%,transparent 27% 37%,#f7fbf8 37% 43%,rgba(22,218,151,.86) 43% 46%,
+      transparent 46% 57%,#e8f1ed 57% 65%,transparent 65% 75%,#f7fbf8 75% 82%,
+      rgba(20,185,132,.92) 82% 86%,transparent 86% 94%,#e7f0ec 94% 100%),
+    radial-gradient(circle,
+      transparent 0 58%,
+      rgba(3,36,27,.98) 58.5% 63%,
+      rgba(44,228,165,.72) 63.5% 65%,
+      #e7f0ec 65.5% 71%,
+      rgba(13,104,78,.98) 71.5% 75%,
+      rgba(241,247,244,.88) 75.5% 78%,
+      transparent 78.5% 100%);
+  box-shadow:0 0 0 4px rgba(2,17,14,.92),0 0 26px rgba(26,240,163,.22),inset 0 0 20px rgba(26,240,163,.10);
+  filter:none;
+}
+:root[data-header-faction='synod'] .asterion-header .header-planet-orbit::after{
+  left:27px;
+  top:20px;
+  width:166px;
+  height:166px;
+  border-style:solid;
+  border-color:rgba(219,255,241,.30);
+  opacity:.58;
+}
+
+/* Synod should read as precise ceramic hardware, not transparent green paint. */
+:root[data-header-faction='synod'] .asterion-header .primary-navigation button,
+:root[data-header-faction='synod'] .asterion-header .header-resource-rail .resource-chip{
+  border-color:rgba(225,247,239,.48);
+  box-shadow:inset 0 0 0 2px rgba(2,30,22,.48),inset 0 1px rgba(242,255,250,.12);
+}
+
+/* Veyra keeps the organic planet shell, but the live cells get restrained ribs
+ * instead of the rejected smeared full-rail bitmap. */
+:root[data-header-faction='veyra'] .asterion-header .primary-navigation button,
+:root[data-header-faction='veyra'] .asterion-header .header-resource-rail .resource-chip{
+  border-color:rgba(255,55,76,.50);
+  background:
+    radial-gradient(ellipse at 8% 50%,rgba(255,45,66,.10),transparent 24%),
+    radial-gradient(ellipse at 92% 50%,rgba(255,45,66,.10),transparent 24%),
+    linear-gradient(180deg,rgba(105,7,19,.42),rgba(18,1,5,.84));
+  box-shadow:inset 0 0 0 2px rgba(45,0,7,.70),inset 0 0 18px rgba(255,35,55,.055);
+}
+
+/* Campaign composition: keep title/timer comfortably above the live utility row. */
+.asterion-header .campaign-status{top:11px}
+.asterion-header .campaign-module time{top:31px}
