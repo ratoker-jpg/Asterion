@@ -313,9 +313,10 @@ html.web-preview.asterion-long-page .stage {
 .shipyard-time-v1 {
   width: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 2px;
   padding-top: 4px;
   border-top: 1px solid rgba(64, 190, 221, .12);
 }
@@ -328,7 +329,22 @@ html.web-preview.asterion-long-page .stage {
 
 .shipyard-time-v1 b {
   color: #fff;
-  font-size: 12px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.shipyard-time-v1 span,
+.shipyard-time-v1 em {
+  color: #6f9aa6;
+  font-size: 7px;
+  font-style: normal;
+  letter-spacing: .04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.shipyard-time-v1 em {
+  color: #69dff2;
+  text-align: center;
 }
 
 /* Hover-only ship stats. No focus/click state: the panel disappears as soon as the pointer leaves the art. */

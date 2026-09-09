@@ -5,6 +5,11 @@ import {
   DEFENSE_COMBAT_CATALOG,
   type CatalogEntity,
 } from './domain/combat/catalog.ts';
+import {
+  calculateUnitProductionDurationMs,
+  formatClockDurationMs,
+  parseClockDurationMs,
+} from './domain/buildings/balance-v1.ts';
 import { getRuntimeSaveKey } from './domain/runtime/mode.ts';
 import { createCanonicalStartingFleet, getFleetSummary, migrateFleetState, resolveSavedFleetState } from './domain/fleet/runtime.ts';
 
@@ -45,6 +50,7 @@ type ShipyardBudget = {
   population: number;
   populationMax: number;
   shipyardLevel: number;
+  advancedFactoryLevel: number;
   hangarLevel: number;
   fleet: ReturnType<typeof migrateFleetState>;
 };
@@ -108,7 +114,7 @@ const formatNumber = (value: number) => new Intl.NumberFormat('ru-RU').format(va
 function readBudget(): ShipyardBudget {
   const fallback: ShipyardBudget = {
     metal: 15_880, minerals: 12_712, gas: 6_421, population: 58, populationMax: 70,
-    shipyardLevel: 0, hangarLevel: 1, fleet: createCanonicalStartingFleet(),
+    shipyardLevel: 0, advancedFactoryLevel: 0, hangarLevel: 1, fleet: createCanonicalStartingFleet(),
   };
 
   try {
@@ -123,6 +129,7 @@ function readBudget(): ShipyardBudget {
       population: getFleetSummary(resolveSavedFleetState(homeworld?.fleet), Number(homeworld?.buildings?.hangar ?? 0)).population,
       populationMax: getFleetSummary(resolveSavedFleetState(homeworld?.fleet), Number(homeworld?.buildings?.hangar ?? 0)).capacity,
       shipyardLevel: typeof homeworld?.buildings?.shipyard === 'number' ? homeworld.buildings.shipyard : fallback.shipyardLevel,
+      advancedFactoryLevel: typeof homeworld?.buildings?.['advanced-factory'] === 'number' ? homeworld.buildings['advanced-factory'] : fallback.advancedFactoryLevel,
       hangarLevel: typeof homeworld?.buildings?.hangar === 'number' ? homeworld.buildings.hangar : fallback.hangarLevel,
       fleet: resolveSavedFleetState(homeworld?.fleet),
     };
@@ -193,6 +200,7 @@ function CatalogCard({
   quantity,
   budget,
   shipyardLevel,
+  advancedFactoryLevel,
   mode,
   onQuantity,
   onBuild,
@@ -201,6 +209,7 @@ function CatalogCard({
   quantity: number;
   budget: ShipyardBudget;
   shipyardLevel: number;
+  advancedFactoryLevel: number;
   mode: ConstructionCatalogMode;
   onQuantity: (item: CatalogItem, quantity: number) => void;
   onBuild: (item: CatalogItem, quantity: number) => void;
@@ -208,6 +217,8 @@ function CatalogCard({
   const unlocked = item.requiredShipyardLevel <= shipyardLevel;
   const max = unlocked ? calculateMax(item, budget) : 0;
   const unavailableLabel = mode === 'defense' ? 'КОМПЛЕКС НЕДОСТУПЕН' : 'КОРПУС НЕДОСТУПЕН';
+  const rawTimeMs = parseClockDurationMs(item.time) ?? 1;
+  const effectiveTimeMs = calculateUnitProductionDurationMs(rawTimeMs, shipyardLevel, advancedFactoryLevel);
 
   return (
     <article className={`shipyard-card-v1 ${unlocked ? '' : 'locked'}`}>
@@ -226,7 +237,11 @@ function CatalogCard({
             <img src={item.art} alt={item.name} draggable={false} />
             <CatalogStatsTooltip item={item} />
           </div>
-          <div className="shipyard-time-v1"><small>ВРЕМЯ ЗА ЕДИНИЦУ</small><b>{item.time}</b></div>
+          <div className="shipyard-time-v1" data-qa-unit-time={item.id}>
+            <small>ВРЕМЯ ЗА ЕДИНИЦУ</small>
+            <b data-qa-unit-time-effective>{formatClockDurationMs(effectiveTimeMs)}</b>
+            <span data-qa-unit-time-raw>RAW {item.time}</span>
+          </div>
         </div>
 
         <div className="shipyard-card-data-v1">
@@ -348,6 +363,7 @@ export function ConstructionCatalogView({
             quantity={quantities[item.id] ?? 0}
             budget={budget}
             shipyardLevel={budget.shipyardLevel}
+            advancedFactoryLevel={budget.advancedFactoryLevel}
             mode={mode}
             onQuantity={setQuantity}
             onBuild={prepareBuild}

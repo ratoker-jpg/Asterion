@@ -95,8 +95,8 @@ test('10 applied bots give exactly +60% metal, +50% minerals and +40% gas', () =
   assert.equal(getProductionBotBonusPercent(applied, 'gas'), 40);
 
   assert.deepEqual(getProductionBotIncomePerHour(RESOURCE_BASE_INCOME_PER_HOUR, applied), {
-    metal: 1238.4,
-    minerals: 765,
-    gas: 436.79999999999995,
+    metal: 240,
+    minerals: 225,
+    gas: 140,
   });
 });

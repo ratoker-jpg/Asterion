@@ -174,7 +174,7 @@ async function makeReady(win, jobIndex = 0) {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
     const job = save.planets?.['helion-01']?.recycling?.jobs?.[${jobIndex}];
     if (!job) return false;
-    const duration = Math.max(1000, Math.ceil((job.debrisAmount / 1000000 * 3 * 60 * 60 * 1000) / 1000) * 1000);
+    const duration = Math.max(1000, Math.ceil((job.debrisAmount / 18 * 1000) / 1000) * 1000);
     job.startedAt = Date.now() - duration - 2000;
     job.finishAt = job.startedAt + duration;
     job.collectExpiresAt = null;
@@ -193,7 +193,7 @@ async function makeExpiredForAutoCollect(win, jobIndex = 0) {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
     const job = save.planets?.['helion-01']?.recycling?.jobs?.[${jobIndex}];
     if (!job) return false;
-    const duration = Math.max(1000, Math.ceil((job.debrisAmount / 1000000 * 3 * 60 * 60 * 1000) / 1000) * 1000);
+    const duration = Math.max(1000, Math.ceil((job.debrisAmount / 18 * 1000) / 1000) * 1000);
     const storage = 24 * 60 * 60 * 1000;
     job.startedAt = Date.now() - duration - storage - 2000;
     job.finishAt = job.startedAt + duration;
@@ -344,7 +344,7 @@ async function verifyFlow(win, directory, label) {
 
   await setNumberInput(win, '[data-qa-recycling-debris-input]', 10000);
   screen = await readScreen(win);
-  if (screen?.debrisInputValue !== 10000 || screen.debrisValue !== 10000 || screen.duration !== '00:01:48') throw new Error(`${label}: manual debris amount or compact duration mismatch ${JSON.stringify(screen)}`);
+  if (screen?.debrisInputValue !== 10000 || screen.debrisValue !== 10000 || screen.duration !== '00:09:16') throw new Error(`${label}: manual debris amount or compact duration mismatch ${JSON.stringify(screen)}`);
   await setRange(win, '[data-qa-recycling-allocation-slider="metal"]', 60);
   await setRange(win, '[data-qa-recycling-allocation-slider="minerals"]', 30);
   screen = await readScreen(win);

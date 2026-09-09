@@ -370,6 +370,10 @@
 .campaign-status{position:absolute;z-index:1;left:42px;top:15px}
 .campaign-status strong{font-size:12px;letter-spacing:.8px;color:#eafff2;white-space:nowrap}
 .campaign-module time{position:absolute;z-index:1;left:50%;top:37px;transform:translateX(-50%);font-size:22px;line-height:1;font-weight:800;color:#fff;letter-spacing:.1px;white-space:nowrap}
+.campaign-module:has(.test-mode-banner-v1) .campaign-status{top:10px}
+.campaign-module:has(.test-mode-banner-v1) time{top:28px;font-size:18px}
+.campaign-module:has(.test-mode-banner-v1) .utility-navigation{height:30px}
+.campaign-module:has(.test-mode-banner-v1) .utility-navigation svg{width:20px;height:20px}
 .utility-navigation{
   position:absolute;
   z-index:4;

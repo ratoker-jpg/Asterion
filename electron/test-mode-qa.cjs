@@ -153,7 +153,7 @@ async function readQaState(win) {
       mode,
       banner: Boolean(document.querySelector('[data-qa-test-mode-banner]')),
       scale: document.querySelector('[data-qa-test-time-scale]')?.textContent?.trim() ?? '',
-      testResources: { metal: test?.metal, minerals: test?.minerals, gas: test?.gas },
+      testResources: { metal: test?.metal, minerals: test?.minerals, gas: test?.gas, energy: planet?.energy },
       productionResources: { metal: production?.metal, minerals: production?.minerals, gas: production?.gas },
       buildings: planet?.buildings ?? null,
       fleet: planet?.fleet ?? null,
@@ -166,6 +166,26 @@ async function readQaState(win) {
       fleetPageLong: document.documentElement.classList.contains('asterion-long-page'),
       populationChips: Array.from(document.querySelectorAll('.header-resource-rail .resource-chip--population'))
         .map((node) => node.textContent?.replace(/\s+/g, ' ').trim() ?? ''),
+      populationValues: Array.from(document.querySelectorAll('.header-resource-rail .resource-chip--population .resource-chip__text strong'))
+        .map((node) => node.textContent?.replace(/\s+/g, ' ').trim() ?? ''),
+      populationTooltips: Array.from(document.querySelectorAll('.header-resource-rail .resource-chip--population .resource-tooltip'))
+        .map((node) => node.textContent?.replace(/\s+/g, ' ').trim() ?? ''),
+      testSpeedLayout: (() => {
+        const rect = (node) => {
+          if (!node) return null;
+          const box = node.getBoundingClientRect();
+          return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width, height: box.height };
+        };
+        const banner = document.querySelector('[data-qa-test-mode-banner]');
+        const picker = document.querySelector('.test-mode-speed-picker');
+        return {
+          banner: rect(banner),
+          picker: rect(picker),
+          campaign: rect(document.querySelector('.campaign-module')),
+          header: rect(document.querySelector('.asterion-header')),
+          buttons: Array.from(document.querySelectorAll('[data-qa-test-speed]')).map(rect),
+        };
+      })(),
       fleetPopulation: document.querySelector('[data-qa-fleet-population]')?.textContent?.trim() ?? '',
       fleetFlightActions: Array.from(document.querySelectorAll('.fleet-flight-actions-v1 button')).map((node) => ({
         text: node.textContent?.replace(/\s+/g, ' ').trim() ?? '',
@@ -205,7 +225,7 @@ async function runViewport(width, height) {
     await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(PRODUCTION_KEY)}); localStorage.removeItem(${JSON.stringify(TEST_KEY)});`);
     await reload(win, 'production');
     const productionInitial = await readQaState(win);
-    if (productionInitial.mode !== 'production' || productionInitial.banner || productionInitial.testResources.metal === 1_000_000 || !productionInitial.scienceLevels || Object.values(productionInitial.scienceLevels).some((level) => level !== 0)) {
+    if (productionInitial.mode !== 'production' || productionInitial.banner || productionInitial.testResources.metal === 1_000_000 || !productionInitial.scienceLevels || Object.values(productionInitial.scienceLevels).some((level) => level !== 0) || await win.webContents.executeJavaScript(`document.querySelectorAll('[data-qa-test-speed]').length`) !== 0) {
       throw new Error(`${label}: production isolation/fixture mismatch ${JSON.stringify(productionInitial)}`);
     }
     await capture(win, directory, 'production-overview');
@@ -213,11 +233,30 @@ async function runViewport(width, height) {
 
     await loadMode(win, 'test');
     const initial = await readQaState(win);
-    if (initial.mode !== 'test' || !initial.banner || !initial.scale.includes('×15') || initial.testResources.metal !== 1_000_000 || initial.buildingQueue !== 0 || initial.scienceQueue !== 0 || initial.shipQueue !== 0 || initial.commanderQueue !== 0) {
+    if (initial.mode !== 'test' || !initial.banner || !initial.scale.includes('×15') || initial.testResources.metal !== 999_999_999 || initial.testResources.minerals !== 999_999_999 || initial.testResources.gas !== 999_999_999 || initial.testResources.energy !== 999_999_999 || initial.buildingQueue !== 0 || initial.scienceQueue !== 0 || initial.shipQueue !== 0 || initial.commanderQueue !== 0) {
       throw new Error(`${label}: Test Mode fixture mismatch ${JSON.stringify(initial)}`);
     }
-    if (initial.populationChips.length !== 1 || !initial.populationChips[0].includes('58 / 70')) {
-      throw new Error(`${label}: population must use the unified fleet entity/capacity display ${JSON.stringify(initial.populationChips)}`);
+    const speedButtons = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-test-speed]')).map((node) => node.getAttribute('data-qa-test-speed'))`);
+    if (JSON.stringify(speedButtons) !== JSON.stringify(['1', '10', '15', '100', '200', '300', '500'])) {
+      throw new Error(`${label}: Test Mode speed selector mismatch ${JSON.stringify(speedButtons)}`);
+    }
+    const speedLayout = initial.testSpeedLayout;
+    const campaignBox = speedLayout?.campaign;
+    if (!speedLayout?.banner || !speedLayout.picker || !campaignBox || speedLayout.picker.width <= 0 || speedLayout.picker.left < campaignBox.left - 1 || speedLayout.picker.right > campaignBox.right + 1) {
+      throw new Error(`${label}: Test Mode speed controls are not laid out inside the campaign card ${JSON.stringify(speedLayout)}`);
+    }
+    if (speedLayout.buttons.length !== 7 || speedLayout.buttons.some((box) => !box || box.width <= 0 || box.left < campaignBox.left - 1 || box.right > campaignBox.right + 1)) {
+      throw new Error(`${label}: Test Mode speed button is clipped ${JSON.stringify(speedLayout)}`);
+    }
+    await click(win, '[data-qa-test-speed="500"]');
+    await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×500')`);
+    await click(win, '[data-qa-test-speed="15"]');
+    await reload(win, 'test');
+    if (!(await win.webContents.executeJavaScript(`document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×15')`))) {
+      throw new Error(`${label}: Test Mode speed selection did not persist`);
+    }
+    if (initial.populationValues.length !== 1 || initial.populationValues[0] !== '58' || initial.populationTooltips.length !== 1 || !initial.populationTooltips[0].includes('58 / 120')) {
+      throw new Error(`${label}: population header/value tooltip contract failed ${JSON.stringify({ values: initial.populationValues, tooltips: initial.populationTooltips, chips: initial.populationChips })}`);
     }
     const canonicalBuildingLevelOne = new Set(['metal-production-1', 'mineral-production-1', 'gas-production-1', 'basic-energy', 'hangar']);
     const canonicalBuildingsOnly = canonicalBuildingLevelOne.size === Object.values(initial.buildings || {}).filter((level) => level === 1).length
@@ -231,10 +270,10 @@ async function runViewport(width, height) {
     }
     await capture(win, directory, 'test-overview');
     await clickText(win, '.shell-notice button', 'СБРОСИТЬ ТЕСТОВОЕ СОХРАНЕНИЕ');
-    await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}').metal === 1000000`);
+    await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}').metal === 999999999`);
     const afterTestReset = await readQaState(win);
     const productionAfterReset = await readEnvelope(win, PRODUCTION_KEY);
-    if (afterTestReset.testResources.metal !== 1_000_000 || productionAfterReset.metal !== productionBeforeTest.metal) throw new Error(`${label}: Test Mode reset crossed save keys`);
+    if (afterTestReset.testResources.metal !== 999_999_999 || productionAfterReset.metal !== productionBeforeTest.metal) throw new Error(`${label}: Test Mode reset crossed save keys`);
 
     await win.webContents.executeJavaScript(`(() => {
       const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
@@ -247,7 +286,7 @@ async function runViewport(width, height) {
     await reload(win, 'test');
     await openFleet(win);
     const commanderFleet = await readQaState(win);
-    if (!commanderFleet.fleetPopulation.includes('66 / 70')) throw new Error(`${label}: commander population was not included in fleet capacity ${JSON.stringify(commanderFleet)}`);
+    if (!commanderFleet.fleetPopulation.includes('66 / 120')) throw new Error(`${label}: commander population was not included in fleet capacity ${JSON.stringify(commanderFleet)}`);
 
     await win.webContents.executeJavaScript(`(() => {
       const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
@@ -335,7 +374,7 @@ async function runViewport(width, height) {
 
     await openFleet(win);
     const fleetRoot = await readQaState(win);
-    if (!fleetRoot.fleetPopulation.includes('58 / 70')) throw new Error(`${label}: fleet population resolver UI mismatch ${JSON.stringify(fleetRoot)}`);
+    if (!fleetRoot.fleetPopulation.includes('58 / 120')) throw new Error(`${label}: fleet population resolver UI mismatch ${JSON.stringify(fleetRoot)}`);
     const expectedFleetRoster = [
       { id: 'spy-probe', owned: 3, population: 1 },
       { id: 'transporter', owned: 10, population: 1 },
@@ -379,13 +418,13 @@ async function runViewport(width, height) {
     await reload(win, 'test');
     await openFleet(win);
     const restoredFleet = await readQaState(win);
-    if (!restoredFleet.fleetPageLong || restoredFleet.fleetRosterOverflow || restoredFleet.fleetRosterOverflowY !== 'visible' || !restoredFleet.fleetPopulation.includes('58 / 70')) {
+    if (!restoredFleet.fleetPageLong || restoredFleet.fleetRosterOverflow || restoredFleet.fleetRosterOverflowY !== 'visible' || !restoredFleet.fleetPopulation.includes('58 / 120')) {
       throw new Error(`${label}: canonical fleet restore after global-scroll QA failed ${JSON.stringify(restoredFleet)}`);
     }
     await clickText(win, '.fleet-sidebar-v1 button', 'Корабли');
     await waitFor(win, `document.querySelector('[data-qa-fleet-summary]')`);
     const fleetUi = await readQaState(win);
-    if (!fleetUi.fleetPopulation.includes('58 / 70') || !(await documentHasNoOverflow(win))) throw new Error(`${label}: fleet construction UI mismatch`);
+    if (!fleetUi.fleetPopulation.includes('58 / 120') || !(await documentHasNoOverflow(win))) throw new Error(`${label}: fleet construction UI mismatch`);
     await capture(win, directory, 'test-fleet-construction');
 
     const final = await readQaState(win);

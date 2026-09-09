@@ -74,6 +74,7 @@ async function setBuiltInteriorSave(win) {
     for (const role of ${JSON.stringify(BUILT_INTERIOR_ROLES)}) planet.buildings[role] = 1;
     planet.buildings.construction = 10;
     planet.buildings['advanced-factory'] = 2;
+    planet.buildings.shipyard = 15;
     planet.productionBots = { metal: 0, minerals: 0, gas: 0 };
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 5);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
@@ -146,6 +147,20 @@ async function verifyMilitaryDeepLinks(win, directory) {
   await waitFor(win, `document.querySelector('.primary-navigation button.active span')?.textContent?.trim() === 'Флоты'`);
   await waitFor(win, `document.querySelector('.fleet-main-v1--shipyard')`);
   await waitFor(win, `document.querySelector('[data-qa-building-interior-back]')`);
+  const unitTime = await win.webContents.executeJavaScript(`(() => {
+    const cards = Array.from(document.querySelectorAll('[data-qa-unit-time]'));
+    const card = document.querySelector('[data-qa-unit-time="transporter"]') ?? cards[0];
+    return card ? {
+      id: card.getAttribute('data-qa-unit-time') ?? '',
+      effective: card.querySelector('[data-qa-unit-time-effective]')?.textContent?.trim() ?? '',
+      raw: card.querySelector('[data-qa-unit-time-raw]')?.textContent?.trim() ?? '',
+      bonus: card.querySelector('[data-qa-unit-time-bonus]')?.textContent?.trim() ?? '',
+      cardCount: cards.length,
+    } : { cardCount: cards.length };
+  })()`);
+  if (!unitTime?.effective || unitTime.raw !== 'RAW 00:10:00' || unitTime.bonus) {
+    throw new Error(`Ship cards should show effective and raw unit time without a bonus label: ${JSON.stringify(unitTime)}`);
+  }
   await capture(win, directory, 'building-interior-fleet-from-shipyard');
   await pressEscape(win);
   await assertReturned(win, 'military', 'shipyard');
@@ -172,12 +187,39 @@ async function verifyMilitaryDeepLinks(win, directory) {
   await assertReturned(win, 'military', 'spaceport');
 }
 
+async function verifyMaxBuildingDialog(win, directory) {
+  await activateZone(win, 'military');
+  await click(win, '[data-zone-building-role="shipyard"]');
+  await waitFor(win, `document.querySelector('[data-qa-building-dialog="shipyard"]')`);
+  const snapshot = await win.webContents.executeJavaScript(`(() => {
+    const root = document.querySelector('[data-qa-building-dialog="shipyard"]');
+    const levels = Array.from(root?.querySelectorAll('.resource-building-level') ?? []).map((node) => node.textContent?.replace(/\\s+/g, ' ').trim() ?? '');
+    return {
+      current: levels.find((value) => value.includes('Текущий уровень')) ?? '',
+      next: levels.find((value) => value.includes('Следующий уровень')) ?? '',
+      max: levels.find((value) => value.includes('Максимальный')) ?? '',
+      maxState: root?.querySelector('[data-qa-max-level-state]')?.textContent?.replace(/\\s+/g, ' ').trim() ?? '',
+      hasEffect: Boolean(root?.querySelector('[data-qa-building-effect]')),
+      hasTime: Boolean(root?.querySelector('[data-qa-building-time-effective]')),
+      hasCost: Boolean(root?.querySelector('[data-qa-building-cost]')),
+      hasBuild: Boolean(root?.querySelector('[data-qa-build-button]')),
+      hasEnter: Boolean(root?.querySelector('[data-qa-enter-building="shipyard"]')),
+    };
+  })()`);
+  if (!snapshot.current.includes('15') || !snapshot.next.includes('—') || !snapshot.max.includes('15') || !snapshot.maxState.includes('ЗДАНИЕ УЛУЧШЕНО ДО МАКСИМАЛЬНОГО УРОВНЯ') || snapshot.hasEffect || snapshot.hasTime || snapshot.hasCost || snapshot.hasBuild || !snapshot.hasEnter) {
+    throw new Error(`Maximum building dialog contract failed: ${JSON.stringify(snapshot)}`);
+  }
+  await capture(win, directory, 'building-dialog-shipyard-max-level');
+  await closeDialog(win);
+}
+
 async function verifyFlow(win, directory) {
   await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);
   await reload(win);
   await setBuiltInteriorSave(win);
 
   await verifyProductionHost(win, directory);
+  await verifyMaxBuildingDialog(win, directory);
   await verifyMilitaryDeepLinks(win, directory);
 
   return {
@@ -185,6 +227,7 @@ async function verifyFlow(win, directory) {
     verified: [
       'factory-enter-back-return',
       'advanced-factory-enter-escape-return',
+      'shipyard-max-level-dialog',
       'shipyard-fleet-deep-link-escape-return',
       'research-science-deep-link-back-return',
       'government-command-deep-link-escape-return',

@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
-    "test:buildings": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/buildings/resource-zone.test.ts src/domain/buildings/production-bots.test.ts src/domain/buildings/production-bot-building-limits.test.ts src/domain/buildings/recycling.test.ts src/domain/buildings/recycling-building-limits.test.ts src/domain/buildings/trade.test.ts src/domain/buildings/spaceport-building-limits.test.ts src/domain/buildings/spaceport-upgrades.test.ts src/building-interior-navigation.test.ts",
+    "test:buildings": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/buildings/balance-v1.test.ts src/domain/buildings/resource-zone.test.ts src/domain/buildings/production-bots.test.ts src/domain/buildings/production-bot-building-limits.test.ts src/domain/buildings/recycling.test.ts src/domain/buildings/recycling-building-limits.test.ts src/domain/buildings/trade.test.ts src/domain/buildings/spaceport-building-limits.test.ts src/domain/buildings/spaceport-upgrades.test.ts src/building-interior-navigation.test.ts",
     "test:combat": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/combat/priority.test.ts src/domain/combat/report.test.ts src/domain/combat/resolver.test.ts src/domain/combat/factions.test.ts src/domain/combat/technologies.test.ts src/domain/combat/technology-resolver.test.ts",
     "test:operations": "node --experimental-strip-types --test src/domain/operations/operations.test.ts",
     "test:command": "node --experimental-strip-types --test src/domain/command/command.test.ts src/domain/command/selectors.test.ts",
@@ -23,6 +23,7 @@
     "test:test-mode-ui": "electron electron/test-mode-qa.cjs",
     "test:reports-ui": "electron electron/reports-profile-qa.cjs",
     "test:universe-ui": "electron electron/universe-planet-qa.cjs",
+    "test:building-actions-ui": "electron electron/visual-building-actions.cjs",
     "qa:visual": "electron electron/visual-capture.cjs && electron electron/visual-industry-requirements.cjs && electron electron/visual-building-interiors.cjs && electron electron/visual-production-bots.cjs && electron electron/visual-recycling-center.cjs && electron electron/visual-trade-center.cjs && npm run test:spaceport-ui && electron electron/visual-spaceport-upgrades.cjs",
     "desktop": "npm run build && electron .",
     "dist:win": "npm run build && electron-builder --win nsis --publish never"

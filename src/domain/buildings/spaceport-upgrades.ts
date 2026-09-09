@@ -88,6 +88,7 @@ export type SpaceportUpgradeContext = {
   scienceLevels: ScienceLevels;
   spaceportLevel: number;
   mode?: RuntimeMode;
+  testTimeScale?: number;
 };
 
 export type SpaceportUpgradeTransition = {
@@ -303,7 +304,7 @@ export function previewSpaceportUpgrade(
   const effectiveDurationMs = scaleRuntimeDuration(calculateSpaceportEffectiveDuration(
     PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS,
     context.spaceportLevel,
-  ), context.mode ?? 'production');
+  ), context.mode ?? 'production', context.testTimeScale);
   const base = {
     track,
     shipId,

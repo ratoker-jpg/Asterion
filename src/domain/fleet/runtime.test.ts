@@ -19,12 +19,12 @@ test('canonical starting fleet is persisted by mechanical IDs and derives popula
 
   fleet.commanders.corsair = 1;
   assert.equal(calculateFleetPopulation(fleet), 66);
-  assert.deepEqual(getFleetSummary(fleet, 1), { population: 66, capacity: 70, available: 4 });
+  assert.deepEqual(getFleetSummary(fleet, 1), { population: 66, capacity: 120, available: 54 });
 });
 test('Hangar is the single capacity resolver and old roster data is not overwritten', () => {
   assert.equal(calculateFleetCapacity(0), 50);
-  assert.equal(calculateFleetCapacity(1), 70);
-  assert.equal(calculateFleetCapacity(999), 450);
+  assert.equal(calculateFleetCapacity(1), 120);
+  assert.equal(calculateFleetCapacity(999), 25_112);
 
   const old = migrateFleetState({ ships: { scout: 4 }, commanders: { corsair: 2 } });
   assert.equal(old.ships.scout, 4);
