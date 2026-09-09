@@ -1,0 +1,217 @@
+/*
+ * Final geometry lock for the approved permanent command-header composition.
+ * This file intentionally loads last. Older prototype selectors may style other
+ * screens, but they must not move the live header away from the 1920x1080 target.
+ */
+
+.asterion-header{
+  --hdr-selector-left:228px;
+  --hdr-selector-top:10px;
+  --hdr-selector-width:248px;
+  --hdr-selector-height:92px;
+  --hdr-resource-left:476px;
+  --hdr-resource-top:6px;
+  --hdr-resource-height:102px;
+  --hdr-campaign-width:258px;
+  --hdr-campaign-top:2px;
+  --hdr-campaign-height:106px;
+  --hdr-nav-left:214px;
+  --hdr-nav-top:118px;
+  --hdr-nav-height:100px;
+}
+
+/* Planet selector is the left edge of the top rail. */
+.asterion-header .current-planet-control{
+  left:var(--hdr-selector-left);
+  top:var(--hdr-selector-top);
+  width:var(--hdr-selector-width);
+  height:var(--hdr-selector-height);
+}
+.asterion-header .current-planet-select{
+  height:var(--hdr-selector-height);
+  grid-template-columns:58px minmax(0,1fr) 20px;
+  gap:10px;
+  padding:9px 12px;
+}
+.asterion-header .current-planet-select img{width:54px;height:54px}
+.asterion-header .current-planet-select small{font-size:9px;letter-spacing:1.2px}
+.asterion-header .current-planet-select strong{margin-top:5px;font-size:16px}
+.asterion-header .planet-list-popover{
+  left:var(--hdr-selector-left);
+  top:calc(var(--hdr-selector-top) + var(--hdr-selector-height) + 8px);
+  width:var(--hdr-selector-width);
+}
+
+/* One contiguous top resource rail: no inherited legacy .resources gap. */
+.asterion-header .header-resource-rail{
+  left:var(--hdr-resource-left);
+  right:var(--hdr-campaign-width);
+  top:var(--hdr-resource-top);
+  height:var(--hdr-resource-height);
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:0;
+}
+.asterion-header .header-resource-rail::before{
+  inset:0;
+  border-width:1px;
+  clip-path:polygon(8px 0,calc(100% - 8px) 0,100% 8px,100% calc(100% - 8px),calc(100% - 8px) 100%,8px 100%,0 calc(100% - 8px),0 8px);
+  box-shadow:
+    inset 0 0 0 1px rgba(0,0,0,.62),
+    inset 0 0 28px rgba(var(--header-accent-rgb),.055),
+    0 0 14px rgba(var(--header-accent-rgb),.06);
+}
+.asterion-header .header-resource-rail .resource-chip{
+  height:calc(var(--hdr-resource-height) - 2px);
+  grid-template-columns:64px minmax(0,1fr);
+  align-items:center;
+  gap:10px;
+  padding:0 13px;
+  border-right:1px solid var(--header-line-soft);
+  background:linear-gradient(180deg,rgba(var(--header-accent-rgb),.045),rgba(0,0,0,.10));
+  box-shadow:inset 0 1px rgba(var(--header-accent-rgb),.12),inset 0 -1px rgba(var(--header-accent-rgb),.11);
+  clip-path:none;
+}
+.asterion-header .header-resource-rail .resource-chip:first-child{
+  border-left:1px solid var(--header-line-soft);
+}
+.asterion-header .header-resource-rail .resource-chip:last-child{border-right:1px solid var(--header-line-soft)}
+
+/* Explicitly cancel old absolute resource-icon positioning. */
+.asterion-header .header-resource-rail .resource-chip > .resource-chip__icon{
+  position:relative;
+  left:auto;
+  right:auto;
+  top:auto;
+  bottom:auto;
+  align-self:center;
+  justify-self:center;
+  width:50px;
+  height:50px;
+  transform:none;
+  border:1px solid rgba(var(--header-accent-rgb),.34);
+  background:radial-gradient(circle at 50% 42%,rgba(var(--header-accent-rgb),.12),rgba(2,13,20,.78) 68%);
+  clip-path:polygon(18% 0,82% 0,100% 18%,100% 82%,82% 100%,18% 100%,0 82%,0 18%);
+  box-shadow:inset 0 0 14px rgba(var(--header-accent-rgb),.08),0 0 10px rgba(var(--header-accent-rgb),.08);
+}
+.asterion-header .header-resource-rail .resource-chip > .resource-chip__icon svg{
+  width:36px;
+  height:36px;
+}
+.asterion-header .header-resource-rail .resource-chip > .resource-chip__text{
+  position:relative;
+  left:auto;
+  right:auto;
+  top:auto;
+  bottom:auto;
+  align-self:center;
+  min-width:0;
+  text-align:left;
+}
+.asterion-header .header-resource-rail .resource-chip small{
+  font-size:9px;
+  letter-spacing:1.15px;
+}
+.asterion-header .header-resource-rail .resource-chip strong{
+  margin-top:5px;
+  font-size:18px;
+  line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+.asterion-header .header-resource-rail .resource-fill{
+  height:4px;
+  margin-top:8px;
+}
+/* The generated cell sample was useful as a style reference, but its internal
+ * composition fights the live DOM. Keep the permanent rail DOM-first. */
+:root[data-header-faction='aegis'] .asterion-header .header-resource-rail .resource-chip::before{opacity:0}
+
+/* Campaign block shares exactly the same top-row baseline. */
+.asterion-header .campaign-module{
+  top:var(--hdr-campaign-top);
+  width:var(--hdr-campaign-width);
+  height:var(--hdr-campaign-height);
+}
+.asterion-header .campaign-status{left:43px;top:14px}
+.asterion-header .campaign-status strong{font-size:12px;letter-spacing:.75px}
+.asterion-header .campaign-module time{top:36px;font-size:22px}
+.asterion-header .utility-navigation{height:42px}
+.asterion-header .utility-navigation svg{width:26px;height:26px}
+
+/* Approved target starts the lower rail farther left and uses framed buttons. */
+.asterion-header .primary-navigation{
+  left:var(--hdr-nav-left);
+  right:0;
+  top:var(--hdr-nav-top);
+  height:var(--hdr-nav-height);
+  grid-template-columns:repeat(6,minmax(0,1fr));
+  gap:2px;
+  padding:4px;
+  overflow:visible;
+  clip-path:polygon(13px 0,calc(100% - 13px) 0,100% 13px,100% calc(100% - 13px),calc(100% - 13px) 100%,13px 100%,0 calc(100% - 13px),0 13px);
+  box-shadow:
+    inset 0 0 0 1px rgba(0,0,0,.68),
+    inset 0 0 28px rgba(var(--header-accent-rgb),.055),
+    0 0 16px rgba(var(--header-accent-rgb),.07);
+}
+.asterion-header .primary-navigation button{
+  height:90px;
+  gap:13px;
+  padding:0 15px;
+  border:1px solid var(--header-line-soft);
+  background:linear-gradient(180deg,rgba(var(--header-accent-rgb),.055),rgba(1,11,17,.34));
+  clip-path:polygon(7px 0,calc(100% - 7px) 0,100% 7px,100% calc(100% - 7px),calc(100% - 7px) 100%,7px 100%,0 calc(100% - 7px),0 7px);
+  box-shadow:inset 0 0 16px rgba(var(--header-accent-rgb),.025);
+}
+.asterion-header .primary-navigation button:last-child{border-right:1px solid var(--header-line-soft)}
+.asterion-header .primary-navigation svg{flex-basis:40px;width:40px;height:40px}
+.asterion-header .primary-navigation button span{font-size:15px}
+.asterion-header .primary-navigation button:hover,
+.asterion-header .primary-navigation button:focus-visible{
+  border-color:var(--header-line);
+  background:linear-gradient(180deg,rgba(var(--header-accent-rgb),.15),rgba(var(--header-accent-rgb),.035));
+}
+.asterion-header .primary-navigation button.active{
+  border-color:var(--header-accent-strong);
+  background:linear-gradient(180deg,rgba(var(--header-accent-rgb),.25),rgba(var(--header-accent-rgb),.075));
+  box-shadow:inset 0 -3px var(--header-accent-strong),inset 0 0 26px rgba(var(--header-accent-rgb),.14),0 0 14px rgba(var(--header-accent-rgb),.10);
+}
+
+/* Make keyboard QA and actual keyboard use agree: the tooltip is tied to the
+ * focus-within state of the focusable resource cell. */
+.asterion-header .header-resource-rail .resource-chip:hover .resource-tooltip,
+.asterion-header .header-resource-rail .resource-chip:focus .resource-tooltip,
+.asterion-header .header-resource-rail .resource-chip:focus-visible .resource-tooltip,
+.asterion-header .header-resource-rail .resource-chip:focus-within .resource-tooltip{
+  visibility:visible;
+  opacity:1;
+  transform:translate(-50%,0);
+}
+
+/* Faction-specific chrome remains decorative; geometry above is identical. */
+:root[data-header-faction='aegis'] .asterion-header .primary-navigation{
+  border-color:rgba(60,222,255,.72);
+  background:
+    linear-gradient(180deg,rgba(14,87,113,.16),rgba(1,11,18,.94));
+}
+:root[data-header-faction='aegis'] .asterion-header .header-resource-rail::before{
+  background:linear-gradient(180deg,rgba(7,48,66,.94),rgba(2,17,27,.97));
+}
+:root[data-header-faction='aegis'] .asterion-header .header-resource-rail .resource-chip > .resource-chip__icon{
+  border-color:rgba(68,225,255,.48);
+}
+
+:root[data-header-faction='synod'] .asterion-header .header-resource-rail::before{
+  background:linear-gradient(180deg,rgba(18,72,57,.90),rgba(3,22,17,.97));
+}
+:root[data-header-faction='synod'] .asterion-header .header-resource-rail .resource-chip > .resource-chip__icon{
+  border-color:rgba(224,255,243,.62);
+  background:radial-gradient(circle at 50% 42%,rgba(32,240,166,.16),rgba(4,32,24,.82) 68%);
+}
+
+:root[data-header-faction='veyra'] .asterion-header .header-resource-rail::before{
+  background:linear-gradient(180deg,rgba(75,8,17,.90),rgba(19,2,5,.98));
+}
+:root[data-header-faction='veyra'] .asterion-header .header-resource-rail .resource-chip > .resource-chip__icon{
+  border-color:rgba(255,61,80,.56);
+  background:radial-gradient(circle at 50% 42%,rgba(255,45,65,.15),rgba(28,2,7,.84) 68%);
+}
