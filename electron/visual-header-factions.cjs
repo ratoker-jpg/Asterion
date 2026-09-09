@@ -257,6 +257,7 @@ app.whenReady().then(async () => {
     });
 
     const results = [];
+    const tooltipErrors = [];
     let referenceGeometry = null;
     for (let index = 0; index < FACTIONS.length; index += 1) {
       const faction = FACTIONS[index];
@@ -277,13 +278,27 @@ app.whenReady().then(async () => {
         }
       }
 
-      const tooltip = await inspectTooltipInteractions(win, faction);
+      // Always persist the clean faction screenshot before interaction QA. This keeps
+      // visual evidence available in CI artifacts even when a later tooltip assertion
+      // correctly fails the job.
       await capture(win, faction);
+
+      let tooltip = null;
+      try {
+        tooltip = await inspectTooltipInteractions(win, faction);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        tooltipErrors.push(`${faction}: ${message}`);
+        tooltip = { error: message };
+      }
       results.push({ ...snapshot, tooltip });
     }
 
     verifyFactionAssetsAreDistinct(results);
     fs.writeFileSync(path.join(OUTPUT, 'metrics.json'), JSON.stringify(results, null, 2));
+    if (tooltipErrors.length) {
+      throw new Error(`Faction header tooltip QA failed after screenshots were captured:\n${tooltipErrors.join('\n')}`);
+    }
     console.log('Faction header visual QA passed for aegis, synod and veyra at 1920x1080.');
     win.webContents.debugger.detach();
     win.destroy();
