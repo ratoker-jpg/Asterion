@@ -5,7 +5,6 @@ import type { ShipId } from './domain/combat/ids.ts';
 import {
   calculateUnitProductionDurationMs,
   formatClockDurationMs,
-  getUnitProductionTimeFactor,
   parseClockDurationMs,
 } from './domain/buildings/balance-v1.ts';
 import { getRuntimeSaveKey } from './domain/runtime/mode.ts';
@@ -194,8 +193,6 @@ function ShipCard({
   const stats = shipCombatStats[ship.id];
   const rawTimeMs = parseClockDurationMs(ship.time) ?? 1;
   const effectiveTimeMs = calculateUnitProductionDurationMs(rawTimeMs, shipyardLevel, advancedFactoryLevel);
-  const unitTimeFactor = getUnitProductionTimeFactor(shipyardLevel, advancedFactoryLevel);
-  const hasUnitTimeBonus = unitTimeFactor < 1;
 
   return (
     <article className={`shipyard-card-v1 ${unlocked ? '' : 'locked'}`}>
@@ -218,7 +215,6 @@ function ShipCard({
             <small>ВРЕМЯ ЗА ЕДИНИЦУ</small>
             <b data-qa-unit-time-effective>{formatClockDurationMs(effectiveTimeMs)}</b>
             <span data-qa-unit-time-raw>RAW {ship.time}</span>
-            {hasUnitTimeBonus ? <em data-qa-unit-time-bonus>ВЕРФЬ + ПРОМЫШЛЕННЫЙ КОМПЛЕКС · −{Math.round((1 - unitTimeFactor) * 100)}%</em> : null}
           </div>
         </div>
 

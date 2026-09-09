@@ -205,6 +205,9 @@ export function ZoneView({
   const nextEffect = selectedRole && availability?.nextLevel != null
     ? playerEffectForLevel(selectedRole, availability.nextLevel, productionBotAssignment)
     : null;
+  const levelProgress = availability && availability.maxLevel > 0
+    ? Math.min(availability.maxLevel, Math.max(0, availability.currentLevel))
+    : 0;
 
   useEffect(() => {
     if (!selectedRole) return;
@@ -412,11 +415,40 @@ export function ZoneView({
               <h2 id="resource-building-dialog-title">{selected.name}</h2>
               <p>{selected.purpose}</p>
 
-              <div className="resource-building-levels">
-                <div><small>Текущий уровень</small><strong>{availability.currentLevel}</strong></div>
-                <div><small>Максимальный</small><strong>{availability.maxLevel}</strong></div>
-                <div><small>В очереди</small><strong>{queue.filter((item) => item.assetRole === selectedRole).length}</strong></div>
-                <div><small>Следующий уровень</small><strong>{availability.nextLevel ?? '—'}</strong></div>
+              <div
+                className="resource-building-levels"
+                data-qa-level-track
+                aria-label={`Уровень ${availability.currentLevel} из ${availability.maxLevel}. Следующий уровень: ${availability.nextLevel ?? 'максимальный уровень'}.`}
+                style={{ '--building-level-count': availability.maxLevel } as CSSProperties}
+              >
+                <div className="resource-building-level resource-building-level--current">
+                  <small>Текущий уровень</small>
+                  <strong>{availability.currentLevel}</strong>
+                </div>
+                <div className="resource-building-level resource-building-level--max">
+                  <small>Максимальный</small>
+                  <strong>{availability.maxLevel}</strong>
+                </div>
+                <div className="resource-building-level-queue" aria-hidden="true">
+                  <small>В очереди</small>
+                  <strong>{queue.filter((item) => item.assetRole === selectedRole).length}</strong>
+                </div>
+                <div className="resource-building-level resource-building-level--next">
+                  <small>Следующий уровень</small>
+                  <strong>{availability.nextLevel ?? '—'}</strong>
+                </div>
+                <div
+                  className="resource-building-level-track"
+                  data-qa-level-segments={availability.maxLevel}
+                  aria-hidden="true"
+                >
+                  {Array.from({ length: availability.maxLevel }, (_, index) => (
+                    <span
+                      className={index < levelProgress ? 'filled' : undefined}
+                      key={`${selectedRole}-level-segment-${index + 1}`}
+                    />
+                  ))}
+                </div>
               </div>
 
               {availability.requirements.length > 0 ? (

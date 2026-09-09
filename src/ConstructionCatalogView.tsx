@@ -8,7 +8,6 @@ import {
 import {
   calculateUnitProductionDurationMs,
   formatClockDurationMs,
-  getUnitProductionTimeFactor,
   parseClockDurationMs,
 } from './domain/buildings/balance-v1.ts';
 import { getRuntimeSaveKey } from './domain/runtime/mode.ts';
@@ -220,8 +219,6 @@ function CatalogCard({
   const unavailableLabel = mode === 'defense' ? 'КОМПЛЕКС НЕДОСТУПЕН' : 'КОРПУС НЕДОСТУПЕН';
   const rawTimeMs = parseClockDurationMs(item.time) ?? 1;
   const effectiveTimeMs = calculateUnitProductionDurationMs(rawTimeMs, shipyardLevel, advancedFactoryLevel);
-  const unitTimeFactor = getUnitProductionTimeFactor(shipyardLevel, advancedFactoryLevel);
-  const hasUnitTimeBonus = unitTimeFactor < 1;
 
   return (
     <article className={`shipyard-card-v1 ${unlocked ? '' : 'locked'}`}>
@@ -244,7 +241,6 @@ function CatalogCard({
             <small>ВРЕМЯ ЗА ЕДИНИЦУ</small>
             <b data-qa-unit-time-effective>{formatClockDurationMs(effectiveTimeMs)}</b>
             <span data-qa-unit-time-raw>RAW {item.time}</span>
-            {hasUnitTimeBonus ? <em data-qa-unit-time-bonus>ВЕРФЬ + ПРОМЫШЛЕННЫЙ КОМПЛЕКС · −{Math.round((1 - unitTimeFactor) * 100)}%</em> : null}
           </div>
         </div>
 
