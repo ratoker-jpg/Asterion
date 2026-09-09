@@ -1,0 +1,1 @@
+This directory stores split base64 chunks for the approved full-width faction header chrome. The chunks are concatenated at runtime only to provide the decorative raster shell; all visible text, values, icons and interactions stay live DOM. Split files are used because the GitHub integration is text-only for direct file writes in this session.
