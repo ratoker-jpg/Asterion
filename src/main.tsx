@@ -36,6 +36,7 @@ import './universe-interaction.css';
  * must not be displaced by older shared prototype selectors. */
 import './asterion-header.css';
 import './asterion-header-faction-skins.css';
+import './asterion-header-reference-lock.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
 
