@@ -529,6 +529,183 @@ export function startBuildingProject(
 
 export const startResourceBuildingProject = startBuildingProject;
 
+export const BUILDING_CANCEL_REFUND_PERCENT = 90;
+export const BUILDING_DESTROY_REFUND_MIN_PERCENT = 50;
+export const BUILDING_DESTROY_REFUND_MAX_PERCENT = 80;
+
+function refundCost(cost: ResourceCost, refundPercent: number): ResourceCost {
+  return Object.fromEntries(
+    (Object.keys(cost) as ResourceKey[]).map((key) => [key, Math.floor(cost[key] * refundPercent / 100)]),
+  ) as ResourceCost;
+}
+
+function addResourceCost(resources: ResourceWallet, cost: ResourceCost): ResourceWallet {
+  return Object.fromEntries(
+    (Object.keys(resources) as ResourceKey[]).map((key) => [key, resources[key] + cost[key]]),
+  ) as ResourceWallet;
+}
+
+function rescheduleQueueAfterCancellation(
+  queue: BuildingQueueItem[],
+  canceledIndex: number,
+  now: number,
+): BuildingQueueItem[] {
+  if (queue.length === 0) return queue;
+
+  const remaining = queue.filter((_, index) => index !== canceledIndex);
+  if (remaining.length === 0) return remaining;
+
+  if (canceledIndex === 0) {
+    let cursor = now;
+    return remaining.map((item) => {
+      const startedAt = cursor;
+      const finishAt = startedAt + Math.max(1, item.durationMs);
+      cursor = finishAt;
+      return { ...item, startedAt, finishAt };
+    });
+  }
+
+  let cursor = remaining[0].finishAt;
+  return remaining.map((item, index) => {
+    if (index === 0) return item;
+    const startedAt = cursor;
+    const finishAt = startedAt + Math.max(1, item.durationMs);
+    cursor = finishAt;
+    return { ...item, startedAt, finishAt };
+  });
+}
+
+export type BuildingCancellationTransition = {
+  ok: boolean;
+  state: BuildingEconomyState;
+  reason: string | null;
+  canceled: BuildingQueueItem | null;
+  refund: ResourceCost | null;
+};
+
+export function cancelBuildingProject(
+  state: BuildingEconomyState,
+  queueIndex: number,
+  now: number,
+): BuildingCancellationTransition {
+  const canceled = Number.isInteger(queueIndex) && queueIndex >= 0
+    ? state.queue[queueIndex] ?? null
+    : null;
+  if (!canceled) {
+    return {
+      ok: false,
+      state,
+      reason: 'Проект в этом слоте уже недоступен.',
+      canceled: null,
+      refund: null,
+    };
+  }
+
+  const balanceRow = getBuildingBalanceRow(canceled.assetRole, canceled.targetLevel);
+  if (!balanceRow?.cost) {
+    return {
+      ok: false,
+      state,
+      reason: 'Стоимость отменяемого проекта недоступна.',
+      canceled: null,
+      refund: null,
+    };
+  }
+
+  const refund = refundCost(balanceRow.cost, BUILDING_CANCEL_REFUND_PERCENT);
+  return {
+    ok: true,
+    state: {
+      ...state,
+      resources: addResourceCost(state.resources, refund),
+      queue: rescheduleQueueAfterCancellation(state.queue, queueIndex, now),
+    },
+    reason: null,
+    canceled,
+    refund,
+  };
+}
+
+export const cancelResourceBuildingProject = cancelBuildingProject;
+
+export type BuildingDestructionTransition = {
+  ok: boolean;
+  state: BuildingEconomyState;
+  reason: string | null;
+  destroyedRole: BuildingRole | null;
+  destroyedLevel: number | null;
+  refundPercent: number | null;
+  refund: ResourceCost | null;
+};
+
+export function destroyBuildingLevel(
+  state: BuildingEconomyState,
+  assetRole: BuildingRole,
+  refundPercent: number,
+): BuildingDestructionTransition {
+  const currentLevel = state.buildings[assetRole] ?? 0;
+  if (currentLevel <= 0) {
+    return {
+      ok: false,
+      state,
+      reason: 'У здания нет построенных уровней.',
+      destroyedRole: null,
+      destroyedLevel: null,
+      refundPercent: null,
+      refund: null,
+    };
+  }
+
+  if (state.queue.some((item) => item.assetRole === assetRole)) {
+    return {
+      ok: false,
+      state,
+      reason: 'Нельзя разрушить здание во время строительства.',
+      destroyedRole: null,
+      destroyedLevel: null,
+      refundPercent: null,
+      refund: null,
+    };
+  }
+
+  const balanceRow = getBuildingBalanceRow(assetRole, currentLevel);
+  if (!balanceRow?.cost) {
+    return {
+      ok: false,
+      state,
+      reason: 'Стоимость разрушенного уровня недоступна.',
+      destroyedRole: null,
+      destroyedLevel: null,
+      refundPercent: null,
+      refund: null,
+    };
+  }
+
+  const safeRefundPercent = Math.min(
+    BUILDING_DESTROY_REFUND_MAX_PERCENT,
+    Math.max(BUILDING_DESTROY_REFUND_MIN_PERCENT, Math.floor(refundPercent)),
+  );
+  const refund = refundCost(balanceRow.cost, safeRefundPercent);
+  return {
+    ok: true,
+    state: {
+      ...state,
+      resources: addResourceCost(state.resources, refund),
+      buildings: {
+        ...state.buildings,
+        [assetRole]: currentLevel - 1,
+      },
+    },
+    reason: null,
+    destroyedRole: assetRole,
+    destroyedLevel: currentLevel,
+    refundPercent: safeRefundPercent,
+    refund,
+  };
+}
+
+export const destroyResourceBuildingLevel = destroyBuildingLevel;
+
 export type CompletionTransition = {
   completedRole: BuildingRole | null;
   state: BuildingEconomyState;

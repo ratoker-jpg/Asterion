@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { getPlanetZoneTerrainUrl } from './assets/planetZoneTerrainAssets.ts';
 import { canEnterBuildingInterior } from './building-interior-navigation.ts';
 import { getZoneScenePlacement } from './zone-scene.ts';
@@ -165,8 +165,14 @@ export type ZoneViewProps = {
   selectedRole: BuildingRole | null;
   onSelectedRoleChange: (role: BuildingRole | null) => void;
   onBuild: (assetRole: BuildingRole) => boolean;
+  onCancelBuilding: (queueIndex: number) => boolean;
+  onDestroyBuilding: (assetRole: BuildingRole) => boolean;
   onEnterBuilding: (assetRole: BuildingRole) => void;
 };
+
+type PendingBuildingAction =
+  | { kind: 'cancel'; queueIndex: number; assetRole: BuildingRole; targetLevel: number }
+  | { kind: 'destroy'; assetRole: BuildingRole; currentLevel: number };
 
 export function ZoneView({
   zone,
@@ -182,6 +188,8 @@ export function ZoneView({
   selectedRole,
   onSelectedRoleChange,
   onBuild,
+  onCancelBuilding,
+  onDestroyBuilding,
   onEnterBuilding,
 }: ZoneViewProps) {
   const economy = useMemo<BuildingEconomyState>(
@@ -192,6 +200,8 @@ export function ZoneView({
   const meta = ZONE_VIEW_META[zone];
   const selected = selectedRole ? getBuildingDefinition(selectedRole) : null;
   const availability = selectedRole ? evaluateBuildingBuild(economy, selectedRole) : null;
+  const selectedHasQueue = selectedRole ? queue.some((item) => item.assetRole === selectedRole) : false;
+  const [pendingAction, setPendingAction] = useState<PendingBuildingAction | null>(null);
   const activeCount = zoneBuildings.filter((building) => buildings[building.assetRole] > 0).length;
   const terrainUrl = getPlanetZoneTerrainUrl(zone);
   const canEnterSelected = selectedRole
@@ -210,17 +220,29 @@ export function ZoneView({
     : 0;
 
   useEffect(() => {
-    if (!selectedRole) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onSelectedRoleChange(null);
+      if (event.key !== 'Escape') return;
+      if (pendingAction) {
+        setPendingAction(null);
+      } else if (selectedRole) {
+        onSelectedRoleChange(null);
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onSelectedRoleChange, selectedRole]);
+  }, [onSelectedRoleChange, pendingAction, selectedRole]);
 
   const submitBuild = () => {
     if (!selectedRole || !availability?.canBuild) return;
     if (onBuild(selectedRole)) onSelectedRoleChange(null);
+  };
+
+  const confirmPendingAction = () => {
+    if (!pendingAction) return;
+    const succeeded = pendingAction.kind === 'cancel'
+      ? onCancelBuilding(pendingAction.queueIndex)
+      : onDestroyBuilding(pendingAction.assetRole);
+    if (succeeded) setPendingAction(null);
   };
 
   return (
@@ -370,24 +392,42 @@ export function ZoneView({
             const duration = Math.max(1, item.finishAt - item.startedAt);
             const progress = isActive ? Math.min(100, Math.max(0, ((now - item.startedAt) / duration) * 100)) : 0;
             return (
-              <button
+              <div
                 className={`resource-zone-queue-card ${isActive ? 'busy' : 'waiting'}`}
-                type="button"
                 key={`${item.assetRole}-${item.enqueuedAt}-${index}`}
                 data-qa-queue-slot={index + 1}
                 data-qa-queue-role={item.assetRole}
                 data-qa-queue-zone={queueDefinition.zone}
-                onClick={() => onSelectedRoleChange(item.assetRole)}
               >
-                <img src={queueDefinition.art} alt="" />
-                <span>
-                  <small>{ZONE_VIEW_META[queueDefinition.zone].queueLabel} · {isActive ? 'СТРОИТСЯ' : 'ОЖИДАЕТ'}</small>
-                  <strong>{queueDefinition.name}</strong>
-                  <em>{isActive ? `Осталось ${formatDuration(remaining)}` : `Уровень ${item.targetLevel}`}</em>
-                </span>
-                <b>ур. {Math.max(0, item.targetLevel - 1)} → {item.targetLevel}</b>
-                {isActive ? <i><span style={{ width: `${progress}%` }} /></i> : null}
-              </button>
+                <button
+                  className="resource-zone-queue-card-main"
+                  type="button"
+                  aria-label={`Открыть ${queueDefinition.name}, уровень ${item.targetLevel}`}
+                  onClick={() => onSelectedRoleChange(item.assetRole)}
+                >
+                  <img src={queueDefinition.art} alt="" />
+                  <span>
+                    <small>{ZONE_VIEW_META[queueDefinition.zone].queueLabel} · {isActive ? 'СТРОИТСЯ' : 'ОЖИДАЕТ'}</small>
+                    <strong>{queueDefinition.name}</strong>
+                    <em>{isActive ? `Осталось ${formatDuration(remaining)}` : `Уровень ${item.targetLevel}`}</em>
+                  </span>
+                  <b>ур. {Math.max(0, item.targetLevel - 1)} → {item.targetLevel}</b>
+                  {isActive ? <i><span style={{ width: `${progress}%` }} /></i> : null}
+                </button>
+                <button
+                  className="resource-zone-queue-cancel"
+                  type="button"
+                  aria-label={`Отменить ${queueDefinition.name}, уровень ${item.targetLevel}`}
+                  title="Отменить строительство"
+                  data-qa-queue-cancel={index + 1}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setPendingAction({ kind: 'cancel', queueIndex: index, assetRole: item.assetRole, targetLevel: item.targetLevel });
+                  }}
+                >
+                  ×
+                </button>
+              </div>
             );
           })}
         </div>
@@ -409,6 +449,19 @@ export function ZoneView({
             onMouseDown={(event) => event.stopPropagation()}
           >
             <button className="resource-building-dialog-close" type="button" aria-label="Закрыть сведения о здании" onClick={() => onSelectedRoleChange(null)}>×</button>
+            {availability.currentLevel > 0 ? (
+              <button
+                className="resource-building-destroy-button"
+                type="button"
+                aria-label="Разрушить один уровень здания"
+                title={selectedHasQueue ? 'Нельзя разрушить здание во время строительства.' : 'Разрушить один уровень'}
+                data-qa-destroy-building
+                disabled={selectedHasQueue}
+                onClick={() => setPendingAction({ kind: 'destroy', assetRole: selectedRole, currentLevel: availability.currentLevel })}
+              >
+                РАЗРУШИТЬ 1 УРОВЕНЬ
+              </button>
+            ) : null}
             <div className="resource-building-dialog-art"><img src={selected.art} alt={selected.name} draggable={false} /></div>
             <div className="resource-building-dialog-copy">
               <small>{ZONE_VIEW_META[selected.zone].title} · АСТЕРЫ</small>
@@ -559,6 +612,33 @@ export function ZoneView({
                   <span>ВОЙТИ</span>
                 </button>
               ) : null}
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {pendingAction ? (
+        <div className="resource-building-action-confirm-backdrop" onMouseDown={() => setPendingAction(null)}>
+          <section
+            className="resource-building-action-confirm"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="resource-building-action-confirm-title"
+            data-qa-action-confirm
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <small>ПОДТВЕРЖДЕНИЕ ДЕЙСТВИЯ</small>
+            <h3 id="resource-building-action-confirm-title">
+              {pendingAction.kind === 'cancel' ? 'Отменить строительство?' : 'Разрушить один уровень?'}
+            </h3>
+            <p>
+              {pendingAction.kind === 'cancel'
+                ? `Вы уверены, что хотите отменить строительство «${getBuildingDefinition(pendingAction.assetRole).name}», ур. ${pendingAction.targetLevel}? 90% затраченных ресурсов будут возвращены.`
+                : `Вы уверены, что хотите разрушить 1 уровень здания «${getBuildingDefinition(pendingAction.assetRole).name}»? 50–80% из затраченных ресурсов будут возвращены, остальные ресурсы за этот уровень будут потеряны.`}
+            </p>
+            <div className="resource-building-action-confirm-actions">
+              <button type="button" data-qa-action-confirm-yes onClick={confirmPendingAction}>ДА</button>
+              <button type="button" data-qa-action-confirm-no onClick={() => setPendingAction(null)}>НЕТ</button>
             </div>
           </section>
         </div>

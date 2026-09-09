@@ -6,6 +6,7 @@ import {
   ASTER_MILITARY_BUILDINGS,
   ASTER_RESOURCE_BUILDINGS,
   BUILDING_QUEUE_CAPACITY,
+  BUILDING_CANCEL_REFUND_PERCENT,
   BUILDING_ROLES,
   INDUSTRY_BUILDING_ROLES,
   MILITARY_BUILDING_ROLES,
@@ -13,11 +14,13 @@ import {
   completeBuildingProject,
   createCanonicalStartingBuildingLevels,
   createDefaultBuildingLevels,
+  destroyBuildingLevel,
   evaluateBuildingBuild,
   evaluateBuildingRequirements,
   getBuildingDefinition,
   migrateBuildingLevels,
   migrateBuildingQueue,
+  cancelBuildingProject,
   startBuildingProject,
   type BuildingEconomyState,
 } from './resource-zone.ts';
@@ -274,6 +277,62 @@ test('one shared three-slot FIFO queue accepts projects from all three zones and
   assert.equal(fourth.ok, false);
   assert.equal(fourth.reason, 'Очередь заполнена.');
   assert.equal(fourth.state.resources.metal, state.resources.metal);
+});
+
+test('any queued slot can be canceled, returns 90 percent and keeps the remaining queue contiguous', () => {
+  let state = createState();
+  for (const role of ['gas-production-1', 'construction', 'shipyard'] as const) {
+    state = startBuildingProject(state, role, 'helion-01', 1_000).state;
+  }
+  const canceled = state.queue[1];
+  const canceledCost = getBuildingDefinition(canceled.assetRole);
+  const balance = evaluateBuildingBuild({ ...state, queue: [] }, canceled.assetRole);
+  const before = { ...state.resources };
+  const transition = cancelBuildingProject(state, 1, 2_000);
+
+  assert.equal(transition.ok, true);
+  assert.equal(transition.canceled?.assetRole, canceled.assetRole);
+  assert.equal(transition.refund?.metal, Math.floor((balance.cost?.metal ?? canceledCost.prototypeCost.metal) * BUILDING_CANCEL_REFUND_PERCENT / 100));
+  assert.deepEqual(transition.state.queue.map((item) => item.assetRole), ['gas-production-1', 'shipyard']);
+  assert.equal(transition.state.queue[1].startedAt, transition.state.queue[0].finishAt);
+  assert.equal(transition.state.resources.metal, before.metal + (transition.refund?.metal ?? 0));
+});
+
+test('canceling the active slot starts the next slot at the cancellation time', () => {
+  let state = createState();
+  state = startBuildingProject(state, 'construction', 'helion-01', 1_000).state;
+  state = startBuildingProject(state, 'shipyard', 'helion-01', 1_000).state;
+  const transition = cancelBuildingProject(state, 0, 5_000);
+
+  assert.equal(transition.ok, true);
+  assert.equal(transition.state.queue.length, 1);
+  assert.equal(transition.state.queue[0].assetRole, 'shipyard');
+  assert.equal(transition.state.queue[0].startedAt, 5_000);
+  assert.equal(transition.state.queue[0].finishAt, 5_000 + transition.state.queue[0].durationMs);
+});
+
+test('destroying the only built level removes the building and returns the bounded percentage', () => {
+  const buildings = { ...createDefaultBuildingLevels(), construction: 1 };
+  const state = createState({ buildings });
+  const cost = evaluateBuildingBuild({ ...state, buildings: { ...buildings, construction: 0 } }, 'construction').cost;
+  const transition = destroyBuildingLevel(state, 'construction', 65);
+
+  assert.equal(transition.ok, true);
+  assert.equal(transition.destroyedLevel, 1);
+  assert.equal(transition.refundPercent, 65);
+  assert.equal(transition.state.buildings.construction, 0);
+  assert.equal(transition.state.resources.metal, state.resources.metal + Math.floor((cost?.metal ?? 0) * 0.65));
+});
+
+test('destroying a queued building level is blocked until its queue is empty', () => {
+  const buildings = { ...createDefaultBuildingLevels(), construction: 1 };
+  const queued = startBuildingProject(createState({ buildings }), 'construction', 'helion-01', 1_000).state;
+  const transition = destroyBuildingLevel(queued, 'construction', 65);
+
+  assert.equal(transition.ok, false);
+  assert.match(transition.reason ?? '', /Нельзя разрушить/);
+  assert.equal(transition.state.buildings.construction, 1);
+  assert.equal(transition.state.queue.length, 1);
 });
 
 test('building availability and queue duration use the official factory coefficient', () => {

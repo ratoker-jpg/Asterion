@@ -97,8 +97,10 @@ import {
 import {
   BUILDING_QUEUE_CAPACITY,
   RESOURCE_BUILDING_ROLES,
+  cancelBuildingProject,
   completeBuildingProject,
   createCanonicalStartingBuildingLevels,
+  destroyBuildingLevel,
   evaluateBuildingBuild,
   getBuildingDefinition,
   getBuildingEnergyIncomePerHour,
@@ -1140,6 +1142,98 @@ export function App() {
     return true;
   };
 
+  const cancelBuilding = (queueIndex: number) => {
+    const canceledAt = Date.now();
+    const current = stateRef.current;
+    const planet = current.planets['helion-01'];
+    const transition = cancelBuildingProject({
+      resources: {
+        metal: current.metal,
+        minerals: current.minerals,
+        gas: current.gas,
+        energy: planet.energy,
+      },
+      buildings: planet.buildings,
+      queue: current.queues['helion-01'],
+      scienceLevels: current.science.levels,
+    }, queueIndex, canceledAt);
+
+    if (!transition.ok) {
+      setNotice(transition.reason ?? 'Отмена строительства сейчас недоступна.');
+      return false;
+    }
+
+    const canceledDefinition = transition.canceled
+      ? getBuildingDefinition(transition.canceled.assetRole)
+      : null;
+    const nextState: SaveState = {
+      ...current,
+      schemaVersion: SAVE_SCHEMA_VERSION,
+      metal: transition.state.resources.metal,
+      minerals: transition.state.resources.minerals,
+      gas: transition.state.resources.gas,
+      planets: {
+        ...current.planets,
+        'helion-01': {
+          ...planet,
+          energy: transition.state.resources.energy,
+        },
+      },
+      queues: {
+        ...current.queues,
+        'helion-01': transition.state.queue,
+      },
+    };
+    stateRef.current = nextState;
+    setState(nextState);
+    setNotice(`${canceledDefinition?.name ?? 'Проект'} отменён. Возвращено 90% ресурсов.`);
+    return true;
+  };
+
+  const destroyBuilding = (assetRole: BuildingRole) => {
+    const refundPercent = 50 + Math.floor(Math.random() * 31);
+    const current = stateRef.current;
+    const planet = current.planets['helion-01'];
+    const transition = destroyBuildingLevel({
+      resources: {
+        metal: current.metal,
+        minerals: current.minerals,
+        gas: current.gas,
+        energy: planet.energy,
+      },
+      buildings: planet.buildings,
+      queue: current.queues['helion-01'],
+      scienceLevels: current.science.levels,
+    }, assetRole, refundPercent);
+
+    if (!transition.ok) {
+      setNotice(transition.reason ?? 'Разрушение уровня сейчас недоступно.');
+      return false;
+    }
+
+    const nextBuildings = transition.state.buildings;
+    const nextState: SaveState = {
+      ...current,
+      schemaVersion: SAVE_SCHEMA_VERSION,
+      metal: transition.state.resources.metal,
+      minerals: transition.state.resources.minerals,
+      gas: transition.state.resources.gas,
+      planets: {
+        ...current.planets,
+        'helion-01': {
+          ...planet,
+          energy: transition.state.resources.energy,
+          buildings: nextBuildings,
+          productionBots: migrateProductionBotAssignment(planet.productionBots, nextBuildings),
+        },
+      },
+    };
+    stateRef.current = nextState;
+    setState(nextState);
+    setNotice(`${getBuildingDefinition(assetRole).name}: уровень разрушен. Возвращено ${transition.refundPercent}% ресурсов.`);
+    return true;
+  };
+
   const closePlanetEditor = () => {
     setEditingPlanetId(null);
     setEditingName(state.planets['helion-01'].name);
@@ -1533,6 +1627,8 @@ export function App() {
               selectedRole={selectedBuildingRole}
               onSelectedRoleChange={setSelectedBuildingRole}
               onBuild={buildBuilding}
+              onCancelBuilding={cancelBuilding}
+              onDestroyBuilding={destroyBuilding}
               onEnterBuilding={enterBuilding}
             />
           ) : activeTab === 'Планета' ? (
