@@ -1,3 +1,6 @@
+import { findScience } from '../science/catalog.ts';
+import type { ScienceId } from '../science/types.ts';
+
 /**
  * Asterion Balance v1 — the single source of truth for building transitions.
  *
@@ -34,6 +37,15 @@ export type BuildingFaction = 'aegis' | 'synod' | 'veyra';
 export type ResourceKey = 'metal' | 'minerals' | 'gas' | 'energy';
 export type ProductionResource = Exclude<ResourceKey, 'energy'>;
 export type ResourceCost = Record<ResourceKey, number>;
+
+export const SCIENCE_ID_PHYSICS: ScienceId = 1;
+export const SCIENCE_ID_MATHEMATICS: ScienceId = 3;
+export const SCIENCE_ID_IMPROVED_CONSTRUCTION: ScienceId = 17;
+export const SCIENCE_INCOME_BONUS_PER_LEVEL_PERCENT = 5;
+export const SCIENCE_INCOME_MAX_BONUS_PERCENT = 50;
+export const IMPROVED_CONSTRUCTION_COST_REDUCTION_PER_LEVEL_PERCENT = 1;
+
+type BuildingScienceLevels = Readonly<Partial<Record<number, number>>>;
 
 export type BalanceEffect =
   | { kind: 'resource-income'; resource: ProductionResource; amountPerHour: number; label: string }
@@ -118,7 +130,7 @@ function effectFor(role: BuildingRole, level: number, values: number[]): Balance
     return { kind: 'resource-income', resource: 'gas', amountPerHour: value, label: 'Добыча газа' };
   }
   if (role === 'basic-energy' || role === 'advanced-energy') {
-    return { kind: 'energy-income', amountPerHour: value, label: 'Энергия/ч' };
+    return { kind: 'energy-income', amountPerHour: value, label: 'Энергия' };
   }
   if (role === 'hangar') {
     return { kind: 'hangar-capacity', bonus: value, total: values[6] ?? 50, label: 'Вместимость флота' };
@@ -176,6 +188,67 @@ export function getBuildingBalanceRow(role: BuildingRole, targetLevel: number): 
   const rows = ROWS.get(role);
   const level = Math.floor(targetLevel);
   return rows?.[level - 1] ?? null;
+}
+
+function getSafeScienceLevel(scienceLevels: BuildingScienceLevels | undefined, scienceId: ScienceId): number {
+  const value = scienceLevels?.[scienceId];
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  const maxLevel = findScience(scienceId)?.maxLevel ?? 0;
+  return Math.min(maxLevel, Math.max(0, Math.floor(value)));
+}
+
+export function getScienceIncomeBonusPercent(
+  scienceLevels: BuildingScienceLevels | undefined,
+  scienceId: typeof SCIENCE_ID_PHYSICS | typeof SCIENCE_ID_MATHEMATICS,
+): number {
+  return Math.min(
+    SCIENCE_INCOME_MAX_BONUS_PERCENT,
+    getSafeScienceLevel(scienceLevels, scienceId) * SCIENCE_INCOME_BONUS_PER_LEVEL_PERCENT,
+  );
+}
+
+export function getImprovedConstructionCostReductionPercent(scienceLevels: BuildingScienceLevels | undefined): number {
+  return Math.min(
+    findScience(SCIENCE_ID_IMPROVED_CONSTRUCTION)?.maxLevel
+      ?? SCIENCE_INCOME_MAX_BONUS_PERCENT,
+    getSafeScienceLevel(scienceLevels, SCIENCE_ID_IMPROVED_CONSTRUCTION)
+      * IMPROVED_CONSTRUCTION_COST_REDUCTION_PER_LEVEL_PERCENT,
+  );
+}
+
+/** Applies science to the effect produced by a building level. */
+export function getBuildingEffectWithScience(
+  role: BuildingRole,
+  level: number,
+  scienceLevels?: BuildingScienceLevels,
+): BalanceEffect {
+  const effect = getBuildingEffect(role, level);
+  if (effect.kind === 'resource-income') {
+    const bonusPercent = getScienceIncomeBonusPercent(scienceLevels, SCIENCE_ID_MATHEMATICS);
+    return { ...effect, amountPerHour: Math.round(effect.amountPerHour * (1 + bonusPercent / 100)) };
+  }
+  if (effect.kind === 'energy-income') {
+    const bonusPercent = getScienceIncomeBonusPercent(scienceLevels, SCIENCE_ID_PHYSICS);
+    return { ...effect, amountPerHour: Math.round(effect.amountPerHour * (1 + bonusPercent / 100)) };
+  }
+  return effect;
+}
+
+/**
+ * Improved Construction discounts economic resources only. Energy remains a
+ * separate construction resource in the balance tables.
+ */
+export function getBuildingConstructionCost(
+  cost: ResourceCost,
+  scienceLevels?: BuildingScienceLevels,
+): ResourceCost {
+  const reductionPercent = getImprovedConstructionCostReductionPercent(scienceLevels);
+  return {
+    metal: Math.floor(cost.metal * (100 - reductionPercent) / 100),
+    minerals: Math.floor(cost.minerals * (100 - reductionPercent) / 100),
+    gas: Math.floor(cost.gas * (100 - reductionPercent) / 100),
+    energy: cost.energy,
+  };
 }
 
 export function getBuildingEffect(role: BuildingRole, level: number): BalanceEffect {
@@ -245,18 +318,24 @@ export function getBuildingPresentation(role: BuildingRole, faction: BuildingFac
   };
 }
 
-export function getBuildingResourceIncomePerHour(buildings: Partial<Record<BuildingRole, number>>) {
+export function getBuildingResourceIncomePerHour(
+  buildings: Partial<Record<BuildingRole, number>>,
+  scienceLevels?: BuildingScienceLevels,
+) {
   const income = { metal: 0, minerals: 0, gas: 0 };
   for (const role of RESOURCE_BUILDING_ROLES) {
-    const effect = getBuildingEffect(role, buildings[role] ?? 0);
+    const effect = getBuildingEffectWithScience(role, buildings[role] ?? 0, scienceLevels);
     if (effect.kind === 'resource-income') income[effect.resource] += effect.amountPerHour;
   }
   return income;
 }
 
-export function getBuildingEnergyIncomePerHour(buildings: Partial<Record<BuildingRole, number>>): number {
+export function getBuildingEnergyIncomePerHour(
+  buildings: Partial<Record<BuildingRole, number>>,
+  scienceLevels?: BuildingScienceLevels,
+): number {
   return (['basic-energy', 'advanced-energy'] as const).reduce((total, role) => {
-    const effect = getBuildingEffect(role, buildings[role] ?? 0);
+    const effect = getBuildingEffectWithScience(role, buildings[role] ?? 0, scienceLevels);
     return total + (effect.kind === 'energy-income' ? effect.amountPerHour : 0);
   }, 0);
 }
@@ -344,7 +423,7 @@ export function getRecyclingBalance(level: number) {
 export function formatBalanceEffect(effect: BalanceEffect): string {
   switch (effect.kind) {
     case 'resource-income': return `${effect.label}: +${effect.amountPerHour.toLocaleString('ru-RU')}/ч`;
-    case 'energy-income': return `${effect.label}: +${effect.amountPerHour.toLocaleString('ru-RU')}/ч`;
+    case 'energy-income': return `${effect.label}: +${effect.amountPerHour.toLocaleString('ru-RU')}`;
     case 'hangar-capacity': return `${effect.label}: +${effect.bonus.toLocaleString('ru-RU')}; итог ${effect.total.toLocaleString('ru-RU')}`;
     case 'construction-time-factor': return `${effect.label}: ${effect.factorPercent}% от базового времени`;
     case 'production-time-factor': return `${effect.label}: ${effect.factorPercent}% от базового времени`;

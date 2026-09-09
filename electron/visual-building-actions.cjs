@@ -70,6 +70,7 @@ async function seed(win, buildings) {
     save.queues = { 'helion-01': [] };
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 10);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    localStorage.setItem('asterion.test-time-scale.v1', '1');
     return true;
   })()`);
   if (!ok) throw new Error('Could not seed building action scenario');
@@ -105,7 +106,7 @@ async function confirm(win) {
 }
 
 async function verifyQueueCancellation(win, directory) {
-  await seed(win, { 'metal-production-1': 1, construction: 1, shipyard: 1 });
+  await seed(win, { 'metal-production-1': 20, construction: 1, shipyard: 1 });
   await activateZone(win, 'resource');
   await buildCurrent(win, 'metal-production-1');
   await activateZone(win, 'industry');

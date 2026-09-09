@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import { getPlanetZoneTerrainUrl } from './assets/planetZoneTerrainAssets.ts';
 import { canEnterBuildingInterior } from './building-interior-navigation.ts';
 import { getZoneScenePlacement } from './zone-scene.ts';
@@ -8,6 +9,8 @@ import {
   formatBalanceEffect,
   getBuildingDefinition,
   getBuildingEffect,
+  getBuildingEffectWithScience,
+  getScienceIncomeBonusPercent,
   getBuildingsForZone,
   getConstructionTimeFactor,
   type BuildingDefinition,
@@ -74,19 +77,37 @@ function formatDurationLabel(ms: number | null) {
   return `${seconds} сек`;
 }
 
-function playerEffectForLevel(role: BuildingRole, level: number, productionBots: BotAssignment) {
+function playerEffectForLevel(
+  role: BuildingRole,
+  level: number,
+  productionBots: BotAssignment,
+  scienceLevels: ScienceLevels,
+) {
   const effect = getBuildingEffect(role, level);
-  if (effect.kind !== 'resource-income') {
+  const scienceEffect = getBuildingEffectWithScience(role, level, scienceLevels);
+  if (scienceEffect.kind !== 'resource-income' && scienceEffect.kind !== 'energy-income') {
     return { primary: formatBalanceEffect(effect), secondary: null };
   }
 
-  const bonusPercent = getProductionBotBonusPercent(productionBots, effect.resource);
-  const boostedEffect = { ...effect, amountPerHour: effect.amountPerHour * (1 + bonusPercent / 100) };
+  const scienceBonusPercent = scienceEffect.kind === 'resource-income'
+    ? getScienceIncomeBonusPercent(scienceLevels, 3)
+    : getScienceIncomeBonusPercent(scienceLevels, 1);
+  const productionBotBonusPercent = scienceEffect.kind === 'resource-income'
+    ? getProductionBotBonusPercent(productionBots, scienceEffect.resource)
+    : 0;
+  const boostedEffect = {
+    ...scienceEffect,
+    amountPerHour: Math.round(scienceEffect.amountPerHour * (1 + productionBotBonusPercent / 100)),
+  };
+  const bonusParts = [
+    scienceBonusPercent > 0 ? `${scienceEffect.kind === 'resource-income' ? 'Математика' : 'Физика'} +${scienceBonusPercent}%` : null,
+    productionBotBonusPercent > 0 ? `production bots +${productionBotBonusPercent}%` : null,
+  ].filter((part): part is string => Boolean(part));
   return {
     primary: formatBalanceEffect(boostedEffect),
-    secondary: bonusPercent > 0
-      ? `База ${formatBalanceEffect(effect)} · production bots +${bonusPercent}%`
-      : 'Бонус production bots не применён',
+    secondary: bonusParts.length > 0
+      ? `База ${formatBalanceEffect(effect)} · ${bonusParts.join(' · ')}`
+      : null,
   };
 }
 
@@ -212,10 +233,10 @@ export function ZoneView({
   const constructionFactor = getConstructionTimeFactor(buildings.construction);
   const constructionBonusPercent = Math.round((1 - constructionFactor) * 100);
   const currentEffect = selectedRole && availability
-    ? playerEffectForLevel(selectedRole, availability.currentLevel, productionBotAssignment)
+    ? playerEffectForLevel(selectedRole, availability.currentLevel, productionBotAssignment, scienceLevels)
     : null;
   const nextEffect = selectedRole && availability?.nextLevel != null
-    ? playerEffectForLevel(selectedRole, availability.nextLevel, productionBotAssignment)
+    ? playerEffectForLevel(selectedRole, availability.nextLevel, productionBotAssignment, scienceLevels)
     : null;
   const levelProgress = availability && availability.maxLevel > 0
     ? Math.min(availability.maxLevel, Math.max(0, availability.currentLevel))
@@ -465,7 +486,7 @@ export function ZoneView({
         ) : null}
       </aside>
 
-      {selected && selectedRole && availability ? (
+      {selected && selectedRole && availability ? createPortal(
         <div className="resource-building-dialog-backdrop" onMouseDown={() => onSelectedRoleChange(null)}>
           <section
             className="resource-building-dialog"
@@ -642,10 +663,11 @@ export function ZoneView({
               ) : null}
             </div>
           </section>
-        </div>
+        </div>,
+        document.body,
       ) : null}
 
-      {pendingAction ? (
+      {pendingAction ? createPortal(
         <div className="resource-building-action-confirm-backdrop" onMouseDown={() => setPendingAction(null)}>
           <section
             className="resource-building-action-confirm"
@@ -669,7 +691,8 @@ export function ZoneView({
               <button ref={confirmNoRef} type="button" data-qa-action-confirm-no onClick={() => setPendingAction(null)}>НЕТ</button>
             </div>
           </section>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );

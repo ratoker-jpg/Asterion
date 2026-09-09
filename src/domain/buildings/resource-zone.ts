@@ -7,6 +7,8 @@ import {
   RESOURCE_BUILDING_ROLES,
   getBuildingBalanceRow,
   getBuildingEffect,
+  getBuildingEffectWithScience,
+  getBuildingConstructionCost,
   getBuildingMaxLevel,
   getBuildingPresentation,
   formatBalanceEffect,
@@ -14,6 +16,8 @@ import {
   getShipyardTimeFactor,
   getBuildingResourceIncomePerHour,
   getBuildingEnergyIncomePerHour,
+  getScienceIncomeBonusPercent,
+  getImprovedConstructionCostReductionPercent,
   getStorageCapacities,
   type BalanceEffect,
   type BuildingFaction,
@@ -33,6 +37,8 @@ export {
   RESOURCE_BUILDING_ROLES,
   getBuildingBalanceRow,
   getBuildingEffect,
+  getBuildingEffectWithScience,
+  getBuildingConstructionCost,
   getBuildingMaxLevel,
   getBuildingPresentation,
   formatBalanceEffect,
@@ -40,6 +46,8 @@ export {
   getShipyardTimeFactor,
   getBuildingResourceIncomePerHour,
   getBuildingEnergyIncomePerHour,
+  getScienceIncomeBonusPercent,
+  getImprovedConstructionCostReductionPercent,
   getStorageCapacities,
 };
 export type {
@@ -124,6 +132,8 @@ export type BuildingQueueItem = {
   targetLevel: number;
   /** Actual duration snapshot used by this queued transition. */
   durationMs: number;
+  /** Effective cost charged when this transition entered the queue. */
+  cost?: ResourceCost;
 };
 
 export type BuildingEconomyState = {
@@ -301,6 +311,7 @@ function migrateQueueItem(
   previousFinishAt: number | null,
   buildings: BuildingLevels,
   queuedRoleCounts: Partial<Record<BuildingRole, number>>,
+  scienceLevels: ScienceLevels,
 ): BuildingQueueItem | null {
   if (!value || typeof value !== 'object') return null;
   const source = value as Record<string, unknown>;
@@ -318,6 +329,7 @@ function migrateQueueItem(
   const targetLevel = Math.min(item.maxLevel, (buildings[role] ?? 0) + queuedBefore + 1);
   const balanceRow = getBuildingBalanceRow(role, targetLevel);
   if (!balanceRow) return null;
+  const cost = balanceRow.cost ? getBuildingConstructionCost(balanceRow.cost, scienceLevels) : null;
 
   const rawStartedAt = isFiniteTimestamp(source.startedAt) ? source.startedAt : null;
   const rawFinishAt = isFiniteTimestamp(source.finishAt) ? source.finishAt : null;
@@ -345,6 +357,7 @@ function migrateQueueItem(
     finishAt,
     targetLevel,
     durationMs: duration,
+    ...(cost ? { cost } : {}),
   };
 }
 
@@ -352,6 +365,7 @@ export function migrateBuildingQueue(
   value: unknown,
   planetId: string,
   buildings: BuildingLevels = createDefaultBuildingLevels(),
+  scienceLevels: ScienceLevels = {},
 ): BuildingQueueItem[] {
   const sourceItems = Array.isArray(value) ? value : value ? [value] : [];
   const migrated: BuildingQueueItem[] = [];
@@ -360,7 +374,7 @@ export function migrateBuildingQueue(
 
   for (const source of sourceItems) {
     if (migrated.length >= BUILDING_QUEUE_CAPACITY) break;
-    const item = migrateQueueItem(source, planetId, migrated.length, previousFinishAt, buildings, queuedRoleCounts);
+    const item = migrateQueueItem(source, planetId, migrated.length, previousFinishAt, buildings, queuedRoleCounts, scienceLevels);
     if (!item) continue;
     const id = migrated.some((queuedItem) => queuedItem.id === item.id)
       ? `${item.id}-${migrated.length}`
@@ -428,12 +442,13 @@ export function evaluateBuildingBuild(state: BuildingEconomyState, assetRole: Bu
   const timeMs = rawTimeMs == null
     ? null
     : Math.max(1, Math.round(rawTimeMs * getConstructionTimeFactor(state.buildings.construction ?? 0)));
+  const cost = balanceRow?.cost ? getBuildingConstructionCost(balanceRow.cost, state.scienceLevels) : null;
   const base = {
     currentLevel,
     projectedLevel,
     nextLevel,
     maxLevel: item.maxLevel,
-    cost: balanceRow?.cost ? { ...balanceRow.cost } : null,
+    cost,
     rawTimeMs,
     timeMs,
     requirements,
@@ -443,7 +458,7 @@ export function evaluateBuildingBuild(state: BuildingEconomyState, assetRole: Bu
     return { ...base, status: 'max-level', canBuild: false, reason: 'Достигнут максимальный уровень.', missing: {} };
   }
 
-  if (!balanceRow?.cost || balanceRow.rawTimeMs == null) {
+  if (!cost || rawTimeMs == null) {
     return { ...base, status: 'max-level', canBuild: false, reason: 'Строка перехода Balance v1 недоступна.', missing: {} };
   }
 
@@ -463,8 +478,8 @@ export function evaluateBuildingBuild(state: BuildingEconomyState, assetRole: Bu
   }
 
   const missing: Partial<Record<ResourceKey, number>> = {};
-  for (const key of Object.keys(balanceRow.cost) as ResourceKey[]) {
-    const deficit = balanceRow.cost[key] - state.resources[key];
+  for (const key of Object.keys(cost) as ResourceKey[]) {
+    const deficit = cost[key] - state.resources[key];
     if (deficit > 0) missing[key] = deficit;
   }
 
@@ -523,6 +538,7 @@ export function startBuildingProject(
     finishAt: startedAt + effectiveDurationMs,
     targetLevel: availability.nextLevel,
     durationMs: effectiveDurationMs,
+    cost: { ...availability.cost },
   };
 
   return {
@@ -610,7 +626,12 @@ export function cancelBuildingProject(
   }
 
   const balanceRow = getBuildingBalanceRow(canceled.assetRole, canceled.targetLevel);
-  if (!balanceRow?.cost) {
+  const cost = canceled.cost
+    ? { ...canceled.cost }
+    : balanceRow?.cost
+      ? getBuildingConstructionCost(balanceRow.cost, state.scienceLevels)
+      : null;
+  if (!cost) {
     return {
       ok: false,
       state,
@@ -620,7 +641,7 @@ export function cancelBuildingProject(
     };
   }
 
-  const refund = refundCost(balanceRow.cost, BUILDING_CANCEL_REFUND_PERCENT);
+  const refund = refundCost(cost, BUILDING_CANCEL_REFUND_PERCENT);
   return {
     ok: true,
     state: {
@@ -677,7 +698,8 @@ export function destroyBuildingLevel(
   }
 
   const balanceRow = getBuildingBalanceRow(assetRole, currentLevel);
-  if (!balanceRow?.cost) {
+  const cost = balanceRow?.cost ? getBuildingConstructionCost(balanceRow.cost, state.scienceLevels) : null;
+  if (!cost) {
     return {
       ok: false,
       state,
@@ -696,7 +718,7 @@ export function destroyBuildingLevel(
     BUILDING_DESTROY_REFUND_MAX_PERCENT,
     Math.max(BUILDING_DESTROY_REFUND_MIN_PERCENT, normalizedRefundPercent),
   );
-  const refund = refundCost(balanceRow.cost, safeRefundPercent);
+  const refund = refundCost(cost, safeRefundPercent);
   return {
     ok: true,
     state: {
@@ -746,10 +768,14 @@ export function completeBuildingProject(state: BuildingEconomyState, now: number
 
 export const completeResourceBuildingProject = completeBuildingProject;
 
-export function getBuildingEffectText(item: BuildingDefinition, currentLevel: number): string {
-  const current = formatBalanceEffect(getBuildingEffect(item.assetRole, currentLevel));
+export function getBuildingEffectText(
+  item: BuildingDefinition,
+  currentLevel: number,
+  scienceLevels: ScienceLevels = {},
+): string {
+  const current = formatBalanceEffect(getBuildingEffectWithScience(item.assetRole, currentLevel, scienceLevels));
   const nextLevel = Math.min(item.maxLevel, Math.max(0, currentLevel + 1));
   if (nextLevel === currentLevel) return `Текущий эффект: ${current}`;
-  const next = formatBalanceEffect(getBuildingEffect(item.assetRole, nextLevel));
+  const next = formatBalanceEffect(getBuildingEffectWithScience(item.assetRole, nextLevel, scienceLevels));
   return `Текущий: ${current} · следующий: ${next}`;
 }

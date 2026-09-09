@@ -399,7 +399,7 @@ function readSave(): SaveState {
     };
 
     const savedQueue = parsed.queues?.['helion-01'] ?? parsed.queue ?? null;
-    const queue = migrateBuildingQueue(savedQueue, 'helion-01', homeworld.buildings);
+    const queue = migrateBuildingQueue(savedQueue, 'helion-01', homeworld.buildings, science.levels);
 
     return {
       schemaVersion: SAVE_SCHEMA_VERSION,
@@ -815,14 +815,14 @@ export function App() {
   };
   const resourceIncomePerHour = useMemo(
     () => getProductionBotIncomePerHour(
-      getBuildingResourceIncomePerHour(currentPlanetState.buildings),
+      getBuildingResourceIncomePerHour(currentPlanetState.buildings, state.science.levels),
       currentPlanetState.productionBots,
     ),
-    [currentPlanetState.buildings, currentPlanetState.productionBots],
+    [currentPlanetState.buildings, currentPlanetState.productionBots, state.science.levels],
   );
   const energyIncomePerHour = useMemo(
-    () => getBuildingEnergyIncomePerHour(currentPlanetState.buildings),
-    [currentPlanetState.buildings],
+    () => getBuildingEnergyIncomePerHour(currentPlanetState.buildings, state.science.levels),
+    [currentPlanetState.buildings, state.science.levels],
   );
   const storageCapacities = useMemo(
     () => getStorageCapacities(currentPlanetState.buildings),

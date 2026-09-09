@@ -418,8 +418,9 @@
 .resource-zone-queue-full{margin-top:10px;padding:9px 10px;border:1px solid rgba(239,129,94,.32);background:rgba(64,29,20,.42);color:#f0ad96;font-size:7px;letter-spacing:1px;text-align:center;text-transform:uppercase}
 
 .resource-building-dialog-backdrop{
-  position:absolute;
-  z-index:260;
+  /* Portaled to body so the building dialog is above the permanent HUD. */
+  position:fixed;
+  z-index:10000;
   inset:0;
   display:grid;
   place-items:center;
@@ -432,8 +433,8 @@
   position:relative;
   width:min(920px,calc(100vw - 48px));
   min-height:0;
-  max-height:none;
-  overflow:visible;
+  max-height:calc(100dvh - 48px);
+  overflow:auto;
   display:block;
   border:1px solid rgba(66,215,246,.42);
   background:linear-gradient(180deg,rgba(4,28,41,.995),rgba(2,14,22,.998));
@@ -529,7 +530,7 @@
 .resource-building-build-button{width:100%;min-height:52px;margin-top:13px;border:1px solid #67ecff;background:linear-gradient(180deg,#1596ad,#075467);color:#eaffff;font-size:12px;letter-spacing:2.1px;font-weight:800;cursor:pointer;box-shadow:0 0 20px rgba(45,213,246,.2),inset 0 0 20px rgba(134,239,255,.12)}
 .resource-building-build-button:hover:not(:disabled),.resource-building-build-button:focus-visible:not(:disabled){outline:none;border-color:#6eeaff;box-shadow:inset 0 0 18px rgba(45,213,246,.12)}
 .resource-building-build-button:disabled{cursor:not-allowed;opacity:.42;box-shadow:none}
-.resource-building-action-confirm-backdrop{position:absolute;z-index:320;inset:0;display:grid;place-items:center;padding:24px;background:rgba(0,5,9,.7);backdrop-filter:blur(5px)}
+.resource-building-action-confirm-backdrop{position:fixed;z-index:10001;inset:0;display:grid;place-items:center;padding:24px;background:rgba(0,5,9,.7);backdrop-filter:blur(5px)}
 .resource-building-action-confirm{width:min(570px,calc(100vw - 48px));padding:23px 24px 18px;border:1px solid rgba(68,215,246,.5);background:linear-gradient(180deg,rgba(5,39,55,.99),rgba(2,19,29,.995));box-shadow:0 22px 70px rgba(0,0,0,.68),inset 0 0 28px rgba(0,185,230,.06);text-align:center}
 .resource-building-action-confirm>small{font-size:8px;letter-spacing:1.8px;color:#68d7ed}
 .resource-building-action-confirm h3{margin:8px 0 9px;color:#f2fdff;font-size:20px;letter-spacing:.8px}

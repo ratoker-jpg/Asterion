@@ -18,6 +18,7 @@ import {
   evaluateBuildingBuild,
   evaluateBuildingRequirements,
   getBuildingDefinition,
+  getBuildingConstructionCost,
   migrateBuildingLevels,
   migrateBuildingQueue,
   cancelBuildingProject,
@@ -454,6 +455,35 @@ test('unmet confirmed resource requirements still prevent enqueue and resource d
   assert.equal(transition.state.queue.length, 0);
   assert.equal(transition.state.resources.metal, state.resources.metal);
   assert.match(transition.reason ?? '', /Металлическая шахта I/);
+});
+
+test('Improved Construction is used consistently for preview, charge, cancellation and destruction refunds', () => {
+  const scienceLevels = { 1: 6, 2: 5, 17: 20 };
+  const state = createState({ scienceLevels });
+  const availability = evaluateBuildingBuild(state, 'construction');
+  const discountedCost = getBuildingConstructionCost(
+    { metal: 400, minerals: 120, gas: 200, energy: 3 },
+    scienceLevels,
+  );
+  assert.deepEqual(availability.cost, discountedCost);
+
+  const started = startBuildingProject(state, 'construction', 'helion-01', 1_000);
+  assert.equal(started.ok, true);
+  assert.deepEqual(started.state.queue[0].cost, discountedCost);
+  assert.equal(started.state.resources.metal, state.resources.metal - discountedCost.metal);
+
+  const cancelState = { ...started.state, scienceLevels: { ...scienceLevels, 17: 0 } };
+  const canceled = cancelBuildingProject(cancelState, cancelState.queue[0].id, 2_000);
+  assert.equal(canceled.ok, true);
+  assert.equal(canceled.refund?.metal, Math.floor(discountedCost.metal * 0.9));
+
+  const built = createState({
+    scienceLevels,
+    buildings: { ...createDefaultBuildingLevels(), construction: 1 },
+  });
+  const destroyed = destroyBuildingLevel(built, 'construction', 65);
+  assert.equal(destroyed.ok, true);
+  assert.equal(destroyed.refund?.metal, Math.floor(discountedCost.metal * 0.65));
 });
 
 test('energy-building completion deducts construction energy but hourly income stays derived', () => {

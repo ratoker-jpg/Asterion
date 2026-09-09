@@ -4,7 +4,9 @@ import {
   BUILDING_ROLES,
   PLANET_BASE_STORAGE_CAPACITY,
   getBuildingBalanceRow,
+  getBuildingConstructionCost,
   getBuildingEffect,
+  getBuildingEffectWithScience,
   getBuildingEnergyIncomePerHour,
   getBuildingMaxLevel,
   getBuildingPresentation,
@@ -20,6 +22,7 @@ import {
   getRecyclingBalance,
   getShipyardTimeFactor,
   getStorageCapacities,
+  getScienceIncomeBonusPercent,
 } from './balance-v1.ts';
 
 test('Balance v1 exposes a complete sequential table for every role', () => {
@@ -47,6 +50,24 @@ test('resource and energy income selectors use the current building level', () =
   }), { metal: 150, minerals: 150, gas: 100 });
   assert.equal(getBuildingEnergyIncomePerHour({ 'basic-energy': 1, 'advanced-energy': 1 }), 160);
   assert.deepEqual(getBuildingResourceIncomePerHour({ 'metal-production-1': 999 }), { metal: 74_860, minerals: 0, gas: 0 });
+});
+
+test('mathematics and physics apply capped five-percent income bonuses to building effects', () => {
+  assert.equal(getScienceIncomeBonusPercent({ 3: 1 }, 3), 5);
+  assert.equal(getScienceIncomeBonusPercent({ 3: 999 }, 3), 50);
+  assert.equal(getScienceIncomeBonusPercent({ 1: 999 }, 1), 50);
+  const metalEffect = getBuildingEffectWithScience('metal-production-1', 1, { 3: 1 });
+  const energyEffect = getBuildingEffectWithScience('basic-energy', 1, { 1: 1 });
+  assert.equal(metalEffect.kind === 'resource-income' ? metalEffect.amountPerHour : null, 158);
+  assert.equal(energyEffect.kind === 'energy-income' ? energyEffect.amountPerHour : null, 63);
+  assert.deepEqual(getBuildingResourceIncomePerHour({ 'metal-production-1': 1 }, { 3: 10 }), { metal: 225, minerals: 0, gas: 0 });
+  assert.equal(getBuildingEnergyIncomePerHour({ 'basic-energy': 1 }, { 1: 10 }), 90);
+});
+
+test('Improved Construction discounts economic building resources by one percent per level and leaves energy separate', () => {
+  const cost = { metal: 100, minerals: 101, gas: 999, energy: 200 };
+  assert.deepEqual(getBuildingConstructionCost(cost, { 17: 1 }), { metal: 99, minerals: 99, gas: 989, energy: 200 });
+  assert.deepEqual(getBuildingConstructionCost(cost, { 17: 999 }), { metal: 80, minerals: 80, gas: 799, energy: 200 });
 });
 
 test('published production rows and final transition rows are fully represented', () => {
