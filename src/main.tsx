@@ -17,8 +17,6 @@ import './planet-visual-v2.css';
 import './shell-v3.css';
 import './shell-v4.css';
 import './single-planet-v5.css';
-import './asterion-header.css';
-import './asterion-header-faction-skins.css';
 import './resource-zone.css';
 import './web-preview.css';
 import './shipyard-workspace.css';
@@ -34,6 +32,10 @@ import './rating.css';
 import './science.css';
 import './utility-source-rebuild-polish.css';
 import './universe-interaction.css';
+/* Permanent command header is intentionally last: its geometry and faction chrome
+ * must not be displaced by older shared prototype selectors. */
+import './asterion-header.css';
+import './asterion-header-faction-skins.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
 
