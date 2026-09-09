@@ -368,7 +368,7 @@ async function verifyResourceZoneFlow(win, directory) {
     })()`);
     if(snapshot.title!==RESOURCE_NAMES[role] || snapshot.status!==INITIAL_STATUS[role]) throw new Error(`Unexpected initial dialog state for ${role}: ${JSON.stringify(snapshot)}`);
     if((snapshot.status==='available' && snapshot.disabled)||(snapshot.status!=='available' && !snapshot.disabled)) throw new Error(`Unexpected build button state for ${role}: ${JSON.stringify(snapshot)}`);
-    if(role==='metal-production-1' && (!snapshot.effectCurrent.includes('ТЕКУЩИЙ УРОВЕНЬ') || !snapshot.effectNext.includes('СЛЕДУЮЩИЙ УРОВЕНЬ') || !snapshot.timePanel.includes('ВРЕМЯ СТРОИТЕЛЬСТВА') || !snapshot.timeValue.includes('мин') || !snapshot.timeRaw.includes('мин') || snapshot.timeBonus!=='НЕТ' || snapshot.costIcons!==4)) throw new Error(`Building upgrade comparison UI contract failed: ${JSON.stringify(snapshot)}`);
+    if(role==='metal-production-1' && (!snapshot.effectCurrent.includes('ТЕКУЩИЙ УРОВЕНЬ') || !snapshot.effectNext.includes('СЛЕДУЮЩИЙ УРОВЕНЬ') || !snapshot.timePanel.includes('ВРЕМЯ СТРОИТЕЛЬСТВА') || snapshot.timeValue!=='2 сек' || snapshot.timeRaw!=='2 сек' || snapshot.timeBonus!=='НЕТ' || snapshot.costIcons!==4)) throw new Error(`Building upgrade comparison UI contract failed: ${JSON.stringify(snapshot)}`);
     dialogSnapshots.push({role,...snapshot});
     if(role==='metal-production-1') await capture(win,directory,'resource-zone-selected');
     if(role==='metal-production-2'){
