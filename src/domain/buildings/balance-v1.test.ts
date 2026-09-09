@@ -62,10 +62,29 @@ test('published production rows and final transition rows are fully represented'
 
   const shipyardFinal = getBuildingBalanceRow('shipyard', 15);
   assert.deepEqual(shipyardFinal?.cost, { metal: 42_611_346, minerals: 21_305_673, gas: 8_522_269, energy: 68 });
-  assert.equal(shipyardFinal?.rawTimeMs, 30 * 60 * 60 * 1000 + 3 * 60 * 1000 + 10 * 1000);
+  assert.equal(shipyardFinal?.rawTimeMs, 55 * 60 * 1000 + 54 * 1000);
   const metalFinal = getBuildingBalanceRow('metal-production-1', 30);
   assert.deepEqual(metalFinal?.cost, { metal: 3_068_017, minerals: 1_278_340, gas: 0, energy: 374 });
-  assert.equal(metalFinal?.rawTimeMs, 31 * 60 * 60 * 1000 + 24 * 60 * 1000 + 31 * 1000);
+  assert.equal(metalFinal?.rawTimeMs, 58 * 60 * 1000 + 26 * 1000);
+});
+
+test('rebalanced base construction times cover every active building role', () => {
+  const checkpoints = [
+    ['metal-production-1', 1, 2_000], ['metal-production-1', 30, 3_506_000],
+    ['metal-production-2', 30, 3_506_000], ['metal-production-3', 30, 3_506_000],
+    ['mineral-production-1', 30, 4_144_000], ['mineral-production-2', 30, 4_144_000],
+    ['gas-production-1', 30, 11_250_000], ['gas-production-2', 30, 11_250_000],
+    ['basic-energy', 30, 9_438_000], ['advanced-energy', 20, 4_081_000],
+    ['hangar', 20, 817_000], ['construction', 20, 388_000],
+    ['advanced-factory', 5, 1_329_000], ['metal-storage', 20, 1_292_000],
+    ['mineral-storage', 20, 1_356_000], ['gas-storage', 20, 1_292_000],
+    ['recycling', 10, 4_058_000], ['trade-center', 10, 710_000],
+    ['shipyard', 15, 3_354_000], ['research', 20, 2_196_000],
+    ['spaceport', 10, 540_000], ['planetary-government', 10, 471_000],
+  ] as const;
+  for (const [role, level, expectedMs] of checkpoints) {
+    assert.equal(getBuildingBalanceRow(role, level)?.rawTimeMs, expectedMs, `${role} ${level}`);
+  }
 });
 
 test('Balance v1 keeps the clarified planetary storage base separate from building bonuses', () => {

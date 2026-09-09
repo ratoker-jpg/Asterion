@@ -253,7 +253,7 @@ test('final shipyard transition 14 → 15 remains available with its published c
   assert.equal(availability.status, 'available');
   assert.equal(availability.nextLevel, 15);
   assert.deepEqual(availability.cost, { metal: 42_611_346, minerals: 21_305_673, gas: 8_522_269, energy: 68 });
-  assert.equal(availability.rawTimeMs, 30 * 60 * 60 * 1000 + 3 * 60 * 1000 + 10 * 1000);
+  assert.equal(availability.rawTimeMs, 55 * 60 * 1000 + 54 * 1000);
 });
 
 test('one shared three-slot FIFO queue accepts projects from all three zones and charges once per slot', () => {
@@ -370,7 +370,7 @@ test('destroying a queued building level is blocked until its queue is empty', (
 test('building availability and queue duration use the official factory coefficient', () => {
   const state = createState({ buildings: { ...createDefaultBuildingLevels(), construction: 1 } });
   const availability = evaluateBuildingBuild(state, 'metal-production-1');
-  assert.equal(availability.rawTimeMs, 44_000);
+  assert.equal(availability.rawTimeMs, 2_000);
   assert.equal(availability.timeMs, Math.round((availability.rawTimeMs ?? 0) * 0.98));
 
   const transition = startBuildingProject(state, 'metal-production-1', 'helion-01', 10_000);
