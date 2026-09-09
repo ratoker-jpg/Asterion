@@ -80,6 +80,7 @@ export type ScienceRuntimeContext = {
   laboratoryLevel: number;
   now: number;
   mode?: RuntimeMode;
+  testTimeScale?: number;
 };
 
 export type ScienceStartTransition = {
@@ -179,6 +180,7 @@ export function calculateScienceDurationMs(
   baseDurationMs: number,
   laboratoryLevel: number,
   mode: RuntimeMode = 'production',
+  testTimeScale?: number,
 ): number {
   const safeBaseDuration = Math.max(1, Math.round(baseDurationMs));
   const safeLaboratoryLevel = Math.min(
@@ -186,7 +188,7 @@ export function calculateScienceDurationMs(
     Math.max(0, Math.floor(laboratoryLevel)),
   );
   const laboratoryFactor = (1 - SCIENCE_LABORATORY_TIME_REDUCTION_PER_LEVEL) ** safeLaboratoryLevel;
-  return scaleRuntimeDuration(Math.max(1, Math.round(safeBaseDuration * laboratoryFactor)), mode);
+  return scaleRuntimeDuration(Math.max(1, Math.round(safeBaseDuration * laboratoryFactor)), mode, testTimeScale);
 }
 
 export function createDefaultScienceLevels(): ScienceLevels {
@@ -263,6 +265,7 @@ export function previewScience(context: ScienceRuntimeContext, scienceId: Scienc
     parseCapturedTime(science.capturedTime),
     context.laboratoryLevel,
     context.mode ?? 'production',
+    context.testTimeScale,
   );
   const base = {
     scienceId,

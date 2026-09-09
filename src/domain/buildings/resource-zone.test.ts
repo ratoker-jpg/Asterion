@@ -23,7 +23,7 @@ import {
 } from './resource-zone.ts';
 
 const createState = (overrides: Partial<BuildingEconomyState> = {}): BuildingEconomyState => ({
-  resources: { metal: 15_880, minerals: 12_712, gas: 6_421, energy: 140 },
+  resources: { metal: 10_000_000, minerals: 10_000_000, gas: 10_000_000, energy: 10_000_000 },
   buildings: createDefaultBuildingLevels(),
   queue: [],
   scienceLevels: { 1: 6, 2: 5 },
@@ -253,7 +253,7 @@ test('one shared three-slot FIFO queue accepts projects from all three zones and
 
   assert.equal(state.queue.length, BUILDING_QUEUE_CAPACITY);
   assert.deepEqual(state.queue.map((item) => item.assetRole), roles);
-  assert.equal(state.resources.metal, initialMetal - 3 * 1200);
+  assert.equal(state.resources.metal, initialMetal - 112 - 400 - 500);
   assert.equal(state.queue[1].startedAt, state.queue[0].finishAt);
   assert.equal(state.queue[2].startedAt, state.queue[1].finishAt);
 
@@ -341,11 +341,11 @@ test('unmet confirmed resource requirements still prevent enqueue and resource d
   assert.match(transition.reason ?? '', /Металлическая шахта I/);
 });
 
-test('basic-energy completion keeps its existing +25 energy effect and new zones add no invented effects', () => {
+test('energy-building completion deducts construction energy but hourly income stays derived', () => {
   let resource = startBuildingProject(createState(), 'basic-energy', 'helion-01', 1_000).state;
   const resourceBefore = resource.resources.energy;
   resource = completeBuildingProject(resource, resource.queue[0].finishAt).state;
-  assert.equal(resource.resources.energy, resourceBefore + 25);
+  assert.equal(resource.resources.energy, resourceBefore);
 
   let industry = startBuildingProject(createState(), 'construction', 'helion-01', 1_000).state;
   const industryBefore = industry.resources.energy;

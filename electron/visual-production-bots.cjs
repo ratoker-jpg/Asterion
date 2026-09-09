@@ -233,7 +233,7 @@ async function verifyFlow(win, directory, label) {
 
   await activateZone(win, 'resource');
   const incomeBefore = await readZoneIncome(win);
-  if (JSON.stringify(incomeBefore) !== JSON.stringify({ metal: '774', minerals: '510', gas: '312' })) {
+  if (JSON.stringify(incomeBefore) !== JSON.stringify({ metal: '10 150', minerals: '8 735', gas: '375' })) {
     throw new Error(`${label}: base income mismatch ${JSON.stringify(incomeBefore)}`);
   }
 
@@ -265,7 +265,7 @@ async function verifyFlow(win, directory, label) {
   const saveBeforeApply = await readAppliedSave(win);
   if (JSON.stringify(saveBeforeApply.productionBots) !== JSON.stringify({ metal: 0, minerals: 0, gas: 0 })) throw new Error(`${label}: draft mutated save before apply ${JSON.stringify(saveBeforeApply)}`);
   const headerBeforeApply = await readHeaderIncome(win);
-  if (!headerBeforeApply.metal.includes('774/ч') || !headerBeforeApply.minerals.includes('510/ч') || !headerBeforeApply.gas.includes('312/ч')) {
+  if (!headerBeforeApply.metal.includes('10 150/ч') || !headerBeforeApply.minerals.includes('8 735/ч') || !headerBeforeApply.gas.includes('375/ч')) {
     throw new Error(`${label}: draft changed header income ${JSON.stringify(headerBeforeApply)}`);
   }
 
@@ -280,8 +280,8 @@ async function verifyFlow(win, directory, label) {
     throw new Error(`${label}: applied save mismatch ${JSON.stringify(saveAfterApply)}`);
   }
   const headerAfterApply = await readHeaderIncome(win);
-  if (!headerAfterApply.metal.includes('1 052,64/ч') && !headerAfterApply.metal.includes('1 052,64/ч')) throw new Error(`${label}: metal header income not applied ${JSON.stringify(headerAfterApply)}`);
-  if (!headerAfterApply.minerals.includes('612/ч')) throw new Error(`${label}: mineral header income not applied ${JSON.stringify(headerAfterApply)}`);
+  if (!headerAfterApply.metal.includes('13 804/ч') && !headerAfterApply.metal.includes('13 804/ч')) throw new Error(`${label}: metal header income not applied ${JSON.stringify(headerAfterApply)}`);
+  if (!headerAfterApply.minerals.includes('10 482/ч') && !headerAfterApply.minerals.includes('10 482/ч')) throw new Error(`${label}: mineral header income not applied ${JSON.stringify(headerAfterApply)}`);
 
   const afterGeometry = await measure(win, 'construction');
   assertGeometry(afterGeometry, label, 'construction');
@@ -304,8 +304,8 @@ async function verifyFlow(win, directory, label) {
 
   await activateZone(win, 'resource');
   const incomeAfter = await readZoneIncome(win);
-  if (incomeAfter.metal !== '1 052,64' && incomeAfter.metal !== '1 052,64') throw new Error(`${label}: applied metal zone income mismatch ${JSON.stringify(incomeAfter)}`);
-  if (incomeAfter.minerals !== '612' || incomeAfter.gas !== '312') throw new Error(`${label}: applied zone income mismatch ${JSON.stringify(incomeAfter)}`);
+  if (incomeAfter.metal !== '13 804' && incomeAfter.metal !== '13 804') throw new Error(`${label}: applied metal zone income mismatch ${JSON.stringify(incomeAfter)}`);
+  if ((incomeAfter.minerals !== '10 482' && incomeAfter.minerals !== '10 482') || incomeAfter.gas !== '375') throw new Error(`${label}: applied zone income mismatch ${JSON.stringify(incomeAfter)}`);
 
   return {
     viewport: label,

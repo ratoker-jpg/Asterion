@@ -73,10 +73,13 @@ import {
 import {
   ACTIVE_RUNTIME_MODE,
   getRuntimeSaveKey,
+  resolveTestTimeScale,
   RUNTIME_SAVE_SCHEMA_VERSION,
   RUNTIME_STATE_CHANGED_EVENT,
   scaleRuntimeDuration,
-  TEST_TIME_SCALE,
+  TEST_TIME_SCALE_OPTIONS,
+  TEST_TIME_SCALE_STORAGE_KEY,
+  type TestTimeScale,
   type RuntimeMode,
 } from './domain/runtime/mode.ts';
 import { publishRuntimeStateSnapshot } from './domain/runtime/state-store.ts';
@@ -93,12 +96,14 @@ import {
 } from './domain/rating/fixtures.ts';
 import {
   BUILDING_QUEUE_CAPACITY,
-  RESOURCE_BASE_INCOME_PER_HOUR,
   RESOURCE_BUILDING_ROLES,
   completeBuildingProject,
   createCanonicalStartingBuildingLevels,
   evaluateBuildingBuild,
   getBuildingDefinition,
+  getBuildingEnergyIncomePerHour,
+  getBuildingResourceIncomePerHour,
+  getStorageCapacities,
   migrateBuildingLevels,
   migrateBuildingQueue,
   startBuildingProject,
@@ -286,20 +291,21 @@ const RUNTIME_MODE: RuntimeMode = ACTIVE_RUNTIME_MODE;
 const SAVE_KEY = getRuntimeSaveKey(RUNTIME_MODE);
 const SAVE_SCHEMA_VERSION = Math.max(COMBAT_SAVE_SCHEMA_VERSION, SCIENCE_SAVE_SCHEMA_VERSION, RUNTIME_SAVE_SCHEMA_VERSION);
 const DEFAULT_PLANET_NAME = 'Helion 01';
+const TEST_MODE_RESOURCE_AMOUNT = 999_999_999;
 
 const createInitialState = (mode: RuntimeMode = RUNTIME_MODE): SaveState => {
   const command = createDefaultCommandState();
   return {
     schemaVersion: SAVE_SCHEMA_VERSION,
-    metal: mode === 'test' ? 1_000_000 : 15_880,
-    minerals: mode === 'test' ? 1_000_000 : 12_712,
-    gas: mode === 'test' ? 1_000_000 : 6_421,
+    metal: mode === 'test' ? TEST_MODE_RESOURCE_AMOUNT : 15_880,
+    minerals: mode === 'test' ? TEST_MODE_RESOURCE_AMOUNT : 12_712,
+    gas: mode === 'test' ? TEST_MODE_RESOURCE_AMOUNT : 6_421,
     currentPlanetId: 'helion-01',
     planets: {
       'helion-01': {
         name: DEFAULT_PLANET_NAME,
         skin: 'colonized',
-        energy: mode === 'test' ? 1_000_000 : 140,
+        energy: mode === 'test' ? TEST_MODE_RESOURCE_AMOUNT : 140,
         buildings: createCanonicalStartingBuildingLevels(),
         fleet: createCanonicalStartingFleet(),
         productionBots: createEmptyBotAssignment(),
@@ -524,6 +530,7 @@ export function App() {
   const stateRef = useRef(state);
   stateRef.current = state;
   const [now, setNow] = useState(Date.now());
+  const [testTimeScale, setTestTimeScale] = useState<TestTimeScale>(() => resolveTestTimeScale());
   const [notice, setNotice] = useState('Система готова. Локальное сохранение активно.');
   const [planetMenuOpen, setPlanetMenuOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(true);
@@ -531,6 +538,11 @@ export function App() {
   const [editingName, setEditingName] = useState(DEFAULT_PLANET_NAME);
   const [selectedBuildingRole, setSelectedBuildingRole] = useState<BuildingRole | null>(null);
   const [buildingInterior, setBuildingInterior] = useState<BuildingInteriorContext | null>(null);
+
+  useEffect(() => {
+    if (RUNTIME_MODE !== 'test') return;
+    window.localStorage.setItem(TEST_TIME_SCALE_STORAGE_KEY, String(testTimeScale));
+  }, [testTimeScale]);
 
   useEffect(() => {
     const onCombatPriorityChanged = (event: Event) => {
@@ -596,6 +608,7 @@ export function App() {
         laboratoryLevel: planet.buildings.research,
         now: researchStartedAt,
         mode: RUNTIME_MODE,
+        testTimeScale,
       }, request.scienceId, taskId);
 
       if (!transition.ok) {
@@ -622,7 +635,7 @@ export function App() {
 
     window.addEventListener(SCIENCE_START_REQUEST_EVENT, onScienceStartRequest);
     return () => window.removeEventListener(SCIENCE_START_REQUEST_EVENT, onScienceStartRequest);
-  }, []);
+  }, [testTimeScale]);
   useEffect(() => {
     const snapshot = reconcileScienceState(state.science, now);
     if (!snapshot.changed) return;
@@ -799,8 +812,19 @@ export function App() {
     gas: state.gas,
   };
   const resourceIncomePerHour = useMemo(
-    () => getProductionBotIncomePerHour(RESOURCE_BASE_INCOME_PER_HOUR, currentPlanetState.productionBots),
-    [currentPlanetState.productionBots],
+    () => getProductionBotIncomePerHour(
+      getBuildingResourceIncomePerHour(currentPlanetState.buildings),
+      currentPlanetState.productionBots,
+    ),
+    [currentPlanetState.buildings, currentPlanetState.productionBots],
+  );
+  const energyIncomePerHour = useMemo(
+    () => getBuildingEnergyIncomePerHour(currentPlanetState.buildings),
+    [currentPlanetState.buildings],
+  );
+  const storageCapacities = useMemo(
+    () => getStorageCapacities(currentPlanetState.buildings),
+    [currentPlanetState.buildings],
   );
   const buildingInteriorTarget = buildingInterior
     ? getBuildingInteriorTarget(buildingInterior.buildingRole)
@@ -1043,6 +1067,7 @@ export function App() {
       scienceLevels: current.science.levels,
       spaceportLevel: planet.buildings.spaceport,
       mode: RUNTIME_MODE,
+      testTimeScale,
     }, track, shipId, enqueuedAt, taskId);
     if (!transition.ok) {
       setNotice(transition.reason ?? 'Улучшение сейчас недоступно.');
@@ -1081,7 +1106,6 @@ export function App() {
     }
 
     const enqueuedAt = Date.now();
-    const definition = getBuildingDefinition(assetRole);
     setState((current) => {
       const currentPlanetStateForBuild = current.planets['helion-01'];
       const transition = startBuildingProject({
@@ -1094,7 +1118,7 @@ export function App() {
         buildings: currentPlanetStateForBuild.buildings,
         queue: current.queues['helion-01'],
         scienceLevels: current.science.levels,
-      }, assetRole, 'helion-01', enqueuedAt, scaleRuntimeDuration(definition.prototypeTimeMs, RUNTIME_MODE));
+      }, assetRole, 'helion-01', enqueuedAt, scaleRuntimeDuration(availability.timeMs ?? 1, RUNTIME_MODE, testTimeScale));
       if (!transition.ok) return current;
 
       return {
@@ -1112,7 +1136,7 @@ export function App() {
         queues: { 'helion-01': transition.state.queue },
       };
     });
-    setNotice(`${currentPlanetName}: ${definition.name} добавлено в общую очередь.`);
+    setNotice(`${currentPlanetName}: ${getBuildingDefinition(assetRole).name} добавлено в общую очередь.`);
     return true;
   };
 
@@ -1369,10 +1393,10 @@ export function App() {
 
           <section className="header-main">
             <div className="resources header-resource-rail" aria-label="Ресурсы планеты">
-              <Resource kind="metal" label="МЕТАЛЛ" value={state.metal} capacity={60_000} hourlyGain={resourceIncomePerHour.metal} />
-              <Resource kind="mineral" label="МИНЕРАЛЫ" value={state.minerals} capacity={60_000} hourlyGain={resourceIncomePerHour.minerals} />
-              <Resource kind="gas" label="ГАЗ" value={state.gas} capacity={60_000} hourlyGain={resourceIncomePerHour.gas} />
-              <Resource kind="energy" label="ЭНЕРГИЯ" value={currentPlanetState.energy} description="Энергия планеты. Солнечная электростанция увеличивает запас после завершения строительства." />
+              <Resource kind="metal" label="МЕТАЛЛ" value={state.metal} capacity={storageCapacities.metal} hourlyGain={resourceIncomePerHour.metal} />
+              <Resource kind="mineral" label="МИНЕРАЛЫ" value={state.minerals} capacity={storageCapacities.minerals} hourlyGain={resourceIncomePerHour.minerals} />
+              <Resource kind="gas" label="ГАЗ" value={state.gas} capacity={storageCapacities.gas} hourlyGain={resourceIncomePerHour.gas} />
+              <Resource kind="energy" label="ЭНЕРГИЯ" value={currentPlanetState.energy} hourlyGain={energyIncomePerHour} description="Энергия/ч — вычисляемый доход; строительство энерго-зданий отдельно меняет запас энергии." />
               <Resource kind="population" label="НАСЕЛЕНИЕ" value={fleetSummary.population} capacity={fleetSummary.capacity} showCapacity />
             </div>
             <nav className="primary-navigation" aria-label="Основная навигация">
@@ -1392,7 +1416,21 @@ export function App() {
             {RUNTIME_MODE === 'test' ? (
               <div className="test-mode-banner-v1" data-qa-test-mode-banner>
                 <strong>ТЕСТОВЫЙ РЕЖИМ</strong>
-                <small data-qa-test-time-scale>ускорение ×{TEST_TIME_SCALE} · {SAVE_KEY}</small>
+                <div className="test-mode-speed-picker" role="group" aria-label="Скорость тестового режима">
+                  {TEST_TIME_SCALE_OPTIONS.map((speed) => (
+                    <button
+                      key={speed}
+                      type="button"
+                      className={speed === testTimeScale ? 'active' : ''}
+                      aria-pressed={speed === testTimeScale}
+                      data-qa-test-speed={speed}
+                      onClick={() => setTestTimeScale(speed)}
+                    >
+                      ×{speed}
+                    </button>
+                  ))}
+                </div>
+                <small data-qa-test-time-scale>ускорение ×{testTimeScale} · {SAVE_KEY}</small>
               </div>
             ) : null}
             <nav className="utility-navigation" aria-label="Служебная навигация">

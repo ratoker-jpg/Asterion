@@ -3,6 +3,7 @@ import { getFactionShipCatalog } from '../combat/faction-catalog.ts';
 import { COMMANDER_IDS, type CommanderId } from '../combat/commanders.ts';
 import { SHIP_IDS, type ShipId } from '../combat/ids.ts';
 import type { CombatFactionId } from '../combat/factions.ts';
+import { getHangarCapacity } from '../buildings/balance-v1.ts';
 
 export type OwnedFleetState = {
   ships: Record<ShipId, number>;
@@ -11,9 +12,10 @@ export type OwnedFleetState = {
 
 export const FLEET_CAPACITY_CONFIG = Object.freeze({
   baseCapacity: 50,
-  hangarCapacityPerLevel: 20,
+  levelOneCapacity: 120,
+  maxCapacity: 25_112,
   maxHangarLevel: 20,
-  note: 'PROTOTYPE/TBD: capacity values require source confirmation; Hangar is the single capacity resolver.',
+  note: 'Balance v1: Hangar is the single fleet-capacity resolver; level 0 keeps the planetary base of 50.',
 });
 
 export const CANONICAL_STARTING_FLEET = Object.freeze({
@@ -84,11 +86,7 @@ export function calculateFleetPopulation(
 }
 
 export function calculateFleetCapacity(hangarLevel: number): number {
-  const level = Math.min(
-    FLEET_CAPACITY_CONFIG.maxHangarLevel,
-    Math.max(0, Math.floor(Number.isFinite(hangarLevel) ? hangarLevel : 0)),
-  );
-  return FLEET_CAPACITY_CONFIG.baseCapacity + level * FLEET_CAPACITY_CONFIG.hangarCapacityPerLevel;
+  return getHangarCapacity(hangarLevel);
 }
 
 export function getFleetSummary(fleet: OwnedFleetState, hangarLevel: number, factionId: CombatFactionId = 'aegis') {

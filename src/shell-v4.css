@@ -146,3 +146,39 @@
   color: rgba(255, 216, 137, 0.78);
   letter-spacing: 0.04em;
 }
+
+.test-mode-speed-picker-v1,
+.test-mode-speed-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.test-mode-speed-picker button {
+  min-width: 38px;
+  min-height: 30px;
+  padding: 2px 5px;
+  border: 1px solid rgba(255, 216, 137, 0.32);
+  background: rgba(13, 22, 33, 0.72);
+  color: rgba(255, 216, 137, 0.78);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.test-mode-speed-picker button:hover,
+.test-mode-speed-picker button:focus-visible,
+.test-mode-speed-picker button.active {
+  border-color: #ffd889;
+  background: rgba(240, 173, 56, 0.3);
+  color: #fff1c9;
+}
+
+@media (max-width: 900px) {
+  .test-mode-banner-v1 {
+    flex-wrap: wrap;
+    margin-left: 0;
+  }
+}

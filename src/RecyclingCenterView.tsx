@@ -101,7 +101,7 @@ export function RecyclingCenterView({
   const maxJobs = getRecyclingMaxConcurrentJobs(buildingLevel);
   const allocationTotal = getRecyclingAllocationTotal(allocation);
   const totalDebris = recycling.availableDebris + recycling.jobs.reduce((total, job) => total + job.debrisAmount, 0);
-  const durationMs = getRecyclingDurationMs(debrisAmount);
+  const durationMs = getRecyclingDurationMs(debrisAmount, buildingLevel);
   const validation = getRecyclingStartValidation(recycling, buildingLevel, debrisAmount, allocation);
   const exactPreview = allocationTotal === 100 ? getRecyclingOutput(debrisAmount, efficiencyPercent, allocation) : null;
 

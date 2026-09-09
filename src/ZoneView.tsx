@@ -120,9 +120,7 @@ function EnterIcon() {
 }
 
 function playerEffectText(item: BuildingDefinition, currentLevel: number) {
-  return item.effect
-    ? getBuildingEffectText(item, currentLevel)
-    : 'Эффект будет определён после утверждения баланса.';
+  return getBuildingEffectText(item, currentLevel);
 }
 
 export type ZoneViewProps = {
@@ -379,7 +377,8 @@ export function ZoneView({
               <div className="resource-building-levels">
                 <div><small>Текущий уровень</small><strong>{availability.currentLevel}</strong></div>
                 <div><small>Максимальный</small><strong>{availability.maxLevel}</strong></div>
-                <div><small>Следующий в очереди</small><strong>{availability.nextLevel ?? '—'}</strong></div>
+                <div><small>В очереди</small><strong>{queue.filter((item) => item.assetRole === selectedRole).length}</strong></div>
+                <div><small>Следующий уровень</small><strong>{availability.nextLevel ?? '—'}</strong></div>
               </div>
 
               {availability.requirements.length > 0 ? (
@@ -400,12 +399,12 @@ export function ZoneView({
               </div>
 
               <div className="resource-building-costs">
-                <div className="resource-building-cost-title"><span>СТОИМОСТЬ СЛЕДУЮЩЕГО УРОВНЯ</span><b>{formatDuration(availability.timeMs)}</b></div>
+                <div className="resource-building-cost-title"><span>СТОИМОСТЬ ПЕРЕХОДА В УР. {availability.nextLevel ?? availability.maxLevel}</span><b>{availability.timeMs == null ? '—' : formatDuration(availability.timeMs)} · RAW</b></div>
                 <div className="resource-building-cost-grid">
                   {(Object.keys(resourceLabels) as Array<keyof typeof resourceLabels>).map((key) => (
                     <div key={key} className={availability.missing[key] ? 'missing' : ''}>
-                      <small>{resourceLabels[key]}</small>
-                      <strong>{formatNumber(availability.cost[key])}</strong>
+                      <small>{key === 'energy' ? 'Энергия строительства' : resourceLabels[key]}</small>
+                      <strong>{availability.cost ? formatNumber(availability.cost[key]) : '—'}</strong>
                       {availability.missing[key] ? <em>не хватает {formatNumber(availability.missing[key] ?? 0)}</em> : null}
                     </div>
                   ))}

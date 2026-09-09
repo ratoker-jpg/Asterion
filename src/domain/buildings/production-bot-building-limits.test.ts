@@ -11,18 +11,18 @@ import {
 } from './resource-zone.ts';
 
 const createState = (): BuildingEconomyState => ({
-  resources: { metal: 100_000, minerals: 100_000, gas: 100_000, energy: 100_000 },
+  resources: { metal: 10_000_000, minerals: 10_000_000, gas: 10_000_000, energy: 10_000_000 },
   buildings: createDefaultBuildingLevels(),
   queue: [],
   scienceLevels: {},
 });
 
-test('advanced factory max level is 5 while factory and other new-zone buildings remain 20', () => {
+test('advanced factory max level is 5, shipyard 15, and other Balance v1 limits remain explicit', () => {
   assert.equal(ADVANCED_FACTORY_MAX_LEVEL, 5);
   assert.equal(getBuildingDefinition('advanced-factory').maxLevel, 5);
   assert.equal(getBuildingDefinition('construction').maxLevel, 20);
   assert.equal(getBuildingDefinition('metal-storage').maxLevel, 20);
-  assert.equal(getBuildingDefinition('shipyard').maxLevel, 20);
+  assert.equal(getBuildingDefinition('shipyard').maxLevel, 15);
 });
 
 test('legacy advanced factory levels above 5 normalize down to 5', () => {
@@ -33,7 +33,7 @@ test('legacy advanced factory levels above 5 normalize down to 5', () => {
   });
   assert.equal(migrated.construction, 20);
   assert.equal(migrated['advanced-factory'], 5);
-  assert.equal(migrated.shipyard, 17);
+  assert.equal(migrated.shipyard, 15);
 });
 
 test('advanced factory keeps factory level 10 requirement', () => {

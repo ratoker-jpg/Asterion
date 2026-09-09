@@ -1,9 +1,9 @@
 import type { BuildingLevels } from './resource-zone.ts';
+import { getRecyclingBalance } from './balance-v1.ts';
 
 export const RECYCLING_MAX_LEVEL = 10;
 export const RECYCLING_INITIAL_DEBRIS = 100_000;
 export const RECYCLING_STORAGE_MS = 24 * 60 * 60 * 1000;
-export const RECYCLING_DURATION_PER_MILLION_MS = 3 * 60 * 60 * 1000;
 export const RECYCLING_RESOURCES = ['metal', 'minerals', 'gas'] as const;
 
 export type RecyclingResource = (typeof RECYCLING_RESOURCES)[number];
@@ -108,16 +108,17 @@ export function getRecyclingLevel(buildings: Pick<BuildingLevels, 'recycling'>):
 
 export function getRecyclingEfficiencyPercent(level: number): number {
   const safeLevel = Math.min(RECYCLING_MAX_LEVEL, Math.max(1, Math.floor(level || 1)));
-  return 75 + (safeLevel - 1) * 5;
+  return getRecyclingBalance(safeLevel).efficiencyPercent;
 }
 
 export function getRecyclingMaxConcurrentJobs(level: number): number {
   return Math.min(RECYCLING_MAX_LEVEL, Math.max(0, Math.floor(level || 0)));
 }
 
-export function getRecyclingDurationMs(debrisAmount: number): number {
+export function getRecyclingDurationMs(debrisAmount: number, level = 1): number {
   const safeAmount = Math.max(0, Number.isFinite(debrisAmount) ? debrisAmount : 0);
-  const rawDuration = safeAmount / 1_000_000 * RECYCLING_DURATION_PER_MILLION_MS;
+  const throughput = Math.max(1, getRecyclingBalance(Math.max(1, level)).debrisPerSecond);
+  const rawDuration = safeAmount / throughput * 1000;
   return Math.max(1000, Math.ceil(rawDuration / 1000) * 1000);
 }
 
@@ -176,7 +177,7 @@ export function getRecyclingPreviewResourceOutput(
   return Math.floor(getRecyclingTotalOutput(debrisAmount, efficiencyPercent) * toSafePercent(percent) / 100);
 }
 
-function migrateRecyclingJob(value: unknown, index: number, now: number): RecyclingJob | null {
+function migrateRecyclingJob(value: unknown, index: number, now: number, recyclingLevel: number): RecyclingJob | null {
   if (!value || typeof value !== 'object') return null;
   const source = value as Record<string, unknown>;
   const debrisAmount = toNonNegativeInteger(source.debrisAmount);
@@ -185,7 +186,7 @@ function migrateRecyclingJob(value: unknown, index: number, now: number): Recycl
   const allocationPercent = normalizeRecyclingAllocation(source.allocationPercent);
   const efficiencyPercent = toSafeEfficiency(source.efficiencyPercent);
   const startedAt = toSafeTimestamp(source.startedAt);
-  const finishAt = startedAt + getRecyclingDurationMs(debrisAmount);
+  const finishAt = startedAt + getRecyclingDurationMs(debrisAmount, recyclingLevel);
   const canonicalExpiresAt = finishAt + RECYCLING_STORAGE_MS;
   const status: RecyclingJob['status'] = now >= finishAt ? 'ready' : 'processing';
   const id = typeof source.id === 'string' && source.id.trim()
@@ -220,7 +221,7 @@ export function migrateRecyclingState(
 
   for (const sourceJob of sourceJobs) {
     if (jobs.length >= maxJobs) break;
-    const migrated = migrateRecyclingJob(sourceJob, jobs.length, now);
+    const migrated = migrateRecyclingJob(sourceJob, jobs.length, now, recyclingLevel);
     if (migrated) jobs.push(migrated);
   }
 
@@ -300,7 +301,7 @@ export function startRecyclingJob(
   const amount = toNonNegativeInteger(debrisAmount);
   const allocation = { ...allocationPercent };
   const efficiencyPercent = getRecyclingEfficiencyPercent(recyclingLevel);
-  const finishAt = startedAt + getRecyclingDurationMs(amount);
+  const finishAt = startedAt + getRecyclingDurationMs(amount, recyclingLevel);
   const job: RecyclingJob = {
     id: jobId,
     debrisAmount: amount,

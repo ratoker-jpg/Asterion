@@ -40,11 +40,11 @@ test('levels 1, 6 and 10 expose canonical efficiency and concurrent slots', () =
   assert.equal(getRecyclingMaxConcurrentJobs(10), 10);
 });
 
-test('duration follows three hours per million, rounds up to seconds and is never zero', () => {
-  assert.equal(getRecyclingDurationMs(1_000_000), 3 * 60 * 60 * 1000);
-  assert.equal(getRecyclingDurationMs(100_000), 18 * 60 * 1000);
-  assert.equal(getRecyclingDurationMs(10_000), 108 * 1000);
-  assert.equal(getRecyclingDurationMs(1_000), 11 * 1000);
+test('duration follows Balance v1 debris-per-second throughput and is never zero', () => {
+  assert.equal(getRecyclingDurationMs(1_000_000, 1), 142_858_000);
+  assert.equal(getRecyclingDurationMs(100_000, 1), 14_286_000);
+  assert.equal(getRecyclingDurationMs(10_000, 1), 1_429_000);
+  assert.equal(getRecyclingDurationMs(1_000, 1), 143_000);
   assert.equal(getRecyclingDurationMs(0), 1000);
   assert.equal(getRecyclingDurationMs(1), 1000);
 });
@@ -148,8 +148,8 @@ test('ready result auto-collects after 24 hours and emits its payout exactly onc
 test('processing, ready and auto-collect boundary are derived from absolute timestamps after migration', () => {
   const processingStartedAt = 1_000_000;
   const readyStartedAt = 500_000;
-  const processingDuration = getRecyclingDurationMs(100_000);
-  const readyDuration = getRecyclingDurationMs(10_000);
+  const processingDuration = getRecyclingDurationMs(100_000, 2);
+  const readyDuration = getRecyclingDurationMs(10_000, 2);
   const now = processingStartedAt + Math.floor(processingDuration / 2);
 
   const source = {

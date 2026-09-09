@@ -1,41 +1,54 @@
 import { findScience } from '../science/catalog.ts';
 import type { ScienceId } from '../science/types.ts';
+import {
+  BUILDING_ROLES,
+  INDUSTRY_BUILDING_ROLES,
+  MILITARY_BUILDING_ROLES,
+  RESOURCE_BUILDING_ROLES,
+  getBuildingBalanceRow,
+  getBuildingEffect,
+  getBuildingMaxLevel,
+  getBuildingPresentation,
+  formatBalanceEffect,
+  getBuildingResourceIncomePerHour,
+  getBuildingEnergyIncomePerHour,
+  getStorageCapacities,
+  type BalanceEffect,
+  type BuildingFaction,
+  type BuildingRole,
+  type BuildingZone,
+  type IndustryBuildingRole,
+  type MilitaryBuildingRole,
+  type ResourceBuildingRole,
+  type ResourceCost,
+  type ResourceKey,
+} from './balance-v1.ts';
 
-export const RESOURCE_BUILDING_ROLES = [
-  'metal-production-1',
-  'metal-production-2',
-  'metal-production-3',
-  'mineral-production-1',
-  'mineral-production-2',
-  'gas-production-1',
-  'gas-production-2',
-  'basic-energy',
-  'advanced-energy',
-  'hangar',
-] as const;
-
-export const INDUSTRY_BUILDING_ROLES = [
-  'construction',
-  'advanced-factory',
-  'metal-storage',
-  'mineral-storage',
-  'gas-storage',
-  'recycling',
-  'trade-center',
-] as const;
-
-export const MILITARY_BUILDING_ROLES = [
-  'shipyard',
-  'research',
-  'spaceport',
-  'planetary-government',
-] as const;
-
-export const BUILDING_ROLES = [
-  ...RESOURCE_BUILDING_ROLES,
-  ...INDUSTRY_BUILDING_ROLES,
-  ...MILITARY_BUILDING_ROLES,
-] as const;
+export {
+  BUILDING_ROLES,
+  INDUSTRY_BUILDING_ROLES,
+  MILITARY_BUILDING_ROLES,
+  RESOURCE_BUILDING_ROLES,
+  getBuildingBalanceRow,
+  getBuildingEffect,
+  getBuildingMaxLevel,
+  getBuildingPresentation,
+  formatBalanceEffect,
+  getBuildingResourceIncomePerHour,
+  getBuildingEnergyIncomePerHour,
+  getStorageCapacities,
+};
+export type {
+  BalanceEffect,
+  BuildingFaction,
+  BuildingRole,
+  BuildingZone,
+  IndustryBuildingRole,
+  MilitaryBuildingRole,
+  ResourceBuildingRole,
+  ResourceCost,
+  ResourceKey,
+};
 
 export const BUILDING_QUEUE_CAPACITY = 3;
 export const RESOURCE_BUILDING_QUEUE_CAPACITY = BUILDING_QUEUE_CAPACITY;
@@ -43,30 +56,26 @@ export const ADVANCED_FACTORY_MAX_LEVEL = 5;
 export const RECYCLING_MAX_LEVEL = 10;
 export const TRADE_CENTER_MAX_LEVEL = 10;
 export const SPACEPORT_MAX_LEVEL = 10;
+export const SHIPYARD_MAX_LEVEL = 15;
+export const PLANETARY_GOVERNMENT_MAX_LEVEL = 10;
+
+/** Balance v1 level-1 fixture kept for callers that need a static bot baseline. */
+export const RESOURCE_BASE_INCOME_PER_HOUR = {
+  metal: 10_150,
+  minerals: 8_735,
+  gas: 375,
+} as const;
 
 export function getSpaceportMaxLevel() {
   return SPACEPORT_MAX_LEVEL;
 }
 
-export type ResourceBuildingRole = (typeof RESOURCE_BUILDING_ROLES)[number];
-export type IndustryBuildingRole = (typeof INDUSTRY_BUILDING_ROLES)[number];
-export type MilitaryBuildingRole = (typeof MILITARY_BUILDING_ROLES)[number];
-export type BuildingRole = (typeof BUILDING_ROLES)[number];
-export type BuildingZone = 'resource' | 'industry' | 'military';
-export type BuildingFaction = 'aegis';
-export type ResourceKey = 'metal' | 'minerals' | 'gas' | 'energy';
-
-export type ResourceCost = Record<ResourceKey, number>;
 export type ResourceWallet = Record<ResourceKey, number>;
 export type BuildingLevels = Record<BuildingRole, number>;
 export type ResourceBuildingLevels = BuildingLevels;
 export type ScienceLevels = Partial<Record<ScienceId, number>>;
 
-export type BuildingEffect = {
-  kind: 'energy';
-  amountPerLevel: number;
-  label: string;
-};
+export type BuildingEffect = BalanceEffect;
 
 export type BuildingRequirement =
   | { kind: 'building-level'; assetRole: BuildingRole; level: number }
@@ -90,8 +99,11 @@ export type BuildingDefinition = {
   purpose: string;
   art: string;
   maxLevel: number;
+  /** @deprecated Compatibility fields for old clients; runtime uses Balance v1 rows. */
   prototypeCost: ResourceCost;
+  /** @deprecated Compatibility fields for old clients; runtime uses Balance v1 rows. */
   prototypeTimeMs: number;
+  /** @deprecated Compatibility marker retained for save/test compatibility. */
   prototypeBalance: boolean;
   requirements: readonly BuildingRequirement[];
   effect?: BuildingEffect;
@@ -105,6 +117,8 @@ export type BuildingQueueItem = {
   startedAt: number;
   finishAt: number;
   targetLevel: number;
+  /** Actual duration snapshot used by this queued transition. */
+  durationMs: number;
 };
 
 export type BuildingEconomyState = {
@@ -131,60 +145,12 @@ export type BuildAvailability = {
   projectedLevel: number;
   nextLevel: number | null;
   maxLevel: number;
-  cost: ResourceCost;
-  timeMs: number;
+  cost: ResourceCost | null;
+  timeMs: number | null;
   missing: Partial<Record<ResourceKey, number>>;
   requirements: readonly BuildingRequirementState[];
 };
 
-const EXISTING_RESOURCE_PROTOTYPE_COST: ResourceCost = {
-  metal: 1200,
-  minerals: 0,
-  gas: 0,
-  energy: 0,
-};
-
-const EXISTING_RESOURCE_PROTOTYPE_TIME_MS = 45_000;
-
-const NEW_ZONE_PROTOTYPE_BALANCE = {
-  maxLevel: 20,
-  cost: EXISTING_RESOURCE_PROTOTYPE_COST,
-  timeMs: EXISTING_RESOURCE_PROTOTYPE_TIME_MS,
-} as const;
-
-export const RESOURCE_BASE_INCOME_PER_HOUR = {
-  metal: 774,
-  minerals: 510,
-  gas: 312,
-} as const;
-
-export const BUILDING_PROTOTYPE_DATA_NOTE =
-  'Цена, время и лимиты новых зон остаются локальными prototype-данными до утверждения баланса. Канонические названия, роли, назначения и PNG от них не зависят.';
-export const RESOURCE_PROTOTYPE_DATA_NOTE = BUILDING_PROTOTYPE_DATA_NOTE;
-
-const BUILDING_ART: Record<BuildingRole, string> = {
-  'metal-production-1': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.metal-production-1.png', import.meta.url).href,
-  'metal-production-2': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.metal-production-2.png', import.meta.url).href,
-  'metal-production-3': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.metal-production-3.png', import.meta.url).href,
-  'mineral-production-1': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.mineral-production-1.png', import.meta.url).href,
-  'mineral-production-2': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.mineral-production-2.png', import.meta.url).href,
-  'gas-production-1': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.gas-production-1.png', import.meta.url).href,
-  'gas-production-2': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.gas-production-2.png', import.meta.url).href,
-  'basic-energy': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.basic-energy.png', import.meta.url).href,
-  'advanced-energy': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.advanced-energy.png', import.meta.url).href,
-  hangar: new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.hangar.png', import.meta.url).href,
-  construction: new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.construction.png', import.meta.url).href,
-  'advanced-factory': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.advanced-factory.png', import.meta.url).href,
-  'metal-storage': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.metal-storage.png', import.meta.url).href,
-  'mineral-storage': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.mineral-storage.png', import.meta.url).href,
-  'gas-storage': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.gas-storage.png', import.meta.url).href,
-  recycling: new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.recycling.png', import.meta.url).href,
-  'trade-center': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.trade-center.png', import.meta.url).href,
-  shipyard: new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.shipyard.png', import.meta.url).href,
-  research: new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.research.png', import.meta.url).href,
-  spaceport: new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.spaceport.png', import.meta.url).href,
-  'planetary-government': new URL('../../../assets/source/New assets/buildings/aegis/building.aegis.planetary-government.png', import.meta.url).href,
-};
 
 const reqBuilding = (assetRole: BuildingRole, level: number): BuildingRequirement => ({ kind: 'building-level', assetRole, level });
 const reqScience = (scienceId: ScienceId, level: number): BuildingRequirement => ({ kind: 'science-level', scienceId, level });
@@ -192,55 +158,50 @@ const reqScience = (scienceId: ScienceId, level: number): BuildingRequirement =>
 const definition = (
   zone: BuildingZone,
   assetRole: BuildingRole,
-  name: string,
-  purpose: string,
-  maxLevel: number,
   requirements: readonly BuildingRequirement[] = [],
-  effect?: BuildingEffect,
-  prototypeBalance = zone !== 'resource',
-): BuildingDefinition => ({
-  zone,
-  assetRole,
-  faction: 'aegis',
-  name,
-  purpose,
-  art: BUILDING_ART[assetRole],
-  maxLevel,
-  prototypeCost: { ...(zone === 'resource' ? EXISTING_RESOURCE_PROTOTYPE_COST : NEW_ZONE_PROTOTYPE_BALANCE.cost) },
-  prototypeTimeMs: zone === 'resource' ? EXISTING_RESOURCE_PROTOTYPE_TIME_MS : NEW_ZONE_PROTOTYPE_BALANCE.timeMs,
-  prototypeBalance,
-  requirements,
-  ...(effect ? { effect } : {}),
-});
+  faction: BuildingFaction = 'aegis',
+): BuildingDefinition => {
+  const presentation = getBuildingPresentation(assetRole, faction);
+  const firstTransition = getBuildingBalanceRow(assetRole, 1);
+  return {
+    ...presentation,
+    zone,
+    prototypeCost: firstTransition?.cost ?? { metal: 0, minerals: 0, gas: 0, energy: 0 },
+    prototypeTimeMs: firstTransition?.rawTimeMs ?? 0,
+    prototypeBalance: true,
+    requirements,
+    effect: getBuildingEffect(assetRole, 1),
+  };
+};
 
 export const ASTER_RESOURCE_BUILDINGS: readonly BuildingDefinition[] = [
-  definition('resource', 'metal-production-1', 'Металлическая шахта I', 'Базовая добыча металла.', 30, [], undefined, false),
-  definition('resource', 'metal-production-2', 'Металлическая шахта II', 'Улучшенная добыча металла.', 30, [reqBuilding('metal-production-1', 10)], undefined, false),
-  definition('resource', 'metal-production-3', 'Металлическая шахта III', 'Высшая ступень добычи металла.', 30, [reqBuilding('metal-production-1', 15)], undefined, false),
-  definition('resource', 'mineral-production-1', 'Минеральная шахта I', 'Базовая добыча минералов.', 30, [], undefined, false),
-  definition('resource', 'mineral-production-2', 'Минеральная шахта II', 'Улучшенная добыча минералов.', 30, [], undefined, false),
-  definition('resource', 'gas-production-1', 'Газовая скважина I', 'Базовая добыча газа.', 30, [], undefined, false),
-  definition('resource', 'gas-production-2', 'Газовая скважина II', 'Улучшенная добыча газа.', 30, [], undefined, false),
-  definition('resource', 'basic-energy', 'Солнечная электростанция', 'Базовая генерация энергии.', 30, [], { kind: 'energy', amountPerLevel: 25, label: 'Энергия планеты' }, false),
-  definition('resource', 'advanced-energy', 'Ядерный реактор', 'Продвинутая генерация энергии.', 20, [reqBuilding('basic-energy', 10), reqScience(2, 5), reqScience(1, 5)], undefined, false),
-  definition('resource', 'hangar', 'Ангар', 'Хранение и увеличение доступной вместимости кораблей/юнитов.', 20, [], undefined, false),
+  definition('resource', 'metal-production-1'),
+  definition('resource', 'metal-production-2', [reqBuilding('metal-production-1', 10)]),
+  definition('resource', 'metal-production-3', [reqBuilding('metal-production-1', 15)]),
+  definition('resource', 'mineral-production-1'),
+  definition('resource', 'mineral-production-2'),
+  definition('resource', 'gas-production-1'),
+  definition('resource', 'gas-production-2'),
+  definition('resource', 'basic-energy'),
+  definition('resource', 'advanced-energy', [reqBuilding('basic-energy', 10), reqScience(2, 5), reqScience(1, 5)]),
+  definition('resource', 'hangar'),
 ];
 
 export const ASTER_INDUSTRY_BUILDINGS: readonly BuildingDefinition[] = [
-  definition('industry', 'construction', 'Фабрика', 'Базовое производство и строительство.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
-  definition('industry', 'advanced-factory', 'Промышленный комплекс', 'Продвинутое производство.', ADVANCED_FACTORY_MAX_LEVEL, [reqBuilding('construction', 10)]),
-  definition('industry', 'metal-storage', 'Склад металла', 'Хранение металла.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel, [reqBuilding('metal-production-1', 1)]),
-  definition('industry', 'mineral-storage', 'Склад минералов', 'Хранение минералов.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel, [reqBuilding('mineral-production-1', 1)]),
-  definition('industry', 'gas-storage', 'Газовое хранилище', 'Хранение газа.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel, [reqBuilding('gas-production-1', 1)]),
-  definition('industry', 'recycling', 'Перерабатывающий центр', 'Переработка и утилизация ресурсов/обломков.', RECYCLING_MAX_LEVEL, [reqBuilding('shipyard', 5), reqScience(2, 6)]),
-  definition('industry', 'trade-center', 'Торговый центр', 'Торговля и обмен ресурсами.', TRADE_CENTER_MAX_LEVEL),
+  definition('industry', 'construction'),
+  definition('industry', 'advanced-factory', [reqBuilding('construction', 10)]),
+  definition('industry', 'metal-storage', [reqBuilding('metal-production-1', 1)]),
+  definition('industry', 'mineral-storage', [reqBuilding('mineral-production-1', 1)]),
+  definition('industry', 'gas-storage', [reqBuilding('gas-production-1', 1)]),
+  definition('industry', 'recycling', [reqBuilding('shipyard', 5), reqScience(2, 6)]),
+  definition('industry', 'trade-center'),
 ];
 
 export const ASTER_MILITARY_BUILDINGS: readonly BuildingDefinition[] = [
-  definition('military', 'shipyard', 'Верфь', 'Производство и обслуживание кораблей.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
-  definition('military', 'research', 'Лаборатория', 'Исследования и развитие технологий.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel, [reqBuilding('construction', 1)]),
-  definition('military', 'spaceport', 'Космодром', 'Космическая инфраструктура и операции с флотом.', SPACEPORT_MAX_LEVEL),
-  definition('military', 'planetary-government', 'Палата управления', 'Управленческое и союзное здание планеты.', NEW_ZONE_PROTOTYPE_BALANCE.maxLevel),
+  definition('military', 'shipyard'),
+  definition('military', 'research', [reqBuilding('construction', 1)]),
+  definition('military', 'spaceport'),
+  definition('military', 'planetary-government'),
 ];
 
 export const ASTER_BUILDINGS: readonly BuildingDefinition[] = [
@@ -267,16 +228,18 @@ export function isResourceBuildingRole(value: unknown): value is ResourceBuildin
   return typeof value === 'string' && (RESOURCE_BUILDING_ROLES as readonly string[]).includes(value);
 }
 
-export function getBuildingDefinition(assetRole: BuildingRole): BuildingDefinition {
+export function getBuildingDefinition(assetRole: BuildingRole, faction: BuildingFaction = 'aegis'): BuildingDefinition {
   const item = definitionByRole.get(assetRole);
   if (!item) throw new Error(`Unknown building role: ${assetRole}`);
-  return item;
+  if (faction === 'aegis') return item;
+  return definition(item.zone, assetRole, item.requirements, faction);
 }
 
 export const getResourceBuildingDefinition = getBuildingDefinition;
 
-export function getBuildingsForZone(zone: BuildingZone): readonly BuildingDefinition[] {
-  return ASTER_BUILDINGS_BY_ZONE[zone];
+export function getBuildingsForZone(zone: BuildingZone, faction: BuildingFaction = 'aegis'): readonly BuildingDefinition[] {
+  if (faction === 'aegis') return ASTER_BUILDINGS_BY_ZONE[zone];
+  return ASTER_BUILDINGS_BY_ZONE[zone].map((item) => getBuildingDefinition(item.assetRole, faction));
 }
 
 export function createDefaultBuildingLevels(): BuildingLevels {
@@ -346,19 +309,21 @@ function migrateQueueItem(
   const queuedBefore = queuedRoleCounts[role] ?? 0;
   if ((buildings[role] ?? 0) + queuedBefore >= item.maxLevel) return null;
 
+  const targetLevel = Math.min(item.maxLevel, (buildings[role] ?? 0) + queuedBefore + 1);
+  const balanceRow = getBuildingBalanceRow(role, targetLevel);
+  if (!balanceRow) return null;
+
   const rawStartedAt = isFiniteTimestamp(source.startedAt) ? source.startedAt : null;
   const rawFinishAt = isFiniteTimestamp(source.finishAt) ? source.finishAt : null;
   const duration = rawStartedAt != null && rawFinishAt != null
     ? Math.max(1, rawFinishAt - rawStartedAt)
-    : item.prototypeTimeMs;
+    : Math.max(1, balanceRow.rawTimeMs ?? 1);
   const startedAt = index === 0
     ? (rawStartedAt ?? 0)
     : (previousFinishAt ?? rawStartedAt ?? 0);
   const finishAt = index === 0 && rawFinishAt != null
     ? Math.max(startedAt, rawFinishAt)
     : startedAt + duration;
-  const fallbackTarget = Math.min(item.maxLevel, (buildings[role] ?? 0) + queuedBefore + 1);
-  const targetLevel = toSafeLevel(source.targetLevel, item.maxLevel) || fallbackTarget;
   queuedRoleCounts[role] = queuedBefore + 1;
 
   return {
@@ -369,6 +334,7 @@ function migrateQueueItem(
     startedAt,
     finishAt,
     targetLevel,
+    durationMs: duration,
   };
 }
 
@@ -443,18 +409,24 @@ export function evaluateBuildingBuild(state: BuildingEconomyState, assetRole: Bu
   const queuedLevels = state.queue.filter((queueItem) => queueItem.assetRole === assetRole).length;
   const projectedLevel = Math.min(item.maxLevel, currentLevel + queuedLevels);
   const requirements = evaluateBuildingRequirements(state, assetRole);
+  const nextLevel = projectedLevel < item.maxLevel ? projectedLevel + 1 : null;
+  const balanceRow = nextLevel == null ? null : getBuildingBalanceRow(assetRole, nextLevel);
   const base = {
     currentLevel,
     projectedLevel,
-    nextLevel: projectedLevel < item.maxLevel ? projectedLevel + 1 : null,
+    nextLevel,
     maxLevel: item.maxLevel,
-    cost: { ...item.prototypeCost },
-    timeMs: item.prototypeTimeMs,
+    cost: balanceRow?.cost ? { ...balanceRow.cost } : null,
+    timeMs: balanceRow?.rawTimeMs ?? null,
     requirements,
   };
 
   if (projectedLevel >= item.maxLevel) {
     return { ...base, status: 'max-level', canBuild: false, reason: 'Достигнут максимальный уровень.', missing: {} };
+  }
+
+  if (!balanceRow?.cost || balanceRow.rawTimeMs == null) {
+    return { ...base, status: 'max-level', canBuild: false, reason: 'Строка перехода Balance v1 недоступна.', missing: {} };
   }
 
   const missingRequirements = requirements.filter((requirement) => !requirement.met);
@@ -473,8 +445,8 @@ export function evaluateBuildingBuild(state: BuildingEconomyState, assetRole: Bu
   }
 
   const missing: Partial<Record<ResourceKey, number>> = {};
-  for (const key of Object.keys(item.prototypeCost) as ResourceKey[]) {
-    const deficit = item.prototypeCost[key] - state.resources[key];
+  for (const key of Object.keys(balanceRow.cost) as ResourceKey[]) {
+    const deficit = balanceRow.cost[key] - state.resources[key];
     if (deficit > 0) missing[key] = deficit;
   }
 
@@ -509,15 +481,16 @@ export function startBuildingProject(
   durationMs?: number,
 ): BuildTransition {
   const availability = evaluateBuildingBuild(state, assetRole);
-  if (!availability.canBuild || availability.nextLevel == null) return { ok: false, state, reason: availability.reason };
+  if (!availability.canBuild || availability.nextLevel == null || !availability.cost || availability.timeMs == null) {
+    return { ok: false, state, reason: availability.reason };
+  }
 
-  const item = getBuildingDefinition(assetRole);
   const effectiveDurationMs = durationMs == null
-    ? item.prototypeTimeMs
+    ? availability.timeMs
     : Math.max(1, Math.round(durationMs));
   const resources: ResourceWallet = { ...state.resources };
-  for (const key of Object.keys(item.prototypeCost) as ResourceKey[]) {
-    resources[key] -= item.prototypeCost[key];
+  for (const key of Object.keys(availability.cost) as ResourceKey[]) {
+    resources[key] -= availability.cost[key];
   }
 
   const previous = state.queue[state.queue.length - 1] ?? null;
@@ -530,6 +503,7 @@ export function startBuildingProject(
     startedAt,
     finishAt: startedAt + effectiveDurationMs,
     targetLevel: availability.nextLevel,
+    durationMs: effectiveDurationMs,
   };
 
   return {
@@ -557,18 +531,12 @@ export function completeBuildingProject(state: BuildingEconomyState, now: number
 
   const item = getBuildingDefinition(active.assetRole);
   const currentLevel = state.buildings[active.assetRole] ?? 0;
-  const nextLevel = Math.min(item.maxLevel, Math.max(currentLevel + 1, active.targetLevel));
-  const resources = { ...state.resources };
-
-  if (nextLevel > currentLevel && item.effect?.kind === 'energy') {
-    resources.energy += item.effect.amountPerLevel * (nextLevel - currentLevel);
-  }
+  const nextLevel = Math.min(item.maxLevel, currentLevel + 1);
 
   return {
     completedRole: active.assetRole,
     state: {
       ...state,
-      resources,
       buildings: {
         ...state.buildings,
         [active.assetRole]: nextLevel,
@@ -581,8 +549,9 @@ export function completeBuildingProject(state: BuildingEconomyState, now: number
 export const completeResourceBuildingProject = completeBuildingProject;
 
 export function getBuildingEffectText(item: BuildingDefinition, currentLevel: number): string {
-  if (!item.effect) return 'Эффект будет определён после утверждения баланса.';
-  const current = item.effect.amountPerLevel * currentLevel;
-  const next = item.effect.amountPerLevel * Math.min(item.maxLevel, currentLevel + 1);
-  return `${item.effect.label}: +${current} → +${next}`;
+  const current = formatBalanceEffect(getBuildingEffect(item.assetRole, currentLevel));
+  const nextLevel = Math.min(item.maxLevel, Math.max(0, currentLevel + 1));
+  if (nextLevel === currentLevel) return `Текущий эффект: ${current}`;
+  const next = formatBalanceEffect(getBuildingEffect(item.assetRole, nextLevel));
+  return `Текущий: ${current} · следующий: ${next}`;
 }
