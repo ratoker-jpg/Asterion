@@ -37,6 +37,7 @@ import './universe-interaction.css';
 import './asterion-header.css';
 import './asterion-header-faction-skins.css';
 import './asterion-header-reference-lock.css';
+import './asterion-header-reference-polish.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
 
