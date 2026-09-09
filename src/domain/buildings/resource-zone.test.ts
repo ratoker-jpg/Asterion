@@ -263,6 +263,17 @@ test('one shared three-slot FIFO queue accepts projects from all three zones and
   assert.equal(fourth.state.resources.metal, state.resources.metal);
 });
 
+test('building availability and queue duration use the official factory coefficient', () => {
+  const state = createState({ buildings: { ...createDefaultBuildingLevels(), construction: 1 } });
+  const availability = evaluateBuildingBuild(state, 'metal-production-1');
+  assert.equal(availability.rawTimeMs, 44_000);
+  assert.equal(availability.timeMs, Math.round((availability.rawTimeMs ?? 0) * 0.98));
+
+  const transition = startBuildingProject(state, 'metal-production-1', 'helion-01', 10_000);
+  assert.equal(transition.ok, true);
+  assert.equal(transition.state.queue[0].durationMs, availability.timeMs);
+});
+
 test('industrial and military completion raise only their queued building levels', () => {
   let industry = startBuildingProject(createState(), 'construction', 'helion-01', 1_000).state;
   industry = completeBuildingProject(industry, industry.queue[0].finishAt).state;

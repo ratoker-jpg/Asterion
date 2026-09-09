@@ -441,10 +441,10 @@ button.resource-zone-queue-card:hover,button.resource-zone-queue-card:focus-visi
 .resource-building-dialog-copy>small:first-child{font-size:7px;letter-spacing:2px;color:#60cae1}
 .resource-building-dialog-copy h2{margin:8px 0 7px;padding-right:45px;font-size:27px;letter-spacing:.6px;color:#effcff}
 .resource-building-dialog-copy>p{margin:0;color:#7ea2ab;font-size:10px;line-height:1.6}
-.resource-building-levels{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px}
-.resource-building-levels>div,.resource-building-cost-grid>div{padding:9px;border:1px solid rgba(63,181,211,.16);background:rgba(3,25,37,.72)}
-.resource-building-levels small,.resource-building-cost-grid small{display:block;font-size:6px;color:#678d98}
-.resource-building-levels strong,.resource-building-cost-grid strong{display:block;margin-top:6px;font-size:14px;color:#e8fbff}
+.resource-building-levels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:16px}
+.resource-building-levels>div,.resource-building-cost-grid>div{padding:10px;border:1px solid rgba(63,181,211,.16);background:rgba(3,25,37,.72)}
+.resource-building-levels small,.resource-building-cost-grid small{display:block;font-size:8px;line-height:1.25;color:#678d98}
+.resource-building-levels strong,.resource-building-cost-grid strong{display:block;margin-top:6px;font-size:18px;color:#e8fbff}
 .resource-building-requirements{margin-top:10px;padding:9px 10px;border:1px solid rgba(67,184,211,.16);background:rgba(3,25,37,.55)}
 .resource-building-requirements>small{display:block;margin-bottom:6px;font-size:6px;letter-spacing:1px;color:#6ba9b8}
 .resource-building-requirements>div{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:7px;border-top:1px solid rgba(67,184,211,.08)}
@@ -453,15 +453,32 @@ button.resource-zone-queue-card:hover,button.resource-zone-queue-card:focus-visi
 .resource-building-requirements span{white-space:nowrap;color:#759ba5}
 .resource-building-requirements .met strong,.resource-building-requirements .met span{color:#69d8ad}
 .resource-building-requirements .missing strong,.resource-building-requirements .missing span{color:#ef9d8d}
-.resource-building-effect{margin-top:10px;padding:9px 10px;border-left:2px solid #43d8f8;background:rgba(4,38,51,.58)}
-.resource-building-effect small{display:block;font-size:6px;letter-spacing:1px;color:#5fa7b7}
-.resource-building-effect strong{display:block;margin-top:5px;font-size:9px;color:#cdeff6}
+.resource-building-effect{margin-top:10px;padding:11px 12px;border-left:2px solid #43d8f8;background:rgba(4,38,51,.58)}
+.resource-building-effect-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.resource-building-effect-heading small{display:block;font-size:8px;letter-spacing:1.1px;color:#5fa7b7}
+.resource-building-effect-heading span{font-size:7px;letter-spacing:1px;color:#7ab7c4}
+.resource-building-effect-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}
+.resource-building-effect-card{min-width:0;padding:9px 10px;border:1px solid rgba(63,181,211,.18);background:rgba(2,22,34,.72)}
+.resource-building-effect-card.next{border-color:rgba(240,182,78,.38);background:rgba(49,35,17,.34)}
+.resource-building-effect-card small{display:block;font-size:8px;letter-spacing:.8px;color:#6da1ad}
+.resource-building-effect-card.next small{color:#d1a75d}
+.resource-building-effect-card strong{display:block;margin-top:6px;font-size:12px;line-height:1.35;color:#e2faff}
+.resource-building-effect-card>span{display:block;margin-top:6px;font-size:8px;line-height:1.35;color:#789da8}
+.resource-building-effect-card.next>span{color:#b89a61}
 .resource-building-costs{margin-top:11px}
-.resource-building-cost-title{display:flex;align-items:center;justify-content:space-between;font-size:7px;letter-spacing:1px;color:#70a3af}
-.resource-building-cost-title b{color:#d6f5fb}
+.resource-building-cost-title{display:flex;align-items:center;justify-content:space-between;font-size:8px;letter-spacing:1px;color:#70a3af}
+.resource-building-cost-title b{color:#d6f5fb;font-size:7px;letter-spacing:.6px;white-space:nowrap}
+.resource-building-cost-time{margin-top:5px;color:#d1a75d;font-size:7px;letter-spacing:1px;text-align:right}
 .resource-building-cost-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:7px}
+.resource-building-cost-grid>div{display:grid;grid-template-columns:26px minmax(0,1fr);align-items:center;gap:8px;min-width:0}
+.resource-building-cost-icon{width:24px;height:24px;display:grid;place-items:center;color:#55e6ff}
+.resource-building-cost-icon svg{width:22px;height:22px}
+.resource-building-cost-icon--minerals{color:#a6adff}
+.resource-building-cost-icon--gas{color:#4df0a7}
+.resource-building-cost-icon--energy{color:#ffd34f}
+.resource-building-cost-copy{min-width:0}
 .resource-building-cost-grid>div.missing{border-color:rgba(238,100,91,.54);background:rgba(70,20,22,.35)}
-.resource-building-cost-grid em{display:block;margin-top:4px;font-size:6px;font-style:normal;color:#f08076}
+.resource-building-cost-grid em{display:block;margin-top:4px;font-size:7px;font-style:normal;color:#f08076}
 .resource-building-availability{margin-top:10px;padding:9px 11px;border:1px solid rgba(76,215,245,.18);background:rgba(4,33,45,.55)}
 .resource-building-availability strong{display:block;font-size:7px;letter-spacing:1px;color:#63e3ff}
 .resource-building-availability span{display:block;margin-top:5px;font-size:7px;color:#789da6;line-height:1.35}

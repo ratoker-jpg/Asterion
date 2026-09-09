@@ -357,10 +357,14 @@ async function verifyResourceZoneFlow(win, directory) {
       const dialog=document.querySelector('.resource-building-dialog');
       const button=dialog?.querySelector('[data-qa-build-button]');
       const requirements=dialog?.querySelector('[data-qa-requirements]')?.textContent?.replace(/\s+/g,' ').trim()??'';
-      return {title:dialog?.querySelector('h2')?.textContent?.trim()??'',status:dialog?.querySelector('[data-qa-build-status]')?.getAttribute('data-qa-build-status')??'',disabled:Boolean(button?.disabled),requirements};
+      const effectCurrent=dialog?.querySelector('[data-qa-building-effect-current]')?.textContent?.replace(/\s+/g,' ').trim()??'';
+      const effectNext=dialog?.querySelector('[data-qa-building-effect-next]')?.textContent?.replace(/\s+/g,' ').trim()??'';
+      const costIcons=dialog?.querySelectorAll('[data-qa-building-cost-icon]').length??0;
+      return {title:dialog?.querySelector('h2')?.textContent?.trim()??'',status:dialog?.querySelector('[data-qa-build-status]')?.getAttribute('data-qa-build-status')??'',disabled:Boolean(button?.disabled),requirements,effectCurrent,effectNext,costIcons};
     })()`);
     if(snapshot.title!==RESOURCE_NAMES[role] || snapshot.status!==INITIAL_STATUS[role]) throw new Error(`Unexpected initial dialog state for ${role}: ${JSON.stringify(snapshot)}`);
     if((snapshot.status==='available' && snapshot.disabled)||(snapshot.status!=='available' && !snapshot.disabled)) throw new Error(`Unexpected build button state for ${role}: ${JSON.stringify(snapshot)}`);
+    if(role==='metal-production-1' && (!snapshot.effectCurrent.includes('ТЕКУЩИЙ УРОВЕНЬ') || !snapshot.effectNext.includes('СЛЕДУЮЩИЙ УРОВЕНЬ') || snapshot.costIcons!==4)) throw new Error(`Building upgrade comparison UI contract failed: ${JSON.stringify(snapshot)}`);
     dialogSnapshots.push({role,...snapshot});
     if(role==='metal-production-1') await capture(win,directory,'resource-zone-selected');
     if(role==='metal-production-2'){

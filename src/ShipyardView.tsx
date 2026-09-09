@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
 import type { ShipId } from './domain/combat/ids.ts';
+import {
+  calculateUnitProductionDurationMs,
+  formatClockDurationMs,
+  getUnitProductionTimeFactor,
+  parseClockDurationMs,
+} from './domain/buildings/balance-v1.ts';
 import { getRuntimeSaveKey } from './domain/runtime/mode.ts';
 import { createCanonicalStartingFleet, getFleetSummary, migrateFleetState, resolveSavedFleetState } from './domain/fleet/runtime.ts';
 
@@ -41,6 +47,7 @@ type ShipyardBudget = {
   population: number;
   populationMax: number;
   shipyardLevel: number;
+  advancedFactoryLevel: number;
   hangarLevel: number;
   fleet: ReturnType<typeof migrateFleetState>;
 };
@@ -84,7 +91,7 @@ const formatNumber = (value: number) => new Intl.NumberFormat('ru-RU').format(va
 
 function readBudget(): ShipyardBudget {
   const fallback: ShipyardBudget = {
-    metal: 15_880, minerals: 12_712, gas: 6_421, population: 58, populationMax: 70, shipyardLevel: 0, hangarLevel: 1,
+    metal: 15_880, minerals: 12_712, gas: 6_421, population: 58, populationMax: 70, shipyardLevel: 0, advancedFactoryLevel: 0, hangarLevel: 1,
     fleet: createCanonicalStartingFleet(),
   };
 
@@ -100,6 +107,7 @@ function readBudget(): ShipyardBudget {
       population: getFleetSummary(resolveSavedFleetState(homeworld?.fleet), Number(homeworld?.buildings?.hangar ?? 0)).population,
       populationMax: getFleetSummary(resolveSavedFleetState(homeworld?.fleet), Number(homeworld?.buildings?.hangar ?? 0)).capacity,
       shipyardLevel: typeof homeworld?.buildings?.shipyard === 'number' ? homeworld.buildings.shipyard : fallback.shipyardLevel,
+      advancedFactoryLevel: typeof homeworld?.buildings?.['advanced-factory'] === 'number' ? homeworld.buildings['advanced-factory'] : fallback.advancedFactoryLevel,
       hangarLevel: typeof homeworld?.buildings?.hangar === 'number' ? homeworld.buildings.hangar : fallback.hangarLevel,
       fleet: resolveSavedFleetState(homeworld?.fleet),
     };
@@ -169,6 +177,7 @@ function ShipCard({
   quantity,
   budget,
   shipyardLevel,
+  advancedFactoryLevel,
   onQuantity,
   onBuild,
 }: {
@@ -176,12 +185,17 @@ function ShipCard({
   quantity: number;
   budget: ShipyardBudget;
   shipyardLevel: number;
+  advancedFactoryLevel: number;
   onQuantity: (ship: ShipDefinition, quantity: number) => void;
   onBuild: (ship: ShipDefinition, quantity: number) => void;
 }) {
   const unlocked = ship.requiredShipyardLevel <= shipyardLevel;
   const max = unlocked ? calculateMax(ship, budget) : 0;
   const stats = shipCombatStats[ship.id];
+  const rawTimeMs = parseClockDurationMs(ship.time) ?? 1;
+  const effectiveTimeMs = calculateUnitProductionDurationMs(rawTimeMs, shipyardLevel, advancedFactoryLevel);
+  const unitTimeFactor = getUnitProductionTimeFactor(shipyardLevel, advancedFactoryLevel);
+  const hasUnitTimeBonus = unitTimeFactor < 1;
 
   return (
     <article className={`shipyard-card-v1 ${unlocked ? '' : 'locked'}`}>
@@ -200,7 +214,12 @@ function ShipCard({
             <img src={ship.art} alt={ship.name} draggable={false} />
             <ShipStatsTooltip ship={ship} stats={stats} />
           </div>
-          <div className="shipyard-time-v1"><small>ВРЕМЯ ЗА ЕДИНИЦУ</small><b>{ship.time}</b></div>
+          <div className="shipyard-time-v1" data-qa-unit-time={ship.id}>
+            <small>ВРЕМЯ ЗА ЕДИНИЦУ</small>
+            <b data-qa-unit-time-effective>{formatClockDurationMs(effectiveTimeMs)}</b>
+            <span data-qa-unit-time-raw>RAW {ship.time}</span>
+            {hasUnitTimeBonus ? <em data-qa-unit-time-bonus>ВЕРФЬ + ПРОМЫШЛЕННЫЙ КОМПЛЕКС · −{Math.round((1 - unitTimeFactor) * 100)}%</em> : null}
+          </div>
         </div>
 
         <div className="shipyard-card-data-v1">
@@ -302,6 +321,7 @@ export function ShipyardView({ planetName, coords, onBack }: { planetName: strin
             quantity={quantities[ship.id] ?? 0}
             budget={budget}
             shipyardLevel={budget.shipyardLevel}
+            advancedFactoryLevel={budget.advancedFactoryLevel}
             onQuantity={setQuantity}
             onBuild={prepareBuild}
           />

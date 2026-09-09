@@ -1397,7 +1397,7 @@ export function App() {
               <Resource kind="mineral" label="МИНЕРАЛЫ" value={state.minerals} capacity={storageCapacities.minerals} hourlyGain={resourceIncomePerHour.minerals} />
               <Resource kind="gas" label="ГАЗ" value={state.gas} capacity={storageCapacities.gas} hourlyGain={resourceIncomePerHour.gas} />
               <Resource kind="energy" label="ЭНЕРГИЯ" value={currentPlanetState.energy} hourlyGain={energyIncomePerHour} description="Энергия/ч — вычисляемый доход; строительство энерго-зданий отдельно меняет запас энергии." />
-              <Resource kind="population" label="НАСЕЛЕНИЕ" value={fleetSummary.population} capacity={fleetSummary.capacity} showCapacity />
+              <Resource kind="population" label="НАСЕЛЕНИЕ" value={fleetSummary.population} capacity={fleetSummary.capacity} />
             </div>
             <nav className="primary-navigation" aria-label="Основная навигация">
               {primaryTabs.map(({ id, label, icon }) => (
@@ -1525,6 +1525,7 @@ export function App() {
               planetCoords={currentPlanet.coords}
               resources={resourceWallet}
               resourceIncomePerHour={resourceIncomePerHour}
+              productionBotAssignment={currentPlanetState.productionBots}
               buildings={currentPlanetState.buildings}
               queue={currentQueue}
               scienceLevels={state.science.levels}

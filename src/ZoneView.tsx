@@ -5,9 +5,11 @@ import { getZoneScenePlacement } from './zone-scene.ts';
 import {
   BUILDING_QUEUE_CAPACITY,
   evaluateBuildingBuild,
+  formatBalanceEffect,
   getBuildingDefinition,
-  getBuildingEffectText,
+  getBuildingEffect,
   getBuildingsForZone,
+  getConstructionTimeFactor,
   type BuildingDefinition,
   type BuildingEconomyState,
   type BuildingLevels,
@@ -17,7 +19,7 @@ import {
   type ResourceWallet,
   type ScienceLevels,
 } from './domain/buildings/resource-zone.ts';
-import type { ProductionResourceIncome } from './domain/buildings/production-bots.ts';
+import { getProductionBotBonusPercent, type BotAssignment, type ProductionResourceIncome } from './domain/buildings/production-bots.ts';
 
 export const ZONE_VIEW_META: Readonly<Record<BuildingZone, {
   title: string;
@@ -61,6 +63,22 @@ function formatDuration(ms: number) {
   return `${String(minutes).padStart(2, '0')}:${String(rest).padStart(2, '0')}`;
 }
 
+function playerEffectForLevel(role: BuildingRole, level: number, productionBots: BotAssignment) {
+  const effect = getBuildingEffect(role, level);
+  if (effect.kind !== 'resource-income') {
+    return { primary: formatBalanceEffect(effect), secondary: null };
+  }
+
+  const bonusPercent = getProductionBotBonusPercent(productionBots, effect.resource);
+  const boostedEffect = { ...effect, amountPerHour: effect.amountPerHour * (1 + bonusPercent / 100) };
+  return {
+    primary: formatBalanceEffect(boostedEffect),
+    secondary: bonusPercent > 0
+      ? `База ${formatBalanceEffect(effect)} · production bots +${bonusPercent}%`
+      : 'Бонус production bots не применён',
+  };
+}
+
 function stateFor(
   economy: BuildingEconomyState,
   role: BuildingRole,
@@ -85,7 +103,7 @@ function selectorStatusText(className: string, level: number) {
   return level > 0 ? 'Доступно к улучшению' : 'Доступно';
 }
 
-function ResourceIncomeIcon({ kind }: { kind: 'metal' | 'mineral' | 'gas' }) {
+function ResourceIncomeIcon({ kind }: { kind: 'metal' | 'mineral' | 'gas' | 'energy' }) {
   const common = {
     fill: 'none',
     stroke: 'currentColor',
@@ -99,6 +117,9 @@ function ResourceIncomeIcon({ kind }: { kind: 'metal' | 'mineral' | 'gas' }) {
   }
   if (kind === 'mineral') {
     return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m12 2 7 7-7 13L5 9l7-7Z"/><path {...common} d="M5 9h14M12 2v20"/></svg>;
+  }
+  if (kind === 'energy') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m13 2-8 12h6l-1 8 8-12h-6l1-8Z"/></svg>;
   }
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M12 3c4 4.7 6 7.6 6 11a6 6 0 1 1-12 0c0-3.4 2-6.3 6-11Z"/><circle {...common} cx="10" cy="13" r="1.8"/><circle {...common} cx="14.5" cy="15.5" r="1.2"/></svg>;
 }
@@ -119,16 +140,13 @@ function EnterIcon() {
   );
 }
 
-function playerEffectText(item: BuildingDefinition, currentLevel: number) {
-  return getBuildingEffectText(item, currentLevel);
-}
-
 export type ZoneViewProps = {
   zone: BuildingZone;
   planetName: string;
   planetCoords: string;
   resources: ResourceWallet;
   resourceIncomePerHour: ProductionResourceIncome;
+  productionBotAssignment: BotAssignment;
   buildings: BuildingLevels;
   queue: BuildingQueueItem[];
   scienceLevels: ScienceLevels;
@@ -145,6 +163,7 @@ export function ZoneView({
   planetCoords,
   resources,
   resourceIncomePerHour,
+  productionBotAssignment,
   buildings,
   queue,
   scienceLevels,
@@ -167,6 +186,14 @@ export function ZoneView({
   const canEnterSelected = selectedRole
     ? canEnterBuildingInterior(selectedRole, buildings[selectedRole])
     : false;
+  const constructionFactor = getConstructionTimeFactor(buildings.construction);
+  const constructionBonusPercent = Math.round((1 - constructionFactor) * 100);
+  const currentEffect = selectedRole && availability
+    ? playerEffectForLevel(selectedRole, availability.currentLevel, productionBotAssignment)
+    : null;
+  const nextEffect = selectedRole && availability?.nextLevel != null
+    ? playerEffectForLevel(selectedRole, availability.nextLevel, productionBotAssignment)
+    : null;
 
   useEffect(() => {
     if (!selectedRole) return;
@@ -393,19 +420,46 @@ export function ZoneView({
                 </div>
               ) : null}
 
-              <div className="resource-building-effect">
-                <small>ЭФФЕКТ</small>
-                <strong>{playerEffectText(selected, availability.currentLevel)}</strong>
+              <div className="resource-building-effect" data-qa-building-effect>
+                <div className="resource-building-effect-heading">
+                  <small>ЭФФЕКТ УЛУЧШЕНИЯ</small>
+                  <span>СРАВНЕНИЕ УРОВНЕЙ</span>
+                </div>
+                <div className="resource-building-effect-grid">
+                  <div className="resource-building-effect-card current" data-qa-building-effect-current>
+                    <small>ТЕКУЩИЙ УРОВЕНЬ · {availability.currentLevel}</small>
+                    <strong>{currentEffect?.primary}</strong>
+                    {currentEffect?.secondary ? <span>{currentEffect.secondary}</span> : null}
+                  </div>
+                  {availability.nextLevel != null ? (
+                    <div className="resource-building-effect-card next" data-qa-building-effect-next>
+                      <small>СЛЕДУЮЩИЙ УРОВЕНЬ · {availability.nextLevel}</small>
+                      <strong>{nextEffect?.primary}</strong>
+                      {nextEffect?.secondary ? <span>{nextEffect.secondary}</span> : null}
+                    </div>
+                  ) : null}
+                </div>
               </div>
 
               <div className="resource-building-costs">
-                <div className="resource-building-cost-title"><span>СТОИМОСТЬ ПЕРЕХОДА В УР. {availability.nextLevel ?? availability.maxLevel}</span><b>{availability.timeMs == null ? '—' : formatDuration(availability.timeMs)} · RAW</b></div>
+                <div className="resource-building-cost-title">
+                  <span>СТОИМОСТЬ ПЕРЕХОДА В УР. {availability.nextLevel ?? availability.maxLevel}</span>
+                  <b>{availability.rawTimeMs == null ? '—' : `RAW ${formatDuration(availability.rawTimeMs)}`} · ФАКТ {availability.timeMs == null ? '—' : formatDuration(availability.timeMs)}</b>
+                </div>
+                <div className="resource-building-cost-time" data-qa-building-time-effective>
+                  {constructionBonusPercent > 0 ? `ФАБРИКА УР. ${buildings.construction} · −${constructionBonusPercent}% ОТ RAW` : 'БЕЗ БОНУСА ФАБРИКИ'}
+                </div>
                 <div className="resource-building-cost-grid">
                   {(Object.keys(resourceLabels) as Array<keyof typeof resourceLabels>).map((key) => (
-                    <div key={key} className={availability.missing[key] ? 'missing' : ''}>
-                      <small>{key === 'energy' ? 'Энергия строительства' : resourceLabels[key]}</small>
-                      <strong>{availability.cost ? formatNumber(availability.cost[key]) : '—'}</strong>
-                      {availability.missing[key] ? <em>не хватает {formatNumber(availability.missing[key] ?? 0)}</em> : null}
+                    <div key={key} className={availability.missing[key] ? 'missing' : ''} data-qa-building-cost={key}>
+                      <span className={`resource-building-cost-icon resource-building-cost-icon--${key}`} data-qa-building-cost-icon>
+                        <ResourceIncomeIcon kind={key === 'minerals' ? 'mineral' : key} />
+                      </span>
+                      <span className="resource-building-cost-copy">
+                        <small>{key === 'energy' ? 'Энергия строительства' : resourceLabels[key]}</small>
+                        <strong>{availability.cost ? formatNumber(availability.cost[key]) : '—'}</strong>
+                        {availability.missing[key] ? <em>не хватает {formatNumber(availability.missing[key] ?? 0)}</em> : null}
+                      </span>
                     </div>
                   ))}
                 </div>

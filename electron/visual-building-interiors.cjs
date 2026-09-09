@@ -146,6 +146,20 @@ async function verifyMilitaryDeepLinks(win, directory) {
   await waitFor(win, `document.querySelector('.primary-navigation button.active span')?.textContent?.trim() === 'Флоты'`);
   await waitFor(win, `document.querySelector('.fleet-main-v1--shipyard')`);
   await waitFor(win, `document.querySelector('[data-qa-building-interior-back]')`);
+  const unitTime = await win.webContents.executeJavaScript(`(() => {
+    const cards = Array.from(document.querySelectorAll('[data-qa-unit-time]'));
+    const card = document.querySelector('[data-qa-unit-time="transporter"]') ?? cards[0];
+    return card ? {
+      id: card.getAttribute('data-qa-unit-time') ?? '',
+      effective: card.querySelector('[data-qa-unit-time-effective]')?.textContent?.trim() ?? '',
+      raw: card.querySelector('[data-qa-unit-time-raw]')?.textContent?.trim() ?? '',
+      bonus: card.querySelector('[data-qa-unit-time-bonus]')?.textContent?.trim() ?? '',
+      cardCount: cards.length,
+    } : { cardCount: cards.length };
+  })()`);
+  if (!unitTime?.effective || unitTime.raw !== 'RAW 00:10:00' || !unitTime.bonus.includes('−15%')) {
+    throw new Error(`Official unit production coefficient is not visible in the shipyard: ${JSON.stringify(unitTime)}`);
+  }
   await capture(win, directory, 'building-interior-fleet-from-shipyard');
   await pressEscape(win);
   await assertReturned(win, 'military', 'shipyard');

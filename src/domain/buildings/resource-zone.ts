@@ -10,6 +10,8 @@ import {
   getBuildingMaxLevel,
   getBuildingPresentation,
   formatBalanceEffect,
+  getConstructionTimeFactor,
+  getShipyardTimeFactor,
   getBuildingResourceIncomePerHour,
   getBuildingEnergyIncomePerHour,
   getStorageCapacities,
@@ -34,6 +36,8 @@ export {
   getBuildingMaxLevel,
   getBuildingPresentation,
   formatBalanceEffect,
+  getConstructionTimeFactor,
+  getShipyardTimeFactor,
   getBuildingResourceIncomePerHour,
   getBuildingEnergyIncomePerHour,
   getStorageCapacities,
@@ -146,6 +150,7 @@ export type BuildAvailability = {
   nextLevel: number | null;
   maxLevel: number;
   cost: ResourceCost | null;
+  rawTimeMs: number | null;
   timeMs: number | null;
   missing: Partial<Record<ResourceKey, number>>;
   requirements: readonly BuildingRequirementState[];
@@ -317,7 +322,7 @@ function migrateQueueItem(
   const rawFinishAt = isFiniteTimestamp(source.finishAt) ? source.finishAt : null;
   const duration = rawStartedAt != null && rawFinishAt != null
     ? Math.max(1, rawFinishAt - rawStartedAt)
-    : Math.max(1, balanceRow.rawTimeMs ?? 1);
+    : Math.max(1, Math.round((balanceRow.rawTimeMs ?? 1) * getConstructionTimeFactor(buildings.construction ?? 0)));
   const startedAt = index === 0
     ? (rawStartedAt ?? 0)
     : (previousFinishAt ?? rawStartedAt ?? 0);
@@ -411,13 +416,18 @@ export function evaluateBuildingBuild(state: BuildingEconomyState, assetRole: Bu
   const requirements = evaluateBuildingRequirements(state, assetRole);
   const nextLevel = projectedLevel < item.maxLevel ? projectedLevel + 1 : null;
   const balanceRow = nextLevel == null ? null : getBuildingBalanceRow(assetRole, nextLevel);
+  const rawTimeMs = balanceRow?.rawTimeMs ?? null;
+  const timeMs = rawTimeMs == null
+    ? null
+    : Math.max(1, Math.round(rawTimeMs * getConstructionTimeFactor(state.buildings.construction ?? 0)));
   const base = {
     currentLevel,
     projectedLevel,
     nextLevel,
     maxLevel: item.maxLevel,
     cost: balanceRow?.cost ? { ...balanceRow.cost } : null,
-    timeMs: balanceRow?.rawTimeMs ?? null,
+    rawTimeMs,
+    timeMs,
     requirements,
   };
 

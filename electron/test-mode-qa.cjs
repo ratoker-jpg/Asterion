@@ -166,6 +166,26 @@ async function readQaState(win) {
       fleetPageLong: document.documentElement.classList.contains('asterion-long-page'),
       populationChips: Array.from(document.querySelectorAll('.header-resource-rail .resource-chip--population'))
         .map((node) => node.textContent?.replace(/\s+/g, ' ').trim() ?? ''),
+      populationValues: Array.from(document.querySelectorAll('.header-resource-rail .resource-chip--population .resource-chip__text strong'))
+        .map((node) => node.textContent?.replace(/\s+/g, ' ').trim() ?? ''),
+      populationTooltips: Array.from(document.querySelectorAll('.header-resource-rail .resource-chip--population .resource-tooltip'))
+        .map((node) => node.textContent?.replace(/\s+/g, ' ').trim() ?? ''),
+      testSpeedLayout: (() => {
+        const rect = (node) => {
+          if (!node) return null;
+          const box = node.getBoundingClientRect();
+          return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width, height: box.height };
+        };
+        const banner = document.querySelector('[data-qa-test-mode-banner]');
+        const picker = document.querySelector('.test-mode-speed-picker');
+        return {
+          banner: rect(banner),
+          picker: rect(picker),
+          campaign: rect(document.querySelector('.campaign-module')),
+          header: rect(document.querySelector('.asterion-header')),
+          buttons: Array.from(document.querySelectorAll('[data-qa-test-speed]')).map(rect),
+        };
+      })(),
       fleetPopulation: document.querySelector('[data-qa-fleet-population]')?.textContent?.trim() ?? '',
       fleetFlightActions: Array.from(document.querySelectorAll('.fleet-flight-actions-v1 button')).map((node) => ({
         text: node.textContent?.replace(/\s+/g, ' ').trim() ?? '',
@@ -220,6 +240,14 @@ async function runViewport(width, height) {
     if (JSON.stringify(speedButtons) !== JSON.stringify(['1', '10', '15', '100', '200', '300', '500'])) {
       throw new Error(`${label}: Test Mode speed selector mismatch ${JSON.stringify(speedButtons)}`);
     }
+    const speedLayout = initial.testSpeedLayout;
+    const campaignBox = speedLayout?.campaign;
+    if (!speedLayout?.banner || !speedLayout.picker || !campaignBox || speedLayout.picker.width <= 0 || speedLayout.picker.left < campaignBox.left - 1 || speedLayout.picker.right > campaignBox.right + 1) {
+      throw new Error(`${label}: Test Mode speed controls are not laid out inside the campaign card ${JSON.stringify(speedLayout)}`);
+    }
+    if (speedLayout.buttons.length !== 7 || speedLayout.buttons.some((box) => !box || box.width <= 0 || box.left < campaignBox.left - 1 || box.right > campaignBox.right + 1)) {
+      throw new Error(`${label}: Test Mode speed button is clipped ${JSON.stringify(speedLayout)}`);
+    }
     await click(win, '[data-qa-test-speed="500"]');
     await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×500')`);
     await click(win, '[data-qa-test-speed="15"]');
@@ -227,8 +255,8 @@ async function runViewport(width, height) {
     if (!(await win.webContents.executeJavaScript(`document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×15')`))) {
       throw new Error(`${label}: Test Mode speed selection did not persist`);
     }
-    if (initial.populationChips.length !== 1 || !initial.populationChips[0].includes('58 / 120')) {
-      throw new Error(`${label}: population must use the unified fleet entity/capacity display ${JSON.stringify(initial.populationChips)}`);
+    if (initial.populationValues.length !== 1 || initial.populationValues[0] !== '58' || initial.populationTooltips.length !== 1 || !initial.populationTooltips[0].includes('58 / 120')) {
+      throw new Error(`${label}: population header/value tooltip contract failed ${JSON.stringify({ values: initial.populationValues, tooltips: initial.populationTooltips, chips: initial.populationChips })}`);
     }
     const canonicalBuildingLevelOne = new Set(['metal-production-1', 'mineral-production-1', 'gas-production-1', 'basic-energy', 'hangar']);
     const canonicalBuildingsOnly = canonicalBuildingLevelOne.size === Object.values(initial.buildings || {}).filter((level) => level === 1).length

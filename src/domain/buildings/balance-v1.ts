@@ -40,6 +40,7 @@ export type BalanceEffect =
   | { kind: 'hangar-capacity'; bonus: number; total: number; label: string }
   | { kind: 'construction-time-factor'; factorPercent: number; label: string }
   | { kind: 'production-time-factor'; factorPercent: number; label: string }
+  | { kind: 'unit-production-time-factor'; factorPercent: number; label: string }
   | { kind: 'storage-capacity'; resource: ProductionResource; capacity: number; label: string }
   | { kind: 'recycling'; efficiencyPercent: number; debrisPerSecond: number; label: string }
   | { kind: 'module'; label: string };
@@ -68,7 +69,7 @@ const MINERAL_STORAGE = '1500,500,0,1,630000,50000;2250,750,0,1,787000,110040;33
 const GAS_STORAGE = '2000,0,0,1,600000,50000;3000,0,0,2,750000,130040;4500,0,0,2,937000,250080;6750,0,0,2,1172000,430120;10125,0,0,2,1465000,700160;15188,0,0,3,1831000,1105200;22781,0,0,3,2289000,1712740;34172,0,0,4,2861000,2624030;51258,0,0,4,3576000,3990945;76887,0,0,5,4470000,6041298;107641,0,0,5,5588000,9116806;150698,0,0,6,6985000,13422503;210977,0,0,7,8731000,19450461;295368,0,0,8,10914000,27889588;413515,0,0,10,13642000,39704348;537570,0,0,11,17053000,56244997;698841,0,0,13,21316000,77747829;908493,0,0,15,26645000,105701498;1181041,0,0,17,33307000,142041256;null,null,null,null,null,189282930';
 const RECYCLING = '22150,14500,5000,11,10980000,75,7;33225,21750,7500,13,21960000,80,12;49838,32625,11250,15,27450000,85,18;74756,48938,16875,17,34312000,90,25;112134,73406,25313,20,42891000,95,33;168202,110109,37969,23,53613000,100,42;252302,165164,56953,26,67017000,105,52;378454,247746,85430,30,83771000,110,63;567680,371619,128145,34,104713000,115,85;null,null,null,null,null,120,98';
 const TRADE_CENTER = '5000,3500,100,2,1920000,0;7500,5250,150,3,3840000,0;11250,7875,225,3,4800000,0;16875,11813,338,4,6000000,0;25313,17719,506,4,7500000,0;37969,26578,759,7,9375000,0;56953,39867,1139,9,11719000,0;85430,59801,1709,12,14648000,0;128145,89701,2563,15,18311000,0;null,null,null,null,null,0';
-const SHIPYARD = '500,250,100,3,1620000,0;1125,563,225,4,2187000,0;2531,1266,506,5,2952000,0;5695,2848,1139,6,3986000,0;12814,6407,2563,7,5381000,0;28833,14416,5767,9,7264000,0;64873,32437,12975,11,9807000,0;145965,72982,29193,14,13239000,0;328420,164210,65684,18,17872000,0;738946,369473,147789,22,24128000,0;1662628,831314,332526,28,32573000,0;3740914,1870457,748183,35,43973000,0;8417056,4208528,1683411,44,59364000,0;18938376,9469188,3787675,55,80141000,0;null,null,null,null,null,0';
+const SHIPYARD = '500,250,100,3,1620000,95;1125,563,225,4,2187000,90;2531,1266,506,5,2952000,85;5695,2848,1139,6,3986000,80;12814,6407,2563,7,5381000,75;28833,14416,5767,9,7264000,70;64873,32437,12975,11,9807000,65;145965,72982,29193,14,13239000,60;328420,164210,65684,18,17872000,55;738946,369473,147789,22,24128000,50;1662628,831314,332526,28,32573000,45;3740914,1870457,748183,35,43973000,40;8417056,4208528,1683411,44,59364000,35;18938376,9469188,3787675,55,80141000,30;null,null,null,null,null,25';
 const RESEARCH = '200,400,200,3,1020000,0;340,680,340,4,1275000,0;578,1156,578,5,1594000,0;983,1965,983,6,1992000,0;1670,3341,1670,8,2490000,0;2840,5679,2840,10,3113000,0;4828,9655,4828,13,3891000,0;8207,16414,8207,16,4864000,0;13952,27903,13952,20,6080000,0;23718,47435,23718,25,7600000,0;37948,75896,37948,31,9499000,0;60717,121434,60717,38,11874000,0;97147,194294,97147,48,14843000,0;155436,310871,155436,60,18554000,0;248697,497394,248697,75,23192000,0;397915,795830,397915,94,28990000,0;636664,1273328,636664,117,36238000,0;1018662,2037324,1018662,147,45297000,0;1629859,3259719,1629859,183,56621000,0;null,null,null,null,null,0';
 const SPACEPORT = '250,150,300,2,1170000,0;625,375,750,2,1580000,0;1563,938,1875,2,2132000,0;3906,2344,4688,3,2879000,0;9766,5859,11719,4,3886000,0;24414,14648,29297,5,5246000,0;61035,36621,73242,6,7083000,0;152588,91553,183105,7,9561000,0;381470,228882,457764,9,12908000,0;null,null,null,null,null,0';
 const PLANETARY_GOVERNMENT = '2000,1500,650,3,1020000,0;3800,2850,1235,4,1377000,0;7220,5415,2347,5,1859000,0;13718,10289,4458,6,2510000,0;26064,19548,8471,8,3388000,0;49522,37141,16095,10,4574000,0;94092,70569,30580,13,6175000,0;178774,134081,58102,16,8336000,0;339671,254753,110393,20,11253000,0;null,null,null,null,null,0';
@@ -124,6 +125,9 @@ function effectFor(role: BuildingRole, level: number, values: number[]): Balance
   if (role === 'advanced-factory') {
     return { kind: 'production-time-factor', factorPercent: Math.max(0, 100 + value), label: 'Время производства' };
   }
+  if (role === 'shipyard') {
+    return { kind: 'unit-production-time-factor', factorPercent: value, label: 'Время строительства кораблей и обороны' };
+  }
   if (role === 'metal-storage' || role === 'mineral-storage' || role === 'gas-storage') {
     const resource = role === 'metal-storage' ? 'metal' : role === 'mineral-storage' ? 'minerals' : 'gas';
     return { kind: 'storage-capacity', resource, capacity: value, label: `Вместимость ${resource}` };
@@ -132,7 +136,6 @@ function effectFor(role: BuildingRole, level: number, values: number[]): Balance
     return { kind: 'recycling', efficiencyPercent: value, debrisPerSecond: values[6] ?? 0, label: 'Переработка' };
   }
   if (role === 'trade-center') return { kind: 'module', label: 'Торговые сделки: до 3 слотов на уровень' };
-  if (role === 'shipyard') return { kind: 'module', label: 'Производство кораблей через отдельный модуль верфи' };
   if (role === 'research') return { kind: 'module', label: 'Исследования через отдельный модуль лаборатории' };
   if (role === 'spaceport') return { kind: 'module', label: 'Отдельные очереди улучшений кораблей и командиров' };
   return { kind: 'module', label: 'Управленческий модуль планеты' };
@@ -282,9 +285,49 @@ export function getConstructionTimeFactor(level: number): number {
   return effect.kind === 'construction-time-factor' ? effect.factorPercent / 100 : 1;
 }
 
+export function getShipyardTimeFactor(level: number): number {
+  const effect = getBuildingEffect('shipyard', level);
+  return effect.kind === 'unit-production-time-factor' ? effect.factorPercent / 100 : 1;
+}
+
 export function getProductionTimeFactor(level: number): number {
   const effect = getBuildingEffect('advanced-factory', level);
   return effect.kind === 'production-time-factor' ? effect.factorPercent / 100 : 1;
+}
+
+/**
+ * Official shipyard and advanced-factory coefficients apply to the same
+ * production timer. Independent bonuses are applied successively to the raw
+ * duration, so the second coefficient acts on the already reduced time.
+ */
+export function getUnitProductionTimeFactor(shipyardLevel: number, advancedFactoryLevel: number): number {
+  return getShipyardTimeFactor(shipyardLevel) * getProductionTimeFactor(advancedFactoryLevel);
+}
+
+export function calculateUnitProductionDurationMs(
+  rawTimeMs: number,
+  shipyardLevel: number,
+  advancedFactoryLevel: number,
+): number {
+  return Math.max(1, Math.round(Math.max(1, rawTimeMs) * getUnitProductionTimeFactor(shipyardLevel, advancedFactoryLevel)));
+}
+
+export function parseClockDurationMs(value: string): number | null {
+  const match = value.trim().match(/^(\d+):(\d{2}):(\d{2})$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const seconds = Number(match[3]);
+  if (!Number.isFinite(hours) || minutes > 59 || seconds > 59) return null;
+  return ((hours * 60 + minutes) * 60 + seconds) * 1000;
+}
+
+export function formatClockDurationMs(durationMs: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(durationMs / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
 export function getRecyclingBalance(level: number) {
@@ -301,6 +344,7 @@ export function formatBalanceEffect(effect: BalanceEffect): string {
     case 'hangar-capacity': return `${effect.label}: +${effect.bonus.toLocaleString('ru-RU')}; итог ${effect.total.toLocaleString('ru-RU')}`;
     case 'construction-time-factor': return `${effect.label}: ${effect.factorPercent}% от базового времени`;
     case 'production-time-factor': return `${effect.label}: ${effect.factorPercent}% от базового времени`;
+    case 'unit-production-time-factor': return `${effect.label}: ${effect.factorPercent}% от базового времени`;
     case 'storage-capacity': return `${effect.label}: +${effect.capacity.toLocaleString('ru-RU')} к вместимости здания`;
     case 'recycling': return `${effect.label}: возврат ${effect.efficiencyPercent}%; ${effect.debrisPerSecond} обломков/с`;
     case 'module': return effect.label;
