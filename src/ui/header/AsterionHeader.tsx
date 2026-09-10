@@ -5,7 +5,7 @@ import {
   UTILITY_NAVIGATION,
   type AppRoute,
 } from '../navigation.tsx';
-import type { CombatFactionId } from '../../domain/combat/factions.ts';
+import type { PlayerFactionId } from '../../domain/profile/types.ts';
 import type { RuntimeMode, TestTimeScale } from '../../domain/runtime/mode.ts';
 import { HEADER_ZONE_IDS, type HeaderPlanetModel, type HeaderResourceModel, type HeaderZoneId, type HeaderZoneMeta } from './types.ts';
 
@@ -19,7 +19,7 @@ export type HeaderCampaignModel = {
 };
 
 export type AsterionHeaderProps = {
-  factionId: CombatFactionId;
+  factionId: PlayerFactionId;
   currentPlanet: HeaderPlanetModel;
   planets: readonly HeaderPlanetModel[];
   resources: readonly HeaderResourceModel[];

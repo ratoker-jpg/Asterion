@@ -160,10 +160,9 @@ import {
   type TradeWallet,
 } from './domain/buildings/trade.ts';
 import {
-  DEFAULT_COMBAT_FACTION_ID,
-  getCombatFactionName,
-  type CombatFactionId,
-} from './domain/combat/factions.ts';
+  PLAYER_FACTION_LABELS,
+} from './domain/profile/repository.ts';
+import type { PlayerFactionId } from './domain/profile/types.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import planetColonized from '../assets/source/starter/planets/planet_colonized.png';
@@ -294,11 +293,11 @@ type PlanetDefinition = {
   id: PlanetId;
   coords: string;
   status: 'Основная планета';
-  factionId: CombatFactionId;
+  factionId: PlayerFactionId;
 };
 
 const ownedPlanets: PlanetDefinition[] = [
-  { id: 'helion-01', coords: '[1:1:1]', status: 'Основная планета', factionId: DEFAULT_COMBAT_FACTION_ID },
+  { id: 'helion-01', coords: '[1:1:1]', status: 'Основная планета', factionId: CURRENT_PLAYER_FACTION_ID },
 ];
 
 const RUNTIME_MODE: RuntimeMode = ACTIVE_RUNTIME_MODE;
@@ -1416,7 +1415,7 @@ export function App() {
     <div className="viewport">
       <div className="stage stage-shell-v3 stage-shell-v4" style={{ transform: `scale(${scale})`, '--space-bg': `url(${systemBackground})` } as CSSProperties}>
         <AsterionHeader
-          factionId={currentPlanet.factionId}
+          factionId={state.profile.factionId}
           currentPlanet={{
             id: currentPlanet.id,
             name: currentPlanetName,
@@ -1567,7 +1566,7 @@ export function App() {
                   <div className="planet-details-v4">
                     <dl>
                       <div><dt>Статус</dt><dd>★ {currentPlanet.status}</dd></div>
-                      <div><dt>Фракция</dt><dd>{getCombatFactionName(currentPlanet.factionId)}</dd></div>
+                      <div><dt>Фракция</dt><dd>{PLAYER_FACTION_LABELS[state.profile.factionId]}</dd></div>
                       <div><dt>Координаты</dt><dd>{currentPlanet.coords}</dd></div>
                       <div><dt>Население</dt><dd>{fleetSummary.population} / {fleetSummary.capacity}</dd></div>
                       <div><dt>Энергия</dt><dd>{currentPlanetState.energy}</dd></div>

@@ -402,16 +402,14 @@
 }
 .asterion-header__test-mode-banner > strong,
 .asterion-header__test-mode-banner > small{display:none}
-.asterion-header__test-mode-speed-picker,
-.asterion-header__test-mode-speed-picker-v1{
+.asterion-header__test-mode-speed-picker{
   display:inline-flex;
   align-items:center;
   gap:3px;
   text-transform:none;
   letter-spacing:0;
 }
-.asterion-header__test-mode-speed-picker button,
-.asterion-header__test-mode-speed-picker-v1 button{
+.asterion-header__test-mode-speed-picker button{
   min-width:27px;
   min-height:20px;
   height:20px;
@@ -425,10 +423,7 @@
 }
 .asterion-header__test-mode-speed-picker button:hover,
 .asterion-header__test-mode-speed-picker button:focus-visible,
-.asterion-header__test-mode-speed-picker button.active,
-.asterion-header__test-mode-speed-picker-v1 button:hover,
-.asterion-header__test-mode-speed-picker-v1 button:focus-visible,
-.asterion-header__test-mode-speed-picker-v1 button.active{
+.asterion-header__test-mode-speed-picker button.active{
   border-color:#ffd889;
   background:rgba(240,173,56,.3);
   color:#fff1c9;

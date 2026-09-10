@@ -192,7 +192,10 @@ async function main() {
   console.log(JSON.stringify({ ok: true, results }, null, 2));
 }
 
-app.whenReady().then(main).catch((error) => {
-  console.error(error.stack || error);
-  app.exit(1);
-});
+app.whenReady().then(main).then(
+  () => app.quit(),
+  (error) => {
+    console.error(error.stack || error);
+    app.exit(1);
+  },
+);
