@@ -31,7 +31,7 @@ export const APP_ROUTE_LABELS = {
   fleets: 'Флоты',
   operations: 'Операции',
   command: 'Командование',
-  reports: 'Отчёты',
+  reports: 'Сообщения',
   settings: 'Настройки',
   rating: 'Рейтинг',
   science: 'Наука',
@@ -126,4 +126,3 @@ export function useNavigation() {
 export function isUtilityRoute(route: AppRoute): route is 'settings' | 'rating' | 'science' {
   return route === 'settings' || route === 'rating' || route === 'science';
 }
-
