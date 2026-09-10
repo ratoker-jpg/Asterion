@@ -118,8 +118,10 @@ export type ScienceCancellationTransition = {
   state: ScienceState;
   wallet: ScienceWallet;
   canceled: ScienceQueueTask | null;
+  canceledTasks: ScienceQueueTask[];
   refund: ScienceResourceCost | null;
   refundPercent: number | null;
+  refundPercents: number[];
   reason: string | null;
 };
 
@@ -408,18 +410,53 @@ function refundScienceCost(cost: ScienceResourceCost, refundPercent: number): Sc
   ) as ScienceResourceCost;
 }
 
-function rescheduleScienceQueue(queue: readonly ScienceQueueTask[], canceledIndex: number, now: number): ScienceQueueTask[] {
-  const remaining = queue.filter((_, index) => index !== canceledIndex);
+function rescheduleScienceQueue(queue: readonly ScienceQueueTask[], canceledWasActive: boolean, now: number): ScienceQueueTask[] {
+  const remaining = [...queue];
   if (remaining.length === 0) return remaining;
 
-  let cursor = canceledIndex === 0 ? now : remaining[0].finishAt;
+  let cursor = canceledWasActive ? now : remaining[0].finishAt;
   return remaining.map((task, index) => {
-    if (canceledIndex !== 0 && index === 0) return task;
+    if (!canceledWasActive && index === 0) return task;
     const startedAt = cursor;
     const finishAt = startedAt + task.durationMs;
     cursor = finishAt;
     return { ...task, startedAt, finishAt };
   });
+}
+
+function removeDependentScienceTasks(
+  queue: readonly ScienceQueueTask[],
+  canceledIndex: number,
+  levels: ScienceLevels,
+): { remaining: ScienceQueueTask[]; cascaded: ScienceQueueTask[] } {
+  const projectedLevels = { ...levels };
+  const remaining: ScienceQueueTask[] = [];
+  const cascaded: ScienceQueueTask[] = [];
+
+  queue.forEach((task, index) => {
+    if (index < canceledIndex) {
+      remaining.push(task);
+      projectedLevels[task.scienceId] = task.toLevel;
+      return;
+    }
+    if (index === canceledIndex) {
+      cascaded.push(task);
+      return;
+    }
+
+    const science = findScience(task.scienceId);
+    const maxLevel = science ? getScienceMaxLevel(science) : task.toLevel;
+    const projectedLevel = safeLevel(projectedLevels[task.scienceId], maxLevel);
+    if (task.fromLevel !== projectedLevel || task.toLevel !== projectedLevel + 1) {
+      cascaded.push(task);
+      return;
+    }
+
+    remaining.push(task);
+    projectedLevels[task.scienceId] = task.toLevel;
+  });
+
+  return { remaining, cascaded };
 }
 
 function ensureUniqueScienceTaskIds(queue: readonly ScienceQueueTask[]): ScienceQueueTask[] {
@@ -437,7 +474,7 @@ function ensureUniqueScienceTaskIds(queue: readonly ScienceQueueTask[]): Science
   });
 }
 
-/** Atomically reconciles, refunds the saved cost once, and reschedules the FIFO queue. */
+/** Atomically reconciles, refunds the saved costs, drops dependent successors, and reschedules FIFO. */
 export function cancelScienceResearch(
   context: ScienceRuntimeContext,
   taskId: string,
@@ -450,23 +487,35 @@ export function cancelScienceResearch(
   const queueIndex = queue.findIndex((task) => task.id === taskId);
   const task = queueIndex >= 0 ? queue[queueIndex] ?? null : null;
   if (!task) {
-    return { ok: false, state: reconciledState, wallet: context.wallet, canceled: null, refund: null, refundPercent: null, reason: 'Исследование уже завершено или недоступно для отмены.' };
+    return { ok: false, state: reconciledState, wallet: context.wallet, canceled: null, canceledTasks: [], refund: null, refundPercent: null, refundPercents: [], reason: 'Исследование уже завершено или недоступно для отмены.' };
   }
   if (task.refundEligible === false || !hasCompleteScienceCost(task.cost)) {
-    return { ok: false, state: reconciledState, wallet: context.wallet, canceled: null, refund: null, refundPercent: null, reason: 'Невозможно подтвердить сохранённую стоимость старого исследования.' };
+    return { ok: false, state: reconciledState, wallet: context.wallet, canceled: null, canceledTasks: [], refund: null, refundPercent: null, refundPercents: [], reason: 'Невозможно подтвердить сохранённую стоимость старого исследования.' };
   }
 
-  const refundPercent = selectScienceCancelRefundPercent(context.rng);
-  const refund = refundScienceCost(task.cost, refundPercent);
+  const { remaining, cascaded } = removeDependentScienceTasks(queue, queueIndex, reconciledState.levels);
+  const canceledTasks = [task, ...cascaded.filter((candidate) => candidate.id !== task.id)];
+  const refundPercents: number[] = [];
+  const refund = canceledTasks.reduce((total, canceledTask) => {
+    if (canceledTask.refundEligible === false || !hasCompleteScienceCost(canceledTask.cost)) return total;
+    const refundPercent = selectScienceCancelRefundPercent(context.rng);
+    refundPercents.push(refundPercent);
+    const itemRefund = refundScienceCost(canceledTask.cost, refundPercent);
+    return Object.fromEntries(
+      RESOURCE_KEYS.map((key) => [key, total[key] + itemRefund[key]]),
+    ) as ScienceResourceCost;
+  }, { metal: 0, minerals: 0, gas: 0, energy: 0 } as ScienceResourceCost);
   const wallet = { ...context.wallet };
   for (const key of RESOURCE_KEYS) wallet[key] += refund[key];
   return {
     ok: true,
-    state: { ...reconciledState, queue: rescheduleScienceQueue(queue, queueIndex, context.now) },
+    state: { ...reconciledState, queue: rescheduleScienceQueue(remaining, queueIndex === 0, context.now) },
     wallet,
     canceled: task,
+    canceledTasks,
     refund,
-    refundPercent,
+    refundPercent: refundPercents[0] ?? null,
+    refundPercents,
     reason: null,
   };
 }

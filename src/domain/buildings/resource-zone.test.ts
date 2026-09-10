@@ -313,6 +313,36 @@ test('canceling the active slot starts the next slot at the cancellation time', 
   assert.equal(transition.state.queue[0].finishAt, 5_000 + transition.state.queue[0].durationMs);
 });
 
+test('canceling an active building cascades dependent same-building projects and refunds each saved cost', () => {
+  let state = createState();
+  for (let index = 0; index < 3; index += 1) {
+    state = startBuildingProject(state, 'construction', 'helion-01', 1_000 + index).state;
+  }
+  const before = { ...state.resources };
+  const expectedRefund = state.queue.reduce((total, item) => {
+    const cost = item.cost!;
+    return {
+      metal: total.metal + Math.floor(cost.metal * BUILDING_CANCEL_REFUND_PERCENT / 100),
+      minerals: total.minerals + Math.floor(cost.minerals * BUILDING_CANCEL_REFUND_PERCENT / 100),
+      gas: total.gas + Math.floor(cost.gas * BUILDING_CANCEL_REFUND_PERCENT / 100),
+      energy: total.energy + Math.floor(cost.energy * BUILDING_CANCEL_REFUND_PERCENT / 100),
+    };
+  }, { metal: 0, minerals: 0, gas: 0, energy: 0 });
+
+  const transition = cancelBuildingProject(state, state.queue[0].id, 2_000);
+
+  assert.equal(transition.ok, true);
+  assert.deepEqual(transition.canceledItems.map((item) => item.targetLevel), [1, 2, 3]);
+  assert.deepEqual(transition.state.queue, []);
+  assert.deepEqual(transition.refund, expectedRefund);
+  assert.deepEqual(transition.state.resources, {
+    metal: before.metal + expectedRefund.metal,
+    minerals: before.minerals + expectedRefund.minerals,
+    gas: before.gas + expectedRefund.gas,
+    energy: before.energy + expectedRefund.energy,
+  });
+});
+
 test('queue cancellation keeps targeting the original project after an earlier slot shifts the queue', () => {
   let state = createState();
   for (const role of ['gas-production-1', 'construction', 'shipyard'] as const) {

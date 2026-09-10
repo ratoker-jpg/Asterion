@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { flushSync } from 'react-dom';
 import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
@@ -69,7 +68,6 @@ import {
   createScienceRuntimeSnapshot,
   migrateScienceState,
   reconcileScienceState,
-  selectScienceCancelRefundPercent,
   startScienceResearch,
   type ScienceStartRequest,
   type ScienceState,
@@ -651,42 +649,37 @@ export function App() {
       const request = (event as CustomEvent<{ taskId?: string; now?: number }>).detail;
       if (!request?.taskId) return;
       const canceledAt = typeof request.now === 'number' && Number.isFinite(request.now) ? request.now : Date.now();
-      // Roll once per user event. The functional updater may be replayed by
-      // StrictMode, so it receives a stable RNG rather than calling Math.random again.
-      const refundPercent = selectScienceCancelRefundPercent();
-      let transition: ReturnType<typeof cancelScienceResearch> | null = null;
-      flushSync(() => {
-        setState((current) => {
-          const planet = current.planets['helion-01'];
-          const result = cancelScienceResearch({
-            state: current.science,
-            wallet: { metal: current.metal, minerals: current.minerals, gas: current.gas, energy: planet.energy },
-            laboratoryLevel: planet.buildings.research,
-            now: canceledAt,
-            mode: RUNTIME_MODE,
-            testTimeScale,
-            rng: () => refundPercent / 100,
-          }, request.taskId!);
-          transition = result;
-          const nextState: SaveState = {
-            ...current,
-            schemaVersion: SAVE_SCHEMA_VERSION,
-            metal: result.wallet.metal,
-            minerals: result.wallet.minerals,
-            gas: result.wallet.gas,
-            planets: { ...current.planets, 'helion-01': { ...planet, energy: result.wallet.energy } },
-            science: result.state,
-          };
-          const walletChanged = nextState.metal !== current.metal
-            || nextState.minerals !== current.minerals
-            || nextState.gas !== current.gas
-            || nextState.planets['helion-01'].energy !== planet.energy;
-          return result.state === current.science && !walletChanged ? current : nextState;
-        });
-      });
-      const result = transition as ReturnType<typeof cancelScienceResearch> | null;
+      const current = stateRef.current;
+      const planet = current.planets['helion-01'];
+      const result = cancelScienceResearch({
+        state: current.science,
+        wallet: { metal: current.metal, minerals: current.minerals, gas: current.gas, energy: planet.energy },
+        laboratoryLevel: planet.buildings.research,
+        now: canceledAt,
+        mode: RUNTIME_MODE,
+        testTimeScale,
+        rng: Math.random,
+      }, request.taskId);
+      const nextState: SaveState = {
+        ...current,
+        schemaVersion: SAVE_SCHEMA_VERSION,
+        metal: result.wallet.metal,
+        minerals: result.wallet.minerals,
+        gas: result.wallet.gas,
+        planets: { ...current.planets, 'helion-01': { ...planet, energy: result.wallet.energy } },
+        science: result.state,
+      };
+      const walletChanged = nextState.metal !== current.metal
+        || nextState.minerals !== current.minerals
+        || nextState.gas !== current.gas
+        || nextState.planets['helion-01'].energy !== planet.energy;
+      if (result.state !== current.science || walletChanged) {
+        stateRef.current = nextState;
+        setState(nextState);
+      }
+      const cascadedCount = Math.max(0, (result?.canceledTasks.length ?? 0) - 1);
       setNotice(result?.ok
-        ? `Исследование отменено. Возвращено ${result.refundPercent}% сохранённой стоимости.`
+        ? `Исследование отменено.${cascadedCount > 0 ? ` Каскадно отменено ещё ${cascadedCount} зависимых исследований.` : ''} ${cascadedCount > 0 ? 'Для каждого отменённого задания рассчитан отдельный возврат 60–80%.' : `Возвращено ${result.refundPercent}% сохранённой стоимости.`}`
         : result?.reason ?? 'Исследование недоступно для отмены.');
     };
     window.addEventListener(SCIENCE_CANCEL_REQUEST_EVENT, onScienceCancelRequest);
@@ -1241,7 +1234,8 @@ export function App() {
     };
     stateRef.current = nextState;
     setState(nextState);
-    setNotice(`${canceledDefinition?.name ?? 'Проект'} отменён. Возвращено 90% ресурсов.`);
+    const cascadedCount = Math.max(0, transition.canceledItems.length - 1);
+    setNotice(`${canceledDefinition?.name ?? 'Проект'} отменён.${cascadedCount > 0 ? ` Каскадно отменено ещё ${cascadedCount} зависимых проектов.` : ''} Возвращено 90% сохранённых ресурсов.`);
     return true;
   };
 

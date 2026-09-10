@@ -151,7 +151,7 @@ test('queued duration is a snapshot and remaining time equals duration at starte
   assert.notEqual(second.task!.durationMs, first.task!.durationMs);
 });
 
-test('science cancellation refunds a single injected 60–80% roll from saved cost and keeps FIFO order', () => {
+test('science cancellation cascades dependent successors and refunds each saved cost with its own 60–80% roll', () => {
   let current = context(createDefaultScienceState(), 1, 10_000);
   for (const id of ['cancel-1', 'cancel-2', 'cancel-3']) {
     const transition = start(current, 1, id);
@@ -159,17 +159,19 @@ test('science cancellation refunds a single injected 60–80% roll from saved co
     current = { ...current, state: transition.state, wallet: transition.wallet };
   }
   const canceledTask = current.state.queue[1];
-  const canceled = cancelScienceResearch({ ...current, rng: () => 0.5 }, canceledTask.id);
+  const rolls = [0, 0.999999];
+  const canceled = cancelScienceResearch({ ...current, rng: () => rolls.shift() ?? 0 }, canceledTask.id);
   assert.equal(canceled.ok, true);
-  assert.equal(canceled.refundPercent, 70);
+  assert.equal(canceled.refundPercent, 60);
+  assert.deepEqual(canceled.refundPercents, [60, 80]);
+  assert.deepEqual(canceled.canceledTasks.map((task) => task.id), ['cancel-2', 'cancel-3']);
   assert.deepEqual(canceled.refund, {
-    metal: Math.floor(canceledTask.cost.metal * 0.7),
-    minerals: Math.floor(canceledTask.cost.minerals * 0.7),
-    gas: Math.floor(canceledTask.cost.gas * 0.7),
-    energy: Math.floor(canceledTask.cost.energy * 0.7),
+    metal: Math.floor(canceledTask.cost.metal * 0.6) + Math.floor(current.state.queue[2].cost.metal * 0.8),
+    minerals: Math.floor(canceledTask.cost.minerals * 0.6) + Math.floor(current.state.queue[2].cost.minerals * 0.8),
+    gas: Math.floor(canceledTask.cost.gas * 0.6) + Math.floor(current.state.queue[2].cost.gas * 0.8),
+    energy: Math.floor(canceledTask.cost.energy * 0.6) + Math.floor(current.state.queue[2].cost.energy * 0.8),
   });
-  assert.deepEqual(canceled.state.queue.map((task) => task.id), ['cancel-1', 'cancel-3']);
-  assert.equal(canceled.state.queue[1].startedAt, canceled.state.queue[0].finishAt);
+  assert.deepEqual(canceled.state.queue.map((task) => task.id), ['cancel-1']);
   const repeated = cancelScienceResearch({ ...current, state: canceled.state, wallet: canceled.wallet, rng: () => 0 }, canceledTask.id);
   assert.equal(repeated.ok, false);
   assert.deepEqual(repeated.wallet, canceled.wallet);
@@ -183,15 +185,31 @@ test('science cancellation reconciles completed work before refusing a refund', 
   assert.deepEqual(canceled.wallet, started.wallet);
 });
 
-test('canceling the active science task starts the preserved FIFO successor immediately', () => {
+test('canceling the active science task removes dependent successors instead of leaving impossible levels', () => {
   const first = start(context(createDefaultScienceState(), 1, 10_000), 1, 'active-cancel-first');
   const second = start({ ...context(first.state, 1, first.task!.finishAt), wallet: first.wallet }, 1, 'active-cancel-second');
   const canceledAt = first.task!.startedAt + 1_000;
   const canceled = cancelScienceResearch({ ...context(second.state, 1, canceledAt), wallet: second.wallet, rng: () => 0 }, 'active-cancel-first');
   assert.equal(canceled.ok, true);
-  assert.deepEqual(canceled.state.queue.map((task) => task.id), ['active-cancel-second']);
-  assert.equal(canceled.state.queue[0].startedAt, canceledAt);
-  assert.equal(canceled.state.queue[0].finishAt, canceledAt + canceled.state.queue[0].durationMs);
+  assert.deepEqual(canceled.state.queue, []);
+  assert.deepEqual(canceled.canceledTasks.map((task) => task.id), ['active-cancel-first', 'active-cancel-second']);
+  assert.deepEqual(canceled.refundPercents, [60, 60]);
+});
+
+test('science cancellation keeps independent queued sciences while dropping only invalid successors', () => {
+  let current = context(createDefaultScienceState(), 1, 10_000);
+  const first = start(current, 1, 'science-chain-first');
+  current = { ...current, state: first.state, wallet: first.wallet };
+  const independent = start({ ...context(current.state, 20, first.task!.finishAt), wallet: current.wallet }, 2, 'science-independent');
+  current = { ...current, state: independent.state, wallet: independent.wallet };
+  const dependent = start({ ...context(current.state, 20, independent.task!.finishAt), wallet: current.wallet }, 1, 'science-chain-dependent');
+  current = { ...current, state: dependent.state, wallet: dependent.wallet };
+
+  const canceled = cancelScienceResearch({ ...current, rng: () => 0 }, first.task!.id);
+  assert.equal(canceled.ok, true);
+  assert.deepEqual(canceled.state.queue.map((task) => task.id), ['science-independent']);
+  assert.deepEqual(canceled.canceledTasks.map((task) => task.id), ['science-chain-first', 'science-chain-dependent']);
+  assert.deepEqual(canceled.refundPercents, [60, 60]);
 });
 
 test('science cancellation source and integer boundary rolls are explicit', () => {

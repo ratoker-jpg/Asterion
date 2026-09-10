@@ -188,7 +188,7 @@ async function runViewport(width, height) {
   if (queueVisibility.count !== 3 || !queueVisibility.buttonEnabled || !queueVisibility.visible || !full.scienceCancelRed || full.horizontalOverflow || full.nestedVerticalScroll || !full.documentScroll) throw new Error(`${label}: three-task queue is clipped or not cancellable ${JSON.stringify({ full, queueVisibility })}`);
   await capture(win, directory, 'science-queue-full', '[data-qa-science-queue]');
 
-  await click(win, '[data-qa-science-queue-task]:last-of-type [data-qa-science-cancel]');
+  await click(win, '[data-qa-science-queue-task]:first-of-type [data-qa-science-cancel]');
   await waitFor(win, `document.querySelector('[data-qa-science-cancel-confirm][role="alertdialog"]')`);
   const dialog = await win.webContents.executeJavaScript(`(() => ({
     hasYes: Boolean(document.querySelector('[data-qa-science-cancel-yes]')),
@@ -203,28 +203,32 @@ async function runViewport(width, height) {
   const afterEscape = await readScreen(win);
   if (afterEscape.scienceQueueLength !== 3 || !afterEscape.activeScienceCancelId) throw new Error(`${label}: Escape changed science queue or did not restore focus ${JSON.stringify(afterEscape)}`);
 
-  await click(win, '[data-qa-science-queue-task]:last-of-type [data-qa-science-cancel]');
+  await click(win, '[data-qa-science-queue-task]:first-of-type [data-qa-science-cancel]');
   await click(win, '[data-qa-science-cancel-no]');
   const afterNo = await readScreen(win);
   if (afterNo.scienceQueueLength !== 3 || !afterNo.activeScienceCancelId) throw new Error(`${label}: No changed science queue or did not restore focus ${JSON.stringify(afterNo)}`);
   const beforeCancel = await readScreen(win);
-  await click(win, '[data-qa-science-queue-task]:last-of-type [data-qa-science-cancel]');
+  await click(win, '[data-qa-science-queue-task]:first-of-type [data-qa-science-cancel]');
   await click(win, '[data-qa-science-cancel-yes]');
-  await waitFor(win, `document.querySelector('[data-qa-science-queue-count]')?.textContent === '2/3'`);
+  await waitFor(win, `document.querySelector('[data-qa-science-queue-count]')?.textContent === '0/3'`);
   const afterCancel = await readScreen(win);
-  const canceledCost = beforeCancel.queueTasks[2].cost;
-  const validRefund = Array.from({ length: 21 }, (_, index) => 60 + index).some((percent) => (
-    afterCancel.wallet.metal - beforeCancel.wallet.metal === Math.floor(canceledCost.metal * percent / 100)
-    && afterCancel.wallet.minerals - beforeCancel.wallet.minerals === Math.floor(canceledCost.minerals * percent / 100)
-    && afterCancel.wallet.gas - beforeCancel.wallet.gas === Math.floor(canceledCost.gas * percent / 100)
-  ));
-  if (!validRefund || afterCancel.queueIds[0] !== beforeCancel.queueIds[0] || afterCancel.queueIds[1] !== beforeCancel.queueIds[1] || afterCancel.queueTasks[1].startedAt !== afterCancel.queueTasks[0].finishAt || !afterCancel.activeScienceCancelId || !afterCancel.queueIds.includes(afterCancel.activeScienceCancelId) || afterCancel.nestedVerticalScroll || !afterCancel.documentScroll) throw new Error(`${label}: science cancel refund/FIFO/focus/scroll mismatch ${JSON.stringify({ beforeCancel, afterCancel })}`);
+  const canceledCosts = beforeCancel.queueTasks.map((task) => task.cost);
+  const refundBounds = ['metal', 'minerals', 'gas'].reduce((bounds, key) => {
+    bounds.min[key] = canceledCosts.reduce((sum, cost) => sum + Math.floor(cost[key] * 0.6), 0);
+    bounds.max[key] = canceledCosts.reduce((sum, cost) => sum + Math.floor(cost[key] * 0.8), 0);
+    return bounds;
+  }, { min: {}, max: {} });
+  const validRefund = ['metal', 'minerals', 'gas'].every((key) => {
+    const delta = afterCancel.wallet[key] - beforeCancel.wallet[key];
+    return delta >= refundBounds.min[key] && delta <= refundBounds.max[key];
+  });
+  if (!validRefund || afterCancel.scienceQueueLength !== 0 || afterCancel.queueIds.length !== 0 || afterCancel.nestedVerticalScroll || !afterCancel.documentScroll) throw new Error(`${label}: science cascade refund/scroll mismatch ${JSON.stringify({ beforeCancel, afterCancel, refundBounds })}`);
   await capture(win, directory, 'science-cancelled-queue', '[data-qa-science-queue]');
 
   await reload(win);
   await openScience(win);
   const afterReload = await readScreen(win);
-  if (afterReload.queue !== '2/3' || afterReload.scienceQueueLength !== 2) throw new Error(`${label}: queue did not survive reload ${JSON.stringify(afterReload)}`);
+  if (afterReload.queue !== '0/3' || afterReload.scienceQueueLength !== 0) throw new Error(`${label}: canceled queue did not survive reload ${JSON.stringify(afterReload)}`);
   await capture(win, directory, 'science-reload-queue');
   stage('reload queue');
 

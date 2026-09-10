@@ -105,6 +105,57 @@ async function confirm(win) {
   return text;
 }
 
+async function verifyDependentQueueCancellation(win, directory) {
+  await seed(win, { construction: 1 });
+  await activateZone(win, 'industry');
+  await buildCurrent(win, 'construction');
+  await buildCurrent(win, 'construction');
+  await buildCurrent(win, 'construction');
+
+  const before = await win.webContents.executeJavaScript(`(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+    return {
+      queue: save.queues?.['helion-01'] ?? [],
+      wallet: { metal: save.metal, minerals: save.minerals, gas: save.gas, energy: save.planets?.['helion-01']?.energy ?? 0 },
+      labels: Array.from(document.querySelectorAll('[data-qa-queue-role] button[aria-label]')).map((node) => node.getAttribute('aria-label')),
+    };
+  })()`);
+  if (before.queue.length !== 3 || before.queue.map((item) => item.targetLevel).join(',') !== '2,3,4' || before.labels.some((label) => !/уровень [234]$/i.test(label ?? ''))) {
+    throw new Error(`Dependent building queue was not sequential: ${JSON.stringify(before)}`);
+  }
+  await capture(win, directory, 'queue-dependent-chain');
+
+  await click(win, '[data-qa-queue-cancel="1"]');
+  const confirmation = await confirm(win);
+  if (!confirmation.includes('90%')) throw new Error(`Dependent queue confirmation is incomplete: ${confirmation}`);
+  await waitFor(win, `document.querySelectorAll('[data-qa-queue-role]').length === 0`);
+  const after = await win.webContents.executeJavaScript(`(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+    const queue = save.queues?.['helion-01'] ?? [];
+    const wallet = { metal: save.metal, minerals: save.minerals, gas: save.gas, energy: save.planets?.['helion-01']?.energy ?? 0 };
+    const refund = Object.fromEntries(['metal', 'minerals', 'gas'].map((key) => [key, wallet[key] - ${JSON.stringify(before.wallet)}[key]]));
+    const expected = ${JSON.stringify(before.queue)}.reduce((total, item) => {
+      for (const key of ['metal', 'minerals', 'gas', 'energy']) {
+        if (key === 'energy') continue;
+        total[key] += Math.floor((item.cost?.[key] ?? 0) * 0.9);
+      }
+      return total;
+    }, { metal: 0, minerals: 0, gas: 0 });
+    return {
+      queue,
+      refund,
+      expected,
+      notice: document.querySelector('.shell-notice span')?.textContent?.trim() ?? '',
+      queueHeader: document.querySelector('.resource-zone-queue .resource-zone-panel-title > span')?.textContent?.trim() ?? '',
+    };
+  })()`);
+  if (after.queue.length !== 0 || JSON.stringify(after.refund) !== JSON.stringify(after.expected) || !after.notice.includes('Каскадно отменено ещё 2 зависимых проектов') || after.queueHeader !== '0 / 3') {
+    throw new Error(`Dependent building cancellation mismatch: ${JSON.stringify({ before, after })}`);
+  }
+  await capture(win, directory, 'queue-dependent-cancelled');
+  return { before, after, confirmation };
+}
+
 async function verifyQueueCancellation(win, directory) {
   await seed(win, { 'metal-production-1': 20, construction: 1, shipyard: 1 });
   await activateZone(win, 'resource');
@@ -191,7 +242,12 @@ async function verifyDestroy(win, directory) {
 }
 
 async function runViewport(win, directory) {
-  return { screen: 'building-actions', queue: await verifyQueueCancellation(win, directory), destroy: await verifyDestroy(win, directory) };
+  return {
+    screen: 'building-actions',
+    dependentQueue: await verifyDependentQueueCancellation(win, directory),
+    queue: await verifyQueueCancellation(win, directory),
+    destroy: await verifyDestroy(win, directory),
+  };
 }
 
 app.whenReady().then(async () => {
