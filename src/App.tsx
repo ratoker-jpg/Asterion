@@ -9,6 +9,14 @@ import { ZoneView } from './ZoneView';
 import { BuildingInteriorHost } from './BuildingInteriorHost';
 import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
 import {
+  APP_ROUTE_LABELS,
+  PRIMARY_NAVIGATION,
+  UTILITY_NAVIGATION,
+  useNavigation,
+  type AppRoute,
+  type NavigationIconKind,
+} from './ui/navigation.tsx';
+import {
   FLEET_CONSTRUCTION_REQUEST_EVENT,
   canEnterBuildingInterior,
   createBuildingInteriorContext,
@@ -206,7 +214,6 @@ type PlanetId = 'helion-01';
 type Zone = BuildingZone;
 type PlanetViewMode = 'overview' | Zone;
 type IconKind = 'metal' | 'mineral' | 'gas' | 'energy' | 'population' | Zone;
-type NavigationIconKind = 'planet' | 'universe' | 'fleets' | 'operations' | 'command' | 'reports' | 'settings' | 'rating' | 'science';
 type BuildingInteriorContext = BuildingInteriorNavigationContext<PlanetId>;
 
 type PlanetRuntime = {
@@ -336,19 +343,6 @@ const createInitialState = (mode: RuntimeMode = RUNTIME_MODE): SaveState => {
 
 const initialState = createInitialState(RUNTIME_MODE);
 
-const primaryTabs: ReadonlyArray<{ id: string; label: string; icon: NavigationIconKind }> = [
-  { id: 'Планета', label: 'Планета', icon: 'planet' },
-  { id: 'Вселенная', label: 'Вселенная', icon: 'universe' },
-  { id: 'Флоты', label: 'Флоты', icon: 'fleets' },
-  { id: 'Операции', label: 'Операции', icon: 'operations' },
-  { id: 'Командование', label: 'Командование', icon: 'command' },
-  { id: 'Отчёты', label: 'Сообщения', icon: 'reports' },
-];
-const utilityTabs: ReadonlyArray<{ label: string; icon: NavigationIconKind }> = [
-  { label: 'Настройки', icon: 'settings' },
-  { label: 'Рейтинг', icon: 'rating' },
-  { label: 'Наука', icon: 'science' },
-];
 const zoneMeta: Record<Zone, { title: string; subtitle: string; accent: string }> = {
   resource: { title: 'РЕСУРСНАЯ ЗОНА', subtitle: 'Добыча и энергия', accent: '#38c8ff' },
   industry: { title: 'ПРОМЫШЛЕННАЯ ЗОНА', subtitle: 'Производство', accent: '#f0ad38' },
@@ -532,8 +526,9 @@ function AegisButton({ children, onClick, disabled = false }: { children: ReactN
 
 export function App() {
   const scale = useStageScale();
+  const { route: activeRoute, navigate } = useNavigation();
+  const activeTab = APP_ROUTE_LABELS[activeRoute];
   const [planetViewMode, setPlanetViewMode] = useState<PlanetViewMode>('overview');
-  const [activeTab, setActiveTab] = useState('Планета');
   const [state, setState] = useState<SaveState>(readSave);
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -546,6 +541,13 @@ export function App() {
   const [editingName, setEditingName] = useState(DEFAULT_PLANET_NAME);
   const [selectedBuildingRole, setSelectedBuildingRole] = useState<BuildingRole | null>(null);
   const [buildingInterior, setBuildingInterior] = useState<BuildingInteriorContext | null>(null);
+
+  const navigateTo = (nextRoute: AppRoute) => {
+    navigate(nextRoute);
+    if (nextRoute === 'fleets') {
+      window.setTimeout(() => window.dispatchEvent(new Event(FLEET_ROOT_REQUEST_EVENT)), 0);
+    }
+  };
 
   useEffect(() => {
     if (RUNTIME_MODE !== 'test') return;
@@ -912,7 +914,7 @@ export function App() {
   const openPlanetEditor = (planetId: PlanetId) => {
     clearBuildingInterior();
     setState((current) => ({ ...current, currentPlanetId: 'helion-01' }));
-    setActiveTab('Планета');
+    navigateTo('planet');
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
     setEditingName(state.planets[planetId].name);
@@ -1318,12 +1320,11 @@ export function App() {
 
   const openFleetRootFromOperations = () => {
     clearBuildingInterior();
-    setActiveTab('Флоты');
+    navigateTo('fleets');
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
     closePlanetEditor();
     setNotice('Флоты: подготовьте состав для принятой операции.');
-    window.setTimeout(() => window.dispatchEvent(new Event(FLEET_ROOT_REQUEST_EVENT)), 0);
   };
 
   const joinCommandOperation = (operationId: string) => {
@@ -1346,27 +1347,25 @@ export function App() {
 
   const openFleetRootFromCommand = () => {
     clearBuildingInterior();
-    setActiveTab('Флоты');
+    navigateTo('fleets');
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
     closePlanetEditor();
     setNotice('Флоты: подготовьте состав для союзной задачи. Отправка не запускается автоматически.');
-    window.setTimeout(() => window.dispatchEvent(new Event(FLEET_ROOT_REQUEST_EVENT)), 0);
   };
 
   const openFleetRootFromReports = () => {
     clearBuildingInterior();
-    setActiveTab('Флоты');
+    navigateTo('fleets');
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
     closePlanetEditor();
     setNotice('Флоты: выберите состав для союзной операции из отчётов.');
-    window.setTimeout(() => window.dispatchEvent(new Event(FLEET_ROOT_REQUEST_EVENT)), 0);
   };
 
   const openCommandFromReports = () => {
     clearBuildingInterior();
-    setActiveTab('Командование');
+    navigateTo('command');
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
     closePlanetEditor();
@@ -1393,7 +1392,7 @@ export function App() {
     setState((current) => current.currentPlanetId === context.planetId
       ? current
       : { ...current, currentPlanetId: context.planetId });
-    setActiveTab('Планета');
+    navigateTo('planet');
     setPlanetViewMode(context.zone);
     setSelectedBuildingRole(context.buildingRole);
     setPlanetMenuOpen(false);
@@ -1413,44 +1412,44 @@ export function App() {
     closePlanetEditor();
 
     if (target.kind === 'host') {
-      setActiveTab('Планета');
+      navigateTo('planet');
       setPlanetViewMode(context.zone);
       setNotice(`${getBuildingDefinition(assetRole).name}: внутренний модуль открыт.`);
       return;
     }
     if (target.kind === 'fleet-construction') {
-      setActiveTab('Флоты');
+      navigateTo('fleets');
       setNotice('Верфь: открыт существующий раздел строительства флота.');
       window.setTimeout(() => window.dispatchEvent(new Event(FLEET_CONSTRUCTION_REQUEST_EVENT)), 0);
       return;
     }
     if (target.kind === 'science') {
-      setActiveTab('Наука');
+      navigateTo('science');
       setNotice('Лаборатория: открыт существующий раздел «Наука».');
       return;
     }
 
-    setActiveTab('Командование');
+    navigateTo('command');
     setNotice('Палата управления: открыт существующий раздел «Командование».');
   };
 
-  const chooseTab = (tab: string) => {
+  const chooseRoute = (nextRoute: AppRoute) => {
     clearBuildingInterior();
-    setActiveTab(tab);
+    navigateTo(nextRoute);
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
     closePlanetEditor();
-    if (tab === 'Вселенная') setNotice('Галактика 1 загружена. Доступно 40 солнечных систем.');
-    else if (tab === 'Операции') setNotice('Операции: доступные PvE-сценарии загружены.');
-    else if (tab === 'Командование') setNotice('Командование: союзный контур загружен.');
-    else if (tab === 'Отчёты') setNotice('Отчёты: центр сообщений и боевых журналов загружен.');
-    else if (tab === 'Планета') setNotice(`${currentPlanetName}: обзор планеты.`);
-    else setNotice(`Экран «${tab}» пока в разработке.`);
+    if (nextRoute === 'universe') setNotice('Галактика 1 загружена. Доступно 40 солнечных систем.');
+    else if (nextRoute === 'operations') setNotice('Операции: доступные PvE-сценарии загружены.');
+    else if (nextRoute === 'command') setNotice('Командование: союзный контур загружен.');
+    else if (nextRoute === 'reports') setNotice('Отчёты: центр сообщений и боевых журналов загружен.');
+    else if (nextRoute === 'planet') setNotice(`${currentPlanetName}: обзор планеты.`);
+    else setNotice(`Экран «${APP_ROUTE_LABELS[nextRoute]}» пока в разработке.`);
   };
 
   const chooseZone = (nextZone: Zone) => {
     clearBuildingInterior();
-    setActiveTab('Планета');
+    navigateTo('planet');
     setPlanetViewMode(nextZone);
     setPlanetMenuOpen(false);
     closePlanetEditor();
@@ -1492,7 +1491,7 @@ export function App() {
         <header className="asterion-header">
           <section className="header-planet-module">
             <div className="header-planet-orbit">
-              <button className="header-planet-world" type="button" onClick={() => chooseTab('Планета')} aria-label={`Открыть ${currentPlanetName}`}>
+              <button className="header-planet-world" type="button" onClick={() => chooseRoute('planet')} aria-label={`Открыть ${currentPlanetName}`}>
                 <img src={currentSkin.art} alt={currentPlanetName} draggable={false} />
               </button>
               {(['resource', 'industry', 'military'] as Zone[]).map((item) => {
@@ -1543,8 +1542,8 @@ export function App() {
               <Resource kind="population" label="НАСЕЛЕНИЕ" value={fleetSummary.population} capacity={fleetSummary.capacity} />
             </div>
             <nav className="primary-navigation" aria-label="Основная навигация">
-              {primaryTabs.map(({ id, label, icon }) => (
-                <button key={id} type="button" className={activeTab === id && !(id === 'Планета' && planetViewMode !== 'overview') ? 'active' : ''} onClick={() => chooseTab(id)}>
+              {PRIMARY_NAVIGATION.map(({ id, label, icon }) => (
+                <button key={id} type="button" className={activeRoute === id && !(id === 'planet' && planetViewMode !== 'overview') ? 'active' : ''} onClick={() => chooseRoute(id)}>
                   <NavigationIcon kind={icon} />
                   <span>{label}</span>
                 </button>
@@ -1577,8 +1576,8 @@ export function App() {
               </div>
             ) : null}
             <nav className="utility-navigation" aria-label="Служебная навигация">
-              {utilityTabs.map(({ label, icon }) => (
-                <button key={label} type="button" aria-label={label} className={activeTab === label ? 'active' : ''} onClick={() => chooseTab(label)}>
+              {UTILITY_NAVIGATION.map(({ id, label, icon }) => (
+                <button key={id} type="button" aria-label={label} className={activeRoute === id ? 'active' : ''} onClick={() => chooseRoute(id)}>
                   <NavigationIcon kind={icon} />
                   <span>{label}</span>
                 </button>

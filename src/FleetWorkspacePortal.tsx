@@ -11,6 +11,13 @@ import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
 import { FLEET_CONSTRUCTION_REQUEST_EVENT } from './building-interior-navigation.ts';
 import { ShipyardView } from './ShipyardView';
 import { SimulatorView } from './SimulatorView';
+import {
+  FLEET_CONSTRUCTION_NAVIGATION,
+  FLEET_MANAGEMENT_NAVIGATION,
+  useNavigation,
+  type FleetSectionId,
+  type FleetSectionItem,
+} from './ui/navigation.tsx';
 import './fleet-workspace.css';
 
 const FLEET_ROOT_STATUS = 'Выберите корабли и миссию. Отправка флота будет подключена следующим этапом.';
@@ -38,15 +45,6 @@ function readFleetSnapshot(): FleetSnapshot {
 
 const shipDefinitions = getFactionShipCatalog('aegis');
 
-type FleetSection =
-  | 'Корабли'
-  | 'Оборона'
-  | 'Командирские корабли'
-  | 'Ремонтная мастерская'
-  | 'Боевой приоритет'
-  | 'Битвы'
-  | 'Симулятор';
-
 type MissionId =
   | 'transport'
   | 'espionage'
@@ -65,15 +63,6 @@ type MissionDefinition = {
 };
 
 type ConstructionView = 'ships' | ConstructionCatalogMode | null;
-
-const constructionSections: FleetSection[] = [
-  'Корабли',
-  'Оборона',
-  'Командирские корабли',
-  'Ремонтная мастерская',
-];
-
-const managementSections: FleetSection[] = ['Боевой приоритет', 'Битвы', 'Симулятор'];
 
 const missions: MissionDefinition[] = [
   { id: 'transport', label: 'Транспортировка', description: 'Перевозка ресурсов между доступными планетами.' },
@@ -112,10 +101,10 @@ function FleetWorkspace({
   openConstruction: boolean;
   onConstructionOpened: () => void;
 }) {
+  const { fleetSection: selectedSection, setFleetSection } = useNavigation();
   const [selectedQuantities, setSelectedQuantities] = useState<Partial<Record<ShipId, number>>>({});
   const [missionId, setMissionId] = useState<MissionId>('transport');
   const [hoveredMissionId, setHoveredMissionId] = useState<MissionId | null>(null);
-  const [selectedSection, setSelectedSection] = useState<FleetSection>('Корабли');
   const [constructionView, setConstructionView] = useState<ConstructionView>(null);
   const [status, setStatus] = useState(FLEET_ROOT_STATUS);
   const [fleetSnapshot, setFleetSnapshot] = useState<FleetSnapshot>(readFleetSnapshot);
@@ -144,7 +133,7 @@ function FleetWorkspace({
   const describedMission = missions.find((mission) => mission.id === hoveredMissionId) ?? selectedMission;
 
   const openFleetRoot = () => {
-    setSelectedSection('Корабли');
+    setFleetSection('ships');
     setConstructionView(null);
     setStatus(FLEET_ROOT_STATUS);
   };
@@ -167,23 +156,23 @@ function FleetWorkspace({
 
   useEffect(() => {
     if (!openConstruction) return;
-    setSelectedSection('Корабли');
+    setFleetSection('ships');
     setConstructionView('ships');
     onConstructionOpened();
-  }, [onConstructionOpened, openConstruction]);
+  }, [onConstructionOpened, openConstruction, setFleetSection]);
 
-  const chooseSection = (section: FleetSection) => {
-    setSelectedSection(section);
+  const chooseSection = (section: FleetSectionId) => {
+    setFleetSection(section);
 
-    if (section === 'Корабли') {
+    if (section === 'ships') {
       setConstructionView('ships');
       return;
     }
-    if (section === 'Оборона') {
+    if (section === 'defense') {
       setConstructionView('defense');
       return;
     }
-    if (section === 'Командирские корабли') {
+    if (section === 'commander-ships') {
       setConstructionView('commander');
       return;
     }
@@ -208,8 +197,8 @@ function FleetWorkspace({
   const mainClassName = [
     'fleet-main-v1',
     constructionView ? 'fleet-main-v1--shipyard' : '',
-    selectedSection === 'Битвы' ? 'fleet-main-v1--battles' : '',
-    selectedSection === 'Симулятор' ? 'fleet-main-v1--subpage' : '',
+    selectedSection === 'battles' ? 'fleet-main-v1--battles' : '',
+    selectedSection === 'simulator' ? 'fleet-main-v1--subpage' : '',
   ].filter(Boolean).join(' ');
 
   return (
@@ -229,8 +218,8 @@ function FleetWorkspace({
           </div>
         </div>
 
-        <FleetMenuGroup title="СТРОИТЕЛЬСТВО" items={constructionSections} selected={selectedSection} onSelect={chooseSection} />
-        <FleetMenuGroup title="УПРАВЛЕНИЕ ФЛОТОМ" items={managementSections} selected={selectedSection} onSelect={chooseSection} />
+        <FleetMenuGroup title="СТРОИТЕЛЬСТВО" items={FLEET_CONSTRUCTION_NAVIGATION} selected={selectedSection} onSelect={chooseSection} />
+        <FleetMenuGroup title="УПРАВЛЕНИЕ ФЛОТОМ" items={FLEET_MANAGEMENT_NAVIGATION} selected={selectedSection} onSelect={chooseSection} />
       </aside>
 
       <main className={mainClassName}>
@@ -238,11 +227,11 @@ function FleetWorkspace({
           <ShipyardView planetName={planetName} coords={coords} onBack={closeConstructionView} />
         ) : constructionView === 'defense' || constructionView === 'commander' ? (
           <ConstructionCatalogView mode={constructionView} planetName={planetName} coords={coords} onBack={closeConstructionView} />
-        ) : selectedSection === 'Боевой приоритет' ? (
+        ) : selectedSection === 'combat-priority' ? (
           <FleetCombatPriorityView planetName={planetName} coords={coords} onBack={openFleetRoot} />
-        ) : selectedSection === 'Битвы' ? (
+        ) : selectedSection === 'battles' ? (
           <BattleReportsView planetName={planetName} coords={coords} onBack={openFleetRoot} />
-        ) : selectedSection === 'Симулятор' ? (
+        ) : selectedSection === 'simulator' ? (
           <SimulatorView planetName={planetName} coords={coords} onBack={openFleetRoot} />
         ) : (
           <>
@@ -360,13 +349,13 @@ function FleetWorkspace({
   );
 }
 
-function FleetMenuGroup({ title, items, selected, onSelect }: { title: string; items: FleetSection[]; selected: FleetSection; onSelect: (section: FleetSection) => void }) {
+function FleetMenuGroup({ title, items, selected, onSelect }: { title: string; items: readonly FleetSectionItem[]; selected: FleetSectionId; onSelect: (section: FleetSectionId) => void }) {
   return (
     <section className="fleet-menu-group-v1">
       <h3>{title}</h3>
       {items.map((item) => (
-        <button key={item} type="button" className={selected === item ? 'active' : ''} onClick={() => onSelect(item)}>
-          <span className="fleet-menu-icon-v1">◇</span><strong>{item}</strong><i>›</i>
+        <button key={item.id} type="button" className={selected === item.id ? 'active' : ''} data-qa-fleet-section={item.id} onClick={() => onSelect(item.id)}>
+          <span className="fleet-menu-icon-v1">◇</span><strong>{item.label}</strong><i>›</i>
         </button>
       ))}
     </section>
@@ -386,24 +375,25 @@ function readCurrentPlanet() {
 }
 
 export function FleetWorkspacePortal() {
+  const { route } = useNavigation();
   const [target, setTarget] = useState<Element | null>(null);
-  const [active, setActive] = useState(false);
   const [planet, setPlanet] = useState({ name: 'Helion 01', coords: '[1:1:1]' });
   const [constructionRequested, setConstructionRequested] = useState(false);
 
   useEffect(() => {
-    const sync = () => {
-      const activeLabel = document.querySelector('.primary-navigation button.active span')?.textContent?.trim();
-      setActive(activeLabel === 'Флоты');
+    const syncPlanet = () => {
       setTarget(document.querySelector('.workspace'));
       setPlanet(readCurrentPlanet());
     };
 
-    sync();
-    const observer = new MutationObserver(sync);
-    observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
+    syncPlanet();
+    window.addEventListener(RUNTIME_STATE_CHANGED_EVENT, syncPlanet);
+    window.addEventListener('storage', syncPlanet);
+    return () => {
+      window.removeEventListener(RUNTIME_STATE_CHANGED_EVENT, syncPlanet);
+      window.removeEventListener('storage', syncPlanet);
+    };
+  }, [route]);
 
   useEffect(() => {
     const onConstructionRequest = () => setConstructionRequested(true);
@@ -411,7 +401,7 @@ export function FleetWorkspacePortal() {
     return () => window.removeEventListener(FLEET_CONSTRUCTION_REQUEST_EVENT, onConstructionRequest);
   }, []);
 
-  if (!active || !target) return null;
+  if (route !== 'fleets' || !target) return null;
   return createPortal(
     <FleetWorkspace
       planetName={planet.name}

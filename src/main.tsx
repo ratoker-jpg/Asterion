@@ -10,6 +10,7 @@ import { RepairWorkshopPortal } from './RepairWorkshopPortal';
 import { ShipInfoController } from './ShipInfoController';
 import { DefenseInfoController } from './DefenseInfoController';
 import { UtilityScreensPortal } from './UtilityScreensPortal';
+import { NavigationProvider } from './ui/navigation.tsx';
 import './styles.css';
 import './universe-nav.css';
 import './universe-polish-v2.css';
@@ -60,15 +61,17 @@ if (!isElectron) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
-    <FleetRootNavigationController />
-    <PrototypeResetController />
-    <GlobalPageScrollController />
-    <GlobalTypographyController />
-    <FleetWorkspacePortal />
-    <UtilityScreensPortal />
-    <RepairWorkshopPortal />
-    <ShipInfoController />
-    <DefenseInfoController />
+    <NavigationProvider>
+      <App />
+      <FleetRootNavigationController />
+      <PrototypeResetController />
+      <GlobalPageScrollController />
+      <GlobalTypographyController />
+      <FleetWorkspacePortal />
+      <UtilityScreensPortal />
+      <RepairWorkshopPortal />
+      <ShipInfoController />
+      <DefenseInfoController />
+    </NavigationProvider>
   </StrictMode>,
 );
