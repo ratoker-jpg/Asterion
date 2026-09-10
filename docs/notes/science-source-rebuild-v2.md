@@ -106,6 +106,10 @@ The saved page explicitly warns that only one direction from Additional Science 
 
 Visual QA verifies all four target viewports and rejects a nested Science vertical scrollbar. If the laboratory content is taller than the workspace, document scrolling must be owned by `GlobalPageScrollController`.
 
+## Science cancellation refund
+
+The confirmed Nemexia source is [saved Science page (2026-09-05 22:49:40)](https://github.com/ratoker-jpg/Nemexia_auto_v2/blob/main/saved_pages/%D0%BD%D0%B0%D1%83%D0%BA%D0%B0/page_2026-09-05_22-49-40.html). Its text specifies a **60–80%** return range and does not specify one fixed percentage. Asterion therefore rolls one injectable random integer in that inclusive range for each successful science cancellation, floors each saved-cost resource independently, and never recalculates a refund from the current catalog.
+
 ## Deferred
 
 - persistent research queue;

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
@@ -60,12 +61,15 @@ import type { PlayerProfileState } from './domain/profile/types.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import {
   SCIENCE_RUNTIME_CHANGED_EVENT,
+  SCIENCE_CANCEL_REQUEST_EVENT,
   SCIENCE_SAVE_SCHEMA_VERSION,
   SCIENCE_START_REQUEST_EVENT,
+  cancelScienceResearch,
   createDefaultScienceState,
   createScienceRuntimeSnapshot,
   migrateScienceState,
   reconcileScienceState,
+  selectScienceCancelRefundPercent,
   startScienceResearch,
   type ScienceStartRequest,
   type ScienceState,
@@ -637,6 +641,52 @@ export function App() {
 
     window.addEventListener(SCIENCE_START_REQUEST_EVENT, onScienceStartRequest);
     return () => window.removeEventListener(SCIENCE_START_REQUEST_EVENT, onScienceStartRequest);
+  }, [testTimeScale]);
+  useEffect(() => {
+    const onScienceCancelRequest = (event: Event) => {
+      const request = (event as CustomEvent<{ taskId?: string; now?: number }>).detail;
+      if (!request?.taskId) return;
+      const canceledAt = typeof request.now === 'number' && Number.isFinite(request.now) ? request.now : Date.now();
+      // Roll once per user event. The functional updater may be replayed by
+      // StrictMode, so it receives a stable RNG rather than calling Math.random again.
+      const refundPercent = selectScienceCancelRefundPercent();
+      let transition: ReturnType<typeof cancelScienceResearch> | null = null;
+      flushSync(() => {
+        setState((current) => {
+          const planet = current.planets['helion-01'];
+          const result = cancelScienceResearch({
+            state: current.science,
+            wallet: { metal: current.metal, minerals: current.minerals, gas: current.gas, energy: planet.energy },
+            laboratoryLevel: planet.buildings.research,
+            now: canceledAt,
+            mode: RUNTIME_MODE,
+            testTimeScale,
+            rng: () => refundPercent / 100,
+          }, request.taskId!);
+          transition = result;
+          const nextState: SaveState = {
+            ...current,
+            schemaVersion: SAVE_SCHEMA_VERSION,
+            metal: result.wallet.metal,
+            minerals: result.wallet.minerals,
+            gas: result.wallet.gas,
+            planets: { ...current.planets, 'helion-01': { ...planet, energy: result.wallet.energy } },
+            science: result.state,
+          };
+          const walletChanged = nextState.metal !== current.metal
+            || nextState.minerals !== current.minerals
+            || nextState.gas !== current.gas
+            || nextState.planets['helion-01'].energy !== planet.energy;
+          return result.state === current.science && !walletChanged ? current : nextState;
+        });
+      });
+      const result = transition as ReturnType<typeof cancelScienceResearch> | null;
+      setNotice(result?.ok
+        ? `Исследование отменено. Возвращено ${result.refundPercent}% сохранённой стоимости.`
+        : result?.reason ?? 'Исследование недоступно для отмены.');
+    };
+    window.addEventListener(SCIENCE_CANCEL_REQUEST_EVENT, onScienceCancelRequest);
+    return () => window.removeEventListener(SCIENCE_CANCEL_REQUEST_EVENT, onScienceCancelRequest);
   }, [testTimeScale]);
   useEffect(() => {
     const snapshot = reconcileScienceState(state.science, now);

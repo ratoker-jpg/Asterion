@@ -12,6 +12,7 @@ const SAVE_KEY = 'asterion.vertical-slice.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const SCIENCE_ID = 1;
 const SCIENCE_DURATION_MS = 2 * 60 * 60 * 1000 + 8 * 60 * 1000 + 59 * 1000;
+const SCIENCE_CANCEL_SOURCE_URL = 'https://github.com/ratoker-jpg/Nemexia_auto_v2/blob/main/saved_pages/%D0%BD%D0%B0%D1%83%D0%BA%D0%B0/page_2026-09-05_22-49-40.html';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitFor(win, expression, timeoutMs = 8000) {
@@ -111,7 +112,15 @@ async function readScreen(win) {
       horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth + 2 || document.body.scrollWidth > window.innerWidth + 2,
       scienceQueueLength: save.science?.queue?.length ?? -1,
       scienceLevel: save.science?.levels?.[1] ?? -1,
+      queueIds: (save.science?.queue ?? []).map((task) => task.id),
+      queueTasks: (save.science?.queue ?? []).map((task) => ({ id: task.id, startedAt: task.startedAt, finishAt: task.finishAt, durationMs: task.durationMs, cost: task.cost })),
+      wallet: { metal: save.metal, minerals: save.minerals, gas: save.gas, energy: save.planets?.['helion-01']?.energy },
       documentScroll: document.documentElement.scrollHeight > window.innerHeight + 2,
+      nestedVerticalScroll: ['.science-sidebar-v2', '.science-main-v2', '.science-catalog-v2'].some((selector) => [...document.querySelectorAll(selector)].some((element) => {
+        const overflowY = getComputedStyle(element).overflowY;
+        return (overflowY === 'auto' || overflowY === 'scroll') && element.scrollHeight > element.clientHeight + 2;
+      })),
+      activeScienceCancelId: document.activeElement?.getAttribute('data-qa-science-cancel') ?? '',
       workspaceWidth: workspace?.getBoundingClientRect().width ?? 0,
     };
   })()`);
@@ -119,7 +128,7 @@ async function readScreen(win) {
 
 async function assertInitial(win, label) {
   const screen = await readScreen(win);
-  if (!screen.root || screen.queue !== '0/3' || screen.actionDisabled || screen.levelProgress.max !== '10' || screen.laboratory !== 'УРОВЕНЬ 1 / 20' || screen.laboratorySpeed !== '−5% времени за уровень' || screen.fixtureText || screen.horizontalOverflow) {
+  if (!screen.root || screen.queue !== '0/3' || screen.actionDisabled || screen.levelProgress.max !== '10' || screen.laboratory !== 'УРОВЕНЬ 1 / 20' || screen.laboratorySpeed !== '−5% времени за уровень' || screen.fixtureText || screen.horizontalOverflow || screen.nestedVerticalScroll) {
     throw new Error(`${label}: initial Science state mismatch ${JSON.stringify(screen)}`);
   }
 }
@@ -160,12 +169,54 @@ async function runViewport(width, height) {
   await waitFor(win, `document.querySelector('[data-qa-science-queue-count]')?.textContent === '3/3'`);
   const full = await readScreen(win);
   if (full.scienceQueueLength !== 3 || full.status !== 'queue-full' || !full.actionDisabled) throw new Error(`${label}: queue-full state mismatch ${JSON.stringify(full)}`);
+  const queueVisibility = await win.webContents.executeJavaScript(`(() => {
+    const cards = [...document.querySelectorAll('[data-qa-science-queue-task]')];
+    const last = cards.at(-1);
+    last?.scrollIntoView({ block: 'center', inline: 'nearest' });
+    const rect = last?.getBoundingClientRect();
+    const button = last?.querySelector('[data-qa-science-cancel]');
+    return { count: cards.length, buttonEnabled: Boolean(button && !button.disabled), visible: Boolean(rect && rect.top >= 0 && rect.bottom <= window.innerHeight) };
+  })()`);
+  if (queueVisibility.count !== 3 || !queueVisibility.buttonEnabled || !queueVisibility.visible || full.horizontalOverflow || full.nestedVerticalScroll || !full.documentScroll) throw new Error(`${label}: three-task queue is clipped or not cancellable ${JSON.stringify({ full, queueVisibility })}`);
   await capture(win, directory, 'science-queue-full', '[data-qa-science-queue]');
+
+  await click(win, '[data-qa-science-queue-task]:last-of-type [data-qa-science-cancel]');
+  await waitFor(win, `document.querySelector('[data-qa-science-cancel-confirm][role="alertdialog"]')`);
+  const dialog = await win.webContents.executeJavaScript(`(() => ({
+    hasYes: Boolean(document.querySelector('[data-qa-science-cancel-yes]')),
+    modal: document.querySelector('[data-qa-science-cancel-confirm]')?.getAttribute('aria-modal'),
+    source: document.querySelector('[data-qa-science-cancel-confirm] a')?.href
+  }))()`);
+  if (!dialog.hasYes || dialog.modal !== 'true' || dialog.source !== SCIENCE_CANCEL_SOURCE_URL) throw new Error(`${label}: science cancel dialog accessibility/source mismatch ${JSON.stringify(dialog)}`);
+  await win.webContents.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+  await settle(win);
+  const dialogStillOpen = await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-science-cancel-confirm]'))`);
+  if (dialogStillOpen) throw new Error(`${label}: Escape did not close science cancel dialog`);
+  const afterEscape = await readScreen(win);
+  if (afterEscape.scienceQueueLength !== 3 || !afterEscape.activeScienceCancelId) throw new Error(`${label}: Escape changed science queue or did not restore focus ${JSON.stringify(afterEscape)}`);
+
+  await click(win, '[data-qa-science-queue-task]:last-of-type [data-qa-science-cancel]');
+  await click(win, '[data-qa-science-cancel-no]');
+  const afterNo = await readScreen(win);
+  if (afterNo.scienceQueueLength !== 3 || !afterNo.activeScienceCancelId) throw new Error(`${label}: No changed science queue or did not restore focus ${JSON.stringify(afterNo)}`);
+  const beforeCancel = await readScreen(win);
+  await click(win, '[data-qa-science-queue-task]:last-of-type [data-qa-science-cancel]');
+  await click(win, '[data-qa-science-cancel-yes]');
+  await waitFor(win, `document.querySelector('[data-qa-science-queue-count]')?.textContent === '2/3'`);
+  const afterCancel = await readScreen(win);
+  const canceledCost = beforeCancel.queueTasks[2].cost;
+  const validRefund = Array.from({ length: 21 }, (_, index) => 60 + index).some((percent) => (
+    afterCancel.wallet.metal - beforeCancel.wallet.metal === Math.floor(canceledCost.metal * percent / 100)
+    && afterCancel.wallet.minerals - beforeCancel.wallet.minerals === Math.floor(canceledCost.minerals * percent / 100)
+    && afterCancel.wallet.gas - beforeCancel.wallet.gas === Math.floor(canceledCost.gas * percent / 100)
+  ));
+  if (!validRefund || afterCancel.queueIds[0] !== beforeCancel.queueIds[0] || afterCancel.queueIds[1] !== beforeCancel.queueIds[1] || afterCancel.queueTasks[1].startedAt !== afterCancel.queueTasks[0].finishAt || !afterCancel.activeScienceCancelId || !afterCancel.queueIds.includes(afterCancel.activeScienceCancelId) || afterCancel.nestedVerticalScroll || !afterCancel.documentScroll) throw new Error(`${label}: science cancel refund/FIFO/focus/scroll mismatch ${JSON.stringify({ beforeCancel, afterCancel })}`);
+  await capture(win, directory, 'science-cancelled-queue', '[data-qa-science-queue]');
 
   await reload(win);
   await openScience(win);
   const afterReload = await readScreen(win);
-  if (afterReload.queue !== '3/3' || afterReload.scienceQueueLength !== 3) throw new Error(`${label}: queue did not survive reload ${JSON.stringify(afterReload)}`);
+  if (afterReload.queue !== '2/3' || afterReload.scienceQueueLength !== 2) throw new Error(`${label}: queue did not survive reload ${JSON.stringify(afterReload)}`);
   await capture(win, directory, 'science-reload-queue');
   stage('reload queue');
 
@@ -209,7 +260,7 @@ async function runViewport(width, height) {
   stage('max level');
 
   const finalScreen = await readScreen(win);
-  if (finalScreen.horizontalOverflow || finalScreen.fixtureText) throw new Error(`${label}: final visual contract mismatch ${JSON.stringify(finalScreen)}`);
+  if (finalScreen.horizontalOverflow || finalScreen.fixtureText || finalScreen.nestedVerticalScroll) throw new Error(`${label}: final visual contract mismatch ${JSON.stringify(finalScreen)}`);
   win.webContents.debugger.detach();
   await win.close();
   stage('closed');

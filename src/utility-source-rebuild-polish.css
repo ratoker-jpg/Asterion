@@ -39,6 +39,7 @@
 /* Science uses the same page-level scroll contract. The laboratory sidebar keeps the
    baseline workspace height while the science catalog contributes its full natural height. */
 .science-view-v2{min-height:846px;height:auto;align-items:start;overflow:visible}
-.science-sidebar-v2{height:846px;min-height:846px;align-self:start;overflow:visible}
+.science-sidebar-v2{height:auto;min-height:846px;align-self:start;overflow:visible}
+.science-queue-v2{margin-top:16px}
 .science-main-v2{min-height:846px;height:auto;grid-template-rows:76px auto auto;overflow:visible}
 .science-catalog-v2{min-height:0;height:auto;overflow:visible}

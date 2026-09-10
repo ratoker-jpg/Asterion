@@ -9,8 +9,13 @@ import { ACTIVE_RUNTIME_MODE, getRuntimeSaveKey, scaleRuntimeDuration, type Runt
 export type { ScienceId } from './types.ts';
 
 export const SCIENCE_SAVE_KEY = getRuntimeSaveKey('production');
-export const SCIENCE_SAVE_SCHEMA_VERSION = 10;
+export const SCIENCE_SAVE_SCHEMA_VERSION = 11;
 export const SCIENCE_QUEUE_CAPACITY = 3;
+export const SCIENCE_CANCEL_REFUND_MIN_PERCENT = 60;
+export const SCIENCE_CANCEL_REFUND_MAX_PERCENT = 80;
+// Nemexia source (states a 60–80% range, not a fixed percentage):
+// https://github.com/ratoker-jpg/Nemexia_auto_v2/blob/main/saved_pages/%D0%BD%D0%B0%D1%83%D0%BA%D0%B0/page_2026-09-05_22-49-40.html
+export const SCIENCE_CANCEL_REFUND_SOURCE_URL = 'https://github.com/ratoker-jpg/Nemexia_auto_v2/blob/main/saved_pages/%D0%BD%D0%B0%D1%83%D0%BA%D0%B0/page_2026-09-05_22-49-40.html';
 
 export const SCIENCE_PROTOTYPE_CONFIG = Object.freeze({
   laboratoryMaxLevel: 20,
@@ -33,6 +38,8 @@ export type ScienceQueueTask = {
   finishAt: number;
   durationMs: number;
   cost: ScienceResourceCost;
+  /** False only for an old save whose original paid cost was not persisted. */
+  refundEligible?: boolean;
 };
 
 export type ScienceState = {
@@ -81,6 +88,7 @@ export type ScienceRuntimeContext = {
   now: number;
   mode?: RuntimeMode;
   testTimeScale?: number;
+  rng?: () => number;
 };
 
 export type ScienceStartTransition = {
@@ -98,6 +106,16 @@ export type ScienceReconciliation = {
   discarded: ScienceQueueTask[];
 };
 
+export type ScienceCancellationTransition = {
+  ok: boolean;
+  state: ScienceState;
+  wallet: ScienceWallet;
+  canceled: ScienceQueueTask | null;
+  refund: ScienceResourceCost | null;
+  refundPercent: number | null;
+  reason: string | null;
+};
+
 export type ScienceRuntimeSnapshot = {
   science: ScienceState;
   wallet: ScienceWallet;
@@ -113,6 +131,7 @@ export type ScienceStartRequest = {
 
 export const SCIENCE_RUNTIME_CHANGED_EVENT = 'asterion:science-runtime-changed';
 export const SCIENCE_START_REQUEST_EVENT = 'asterion:science-start-request';
+export const SCIENCE_CANCEL_REQUEST_EVENT = 'asterion:science-cancel-request';
 
 const RESOURCE_KEYS: readonly (keyof ScienceResourceCost)[] = ['metal', 'minerals', 'gas', 'energy'];
 const RESOURCE_LABELS: Record<keyof ScienceResourceCost, string> = {
@@ -135,6 +154,12 @@ function safeNonNegativeNumber(value: unknown, fallback: number): number {
   return Math.max(0, safeNumber(value, fallback));
 }
 
+function hasCompleteScienceCost(value: unknown): value is ScienceResourceCost {
+  return isRecord(value) && RESOURCE_KEYS.every((key) => (
+    typeof value[key] === 'number' && Number.isFinite(value[key]) && value[key] >= 0
+  ));
+}
+
 function safeLevel(value: unknown, maxLevel: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
   return Math.min(maxLevel, Math.max(0, Math.floor(value)));
@@ -142,11 +167,6 @@ function safeLevel(value: unknown, maxLevel: number): number {
 
 function safeTimestamp(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
-}
-
-function safeDuration(value: unknown, fallback: number): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return fallback;
-  return Math.max(1, Math.round(value));
 }
 
 function parseCapturedTime(value: string): number {
@@ -331,6 +351,9 @@ export function startScienceResearch(
   scienceId: ScienceId,
   taskId: string,
 ): ScienceStartTransition {
+  if (context.state.queue.some((task) => task.id === taskId)) {
+    return { ok: false, state: context.state, wallet: context.wallet, task: null, reason: 'Исследование с таким идентификатором уже находится в очереди.' };
+  }
   const preview = previewScience(context, scienceId);
   if (!preview.canStart || preview.nextLevel == null) {
     return { ok: false, state: context.state, wallet: context.wallet, task: null, reason: preview.reason };
@@ -347,6 +370,7 @@ export function startScienceResearch(
     finishAt: startedAt + preview.durationMs,
     durationMs: preview.durationMs,
     cost: cloneCost(preview.cost),
+    refundEligible: true,
   };
   const wallet = { ...context.wallet };
   for (const key of RESOURCE_KEYS) wallet[key] -= preview.cost[key];
@@ -356,6 +380,83 @@ export function startScienceResearch(
     state: { ...context.state, queue: [...context.state.queue, task] },
     wallet,
     task,
+    reason: null,
+  };
+}
+
+export function selectScienceCancelRefundPercent(rng: () => number = Math.random): number {
+  const sampled = rng();
+  const normalized = Number.isFinite(sampled) ? Math.min(0.999_999_999, Math.max(0, sampled)) : 0;
+  return SCIENCE_CANCEL_REFUND_MIN_PERCENT + Math.floor(
+    normalized * (SCIENCE_CANCEL_REFUND_MAX_PERCENT - SCIENCE_CANCEL_REFUND_MIN_PERCENT + 1),
+  );
+}
+
+function refundScienceCost(cost: ScienceResourceCost, refundPercent: number): ScienceResourceCost {
+  return Object.fromEntries(
+    RESOURCE_KEYS.map((key) => [key, Math.floor(cost[key] * refundPercent / 100)]),
+  ) as ScienceResourceCost;
+}
+
+function rescheduleScienceQueue(queue: readonly ScienceQueueTask[], canceledIndex: number, now: number): ScienceQueueTask[] {
+  const remaining = queue.filter((_, index) => index !== canceledIndex);
+  if (remaining.length === 0) return remaining;
+
+  let cursor = canceledIndex === 0 ? now : remaining[0].finishAt;
+  return remaining.map((task, index) => {
+    if (canceledIndex !== 0 && index === 0) return task;
+    const startedAt = cursor;
+    const finishAt = startedAt + task.durationMs;
+    cursor = finishAt;
+    return { ...task, startedAt, finishAt };
+  });
+}
+
+function ensureUniqueScienceTaskIds(queue: readonly ScienceQueueTask[]): ScienceQueueTask[] {
+  const seen = new Set<string>();
+  return queue.map((task, index) => {
+    if (!seen.has(task.id)) {
+      seen.add(task.id);
+      return task;
+    }
+    let id = `${task.id}-duplicate-${index}`;
+    let suffix = 1;
+    while (seen.has(id)) id = `${task.id}-duplicate-${index}-${suffix++}`;
+    seen.add(id);
+    return { ...task, id };
+  });
+}
+
+/** Atomically reconciles, refunds the saved cost once, and reschedules the FIFO queue. */
+export function cancelScienceResearch(
+  context: ScienceRuntimeContext,
+  taskId: string,
+): ScienceCancellationTransition {
+  const reconciled = reconcileScienceState(context.state, context.now);
+  const queue = ensureUniqueScienceTaskIds(reconciled.state.queue);
+  const reconciledState = queue.some((task, index) => task.id !== reconciled.state.queue[index]?.id)
+    ? { ...reconciled.state, queue }
+    : reconciled.state;
+  const queueIndex = queue.findIndex((task) => task.id === taskId);
+  const task = queueIndex >= 0 ? queue[queueIndex] ?? null : null;
+  if (!task) {
+    return { ok: false, state: reconciledState, wallet: context.wallet, canceled: null, refund: null, refundPercent: null, reason: 'Исследование уже завершено или недоступно для отмены.' };
+  }
+  if (task.refundEligible === false || !hasCompleteScienceCost(task.cost)) {
+    return { ok: false, state: reconciledState, wallet: context.wallet, canceled: null, refund: null, refundPercent: null, reason: 'Невозможно подтвердить сохранённую стоимость старого исследования.' };
+  }
+
+  const refundPercent = selectScienceCancelRefundPercent(context.rng);
+  const refund = refundScienceCost(task.cost, refundPercent);
+  const wallet = { ...context.wallet };
+  for (const key of RESOURCE_KEYS) wallet[key] += refund[key];
+  return {
+    ok: true,
+    state: { ...reconciledState, queue: rescheduleScienceQueue(queue, queueIndex, context.now) },
+    wallet,
+    canceled: task,
+    refund,
+    refundPercent,
     reason: null,
   };
 }
@@ -428,20 +529,30 @@ function migrateQueue(value: unknown, levels: ScienceLevels): ScienceQueueTask[]
     const fromLevel = transitionIsValid ? safeLevel(persistedFromLevel, maxLevel) : expectedFromLevel;
     if (fromLevel >= maxLevel) continue;
 
-    const durationMs = safeDuration(raw.durationMs, parseCapturedTime(science.capturedTime));
     const rawStartedAt = safeTimestamp(raw.startedAt);
-    const startedAt: number = previousFinishAt == null ? (rawStartedAt ?? 0) : previousFinishAt;
     const rawFinishAt = safeTimestamp(raw.finishAt);
-    const finishAt: number = rawFinishAt != null && rawFinishAt >= startedAt
-      ? rawFinishAt
-      : startedAt + durationMs;
-    const costSource = isRecord(raw.cost) ? raw.cost : science.capturedCost;
+    // Legacy saves did not always persist durationMs. Timestamps are the only
+    // evidence available, so derive solely from them; never use the live catalog,
+    // laboratory level, or Test Mode to recreate an already queued duration.
+    const persistedDuration = safeTimestamp(raw.durationMs);
+    const timestampDuration = rawStartedAt != null && rawFinishAt != null && rawFinishAt >= rawStartedAt
+      ? rawFinishAt - rawStartedAt
+      : null;
+    const durationMs = persistedDuration != null && persistedDuration > 0 ? Math.round(persistedDuration) : timestampDuration;
+    if (durationMs == null || durationMs <= 0) continue;
+    const startedAt: number = previousFinishAt == null ? (rawStartedAt ?? 0) : previousFinishAt;
+    const finishAt = startedAt + durationMs;
+    const costSource = isRecord(raw.cost) ? raw.cost : {};
+    const hasSavedCost = hasCompleteScienceCost(raw.cost);
     const cost = Object.fromEntries(
-      RESOURCE_KEYS.map((key) => [key, safeNonNegativeNumber(costSource[key], science.capturedCost[key])]),
+      RESOURCE_KEYS.map((key) => [key, safeNonNegativeNumber(costSource[key], 0)]),
     ) as ScienceResourceCost;
-    const id = typeof raw.id === 'string' && raw.id.trim()
+    const requestedId = typeof raw.id === 'string' && raw.id.trim()
       ? raw.id
       : `migrated-science-${scienceId}-${result.length}-${startedAt}`;
+    let id = requestedId;
+    let suffix = 1;
+    while (result.some((task) => task.id === id)) id = `${requestedId}-duplicate-${suffix++}`;
 
     result.push({
       id,
@@ -452,6 +563,7 @@ function migrateQueue(value: unknown, levels: ScienceLevels): ScienceQueueTask[]
       finishAt,
       durationMs,
       cost,
+      refundEligible: hasSavedCost,
     });
     queuedPerScience[scienceId] = queuedBefore + 1;
     previousFinishAt = finishAt;
