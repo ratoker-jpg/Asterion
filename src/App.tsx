@@ -10,12 +10,11 @@ import { BuildingInteriorHost } from './BuildingInteriorHost';
 import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
 import {
   APP_ROUTE_LABELS,
-  PRIMARY_NAVIGATION,
-  UTILITY_NAVIGATION,
   useNavigation,
   type AppRoute,
-  type NavigationIconKind,
 } from './ui/navigation.tsx';
+import { AsterionHeader } from './ui/header/AsterionHeader';
+import { GameIcon } from './ui/header/HeaderIcons';
 import {
   FLEET_CONSTRUCTION_REQUEST_EVENT,
   canEnterBuildingInterior,
@@ -160,6 +159,11 @@ import {
   type TradeState,
   type TradeWallet,
 } from './domain/buildings/trade.ts';
+import {
+  DEFAULT_COMBAT_FACTION_ID,
+  getCombatFactionName,
+  type CombatFactionId,
+} from './domain/combat/factions.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import planetColonized from '../assets/source/starter/planets/planet_colonized.png';
@@ -213,7 +217,6 @@ type PlanetSkin = (typeof planetSkins)[number]['id'];
 type PlanetId = 'helion-01';
 type Zone = BuildingZone;
 type PlanetViewMode = 'overview' | Zone;
-type IconKind = 'metal' | 'mineral' | 'gas' | 'energy' | 'population' | Zone;
 type BuildingInteriorContext = BuildingInteriorNavigationContext<PlanetId>;
 
 type PlanetRuntime = {
@@ -291,11 +294,11 @@ type PlanetDefinition = {
   id: PlanetId;
   coords: string;
   status: 'Основная планета';
-  faction: 'Астеры';
+  factionId: CombatFactionId;
 };
 
 const ownedPlanets: PlanetDefinition[] = [
-  { id: 'helion-01', coords: '[1:1:1]', status: 'Основная планета', faction: 'Астеры' },
+  { id: 'helion-01', coords: '[1:1:1]', status: 'Основная планета', factionId: DEFAULT_COMBAT_FACTION_ID },
 ];
 
 const RUNTIME_MODE: RuntimeMode = ACTIVE_RUNTIME_MODE;
@@ -433,21 +436,6 @@ function formatCountdown(ms: number) {
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 }
 
-function formatStorageEta(current: number, capacity: number, hourlyGain: number) {
-  if (current >= capacity) return 'склад заполнен';
-  if (hourlyGain <= 0) return 'нет добычи';
-
-  const minutes = Math.max(1, Math.ceil(((capacity - current) / hourlyGain) * 60));
-  const days = Math.floor(minutes / (24 * 60));
-  const hours = Math.floor((minutes % (24 * 60)) / 60);
-  const remainingMinutes = minutes % 60;
-  const parts = [];
-  if (days) parts.push(`${days} д`);
-  if (hours) parts.push(`${hours} ч`);
-  if (!days && !hours) parts.push(`${remainingMinutes} мин`);
-  return parts.join(' ');
-}
-
 function useStageScale() {
   const calc = () => Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
   const [scale, setScale] = useState(calc);
@@ -457,67 +445,6 @@ function useStageScale() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
   return scale;
-}
-
-function GameIcon({ kind }: { kind: IconKind }) {
-  const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.65, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
-
-  if (kind === 'metal') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M4 7 12 3l8 4-8 4-8-4Z"/><path {...common} d="m4 7 8 4v10l-8-4V7Zm16 0-8 4v10l8-4V7Z"/></svg>;
-  if (kind === 'mineral') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m12 2 7 7-7 13L5 9l7-7Z"/><path {...common} d="M5 9h14M12 2v20"/></svg>;
-  if (kind === 'gas') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M12 3c4 4.7 6 7.6 6 11a6 6 0 1 1-12 0c0-3.4 2-6.3 6-11Z"/><circle {...common} cx="10" cy="13" r="1.8"/><circle {...common} cx="14.5" cy="15.5" r="1.2"/></svg>;
-  if (kind === 'energy') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m13 2-7 12h6l-1 8 7-12h-6l1-8Z"/></svg>;
-  if (kind === 'population') return <svg viewBox="0 0 24 24" aria-hidden="true"><circle {...common} cx="9" cy="8" r="3"/><circle {...common} cx="16.5" cy="9.5" r="2.3"/><path {...common} d="M3.5 20c.5-4.2 2.5-6.3 5.5-6.3s5 2.1 5.5 6.3M14 14.6c3.5-.5 5.6 1.3 6.5 5.4"/></svg>;
-  if (kind === 'resource') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m12 2 4 6-4 6-4-6 4-6Zm-6 9 3 4-3 5-3-5 3-4Zm12 0 3 4-3 5-3-5 3-4Z"/></svg>;
-  if (kind === 'industry') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M3 21V10l6 3v-3l6 3V6h4v15H3Z"/><path {...common} d="M6 17h2m3 0h2m3 0h2M16 6V3h3v3"/></svg>;
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M4 19h16M7 19v-4l4-2V8l2-2 2 2v5l3 2v4M11 10h4M9 19v-3m6 3v-4"/><path {...common} d="m12 6 1-4 1 4"/></svg>;
-}
-
-function NavigationIcon({ kind }: { kind: NavigationIconKind }) {
-  const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.55, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
-
-  if (kind === 'planet') return <svg viewBox="0 0 32 32" aria-hidden="true"><ellipse {...common} cx="16" cy="16" rx="11" ry="6.5" /><circle {...common} cx="16" cy="16" r="4.7" /><path {...common} d="M4 13c5-5 19-7 25-2M5 20c5 4 17 5 23 1" /></svg>;
-  if (kind === 'universe') return <svg viewBox="0 0 32 32" aria-hidden="true"><circle {...common} cx="16" cy="16" r="2.4" /><ellipse {...common} cx="16" cy="16" rx="12.5" ry="5.2" transform="rotate(25 16 16)" /><ellipse {...common} cx="16" cy="16" rx="12.5" ry="5.2" transform="rotate(-35 16 16)" /></svg>;
-  if (kind === 'fleets') return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="m16 3 8 23-8-5-8 5 8-23Z" /><path {...common} d="M11 19H4l5-6M21 19h7l-5-6M16 8v13" /></svg>;
-  if (kind === 'operations') return <svg viewBox="0 0 32 32" aria-hidden="true"><circle {...common} cx="16" cy="16" r="10" /><circle {...common} cx="16" cy="16" r="4" /><path {...common} d="M16 2v6M16 24v6M2 16h6M24 16h6" /></svg>;
-  if (kind === 'command') return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="m16 8 4 5-4 5-4-5 4-5Z" /><path {...common} d="M12 13 3 9l6 9 7 7M20 13l9-4-6 9-7 7" /></svg>;
-  if (kind === 'reports') return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="M9 3h11l4 4v22H9V3Z" /><path {...common} d="M20 3v5h5M13 13h8M13 18h8M13 23h6" /></svg>;
-  if (kind === 'settings') return <svg viewBox="0 0 32 32" aria-hidden="true"><circle {...common} cx="16" cy="16" r="4.2" /><path {...common} d="m16 3 1.5 3.4a10.3 10.3 0 0 1 3 1.2l3.4-1.4 2.1 2.1-1.4 3.4a10.3 10.3 0 0 1 1.2 3L29 16l-1.2 1.5a10.3 10.3 0 0 1-1.2 3l1.4 3.4-2.1 2.1-3.4-1.4a10.3 10.3 0 0 1-3 1.2L16 29l-1.5-1.2a10.3 10.3 0 0 1-3-1.2l-3.4 1.4L6 25.9l1.4-3.4a10.3 10.3 0 0 1-1.2-3L3 16l3.2-1.3a10.3 10.3 0 0 1 1.2-3L6 8.3l2.1-2.1 3.4 1.4a10.3 10.3 0 0 1 3-1.2L16 3Z" /></svg>;
-  if (kind === 'rating') return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="m16 4 3.5 7.1 7.8 1.1-5.7 5.5 1.3 7.8-6.9-3.7-6.9 3.7 1.3-7.8-5.7-5.5 7.8-1.1L16 4Z" /></svg>;
-  return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="M13 4h6M14 4v8L7 25c-1.1 2.2.2 4 3 4h12c2.8 0 4.1-1.8 3-4l-7-13V4" /><path {...common} d="M10 21h12" /></svg>;
-}
-
-type ResourceProps = {
-  kind: Exclude<IconKind, Zone>;
-  label: string;
-  value: number;
-  capacity?: number;
-  showCapacity?: boolean;
-  hourlyGain?: number;
-  description?: string;
-};
-
-function Resource({ kind, label, value, capacity, showCapacity = false, hourlyGain, description }: ResourceProps) {
-  const fill = capacity ? Math.min(100, Math.max(0, (value / capacity) * 100)) : 0;
-  const fillTone = fill >= 85 ? 'critical' : fill >= 75 ? 'warning' : fill >= 65 ? 'watch' : 'normal';
-
-  return (
-    <div className={`resource-chip resource-chip--${kind}`} tabIndex={0}>
-      <span className="resource-chip__icon"><GameIcon kind={kind} /></span>
-      <span className="resource-chip__text">
-        <small>{label}</small>
-        <strong>{showCapacity && capacity ? `${formatNumber(value)} / ${formatNumber(capacity)}` : formatNumber(value)}</strong>
-        {capacity ? <span className={`resource-fill resource-fill--${fillTone}`}><i style={{ '--fill': `${fill}%` } as CSSProperties} /></span> : null}
-      </span>
-      <span className="resource-tooltip" role="tooltip">
-        <strong>{label}</strong>
-        {capacity ? <span>{formatNumber(value)} / {formatNumber(capacity)}</span> : <span>{formatNumber(value)}</span>}
-        {hourlyGain != null ? <span>Добыча: +{formatNumber(hourlyGain)}/ч</span> : null}
-        {capacity && hourlyGain != null ? <span>Склад заполнится через: {formatStorageEta(value, capacity, hourlyGain)}</span> : null}
-        {kind === 'population' && capacity ? <span>Заполнено: {fill.toFixed(1).replace('.', ',')}%</span> : null}
-        {description ? <span>{description}</span> : null}
-      </span>
-    </div>
-  );
 }
 
 function AegisButton({ children, onClick, disabled = false }: { children: ReactNode; onClick: () => void; disabled?: boolean }) {
@@ -1488,103 +1415,41 @@ export function App() {
   return (
     <div className="viewport">
       <div className="stage stage-shell-v3 stage-shell-v4" style={{ transform: `scale(${scale})`, '--space-bg': `url(${systemBackground})` } as CSSProperties}>
-        <header className="asterion-header">
-          <section className="header-planet-module">
-            <div className="header-planet-orbit">
-              <button className="header-planet-world" type="button" onClick={() => chooseRoute('planet')} aria-label={`Открыть ${currentPlanetName}`}>
-                <img src={currentSkin.art} alt={currentPlanetName} draggable={false} />
-              </button>
-              {(['resource', 'industry', 'military'] as Zone[]).map((item) => {
-                const isActive = activeTab === 'Планета' && planetViewMode === item;
-                return (
-                  <button
-                    key={item}
-                    type="button"
-                    className={`header-zone header-zone--${item} ${isActive ? 'active' : ''}`}
-                    title={zoneMeta[item].title}
-                    onClick={() => chooseZone(item)}
-                  >
-                    <GameIcon kind={item} />
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="current-planet-control">
-              <button className="current-planet-select" type="button" onClick={() => setPlanetMenuOpen((open) => !open)}>
-                <img src={currentSkin.art} alt={currentPlanetName} draggable={false} />
-                <span>
-                  <small>ТЕКУЩАЯ ПЛАНЕТА</small>
-                  <strong>{currentPlanetName} <em>{currentPlanet.coords}</em></strong>
-                </span>
-                <i>{planetMenuOpen ? '⌃' : '⌄'}</i>
-              </button>
-            </div>
-
-            {planetMenuOpen ? (
-              <div className="planet-list-popover">
-                <button type="button" className="active" onClick={() => selectPlanet('helion-01')}>
-                  <img src={currentSkin.art} alt="" />
-                  <span><strong>{currentPlanetName}</strong><small>{currentPlanet.coords} · {currentPlanet.status}</small></span>
-                  <b>✓</b>
-                </button>
-                <div>Новые планеты появятся здесь только после реальной колонизации.</div>
-              </div>
-            ) : null}
-          </section>
-
-          <section className="header-main">
-            <div className="resources header-resource-rail" aria-label="Ресурсы планеты">
-              <Resource kind="metal" label="МЕТАЛЛ" value={state.metal} capacity={storageCapacities.metal} hourlyGain={resourceIncomePerHour.metal} />
-              <Resource kind="mineral" label="МИНЕРАЛЫ" value={state.minerals} capacity={storageCapacities.minerals} hourlyGain={resourceIncomePerHour.minerals} />
-              <Resource kind="gas" label="ГАЗ" value={state.gas} capacity={storageCapacities.gas} hourlyGain={resourceIncomePerHour.gas} />
-              <Resource kind="energy" label="ЭНЕРГИЯ" value={currentPlanetState.energy} hourlyGain={energyIncomePerHour} description="Энергия/ч — вычисляемый доход; строительство энерго-зданий отдельно меняет запас энергии." />
-              <Resource kind="population" label="НАСЕЛЕНИЕ" value={fleetSummary.population} capacity={fleetSummary.capacity} />
-            </div>
-            <nav className="primary-navigation" aria-label="Основная навигация">
-              {PRIMARY_NAVIGATION.map(({ id, label, icon }) => (
-                <button key={id} type="button" className={activeRoute === id && !(id === 'planet' && planetViewMode !== 'overview') ? 'active' : ''} onClick={() => chooseRoute(id)}>
-                  <NavigationIcon kind={icon} />
-                  <span>{label}</span>
-                </button>
-              ))}
-            </nav>
-          </section>
-
-          <section className="campaign-block campaign-module">
-            <span className="campaign-icon">✦</span>
-            <div className="campaign-status"><strong>КАМПАНИЯ АКТИВНА</strong></div>
-            <time>{new Date(now).toLocaleTimeString('ru-RU', { hour12: false })}</time>
-            {RUNTIME_MODE === 'test' ? (
-              <div className="test-mode-banner-v1" data-qa-test-mode-banner>
-                <strong>ТЕСТОВЫЙ РЕЖИМ</strong>
-                <div className="test-mode-speed-picker" role="group" aria-label="Скорость тестового режима">
-                  {TEST_TIME_SCALE_OPTIONS.map((speed) => (
-                    <button
-                      key={speed}
-                      type="button"
-                      className={speed === testTimeScale ? 'active' : ''}
-                      aria-pressed={speed === testTimeScale}
-                      data-qa-test-speed={speed}
-                      onClick={() => setTestTimeScale(speed)}
-                    >
-                      ×{speed}
-                    </button>
-                  ))}
-                </div>
-                <small data-qa-test-time-scale>ускорение ×{testTimeScale} · {SAVE_KEY}</small>
-              </div>
-            ) : null}
-            <nav className="utility-navigation" aria-label="Служебная навигация">
-              {UTILITY_NAVIGATION.map(({ id, label, icon }) => (
-                <button key={id} type="button" aria-label={label} className={activeRoute === id ? 'active' : ''} onClick={() => chooseRoute(id)}>
-                  <NavigationIcon kind={icon} />
-                  <span>{label}</span>
-                </button>
-              ))}
-            </nav>
-          </section>
-        </header>
+        <AsterionHeader
+          factionId={currentPlanet.factionId}
+          currentPlanet={{
+            id: currentPlanet.id,
+            name: currentPlanetName,
+            coords: currentPlanet.coords,
+            status: currentPlanet.status,
+            art: currentSkin.art,
+          }}
+          planets={ownedPlanets.map((planet) => ({
+            id: planet.id,
+            name: planet.id === currentPlanet.id ? currentPlanetName : planet.id,
+            coords: planet.coords,
+            status: planet.status,
+            art: planet.id === currentPlanet.id ? currentSkin.art : currentSkin.art,
+          }))}
+          resources={[
+             { kind: 'metal', label: 'МЕТАЛЛ', value: state.metal, capacity: storageCapacities.metal, hourlyGain: resourceIncomePerHour.metal },
+             { kind: 'mineral', label: 'МИНЕРАЛЫ', value: state.minerals, capacity: storageCapacities.minerals, hourlyGain: resourceIncomePerHour.minerals },
+             { kind: 'gas', label: 'ГАЗ', value: state.gas, capacity: storageCapacities.gas, hourlyGain: resourceIncomePerHour.gas },
+             { kind: 'energy', label: 'ЭНЕРГИЯ', value: currentPlanetState.energy, hourlyGain: energyIncomePerHour, description: 'Энергия/ч — вычисляемый доход; строительство энерго-зданий отдельно меняет запас энергии.' },
+            { kind: 'population', label: 'НАСЕЛЕНИЕ', value: fleetSummary.population, capacity: fleetSummary.capacity, showCapacity: false },
+          ]}
+          zoneMeta={zoneMeta}
+          activeRoute={activeRoute}
+          activeZone={activeRoute === 'planet' && planetViewMode !== 'overview' ? planetViewMode : null}
+          planetMenuOpen={planetMenuOpen}
+           campaign={{ now, mode: RUNTIME_MODE, timeScale: testTimeScale, saveKey: SAVE_KEY, timeScaleOptions: TEST_TIME_SCALE_OPTIONS, onTimeScaleChange: setTestTimeScale }}
+          onRouteChange={chooseRoute}
+          onZoneChange={chooseZone}
+          onPlanetChange={(planetId) => {
+            if (planetId === currentPlanet.id) selectPlanet(currentPlanet.id);
+          }}
+          onPlanetMenuToggle={() => setPlanetMenuOpen((open) => !open)}
+         />
 
         <section className={`workspace workspace-v4 workspace--${workspaceKind}`}>
           {buildingInterior && buildingInteriorTarget && buildingInteriorTarget.kind !== 'host' && buildingInteriorDefinition ? (
@@ -1702,7 +1567,7 @@ export function App() {
                   <div className="planet-details-v4">
                     <dl>
                       <div><dt>Статус</dt><dd>★ {currentPlanet.status}</dd></div>
-                      <div><dt>Фракция</dt><dd>{currentPlanet.faction}</dd></div>
+                      <div><dt>Фракция</dt><dd>{getCombatFactionName(currentPlanet.factionId)}</dd></div>
                       <div><dt>Координаты</dt><dd>{currentPlanet.coords}</dd></div>
                       <div><dt>Население</dt><dd>{fleetSummary.population} / {fleetSummary.capacity}</dd></div>
                       <div><dt>Энергия</dt><dd>{currentPlanetState.energy}</dd></div>
