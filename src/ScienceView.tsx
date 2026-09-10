@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import laboratoryArt from '../assets/source/New assets/buildings/aegis/building.aegis.research.png';
 import astronomyArt from '../assets/source/New assets/technologies/technology.shared.astronomy.png';
 import chemistryArt from '../assets/source/New assets/technologies/technology.shared.chemistry.png';
@@ -29,6 +30,8 @@ import {
 } from './domain/science/catalog.ts';
 import {
   SCIENCE_CAPTURED_VALUES_NOTE,
+  SCIENCE_CANCEL_REQUEST_EVENT,
+  SCIENCE_CANCEL_REFUND_SOURCE_URL,
   SCIENCE_LABORATORY_MAX_LEVEL,
   SCIENCE_LABORATORY_TIME_REDUCTION_PER_LEVEL,
   SCIENCE_QUEUE_CAPACITY,
@@ -73,6 +76,9 @@ export function ScienceView() {
   const [section, setSection] = useState<ScienceSectionId>('basic');
   const [runtime, setRuntime] = useState<ScienceRuntimeSnapshot>(() => readScienceRuntimeSnapshot());
   const [now, setNow] = useState(() => Date.now());
+  const [pendingCancellation, setPendingCancellation] = useState<ScienceState['queue'][number] | null>(null);
+  const confirmYesRef = useRef<HTMLButtonElement>(null);
+  const confirmNoRef = useRef<HTMLButtonElement>(null);
   const sciences = useMemo(() => sciencesForSection(section), [section]);
   const heading = SCIENCE_SECTIONS.find((item) => item.id === section)?.label ?? 'Науки';
   const reconciled = reconcileScienceState(runtime.science, now);
@@ -95,10 +101,57 @@ export function ScienceView() {
     };
   }, []);
 
+  // Mirrors ZoneView's confirmation-dialog focus, Escape and tab-loop contract.
+  useEffect(() => {
+    if (!pendingCancellation) return;
+    const previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusFrame = window.requestAnimationFrame(() => confirmYesRef.current?.focus());
+    const restoreFocus = () => {
+      const fallback = document.querySelector('[data-qa-science-cancel]:not([disabled]), [data-qa-science-action]:not([disabled])');
+      const canRestorePrevious = previousActiveElement?.isConnected
+        && previousActiveElement !== document.body
+        && previousActiveElement !== document.documentElement
+        && !(previousActiveElement instanceof HTMLButtonElement && previousActiveElement.disabled);
+      const target = canRestorePrevious
+        ? previousActiveElement
+        : fallback instanceof HTMLElement ? fallback : null;
+      target?.focus();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setPendingCancellation(null);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const controls = [confirmYesRef.current, confirmNoRef.current].filter((control): control is HTMLButtonElement => Boolean(control));
+      if (controls.length !== 2) return;
+      if (event.shiftKey && document.activeElement === controls[0]) {
+        event.preventDefault();
+        controls[1].focus();
+      } else if (!event.shiftKey && document.activeElement === controls[1]) {
+        event.preventDefault();
+        controls[0].focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener('keydown', onKeyDown);
+      window.requestAnimationFrame(() => window.requestAnimationFrame(restoreFocus));
+    };
+  }, [pendingCancellation]);
+
   const startResearch = (scienceId: ScienceId) => {
     window.dispatchEvent(new CustomEvent(SCIENCE_START_REQUEST_EVENT, {
       detail: { scienceId, now: Date.now() },
     }));
+  };
+  const confirmCancellation = () => {
+    if (!pendingCancellation) return;
+    window.dispatchEvent(new CustomEvent(SCIENCE_CANCEL_REQUEST_EVENT, {
+      detail: { taskId: pendingCancellation.id, now: Date.now() },
+    }));
+    setPendingCancellation(null);
   };
 
   return (
@@ -133,10 +186,10 @@ export function ScienceView() {
             <small className="utility-secondary" data-qa-science-queue-count>{scienceState.queue.length}/{SCIENCE_QUEUE_CAPACITY}</small>
           </header>
           {scienceState.queue.length > 0 ? scienceState.queue.map((task) => (
-            <ScienceQueueCard key={task.id} task={task} now={now} />
+            <ScienceQueueCard key={task.id} task={task} now={now} onCancel={() => setPendingCancellation(task)} />
           )) : <p className="utility-helper">Очередь свободна.</p>}
         </section>
-        <small className="science-captured-note utility-helper" title={SCIENCE_CAPTURED_VALUES_NOTE}>Стоимость и время: сохранённые prototype/captured значения.</small>
+        <small className="science-captured-note utility-helper" title={SCIENCE_CAPTURED_VALUES_NOTE}>Стоимость: captured-значения; время: Asterion Balance v1 с учётом лаборатории.</small>
       </aside>
 
       <main className="science-main-v2">
@@ -156,24 +209,54 @@ export function ScienceView() {
           ))}
         </div>
       </main>
+      {pendingCancellation ? createPortal(
+        <div className="resource-building-action-confirm-backdrop" data-qa-science-cancel-backdrop onMouseDown={() => setPendingCancellation(null)}>
+          <section
+            className="resource-building-action-confirm"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="science-cancel-confirm-title"
+            data-qa-science-cancel-confirm
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <small>ПОДТВЕРЖДЕНИЕ ДЕЙСТВИЯ</small>
+            <h3 id="science-cancel-confirm-title">Отменить исследование?</h3>
+            <p>Вы уверены, что хотите отменить исследование «{SCIENCE_CATALOG.find((science) => science.id === pendingCancellation.scienceId)?.name ?? 'Наука'}»? Случайные 60–80% сохранённой стоимости будут возвращены; остальное будет потеряно.</p>
+            <small className="utility-helper">Источник правила: <a href={SCIENCE_CANCEL_REFUND_SOURCE_URL} target="_blank" rel="noreferrer">Nemexia, 60–80%</a>.</small>
+            <div className="resource-building-action-confirm-actions">
+              <button ref={confirmYesRef} type="button" data-qa-action-confirm-yes data-qa-science-cancel-yes onClick={confirmCancellation}>ДА</button>
+              <button ref={confirmNoRef} type="button" data-qa-action-confirm-no data-qa-science-cancel-no onClick={() => setPendingCancellation(null)}>НЕТ</button>
+            </div>
+          </section>
+        </div>,
+        document.body,
+      ) : null}
     </div>
   );
 }
 
-function ScienceQueueCard({ task, now }: { task: ScienceState['queue'][number]; now: number }) {
+function ScienceQueueCard({ task, now, onCancel }: { task: ScienceState['queue'][number]; now: number; onCancel: () => void }) {
   const science = SCIENCE_CATALOG.find((item) => item.id === task.scienceId);
   if (!science) return null;
-  const duration = Math.max(1, task.finishAt - task.startedAt);
+  const duration = task.durationMs;
   const progress = Math.min(100, Math.max(0, ((now - task.startedAt) / duration) * 100));
   return (
-    <div className="science-queue-card-v2" data-qa-science-queue-task={science.id}>
+    <div className="science-queue-card-v2" data-qa-science-queue-task={science.id} data-qa-science-queue-task-id={task.id}>
       <img src={SCIENCE_ARTS[science.artSlug]} alt="" draggable={false} />
       <div>
         <strong className="utility-section-title">{science.name}</strong>
         <span className="utility-secondary">Уровень {task.fromLevel} → {task.toLevel}</span>
         <time className="utility-data-text" data-qa-science-remaining>{formatDuration(Math.max(0, task.finishAt - now))}</time>
       </div>
-      <button type="button" className="utility-control" disabled title="Отмена недоступна: правило возврата ресурсов не подтверждено источником">×</button>
+      <button
+        type="button"
+        className="utility-control"
+        data-qa-science-cancel={task.id}
+        disabled={task.refundEligible === false}
+        title={task.refundEligible === false ? 'Отмена недоступна: сохранённая стоимость старого исследования не подтверждена.' : 'Отменить исследование'}
+        aria-label={`Отменить исследование «${science.name}»`}
+        onClick={onCancel}
+      >×</button>
       <i><b style={{ width: `${progress}%` }} /></i>
     </div>
   );
@@ -188,7 +271,7 @@ function ScienceRow({
   runtime: ScienceRuntimeSnapshot;
   onStart: (scienceId: ScienceId) => void;
 }) {
-  const preview = previewScience({ state: runtime.science, wallet: runtime.wallet, laboratoryLevel: runtime.laboratoryLevel, now: runtime.now, mode: runtime.mode }, science.id);
+  const preview = previewScience({ state: runtime.science, wallet: runtime.wallet, laboratoryLevel: runtime.laboratoryLevel, now: runtime.now, mode: runtime.mode, testTimeScale: runtime.testTimeScale }, science.id);
   const currentLevel = preview.currentLevel;
   const actionLabel = preview.status === 'max-level'
     ? 'МАКСИМАЛЬНЫЙ УРОВЕНЬ'

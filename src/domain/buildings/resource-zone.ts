@@ -570,29 +570,25 @@ function addResourceCost(resources: ResourceWallet, cost: ResourceCost): Resourc
   ) as ResourceWallet;
 }
 
+function getQueuedBuildingCost(item: BuildingQueueItem, scienceLevels: ScienceLevels): ResourceCost | null {
+  if (item.cost) return { ...item.cost };
+  const balanceRow = getBuildingBalanceRow(item.assetRole, item.targetLevel);
+  return balanceRow?.cost ? getBuildingConstructionCost(balanceRow.cost, scienceLevels) : null;
+}
+
 function rescheduleQueueAfterCancellation(
-  queue: BuildingQueueItem[],
-  canceledIndex: number,
+  queue: readonly BuildingQueueItem[],
+  canceledWasActive: boolean,
   now: number,
 ): BuildingQueueItem[] {
-  if (queue.length === 0) return queue;
+  if (queue.length === 0) return [];
 
-  const remaining = queue.filter((_, index) => index !== canceledIndex);
+  const remaining = [...queue];
   if (remaining.length === 0) return remaining;
 
-  if (canceledIndex === 0) {
-    let cursor = now;
-    return remaining.map((item) => {
-      const startedAt = cursor;
-      const finishAt = startedAt + Math.max(1, item.durationMs);
-      cursor = finishAt;
-      return { ...item, startedAt, finishAt };
-    });
-  }
-
-  let cursor = remaining[0].finishAt;
+  let cursor = canceledWasActive ? now : remaining[0].finishAt;
   return remaining.map((item, index) => {
-    if (index === 0) return item;
+    if (!canceledWasActive && index === 0) return item;
     const startedAt = cursor;
     const finishAt = startedAt + Math.max(1, item.durationMs);
     cursor = finishAt;
@@ -600,11 +596,45 @@ function rescheduleQueueAfterCancellation(
   });
 }
 
+function removeDependentBuildingProjects(
+  queue: readonly BuildingQueueItem[],
+  canceledIndex: number,
+  buildings: BuildingLevels,
+): { remaining: BuildingQueueItem[]; cascaded: BuildingQueueItem[] } {
+  const projectedLevels = { ...buildings };
+  const remaining: BuildingQueueItem[] = [];
+  const cascaded: BuildingQueueItem[] = [];
+
+  queue.forEach((item, index) => {
+    if (index < canceledIndex) {
+      remaining.push(item);
+      projectedLevels[item.assetRole] = item.targetLevel;
+      return;
+    }
+    if (index === canceledIndex) {
+      cascaded.push(item);
+      return;
+    }
+
+    const projectedLevel = projectedLevels[item.assetRole] ?? 0;
+    if (item.targetLevel !== projectedLevel + 1) {
+      cascaded.push(item);
+      return;
+    }
+
+    remaining.push(item);
+    projectedLevels[item.assetRole] = item.targetLevel;
+  });
+
+  return { remaining, cascaded };
+}
+
 export type BuildingCancellationTransition = {
   ok: boolean;
   state: BuildingEconomyState;
   reason: string | null;
   canceled: BuildingQueueItem | null;
+  canceledItems: BuildingQueueItem[];
   refund: ResourceCost | null;
 };
 
@@ -621,36 +651,43 @@ export function cancelBuildingProject(
       state,
       reason: 'Проект в этом слоте уже недоступен.',
       canceled: null,
+      canceledItems: [],
       refund: null,
     };
   }
 
-  const balanceRow = getBuildingBalanceRow(canceled.assetRole, canceled.targetLevel);
-  const cost = canceled.cost
-    ? { ...canceled.cost }
-    : balanceRow?.cost
-      ? getBuildingConstructionCost(balanceRow.cost, state.scienceLevels)
-      : null;
+  const cost = getQueuedBuildingCost(canceled, state.scienceLevels);
   if (!cost) {
     return {
       ok: false,
       state,
       reason: 'Стоимость отменяемого проекта недоступна.',
       canceled: null,
+      canceledItems: [],
       refund: null,
     };
   }
 
-  const refund = refundCost(cost, BUILDING_CANCEL_REFUND_PERCENT);
+  const { remaining, cascaded } = removeDependentBuildingProjects(state.queue, queueIndex, state.buildings);
+  const canceledItems = [canceled, ...cascaded.filter((item) => item.id !== canceled.id)];
+  const refund = canceledItems.reduce((total, item) => {
+    const itemCost = getQueuedBuildingCost(item, state.scienceLevels);
+    if (!itemCost) return total;
+    const itemRefund = refundCost(itemCost, BUILDING_CANCEL_REFUND_PERCENT);
+    return Object.fromEntries(
+      (Object.keys(total) as ResourceKey[]).map((key) => [key, total[key] + itemRefund[key]]),
+    ) as ResourceCost;
+  }, { metal: 0, minerals: 0, gas: 0, energy: 0 } as ResourceCost);
   return {
     ok: true,
     state: {
       ...state,
       resources: addResourceCost(state.resources, refund),
-      queue: rescheduleQueueAfterCancellation(state.queue, queueIndex, now),
+      queue: rescheduleQueueAfterCancellation(remaining, queueIndex === 0, now),
     },
     reason: null,
     canceled,
+    canceledItems,
     refund,
   };
 }

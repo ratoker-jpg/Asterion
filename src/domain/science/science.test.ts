@@ -4,17 +4,21 @@ import { COMBAT_TECHNOLOGY_IDS } from '../combat/technologies.ts';
 import { SCIENCE_CATALOG, SCIENCE_SECTIONS } from './catalog.ts';
 import {
   SCIENCE_QUEUE_CAPACITY,
+  SCIENCE_CANCEL_REFUND_SOURCE_URL,
   calculateScienceDurationMs,
+  cancelScienceResearch,
   createDefaultScienceState,
   getSciencePrototypeMaxLevel,
   migrateScienceState,
   migrateScienceLevels,
   previewScience,
   reconcileScienceState,
+  selectScienceCancelRefundPercent,
   startScienceResearch,
   type ScienceRuntimeContext,
   type ScienceState,
 } from './runtime.ts';
+import { SCIENCE_REBALANCED_BASE_TIME_MS, getScienceRebalancedBaseDurationMs } from './time-rebalanced.ts';
 import { sciencesForSection } from './selectors.ts';
 
 const wallet = { metal: 1_000_000, minerals: 1_000_000, gas: 1_000_000, energy: 1_000_000 };
@@ -75,13 +79,13 @@ test('canonical science maxima are per technology and the laboratory is level 20
   assert.deepEqual(
     Object.fromEntries(SCIENCE_CATALOG.map((science) => [science.id, science.maxLevel])),
     {
-      1: 10, 2: 15, 3: 10, 4: 15, 5: 20, 6: 20, 7: 15, 8: 15, 9: 15,
-      10: 15, 11: 15, 12: 15, 13: 15, 14: 2, 15: 1, 17: 20,
+      1: 10, 2: 15, 3: 10, 4: 15, 5: 20, 6: 15, 7: 20, 8: 15, 9: 15,
+      10: 15, 11: 15, 12: 15, 13: 15, 14: 15, 15: 1, 17: 10,
       18: 10, 19: 10, 20: 10, 21: 10, 22: 10, 23: 10,
     },
   );
   assert.equal(migrateScienceLevels({ 1: 999, 14: 999, 15: 999 })[1], 10);
-  assert.equal(migrateScienceLevels({ 1: 999, 14: 999, 15: 999 })[14], 2);
+  assert.equal(migrateScienceLevels({ 1: 999, 14: 999, 15: 999 })[14], 15);
   assert.equal(migrateScienceLevels({ 1: 999, 14: 999, 15: 999 })[15], 1);
 });
 
@@ -91,6 +95,154 @@ test('laboratory reduces current research time by 5 percent per level', () => {
   assert.equal(calculateScienceDurationMs(base, 1), Math.round(base * 0.95));
   assert.equal(calculateScienceDurationMs(base, 2), Math.round(base * 0.95 ** 2));
   assert.equal(calculateScienceDurationMs(base, 20), Math.round(base * 0.95 ** 20));
+});
+
+test('Asterion Balance v1 supplies every science transition duration and preview uses its next level', () => {
+  for (const science of SCIENCE_CATALOG) {
+    const durations = SCIENCE_REBALANCED_BASE_TIME_MS[science.id];
+    assert.equal(durations.length >= science.maxLevel, true, `${science.name} is missing a duration row`);
+    for (let targetLevel = 1; targetLevel <= science.maxLevel; targetLevel += 1) {
+      assert.equal(getScienceRebalancedBaseDurationMs(science.id, targetLevel), durations[targetLevel - 1]);
+    }
+    const preview = previewScience(context(createDefaultScienceState(), 1), science.id);
+    assert.equal(preview.durationMs, calculateScienceDurationMs(durations[0], 1));
+  }
+  assert.equal(getScienceRebalancedBaseDurationMs(1, 1), 45_000);
+});
+
+test('legacy science queue replaces stale captured durations with source-backed lab-adjusted snapshots', () => {
+  const migrated = migrateScienceState({
+    levels: { 1: 0 },
+    queue: [
+      { id: 'old-first', scienceId: 1, fromLevel: 0, toLevel: 1, startedAt: 10_000, finishAt: 5_410_000, durationMs: 5_400_000 },
+      { id: 'old-second', scienceId: 1, fromLevel: 1, toLevel: 2, startedAt: 5_410_000, finishAt: 10_810_000, durationMs: 5_400_000 },
+    ],
+  }, { laboratoryLevel: 1 });
+  assert.deepEqual(migrated.queue.map((task) => task.durationMs), [42_750, 76_000]);
+  assert.equal(migrated.queue[0].finishAt, migrated.queue[0].startedAt + 42_750);
+  assert.equal(migrated.queue[1].startedAt, migrated.queue[0].finishAt);
+});
+
+test('one canonical duration calculation is used by preview and queued snapshots across all Test Mode scales', () => {
+  const base = 45 * 1_000;
+  for (const laboratoryLevel of [0, 1, 2, 20]) {
+    for (const scale of [1, 10, 15, 100, 200, 300, 500]) {
+      const state = createDefaultScienceState();
+      const current = { ...context(state, laboratoryLevel), mode: 'test' as const, testTimeScale: scale };
+      const preview = previewScience(current, 1);
+      assert.equal(preview.durationMs, calculateScienceDurationMs(base, laboratoryLevel, 'test', scale));
+      if (laboratoryLevel > 0) {
+        const transition = startScienceResearch(current, 1, `duration-${laboratoryLevel}-${scale}`);
+        assert.equal(transition.ok, true);
+        assert.equal(transition.task?.durationMs, preview.durationMs);
+        assert.equal(transition.task?.finishAt, transition.task!.startedAt + transition.task!.durationMs);
+      }
+    }
+  }
+});
+
+test('queued duration is a snapshot and remaining time equals duration at startedAt', () => {
+  const first = start(context(createDefaultScienceState(), 1, 10_000), 1, 'snapshot-first');
+  assert.equal(first.ok, true);
+  const second = start({ ...context(first.state, 20, first.task!.finishAt), wallet: first.wallet }, 1, 'snapshot-second');
+  assert.equal(second.ok, true);
+  assert.equal(first.task!.finishAt - first.task!.startedAt, first.task!.durationMs);
+  assert.equal(second.task!.startedAt, first.task!.finishAt);
+  assert.notEqual(second.task!.durationMs, first.task!.durationMs);
+});
+
+test('science cancellation cascades dependent successors and refunds each saved cost with its own 60–80% roll', () => {
+  let current = context(createDefaultScienceState(), 1, 10_000);
+  for (const id of ['cancel-1', 'cancel-2', 'cancel-3']) {
+    const transition = start(current, 1, id);
+    assert.equal(transition.ok, true);
+    current = { ...current, state: transition.state, wallet: transition.wallet };
+  }
+  const canceledTask = current.state.queue[1];
+  const rolls = [0, 0.999999];
+  const canceled = cancelScienceResearch({ ...current, rng: () => rolls.shift() ?? 0 }, canceledTask.id);
+  assert.equal(canceled.ok, true);
+  assert.equal(canceled.refundPercent, 60);
+  assert.deepEqual(canceled.refundPercents, [60, 80]);
+  assert.deepEqual(canceled.canceledTasks.map((task) => task.id), ['cancel-2', 'cancel-3']);
+  assert.deepEqual(canceled.refund, {
+    metal: Math.floor(canceledTask.cost.metal * 0.6) + Math.floor(current.state.queue[2].cost.metal * 0.8),
+    minerals: Math.floor(canceledTask.cost.minerals * 0.6) + Math.floor(current.state.queue[2].cost.minerals * 0.8),
+    gas: Math.floor(canceledTask.cost.gas * 0.6) + Math.floor(current.state.queue[2].cost.gas * 0.8),
+    energy: Math.floor(canceledTask.cost.energy * 0.6) + Math.floor(current.state.queue[2].cost.energy * 0.8),
+  });
+  assert.deepEqual(canceled.state.queue.map((task) => task.id), ['cancel-1']);
+  const repeated = cancelScienceResearch({ ...current, state: canceled.state, wallet: canceled.wallet, rng: () => 0 }, canceledTask.id);
+  assert.equal(repeated.ok, false);
+  assert.deepEqual(repeated.wallet, canceled.wallet);
+});
+
+test('science cancellation reconciles completed work before refusing a refund', () => {
+  const started = start(context(createDefaultScienceState(), 1, 10_000), 1, 'complete-before-cancel');
+  const canceled = cancelScienceResearch({ ...context(started.state, 1, started.task!.finishAt), wallet: started.wallet, rng: () => 0 }, 'complete-before-cancel');
+  assert.equal(canceled.ok, false);
+  assert.equal(canceled.state.levels[1], 1);
+  assert.deepEqual(canceled.wallet, started.wallet);
+});
+
+test('canceling the active science task removes dependent successors instead of leaving impossible levels', () => {
+  const first = start(context(createDefaultScienceState(), 1, 10_000), 1, 'active-cancel-first');
+  const second = start({ ...context(first.state, 1, first.task!.finishAt), wallet: first.wallet }, 1, 'active-cancel-second');
+  const canceledAt = first.task!.startedAt + 1_000;
+  const canceled = cancelScienceResearch({ ...context(second.state, 1, canceledAt), wallet: second.wallet, rng: () => 0 }, 'active-cancel-first');
+  assert.equal(canceled.ok, true);
+  assert.deepEqual(canceled.state.queue, []);
+  assert.deepEqual(canceled.canceledTasks.map((task) => task.id), ['active-cancel-first', 'active-cancel-second']);
+  assert.deepEqual(canceled.refundPercents, [60, 60]);
+});
+
+test('science cancellation keeps independent queued sciences while dropping only invalid successors', () => {
+  let current = context(createDefaultScienceState(), 1, 10_000);
+  const first = start(current, 1, 'science-chain-first');
+  current = { ...current, state: first.state, wallet: first.wallet };
+  const independent = start({ ...context(current.state, 20, first.task!.finishAt), wallet: current.wallet }, 2, 'science-independent');
+  current = { ...current, state: independent.state, wallet: independent.wallet };
+  const dependent = start({ ...context(current.state, 20, independent.task!.finishAt), wallet: current.wallet }, 1, 'science-chain-dependent');
+  current = { ...current, state: dependent.state, wallet: dependent.wallet };
+
+  const canceled = cancelScienceResearch({ ...current, rng: () => 0 }, first.task!.id);
+  assert.equal(canceled.ok, true);
+  assert.deepEqual(canceled.state.queue.map((task) => task.id), ['science-independent']);
+  assert.deepEqual(canceled.canceledTasks.map((task) => task.id), ['science-chain-first', 'science-chain-dependent']);
+  assert.deepEqual(canceled.refundPercents, [60, 60]);
+});
+
+test('science cancellation source and integer boundary rolls are explicit', () => {
+  assert.equal(SCIENCE_CANCEL_REFUND_SOURCE_URL, 'https://github.com/ratoker-jpg/Nemexia_auto_v2/blob/main/saved_pages/%D0%BD%D0%B0%D1%83%D0%BA%D0%B0/page_2026-09-05_22-49-40.html');
+  assert.equal(selectScienceCancelRefundPercent(() => 0), 60);
+  assert.equal(selectScienceCancelRefundPercent(() => 0.999999), 80);
+});
+
+test('science migration makes task ids unique and blocks refunds without a complete saved cost', () => {
+  const migrated = migrateScienceState({
+    levels: { 1: 0 },
+    queue: [
+      {
+        id: 'duplicate-task', scienceId: 1, fromLevel: 0, toLevel: 1,
+        startedAt: 100, finishAt: 200, durationMs: 100,
+        cost: { metal: 100, minerals: 50, gas: 20, energy: 10 },
+      },
+      {
+        id: 'duplicate-task', scienceId: 1, fromLevel: 1, toLevel: 2,
+        startedAt: 200, finishAt: 300, durationMs: 100,
+        cost: { metal: 100, minerals: 50, gas: 20 },
+      },
+    ],
+  });
+  assert.equal(migrated.queue.length, 2);
+  assert.notEqual(migrated.queue[0].id, migrated.queue[1].id);
+  assert.equal(migrated.queue[1].refundEligible, false);
+
+  const current = context(migrated, 1, 150);
+  const blocked = cancelScienceResearch(current, migrated.queue[1].id);
+  assert.equal(blocked.ok, false);
+  assert.deepEqual(blocked.wallet, current.wallet);
+  assert.deepEqual(blocked.state.queue.map((task) => task.id), migrated.queue.map((task) => task.id));
 });
 
 test('science start validates runtime laboratory/prerequisites and atomically deducts resources', () => {
@@ -181,7 +333,7 @@ test('malformed and legacy science saves migrate safely, including stale tasks',
   assert.equal(migrated.levels[2], 0);
   assert.equal(migrated.queue.length, 2);
   assert.deepEqual([migrated.queue[0].fromLevel, migrated.queue[0].toLevel], [1, 2]);
-  const reconciled = reconcileScienceState(migrated, 3_000);
+  const reconciled = reconcileScienceState(migrated, migrated.queue[0].finishAt);
   assert.equal(reconciled.state.levels[1], 2);
   assert.equal(reconciled.completed.length, 1);
   assert.equal(migrateScienceState({ queue: 'not-an-array' }).queue.length, 0);

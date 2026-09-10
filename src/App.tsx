@@ -60,8 +60,10 @@ import type { PlayerProfileState } from './domain/profile/types.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import {
   SCIENCE_RUNTIME_CHANGED_EVENT,
+  SCIENCE_CANCEL_REQUEST_EVENT,
   SCIENCE_SAVE_SCHEMA_VERSION,
   SCIENCE_START_REQUEST_EVENT,
+  cancelScienceResearch,
   createDefaultScienceState,
   createScienceRuntimeSnapshot,
   migrateScienceState,
@@ -370,7 +372,11 @@ function readSave(): SaveState {
       migrateSpaceportUpgradeState(savedHomeworld?.spaceportUpgrades),
       now,
     ).state;
-    const science = migrateScienceState(parsed.science);
+    const science = migrateScienceState(parsed.science, {
+      laboratoryLevel: buildings.research,
+      mode: RUNTIME_MODE,
+      testTimeScale: resolveTestTimeScale(),
+    });
     const combat = migrateBattleHistory(parsed.combat);
     const operations = migrateOperationsState(parsed.operations);
     const command = migrateCommandState(parsed.command);
@@ -639,6 +645,47 @@ export function App() {
     return () => window.removeEventListener(SCIENCE_START_REQUEST_EVENT, onScienceStartRequest);
   }, [testTimeScale]);
   useEffect(() => {
+    const onScienceCancelRequest = (event: Event) => {
+      const request = (event as CustomEvent<{ taskId?: string; now?: number }>).detail;
+      if (!request?.taskId) return;
+      const canceledAt = typeof request.now === 'number' && Number.isFinite(request.now) ? request.now : Date.now();
+      const current = stateRef.current;
+      const planet = current.planets['helion-01'];
+      const result = cancelScienceResearch({
+        state: current.science,
+        wallet: { metal: current.metal, minerals: current.minerals, gas: current.gas, energy: planet.energy },
+        laboratoryLevel: planet.buildings.research,
+        now: canceledAt,
+        mode: RUNTIME_MODE,
+        testTimeScale,
+        rng: Math.random,
+      }, request.taskId);
+      const nextState: SaveState = {
+        ...current,
+        schemaVersion: SAVE_SCHEMA_VERSION,
+        metal: result.wallet.metal,
+        minerals: result.wallet.minerals,
+        gas: result.wallet.gas,
+        planets: { ...current.planets, 'helion-01': { ...planet, energy: result.wallet.energy } },
+        science: result.state,
+      };
+      const walletChanged = nextState.metal !== current.metal
+        || nextState.minerals !== current.minerals
+        || nextState.gas !== current.gas
+        || nextState.planets['helion-01'].energy !== planet.energy;
+      if (result.state !== current.science || walletChanged) {
+        stateRef.current = nextState;
+        setState(nextState);
+      }
+      const cascadedCount = Math.max(0, (result?.canceledTasks.length ?? 0) - 1);
+      setNotice(result?.ok
+        ? `Исследование отменено.${cascadedCount > 0 ? ` Каскадно отменено ещё ${cascadedCount} зависимых исследований.` : ''} ${cascadedCount > 0 ? 'Для каждого отменённого задания рассчитан отдельный возврат 60–80%.' : `Возвращено ${result.refundPercent}% сохранённой стоимости.`}`
+        : result?.reason ?? 'Исследование недоступно для отмены.');
+    };
+    window.addEventListener(SCIENCE_CANCEL_REQUEST_EVENT, onScienceCancelRequest);
+    return () => window.removeEventListener(SCIENCE_CANCEL_REQUEST_EVENT, onScienceCancelRequest);
+  }, [testTimeScale]);
+  useEffect(() => {
     const snapshot = reconcileScienceState(state.science, now);
     if (!snapshot.changed) return;
 
@@ -670,11 +717,12 @@ export function App() {
       planet.buildings.research,
       now,
       RUNTIME_MODE,
+      testTimeScale,
     );
     window.dispatchEvent(new CustomEvent(SCIENCE_RUNTIME_CHANGED_EVENT, { detail: snapshot }));
     publishRuntimeStateSnapshot({ command: state.command, rating: state.rating });
     window.dispatchEvent(new CustomEvent(RUNTIME_STATE_CHANGED_EVENT, { detail: state }));
-  }, [now, state]);
+  }, [now, state, testTimeScale]);
   useEffect(() => {
     const activeQueueItem = state.queues['helion-01'][0];
     if (!activeQueueItem || now < activeQueueItem.finishAt) return;
@@ -1186,7 +1234,8 @@ export function App() {
     };
     stateRef.current = nextState;
     setState(nextState);
-    setNotice(`${canceledDefinition?.name ?? 'Проект'} отменён. Возвращено 90% ресурсов.`);
+    const cascadedCount = Math.max(0, transition.canceledItems.length - 1);
+    setNotice(`${canceledDefinition?.name ?? 'Проект'} отменён.${cascadedCount > 0 ? ` Каскадно отменено ещё ${cascadedCount} зависимых проектов.` : ''} Возвращено 90% сохранённых ресурсов.`);
     return true;
   };
 
