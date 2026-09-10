@@ -12,12 +12,7 @@ import {
 } from './domain/settings/preferences.ts';
 import { getDesktopBridge, getWindowPresetDimensions } from './domain/settings/desktop.ts';
 import { WINDOW_PRESETS, type DesktopDisplayState, type UiPreferencesV2 } from './domain/settings/types.ts';
-
-type UtilityScreen = 'Настройки' | 'Рейтинг' | 'Наука';
-
-function isUtilityScreen(value: string | undefined): value is UtilityScreen {
-  return value === 'Настройки' || value === 'Рейтинг' || value === 'Наука';
-}
+import { APP_ROUTE_LABELS, isUtilityRoute, useNavigation } from './ui/navigation.tsx';
 
 function presetForDisplayState(state: DesktopDisplayState, fallback: UiPreferencesV2['display']['preset']) {
   if (state.mode !== 'windowed') return fallback;
@@ -28,8 +23,8 @@ function presetForDisplayState(state: DesktopDisplayState, fallback: UiPreferenc
 }
 
 export function UtilityScreensPortal() {
+  const { route } = useNavigation();
   const [target, setTarget] = useState<Element | null>(null);
-  const [active, setActive] = useState<UtilityScreen | null>(null);
   const [preferences, setPreferences] = useState<UiPreferencesV2>(() => readPreferences());
   const [runtimeState, setRuntimeState] = useState<RuntimeStateSnapshot | null>(() => getRuntimeStateSnapshot());
   const preferencesRef = useRef(preferences);
@@ -75,22 +70,7 @@ export function UtilityScreensPortal() {
   }, []);
 
   useEffect(() => {
-    const sync = () => {
-      const label = document.querySelector('.utility-navigation button.active span')?.textContent?.trim();
-      setActive(isUtilityScreen(label) ? label : null);
-      setTarget(document.querySelector('.workspace'));
-    };
-
-    sync();
-    const observer = new MutationObserver(sync);
-    observer.observe(document.body, {
-      subtree: true,
-      childList: true,
-      characterData: true,
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-    return () => observer.disconnect();
+    setTarget(document.querySelector('.workspace'));
   }, []);
 
   const updatePreferences = (next: UiPreferencesV2) => {
@@ -108,13 +88,14 @@ export function UtilityScreensPortal() {
     void getDesktopBridge()?.setDisplay(defaults.display).catch(() => undefined);
   };
 
+  const active = isUtilityRoute(route) ? route : null;
   if (!active || !target) return null;
 
   return createPortal(
-    <div className="utility-screen-host" data-utility-screen={active}>
-      {active === 'Настройки' ? (
+    <div className="utility-screen-host" data-utility-screen={APP_ROUTE_LABELS[active]} data-qa-utility-screen={active}>
+      {active === 'settings' ? (
         <SettingsView preferences={preferences} onPreferencesChange={updatePreferences} onReset={resetUiPreferences} />
-      ) : active === 'Рейтинг' ? (
+      ) : active === 'rating' ? (
         runtimeState ? <RatingView command={runtimeState.command} currentPlayerResourcePoints={runtimeState.rating.resourcePoints} /> : null
       ) : (
         <ScienceView />

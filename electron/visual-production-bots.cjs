@@ -30,7 +30,7 @@ async function reload(win) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   win.webContents.reload();
   await done;
-  await waitFor(win, `document.querySelector('.utility-navigation')`);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);
 }
@@ -91,7 +91,7 @@ async function seedPlanet(win) {
 }
 
 async function activateZone(win, zone) {
-  await click(win, `.header-zone--${zone}`);
+  await click(win, `[data-qa-zone="${zone}"]`);
   await waitFor(win, `document.querySelector('[data-qa-zone-view][data-zone=${JSON.stringify(zone)}]')`);
 }
 
@@ -119,7 +119,7 @@ async function readAppliedSave(win) {
 
 async function readHeaderIncome(win) {
   return win.webContents.executeJavaScript(`(() => {
-    const read = (kind) => document.querySelector('.resource-chip--' + kind + ' .resource-tooltip')?.textContent?.replace(/\\s+/g, ' ').trim() ?? '';
+    const read = (kind) => document.querySelector('[data-qa-resource-tooltip="' + kind + '"]')?.textContent?.replace(/\\s+/g, ' ').trim() ?? '';
     return { metal: read('metal'), minerals: read('mineral'), gas: read('gas') };
   })()`);
 }

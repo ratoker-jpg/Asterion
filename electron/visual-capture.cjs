@@ -16,6 +16,10 @@ const SCREENS = [
   ['rating','Рейтинг','rating-view-v2'],
   ['science','Наука','science-view-v2'],
 ];
+const PRIMARY_ROUTE_IDS = {
+  'Планета': 'planet',
+  'Командование': 'command',
+};
 const RESOURCE_ROLES = [
   'metal-production-1',
   'metal-production-2',
@@ -72,7 +76,7 @@ async function reload(win) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   win.webContents.reload();
   await done;
-  await waitFor(win, `document.querySelector('.utility-navigation')`);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);
 }
@@ -80,7 +84,7 @@ async function reload(win) {
 async function activateScreen(win, label, expectedClass) {
   const encoded = JSON.stringify(label);
   const clicked = await win.webContents.executeJavaScript(`(() => {
-    const button = Array.from(document.querySelectorAll('.utility-navigation button')).find((item) => item.getAttribute('aria-label') === ${encoded});
+    const button = Array.from(document.querySelectorAll('[data-qa-navigation="utility"] button')).find((item) => item.getAttribute('aria-label') === ${encoded});
     if (!button) return false;
     button.click();
     return true;
@@ -91,9 +95,10 @@ async function activateScreen(win, label, expectedClass) {
 }
 
 async function activateMainScreen(win, label, expectedSelector) {
-  const encoded = JSON.stringify(label);
+  const route = PRIMARY_ROUTE_IDS[label];
+  if (!route) throw new Error(`Primary route ID not configured for: ${label}`);
   const clicked = await win.webContents.executeJavaScript(`(() => {
-    const button = Array.from(document.querySelectorAll('.primary-navigation button')).find((item) => item.textContent?.trim() === ${encoded});
+    const button = document.querySelector('[data-qa-route="${route}"]');
     if (!button) return false;
     button.click();
     return true;
@@ -105,7 +110,7 @@ async function activateMainScreen(win, label, expectedSelector) {
 
 async function activateResourceZone(win) {
   const clicked = await win.webContents.executeJavaScript(`(() => {
-    const button=document.querySelector('.header-zone--resource');
+    const button=document.querySelector('[data-qa-zone="resource"]');
     if(!button)return false;
     button.click();
     return true;
@@ -512,9 +517,9 @@ app.whenReady().then(async()=>{
         await verifyCommon(helper180,label,'settings-helper-180',width,height); results.push(helper180); await capture(win,directory,'settings-helper-180');
         await resetTypography(win,'Подсказки и пояснения');
 
-        const hudBefore=await fontSnapshot(win,'.asterion-header .resource-chip strong');
+        const hudBefore=await fontSnapshot(win,'[data-qa-resource-chip="metal"] strong');
         await clickTypography(win,'HUD / верхняя панель',6);
-        const hudAfter=await fontSnapshot(win,'.asterion-header .resource-chip strong');
+        const hudAfter=await fontSnapshot(win,'[data-qa-resource-chip="metal"] strong');
         const hud130=await metrics(win,'settings-hud-130');
         if(hud130.typography.hud!=='1.3'||hud130.typography.helper!=='1') throw new Error(`Typography isolation failed: ${JSON.stringify(hud130.typography)}`);
         if(!hudBefore||!hudAfter||!approximately(hudAfter.size,hudBefore.size*1.3)) throw new Error(`HUD typography did not reach the global header: ${JSON.stringify({hudBefore,hudAfter})}`);

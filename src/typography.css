@@ -10,17 +10,17 @@
 }
 
 /* Semantic typography contract: only the named category changes. */
-.asterion-header .current-planet-select small{font-size:calc(10px * var(--text-scale-hud))}
-.asterion-header .current-planet-select strong{font-size:calc(16px * var(--text-scale-hud))}
-.asterion-header .current-planet-select em{font-size:calc(10px * var(--text-scale-hud))}
-.asterion-header .resource-chip small{font-size:calc(10px * var(--text-scale-hud))}
-.asterion-header .resource-chip strong{font-size:calc(20px * var(--text-scale-hud))}
-.asterion-header .resource-tooltip{font-size:calc(10px * var(--text-scale-hud))}
-.asterion-header .resource-tooltip strong{font-size:calc(12px * var(--text-scale-hud))}
-.asterion-header .primary-navigation button span{font-size:calc(16px * var(--text-scale-hud))}
-.asterion-header .campaign-status strong{font-size:calc(12px * var(--text-scale-hud))}
-.asterion-header .campaign-module time{font-size:calc(22px * var(--text-scale-hud))}
-.asterion-header .utility-navigation button span{font-size:calc(11px * var(--text-scale-hud))}
+.asterion-header .asterion-header__planet-select small{font-size:calc(10px * var(--text-scale-hud))}
+.asterion-header .asterion-header__planet-select strong{font-size:calc(16px * var(--text-scale-hud))}
+.asterion-header .asterion-header__planet-select em{font-size:calc(10px * var(--text-scale-hud))}
+.asterion-header .asterion-header__resource small{font-size:calc(10px * var(--text-scale-hud))}
+.asterion-header .asterion-header__resource strong{font-size:calc(20px * var(--text-scale-hud))}
+.asterion-header .asterion-header__resource-tooltip{font-size:calc(10px * var(--text-scale-hud))}
+.asterion-header .asterion-header__resource-tooltip strong{font-size:calc(12px * var(--text-scale-hud))}
+.asterion-header .asterion-header__primary-navigation button span{font-size:calc(16px * var(--text-scale-hud))}
+.asterion-header .asterion-header__campaign-status strong{font-size:calc(12px * var(--text-scale-hud))}
+.asterion-header .asterion-header__campaign time{font-size:calc(22px * var(--text-scale-hud))}
+.asterion-header .asterion-header__utility-navigation button span{font-size:calc(11px * var(--text-scale-hud))}
 
 .utility-page-title{font-size:calc(34px * var(--text-scale-page-title));line-height:1.05}
 .utility-section-title{font-size:calc(14px * var(--text-scale-section-title))}

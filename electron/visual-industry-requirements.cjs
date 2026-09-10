@@ -30,7 +30,7 @@ async function reload(win) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   win.webContents.reload();
   await done;
-  await waitFor(win, `document.querySelector('.utility-navigation')`);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);
 }
@@ -46,7 +46,7 @@ async function capture(win, directory, name) {
 
 async function activateIndustryZone(win) {
   const clicked = await win.webContents.executeJavaScript(`(() => {
-    const button = document.querySelector('.header-zone--industry');
+    const button = document.querySelector('[data-qa-zone="industry"]');
     if (!button) return false;
     button.click();
     return true;

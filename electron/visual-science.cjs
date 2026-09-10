@@ -33,7 +33,7 @@ async function reload(win) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   win.webContents.reload();
   await done;
-  await waitFor(win, `document.querySelector('.utility-navigation')`);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);
 }
@@ -84,7 +84,7 @@ async function seed(win, science) {
 }
 
 async function openScience(win) {
-  await click(win, '.utility-navigation button[aria-label="Наука"]');
+  await click(win, '[data-qa-route="science"]');
   await waitFor(win, `document.querySelector('[data-qa-science-root]')`);
   await settle(win);
 }
@@ -158,7 +158,7 @@ async function runViewport(width, height) {
   await win.loadFile(path.join(ROOT, 'dist', 'index.html'));
   win.webContents.debugger.attach('1.3');
   stage('loaded');
-  await waitFor(win, `document.querySelector('.utility-navigation')`);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
 
   await seed(win, { level: 0, queue: [] });
   await openScience(win);

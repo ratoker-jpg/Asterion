@@ -2,7 +2,6 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { FleetWorkspacePortal } from './FleetWorkspacePortal';
-import { FleetRootNavigationController } from './FleetRootNavigationController';
 import { GlobalPageScrollController } from './GlobalPageScrollController';
 import { GlobalTypographyController } from './GlobalTypographyController';
 import { PrototypeResetController } from './PrototypeResetController';
@@ -10,6 +9,7 @@ import { RepairWorkshopPortal } from './RepairWorkshopPortal';
 import { ShipInfoController } from './ShipInfoController';
 import { DefenseInfoController } from './DefenseInfoController';
 import { UtilityScreensPortal } from './UtilityScreensPortal';
+import { NavigationProvider } from './ui/navigation.tsx';
 import './styles.css';
 import './universe-nav.css';
 import './universe-polish-v2.css';
@@ -17,6 +17,8 @@ import './planet-visual-v2.css';
 import './shell-v3.css';
 import './shell-v4.css';
 import './single-planet-v5.css';
+import './ui/header/header.tokens.css';
+import './ui/header/header.theme.css';
 import './asterion-header.css';
 import './resource-zone.css';
 import './web-preview.css';
@@ -60,15 +62,16 @@ if (!isElectron) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
-    <FleetRootNavigationController />
-    <PrototypeResetController />
-    <GlobalPageScrollController />
-    <GlobalTypographyController />
-    <FleetWorkspacePortal />
-    <UtilityScreensPortal />
-    <RepairWorkshopPortal />
-    <ShipInfoController />
-    <DefenseInfoController />
+    <NavigationProvider>
+      <App />
+      <PrototypeResetController />
+      <GlobalPageScrollController />
+      <GlobalTypographyController />
+      <FleetWorkspacePortal />
+      <UtilityScreensPortal />
+      <RepairWorkshopPortal />
+      <ShipInfoController />
+      <DefenseInfoController />
+    </NavigationProvider>
   </StrictMode>,
 );

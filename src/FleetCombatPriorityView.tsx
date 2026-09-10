@@ -10,6 +10,7 @@ import {
   readCombatPriority,
   type CombatPriorityState,
 } from './domain/combat/priority.ts';
+import { readHeaderGeometry } from './ui/header/geometry.ts';
 import './fleet-combat-priority.css';
 import './fleet-combat-priority-scroll.css';
 
@@ -22,8 +23,6 @@ type DragState = {
 } | null;
 
 const commanderById = new Map(COMMANDER_COMBAT_CATALOG.map((commander) => [commander.id, commander]));
-const WORKSPACE_TOP = 246;
-const WORKSPACE_BOTTOM_GAP = 58;
 const FLEET_VERTICAL_PADDING = 52;
 
 function PriorityList({
@@ -159,7 +158,8 @@ export function FleetCombatPriorityView({
 
       const contentHeight = Math.ceil(view.scrollHeight);
       const workspaceHeight = contentHeight + FLEET_VERTICAL_PADDING;
-      const stageHeight = WORKSPACE_TOP + workspaceHeight + WORKSPACE_BOTTOM_GAP;
+      const geometry = readHeaderGeometry();
+      const stageHeight = geometry.workspaceTop + workspaceHeight + geometry.stageBottomGap;
       const rawScale = Number.parseFloat(getComputedStyle(root).getPropertyValue('--web-stage-scale'));
       const previewScale = root.classList.contains('web-preview') && Number.isFinite(rawScale) ? rawScale : 1;
 
