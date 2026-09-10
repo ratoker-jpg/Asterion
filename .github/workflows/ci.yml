@@ -40,6 +40,8 @@ jobs:
         run: npm run test:fleet
       - name: Build renderer
         run: npm run build
+      - name: Header Electron QA
+        run: npm run test:header-ui
       - name: Test Mode Electron QA
         env:
           # GitHub's hidden Windows compositor can block viewport captures on
