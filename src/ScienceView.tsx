@@ -189,7 +189,7 @@ export function ScienceView() {
             <ScienceQueueCard key={task.id} task={task} now={now} onCancel={() => setPendingCancellation(task)} />
           )) : <p className="utility-helper">Очередь свободна.</p>}
         </section>
-        <small className="science-captured-note utility-helper" title={SCIENCE_CAPTURED_VALUES_NOTE}>Стоимость и время: сохранённые prototype/captured значения.</small>
+        <small className="science-captured-note utility-helper" title={SCIENCE_CAPTURED_VALUES_NOTE}>Стоимость: captured-значения; время: Asterion Balance v1 с учётом лаборатории.</small>
       </aside>
 
       <main className="science-main-v2">
@@ -271,7 +271,7 @@ function ScienceRow({
   runtime: ScienceRuntimeSnapshot;
   onStart: (scienceId: ScienceId) => void;
 }) {
-  const preview = previewScience({ state: runtime.science, wallet: runtime.wallet, laboratoryLevel: runtime.laboratoryLevel, now: runtime.now, mode: runtime.mode }, science.id);
+  const preview = previewScience({ state: runtime.science, wallet: runtime.wallet, laboratoryLevel: runtime.laboratoryLevel, now: runtime.now, mode: runtime.mode, testTimeScale: runtime.testTimeScale }, science.id);
   const currentLevel = preview.currentLevel;
   const actionLabel = preview.status === 'max-level'
     ? 'МАКСИМАЛЬНЫЙ УРОВЕНЬ'

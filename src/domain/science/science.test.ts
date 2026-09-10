@@ -18,6 +18,7 @@ import {
   type ScienceRuntimeContext,
   type ScienceState,
 } from './runtime.ts';
+import { SCIENCE_REBALANCED_BASE_TIME_MS, getScienceRebalancedBaseDurationMs } from './time-rebalanced.ts';
 import { sciencesForSection } from './selectors.ts';
 
 const wallet = { metal: 1_000_000, minerals: 1_000_000, gas: 1_000_000, energy: 1_000_000 };
@@ -78,13 +79,13 @@ test('canonical science maxima are per technology and the laboratory is level 20
   assert.deepEqual(
     Object.fromEntries(SCIENCE_CATALOG.map((science) => [science.id, science.maxLevel])),
     {
-      1: 10, 2: 15, 3: 10, 4: 15, 5: 20, 6: 20, 7: 15, 8: 15, 9: 15,
-      10: 15, 11: 15, 12: 15, 13: 15, 14: 2, 15: 1, 17: 20,
+      1: 10, 2: 15, 3: 10, 4: 15, 5: 20, 6: 15, 7: 20, 8: 15, 9: 15,
+      10: 15, 11: 15, 12: 15, 13: 15, 14: 15, 15: 1, 17: 10,
       18: 10, 19: 10, 20: 10, 21: 10, 22: 10, 23: 10,
     },
   );
   assert.equal(migrateScienceLevels({ 1: 999, 14: 999, 15: 999 })[1], 10);
-  assert.equal(migrateScienceLevels({ 1: 999, 14: 999, 15: 999 })[14], 2);
+  assert.equal(migrateScienceLevels({ 1: 999, 14: 999, 15: 999 })[14], 15);
   assert.equal(migrateScienceLevels({ 1: 999, 14: 999, 15: 999 })[15], 1);
 });
 
@@ -96,8 +97,34 @@ test('laboratory reduces current research time by 5 percent per level', () => {
   assert.equal(calculateScienceDurationMs(base, 20), Math.round(base * 0.95 ** 20));
 });
 
+test('Asterion Balance v1 supplies every science transition duration and preview uses its next level', () => {
+  for (const science of SCIENCE_CATALOG) {
+    const durations = SCIENCE_REBALANCED_BASE_TIME_MS[science.id];
+    assert.equal(durations.length >= science.maxLevel, true, `${science.name} is missing a duration row`);
+    for (let targetLevel = 1; targetLevel <= science.maxLevel; targetLevel += 1) {
+      assert.equal(getScienceRebalancedBaseDurationMs(science.id, targetLevel), durations[targetLevel - 1]);
+    }
+    const preview = previewScience(context(createDefaultScienceState(), 1), science.id);
+    assert.equal(preview.durationMs, calculateScienceDurationMs(durations[0], 1));
+  }
+  assert.equal(getScienceRebalancedBaseDurationMs(1, 1), 45_000);
+});
+
+test('legacy science queue replaces stale captured durations with source-backed lab-adjusted snapshots', () => {
+  const migrated = migrateScienceState({
+    levels: { 1: 0 },
+    queue: [
+      { id: 'old-first', scienceId: 1, fromLevel: 0, toLevel: 1, startedAt: 10_000, finishAt: 5_410_000, durationMs: 5_400_000 },
+      { id: 'old-second', scienceId: 1, fromLevel: 1, toLevel: 2, startedAt: 5_410_000, finishAt: 10_810_000, durationMs: 5_400_000 },
+    ],
+  }, { laboratoryLevel: 1 });
+  assert.deepEqual(migrated.queue.map((task) => task.durationMs), [42_750, 76_000]);
+  assert.equal(migrated.queue[0].finishAt, migrated.queue[0].startedAt + 42_750);
+  assert.equal(migrated.queue[1].startedAt, migrated.queue[0].finishAt);
+});
+
 test('one canonical duration calculation is used by preview and queued snapshots across all Test Mode scales', () => {
-  const base = 2 * 60 * 60 * 1_000 + 8 * 60 * 1_000 + 59 * 1_000;
+  const base = 45 * 1_000;
   for (const laboratoryLevel of [0, 1, 2, 20]) {
     for (const scale of [1, 10, 15, 100, 200, 300, 500]) {
       const state = createDefaultScienceState();
@@ -288,7 +315,7 @@ test('malformed and legacy science saves migrate safely, including stale tasks',
   assert.equal(migrated.levels[2], 0);
   assert.equal(migrated.queue.length, 2);
   assert.deepEqual([migrated.queue[0].fromLevel, migrated.queue[0].toLevel], [1, 2]);
-  const reconciled = reconcileScienceState(migrated, 3_000);
+  const reconciled = reconcileScienceState(migrated, migrated.queue[0].finishAt);
   assert.equal(reconciled.state.levels[1], 2);
   assert.equal(reconciled.completed.length, 1);
   assert.equal(migrateScienceState({ queue: 'not-an-array' }).queue.length, 0);

@@ -62,6 +62,7 @@ async function capture(win, directory, name, selector = null) {
 }
 
 async function seed(win, science) {
+  await waitFor(win, `document.querySelector('.utility-navigation')`);
   const ok = await win.webContents.executeJavaScript(`(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
     const planet = save?.planets?.['helion-01'];
@@ -120,6 +121,13 @@ async function readScreen(win) {
         const overflowY = getComputedStyle(element).overflowY;
         return (overflowY === 'auto' || overflowY === 'scroll') && element.scrollHeight > element.clientHeight + 2;
       })),
+      scienceCancelRed: (() => {
+        const button = document.querySelector('[data-qa-science-cancel]');
+        if (!button) return false;
+        const color = getComputedStyle(button).color;
+        const channels = color.slice(color.indexOf('(') + 1, color.lastIndexOf(')')).split(',').map((value) => Number(value.trim()));
+        return channels.length >= 3 && channels[0] >= 200 && channels[1] < 150 && channels[2] < 150;
+      })(),
       activeScienceCancelId: document.activeElement?.getAttribute('data-qa-science-cancel') ?? '',
       workspaceWidth: workspace?.getBoundingClientRect().width ?? 0,
     };
@@ -177,7 +185,7 @@ async function runViewport(width, height) {
     const button = last?.querySelector('[data-qa-science-cancel]');
     return { count: cards.length, buttonEnabled: Boolean(button && !button.disabled), visible: Boolean(rect && rect.top >= 0 && rect.bottom <= window.innerHeight) };
   })()`);
-  if (queueVisibility.count !== 3 || !queueVisibility.buttonEnabled || !queueVisibility.visible || full.horizontalOverflow || full.nestedVerticalScroll || !full.documentScroll) throw new Error(`${label}: three-task queue is clipped or not cancellable ${JSON.stringify({ full, queueVisibility })}`);
+  if (queueVisibility.count !== 3 || !queueVisibility.buttonEnabled || !queueVisibility.visible || !full.scienceCancelRed || full.horizontalOverflow || full.nestedVerticalScroll || !full.documentScroll) throw new Error(`${label}: three-task queue is clipped or not cancellable ${JSON.stringify({ full, queueVisibility })}`);
   await capture(win, directory, 'science-queue-full', '[data-qa-science-queue]');
 
   await click(win, '[data-qa-science-queue-task]:last-of-type [data-qa-science-cancel]');

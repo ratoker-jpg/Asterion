@@ -4,7 +4,8 @@ import type {
   ScienceId,
   ScienceResourceCost,
 } from './types.ts';
-import { ACTIVE_RUNTIME_MODE, getRuntimeSaveKey, scaleRuntimeDuration, type RuntimeMode } from '../runtime/mode.ts';
+import { ACTIVE_RUNTIME_MODE, getRuntimeSaveKey, resolveTestTimeScale, scaleRuntimeDuration, type RuntimeMode } from '../runtime/mode.ts';
+import { getScienceRebalancedBaseDurationMs } from './time-rebalanced.ts';
 
 export type { ScienceId } from './types.ts';
 
@@ -20,7 +21,7 @@ export const SCIENCE_CANCEL_REFUND_SOURCE_URL = 'https://github.com/ratoker-jpg/
 export const SCIENCE_PROTOTYPE_CONFIG = Object.freeze({
   laboratoryMaxLevel: 20,
   laboratoryTimeReductionPerLevel: 0.05,
-  note: 'Канонические максимумы науки заданы в каталоге; стоимость и время исследования пока остаются captured/prototype-значениями.',
+  note: 'Стоимость науки сохранена из captured-данных; время каждого уровня берётся из Asterion Balance v1 и сокращается лабораторией динамически.',
 });
 
 export const SCIENCE_CAPTURED_VALUES_NOTE = SCIENCE_PROTOTYPE_CONFIG.note;
@@ -91,6 +92,12 @@ export type ScienceRuntimeContext = {
   rng?: () => number;
 };
 
+export type ScienceMigrationOptions = {
+  laboratoryLevel?: number;
+  mode?: RuntimeMode;
+  testTimeScale?: number;
+};
+
 export type ScienceStartTransition = {
   ok: boolean;
   state: ScienceState;
@@ -122,6 +129,7 @@ export type ScienceRuntimeSnapshot = {
   laboratoryLevel: number;
   now: number;
   mode: RuntimeMode;
+  testTimeScale?: number;
 };
 
 export type ScienceStartRequest = {
@@ -281,8 +289,10 @@ export function previewScience(context: ScienceRuntimeContext, scienceId: Scienc
   const projectedLevel = Math.min(maxLevel, currentLevel + queuedCount);
   const requirements = requirementsFor(science, context.state.levels, Math.max(0, Math.floor(context.laboratoryLevel)));
   const cost = cloneCost(science.capturedCost);
+  const targetLevel = Math.min(maxLevel, projectedLevel + 1);
+  const rebalancedBaseDurationMs = getScienceRebalancedBaseDurationMs(scienceId, targetLevel);
   const durationMs = calculateScienceDurationMs(
-    parseCapturedTime(science.capturedTime),
+    rebalancedBaseDurationMs ?? parseCapturedTime(science.capturedTime),
     context.laboratoryLevel,
     context.mode ?? 'production',
     context.testTimeScale,
@@ -492,7 +502,7 @@ export function reconcileScienceState(state: ScienceState, now: number): Science
   return { changed, state: { levels, queue }, completed, discarded };
 }
 
-function migrateQueue(value: unknown, levels: ScienceLevels): ScienceQueueTask[] {
+function migrateQueue(value: unknown, levels: ScienceLevels, options: ScienceMigrationOptions): ScienceQueueTask[] {
   const source = Array.isArray(value) ? value : [];
   const result: ScienceQueueTask[] = [];
   const queuedPerScience: Partial<Record<ScienceId, number>> = {};
@@ -531,14 +541,19 @@ function migrateQueue(value: unknown, levels: ScienceLevels): ScienceQueueTask[]
 
     const rawStartedAt = safeTimestamp(raw.startedAt);
     const rawFinishAt = safeTimestamp(raw.finishAt);
-    // Legacy saves did not always persist durationMs. Timestamps are the only
-    // evidence available, so derive solely from them; never use the live catalog,
-    // laboratory level, or Test Mode to recreate an already queued duration.
     const persistedDuration = safeTimestamp(raw.durationMs);
     const timestampDuration = rawStartedAt != null && rawFinishAt != null && rawFinishAt >= rawStartedAt
       ? rawFinishAt - rawStartedAt
       : null;
-    const durationMs = persistedDuration != null && persistedDuration > 0 ? Math.round(persistedDuration) : timestampDuration;
+    const rebalancedBaseDurationMs = getScienceRebalancedBaseDurationMs(scienceId, fromLevel + 1);
+    const durationMs = rebalancedBaseDurationMs != null
+      ? calculateScienceDurationMs(
+        rebalancedBaseDurationMs,
+        options.laboratoryLevel ?? 0,
+        options.mode ?? 'production',
+        options.testTimeScale,
+      )
+      : persistedDuration != null && persistedDuration > 0 ? Math.round(persistedDuration) : timestampDuration;
     if (durationMs == null || durationMs <= 0) continue;
     const startedAt: number = previousFinishAt == null ? (rawStartedAt ?? 0) : previousFinishAt;
     const finishAt = startedAt + durationMs;
@@ -572,10 +587,10 @@ function migrateQueue(value: unknown, levels: ScienceLevels): ScienceQueueTask[]
   return result;
 }
 
-export function migrateScienceState(value: unknown): ScienceState {
+export function migrateScienceState(value: unknown, options: ScienceMigrationOptions = {}): ScienceState {
   if (!isRecord(value)) return createDefaultScienceState();
   const levels = migrateScienceLevels(value.levels ?? value.scienceLevels);
-  return { levels, queue: migrateQueue(value.queue, levels) };
+  return { levels, queue: migrateQueue(value.queue, levels, options) };
 }
 
 export function createScienceRuntimeSnapshot(
@@ -584,6 +599,7 @@ export function createScienceRuntimeSnapshot(
   laboratoryLevel: number,
   now: number,
   mode: RuntimeMode = 'production',
+  testTimeScale?: number,
 ): ScienceRuntimeSnapshot {
   return {
     science,
@@ -591,11 +607,13 @@ export function createScienceRuntimeSnapshot(
     laboratoryLevel: Math.min(SCIENCE_LABORATORY_MAX_LEVEL, Math.max(0, Math.floor(laboratoryLevel))),
     now,
     mode,
+    testTimeScale,
   };
 }
 
 export function readScienceRuntimeSnapshot(): ScienceRuntimeSnapshot {
-  const fallback = createScienceRuntimeSnapshot(createDefaultScienceState(), { metal: 0, minerals: 0, gas: 0, energy: 0 }, 0, Date.now(), ACTIVE_RUNTIME_MODE);
+  const testTimeScale = ACTIVE_RUNTIME_MODE === 'test' ? resolveTestTimeScale() : undefined;
+  const fallback = createScienceRuntimeSnapshot(createDefaultScienceState(), { metal: 0, minerals: 0, gas: 0, energy: 0 }, 0, Date.now(), ACTIVE_RUNTIME_MODE, testTimeScale);
   if (typeof localStorage === 'undefined') return fallback;
 
   try {
@@ -606,7 +624,11 @@ export function readScienceRuntimeSnapshot(): ScienceRuntimeSnapshot {
     const homeworld = isRecord(planets['helion-01']) ? planets['helion-01'] : {};
     const buildings = isRecord(homeworld.buildings) ? homeworld.buildings : {};
     return createScienceRuntimeSnapshot(
-      migrateScienceState(parsed.science),
+      migrateScienceState(parsed.science, {
+        laboratoryLevel: safeNonNegativeNumber(buildings.research, 0),
+        mode: ACTIVE_RUNTIME_MODE,
+        testTimeScale,
+      }),
       {
         metal: safeNonNegativeNumber(parsed.metal, 0),
         minerals: safeNonNegativeNumber(parsed.minerals, 0),
@@ -616,6 +638,7 @@ export function readScienceRuntimeSnapshot(): ScienceRuntimeSnapshot {
       safeNonNegativeNumber(buildings.research, 0),
       Date.now(),
       ACTIVE_RUNTIME_MODE,
+      testTimeScale,
     );
   } catch {
     return fallback;

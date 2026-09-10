@@ -42,7 +42,15 @@ The display catalog contains exactly the 22 sciences visible in the saved page:
 19. Маневренная защита
 20. Критический удар
 
-Captured saved-page values include current/next level, next-level resource cost, captured research time, laboratory requirement and science prerequisites where the page exposes them. These are presentation/snapshot values, not live Asterion campaign progression.
+Captured saved-page values include current/next level, next-level resource cost, laboratory requirement and science prerequisites where the page exposes them. Resource costs remain captured values; research durations are supplied by the committed Asterion Balance v1 time-rebalanced tables.
+
+## Asterion research durations
+
+The authoritative duration source is:
+
+`ASTERION_BALANCE_V1/ASTERION_BALANCE_V1_TIME_REBALANCED/науки`
+
+The integration uses each science's **Базовое время Asterion** column for the target level. The laboratory applies its existing 5% per-level reduction dynamically, and Test Mode scales the resulting absolute duration. Preview, newly queued tasks, progress, remaining time, reload and offline completion all use the same saved `durationMs` snapshot. Existing queued tasks are migrated to the same source-backed duration so an old captured duration cannot diverge from the preview.
 
 ## Asterion canon and assets
 
@@ -94,7 +102,7 @@ The UI follows the saved Laboratory information hierarchy rather than a tree/con
 - fulfilled requirements remain colored;
 - missing requirements are desaturated/dimmed;
 - blocked sciences show a red missing-requirement banner and no upgrade CTA;
-- sciences whose captured requirements are satisfied keep the visual `Повысить уровень` CTA, but the button remains non-functional until real research runtime exists.
+- sciences whose requirements are satisfied expose the active `Повысить уровень` CTA and enqueue a source-backed research task.
 
 After visual review, Science follows the shared Asterion document-scroll model rather than owning a nested catalog scrollbar. The laboratory content contributes its natural height to `GlobalPageScrollController`; if it exceeds the available workspace, the common game scrollbar moves the whole page. This keeps Science consistent with other long Asterion screens and avoids a second vertical scroll channel inside the catalog.
 
@@ -112,8 +120,4 @@ The confirmed Nemexia source is [saved Science page (2026-09-05 22:49:40)](https
 
 ## Deferred
 
-- persistent research queue;
-- real research countdown;
-- campaign resource spending;
-- science progression;
-- applying unconfirmed modifiers to combat/economy/fleet systems.
+- applying unconfirmed science modifiers to combat/economy/fleet systems.

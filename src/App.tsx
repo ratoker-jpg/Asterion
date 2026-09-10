@@ -374,7 +374,11 @@ function readSave(): SaveState {
       migrateSpaceportUpgradeState(savedHomeworld?.spaceportUpgrades),
       now,
     ).state;
-    const science = migrateScienceState(parsed.science);
+    const science = migrateScienceState(parsed.science, {
+      laboratoryLevel: buildings.research,
+      mode: RUNTIME_MODE,
+      testTimeScale: resolveTestTimeScale(),
+    });
     const combat = migrateBattleHistory(parsed.combat);
     const operations = migrateOperationsState(parsed.operations);
     const command = migrateCommandState(parsed.command);
@@ -720,11 +724,12 @@ export function App() {
       planet.buildings.research,
       now,
       RUNTIME_MODE,
+      testTimeScale,
     );
     window.dispatchEvent(new CustomEvent(SCIENCE_RUNTIME_CHANGED_EVENT, { detail: snapshot }));
     publishRuntimeStateSnapshot({ command: state.command, rating: state.rating });
     window.dispatchEvent(new CustomEvent(RUNTIME_STATE_CHANGED_EVENT, { detail: state }));
-  }, [now, state]);
+  }, [now, state, testTimeScale]);
   useEffect(() => {
     const activeQueueItem = state.queues['helion-01'][0];
     if (!activeQueueItem || now < activeQueueItem.finishAt) return;

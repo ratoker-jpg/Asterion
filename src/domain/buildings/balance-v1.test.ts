@@ -67,7 +67,7 @@ test('mathematics and physics apply capped five-percent income bonuses to buildi
 test('Improved Construction discounts economic building resources by one percent per level and leaves energy separate', () => {
   const cost = { metal: 100, minerals: 101, gas: 999, energy: 200 };
   assert.deepEqual(getBuildingConstructionCost(cost, { 17: 1 }), { metal: 99, minerals: 99, gas: 989, energy: 200 });
-  assert.deepEqual(getBuildingConstructionCost(cost, { 17: 999 }), { metal: 80, minerals: 80, gas: 799, energy: 200 });
+  assert.deepEqual(getBuildingConstructionCost(cost, { 17: 999 }), { metal: 90, minerals: 90, gas: 899, energy: 200 });
 });
 
 test('published production rows and final transition rows are fully represented', () => {

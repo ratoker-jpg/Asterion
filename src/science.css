@@ -22,7 +22,9 @@
 .science-queue-card-v2 strong,.science-queue-card-v2 span,.science-queue-card-v2 time{display:block}
 .science-queue-card-v2 span{margin-top:4px;color:#7196a2}
 .science-queue-card-v2 time{margin-top:5px;color:#e8fbff;font-variant-numeric:tabular-nums}
-.science-queue-card-v2 button{width:26px;height:26px;padding:0;border:1px solid rgba(100,173,191,.16);background:#061b25;color:#52727b}
+.science-queue-card-v2 button[data-qa-science-cancel]{width:26px;height:26px;padding:0;border:1px solid rgba(236,91,100,.72);background:rgba(91,18,28,.42);color:#ff6972;font-size:16px;font-weight:700;line-height:1;opacity:1;text-shadow:0 0 7px rgba(255,72,88,.5)}
+.science-queue-card-v2 button[data-qa-science-cancel]:hover:not(:disabled),.science-queue-card-v2 button[data-qa-science-cancel]:focus-visible{border-color:#ff9aa0;background:rgba(142,24,38,.68);color:#fff0f1;box-shadow:0 0 10px rgba(255,70,86,.3);outline:none}
+.science-queue-card-v2 button[data-qa-science-cancel]:disabled{border-color:rgba(170,73,82,.42);background:rgba(67,21,28,.35);color:#b9555e}
 .science-queue-card-v2>i{position:absolute;left:92px;right:12px;bottom:9px;height:4px;background:#061c27;border:1px solid rgba(62,164,188,.12)}
 .science-queue-card-v2>i b{display:block;width:54%;height:100%;background:linear-gradient(90deg,#18b8da,#55e8b1);box-shadow:0 0 8px rgba(49,219,236,.24)}
 .science-main-v2{display:grid;grid-template-rows:76px auto minmax(0,1fr);overflow:hidden}
