@@ -27,7 +27,7 @@ async function reload(win) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   win.webContents.reload();
   await done;
-  await waitFor(win, `document.querySelector('.utility-navigation')`);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await settle(win);
 }
 
@@ -67,7 +67,7 @@ async function seed(win) {
 }
 
 async function openSpaceport(win, track = 'ships') {
-  await click(win, '.header-zone--military');
+  await click(win, '[data-qa-zone="military"]');
   await waitFor(win, `document.querySelector('[data-qa-zone-view][data-zone="military"]')`);
   await click(win, '[data-zone-building-role="spaceport"]');
   await waitFor(win, `document.querySelector('[data-qa-building-dialog="spaceport"]')`);

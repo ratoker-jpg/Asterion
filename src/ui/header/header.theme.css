@@ -1,0 +1,29 @@
+/* Faction themes only change presentation tokens. Runtime/save mechanics stay in the domain layer. */
+.asterion-header {
+  --header-accent: #7ee8ff;
+  --header-accent-strong: #65e8ff;
+  --header-border: rgba(72, 215, 245, .38);
+  --header-rail-border: rgba(66, 207, 237, .3);
+}
+
+.asterion-header[data-faction="aegis"] {
+  --header-accent: #7ee8ff;
+  --header-accent-strong: #65e8ff;
+  --header-border: rgba(72, 215, 245, .38);
+  --header-rail-border: rgba(66, 207, 237, .3);
+}
+
+.asterion-header[data-faction="synod"] {
+  --header-accent: #c9b7ff;
+  --header-accent-strong: #b291ff;
+  --header-border: rgba(170, 133, 255, .48);
+  --header-rail-border: rgba(155, 126, 235, .36);
+}
+
+.asterion-header[data-faction="veyra"] {
+  --header-accent: #83f3c0;
+  --header-accent-strong: #5ce8aa;
+  --header-border: rgba(83, 225, 165, .46);
+  --header-rail-border: rgba(68, 207, 158, .34);
+}
+

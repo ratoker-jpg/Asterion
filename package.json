@@ -19,6 +19,7 @@
     "test:science": "node --experimental-strip-types --test src/domain/science/science.test.ts",
     "test:universe": "node --experimental-strip-types --test src/domain/universe/universe.test.ts",
     "test:science-ui": "electron electron/visual-science.cjs",
+    "test:header-ui": "electron electron/header-qa.cjs",
     "test:spaceport-ui": "electron electron/integration-spaceport-upgrades.cjs",
     "test:test-mode-ui": "electron electron/test-mode-qa.cjs",
     "test:reports-ui": "electron electron/reports-profile-qa.cjs",

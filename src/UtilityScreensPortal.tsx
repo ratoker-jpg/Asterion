@@ -13,7 +13,6 @@ import {
 import { getDesktopBridge, getWindowPresetDimensions } from './domain/settings/desktop.ts';
 import { WINDOW_PRESETS, type DesktopDisplayState, type UiPreferencesV2 } from './domain/settings/types.ts';
 import { APP_ROUTE_LABELS, isUtilityRoute, useNavigation } from './ui/navigation.tsx';
-}
 
 function presetForDisplayState(state: DesktopDisplayState, fallback: UiPreferencesV2['display']['preset']) {
   if (state.mode !== 'windowed') return fallback;

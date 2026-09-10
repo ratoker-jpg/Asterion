@@ -6,17 +6,11 @@ import { RUNTIME_STATE_CHANGED_EVENT } from './domain/runtime/mode.ts';
 import { useNavigation } from './ui/navigation.tsx';
 
 function readCurrentPlanet() {
-  const strong = document.querySelector('.current-planet-select strong');
-  if (!strong) return { name: 'Helion 01', coords: '[1:1:1]' };
-
-  const coords = strong.querySelector('em')?.textContent?.trim() || '[1:1:1]';
-  const name = Array.from(strong.childNodes)
-    .filter((node) => node.nodeType === Node.TEXT_NODE)
-    .map((node) => node.textContent ?? '')
-    .join(' ')
-    .trim() || 'Helion 01';
-
-  return { name, coords };
+  const selector = document.querySelector<HTMLElement>('[data-qa-current-planet]');
+  return {
+    name: selector?.dataset.planetName || 'Helion 01',
+    coords: selector?.dataset.planetCoords || '[1:1:1]',
+  };
 }
 
 export function RepairWorkshopPortal() {

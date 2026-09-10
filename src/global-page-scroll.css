@@ -60,16 +60,16 @@ html.asterion-long-page.asterion-combat-priority-page .stage {
 html.asterion-long-page .workspace,
 html.asterion-long-page.asterion-repair-page .workspace,
 html.asterion-long-page.asterion-combat-priority-page .workspace {
-  top: 246px !important;
+  top: var(--hud-workspace-top) !important;
   bottom: auto !important;
-  height: var(--asterion-scroll-workspace-height, 846px) !important;
+  height: var(--asterion-scroll-workspace-height, var(--hud-workspace-height, 776px)) !important;
   overflow: visible !important;
 }
 
 html.asterion-long-page .fleet-workspace-v1,
 html.asterion-long-page.asterion-repair-page .fleet-workspace-v1,
 html.asterion-long-page.asterion-combat-priority-page .fleet-workspace-v1 {
-  min-height: var(--asterion-scroll-workspace-height, 846px) !important;
+  min-height: var(--asterion-scroll-workspace-height, var(--hud-workspace-height, 776px)) !important;
   overflow: visible !important;
   align-items: start;
   background:

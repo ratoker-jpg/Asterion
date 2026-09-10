@@ -40,7 +40,7 @@ async function reload(win) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   win.webContents.reload();
   await done;
-  await waitFor(win, `document.querySelector('.utility-navigation')`);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);
 }
@@ -85,7 +85,7 @@ async function setBuiltInteriorSave(win) {
 }
 
 async function activateZone(win, zone) {
-  await click(win, `.header-zone--${zone}`);
+  await click(win, `[data-qa-zone="${zone}"]`);
   await waitFor(win, `document.querySelector('[data-qa-zone-view][data-zone=${JSON.stringify(zone)}]')`);
 }
 
@@ -106,7 +106,7 @@ async function assertReturned(win, zone, role) {
   const snapshot = await win.webContents.executeJavaScript(`(() => ({
     zone: document.querySelector('[data-qa-zone-view]')?.getAttribute('data-zone') ?? '',
     role: document.querySelector('[data-qa-building-dialog]')?.getAttribute('data-qa-building-dialog') ?? '',
-    planet: document.querySelector('.current-planet-select strong')?.textContent?.replace(/\\s+/g, ' ').trim() ?? '',
+    planet: document.querySelector('[data-qa-current-planet]')?.textContent?.replace(/\\s+/g, ' ').trim() ?? '',
   }))()`);
   if (snapshot.zone !== zone || snapshot.role !== role || !snapshot.planet.includes('Helion 01')) {
     throw new Error(`Return context mismatch: ${JSON.stringify(snapshot)}`);
@@ -144,7 +144,7 @@ async function verifyMilitaryDeepLinks(win, directory) {
   await activateZone(win, 'military');
 
   await enterBuilding(win, 'shipyard');
-  await waitFor(win, `document.querySelector('.primary-navigation button.active span')?.textContent?.trim() === 'Флоты'`);
+  await waitFor(win, `document.querySelector('[data-qa-route="fleets"][aria-current="page"]')?.textContent?.trim() === 'Флоты'`);
   await waitFor(win, `document.querySelector('.fleet-main-v1--shipyard')`);
   await waitFor(win, `document.querySelector('[data-qa-building-interior-back]')`);
   const unitTime = await win.webContents.executeJavaScript(`(() => {

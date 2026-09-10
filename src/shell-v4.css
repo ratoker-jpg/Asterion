@@ -1,7 +1,7 @@
 /* Asterion shell v4 — planet workspace refinements. Header geometry lives in asterion-header.css. */
 
 .workspace-v4{
-  top:246px;
+  top:var(--hud-workspace-top);
 }
 .planet-page-v4{
   grid-template-columns:330px minmax(0,1fr) 340px;
@@ -128,71 +128,3 @@
 .planet-page-v4 .planet-stage-v3 .zone-hotspot--resource{left:42px;top:140px}
 .planet-page-v4 .planet-stage-v3 .zone-hotspot--industry{right:2px;top:268px}
 .planet-page-v4 .planet-stage-v3 .zone-hotspot--military{left:50px;bottom:94px}
-.test-mode-banner-v1 {
-  position: absolute;
-  z-index: 3;
-  left: 8px;
-  right: 8px;
-  top: 48px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin: 0;
-  padding: 3px 4px;
-  border: 1px solid rgba(240, 173, 56, 0.72);
-  background: rgba(240, 173, 56, 0.12);
-  color: #ffd889;
-  font-size: 8px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.test-mode-banner-v1::before {
-  content: 'TEST';
-  flex: 0 0 auto;
-  color: #fff1c9;
-  font-size: 8px;
-  letter-spacing: 0.08em;
-}
-
-.test-mode-banner-v1 > strong,
-.test-mode-banner-v1 small {
-  display: none;
-}
-
-.test-mode-speed-picker-v1,
-.test-mode-speed-picker {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-.test-mode-speed-picker button {
-  min-width: 27px;
-  min-height: 20px;
-  height: 20px;
-  padding: 1px 3px;
-  border: 1px solid rgba(255, 216, 137, 0.32);
-  background: rgba(13, 22, 33, 0.72);
-  color: rgba(255, 216, 137, 0.78);
-  font: inherit;
-  font-size: 9px;
-  cursor: pointer;
-}
-
-.test-mode-speed-picker button:hover,
-.test-mode-speed-picker button:focus-visible,
-.test-mode-speed-picker button.active {
-  border-color: #ffd889;
-  background: rgba(240, 173, 56, 0.3);
-  color: #fff1c9;
-}
-
-@media (max-width: 900px) {
-  .test-mode-banner-v1 {
-    flex-wrap: wrap;
-  }
-}

@@ -34,7 +34,7 @@ async function loadMode(win, mode) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   await win.loadFile(path.join(ROOT, 'dist', 'index.html'), mode === 'test' ? { search: '?mode=test' } : undefined);
   await done;
-  await waitFor(win, `document.querySelector('.utility-navigation')`);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await waitFor(win, `localStorage.getItem(${JSON.stringify(mode === 'test' ? TEST_KEY : PRODUCTION_KEY)})`);
   await settle(win);
 }
@@ -43,7 +43,7 @@ async function reload(win, mode) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   win.webContents.reload();
   await done;
-  await waitFor(win, `document.querySelector('.utility-navigation')`);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await settle(win);
   const activeKey = mode === 'test' ? TEST_KEY : PRODUCTION_KEY;
   await waitFor(win, `localStorage.getItem(${JSON.stringify(activeKey)})`);
@@ -122,12 +122,12 @@ async function seedTestRuntime(win, changes = {}) {
 }
 
 async function openScience(win) {
-  await clickText(win, '.utility-navigation button', 'Наука');
+  await click(win, '[data-qa-route="science"]');
   await waitFor(win, `document.querySelector('[data-qa-science-root]')`);
 }
 
 async function openSpaceport(win, track = 'ships') {
-  await click(win, '.header-zone--military');
+  await click(win, '[data-qa-zone="military"]');
   await waitFor(win, `document.querySelector('[data-qa-zone-view][data-zone="military"]')`);
   await click(win, '[data-zone-building-role="spaceport"]');
   await waitFor(win, `document.querySelector('[data-qa-building-dialog="spaceport"]')`);
@@ -137,7 +137,7 @@ async function openSpaceport(win, track = 'ships') {
 }
 
 async function openFleet(win) {
-  await clickText(win, '.primary-navigation button', 'Флоты');
+  await click(win, '[data-qa-route="fleets"]');
   await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
 }
 
@@ -164,11 +164,9 @@ async function readQaState(win) {
       commanderQueue: planet?.spaceportUpgrades?.commanderQueue?.length ?? -1,
       horizontalOverflow,
       fleetPageLong: document.documentElement.classList.contains('asterion-long-page'),
-      populationChips: Array.from(document.querySelectorAll('.header-resource-rail .resource-chip--population'))
-        .map((node) => node.textContent?.replace(/\s+/g, ' ').trim() ?? ''),
-      populationValues: Array.from(document.querySelectorAll('.header-resource-rail .resource-chip--population .resource-chip__text strong'))
-        .map((node) => node.textContent?.replace(/\s+/g, ' ').trim() ?? ''),
-      populationTooltips: Array.from(document.querySelectorAll('.header-resource-rail .resource-chip--population .resource-tooltip'))
+      populationChips: Array.from(document.querySelectorAll('[data-qa-resource-chip="population"]'))
+        .map((node) => node.querySelector('strong')?.textContent?.replace(/\s+/g, ' ').trim() ?? ''),
+      populationTooltips: Array.from(document.querySelectorAll('[data-qa-resource-tooltip="population"]'))
         .map((node) => node.textContent?.replace(/\s+/g, ' ').trim() ?? ''),
       testSpeedLayout: (() => {
         const rect = (node) => {
@@ -177,11 +175,11 @@ async function readQaState(win) {
           return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width, height: box.height };
         };
         const banner = document.querySelector('[data-qa-test-mode-banner]');
-        const picker = document.querySelector('.test-mode-speed-picker');
+        const picker = document.querySelector('.asterion-header__test-mode-speed-picker');
         return {
           banner: rect(banner),
           picker: rect(picker),
-          campaign: rect(document.querySelector('.campaign-module')),
+          campaign: rect(document.querySelector('[data-qa-campaign]')),
           header: rect(document.querySelector('.asterion-header')),
           buttons: Array.from(document.querySelectorAll('[data-qa-test-speed]')).map(rect),
         };
@@ -255,8 +253,8 @@ async function runViewport(width, height) {
     if (!(await win.webContents.executeJavaScript(`document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×15')`))) {
       throw new Error(`${label}: Test Mode speed selection did not persist`);
     }
-    if (initial.populationValues.length !== 1 || initial.populationValues[0] !== '58' || initial.populationTooltips.length !== 1 || !initial.populationTooltips[0].includes('58 / 120')) {
-      throw new Error(`${label}: population header/value tooltip contract failed ${JSON.stringify({ values: initial.populationValues, tooltips: initial.populationTooltips, chips: initial.populationChips })}`);
+    if (initial.populationChips.length !== 1 || initial.populationChips[0] !== '58' || initial.populationTooltips.length !== 1 || !initial.populationTooltips[0].includes('58 / 120')) {
+      throw new Error(`${label}: population must show current value in the chip and capacity in its tooltip ${JSON.stringify({ chips: initial.populationChips, tooltips: initial.populationTooltips })}`);
     }
     const canonicalBuildingLevelOne = new Set(['metal-production-1', 'mineral-production-1', 'gas-production-1', 'basic-energy', 'hangar']);
     const canonicalBuildingsOnly = canonicalBuildingLevelOne.size === Object.values(initial.buildings || {}).filter((level) => level === 1).length

@@ -1398,17 +1398,17 @@ export function App() {
   const remaining = currentActiveQueueItem ? currentActiveQueueItem.finishAt - now : 0;
   const workspaceKind = buildingInteriorTarget?.kind === 'host'
     ? 'building-interior'
-    : activeTab === 'Вселенная'
+    : activeRoute === 'universe'
       ? 'universe'
-      : activeTab === 'Планета' && planetViewMode !== 'overview'
+      : activeRoute === 'planet' && planetViewMode !== 'overview'
         ? 'resource-zone'
-        : activeTab === 'Планета'
+        : activeRoute === 'planet'
           ? 'planet'
-          : activeTab === 'Операции'
+          : activeRoute === 'operations'
             ? 'operations'
-            : activeTab === 'Командование'
+            : activeRoute === 'command'
               ? 'command'
-              : activeTab === 'Отчёты'
+              : activeRoute === 'reports'
                 ? 'reports'
                 : 'module';
 
@@ -1486,7 +1486,7 @@ export function App() {
               onSpaceportUpgrade={startSpaceportUpgrade}
               onBack={returnToBuilding}
             />
-          ) : activeTab === 'Вселенная' ? (
+          ) : activeRoute === 'universe' ? (
             <UniverseView
               onNotice={setNotice}
               ownedPlanetArt={currentSkin.art}
@@ -1495,7 +1495,7 @@ export function App() {
               rating={state.rating}
               command={state.command}
             />
-          ) : activeTab === 'Операции' ? (
+          ) : activeRoute === 'operations' ? (
             <OperationsView
               state={state.operations}
               onAccept={acceptOperationsOperation}
@@ -1503,7 +1503,7 @@ export function App() {
               onReveal={revealOperationsOperation}
               onOpenFleets={openFleetRootFromOperations}
             />
-          ) : activeTab === 'Командование' ? (
+          ) : activeRoute === 'command' ? (
             <CommandView
               state={state.command}
               onJoinOperation={joinCommandOperation}
@@ -1511,7 +1511,7 @@ export function App() {
               onSaveSettings={saveCommandSettings}
               onOpenFleets={openFleetRootFromCommand}
             />
-          ) : activeTab === 'Отчёты' ? (
+          ) : activeRoute === 'reports' ? (
             <ReportsView
               battleReports={state.combat.reports}
               savedBattleReportIds={state.combat.savedReportIds}
@@ -1525,7 +1525,7 @@ export function App() {
               onOpenFleets={openFleetRootFromReports}
               onOpenCommand={openCommandFromReports}
             />
-          ) : activeTab === 'Планета' && planetViewMode !== 'overview' ? (
+          ) : activeRoute === 'planet' && planetViewMode !== 'overview' ? (
             <ZoneView
               zone={planetViewMode}
               planetName={currentPlanetName}
@@ -1544,7 +1544,7 @@ export function App() {
               onDestroyBuilding={destroyBuilding}
               onEnterBuilding={enterBuilding}
             />
-          ) : activeTab === 'Планета' ? (
+          ) : activeRoute === 'planet' ? (
             <div className="planet-page-v3 planet-page-v4">
               <aside className="planet-summary-v3 planet-list-panel-v4">
                 <div className="page-panel-title"><strong>ПЛАНЕТЫ</strong><small>1 ПЛАНЕТА</small></div>

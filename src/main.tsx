@@ -2,7 +2,6 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { FleetWorkspacePortal } from './FleetWorkspacePortal';
-import { FleetRootNavigationController } from './FleetRootNavigationController';
 import { GlobalPageScrollController } from './GlobalPageScrollController';
 import { GlobalTypographyController } from './GlobalTypographyController';
 import { PrototypeResetController } from './PrototypeResetController';
@@ -18,6 +17,8 @@ import './planet-visual-v2.css';
 import './shell-v3.css';
 import './shell-v4.css';
 import './single-planet-v5.css';
+import './ui/header/header.tokens.css';
+import './ui/header/header.theme.css';
 import './asterion-header.css';
 import './resource-zone.css';
 import './web-preview.css';
@@ -63,7 +64,6 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <NavigationProvider>
       <App />
-      <FleetRootNavigationController />
       <PrototypeResetController />
       <GlobalPageScrollController />
       <GlobalTypographyController />

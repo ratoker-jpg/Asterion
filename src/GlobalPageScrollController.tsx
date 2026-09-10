@@ -1,12 +1,7 @@
 import { useEffect } from 'react';
+import { readHeaderGeometry } from './ui/header/geometry.ts';
 
-const BASE_STAGE_WIDTH = 1920;
-const BASE_WORKSPACE_HEIGHT = 1080 - 176 - 58;
-const BASE_UTILITY_WORKSPACE_HEIGHT = 1080 - 246 - 58;
 const BASE_FLEET_VERTICAL_PADDING = 22 + 30;
-const BASE_FLEET_CONTENT_HEIGHT = BASE_UTILITY_WORKSPACE_HEIGHT - BASE_FLEET_VERTICAL_PADDING;
-const LONG_WORKSPACE_TOP = 246;
-const STAGE_BOTTOM_GAP = 58;
 const PAGE_BOTTOM_PADDING = 52;
 const OVERFLOW_EPSILON = 2;
 
@@ -15,9 +10,9 @@ function isVisible(element: HTMLElement) {
   return style.display !== 'none' && style.visibility !== 'hidden';
 }
 
-function getStageScale(stage: HTMLElement) {
+function getStageScale(stage: HTMLElement, canvasWidth: number) {
   const rect = stage.getBoundingClientRect();
-  const scale = rect.width / BASE_STAGE_WIDTH;
+  const scale = rect.width / canvasWidth;
   return Number.isFinite(scale) && scale > 0 ? scale : 1;
 }
 
@@ -107,7 +102,11 @@ export function GlobalPageScrollController() {
         return;
       }
 
-      const stageScale = getStageScale(stage);
+      const geometry = readHeaderGeometry();
+      const baseWorkspaceHeight = geometry.canvasHeight - geometry.baseWorkspaceTop - geometry.stageBottomGap;
+      const utilityWorkspaceHeight = geometry.canvasHeight - geometry.workspaceTop - geometry.stageBottomGap;
+      const fleetContentHeight = utilityWorkspaceHeight - BASE_FLEET_VERTICAL_PADDING;
+      const stageScale = getStageScale(stage, geometry.canvasWidth);
       const pageContainer = getPageContainer(workspace);
       const pageRoots = getPageRoots(pageContainer);
       const identity = pageIdentity(pageRoots);
@@ -128,16 +127,16 @@ export function GlobalPageScrollController() {
       const isFleetPage = pageContainer.classList.contains('fleet-main-v1');
       const utilityPage = !isFleetPage && isUtilityRoot(pageRoots);
       const availableHeight = utilityPage || usesCompactWorkspaceHeight(workspace)
-        ? BASE_UTILITY_WORKSPACE_HEIGHT
+        ? utilityWorkspaceHeight
         : isFleetPage
-          ? BASE_FLEET_CONTENT_HEIGHT
-          : BASE_WORKSPACE_HEIGHT;
+          ? fleetContentHeight
+          : baseWorkspaceHeight;
       const contentHeight = measureContentHeight(pageContainer, stageScale, pageRoots);
       const needsScroll = contentHeight > availableHeight + OVERFLOW_EPSILON;
 
       if (needsScroll) {
         const workspaceHeight = Math.ceil(contentHeight + PAGE_BOTTOM_PADDING);
-        const stageHeight = LONG_WORKSPACE_TOP + workspaceHeight + STAGE_BOTTOM_GAP;
+        const stageHeight = geometry.workspaceTop + workspaceHeight + geometry.stageBottomGap;
         const pageHeight = Math.ceil(stageHeight * stageScale);
 
         root.style.setProperty('--asterion-scroll-workspace-height', `${workspaceHeight}px`);

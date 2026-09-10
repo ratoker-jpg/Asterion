@@ -6,7 +6,7 @@ import {
   type AppRoute,
 } from '../navigation.tsx';
 import type { CombatFactionId } from '../../domain/combat/factions.ts';
-import type { RuntimeMode } from '../../domain/runtime/mode.ts';
+import type { RuntimeMode, TestTimeScale } from '../../domain/runtime/mode.ts';
 import { HEADER_ZONE_IDS, type HeaderPlanetModel, type HeaderResourceModel, type HeaderZoneId, type HeaderZoneMeta } from './types.ts';
 
 export type HeaderCampaignModel = {
@@ -14,6 +14,8 @@ export type HeaderCampaignModel = {
   mode: RuntimeMode;
   timeScale: number;
   saveKey: string;
+  timeScaleOptions?: readonly TestTimeScale[];
+  onTimeScaleChange?: (timeScale: TestTimeScale) => void;
 };
 
 export type AsterionHeaderProps = {
@@ -49,10 +51,10 @@ export function AsterionHeader({
 }: AsterionHeaderProps) {
   return (
     <header className="asterion-header" data-faction={factionId} data-qa-header>
-      <section className="asterion-header__planet-module header-planet-module">
-        <div className="asterion-header__planet-orbit header-planet-orbit">
+      <section className="asterion-header__planet-module">
+        <div className="asterion-header__planet-orbit">
           <button
-            className="asterion-header__planet-world header-planet-world"
+            className="asterion-header__planet-world"
             type="button"
             onClick={() => onRouteChange('planet')}
             aria-label={`Открыть ${currentPlanet.name}`}
@@ -66,7 +68,7 @@ export function AsterionHeader({
               <button
                 key={zone}
                 type="button"
-                className={`asterion-header__zone header-zone header-zone--${zone} ${isActive ? 'active' : ''}`}
+                className={`asterion-header__zone asterion-header__zone--${zone} ${isActive ? 'active' : ''}`}
                 title={zoneMeta[zone].title}
                 aria-label={zoneMeta[zone].title}
                 data-qa-zone={zone}
@@ -78,9 +80,9 @@ export function AsterionHeader({
           })}
         </div>
 
-        <div className="asterion-header__planet-control current-planet-control">
+        <div className="asterion-header__planet-control">
           <button
-            className="asterion-header__planet-select current-planet-select"
+            className="asterion-header__planet-select"
             type="button"
             onClick={onPlanetMenuToggle}
             aria-expanded={planetMenuOpen}
@@ -121,11 +123,11 @@ export function AsterionHeader({
         ) : null}
       </section>
 
-      <section className="asterion-header__main header-main">
-        <div className="asterion-header__resource-rail header-resource-rail" aria-label="Ресурсы планеты" data-qa-resource-rail>
+      <section className="asterion-header__main">
+        <div className="asterion-header__resource-rail" aria-label="Ресурсы планеты" data-qa-resource-rail>
           {resources.map((resource) => <ResourceChip key={resource.kind} {...resource} />)}
         </div>
-        <nav className="asterion-header__primary-navigation primary-navigation" aria-label="Основная навигация" data-qa-navigation="primary">
+        <nav className="asterion-header__primary-navigation" aria-label="Основная навигация" data-qa-navigation="primary">
           {PRIMARY_NAVIGATION.map(({ id, label, icon }) => {
             const isActive = activeRoute === id && !(id === 'planet' && activeZone !== null);
             return (
@@ -146,17 +148,33 @@ export function AsterionHeader({
         </nav>
       </section>
 
-      <section className="asterion-header__campaign campaign-module" data-qa-campaign>
-        <span className="asterion-header__campaign-icon campaign-icon">✦</span>
-        <div className="asterion-header__campaign-status campaign-status"><strong>КАМПАНИЯ АКТИВНА</strong></div>
+      <section className="asterion-header__campaign" data-qa-campaign>
+        <span className="asterion-header__campaign-icon">✦</span>
+        <div className="asterion-header__campaign-status"><strong>КАМПАНИЯ АКТИВНА</strong></div>
         <time>{new Date(campaign.now).toLocaleTimeString('ru-RU', { hour12: false })}</time>
         {campaign.mode === 'test' ? (
-          <div className="asterion-header__test-mode-banner test-mode-banner-v1" data-qa-test-mode-banner>
+          <div className="asterion-header__test-mode-banner" data-qa-test-mode-banner>
             <strong>ТЕСТОВЫЙ РЕЖИМ</strong>
+            {campaign.timeScaleOptions?.length ? (
+              <div className="asterion-header__test-mode-speed-picker" role="group" aria-label="Скорость тестового режима">
+                {campaign.timeScaleOptions.map((speed) => (
+                  <button
+                    key={speed}
+                    type="button"
+                    className={speed === campaign.timeScale ? 'active' : ''}
+                    aria-pressed={speed === campaign.timeScale}
+                    data-qa-test-speed={speed}
+                    onClick={() => campaign.onTimeScaleChange?.(speed)}
+                  >
+                    ×{speed}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <small data-qa-test-time-scale>ускорение ×{campaign.timeScale} · {campaign.saveKey}</small>
           </div>
         ) : null}
-        <nav className="asterion-header__utility-navigation utility-navigation" aria-label="Служебная навигация" data-qa-navigation="utility">
+        <nav className="asterion-header__utility-navigation" aria-label="Служебная навигация" data-qa-navigation="utility">
           {UTILITY_NAVIGATION.map(({ id, label, icon }) => {
             const isActive = activeRoute === id;
             return (
@@ -186,4 +204,3 @@ function NavigationZoneIcon({ zone }: { zone: HeaderZoneId }) {
   if (zone === 'industry') return <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" d="M3 21V10l6 3v-3l6 3V6h4v15H3Z" /><path fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" d="M6 17h2m3 0h2m3 0h2M16 6V3h3v3" /></svg>;
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" d="M4 19h16M7 19v-4l4-2V8l2-2 2 2v5l3 2v4M11 10h4M9 19v-3m6 3v-4" /><path fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" d="m12 6 1-4 1 4" /></svg>;
 }
-

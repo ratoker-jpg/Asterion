@@ -1,7 +1,7 @@
 /* Asterion shell v3 — persistent top command bar + replaceable workspace. */
 .stage-shell-v3{overflow:hidden}
 
-.workspace{position:absolute;z-index:10;left:38px;right:38px;top:176px;bottom:58px;overflow:hidden}.workspace:before{content:"";position:absolute;inset:0;pointer-events:none;border:1px solid rgba(64,181,213,.08)}
+.workspace{position:absolute;z-index:10;left:38px;right:38px;top:var(--hud-base-workspace-top);bottom:var(--hud-stage-bottom-gap);overflow:hidden}.workspace:before{content:"";position:absolute;inset:0;pointer-events:none;border:1px solid rgba(64,181,213,.08)}
 
 /* Planet page is one replaceable workspace, not part of the global shell. */
 .planet-page-v3{position:absolute;inset:0;display:grid;grid-template-columns:310px minmax(0,1fr) 340px;gap:22px}

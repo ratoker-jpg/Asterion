@@ -23,7 +23,7 @@ export function inferTypographyCategory(element: HTMLElement): TypographyKey {
   const tag = element.tagName.toLowerCase();
   const signature = classSignature(element);
 
-  if (element.closest('.footer-status, .shell-notice, .campaign-status, .campaign-module')) return 'hud';
+  if (element.closest('.footer-status, .shell-notice, .asterion-header__campaign-status, .asterion-header__campaign')) return 'hud';
   if (tag === 'h1' || /page-title|scene-title|screen-title|module-placeholder/.test(signature)) return 'pageTitle';
   if (element.closest('button, [role="button"], input, select, textarea') || tag === 'option') return 'control';
   if (element.closest('table, [role="table"], [role="row"]') || /table|score|rank|points|stat|metric|resource|cost|value|amount|counter|countdown|time/.test(signature)) return 'table';

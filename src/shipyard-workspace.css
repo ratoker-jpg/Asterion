@@ -33,7 +33,7 @@ html.asterion-long-page .stage {
 }
 
 html.asterion-long-page .workspace {
-  top: 246px;
+  top: var(--hud-workspace-top);
   bottom: auto;
   height: 2555px;
   overflow: visible;
