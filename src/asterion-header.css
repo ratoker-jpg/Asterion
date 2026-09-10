@@ -12,6 +12,10 @@
 .asterion-header .asterion-header__resource{
   pointer-events:auto;
 }
+.asterion-header-icon{
+  display:block;
+  object-fit:contain;
+}
 
 /* Planet cluster and current-planet selector. */
 .asterion-header__planet-module{
@@ -88,7 +92,8 @@
   box-shadow:0 0 0 5px rgba(1,9,16,.96),0 0 16px rgba(0,205,247,.17);
   transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease,color .15s ease;
 }
-.asterion-header__zone svg{width:25px;height:25px}
+.asterion-header__zone svg,
+.asterion-header__zone img{width:34px;height:34px}
 .asterion-header__zone:hover,
 .asterion-header__zone.active{
   transform:scale(1.08);
@@ -104,8 +109,8 @@
   position:absolute;
   z-index:8;
   left:var(--hud-planet-control-left);
-  top:10px;
-  width:242px;
+  top:3px;
+  width:252px;
   height:90px;
 }
 .asterion-header__planet-select{
@@ -113,17 +118,19 @@
   height:90px;
   min-width:0;
   display:grid;
-  grid-template-columns:56px minmax(0,1fr) 20px;
-  align-items:center;
-  gap:10px;
-  padding:10px 12px;
+  grid-template-columns:44px minmax(0,1fr) 34px;
+  grid-template-rows:1fr;
+  align-items:start;
+  gap:8px;
+  padding:10px 10px 19px 12px;
   border:1px solid var(--header-border);
+  border-radius:22px;
   background:linear-gradient(180deg,rgba(5,31,45,.98),rgba(2,16,26,.98));
   color:#dff7ff;
   cursor:pointer;
   text-align:left;
-  clip-path:polygon(0 0,94% 0,100% 18%,100% 100%,0 100%);
-  box-shadow:inset 0 0 24px rgba(0,188,235,.035);
+  clip-path:none;
+  box-shadow:inset 0 1px 0 rgba(113,239,255,.09),0 8px 22px rgba(0,0,0,.18);
 }
 .asterion-header__planet-select:hover,
 .asterion-header__planet-select:focus-visible{
@@ -131,18 +138,19 @@
   background:linear-gradient(180deg,rgba(7,46,62,.98),rgba(2,23,34,.98));
   outline:0;
 }
-.asterion-header__planet-select img{width:54px;height:54px;object-fit:contain;filter:drop-shadow(0 0 10px rgba(50,201,255,.38))}
-.asterion-header__planet-select span{min-width:0}
-.asterion-header__planet-select small{display:block;color:#69cfe7;font-size:10px;letter-spacing:1.2px;white-space:nowrap}
-.asterion-header__planet-select strong{display:block;margin-top:6px;font-size:16px;line-height:1.1;white-space:nowrap}
-.asterion-header__planet-select em{font-style:normal;color:#7999a4;font-size:10px;font-weight:500;margin-left:5px}
-.asterion-header__planet-select i{font-style:normal;color:#69e7ff;font-size:18px;text-align:center}
+.asterion-header__planet-select img{width:44px;height:44px;object-fit:contain;filter:drop-shadow(0 0 10px rgba(50,201,255,.38))}
+.asterion-header__planet-select-copy{min-width:0;display:block;padding-top:1px}
+.asterion-header__planet-select-copy small{display:block;color:#69cfe7;font-size:9px;font-weight:800;letter-spacing:1.15px;line-height:1;white-space:nowrap}
+.asterion-header__planet-select-copy strong{display:block;margin-top:5px;color:#f2fcff;font-size:18px;line-height:1;white-space:nowrap}
+.asterion-header__planet-select-copy em{display:inline-block;margin-top:4px;padding:2px 6px;border-radius:3px;background:#f2fcff;color:#06202d;font-style:normal;font-size:9px;font-weight:900;line-height:1;letter-spacing:.15px;white-space:nowrap}
+.asterion-header__planet-select i{width:34px;height:40px;display:grid;place-items:center;align-self:center;border:1px solid rgba(76,215,244,.6);border-radius:8px;background:rgba(4,41,55,.7);font-style:normal;color:#69e7ff;font-size:21px;line-height:1;text-align:center}
+.asterion-header__planet-selected{position:absolute;left:12px;bottom:7px;display:block;color:#6ef1b4;font-size:8px;font-weight:800;letter-spacing:1px;line-height:1;white-space:nowrap}
 .asterion-header__planet-list{
   position:absolute;
   z-index:240;
   left:var(--hud-planet-control-left);
-  top:var(--hud-header-top-row-height);
-  width:242px;
+  top:calc(var(--hud-header-top-row-height) + 8px);
+  width:252px;
   padding:8px;
   border:1px solid rgba(65,215,246,.44);
   background:rgba(2,14,23,.99);
@@ -180,61 +188,58 @@
   height:var(--hud-header-top-row-height);
   display:grid;
   grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:8px;
+  padding:3px 8px 0;
+  background:transparent;
+  border:0;
   overflow:visible;
 }
 .asterion-header__resource-rail::before{
-  content:"";
-  position:absolute;
-  z-index:0;
-  inset:0;
-  border:1px solid var(--header-rail-border);
-  background:linear-gradient(180deg,rgba(5,27,39,.98),rgba(2,14,23,.99));
-  clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px);
-  box-shadow:inset 0 0 30px rgba(0,185,230,.025);
-  pointer-events:none;
+  display:none;
 }
 .asterion-header__resource-rail .asterion-header__resource{
   position:relative;
   z-index:1;
   min-width:0;
-  height:106px;
+  height:92px;
   display:grid;
-  grid-template-columns:54px minmax(0,1fr);
-  align-items:center;
-  gap:8px;
-  padding:0 15px;
-  border:0;
-  border-right:1px solid rgba(68,185,214,.14);
-  background:linear-gradient(90deg,rgba(6,34,47,.42),rgba(2,18,28,.16));
+  grid-template-columns:42px minmax(0,1fr);
+  align-items:start;
+  gap:9px;
+  padding:12px 14px 0;
+  border:1px solid rgba(65,212,239,.46);
+  border-radius:20px;
+  background:linear-gradient(155deg,rgba(13,71,87,.98),rgba(3,25,37,.99));
   overflow:visible;
   clip-path:none;
   cursor:default;
   outline:0;
 }
-.asterion-header__resource-rail .asterion-header__resource:last-child{border-right:0}
+.asterion-header__resource-rail .asterion-header__resource:last-child{border-right:1px solid rgba(65,212,239,.46)}
 .asterion-header__resource-icon{
   position:static;
   width:42px;
   height:42px;
   display:grid;
   place-items:center;
-  transform:none;
+  transform:translateY(12px);
   filter:drop-shadow(0 0 8px rgba(0,205,255,.34));
 }
-.asterion-header__resource-icon svg{width:34px;height:34px}
+.asterion-header__resource-icon svg,
+.asterion-header__resource-icon img{width:50px;height:50px}
 .asterion-header__resource--metal .asterion-header__resource-icon{color:#55e6ff}
 .asterion-header__resource--mineral .asterion-header__resource-icon{color:#a6adff}
 .asterion-header__resource--gas .asterion-header__resource-icon{color:#4df0a7}
 .asterion-header__resource--energy .asterion-header__resource-icon{color:#ffd34f}
 .asterion-header__resource--population .asterion-header__resource-icon{color:#dffaff}
-.asterion-header__resource-text{position:static;min-width:0}
-.asterion-header__resource small{display:block;color:#769aa7;font-size:10px;letter-spacing:1.15px;white-space:nowrap}
-.asterion-header__resource strong{display:block;margin-top:5px;color:#f2fcff;font-size:20px;line-height:1.05;font-weight:700;white-space:nowrap}
+.asterion-header__resource-text{position:static;min-width:0;display:block;height:54px;overflow:visible;transform:translateY(12px)}
+.asterion-header__resource small{display:block;color:#a6d9e1;font-size:11px;font-weight:700;letter-spacing:1.25px;line-height:1;white-space:nowrap}
+.asterion-header__resource strong{display:block;margin-top:6px;color:#effcff;font-size:18px;line-height:1;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
 .asterion-header__resource-fill{
   display:block;
   width:100%;
-  height:4px;
-  margin-top:10px;
+  height:3px;
+  margin-top:13px;
   overflow:hidden;
   background:rgba(4,29,42,.96);
   border:1px solid rgba(71,197,222,.16);
@@ -244,13 +249,17 @@
   display:block;
   width:var(--fill);
   height:100%;
-  background:#1ed2f5;
-  box-shadow:0 0 8px rgba(30,210,245,.45);
+  background:#ff5f69;
+  box-shadow:0 0 8px rgba(255,95,105,.5);
   transition:width .25s ease,background .25s ease,box-shadow .25s ease;
 }
 .asterion-header__resource-fill--watch i{background:#ffe27b;box-shadow:0 0 8px rgba(255,226,123,.42)}
 .asterion-header__resource-fill--warning i{background:#ff9b4a;box-shadow:0 0 8px rgba(255,155,74,.46)}
 .asterion-header__resource-fill--critical i{background:#ff5f69;box-shadow:0 0 9px rgba(255,95,105,.54)}
+.asterion-header__resource--metal .asterion-header__resource-fill i,
+.asterion-header__resource--mineral .asterion-header__resource-fill i,
+.asterion-header__resource--gas .asterion-header__resource-fill i{background:#ff5f69;box-shadow:0 0 9px rgba(255,95,105,.54)}
+.asterion-header__resource--population .asterion-header__resource-fill i{background:#1ed2f5;box-shadow:0 0 8px rgba(30,210,245,.45)}
 .asterion-header__resource-tooltip{
   position:absolute;
   z-index:300;
@@ -294,11 +303,11 @@
 .asterion-header__primary-navigation button{
   position:relative;
   min-width:0;
-  height:94px;
+  height:98px;
   display:flex;
   align-items:center;
   justify-content:center;
-  gap:14px;
+  gap:17px;
   padding:0 18px;
   border:0;
   border-right:1px solid rgba(68,188,216,.14);
@@ -327,21 +336,24 @@
   background:var(--header-accent-strong);
   box-shadow:0 0 16px rgba(61,224,255,.86);
 }
-.asterion-header__primary-navigation svg{flex:0 0 42px;width:42px;height:42px;filter:drop-shadow(0 0 6px rgba(120,235,255,.2))}
-.asterion-header__primary-navigation button.active svg{filter:drop-shadow(0 0 10px rgba(70,225,255,.68))}
-.asterion-header__primary-navigation button span{font-size:16px;line-height:1;font-weight:700;letter-spacing:.2px;white-space:nowrap}
+.asterion-header__primary-navigation svg,
+.asterion-header__primary-navigation .asterion-header-icon{flex:0 0 48px;width:48px;height:48px;filter:drop-shadow(0 0 6px rgba(120,235,255,.2))}
+.asterion-header__primary-navigation button.active svg,
+.asterion-header__primary-navigation button.active .asterion-header-icon{filter:drop-shadow(0 0 10px rgba(70,225,255,.68))}
+.asterion-header__primary-navigation button span{font-size:17px;line-height:1;font-weight:700;letter-spacing:.2px;white-space:nowrap;color:#f2fdff}
 
 /* Campaign status and a separate utility navigation row. */
 .asterion-header__campaign{
   position:absolute;
   z-index:7;
   right:0;
-  top:0;
+  top:3px;
   width:var(--hud-campaign-width);
   height:var(--hud-header-top-row-height);
   padding:0;
   display:block;
-  overflow:visible;
+  overflow:hidden;
+  border-radius:8px;
   clip-path:none;
 }
 .asterion-header__campaign::before{
@@ -351,7 +363,8 @@
   inset:0;
   border:1px solid rgba(66,207,237,.3);
   background:linear-gradient(180deg,rgba(5,28,40,.98),rgba(2,14,23,.99));
-  clip-path:polygon(14px 0,100% 0,100% 100%,0 100%,0 14px);
+  border-radius:8px;
+  clip-path:none;
   box-shadow:inset 0 0 28px rgba(0,185,230,.03);
   pointer-events:none;
 }
@@ -359,7 +372,7 @@
   position:absolute;
   z-index:1;
   left:18px;
-  top:19px;
+  top:15px;
   width:12px;
   height:12px;
   border-radius:50%;
@@ -367,13 +380,14 @@
   background:#38ee7e;
   box-shadow:0 0 8px #38ee7e,0 0 18px rgba(56,238,126,.5);
 }
-.asterion-header__campaign-status{position:absolute;z-index:1;left:42px;top:15px}
+.asterion-header__campaign-status{position:absolute;z-index:1;left:42px;top:11px}
 .asterion-header__campaign-status strong{font-size:12px;letter-spacing:.8px;color:#eafff2;white-space:nowrap}
-.asterion-header__campaign time{position:absolute;z-index:1;left:50%;top:37px;transform:translateX(-50%);font-size:22px;line-height:1;font-weight:800;color:#fff;letter-spacing:.1px;white-space:nowrap}
+.asterion-header__campaign time{position:absolute;z-index:1;left:50%;top:30px;transform:translateX(-50%);font-size:20px;line-height:1;font-weight:800;color:#fff;letter-spacing:.1px;white-space:nowrap}
 .asterion-header__campaign:has(.asterion-header__test-mode-banner) .asterion-header__campaign-status{top:10px}
 .asterion-header__campaign:has(.asterion-header__test-mode-banner) time{top:28px;font-size:18px}
 .asterion-header__campaign:has(.asterion-header__test-mode-banner) .asterion-header__utility-navigation{height:30px}
-.asterion-header__campaign:has(.asterion-header__test-mode-banner) .asterion-header__utility-navigation svg{width:20px;height:20px}
+.asterion-header__campaign:has(.asterion-header__test-mode-banner) .asterion-header__utility-navigation svg,
+.asterion-header__campaign:has(.asterion-header__test-mode-banner) .asterion-header__utility-navigation .asterion-header-icon{width:20px;height:20px}
 .asterion-header__test-mode-banner{
   position:absolute;
   z-index:3;
@@ -434,49 +448,38 @@
   left:0;
   right:0;
   bottom:0;
-  height:42px;
+  height:35px;
   display:grid;
   grid-template-columns:repeat(3,1fr);
   border-top:1px solid rgba(70,195,222,.2);
   overflow:visible;
+  border-bottom-left-radius:8px;
+  border-bottom-right-radius:8px;
 }
 .asterion-header__utility-navigation button{
   position:relative;
   display:grid;
   place-items:center;
+  gap:0;
   padding:0;
   border:0;
   border-right:1px solid rgba(70,195,222,.16);
   background:rgba(3,26,38,.54);
   color:#d9faff;
   cursor:pointer;
+  overflow:hidden;
 }
+.asterion-header__utility-navigation button:first-child{border-bottom-left-radius:8px}
+.asterion-header__utility-navigation button:last-child{border-bottom-right-radius:8px}
 .asterion-header__utility-navigation button:last-child{border-right:0}
 .asterion-header__utility-navigation button:hover,
 .asterion-header__utility-navigation button:focus-visible,
 .asterion-header__utility-navigation button.active{color:#fff;background:rgba(7,61,80,.78);box-shadow:inset 0 0 18px rgba(0,205,255,.12);outline:0}
-.asterion-header__utility-navigation svg{width:27px;height:27px;filter:drop-shadow(0 0 6px rgba(120,235,255,.2))}
+.asterion-header__utility-navigation svg,
+.asterion-header__utility-navigation .asterion-header-icon{width:22px;height:22px;filter:drop-shadow(0 0 6px rgba(120,235,255,.2))}
 .asterion-header__utility-navigation button span{
-  position:absolute;
-  z-index:20;
-  top:calc(100% + 8px);
-  left:50%;
-  padding:5px 8px;
-  border:1px solid rgba(69,210,238,.35);
-  background:#061722;
-  box-shadow:0 8px 18px rgba(0,0,0,.35);
-  color:#dffaff;
-  font-size:11px;
-  line-height:1;
-  white-space:nowrap;
-  opacity:0;
-  transform:translate(-50%,4px);
-  pointer-events:none;
-  transition:opacity .12s ease,transform .12s ease;
+  display:none;
 }
-.asterion-header__utility-navigation button:hover span,
-.asterion-header__utility-navigation button:focus span,
-.asterion-header__utility-navigation button:focus-visible span{opacity:1;transform:translate(-50%,0)}
 
 @keyframes asterion-header-orbit{to{transform:rotate(360deg)}}
 @keyframes asterion-header-planet-float{50%{transform:translateY(-2px) scale(1.012)}}
