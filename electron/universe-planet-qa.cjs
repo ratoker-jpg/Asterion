@@ -32,20 +32,19 @@ async function reload(win) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   win.webContents.reload();
   await done;
-  await waitFor(win, `document.querySelector('.utility-navigation')`);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await waitFor(win, `localStorage.getItem(${JSON.stringify(SAVE_KEY)})`);
   await settle(win);
 }
 
-async function clickPrimary(win, label) {
+async function clickPrimary(win, route) {
   const clicked = await win.webContents.executeJavaScript(`(() => {
-    const button = Array.from(document.querySelectorAll('.primary-navigation button'))
-      .find((item) => item.textContent?.trim() === ${JSON.stringify(label)});
+    const button = document.querySelector('[data-qa-route="${route}"]');
     if (!button) return false;
     button.click();
     return true;
   })()`);
-  if (!clicked) throw new Error(`Primary navigation button not found: ${label}`);
+  if (!clicked) throw new Error(`Primary navigation route not found: ${route}`);
   await waitFor(win, `document.querySelector('[data-qa-universe]')`);
   await settle(win);
 }
@@ -265,7 +264,7 @@ async function runViewport(width, height) {
     const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
     await win.loadFile(path.join(ROOT, 'dist', 'index.html'));
     await loaded;
-    await waitFor(win, `document.querySelector('.utility-navigation')`);
+    await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
     win.webContents.debugger.attach('1.3');
     await win.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', {
       width,
@@ -279,7 +278,7 @@ async function runViewport(width, height) {
     await waitFor(win, `localStorage.getItem(${JSON.stringify(SAVE_KEY)})`);
     await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)}); localStorage.removeItem('asterion.preferences.v2');`);
     await reload(win);
-    await clickPrimary(win, 'Вселенная');
+    await clickPrimary(win, 'universe');
 
     const map = await mapSnapshot(win);
     if (map.system !== '1' || map.systemOptions !== 40 || map.systemOptionTexts.some((text, index) => text !== String(index + 1).padStart(2, '0')) || map.positionCount !== 24 || map.viewport.innerWidth !== width || map.viewport.innerHeight !== height) throw new Error(`${label}: map cardinality/viewport failed ${JSON.stringify(map)}`);
