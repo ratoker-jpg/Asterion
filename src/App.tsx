@@ -110,6 +110,7 @@ import {
 import { getFleetSummaryForState } from './application/fleet.ts';
 import { publishApplicationRuntimeSnapshot } from './application/runtime.ts';
 import { reconcileRuntime } from './application/reconcile.ts';
+import { enqueueApplicationStateUpdate } from './application/state.ts';
 import type { PlanetId, SaveState } from './application/contracts.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
@@ -451,76 +452,77 @@ export function App() {
   };
 
   const applyProductionBots = (assignment: BotAssignment) => {
-    const current = stateRef.current;
-    const nextState = applyProductionBotsAction(current, {
-      planetId: 'helion-01',
-      now,
-      mode: RUNTIME_MODE,
-      testTimeScale,
-    }, assignment);
-    stateRef.current = nextState;
-    setState(nextState);
+    enqueueApplicationStateUpdate(stateRef, setState, (current) => ({
+      state: applyProductionBotsAction(current, {
+        planetId: 'helion-01',
+        now,
+        mode: RUNTIME_MODE,
+        testTimeScale,
+      }, assignment),
+      result: undefined,
+    }));
     setNotice('Роботы перераспределены');
   };
 
   const startRecycling = (debrisAmount: number, allocation: ResourceAllocationPercent) => {
     const startedAt = Date.now();
     const jobId = globalThis.crypto?.randomUUID?.() ?? `recycling-${startedAt}-${Math.random().toString(36).slice(2, 9)}`;
-    const result = startRecyclingAction(stateRef.current, {
-      planetId: 'helion-01',
-      now: startedAt,
-      mode: RUNTIME_MODE,
-      testTimeScale,
-    }, debrisAmount, allocation, jobId);
+    const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
+      const transition = startRecyclingAction(current, {
+        planetId: 'helion-01',
+        now: startedAt,
+        mode: RUNTIME_MODE,
+        testTimeScale,
+      }, debrisAmount, allocation, jobId);
+      return {
+        state: transition.ok ? transition.state : current,
+        result: transition,
+      };
+    });
     if (!result.ok) {
       setNotice(result.reason ?? 'Переработка сейчас недоступна');
       return false;
     }
-    stateRef.current = result.state;
-    setState(result.state);
     setNotice('Переработка запущена');
     return true;
   };
 
   const collectRecycling = (jobId: string) => {
     const collectedAt = Date.now();
-    const current = stateRef.current;
-    const result = collectRecyclingAction(current, {
-      planetId: 'helion-01',
-      now: collectedAt,
-      mode: RUNTIME_MODE,
-      testTimeScale,
-    }, jobId);
+    const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
+      const transition = collectRecyclingAction(current, {
+        planetId: 'helion-01',
+        now: collectedAt,
+        mode: RUNTIME_MODE,
+        testTimeScale,
+      }, jobId);
+      return { state: transition.state, result: transition };
+    });
     if (!result.ok || !result.output) {
       setNotice(result.reason ?? 'Ресурс пока недоступен');
-      if (result.state !== current) {
-        stateRef.current = result.state;
-        setState(result.state);
-      }
       return false;
     }
-    stateRef.current = result.state;
-    setState(result.state);
     setNotice('Ресурсы получены');
     return true;
   };
 
   const tradeResources = (request: TradeRequest): TradeExecution => {
     const tradedAt = Date.now();
-    const result = executeTradeAction(stateRef.current, {
-      planetId: 'helion-01',
-      now: tradedAt,
-      mode: RUNTIME_MODE,
-      testTimeScale,
-    }, stateRef.current.rating.resourcePoints, request);
-    if (!result.execution.ok) {
-      setNotice(result.execution.reason ?? 'Обмен сейчас недоступен');
-      return result.execution;
+    const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
+      const transition = executeTradeAction(current, {
+        planetId: 'helion-01',
+        now: tradedAt,
+        mode: RUNTIME_MODE,
+        testTimeScale,
+      }, current.rating.resourcePoints, request);
+      return { state: transition.state, result: transition.execution };
+    });
+    if (!result.ok) {
+      setNotice(result.reason ?? 'Обмен сейчас недоступен');
+      return result;
     }
-    stateRef.current = result.state;
-    setState(result.state);
     setNotice('Обмен выполнен');
-    return result.execution;
+    return result;
   };
 
   const startSpaceportUpgrade = (track: SpaceportUpgradeTrack, shipId: string) => {
@@ -545,19 +547,24 @@ export function App() {
   const buildBuilding = (assetRole: BuildingRole) => {
     const enqueuedAt = Date.now();
     const context = { planetId: 'helion-01' as PlanetId, now: enqueuedAt, mode: RUNTIME_MODE, testTimeScale };
-    const preview = previewBuilding(stateRef.current, context, assetRole);
-    const availability = preview.availability;
-    if (!availability.canBuild) {
-      setNotice(availability.reason ?? 'Строительство сейчас недоступно.');
-      return false;
-    }
-    const result = startBuildingAction(stateRef.current, context, assetRole);
+    const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
+      const availability = previewBuilding(current, context, assetRole).availability;
+      if (!availability.canBuild) {
+        return {
+          state: current,
+          result: { ok: false, state: current, reason: availability.reason },
+        };
+      }
+      const transition = startBuildingAction(current, context, assetRole);
+      return {
+        state: transition.ok ? transition.state : current,
+        result: transition,
+      };
+    });
     if (!result.ok) {
       setNotice(result.reason ?? 'Строительство сейчас недоступно.');
       return false;
     }
-    stateRef.current = result.state;
-    setState(result.state);
     setNotice(`${currentPlanetName}: ${getBuildingDefinition(assetRole).name} добавлено в общую очередь.`);
     return true;
   };

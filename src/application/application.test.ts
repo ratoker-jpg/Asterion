@@ -30,6 +30,7 @@ import {
 import { bindScienceEventBridge, cancelScience, startScience } from './science.ts';
 import { reconcileRuntime } from './reconcile.ts';
 import { publishApplicationRuntimeSnapshot } from './runtime.ts';
+import { enqueueApplicationStateUpdate } from './state.ts';
 import {
   createInitialSaveState,
   createPersistenceFacade,
@@ -269,4 +270,34 @@ test('runtime snapshot adapter emits one science event and one runtime event per
 
   assert.equal(scienceEvents, 1);
   assert.equal(runtimeEvents, 1);
+});
+
+test('functional application commits preserve simultaneous building and bot updates', () => {
+  const initial = withBuildingSetup(createInitialSaveState('test'));
+  const stateRef = { current: initial };
+  const queuedUpdates: Array<(current: SaveState) => SaveState> = [];
+  const setState = (update: (current: SaveState) => SaveState) => {
+    queuedUpdates.push(update);
+  };
+  const buildingContext = context(60_000);
+  const assignment = { metal: 2, minerals: 1, gas: 0 };
+
+  const buildingResult = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
+    const transition = startBuilding(current, buildingContext, 'trade-center');
+    return {
+      state: transition.ok ? transition.state : current,
+      result: transition,
+    };
+  });
+  assert.equal(buildingResult.ok, true);
+
+  enqueueApplicationStateUpdate(stateRef, setState, (current) => ({
+    state: applyProductionBots(current, buildingContext, assignment),
+    result: undefined,
+  }));
+
+  const finalState = queuedUpdates.reduce((current, update) => update(current), initial);
+  assert.equal(finalState.queues['helion-01'].length, 1);
+  assert.deepEqual(finalState.planets['helion-01'].productionBots, assignment);
+  assert.ok(finalState.metal < initial.metal);
 });
