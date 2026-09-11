@@ -379,6 +379,8 @@
 .battle-outcome-v1 > div:last-child { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
 .battle-outcome-v1 > div:last-child > span { display: grid; gap: 4px; min-height: 54px; padding: 9px; border: 1px solid rgba(52, 178, 213, .14); background: rgba(4, 34, 46, .68); }
 .battle-outcome-v1 strong { color: #eefcff; font-size: 14px; }
+.battle-outcome-resource { grid-template-columns: 20px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 7px; align-items: center; }
+.battle-outcome-resource-icon { grid-row: 1 / 3; display: grid; place-items: center; width: 20px; height: 20px; }
 
 @media (max-width: 1250px) {
   .battle-list-v1,

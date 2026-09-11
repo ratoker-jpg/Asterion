@@ -61,6 +61,12 @@
   clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
   background: rgba(7, 94, 126, .22);
 }
+.fleet-yard-emblem-v1 img {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 8px rgba(72, 218, 255, .36));
+}
 .fleet-yard-card-v1 strong,
 .fleet-yard-card-v1 span,
 .fleet-yard-card-v1 small { display: block; }

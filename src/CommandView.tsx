@@ -13,6 +13,7 @@ import type {
   ResourceRequest,
   ResourceType,
 } from './domain/command/types.ts';
+import { ResourceIcon } from './ui/resources/ResourceIcon';
 import './command.css';
 
 type CommandViewProps = {
@@ -119,8 +120,8 @@ function OperationGlyph({ operation }: { operation: JointOperation }) {
   return <span className="command-operation-glyph">⇄</span>;
 }
 
-function ResourceGlyph({ resource }: { resource: ResourceType }) {
-  return <span className={`command-resource-glyph command-resource-glyph--${resource}`}>{resource === 'metal' ? '◆' : resource === 'minerals' ? '◇' : resource === 'gas' ? '◈' : 'ϟ'}</span>;
+function CommandResourceIcon({ resource }: { resource: ResourceType }) {
+  return <span className={`command-resource-glyph command-resource-glyph--${resource}`}><ResourceIcon kind={resource} /></span>;
 }
 
 function RelationBadge({ relation }: { relation: DiplomaticRelation }) {
@@ -162,7 +163,7 @@ function RequestRow({ state, request, onOpen }: { state: CommandState; request: 
   const progress = Math.min(100, Math.round((request.fulfilledAmount / Math.max(1, request.amount)) * 100));
   return (
     <button type="button" className={`command-request-row command-request-row--${request.priority}`} onClick={onOpen}>
-      <ResourceGlyph resource={request.resource} />
+      <CommandResourceIcon resource={request.resource} />
       <span><strong>{member?.callsign ?? 'Неизвестный участник'}</strong><small>{request.purpose}</small></span>
       <span className="command-request-amount"><b>{number.format(request.amount)}</b><small>{RESOURCE_LABELS[request.resource]}</small></span>
       <span className="command-request-progress"><i style={{ width: `${progress}%` }} /></span>
@@ -286,7 +287,7 @@ function MembersTab({ state, selectedId, onSelect, openRequest }: {
             <section className="command-member-requests">
               <small>ЗАПРОСЫ УЧАСТНИКА</small>
               {selectedRequests.length ? selectedRequests.map((request) => (
-                <button key={request.id} type="button" onClick={() => openRequest(request.id)}><ResourceGlyph resource={request.resource} /><span>{RESOURCE_LABELS[request.resource]} · {number.format(request.amount)}</span><b>ОТКРЫТЬ →</b></button>
+                <button key={request.id} type="button" onClick={() => openRequest(request.id)}><CommandResourceIcon resource={request.resource} /><span>{RESOURCE_LABELS[request.resource]} · {number.format(request.amount)}</span><b>ОТКРЫТЬ →</b></button>
               )) : <p>Открытых запросов нет.</p>}
             </section>
           </>
@@ -317,7 +318,7 @@ function RequestsTab({ state, selectedId, onSelect, onReviewRequest, onOpenFleet
       <aside className="command-panel command-detail-panel">
         {selected ? (
           <>
-            <div className="command-request-detail-head"><ResourceGlyph resource={selected.resource} /><div><small>{RESOURCE_LABELS[selected.resource]} · {selected.priority.toUpperCase()}</small><h2>{number.format(selected.amount)}</h2><p>Запрос: {member?.callsign ?? 'Неизвестный участник'}</p></div></div>
+            <div className="command-request-detail-head"><CommandResourceIcon resource={selected.resource} /><div><small>{RESOURCE_LABELS[selected.resource]} · {selected.priority.toUpperCase()}</small><h2>{number.format(selected.amount)}</h2><p>Запрос: {member?.callsign ?? 'Неизвестный участник'}</p></div></div>
             <section className="command-request-purpose"><small>НАЗНАЧЕНИЕ</small><p>{selected.purpose}</p></section>
             <div className="command-request-meter"><span><b>{number.format(selected.fulfilledAmount)}</b> подтверждено из {number.format(selected.amount)}</span><em>{progress}%</em><div><i style={{ width: `${progress}%` }} /></div></div>
             <dl className="command-detail-grid">

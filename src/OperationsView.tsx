@@ -10,6 +10,8 @@ import type {
   OperationThreatTier,
   OperationsState,
 } from './domain/operations/types.ts';
+import { ResourceIcon } from './ui/resources/ResourceIcon';
+import type { ResourceIconKind } from './ui/resources/resource-assets.ts';
 import './operations.css';
 
 type OperationsViewProps = {
@@ -88,10 +90,10 @@ function OperationGlyph({ category }: { category: OperationCategory }) {
 
 function rewardEntries(operation: OperationInstance) {
   return [
-    ['МЕТАЛЛ', operation.rewardPreview.metal, '◆'],
-    ['МИНЕРАЛЫ', operation.rewardPreview.minerals, '◇'],
-    ['ГАЗ', operation.rewardPreview.gas, '◈'],
-  ].filter((entry): entry is [string, number, string] => typeof entry[1] === 'number');
+    ['МЕТАЛЛ', operation.rewardPreview.metal, 'metal'],
+    ['МИНЕРАЛЫ', operation.rewardPreview.minerals, 'minerals'],
+    ['ГАЗ', operation.rewardPreview.gas, 'gas'],
+  ].filter((entry): entry is [string, number, ResourceIconKind] => typeof entry[1] === 'number');
 }
 
 function RewardPreview({ operation, compact = false }: { operation: OperationInstance; compact?: boolean }) {
@@ -104,7 +106,7 @@ function RewardPreview({ operation, compact = false }: { operation: OperationIns
     <div className={compact ? 'operations-reward-compact-v2' : 'operations-reward-v2'}>
       {entries.map(([label, value, glyph]) => (
         <span key={label}>
-          <i>{glyph}</i>
+          <i><ResourceIcon kind={glyph} /></i>
           {!compact ? <small>{label}</small> : null}
           <strong>{number.format(value)}</strong>
         </span>
@@ -191,7 +193,7 @@ function OperationCard({ operation, selected, onSelect }: {
         <span className="operation-feed-meta-v2">
           <i>{intelZero ? formatLocationClass(operation.location) : formatLocation(operation.location)}</i>
           <IntelPips level={operation.intel} />
-          {firstReward ? <b>{firstReward[2]} {number.format(firstReward[1])}</b> : <b>НАГРАДА ?</b>}
+          {firstReward ? <b><ResourceIcon kind={firstReward[2]} /> {number.format(firstReward[1])}</b> : <b>НАГРАДА ?</b>}
         </span>
       </span>
       <span className="operation-feed-arrow-v2">›</span>

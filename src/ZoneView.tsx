@@ -23,6 +23,7 @@ import {
   type ScienceLevels,
 } from './domain/buildings/resource-zone.ts';
 import { getProductionBotBonusPercent, type BotAssignment, type ProductionResourceIncome } from './domain/buildings/production-bots.ts';
+import { ResourceIcon } from './ui/resources/ResourceIcon';
 
 export const ZONE_VIEW_META: Readonly<Record<BuildingZone, {
   title: string;
@@ -133,27 +134,6 @@ function selectorStatusText(className: string, level: number) {
   if (className === 'blocked') return 'Требования не выполнены';
   if (className === 'maxed') return 'Максимальный уровень';
   return level > 0 ? 'Доступно к улучшению' : 'Доступно';
-}
-
-function ResourceIncomeIcon({ kind }: { kind: 'metal' | 'mineral' | 'gas' | 'energy' }) {
-  const common = {
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 1.65,
-    strokeLinecap: 'round' as const,
-    strokeLinejoin: 'round' as const,
-  };
-
-  if (kind === 'metal') {
-    return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M4 7 12 3l8 4-8 4-8-4Z"/><path {...common} d="m4 7 8 4v10l-8-4V7Zm16 0-8 4v10l8-4V7Z"/></svg>;
-  }
-  if (kind === 'mineral') {
-    return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m12 2 7 7-7 13L5 9l7-7Z"/><path {...common} d="M5 9h14M12 2v20"/></svg>;
-  }
-  if (kind === 'energy') {
-    return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m13 2-8 12h6l-1 8 8-12h-6l1-8Z"/></svg>;
-  }
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M12 3c4 4.7 6 7.6 6 11a6 6 0 1 1-12 0c0-3.4 2-6.3 6-11Z"/><circle {...common} cx="10" cy="13" r="1.8"/><circle {...common} cx="14.5" cy="15.5" r="1.2"/></svg>;
 }
 
 function EnterIcon() {
@@ -348,17 +328,17 @@ export function ZoneView({
             <div className="resource-zone-economy-title">ДОБЫЧА ЗА 1 ЧАС</div>
             <div className="resource-zone-income-list">
               <div className="resource-zone-income-row" data-resource-income="metal">
-                <span className="resource-zone-income-icon"><ResourceIncomeIcon kind="metal" /></span>
+                <span className="resource-zone-income-icon"><ResourceIcon kind="metal" /></span>
                 <span className="resource-zone-income-name">Металл</span>
                 <strong>{formatNumber(resourceIncomePerHour.metal)}</strong>
               </div>
               <div className="resource-zone-income-row" data-resource-income="minerals">
-                <span className="resource-zone-income-icon"><ResourceIncomeIcon kind="mineral" /></span>
+                <span className="resource-zone-income-icon"><ResourceIcon kind="minerals" /></span>
                 <span className="resource-zone-income-name">Минералы</span>
                 <strong>{formatNumber(resourceIncomePerHour.minerals)}</strong>
               </div>
               <div className="resource-zone-income-row" data-resource-income="gas">
-                <span className="resource-zone-income-icon"><ResourceIncomeIcon kind="gas" /></span>
+                <span className="resource-zone-income-icon"><ResourceIcon kind="gas" /></span>
                 <span className="resource-zone-income-name">Газ</span>
                 <strong>{formatNumber(resourceIncomePerHour.gas)}</strong>
               </div>
@@ -621,7 +601,7 @@ export function ZoneView({
                       {(Object.keys(resourceLabels) as Array<keyof typeof resourceLabels>).map((key) => (
                         <div key={key} className={availability.missing[key] ? 'missing' : ''} data-qa-building-cost={key}>
                           <span className={`resource-building-cost-icon resource-building-cost-icon--${key}`} data-qa-building-cost-icon>
-                            <ResourceIncomeIcon kind={key === 'minerals' ? 'mineral' : key} />
+                            <ResourceIcon kind={key} />
                           </span>
                           <span className="resource-building-cost-copy">
                             <small>{resourceLabels[key]}</small>

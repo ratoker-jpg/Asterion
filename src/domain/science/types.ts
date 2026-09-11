@@ -22,6 +22,8 @@ export type ScienceCatalogDefinition = {
   sourceName: string;
   description: string;
   artSlug: string;
+  /** Official NEMEXIA RAW 0 → 1 cost; never derive this from capturedCost. */
+  baseCost: ScienceResourceCost;
   capturedLevel: number;
   capturedNextLevel: number;
   capturedCost: ScienceResourceCost;

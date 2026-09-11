@@ -16,6 +16,7 @@ import {
   type TradeTargetResource,
   type TradeWallet,
 } from './domain/buildings/trade.ts';
+import { ResourceIcon } from './ui/resources/ResourceIcon';
 import './trade-center.css';
 
 const SOURCE_LABELS: Record<TradeResource, string> = {
@@ -47,14 +48,6 @@ function formatDuration(ms: number): string {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-}
-
-function ResourceGlyph({ resource }: { resource: TradeResource }) {
-  const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
-  if (resource === 'metal') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M4 7 12 3l8 4-8 4-8-4Z"/><path {...common} d="m4 7 8 4v10l-8-4V7Zm16 0-8 4v10l8-4V7Z"/></svg>;
-  if (resource === 'minerals') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m12 2 7 7-7 13L5 9l7-7Z"/><path {...common} d="M5 9h14M12 2v20"/></svg>;
-  if (resource === 'gas') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M12 3c4 4.7 6 7.6 6 11a6 6 0 1 1-12 0c0-3.4 2-6.3 6-11Z"/><circle {...common} cx="10" cy="13" r="1.8"/><circle {...common} cx="14.5" cy="15.5" r="1.2"/></svg>;
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m5 6 4-3 3 3 4-2 3 4-2 4 2 4-4 4-4-2-4 2-3-4 2-4-2-3 3-3Z"/><path {...common} d="m8 9 3 2 4-2 2 3-3 4-5-1-1-6Z"/></svg>;
 }
 
 type TradeCenterViewProps = {
@@ -199,7 +192,7 @@ export function TradeCenterView({
                     data-qa-trade-selected={selected ? 'true' : 'false'}
                     onClick={() => selectSource(resource)}
                   >
-                    <span className="trade-resource-icon"><ResourceGlyph resource={resource} /></span>
+                    <span className="trade-resource-icon"><ResourceIcon kind={resource} /></span>
                     <span className="trade-resource-name">{SOURCE_LABELS[resource]}</span>
                     <small>{formatNumber(balance)}</small>
                     <span className="trade-resource-tooltip" data-qa-trade-tooltip>{SOURCE_LABELS[resource]} · доступно {formatNumber(balance)}</span>
@@ -233,7 +226,7 @@ export function TradeCenterView({
                     data-qa-trade-selected={selected ? 'true' : 'false'}
                     onClick={() => selectTarget(resource)}
                   >
-                    <span className="trade-resource-icon"><ResourceGlyph resource={resource} /></span>
+                    <span className="trade-resource-icon"><ResourceIcon kind={resource} /></span>
                     <span className="trade-resource-name">{TARGET_LABELS[resource]}</span>
                     <small>{disabled ? 'НЕДОСТУПНО' : 'ВЫБРАТЬ'}</small>
                     <span className="trade-resource-tooltip" data-qa-trade-tooltip>{disabled ? 'Нельзя купить тот же ресурс' : TARGET_LABELS[resource]}</span>

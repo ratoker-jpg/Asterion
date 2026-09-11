@@ -20,6 +20,7 @@ import {
   type BattleStackSnapshot,
   type CombatEvent,
 } from './domain/combat/report.ts';
+import { ResourceIcon } from './ui/resources/ResourceIcon';
 import './battle-reports.css';
 
 type SaveNotice = { kind: 'saved' | 'error'; message: string };
@@ -278,7 +279,7 @@ function RoundLog({ report, openRounds, onToggle }: { report: BattleReport; open
 
 function BattleOutcome({ report }: { report: BattleReport }) {
   const resourceEntries = report.resources
-    ? ([['Металл', report.resources.metal], ['Минералы', report.resources.minerals], ['Газ', report.resources.gas]] as const).filter(([, value]) => value != null)
+    ? ([['metal', 'Металл', report.resources.metal], ['minerals', 'Минералы', report.resources.minerals], ['gas', 'Газ', report.resources.gas]] as const).filter(([, , value]) => value != null)
     : [];
   if (report.experience == null && report.debris == null && !resourceEntries.length) return null;
   return (
@@ -286,8 +287,8 @@ function BattleOutcome({ report }: { report: BattleReport }) {
       <header className="battle-section-head-v1"><div><small>ИТОГ</small><h3>РЕЗУЛЬТАТЫ ОПЕРАЦИИ</h3></div></header>
       <div>
         {report.experience != null ? <span><small>БОЕВОЙ ОПЫТ</small><strong>{formatNumber(report.experience)}</strong></span> : null}
-        {report.debris != null ? <span><small>ОБЛОМКИ</small><strong>{formatNumber(report.debris)}</strong></span> : null}
-        {resourceEntries.map(([label, value]) => <span key={label}><small>{label.toUpperCase()}</small><strong>{formatNumber(value!)}</strong></span>)}
+        {report.debris != null ? <span className="battle-outcome-resource" data-qa-resource-kind="debris"><span className="battle-outcome-resource-icon"><ResourceIcon kind="debris" /></span><small>ОБЛОМКИ</small><strong>{formatNumber(report.debris)}</strong></span> : null}
+        {resourceEntries.map(([kind, label, value]) => <span className="battle-outcome-resource" key={label} data-qa-resource-kind={kind}><span className="battle-outcome-resource-icon"><ResourceIcon kind={kind} /></span><small>{label.toUpperCase()}</small><strong>{formatNumber(value!)}</strong></span>)}
       </div>
     </section>
   );

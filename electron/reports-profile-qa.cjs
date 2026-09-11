@@ -39,7 +39,7 @@ async function reload(win) {
 
 async function clickPrimary(win, route, waitExpression = `document.querySelector('[data-qa-profile]')`) {
   const clicked = await win.webContents.executeJavaScript(`(() => {
-    const button = document.querySelector('[data-qa-navigation="primary"] [data-qa-route="${route}"]');
+   const button = document.querySelector('[data-qa-navigation="primary"] [data-qa-route="${route}"]');
     if (!button) return false;
     button.click();
     return true;
@@ -51,7 +51,7 @@ async function clickPrimary(win, route, waitExpression = `document.querySelector
 
 async function clickUtility(win, route) {
   const clicked = await win.webContents.executeJavaScript(`(() => {
-    const button = document.querySelector('[data-qa-navigation="utility"] [data-qa-route="${route}"]');
+   const button = document.querySelector('[data-qa-navigation="utility"] [data-qa-route="${route}"]');
     if (!button) return false;
     button.click();
     return true;

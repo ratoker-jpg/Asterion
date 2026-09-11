@@ -10,7 +10,7 @@ import { getScienceRebalancedBaseDurationMs } from './time-rebalanced.ts';
 export type { ScienceId } from './types.ts';
 
 export const SCIENCE_SAVE_KEY = getRuntimeSaveKey('production');
-export const SCIENCE_SAVE_SCHEMA_VERSION = 11;
+export const SCIENCE_SAVE_SCHEMA_VERSION = 12;
 export const SCIENCE_QUEUE_CAPACITY = 3;
 export const SCIENCE_CANCEL_REFUND_MIN_PERCENT = 60;
 export const SCIENCE_CANCEL_REFUND_MAX_PERCENT = 80;
@@ -21,10 +21,12 @@ export const SCIENCE_CANCEL_REFUND_SOURCE_URL = 'https://github.com/ratoker-jpg/
 export const SCIENCE_PROTOTYPE_CONFIG = Object.freeze({
   laboratoryMaxLevel: 20,
   laboratoryTimeReductionPerLevel: 0.05,
-  note: 'Стоимость науки сохранена из captured-данных; время каждого уровня берётся из Asterion Balance v1 и сокращается лабораторией динамически.',
+  note: 'Стоимость науки берётся из официальных NEMEXIA RAW-переходов 0 → 1 и масштабируется по уровню; время каждого уровня берётся из Asterion Balance v1 и сокращается лабораторией динамически.',
 });
 
 export const SCIENCE_CAPTURED_VALUES_NOTE = SCIENCE_PROTOTYPE_CONFIG.note;
+/** @deprecated Prefer the explicit base-cost name in new UI and tooling. */
+export const SCIENCE_BASE_COSTS_NOTE = SCIENCE_PROTOTYPE_CONFIG.note;
 export const SCIENCE_LABORATORY_MAX_LEVEL = SCIENCE_PROTOTYPE_CONFIG.laboratoryMaxLevel;
 export const SCIENCE_LABORATORY_TIME_REDUCTION_PER_LEVEL = SCIENCE_PROTOTYPE_CONFIG.laboratoryTimeReductionPerLevel;
 
@@ -198,6 +200,21 @@ function cloneCost(cost: ScienceResourceCost): ScienceResourceCost {
   return { metal: cost.metal, minerals: cost.minerals, gas: cost.gas, energy: cost.energy };
 }
 
+/**
+ * Computes the exact integer cost for the transition `fromLevel → fromLevel + 1`.
+ * Each resource is scaled independently; zero-valued resources stay zero.
+ */
+export function calculateScienceCost(baseCost: ScienceResourceCost, fromLevel: number): ScienceResourceCost {
+  const normalizedFromLevel = Number.isFinite(fromLevel) ? Math.max(0, Math.floor(fromLevel)) : 0;
+  const multiplier = 2 ** normalizedFromLevel;
+  return {
+    metal: baseCost.metal * multiplier,
+    minerals: baseCost.minerals * multiplier,
+    gas: baseCost.gas * multiplier,
+    energy: baseCost.energy * multiplier,
+  };
+}
+
 export function getScienceMaxLevel(science: ScienceCatalogDefinition): number {
   return science.maxLevel;
 }
@@ -289,7 +306,7 @@ export function previewScience(context: ScienceRuntimeContext, scienceId: Scienc
   const queuedCount = context.state.queue.filter((task) => task.scienceId === scienceId).length;
   const projectedLevel = Math.min(maxLevel, currentLevel + queuedCount);
   const requirements = requirementsFor(science, context.state.levels, Math.max(0, Math.floor(context.laboratoryLevel)));
-  const cost = cloneCost(science.capturedCost);
+  const cost = calculateScienceCost(science.baseCost, projectedLevel);
   const targetLevel = Math.min(maxLevel, projectedLevel + 1);
   const rebalancedBaseDurationMs = getScienceRebalancedBaseDurationMs(scienceId, targetLevel);
   const durationMs = calculateScienceDurationMs(

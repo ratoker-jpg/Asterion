@@ -73,12 +73,13 @@ async function seed(win, science) {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
     const planet = save?.planets?.['helion-01'];
     if (!save || !planet?.buildings || !save.science?.levels) return false;
-    planet.buildings.research = 1;
+    planet.buildings.research = ${science.researchLevel ?? 1};
     planet.buildings.construction = 1;
     save.metal = 1_000_000;
     save.minerals = 1_000_000;
     save.gas = 1_000_000;
     planet.energy = 1_000_000;
+    Object.assign(save.science.levels, ${JSON.stringify(science.levels ?? {})});
     save.science.levels[1] = ${science.level};
     save.science.queue = ${JSON.stringify(science.queue)};
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 10);
@@ -102,6 +103,10 @@ async function readScreen(win) {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
     const action = row?.querySelector('[data-qa-science-action]');
     const workspace = document.querySelector('.workspace');
+    const rowRect = row?.getBoundingClientRect();
+    const costsRect = row?.querySelector('.science-costs-v2')?.getBoundingClientRect();
+    const actionRect = action?.getBoundingClientRect();
+    const statusSlot = row?.querySelector('[data-qa-science-status-slot]');
     return {
       root: Boolean(root),
       queue: document.querySelector('[data-qa-science-queue-count]')?.textContent?.trim() ?? '',
@@ -139,6 +144,12 @@ async function readScreen(win) {
       activeScienceCancelId: document.activeElement?.getAttribute('data-qa-science-cancel') ?? '',
       activeScienceAction: Boolean(document.activeElement?.matches('[data-qa-science-action]')),
       workspaceWidth: workspace?.getBoundingClientRect().width ?? 0,
+      rowGeometry: {
+        height: rowRect?.height ?? 0,
+        costOffset: rowRect && costsRect ? costsRect.top - rowRect.top : 0,
+        actionOffset: rowRect && actionRect ? actionRect.top - rowRect.top : 0,
+        statusHeight: statusSlot?.getBoundingClientRect().height ?? 0,
+      },
     };
   })()`);
 }
@@ -147,6 +158,34 @@ async function assertInitial(win, label) {
   const screen = await readScreen(win);
   if (!screen.root || screen.queue !== '0/3' || screen.actionDisabled || screen.previewDurationMs !== SCIENCE_DURATION_MS || screen.queueDurations.length !== 0 || screen.levelProgress.max !== '10' || screen.laboratory !== 'УРОВЕНЬ 1 / 20' || screen.laboratorySpeed !== '−5% времени за уровень' || screen.fixtureText || screen.horizontalOverflow || screen.nestedVerticalScroll) {
     throw new Error(`${label}: initial Science state mismatch ${JSON.stringify(screen)}`);
+  }
+  return screen;
+}
+
+async function readScienceCosts(win, scienceId) {
+  return win.webContents.executeJavaScript(`(() => {
+    const row = document.querySelector('[data-qa-science-id="${scienceId}"]');
+    const costs = Object.fromEntries([...row?.querySelectorAll('[data-qa-science-cost-resource]') ?? []].map((element) => [
+      element.getAttribute('data-qa-science-cost-resource'),
+      Number(element.querySelector('strong')?.textContent?.replace(/[^0-9]/g, '') || 0),
+    ]));
+    const assets = [...row?.querySelectorAll('[data-qa-science-cost-resource] img') ?? []].map((element) => ({
+      kind: element.getAttribute('data-qa-resource-kind'),
+      asset: element.getAttribute('data-qa-resource-asset'),
+    }));
+    return {
+      status: row?.getAttribute('data-qa-science-status') ?? '',
+      disabled: Boolean(row?.querySelector('[data-qa-science-action]')?.disabled),
+      costs,
+      assets,
+    };
+  })()`);
+}
+
+function assertScienceGeometry(label, screens) {
+  const baseline = screens[0]?.rowGeometry;
+  if (!baseline || screens.some((screen) => !screen.rowGeometry || ['height', 'costOffset', 'actionOffset', 'statusHeight'].some((key) => Math.abs(screen.rowGeometry[key] - baseline[key]) > 1))) {
+    throw new Error(`${label}: Science row geometry changed with queue state ${JSON.stringify(screens.map((screen) => screen.rowGeometry))}`);
   }
 }
 
@@ -171,7 +210,7 @@ async function runViewport(width, height) {
   await seed(win, { level: 0, queue: [] });
   await openScience(win);
   stage('empty queue');
-  await assertInitial(win, label);
+  const empty = await assertInitial(win, label);
   await capture(win, directory, 'science-empty-queue');
 
   const beforeFirst = await readScreen(win);
@@ -217,6 +256,9 @@ async function runViewport(width, height) {
     return { count: cards.length, buttonEnabled: Boolean(button && !button.disabled), visible: Boolean(rect && rect.top >= 0 && rect.bottom <= window.innerHeight) };
   })()`);
   if (queueVisibility.count !== 3 || !queueVisibility.buttonEnabled || !queueVisibility.visible || !full.scienceCancelRed || full.horizontalOverflow || full.nestedVerticalScroll || !full.documentScroll) throw new Error(`${label}: three-task queue is clipped or not cancellable ${JSON.stringify({ full, queueVisibility })}`);
+  assertScienceGeometry(label, [empty, afterOne, full]);
+  const queueFullMarker = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-science-id="1"] [data-qa-science-status-slot]')?.getAttribute('data-qa-science-queue-full')`);
+  if (queueFullMarker !== 'true') throw new Error(`${label}: queue-full status marker is missing`);
   await capture(win, directory, 'science-queue-full', '[data-qa-science-queue]');
 
   await click(win, '[data-qa-science-queue-task]:first-of-type [data-qa-science-cancel]');
@@ -311,6 +353,25 @@ async function runViewport(width, height) {
   if (blocked.status !== 'requirements-unmet' || !blocked.disabled || !/Лаборатория/.test(blocked.text)) throw new Error(`${label}: blocked requirements mismatch ${JSON.stringify(blocked)}`);
   await capture(win, directory, 'science-blocked-requirements', '[data-qa-science-id="5"]');
   stage('blocked requirements');
+
+  await seed(win, { level: 0, levels: { 3: 3, 10: 0 }, researchLevel: 8, queue: [] });
+  await openScience(win);
+  await click(win, '.science-sections-v2 button:nth-child(2)');
+  await waitFor(win, `document.querySelector('[data-qa-science-id="10"]')`);
+  const laserZero = await readScienceCosts(win, 10);
+  if (laserZero.status !== 'available' || laserZero.disabled || laserZero.costs.metal !== 200 || laserZero.costs.minerals !== 100 || laserZero.costs.gas !== 0 || laserZero.assets.length !== 3 || !laserZero.assets.every(({ kind, asset }) => ['metal', 'minerals', 'gas'].includes(kind) && /(?:metal|mineral|gas)(?:-[^/]+)?\.png$/.test(asset ?? ''))) {
+    throw new Error(`${label}: Laser 0 → 1 cost/assets mismatch ${JSON.stringify(laserZero)}`);
+  }
+  await click(win, '[data-qa-science-id="10"] [data-qa-science-action]');
+  await waitFor(win, `document.querySelector('[data-qa-science-queue-count]')?.textContent === '1/3'`);
+  const laserOne = await readScienceCosts(win, 10);
+  if (laserOne.costs.metal !== 400 || laserOne.costs.minerals !== 200 || laserOne.costs.gas !== 0) throw new Error(`${label}: Laser 1 → 2 cost mismatch ${JSON.stringify(laserOne)}`);
+  await click(win, '[data-qa-science-id="10"] [data-qa-science-action]');
+  await waitFor(win, `document.querySelector('[data-qa-science-queue-count]')?.textContent === '2/3'`);
+  const laserTwo = await readScienceCosts(win, 10);
+  if (laserTwo.costs.metal !== 800 || laserTwo.costs.minerals !== 400 || laserTwo.costs.gas !== 0) throw new Error(`${label}: Laser 2 → 3 cost mismatch ${JSON.stringify(laserTwo)}`);
+  await capture(win, directory, 'science-laser-x2', '[data-qa-science-id="10"]');
+  stage('laser x2 costs');
 
   await seed(win, { level: 10, queue: [] });
   stage('seed max');

@@ -13,6 +13,7 @@ import {
   type RecyclingState,
   type ResourceAllocationPercent,
 } from './domain/buildings/recycling.ts';
+import { ResourceIcon } from './ui/resources/ResourceIcon';
 import './recycling-center.css';
 
 type RecyclingCenterViewProps = {
@@ -53,24 +54,6 @@ function formatOutput(output: { metal: number; minerals: number; gas: number }) 
   return RECYCLING_RESOURCES
     .map((resource) => `${RESOURCE_META[resource].short} ${formatNumber(output[resource])}`)
     .join(' · ');
-}
-
-function ResourceIcon({ resource }: { resource: RecyclingResource }) {
-  const common = {
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 1.6,
-    strokeLinecap: 'round' as const,
-    strokeLinejoin: 'round' as const,
-  };
-
-  if (resource === 'metal') {
-    return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="m7 8 9-4 9 4-9 5-9-5Z"/><path {...common} d="m7 8 9 5v14l-9-5V8Zm18 0-9 5v14l9-5V8Z"/></svg>;
-  }
-  if (resource === 'minerals') {
-    return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="m16 3 10 10-10 16L6 13 16 3Z"/><path {...common} d="M6 13h20M16 3v26"/></svg>;
-  }
-  return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="M16 4c5.6 6.8 8 11 8 15a8 8 0 1 1-16 0c0-4 2.4-8.2 8-15Z"/><circle {...common} cx="13" cy="18" r="2.2"/><circle {...common} cx="19.5" cy="21" r="1.6"/></svg>;
 }
 
 export function RecyclingCenterView({
@@ -201,7 +184,7 @@ export function RecyclingCenterView({
                           <strong>{timerValue}</strong>
                         </div>
                         <div className="recycling-job-cell recycling-job-debris">
-                          <strong>{formatNumber(job.debrisAmount)}</strong>
+                          <span className="recycling-job-debris-value"><span className="recycling-job-debris-icon"><ResourceIcon kind="debris" /></span><strong>{formatNumber(job.debrisAmount)}</strong></span>
                           <small>обломков</small>
                         </div>
                         <div className="recycling-job-cell recycling-job-conversion">
@@ -231,7 +214,7 @@ export function RecyclingCenterView({
           </header>
           <div className="recycling-debris-control">
             <label className="recycling-debris-field">
-              <small>ОБЛОМКИ</small>
+              <small><span className="recycling-job-debris-icon"><ResourceIcon kind="debris" /></span><span>ОБЛОМКИ</span></small>
               <input
                 type="number"
                 min={0}
@@ -277,7 +260,7 @@ export function RecyclingCenterView({
               const percent = allocation[resource];
               return (
                 <div className="recycling-target-row" key={resource} data-qa-recycling-resource={resource}>
-                  <div className="recycling-target-resource"><span><ResourceIcon resource={resource} /></span><div><small>РЕСУРС</small><strong>{meta.label}</strong></div></div>
+                  <div className="recycling-target-resource"><span><ResourceIcon kind={resource} /></span><div><small>РЕСУРС</small><strong>{meta.label}</strong></div></div>
                   <button type="button" data-qa-recycling-allocation-minus={resource} disabled={percent <= 0} onClick={() => changeAllocation(resource, percent - 1)}>−</button>
                   <input
                     type="range"

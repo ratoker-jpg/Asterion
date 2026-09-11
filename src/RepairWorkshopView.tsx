@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 
 import { getCombatEntity } from './domain/combat/catalog.ts';
 import type { DefenseId, ShipId } from './domain/combat/ids.ts';
+import { ResourceIcon as CanonicalResourceIcon } from './ui/resources/ResourceIcon';
 import './repair-workshop.css';
 import './repair-workshop-feedback-v2.css';
 
@@ -63,19 +64,6 @@ function tokenWord(value: number) {
   return 'ЖЕТОНОВ';
 }
 
-function ResourceIcon({ kind }: { kind: ResourceKind }) {
-  if (kind === 'metal') {
-    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7 12 3l8 4-8 4-8-4Z"/><path d="m4 7 8 4v10l-8-4V7Zm16 0-8 4v10l8-4V7Z"/></svg>;
-  }
-  if (kind === 'minerals') {
-    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2.8 7.7 7.4-3.1 10.9H7.4L4.3 10.2 12 2.8Z"/><path d="m12 6.1 3.7 4.6-3.7 7.1-3.7-7.1L12 6.1Z"/></svg>;
-  }
-  if (kind === 'gas') {
-    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8c3.8 4.5 6.3 7.9 6.3 11.6A6.3 6.3 0 1 1 5.7 14.4C5.7 10.7 8.2 7.3 12 2.8Z"/><circle cx="10" cy="14.2" r="1.3"/><circle cx="14.5" cy="11.6" r="1"/></svg>;
-  }
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="16.3" cy="9.4" r="2.4"/><path d="M3.8 19c.4-4 2.1-6.1 5.2-6.1s4.8 2.1 5.2 6.1H3.8Z"/><path d="M13 18.7c.3-3 1.5-4.6 3.7-4.6 2.1 0 3.3 1.6 3.6 4.6H13Z"/></svg>;
-}
-
 function TicketIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -88,7 +76,7 @@ function TicketIcon() {
 function CostRow({ kind, label, value }: { kind: ResourceKind; label: string; value: number }) {
   return (
     <div className={`repair-cost-row-v1 repair-cost-row-v1--${kind}`}>
-      <span className="repair-cost-icon-v1"><ResourceIcon kind={kind} /></span>
+      <span className="repair-cost-icon-v1"><CanonicalResourceIcon kind={kind === 'population' ? 'population' : kind} /></span>
       <span><small>{label}</small><strong>{formatNumber(value)}</strong></span>
     </div>
   );
@@ -209,7 +197,7 @@ function SummaryCard({ label, value, unit, icon }: { label: string; value: numbe
   return (
     <div className="repair-summary-card-v1">
       <span className={`repair-summary-icon-v2 repair-summary-icon-v2--${icon}`}>
-        {icon === 'tokens' ? <TicketIcon /> : <ResourceIcon kind="population" />}
+        {icon === 'tokens' ? <TicketIcon /> : <CanonicalResourceIcon kind="population" />}
       </span>
       <div className="repair-summary-copy-v2">
         <small>{label}</small>
