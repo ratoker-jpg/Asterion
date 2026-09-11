@@ -72,7 +72,7 @@ async function clickText(win, selector, text) {
   await settle(win);
 }
 
-async function capture(win, directory, name) {
+async function capture(win, directory, name, { nativeCapture = false } = {}) {
   if (skipScreenshots) {
     console.log(`[test-mode-qa] screenshot skipped: ${name}`);
     return;
@@ -84,6 +84,14 @@ async function capture(win, directory, name) {
   // helpers already settle the state before capture.
   await sleep(100);
   const { width, height } = await win.webContents.executeJavaScript('({ width: innerWidth, height: innerHeight })');
+  if (nativeCapture) {
+    // DevTools capture blocks long enough for the first accelerated science
+    // task to complete. Electron's native viewport capture avoids that race
+    // while preserving the same visible viewport screenshot.
+    const image = await win.capturePage({ x: 0, y: 0, width, height });
+    fs.writeFileSync(path.join(directory, `${name}.png`), image.toPNG());
+    return;
+  }
   const result = await win.webContents.debugger.sendCommand('Page.captureScreenshot', {
     format: 'png',
     fromSurface: false,
@@ -310,7 +318,7 @@ async function runViewport(width, height) {
     for (let index = 0; index < 3; index += 1) await click(win, '[data-qa-science-id="1"] [data-qa-science-action]');
     await waitFor(win, `document.querySelector('[data-qa-science-queue-count]')?.textContent === '3/3'`);
     await waitFor(win, `(() => { try { return JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.science?.queue?.length === 3; } catch { return false; } })()`);
-    await capture(win, directory, 'test-science-queue-3of3');
+    await capture(win, directory, 'test-science-queue-3of3', { nativeCapture: true });
     const scienceQueue = await readEnvelope(win, TEST_KEY);
     if (scienceQueue.science.queue.length !== 3) throw new Error(`${label}: Science queue did not persist three tasks`);
 

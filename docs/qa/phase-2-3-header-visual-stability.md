@@ -13,7 +13,7 @@ This report records the stable route and visual contracts covered by `electron/h
 ## Header contracts
 
 - The header keeps the canonical top/height contract `20px` / `220px` in the fixed `1920×1080` stage; document-level scrolling remains owned by `GlobalPageScrollController` for long screens.
-- Planet selection exposes `data-qa-current-planet`, a labelled listbox controlled by `aria-controls`, one selected option, Escape-to-close, and focus return to the trigger.
+- Planet selection exposes `data-qa-current-planet`, a labelled listbox controlled by `aria-controls`, one selected option, Escape-to-close, and focus return to the trigger only after Escape or a planet selection; route and zone navigation retain focus on the activated control.
 - The resource rail keeps five cards in the order metal, mineral, gas, energy, population. Energy has no fill bar; population shows the current value in the chip and capacity only in its tooltip.
 - Campaign status, time, and utility navigation occupy non-overlapping rows. Test Mode keeps its speed picker inside the campaign frame.
 - Faction presentation IDs remain `aegis`, `synod`, and `veyra`; the QA harness verifies distinct accent tokens and identical geometry for all three.
@@ -33,3 +33,5 @@ npm run dist:win
 ```
 
 All commands above passed on 2026-09-11 in the phase-2/3 worktree. Build and packaging retain the repository's existing large-chunk, missing-package-metadata, and default-icon warnings; none are build failures.
+
+`ASTERION_SKIP_SCREENSHOTS=1` is optional and is not required for CI. The science-queue screenshot uses Electron's native viewport capture because the slower DevTools capture can outlast the first accelerated Test Mode task and make the queue advance before its unchanged persistence assertion runs.

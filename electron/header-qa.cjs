@@ -160,6 +160,55 @@ async function readPlanetMenuContract(win) {
   return { ...openState, closedFocus };
 }
 
+async function readPlanetMenuFocusContract(win) {
+  const openMenu = async () => {
+    await win.webContents.executeJavaScript(`(() => {
+      const button = document.querySelector('[data-qa-current-planet]');
+      if (!button) return false;
+      button.focus();
+      button.click();
+      return true;
+    })()`);
+    await waitFor(win, `document.querySelector('#asterion-header-planet-list')`);
+  };
+
+  const routeFocus = {};
+  for (const route of ['reports', 'universe']) {
+    await openMenu();
+    await win.webContents.executeJavaScript(`(() => {
+      const button = document.querySelector('[data-qa-route="${route}"]');
+      if (!button) return false;
+      button.focus();
+      button.click();
+      return true;
+    })()`);
+    await waitFor(win, `document.querySelector('[data-qa-route="${route}"][aria-current="page"]')`);
+    await waitFor(win, `document.querySelector('[data-qa-current-planet]')?.getAttribute('aria-expanded') === 'false'`);
+    routeFocus[route] = await win.webContents.executeJavaScript(`document.activeElement?.getAttribute('data-qa-route') === ${JSON.stringify(route)}`);
+    await clickRoute(win, 'planet');
+  }
+
+  await openMenu();
+  await win.webContents.executeJavaScript(`(() => {
+    const button = document.querySelector('[data-qa-zone="resource"]');
+    if (!button) return false;
+    button.focus();
+    button.click();
+    return true;
+  })()`);
+  await waitFor(win, `document.querySelector('[data-qa-zone-view][data-zone="resource"]')`);
+  await waitFor(win, `document.querySelector('[data-qa-current-planet]')?.getAttribute('aria-expanded') === 'false'`);
+  const zoneFocus = await win.webContents.executeJavaScript(`document.activeElement?.getAttribute('data-qa-zone') === 'resource'`);
+
+  await clickRoute(win, 'planet');
+  await openMenu();
+  await win.webContents.executeJavaScript(`document.querySelector('[data-qa-planet-option]')?.focus(); document.querySelector('[data-qa-planet-option]')?.click()`);
+  await waitFor(win, `document.querySelector('[data-qa-current-planet]')?.getAttribute('aria-expanded') === 'false'`);
+  const planetSelectionFocus = await win.webContents.executeJavaScript(`document.activeElement?.matches('[data-qa-current-planet]')`);
+
+  return { routeFocus, zoneFocus, planetSelectionFocus };
+}
+
 async function readThemeContract(win) {
   return win.webContents.executeJavaScript(`(() => {
     const rect = (element) => {
@@ -190,7 +239,7 @@ function overlaps(left, right) {
   return left && right && left.x < right.x + right.width - 0.5 && left.x + left.width > right.x + 0.5 && left.y < right.y + right.height - 0.5 && left.y + left.height > right.y + 0.5;
 }
 
-function assertContract(label, header, tooltip, planetMenu, themes) {
+function assertContract(label, header, tooltip, planetMenu, planetMenuFocus, themes) {
   const expectedPrimary = PRIMARY_ROUTES.map(([id]) => id);
   if (JSON.stringify(header.primaryRoutes) !== JSON.stringify(expectedPrimary)) {
     throw new Error(`${label}: primary route IDs are not stable`);
@@ -224,6 +273,9 @@ function assertContract(label, header, tooltip, planetMenu, themes) {
   if (new Set(Object.values(themes.accents)).size !== 3) throw new Error(`${label}: faction theme accents are not distinct`);
   if (!planetMenu.expanded || !planetMenu.controls || !planetMenu.listbox || planetMenu.optionCount !== 1 || planetMenu.selectedCount !== 1 || !planetMenu.closedFocus) {
     throw new Error(`${label}: planet selector keyboard contract failed: ${JSON.stringify(planetMenu)}`);
+  }
+  if (!planetMenuFocus.routeFocus.reports || !planetMenuFocus.routeFocus.universe || !planetMenuFocus.zoneFocus || !planetMenuFocus.planetSelectionFocus) {
+    throw new Error(`${label}: planet menu restored focus for the wrong dismissal reason: ${JSON.stringify(planetMenuFocus)}`);
   }
   const resourceKinds = header.resources.map((item) => item.kind);
   if (JSON.stringify(resourceKinds) !== JSON.stringify(['metal', 'mineral', 'gas', 'energy', 'population'])) {
@@ -274,8 +326,9 @@ async function main() {
       const header = await readHeaderContract(win);
       const tooltip = await readTooltipContract(win);
       const planetMenu = await readPlanetMenuContract(win);
+      const planetMenuFocus = await readPlanetMenuFocusContract(win);
       const themes = await readThemeContract(win);
-      assertContract(`${width}x${height}`, header, tooltip, planetMenu, themes);
+      assertContract(`${width}x${height}`, header, tooltip, planetMenu, planetMenuFocus, themes);
 
       for (const [route] of PRIMARY_ROUTES) await clickRoute(win, route);
       for (const route of UTILITY_ROUTES) await clickRoute(win, route);
