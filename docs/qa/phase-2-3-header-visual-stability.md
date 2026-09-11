@@ -34,4 +34,4 @@ npm run dist:win
 
 All commands above passed on 2026-09-11 in the phase-2/3 worktree. Build and packaging retain the repository's existing large-chunk, missing-package-metadata, and default-icon warnings; none are build failures.
 
-`ASTERION_SKIP_SCREENSHOTS=1` is optional and is not required for CI. The science-queue screenshot uses Electron's native viewport capture because the slower DevTools capture can outlast the first accelerated Test Mode task and make the queue advance before its unchanged persistence assertion runs.
+`ASTERION_SKIP_SCREENSHOTS=1` is optional and is not required for CI. `electron/visual-science.cjs` and the Test Mode science-queue capture use Electron's native viewport capture; this avoids the DevTools capture hang and preserves selector-based scrolling before each Science screenshot.

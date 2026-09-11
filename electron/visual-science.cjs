@@ -58,13 +58,13 @@ async function capture(win, directory, name, selector = null) {
   }
   if (selector) await win.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(selector)})?.scrollIntoView({ block: 'center', inline: 'nearest' })`);
   else await win.webContents.executeJavaScript('window.scrollTo(0, 0)');
-  await settle(win);
-  const result = await win.webContents.debugger.sendCommand('Page.captureScreenshot', {
-    format: 'png',
-    fromSurface: true,
-    captureBeyondViewport: false,
-  });
-  fs.writeFileSync(path.join(directory, `${name}.png`), Buffer.from(result.data, 'base64'));
+  // Hidden Electron windows may not deliver requestAnimationFrame callbacks
+  // after a native capture. A bounded delay is enough for the scroll/layout
+  // update and keeps screenshot QA from waiting indefinitely.
+  await sleep(100);
+  const { width, height } = await win.webContents.executeJavaScript('({ width: innerWidth, height: innerHeight })');
+  const image = await win.capturePage({ x: 0, y: 0, width, height });
+  fs.writeFileSync(path.join(directory, `${name}.png`), image.toPNG());
 }
 
 async function seed(win, science) {
@@ -165,7 +165,6 @@ async function runViewport(width, height) {
     if (/error/i.test(message)) console.warn(`[${label}] renderer: ${message}`);
   });
   await win.loadFile(path.join(ROOT, 'dist', 'index.html'));
-  win.webContents.debugger.attach('1.3');
   stage('loaded');
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
 
@@ -324,7 +323,6 @@ async function runViewport(width, height) {
 
   const finalScreen = await readScreen(win);
   if (finalScreen.horizontalOverflow || finalScreen.fixtureText || finalScreen.nestedVerticalScroll) throw new Error(`${label}: final visual contract mismatch ${JSON.stringify(finalScreen)}`);
-  win.webContents.debugger.detach();
   await win.close();
   stage('closed');
   return { viewport: label, screenshots: fs.readdirSync(directory).sort(), finalScreen };
