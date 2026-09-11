@@ -16,10 +16,6 @@ const SCREENS = [
   ['rating','Рейтинг','rating-view-v2'],
   ['science','Наука','science-view-v2'],
 ];
-const PRIMARY_ROUTE_IDS = {
-  'Планета': 'planet',
-  'Командование': 'command',
-};
 const RESOURCE_ROLES = [
   'metal-production-1',
   'metal-production-2',
@@ -81,29 +77,26 @@ async function reload(win) {
   await settle(win);
 }
 
-async function activateScreen(win, label, expectedClass) {
-  const encoded = JSON.stringify(label);
+async function activateScreen(win, route, label, expectedClass) {
   const clicked = await win.webContents.executeJavaScript(`(() => {
-    const button = Array.from(document.querySelectorAll('[data-qa-navigation="utility"] button')).find((item) => item.getAttribute('aria-label') === ${encoded});
+    const button = document.querySelector('[data-qa-navigation="utility"] [data-qa-route="${route}"]');
     if (!button) return false;
     button.click();
     return true;
   })()`);
-  if (!clicked) throw new Error(`Utility navigation button not found: ${label}`);
-  await waitFor(win, `document.querySelector('.utility-screen-host[data-utility-screen="${label}"] .${expectedClass}')`);
+  if (!clicked) throw new Error(`Utility navigation button not found: ${route}`);
+  await waitFor(win, `document.querySelector('[data-qa-utility-screen="${route}"] .${expectedClass}')`);
   await settle(win);
 }
 
-async function activateMainScreen(win, label, expectedSelector) {
-  const route = PRIMARY_ROUTE_IDS[label];
-  if (!route) throw new Error(`Primary route ID not configured for: ${label}`);
+async function activateMainScreen(win, route, expectedSelector) {
   const clicked = await win.webContents.executeJavaScript(`(() => {
     const button = document.querySelector('[data-qa-route="${route}"]');
     if (!button) return false;
     button.click();
     return true;
   })()`);
-  if (!clicked) throw new Error(`Primary navigation button not found: ${label}`);
+  if (!clicked) throw new Error(`Primary navigation button not found: ${route}`);
   await waitFor(win, `document.querySelector(${JSON.stringify(expectedSelector)}) && !document.querySelector('.utility-screen-host')`);
   await settle(win);
 }
@@ -275,7 +268,7 @@ async function commandScrollSnapshot(win) {
 }
 
 async function verifyCommandScrollStability(win, directory, label) {
-  await activateMainScreen(win,'Командование','.command-view');
+  await activateMainScreen(win,'command','.command-view');
   const before=await commandScrollSnapshot(win);
   await sleep(180);
   await settle(win);
@@ -286,7 +279,7 @@ async function verifyCommandScrollStability(win, directory, label) {
   }
   await capture(win,directory,'command');
 
-  await activateMainScreen(win,'Планета','.planet-page-v3 .scene-title h1');
+  await activateMainScreen(win,'planet','.planet-page-v3 .scene-title h1');
   await sleep(180);
   await settle(win);
   const reset=await commandScrollSnapshot(win);
@@ -297,7 +290,7 @@ async function verifyResourceZoneFlow(win, directory) {
   await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);
   await reload(win);
 
-  await activateMainScreen(win,'Планета','.planet-page-v3 .scene-title h1');
+  await activateMainScreen(win,'planet','.planet-page-v3 .scene-title h1');
   const hotspotOpened = await win.webContents.executeJavaScript(`(() => {
     const button=document.querySelector('.zone-hotspot--resource');
     if(!button)return false;
@@ -308,7 +301,7 @@ async function verifyResourceZoneFlow(win, directory) {
   await waitFor(win, `document.querySelector('[data-qa-resource-zone]')`);
   await settle(win);
 
-  await activateMainScreen(win,'Планета','.planet-page-v3 .scene-title h1');
+  await activateMainScreen(win,'planet','.planet-page-v3 .scene-title h1');
   await activateResourceZone(win);
 
   const terrain = await win.webContents.executeJavaScript(`(() => {
@@ -497,10 +490,10 @@ app.whenReady().then(async()=>{
       await win.webContents.executeJavaScript("localStorage.removeItem('asterion.preferences.v2')");
       await reload(win);
       const results=[];
-      for(const [name,screenLabel,expectedClass] of SCREENS){
-        await activateScreen(win,screenLabel,expectedClass);
-        const item=await metrics(win,name); await verifyCommon(item,label,name,width,height); results.push(item); await capture(win,directory,name);
-        if(name==='rating'){
+      for(const [route,screenLabel,expectedClass] of SCREENS){
+        await activateScreen(win,route,screenLabel,expectedClass);
+        const item=await metrics(win,route); await verifyCommon(item,label,route,width,height); results.push(item); await capture(win,directory,route);
+        if(route==='rating'){
           await win.webContents.executeJavaScript('window.scrollTo(0, document.documentElement.scrollHeight)');
           await settle(win);
           await capture(win,directory,'rating-bottom');
@@ -510,7 +503,7 @@ app.whenReady().then(async()=>{
       }
       await verifyCommandScrollStability(win,directory,label);
       if(width===1920 && height===1080){
-        await activateScreen(win,'Настройки','settings-view-v2');
+        await activateScreen(win,'settings','Настройки','settings-view-v2');
         await clickTypography(win,'Подсказки и пояснения',16);
         const helper180=await metrics(win,'settings-helper-180');
         if(helper180.typography.helper!=='1.8'||helper180.typography.hud!=='1') throw new Error(`Typography isolation failed: ${JSON.stringify(helper180.typography)}`);
@@ -526,14 +519,14 @@ app.whenReady().then(async()=>{
         await verifyCommon(hud130,label,'settings-hud-130',width,height); results.push({...hud130,hudFont:{before:hudBefore,after:hudAfter}}); await capture(win,directory,'settings-hud-130');
         await resetTypography(win,'HUD / верхняя панель');
 
-        await activateMainScreen(win,'Планета','.planet-page-v3 .scene-title h1');
+        await activateMainScreen(win,'planet','.planet-page-v3 .scene-title h1');
         const legacyTitleBefore=await fontSnapshot(win,'.planet-page-v3 .scene-title h1');
         const coverageBefore=await typographyCoverage(win);
         if(!legacyTitleBefore||legacyTitleBefore.category!=='pageTitle'||coverageBefore.total<12) throw new Error(`Legacy typography controller did not classify the game screen: ${JSON.stringify({legacyTitleBefore,coverageBefore})}`);
 
-        await activateScreen(win,'Настройки','settings-view-v2');
+        await activateScreen(win,'settings','Настройки','settings-view-v2');
         await clickTypography(win,'Заголовки экранов',6);
-        await activateMainScreen(win,'Планета','.planet-page-v3 .scene-title h1');
+        await activateMainScreen(win,'planet','.planet-page-v3 .scene-title h1');
         const legacyTitleAfter=await fontSnapshot(win,'.planet-page-v3 .scene-title h1');
         if(!legacyTitleAfter||legacyTitleAfter.category!=='pageTitle'||!approximately(legacyTitleAfter.size,legacyTitleBefore.size*1.3)) throw new Error(`Page-title typography did not reach the existing game screen: ${JSON.stringify({legacyTitleBefore,legacyTitleAfter})}`);
         results.push({screen:'legacy-typography-global',coverage:coverageBefore,pageTitle:{before:legacyTitleBefore,after:legacyTitleAfter}});

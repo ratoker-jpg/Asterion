@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { HeaderGameIcon, HeaderNavigationIcon } from './HeaderAssetIcons';
 import { ResourceChip } from './ResourceChip';
 import {
@@ -49,6 +50,20 @@ export function AsterionHeader({
   onPlanetChange,
   onPlanetMenuToggle,
 }: AsterionHeaderProps) {
+  const planetSelectRef = useRef<HTMLButtonElement>(null);
+  const wasPlanetMenuOpen = useRef(planetMenuOpen);
+
+  useEffect(() => {
+    if (wasPlanetMenuOpen.current && !planetMenuOpen) {
+      planetSelectRef.current?.focus();
+    }
+    wasPlanetMenuOpen.current = planetMenuOpen;
+  }, [planetMenuOpen]);
+
+  const closePlanetMenu = () => {
+    if (planetMenuOpen) onPlanetMenuToggle();
+  };
+
   return (
     <header className="asterion-header" data-faction={factionId} data-qa-header>
       <section className="asterion-header__planet-module">
@@ -82,9 +97,16 @@ export function AsterionHeader({
 
         <div className="asterion-header__planet-control">
           <button
+            ref={planetSelectRef}
             className="asterion-header__planet-select"
             type="button"
             onClick={onPlanetMenuToggle}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                closePlanetMenu();
+              }
+            }}
             aria-label={`Выбор планеты: ${currentPlanet.name}, координаты ${currentPlanet.coords}. Планета выбрана`}
             aria-expanded={planetMenuOpen}
             aria-controls="asterion-header-planet-list"
@@ -107,7 +129,18 @@ export function AsterionHeader({
         </div>
 
         {planetMenuOpen ? (
-          <div className="asterion-header__planet-list planet-list-popover" id="asterion-header-planet-list" role="listbox" aria-label="Выбор планеты">
+          <div
+            className="asterion-header__planet-list planet-list-popover"
+            id="asterion-header-planet-list"
+            role="listbox"
+            aria-label="Выбор планеты"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                closePlanetMenu();
+              }
+            }}
+          >
             {planets.map((planet) => (
               <button
                 key={planet.id}

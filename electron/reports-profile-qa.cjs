@@ -32,32 +32,32 @@ async function reload(win) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   win.webContents.reload();
   await done;
-  await waitFor(win, `document.querySelector('.primary-navigation')`);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="primary"]')`);
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);
 }
 
-async function clickPrimary(win, label, waitExpression = `document.querySelector('[data-qa-profile]')`) {
+async function clickPrimary(win, route, waitExpression = `document.querySelector('[data-qa-profile]')`) {
   const clicked = await win.webContents.executeJavaScript(`(() => {
-    const button = Array.from(document.querySelectorAll('.primary-navigation button')).find((item) => item.textContent?.trim() === ${JSON.stringify(label)});
+    const button = document.querySelector('[data-qa-navigation="primary"] [data-qa-route="${route}"]');
     if (!button) return false;
     button.click();
     return true;
   })()`);
-  if (!clicked) throw new Error(`Primary navigation button not found: ${label}`);
+  if (!clicked) throw new Error(`Primary navigation button not found: ${route}`);
   await waitFor(win, waitExpression);
   await settle(win);
 }
 
-async function clickUtility(win, label) {
+async function clickUtility(win, route) {
   const clicked = await win.webContents.executeJavaScript(`(() => {
-    const button = Array.from(document.querySelectorAll('.utility-navigation button')).find((item) => item.textContent?.trim() === ${JSON.stringify(label)});
+    const button = document.querySelector('[data-qa-navigation="utility"] [data-qa-route="${route}"]');
     if (!button) return false;
     button.click();
     return true;
   })()`);
-  if (!clicked) throw new Error(`Utility navigation button not found: ${label}`);
-  await waitFor(win, `document.querySelector('[data-utility-screen="${label}"]')`);
+  if (!clicked) throw new Error(`Utility navigation button not found: ${route}`);
+  await waitFor(win, `document.querySelector('[data-qa-utility-screen="${route}"]')`);
   await settle(win);
 }
 
@@ -92,7 +92,7 @@ async function showCurrentAllianceRating(win) {
 }
 
 async function updateAllianceThroughCommand(win) {
-  await clickPrimary(win, 'Командование', `document.querySelector('.command-view')`);
+  await clickPrimary(win, 'command', `document.querySelector('.command-view')`);
   const opened = await win.webContents.executeJavaScript(`(() => {
     const button = Array.from(document.querySelectorAll('.command-tabs button')).find((item) => item.textContent?.trim() === 'НАСТРОЙКИ СОЮЗА');
     button?.click();
@@ -178,7 +178,7 @@ async function runViewport(win, width, height) {
   await settle(win);
   await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)}); localStorage.removeItem('asterion.preferences.v2');`);
   await reload(win);
-  await clickPrimary(win, 'Сообщения');
+  await clickPrimary(win, 'reports');
 
   const profile = await profileSnapshot(win);
   if (!profile.visible || profile.name !== 'Dendrilion' || !profile.avatar.includes('aegis_profile_avatar') || profile.alliance !== 'Содружество Гелион' || profile.allianceTag !== 'HLN') throw new Error(`Profile contract failed at ${label}: ${JSON.stringify(profile)}`);
@@ -189,7 +189,7 @@ async function runViewport(win, width, height) {
   if (metricFocus !== 'resourcePoints') throw new Error(`Profile metric keyboard focus failed at ${label}: ${metricFocus}`);
   await capture(win, directory, 'profile');
 
-  await clickUtility(win, 'Рейтинг');
+  await clickUtility(win, 'rating');
   await showCurrentAllianceRating(win);
   const initialRating = await ratingAllianceSnapshot(win);
   if (!initialRating.visible || initialRating.name !== 'Содружество Гелион' || initialRating.tag !== '[HLN]' || !initialRating.emblem.includes('starforge')) throw new Error(`Initial alliance rating contract failed at ${label}: ${JSON.stringify(initialRating)}`);
@@ -198,10 +198,10 @@ async function runViewport(win, width, height) {
   const commandAlliance = await win.webContents.executeJavaScript(`document.querySelector('.command-view__status strong')?.textContent?.trim() || ''`);
   if (commandAlliance !== 'Содружество Север [NORTH]') throw new Error(`Command alliance update failed at ${label}: ${commandAlliance}`);
 
-  await clickPrimary(win, 'Сообщения');
+  await clickPrimary(win, 'reports');
   const updatedProfile = await profileSnapshot(win);
   if (updatedProfile.alliance !== 'Содружество Север' || updatedProfile.allianceTag !== 'NORTH') throw new Error(`Updated profile alliance contract failed at ${label}: ${JSON.stringify(updatedProfile)}`);
-  await clickUtility(win, 'Рейтинг');
+  await clickUtility(win, 'rating');
   await showCurrentAllianceRating(win);
   const updatedRating = await ratingAllianceSnapshot(win);
   if (!updatedRating.visible || updatedRating.name !== 'Содружество Север' || updatedRating.tag !== '[NORTH]' || !updatedRating.emblem.includes('vanguard')) throw new Error(`Updated alliance rating contract failed at ${label}: ${JSON.stringify(updatedRating)}`);
@@ -215,14 +215,14 @@ async function runViewport(win, width, height) {
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
   })()`);
   await reload(win);
-  await clickPrimary(win, 'Сообщения');
+  await clickPrimary(win, 'reports');
   const reloadedProfile = await profileSnapshot(win);
   if (reloadedProfile.alliance !== 'Содружество Север' || reloadedProfile.allianceTag !== 'NORTH') throw new Error(`Reloaded profile alliance contract failed at ${label}: ${JSON.stringify(reloadedProfile)}`);
-  await clickUtility(win, 'Рейтинг');
+  await clickUtility(win, 'rating');
   await showCurrentAllianceRating(win);
   const reloadedRating = await ratingAllianceSnapshot(win);
   if (!reloadedRating.visible || reloadedRating.name !== 'Содружество Север' || reloadedRating.tag !== '[NORTH]' || !reloadedRating.emblem.includes('vanguard')) throw new Error(`Reloaded alliance rating contract failed at ${label}: ${JSON.stringify(reloadedRating)}`);
-  await clickPrimary(win, 'Сообщения');
+  await clickPrimary(win, 'reports');
   await waitFor(win, `document.querySelector('.reports-profile-alliance-link')`);
   await win.webContents.executeJavaScript(`document.querySelector('.reports-profile-alliance-link')?.click()`);
   await waitFor(win, `document.querySelector('.command-view')`);
@@ -231,7 +231,7 @@ async function runViewport(win, width, height) {
 
   await win.webContents.executeJavaScript(`localStorage.setItem(${JSON.stringify(SAVE_KEY)}, ${JSON.stringify(JSON.stringify(beforeActiveAlliance))})`);
   await reload(win);
-  await clickPrimary(win, 'Сообщения');
+  await clickPrimary(win, 'reports');
   await clickFolder(win, 'alliances');
   const allianceBefore = await win.webContents.executeJavaScript(`(() => ({
     total: document.querySelectorAll('[data-qa-message-list] .reports-list-item').length,
@@ -252,7 +252,7 @@ async function runViewport(win, width, height) {
   const savedBattleIds = [...new Set([...(battleBefore.combat.savedReportIds || []), canonicalBattleId])];
   await win.webContents.executeJavaScript(`(() => { const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}'); save.combat.savedReportIds = ${JSON.stringify(savedBattleIds)}; localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save)); })()`);
   await reload(win);
-  await clickPrimary(win, 'Сообщения');
+  await clickPrimary(win, 'reports');
   await clickFolder(win, 'battle');
   await waitFor(win, `document.querySelector('[data-qa-message-list] .reports-list-item')`);
   await win.webContents.executeJavaScript(`window.confirm = () => true; document.querySelector('[data-qa-message-list] input[type="checkbox"]')?.click(); document.querySelector('[data-qa-delete-selected]')?.click();`);
@@ -262,7 +262,7 @@ async function runViewport(win, width, height) {
   await capture(win, directory, 'battle-after-delete');
 
   await reload(win);
-  await clickPrimary(win, 'Сообщения');
+  await clickPrimary(win, 'reports');
   await clickFolder(win, 'battle');
   const reloaded = await savedState(win);
   const persisted = await win.webContents.executeJavaScript(`(() => {

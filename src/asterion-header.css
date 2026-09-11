@@ -191,7 +191,8 @@
   left:var(--hud-planet-module-width);
   right:var(--hud-campaign-width);
   top:0;
-  height:var(--hud-header-top-row-height);
+  /* The 3px top inset aligns cards with the campaign frame; keep the 92px cards inside the rail box. */
+  height:calc(var(--hud-header-top-row-height) + 3px);
   display:grid;
   grid-template-columns:repeat(5,minmax(0,1fr));
   gap:8px;
@@ -388,9 +389,9 @@
   background:#38ee7e;
   box-shadow:0 0 8px #38ee7e,0 0 18px rgba(56,238,126,.5);
 }
-.asterion-header__campaign-status{position:absolute;z-index:1;left:42px;top:11px}
+.asterion-header__campaign-status{position:absolute;z-index:1;left:42px;top:8px}
 .asterion-header__campaign-status strong{font-size:12px;letter-spacing:.8px;color:#eafff2;white-space:nowrap}
-.asterion-header__campaign time{position:absolute;z-index:1;left:50%;top:30px;transform:translateX(-50%);font-size:20px;line-height:1;font-weight:800;color:#fff;letter-spacing:.1px;white-space:nowrap}
+.asterion-header__campaign time{position:absolute;z-index:1;left:50%;top:33px;transform:translateX(-50%);font-size:20px;line-height:1;font-weight:800;color:#fff;letter-spacing:.1px;white-space:nowrap}
 .asterion-header__campaign:has(.asterion-header__test-mode-banner) .asterion-header__campaign-status{top:10px}
 .asterion-header__campaign:has(.asterion-header__test-mode-banner) time{top:28px;font-size:18px}
 .asterion-header__campaign:has(.asterion-header__test-mode-banner) .asterion-header__utility-navigation{height:30px}

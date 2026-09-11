@@ -309,6 +309,7 @@ async function runViewport(width, height) {
     await openScience(win);
     for (let index = 0; index < 3; index += 1) await click(win, '[data-qa-science-id="1"] [data-qa-science-action]');
     await waitFor(win, `document.querySelector('[data-qa-science-queue-count]')?.textContent === '3/3'`);
+    await waitFor(win, `(() => { try { return JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.science?.queue?.length === 3; } catch { return false; } })()`);
     await capture(win, directory, 'test-science-queue-3of3');
     const scienceQueue = await readEnvelope(win, TEST_KEY);
     if (scienceQueue.science.queue.length !== 3) throw new Error(`${label}: Science queue did not persist three tasks`);
