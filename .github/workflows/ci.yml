@@ -40,6 +40,10 @@ jobs:
         run: npm run test:fleet
       - name: Build renderer
         run: npm run build
+      - name: Science Electron QA
+        env:
+          ASTERION_SKIP_SCREENSHOTS: '1'
+        run: npm run test:science-ui
       - name: Header Electron QA
         run: npm run test:header-ui
       - name: Test Mode Electron QA
@@ -62,6 +66,7 @@ jobs:
           name: Asterion-Utility-Visual-QA
           path: |
             visual-qa/**/*
+            artifacts-pass1/science-qa/**/*
             artifacts-pass1/test-mode-qa/**/*
             artifacts/universe-planet-qa/**/*
           if-no-files-found: warn

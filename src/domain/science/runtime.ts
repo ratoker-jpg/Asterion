@@ -96,6 +96,7 @@ export type ScienceMigrationOptions = {
   laboratoryLevel?: number;
   mode?: RuntimeMode;
   testTimeScale?: number;
+  schemaVersion?: number;
 };
 
 export type ScienceStartTransition = {
@@ -595,17 +596,34 @@ function migrateQueue(value: unknown, levels: ScienceLevels, options: ScienceMig
       ? rawFinishAt - rawStartedAt
       : null;
     const rebalancedBaseDurationMs = getScienceRebalancedBaseDurationMs(scienceId, fromLevel + 1);
-    const durationMs = rebalancedBaseDurationMs != null
-      ? calculateScienceDurationMs(
+    // Current versioned saves already contain the authoritative duration snapshot.
+    // Legacy saves are still rebuilt from the source-backed balance table below.
+    const preservePersistedSnapshot: boolean = options.schemaVersion != null
+      && options.schemaVersion >= SCIENCE_SAVE_SCHEMA_VERSION
+      && rawStartedAt != null
+      && rawFinishAt != null
+      && persistedDuration != null
+      && rawFinishAt >= rawStartedAt
+      && rawFinishAt - rawStartedAt === Math.round(persistedDuration)
+      && (previousFinishAt == null || rawStartedAt >= previousFinishAt);
+    let durationMs: number | null;
+    if (preservePersistedSnapshot && persistedDuration != null) {
+      durationMs = Math.round(persistedDuration);
+    } else if (rebalancedBaseDurationMs != null) {
+      durationMs = calculateScienceDurationMs(
         rebalancedBaseDurationMs,
         options.laboratoryLevel ?? 0,
         options.mode ?? 'production',
         options.testTimeScale,
-      )
-      : persistedDuration != null && persistedDuration > 0 ? Math.round(persistedDuration) : timestampDuration;
+      );
+    } else {
+      durationMs = persistedDuration != null && persistedDuration > 0 ? Math.round(persistedDuration) : timestampDuration;
+    }
     if (durationMs == null || durationMs <= 0) continue;
-    const startedAt: number = previousFinishAt == null ? (rawStartedAt ?? 0) : previousFinishAt;
-    const finishAt = startedAt + durationMs;
+    const startedAt: number = preservePersistedSnapshot && rawStartedAt != null
+      ? rawStartedAt
+      : previousFinishAt == null ? (rawStartedAt ?? 0) : previousFinishAt;
+    const finishAt: number = preservePersistedSnapshot && rawFinishAt != null ? rawFinishAt : startedAt + durationMs;
     const costSource = isRecord(raw.cost) ? raw.cost : {};
     const hasSavedCost = hasCompleteScienceCost(raw.cost);
     const cost = Object.fromEntries(
@@ -677,6 +695,7 @@ export function readScienceRuntimeSnapshot(): ScienceRuntimeSnapshot {
         laboratoryLevel: safeNonNegativeNumber(buildings.research, 0),
         mode: ACTIVE_RUNTIME_MODE,
         testTimeScale,
+        schemaVersion: safeNonNegativeNumber(parsed.schemaVersion, 0),
       }),
       {
         metal: safeNonNegativeNumber(parsed.metal, 0),
