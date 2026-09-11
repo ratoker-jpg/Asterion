@@ -2,6 +2,7 @@ import type { SaveState } from './contracts.ts';
 
 export type ApplicationStateRef = { current: SaveState };
 export type ApplicationStateSetter = (update: (current: SaveState) => SaveState) => void;
+export type ApplicationStateFlush = (work: () => void) => void;
 
 export type ApplicationStateTransition<TResult> = {
   state: SaveState;
@@ -9,20 +10,27 @@ export type ApplicationStateTransition<TResult> = {
 };
 
 /**
- * Keep synchronous handler results while making React resolve every queued
- * application action against the freshest state in the functional updater.
+ * Resolve the action inside a functional React update and return the
+ * transition that was actually applied. The caller supplies the synchronous
+ * flush boundary so handler APIs can report the applied result without an
+ * eager state calculation.
  */
 export function enqueueApplicationStateUpdate<TResult>(
   stateRef: ApplicationStateRef,
   setState: ApplicationStateSetter,
   update: (current: SaveState) => ApplicationStateTransition<TResult>,
+  flush: ApplicationStateFlush,
 ): TResult {
-  const eager = update(stateRef.current);
-  stateRef.current = eager.state;
-  setState((current) => {
-    const resolved = update(current);
-    stateRef.current = resolved.state;
-    return resolved.state;
+  const applied: { transition?: ApplicationStateTransition<TResult> } = {};
+  flush(() => {
+    setState((current) => {
+      const resolved = update(current);
+      applied.transition = resolved;
+      return resolved.state;
+    });
   });
-  return eager.result;
+  const resolved = applied.transition;
+  if (!resolved) throw new Error('Application state update was not applied synchronously.');
+  stateRef.current = resolved.state;
+  return resolved.result;
 }

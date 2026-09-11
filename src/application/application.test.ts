@@ -276,8 +276,14 @@ test('functional application commits preserve simultaneous building and bot upda
   const initial = withBuildingSetup(createInitialSaveState('test'));
   const stateRef = { current: initial };
   const queuedUpdates: Array<(current: SaveState) => SaveState> = [];
+  let committed = initial;
   const setState = (update: (current: SaveState) => SaveState) => {
     queuedUpdates.push(update);
+  };
+  const flush = (work: () => void) => {
+    work();
+    committed = queuedUpdates.reduce((current, update) => update(current), committed);
+    queuedUpdates.length = 0;
   };
   const buildingContext = context(60_000);
   const assignment = { metal: 2, minerals: 1, gas: 0 };
@@ -288,16 +294,55 @@ test('functional application commits preserve simultaneous building and bot upda
       state: transition.ok ? transition.state : current,
       result: transition,
     };
-  });
+  }, flush);
   assert.equal(buildingResult.ok, true);
 
   enqueueApplicationStateUpdate(stateRef, setState, (current) => ({
     state: applyProductionBots(current, buildingContext, assignment),
     result: undefined,
-  }));
+  }), flush);
 
-  const finalState = queuedUpdates.reduce((current, update) => update(current), initial);
-  assert.equal(finalState.queues['helion-01'].length, 1);
-  assert.deepEqual(finalState.planets['helion-01'].productionBots, assignment);
-  assert.ok(finalState.metal < initial.metal);
+  assert.equal(committed.queues['helion-01'].length, 1);
+  assert.deepEqual(committed.planets['helion-01'].productionBots, assignment);
+  assert.ok(committed.metal < initial.metal);
+});
+
+test('application result reflects a failed transition after a queued functional update fills the queue', () => {
+  const initial = withBuildingSetup(createInitialSaveState('test'));
+  const stateRef = { current: initial };
+  const queuedUpdates: Array<(current: SaveState) => SaveState> = [];
+  let committed = initial;
+  const setState = (update: (current: SaveState) => SaveState) => {
+    queuedUpdates.push(update);
+  };
+  const flush = (work: () => void) => {
+    work();
+    committed = queuedUpdates.reduce((current, update) => update(current), committed);
+    queuedUpdates.length = 0;
+  };
+  const buildingContext = context(70_000);
+
+  setState((current) => {
+    let next = current;
+    for (const [offset, assetRole] of (['trade-center', 'metal-storage', 'mineral-storage'] as const).entries()) {
+      const transition = startBuilding(next, { ...buildingContext, now: buildingContext.now + offset }, assetRole);
+      assert.equal(transition.ok, true);
+      next = transition.state;
+    }
+    return next;
+  });
+
+  const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
+    const transition = startBuilding(current, buildingContext, 'gas-storage');
+    return {
+      state: transition.ok ? transition.state : current,
+      result: transition,
+    };
+  }, flush);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'Очередь заполнена.');
+  assert.equal(committed.queues['helion-01'].length, 3);
+  assert.equal(committed.planets['helion-01'].buildings['gas-storage'], 0);
+  assert.equal(stateRef.current, committed);
 });

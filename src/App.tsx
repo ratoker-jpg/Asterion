@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
@@ -460,7 +461,7 @@ export function App() {
         testTimeScale,
       }, assignment),
       result: undefined,
-    }));
+    }), flushSync);
     setNotice('Роботы перераспределены');
   };
 
@@ -478,7 +479,7 @@ export function App() {
         state: transition.ok ? transition.state : current,
         result: transition,
       };
-    });
+    }, flushSync);
     if (!result.ok) {
       setNotice(result.reason ?? 'Переработка сейчас недоступна');
       return false;
@@ -497,7 +498,7 @@ export function App() {
         testTimeScale,
       }, jobId);
       return { state: transition.state, result: transition };
-    });
+    }, flushSync);
     if (!result.ok || !result.output) {
       setNotice(result.reason ?? 'Ресурс пока недоступен');
       return false;
@@ -516,7 +517,7 @@ export function App() {
         testTimeScale,
       }, current.rating.resourcePoints, request);
       return { state: transition.state, result: transition.execution };
-    });
+    }, flushSync);
     if (!result.ok) {
       setNotice(result.reason ?? 'Обмен сейчас недоступен');
       return result;
@@ -560,7 +561,7 @@ export function App() {
         state: transition.ok ? transition.state : current,
         result: transition,
       };
-    });
+    }, flushSync);
     if (!result.ok) {
       setNotice(result.reason ?? 'Строительство сейчас недоступно.');
       return false;
