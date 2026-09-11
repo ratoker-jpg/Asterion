@@ -4,7 +4,7 @@ import type {
   ScienceId,
   ScienceResourceCost,
 } from './types.ts';
-import { ACTIVE_RUNTIME_MODE, getRuntimeSaveKey, resolveTestTimeScale, scaleRuntimeDuration, type RuntimeMode } from '../runtime/mode.ts';
+import { getRuntimeSaveKey, scaleRuntimeDuration, type RuntimeMode } from '../runtime/mode.ts';
 import { getScienceRebalancedBaseDurationMs } from './time-rebalanced.ts';
 
 export type { ScienceId } from './types.ts';
@@ -156,11 +156,9 @@ const SCIENCE_IDS = new Set<number>(SCIENCE_CATALOG.map((science) => science.id)
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
-
 function safeNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
-
 function safeNonNegativeNumber(value: unknown, fallback: number): number {
   return Math.max(0, safeNumber(value, fallback));
 }
@@ -396,7 +394,6 @@ export function startScienceResearch(
     reason: null,
   };
 }
-
 export function selectScienceCancelRefundPercent(rng: () => number = Math.random): number {
   const sampled = rng();
   const normalized = Number.isFinite(sampled) ? Math.min(0.999_999_999, Math.max(0, sampled)) : 0;
@@ -677,38 +674,4 @@ export function createScienceRuntimeSnapshot(
     testTimeScale,
   };
 }
-
-export function readScienceRuntimeSnapshot(): ScienceRuntimeSnapshot {
-  const testTimeScale = ACTIVE_RUNTIME_MODE === 'test' ? resolveTestTimeScale() : undefined;
-  const fallback = createScienceRuntimeSnapshot(createDefaultScienceState(), { metal: 0, minerals: 0, gas: 0, energy: 0 }, 0, Date.now(), ACTIVE_RUNTIME_MODE, testTimeScale);
-  if (typeof localStorage === 'undefined') return fallback;
-
-  try {
-    const raw = localStorage.getItem(getRuntimeSaveKey());
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const planets = isRecord(parsed.planets) ? parsed.planets : {};
-    const homeworld = isRecord(planets['helion-01']) ? planets['helion-01'] : {};
-    const buildings = isRecord(homeworld.buildings) ? homeworld.buildings : {};
-    return createScienceRuntimeSnapshot(
-      migrateScienceState(parsed.science, {
-        laboratoryLevel: safeNonNegativeNumber(buildings.research, 0),
-        mode: ACTIVE_RUNTIME_MODE,
-        testTimeScale,
-        schemaVersion: safeNonNegativeNumber(parsed.schemaVersion, 0),
-      }),
-      {
-        metal: safeNonNegativeNumber(parsed.metal, 0),
-        minerals: safeNonNegativeNumber(parsed.minerals, 0),
-        gas: safeNonNegativeNumber(parsed.gas, 0),
-        energy: safeNonNegativeNumber(homeworld.energy, 0),
-      },
-      safeNonNegativeNumber(buildings.research, 0),
-      Date.now(),
-      ACTIVE_RUNTIME_MODE,
-      testTimeScale,
-    );
-  } catch {
-    return fallback;
-  }
-}
+// Storage-backed snapshots are assembled by src/application/science.ts.

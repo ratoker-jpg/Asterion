@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
@@ -25,145 +26,93 @@ import {
 } from './building-interior-navigation.ts';
 import {
   BATTLE_HISTORY_CHANGED_EVENT,
-  createDefaultBattleHistory,
   migrateBattleHistory,
-  persistBattleHistory,
   setBattleReportSaved,
   type BattleHistoryState,
 } from './domain/combat/battle-repository.ts';
 import {
   COMBAT_PRIORITY_CHANGED_EVENT,
-  COMBAT_SAVE_SCHEMA_VERSION,
-  createDefaultCombatPriority,
   migrateCombatPriority,
   type CombatPriorityState,
 } from './domain/combat/priority.ts';
 import {
   SIMULATOR_STATE_CHANGED_EVENT,
-  createDefaultSimulatorState,
   migrateSimulatorState,
   type SimulatorState,
 } from './domain/combat/simulator-repository.ts';
 import {
   acceptOperation,
   cancelOperation,
-  createDefaultOperationsState,
-  migrateOperationsState,
   revealOperation,
 } from './domain/operations/repository.ts';
-import type { OperationId, OperationsState } from './domain/operations/types.ts';
+import type { OperationId } from './domain/operations/types.ts';
 import {
-  createDefaultCommandState,
   joinJointOperation,
   markResourceRequestReviewing,
-  migrateCommandState,
   updateAllianceSettings,
 } from './domain/command/repository.ts';
-import type { AllianceSettingsInput, CommandState } from './domain/command/types.ts';
-import { createDefaultReportsState, migrateReportsState } from './domain/reports/repository.ts';
-import type { ReportsState } from './domain/reports/types.ts';
-import { buildReportsFeed } from './domain/reports/adapters.ts';
-import { createDefaultPlayerProfileState, CURRENT_PLAYER_FACTION_ID, migratePlayerProfileState, syncPlayerProfileWithAlliance, syncPlayerProfileWithFaction } from './domain/profile/repository.ts';
-import type { PlayerProfileState } from './domain/profile/types.ts';
+import type { AllianceSettingsInput } from './domain/command/types.ts';
+import { CURRENT_PLAYER_FACTION_ID, syncPlayerProfileWithAlliance } from './domain/profile/repository.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import {
-  SCIENCE_RUNTIME_CHANGED_EVENT,
-  SCIENCE_CANCEL_REQUEST_EVENT,
-  SCIENCE_SAVE_SCHEMA_VERSION,
-  SCIENCE_START_REQUEST_EVENT,
-  cancelScienceResearch,
-  createDefaultScienceState,
-  createScienceRuntimeSnapshot,
-  migrateScienceState,
-  reconcileScienceState,
-  startScienceResearch,
-  type ScienceStartRequest,
-  type ScienceState,
-} from './domain/science/runtime.ts';
-import {
   ACTIVE_RUNTIME_MODE,
-  getRuntimeSaveKey,
   resolveTestTimeScale,
-  RUNTIME_SAVE_SCHEMA_VERSION,
-  RUNTIME_STATE_CHANGED_EVENT,
-  scaleRuntimeDuration,
   TEST_TIME_SCALE_OPTIONS,
-  TEST_TIME_SCALE_STORAGE_KEY,
   type TestTimeScale,
   type RuntimeMode,
 } from './domain/runtime/mode.ts';
-import { publishRuntimeStateSnapshot } from './domain/runtime/state-store.ts';
-import {
-  createCanonicalStartingFleet,
-  getFleetSummary,
-  resolveSavedFleetState,
-  type OwnedFleetState,
-} from './domain/fleet/runtime.ts';
-import {
-  createDefaultRatingPrototypeState,
-  migrateRatingPrototypeState,
-  type RatingPrototypeState,
-} from './domain/rating/fixtures.ts';
 import {
   BUILDING_QUEUE_CAPACITY,
   RESOURCE_BUILDING_ROLES,
-  cancelBuildingProject,
-  completeBuildingProject,
-  createCanonicalStartingBuildingLevels,
-  destroyBuildingLevel,
-  evaluateBuildingBuild,
   getBuildingDefinition,
   getBuildingEnergyIncomePerHour,
   getBuildingResourceIncomePerHour,
   getStorageCapacities,
-  migrateBuildingLevels,
-  migrateBuildingQueue,
-  startBuildingProject,
-  type BuildingLevels,
-  type BuildingQueueItem,
   type BuildingRole,
   type BuildingZone,
   type ResourceWallet,
 } from './domain/buildings/resource-zone.ts';
+import { getProductionBotIncomePerHour, type BotAssignment } from './domain/buildings/production-bots.ts';
+import type { ResourceAllocationPercent } from './domain/buildings/recycling.ts';
 import {
-  createEmptyBotAssignment,
-  getProductionBotIncomePerHour,
-  migrateProductionBotAssignment,
-  type BotAssignment,
-} from './domain/buildings/production-bots.ts';
-import {
-  advanceRecyclingState,
-  collectRecyclingJob,
-  createDefaultRecyclingState,
-  migrateRecyclingState,
-  startRecyclingJob,
-  type RecyclingState,
-  type ResourceAllocationPercent,
-} from './domain/buildings/recycling.ts';
-import {
-  createDefaultSpaceportUpgradeState,
-  enqueueSpaceportUpgrade,
   getSpaceportUpgradeEntity,
-  migrateSpaceportUpgradeState,
-  reconcileSpaceportUpgradeState,
-  type SpaceportUpgradeState,
   type SpaceportUpgradeTrack,
   type SpaceportUpgradeWallet,
 } from './domain/buildings/spaceport-upgrades.ts';
 import {
-  createDefaultTradeState,
-  executeTrade,
-  migrateTradeState,
-  reconcileTradeState,
   type TradeExecution,
   type TradeRequest,
-  type TradeState,
   type TradeWallet,
 } from './domain/buildings/trade.ts';
 import {
   PLAYER_FACTION_LABELS,
 } from './domain/profile/repository.ts';
 import type { PlayerFactionId } from './domain/profile/types.ts';
+import {
+  createInitialSaveState,
+  createPersistenceFacade,
+  DEFAULT_PLANET_NAME,
+  SAVE_SCHEMA_VERSION,
+} from './application/persistence.ts';
+import {
+  applyProductionBots as applyProductionBotsAction,
+  cancelBuilding as cancelBuildingAction,
+  collectRecycling as collectRecyclingAction,
+  destroyBuilding as destroyBuildingAction,
+  executeTradeAction,
+  previewBuilding,
+  startBuilding as startBuildingAction,
+  startRecycling as startRecyclingAction,
+  startSpaceportUpgrade as startSpaceportUpgradeAction,
+} from './application/buildings.ts';
+import {
+  bindScienceEventBridge,
+} from './application/science.ts';
+import { getFleetSummaryForState } from './application/fleet.ts';
+import { publishApplicationRuntimeSnapshot } from './application/runtime.ts';
+import { reconcileRuntime } from './application/reconcile.ts';
+import { enqueueApplicationStateUpdate } from './application/state.ts';
+import type { PlanetId, SaveState } from './application/contracts.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import planetColonized from '../assets/source/starter/planets/planet_colonized.png';
@@ -213,82 +162,9 @@ const planetSkins = [
   { id: 'skin-032', label: 'Облик 032', art: generated032 },
 ] as const;
 
-type PlanetSkin = (typeof planetSkins)[number]['id'];
-type PlanetId = 'helion-01';
 type Zone = BuildingZone;
 type PlanetViewMode = 'overview' | Zone;
 type BuildingInteriorContext = BuildingInteriorNavigationContext<PlanetId>;
-
-type PlanetRuntime = {
-  name: string;
-  skin: PlanetSkin;
-  fleet: OwnedFleetState;
-  energy: number;
-  buildings: BuildingLevels;
-  productionBots: BotAssignment;
-  recycling: RecyclingState;
-  trade: TradeState;
-  spaceportUpgrades: SpaceportUpgradeState;
-  stability: number;
-};
-
-type SaveState = {
-  schemaVersion: number;
-  metal: number;
-  minerals: number;
-  gas: number;
-  currentPlanetId: PlanetId;
-  planets: Record<PlanetId, PlanetRuntime>;
-  queues: Record<PlanetId, BuildingQueueItem[]>;
-  rating: RatingPrototypeState;
-  profile: PlayerProfileState;
-  combatPriority: CombatPriorityState;
-  combat: BattleHistoryState;
-  combatSimulator: SimulatorState;
-  operations: OperationsState;
-  command: CommandState;
-  reports: ReportsState;
-  science: ScienceState;
-};
-
-type StoredPlanetRuntime = {
-  name?: unknown;
-  skin?: unknown;
-  population?: unknown;
-  populationMax?: unknown;
-  fleet?: unknown;
-  energy?: unknown;
-  buildings?: unknown;
-  productionBots?: unknown;
-  recycling?: unknown;
-  trade?: unknown;
-  spaceportUpgrades?: unknown;
-  solarStations?: unknown;
-  stability?: unknown;
-};
-
-type StoredSave = {
-  schemaVersion?: unknown;
-  metal?: unknown;
-  minerals?: unknown;
-  gas?: unknown;
-  planetSkin?: unknown;
-  population?: unknown;
-  energy?: unknown;
-  solarStations?: unknown;
-  planets?: Record<string, StoredPlanetRuntime>;
-  queues?: Record<string, unknown>;
-  queue?: unknown;
-  rating?: unknown;
-  profile?: unknown;
-  combatPriority?: unknown;
-  combat?: unknown;
-  combatSimulator?: unknown;
-  operations?: unknown;
-  command?: unknown;
-  reports?: unknown;
-  science?: unknown;
-};
 
 type PlanetDefinition = {
   id: PlanetId;
@@ -302,135 +178,12 @@ const ownedPlanets: PlanetDefinition[] = [
 ];
 
 const RUNTIME_MODE: RuntimeMode = ACTIVE_RUNTIME_MODE;
-const SAVE_KEY = getRuntimeSaveKey(RUNTIME_MODE);
-const SAVE_SCHEMA_VERSION = Math.max(COMBAT_SAVE_SCHEMA_VERSION, SCIENCE_SAVE_SCHEMA_VERSION, RUNTIME_SAVE_SCHEMA_VERSION);
-const DEFAULT_PLANET_NAME = 'Helion 01';
-const TEST_MODE_RESOURCE_AMOUNT = 999_999_999;
-
-const createInitialState = (mode: RuntimeMode = RUNTIME_MODE): SaveState => {
-  const command = createDefaultCommandState();
-  return {
-    schemaVersion: SAVE_SCHEMA_VERSION,
-    metal: mode === 'test' ? TEST_MODE_RESOURCE_AMOUNT : 15_880,
-    minerals: mode === 'test' ? TEST_MODE_RESOURCE_AMOUNT : 12_712,
-    gas: mode === 'test' ? TEST_MODE_RESOURCE_AMOUNT : 6_421,
-    currentPlanetId: 'helion-01',
-    planets: {
-      'helion-01': {
-        name: DEFAULT_PLANET_NAME,
-        skin: 'colonized',
-        energy: mode === 'test' ? TEST_MODE_RESOURCE_AMOUNT : 140,
-        buildings: createCanonicalStartingBuildingLevels(),
-        fleet: createCanonicalStartingFleet(),
-        productionBots: createEmptyBotAssignment(),
-        recycling: createDefaultRecyclingState(),
-        trade: createDefaultTradeState(),
-        spaceportUpgrades: createDefaultSpaceportUpgradeState(),
-        stability: 100,
-      },
-    },
-    queues: {
-      'helion-01': [],
-    },
-    rating: createDefaultRatingPrototypeState(),
-    profile: syncPlayerProfileWithAlliance(createDefaultPlayerProfileState(), command.alliance),
-    combatPriority: createDefaultCombatPriority(),
-    combat: createDefaultBattleHistory(),
-    combatSimulator: createDefaultSimulatorState(),
-    operations: createDefaultOperationsState(),
-    command,
-    reports: createDefaultReportsState(),
-    science: createDefaultScienceState(),
-  };
-};
-
-const initialState = createInitialState(RUNTIME_MODE);
 
 const zoneMeta: Record<Zone, { title: string; subtitle: string; accent: string }> = {
   resource: { title: 'РЕСУРСНАЯ ЗОНА', subtitle: 'Добыча и энергия', accent: '#38c8ff' },
   industry: { title: 'ПРОМЫШЛЕННАЯ ЗОНА', subtitle: 'Производство', accent: '#f0ad38' },
   military: { title: 'ВОЕННАЯ ЗОНА', subtitle: 'Оборона и флот', accent: '#ee665d' },
 };
-
-const isPlanetSkin = (value: unknown): value is PlanetSkin => planetSkins.some((skin) => skin.id === value);
-const numberOr = (value: unknown, fallback: number) => typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-
-function readSave(): SaveState {
-  try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return createInitialState();
-
-    const parsed = JSON.parse(raw) as StoredSave;
-    const savedHomeworld = parsed.planets?.['helion-01'];
-    const legacySolarStations = numberOr(savedHomeworld?.solarStations, numberOr(parsed.solarStations, 0));
-    const buildings = migrateBuildingLevels(savedHomeworld?.buildings, legacySolarStations);
-    const now = Date.now();
-    const spaceportUpgrades = reconcileSpaceportUpgradeState(
-      migrateSpaceportUpgradeState(savedHomeworld?.spaceportUpgrades),
-      now,
-    ).state;
-    const science = migrateScienceState(parsed.science, {
-      laboratoryLevel: buildings.research,
-      mode: RUNTIME_MODE,
-      testTimeScale: resolveTestTimeScale(),
-      schemaVersion: numberOr(parsed.schemaVersion, 0),
-    });
-    const combat = migrateBattleHistory(parsed.combat);
-    const operations = migrateOperationsState(parsed.operations);
-    const command = migrateCommandState(parsed.command);
-    const profile = syncPlayerProfileWithAlliance(
-      syncPlayerProfileWithFaction(migratePlayerProfileState(parsed.profile), CURRENT_PLAYER_FACTION_ID),
-      command.alliance,
-    );
-    const reportIds = buildReportsFeed(combat.reports, operations, command).map((item) => item.id);
-    const homeworld: PlanetRuntime = {
-      name: typeof savedHomeworld?.name === 'string' && savedHomeworld.name.trim()
-        ? savedHomeworld.name.trim().slice(0, 28)
-        : DEFAULT_PLANET_NAME,
-      skin: isPlanetSkin(savedHomeworld?.skin)
-        ? savedHomeworld.skin
-        : isPlanetSkin(parsed.planetSkin)
-          ? parsed.planetSkin
-          : initialState.planets['helion-01'].skin,
-      fleet: resolveSavedFleetState(savedHomeworld?.fleet),
-      energy: numberOr(savedHomeworld?.energy, numberOr(parsed.energy, initialState.planets['helion-01'].energy)),
-      buildings,
-      productionBots: migrateProductionBotAssignment(savedHomeworld?.productionBots, buildings),
-      recycling: migrateRecyclingState(savedHomeworld?.recycling, buildings.recycling, now),
-      trade: migrateTradeState(savedHomeworld?.trade, buildings['trade-center'], now),
-      spaceportUpgrades,
-      stability: numberOr(savedHomeworld?.stability, initialState.planets['helion-01'].stability),
-    };
-
-    const savedQueue = parsed.queues?.['helion-01'] ?? parsed.queue ?? null;
-    const queue = migrateBuildingQueue(savedQueue, 'helion-01', homeworld.buildings, science.levels);
-
-    return {
-      schemaVersion: SAVE_SCHEMA_VERSION,
-      metal: numberOr(parsed.metal, initialState.metal),
-      minerals: numberOr(parsed.minerals, initialState.minerals),
-      gas: numberOr(parsed.gas, initialState.gas),
-      currentPlanetId: 'helion-01',
-      planets: { 'helion-01': homeworld },
-      queues: { 'helion-01': queue },
-      rating: migrateRatingPrototypeState(parsed.rating),
-      combatPriority: migrateCombatPriority(parsed.combatPriority),
-      combat,
-      combatSimulator: migrateSimulatorState(parsed.combatSimulator),
-      operations,
-      command,
-      profile,
-      reports: migrateReportsState(parsed.reports, reportIds),
-      science,
-    };
-  } catch {
-    return createInitialState();
-  }
-}
-
-function formatNumber(value: number) {
-  return new Intl.NumberFormat('ru-RU').format(value);
-}
 
 function formatCountdown(ms: number) {
   const total = Math.max(0, Math.ceil(ms / 1000));
@@ -457,7 +210,8 @@ export function App() {
   const { route: activeRoute, navigate } = useNavigation();
   const activeTab = APP_ROUTE_LABELS[activeRoute];
   const [planetViewMode, setPlanetViewMode] = useState<PlanetViewMode>('overview');
-  const [state, setState] = useState<SaveState>(readSave);
+  const persistence = useMemo(() => createPersistenceFacade({ mode: RUNTIME_MODE }), []);
+  const [state, setState] = useState<SaveState>(() => persistence.read());
   const stateRef = useRef(state);
   stateRef.current = state;
   const [now, setNow] = useState(Date.now());
@@ -479,8 +233,8 @@ export function App() {
 
   useEffect(() => {
     if (RUNTIME_MODE !== 'test') return;
-    window.localStorage.setItem(TEST_TIME_SCALE_STORAGE_KEY, String(testTimeScale));
-  }, [testTimeScale]);
+    persistence.writeTestTimeScale(testTimeScale);
+  }, [persistence, testTimeScale]);
 
   useEffect(() => {
     const onCombatPriorityChanged = (event: Event) => {
@@ -525,252 +279,67 @@ export function App() {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
-  useEffect(() => {
-    const onScienceStartRequest = (event: Event) => {
-      const request = (event as CustomEvent<ScienceStartRequest>).detail;
-      if (!request || !Number.isInteger(request.scienceId)) return;
-
-      const current = stateRef.current;
-      const planet = current.planets['helion-01'];
-      const researchStartedAt = Number.isFinite(request.now) ? request.now : Date.now();
-      const taskId = globalThis.crypto?.randomUUID?.()
-        ?? `science-${request.scienceId}-${researchStartedAt}-${Math.random().toString(36).slice(2, 9)}`;
-      const transition = startScienceResearch({
-        state: current.science,
-        wallet: {
-          metal: current.metal,
-          minerals: current.minerals,
-          gas: current.gas,
-          energy: planet.energy,
-        },
-        laboratoryLevel: planet.buildings.research,
-        now: researchStartedAt,
-        mode: RUNTIME_MODE,
-        testTimeScale,
-      }, request.scienceId, taskId);
-
-      if (!transition.ok) {
-        setNotice(transition.reason ?? 'Исследование сейчас недоступно.');
-        return;
-      }
-
-      const nextState: SaveState = {
-        ...current,
-        schemaVersion: SAVE_SCHEMA_VERSION,
-        metal: transition.wallet.metal,
-        minerals: transition.wallet.minerals,
-        gas: transition.wallet.gas,
-        planets: {
-          ...current.planets,
-          'helion-01': { ...planet, energy: transition.wallet.energy },
-        },
-        science: transition.state,
-      };
+  useEffect(() => bindScienceEventBridge({
+    target: window,
+    getState: () => stateRef.current,
+    getContext: (eventNow) => ({
+      planetId: 'helion-01',
+      mode: RUNTIME_MODE,
+      testTimeScale,
+      now: eventNow,
+      rng: Math.random,
+    }),
+    commit: (nextState) => {
       stateRef.current = nextState;
       setState(nextState);
-      setNotice('Исследование добавлено в очередь.');
-    };
-
-    window.addEventListener(SCIENCE_START_REQUEST_EVENT, onScienceStartRequest);
-    return () => window.removeEventListener(SCIENCE_START_REQUEST_EVENT, onScienceStartRequest);
-  }, [testTimeScale]);
+    },
+    onNotice: setNotice,
+  }), [testTimeScale]);
   useEffect(() => {
-    const onScienceCancelRequest = (event: Event) => {
-      const request = (event as CustomEvent<{ taskId?: string; now?: number }>).detail;
-      if (!request?.taskId) return;
-      const canceledAt = typeof request.now === 'number' && Number.isFinite(request.now) ? request.now : Date.now();
-      const current = stateRef.current;
-      const planet = current.planets['helion-01'];
-      const result = cancelScienceResearch({
-        state: current.science,
-        wallet: { metal: current.metal, minerals: current.minerals, gas: current.gas, energy: planet.energy },
-        laboratoryLevel: planet.buildings.research,
-        now: canceledAt,
-        mode: RUNTIME_MODE,
-        testTimeScale,
-        rng: Math.random,
-      }, request.taskId);
-      const nextState: SaveState = {
-        ...current,
-        schemaVersion: SAVE_SCHEMA_VERSION,
-        metal: result.wallet.metal,
-        minerals: result.wallet.minerals,
-        gas: result.wallet.gas,
-        planets: { ...current.planets, 'helion-01': { ...planet, energy: result.wallet.energy } },
-        science: result.state,
-      };
-      const walletChanged = nextState.metal !== current.metal
-        || nextState.minerals !== current.minerals
-        || nextState.gas !== current.gas
-        || nextState.planets['helion-01'].energy !== planet.energy;
-      if (result.state !== current.science || walletChanged) {
-        stateRef.current = nextState;
-        setState(nextState);
-      }
-      const cascadedCount = Math.max(0, (result?.canceledTasks.length ?? 0) - 1);
-      const unreimbursedCount = result?.ok
-        ? Math.max(0, result.canceledTasks.length - result.refundPercents.length)
-        : 0;
-      setNotice(result?.ok
-        ? `Исследование отменено.${cascadedCount > 0 ? ` Каскадно отменено ещё ${cascadedCount} зависимых исследований.` : ''} ${cascadedCount > 0
-          ? `Для ${result.refundPercents.length} отменённых заданий рассчитан отдельный возврат 60–80%.${unreimbursedCount > 0 ? ` ${unreimbursedCount} старых заданий без подтверждённой стоимости возвращены без компенсации.` : ''}`
-          : `Возвращено ${result.refundPercent}% сохранённой стоимости.`}`
-        : result?.reason ?? 'Исследование недоступно для отмены.');
-    };
-    window.addEventListener(SCIENCE_CANCEL_REQUEST_EVENT, onScienceCancelRequest);
-    return () => window.removeEventListener(SCIENCE_CANCEL_REQUEST_EVENT, onScienceCancelRequest);
-  }, [testTimeScale]);
+    persistence.write(state);
+  }, [persistence, state]);
   useEffect(() => {
-    const snapshot = reconcileScienceState(state.science, now);
-    if (!snapshot.changed) return;
-
-    setState((current) => {
-      const reconciled = reconcileScienceState(current.science, now);
-      if (!reconciled.changed) return current;
-      return {
-        ...current,
-        schemaVersion: SAVE_SCHEMA_VERSION,
-        science: reconciled.state,
-      };
-    });
-
-    if (snapshot.completed.length > 0) {
-      const names = snapshot.completed
-        .map((task) => SCIENCE_CATALOG.find((science) => science.id === task.scienceId)?.name ?? `Наука ${task.scienceId}`)
-        .join(', ');
-      setNotice(`Наука: исследование завершено — ${names}.`);
-    }
-  }, [now, state.science]);
-  useEffect(() => {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(state));
-  }, [state]);
-  useEffect(() => {
-    const planet = state.planets['helion-01'];
-    const snapshot = createScienceRuntimeSnapshot(
-      state.science,
-      { metal: state.metal, minerals: state.minerals, gas: state.gas, energy: planet.energy },
-      planet.buildings.research,
-      now,
-      RUNTIME_MODE,
-      testTimeScale,
+    publishApplicationRuntimeSnapshot(
+      state,
+      { planetId: 'helion-01', now, mode: RUNTIME_MODE, testTimeScale },
+      window,
     );
-    window.dispatchEvent(new CustomEvent(SCIENCE_RUNTIME_CHANGED_EVENT, { detail: snapshot }));
-    publishRuntimeStateSnapshot({ command: state.command, rating: state.rating });
-    window.dispatchEvent(new CustomEvent(RUNTIME_STATE_CHANGED_EVENT, { detail: state }));
   }, [now, state, testTimeScale]);
   useEffect(() => {
-    const activeQueueItem = state.queues['helion-01'][0];
-    if (!activeQueueItem || now < activeQueueItem.finishAt) return;
-    const completedDefinition = getBuildingDefinition(activeQueueItem.assetRole);
-
-    setState((current) => {
-      const currentActiveItem = current.queues['helion-01'][0];
-      if (!currentActiveItem || Date.now() < currentActiveItem.finishAt) return current;
-      const currentPlanet = current.planets['helion-01'];
-      const completed = completeBuildingProject({
-        resources: {
-          metal: current.metal,
-          minerals: current.minerals,
-          gas: current.gas,
-          energy: currentPlanet.energy,
-        },
-        buildings: currentPlanet.buildings,
-        queue: current.queues['helion-01'],
-        scienceLevels: current.science.levels,
-      }, Date.now());
-      if (!completed.completedRole) return current;
-
-      return {
-        ...current,
-        metal: completed.state.resources.metal,
-        minerals: completed.state.resources.minerals,
-        gas: completed.state.resources.gas,
-        planets: {
-          'helion-01': {
-            ...currentPlanet,
-            energy: completed.state.resources.energy,
-            buildings: completed.state.buildings,
-          },
-        },
-        queues: { 'helion-01': completed.state.queue },
-      };
+    const result = reconcileRuntime(stateRef.current, {
+      planetId: 'helion-01',
+      now,
+      mode: RUNTIME_MODE,
+      testTimeScale,
     });
-    setNotice(`${state.planets['helion-01'].name}: ${completedDefinition.name} завершено.`);
-  }, [now, state.queues, state.planets]);
-
-  useEffect(() => {
-    const snapshot = advanceRecyclingState(state.planets['helion-01'].recycling, now);
-    if (!snapshot.changed) return;
-
-    setState((current) => {
-      const currentPlanet = current.planets['helion-01'];
-      const advanced = advanceRecyclingState(currentPlanet.recycling, now);
-      if (!advanced.changed) return current;
-      return {
-        ...current,
-        schemaVersion: SAVE_SCHEMA_VERSION,
-        metal: current.metal + advanced.autoCollectedOutput.metal,
-        minerals: current.minerals + advanced.autoCollectedOutput.minerals,
-        gas: current.gas + advanced.autoCollectedOutput.gas,
-        planets: {
-          ...current.planets,
-          'helion-01': {
-            ...currentPlanet,
-            recycling: advanced.state,
-          },
-        },
-      };
+    if (!result.changed) return;
+    stateRef.current = result.state;
+    setState(result.state);
+    result.events.forEach((event) => {
+      if (event.kind === 'science') {
+        const names = event.scienceIds
+          .map((scienceId) => SCIENCE_CATALOG.find((science) => science.id === scienceId)?.name ?? `Наука ${scienceId}`)
+          .join(', ');
+        setNotice(`Наука: исследование завершено — ${names}.`);
+      } else if (event.kind === 'building') {
+        setNotice(`${result.state.planets['helion-01'].name}: ${getBuildingDefinition(event.assetRole).name} завершено.`);
+      } else if (event.kind === 'recycling') {
+        setNotice('Результат переработки автоматически зачислен');
+      } else if (event.kind === 'spaceport') {
+        const names = event.tasks
+          .map((task) => getSpaceportUpgradeEntity(task.track, task.shipId)?.name ?? task.shipId)
+          .join(', ');
+        setNotice(`Космодром: улучшение завершено — ${names}.`);
+      }
     });
-
-    if (snapshot.autoCollectedJobIds.length > 0) setNotice('Результат переработки автоматически зачислен');
-  }, [now, state.planets]);
-
-  useEffect(() => {
-    const snapshot = reconcileTradeState(state.planets['helion-01'].trade, state.planets['helion-01'].buildings['trade-center'], now);
-    if (!snapshot.changed) return;
-    setState((current) => {
-      const currentPlanet = current.planets['helion-01'];
-      const reconciled = reconcileTradeState(currentPlanet.trade, currentPlanet.buildings['trade-center'], now);
-      if (!reconciled.changed) return current;
-      return {
-        ...current,
-        schemaVersion: SAVE_SCHEMA_VERSION,
-        planets: {
-          ...current.planets,
-          'helion-01': { ...currentPlanet, trade: reconciled.state },
-        },
-      };
-    });
-  }, [now, state.planets]);
-
-  useEffect(() => {
-    const snapshot = reconcileSpaceportUpgradeState(state.planets['helion-01'].spaceportUpgrades, now);
-    if (!snapshot.changed) return;
-    setState((current) => {
-      const currentPlanet = current.planets['helion-01'];
-      const reconciled = reconcileSpaceportUpgradeState(currentPlanet.spaceportUpgrades, Date.now());
-      if (!reconciled.changed) return current;
-      return {
-        ...current,
-        schemaVersion: SAVE_SCHEMA_VERSION,
-        planets: {
-          ...current.planets,
-          'helion-01': { ...currentPlanet, spaceportUpgrades: reconciled.state },
-        },
-      };
-    });
-    const names = snapshot.completed
-      .map((task) => getSpaceportUpgradeEntity(task.track, task.shipId)?.name ?? task.shipId)
-      .join(', ');
-    setNotice(`Космодром: улучшение завершено — ${names}.`);
-  }, [now, state.planets]);
+  }, [now, state, testTimeScale]);
 
   const currentPlanet = ownedPlanets[0];
   const currentPlanetState = state.planets['helion-01'];
   const currentPlanetName = currentPlanetState.name;
   const fleetSummary = useMemo(
-    () => getFleetSummary(currentPlanetState.fleet, currentPlanetState.buildings.hangar),
-    [currentPlanetState.buildings.hangar, currentPlanetState.fleet],
+    () => getFleetSummaryForState(state),
+    [state],
   );
   const currentSkin = useMemo(
     () => planetSkins.find((skin) => skin.id === currentPlanetState.skin) ?? planetSkins[0],
@@ -884,243 +453,119 @@ export function App() {
   };
 
   const applyProductionBots = (assignment: BotAssignment) => {
-    setState((current) => {
-      const currentPlanet = current.planets['helion-01'];
-      const productionBots = migrateProductionBotAssignment(assignment, currentPlanet.buildings);
-      return {
-        ...current,
-        schemaVersion: SAVE_SCHEMA_VERSION,
-        planets: {
-          ...current.planets,
-          'helion-01': {
-            ...currentPlanet,
-            productionBots,
-          },
-        },
-      };
-    });
+    enqueueApplicationStateUpdate(stateRef, setState, (current) => ({
+      state: applyProductionBotsAction(current, {
+        planetId: 'helion-01',
+        now,
+        mode: RUNTIME_MODE,
+        testTimeScale,
+      }, assignment),
+      result: undefined,
+    }), flushSync);
     setNotice('Роботы перераспределены');
   };
 
   const startRecycling = (debrisAmount: number, allocation: ResourceAllocationPercent) => {
     const startedAt = Date.now();
     const jobId = globalThis.crypto?.randomUUID?.() ?? `recycling-${startedAt}-${Math.random().toString(36).slice(2, 9)}`;
-    const preview = startRecyclingJob(
-      currentPlanetState.recycling,
-      currentPlanetState.buildings.recycling,
-      debrisAmount,
-      allocation,
-      startedAt,
-      jobId,
-    );
-    if (!preview.canStart) {
-      setNotice(preview.reason ?? 'Переработка сейчас недоступна');
+    const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
+      const transition = startRecyclingAction(current, {
+        planetId: 'helion-01',
+        now: startedAt,
+        mode: RUNTIME_MODE,
+        testTimeScale,
+      }, debrisAmount, allocation, jobId);
+      return {
+        state: transition.ok ? transition.state : current,
+        result: transition,
+      };
+    }, flushSync);
+    if (!result.ok) {
+      setNotice(result.reason ?? 'Переработка сейчас недоступна');
       return false;
     }
-
-    setState((current) => {
-      const currentPlanetStateForUpdate = current.planets['helion-01'];
-      const transition = startRecyclingJob(
-        currentPlanetStateForUpdate.recycling,
-        currentPlanetStateForUpdate.buildings.recycling,
-        debrisAmount,
-        allocation,
-        startedAt,
-        jobId,
-      );
-      if (!transition.canStart) return current;
-      return {
-        ...current,
-        schemaVersion: SAVE_SCHEMA_VERSION,
-        planets: {
-          ...current.planets,
-          'helion-01': {
-            ...currentPlanetStateForUpdate,
-            recycling: transition.state,
-          },
-        },
-      };
-    });
     setNotice('Переработка запущена');
     return true;
   };
 
   const collectRecycling = (jobId: string) => {
     const collectedAt = Date.now();
-    const preview = collectRecyclingJob(currentPlanetState.recycling, jobId, collectedAt);
-    if (!preview.ok || !preview.output) {
-      setNotice(preview.reason ?? 'Ресурс пока недоступен');
-      if (preview.state !== currentPlanetState.recycling) {
-        setState((current) => ({
-          ...current,
-          planets: {
-            ...current.planets,
-            'helion-01': { ...current.planets['helion-01'], recycling: preview.state },
-          },
-        }));
-      }
+    const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
+      const transition = collectRecyclingAction(current, {
+        planetId: 'helion-01',
+        now: collectedAt,
+        mode: RUNTIME_MODE,
+        testTimeScale,
+      }, jobId);
+      return { state: transition.state, result: transition };
+    }, flushSync);
+    if (!result.ok || !result.output) {
+      setNotice(result.reason ?? 'Ресурс пока недоступен');
       return false;
     }
-
-    setState((current) => {
-      const currentPlanetStateForUpdate = current.planets['helion-01'];
-      const transition = collectRecyclingJob(currentPlanetStateForUpdate.recycling, jobId, collectedAt);
-      if (!transition.ok || !transition.output) return current;
-      return {
-        ...current,
-        schemaVersion: SAVE_SCHEMA_VERSION,
-        metal: current.metal + transition.output.metal,
-        minerals: current.minerals + transition.output.minerals,
-        gas: current.gas + transition.output.gas,
-        planets: {
-          ...current.planets,
-          'helion-01': {
-            ...currentPlanetStateForUpdate,
-            recycling: transition.state,
-          },
-        },
-      };
-    });
     setNotice('Ресурсы получены');
     return true;
   };
 
   const tradeResources = (request: TradeRequest): TradeExecution => {
     const tradedAt = Date.now();
-    const preview = executeTrade(
-      { wallet: tradeWallet, trade: currentPlanetState.trade },
-      currentPlanetState.buildings['trade-center'],
-      state.rating.resourcePoints,
-      request,
-      tradedAt,
-    );
-    if (!preview.ok) {
-      setNotice(preview.reason ?? 'Обмен сейчас недоступен');
-      return preview;
+    const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
+      const transition = executeTradeAction(current, {
+        planetId: 'helion-01',
+        now: tradedAt,
+        mode: RUNTIME_MODE,
+        testTimeScale,
+      }, current.rating.resourcePoints, request);
+      return { state: transition.state, result: transition.execution };
+    }, flushSync);
+    if (!result.ok) {
+      setNotice(result.reason ?? 'Обмен сейчас недоступен');
+      return result;
     }
-
-    setState((current) => {
-      const planet = current.planets['helion-01'];
-      const transition = executeTrade(
-        {
-          wallet: {
-            metal: current.metal,
-            minerals: current.minerals,
-            gas: current.gas,
-            debris: planet.recycling.availableDebris,
-          },
-          trade: planet.trade,
-        },
-        planet.buildings['trade-center'],
-        current.rating.resourcePoints,
-        request,
-        tradedAt,
-      );
-      if (!transition.ok) return current;
-      return {
-        ...current,
-        schemaVersion: SAVE_SCHEMA_VERSION,
-        metal: transition.state.wallet.metal,
-        minerals: transition.state.wallet.minerals,
-        gas: transition.state.wallet.gas,
-        planets: {
-          ...current.planets,
-          'helion-01': {
-            ...planet,
-            trade: transition.state.trade,
-            recycling: {
-              ...planet.recycling,
-              availableDebris: transition.state.wallet.debris,
-            },
-          },
-        },
-      };
-    });
     setNotice('Обмен выполнен');
-    return preview;
+    return result;
   };
 
   const startSpaceportUpgrade = (track: SpaceportUpgradeTrack, shipId: string) => {
     const enqueuedAt = Date.now();
     const taskId = globalThis.crypto?.randomUUID?.() ?? `spaceport-${track}-${shipId}-${enqueuedAt}-${Math.random().toString(36).slice(2, 9)}`;
-    const current = stateRef.current;
-    const planet = current.planets['helion-01'];
-    const transition = enqueueSpaceportUpgrade({
-      state: planet.spaceportUpgrades,
-      wallet: { metal: current.metal, minerals: current.minerals, gas: current.gas },
-      buildings: planet.buildings,
-      scienceLevels: current.science.levels,
-      spaceportLevel: planet.buildings.spaceport,
+    const result = startSpaceportUpgradeAction(stateRef.current, {
+      planetId: 'helion-01',
+      now: enqueuedAt,
       mode: RUNTIME_MODE,
       testTimeScale,
-    }, track, shipId, enqueuedAt, taskId);
-    if (!transition.ok) {
-      setNotice(transition.reason ?? 'Улучшение сейчас недоступно.');
+    }, track, shipId, taskId);
+    if (!result.ok) {
+      setNotice(result.reason ?? 'Улучшение сейчас недоступно.');
       return false;
     }
-
-    const nextState: SaveState = {
-      ...current,
-      schemaVersion: SAVE_SCHEMA_VERSION,
-      metal: transition.wallet.metal,
-      minerals: transition.wallet.minerals,
-      gas: transition.wallet.gas,
-      planets: {
-        ...current.planets,
-        'helion-01': { ...planet, spaceportUpgrades: transition.state },
-      },
-    };
-    stateRef.current = nextState;
-    setState(nextState);
-    const entity = getSpaceportUpgradeEntity(track, shipId);
-    setNotice(`Космодром: ${entity?.name ?? shipId} добавлен в очередь улучшений.`);
+    stateRef.current = result.state;
+    setState(result.state);
+    setNotice(`Космодром: ${result.entityName} добавлен в очередь улучшений.`);
     return true;
   };
 
   const buildBuilding = (assetRole: BuildingRole) => {
-    const snapshot = {
-      resources: resourceWallet,
-      buildings: currentPlanetState.buildings,
-      queue: currentQueue,
-      scienceLevels: state.science.levels,
-    };
-    const availability = evaluateBuildingBuild(snapshot, assetRole);
-    if (!availability.canBuild) {
-      setNotice(availability.reason ?? 'Строительство сейчас недоступно.');
+    const enqueuedAt = Date.now();
+    const context = { planetId: 'helion-01' as PlanetId, now: enqueuedAt, mode: RUNTIME_MODE, testTimeScale };
+    const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
+      const availability = previewBuilding(current, context, assetRole).availability;
+      if (!availability.canBuild) {
+        return {
+          state: current,
+          result: { ok: false, state: current, reason: availability.reason },
+        };
+      }
+      const transition = startBuildingAction(current, context, assetRole);
+      return {
+        state: transition.ok ? transition.state : current,
+        result: transition,
+      };
+    }, flushSync);
+    if (!result.ok) {
+      setNotice(result.reason ?? 'Строительство сейчас недоступно.');
       return false;
     }
-
-    const enqueuedAt = Date.now();
-    setState((current) => {
-      const currentPlanetStateForBuild = current.planets['helion-01'];
-      const transition = startBuildingProject({
-        resources: {
-          metal: current.metal,
-          minerals: current.minerals,
-          gas: current.gas,
-          energy: currentPlanetStateForBuild.energy,
-        },
-        buildings: currentPlanetStateForBuild.buildings,
-        queue: current.queues['helion-01'],
-        scienceLevels: current.science.levels,
-      }, assetRole, 'helion-01', enqueuedAt, scaleRuntimeDuration(availability.timeMs ?? 1, RUNTIME_MODE, testTimeScale));
-      if (!transition.ok) return current;
-
-      return {
-        ...current,
-        metal: transition.state.resources.metal,
-        minerals: transition.state.resources.minerals,
-        gas: transition.state.resources.gas,
-        planets: {
-          'helion-01': {
-            ...currentPlanetStateForBuild,
-            energy: transition.state.resources.energy,
-            buildings: transition.state.buildings,
-          },
-        },
-        queues: { 'helion-01': transition.state.queue },
-      };
-    });
     setNotice(`${currentPlanetName}: ${getBuildingDefinition(assetRole).name} добавлено в общую очередь.`);
     return true;
   };
@@ -1128,93 +573,41 @@ export function App() {
   const cancelBuilding = (queueId: string) => {
     const canceledAt = Date.now();
     const current = stateRef.current;
-    const planet = current.planets['helion-01'];
-    const transition = cancelBuildingProject({
-      resources: {
-        metal: current.metal,
-        minerals: current.minerals,
-        gas: current.gas,
-        energy: planet.energy,
-      },
-      buildings: planet.buildings,
-      queue: current.queues['helion-01'],
-      scienceLevels: current.science.levels,
-    }, queueId, canceledAt);
-
-    if (!transition.ok) {
-      setNotice(transition.reason ?? 'Отмена строительства сейчас недоступна.');
+    const result = cancelBuildingAction(current, {
+      planetId: 'helion-01',
+      now: canceledAt,
+      mode: RUNTIME_MODE,
+      testTimeScale,
+    }, queueId);
+    if (!result.ok) {
+      setNotice(result.reason ?? 'Отмена строительства сейчас недоступна.');
       return false;
     }
-
-    const canceledDefinition = transition.canceled
-      ? getBuildingDefinition(transition.canceled.assetRole)
+    stateRef.current = result.state;
+    setState(result.state);
+    const canceledDefinition = result.canceledRole
+      ? getBuildingDefinition(result.canceledRole)
       : null;
-    const nextState: SaveState = {
-      ...current,
-      schemaVersion: SAVE_SCHEMA_VERSION,
-      metal: transition.state.resources.metal,
-      minerals: transition.state.resources.minerals,
-      gas: transition.state.resources.gas,
-      planets: {
-        ...current.planets,
-        'helion-01': {
-          ...planet,
-          energy: transition.state.resources.energy,
-        },
-      },
-      queues: {
-        ...current.queues,
-        'helion-01': transition.state.queue,
-      },
-    };
-    stateRef.current = nextState;
-    setState(nextState);
-    const cascadedCount = Math.max(0, transition.canceledItems.length - 1);
+    const cascadedCount = result.cascadedCount;
     setNotice(`${canceledDefinition?.name ?? 'Проект'} отменён.${cascadedCount > 0 ? ` Каскадно отменено ещё ${cascadedCount} зависимых проектов.` : ''} Возвращено 90% сохранённых ресурсов.`);
     return true;
   };
 
   const destroyBuilding = (assetRole: BuildingRole) => {
-    const refundPercent = 50 + Math.floor(Math.random() * 31);
     const current = stateRef.current;
-    const planet = current.planets['helion-01'];
-    const transition = destroyBuildingLevel({
-      resources: {
-        metal: current.metal,
-        minerals: current.minerals,
-        gas: current.gas,
-        energy: planet.energy,
-      },
-      buildings: planet.buildings,
-      queue: current.queues['helion-01'],
-      scienceLevels: current.science.levels,
-    }, assetRole, refundPercent);
-
-    if (!transition.ok) {
-      setNotice(transition.reason ?? 'Разрушение уровня сейчас недоступно.');
+    const result = destroyBuildingAction(current, {
+      planetId: 'helion-01',
+      now,
+      mode: RUNTIME_MODE,
+      testTimeScale,
+    }, assetRole);
+    if (!result.ok) {
+      setNotice(result.reason ?? 'Разрушение уровня сейчас недоступно.');
       return false;
     }
-
-    const nextBuildings = transition.state.buildings;
-    const nextState: SaveState = {
-      ...current,
-      schemaVersion: SAVE_SCHEMA_VERSION,
-      metal: transition.state.resources.metal,
-      minerals: transition.state.resources.minerals,
-      gas: transition.state.resources.gas,
-      planets: {
-        ...current.planets,
-        'helion-01': {
-          ...planet,
-          energy: transition.state.resources.energy,
-          buildings: nextBuildings,
-          productionBots: migrateProductionBotAssignment(planet.productionBots, nextBuildings),
-        },
-      },
-    };
-    stateRef.current = nextState;
-    setState(nextState);
-    setNotice(`${getBuildingDefinition(assetRole).name}: уровень разрушен. Возвращено ${transition.refundPercent}% ресурсов.`);
+    stateRef.current = result.state;
+    setState(result.state);
+    setNotice(`${getBuildingDefinition(assetRole).name}: уровень разрушен. Возвращено ${result.refundPercent}% ресурсов.`);
     return true;
   };
 
@@ -1224,8 +617,10 @@ export function App() {
   };
 
   const reset = () => {
-    localStorage.removeItem(SAVE_KEY);
-    setState(createInitialState(RUNTIME_MODE));
+    persistence.clear();
+    const nextState = createInitialSaveState(RUNTIME_MODE);
+    stateRef.current = nextState;
+    setState(nextState);
     setPlanetMenuOpen(false);
     setEditingPlanetId(null);
     setEditingName(DEFAULT_PLANET_NAME);
@@ -1306,15 +701,15 @@ export function App() {
   };
 
   const toggleBattleSavedFromReports = (reportId: string, saved: boolean) => {
-    const result = persistBattleHistory(setBattleReportSaved(state.combat, reportId, saved));
-    setState((current) => ({
+    const current = stateRef.current;
+    const nextState: SaveState = {
       ...current,
       schemaVersion: SAVE_SCHEMA_VERSION,
-      combat: migrateBattleHistory(result.value),
-    }));
-    setNotice(result.ok
-      ? (saved ? 'Боевой доклад сохранён.' : 'Боевой доклад удалён из сохранённых.')
-      : `Не удалось обновить сохранённые бои: ${result.error}`);
+      combat: migrateBattleHistory(setBattleReportSaved(current.combat, reportId, saved)),
+    };
+    stateRef.current = nextState;
+    setState(nextState);
+    setNotice(saved ? 'Боевой доклад сохранён.' : 'Боевой доклад удалён из сохранённых.');
   };
 
   const returnToBuilding = () => {
@@ -1448,7 +843,7 @@ export function App() {
           activeRoute={activeRoute}
           activeZone={activeRoute === 'planet' && planetViewMode !== 'overview' ? planetViewMode : null}
           planetMenuOpen={planetMenuOpen}
-           campaign={{ now, mode: RUNTIME_MODE, timeScale: testTimeScale, saveKey: SAVE_KEY, timeScaleOptions: TEST_TIME_SCALE_OPTIONS, onTimeScaleChange: setTestTimeScale }}
+            campaign={{ now, mode: RUNTIME_MODE, timeScale: testTimeScale, saveKey: persistence.saveKey, timeScaleOptions: TEST_TIME_SCALE_OPTIONS, onTimeScaleChange: setTestTimeScale }}
           onRouteChange={chooseRoute}
           onZoneChange={chooseZone}
           onPlanetChange={(planetId) => {

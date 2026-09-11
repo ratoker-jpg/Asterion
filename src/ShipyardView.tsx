@@ -7,10 +7,7 @@ import {
   formatClockDurationMs,
   parseClockDurationMs,
 } from './domain/buildings/balance-v1.ts';
-import { getRuntimeSaveKey } from './domain/runtime/mode.ts';
-import { createCanonicalStartingFleet, getFleetSummary, migrateFleetState, resolveSavedFleetState } from './domain/fleet/runtime.ts';
-
-const SAVE_KEY = getRuntimeSaveKey();
+import { readFleetBuildBudget, type FleetBuildBudget } from './application/fleet.ts';
 
 type ShipDefinition = {
   id: ShipId;
@@ -39,24 +36,7 @@ type ShipCombatStats = {
   fuel: number;
 };
 
-type ShipyardBudget = {
-  metal: number;
-  minerals: number;
-  gas: number;
-  population: number;
-  populationMax: number;
-  shipyardLevel: number;
-  advancedFactoryLevel: number;
-  hangarLevel: number;
-  fleet: ReturnType<typeof migrateFleetState>;
-};
-
-type StoredSave = {
-  metal?: number;
-  minerals?: number;
-  gas?: number;
-  planets?: Record<string, { population?: number; populationMax?: number; buildings?: Record<string, unknown>; fleet?: unknown }>;
-};
+type ShipyardBudget = FleetBuildBudget;
 
 type ResourceKind = 'metal' | 'minerals' | 'gas' | 'population';
 
@@ -87,33 +67,6 @@ const shipCombatStats = Object.fromEntries(
 ) as Record<ShipId, ShipCombatStats>;
 
 const formatNumber = (value: number) => new Intl.NumberFormat('ru-RU').format(value);
-
-function readBudget(): ShipyardBudget {
-  const fallback: ShipyardBudget = {
-    metal: 15_880, minerals: 12_712, gas: 6_421, population: 58, populationMax: 70, shipyardLevel: 0, advancedFactoryLevel: 0, hangarLevel: 1,
-    fleet: createCanonicalStartingFleet(),
-  };
-
-  try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw) as StoredSave;
-    const homeworld = parsed.planets?.['helion-01'];
-    return {
-      metal: typeof parsed.metal === 'number' ? parsed.metal : fallback.metal,
-      minerals: typeof parsed.minerals === 'number' ? parsed.minerals : fallback.minerals,
-      gas: typeof parsed.gas === 'number' ? parsed.gas : fallback.gas,
-      population: getFleetSummary(resolveSavedFleetState(homeworld?.fleet), Number(homeworld?.buildings?.hangar ?? 0)).population,
-      populationMax: getFleetSummary(resolveSavedFleetState(homeworld?.fleet), Number(homeworld?.buildings?.hangar ?? 0)).capacity,
-      shipyardLevel: typeof homeworld?.buildings?.shipyard === 'number' ? homeworld.buildings.shipyard : fallback.shipyardLevel,
-      advancedFactoryLevel: typeof homeworld?.buildings?.['advanced-factory'] === 'number' ? homeworld.buildings['advanced-factory'] : fallback.advancedFactoryLevel,
-      hangarLevel: typeof homeworld?.buildings?.hangar === 'number' ? homeworld.buildings.hangar : fallback.hangarLevel,
-      fleet: resolveSavedFleetState(homeworld?.fleet),
-    };
-  } catch {
-    return fallback;
-  }
-}
 
 function calculateMax(ship: ShipDefinition, budget: ShipyardBudget) {
   const limits: number[] = [];
@@ -265,8 +218,8 @@ function ShipCard({
 }
 
 export function ShipyardView({ planetName, coords, onBack }: { planetName: string; coords: string; onBack: () => void }) {
-  const budget = useMemo(readBudget, []);
-  const fleetSummary = useMemo(() => getFleetSummary(budget.fleet, budget.hangarLevel), [budget.fleet, budget.hangarLevel]);
+  const budget = useMemo(readFleetBuildBudget, []);
+  const fleetSummary = budget.summary;
   const ownedShips = useMemo(
     () => ships.map((ship) => ({ ...ship, owned: budget.fleet.ships[ship.id] ?? 0 })),
     [budget.fleet],

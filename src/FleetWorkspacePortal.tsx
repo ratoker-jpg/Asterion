@@ -2,8 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
 import type { ShipId } from './domain/combat/ids.ts';
-import { createCanonicalStartingFleet, getFleetSummary, migrateFleetState, resolveSavedFleetState } from './domain/fleet/runtime.ts';
-import { getRuntimeSaveKey, RUNTIME_STATE_CHANGED_EVENT } from './domain/runtime/mode.ts';
+import { RUNTIME_STATE_CHANGED_EVENT } from './domain/runtime/mode.ts';
+import {
+  getFleetSummaryForSnapshot,
+  readFleetSnapshot as readApplicationFleetSnapshot,
+  type FleetSnapshot,
+} from './application/fleet.ts';
 import { BattleReportsView } from './BattleReportsView';
 import { ConstructionCatalogView, type ConstructionCatalogMode } from './ConstructionCatalogView';
 import { FleetCombatPriorityView } from './FleetCombatPriorityView';
@@ -21,27 +25,6 @@ import {
 import './fleet-workspace.css';
 
 const FLEET_ROOT_STATUS = 'Выберите корабли и миссию. Отправка флота будет подключена следующим этапом.';
-
-type FleetSnapshot = {
-  fleet: ReturnType<typeof migrateFleetState>;
-  hangarLevel: number;
-  shipyardLevel: number;
-};
-
-function readFleetSnapshot(): FleetSnapshot {
-  try {
-    const raw = localStorage.getItem(getRuntimeSaveKey());
-    const parsed = raw ? JSON.parse(raw) as { planets?: Record<string, { buildings?: Record<string, unknown>; fleet?: unknown }> } : null;
-    const homeworld = parsed?.planets?.['helion-01'];
-    return {
-      fleet: resolveSavedFleetState(homeworld?.fleet),
-      hangarLevel: typeof homeworld?.buildings?.hangar === 'number' ? homeworld.buildings.hangar : 1,
-      shipyardLevel: typeof homeworld?.buildings?.shipyard === 'number' ? homeworld.buildings.shipyard : 0,
-    };
-  } catch {
-    return { fleet: createCanonicalStartingFleet(), hangarLevel: 1, shipyardLevel: 0 };
-  }
-}
 
 const shipDefinitions = getFactionShipCatalog('aegis');
 
@@ -107,9 +90,9 @@ function FleetWorkspace({
   const [hoveredMissionId, setHoveredMissionId] = useState<MissionId | null>(null);
   const [constructionView, setConstructionView] = useState<ConstructionView>(null);
   const [status, setStatus] = useState(FLEET_ROOT_STATUS);
-  const [fleetSnapshot, setFleetSnapshot] = useState<FleetSnapshot>(readFleetSnapshot);
+  const [fleetSnapshot, setFleetSnapshot] = useState<FleetSnapshot>(readApplicationFleetSnapshot);
   const fleetSummary = useMemo(
-    () => getFleetSummary(fleetSnapshot.fleet, fleetSnapshot.hangarLevel),
+    () => getFleetSummaryForSnapshot(fleetSnapshot),
     [fleetSnapshot.fleet, fleetSnapshot.hangarLevel],
   );
   const ownedShipDefinitions = useMemo(
@@ -145,7 +128,7 @@ function FleetWorkspace({
   }, []);
 
   useEffect(() => {
-    const refresh = () => setFleetSnapshot(readFleetSnapshot());
+    const refresh = () => setFleetSnapshot(readApplicationFleetSnapshot());
     window.addEventListener(RUNTIME_STATE_CHANGED_EVENT, refresh);
     window.addEventListener('storage', refresh);
     return () => {
