@@ -30,7 +30,7 @@ async function reload(win) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   win.webContents.reload();
   await done;
-  await waitFor(win, `document.querySelector('.utility-navigation')`);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);
 }
@@ -78,7 +78,7 @@ async function seed(win, buildings) {
 }
 
 async function activateZone(win, zone) {
-  await click(win, `.header-zone--${zone}`);
+  await click(win, `[data-qa-zone="${zone}"]`);
   await waitFor(win, `document.querySelector('[data-qa-zone-view][data-zone=${JSON.stringify(zone)}]')`);
 }
 

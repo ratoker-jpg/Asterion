@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { HeaderGameIcon, HeaderNavigationIcon } from './HeaderAssetIcons';
 import { ResourceChip } from './ResourceChip';
 import {
@@ -49,6 +50,38 @@ export function AsterionHeader({
   onPlanetChange,
   onPlanetMenuToggle,
 }: AsterionHeaderProps) {
+  const planetSelectRef = useRef<HTMLButtonElement>(null);
+  const wasPlanetMenuOpen = useRef(planetMenuOpen);
+  const restorePlanetFocusOnClose = useRef(false);
+
+  useEffect(() => {
+    if (wasPlanetMenuOpen.current && !planetMenuOpen && restorePlanetFocusOnClose.current) {
+      planetSelectRef.current?.focus();
+    }
+    if (!planetMenuOpen) restorePlanetFocusOnClose.current = false;
+    wasPlanetMenuOpen.current = planetMenuOpen;
+  }, [planetMenuOpen]);
+
+  const closePlanetMenu = () => {
+    if (!planetMenuOpen) return;
+    restorePlanetFocusOnClose.current = true;
+    onPlanetMenuToggle();
+  };
+
+  const dismissPlanetMenuForNavigation = () => {
+    restorePlanetFocusOnClose.current = false;
+  };
+
+  const togglePlanetMenu = () => {
+    if (planetMenuOpen) restorePlanetFocusOnClose.current = false;
+    onPlanetMenuToggle();
+  };
+
+  const selectPlanet = (planetId: string) => {
+    restorePlanetFocusOnClose.current = true;
+    onPlanetChange(planetId);
+  };
+
   return (
     <header className="asterion-header" data-faction={factionId} data-qa-header>
       <section className="asterion-header__planet-module">
@@ -56,7 +89,10 @@ export function AsterionHeader({
           <button
             className="asterion-header__planet-world"
             type="button"
-            onClick={() => onRouteChange('planet')}
+            onClick={() => {
+              dismissPlanetMenuForNavigation();
+              onRouteChange('planet');
+            }}
             aria-label={`Открыть ${currentPlanet.name}`}
             data-qa-planet-home
           >
@@ -72,7 +108,10 @@ export function AsterionHeader({
                 title={zoneMeta[zone].title}
                 aria-label={zoneMeta[zone].title}
                 data-qa-zone={zone}
-                onClick={() => onZoneChange(zone)}
+                onClick={() => {
+                  dismissPlanetMenuForNavigation();
+                  onZoneChange(zone);
+                }}
               >
                 <HeaderGameIcon kind={zone} />
               </button>
@@ -82,9 +121,16 @@ export function AsterionHeader({
 
         <div className="asterion-header__planet-control">
           <button
+            ref={planetSelectRef}
             className="asterion-header__planet-select"
             type="button"
-            onClick={onPlanetMenuToggle}
+            onClick={togglePlanetMenu}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                closePlanetMenu();
+              }
+            }}
             aria-label={`Выбор планеты: ${currentPlanet.name}, координаты ${currentPlanet.coords}. Планета выбрана`}
             aria-expanded={planetMenuOpen}
             aria-controls="asterion-header-planet-list"
@@ -107,7 +153,18 @@ export function AsterionHeader({
         </div>
 
         {planetMenuOpen ? (
-          <div className="asterion-header__planet-list planet-list-popover" id="asterion-header-planet-list" role="listbox" aria-label="Выбор планеты">
+          <div
+            className="asterion-header__planet-list planet-list-popover"
+            id="asterion-header-planet-list"
+            role="listbox"
+            aria-label="Выбор планеты"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                closePlanetMenu();
+              }
+            }}
+          >
             {planets.map((planet) => (
               <button
                 key={planet.id}
@@ -116,7 +173,7 @@ export function AsterionHeader({
                 role="option"
                 aria-selected={planet.id === currentPlanet.id}
                 data-qa-planet-option={planet.id}
-                onClick={() => onPlanetChange(planet.id)}
+                onClick={() => selectPlanet(planet.id)}
               >
                 <img src={planet.art} alt="" />
                 <span><strong>{planet.name}</strong><small>{planet.coords} · {planet.status}</small></span>
@@ -143,7 +200,10 @@ export function AsterionHeader({
                 aria-current={isActive ? 'page' : undefined}
                 data-route={id}
                 data-qa-route={id}
-                onClick={() => onRouteChange(id)}
+                onClick={() => {
+                  dismissPlanetMenuForNavigation();
+                  onRouteChange(id);
+                }}
               >
                 <HeaderNavigationIcon kind={icon} factionId={factionId} />
                 <span>{label}</span>
@@ -191,7 +251,10 @@ export function AsterionHeader({
                 className={isActive ? 'active' : ''}
                 data-route={id}
                 data-qa-route={id}
-                onClick={() => onRouteChange(id)}
+                onClick={() => {
+                  dismissPlanetMenuForNavigation();
+                  onRouteChange(id);
+                }}
               >
                 <HeaderNavigationIcon kind={icon} factionId={factionId} />
                 <span>{label}</span>

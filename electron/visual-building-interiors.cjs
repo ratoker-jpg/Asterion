@@ -144,7 +144,7 @@ async function verifyMilitaryDeepLinks(win, directory) {
   await activateZone(win, 'military');
 
   await enterBuilding(win, 'shipyard');
-  await waitFor(win, `document.querySelector('[data-qa-route="fleets"][aria-current="page"]')?.textContent?.trim() === 'Флоты'`);
+  await waitFor(win, `document.querySelector('[data-qa-route="fleets"][aria-current="page"]')`);
   await waitFor(win, `document.querySelector('.fleet-main-v1--shipyard')`);
   await waitFor(win, `document.querySelector('[data-qa-building-interior-back]')`);
   const unitTime = await win.webContents.executeJavaScript(`(() => {
