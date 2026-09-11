@@ -38,12 +38,12 @@ import {
   SCIENCE_RUNTIME_CHANGED_EVENT,
   SCIENCE_START_REQUEST_EVENT,
   previewScience,
-  readScienceRuntimeSnapshot,
   reconcileScienceState,
   type ScienceId,
   type ScienceRuntimeSnapshot,
   type ScienceState,
 } from './domain/science/runtime.ts';
+import { readScienceSnapshot } from './application/science.ts';
 import { sciencesForSection } from './domain/science/selectors.ts';
 import type { ScienceCatalogDefinition, ScienceSectionId } from './domain/science/types.ts';
 
@@ -74,7 +74,7 @@ const SCIENCE_ARTS: Record<string, string> = {
 
 export function ScienceView() {
   const [section, setSection] = useState<ScienceSectionId>('basic');
-  const [runtime, setRuntime] = useState<ScienceRuntimeSnapshot>(() => readScienceRuntimeSnapshot());
+  const [runtime, setRuntime] = useState<ScienceRuntimeSnapshot>(() => readScienceSnapshot());
   const [now, setNow] = useState(() => Date.now());
   const [pendingCancellation, setPendingCancellation] = useState<ScienceState['queue'][number] | null>(null);
   const confirmYesRef = useRef<HTMLButtonElement>(null);
@@ -90,7 +90,7 @@ export function ScienceView() {
       const next = (event as CustomEvent<ScienceRuntimeSnapshot>).detail;
       if (next?.science && next.wallet) setRuntime(next);
     };
-    const onStorage = () => setRuntime(readScienceRuntimeSnapshot());
+    const onStorage = () => setRuntime(readScienceSnapshot());
     window.addEventListener(SCIENCE_RUNTIME_CHANGED_EVENT, onRuntimeChanged);
     window.addEventListener('storage', onStorage);
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
