@@ -118,11 +118,11 @@
   height:90px;
   min-width:0;
   display:grid;
-  grid-template-columns:44px minmax(0,1fr) 34px;
+  grid-template-columns:44px minmax(0,1fr) 38px;
   grid-template-rows:1fr;
   align-items:start;
   gap:8px;
-  padding:10px 10px 19px 12px;
+  padding:10px 10px 12px 12px;
   border:1px solid var(--header-border);
   border-radius:22px;
   background:linear-gradient(180deg,rgba(5,31,45,.98),rgba(2,16,26,.98));
@@ -141,10 +141,16 @@
 .asterion-header__planet-select img{width:44px;height:44px;object-fit:contain;filter:drop-shadow(0 0 10px rgba(50,201,255,.38))}
 .asterion-header__planet-select-copy{min-width:0;display:block;padding-top:1px}
 .asterion-header__planet-select-copy small{display:block;color:#69cfe7;font-size:9px;font-weight:800;letter-spacing:1.15px;line-height:1;white-space:nowrap}
-.asterion-header__planet-select-copy strong{display:block;margin-top:5px;color:#f2fcff;font-size:18px;line-height:1;white-space:nowrap}
+.asterion-header__planet-name-row{display:flex;align-items:center;min-width:0;gap:6px;margin-top:5px}
+.asterion-header__planet-name-row strong{display:block;min-width:0;color:#f2fcff;font-size:18px;line-height:1;white-space:nowrap}
+.asterion-header__planet-selected-mark{flex:0 0 18px;width:18px;height:18px;display:grid;place-items:center;border:1px solid rgba(83,239,173,.72);border-radius:50%;background:rgba(21,105,75,.28);color:#6ef1b4;font-size:12px;font-weight:900;line-height:1;box-shadow:0 0 10px rgba(61,235,164,.24),inset 0 0 8px rgba(86,255,181,.12)}
 .asterion-header__planet-select-copy em{display:inline-block;margin-top:4px;padding:2px 6px;border-radius:3px;background:#f2fcff;color:#06202d;font-style:normal;font-size:9px;font-weight:900;line-height:1;letter-spacing:.15px;white-space:nowrap}
-.asterion-header__planet-select i{width:34px;height:40px;display:grid;place-items:center;align-self:center;border:1px solid rgba(76,215,244,.6);border-radius:8px;background:rgba(4,41,55,.7);font-style:normal;color:#69e7ff;font-size:21px;line-height:1;text-align:center}
-.asterion-header__planet-selected{position:absolute;left:12px;bottom:7px;display:block;color:#6ef1b4;font-size:8px;font-weight:800;letter-spacing:1px;line-height:1;white-space:nowrap}
+.asterion-header__planet-toggle{position:relative;width:38px;height:42px;display:grid;place-items:center;align-self:center;border:1px solid rgba(76,215,244,.68);border-radius:11px;background:linear-gradient(180deg,rgba(8,61,78,.86),rgba(3,29,42,.92));box-shadow:inset 0 1px 0 rgba(144,241,255,.14),0 0 12px rgba(0,189,236,.1);transition:border-color .15s ease,background .15s ease,box-shadow .15s ease}
+.asterion-header__planet-toggle::after{content:"";position:absolute;left:7px;right:7px;top:7px;height:1px;background:rgba(126,238,255,.32);box-shadow:0 0 7px rgba(80,220,255,.3)}
+.asterion-header__planet-toggle>span{width:10px;height:10px;border-right:2px solid #72eaff;border-bottom:2px solid #72eaff;transform:translateY(-3px) rotate(45deg);transition:transform .15s ease;filter:drop-shadow(0 0 4px rgba(75,225,255,.42))}
+.asterion-header__planet-toggle.is-open>span{transform:translateY(3px) rotate(225deg)}
+.asterion-header__planet-select:hover .asterion-header__planet-toggle,
+.asterion-header__planet-select:focus-visible .asterion-header__planet-toggle{border-color:#6fe8ff;background:linear-gradient(180deg,rgba(10,77,98,.94),rgba(4,39,54,.96));box-shadow:inset 0 1px 0 rgba(162,246,255,.18),0 0 16px rgba(0,205,255,.22)}
 .asterion-header__planet-list{
   position:absolute;
   z-index:240;
@@ -227,6 +233,7 @@
 }
 .asterion-header__resource-icon svg,
 .asterion-header__resource-icon img{width:50px;height:50px}
+.asterion-header__resource--metal .asterion-header__resource-icon img{width:70px;height:70px}
 .asterion-header__resource--metal .asterion-header__resource-icon{color:#55e6ff}
 .asterion-header__resource--mineral .asterion-header__resource-icon{color:#a6adff}
 .asterion-header__resource--gas .asterion-header__resource-icon{color:#4df0a7}
@@ -295,10 +302,11 @@
   height:var(--hud-primary-navigation-height);
   display:grid;
   grid-template-columns:repeat(6,minmax(0,1fr));
-  overflow:visible;
+  overflow:hidden;
   border:1px solid var(--header-rail-border);
+  border-radius:22px;
   background:linear-gradient(180deg,rgba(5,28,40,.98),rgba(2,14,23,.99));
-  clip-path:polygon(15px 0,100% 0,100% calc(100% - 15px),calc(100% - 15px) 100%,0 100%,0 15px);
+  clip-path:none;
 }
 .asterion-header__primary-navigation button{
   position:relative;

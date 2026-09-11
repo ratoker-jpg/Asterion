@@ -85,6 +85,7 @@ export function AsterionHeader({
             className="asterion-header__planet-select"
             type="button"
             onClick={onPlanetMenuToggle}
+            aria-label={`Выбор планеты: ${currentPlanet.name}, координаты ${currentPlanet.coords}. Планета выбрана`}
             aria-expanded={planetMenuOpen}
             aria-controls="asterion-header-planet-list"
             data-qa-current-planet
@@ -95,11 +96,13 @@ export function AsterionHeader({
             <img src={currentPlanet.art} alt={currentPlanet.name} draggable={false} />
             <span className="asterion-header__planet-select-copy">
               <small>ВЫБОР ПЛАНЕТЫ</small>
-              <strong>{currentPlanet.name}</strong>
+              <span className="asterion-header__planet-name-row">
+                <strong>{currentPlanet.name}</strong>
+                <b className="asterion-header__planet-selected-mark" aria-hidden="true">✓</b>
+              </span>
               <em>{currentPlanet.coords}</em>
             </span>
-            <i aria-hidden="true">{planetMenuOpen ? '⌃' : '⌄'}</i>
-            <small className="asterion-header__planet-selected">✓ ВЫБРАНА</small>
+            <span className={`asterion-header__planet-toggle ${planetMenuOpen ? 'is-open' : ''}`} aria-hidden="true"><span /></span>
           </button>
         </div>
 
