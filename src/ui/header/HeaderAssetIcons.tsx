@@ -1,6 +1,6 @@
 import type { NavigationIconKind } from '../navigation.tsx';
 import type { PlayerFactionId } from '../../domain/profile/types.ts';
-import type { HeaderIconKind } from './types.ts';
+import type { HeaderIconKind, HeaderZoneId } from './types.ts';
 import { NavigationIcon as LegacyNavigationIcon } from './HeaderIcons';
 import metalIcon from '../../assets/ui/header-icons/metal.png';
 import mineralIcon from '../../assets/ui/header-icons/mineral.png';
@@ -50,6 +50,11 @@ function AssetIcon({ src }: { src: string }) {
 /** Global resource and zone icons used by the approved header only. */
 export function HeaderGameIcon({ kind }: { kind: HeaderIconKind }) {
   return <AssetIcon src={GLOBAL_GAME_ICON_ASSETS[kind]} />;
+}
+
+/** Approved transparent zone assets for the large planet scene. */
+export function ApprovedZoneIcon({ kind }: { kind: HeaderZoneId }) {
+  return <img className="asterion-zone-icon" src={GLOBAL_GAME_ICON_ASSETS[kind]} alt="" aria-hidden="true" draggable={false} />;
 }
 
 /** Aegis header pack; other factions keep their existing vector icons for now. */
