@@ -3,6 +3,12 @@
   width: 1.5em;
   height: 1.5em;
   object-fit: contain;
+  transform: scale(var(--asterion-resource-optical-scale, 1));
+  transform-origin: center;
+}
+
+.asterion-resource-icon--metal {
+  --asterion-resource-optical-scale: 1.28;
 }
 
 .resource-zone-income-icon .asterion-resource-icon,

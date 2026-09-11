@@ -2,7 +2,12 @@ import type { NavigationIconKind } from '../navigation.tsx';
 import type { PlayerFactionId } from '../../domain/profile/types.ts';
 import type { HeaderIconKind, HeaderZoneId } from './types.ts';
 import { NavigationIcon as LegacyNavigationIcon } from './HeaderIcons';
-import { RESOURCE_ICON_ASSETS, type ResourceIconKind } from '../resources/resource-assets.ts';
+import {
+  RESOURCE_ICON_ASSETS,
+  RESOURCE_ICON_OPTICAL_SCALES,
+  type ResourceIconKind,
+} from '../resources/resource-assets.ts';
+import '../resources/resource-icons.css';
 import resourceZoneIcon from '../../assets/ui/header-icons/zone-resource.png';
 import industryZoneIcon from '../../assets/ui/header-icons/zone-industry.png';
 import militaryZoneIcon from '../../assets/ui/header-icons/zone-military.png';
@@ -40,14 +45,19 @@ const AEGIS_NAVIGATION_ICON_ASSETS = {
 } satisfies Record<NavigationIconKind, string>;
 
 function AssetIcon({ src, resourceKind }: { src: string; resourceKind?: ResourceIconKind }) {
+  const resourceClasses = resourceKind
+    ? ['asterion-resource-icon', `asterion-resource-icon--${resourceKind}`]
+    : [];
+
   return (
     <img
-      className="asterion-header-icon"
+      className={['asterion-header-icon', ...resourceClasses].join(' ')}
       src={src}
       alt=""
       aria-hidden="true"
       data-qa-resource-kind={resourceKind}
       data-qa-resource-asset={resourceKind ? src : undefined}
+      data-qa-resource-optical-scale={resourceKind ? RESOURCE_ICON_OPTICAL_SCALES[resourceKind] : undefined}
       draggable={false}
     />
   );

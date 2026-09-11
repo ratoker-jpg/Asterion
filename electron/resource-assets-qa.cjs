@@ -18,6 +18,15 @@ const RESOURCE_ASSET_BASE = {
   population: 'population',
   debris: 'debris',
 };
+const RESOURCE_ICON_OPTICAL_SCALES = {
+  metal: 1.28,
+  minerals: 1,
+  gas: 1,
+  energy: 1,
+  population: 1,
+  debris: 1,
+};
+const OPTICAL_SCALE_TOLERANCE = 0.01;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitFor(win, expression, timeoutMs = 10_000) {
@@ -111,14 +120,27 @@ async function readResourceImages(win, scopeSelector) {
   return win.webContents.executeJavaScript(`(() => {
     const root = document.querySelector(${JSON.stringify(scopeSelector)});
     if (!root) return null;
-    return [...root.querySelectorAll('img[data-qa-resource-kind]')].map((image) => ({
-      kind: image.getAttribute('data-qa-resource-kind') || '',
-      asset: image.getAttribute('data-qa-resource-asset') || '',
-      src: image.currentSrc || image.src || '',
-      naturalWidth: image.naturalWidth,
-      width: image.getBoundingClientRect().width,
-      height: image.getBoundingClientRect().height,
-    }));
+    return [...root.querySelectorAll('img[data-qa-resource-kind]')].map((image) => {
+      const style = getComputedStyle(image);
+      const transformValues = style.transform.match(/^matrix\\(([^)]+)\\)$/)?.[1].split(',').map(Number);
+      const transformScaleX = transformValues ? Math.hypot(transformValues[0], transformValues[1]) : 1;
+      const transformScaleY = transformValues ? Math.hypot(transformValues[2], transformValues[3]) : 1;
+      const rect = image.getBoundingClientRect();
+      return {
+        kind: image.getAttribute('data-qa-resource-kind') || '',
+        asset: image.getAttribute('data-qa-resource-asset') || '',
+        declaredOpticalScale: image.getAttribute('data-qa-resource-optical-scale') || '',
+        transform: style.transform,
+        transformScaleX,
+        transformScaleY,
+        src: image.currentSrc || image.src || '',
+        naturalWidth: image.naturalWidth,
+        layoutWidth: image.offsetWidth,
+        layoutHeight: image.offsetHeight,
+        width: rect.width,
+        height: rect.height,
+      };
+    });
   })()`);
 }
 
@@ -136,11 +158,26 @@ function assertResourceImages(label, images, requiredKinds, { exact = false } = 
     const matching = images.filter((image) => image.kind === kind);
     if (!matching.length) throw new Error(`${label}: missing resource kind ${kind} ${JSON.stringify({ availableKinds, images })}`);
     const base = RESOURCE_ASSET_BASE[kind];
+    const expectedOpticalScale = RESOURCE_ICON_OPTICAL_SCALES[kind];
     const pattern = new RegExp(`^${base}(?:-[^/]+)?\\.png$`, 'i');
     for (const image of matching) {
       const asset = assetName(image.asset);
       const source = assetName(image.src);
-      if (!pattern.test(asset) || !pattern.test(source) || asset !== source || image.naturalWidth <= 0 || image.width <= 0 || image.height <= 0) {
+      const declaredOpticalScale = Number(image.declaredOpticalScale);
+      const scaleMatches = (actual) => Number.isFinite(actual) && Math.abs(actual - expectedOpticalScale) <= OPTICAL_SCALE_TOLERANCE;
+      if (
+        !pattern.test(asset) ||
+        !pattern.test(source) ||
+        asset !== source ||
+        image.naturalWidth <= 0 ||
+        image.width <= 0 ||
+        image.height <= 0 ||
+        image.layoutWidth <= 0 ||
+        image.layoutHeight <= 0 ||
+        !scaleMatches(declaredOpticalScale) ||
+        !scaleMatches(image.transformScaleX) ||
+        !scaleMatches(image.transformScaleY)
+      ) {
         throw new Error(`${label}: resource asset contract mismatch ${JSON.stringify({ kind, image, expectedBase: base })}`);
       }
     }

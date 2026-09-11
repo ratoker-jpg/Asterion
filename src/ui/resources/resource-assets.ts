@@ -18,6 +18,16 @@ export const RESOURCE_ICON_ASSETS = {
   debris: debrisIcon,
 } satisfies Record<ResourceIconKind, string>;
 
+/** Optical compensation for transparent padding in the source asset canvases. */
+export const RESOURCE_ICON_OPTICAL_SCALES = {
+  metal: 1.28,
+  minerals: 1,
+  gas: 1,
+  energy: 1,
+  population: 1,
+  debris: 1,
+} satisfies Record<ResourceIconKind, number>;
+
 /** Compatibility adapter for the legacy header spelling `mineral`. */
 export function resolveResourceIconKind(kind: ResourceIconKind | 'mineral'): ResourceIconKind {
   return kind === 'mineral' ? 'minerals' : kind;
