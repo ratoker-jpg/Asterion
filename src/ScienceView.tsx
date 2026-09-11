@@ -246,7 +246,13 @@ function ScienceQueueCard({ task, now, onCancel }: { task: ScienceState['queue']
       <div>
         <strong className="utility-section-title">{science.name}</strong>
         <span className="utility-secondary">Уровень {task.fromLevel} → {task.toLevel}</span>
-        <time className="utility-data-text" data-qa-science-remaining>{formatDuration(Math.max(0, task.finishAt - now))}</time>
+        <time
+          className="utility-data-text"
+          data-qa-science-remaining
+          data-qa-science-duration-ms={task.durationMs}
+        >
+          {formatDuration(Math.max(0, task.finishAt - now))}
+        </time>
       </div>
       <button
         type="button"
@@ -319,7 +325,10 @@ function ScienceRow({
           <ResourceCost kind="K" label="Минералы" value={preview.cost.minerals} available={runtime.wallet.minerals} />
           <ResourceCost kind="G" label="Газ" value={preview.cost.gas} available={runtime.wallet.gas} />
           {preview.cost.energy > 0 ? <ResourceCost kind="E" label="Энергия" value={preview.cost.energy} available={runtime.wallet.energy} /> : null}
-          <span className="science-time-v2"><small className="utility-secondary">ВРЕМЯ</small><strong className="utility-data-text">{formatDuration(preview.durationMs)}</strong></span>
+          <span className="science-time-v2">
+            <small className="utility-secondary">ВРЕМЯ</small>
+            <strong className="utility-data-text" data-qa-science-duration-ms={preview.durationMs}>{formatDuration(preview.durationMs)}</strong>
+          </span>
         </div>
 
         <div className="science-requirements-v2">

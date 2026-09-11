@@ -373,6 +373,7 @@ function readSave(): SaveState {
       laboratoryLevel: buildings.research,
       mode: RUNTIME_MODE,
       testTimeScale: resolveTestTimeScale(),
+      schemaVersion: numberOr(parsed.schemaVersion, 0),
     });
     const combat = migrateBattleHistory(parsed.combat);
     const operations = migrateOperationsState(parsed.operations);
@@ -607,8 +608,13 @@ export function App() {
         setState(nextState);
       }
       const cascadedCount = Math.max(0, (result?.canceledTasks.length ?? 0) - 1);
+      const unreimbursedCount = result?.ok
+        ? Math.max(0, result.canceledTasks.length - result.refundPercents.length)
+        : 0;
       setNotice(result?.ok
-        ? `Исследование отменено.${cascadedCount > 0 ? ` Каскадно отменено ещё ${cascadedCount} зависимых исследований.` : ''} ${cascadedCount > 0 ? 'Для каждого отменённого задания рассчитан отдельный возврат 60–80%.' : `Возвращено ${result.refundPercent}% сохранённой стоимости.`}`
+        ? `Исследование отменено.${cascadedCount > 0 ? ` Каскадно отменено ещё ${cascadedCount} зависимых исследований.` : ''} ${cascadedCount > 0
+          ? `Для ${result.refundPercents.length} отменённых заданий рассчитан отдельный возврат 60–80%.${unreimbursedCount > 0 ? ` ${unreimbursedCount} старых заданий без подтверждённой стоимости возвращены без компенсации.` : ''}`
+          : `Возвращено ${result.refundPercent}% сохранённой стоимости.`}`
         : result?.reason ?? 'Исследование недоступно для отмены.');
     };
     window.addEventListener(SCIENCE_CANCEL_REQUEST_EVENT, onScienceCancelRequest);

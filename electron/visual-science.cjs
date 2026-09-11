@@ -11,9 +11,11 @@ const OUTPUT = path.join(ROOT, 'artifacts-pass1', 'science-qa');
 const SAVE_KEY = 'asterion.vertical-slice.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const SCIENCE_ID = 1;
-const SCIENCE_DURATION_MS = 2 * 60 * 60 * 1000 + 8 * 60 * 1000 + 59 * 1000;
+// Science 1 at level 1 with laboratory level 1: 45,000 ms × 95%.
+const SCIENCE_DURATION_MS = 42_750;
 const SCIENCE_CANCEL_SOURCE_URL = 'https://github.com/ratoker-jpg/Nemexia_auto_v2/blob/main/saved_pages/%D0%BD%D0%B0%D1%83%D0%BA%D0%B0/page_2026-09-05_22-49-40.html';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const skipScreenshots = process.env.ASTERION_SKIP_SCREENSHOTS === '1';
 
 async function waitFor(win, expression, timeoutMs = 8000) {
   const started = Date.now();
@@ -50,6 +52,10 @@ async function click(win, selector) {
 }
 
 async function capture(win, directory, name, selector = null) {
+  if (skipScreenshots) {
+    console.log(`[science-qa] screenshot skipped: ${name}`);
+    return;
+  }
   if (selector) await win.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(selector)})?.scrollIntoView({ block: 'center', inline: 'nearest' })`);
   else await win.webContents.executeJavaScript('window.scrollTo(0, 0)');
   await settle(win);
@@ -62,7 +68,7 @@ async function capture(win, directory, name, selector = null) {
 }
 
 async function seed(win, science) {
-  await waitFor(win, `document.querySelector('.utility-navigation')`);
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   const ok = await win.webContents.executeJavaScript(`(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
     const planet = save?.planets?.['helion-01'];
@@ -100,6 +106,7 @@ async function readScreen(win) {
       root: Boolean(root),
       queue: document.querySelector('[data-qa-science-queue-count]')?.textContent?.trim() ?? '',
       level: row?.querySelector('[data-qa-science-level]')?.textContent?.replace(/\\s+/g, ' ').trim() ?? '',
+      previewDurationMs: Number(row?.querySelector('[data-qa-science-duration-ms]')?.getAttribute('data-qa-science-duration-ms') ?? 0),
       levelProgress: {
         current: row?.querySelector('[data-qa-science-level-progress]')?.getAttribute('data-qa-current-level') ?? '',
         max: row?.querySelector('[data-qa-science-level-progress]')?.getAttribute('data-qa-max-level') ?? '',
@@ -115,6 +122,7 @@ async function readScreen(win) {
       scienceLevel: save.science?.levels?.[1] ?? -1,
       queueIds: (save.science?.queue ?? []).map((task) => task.id),
       queueTasks: (save.science?.queue ?? []).map((task) => ({ id: task.id, startedAt: task.startedAt, finishAt: task.finishAt, durationMs: task.durationMs, cost: task.cost })),
+      queueDurations: [...document.querySelectorAll('[data-qa-science-queue-task] [data-qa-science-duration-ms]')].map((element) => Number(element.getAttribute('data-qa-science-duration-ms') ?? 0)),
       wallet: { metal: save.metal, minerals: save.minerals, gas: save.gas, energy: save.planets?.['helion-01']?.energy },
       documentScroll: document.documentElement.scrollHeight > window.innerHeight + 2,
       nestedVerticalScroll: ['.science-sidebar-v2', '.science-main-v2', '.science-catalog-v2'].some((selector) => [...document.querySelectorAll(selector)].some((element) => {
@@ -129,6 +137,7 @@ async function readScreen(win) {
         return channels.length >= 3 && channels[0] >= 200 && channels[1] < 150 && channels[2] < 150;
       })(),
       activeScienceCancelId: document.activeElement?.getAttribute('data-qa-science-cancel') ?? '',
+      activeScienceAction: Boolean(document.activeElement?.matches('[data-qa-science-action]')),
       workspaceWidth: workspace?.getBoundingClientRect().width ?? 0,
     };
   })()`);
@@ -136,7 +145,7 @@ async function readScreen(win) {
 
 async function assertInitial(win, label) {
   const screen = await readScreen(win);
-  if (!screen.root || screen.queue !== '0/3' || screen.actionDisabled || screen.levelProgress.max !== '10' || screen.laboratory !== 'УРОВЕНЬ 1 / 20' || screen.laboratorySpeed !== '−5% времени за уровень' || screen.fixtureText || screen.horizontalOverflow || screen.nestedVerticalScroll) {
+  if (!screen.root || screen.queue !== '0/3' || screen.actionDisabled || screen.previewDurationMs !== SCIENCE_DURATION_MS || screen.queueDurations.length !== 0 || screen.levelProgress.max !== '10' || screen.laboratory !== 'УРОВЕНЬ 1 / 20' || screen.laboratorySpeed !== '−5% времени за уровень' || screen.fixtureText || screen.horizontalOverflow || screen.nestedVerticalScroll) {
     throw new Error(`${label}: initial Science state mismatch ${JSON.stringify(screen)}`);
   }
 }
@@ -166,13 +175,36 @@ async function runViewport(width, height) {
   await assertInitial(win, label);
   await capture(win, directory, 'science-empty-queue');
 
+  const beforeFirst = await readScreen(win);
   await click(win, '[data-qa-science-id="1"] [data-qa-science-action]');
   await waitFor(win, `document.querySelector('[data-qa-science-queue-count]')?.textContent === '1/3'`);
   const afterOne = await readScreen(win);
-  if (afterOne.scienceQueueLength !== 1 || afterOne.horizontalOverflow) throw new Error(`${label}: first research was not persisted atomically ${JSON.stringify(afterOne)}`);
+  if (afterOne.scienceQueueLength !== 1 || afterOne.queueDurations[0] !== beforeFirst.previewDurationMs || afterOne.horizontalOverflow) throw new Error(`${label}: first research was not persisted atomically or duration diverged ${JSON.stringify({ beforeFirst, afterOne })}`);
   await capture(win, directory, 'science-one-queued', '[data-qa-science-id="1"]');
 
+  const activeSnapshot = afterOne.queueTasks[0];
+  const labChanged = await win.webContents.executeJavaScript(`(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
+    const planet = save?.planets?.['helion-01'];
+    if (!planet?.buildings) return false;
+    planet.buildings.research = 20;
+    localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    return true;
+  })()`);
+  if (!labChanged || !activeSnapshot) throw new Error(`${label}: could not prepare active queue reload snapshot`);
+  await reload(win);
+  await openScience(win);
+  const afterActiveReload = await readScreen(win);
+  const reloadedActiveTask = afterActiveReload.queueTasks.find((task) => task.id === activeSnapshot.id);
+  if (afterActiveReload.queue !== '1/3' || !reloadedActiveTask || reloadedActiveTask.startedAt !== activeSnapshot.startedAt || reloadedActiveTask.finishAt !== activeSnapshot.finishAt || reloadedActiveTask.durationMs !== activeSnapshot.durationMs || afterActiveReload.queueDurations[0] !== activeSnapshot.durationMs) {
+    throw new Error(`${label}: active science snapshot changed after laboratory upgrade and reload ${JSON.stringify({ activeSnapshot, afterActiveReload, reloadedActiveTask })}`);
+  }
+  await capture(win, directory, 'science-active-reload', '[data-qa-science-queue]');
+
   await click(win, '[data-qa-science-id="1"] [data-qa-science-action]');
+  await waitFor(win, `document.querySelector('[data-qa-science-queue-count]')?.textContent === '2/3'`);
+  const afterTwo = await readScreen(win);
+  if (afterTwo.scienceQueueLength !== 2 || afterTwo.queueDurations.length !== 2 || afterTwo.queueDurations.some((duration) => duration <= 0) || afterTwo.horizontalOverflow) throw new Error(`${label}: two-task queue mismatch ${JSON.stringify(afterTwo)}`);
   await click(win, '[data-qa-science-id="1"] [data-qa-science-action]');
   await waitFor(win, `document.querySelector('[data-qa-science-queue-count]')?.textContent === '3/3'`);
   const full = await readScreen(win);
@@ -190,12 +222,26 @@ async function runViewport(width, height) {
 
   await click(win, '[data-qa-science-queue-task]:first-of-type [data-qa-science-cancel]');
   await waitFor(win, `document.querySelector('[data-qa-science-cancel-confirm][role="alertdialog"]')`);
+  await settle(win);
   const dialog = await win.webContents.executeJavaScript(`(() => ({
     hasYes: Boolean(document.querySelector('[data-qa-science-cancel-yes]')),
     modal: document.querySelector('[data-qa-science-cancel-confirm]')?.getAttribute('aria-modal'),
-    source: document.querySelector('[data-qa-science-cancel-confirm] a')?.href
+    source: document.querySelector('[data-qa-science-cancel-confirm] a')?.href,
+    initialFocus: document.activeElement === document.querySelector('[data-qa-science-cancel-yes]'),
   }))()`);
-  if (!dialog.hasYes || dialog.modal !== 'true' || dialog.source !== SCIENCE_CANCEL_SOURCE_URL) throw new Error(`${label}: science cancel dialog accessibility/source mismatch ${JSON.stringify(dialog)}`);
+  if (!dialog.hasYes || dialog.modal !== 'true' || dialog.source !== SCIENCE_CANCEL_SOURCE_URL || !dialog.initialFocus) throw new Error(`${label}: science cancel dialog accessibility/source/focus mismatch ${JSON.stringify(dialog)}`);
+  const tabLoop = await win.webContents.executeJavaScript(`(() => {
+    const yes = document.querySelector('[data-qa-science-cancel-yes]');
+    const no = document.querySelector('[data-qa-science-cancel-no]');
+    if (!yes || !no) return { forward: false, backward: false };
+    no.focus();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    const forward = document.activeElement === yes;
+    yes.focus();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }));
+    return { forward, backward: document.activeElement === no };
+  })()`);
+  if (!tabLoop.forward || !tabLoop.backward) throw new Error(`${label}: science cancel dialog did not trap Tab focus ${JSON.stringify(tabLoop)}`);
   await win.webContents.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
   await settle(win);
   const dialogStillOpen = await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-science-cancel-confirm]'))`);
@@ -222,7 +268,7 @@ async function runViewport(width, height) {
     const delta = afterCancel.wallet[key] - beforeCancel.wallet[key];
     return delta >= refundBounds.min[key] && delta <= refundBounds.max[key];
   });
-  if (!validRefund || afterCancel.scienceQueueLength !== 0 || afterCancel.queueIds.length !== 0 || afterCancel.nestedVerticalScroll || !afterCancel.documentScroll) throw new Error(`${label}: science cascade refund/scroll mismatch ${JSON.stringify({ beforeCancel, afterCancel, refundBounds })}`);
+  if (!validRefund || afterCancel.scienceQueueLength !== 0 || afterCancel.queueIds.length !== 0 || !afterCancel.activeScienceAction || afterCancel.nestedVerticalScroll || !afterCancel.documentScroll) throw new Error(`${label}: science cascade refund/focus/scroll mismatch ${JSON.stringify({ beforeCancel, afterCancel, refundBounds })}`);
   await capture(win, directory, 'science-cancelled-queue', '[data-qa-science-queue]');
 
   await reload(win);
@@ -232,13 +278,14 @@ async function runViewport(width, height) {
   await capture(win, directory, 'science-reload-queue');
   stage('reload queue');
 
+  const offlineFinishAt = Date.now() - 5_000;
   const completedQueue = [{
     id: 'offline-complete',
     scienceId: 1,
     fromLevel: 0,
     toLevel: 1,
-    startedAt: Date.now() - SCIENCE_DURATION_MS - 5_000,
-    finishAt: Date.now() - 5_000,
+    startedAt: offlineFinishAt - SCIENCE_DURATION_MS,
+    finishAt: offlineFinishAt,
     durationMs: SCIENCE_DURATION_MS,
     cost: { metal: 64_000, minerals: 32_000, gas: 5_000, energy: 0 },
   }];
@@ -248,6 +295,10 @@ async function runViewport(width, height) {
   const offline = await readScreen(win);
   if (offline.scienceQueueLength !== 0 || offline.scienceLevel !== 1 || offline.level !== 'УР. 1 / 10' || offline.levelProgress.max !== '10') throw new Error(`${label}: offline completion mismatch ${JSON.stringify(offline)}`);
   await capture(win, directory, 'science-offline-completed', '[data-qa-science-id="1"]');
+  await reload(win);
+  await openScience(win);
+  const offlineReload = await readScreen(win);
+  if (offlineReload.scienceQueueLength !== 0 || offlineReload.scienceLevel !== 1 || offlineReload.queue !== '0/3') throw new Error(`${label}: offline completion was not exact-once after reload ${JSON.stringify(offlineReload)}`);
   stage('offline completion');
 
   await seed(win, { level: 0, queue: [] });

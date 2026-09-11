@@ -5,6 +5,7 @@ import { SCIENCE_CATALOG, SCIENCE_SECTIONS } from './catalog.ts';
 import {
   SCIENCE_QUEUE_CAPACITY,
   SCIENCE_CANCEL_REFUND_SOURCE_URL,
+  SCIENCE_SAVE_SCHEMA_VERSION,
   calculateScienceDurationMs,
   cancelScienceResearch,
   createDefaultScienceState,
@@ -151,6 +152,31 @@ test('queued duration is a snapshot and remaining time equals duration at starte
   assert.notEqual(second.task!.durationMs, first.task!.durationMs);
 });
 
+test('current-save migration preserves queued duration snapshots across laboratory and Test Mode changes', () => {
+  const productionStart = start({ ...context(createDefaultScienceState(), 1, 10_000), mode: 'production' }, 1, 'modern-production-snapshot');
+  assert.equal(productionStart.ok, true);
+  const productionReload = migrateScienceState(productionStart.state, {
+    schemaVersion: SCIENCE_SAVE_SCHEMA_VERSION,
+    laboratoryLevel: 20,
+    mode: 'production',
+  });
+  assert.equal(productionReload.queue[0]?.durationMs, productionStart.task?.durationMs);
+  assert.equal(productionReload.queue[0]?.startedAt, productionStart.task?.startedAt);
+  assert.equal(productionReload.queue[0]?.finishAt, productionStart.task?.finishAt);
+
+  const testStart = start({ ...context(createDefaultScienceState(), 1, 10_000), mode: 'test', testTimeScale: 1 }, 1, 'modern-test-snapshot');
+  assert.equal(testStart.ok, true);
+  const testReload = migrateScienceState(testStart.state, {
+    schemaVersion: SCIENCE_SAVE_SCHEMA_VERSION,
+    laboratoryLevel: 20,
+    mode: 'test',
+    testTimeScale: 500,
+  });
+  assert.equal(testReload.queue[0]?.durationMs, testStart.task?.durationMs);
+  assert.equal(testReload.queue[0]?.startedAt, testStart.task?.startedAt);
+  assert.equal(testReload.queue[0]?.finishAt, testStart.task?.finishAt);
+});
+
 test('science cancellation cascades dependent successors and refunds each saved cost with its own 60–80% roll', () => {
   let current = context(createDefaultScienceState(), 1, 10_000);
   for (const id of ['cancel-1', 'cancel-2', 'cancel-3']) {
@@ -210,6 +236,34 @@ test('science cancellation keeps independent queued sciences while dropping only
   assert.deepEqual(canceled.state.queue.map((task) => task.id), ['science-independent']);
   assert.deepEqual(canceled.canceledTasks.map((task) => task.id), ['science-chain-first', 'science-chain-dependent']);
   assert.deepEqual(canceled.refundPercents, [60, 60]);
+});
+
+test('mixed cascade keeps independent work and does not claim a refund for damaged dependent saves', () => {
+  let current = context(createDefaultScienceState(), 1, 10_000);
+  for (const id of ['mixed-first', 'mixed-second', 'mixed-third']) {
+    const transition = start(current, 1, id);
+    assert.equal(transition.ok, true);
+    current = { ...current, state: transition.state, wallet: transition.wallet };
+  }
+  const damagedQueue = current.state.queue.map((task, index) => index === 2
+    ? { ...task, cost: { ...task.cost, energy: Number.NaN }, refundEligible: false }
+    : task);
+  const canceled = cancelScienceResearch({
+    ...current,
+    state: { ...current.state, queue: damagedQueue },
+    rng: () => 0,
+  }, 'mixed-second');
+
+  assert.equal(canceled.ok, true);
+  assert.deepEqual(canceled.state.queue.map((task) => task.id), ['mixed-first']);
+  assert.deepEqual(canceled.canceledTasks.map((task) => task.id), ['mixed-second', 'mixed-third']);
+  assert.deepEqual(canceled.refundPercents, [60]);
+  assert.deepEqual(canceled.refund, {
+    metal: Math.floor(damagedQueue[1].cost.metal * 0.6),
+    minerals: Math.floor(damagedQueue[1].cost.minerals * 0.6),
+    gas: Math.floor(damagedQueue[1].cost.gas * 0.6),
+    energy: Math.floor(damagedQueue[1].cost.energy * 0.6),
+  });
 });
 
 test('science cancellation source and integer boundary rolls are explicit', () => {
