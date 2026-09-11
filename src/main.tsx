@@ -20,6 +20,7 @@ import './single-planet-v5.css';
 import './ui/header/header.tokens.css';
 import './ui/header/header.theme.css';
 import './asterion-header.css';
+import './ui/header/header.test-mode.css';
 import './resource-zone.css';
 import './web-preview.css';
 import './shipyard-workspace.css';

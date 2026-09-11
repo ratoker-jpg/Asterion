@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { GameIcon } from './HeaderIcons';
+import { HeaderGameIcon } from './HeaderAssetIcons';
 import type { HeaderResourceModel } from './types.ts';
 
 function formatNumber(value: number) {
@@ -33,7 +33,7 @@ export function ResourceChip({ kind, label, value, capacity, showCapacity = fals
       data-qa-resource-chip={kind}
       aria-describedby={tooltipId}
     >
-      <span className="asterion-header__resource-icon"><GameIcon kind={kind} /></span>
+      <span className="asterion-header__resource-icon"><HeaderGameIcon kind={kind} /></span>
       <span className="asterion-header__resource-text">
         <small>{label}</small>
         <strong>{showCapacity && capacity ? `${formatNumber(value)} / ${formatNumber(capacity)}` : formatNumber(value)}</strong>

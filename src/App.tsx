@@ -14,6 +14,7 @@ import {
   type AppRoute,
 } from './ui/navigation.tsx';
 import { AsterionHeader } from './ui/header/AsterionHeader';
+import { ApprovedZoneIcon } from './ui/header/HeaderAssetIcons';
 import { GameIcon } from './ui/header/HeaderIcons';
 import {
   FLEET_CONSTRUCTION_REQUEST_EVENT,
@@ -1594,7 +1595,7 @@ export function App() {
                       style={{ '--zone-accent': zoneMeta[item].accent } as CSSProperties}
                       onClick={() => chooseZone(item)}
                     >
-                      <span className="zone-hotspot__icon"><GameIcon kind={item} /></span>
+                      <span className="zone-hotspot__icon"><ApprovedZoneIcon kind={item} /></span>
                       <span className="zone-hotspot__label"><strong>{zoneMeta[item].title.replace(' ЗОНА', '')}</strong><small>ЗОНА</small></span>
                     </button>
                   ))}

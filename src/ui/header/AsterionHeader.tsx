@@ -1,4 +1,4 @@
-import { NavigationIcon } from './HeaderIcons';
+import { HeaderGameIcon, HeaderNavigationIcon } from './HeaderAssetIcons';
 import { ResourceChip } from './ResourceChip';
 import {
   PRIMARY_NAVIGATION,
@@ -74,7 +74,7 @@ export function AsterionHeader({
                 data-qa-zone={zone}
                 onClick={() => onZoneChange(zone)}
               >
-                <NavigationZoneIcon zone={zone} />
+                <HeaderGameIcon kind={zone} />
               </button>
             );
           })}
@@ -85,6 +85,7 @@ export function AsterionHeader({
             className="asterion-header__planet-select"
             type="button"
             onClick={onPlanetMenuToggle}
+            aria-label={`Выбор планеты: ${currentPlanet.name}, координаты ${currentPlanet.coords}. Планета выбрана`}
             aria-expanded={planetMenuOpen}
             aria-controls="asterion-header-planet-list"
             data-qa-current-planet
@@ -93,11 +94,15 @@ export function AsterionHeader({
             data-planet-coords={currentPlanet.coords}
           >
             <img src={currentPlanet.art} alt={currentPlanet.name} draggable={false} />
-            <span>
-              <small>ТЕКУЩАЯ ПЛАНЕТА</small>
-              <strong>{currentPlanet.name} <em>{currentPlanet.coords}</em></strong>
+            <span className="asterion-header__planet-select-copy">
+              <small>ВЫБОР ПЛАНЕТЫ</small>
+              <span className="asterion-header__planet-name-row">
+                <strong>{currentPlanet.name}</strong>
+                <b className="asterion-header__planet-selected-mark" aria-hidden="true">✓</b>
+              </span>
+              <em>{currentPlanet.coords}</em>
             </span>
-            <i aria-hidden="true">{planetMenuOpen ? '⌃' : '⌄'}</i>
+            <span className={`asterion-header__planet-toggle ${planetMenuOpen ? 'is-open' : ''}`} aria-hidden="true"><span /></span>
           </button>
         </div>
 
@@ -140,7 +145,7 @@ export function AsterionHeader({
                 data-qa-route={id}
                 onClick={() => onRouteChange(id)}
               >
-                <NavigationIcon kind={icon} />
+                <HeaderNavigationIcon kind={icon} factionId={factionId} />
                 <span>{label}</span>
               </button>
             );
@@ -188,7 +193,7 @@ export function AsterionHeader({
                 data-qa-route={id}
                 onClick={() => onRouteChange(id)}
               >
-                <NavigationIcon kind={icon} />
+                <HeaderNavigationIcon kind={icon} factionId={factionId} />
                 <span>{label}</span>
               </button>
             );
@@ -197,10 +202,4 @@ export function AsterionHeader({
       </section>
     </header>
   );
-}
-
-function NavigationZoneIcon({ zone }: { zone: HeaderZoneId }) {
-  if (zone === 'resource') return <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" d="m12 2 4 6-4 6-4-6 4-6Zm-6 9 3 4-3 5-3-5 3-4Zm12 0 3 4-3 5-3-5 3-4Z" /></svg>;
-  if (zone === 'industry') return <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" d="M3 21V10l6 3v-3l6 3V6h4v15H3Z" /><path fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" d="M6 17h2m3 0h2m3 0h2M16 6V3h3v3" /></svg>;
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" d="M4 19h16M7 19v-4l4-2V8l2-2 2 2v5l3 2v4M11 10h4M9 19v-3m6 3v-4" /><path fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" d="m12 6 1-4 1 4" /></svg>;
 }
