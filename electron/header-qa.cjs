@@ -21,6 +21,21 @@ const EXPECTED_ZONE_POSITIONS = {
   industry: ['173px', '49px'],
   military: ['87px', '161px'],
 };
+const TEST_SAVE_KEY = 'asterion.vertical-slice.test.v1';
+const TEST_RESOURCE_CAPACITIES = {
+  metal: 450_100_000,
+  minerals: 300_100_000,
+  gas: 189_382_930,
+};
+const REPRESENTATIVE_RATIOS = [10, 37, 60, 75, 85, 95];
+const EXPECTED_RESOURCE_COLORS = {
+  normal: 'rgb(53,229,138)',
+  positive: 'rgb(139,227,107)',
+  watch: 'rgb(217,237,121)',
+  warning: 'rgb(255,225,90)',
+  danger: 'rgb(255,179,71)',
+  critical: 'rgb(240,68,94)',
+};
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitFor(win, expression, timeoutMs = 8000) {
@@ -87,6 +102,15 @@ async function readHeaderContract(win) {
         kind: element.getAttribute('data-qa-resource-chip'),
         fill: Boolean(element.querySelector('.asterion-header__resource-fill')),
         value: element.querySelector('strong')?.textContent?.trim() ?? '',
+        ratio: Number(element.getAttribute('data-qa-resource-ratio') || 0),
+        tone: element.getAttribute('data-qa-resource-tone'),
+        pulse: element.getAttribute('data-qa-resource-pulse') === 'true',
+        fillHeight: element.querySelector('.asterion-header__resource-fill')
+          ? getComputedStyle(element.querySelector('.asterion-header__resource-fill')).height
+          : null,
+        fillColor: element.querySelector('.asterion-header__resource-fill i')
+          ? getComputedStyle(element.querySelector('.asterion-header__resource-fill i')).backgroundColor
+          : null,
       })),
       resourceRail: rect(document.querySelector('[data-qa-resource-rail]')),
       resourceRects: Array.from(document.querySelectorAll('[data-qa-resource-chip]')).map((element) => rect(element)),
@@ -111,6 +135,120 @@ async function readHeaderContract(win) {
     };
     return values;
   })()`);
+}
+
+async function readResourceContract(win) {
+  return win.webContents.executeJavaScript(`(() => Array.from(document.querySelectorAll('[data-qa-resource-chip]')).map((element) => ({
+    kind: element.getAttribute('data-qa-resource-chip'),
+    ratio: Number(element.getAttribute('data-qa-resource-ratio') || 0),
+    tone: element.getAttribute('data-qa-resource-tone'),
+    pulse: element.getAttribute('data-qa-resource-pulse') === 'true',
+    fill: Boolean(element.querySelector('.asterion-header__resource-fill')),
+    color: element.querySelector('.asterion-header__resource-fill i')
+      ? getComputedStyle(element.querySelector('.asterion-header__resource-fill i')).backgroundColor
+      : null,
+  })))()`);
+}
+
+function expectedResourceTone(ratio) {
+  if (ratio <= 20) return 'normal';
+  if (ratio <= 40) return 'positive';
+  if (ratio <= 55) return 'watch';
+  if (ratio <= 70) return 'warning';
+  if (ratio <= 85) return 'danger';
+  return 'critical';
+}
+
+async function loadMode(win, file, search) {
+  await win.loadFile(file, search ? { search } : undefined);
+  await waitFor(win, `document.querySelector('[data-qa-header]')`);
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win);
+}
+
+async function assertRepresentativeRatios(win, file, label) {
+  const original = await win.webContents.executeJavaScript(`localStorage.getItem(${JSON.stringify(TEST_SAVE_KEY)})`);
+  const parsed = original ? JSON.parse(original) : {};
+  const originalHomeworld = parsed.planets?.['helion-01'] ?? {};
+  const originalBuildings = originalHomeworld.buildings ?? {};
+  const baseline = {
+    ...parsed,
+    schemaVersion: 12,
+    metal: 0,
+    minerals: 0,
+    gas: 0,
+    planets: {
+      ...parsed.planets,
+      'helion-01': {
+        ...originalHomeworld,
+        buildings: {
+          ...originalBuildings,
+          'metal-production-1': 0,
+          'metal-production-2': 0,
+          'metal-production-3': 0,
+          'mineral-production-1': 0,
+          'mineral-production-2': 0,
+          'gas-production-1': 0,
+          'gas-production-2': 0,
+          'basic-energy': 0,
+          'advanced-energy': 0,
+          'metal-storage': 20,
+          'mineral-storage': 20,
+          'gas-storage': 20,
+        },
+        productionBots: { metal: 0, minerals: 0, gas: 0 },
+      },
+    },
+    resourceClock: {
+      lastReconciledAt: Date.now(),
+      remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+    },
+  };
+
+  try {
+    await win.webContents.executeJavaScript(`localStorage.setItem(${JSON.stringify(TEST_SAVE_KEY)}, ${JSON.stringify(JSON.stringify(baseline))})`);
+    await loadMode(win, file, '?mode=test');
+    for (const ratio of REPRESENTATIVE_RATIOS) {
+      const seeded = {
+        ...baseline,
+        metal: Math.floor(TEST_RESOURCE_CAPACITIES.metal * ratio / 100),
+        minerals: Math.floor(TEST_RESOURCE_CAPACITIES.minerals * ratio / 100),
+        gas: Math.floor(TEST_RESOURCE_CAPACITIES.gas * ratio / 100),
+        resourceClock: {
+          lastReconciledAt: Date.now(),
+          remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+        },
+      };
+      await win.webContents.executeJavaScript(`localStorage.setItem(${JSON.stringify(TEST_SAVE_KEY)}, ${JSON.stringify(JSON.stringify(seeded))})`);
+      await win.reload();
+      await waitFor(win, `document.querySelector('[data-qa-header]')`);
+      await settle(win);
+
+      const resources = await readResourceContract(win);
+      for (const kind of ['metal', 'mineral', 'gas']) {
+        const storageKey = kind === 'mineral' ? 'minerals' : kind;
+        const item = resources.find((candidate) => candidate.kind === kind);
+        const expectedRatio = (seeded[storageKey] / TEST_RESOURCE_CAPACITIES[storageKey]) * 100;
+        const expectedTone = expectedResourceTone(ratio);
+        const normalizedColor = item?.color?.replace(/\s+/g, '') ?? null;
+        const expectedPulse = ratio > 85;
+        if (!item || Math.abs(item.ratio - expectedRatio) > 0.0001 || item.tone !== expectedTone || item.pulse !== expectedPulse || !item.fill || normalizedColor !== EXPECTED_RESOURCE_COLORS[expectedTone]) {
+          throw new Error(`${label}: representative ${ratio}% ${kind} contract failed: ${JSON.stringify({ item, expectedRatio, expectedTone, expectedPulse })}`);
+        }
+      }
+
+      const population = resources.find((candidate) => candidate.kind === 'population');
+      const energy = resources.find((candidate) => candidate.kind === 'energy');
+      if (!population || population.pulse || !energy || energy.fill) {
+        throw new Error(`${label}: representative ${ratio}% population/energy pulse contract failed: ${JSON.stringify({ population, energy })}`);
+      }
+    }
+  } finally {
+    await win.webContents.executeJavaScript(original == null
+      ? `localStorage.removeItem(${JSON.stringify(TEST_SAVE_KEY)})`
+      : `localStorage.setItem(${JSON.stringify(TEST_SAVE_KEY)}, ${JSON.stringify(original)})`);
+    await loadMode(win, file);
+  }
 }
 
 async function readTooltipContract(win) {
@@ -283,7 +421,17 @@ function assertContract(label, header, tooltip, planetMenu, planetMenuFocus, the
   }
   for (const item of header.resources) {
     const shouldHaveFill = item.kind !== 'energy';
-    if (item.fill !== shouldHaveFill || (item.kind === 'population' && item.value.includes('/'))) {
+    const shouldPulse = ['metal', 'mineral', 'gas'].includes(item.kind) && item.ratio > 85;
+    const expectedColors = {
+      normal: 'rgb(53,229,138)',
+      positive: 'rgb(139,227,107)',
+      watch: 'rgb(217,237,121)',
+      warning: 'rgb(255,225,90)',
+      danger: 'rgb(255,179,71)',
+      critical: 'rgb(240,68,94)',
+    };
+    const normalizedColor = item.fillColor?.replace(/\s+/g, '') ?? null;
+    if (item.fill !== shouldHaveFill || item.pulse !== shouldPulse || (item.fill && item.fillHeight !== '7px') || (item.fill && normalizedColor !== expectedColors[item.tone]) || (item.kind === 'population' && item.value.includes('/'))) {
       throw new Error(`${label}: resource presentation contract failed: ${JSON.stringify(item)}`);
     }
   }
@@ -315,13 +463,11 @@ function assertContract(label, header, tooltip, planetMenu, planetMenuFocus, the
 
 async function main() {
   const results = [];
+  const file = path.join(ROOT, 'dist', 'index.html');
   for (const [width, height] of VIEWPORTS) {
     const win = new BrowserWindow({ width, height, show: false, webPreferences: { offscreen: true, sandbox: false } });
     try {
-      await win.loadFile(path.join(ROOT, 'dist', 'index.html'));
-      await waitFor(win, `document.querySelector('[data-qa-header]')`);
-      await win.webContents.executeJavaScript('document.fonts?.ready');
-      await settle(win);
+      await loadMode(win, file);
       await clickRoute(win, 'planet');
       const header = await readHeaderContract(win);
       const tooltip = await readTooltipContract(win);
@@ -329,6 +475,7 @@ async function main() {
       const planetMenuFocus = await readPlanetMenuFocusContract(win);
       const themes = await readThemeContract(win);
       assertContract(`${width}x${height}`, header, tooltip, planetMenu, planetMenuFocus, themes);
+      await assertRepresentativeRatios(win, file, `${width}x${height}`);
 
       for (const [route] of PRIMARY_ROUTES) await clickRoute(win, route);
       for (const route of UTILITY_ROUTES) await clickRoute(win, route);

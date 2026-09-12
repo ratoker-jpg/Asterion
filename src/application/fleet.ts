@@ -1,6 +1,7 @@
 import {
   createCanonicalStartingFleet,
   getFleetSummary,
+  normalizeFleetStateForCapacity,
   resolveSavedFleetState,
   type OwnedFleetState,
 } from '../domain/fleet/runtime.ts';
@@ -40,7 +41,11 @@ export function getFleetSnapshot(state: SaveState, planetId: PlanetId = state.cu
   const planet = state.planets[planetId];
   return {
     factionId: state.profile.factionId,
-    fleet: resolveSavedFleetState(planet?.fleet),
+    fleet: normalizeFleetStateForCapacity(
+      resolveSavedFleetState(planet?.fleet),
+      safeLevel(planet?.buildings.hangar, 1),
+      state.profile.factionId,
+    ),
     hangarLevel: safeLevel(planet?.buildings.hangar, 1),
     shipyardLevel: safeLevel(planet?.buildings.shipyard, 0),
     advancedFactoryLevel: safeLevel(planet?.buildings['advanced-factory'], 0),

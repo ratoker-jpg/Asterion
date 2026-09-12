@@ -72,6 +72,91 @@ export function resolveSavedFleetState(value: unknown): OwnedFleetState {
   return value === undefined ? createCanonicalStartingFleet() : migrateFleetState(value);
 }
 
+function populationForEntity(kind: 'ship' | 'commander', id: string, factionId: CombatFactionId): number | null {
+  const entity = kind === 'ship'
+    ? getFactionShipCatalog(factionId).find((candidate) => candidate.id === id)
+    : COMMANDER_COMBAT_CATALOG.find((candidate) => candidate.id === id);
+  return entity ? Math.max(0, Math.floor(entity.population)) : null;
+}
+
+export type FleetPopulationTransition = {
+  ok: boolean;
+  fleet: OwnedFleetState;
+  addedPopulation: number;
+  population: number;
+  capacity: number;
+  reason: string | null;
+};
+
+/** Adds a future-production result only when its population fits the hangar. */
+export function addFleetUnits(
+  fleet: OwnedFleetState,
+  kind: 'ship' | 'commander',
+  id: string,
+  quantity: number,
+  hangarLevel: number,
+  factionId: CombatFactionId = 'aegis',
+): FleetPopulationTransition {
+  const capacity = calculateFleetCapacity(hangarLevel);
+  const population = calculateFleetPopulation(fleet, factionId);
+  const safeQuantity = typeof quantity === 'number' && Number.isFinite(quantity) ? Math.floor(quantity) : 0;
+  const unitPopulation = populationForEntity(kind, id, factionId);
+  if (unitPopulation == null) {
+    return { ok: false, fleet, addedPopulation: 0, population, capacity, reason: 'Неизвестная единица флота.' };
+  }
+  if (safeQuantity <= 0) {
+    return { ok: false, fleet, addedPopulation: 0, population, capacity, reason: 'Количество должно быть положительным.' };
+  }
+  const addedPopulation = unitPopulation * safeQuantity;
+  if (population + addedPopulation > capacity) {
+    return { ok: false, fleet, addedPopulation: 0, population, capacity, reason: 'Недостаточно населения' };
+  }
+
+  const next = {
+    ships: { ...fleet.ships },
+    commanders: { ...fleet.commanders },
+  };
+  if (kind === 'ship' && (SHIP_IDS as readonly string[]).includes(id)) {
+    next.ships[id as ShipId] += safeQuantity;
+  } else if (kind === 'commander' && (COMMANDER_IDS as readonly string[]).includes(id)) {
+    next.commanders[id as CommanderId] += safeQuantity;
+  } else {
+    return { ok: false, fleet, addedPopulation: 0, population, capacity, reason: 'Неизвестная единица флота.' };
+  }
+  return { ok: true, fleet: next, addedPopulation, population: population + addedPopulation, capacity, reason: null };
+}
+
+/** Deterministically trims damaged saved rosters to the current hangar limit. */
+export function normalizeFleetStateForCapacity(
+  fleet: OwnedFleetState,
+  hangarLevel: number,
+  factionId: CombatFactionId = 'aegis',
+): OwnedFleetState {
+  const capacity = calculateFleetCapacity(hangarLevel);
+  let population = calculateFleetPopulation(fleet, factionId);
+  if (population <= capacity) return fleet;
+
+  const next: OwnedFleetState = {
+    ships: { ...fleet.ships },
+    commanders: { ...fleet.commanders },
+  };
+  const removable = [
+    ...COMMANDER_COMBAT_CATALOG.map((entity) => ({ kind: 'commander' as const, id: entity.id, population: Math.max(0, Math.floor(entity.population)) })).reverse(),
+    ...getFactionShipCatalog(factionId).map((entity) => ({ kind: 'ship' as const, id: entity.id, population: Math.max(0, Math.floor(entity.population)) })).reverse(),
+  ];
+  for (const entity of removable) {
+    if (population <= capacity || entity.population <= 0) break;
+    const current = entity.kind === 'ship' ? next.ships[entity.id as ShipId] : next.commanders[entity.id as CommanderId];
+    const excess = population - capacity;
+    const remove = Math.min(current, Math.ceil(excess / entity.population));
+    if (remove <= 0) continue;
+    if (entity.kind === 'ship') next.ships[entity.id as ShipId] -= remove;
+    else next.commanders[entity.id as CommanderId] -= remove;
+    population -= remove * entity.population;
+  }
+  return next;
+}
+
 export function calculateFleetPopulation(
   fleet: OwnedFleetState,
   factionId: CombatFactionId = 'aegis',
@@ -90,7 +175,8 @@ export function calculateFleetCapacity(hangarLevel: number): number {
 }
 
 export function getFleetSummary(fleet: OwnedFleetState, hangarLevel: number, factionId: CombatFactionId = 'aegis') {
-  const population = calculateFleetPopulation(fleet, factionId);
   const capacity = calculateFleetCapacity(hangarLevel);
+  const normalizedFleet = normalizeFleetStateForCapacity(fleet, hangarLevel, factionId);
+  const population = calculateFleetPopulation(normalizedFleet, factionId);
   return { population, capacity, available: Math.max(0, capacity - population) };
 }

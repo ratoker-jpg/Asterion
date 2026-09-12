@@ -10,6 +10,8 @@ import type { BuildingRole } from '../domain/buildings/resource-zone.ts';
 import type { ScienceId } from '../domain/science/types.ts';
 import type { SpaceportUpgradeTrack } from '../domain/buildings/spaceport-upgrades.ts';
 import type { SaveState } from './contracts.ts';
+import { reconcileResourceIncome } from './resource-clock.ts';
+import type { ResourceCreditResult } from '../domain/resources/credit.ts';
 
 export type RuntimeReconcileEvent =
   | { kind: 'science'; scienceIds: ScienceId[] }
@@ -21,6 +23,7 @@ export type RuntimeReconcileResult = {
   changed: boolean;
   state: SaveState;
   events: RuntimeReconcileEvent[];
+  credit: ResourceCreditResult;
 };
 
 /**
@@ -34,6 +37,11 @@ export function reconcileRuntime(
 ): RuntimeReconcileResult {
   let next = state;
   const events: RuntimeReconcileEvent[] = [];
+
+  // Close the interval using the pre-transition buildings and capacities. Any
+  // completion at this exact timestamp affects the next interval.
+  const resources = reconcileResourceIncome(next, context);
+  if (resources.changed) next = resources.state;
 
   const science = reconcileScience(next, context);
   if (science.changed) {
@@ -68,5 +76,5 @@ export function reconcileRuntime(
     }
   }
 
-  return { changed: next !== state, state: next, events };
+  return { changed: next !== state, state: next, events, credit: resources.credit };
 }

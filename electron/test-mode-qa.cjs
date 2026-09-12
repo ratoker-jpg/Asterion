@@ -118,6 +118,7 @@ async function seedTestRuntime(win, changes = {}) {
     if (${changes.spaceport ? 'true' : 'false'}) {
       planet.spaceportUpgrades = ${JSON.stringify(changes.spaceport)};
     }
+    if (${changes.resourceClock ? 'true' : 'false'}) save.resourceClock = ${JSON.stringify(changes.resourceClock)};
     save.metal = ${changes.metal ?? 1_000_000};
     save.minerals = ${changes.minerals ?? 1_000_000};
     save.gas = ${changes.gas ?? 1_000_000};
@@ -192,6 +193,15 @@ async function readQaState(win) {
       scale: document.querySelector('[data-qa-test-time-scale]')?.textContent?.trim() ?? '',
       testResources: { metal: test?.metal, minerals: test?.minerals, gas: test?.gas, energy: planet?.energy },
       productionResources: { metal: production?.metal, minerals: production?.minerals, gas: production?.gas },
+      resourceClock: active?.resourceClock ?? null,
+      resourceBars: Array.from(document.querySelectorAll('[data-qa-resource-fill]')).map((node) => ({
+        kind: node.getAttribute('data-qa-resource-fill'),
+        ratio: Number(node.getAttribute('data-qa-resource-ratio') || 0),
+        tone: node.getAttribute('data-qa-resource-tone'),
+        pulse: node.getAttribute('data-qa-resource-pulse') === 'true',
+        height: getComputedStyle(node).height,
+        color: getComputedStyle(node.querySelector('i')).backgroundColor,
+      })),
       buildings: planet?.buildings ?? null,
       fleet: planet?.fleet ?? null,
       scienceLevels: active?.science?.levels ?? null,
@@ -268,7 +278,7 @@ async function runViewport(width, height) {
 
     await loadMode(win, 'test');
     const initial = await readQaState(win);
-    if (initial.mode !== 'test' || !initial.banner || !initial.scale.includes('×15') || initial.testResources.metal !== 999_999_999 || initial.testResources.minerals !== 999_999_999 || initial.testResources.gas !== 999_999_999 || initial.testResources.energy !== 999_999_999 || initial.buildingQueue !== 0 || initial.scienceQueue !== 0 || initial.shipQueue !== 0 || initial.commanderQueue !== 0) {
+    if (initial.mode !== 'test' || !initial.banner || !initial.scale.includes('×15') || initial.testResources.metal !== 450_100_000 || initial.testResources.minerals !== 300_100_000 || initial.testResources.gas !== 189_382_930 || initial.testResources.energy !== 999_999_999 || initial.buildings?.['metal-storage'] !== 20 || initial.buildings?.['mineral-storage'] !== 20 || initial.buildings?.['gas-storage'] !== 20 || initial.buildingQueue !== 0 || initial.scienceQueue !== 0 || initial.shipQueue !== 0 || initial.commanderQueue !== 0) {
       throw new Error(`${label}: Test Mode fixture mismatch ${JSON.stringify(initial)}`);
     }
     const speedButtons = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-test-speed]')).map((node) => node.getAttribute('data-qa-test-speed'))`);
@@ -294,9 +304,11 @@ async function runViewport(width, height) {
       throw new Error(`${label}: population must show current value in the chip and capacity in its tooltip ${JSON.stringify({ chips: initial.populationChips, tooltips: initial.populationTooltips })}`);
     }
     const canonicalBuildingLevelOne = new Set(['metal-production-1', 'mineral-production-1', 'gas-production-1', 'basic-energy', 'hangar']);
+    const canonicalStorageLevelTwenty = new Set(['metal-storage', 'mineral-storage', 'gas-storage']);
     const canonicalBuildingsOnly = canonicalBuildingLevelOne.size === Object.values(initial.buildings || {}).filter((level) => level === 1).length
       && [...canonicalBuildingLevelOne].every((id) => initial.buildings?.[id] === 1)
-      && Object.entries(initial.buildings || {}).every(([id, level]) => canonicalBuildingLevelOne.has(id) ? level === 1 : level === 0);
+      && [...canonicalStorageLevelTwenty].every((id) => initial.buildings?.[id] === 20)
+      && Object.entries(initial.buildings || {}).every(([id, level]) => canonicalBuildingLevelOne.has(id) ? level === 1 : canonicalStorageLevelTwenty.has(id) ? level === 20 : level === 0);
     const canonicalFleetShips = { scout: 20, transporter: 10, recycler: 1, 'spy-probe': 3 };
     const canonicalFleetOnly = Object.entries(initial.fleet?.ships || {}).every(([id, count]) => count === (canonicalFleetShips[id] || 0))
       && Object.values(initial.fleet?.commanders || {}).every((count) => count === 0);
@@ -305,10 +317,35 @@ async function runViewport(width, height) {
     }
     await capture(win, directory, 'test-overview');
     await clickText(win, '.shell-notice button', 'СБРОСИТЬ ТЕСТОВОЕ СОХРАНЕНИЕ');
-    await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}').metal === 999999999`);
+    await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}').metal === 450100000`);
     const afterTestReset = await readQaState(win);
     const productionAfterReset = await readEnvelope(win, PRODUCTION_KEY);
-    if (afterTestReset.testResources.metal !== 999_999_999 || productionAfterReset.metal !== productionBeforeTest.metal) throw new Error(`${label}: Test Mode reset crossed save keys`);
+    if (afterTestReset.testResources.metal !== 450_100_000 || afterTestReset.testResources.minerals !== 300_100_000 || afterTestReset.testResources.gas !== 189_382_930 || afterTestReset.buildings?.['metal-storage'] !== 20 || afterTestReset.buildings?.['mineral-storage'] !== 20 || afterTestReset.buildings?.['gas-storage'] !== 20 || productionAfterReset.metal !== productionBeforeTest.metal) throw new Error(`${label}: Test Mode reset/capacity/save-key contract failed ${JSON.stringify(afterTestReset)}`);
+
+    await seedTestRuntime(win, {
+      buildings: { 'metal-storage': 20, 'mineral-storage': 20, 'gas-storage': 20 },
+      metal: 0,
+      minerals: 0,
+      gas: 0,
+      energy: 0,
+      resourceClock: { lastReconciledAt: Date.now() - 3_600_000, remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } },
+    });
+    const accruedResources = await readQaState(win);
+    if (!(accruedResources.testResources.metal > 0) || !(accruedResources.testResources.minerals > 0) || !(accruedResources.testResources.gas > 0) || !(accruedResources.testResources.energy >= 0) || !accruedResources.resourceClock || accruedResources.resourceClock.lastReconciledAt <= Date.now() - 3_600_000) {
+      throw new Error(`${label}: passive resource accrual did not reconcile one scaled interval ${JSON.stringify(accruedResources)}`);
+    }
+    await seedTestRuntime(win, {
+      buildings: { 'metal-storage': 20, 'mineral-storage': 20, 'gas-storage': 20 },
+      metal: 450_100_000 - 1,
+      minerals: 0,
+      gas: 0,
+      energy: 0,
+      resourceClock: { lastReconciledAt: Date.now() - 3_600_000, remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } },
+    });
+    const cappedResources = await readQaState(win);
+    if (cappedResources.testResources.metal !== 450_100_000 || cappedResources.resourceBars.find((bar) => bar.kind === 'energy')) {
+      throw new Error(`${label}: storage cap or energy bar contract failed ${JSON.stringify(cappedResources)}`);
+    }
 
     await win.webContents.executeJavaScript(`(() => {
       const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');

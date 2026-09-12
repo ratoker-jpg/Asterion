@@ -65,7 +65,6 @@ import {
   BUILDING_QUEUE_CAPACITY,
   RESOURCE_BUILDING_ROLES,
   getBuildingDefinition,
-  getBuildingEnergyIncomePerHour,
   getBuildingResourceIncomePerHour,
   getStorageCapacities,
   type BuildingRole,
@@ -374,10 +373,6 @@ export function App() {
       currentPlanetState.productionBots,
     ),
     [currentPlanetState.buildings, currentPlanetState.productionBots, state.science.levels],
-  );
-  const energyIncomePerHour = useMemo(
-    () => getBuildingEnergyIncomePerHour(currentPlanetState.buildings, state.science.levels),
-    [currentPlanetState.buildings, state.science.levels],
   );
   const storageCapacities = useMemo(
     () => getStorageCapacities(currentPlanetState.buildings),
@@ -862,7 +857,7 @@ export function App() {
              { kind: 'metal', label: 'МЕТАЛЛ', value: state.metal, capacity: storageCapacities.metal, hourlyGain: resourceIncomePerHour.metal },
              { kind: 'mineral', label: 'МИНЕРАЛЫ', value: state.minerals, capacity: storageCapacities.minerals, hourlyGain: resourceIncomePerHour.minerals },
              { kind: 'gas', label: 'ГАЗ', value: state.gas, capacity: storageCapacities.gas, hourlyGain: resourceIncomePerHour.gas },
-             { kind: 'energy', label: 'ЭНЕРГИЯ', value: currentPlanetState.energy, hourlyGain: energyIncomePerHour, description: 'Энергия/ч — вычисляемый доход; строительство энерго-зданий отдельно меняет запас энергии.' },
+             { kind: 'energy', label: 'ЭНЕРГИЯ', value: currentPlanetState.energy },
             { kind: 'population', label: 'НАСЕЛЕНИЕ', value: fleetSummary.population, capacity: fleetSummary.capacity, showCapacity: false },
           ]}
           zoneMeta={zoneMeta}

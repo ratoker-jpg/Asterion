@@ -3,9 +3,11 @@ import test from 'node:test';
 import {
   calculateFleetCapacity,
   calculateFleetPopulation,
+  addFleetUnits,
   createCanonicalStartingFleet,
   getFleetSummary,
   migrateFleetState,
+  normalizeFleetStateForCapacity,
   resolveSavedFleetState,
 } from './runtime.ts';
 
@@ -54,4 +56,21 @@ test('legacy save without fleet gets the canonical roster while an explicit empt
   assert.equal(calculateFleetPopulation(explicitEmpty), 0);
   assert.equal(explicitEmpty.ships.scout, 0);
   assert.equal(explicitEmpty.commanders.corsair, 0);
+});
+
+test('population guard rejects additions over hangar capacity and damaged rosters are normalized deterministically', () => {
+  const empty = migrateFleetState({ ships: {}, commanders: {} });
+  const accepted = addFleetUnits(empty, 'ship', 'scout', 60, 1);
+  assert.equal(accepted.ok, true);
+  assert.equal(accepted.population, 120);
+
+  const rejected = addFleetUnits(accepted.fleet, 'ship', 'scout', 1, 1);
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.reason, 'Недостаточно населения');
+  assert.equal(rejected.fleet.ships.scout, accepted.fleet.ships.scout);
+
+  const damaged = migrateFleetState({ ships: { destroyer: 1_000 }, commanders: {} });
+  const normalized = normalizeFleetStateForCapacity(damaged, 20);
+  assert.equal(calculateFleetPopulation(normalized), 25_110);
+  assert.equal(getFleetSummary(damaged, 20).population, 25_110);
 });

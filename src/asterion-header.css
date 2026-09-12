@@ -245,7 +245,7 @@
 .asterion-header__resource-fill{
   display:block;
   width:100%;
-  height:3px;
+  height:7px;
   margin-top:13px;
   overflow:hidden;
   background:rgba(4,29,42,.96);
@@ -256,17 +256,16 @@
   display:block;
   width:var(--fill);
   height:100%;
-  background:#ff5f69;
-  box-shadow:0 0 8px rgba(255,95,105,.5);
+  background:#35E58A;
+  box-shadow:0 0 8px rgba(53,229,138,.5);
   transition:width .25s ease,background .25s ease,box-shadow .25s ease;
 }
-.asterion-header__resource-fill--watch i{background:#ffe27b;box-shadow:0 0 8px rgba(255,226,123,.42)}
-.asterion-header__resource-fill--warning i{background:#ff9b4a;box-shadow:0 0 8px rgba(255,155,74,.46)}
-.asterion-header__resource-fill--critical i{background:#ff5f69;box-shadow:0 0 9px rgba(255,95,105,.54)}
-.asterion-header__resource--metal .asterion-header__resource-fill i,
-.asterion-header__resource--mineral .asterion-header__resource-fill i,
-.asterion-header__resource--gas .asterion-header__resource-fill i{background:#ff5f69;box-shadow:0 0 9px rgba(255,95,105,.54)}
-.asterion-header__resource--population .asterion-header__resource-fill i{background:#1ed2f5;box-shadow:0 0 8px rgba(30,210,245,.45)}
+.asterion-header__resource-fill--positive i{background:#8BE36B;box-shadow:0 0 8px rgba(139,227,107,.5)}
+.asterion-header__resource-fill--watch i{background:#D9ED79;box-shadow:0 0 8px rgba(217,237,121,.5)}
+.asterion-header__resource-fill--warning i{background:#FFE15A;box-shadow:0 0 8px rgba(255,225,90,.5)}
+.asterion-header__resource-fill--danger i{background:#FFB347;box-shadow:0 0 8px rgba(255,179,71,.5)}
+.asterion-header__resource-fill--critical i{background:#F0445E;box-shadow:0 0 9px rgba(240,68,94,.54)}
+.asterion-header__resource.is-pulsing .asterion-header__resource-fill i{animation:asterion-header-resource-critical-pulse 1.25s ease-in-out infinite}
 .asterion-header__resource-tooltip{
   position:absolute;
   z-index:300;
@@ -491,8 +490,10 @@
 
 @keyframes asterion-header-orbit{to{transform:rotate(360deg)}}
 @keyframes asterion-header-planet-float{50%{transform:translateY(-2px) scale(1.012)}}
+@keyframes asterion-header-resource-critical-pulse{50%{filter:brightness(1.2);box-shadow:0 0 15px rgba(240,68,94,.92)}}
 
 @media (prefers-reduced-motion:reduce){
   .asterion-header__planet-orbit::after,
-  .asterion-header__planet-world img{animation:none}
+  .asterion-header__planet-world img,
+  .asterion-header__resource.is-pulsing .asterion-header__resource-fill i{animation:none}
 }
