@@ -121,6 +121,40 @@ test('Balance v1 supplies every ordinary ship upgrade cost and duration transiti
   assert.equal(deathStarLevelEight.baseDurationMs, ((105 * 60 + 24) * 60 + 49) * 1_000);
 });
 
+test('Spaceport preview uses the selected faction ship data and keeps Balance v1 timing', () => {
+  const synodTransporter = getSpaceportUpgradeEntity('ships', 'transporter', 'synod');
+  const veyraTransporter = getSpaceportUpgradeEntity('ships', 'transporter', 'veyra');
+  assert.equal(synodTransporter?.name, 'Транспортный дрон');
+  assert.equal(veyraTransporter?.name, 'Носильщик');
+  assert.equal(synodTransporter?.population, 1);
+  assert.equal(veyraTransporter?.population, 2);
+  assert.equal(synodTransporter?.ship?.speed, 22_000);
+  assert.equal(veyraTransporter?.ship?.speed, 21_000);
+
+  const synodPreview = previewSpaceportUpgrade({ ...context(), factionId: 'synod' }, 'ships', 'transporter');
+  assert.deepEqual(synodPreview.cost, SPACEPORT_UPGRADE_BALANCE_V1.transporter[0].cost);
+  assert.equal(synodPreview.baseDurationMs, SPACEPORT_UPGRADE_BALANCE_V1.transporter[0].durationMs);
+  assert.equal(synodPreview.effectiveDurationMs, calculateSpaceportEffectiveDuration(
+    SPACEPORT_UPGRADE_BALANCE_V1.transporter[0].durationMs,
+    1,
+  ));
+
+  const buildings = createDefaultBuildingLevels();
+  buildings.shipyard = 20;
+  const unresolvedVeyraRequirement = evaluateSpaceportUpgradeRequirements(
+    'ships',
+    'destroyer',
+    buildings,
+    unlockedScienceLevels(),
+    'veyra',
+  ).find((requirement) => requirement.label === 'Немезис' && requirement.valueKind === 'quantity');
+  assert.ok(unresolvedVeyraRequirement);
+  assert.equal(unresolvedVeyraRequirement.kind, 'unresolved-catalog-requirement');
+  assert.equal(unresolvedVeyraRequirement.valueKind, 'quantity');
+  assert.equal(unresolvedVeyraRequirement.currentLevel, null);
+  assert.equal(unresolvedVeyraRequirement.met, false);
+});
+
 test('prototype commander upgrade fallback doubles from the previous level', () => {
   assert.deepEqual(calculateSpaceportUpgradeCost(0), PROTOTYPE_SPACEPORT_UPGRADE_COST);
   assert.deepEqual(calculateSpaceportUpgradeCost(1), { metal: 1_000, minerals: 500, gas: 0 });

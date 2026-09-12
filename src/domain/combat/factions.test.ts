@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { getFactionDefenseCatalog, getFactionShipCatalog } from './faction-catalog.ts';
+import { FACTION_SHIP_MECHANICS } from './faction-ship-data.ts';
 import { COMBAT_FACTIONS, getCombatFactionName } from './factions.ts';
+import { SHIP_IDS } from './ids.ts';
 import { createDefaultCombatPriority } from './priority.ts';
 import {
   migrateSimulatorState,
@@ -115,8 +117,11 @@ test('race selection swaps presentation roster while preserving canonical mechan
   assert.equal(swarmScout?.name, 'Жало');
   assert.notEqual(asterScout?.art, ilarScout?.art);
   assert.notEqual(ilarScout?.art, swarmScout?.art);
-  assert.equal(asterScout?.combat.attack, ilarScout?.combat.attack);
-  assert.equal(ilarScout?.combat.attack, swarmScout?.combat.attack);
+  assert.equal(asterScout?.combat.attack, 800);
+  assert.equal(ilarScout?.combat.attack, 800);
+  assert.equal(swarmScout?.combat.attack, 400);
+  assert.notEqual(asterScout?.ship?.speed, ilarScout?.ship?.speed);
+  assert.equal(ilarScout?.ship?.speed, swarmScout?.ship?.speed);
 
   const asterDefense = getFactionDefenseCatalog('aegis').find((entity) => entity.id === 'ballistic-turret');
   const ilarDefense = getFactionDefenseCatalog('synod').find((entity) => entity.id === 'ballistic-turret');
@@ -126,6 +131,72 @@ test('race selection swaps presentation roster while preserving canonical mechan
   assert.equal(swarmDefense?.name, 'Шипомёт');
   assert.notEqual(asterDefense?.art, ilarDefense?.art);
   assert.notEqual(ilarDefense?.art, swarmDefense?.art);
+});
+
+test('canonical source registry resolves all 39 ships without a faction fallback', () => {
+  const expectedFolders = {
+    aegis: 'Корабли Синяя раса',
+    synod: 'Корабли Зеленная раса',
+    veyra: 'Корабли Рой Красные',
+  } as const;
+
+  for (const faction of COMBAT_FACTIONS) {
+    const mechanics = FACTION_SHIP_MECHANICS[faction.id];
+    assert.deepEqual(Object.keys(mechanics).sort(), [...SHIP_IDS].sort(), `${faction.id} must have 13 source records`);
+    const catalog = getFactionShipCatalog(faction.id);
+    assert.equal(catalog.length, 13);
+
+    for (const entity of catalog) {
+      const source = mechanics[entity.id];
+      assert.ok(source, `${faction.id}/${entity.id} must have source data`);
+      assert.match(source.sourceFile, new RegExp(`${expectedFolders[faction.id]}\\/page_.*\\.html$`));
+      assert.equal(entity.population, source.population);
+      assert.deepEqual(entity.cost, source.cost);
+      assert.deepEqual(entity.combat, source.combat);
+      assert.deepEqual(entity.ship, source.ship);
+      assert.deepEqual(entity.construction, source.construction);
+    }
+  }
+
+  const controls = {
+    aegis: { civil: ['transporter', 1, 10, '00:10:00'], combat: ['scout', 2, 800, '00:20:00'], superheavy: ['death-star', 700, 700_000, '175:00:00'] },
+    synod: { civil: ['transporter', 1, 10, '00:10:00'], combat: ['scout', 2, 800, '00:13:20'], superheavy: ['death-star', 615, 615_000, '153:45:00'] },
+    veyra: { civil: ['transporter', 2, 10, '00:20:00'], combat: ['scout', 1, 400, '00:10:00'], superheavy: ['death-star', 320, 320_000, '80:00:00'] },
+  } as const;
+
+  for (const faction of COMBAT_FACTIONS) {
+    for (const sample of Object.values(controls[faction.id])) {
+      const [id, population, attack, time] = sample;
+      const entity = getFactionShipCatalog(faction.id).find((item) => item.id === id);
+      assert.ok(entity);
+      assert.equal(entity.population, population);
+      assert.equal(entity.combat.attack, attack);
+      assert.equal(entity.construction.time, time);
+    }
+  }
+
+  assert.equal(FACTION_SHIP_MECHANICS.aegis.transporter.cost.metal, FACTION_SHIP_MECHANICS.synod.transporter.cost.metal);
+  assert.equal(FACTION_SHIP_MECHANICS.aegis.transporter.combat.attack, FACTION_SHIP_MECHANICS.veyra.transporter.combat.attack);
+  assert.notDeepEqual(FACTION_SHIP_MECHANICS.aegis.transporter, FACTION_SHIP_MECHANICS.veyra.transporter);
+  assert.notDeepEqual(FACTION_SHIP_MECHANICS.synod['death-star'], FACTION_SHIP_MECHANICS.veyra['death-star']);
+  assert.equal(FACTION_SHIP_MECHANICS.veyra.cruiser.sourceName, 'Абсорбатор');
+  assert.equal(FACTION_SHIP_MECHANICS.veyra.defender.sourceName, 'Немезис');
+
+  const destroyerControls = {
+    aegis: { time: '01:20:00', population: 30, attack: 19_500, cost: { metal: 93_900, minerals: 84_500, gas: 9_400 }, requirements: ['Верфь · уровень 9', 'Реактивные двигатели · уровень 6', 'Гиперпространство · уровень 5'] },
+    synod: { time: '01:14:40', population: 28, attack: 18_200, cost: { metal: 87_600, minerals: 78_900, gas: 8_800 }, requirements: ['Верфь · уровень 9', 'Реактивные двигатели · уровень 6', 'Гиперпространство · уровень 5'] },
+    veyra: { time: '00:45:20', population: 17, attack: 11_050, cost: { metal: 53_200, minerals: 47_900, gas: 5_300 }, requirements: ['Верфь · уровень 6', 'Плазменная наука · уровень 1', 'Немезис · количество 1'] },
+  } as const;
+
+  for (const faction of COMBAT_FACTIONS) {
+    const destroyer = FACTION_SHIP_MECHANICS[faction.id].destroyer;
+    const control = destroyerControls[faction.id];
+    assert.equal(destroyer.construction.time, control.time);
+    assert.equal(destroyer.population, control.population);
+    assert.equal(destroyer.combat.attack, control.attack);
+    assert.deepEqual(destroyer.cost, control.cost);
+    assert.deepEqual(destroyer.construction.requirements, control.requirements);
+  }
 });
 
 test('legacy simulator scenario migrates to Asters versus Asters with zero technologies', () => {

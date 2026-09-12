@@ -13,6 +13,7 @@ import {
   type SpaceportUpgradeWallet,
 } from './domain/buildings/spaceport-upgrades.ts';
 import { getBuildingDefinition, type BuildingLevels, type ScienceLevels } from './domain/buildings/resource-zone.ts';
+import type { CombatFactionId } from './domain/combat/factions.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import { ACTIVE_RUNTIME_MODE } from './domain/runtime/mode.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
@@ -21,6 +22,7 @@ import './spaceport-upgrades-enhancements.css';
 
 type SpaceportUpgradeViewProps = {
   planetName: string;
+  factionId: CombatFactionId;
   buildingLevel: number;
   buildings: BuildingLevels;
   scienceLevels: ScienceLevels;
@@ -82,26 +84,54 @@ function queueOf(upgrades: SpaceportUpgradeState, track: SpaceportUpgradeTrack) 
   return track === 'ships' ? upgrades.shipQueue : upgrades.commanderQueue;
 }
 
-function requirementBlocker(label: string, requiredLevel: number, currentLevel: number | null) {
-  if (currentLevel == null) return `Нужна ${label} ур. ${requiredLevel} · текущий уровень не подключён`;
-  return `Нужна ${label} ур. ${requiredLevel} · сейчас ${currentLevel}`;
+function requirementValueLabel(requirement: SpaceportRequirementState) {
+  if (requirement.valueKind === 'quantity') return 'количество';
+  if (requirement.valueKind === 'unknown') return 'значение';
+  return 'ур.';
 }
 
-function requirementArt(requirement: SpaceportRequirementState): string | null {
-  if (requirement.buildingRole) return getBuildingDefinition(requirement.buildingRole).art;
+function requirementCurrentLabel(requirement: SpaceportRequirementState) {
+  if (requirement.valueKind === 'quantity') return 'Текущее количество';
+  if (requirement.valueKind === 'unknown') return 'Текущее значение';
+  return 'Текущий уровень';
+}
+
+function requirementRequiredLabel(requirement: SpaceportRequirementState) {
+  if (requirement.valueKind === 'quantity') return 'Требуется количество';
+  if (requirement.valueKind === 'unknown') return 'Требуется значение';
+  return 'Требуется';
+}
+
+function requirementBlocker(requirement: SpaceportRequirementState) {
+  const valueLabel = requirementValueLabel(requirement);
+  if (requirement.valueKind === 'level') {
+    if (requirement.currentLevel == null) return `Нужна ${requirement.label} ур. ${requirement.requiredLevel} · текущий уровень не подключён`;
+    return `Нужна ${requirement.label} ур. ${requirement.requiredLevel} · сейчас ${requirement.currentLevel}`;
+  }
+  if (requirement.currentLevel == null) {
+    return `Нужна ${requirement.label} · ${valueLabel} ${requirement.requiredLevel} · текущее ${valueLabel} не подключено`;
+  }
+  return `Нужна ${requirement.label} · ${valueLabel} ${requirement.requiredLevel} · сейчас ${requirement.currentLevel}`;
+}
+
+function requirementArt(requirement: SpaceportRequirementState, factionId: CombatFactionId): string | null {
+  if (requirement.buildingRole) return getBuildingDefinition(requirement.buildingRole, factionId).art;
   if (requirement.scienceId == null) return null;
   const science = SCIENCE_CATALOG.find((item) => item.id === requirement.scienceId);
   if (!science) return null;
   return SCIENCE_ARTS[`../assets/source/New assets/technologies/${science.artSlug}`] ?? null;
 }
 
-function RequirementBadge({ requirement }: { requirement: SpaceportRequirementState }) {
+function RequirementBadge({ requirement, factionId }: { requirement: SpaceportRequirementState; factionId: CombatFactionId }) {
   const [tooltipOpen, setTooltipOpen] = useState(false);
   const badgeRef = useRef<HTMLSpanElement>(null);
-  const art = requirementArt(requirement);
+  const art = requirementArt(requirement, factionId);
   const status = requirement.met ? 'выполнено' : 'не выполнено';
   const current = requirement.currentLevel == null ? 'неизвестно' : String(requirement.currentLevel);
-  const tooltip = `${requirement.label}\nТекущий уровень: ${current}\nТребуется: ${requirement.requiredLevel}\nСтатус: ${status}`;
+  const valueLabel = requirementValueLabel(requirement);
+  const currentLabel = requirementCurrentLabel(requirement);
+  const requiredLabel = requirementRequiredLabel(requirement);
+  const tooltip = `${requirement.label}\n${currentLabel}: ${current}\n${requiredLabel}: ${requirement.requiredLevel}\nСтатус: ${status}`;
 
   useEffect(() => {
     const badge = badgeRef.current;
@@ -137,7 +167,7 @@ function RequirementBadge({ requirement }: { requirement: SpaceportRequirementSt
         className="spaceport-requirement-fallback-v2"
         data-qa-spaceport-requirement-fallback={requirement.label}
       >
-        {requirement.label} · ур. {requirement.requiredLevel} · asset не найден
+        {requirement.label} · {valueLabel} {requirement.requiredLevel} · asset не найден
       </span>
     );
   }
@@ -150,7 +180,7 @@ function RequirementBadge({ requirement }: { requirement: SpaceportRequirementSt
       data-qa-spaceport-requirement-status={requirement.met ? 'met' : 'missing'}
       data-tooltip={tooltip}
       tabIndex={0}
-      aria-label={`${requirement.label}. Текущий уровень ${current}. Требуется ${requirement.requiredLevel}. Статус: ${status}.`}
+      aria-label={`${requirement.label}. ${currentLabel} ${current}. ${requiredLabel} ${requirement.requiredLevel}. Статус: ${status}.`}
     >
       <img src={art} alt="" draggable={false} />
       <b>{requirement.requiredLevel}</b>
@@ -161,8 +191,8 @@ function RequirementBadge({ requirement }: { requirement: SpaceportRequirementSt
         aria-hidden={false}
       >
         <strong>{requirement.label}</strong>
-        <span>Текущий уровень: {current}</span>
-        <span>Требуется: {requirement.requiredLevel}</span>
+        <span>{currentLabel}: {current}</span>
+        <span>{requiredLabel}: {requirement.requiredLevel}</span>
         <span>Статус: {status}</span>
       </span>
     </span>
@@ -222,10 +252,12 @@ function LevelProgress({
 
 function SelectedQueue({
   track,
+  factionId,
   upgrades,
   now,
 }: {
   track: SpaceportUpgradeTrack;
+  factionId: CombatFactionId;
   upgrades: SpaceportUpgradeState;
   now: number;
 }) {
@@ -251,7 +283,7 @@ function SelectedQueue({
       ) : (
         <div className="spaceport-queue-list">
           {queue.map((task, index) => {
-            const entity = getSpaceportUpgradeEntity(track, task.shipId);
+            const entity = getSpaceportUpgradeEntity(track, task.shipId, factionId);
             const active = index === 0;
             return (
               <article
@@ -281,6 +313,7 @@ function SelectedQueue({
 
 export function SpaceportUpgradeView({
   planetName,
+  factionId,
   buildingLevel,
   buildings,
   scienceLevels,
@@ -291,8 +324,8 @@ export function SpaceportUpgradeView({
   onBack,
 }: SpaceportUpgradeViewProps) {
   const [activeTrack, setActiveTrack] = useState<SpaceportUpgradeTrack>('ships');
-  const spaceport = getBuildingDefinition('spaceport');
-  const catalog = useMemo(() => getSpaceportUpgradeCatalog(activeTrack), [activeTrack]);
+  const spaceport = getBuildingDefinition('spaceport', factionId);
+  const catalog = useMemo(() => getSpaceportUpgradeCatalog(activeTrack, factionId), [activeTrack, factionId]);
   const selectedQueue = queueOf(upgrades, activeTrack);
 
   return (
@@ -331,7 +364,7 @@ export function SpaceportUpgradeView({
           })}
         </nav>
 
-        <SelectedQueue track={activeTrack} upgrades={upgrades} now={now} />
+        <SelectedQueue track={activeTrack} factionId={factionId} upgrades={upgrades} now={now} />
 
         <button type="button" className="spaceport-back-v2" data-qa-building-interior-back onClick={onBack}>
           <span aria-hidden="true">←</span>
@@ -361,6 +394,7 @@ export function SpaceportUpgradeView({
               buildings,
               scienceLevels,
               spaceportLevel: buildingLevel,
+              factionId,
               mode: ACTIVE_RUNTIME_MODE,
             }, activeTrack, entity.id);
             const queuedTasks = selectedQueue
@@ -377,7 +411,7 @@ export function SpaceportUpgradeView({
                 ? 'ОЧЕРЕДЬ УЛУЧШЕНИЙ ЗАПОЛНЕНА'
                 : `ЗАКАЗАТЬ УРОВЕНЬ ${preview.nextLevel ?? preview.currentLevel}`;
             const actionReason = missingRequirements.length > 0
-              ? missingRequirements.map((requirement) => requirementBlocker(requirement.label, requirement.requiredLevel, requirement.currentLevel)).join('. ')
+              ? missingRequirements.map(requirementBlocker).join('. ')
               : missingResources.length > 0
                 ? missingResources.map((key) => `Недостаточно ${RESOURCE_LABELS[key]}`).join('. ')
                 : preview.reason ?? undefined;
@@ -440,6 +474,7 @@ export function SpaceportUpgradeView({
                         <RequirementBadge
                           key={`${entity.id}-${requirement.kind}-${requirement.label}`}
                           requirement={requirement}
+                          factionId={factionId}
                         />
                       ))}
                     </div>
@@ -463,7 +498,7 @@ export function SpaceportUpgradeView({
                       data-qa-spaceport-blocker="requirement"
                       key={`${entity.id}-block-${requirement.kind}-${requirement.label}`}
                     >
-                      {requirementBlocker(requirement.label, requirement.requiredLevel, requirement.currentLevel)}
+                      {requirementBlocker(requirement)}
                     </div>
                   ))}
 

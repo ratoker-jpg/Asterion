@@ -53,6 +53,7 @@ import {
   getCombatEntity,
   type CatalogEntity,
 } from './catalog.ts';
+import { FACTION_SHIP_MECHANICS } from './faction-ship-data.ts';
 import type { CombatFactionId } from './factions.ts';
 import type { CombatEntityId, DefenseId, ShipId } from './ids.ts';
 
@@ -74,10 +75,30 @@ function applyOverrides<TId extends CombatEntityId>(
   });
 }
 
-// These rosters keep the canonical mechanical IDs/stats, but their presentation
-// follows the naming contract approved in Asterion PR #26. Asset filenames retain
-// legacy Nemexia/source names and therefore must not leak into the UI.
-const SYNOD_SHIPS = applyOverrides<ShipId>(SHIP_COMBAT_CATALOG, [
+function applyMechanicalData(
+  base: readonly CatalogEntity<ShipId>[],
+  factionId: CombatFactionId,
+): readonly CatalogEntity<ShipId>[] {
+  const mechanics = FACTION_SHIP_MECHANICS[factionId];
+  return base.map((entity) => {
+    const data = mechanics[entity.id];
+    if (!data) throw new Error(`Missing ${factionId} ship data for ${entity.id}`);
+    return {
+      ...entity,
+      population: data.population,
+      cost: data.cost,
+      combat: data.combat,
+      ship: data.ship,
+      construction: data.construction,
+    };
+  });
+}
+
+// Mechanical values come from the 39 saved Nemexia pages. Presentation follows
+// the naming contract approved in Asterion PR #26; legacy source names therefore
+// remain provenance metadata and never leak into the UI.
+const AEGIS_SHIPS = applyMechanicalData(SHIP_COMBAT_CATALOG, 'aegis');
+const SYNOD_SHIPS = applyOverrides<ShipId>(applyMechanicalData(SHIP_COMBAT_CATALOG, 'synod'), [
   { id: 'solar-satellite', name: 'Энергосфера', role: 'Орбитальный спутник Иларов', art: synodSatelliteArt },
   { id: 'spy-probe', name: 'Сканер', role: 'Разведывательный бот Иларов', art: synodSpyProbeArt },
   { id: 'transporter', name: 'Транспортный дрон', role: 'Транспорт Иларов', art: synodTransportArt },
@@ -93,7 +114,7 @@ const SYNOD_SHIPS = applyOverrides<ShipId>(SHIP_COMBAT_CATALOG, [
   { id: 'death-star', name: 'Разлом', role: 'Сверхтяжёлый корабль Иларов', art: synodTitanArt },
 ]);
 
-const VEYRA_SHIPS = applyOverrides<ShipId>(SHIP_COMBAT_CATALOG, [
+const VEYRA_SHIPS = applyOverrides<ShipId>(applyMechanicalData(SHIP_COMBAT_CATALOG, 'veyra'), [
   { id: 'solar-satellite', name: 'Симбионт', role: 'Орбитальный организм Роя', art: veyraSatelliteArt },
   { id: 'spy-probe', name: 'Глаз', role: 'Разведывательный организм Роя', art: veyraSpyProbeArt },
   { id: 'transporter', name: 'Носильщик', role: 'Транспортный организм Роя', art: veyraTransportArt },
@@ -134,7 +155,7 @@ const VEYRA_DEFENSES = applyOverrides<DefenseId>(DEFENSE_COMBAT_CATALOG, [
 ]);
 
 const SHIPS_BY_FACTION: Record<CombatFactionId, readonly CatalogEntity<ShipId>[]> = {
-  aegis: SHIP_COMBAT_CATALOG,
+  aegis: AEGIS_SHIPS,
   synod: SYNOD_SHIPS,
   veyra: VEYRA_SHIPS,
 };

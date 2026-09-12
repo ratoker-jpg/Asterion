@@ -155,12 +155,14 @@ async function verifyMilitaryDeepLinks(win, directory) {
     return {
       fleetName: fleetCard?.querySelector('strong')?.textContent?.trim() ?? '',
       pageName: pageTitle?.querySelector('h2')?.textContent?.trim() ?? '',
+      fleetCardTag: fleetCard?.tagName ?? '',
+      fleetCardLabel: fleetCard?.getAttribute('aria-label') ?? '',
       asset,
       image: root?.querySelector('img')?.getAttribute('src') ?? '',
       hasLegacyName: Boolean(document.querySelector('[data-qa-building-role="shipyard"]')?.textContent?.includes('Орбитальная')),
     };
   })()`);
-  if (shipyardIdentity.fleetName !== 'Верфь' || shipyardIdentity.pageName !== 'Верфь' || shipyardIdentity.hasLegacyName || !/building\.aegis\.shipyard(?:-[^/]+)?\.png$/.test(shipyardIdentity.asset) || shipyardIdentity.image !== shipyardIdentity.asset) {
+  if (shipyardIdentity.fleetName !== 'Верфь' || shipyardIdentity.pageName !== 'Верфь' || shipyardIdentity.fleetCardTag !== 'BUTTON' || !shipyardIdentity.fleetCardLabel.startsWith('Открыть Верфь') || shipyardIdentity.hasLegacyName || !/building\.aegis\.shipyard(?:-[^/]+)?\.png$/.test(shipyardIdentity.asset) || shipyardIdentity.image !== shipyardIdentity.asset) {
     throw new Error(`Shipyard identity contract failed: ${JSON.stringify(shipyardIdentity)}`);
   }
   const unitTime = await win.webContents.executeJavaScript(`(() => {

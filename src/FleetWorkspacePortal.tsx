@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
+import { getCombatFactionName } from './domain/combat/factions.ts';
 import type { ShipId } from './domain/combat/ids.ts';
 import { getBuildingPresentation } from './domain/buildings/balance-v1.ts';
 import { RUNTIME_STATE_CHANGED_EVENT } from './domain/runtime/mode.ts';
@@ -26,9 +27,6 @@ import {
 import './fleet-workspace.css';
 
 const FLEET_ROOT_STATUS = 'Выберите корабли и миссию. Отправка флота будет подключена следующим этапом.';
-
-const shipDefinitions = getFactionShipCatalog('aegis');
-const shipyardPresentation = getBuildingPresentation('shipyard', 'aegis');
 
 type MissionId =
   | 'transport'
@@ -93,13 +91,20 @@ function FleetWorkspace({
   const [constructionView, setConstructionView] = useState<ConstructionView>(null);
   const [status, setStatus] = useState(FLEET_ROOT_STATUS);
   const [fleetSnapshot, setFleetSnapshot] = useState<FleetSnapshot>(readApplicationFleetSnapshot);
+  const factionId = fleetSnapshot.factionId;
+  const factionName = getCombatFactionName(factionId);
+  const shipDefinitions = useMemo(() => getFactionShipCatalog(factionId), [factionId]);
+  const shipyardPresentation = useMemo(
+    () => getBuildingPresentation('shipyard', factionId),
+    [factionId],
+  );
   const fleetSummary = useMemo(
     () => getFleetSummaryForSnapshot(fleetSnapshot),
-    [fleetSnapshot.fleet, fleetSnapshot.hangarLevel],
+    [fleetSnapshot.factionId, fleetSnapshot.fleet, fleetSnapshot.hangarLevel],
   );
   const ownedShipDefinitions = useMemo(
     () => shipDefinitions.filter((ship) => (fleetSnapshot.fleet.ships[ship.id] ?? 0) > 0),
-    [fleetSnapshot.fleet],
+    [fleetSnapshot.fleet, shipDefinitions],
   );
   const availableShipCount = useMemo(
     () => ownedShipDefinitions.reduce((total, ship) => total + (fleetSnapshot.fleet.ships[ship.id] ?? 0), 0),
@@ -191,19 +196,27 @@ function FleetWorkspace({
       <aside className="fleet-sidebar-v1">
         <div className="fleet-sidebar-title-v1">
           <span>ФЛОТЫ</span>
-          <small>ФЛОТ АСТЕРОВ</small>
+          <small>ФЛОТ {factionName.toUpperCase()}</small>
         </div>
 
-        <div className="fleet-yard-card-v1" data-qa-building-role="shipyard" data-qa-building-asset={shipyardPresentation.art}>
+        <button
+          type="button"
+          className="fleet-yard-card-v1"
+          data-qa-building-role="shipyard"
+          data-qa-building-faction={factionId}
+          data-qa-building-asset={shipyardPresentation.art}
+          aria-label={`Открыть Верфь фракции ${factionName}`}
+          onClick={() => chooseSection('ships')}
+        >
           <div className="fleet-yard-emblem-v1">
             <img src={shipyardPresentation.art} alt="" aria-hidden="true" draggable={false} />
           </div>
           <div>
             <small>БАЗА ФЛОТА</small>
-            <strong>{shipyardPresentation.name}</strong>
-            <span>Ангар {fleetSnapshot.hangarLevel} · {shipyardPresentation.name} {fleetSnapshot.shipyardLevel}</span>
+            <strong>Верфь</strong>
+            <span>Ангар {fleetSnapshot.hangarLevel} · Верфь {fleetSnapshot.shipyardLevel}</span>
           </div>
-        </div>
+        </button>
 
         <FleetMenuGroup title="СТРОИТЕЛЬСТВО" items={FLEET_CONSTRUCTION_NAVIGATION} selected={selectedSection} onSelect={chooseSection} />
         <FleetMenuGroup title="УПРАВЛЕНИЕ ФЛОТОМ" items={FLEET_MANAGEMENT_NAVIGATION} selected={selectedSection} onSelect={chooseSection} />

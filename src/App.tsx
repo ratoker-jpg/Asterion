@@ -322,12 +322,12 @@ export function App() {
           .join(', ');
         setNotice(`Наука: исследование завершено — ${names}.`);
       } else if (event.kind === 'building') {
-        setNotice(`${result.state.planets['helion-01'].name}: ${getBuildingDefinition(event.assetRole).name} завершено.`);
+        setNotice(`${result.state.planets['helion-01'].name}: ${getBuildingDefinition(event.assetRole, result.state.profile.factionId).name} завершено.`);
       } else if (event.kind === 'recycling') {
         setNotice('Результат переработки автоматически зачислен');
       } else if (event.kind === 'spaceport') {
         const names = event.tasks
-          .map((task) => getSpaceportUpgradeEntity(task.track, task.shipId)?.name ?? task.shipId)
+          .map((task) => getSpaceportUpgradeEntity(task.track, task.shipId, result.state.profile.factionId)?.name ?? task.shipId)
           .join(', ');
         setNotice(`Космодром: улучшение завершено — ${names}.`);
       }
@@ -347,7 +347,9 @@ export function App() {
   );
   const currentQueue = state.queues['helion-01'];
   const currentActiveQueueItem = currentQueue[0] ?? null;
-  const currentQueueDefinition = currentActiveQueueItem ? getBuildingDefinition(currentActiveQueueItem.assetRole) : null;
+  const currentQueueDefinition = currentActiveQueueItem
+    ? getBuildingDefinition(currentActiveQueueItem.assetRole, state.profile.factionId)
+    : null;
   const resourceWallet: ResourceWallet = {
     metal: state.metal,
     minerals: state.minerals,
@@ -384,7 +386,7 @@ export function App() {
     ? getBuildingInteriorTarget(buildingInterior.buildingRole)
     : null;
   const buildingInteriorDefinition = buildingInterior
-    ? getBuildingDefinition(buildingInterior.buildingRole)
+    ? getBuildingDefinition(buildingInterior.buildingRole, state.profile.factionId)
     : null;
 
   const editingPlanet = editingPlanetId ? currentPlanet : null;
@@ -870,6 +872,7 @@ export function App() {
               context={buildingInterior}
               planetName={currentPlanetName}
               moduleTitle={buildingInteriorTarget.moduleTitle}
+              factionId={state.profile.factionId}
               buildings={currentPlanetState.buildings}
               scienceLevels={state.science.levels}
               productionBots={currentPlanetState.productionBots}

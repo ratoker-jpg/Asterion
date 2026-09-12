@@ -16,10 +16,23 @@ test('canonical starting fleet is persisted by mechanical IDs and derives popula
     { scout: 20, transporter: 10, recycler: 1, 'spy-probe': 3 },
   );
   assert.equal(calculateFleetPopulation(fleet), 58);
+  assert.equal(calculateFleetPopulation(fleet, 'synod'), 60);
+  assert.equal(calculateFleetPopulation(fleet, 'veyra'), 48);
 
   fleet.commanders.corsair = 1;
   assert.equal(calculateFleetPopulation(fleet), 66);
   assert.deepEqual(getFleetSummary(fleet, 1), { population: 66, capacity: 120, available: 54 });
+});
+
+test('fleet population resolves the selected faction catalog for each owned ship', () => {
+  const fleet = createCanonicalStartingFleet();
+  const aegis = getFleetSummary(fleet, 1, 'aegis');
+  const synod = getFleetSummary(fleet, 1, 'synod');
+  const veyra = getFleetSummary(fleet, 1, 'veyra');
+
+  assert.deepEqual(aegis, { population: 58, capacity: 120, available: 62 });
+  assert.deepEqual(synod, { population: 60, capacity: 120, available: 60 });
+  assert.deepEqual(veyra, { population: 48, capacity: 120, available: 72 });
 });
 test('Hangar is the single capacity resolver and old roster data is not overwritten', () => {
   assert.equal(calculateFleetCapacity(0), 50);

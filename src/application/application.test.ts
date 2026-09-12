@@ -192,6 +192,18 @@ test('recycling, trade, and spaceport actions remain thin domain-backed transiti
   assert.equal(upgrade.state.planets['helion-01'].spaceportUpgrades.shipQueue.length, 1);
 });
 
+test('spaceport application action names and resolves the selected faction ship', () => {
+  const state = {
+    ...withBuildingSetup(createInitialSaveState('test')),
+    profile: { ...createInitialSaveState('test').profile, factionId: 'synod' as const },
+  };
+  const result = startSpaceportUpgrade(state, context(25_000), 'ships', 'transporter', 'synod-transporter-1');
+
+  assert.equal(result.ok, true);
+  assert.equal(result.entityName, 'Транспортный дрон');
+  assert.equal(result.state.planets['helion-01'].spaceportUpgrades.shipQueue[0]?.shipId, 'transporter');
+});
+
 test('science application uses one clock, reconciles idempotently, and event bridge reads latest state', () => {
   const base = createInitialSaveState('test');
   const initial = {
@@ -245,6 +257,14 @@ test('fleet adapter is the only UI-facing source for fleet budget and summary', 
   assert.equal(summary.capacity, 120);
   const budget = getFleetBuildBudget(state);
   assert.deepEqual(budget.summary, summary);
+
+  const synodState = {
+    ...state,
+    profile: { ...state.profile, factionId: 'synod' as const },
+  };
+  const synodSummary = getFleetSummaryForState(synodState);
+  assert.equal(synodSummary.population, 60);
+  assert.equal(getFleetBuildBudget(synodState).factionId, 'synod');
 
   const storage = new MemoryStorage();
   const persistence = createPersistenceFacade({ mode: 'production', storage });

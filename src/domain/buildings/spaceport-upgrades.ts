@@ -1,8 +1,9 @@
 import {
   COMMANDER_COMBAT_CATALOG,
-  SHIP_COMBAT_CATALOG,
   type CatalogEntity,
 } from '../combat/catalog.ts';
+import { getFactionShipCatalog } from '../combat/faction-catalog.ts';
+import type { CombatFactionId } from '../combat/factions.ts';
 import { SCIENCE_CATALOG } from '../science/catalog.ts';
 import type { ScienceId } from '../science/types.ts';
 import type { BuildingLevels, BuildingRole, ScienceLevels } from './resource-zone.ts';
@@ -72,6 +73,7 @@ export type SpaceportRequirementState = {
   requiredLevel: number;
   currentLevel: number | null;
   met: boolean;
+  valueKind: 'level' | 'quantity' | 'unknown';
   buildingRole?: BuildingRole;
   scienceId?: ScienceId;
 };
@@ -98,6 +100,7 @@ export type SpaceportUpgradeContext = {
   buildings: BuildingLevels;
   scienceLevels: ScienceLevels;
   spaceportLevel: number;
+  factionId?: CombatFactionId;
   mode?: RuntimeMode;
   testTimeScale?: number;
 };
@@ -122,13 +125,6 @@ const EXCLUDED_SHIP_UPGRADE_IDS = new Set<string>([
   'colonizer',
   'recycler',
 ]);
-
-const SHIP_UPGRADE_CATALOG = SHIP_COMBAT_CATALOG.filter((entity) => !EXCLUDED_SHIP_UPGRADE_IDS.has(entity.id));
-
-const CATALOG_BY_TRACK: Readonly<Record<SpaceportUpgradeTrack, readonly CatalogEntity[]>> = {
-  ships: SHIP_UPGRADE_CATALOG,
-  commanders: COMMANDER_COMBAT_CATALOG,
-};
 
 const commanderIds = new Set<string>(COMMANDER_COMBAT_CATALOG.map((entity) => entity.id));
 
@@ -186,16 +182,28 @@ function getSpaceportUpgradeBalance(track: SpaceportUpgradeTrack, shipId: string
   return rows?.[fromLevel] ?? null;
 }
 
-export function getSpaceportUpgradeCatalog(track: SpaceportUpgradeTrack): readonly CatalogEntity[] {
-  return CATALOG_BY_TRACK[track];
+function getCatalog(track: SpaceportUpgradeTrack, factionId: CombatFactionId): readonly CatalogEntity[] {
+  if (track === 'commanders') return COMMANDER_COMBAT_CATALOG;
+  return getFactionShipCatalog(factionId).filter((entity) => !EXCLUDED_SHIP_UPGRADE_IDS.has(entity.id));
 }
 
-export function getSpaceportUpgradeEntity(track: SpaceportUpgradeTrack, shipId: string): CatalogEntity | null {
-  return CATALOG_BY_TRACK[track].find((entity) => entity.id === shipId) ?? null;
+export function getSpaceportUpgradeCatalog(
+  track: SpaceportUpgradeTrack,
+  factionId: CombatFactionId = 'aegis',
+): readonly CatalogEntity[] {
+  return getCatalog(track, factionId);
+}
+
+export function getSpaceportUpgradeEntity(
+  track: SpaceportUpgradeTrack,
+  shipId: string,
+  factionId: CombatFactionId = 'aegis',
+): CatalogEntity | null {
+  return getCatalog(track, factionId).find((entity) => entity.id === shipId) ?? null;
 }
 
 export function createDefaultSpaceportUpgradeState(): SpaceportUpgradeState {
-  const ids = [...SHIP_COMBAT_CATALOG, ...COMMANDER_COMBAT_CATALOG].map((entity) => entity.id);
+  const ids = [...getFactionShipCatalog('aegis'), ...COMMANDER_COMBAT_CATALOG].map((entity) => entity.id);
   return {
     shipLevels: Object.fromEntries(ids.map((id) => [id, 0])),
     shipQueue: [],
@@ -221,7 +229,7 @@ function parseCatalogRequirement(
   buildings: BuildingLevels,
   scienceLevels: ScienceLevels,
 ): SpaceportRequirementState | null {
-  const match = raw.match(/^(.+?)\s*[·•]\s*уровень\s*(\d+)\s*$/iu);
+  const match = raw.match(/^(.+?)\s*[·•]\s*(уровень|количество)\s*(\d+)\s*$/iu);
   if (!match) {
     return {
       kind: 'unresolved-catalog-requirement',
@@ -229,11 +237,24 @@ function parseCatalogRequirement(
       requiredLevel: 1,
       currentLevel: null,
       met: false,
+      valueKind: 'unknown',
     };
   }
 
   const label = match[1].trim();
-  const requiredLevel = Math.max(0, Number(match[2]));
+  const valueKind = match[2].toLocaleLowerCase('ru-RU') === 'количество' ? 'quantity' : 'level';
+  const requiredLevel = Math.max(0, Number(match[3]));
+  if (valueKind === 'quantity') {
+    return {
+      kind: 'unresolved-catalog-requirement',
+      label,
+      requiredLevel,
+      currentLevel: null,
+      met: false,
+      valueKind,
+    };
+  }
+
   if (normalizeRequirementName(label) === normalizeRequirementName('Верфь')) {
     const currentLevel = buildings.shipyard ?? 0;
     return {
@@ -242,6 +263,7 @@ function parseCatalogRequirement(
       requiredLevel,
       currentLevel,
       met: currentLevel >= requiredLevel,
+      valueKind,
       buildingRole: 'shipyard',
     };
   }
@@ -254,6 +276,7 @@ function parseCatalogRequirement(
       requiredLevel,
       currentLevel: null,
       met: false,
+      valueKind,
     };
   }
 
@@ -264,6 +287,7 @@ function parseCatalogRequirement(
     requiredLevel,
     currentLevel,
     met: currentLevel >= requiredLevel,
+    valueKind,
     scienceId: science.id,
   };
 }
@@ -273,8 +297,9 @@ export function evaluateSpaceportUpgradeRequirements(
   shipId: string,
   buildings: BuildingLevels,
   scienceLevels: ScienceLevels,
+  factionId: CombatFactionId = 'aegis',
 ): SpaceportRequirementState[] {
-  const entity = getSpaceportUpgradeEntity(track, shipId);
+  const entity = getSpaceportUpgradeEntity(track, shipId, factionId);
   if (!entity) return [];
 
   const parsed = entity.construction.requirements
@@ -290,6 +315,7 @@ export function evaluateSpaceportUpgradeRequirements(
       requiredLevel: entity.construction.requiredShipyardLevel,
       currentLevel,
       met: currentLevel >= entity.construction.requiredShipyardLevel,
+      valueKind: 'level',
       buildingRole: 'shipyard',
     });
   }
@@ -298,10 +324,20 @@ export function evaluateSpaceportUpgradeRequirements(
 }
 
 export function formatSpaceportRequirement(requirement: SpaceportRequirementState): string {
+  const valueLabel = requirement.valueKind === 'quantity'
+    ? 'количество'
+    : requirement.valueKind === 'unknown'
+      ? 'значение'
+      : 'уровень';
   if (requirement.currentLevel == null) {
-    return `${requirement.label} — уровень ${requirement.requiredLevel}; текущий уровень не подключён к общей science-модели`;
+    const modelLabel = requirement.valueKind === 'quantity'
+      ? 'общей модели состава флота'
+      : requirement.valueKind === 'unknown'
+        ? 'общей модели требований'
+        : 'общей science-модели';
+    return `${requirement.label} — ${valueLabel} ${requirement.requiredLevel}; текущее ${valueLabel} не подключено к ${modelLabel}`;
   }
-  return `${requirement.label} — уровень ${requirement.requiredLevel}; сейчас ${requirement.currentLevel}`;
+  return `${requirement.label} — ${valueLabel} ${requirement.requiredLevel}; сейчас ${requirement.currentLevel}`;
 }
 
 export function previewSpaceportUpgrade(
@@ -309,7 +345,7 @@ export function previewSpaceportUpgrade(
   track: SpaceportUpgradeTrack,
   shipId: string,
 ): SpaceportUpgradePreview {
-  const entity = getSpaceportUpgradeEntity(track, shipId);
+  const entity = getSpaceportUpgradeEntity(track, shipId, context.factionId);
   if (!entity) throw new Error(`Unknown ${track} upgrade target: ${shipId}`);
 
   const maxLevel = getSpaceportUpgradeMaxLevel(track);
@@ -317,7 +353,13 @@ export function previewSpaceportUpgrade(
   const currentLevel = safeTrackLevel(context.state.shipLevels[shipId], track);
   const queuedCount = queue.filter((task) => task.shipId === shipId).length;
   const projectedLevel = Math.min(maxLevel, currentLevel + queuedCount);
-  const requirements = evaluateSpaceportUpgradeRequirements(track, shipId, context.buildings, context.scienceLevels);
+  const requirements = evaluateSpaceportUpgradeRequirements(
+    track,
+    shipId,
+    context.buildings,
+    context.scienceLevels,
+    context.factionId,
+  );
   const balance = getSpaceportUpgradeBalance(track, shipId, projectedLevel);
   const cost = balance ? { ...balance.cost } : calculateSpaceportUpgradeCost(projectedLevel);
   const baseDurationMs = balance?.durationMs ?? PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS;
@@ -382,7 +424,7 @@ export function enqueueSpaceportUpgrade(
   now: number,
   taskId: string,
 ): SpaceportUpgradeTransition {
-  if (!getSpaceportUpgradeEntity(track, shipId)) {
+  if (!getSpaceportUpgradeEntity(track, shipId, context.factionId)) {
     return {
       ok: false,
       state: context.state,

@@ -356,11 +356,12 @@ export function startSpaceportUpgrade(
     buildings: planet.buildings,
     scienceLevels: state.science.levels,
     spaceportLevel: planet.buildings.spaceport,
+    factionId: state.profile.factionId,
     mode: context.mode,
     testTimeScale: context.testTimeScale,
   }, track, shipId, context.now, taskId);
   if (!transition.ok) return { ok: false, state, reason: transition.reason, entityName: shipId };
-  const entityName = getSpaceportUpgradeEntity(track, shipId)?.name ?? shipId;
+  const entityName = getSpaceportUpgradeEntity(track, shipId, state.profile.factionId)?.name ?? shipId;
   return {
     ok: true,
     state: replacePlanetState({

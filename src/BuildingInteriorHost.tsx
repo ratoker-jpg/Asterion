@@ -16,12 +16,14 @@ import type {
 } from './domain/buildings/spaceport-upgrades.ts';
 import type { TradeExecution, TradeRequest, TradeState, TradeWallet } from './domain/buildings/trade.ts';
 import type { BuildingInteriorContext } from './building-interior-navigation.ts';
+import type { PlayerFactionId } from './domain/profile/types.ts';
 import './building-interiors.css';
 
 type BuildingInteriorHostProps<PlanetId extends string> = {
   context: BuildingInteriorContext<PlanetId>;
   planetName: string;
   moduleTitle: string;
+  factionId: PlayerFactionId;
   buildings: BuildingLevels;
   scienceLevels: ScienceLevels;
   productionBots: BotAssignment;
@@ -44,6 +46,7 @@ export function BuildingInteriorHost<PlanetId extends string>({
   context,
   planetName,
   moduleTitle,
+  factionId,
   buildings,
   scienceLevels,
   productionBots,
@@ -94,6 +97,7 @@ export function BuildingInteriorHost<PlanetId extends string>({
     return (
       <SpaceportUpgradeView
         planetName={planetName}
+        factionId={factionId}
         buildingLevel={buildings.spaceport}
         buildings={buildings}
         scienceLevels={scienceLevels}
@@ -120,7 +124,7 @@ export function BuildingInteriorHost<PlanetId extends string>({
     );
   }
 
-  const building = getBuildingDefinition(context.buildingRole);
+  const building = getBuildingDefinition(context.buildingRole, factionId);
 
   return (
     <main
