@@ -15,6 +15,7 @@ import {
 import { getBuildingDefinition, type BuildingLevels, type ScienceLevels } from './domain/buildings/resource-zone.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import { ACTIVE_RUNTIME_MODE } from './domain/runtime/mode.ts';
+import { ResourceIcon } from './ui/resources/ResourceIcon';
 import './spaceport-upgrades.css';
 import './spaceport-upgrades-enhancements.css';
 
@@ -422,7 +423,9 @@ export function SpaceportUpgradeView({
                     <span className="spaceport-line-label-v2">СТОИМОСТЬ</span>
                     {(Object.keys(preview.cost) as (keyof SpaceportUpgradeWallet)[]).map((key) => (
                       <span className="spaceport-cost-chip-v2" key={key} data-resource={key}>
-                        <i>{RESOURCE_SHORT_LABELS[key].slice(0, 1)}</i>
+                        <span className="spaceport-cost-icon-v2">
+                          <ResourceIcon kind={key} />
+                        </span>
                         <small>{RESOURCE_SHORT_LABELS[key]}</small>
                         <strong>{formatNumber(preview.cost[key])}</strong>
                       </span>

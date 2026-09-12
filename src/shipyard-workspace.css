@@ -97,6 +97,35 @@ html.web-preview.asterion-long-page .stage {
   clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 0 100%);
 }
 
+.shipyard-page-title-v1 {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.shipyard-page-art-v1 {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(61, 210, 244, .42);
+  background: rgba(5, 57, 76, .42);
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+}
+
+.shipyard-page-art-v1 img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(72, 218, 255, .34));
+}
+
+.shipyard-page-title-v1 > div {
+  min-width: 0;
+}
+
 .shipyard-page-head-v1 small {
   color: #62b7ce;
   font-size: 10px;

@@ -147,6 +147,22 @@ async function verifyMilitaryDeepLinks(win, directory) {
   await waitFor(win, `document.querySelector('[data-qa-route="fleets"][aria-current="page"]')`);
   await waitFor(win, `document.querySelector('.fleet-main-v1--shipyard')`);
   await waitFor(win, `document.querySelector('[data-qa-building-interior-back]')`);
+  const shipyardIdentity = await win.webContents.executeJavaScript(`(() => {
+    const root = document.querySelector('[data-qa-building-role="shipyard"]');
+    const fleetCard = document.querySelector('.fleet-yard-card-v1');
+    const pageTitle = document.querySelector('.shipyard-page-title-v1');
+    const asset = root?.getAttribute('data-qa-building-asset') ?? '';
+    return {
+      fleetName: fleetCard?.querySelector('strong')?.textContent?.trim() ?? '',
+      pageName: pageTitle?.querySelector('h2')?.textContent?.trim() ?? '',
+      asset,
+      image: root?.querySelector('img')?.getAttribute('src') ?? '',
+      hasLegacyName: Boolean(document.querySelector('[data-qa-building-role="shipyard"]')?.textContent?.includes('Орбитальная')),
+    };
+  })()`);
+  if (shipyardIdentity.fleetName !== 'Верфь' || shipyardIdentity.pageName !== 'Верфь' || shipyardIdentity.hasLegacyName || !/building\.aegis\.shipyard(?:-[^/]+)?\.png$/.test(shipyardIdentity.asset) || shipyardIdentity.image !== shipyardIdentity.asset) {
+    throw new Error(`Shipyard identity contract failed: ${JSON.stringify(shipyardIdentity)}`);
+  }
   const unitTime = await win.webContents.executeJavaScript(`(() => {
     const cards = Array.from(document.querySelectorAll('[data-qa-unit-time]'));
     const card = document.querySelector('[data-qa-unit-time="transporter"]') ?? cards[0];

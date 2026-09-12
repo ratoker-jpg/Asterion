@@ -6,6 +6,7 @@ import {
   SCIENCE_QUEUE_CAPACITY,
   SCIENCE_CANCEL_REFUND_SOURCE_URL,
   SCIENCE_SAVE_SCHEMA_VERSION,
+  calculateScienceCost,
   calculateScienceDurationMs,
   cancelScienceResearch,
   createDefaultScienceState,
@@ -65,6 +66,44 @@ test('all prerequisites reference valid source science ids', () => {
       assert.equal(prerequisite.level > 0, true);
     }
   }
+});
+
+test('official NEMEXIA RAW 0 → 1 base costs are present for all 22 sciences', () => {
+  const expected = {
+    1: { metal: 1_000, minerals: 500, gas: 0, energy: 0 },
+    2: { metal: 400, minerals: 200, gas: 50, energy: 0 },
+    3: { metal: 1_000, minerals: 400, gas: 0, energy: 0 },
+    4: { metal: 500, minerals: 0, gas: 500, energy: 0 },
+    5: { metal: 50, minerals: 100, gas: 50, energy: 0 },
+    6: { metal: 0, minerals: 250, gas: 500, energy: 0 },
+    7: { metal: 100, minerals: 50, gas: 0, energy: 0 },
+    8: { metal: 500, minerals: 1_000, gas: 200, energy: 0 },
+    9: { metal: 0, minerals: 1_000, gas: 500, energy: 0 },
+    10: { metal: 200, minerals: 100, gas: 0, energy: 0 },
+    11: { metal: 500, minerals: 250, gas: 50, energy: 0 },
+    12: { metal: 1_000, minerals: 1_000, gas: 1_000, energy: 0 },
+    13: { metal: 2_000, minerals: 1_500, gas: 500, energy: 0 },
+    14: { metal: 2_500, minerals: 3_750, gas: 1_500, energy: 0 },
+    15: { metal: 0, minerals: 0, gas: 0, energy: 250_000 },
+    17: { metal: 10_000, minerals: 5_000, gas: 0, energy: 0 },
+    18: { metal: 50_000, minerals: 25_000, gas: 5_000, energy: 0 },
+    19: { metal: 0, minerals: 50_000, gas: 5_000, energy: 0 },
+    20: { metal: 50_000, minerals: 30_000, gas: 0, energy: 0 },
+    21: { metal: 1_000, minerals: 500, gas: 250, energy: 0 },
+    22: { metal: 1_300, minerals: 650, gas: 325, energy: 0 },
+    23: { metal: 1_600, minerals: 800, gas: 400, energy: 0 },
+  } as const;
+  assert.deepEqual(Object.fromEntries(SCIENCE_CATALOG.map((science) => [science.id, science.baseCost])), expected);
+});
+
+test('science cost scales each resource independently with exact integer doubling', () => {
+  const laser = SCIENCE_CATALOG.find((science) => science.id === 10)!;
+  assert.deepEqual(calculateScienceCost(laser.baseCost, 0), { metal: 200, minerals: 100, gas: 0, energy: 0 });
+  assert.deepEqual(calculateScienceCost(laser.baseCost, 1), { metal: 400, minerals: 200, gas: 0, energy: 0 });
+  assert.deepEqual(calculateScienceCost(laser.baseCost, 2), { metal: 800, minerals: 400, gas: 0, energy: 0 });
+
+  const parallel = SCIENCE_CATALOG.find((science) => science.id === 15)!;
+  assert.deepEqual(calculateScienceCost(parallel.baseCost, 0), { metal: 0, minerals: 0, gas: 0, energy: 250_000 });
 });
 
 test('new science state starts at zero and explicit levels survive migration', () => {
@@ -175,6 +214,41 @@ test('current-save migration preserves queued duration snapshots across laborato
   assert.equal(testReload.queue[0]?.durationMs, testStart.task?.durationMs);
   assert.equal(testReload.queue[0]?.startedAt, testStart.task?.startedAt);
   assert.equal(testReload.queue[0]?.finishAt, testStart.task?.finishAt);
+});
+
+test('preview, start and sequential queue tasks use fromLevel costs and charge once', () => {
+  const initial = context(createDefaultScienceState(), 1, 10_000);
+  const firstPreview = previewScience(initial, 1);
+  assert.deepEqual(firstPreview.cost, { metal: 1_000, minerals: 500, gas: 0, energy: 0 });
+  const first = start(initial, 1, 'cost-snapshot-first');
+  assert.equal(first.ok, true);
+  assert.deepEqual(first.task?.cost, firstPreview.cost);
+  assert.deepEqual(first.wallet, { metal: 999_000, minerals: 999_500, gas: 1_000_000, energy: 1_000_000 });
+
+  const secondContext = { ...initial, state: first.state, wallet: first.wallet, now: first.task!.finishAt };
+  const secondPreview = previewScience(secondContext, 1);
+  assert.equal(secondPreview.projectedLevel, 1);
+  assert.deepEqual(secondPreview.cost, { metal: 2_000, minerals: 1_000, gas: 0, energy: 0 });
+  const second = start(secondContext, 1, 'cost-snapshot-second');
+  assert.equal(second.ok, true);
+  assert.deepEqual(second.task?.cost, secondPreview.cost);
+  assert.equal(second.wallet.metal, 997_000);
+  assert.equal(second.wallet.minerals, 998_500);
+});
+
+test('migration preserves a saved task cost for refunds instead of recalculating it', () => {
+  const migrated = migrateScienceState({
+    levels: { 1: 0 },
+    queue: [{
+      id: 'saved-cost', scienceId: 1, fromLevel: 0, toLevel: 1,
+      startedAt: 100, finishAt: 200, durationMs: 100,
+      cost: { metal: 777, minerals: 333, gas: 222, energy: 111 },
+    }],
+  });
+  assert.deepEqual(migrated.queue[0]?.cost, { metal: 777, minerals: 333, gas: 222, energy: 111 });
+  const canceled = cancelScienceResearch({ ...context(migrated, 1, 150), rng: () => 0 }, 'saved-cost');
+  assert.equal(canceled.ok, true);
+  assert.deepEqual(canceled.refund, { metal: 466, minerals: 199, gas: 133, energy: 66 });
 });
 
 test('science cancellation cascades dependent successors and refunds each saved cost with its own 60–80% roll', () => {
@@ -313,7 +387,7 @@ test('science start validates runtime laboratory/prerequisites and atomically de
   assert.equal(transition.task?.fromLevel, 4);
   assert.equal(transition.task?.toLevel, 5);
   assert.equal(transition.task?.startedAt, before.now);
-  assert.equal(transition.wallet.metal, before.wallet.metal - SCIENCE_CATALOG.find((science) => science.id === 5)!.capturedCost.metal);
+  assert.equal(transition.wallet.metal, before.wallet.metal - SCIENCE_CATALOG.find((science) => science.id === 5)!.baseCost.metal * (2 ** 4));
   assert.equal(transition.wallet.minerals, before.wallet.minerals - 1_600);
   assert.equal(transition.state.queue.length, 1);
 

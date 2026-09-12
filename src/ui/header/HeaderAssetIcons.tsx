@@ -2,11 +2,12 @@ import type { NavigationIconKind } from '../navigation.tsx';
 import type { PlayerFactionId } from '../../domain/profile/types.ts';
 import type { HeaderIconKind, HeaderZoneId } from './types.ts';
 import { NavigationIcon as LegacyNavigationIcon } from './HeaderIcons';
-import metalIcon from '../../assets/ui/header-icons/metal.png';
-import mineralIcon from '../../assets/ui/header-icons/mineral.png';
-import gasIcon from '../../assets/ui/header-icons/gas.png';
-import energyIcon from '../../assets/ui/header-icons/energy.png';
-import populationIcon from '../../assets/ui/header-icons/population.png';
+import {
+  RESOURCE_ICON_ASSETS,
+  RESOURCE_ICON_OPTICAL_SCALES,
+  type ResourceIconKind,
+} from '../resources/resource-assets.ts';
+import '../resources/resource-icons.css';
 import resourceZoneIcon from '../../assets/ui/header-icons/zone-resource.png';
 import industryZoneIcon from '../../assets/ui/header-icons/zone-industry.png';
 import militaryZoneIcon from '../../assets/ui/header-icons/zone-military.png';
@@ -21,11 +22,11 @@ import ratingIcon from '../../assets/ui/header-icons/rating.png';
 import scienceIcon from '../../assets/ui/header-icons/science.png';
 
 const GLOBAL_GAME_ICON_ASSETS = {
-  metal: metalIcon,
-  mineral: mineralIcon,
-  gas: gasIcon,
-  energy: energyIcon,
-  population: populationIcon,
+  metal: RESOURCE_ICON_ASSETS.metal,
+  mineral: RESOURCE_ICON_ASSETS.minerals,
+  gas: RESOURCE_ICON_ASSETS.gas,
+  energy: RESOURCE_ICON_ASSETS.energy,
+  population: RESOURCE_ICON_ASSETS.population,
   resource: resourceZoneIcon,
   industry: industryZoneIcon,
   military: militaryZoneIcon,
@@ -43,13 +44,29 @@ const AEGIS_NAVIGATION_ICON_ASSETS = {
   science: scienceIcon,
 } satisfies Record<NavigationIconKind, string>;
 
-function AssetIcon({ src }: { src: string }) {
-  return <img className="asterion-header-icon" src={src} alt="" aria-hidden="true" draggable={false} />;
+function AssetIcon({ src, resourceKind }: { src: string; resourceKind?: ResourceIconKind }) {
+  const resourceClasses = resourceKind
+    ? ['asterion-resource-icon', `asterion-resource-icon--${resourceKind}`]
+    : [];
+
+  return (
+    <img
+      className={['asterion-header-icon', ...resourceClasses].join(' ')}
+      src={src}
+      alt=""
+      aria-hidden="true"
+      data-qa-resource-kind={resourceKind}
+      data-qa-resource-asset={resourceKind ? src : undefined}
+      data-qa-resource-optical-scale={resourceKind ? RESOURCE_ICON_OPTICAL_SCALES[resourceKind] : undefined}
+      draggable={false}
+    />
+  );
 }
 
 /** Global resource and zone icons used by the approved header only. */
 export function HeaderGameIcon({ kind }: { kind: HeaderIconKind }) {
-  return <AssetIcon src={GLOBAL_GAME_ICON_ASSETS[kind]} />;
+  const resourceKind: ResourceIconKind | undefined = kind === 'mineral' ? 'minerals' : kind === 'metal' || kind === 'gas' || kind === 'energy' || kind === 'population' ? kind : undefined;
+  return <AssetIcon src={GLOBAL_GAME_ICON_ASSETS[kind]} resourceKind={resourceKind} />;
 }
 
 /** Approved transparent zone assets for the large planet scene. */

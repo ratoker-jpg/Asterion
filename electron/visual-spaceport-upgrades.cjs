@@ -10,6 +10,14 @@ const ROOT = path.join(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'visual-qa');
 const SAVE_KEY = 'asterion.vertical-slice.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
+const EXPECTED_UPGRADE_COST_BASES = {
+  transporter: { metal: 1_000, minerals: 0, gas: 0 },
+  corsair: { metal: 500, minerals: 250, gas: 0 },
+};
+const EXPECTED_UPGRADE_BASE_DURATIONS = {
+  transporter: 9_000_000,
+  corsair: 900_000,
+};
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitFor(win, expression, timeoutMs = 8000) {
@@ -139,6 +147,79 @@ async function measureLayout(win) {
       sidebarPosition: sidebar ? getComputedStyle(sidebar).position : null,
     };
   })()`);
+}
+
+async function readUpgradeCosts(win, shipId) {
+  return win.webContents.executeJavaScript(`(() => {
+    const row = document.querySelector('[data-qa-spaceport-card=${JSON.stringify(shipId)}]');
+    return Array.from(row?.querySelectorAll('.spaceport-cost-chip-v2') ?? []).map((chip) => {
+      const icon = chip.querySelector('img[data-qa-resource-kind]');
+      const rect = icon?.getBoundingClientRect();
+      return {
+        resource: chip.getAttribute('data-resource') || '',
+        kind: icon?.getAttribute('data-qa-resource-kind') || '',
+        asset: icon?.getAttribute('data-qa-resource-asset') || '',
+        value: chip.querySelector('strong')?.textContent?.replace(/\\s+/g, '').trim() || '',
+        iconText: chip.querySelector('.spaceport-cost-icon-v2')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        iconWidth: rect?.width || 0,
+        iconHeight: rect?.height || 0,
+      };
+    });
+  })()`);
+}
+
+function assetName(value) {
+  return String(value || '').split(/[\\/]/).pop()?.split('?')[0] || '';
+}
+
+function assertUpgradeCosts(snapshot, label, shipId, fromLevel = 0) {
+  const base = EXPECTED_UPGRADE_COST_BASES[shipId];
+  if (!base) throw new Error(`${label}: missing expected cost base for ${shipId}`);
+  const expected = [
+    { resource: 'metal', kind: 'metal', assetBase: 'metal', value: String(base.metal * (2 ** fromLevel)) },
+    { resource: 'minerals', kind: 'minerals', assetBase: 'mineral', value: String(base.minerals * (2 ** fromLevel)) },
+    { resource: 'gas', kind: 'gas', assetBase: 'gas', value: String(base.gas * (2 ** fromLevel)) },
+  ];
+  if (!snapshot || snapshot.length !== expected.length) {
+    throw new Error(`${label}: upgrade cost chip count mismatch ${JSON.stringify(snapshot)}`);
+  }
+  const actual = snapshot.map((item) => ({
+    resource: item.resource,
+    kind: item.kind,
+    asset: assetName(item.asset),
+    value: item.value,
+  }));
+  const contractMatches = actual.every((item, index) => {
+    const expectedItem = expected[index];
+    const pattern = new RegExp(`^${expectedItem.assetBase}(?:-[^/]+)?\\.png$`, 'i');
+    return (
+      item.resource === expectedItem.resource &&
+      item.kind === expectedItem.kind &&
+      pattern.test(item.asset) &&
+      item.value === expectedItem.value
+    );
+  });
+  if (!contractMatches) {
+    throw new Error(`${label}: upgrade cost contract mismatch ${JSON.stringify({ actual, expected, snapshot })}`);
+  }
+  if (snapshot.some((item) => item.iconText || item.iconWidth <= 0 || item.iconHeight <= 0)) {
+    throw new Error(`${label}: upgrade cost icon rendering mismatch ${JSON.stringify(snapshot)}`);
+  }
+}
+
+async function readUpgradeDuration(win, shipId) {
+  return win.webContents.executeJavaScript(`(() => {
+    const row = document.querySelector('[data-qa-spaceport-card=${JSON.stringify(shipId)}]');
+    return Number(row?.getAttribute('data-qa-spaceport-duration-ms') || 0);
+  })()`);
+}
+
+function assertUpgradeDuration(actual, label, shipId) {
+  const expectedBase = EXPECTED_UPGRADE_BASE_DURATIONS[shipId];
+  const expectedEffective = Math.round(expectedBase * 0.95);
+  if (actual !== expectedEffective) {
+    throw new Error(`${label}: upgrade duration mismatch ${JSON.stringify({ actual, expectedEffective, expectedBase })}`);
+  }
 }
 
 function assertLayout(snapshot, label) {
@@ -305,6 +386,9 @@ async function enqueueThree(win, shipId) {
   for (let index = 0; index < 3; index += 1) {
     await click(win, `[data-qa-spaceport-upgrade="${shipId}"]`);
     await waitFor(win, `document.querySelector('[data-qa-spaceport-queue-count]')?.getAttribute('data-qa-spaceport-queue-count') === '${index + 1}/3'`);
+    if (index === 0) {
+      assertUpgradeCosts(await readUpgradeCosts(win, shipId), `${shipId}/after-first-queue`, shipId, 1);
+    }
   }
   const row = await win.webContents.executeJavaScript(`(() => {
     const node = document.querySelector('[data-qa-spaceport-card=${JSON.stringify(shipId)}]');
@@ -357,6 +441,8 @@ async function verifyFlow(win, directory, label) {
   await activateMilitary(win);
   await openSpaceport(win);
 
+  assertUpgradeCosts(await readUpgradeCosts(win, 'transporter'), `${label}/ships-standard`, 'transporter');
+  assertUpgradeDuration(await readUpgradeDuration(win, 'transporter'), `${label}/ships-standard`, 'transporter');
   await assertCatalogAndRequirements(win, label);
   assertLayout(await measureLayout(win), `${label}/ships-standard`);
   const initialHeights = await assertStableHeight(win, `${label}/ships-standard`);
@@ -369,6 +455,8 @@ async function verifyFlow(win, directory, label) {
   await capture(win, directory, 'spaceport-ships-repeated-3-of-3');
 
   await click(win, '[data-qa-spaceport-tab="commanders"]');
+  assertUpgradeCosts(await readUpgradeCosts(win, 'corsair'), `${label}/commanders-standard`, 'corsair');
+  assertUpgradeDuration(await readUpgradeDuration(win, 'corsair'), `${label}/commanders-standard`, 'corsair');
   assertLayout(await measureLayout(win), `${label}/commanders-standard`);
   await enqueueThree(win, 'corsair');
   assertLayout(await measureLayout(win), `${label}/commanders-repeated`);
@@ -405,6 +493,9 @@ async function verifyFlow(win, directory, label) {
       'four-utility-ships-excluded-from-upgrade-catalog',
       'transporter-and-mega-transporter-remain',
       'known-requirements-use-asset-badges',
+      'upgrade-costs-use-canonical-resource-icons-and-values',
+      'official-balance-v1-cost-and-duration-contract',
+      'next-level-cost-is-verified-after-first-queue',
       'requirement-dom-tooltip-keyboard-focus-and-hover',
       'requirement-tooltip-visible-nonzero-in-viewport-unclipped',
       'concrete-red-requirement-blockers',

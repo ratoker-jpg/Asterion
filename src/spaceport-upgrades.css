@@ -475,17 +475,15 @@ html.asterion-long-page .spaceport-upgrades-v2 {
   border: 1px solid rgba(65, 177, 205, .15);
   background: rgba(3, 25, 36, .65);
 }
-.spaceport-cost-chip-v2 i {
+.spaceport-cost-icon-v2 {
   width: 20px;
   height: 20px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(72, 207, 236, .24);
-  border-radius: 50%;
-  color: #70dff5;
-  font-size: 9px;
-  font-style: normal;
-  font-weight: 900;
+}
+.spaceport-cost-icon-v2 .asterion-resource-icon {
+  width: 20px;
+  height: 20px;
 }
 .spaceport-cost-chip-v2 small { color: #617f89; font-size: 8px; }
 .spaceport-cost-chip-v2 strong {
@@ -635,6 +633,8 @@ html.asterion-long-page .spaceport-upgrades-v2 {
   .spaceport-row-art-v2 img { width: 138px; height: 138px; }
   .spaceport-row-info-v2 { padding: 12px 13px 11px; }
   .spaceport-cost-chip-v2 { grid-template-columns: 18px auto; }
+  .spaceport-cost-icon-v2,
+  .spaceport-cost-icon-v2 .asterion-resource-icon { width: 18px; height: 18px; }
   .spaceport-cost-chip-v2 small { display: none; }
 }
 

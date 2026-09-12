@@ -13,6 +13,7 @@ import {
   type BotResource,
   type ProductionBotBuildingRole,
 } from './domain/buildings/production-bots.ts';
+import { ResourceIcon } from './ui/resources/ResourceIcon';
 import './production-bots.css';
 
 type ProductionBotsViewProps = {
@@ -24,24 +25,6 @@ type ProductionBotsViewProps = {
   onApply: (assignment: BotAssignment) => void;
   onBack: () => void;
 };
-
-function BotResourceIcon({ resource }: { resource: BotResource }) {
-  const common = {
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 1.6,
-    strokeLinecap: 'round' as const,
-    strokeLinejoin: 'round' as const,
-  };
-
-  if (resource === 'metal') {
-    return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="m7 8 9-4 9 4-9 5-9-5Z"/><path {...common} d="m7 8 9 5v14l-9-5V8Zm18 0-9 5v14l9-5V8Z"/><path {...common} d="m11 10 10-4M11 20l5 3 5-3"/></svg>;
-  }
-  if (resource === 'minerals') {
-    return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="m16 3 10 10-10 16L6 13 16 3Z"/><path {...common} d="M6 13h20M16 3v26M10 13l6 7 6-7"/></svg>;
-  }
-  return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="M16 4c5.6 6.8 8 11 8 15a8 8 0 1 1-16 0c0-4 2.4-8.2 8-15Z"/><circle {...common} cx="13" cy="18" r="2.2"/><circle {...common} cx="19.5" cy="21" r="1.6"/><circle {...common} cx="19" cy="15" r="1"/></svg>;
-}
 
 function backLabel(role: ProductionBotBuildingRole) {
   return role === 'construction' ? 'Назад в Фабрику' : 'Назад в Промышленный комплекс';
@@ -165,7 +148,7 @@ export function ProductionBotsView({
                   data-qa-production-bot-resource={definition.resource}
                 >
                   <div className="production-bot-target__resource">
-                    <span className="production-bot-target__icon"><BotResourceIcon resource={definition.resource} /></span>
+                    <span className="production-bot-target__icon"><ResourceIcon kind={definition.resource} /></span>
                     <span><small>РЕСУРС</small><strong>{definition.label}</strong></span>
                   </div>
 

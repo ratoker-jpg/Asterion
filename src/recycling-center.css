@@ -16,3 +16,7 @@
 .recycling-toast{position:fixed;z-index:30;left:50%;bottom:28px;transform:translate(-50%,10px);opacity:0;pointer-events:none;transition:.18s}.recycling-toast.visible{opacity:1;transform:translate(-50%,0)}.recycling-toast span{display:flex;gap:8px;padding:11px 17px;border:1px solid rgba(78,220,177,.52);background:#053738;color:#dffdf1;font-size:10px;font-weight:800}.recycling-toast b{color:#66e8ad}
 @media(max-width:1400px){.recycling-center-view{grid-template-columns:300px minmax(0,1fr);gap:12px;padding:14px 16px 24px;min-height:1030px}.recycling-info-panel{grid-template-rows:180px auto auto 44px;padding:13px}.recycling-info-art img{width:160px;height:160px}.recycling-workspace{gap:10px}.recycling-section{padding:0 14px 11px}.recycling-job-table{min-width:1010px}.recycling-job-table__header,.recycling-job-row{grid-template-columns:165px 145px 380px 155px 165px}.recycling-job-cell{padding:8px 10px}.recycling-debris-control{grid-template-columns:185px 105px 42px minmax(180px,1fr) 42px 68px;gap:7px}.recycling-target-row{grid-template-columns:140px 40px minmax(120px,1fr) 40px 56px 105px;gap:7px}.recycling-target-footer{grid-template-columns:minmax(190px,1fr) minmax(250px,350px)}}
 @media(prefers-reduced-motion:reduce){.recycling-toast{transition:none}}
+
+.recycling-job-debris-value{display:flex;align-items:center;gap:7px}
+.recycling-debris-field small{display:flex;align-items:center;gap:4px}
+.recycling-debris-field small .recycling-job-debris-icon .asterion-resource-icon{width:16px;height:16px}

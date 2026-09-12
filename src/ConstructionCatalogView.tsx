@@ -11,6 +11,8 @@ import {
   parseClockDurationMs,
 } from './domain/buildings/balance-v1.ts';
 import { readFleetBuildBudget, type FleetBuildBudget } from './application/fleet.ts';
+import { ResourceIcon } from './ui/resources/ResourceIcon';
+
 
 export type ConstructionCatalogMode = 'defense' | 'commander';
 
@@ -98,19 +100,6 @@ function calculateMax(item: CatalogItem, budget: ShipyardBudget) {
   if (item.gas > 0) limits.push(Math.floor(budget.gas / item.gas));
   if (item.population > 0) limits.push(Math.floor(Math.max(0, budget.populationMax - budget.population) / item.population));
   return Math.max(0, Math.min(999, ...(limits.length ? limits : [0])));
-}
-
-function ResourceIcon({ kind }: { kind: ResourceKind }) {
-  if (kind === 'metal') {
-    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.2 5.2h11.6l3 5.8-4.1 7.8H7.3L3.2 11l3-5.8Z"/><path d="m7.4 8.2 4.6-2 4.6 2-1.2 6.9H8.6L7.4 8.2Z"/></svg>;
-  }
-  if (kind === 'minerals') {
-    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2.8 7.7 7.4-3.1 10.9H7.4L4.3 10.2 12 2.8Z"/><path d="m12 6.1 3.7 4.6-3.7 7.1-3.7-7.1L12 6.1Z"/></svg>;
-  }
-  if (kind === 'gas') {
-    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8c3.8 4.5 6.3 7.9 6.3 11.6A6.3 6.3 0 1 1 5.7 14.4C5.7 10.7 8.2 7.3 12 2.8Z"/><circle cx="10" cy="14.2" r="1.3"/><circle cx="14.5" cy="11.6" r="1"/></svg>;
-  }
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="16.3" cy="9.4" r="2.4"/><path d="M3.8 19c.4-4 2.1-6.1 5.2-6.1s4.8 2.1 5.2 6.1H3.8Z"/><path d="M13 18.7c.3-3 1.5-4.6 3.7-4.6 2.1 0 3.3 1.6 3.6 4.6H13Z"/></svg>;
 }
 
 function CostRow({ kind, label, value }: { kind: ResourceKind; label: string; value: number }) {

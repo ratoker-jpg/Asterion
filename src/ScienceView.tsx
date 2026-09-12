@@ -29,7 +29,7 @@ import {
   SCIENCE_SECTIONS,
 } from './domain/science/catalog.ts';
 import {
-  SCIENCE_CAPTURED_VALUES_NOTE,
+  SCIENCE_BASE_COSTS_NOTE,
   SCIENCE_CANCEL_REQUEST_EVENT,
   SCIENCE_CANCEL_REFUND_SOURCE_URL,
   SCIENCE_LABORATORY_MAX_LEVEL,
@@ -46,6 +46,8 @@ import {
 import { readScienceSnapshot } from './application/science.ts';
 import { sciencesForSection } from './domain/science/selectors.ts';
 import type { ScienceCatalogDefinition, ScienceSectionId } from './domain/science/types.ts';
+import { ResourceIcon } from './ui/resources/ResourceIcon';
+import type { ResourceIconKind } from './ui/resources/resource-assets.ts';
 
 const SCIENCE_ARTS: Record<string, string> = {
   'technology.shared.astronomy.png': astronomyArt,
@@ -189,7 +191,7 @@ export function ScienceView() {
             <ScienceQueueCard key={task.id} task={task} now={now} onCancel={() => setPendingCancellation(task)} />
           )) : <p className="utility-helper">Очередь свободна.</p>}
         </section>
-        <small className="science-captured-note utility-helper" title={SCIENCE_CAPTURED_VALUES_NOTE}>Стоимость: captured-значения; время: Asterion Balance v1 с учётом лаборатории.</small>
+        <small className="science-captured-note utility-helper" title={SCIENCE_BASE_COSTS_NOTE}>Стоимость: официальные RAW 0 → 1 × 2^уровень; время: Asterion Balance v1 с учётом лаборатории.</small>
       </aside>
 
       <main className="science-main-v2">
@@ -316,19 +318,23 @@ function ScienceRow({
           maxLevel={preview.maxLevel}
         />
 
-        {!preview.canStart && preview.status !== 'max-level' ? (
-          <div className="science-missing-banner-v2" role="note">{preview.reason}</div>
-        ) : null}
+        <div
+          className={`science-status-slot-v2 ${preview.reason && preview.status !== 'max-level' ? 'is-visible' : ''}`}
+          data-qa-science-status-slot
+          data-qa-science-queue-full={preview.status === 'queue-full' ? 'true' : 'false'}
+          aria-live="polite"
+        >
+          {preview.reason && preview.status !== 'max-level' ? (
+            <div className="science-missing-banner-v2" role="note">{preview.reason}</div>
+          ) : <span aria-hidden="true" />}
+        </div>
 
         <div className="science-costs-v2" aria-label="Стоимость следующего уровня">
-          <ResourceCost kind="M" label="Металл" value={preview.cost.metal} available={runtime.wallet.metal} />
-          <ResourceCost kind="K" label="Минералы" value={preview.cost.minerals} available={runtime.wallet.minerals} />
-          <ResourceCost kind="G" label="Газ" value={preview.cost.gas} available={runtime.wallet.gas} />
-          {preview.cost.energy > 0 ? <ResourceCost kind="E" label="Энергия" value={preview.cost.energy} available={runtime.wallet.energy} /> : null}
-          <span className="science-time-v2">
-            <small className="utility-secondary">ВРЕМЯ</small>
-            <strong className="utility-data-text" data-qa-science-duration-ms={preview.durationMs}>{formatDuration(preview.durationMs)}</strong>
-          </span>
+          <ResourceCost kind="metal" label="Металл" value={preview.cost.metal} available={runtime.wallet.metal} />
+          <ResourceCost kind="minerals" label="Минералы" value={preview.cost.minerals} available={runtime.wallet.minerals} />
+          <ResourceCost kind="gas" label="Газ" value={preview.cost.gas} available={runtime.wallet.gas} />
+          {preview.cost.energy > 0 ? <ResourceCost kind="energy" label="Энергия" value={preview.cost.energy} available={runtime.wallet.energy} /> : null}
+          <span className="science-time-v2"><small className="utility-secondary">ВРЕМЯ</small><strong className="utility-data-text" data-qa-science-duration-ms={preview.durationMs}>{formatDuration(preview.durationMs)}</strong></span>
         </div>
 
         <div className="science-requirements-v2">
@@ -440,10 +446,10 @@ function RequirementBadge({
   );
 }
 
-function ResourceCost({ kind, label, value, available }: { kind: string; label: string; value: number; available: number }) {
+function ResourceCost({ kind, label, value, available }: { kind: ResourceIconKind; label: string; value: number; available: number }) {
   return (
-    <span className={`science-cost-v2 ${available < value ? 'is-insufficient' : ''}`} title={`${label}: доступно ${formatNumber(available)}`}>
-      <i>{kind}</i>
+    <span className={`science-cost-v2 science-cost-v2--${kind} ${available < value ? 'is-insufficient' : ''}`} data-qa-science-cost-resource={kind} title={`${label}: доступно ${formatNumber(available)}`}>
+      <i><ResourceIcon kind={kind} label={label} /></i>
       <strong className="utility-data-text">{formatNumber(value)}</strong>
     </span>
   );

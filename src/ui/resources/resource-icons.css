@@ -1,0 +1,45 @@
+.asterion-resource-icon {
+  display: block;
+  width: 1.5em;
+  height: 1.5em;
+  object-fit: contain;
+  transform: scale(var(--asterion-resource-optical-scale, 1));
+  transform-origin: center;
+}
+
+.asterion-resource-icon--metal {
+  --asterion-resource-optical-scale: 1.28;
+}
+
+.resource-zone-income-icon .asterion-resource-icon,
+.resource-building-cost-icon .asterion-resource-icon,
+.shipyard-cost-icon-v1 .asterion-resource-icon,
+.repair-cost-icon-v1 .asterion-resource-icon,
+.trade-resource-icon .asterion-resource-icon,
+.command-resource-glyph .asterion-resource-icon {
+  width: 23px;
+  height: 23px;
+}
+
+.production-bot-target__icon .asterion-resource-icon,
+.recycling-target-resource .asterion-resource-icon {
+  width: 30px;
+  height: 30px;
+}
+
+.science-cost-v2 i .asterion-resource-icon {
+  width: 30px;
+  height: 30px;
+}
+
+.operations-reward-v2 .asterion-resource-icon,
+.operations-reward-compact-v2 .asterion-resource-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.battle-outcome-resource-icon .asterion-resource-icon,
+.recycling-job-debris-icon .asterion-resource-icon {
+  width: 20px;
+  height: 20px;
+}

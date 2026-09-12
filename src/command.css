@@ -367,6 +367,7 @@
 .command-request-stack--full .command-request-row { min-height: 72px; border: 1px solid rgba(66, 145, 171, .14); margin-bottom: 7px; background: rgba(2, 14, 22, .55); }
 .command-request-detail-head { display: grid; grid-template-columns: 58px 1fr; gap: 12px; align-items: center; padding-bottom: 14px; border-bottom: 1px solid rgba(72, 153, 181, .14); }
 .command-request-detail-head .command-resource-glyph { width: 52px; height: 52px; font-size: 20px; }
+.command-request-detail-head .command-resource-glyph .asterion-resource-icon { width: 36px; height: 36px; }
 .command-request-purpose { margin: 14px 0; padding: 12px; border: 1px solid rgba(64, 148, 177, .14); }
 .command-request-purpose p { margin: 7px 0 0; color: #a0b5bd; font-size: 11px; }
 .command-request-meter,

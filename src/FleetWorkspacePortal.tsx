@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
 import type { ShipId } from './domain/combat/ids.ts';
+import { getBuildingPresentation } from './domain/buildings/balance-v1.ts';
 import { RUNTIME_STATE_CHANGED_EVENT } from './domain/runtime/mode.ts';
 import {
   getFleetSummaryForSnapshot,
@@ -27,6 +28,7 @@ import './fleet-workspace.css';
 const FLEET_ROOT_STATUS = 'Выберите корабли и миссию. Отправка флота будет подключена следующим этапом.';
 
 const shipDefinitions = getFactionShipCatalog('aegis');
+const shipyardPresentation = getBuildingPresentation('shipyard', 'aegis');
 
 type MissionId =
   | 'transport'
@@ -192,12 +194,14 @@ function FleetWorkspace({
           <small>ФЛОТ АСТЕРОВ</small>
         </div>
 
-        <div className="fleet-yard-card-v1">
-          <div className="fleet-yard-emblem-v1">A</div>
+        <div className="fleet-yard-card-v1" data-qa-building-role="shipyard" data-qa-building-asset={shipyardPresentation.art}>
+          <div className="fleet-yard-emblem-v1">
+            <img src={shipyardPresentation.art} alt="" aria-hidden="true" draggable={false} />
+          </div>
           <div>
             <small>БАЗА ФЛОТА</small>
-            <strong>Орбитальная верфь</strong>
-            <span>Ангар {fleetSnapshot.hangarLevel} · Верфь {fleetSnapshot.shipyardLevel}</span>
+            <strong>{shipyardPresentation.name}</strong>
+            <span>Ангар {fleetSnapshot.hangarLevel} · {shipyardPresentation.name} {fleetSnapshot.shipyardLevel}</span>
           </div>
         </div>
 

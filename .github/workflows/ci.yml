@@ -46,6 +46,12 @@ jobs:
         run: npm run test:science-ui
       - name: Header Electron QA
         run: npm run test:header-ui
+      - name: Building actions Electron QA
+        run: npm run test:building-actions-ui
+      - name: Reports Electron QA
+        run: npm run test:reports-ui
+      - name: Resource asset Electron QA
+        run: npm run test:resource-assets-ui
       - name: Test Mode Electron QA
         env:
           # GitHub's hidden Windows compositor can block viewport captures on
@@ -67,6 +73,7 @@ jobs:
           path: |
             visual-qa/**/*
             artifacts-pass1/science-qa/**/*
+            artifacts-pass1/resource-assets-qa/**/*
             artifacts-pass1/test-mode-qa/**/*
             artifacts/universe-planet-qa/**/*
           if-no-files-found: warn
