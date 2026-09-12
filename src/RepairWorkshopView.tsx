@@ -1,16 +1,30 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
-import { getCombatEntity } from './domain/combat/catalog.ts';
+import {
+  getFactionDefenseCatalog,
+  getFactionShipCatalog,
+} from './domain/combat/faction-catalog.ts';
 import type { DefenseId, ShipId } from './domain/combat/ids.ts';
+import {
+  getDefensePopulationSummary,
+  getFleetProductionPopulationSummary,
+} from './domain/fleet/production.ts';
+import {
+  evaluateRepairAvailability,
+  type RepairAvailability,
+  type RepairCategory,
+} from './domain/repair/workshop.ts';
+import {
+  REPAIR_NOTICE_CHANGED_EVENT,
+  REPAIR_REQUEST_EVENT,
+  type RepairWorkshopSnapshot,
+} from './application/repair.ts';
 import { ResourceIcon as CanonicalResourceIcon } from './ui/resources/ResourceIcon';
 import './repair-workshop.css';
 import './repair-workshop-feedback-v2.css';
 
-type RepairCategory = 'ship' | 'defense';
 type PaymentMethod = 'resources' | 'tokens';
 type ResourceKind = 'metal' | 'minerals' | 'gas' | 'population';
-
-type RepairCost = Record<ResourceKind, number>;
 
 type RepairUnit = {
   id: ShipId | DefenseId;
@@ -18,42 +32,11 @@ type RepairUnit = {
   name: string;
   role: string;
   art: string;
-  destroyed: number;
-  initialSelected: number;
-  repairCost: RepairCost;
-  tokenCost: number;
+  population: number;
+  cost: { metal: number; minerals: number; gas: number };
 };
 
-type RepairPreviewDefinition = Pick<RepairUnit, 'id' | 'destroyed' | 'initialSelected' | 'tokenCost'>;
-
-// Until battle resolution is connected, only casualty counts remain deterministic preview data.
-// Immutable unit identity, visuals and resource costs come from the shared combat catalog.
-const repairPreview: readonly RepairPreviewDefinition[] = [
-  { id: 'scout', destroyed: 4, initialSelected: 2, tokenCost: 1 },
-  { id: 'battleship', destroyed: 6, initialSelected: 3, tokenCost: 1 },
-  { id: 'cruiser', destroyed: 14, initialSelected: 4, tokenCost: 1 },
-  { id: 'ballistic-turret', destroyed: 8, initialSelected: 4, tokenCost: 1 },
-  { id: 'laser-turret', destroyed: 4, initialSelected: 2, tokenCost: 1 },
-];
-
-const repairUnits: RepairUnit[] = repairPreview.map((preview) => {
-  const entity = getCombatEntity(preview.id);
-  if (entity.kind === 'commander') throw new Error(`Commander ${entity.id} cannot enter repair workshop`);
-  return {
-    ...preview,
-    category: entity.kind,
-    name: entity.name,
-    role: entity.role,
-    art: entity.art,
-    repairCost: {
-      ...entity.cost,
-      population: entity.population,
-    },
-  };
-});
-
 const formatNumber = (value: number) => new Intl.NumberFormat('ru-RU').format(value);
-const recoverableFromDestroyed = (destroyed: number) => Math.round(Math.max(0, destroyed) * 0.5);
 
 function tokenWord(value: number) {
   const mod100 = value % 100;
@@ -87,6 +70,7 @@ function RepairCard({
   available,
   selected,
   tokens,
+  availability,
   onQuantity,
   onRepair,
 }: {
@@ -94,23 +78,23 @@ function RepairCard({
   available: number;
   selected: number;
   tokens: number;
+  availability: RepairAvailability;
   onQuantity: (unit: RepairUnit, value: number) => void;
   onRepair: (unit: RepairUnit, method: PaymentMethod) => void;
 }) {
-  const tokenTotal = selected * unit.tokenCost;
-  const totalCost = {
-    metal: unit.repairCost.metal * selected,
-    minerals: unit.repairCost.minerals * selected,
-    gas: unit.repairCost.gas * selected,
-    population: unit.repairCost.population * selected,
-  };
+  const capacityReason = availability.capacityReason;
+  const paymentReasons = [
+    !availability.canPayResources && !capacityReason ? `Ресурсы: ${availability.resourceReason}` : null,
+    !availability.canPayTokens && !capacityReason ? `Жетоны: ${availability.tokenReason}` : null,
+  ].filter(Boolean).join(' ');
+  const disabledReason = capacityReason ?? paymentReasons;
 
   return (
-    <article className="repair-card-v1">
+    <article className="repair-card-v1" data-qa-repair-card={unit.id}>
       <header className="repair-card-title-v1">
         <div className="repair-available-v1">
           <small>ДОСТУПНО</small>
-          <strong>{available}</strong>
+          <strong data-qa-repair-available>{available}</strong>
         </div>
         <div className="repair-card-name-v1">
           <strong>{unit.name}</strong>
@@ -125,13 +109,13 @@ function RepairCard({
         </div>
 
         <div className="repair-card-data-v1">
-          <section className="repair-costs-v1">
-            <div className="repair-mini-title-v1"><span>СТОИМОСТЬ ВЫБРАННОГО РЕМОНТА</span><i /></div>
+          <section className="repair-costs-v1" data-qa-repair-resource-cost={JSON.stringify(availability.cost)}>
+            <div className="repair-mini-title-v1"><span>2 × КАНОНИЧЕСКАЯ СТОИМОСТЬ</span><i /></div>
             <div className="repair-cost-grid-v1">
-              <CostRow kind="metal" label="Металл" value={totalCost.metal} />
-              <CostRow kind="minerals" label="Минералы" value={totalCost.minerals} />
-              <CostRow kind="gas" label="Газ" value={totalCost.gas} />
-              <CostRow kind="population" label="Население" value={totalCost.population} />
+              <CostRow kind="metal" label="Металл" value={availability.cost.metal} />
+              <CostRow kind="minerals" label="Минералы" value={availability.cost.minerals} />
+              <CostRow kind="gas" label="Газ" value={availability.cost.gas} />
+              <CostRow kind="population" label="Население" value={availability.capacity.addedPopulation} />
             </div>
           </section>
 
@@ -144,6 +128,7 @@ function RepairCard({
                 min="1"
                 max={available}
                 value={selected}
+                data-qa-repair-quantity={unit.id}
                 aria-label={`Количество для ремонта: ${unit.name}`}
                 onChange={(event) => onQuantity(unit, Number(event.target.value))}
               />
@@ -153,13 +138,33 @@ function RepairCard({
             </div>
           </section>
 
+          {disabledReason ? (
+            <div className="repair-payment-reason-v1" data-qa-repair-disabled-reason role="status">
+              {disabledReason}
+            </div>
+          ) : null}
+
           <div className="repair-payment-v1">
-            <button className="repair-button-v1 repair-button-v1--resources" type="button" onClick={() => onRepair(unit, 'resources')}>
+            <button
+              className="repair-button-v1 repair-button-v1--resources"
+              type="button"
+              data-qa-repair-resource-button={unit.id}
+              disabled={!availability.canPayResources}
+              title={availability.resourceReason ?? undefined}
+              onClick={() => onRepair(unit, 'resources')}
+            >
               ВОССТАНОВИТЬ ЗА РЕСУРСЫ
             </button>
-            <button className="repair-button-v1 repair-button-v1--tokens" type="button" disabled={tokenTotal > tokens} onClick={() => onRepair(unit, 'tokens')}>
+            <button
+              className="repair-button-v1 repair-button-v1--tokens"
+              type="button"
+              data-qa-repair-token-button={unit.id}
+              disabled={!availability.canPayTokens}
+              title={availability.tokenReason ?? undefined}
+              onClick={() => onRepair(unit, 'tokens')}
+            >
               <TicketIcon />
-              <span>РЕМОНТ ЗА {tokenTotal} {tokenWord(tokenTotal)}</span>
+              <span>РЕМОНТ ЗА {availability.tokenCost} {tokenWord(availability.tokenCost)} · {tokens} ДОСТУПНО</span>
             </button>
           </div>
         </div>
@@ -193,7 +198,19 @@ function WorkshopHelp() {
 
 type SummaryIcon = 'tokens' | 'population';
 
-function SummaryCard({ label, value, unit, icon }: { label: string; value: number; unit: string; icon: SummaryIcon }) {
+function SummaryCard({
+  label,
+  value,
+  unit,
+  icon,
+  meta,
+}: {
+  label: string;
+  value: number;
+  unit: string;
+  icon: SummaryIcon;
+  meta?: string;
+}) {
   return (
     <div className="repair-summary-card-v1">
       <span className={`repair-summary-icon-v2 repair-summary-icon-v2--${icon}`}>
@@ -201,80 +218,129 @@ function SummaryCard({ label, value, unit, icon }: { label: string; value: numbe
       </span>
       <div className="repair-summary-copy-v2">
         <small>{label}</small>
-        <div className="repair-summary-value-v1"><strong>{formatNumber(value)}</strong><span>{unit}</span></div>
+        <div className="repair-summary-value-v1"><strong data-qa-repair-summary-population={label}>{formatNumber(value)}</strong><span>{unit}</span></div>
+        {meta ? <em data-qa-repair-summary-capacity={label}>{meta}</em> : null}
       </div>
     </div>
   );
 }
 
-export function RepairWorkshopView({ planetName, coords, onBack }: { planetName: string; coords: string; onBack: () => void }) {
-  const [remaining, setRemaining] = useState<Record<string, number>>(() => Object.fromEntries(
-    repairUnits.map((unit) => [unit.id, recoverableFromDestroyed(unit.destroyed)]),
-  ));
-  const [quantities, setQuantities] = useState<Record<string, number>>(() => Object.fromEntries(
-    repairUnits.map((unit) => {
-      const available = recoverableFromDestroyed(unit.destroyed);
-      return [unit.id, Math.max(1, Math.min(available, unit.initialSelected))];
-    }),
-  ));
-  const [tokens, setTokens] = useState(31);
+function availableFor(snapshot: RepairWorkshopSnapshot, unit: RepairUnit): number {
+  return unit.category === 'ship'
+    ? snapshot.repair.ships[unit.id as ShipId] ?? 0
+    : snapshot.repair.defenses[unit.id as DefenseId] ?? 0;
+}
+
+export function RepairWorkshopView({
+  planetName,
+  coords,
+  snapshot,
+  onBack,
+}: {
+  planetName: string;
+  coords: string;
+  snapshot: RepairWorkshopSnapshot;
+  onBack: () => void;
+}) {
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [notice, setNotice] = useState('Выберите количество и способ оплаты. Ремонт выполняется мгновенно.');
+  const repairUnits = useMemo<RepairUnit[]>(() => [
+    ...getFactionShipCatalog(snapshot.factionId).map((entity) => ({
+      id: entity.id,
+      category: 'ship' as const,
+      name: entity.name,
+      role: entity.role,
+      art: entity.art,
+      population: entity.population,
+      cost: entity.cost,
+    })),
+    ...getFactionDefenseCatalog(snapshot.factionId).map((entity) => ({
+      id: entity.id,
+      category: 'defense' as const,
+      name: entity.name,
+      role: entity.role,
+      art: entity.art,
+      population: entity.population,
+      cost: entity.cost,
+    })),
+  ], [snapshot.factionId]);
 
-  const visibleShips = useMemo(() => repairUnits.filter((unit) => unit.category === 'ship' && (remaining[unit.id] ?? 0) > 0), [remaining]);
-  const visibleDefense = useMemo(() => repairUnits.filter((unit) => unit.category === 'defense' && (remaining[unit.id] ?? 0) > 0), [remaining]);
+  useEffect(() => {
+    const onNotice = (event: Event) => {
+      const value = (event as CustomEvent<string>).detail;
+      if (typeof value === 'string' && value) setNotice(value);
+    };
+    window.addEventListener(REPAIR_NOTICE_CHANGED_EVENT, onNotice);
+    return () => window.removeEventListener(REPAIR_NOTICE_CHANGED_EVENT, onNotice);
+  }, []);
 
-  const shipUnits = visibleShips.reduce((sum, unit) => sum + (remaining[unit.id] ?? 0), 0);
-  const defenseUnits = visibleDefense.reduce((sum, unit) => sum + (remaining[unit.id] ?? 0), 0);
+  const visibleShips = useMemo(
+    () => repairUnits.filter((unit) => unit.category === 'ship' && availableFor(snapshot, unit) > 0),
+    [repairUnits, snapshot],
+  );
+  const visibleDefense = useMemo(
+    () => repairUnits.filter((unit) => unit.category === 'defense' && availableFor(snapshot, unit) > 0),
+    [repairUnits, snapshot],
+  );
+  const fleetCapacity = useMemo(
+    () => getFleetProductionPopulationSummary(snapshot.fleet, snapshot.fleetProduction, snapshot.hangarLevel, snapshot.factionId),
+    [snapshot],
+  );
+  const defenseCapacity = useMemo(
+    () => getDefensePopulationSummary(snapshot.defense, snapshot.fleetProduction, snapshot.hangarLevel, snapshot.factionId),
+    [snapshot],
+  );
+
+  const shipUnits = visibleShips.reduce((sum, unit) => sum + availableFor(snapshot, unit), 0);
+  const defenseUnits = visibleDefense.reduce((sum, unit) => sum + availableFor(snapshot, unit), 0);
   const totalUnits = shipUnits + defenseUnits;
-
-  const shipPopulation = visibleShips.reduce(
-    (sum, unit) => sum + (remaining[unit.id] ?? 0) * unit.repairCost.population,
-    0,
-  );
-  const defensePopulation = visibleDefense.reduce(
-    (sum, unit) => sum + (remaining[unit.id] ?? 0) * unit.repairCost.population,
-    0,
-  );
+  const shipPopulation = visibleShips.reduce((sum, unit) => sum + availableFor(snapshot, unit) * unit.population, 0);
+  const defensePopulation = visibleDefense.reduce((sum, unit) => sum + availableFor(snapshot, unit) * unit.population, 0);
   const totalPopulation = shipPopulation + defensePopulation;
 
   const setQuantity = (unit: RepairUnit, raw: number) => {
-    const available = remaining[unit.id] ?? 0;
+    const available = availableFor(snapshot, unit);
     if (available <= 0) return;
     const next = Number.isFinite(raw) ? Math.max(1, Math.min(available, Math.floor(raw))) : 1;
     setQuantities((current) => ({ ...current, [unit.id]: next }));
   };
 
-  const repair = (unit: RepairUnit, method: PaymentMethod) => {
-    const available = remaining[unit.id] ?? 0;
-    const selected = Math.max(1, Math.min(available, quantities[unit.id] ?? 1));
-    if (available <= 0) return;
-
-    const tokenTotal = selected * unit.tokenCost;
-    if (method === 'tokens' && tokenTotal > tokens) {
-      setNotice(`Недостаточно жетонов для ремонта ${selected} × ${unit.name}.`);
-      return;
-    }
-
-    const nextAvailable = available - selected;
-    setRemaining((current) => ({ ...current, [unit.id]: nextAvailable }));
-    setQuantities((current) => ({ ...current, [unit.id]: Math.max(1, Math.min(nextAvailable || 1, current[unit.id] ?? 1)) }));
-    if (method === 'tokens') setTokens((current) => current - tokenTotal);
-
-    const destination = unit.category === 'ship' ? 'на планету' : 'в оборону планеты';
-    setNotice(`${selected} × ${unit.name} восстановлено ${method === 'tokens' ? 'за жетоны' : 'за ресурсы'} и мгновенно возвращено ${destination}.`);
+  const selectedQuantity = (unit: RepairUnit) => {
+    const available = availableFor(snapshot, unit);
+    return Math.max(1, Math.min(available, quantities[unit.id] ?? 1));
   };
 
-  const renderCards = (units: RepairUnit[]) => units.map((unit) => (
-    <RepairCard
-      key={unit.id}
-      unit={unit}
-      available={remaining[unit.id] ?? 0}
-      selected={quantities[unit.id] ?? 1}
-      tokens={tokens}
-      onQuantity={setQuantity}
-      onRepair={repair}
-    />
-  ));
+  const repair = (unit: RepairUnit, method: PaymentMethod) => {
+    const available = availableFor(snapshot, unit);
+    if (available <= 0) return;
+    window.dispatchEvent(new CustomEvent(REPAIR_REQUEST_EVENT, {
+      detail: {
+        planetId: snapshot.planetId,
+        category: unit.category,
+        entityId: unit.id,
+        quantity: selectedQuantity(unit),
+        method,
+      },
+    }));
+  };
+
+  const renderCards = (units: RepairUnit[]) => units.map((unit) => {
+    const available = availableFor(snapshot, unit);
+    const selected = selectedQuantity(unit);
+    const availability = evaluateRepairAvailability(snapshot, unit.category, unit.id, selected);
+    return (
+      <RepairCard
+        key={unit.id}
+        unit={unit}
+        available={available}
+        selected={selected}
+        tokens={snapshot.repair.tokens}
+        availability={availability}
+        onQuantity={setQuantity}
+        onRepair={repair}
+      />
+    );
+  });
 
   return (
     <section className="repair-workshop-v1">
@@ -291,10 +357,22 @@ export function RepairWorkshopView({ planetName, coords, onBack }: { planetName:
       </header>
 
       <section className="repair-summary-v1" aria-label="Сводка ремонтной мастерской">
-        <SummaryCard label="ЖЕТОНЫ" value={tokens} unit={tokenWord(tokens)} icon="tokens" />
+        <SummaryCard label="ЖЕТОНЫ" value={snapshot.repair.tokens} unit={tokenWord(snapshot.repair.tokens)} icon="tokens" />
         <SummaryCard label="ДОСТУПНО К ВОССТАНОВЛЕНИЮ" value={totalPopulation} unit="НАС." icon="population" />
-        <SummaryCard label="КОРАБЛИ" value={shipPopulation} unit="НАС." icon="population" />
-        <SummaryCard label="ОБОРОНА" value={defensePopulation} unit="НАС." icon="population" />
+        <SummaryCard
+          label="КОРАБЛИ"
+          value={shipPopulation}
+          unit="НАС."
+          icon="population"
+          meta={`ФЛОТ ${formatNumber(fleetCapacity.population)} / ${formatNumber(fleetCapacity.capacity)}`}
+        />
+        <SummaryCard
+          label="ОБОРОНА"
+          value={defensePopulation}
+          unit="НАС."
+          icon="population"
+          meta={`ОБОРОНА ${formatNumber(defenseCapacity.population)} / ${formatNumber(defenseCapacity.capacity)}`}
+        />
       </section>
 
       <div className="repair-notice-v1"><span>●</span><strong>{notice}</strong></div>

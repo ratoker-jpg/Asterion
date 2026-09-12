@@ -111,6 +111,11 @@ import {
 import {
   bindFleetProductionEventBridge,
 } from './application/fleet-production.ts';
+import {
+  bindCombatResultEventBridge,
+  bindRepairEventBridge,
+} from './application/repair.ts';
+import { bindCombatResolutionEventBridge } from './application/combat.ts';
 import { getFleetProductionEntity } from './domain/fleet/production.ts';
 import { getFleetBuildBudget, getFleetSummaryForState } from './application/fleet.ts';
 import { getEffectiveResourceIncomePerHour } from './application/resource-clock.ts';
@@ -316,6 +321,33 @@ export function App() {
     },
     onNotice: setNotice,
   }), [testTimeScale]);
+  useEffect(() => bindRepairEventBridge({
+    target: window,
+    getState: () => stateRef.current,
+    commit: (nextState) => {
+      stateRef.current = nextState;
+      setState(nextState);
+    },
+    onNotice: setNotice,
+  }), []);
+  useEffect(() => bindCombatResultEventBridge({
+    target: window,
+    getState: () => stateRef.current,
+    commit: (nextState) => {
+      stateRef.current = nextState;
+      setState(nextState);
+    },
+    onNotice: setNotice,
+  }), []);
+  useEffect(() => bindCombatResolutionEventBridge({
+    target: window,
+    getState: () => stateRef.current,
+    commit: (nextState) => {
+      stateRef.current = nextState;
+      setState(nextState);
+    },
+    onNotice: setNotice,
+  }), []);
   useEffect(() => {
     persistence.write(state);
   }, [persistence, state]);

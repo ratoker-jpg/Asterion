@@ -392,6 +392,24 @@ html.asterion-repair-page .fleet-workspace-v1 {
 .repair-button-v1--tokens span { font-size: 11px; font-weight: 900; }
 .repair-button-v1--tokens:hover:not(:disabled) { border-color: #3bd5ff; background: linear-gradient(180deg, #159ac7, #08617f); }
 .repair-button-v1:disabled { opacity: .4; filter: grayscale(.4); cursor: not-allowed; }
+.repair-payment-reason-v1 {
+  min-height: 22px;
+  margin: 7px 0 0;
+  padding: 5px 7px;
+  border: 1px solid rgba(255, 177, 92, .24);
+  background: rgba(72, 38, 18, .26);
+  color: #f0bd88;
+  font-size: 9px;
+  line-height: 1.25;
+}
+.repair-summary-copy-v2 em {
+  display: block;
+  margin-top: 3px;
+  color: #5f99a5;
+  font-size: 8px;
+  font-style: normal;
+  letter-spacing: .03em;
+}
 
 .repair-empty-v1 {
   min-height: 230px;
