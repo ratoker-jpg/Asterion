@@ -855,7 +855,7 @@ export function App() {
          />
 
         <section className={`workspace workspace-v4 workspace--${workspaceKind}`}>
-          {buildingInterior && buildingInteriorTarget && buildingInteriorTarget.kind !== 'host' && buildingInteriorDefinition ? (
+          {buildingInterior && buildingInteriorTarget && buildingInteriorTarget.kind !== 'host' && buildingInteriorTarget.kind !== 'fleet-construction' && buildingInteriorDefinition ? (
             <button
               className="building-interior-return-overlay"
               type="button"

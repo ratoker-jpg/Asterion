@@ -146,7 +146,7 @@ async function verifyMilitaryDeepLinks(win, directory) {
   await enterBuilding(win, 'shipyard');
   await waitFor(win, `document.querySelector('[data-qa-route="fleets"][aria-current="page"]')`);
   await waitFor(win, `document.querySelector('.fleet-main-v1--shipyard')`);
-  await waitFor(win, `document.querySelector('[data-qa-building-interior-back]')`);
+  await waitFor(win, `document.querySelector('[data-qa-construction-header="ships"]')`);
   const shipyardIdentity = await win.webContents.executeJavaScript(`(() => {
     const root = document.querySelector('[data-qa-building-role="shipyard"]');
     const fleetCard = document.querySelector('.fleet-yard-card-v1');
@@ -183,6 +183,7 @@ async function verifyMilitaryDeepLinks(win, directory) {
         detailMargin: detailStyle?.marginTop ?? '',
       },
       hasLegacyName: Boolean(document.querySelector('[data-qa-building-role="shipyard"]')?.textContent?.includes('Орбитальная')),
+      hasReturnToShipyardOverlay: Boolean(document.querySelector('.building-interior-return-overlay')),
     };
   })()`);
   const expectedGridColumn = shipyardIdentity.visual.viewportWidth <= 1040 ? '62px' : shipyardIdentity.visual.viewportWidth <= 1440 ? '72px' : '84px';
@@ -201,7 +202,7 @@ async function verifyMilitaryDeepLinks(win, directory) {
     && shipyardIdentity.visual.titleSize === '13px'
     && shipyardIdentity.visual.detailSize === '10px'
     && shipyardIdentity.visual.detailMargin === '7px';
-  if (shipyardIdentity.fleetName !== 'Верфь' || shipyardIdentity.pageName !== 'Верфь' || shipyardIdentity.fleetCardTag !== 'BUTTON' || !shipyardIdentity.fleetCardLabel.startsWith('Открыть Верфь') || shipyardIdentity.hasLegacyName || shipyardIdentity.hasLegacyEmblem || !shipyardIdentity.hasSharedCardTemplate || !visualTemplateMatches || !/building\.aegis\.shipyard(?:-[^/]+)?\.png$/.test(shipyardIdentity.asset) || shipyardIdentity.image !== shipyardIdentity.asset) {
+  if (shipyardIdentity.fleetName !== 'Верфь' || shipyardIdentity.pageName !== 'Верфь' || shipyardIdentity.fleetCardTag !== 'BUTTON' || !shipyardIdentity.fleetCardLabel.startsWith('Открыть Верфь') || shipyardIdentity.hasLegacyName || shipyardIdentity.hasLegacyEmblem || shipyardIdentity.hasReturnToShipyardOverlay || !shipyardIdentity.hasSharedCardTemplate || !visualTemplateMatches || !/building\.aegis\.shipyard(?:-[^/]+)?\.png$/.test(shipyardIdentity.asset) || shipyardIdentity.image !== shipyardIdentity.asset) {
     throw new Error(`Shipyard identity contract failed: ${JSON.stringify(shipyardIdentity)}`);
   }
 
@@ -234,6 +235,7 @@ async function verifyMilitaryDeepLinks(win, directory) {
       hasLegacyPageHeader: header?.classList.contains('shipyard-page-head-v1') ?? false,
       hasLegacyPageTitle: Boolean(root?.querySelector('.shipyard-page-title-v1, .shipyard-page-art-v1')),
       hasLegacyEmblem: Boolean(root?.querySelector('.fleet-yard-emblem-v1')),
+      hasReturnToShipyardOverlay: Boolean(document.querySelector('.building-interior-return-overlay')),
       header: {
         minHeight: headerStyle?.minHeight ?? '',
         gridFirstColumn: headerGrid[0] ?? '',
@@ -273,6 +275,7 @@ async function verifyMilitaryDeepLinks(win, directory) {
     && !visual.hasLegacyPageHeader
     && !visual.hasLegacyPageTitle
     && !visual.hasLegacyEmblem
+    && !visual.hasReturnToShipyardOverlay
     && visual.header.display === 'grid'
     && visual.header.clipPath === 'none'
     && visual.header.minHeight === '112px'
