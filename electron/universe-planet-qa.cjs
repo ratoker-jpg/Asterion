@@ -55,7 +55,7 @@ async function clickObject(win, selector) {
   await settle(win);
 }
 
-async function clickAt(win, selector, backdrop = false) {
+async function clickAt(win, selector, backdrop = false, settleAfter = true) {
   const point = await win.webContents.executeJavaScript(`(() => {
     const element = document.querySelector(${JSON.stringify(selector)});
     if (!element) throw new Error('Click target missing');
@@ -70,7 +70,7 @@ async function clickAt(win, selector, backdrop = false) {
   await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
   await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mousePressed', ...point, button: 'left', clickCount: 1 });
   await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseReleased', ...point, button: 'left', clickCount: 1 });
-  await settle(win);
+  if (settleAfter) await settle(win);
 }
 
 async function pressKey(win, key, modifiers = 0) {
@@ -329,12 +329,16 @@ async function runViewport(width, height) {
     if (new Set(systems).size !== 7 || systems.some((system) => !Number.isInteger(system) || system < 1 || system > 40) || new Set(npc.rows.map((row) => row.id)).size !== 7 || npc.rows.some((row) => row.visitId !== row.id || !/^\[1:\d+:\d+\]$/.test(row.coordinate) || Number(row.coordinate.slice(1, -1).split(':')[2]) < 1 || Number(row.coordinate.slice(1, -1).split(':')[2]) > 24)) throw new Error(`${label}: NPC coordinates/visit targets failed ${JSON.stringify(npc.rows)}`);
     await capture(win, directory, 'npc-inspector');
     const beforePrototypeAction = await win.webContents.executeJavaScript(`localStorage.getItem(${JSON.stringify(SAVE_KEY)})`);
-    await clickAt(win, '[data-qa-universe-action="fleet"]');
+    // Read the envelope immediately after the prototype click. Waiting for
+    // the notice first can cross App's one-second runtime reconciliation tick,
+    // which legitimately persists a new resource clock and creates a false
+    // positive for an action that itself does not mutate the save.
+    await clickAt(win, '[data-qa-universe-action="fleet"]', false, false);
+    const afterPrototypeAction = await win.webContents.executeJavaScript(`localStorage.getItem(${JSON.stringify(SAVE_KEY)})`);
+    if (beforePrototypeAction !== afterPrototypeAction) throw new Error(`${label}: prototype action mutated the save envelope`);
     await waitFor(win, `document.querySelector('.shell-notice span')?.textContent?.includes('Прототип — отправка не подключена')`);
     const prototypeNotice = await win.webContents.executeJavaScript(`document.querySelector('.shell-notice span')?.textContent?.replace(/\\s+/g, ' ').trim() || ''`);
     if (!prototypeNotice.includes(npc.rows[0].coordinate)) throw new Error(`${label}: prototype action target missing ${prototypeNotice}`);
-    const afterPrototypeAction = await win.webContents.executeJavaScript(`localStorage.getItem(${JSON.stringify(SAVE_KEY)})`);
-    if (beforePrototypeAction !== afterPrototypeAction) throw new Error(`${label}: prototype action mutated the save envelope`);
     await dismissInspector(win);
     await checkRestoredFocus(win, npcId);
 
