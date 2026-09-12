@@ -2,7 +2,7 @@ export type RuntimeMode = 'production' | 'test';
 
 export const PRODUCTION_SAVE_KEY = 'asterion.vertical-slice.v1';
 export const TEST_SAVE_KEY = 'asterion.vertical-slice.test.v1';
-export const RUNTIME_SAVE_SCHEMA_VERSION = 10;
+export const RUNTIME_SAVE_SCHEMA_VERSION = 11;
 
 // Test Mode is deliberately accelerated at the runtime boundary. Production
 // never reads any test speed setting.

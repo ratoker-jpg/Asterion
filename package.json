@@ -16,6 +16,7 @@
     "test:settings": "node --experimental-strip-types --test src/domain/settings/settings.test.ts",
     "test:rating": "node --experimental-strip-types --test src/domain/rating/rating.test.ts",
     "test:runtime": "node --experimental-strip-types --test src/domain/runtime/mode.test.ts",
+    "test:resources": "node --experimental-strip-types --test src/domain/resources/credit.test.ts",
     "test:fleet": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/fleet/runtime.test.ts",
     "test:science": "node --experimental-strip-types --test src/domain/science/science.test.ts",
     "test:universe": "node --experimental-strip-types --test src/domain/universe/universe.test.ts",

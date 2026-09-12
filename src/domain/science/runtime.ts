@@ -6,6 +6,7 @@ import type {
 } from './types.ts';
 import { getRuntimeSaveKey, scaleRuntimeDuration, type RuntimeMode } from '../runtime/mode.ts';
 import { getScienceRebalancedBaseDurationMs } from './time-rebalanced.ts';
+import { creditResources, type ResourceCapacitiesInput, type ResourceCreditResult } from '../resources/credit.ts';
 
 export type { ScienceId } from './types.ts';
 
@@ -87,6 +88,7 @@ export type SciencePreview = {
 export type ScienceRuntimeContext = {
   state: ScienceState;
   wallet: ScienceWallet;
+  capacities?: ResourceCapacitiesInput;
   laboratoryLevel: number;
   now: number;
   mode?: RuntimeMode;
@@ -126,6 +128,7 @@ export type ScienceCancellationTransition = {
   refundPercent: number | null;
   refundPercents: number[];
   reason: string | null;
+  credit?: ResourceCreditResult;
 };
 
 export type ScienceRuntimeSnapshot = {
@@ -520,8 +523,9 @@ export function cancelScienceResearch(
       RESOURCE_KEYS.map((key) => [key, total[key] + itemRefund[key]]),
     ) as ScienceResourceCost;
   }, { metal: 0, minerals: 0, gas: 0, energy: 0 } as ScienceResourceCost);
-  const wallet = { ...context.wallet };
-  for (const key of RESOURCE_KEYS) wallet[key] += refund[key];
+  const unlimitedCapacities = { metal: Number.MAX_SAFE_INTEGER, minerals: Number.MAX_SAFE_INTEGER, gas: Number.MAX_SAFE_INTEGER };
+  const credit = creditResources(context.wallet, context.capacities ?? unlimitedCapacities, refund);
+  const wallet = credit.wallet;
   return {
     ok: true,
     state: { ...reconciledState, queue: rescheduleScienceQueue(remaining, queueIndex === 0, context.now) },
@@ -532,6 +536,7 @@ export function cancelScienceResearch(
     refundPercent: refundPercents[0] ?? null,
     refundPercents,
     reason: null,
+    credit,
   };
 }
 

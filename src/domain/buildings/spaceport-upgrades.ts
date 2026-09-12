@@ -11,6 +11,7 @@ import type { BuildingLevels, BuildingRole, ScienceLevels } from './resource-zon
 import { scaleRuntimeDuration, type RuntimeMode } from '../runtime/mode.ts';
 import { getFactionSpaceportUpgradeBalance } from './spaceport-upgrade-balance-v1.ts';
 import { getCommanderSpaceportUpgradeBalance } from './commander-upgrade-balance-v1.ts';
+import { creditResources, type ResourceCapacitiesInput, type ResourceCreditResult } from '../resources/credit.ts';
 
 export const SPACEPORT_UPGRADE_QUEUE_CAPACITY = 3;
 export const PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS = 15 * 60 * 1000;
@@ -95,6 +96,7 @@ export type SpaceportUpgradePreview = {
 export type SpaceportUpgradeContext = {
   state: SpaceportUpgradeState;
   wallet: SpaceportUpgradeWallet;
+  capacities?: ResourceCapacitiesInput;
   buildings: BuildingLevels;
   scienceLevels: ScienceLevels;
   spaceportLevel: number;
@@ -113,6 +115,7 @@ export type SpaceportCancellationTransition = {
   refundPercent: number | null;
   refundPercents: number[];
   reason: string | null;
+  credit?: ResourceCreditResult;
 };
 
 export type SpaceportUpgradeTransition = {
@@ -660,10 +663,16 @@ export function cancelSpaceportUpgrade(
       gas: total.gas + itemRefund.gas,
     };
   }, { metal: 0, minerals: 0, gas: 0 });
+  const unlimitedCapacities = { metal: Number.MAX_SAFE_INTEGER, minerals: Number.MAX_SAFE_INTEGER, gas: Number.MAX_SAFE_INTEGER };
+  const credit = creditResources(
+    { ...context.wallet, energy: 0 },
+    context.capacities ?? unlimitedCapacities,
+    refund,
+  );
   const wallet = {
-    metal: context.wallet.metal + refund.metal,
-    minerals: context.wallet.minerals + refund.minerals,
-    gas: context.wallet.gas + refund.gas,
+    metal: credit.wallet.metal,
+    minerals: credit.wallet.minerals,
+    gas: credit.wallet.gas,
   };
 
   return {
@@ -676,6 +685,7 @@ export function cancelSpaceportUpgrade(
     refundPercent: refundPercents[0] ?? null,
     refundPercents,
     reason: null,
+    credit,
   };
 }
 

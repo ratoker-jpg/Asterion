@@ -5,17 +5,23 @@ import {
   destroyBuildingLevel,
   evaluateBuildingBuild,
   getBuildingDefinition,
+  getStorageCapacities,
   startBuildingProject,
   type BuildAvailability,
   type BuildingEconomyState,
   type BuildingRole,
   type ResourceWallet,
 } from '../domain/buildings/resource-zone.ts';
+import { creditResources, type ResourceCreditResult } from '../domain/resources/credit.ts';
 import {
   createEmptyBotAssignment,
   migrateProductionBotAssignment,
   type BotAssignment,
 } from '../domain/buildings/production-bots.ts';
+import {
+  calculateFleetCapacity,
+  calculateFleetPopulation,
+} from '../domain/fleet/runtime.ts';
 import {
   advanceRecyclingState,
   collectRecyclingJob,
@@ -84,6 +90,7 @@ function economyFor(state: SaveState, context: BuildingApplicationContext): Buil
     buildings: planet.buildings,
     queue: state.queues[context.planetId] ?? [],
     scienceLevels: state.science.levels,
+    capacities: getStorageCapacities(planet.buildings),
   };
 }
 
@@ -167,11 +174,27 @@ export function destroyBuilding(
   assetRole: BuildingRole,
   rng: () => number = Math.random,
 ): BuildingActionResult & { refundPercent: number | null } {
+  const planet = getPlanetState(state, context.planetId);
+  if (assetRole === 'hangar') {
+    const currentLevel = Math.max(0, Math.floor(planet.buildings.hangar ?? 0));
+    if (currentLevel > 0) {
+      const nextCapacity = calculateFleetCapacity(currentLevel - 1);
+      const currentPopulation = calculateFleetPopulation(planet.fleet, state.profile.factionId);
+      if (currentPopulation > nextCapacity) {
+        return {
+          ok: false,
+          state,
+          reason: `Нельзя понизить ангар: флот занимает ${currentPopulation} мест, новая вместимость — ${nextCapacity}.`,
+          refundPercent: null,
+        };
+      }
+    }
+  }
+
   const refundPercent = 50 + Math.floor(rng() * 31);
   const transition = destroyBuildingLevel(economyFor(state, context), assetRole, refundPercent);
   if (!transition.ok) return { ok: false, state, reason: transition.reason, refundPercent: null };
 
-  const planet = getPlanetState(state, context.planetId);
   const next = stateFromEconomy(state, context, transition.state);
   return {
     ok: true,
@@ -245,47 +268,59 @@ export function collectRecycling(
   state: SaveState,
   context: BuildingApplicationContext,
   jobId: string,
-): BuildingActionResult & { output: { metal: number; minerals: number; gas: number } | null } {
+): BuildingActionResult & { output: { metal: number; minerals: number; gas: number } | null; credit: ResourceCreditResult | null } {
   const planet = getPlanetState(state, context.planetId);
   const transition = collectRecyclingJob(planet.recycling, jobId, context.now);
   if (!transition.ok || !transition.output) {
     const nextState = transition.state !== planet.recycling
       ? replacePlanetState(state, context.planetId, { ...planet, recycling: transition.state })
       : state;
-    return { ok: false, state: nextState, reason: transition.reason ?? 'Ресурс пока недоступен.', output: null };
+    return { ok: false, state: nextState, reason: transition.reason ?? 'Ресурс пока недоступен.', output: null, credit: null };
   }
+  const credit = creditResources(
+    { metal: state.metal, minerals: state.minerals, gas: state.gas, energy: planet.energy },
+    getStorageCapacities(planet.buildings),
+    transition.output,
+  );
   return {
     ok: true,
     state: replacePlanetState({
       ...state,
       schemaVersion: SAVE_SCHEMA_VERSION,
-      metal: state.metal + transition.output.metal,
-      minerals: state.minerals + transition.output.minerals,
-      gas: state.gas + transition.output.gas,
+      metal: credit.wallet.metal,
+      minerals: credit.wallet.minerals,
+      gas: credit.wallet.gas,
     }, context.planetId, { ...planet, recycling: transition.state }),
     reason: null,
     output: transition.output,
+    credit,
   };
 }
 
 export function reconcileRecycling(
   state: SaveState,
   context: BuildingApplicationContext,
-): BuildingActionResult & { autoCollectedJobIds: string[] } {
+): BuildingActionResult & { autoCollectedJobIds: string[]; credit: ResourceCreditResult | null } {
   const planet = getPlanetState(state, context.planetId);
   const transition = advanceRecyclingState(planet.recycling, context.now);
-  if (!transition.changed) return { ok: true, state, reason: null, autoCollectedJobIds: [] };
+  if (!transition.changed) return { ok: true, state, reason: null, autoCollectedJobIds: [], credit: null };
+  const credit = creditResources(
+    { metal: state.metal, minerals: state.minerals, gas: state.gas, energy: planet.energy },
+    getStorageCapacities(planet.buildings),
+    transition.autoCollectedOutput,
+  );
   return {
     ok: true,
     state: replacePlanetState({
       ...state,
       schemaVersion: SAVE_SCHEMA_VERSION,
-      metal: state.metal + transition.autoCollectedOutput.metal,
-      minerals: state.minerals + transition.autoCollectedOutput.minerals,
-      gas: state.gas + transition.autoCollectedOutput.gas,
+      metal: credit.wallet.metal,
+      minerals: credit.wallet.minerals,
+      gas: credit.wallet.gas,
     }, context.planetId, { ...planet, recycling: transition.state }),
     reason: null,
     autoCollectedJobIds: transition.autoCollectedJobIds,
+    credit,
   };
 }
 
@@ -305,6 +340,7 @@ export function executeTradeAction(
         debris: planet.recycling.availableDebris,
       },
       trade: planet.trade,
+      capacities: getStorageCapacities(planet.buildings),
     },
     planet.buildings['trade-center'],
     ratingPoints,
@@ -360,6 +396,7 @@ export function startSpaceportUpgrade(
     scienceLevels: state.science.levels,
     spaceportLevel: planet.buildings.spaceport,
     factionId: state.profile.factionId,
+    capacities: getStorageCapacities(planet.buildings),
     mode: context.mode,
     testTimeScale: context.testTimeScale,
   }, track, shipId, context.now, taskId);
@@ -392,6 +429,7 @@ export function cancelSpaceportUpgrade(
     scienceLevels: state.science.levels,
     spaceportLevel: planet.buildings.spaceport,
     factionId: state.profile.factionId,
+    capacities: getStorageCapacities(planet.buildings),
     mode: context.mode,
     testTimeScale: context.testTimeScale,
   }, taskId, context.now, context.rng);

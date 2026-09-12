@@ -33,6 +33,16 @@ export type PlanetRuntime = {
   stability: number;
 };
 
+export type ResourceClock = {
+  lastReconciledAt: number;
+  remainder: {
+    metal: number;
+    minerals: number;
+    gas: number;
+    energy: number;
+  };
+};
+
 export type SaveState = {
   schemaVersion: number;
   metal: number;
@@ -50,6 +60,7 @@ export type SaveState = {
   command: CommandState;
   reports: ReportsState;
   science: ScienceState;
+  resourceClock: ResourceClock;
 };
 
 export function getPlanetState(state: SaveState, planetId: PlanetId): PlanetRuntime {

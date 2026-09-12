@@ -23,21 +23,48 @@ function formatStorageEta(current: number, capacity: number, hourlyGain: number)
 
 export function ResourceChip({ kind, label, value, capacity, showCapacity = false, hourlyGain, description }: HeaderResourceModel) {
   const fill = capacity ? Math.min(100, Math.max(0, (value / capacity) * 100)) : 0;
-  const fillTone = fill >= 85 ? 'critical' : fill >= 75 ? 'warning' : fill >= 65 ? 'watch' : 'normal';
+  const fillTone = fill <= 20
+    ? 'normal'
+    : fill <= 40
+      ? 'positive'
+      : fill <= 55
+        ? 'watch'
+        : fill <= 70
+          ? 'warning'
+          : fill <= 85
+            ? 'danger'
+            : 'critical';
+  const hasFill = kind !== 'energy' && Boolean(capacity);
+  const shouldPulse = (kind === 'metal' || kind === 'mineral' || kind === 'gas') && fill > 85;
   const tooltipId = `asterion-header-resource-tooltip-${kind}`;
 
   return (
     <div
-      className={`asterion-header__resource asterion-header__resource--${kind}`}
+      className={`asterion-header__resource asterion-header__resource--${kind}${shouldPulse ? ' is-pulsing' : ''}`}
       tabIndex={0}
       data-qa-resource-chip={kind}
+      data-qa-resource-kind={kind}
+      data-qa-resource-ratio={fill}
+      data-qa-resource-tone={fillTone}
+      data-qa-resource-pulse={shouldPulse}
       aria-describedby={tooltipId}
     >
       <span className="asterion-header__resource-icon"><HeaderGameIcon kind={kind} /></span>
       <span className="asterion-header__resource-text">
         <small>{label}</small>
         <strong>{showCapacity && capacity ? `${formatNumber(value)} / ${formatNumber(capacity)}` : formatNumber(value)}</strong>
-        {capacity ? <span className={`asterion-header__resource-fill asterion-header__resource-fill--${fillTone}`}><i style={{ '--fill': `${fill}%` } as CSSProperties} /></span> : null}
+        {hasFill ? (
+          <span
+            className={`asterion-header__resource-fill asterion-header__resource-fill--${fillTone}${shouldPulse ? ' is-pulsing' : ''}`}
+            data-qa-resource-fill={kind}
+            data-qa-resource-kind={kind}
+            data-qa-resource-ratio={fill}
+            data-qa-resource-tone={fillTone}
+            data-qa-resource-pulse={shouldPulse}
+          >
+            <i style={{ '--fill': `${fill}%` } as CSSProperties} />
+          </span>
+        ) : null}
       </span>
       <span id={tooltipId} className="asterion-header__resource-tooltip" data-qa-resource-tooltip={kind} role="tooltip">
         <strong>{label}</strong>
