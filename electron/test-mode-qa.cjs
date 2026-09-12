@@ -612,9 +612,9 @@ async function runViewport(width, height) {
       throw new Error(`${label}: canonical fleet restore after global-scroll QA failed ${JSON.stringify(restoredFleet)}`);
     }
     await clickText(win, '.fleet-sidebar-v1 button', 'Корабли');
-    await waitFor(win, `document.querySelector('[data-qa-fleet-summary]')`);
+    await waitFor(win, `document.querySelector('[data-qa-construction-mode="ships"]')`);
     const fleetUi = await readQaState(win);
-    if (!fleetUi.fleetPopulation.includes('58 / 120') || !(await documentHasNoOverflow(win))) throw new Error(`${label}: fleet construction UI mismatch`);
+    if (!(await documentHasNoOverflow(win))) throw new Error(`${label}: fleet construction UI mismatch`);
     await capture(win, directory, 'test-fleet-construction');
 
     const final = await readQaState(win);

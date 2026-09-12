@@ -12,7 +12,6 @@ import {
 } from './domain/fleet/production.ts';
 import { ACTIVE_RUNTIME_MODE, resolveTestTimeScale } from './domain/runtime/mode.ts';
 import { FLEET_PRODUCTION_START_REQUEST_EVENT } from './application/fleet-production.ts';
-import { FleetProductionQueueView } from './FleetProductionQueueView';
 import { readFleetBuildBudget, type FleetBuildBudget } from './application/fleet.ts';
 import { FleetConstructionHeader } from './FleetConstructionHeader';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
@@ -103,7 +102,7 @@ function formatMetric(value: number | null) {
   return value == null ? '—' : formatNumber(value);
 }
 
-function ShipStatsTooltip({ ship, stats }: { ship: ShipDefinition; stats: ShipCombatStats }) {
+function ShipStatsTooltip({ ship, stats, level }: { ship: ShipDefinition; stats: ShipCombatStats; level: number }) {
   return (
     <div className="shipyard-stats-tooltip-v1" role="tooltip">
       <header className="shipyard-tooltip-head-v1">
@@ -123,6 +122,7 @@ function ShipStatsTooltip({ ship, stats }: { ship: ShipDefinition; stats: ShipCo
         <div><small>Грузоподъёмность</small><strong>{formatMetric(stats.cargo)}</strong></div>
         <div><small>Скорость</small><strong>{formatMetric(stats.speed)}</strong></div>
         <div><small>Расход топлива</small><strong>{formatMetric(stats.fuel)}</strong></div>
+        <div className="shipyard-tooltip-level-v1" data-qa-fleet-level={ship.id}><small>Уровень корабля</small><strong>{level}/10</strong></div>
       </div>
     </div>
   );
@@ -157,6 +157,7 @@ function ShipCard({
     mode: ACTIVE_RUNTIME_MODE,
     testTimeScale: resolveTestTimeScale(),
   });
+  const shipLevel = Math.min(10, Math.max(0, Math.floor(budget.spaceportUpgrades.shipLevels[ship.id] ?? 0)));
 
   return (
     <article className={`shipyard-card-v1 ${unlocked ? '' : 'locked'}`} data-qa-fleet-production-item={ship.id}>
@@ -164,7 +165,6 @@ function ShipCard({
         <div className={`shipyard-owned-v1 ${ship.owned > 0 ? 'has-ships' : ''}`}>
           <small>В СТРОЮ</small>
           <strong>{formatNumber(ship.owned)}</strong>
-          {ship.pending > 0 ? <span>В очереди {formatNumber(ship.pending)}</span> : null}
         </div>
         <div className="shipyard-title-copy-v1"><strong>{ship.name}</strong><small>{ship.role}</small></div>
         <button type="button" title={ship.role} aria-label={`Информация: ${ship.name}`}>i</button>
@@ -174,13 +174,12 @@ function ShipCard({
         <div className="shipyard-art-v1">
           <div className="shipyard-art-hover-v1" aria-label={`Характеристики корабля ${ship.name}`}>
             <img src={ship.art} alt={ship.name} draggable={false} />
-            <ShipStatsTooltip ship={ship} stats={stats} />
+            <ShipStatsTooltip ship={ship} stats={stats} level={shipLevel} />
           </div>
           <div className="shipyard-time-v1" data-qa-unit-time={ship.id}>
             <small>ВРЕМЯ ЗА ЕДИНИЦУ</small>
             <b data-qa-unit-time-effective>{formatClockDurationMs(effectiveTimeMs)}</b>
             <span data-qa-unit-time-raw>RAW {ship.time}</span>
-            <span className="shipyard-unit-level-v1" data-qa-fleet-level={ship.id}>УРОВЕНЬ КОРПУСА {Math.min(10, Math.max(0, Math.floor(budget.spaceportUpgrades.shipLevels[ship.id] ?? 0)))}/10</span>
           </div>
         </div>
 
@@ -295,8 +294,6 @@ export function ShipyardView({ planetName, coords, budget: providedBudget }: { p
         coords={coords}
       />
 
-      <FleetProductionQueueView queueKind="ships" state={budget.fleetProduction} factionId={budget.factionId} />
-
       <div className="shipyard-grid-v1">
         {ownedShips.map((ship) => (
           <ShipCard
@@ -313,10 +310,6 @@ export function ShipyardView({ planetName, coords, budget: providedBudget }: { p
         ))}
       </div>
 
-      <footer className="shipyard-page-foot-v1">
-        <span>13 стандартных корпусов {factionName} · командирские корабли находятся в отдельном разделе.</span>
-        <span data-qa-fleet-summary>Популяция флота: {formatNumber(fleetSummary.population)} / {formatNumber(fleetSummary.capacity)} · свободно {formatNumber(fleetSummary.available)}</span>
-      </footer>
     </section>
   );
 }

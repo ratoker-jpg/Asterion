@@ -14,11 +14,13 @@ import {
 } from './application/fleet.ts';
 import { BattleReportsView } from './BattleReportsView';
 import { ConstructionCatalogView, type ConstructionCatalogMode } from './ConstructionCatalogView';
+import { FleetProductionQueueView } from './FleetProductionQueueView';
 import { FleetCombatPriorityView } from './FleetCombatPriorityView';
 import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
 import { FLEET_CONSTRUCTION_REQUEST_EVENT } from './building-interior-navigation.ts';
 import { ShipyardView } from './ShipyardView';
 import { SimulatorView } from './SimulatorView';
+import type { FleetProductionQueueKind } from './domain/fleet/production.ts';
 import {
   FLEET_CONSTRUCTION_NAVIGATION,
   FLEET_MANAGEMENT_NAVIGATION,
@@ -49,6 +51,13 @@ type MissionDefinition = {
 };
 
 type ConstructionView = 'ships' | ConstructionCatalogMode | null;
+
+function queueKindForConstructionView(view: ConstructionView): FleetProductionQueueKind | null {
+  if (view === 'ships') return 'ships';
+  if (view === 'defense') return 'defense';
+  if (view === 'commander') return 'commanders';
+  return null;
+}
 
 const missions: MissionDefinition[] = [
   { id: 'transport', label: 'Транспортировка', description: 'Перевозка ресурсов между доступными планетами.' },
@@ -201,13 +210,15 @@ function FleetWorkspace({
     selectedSection === 'battles' ? 'fleet-main-v1--battles' : '',
     selectedSection === 'simulator' ? 'fleet-main-v1--subpage' : '',
   ].filter(Boolean).join(' ');
+  const productionQueueKind = queueKindForConstructionView(constructionView);
 
   return (
     <div className="fleet-workspace-v1">
       <aside className="fleet-sidebar-v1">
         <div className="fleet-sidebar-title-v1">
+          <small>ASTERION // ВОЕННАЯ ЗОНА</small>
           <span>ФЛОТЫ</span>
-          <small>ФЛОТ {factionName.toUpperCase()}</small>
+          <em>ФЛОТ {factionName.toUpperCase()}</em>
         </div>
 
         <div
@@ -218,14 +229,22 @@ function FleetWorkspace({
         >
           <img src={shipyardPresentation.art} alt="Верфь" draggable={false} />
           <div>
-            <small>БАЗА ФЛОТА</small>
-            <strong>Верфь</strong>
-            <p>Ангар {fleetSnapshot.hangarLevel} · Верфь {fleetSnapshot.shipyardLevel}</p>
+            <small>{planetName}</small>
+            <strong>ВЕРФЬ · УРОВЕНЬ {fleetSnapshot.shipyardLevel}</strong>
+            <p>Ангар {fleetSnapshot.hangarLevel} · производство флота и обороны.</p>
           </div>
         </div>
 
         <FleetMenuGroup title="СТРОИТЕЛЬСТВО" items={FLEET_CONSTRUCTION_NAVIGATION} selected={selectedSection} onSelect={chooseSection} />
         <FleetMenuGroup title="УПРАВЛЕНИЕ ФЛОТОМ" items={FLEET_MANAGEMENT_NAVIGATION} selected={selectedSection} onSelect={chooseSection} />
+
+        {productionQueueKind ? (
+          <FleetProductionQueueView
+            queueKind={productionQueueKind}
+            state={fleetSnapshot.fleetProduction}
+            factionId={factionId}
+          />
+        ) : null}
       </aside>
 
       <main className={mainClassName}>
@@ -361,7 +380,7 @@ function FleetMenuGroup({ title, items, selected, onSelect }: { title: string; i
       <h3>{title}</h3>
       {items.map((item) => (
         <button key={item.id} type="button" className={selected === item.id ? 'active' : ''} data-qa-fleet-section={item.id} onClick={() => onSelect(item.id)}>
-          <span className="fleet-menu-icon-v1">◇</span><strong>{item.label}</strong><i>›</i>
+          <strong>{item.label}</strong>
         </button>
       ))}
     </section>

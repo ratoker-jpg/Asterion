@@ -22,8 +22,6 @@ const queueLabels: Record<FleetProductionQueueKind, string> = {
   commanders: 'Командиры',
 };
 
-const formatNumber = (value: number) => new Intl.NumberFormat('ru-RU').format(value);
-
 function cancelOrder(orderId: string) {
   window.dispatchEvent(new CustomEvent(FLEET_PRODUCTION_CANCEL_REQUEST_EVENT, {
     detail: { orderId, now: Date.now() },
@@ -39,13 +37,23 @@ export function FleetProductionQueueView({ queueKind, state, factionId }: FleetP
 
   const queue = getFleetProductionQueue(state, queueKind);
   return (
-    <section className="fleet-production-queue-v1" data-qa-fleet-production-queue={queueKind}>
+    <section
+      className="fleet-production-queue-v1"
+      data-qa-fleet-production-queue={queueKind}
+      aria-label={`Очередь: ${queueLabels[queueKind]}`}
+    >
       <header className="fleet-production-queue-head-v1">
-        <strong>ТЕКУЩИЕ ПРОЦЕССЫ · {queueLabels[queueKind].toUpperCase()}</strong>
-        <span>{queue.length > 0 ? `${queue.length} ${queue.length === 1 ? 'пакет' : 'пакета'}` : 'Очередь свободна'}</span>
+        <span>ОЧЕРЕДЬ</span>
+        <strong data-qa-fleet-production-queue-count>{queue.length}</strong>
       </header>
       {queue.length === 0 ? (
-        <div className="fleet-production-queue-empty-v1">Очередь свободна</div>
+        <div className="fleet-production-queue-empty-v1">
+          <span aria-hidden="true">◇</span>
+          <div>
+            <strong>Очередь свободна</strong>
+            <small>Можно запустить новое производство.</small>
+          </div>
+        </div>
       ) : (
         <div className="fleet-production-queue-list-v1">
           {queue.map((order, index) => {
@@ -64,24 +72,24 @@ export function FleetProductionQueueView({ queueKind, state, factionId }: FleetP
                 data-qa-fleet-production-order={order.id}
                 data-qa-fleet-production-status={active ? 'active' : 'waiting'}
               >
+                <div className="fleet-production-order-art-v1">
+                  {entity ? <img src={entity.art} alt="" draggable={false} /> : <span aria-hidden="true">◇</span>}
+                </div>
                 <div className="fleet-production-order-main-v1">
-                  <span className="fleet-production-order-index-v1">{String(index + 1).padStart(2, '0')}</span>
-                  <div>
-                    <strong>{entity?.name ?? order.itemId}</strong>
-                    <small>{order.quantity} ед. · готово {completed} · осталось {pending}</small>
-                  </div>
+                  <strong>{entity?.name ?? order.itemId}</strong>
+                  <small>{order.quantity} ед. · готово {completed} · осталось {pending}</small>
+                  {active ? (
+                    <time>{remainingMs > 0 ? formatClockDurationMs(remainingMs) : 'ЗАВЕРШЕНИЕ…'}</time>
+                  ) : (
+                    <span>ОЖИДАЕТ · ПОЗИЦИЯ {index + 1}</span>
+                  )}
                 </div>
                 <div className="fleet-production-order-meta-v1">
-                  <span>{active ? `Осталось ${formatClockDurationMs(remainingMs)}` : 'ОЖИДАЕТ'}</span>
                   <button type="button" aria-label={`Отменить заказ ${entity?.name ?? order.itemId}`} onClick={() => cancelOrder(order.id)}>×</button>
                 </div>
                 <div className="fleet-production-order-progress-v1" aria-hidden="true">
                   <i style={{ transform: `scaleX(${active ? progress : 0})` }} />
                 </div>
-                <footer>
-                  <span>{active ? 'В ПРОИЗВОДСТВЕ' : 'В ОЧЕРЕДИ'}</span>
-                  <span>{formatNumber(order.effectiveDurationMs / 1_000)} сек. / ед.</span>
-                </footer>
               </article>
             );
           })}

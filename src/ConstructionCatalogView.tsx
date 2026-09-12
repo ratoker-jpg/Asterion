@@ -14,7 +14,6 @@ import { calculateFleetProductionDurationMs } from './domain/fleet/production.ts
 import { ACTIVE_RUNTIME_MODE, resolveTestTimeScale } from './domain/runtime/mode.ts';
 import { readFleetBuildBudget, type FleetBuildBudget } from './application/fleet.ts';
 import { FLEET_PRODUCTION_START_REQUEST_EVENT } from './application/fleet-production.ts';
-import { FleetProductionQueueView } from './FleetProductionQueueView';
 import { FleetConstructionHeader } from './FleetConstructionHeader';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 
@@ -153,6 +152,12 @@ function CatalogStatsTooltip({ item }: { item: CatalogItem }) {
         <div><small>Специализация</small><strong>{stats.specialization}</strong></div>
         <div><small>Дистанция</small><strong>{stats.range}</strong></div>
         <div><small>Приоритет</small><strong>{stats.priority}</strong></div>
+        {item.commanderAbility ? (
+          <div className="shipyard-tooltip-level-v1" data-qa-commander-dossier-level={item.id}>
+            <small>Уровень командира</small>
+            <strong>{item.level}/40</strong>
+          </div>
+        ) : null}
       </div>
 
       {item.commanderAbility ? (
@@ -199,12 +204,21 @@ function CatalogCard({
 
   return (
     <article className={`shipyard-card-v1 ${unlocked ? '' : 'locked'}`} data-qa-fleet-production-item={item.id}>
-      <header className="shipyard-card-title-v1">
-        <div className={`shipyard-owned-v1 ${item.owned > 0 ? 'has-ships' : ''}`}>
-          <small>{mode === 'defense' ? 'ПОСТРОЕНО' : 'В СТРОЮ'}</small>
-          <strong>{formatNumber(item.owned)}</strong>
-          {item.pending > 0 ? <span>В очереди {formatNumber(item.pending)}</span> : null}
-          {mode === 'commander' ? <em className="fleet-commander-level-v1" data-qa-commander-level={item.id}>УР. {Math.min(40, Math.max(0, Math.floor(item.level)))}/40</em> : null}
+      <header className={`shipyard-card-title-v1 ${mode === 'commander' ? 'commander' : ''}`}>
+        <div className={`shipyard-owned-v1 ${item.owned > 0 ? 'has-ships' : ''} ${mode === 'commander' ? 'has-commander-level' : ''}`}>
+          {mode === 'commander' ? <div className="shipyard-owned-count-v1">
+            <small>В СТРОЮ</small>
+            <strong>{formatNumber(item.owned)}</strong>
+          </div> : <>
+            <small>{mode === 'defense' ? 'ПОСТРОЕНО' : 'В СТРОЮ'}</small>
+            <strong>{formatNumber(item.owned)}</strong>
+          </>}
+          {mode === 'commander' ? (
+            <em className="fleet-commander-level-v1">
+              <small>УРОВЕНЬ</small>
+              <strong data-qa-commander-level={item.id}>{Math.min(40, Math.max(0, Math.floor(item.level)))}/40</strong>
+            </em>
+          ) : null}
         </div>
         <div className="shipyard-title-copy-v1"><strong>{item.name}</strong><small>{item.role}</small></div>
         <button type="button" title={item.role} aria-label={`Информация: ${item.name}`}>i</button>
@@ -220,7 +234,6 @@ function CatalogCard({
             <small>ВРЕМЯ ЗА ЕДИНИЦУ</small>
             <b data-qa-unit-time-effective>{formatClockDurationMs(effectiveTimeMs)}</b>
             <span data-qa-unit-time-raw>RAW {item.time}</span>
-            {mode === 'commander' ? <span className="shipyard-unit-level-v1">УРОВЕНЬ КОМАНДИРА {Math.min(40, Math.max(0, Math.floor(item.level)))}/40</span> : null}
           </div>
         </div>
 
@@ -285,9 +298,7 @@ export function ConstructionCatalogView({
   const budget = providedBudget ?? savedBudget;
   const config = catalogConfig[mode];
   const factionName = getCombatFactionName(budget.factionId);
-  const defenseKicker = `${config.kicker} ${factionName.toUpperCase()}`;
   const defenseDescription = `оборонные установки и щитовые комплексы ${factionName}`;
-  const defenseFooter = `9 оборонных комплексов ${factionName} · порядок соответствует технологической линейке.`;
   const shipyardPresentation = useMemo(
     () => getBuildingPresentation('shipyard', budget.factionId),
     [budget.factionId],
@@ -341,14 +352,25 @@ export function ConstructionCatalogView({
       <FleetConstructionHeader
         viewId={mode}
         shipyardPresentation={shipyardPresentation}
-        kicker={`${mode === 'defense' ? defenseKicker : config.kicker} · ВЕРФЬ УРОВНЯ ${budget.shipyardLevel}`}
+        kicker={`${mode === 'defense' ? `${config.kicker} ${factionName.toUpperCase()}` : config.kicker} · ВЕРФЬ УРОВНЯ ${budget.shipyardLevel}`}
         title={config.title}
         description={mode === 'defense' ? defenseDescription : config.description}
         planetName={planetName}
         coords={coords}
       />
 
-      <FleetProductionQueueView queueKind={mode === 'defense' ? 'defense' : 'commanders'} state={budget.fleetProduction} factionId={budget.factionId} />
+      {mode === 'defense' ? (
+        <div className="fleet-defense-population-v1" data-qa-population-scope="НАСЕЛЕНИЕ ОБОРОНЫ">
+          <div>
+            <small>ОБОРОННЫЙ ПУЛ</small>
+            <strong>НАСЕЛЕНИЕ ОБОРОНЫ</strong>
+          </div>
+          <div>
+            <strong>{formatNumber(populationSummary.population)} / {formatNumber(populationSummary.capacity)}</strong>
+            <small>свободно {formatNumber(populationSummary.available)}</small>
+          </div>
+        </div>
+      ) : null}
 
       <div className="shipyard-grid-v1">
         {items.map((item) => (
@@ -366,10 +388,6 @@ export function ConstructionCatalogView({
         ))}
       </div>
 
-      <footer className="shipyard-page-foot-v1">
-        <span>{mode === 'defense' ? defenseFooter : config.footer}</span>
-        <span>{mode === 'defense' ? 'Популяция обороны' : 'Популяция флота'}: {formatNumber(populationSummary.population)} / {formatNumber(populationSummary.capacity)} · свободно {formatNumber(populationSummary.available)}</span>
-      </footer>
     </section>
   );
 }

@@ -21,7 +21,7 @@ function formatStorageEta(current: number, capacity: number, hourlyGain: number)
   return parts.join(' ');
 }
 
-export function ResourceChip({ kind, label, value, capacity, showCapacity = false, hourlyGain, description }: HeaderResourceModel) {
+export function ResourceChip({ kind, label, value, capacity, showCapacity = false, hourlyGain, description, populationBreakdown }: HeaderResourceModel) {
   const fill = capacity ? Math.min(100, Math.max(0, (value / capacity) * 100)) : 0;
   const fillTone = fill <= 20
     ? 'normal'
@@ -72,6 +72,12 @@ export function ResourceChip({ kind, label, value, capacity, showCapacity = fals
         {hourlyGain != null ? <span>Добыча: +{formatNumber(hourlyGain)}/ч</span> : null}
         {capacity && hourlyGain != null ? <span>Склад заполнится через: {formatStorageEta(value, capacity, hourlyGain)}</span> : null}
         {kind === 'population' && capacity ? <span>Заполнено: {fill.toFixed(1).replace('.', ',')}%</span> : null}
+        {kind === 'population' && populationBreakdown ? (
+          <div className="asterion-header__resource-population-breakdown" data-qa-population-breakdown>
+            <span data-qa-population-breakdown-item="fleet"><small>Корабли</small><b>{formatNumber(populationBreakdown.fleet.value)} / {formatNumber(populationBreakdown.fleet.capacity)}</b></span>
+            <span data-qa-population-breakdown-item="defense"><small>Оборона</small><b>{formatNumber(populationBreakdown.defense.value)} / {formatNumber(populationBreakdown.defense.capacity)}</b></span>
+          </div>
+        ) : null}
         {description ? <span>{description}</span> : null}
       </span>
     </div>
