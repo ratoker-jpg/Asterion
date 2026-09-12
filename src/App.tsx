@@ -907,6 +907,7 @@ export function App() {
               spaceportWallet={spaceportWallet}
               resourceRatingPoints={state.rating.resourcePoints}
               now={now}
+              testTimeScale={testTimeScale}
               onProductionBotsApply={applyProductionBots}
               onRecyclingStart={startRecycling}
               onRecyclingCollect={collectRecycling}

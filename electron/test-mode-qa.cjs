@@ -144,6 +144,35 @@ async function openSpaceport(win, track = 'ships') {
   if (track === 'commanders') await click(win, '[data-qa-spaceport-tab="commanders"]');
 }
 
+async function selectTestTimeScale(win, scale) {
+  await click(win, `[data-qa-test-speed="${scale}"]`);
+  await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×${scale}')`);
+}
+
+async function assertSpaceportPreviewMatchesQueuedTask(win, track, shipId, label) {
+  const queueKey = track === 'ships' ? 'shipQueue' : 'commanderQueue';
+  const previewDurationMs = await win.webContents.executeJavaScript(`Number(document.querySelector('[data-qa-spaceport-card=${JSON.stringify(shipId)}]')?.getAttribute('data-qa-spaceport-duration-ms') || 0)`);
+  if (!Number.isFinite(previewDurationMs) || previewDurationMs <= 0) {
+    throw new Error(`${label}: preview duration is missing ${previewDurationMs}`);
+  }
+
+  await click(win, `[data-qa-spaceport-upgrade="${shipId}"]`);
+  await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.planets?.['helion-01']?.spaceportUpgrades?.${queueKey}?.length === 1`);
+  const task = await win.webContents.executeJavaScript(`(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}');
+    return save?.planets?.['helion-01']?.spaceportUpgrades?.${queueKey}?.[0] ?? null;
+  })()`);
+  if (!task || task.effectiveDurationMs !== previewDurationMs || task.finishAt - task.startedAt !== previewDurationMs) {
+    throw new Error(`${label}: preview/enqueue duration mismatch ${JSON.stringify({ previewDurationMs, task })}`);
+  }
+
+  const elapsedMs = 1_234;
+  const remaining = Math.max(0, task.finishAt - (task.startedAt + elapsedMs));
+  if (remaining !== Math.max(0, previewDurationMs - elapsedMs)) {
+    throw new Error(`${label}: elapsed remaining-time mismatch ${JSON.stringify({ previewDurationMs, task, elapsedMs, remaining })}`);
+  }
+}
+
 async function openFleet(win) {
   await click(win, '[data-qa-route="fleets"]');
   await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
@@ -292,7 +321,7 @@ async function runViewport(width, height) {
     await reload(win, 'test');
     await openFleet(win);
     const commanderFleet = await readQaState(win);
-    if (!commanderFleet.fleetPopulation.includes('66 / 120')) throw new Error(`${label}: commander population was not included in fleet capacity ${JSON.stringify(commanderFleet)}`);
+    if (!commanderFleet.fleetPopulation.includes('68 / 120')) throw new Error(`${label}: commander population was not included in fleet capacity ${JSON.stringify(commanderFleet)}`);
 
     await win.webContents.executeJavaScript(`(() => {
       const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
@@ -337,8 +366,22 @@ async function runViewport(width, height) {
     if (scienceSecondReload.science.levels[1] !== 1 || scienceSecondReload.science.queue.length !== 0) throw new Error(`${label}: Science completion duplicated after reload`);
 
     const emptySpaceport = { shipLevels: {}, shipQueue: [], commanderQueue: [] };
+    const spaceportTestBuildings = { construction: 1, research: 1, spaceport: 1, shipyard: 1 };
+    for (const scale of [15, 1]) {
+      await selectTestTimeScale(win, scale);
+      for (const target of [{ track: 'ships', shipId: 'scout' }, { track: 'commanders', shipId: 'corsair' }]) {
+        await seedTestRuntime(win, {
+          buildings: spaceportTestBuildings,
+          scienceLevels: { 4: 1 },
+          spaceport: emptySpaceport,
+        });
+        await openSpaceport(win, target.track);
+        await assertSpaceportPreviewMatchesQueuedTask(win, target.track, target.shipId, `Spaceport ${target.track} ${target.shipId} ×${scale}`);
+      }
+    }
+    await selectTestTimeScale(win, 15);
     await seedTestRuntime(win, {
-      buildings: { construction: 1, research: 1, spaceport: 1, shipyard: 1 },
+      buildings: spaceportTestBuildings,
       scienceLevels: { 4: 1 },
       spaceport: emptySpaceport,
     });

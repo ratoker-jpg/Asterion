@@ -347,6 +347,34 @@ test('commander preview and enqueue use the same effective duration in Productio
   }
 });
 
+test('Spaceport preview matches the newly queued full duration at Test Mode ×1 and ×15', () => {
+  const targets = [
+    { track: 'ships' as const, shipId: 'transporter' },
+    { track: 'commanders' as const, shipId: 'corsair' },
+  ];
+  for (const testTimeScale of [1, TEST_TIME_SCALE] as const) {
+    for (const target of targets) {
+      const startedAt = 100_000;
+      const elapsedMs = 1_234;
+      const initial = {
+        ...context(createDefaultSpaceportUpgradeState(), unlockedScienceLevels(), 1),
+        mode: 'test' as const,
+        testTimeScale,
+      };
+      const preview = previewSpaceportUpgrade(initial, target.track, target.shipId);
+      const queued = enqueueSpaceportUpgrade(initial, target.track, target.shipId, startedAt, `${target.track}-${target.shipId}-${testTimeScale}`);
+
+      assert.equal(queued.ok, true);
+      assert.equal(queued.task?.effectiveDurationMs, preview.effectiveDurationMs);
+      assert.equal(queued.task?.finishAt, startedAt + preview.effectiveDurationMs);
+      assert.equal(
+        Math.max(0, (queued.task?.finishAt ?? 0) - (startedAt + elapsedMs)),
+        Math.max(0, preview.effectiveDurationMs - elapsedMs),
+      );
+    }
+  }
+});
+
 test('Test Mode snapshots the same Spaceport speed policy with accelerated absolute timestamps', () => {
   const queued = enqueueSpaceportUpgrade({ ...context(), mode: 'test' }, 'ships', 'transporter', 5_000, 'test-speed');
   assert.equal(queued.ok, true);

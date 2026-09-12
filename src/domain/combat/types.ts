@@ -45,7 +45,7 @@ export type CombatEntityDefinition = {
   role: string;
   art: string;
   population: number;
-  /** Shared-data production limit. Existing saves are intentionally not clamped by migration. */
+  /** Catalog/UI preparation for a future production limit; runtime production is not implemented yet. */
   maxOwned?: number;
   cost: ResourceCost;
   combat: CombatStats;

@@ -17,6 +17,7 @@ import type {
 import type { TradeExecution, TradeRequest, TradeState, TradeWallet } from './domain/buildings/trade.ts';
 import type { BuildingInteriorContext } from './building-interior-navigation.ts';
 import type { PlayerFactionId } from './domain/profile/types.ts';
+import type { TestTimeScale } from './domain/runtime/mode.ts';
 import './building-interiors.css';
 
 type BuildingInteriorHostProps<PlanetId extends string> = {
@@ -34,6 +35,7 @@ type BuildingInteriorHostProps<PlanetId extends string> = {
   spaceportWallet: SpaceportUpgradeWallet;
   resourceRatingPoints: number;
   now: number;
+  testTimeScale: TestTimeScale;
   onProductionBotsApply: (assignment: BotAssignment) => void;
   onRecyclingStart: (debrisAmount: number, allocation: ResourceAllocationPercent) => boolean;
   onRecyclingCollect: (jobId: string) => boolean;
@@ -58,6 +60,7 @@ export function BuildingInteriorHost<PlanetId extends string>({
   spaceportWallet,
   resourceRatingPoints,
   now,
+  testTimeScale,
   onProductionBotsApply,
   onRecyclingStart,
   onRecyclingCollect,
@@ -106,6 +109,7 @@ export function BuildingInteriorHost<PlanetId extends string>({
         upgrades={spaceportUpgrades}
         wallet={spaceportWallet}
         now={now}
+        testTimeScale={testTimeScale}
         onUpgrade={onSpaceportUpgrade}
         onCancel={onSpaceportCancel}
         onBack={onBack}

@@ -17,7 +17,7 @@ import {
 import { getBuildingDefinition, type BuildingLevels, type ScienceLevels } from './domain/buildings/resource-zone.ts';
 import type { CombatFactionId } from './domain/combat/factions.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
-import { ACTIVE_RUNTIME_MODE } from './domain/runtime/mode.ts';
+import { ACTIVE_RUNTIME_MODE, type TestTimeScale } from './domain/runtime/mode.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 import './building-card.css';
 import './spaceport-upgrades.css';
@@ -32,6 +32,7 @@ type SpaceportUpgradeViewProps = {
   upgrades: SpaceportUpgradeState;
   wallet: SpaceportUpgradeWallet;
   now: number;
+  testTimeScale: TestTimeScale;
   onUpgrade: (track: SpaceportUpgradeTrack, shipId: string) => boolean;
   onCancel: (taskId: string) => boolean;
   onBack: () => void;
@@ -336,6 +337,7 @@ export function SpaceportUpgradeView({
   upgrades,
   wallet,
   now,
+  testTimeScale,
   onUpgrade,
   onCancel,
   onBack,
@@ -455,6 +457,7 @@ export function SpaceportUpgradeView({
               spaceportLevel: buildingLevel,
               factionId,
               mode: ACTIVE_RUNTIME_MODE,
+              testTimeScale,
             }, activeTrack, entity.id);
             const queuedTasks = selectedQueue
               .map((task, index) => ({ task, index }))
