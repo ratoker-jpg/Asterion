@@ -7,12 +7,14 @@ import {
 import { getFactionDefenseCatalog } from './domain/combat/faction-catalog.ts';
 import { getCombatFactionName } from './domain/combat/factions.ts';
 import {
-  calculateUnitProductionDurationMs,
   formatClockDurationMs,
-  parseClockDurationMs,
   getBuildingPresentation,
 } from './domain/buildings/balance-v1.ts';
+import { calculateFleetProductionDurationMs } from './domain/fleet/production.ts';
+import { ACTIVE_RUNTIME_MODE, resolveTestTimeScale } from './domain/runtime/mode.ts';
 import { readFleetBuildBudget, type FleetBuildBudget } from './application/fleet.ts';
+import { FLEET_PRODUCTION_START_REQUEST_EVENT } from './application/fleet-production.ts';
+import { FleetProductionQueueView } from './FleetProductionQueueView';
 import { FleetConstructionHeader } from './FleetConstructionHeader';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 
@@ -25,6 +27,8 @@ type CatalogItem = {
   role: string;
   art: string;
   owned: number;
+  pending: number;
+  level: number;
   metal: number;
   minerals: number;
   gas: number;
@@ -63,6 +67,8 @@ function toCatalogItem(entity: CatalogEntity): CatalogItem {
     role: entity.role,
     art: entity.art,
     owned: 0,
+    pending: 0,
+    level: 0,
     metal: entity.cost.metal,
     minerals: entity.cost.minerals,
     gas: entity.cost.gas,
@@ -102,15 +108,19 @@ const catalogConfig: Record<ConstructionCatalogMode, { title: string; kicker: st
 
 const formatNumber = (value: number) => new Intl.NumberFormat('ru-RU').format(value);
 
-function calculateMax(item: CatalogItem, budget: ShipyardBudget) {
+function calculateMax(item: CatalogItem, budget: ShipyardBudget, mode: ConstructionCatalogMode) {
   const limits: number[] = [];
   if (item.metal > 0) limits.push(Math.floor(budget.metal / item.metal));
   if (item.minerals > 0) limits.push(Math.floor(budget.minerals / item.minerals));
   if (item.gas > 0) limits.push(Math.floor(budget.gas / item.gas));
-  if (item.population > 0) limits.push(Math.floor(Math.max(0, budget.populationMax - budget.population) / item.population));
-  const resourceLimit = Math.min(999, ...(limits.length ? limits : [0]));
-  const ownershipLimit = item.maxOwned == null ? 999 : Math.max(0, item.maxOwned - item.owned);
-  return Math.max(0, Math.min(SINGLE_COPY_DEFENSE_IDS.has(item.id) ? 1 : ownershipLimit, resourceLimit));
+  const population = mode === 'defense' ? budget.defenseSummary : budget.summary;
+  if (item.population > 0) limits.push(Math.floor(Math.max(0, population.capacity - population.population) / item.population));
+  const resourceLimit = Math.min(...(limits.length ? limits : [0]));
+  const ownershipLimit = item.maxOwned == null
+    ? Number.MAX_SAFE_INTEGER
+    : Math.max(0, item.maxOwned - item.owned - item.pending);
+  const singleCopyLimit = mode === 'defense' && SINGLE_COPY_DEFENSE_IDS.has(item.id) ? Math.max(0, 1 - item.owned - item.pending) : ownershipLimit;
+  return Math.max(0, Math.min(singleCopyLimit, resourceLimit));
 }
 
 function CostRow({ kind, label, value }: { kind: ResourceKind; label: string; value: number }) {
@@ -176,17 +186,25 @@ function CatalogCard({
   onBuild: (item: CatalogItem, quantity: number) => void;
 }) {
   const unlocked = item.requiredShipyardLevel <= shipyardLevel;
-  const max = unlocked ? calculateMax(item, budget) : 0;
+  const max = unlocked ? calculateMax(item, budget, mode) : 0;
   const unavailableLabel = mode === 'defense' ? 'КОМПЛЕКС НЕДОСТУПЕН' : 'КОРПУС НЕДОСТУПЕН';
-  const rawTimeMs = parseClockDurationMs(item.time) ?? 1;
-  const effectiveTimeMs = calculateUnitProductionDurationMs(rawTimeMs, shipyardLevel, advancedFactoryLevel);
+  const effectiveTimeMs = calculateFleetProductionDurationMs(mode === 'defense' ? 'defense' : 'commanders', item.id, {
+    factionId: budget.factionId,
+    shipyardLevel,
+    advancedFactoryLevel,
+    commanderLevel: item.level,
+    mode: ACTIVE_RUNTIME_MODE,
+    testTimeScale: resolveTestTimeScale(),
+  });
 
   return (
-    <article className={`shipyard-card-v1 ${unlocked ? '' : 'locked'}`}>
+    <article className={`shipyard-card-v1 ${unlocked ? '' : 'locked'}`} data-qa-fleet-production-item={item.id}>
       <header className="shipyard-card-title-v1">
         <div className={`shipyard-owned-v1 ${item.owned > 0 ? 'has-ships' : ''}`}>
           <small>{mode === 'defense' ? 'ПОСТРОЕНО' : 'В СТРОЮ'}</small>
           <strong>{formatNumber(item.owned)}</strong>
+          {item.pending > 0 ? <span>В очереди {formatNumber(item.pending)}</span> : null}
+          {mode === 'commander' ? <em className="fleet-commander-level-v1" data-qa-commander-level={item.id}>УР. {Math.min(40, Math.max(0, Math.floor(item.level)))}/40</em> : null}
         </div>
         <div className="shipyard-title-copy-v1"><strong>{item.name}</strong><small>{item.role}</small></div>
         <button type="button" title={item.role} aria-label={`Информация: ${item.name}`}>i</button>
@@ -202,6 +220,7 @@ function CatalogCard({
             <small>ВРЕМЯ ЗА ЕДИНИЦУ</small>
             <b data-qa-unit-time-effective>{formatClockDurationMs(effectiveTimeMs)}</b>
             <span data-qa-unit-time-raw>RAW {item.time}</span>
+            {mode === 'commander' ? <span className="shipyard-unit-level-v1">УРОВЕНЬ КОМАНДИРА {Math.min(40, Math.max(0, Math.floor(item.level)))}/40</span> : null}
           </div>
         </div>
 
@@ -255,12 +274,15 @@ export function ConstructionCatalogView({
   mode,
   planetName,
   coords,
+  budget: providedBudget,
 }: {
   mode: ConstructionCatalogMode;
   planetName: string;
   coords: string;
+  budget?: FleetBuildBudget;
 }) {
-  const budget = useMemo(readFleetBuildBudget, []);
+  const savedBudget = useMemo(readFleetBuildBudget, []);
+  const budget = providedBudget ?? savedBudget;
   const config = catalogConfig[mode];
   const factionName = getCombatFactionName(budget.factionId);
   const defenseKicker = `${config.kicker} ${factionName.toUpperCase()}`;
@@ -270,16 +292,20 @@ export function ConstructionCatalogView({
     () => getBuildingPresentation('shipyard', budget.factionId),
     [budget.factionId],
   );
-  const fleetSummary = budget.summary;
   const items = useMemo(
     () => (mode === 'defense' ? getFactionDefenseCatalog(budget.factionId).map(toCatalogItem) : commanderItems).map((item) => ({
       ...item,
-      owned: mode === 'commander' ? budget.fleet.commanders[item.id as keyof typeof budget.fleet.commanders] ?? 0 : item.owned,
+      owned: mode === 'commander'
+        ? budget.fleet.commanders[item.id as keyof typeof budget.fleet.commanders] ?? 0
+        : budget.defense.defenses[item.id as keyof typeof budget.defense.defenses] ?? 0,
+      pending: (mode === 'defense' ? budget.fleetProduction.defenseQueue : budget.fleetProduction.commanderQueue)
+        .filter((order) => order.itemId === item.id)
+        .reduce((total, order) => total + Math.max(0, order.quantity - order.completedQuantity), 0),
+      level: Math.max(0, Math.floor(budget.spaceportUpgrades.shipLevels[item.id] ?? 0)),
     })),
-    [budget.factionId, budget.fleet, mode],
+    [budget.defense, budget.factionId, budget.fleet, budget.fleetProduction, budget.spaceportUpgrades, mode],
   );
   const [quantities, setQuantities] = useState<Record<string, number>>({});
-  const [process, setProcess] = useState<string | null>(null);
 
   useEffect(() => {
     document.documentElement.classList.add('asterion-long-page');
@@ -292,22 +318,26 @@ export function ConstructionCatalogView({
 
   useEffect(() => {
     setQuantities({});
-    setProcess(null);
     window.scrollTo(0, 0);
   }, [mode]);
 
   const setQuantity = (item: CatalogItem, raw: number) => {
-    const max = calculateMax(item, budget);
+    const max = calculateMax(item, budget, mode);
     const next = Number.isFinite(raw) ? Math.max(0, Math.min(max, Math.floor(raw))) : 0;
     setQuantities((current) => ({ ...current, [item.id]: next }));
   };
 
   const prepareBuild = (item: CatalogItem, quantity: number) => {
-    setProcess(`${quantity} × ${item.name} подготовлено к постановке в очередь. Реальное списание ресурсов подключим вместе с системой производства.`);
+    window.dispatchEvent(new CustomEvent(FLEET_PRODUCTION_START_REQUEST_EVENT, {
+      detail: { queueKind: mode === 'defense' ? 'defense' : 'commanders', itemId: item.id, quantity, now: Date.now() },
+    }));
+    setQuantities((current) => ({ ...current, [item.id]: 0 }));
   };
 
+  const populationSummary = mode === 'defense' ? budget.defenseSummary : budget.summary;
+
   return (
-    <section className="shipyard-view-v1" data-qa-construction-mode={mode} data-qa-building-asset={shipyardPresentation.art}>
+    <section className="shipyard-view-v1" data-qa-construction-mode={mode} data-qa-building-asset={shipyardPresentation.art} data-qa-defense-population={mode === 'defense' ? populationSummary.population : undefined} data-qa-defense-capacity={mode === 'defense' ? populationSummary.capacity : undefined}>
       <FleetConstructionHeader
         viewId={mode}
         shipyardPresentation={shipyardPresentation}
@@ -318,10 +348,7 @@ export function ConstructionCatalogView({
         coords={coords}
       />
 
-      <section className="shipyard-processes-v1">
-        <strong>ТЕКУЩИЕ ПРОЦЕССЫ</strong>
-        <span>{process ?? 'Очередь производства пуста.'}</span>
-      </section>
+      <FleetProductionQueueView queueKind={mode === 'defense' ? 'defense' : 'commanders'} state={budget.fleetProduction} factionId={budget.factionId} />
 
       <div className="shipyard-grid-v1">
         {items.map((item) => (
@@ -341,7 +368,7 @@ export function ConstructionCatalogView({
 
       <footer className="shipyard-page-foot-v1">
         <span>{mode === 'defense' ? defenseFooter : config.footer}</span>
-        <span>Популяция флота: {formatNumber(fleetSummary.population)} / {formatNumber(fleetSummary.capacity)} · свободно {formatNumber(fleetSummary.available)}</span>
+        <span>{mode === 'defense' ? 'Популяция обороны' : 'Популяция флота'}: {formatNumber(populationSummary.population)} / {formatNumber(populationSummary.capacity)} · свободно {formatNumber(populationSummary.available)}</span>
       </footer>
     </section>
   );

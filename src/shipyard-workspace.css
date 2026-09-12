@@ -183,6 +183,154 @@ html.web-preview.asterion-long-page .stage {
   font-size: 11px;
 }
 
+.fleet-production-queue-v1 {
+  margin: 12px 0 16px;
+  border: 1px solid rgba(64, 190, 221, .2);
+  background: linear-gradient(90deg, rgba(7, 61, 77, .76), rgba(3, 25, 36, .96));
+}
+
+.fleet-production-queue-head-v1 {
+  min-height: 45px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 17px;
+  border-bottom: 1px solid rgba(64, 190, 221, .16);
+}
+
+.fleet-production-queue-head-v1 strong {
+  color: #d8f8ff;
+  font-size: 12px;
+  letter-spacing: .07em;
+}
+
+.fleet-production-queue-head-v1 span,
+.fleet-production-queue-empty-v1 {
+  color: #8ab3bf;
+  font-size: 11px;
+}
+
+.fleet-production-queue-empty-v1 {
+  min-height: 54px;
+  display: grid;
+  place-items: center start;
+  padding: 0 17px;
+  color: #79aab8;
+}
+
+.fleet-production-queue-list-v1 {
+  display: grid;
+  gap: 8px;
+  padding: 9px;
+}
+
+.fleet-production-order-v1 {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px 14px;
+  padding: 11px 13px 10px;
+  border: 1px solid rgba(64, 190, 221, .18);
+  background: rgba(2, 22, 31, .72);
+}
+
+.fleet-production-order-v1.active {
+  border-color: rgba(74, 220, 255, .5);
+  background: linear-gradient(90deg, rgba(5, 71, 88, .65), rgba(3, 26, 37, .76));
+  box-shadow: inset 3px 0 #24d8ff;
+}
+
+.fleet-production-order-main-v1,
+.fleet-production-order-meta-v1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.fleet-production-order-main-v1 > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.fleet-production-order-main-v1 strong {
+  overflow: hidden;
+  color: #effcff;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fleet-production-order-main-v1 small {
+  color: #80adba;
+  font-size: 9px;
+  letter-spacing: .03em;
+}
+
+.fleet-production-order-index-v1 {
+  color: #39d9fb;
+  font: 800 11px/1 Arial, sans-serif;
+  letter-spacing: .08em;
+}
+
+.fleet-production-order-meta-v1 {
+  justify-content: flex-end;
+  color: #75c7d8;
+  font-size: 9px;
+  letter-spacing: .06em;
+  white-space: nowrap;
+}
+
+.fleet-production-order-meta-v1 button {
+  width: 25px;
+  height: 25px;
+  border: 1px solid rgba(238, 101, 82, .6);
+  background: rgba(76, 23, 27, .72);
+  color: #ff9e91;
+  font: 700 18px/1 Arial, sans-serif;
+  cursor: pointer;
+}
+
+.fleet-production-order-meta-v1 button:hover,
+.fleet-production-order-meta-v1 button:focus-visible {
+  border-color: #ff786b;
+  background: rgba(125, 35, 34, .86);
+  color: #fff;
+  outline: none;
+}
+
+.fleet-production-order-progress-v1 {
+  grid-column: 1 / -1;
+  height: 3px;
+  overflow: hidden;
+  background: rgba(18, 79, 94, .65);
+}
+
+.fleet-production-order-progress-v1 i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: left center;
+  background: linear-gradient(90deg, #20d5fb, #8af1ff);
+  transition: transform 220ms linear;
+}
+
+.fleet-production-order-v1.waiting .fleet-production-order-progress-v1 i {
+  background: #4b8492;
+}
+
+.fleet-production-order-v1 footer {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #628d9a;
+  font-size: 8px;
+  letter-spacing: .07em;
+}
+
 .shipyard-grid-v1 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -250,6 +398,21 @@ html.web-preview.asterion-long-page .stage {
   text-shadow: 0 0 14px rgba(67, 211, 246, .16);
 }
 
+.shipyard-owned-v1 > span,
+.fleet-commander-level-v1 {
+  grid-column: 1 / -1;
+  color: #67c9da;
+  font-size: 8px;
+  line-height: 1;
+  letter-spacing: .05em;
+  white-space: nowrap;
+}
+
+.fleet-commander-level-v1 {
+  color: #9eefff;
+  font-style: normal;
+}
+
 .shipyard-owned-v1.has-ships {
   background: linear-gradient(90deg, rgba(4, 82, 102, .74), rgba(3, 38, 52, .56));
   box-shadow: inset 3px 0 #24d8ff;
@@ -311,7 +474,7 @@ html.web-preview.asterion-long-page .stage {
   z-index: 2;
   min-width: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) 38px;
+  grid-template-rows: minmax(0, 1fr) 52px;
   place-items: center;
   padding: 7px 8px 8px;
   border-right: 1px solid rgba(68, 185, 214, .18);
@@ -373,6 +536,14 @@ html.web-preview.asterion-long-page .stage {
 
 .shipyard-time-v1 em {
   color: #69dff2;
+  text-align: center;
+}
+
+.shipyard-unit-level-v1 {
+  color: #6fe0f2 !important;
+  font-size: 7px !important;
+  font-weight: 750;
+  letter-spacing: .05em;
   text-align: center;
 }
 

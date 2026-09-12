@@ -7,9 +7,10 @@ app.commandLine.appendSwitch('disable-gpu');
 app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
-const OUTPUT = path.join(ROOT, 'artifacts-pass1', 'test-mode-qa');
+const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'artifacts-pass1', 'test-mode-qa');
 const PRODUCTION_KEY = 'asterion.vertical-slice.v1';
 const TEST_KEY = 'asterion.vertical-slice.test.v1';
+const TEST_TIME_SCALE_KEY = 'asterion.test-time-scale.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const skipScreenshots = process.env.ASTERION_SKIP_SCREENSHOTS === '1';
@@ -339,6 +340,13 @@ async function readQaState(win) {
         owned: Number(node.querySelector('[data-qa-fleet-owned]')?.textContent || 0),
         population: Number(node.querySelector('[data-qa-fleet-unit-population]')?.textContent || 0),
       })),
+      fleetBaseCardTag: document.querySelector('.fleet-yard-card-v1')?.tagName ?? '',
+      fleetProductionQueues: {
+        ships: planet?.fleetProduction?.shipQueue?.length ?? -1,
+        defense: planet?.fleetProduction?.defenseQueue?.length ?? -1,
+        commanders: planet?.fleetProduction?.commanderQueue?.length ?? -1,
+      },
+      defense: planet?.defense ?? null,
     };
   })()`);
 }
@@ -355,7 +363,7 @@ async function runViewport(width, height) {
   try {
     await loadMode(win, 'production');
     win.webContents.debugger.attach('1.3');
-    await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(PRODUCTION_KEY)}); localStorage.removeItem(${JSON.stringify(TEST_KEY)});`);
+    await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(PRODUCTION_KEY)}); localStorage.removeItem(${JSON.stringify(TEST_KEY)}); localStorage.removeItem(${JSON.stringify(TEST_TIME_SCALE_KEY)});`);
     await reload(win, 'production');
     const productionInitial = await readQaState(win);
     if (productionInitial.mode !== 'production' || productionInitial.banner || productionInitial.testResources.metal === 1_000_000 || !productionInitial.scienceLevels || Object.values(productionInitial.scienceLevels).some((level) => level !== 0) || await win.webContents.executeJavaScript(`document.querySelectorAll('[data-qa-test-speed]').length`) !== 0) {
@@ -397,10 +405,10 @@ async function runViewport(width, height) {
       && [...canonicalBuildingLevelOne].every((id) => initial.buildings?.[id] === 1)
       && [...canonicalStorageLevelTwenty].every((id) => initial.buildings?.[id] === 20)
       && Object.entries(initial.buildings || {}).every(([id, level]) => canonicalBuildingLevelOne.has(id) ? level === 1 : canonicalStorageLevelTwenty.has(id) ? level === 20 : level === 0);
-    const canonicalFleetShips = { scout: 20, transporter: 10, recycler: 1, 'spy-probe': 3 };
+    const canonicalFleetShips = { scout: 20, transporter: 0, recycler: 1, colonizer: 1, 'spy-probe': 1 };
     const canonicalFleetOnly = Object.entries(initial.fleet?.ships || {}).every(([id, count]) => count === (canonicalFleetShips[id] || 0))
       && Object.values(initial.fleet?.commanders || {}).every((count) => count === 0);
-    if (!canonicalBuildingsOnly || !canonicalFleetOnly || initial.buildings?.hangar !== 1 || initial.fleet?.ships?.scout !== 20 || initial.fleet?.ships?.transporter !== 10 || initial.fleet?.ships?.recycler !== 1 || initial.fleet?.ships?.['spy-probe'] !== 3) {
+    if (!canonicalBuildingsOnly || !canonicalFleetOnly || initial.buildings?.hangar !== 1 || initial.fleet?.ships?.scout !== 20 || initial.fleet?.ships?.transporter !== 0 || initial.fleet?.ships?.recycler !== 1 || initial.fleet?.ships?.colonizer !== 1 || initial.fleet?.ships?.['spy-probe'] !== 1) {
       throw new Error(`${label}: canonical building/fleet mismatch ${JSON.stringify(initial)}`);
     }
     await capture(win, directory, 'test-overview');
@@ -465,7 +473,7 @@ async function runViewport(width, height) {
     })()`);
     await reload(win, 'test');
     const legacyFleet = await readQaState(win);
-    if (legacyFleet.fleet?.ships?.scout !== 20 || legacyFleet.fleet?.ships?.transporter !== 10 || legacyFleet.fleet?.ships?.recycler !== 1 || legacyFleet.fleet?.ships?.['spy-probe'] !== 3) {
+    if (legacyFleet.fleet?.ships?.scout !== 20 || legacyFleet.fleet?.ships?.transporter !== 0 || legacyFleet.fleet?.ships?.recycler !== 1 || legacyFleet.fleet?.ships?.colonizer !== 1 || legacyFleet.fleet?.ships?.['spy-probe'] !== 1) {
       throw new Error(`${label}: legacy save without fleet did not receive canonical fleet ${JSON.stringify(legacyFleet)}`);
     }
 
@@ -557,12 +565,13 @@ async function runViewport(width, height) {
     const fleetRoot = await readQaState(win);
     if (!fleetRoot.fleetPopulation.includes('58 / 120')) throw new Error(`${label}: fleet population resolver UI mismatch ${JSON.stringify(fleetRoot)}`);
     const expectedFleetRoster = [
-      { id: 'spy-probe', owned: 3, population: 1 },
-      { id: 'transporter', owned: 10, population: 1 },
+      { id: 'spy-probe', owned: 1, population: 1 },
+      { id: 'colonizer', owned: 1, population: 12 },
       { id: 'recycler', owned: 1, population: 5 },
       { id: 'scout', owned: 20, population: 2 },
     ];
     if (JSON.stringify(fleetRoot.fleetRoster) !== JSON.stringify(expectedFleetRoster)) throw new Error(`${label}: current fleet roster UI mismatch ${JSON.stringify(fleetRoot.fleetRoster)}`);
+    if (fleetRoot.fleetBaseCardTag === 'BUTTON') throw new Error(`${label}: fleet base card must be informational, not a button`);
     if (fleetRoot.fleetRosterOverflow || fleetRoot.fleetRosterOverflowY !== 'visible') throw new Error(`${label}: fleet roster still owns an internal scrollbar ${JSON.stringify(fleetRoot)}`);
     if (fleetRoot.fleetFlightActions.length !== 3 || fleetRoot.fleetFlightActions.some((action) => action.bottom > fleetRoot.fleetFlightPanelBottom + 2 || action.bottom <= action.top)) {
       throw new Error(`${label}: fleet flight action buttons are clipped or missing ${JSON.stringify(fleetRoot)}`);
@@ -592,7 +601,7 @@ async function runViewport(width, height) {
       const fleet = save?.planets?.['helion-01']?.fleet;
       if (!fleet) return false;
       for (const id of Object.keys(fleet.ships || {})) fleet.ships[id] = 0;
-      Object.assign(fleet.ships, { scout: 20, transporter: 10, recycler: 1, 'spy-probe': 3 });
+      Object.assign(fleet.ships, { scout: 20, transporter: 0, recycler: 1, colonizer: 1, 'spy-probe': 1 });
       localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
       return true;
     })()`);

@@ -3,6 +3,10 @@ import type { CombatPriorityState } from '../domain/combat/priority.ts';
 import type { SimulatorState } from '../domain/combat/simulator-repository.ts';
 import type { CommandState } from '../domain/command/types.ts';
 import type { OwnedFleetState } from '../domain/fleet/runtime.ts';
+import type {
+  FleetProductionState,
+  OwnedDefenseState,
+} from '../domain/fleet/production.ts';
 import type { OperationsState } from '../domain/operations/types.ts';
 import type { PlayerProfileState } from '../domain/profile/types.ts';
 import type { RatingPrototypeState } from '../domain/rating/fixtures.ts';
@@ -24,6 +28,8 @@ export type PlanetRuntime = {
   name: string;
   skin: string;
   fleet: OwnedFleetState;
+  defense: OwnedDefenseState;
+  fleetProduction: FleetProductionState;
   energy: number;
   buildings: BuildingLevels;
   productionBots: BotAssignment;

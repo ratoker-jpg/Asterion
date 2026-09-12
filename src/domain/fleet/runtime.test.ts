@@ -14,12 +14,16 @@ import {
 test('canonical starting fleet is persisted by mechanical IDs and derives population from catalog values', () => {
   const fleet = createCanonicalStartingFleet();
   assert.deepEqual(
-    { scout: fleet.ships.scout, transporter: fleet.ships.transporter, recycler: fleet.ships.recycler, 'spy-probe': fleet.ships['spy-probe'] },
-    { scout: 20, transporter: 10, recycler: 1, 'spy-probe': 3 },
+    { scout: fleet.ships.scout, transporter: fleet.ships.transporter, recycler: fleet.ships.recycler, colonizer: fleet.ships.colonizer, 'spy-probe': fleet.ships['spy-probe'] },
+    { scout: 20, transporter: 0, recycler: 1, colonizer: 1, 'spy-probe': 1 },
   );
   assert.equal(calculateFleetPopulation(fleet), 58);
   assert.equal(calculateFleetPopulation(fleet, 'synod'), 60);
-  assert.equal(calculateFleetPopulation(fleet, 'veyra'), 48);
+  assert.equal(calculateFleetPopulation(fleet, 'veyra'), 38);
+
+  const veyraFleet = createCanonicalStartingFleet('veyra');
+  assert.equal(veyraFleet.ships.scout, 40);
+  assert.equal(calculateFleetPopulation(veyraFleet, 'veyra'), 58);
 
   fleet.commanders.corsair = 1;
   assert.equal(calculateFleetPopulation(fleet), 68);
@@ -34,9 +38,9 @@ test('fleet population resolves the selected faction catalog for each owned ship
 
   assert.deepEqual(aegis, { population: 58, capacity: 120, available: 62 });
   assert.deepEqual(synod, { population: 60, capacity: 120, available: 60 });
-  assert.deepEqual(veyra, { population: 48, capacity: 120, available: 72 });
+  assert.deepEqual(veyra, { population: 38, capacity: 120, available: 82 });
 });
-test('Hangar is the single capacity resolver and old roster data is not overwritten', () => {
+test('Hangar is the single capacity resolver and legacy commander counts are normalized', () => {
   assert.equal(calculateFleetCapacity(0), 50);
   assert.equal(calculateFleetCapacity(1), 120);
   assert.equal(calculateFleetCapacity(999), 25_112);
@@ -44,7 +48,7 @@ test('Hangar is the single capacity resolver and old roster data is not overwrit
   const old = migrateFleetState({ ships: { scout: 4 }, commanders: { corsair: 2 } });
   assert.equal(old.ships.scout, 4);
   assert.equal(old.ships.transporter, 0);
-  assert.equal(old.commanders.corsair, 2);
+  assert.equal(old.commanders.corsair, 1);
 });
 
 test('legacy save without fleet gets the canonical roster while an explicit empty fleet stays empty', () => {

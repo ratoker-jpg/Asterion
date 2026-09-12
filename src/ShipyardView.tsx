@@ -4,11 +4,15 @@ import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
 import { getCombatFactionName, type CombatFactionId } from './domain/combat/factions.ts';
 import type { ShipId } from './domain/combat/ids.ts';
 import {
-  calculateUnitProductionDurationMs,
   formatClockDurationMs,
-  parseClockDurationMs,
   getBuildingPresentation,
 } from './domain/buildings/balance-v1.ts';
+import {
+  calculateFleetProductionDurationMs,
+} from './domain/fleet/production.ts';
+import { ACTIVE_RUNTIME_MODE, resolveTestTimeScale } from './domain/runtime/mode.ts';
+import { FLEET_PRODUCTION_START_REQUEST_EVENT } from './application/fleet-production.ts';
+import { FleetProductionQueueView } from './FleetProductionQueueView';
 import { readFleetBuildBudget, type FleetBuildBudget } from './application/fleet.ts';
 import { FleetConstructionHeader } from './FleetConstructionHeader';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
@@ -19,6 +23,7 @@ type ShipDefinition = {
   role: string;
   art: string;
   owned: number;
+  pending: number;
   metal: number;
   minerals: number;
   gas: number;
@@ -51,6 +56,7 @@ function getShipDefinitions(factionId: CombatFactionId): ShipDefinition[] {
     role: entity.role,
     art: entity.art,
     owned: 0,
+    pending: 0,
     metal: entity.cost.metal,
     minerals: entity.cost.minerals,
     gas: entity.cost.gas,
@@ -81,7 +87,7 @@ function calculateMax(ship: ShipDefinition, budget: ShipyardBudget) {
   if (ship.minerals > 0) limits.push(Math.floor(budget.minerals / ship.minerals));
   if (ship.gas > 0) limits.push(Math.floor(budget.gas / ship.gas));
   if (ship.population > 0) limits.push(Math.floor(Math.max(0, budget.populationMax - budget.population) / ship.population));
-  return Math.max(0, Math.min(999, ...(limits.length ? limits : [0])));
+  return Math.max(0, Math.min(...(limits.length ? limits : [0])));
 }
 
 function CostRow({ kind, label, value }: { kind: ResourceKind; label: string; value: number }) {
@@ -144,15 +150,21 @@ function ShipCard({
   const unlocked = ship.requiredShipyardLevel <= shipyardLevel;
   const max = unlocked ? calculateMax(ship, budget) : 0;
   const stats = shipCombatStats[ship.id];
-  const rawTimeMs = parseClockDurationMs(ship.time) ?? 1;
-  const effectiveTimeMs = calculateUnitProductionDurationMs(rawTimeMs, shipyardLevel, advancedFactoryLevel);
+  const effectiveTimeMs = calculateFleetProductionDurationMs('ships', ship.id, {
+    factionId: budget.factionId,
+    shipyardLevel,
+    advancedFactoryLevel,
+    mode: ACTIVE_RUNTIME_MODE,
+    testTimeScale: resolveTestTimeScale(),
+  });
 
   return (
-    <article className={`shipyard-card-v1 ${unlocked ? '' : 'locked'}`}>
+    <article className={`shipyard-card-v1 ${unlocked ? '' : 'locked'}`} data-qa-fleet-production-item={ship.id}>
       <header className="shipyard-card-title-v1">
         <div className={`shipyard-owned-v1 ${ship.owned > 0 ? 'has-ships' : ''}`}>
           <small>В СТРОЮ</small>
           <strong>{formatNumber(ship.owned)}</strong>
+          {ship.pending > 0 ? <span>В очереди {formatNumber(ship.pending)}</span> : null}
         </div>
         <div className="shipyard-title-copy-v1"><strong>{ship.name}</strong><small>{ship.role}</small></div>
         <button type="button" title={ship.role} aria-label={`Информация: ${ship.name}`}>i</button>
@@ -168,6 +180,7 @@ function ShipCard({
             <small>ВРЕМЯ ЗА ЕДИНИЦУ</small>
             <b data-qa-unit-time-effective>{formatClockDurationMs(effectiveTimeMs)}</b>
             <span data-qa-unit-time-raw>RAW {ship.time}</span>
+            <span className="shipyard-unit-level-v1" data-qa-fleet-level={ship.id}>УРОВЕНЬ КОРПУСА {Math.min(10, Math.max(0, Math.floor(budget.spaceportUpgrades.shipLevels[ship.id] ?? 0)))}/10</span>
           </div>
         </div>
 
@@ -217,8 +230,9 @@ function ShipCard({
   );
 }
 
-export function ShipyardView({ planetName, coords }: { planetName: string; coords: string }) {
-  const budget = useMemo(readFleetBuildBudget, []);
+export function ShipyardView({ planetName, coords, budget: providedBudget }: { planetName: string; coords: string; budget?: FleetBuildBudget }) {
+  const savedBudget = useMemo(readFleetBuildBudget, []);
+  const budget = providedBudget ?? savedBudget;
   const factionName = getCombatFactionName(budget.factionId);
   const shipyardPresentation = useMemo(
     () => getBuildingPresentation('shipyard', budget.factionId),
@@ -228,11 +242,16 @@ export function ShipyardView({ planetName, coords }: { planetName: string; coord
   const shipCombatStats = useMemo(() => getShipCombatStats(budget.factionId), [budget.factionId]);
   const fleetSummary = budget.summary;
   const ownedShips = useMemo(
-    () => ships.map((ship) => ({ ...ship, owned: budget.fleet.ships[ship.id] ?? 0 })),
-    [budget.fleet, ships],
+    () => ships.map((ship) => ({
+      ...ship,
+      owned: budget.fleet.ships[ship.id] ?? 0,
+      pending: budget.fleetProduction.shipQueue
+        .filter((order) => order.itemId === ship.id)
+        .reduce((total, order) => total + Math.max(0, order.quantity - order.completedQuantity), 0),
+    })),
+    [budget.fleet, budget.fleetProduction.shipQueue, ships],
   );
   const [quantities, setQuantities] = useState<Partial<Record<ShipId, number>>>({});
-  const [process, setProcess] = useState<string | null>(null);
 
   useEffect(() => {
     document.documentElement.classList.add('asterion-long-page');
@@ -250,7 +269,10 @@ export function ShipyardView({ planetName, coords }: { planetName: string; coord
   };
 
   const prepareBuild = (ship: ShipDefinition, quantity: number) => {
-    setProcess(`${quantity} × ${ship.name} подготовлено к постановке в очередь. Реальное списание ресурсов подключим вместе с системой производства.`);
+    window.dispatchEvent(new CustomEvent(FLEET_PRODUCTION_START_REQUEST_EVENT, {
+      detail: { queueKind: 'ships', itemId: ship.id, quantity, now: Date.now() },
+    }));
+    setQuantities((current) => ({ ...current, [ship.id]: 0 }));
   };
 
   return (
@@ -273,10 +295,7 @@ export function ShipyardView({ planetName, coords }: { planetName: string; coord
         coords={coords}
       />
 
-      <section className="shipyard-processes-v1">
-        <strong>ТЕКУЩИЕ ПРОЦЕССЫ</strong>
-        <span>{process ?? 'Очередь верфи пуста.'}</span>
-      </section>
+      <FleetProductionQueueView queueKind="ships" state={budget.fleetProduction} factionId={budget.factionId} />
 
       <div className="shipyard-grid-v1">
         {ownedShips.map((ship) => (

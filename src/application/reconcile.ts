@@ -6,18 +6,21 @@ import {
   type BuildingApplicationContext,
 } from './buildings.ts';
 import { reconcileScience } from './science.ts';
+import { reconcileFleetProduction } from './fleet-production.ts';
 import type { BuildingRole } from '../domain/buildings/resource-zone.ts';
 import type { ScienceId } from '../domain/science/types.ts';
 import type { SpaceportUpgradeTrack } from '../domain/buildings/spaceport-upgrades.ts';
 import type { SaveState } from './contracts.ts';
 import { reconcileResourceIncome } from './resource-clock.ts';
 import type { ResourceCreditResult } from '../domain/resources/credit.ts';
+import type { FleetProductionCompletion } from '../domain/fleet/production.ts';
 
 export type RuntimeReconcileEvent =
   | { kind: 'science'; scienceIds: ScienceId[] }
   | { kind: 'building'; assetRole: BuildingRole }
   | { kind: 'recycling'; jobIds: string[] }
-  | { kind: 'spaceport'; tasks: Array<{ track: SpaceportUpgradeTrack; shipId: string }> };
+  | { kind: 'spaceport'; tasks: Array<{ track: SpaceportUpgradeTrack; shipId: string }> }
+  | { kind: 'fleet-production'; completed: FleetProductionCompletion[] };
 
 export type RuntimeReconcileResult = {
   changed: boolean;
@@ -73,6 +76,14 @@ export function reconcileRuntime(
     next = spaceport.state;
     if (spaceport.completed.length > 0) {
       events.push({ kind: 'spaceport', tasks: spaceport.completed });
+    }
+  }
+
+  const fleetProduction = reconcileFleetProduction(next, context);
+  if (fleetProduction.changed) {
+    next = fleetProduction.state;
+    if (fleetProduction.completed.length > 0) {
+      events.push({ kind: 'fleet-production', completed: fleetProduction.completed });
     }
   }
 

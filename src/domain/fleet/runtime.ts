@@ -20,9 +20,16 @@ export const FLEET_CAPACITY_CONFIG = Object.freeze({
 
 export const CANONICAL_STARTING_FLEET = Object.freeze({
   scout: 20,
-  transporter: 10,
   recycler: 1,
-  'spy-probe': 3,
+  colonizer: 1,
+  'spy-probe': 1,
+  transporter: 0,
+});
+
+export const CANONICAL_STARTING_FLEET_BY_FACTION = Object.freeze({
+  aegis: CANONICAL_STARTING_FLEET,
+  synod: CANONICAL_STARTING_FLEET,
+  veyra: Object.freeze({ ...CANONICAL_STARTING_FLEET, scout: 40 }),
 });
 
 function emptyRecord<T extends string>(ids: readonly T[]): Record<T, number> {
@@ -36,9 +43,9 @@ export function createEmptyFleetState(): OwnedFleetState {
   };
 }
 
-export function createCanonicalStartingFleet(): OwnedFleetState {
+export function createCanonicalStartingFleet(factionId: CombatFactionId = 'aegis'): OwnedFleetState {
   const fleet = createEmptyFleetState();
-  for (const [id, quantity] of Object.entries(CANONICAL_STARTING_FLEET)) {
+  for (const [id, quantity] of Object.entries(CANONICAL_STARTING_FLEET_BY_FACTION[factionId])) {
     fleet.ships[id as ShipId] = quantity;
   }
   return fleet;
@@ -59,7 +66,7 @@ export function migrateFleetState(value: unknown): OwnedFleetState {
     : {};
 
   for (const id of SHIP_IDS) migrated.ships[id] = safeOwnedQuantity(ships[id]);
-  for (const id of COMMANDER_IDS) migrated.commanders[id] = safeOwnedQuantity(commanders[id]);
+  for (const id of COMMANDER_IDS) migrated.commanders[id] = Math.min(1, safeOwnedQuantity(commanders[id]));
   return migrated;
 }
 
@@ -68,8 +75,8 @@ export function migrateFleetState(value: unknown): OwnedFleetState {
  * starting fleet; an explicitly saved value (including an empty object) is
  * preserved through normal migration.
  */
-export function resolveSavedFleetState(value: unknown): OwnedFleetState {
-  return value === undefined ? createCanonicalStartingFleet() : migrateFleetState(value);
+export function resolveSavedFleetState(value: unknown, factionId: CombatFactionId = 'aegis'): OwnedFleetState {
+  return value === undefined ? createCanonicalStartingFleet(factionId) : migrateFleetState(value);
 }
 
 function populationForEntity(kind: 'ship' | 'commander', id: string, factionId: CombatFactionId): number | null {

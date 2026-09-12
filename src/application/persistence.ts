@@ -57,6 +57,13 @@ import {
   resolveSavedFleetState,
 } from '../domain/fleet/runtime.ts';
 import {
+  createDefaultFleetProductionState,
+  createEmptyDefenseState,
+  migrateDefenseState,
+  migrateFleetProductionState,
+  reconcileFleetProductionState,
+} from '../domain/fleet/production.ts';
+import {
   createCanonicalStartingBuildingLevels,
   getStorageCapacities,
   migrateBuildingLevels,
@@ -104,6 +111,8 @@ type StoredPlanetRuntime = {
   population?: unknown;
   populationMax?: unknown;
   fleet?: unknown;
+  defense?: unknown;
+  fleetProduction?: unknown;
   energy?: unknown;
   buildings?: unknown;
   productionBots?: unknown;
@@ -224,6 +233,8 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
         energy: mode === 'test' ? TEST_MODE_RESOURCE_AMOUNT : 140,
         buildings,
         fleet: createCanonicalStartingFleet(),
+        defense: createEmptyDefenseState(),
+        fleetProduction: createDefaultFleetProductionState(),
         productionBots: createEmptyBotAssignment(),
         recycling: createDefaultRecyclingState(),
         trade: createDefaultTradeState(),
@@ -284,6 +295,25 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       command.alliance,
     );
     const reportIds = buildReportsFeed(combat.reports, operations, command).map((item) => item.id);
+    const savedFleet = normalizeFleetStateForCapacity(
+      resolveSavedFleetState(savedHomeworld?.fleet, profile.factionId),
+      buildings.hangar,
+      profile.factionId,
+    );
+    const savedDefense = migrateDefenseState(savedHomeworld?.defense);
+    const migratedFleetProduction = migrateFleetProductionState(savedHomeworld?.fleetProduction, {
+      factionId: profile.factionId,
+      fleet: savedFleet,
+      defense: savedDefense,
+      hangarLevel: buildings.hangar,
+    });
+    const reconciledFleetProduction = reconcileFleetProductionState(
+      migratedFleetProduction,
+      savedFleet,
+      savedDefense,
+      profile.factionId,
+      timestamp,
+    );
     const homeworld: PlanetRuntime = {
       name: typeof savedHomeworld?.name === 'string' && savedHomeworld.name.trim()
         ? savedHomeworld.name.trim().slice(0, 28)
@@ -293,11 +323,9 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
         : typeof parsed.planetSkin === 'string' && KNOWN_PLANET_SKINS.has(parsed.planetSkin)
           ? parsed.planetSkin
           : initialState.planets['helion-01'].skin,
-      fleet: normalizeFleetStateForCapacity(
-        resolveSavedFleetState(savedHomeworld?.fleet),
-        buildings.hangar,
-        profile.factionId,
-      ),
+      fleet: normalizeFleetStateForCapacity(reconciledFleetProduction.fleet, buildings.hangar, profile.factionId),
+      defense: reconciledFleetProduction.defense,
+      fleetProduction: reconciledFleetProduction.state,
       energy: nonNegativeNumberOr(savedHomeworld?.energy, numberOr(parsed.energy, initialState.planets['helion-01'].energy)),
       buildings,
       productionBots: migrateProductionBotAssignment(savedHomeworld?.productionBots, buildings),

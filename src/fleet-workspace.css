@@ -41,17 +41,10 @@
 
 .fleet-yard-card-v1 {
   width: 100%;
-  appearance: none;
   color: inherit;
   font: inherit;
   text-align: left;
-  cursor: pointer;
-}
-.fleet-yard-card-v1:hover,
-.fleet-yard-card-v1:focus-visible {
-  border-color: rgba(74, 222, 250, .62);
-  box-shadow: inset 3px 0 rgba(78, 225, 248, .65), 0 0 0 1px rgba(74, 222, 250, .12);
-  outline: none;
+  cursor: default;
 }
 
 .fleet-menu-group-v1 { margin-top: 7px; }

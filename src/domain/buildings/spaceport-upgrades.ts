@@ -12,6 +12,12 @@ import { scaleRuntimeDuration, type RuntimeMode } from '../runtime/mode.ts';
 import { getFactionSpaceportUpgradeBalance } from './spaceport-upgrade-balance-v1.ts';
 import { getCommanderSpaceportUpgradeBalance } from './commander-upgrade-balance-v1.ts';
 import { creditResources, type ResourceCapacitiesInput, type ResourceCreditResult } from '../resources/credit.ts';
+import {
+  calculateRefund,
+  CANCEL_REFUND_MAX_PERCENT,
+  CANCEL_REFUND_MIN_PERCENT,
+  selectCancelRefundPercent,
+} from '../resources/refund.ts';
 
 export const SPACEPORT_UPGRADE_QUEUE_CAPACITY = 3;
 export const PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS = 15 * 60 * 1000;
@@ -22,8 +28,8 @@ export const SPACEPORT_UPGRADE_MAX_LEVEL_BY_TRACK = Object.freeze({
 export const SPACEPORT_UPGRADE_PROTOTYPE_NOTE =
   'BALANCE V1: обычные корабли используют Factory upgrades и Time Rebalanced, а командирские корабли — все 13 таблиц Ability upgrades из Time Rebalanced. Космодром ускоряет только новое улучшение на 5% за уровень; уже созданные задания сохраняют снимок времени.';
 
-export const SPACEPORT_CANCEL_REFUND_MIN_PERCENT = 60;
-export const SPACEPORT_CANCEL_REFUND_MAX_PERCENT = 80;
+export const SPACEPORT_CANCEL_REFUND_MIN_PERCENT = CANCEL_REFUND_MIN_PERCENT;
+export const SPACEPORT_CANCEL_REFUND_MAX_PERCENT = CANCEL_REFUND_MAX_PERCENT;
 export const SPACEPORT_CANCEL_REFUND_SOURCE_URL = 'https://github.com/ratoker-jpg/Nemexia_auto_v2/blob/main/saved_pages/%D0%BD%D0%B0%D1%83%D0%BA%D0%B0/page_2026-09-05_22-49-40.html';
 
 export type SpaceportUpgradeTrack = 'ships' | 'commanders';
@@ -531,19 +537,11 @@ export function enqueueSpaceportUpgrade(
 }
 
 export function selectSpaceportCancelRefundPercent(rng: () => number = Math.random): number {
-  const sampled = rng();
-  const normalized = Number.isFinite(sampled) ? Math.min(0.999_999_999, Math.max(0, sampled)) : 0;
-  return SPACEPORT_CANCEL_REFUND_MIN_PERCENT + Math.floor(
-    normalized * (SPACEPORT_CANCEL_REFUND_MAX_PERCENT - SPACEPORT_CANCEL_REFUND_MIN_PERCENT + 1),
-  );
+  return selectCancelRefundPercent(rng);
 }
 
 function refundSpaceportCost(cost: SpaceportUpgradeWallet, refundPercent: number): SpaceportUpgradeWallet {
-  return {
-    metal: Math.floor(cost.metal * refundPercent / 100),
-    minerals: Math.floor(cost.minerals * refundPercent / 100),
-    gas: Math.floor(cost.gas * refundPercent / 100),
-  };
+  return calculateRefund(cost, refundPercent);
 }
 
 function removeDependentSpaceportTasks(

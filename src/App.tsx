@@ -108,6 +108,10 @@ import {
 import {
   bindScienceEventBridge,
 } from './application/science.ts';
+import {
+  bindFleetProductionEventBridge,
+} from './application/fleet-production.ts';
+import { getFleetProductionEntity } from './domain/fleet/production.ts';
 import { getFleetSummaryForState } from './application/fleet.ts';
 import { getEffectiveResourceIncomePerHour } from './application/resource-clock.ts';
 import { publishApplicationRuntimeSnapshot } from './application/runtime.ts';
@@ -296,6 +300,22 @@ export function App() {
     },
     onNotice: setNotice,
   }), [testTimeScale]);
+  useEffect(() => bindFleetProductionEventBridge({
+    target: window,
+    getState: () => stateRef.current,
+    getContext: (eventNow) => ({
+      planetId: 'helion-01',
+      mode: RUNTIME_MODE,
+      testTimeScale,
+      now: eventNow,
+      rng: Math.random,
+    }),
+    commit: (nextState) => {
+      stateRef.current = nextState;
+      setState(nextState);
+    },
+    onNotice: setNotice,
+  }), [testTimeScale]);
   useEffect(() => {
     persistence.write(state);
   }, [persistence, state]);
@@ -331,6 +351,11 @@ export function App() {
           .map((task) => getSpaceportUpgradeEntity(task.track, task.shipId, result.state.profile.factionId)?.name ?? task.shipId)
           .join(', ');
         setNotice(`Космодром: улучшение завершено — ${names}.`);
+      } else if (event.kind === 'fleet-production') {
+        const names = event.completed
+          .map((item) => getFleetProductionEntity(item.queueKind, item.itemId, result.state.profile.factionId)?.name ?? item.itemId)
+          .join(', ');
+        setNotice(`Верфь: производство завершено — ${names}.`);
       }
     });
   }, [now, state, testTimeScale]);
