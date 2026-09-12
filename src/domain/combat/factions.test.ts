@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { FACTION_DEFENSE_CONSTRUCTION_BALANCE } from './defense-construction-data.ts';
+import { COMMANDER_COMBAT_CATALOG } from './catalog.ts';
+import { COMMANDER_ABILITIES, COMMANDER_IDS } from './commanders.ts';
 import { getFactionDefenseCatalog, getFactionShipCatalog } from './faction-catalog.ts';
 import { FACTION_SHIP_MECHANICS } from './faction-ship-data.ts';
 import { COMBAT_FACTIONS, getCombatFactionName } from './factions.ts';
@@ -133,6 +135,51 @@ test('race selection swaps presentation roster while preserving canonical mechan
   assert.equal(swarmDefense?.name, 'Шипомёт');
   assert.notEqual(asterDefense?.art, ilarDefense?.art);
   assert.notEqual(ilarDefense?.art, swarmDefense?.art);
+});
+
+test('commander catalog uses the Asterion naming contract and the canonical source characteristics', () => {
+  const expected = {
+    corsair: { name: 'Корсар', population: 10, cost: { metal: 2_500, minerals: 2_500, gas: 0 }, time: '00:03:20', sourceRequirement: 'Адмирал Уровень: 2' },
+    hunter: { name: 'Охотник', population: 10, cost: { metal: 2_000, minerals: 2_000, gas: 0 }, time: '00:02:40', sourceRequirement: 'Адмирал Уровень: 2' },
+    executioner: { name: 'Палач', population: 10, cost: { metal: 4_000, minerals: 4_000, gas: 0 }, time: '00:05:20', sourceRequirement: 'Адмирал Уровень: 5' },
+    juggernaut: { name: 'Джаггернаут', population: 10, cost: { metal: 4_000, minerals: 4_000, gas: 0 }, time: '00:05:20', sourceRequirement: 'Адмирал Уровень: 5' },
+    typhoon: { name: 'Тайфун', population: 10, cost: { metal: 2_500, minerals: 2_500, gas: 0 }, time: '00:03:20', sourceRequirement: 'Адмирал Уровень: 10' },
+    viper: { name: 'Вайпер', population: 10, cost: { metal: 3_500, minerals: 3_500, gas: 0 }, time: '00:04:40', sourceRequirement: 'Адмирал Уровень: 20' },
+    phantom: { name: 'Фантом', population: 10, cost: { metal: 4_000, minerals: 4_000, gas: 0 }, time: '00:05:20', sourceRequirement: 'Адмирал Уровень: 25' },
+    scorpion: { name: 'Скорпион', population: 10, cost: { metal: 4_000, minerals: 4_000, gas: 0 }, time: '00:05:20', sourceRequirement: 'Адмирал Уровень: 20' },
+    annihilator: { name: 'Аннигилятор', population: 10, cost: { metal: 4_500, minerals: 4_500, gas: 0 }, time: '00:06:00', sourceRequirement: 'Адмирал Уровень: 35' },
+    reanimator: { name: 'Реаниматор', population: 10, cost: { metal: 3_500, minerals: 3_500, gas: 0 }, time: '00:04:40', sourceRequirement: 'Адмирал Уровень: 15' },
+    argo: { name: 'Арго', population: 10, cost: { metal: 2_500, minerals: 2_500, gas: 0 }, time: '00:03:20', sourceRequirement: 'Чертежный комплект Необходим: Арго' },
+    judge: { name: 'Судья', population: 10, cost: { metal: 4_500, minerals: 4_500, gas: 0 }, time: '00:06:00', sourceRequirement: 'Чертежный комплект Необходим: Судья' },
+    polias: { name: 'Полиас', population: 500, cost: { metal: 6_000, minerals: 6_000, gas: 0 }, time: '00:08:00', sourceRequirement: 'Адмирал Уровень: 28' },
+  } as const;
+
+  assert.deepEqual(COMMANDER_COMBAT_CATALOG.map((entity) => entity.id), COMMANDER_IDS);
+  for (const id of COMMANDER_IDS) {
+    const entity = COMMANDER_COMBAT_CATALOG.find((candidate) => candidate.id === id);
+    assert.ok(entity, `${id} must be present in the commander catalog`);
+    const source = expected[id];
+    assert.equal(entity.name, source.name);
+    assert.equal(entity.population, source.population);
+    assert.deepEqual(entity.cost, source.cost);
+    assert.equal(entity.construction.time, source.time);
+    assert.deepEqual(entity.combat, {
+      attack: 2_000,
+      life: 20_000,
+      weaponType: 'Лазер',
+      armorType: 'Средняя Броня',
+      armorStrength: 6,
+    });
+    assert.deepEqual(entity.ship, { cargo: 1_000, speed: 33_000, fuel: 300 });
+    assert.equal(entity.maxOwned, 1);
+    assert.deepEqual(entity.sourceRequirements, [source.sourceRequirement]);
+    assert.deepEqual(entity.commanderAbility, {
+      ability: COMMANDER_ABILITIES[id].ability,
+      description: COMMANDER_ABILITIES[id].description,
+      ratePerLevel: COMMANDER_ABILITIES[id].ratePerLevel,
+    });
+    assert.match(entity.art, /commander-ship\.[a-z-]+\.png$/i);
+  }
 });
 
 test('canonical source registry resolves all 39 ships without a faction fallback', () => {

@@ -165,7 +165,7 @@ html.asterion-long-page .spaceport-upgrades-v2 {
   min-width: 0;
   min-height: 76px;
   display: grid;
-  grid-template-columns: 58px minmax(0, 1fr);
+  grid-template-columns: 58px minmax(0, 1fr) 28px;
   align-items: center;
   gap: 9px;
   padding: 8px 9px;
@@ -214,6 +214,48 @@ html.asterion-long-page .spaceport-upgrades-v2 {
   font-size: 8px;
   font-weight: 800;
   letter-spacing: .5px;
+}
+
+.spaceport-queue-cancel {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid rgba(236, 91, 100, .72);
+  background: rgba(91, 18, 28, .42);
+  color: #ff6972;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 1;
+  text-shadow: 0 0 7px rgba(255, 72, 88, .5);
+}
+.spaceport-queue-cancel:hover:not(:disabled),
+.spaceport-queue-cancel:focus-visible {
+  border-color: #ff9aa0;
+  background: rgba(142, 24, 38, .68);
+  color: #fff0f1;
+  box-shadow: 0 0 10px rgba(255, 70, 86, .3);
+  outline: none;
+}
+.spaceport-queue-cancel:disabled {
+  border-color: rgba(170, 73, 82, .42);
+  background: rgba(67, 21, 28, .35);
+  color: #b9555e;
+  cursor: not-allowed;
+}
+
+.spaceport-cost-source-note-v2 {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 8px;
+  border: 1px dashed rgba(180, 151, 89, .28);
+  background: rgba(48, 38, 19, .25);
+  color: #b7a77d;
+  font-size: 8px;
+  line-height: 1.25;
 }
 
 .spaceport-back-v2 {

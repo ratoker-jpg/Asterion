@@ -29,6 +29,7 @@ type CatalogItem = {
   minerals: number;
   gas: number;
   population: number;
+  maxOwned?: number;
   time: string;
   requiredShipyardLevel: number;
   requirements: readonly string[];
@@ -42,6 +43,11 @@ type CatalogItem = {
     specialization: string;
     range: string;
     priority: string;
+  };
+  commanderAbility?: {
+    ability: string;
+    description: string;
+    ratePerLevel: string;
   };
 };
 
@@ -61,6 +67,7 @@ function toCatalogItem(entity: CatalogEntity): CatalogItem {
     minerals: entity.cost.minerals,
     gas: entity.cost.gas,
     population: entity.population,
+    maxOwned: entity.maxOwned,
     time: entity.construction.time,
     requiredShipyardLevel: entity.construction.requiredShipyardLevel,
     requirements: entity.construction.requirements,
@@ -69,6 +76,7 @@ function toCatalogItem(entity: CatalogEntity): CatalogItem {
       ...entity.combat,
       ...entity.tactical,
     },
+    commanderAbility: entity.commanderAbility,
   };
 }
 
@@ -101,7 +109,8 @@ function calculateMax(item: CatalogItem, budget: ShipyardBudget) {
   if (item.gas > 0) limits.push(Math.floor(budget.gas / item.gas));
   if (item.population > 0) limits.push(Math.floor(Math.max(0, budget.populationMax - budget.population) / item.population));
   const resourceLimit = Math.min(999, ...(limits.length ? limits : [0]));
-  return Math.max(0, Math.min(SINGLE_COPY_DEFENSE_IDS.has(item.id) ? 1 : 999, resourceLimit));
+  const ownershipLimit = item.maxOwned == null ? 999 : Math.max(0, item.maxOwned - item.owned);
+  return Math.max(0, Math.min(SINGLE_COPY_DEFENSE_IDS.has(item.id) ? 1 : ownershipLimit, resourceLimit));
 }
 
 function CostRow({ kind, label, value }: { kind: ResourceKind; label: string; value: number }) {
@@ -135,6 +144,14 @@ function CatalogStatsTooltip({ item }: { item: CatalogItem }) {
         <div><small>Дистанция</small><strong>{stats.range}</strong></div>
         <div><small>Приоритет</small><strong>{stats.priority}</strong></div>
       </div>
+
+      {item.commanderAbility ? (
+        <div className="shipyard-tooltip-ability-v1">
+          <small>СПОСОБНОСТЬ · {item.commanderAbility.ratePerLevel}</small>
+          <strong>{item.commanderAbility.ability}</strong>
+          <span>{item.commanderAbility.description}</span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -238,12 +255,10 @@ export function ConstructionCatalogView({
   mode,
   planetName,
   coords,
-  onBack,
 }: {
   mode: ConstructionCatalogMode;
   planetName: string;
   coords: string;
-  onBack: () => void;
 }) {
   const budget = useMemo(readFleetBuildBudget, []);
   const config = catalogConfig[mode];
@@ -301,7 +316,6 @@ export function ConstructionCatalogView({
         description={mode === 'defense' ? defenseDescription : config.description}
         planetName={planetName}
         coords={coords}
-        onBack={onBack}
       />
 
       <section className="shipyard-processes-v1">

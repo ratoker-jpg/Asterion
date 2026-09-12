@@ -12,13 +12,14 @@ import {
 import { createDefaultBuildingLevels, type ScienceLevels } from './resource-zone.ts';
 import { calculateUnitProductionDurationMs } from './balance-v1.ts';
 import { FACTION_SPACEPORT_UPGRADE_BALANCE_V1, SPACEPORT_UPGRADE_BALANCE_V1 } from './spaceport-upgrade-balance-v1.ts';
+import { COMMANDER_SPACEPORT_UPGRADE_BALANCE, COMMANDER_UPGRADE_SOURCE_FILES } from './commander-upgrade-balance-v1.ts';
+import { COMMANDER_COMBAT_CATALOG } from '../combat/catalog.ts';
 import {
   PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS,
-  PROTOTYPE_SPACEPORT_UPGRADE_COST,
   SPACEPORT_UPGRADE_MAX_LEVEL_BY_TRACK,
   SPACEPORT_UPGRADE_QUEUE_CAPACITY,
-  calculateSpaceportUpgradeCost,
   calculateSpaceportEffectiveDuration,
+  cancelSpaceportUpgrade,
   createDefaultSpaceportUpgradeState,
   enqueueSpaceportUpgrade,
   evaluateSpaceportUpgradeRequirements,
@@ -28,6 +29,7 @@ import {
   migrateSpaceportUpgradeState,
   previewSpaceportUpgrade,
   reconcileSpaceportUpgradeState,
+  selectSpaceportCancelRefundPercent,
   type SpaceportUpgradeContext,
   type SpaceportUpgradeState,
   type SpaceportUpgradeTrack,
@@ -291,22 +293,58 @@ test('queued upgrades retain their captured faction-specific duration snapshot',
   assert.equal(reconciled.state.shipQueue[0]?.finishAt, queued.task.finishAt);
 });
 
-test('prototype commander upgrade fallback doubles from the previous level', () => {
-  assert.deepEqual(calculateSpaceportUpgradeCost(0), PROTOTYPE_SPACEPORT_UPGRADE_COST);
-  assert.deepEqual(calculateSpaceportUpgradeCost(1), { metal: 1_000, minerals: 500, gas: 0 });
-  assert.deepEqual(calculateSpaceportUpgradeCost(2), { metal: 2_000, minerals: 1_000, gas: 0 });
+test('commander balance connects all 13 source files, every 40 transition, and never uses the prototype ×2 cost', () => {
+  assert.deepEqual(Object.keys(COMMANDER_UPGRADE_SOURCE_FILES), COMMANDER_COMBAT_CATALOG.map((entity) => entity.id));
+  for (const entity of COMMANDER_COMBAT_CATALOG) {
+    const rows = COMMANDER_SPACEPORT_UPGRADE_BALANCE[entity.id];
+    assert.equal(rows.length, 40, `${entity.id} must expose 40 transitions`);
+    assert.equal(rows[0]?.sourceLevel, 1);
+    assert.equal(rows[39]?.sourceLevel, 40);
 
-  for (const fromLevel of [0, 1, 2]) {
     const state = createDefaultSpaceportUpgradeState();
-    state.shipLevels.corsair = fromLevel;
-    const preview = previewSpaceportUpgrade(context(state), 'commanders', 'corsair');
-    assert.deepEqual(preview.cost, calculateSpaceportUpgradeCost(fromLevel));
-  }
+    state.shipLevels[entity.id] = 0;
+    const first = previewSpaceportUpgrade({
+      ...context(state),
+      wallet: { metal: Number.MAX_SAFE_INTEGER, minerals: Number.MAX_SAFE_INTEGER, gas: Number.MAX_SAFE_INTEGER },
+    }, 'commanders', entity.id);
+    assert.deepEqual(first.cost, rows[0]?.cost);
+    assert.equal(first.baseDurationMs, rows[0]?.durationMs);
+    assert.equal(first.costSource, 'commander-ability-upgrades');
+    assert.equal(first.gasSpecified, false);
 
-  const repeated = enqueueRepeated('commanders', 'corsair', 3);
-  assert.equal(repeated.wallet.metal, wallet.metal - 3_500);
-  assert.equal(repeated.wallet.minerals, wallet.minerals - 1_750);
-  assert.equal(repeated.wallet.gas, wallet.gas);
+    state.shipLevels[entity.id] = 39;
+    const last = previewSpaceportUpgrade({
+      ...context(state),
+      wallet: { metal: Number.MAX_SAFE_INTEGER, minerals: Number.MAX_SAFE_INTEGER, gas: Number.MAX_SAFE_INTEGER },
+    }, 'commanders', entity.id);
+    assert.deepEqual(last.cost, rows[39]?.cost);
+    assert.equal(last.baseDurationMs, rows[39]?.durationMs);
+    assert.equal(last.nextLevel, 40);
+    assert.notDeepEqual(first.cost, { metal: 500, minerals: 250, gas: 0 });
+  }
+});
+
+test('commander preview and enqueue use the same effective duration in Production and Test modes', () => {
+  for (const mode of ['production', 'test'] as const) {
+    for (const spaceportLevel of [0, 4, 10]) {
+      for (const fromLevel of [0, 1, 17, 39]) {
+        const state = createDefaultSpaceportUpgradeState();
+        state.shipLevels.corsair = fromLevel;
+        const initial = {
+          ...context(state, unlockedScienceLevels(), spaceportLevel),
+          wallet: { metal: Number.MAX_SAFE_INTEGER, minerals: Number.MAX_SAFE_INTEGER, gas: Number.MAX_SAFE_INTEGER },
+          mode,
+          testTimeScale: TEST_TIME_SCALE,
+        };
+        const preview = previewSpaceportUpgrade(initial, 'commanders', 'corsair');
+        const queued = enqueueSpaceportUpgrade(initial, 'commanders', 'corsair', 5_000, `preview-${mode}-${spaceportLevel}-${fromLevel}`);
+        assert.equal(queued.ok, true);
+        assert.equal(queued.task?.effectiveDurationMs, preview.effectiveDurationMs);
+        assert.equal(queued.task?.finishAt, 5_000 + preview.effectiveDurationMs);
+        assert.deepEqual(queued.task?.cost, preview.cost);
+      }
+    }
+  }
 });
 
 test('Test Mode snapshots the same Spaceport speed policy with accelerated absolute timestamps', () => {
@@ -389,6 +427,89 @@ test('Corsair can be enqueued 0→1, 1→2, 2→3 and commander queue remains in
   assert.equal(fourthCommander.reason, 'Очередь улучшений заполнена.');
 });
 
+test('cancellation refunds one active task, restarts the remaining queue, and leaves the independent commander queue intact', () => {
+  const initial = context();
+  initial.wallet = { metal: 1_000_000, minerals: 1_000_000, gas: 1_000_000 };
+  const first = enqueueSpaceportUpgrade(initial, 'ships', 'transporter', 1_000, 'ship-active');
+  assert.equal(first.ok, true);
+  const second = enqueueSpaceportUpgrade({ ...initial, state: first.state, wallet: first.wallet }, 'ships', 'mega-transporter', 1_000, 'ship-waiting');
+  assert.equal(second.ok, true);
+  const commander = enqueueSpaceportUpgrade({ ...initial, state: second.state, wallet: second.wallet }, 'commanders', 'corsair', 1_000, 'commander-independent');
+  assert.equal(commander.ok, true);
+  assert.ok(first.task);
+  assert.ok(second.task);
+  assert.ok(commander.task);
+
+  const beforeRefund = commander.wallet;
+  const transition = cancelSpaceportUpgrade({ ...initial, state: commander.state, wallet: beforeRefund }, 'ship-active', 1_100, () => 0);
+  assert.equal(transition.ok, true);
+  assert.equal(transition.refundPercent, 60);
+  assert.deepEqual(transition.refundPercents, [60]);
+  assert.deepEqual(transition.canceledTasks.map((task) => task.id), ['ship-active']);
+  assert.equal(transition.wallet.metal, beforeRefund.metal + Math.floor((first.task.cost.metal * 60) / 100));
+  assert.equal(transition.wallet.minerals, beforeRefund.minerals + Math.floor((first.task.cost.minerals * 60) / 100));
+  assert.equal(transition.wallet.gas, beforeRefund.gas);
+  assert.deepEqual(transition.state.shipQueue.map((task) => task.id), ['ship-waiting']);
+  assert.equal(transition.state.shipQueue[0]?.startedAt, 1_100);
+  assert.equal(transition.state.shipQueue[0]?.finishAt, 1_100 + second.task.effectiveDurationMs);
+  assert.deepEqual(transition.state.commanderQueue.map((task) => task.id), ['commander-independent']);
+  assert.equal(transition.state.commanderQueue[0]?.startedAt, commander.task.startedAt);
+  assert.equal(transition.state.commanderQueue[0]?.finishAt, commander.task.finishAt);
+});
+
+test('waiting cancellation cascades only dependent later transitions of the same ship and reschedules other ships', () => {
+  const initial = context();
+  initial.wallet = { metal: 1_000_000, minerals: 1_000_000, gas: 1_000_000 };
+  const first = enqueueSpaceportUpgrade(initial, 'ships', 'transporter', 1_000, 'transporter-1');
+  assert.equal(first.ok, true);
+  const second = enqueueSpaceportUpgrade({ ...initial, state: first.state, wallet: first.wallet }, 'ships', 'transporter', 1_000, 'transporter-2');
+  assert.equal(second.ok, true);
+  const third = enqueueSpaceportUpgrade({ ...initial, state: second.state, wallet: second.wallet }, 'ships', 'transporter', 1_000, 'transporter-3');
+  assert.equal(third.ok, true);
+  assert.ok(first.task);
+  assert.ok(second.task);
+  assert.ok(third.task);
+
+  const samples = [0, 0.999_999];
+  const transition = cancelSpaceportUpgrade({ ...initial, state: third.state, wallet: third.wallet }, 'transporter-2', 1_100, () => samples.shift() ?? 0);
+  assert.equal(transition.ok, true);
+  assert.deepEqual(transition.canceledTasks.map((task) => task.id), ['transporter-2', 'transporter-3']);
+  assert.deepEqual(transition.refundPercents, [60, 80]);
+  assert.deepEqual(transition.state.shipQueue.map((task) => task.id), ['transporter-1']);
+  assert.equal(transition.state.shipQueue[0]?.startedAt, first.task.startedAt);
+  assert.equal(transition.state.shipQueue[0]?.finishAt, first.task.finishAt);
+  assert.equal(transition.wallet.gas, third.wallet.gas);
+});
+
+test('cancellation refund sampling is inclusive from 60% through 80%', () => {
+  assert.equal(selectSpaceportCancelRefundPercent(() => 0), 60);
+  assert.equal(selectSpaceportCancelRefundPercent(() => 0.5), 70);
+  assert.equal(selectSpaceportCancelRefundPercent(() => 0.999_999_999), 80);
+});
+
+test('legacy queue tasks without a saved cost cannot receive an invented cancellation refund', () => {
+  const migrated = migrateSpaceportUpgradeState({
+    shipLevels: { transporter: 0 },
+    shipQueue: [{
+      id: 'legacy-no-cost',
+      shipId: 'transporter',
+      fromLevel: 0,
+      toLevel: 1,
+      startedAt: 1_000,
+      finishAt: 20_000,
+      spaceportLevelAtStart: 1,
+      effectiveDurationMs: 19_000,
+    }],
+  });
+  const initial = context(migrated);
+  const result = cancelSpaceportUpgrade(initial, 'legacy-no-cost', 1_100, () => 0);
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'Невозможно подтвердить сохранённую стоимость старого задания.');
+  assert.deepEqual(result.wallet, initial.wallet);
+  assert.equal(result.state.shipQueue.length, 1);
+  assert.deepEqual(result.refundPercents, []);
+});
+
 test('ordinary ships never exceed level 10 in preview, enqueue, completion or migration', () => {
   const state = createDefaultSpaceportUpgradeState();
   state.shipLevels.transporter = 9;
@@ -464,6 +585,9 @@ test('reconciliation is idempotent when a legacy task target was already applied
     finishAt: 2_000,
     spaceportLevelAtStart: 1,
     effectiveDurationMs: 1_000,
+    cost: { metal: 100, minerals: 50, gas: 0 },
+    costSource: 'faction-factory-upgrades',
+    refundEligible: true,
   }];
   const reconciled = reconcileSpaceportUpgradeState(state, 3_000);
   assert.equal(reconciled.state.shipLevels.transporter, 1);
@@ -596,4 +720,7 @@ test('migration restores FIFO timestamps, sequential duplicate levels and track-
   assert.equal(restored.commanderQueue.length, 2);
   assert.deepEqual(restored.commanderQueue.map((task) => [task.fromLevel, task.toLevel]), [[38, 39], [39, 40]]);
   assert.equal(restored.commanderQueue[1].startedAt, restored.commanderQueue[0].finishAt);
+  assert.deepEqual(restored.shipQueue[0].cost, { metal: 0, minerals: 0, gas: 0 });
+  assert.equal(restored.shipQueue[0].costSource, 'legacy-unknown');
+  assert.equal(restored.shipQueue[0].refundEligible, false);
 });

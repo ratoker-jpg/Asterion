@@ -8,7 +8,6 @@ type FleetConstructionHeaderProps = {
   description: string;
   planetName: string;
   coords: string;
-  onBack: () => void;
 };
 
 export function FleetConstructionHeader({
@@ -19,7 +18,6 @@ export function FleetConstructionHeader({
   description,
   planetName,
   coords,
-  onBack,
 }: FleetConstructionHeaderProps) {
   return (
     <header className="building-card-v2 fleet-construction-card-v1" data-qa-construction-header={viewId}>
@@ -29,7 +27,6 @@ export function FleetConstructionHeader({
         <strong>{title}</strong>
         <p>{planetName} {coords} · {description}</p>
       </div>
-      <button type="button" onClick={onBack}>← К ФЛОТАМ</button>
     </header>
   );
 }

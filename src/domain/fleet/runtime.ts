@@ -1,7 +1,7 @@
-import { COMMANDER_COMBAT_CATALOG } from '../combat/catalog.ts';
+import { COMMANDER_COMBAT_CATALOG, COMBAT_ENTITY_BY_ID } from '../combat/catalog.ts';
 import { getFactionShipCatalog } from '../combat/faction-catalog.ts';
 import { COMMANDER_IDS, type CommanderId } from '../combat/commanders.ts';
-import { SHIP_IDS, type ShipId } from '../combat/ids.ts';
+import { SHIP_IDS, type CombatEntityId, type ShipId } from '../combat/ids.ts';
 import type { CombatFactionId } from '../combat/factions.ts';
 import { getHangarCapacity } from '../buildings/balance-v1.ts';
 
@@ -61,6 +61,27 @@ export function migrateFleetState(value: unknown): OwnedFleetState {
   for (const id of SHIP_IDS) migrated.ships[id] = safeOwnedQuantity(ships[id]);
   for (const id of COMMANDER_IDS) migrated.commanders[id] = safeOwnedQuantity(commanders[id]);
   return migrated;
+}
+
+export function getFleetEntityMaxOwned(entityId: CombatEntityId): number | null {
+  return COMBAT_ENTITY_BY_ID.get(entityId)?.maxOwned ?? null;
+}
+
+/**
+ * Shared production contract for unique entities. Migration deliberately keeps
+ * legacy duplicate saves intact; new production callers must check this rule.
+ */
+export function canAddFleetEntity(
+  fleet: OwnedFleetState,
+  entityId: CombatEntityId,
+  quantity = 1,
+): boolean {
+  if (!Number.isInteger(quantity) || quantity < 0) return false;
+  const current = (COMMANDER_IDS as readonly string[]).includes(entityId)
+    ? fleet.commanders[entityId as CommanderId] ?? 0
+    : fleet.ships[entityId as ShipId] ?? 0;
+  const maxOwned = getFleetEntityMaxOwned(entityId);
+  return maxOwned == null || current + quantity <= maxOwned;
 }
 
 /**

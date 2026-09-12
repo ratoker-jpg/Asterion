@@ -98,6 +98,7 @@ import {
   applyProductionBots as applyProductionBotsAction,
   cancelBuilding as cancelBuildingAction,
   collectRecycling as collectRecyclingAction,
+  cancelSpaceportUpgrade as cancelSpaceportUpgradeAction,
   destroyBuilding as destroyBuildingAction,
   executeTradeAction,
   previewBuilding,
@@ -547,6 +548,29 @@ export function App() {
     return true;
   };
 
+  const cancelSpaceportUpgrade = (taskId: string) => {
+    const canceledAt = Date.now();
+    const result = cancelSpaceportUpgradeAction(stateRef.current, {
+      planetId: 'helion-01',
+      now: canceledAt,
+      mode: RUNTIME_MODE,
+      testTimeScale,
+      rng: Math.random,
+    }, taskId);
+    stateRef.current = result.state;
+    setState(result.state);
+    if (!result.ok) {
+      setNotice(result.reason ?? 'Улучшение недоступно для отмены.');
+      return false;
+    }
+    const cascadedCount = Math.max(0, result.transition.canceledTasks.length - 1);
+    const refundLabel = result.transition.refundPercents.length > 1
+      ? `Возврат рассчитан отдельно для ${result.transition.refundPercents.length} заданий в диапазоне 60–80%.`
+      : `Возвращено ${result.transition.refundPercent}% сохранённой стоимости.`;
+    setNotice(`Космодром: улучшение отменено. ${refundLabel}${cascadedCount > 0 ? ` Каскадно отменено ещё ${cascadedCount} зависимых заданий.` : ''}`);
+    return true;
+  };
+
   const buildBuilding = (assetRole: BuildingRole) => {
     const enqueuedAt = Date.now();
     const context = { planetId: 'helion-01' as PlanetId, now: enqueuedAt, mode: RUNTIME_MODE, testTimeScale };
@@ -888,6 +912,7 @@ export function App() {
               onRecyclingCollect={collectRecycling}
               onTrade={tradeResources}
               onSpaceportUpgrade={startSpaceportUpgrade}
+              onSpaceportCancel={cancelSpaceportUpgrade}
               onBack={returnToBuilding}
             />
           ) : activeRoute === 'universe' ? (

@@ -232,12 +232,14 @@ async function verifyMilitaryDeepLinks(win, directory) {
       image: headerImage?.getAttribute('src') ?? '',
       hasBuildingCardTemplate: header?.classList.contains('building-card-v2') ?? false,
       hasConstructionCardTemplate: header?.classList.contains('fleet-construction-card-v1') ?? false,
+      hasHeaderBack: Boolean(headerBack),
       hasLegacyPageHeader: header?.classList.contains('shipyard-page-head-v1') ?? false,
       hasLegacyPageTitle: Boolean(root?.querySelector('.shipyard-page-title-v1, .shipyard-page-art-v1')),
       hasLegacyEmblem: Boolean(root?.querySelector('.fleet-yard-emblem-v1')),
       hasReturnToShipyardOverlay: Boolean(document.querySelector('.building-interior-return-overlay')),
       header: {
         minHeight: headerStyle?.minHeight ?? '',
+        gridColumns: headerStyle?.gridTemplateColumns ?? '',
         gridFirstColumn: headerGrid[0] ?? '',
         gridLastColumn: headerGrid.at(-1) ?? '',
         display: headerStyle?.display ?? '',
@@ -280,7 +282,8 @@ async function verifyMilitaryDeepLinks(win, directory) {
     && visual.header.clipPath === 'none'
     && visual.header.minHeight === '112px'
     && visual.header.gridFirstColumn === (visual.viewportWidth <= 1040 ? '62px' : visual.viewportWidth <= 1440 ? '72px' : '84px')
-    && visual.header.gridLastColumn === '128px'
+    && !visual.hasHeaderBack
+    && !visual.header.gridColumns.includes('128px')
     && visual.header.margin === '14px 0px'
     && visual.header.gap === '12px'
     && visual.header.padding === '10px 12px'
@@ -293,8 +296,8 @@ async function verifyMilitaryDeepLinks(win, directory) {
     && visual.header.titleSize === '13px'
     && visual.header.detailSize === '10px'
     && visual.header.detailMargin === '7px'
-    && visual.header.backWidth === '128px'
-    && visual.header.backHeight === '36px';
+    && visual.header.backWidth === ''
+    && visual.header.backHeight === '';
   const expectedConstructionCardMinHeight = (visual) => visual.viewportWidth <= 1400 ? '282px' : '292px';
   const sharedCardTemplate = (visual) => visual.card.minHeight === expectedConstructionCardMinHeight(visual)
     && visual.card.borderWidth === '1px'

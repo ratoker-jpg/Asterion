@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import {
   SPACEPORT_UPGRADE_PROTOTYPE_NOTE,
@@ -10,6 +11,7 @@ import {
   type SpaceportRequirementState,
   type SpaceportUpgradeState,
   type SpaceportUpgradeTrack,
+  type SpaceportUpgradeTask,
   type SpaceportUpgradeWallet,
 } from './domain/buildings/spaceport-upgrades.ts';
 import { getBuildingDefinition, type BuildingLevels, type ScienceLevels } from './domain/buildings/resource-zone.ts';
@@ -31,6 +33,7 @@ type SpaceportUpgradeViewProps = {
   wallet: SpaceportUpgradeWallet;
   now: number;
   onUpgrade: (track: SpaceportUpgradeTrack, shipId: string) => boolean;
+  onCancel: (taskId: string) => boolean;
   onBack: () => void;
 };
 
@@ -256,11 +259,13 @@ function SelectedQueue({
   factionId,
   upgrades,
   now,
+  onCancel,
 }: {
   track: SpaceportUpgradeTrack;
   factionId: CombatFactionId;
   upgrades: SpaceportUpgradeState;
   now: number;
+  onCancel: (task: SpaceportUpgradeTask) => void;
 }) {
   const queue = queueOf(upgrades, track);
 
@@ -291,6 +296,7 @@ function SelectedQueue({
                 key={task.id}
                 className={`spaceport-queue-task ${active ? 'is-active' : 'is-waiting'}`}
                 data-qa-spaceport-queue-task={task.shipId}
+                data-qa-spaceport-queue-task-id={task.id}
                 data-qa-spaceport-queue-position={index + 1}
               >
                 {entity ? <img src={entity.art} alt="" draggable={false} /> : <span className="spaceport-queue-fallback">◇</span>}
@@ -303,6 +309,15 @@ function SelectedQueue({
                     <span>ОЖИДАЕТ · ПОЗИЦИЯ {index + 1}</span>
                   )}
                 </div>
+                <button
+                  type="button"
+                  className="spaceport-queue-cancel"
+                  data-qa-spaceport-cancel={task.id}
+                  disabled={task.refundEligible === false}
+                  title={task.refundEligible === false ? 'Отмена недоступна: сохранённая стоимость старого задания не подтверждена.' : 'Отменить улучшение'}
+                  aria-label={`Отменить улучшение «${entity?.name ?? task.shipId}»`}
+                  onClick={() => onCancel(task)}
+                >×</button>
               </article>
             );
           })}
@@ -322,12 +337,55 @@ export function SpaceportUpgradeView({
   wallet,
   now,
   onUpgrade,
+  onCancel,
   onBack,
 }: SpaceportUpgradeViewProps) {
   const [activeTrack, setActiveTrack] = useState<SpaceportUpgradeTrack>('ships');
+  const [pendingCancellation, setPendingCancellation] = useState<SpaceportUpgradeTask | null>(null);
+  const confirmYesRef = useRef<HTMLButtonElement>(null);
+  const confirmNoRef = useRef<HTMLButtonElement>(null);
   const spaceport = getBuildingDefinition('spaceport', factionId);
   const catalog = useMemo(() => getSpaceportUpgradeCatalog(activeTrack, factionId), [activeTrack, factionId]);
   const selectedQueue = queueOf(upgrades, activeTrack);
+
+  useEffect(() => {
+    if (!pendingCancellation) return;
+    const previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusFrame = window.requestAnimationFrame(() => confirmYesRef.current?.focus());
+    const restoreFocus = () => {
+      const fallback = document.querySelector('[data-qa-spaceport-cancel]:not([disabled])');
+      const canRestorePrevious = previousActiveElement?.isConnected
+        && previousActiveElement !== document.body
+        && previousActiveElement !== document.documentElement
+        && !(previousActiveElement instanceof HTMLButtonElement && previousActiveElement.disabled);
+      const target = canRestorePrevious
+        ? previousActiveElement
+        : fallback instanceof HTMLElement ? fallback : null;
+      target?.focus();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setPendingCancellation(null);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const controls = [confirmYesRef.current, confirmNoRef.current].filter((control): control is HTMLButtonElement => Boolean(control));
+      if (controls.length !== 2) return;
+      if (event.shiftKey && document.activeElement === controls[0]) {
+        event.preventDefault();
+        controls[1].focus();
+      } else if (!event.shiftKey && document.activeElement === controls[1]) {
+        event.preventDefault();
+        controls[0].focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener('keydown', onKeyDown);
+      window.requestAnimationFrame(() => window.requestAnimationFrame(restoreFocus));
+    };
+  }, [pendingCancellation]);
 
   return (
     <main className="spaceport-upgrades spaceport-upgrades-v2" data-qa-spaceport-upgrades data-qa-spaceport-track={activeTrack}>
@@ -365,7 +423,7 @@ export function SpaceportUpgradeView({
           })}
         </nav>
 
-        <SelectedQueue track={activeTrack} factionId={factionId} upgrades={upgrades} now={now} />
+        <SelectedQueue track={activeTrack} factionId={factionId} upgrades={upgrades} now={now} onCancel={setPendingCancellation} />
 
         <button type="button" className="spaceport-back-v2" data-qa-building-interior-back onClick={onBack}>
           <span aria-hidden="true">←</span>
@@ -403,7 +461,9 @@ export function SpaceportUpgradeView({
               .filter(({ task }) => task.shipId === entity.id);
             const isQueued = queuedTasks.length > 0;
             const missingRequirements = preview.requirements.filter((requirement) => !requirement.met);
-            const missingResources = (Object.keys(preview.cost) as (keyof SpaceportUpgradeWallet)[])
+            const resourceKeys = (Object.keys(preview.cost) as (keyof SpaceportUpgradeWallet)[])
+              .filter((key) => key !== 'gas' || preview.gasSpecified);
+            const missingResources = resourceKeys
               .filter((key) => wallet[key] < preview.cost[key]);
             const uiCanStart = preview.canStart;
             const ctaText = preview.status === 'max-level'
@@ -456,7 +516,7 @@ export function SpaceportUpgradeView({
 
                   <div className="spaceport-cost-line-v2" aria-label="Стоимость улучшения">
                     <span className="spaceport-line-label-v2">СТОИМОСТЬ</span>
-                    {(Object.keys(preview.cost) as (keyof SpaceportUpgradeWallet)[]).map((key) => (
+                    {resourceKeys.map((key) => (
                       <span className="spaceport-cost-chip-v2" key={key} data-resource={key}>
                         <span className="spaceport-cost-icon-v2">
                           <ResourceIcon kind={key} />
@@ -465,6 +525,7 @@ export function SpaceportUpgradeView({
                         <strong>{formatNumber(preview.cost[key])}</strong>
                       </span>
                     ))}
+                    {!preview.gasSpecified ? <span className="spaceport-cost-source-note-v2" data-qa-spaceport-gas-unspecified>ГАЗ · источник не указывает</span> : null}
                   </div>
 
                   <div className="spaceport-requirement-line-v2">
@@ -543,6 +604,27 @@ export function SpaceportUpgradeView({
           })}
         </div>
       </section>
+      {pendingCancellation ? createPortal(
+        <div className="resource-building-action-confirm-backdrop" data-qa-spaceport-cancel-backdrop onMouseDown={() => setPendingCancellation(null)}>
+          <section
+            className="resource-building-action-confirm"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="spaceport-cancel-confirm-title"
+            data-qa-spaceport-cancel-confirm
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <small>ПОДТВЕРЖДЕНИЕ ДЕЙСТВИЯ</small>
+            <h3 id="spaceport-cancel-confirm-title">Отменить улучшение?</h3>
+            <p>Задание «{getSpaceportUpgradeEntity(pendingCancellation.track, pendingCancellation.shipId, factionId)?.name ?? pendingCancellation.shipId}» будет удалено. Зависимые следующие уровни этого же корабля отменятся каскадно. Для каждого отменённого задания возвращаются случайные 60–80% сохранённой стоимости.</p>
+            <div className="resource-building-action-confirm-actions">
+              <button ref={confirmYesRef} type="button" data-qa-spaceport-cancel-yes onClick={() => { onCancel(pendingCancellation.id); setPendingCancellation(null); }}>ДА</button>
+              <button ref={confirmNoRef} type="button" data-qa-spaceport-cancel-no onClick={() => setPendingCancellation(null)}>НЕТ</button>
+            </div>
+          </section>
+        </div>,
+        document.body,
+      ) : null}
     </main>
   );
 }

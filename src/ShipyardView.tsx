@@ -217,7 +217,7 @@ function ShipCard({
   );
 }
 
-export function ShipyardView({ planetName, coords, onBack }: { planetName: string; coords: string; onBack: () => void }) {
+export function ShipyardView({ planetName, coords }: { planetName: string; coords: string }) {
   const budget = useMemo(readFleetBuildBudget, []);
   const factionName = getCombatFactionName(budget.factionId);
   const shipyardPresentation = useMemo(
@@ -271,7 +271,6 @@ export function ShipyardView({ planetName, coords, onBack }: { planetName: strin
         description={`полный каталог стандартных корпусов ${factionName}`}
         planetName={planetName}
         coords={coords}
-        onBack={onBack}
       />
 
       <section className="shipyard-processes-v1">

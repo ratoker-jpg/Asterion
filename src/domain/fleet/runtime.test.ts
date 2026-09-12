@@ -3,7 +3,9 @@ import test from 'node:test';
 import {
   calculateFleetCapacity,
   calculateFleetPopulation,
+  canAddFleetEntity,
   createCanonicalStartingFleet,
+  getFleetEntityMaxOwned,
   getFleetSummary,
   migrateFleetState,
   resolveSavedFleetState,
@@ -20,8 +22,8 @@ test('canonical starting fleet is persisted by mechanical IDs and derives popula
   assert.equal(calculateFleetPopulation(fleet, 'veyra'), 48);
 
   fleet.commanders.corsair = 1;
-  assert.equal(calculateFleetPopulation(fleet), 66);
-  assert.deepEqual(getFleetSummary(fleet, 1), { population: 66, capacity: 120, available: 54 });
+  assert.equal(calculateFleetPopulation(fleet), 68);
+  assert.deepEqual(getFleetSummary(fleet, 1), { population: 68, capacity: 120, available: 52 });
 });
 
 test('fleet population resolves the selected faction catalog for each owned ship', () => {
@@ -54,4 +56,20 @@ test('legacy save without fleet gets the canonical roster while an explicit empt
   assert.equal(calculateFleetPopulation(explicitEmpty), 0);
   assert.equal(explicitEmpty.ships.scout, 0);
   assert.equal(explicitEmpty.commanders.corsair, 0);
+});
+
+test('commander ownership is a shared one-copy rule while legacy duplicate saves remain readable', () => {
+  const fleet = createCanonicalStartingFleet();
+  assert.equal(getFleetEntityMaxOwned('corsair'), 1);
+  assert.equal(getFleetEntityMaxOwned('transporter'), null);
+  assert.equal(canAddFleetEntity(fleet, 'corsair'), true);
+  fleet.commanders.corsair = 1;
+  assert.equal(canAddFleetEntity(fleet, 'corsair'), false);
+  assert.equal(canAddFleetEntity(fleet, 'corsair', 0), true);
+  assert.equal(canAddFleetEntity(fleet, 'corsair', 2), false);
+  assert.equal(canAddFleetEntity(fleet, 'transporter', 500), true);
+
+  const legacy = migrateFleetState({ commanders: { corsair: 2 } });
+  assert.equal(legacy.commanders.corsair, 2);
+  assert.equal(canAddFleetEntity(legacy, 'corsair'), false);
 });

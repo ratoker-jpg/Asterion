@@ -24,9 +24,11 @@ import {
   type ResourceAllocationPercent,
 } from '../domain/buildings/recycling.ts';
 import {
+  cancelSpaceportUpgrade as cancelSpaceportUpgradeDomain,
   enqueueSpaceportUpgrade,
   getSpaceportUpgradeEntity,
   reconcileSpaceportUpgradeState,
+  type SpaceportCancellationTransition,
   type SpaceportUpgradeTrack,
   type SpaceportUpgradeWallet,
 } from '../domain/buildings/spaceport-upgrades.ts';
@@ -51,6 +53,7 @@ export type BuildingApplicationContext = {
   now: number;
   mode: RuntimeMode;
   testTimeScale: TestTimeScale;
+  rng?: () => number;
 };
 
 export type BuildingActionResult = {
@@ -373,6 +376,37 @@ export function startSpaceportUpgrade(
     }, context.planetId, { ...planet, spaceportUpgrades: transition.state }),
     reason: null,
     entityName,
+  };
+}
+
+export function cancelSpaceportUpgrade(
+  state: SaveState,
+  context: BuildingApplicationContext,
+  taskId: string,
+): BuildingActionResult & { transition: SpaceportCancellationTransition } {
+  const planet = getPlanetState(state, context.planetId);
+  const transition = cancelSpaceportUpgradeDomain({
+    state: planet.spaceportUpgrades,
+    wallet: { metal: state.metal, minerals: state.minerals, gas: state.gas },
+    buildings: planet.buildings,
+    scienceLevels: state.science.levels,
+    spaceportLevel: planet.buildings.spaceport,
+    factionId: state.profile.factionId,
+    mode: context.mode,
+    testTimeScale: context.testTimeScale,
+  }, taskId, context.now, context.rng);
+  const nextState = replacePlanetState({
+    ...state,
+    schemaVersion: SAVE_SCHEMA_VERSION,
+    metal: transition.wallet.metal,
+    minerals: transition.wallet.minerals,
+    gas: transition.wallet.gas,
+  }, context.planetId, { ...planet, spaceportUpgrades: transition.state });
+  return {
+    ok: transition.ok,
+    state: transition.ok || nextState !== state ? nextState : state,
+    reason: transition.reason,
+    transition,
   };
 }
 

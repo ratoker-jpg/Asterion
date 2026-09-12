@@ -39,6 +39,7 @@ type BuildingInteriorHostProps<PlanetId extends string> = {
   onRecyclingCollect: (jobId: string) => boolean;
   onTrade: (request: TradeRequest) => TradeExecution;
   onSpaceportUpgrade: (track: SpaceportUpgradeTrack, shipId: string) => boolean;
+  onSpaceportCancel: (taskId: string) => boolean;
   onBack: () => void;
 };
 
@@ -62,6 +63,7 @@ export function BuildingInteriorHost<PlanetId extends string>({
   onRecyclingCollect,
   onTrade,
   onSpaceportUpgrade,
+  onSpaceportCancel,
   onBack,
 }: BuildingInteriorHostProps<PlanetId>) {
   if (context.buildingRole === 'recycling') {
@@ -105,6 +107,7 @@ export function BuildingInteriorHost<PlanetId extends string>({
         wallet={spaceportWallet}
         now={now}
         onUpgrade={onSpaceportUpgrade}
+        onCancel={onSpaceportCancel}
         onBack={onBack}
       />
     );

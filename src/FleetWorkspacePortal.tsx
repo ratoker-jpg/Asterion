@@ -183,8 +183,6 @@ function FleetWorkspace({
     ) as Partial<Record<ShipId, number>>);
   };
 
-  const closeConstructionView = () => setConstructionView(null);
-
   const mainClassName = [
     'fleet-main-v1',
     constructionView ? 'fleet-main-v1--shipyard' : '',
@@ -223,9 +221,9 @@ function FleetWorkspace({
 
       <main className={mainClassName}>
         {constructionView === 'ships' ? (
-          <ShipyardView planetName={planetName} coords={coords} onBack={closeConstructionView} />
+          <ShipyardView planetName={planetName} coords={coords} />
         ) : constructionView === 'defense' || constructionView === 'commander' ? (
-          <ConstructionCatalogView mode={constructionView} planetName={planetName} coords={coords} onBack={closeConstructionView} />
+          <ConstructionCatalogView mode={constructionView} planetName={planetName} coords={coords} />
         ) : selectedSection === 'combat-priority' ? (
           <FleetCombatPriorityView planetName={planetName} coords={coords} onBack={openFleetRoot} />
         ) : selectedSection === 'battles' ? (
