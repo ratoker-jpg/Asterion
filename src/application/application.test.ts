@@ -438,11 +438,13 @@ test('resource clock accrues canonical income once, scales only Test Mode, and p
   assert.equal(production.state.metal, 150);
   assert.equal(production.state.minerals, 150);
   assert.equal(production.state.gas, 100);
+  assert.equal(production.state.planets['helion-01'].energy, 0);
   assert.equal(production.state.resourceClock.lastReconciledAt, 3_600_000);
   assert.equal(reconcileRuntime(production.state, context(3_600_000, 'production')).changed, false);
 
   const testScaled = reconcileRuntime({ ...state, resourceClock: { ...state.resourceClock } }, context(3_600_000, 'test'));
   assert.equal(testScaled.state.metal, 1_500);
+  assert.equal(testScaled.state.planets['helion-01'].energy, 0);
 
   const half = reconcileRuntime(state, context(1_800_000, 'production'));
   const twoTicks = reconcileRuntime(half.state, context(3_600_000, 'production'));

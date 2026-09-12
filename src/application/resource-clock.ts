@@ -1,5 +1,4 @@
 import {
-  getBuildingEnergyIncomePerHour,
   getBuildingResourceIncomePerHour,
   getStorageCapacities,
   type ResourceKey,
@@ -44,7 +43,9 @@ function normalizeClock(clock: ResourceClock | undefined, now: number): Resource
       metal: remainder('metal'),
       minerals: remainder('minerals'),
       gas: remainder('gas'),
-      energy: remainder('energy'),
+      // Kept in the persisted shape for backwards compatibility, but energy
+      // is static until a dedicated energy-income mechanic is introduced.
+      energy: 0,
     },
   };
 }
@@ -106,14 +107,14 @@ export function reconcileResourceIncome(
     metal: finiteNonNegative(income.metal),
     minerals: finiteNonNegative(income.minerals),
     gas: finiteNonNegative(income.gas),
-    energy: finiteNonNegative(getBuildingEnergyIncomePerHour(planet.buildings, state.science.levels)),
   };
   const capacities = getStorageCapacities(planet.buildings);
   const rawCredits = {
     metal: hourly.metal * elapsedHours + clock.remainder.metal,
     minerals: hourly.minerals * elapsedHours + clock.remainder.minerals,
     gas: hourly.gas * elapsedHours + clock.remainder.gas,
-    energy: hourly.energy * elapsedHours + clock.remainder.energy,
+    // Energy remains spendable, but is not passively accrued by the runtime.
+    energy: 0,
   };
   const wholeCredits = Object.fromEntries(
     RESOURCE_KEYS.map((key) => [key, Number.isFinite(rawCredits[key]) ? Math.floor(Math.max(0, rawCredits[key])) : 0]),

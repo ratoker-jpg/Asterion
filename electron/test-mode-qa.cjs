@@ -327,11 +327,11 @@ async function runViewport(width, height) {
       metal: 0,
       minerals: 0,
       gas: 0,
-      energy: 0,
+      energy: 999_999_999,
       resourceClock: { lastReconciledAt: Date.now() - 3_600_000, remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } },
     });
     const accruedResources = await readQaState(win);
-    if (!(accruedResources.testResources.metal > 0) || !(accruedResources.testResources.minerals > 0) || !(accruedResources.testResources.gas > 0) || !(accruedResources.testResources.energy >= 0) || !accruedResources.resourceClock || accruedResources.resourceClock.lastReconciledAt <= Date.now() - 3_600_000) {
+    if (!(accruedResources.testResources.metal > 0) || !(accruedResources.testResources.minerals > 0) || !(accruedResources.testResources.gas > 0) || accruedResources.testResources.energy !== 999_999_999 || !accruedResources.resourceClock || accruedResources.resourceClock.lastReconciledAt <= Date.now() - 3_600_000) {
       throw new Error(`${label}: passive resource accrual did not reconcile one scaled interval ${JSON.stringify(accruedResources)}`);
     }
     await seedTestRuntime(win, {

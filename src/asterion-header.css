@@ -265,7 +265,7 @@
 .asterion-header__resource-fill--warning i{background:#FFE15A;box-shadow:0 0 8px rgba(255,225,90,.5)}
 .asterion-header__resource-fill--danger i{background:#FFB347;box-shadow:0 0 8px rgba(255,179,71,.5)}
 .asterion-header__resource-fill--critical i{background:#F0445E;box-shadow:0 0 9px rgba(240,68,94,.54)}
-.asterion-header__resource.is-pulsing .asterion-header__resource-fill i{animation:asterion-header-resource-critical-pulse 1.25s ease-in-out infinite}
+.asterion-header__resource.is-pulsing .asterion-header__resource-fill i{animation:asterion-header-resource-critical-pulse 1.1s ease-in-out infinite;will-change:opacity,filter,box-shadow}
 .asterion-header__resource-tooltip{
   position:absolute;
   z-index:300;
@@ -490,7 +490,10 @@
 
 @keyframes asterion-header-orbit{to{transform:rotate(360deg)}}
 @keyframes asterion-header-planet-float{50%{transform:translateY(-2px) scale(1.012)}}
-@keyframes asterion-header-resource-critical-pulse{50%{filter:brightness(1.2);box-shadow:0 0 15px rgba(240,68,94,.92)}}
+@keyframes asterion-header-resource-critical-pulse{
+  0%,100%{opacity:1;filter:brightness(1);box-shadow:0 0 9px rgba(240,68,94,.54)}
+  50%{opacity:.62;filter:brightness(1.3);box-shadow:0 0 18px rgba(240,68,94,.94)}
+}
 
 @media (prefers-reduced-motion:reduce){
   .asterion-header__planet-orbit::after,

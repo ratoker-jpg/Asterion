@@ -27,7 +27,7 @@ const TEST_RESOURCE_CAPACITIES = {
   minerals: 300_100_000,
   gas: 189_382_930,
 };
-const REPRESENTATIVE_RATIOS = [10, 37, 60, 75, 85, 95];
+const REPRESENTATIVE_RATIOS = [10, 37, 60, 75, 85, 86, 95];
 const EXPECTED_RESOURCE_COLORS = {
   normal: 'rgb(53,229,138)',
   positive: 'rgb(139,227,107)',
@@ -111,6 +111,12 @@ async function readHeaderContract(win) {
         fillColor: element.querySelector('.asterion-header__resource-fill i')
           ? getComputedStyle(element.querySelector('.asterion-header__resource-fill i')).backgroundColor
           : null,
+        fillAnimationName: element.querySelector('.asterion-header__resource-fill i')
+          ? getComputedStyle(element.querySelector('.asterion-header__resource-fill i')).animationName
+          : null,
+        fillAnimationDuration: element.querySelector('.asterion-header__resource-fill i')
+          ? getComputedStyle(element.querySelector('.asterion-header__resource-fill i')).animationDuration
+          : null,
       })),
       resourceRail: rect(document.querySelector('[data-qa-resource-rail]')),
       resourceRects: Array.from(document.querySelectorAll('[data-qa-resource-chip]')).map((element) => rect(element)),
@@ -146,6 +152,12 @@ async function readResourceContract(win) {
     fill: Boolean(element.querySelector('.asterion-header__resource-fill')),
     color: element.querySelector('.asterion-header__resource-fill i')
       ? getComputedStyle(element.querySelector('.asterion-header__resource-fill i')).backgroundColor
+      : null,
+    animationName: element.querySelector('.asterion-header__resource-fill i')
+      ? getComputedStyle(element.querySelector('.asterion-header__resource-fill i')).animationName
+      : null,
+    animationDuration: element.querySelector('.asterion-header__resource-fill i')
+      ? getComputedStyle(element.querySelector('.asterion-header__resource-fill i')).animationDuration
       : null,
   })))()`);
 }
@@ -232,8 +244,9 @@ async function assertRepresentativeRatios(win, file, label) {
         const expectedTone = expectedResourceTone(ratio);
         const normalizedColor = item?.color?.replace(/\s+/g, '') ?? null;
         const expectedPulse = ratio > 85;
-        if (!item || Math.abs(item.ratio - expectedRatio) > 0.0001 || item.tone !== expectedTone || item.pulse !== expectedPulse || !item.fill || normalizedColor !== EXPECTED_RESOURCE_COLORS[expectedTone]) {
-          throw new Error(`${label}: representative ${ratio}% ${kind} contract failed: ${JSON.stringify({ item, expectedRatio, expectedTone, expectedPulse })}`);
+        const hasPulseAnimation = item?.animationName === 'asterion-header-resource-critical-pulse' && item.animationDuration !== '0s';
+        if (!item || Math.abs(item.ratio - expectedRatio) > 0.0001 || item.tone !== expectedTone || item.pulse !== expectedPulse || item.pulse !== hasPulseAnimation || !item.fill || normalizedColor !== EXPECTED_RESOURCE_COLORS[expectedTone]) {
+          throw new Error(`${label}: representative ${ratio}% ${kind} contract failed: ${JSON.stringify({ item, expectedRatio, expectedTone, expectedPulse, hasPulseAnimation })}`);
         }
       }
 
@@ -431,7 +444,8 @@ function assertContract(label, header, tooltip, planetMenu, planetMenuFocus, the
       critical: 'rgb(240,68,94)',
     };
     const normalizedColor = item.fillColor?.replace(/\s+/g, '') ?? null;
-    if (item.fill !== shouldHaveFill || item.pulse !== shouldPulse || (item.fill && item.fillHeight !== '7px') || (item.fill && normalizedColor !== expectedColors[item.tone]) || (item.kind === 'population' && item.value.includes('/'))) {
+    const hasPulseAnimation = item.pulse && item.fillAnimationName === 'asterion-header-resource-critical-pulse' && item.fillAnimationDuration !== '0s';
+    if (item.fill !== shouldHaveFill || item.pulse !== shouldPulse || item.pulse !== hasPulseAnimation || (item.fill && item.fillHeight !== '7px') || (item.fill && normalizedColor !== expectedColors[item.tone]) || (item.kind === 'population' && item.value.includes('/'))) {
       throw new Error(`${label}: resource presentation contract failed: ${JSON.stringify(item)}`);
     }
   }

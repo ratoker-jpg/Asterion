@@ -190,7 +190,9 @@ function migrateResourceClock(value: unknown, now: number): ResourceClock {
       metal: remainder('metal'),
       minerals: remainder('minerals'),
       gas: remainder('gas'),
-      energy: remainder('energy'),
+      // Legacy clock field retained for save compatibility; energy has no
+      // passive runtime income yet.
+      energy: 0,
     },
   };
 }
