@@ -6,8 +6,10 @@ import {
 } from '../domain/fleet/runtime.ts';
 import type { PlanetId, SaveState } from './contracts.ts';
 import { createPersistenceFacade, type PersistenceOptions } from './persistence.ts';
+import type { CombatFactionId } from '../domain/combat/factions.ts';
 
 export type FleetSnapshot = {
+  factionId: CombatFactionId;
   fleet: OwnedFleetState;
   hangarLevel: number;
   shipyardLevel: number;
@@ -17,6 +19,7 @@ export type FleetSnapshot = {
 export type FleetSummary = ReturnType<typeof getFleetSummary>;
 
 export type FleetBuildBudget = {
+  factionId: CombatFactionId;
   metal: number;
   minerals: number;
   gas: number;
@@ -36,6 +39,7 @@ function safeLevel(value: unknown, fallback: number): number {
 export function getFleetSnapshot(state: SaveState, planetId: PlanetId = state.currentPlanetId): FleetSnapshot {
   const planet = state.planets[planetId];
   return {
+    factionId: state.profile.factionId,
     fleet: resolveSavedFleetState(planet?.fleet),
     hangarLevel: safeLevel(planet?.buildings.hangar, 1),
     shipyardLevel: safeLevel(planet?.buildings.shipyard, 0),
@@ -45,11 +49,11 @@ export function getFleetSnapshot(state: SaveState, planetId: PlanetId = state.cu
 
 export function getFleetSummaryForState(state: SaveState, planetId: PlanetId = state.currentPlanetId): FleetSummary {
   const snapshot = getFleetSnapshot(state, planetId);
-  return getFleetSummary(snapshot.fleet, snapshot.hangarLevel);
+  return getFleetSummary(snapshot.fleet, snapshot.hangarLevel, snapshot.factionId);
 }
 
 export function getFleetSummaryForSnapshot(snapshot: FleetSnapshot): FleetSummary {
-  return getFleetSummary(snapshot.fleet, snapshot.hangarLevel);
+  return getFleetSummary(snapshot.fleet, snapshot.hangarLevel, snapshot.factionId);
 }
 
 export function readFleetSnapshot(options: PersistenceOptions = {}): FleetSnapshot {
@@ -59,8 +63,9 @@ export function readFleetSnapshot(options: PersistenceOptions = {}): FleetSnapsh
 
 export function getFleetBuildBudget(state: SaveState, planetId: PlanetId = state.currentPlanetId): FleetBuildBudget {
   const snapshot = getFleetSnapshot(state, planetId);
-  const summary = getFleetSummary(snapshot.fleet, snapshot.hangarLevel);
+  const summary = getFleetSummary(snapshot.fleet, snapshot.hangarLevel, snapshot.factionId);
   return {
+    factionId: snapshot.factionId,
     metal: state.metal,
     minerals: state.minerals,
     gas: state.gas,
@@ -81,6 +86,7 @@ export function readFleetBuildBudget(options: PersistenceOptions = {}): FleetBui
 
 export function createDefaultFleetSnapshot(): FleetSnapshot {
   return {
+    factionId: 'aegis',
     fleet: createCanonicalStartingFleet(),
     hangarLevel: 1,
     shipyardLevel: 0,

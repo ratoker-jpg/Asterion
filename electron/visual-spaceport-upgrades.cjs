@@ -12,11 +12,11 @@ const SAVE_KEY = 'asterion.vertical-slice.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const EXPECTED_UPGRADE_COST_BASES = {
   transporter: { metal: 1_000, minerals: 0, gas: 0 },
-  corsair: { metal: 500, minerals: 250, gas: 0 },
+  corsair: { metal: 2_000, minerals: 2_000, gas: 0 },
 };
 const EXPECTED_UPGRADE_BASE_DURATIONS = {
-  transporter: 9_000_000,
-  corsair: 900_000,
+  transporter: 180_000,
+  corsair: 138_000,
 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -175,10 +175,16 @@ function assetName(value) {
 function assertUpgradeCosts(snapshot, label, shipId, fromLevel = 0) {
   const base = EXPECTED_UPGRADE_COST_BASES[shipId];
   if (!base) throw new Error(`${label}: missing expected cost base for ${shipId}`);
+  const exactCommanderRows = [
+    { metal: 2_000, minerals: 2_000, gas: 0 },
+    { metal: 2_747, minerals: 2_747, gas: 0 },
+    { metal: 3_761, minerals: 3_761, gas: 0 },
+  ];
+  const exact = shipId === 'corsair' ? exactCommanderRows[fromLevel] : null;
   const expected = [
-    { resource: 'metal', kind: 'metal', assetBase: 'metal', value: String(base.metal * (2 ** fromLevel)) },
-    { resource: 'minerals', kind: 'minerals', assetBase: 'mineral', value: String(base.minerals * (2 ** fromLevel)) },
-    { resource: 'gas', kind: 'gas', assetBase: 'gas', value: String(base.gas * (2 ** fromLevel)) },
+    { resource: 'metal', kind: 'metal', assetBase: 'metal', value: String(exact?.metal ?? base.metal * (2 ** fromLevel)) },
+    { resource: 'minerals', kind: 'minerals', assetBase: 'mineral', value: String(exact?.minerals ?? base.minerals * (2 ** fromLevel)) },
+    ...(shipId === 'corsair' ? [] : [{ resource: 'gas', kind: 'gas', assetBase: 'gas', value: String(base.gas * (2 ** fromLevel)) }]),
   ];
   if (!snapshot || snapshot.length !== expected.length) {
     throw new Error(`${label}: upgrade cost chip count mismatch ${JSON.stringify(snapshot)}`);
@@ -457,6 +463,17 @@ async function verifyFlow(win, directory, label) {
   await click(win, '[data-qa-spaceport-tab="commanders"]');
   assertUpgradeCosts(await readUpgradeCosts(win, 'corsair'), `${label}/commanders-standard`, 'corsair');
   assertUpgradeDuration(await readUpgradeDuration(win, 'corsair'), `${label}/commanders-standard`, 'corsair');
+  const commanderGasPresentation = await win.webContents.executeJavaScript(`(() => {
+    const row = document.querySelector('[data-qa-spaceport-card="corsair"]');
+    return {
+      hasGasChip: Boolean(row?.querySelector('[data-resource="gas"]')),
+      hasUnspecifiedNote: Boolean(row?.querySelector('[data-qa-spaceport-gas-unspecified]')),
+      text: row?.textContent?.replace(/\\s+/g, ' ').trim() ?? '',
+    };
+  })()`);
+  if (commanderGasPresentation.hasGasChip || !commanderGasPresentation.hasUnspecifiedNote || !commanderGasPresentation.text.includes('Корсар')) {
+    throw new Error(`${label}/commanders-standard: commander gas/name presentation mismatch ${JSON.stringify(commanderGasPresentation)}`);
+  }
   assertLayout(await measureLayout(win), `${label}/commanders-standard`);
   await enqueueThree(win, 'corsair');
   assertLayout(await measureLayout(win), `${label}/commanders-repeated`);
@@ -501,6 +518,7 @@ async function verifyFlow(win, directory, label) {
       'concrete-red-requirement-blockers',
       'ordinary-repeated-queue-0-1-2-3-visual-state',
       'commander-repeated-queue-0-1-2-3-visual-state',
+      'commander-source-gas-omitted-and-explicitly-labelled',
       'ordinary-max-progress-10',
       'commander-max-progress-40',
       'document-height-stable',

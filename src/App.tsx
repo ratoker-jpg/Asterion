@@ -98,6 +98,7 @@ import {
   applyProductionBots as applyProductionBotsAction,
   cancelBuilding as cancelBuildingAction,
   collectRecycling as collectRecyclingAction,
+  cancelSpaceportUpgrade as cancelSpaceportUpgradeAction,
   destroyBuilding as destroyBuildingAction,
   executeTradeAction,
   previewBuilding,
@@ -322,12 +323,12 @@ export function App() {
           .join(', ');
         setNotice(`Наука: исследование завершено — ${names}.`);
       } else if (event.kind === 'building') {
-        setNotice(`${result.state.planets['helion-01'].name}: ${getBuildingDefinition(event.assetRole).name} завершено.`);
+        setNotice(`${result.state.planets['helion-01'].name}: ${getBuildingDefinition(event.assetRole, result.state.profile.factionId).name} завершено.`);
       } else if (event.kind === 'recycling') {
         setNotice('Результат переработки автоматически зачислен');
       } else if (event.kind === 'spaceport') {
         const names = event.tasks
-          .map((task) => getSpaceportUpgradeEntity(task.track, task.shipId)?.name ?? task.shipId)
+          .map((task) => getSpaceportUpgradeEntity(task.track, task.shipId, result.state.profile.factionId)?.name ?? task.shipId)
           .join(', ');
         setNotice(`Космодром: улучшение завершено — ${names}.`);
       }
@@ -347,7 +348,9 @@ export function App() {
   );
   const currentQueue = state.queues['helion-01'];
   const currentActiveQueueItem = currentQueue[0] ?? null;
-  const currentQueueDefinition = currentActiveQueueItem ? getBuildingDefinition(currentActiveQueueItem.assetRole) : null;
+  const currentQueueDefinition = currentActiveQueueItem
+    ? getBuildingDefinition(currentActiveQueueItem.assetRole, state.profile.factionId)
+    : null;
   const resourceWallet: ResourceWallet = {
     metal: state.metal,
     minerals: state.minerals,
@@ -384,7 +387,7 @@ export function App() {
     ? getBuildingInteriorTarget(buildingInterior.buildingRole)
     : null;
   const buildingInteriorDefinition = buildingInterior
-    ? getBuildingDefinition(buildingInterior.buildingRole)
+    ? getBuildingDefinition(buildingInterior.buildingRole, state.profile.factionId)
     : null;
 
   const editingPlanet = editingPlanetId ? currentPlanet : null;
@@ -542,6 +545,29 @@ export function App() {
     stateRef.current = result.state;
     setState(result.state);
     setNotice(`Космодром: ${result.entityName} добавлен в очередь улучшений.`);
+    return true;
+  };
+
+  const cancelSpaceportUpgrade = (taskId: string) => {
+    const canceledAt = Date.now();
+    const result = cancelSpaceportUpgradeAction(stateRef.current, {
+      planetId: 'helion-01',
+      now: canceledAt,
+      mode: RUNTIME_MODE,
+      testTimeScale,
+      rng: Math.random,
+    }, taskId);
+    stateRef.current = result.state;
+    setState(result.state);
+    if (!result.ok) {
+      setNotice(result.reason ?? 'Улучшение недоступно для отмены.');
+      return false;
+    }
+    const cascadedCount = Math.max(0, result.transition.canceledTasks.length - 1);
+    const refundLabel = result.transition.refundPercents.length > 1
+      ? `Возврат рассчитан отдельно для ${result.transition.refundPercents.length} заданий в диапазоне 60–80%.`
+      : `Возвращено ${result.transition.refundPercent}% сохранённой стоимости.`;
+    setNotice(`Космодром: улучшение отменено. ${refundLabel}${cascadedCount > 0 ? ` Каскадно отменено ещё ${cascadedCount} зависимых заданий.` : ''}`);
     return true;
   };
 
@@ -853,7 +879,7 @@ export function App() {
          />
 
         <section className={`workspace workspace-v4 workspace--${workspaceKind}`}>
-          {buildingInterior && buildingInteriorTarget && buildingInteriorTarget.kind !== 'host' && buildingInteriorDefinition ? (
+          {buildingInterior && buildingInteriorTarget && buildingInteriorTarget.kind !== 'host' && buildingInteriorTarget.kind !== 'fleet-construction' && buildingInteriorDefinition ? (
             <button
               className="building-interior-return-overlay"
               type="button"
@@ -870,6 +896,7 @@ export function App() {
               context={buildingInterior}
               planetName={currentPlanetName}
               moduleTitle={buildingInteriorTarget.moduleTitle}
+              factionId={state.profile.factionId}
               buildings={currentPlanetState.buildings}
               scienceLevels={state.science.levels}
               productionBots={currentPlanetState.productionBots}
@@ -880,11 +907,13 @@ export function App() {
               spaceportWallet={spaceportWallet}
               resourceRatingPoints={state.rating.resourcePoints}
               now={now}
+              testTimeScale={testTimeScale}
               onProductionBotsApply={applyProductionBots}
               onRecyclingStart={startRecycling}
               onRecyclingCollect={collectRecycling}
               onTrade={tradeResources}
               onSpaceportUpgrade={startSpaceportUpgrade}
+              onSpaceportCancel={cancelSpaceportUpgrade}
               onBack={returnToBuilding}
             />
           ) : activeRoute === 'universe' ? (

@@ -1,13 +1,16 @@
 import {
   COMMANDER_COMBAT_CATALOG,
-  SHIP_COMBAT_CATALOG,
   type CatalogEntity,
 } from '../combat/catalog.ts';
+import { isCommanderId, type CommanderId } from '../combat/commanders.ts';
+import { getFactionShipCatalog } from '../combat/faction-catalog.ts';
+import type { CombatFactionId } from '../combat/factions.ts';
 import { SCIENCE_CATALOG } from '../science/catalog.ts';
 import type { ScienceId } from '../science/types.ts';
 import type { BuildingLevels, BuildingRole, ScienceLevels } from './resource-zone.ts';
 import { scaleRuntimeDuration, type RuntimeMode } from '../runtime/mode.ts';
-import { SPACEPORT_UPGRADE_BALANCE_V1 } from './spaceport-upgrade-balance-v1.ts';
+import { getFactionSpaceportUpgradeBalance } from './spaceport-upgrade-balance-v1.ts';
+import { getCommanderSpaceportUpgradeBalance } from './commander-upgrade-balance-v1.ts';
 
 export const SPACEPORT_UPGRADE_QUEUE_CAPACITY = 3;
 export const PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS = 15 * 60 * 1000;
@@ -15,14 +18,12 @@ export const SPACEPORT_UPGRADE_MAX_LEVEL_BY_TRACK = Object.freeze({
   ships: 10,
   commanders: 40,
 } as const);
-export const PROTOTYPE_SPACEPORT_UPGRADE_COST = Object.freeze({
-  metal: 500,
-  minerals: 250,
-  gas: 0,
-});
-
 export const SPACEPORT_UPGRADE_PROTOTYPE_NOTE =
-  'BALANCE V1: стоимость и время обычных кораблей взяты из Factory upgrades для всех трёх рас. Космодром ускоряет новое улучшение на 5% за уровень; командирские корабли пока используют прототипные значения.';
+  'BALANCE V1: обычные корабли используют Factory upgrades и Time Rebalanced, а командирские корабли — все 13 таблиц Ability upgrades из Time Rebalanced. Космодром ускоряет только новое улучшение на 5% за уровень; уже созданные задания сохраняют снимок времени.';
+
+export const SPACEPORT_CANCEL_REFUND_MIN_PERCENT = 60;
+export const SPACEPORT_CANCEL_REFUND_MAX_PERCENT = 80;
+export const SPACEPORT_CANCEL_REFUND_SOURCE_URL = 'https://github.com/ratoker-jpg/Nemexia_auto_v2/blob/main/saved_pages/%D0%BD%D0%B0%D1%83%D0%BA%D0%B0/page_2026-09-05_22-49-40.html';
 
 export type SpaceportUpgradeTrack = 'ships' | 'commanders';
 export type SpaceportUpgradeStatus =
@@ -38,15 +39,7 @@ export type SpaceportUpgradeWallet = {
   gas: number;
 };
 
-export function calculateSpaceportUpgradeCost(fromLevel: number): SpaceportUpgradeWallet {
-  const safeFromLevel = Number.isFinite(fromLevel) ? Math.max(0, Math.floor(fromLevel)) : 0;
-  const multiplier = 2 ** safeFromLevel;
-  return {
-    metal: PROTOTYPE_SPACEPORT_UPGRADE_COST.metal * multiplier,
-    minerals: PROTOTYPE_SPACEPORT_UPGRADE_COST.minerals * multiplier,
-    gas: PROTOTYPE_SPACEPORT_UPGRADE_COST.gas * multiplier,
-  };
-}
+export type SpaceportUpgradeCostSource = 'faction-factory-upgrades' | 'commander-ability-upgrades' | 'legacy-unknown';
 
 export type SpaceportUpgradeTask = {
   id: string;
@@ -58,6 +51,10 @@ export type SpaceportUpgradeTask = {
   finishAt: number;
   spaceportLevelAtStart: number;
   effectiveDurationMs: number;
+  /** Paid cost snapshot. Old tasks without this field are not refundable. */
+  cost: SpaceportUpgradeWallet;
+  costSource: SpaceportUpgradeCostSource;
+  refundEligible?: boolean;
 };
 
 export type SpaceportUpgradeState = {
@@ -72,6 +69,7 @@ export type SpaceportRequirementState = {
   requiredLevel: number;
   currentLevel: number | null;
   met: boolean;
+  valueKind: 'level' | 'quantity' | 'unknown';
   buildingRole?: BuildingRole;
   scienceId?: ScienceId;
 };
@@ -88,6 +86,8 @@ export type SpaceportUpgradePreview = {
   queuedCount: number;
   requirements: readonly SpaceportRequirementState[];
   cost: SpaceportUpgradeWallet;
+  costSource: Exclude<SpaceportUpgradeCostSource, 'legacy-unknown'>;
+  gasSpecified: boolean;
   baseDurationMs: number;
   effectiveDurationMs: number;
 };
@@ -98,8 +98,21 @@ export type SpaceportUpgradeContext = {
   buildings: BuildingLevels;
   scienceLevels: ScienceLevels;
   spaceportLevel: number;
+  factionId?: CombatFactionId;
   mode?: RuntimeMode;
   testTimeScale?: number;
+};
+
+export type SpaceportCancellationTransition = {
+  ok: boolean;
+  state: SpaceportUpgradeState;
+  wallet: SpaceportUpgradeWallet;
+  canceled: SpaceportUpgradeTask | null;
+  canceledTasks: SpaceportUpgradeTask[];
+  refund: SpaceportUpgradeWallet | null;
+  refundPercent: number | null;
+  refundPercents: number[];
+  reason: string | null;
 };
 
 export type SpaceportUpgradeTransition = {
@@ -122,13 +135,6 @@ const EXCLUDED_SHIP_UPGRADE_IDS = new Set<string>([
   'colonizer',
   'recycler',
 ]);
-
-const SHIP_UPGRADE_CATALOG = SHIP_COMBAT_CATALOG.filter((entity) => !EXCLUDED_SHIP_UPGRADE_IDS.has(entity.id));
-
-const CATALOG_BY_TRACK: Readonly<Record<SpaceportUpgradeTrack, readonly CatalogEntity[]>> = {
-  ships: SHIP_UPGRADE_CATALOG,
-  commanders: COMMANDER_COMBAT_CATALOG,
-};
 
 const commanderIds = new Set<string>(COMMANDER_COMBAT_CATALOG.map((entity) => entity.id));
 
@@ -162,6 +168,22 @@ function safeTimestamp(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
+function hasCompleteSpaceportCost(value: unknown): value is SpaceportUpgradeWallet {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const cost = value as Record<string, unknown>;
+  return (['metal', 'minerals', 'gas'] as const).every((key) => (
+    typeof cost[key] === 'number' && Number.isFinite(cost[key]) && cost[key] >= 0
+  ));
+}
+
+function spaceportCostSource(value: unknown): SpaceportUpgradeCostSource {
+  return value === 'faction-factory-upgrades'
+    || value === 'commander-ability-upgrades'
+    || value === 'legacy-unknown'
+    ? value
+    : 'legacy-unknown';
+}
+
 function trackForEntityId(id: string): SpaceportUpgradeTrack {
   return commanderIds.has(id) ? 'commanders' : 'ships';
 }
@@ -180,22 +202,45 @@ function withQueue(
     : { ...state, commanderQueue: queue };
 }
 
-function getSpaceportUpgradeBalance(track: SpaceportUpgradeTrack, shipId: string, fromLevel: number) {
-  if (track !== 'ships') return null;
-  const rows = SPACEPORT_UPGRADE_BALANCE_V1[shipId as keyof typeof SPACEPORT_UPGRADE_BALANCE_V1];
-  return rows?.[fromLevel] ?? null;
+function getSpaceportUpgradeBalance(
+  track: SpaceportUpgradeTrack,
+  shipId: string,
+  fromLevel: number,
+  factionId: CombatFactionId,
+): { cost: SpaceportUpgradeWallet; durationMs: number; costSource: Exclude<SpaceportUpgradeCostSource, 'legacy-unknown'>; gasSpecified: boolean } | null {
+  if (track === 'ships') {
+    const balance = getFactionSpaceportUpgradeBalance(factionId, shipId, fromLevel);
+    return balance ? { ...balance, costSource: 'faction-factory-upgrades', gasSpecified: true } : null;
+  }
+  if (!isCommanderId(shipId)) return null;
+  const balance = getCommanderSpaceportUpgradeBalance(shipId as CommanderId, fromLevel);
+  return balance
+    ? { cost: { ...balance.cost }, durationMs: balance.durationMs, costSource: 'commander-ability-upgrades', gasSpecified: false }
+    : null;
 }
 
-export function getSpaceportUpgradeCatalog(track: SpaceportUpgradeTrack): readonly CatalogEntity[] {
-  return CATALOG_BY_TRACK[track];
+function getCatalog(track: SpaceportUpgradeTrack, factionId: CombatFactionId): readonly CatalogEntity[] {
+  if (track === 'commanders') return COMMANDER_COMBAT_CATALOG;
+  return getFactionShipCatalog(factionId).filter((entity) => !EXCLUDED_SHIP_UPGRADE_IDS.has(entity.id));
 }
 
-export function getSpaceportUpgradeEntity(track: SpaceportUpgradeTrack, shipId: string): CatalogEntity | null {
-  return CATALOG_BY_TRACK[track].find((entity) => entity.id === shipId) ?? null;
+export function getSpaceportUpgradeCatalog(
+  track: SpaceportUpgradeTrack,
+  factionId: CombatFactionId = 'aegis',
+): readonly CatalogEntity[] {
+  return getCatalog(track, factionId);
+}
+
+export function getSpaceportUpgradeEntity(
+  track: SpaceportUpgradeTrack,
+  shipId: string,
+  factionId: CombatFactionId = 'aegis',
+): CatalogEntity | null {
+  return getCatalog(track, factionId).find((entity) => entity.id === shipId) ?? null;
 }
 
 export function createDefaultSpaceportUpgradeState(): SpaceportUpgradeState {
-  const ids = [...SHIP_COMBAT_CATALOG, ...COMMANDER_COMBAT_CATALOG].map((entity) => entity.id);
+  const ids = [...getFactionShipCatalog('aegis'), ...COMMANDER_COMBAT_CATALOG].map((entity) => entity.id);
   return {
     shipLevels: Object.fromEntries(ids.map((id) => [id, 0])),
     shipQueue: [],
@@ -221,7 +266,7 @@ function parseCatalogRequirement(
   buildings: BuildingLevels,
   scienceLevels: ScienceLevels,
 ): SpaceportRequirementState | null {
-  const match = raw.match(/^(.+?)\s*[·•]\s*уровень\s*(\d+)\s*$/iu);
+  const match = raw.match(/^(.+?)\s*[·•]\s*(уровень|количество)\s*(\d+)\s*$/iu);
   if (!match) {
     return {
       kind: 'unresolved-catalog-requirement',
@@ -229,11 +274,27 @@ function parseCatalogRequirement(
       requiredLevel: 1,
       currentLevel: null,
       met: false,
+      valueKind: 'unknown',
     };
   }
 
   const label = match[1].trim();
-  const requiredLevel = Math.max(0, Number(match[2]));
+  const valueKind = match[2].toLocaleLowerCase('ru-RU') === 'количество' ? 'quantity' : 'level';
+  const requiredLevel = Math.max(0, Number(match[3]));
+  if (valueKind === 'quantity') {
+    // TODO(phase6): connect Veyra sacrifice/quantity requirements to the
+    // future fleet-production inventory. Until that model exists, keep the
+    // requirement explicitly unresolved instead of inventing a current count.
+    return {
+      kind: 'unresolved-catalog-requirement',
+      label,
+      requiredLevel,
+      currentLevel: null,
+      met: false,
+      valueKind,
+    };
+  }
+
   if (normalizeRequirementName(label) === normalizeRequirementName('Верфь')) {
     const currentLevel = buildings.shipyard ?? 0;
     return {
@@ -242,6 +303,7 @@ function parseCatalogRequirement(
       requiredLevel,
       currentLevel,
       met: currentLevel >= requiredLevel,
+      valueKind,
       buildingRole: 'shipyard',
     };
   }
@@ -254,6 +316,7 @@ function parseCatalogRequirement(
       requiredLevel,
       currentLevel: null,
       met: false,
+      valueKind,
     };
   }
 
@@ -264,6 +327,7 @@ function parseCatalogRequirement(
     requiredLevel,
     currentLevel,
     met: currentLevel >= requiredLevel,
+    valueKind,
     scienceId: science.id,
   };
 }
@@ -273,8 +337,9 @@ export function evaluateSpaceportUpgradeRequirements(
   shipId: string,
   buildings: BuildingLevels,
   scienceLevels: ScienceLevels,
+  factionId: CombatFactionId = 'aegis',
 ): SpaceportRequirementState[] {
-  const entity = getSpaceportUpgradeEntity(track, shipId);
+  const entity = getSpaceportUpgradeEntity(track, shipId, factionId);
   if (!entity) return [];
 
   const parsed = entity.construction.requirements
@@ -290,6 +355,7 @@ export function evaluateSpaceportUpgradeRequirements(
       requiredLevel: entity.construction.requiredShipyardLevel,
       currentLevel,
       met: currentLevel >= entity.construction.requiredShipyardLevel,
+      valueKind: 'level',
       buildingRole: 'shipyard',
     });
   }
@@ -298,10 +364,20 @@ export function evaluateSpaceportUpgradeRequirements(
 }
 
 export function formatSpaceportRequirement(requirement: SpaceportRequirementState): string {
+  const valueLabel = requirement.valueKind === 'quantity'
+    ? 'количество'
+    : requirement.valueKind === 'unknown'
+      ? 'значение'
+      : 'уровень';
   if (requirement.currentLevel == null) {
-    return `${requirement.label} — уровень ${requirement.requiredLevel}; текущий уровень не подключён к общей science-модели`;
+    const modelLabel = requirement.valueKind === 'quantity'
+      ? 'общей модели состава флота'
+      : requirement.valueKind === 'unknown'
+        ? 'общей модели требований'
+        : 'общей science-модели';
+    return `${requirement.label} — ${valueLabel} ${requirement.requiredLevel}; текущее ${valueLabel} не подключено к ${modelLabel}`;
   }
-  return `${requirement.label} — уровень ${requirement.requiredLevel}; сейчас ${requirement.currentLevel}`;
+  return `${requirement.label} — ${valueLabel} ${requirement.requiredLevel}; сейчас ${requirement.currentLevel}`;
 }
 
 export function previewSpaceportUpgrade(
@@ -309,7 +385,7 @@ export function previewSpaceportUpgrade(
   track: SpaceportUpgradeTrack,
   shipId: string,
 ): SpaceportUpgradePreview {
-  const entity = getSpaceportUpgradeEntity(track, shipId);
+  const entity = getSpaceportUpgradeEntity(track, shipId, context.factionId);
   if (!entity) throw new Error(`Unknown ${track} upgrade target: ${shipId}`);
 
   const maxLevel = getSpaceportUpgradeMaxLevel(track);
@@ -317,10 +393,23 @@ export function previewSpaceportUpgrade(
   const currentLevel = safeTrackLevel(context.state.shipLevels[shipId], track);
   const queuedCount = queue.filter((task) => task.shipId === shipId).length;
   const projectedLevel = Math.min(maxLevel, currentLevel + queuedCount);
-  const requirements = evaluateSpaceportUpgradeRequirements(track, shipId, context.buildings, context.scienceLevels);
-  const balance = getSpaceportUpgradeBalance(track, shipId, projectedLevel);
-  const cost = balance ? { ...balance.cost } : calculateSpaceportUpgradeCost(projectedLevel);
-  const baseDurationMs = balance?.durationMs ?? PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS;
+  const requirements = evaluateSpaceportUpgradeRequirements(
+    track,
+    shipId,
+    context.buildings,
+    context.scienceLevels,
+    context.factionId,
+  );
+  // A max-level preview still needs a stable display payload, but there is no
+  // L -> L+1 row after the cap. Reuse the last real row for display only; it
+  // never becomes enqueueable because the max-level branch below returns first.
+  const balanceLevel = Math.min(projectedLevel, Math.max(0, maxLevel - 1));
+  const balance = getSpaceportUpgradeBalance(track, shipId, balanceLevel, context.factionId ?? 'aegis');
+  if (!balance) {
+    throw new Error(`Missing ${track} upgrade balance for ${shipId} at level ${balanceLevel + 1}`);
+  }
+  const { cost, costSource, gasSpecified } = balance;
+  const baseDurationMs = balance.durationMs;
   const effectiveDurationMs = scaleRuntimeDuration(calculateSpaceportEffectiveDuration(
     baseDurationMs,
     context.spaceportLevel,
@@ -334,6 +423,8 @@ export function previewSpaceportUpgrade(
     queuedCount,
     requirements,
     cost,
+    costSource,
+    gasSpecified,
     baseDurationMs,
     effectiveDurationMs,
   };
@@ -382,7 +473,7 @@ export function enqueueSpaceportUpgrade(
   now: number,
   taskId: string,
 ): SpaceportUpgradeTransition {
-  if (!getSpaceportUpgradeEntity(track, shipId)) {
+  if (!getSpaceportUpgradeEntity(track, shipId, context.factionId)) {
     return {
       ok: false,
       state: context.state,
@@ -417,6 +508,9 @@ export function enqueueSpaceportUpgrade(
     finishAt: startedAt + effectiveDurationMs,
     spaceportLevelAtStart: safeSpaceportLevel(context.spaceportLevel),
     effectiveDurationMs,
+    cost: { ...preview.cost },
+    costSource: preview.costSource,
+    refundEligible: true,
   };
   const wallet: SpaceportUpgradeWallet = {
     metal: context.wallet.metal - preview.cost.metal,
@@ -429,6 +523,158 @@ export function enqueueSpaceportUpgrade(
     state: withQueue(context.state, track, [...queue, task]),
     wallet,
     task,
+    reason: null,
+  };
+}
+
+export function selectSpaceportCancelRefundPercent(rng: () => number = Math.random): number {
+  const sampled = rng();
+  const normalized = Number.isFinite(sampled) ? Math.min(0.999_999_999, Math.max(0, sampled)) : 0;
+  return SPACEPORT_CANCEL_REFUND_MIN_PERCENT + Math.floor(
+    normalized * (SPACEPORT_CANCEL_REFUND_MAX_PERCENT - SPACEPORT_CANCEL_REFUND_MIN_PERCENT + 1),
+  );
+}
+
+function refundSpaceportCost(cost: SpaceportUpgradeWallet, refundPercent: number): SpaceportUpgradeWallet {
+  return {
+    metal: Math.floor(cost.metal * refundPercent / 100),
+    minerals: Math.floor(cost.minerals * refundPercent / 100),
+    gas: Math.floor(cost.gas * refundPercent / 100),
+  };
+}
+
+function removeDependentSpaceportTasks(
+  queue: readonly SpaceportUpgradeTask[],
+  canceledIndex: number,
+  state: SpaceportUpgradeState,
+  track: SpaceportUpgradeTrack,
+): { remaining: SpaceportUpgradeTask[]; cascaded: SpaceportUpgradeTask[] } {
+  const canceledTask = queue[canceledIndex];
+  if (!canceledTask) return { remaining: [...queue], cascaded: [] };
+
+  const projectedLevels = { ...state.shipLevels };
+  const remaining: SpaceportUpgradeTask[] = [];
+  const cascaded: SpaceportUpgradeTask[] = [];
+
+  queue.forEach((task, index) => {
+    const projectedLevel = safeTrackLevel(projectedLevels[task.shipId], track);
+    if (index < canceledIndex) {
+      remaining.push(task);
+      projectedLevels[task.shipId] = Math.max(projectedLevel, safeTrackLevel(task.toLevel, track));
+      return;
+    }
+    if (index === canceledIndex) {
+      cascaded.push(task);
+      return;
+    }
+
+    if (task.shipId === canceledTask.shipId
+      && (task.fromLevel !== projectedLevel || task.toLevel !== projectedLevel + 1)) {
+      cascaded.push(task);
+      return;
+    }
+
+    remaining.push(task);
+    projectedLevels[task.shipId] = Math.max(projectedLevel, safeTrackLevel(task.toLevel, track));
+  });
+
+  return { remaining, cascaded };
+}
+
+function rescheduleSpaceportQueue(
+  queue: readonly SpaceportUpgradeTask[],
+  canceledWasActive: boolean,
+  now: number,
+): SpaceportUpgradeTask[] {
+  if (queue.length === 0) return [];
+  let cursor = canceledWasActive ? now : queue[0]?.finishAt ?? now;
+  return queue.map((task, index) => {
+    if (!canceledWasActive && index === 0) return task;
+    const startedAt = cursor;
+    const finishAt = startedAt + task.effectiveDurationMs;
+    cursor = finishAt;
+    return { ...task, startedAt, finishAt };
+  });
+}
+
+export function cancelSpaceportUpgrade(
+  context: SpaceportUpgradeContext,
+  taskId: string,
+  now: number,
+  rng: () => number = Math.random,
+): SpaceportCancellationTransition {
+  const reconciledState = reconcileSpaceportUpgradeState(context.state, now).state;
+  const tracks: readonly SpaceportUpgradeTrack[] = ['ships', 'commanders'];
+  let track: SpaceportUpgradeTrack | null = null;
+  let queueIndex = -1;
+  for (const candidate of tracks) {
+    const index = queueForTrack(reconciledState, candidate).findIndex((task) => task.id === taskId);
+    if (index >= 0) {
+      track = candidate;
+      queueIndex = index;
+      break;
+    }
+  }
+
+  if (!track || queueIndex < 0) {
+    return {
+      ok: false,
+      state: reconciledState,
+      wallet: context.wallet,
+      canceled: null,
+      canceledTasks: [],
+      refund: null,
+      refundPercent: null,
+      refundPercents: [],
+      reason: 'Улучшение уже завершено или недоступно для отмены.',
+    };
+  }
+
+  const queue = queueForTrack(reconciledState, track);
+  const task = queue[queueIndex];
+  if (!task || task.refundEligible === false || !hasCompleteSpaceportCost(task.cost)) {
+    return {
+      ok: false,
+      state: reconciledState,
+      wallet: context.wallet,
+      canceled: null,
+      canceledTasks: [],
+      refund: null,
+      refundPercent: null,
+      refundPercents: [],
+      reason: 'Невозможно подтвердить сохранённую стоимость старого задания.',
+    };
+  }
+
+  const { remaining, cascaded } = removeDependentSpaceportTasks(queue, queueIndex, reconciledState, track);
+  const canceledTasks = [task, ...cascaded.filter((candidate) => candidate.id !== task.id)];
+  const refundPercents: number[] = [];
+  const refund = canceledTasks.reduce((total, canceledTask) => {
+    if (canceledTask.refundEligible === false || !hasCompleteSpaceportCost(canceledTask.cost)) return total;
+    const refundPercent = selectSpaceportCancelRefundPercent(rng);
+    refundPercents.push(refundPercent);
+    const itemRefund = refundSpaceportCost(canceledTask.cost, refundPercent);
+    return {
+      metal: total.metal + itemRefund.metal,
+      minerals: total.minerals + itemRefund.minerals,
+      gas: total.gas + itemRefund.gas,
+    };
+  }, { metal: 0, minerals: 0, gas: 0 });
+  const wallet = {
+    metal: context.wallet.metal + refund.metal,
+    minerals: context.wallet.minerals + refund.minerals,
+    gas: context.wallet.gas + refund.gas,
+  };
+
+  return {
+    ok: true,
+    state: withQueue(reconciledState, track, rescheduleSpaceportQueue(remaining, queueIndex === 0, now)),
+    wallet,
+    canceled: task,
+    canceledTasks,
+    refund,
+    refundPercent: refundPercents[0] ?? null,
+    refundPercents,
     reason: null,
   };
 }
@@ -538,6 +784,10 @@ function migrateQueue(
       ? rawFinishAt
       : startedAt + effectiveDurationMs;
     const spaceportLevelAtStart = safeSpaceportLevel(item.spaceportLevelAtStart);
+    const savedCost = hasCompleteSpaceportCost(item.cost) ? item.cost : null;
+    const cost = savedCost
+      ? { metal: savedCost.metal, minerals: savedCost.minerals, gas: savedCost.gas }
+      : { metal: 0, minerals: 0, gas: 0 };
     const id = typeof item.id === 'string' && item.id.trim()
       ? item.id
       : `migrated-${track}-${result.length}-${shipId}-${startedAt}`;
@@ -552,6 +802,9 @@ function migrateQueue(
       finishAt,
       spaceportLevelAtStart,
       effectiveDurationMs,
+      cost,
+      costSource: savedCost ? spaceportCostSource(item.costSource) : 'legacy-unknown',
+      refundEligible: savedCost != null,
     });
     queuedPerTarget[shipId] = queuedBefore + 1;
     previousFinishAt = finishAt;

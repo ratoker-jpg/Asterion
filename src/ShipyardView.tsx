@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
+import { getCombatFactionName, type CombatFactionId } from './domain/combat/factions.ts';
 import type { ShipId } from './domain/combat/ids.ts';
 import {
   calculateUnitProductionDurationMs,
@@ -9,9 +10,8 @@ import {
   getBuildingPresentation,
 } from './domain/buildings/balance-v1.ts';
 import { readFleetBuildBudget, type FleetBuildBudget } from './application/fleet.ts';
+import { FleetConstructionHeader } from './FleetConstructionHeader';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
-
-const shipyardPresentation = getBuildingPresentation('shipyard', 'aegis');
 
 type ShipDefinition = {
   id: ShipId;
@@ -35,40 +35,43 @@ type ShipCombatStats = {
   weaponType: string;
   armorType: string;
   armorStrength: number;
-  cargo: number;
-  speed: number;
-  fuel: number;
+  cargo: number | null;
+  speed: number | null;
+  fuel: number | null;
 };
 
 type ShipyardBudget = FleetBuildBudget;
 
 type ResourceKind = 'metal' | 'minerals' | 'gas' | 'population';
 
-const ships: ShipDefinition[] = getFactionShipCatalog('aegis').map((entity) => ({
-  id: entity.id,
-  name: entity.name,
-  role: entity.role,
-  art: entity.art,
-  owned: 0,
-  metal: entity.cost.metal,
-  minerals: entity.cost.minerals,
-  gas: entity.cost.gas,
-  population: entity.population,
-  time: entity.construction.time,
-  requiredShipyardLevel: entity.construction.requiredShipyardLevel,
-  requirements: entity.construction.requirements,
-}));
+function getShipDefinitions(factionId: CombatFactionId): ShipDefinition[] {
+  return getFactionShipCatalog(factionId).map((entity) => ({
+    id: entity.id,
+    name: entity.name,
+    role: entity.role,
+    art: entity.art,
+    owned: 0,
+    metal: entity.cost.metal,
+    minerals: entity.cost.minerals,
+    gas: entity.cost.gas,
+    population: entity.population,
+    time: entity.construction.time,
+    requiredShipyardLevel: entity.construction.requiredShipyardLevel,
+    requirements: entity.construction.requirements,
+  }));
+}
 
-const shipCombatStats = Object.fromEntries(
-  getFactionShipCatalog('aegis').map((entity) => {
-    if (!entity.ship) throw new Error(`Ship traits missing for ${entity.id}`);
-    return [entity.id, {
+function getShipCombatStats(factionId: CombatFactionId): Record<ShipId, ShipCombatStats> {
+  return Object.fromEntries(
+    getFactionShipCatalog(factionId).map((entity) => [entity.id, {
       category: entity.category,
       ...entity.combat,
-      ...entity.ship,
-    } satisfies ShipCombatStats] as const;
-  }),
-) as Record<ShipId, ShipCombatStats>;
+      cargo: entity.ship?.cargo ?? null,
+      speed: entity.ship?.speed ?? null,
+      fuel: entity.ship?.fuel ?? null,
+    } satisfies ShipCombatStats] as const),
+  ) as Record<ShipId, ShipCombatStats>;
+}
 
 const formatNumber = (value: number) => new Intl.NumberFormat('ru-RU').format(value);
 
@@ -90,6 +93,10 @@ function CostRow({ kind, label, value }: { kind: ResourceKind; label: string; va
   );
 }
 
+function formatMetric(value: number | null) {
+  return value == null ? '—' : formatNumber(value);
+}
+
 function ShipStatsTooltip({ ship, stats }: { ship: ShipDefinition; stats: ShipCombatStats }) {
   return (
     <div className="shipyard-stats-tooltip-v1" role="tooltip">
@@ -107,9 +114,9 @@ function ShipStatsTooltip({ ship, stats }: { ship: ShipDefinition; stats: ShipCo
         <div><small>Тип оружия</small><strong>{stats.weaponType}</strong></div>
         <div><small>Тип брони</small><strong>{stats.armorType}</strong></div>
         <div><small>Сила брони</small><strong>{stats.armorStrength}%</strong></div>
-        <div><small>Грузоподъёмность</small><strong>{formatNumber(stats.cargo)}</strong></div>
-        <div><small>Скорость</small><strong>{formatNumber(stats.speed)}</strong></div>
-        <div><small>Расход топлива</small><strong>{formatNumber(stats.fuel)}</strong></div>
+        <div><small>Грузоподъёмность</small><strong>{formatMetric(stats.cargo)}</strong></div>
+        <div><small>Скорость</small><strong>{formatMetric(stats.speed)}</strong></div>
+        <div><small>Расход топлива</small><strong>{formatMetric(stats.fuel)}</strong></div>
       </div>
     </div>
   );
@@ -121,6 +128,7 @@ function ShipCard({
   budget,
   shipyardLevel,
   advancedFactoryLevel,
+  shipCombatStats,
   onQuantity,
   onBuild,
 }: {
@@ -129,6 +137,7 @@ function ShipCard({
   budget: ShipyardBudget;
   shipyardLevel: number;
   advancedFactoryLevel: number;
+  shipCombatStats: Record<ShipId, ShipCombatStats>;
   onQuantity: (ship: ShipDefinition, quantity: number) => void;
   onBuild: (ship: ShipDefinition, quantity: number) => void;
 }) {
@@ -208,12 +217,19 @@ function ShipCard({
   );
 }
 
-export function ShipyardView({ planetName, coords, onBack }: { planetName: string; coords: string; onBack: () => void }) {
+export function ShipyardView({ planetName, coords }: { planetName: string; coords: string }) {
   const budget = useMemo(readFleetBuildBudget, []);
+  const factionName = getCombatFactionName(budget.factionId);
+  const shipyardPresentation = useMemo(
+    () => getBuildingPresentation('shipyard', budget.factionId),
+    [budget.factionId],
+  );
+  const ships = useMemo(() => getShipDefinitions(budget.factionId), [budget.factionId]);
+  const shipCombatStats = useMemo(() => getShipCombatStats(budget.factionId), [budget.factionId]);
   const fleetSummary = budget.summary;
   const ownedShips = useMemo(
     () => ships.map((ship) => ({ ...ship, owned: budget.fleet.ships[ship.id] ?? 0 })),
-    [budget.fleet],
+    [budget.fleet, ships],
   );
   const [quantities, setQuantities] = useState<Partial<Record<ShipId, number>>>({});
   const [process, setProcess] = useState<string | null>(null);
@@ -240,24 +256,22 @@ export function ShipyardView({ planetName, coords, onBack }: { planetName: strin
   return (
     <section
       className="shipyard-view-v1"
+      data-qa-construction-mode="ships"
       data-qa-building-role="shipyard"
       data-qa-building-asset={shipyardPresentation.art}
+      data-qa-building-faction={budget.factionId}
       data-qa-fleet-population={fleetSummary.population}
       data-qa-fleet-capacity={fleetSummary.capacity}
     >
-      <header className="shipyard-page-head-v1">
-        <div className="shipyard-page-title-v1">
-          <span className="shipyard-page-art-v1">
-            <img src={shipyardPresentation.art} alt="" aria-hidden="true" draggable={false} />
-          </span>
-          <div>
-            <small>{shipyardPresentation.name.toUpperCase()} · УРОВЕНЬ {budget.shipyardLevel}</small>
-            <h2>{shipyardPresentation.name}</h2>
-            <p>{planetName} {coords} · полный каталог стандартных корпусов Астеров</p>
-          </div>
-        </div>
-        <button type="button" onClick={onBack}>← К ФЛОТАМ</button>
-      </header>
+      <FleetConstructionHeader
+        viewId="ships"
+        shipyardPresentation={shipyardPresentation}
+        kicker={`${shipyardPresentation.name.toUpperCase()} · УРОВЕНЬ ${budget.shipyardLevel}`}
+        title={shipyardPresentation.name}
+        description={`полный каталог стандартных корпусов ${factionName}`}
+        planetName={planetName}
+        coords={coords}
+      />
 
       <section className="shipyard-processes-v1">
         <strong>ТЕКУЩИЕ ПРОЦЕССЫ</strong>
@@ -273,6 +287,7 @@ export function ShipyardView({ planetName, coords, onBack }: { planetName: strin
             budget={budget}
             shipyardLevel={budget.shipyardLevel}
             advancedFactoryLevel={budget.advancedFactoryLevel}
+            shipCombatStats={shipCombatStats}
             onQuantity={setQuantity}
             onBuild={prepareBuild}
           />
@@ -280,7 +295,7 @@ export function ShipyardView({ planetName, coords, onBack }: { planetName: strin
       </div>
 
       <footer className="shipyard-page-foot-v1">
-        <span>13 стандартных корпусов Астеров · командирские корабли находятся в отдельном разделе.</span>
+        <span>13 стандартных корпусов {factionName} · командирские корабли находятся в отдельном разделе.</span>
         <span data-qa-fleet-summary>Популяция флота: {formatNumber(fleetSummary.population)} / {formatNumber(fleetSummary.capacity)} · свободно {formatNumber(fleetSummary.available)}</span>
       </footer>
     </section>

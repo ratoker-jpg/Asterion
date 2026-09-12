@@ -40,38 +40,19 @@
 .fleet-ship-info-v1 small { color: #6bb9d3; letter-spacing: .13em; font-size: 9px; }
 
 .fleet-yard-card-v1 {
-  display: grid;
-  grid-template-columns: 52px 1fr;
-  gap: 10px;
-  align-items: center;
-  margin: 14px 0;
-  padding: 10px;
-  border: 1px solid rgba(50, 205, 255, .14);
-  background: rgba(4, 42, 59, .42);
+  width: 100%;
+  appearance: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
-.fleet-yard-emblem-v1 {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  border: 1px solid #21c4f6;
-  color: #50dfff;
-  font-size: 20px;
-  font-weight: 900;
-  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
-  background: rgba(7, 94, 126, .22);
+.fleet-yard-card-v1:hover,
+.fleet-yard-card-v1:focus-visible {
+  border-color: rgba(74, 222, 250, .62);
+  box-shadow: inset 3px 0 rgba(78, 225, 248, .65), 0 0 0 1px rgba(74, 222, 250, .12);
+  outline: none;
 }
-.fleet-yard-emblem-v1 img {
-  width: 42px;
-  height: 42px;
-  object-fit: contain;
-  filter: drop-shadow(0 0 8px rgba(72, 218, 255, .36));
-}
-.fleet-yard-card-v1 strong,
-.fleet-yard-card-v1 span,
-.fleet-yard-card-v1 small { display: block; }
-.fleet-yard-card-v1 strong { font-size: 13px; margin: 3px 0; }
-.fleet-yard-card-v1 span { color: #83aec0; font-size: 10px; }
 
 .fleet-menu-group-v1 { margin-top: 7px; }
 .fleet-menu-group-v1 h3 {
