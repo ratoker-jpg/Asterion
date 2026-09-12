@@ -230,7 +230,8 @@ function FleetWorkspace({
           <img src={shipyardPresentation.art} alt="Верфь" draggable={false} />
           <div>
             <small>{planetName}</small>
-            <strong>ВЕРФЬ · УРОВЕНЬ {fleetSnapshot.shipyardLevel}</strong>
+            <strong>Верфь</strong>
+            <span className="fleet-yard-level-v1">УРОВЕНЬ {fleetSnapshot.shipyardLevel}</span>
             <p>Ангар {fleetSnapshot.hangarLevel} · производство флота и обороны.</p>
           </div>
         </div>
