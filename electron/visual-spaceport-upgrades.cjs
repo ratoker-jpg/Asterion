@@ -15,7 +15,7 @@ const EXPECTED_UPGRADE_COST_BASES = {
   corsair: { metal: 500, minerals: 250, gas: 0 },
 };
 const EXPECTED_UPGRADE_BASE_DURATIONS = {
-  transporter: 9_000_000,
+  transporter: 180_000,
   corsair: 900_000,
 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

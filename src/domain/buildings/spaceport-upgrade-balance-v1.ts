@@ -1,5 +1,11 @@
 import type { CombatFactionId } from '../combat/factions.ts';
 import type { ShipId } from '../combat/ids.ts';
+import {
+  FACTION_SHIP_UPGRADE_TIMES,
+  ORDINARY_UPGRADE_SHIP_IDS,
+  parseTimeRebalancedDurationMs,
+  type OrdinaryUpgradeShipId,
+} from '../combat/ship-time-rebalanced.ts';
 
 export type SpaceportUpgradeBalanceV1Row = Readonly<{
   cost: Readonly<{
@@ -25,10 +31,13 @@ const row = (
   durationMs: durationMs(hours, minutes, seconds),
 });
 
-// Source: ASTERION_BALANCE_V1/корабли/{Астеры,Илары,Рой}/* — Factory upgrades only.
-// Published level 1 is array index 0, so index N resolves transition N → N+1.
-// The four excluded utility ships have no Factory upgrades table in these MD files.
-export const FACTION_SPACEPORT_UPGRADE_BALANCE_V1 = {
+// Costs are sourced from ASTERION_BALANCE_V1/корабли/{Астеры,Илары,Рой}/* —
+// Factory upgrades only. Published level 1 is array index 0, so index N
+// resolves transition N → N+1. The four excluded utility ships have no
+// Factory upgrades table in these MD files. The duration literals below are
+// retained only as raw-table scaffolding; the exported balance replaces them
+// with the `Время 2%` values from the Time Rebalanced files.
+const RAW_FACTION_SPACEPORT_UPGRADE_BALANCE_V1 = {
   aegis: {
     'transporter': [
       row(1_000, 0, 0, 2, 30, 0),
@@ -360,6 +369,41 @@ export const FACTION_SPACEPORT_UPGRADE_BALANCE_V1 = {
     ],
   },
 } as const satisfies Readonly<Record<CombatFactionId, Partial<Record<ShipId, readonly SpaceportUpgradeBalanceV1Row[]>>>>;
+
+type SpaceportUpgradeTables = Partial<Record<ShipId, readonly SpaceportUpgradeBalanceV1Row[]>>;
+type FactionSpaceportUpgradeTables = Readonly<Record<OrdinaryUpgradeShipId, readonly SpaceportUpgradeBalanceV1Row[]>>;
+
+function applyTimeRebalancedUpgradeTimes(
+  factionId: CombatFactionId,
+  tables: SpaceportUpgradeTables,
+): FactionSpaceportUpgradeTables {
+  const result = {} as Record<OrdinaryUpgradeShipId, readonly SpaceportUpgradeBalanceV1Row[]>;
+  for (const shipId of ORDINARY_UPGRADE_SHIP_IDS) {
+    const costs = tables[shipId];
+    const times = FACTION_SHIP_UPGRADE_TIMES[factionId][shipId];
+    if (!costs) throw new Error(`Missing ${factionId} Factory upgrades table for ${shipId}`);
+    if (!times) throw new Error(`Missing ${factionId} Time Rebalanced upgrades for ${shipId}`);
+    if (costs.length !== times.length) {
+      throw new Error(`Mismatched ${factionId} ${shipId} upgrade rows: ${costs.length} costs vs ${times.length} times`);
+    }
+    result[shipId] = Object.freeze(costs.map((balance, index) => Object.freeze({
+      ...balance,
+      durationMs: parseTimeRebalancedDurationMs(times[index]),
+    })));
+  }
+  return Object.freeze(result);
+}
+
+const factionSpaceportUpgradeBalance = {} as Record<CombatFactionId, FactionSpaceportUpgradeTables>;
+for (const factionId of ['aegis', 'synod', 'veyra'] as const) {
+  factionSpaceportUpgradeBalance[factionId] = applyTimeRebalancedUpgradeTimes(
+    factionId,
+    RAW_FACTION_SPACEPORT_UPGRADE_BALANCE_V1[factionId],
+  );
+}
+
+export const FACTION_SPACEPORT_UPGRADE_BALANCE_V1: Readonly<Record<CombatFactionId, FactionSpaceportUpgradeTables>> =
+  Object.freeze(factionSpaceportUpgradeBalance);
 
 // Compatibility export for callers that intentionally use the current Aegis default.
 export const SPACEPORT_UPGRADE_BALANCE_V1 = FACTION_SPACEPORT_UPGRADE_BALANCE_V1.aegis;

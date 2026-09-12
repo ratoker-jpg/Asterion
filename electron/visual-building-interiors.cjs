@@ -316,7 +316,7 @@ async function verifyMilitaryDeepLinks(win, directory) {
       cardCount: cards.length,
     } : { cardCount: cards.length };
   })()`);
-  if (!unitTime?.effective || unitTime.raw !== 'RAW 00:10:00' || unitTime.bonus) {
+  if (!unitTime?.effective || unitTime.raw !== 'RAW 00:00:12' || unitTime.bonus) {
     throw new Error(`Ship cards should show effective and raw unit time without a bonus label: ${JSON.stringify(unitTime)}`);
   }
   await capture(win, directory, 'building-interior-fleet-from-shipyard');

@@ -6,10 +6,13 @@ import type {
   ResourceCost,
   ShipCombatTraits,
 } from './types.ts';
+import { FACTION_SHIP_BASE_PRODUCTION_TIMES } from './ship-time-rebalanced.ts';
 
 /**
  * Mechanical ship data transcribed from the saved Nemexia pages named in
- * docs/prompts/PHASE_6_CANONICAL_SHIP_DATA_BY_FACTION_PROMPT.md.
+ * docs/prompts/PHASE_6_CANONICAL_SHIP_DATA_BY_FACTION_PROMPT.md. The
+ * construction time is the separate Time Rebalanced `Новое 2%/шт.` column;
+ * all other mechanical fields stay sourced from those saved HTML pages.
  *
  * `sourceName` and `sourceFile` are provenance only. Presentation names and
  * assets remain the approved Asterion contract in faction-catalog.ts.
@@ -53,12 +56,20 @@ function record(
   };
 }
 
-function defineFaction(folder: string, entries: readonly ShipEntry[]): Readonly<Record<ShipId, FactionShipMechanics>> {
+function defineFaction(
+  factionId: CombatFactionId,
+  folder: string,
+  entries: readonly ShipEntry[],
+): Readonly<Record<ShipId, FactionShipMechanics>> {
   const byId = Object.fromEntries(entries.map((entry) => [
     entry.id,
     {
       ...entry,
       sourceFile: `${SOURCE_ROOT}/${folder}/${entry.sourceFileName}`,
+      construction: {
+        ...entry.construction,
+        time: FACTION_SHIP_BASE_PRODUCTION_TIMES[factionId][entry.id],
+      },
     },
   ])) as unknown as Record<ShipId, FactionShipMechanics>;
   const missing = SHIP_IDS.filter((id) => !byId[id]);
@@ -67,7 +78,7 @@ function defineFaction(folder: string, entries: readonly ShipEntry[]): Readonly<
 }
 
 export const FACTION_SHIP_MECHANICS: Readonly<Record<CombatFactionId, Readonly<Record<ShipId, FactionShipMechanics>>>> = {
-  aegis: defineFaction('Корабли Синяя раса', [
+  aegis: defineFaction('aegis', 'Корабли Синяя раса', [
     record('solar-satellite', 'page_2026-07-22_20-32-43.html', 'Солнечный спутник', 1,
       { metal: 500, minerals: 2_000, gas: 500 },
       { attack: 1, life: 2_200, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6 },
@@ -133,7 +144,7 @@ export const FACTION_SHIP_MECHANICS: Readonly<Record<CombatFactionId, Readonly<R
       '175:00:00', 14, ['Верфь · уровень 14', 'Гиперпространство · уровень 13', 'Параллельные вселенные · уровень 1', 'Тяжелая Броня · уровень 10'],
       { cargo: 1_000_000, speed: 200, fuel: 60_000 }),
   ]),
-  synod: defineFaction('Корабли Зеленная раса', [
+  synod: defineFaction('synod', 'Корабли Зеленная раса', [
     record('solar-satellite', 'page_2026-07-22_20-39-35.html', 'Солнечный спутник', 1,
       { metal: 500, minerals: 2_000, gas: 500 },
       { attack: 1, life: 2_200, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6 },
@@ -199,7 +210,7 @@ export const FACTION_SHIP_MECHANICS: Readonly<Record<CombatFactionId, Readonly<R
       '153:45:00', 14, ['Верфь · уровень 14', 'Гиперпространство · уровень 13', 'Параллельные вселенные · уровень 1', 'Тяжелая Броня · уровень 10'],
       { cargo: 750_000, speed: 200, fuel: 45_000 }),
   ]),
-  veyra: defineFaction('Корабли Рой Красные', [
+  veyra: defineFaction('veyra', 'Корабли Рой Красные', [
     record('solar-satellite', 'page_2026-07-22_20-19-25.html', 'Органический спутник', 1,
       { metal: 500, minerals: 2_000, gas: 500 },
       { attack: 1, life: 2_200, weaponType: 'Лазер', armorType: 'Тяжелая Броня', armorStrength: 9 },

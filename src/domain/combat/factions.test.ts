@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { FACTION_DEFENSE_CONSTRUCTION_BALANCE } from './defense-construction-data.ts';
 import { getFactionDefenseCatalog, getFactionShipCatalog } from './faction-catalog.ts';
 import { FACTION_SHIP_MECHANICS } from './faction-ship-data.ts';
 import { COMBAT_FACTIONS, getCombatFactionName } from './factions.ts';
-import { SHIP_IDS } from './ids.ts';
+import { DEFENSE_IDS, SHIP_IDS } from './ids.ts';
 import { createDefaultCombatPriority } from './priority.ts';
+import { FACTION_SHIP_BASE_PRODUCTION_TIMES } from './ship-time-rebalanced.ts';
 import {
   migrateSimulatorState,
   normalizeSimulatorScenario,
@@ -155,13 +157,14 @@ test('canonical source registry resolves all 39 ships without a faction fallback
       assert.deepEqual(entity.combat, source.combat);
       assert.deepEqual(entity.ship, source.ship);
       assert.deepEqual(entity.construction, source.construction);
+      assert.equal(source.construction.time, FACTION_SHIP_BASE_PRODUCTION_TIMES[faction.id][entity.id]);
     }
   }
 
   const controls = {
-    aegis: { civil: ['transporter', 1, 10, '00:10:00'], combat: ['scout', 2, 800, '00:20:00'], superheavy: ['death-star', 700, 700_000, '175:00:00'] },
-    synod: { civil: ['transporter', 1, 10, '00:10:00'], combat: ['scout', 2, 800, '00:13:20'], superheavy: ['death-star', 615, 615_000, '153:45:00'] },
-    veyra: { civil: ['transporter', 2, 10, '00:20:00'], combat: ['scout', 1, 400, '00:10:00'], superheavy: ['death-star', 320, 320_000, '80:00:00'] },
+    aegis: { civil: ['transporter', 1, 10, '00:00:12'], combat: ['scout', 2, 800, '00:00:24'], superheavy: ['death-star', 700, 700_000, '03:30:00'] },
+    synod: { civil: ['transporter', 1, 10, '00:00:12'], combat: ['scout', 2, 800, '00:00:16'], superheavy: ['death-star', 615, 615_000, '03:04:30'] },
+    veyra: { civil: ['transporter', 2, 10, '00:00:24'], combat: ['scout', 1, 400, '00:00:12'], superheavy: ['death-star', 320, 320_000, '01:36:00'] },
   } as const;
 
   for (const faction of COMBAT_FACTIONS) {
@@ -183,9 +186,9 @@ test('canonical source registry resolves all 39 ships without a faction fallback
   assert.equal(FACTION_SHIP_MECHANICS.veyra.defender.sourceName, 'Немезис');
 
   const destroyerControls = {
-    aegis: { time: '01:20:00', population: 30, attack: 19_500, cost: { metal: 93_900, minerals: 84_500, gas: 9_400 }, requirements: ['Верфь · уровень 9', 'Реактивные двигатели · уровень 6', 'Гиперпространство · уровень 5'] },
-    synod: { time: '01:14:40', population: 28, attack: 18_200, cost: { metal: 87_600, minerals: 78_900, gas: 8_800 }, requirements: ['Верфь · уровень 9', 'Реактивные двигатели · уровень 6', 'Гиперпространство · уровень 5'] },
-    veyra: { time: '00:45:20', population: 17, attack: 11_050, cost: { metal: 53_200, minerals: 47_900, gas: 5_300 }, requirements: ['Верфь · уровень 6', 'Плазменная наука · уровень 1', 'Немезис · количество 1'] },
+    aegis: { time: '00:01:36', population: 30, attack: 19_500, cost: { metal: 93_900, minerals: 84_500, gas: 9_400 }, requirements: ['Верфь · уровень 9', 'Реактивные двигатели · уровень 6', 'Гиперпространство · уровень 5'] },
+    synod: { time: '00:01:30', population: 28, attack: 18_200, cost: { metal: 87_600, minerals: 78_900, gas: 8_800 }, requirements: ['Верфь · уровень 9', 'Реактивные двигатели · уровень 6', 'Гиперпространство · уровень 5'] },
+    veyra: { time: '00:00:54', population: 17, attack: 11_050, cost: { metal: 53_200, minerals: 47_900, gas: 5_300 }, requirements: ['Верфь · уровень 6', 'Плазменная наука · уровень 1', 'Немезис · количество 1'] },
   } as const;
 
   for (const faction of COMBAT_FACTIONS) {
@@ -197,6 +200,25 @@ test('canonical source registry resolves all 39 ships without a faction fallback
     assert.deepEqual(destroyer.cost, control.cost);
     assert.deepEqual(destroyer.construction.requirements, control.requirements);
   }
+});
+
+test('faction defense catalogs use independent source costs, populations, and 1.4% base times', () => {
+  for (const faction of COMBAT_FACTIONS) {
+    const catalog = getFactionDefenseCatalog(faction.id);
+    assert.equal(catalog.length, DEFENSE_IDS.length);
+    for (const defenseId of DEFENSE_IDS) {
+      const entity = catalog.find((item) => item.id === defenseId);
+      const expected = FACTION_DEFENSE_CONSTRUCTION_BALANCE[faction.id][defenseId];
+      assert.ok(entity, `${faction.id}/${defenseId} must exist in the selected faction catalog`);
+      assert.deepEqual(entity.cost, expected.cost, `${faction.id}/${defenseId} cost`);
+      assert.equal(entity.population, expected.population, `${faction.id}/${defenseId} population`);
+      assert.equal(entity.construction.time, expected.time, `${faction.id}/${defenseId} base time`);
+    }
+  }
+
+  assert.equal(getFactionDefenseCatalog('aegis').find((entity) => entity.id === 'tower-shield')?.population, 12);
+  assert.equal(getFactionDefenseCatalog('synod').find((entity) => entity.id === 'ion-plasma-battery')?.cost.gas, 64_000);
+  assert.equal(getFactionDefenseCatalog('veyra').find((entity) => entity.id === 'ballistic-turret')?.cost.metal, 2_300);
 });
 
 test('legacy simulator scenario migrates to Asters versus Asters with zero technologies', () => {

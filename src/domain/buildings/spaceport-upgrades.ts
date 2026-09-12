@@ -23,7 +23,7 @@ export const PROTOTYPE_SPACEPORT_UPGRADE_COST = Object.freeze({
 });
 
 export const SPACEPORT_UPGRADE_PROTOTYPE_NOTE =
-  'BALANCE V1: стоимость и время обычных кораблей взяты из Factory upgrades для всех трёх рас. Космодром ускоряет новое улучшение на 5% за уровень; командирские корабли пока используют прототипные значения.';
+  'BALANCE V1: стоимость обычных кораблей взята из Factory upgrades, а базовое время — из Time Rebalanced, колонка «Время 2%», для всех трёх рас. Космодром ускоряет новое улучшение на 5% за уровень; командирские корабли пока используют прототипные значения.';
 
 export type SpaceportUpgradeTrack = 'ships' | 'commanders';
 export type SpaceportUpgradeStatus =

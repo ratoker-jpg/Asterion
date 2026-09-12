@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 
 import {
   COMMANDER_COMBAT_CATALOG,
-  DEFENSE_COMBAT_CATALOG,
   type CatalogEntity,
 } from './domain/combat/catalog.ts';
+import { getFactionDefenseCatalog } from './domain/combat/faction-catalog.ts';
+import { getCombatFactionName } from './domain/combat/factions.ts';
 import {
   calculateUnitProductionDurationMs,
   formatClockDurationMs,
@@ -71,16 +72,15 @@ function toCatalogItem(entity: CatalogEntity): CatalogItem {
   };
 }
 
-const defenseItems: CatalogItem[] = DEFENSE_COMBAT_CATALOG.map(toCatalogItem);
 const commanderItems: CatalogItem[] = COMMANDER_COMBAT_CATALOG.map(toCatalogItem);
+const SINGLE_COPY_DEFENSE_IDS = new Set(['tower-shield', 'planetary-shield']);
 
-const catalogConfig: Record<ConstructionCatalogMode, { title: string; kicker: string; description: string; footer: string; items: CatalogItem[]; unitLabel: string }> = {
+const catalogConfig: Record<ConstructionCatalogMode, { title: string; kicker: string; description: string; footer: string; unitLabel: string }> = {
   defense: {
     title: 'ОБОРОНА',
-    kicker: 'ПЛАНЕТАРНАЯ ОБОРОНА АСТЕРОВ',
-    description: 'оборонные установки и щитовые комплексы Астеров',
-    footer: '9 оборонных комплексов Астеров · порядок соответствует технологической линейке.',
-    items: defenseItems,
+    kicker: 'ПЛАНЕТАРНАЯ ОБОРОНА',
+    description: 'оборонные установки и щитовые комплексы выбранной расы',
+    footer: '9 оборонных комплексов · порядок соответствует технологической линейке.',
     unitLabel: 'установок',
   },
   commander: {
@@ -88,7 +88,6 @@ const catalogConfig: Record<ConstructionCatalogMode, { title: string; kicker: st
     kicker: 'КОМАНДНЫЙ ФЛОТ',
     description: '13 уникальных командирских корпусов',
     footer: '13 командирских кораблей · единая линейка для всех рас.',
-    items: commanderItems,
     unitLabel: 'кораблей',
   },
 };
@@ -101,7 +100,8 @@ function calculateMax(item: CatalogItem, budget: ShipyardBudget) {
   if (item.minerals > 0) limits.push(Math.floor(budget.minerals / item.minerals));
   if (item.gas > 0) limits.push(Math.floor(budget.gas / item.gas));
   if (item.population > 0) limits.push(Math.floor(Math.max(0, budget.populationMax - budget.population) / item.population));
-  return Math.max(0, Math.min(999, ...(limits.length ? limits : [0])));
+  const resourceLimit = Math.min(999, ...(limits.length ? limits : [0]));
+  return Math.max(0, Math.min(SINGLE_COPY_DEFENSE_IDS.has(item.id) ? 1 : 999, resourceLimit));
 }
 
 function CostRow({ kind, label, value }: { kind: ResourceKind; label: string; value: number }) {
@@ -247,17 +247,21 @@ export function ConstructionCatalogView({
 }) {
   const budget = useMemo(readFleetBuildBudget, []);
   const config = catalogConfig[mode];
+  const factionName = getCombatFactionName(budget.factionId);
+  const defenseKicker = `${config.kicker} ${factionName.toUpperCase()}`;
+  const defenseDescription = `оборонные установки и щитовые комплексы ${factionName}`;
+  const defenseFooter = `9 оборонных комплексов ${factionName} · порядок соответствует технологической линейке.`;
   const shipyardPresentation = useMemo(
     () => getBuildingPresentation('shipyard', budget.factionId),
     [budget.factionId],
   );
   const fleetSummary = budget.summary;
   const items = useMemo(
-    () => config.items.map((item) => ({
+    () => (mode === 'defense' ? getFactionDefenseCatalog(budget.factionId).map(toCatalogItem) : commanderItems).map((item) => ({
       ...item,
       owned: mode === 'commander' ? budget.fleet.commanders[item.id as keyof typeof budget.fleet.commanders] ?? 0 : item.owned,
     })),
-    [budget.fleet, config.items, mode],
+    [budget.factionId, budget.fleet, mode],
   );
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [process, setProcess] = useState<string | null>(null);
@@ -292,9 +296,9 @@ export function ConstructionCatalogView({
       <FleetConstructionHeader
         viewId={mode}
         shipyardPresentation={shipyardPresentation}
-        kicker={`${config.kicker} · ВЕРФЬ УРОВНЯ ${budget.shipyardLevel}`}
+        kicker={`${mode === 'defense' ? defenseKicker : config.kicker} · ВЕРФЬ УРОВНЯ ${budget.shipyardLevel}`}
         title={config.title}
-        description={config.description}
+        description={mode === 'defense' ? defenseDescription : config.description}
         planetName={planetName}
         coords={coords}
         onBack={onBack}
@@ -322,7 +326,7 @@ export function ConstructionCatalogView({
       </div>
 
       <footer className="shipyard-page-foot-v1">
-        <span>{config.footer}</span>
+        <span>{mode === 'defense' ? defenseFooter : config.footer}</span>
         <span>Популяция флота: {formatNumber(fleetSummary.population)} / {formatNumber(fleetSummary.capacity)} · свободно {formatNumber(fleetSummary.available)}</span>
       </footer>
     </section>
