@@ -135,6 +135,7 @@ async function readHeaderContract(win) {
         bottom: getComputedStyle(workspace).bottom,
       },
       zones,
+      reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
       genericHeaderClasses: ['.resources', '.resource-chip', '.campaign-block'].filter((selector) => header?.querySelector(selector)),
       horizontalOverflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) > window.innerWidth + 2,
       faction: header?.getAttribute('data-faction') ?? null,
@@ -218,6 +219,7 @@ async function assertRepresentativeRatios(win, file, label) {
   };
 
   try {
+    const reducedMotion = await win.webContents.executeJavaScript(`window.matchMedia('(prefers-reduced-motion: reduce)').matches`);
     await win.webContents.executeJavaScript(`localStorage.setItem(${JSON.stringify(TEST_SAVE_KEY)}, ${JSON.stringify(JSON.stringify(baseline))})`);
     await loadMode(win, file, '?mode=test');
     for (const ratio of REPRESENTATIVE_RATIOS) {
@@ -245,8 +247,12 @@ async function assertRepresentativeRatios(win, file, label) {
         const normalizedColor = item?.color?.replace(/\s+/g, '') ?? null;
         const expectedPulse = ratio > 85;
         const hasPulseAnimation = item?.animationName === 'asterion-header-resource-critical-pulse' && item.animationDuration !== '0s';
-        if (!item || Math.abs(item.ratio - expectedRatio) > 0.0001 || item.tone !== expectedTone || item.pulse !== expectedPulse || item.pulse !== hasPulseAnimation || !item.fill || normalizedColor !== EXPECTED_RESOURCE_COLORS[expectedTone]) {
-          throw new Error(`${label}: representative ${ratio}% ${kind} contract failed: ${JSON.stringify({ item, expectedRatio, expectedTone, expectedPulse, hasPulseAnimation })}`);
+        const reducedMotionPulse = item?.animationName === 'none' && item.animationDuration === '0s';
+        const pulseContract = expectedPulse
+          ? (hasPulseAnimation || (reducedMotion && reducedMotionPulse))
+          : !hasPulseAnimation;
+        if (!item || Math.abs(item.ratio - expectedRatio) > 0.0001 || item.tone !== expectedTone || item.pulse !== expectedPulse || !pulseContract || !item.fill || normalizedColor !== EXPECTED_RESOURCE_COLORS[expectedTone]) {
+          throw new Error(`${label}: representative ${ratio}% ${kind} contract failed: ${JSON.stringify({ item, expectedRatio, expectedTone, expectedPulse, hasPulseAnimation, reducedMotion })}`);
         }
       }
 
@@ -445,8 +451,12 @@ function assertContract(label, header, tooltip, planetMenu, planetMenuFocus, the
     };
     const normalizedColor = item.fillColor?.replace(/\s+/g, '') ?? null;
     const hasPulseAnimation = item.pulse && item.fillAnimationName === 'asterion-header-resource-critical-pulse' && item.fillAnimationDuration !== '0s';
-    if (item.fill !== shouldHaveFill || item.pulse !== shouldPulse || item.pulse !== hasPulseAnimation || (item.fill && item.fillHeight !== '7px') || (item.fill && normalizedColor !== expectedColors[item.tone]) || (item.kind === 'population' && item.value.includes('/'))) {
-      throw new Error(`${label}: resource presentation contract failed: ${JSON.stringify(item)}`);
+    const reducedMotionPulse = item.fillAnimationName === 'none' && item.fillAnimationDuration === '0s';
+    const pulseContract = shouldPulse
+      ? (hasPulseAnimation || (header.reducedMotion && reducedMotionPulse))
+      : !hasPulseAnimation;
+    if (item.fill !== shouldHaveFill || item.pulse !== shouldPulse || !pulseContract || (item.fill && item.fillHeight !== '7px') || (item.fill && normalizedColor !== expectedColors[item.tone]) || (item.kind === 'population' && item.value.includes('/'))) {
+      throw new Error(`${label}: resource presentation contract failed: ${JSON.stringify({ ...item, reducedMotion: header.reducedMotion })}`);
     }
   }
   const resourceRects = header.resourceRects.filter(Boolean);
