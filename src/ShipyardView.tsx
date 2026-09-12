@@ -10,6 +10,7 @@ import {
   getBuildingPresentation,
 } from './domain/buildings/balance-v1.ts';
 import { readFleetBuildBudget, type FleetBuildBudget } from './application/fleet.ts';
+import { FleetConstructionHeader } from './FleetConstructionHeader';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 
 type ShipDefinition = {
@@ -255,25 +256,23 @@ export function ShipyardView({ planetName, coords, onBack }: { planetName: strin
   return (
     <section
       className="shipyard-view-v1"
+      data-qa-construction-mode="ships"
       data-qa-building-role="shipyard"
       data-qa-building-asset={shipyardPresentation.art}
       data-qa-building-faction={budget.factionId}
       data-qa-fleet-population={fleetSummary.population}
       data-qa-fleet-capacity={fleetSummary.capacity}
     >
-      <header className="shipyard-page-head-v1">
-        <div className="shipyard-page-title-v1">
-          <span className="shipyard-page-art-v1">
-            <img src={shipyardPresentation.art} alt="" aria-hidden="true" draggable={false} />
-          </span>
-          <div>
-            <small>{shipyardPresentation.name.toUpperCase()} · УРОВЕНЬ {budget.shipyardLevel}</small>
-            <h2>{shipyardPresentation.name}</h2>
-            <p>{planetName} {coords} · полный каталог стандартных корпусов {factionName}</p>
-          </div>
-        </div>
-        <button type="button" onClick={onBack}>← К ФЛОТАМ</button>
-      </header>
+      <FleetConstructionHeader
+        viewId="ships"
+        shipyardPresentation={shipyardPresentation}
+        kicker={`${shipyardPresentation.name.toUpperCase()} · УРОВЕНЬ ${budget.shipyardLevel}`}
+        title={shipyardPresentation.name}
+        description={`полный каталог стандартных корпусов ${factionName}`}
+        planetName={planetName}
+        coords={coords}
+        onBack={onBack}
+      />
 
       <section className="shipyard-processes-v1">
         <strong>ТЕКУЩИЕ ПРОЦЕССЫ</strong>

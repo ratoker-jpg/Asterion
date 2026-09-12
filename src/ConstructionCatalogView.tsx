@@ -9,8 +9,10 @@ import {
   calculateUnitProductionDurationMs,
   formatClockDurationMs,
   parseClockDurationMs,
+  getBuildingPresentation,
 } from './domain/buildings/balance-v1.ts';
 import { readFleetBuildBudget, type FleetBuildBudget } from './application/fleet.ts';
+import { FleetConstructionHeader } from './FleetConstructionHeader';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 
 
@@ -245,6 +247,10 @@ export function ConstructionCatalogView({
 }) {
   const budget = useMemo(readFleetBuildBudget, []);
   const config = catalogConfig[mode];
+  const shipyardPresentation = useMemo(
+    () => getBuildingPresentation('shipyard', budget.factionId),
+    [budget.factionId],
+  );
   const fleetSummary = budget.summary;
   const items = useMemo(
     () => config.items.map((item) => ({
@@ -282,15 +288,17 @@ export function ConstructionCatalogView({
   };
 
   return (
-    <section className="shipyard-view-v1">
-      <header className="shipyard-page-head-v1">
-        <div>
-          <small>{config.kicker} · ВЕРФЬ УРОВНЯ {budget.shipyardLevel}</small>
-          <h2>{config.title}</h2>
-          <p>{planetName} {coords} · {config.description}</p>
-        </div>
-        <button type="button" onClick={onBack}>← К ФЛОТАМ</button>
-      </header>
+    <section className="shipyard-view-v1" data-qa-construction-mode={mode} data-qa-building-asset={shipyardPresentation.art}>
+      <FleetConstructionHeader
+        viewId={mode}
+        shipyardPresentation={shipyardPresentation}
+        kicker={`${config.kicker} · ВЕРФЬ УРОВНЯ ${budget.shipyardLevel}`}
+        title={config.title}
+        description={config.description}
+        planetName={planetName}
+        coords={coords}
+        onBack={onBack}
+      />
 
       <section className="shipyard-processes-v1">
         <strong>ТЕКУЩИЕ ПРОЦЕССЫ</strong>
