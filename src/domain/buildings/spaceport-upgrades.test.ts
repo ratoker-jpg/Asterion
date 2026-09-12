@@ -4,11 +4,13 @@ import test from 'node:test';
 import { SCIENCE_CATALOG } from '../science/catalog.ts';
 import { TEST_TIME_SCALE } from '../runtime/mode.ts';
 import { createDefaultBuildingLevels, type ScienceLevels } from './resource-zone.ts';
+import { SPACEPORT_UPGRADE_BALANCE_V1 } from './spaceport-upgrade-balance-v1.ts';
 import {
   PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS,
   PROTOTYPE_SPACEPORT_UPGRADE_COST,
   SPACEPORT_UPGRADE_MAX_LEVEL_BY_TRACK,
   SPACEPORT_UPGRADE_QUEUE_CAPACITY,
+  calculateSpaceportUpgradeCost,
   calculateSpaceportEffectiveDuration,
   createDefaultSpaceportUpgradeState,
   enqueueSpaceportUpgrade,
@@ -91,11 +93,57 @@ test('prototype duration is 15 minutes; Spaceport level 1 = 95% and level 10 = 5
   assert.equal(calculateSpaceportEffectiveDuration(PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS, 10), 450_000);
 });
 
+test('Balance v1 supplies every ordinary ship upgrade cost and duration transition', () => {
+  for (const [shipId, rows] of Object.entries(SPACEPORT_UPGRADE_BALANCE_V1)) {
+    for (const [fromLevel, balance] of rows.entries()) {
+      const state = createDefaultSpaceportUpgradeState();
+      state.shipLevels[shipId] = fromLevel;
+      const preview = previewSpaceportUpgrade(context(state), 'ships', shipId);
+      assert.deepEqual(preview.cost, balance.cost, `${shipId} ${fromLevel} → ${fromLevel + 1} cost`);
+      assert.equal(preview.baseDurationMs, balance.durationMs, `${shipId} ${fromLevel} → ${fromLevel + 1} duration`);
+    }
+  }
+
+  const transporter = previewSpaceportUpgrade(context(), 'ships', 'transporter');
+  assert.deepEqual(transporter.cost, { metal: 1_000, minerals: 0, gas: 0 });
+  assert.equal(transporter.baseDurationMs, 9_000_000);
+
+  const transporterLevelTwoState = createDefaultSpaceportUpgradeState();
+  transporterLevelTwoState.shipLevels.transporter = 1;
+  const transporterLevelTwo = previewSpaceportUpgrade(context(transporterLevelTwoState), 'ships', 'transporter');
+  assert.deepEqual(transporterLevelTwo.cost, { metal: 2_000, minerals: 0, gas: 0 });
+  assert.equal(transporterLevelTwo.baseDurationMs, 11_250_000);
+
+  const deathStarLevelEightState = createDefaultSpaceportUpgradeState();
+  deathStarLevelEightState.shipLevels['death-star'] = 7;
+  const deathStarLevelEight = previewSpaceportUpgrade(context(deathStarLevelEightState), 'ships', 'death-star');
+  assert.deepEqual(deathStarLevelEight.cost, { metal: 192_000_000, minerals: 96_000_000, gas: 48_000_000 });
+  assert.equal(deathStarLevelEight.baseDurationMs, ((105 * 60 + 24) * 60 + 49) * 1_000);
+});
+
+test('prototype commander upgrade fallback doubles from the previous level', () => {
+  assert.deepEqual(calculateSpaceportUpgradeCost(0), PROTOTYPE_SPACEPORT_UPGRADE_COST);
+  assert.deepEqual(calculateSpaceportUpgradeCost(1), { metal: 1_000, minerals: 500, gas: 0 });
+  assert.deepEqual(calculateSpaceportUpgradeCost(2), { metal: 2_000, minerals: 1_000, gas: 0 });
+
+  for (const fromLevel of [0, 1, 2]) {
+    const state = createDefaultSpaceportUpgradeState();
+    state.shipLevels.corsair = fromLevel;
+    const preview = previewSpaceportUpgrade(context(state), 'commanders', 'corsair');
+    assert.deepEqual(preview.cost, calculateSpaceportUpgradeCost(fromLevel));
+  }
+
+  const repeated = enqueueRepeated('commanders', 'corsair', 3);
+  assert.equal(repeated.wallet.metal, wallet.metal - 3_500);
+  assert.equal(repeated.wallet.minerals, wallet.minerals - 1_750);
+  assert.equal(repeated.wallet.gas, wallet.gas);
+});
+
 test('Test Mode snapshots the same Spaceport speed policy with accelerated absolute timestamps', () => {
   const queued = enqueueSpaceportUpgrade({ ...context(), mode: 'test' }, 'ships', 'transporter', 5_000, 'test-speed');
   assert.equal(queued.ok, true);
-  assert.equal(queued.task?.effectiveDurationMs, 855_000 / TEST_TIME_SCALE);
-  assert.equal(queued.task?.finishAt, 5_000 + 855_000 / TEST_TIME_SCALE);
+  assert.equal(queued.task?.effectiveDurationMs, 8_550_000 / TEST_TIME_SCALE);
+  assert.equal(queued.task?.finishAt, 5_000 + 8_550_000 / TEST_TIME_SCALE);
 });
 
 test('queued task snapshots Spaceport speed and does not recalculate after building upgrade', () => {
@@ -105,13 +153,13 @@ test('queued task snapshots Spaceport speed and does not recalculate after build
   assert.equal(queued.ok, true);
   assert.ok(queued.task);
   assert.equal(queued.task.spaceportLevelAtStart, 1);
-  assert.equal(queued.task.effectiveDurationMs, 855_000);
-  assert.equal(queued.task.finishAt, startedAt + 855_000);
+  assert.equal(queued.task.effectiveDurationMs, 8_550_000);
+  assert.equal(queued.task.finishAt, startedAt + 8_550_000);
 
   const upgradedContext = { ...initial, state: queued.state, spaceportLevel: 10 };
   const beforeFinish = reconcileSpaceportUpgradeState(upgradedContext.state, startedAt + 1_000);
   assert.equal(beforeFinish.changed, false);
-  assert.equal(beforeFinish.state.shipQueue[0].finishAt, startedAt + 855_000);
+  assert.equal(beforeFinish.state.shipQueue[0].finishAt, startedAt + 8_550_000);
   assert.equal(beforeFinish.state.shipQueue[0].spaceportLevelAtStart, 1);
 });
 
@@ -155,6 +203,7 @@ test('ordinary ships never exceed level 10 in preview, enqueue, completion or mi
   const state = createDefaultSpaceportUpgradeState();
   state.shipLevels.transporter = 9;
   const initial = context(state);
+  initial.wallet = { metal: 1_000_000, minerals: 1_000_000, gas: 1_000_000 };
   const queued = enqueueSpaceportUpgrade(initial, 'ships', 'transporter', 2_000, 'ship-ten');
   assert.equal(queued.ok, true);
   assert.deepEqual([queued.task?.fromLevel, queued.task?.toLevel], [9, 10]);
@@ -178,6 +227,7 @@ test('commander ships reach level 40 and are never clamped to the ordinary ship 
   const state = createDefaultSpaceportUpgradeState();
   state.shipLevels.corsair = 39;
   const initial = context(state);
+  initial.wallet = { metal: Number.MAX_SAFE_INTEGER, minerals: Number.MAX_SAFE_INTEGER, gas: Number.MAX_SAFE_INTEGER };
   const queued = enqueueSpaceportUpgrade(initial, 'commanders', 'corsair', 2_000, 'corsair-forty');
   assert.equal(queued.ok, true);
   assert.deepEqual([queued.task?.fromLevel, queued.task?.toLevel], [39, 40]);
@@ -327,9 +377,9 @@ test('failed enqueue is atomic and does not deduct prototype resources', () => {
   initial.wallet.metal = wallet.metal;
   const success = enqueueSpaceportUpgrade(initial, 'ships', 'transporter', 10_000, 'success');
   assert.equal(success.ok, true);
-  assert.equal(success.wallet.metal, wallet.metal - PROTOTYPE_SPACEPORT_UPGRADE_COST.metal);
-  assert.equal(success.wallet.minerals, wallet.minerals - PROTOTYPE_SPACEPORT_UPGRADE_COST.minerals);
-  assert.equal(success.wallet.gas, wallet.gas - PROTOTYPE_SPACEPORT_UPGRADE_COST.gas);
+  assert.equal(success.wallet.metal, wallet.metal - 1_000);
+  assert.equal(success.wallet.minerals, wallet.minerals);
+  assert.equal(success.wallet.gas, wallet.gas);
 });
 
 test('migration restores FIFO timestamps, sequential duplicate levels and track-specific clamps', () => {

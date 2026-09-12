@@ -7,6 +7,7 @@ import { SCIENCE_CATALOG } from '../science/catalog.ts';
 import type { ScienceId } from '../science/types.ts';
 import type { BuildingLevels, BuildingRole, ScienceLevels } from './resource-zone.ts';
 import { scaleRuntimeDuration, type RuntimeMode } from '../runtime/mode.ts';
+import { SPACEPORT_UPGRADE_BALANCE_V1 } from './spaceport-upgrade-balance-v1.ts';
 
 export const SPACEPORT_UPGRADE_QUEUE_CAPACITY = 3;
 export const PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS = 15 * 60 * 1000;
@@ -21,7 +22,7 @@ export const PROTOTYPE_SPACEPORT_UPGRADE_COST = Object.freeze({
 });
 
 export const SPACEPORT_UPGRADE_PROTOTYPE_NOTE =
-  'PROTOTYPE: стоимость и индивидуальная длительность улучшения остаются прототипными. Лимиты уровней: корабли 10, командирские корабли 40.';
+  'BALANCE V1: стоимость и время обычных кораблей взяты из Factory upgrades для всех трёх рас. Космодром ускоряет новое улучшение на 5% за уровень; командирские корабли пока используют прототипные значения.';
 
 export type SpaceportUpgradeTrack = 'ships' | 'commanders';
 export type SpaceportUpgradeStatus =
@@ -36,6 +37,16 @@ export type SpaceportUpgradeWallet = {
   minerals: number;
   gas: number;
 };
+
+export function calculateSpaceportUpgradeCost(fromLevel: number): SpaceportUpgradeWallet {
+  const safeFromLevel = Number.isFinite(fromLevel) ? Math.max(0, Math.floor(fromLevel)) : 0;
+  const multiplier = 2 ** safeFromLevel;
+  return {
+    metal: PROTOTYPE_SPACEPORT_UPGRADE_COST.metal * multiplier,
+    minerals: PROTOTYPE_SPACEPORT_UPGRADE_COST.minerals * multiplier,
+    gas: PROTOTYPE_SPACEPORT_UPGRADE_COST.gas * multiplier,
+  };
+}
 
 export type SpaceportUpgradeTask = {
   id: string;
@@ -167,6 +178,12 @@ function withQueue(
   return track === 'ships'
     ? { ...state, shipQueue: queue }
     : { ...state, commanderQueue: queue };
+}
+
+function getSpaceportUpgradeBalance(track: SpaceportUpgradeTrack, shipId: string, fromLevel: number) {
+  if (track !== 'ships') return null;
+  const rows = SPACEPORT_UPGRADE_BALANCE_V1[shipId as keyof typeof SPACEPORT_UPGRADE_BALANCE_V1];
+  return rows?.[fromLevel] ?? null;
 }
 
 export function getSpaceportUpgradeCatalog(track: SpaceportUpgradeTrack): readonly CatalogEntity[] {
@@ -301,8 +318,11 @@ export function previewSpaceportUpgrade(
   const queuedCount = queue.filter((task) => task.shipId === shipId).length;
   const projectedLevel = Math.min(maxLevel, currentLevel + queuedCount);
   const requirements = evaluateSpaceportUpgradeRequirements(track, shipId, context.buildings, context.scienceLevels);
+  const balance = getSpaceportUpgradeBalance(track, shipId, projectedLevel);
+  const cost = balance ? { ...balance.cost } : calculateSpaceportUpgradeCost(projectedLevel);
+  const baseDurationMs = balance?.durationMs ?? PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS;
   const effectiveDurationMs = scaleRuntimeDuration(calculateSpaceportEffectiveDuration(
-    PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS,
+    baseDurationMs,
     context.spaceportLevel,
   ), context.mode ?? 'production', context.testTimeScale);
   const base = {
@@ -313,8 +333,8 @@ export function previewSpaceportUpgrade(
     nextLevel: projectedLevel < maxLevel ? projectedLevel + 1 : null,
     queuedCount,
     requirements,
-    cost: { ...PROTOTYPE_SPACEPORT_UPGRADE_COST },
-    baseDurationMs: PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS,
+    cost,
+    baseDurationMs,
     effectiveDurationMs,
   };
 
@@ -336,8 +356,8 @@ export function previewSpaceportUpgrade(
     return { ...base, status: 'queue-full', canStart: false, reason: 'Очередь улучшений заполнена.' };
   }
 
-  const missingResource = (Object.keys(PROTOTYPE_SPACEPORT_UPGRADE_COST) as (keyof SpaceportUpgradeWallet)[])
-    .find((key) => context.wallet[key] < PROTOTYPE_SPACEPORT_UPGRADE_COST[key]);
+  const missingResource = (Object.keys(cost) as (keyof SpaceportUpgradeWallet)[])
+    .find((key) => context.wallet[key] < cost[key]);
   if (missingResource) {
     const labels: Record<keyof SpaceportUpgradeWallet, string> = {
       metal: 'металла',
@@ -399,9 +419,9 @@ export function enqueueSpaceportUpgrade(
     effectiveDurationMs,
   };
   const wallet: SpaceportUpgradeWallet = {
-    metal: context.wallet.metal - PROTOTYPE_SPACEPORT_UPGRADE_COST.metal,
-    minerals: context.wallet.minerals - PROTOTYPE_SPACEPORT_UPGRADE_COST.minerals,
-    gas: context.wallet.gas - PROTOTYPE_SPACEPORT_UPGRADE_COST.gas,
+    metal: context.wallet.metal - preview.cost.metal,
+    minerals: context.wallet.minerals - preview.cost.minerals,
+    gas: context.wallet.gas - preview.cost.gas,
   };
 
   return {

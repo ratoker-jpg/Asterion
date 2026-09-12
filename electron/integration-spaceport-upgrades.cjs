@@ -347,7 +347,7 @@ async function verify(win) {
   }
   let saved = await readSave(win);
   assertChain(saved.shipQueue, 'transporter', 'ordinary ship UI enqueue');
-  if (saved.metal !== 98500 || saved.minerals !== 99250 || saved.gas !== 100000) throw new Error(`ordinary ship resource deduction mismatch ${JSON.stringify(saved)}`);
+  if (saved.metal !== 93000 || saved.minerals !== 100000 || saved.gas !== 100000) throw new Error(`ordinary ship resource deduction mismatch ${JSON.stringify(saved)}`);
   await assertRepeatedRow(win, 'transporter', 10, 'ordinary ship row');
 
   await click(win, '[data-qa-spaceport-tab="commanders"]');
@@ -361,7 +361,7 @@ async function verify(win) {
   saved = await readSave(win);
   assertChain(saved.commanderQueue, 'corsair', 'Corsair rapid UI enqueue');
   if (saved.shipQueue.length !== 3) throw new Error('Commander enqueue mutated ordinary queue');
-  if (saved.metal !== beforeRapidCorsair.metal - 1500 || saved.minerals !== beforeRapidCorsair.minerals - 750 || saved.gas !== beforeRapidCorsair.gas) {
+  if (saved.metal !== beforeRapidCorsair.metal - 3500 || saved.minerals !== beforeRapidCorsair.minerals - 1750 || saved.gas !== beforeRapidCorsair.gas) {
     throw new Error(`Corsair rapid enqueue charged resources more/less than three times ${JSON.stringify({ beforeRapidCorsair, saved })}`);
   }
   const rapidNotice = await win.webContents.executeJavaScript(`document.querySelector('.shell-notice span')?.textContent?.replace(/\s+/g, ' ').trim() ?? ''`);
