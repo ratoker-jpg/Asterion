@@ -244,6 +244,18 @@ html.web-preview.asterion-long-page .stage {
 .fleet-production-queue-empty-v1 strong { color: #91b9c4; font-size: 10px; }
 .fleet-production-queue-empty-v1 small { margin-top: 4px; color: #5f7e88; font-size: 8px; line-height: 1.25; }
 
+.fleet-production-queue-foot-v1 {
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px solid rgba(66, 185, 214, .14);
+}
+
+.fleet-production-back-v1 {
+  width: 100%;
+  min-width: 0 !important;
+  text-align: left;
+}
+
 .fleet-production-queue-list-v1 {
   display: grid;
   gap: 7px;
@@ -812,6 +824,30 @@ html.web-preview.asterion-long-page .stage {
   flex: 1;
   height: 1px;
   background: linear-gradient(90deg, rgba(73, 200, 233, .32), transparent);
+}
+
+.shipyard-visible-level-v1 {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 1px solid rgba(67, 222, 248, .38);
+  background: linear-gradient(90deg, rgba(6, 69, 88, .56), rgba(4, 28, 39, .5));
+  color: #9eefff;
+  white-space: nowrap;
+}
+
+.shipyard-visible-level-v1 small {
+  color: #78b8c8;
+  font-size: 7px;
+  letter-spacing: .08em;
+}
+
+.shipyard-visible-level-v1 b {
+  color: #effcff;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 
 .shipyard-cost-grid-v1 {

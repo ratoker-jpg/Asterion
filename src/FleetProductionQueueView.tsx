@@ -14,6 +14,7 @@ type FleetProductionQueueViewProps = {
   queueKind: FleetProductionQueueKind;
   state: FleetProductionState;
   factionId: CombatFactionId;
+  onBack: () => void;
 };
 
 const queueLabels: Record<FleetProductionQueueKind, string> = {
@@ -28,7 +29,7 @@ function cancelOrder(orderId: string) {
   }));
 }
 
-export function FleetProductionQueueView({ queueKind, state, factionId }: FleetProductionQueueViewProps) {
+export function FleetProductionQueueView({ queueKind, state, factionId, onBack }: FleetProductionQueueViewProps) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
@@ -43,7 +44,7 @@ export function FleetProductionQueueView({ queueKind, state, factionId }: FleetP
       aria-label={`Очередь: ${queueLabels[queueKind]}`}
     >
       <header className="fleet-production-queue-head-v1">
-        <span>ОЧЕРЕДЬ</span>
+        <span>ТЕКУЩИЕ ПРОЦЕССЫ</span>
         <strong data-qa-fleet-production-queue-count>{queue.length}</strong>
       </header>
       {queue.length === 0 ? (
@@ -95,6 +96,16 @@ export function FleetProductionQueueView({ queueKind, state, factionId }: FleetP
           })}
         </div>
       )}
+      <footer className="fleet-production-queue-foot-v1">
+        <button
+          type="button"
+          className="fleet-production-back-v1 fleet-page-back-v1"
+          data-qa-fleet-production-back
+          onClick={onBack}
+        >
+          ← Назад к Флотам
+        </button>
+      </footer>
     </section>
   );
 }

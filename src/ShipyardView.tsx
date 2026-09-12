@@ -185,7 +185,18 @@ function ShipCard({
 
         <div className="shipyard-card-data-v1">
           <div className="shipyard-costs-v1">
-            <div className="shipyard-costs-title-v1"><span>СТОИМОСТЬ ЕДИНИЦЫ</span><i /></div>
+            <div className="shipyard-costs-title-v1">
+              <span>СТОИМОСТЬ ЕДИНИЦЫ</span>
+              <i />
+              <span
+                className="shipyard-visible-level-v1"
+                data-qa-fleet-visible-level={ship.id}
+                aria-label={`Уровень корабля ${ship.name}: ${shipLevel} из 10`}
+              >
+                <small>УРОВЕНЬ</small>
+                <b>{shipLevel}/10</b>
+              </span>
+            </div>
             <div className="shipyard-cost-grid-v1">
               <CostRow kind="metal" label="Металл" value={ship.metal} />
               <CostRow kind="minerals" label="Минералы" value={ship.minerals} />

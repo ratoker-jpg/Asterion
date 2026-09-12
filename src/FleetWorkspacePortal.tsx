@@ -243,6 +243,7 @@ function FleetWorkspace({
             queueKind={productionQueueKind}
             state={fleetSnapshot.fleetProduction}
             factionId={factionId}
+            onBack={openFleetRoot}
           />
         ) : null}
       </aside>

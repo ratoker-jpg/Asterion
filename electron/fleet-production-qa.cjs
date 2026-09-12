@@ -125,8 +125,16 @@ async function runViewport(width, height) {
 
     await click(win, '[data-qa-fleet-section="ships"]');
     await waitFor(win, `document.querySelector('[data-qa-construction-mode="ships"]')`);
-    const ordinaryLevel = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-fleet-level="scout"]')?.textContent ?? ''`);
-    if (!ordinaryLevel.includes('0/10')) throw new Error(`${label}: ordinary level is not visible as 0/10: ${ordinaryLevel}`);
+    const ordinaryLevel = await win.webContents.executeJavaScript(`(() => {
+      const level = document.querySelector('[data-qa-fleet-visible-level="scout"]');
+      const rect = level?.getBoundingClientRect();
+      const style = level ? getComputedStyle(level) : null;
+      return {
+        text: level?.textContent?.replace(/\\s+/g, ' ').trim() ?? '',
+        visible: Boolean(level && rect && rect.width > 0 && rect.height > 0 && style?.visibility !== 'hidden' && Number(style?.opacity ?? 0) > 0),
+      };
+    })()`);
+    if (!ordinaryLevel.text.includes('0/10') || !ordinaryLevel.visible) throw new Error(`${label}: ordinary level is not visibly rendered as 0/10: ${JSON.stringify(ordinaryLevel)}`);
     const ordinaryTimerText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-unit-time="scout"]')?.textContent ?? ''`);
     if (ordinaryTimerText.includes('УРОВЕНЬ')) throw new Error(`${label}: ordinary ship level still appears under the unit timer: ${ordinaryTimerText}`);
     const ordinaryDossierLevelLabel = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-fleet-level="scout"] small')?.textContent ?? ''`);
@@ -146,12 +154,21 @@ async function runViewport(width, height) {
         heading: queue?.querySelector('.fleet-production-queue-head-v1')?.textContent?.replace(/\\s+/g, ' ').trim() ?? '',
       };
     })()`);
-    if (!queuePlacement.inSidebar || queuePlacement.inMain || !queuePlacement.followsSimulator || queuePlacement.hasMainStrip || !queuePlacement.heading.includes('ОЧЕРЕДЬ')) {
+    if (!queuePlacement.inSidebar || queuePlacement.inMain || !queuePlacement.followsSimulator || queuePlacement.hasMainStrip || !queuePlacement.heading.includes('ТЕКУЩИЕ ПРОЦЕССЫ')) {
       throw new Error(`${label}: fleet queue placement contract failed ${JSON.stringify(queuePlacement)}`);
     }
     if (!(await win.webContents.executeJavaScript(`document.querySelector('[data-qa-fleet-production-queue="ships"]')?.textContent?.includes('Очередь свободна')`))) {
       throw new Error(`${label}: empty ordinary queue is not visible`);
     }
+    const backButton = await win.webContents.executeJavaScript(`(() => {
+      const button = document.querySelector('[data-qa-fleet-production-back]');
+      return { text: button?.textContent?.replace(/\\s+/g, ' ').trim() ?? '', tag: button?.tagName ?? '' };
+    })()`);
+    if (backButton.tag !== 'BUTTON' || !backButton.text.includes('Назад к Флотам')) throw new Error(`${label}: fleet production back button is missing ${JSON.stringify(backButton)}`);
+    await click(win, '[data-qa-fleet-production-back]');
+    await waitFor(win, `!document.querySelector('[data-qa-construction-mode="ships"]')`);
+    await click(win, '[data-qa-fleet-section="ships"]');
+    await waitFor(win, `document.querySelector('[data-qa-construction-mode="ships"]')`);
     await capture(win, directory, 'ships-empty');
     await click(win, '[data-qa-fleet-production-item="scout"] button[aria-label^="Информация:"]');
     await waitFor(win, `document.querySelector('.ship-info-modal-v1')`);
