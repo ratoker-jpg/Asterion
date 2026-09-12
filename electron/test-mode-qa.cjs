@@ -150,6 +150,94 @@ async function selectTestTimeScale(win, scale) {
   await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×${scale}')`);
 }
 
+async function readResourceTooltip(win, kind) {
+  const chipSelector = JSON.stringify(`[data-qa-resource-chip="${kind}"]`);
+  const tooltipSelector = JSON.stringify(`[data-qa-resource-tooltip="${kind}"]`);
+  const focused = await win.webContents.executeJavaScript(`(() => {
+    const chip = document.querySelector(${chipSelector});
+    chip?.focus();
+    return document.activeElement === chip;
+  })()`);
+  if (!focused) throw new Error(`Resource chip is not focusable: ${kind}`);
+  await settle(win);
+  return win.webContents.executeJavaScript(`document.querySelector(${tooltipSelector})?.textContent?.replace(/\\s+/g, ' ').trim() ?? ''`);
+}
+
+function parseResourceTooltip(text) {
+  const numberFromText = (value) => Number(value.replace(/[^\d]/g, ''));
+  const storage = text.match(/([\d\s\u00a0]+)\s*\/\s*([\d\s\u00a0]+)/);
+  const income = text.match(/Добыча:\s*\+([\d\s\u00a0]+)\/ч/);
+  const etaMarker = 'Склад заполнится через:';
+  const etaIndex = text.indexOf(etaMarker);
+  return {
+    current: storage ? numberFromText(storage[1]) : NaN,
+    capacity: storage ? numberFromText(storage[2]) : NaN,
+    hourlyGain: income ? numberFromText(income[1]) : NaN,
+    eta: etaIndex >= 0 ? text.slice(etaIndex + etaMarker.length).trim() : '',
+  };
+}
+
+function formatStorageEta(current, capacity, hourlyGain) {
+  if (current >= capacity) return 'склад заполнен';
+  if (hourlyGain <= 0) return 'нет добычи';
+
+  const minutes = Math.max(1, Math.ceil(((capacity - current) / hourlyGain) * 60));
+  const days = Math.floor(minutes / (24 * 60));
+  const hours = Math.floor((minutes % (24 * 60)) / 60);
+  const remainingMinutes = minutes % 60;
+  const parts = [];
+  if (days) parts.push(`${days} д`);
+  if (hours) parts.push(`${hours} ч`);
+  if (!days && !hours) parts.push(`${remainingMinutes} мин`);
+  return parts.join(' ');
+}
+
+async function assertTestModeResourceTooltips(win, label) {
+  const buildings = {
+    'metal-production-1': 1,
+    'metal-production-2': 0,
+    'metal-production-3': 0,
+    'mineral-production-1': 1,
+    'mineral-production-2': 0,
+    'gas-production-1': 1,
+    'gas-production-2': 0,
+    'metal-storage': 20,
+    'mineral-storage': 20,
+    'gas-storage': 20,
+  };
+  const baselineResources = { metal: 225_050_000, minerals: 150_050_000, gas: 94_691_465 };
+  const byScale = new Map();
+
+  for (const scale of [1, 15]) {
+    await selectTestTimeScale(win, scale);
+    await seedTestRuntime(win, {
+      buildings,
+      ...baselineResources,
+      energy: 999_999_999,
+      resourceClock: { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } },
+    });
+
+    const parsed = {};
+    for (const kind of ['metal', 'mineral', 'gas']) {
+      const tooltip = parseResourceTooltip(await readResourceTooltip(win, kind));
+      const expectedEta = formatStorageEta(tooltip.current, tooltip.capacity, tooltip.hourlyGain);
+      if (!Number.isFinite(tooltip.hourlyGain) || tooltip.hourlyGain <= 0 || tooltip.eta !== expectedEta) {
+        throw new Error(`${label}: Test Mode ×${scale} ${kind} tooltip/ETA mismatch ${JSON.stringify({ tooltip, expectedEta })}`);
+      }
+      parsed[kind] = tooltip;
+    }
+    byScale.set(scale, parsed);
+  }
+
+  for (const kind of ['metal', 'mineral', 'gas']) {
+    const atOne = byScale.get(1)[kind];
+    const atFifteen = byScale.get(15)[kind];
+    if (atFifteen.hourlyGain !== atOne.hourlyGain * 15 || atFifteen.eta === atOne.eta) {
+      throw new Error(`${label}: Test Mode ×1/×15 runtime-tooltip scale mismatch for ${kind} ${JSON.stringify({ atOne, atFifteen })}`);
+    }
+  }
+}
+
 async function assertSpaceportPreviewMatchesQueuedTask(win, track, shipId, label) {
   const queueKey = track === 'ships' ? 'shipQueue' : 'commanderQueue';
   const previewDurationMs = await win.webContents.executeJavaScript(`Number(document.querySelector('[data-qa-spaceport-card=${JSON.stringify(shipId)}]')?.getAttribute('data-qa-spaceport-duration-ms') || 0)`);
@@ -322,6 +410,8 @@ async function runViewport(width, height) {
     const productionAfterReset = await readEnvelope(win, PRODUCTION_KEY);
     if (afterTestReset.testResources.metal !== 450_100_000 || afterTestReset.testResources.minerals !== 300_100_000 || afterTestReset.testResources.gas !== 189_382_930 || afterTestReset.buildings?.['metal-storage'] !== 20 || afterTestReset.buildings?.['mineral-storage'] !== 20 || afterTestReset.buildings?.['gas-storage'] !== 20 || productionAfterReset.metal !== productionBeforeTest.metal) throw new Error(`${label}: Test Mode reset/capacity/save-key contract failed ${JSON.stringify(afterTestReset)}`);
 
+    await assertTestModeResourceTooltips(win, label);
+
     await seedTestRuntime(win, {
       buildings: { 'metal-storage': 20, 'mineral-storage': 20, 'gas-storage': 20 },
       metal: 0,
@@ -345,6 +435,10 @@ async function runViewport(width, height) {
     const cappedResources = await readQaState(win);
     if (cappedResources.testResources.metal !== 450_100_000 || cappedResources.resourceBars.find((bar) => bar.kind === 'energy')) {
       throw new Error(`${label}: storage cap or energy bar contract failed ${JSON.stringify(cappedResources)}`);
+    }
+    const cappedMetalTooltip = await readResourceTooltip(win, 'metal');
+    if (!/Склад заполнится через:\s*склад заполнен/.test(cappedMetalTooltip)) {
+      throw new Error(`${label}: full storage tooltip did not report склад заполнен: ${cappedMetalTooltip}`);
     }
 
     await win.webContents.executeJavaScript(`(() => {

@@ -19,6 +19,10 @@ import {
   type BotAssignment,
 } from '../domain/buildings/production-bots.ts';
 import {
+  calculateFleetCapacity,
+  calculateFleetPopulation,
+} from '../domain/fleet/runtime.ts';
+import {
   advanceRecyclingState,
   collectRecyclingJob,
   startRecyclingJob,
@@ -170,11 +174,27 @@ export function destroyBuilding(
   assetRole: BuildingRole,
   rng: () => number = Math.random,
 ): BuildingActionResult & { refundPercent: number | null } {
+  const planet = getPlanetState(state, context.planetId);
+  if (assetRole === 'hangar') {
+    const currentLevel = Math.max(0, Math.floor(planet.buildings.hangar ?? 0));
+    if (currentLevel > 0) {
+      const nextCapacity = calculateFleetCapacity(currentLevel - 1);
+      const currentPopulation = calculateFleetPopulation(planet.fleet, state.profile.factionId);
+      if (currentPopulation > nextCapacity) {
+        return {
+          ok: false,
+          state,
+          reason: `Нельзя понизить ангар: флот занимает ${currentPopulation} мест, новая вместимость — ${nextCapacity}.`,
+          refundPercent: null,
+        };
+      }
+    }
+  }
+
   const refundPercent = 50 + Math.floor(rng() * 31);
   const transition = destroyBuildingLevel(economyFor(state, context), assetRole, refundPercent);
   if (!transition.ok) return { ok: false, state, reason: transition.reason, refundPercent: null };
 
-  const planet = getPlanetState(state, context.planetId);
   const next = stateFromEconomy(state, context, transition.state);
   return {
     ok: true,

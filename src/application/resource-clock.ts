@@ -3,7 +3,10 @@ import {
   getStorageCapacities,
   type ResourceKey,
 } from '../domain/buildings/resource-zone.ts';
-import { getProductionBotIncomePerHour } from '../domain/buildings/production-bots.ts';
+import {
+  getProductionBotIncomePerHour,
+  type ProductionResourceIncome,
+} from '../domain/buildings/production-bots.ts';
 import { creditResources, type ResourceCreditResult } from '../domain/resources/credit.ts';
 import { normalizeTestTimeScale, type RuntimeMode, type TestTimeScale } from '../domain/runtime/mode.ts';
 import type { ResourceClock, SaveState } from './contracts.ts';
@@ -27,6 +30,24 @@ export type ResourceReconcileResult = {
 
 function finiteNonNegative(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : fallback;
+}
+
+/**
+ * Resolves the rate shown to players and credited by the runtime.
+ * Production Mode always uses the canonical rate; Test Mode accelerates the
+ * same rate by the selected test-time scale.
+ */
+export function getEffectiveResourceIncomePerHour(
+  income: ProductionResourceIncome,
+  mode: RuntimeMode,
+  testTimeScale: TestTimeScale,
+): ProductionResourceIncome {
+  const multiplier = mode === 'test' ? normalizeTestTimeScale(testTimeScale) : 1;
+  return {
+    metal: finiteNonNegative(income.metal) * multiplier,
+    minerals: finiteNonNegative(income.minerals) * multiplier,
+    gas: finiteNonNegative(income.gas) * multiplier,
+  };
 }
 
 function normalizeClock(clock: ResourceClock | undefined, now: number): ResourceClock {
@@ -99,15 +120,10 @@ export function reconcileResourceIncome(
   }
 
   const elapsedMs = now - clock.lastReconciledAt;
-  const elapsedMultiplier = context.mode === 'test' ? normalizeTestTimeScale(context.testTimeScale) : 1;
-  const elapsedHours = (elapsedMs * elapsedMultiplier) / HOUR_MS;
+  const elapsedHours = elapsedMs / HOUR_MS;
   const baseIncome = getBuildingResourceIncomePerHour(planet.buildings, state.science.levels);
   const income = getProductionBotIncomePerHour(baseIncome, planet.productionBots);
-  const hourly = {
-    metal: finiteNonNegative(income.metal),
-    minerals: finiteNonNegative(income.minerals),
-    gas: finiteNonNegative(income.gas),
-  };
+  const hourly = getEffectiveResourceIncomePerHour(income, context.mode, context.testTimeScale);
   const capacities = getStorageCapacities(planet.buildings);
   const rawCredits = {
     metal: hourly.metal * elapsedHours + clock.remainder.metal,

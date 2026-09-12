@@ -109,6 +109,7 @@ import {
   bindScienceEventBridge,
 } from './application/science.ts';
 import { getFleetSummaryForState } from './application/fleet.ts';
+import { getEffectiveResourceIncomePerHour } from './application/resource-clock.ts';
 import { publishApplicationRuntimeSnapshot } from './application/runtime.ts';
 import { reconcileRuntime } from './application/reconcile.ts';
 import { enqueueApplicationStateUpdate } from './application/state.ts';
@@ -373,6 +374,10 @@ export function App() {
       currentPlanetState.productionBots,
     ),
     [currentPlanetState.buildings, currentPlanetState.productionBots, state.science.levels],
+  );
+  const effectiveResourceIncomePerHour = useMemo(
+    () => getEffectiveResourceIncomePerHour(resourceIncomePerHour, RUNTIME_MODE, testTimeScale),
+    [resourceIncomePerHour, testTimeScale],
   );
   const storageCapacities = useMemo(
     () => getStorageCapacities(currentPlanetState.buildings),
@@ -854,9 +859,9 @@ export function App() {
             art: planet.id === currentPlanet.id ? currentSkin.art : currentSkin.art,
           }))}
           resources={[
-             { kind: 'metal', label: 'МЕТАЛЛ', value: state.metal, capacity: storageCapacities.metal, hourlyGain: resourceIncomePerHour.metal },
-             { kind: 'mineral', label: 'МИНЕРАЛЫ', value: state.minerals, capacity: storageCapacities.minerals, hourlyGain: resourceIncomePerHour.minerals },
-             { kind: 'gas', label: 'ГАЗ', value: state.gas, capacity: storageCapacities.gas, hourlyGain: resourceIncomePerHour.gas },
+             { kind: 'metal', label: 'МЕТАЛЛ', value: state.metal, capacity: storageCapacities.metal, hourlyGain: effectiveResourceIncomePerHour.metal },
+             { kind: 'mineral', label: 'МИНЕРАЛЫ', value: state.minerals, capacity: storageCapacities.minerals, hourlyGain: effectiveResourceIncomePerHour.minerals },
+             { kind: 'gas', label: 'ГАЗ', value: state.gas, capacity: storageCapacities.gas, hourlyGain: effectiveResourceIncomePerHour.gas },
              { kind: 'energy', label: 'ЭНЕРГИЯ', value: currentPlanetState.energy },
             { kind: 'population', label: 'НАСЕЛЕНИЕ', value: fleetSummary.population, capacity: fleetSummary.capacity, showCapacity: false },
           ]}
@@ -956,7 +961,7 @@ export function App() {
               planetName={currentPlanetName}
               planetCoords={currentPlanet.coords}
               resources={resourceWallet}
-              resourceIncomePerHour={resourceIncomePerHour}
+              resourceIncomePerHour={effectiveResourceIncomePerHour}
               productionBotAssignment={currentPlanetState.productionBots}
               buildings={currentPlanetState.buildings}
               queue={currentQueue}

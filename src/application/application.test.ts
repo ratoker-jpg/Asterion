@@ -29,6 +29,7 @@ import {
 } from './fleet.ts';
 import { bindScienceEventBridge, cancelScience, startScience } from './science.ts';
 import { reconcileRuntime } from './reconcile.ts';
+import { getEffectiveResourceIncomePerHour } from './resource-clock.ts';
 import { publishApplicationRuntimeSnapshot } from './runtime.ts';
 import { enqueueApplicationStateUpdate } from './state.ts';
 import {
@@ -170,6 +171,49 @@ test('building application owns start, queue cancellation, completion, destroy, 
 
   const assigned = applyProductionBots(destroyed.state, buildingContext, { metal: 1, minerals: 0, gas: 0 });
   assert.equal(assigned.planets['helion-01'].productionBots.metal, 1);
+});
+
+test('over-capacity fleet rejects hangar downgrade without changing state or refunding', () => {
+  const state = createInitialSaveState('test', 0);
+  const beforeSummary = getFleetSummaryForState(state);
+  const beforeResources = {
+    metal: state.metal,
+    minerals: state.minerals,
+    gas: state.gas,
+    energy: state.planets['helion-01'].energy,
+  };
+  let rngCalled = false;
+
+  const result = destroyBuilding(state, context(10_000), 'hangar', () => {
+    rngCalled = true;
+    return 0;
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.refundPercent, null);
+  assert.match(result.reason ?? '', /флот занимает 58 мест, новая вместимость — 50/);
+  assert.equal(rngCalled, false);
+  assert.strictEqual(result.state, state);
+  assert.equal(result.state.planets['helion-01'].buildings.hangar, 1);
+  assert.deepEqual(result.state.planets['helion-01'].fleet, state.planets['helion-01'].fleet);
+  assert.deepEqual(
+    {
+      metal: result.state.metal,
+      minerals: result.state.minerals,
+      gas: result.state.gas,
+      energy: result.state.planets['helion-01'].energy,
+    },
+    beforeResources,
+  );
+  assert.deepEqual(getFleetSummaryForState(result.state), beforeSummary);
+
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 10_000, testTimeScale: 1 });
+  assert.equal(persistence.write(result.state).ok, true);
+  const persisted = persistence.read();
+  assert.equal(persisted.planets['helion-01'].buildings.hangar, 1);
+  assert.deepEqual(persisted.planets['helion-01'].fleet, state.planets['helion-01'].fleet);
+  assert.deepEqual(getFleetSummaryForState(persisted), beforeSummary);
 });
 
 test('recycling, trade, and spaceport actions remain thin domain-backed transitions', () => {
@@ -442,9 +486,27 @@ test('resource clock accrues canonical income once, scales only Test Mode, and p
   assert.equal(production.state.resourceClock.lastReconciledAt, 3_600_000);
   assert.equal(reconcileRuntime(production.state, context(3_600_000, 'production')).changed, false);
 
-  const testScaled = reconcileRuntime({ ...state, resourceClock: { ...state.resourceClock } }, context(3_600_000, 'test'));
-  assert.equal(testScaled.state.metal, 1_500);
-  assert.equal(testScaled.state.planets['helion-01'].energy, 0);
+  const canonicalIncome = {
+    metal: production.state.metal,
+    minerals: production.state.minerals,
+    gas: production.state.gas,
+  };
+  for (const testTimeScale of [1, 15] as const) {
+    const testScaled = reconcileRuntime(
+      { ...state, resourceClock: { ...state.resourceClock, remainder: { ...state.resourceClock.remainder } } },
+      { ...context(3_600_000, 'test'), testTimeScale },
+    );
+    const effectiveIncome = getEffectiveResourceIncomePerHour(canonicalIncome, 'test', testTimeScale);
+    assert.deepEqual(
+      {
+        metal: testScaled.state.metal,
+        minerals: testScaled.state.minerals,
+        gas: testScaled.state.gas,
+      },
+      effectiveIncome,
+    );
+    assert.equal(testScaled.state.planets['helion-01'].energy, 0);
+  }
 
   const half = reconcileRuntime(state, context(1_800_000, 'production'));
   const twoTicks = reconcileRuntime(half.state, context(3_600_000, 'production'));
