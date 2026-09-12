@@ -22,16 +22,12 @@ export function FleetConstructionHeader({
   onBack,
 }: FleetConstructionHeaderProps) {
   return (
-    <header className="shipyard-page-head-v1" data-qa-construction-header={viewId}>
-      <div className="shipyard-page-title-v1">
-        <span className="shipyard-page-art-v1">
-          <img src={shipyardPresentation.art} alt="" aria-hidden="true" draggable={false} />
-        </span>
-        <div>
-          <small>{kicker}</small>
-          <h2>{title}</h2>
-          <p>{planetName} {coords} · {description}</p>
-        </div>
+    <header className="building-card-v2 fleet-construction-card-v1" data-qa-construction-header={viewId}>
+      <img src={shipyardPresentation.art} alt="" aria-hidden="true" draggable={false} />
+      <div>
+        <small>{kicker}</small>
+        <strong>{title}</strong>
+        <p>{planetName} {coords} · {description}</p>
       </div>
       <button type="button" onClick={onBack}>← К ФЛОТАМ</button>
     </header>

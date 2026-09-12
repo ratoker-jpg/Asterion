@@ -150,7 +150,7 @@ async function verifyMilitaryDeepLinks(win, directory) {
   const shipyardIdentity = await win.webContents.executeJavaScript(`(() => {
     const root = document.querySelector('[data-qa-building-role="shipyard"]');
     const fleetCard = document.querySelector('.fleet-yard-card-v1');
-    const pageTitle = document.querySelector('.shipyard-page-title-v1');
+    const pageTitle = document.querySelector('[data-qa-construction-header="ships"]');
     const asset = root?.getAttribute('data-qa-building-asset') ?? '';
     const cardStyle = fleetCard ? getComputedStyle(fleetCard) : null;
     const fleetImage = fleetCard?.querySelector('img');
@@ -159,7 +159,7 @@ async function verifyMilitaryDeepLinks(win, directory) {
     const detailStyle = fleetCard?.querySelector('p') ? getComputedStyle(fleetCard.querySelector('p')) : null;
     return {
       fleetName: fleetCard?.querySelector('strong')?.textContent?.trim() ?? '',
-      pageName: pageTitle?.querySelector('h2')?.textContent?.trim() ?? '',
+      pageName: pageTitle?.querySelector('strong')?.textContent?.trim() ?? '',
       fleetCardTag: fleetCard?.tagName ?? '',
       fleetCardLabel: fleetCard?.getAttribute('aria-label') ?? '',
       asset,
@@ -208,47 +208,52 @@ async function verifyMilitaryDeepLinks(win, directory) {
   const readConstructionVisual = async (viewId) => win.webContents.executeJavaScript(`(() => {
     const root = document.querySelector('[data-qa-construction-mode=${JSON.stringify(viewId)}]');
     const header = document.querySelector('[data-qa-construction-header=${JSON.stringify(viewId)}]');
-    const pageTitle = header?.querySelector('.shipyard-page-title-v1');
-    const pageArt = header?.querySelector('.shipyard-page-art-v1');
-    const pageImage = pageArt?.querySelector('img');
+    const headerImage = header?.querySelector(':scope > img');
+    const headerCopy = header?.querySelector(':scope > div');
+    const headerBack = header?.querySelector(':scope > button');
     const card = root?.querySelector('.shipyard-card-v1');
     const cardTitle = card?.querySelector('.shipyard-card-title-v1');
     const cardBody = card?.querySelector('.shipyard-card-body-v1');
     const headerStyle = header ? getComputedStyle(header) : null;
-    const titleStyle = pageTitle ? getComputedStyle(pageTitle) : null;
-    const artStyle = pageArt ? getComputedStyle(pageArt) : null;
-    const imageStyle = pageImage ? getComputedStyle(pageImage) : null;
+    const imageStyle = headerImage ? getComputedStyle(headerImage) : null;
+    const copyTitleStyle = headerCopy?.querySelector('strong') ? getComputedStyle(headerCopy.querySelector('strong')) : null;
+    const copyDetailStyle = headerCopy?.querySelector('p') ? getComputedStyle(headerCopy.querySelector('p')) : null;
+    const backStyle = headerBack ? getComputedStyle(headerBack) : null;
     const cardStyle = card ? getComputedStyle(card) : null;
     const cardTitleStyle = cardTitle ? getComputedStyle(cardTitle) : null;
     const cardBodyStyle = cardBody ? getComputedStyle(cardBody) : null;
-    const headerBorderStyle = header ? getComputedStyle(header, '::before') : null;
-    const headerSurfaceStyle = header ? getComputedStyle(header, '::after') : null;
+    const headerGrid = headerStyle?.gridTemplateColumns?.split(' ') ?? [];
     return {
       mode: root?.getAttribute('data-qa-construction-mode') ?? '',
       viewportWidth: window.innerWidth,
-      title: header?.querySelector('h2')?.textContent?.trim() ?? '',
+      title: headerCopy?.querySelector('strong')?.textContent?.trim() ?? '',
       kicker: header?.querySelector('small')?.textContent?.trim() ?? '',
-      image: pageImage?.getAttribute('src') ?? '',
-      hasPageTitle: Boolean(pageTitle),
-      hasPageArt: Boolean(pageArt),
+      image: headerImage?.getAttribute('src') ?? '',
+      hasBuildingCardTemplate: header?.classList.contains('building-card-v2') ?? false,
+      hasConstructionCardTemplate: header?.classList.contains('fleet-construction-card-v1') ?? false,
+      hasLegacyPageHeader: header?.classList.contains('shipyard-page-head-v1') ?? false,
+      hasLegacyPageTitle: Boolean(root?.querySelector('.shipyard-page-title-v1, .shipyard-page-art-v1')),
       hasLegacyEmblem: Boolean(root?.querySelector('.fleet-yard-emblem-v1')),
       header: {
         minHeight: headerStyle?.minHeight ?? '',
+        gridFirstColumn: headerGrid[0] ?? '',
+        gridLastColumn: headerGrid.at(-1) ?? '',
+        display: headerStyle?.display ?? '',
+        clipPath: headerStyle?.clipPath ?? '',
+        margin: headerStyle?.margin ?? '',
+        gap: headerStyle?.gap ?? '',
         padding: headerStyle?.padding ?? '',
-        borderTopWidth: headerStyle?.borderTopWidth ?? '',
-        hasBorderSurface: headerBorderStyle?.backgroundColor?.includes('rgba(65, 205, 242') ?? false,
-        hasGradientSurface: headerSurfaceStyle?.backgroundImage?.includes('linear-gradient') ?? false,
-        surfaceClipPath: headerSurfaceStyle?.clipPath ?? '',
-        titleDisplay: titleStyle?.display ?? '',
-        titleGrid: titleStyle?.gridTemplateColumns ?? '',
-        titleGridFirstColumn: titleStyle?.gridTemplateColumns?.split(' ')[0] ?? '',
-        titleGap: titleStyle?.gap ?? '',
-        artWidth: artStyle?.width ?? '',
-        artHeight: artStyle?.height ?? '',
-        artClipPath: artStyle?.clipPath ?? '',
+        borderWidth: headerStyle?.borderTopWidth ?? '',
+        hasGradient: headerStyle?.backgroundImage?.includes('linear-gradient') ?? false,
+        hasCyanInset: headerStyle?.boxShadow?.includes('inset') ?? false,
         imageWidth: imageStyle?.width ?? '',
         imageHeight: imageStyle?.height ?? '',
         imageFit: imageStyle?.objectFit ?? '',
+        titleSize: copyTitleStyle?.fontSize ?? '',
+        detailSize: copyDetailStyle?.fontSize ?? '',
+        detailMargin: copyDetailStyle?.marginTop ?? '',
+        backWidth: backStyle?.minWidth ?? '',
+        backHeight: backStyle?.height ?? '',
       },
       card: {
         minHeight: cardStyle?.minHeight ?? '',
@@ -262,27 +267,31 @@ async function verifyMilitaryDeepLinks(win, directory) {
   })()`);
 
   const shipConstructionVisual = await readConstructionVisual('ships');
-  const expectedPageArtClipPath = shipConstructionVisual.header.artClipPath;
   const sharedHeaderTemplate = (visual) => visual.mode
-    && visual.hasPageTitle
-    && visual.hasPageArt
+    && visual.hasBuildingCardTemplate
+    && visual.hasConstructionCardTemplate
+    && !visual.hasLegacyPageHeader
+    && !visual.hasLegacyPageTitle
     && !visual.hasLegacyEmblem
-    && visual.header.minHeight === '86px'
-    && visual.header.padding === '11px 18px 13px'
-    && visual.header.borderTopWidth === '0px'
-    && visual.header.hasBorderSurface
-    && visual.header.hasGradientSurface
-    && visual.header.surfaceClipPath.startsWith('polygon(')
-    && visual.header.titleDisplay === 'grid'
-    && visual.header.titleGridFirstColumn === '58px'
-    && visual.header.titleGap === '12px'
-    && visual.header.artWidth === '56px'
-    && visual.header.artHeight === '56px'
-    && visual.header.artClipPath === expectedPageArtClipPath
-    && visual.header.artClipPath.startsWith('polygon(50%')
-    && visual.header.imageWidth === '48px'
-    && visual.header.imageHeight === '48px'
-    && visual.header.imageFit === 'contain';
+    && visual.header.display === 'grid'
+    && visual.header.clipPath === 'none'
+    && visual.header.minHeight === '112px'
+    && visual.header.gridFirstColumn === (visual.viewportWidth <= 1040 ? '62px' : visual.viewportWidth <= 1440 ? '72px' : '84px')
+    && visual.header.gridLastColumn === '128px'
+    && visual.header.margin === '14px 0px'
+    && visual.header.gap === '12px'
+    && visual.header.padding === '10px 12px'
+    && visual.header.borderWidth === '1px'
+    && visual.header.hasGradient
+    && visual.header.hasCyanInset
+    && visual.header.imageWidth === (visual.viewportWidth <= 1040 ? '58px' : visual.viewportWidth <= 1440 ? '68px' : '80px')
+    && visual.header.imageHeight === (visual.viewportWidth <= 1040 ? '66px' : visual.viewportWidth <= 1440 ? '76px' : '86px')
+    && visual.header.imageFit === 'contain'
+    && visual.header.titleSize === '13px'
+    && visual.header.detailSize === '10px'
+    && visual.header.detailMargin === '7px'
+    && visual.header.backWidth === '128px'
+    && visual.header.backHeight === '36px';
   const expectedConstructionCardMinHeight = (visual) => visual.viewportWidth <= 1400 ? '282px' : '292px';
   const sharedCardTemplate = (visual) => visual.card.minHeight === expectedConstructionCardMinHeight(visual)
     && visual.card.borderWidth === '1px'
@@ -313,8 +322,7 @@ async function verifyMilitaryDeepLinks(win, directory) {
   await waitFor(win, `document.querySelector('[data-qa-construction-mode="defense"]')`);
   await waitFor(win, `document.querySelector('[data-qa-construction-header="defense"]')`);
   const defenseConstructionVisual = await readConstructionVisual('defense');
-  const sameHeaderVisual = JSON.stringify({ ...defenseConstructionVisual.header, titleGrid: defenseConstructionVisual.header.titleGridFirstColumn })
-    === JSON.stringify({ ...shipConstructionVisual.header, titleGrid: shipConstructionVisual.header.titleGridFirstColumn });
+  const sameHeaderVisual = JSON.stringify(defenseConstructionVisual.header) === JSON.stringify(shipConstructionVisual.header);
   const sameCardVisual = JSON.stringify(defenseConstructionVisual.card) === JSON.stringify(shipConstructionVisual.card);
   if (!sharedHeaderTemplate(defenseConstructionVisual) || !sharedCardTemplate(defenseConstructionVisual) || !sameHeaderVisual || !sameCardVisual || defenseConstructionVisual.title !== 'ОБОРОНА' || defenseConstructionVisual.image !== shipyardIdentity.asset || defenseConstructionVisual.kicker.includes('КОСМОДРОМ') || defenseConstructionVisual.kicker.includes('ОРБИТАЛЬНАЯ')) {
     throw new Error(`Defense construction visual contract failed: ${JSON.stringify({ ship: shipConstructionVisual, defense: defenseConstructionVisual })}`);
