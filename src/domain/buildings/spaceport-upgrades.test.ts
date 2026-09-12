@@ -4,7 +4,7 @@ import test from 'node:test';
 import { SCIENCE_CATALOG } from '../science/catalog.ts';
 import { TEST_TIME_SCALE } from '../runtime/mode.ts';
 import { createDefaultBuildingLevels, type ScienceLevels } from './resource-zone.ts';
-import { SPACEPORT_UPGRADE_BALANCE_V1 } from './spaceport-upgrade-balance-v1.ts';
+import { FACTION_SPACEPORT_UPGRADE_BALANCE_V1, SPACEPORT_UPGRADE_BALANCE_V1 } from './spaceport-upgrade-balance-v1.ts';
 import {
   PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS,
   PROTOTYPE_SPACEPORT_UPGRADE_COST,
@@ -27,6 +27,10 @@ import {
 } from './spaceport-upgrades.ts';
 
 const wallet = { metal: 100_000, minerals: 100_000, gas: 100_000 };
+
+function durationMs(hours: number, minutes: number, seconds: number): number {
+  return ((hours * 60 + minutes) * 60 + seconds) * 1_000;
+}
 
 function unlockedScienceLevels(): ScienceLevels {
   return Object.fromEntries(SCIENCE_CATALOG.map((science) => [science.id, 99])) as ScienceLevels;
@@ -132,10 +136,11 @@ test('Spaceport preview uses the selected faction ship data and keeps Balance v1
   assert.equal(veyraTransporter?.ship?.speed, 21_000);
 
   const synodPreview = previewSpaceportUpgrade({ ...context(), factionId: 'synod' }, 'ships', 'transporter');
-  assert.deepEqual(synodPreview.cost, SPACEPORT_UPGRADE_BALANCE_V1.transporter[0].cost);
-  assert.equal(synodPreview.baseDurationMs, SPACEPORT_UPGRADE_BALANCE_V1.transporter[0].durationMs);
+  const synodBalance = FACTION_SPACEPORT_UPGRADE_BALANCE_V1.synod.transporter[0];
+  assert.deepEqual(synodPreview.cost, synodBalance.cost);
+  assert.equal(synodPreview.baseDurationMs, synodBalance.durationMs);
   assert.equal(synodPreview.effectiveDurationMs, calculateSpaceportEffectiveDuration(
-    SPACEPORT_UPGRADE_BALANCE_V1.transporter[0].durationMs,
+    synodBalance.durationMs,
     1,
   ));
 
@@ -153,6 +158,92 @@ test('Spaceport preview uses the selected faction ship data and keeps Balance v1
   assert.equal(unresolvedVeyraRequirement.valueKind, 'quantity');
   assert.equal(unresolvedVeyraRequirement.currentLevel, null);
   assert.equal(unresolvedVeyraRequirement.met, false);
+});
+
+test('Factory upgrades are faction-specific and resolve L → L+1 without a level shift', () => {
+  const ordinaryShipIds = ['transporter', 'mega-transporter', 'scout', 'cruiser', 'defender', 'battleship', 'destroyer', 'bomber', 'death-star'] as const;
+  for (const factionId of ['aegis', 'synod', 'veyra'] as const) {
+    for (const shipId of ordinaryShipIds) {
+      const rows = FACTION_SPACEPORT_UPGRADE_BALANCE_V1[factionId][shipId];
+      assert.ok(rows, `${factionId} ${shipId} must have a Factory upgrades table`);
+      assert.equal(rows.length, 10, `${factionId} ${shipId} must have ten published levels`);
+    }
+  }
+
+  const fixtures = [
+    { factionId: 'aegis' as const, shipId: 'transporter', rows: [
+      { fromLevel: 0, cost: { metal: 1_000, minerals: 0, gas: 0 }, durationMs: durationMs(2, 30, 0) },
+      { fromLevel: 1, cost: { metal: 2_000, minerals: 0, gas: 0 }, durationMs: durationMs(3, 7, 30) },
+    ] },
+    { factionId: 'aegis' as const, shipId: 'destroyer', rows: [
+      { fromLevel: 0, cost: { metal: 50_000, minerals: 25_000, gas: 10_000 }, durationMs: durationMs(3, 30, 0) },
+      { fromLevel: 1, cost: { metal: 100_000, minerals: 50_000, gas: 20_000 }, durationMs: durationMs(4, 54, 0) },
+    ] },
+    { factionId: 'aegis' as const, shipId: 'death-star', rows: [
+      { fromLevel: 0, cost: { metal: 2_000_000, minerals: 1_000_000, gas: 500_000 }, durationMs: durationMs(10, 0, 0) },
+      { fromLevel: 1, cost: { metal: 4_000_000, minerals: 2_000_000, gas: 1_000_000 }, durationMs: durationMs(14, 0, 0) },
+    ] },
+    { factionId: 'synod' as const, shipId: 'transporter', rows: [
+      { fromLevel: 0, cost: { metal: 1_000, minerals: 0, gas: 0 }, durationMs: durationMs(2, 30, 0) },
+      { fromLevel: 1, cost: { metal: 2_000, minerals: 0, gas: 0 }, durationMs: durationMs(3, 7, 30) },
+    ] },
+    { factionId: 'synod' as const, shipId: 'destroyer', rows: [
+      { fromLevel: 0, cost: { metal: 45_000, minerals: 22_500, gas: 10_000 }, durationMs: durationMs(3, 30, 0) },
+      { fromLevel: 1, cost: { metal: 90_000, minerals: 45_000, gas: 20_000 }, durationMs: durationMs(4, 54, 0) },
+    ] },
+    { factionId: 'synod' as const, shipId: 'death-star', rows: [
+      { fromLevel: 0, cost: { metal: 2_000_000, minerals: 1_000_000, gas: 500_000 }, durationMs: durationMs(9, 0, 0) },
+      { fromLevel: 1, cost: { metal: 4_000_000, minerals: 2_000_000, gas: 1_000_000 }, durationMs: durationMs(12, 36, 0) },
+    ] },
+    { factionId: 'veyra' as const, shipId: 'transporter', rows: [
+      { fromLevel: 0, cost: { metal: 1_600, minerals: 800, gas: 0 }, durationMs: durationMs(2, 30, 0) },
+      { fromLevel: 1, cost: { metal: 3_200, minerals: 1_600, gas: 0 }, durationMs: durationMs(3, 7, 30) },
+    ] },
+    { factionId: 'veyra' as const, shipId: 'destroyer', rows: [
+      { fromLevel: 0, cost: { metal: 25_000, minerals: 15_000, gas: 1_500 }, durationMs: durationMs(3, 0, 0) },
+      { fromLevel: 1, cost: { metal: 50_000, minerals: 30_000, gas: 3_000 }, durationMs: durationMs(4, 12, 0) },
+    ] },
+    { factionId: 'veyra' as const, shipId: 'death-star', rows: [
+      { fromLevel: 0, cost: { metal: 2_000_000, minerals: 1_000_000, gas: 500_000 }, durationMs: durationMs(8, 0, 0) },
+      { fromLevel: 1, cost: { metal: 4_000_000, minerals: 2_000_000, gas: 1_000_000 }, durationMs: durationMs(11, 12, 0) },
+    ] },
+  ] as const;
+
+  for (const fixture of fixtures) {
+    for (const expected of fixture.rows) {
+      const state = createDefaultSpaceportUpgradeState();
+      state.shipLevels[fixture.shipId] = expected.fromLevel;
+      const preview = previewSpaceportUpgrade({ ...context(state), factionId: fixture.factionId }, 'ships', fixture.shipId);
+      assert.deepEqual(preview.cost, expected.cost, `${fixture.factionId} ${fixture.shipId} ${expected.fromLevel} → ${expected.fromLevel + 1} cost`);
+      assert.equal(preview.baseDurationMs, expected.durationMs, `${fixture.factionId} ${fixture.shipId} ${expected.fromLevel} → ${expected.fromLevel + 1} duration`);
+    }
+  }
+
+  assert.notDeepEqual(
+    FACTION_SPACEPORT_UPGRADE_BALANCE_V1.aegis.destroyer[0],
+    FACTION_SPACEPORT_UPGRADE_BALANCE_V1.synod.destroyer[0],
+    'Synod must not fall back to the Aegis destroyer table',
+  );
+  assert.notDeepEqual(
+    FACTION_SPACEPORT_UPGRADE_BALANCE_V1.aegis['death-star'][0],
+    FACTION_SPACEPORT_UPGRADE_BALANCE_V1.veyra['death-star'][0],
+    'Veyra must not fall back to the Aegis death-star table',
+  );
+});
+
+test('queued upgrades retain their captured faction-specific duration snapshot', () => {
+  const initial = { ...context(), factionId: 'synod' as const };
+  const queued = enqueueSpaceportUpgrade(initial, 'ships', 'destroyer', 5_000, 'synod-destroyer');
+  assert.equal(queued.ok, true);
+  assert.ok(queued.task);
+  assert.equal(queued.task.effectiveDurationMs, calculateSpaceportEffectiveDuration(
+    FACTION_SPACEPORT_UPGRADE_BALANCE_V1.synod.destroyer[0].durationMs,
+    1,
+  ));
+  const reloadedWithAnotherFaction = { ...initial, factionId: 'veyra' as const, state: queued.state };
+  const reconciled = reconcileSpaceportUpgradeState(reloadedWithAnotherFaction.state, 5_000);
+  assert.equal(reconciled.state.shipQueue[0]?.effectiveDurationMs, queued.task.effectiveDurationMs);
+  assert.equal(reconciled.state.shipQueue[0]?.finishAt, queued.task.finishAt);
 });
 
 test('prototype commander upgrade fallback doubles from the previous level', () => {

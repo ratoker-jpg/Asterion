@@ -17,6 +17,7 @@ import type { CombatFactionId } from './domain/combat/factions.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import { ACTIVE_RUNTIME_MODE } from './domain/runtime/mode.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
+import './building-card.css';
 import './spaceport-upgrades.css';
 import './spaceport-upgrades-enhancements.css';
 
@@ -336,7 +337,7 @@ export function SpaceportUpgradeView({
           <h1>КОСМОДРОМ</h1>
         </header>
 
-        <section className="spaceport-building-card-v2">
+        <section className="building-card-v2 spaceport-building-card-v2">
           <img src={spaceport.art} alt="Космодром" draggable={false} />
           <div>
             <small>{planetName}</small>

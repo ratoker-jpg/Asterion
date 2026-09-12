@@ -24,6 +24,7 @@ import {
   type FleetSectionId,
   type FleetSectionItem,
 } from './ui/navigation.tsx';
+import './building-card.css';
 import './fleet-workspace.css';
 
 const FLEET_ROOT_STATUS = 'Выберите корабли и миссию. Отправка флота будет подключена следующим этапом.';
@@ -201,20 +202,18 @@ function FleetWorkspace({
 
         <button
           type="button"
-          className="fleet-yard-card-v1"
+          className="building-card-v2 fleet-yard-card-v1"
           data-qa-building-role="shipyard"
           data-qa-building-faction={factionId}
           data-qa-building-asset={shipyardPresentation.art}
           aria-label={`Открыть Верфь фракции ${factionName}`}
           onClick={() => chooseSection('ships')}
         >
-          <div className="fleet-yard-emblem-v1">
-            <img src={shipyardPresentation.art} alt="" aria-hidden="true" draggable={false} />
-          </div>
+          <img src={shipyardPresentation.art} alt="Верфь" draggable={false} />
           <div>
             <small>БАЗА ФЛОТА</small>
             <strong>Верфь</strong>
-            <span>Ангар {fleetSnapshot.hangarLevel} · Верфь {fleetSnapshot.shipyardLevel}</span>
+            <p>Ангар {fleetSnapshot.hangarLevel} · Верфь {fleetSnapshot.shipyardLevel}</p>
           </div>
         </button>
 

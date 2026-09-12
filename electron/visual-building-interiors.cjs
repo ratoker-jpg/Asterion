@@ -152,6 +152,11 @@ async function verifyMilitaryDeepLinks(win, directory) {
     const fleetCard = document.querySelector('.fleet-yard-card-v1');
     const pageTitle = document.querySelector('.shipyard-page-title-v1');
     const asset = root?.getAttribute('data-qa-building-asset') ?? '';
+    const cardStyle = fleetCard ? getComputedStyle(fleetCard) : null;
+    const fleetImage = fleetCard?.querySelector('img');
+    const imageStyle = fleetImage ? getComputedStyle(fleetImage) : null;
+    const titleStyle = fleetCard?.querySelector('strong') ? getComputedStyle(fleetCard.querySelector('strong')) : null;
+    const detailStyle = fleetCard?.querySelector('p') ? getComputedStyle(fleetCard.querySelector('p')) : null;
     return {
       fleetName: fleetCard?.querySelector('strong')?.textContent?.trim() ?? '',
       pageName: pageTitle?.querySelector('h2')?.textContent?.trim() ?? '',
@@ -159,10 +164,44 @@ async function verifyMilitaryDeepLinks(win, directory) {
       fleetCardLabel: fleetCard?.getAttribute('aria-label') ?? '',
       asset,
       image: root?.querySelector('img')?.getAttribute('src') ?? '',
+      hasSharedCardTemplate: fleetCard?.classList.contains('building-card-v2') ?? false,
+      hasLegacyEmblem: Boolean(fleetCard?.querySelector('.fleet-yard-emblem-v1')),
+      visual: {
+        viewportWidth: window.innerWidth,
+        minHeight: cardStyle?.minHeight ?? '',
+        gridFirstColumn: cardStyle?.gridTemplateColumns?.split(' ')[0] ?? '',
+        gap: cardStyle?.gap ?? '',
+        padding: cardStyle?.padding ?? '',
+        borderWidth: cardStyle?.borderTopWidth ?? '',
+        hasGradient: cardStyle?.backgroundImage?.includes('linear-gradient') ?? false,
+        hasCyanInset: cardStyle?.boxShadow?.includes('inset') ?? false,
+        imageWidth: imageStyle?.width ?? '',
+        imageHeight: imageStyle?.height ?? '',
+        imageFit: imageStyle?.objectFit ?? '',
+        titleSize: titleStyle?.fontSize ?? '',
+        detailSize: detailStyle?.fontSize ?? '',
+        detailMargin: detailStyle?.marginTop ?? '',
+      },
       hasLegacyName: Boolean(document.querySelector('[data-qa-building-role="shipyard"]')?.textContent?.includes('Орбитальная')),
     };
   })()`);
-  if (shipyardIdentity.fleetName !== 'Верфь' || shipyardIdentity.pageName !== 'Верфь' || shipyardIdentity.fleetCardTag !== 'BUTTON' || !shipyardIdentity.fleetCardLabel.startsWith('Открыть Верфь') || shipyardIdentity.hasLegacyName || !/building\.aegis\.shipyard(?:-[^/]+)?\.png$/.test(shipyardIdentity.asset) || shipyardIdentity.image !== shipyardIdentity.asset) {
+  const expectedGridColumn = shipyardIdentity.visual.viewportWidth <= 1040 ? '62px' : shipyardIdentity.visual.viewportWidth <= 1440 ? '72px' : '84px';
+  const expectedImageWidth = shipyardIdentity.visual.viewportWidth <= 1040 ? '58px' : shipyardIdentity.visual.viewportWidth <= 1440 ? '68px' : '80px';
+  const expectedImageHeight = shipyardIdentity.visual.viewportWidth <= 1040 ? '66px' : shipyardIdentity.visual.viewportWidth <= 1440 ? '76px' : '86px';
+  const visualTemplateMatches = shipyardIdentity.visual.minHeight === '112px'
+    && shipyardIdentity.visual.gridFirstColumn === expectedGridColumn
+    && shipyardIdentity.visual.gap === '12px'
+    && shipyardIdentity.visual.padding === '10px 12px'
+    && shipyardIdentity.visual.borderWidth === '1px'
+    && shipyardIdentity.visual.hasGradient
+    && shipyardIdentity.visual.hasCyanInset
+    && shipyardIdentity.visual.imageWidth === expectedImageWidth
+    && shipyardIdentity.visual.imageHeight === expectedImageHeight
+    && shipyardIdentity.visual.imageFit === 'contain'
+    && shipyardIdentity.visual.titleSize === '13px'
+    && shipyardIdentity.visual.detailSize === '10px'
+    && shipyardIdentity.visual.detailMargin === '7px';
+  if (shipyardIdentity.fleetName !== 'Верфь' || shipyardIdentity.pageName !== 'Верфь' || shipyardIdentity.fleetCardTag !== 'BUTTON' || !shipyardIdentity.fleetCardLabel.startsWith('Открыть Верфь') || shipyardIdentity.hasLegacyName || shipyardIdentity.hasLegacyEmblem || !shipyardIdentity.hasSharedCardTemplate || !visualTemplateMatches || !/building\.aegis\.shipyard(?:-[^/]+)?\.png$/.test(shipyardIdentity.asset) || shipyardIdentity.image !== shipyardIdentity.asset) {
     throw new Error(`Shipyard identity contract failed: ${JSON.stringify(shipyardIdentity)}`);
   }
   const unitTime = await win.webContents.executeJavaScript(`(() => {

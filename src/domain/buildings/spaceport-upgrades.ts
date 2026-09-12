@@ -8,7 +8,7 @@ import { SCIENCE_CATALOG } from '../science/catalog.ts';
 import type { ScienceId } from '../science/types.ts';
 import type { BuildingLevels, BuildingRole, ScienceLevels } from './resource-zone.ts';
 import { scaleRuntimeDuration, type RuntimeMode } from '../runtime/mode.ts';
-import { SPACEPORT_UPGRADE_BALANCE_V1 } from './spaceport-upgrade-balance-v1.ts';
+import { getFactionSpaceportUpgradeBalance } from './spaceport-upgrade-balance-v1.ts';
 
 export const SPACEPORT_UPGRADE_QUEUE_CAPACITY = 3;
 export const PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS = 15 * 60 * 1000;
@@ -176,10 +176,14 @@ function withQueue(
     : { ...state, commanderQueue: queue };
 }
 
-function getSpaceportUpgradeBalance(track: SpaceportUpgradeTrack, shipId: string, fromLevel: number) {
+function getSpaceportUpgradeBalance(
+  track: SpaceportUpgradeTrack,
+  shipId: string,
+  fromLevel: number,
+  factionId: CombatFactionId,
+) {
   if (track !== 'ships') return null;
-  const rows = SPACEPORT_UPGRADE_BALANCE_V1[shipId as keyof typeof SPACEPORT_UPGRADE_BALANCE_V1];
-  return rows?.[fromLevel] ?? null;
+  return getFactionSpaceportUpgradeBalance(factionId, shipId, fromLevel);
 }
 
 function getCatalog(track: SpaceportUpgradeTrack, factionId: CombatFactionId): readonly CatalogEntity[] {
@@ -360,7 +364,7 @@ export function previewSpaceportUpgrade(
     context.scienceLevels,
     context.factionId,
   );
-  const balance = getSpaceportUpgradeBalance(track, shipId, projectedLevel);
+  const balance = getSpaceportUpgradeBalance(track, shipId, projectedLevel, context.factionId ?? 'aegis');
   const cost = balance ? { ...balance.cost } : calculateSpaceportUpgradeCost(projectedLevel);
   const baseDurationMs = balance?.durationMs ?? PROTOTYPE_SPACEPORT_UPGRADE_BASE_DURATION_MS;
   const effectiveDurationMs = scaleRuntimeDuration(calculateSpaceportEffectiveDuration(
