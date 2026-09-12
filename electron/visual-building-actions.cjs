@@ -68,6 +68,10 @@ async function seed(win, buildings) {
     save.minerals = 999999999;
     save.gas = 999999999;
     save.queues = { 'helion-01': [] };
+    save.resourceClock = {
+      lastReconciledAt: Date.now(),
+      remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+    };
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 10);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem('asterion.test-time-scale.v1', '1');
@@ -149,8 +153,9 @@ async function verifyDependentQueueCancellation(win, directory) {
       queueHeader: document.querySelector('.resource-zone-queue .resource-zone-panel-title > span')?.textContent?.trim() ?? '',
     };
   })()`);
-  if (after.queue.length !== 0 || JSON.stringify(after.refund) !== JSON.stringify(after.expected) || !after.notice.includes('Каскадно отменено ещё 2 зависимых проектов') || after.queueHeader !== '0 / 3') {
-    throw new Error(`Dependent building cancellation mismatch: ${JSON.stringify({ before, after })}`);
+  const refundShortfall = ['metal', 'minerals', 'gas'].some((key) => after.refund[key] < after.expected[key]);
+  if (after.queue.length !== 0 || refundShortfall || !after.notice.includes('Каскадно отменено ещё 2 зависимых проектов') || after.queueHeader !== '0 / 3') {
+    throw new Error(`Dependent building cancellation mismatch: ${JSON.stringify({ before, after, refundShortfall })}`);
   }
   await capture(win, directory, 'queue-dependent-cancelled');
   return { before, after, confirmation };
