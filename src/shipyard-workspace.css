@@ -183,6 +183,214 @@ html.web-preview.asterion-long-page .stage {
   font-size: 11px;
 }
 
+.fleet-defense-population-v1 {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 12px 0 16px;
+  padding: 10px 16px;
+  border: 1px solid rgba(66, 178, 207, .2);
+  border-left: 3px solid #43def8;
+  background: linear-gradient(90deg, rgba(5, 61, 76, .58), rgba(3, 24, 35, .78));
+}
+
+.fleet-defense-population-v1 > div { display: grid; gap: 3px; min-width: 0; }
+.fleet-defense-population-v1 > div:last-child { text-align: right; }
+.fleet-defense-population-v1 small { color: #79b9cb; font-size: 8px; letter-spacing: .1em; }
+.fleet-defense-population-v1 strong { color: #effcff; font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.fleet-production-queue-v1 {
+  margin-top: 15px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(66, 185, 214, .14);
+}
+
+.fleet-production-queue-head-v1 {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #bfeaf2;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+.fleet-production-queue-head-v1 > span { color: #bfeaf2; }
+.fleet-production-queue-head-v1 strong { color: #70e6ff; font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.fleet-production-queue-empty-v1 {
+  min-height: 74px;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 10px 11px;
+  border: 1px dashed rgba(74, 182, 209, .2);
+  background: rgba(3, 22, 32, .52);
+}
+
+.fleet-production-queue-empty-v1 > span {
+  color: #3d8799;
+  font-size: 21px;
+  text-align: center;
+}
+
+.fleet-production-queue-empty-v1 strong,
+.fleet-production-queue-empty-v1 small { display: block; }
+.fleet-production-queue-empty-v1 strong { color: #91b9c4; font-size: 10px; }
+.fleet-production-queue-empty-v1 small { margin-top: 4px; color: #5f7e88; font-size: 8px; line-height: 1.25; }
+
+.fleet-production-queue-foot-v1 {
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px solid rgba(66, 185, 214, .14);
+}
+
+.fleet-production-back-v1 {
+  width: 100%;
+  min-width: 0 !important;
+  text-align: left;
+}
+
+.fleet-production-queue-list-v1 {
+  display: grid;
+  gap: 7px;
+  margin-top: 7px;
+}
+
+.fleet-production-order-v1 {
+  min-width: 0;
+  min-height: 76px;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 26px;
+  grid-template-rows: minmax(0, 1fr) 3px;
+  align-items: center;
+  gap: 0 8px;
+  padding: 8px 8px 7px;
+  border: 1px solid rgba(66, 187, 215, .18);
+  background: rgba(3, 24, 35, .78);
+}
+
+.fleet-production-order-v1.active {
+  border-color: rgba(66, 216, 244, .45);
+  box-shadow: inset 3px 0 #3edcf7;
+  background: linear-gradient(90deg, rgba(5, 61, 76, .58), rgba(3, 24, 35, .78));
+}
+
+.fleet-production-order-v1.waiting { opacity: .76; }
+
+.fleet-production-order-art-v1 {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+}
+
+.fleet-production-order-art-v1 img {
+  width: 46px;
+  height: 46px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 8px rgba(34, 200, 243, .18));
+}
+
+.fleet-production-order-art-v1 > span { color: #4c8190; font-size: 18px; }
+
+.fleet-production-order-main-v1 {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.fleet-production-order-main-v1 strong,
+.fleet-production-order-main-v1 small,
+.fleet-production-order-main-v1 time,
+.fleet-production-order-main-v1 > span { display: block; }
+
+.fleet-production-order-main-v1 strong {
+  overflow: hidden;
+  color: #e5f9fd;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fleet-production-order-main-v1 small { color: #7898a4; font-size: 8px; line-height: 1.2; }
+
+.fleet-production-order-main-v1 time {
+  margin-top: 2px;
+  color: #74e7ff;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: .5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fleet-production-order-main-v1 > span {
+  margin-top: 2px;
+  color: #64838e;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: .35px;
+}
+
+.fleet-production-order-meta-v1 {
+  align-self: start;
+  justify-self: end;
+}
+
+.fleet-production-order-meta-v1 button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid rgba(236, 91, 100, .72);
+  background: rgba(91, 18, 28, .42);
+  color: #ff6972;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  text-shadow: 0 0 7px rgba(255, 72, 88, .5);
+}
+
+.fleet-production-order-meta-v1 button:hover,
+.fleet-production-order-meta-v1 button:focus-visible {
+  border-color: #ff9aa0;
+  background: rgba(142, 24, 38, .68);
+  color: #fff0f1;
+  box-shadow: 0 0 10px rgba(255, 70, 86, .3);
+  outline: none;
+}
+
+.fleet-production-order-progress-v1 {
+  grid-column: 1 / -1;
+  height: 3px;
+  align-self: end;
+  overflow: hidden;
+  background: rgba(18, 79, 94, .65);
+}
+
+.fleet-production-order-progress-v1 i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: left center;
+  background: linear-gradient(90deg, #20d5fb, #8af1ff);
+  transition: transform 220ms linear;
+}
+
+.fleet-production-order-v1.waiting .fleet-production-order-progress-v1 i { background: #4b8492; }
+
+/* The fleet queue is a sidebar section. Its list must grow with the page. */
+.fleet-production-queue-v1,
+.fleet-production-queue-list-v1 {
+  overflow: visible;
+}
+
 .shipyard-grid-v1 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -225,7 +433,7 @@ html.web-preview.asterion-long-page .stage {
 
 .shipyard-owned-v1 {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 7px;
   min-width: 0;
@@ -234,7 +442,8 @@ html.web-preview.asterion-long-page .stage {
   background: rgba(1, 18, 27, .58);
 }
 
-.shipyard-owned-v1 small {
+.shipyard-owned-v1 small,
+.fleet-commander-level-v1 small {
   color: #6b9ead;
   font-size: 8px;
   font-weight: 750;
@@ -242,12 +451,55 @@ html.web-preview.asterion-long-page .stage {
   white-space: nowrap;
 }
 
-.shipyard-owned-v1 strong {
+.shipyard-owned-v1 > strong {
   color: #9cc2cb;
   font-size: 19px;
   line-height: 1;
   font-weight: 900;
   text-shadow: 0 0 14px rgba(67, 211, 246, .16);
+}
+
+.shipyard-card-title-v1.commander { grid-template-columns: 164px minmax(0, 1fr) 28px; }
+
+.shipyard-owned-count-v1 {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.shipyard-owned-v1.has-commander-level {
+  grid-template-columns: minmax(0, 1fr) 58px;
+  gap: 7px;
+}
+
+.shipyard-owned-v1.has-commander-level .shipyard-owned-count-v1 { grid-column: 1; }
+
+.fleet-commander-level-v1 {
+  min-height: 32px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  padding: 4px 5px;
+  border: 1px solid rgba(66, 188, 217, .42);
+  background: #062330;
+  color: #9eefff;
+  font-style: normal;
+  text-align: center;
+}
+
+.fleet-commander-level-v1 small {
+  color: #67c9da;
+  font-size: 7px;
+  letter-spacing: .08em;
+}
+
+.fleet-commander-level-v1 strong {
+  color: #9eefff;
+  font-size: 12px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .shipyard-owned-v1.has-ships {
@@ -256,7 +508,8 @@ html.web-preview.asterion-long-page .stage {
 }
 
 .shipyard-owned-v1.has-ships small { color: #85d9e9; }
-.shipyard-owned-v1.has-ships strong {
+.shipyard-owned-v1.has-ships > strong,
+.shipyard-owned-v1.has-ships .shipyard-owned-count-v1 strong {
   color: #f3fdff;
   font-size: 22px;
   text-shadow: 0 0 16px rgba(57, 221, 255, .46);
@@ -311,7 +564,7 @@ html.web-preview.asterion-long-page .stage {
   z-index: 2;
   min-width: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) 38px;
+  grid-template-rows: minmax(0, 1fr) 52px;
   place-items: center;
   padding: 7px 8px 8px;
   border-right: 1px solid rgba(68, 185, 214, .18);
@@ -510,6 +763,13 @@ html.web-preview.asterion-long-page .stage {
   white-space: nowrap;
 }
 
+.shipyard-tooltip-level-v1 {
+  border-left-color: rgba(67, 222, 248, .72) !important;
+  background: linear-gradient(90deg, rgba(6, 69, 88, .56), rgba(4, 28, 39, .5)) !important;
+}
+
+.shipyard-tooltip-level-v1 strong { color: #9eefff; }
+
 .shipyard-tooltip-ability-v1 {
   display: grid;
   gap: 3px;
@@ -564,6 +824,30 @@ html.web-preview.asterion-long-page .stage {
   flex: 1;
   height: 1px;
   background: linear-gradient(90deg, rgba(73, 200, 233, .32), transparent);
+}
+
+.shipyard-visible-level-v1 {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 1px solid rgba(67, 222, 248, .38);
+  background: linear-gradient(90deg, rgba(6, 69, 88, .56), rgba(4, 28, 39, .5));
+  color: #9eefff;
+  white-space: nowrap;
+}
+
+.shipyard-visible-level-v1 small {
+  color: #78b8c8;
+  font-size: 7px;
+  letter-spacing: .08em;
+}
+
+.shipyard-visible-level-v1 b {
+  color: #effcff;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 
 .shipyard-cost-grid-v1 {

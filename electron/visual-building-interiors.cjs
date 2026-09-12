@@ -186,23 +186,26 @@ async function verifyMilitaryDeepLinks(win, directory) {
       hasReturnToShipyardOverlay: Boolean(document.querySelector('.building-interior-return-overlay')),
     };
   })()`);
-  const expectedGridColumn = shipyardIdentity.visual.viewportWidth <= 1040 ? '62px' : shipyardIdentity.visual.viewportWidth <= 1440 ? '72px' : '84px';
-  const expectedImageWidth = shipyardIdentity.visual.viewportWidth <= 1040 ? '58px' : shipyardIdentity.visual.viewportWidth <= 1440 ? '68px' : '80px';
-  const expectedImageHeight = shipyardIdentity.visual.viewportWidth <= 1040 ? '66px' : shipyardIdentity.visual.viewportWidth <= 1440 ? '76px' : '86px';
+  // The fleet sidebar card is intentionally a non-interactive presentation
+  // block. Keep its contract aligned with the shared compact card used by the
+  // fleet workspace at both supported QA viewports.
+  const expectedGridColumn = '72px';
+  const expectedImageWidth = '68px';
+  const expectedImageHeight = '76px';
   const visualTemplateMatches = shipyardIdentity.visual.minHeight === '112px'
     && shipyardIdentity.visual.gridFirstColumn === expectedGridColumn
-    && shipyardIdentity.visual.gap === '12px'
-    && shipyardIdentity.visual.padding === '10px 12px'
+    && shipyardIdentity.visual.gap === '10px'
+    && shipyardIdentity.visual.padding === '10px'
     && shipyardIdentity.visual.borderWidth === '1px'
     && shipyardIdentity.visual.hasGradient
     && shipyardIdentity.visual.hasCyanInset
     && shipyardIdentity.visual.imageWidth === expectedImageWidth
     && shipyardIdentity.visual.imageHeight === expectedImageHeight
     && shipyardIdentity.visual.imageFit === 'contain'
-    && shipyardIdentity.visual.titleSize === '13px'
-    && shipyardIdentity.visual.detailSize === '10px'
-    && shipyardIdentity.visual.detailMargin === '7px';
-  if (shipyardIdentity.fleetName !== 'Верфь' || shipyardIdentity.pageName !== 'Верфь' || shipyardIdentity.fleetCardTag !== 'BUTTON' || !shipyardIdentity.fleetCardLabel.startsWith('Открыть Верфь') || shipyardIdentity.hasLegacyName || shipyardIdentity.hasLegacyEmblem || shipyardIdentity.hasReturnToShipyardOverlay || !shipyardIdentity.hasSharedCardTemplate || !visualTemplateMatches || !/building\.aegis\.shipyard(?:-[^/]+)?\.png$/.test(shipyardIdentity.asset) || shipyardIdentity.image !== shipyardIdentity.asset) {
+    && shipyardIdentity.visual.titleSize === '11px'
+    && shipyardIdentity.visual.detailSize === '8px'
+    && shipyardIdentity.visual.detailMargin === '6px';
+  if (shipyardIdentity.fleetName !== 'Верфь' || shipyardIdentity.pageName !== 'Верфь' || shipyardIdentity.fleetCardTag !== 'DIV' || shipyardIdentity.fleetCardLabel || shipyardIdentity.hasLegacyName || shipyardIdentity.hasLegacyEmblem || shipyardIdentity.hasReturnToShipyardOverlay || !shipyardIdentity.hasSharedCardTemplate || !visualTemplateMatches || !/building\.aegis\.shipyard(?:-[^/]+)?\.png$/.test(shipyardIdentity.asset) || shipyardIdentity.image !== shipyardIdentity.asset) {
     throw new Error(`Shipyard identity contract failed: ${JSON.stringify(shipyardIdentity)}`);
   }
 

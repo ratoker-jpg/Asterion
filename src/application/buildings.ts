@@ -20,8 +20,11 @@ import {
 } from '../domain/buildings/production-bots.ts';
 import {
   calculateFleetCapacity,
-  calculateFleetPopulation,
 } from '../domain/fleet/runtime.ts';
+import {
+  getDefensePopulationSummary,
+  getFleetProductionPopulationSummary,
+} from '../domain/fleet/production.ts';
 import {
   advanceRecyclingState,
   collectRecyclingJob,
@@ -179,12 +182,25 @@ export function destroyBuilding(
     const currentLevel = Math.max(0, Math.floor(planet.buildings.hangar ?? 0));
     if (currentLevel > 0) {
       const nextCapacity = calculateFleetCapacity(currentLevel - 1);
-      const currentPopulation = calculateFleetPopulation(planet.fleet, state.profile.factionId);
-      if (currentPopulation > nextCapacity) {
+      const currentPopulation = getFleetProductionPopulationSummary(
+        planet.fleet,
+        planet.fleetProduction,
+        currentLevel,
+        state.profile.factionId,
+      ).population;
+      const defensePopulation = getDefensePopulationSummary(
+        planet.defense,
+        planet.fleetProduction,
+        currentLevel,
+        state.profile.factionId,
+      ).population;
+      if (currentPopulation > nextCapacity || defensePopulation > nextCapacity) {
         return {
           ok: false,
           state,
-          reason: `Нельзя понизить ангар: флот занимает ${currentPopulation} мест, новая вместимость — ${nextCapacity}.`,
+          reason: currentPopulation > nextCapacity
+            ? `Нельзя понизить ангар: флот занимает ${currentPopulation} мест, новая вместимость — ${nextCapacity}.`
+            : `Нельзя понизить ангар: оборона занимает ${defensePopulation} мест, новая вместимость — ${nextCapacity}.`,
           refundPercent: null,
         };
       }

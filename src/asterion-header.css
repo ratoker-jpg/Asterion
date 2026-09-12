@@ -287,6 +287,10 @@
   transition:opacity .14s ease,transform .14s ease;
 }
 .asterion-header__resource-tooltip strong{margin:0;color:#e9fbff;font-size:12px}
+.asterion-header__resource-population-breakdown{display:grid;gap:3px;margin-top:2px;padding-top:5px;border-top:1px solid rgba(67,211,242,.2)}
+.asterion-header__resource-population-breakdown>span{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.asterion-header__resource-population-breakdown small{color:#85aeb9;font-size:9px;letter-spacing:.5px;line-height:1.2}
+.asterion-header__resource-population-breakdown b{color:#e9fbff;font-size:10px;font-variant-numeric:tabular-nums;line-height:1.2;white-space:nowrap}
 .asterion-header__resource:hover .asterion-header__resource-tooltip,
 .asterion-header__resource:focus .asterion-header__resource-tooltip,
 .asterion-header__resource:focus-visible .asterion-header__resource-tooltip{opacity:1;transform:translate(-50%,0)}

@@ -28,6 +28,11 @@ import {
   readFleetBuildBudget,
 } from './fleet.ts';
 import { bindScienceEventBridge, cancelScience, startScience } from './science.ts';
+import {
+  bindFleetProductionEventBridge,
+  cancelFleetProduction,
+  startFleetProduction,
+} from './fleet-production.ts';
 import { reconcileRuntime } from './reconcile.ts';
 import { getEffectiveResourceIncomePerHour } from './resource-clock.ts';
 import { publishApplicationRuntimeSnapshot } from './runtime.ts';
@@ -269,6 +274,72 @@ test('spaceport application action names and resolves the selected faction ship'
   assert.equal(result.ok, true);
   assert.equal(result.entityName, 'Транспортный дрон');
   assert.equal(result.state.planets['helion-01'].spaceportUpgrades.shipQueue[0]?.shipId, 'transporter');
+});
+
+test('fleet production application persists, reconciles, and bridges all three queues', () => {
+  const initial = withBuildingSetup(createInitialSaveState('test', 1_000));
+  const startContext = context(2_000);
+  const ship = startFleetProduction(initial, startContext, 'ships', 'scout', 2, 'app-ship');
+  assert.equal(ship.transition.ok, true);
+  assert.equal(ship.state.planets['helion-01'].fleetProduction.shipQueue.length, 1);
+  assert.equal(getFleetSummaryForState(ship.state).pendingPopulation, 4);
+
+  const defense = startFleetProduction(ship.state, { ...startContext, now: 2_001 }, 'defense', 'ballistic-turret', 2, 'app-defense');
+  assert.equal(defense.transition.ok, true);
+  const commander = startFleetProduction(defense.state, { ...startContext, now: 2_002 }, 'commanders', 'corsair', 1, 'app-commander');
+  assert.equal(commander.transition.ok, true);
+  assert.equal(commander.state.planets['helion-01'].fleetProduction.commanderQueue.length, 1);
+
+  const task = ship.state.planets['helion-01'].fleetProduction.shipQueue[0];
+  assert.ok(task);
+  const completed = reconcileRuntime(commander.state, { ...startContext, now: task.finishAt });
+  assert.equal(completed.events.some((event) => event.kind === 'fleet-production'), true);
+  assert.equal(completed.state.planets['helion-01'].fleet.ships.scout, 22);
+
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => task.finishAt, testTimeScale: 10 });
+  assert.equal(persistence.write(commander.state).ok, true);
+  const offline = persistence.read();
+  assert.equal(offline.planets['helion-01'].fleet.ships.scout, 22);
+  assert.equal(offline.planets['helion-01'].fleetProduction.shipQueue.length, 0);
+
+  const target = new EventTarget();
+  let current = initial;
+  const commits: SaveState[] = [];
+  const unbind = bindFleetProductionEventBridge({
+    target,
+    getState: () => current,
+    getContext: (now) => ({ ...context(now), rng: () => 0 }),
+    commit: (next) => {
+      current = next;
+      commits.push(next);
+    },
+    onNotice: () => undefined,
+  });
+  target.dispatchEvent(new CustomEvent('asterion:fleet-production-start-request', {
+    detail: { queueKind: 'ships', itemId: 'scout', quantity: 1, orderId: 'bridge-ship', now: 3_000 },
+  }));
+  assert.equal(commits.length, 1);
+  assert.equal(current.planets['helion-01'].fleetProduction.shipQueue[0]?.id, 'bridge-ship');
+  target.dispatchEvent(new CustomEvent('asterion:fleet-production-cancel-request', {
+    detail: { orderId: 'bridge-ship', now: 3_001 },
+  }));
+  assert.equal(commits.length, 2);
+  assert.equal(current.planets['helion-01'].fleetProduction.shipQueue.length, 0);
+  target.dispatchEvent(new CustomEvent('asterion:fleet-production-start-request', {
+    detail: { queueKind: 'ships', itemId: 'scout', quantity: 1, orderId: 'bridge-complete', now: 4_000 },
+  }));
+  const bridgeCompletedTask = current.planets['helion-01'].fleetProduction.shipQueue[0];
+  assert.ok(bridgeCompletedTask);
+  target.dispatchEvent(new CustomEvent('asterion:fleet-production-start-request', {
+    detail: { queueKind: 'ships', itemId: 'scout', quantity: 0, now: bridgeCompletedTask.finishAt },
+  }));
+  assert.equal(commits.length, 4);
+  assert.equal(current.planets['helion-01'].fleet.ships.scout, 21);
+  assert.equal(current.planets['helion-01'].fleetProduction.shipQueue.length, 0);
+  unbind();
+  const canceled = cancelFleetProduction(current, { ...context(3_002), rng: () => 0 }, 'missing');
+  assert.equal(canceled.transition.ok, false);
 });
 
 test('science application uses one clock, reconciles idempotently, and event bridge reads latest state', () => {

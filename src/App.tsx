@@ -108,7 +108,11 @@ import {
 import {
   bindScienceEventBridge,
 } from './application/science.ts';
-import { getFleetSummaryForState } from './application/fleet.ts';
+import {
+  bindFleetProductionEventBridge,
+} from './application/fleet-production.ts';
+import { getFleetProductionEntity } from './domain/fleet/production.ts';
+import { getFleetBuildBudget, getFleetSummaryForState } from './application/fleet.ts';
 import { getEffectiveResourceIncomePerHour } from './application/resource-clock.ts';
 import { publishApplicationRuntimeSnapshot } from './application/runtime.ts';
 import { reconcileRuntime } from './application/reconcile.ts';
@@ -208,7 +212,7 @@ function AegisButton({ children, onClick, disabled = false }: { children: ReactN
 
 export function App() {
   const scale = useStageScale();
-  const { route: activeRoute, navigate } = useNavigation();
+  const { route: activeRoute, fleetSection: activeFleetSection, navigate } = useNavigation();
   const activeTab = APP_ROUTE_LABELS[activeRoute];
   const [planetViewMode, setPlanetViewMode] = useState<PlanetViewMode>('overview');
   const persistence = useMemo(() => createPersistenceFacade({ mode: RUNTIME_MODE }), []);
@@ -296,6 +300,22 @@ export function App() {
     },
     onNotice: setNotice,
   }), [testTimeScale]);
+  useEffect(() => bindFleetProductionEventBridge({
+    target: window,
+    getState: () => stateRef.current,
+    getContext: (eventNow) => ({
+      planetId: 'helion-01',
+      mode: RUNTIME_MODE,
+      testTimeScale,
+      now: eventNow,
+      rng: Math.random,
+    }),
+    commit: (nextState) => {
+      stateRef.current = nextState;
+      setState(nextState);
+    },
+    onNotice: setNotice,
+  }), [testTimeScale]);
   useEffect(() => {
     persistence.write(state);
   }, [persistence, state]);
@@ -331,6 +351,11 @@ export function App() {
           .map((task) => getSpaceportUpgradeEntity(task.track, task.shipId, result.state.profile.factionId)?.name ?? task.shipId)
           .join(', ');
         setNotice(`Космодром: улучшение завершено — ${names}.`);
+      } else if (event.kind === 'fleet-production') {
+        const names = event.completed
+          .map((item) => getFleetProductionEntity(item.queueKind, item.itemId, result.state.profile.factionId)?.name ?? item.itemId)
+          .join(', ');
+        setNotice(`Верфь: производство завершено — ${names}.`);
       }
     });
   }, [now, state, testTimeScale]);
@@ -342,6 +367,12 @@ export function App() {
     () => getFleetSummaryForState(state),
     [state],
   );
+  const defenseSummary = useMemo(
+    () => getFleetBuildBudget(state).defenseSummary,
+    [state],
+  );
+  const isDefenseFleetView = activeRoute === 'fleets' && activeFleetSection === 'defense';
+  const headerPopulationSummary = isDefenseFleetView ? defenseSummary : fleetSummary;
   const currentSkin = useMemo(
     () => planetSkins.find((skin) => skin.id === currentPlanetState.skin) ?? planetSkins[0],
     [currentPlanetState.skin],
@@ -863,7 +894,23 @@ export function App() {
              { kind: 'mineral', label: 'МИНЕРАЛЫ', value: state.minerals, capacity: storageCapacities.minerals, hourlyGain: effectiveResourceIncomePerHour.minerals },
              { kind: 'gas', label: 'ГАЗ', value: state.gas, capacity: storageCapacities.gas, hourlyGain: effectiveResourceIncomePerHour.gas },
              { kind: 'energy', label: 'ЭНЕРГИЯ', value: currentPlanetState.energy },
-            { kind: 'population', label: 'НАСЕЛЕНИЕ', value: fleetSummary.population, capacity: fleetSummary.capacity, showCapacity: false },
+            {
+              kind: 'population',
+              label: isDefenseFleetView ? 'НАСЕЛЕНИЕ ОБОРОНЫ' : 'НАСЕЛЕНИЕ',
+              value: headerPopulationSummary.population,
+              capacity: headerPopulationSummary.capacity,
+              showCapacity: isDefenseFleetView,
+              populationBreakdown: {
+                fleet: {
+                  value: fleetSummary.population,
+                  capacity: fleetSummary.capacity,
+                },
+                defense: {
+                  value: defenseSummary.population,
+                  capacity: defenseSummary.capacity,
+                },
+              },
+            },
           ]}
           zoneMeta={zoneMeta}
           activeRoute={activeRoute}
