@@ -86,6 +86,11 @@ import {
   createDefaultTradeState,
   migrateTradeState,
 } from '../domain/buildings/trade.ts';
+import {
+  createDefaultRepairWorkshopState,
+  createTestRepairWorkshopState,
+  migrateRepairWorkshopState,
+} from '../domain/repair/workshop.ts';
 import type { ResourceClock, SaveState, PlanetRuntime } from './contracts.ts';
 
 export const SAVE_SCHEMA_VERSION = Math.max(
@@ -113,6 +118,7 @@ type StoredPlanetRuntime = {
   fleet?: unknown;
   defense?: unknown;
   fleetProduction?: unknown;
+  repair?: unknown;
   energy?: unknown;
   buildings?: unknown;
   productionBots?: unknown;
@@ -235,6 +241,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
         fleet: createCanonicalStartingFleet(),
         defense: createEmptyDefenseState(),
         fleetProduction: createDefaultFleetProductionState(),
+        repair: mode === 'test' ? createTestRepairWorkshopState() : createDefaultRepairWorkshopState(),
         productionBots: createEmptyBotAssignment(),
         recycling: createDefaultRecyclingState(),
         trade: createDefaultTradeState(),
@@ -326,6 +333,9 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       fleet: normalizeFleetStateForCapacity(reconciledFleetProduction.fleet, buildings.hangar, profile.factionId),
       defense: reconciledFleetProduction.defense,
       fleetProduction: reconciledFleetProduction.state,
+      repair: mode === 'test' && savedHomeworld?.repair === undefined
+        ? createTestRepairWorkshopState()
+        : migrateRepairWorkshopState(savedHomeworld?.repair),
       energy: nonNegativeNumberOr(savedHomeworld?.energy, numberOr(parsed.energy, initialState.planets['helion-01'].energy)),
       buildings,
       productionBots: migrateProductionBotAssignment(savedHomeworld?.productionBots, buildings),

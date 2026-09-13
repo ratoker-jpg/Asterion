@@ -20,6 +20,7 @@ import type { BotAssignment } from '../domain/buildings/production-bots.ts';
 import type { RecyclingState } from '../domain/buildings/recycling.ts';
 import type { SpaceportUpgradeState } from '../domain/buildings/spaceport-upgrades.ts';
 import type { TradeState } from '../domain/buildings/trade.ts';
+import type { RepairWorkshopState } from '../domain/repair/workshop.ts';
 
 /** Phase 4 deliberately preserves the current single-homeworld data contract. */
 export type PlanetId = 'helion-01';
@@ -30,6 +31,7 @@ export type PlanetRuntime = {
   fleet: OwnedFleetState;
   defense: OwnedDefenseState;
   fleetProduction: FleetProductionState;
+  repair: RepairWorkshopState;
   energy: number;
   buildings: BuildingLevels;
   productionBots: BotAssignment;

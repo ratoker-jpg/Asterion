@@ -1,5 +1,5 @@
 import type { CommanderId } from './commanders.ts';
-import type { CombatEntityId } from './ids.ts';
+import type { CombatEntityId, DefenseId, ShipId } from './ids.ts';
 
 export const ASTERION_LOCAL_PLAYER_ID = 'player-aster';
 
@@ -84,6 +84,9 @@ export type BattleResourceOutcome = {
 
 export type BattleRepairEligibility = {
   status?: 'unknown' | 'available' | 'unavailable';
+  claimState?: 'claimed' | 'not-eligible';
+  shipUnits?: Partial<Record<ShipId, number>>;
+  defenseUnits?: Partial<Record<DefenseId, number>>;
   note?: string;
 };
 
