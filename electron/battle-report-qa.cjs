@@ -98,6 +98,9 @@ async function modalSnapshot(win) {
     const modal = document.querySelector('[role="dialog"][data-qa-battle-report-modal]');
     const scroll = modal?.querySelector('.battle-report-modal-scroll-v1');
     const scenes = Array.from(modal?.querySelectorAll('[data-qa-battle-scene]') || []);
+    const backdrops = Array.from(modal?.querySelectorAll('.battle-scene-backdrop-v1') || []);
+    const outcome = modal?.querySelector('[data-qa-battle-outcome]');
+    const visual = modal?.querySelector('[data-qa-battle-visual-report]');
     const focusables = Array.from(modal?.querySelectorAll('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]:not([tabindex="-1"])') || []);
     const technologyRows = Array.from(modal?.querySelectorAll('.battle-tech-table-row-v1') || []);
     const layoutNodes = Array.from(modal?.querySelectorAll('.battle-stack-row-v1, .battle-scene-v1, .battle-scene-fleet-field-v1, .battle-scene-planet-deck-v1, .battle-scene-zone-v1, .battle-scene-defense-zone-v1') || []);
@@ -119,6 +122,8 @@ async function modalSnapshot(win) {
       ariaModal: modal?.getAttribute('aria-modal') || '',
       labelledBy: modal?.getAttribute('aria-labelledby') || '',
       sceneCount: scenes.length,
+      backdropCount: backdrops.length,
+      backdropBackgroundSizes: backdrops.map((node) => getComputedStyle(node).backgroundSize),
       analysisOpenCount: modal?.querySelectorAll('[data-qa-battle-round-analysis][open]').length || 0,
       cellSizes: scenes.map((scene) => scene.getAttribute('data-qa-battle-cell-size') || ''),
       hasOverallLosses: Boolean(modal?.querySelector('[data-qa-battle-summary]')),
@@ -133,6 +138,7 @@ async function modalSnapshot(win) {
       hasVisualAnchor: Boolean(modal?.querySelector('[data-qa-battle-visual-anchor]')),
       hasComposition: Boolean(modal?.querySelector('[data-qa-battle-composition]')),
       hasOutcome: Boolean(modal?.querySelector('[data-qa-battle-outcome]')),
+      outcomeBeforeVisual: Boolean(outcome && visual && (outcome.compareDocumentPosition(visual) & 4)),
       internalScroll: Boolean(scroll && scroll.scrollHeight > scroll.clientHeight),
       internalHorizontalOverflow: Boolean(scroll && scroll.scrollWidth > scroll.clientWidth + 2),
       layoutOverflowCount: layoutNodes.filter((node) => node.scrollWidth > node.clientWidth + 2).length,
@@ -293,7 +299,7 @@ async function runViewport(win, width, height) {
 
   await openBattle(win, 'battle-demo-attacker-victory');
   const modal = await modalSnapshot(win);
-  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.sceneCount !== 5 || modal.analysisOpenCount !== 0 || modal.cellSizes.some((value) => value !== '100px') || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount !== 16 || modal.technologyTooltipCount !== 16 || modal.technologyTooltipImageCount !== 24 || modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || !modal.hasBattlePoints || modal.hasVisualAnchor || !modal.hasComposition || !modal.hasOutcome || !modal.internalScroll || modal.internalHorizontalOverflow || modal.layoutOverflowCount !== 0 || modal.tooltipHorizontalClips !== 0 || !modal.bodyLocked || !modal.stageInert) {
+  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.sceneCount !== 5 || modal.backdropCount !== modal.sceneCount || modal.backdropBackgroundSizes.some((value) => value.split(',').some((size) => size.trim() !== 'cover')) || modal.analysisOpenCount !== 0 || modal.cellSizes.some((value) => value !== '100px') || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount !== 16 || modal.technologyTooltipCount !== 16 || modal.technologyTooltipImageCount !== 24 || modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || !modal.hasBattlePoints || modal.hasVisualAnchor || !modal.hasComposition || !modal.hasOutcome || !modal.outcomeBeforeVisual || !modal.internalScroll || modal.internalHorizontalOverflow || modal.layoutOverflowCount !== 0 || modal.tooltipHorizontalClips !== 0 || !modal.bodyLocked || !modal.stageInert) {
     throw new Error(`Battle modal contract failed at ${label}: ${JSON.stringify(modal)}`);
   }
   await capture(win, directory, 'battle-report-modal');
@@ -305,6 +311,13 @@ async function runViewport(win, width, height) {
   })()`);
   await settle(win);
   await capture(win, directory, 'battle-report-scene');
+  await win.webContents.executeJavaScript(`(() => {
+    const scroll = document.querySelector('[role="dialog"][data-qa-battle-report-modal] .battle-report-modal-scroll-v1');
+    const outcome = scroll?.querySelector('[data-qa-battle-outcome]');
+    if (scroll && outcome) scroll.scrollTop = Math.max(0, outcome.offsetTop - 16);
+  })()`);
+  await settle(win);
+  await capture(win, directory, 'battle-report-outcome');
   const bottom = await win.webContents.executeJavaScript(`(() => {
     const scroll = document.querySelector('[role="dialog"][data-qa-battle-report-modal] .battle-report-modal-scroll-v1');
     if (!scroll) return { atBottom: false, backButtonVisible: false };
@@ -317,7 +330,6 @@ async function runViewport(win, width, height) {
     };
   })()`);
   await settle(win);
-  await capture(win, directory, 'battle-report-outcome');
   if (!bottom.atBottom || !bottom.backButtonVisible) throw new Error(`Battle modal bottom scroll contract failed at ${label}: ${JSON.stringify(bottom)}`);
 
   const focus = await exerciseFocusTrapAndEscape(win);

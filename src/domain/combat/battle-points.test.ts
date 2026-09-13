@@ -13,6 +13,11 @@ test('resource points use destroyed catalog cost and exclude solar satellites', 
   assert.equal(calculateResourcePointsLost([], [stack('laser-turret', 1, 0)]), 4.5);
 });
 
+test('resource points use faction-specific historical costs when a faction is provided', () => {
+  assert.equal(calculateResourcePointsLost([stack('scout', 1, 0)], [], 'veyra'), 2);
+  assert.equal(calculateResourcePointsLost([], [stack('laser-turret', 1, 0)], 'synod'), 18);
+});
+
 test('winner and loser Battle Points follow the Nemexia formula', () => {
   const result = calculateBattlePoints(
     'attacker',

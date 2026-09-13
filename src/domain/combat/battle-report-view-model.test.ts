@@ -19,6 +19,33 @@ test('view model exposes losses, rewards, and every saved round snapshot', () =>
   assert.deepEqual(viewModel.attacker.modifiers.map((modifier) => modifier.label), ['Построение', 'Командирский snapshot']);
 });
 
+test('view model derives stack losses from persisted counts when destroyed is missing', () => {
+  const viewModel = createBattleReportViewModel({
+    id: 'missing-destroyed',
+    attacker: { playerName: 'Attacker', side: 'attacker', race: 'Астеры' },
+    defender: { playerName: 'Defender', side: 'defender', race: 'Рой' },
+    winner: 'attacker',
+    attackerForce: {
+      populationBefore: 10,
+      populationAfter: 7,
+      stacks: [
+        { entityId: 'scout', countBefore: 4, countAfter: 1 },
+        { entityId: 'cruiser', countBefore: 1, countAfter: 3 },
+      ],
+    },
+    defenderForce: {
+      stacks: [{ entityId: 'scout', countBefore: 1, countAfter: 0 }],
+    },
+    rounds: [],
+  });
+
+  assert.equal(viewModel.attacker.stacks[0]?.destroyed, 3);
+  assert.equal(viewModel.attacker.stacks[1]?.destroyed, 0);
+  assert.equal(viewModel.attacker.losses.ships, 3);
+  assert.equal(viewModel.defender.stacks[0]?.destroyed, 1);
+  assert.equal(viewModel.battlePoints.defenderResourcePointsLost, 2);
+});
+
 test('demo reports identify the current player and render Bot 01 with Veyra presentation', () => {
   const viewModel = createBattleReportViewModel(DEMO_BATTLE_REPORTS[0]);
 

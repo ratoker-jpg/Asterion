@@ -329,6 +329,11 @@ function readStack(
   const resolved = resolveEntity(factionId, entityId, kindHint);
   const countBefore = readCount(record.countBefore);
   const countAfter = readCount(record.countAfter);
+  const destroyed = readCount(record.destroyed) ?? (
+    countBefore != null && countAfter != null
+      ? Math.max(0, countBefore - countAfter)
+      : null
+  );
   const catalog = resolved.entity;
   const tooltip = {
     name: resolved.name,
@@ -351,7 +356,7 @@ function readStack(
     assetSource: resolved.assetSource,
     countBefore,
     countAfter,
-    destroyed: readCount(record.destroyed),
+    destroyed,
     populationPerUnit: catalog?.population ?? null,
     tooltip,
   };
@@ -574,6 +579,8 @@ export function createBattleReportViewModel(input: unknown): BattleReportViewMod
       defenderViewModel.stacks,
       attackerViewModel.defenses,
       defenderViewModel.defenses,
+      attackerFactionId,
+      defenderFactionId,
     ),
     timestampAvailable: readString(record.timestamp) != null,
   };

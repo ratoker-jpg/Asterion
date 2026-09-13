@@ -701,6 +701,7 @@ function BattleVisualReport({ viewModel, scrollRef }: { viewModel: BattleReportV
                   </div>
                 </div>
                 <div className="battle-scene-planet-deck-v1">
+                  <div className="battle-scene-backdrop-v1" aria-hidden="true" />
                   {defenses.length ? (
                     <div className="battle-scene-defense-zone-v1" aria-label="Оборона защитника">
                       {defenses.map((stack) => <SceneStack key={stack.key} stack={stack} side="defender" roundIndex={round.index} />)}
@@ -869,11 +870,11 @@ export function BattleReportDetailBody({
   const viewModel = providedViewModel ?? createBattleReportViewModel(report);
   return (
     <>
+      <BattleOutcome viewModel={viewModel} />
       <PopulationPanel viewModel={viewModel} />
       <BattleVisualReport viewModel={viewModel} scrollRef={scrollRef} />
       <BattleComposition viewModel={viewModel} />
       <CommanderSnapshot viewModel={viewModel} />
-      <BattleOutcome viewModel={viewModel} />
     </>
   );
 }

@@ -795,10 +795,7 @@
   overflow: visible;
   border-bottom: 0;
   background-color: #020b12;
-  background-image: linear-gradient(180deg, rgba(1, 10, 18, .28), rgba(1, 10, 18, .12) 45%, rgba(1, 8, 14, .42)), var(--battle-background-image, none);
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: 100% 100%;
+  isolation: isolate;
 }
 
 .battle-scene-fleet-field-v1 {
@@ -884,6 +881,18 @@
   padding: 30px 28px 34px;
   overflow: visible;
   background: transparent;
+  isolation: isolate;
+}
+
+.battle-scene-backdrop-v1 {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: linear-gradient(180deg, rgba(1, 10, 18, .28), rgba(1, 10, 18, .12) 45%, rgba(1, 8, 14, .42)), var(--battle-background-image, none);
+  background-position: center bottom;
+  background-repeat: no-repeat;
+  background-size: cover;
+  pointer-events: none;
 }
 
 .battle-scene-defense-zone-v1 {

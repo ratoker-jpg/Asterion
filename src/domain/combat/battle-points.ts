@@ -1,4 +1,6 @@
 import { COMBAT_ENTITY_BY_ID } from './catalog.ts';
+import { getFactionCombatEntity } from './faction-catalog.ts';
+import type { CombatFactionId } from './factions.ts';
 import type { CombatEntityId } from './ids.ts';
 import type { BattleWinner } from './report.ts';
 
@@ -22,19 +24,30 @@ function destroyedCount(stack: BattlePointStack) {
   return Math.max(0, Math.floor(stack.countBefore) - Math.floor(stack.countAfter));
 }
 
+function resolveEntity(entityId: string, factionId?: CombatFactionId) {
+  const combatEntityId = entityId as CombatEntityId;
+  if (!COMBAT_ENTITY_BY_ID.has(combatEntityId)) return null;
+  return factionId
+    ? getFactionCombatEntity(factionId, combatEntityId)
+    : COMBAT_ENTITY_BY_ID.get(combatEntityId) ?? null;
+}
+
 /**
  * Converts the catalog cost of destroyed units into Nemexia resource points.
- * Solar satellites are intentionally excluded: Nemexia does not award battle
- * points for them, even though they have a catalog cost in Asterion.
+ * When a faction is supplied, its historical catalog provides the unit cost;
+ * otherwise the shared catalog keeps this helper backward-compatible. Solar
+ * satellites are intentionally excluded: Nemexia does not award battle points
+ * for them, even though they have a catalog cost in Asterion.
  */
 export function calculateResourcePointsLost(
   stacks: readonly BattlePointStack[],
   defenses: readonly BattlePointStack[] = [],
+  factionId?: CombatFactionId,
 ) {
   return [...stacks, ...defenses].reduce((total, stack) => {
     if (stack.entityId === 'solar-satellite') return total;
     const destroyed = destroyedCount(stack);
-    const entity = COMBAT_ENTITY_BY_ID.get(stack.entityId as CombatEntityId);
+    const entity = resolveEntity(stack.entityId, factionId);
     if (!destroyed || !entity) return total;
     const cost = entity.cost.metal + entity.cost.minerals + entity.cost.gas;
     return total + destroyed * cost / RESOURCE_UNITS_PER_POINT;
@@ -71,9 +84,11 @@ export function calculateBattlePoints(
   defenderStacks: readonly BattlePointStack[],
   attackerDefenses: readonly BattlePointStack[] = [],
   defenderDefenses: readonly BattlePointStack[] = [],
+  attackerFactionId?: CombatFactionId,
+  defenderFactionId?: CombatFactionId,
 ): BattlePointResult {
-  const attackerResourcePointsLost = calculateResourcePointsLost(attackerStacks, attackerDefenses);
-  const defenderResourcePointsLost = calculateResourcePointsLost(defenderStacks, defenderDefenses);
+  const attackerResourcePointsLost = calculateResourcePointsLost(attackerStacks, attackerDefenses, attackerFactionId);
+  const defenderResourcePointsLost = calculateResourcePointsLost(defenderStacks, defenderDefenses, defenderFactionId);
   const formulaWinner = winner === 'draw'
     ? attackerResourcePointsLost <= defenderResourcePointsLost ? 'attacker' : 'defender'
     : winner;
