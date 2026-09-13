@@ -619,58 +619,142 @@ function BattleVisualReport({ viewModel, scrollRef }: { viewModel: BattleReportV
   );
 }
 
+type BattleOutcomeStat = {
+  id: 'population' | 'ships' | 'defense';
+  label: string;
+  unit: string;
+  remaining: number | null;
+  lost: number | null;
+};
+
+function outcomeStats(side: BattleSideViewModel): BattleOutcomeStat[] {
+  return [
+    { id: 'population', label: 'Население', unit: 'населения', remaining: side.populationAfter, lost: side.losses.population },
+    { id: 'ships', label: 'Корабли', unit: 'кораблей', remaining: side.fleet.countAfter, lost: side.losses.ships },
+    { id: 'defense', label: 'Оборона', unit: 'сооружений', remaining: side.defense.countAfter, lost: side.losses.defenses },
+  ];
+}
+
+function formatOutcomeWithUnit(value: number | null, unit: string) {
+  return value == null ? '—' : `${formatNumber(value)} ${unit}`;
+}
+
+function OutcomeIntro({
+  viewModel,
+  result,
+  winnerName,
+  className = '',
+}: {
+  viewModel: BattleReportViewModel;
+  result: ReturnType<typeof resultLabel>;
+  winnerName: string | null;
+  className?: string;
+}) {
+  return (
+    <header className={`battle-outcome-option-head-v1 ${className}`}>
+      <div>
+        <small>ИТОГ БОЯ</small>
+        <div className={`battle-outcome-title-v1 ${result.tone}`}><span aria-hidden="true">{resultIcon(result.tone)}</span><h3>{result.label}</h3></div>
+        <p>{winnerName ? `${winnerName} — победитель боя.` : 'Победитель не определён: достигнут лимит раундов.'}</p>
+      </div>
+      <span>{formatNumber(viewModel.roundCount)} РАУНДОВ</span>
+    </header>
+  );
+}
+
+function OutcomeSideHeader({ side, winner }: { side: BattleSideViewModel; winner: boolean }) {
+  const sideLabel = side.participant.side === 'attacker' ? 'АТАКУЮЩИЙ' : 'ЗАЩИТНИК';
+  const participantMeta = [side.participant.coordinates, side.participant.race].filter(Boolean).join(' · ') || 'Данные участника не зафиксированы';
+  return (
+    <header className="battle-outcome-side-head-v1">
+      <small>{sideLabel}{winner ? ' · ПОБЕДИТЕЛЬ' : ''}</small>
+      <strong>{side.participant.playerName}</strong>
+      <span>{participantMeta}</span>
+    </header>
+  );
+}
+
+function OutcomeMiniStateTable({ side, className = '' }: { side: BattleSideViewModel; className?: string }) {
+  return (
+    <div className={`battle-outcome-mini-table-v1 ${className}`}>
+      <div className="battle-outcome-mini-table-head-v1"><span>ПАРАМЕТР</span><span>ОСТАЛОСЬ</span><span>ПОТЕРЯНО</span></div>
+      {outcomeStats(side).map((stat) => (
+        <div className="battle-outcome-mini-table-row-v1" key={stat.id}>
+          <strong>{stat.label}</strong>
+          <b>{formatOutcomeWithUnit(stat.remaining, stat.unit)}</b>
+          <b className="loss">{formatOutcomeWithUnit(stat.lost, stat.unit)}</b>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OutcomePointsPanel({
+  sideLabel,
+  points,
+  resourcePointsLost,
+  winner,
+  className = '',
+}: {
+  sideLabel: string;
+  points: number;
+  resourcePointsLost: number;
+  winner: boolean;
+  className?: string;
+}) {
+  return (
+    <div className={`battle-outcome-points-panel-v1 ${winner ? 'winner' : ''} ${className}`} data-qa-battle-points>
+      <div><small>{sideLabel} · ПОЛУЧЕНО БОЕВЫХ ОЧКОВ</small><strong>{formatNumber(points)}</strong></div>
+      <div><small>РЕСУРСНЫЕ ОЧКИ · ПОТЕРЯНО</small><b>−{formatResourcePoints(resourcePointsLost)}</b><span>очков</span></div>
+    </div>
+  );
+}
+
+function OutcomeRewardStrip({ viewModel, className = '' }: { viewModel: BattleReportViewModel; className?: string }) {
+  const hasRewards = viewModel.experience != null || viewModel.debris != null || viewModel.resources.length > 0;
+  return (
+    <section className={`battle-outcome-reward-strip-v1 ${className}`}>
+      <header><small>НАГРАДЫ И ДОБЫЧА</small><span>ПОЛУЧЕНО ПОСЛЕ БОЯ</span></header>
+      {hasRewards ? (
+        <div className="battle-outcome-reward-grid-v1">
+          <div><small>БОЕВОЙ ОПЫТ</small><strong>{formatKnownNumber(viewModel.experience)}</strong></div>
+          {viewModel.debris != null ? <div className="battle-outcome-reward-resource-v1" data-qa-resource-kind="debris"><span><ResourceIcon kind="debris" /></span><small>ОБЛОМКИ</small><strong>{formatNumber(viewModel.debris)}</strong></div> : null}
+          {viewModel.resources.map((resource) => <div className="battle-outcome-reward-resource-v1" key={resource.kind} data-qa-resource-kind={resource.kind}><span><ResourceIcon kind={resource.kind} /></span><small>{resource.label.toUpperCase()}</small><strong>{formatNumber(resource.value)}</strong></div>)}
+        </div>
+      ) : <p className="battle-empty-inline-v1">Награды и ресурсы не зафиксированы в этом отчёте.</p>}
+    </section>
+  );
+}
+
+function BattleOutcomeSummary({ viewModel, result, winnerName }: { viewModel: BattleReportViewModel; result: ReturnType<typeof resultLabel>; winnerName: string | null }) {
+  const sides = [
+    { side: viewModel.attacker, label: 'АТАКУЮЩИЙ', points: viewModel.battlePoints.attacker, resourcePointsLost: viewModel.battlePoints.attackerResourcePointsLost },
+    { side: viewModel.defender, label: 'ЗАЩИТНИК', points: viewModel.battlePoints.defender, resourcePointsLost: viewModel.battlePoints.defenderResourcePointsLost },
+  ];
+  return (
+    <div className="battle-outcome-duel-v1">
+      <OutcomeIntro viewModel={viewModel} result={result} winnerName={winnerName} />
+      <div className="battle-outcome-duel-grid-v1">
+        {sides.map(({ side, label, points, resourcePointsLost }) => (
+          <article className={`battle-outcome-duel-side-v1 ${side.participant.side} ${viewModel.winner === side.participant.side ? 'winner' : ''}`} key={side.participant.side}>
+            <OutcomeSideHeader side={side} winner={viewModel.winner === side.participant.side} />
+            <OutcomeMiniStateTable side={side} />
+            <OutcomePointsPanel sideLabel={label} points={points} resourcePointsLost={resourcePointsLost} winner={viewModel.winner === side.participant.side || (viewModel.winner === 'draw' && points === Math.max(viewModel.battlePoints.attacker, viewModel.battlePoints.defender))} />
+          </article>
+        ))}
+      </div>
+      <OutcomeRewardStrip viewModel={viewModel} />
+    </div>
+  );
+}
+
 function BattleOutcome({ viewModel }: { viewModel: BattleReportViewModel }) {
   const result = resultLabel(viewModel);
   const winnerSide = viewModel.winner === 'draw' ? null : viewModel.winner === 'attacker' ? viewModel.attacker : viewModel.defender;
   const winnerName = winnerSide ? participantLabel(winnerSide.participant) : null;
   return (
     <section className="battle-section-v1 battle-outcome-v1" data-qa-battle-outcome>
-      <header className="battle-section-head-v1">
-        <div>
-          <small>ИТОГ БОЯ</small>
-          <div className={`battle-outcome-title-v1 ${result.tone}`}><span aria-hidden="true">{resultIcon(result.tone)}</span><h3>{result.label}</h3></div>
-        </div>
-        <span>{formatNumber(viewModel.roundCount)} РАУНДОВ</span>
-      </header>
-      <p className="battle-outcome-verdict-v1">{winnerName ? `${winnerName} — победитель боя.` : 'Победитель не определён: достигнут лимит раундов.'}</p>
-      <div className="battle-outcome-survivors-v1">
-        <div className={viewModel.winner === 'attacker' ? 'winner' : ''}>
-          <small>АТАКУЮЩИЙ · ФЛОТ {viewModel.winner === 'attacker' ? '· ПОБЕДИТЕЛЬ' : ''}</small>
-          <strong>{formatNumber(viewModel.attacker.remainingShips)} кораблей</strong>
-          <span>Население осталось: <b>{formatNumber(viewModel.attacker.populationAfter)}</b></span>
-          <span>Потери населения: <b>{formatNumber(viewModel.attacker.losses.population)}</b></span>
-        </div>
-        <div className={viewModel.winner === 'defender' ? 'winner' : ''}>
-          <small>ЗАЩИТНИК · ФЛОТ {viewModel.winner === 'defender' ? '· ПОБЕДИТЕЛЬ' : ''}</small>
-          <strong>{formatNumber(viewModel.defender.remainingShips)} кораблей</strong>
-          <span>Население осталось: <b>{formatNumber(viewModel.defender.populationAfter)}</b></span>
-          <span>Потери населения: <b>{formatNumber(viewModel.defender.losses.population)}</b></span>
-        </div>
-        <div>
-          <small>ЗАЩИТНИК · ОБОРОНА</small>
-          <strong>{viewModel.defender.remainingDefenses == null ? '—' : `${formatNumber(viewModel.defender.remainingDefenses)} сооружений`}</strong>
-          <span>Потери обороны: <b>{viewModel.defender.losses.defenses == null ? '—' : formatNumber(viewModel.defender.losses.defenses)}</b></span>
-          <span>Показана только зафиксированная оборона</span>
-        </div>
-      </div>
-      <div className="battle-outcome-points-v1" data-qa-battle-points>
-        <div className={viewModel.winner === 'attacker' || (viewModel.winner === 'draw' && viewModel.battlePoints.attacker >= viewModel.battlePoints.defender) ? 'winner' : ''}>
-          <small>АТАКУЮЩИЙ · BATTLE POINTS</small>
-          <strong>{formatNumber(viewModel.battlePoints.attacker)}</strong>
-          <span>Ресурсные потери: {formatResourcePoints(viewModel.battlePoints.attackerResourcePointsLost)} очк.</span>
-        </div>
-        <div className={viewModel.winner === 'defender' || (viewModel.winner === 'draw' && viewModel.battlePoints.defender > viewModel.battlePoints.attacker) ? 'winner' : ''}>
-          <small>ЗАЩИТНИК · BATTLE POINTS</small>
-          <strong>{formatNumber(viewModel.battlePoints.defender)}</strong>
-          <span>Ресурсные потери: {formatResourcePoints(viewModel.battlePoints.defenderResourcePointsLost)} очк.</span>
-        </div>
-      </div>
-      <div className="battle-outcome-metrics-v1">
-        {viewModel.experience != null ? <span><small>БОЕВОЙ ОПЫТ</small><strong>{formatNumber(viewModel.experience)}</strong></span> : null}
-        {viewModel.debris != null ? <span className="battle-outcome-resource" data-qa-resource-kind="debris"><span className="battle-outcome-resource-icon"><ResourceIcon kind="debris" /></span><small>ОБЛОМКИ</small><strong>{formatNumber(viewModel.debris)}</strong></span> : null}
-        {viewModel.resources.map((resource) => <span className="battle-outcome-resource" key={resource.kind} data-qa-resource-kind={resource.kind}><span className="battle-outcome-resource-icon"><ResourceIcon kind={resource.kind} /></span><small>{resource.label.toUpperCase()}</small><strong>{formatNumber(resource.value)}</strong></span>)}
-      </div>
-      {viewModel.experience == null && viewModel.debris == null && !viewModel.resources.length ? <p className="battle-empty-inline-v1">Награды и ресурсы не зафиксированы в этом отчёте.</p> : null}
+      <BattleOutcomeSummary viewModel={viewModel} result={result} winnerName={winnerName} />
     </section>
   );
 }

@@ -600,6 +600,54 @@
 .battle-outcome-points-v1 > div { min-height: 70px; }
 .battle-outcome-metrics-v1 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 
+/* Final outcome: each side keeps the remaining units, losses, and points together. */
+.battle-outcome-option-head-v1 { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding-bottom: 11px; border-bottom: 1px solid rgba(55, 205, 255, .18); }
+.battle-outcome-option-head-v1 > div { min-width: 0; }
+.battle-outcome-option-head-v1 > span { flex: 0 0 auto; color: #69acc3; font-size: 9px; font-weight: 800; letter-spacing: .1em; }
+.battle-outcome-option-head-v1 p { margin: 8px 0 0; color: #b6d6de; font-size: 12px; line-height: 1.4; }
+.battle-outcome-side-head-v1 { display: grid; gap: 3px; min-width: 0; padding: 11px 12px 10px; border-bottom: 1px solid rgba(62, 193, 231, .16); }
+.battle-outcome-side-head-v1 small { color: #6fc8dd; font-size: 9px; font-weight: 800; letter-spacing: .1em; }
+.battle-outcome-side-head-v1 strong { overflow: hidden; color: #f0fcff; font-size: 16px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.battle-outcome-side-head-v1 span { overflow: hidden; color: #8db6c1; font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.battle-outcome-mini-table-v1 { margin-top: 10px; border: 1px solid rgba(52, 178, 213, .16); }
+.battle-outcome-mini-table-head-v1,
+.battle-outcome-mini-table-row-v1 { display: grid; grid-template-columns: minmax(80px, .8fr) minmax(110px, 1.1fr) minmax(110px, 1.1fr); align-items: center; gap: 7px; }
+.battle-outcome-mini-table-head-v1 { min-height: 27px; padding: 0 9px; background: rgba(13, 78, 101, .86); color: #83c8da; font-size: 8px; font-weight: 800; letter-spacing: .08em; }
+.battle-outcome-mini-table-head-v1 span:not(:first-child),
+.battle-outcome-mini-table-row-v1 > *:not(:first-child) { text-align: right; }
+.battle-outcome-mini-table-row-v1 { min-height: 34px; padding: 5px 9px; border-top: 1px solid rgba(66, 181, 214, .1); background: rgba(2, 20, 29, .5); }
+.battle-outcome-mini-table-row-v1:nth-child(odd) { background: rgba(7, 46, 61, .48); }
+.battle-outcome-mini-table-row-v1 strong { color: #d9f5fc; font-size: 11px; }
+.battle-outcome-mini-table-row-v1 b { color: #edfaff; font-size: 11px; font-variant-numeric: tabular-nums; }
+.battle-outcome-mini-table-row-v1 b.loss { color: #ffb1a9; }
+.battle-outcome-points-panel-v1 { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(150px, .9fr); gap: 8px; margin-top: 10px; }
+.battle-outcome-points-panel-v1 > div { display: grid; gap: 3px; min-width: 0; padding: 9px 10px; border: 1px solid rgba(52, 178, 213, .16); background: rgba(4, 34, 46, .68); }
+.battle-outcome-points-panel-v1 > div:first-child { border-color: rgba(105, 227, 193, .24); }
+.battle-outcome-points-panel-v1 > div:last-child { border-color: rgba(255, 159, 155, .2); }
+.battle-outcome-points-panel-v1.winner > div:first-child { border-color: rgba(105, 227, 193, .62); background: linear-gradient(135deg, rgba(9, 72, 67, .68), rgba(4, 34, 46, .75)); }
+.battle-outcome-points-panel-v1 small { color: #8eb8c5; font-size: 8px; letter-spacing: .07em; }
+.battle-outcome-points-panel-v1 strong { color: #8fe6ca; font-size: 21px; font-variant-numeric: tabular-nums; }
+.battle-outcome-points-panel-v1 b { color: #ffb1a9; font-size: 15px; font-variant-numeric: tabular-nums; }
+.battle-outcome-points-panel-v1 span { color: #8eb8c5; font-size: 9px; }
+.battle-outcome-reward-strip-v1 { margin-top: 12px; padding: 10px; border: 1px solid rgba(52, 178, 213, .16); background: rgba(3, 24, 34, .72); }
+.battle-outcome-reward-strip-v1 > header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 7px; border-bottom: 1px solid rgba(62, 193, 231, .14); }
+.battle-outcome-reward-strip-v1 > header small { color: #75c9a9; }
+.battle-outcome-reward-strip-v1 > header span { color: #78a8b3; font-size: 8px; font-weight: 800; letter-spacing: .08em; }
+.battle-outcome-reward-grid-v1 { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; margin-top: 8px; }
+.battle-outcome-reward-grid-v1 > div { display: grid; gap: 3px; min-width: 0; min-height: 47px; padding: 7px 8px; border: 1px solid rgba(52, 178, 213, .12); background: rgba(4, 34, 46, .58); }
+.battle-outcome-reward-grid-v1 > div > small { overflow: hidden; color: #85afba; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.battle-outcome-reward-grid-v1 > div > strong { color: #eafcff; font-size: 14px; font-variant-numeric: tabular-nums; }
+.battle-outcome-reward-resource-v1 { grid-template-columns: 20px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 6px; align-items: center; }
+.battle-outcome-reward-resource-v1 > span { grid-row: 1 / 3; display: grid; place-items: center; width: 20px; height: 20px; }
+.battle-outcome-reward-resource-v1 > span img { width: 20px; height: 20px; object-fit: contain; }
+
+/* 1. Duel: each side gets a self-contained readable after/lost ledger. */
+.battle-outcome-duel-grid-v1 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.battle-outcome-duel-side-v1 { min-width: 0; padding: 0 10px 10px; border: 1px solid rgba(52, 178, 213, .2); background: linear-gradient(180deg, rgba(5, 42, 55, .78), rgba(3, 23, 32, .84)); }
+.battle-outcome-duel-side-v1.attacker { border-top: 2px solid rgba(64, 208, 247, .8); }
+.battle-outcome-duel-side-v1.defender { border-top: 2px solid rgba(228, 201, 112, .8); }
+.battle-outcome-duel-side-v1.winner { box-shadow: inset 0 0 24px rgba(105, 227, 193, .08); }
+
 .battle-report-overlay-v1 {
   position: fixed;
   inset: 0;
@@ -890,4 +938,19 @@
   .battle-scene-commander-zone-v1,
   .battle-scene-defense-zone-v1 { grid-template-columns: minmax(100px, 1fr); }
   .battle-scene-side-label-v1 { max-width: calc(50% - 24px); }
+}
+
+@media (max-width: 760px) {
+  .battle-outcome-option-head-v1 { align-items: flex-start; flex-direction: column; gap: 6px; }
+  .battle-outcome-option-head-v1 > span { align-self: flex-end; }
+  .battle-outcome-duel-grid-v1 { grid-template-columns: 1fr; }
+  .battle-outcome-reward-grid-v1 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 420px) {
+  .battle-outcome-reward-grid-v1 { grid-template-columns: 1fr 1fr; gap: 5px; }
+  .battle-outcome-reward-grid-v1 > div { padding-left: 6px; padding-right: 6px; }
+  .battle-outcome-mini-table-head-v1,
+  .battle-outcome-mini-table-row-v1 { grid-template-columns: minmax(64px, .72fr) minmax(94px, 1fr) minmax(94px, 1fr); gap: 4px; padding-left: 6px; padding-right: 6px; }
+  .battle-outcome-mini-table-row-v1 b { font-size: 10px; }
 }
