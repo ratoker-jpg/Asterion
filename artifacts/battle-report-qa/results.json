@@ -1,0 +1,178 @@
+{
+  "results": [
+    {
+      "viewport": "1440x900",
+      "list": {
+        "cardCount": 3,
+        "cardLossCount": 6,
+        "openButtonCount": 3,
+        "rootHorizontalOverflow": false,
+        "bodyHorizontalOverflow": false
+      },
+      "modal": {
+        "present": true,
+        "ariaModal": "true",
+        "labelledBy": "battle-report-modal-title-battle-demo-attacker-victory",
+        "sceneCount": 5,
+        "analysisOpenCount": 0,
+        "cellSizes": [
+          "100px",
+          "100px",
+          "100px",
+          "100px",
+          "100px"
+        ],
+        "hasOverallLosses": true,
+        "hasVisualAnchor": true,
+        "hasComposition": true,
+        "hasOutcome": true,
+        "internalScroll": true,
+        "internalHorizontalOverflow": false,
+        "layoutOverflowCount": 0,
+        "tooltipHorizontalClips": 0,
+        "bodyLocked": true,
+        "stageInert": true,
+        "focusableCount": 40
+      },
+      "focus": {
+        "wrappedToFirst": true
+      },
+      "closeState": {
+        "stageInert": false,
+        "bodyLocked": false,
+        "restoredTrigger": "battle-demo-attacker-victory"
+      },
+      "transition": {
+        "firstRoundSpyCount": "6",
+        "secondRoundSpyPresent": false,
+        "missingDataText": true
+      },
+      "bottom": {
+        "atBottom": true,
+        "backButtonVisible": true
+      },
+      "simulator": {
+        "resultBeforeSave": {
+          "sceneCount": 8,
+          "hasSaveButton": true
+        },
+        "savedSimulationVisible": true,
+        "savedModal": {
+          "present": true,
+          "ariaModal": "true",
+          "labelledBy": "battle-report-modal-title-simulation-mtzwc2b3-2",
+          "sceneCount": 8,
+          "analysisOpenCount": 0,
+          "cellSizes": [
+            "100px",
+            "100px",
+            "100px",
+            "100px",
+            "100px",
+            "100px",
+            "100px",
+            "100px"
+          ],
+          "hasOverallLosses": true,
+          "hasVisualAnchor": true,
+          "hasComposition": true,
+          "hasOutcome": true,
+          "internalScroll": true,
+          "internalHorizontalOverflow": false,
+          "layoutOverflowCount": 0,
+          "tooltipHorizontalClips": 0,
+          "bodyLocked": true,
+          "stageInert": true,
+          "focusableCount": 28
+        }
+      }
+    },
+    {
+      "viewport": "390x844",
+      "list": {
+        "cardCount": 3,
+        "cardLossCount": 6,
+        "openButtonCount": 3,
+        "rootHorizontalOverflow": false,
+        "bodyHorizontalOverflow": false
+      },
+      "modal": {
+        "present": true,
+        "ariaModal": "true",
+        "labelledBy": "battle-report-modal-title-battle-demo-attacker-victory",
+        "sceneCount": 5,
+        "analysisOpenCount": 0,
+        "cellSizes": [
+          "100px",
+          "100px",
+          "100px",
+          "100px",
+          "100px"
+        ],
+        "hasOverallLosses": true,
+        "hasVisualAnchor": true,
+        "hasComposition": true,
+        "hasOutcome": true,
+        "internalScroll": true,
+        "internalHorizontalOverflow": false,
+        "layoutOverflowCount": 0,
+        "tooltipHorizontalClips": 0,
+        "bodyLocked": true,
+        "stageInert": true,
+        "focusableCount": 40
+      },
+      "focus": {
+        "wrappedToFirst": true
+      },
+      "closeState": {
+        "stageInert": false,
+        "bodyLocked": false,
+        "restoredTrigger": "battle-demo-attacker-victory"
+      },
+      "transition": {
+        "firstRoundSpyCount": "6",
+        "secondRoundSpyPresent": false,
+        "missingDataText": true
+      },
+      "bottom": {
+        "atBottom": true,
+        "backButtonVisible": true
+      },
+      "simulator": {
+        "resultBeforeSave": {
+          "sceneCount": 8,
+          "hasSaveButton": true
+        },
+        "savedSimulationVisible": true,
+        "savedModal": {
+          "present": true,
+          "ariaModal": "true",
+          "labelledBy": "battle-report-modal-title-simulation-mtzwc3v8-2",
+          "sceneCount": 8,
+          "analysisOpenCount": 0,
+          "cellSizes": [
+            "100px",
+            "100px",
+            "100px",
+            "100px",
+            "100px",
+            "100px",
+            "100px",
+            "100px"
+          ],
+          "hasOverallLosses": true,
+          "hasVisualAnchor": true,
+          "hasComposition": true,
+          "hasOutcome": true,
+          "internalScroll": true,
+          "internalHorizontalOverflow": false,
+          "layoutOverflowCount": 0,
+          "tooltipHorizontalClips": 0,
+          "bodyLocked": true,
+          "stageInert": true,
+          "focusableCount": 28
+        }
+      }
+    }
+  ]
+}

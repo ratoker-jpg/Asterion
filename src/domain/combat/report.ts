@@ -22,6 +22,8 @@ export type BattleStackSnapshot = {
   countBefore: number;
   countAfter: number;
   destroyed: number;
+  /** Optional historical level captured by a future combat producer. */
+  level?: number;
   life?: number;
   armor?: number;
   shield?: number;
