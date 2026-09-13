@@ -692,6 +692,7 @@ function BattleVisualReport({ viewModel, scrollRef }: { viewModel: BattleReportV
                   '--battle-fleet-rows': round.fleetRows,
                 } as CSSProperties}
               >
+                <div className="battle-scene-backdrop-v1" aria-hidden="true" />
                 <div className="battle-scene-fleet-field-v1">
                   <div className="battle-scene-side-label-v1 attacker"><span>АТАКУЮЩИЙ</span><strong>{participantLabel(viewModel.attacker.participant)}</strong></div>
                   <div className="battle-scene-side-label-v1 defender"><span>ЗАЩИТНИК</span><strong>{participantLabel(viewModel.defender.participant)}</strong></div>
@@ -701,7 +702,6 @@ function BattleVisualReport({ viewModel, scrollRef }: { viewModel: BattleReportV
                   </div>
                 </div>
                 <div className="battle-scene-planet-deck-v1">
-                  <div className="battle-scene-backdrop-v1" aria-hidden="true" />
                   {defenses.length ? (
                     <div className="battle-scene-defense-zone-v1" aria-label="Оборона защитника">
                       {defenses.map((stack) => <SceneStack key={stack.key} stack={stack} side="defender" roundIndex={round.index} />)}
