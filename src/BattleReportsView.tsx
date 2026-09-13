@@ -135,12 +135,137 @@ function SaveButton({ saved, onToggle, reportId }: { saved: boolean; onToggle: (
   );
 }
 
-function LossSummary({ side }: { side: BattleSideViewModel }) {
+type BattleCardMetric = {
+  id: 'population' | 'ships' | 'defense';
+  label: string;
+  unit: string;
+  before: number | null;
+  after: number | null;
+  lost: number | null;
+};
+
+function battleCardMetrics(side: BattleSideViewModel): BattleCardMetric[] {
+  return [
+    { id: 'population', label: 'Население', unit: 'населения', before: side.populationBefore, after: side.populationAfter, lost: side.losses.population },
+    { id: 'ships', label: 'Корабли', unit: 'кораблей', before: side.fleet.countBefore, after: side.fleet.countAfter, lost: side.losses.ships },
+    { id: 'defense', label: 'Оборона', unit: 'сооружений', before: side.defense.countBefore, after: side.defense.countAfter, lost: side.losses.defenses },
+  ];
+}
+
+function battleCardMetricValue(value: number | null, unit: string) {
+  return value == null ? '—' : `${formatNumber(value)} ${unit}`;
+}
+
+function battleCardSideName(side: BattleSideViewModel) {
+  return side.participant.playerName || side.participant.planetName || BATTLE_MISSING_DATA;
+}
+
+function battleCardSideMeta(side: BattleSideViewModel) {
+  return [side.participant.coordinates, side.participant.race].filter(Boolean).join(' · ') || 'Данные участника не зафиксированы';
+}
+
+function battleCardPoints(viewModel: BattleReportViewModel, side: BattleSideViewModel) {
+  return side.participant.side === 'attacker'
+    ? viewModel.battlePoints.attacker
+    : viewModel.battlePoints.defender;
+}
+
+function battleCardResourcePointsLost(viewModel: BattleReportViewModel, side: BattleSideViewModel) {
+  return side.participant.side === 'attacker'
+    ? viewModel.battlePoints.attackerResourcePointsLost
+    : viewModel.battlePoints.defenderResourcePointsLost;
+}
+
+function CardSideTitle({ side, winner = false, className = '' }: { side: BattleSideViewModel; winner?: boolean; className?: string }) {
   return (
-    <div className="battle-card-losses-v1" data-qa-battle-losses={side.participant.side}>
-      <span>Потери <b>{formatNumber(side.losses.population)}</b> населения</span>
-      {side.losses.ships != null ? <span>Корабли <b>{formatNumber(side.losses.ships)}</b></span> : null}
-      {side.losses.defenses != null ? <span>Оборона <b>{formatNumber(side.losses.defenses)}</b></span> : null}
+    <header className={`battle-card-side-title-v1 ${className}`}>
+      <small>{side.participant.side === 'attacker' ? 'АТАКУЮЩИЙ' : 'ЗАЩИТНИК'}{winner ? ' · ПОБЕДИТЕЛЬ' : ''}</small>
+      <strong>{battleCardSideName(side)}</strong>
+      <span>{battleCardSideMeta(side)}</span>
+    </header>
+  );
+}
+
+function LossSummary({ side, className = '' }: { side: BattleSideViewModel; className?: string }) {
+  const losses = battleCardMetrics(side).filter((metric) => metric.lost != null);
+  return (
+    <div className={`battle-card-losses-v1 ${className}`} data-qa-battle-losses={side.participant.side}>
+      <small>ПОТЕРЯНО В БОЮ</small>
+      <div>
+        {losses.map((metric) => <span key={metric.id}><b>−{formatNumber(metric.lost)}</b><em>{metric.label.toLowerCase()}</em></span>)}
+      </div>
+    </div>
+  );
+}
+
+function CardPoints({ viewModel, side, className = '' }: { viewModel: BattleReportViewModel; side: BattleSideViewModel; className?: string }) {
+  return (
+    <div className={`battle-card-points-v1 ${className}`}>
+      <span><small>ПОЛУЧЕНО БОЕВЫХ ОЧКОВ</small><b>+{formatNumber(battleCardPoints(viewModel, side))}</b></span>
+      <span><small>РЕСУРСНЫЕ ОЧКИ · ПОТЕРЯНО</small><b>−{formatResourcePoints(battleCardResourcePointsLost(viewModel, side))}</b></span>
+    </div>
+  );
+}
+
+function CardRewards({ viewModel, className = '' }: { viewModel: BattleReportViewModel; className?: string }) {
+  const hasRewards = viewModel.debris != null || viewModel.resources.length > 0;
+  if (!hasRewards) return null;
+  return (
+    <div className={`battle-card-rewards-v1 ${className}`}>
+      <small>НАГРАДЫ И ДОБЫЧА</small>
+      <div>
+        {viewModel.debris != null ? <span className="battle-card-reward-item-v1"><ResourceIcon kind="debris" /><b>{formatNumber(viewModel.debris)}</b><em>обломков</em></span> : null}
+        {viewModel.resources.map((resource) => <span className="battle-card-reward-item-v1" key={resource.kind}><ResourceIcon kind={resource.kind} /><b>{formatNumber(resource.value)}</b><em>{resource.label.toLowerCase()}</em></span>)}
+      </div>
+    </div>
+  );
+}
+
+function CardActions({ viewModel, saved, onToggleSaved, onOpen, className = '' }: {
+  viewModel: BattleReportViewModel;
+  saved: boolean;
+  onToggleSaved: () => void;
+  onOpen: () => void;
+  className?: string;
+}) {
+  return (
+    <footer className={`battle-card-footer-v1 ${className}`}>
+      <span><small>РАУНДЫ</small><b>{formatNumber(viewModel.roundCount)}</b></span>
+      <div>
+        <SaveButton saved={saved} onToggle={onToggleSaved} reportId={viewModel.id} />
+        <button type="button" className="battle-open-v1" data-qa-battle-open={viewModel.id} onClick={onOpen}>ПОСМОТРЕТЬ БОЕВОЙ ДОКЛАД</button>
+      </div>
+    </footer>
+  );
+}
+
+type BattleCardBodyProps = {
+  viewModel: BattleReportViewModel;
+  saved: boolean;
+  onToggleSaved: () => void;
+  onOpen: () => void;
+};
+
+function BattleCardSummaryBody({ viewModel, ...actions }: BattleCardBodyProps) {
+  const sides = [viewModel.attacker, viewModel.defender];
+  return (
+    <div className="battle-card-body-v1 battle-card-versus-v1">
+      <div className="battle-card-versus-grid-v1">
+        {sides.map((side, index) => (
+          <div className="battle-card-versus-column-v1" key={side.participant.side}>
+            <CardSideTitle side={side} winner={viewModel.winner === side.participant.side} />
+            <div className="battle-card-versus-population-v1"><small>ОСТАЛОСЬ НАСЕЛЕНИЯ</small><strong>{formatKnownNumber(side.populationAfter)}</strong><span>из {formatKnownNumber(side.populationBefore)}</span></div>
+            <div className="battle-card-versus-secondary-v1">
+              {battleCardMetrics(side).slice(1).map((metric) => <span key={metric.id}><small>{metric.label}</small><b>{battleCardMetricValue(metric.after, metric.unit)}</b></span>)}
+            </div>
+            <LossSummary side={side} />
+            <CardPoints viewModel={viewModel} side={side} />
+            {index === 0 ? <span className="battle-card-versus-arrow-v1" aria-hidden="true">→</span> : null}
+          </div>
+        ))}
+      </div>
+      <CardRewards viewModel={viewModel} />
+      <CardActions viewModel={viewModel} {...actions} />
     </div>
   );
 }
@@ -157,7 +282,6 @@ function BattleCard({
   onOpen: () => void;
 }) {
   const result = resultLabel(viewModel);
-  const optionalRewards = viewModel.debris != null || viewModel.resources.length > 0;
   return (
     <details className={`battle-card-v1 ${result.tone}`} data-qa-battle-card={viewModel.id}>
       <summary className="battle-card-summary-v1">
@@ -173,33 +297,7 @@ function BattleCard({
         <time dateTime={viewModel.timestamp}>{formatBattleDate(viewModel.timestamp)}</time>
         <span className="battle-card-expand-v1" aria-hidden="true">⌄</span>
       </summary>
-
-      <div className="battle-card-body-v1">
-        <div className="battle-card-sides-v1">
-          {[viewModel.attacker, viewModel.defender].map((side) => (
-            <div key={side.participant.side} data-qa-battle-side={side.participant.side}>
-              <small>{side.participant.side === 'attacker' ? 'АТАКУЮЩИЙ' : 'ЗАЩИТНИК'}</small>
-              <span>Население <b>{formatNumber(side.populationBefore)}</b> → <b>{formatNumber(side.populationAfter)}</b></span>
-              <LossSummary side={side} />
-            </div>
-          ))}
-        </div>
-
-        {optionalRewards ? (
-          <div className="battle-card-rewards-v1">
-            {viewModel.debris != null ? <span>Обломки <b>{formatNumber(viewModel.debris)}</b></span> : null}
-            {viewModel.resources.map((resource) => <span key={resource.kind}>{resource.label} <b>{formatNumber(resource.value)}</b></span>)}
-          </div>
-        ) : null}
-
-        <footer className="battle-card-footer-v1">
-          <span>Раундов: <b>{formatNumber(viewModel.roundCount)}</b></span>
-          <div>
-            <SaveButton saved={saved} onToggle={onToggleSaved} reportId={viewModel.id} />
-            <button type="button" className="battle-open-v1" data-qa-battle-open={viewModel.id} onClick={onOpen}>ПОСМОТРЕТЬ БОЕВОЙ ДОКЛАД</button>
-          </div>
-        </footer>
-      </div>
+      <BattleCardSummaryBody viewModel={viewModel} saved={saved} onToggleSaved={onToggleSaved} onOpen={onOpen} />
     </details>
   );
 }
