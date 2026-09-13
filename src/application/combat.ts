@@ -24,8 +24,8 @@ export type CombatResolutionRequest = {
 };
 
 /**
- * Production combat boundary. SimulatorView continues to resolve and save
- * simulations through its own repository; only a real combat caller should
+ * Production combat boundary. SimulatorView resolves temporary simulations
+ * and persists only its editable scenarios; only a real combat caller should
  * use this function, which applies the canonical report and defensive repair
  * award in one application transition.
  */

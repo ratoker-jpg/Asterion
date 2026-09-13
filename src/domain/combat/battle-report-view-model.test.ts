@@ -19,6 +19,20 @@ test('view model exposes losses, rewards, and every saved round snapshot', () =>
   assert.deepEqual(viewModel.attacker.modifiers.map((modifier) => modifier.label), ['Построение', 'Командирский snapshot']);
 });
 
+test('demo reports identify the current player and render Bot 01 with Veyra presentation', () => {
+  const viewModel = createBattleReportViewModel(DEMO_BATTLE_REPORTS[0]);
+
+  assert.equal(viewModel.attacker.participant.playerName, 'Dendrilion');
+  assert.equal(viewModel.attacker.participant.coordinates, '[1:1:1]');
+  assert.equal(viewModel.defender.participant.playerName, 'Бот 01');
+  assert.equal(viewModel.defender.participant.coordinates, '[1:11:10]');
+  assert.equal(viewModel.defender.participant.race, 'Рой');
+  assert.equal(viewModel.defender.stacks.find((stack) => stack.entityId === 'defender')?.name, 'Панцирник');
+  assert.equal(viewModel.defender.stacks.every((stack) => stack.assetSource === 'catalog'), true);
+  assert.equal(viewModel.defender.defenses[0]?.name, 'Лазерная железа');
+  assert.equal(viewModel.defender.defenses.every((stack) => stack.assetSource === 'catalog'), true);
+});
+
 test('view model binds scene stacks to saved snapshots across rounds', () => {
   const viewModel = createBattleReportViewModel(DEMO_BATTLE_REPORTS[2]);
   const firstRound = viewModel.rounds.find((round) => round.index === 1);

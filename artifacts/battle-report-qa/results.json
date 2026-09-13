@@ -4,8 +4,15 @@
       "viewport": "1440x900",
       "list": {
         "cardCount": 3,
+        "collapsedCardCount": 3,
         "cardLossCount": 6,
         "openButtonCount": 3,
+        "resultIconCount": 3,
+        "resultLabels": [
+          "ПОБЕДА",
+          "ПОРАЖЕНИЕ",
+          "НИЧЬЯ"
+        ],
         "rootHorizontalOverflow": false,
         "bodyHorizontalOverflow": false
       },
@@ -52,15 +59,10 @@
         "backButtonVisible": true
       },
       "simulator": {
-        "resultBeforeSave": {
-          "sceneCount": 8,
-          "hasSaveButton": true
-        },
-        "savedSimulationVisible": true,
-        "savedModal": {
+        "simulationModal": {
           "present": true,
           "ariaModal": "true",
-          "labelledBy": "battle-report-modal-title-simulation-mtzwc2b3-2",
+          "labelledBy": "battle-report-modal-title-simulation-mtzyfl64-2",
           "sceneCount": 8,
           "analysisOpenCount": 0,
           "cellSizes": [
@@ -83,16 +85,50 @@
           "tooltipHorizontalClips": 0,
           "bodyLocked": true,
           "stageInert": true,
-          "focusableCount": 28
-        }
+          "focusableCount": 27
+        },
+        "simulationPresentation": {
+          "source": "simulation",
+          "hasSaveButton": false,
+          "hasGenericAttacker": true,
+          "hasGenericDefender": true,
+          "hasInlineResult": false
+        },
+        "beforeCloseState": {
+          "reportIds": [
+            "battle-demo-attacker-victory",
+            "battle-demo-defender-victory",
+            "battle-demo-round-limit-draw"
+          ],
+          "savedReportIds": []
+        },
+        "afterCloseState": {
+          "reportIds": [
+            "battle-demo-attacker-victory",
+            "battle-demo-defender-victory",
+            "battle-demo-round-limit-draw"
+          ],
+          "savedReportIds": [],
+          "hasInlineResult": false,
+          "attackerSelected": true,
+          "defenderSelected": true
+        },
+        "rerun": true
       }
     },
     {
       "viewport": "390x844",
       "list": {
         "cardCount": 3,
+        "collapsedCardCount": 3,
         "cardLossCount": 6,
         "openButtonCount": 3,
+        "resultIconCount": 3,
+        "resultLabels": [
+          "ПОБЕДА",
+          "ПОРАЖЕНИЕ",
+          "НИЧЬЯ"
+        ],
         "rootHorizontalOverflow": false,
         "bodyHorizontalOverflow": false
       },
@@ -139,15 +175,10 @@
         "backButtonVisible": true
       },
       "simulator": {
-        "resultBeforeSave": {
-          "sceneCount": 8,
-          "hasSaveButton": true
-        },
-        "savedSimulationVisible": true,
-        "savedModal": {
+        "simulationModal": {
           "present": true,
           "ariaModal": "true",
-          "labelledBy": "battle-report-modal-title-simulation-mtzwc3v8-2",
+          "labelledBy": "battle-report-modal-title-simulation-mtzyfmtu-2",
           "sceneCount": 8,
           "analysisOpenCount": 0,
           "cellSizes": [
@@ -170,8 +201,35 @@
           "tooltipHorizontalClips": 0,
           "bodyLocked": true,
           "stageInert": true,
-          "focusableCount": 28
-        }
+          "focusableCount": 27
+        },
+        "simulationPresentation": {
+          "source": "simulation",
+          "hasSaveButton": false,
+          "hasGenericAttacker": true,
+          "hasGenericDefender": true,
+          "hasInlineResult": false
+        },
+        "beforeCloseState": {
+          "reportIds": [
+            "battle-demo-attacker-victory",
+            "battle-demo-defender-victory",
+            "battle-demo-round-limit-draw"
+          ],
+          "savedReportIds": []
+        },
+        "afterCloseState": {
+          "reportIds": [
+            "battle-demo-attacker-victory",
+            "battle-demo-defender-victory",
+            "battle-demo-round-limit-draw"
+          ],
+          "savedReportIds": [],
+          "hasInlineResult": false,
+          "attackerSelected": true,
+          "defenderSelected": true
+        },
+        "rerun": true
       }
     }
   ]

@@ -1,5 +1,6 @@
 import type { BattleReport, BattleStackSnapshot, CombatRoundSnapshot } from './report.ts';
 import type { CombatEntityId } from './ids.ts';
+import { CURRENT_PLAYER_DISPLAY_NAME } from '../rating/fixtures.ts';
 
 function demoStack(entityId: CombatEntityId, countBefore: number, countAfter: number): BattleStackSnapshot {
   return {
@@ -26,18 +27,18 @@ export const DEMO_BATTLE_REPORTS: readonly BattleReport[] = [
     missionType: 'attack',
     attacker: {
       playerId: 'player-aster',
-      playerName: 'Aster Command',
+      playerName: CURRENT_PLAYER_DISPLAY_NAME,
       planetName: 'Helion 01',
       coordinates: '[1:1:1]',
       race: 'Астеры',
       side: 'attacker',
     },
     defender: {
-      playerId: 'player-vega',
-      playerName: 'Vega Directorate',
-      planetName: 'Vega IX',
-      coordinates: '[1:12:7]',
-      race: 'Директорат',
+      playerId: 'npc-bot-01',
+      playerName: 'Бот 01',
+      planetName: 'Кальдера',
+      coordinates: '[1:11:10]',
+      race: 'Рой',
       side: 'defender',
     },
     winner: 'attacker',
@@ -222,21 +223,21 @@ export const DEMO_BATTLE_REPORTS: readonly BattleReport[] = [
   {
     id: 'battle-demo-defender-victory',
     timestamp: '2026-09-02T20:16:00.000Z',
-    missionType: 'defense',
+    missionType: 'attack',
     attacker: {
-      playerId: 'player-raider',
-      playerName: 'Orion Raiders',
-      planetName: 'Orion Gate',
-      coordinates: '[1:8:4]',
-      race: 'Рейдеры',
-      side: 'attacker',
-    },
-    defender: {
       playerId: 'player-aster',
-      playerName: 'Aster Command',
+      playerName: CURRENT_PLAYER_DISPLAY_NAME,
       planetName: 'Helion 01',
       coordinates: '[1:1:1]',
       race: 'Астеры',
+      side: 'attacker',
+    },
+    defender: {
+      playerId: 'npc-bot-01',
+      playerName: 'Бот 01',
+      planetName: 'Аурелия',
+      coordinates: '[1:29:12]',
+      race: 'Рой',
       side: 'defender',
     },
     winner: 'defender',
@@ -384,18 +385,18 @@ export const DEMO_BATTLE_REPORTS: readonly BattleReport[] = [
     missionType: 'attack',
     attacker: {
       playerId: 'player-aster',
-      playerName: 'Aster Command',
+      playerName: CURRENT_PLAYER_DISPLAY_NAME,
       planetName: 'Helion 01',
       coordinates: '[1:1:1]',
       race: 'Астеры',
       side: 'attacker',
     },
     defender: {
-      playerId: 'player-lyra',
-      playerName: 'Lyra Collective',
-      planetName: 'Lyra Outpost',
-      coordinates: '[1:19:3]',
-      race: 'Коллектив',
+      playerId: 'npc-bot-01',
+      playerName: 'Бот 01',
+      planetName: 'Мицелия',
+      coordinates: '[1:28:24]',
+      race: 'Рой',
       side: 'defender',
     },
     winner: 'draw',

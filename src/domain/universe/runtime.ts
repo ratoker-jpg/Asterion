@@ -712,6 +712,7 @@ export function createUniverseNpcOwnerProfile(): UniverseOwnerProfile {
   return normalizeUniverseOwnerProfile({
     id: NPC_OWNER_ID,
     displayName: 'Бот 01',
+    raceId: 'veyra',
     planetIds: NPC_PLANET_FIXTURES.map((planet) => planet.id),
   });
 }

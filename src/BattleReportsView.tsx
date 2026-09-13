@@ -59,8 +59,14 @@ function formatBattleDate(timestamp: string, withYear = true) {
 }
 
 function participantLabel(participant: BattleParticipantViewModel) {
-  const title = participant.planetName ?? participant.playerName;
+  const title = participant.playerName || participant.planetName || BATTLE_MISSING_DATA;
   return `${title}${participant.coordinates ? ` ${participant.coordinates}` : ''}`;
+}
+
+type BattleResultTone = 'victory' | 'defeat' | 'draw';
+
+function resultIcon(tone: BattleResultTone) {
+  return tone === 'victory' ? '✓' : tone === 'defeat' ? '×' : '=';
 }
 
 function resultLabel(viewModel: BattleReportViewModel) {
@@ -131,43 +137,48 @@ function BattleCard({
   const result = resultLabel(viewModel);
   const optionalRewards = viewModel.debris != null || viewModel.resources.length > 0;
   return (
-    <article className="battle-card-v1" data-qa-battle-card={viewModel.id}>
-      <header className="battle-card-head-v1">
-        <strong className={`battle-result-v1 ${result.tone}`}>{result.label}</strong>
+    <details className={`battle-card-v1 ${result.tone}`} data-qa-battle-card={viewModel.id}>
+      <summary className="battle-card-summary-v1">
+        <span className={`battle-result-badge-v1 ${result.tone}`}>
+          <span className="battle-result-icon-v1" aria-hidden="true">{resultIcon(result.tone)}</span>
+          <strong>{result.label}</strong>
+        </span>
+        <span className="battle-card-summary-route-v1">
+          <strong>{participantLabel(viewModel.attacker.participant)}</strong>
+          <span aria-hidden="true">→</span>
+          <strong>{participantLabel(viewModel.defender.participant)}</strong>
+        </span>
         <time dateTime={viewModel.timestamp}>{formatBattleDate(viewModel.timestamp)}</time>
-      </header>
+        <span className="battle-card-expand-v1" aria-hidden="true">⌄</span>
+      </summary>
 
-      <div className="battle-route-v1">
-        <strong>{participantLabel(viewModel.attacker.participant)}</strong>
-        <span aria-hidden="true">→</span>
-        <strong>{participantLabel(viewModel.defender.participant)}</strong>
-      </div>
+      <div className="battle-card-body-v1">
+        <div className="battle-card-sides-v1">
+          {[viewModel.attacker, viewModel.defender].map((side) => (
+            <div key={side.participant.side} data-qa-battle-side={side.participant.side}>
+              <small>{side.participant.side === 'attacker' ? 'АТАКУЮЩИЙ' : 'ЗАЩИТНИК'}</small>
+              <span>Население <b>{formatNumber(side.populationBefore)}</b> → <b>{formatNumber(side.populationAfter)}</b></span>
+              <LossSummary side={side} />
+            </div>
+          ))}
+        </div>
 
-      <div className="battle-card-sides-v1">
-        {[viewModel.attacker, viewModel.defender].map((side) => (
-          <div key={side.participant.side} data-qa-battle-side={side.participant.side}>
-            <small>{side.participant.side === 'attacker' ? 'АТАКУЮЩИЙ' : 'ЗАЩИТНИК'}</small>
-            <span>Население <b>{formatNumber(side.populationBefore)}</b> → <b>{formatNumber(side.populationAfter)}</b></span>
-            <LossSummary side={side} />
+        {optionalRewards ? (
+          <div className="battle-card-rewards-v1">
+            {viewModel.debris != null ? <span>Обломки <b>{formatNumber(viewModel.debris)}</b></span> : null}
+            {viewModel.resources.map((resource) => <span key={resource.kind}>{resource.label} <b>{formatNumber(resource.value)}</b></span>)}
           </div>
-        ))}
+        ) : null}
+
+        <footer className="battle-card-footer-v1">
+          <span>Раундов: <b>{formatNumber(viewModel.roundCount)}</b></span>
+          <div>
+            <SaveButton saved={saved} onToggle={onToggleSaved} reportId={viewModel.id} />
+            <button type="button" className="battle-open-v1" data-qa-battle-open={viewModel.id} onClick={onOpen}>ПОСМОТРЕТЬ БОЕВОЙ ДОКЛАД</button>
+          </div>
+        </footer>
       </div>
-
-      {optionalRewards ? (
-        <div className="battle-card-rewards-v1">
-          {viewModel.debris != null ? <span>Обломки <b>{formatNumber(viewModel.debris)}</b></span> : null}
-          {viewModel.resources.map((resource) => <span key={resource.kind}>{resource.label} <b>{formatNumber(resource.value)}</b></span>)}
-        </div>
-      ) : null}
-
-      <footer className="battle-card-footer-v1">
-        <span>Раундов: <b>{formatNumber(viewModel.roundCount)}</b></span>
-        <div>
-          <SaveButton saved={saved} onToggle={onToggleSaved} reportId={viewModel.id} />
-          <button type="button" className="battle-open-v1" data-qa-battle-open={viewModel.id} onClick={onOpen}>ПОСМОТРЕТЬ БОЕВОЙ ДОКЛАД</button>
-        </div>
-      </footer>
-    </article>
+    </details>
   );
 }
 
@@ -175,8 +186,11 @@ function PopulationPanel({ viewModel }: { viewModel: BattleReportViewModel }) {
   const result = resultLabel(viewModel);
   return (
     <section className="battle-summary-v1" data-qa-battle-summary>
-      <header>
-        <div><small>РЕЗУЛЬТАТ БОЯ · {missionLabel(viewModel.missionType)}</small><h3>{result.label}</h3></div>
+      <header className={`battle-result-panel-v1 ${result.tone}`} data-qa-battle-result-panel>
+        <div className="battle-result-panel-copy">
+          <small>РЕЗУЛЬТАТ БОЯ · {missionLabel(viewModel.missionType)}</small>
+          <div className="battle-result-panel-title"><span className="battle-result-panel-icon" aria-hidden="true">{resultIcon(result.tone)}</span><h3>{result.label}</h3></div>
+        </div>
         <span>{formatNumber(viewModel.roundCount)} РАУНДОВ</span>
       </header>
       <div className="battle-summary-grid-v1">
@@ -512,23 +526,27 @@ export function BattleReportDetailBody({
 
 const FOCUSABLE_SELECTOR = 'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]:not([tabindex="-1"])';
 
-function BattleReportModal({
+export function BattleReportModal({
   report,
-  viewModel,
-  saved,
+  viewModel: providedViewModel,
+  saved = false,
   onToggleSaved,
   onClose,
+  context = 'battle',
 }: {
   report: BattleReport;
-  viewModel: BattleReportViewModel;
-  saved: boolean;
-  onToggleSaved: () => void;
+  viewModel?: BattleReportViewModel;
+  saved?: boolean;
+  onToggleSaved?: () => void;
   onClose: () => void;
+  context?: 'battle' | 'simulation';
 }) {
+  const viewModel = providedViewModel ?? createBattleReportViewModel(report);
   const modalRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const titleId = `battle-report-modal-title-${viewModel.id}`;
+  const result = resultLabel(viewModel);
 
   useEffect(() => {
     const previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -577,21 +595,24 @@ function BattleReportModal({
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <section ref={modalRef} className="battle-report-modal-v1" role="dialog" aria-modal="true" aria-labelledby={titleId} data-qa-battle-report-modal={viewModel.id}>
+      <section ref={modalRef} className="battle-report-modal-v1" role="dialog" aria-modal="true" aria-labelledby={titleId} data-qa-battle-report-modal={viewModel.id} data-qa-battle-report-source={context}>
         <header className="battle-report-modal-head-v1">
           <div>
             <small>БОЕВОЙ ОТЧЁТ · {missionLabel(viewModel.missionType)}</small>
-            <h2 id={titleId}>{resultLabel(viewModel).label}</h2>
+            <div className={`battle-report-modal-result-v1 ${result.tone}`}>
+              <span className="battle-report-modal-result-icon-v1" aria-hidden="true">{resultIcon(result.tone)}</span>
+              <h2 id={titleId}>{result.label}</h2>
+            </div>
             <p><time dateTime={viewModel.timestamp}>{formatBattleDate(viewModel.timestamp)}</time> · {participantLabel(viewModel.attacker.participant)} → {participantLabel(viewModel.defender.participant)}</p>
           </div>
           <div className="battle-report-modal-actions-v1">
-            <SaveButton saved={saved} onToggle={onToggleSaved} reportId={viewModel.id} />
+            {context === 'battle' && onToggleSaved ? <SaveButton saved={saved} onToggle={onToggleSaved} reportId={viewModel.id} /> : null}
             <button ref={closeRef} type="button" className="battle-report-modal-close-v1" onClick={onClose} aria-label="Закрыть боевой отчёт">×</button>
           </div>
         </header>
         <div ref={scrollRef} className="battle-report-modal-scroll-v1">
           <BattleReportDetailBody report={report} viewModel={viewModel} scrollRef={scrollRef} />
-          <button type="button" className="battle-list-back-v1 battle-modal-back-v1" onClick={onClose}>← К СПИСКУ БИТВ</button>
+          <button type="button" className="battle-list-back-v1 battle-modal-back-v1" onClick={onClose}>{context === 'simulation' ? '← К СИМУЛЯТОРУ' : '← К СПИСКУ БИТВ'}</button>
         </div>
       </section>
     </div>,

@@ -67,8 +67,11 @@ async function capture(win, directory, name) {
 async function listSnapshot(win) {
   return win.webContents.executeJavaScript(`(() => ({
     cardCount: document.querySelectorAll('[data-qa-battle-card]').length,
+    collapsedCardCount: document.querySelectorAll('[data-qa-battle-card]:not([open])').length,
     cardLossCount: document.querySelectorAll('[data-qa-battle-losses]').length,
     openButtonCount: document.querySelectorAll('[data-qa-battle-open]').length,
+    resultIconCount: document.querySelectorAll('[data-qa-battle-card] .battle-result-icon-v1').length,
+    resultLabels: Array.from(document.querySelectorAll('[data-qa-battle-card] .battle-result-badge-v1 strong')).map((node) => node.textContent?.trim() || ''),
     rootHorizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 2,
     bodyHorizontalOverflow: document.body.scrollWidth > document.body.clientWidth + 2,
   }))()`);
@@ -79,6 +82,8 @@ async function openBattle(win, reportId) {
   const clicked = await win.webContents.executeJavaScript(`(() => {
     const button = document.querySelector(${JSON.stringify(selector)});
     if (!button) return false;
+    const card = button.closest('details');
+    if (card) card.open = true;
     button.focus();
     button.click();
     return true;
@@ -144,7 +149,7 @@ async function exerciseFocusTrapAndEscape(win) {
   })()`);
 }
 
-async function exerciseSimulatorSaveFlow(win) {
+async function exerciseSimulatorModalFlow(win) {
   const backToFleet = await win.webContents.executeJavaScript(`(() => {
     const button = document.querySelector('.battle-back-v1');
     if (!button) return false;
@@ -198,55 +203,67 @@ async function exerciseSimulatorSaveFlow(win) {
     }))()`);
     throw new Error(`Simulator run button did not become enabled: ${JSON.stringify(state)}`);
   }
-  await waitFor(win, `document.querySelector('.sim-result-v1 [data-qa-battle-visual-report]')`);
+  await waitFor(win, `document.querySelector('[role="dialog"][data-qa-battle-report-modal][data-qa-battle-report-source="simulation"]')`);
   await settle(win);
 
-  const resultBeforeSave = await win.webContents.executeJavaScript(`(() => ({
-    sceneCount: document.querySelectorAll('.sim-result-v1 [data-qa-battle-scene]').length,
-    hasSaveButton: Array.from(document.querySelectorAll('.sim-result-head-v1 button')).some((button) => button.textContent?.includes('СОХРАНИТЬ В БИТВЫ')),
-  }))()`);
-  if (resultBeforeSave.sceneCount < 1 || !resultBeforeSave.hasSaveButton) throw new Error(`Simulator result contract failed: ${JSON.stringify(resultBeforeSave)}`);
+  const simulationModal = await modalSnapshot(win);
+  const simulationPresentation = await win.webContents.executeJavaScript(`(() => {
+    const modal = document.querySelector('[role="dialog"][data-qa-battle-report-source="simulation"]');
+    const text = modal?.textContent || '';
+    return {
+      source: modal?.getAttribute('data-qa-battle-report-source') || '',
+      hasSaveButton: Boolean(modal?.querySelector('.battle-save-v1')),
+      hasGenericAttacker: text.includes('Атакующий'),
+      hasGenericDefender: text.includes('Защитник'),
+      hasInlineResult: Boolean(document.querySelector('.sim-result-v1')),
+    };
+  })()`);
+  if (!simulationModal.present || simulationModal.sceneCount < 1 || simulationModal.internalHorizontalOverflow || simulationPresentation.source !== 'simulation' || simulationPresentation.hasSaveButton || !simulationPresentation.hasGenericAttacker || !simulationPresentation.hasGenericDefender || simulationPresentation.hasInlineResult) {
+    throw new Error(`Simulator modal contract failed: ${JSON.stringify({ simulationModal, simulationPresentation })}`);
+  }
 
-  const saved = await win.webContents.executeJavaScript(`(() => {
-    const button = Array.from(document.querySelectorAll('.sim-result-head-v1 button')).find((item) => item.textContent?.includes('СОХРАНИТЬ В БИТВЫ'));
+  const beforeCloseState = await win.webContents.executeJavaScript(`(() => {
+    try {
+      const state = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+      return {
+        reportIds: state.combat?.reports?.map((report) => report.id) || [],
+        savedReportIds: state.combat?.savedReportIds || [],
+      };
+    } catch { return { reportIds: [], savedReportIds: [] }; }
+  })()`);
+
+  await win.webContents.executeJavaScript(`document.querySelector('.battle-report-modal-close-v1')?.click()`);
+  await waitFor(win, `!document.querySelector('[role="dialog"][data-qa-battle-report-modal]')`);
+  await settle(win);
+  const afterCloseState = await win.webContents.executeJavaScript(`(() => {
+    let state = {};
+    try { state = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}'); } catch {}
+    const attackerInputs = Array.from(document.querySelectorAll('#sim-attacker-ships input[type="number"]'));
+    const defenderInputs = Array.from(document.querySelectorAll('#sim-defender-ships input[type="number"]'));
+    return {
+      reportIds: state.combat?.reports?.map((report) => report.id) || [],
+      savedReportIds: state.combat?.savedReportIds || [],
+      hasInlineResult: Boolean(document.querySelector('.sim-result-v1')),
+      attackerSelected: attackerInputs.some((input) => Number(input.value) > 0),
+      defenderSelected: defenderInputs.some((input) => Number(input.value) > 0),
+    };
+  })()`);
+  if (JSON.stringify(beforeCloseState) !== JSON.stringify({ reportIds: afterCloseState.reportIds, savedReportIds: afterCloseState.savedReportIds }) || afterCloseState.hasInlineResult || !afterCloseState.attackerSelected || !afterCloseState.defenderSelected) {
+    throw new Error(`Simulator isolation contract failed: ${JSON.stringify({ beforeCloseState, afterCloseState })}`);
+  }
+
+  const rerun = await win.webContents.executeJavaScript(`(() => {
+    const button = document.querySelector('.sim-run-v1');
     if (!button || button.disabled) return false;
     button.click();
     return true;
   })()`);
-  if (!saved) throw new Error('Simulator save-to-battles button not available');
-  await waitFor(win, `document.querySelector('.sim-result-head-v1 button')?.textContent?.includes('СОХРАНЕНО В БИТВЫ')`);
-  const savedState = await win.webContents.executeJavaScript(`(() => {
-    try { return JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}'); } catch { return {}; }
-  })()`);
-  const simulationReport = savedState.combat?.reports?.find((report) => report.metadata?.source === 'combat-resolver');
-  if (!simulationReport || !savedState.combat.savedReportIds?.includes(simulationReport.id)) throw new Error(`Simulator persistence contract failed: ${JSON.stringify({ simulationReport, savedReportIds: savedState.combat?.savedReportIds })}`);
-
-  const battles = await win.webContents.executeJavaScript(`(() => {
-    const button = document.querySelector('[data-qa-fleet-section="battles"]');
-    if (!button) return false;
-    button.click();
-    return true;
-  })()`);
-  if (!battles) throw new Error('Battle fleet section not found after simulator save');
-  const savedCardSelector = `[data-qa-battle-card="${simulationReport.id}"]`;
-  await waitFor(win, `document.querySelector(${JSON.stringify(savedCardSelector)})`);
+  if (!rerun) throw new Error('Simulator rerun button not available after closing result');
+  await waitFor(win, `document.querySelector('[role="dialog"][data-qa-battle-report-source="simulation"]')`);
   await settle(win);
-  const openedSaved = await win.webContents.executeJavaScript(`(() => {
-    const button = document.querySelector(${JSON.stringify(`[data-qa-battle-open="${simulationReport.id}"]`)});
-    if (!button) return false;
-    button.focus();
-    button.click();
-    return true;
-  })()`);
-  if (!openedSaved) throw new Error('Saved simulator battle open button not available');
-  await waitFor(win, `document.querySelector('[role="dialog"][data-qa-battle-report-modal]')`);
-  const savedModal = await modalSnapshot(win);
-  if (!savedModal.present || savedModal.sceneCount < 1 || savedModal.internalHorizontalOverflow) {
-    throw new Error(`Saved simulator battle modal contract failed: ${JSON.stringify(savedModal)}`);
-  }
   await win.webContents.executeJavaScript(`document.querySelector('.battle-report-modal-close-v1')?.click()`);
   await waitFor(win, `!document.querySelector('[role="dialog"][data-qa-battle-report-modal]')`);
-  return { resultBeforeSave, savedSimulationVisible: true, savedModal };
+  return { simulationModal, simulationPresentation, beforeCloseState, afterCloseState, rerun: true };
 }
 
 async function runViewport(win, width, height) {
@@ -261,7 +278,7 @@ async function runViewport(win, width, height) {
   await clickBattleSection(win);
 
   const list = await listSnapshot(win);
-  if (list.cardCount !== 3 || list.cardLossCount !== 6 || list.openButtonCount !== 3 || list.rootHorizontalOverflow || list.bodyHorizontalOverflow) {
+  if (list.cardCount !== 3 || list.collapsedCardCount !== 3 || list.cardLossCount !== 6 || list.openButtonCount !== 3 || list.resultIconCount !== 3 || JSON.stringify(list.resultLabels) !== JSON.stringify(['ПОБЕДА', 'ПОРАЖЕНИЕ', 'НИЧЬЯ']) || list.rootHorizontalOverflow || list.bodyHorizontalOverflow) {
     throw new Error(`Battle list contract failed at ${label}: ${JSON.stringify(list)}`);
   }
 
@@ -318,7 +335,7 @@ async function runViewport(win, width, height) {
 
   await win.webContents.executeJavaScript(`document.querySelector('.battle-report-modal-close-v1')?.click()`);
   await waitFor(win, `!document.querySelector('[role="dialog"][data-qa-battle-report-modal]')`);
-  const simulator = await exerciseSimulatorSaveFlow(win);
+  const simulator = await exerciseSimulatorModalFlow(win);
   return { viewport: label, list, modal, focus, closeState, transition, bottom, simulator };
 }
 
