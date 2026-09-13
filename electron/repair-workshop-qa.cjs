@@ -218,7 +218,7 @@ async function dispatchDefensiveReport(win) {
 
 async function assertRepairCost(win) {
   const cost = await win.webContents.executeJavaScript(`(() => {
-    const raw = document.querySelector('[data-qa-repair-resource-cost]')?.getAttribute('data-qa-repair-resource-cost');
+    const raw = document.querySelector('[data-qa-repair-card="scout"] [data-qa-repair-resource-cost]')?.getAttribute('data-qa-repair-resource-cost');
     return raw ? JSON.parse(raw) : null;
   })()`);
   if (!cost || cost.metal !== 4800 || cost.minerals !== 3200 || cost.gas !== 0) {

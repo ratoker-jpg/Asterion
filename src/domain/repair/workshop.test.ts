@@ -13,6 +13,7 @@ import {
   calculateRepairCost,
   claimDefensiveBattleRepair,
   createDefaultRepairWorkshopState,
+  createTestRepairWorkshopState,
   recoverableFromDestroyed,
   repairForResources,
   repairForTokens,
@@ -62,6 +63,18 @@ test('recoverable losses round half up and never go below zero', () => {
   assert.equal(recoverableFromDestroyed(4), 2);
   assert.equal(recoverableFromDestroyed(5), 3);
   assert.equal(recoverableFromDestroyed(-3), 0);
+});
+
+test('Test Mode fixture exposes every repairable ship and defense at ten units', () => {
+  const seeded = createTestRepairWorkshopState();
+  const production = createDefaultRepairWorkshopState();
+
+  assert.equal(Object.keys(seeded.ships).length, 13);
+  assert.equal(Object.keys(seeded.defenses).length, 9);
+  assert.deepEqual(new Set(Object.values(seeded.ships)), new Set([10]));
+  assert.deepEqual(new Set(Object.values(seeded.defenses)), new Set([10]));
+  assert.deepEqual(new Set(Object.values(production.ships)), new Set([0]));
+  assert.deepEqual(new Set(Object.values(production.defenses)), new Set([0]));
 });
 
 test('defensive battle awards ordinary defender ships and defenses, excluding commanders', () => {

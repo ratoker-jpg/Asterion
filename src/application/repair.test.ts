@@ -58,7 +58,7 @@ function report(overrides: Partial<BattleReport> = {}): BattleReport {
 
 test('legacy saves migrate to an empty repair pool with 31 tokens and persist new state', () => {
   const storage = new MemoryStorage();
-  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 1_000 });
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => 1_000 });
   storage.values.set(persistence.saveKey, JSON.stringify({
     schemaVersion: 13,
     planets: { 'helion-01': {} },
@@ -91,7 +91,7 @@ test('legacy saves migrate to an empty repair pool with 31 tokens and persist ne
 });
 
 test('real combat application awards defensive repair once and stores an annotated report', () => {
-  const initial = createInitialSaveState('test', 0);
+  const initial = createInitialSaveState('production', 0);
   const first = applyBattleResult(initial, 'helion-01', report());
   const planet = first.state.planets['helion-01'];
 
@@ -111,7 +111,7 @@ test('real combat application awards defensive repair once and stores an annotat
 });
 
 test('production combat boundary classifies a defensive resolver result and awards repair once', () => {
-  const initial = createInitialSaveState('test', 0);
+  const initial = createInitialSaveState('production', 0);
   const priority = createDefaultCombatPriority();
   const input: CombatInput = {
     scenarioId: 'production-defense-scenario',
@@ -145,7 +145,7 @@ test('production combat boundary classifies a defensive resolver result and awar
 });
 
 test('production combat event bridge commits the resolver result without simulator coupling', () => {
-  const initial = createInitialSaveState('test', 0);
+  const initial = createInitialSaveState('production', 0);
   const priority = createDefaultCombatPriority();
   const input: CombatInput = {
     scenarioId: 'production-event-scenario',
@@ -190,7 +190,7 @@ test('production combat event bridge commits the resolver result without simulat
 });
 
 test('attacker losses are not eligible while the report remains auditable', () => {
-  const initial = createInitialSaveState('test', 0);
+  const initial = createInitialSaveState('production', 0);
   const attackingReport = report({
     id: 'repair-application-attack-1',
     missionType: 'attack',
@@ -249,7 +249,7 @@ test('repair application immediately changes owned fleet or spends tokens and su
   assert.equal(tokenRepair.state.metal, repaired.state.metal);
 
   const storage = new MemoryStorage();
-  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 2_000 });
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => 2_000 });
   assert.equal(persistence.write(tokenRepair.state).ok, true);
   const roundTripped = persistence.read();
   assert.equal(roundTripped.planets['helion-01'].fleet.ships.scout, 23);

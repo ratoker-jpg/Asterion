@@ -108,6 +108,16 @@ async function readEnvelope(win, key) {
   return win.webContents.executeJavaScript(`JSON.parse(localStorage.getItem(${JSON.stringify(key)}) || 'null')`);
 }
 
+function hasRepairFixture(envelope, amount) {
+  const repair = envelope?.planets?.['helion-01']?.repair;
+  const ships = repair?.ships ?? {};
+  const defenses = repair?.defenses ?? {};
+  return Object.keys(ships).length === 13
+    && Object.keys(defenses).length === 9
+    && Object.values(ships).every((value) => value === amount)
+    && Object.values(defenses).every((value) => value === amount);
+}
+
 async function seedTestRuntime(win, changes = {}) {
   const ok = await win.webContents.executeJavaScript(`(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
@@ -369,6 +379,8 @@ async function runViewport(width, height) {
     if (productionInitial.mode !== 'production' || productionInitial.banner || productionInitial.testResources.metal === 1_000_000 || !productionInitial.scienceLevels || Object.values(productionInitial.scienceLevels).some((level) => level !== 0) || await win.webContents.executeJavaScript(`document.querySelectorAll('[data-qa-test-speed]').length`) !== 0) {
       throw new Error(`${label}: production isolation/fixture mismatch ${JSON.stringify(productionInitial)}`);
     }
+    const productionEnvelope = await readEnvelope(win, PRODUCTION_KEY);
+    if (!hasRepairFixture(productionEnvelope, 0)) throw new Error(`${label}: production Repair Workshop must start empty`);
     await capture(win, directory, 'production-overview');
     const productionBeforeTest = await readEnvelope(win, PRODUCTION_KEY);
 
@@ -377,6 +389,8 @@ async function runViewport(width, height) {
     if (initial.mode !== 'test' || !initial.banner || !initial.scale.includes('×15') || initial.testResources.metal !== 450_100_000 || initial.testResources.minerals !== 300_100_000 || initial.testResources.gas !== 189_382_930 || initial.testResources.energy !== 999_999_999 || initial.buildings?.['metal-storage'] !== 20 || initial.buildings?.['mineral-storage'] !== 20 || initial.buildings?.['gas-storage'] !== 20 || initial.buildingQueue !== 0 || initial.scienceQueue !== 0 || initial.shipQueue !== 0 || initial.commanderQueue !== 0) {
       throw new Error(`${label}: Test Mode fixture mismatch ${JSON.stringify(initial)}`);
     }
+    const testEnvelope = await readEnvelope(win, TEST_KEY);
+    if (!hasRepairFixture(testEnvelope, 10)) throw new Error(`${label}: Test Mode Repair Workshop must contain every ship/defense type at 10 units`);
     const speedButtons = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-test-speed]')).map((node) => node.getAttribute('data-qa-test-speed'))`);
     if (JSON.stringify(speedButtons) !== JSON.stringify(['1', '10', '15', '100', '200', '300', '500'])) {
       throw new Error(`${label}: Test Mode speed selector mismatch ${JSON.stringify(speedButtons)}`);

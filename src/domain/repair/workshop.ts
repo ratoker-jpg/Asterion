@@ -31,6 +31,7 @@ export type RepairPaymentMethod = 'resources' | 'tokens';
 
 export const INITIAL_REPAIR_TOKEN_BALANCE = 31;
 export const REPAIR_TOKEN_COST_PER_UNIT = 1;
+export const TEST_REPAIR_POOL_AMOUNT = 10;
 
 export type RepairWorkshopState = {
   ships: Record<ShipId, number>;
@@ -105,6 +106,10 @@ function emptyRecord<T extends string>(ids: readonly T[]): Record<T, number> {
   return Object.fromEntries(ids.map((id) => [id, 0])) as Record<T, number>;
 }
 
+function filledRecord<T extends string>(ids: readonly T[], value: number): Record<T, number> {
+  return Object.fromEntries(ids.map((id) => [id, value])) as Record<T, number>;
+}
+
 function safeNonNegativeInteger(value: unknown, fallback = 0): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
   return Math.max(0, Math.floor(value));
@@ -120,6 +125,20 @@ export function createDefaultRepairWorkshopState(): RepairWorkshopState {
   return {
     ships: emptyRecord(SHIP_IDS),
     defenses: emptyRecord(DEFENSE_IDS),
+    tokens: INITIAL_REPAIR_TOKEN_BALANCE,
+    claimedBattleIds: [],
+  };
+}
+
+/**
+ * Test Mode starts with every canonical repair card populated so the whole
+ * workshop can be exercised without manufacturing a defensive battle first.
+ * This fixture is intentionally separate from the production/default state.
+ */
+export function createTestRepairWorkshopState(): RepairWorkshopState {
+  return {
+    ships: filledRecord(SHIP_IDS, TEST_REPAIR_POOL_AMOUNT),
+    defenses: filledRecord(DEFENSE_IDS, TEST_REPAIR_POOL_AMOUNT),
     tokens: INITIAL_REPAIR_TOKEN_BALANCE,
     claimedBattleIds: [],
   };

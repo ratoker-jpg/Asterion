@@ -110,6 +110,10 @@ test('persistence facade keeps the existing save key, envelope migration, and on
   assert.equal(initial.planets['helion-01'].buildings['metal-storage'], 20);
   assert.equal(initial.planets['helion-01'].buildings['mineral-storage'], 20);
   assert.equal(initial.planets['helion-01'].buildings['gas-storage'], 20);
+  assert.equal(Object.keys(initial.planets['helion-01'].repair.ships).length, 13);
+  assert.equal(Object.keys(initial.planets['helion-01'].repair.defenses).length, 9);
+  assert.deepEqual(new Set(Object.values(initial.planets['helion-01'].repair.ships)), new Set([10]));
+  assert.deepEqual(new Set(Object.values(initial.planets['helion-01'].repair.defenses)), new Set([10]));
   assert.equal(initial.resourceClock.lastReconciledAt, 1_000);
   assert.equal(initial.currentPlanetId, 'helion-01');
   assert.equal(persistence.write(initial).ok, true);
@@ -129,6 +133,8 @@ test('persistence facade keeps the existing save key, envelope migration, and on
   assert.equal(migrated.metal, 777);
   assert.equal(migrated.planets['helion-01'].skin, 'terran');
   assert.equal(migrated.planets['helion-01'].fleet.ships.scout, 16);
+  assert.equal(migrated.planets['helion-01'].repair.ships.scout, 10);
+  assert.equal(migrated.planets['helion-01'].repair.defenses['ballistic-turret'], 10);
 
   storage.values.set(persistence.saveKey, JSON.stringify({
     schemaVersion: 1,
@@ -143,6 +149,9 @@ test('persistence facade keeps the existing save key, envelope migration, and on
   assert.equal(damaged.gas, 0);
   assert.equal(damaged.resourceClock.lastReconciledAt, 1_000);
   assert.equal(getFleetSummaryForState(damaged).population, 58);
+  const production = createPersistenceFacade({ mode: 'production', storage: new MemoryStorage(), now: () => 1_000 }).read();
+  assert.deepEqual(new Set(Object.values(production.planets['helion-01'].repair.ships)), new Set([0]));
+  assert.deepEqual(new Set(Object.values(production.planets['helion-01'].repair.defenses)), new Set([0]));
 });
 
 test('building application owns start, queue cancellation, completion, destroy, and production bot transitions', () => {
