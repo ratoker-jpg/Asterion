@@ -11,6 +11,7 @@ import {
 } from './domain/fleet/production.ts';
 import {
   evaluateRepairAvailability,
+  isRepairableDefenseId,
   type RepairAvailability,
   type RepairCategory,
 } from './domain/repair/workshop.ts';
@@ -73,6 +74,7 @@ function RepairCard({
   availability,
   onQuantity,
   onRepair,
+  onRemove,
 }: {
   unit: RepairUnit;
   available: number;
@@ -81,7 +83,9 @@ function RepairCard({
   availability: RepairAvailability;
   onQuantity: (unit: RepairUnit, value: number) => void;
   onRepair: (unit: RepairUnit, method: PaymentMethod) => void;
+  onRemove: (unit: RepairUnit) => void;
 }) {
+  const [removeConfirmationOpen, setRemoveConfirmationOpen] = useState(false);
   const capacityReason = availability.capacityReason;
   const paymentReasons = [
     !availability.canPayResources && !capacityReason ? `Ресурсы: ${availability.resourceReason}` : null,
@@ -166,6 +170,48 @@ function RepairCard({
               <TicketIcon />
               <span>РЕМОНТ ЗА {availability.tokenCost} {tokenWord(availability.tokenCost)} · {tokens} ДОСТУПНО</span>
             </button>
+            {removeConfirmationOpen ? (
+              <div
+                className="repair-remove-confirm-v1"
+                role="alertdialog"
+                aria-label={`Подтверждение удаления ${unit.name}`}
+                data-qa-repair-remove-confirm={unit.id}
+              >
+                <strong>Удалить {selected} {selected === 1 ? 'единицу' : 'единицы'}?</strong>
+                <span>Возврата ресурсов не будет.</span>
+                <div className="repair-remove-confirm-actions-v1">
+                  <button
+                    className="repair-remove-confirm-button-v1 repair-remove-confirm-button-v1--danger"
+                    type="button"
+                    data-qa-repair-remove-confirm-action={unit.id}
+                    onClick={() => {
+                      onRemove(unit);
+                      setRemoveConfirmationOpen(false);
+                    }}
+                  >
+                    УДАЛИТЬ
+                  </button>
+                  <button
+                    className="repair-remove-confirm-button-v1"
+                    type="button"
+                    data-qa-repair-remove-cancel={unit.id}
+                    onClick={() => setRemoveConfirmationOpen(false)}
+                  >
+                    ОТМЕНИТЬ
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                className="repair-button-v1 repair-button-v1--remove"
+                type="button"
+                data-qa-repair-remove-button={unit.id}
+                aria-label={`Удалить ${selected} единиц ${unit.name} из ремонтной мастерской`}
+                onClick={() => setRemoveConfirmationOpen(true)}
+              >
+                УДАЛИТЬ ИЗ МАСТЕРСКОЙ
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -191,6 +237,7 @@ function WorkshopHelp() {
         <span><b>50%</b> После оборонительного боя в мастерскую попадает 50% уничтоженной техники с математическим округлением.</span>
         <span><b>Мгновенно</b> Очереди ремонта нет: выбранные единицы возвращаются на планету сразу после оплаты.</span>
         <span><b>Без командирских</b> Командирские корабли не попадают в мастерскую и не восстанавливаются.</span>
+        <span><b>Удаление</b> Выбранное количество можно удалить из мастерской без возврата ресурсов.</span>
       </div>
     </div>
   );
@@ -243,7 +290,7 @@ export function RepairWorkshopView({
   onBack: () => void;
 }) {
   const [quantities, setQuantities] = useState<Record<string, number>>({});
-  const [notice, setNotice] = useState('Выберите количество и способ оплаты. Ремонт выполняется мгновенно.');
+  const [notice, setNotice] = useState('Выберите количество и способ действия. Ремонт выполняется мгновенно.');
   const repairUnits = useMemo<RepairUnit[]>(() => [
     ...getFactionShipCatalog(snapshot.factionId).map((entity) => ({
       id: entity.id,
@@ -254,7 +301,7 @@ export function RepairWorkshopView({
       population: entity.population,
       cost: entity.cost,
     })),
-    ...getFactionDefenseCatalog(snapshot.factionId).map((entity) => ({
+    ...getFactionDefenseCatalog(snapshot.factionId).filter((entity) => isRepairableDefenseId(entity.id)).map((entity) => ({
       id: entity.id,
       category: 'defense' as const,
       name: entity.name,
@@ -324,6 +371,20 @@ export function RepairWorkshopView({
     }));
   };
 
+  const remove = (unit: RepairUnit) => {
+    const available = availableFor(snapshot, unit);
+    if (available <= 0) return;
+    window.dispatchEvent(new CustomEvent(REPAIR_REQUEST_EVENT, {
+      detail: {
+        planetId: snapshot.planetId,
+        category: unit.category,
+        entityId: unit.id,
+        quantity: selectedQuantity(unit),
+        operation: 'remove',
+      },
+    }));
+  };
+
   const renderCards = (units: RepairUnit[]) => units.map((unit) => {
     const available = availableFor(snapshot, unit);
     const selected = selectedQuantity(unit);
@@ -338,6 +399,7 @@ export function RepairWorkshopView({
         availability={availability}
         onQuantity={setQuantity}
         onRepair={repair}
+        onRemove={remove}
       />
     );
   });

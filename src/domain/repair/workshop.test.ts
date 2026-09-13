@@ -14,7 +14,9 @@ import {
   claimDefensiveBattleRepair,
   createDefaultRepairWorkshopState,
   createTestRepairWorkshopState,
+  isRepairableDefenseId,
   recoverableFromDestroyed,
+  removeFromRepairPool,
   repairForResources,
   repairForTokens,
   type RepairTransitionContext,
@@ -52,6 +54,7 @@ function report(overrides: Partial<BattleReport> = {}): BattleReport {
       ],
       defenses: [
         { entityId: 'ballistic-turret', countBefore: 4, countAfter: 0, destroyed: 4 },
+        { entityId: 'tower-shield', countBefore: 1, countAfter: 0, destroyed: 1 },
       ],
     },
     rounds: [],
@@ -65,14 +68,21 @@ test('recoverable losses round half up and never go below zero', () => {
   assert.equal(recoverableFromDestroyed(-3), 0);
 });
 
-test('Test Mode fixture exposes every repairable ship and defense at ten units', () => {
+test('Test Mode fixture exposes every supported ship and defense at ten units, excluding shields', () => {
   const seeded = createTestRepairWorkshopState();
   const production = createDefaultRepairWorkshopState();
 
   assert.equal(Object.keys(seeded.ships).length, 13);
   assert.equal(Object.keys(seeded.defenses).length, 9);
   assert.deepEqual(new Set(Object.values(seeded.ships)), new Set([10]));
-  assert.deepEqual(new Set(Object.values(seeded.defenses)), new Set([10]));
+  assert.equal(seeded.defenses['tower-shield'], 0);
+  assert.equal(seeded.defenses['planetary-shield'], 0);
+  assert.deepEqual(
+    Object.entries(seeded.defenses)
+      .filter(([id]) => isRepairableDefenseId(id))
+      .map(([, value]) => value),
+    [10, 10, 10, 10, 10, 10, 10],
+  );
   assert.deepEqual(new Set(Object.values(production.ships)), new Set([0]));
   assert.deepEqual(new Set(Object.values(production.defenses)), new Set([0]));
 });
@@ -85,6 +95,7 @@ test('defensive battle awards ordinary defender ships and defenses, excluding co
   assert.equal(transition.losses.eligible, true);
   assert.equal(transition.state.ships.scout, 3);
   assert.equal(transition.state.defenses['ballistic-turret'], 2);
+  assert.equal(transition.state.defenses['tower-shield'], 0);
   assert.equal(transition.state.claimedBattleIds.includes('repair-workshop-battle-1'), true);
   assert.equal('judge' in transition.state.ships, false);
 });
@@ -253,4 +264,28 @@ test('commanders are not accepted by the repair workshop', () => {
   assert.equal(result.ok, false);
   assert.equal(result.code, 'invalid-entity');
   assert.match(result.reason ?? '', /поддерживается/);
+});
+
+test('shield defenses are not accepted by the repair workshop', () => {
+  const result = repairForResources(context(), 'defense', 'tower-shield', 1);
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'invalid-entity');
+  assert.match(result.reason ?? '', /поддерживается/);
+});
+
+test('repair-pool removal discards selected units without payment or roster changes', () => {
+  const initial = context({
+    repair: {
+      ...createDefaultRepairWorkshopState(),
+      ships: { ...createDefaultRepairWorkshopState().ships, scout: 3 },
+    },
+  });
+  const result = removeFromRepairPool(initial, 'ship', 'scout', 2);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.repair.ships.scout, 1);
+  assert.strictEqual(result.fleet, initial.fleet);
+  assert.strictEqual(result.defense, initial.defense);
+  assert.strictEqual(result.wallet, initial.wallet);
+  assert.equal(result.repair.tokens, initial.repair.tokens);
 });

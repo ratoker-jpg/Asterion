@@ -33,6 +33,28 @@ export const INITIAL_REPAIR_TOKEN_BALANCE = 31;
 export const REPAIR_TOKEN_COST_PER_UNIT = 1;
 export const TEST_REPAIR_POOL_AMOUNT = 10;
 
+/**
+ * Shield defenses are single-slot structures. A half-destroyed shield cannot
+ * be represented as an integer repair-pool unit, so shields never enter the
+ * workshop. Keep the canonical IDs in the combat catalog; this list is the
+ * explicit repair-workshop eligibility boundary.
+ */
+export const REPAIRABLE_DEFENSE_IDS = [
+  'ballistic-turret',
+  'laser-turret',
+  'ion-turret',
+  'plasma-turret',
+  'laser-ion-battery',
+  'plasma-laser-battery',
+  'ion-plasma-battery',
+] as const satisfies readonly DefenseId[];
+
+export type RepairableDefenseId = (typeof REPAIRABLE_DEFENSE_IDS)[number];
+
+export function isRepairableDefenseId(entityId: string): entityId is RepairableDefenseId {
+  return (REPAIRABLE_DEFENSE_IDS as readonly string[]).includes(entityId);
+}
+
 export type RepairWorkshopState = {
   ships: Record<ShipId, number>;
   defenses: Record<DefenseId, number>;
@@ -131,14 +153,17 @@ export function createDefaultRepairWorkshopState(): RepairWorkshopState {
 }
 
 /**
- * Test Mode starts with every canonical repair card populated so the whole
- * workshop can be exercised without manufacturing a defensive battle first.
+ * Test Mode starts with every supported ordinary repair card populated so the
+ * whole workshop can be exercised without manufacturing a defensive battle
+ * first. Single-slot shields and commander ships are intentionally excluded.
  * This fixture is intentionally separate from the production/default state.
  */
 export function createTestRepairWorkshopState(): RepairWorkshopState {
+  const defenses = emptyRecord(DEFENSE_IDS);
+  REPAIRABLE_DEFENSE_IDS.forEach((id) => { defenses[id] = TEST_REPAIR_POOL_AMOUNT; });
   return {
     ships: filledRecord(SHIP_IDS, TEST_REPAIR_POOL_AMOUNT),
-    defenses: filledRecord(DEFENSE_IDS, TEST_REPAIR_POOL_AMOUNT),
+    defenses,
     tokens: INITIAL_REPAIR_TOKEN_BALANCE,
     claimedBattleIds: [],
   };
@@ -153,7 +178,9 @@ export function migrateRepairWorkshopState(value: unknown): RepairWorkshopState 
   const defenses = emptyRecord(DEFENSE_IDS);
 
   SHIP_IDS.forEach((id) => { ships[id] = safeNonNegativeInteger(shipsSource[id]); });
-  DEFENSE_IDS.forEach((id) => { defenses[id] = safeNonNegativeInteger(defensesSource[id]); });
+  DEFENSE_IDS.forEach((id) => {
+    defenses[id] = isRepairableDefenseId(id) ? safeNonNegativeInteger(defensesSource[id]) : 0;
+  });
 
   const rawTokens = source.tokens;
   const tokens = rawTokens === undefined
@@ -175,6 +202,7 @@ export function getRepairEntity(
   category: RepairCategory,
   entityId: string,
 ): RepairEntity | null {
+  if (category === 'defense' && !isRepairableDefenseId(entityId)) return null;
   return category === 'ship'
     ? getFactionShipCatalog(factionId).find((entity) => entity.id === entityId) ?? null
     : getFactionDefenseCatalog(factionId).find((entity) => entity.id === entityId) ?? null;
@@ -420,6 +448,75 @@ export function repairForTokens(
   return repairWithPayment(context, category, entityId, quantity, 'tokens');
 }
 
+/**
+ * Discard units from the repair pool without restoring them. This transition
+ * deliberately does not touch the wallet, fleet, defense roster, or tokens.
+ */
+export function removeFromRepairPool(
+  context: RepairTransitionContext,
+  category: RepairCategory,
+  entityId: string,
+  quantity: number,
+): RepairTransition {
+  const availability = evaluateRepairAvailability(context, category, entityId, quantity);
+  if (!availability.entity) {
+    return failureTransition(
+      context,
+      category,
+      entityId,
+      availability,
+      'invalid-entity',
+      'Эта единица не поддерживается ремонтной мастерской.',
+    );
+  }
+  if (availability.quantity <= 0) {
+    return failureTransition(
+      context,
+      category,
+      entityId,
+      availability,
+      'invalid-quantity',
+      'Количество должно быть положительным.',
+    );
+  }
+  if (availability.available < availability.quantity) {
+    return failureTransition(
+      context,
+      category,
+      entityId,
+      availability,
+      'repair-pool',
+      'Недостаточно единиц в ремонтном пуле.',
+    );
+  }
+
+  const nextRepair: RepairWorkshopState = {
+    ...context.repair,
+    ships: category === 'ship'
+      ? { ...context.repair.ships, [entityId as ShipId]: availability.available - availability.quantity }
+      : context.repair.ships,
+    defenses: category === 'defense'
+      ? { ...context.repair.defenses, [entityId as DefenseId]: availability.available - availability.quantity }
+      : context.repair.defenses,
+  };
+
+  return {
+    ok: true,
+    repair: nextRepair,
+    fleet: context.fleet,
+    defense: context.defense,
+    wallet: context.wallet,
+    category,
+    entityId,
+    quantity: availability.quantity,
+    cost: availability.cost,
+    tokenCost: 0,
+    capacity: availability.capacity,
+    code: null,
+    reason: null,
+  };
+}
+
 export type RepairBattleLosses = {
   eligible: boolean;
   ships: Partial<Record<ShipId, number>>;
@@ -473,7 +570,9 @@ export function calculateRepairLosses(report: BattleReport): RepairBattleLosses 
     if (!entity) return;
     const quantity = recoverableFromDestroyed(safeDestroyed(destroyed));
     if (entity.kind === 'ship') addLoss(ships, entityId as ShipId, quantity);
-    if (entity.kind === 'defense') addLoss(defenses, entityId as DefenseId, quantity);
+    if (entity.kind === 'defense' && isRepairableDefenseId(entityId)) {
+      addLoss(defenses, entityId as DefenseId, quantity);
+    }
   };
 
   const stacks = Array.isArray(report.defenderForce?.stacks) ? report.defenderForce.stacks : [];

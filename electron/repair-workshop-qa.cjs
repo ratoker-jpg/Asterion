@@ -92,7 +92,12 @@ async function seedSave(win, {
     save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     planet.repair = {
       ships: { ...(planet.repair?.ships || {}), scout: ${JSON.stringify(capacity === 'fleet' ? 2 : shipPool)} },
-      defenses: { ...(planet.repair?.defenses || {}), 'ballistic-turret': ${JSON.stringify(capacity === 'defense' ? 1 : defensePool)} },
+      defenses: {
+        ...(planet.repair?.defenses || {}),
+        'ballistic-turret': ${JSON.stringify(capacity === 'defense' ? 1 : defensePool)},
+        'tower-shield': 10,
+        'planetary-shield': 10,
+      },
       tokens: ${JSON.stringify(tokens)},
       claimedBattleIds: [],
     };
@@ -263,6 +268,15 @@ async function runViewport(width, height) {
     await openRepairWorkshop(win);
     await assertRepairCost(win);
 
+    const unsupportedCards = await win.webContents.executeJavaScript(`({
+      towerShield: Boolean(document.querySelector('[data-qa-repair-card="tower-shield"]')),
+      planetaryShield: Boolean(document.querySelector('[data-qa-repair-card="planetary-shield"]')),
+      commander: Boolean(document.querySelector('[data-qa-repair-card="judge"]')),
+    })`);
+    if (unsupportedCards.towerShield || unsupportedCards.planetaryShield || unsupportedCards.commander) {
+      throw new Error(`${label}: unsupported repair cards are visible ${JSON.stringify(unsupportedCards)}`);
+    }
+
     const beforeResources = await readSave(win);
     await assertButtonState(win, '[data-qa-repair-resource-button="scout"]', false);
     await assertButtonState(win, '[data-qa-repair-token-button="scout"]', false);
@@ -285,6 +299,31 @@ async function runViewport(width, height) {
     const persistedAvailable = await win.webContents.executeJavaScript(`Number(document.querySelector('[data-qa-repair-card="scout"] [data-qa-repair-available]')?.textContent || 0)`);
     if (persisted.planets['helion-01'].repair.ships.scout !== 1 || persisted.planets['helion-01'].repair.tokens !== 30 || persistedAvailable !== 1) {
       throw new Error(`${label}: repair persistence mismatch ${JSON.stringify({ persisted: persisted.planets['helion-01'].repair, persistedAvailable })}`);
+    }
+
+    await seedSave(win, { shipPool: 3, defensePool: 0, tokens: 31 });
+    await openRepairWorkshop(win);
+    const beforeRemove = await readSave(win);
+    await click(win, '[data-qa-repair-remove-button="scout"]');
+    await waitFor(win, `document.querySelector('[data-qa-repair-remove-confirm="scout"]')`);
+    await click(win, '[data-qa-repair-remove-cancel="scout"]');
+    const afterCancel = await readSave(win);
+    if (afterCancel.planets['helion-01'].repair.ships.scout !== 3) {
+      throw new Error(`${label}: cancelling repair-pool removal changed the pool`);
+    }
+    await click(win, '[data-qa-repair-remove-button="scout"]');
+    await waitFor(win, `document.querySelector('[data-qa-repair-remove-confirm="scout"]')`);
+    await click(win, '[data-qa-repair-remove-confirm-action="scout"]');
+    await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}')?.planets?.['helion-01']?.repair?.ships?.scout === 2`);
+    const afterRemove = await readSave(win);
+    if (
+      afterRemove.planets['helion-01'].fleet.ships.scout !== beforeRemove.planets['helion-01'].fleet.ships.scout
+      || afterRemove.metal !== beforeRemove.metal
+      || afterRemove.minerals !== beforeRemove.minerals
+      || afterRemove.gas !== beforeRemove.gas
+      || afterRemove.planets['helion-01'].repair.tokens !== beforeRemove.planets['helion-01'].repair.tokens
+    ) {
+      throw new Error(`${label}: repair-pool removal changed payment or roster state`);
     }
 
     await seedSave(win, { shipPool: 0, defensePool: 0 });

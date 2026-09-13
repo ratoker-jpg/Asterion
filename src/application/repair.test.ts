@@ -11,6 +11,7 @@ import {
 } from './combat.ts';
 import {
   applyBattleResult,
+  removeRepairUnits,
   repairUnits,
 } from './repair.ts';
 import {
@@ -254,4 +255,33 @@ test('repair application immediately changes owned fleet or spends tokens and su
   const roundTripped = persistence.read();
   assert.equal(roundTripped.planets['helion-01'].fleet.ships.scout, 23);
   assert.equal(roundTripped.planets['helion-01'].repair.tokens, 30);
+});
+
+test('repair-pool removal works in production and test saves without refunds', () => {
+  for (const mode of ['production', 'test'] as const) {
+    const initial = createInitialSaveState(mode, 0);
+    const planet = initial.planets['helion-01'];
+    const withPool = {
+      ...initial,
+      planets: {
+        ...initial.planets,
+        'helion-01': {
+          ...planet,
+          repair: {
+            ...planet.repair,
+            ships: { ...planet.repair.ships, scout: 2 },
+          },
+        },
+      },
+    };
+    const removed = removeRepairUnits(withPool, 'helion-01', 'ship', 'scout', 1);
+
+    assert.equal(removed.transition.ok, true);
+    assert.equal(removed.state.planets['helion-01'].repair.ships.scout, 1);
+    assert.equal(removed.state.planets['helion-01'].fleet.ships.scout, planet.fleet.ships.scout);
+    assert.equal(removed.state.metal, withPool.metal);
+    assert.equal(removed.state.minerals, withPool.minerals);
+    assert.equal(removed.state.gas, withPool.gas);
+    assert.equal(removed.state.planets['helion-01'].repair.tokens, withPool.planets['helion-01'].repair.tokens);
+  }
 });

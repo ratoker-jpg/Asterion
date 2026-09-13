@@ -112,10 +112,21 @@ function hasRepairFixture(envelope, amount) {
   const repair = envelope?.planets?.['helion-01']?.repair;
   const ships = repair?.ships ?? {};
   const defenses = repair?.defenses ?? {};
+  const repairableDefenses = [
+    'ballistic-turret',
+    'laser-turret',
+    'ion-turret',
+    'plasma-turret',
+    'laser-ion-battery',
+    'plasma-laser-battery',
+    'ion-plasma-battery',
+  ];
   return Object.keys(ships).length === 13
     && Object.keys(defenses).length === 9
     && Object.values(ships).every((value) => value === amount)
-    && Object.values(defenses).every((value) => value === amount);
+    && repairableDefenses.every((id) => defenses[id] === amount)
+    && defenses['tower-shield'] === 0
+    && defenses['planetary-shield'] === 0;
 }
 
 async function seedTestRuntime(win, changes = {}) {
@@ -390,7 +401,7 @@ async function runViewport(width, height) {
       throw new Error(`${label}: Test Mode fixture mismatch ${JSON.stringify(initial)}`);
     }
     const testEnvelope = await readEnvelope(win, TEST_KEY);
-    if (!hasRepairFixture(testEnvelope, 10)) throw new Error(`${label}: Test Mode Repair Workshop must contain every ship/defense type at 10 units`);
+    if (!hasRepairFixture(testEnvelope, 10)) throw new Error(`${label}: Test Mode Repair Workshop must contain every supported ship/defense type at 10 units and exclude shields`);
     const speedButtons = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-test-speed]')).map((node) => node.getAttribute('data-qa-test-speed'))`);
     if (JSON.stringify(speedButtons) !== JSON.stringify(['1', '10', '15', '100', '200', '300', '500'])) {
       throw new Error(`${label}: Test Mode speed selector mismatch ${JSON.stringify(speedButtons)}`);

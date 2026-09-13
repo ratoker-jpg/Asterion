@@ -113,7 +113,14 @@ test('persistence facade keeps the existing save key, envelope migration, and on
   assert.equal(Object.keys(initial.planets['helion-01'].repair.ships).length, 13);
   assert.equal(Object.keys(initial.planets['helion-01'].repair.defenses).length, 9);
   assert.deepEqual(new Set(Object.values(initial.planets['helion-01'].repair.ships)), new Set([10]));
-  assert.deepEqual(new Set(Object.values(initial.planets['helion-01'].repair.defenses)), new Set([10]));
+  assert.equal(initial.planets['helion-01'].repair.defenses['tower-shield'], 0);
+  assert.equal(initial.planets['helion-01'].repair.defenses['planetary-shield'], 0);
+  assert.deepEqual(
+    Object.entries(initial.planets['helion-01'].repair.defenses)
+      .filter(([id]) => !['tower-shield', 'planetary-shield'].includes(id))
+      .map(([, value]) => value),
+    [10, 10, 10, 10, 10, 10, 10],
+  );
   assert.equal(initial.resourceClock.lastReconciledAt, 1_000);
   assert.equal(initial.currentPlanetId, 'helion-01');
   assert.equal(persistence.write(initial).ok, true);

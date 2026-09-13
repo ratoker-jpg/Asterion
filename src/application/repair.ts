@@ -2,6 +2,7 @@ import {
   annotateBattleReportRepair,
   claimDefensiveBattleRepair,
   getRepairEntity,
+  removeFromRepairPool,
   repairForResources,
   repairForTokens,
   type RepairCategory,
@@ -18,11 +19,14 @@ export const REPAIR_REQUEST_EVENT = 'asterion:repair-request';
 export const REPAIR_NOTICE_CHANGED_EVENT = 'asterion:repair-notice-changed';
 export const COMBAT_RESULT_APPLY_REQUEST_EVENT = 'asterion:combat-result-apply-request';
 
+export type RepairOperation = 'repair' | 'remove';
+
 export type RepairRequest = {
   planetId?: PlanetId;
   category?: RepairCategory;
   entityId?: string;
   quantity?: number;
+  operation?: RepairOperation;
   method?: RepairPaymentMethod;
 };
 
@@ -91,6 +95,21 @@ export function repairUnits(
   };
 }
 
+export function removeRepairUnits(
+  state: SaveState,
+  planetId: PlanetId,
+  category: RepairCategory,
+  entityId: string,
+  quantity: number,
+): RepairActionResult {
+  const context = getRepairWorkshopSnapshot(state, planetId);
+  const transition = removeFromRepairPool(context, category, entityId, quantity);
+  return {
+    state: stateFromRepairTransition(state, planetId, transition),
+    transition,
+  };
+}
+
 export type RepairEventBridgeOptions = {
   target: EventTarget;
   getState: () => SaveState;
@@ -105,30 +124,43 @@ function publishRepairNotice(target: EventTarget, notice: string): void {
 export function bindRepairEventBridge(options: RepairEventBridgeOptions): () => void {
   const onRepair = (event: Event) => {
     const request = (event as CustomEvent<RepairRequest>).detail;
+    const operation = request?.operation ?? 'repair';
     if (
       !request?.planetId
       || (request.category !== 'ship' && request.category !== 'defense')
       || typeof request.entityId !== 'string'
-      || (request.method !== 'resources' && request.method !== 'tokens')
+      || (operation !== 'repair' && operation !== 'remove')
       || typeof request.quantity !== 'number'
       || !Number.isFinite(request.quantity)
+      || (operation === 'repair' && request.method !== 'resources' && request.method !== 'tokens')
     ) return;
 
-    const result = repairUnits(
-      options.getState(),
-      request.planetId,
-      request.category,
-      request.entityId,
-      request.quantity,
-      request.method,
-    );
+    const currentState = options.getState();
+    const result = operation === 'remove'
+      ? removeRepairUnits(
+        currentState,
+        request.planetId,
+        request.category,
+        request.entityId,
+        request.quantity,
+      )
+      : repairUnits(
+        currentState,
+        request.planetId,
+        request.category,
+        request.entityId,
+        request.quantity,
+        request.method as RepairPaymentMethod,
+      );
     const entity = getRepairEntity(
-      options.getState().profile.factionId,
+      currentState.profile.factionId,
       request.category,
       request.entityId,
     );
     const notice = result.transition.ok
-      ? `${result.transition.quantity} × ${entity?.name ?? request.entityId} восстановлено ${request.method === 'tokens' ? 'за жетоны' : 'за ресурсы'} и возвращено ${request.category === 'ship' ? 'в флот' : 'в оборону планеты'}.`
+      ? operation === 'remove'
+        ? `${result.transition.quantity} × ${entity?.name ?? request.entityId} удалено из ремонтной мастерской без возврата ресурсов.`
+        : `${result.transition.quantity} × ${entity?.name ?? request.entityId} восстановлено ${request.method === 'tokens' ? 'за жетоны' : 'за ресурсы'} и возвращено ${request.category === 'ship' ? 'в флот' : 'в оборону планеты'}.`
       : result.transition.reason ?? 'Восстановление сейчас недоступно.';
     if (result.transition.ok) options.commit(result.state);
     options.onNotice(notice);
