@@ -34,12 +34,23 @@ import {
   type BattleRoundViewModel,
   type BattleSideViewModel,
   type BattleStackViewModel,
+  type BattleTechnologyViewModel,
 } from './domain/combat/battle-report-view-model.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 import battleBackground from './assets/battle-report/battle-bg-approved-candidate.png';
-import aegisProfileAvatar from '../assets/source/generated-factions-v1/factions/aegis_profile_avatar.png';
-import synodEmblem from '../assets/source/generated-factions-v1/factions/synod_emblem.png';
-import veyraEmblem from '../assets/source/generated-factions-v1/factions/veyra_emblem.png';
+import criticalHitArt from '../assets/source/New assets/technologies/technology.shared.critical-hit.png';
+import heavyArmorArt from '../assets/source/New assets/technologies/technology.shared.heavy-armor.png';
+import ionScienceArt from '../assets/source/New assets/technologies/technology.shared.ion-science.png';
+import laserScienceArt from '../assets/source/New assets/technologies/technology.shared.laser-science.png';
+import lightArmorArt from '../assets/source/New assets/technologies/technology.shared.light-armor.png';
+import maneuverDefenseArt from '../assets/source/New assets/technologies/technology.shared.maneuver-defense.png';
+import mediumArmorArt from '../assets/source/New assets/technologies/technology.shared.medium-armor.png';
+import piercingAttackArt from '../assets/source/New assets/technologies/technology.shared.piercing-attack.png';
+import plasmaScienceArt from '../assets/source/New assets/technologies/technology.shared.plasma-science.png';
+import shipArmorArt from '../assets/source/New assets/technologies/technology.shared.ship-armor.png';
+import aegisGeneral from '../assets/source/generated-factions-v1/factions/aegis_general.png';
+import synodGeneral from '../assets/source/generated-factions-v1/factions/synod_general.png';
+import veyraGeneral from '../assets/source/generated-factions-v1/factions/veyra_general.png';
 import './battle-reports.css';
 
 type SaveNotice = { kind: 'saved' | 'error'; message: string };
@@ -51,6 +62,10 @@ function formatNumber(value: number | null | undefined) {
 
 function formatResourcePoints(value: number) {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(value);
+}
+
+function formatKnownNumber(value: number | null | undefined) {
+  return value == null ? '—' : formatNumber(value);
 }
 
 function formatBattleDate(timestamp: string, withYear = true) {
@@ -189,33 +204,41 @@ function BattleCard({
   );
 }
 
-function formatTransition(before: number | null, after: number | null, empty = '—') {
-  if (before == null && after == null) return empty;
-  return `${formatNumber(before)} → ${formatNumber(after)}`;
-}
-
 function sideTitle(side: BattleSideViewModel) {
   return side.participant.side === 'attacker' ? 'АТАКУЮЩИЙ' : 'ЗАЩИТНИК';
 }
 
 const BATTLE_FACTION_AVATARS = {
-  aegis: aegisProfileAvatar,
-  synod: synodEmblem,
-  veyra: veyraEmblem,
+  aegis: aegisGeneral,
+  synod: synodGeneral,
+  veyra: veyraGeneral,
 } as const;
 
-const BATTLE_TECHNOLOGY_LABELS = {
-  laserScience: 'Повреждения Лазером',
-  ionScience: 'Повреждения Ионом',
-  plasmaScience: 'Повреждения Плазмой',
-  piercingAttack: 'Пробивающая атака',
-  lightArmor: 'Лёгкая Броня',
-  mediumArmor: 'Средняя Броня',
-  heavyArmor: 'Тяжёлая Броня',
-  shipArmor: 'Жизни Кораблей',
-  maneuverDefense: 'Маневренная защита',
-  criticalHit: 'Критический удар',
-} as const;
+type BattleTechnologyId = BattleTechnologyViewModel['id'];
+
+const BATTLE_TECHNOLOGY_ART: Record<BattleTechnologyId, string> = {
+  laserScience: laserScienceArt,
+  ionScience: ionScienceArt,
+  plasmaScience: plasmaScienceArt,
+  piercingAttack: piercingAttackArt,
+  lightArmor: lightArmorArt,
+  mediumArmor: mediumArmorArt,
+  heavyArmor: heavyArmorArt,
+  shipArmor: shipArmorArt,
+  maneuverDefense: maneuverDefenseArt,
+  criticalHit: criticalHitArt,
+};
+
+const BATTLE_BONUS_GROUPS: readonly { id: string; label: string; technologyIds: readonly BattleTechnologyId[] }[] = [
+  { id: 'laserDamage', label: 'Повреждения Лазером', technologyIds: ['laserScience', 'piercingAttack'] },
+  { id: 'ionDamage', label: 'Повреждения Ионом', technologyIds: ['ionScience', 'piercingAttack'] },
+  { id: 'plasmaDamage', label: 'Повреждения Плазмой', technologyIds: ['plasmaScience', 'piercingAttack'] },
+  { id: 'lightArmor', label: 'Лёгкая Броня', technologyIds: ['lightArmor'] },
+  { id: 'mediumArmor', label: 'Средняя Броня', technologyIds: ['mediumArmor'] },
+  { id: 'heavyArmor', label: 'Тяжёлая Броня', technologyIds: ['heavyArmor'] },
+  { id: 'shipLife', label: 'Жизни Кораблей', technologyIds: ['shipArmor', 'maneuverDefense'] },
+  { id: 'criticalHit', label: 'Критический удар', technologyIds: ['criticalHit'] },
+];
 
 function battleSideAvatar(side: BattleSideViewModel) {
   return BATTLE_FACTION_AVATARS[side.factionId];
@@ -234,22 +257,38 @@ function battleSideInitials(side: BattleSideViewModel) {
 function UnitSummaryTable({ side }: { side: BattleSideViewModel }) {
   return (
     <div className="battle-unit-table-v1" data-qa-battle-unit-table={side.participant.side}>
-      <div className="battle-unit-table-head-v1"><span>ЕДИНИЦЫ</span><span>НАСЕЛЕНИЕ</span><span>КОЛИЧЕСТВО</span></div>
+      <div className="battle-unit-table-head-v1"><span>ЕДИНИЦЫ</span><span>БЫЛО</span><span>ОСТАЛОСЬ</span></div>
       <div className="battle-unit-table-row-v1">
         <strong>Население</strong>
-        <b>{formatTransition(side.populationBefore, side.populationAfter)}</b>
-        <span>{formatNumber(side.losses.population)} потерь</span>
+        <b>{formatKnownNumber(side.populationBefore)}</b>
+        <b>{formatKnownNumber(side.populationAfter)}</b>
       </div>
       <div className="battle-unit-table-row-v1">
         <strong>Корабли</strong>
-        <span className="battle-unit-table-muted-v1">—</span>
-        <b>{formatTransition(side.fleet.countBefore, side.fleet.countAfter)}</b>
+        <b>{formatKnownNumber(side.fleet.countBefore)}</b>
+        <b>{formatKnownNumber(side.fleet.countAfter)}</b>
       </div>
       <div className="battle-unit-table-row-v1">
         <strong>Оборона</strong>
-        <span className="battle-unit-table-muted-v1">—</span>
-        <b>{formatTransition(side.defense.countBefore, side.defense.countAfter)}</b>
+        <b>{formatKnownNumber(side.defense.countBefore)}</b>
+        <b>{formatKnownNumber(side.defense.countAfter)}</b>
       </div>
+    </div>
+  );
+}
+
+function TechnologyBonusTooltip({ technologies }: { technologies: readonly BattleTechnologyViewModel[] }) {
+  return (
+    <div className="battle-tech-tooltip-v1" role="tooltip">
+      {technologies.map((technology) => (
+        <span className="battle-tech-tooltip-row-v1" key={technology.id}>
+          <img src={BATTLE_TECHNOLOGY_ART[technology.id]} alt="" draggable={false} />
+          <span>
+            <strong>{technology.name}:</strong>
+            <small>{formatNumber(technology.level)} <b>({formatNumber(technology.bonusPercent)}%)</b></small>
+          </span>
+        </span>
+      ))}
     </div>
   );
 }
@@ -258,18 +297,24 @@ function TechnologyBonusTable({ side }: { side: BattleSideViewModel }) {
   return (
     <div className="battle-tech-table-v1" data-qa-battle-technologies={side.participant.side}>
       <div className="battle-tech-table-head-v1"><span>БОНУСЫ КОРАБЛЕЙ</span><span>%</span></div>
-      {side.technologies.length ? side.technologies.map((technology) => (
-        <div
-          className="battle-tech-table-row-v1"
-          key={technology.id}
-          tabIndex={0}
-          title={`${technology.name} · уровень ${technology.level} · +${technology.bonusPercent}%`}
-          aria-label={`${BATTLE_TECHNOLOGY_LABELS[technology.id]}: ${technology.name}, уровень ${technology.level}, бонус плюс ${technology.bonusPercent} процентов`}
-        >
-          <span><strong>{BATTLE_TECHNOLOGY_LABELS[technology.id]}</strong><small>УРОВЕНЬ {technology.level}</small></span>
-          <b>+{formatNumber(technology.bonusPercent)}%</b>
-        </div>
-      )) : <p className="battle-tech-empty-v1">Снимок технологий не зафиксирован.</p>}
+      {side.technologies.length ? BATTLE_BONUS_GROUPS.map((group) => {
+        const technologies = group.technologyIds.flatMap((id) => side.technologies.filter((technology) => technology.id === id));
+        if (!technologies.length) return null;
+        const bonusPercent = technologies.reduce((total, technology) => total + technology.bonusPercent, 0);
+        const technologyDetails = technologies.map((technology) => `${technology.name}: ${technology.level} уровень, +${technology.bonusPercent}%`).join('; ');
+        return (
+          <div
+            className="battle-tech-table-row-v1"
+            key={group.id}
+            tabIndex={0}
+            aria-label={`${group.label}: плюс ${bonusPercent} процентов. ${technologyDetails}`}
+          >
+            <span><strong>{group.label}</strong></span>
+            <b>+{formatNumber(bonusPercent)}%</b>
+            <TechnologyBonusTooltip technologies={technologies} />
+          </div>
+        );
+      }) : <p className="battle-tech-empty-v1">Снимок технологий не зафиксирован.</p>}
     </div>
   );
 }

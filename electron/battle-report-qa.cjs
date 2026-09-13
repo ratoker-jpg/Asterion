@@ -99,6 +99,7 @@ async function modalSnapshot(win) {
     const scroll = modal?.querySelector('.battle-report-modal-scroll-v1');
     const scenes = Array.from(modal?.querySelectorAll('[data-qa-battle-scene]') || []);
     const focusables = Array.from(modal?.querySelectorAll('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]:not([tabindex="-1"])') || []);
+    const technologyRows = Array.from(modal?.querySelectorAll('.battle-tech-table-row-v1') || []);
     const layoutNodes = Array.from(modal?.querySelectorAll('.battle-stack-row-v1, .battle-scene-v1, .battle-scene-fleet-field-v1, .battle-scene-planet-deck-v1, .battle-scene-zone-v1, .battle-scene-defense-zone-v1') || []);
     const tooltipClips = Array.from(modal?.querySelectorAll('.battle-scene-stack-v1') || []).reduce((count, stack) => {
       const tooltip = stack.querySelector('.battle-scene-tooltip-v1');
@@ -123,7 +124,11 @@ async function modalSnapshot(win) {
       hasOverallLosses: Boolean(modal?.querySelector('[data-qa-battle-summary]')),
       hasHeaderTable: Boolean(modal?.querySelector('[data-qa-battle-unit-table]')),
       headerAvatarCount: modal?.querySelectorAll('[data-qa-battle-side-avatar]').length || 0,
-      technologyRowCount: modal?.querySelectorAll('.battle-tech-table-row-v1').length || 0,
+      technologyRowCount: technologyRows.length,
+      technologyTooltipCount: modal?.querySelectorAll('.battle-tech-tooltip-v1').length || 0,
+      technologyTooltipImageCount: modal?.querySelectorAll('.battle-tech-tooltip-row-v1 img').length || 0,
+      visibleTechnologyLevel: technologyRows.some((row) => (row.querySelector(':scope > span')?.textContent || '').toLowerCase().includes('уровень')),
+      technologyRowsFocusable: technologyRows.every((row) => row.tabIndex >= 0),
       hasBattlePoints: Boolean(modal?.querySelector('[data-qa-battle-points]')),
       hasVisualAnchor: Boolean(modal?.querySelector('[data-qa-battle-visual-anchor]')),
       hasComposition: Boolean(modal?.querySelector('[data-qa-battle-composition]')),
@@ -288,7 +293,7 @@ async function runViewport(win, width, height) {
 
   await openBattle(win, 'battle-demo-attacker-victory');
   const modal = await modalSnapshot(win);
-  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.sceneCount !== 5 || modal.analysisOpenCount !== 0 || modal.cellSizes.some((value) => value !== '100px') || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount !== 20 || !modal.hasBattlePoints || modal.hasVisualAnchor || !modal.hasComposition || !modal.hasOutcome || !modal.internalScroll || modal.internalHorizontalOverflow || modal.layoutOverflowCount !== 0 || modal.tooltipHorizontalClips !== 0 || !modal.bodyLocked || !modal.stageInert) {
+  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.sceneCount !== 5 || modal.analysisOpenCount !== 0 || modal.cellSizes.some((value) => value !== '100px') || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount !== 16 || modal.technologyTooltipCount !== 16 || modal.technologyTooltipImageCount !== 24 || modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || !modal.hasBattlePoints || modal.hasVisualAnchor || !modal.hasComposition || !modal.hasOutcome || !modal.internalScroll || modal.internalHorizontalOverflow || modal.layoutOverflowCount !== 0 || modal.tooltipHorizontalClips !== 0 || !modal.bodyLocked || !modal.stageInert) {
     throw new Error(`Battle modal contract failed at ${label}: ${JSON.stringify(modal)}`);
   }
   await capture(win, directory, 'battle-report-modal');

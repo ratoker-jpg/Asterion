@@ -32,7 +32,11 @@
         "hasOverallLosses": true,
         "hasHeaderTable": true,
         "headerAvatarCount": 2,
-        "technologyRowCount": 20,
+        "technologyRowCount": 16,
+        "technologyTooltipCount": 16,
+        "technologyTooltipImageCount": 24,
+        "visibleTechnologyLevel": false,
+        "technologyRowsFocusable": true,
         "hasBattlePoints": true,
         "hasVisualAnchor": false,
         "hasComposition": true,
@@ -43,7 +47,7 @@
         "tooltipHorizontalClips": 0,
         "bodyLocked": true,
         "stageInert": true,
-        "focusableCount": 59
+        "focusableCount": 55
       },
       "focus": {
         "wrappedToFirst": true
@@ -67,7 +71,7 @@
         "simulationModal": {
           "present": true,
           "ariaModal": "true",
-          "labelledBy": "battle-report-modal-title-simulation-mu00cxuf-2",
+          "labelledBy": "battle-report-modal-title-simulation-mu02adqo-2",
           "sceneCount": 8,
           "analysisOpenCount": 0,
           "cellSizes": [
@@ -83,7 +87,11 @@
           "hasOverallLosses": true,
           "hasHeaderTable": true,
           "headerAvatarCount": 2,
-          "technologyRowCount": 20,
+          "technologyRowCount": 16,
+          "technologyTooltipCount": 16,
+          "technologyTooltipImageCount": 24,
+          "visibleTechnologyLevel": false,
+          "technologyRowsFocusable": true,
           "hasBattlePoints": true,
           "hasVisualAnchor": false,
           "hasComposition": true,
@@ -94,7 +102,7 @@
           "tooltipHorizontalClips": 0,
           "bodyLocked": true,
           "stageInert": true,
-          "focusableCount": 46
+          "focusableCount": 42
         },
         "simulationPresentation": {
           "source": "simulation",
@@ -157,7 +165,11 @@
         "hasOverallLosses": true,
         "hasHeaderTable": true,
         "headerAvatarCount": 2,
-        "technologyRowCount": 20,
+        "technologyRowCount": 16,
+        "technologyTooltipCount": 16,
+        "technologyTooltipImageCount": 24,
+        "visibleTechnologyLevel": false,
+        "technologyRowsFocusable": true,
         "hasBattlePoints": true,
         "hasVisualAnchor": false,
         "hasComposition": true,
@@ -168,7 +180,7 @@
         "tooltipHorizontalClips": 0,
         "bodyLocked": true,
         "stageInert": true,
-        "focusableCount": 59
+        "focusableCount": 55
       },
       "focus": {
         "wrappedToFirst": true
@@ -192,7 +204,7 @@
         "simulationModal": {
           "present": true,
           "ariaModal": "true",
-          "labelledBy": "battle-report-modal-title-simulation-mu00cznm-2",
+          "labelledBy": "battle-report-modal-title-simulation-mu02aff7-2",
           "sceneCount": 8,
           "analysisOpenCount": 0,
           "cellSizes": [
@@ -208,7 +220,11 @@
           "hasOverallLosses": true,
           "hasHeaderTable": true,
           "headerAvatarCount": 2,
-          "technologyRowCount": 20,
+          "technologyRowCount": 16,
+          "technologyTooltipCount": 16,
+          "technologyTooltipImageCount": 24,
+          "visibleTechnologyLevel": false,
+          "technologyRowsFocusable": true,
           "hasBattlePoints": true,
           "hasVisualAnchor": false,
           "hasComposition": true,
@@ -219,7 +235,7 @@
           "tooltipHorizontalClips": 0,
           "bodyLocked": true,
           "stageInert": true,
-          "focusableCount": 46
+          "focusableCount": 42
         },
         "simulationPresentation": {
           "source": "simulation",
