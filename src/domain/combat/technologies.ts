@@ -23,6 +23,8 @@ export type CombatTechnologyDefinition = {
   name: string;
   maxLevel: number;
   effect: string;
+  /** Presentation-only percentage copied from the implemented Science catalog. */
+  displayBonusPercentPerLevel: number;
 };
 
 const UNKNOWN_SCIENCE_EFFECT =
@@ -38,16 +40,16 @@ const TECHNICAL_EDITOR_LIMIT = Number.MAX_SAFE_INTEGER;
  * not expose their battle coefficients or maximum levels. Do not infer either.
  */
 export const COMBAT_TECHNOLOGIES: readonly CombatTechnologyDefinition[] = [
-  { id: 'laserScience', sourceScienceId: 10, name: 'Лазерная наука', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT },
-  { id: 'ionScience', sourceScienceId: 11, name: 'Ионная наука', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT },
-  { id: 'plasmaScience', sourceScienceId: 12, name: 'Плазменная наука', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT },
-  { id: 'piercingAttack', sourceScienceId: 18, name: 'Пробивающая атака', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT },
-  { id: 'lightArmor', sourceScienceId: 21, name: 'Лёгкая броня', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT },
-  { id: 'mediumArmor', sourceScienceId: 22, name: 'Средняя броня', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT },
-  { id: 'heavyArmor', sourceScienceId: 23, name: 'Тяжёлая броня', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT },
-  { id: 'shipArmor', sourceScienceId: 7, name: 'Броня кораблей', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT },
-  { id: 'maneuverDefense', sourceScienceId: 19, name: 'Маневренная защита', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT },
-  { id: 'criticalHit', sourceScienceId: 20, name: 'Критический удар', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT },
+  { id: 'laserScience', sourceScienceId: 10, name: 'Лазерная наука', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT, displayBonusPercentPerLevel: 15 },
+  { id: 'ionScience', sourceScienceId: 11, name: 'Ионная наука', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT, displayBonusPercentPerLevel: 15 },
+  { id: 'plasmaScience', sourceScienceId: 12, name: 'Плазменная наука', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT, displayBonusPercentPerLevel: 15 },
+  { id: 'piercingAttack', sourceScienceId: 18, name: 'Пробивающая атака', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT, displayBonusPercentPerLevel: 5 },
+  { id: 'lightArmor', sourceScienceId: 21, name: 'Лёгкая броня', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT, displayBonusPercentPerLevel: 1 },
+  { id: 'mediumArmor', sourceScienceId: 22, name: 'Средняя броня', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT, displayBonusPercentPerLevel: 2 },
+  { id: 'heavyArmor', sourceScienceId: 23, name: 'Тяжёлая броня', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT, displayBonusPercentPerLevel: 3 },
+  { id: 'shipArmor', sourceScienceId: 7, name: 'Броня кораблей', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT, displayBonusPercentPerLevel: 10 },
+  { id: 'maneuverDefense', sourceScienceId: 19, name: 'Маневренная защита', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT, displayBonusPercentPerLevel: 5 },
+  { id: 'criticalHit', sourceScienceId: 20, name: 'Критический удар', maxLevel: TECHNICAL_EDITOR_LIMIT, effect: UNKNOWN_SCIENCE_EFFECT, displayBonusPercentPerLevel: 1 },
 ];
 
 const TECHNOLOGY_BY_ID = new Map(COMBAT_TECHNOLOGIES.map((technology) => [technology.id, technology]));

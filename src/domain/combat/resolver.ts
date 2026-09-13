@@ -223,6 +223,7 @@ function createRoundSnapshot(
 function createForceSnapshot(
   stacks: readonly RuntimeStack[],
   activeCommanderId: CommanderId | null,
+  technologies: CombatTechnologyLevels,
 ): BattleForceSnapshot {
   const build = (bucket: RuntimeBucket): BattleStackSnapshot[] => sortRuntime(stacks)
     .filter((stack) => stack.bucket === bucket)
@@ -244,6 +245,7 @@ function createForceSnapshot(
     stacks: regularStacks,
     ...(defenses.length ? { defenses } : {}),
     ...(activeCommanderId ? { activeCommanderId } : {}),
+    technologies,
   };
 }
 
@@ -352,8 +354,8 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
     defender: { ...normalized.defender.participant, side: 'defender' },
     winner,
     roundCount: rounds.length,
-    attackerForce: createForceSnapshot(attacker, activeAttackerCommander),
-    defenderForce: createForceSnapshot(defender, activeDefenderCommander),
+    attackerForce: createForceSnapshot(attacker, activeAttackerCommander, attackerTechnologies),
+    defenderForce: createForceSnapshot(defender, activeDefenderCommander, defenderTechnologies),
     rounds,
     metadata: {
       source: 'combat-resolver',

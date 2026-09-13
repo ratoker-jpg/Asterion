@@ -33,6 +33,28 @@ test('demo reports identify the current player and render Bot 01 with Veyra pres
   assert.equal(viewModel.defender.defenses.every((stack) => stack.assetSource === 'catalog'), true);
 });
 
+test('demo reports render the same historical supported technology snapshot for both sides', () => {
+  const viewModel = createBattleReportViewModel(DEMO_BATTLE_REPORTS[0]);
+  const levels = (side: typeof viewModel.attacker) => side.technologies.map((technology) => [technology.id, technology.level, technology.bonusPercent]);
+
+  assert.equal(viewModel.attacker.technologies.length, 10);
+  assert.deepEqual(levels(viewModel.attacker), levels(viewModel.defender));
+  assert.deepEqual(levels(viewModel.attacker), [
+    ['laserScience', 12, 180],
+    ['ionScience', 11, 165],
+    ['plasmaScience', 10, 150],
+    ['piercingAttack', 0, 0],
+    ['lightArmor', 10, 10],
+    ['mediumArmor', 10, 20],
+    ['heavyArmor', 10, 30],
+    ['shipArmor', 14, 140],
+    ['maneuverDefense', 0, 0],
+    ['criticalHit', 0, 0],
+  ]);
+  assert.equal(viewModel.attacker.technologies.some((technology) => technology.name === 'Усиленная атака'), false);
+  assert.equal(viewModel.defender.technologies.some((technology) => technology.name === 'Лазерный удар'), false);
+});
+
 test('view model binds scene stacks to saved snapshots across rounds', () => {
   const viewModel = createBattleReportViewModel(DEMO_BATTLE_REPORTS[2]);
   const firstRound = viewModel.rounds.find((round) => round.index === 1);

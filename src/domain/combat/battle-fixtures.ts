@@ -1,6 +1,26 @@
 import type { BattleReport, BattleStackSnapshot, CombatRoundSnapshot } from './report.ts';
 import type { CombatEntityId } from './ids.ts';
+import type { CombatTechnologyLevels } from './technologies.ts';
 import { CURRENT_PLAYER_DISPLAY_NAME } from '../rating/fixtures.ts';
+
+// Historical report snapshot. This is deliberately independent from the current
+// player/Bot 01 science state and is shared by both sides in every demo report.
+const DEMO_BATTLE_TECHNOLOGIES: CombatTechnologyLevels = {
+  laserScience: 12,
+  ionScience: 11,
+  plasmaScience: 10,
+  piercingAttack: 0,
+  lightArmor: 10,
+  mediumArmor: 10,
+  heavyArmor: 10,
+  shipArmor: 14,
+  maneuverDefense: 0,
+  criticalHit: 0,
+};
+
+function demoBattleTechnologies(): CombatTechnologyLevels {
+  return { ...DEMO_BATTLE_TECHNOLOGIES };
+}
 
 function demoStack(entityId: CombatEntityId, countBefore: number, countAfter: number): BattleStackSnapshot {
   return {
@@ -52,6 +72,7 @@ export const DEMO_BATTLE_REPORTS: readonly BattleReport[] = [
         { entityId: 'cruiser', countBefore: 24, countAfter: 11, destroyed: 13 },
         { entityId: 'judge', countBefore: 1, countAfter: 1, destroyed: 0 },
       ],
+      technologies: demoBattleTechnologies(),
       modifiers: { formation: 'Ударная линия', commanderSnapshot: 'judge' },
     },
     defenderForce: {
@@ -61,6 +82,7 @@ export const DEMO_BATTLE_REPORTS: readonly BattleReport[] = [
         { entityId: 'defender', countBefore: 32, countAfter: 0, destroyed: 32 },
         { entityId: 'battleship', countBefore: 8, countAfter: 0, destroyed: 8 },
       ],
+      technologies: demoBattleTechnologies(),
       defenses: [
         { entityId: 'laser-turret', countBefore: 50, countAfter: 0, destroyed: 50 },
         { entityId: 'tower-shield', countBefore: 1, countAfter: 0, destroyed: 1, shield: 0 },
@@ -249,6 +271,7 @@ export const DEMO_BATTLE_REPORTS: readonly BattleReport[] = [
         { entityId: 'scout', countBefore: 60, countAfter: 0, destroyed: 60 },
         { entityId: 'destroyer', countBefore: 8, countAfter: 0, destroyed: 8 },
       ],
+      technologies: demoBattleTechnologies(),
     },
     defenderForce: {
       populationBefore: 445,
@@ -258,6 +281,7 @@ export const DEMO_BATTLE_REPORTS: readonly BattleReport[] = [
         { entityId: 'cruiser', countBefore: 18, countAfter: 10, destroyed: 8 },
         { entityId: 'reanimator', countBefore: 1, countAfter: 1, destroyed: 0 },
       ],
+      technologies: demoBattleTechnologies(),
       defenses: [
         { entityId: 'ballistic-turret', countBefore: 80, countAfter: 34, destroyed: 46 },
         { entityId: 'plasma-turret', countBefore: 24, countAfter: 9, destroyed: 15 },
@@ -409,6 +433,7 @@ export const DEMO_BATTLE_REPORTS: readonly BattleReport[] = [
         { entityId: 'cruiser', countBefore: 14, countAfter: 7, destroyed: 7 },
         { entityId: 'spy-probe', countBefore: 6, countAfter: 0, destroyed: 6 },
       ],
+      technologies: demoBattleTechnologies(),
     },
     defenderForce: {
       populationBefore: 300,
@@ -417,6 +442,7 @@ export const DEMO_BATTLE_REPORTS: readonly BattleReport[] = [
         { entityId: 'defender', countBefore: 30, countAfter: 12, destroyed: 18 },
         { entityId: 'battleship', countBefore: 8, countAfter: 3, destroyed: 5 },
       ],
+      technologies: demoBattleTechnologies(),
     },
     rounds: [
       {

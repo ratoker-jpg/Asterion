@@ -30,7 +30,11 @@
           "100px"
         ],
         "hasOverallLosses": true,
-        "hasVisualAnchor": true,
+        "hasHeaderTable": true,
+        "headerAvatarCount": 2,
+        "technologyRowCount": 20,
+        "hasBattlePoints": true,
+        "hasVisualAnchor": false,
         "hasComposition": true,
         "hasOutcome": true,
         "internalScroll": true,
@@ -39,7 +43,7 @@
         "tooltipHorizontalClips": 0,
         "bodyLocked": true,
         "stageInert": true,
-        "focusableCount": 40
+        "focusableCount": 59
       },
       "focus": {
         "wrappedToFirst": true
@@ -52,7 +56,8 @@
       "transition": {
         "firstRoundSpyCount": "6",
         "secondRoundSpyPresent": false,
-        "missingDataText": true
+        "missingDataText": false,
+        "tooltipHasQuantity": false
       },
       "bottom": {
         "atBottom": true,
@@ -62,7 +67,7 @@
         "simulationModal": {
           "present": true,
           "ariaModal": "true",
-          "labelledBy": "battle-report-modal-title-simulation-mtzyfl64-2",
+          "labelledBy": "battle-report-modal-title-simulation-mu00cxuf-2",
           "sceneCount": 8,
           "analysisOpenCount": 0,
           "cellSizes": [
@@ -76,7 +81,11 @@
             "100px"
           ],
           "hasOverallLosses": true,
-          "hasVisualAnchor": true,
+          "hasHeaderTable": true,
+          "headerAvatarCount": 2,
+          "technologyRowCount": 20,
+          "hasBattlePoints": true,
+          "hasVisualAnchor": false,
           "hasComposition": true,
           "hasOutcome": true,
           "internalScroll": true,
@@ -85,7 +94,7 @@
           "tooltipHorizontalClips": 0,
           "bodyLocked": true,
           "stageInert": true,
-          "focusableCount": 27
+          "focusableCount": 46
         },
         "simulationPresentation": {
           "source": "simulation",
@@ -146,7 +155,11 @@
           "100px"
         ],
         "hasOverallLosses": true,
-        "hasVisualAnchor": true,
+        "hasHeaderTable": true,
+        "headerAvatarCount": 2,
+        "technologyRowCount": 20,
+        "hasBattlePoints": true,
+        "hasVisualAnchor": false,
         "hasComposition": true,
         "hasOutcome": true,
         "internalScroll": true,
@@ -155,7 +168,7 @@
         "tooltipHorizontalClips": 0,
         "bodyLocked": true,
         "stageInert": true,
-        "focusableCount": 40
+        "focusableCount": 59
       },
       "focus": {
         "wrappedToFirst": true
@@ -168,7 +181,8 @@
       "transition": {
         "firstRoundSpyCount": "6",
         "secondRoundSpyPresent": false,
-        "missingDataText": true
+        "missingDataText": false,
+        "tooltipHasQuantity": false
       },
       "bottom": {
         "atBottom": true,
@@ -178,7 +192,7 @@
         "simulationModal": {
           "present": true,
           "ariaModal": "true",
-          "labelledBy": "battle-report-modal-title-simulation-mtzyfmtu-2",
+          "labelledBy": "battle-report-modal-title-simulation-mu00cznm-2",
           "sceneCount": 8,
           "analysisOpenCount": 0,
           "cellSizes": [
@@ -192,7 +206,11 @@
             "100px"
           ],
           "hasOverallLosses": true,
-          "hasVisualAnchor": true,
+          "hasHeaderTable": true,
+          "headerAvatarCount": 2,
+          "technologyRowCount": 20,
+          "hasBattlePoints": true,
+          "hasVisualAnchor": false,
           "hasComposition": true,
           "hasOutcome": true,
           "internalScroll": true,
@@ -201,7 +219,7 @@
           "tooltipHorizontalClips": 0,
           "bodyLocked": true,
           "stageInert": true,
-          "focusableCount": 27
+          "focusableCount": 46
         },
         "simulationPresentation": {
           "source": "simulation",

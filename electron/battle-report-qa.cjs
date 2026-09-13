@@ -121,6 +121,10 @@ async function modalSnapshot(win) {
       analysisOpenCount: modal?.querySelectorAll('[data-qa-battle-round-analysis][open]').length || 0,
       cellSizes: scenes.map((scene) => scene.getAttribute('data-qa-battle-cell-size') || ''),
       hasOverallLosses: Boolean(modal?.querySelector('[data-qa-battle-summary]')),
+      hasHeaderTable: Boolean(modal?.querySelector('[data-qa-battle-unit-table]')),
+      headerAvatarCount: modal?.querySelectorAll('[data-qa-battle-side-avatar]').length || 0,
+      technologyRowCount: modal?.querySelectorAll('.battle-tech-table-row-v1').length || 0,
+      hasBattlePoints: Boolean(modal?.querySelector('[data-qa-battle-points]')),
       hasVisualAnchor: Boolean(modal?.querySelector('[data-qa-battle-visual-anchor]')),
       hasComposition: Boolean(modal?.querySelector('[data-qa-battle-composition]')),
       hasOutcome: Boolean(modal?.querySelector('[data-qa-battle-outcome]')),
@@ -284,7 +288,7 @@ async function runViewport(win, width, height) {
 
   await openBattle(win, 'battle-demo-attacker-victory');
   const modal = await modalSnapshot(win);
-  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.sceneCount !== 5 || modal.analysisOpenCount !== 0 || modal.cellSizes.some((value) => value !== '100px') || !modal.hasOverallLosses || !modal.hasVisualAnchor || !modal.hasComposition || !modal.hasOutcome || !modal.internalScroll || modal.internalHorizontalOverflow || modal.layoutOverflowCount !== 0 || modal.tooltipHorizontalClips !== 0 || !modal.bodyLocked || !modal.stageInert) {
+  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.sceneCount !== 5 || modal.analysisOpenCount !== 0 || modal.cellSizes.some((value) => value !== '100px') || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount !== 20 || !modal.hasBattlePoints || modal.hasVisualAnchor || !modal.hasComposition || !modal.hasOutcome || !modal.internalScroll || modal.internalHorizontalOverflow || modal.layoutOverflowCount !== 0 || modal.tooltipHorizontalClips !== 0 || !modal.bodyLocked || !modal.stageInert) {
     throw new Error(`Battle modal contract failed at ${label}: ${JSON.stringify(modal)}`);
   }
   await capture(win, directory, 'battle-report-modal');
@@ -323,12 +327,18 @@ async function runViewport(win, width, height) {
   }
 
   await openBattle(win, 'battle-demo-round-limit-draw');
-  const transition = await win.webContents.executeJavaScript(`(() => ({
+  const transition = await win.webContents.executeJavaScript(`(() => {
+    const modal = document.querySelector('[role="dialog"][data-qa-battle-report-modal]');
+    const tooltipText = Array.from(modal?.querySelectorAll('.battle-scene-tooltip-v1') || []).map((node) => node.textContent || '').join(' ');
+    const lastRound = modal?.querySelector('[data-qa-battle-round="5"]');
+    return {
     firstRoundSpyCount: document.querySelector('[data-qa-battle-round="1"] [data-qa-battle-stack="spy-probe"]')?.getAttribute('data-qa-battle-stack-count') || '',
     secondRoundSpyPresent: Boolean(document.querySelector('[data-qa-battle-round="2"] [data-qa-battle-stack="spy-probe"]')),
-    missingDataText: document.body.textContent?.includes('Нет данных') || false,
-  }))()`);
-  if (transition.firstRoundSpyCount !== '6' || transition.secondRoundSpyPresent || !transition.missingDataText) {
+    missingDataText: Boolean(lastRound?.querySelector('.battle-scene-empty-v1')) || /ОБОРОНА НЕ ЗАФИКСИРОВАНА|Оборона не зафиксирована/.test(lastRound?.textContent || ''),
+    tooltipHasQuantity: tooltipText.includes('Количество'),
+  };
+  })()`);
+  if (transition.firstRoundSpyCount !== '6' || transition.secondRoundSpyPresent || transition.missingDataText || transition.tooltipHasQuantity) {
     throw new Error(`Battle snapshot transition contract failed at ${label}: ${JSON.stringify(transition)}`);
   }
   await capture(win, directory, 'battle-report-snapshot-transition');

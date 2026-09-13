@@ -1,5 +1,6 @@
 import type { CommanderId } from './commanders.ts';
 import type { CombatEntityId, DefenseId, ShipId } from './ids.ts';
+import type { CombatTechnologyLevels } from './technologies.ts';
 
 export const ASTERION_LOCAL_PLAYER_ID = 'player-aster';
 
@@ -75,6 +76,8 @@ export type BattleForceSnapshot = {
   stacks: BattleStackSnapshot[];
   defenses?: BattleStackSnapshot[];
   activeCommanderId?: CommanderId;
+  /** Historical combat technology levels captured with this report. */
+  technologies?: CombatTechnologyLevels;
   modifiers?: Readonly<Record<string, number | string>>;
 };
 

@@ -27,6 +27,7 @@ import {
   type SimulatorScenario,
 } from './simulator.ts';
 import { ASTERION_SAVE_KEY, createDefaultCombatPriority } from './priority.ts';
+import { createDefaultCombatTechnologies } from './technologies.ts';
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -415,6 +416,18 @@ test('simulation reports stay out of Battles even when a caller tries to save th
   const reloaded = readBattleHistory(storage);
   assert.equal(reloaded.reports.some((item) => item.id === report.id), false);
   assert.equal(reloaded.savedReportIds.includes(report.id), false);
+});
+
+test('generated report stores the technologies used for each side as historical snapshots', () => {
+  const attackerTechnologies = { ...createDefaultCombatTechnologies(), laserScience: 12 };
+  const defenderTechnologies = { ...createDefaultCombatTechnologies(), ionScience: 11 };
+  const report = resolve(input({ attackerTechnologies, defenderTechnologies }));
+
+  assert.equal(report.attackerForce.technologies?.laserScience, 12);
+  assert.equal(report.attackerForce.technologies?.ionScience, 0);
+  assert.equal(report.defenderForce.technologies?.ionScience, 11);
+  assert.equal(report.defenderForce.technologies?.laserScience, 0);
+  assert.notEqual(report.attackerForce.technologies, report.defenderForce.technologies);
 });
 
 test('attempting to save the same simulation report twice keeps it out of Battles', () => {

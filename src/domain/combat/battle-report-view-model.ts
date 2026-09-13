@@ -6,10 +6,12 @@ import {
   type CatalogEntity,
 } from './catalog.ts';
 import { COMMANDER_ABILITIES, isCommanderId, type CommanderId } from './commanders.ts';
+import { calculateBattlePoints, type BattlePointResult } from './battle-points.ts';
 import { getFactionDefenseCatalog, getFactionShipCatalog } from './faction-catalog.ts';
 import { getCombatFactionId, type CombatFactionId } from './factions.ts';
 import type { CombatEntityId } from './ids.ts';
 import { calculatePopulationLoss, type BattleMissionType, type BattleSide, type BattleWinner } from './report.ts';
+import { COMBAT_TECHNOLOGIES, normalizeCombatTechnologies, type CombatTechnologyId } from './technologies.ts';
 
 export const BATTLE_MISSING_DATA = 'Нет данных' as const;
 
@@ -47,6 +49,7 @@ export type BattleStackViewModel = {
   countBefore: number | null;
   countAfter: number | null;
   destroyed: number | null;
+  populationPerUnit: number | null;
   tooltip: BattleTooltipViewModel;
 };
 
@@ -99,6 +102,20 @@ export type BattleModifierViewModel = {
   value: string;
 };
 
+export type BattleUnitGroupViewModel = {
+  countBefore: number | null;
+  countAfter: number | null;
+  populationBefore: number | null;
+  populationAfter: number | null;
+};
+
+export type BattleTechnologyViewModel = {
+  id: CombatTechnologyId;
+  name: string;
+  level: number;
+  bonusPercent: number;
+};
+
 export type BattleSideViewModel = {
   participant: BattleParticipantViewModel;
   factionId: CombatFactionId;
@@ -109,10 +126,13 @@ export type BattleSideViewModel = {
   ships: BattleStackViewModel[];
   commanders: BattleStackViewModel[];
   defenses: BattleStackViewModel[];
+  fleet: BattleUnitGroupViewModel;
+  defense: BattleUnitGroupViewModel;
   remainingShips: number | null;
   remainingDefenses: number | null;
   activeCommander: BattleStackViewModel | null;
   modifiers: BattleModifierViewModel[];
+  technologies: BattleTechnologyViewModel[];
 };
 
 export type BattleResourceViewModel = {
@@ -133,6 +153,7 @@ export type BattleReportViewModel = {
   experience: number | null;
   debris: number | null;
   resources: BattleResourceViewModel[];
+  battlePoints: BattlePointResult;
   timestampAvailable: boolean;
 };
 
@@ -283,6 +304,20 @@ function readModifiers(value: unknown): BattleModifierViewModel[] {
   });
 }
 
+function readTechnologies(value: unknown): BattleTechnologyViewModel[] {
+  const record = asRecord(value);
+  const hasSnapshot = COMBAT_TECHNOLOGIES.some(({ id }) => Object.prototype.hasOwnProperty.call(record, id))
+    || ['shipDefense', 'forceAttack', 'promptDefense'].some((id) => Object.prototype.hasOwnProperty.call(record, id));
+  if (!hasSnapshot) return [];
+  const levels = normalizeCombatTechnologies(record);
+  return COMBAT_TECHNOLOGIES.map((technology) => ({
+    id: technology.id,
+    name: technology.name,
+    level: levels[technology.id],
+    bonusPercent: levels[technology.id] * technology.displayBonusPercentPerLevel,
+  }));
+}
+
 function readStack(
   value: unknown,
   index: number,
@@ -317,6 +352,7 @@ function readStack(
     countBefore,
     countAfter,
     destroyed: readCount(record.destroyed),
+    populationPerUnit: catalog?.population ?? null,
     tooltip,
   };
 }
@@ -342,10 +378,24 @@ function sumDestroyed(stacks: readonly BattleStackViewModel[]) {
   return values.length === stacks.length ? values.reduce((total, value) => total + value, 0) : null;
 }
 
-function sumCount(stacks: readonly BattleStackViewModel[]) {
+function sumMetric(
+  stacks: readonly BattleStackViewModel[],
+  readValue: (stack: BattleStackViewModel) => number | null,
+) {
   if (!stacks.length) return null;
-  const values = stacks.map((stack) => stack.countAfter).filter((value): value is number => value != null);
-  return values.length === stacks.length ? values.reduce((total, value) => total + value, 0) : null;
+  const values = stacks.map(readValue);
+  return values.every((value): value is number => value != null)
+    ? values.reduce((total, value) => total + value, 0)
+    : null;
+}
+
+function summarizeStacks(stacks: readonly BattleStackViewModel[]): BattleUnitGroupViewModel {
+  return {
+    countBefore: sumMetric(stacks, (stack) => stack.countBefore),
+    countAfter: sumMetric(stacks, (stack) => stack.countAfter),
+    populationBefore: sumMetric(stacks, (stack) => stack.countBefore == null || stack.populationPerUnit == null ? null : stack.countBefore * stack.populationPerUnit),
+    populationAfter: sumMetric(stacks, (stack) => stack.countAfter == null || stack.populationPerUnit == null ? null : stack.countAfter * stack.populationPerUnit),
+  };
 }
 
 function readForce(value: unknown, participant: BattleParticipantViewModel, factionId: CombatFactionId): BattleSideViewModel {
@@ -359,6 +409,8 @@ function readForce(value: unknown, participant: BattleParticipantViewModel, fact
     : null;
   const populationBefore = readCount(record.populationBefore);
   const populationAfter = readCount(record.populationAfter);
+  const fleet = summarizeStacks([...split.ships, ...split.commanders]);
+  const defense = summarizeStacks(defenses);
 
   return {
     participant,
@@ -378,10 +430,13 @@ function readForce(value: unknown, participant: BattleParticipantViewModel, fact
     ships: split.ships,
     commanders: split.commanders,
     defenses,
-    remainingShips: sumCount([...split.ships, ...split.commanders]),
-    remainingDefenses: sumCount(defenses),
+    fleet,
+    defense,
+    remainingShips: fleet.countAfter,
+    remainingDefenses: defense.countAfter,
     activeCommander,
     modifiers: readModifiers(record.modifiers),
+    technologies: readTechnologies(record.technologies),
   };
 }
 
@@ -497,19 +552,29 @@ export function createBattleReportViewModel(input: unknown): BattleReportViewMod
   const rounds = asArray(record.rounds)
     .map((round, index) => readRound(round, index, attackerFactionId, defenderFactionId))
     .sort((left, right) => left.index - right.index);
+  const attackerViewModel = readForce(record.attackerForce, attacker, attackerFactionId);
+  const defenderViewModel = readForce(record.defenderForce, defender, defenderFactionId);
+  const winner = readWinner(record.winner);
 
   return {
     id: readString(record.id) ?? 'invalid-battle-report',
     timestamp: readString(record.timestamp) ?? '',
     missionType: readMissionType(record.missionType),
-    attacker: readForce(record.attackerForce, attacker, attackerFactionId),
-    defender: readForce(record.defenderForce, defender, defenderFactionId),
-    winner: readWinner(record.winner),
+    attacker: attackerViewModel,
+    defender: defenderViewModel,
+    winner,
     roundCount: readCount(record.roundCount) ?? rounds.length,
     rounds,
     experience: readNumber(record.experience),
     debris: readNumber(record.debris),
     resources: readResources(record.resources),
+    battlePoints: calculateBattlePoints(
+      winner,
+      attackerViewModel.stacks,
+      defenderViewModel.stacks,
+      attackerViewModel.defenses,
+      defenderViewModel.defenses,
+    ),
     timestampAvailable: readString(record.timestamp) != null,
   };
 }
