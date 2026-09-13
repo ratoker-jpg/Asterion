@@ -203,6 +203,12 @@ async function seedSave(win) {
     planet.productionBots = { metal: 0, minerals: 0, gas: 0 };
     planet.recycling = { availableDebris: 100000, jobs: [] };
     planet.trade = { refillAtQueue: [] };
+    planet.repair = {
+      ships: { ...(planet.repair?.ships || {}), scout: 4 },
+      defenses: { ...(planet.repair?.defenses || {}), 'ballistic-turret': 2 },
+      tokens: 31,
+      claimedBattleIds: [],
+    };
     planet.energy = 999999999;
     save.metal = 999999999;
     save.minerals = 999999999;

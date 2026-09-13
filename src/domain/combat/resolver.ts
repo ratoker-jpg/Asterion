@@ -4,6 +4,7 @@ import type { CombatEntityId } from './ids.ts';
 import { selectActiveCommander } from './priority.ts';
 import type {
   BattleForceSnapshot,
+  BattleMissionType,
   BattleReport,
   BattleSide,
   BattleStackSnapshot,
@@ -38,6 +39,8 @@ import {
 
 export type CombatResolverContext = {
   reportId: string;
+  /** Production combat may classify the result; omitted means simulator. */
+  missionType?: Exclude<BattleMissionType, 'simulation'>;
 };
 
 type RuntimeBucket = 'stacks' | 'defenses';
@@ -344,7 +347,7 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
   return {
     id: context.reportId,
     timestamp: normalized.timestamp,
-    missionType: 'simulation',
+    missionType: context.missionType ?? 'simulation',
     attacker: { ...normalized.attacker.participant, side: 'attacker' },
     defender: { ...normalized.defender.participant, side: 'defender' },
     winner,
