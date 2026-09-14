@@ -156,6 +156,28 @@ async function enqueueResourceBuilding(win, role) {
   await settle(win);
 }
 
+async function holdActiveResourceQueue(win) {
+  const held = await win.webContents.executeJavaScript(`(() => {
+    try {
+      const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+      const queue = save.queues?.['helion-01'];
+      if (!Array.isArray(queue) || !queue[0]) return false;
+      const duration = 5 * 60 * 1000;
+      let finishAt = Date.now() + duration;
+      queue.forEach((item, index) => {
+        item.startedAt = index === 0 ? Date.now() : finishAt;
+        item.finishAt = item.startedAt + duration;
+        finishAt = item.finishAt;
+      });
+      localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+      return true;
+    } catch {
+      return false;
+    }
+  })()`);
+  if (!held) throw new Error('Could not hold the active resource queue item for QA');
+}
+
 async function metrics(win, screen) {
   return win.webContents.executeJavaScript(`(() => {
     const root=document.documentElement, body=document.body;
@@ -386,7 +408,8 @@ async function verifyResourceZoneFlow(win, directory) {
   await reload(win);
   await activateResourceZone(win);
   await openResourceBuilding(win,'metal-production-1');
-  await waitFor(win, `document.querySelector('[data-qa-build-status="insufficient-resource"]')`);
+  await waitFor(win, `document.querySelector('[data-qa-build-status]')`);
+  await settle(win);
   const insufficient=await win.webContents.executeJavaScript(`(() => {
     const status=document.querySelector('[data-qa-build-status]');
     const button=document.querySelector('[data-qa-build-button]');
@@ -399,7 +422,16 @@ async function verifyResourceZoneFlow(win, directory) {
   await reload(win);
   await activateResourceZone(win);
 
-  for(const role of ['basic-energy','gas-production-1','hangar']) await enqueueResourceBuilding(win,role);
+  for(const [index, role] of ['basic-energy','gas-production-1','hangar'].entries()) {
+    await enqueueResourceBuilding(win,role);
+    if(index===0){
+      // QA-only setup: keep the first item active while the three-slot contract
+      // is checked. Production queue timing and reconciliation stay untouched.
+      await holdActiveResourceQueue(win);
+      await reload(win);
+      await activateResourceZone(win);
+    }
+  }
   await waitFor(win, `(() => { try { const q=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}').queues?.['helion-01']; return Array.isArray(q)&&q.length===3; } catch { return false; } })()`);
   await waitFor(win, `document.querySelectorAll('[data-qa-queue-role]').length===3 && document.querySelector('[data-qa-queue-full]')`);
   await settle(win);

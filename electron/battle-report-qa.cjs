@@ -10,6 +10,7 @@ const ROOT = path.join(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'artifacts', 'battle-report-qa');
 const SAVE_KEY = 'asterion.vertical-slice.v1';
 const VIEWPORTS = [[1440, 900], [390, 844]];
+const skipScreenshots = process.env.ASTERION_SKIP_SCREENSHOTS === '1';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitFor(win, expression, timeoutMs = 8000) {
@@ -60,6 +61,7 @@ async function clickBattleSection(win) {
 }
 
 async function capture(win, directory, name) {
+  if (skipScreenshots) return;
   const image = await win.webContents.capturePage();
   fs.writeFileSync(path.join(directory, `${name}.png`), image.toPNG());
 }
@@ -654,7 +656,7 @@ app.whenReady().then(async () => {
     await win.loadFile(path.join(ROOT, 'dist', 'index.html'));
     const results = [];
     for (const [width, height] of VIEWPORTS) results.push(await runViewport(win, width, height));
-    fs.writeFileSync(path.join(OUTPUT, 'results.json'), JSON.stringify({ results }, null, 2));
+    fs.writeFileSync(path.join(OUTPUT, 'results.json'), JSON.stringify({ results, screenshotsSkipped: skipScreenshots }, null, 2));
     console.log('Battle report QA passed: list losses, accessible scrollable modal, independent space/celestial layers, real 1/5-row fleet geometry, multi-row defense anchoring, celestial modes, 100px cell contract, event analysis stability, focus trap, Escape restoration, mobile overflow, rewards and snapshot transitions.');
     win.destroy();
     app.exit(0);
