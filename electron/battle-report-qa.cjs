@@ -106,7 +106,7 @@ async function modalSnapshot(win) {
     const visual = modal?.querySelector('[data-qa-battle-visual-report]');
     const focusables = Array.from(modal?.querySelectorAll('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]:not([tabindex="-1"])') || []);
     const technologyRows = Array.from(modal?.querySelectorAll('.battle-tech-table-row-v1') || []);
-    const layoutNodes = Array.from(modal?.querySelectorAll('.battle-stack-row-v1, .battle-scene-v1, .battle-scene-space-layer-v1, .battle-scene-fleet-field-v1, .battle-scene-celestial-layer-v2, .battle-scene-celestial-object-v2, .battle-scene-zone-v1, .battle-scene-defense-zone-v1') || []);
+    const layoutNodes = Array.from(modal?.querySelectorAll('.battle-stack-row-v1, .battle-scene-v1, .battle-scene-space-layer-v1, .battle-scene-fleet-field-v1, .battle-scene-celestial-object-v2, .battle-scene-zone-v1, .battle-scene-defense-zone-v1') || []);
     const tooltipClips = Array.from(modal?.querySelectorAll('.battle-scene-stack-v1') || []).reduce((count, stack) => {
       const tooltip = stack.querySelector('.battle-scene-tooltip-v1');
       if (!tooltip || !scroll) return count;
@@ -182,7 +182,7 @@ async function measureBattleSceneGeometry(win) {
       while (zone.children.length < count) zone.appendChild(template.cloneNode(true));
     };
 
-    const targetStacksPerZone = window.innerWidth > 1100 ? 20 : window.innerWidth > 560 ? 15 : 10;
+    const targetStacksPerZone = window.innerWidth > 1100 ? 25 : window.innerWidth > 560 ? 15 : 10;
     fiveFleetZones.forEach((zone, index) => appendCopies(zone, zone.firstElementChild || firstFleetZones[index]?.firstElementChild || firstFleetZones[0]?.firstElementChild, targetStacksPerZone));
     const defenseZone = firstScene?.querySelector('.battle-scene-defense-zone-v1');
     appendCopies(defenseZone, defenseZone?.firstElementChild, 9);
@@ -246,7 +246,9 @@ async function measureBattleSceneGeometry(win) {
         defenseStackRects,
         defenseRowCount: rowTops(defenseStackRects).length,
         defenseAnchorOffset: defenseStackRects.length && celestialLayerRect
-          ? Number((celestialLayerRect.bottom - Math.max(...defenseStackRects.map((rect) => rect.bottom))).toFixed(2))
+          ? Number(((window.innerWidth <= 760
+            ? celestialLayerRect.bottom - Math.max(...defenseStackRects.map((rect) => rect.bottom))
+            : Math.min(...defenseStackRects.map((rect) => rect.top)) - celestialLayerRect.top)).toFixed(2))
           : null,
         spaceBackgroundSize: space ? getComputedStyle(space).backgroundSize : '',
         spaceBackgroundImage: space ? getComputedStyle(space).backgroundImage : '',
@@ -277,12 +279,21 @@ function inside(inner, outer, tolerance = 2) {
   return covers(outer, inner, tolerance);
 }
 
+function overlaps(left, right, tolerance = 0) {
+  return Boolean(left && right)
+    && left.left < right.right - tolerance
+    && left.right > right.left + tolerance
+    && left.top < right.bottom - tolerance
+    && left.bottom > right.top + tolerance;
+}
+
 function assertBattleSceneGeometry(samples, label) {
   const first = samples.find((sample) => sample.actualFleetRows === 1);
   const five = samples.find((sample) => sample.actualFleetRows === 5);
   const everyScenePasses = samples.length > 0 && samples.every((sample) => {
     const celestialObjectIsSquare = Boolean(sample.celestialObject && sample.celestialObject.width > 0 && sample.celestialObject.height > 0)
       && Math.abs(sample.celestialObject.width / sample.celestialObject.height - 1) < 0.02;
+    const compactViewport = Boolean(sample.scene && sample.scene.width <= 760);
     const fleetShipsStayAboveCelestial = sample.fleetStackRects.every((rect) => inside(rect, sample.fleet) && rect.bottom <= sample.celestialLayer.top + 2);
     const defenseSharesPlanetAnchor = !sample.defense
       || (inside(sample.defense, sample.celestialLayer)
@@ -292,12 +303,13 @@ function assertBattleSceneGeometry(samples, label) {
         && sample.defenseStackRects.every((rect) => inside(rect, sample.celestialLayer) && !inside(rect, sample.fleet)));
     return covers(sample.space, sample.scene)
       && inside(sample.celestialLayer, sample.scene)
-      && inside(sample.celestialObject, sample.celestialLayer)
+      && overlaps(sample.celestialObject, sample.celestialLayer)
       && celestialObjectIsSquare
-      && sample.celestialObjectAnchor?.bottom === 0
+      && sample.celestialObjectAnchor?.right === (compactViewport ? 18 : -450)
+      && sample.celestialObjectAnchor?.bottom === (compactViewport ? 0 : -700)
       && sample.celestialObjectBackgroundSize === 'contain'
       && sample.celestialObjectBackgroundImage.includes('battle-planet-transparent-v1')
-      && sample.celestialLayerOverflow === 'visible'
+      && sample.celestialLayerOverflow === 'hidden'
       && sample.celestialObjectOverflow === 'visible'
       && almostEqual(sample.fleet?.bottom, sample.celestialLayer?.top)
       && fleetShipsStayAboveCelestial
@@ -554,7 +566,7 @@ async function runViewport(win, width, height) {
   const sceneGeometry = await measureBattleSceneGeometry(win);
   assertBattleSceneGeometry(sceneGeometry, label);
   const modal = await modalSnapshot(win);
-  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.sceneCount !== 5 || modal.spaceLayerCount !== modal.sceneCount || modal.legacyLayerCount !== 0 || modal.celestialLayerCount !== modal.sceneCount || modal.celestialObjectCount !== modal.sceneCount || modal.celestialModes.some((mode) => mode !== 'planet') || modal.celestialObjectBackgroundImages.some((image) => !image.includes('battle-planet-transparent-v1')) || modal.celestialObjectBackgroundSizes.some((size) => size !== 'contain') || modal.celestialLayerOverflows.some((overflow) => overflow !== 'visible') || modal.analysisOpenCount !== 0 || modal.cellSizes.some((value) => value !== '100px') || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount !== 16 || modal.technologyTooltipCount !== 16 || modal.technologyTooltipImageCount !== 24 || modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || modal.eventCardCount < 1 || !modal.hasBattlePoints || modal.hasVisualAnchor || !modal.hasComposition || !modal.hasOutcome || !modal.outcomeBeforeVisual || !modal.internalScroll || modal.internalHorizontalOverflow || modal.layoutOverflowCount !== 0 || modal.tooltipHorizontalClips !== 0 || modal.visibleGridLineCount !== 0 || !modal.bodyLocked || !modal.stageInert) {
+  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.sceneCount !== 5 || modal.spaceLayerCount !== modal.sceneCount || modal.legacyLayerCount !== 0 || modal.celestialLayerCount !== modal.sceneCount || modal.celestialObjectCount !== modal.sceneCount || modal.celestialModes.some((mode) => mode !== 'planet') || modal.celestialObjectBackgroundImages.some((image) => !image.includes('battle-planet-transparent-v1')) || modal.celestialObjectBackgroundSizes.some((size) => size !== 'contain') || modal.celestialLayerOverflows.some((overflow) => overflow !== 'hidden') || modal.analysisOpenCount !== 0 || modal.cellSizes.some((value) => value !== '100px') || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount !== 16 || modal.technologyTooltipCount !== 16 || modal.technologyTooltipImageCount !== 24 || modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || modal.eventCardCount < 1 || !modal.hasBattlePoints || modal.hasVisualAnchor || !modal.hasComposition || !modal.hasOutcome || !modal.outcomeBeforeVisual || !modal.internalScroll || modal.internalHorizontalOverflow || modal.layoutOverflowCount !== 0 || modal.tooltipHorizontalClips !== 0 || modal.visibleGridLineCount !== 0 || !modal.bodyLocked || !modal.stageInert) {
     throw new Error(`Battle modal contract failed at ${label}: ${JSON.stringify(modal)}`);
   }
   await capture(win, directory, 'battle-report-modal');

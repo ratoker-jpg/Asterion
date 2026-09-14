@@ -516,7 +516,7 @@ function visibleRows(snapshot: BattleRoundSnapshotViewModel | null) {
   if (!snapshot) return 0;
   const regular = snapshot.stacks.filter((stack) => stack.kind !== 'commander' && (stack.countAfter ?? 0) > 0).length;
   const commanders = snapshot.stacks.filter((stack) => stack.kind === 'commander' && (stack.countAfter ?? 0) > 0).length;
-  return Math.ceil(regular / 4) + (commanders ? 1 : 0);
+  return Math.ceil(regular / 5) + (commanders ? 1 : 0);
 }
 
 function readRound(value: unknown, index: number, attackerFactionId: CombatFactionId, defenderFactionId: CombatFactionId): BattleRoundViewModel {
