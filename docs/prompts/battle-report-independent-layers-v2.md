@@ -2,6 +2,21 @@
 
 Ты работаешь в репозитории Asterion, в worktree/ветке `codex/phase8-battle-report-visual`, продолжая уже открытый draft Pull Request #65 «[Phase 8] Add battle report visual viewer». Это продолжение PR #65, а не новая feature-ветка и не новый PR: все изменения реализации вноси в текущую ветку PR #65, сохраняя его историю и пользовательские правки. Сначала изучи текущую реализацию и существующий view-model, затем внеси изменения только в рамках этой задачи. Не переписывай доменную механику боя, Simulator, Battle Points и несвязанные UI-экраны.
 
+## Фактический контекст PR #65 (проверено перед реализацией)
+
+- PR #65 открыт из `codex/phase8-battle-report-visual` в `main` и остаётся draft.
+- Удалённая head-версия PR на момент подготовки этого промпта — `98e4df0`. В локальном worktree уже есть последующие локальные коммиты `0c5d942`, `189caae`, `62a55eb`, `00b3bcf`; не делай reset и не теряй их. Реализацию новой структуры добавляй в тот же PR #65.
+- В PR уже добавлены `src/BattleReportsView.tsx`, `src/battle-reports.css`, `electron/battle-report-qa.cjs`, `src/domain/combat/battle-report-view-model.ts`, расширенные `battle-fixtures.ts` и сводка/модалка отчёта. Комбинированный asset `src/assets/battle-report/battle-bg-approved-candidate.png` — старый непрозрачный фон «космос + планета», его нужно вывести из scene renderer, но не удалять без проверки других ссылок.
+- `BattleReportDetailBody` из `src/BattleReportsView.tsx` используется в двух местах: в `BattleReportModal` (вкладка Флоты → Битвы и результат симулятора) и в `BattleDossier` из `src/ReportsView.tsx` (сообщения/доклады). Изменение визуального доклада должно сохранить оба режима.
+- `SimulatorView.tsx` уже открывает результат через `BattleReportModal` с `context="simulation"`; не возвращай inline-result, не возвращай сохранение симуляции в «Битвы» и не меняй simulator UX в этой фазе.
+- В `src/domain/combat/battle-report-view-model.ts` уже есть контракты `BattleStackViewModel`, `BattleTooltipViewModel`, `BattleEventViewModel`, `BattleRoundSnapshotViewModel`, `BattleRoundViewModel` и `BattleReportViewModel`. `readRound()` строит snapshots, `visibleRows()` вычисляет `fleetRows`, а `analysisForEvent()` уже формирует текстовые строки из событий. Используй эти данные, не дублируй расчёты в UI.
+- `EventCard()` уже реализован в `src/BattleReportsView.tsx`, но в текущем PR не подключён к `RoundAnalysis()`: сейчас раскрытие показывает только `round.analysis` в `<ul>`. Для согласованного подробного анализа нужно либо подключить `EventCard` к свёрнутой панели, либо заменить его на эквивалентный доступный список событий, сохранив все доступные поля события.
+- Фикстуры для проверки уже есть: `battle-demo-attacker-victory` (5 раундов, оборона), `battle-demo-defender-victory` (4 раунда, оборона) и `battle-demo-round-limit-draw` (5 раундов, переход `spy-probe` 6 → отсутствует в следующем snapshot). Не подменяй их одним искусственным раундом и не ломай проверку исчезновения уничтоженных стеков.
+- Текущий Electron QA в `electron/battle-report-qa.cjs` уже проверяет 3 карточки, 5 сцен, 100px cell contract, collapsed analysis, tooltips/overflow, focus trap, Escape, скролл модалки и simulator flow. Расширь его для независимых celestial-слоёв и реальных 1/5-row snapshots; не ограничивайся подменой CSS-переменных.
+- PR затрагивает `src/SimulatorView.tsx`, `src/application/combat.ts`, `src/domain/combat/battle-points.ts` и доменные тесты ради существующего demo/simulation контракта. Эти изменения сохраняй, но новая визуальная переработка не должна добавлять туда новые механики или формулы.
+
+Важно: Nemexia-подобная компоновка и терминология используются здесь как явно разрешённый визуальный референс владельца проекта. Не помечай их как запрещённые. При этом не добавляй новые Nemexia-формулы или боевую механику: используй существующие snapshot/view-model данные PR #65.
+
 ## Главная цель
 
 Переделать визуальную сцену боевого отчёта так, чтобы космический фон и планета/Солнце были двумя независимыми слоями с фиксированной геометрией:
@@ -23,6 +38,8 @@
 - `assets/source/battle-report-v2/battle-sun-transparent-v1.png` — отдельное RGBA-Солнце с полной сферой, короной и прозрачным фоном.
 
 Не использовать черновой файл `exec-21c912c3-b4f8-43dd-b55c-af93caf9ad8d.png`: в нём шахматный паттерн уже нарисован пикселями и он не является прозрачным asset. Единственный допустимый planet asset — `battle-planet-transparent-v1.png` из worktree.
+
+Если новый чат создаётся из удалённого head PR #65 и локальные коммиты ещё не видны, сначала перенеси в текущую ветку эти три PNG и MD из локального worktree; не генерируй замену и не создавай отдельный PR только ради ассетов.
 
 Проверь формат и alpha-канал перед подключением. Не перезаписывай эти файлы без явной необходимости. Если нужен fallback для старого режима «альтернативная планета», сохрани его поведение, но также отдели небесное тело от космического фона.
 
@@ -100,11 +117,14 @@
 ```text
 npm run build
 npm run test:combat
+npm run test:reports
+npm run test:repair
+npm run test:application
 npm run test:battle-reports-ui
 git diff --check
 ```
 
-Дополнительно проверь, что `SimulatorView.tsx` и `src/domain/combat/battle-points.ts` не изменялись. Существующие боевые формулы и Nemexia-совместимая логика, явно разрешённая владельцем проекта, не являются предметом этой задачи.
+Дополнительно проверь diff относительно исходного head PR #65: новая правка не должна добавлять изменения в `SimulatorView.tsx`, `src/application/combat.ts`, `src/domain/combat/battle-points.ts` и доменные формулы. Уже существующие изменения этих файлов из PR #65 сохраняй. Существующие боевые формулы и Nemexia-совместимая визуальная логика, явно разрешённая владельцем проекта, не являются предметом этой задачи.
 
 ## Ограничения по git и handoff
 
