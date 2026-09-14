@@ -491,7 +491,11 @@
 .battle-round-body-v1 { display: grid; gap: 7px; padding: 8px; border-top: 1px solid rgba(53, 180, 214, .14); }
 .battle-round-body-v1 > p { margin: 8px; color: #779aa7; font-size: 10px; }
 
+.battle-event-list-v1 { display: grid; gap: 7px; padding: 10px 13px 14px; border-top: 1px solid rgba(54, 177, 211, .13); }
 .battle-event-v1 { padding: 11px; border: 1px solid rgba(50, 159, 190, .13); background: linear-gradient(90deg, rgba(6, 43, 57, .55), rgba(3, 22, 31, .68)); }
+.battle-event-head-v1 { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.battle-event-head-v1 small { color: #6eaabd; font-size: 8px; font-weight: 800; letter-spacing: .1em; }
+.battle-event-head-v1 b { color: #55d4ef; font-size: 8px; letter-spacing: .08em; }
 .battle-event-route-v1 { display: grid; grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr); align-items: center; gap: 8px; }
 .battle-event-route-v1 > span { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .battle-event-route-v1 > span:last-child { justify-content: flex-end; text-align: right; }
@@ -790,7 +794,13 @@
 .battle-scene-v1 {
   --battle-cell: 100px;
   --battle-fleet-row-size: 164px;
+  --battle-celestial-zone-height: 560px;
+  --battle-celestial-size: 500px;
+  --battle-celestial-right: 28px;
+  --battle-celestial-bottom: 0px;
   position: relative;
+  display: flex;
+  flex-direction: column;
   max-width: 100%;
   overflow: visible;
   border-bottom: 0;
@@ -803,7 +813,7 @@
   inset: 0;
   z-index: 0;
   background-color: #020b12;
-  background-image: linear-gradient(180deg, rgba(1, 10, 18, .28), rgba(1, 10, 18, .12) 45%, rgba(1, 8, 14, .42)), var(--battle-space-image, none);
+  background-image: var(--battle-space-image, none);
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
@@ -813,6 +823,7 @@
 .battle-scene-fleet-field-v1 {
   position: relative;
   z-index: 1;
+  flex: 0 0 auto;
   min-height: calc(var(--battle-fleet-rows, 1) * var(--battle-fleet-row-size) + 96px);
   padding: 54px 28px 28px;
   overflow: visible;
@@ -888,44 +899,44 @@
 .battle-scene-stack-v1:focus-visible .battle-scene-tooltip-v1 { visibility: visible; opacity: 1; }
 .battle-scene-empty-v1 { grid-column: 1 / -1; align-self: start; padding: 18px 10px; color: #84a6b0; font-size: 10px; text-align: center; letter-spacing: .1em; }
 
-.battle-scene-planet-deck-v1 {
+.battle-scene-celestial-layer-v2 {
   position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  min-height: 360px;
-  padding: 30px 28px 34px;
+  z-index: 2;
+  flex: 0 0 var(--battle-celestial-zone-height);
+  height: var(--battle-celestial-zone-height);
+  min-height: var(--battle-celestial-zone-height);
   overflow: visible;
   background: transparent;
 }
 
-.battle-scene-planet-layer-v1 {
+.battle-scene-celestial-object-v2 {
   position: absolute;
-  inset: 0;
+  right: var(--battle-celestial-right);
+  bottom: var(--battle-celestial-bottom);
   z-index: 0;
-  overflow: hidden;
-  background: linear-gradient(180deg, rgba(2, 11, 18, .24), rgba(2, 11, 18, .04) 38%, rgba(1, 7, 12, .2));
+  width: min(var(--battle-celestial-size), calc(100% - 36px));
+  aspect-ratio: 1;
+  background-image: var(--battle-celestial-planet-image, none);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
   pointer-events: none;
 }
 
-.battle-scene-planet-art-v1 {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  background-image: var(--battle-planet-image, none);
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: 100% auto;
+.battle-scene-v1[data-qa-battle-celestial-mode="sun"] .battle-scene-celestial-object-v2 {
+  background-image: var(--battle-celestial-sun-image, none);
+}
+
+.battle-scene-v1[data-qa-battle-celestial-mode="clean-space"] .battle-scene-celestial-layer-v2 {
+  display: none;
 }
 
 .battle-scene-defense-zone-v1 {
-  position: relative;
+  position: absolute;
+  right: 28px;
+  bottom: 22px;
   z-index: 2;
   width: calc(50% - 36px);
-  margin: 0 0 0 auto;
   padding: 12px 0 14px;
   border: 0;
   background: transparent;
@@ -965,6 +976,11 @@
 }
 
 @media (max-width: 760px) {
+  .battle-scene-v1 {
+    --battle-celestial-zone-height: 620px;
+    --battle-celestial-size: 340px;
+    --battle-celestial-right: 18px;
+  }
   .battle-report-overlay-v1 { place-items: stretch; padding: 8px; }
   .battle-report-modal-v1 { max-height: calc(100dvh - 16px); }
   .battle-report-modal-head-v1 { padding: 14px 14px 13px; }
@@ -991,8 +1007,7 @@
   .battle-scene-side-label-v1.defender { right: 18px; }
   .battle-scene-fleet-grid-v1 { grid-template-columns: 1fr; gap: 24px; }
   .battle-scene-side-label-v1 { max-width: calc(50% - 30px); }
-  .battle-scene-planet-deck-v1 { min-height: 252px; padding: 24px 18px 28px; }
-  .battle-scene-defense-zone-v1 { width: 100%; }
+  .battle-scene-defense-zone-v1 { right: 18px; bottom: 18px; width: calc(100% - 36px); }
   .battle-outcome-survivors-v1 { grid-template-columns: 1fr; }
   .battle-outcome-points-v1 { grid-template-columns: 1fr; }
   .battle-outcome-metrics-v1 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1016,9 +1031,10 @@
 }
 
 @media (max-width: 380px) {
+  .battle-scene-v1 { --battle-celestial-size: 300px; }
   .battle-scene-zone-v1,
-  .battle-scene-commander-zone-v1,
-  .battle-scene-defense-zone-v1 { grid-template-columns: minmax(100px, 1fr); }
+  .battle-scene-commander-zone-v1 { grid-template-columns: minmax(100px, 1fr); }
+  .battle-scene-defense-zone-v1 { grid-template-columns: repeat(2, minmax(100px, 1fr)); }
   .battle-scene-side-label-v1 { max-width: calc(50% - 24px); }
 }
 

@@ -37,8 +37,9 @@ import {
   type BattleTechnologyViewModel,
 } from './domain/combat/battle-report-view-model.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
-import battleBackground from './assets/battle-report/battle-bg-approved-candidate.png';
-import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
+import battlePlanet from '../assets/source/battle-report-v2/battle-planet-transparent-v1.png';
+import battleSpaceBackground from '../assets/source/battle-report-v2/battle-space-background-v1.png';
+import battleSun from '../assets/source/battle-report-v2/battle-sun-transparent-v1.png';
 import criticalHitArt from '../assets/source/New assets/technologies/technology.shared.critical-hit.png';
 import heavyArmorArt from '../assets/source/New assets/technologies/technology.shared.heavy-armor.png';
 import ionScienceArt from '../assets/source/New assets/technologies/technology.shared.ion-science.png';
@@ -56,6 +57,7 @@ import './battle-reports.css';
 
 type SaveNotice = { kind: 'saved' | 'error'; message: string };
 type ScrollRef = { current: HTMLElement | null };
+type BattleCelestialMode = 'planet' | 'sun' | 'clean-space';
 
 function formatNumber(value: number | null | undefined) {
   return value == null ? BATTLE_MISSING_DATA : new Intl.NumberFormat('ru-RU').format(value);
@@ -554,8 +556,20 @@ function OptionalMetric({ label, before, after }: { label: string; before: numbe
 }
 
 function EventCard({ event }: { event: BattleEventViewModel }) {
+  const actionLabel = {
+    attack: 'АТАКА',
+    ability: 'СПОСОБНОСТЬ',
+    shield: 'ЩИТ',
+    status: 'СТАТУС',
+    destroyed: 'УНИЧТОЖЕНИЕ',
+  }[event.actionType];
+
   return (
-    <article className="battle-event-v1">
+    <article className="battle-event-v1" data-qa-battle-event={event.sequence} data-qa-battle-event-action={event.actionType}>
+      <header className="battle-event-head-v1">
+        <small>СОБЫТИЕ {formatNumber(event.sequence)}</small>
+        <b>{actionLabel}</b>
+      </header>
       <div className="battle-event-route-v1">
         <span><img src={event.actor.art} alt="" /><strong>{event.actor.name}{countSuffix(event.actorCount)}</strong></span>
         <i aria-hidden="true">→</i>
@@ -593,7 +607,11 @@ function RoundAnalysis({ round, scrollRef }: { round: BattleRoundViewModel; scro
   return (
     <details className="battle-round-analysis-v1" data-qa-battle-round-analysis={round.index} onClick={rememberScroll} onToggle={restoreScroll}>
       <summary>АНАЛИЗ РАУНДА <span>{round.events.length} СОБЫТИЙ</span></summary>
-      {round.analysis.length ? (
+      {round.events.length ? (
+        <div className="battle-event-list-v1" data-qa-battle-events={round.events.length}>
+          {round.events.map((event) => <EventCard key={`${round.index}-${event.sequence}`} event={event} />)}
+        </div>
+      ) : round.analysis.length ? (
         <ul>{round.analysis.map((line, index) => <li key={`${round.index}-${index}`}>{line}</li>)}</ul>
       ) : (
         <p>Анализ недоступен для этого demo-отчёта.</p>
@@ -669,7 +687,7 @@ function SceneSide({ stacks, side, roundIndex }: { stacks: BattleStackViewModel[
   );
 }
 
-function BattleVisualReport({ viewModel, scrollRef }: { viewModel: BattleReportViewModel; scrollRef?: ScrollRef }) {
+function BattleVisualReport({ viewModel, scrollRef, celestialMode = 'planet' }: { viewModel: BattleReportViewModel; scrollRef?: ScrollRef; celestialMode?: BattleCelestialMode }) {
   return (
     <section id={visualReportAnchorId(viewModel)} className="battle-section-v1 battle-visual-report-v1" data-qa-battle-visual-report>
       <header className="battle-section-head-v1">
@@ -688,13 +706,15 @@ function BattleVisualReport({ viewModel, scrollRef }: { viewModel: BattleReportV
                 className="battle-scene-v1"
                 data-qa-battle-scene={round.index}
                 data-qa-battle-cell-size="100px"
+                data-qa-battle-celestial-mode={celestialMode}
                 style={{
-                  '--battle-space-image': `url("${systemBackground}")`,
-                  '--battle-planet-image': `url("${battleBackground}")`,
+                  '--battle-space-image': `url("${battleSpaceBackground}")`,
+                  '--battle-celestial-planet-image': `url("${battlePlanet}")`,
+                  '--battle-celestial-sun-image': `url("${battleSun}")`,
                   '--battle-fleet-rows': round.fleetRows,
                 } as CSSProperties}
               >
-                <div className="battle-scene-space-layer-v1 battle-scene-backdrop-v1" aria-hidden="true" />
+                <div className="battle-scene-space-layer-v1" aria-hidden="true" />
                 <div className="battle-scene-fleet-field-v1">
                   <div className="battle-scene-side-label-v1 attacker"><span>АТАКУЮЩИЙ</span><strong>{participantLabel(viewModel.attacker.participant)}</strong></div>
                   <div className="battle-scene-side-label-v1 defender"><span>ЗАЩИТНИК</span><strong>{participantLabel(viewModel.defender.participant)}</strong></div>
@@ -703,12 +723,10 @@ function BattleVisualReport({ viewModel, scrollRef }: { viewModel: BattleReportV
                     <SceneSide stacks={defenderStacks} side="defender" roundIndex={round.index} />
                   </div>
                 </div>
-                <div className="battle-scene-planet-deck-v1">
-                  <div className="battle-scene-planet-layer-v1" aria-hidden="true">
-                    <div className="battle-scene-planet-art-v1" />
-                  </div>
+                <div className="battle-scene-celestial-layer-v2" data-qa-battle-celestial-layer>
+                  <div className="battle-scene-celestial-object-v2" data-qa-battle-celestial-object aria-hidden="true" />
                   {defenses.length ? (
-                    <div className="battle-scene-defense-zone-v1" aria-label="Оборона защитника">
+                    <div className="battle-scene-defense-zone-v1" data-qa-battle-defense-zone aria-label="Оборона защитника">
                       {defenses.map((stack) => <SceneStack key={stack.key} stack={stack} side="defender" roundIndex={round.index} />)}
                     </div>
                   ) : null}
@@ -867,17 +885,19 @@ export function BattleReportDetailBody({
   report,
   viewModel: providedViewModel,
   scrollRef,
+  celestialMode,
 }: {
   report: BattleReport;
   viewModel?: BattleReportViewModel;
   scrollRef?: ScrollRef;
+  celestialMode?: BattleCelestialMode;
 }) {
   const viewModel = providedViewModel ?? createBattleReportViewModel(report);
   return (
     <>
       <BattleOutcome viewModel={viewModel} />
       <PopulationPanel viewModel={viewModel} />
-      <BattleVisualReport viewModel={viewModel} scrollRef={scrollRef} />
+      <BattleVisualReport viewModel={viewModel} scrollRef={scrollRef} celestialMode={celestialMode} />
       <BattleComposition viewModel={viewModel} />
       <CommanderSnapshot viewModel={viewModel} />
     </>
@@ -893,6 +913,7 @@ export function BattleReportModal({
   onToggleSaved,
   onClose,
   context = 'battle',
+  celestialMode,
 }: {
   report: BattleReport;
   viewModel?: BattleReportViewModel;
@@ -900,6 +921,7 @@ export function BattleReportModal({
   onToggleSaved?: () => void;
   onClose: () => void;
   context?: 'battle' | 'simulation';
+  celestialMode?: BattleCelestialMode;
 }) {
   const viewModel = providedViewModel ?? createBattleReportViewModel(report);
   const modalRef = useRef<HTMLElement>(null);
@@ -971,7 +993,7 @@ export function BattleReportModal({
           </div>
         </header>
         <div ref={scrollRef} className="battle-report-modal-scroll-v1">
-          <BattleReportDetailBody report={report} viewModel={viewModel} scrollRef={scrollRef} />
+          <BattleReportDetailBody report={report} viewModel={viewModel} scrollRef={scrollRef} celestialMode={celestialMode} />
           <button type="button" className="battle-list-back-v1 battle-modal-back-v1" onClick={onClose}>{context === 'simulation' ? '← К СИМУЛЯТОРУ' : '← К СПИСКУ БИТВ'}</button>
         </div>
       </section>
