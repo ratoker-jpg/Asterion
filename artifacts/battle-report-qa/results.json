@@ -1,0 +1,270 @@
+{
+  "results": [
+    {
+      "viewport": "1440x900",
+      "list": {
+        "cardCount": 3,
+        "collapsedCardCount": 3,
+        "cardLossCount": 6,
+        "openButtonCount": 3,
+        "resultIconCount": 3,
+        "resultLabels": [
+          "ПОБЕДА",
+          "ПОРАЖЕНИЕ",
+          "НИЧЬЯ"
+        ],
+        "rootHorizontalOverflow": false,
+        "bodyHorizontalOverflow": false
+      },
+      "modal": {
+        "present": true,
+        "ariaModal": "true",
+        "labelledBy": "battle-report-modal-title-battle-demo-attacker-victory",
+        "sceneCount": 5,
+        "analysisOpenCount": 0,
+        "cellSizes": [
+          "100px",
+          "100px",
+          "100px",
+          "100px",
+          "100px"
+        ],
+        "hasOverallLosses": true,
+        "hasHeaderTable": true,
+        "headerAvatarCount": 2,
+        "technologyRowCount": 16,
+        "technologyTooltipCount": 16,
+        "technologyTooltipImageCount": 24,
+        "visibleTechnologyLevel": false,
+        "technologyRowsFocusable": true,
+        "hasBattlePoints": true,
+        "hasVisualAnchor": false,
+        "hasComposition": true,
+        "hasOutcome": true,
+        "internalScroll": true,
+        "internalHorizontalOverflow": false,
+        "layoutOverflowCount": 0,
+        "tooltipHorizontalClips": 0,
+        "bodyLocked": true,
+        "stageInert": true,
+        "focusableCount": 55
+      },
+      "focus": {
+        "wrappedToFirst": true
+      },
+      "closeState": {
+        "stageInert": false,
+        "bodyLocked": false,
+        "restoredTrigger": "battle-demo-attacker-victory"
+      },
+      "transition": {
+        "firstRoundSpyCount": "6",
+        "secondRoundSpyPresent": false,
+        "missingDataText": false,
+        "tooltipHasQuantity": false
+      },
+      "bottom": {
+        "atBottom": true,
+        "backButtonVisible": true
+      },
+      "simulator": {
+        "simulationModal": {
+          "present": true,
+          "ariaModal": "true",
+          "labelledBy": "battle-report-modal-title-simulation-mu02adqo-2",
+          "sceneCount": 8,
+          "analysisOpenCount": 0,
+          "cellSizes": [
+            "100px",
+            "100px",
+            "100px",
+            "100px",
+            "100px",
+            "100px",
+            "100px",
+            "100px"
+          ],
+          "hasOverallLosses": true,
+          "hasHeaderTable": true,
+          "headerAvatarCount": 2,
+          "technologyRowCount": 16,
+          "technologyTooltipCount": 16,
+          "technologyTooltipImageCount": 24,
+          "visibleTechnologyLevel": false,
+          "technologyRowsFocusable": true,
+          "hasBattlePoints": true,
+          "hasVisualAnchor": false,
+          "hasComposition": true,
+          "hasOutcome": true,
+          "internalScroll": true,
+          "internalHorizontalOverflow": false,
+          "layoutOverflowCount": 0,
+          "tooltipHorizontalClips": 0,
+          "bodyLocked": true,
+          "stageInert": true,
+          "focusableCount": 42
+        },
+        "simulationPresentation": {
+          "source": "simulation",
+          "hasSaveButton": false,
+          "hasGenericAttacker": true,
+          "hasGenericDefender": true,
+          "hasInlineResult": false
+        },
+        "beforeCloseState": {
+          "reportIds": [
+            "battle-demo-attacker-victory",
+            "battle-demo-defender-victory",
+            "battle-demo-round-limit-draw"
+          ],
+          "savedReportIds": []
+        },
+        "afterCloseState": {
+          "reportIds": [
+            "battle-demo-attacker-victory",
+            "battle-demo-defender-victory",
+            "battle-demo-round-limit-draw"
+          ],
+          "savedReportIds": [],
+          "hasInlineResult": false,
+          "attackerSelected": true,
+          "defenderSelected": true
+        },
+        "rerun": true
+      }
+    },
+    {
+      "viewport": "390x844",
+      "list": {
+        "cardCount": 3,
+        "collapsedCardCount": 3,
+        "cardLossCount": 6,
+        "openButtonCount": 3,
+        "resultIconCount": 3,
+        "resultLabels": [
+          "ПОБЕДА",
+          "ПОРАЖЕНИЕ",
+          "НИЧЬЯ"
+        ],
+        "rootHorizontalOverflow": false,
+        "bodyHorizontalOverflow": false
+      },
+      "modal": {
+        "present": true,
+        "ariaModal": "true",
+        "labelledBy": "battle-report-modal-title-battle-demo-attacker-victory",
+        "sceneCount": 5,
+        "analysisOpenCount": 0,
+        "cellSizes": [
+          "100px",
+          "100px",
+          "100px",
+          "100px",
+          "100px"
+        ],
+        "hasOverallLosses": true,
+        "hasHeaderTable": true,
+        "headerAvatarCount": 2,
+        "technologyRowCount": 16,
+        "technologyTooltipCount": 16,
+        "technologyTooltipImageCount": 24,
+        "visibleTechnologyLevel": false,
+        "technologyRowsFocusable": true,
+        "hasBattlePoints": true,
+        "hasVisualAnchor": false,
+        "hasComposition": true,
+        "hasOutcome": true,
+        "internalScroll": true,
+        "internalHorizontalOverflow": false,
+        "layoutOverflowCount": 0,
+        "tooltipHorizontalClips": 0,
+        "bodyLocked": true,
+        "stageInert": true,
+        "focusableCount": 55
+      },
+      "focus": {
+        "wrappedToFirst": true
+      },
+      "closeState": {
+        "stageInert": false,
+        "bodyLocked": false,
+        "restoredTrigger": "battle-demo-attacker-victory"
+      },
+      "transition": {
+        "firstRoundSpyCount": "6",
+        "secondRoundSpyPresent": false,
+        "missingDataText": false,
+        "tooltipHasQuantity": false
+      },
+      "bottom": {
+        "atBottom": true,
+        "backButtonVisible": true
+      },
+      "simulator": {
+        "simulationModal": {
+          "present": true,
+          "ariaModal": "true",
+          "labelledBy": "battle-report-modal-title-simulation-mu02aff7-2",
+          "sceneCount": 8,
+          "analysisOpenCount": 0,
+          "cellSizes": [
+            "100px",
+            "100px",
+            "100px",
+            "100px",
+            "100px",
+            "100px",
+            "100px",
+            "100px"
+          ],
+          "hasOverallLosses": true,
+          "hasHeaderTable": true,
+          "headerAvatarCount": 2,
+          "technologyRowCount": 16,
+          "technologyTooltipCount": 16,
+          "technologyTooltipImageCount": 24,
+          "visibleTechnologyLevel": false,
+          "technologyRowsFocusable": true,
+          "hasBattlePoints": true,
+          "hasVisualAnchor": false,
+          "hasComposition": true,
+          "hasOutcome": true,
+          "internalScroll": true,
+          "internalHorizontalOverflow": false,
+          "layoutOverflowCount": 0,
+          "tooltipHorizontalClips": 0,
+          "bodyLocked": true,
+          "stageInert": true,
+          "focusableCount": 42
+        },
+        "simulationPresentation": {
+          "source": "simulation",
+          "hasSaveButton": false,
+          "hasGenericAttacker": true,
+          "hasGenericDefender": true,
+          "hasInlineResult": false
+        },
+        "beforeCloseState": {
+          "reportIds": [
+            "battle-demo-attacker-victory",
+            "battle-demo-defender-victory",
+            "battle-demo-round-limit-draw"
+          ],
+          "savedReportIds": []
+        },
+        "afterCloseState": {
+          "reportIds": [
+            "battle-demo-attacker-victory",
+            "battle-demo-defender-victory",
+            "battle-demo-round-limit-draw"
+          ],
+          "savedReportIds": [],
+          "hasInlineResult": false,
+          "attackerSelected": true,
+          "defenderSelected": true
+        },
+        "rerun": true
+      }
+    }
+  ]
+}

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useState, type SetStateAction } from 'react';
 
-import { BattleReportDetailBody } from './BattleReportsView';
+import { BattleReportModal } from './BattleReportsView';
 import { COMMANDER_COMBAT_CATALOG, DEFENSE_COMBAT_CATALOG, SHIP_COMBAT_CATALOG, type CatalogEntity } from './domain/combat/catalog.ts';
 import { COMMANDER_ABILITIES, type CommanderId } from './domain/combat/commanders.ts';
 import { getFactionDefenseCatalog, getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
@@ -10,11 +10,6 @@ import {
   normalizeCombatFactionId,
   type CombatFactionId,
 } from './domain/combat/factions.ts';
-import {
-  addBattleReportSaved,
-  persistBattleHistory,
-  readBattleHistory,
-} from './domain/combat/battle-repository.ts';
 import { readCombatPriority, selectActiveCommander } from './domain/combat/priority.ts';
 import { resolveCombat } from './domain/combat/resolver.ts';
 import {
@@ -323,13 +318,15 @@ export function SimulatorView({ planetName, coords, onBack }: { planetName: stri
   const [presetName, setPresetName] = useState('');
   const [selectedPresetId, setSelectedPresetId] = useState('');
   const [result, setResult] = useState<BattleReport | null>(null);
-  const [resultSaved, setResultSaved] = useState(false);
   const [notice, setNotice] = useState('Готов к расчёту. Combat Resolver v1 не использует RNG.');
+  const closeResult = useCallback(() => {
+    setResult(null);
+    setNotice('Результат закрыт. Сценарий сохранён.');
+  }, []);
 
   const updateScenario = (next: SetStateAction<SimulatorScenario>) => {
     setScenario(next);
     setResult(null);
-    setResultSaved(false);
   };
 
   const attackerFactionId = normalizeCombatFactionId(scenario.attackerFactionId);
@@ -342,8 +339,8 @@ export function SimulatorView({ planetName, coords, onBack }: { planetName: stri
   const validationInput = useMemo(() => scenarioToCombatInput(scenario, {
     scenarioId: 'simulator-validation',
     timestamp: '2026-01-01T00:00:00.000Z',
-    attacker: { playerId: 'sim-attacker', playerName: getCombatFactionName(attackerFactionId), planetName, coordinates: coords, side: 'attacker' },
-    defender: { playerId: 'sim-defender', playerName: getCombatFactionName(defenderFactionId), planetName: 'Цель симулятора', coordinates: '[SIM]', side: 'defender' },
+    attacker: { playerId: 'sim-attacker', playerName: 'Атакующий', planetName, coordinates: coords, side: 'attacker' },
+    defender: { playerId: 'sim-defender', playerName: 'Защитник', planetName: 'Цель симулятора', coordinates: '[SIM]', side: 'defender' },
     priority: readCombatPriority(),
   }), [scenario, planetName, coords, attackerFactionId, defenderFactionId]);
   const validation = useMemo(() => validateCombatInput(validationInput), [validationInput]);
@@ -396,8 +393,8 @@ export function SimulatorView({ planetName, coords, onBack }: { planetName: stri
     const combatInput = scenarioToCombatInput(scenario, {
       scenarioId: nextIdentity('scenario'),
       timestamp,
-      attacker: { playerId: 'sim-attacker', playerName: getCombatFactionName(attackerFactionId), planetName, coordinates: coords, side: 'attacker' },
-      defender: { playerId: 'sim-defender', playerName: getCombatFactionName(defenderFactionId), planetName: 'Цель симулятора', coordinates: '[SIM]', side: 'defender' },
+      attacker: { playerId: 'sim-attacker', playerName: 'Атакующий', planetName, coordinates: coords, side: 'attacker' },
+      defender: { playerId: 'sim-defender', playerName: 'Защитник', planetName: 'Цель симулятора', coordinates: '[SIM]', side: 'defender' },
       priority: readCombatPriority(),
     });
     const checked = validateCombatInput(combatInput);
@@ -407,16 +404,7 @@ export function SimulatorView({ planetName, coords, onBack }: { planetName: stri
     }
     const report = resolveCombat(checked.value, { reportId: nextIdentity('simulation') });
     setResult(report);
-    setResultSaved(false);
     setNotice(`Расчёт завершён: ${report.roundCount} раунд(ов), результат — ${report.winner === 'draw' ? 'ничья' : report.winner === 'attacker' ? 'победа атакующего' : 'победа защитника'}.`);
-  };
-
-  const saveResultToBattles = () => {
-    if (!result) return;
-    const next = addBattleReportSaved(readBattleHistory(), result);
-    const persisted = persistBattleHistory(next);
-    setResultSaved(persisted.ok && persisted.value.savedReportIds.includes(result.id));
-    setNotice(persisted.ok ? '✓ Отчёт сохранён в Битвы' : `⚠ ${persisted.error}`);
   };
 
   const savePreset = () => {
@@ -509,12 +497,7 @@ export function SimulatorView({ planetName, coords, onBack }: { planetName: stri
         <button type="button" className="sim-run-v1" disabled={!validation.ok} onClick={runSimulation}>СИМУЛИРОВАТЬ БОЙ</button>
       </section>
 
-      {result ? (
-        <section className="sim-result-v1">
-          <header className="sim-result-head-v1"><div><small>COMBAT RESOLVER V1</small><h3>РЕЗУЛЬТАТ СИМУЛЯЦИИ</h3><span>{result.metadata?.note}</span></div><div><button type="button" disabled={resultSaved} onClick={saveResultToBattles}>{resultSaved ? '✓ СОХРАНЕНО В БИТВЫ' : 'СОХРАНИТЬ В БИТВЫ'}</button><button type="button" onClick={() => { setResult(null); setResultSaved(false); setNotice('Результат очищен. Сценарий сохранён.'); }}>ОЧИСТИТЬ РЕЗУЛЬТАТ</button></div></header>
-          <BattleReportDetailBody report={result} />
-        </section>
-      ) : null}
+      {result ? <BattleReportModal report={result} context="simulation" onClose={closeResult} /> : null}
     </section>
   );
 }

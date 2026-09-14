@@ -27,6 +27,7 @@ import {
   type SimulatorScenario,
 } from './simulator.ts';
 import { ASTERION_SAVE_KEY, createDefaultCombatPriority } from './priority.ts';
+import { createDefaultCombatTechnologies } from './technologies.ts';
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -405,23 +406,36 @@ test('simulation result is not added to Battles automatically', () => {
   assert.equal(history.reports.some((item) => item.id === report.id), false);
 });
 
-test('explicit save adds simulation to Battles and savedReportIds and survives reload', () => {
+test('simulation reports stay out of Battles even when a caller tries to save them', () => {
   const storage = new MemoryStorage();
   const report = resolve(input(), 'simulation-explicit-save');
   const saved = addBattleReportSaved(createDefaultBattleHistory(), report);
-  assert.equal(saved.reports.some((item) => item.id === report.id), true);
-  assert.equal(saved.savedReportIds.includes(report.id), true);
+  assert.equal(saved.reports.some((item) => item.id === report.id), false);
+  assert.equal(saved.savedReportIds.includes(report.id), false);
   persistBattleHistory(saved, storage);
   const reloaded = readBattleHistory(storage);
-  assert.equal(reloaded.reports.some((item) => item.id === report.id), true);
-  assert.equal(reloaded.savedReportIds.includes(report.id), true);
+  assert.equal(reloaded.reports.some((item) => item.id === report.id), false);
+  assert.equal(reloaded.savedReportIds.includes(report.id), false);
 });
 
-test('saving the same simulation report twice does not duplicate report id', () => {
+test('generated report stores the technologies used for each side as historical snapshots', () => {
+  const attackerTechnologies = { ...createDefaultCombatTechnologies(), laserScience: 12 };
+  const defenderTechnologies = { ...createDefaultCombatTechnologies(), ionScience: 11 };
+  const report = resolve(input({ attackerTechnologies, defenderTechnologies }));
+
+  assert.equal(report.attackerForce.technologies?.laserScience, 12);
+  assert.equal(report.attackerForce.technologies?.ionScience, 0);
+  assert.equal(report.defenderForce.technologies?.ionScience, 11);
+  assert.equal(report.defenderForce.technologies?.laserScience, 0);
+  assert.notEqual(report.attackerForce.technologies, report.defenderForce.technologies);
+});
+
+test('attempting to save the same simulation report twice keeps it out of Battles', () => {
   const report = resolve(input(), 'simulation-no-duplicate');
   const once = addBattleReportSaved(createDefaultBattleHistory(), report);
   const twice = addBattleReportSaved(once, report);
-  assert.equal(twice.reports.filter((item) => item.id === report.id).length, 1);
+  assert.equal(twice.reports.filter((item) => item.id === report.id).length, 0);
+  assert.equal(twice.savedReportIds.includes(report.id), false);
 });
 
 test('saving simulation does not mutate demo reports', () => {
