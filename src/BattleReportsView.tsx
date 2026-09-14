@@ -38,6 +38,7 @@ import {
 } from './domain/combat/battle-report-view-model.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 import battleBackground from './assets/battle-report/battle-bg-approved-candidate.png';
+import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import criticalHitArt from '../assets/source/New assets/technologies/technology.shared.critical-hit.png';
 import heavyArmorArt from '../assets/source/New assets/technologies/technology.shared.heavy-armor.png';
 import ionScienceArt from '../assets/source/New assets/technologies/technology.shared.ion-science.png';
@@ -688,11 +689,12 @@ function BattleVisualReport({ viewModel, scrollRef }: { viewModel: BattleReportV
                 data-qa-battle-scene={round.index}
                 data-qa-battle-cell-size="100px"
                 style={{
-                  '--battle-background-image': `url("${battleBackground}")`,
+                  '--battle-space-image': `url("${systemBackground}")`,
+                  '--battle-planet-image': `url("${battleBackground}")`,
                   '--battle-fleet-rows': round.fleetRows,
                 } as CSSProperties}
               >
-                <div className="battle-scene-backdrop-v1" aria-hidden="true" />
+                <div className="battle-scene-space-layer-v1 battle-scene-backdrop-v1" aria-hidden="true" />
                 <div className="battle-scene-fleet-field-v1">
                   <div className="battle-scene-side-label-v1 attacker"><span>АТАКУЮЩИЙ</span><strong>{participantLabel(viewModel.attacker.participant)}</strong></div>
                   <div className="battle-scene-side-label-v1 defender"><span>ЗАЩИТНИК</span><strong>{participantLabel(viewModel.defender.participant)}</strong></div>
@@ -702,6 +704,9 @@ function BattleVisualReport({ viewModel, scrollRef }: { viewModel: BattleReportV
                   </div>
                 </div>
                 <div className="battle-scene-planet-deck-v1">
+                  <div className="battle-scene-planet-layer-v1" aria-hidden="true">
+                    <div className="battle-scene-planet-art-v1" />
+                  </div>
                   {defenses.length ? (
                     <div className="battle-scene-defense-zone-v1" aria-label="Оборона защитника">
                       {defenses.map((stack) => <SceneStack key={stack.key} stack={stack} side="defender" roundIndex={round.index} />)}

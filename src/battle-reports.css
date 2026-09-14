@@ -798,14 +798,15 @@
   isolation: isolate;
 }
 
-.battle-scene-backdrop-v1 {
+.battle-scene-space-layer-v1 {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background-image: linear-gradient(180deg, rgba(1, 10, 18, .28), rgba(1, 10, 18, .12) 45%, rgba(1, 8, 14, .42)), var(--battle-background-image, none);
-  background-position: center top;
+  background-color: #020b12;
+  background-image: linear-gradient(180deg, rgba(1, 10, 18, .28), rgba(1, 10, 18, .12) 45%, rgba(1, 8, 14, .42)), var(--battle-space-image, none);
+  background-position: center;
   background-repeat: no-repeat;
-  background-size: 100% auto;
+  background-size: cover;
   pointer-events: none;
 }
 
@@ -890,17 +891,41 @@
 .battle-scene-planet-deck-v1 {
   position: relative;
   z-index: 1;
-  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 360px;
   padding: 30px 28px 34px;
   overflow: visible;
   background: transparent;
+}
+
+.battle-scene-planet-layer-v1 {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(2, 11, 18, .24), rgba(2, 11, 18, .04) 38%, rgba(1, 7, 12, .2));
+  pointer-events: none;
+}
+
+.battle-scene-planet-art-v1 {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background-image: var(--battle-planet-image, none);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% auto;
 }
 
 .battle-scene-defense-zone-v1 {
   position: relative;
   z-index: 2;
   width: calc(50% - 36px);
-  margin: clamp(128px, 12vw, 168px) 0 0 auto;
+  margin: 0 0 0 auto;
   padding: 12px 0 14px;
   border: 0;
   background: transparent;
@@ -940,7 +965,6 @@
 }
 
 @media (max-width: 760px) {
-  .battle-scene-backdrop-v1 { background-size: cover; }
   .battle-report-overlay-v1 { place-items: stretch; padding: 8px; }
   .battle-report-modal-v1 { max-height: calc(100dvh - 16px); }
   .battle-report-modal-head-v1 { padding: 14px 14px 13px; }
@@ -968,7 +992,7 @@
   .battle-scene-fleet-grid-v1 { grid-template-columns: 1fr; gap: 24px; }
   .battle-scene-side-label-v1 { max-width: calc(50% - 30px); }
   .battle-scene-planet-deck-v1 { min-height: 252px; padding: 24px 18px 28px; }
-  .battle-scene-defense-zone-v1 { width: 100%; margin: 96px 0 0; }
+  .battle-scene-defense-zone-v1 { width: 100%; }
   .battle-outcome-survivors-v1 { grid-template-columns: 1fr; }
   .battle-outcome-points-v1 { grid-template-columns: 1fr; }
   .battle-outcome-metrics-v1 { grid-template-columns: repeat(2, minmax(0, 1fr)); }

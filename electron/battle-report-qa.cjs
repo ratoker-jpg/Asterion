@@ -98,12 +98,15 @@ async function modalSnapshot(win) {
     const modal = document.querySelector('[role="dialog"][data-qa-battle-report-modal]');
     const scroll = modal?.querySelector('.battle-report-modal-scroll-v1');
     const scenes = Array.from(modal?.querySelectorAll('[data-qa-battle-scene]') || []);
+    const spaceLayers = Array.from(modal?.querySelectorAll('.battle-scene-space-layer-v1') || []);
     const backdrops = Array.from(modal?.querySelectorAll('.battle-scene-backdrop-v1') || []);
+    const planetLayers = Array.from(modal?.querySelectorAll('.battle-scene-planet-layer-v1') || []);
+    const planetArts = Array.from(modal?.querySelectorAll('.battle-scene-planet-art-v1') || []);
     const outcome = modal?.querySelector('[data-qa-battle-outcome]');
     const visual = modal?.querySelector('[data-qa-battle-visual-report]');
     const focusables = Array.from(modal?.querySelectorAll('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]:not([tabindex="-1"])') || []);
     const technologyRows = Array.from(modal?.querySelectorAll('.battle-tech-table-row-v1') || []);
-    const layoutNodes = Array.from(modal?.querySelectorAll('.battle-stack-row-v1, .battle-scene-v1, .battle-scene-fleet-field-v1, .battle-scene-planet-deck-v1, .battle-scene-zone-v1, .battle-scene-defense-zone-v1') || []);
+    const layoutNodes = Array.from(modal?.querySelectorAll('.battle-stack-row-v1, .battle-scene-v1, .battle-scene-space-layer-v1, .battle-scene-fleet-field-v1, .battle-scene-planet-deck-v1, .battle-scene-planet-layer-v1, .battle-scene-planet-art-v1, .battle-scene-zone-v1, .battle-scene-defense-zone-v1') || []);
     const tooltipClips = Array.from(modal?.querySelectorAll('.battle-scene-stack-v1') || []).reduce((count, stack) => {
       const tooltip = stack.querySelector('.battle-scene-tooltip-v1');
       if (!tooltip || !scroll) return count;
@@ -122,8 +125,11 @@ async function modalSnapshot(win) {
       ariaModal: modal?.getAttribute('aria-modal') || '',
       labelledBy: modal?.getAttribute('aria-labelledby') || '',
       sceneCount: scenes.length,
+      spaceLayerCount: spaceLayers.length,
       backdropCount: backdrops.length,
       backdropBackgroundSizes: backdrops.map((node) => getComputedStyle(node).backgroundSize),
+      planetLayerCount: planetLayers.length,
+      planetArtCount: planetArts.length,
       analysisOpenCount: modal?.querySelectorAll('[data-qa-battle-round-analysis][open]').length || 0,
       cellSizes: scenes.map((scene) => scene.getAttribute('data-qa-battle-cell-size') || ''),
       hasOverallLosses: Boolean(modal?.querySelector('[data-qa-battle-summary]')),
@@ -148,6 +154,130 @@ async function modalSnapshot(win) {
       focusableCount: focusables.length,
     };
   })()`);
+}
+
+async function measureBattleSceneGeometry(win) {
+  return win.webContents.executeJavaScript(`(() => {
+    const modal = document.querySelector('[role="dialog"][data-qa-battle-report-modal]');
+    const scenes = Array.from(modal?.querySelectorAll('[data-qa-battle-scene]') || []);
+    const firstScene = scenes.find((scene) => scene.getAttribute('data-qa-battle-scene') === '1') || scenes[0];
+    const fiveRowScene = scenes.find((scene) => scene.getAttribute('data-qa-battle-scene') === '5') || scenes[scenes.length - 1];
+    firstScene?.style.setProperty('--battle-fleet-rows', '1');
+    fiveRowScene?.style.setProperty('--battle-fleet-rows', '5');
+
+    const defenseZone = firstScene?.querySelector('.battle-scene-defense-zone-v1');
+    const defenseTemplate = defenseZone?.firstElementChild;
+    if (defenseZone && defenseTemplate) {
+      while (defenseZone.children.length < 9) defenseZone.appendChild(defenseTemplate.cloneNode(true));
+    }
+
+    const readRect = (node) => {
+      if (!node) return null;
+      const rect = node.getBoundingClientRect();
+      return {
+        top: Number(rect.top.toFixed(2)),
+        right: Number(rect.right.toFixed(2)),
+        bottom: Number(rect.bottom.toFixed(2)),
+        left: Number(rect.left.toFixed(2)),
+        width: Number(rect.width.toFixed(2)),
+        height: Number(rect.height.toFixed(2)),
+      };
+    };
+    const rowTops = (rects) => rects.reduce((rows, rect) => {
+      if (!rows.some((top) => Math.abs(top - rect.top) < 2)) rows.push(rect.top);
+      return rows;
+    }, []);
+
+    return scenes.map((scene) => {
+      const space = scene.querySelector('.battle-scene-space-layer-v1');
+      const fleet = scene.querySelector('.battle-scene-fleet-field-v1');
+      const planetDeck = scene.querySelector('.battle-scene-planet-deck-v1');
+      const planetLayer = scene.querySelector('.battle-scene-planet-layer-v1');
+      const planetArt = scene.querySelector('.battle-scene-planet-art-v1');
+      const defense = scene.querySelector('.battle-scene-defense-zone-v1');
+      const fleetStackRects = Array.from(fleet?.querySelectorAll('.battle-scene-stack-v1') || []).map(readRect);
+      const defenseStackRects = Array.from(defense?.querySelectorAll('.battle-scene-stack-v1') || []).map(readRect);
+      const sceneRect = readRect(scene);
+      const planetDeckRect = readRect(planetDeck);
+      const planetArtRect = readRect(planetArt);
+      const planetLayerRect = readRect(planetLayer);
+      const visiblePlanetTop = Math.max(planetLayerRect?.top ?? 0, planetArtRect?.top ?? 0);
+      const visiblePlanetBottom = Math.min(planetLayerRect?.bottom ?? 0, planetArtRect?.bottom ?? 0);
+      return {
+        index: scene.getAttribute('data-qa-battle-scene') || '',
+        requestedFleetRows: Number.parseInt(getComputedStyle(scene).getPropertyValue('--battle-fleet-rows').trim(), 10) || 0,
+        scene: sceneRect,
+        space: readRect(space),
+        fleet: readRect(fleet),
+        planetDeck: readRect(planetDeck),
+        planetLayer: planetLayerRect,
+        planetArt: planetArtRect,
+        planetVisibleHeight: Number(Math.max(0, visiblePlanetBottom - visiblePlanetTop).toFixed(2)),
+        defense: readRect(defense),
+        fleetStackRects,
+        defenseStackRects,
+        defenseRowCount: rowTops(defenseStackRects).length,
+        defenseAnchorOffset: defenseStackRects.length && planetDeckRect
+          ? Number((planetDeckRect.bottom - Math.max(...defenseStackRects.map((rect) => rect.bottom))).toFixed(2))
+          : null,
+        spaceBackgroundSize: space ? getComputedStyle(space).backgroundSize : '',
+        spaceBackgroundImage: space ? getComputedStyle(space).backgroundImage : '',
+      };
+    });
+  })()`);
+}
+
+function almostEqual(left, right, tolerance = 2) {
+  return Number.isFinite(left) && Number.isFinite(right) && Math.abs(left - right) <= tolerance;
+}
+
+function covers(outer, inner, tolerance = 2) {
+  return Boolean(outer && inner)
+    && outer.top <= inner.top + tolerance
+    && outer.left <= inner.left + tolerance
+    && outer.right >= inner.right - tolerance
+    && outer.bottom >= inner.bottom - tolerance;
+}
+
+function inside(inner, outer, tolerance = 2) {
+  return covers(outer, inner, tolerance);
+}
+
+function assertBattleSceneGeometry(samples, label) {
+  const first = samples.find((sample) => sample.requestedFleetRows === 1);
+  const five = samples.find((sample) => sample.requestedFleetRows === 5);
+  const everyScenePasses = samples.length > 0 && samples.every((sample) => {
+    const planetAspectPasses = Boolean(sample.planetArt && sample.planetArt.height > 0)
+      && Math.abs(sample.planetArt.width / sample.planetArt.height - (4 / 3)) < 0.02;
+    const fleetShipsStayAbovePlanet = sample.fleetStackRects.every((rect) => inside(rect, sample.fleet) && rect.bottom <= sample.planetDeck.top + 2);
+    const defenseSharesPlanetAnchor = !sample.defense
+      || (inside(sample.defense, sample.planetDeck)
+        && sample.defenseAnchorOffset != null
+        && sample.defenseAnchorOffset >= 0
+        && sample.defenseAnchorOffset < 80
+        && sample.defenseStackRects.every((rect) => inside(rect, sample.planetDeck)));
+    return covers(sample.space, sample.scene)
+      && inside(sample.planetLayer, sample.planetDeck)
+      && almostEqual(sample.planetLayer?.top, sample.planetDeck?.top)
+      && almostEqual(sample.planetLayer?.right, sample.planetDeck?.right)
+      && almostEqual(sample.planetLayer?.bottom, sample.planetDeck?.bottom)
+      && almostEqual(sample.planetLayer?.left, sample.planetDeck?.left)
+      && almostEqual(sample.planetArt?.bottom, sample.planetLayer?.bottom)
+      && planetAspectPasses
+      && sample.planetVisibleHeight > 2
+      && almostEqual(sample.fleet?.bottom, sample.planetDeck?.top)
+      && fleetShipsStayAbovePlanet
+      && defenseSharesPlanetAnchor
+      && sample.spaceBackgroundSize.split(',').every((size) => size.trim() === 'cover')
+      && sample.spaceBackgroundImage !== 'none';
+  });
+  const fleetRowsGrow = Boolean(first && five && five.fleet && first.fleet)
+    && five.fleet.height > first.fleet.height + 100;
+  const multipleDefenseRows = Boolean(first && first.defenseRowCount >= 3);
+  if (!first || !five || !everyScenePasses || !fleetRowsGrow || !multipleDefenseRows) {
+    throw new Error(`Battle scene layer geometry contract failed at ${label}: ${JSON.stringify({ samples, first, five, everyScenePasses, fleetRowsGrow, multipleDefenseRows })}`);
+  }
+  return { samples, fleetRowsGrow, multipleDefenseRows };
 }
 
 async function exerciseFocusTrapAndEscape(win) {
@@ -298,8 +428,10 @@ async function runViewport(win, width, height) {
   }
 
   await openBattle(win, 'battle-demo-attacker-victory');
+  const sceneGeometry = await measureBattleSceneGeometry(win);
+  assertBattleSceneGeometry(sceneGeometry, label);
   const modal = await modalSnapshot(win);
-  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.sceneCount !== 5 || modal.backdropCount !== modal.sceneCount || modal.backdropBackgroundSizes.some((value) => value.split(',').some((size) => !['100% auto', 'cover'].includes(size.trim()))) || modal.analysisOpenCount !== 0 || modal.cellSizes.some((value) => value !== '100px') || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount !== 16 || modal.technologyTooltipCount !== 16 || modal.technologyTooltipImageCount !== 24 || modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || !modal.hasBattlePoints || modal.hasVisualAnchor || !modal.hasComposition || !modal.hasOutcome || !modal.outcomeBeforeVisual || !modal.internalScroll || modal.internalHorizontalOverflow || modal.layoutOverflowCount !== 0 || modal.tooltipHorizontalClips !== 0 || !modal.bodyLocked || !modal.stageInert) {
+  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.sceneCount !== 5 || modal.spaceLayerCount !== modal.sceneCount || modal.backdropCount !== modal.sceneCount || modal.planetLayerCount !== modal.sceneCount || modal.planetArtCount !== modal.sceneCount || modal.backdropBackgroundSizes.some((value) => value.split(',').some((size) => !['cover'].includes(size.trim()))) || modal.analysisOpenCount !== 0 || modal.cellSizes.some((value) => value !== '100px') || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount !== 16 || modal.technologyTooltipCount !== 16 || modal.technologyTooltipImageCount !== 24 || modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || !modal.hasBattlePoints || modal.hasVisualAnchor || !modal.hasComposition || !modal.hasOutcome || !modal.outcomeBeforeVisual || !modal.internalScroll || modal.internalHorizontalOverflow || modal.layoutOverflowCount !== 0 || modal.tooltipHorizontalClips !== 0 || !modal.bodyLocked || !modal.stageInert) {
     throw new Error(`Battle modal contract failed at ${label}: ${JSON.stringify(modal)}`);
   }
   await capture(win, directory, 'battle-report-modal');
@@ -383,7 +515,7 @@ app.whenReady().then(async () => {
     const results = [];
     for (const [width, height] of VIEWPORTS) results.push(await runViewport(win, width, height));
     fs.writeFileSync(path.join(OUTPUT, 'results.json'), JSON.stringify({ results }, null, 2));
-    console.log('Battle report QA passed: list losses, accessible scrollable modal, static all-round scenes, 100px cell contract, focus trap, Escape restoration, mobile overflow, rewards and snapshot transitions.');
+    console.log('Battle report QA passed: list losses, accessible scrollable modal, layered 1/5-row scene geometry, multi-row defense anchoring, 100px cell contract, focus trap, Escape restoration, mobile overflow, rewards and snapshot transitions.');
     win.destroy();
     app.exit(0);
   } catch (error) {
