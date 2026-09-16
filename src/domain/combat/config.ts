@@ -12,7 +12,6 @@ export const SIMULATOR_POPULATION_LIMITS = Object.freeze({
 export const SIMULATOR_MAX_ROUNDS = [5, 8, 12] as const;
 export type CombatMaxRounds = (typeof SIMULATOR_MAX_ROUNDS)[number];
 
-export const MAX_COMMANDERS_PER_SIDE = 1;
 export const PLANET_HANGAR_CAPACITY = 25_112;
 
 export const COMBAT_ENTITY_LEVEL_LIMITS = Object.freeze({

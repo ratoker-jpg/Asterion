@@ -1,4 +1,5 @@
 import { COMBAT_ENTITY_BY_ID, getCombatEntity } from './catalog.ts';
+import { isCommanderId, type CommanderId } from './commanders.ts';
 import { normalizeCombatFactionId } from './factions.ts';
 import type { CombatEntityId } from './ids.ts';
 import { ASTERION_SAVE_KEY, COMBAT_SAVE_SCHEMA_VERSION } from './priority.ts';
@@ -83,6 +84,25 @@ function normalizeStacks(value: unknown, kind: CombatEntityKind): CombatStackInp
   return [...counts.entries()].map(([entityId, value]) => ({ entityId, count: value.count, level: value.level }));
 }
 
+function readCommander(value: unknown) {
+  return normalizeStacks(value == null ? [] : [value], 'commander')[0] ?? null;
+}
+
+function readCommanderSelection(value: unknown, commanders: readonly CombatStackInput[], fallback?: CombatStackInput | null): CommanderId | null {
+  const selected = commanders.filter((stack) => stack.count > 0 && isCommanderId(stack.entityId));
+  if (typeof value === 'string' && isCommanderId(value) && selected.some((stack) => stack.entityId === value)) return value;
+  if (selected.length === 1) return selected[0]!.entityId as CommanderId;
+  if (fallback && selected.some((stack) => stack.entityId === fallback.entityId)) return fallback.entityId as CommanderId;
+  return null;
+}
+
+function readCommanderStacks(side: { commanders?: unknown; commander?: unknown } | undefined) {
+  const commanders = normalizeStacks(side?.commanders, 'commander');
+  if (commanders.length) return commanders;
+  const legacyCommander = readCommander(side?.commander);
+  return legacyCommander ? [legacyCommander] : [];
+}
+
 export function normalizeSimulatorScenario(value: unknown): SimulatorScenario {
   if (!value || typeof value !== 'object') return createEmptySimulatorScenario();
   const candidate = value as {
@@ -95,19 +115,17 @@ export function normalizeSimulatorScenario(value: unknown): SimulatorScenario {
     attackerTargetPriority?: unknown;
     defenderTargetPriority?: unknown;
     seed?: unknown;
-    attacker?: { ships?: unknown; commanders?: unknown };
-    defender?: { ships?: unknown; commanders?: unknown; defenses?: unknown };
+    attacker?: { factionId?: unknown; ships?: unknown; commanders?: unknown; commander?: unknown; activeCommanderId?: unknown };
+    defender?: { factionId?: unknown; ships?: unknown; commanders?: unknown; commander?: unknown; activeCommanderId?: unknown; defenses?: unknown };
     maxRounds?: unknown;
   };
 
-  const attackerCommanders = normalizeStacks(candidate.attacker?.commanders, 'commander');
-  const defenderCommanders = normalizeStacks(candidate.defender?.commanders, 'commander');
-  const attackerCommanderProvided = candidate.attacker && Object.prototype.hasOwnProperty.call(candidate.attacker, 'commander');
-  const defenderCommanderProvided = candidate.defender && Object.prototype.hasOwnProperty.call(candidate.defender, 'commander');
-  const readCommander = (value: unknown) => {
-    const normalized = normalizeStacks(value == null ? [] : [value], 'commander');
-    return normalized[0] ?? null;
-  };
+  const attackerCommanders = readCommanderStacks(candidate.attacker);
+  const defenderCommanders = readCommanderStacks(candidate.defender);
+  const attackerLegacyCommander = readCommander(candidate.attacker?.commander);
+  const defenderLegacyCommander = readCommander(candidate.defender?.commander);
+  const attackerActiveCommanderId = readCommanderSelection(candidate.attacker?.activeCommanderId, attackerCommanders, attackerLegacyCommander);
+  const defenderActiveCommanderId = readCommanderSelection(candidate.defender?.activeCommanderId, defenderCommanders, defenderLegacyCommander);
 
   return {
     attackerFactionId: normalizeCombatFactionId(candidate.attackerFactionId),
@@ -115,7 +133,7 @@ export function normalizeSimulatorScenario(value: unknown): SimulatorScenario {
     attackerTechnologies: normalizeCombatTechnologies(candidate.attackerTechnologies),
     defenderTechnologies: normalizeCombatTechnologies(candidate.defenderTechnologies),
     technologyMode: candidate.technologyMode === 'shared' ? 'shared' : 'independent',
-    executionMode: candidate.executionMode === 'production' ? 'production' : 'calibration',
+    executionMode: candidate.executionMode === 'calibration' ? 'calibration' : 'production',
     attackerTargetPriority: candidate.attackerTargetPriority === 'population' || candidate.attackerTargetPriority === 'catalog'
       ? candidate.attackerTargetPriority
       : DEFAULT_COMBAT_TARGET_PRIORITY,
@@ -124,14 +142,22 @@ export function normalizeSimulatorScenario(value: unknown): SimulatorScenario {
       : DEFAULT_COMBAT_TARGET_PRIORITY,
     ...(typeof candidate.seed === 'string' && candidate.seed.trim() ? { seed: candidate.seed.trim() } : {}),
     attacker: {
+      factionId: normalizeCombatFactionId(candidate.attacker?.factionId ?? candidate.attackerFactionId),
       ships: normalizeStacks(candidate.attacker?.ships, 'ship'),
       commanders: attackerCommanders,
-      ...(attackerCommanderProvided ? { commander: readCommander((candidate.attacker as { commander?: unknown }).commander) } : {}),
+      commander: attackerActiveCommanderId
+        ? attackerCommanders.find((stack) => stack.entityId === attackerActiveCommanderId) ?? null
+        : null,
+      activeCommanderId: attackerActiveCommanderId,
     },
     defender: {
+      factionId: normalizeCombatFactionId(candidate.defender?.factionId ?? candidate.defenderFactionId),
       ships: normalizeStacks(candidate.defender?.ships, 'ship'),
       commanders: defenderCommanders,
-      ...(defenderCommanderProvided ? { commander: readCommander((candidate.defender as { commander?: unknown }).commander) } : {}),
+      commander: defenderActiveCommanderId
+        ? defenderCommanders.find((stack) => stack.entityId === defenderActiveCommanderId) ?? null
+        : null,
+      activeCommanderId: defenderActiveCommanderId,
       defenses: normalizeStacks(candidate.defender?.defenses, 'defense'),
     },
     maxRounds: isMaxRounds(candidate.maxRounds) ? candidate.maxRounds : 8,

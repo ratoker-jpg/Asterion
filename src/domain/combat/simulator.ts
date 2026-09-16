@@ -1,10 +1,9 @@
 import { COMBAT_ENTITY_BY_ID, getCombatEntity } from './catalog.ts';
-import type { CommanderId } from './commanders.ts';
+import { isCommanderId, type CommanderId } from './commanders.ts';
 import {
   COMBAT_PROFILE_ID,
   COMBAT_ENTITY_LEVEL_LIMITS,
   DEFAULT_COMBAT_TARGET_PRIORITY,
-  MAX_COMMANDERS_PER_SIDE,
   SIMULATOR_MAX_ROUNDS as PROFILE_MAX_ROUNDS,
   SIMULATOR_POPULATION_LIMITS,
   type CombatExecutionMode,
@@ -13,9 +12,11 @@ import {
 } from './config.ts';
 import {
   DEFAULT_COMBAT_FACTION_ID,
+  getCombatFactionId,
   getCombatFactionName,
   type CombatFactionId,
 } from './factions.ts';
+import { getFactionCombatEntity } from './faction-catalog.ts';
 import type { CombatEntityId } from './ids.ts';
 import type { CombatPriorityState } from './priority.ts';
 import type { BattleParticipant } from './report.ts';
@@ -38,11 +39,14 @@ export type CombatStackInput = {
 
 export type CombatSideInput = {
   participant: BattleParticipant;
+  factionId?: CombatFactionId;
   ships: CombatStackInput[];
   /** Canonical commander field. It is nullable because a side may have none. */
   commander?: CombatStackInput | null;
   /** @deprecated Kept as a migration adapter for pre-v2 simulator inputs. */
   commanders?: CombatStackInput[];
+  /** Explicit simulator selection. If absent, the first selected commander is used. */
+  activeCommanderId?: CommanderId | null;
   defenses?: CombatStackInput[];
 };
 
@@ -76,14 +80,18 @@ export type SimulatorScenario = {
   seed?: string;
   profileId?: string;
   attacker: {
+    factionId?: CombatFactionId;
     ships: CombatStackInput[];
     commanders: CombatStackInput[];
     commander?: CombatStackInput | null;
+    activeCommanderId?: CommanderId | null;
   };
   defender: {
+    factionId?: CombatFactionId;
     ships: CombatStackInput[];
     commanders: CombatStackInput[];
     commander?: CombatStackInput | null;
+    activeCommanderId?: CommanderId | null;
     defenses: CombatStackInput[];
   };
   maxRounds: SimulatorMaxRounds;
@@ -101,7 +109,8 @@ export type CombatValidationCode =
   | 'participant-side'
   | 'invalid-level'
   | 'level-overflow'
-  | 'commander-limit'
+  | 'entity-limit'
+  | 'invalid-commander-selection'
   | 'invalid-technology-mode'
   | 'invalid-target-priority'
   | 'exclusive-technology'
@@ -126,7 +135,7 @@ export function createEmptySimulatorScenario(): SimulatorScenario {
     attackerTechnologies: createDefaultCombatTechnologies(),
     defenderTechnologies: createDefaultCombatTechnologies(),
     technologyMode: 'independent',
-    executionMode: 'calibration',
+    executionMode: 'production',
     attackerTargetPriority: DEFAULT_COMBAT_TARGET_PRIORITY,
     defenderTargetPriority: DEFAULT_COMBAT_TARGET_PRIORITY,
     attacker: { ships: [], commanders: [], commander: null },
@@ -188,6 +197,7 @@ function normalizeEntityLevel(entityId: CombatEntityId, value: unknown) {
 }
 
 export function getSideCommanders(side: Pick<CombatSideInput, 'commander' | 'commanders'>): CombatStackInput[] {
+  if (side.commanders?.length) return side.commanders.map((stack) => ({ ...stack }));
   if (side.commander !== undefined) return side.commander ? [{ ...side.commander }] : [];
   return [...(side.commanders ?? [])];
 }
@@ -202,12 +212,14 @@ export function normalizeCombatInput(input: CombatInput): CombatInput {
     ...input,
     attacker: {
       ...input.attacker,
+      factionId: getCombatFactionId(input.attacker.factionId ?? input.attacker.participant.race),
       ships: normalizeStacks(input.attacker.ships),
       ...normalizeSideCommanders(input.attacker),
       defenses: normalizeStacks(input.attacker.defenses),
     },
     defender: {
       ...input.defender,
+      factionId: getCombatFactionId(input.defender.factionId ?? input.defender.participant.race),
       ships: normalizeStacks(input.defender.ships),
       ...normalizeSideCommanders(input.defender),
       defenses: normalizeStacks(input.defender.defenses),
@@ -231,24 +243,20 @@ export function normalizeCombatInput(input: CombatInput): CombatInput {
   };
 }
 
-export function calculateStacksPopulation(stacks: readonly CombatStackInput[]) {
+export function calculateStacksPopulation(stacks: readonly CombatStackInput[], factionId: CombatFactionId = DEFAULT_COMBAT_FACTION_ID) {
   return stacks.reduce((total, stack) => {
     if (!COMBAT_ENTITY_BY_ID.has(stack.entityId)) return total;
-    return total + stack.count * getCombatEntity(stack.entityId).population;
+    return total + stack.count * getFactionCombatEntity(factionId, stack.entityId).population;
   }, 0);
 }
 
 export function calculateScenarioPopulation(scenario: SimulatorScenario) {
-  const attackerCommanders = scenario.attacker.commander !== undefined
-    ? (scenario.attacker.commander ? [scenario.attacker.commander] : [])
-    : scenario.attacker.commanders;
-  const defenderCommanders = scenario.defender.commander !== undefined
-    ? (scenario.defender.commander ? [scenario.defender.commander] : [])
-    : scenario.defender.commanders;
+  const attackerCommanders = getSideCommanders(scenario.attacker);
+  const defenderCommanders = getSideCommanders(scenario.defender);
   return {
-    attackerFleet: calculateStacksPopulation([...scenario.attacker.ships, ...attackerCommanders]),
-    defenderFleet: calculateStacksPopulation([...scenario.defender.ships, ...defenderCommanders]),
-    defenderDefense: calculateStacksPopulation(scenario.defender.defenses),
+    attackerFleet: calculateStacksPopulation([...scenario.attacker.ships, ...attackerCommanders], getCombatFactionId(scenario.attackerFactionId)),
+    defenderFleet: calculateStacksPopulation([...scenario.defender.ships, ...defenderCommanders], getCombatFactionId(scenario.defenderFactionId)),
+    defenderDefense: calculateStacksPopulation(scenario.defender.defenses, getCombatFactionId(scenario.defenderFactionId)),
   };
 }
 
@@ -313,6 +321,15 @@ function validateStackCollection(
         message: `${entity.name}: максимальный уровень для ${entity.kind} — ${maxLevel}.`,
       });
     }
+
+    const uniqueLimit = entity.maxOwned ?? (expectedKind === 'defense' && (entity.id === 'tower-shield' || entity.id === 'planetary-shield') ? 1 : undefined);
+    if (uniqueLimit !== undefined && stack.count > uniqueLimit) {
+      errors.push({
+        code: 'entity-limit',
+        path: `${stackPath}.count`,
+        message: `${entity.name}: можно выбрать не больше ${uniqueLimit} экземпляра.`,
+      });
+    }
   });
 }
 
@@ -328,19 +345,15 @@ export function validateCombatInput(input: CombatInput): CombatValidationResult 
   validateStackCollection(defenderCommanders, 'commander', 'defender.commander', errors);
   validateStackCollection(input.defender.defenses, 'defense', 'defender.defenses', errors);
 
-  if (attackerCommanders.reduce((total, stack) => total + Math.max(0, stack.count), 0) > MAX_COMMANDERS_PER_SIDE) {
-    errors.push({
-      code: 'commander-limit',
-      path: 'attacker.commander',
-      message: `У атакующего допускается не более ${MAX_COMMANDERS_PER_SIDE} командирского корабля.`,
-    });
-  }
-  if (defenderCommanders.reduce((total, stack) => total + Math.max(0, stack.count), 0) > MAX_COMMANDERS_PER_SIDE) {
-    errors.push({
-      code: 'commander-limit',
-      path: 'defender.commander',
-      message: `У защитника допускается не более ${MAX_COMMANDERS_PER_SIDE} командирского корабля.`,
-    });
+  for (const [side, commanders] of [['attacker', attackerCommanders] as const, ['defender', defenderCommanders] as const]) {
+    const activeCommanderId = input[side].activeCommanderId;
+    if (activeCommanderId !== undefined && activeCommanderId !== null && (!isCommanderId(activeCommanderId) || !commanders.some((stack) => stack.entityId === activeCommanderId && stack.count > 0))) {
+      errors.push({
+        code: 'invalid-commander-selection',
+        path: `${side}.activeCommanderId`,
+        message: 'Ведущим можно выбрать только выбранный командирский корабль.',
+      });
+    }
   }
 
   if ((input.attacker.defenses ?? []).length > 0) {
@@ -408,9 +421,9 @@ export function validateCombatInput(input: CombatInput): CombatValidationResult 
     errors.push({ code: 'empty-side', path: 'defender', message: 'Для запуска у защитника должна быть хотя бы одна единица.' });
   }
 
-  const attackerPopulation = calculateStacksPopulation([...normalized.attacker.ships, ...getSideCommanders(normalized.attacker)]);
-  const defenderFleetPopulation = calculateStacksPopulation([...normalized.defender.ships, ...getSideCommanders(normalized.defender)]);
-  const defenderDefensePopulation = calculateStacksPopulation(normalized.defender.defenses ?? []);
+  const attackerPopulation = calculateStacksPopulation([...normalized.attacker.ships, ...getSideCommanders(normalized.attacker)], normalized.attacker.factionId);
+  const defenderFleetPopulation = calculateStacksPopulation([...normalized.defender.ships, ...getSideCommanders(normalized.defender)], normalized.defender.factionId);
+  const defenderDefensePopulation = calculateStacksPopulation(normalized.defender.defenses ?? [], normalized.defender.factionId);
 
   if (attackerPopulation > SIMULATOR_POPULATION_LIMITS.attackerFleet) {
     errors.push({
@@ -456,11 +469,10 @@ export function scenarioToCombatInput(
         side: 'attacker',
         race: getCombatFactionName(scenario.attackerFactionId),
       },
+      factionId: getCombatFactionId(scenario.attackerFactionId),
       ships: scenario.attacker.ships.map((stack) => ({ ...stack })),
-      commanders: scenario.attacker.commanders.map((stack) => ({ ...stack })),
-      ...(scenario.attacker.commander !== undefined
-        ? { commander: scenario.attacker.commander ? { ...scenario.attacker.commander } : null }
-        : {}),
+      commanders: getSideCommanders(scenario.attacker),
+      ...(scenario.attacker.activeCommanderId !== undefined ? { activeCommanderId: scenario.attacker.activeCommanderId } : {}),
     },
     defender: {
       participant: {
@@ -468,11 +480,10 @@ export function scenarioToCombatInput(
         side: 'defender',
         race: getCombatFactionName(scenario.defenderFactionId),
       },
+      factionId: getCombatFactionId(scenario.defenderFactionId),
       ships: scenario.defender.ships.map((stack) => ({ ...stack })),
-      commanders: scenario.defender.commanders.map((stack) => ({ ...stack })),
-      ...(scenario.defender.commander !== undefined
-        ? { commander: scenario.defender.commander ? { ...scenario.defender.commander } : null }
-        : {}),
+      commanders: getSideCommanders(scenario.defender),
+      ...(scenario.defender.activeCommanderId !== undefined ? { activeCommanderId: scenario.defender.activeCommanderId } : {}),
       defenses: scenario.defender.defenses.map((stack) => ({ ...stack })),
     },
     maxRounds: scenario.maxRounds,

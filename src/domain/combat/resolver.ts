@@ -1,4 +1,5 @@
 import { COMBAT_CATALOG, getCombatEntity } from './catalog.ts';
+import { getFactionCombatEntity } from './faction-catalog.ts';
 import type { CommanderId } from './commanders.ts';
 import {
   COMBAT_PROFILE_ID,
@@ -36,6 +37,7 @@ import {
   type CombatInput,
   type CombatStackInput,
 } from './simulator.ts';
+import { getCombatFactionId, type CombatFactionId } from './factions.ts';
 import {
   COMBAT_TECHNOLOGIES,
   getCombatTechnologyDefinition,
@@ -190,9 +192,10 @@ function runtimeFromInput(
   stacks: readonly CombatStackInput[],
   technologies: CombatTechnologyLevels,
   executionMode: CombatExecutionMode,
+  factionId: CombatFactionId,
 ): RuntimeStack[] {
   return stacks.map((stack) => {
-    const entity = getCombatEntity(stack.entityId);
+    const entity = getFactionCombatEntity(factionId, stack.entityId);
     const lifePerUnit = Math.max(1, entity.combat.life * getTechnologyLifeMultiplier(entity, technologies, executionMode));
     const attackPerUnit = Math.max(0, entity.combat.attack * getTechnologyAttackMultiplier(entity, technologies, executionMode));
     const armorPercent = clamp(getTechnologyArmorPercent(entity, technologies, executionMode), 0, 80);
@@ -377,7 +380,10 @@ function createRoundSummary(
     if (event.weaponType) damageByWeapon[event.weaponType] = (damageByWeapon[event.weaponType] ?? 0) + damage;
     const destroyed = event.destroyedCount ?? 0;
     destroyedUnits += destroyed;
-    if (event.targetEntityId) destroyedPopulation += destroyed * getCombatEntity(event.targetEntityId).population;
+    if (event.targetEntityId) {
+      const targetStacks = event.targetSide === 'attacker' ? attacker : defender;
+      destroyedPopulation += destroyed * (targetStacks.find((stack) => stack.entityId === event.targetEntityId)?.populationPerUnit ?? 0);
+    }
   });
 
   return {
@@ -491,6 +497,15 @@ function activeCommanderLevel(stacks: readonly CombatStackInput[], id: Commander
   return id ? stacks.find((stack) => stack.entityId === id && stack.count > 0)?.level : undefined;
 }
 
+function chooseActiveCommander(
+  requested: CommanderId | null | undefined,
+  priority: CommanderId[],
+  available: readonly CommanderId[],
+) {
+  if (requested && available.includes(requested)) return requested;
+  return selectActiveCommander(priority, available);
+}
+
 export function resolveCombat(input: CombatInput, context: CombatResolverContext): BattleReport {
   const validation = validateCombatInput(input);
   if (!validation.ok) throw new CombatInputValidationError(validation.errors);
@@ -504,19 +519,21 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
   const defenderTechnologies = technologyMode === 'shared' ? requestedAttackerTechnologies : requestedDefenderTechnologies;
   const executionMode: CombatExecutionMode = normalized.executionMode === 'production' ? 'production' : 'calibration';
   const rng = normalized.seed ? createSeededCombatRng(normalized.seed) : createNonReplayableCombatRng();
+  const attackerFactionId = normalized.attacker.factionId ?? getCombatFactionId(normalized.attacker.participant.race);
+  const defenderFactionId = normalized.defender.factionId ?? getCombatFactionId(normalized.defender.participant.race);
 
   // Unknown mechanics are deliberately inactive. The RNG interface is still
   // included so future evidence-backed mechanics can consume it reproducibly.
   void rng.next;
 
   const attacker = [
-    ...runtimeFromInput('attacker', 'stacks', normalized.attacker.ships, attackerTechnologies, executionMode),
-    ...runtimeFromInput('attacker', 'stacks', getSideCommanders(normalized.attacker), attackerTechnologies, executionMode),
+    ...runtimeFromInput('attacker', 'stacks', normalized.attacker.ships, attackerTechnologies, executionMode, attackerFactionId),
+    ...runtimeFromInput('attacker', 'stacks', getSideCommanders(normalized.attacker), attackerTechnologies, executionMode, attackerFactionId),
   ];
   const defender = [
-    ...runtimeFromInput('defender', 'stacks', normalized.defender.ships, defenderTechnologies, executionMode),
-    ...runtimeFromInput('defender', 'stacks', getSideCommanders(normalized.defender), defenderTechnologies, executionMode),
-    ...runtimeFromInput('defender', 'defenses', normalized.defender.defenses ?? [], defenderTechnologies, executionMode),
+    ...runtimeFromInput('defender', 'stacks', normalized.defender.ships, defenderTechnologies, executionMode, defenderFactionId),
+    ...runtimeFromInput('defender', 'stacks', getSideCommanders(normalized.defender), defenderTechnologies, executionMode, defenderFactionId),
+    ...runtimeFromInput('defender', 'defenses', normalized.defender.defenses ?? [], defenderTechnologies, executionMode, defenderFactionId),
   ];
 
   const attackerCommanderIds = getSideCommanders(normalized.attacker)
@@ -525,8 +542,8 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
   const defenderCommanderIds = getSideCommanders(normalized.defender)
     .filter((stack) => stack.count > 0)
     .map((stack) => stack.entityId as CommanderId);
-  const activeAttackerCommander = selectActiveCommander(normalized.attackerPriority, attackerCommanderIds);
-  const activeDefenderCommander = selectActiveCommander(normalized.defenderPriority, defenderCommanderIds);
+  const activeAttackerCommander = chooseActiveCommander(normalized.attacker.activeCommanderId, normalized.attackerPriority, attackerCommanderIds);
+  const activeDefenderCommander = chooseActiveCommander(normalized.defender.activeCommanderId, normalized.defenderPriority, defenderCommanderIds);
 
   const rounds: CombatRound[] = [];
   let winner: BattleWinner | null = determineWinner(attacker, defender);
@@ -609,9 +626,11 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
 }
 
 export function combatInputPopulation(input: CombatInput) {
+  const attackerFactionId = input.attacker.factionId ?? getCombatFactionId(input.attacker.participant.race);
+  const defenderFactionId = input.defender.factionId ?? getCombatFactionId(input.defender.participant.race);
   return {
-    attacker: calculateStacksPopulation([...input.attacker.ships, ...getSideCommanders(input.attacker)]),
-    defenderFleet: calculateStacksPopulation([...input.defender.ships, ...getSideCommanders(input.defender)]),
-    defenderDefense: calculateStacksPopulation(input.defender.defenses ?? []),
+    attacker: calculateStacksPopulation([...input.attacker.ships, ...getSideCommanders(input.attacker)], attackerFactionId),
+    defenderFleet: calculateStacksPopulation([...input.defender.ships, ...getSideCommanders(input.defender)], defenderFactionId),
+    defenderDefense: calculateStacksPopulation(input.defender.defenses ?? [], defenderFactionId),
   };
 }

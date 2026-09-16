@@ -8,7 +8,7 @@ This ledger separates source-backed facts from Asterion decisions and uncalibrat
 | Simulator defender fleet cap | CONFIRMED | User decision, 2026-09-16 | high | 35,000 population |
 | Simulator defender defense cap | CONFIRMED | User decision, 2026-09-16 | high | 35,000 population, independent from fleet |
 | Planet hangar capacity | CONFIRMED | `src/domain/fleet/runtime.ts` | high | 25,112 is not a combat cap |
-| Commander presence | CONFIRMED | User decision, 2026-09-16 | high | Each side independently uses zero or one commander |
+| Commander presence | CONFIRMED | User decision, 2026-09-17 | high | Each side may select zero or more distinct commander types; each type is limited to one ship, with at most one leading commander |
 | Commander maximum level | CONFIRMED | `src/domain/buildings/spaceport-upgrades.ts` | high | 0..40 |
 | Ship maximum level | CONFIRMED | `src/domain/buildings/spaceport-upgrades.ts` | high | 0..10 |
 | Combat effect of ship/commander/defence levels | UNKNOWN | Level ranges are sourced, combat coefficients are not | low | Store and report levels; do not apply a hidden multiplier |

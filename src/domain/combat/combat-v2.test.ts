@@ -43,13 +43,13 @@ test('the three 35,000 population caps are independent', () => {
       participant: defenderParticipant,
       ships: [{ entityId: 'scout', count: 17_500 }],
       commanders: [],
-      defenses: [{ entityId: 'ballistic-turret', count: 35_000 }],
+      defenses: [{ entityId: 'ballistic-turret', count: 17_500 }],
     },
   });
   assert.equal(validateCombatInput(valid).ok, true);
   assert.equal(validateCombatInput(input({ attacker: { ...valid.attacker, ships: [{ entityId: 'scout', count: 17_501 }] } })).errors.some((error) => error.path === 'attacker'), true);
   assert.equal(validateCombatInput(input({ defender: { ...valid.defender, ships: [{ entityId: 'scout', count: 17_501 }] } })).errors.some((error) => error.path === 'defender'), true);
-  assert.equal(validateCombatInput(input({ defender: { ...valid.defender, defenses: [{ entityId: 'ballistic-turret', count: 35_001 }] } })).errors.some((error) => error.path === 'defender.defenses'), true);
+  assert.equal(validateCombatInput(input({ defender: { ...valid.defender, defenses: [{ entityId: 'ballistic-turret', count: 17_501 }] } })).errors.some((error) => error.path === 'defender.defenses'), true);
   assert.equal(SIMULATOR_POPULATION_LIMIT, 35_000);
   assert.equal(PLANET_HANGAR_CAPACITY, 25_112);
 });
@@ -78,7 +78,7 @@ test('one side may omit its commander and the commander level is retained', () =
   assert.equal(report.defenderForce.activeCommanderId, undefined);
 });
 
-test('more than one active commander is rejected instead of truncated', () => {
+test('different commander types can coexist while each type is limited to one', () => {
   const result = validateCombatInput(input({
     attacker: {
       participant: attackerParticipant,
@@ -86,7 +86,7 @@ test('more than one active commander is rejected instead of truncated', () => {
       commanders: [{ entityId: 'corsair', count: 1 }, { entityId: 'hunter', count: 1 }],
     },
   }));
-  assert.equal(result.errors.some((error) => error.code === 'commander-limit'), true);
+  assert.equal(result.ok, true);
   assert.equal(validateCombatInput(input({
     attacker: {
       participant: attackerParticipant,
@@ -94,7 +94,59 @@ test('more than one active commander is rejected instead of truncated', () => {
       commander: { entityId: 'corsair', count: 2 },
       commanders: [],
     },
-  })).errors.some((error) => error.code === 'commander-limit'), true);
+  })).errors.some((error) => error.code === 'entity-limit'), true);
+});
+
+test('matrix and planetary shields may coexist but each is unique', () => {
+  const bothShields = validateCombatInput(input({
+    defender: {
+      participant: defenderParticipant,
+      ships: [{ entityId: 'scout', count: 1 }],
+      commanders: [],
+      defenses: [{ entityId: 'tower-shield', count: 1 }, { entityId: 'planetary-shield', count: 1 }],
+    },
+  }));
+  assert.equal(bothShields.ok, true);
+
+  const duplicateTower = validateCombatInput(input({
+    defender: {
+      participant: defenderParticipant,
+      ships: [{ entityId: 'scout', count: 1 }],
+      commanders: [],
+      defenses: [{ entityId: 'tower-shield', count: 2 }],
+    },
+  }));
+  assert.equal(duplicateTower.errors.some((error) => error.code === 'entity-limit' && error.path === 'defender.defenses[0].count'), true);
+
+  const duplicatePlanetary = validateCombatInput(input({
+    defender: {
+      participant: defenderParticipant,
+      ships: [{ entityId: 'scout', count: 1 }],
+      commanders: [],
+      defenses: [{ entityId: 'planetary-shield', count: 2 }],
+    },
+  }));
+  assert.equal(duplicatePlanetary.errors.some((error) => error.code === 'entity-limit' && error.path === 'defender.defenses[0].count'), true);
+});
+
+test('explicit leading commander must be one of the selected commander types', () => {
+  const report = resolveCombat(input({
+    attacker: {
+      participant: attackerParticipant,
+      ships: [{ entityId: 'scout', count: 1 }],
+      commanders: [{ entityId: 'corsair', count: 1 }, { entityId: 'hunter', count: 1 }],
+      activeCommanderId: 'hunter',
+    },
+  }), { reportId: 'explicit-leading-commander' });
+  assert.equal(report.attackerForce.activeCommanderId, 'hunter');
+  assert.equal(validateCombatInput(input({
+    attacker: {
+      participant: attackerParticipant,
+      ships: [{ entityId: 'scout', count: 1 }],
+      commanders: [{ entityId: 'corsair', count: 1 }],
+      activeCommanderId: 'hunter',
+    },
+  })).errors.some((error) => error.code === 'invalid-commander-selection'), true);
 });
 
 test('science maxima are real and additional technologies are mutually exclusive', () => {
@@ -196,10 +248,24 @@ test('defense remains a separate force and round snapshot bucket', () => {
   assert.equal(report.attackerForce.defenses, undefined);
   assert.equal(report.defenderForce.defenses?.[0]?.entityId, 'ballistic-turret');
   assert.equal(report.defenderForce.fleetPopulationBefore, 2);
-  assert.equal(report.defenderForce.defensePopulationBefore, 1);
+  assert.equal(report.defenderForce.defensePopulationBefore, 2);
   assert.equal(report.rounds[0]?.defenderSnapshot?.defenses?.[0]?.entityId, 'ballistic-turret');
-  assert.equal(report.rounds[0]?.defenderSnapshot?.defensePopulationBefore, 1);
-  assert.equal(report.rounds[0]?.summary?.survivingDefensePopulation, 1);
+  assert.equal(report.rounds[0]?.defenderSnapshot?.defensePopulationBefore, 2);
+  assert.equal(report.rounds[0]?.summary?.survivingDefensePopulation, 2);
+});
+
+test('faction-specific combat population and stats reach the resolver', () => {
+  const report = resolveCombat(input({
+    attacker: {
+      participant: attackerParticipant,
+      factionId: 'synod',
+      ships: [{ entityId: 'destroyer', count: 1 }],
+      commanders: [],
+    },
+    defender: { participant: defenderParticipant, ships: [{ entityId: 'solar-satellite', count: 1 }], commanders: [], defenses: [] },
+  }), { reportId: 'faction-runtime' });
+  assert.equal(report.attackerForce.populationBefore, 28);
+  assert.equal(report.rounds[0]?.events.find((event) => event.actorEntityId === 'destroyer')?.attackValue, 18_200);
 });
 
 test('legacy reports migrate with unknown provenance and without fabricated numeric values', () => {
@@ -227,7 +293,7 @@ test('legacy reports migrate with unknown provenance and without fabricated nume
   assert.deepEqual(migrated?.rounds.flatMap((round) => round.events.map((event) => event.sequence)), [1, 2]);
 });
 
-test('legacy scenarios retain multiple commanders and validation blocks launch', () => {
+test('legacy scenarios retain multiple commanders and the new per-type rule permits them', () => {
   const legacy = normalizeSimulatorScenario({
     attacker: {
       ships: [{ entityId: 'scout', count: 1 }],
@@ -244,10 +310,9 @@ test('legacy scenarios retain multiple commanders and validation blocks launch',
     defender: defenderParticipant,
     priority,
   });
-  assert.equal(combatInput.attacker.commander, undefined);
   assert.equal(combatInput.attacker.commanders?.length, 2);
   const checked = validateCombatInput(combatInput);
-  assert.equal(checked.errors.some((error) => error.code === 'commander-limit'), true);
+  assert.equal(checked.ok, true);
 });
 
 test('destroyed stacks emit a skipped-volley status and never attack', () => {
