@@ -47,18 +47,27 @@
   background: rgba(49, 178, 215, .13);
 }
 
+.sim-tech-list-v1[hidden] { display: none; }
+
 .sim-tech-row-v1 {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
-  min-height: 52px;
-  padding: 7px 10px;
+  min-height: 68px;
+  padding: 9px 12px;
   background: rgba(2, 23, 33, .98);
   box-sizing: border-box;
 }
 
-.sim-tech-row-v1 > div:first-child {
+.sim-tech-row-v1 > img {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 8px rgba(37, 182, 239, .24));
+}
+
+.sim-tech-row-v1 > div:nth-child(2) {
   display: grid;
   gap: 3px;
   min-width: 0;
@@ -66,30 +75,30 @@
 
 .sim-tech-row-v1 strong {
   color: #d9f6ff;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .sim-tech-row-v1 small {
   color: #6895a4;
-  font-size: 8px;
+  font-size: 9px;
   line-height: 1.35;
 }
 
 .sim-tech-controls-v1 {
   display: grid;
-  grid-template-columns: 28px 56px 28px;
+  grid-template-columns: 34px 68px auto 34px;
   align-items: center;
   gap: 4px;
 }
 
 .sim-tech-controls-v1 button,
 .sim-tech-controls-v1 input {
-  height: 28px;
+  height: 34px;
   border: 1px solid rgba(51, 185, 222, .38);
   background: rgba(2, 22, 31, .95);
   color: #dff9ff;
   font: inherit;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   text-align: center;
   box-sizing: border-box;
@@ -105,23 +114,22 @@
 }
 
 .sim-tech-controls-v1 input {
-  width: 56px;
+  width: 68px;
   padding: 0 3px;
 }
 
-/* The saved Nemexia simulator confirms editable science levels, but not an
-   authoritative maximum. Keep the technical input guard internal and never
-   render it as a game rule. */
-.sim-tech-controls-v1 span,
-.sim-tech-controls-v1 .sim-max-v1 {
-  display: none;
+.sim-tech-controls-v1 span {
+  color: #5e91a3;
+  font-size: 9px;
+  white-space: nowrap;
 }
 
-/* Older Simulator markup contained a critical-hit explanation that went beyond
-   the facts available in the saved page. Per-technology copy now states the
-   supported fact precisely, so suppress that provisional note. */
 .sim-tech-note-v1 {
-  display: none;
+  margin: 0;
+  padding: 10px 12px;
+  color: #79a9b8;
+  font-size: 10px;
+  line-height: 1.4;
 }
 
 .sim-race-mechanics-note-v1 {
@@ -155,10 +163,11 @@
   }
 
   .sim-tech-row-v1 {
-    grid-template-columns: 1fr;
+    grid-template-columns: 52px minmax(0, 1fr);
   }
 
   .sim-tech-controls-v1 {
+    grid-column: 1 / -1;
     justify-content: start;
   }
 
