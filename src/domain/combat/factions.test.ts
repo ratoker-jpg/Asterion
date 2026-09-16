@@ -147,14 +147,14 @@ test('attacker and defender race selections are independent', () => {
   const attackerChanged = setScenarioFaction(populatedScenario, 'attacker', 'synod');
   assert.equal(attackerChanged.attackerFactionId, 'synod');
   assert.equal(attackerChanged.defenderFactionId, 'aegis');
-  assert.deepEqual(attackerChanged.attacker, { ships: [], commanders: [] });
+  assert.deepEqual(attackerChanged.attacker, { ships: [], commanders: [], commander: null });
   assert.deepEqual(attackerChanged.defender, populatedScenario.defender);
 
   const defenderChanged = setScenarioFaction(attackerChanged, 'defender', 'veyra');
   assert.equal(defenderChanged.attackerFactionId, 'synod');
   assert.equal(defenderChanged.defenderFactionId, 'veyra');
-  assert.deepEqual(defenderChanged.attacker, { ships: [], commanders: [] });
-  assert.deepEqual(defenderChanged.defender, { ships: [], commanders: [], defenses: [] });
+  assert.deepEqual(defenderChanged.attacker, { ships: [], commanders: [], commander: null });
+  assert.deepEqual(defenderChanged.defender, { ships: [], commanders: [], commander: null, defenses: [] });
 });
 
 test('changing to the already selected race does not clear the side', () => {

@@ -9,7 +9,18 @@ import {
   type SimulatorMaxRounds,
   type SimulatorScenario,
 } from './simulator.ts';
-import { normalizeCombatTechnologies } from './technologies.ts';
+import {
+  COMBAT_ENTITY_LEVEL_LIMITS,
+  COMBAT_PROFILE_ID,
+  DEFAULT_COMBAT_TARGET_PRIORITY,
+} from './config.ts';
+import {
+  COMBAT_TECHNOLOGIES,
+  createDefaultCombatTechnologies,
+  normalizeCombatTechnologies,
+  type CombatTechnologyLevels,
+} from './technologies.ts';
+import { migrateScienceState } from '../science/runtime.ts';
 import type { CombatEntityKind } from './types.ts';
 
 export const SIMULATOR_STATE_CHANGED_EVENT = 'asterion:combat-simulator-changed';
@@ -46,7 +57,7 @@ function isMaxRounds(value: unknown): value is SimulatorMaxRounds {
 
 function normalizeStacks(value: unknown, kind: CombatEntityKind): CombatStackInput[] {
   if (!Array.isArray(value)) return [];
-  const counts = new Map<CombatEntityId, number>();
+  const counts = new Map<CombatEntityId, { count: number; level: number }>();
 
   value.forEach((candidate) => {
     if (!candidate || typeof candidate !== 'object') return;
@@ -56,10 +67,20 @@ function normalizeStacks(value: unknown, kind: CombatEntityKind): CombatStackInp
     const id = entityId as CombatEntityId;
     if (getCombatEntity(id).kind !== kind) return;
     if (!Number.isFinite(count) || !Number.isInteger(count) || (count as number) <= 0) return;
-    counts.set(id, (counts.get(id) ?? 0) + (count as number));
+    const level = (candidate as { level?: unknown }).level;
+    const normalizedLevel = typeof level === 'number' && Number.isFinite(level) && level >= 0
+      ? Math.min(COMBAT_ENTITY_LEVEL_LIMITS[kind], Math.floor(level))
+      : 0;
+    const existing = counts.get(id);
+    if (existing) {
+      existing.count += count as number;
+      existing.level = Math.max(existing.level, normalizedLevel);
+    } else {
+      counts.set(id, { count: count as number, level: normalizedLevel });
+    }
   });
 
-  return [...counts.entries()].map(([entityId, count]) => ({ entityId, count }));
+  return [...counts.entries()].map(([entityId, value]) => ({ entityId, count: value.count, level: value.level }));
 }
 
 export function normalizeSimulatorScenario(value: unknown): SimulatorScenario {
@@ -69,9 +90,23 @@ export function normalizeSimulatorScenario(value: unknown): SimulatorScenario {
     defenderFactionId?: unknown;
     attackerTechnologies?: unknown;
     defenderTechnologies?: unknown;
+    technologyMode?: unknown;
+    executionMode?: unknown;
+    attackerTargetPriority?: unknown;
+    defenderTargetPriority?: unknown;
+    seed?: unknown;
     attacker?: { ships?: unknown; commanders?: unknown };
     defender?: { ships?: unknown; commanders?: unknown; defenses?: unknown };
     maxRounds?: unknown;
+  };
+
+  const attackerCommanders = normalizeStacks(candidate.attacker?.commanders, 'commander');
+  const defenderCommanders = normalizeStacks(candidate.defender?.commanders, 'commander');
+  const attackerCommanderProvided = candidate.attacker && Object.prototype.hasOwnProperty.call(candidate.attacker, 'commander');
+  const defenderCommanderProvided = candidate.defender && Object.prototype.hasOwnProperty.call(candidate.defender, 'commander');
+  const readCommander = (value: unknown) => {
+    const normalized = normalizeStacks(value == null ? [] : [value], 'commander');
+    return normalized[0] ?? null;
   };
 
   return {
@@ -79,16 +114,28 @@ export function normalizeSimulatorScenario(value: unknown): SimulatorScenario {
     defenderFactionId: normalizeCombatFactionId(candidate.defenderFactionId),
     attackerTechnologies: normalizeCombatTechnologies(candidate.attackerTechnologies),
     defenderTechnologies: normalizeCombatTechnologies(candidate.defenderTechnologies),
+    technologyMode: candidate.technologyMode === 'shared' ? 'shared' : 'independent',
+    executionMode: candidate.executionMode === 'production' ? 'production' : 'calibration',
+    attackerTargetPriority: candidate.attackerTargetPriority === 'population' || candidate.attackerTargetPriority === 'catalog'
+      ? candidate.attackerTargetPriority
+      : DEFAULT_COMBAT_TARGET_PRIORITY,
+    defenderTargetPriority: candidate.defenderTargetPriority === 'population' || candidate.defenderTargetPriority === 'catalog'
+      ? candidate.defenderTargetPriority
+      : DEFAULT_COMBAT_TARGET_PRIORITY,
+    ...(typeof candidate.seed === 'string' && candidate.seed.trim() ? { seed: candidate.seed.trim() } : {}),
     attacker: {
       ships: normalizeStacks(candidate.attacker?.ships, 'ship'),
-      commanders: normalizeStacks(candidate.attacker?.commanders, 'commander'),
+      commanders: attackerCommanders,
+      ...(attackerCommanderProvided ? { commander: readCommander((candidate.attacker as { commander?: unknown }).commander) } : {}),
     },
     defender: {
       ships: normalizeStacks(candidate.defender?.ships, 'ship'),
-      commanders: normalizeStacks(candidate.defender?.commanders, 'commander'),
+      commanders: defenderCommanders,
+      ...(defenderCommanderProvided ? { commander: readCommander((candidate.defender as { commander?: unknown }).commander) } : {}),
       defenses: normalizeStacks(candidate.defender?.defenses, 'defense'),
     },
     maxRounds: isMaxRounds(candidate.maxRounds) ? candidate.maxRounds : 8,
+    profileId: COMBAT_PROFILE_ID,
   };
 }
 
@@ -133,6 +180,22 @@ export function readSimulatorState(storage?: StorageLike): SimulatorState {
     return migrateSimulatorState(envelope.combatSimulator);
   } catch {
     return createDefaultSimulatorState();
+  }
+}
+
+export function readSavedCombatTechnologies(storage?: StorageLike): CombatTechnologyLevels {
+  const target = resolveStorage(storage);
+  if (!target) return createDefaultCombatTechnologies();
+  try {
+    const raw = target.getItem(ASTERION_SAVE_KEY);
+    if (!raw) return createDefaultCombatTechnologies();
+    const envelope = JSON.parse(raw) as SaveEnvelope & { science?: unknown };
+    const science = migrateScienceState(envelope.science);
+    return normalizeCombatTechnologies(Object.fromEntries(
+      COMBAT_TECHNOLOGIES.map((technology) => [technology.id, science.levels[technology.sourceScienceId] ?? 0]),
+    ));
+  } catch {
+    return createDefaultCombatTechnologies();
   }
 }
 
