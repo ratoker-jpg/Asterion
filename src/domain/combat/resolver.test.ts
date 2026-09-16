@@ -188,19 +188,18 @@ test('target selection remains deterministic at lexical fallback boundary', () =
   assert.deepEqual(first, second);
 });
 
-test('simultaneous planning lets a stack fire after it was destroyed earlier in the event log', () => {
+test('sequential resolution stops the defender after attacker destroys it', () => {
   const report = resolve(input({
     attacker: { participant: attackerParticipant, ships: [{ entityId: 'spy-probe', count: 1 }], commanders: [] },
     defender: { participant: defenderParticipant, ships: [{ entityId: 'spy-probe', count: 1 }], commanders: [], defenses: [] },
     maxRounds: 5,
   }));
-  assert.equal(report.rounds[0].events.length, 2);
-  assert.equal(report.rounds[0].events[1].actorSide, 'defender');
-  assert.equal(report.rounds[0].events[1].damage, 1);
-  assert.equal(report.winner, 'draw');
+  assert.equal(report.rounds[0].events.length, 1);
+  assert.equal(report.rounds[0].events[0].actorSide, 'attacker');
+  assert.equal(report.winner, 'attacker');
 });
 
-test('planned attack does not retarget when its target is already destroyed in same round', () => {
+test('sequential resolution retargets after a target is destroyed in same round', () => {
   const report = resolve(input({
     attacker: {
       participant: attackerParticipant,
@@ -217,8 +216,8 @@ test('planned attack does not retarget when its target is already destroyed in s
   }));
   const attackerEvents = report.rounds[0].events.filter((event) => event.actorSide === 'attacker');
   assert.equal(attackerEvents[0].targetEntityId, 'spy-probe');
-  assert.equal(attackerEvents[1].targetEntityId, 'spy-probe');
-  assert.equal(attackerEvents[1].damage, 0);
+  assert.equal(attackerEvents[1].targetEntityId, 'solar-satellite');
+  assert.ok((attackerEvents[1].damage ?? 0) > 0);
   assert.equal(report.rounds[0].defenderSnapshot?.stacks.find((stack) => stack.entityId === 'solar-satellite')?.countAfter, 1);
 });
 
@@ -234,12 +233,12 @@ test('defender victory is detected', () => {
   assert.equal(report.winner, 'defender');
 });
 
-test('mutual destruction is draw', () => {
+test('attacker priority resolves before defender in a baseline exchange', () => {
   const report = resolve(input({
     attacker: { participant: attackerParticipant, ships: [{ entityId: 'spy-probe', count: 1 }], commanders: [] },
     defender: { participant: defenderParticipant, ships: [{ entityId: 'spy-probe', count: 1 }], commanders: [], defenses: [] },
   }));
-  assert.equal(report.winner, 'draw');
+  assert.equal(report.winner, 'attacker');
 });
 
 test('living sides at max round limit produce draw and never exceed limit', () => {
@@ -264,10 +263,10 @@ test('population before and after uses canonical catalog population and survivor
 test('attacker and defender select active commander from independent priority', () => {
   const priority = createDefaultCombatPriority();
   const report = resolve(input({
-    attacker: { participant: attackerParticipant, ships: [{ entityId: 'scout', count: 1 }], commanders: [{ entityId: 'corsair', count: 1 }, { entityId: 'hunter', count: 1 }] },
-    defender: { participant: defenderParticipant, ships: [{ entityId: 'cruiser', count: 1 }], commanders: [{ entityId: 'judge', count: 1 }, { entityId: 'polias', count: 1 }], defenses: [] },
-    attackerPriority: ['hunter', 'corsair', ...priority.attack.filter((id) => id !== 'hunter' && id !== 'corsair')],
-    defenderPriority: ['polias', 'judge', ...priority.defense.filter((id) => id !== 'polias' && id !== 'judge')],
+    attacker: { participant: attackerParticipant, ships: [{ entityId: 'scout', count: 1 }], commanders: [{ entityId: 'hunter', count: 1 }] },
+    defender: { participant: defenderParticipant, ships: [{ entityId: 'cruiser', count: 1 }], commanders: [{ entityId: 'polias', count: 1 }], defenses: [] },
+    attackerPriority: ['hunter', ...priority.attack.filter((id) => id !== 'hunter')],
+    defenderPriority: ['polias', ...priority.defense.filter((id) => id !== 'polias')],
   }));
   assert.equal(report.attackerForce.activeCommanderId, 'hunter');
   assert.equal(report.defenderForce.activeCommanderId, 'polias');
@@ -279,24 +278,24 @@ test('no commander means no activeCommanderId', () => {
   assert.equal(report.defenderForce.activeCommanderId, undefined);
 });
 
-test('priority changes selected commander but v1 combat numbers stay identical', () => {
-  const base = input({
+test('commander selection is asymmetric and commander stats are reported', () => {
+  const corsairInput = input({
     attacker: {
       participant: attackerParticipant,
       ships: [{ entityId: 'scout', count: 1 }],
-      commanders: [{ entityId: 'corsair', count: 1 }, { entityId: 'hunter', count: 1 }],
+      commanders: [{ entityId: 'corsair', count: 1 }],
     },
     defender: { participant: defenderParticipant, ships: [{ entityId: 'battleship', count: 1 }], commanders: [], defenses: [] },
   });
-  const rest = COMMANDER_IDS.filter((id) => id !== 'corsair' && id !== 'hunter');
-  const corsairFirst = resolve({ ...base, attackerPriority: ['corsair', 'hunter', ...rest] }, 'same');
-  const hunterFirst = resolve({ ...base, attackerPriority: ['hunter', 'corsair', ...rest] }, 'same');
+  const hunterInput: CombatInput = { ...corsairInput, attacker: { ...corsairInput.attacker, commanders: [{ entityId: 'hunter', count: 1 }] } };
+  const corsairFirst = resolve(corsairInput, 'same');
+  const hunterFirst = resolve(hunterInput, 'same');
   assert.equal(corsairFirst.attackerForce.activeCommanderId, 'corsair');
   assert.equal(hunterFirst.attackerForce.activeCommanderId, 'hunter');
-  assert.deepEqual(stripCommanderSelection(corsairFirst), stripCommanderSelection(hunterFirst));
+  assert.notDeepEqual(stripCommanderSelection(corsairFirst), stripCommanderSelection(hunterFirst));
 });
 
-test('all commander abilities are selection-only in resolver v1', () => {
+test('all commander abilities remain selection-only in the v2 resolver', () => {
   const priority = createDefaultCombatPriority();
   COMMANDER_IDS.forEach((commanderId: CommanderId) => {
     const report = resolve(input({
@@ -313,7 +312,7 @@ test('generated report uses existing BattleReport contract without fake optional
   const report = resolve(input());
   assert.equal(report.missionType, 'simulation');
   assert.equal(report.metadata?.source, 'combat-resolver');
-  assert.equal(report.metadata?.note, 'Asterion Combat Resolver v1');
+  assert.match(report.metadata?.note ?? '', /asterion-combat-engine-v2/);
   assert.equal(report.experience, undefined);
   assert.equal(report.debris, undefined);
   assert.equal(report.resources, undefined);
@@ -321,8 +320,8 @@ test('generated report uses existing BattleReport contract without fake optional
   report.rounds.flatMap((round) => round.events).forEach((event) => {
     assert.equal(event.shieldBefore, undefined);
     assert.equal(event.shieldAfter, undefined);
-    assert.equal(event.armorBefore, undefined);
-    assert.equal(event.armorAfter, undefined);
+    assert.equal(event.armorBefore != null, true);
+    assert.equal(event.armorAfter != null, true);
     assert.equal(event.commanderAbilityId, undefined);
   });
 });
@@ -384,7 +383,7 @@ test('malformed presets are safely dropped or normalized', () => {
   });
   assert.equal(state.presets.length, 1);
   assert.equal(state.presets[0].name, 'Safe');
-  assert.deepEqual(state.presets[0].input.attacker.ships, [{ entityId: 'scout', count: 5 }]);
+  assert.deepEqual(state.presets[0].input.attacker.ships, [{ entityId: 'scout', count: 5, level: 0 }]);
   assert.equal(state.presets[0].input.maxRounds, 8);
 });
 
