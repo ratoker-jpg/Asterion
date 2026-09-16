@@ -1,5 +1,5 @@
 import type { CommanderId } from './commanders.ts';
-import type { CombatEntityId } from './ids.ts';
+import type { CombatEntityId, DefenseId, ShipId } from './ids.ts';
 import type { CombatTechnologyId, CombatTechnologyLevels } from './technologies.ts';
 import type { CombatTargetPriority } from './config.ts';
 
@@ -63,6 +63,7 @@ export type BattleStackSnapshot = {
   countBefore: number;
   countAfter: number;
   destroyed: number;
+  /** Optional historical level captured by a future combat producer. */
   level?: number;
   life?: number;
   lifeBefore?: number;
@@ -138,7 +139,9 @@ export type BattleForceSnapshot = {
   activeCommanderId?: CommanderId;
   activeCommanderLevel?: number;
   technologyLevels?: CombatTechnologyLevels;
-  technologies?: BattleTechnologySnapshot[];
+  /** Historical combat technology levels captured with this report. */
+  technologies?: CombatTechnologyLevels;
+  technologySnapshots?: BattleTechnologySnapshot[];
   modifiers?: Readonly<Record<string, number | string>>;
 };
 
@@ -150,6 +153,9 @@ export type BattleResourceOutcome = {
 
 export type BattleRepairEligibility = {
   status?: 'unknown' | 'available' | 'unavailable';
+  claimState?: 'claimed' | 'not-eligible';
+  shipUnits?: Partial<Record<ShipId, number>>;
+  defenseUnits?: Partial<Record<DefenseId, number>>;
   note?: string;
 };
 

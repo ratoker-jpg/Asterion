@@ -2,15 +2,19 @@ import { useEffect, useMemo, useState } from 'react';
 
 import {
   COMMANDER_COMBAT_CATALOG,
-  DEFENSE_COMBAT_CATALOG,
   type CatalogEntity,
 } from './domain/combat/catalog.ts';
+import { getFactionDefenseCatalog } from './domain/combat/faction-catalog.ts';
+import { getCombatFactionName } from './domain/combat/factions.ts';
 import {
-  calculateUnitProductionDurationMs,
   formatClockDurationMs,
-  parseClockDurationMs,
+  getBuildingPresentation,
 } from './domain/buildings/balance-v1.ts';
+import { calculateFleetProductionDurationMs } from './domain/fleet/production.ts';
+import { ACTIVE_RUNTIME_MODE, resolveTestTimeScale } from './domain/runtime/mode.ts';
 import { readFleetBuildBudget, type FleetBuildBudget } from './application/fleet.ts';
+import { FLEET_PRODUCTION_START_REQUEST_EVENT } from './application/fleet-production.ts';
+import { FleetConstructionHeader } from './FleetConstructionHeader';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 
 
@@ -22,10 +26,13 @@ type CatalogItem = {
   role: string;
   art: string;
   owned: number;
+  pending: number;
+  level: number;
   metal: number;
   minerals: number;
   gas: number;
   population: number;
+  maxOwned?: number;
   time: string;
   requiredShipyardLevel: number;
   requirements: readonly string[];
@@ -39,6 +46,11 @@ type CatalogItem = {
     specialization: string;
     range: string;
     priority: string;
+  };
+  commanderAbility?: {
+    ability: string;
+    description: string;
+    ratePerLevel: string;
   };
 };
 
@@ -54,10 +66,13 @@ function toCatalogItem(entity: CatalogEntity): CatalogItem {
     role: entity.role,
     art: entity.art,
     owned: 0,
+    pending: 0,
+    level: 0,
     metal: entity.cost.metal,
     minerals: entity.cost.minerals,
     gas: entity.cost.gas,
     population: entity.population,
+    maxOwned: entity.maxOwned,
     time: entity.construction.time,
     requiredShipyardLevel: entity.construction.requiredShipyardLevel,
     requirements: entity.construction.requirements,
@@ -66,19 +81,19 @@ function toCatalogItem(entity: CatalogEntity): CatalogItem {
       ...entity.combat,
       ...entity.tactical,
     },
+    commanderAbility: entity.commanderAbility,
   };
 }
 
-const defenseItems: CatalogItem[] = DEFENSE_COMBAT_CATALOG.map(toCatalogItem);
 const commanderItems: CatalogItem[] = COMMANDER_COMBAT_CATALOG.map(toCatalogItem);
+const SINGLE_COPY_DEFENSE_IDS = new Set(['tower-shield', 'planetary-shield']);
 
-const catalogConfig: Record<ConstructionCatalogMode, { title: string; kicker: string; description: string; footer: string; items: CatalogItem[]; unitLabel: string }> = {
+const catalogConfig: Record<ConstructionCatalogMode, { title: string; kicker: string; description: string; footer: string; unitLabel: string }> = {
   defense: {
     title: 'ОБОРОНА',
-    kicker: 'ПЛАНЕТАРНАЯ ОБОРОНА АСТЕРОВ',
-    description: 'оборонные установки и щитовые комплексы Астеров',
-    footer: '9 оборонных комплексов Астеров · порядок соответствует технологической линейке.',
-    items: defenseItems,
+    kicker: 'ПЛАНЕТАРНАЯ ОБОРОНА',
+    description: 'оборонные установки и щитовые комплексы выбранной расы',
+    footer: '9 оборонных комплексов · порядок соответствует технологической линейке.',
     unitLabel: 'установок',
   },
   commander: {
@@ -86,20 +101,25 @@ const catalogConfig: Record<ConstructionCatalogMode, { title: string; kicker: st
     kicker: 'КОМАНДНЫЙ ФЛОТ',
     description: '13 уникальных командирских корпусов',
     footer: '13 командирских кораблей · единая линейка для всех рас.',
-    items: commanderItems,
     unitLabel: 'кораблей',
   },
 };
 
 const formatNumber = (value: number) => new Intl.NumberFormat('ru-RU').format(value);
 
-function calculateMax(item: CatalogItem, budget: ShipyardBudget) {
+function calculateMax(item: CatalogItem, budget: ShipyardBudget, mode: ConstructionCatalogMode) {
   const limits: number[] = [];
   if (item.metal > 0) limits.push(Math.floor(budget.metal / item.metal));
   if (item.minerals > 0) limits.push(Math.floor(budget.minerals / item.minerals));
   if (item.gas > 0) limits.push(Math.floor(budget.gas / item.gas));
-  if (item.population > 0) limits.push(Math.floor(Math.max(0, budget.populationMax - budget.population) / item.population));
-  return Math.max(0, Math.min(999, ...(limits.length ? limits : [0])));
+  const population = mode === 'defense' ? budget.defenseSummary : budget.summary;
+  if (item.population > 0) limits.push(Math.floor(Math.max(0, population.capacity - population.population) / item.population));
+  const resourceLimit = Math.min(...(limits.length ? limits : [0]));
+  const ownershipLimit = item.maxOwned == null
+    ? Number.MAX_SAFE_INTEGER
+    : Math.max(0, item.maxOwned - item.owned - item.pending);
+  const singleCopyLimit = mode === 'defense' && SINGLE_COPY_DEFENSE_IDS.has(item.id) ? Math.max(0, 1 - item.owned - item.pending) : ownershipLimit;
+  return Math.max(0, Math.min(singleCopyLimit, resourceLimit));
 }
 
 function CostRow({ kind, label, value }: { kind: ResourceKind; label: string; value: number }) {
@@ -132,7 +152,21 @@ function CatalogStatsTooltip({ item }: { item: CatalogItem }) {
         <div><small>Специализация</small><strong>{stats.specialization}</strong></div>
         <div><small>Дистанция</small><strong>{stats.range}</strong></div>
         <div><small>Приоритет</small><strong>{stats.priority}</strong></div>
+        {item.commanderAbility ? (
+          <div className="shipyard-tooltip-level-v1" data-qa-commander-dossier-level={item.id}>
+            <small>Уровень командира</small>
+            <strong>{item.level}/40</strong>
+          </div>
+        ) : null}
       </div>
+
+      {item.commanderAbility ? (
+        <div className="shipyard-tooltip-ability-v1">
+          <small>СПОСОБНОСТЬ · {item.commanderAbility.ratePerLevel}</small>
+          <strong>{item.commanderAbility.ability}</strong>
+          <span>{item.commanderAbility.description}</span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -157,17 +191,34 @@ function CatalogCard({
   onBuild: (item: CatalogItem, quantity: number) => void;
 }) {
   const unlocked = item.requiredShipyardLevel <= shipyardLevel;
-  const max = unlocked ? calculateMax(item, budget) : 0;
+  const max = unlocked ? calculateMax(item, budget, mode) : 0;
   const unavailableLabel = mode === 'defense' ? 'КОМПЛЕКС НЕДОСТУПЕН' : 'КОРПУС НЕДОСТУПЕН';
-  const rawTimeMs = parseClockDurationMs(item.time) ?? 1;
-  const effectiveTimeMs = calculateUnitProductionDurationMs(rawTimeMs, shipyardLevel, advancedFactoryLevel);
+  const effectiveTimeMs = calculateFleetProductionDurationMs(mode === 'defense' ? 'defense' : 'commanders', item.id, {
+    factionId: budget.factionId,
+    shipyardLevel,
+    advancedFactoryLevel,
+    commanderLevel: item.level,
+    mode: ACTIVE_RUNTIME_MODE,
+    testTimeScale: resolveTestTimeScale(),
+  });
 
   return (
-    <article className={`shipyard-card-v1 ${unlocked ? '' : 'locked'}`}>
-      <header className="shipyard-card-title-v1">
-        <div className={`shipyard-owned-v1 ${item.owned > 0 ? 'has-ships' : ''}`}>
-          <small>{mode === 'defense' ? 'ПОСТРОЕНО' : 'В СТРОЮ'}</small>
-          <strong>{formatNumber(item.owned)}</strong>
+    <article className={`shipyard-card-v1 ${unlocked ? '' : 'locked'}`} data-qa-fleet-production-item={item.id}>
+      <header className={`shipyard-card-title-v1 ${mode === 'commander' ? 'commander' : ''}`}>
+        <div className={`shipyard-owned-v1 ${item.owned > 0 ? 'has-ships' : ''} ${mode === 'commander' ? 'has-commander-level' : ''}`}>
+          {mode === 'commander' ? <div className="shipyard-owned-count-v1">
+            <small>В СТРОЮ</small>
+            <strong>{formatNumber(item.owned)}</strong>
+          </div> : <>
+            <small>{mode === 'defense' ? 'ПОСТРОЕНО' : 'В СТРОЮ'}</small>
+            <strong>{formatNumber(item.owned)}</strong>
+          </>}
+          {mode === 'commander' ? (
+            <em className="fleet-commander-level-v1">
+              <small>УРОВЕНЬ</small>
+              <strong data-qa-commander-level={item.id}>{Math.min(40, Math.max(0, Math.floor(item.level)))}/40</strong>
+            </em>
+          ) : null}
         </div>
         <div className="shipyard-title-copy-v1"><strong>{item.name}</strong><small>{item.role}</small></div>
         <button type="button" title={item.role} aria-label={`Информация: ${item.name}`}>i</button>
@@ -236,25 +287,36 @@ export function ConstructionCatalogView({
   mode,
   planetName,
   coords,
-  onBack,
+  budget: providedBudget,
 }: {
   mode: ConstructionCatalogMode;
   planetName: string;
   coords: string;
-  onBack: () => void;
+  budget?: FleetBuildBudget;
 }) {
-  const budget = useMemo(readFleetBuildBudget, []);
+  const savedBudget = useMemo(readFleetBuildBudget, []);
+  const budget = providedBudget ?? savedBudget;
   const config = catalogConfig[mode];
-  const fleetSummary = budget.summary;
+  const factionName = getCombatFactionName(budget.factionId);
+  const defenseDescription = `оборонные установки и щитовые комплексы ${factionName}`;
+  const shipyardPresentation = useMemo(
+    () => getBuildingPresentation('shipyard', budget.factionId),
+    [budget.factionId],
+  );
   const items = useMemo(
-    () => config.items.map((item) => ({
+    () => (mode === 'defense' ? getFactionDefenseCatalog(budget.factionId).map(toCatalogItem) : commanderItems).map((item) => ({
       ...item,
-      owned: mode === 'commander' ? budget.fleet.commanders[item.id as keyof typeof budget.fleet.commanders] ?? 0 : item.owned,
+      owned: mode === 'commander'
+        ? budget.fleet.commanders[item.id as keyof typeof budget.fleet.commanders] ?? 0
+        : budget.defense.defenses[item.id as keyof typeof budget.defense.defenses] ?? 0,
+      pending: (mode === 'defense' ? budget.fleetProduction.defenseQueue : budget.fleetProduction.commanderQueue)
+        .filter((order) => order.itemId === item.id)
+        .reduce((total, order) => total + Math.max(0, order.quantity - order.completedQuantity), 0),
+      level: Math.max(0, Math.floor(budget.spaceportUpgrades.shipLevels[item.id] ?? 0)),
     })),
-    [budget.fleet, config.items, mode],
+    [budget.defense, budget.factionId, budget.fleet, budget.fleetProduction, budget.spaceportUpgrades, mode],
   );
   const [quantities, setQuantities] = useState<Record<string, number>>({});
-  const [process, setProcess] = useState<string | null>(null);
 
   useEffect(() => {
     document.documentElement.classList.add('asterion-long-page');
@@ -267,35 +329,48 @@ export function ConstructionCatalogView({
 
   useEffect(() => {
     setQuantities({});
-    setProcess(null);
     window.scrollTo(0, 0);
   }, [mode]);
 
   const setQuantity = (item: CatalogItem, raw: number) => {
-    const max = calculateMax(item, budget);
+    const max = calculateMax(item, budget, mode);
     const next = Number.isFinite(raw) ? Math.max(0, Math.min(max, Math.floor(raw))) : 0;
     setQuantities((current) => ({ ...current, [item.id]: next }));
   };
 
   const prepareBuild = (item: CatalogItem, quantity: number) => {
-    setProcess(`${quantity} × ${item.name} подготовлено к постановке в очередь. Реальное списание ресурсов подключим вместе с системой производства.`);
+    window.dispatchEvent(new CustomEvent(FLEET_PRODUCTION_START_REQUEST_EVENT, {
+      detail: { queueKind: mode === 'defense' ? 'defense' : 'commanders', itemId: item.id, quantity, now: Date.now() },
+    }));
+    setQuantities((current) => ({ ...current, [item.id]: 0 }));
   };
 
-  return (
-    <section className="shipyard-view-v1">
-      <header className="shipyard-page-head-v1">
-        <div>
-          <small>{config.kicker} · ВЕРФЬ УРОВНЯ {budget.shipyardLevel}</small>
-          <h2>{config.title}</h2>
-          <p>{planetName} {coords} · {config.description}</p>
-        </div>
-        <button type="button" onClick={onBack}>← К ФЛОТАМ</button>
-      </header>
+  const populationSummary = mode === 'defense' ? budget.defenseSummary : budget.summary;
 
-      <section className="shipyard-processes-v1">
-        <strong>ТЕКУЩИЕ ПРОЦЕССЫ</strong>
-        <span>{process ?? 'Очередь производства пуста.'}</span>
-      </section>
+  return (
+    <section className="shipyard-view-v1" data-qa-construction-mode={mode} data-qa-building-asset={shipyardPresentation.art} data-qa-defense-population={mode === 'defense' ? populationSummary.population : undefined} data-qa-defense-capacity={mode === 'defense' ? populationSummary.capacity : undefined}>
+      <FleetConstructionHeader
+        viewId={mode}
+        shipyardPresentation={shipyardPresentation}
+        kicker={`${mode === 'defense' ? `${config.kicker} ${factionName.toUpperCase()}` : config.kicker} · ВЕРФЬ УРОВНЯ ${budget.shipyardLevel}`}
+        title={config.title}
+        description={mode === 'defense' ? defenseDescription : config.description}
+        planetName={planetName}
+        coords={coords}
+      />
+
+      {mode === 'defense' ? (
+        <div className="fleet-defense-population-v1" data-qa-population-scope="НАСЕЛЕНИЕ ОБОРОНЫ">
+          <div>
+            <small>ОБОРОННЫЙ ПУЛ</small>
+            <strong>НАСЕЛЕНИЕ ОБОРОНЫ</strong>
+          </div>
+          <div>
+            <strong>{formatNumber(populationSummary.population)} / {formatNumber(populationSummary.capacity)}</strong>
+            <small>свободно {formatNumber(populationSummary.available)}</small>
+          </div>
+        </div>
+      ) : null}
 
       <div className="shipyard-grid-v1">
         {items.map((item) => (
@@ -313,10 +388,6 @@ export function ConstructionCatalogView({
         ))}
       </div>
 
-      <footer className="shipyard-page-foot-v1">
-        <span>{config.footer}</span>
-        <span>Популяция флота: {formatNumber(fleetSummary.population)} / {formatNumber(fleetSummary.capacity)} · свободно {formatNumber(fleetSummary.available)}</span>
-      </footer>
     </section>
   );
 }

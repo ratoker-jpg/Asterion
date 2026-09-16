@@ -16,6 +16,7 @@ import {
 } from './report.ts';
 import type {
   BattleForceSnapshot,
+  BattleMissionType,
   BattleReport,
   BattleRoundSummary,
   BattleSide,
@@ -47,6 +48,8 @@ import {
 
 export type CombatResolverContext = {
   reportId: string;
+  /** Production combat may classify the result; omitted means simulator. */
+  missionType?: Exclude<BattleMissionType, 'simulation'>;
 };
 
 type RuntimeBucket = 'stacks' | 'defenses';
@@ -285,7 +288,7 @@ function createForceSnapshot(
   activeCommanderId: CommanderId | null,
   activeCommanderLevel: number | undefined,
   technologyLevels: CombatTechnologyLevels,
-  technologies: BattleTechnologySnapshot[],
+  technologySnapshots: BattleTechnologySnapshot[],
 ): BattleForceSnapshot {
   const build = (bucket: RuntimeBucket): BattleStackSnapshot[] => sortRuntime(stacks)
     .filter((stack) => stack.bucket === bucket)
@@ -322,7 +325,8 @@ function createForceSnapshot(
     ...(activeCommanderId ? { activeCommanderId } : {}),
     ...(activeCommanderLevel !== undefined ? { activeCommanderLevel } : {}),
     technologyLevels,
-    technologies,
+    technologies: technologyLevels,
+    technologySnapshots,
   };
 }
 
@@ -564,7 +568,7 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
     schemaVersion: BATTLE_REPORT_SCHEMA_VERSION,
     engineVersion: COMBAT_ENGINE_VERSION,
     timestamp: normalized.timestamp,
-    missionType: 'simulation',
+    missionType: context.missionType ?? 'simulation',
     attacker: { ...normalized.attacker.participant, side: 'attacker' },
     defender: { ...normalized.defender.participant, side: 'defender' },
     winner,

@@ -1,4 +1,5 @@
 import { TRADE_CENTER_MAX_LEVEL } from './resource-zone.ts';
+import { creditResources, type ResourceCapacitiesInput, type ResourceCreditResult } from '../resources/credit.ts';
 
 export const TRADE_REFILL_INTERVAL_MS = 15 * 60 * 1000;
 export const TRADE_RESOURCES = ['metal', 'minerals', 'gas', 'debris'] as const;
@@ -27,6 +28,7 @@ export type TradeRequest = {
 export type TradeExecutionState = {
   wallet: TradeWallet;
   trade: TradeState;
+  capacities?: ResourceCapacitiesInput;
 };
 
 export type TradeRefillInfo = {
@@ -52,6 +54,7 @@ export type TradeExecution = TradeValidation & {
   ok: boolean;
   state: TradeExecutionState;
   refillAt: number | null;
+  credit?: ResourceCreditResult;
 };
 
 function toNonNegativeInteger(value: unknown, fallback = 0): number {
@@ -205,9 +208,20 @@ export function executeTrade(
   const reconciled = reconcileTradeState(state.trade, tradeCenterLevel, now).state;
   const previousRefillAt = reconciled.refillAtQueue[reconciled.refillAtQueue.length - 1] ?? now;
   const refillAt = Math.max(now, previousRefillAt) + TRADE_REFILL_INTERVAL_MS;
-  const wallet: TradeWallet = { ...state.wallet };
-  wallet[request.source] -= request.amount;
-  wallet[request.target] += validation.received;
+  const walletAfterSpend: TradeWallet = { ...state.wallet };
+  walletAfterSpend[request.source] -= request.amount;
+  const unlimitedCapacities = { metal: Number.MAX_SAFE_INTEGER, minerals: Number.MAX_SAFE_INTEGER, gas: Number.MAX_SAFE_INTEGER };
+  const credit = creditResources(
+    walletAfterSpend,
+    state.capacities ?? unlimitedCapacities,
+    { [request.target]: validation.received },
+  );
+  const wallet: TradeWallet = {
+    ...walletAfterSpend,
+    metal: credit.wallet.metal,
+    minerals: credit.wallet.minerals,
+    gas: credit.wallet.gas,
+  };
 
   return {
     ...validation,
@@ -217,5 +231,6 @@ export function executeTrade(
       wallet,
       trade: { refillAtQueue: [...reconciled.refillAtQueue, refillAt] },
     },
+    credit,
   };
 }

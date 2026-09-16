@@ -27,6 +27,8 @@ export type CombatTechnologyDefinition = {
   maxLevel: number;
   effect: string;
   effectStatus: 'confirmed' | 'inferred' | 'unknown' | 'not-calibrated';
+  /** Presentation-only percentage copied from the implemented Science catalog. */
+  displayBonusPercentPerLevel: number;
 };
 
 const UNKNOWN_SCIENCE_EFFECT =
@@ -37,16 +39,16 @@ function sourceScienceMaxLevel(sourceScienceId: ScienceId) {
 }
 
 export const COMBAT_TECHNOLOGIES: readonly CombatTechnologyDefinition[] = [
-  { id: 'laserScience', sourceScienceId: 10, name: 'Лазерная наука', maxLevel: sourceScienceMaxLevel(10), effect: 'Повышает урон лазерных атак в calibration-профиле.', effectStatus: 'inferred' },
-  { id: 'ionScience', sourceScienceId: 11, name: 'Ионная наука', maxLevel: sourceScienceMaxLevel(11), effect: 'Повышает урон ионных атак в calibration-профиле.', effectStatus: 'inferred' },
-  { id: 'plasmaScience', sourceScienceId: 12, name: 'Плазменная наука', maxLevel: sourceScienceMaxLevel(12), effect: 'Повышает урон плазменных атак в calibration-профиле.', effectStatus: 'inferred' },
-  { id: 'piercingAttack', sourceScienceId: 18, name: 'Пробивающая атака', maxLevel: sourceScienceMaxLevel(18), effect: 'Повышает атаку в calibration-профиле.', effectStatus: 'inferred' },
-  { id: 'lightArmor', sourceScienceId: 21, name: 'Лёгкая броня', maxLevel: sourceScienceMaxLevel(21), effect: UNKNOWN_SCIENCE_EFFECT, effectStatus: 'unknown' },
-  { id: 'mediumArmor', sourceScienceId: 22, name: 'Средняя броня', maxLevel: sourceScienceMaxLevel(22), effect: UNKNOWN_SCIENCE_EFFECT, effectStatus: 'unknown' },
-  { id: 'heavyArmor', sourceScienceId: 23, name: 'Тяжёлая броня', maxLevel: sourceScienceMaxLevel(23), effect: UNKNOWN_SCIENCE_EFFECT, effectStatus: 'unknown' },
-  { id: 'shipArmor', sourceScienceId: 7, name: 'Броня кораблей', maxLevel: sourceScienceMaxLevel(7), effect: 'Повышает запас здоровья в calibration-профиле.', effectStatus: 'inferred' },
-  { id: 'maneuverDefense', sourceScienceId: 19, name: 'Маневренная защита', maxLevel: sourceScienceMaxLevel(19), effect: 'Повышает запас здоровья в calibration-профиле.', effectStatus: 'inferred' },
-  { id: 'criticalHit', sourceScienceId: 20, name: 'Критический удар', maxLevel: sourceScienceMaxLevel(20), effect: UNKNOWN_SCIENCE_EFFECT, effectStatus: 'unknown' },
+  { id: 'laserScience', sourceScienceId: 10, name: 'Лазерная наука', maxLevel: sourceScienceMaxLevel(10), effect: 'Повышает урон лазерных атак в calibration-профиле.', effectStatus: 'inferred', displayBonusPercentPerLevel: 15 },
+  { id: 'ionScience', sourceScienceId: 11, name: 'Ионная наука', maxLevel: sourceScienceMaxLevel(11), effect: 'Повышает урон ионных атак в calibration-профиле.', effectStatus: 'inferred', displayBonusPercentPerLevel: 15 },
+  { id: 'plasmaScience', sourceScienceId: 12, name: 'Плазменная наука', maxLevel: sourceScienceMaxLevel(12), effect: 'Повышает урон плазменных атак в calibration-профиле.', effectStatus: 'inferred', displayBonusPercentPerLevel: 15 },
+  { id: 'piercingAttack', sourceScienceId: 18, name: 'Пробивающая атака', maxLevel: sourceScienceMaxLevel(18), effect: 'Повышает атаку в calibration-профиле.', effectStatus: 'inferred', displayBonusPercentPerLevel: 5 },
+  { id: 'lightArmor', sourceScienceId: 21, name: 'Лёгкая броня', maxLevel: sourceScienceMaxLevel(21), effect: UNKNOWN_SCIENCE_EFFECT, effectStatus: 'unknown', displayBonusPercentPerLevel: 1 },
+  { id: 'mediumArmor', sourceScienceId: 22, name: 'Средняя броня', maxLevel: sourceScienceMaxLevel(22), effect: UNKNOWN_SCIENCE_EFFECT, effectStatus: 'unknown', displayBonusPercentPerLevel: 2 },
+  { id: 'heavyArmor', sourceScienceId: 23, name: 'Тяжёлая броня', maxLevel: sourceScienceMaxLevel(23), effect: UNKNOWN_SCIENCE_EFFECT, effectStatus: 'unknown', displayBonusPercentPerLevel: 3 },
+  { id: 'shipArmor', sourceScienceId: 7, name: 'Броня кораблей', maxLevel: sourceScienceMaxLevel(7), effect: 'Повышает запас здоровья в calibration-профиле.', effectStatus: 'inferred', displayBonusPercentPerLevel: 10 },
+  { id: 'maneuverDefense', sourceScienceId: 19, name: 'Маневренная защита', maxLevel: sourceScienceMaxLevel(19), effect: 'Повышает запас здоровья в calibration-профиле.', effectStatus: 'inferred', displayBonusPercentPerLevel: 5 },
+  { id: 'criticalHit', sourceScienceId: 20, name: 'Критический удар', maxLevel: sourceScienceMaxLevel(20), effect: UNKNOWN_SCIENCE_EFFECT, effectStatus: 'unknown', displayBonusPercentPerLevel: 1 },
 ];
 
 const TECHNOLOGY_BY_ID = new Map(COMBAT_TECHNOLOGIES.map((technology) => [technology.id, technology]));

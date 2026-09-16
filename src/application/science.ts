@@ -12,6 +12,7 @@ import {
   type ScienceStartRequest,
 } from '../domain/science/runtime.ts';
 import type { ScienceId } from '../domain/science/types.ts';
+import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import {
   ACTIVE_RUNTIME_MODE,
   resolveTestTimeScale,
@@ -86,6 +87,7 @@ export function startScience(
   const transition = startScienceResearch({
     state: state.science,
     wallet: walletFor(state, context.planetId),
+    capacities: getStorageCapacities(planet.buildings),
     laboratoryLevel: planet.buildings.research,
     now: context.now,
     mode: context.mode,
@@ -108,6 +110,7 @@ export function cancelScience(
   const transition = cancelScienceResearch({
     state: state.science,
     wallet: walletFor(state, context.planetId),
+    capacities: getStorageCapacities(planet.buildings),
     laboratoryLevel: planet.buildings.research,
     now: context.now,
     mode: context.mode,

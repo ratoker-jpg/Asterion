@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { FACTION_DEFENSE_CONSTRUCTION_BALANCE } from './defense-construction-data.ts';
+import { COMMANDER_COMBAT_CATALOG } from './catalog.ts';
+import { COMMANDER_ABILITIES, COMMANDER_IDS } from './commanders.ts';
 import { getFactionDefenseCatalog, getFactionShipCatalog } from './faction-catalog.ts';
+import { FACTION_SHIP_MECHANICS } from './faction-ship-data.ts';
 import { COMBAT_FACTIONS, getCombatFactionName } from './factions.ts';
+import { DEFENSE_IDS, SHIP_IDS } from './ids.ts';
 import { createDefaultCombatPriority } from './priority.ts';
+import { FACTION_SHIP_BASE_PRODUCTION_TIMES } from './ship-time-rebalanced.ts';
 import {
   migrateSimulatorState,
   normalizeSimulatorScenario,
@@ -115,8 +121,11 @@ test('race selection swaps presentation roster while preserving canonical mechan
   assert.equal(swarmScout?.name, 'Жало');
   assert.notEqual(asterScout?.art, ilarScout?.art);
   assert.notEqual(ilarScout?.art, swarmScout?.art);
-  assert.equal(asterScout?.combat.attack, ilarScout?.combat.attack);
-  assert.equal(ilarScout?.combat.attack, swarmScout?.combat.attack);
+  assert.equal(asterScout?.combat.attack, 800);
+  assert.equal(ilarScout?.combat.attack, 800);
+  assert.equal(swarmScout?.combat.attack, 400);
+  assert.notEqual(asterScout?.ship?.speed, ilarScout?.ship?.speed);
+  assert.equal(ilarScout?.ship?.speed, swarmScout?.ship?.speed);
 
   const asterDefense = getFactionDefenseCatalog('aegis').find((entity) => entity.id === 'ballistic-turret');
   const ilarDefense = getFactionDefenseCatalog('synod').find((entity) => entity.id === 'ballistic-turret');
@@ -126,6 +135,137 @@ test('race selection swaps presentation roster while preserving canonical mechan
   assert.equal(swarmDefense?.name, 'Шипомёт');
   assert.notEqual(asterDefense?.art, ilarDefense?.art);
   assert.notEqual(ilarDefense?.art, swarmDefense?.art);
+});
+
+test('commander catalog uses the Asterion naming contract and the canonical source characteristics', () => {
+  const expected = {
+    corsair: { name: 'Корсар', population: 10, cost: { metal: 2_500, minerals: 2_500, gas: 0 }, time: '00:03:20', sourceRequirement: 'Адмирал Уровень: 2' },
+    hunter: { name: 'Охотник', population: 10, cost: { metal: 2_000, minerals: 2_000, gas: 0 }, time: '00:02:40', sourceRequirement: 'Адмирал Уровень: 2' },
+    executioner: { name: 'Палач', population: 10, cost: { metal: 4_000, minerals: 4_000, gas: 0 }, time: '00:05:20', sourceRequirement: 'Адмирал Уровень: 5' },
+    juggernaut: { name: 'Джаггернаут', population: 10, cost: { metal: 4_000, minerals: 4_000, gas: 0 }, time: '00:05:20', sourceRequirement: 'Адмирал Уровень: 5' },
+    typhoon: { name: 'Тайфун', population: 10, cost: { metal: 2_500, minerals: 2_500, gas: 0 }, time: '00:03:20', sourceRequirement: 'Адмирал Уровень: 10' },
+    viper: { name: 'Вайпер', population: 10, cost: { metal: 3_500, minerals: 3_500, gas: 0 }, time: '00:04:40', sourceRequirement: 'Адмирал Уровень: 20' },
+    phantom: { name: 'Фантом', population: 10, cost: { metal: 4_000, minerals: 4_000, gas: 0 }, time: '00:05:20', sourceRequirement: 'Адмирал Уровень: 25' },
+    scorpion: { name: 'Скорпион', population: 10, cost: { metal: 4_000, minerals: 4_000, gas: 0 }, time: '00:05:20', sourceRequirement: 'Адмирал Уровень: 20' },
+    annihilator: { name: 'Аннигилятор', population: 10, cost: { metal: 4_500, minerals: 4_500, gas: 0 }, time: '00:06:00', sourceRequirement: 'Адмирал Уровень: 35' },
+    reanimator: { name: 'Реаниматор', population: 10, cost: { metal: 3_500, minerals: 3_500, gas: 0 }, time: '00:04:40', sourceRequirement: 'Адмирал Уровень: 15' },
+    argo: { name: 'Арго', population: 10, cost: { metal: 2_500, minerals: 2_500, gas: 0 }, time: '00:03:20', sourceRequirement: 'Чертежный комплект Необходим: Арго' },
+    judge: { name: 'Судья', population: 10, cost: { metal: 4_500, minerals: 4_500, gas: 0 }, time: '00:06:00', sourceRequirement: 'Чертежный комплект Необходим: Судья' },
+    polias: { name: 'Полиас', population: 500, cost: { metal: 6_000, minerals: 6_000, gas: 0 }, time: '00:08:00', sourceRequirement: 'Адмирал Уровень: 28' },
+  } as const;
+
+  assert.deepEqual(COMMANDER_COMBAT_CATALOG.map((entity) => entity.id), COMMANDER_IDS);
+  for (const id of COMMANDER_IDS) {
+    const entity = COMMANDER_COMBAT_CATALOG.find((candidate) => candidate.id === id);
+    assert.ok(entity, `${id} must be present in the commander catalog`);
+    const source = expected[id];
+    assert.equal(entity.name, source.name);
+    assert.equal(entity.population, source.population);
+    assert.deepEqual(entity.cost, source.cost);
+    assert.equal(entity.construction.time, source.time);
+    assert.deepEqual(entity.combat, {
+      attack: 2_000,
+      life: 20_000,
+      weaponType: 'Лазер',
+      armorType: 'Средняя Броня',
+      armorStrength: 6,
+    });
+    assert.deepEqual(entity.ship, { cargo: 1_000, speed: 33_000, fuel: 300 });
+    assert.equal(entity.maxOwned, 1);
+    assert.deepEqual(entity.sourceRequirements, [source.sourceRequirement]);
+    assert.deepEqual(entity.commanderAbility, {
+      ability: COMMANDER_ABILITIES[id].ability,
+      description: COMMANDER_ABILITIES[id].description,
+      ratePerLevel: COMMANDER_ABILITIES[id].ratePerLevel,
+    });
+    assert.match(entity.art, /commander-ship\.[a-z-]+\.png$/i);
+  }
+});
+
+test('canonical source registry resolves all 39 ships without a faction fallback', () => {
+  const expectedFolders = {
+    aegis: 'Корабли Синяя раса',
+    synod: 'Корабли Зеленная раса',
+    veyra: 'Корабли Рой Красные',
+  } as const;
+
+  for (const faction of COMBAT_FACTIONS) {
+    const mechanics = FACTION_SHIP_MECHANICS[faction.id];
+    assert.deepEqual(Object.keys(mechanics).sort(), [...SHIP_IDS].sort(), `${faction.id} must have 13 source records`);
+    const catalog = getFactionShipCatalog(faction.id);
+    assert.equal(catalog.length, 13);
+
+    for (const entity of catalog) {
+      const source = mechanics[entity.id];
+      assert.ok(source, `${faction.id}/${entity.id} must have source data`);
+      assert.match(source.sourceFile, new RegExp(`${expectedFolders[faction.id]}\\/page_.*\\.html$`));
+      assert.equal(entity.population, source.population);
+      assert.deepEqual(entity.cost, source.cost);
+      assert.deepEqual(entity.combat, source.combat);
+      assert.deepEqual(entity.ship, source.ship);
+      assert.deepEqual(entity.construction, source.construction);
+      assert.equal(source.construction.time, FACTION_SHIP_BASE_PRODUCTION_TIMES[faction.id][entity.id]);
+    }
+  }
+
+  const controls = {
+    aegis: { civil: ['transporter', 1, 10, '00:00:12'], combat: ['scout', 2, 800, '00:00:24'], superheavy: ['death-star', 700, 700_000, '03:30:00'] },
+    synod: { civil: ['transporter', 1, 10, '00:00:12'], combat: ['scout', 2, 800, '00:00:16'], superheavy: ['death-star', 615, 615_000, '03:04:30'] },
+    veyra: { civil: ['transporter', 2, 10, '00:00:24'], combat: ['scout', 1, 400, '00:00:12'], superheavy: ['death-star', 320, 320_000, '01:36:00'] },
+  } as const;
+
+  for (const faction of COMBAT_FACTIONS) {
+    for (const sample of Object.values(controls[faction.id])) {
+      const [id, population, attack, time] = sample;
+      const entity = getFactionShipCatalog(faction.id).find((item) => item.id === id);
+      assert.ok(entity);
+      assert.equal(entity.population, population);
+      assert.equal(entity.combat.attack, attack);
+      assert.equal(entity.construction.time, time);
+    }
+  }
+
+  assert.equal(FACTION_SHIP_MECHANICS.aegis.transporter.cost.metal, FACTION_SHIP_MECHANICS.synod.transporter.cost.metal);
+  assert.equal(FACTION_SHIP_MECHANICS.aegis.transporter.combat.attack, FACTION_SHIP_MECHANICS.veyra.transporter.combat.attack);
+  assert.notDeepEqual(FACTION_SHIP_MECHANICS.aegis.transporter, FACTION_SHIP_MECHANICS.veyra.transporter);
+  assert.notDeepEqual(FACTION_SHIP_MECHANICS.synod['death-star'], FACTION_SHIP_MECHANICS.veyra['death-star']);
+  assert.equal(FACTION_SHIP_MECHANICS.veyra.cruiser.sourceName, 'Абсорбатор');
+  assert.equal(FACTION_SHIP_MECHANICS.veyra.defender.sourceName, 'Немезис');
+
+  const destroyerControls = {
+    aegis: { time: '00:01:36', population: 30, attack: 19_500, cost: { metal: 93_900, minerals: 84_500, gas: 9_400 }, requirements: ['Верфь · уровень 9', 'Реактивные двигатели · уровень 6', 'Гиперпространство · уровень 5'] },
+    synod: { time: '00:01:30', population: 28, attack: 18_200, cost: { metal: 87_600, minerals: 78_900, gas: 8_800 }, requirements: ['Верфь · уровень 9', 'Реактивные двигатели · уровень 6', 'Гиперпространство · уровень 5'] },
+    veyra: { time: '00:00:54', population: 17, attack: 11_050, cost: { metal: 53_200, minerals: 47_900, gas: 5_300 }, requirements: ['Верфь · уровень 6', 'Плазменная наука · уровень 1', 'Немезис · количество 1'] },
+  } as const;
+
+  for (const faction of COMBAT_FACTIONS) {
+    const destroyer = FACTION_SHIP_MECHANICS[faction.id].destroyer;
+    const control = destroyerControls[faction.id];
+    assert.equal(destroyer.construction.time, control.time);
+    assert.equal(destroyer.population, control.population);
+    assert.equal(destroyer.combat.attack, control.attack);
+    assert.deepEqual(destroyer.cost, control.cost);
+    assert.deepEqual(destroyer.construction.requirements, control.requirements);
+  }
+});
+
+test('faction defense catalogs use independent source costs, populations, and 1.4% base times', () => {
+  for (const faction of COMBAT_FACTIONS) {
+    const catalog = getFactionDefenseCatalog(faction.id);
+    assert.equal(catalog.length, DEFENSE_IDS.length);
+    for (const defenseId of DEFENSE_IDS) {
+      const entity = catalog.find((item) => item.id === defenseId);
+      const expected = FACTION_DEFENSE_CONSTRUCTION_BALANCE[faction.id][defenseId];
+      assert.ok(entity, `${faction.id}/${defenseId} must exist in the selected faction catalog`);
+      assert.deepEqual(entity.cost, expected.cost, `${faction.id}/${defenseId} cost`);
+      assert.equal(entity.population, expected.population, `${faction.id}/${defenseId} population`);
+      assert.equal(entity.construction.time, expected.time, `${faction.id}/${defenseId} base time`);
+    }
+  }
+
+  assert.equal(getFactionDefenseCatalog('aegis').find((entity) => entity.id === 'tower-shield')?.population, 12);
+  assert.equal(getFactionDefenseCatalog('synod').find((entity) => entity.id === 'ion-plasma-battery')?.cost.gas, 64_000);
+  assert.equal(getFactionDefenseCatalog('veyra').find((entity) => entity.id === 'ballistic-turret')?.cost.metal, 2_300);
 });
 
 test('legacy simulator scenario migrates to Asters versus Asters with zero technologies', () => {

@@ -1,5 +1,6 @@
 import { findScience } from '../science/catalog.ts';
 import type { ScienceId } from '../science/types.ts';
+import { creditResources, type ResourceCapacitiesInput } from '../resources/credit.ts';
 import {
   BUILDING_ROLES,
   INDUSTRY_BUILDING_ROLES,
@@ -141,6 +142,8 @@ export type BuildingEconomyState = {
   buildings: BuildingLevels;
   queue: BuildingQueueItem[];
   scienceLevels: ScienceLevels;
+  /** Runtime callers provide dynamic storage limits; omitted for legacy domain callers. */
+  capacities?: ResourceCapacitiesInput;
 };
 
 export type ResourceEconomyState = BuildingEconomyState;
@@ -564,10 +567,13 @@ function refundCost(cost: ResourceCost, refundPercent: number): ResourceCost {
   ) as ResourceCost;
 }
 
-function addResourceCost(resources: ResourceWallet, cost: ResourceCost): ResourceWallet {
-  return Object.fromEntries(
-    (Object.keys(resources) as ResourceKey[]).map((key) => [key, resources[key] + cost[key]]),
-  ) as ResourceWallet;
+function addResourceCost(
+  resources: ResourceWallet,
+  cost: ResourceCost,
+  capacities?: ResourceCapacitiesInput,
+): ResourceWallet {
+  const unlimitedCapacities = { metal: Number.MAX_SAFE_INTEGER, minerals: Number.MAX_SAFE_INTEGER, gas: Number.MAX_SAFE_INTEGER };
+  return creditResources(resources, capacities ?? unlimitedCapacities, cost).wallet;
 }
 
 function getQueuedBuildingCost(item: BuildingQueueItem, scienceLevels: ScienceLevels): ResourceCost | null {
@@ -682,7 +688,7 @@ export function cancelBuildingProject(
     ok: true,
     state: {
       ...state,
-      resources: addResourceCost(state.resources, refund),
+      resources: addResourceCost(state.resources, refund, state.capacities),
       queue: rescheduleQueueAfterCancellation(remaining, queueIndex === 0, now),
     },
     reason: null,
@@ -756,15 +762,20 @@ export function destroyBuildingLevel(
     Math.max(BUILDING_DESTROY_REFUND_MIN_PERCENT, normalizedRefundPercent),
   );
   const refund = refundCost(cost, safeRefundPercent);
+  const nextBuildings = {
+    ...state.buildings,
+    [assetRole]: currentLevel - 1,
+  };
   return {
     ok: true,
     state: {
       ...state,
-      resources: addResourceCost(state.resources, refund),
-      buildings: {
-        ...state.buildings,
-        [assetRole]: currentLevel - 1,
-      },
+      resources: addResourceCost(
+        state.resources,
+        refund,
+        state.capacities ? getStorageCapacities(nextBuildings) : undefined,
+      ),
+      buildings: nextBuildings,
     },
     reason: null,
     destroyedRole: assetRole,

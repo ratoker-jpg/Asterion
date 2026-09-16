@@ -16,22 +16,25 @@ export const COMMANDER_IDS = [
 
 export type CommanderId = (typeof COMMANDER_IDS)[number];
 
-export type CommanderAbilityDefinition = {
+import type { CommanderAbilityTraits } from './types.ts';
+
+export type CommanderAbilityDefinition = CommanderAbilityTraits & {
   commanderId: CommanderId;
   commanderName: string;
-  ability: string;
-  description: string;
-  ratePerLevel: string;
   implementationStatus: 'catalog-only';
   note?: string;
 };
 
+// TODO(phase6): wire these source-described abilities into the battle
+// resolver. The current PR exposes the canonical catalog and upgrade data;
+// combat effects remain intentionally catalog-only until their battle rules
+// are specified and tested.
 export const COMMANDER_ABILITIES: Readonly<Record<CommanderId, CommanderAbilityDefinition>> = {
   annihilator: {
     commanderId: 'annihilator',
     commanderName: 'Аннигилятор',
     ability: 'Форсированное разрушение',
-    description: 'Увеличивает вероятность разрушения здания или планетарной структуры.',
+    description: 'Увеличивает шанс уничтожить здание противника.',
     ratePerLevel: '+0,5% за уровень',
     implementationStatus: 'catalog-only',
   },
@@ -39,7 +42,7 @@ export const COMMANDER_ABILITIES: Readonly<Record<CommanderId, CommanderAbilityD
     commanderId: 'corsair',
     commanderName: 'Корсар',
     ability: 'Форсированное пиратство',
-    description: 'Увеличивает возможную добычу в Пиратском рейде.',
+    description: 'Увеличивает возможный процент украденных ресурсов за Пиратский рейд.',
     ratePerLevel: '+1,25% за уровень',
     implementationStatus: 'catalog-only',
   },
@@ -47,7 +50,7 @@ export const COMMANDER_ABILITIES: Readonly<Record<CommanderId, CommanderAbilityD
     commanderId: 'reanimator',
     commanderName: 'Реаниматор',
     ability: 'Восстановление',
-    description: 'Даёт шанс восстановить потерянные корабли на поле боя.',
+    description: 'Даёт шанс восстановить потерянные корабли прямо на поле боя.',
     ratePerLevel: '+0,4% за уровень',
     implementationStatus: 'catalog-only',
     note: 'Справка Nemexia также указывает ограничение: до 15 кораблей за ход.',
@@ -64,7 +67,7 @@ export const COMMANDER_ABILITIES: Readonly<Record<CommanderId, CommanderAbilityD
     commanderId: 'scorpion',
     commanderName: 'Скорпион',
     ability: 'Парализующий',
-    description: 'Увеличивает вероятность парализующего эффекта против противника.',
+    description: 'Увеличивает шанс парализовать корабли противника.',
     ratePerLevel: '+0,1% за уровень',
     implementationStatus: 'catalog-only',
   },
@@ -72,7 +75,7 @@ export const COMMANDER_ABILITIES: Readonly<Record<CommanderId, CommanderAbilityD
     commanderId: 'phantom',
     commanderName: 'Фантом',
     ability: 'Разрушение',
-    description: 'Увеличивает шанс отменить атаку противника.',
+    description: 'Даёт шанс отменить атаку противника.',
     ratePerLevel: '+0,75% за уровень',
     implementationStatus: 'catalog-only',
   },
@@ -80,7 +83,7 @@ export const COMMANDER_ABILITIES: Readonly<Record<CommanderId, CommanderAbilityD
     commanderId: 'hunter',
     commanderName: 'Охотник',
     ability: 'Охота',
-    description: 'Увеличивает вероятность обнаружения шпионов.',
+    description: 'Увеличивает шанс обнаружить вражеских шпионов.',
     ratePerLevel: '+1,75% за уровень',
     implementationStatus: 'catalog-only',
   },
@@ -88,7 +91,7 @@ export const COMMANDER_ABILITIES: Readonly<Record<CommanderId, CommanderAbilityD
     commanderId: 'typhoon',
     commanderName: 'Тайфун',
     ability: 'Форсаж',
-    description: 'Увеличивает скорость полёта флота.',
+    description: 'Увеличивает скорость полёта.',
     ratePerLevel: '+0,1% за уровень',
     implementationStatus: 'catalog-only',
   },
@@ -96,7 +99,7 @@ export const COMMANDER_ABILITIES: Readonly<Record<CommanderId, CommanderAbilityD
     commanderId: 'executioner',
     commanderName: 'Палач',
     ability: 'Форсированная атака',
-    description: 'Увеличивает урон флота.',
+    description: 'Увеличивает урон от атаки флота.',
     ratePerLevel: '+0,15% за уровень',
     implementationStatus: 'catalog-only',
   },
@@ -104,7 +107,7 @@ export const COMMANDER_ABILITIES: Readonly<Record<CommanderId, CommanderAbilityD
     commanderId: 'juggernaut',
     commanderName: 'Джаггернаут',
     ability: 'Повышенные жизни',
-    description: 'Увеличивает запас жизни кораблей флота.',
+    description: 'Увеличивает жизненные очки кораблей флота.',
     ratePerLevel: '+0,15% за уровень',
     implementationStatus: 'catalog-only',
   },
@@ -112,7 +115,7 @@ export const COMMANDER_ABILITIES: Readonly<Record<CommanderId, CommanderAbilityD
     commanderId: 'argo',
     commanderName: 'Арго',
     ability: 'Инженерное дело Отступников',
-    description: 'Усиливает специальный эффект против Отступников и грузоподъёмность.',
+    description: 'Даёт дополнительные очки усовершенствования в боях с Отступниками и увеличивает грузоподъёмность кораблей.',
     ratePerLevel: '+1% за уровень',
     implementationStatus: 'catalog-only',
   },
@@ -120,7 +123,7 @@ export const COMMANDER_ABILITIES: Readonly<Record<CommanderId, CommanderAbilityD
     commanderId: 'judge',
     commanderName: 'Судья',
     ability: 'Наказание',
-    description: 'Снижает броню противника.',
+    description: 'Уменьшает показатель брони всех вражеских юнитов.',
     ratePerLevel: '−0,15% брони противника за уровень',
     implementationStatus: 'catalog-only',
   },

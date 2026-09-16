@@ -161,6 +161,18 @@ test('stored reports survive migration while missing demo fixtures are restored'
   assert.deepEqual(migrated.savedReportIds, [customReport.id]);
 });
 
+test('legacy simulation reports are excluded from real battle history during migration', () => {
+  const simulation = {
+    ...DEMO_BATTLE_REPORTS[0],
+    id: 'battle-imported-simulation',
+    missionType: 'simulation' as const,
+  };
+  const migrated = migrateBattleHistory({ reports: [simulation], savedReportIds: [simulation.id] });
+
+  assert.equal(migrated.reports.some((report) => report.id === simulation.id), false);
+  assert.equal(migrated.savedReportIds.includes(simulation.id), false);
+});
+
 test('recent and saved list selectors stay independent', () => {
   const history = createDefaultBattleHistory();
   const reportId = DEMO_BATTLE_REPORTS[1].id;

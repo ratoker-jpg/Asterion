@@ -132,7 +132,7 @@ test('one seeded owner has exactly seven planets across seven systems, without e
   assert.deepEqual(planets.map((node) => node.id).sort(), [...profile.planetIds].sort());
   assert.equal(profile.displayName, 'Бот 01');
   assert.equal(profile.points, undefined);
-  assert.equal(profile.raceId, undefined);
+  assert.equal(profile.raceId, 'veyra');
   assert.equal(profile.alliance, undefined);
   const prime = planets.find((node) => node.id === 'npc-bot-01-prime')!;
   assert.equal(prime.id, 'npc-bot-01-prime');

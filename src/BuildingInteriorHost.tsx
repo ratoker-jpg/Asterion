@@ -16,12 +16,15 @@ import type {
 } from './domain/buildings/spaceport-upgrades.ts';
 import type { TradeExecution, TradeRequest, TradeState, TradeWallet } from './domain/buildings/trade.ts';
 import type { BuildingInteriorContext } from './building-interior-navigation.ts';
+import type { PlayerFactionId } from './domain/profile/types.ts';
+import type { TestTimeScale } from './domain/runtime/mode.ts';
 import './building-interiors.css';
 
 type BuildingInteriorHostProps<PlanetId extends string> = {
   context: BuildingInteriorContext<PlanetId>;
   planetName: string;
   moduleTitle: string;
+  factionId: PlayerFactionId;
   buildings: BuildingLevels;
   scienceLevels: ScienceLevels;
   productionBots: BotAssignment;
@@ -32,11 +35,13 @@ type BuildingInteriorHostProps<PlanetId extends string> = {
   spaceportWallet: SpaceportUpgradeWallet;
   resourceRatingPoints: number;
   now: number;
+  testTimeScale: TestTimeScale;
   onProductionBotsApply: (assignment: BotAssignment) => void;
   onRecyclingStart: (debrisAmount: number, allocation: ResourceAllocationPercent) => boolean;
   onRecyclingCollect: (jobId: string) => boolean;
   onTrade: (request: TradeRequest) => TradeExecution;
   onSpaceportUpgrade: (track: SpaceportUpgradeTrack, shipId: string) => boolean;
+  onSpaceportCancel: (taskId: string) => boolean;
   onBack: () => void;
 };
 
@@ -44,6 +49,7 @@ export function BuildingInteriorHost<PlanetId extends string>({
   context,
   planetName,
   moduleTitle,
+  factionId,
   buildings,
   scienceLevels,
   productionBots,
@@ -54,11 +60,13 @@ export function BuildingInteriorHost<PlanetId extends string>({
   spaceportWallet,
   resourceRatingPoints,
   now,
+  testTimeScale,
   onProductionBotsApply,
   onRecyclingStart,
   onRecyclingCollect,
   onTrade,
   onSpaceportUpgrade,
+  onSpaceportCancel,
   onBack,
 }: BuildingInteriorHostProps<PlanetId>) {
   if (context.buildingRole === 'recycling') {
@@ -94,13 +102,16 @@ export function BuildingInteriorHost<PlanetId extends string>({
     return (
       <SpaceportUpgradeView
         planetName={planetName}
+        factionId={factionId}
         buildingLevel={buildings.spaceport}
         buildings={buildings}
         scienceLevels={scienceLevels}
         upgrades={spaceportUpgrades}
         wallet={spaceportWallet}
         now={now}
+        testTimeScale={testTimeScale}
         onUpgrade={onSpaceportUpgrade}
+        onCancel={onSpaceportCancel}
         onBack={onBack}
       />
     );
@@ -120,7 +131,7 @@ export function BuildingInteriorHost<PlanetId extends string>({
     );
   }
 
-  const building = getBuildingDefinition(context.buildingRole);
+  const building = getBuildingDefinition(context.buildingRole, factionId);
 
   return (
     <main

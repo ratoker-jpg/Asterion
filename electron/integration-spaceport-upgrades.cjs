@@ -361,8 +361,27 @@ async function verify(win) {
   saved = await readSave(win);
   assertChain(saved.commanderQueue, 'corsair', 'Corsair rapid UI enqueue');
   if (saved.shipQueue.length !== 3) throw new Error('Commander enqueue mutated ordinary queue');
-  if (saved.metal !== beforeRapidCorsair.metal - 3500 || saved.minerals !== beforeRapidCorsair.minerals - 1750 || saved.gas !== beforeRapidCorsair.gas) {
-    throw new Error(`Corsair rapid enqueue charged resources more/less than three times ${JSON.stringify({ beforeRapidCorsair, saved })}`);
+  const commanderCost = saved.commanderQueue.reduce((total, task) => ({
+    metal: total.metal + task.cost.metal,
+    minerals: total.minerals + task.cost.minerals,
+    gas: total.gas + task.cost.gas,
+  }), { metal: 0, minerals: 0, gas: 0 });
+  if (saved.metal !== beforeRapidCorsair.metal - commanderCost.metal
+      || saved.minerals !== beforeRapidCorsair.minerals - commanderCost.minerals
+      || saved.gas !== beforeRapidCorsair.gas - commanderCost.gas
+      || saved.commanderQueue.some((task) => task.cost.gas !== 0 || task.refundEligible !== true)) {
+    throw new Error(`Corsair rapid enqueue charged resources or snapshots incorrectly ${JSON.stringify({ beforeRapidCorsair, saved, commanderCost })}`);
+  }
+  const commanderCard = await win.webContents.executeJavaScript(`(() => {
+    const row = document.querySelector('[data-qa-spaceport-card="corsair"]');
+    return {
+      text: row?.textContent?.replace(/\\s+/g, ' ').trim() ?? '',
+      hasGasChip: Boolean(row?.querySelector('[data-resource="gas"]')),
+      hasGasSourceNote: Boolean(row?.querySelector('[data-qa-spaceport-gas-unspecified]')),
+    };
+  })()`);
+  if (!commanderCard.text.includes('Корсар') || /Nox|Nemesis|Немезис/i.test(commanderCard.text) || commanderCard.hasGasChip || !commanderCard.hasGasSourceNote) {
+    throw new Error(`Commander presentation/gas contract mismatch ${JSON.stringify(commanderCard)}`);
   }
   const rapidNotice = await win.webContents.executeJavaScript(`document.querySelector('.shell-notice span')?.textContent?.replace(/\s+/g, ' ').trim() ?? ''`);
   if (!rapidNotice.includes('Очередь улучшений заполнена') || rapidNotice.includes('добавлен в очередь улучшений')) {
@@ -380,6 +399,32 @@ async function verify(win) {
   const secondReload = await readSave(win);
   if (secondReload.levels.transporter !== 3 || secondReload.levels.corsair !== 3) {
     throw new Error(`offline completion applied more than once ${JSON.stringify(secondReload)}`);
+  }
+
+  // Refill one queue after completion and exercise the actual red-X flow:
+  // confirmation, per-task refund, same-ship cascade and queue persistence.
+  for (let index = 0; index < 3; index += 1) {
+    await click(win, '[data-qa-spaceport-upgrade="transporter"]');
+    await waitFor(win, `document.querySelector('[data-qa-spaceport-queue-count]')?.getAttribute('data-qa-spaceport-queue-count') === '${index + 1}/3'`);
+  }
+  const beforeCancellation = await readSave(win);
+  const cancellationTaskId = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-spaceport-cancel]')?.getAttribute('data-qa-spaceport-cancel') ?? ''`);
+  if (!cancellationTaskId) throw new Error('Spaceport queue has no cancellable task control');
+  await click(win, `[data-qa-spaceport-cancel=${JSON.stringify(cancellationTaskId)}]`);
+  await waitFor(win, 'document.querySelector("[data-qa-spaceport-cancel-confirm]")');
+  const confirmationText = await win.webContents.executeJavaScript('document.querySelector("[data-qa-spaceport-cancel-confirm]")?.textContent?.replace(/\\s+/g, " ").trim() ?? ""');
+  if (!confirmationText.includes('каскадно') || !confirmationText.includes('60–80%')) {
+    throw new Error(`Spaceport cancellation confirmation is incomplete: ${confirmationText}`);
+  }
+  await click(win, '[data-qa-spaceport-cancel-yes]');
+  await waitFor(win, 'document.querySelector("[data-qa-spaceport-queue-count]")?.getAttribute("data-qa-spaceport-queue-count") === "0/3"');
+  const afterCancellation = await readSave(win);
+  if (afterCancellation.shipQueue.length !== 0 || afterCancellation.levels.transporter !== 3 || afterCancellation.metal <= beforeCancellation.metal) {
+    throw new Error(`Spaceport cancellation state mismatch ${JSON.stringify({ beforeCancellation, afterCancellation })}`);
+  }
+  const cancellationNotice = await win.webContents.executeJavaScript('document.querySelector(".shell-notice span")?.textContent?.replace(/\\s+/g, " ").trim() ?? ""');
+  if (!cancellationNotice.includes('Каскадно отменено ещё 2')) {
+    throw new Error(`Spaceport cancellation notice is incomplete: ${cancellationNotice}`);
   }
 
   await assertRequirementBadges(win);

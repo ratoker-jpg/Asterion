@@ -26,6 +26,12 @@ export type TacticalCombatTraits = {
   priority: string;
 };
 
+export type CommanderAbilityTraits = {
+  ability: string;
+  description: string;
+  ratePerLevel: string;
+};
+
 export type ConstructionDefinition = {
   time: string;
   requiredShipyardLevel: number;
@@ -39,10 +45,15 @@ export type CombatEntityDefinition = {
   role: string;
   art: string;
   population: number;
+  /** Catalog/UI preparation for a future production limit; runtime production is not implemented yet. */
+  maxOwned?: number;
   cost: ResourceCost;
   combat: CombatStats;
   category: string;
   ship?: ShipCombatTraits;
   tactical?: TacticalCombatTraits;
+  commanderAbility?: CommanderAbilityTraits;
+  /** Source requirement snapshot kept separate from Asterion's currently enforced gates. */
+  sourceRequirements?: readonly string[];
   construction: ConstructionDefinition;
 };

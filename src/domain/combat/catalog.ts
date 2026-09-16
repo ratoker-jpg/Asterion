@@ -36,8 +36,8 @@ import argoArt from '../../../assets/source/New assets/comander_ship/commander-s
 import judgeArt from '../../../assets/source/New assets/comander_ship/commander-ship.judge.png';
 import poliasArt from '../../../assets/source/New assets/comander_ship/commander-ship.polias.png';
 
-import type { CommanderId } from './commanders.ts';
-import type { CombatEntityDefinition } from './types.ts';
+import { COMMANDER_ABILITIES, type CommanderId } from './commanders.ts';
+import type { CommanderAbilityTraits, CombatEntityDefinition } from './types.ts';
 import type { CombatEntityId, DefenseId, ShipId } from './ids.ts';
 
 export type CatalogEntity<TId extends CombatEntityId = CombatEntityId> = CombatEntityDefinition & { id: TId };
@@ -184,72 +184,140 @@ export const DEFENSE_COMBAT_CATALOG: readonly CatalogEntity<DefenseId>[] = [
   },
 ];
 
+type CommanderCatalogInput = {
+  id: CommanderId;
+  name: string;
+  role: string;
+  art: string;
+  population: number;
+  cost: { metal: number; minerals: number; gas: number };
+  combat: { attack: number; life: number; weaponType: string; armorType: string; armorStrength: number };
+  sourceRequirements: readonly string[];
+  requiredShipyardLevel: number;
+  requirements: readonly string[];
+  tactical: { specialization: string; range: string; priority: string };
+  time: string;
+};
+
+const commanderAbilityFor = (id: CommanderId): CommanderAbilityTraits => {
+  const ability = COMMANDER_ABILITIES[id];
+  return {
+    ability: ability.ability,
+    description: ability.description,
+    ratePerLevel: ability.ratePerLevel,
+  };
+};
+
+const commander = ({
+  id,
+  name,
+  role,
+  art,
+  population,
+  cost,
+  combat,
+  sourceRequirements,
+  requiredShipyardLevel,
+  requirements,
+  tactical,
+  time,
+}: CommanderCatalogInput): CatalogEntity<CommanderId> => ({
+  id,
+  kind: 'commander',
+  name,
+  role,
+  art,
+  population,
+  maxOwned: 1,
+  cost,
+  combat,
+  category: 'Командирский корабль',
+  ship: { cargo: 1_000, speed: 33_000, fuel: 300 },
+  tactical,
+  commanderAbility: commanderAbilityFor(id),
+  sourceRequirements,
+  construction: { time, requiredShipyardLevel, requirements },
+});
+
 export const COMMANDER_COMBAT_CATALOG: readonly CatalogEntity<CommanderId>[] = [
-  {
-    id: 'corsair', kind: 'commander', name: 'Корсар', role: 'Командирский рейдер', art: corsairArt, population: 8,
-    cost: { metal: 12_000, minerals: 6_000, gas: 1_000 }, combat: { attack: 6_000, life: 18_000, weaponType: 'Лазер', armorType: 'Лёгкая броня', armorStrength: 5 }, category: 'Командирский корабль',
-    tactical: { specialization: 'Рейд', range: 'Ближняя', priority: 'Лёгкий флот' }, construction: { time: '00:30:00', requiredShipyardLevel: 1, requirements: ['Верфь · уровень 1'] },
-  },
-  {
-    id: 'hunter', kind: 'commander', name: 'Охотник', role: 'Командирский перехватчик', art: hunterArt, population: 10,
-    cost: { metal: 16_000, minerals: 9_000, gas: 2_000 }, combat: { attack: 8_000, life: 22_000, weaponType: 'Лазер', armorType: 'Лёгкая броня', armorStrength: 5 }, category: 'Командирский корабль',
-    tactical: { specialization: 'Перехват', range: 'Ближняя', priority: 'Быстрые цели' }, construction: { time: '00:40:00', requiredShipyardLevel: 2, requirements: ['Верфь · уровень 2', 'Астрономия · уровень 2'] },
-  },
-  {
-    id: 'executioner', kind: 'commander', name: 'Палач', role: 'Командирский штурмовик', art: executionerArt, population: 14,
-    cost: { metal: 22_000, minerals: 15_000, gas: 4_000 }, combat: { attack: 12_500, life: 32_000, weaponType: 'Ион', armorType: 'Средняя броня', armorStrength: 7 }, category: 'Командирский корабль',
-    tactical: { specialization: 'Штурм', range: 'Средняя', priority: 'Крейсеры' }, construction: { time: '00:55:00', requiredShipyardLevel: 3, requirements: ['Верфь · уровень 3', 'Броня кораблей · уровень 3'] },
-  },
-  {
-    id: 'juggernaut', kind: 'commander', name: 'Джаггернаут', role: 'Тяжёлый командирский корабль', art: juggernautArt, population: 20,
-    cost: { metal: 34_000, minerals: 25_000, gas: 6_500 }, combat: { attack: 18_000, life: 55_000, weaponType: 'Ион', armorType: 'Тяжёлая броня', armorStrength: 10 }, category: 'Командирский корабль',
-    tactical: { specialization: 'Прорыв', range: 'Средняя', priority: 'Тяжёлый флот' }, construction: { time: '01:20:00', requiredShipyardLevel: 4, requirements: ['Верфь · уровень 4', 'Тяжёлая броня · уровень 3'] },
-  },
-  {
-    id: 'typhoon', kind: 'commander', name: 'Тайфун', role: 'Командирский ударный крейсер', art: typhoonArt, population: 26,
-    cost: { metal: 45_000, minerals: 34_000, gas: 10_000 }, combat: { attack: 25_000, life: 68_000, weaponType: 'Плазма', armorType: 'Средняя броня', armorStrength: 8 }, category: 'Командирский корабль',
-    tactical: { specialization: 'Ударный флот', range: 'Средняя', priority: 'Флот' }, construction: { time: '01:45:00', requiredShipyardLevel: 5, requirements: ['Верфь · уровень 5', 'Реактивные двигатели · уровень 4'] },
-  },
-  {
-    id: 'viper', kind: 'commander', name: 'Вайпер', role: 'Командирский охотник', art: viperArt, population: 30,
-    cost: { metal: 52_000, minerals: 38_000, gas: 12_000 }, combat: { attack: 31_000, life: 74_000, weaponType: 'Ион', armorType: 'Средняя броня', armorStrength: 8 }, category: 'Командирский корабль',
-    tactical: { specialization: 'Охота', range: 'Дальняя', priority: 'Командиры' }, construction: { time: '02:00:00', requiredShipyardLevel: 6, requirements: ['Верфь · уровень 6', 'Ионная наука · уровень 5'] },
-  },
-  {
-    id: 'phantom', kind: 'commander', name: 'Фантом', role: 'Командирский скрытный корабль', art: phantomArt, population: 35,
-    cost: { metal: 66_000, minerals: 52_000, gas: 18_000 }, combat: { attack: 38_000, life: 82_000, weaponType: 'Лазер', armorType: 'Композитная броня', armorStrength: 9 }, category: 'Командирский корабль',
-    tactical: { specialization: 'Скрытная атака', range: 'Дальняя', priority: 'Тыл' }, construction: { time: '02:30:00', requiredShipyardLevel: 7, requirements: ['Верфь · уровень 7', 'Шпионаж · уровень 6', 'Гиперпространство · уровень 3'] },
-  },
-  {
-    id: 'scorpion', kind: 'commander', name: 'Скорпион', role: 'Командирский осадный корабль', art: scorpionArt, population: 42,
-    cost: { metal: 82_000, minerals: 65_000, gas: 24_000 }, combat: { attack: 48_000, life: 105_000, weaponType: 'Плазма', armorType: 'Тяжёлая броня', armorStrength: 11 }, category: 'Командирский корабль',
-    tactical: { specialization: 'Осада', range: 'Дальняя', priority: 'Оборона' }, construction: { time: '03:00:00', requiredShipyardLevel: 8, requirements: ['Верфь · уровень 8', 'Плазменная наука · уровень 6'] },
-  },
-  {
-    id: 'annihilator', kind: 'commander', name: 'Аннигилятор', role: 'Командирский разрушитель', art: annihilatorArt, population: 55,
-    cost: { metal: 105_000, minerals: 82_000, gas: 34_000 }, combat: { attack: 65_000, life: 135_000, weaponType: 'Плазма', armorType: 'Тяжёлая броня', armorStrength: 12 }, category: 'Командирский корабль',
-    tactical: { specialization: 'Уничтожение флота', range: 'Дальняя', priority: 'Капитальные' }, construction: { time: '04:00:00', requiredShipyardLevel: 9, requirements: ['Верфь · уровень 9', 'Плазменная наука · уровень 8', 'Тяжёлая броня · уровень 6'] },
-  },
-  {
-    id: 'reanimator', kind: 'commander', name: 'Реаниматор', role: 'Командирский корабль поддержки', art: reanimatorArt, population: 60,
-    cost: { metal: 118_000, minerals: 96_000, gas: 40_000 }, combat: { attack: 42_000, life: 170_000, weaponType: 'Ион', armorType: 'Усиленная броня', armorStrength: 13 }, category: 'Командирский корабль',
-    tactical: { specialization: 'Поддержка', range: 'Средняя', priority: 'Союзный флот' }, construction: { time: '04:30:00', requiredShipyardLevel: 10, requirements: ['Верфь · уровень 10', 'Энергетика · уровень 8', 'Нанотехнологии · уровень 5'] },
-  },
-  {
-    id: 'argo', kind: 'commander', name: 'Арго', role: 'Командирский флагман', art: argoArt, population: 75,
-    cost: { metal: 145_000, minerals: 120_000, gas: 52_000 }, combat: { attack: 78_000, life: 210_000, weaponType: 'Ион / Плазма', armorType: 'Флагманская броня', armorStrength: 14 }, category: 'Командирский корабль',
-    tactical: { specialization: 'Командование', range: 'Дальняя', priority: 'Флот' }, construction: { time: '05:30:00', requiredShipyardLevel: 11, requirements: ['Верфь · уровень 11', 'Гиперпространство · уровень 7'] },
-  },
-  {
-    id: 'judge', kind: 'commander', name: 'Судья', role: 'Командирский линкор', art: judgeArt, population: 90,
-    cost: { metal: 180_000, minerals: 150_000, gas: 68_000 }, combat: { attack: 105_000, life: 270_000, weaponType: 'Плазма', armorType: 'Флагманская броня', armorStrength: 15 }, category: 'Командирский корабль',
-    tactical: { specialization: 'Тяжёлый бой', range: 'Дальняя', priority: 'Капитальные' }, construction: { time: '07:00:00', requiredShipyardLevel: 12, requirements: ['Верфь · уровень 12', 'Тяжёлая броня · уровень 9', 'Плазменная наука · уровень 9'] },
-  },
-  {
-    id: 'polias', kind: 'commander', name: 'Полиас', role: 'Верховный командирский корабль', art: poliasArt, population: 130,
-    cost: { metal: 260_000, minerals: 220_000, gas: 110_000 }, combat: { attack: 165_000, life: 420_000, weaponType: 'Гибридное', armorType: 'Флагманская броня', armorStrength: 18 }, category: 'Командирский корабль',
-    tactical: { specialization: 'Стратегическое превосходство', range: 'Дальняя', priority: 'Все цели' }, construction: { time: '10:00:00', requiredShipyardLevel: 14, requirements: ['Верфь · уровень 14', 'Гиперпространство · уровень 10', 'Параллельные вселенные · уровень 1'] },
-  },
+  commander({
+    id: 'corsair', name: 'Корсар', role: 'Командирский рейдер', art: corsairArt, population: 10,
+    cost: { metal: 2_500, minerals: 2_500, gas: 0 }, combat: { attack: 2_000, life: 20_000, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6 },
+    sourceRequirements: ['Адмирал Уровень: 2'], requiredShipyardLevel: 1, requirements: ['Верфь · уровень 1'],
+    tactical: { specialization: 'Рейд', range: 'Ближняя', priority: 'Лёгкий флот' }, time: '00:03:20',
+  }),
+  commander({
+    id: 'hunter', name: 'Охотник', role: 'Командирский перехватчик', art: hunterArt, population: 10,
+    cost: { metal: 2_000, minerals: 2_000, gas: 0 }, combat: { attack: 2_000, life: 20_000, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6 },
+    sourceRequirements: ['Адмирал Уровень: 2'], requiredShipyardLevel: 2, requirements: ['Верфь · уровень 2', 'Астрономия · уровень 2'],
+    tactical: { specialization: 'Перехват', range: 'Ближняя', priority: 'Быстрые цели' }, time: '00:02:40',
+  }),
+  commander({
+    id: 'executioner', name: 'Палач', role: 'Командирский штурмовик', art: executionerArt, population: 10,
+    cost: { metal: 4_000, minerals: 4_000, gas: 0 }, combat: { attack: 2_000, life: 20_000, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6 },
+    sourceRequirements: ['Адмирал Уровень: 5'], requiredShipyardLevel: 3, requirements: ['Верфь · уровень 3', 'Броня кораблей · уровень 3'],
+    tactical: { specialization: 'Штурм', range: 'Средняя', priority: 'Крейсеры' }, time: '00:05:20',
+  }),
+  commander({
+    id: 'juggernaut', name: 'Джаггернаут', role: 'Тяжёлый командирский корабль', art: juggernautArt, population: 10,
+    cost: { metal: 4_000, minerals: 4_000, gas: 0 }, combat: { attack: 2_000, life: 20_000, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6 },
+    sourceRequirements: ['Адмирал Уровень: 5'], requiredShipyardLevel: 4, requirements: ['Верфь · уровень 4', 'Тяжёлая броня · уровень 3'],
+    tactical: { specialization: 'Прорыв', range: 'Средняя', priority: 'Тяжёлый флот' }, time: '00:05:20',
+  }),
+  commander({
+    id: 'typhoon', name: 'Тайфун', role: 'Командирский ударный крейсер', art: typhoonArt, population: 10,
+    cost: { metal: 2_500, minerals: 2_500, gas: 0 }, combat: { attack: 2_000, life: 20_000, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6 },
+    sourceRequirements: ['Адмирал Уровень: 10'], requiredShipyardLevel: 5, requirements: ['Верфь · уровень 5', 'Реактивные двигатели · уровень 4'],
+    tactical: { specialization: 'Ударный флот', range: 'Средняя', priority: 'Флот' }, time: '00:03:20',
+  }),
+  commander({
+    id: 'viper', name: 'Вайпер', role: 'Командирский охотник', art: viperArt, population: 10,
+    cost: { metal: 3_500, minerals: 3_500, gas: 0 }, combat: { attack: 2_000, life: 20_000, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6 },
+    sourceRequirements: ['Адмирал Уровень: 20'], requiredShipyardLevel: 6, requirements: ['Верфь · уровень 6', 'Ионная наука · уровень 5'],
+    tactical: { specialization: 'Охота', range: 'Дальняя', priority: 'Командиры' }, time: '00:04:40',
+  }),
+  commander({
+    id: 'phantom', name: 'Фантом', role: 'Командирский скрытный корабль', art: phantomArt, population: 10,
+    cost: { metal: 4_000, minerals: 4_000, gas: 0 }, combat: { attack: 2_000, life: 20_000, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6 },
+    sourceRequirements: ['Адмирал Уровень: 25'], requiredShipyardLevel: 7, requirements: ['Верфь · уровень 7', 'Шпионаж · уровень 6', 'Гиперпространство · уровень 3'],
+    tactical: { specialization: 'Скрытная атака', range: 'Дальняя', priority: 'Тыл' }, time: '00:05:20',
+  }),
+  commander({
+    id: 'scorpion', name: 'Скорпион', role: 'Командирский осадный корабль', art: scorpionArt, population: 10,
+    cost: { metal: 4_000, minerals: 4_000, gas: 0 }, combat: { attack: 2_000, life: 20_000, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6 },
+    sourceRequirements: ['Адмирал Уровень: 20'], requiredShipyardLevel: 8, requirements: ['Верфь · уровень 8', 'Плазменная наука · уровень 6'],
+    tactical: { specialization: 'Осада', range: 'Дальняя', priority: 'Оборона' }, time: '00:05:20',
+  }),
+  commander({
+    id: 'annihilator', name: 'Аннигилятор', role: 'Командирский разрушитель', art: annihilatorArt, population: 10,
+    cost: { metal: 4_500, minerals: 4_500, gas: 0 }, combat: { attack: 2_000, life: 20_000, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6 },
+    sourceRequirements: ['Адмирал Уровень: 35'], requiredShipyardLevel: 9, requirements: ['Верфь · уровень 9', 'Плазменная наука · уровень 8', 'Тяжёлая броня · уровень 6'],
+    tactical: { specialization: 'Уничтожение флота', range: 'Дальняя', priority: 'Капитальные' }, time: '00:06:00',
+  }),
+  commander({
+    id: 'reanimator', name: 'Реаниматор', role: 'Командирский корабль поддержки', art: reanimatorArt, population: 10,
+    cost: { metal: 3_500, minerals: 3_500, gas: 0 }, combat: { attack: 2_000, life: 20_000, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6 },
+    sourceRequirements: ['Адмирал Уровень: 15'], requiredShipyardLevel: 10, requirements: ['Верфь · уровень 10', 'Энергетика · уровень 8', 'Нанотехнологии · уровень 5'],
+    tactical: { specialization: 'Поддержка', range: 'Средняя', priority: 'Союзный флот' }, time: '00:04:40',
+  }),
+  commander({
+    id: 'argo', name: 'Арго', role: 'Командирский флагман', art: argoArt, population: 10,
+    cost: { metal: 2_500, minerals: 2_500, gas: 0 }, combat: { attack: 2_000, life: 20_000, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6 },
+    sourceRequirements: ['Чертежный комплект Необходим: Арго'], requiredShipyardLevel: 11, requirements: ['Верфь · уровень 11', 'Гиперпространство · уровень 7'],
+    tactical: { specialization: 'Командование', range: 'Дальняя', priority: 'Флот' }, time: '00:03:20',
+  }),
+  commander({
+    id: 'judge', name: 'Судья', role: 'Командирский линкор', art: judgeArt, population: 10,
+    cost: { metal: 4_500, minerals: 4_500, gas: 0 }, combat: { attack: 2_000, life: 20_000, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6 },
+    sourceRequirements: ['Чертежный комплект Необходим: Судья'], requiredShipyardLevel: 12, requirements: ['Верфь · уровень 12', 'Тяжёлая броня · уровень 9', 'Плазменная наука · уровень 9'],
+    tactical: { specialization: 'Тяжёлый бой', range: 'Дальняя', priority: 'Капитальные' }, time: '00:06:00',
+  }),
+  commander({
+    id: 'polias', name: 'Полиас', role: 'Верховный командирский корабль', art: poliasArt, population: 500,
+    cost: { metal: 6_000, minerals: 6_000, gas: 0 }, combat: { attack: 2_000, life: 20_000, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6 },
+    sourceRequirements: ['Адмирал Уровень: 28'], requiredShipyardLevel: 14, requirements: ['Верфь · уровень 14', 'Гиперпространство · уровень 10', 'Параллельные вселенные · уровень 1'],
+    tactical: { specialization: 'Стратегическое превосходство', range: 'Дальняя', priority: 'Все цели' }, time: '00:08:00',
+  }),
 ];
 
 export const COMBAT_CATALOG: readonly CatalogEntity[] = [

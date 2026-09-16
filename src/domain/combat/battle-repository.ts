@@ -47,7 +47,7 @@ export function migrateBattleHistory(value: unknown): BattleHistoryState {
   if (Array.isArray(candidate.reports)) {
     candidate.reports.forEach((report) => {
       const normalized = normalizeBattleReport(report);
-      if (!normalized || DEMO_REPORT_ID_SET.has(normalized.id)) return;
+      if (!normalized || normalized.missionType === 'simulation' || DEMO_REPORT_ID_SET.has(normalized.id)) return;
       reportById.set(normalized.id, normalized);
     });
   }
@@ -131,6 +131,7 @@ export function setBattleReportSaved(
 }
 
 export function addBattleReportSaved(history: BattleHistoryState, report: BattleReport): BattleHistoryState {
+  if (report.missionType === 'simulation') return migrateBattleHistory(history);
   const exists = history.reports.some((item) => item.id === report.id);
   const savedIds = new Set(history.savedReportIds);
   savedIds.add(report.id);

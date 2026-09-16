@@ -95,7 +95,7 @@ async function snapshot(win) {
       commanderCounts: Array.from(commanderSection?.querySelectorAll('input[aria-label^="Количество"]') || []).map((item) => item.value),
       executionMode: document.querySelector('#sim-execution-mode')?.value || '',
       seed: document.querySelector('#sim-seed')?.value || '',
-      hasResult: Boolean(document.querySelector('.sim-result-v1')),
+      hasResult: Boolean(document.querySelector('[role="dialog"][data-qa-battle-report-modal][data-qa-battle-report-source="simulation"]')),
       hasProvenance: Boolean(document.querySelector('.battle-provenance-v1')),
       hasRoundLog: Boolean(document.querySelector('.battle-rounds-v1')),
       missingAriaControls: Array.from(document.querySelectorAll('[aria-expanded]')).filter((item) => {
@@ -168,7 +168,7 @@ async function runViewport(win, width, height) {
   await click(win, '.sim-presets-v1 > div:first-child button');
   await waitFor(win, `(() => { try { return JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}')?.combatSimulator?.presets?.length === 1; } catch { return false; } })()`);
   await click(win, '.sim-run-v1');
-  await waitFor(win, `document.querySelector('.sim-result-v1')`);
+  await waitFor(win, `document.querySelector('[role="dialog"][data-qa-battle-report-modal][data-qa-battle-report-source="simulation"]')`);
   await waitFor(win, `document.querySelector('.battle-provenance-v1') && document.querySelector('.battle-rounds-v1')`);
 
   const result = await snapshot(win);
@@ -177,12 +177,10 @@ async function runViewport(win, width, height) {
   }
   await capture(win, directory, 'simulator-result');
 
-  await click(win, '.sim-result-head-v1 button:first-child');
-  await waitFor(win, `document.querySelector('.sim-result-head-v1 button:first-child')?.disabled === true`);
   const saved = await readSave(win);
   const lastScenario = saved.combatSimulator?.lastScenario;
-  if (lastScenario?.seed !== `qa-seed-${label}` || lastScenario?.attackerTargetPriority !== 'catalog' || lastScenario?.defenderTargetPriority !== 'population' || saved.combatSimulator?.presets?.length !== 1 || !saved.combat?.reports?.some((report) => report.metadata?.rngProvenance?.seed === `qa-seed-${label}`)) {
-    throw new Error(`${label}: full scenario/report persistence failed ${JSON.stringify({ simulator: saved.combatSimulator, reportCount: saved.combat?.reports?.length })}`);
+  if (lastScenario?.seed !== `qa-seed-${label}` || lastScenario?.attackerTargetPriority !== 'catalog' || lastScenario?.defenderTargetPriority !== 'population' || saved.combatSimulator?.presets?.length !== 1 || saved.combat?.reports?.some((report) => report.metadata?.rngProvenance?.seed === `qa-seed-${label}`)) {
+    throw new Error(`${label}: full scenario persistence or simulation isolation failed ${JSON.stringify({ simulator: saved.combatSimulator, reportCount: saved.combat?.reports?.length })}`);
   }
 
   await reload(win);
