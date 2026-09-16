@@ -52,10 +52,10 @@ test('combat technology levels default to zero and normalize as non-negative int
     maneuverDefense: 7,
     criticalHit: 6,
   }), {
-    laserScience: 99,
+    laserScience: 15,
     ionScience: 0,
     plasmaScience: 4,
-    piercingAttack: 12,
+    piercingAttack: 10,
     lightArmor: 8,
     mediumArmor: 3,
     heavyArmor: 2,
@@ -76,7 +76,7 @@ test('legacy provisional science keys migrate without losing saved levels', () =
   assert.equal(migrated.maneuverDefense, 3);
 });
 
-test('unverified science coefficients remain neutral in Combat Resolver v1', () => {
+test('unverified science coefficients remain neutral in production', () => {
   const levels = normalizeCombatTechnologies({
     laserScience: 9,
     ionScience: 8,

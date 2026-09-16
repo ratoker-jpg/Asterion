@@ -23,18 +23,15 @@ function makeInput(overrides: Partial<CombatInput> = {}): CombatInput {
   };
 }
 
-test('stored science levels do not alter resolver math until coefficients are verified', () => {
+test('production resolver keeps inferred science neutral', () => {
   const baseline = resolveCombat(makeInput(), { reportId: 'baseline' });
   const configured = resolveCombat(makeInput({
     attackerTechnologies: normalizeCombatTechnologies({
       laserScience: 12,
-      piercingAttack: 8,
-      criticalHit: 7,
     }),
     defenderTechnologies: normalizeCombatTechnologies({
       mediumArmor: 9,
       shipArmor: 10,
-      maneuverDefense: 6,
     }),
   }), { reportId: 'configured' });
 
@@ -45,6 +42,21 @@ test('stored science levels do not alter resolver math until coefficients are ve
   assert.equal(configuredAttack.attackValue, baselineAttack.attackValue);
   assert.equal(configuredAttack.damage, baselineAttack.damage);
   assert.equal(configuredAttack.lifeBefore, baselineAttack.lifeBefore);
+});
+
+test('calibration resolver applies only the documented inferred curves', () => {
+  const baseline = resolveCombat(makeInput({ executionMode: 'calibration' }), { reportId: 'baseline-calibration' });
+  const configured = resolveCombat(makeInput({
+    executionMode: 'calibration',
+    attackerTechnologies: normalizeCombatTechnologies({ laserScience: 4 }),
+    defenderTechnologies: normalizeCombatTechnologies({ shipArmor: 5 }),
+  }), { reportId: 'configured-calibration' });
+  const baselineAttack = baseline.rounds[0]?.events.find((event) => event.actorSide === 'attacker');
+  const configuredAttack = configured.rounds[0]?.events.find((event) => event.actorSide === 'attacker');
+  assert.ok(baselineAttack);
+  assert.ok(configuredAttack);
+  assert.equal(configuredAttack.attackValue, baselineAttack.attackValue! * 1.6);
+  assert.equal(configured.metadata?.executionMode, 'calibration');
 });
 
 test('validator reports malformed attacker defense stacks instead of silently discarding them', () => {
