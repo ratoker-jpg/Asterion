@@ -1,6 +1,6 @@
 import { DEMO_BATTLE_REPORTS } from './battle-fixtures.ts';
 import { ASTERION_SAVE_KEY, COMBAT_SAVE_SCHEMA_VERSION } from './priority.ts';
-import type { BattleReport } from './report.ts';
+import { normalizeBattleReport, type BattleReport } from './report.ts';
 
 export const BATTLE_HISTORY_CHANGED_EVENT = 'asterion:battle-history-changed';
 
@@ -20,16 +20,7 @@ type SaveEnvelope = {
 const DEMO_REPORT_ID_SET = new Set(DEMO_BATTLE_REPORTS.map((report) => report.id));
 
 function isBattleReport(value: unknown): value is BattleReport {
-  if (!value || typeof value !== 'object') return false;
-  const candidate = value as Partial<BattleReport>;
-  return typeof candidate.id === 'string'
-    && typeof candidate.timestamp === 'string'
-    && typeof candidate.roundCount === 'number'
-    && Array.isArray(candidate.rounds)
-    && Boolean(candidate.attacker)
-    && Boolean(candidate.defender)
-    && Boolean(candidate.attackerForce)
-    && Boolean(candidate.defenderForce);
+  return normalizeBattleReport(value) !== null;
 }
 
 function resolveStorage(storage?: StorageLike): StorageLike | null {
@@ -55,8 +46,9 @@ export function migrateBattleHistory(value: unknown): BattleHistoryState {
 
   if (Array.isArray(candidate.reports)) {
     candidate.reports.forEach((report) => {
-      if (!isBattleReport(report) || DEMO_REPORT_ID_SET.has(report.id)) return;
-      reportById.set(report.id, report);
+      const normalized = normalizeBattleReport(report);
+      if (!normalized || DEMO_REPORT_ID_SET.has(normalized.id)) return;
+      reportById.set(normalized.id, normalized);
     });
   }
 

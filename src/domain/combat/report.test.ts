@@ -42,7 +42,8 @@ function allFixtureEntityIds() {
     collectStacks(report.defenderForce.defenses);
     report.rounds.forEach((round) => {
       round.events.forEach((event) => {
-        ids.push(event.actorEntityId, event.targetEntityId);
+        ids.push(event.actorEntityId);
+        if (event.targetEntityId) ids.push(event.targetEntityId);
       });
       collectStacks(round.attackerSnapshot?.stacks);
       collectStacks(round.attackerSnapshot?.defenses);

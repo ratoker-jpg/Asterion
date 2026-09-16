@@ -1,5 +1,7 @@
 import type { CommanderId } from './commanders.ts';
 import type { CombatEntityId } from './ids.ts';
+import type { CombatTechnologyId, CombatTechnologyLevels } from './technologies.ts';
+import type { CombatTargetPriority } from './config.ts';
 
 export const ASTERION_LOCAL_PLAYER_ID = 'player-aster';
 
@@ -7,6 +9,45 @@ export type BattleSide = 'attacker' | 'defender';
 export type BattleWinner = BattleSide | 'draw';
 export type BattleMissionType = 'attack' | 'raid' | 'defense' | 'arena' | 'simulation';
 export type CombatActionType = 'attack' | 'ability' | 'shield' | 'status' | 'destroyed';
+export const BATTLE_REPORT_SCHEMA_VERSION = 2;
+export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v2';
+
+export type RngProvenance = {
+  mode: 'seeded' | 'recorded-sequence' | 'non-replayable';
+  algorithmVersion?: string;
+  seed?: string;
+  drawCount?: number;
+  note?: string;
+};
+
+export type CombatProvenance = {
+  status: 'confirmed' | 'structural' | 'inferred' | 'unknown' | 'not-calibrated';
+  source?: string;
+  confidence?: 'high' | 'medium' | 'low';
+  note?: string;
+};
+
+export type BattleTechnologySnapshot = {
+  id: CombatTechnologyId;
+  level: number;
+  maxLevel: number;
+  status: CombatProvenance['status'];
+  note?: string;
+};
+
+export type BattleRoundSummary = {
+  attackerDamage?: number;
+  defenderDamage?: number;
+  damageByWeapon?: Readonly<Record<string, number>>;
+  blockedDamage?: number;
+  absorbedDamage?: number;
+  destroyedPopulation?: number;
+  destroyedUnits?: number;
+  procs?: number;
+  repairs?: number;
+  survivingPopulation?: Readonly<{ attacker: number; defender: number }>;
+  survivingDefensePopulation?: number;
+};
 
 export type BattleParticipant = {
   playerId?: string;
@@ -22,9 +63,16 @@ export type BattleStackSnapshot = {
   countBefore: number;
   countAfter: number;
   destroyed: number;
+  level?: number;
   life?: number;
+  lifeBefore?: number;
+  lifeAfter?: number;
   armor?: number;
+  armorBefore?: number;
+  armorAfter?: number;
   shield?: number;
+  shieldBefore?: number;
+  shieldAfter?: number;
 };
 
 type ShieldTransition =
@@ -43,26 +91,37 @@ export type CombatEvent = {
   sequence: number;
   actorSide: BattleSide;
   actorEntityId: CombatEntityId;
-  targetSide: BattleSide;
-  targetEntityId: CombatEntityId;
+  targetSide?: BattleSide;
+  targetEntityId?: CombatEntityId;
   actionType: CombatActionType;
   actorCount?: number;
   targetCount?: number;
   attackValue?: number;
+  rawDamage?: number;
+  effectiveDamage?: number;
+  mitigation?: number;
+  weaponType?: string;
+  armorType?: string;
   damage?: number;
   destroyedCount?: number;
   commanderAbilityId?: CommanderId;
+  provenance?: CombatProvenance;
   note?: string;
 } & ShieldTransition & ArmorTransition & LifeTransition;
 
 export type CombatRoundSnapshot = {
   stacks: BattleStackSnapshot[];
   defenses?: BattleStackSnapshot[];
+  fleetPopulationBefore?: number;
+  fleetPopulationAfter?: number;
+  defensePopulationBefore?: number;
+  defensePopulationAfter?: number;
 };
 
 export type CombatRound = {
   index: number;
   events: CombatEvent[];
+  summary?: BattleRoundSummary;
   attackerSnapshot?: CombatRoundSnapshot;
   defenderSnapshot?: CombatRoundSnapshot;
 };
@@ -72,7 +131,14 @@ export type BattleForceSnapshot = {
   populationAfter: number;
   stacks: BattleStackSnapshot[];
   defenses?: BattleStackSnapshot[];
+  fleetPopulationBefore?: number;
+  fleetPopulationAfter?: number;
+  defensePopulationBefore?: number;
+  defensePopulationAfter?: number;
   activeCommanderId?: CommanderId;
+  activeCommanderLevel?: number;
+  technologyLevels?: CombatTechnologyLevels;
+  technologies?: BattleTechnologySnapshot[];
   modifiers?: Readonly<Record<string, number | string>>;
 };
 
@@ -91,10 +157,20 @@ export type BattleReportMetadata = {
   source: 'demo-fixture' | 'combat-resolver' | 'imported';
   note?: string;
   maxRounds?: number;
+  profileId?: string;
+  engineVersion?: string;
+  executionMode?: 'production' | 'calibration';
+  technologyMode?: 'independent' | 'shared';
+  targetPriority?: Readonly<{ attacker: CombatTargetPriority; defender: CombatTargetPriority }>;
+  rngProvenance?: RngProvenance;
+  provenance?: Readonly<Record<string, CombatProvenance>>;
+  unknowns?: string[];
 };
 
 export type BattleReport = {
   id: string;
+  schemaVersion?: number;
+  engineVersion?: string;
   timestamp: string;
   missionType: BattleMissionType;
   attacker: BattleParticipant;
@@ -110,6 +186,68 @@ export type BattleReport = {
   metadata?: BattleReportMetadata;
   repairEligibility?: BattleRepairEligibility;
 };
+
+export function normalizeBattleReport(value: unknown): BattleReport | null {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as Partial<BattleReport>;
+  if (typeof candidate.id !== 'string'
+    || typeof candidate.timestamp !== 'string'
+    || typeof candidate.roundCount !== 'number'
+    || !Array.isArray(candidate.rounds)
+    || !candidate.attacker
+    || !candidate.defender
+    || !candidate.attackerForce
+    || !candidate.defenderForce) return null;
+
+  let nextRoundIndex = 1;
+  let nextSequence = 1;
+  const rounds = candidate.rounds.map((round, roundIndex) => {
+    const sourceEvents = Array.isArray(round?.events) ? round.events : [];
+    const index = typeof round?.index === 'number' && round.index >= nextRoundIndex
+      ? round.index
+      : nextRoundIndex;
+    nextRoundIndex = index + 1;
+    return {
+      ...round,
+      index: index || roundIndex + 1,
+      events: sourceEvents.map((event) => {
+        const sequence = typeof event?.sequence === 'number' && event.sequence >= nextSequence
+          ? event.sequence
+          : nextSequence;
+        nextSequence = sequence + 1;
+        return { ...event, sequence };
+      }),
+    };
+  });
+
+  const metadata: BattleReportMetadata = {
+    ...(candidate.metadata ?? {}),
+    source: candidate.metadata?.source ?? 'imported',
+    note: candidate.metadata?.note ?? 'Legacy BattleReport: расширенные поля не были доступны при создании.',
+    rngProvenance: candidate.metadata?.rngProvenance ?? {
+      mode: 'non-replayable',
+      note: 'В старом отчёте отсутствует provenance seed/RNG.',
+    },
+    provenance: {
+      legacy: {
+        status: 'unknown',
+        source: 'BattleReport migration',
+        confidence: 'low',
+        note: 'Новые поля старого отчёта не восстанавливаются выдуманными значениями.',
+      },
+      ...(candidate.metadata?.provenance ?? {}),
+    },
+    unknowns: candidate.metadata?.unknowns ?? ['Старый отчёт не содержит provenance полного боевого runtime.'],
+  };
+
+  return {
+    ...candidate as BattleReport,
+    schemaVersion: candidate.schemaVersion ?? 1,
+    engineVersion: candidate.engineVersion ?? 'legacy-battle-report',
+    rounds,
+    metadata,
+  };
+}
 
 export type BattleSummary = {
   id: string;

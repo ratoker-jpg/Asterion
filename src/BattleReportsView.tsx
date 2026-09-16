@@ -158,7 +158,7 @@ function StackRow({ stack }: { stack: BattleStackSnapshot }) {
   return (
     <div className="battle-stack-row-v1">
       <span className="battle-stack-art-v1"><img src={entity.art} alt="" draggable={false} /></span>
-      <span className="battle-stack-name-v1"><strong>{entity.name}</strong><small>{entity.category}</small></span>
+      <span className="battle-stack-name-v1"><strong>{entity.name}</strong><small>{entity.category}{stack.level != null ? ` · уровень ${stack.level}` : ''}</small></span>
       <span><small>БЫЛО</small><b>{formatNumber(stack.countBefore)}</b></span>
       <span><small>ОСТАЛОСЬ</small><b>{formatNumber(stack.countAfter)}</b></span>
       <span><small>УНИЧТОЖЕНО</small><b>{formatNumber(stack.destroyed)}</b></span>
@@ -207,7 +207,9 @@ function CommanderSnapshot({ report }: { report: BattleReport }) {
           return (
             <article key={`${side}-${id}`}>
               <img src={entity.art} alt="" draggable={false} />
-              <div><small>{side}</small><strong>{entity.name}</strong><span>Способность: {ability.ability}</span><em>Эффект не пересчитывается в отчёте.</em></div>
+              <div><small>{side}{side === 'АТАКУЮЩИЙ'
+                ? ` · уровень ${report.attackerForce.activeCommanderLevel ?? 'не указан'}`
+                : ` · уровень ${report.defenderForce.activeCommanderLevel ?? 'не указан'}`}</small><strong>{entity.name}</strong><span>Способность: {ability.ability}</span><em>Эффект не пересчитывается в отчёте.</em></div>
             </article>
           );
         })}
@@ -223,23 +225,26 @@ function OptionalMetric({ label, before, after }: { label: string; before?: numb
 
 function EventCard({ event }: { event: CombatEvent }) {
   const actor = getCombatEntity(event.actorEntityId);
-  const target = getCombatEntity(event.targetEntityId);
+  const target = event.targetEntityId ? getCombatEntity(event.targetEntityId) : null;
   return (
     <article className="battle-event-v1">
-      <div className="battle-event-route-v1">
+      <div className={`battle-event-route-v1 ${target ? '' : 'no-target'}`}>
         <span><img src={actor.art} alt="" /><strong>{actor.name}{event.actorCount != null ? ` × ${formatNumber(event.actorCount)}` : ''}</strong></span>
-        <i aria-hidden="true">→</i>
-        <span><img src={target.art} alt="" /><strong>{target.name}{event.targetCount != null ? ` × ${formatNumber(event.targetCount)}` : ''}</strong></span>
+        {target ? <><i aria-hidden="true">→</i><span><img src={target.art} alt="" /><strong>{target.name}{event.targetCount != null ? ` × ${formatNumber(event.targetCount)}` : ''}</strong></span></> : <span className="battle-event-no-target-v1">ЦЕЛЬ НЕ НАЙДЕНА</span>}
       </div>
       <div className="battle-event-metrics-v1">
         {event.attackValue != null ? <span><small>АТАКА</small><b>{formatNumber(event.attackValue)}</b></span> : null}
         {event.damage != null ? <span><small>УРОН</small><b>{formatNumber(event.damage)}</b></span> : null}
+        {event.rawDamage != null ? <span><small>RAW</small><b>{formatNumber(event.rawDamage)}</b></span> : null}
+        {event.effectiveDamage != null ? <span><small>ПОСЛЕ БРОНИ</small><b>{formatNumber(event.effectiveDamage)}</b></span> : null}
+        {event.mitigation != null ? <span><small>МИТИГАЦИЯ</small><b>{formatNumber(event.mitigation)}</b></span> : null}
         {event.destroyedCount != null ? <span><small>УНИЧТОЖЕНО</small><b>{formatNumber(event.destroyedCount)}</b></span> : null}
         <OptionalMetric label="ЩИТ" before={event.shieldBefore} after={event.shieldAfter} />
         <OptionalMetric label="БРОНЯ" before={event.armorBefore} after={event.armorAfter} />
         <OptionalMetric label="ЖИЗНЬ" before={event.lifeBefore} after={event.lifeAfter} />
       </div>
-      {event.commanderAbilityId ? <div className="battle-event-ability-v1">◆ {COMMANDER_ABILITIES[event.commanderAbilityId].ability}</div> : null}
+       {event.commanderAbilityId ? <div className="battle-event-ability-v1">{COMMANDER_ABILITIES[event.commanderAbilityId].ability}</div> : null}
+       {event.provenance ? <div className="battle-event-provenance-v1">{event.provenance.status.toUpperCase()}{event.provenance.note ? ` · ${event.provenance.note}` : ''}</div> : null}
       {event.note ? <p>{event.note}</p> : null}
     </article>
   );
@@ -252,6 +257,9 @@ function RoundLog({ report, openRounds, onToggle }: { report: BattleReport; open
       <div className="battle-round-list-v1">
         {report.rounds.map((round) => {
           const open = openRounds.has(round.index);
+          const roundDamage = round.summary?.attackerDamage != null && round.summary.defenderDamage != null
+            ? round.summary.attackerDamage + round.summary.defenderDamage
+            : undefined;
           return (
             <section key={round.index} className={`battle-round-v1 ${open ? 'open' : ''}`}>
               <button
@@ -261,18 +269,73 @@ function RoundLog({ report, openRounds, onToggle }: { report: BattleReport; open
                 onClick={() => onToggle(round.index)}
               >
                 <span><small>РАУНД</small><strong>{String(round.index).padStart(2, '0')}</strong></span>
-                <em>{round.events.length} СОБЫТИЙ</em>
+                <em>{round.events.length} СОБЫТИЙ{round.summary
+                  ? ` · УРОН ${roundDamage != null ? formatNumber(roundDamage) : 'не указан'}`
+                  : ''}</em>
                 <b aria-hidden="true">{open ? '−' : '+'}</b>
               </button>
-              {open ? (
-                <div id={`battle-round-${report.id}-${round.index}`} className="battle-round-body-v1">
-                  {round.events.length ? round.events.map((event) => <EventCard key={`${round.index}-${event.sequence}`} event={event} />) : <p>В этом раунде нет зафиксированных событий.</p>}
-                </div>
-              ) : null}
+              <div id={`battle-round-${report.id}-${round.index}`} className="battle-round-body-v1" hidden={!open}>
+                {round.events.length ? round.events.map((event) => <EventCard key={`${round.index}-${event.sequence}`} event={event} />) : <p>В этом раунде нет зафиксированных событий.</p>}
+              </div>
             </section>
           );
         })}
       </div>
+    </section>
+  );
+}
+
+function TechnologyPanel({ report }: { report: BattleReport }) {
+  const render = (label: string, force: BattleReport['attackerForce']) => (
+    <div className="battle-technology-column-v1">
+      <h4>{label}</h4>
+      <div className="battle-technology-list-v1">
+        {(force.technologies ?? []).map((technology) => (
+          <span key={technology.id}>
+            <strong>{technology.id}</strong>
+            <small>{technology.level} / {technology.maxLevel} · {technology.status.toUpperCase()}</small>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+  if (!(report.attackerForce.technologies?.length || report.defenderForce.technologies?.length)) return null;
+  return (
+    <section className="battle-section-v1 battle-technologies-v1">
+      <header className="battle-section-head-v1"><div><small>ТЕХНОЛОГИЧЕСКИЕ ПРОФИЛИ</small><h3>УРОВНИ И СТАТУСЫ</h3></div></header>
+      <div className="battle-technology-grid-v1">
+        {render('АТАКУЮЩИЙ', report.attackerForce)}
+        {render('ЗАЩИТНИК', report.defenderForce)}
+      </div>
+    </section>
+  );
+}
+
+function ProvenancePanel({ report }: { report: BattleReport }) {
+  const metadata = report.metadata;
+  if (!metadata) return null;
+  const rng = metadata.rngProvenance;
+  const targetPriorityLabel = (value: 'threat' | 'population' | 'catalog') => value === 'threat'
+    ? 'УГРОЗА → НАСЕЛЕНИЕ → КАТАЛОГ'
+    : value === 'population'
+      ? 'НАСЕЛЕНИЕ → УГРОЗА → КАТАЛОГ'
+      : 'КАТАЛОГ → УГРОЗА → НАСЕЛЕНИЕ';
+  return (
+    <section className="battle-section-v1 battle-provenance-v1">
+      <header className="battle-section-head-v1"><div><small>ПРОИСХОЖДЕНИЕ РАСЧЁТА</small><h3>{metadata.engineVersion ?? report.engineVersion ?? 'LEGACY REPORT'}</h3></div></header>
+      <div className="battle-provenance-grid-v1">
+        <span><small>СХЕМА</small><b>v{report.schemaVersion ?? 1}</b></span>
+        <span><small>ПРОФИЛЬ</small><b>{metadata.profileId ?? 'не указан'}</b></span>
+        <span><small>РЕЖИМ</small><b>{metadata.executionMode ?? 'не указан'} · {metadata.technologyMode ?? 'independent'}</b></span>
+        <span><small>RNG</small><b>{rng?.mode ?? 'unknown'}{rng?.seed ? ` · ${rng.seed}` : ''}</b></span>
+      </div>
+      {metadata.targetPriority ? (
+        <div className="battle-target-priority-v1">
+          <span><small>ЦЕЛЬ АТАКУЮЩЕГО</small><b>{targetPriorityLabel(metadata.targetPriority.attacker)}</b><em>{metadata.provenance?.targetSelection?.status ?? 'not-calibrated'}</em></span>
+          <span><small>ЦЕЛЬ ЗАЩИТНИКА</small><b>{targetPriorityLabel(metadata.targetPriority.defender)}</b><em>{metadata.provenance?.targetSelection?.status ?? 'not-calibrated'}</em></span>
+        </div>
+      ) : null}
+      {metadata.unknowns?.length ? <ul className="battle-unknown-list-v1">{metadata.unknowns.map((unknown) => <li key={unknown}>{unknown}</li>)}</ul> : null}
     </section>
   );
 }
@@ -315,6 +378,8 @@ export function BattleReportDetailBody({ report }: { report: BattleReport }) {
       <PopulationPanel report={report} />
       <BattleComposition report={report} />
       <CommanderSnapshot report={report} />
+      <TechnologyPanel report={report} />
+      <ProvenancePanel report={report} />
       <RoundLog report={report} openRounds={openRounds} onToggle={toggleRound} />
       <BattleOutcome report={report} />
     </>

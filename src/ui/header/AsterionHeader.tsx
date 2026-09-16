@@ -152,12 +152,12 @@ export function AsterionHeader({
           </button>
         </div>
 
-        {planetMenuOpen ? (
-          <div
+        <div
             className="asterion-header__planet-list planet-list-popover"
             id="asterion-header-planet-list"
             role="listbox"
             aria-label="Выбор планеты"
+            hidden={!planetMenuOpen}
             onKeyDown={(event) => {
               if (event.key === 'Escape') {
                 event.preventDefault();
@@ -181,8 +181,7 @@ export function AsterionHeader({
               </button>
             ))}
             <div>Новые планеты появятся здесь только после реальной колонизации.</div>
-          </div>
-        ) : null}
+        </div>
       </section>
 
       <section className="asterion-header__main">
