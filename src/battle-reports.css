@@ -402,7 +402,7 @@
 .battle-unit-table-row-v1 b { color: #f0fcff; font-size: 13px; font-variant-numeric: tabular-nums; text-align: right; }
 .battle-unit-table-muted-v1 { color: #63838d !important; }
 .battle-tech-table-head-v1,
-.battle-tech-table-row-v1 { display: grid; grid-template-columns: minmax(0, 1fr) 70px; align-items: center; gap: 7px; }
+.battle-tech-table-row-v1 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(106px, auto); align-items: center; gap: 7px; }
 .battle-tech-table-head-v1 { min-height: 29px; padding: 0 9px; background: rgba(13, 78, 101, .86); color: #83c8da; font-size: 9px; font-weight: 800; letter-spacing: .1em; }
 .battle-tech-table-head-v1 span:last-child { text-align: right; }
 .battle-tech-table-row-v1 { position: relative; min-height: 31px; padding: 4px 9px; border-top: 1px solid rgba(66, 181, 214, .1); background: rgba(2, 20, 29, .42); cursor: help; }
@@ -411,6 +411,7 @@
 .battle-tech-table-row-v1 strong { overflow: hidden; color: #d9f5fc; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .battle-tech-table-row-v1 small { flex: 0 0 auto; color: #769aa6; font-size: 10px; white-space: nowrap; }
 .battle-tech-table-row-v1 > b { color: #8fe6ca; font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+.battle-tech-table-row-v1 > b.not-calibrated { color: #d6c68e; font-size: 9px; letter-spacing: .04em; }
 .battle-tech-table-row-v1:hover,
 .battle-tech-table-row-v1:focus-visible { background: rgba(9, 71, 90, .72); outline: 1px solid rgba(67, 210, 255, .28); outline-offset: -1px; }
 .battle-tech-empty-v1 { margin: 0; padding: 12px 8px; color: #7799a4; font-size: 11px; }

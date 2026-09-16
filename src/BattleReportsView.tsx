@@ -378,7 +378,7 @@ function UnitSummaryTable({ side }: { side: BattleSideViewModel }) {
   );
 }
 
-function TechnologyBonusTooltip({ technologies }: { technologies: readonly BattleTechnologyViewModel[] }) {
+function TechnologyBonusTooltip({ technologies, calibrated }: { technologies: readonly BattleTechnologyViewModel[]; calibrated: boolean }) {
   return (
     <div className="battle-tech-tooltip-v1" role="tooltip">
       {technologies.map((technology) => (
@@ -386,7 +386,7 @@ function TechnologyBonusTooltip({ technologies }: { technologies: readonly Battl
           <img src={BATTLE_TECHNOLOGY_ART[technology.id]} alt="" draggable={false} />
           <span>
             <strong>{technology.name}:</strong>
-            <small>{formatNumber(technology.level)} <b>({formatNumber(technology.bonusPercent)}%)</b></small>
+            <small>{formatNumber(technology.level)} ур. <b>{calibrated ? `(+${formatNumber(technology.bonusPercent)}%)` : '(не активировано)'}</b></small>
           </span>
         </span>
       ))}
@@ -394,33 +394,34 @@ function TechnologyBonusTooltip({ technologies }: { technologies: readonly Battl
   );
 }
 
-function TechnologyBonusTable({ side }: { side: BattleSideViewModel }) {
+function TechnologyBonusTable({ side, executionMode }: { side: BattleSideViewModel; executionMode?: 'production' | 'calibration' }) {
+  const calibrated = executionMode === 'calibration';
   return (
     <div className="battle-tech-table-v1" data-qa-battle-technologies={side.participant.side}>
-      <div className="battle-tech-table-head-v1"><span>БОНУСЫ КОРАБЛЕЙ</span><span>%</span></div>
-      {side.technologies.length ? BATTLE_BONUS_GROUPS.map((group) => {
+      <div className="battle-tech-table-head-v1"><span>{calibrated ? 'ПРИМЕНЁННЫЕ БОНУСЫ' : 'НАУКИ В СЦЕНАРИИ'}</span><span>{calibrated ? '%' : 'СТАТУС'}</span></div>
+      {side.technologies.some((technology) => technology.level > 0) ? BATTLE_BONUS_GROUPS.map((group) => {
         const technologies = group.technologyIds.flatMap((id) => side.technologies.filter((technology) => technology.id === id));
-        if (!technologies.length) return null;
+        if (!technologies.some((technology) => technology.level > 0)) return null;
         const bonusPercent = technologies.reduce((total, technology) => total + technology.bonusPercent, 0);
-        const technologyDetails = technologies.map((technology) => `${technology.name}: ${technology.level} уровень, +${technology.bonusPercent}%`).join('; ');
+        const technologyDetails = technologies.map((technology) => `${technology.name}: ${technology.level} уровень`).join('; ');
         return (
           <div
             className="battle-tech-table-row-v1"
             key={group.id}
             tabIndex={0}
-            aria-label={`${group.label}: плюс ${bonusPercent} процентов. ${technologyDetails}`}
+            aria-label={`${group.label}: ${technologyDetails}. ${calibrated ? `Плюс ${bonusPercent} процентов.` : 'Коэффициент не активирован в обычном расчёте.'}`}
           >
-            <span><strong>{group.label}</strong></span>
-            <b>+{formatNumber(bonusPercent)}%</b>
-            <TechnologyBonusTooltip technologies={technologies} />
+            <span><strong>{group.label}</strong><small>{technologyDetails}</small></span>
+            <b className={calibrated ? '' : 'not-calibrated'}>{calibrated ? `+${formatNumber(bonusPercent)}%` : 'НЕ АКТИВИРОВАНО'}</b>
+            <TechnologyBonusTooltip technologies={technologies} calibrated={calibrated} />
           </div>
         );
-      }) : <p className="battle-tech-empty-v1">Снимок технологий не зафиксирован.</p>}
+      }) : <p className="battle-tech-empty-v1">{side.technologies.length ? 'Уровни наук не выбраны.' : 'Снимок технологий не зафиксирован.'}</p>}
     </div>
   );
 }
 
-function BattleHeaderSide({ side }: { side: BattleSideViewModel }) {
+function BattleHeaderSide({ side, executionMode }: { side: BattleSideViewModel; executionMode?: 'production' | 'calibration' }) {
   const avatar = battleSideAvatar(side);
   const participantMeta = [side.participant.coordinates, side.participant.race].filter(Boolean).join(' · ') || 'Идентификатор не зафиксирован';
   return (
@@ -439,17 +440,17 @@ function BattleHeaderSide({ side }: { side: BattleSideViewModel }) {
         <span className="battle-header-side-mark-v1" aria-hidden="true">{side.participant.side === 'attacker' ? '→' : '◆'}</span>
       </header>
       <UnitSummaryTable side={side} />
-      <TechnologyBonusTable side={side} />
+      <TechnologyBonusTable side={side} executionMode={executionMode} />
     </article>
   );
 }
 
-function PopulationPanel({ viewModel }: { viewModel: BattleReportViewModel }) {
+function PopulationPanel({ viewModel, executionMode }: { viewModel: BattleReportViewModel; executionMode?: 'production' | 'calibration' }) {
   return (
     <section className="battle-summary-v1" data-qa-battle-summary>
       <div className="battle-header-sides-v1">
-        <BattleHeaderSide side={viewModel.attacker} />
-        <BattleHeaderSide side={viewModel.defender} />
+        <BattleHeaderSide side={viewModel.attacker} executionMode={executionMode} />
+        <BattleHeaderSide side={viewModel.defender} executionMode={executionMode} />
       </div>
     </section>
   );
@@ -459,7 +460,7 @@ function StackRow({ stack }: { stack: BattleStackViewModel }) {
   return (
     <div className="battle-stack-row-v1" data-qa-battle-composition-stack={stack.entityId}>
       <span className="battle-stack-art-v1"><img src={stack.art} alt="" draggable={false} /></span>
-      <span className="battle-stack-name-v1"><strong>{stack.name}</strong><small>{stack.category}{stack.tooltip.level != null ? ` · уровень ${stack.tooltip.level}` : ''}</small></span>
+      <span className="battle-stack-name-v1"><strong>{stack.name}</strong><small>{stack.category}{stack.kind !== 'defense' && stack.tooltip.level != null ? ` · уровень ${stack.tooltip.level}` : ''}</small></span>
       <span><small>БЫЛО</small><b>{formatNumber(stack.countBefore)}</b></span>
       <span><small>ОСТАЛОСЬ</small><b>{formatNumber(stack.countAfter)}</b></span>
       <span><small>УНИЧТОЖЕНО</small><b>{formatNumber(stack.destroyed)}</b></span>
@@ -586,113 +587,8 @@ function EventCard({ event }: { event: BattleEventViewModel }) {
         <OptionalMetric label="ЖИЗНЬ" before={event.lifeBefore} after={event.lifeAfter} />
       </div>
       {event.commanderAbility ? <div className="battle-event-ability-v1">◆ {event.commanderAbility}</div> : null}
-      {event.provenance ? <div className="battle-event-provenance-v1">{event.provenance.status.toUpperCase()}{event.provenance.note ? ` · ${event.provenance.note}` : ''}</div> : null}
       {event.note ? <p>{event.note}</p> : null}
     </article>
-  );
-}
-
-function RoundLog({ report, viewModel }: { report: BattleReport; viewModel: BattleReportViewModel }) {
-  const [openRounds, setOpenRounds] = useState<Set<number>>(() => new Set(report.rounds[0] ? [report.rounds[0].index] : []));
-
-  useEffect(() => {
-    setOpenRounds(new Set(report.rounds[0] ? [report.rounds[0].index] : []));
-  }, [report.id]);
-
-  const toggleRound = (roundIndex: number) => {
-    setOpenRounds((current) => {
-      const next = new Set(current);
-      if (next.has(roundIndex)) next.delete(roundIndex);
-      else next.add(roundIndex);
-      return next;
-    });
-  };
-
-  return (
-    <section className="battle-section-v1 battle-rounds-v1" data-qa-battle-round-log>
-      <header className="battle-section-head-v1"><div><small>ХОД БОЯ</small><h3>РАУНДОВЫЙ ЛОГ</h3></div><span>{report.roundCount} РАУНДОВ</span></header>
-      <div className="battle-round-list-v1">
-        {report.rounds.map((round) => {
-          const open = openRounds.has(round.index);
-          const viewRound = viewModel.rounds.find((candidate) => candidate.index === round.index);
-          const roundDamage = round.summary?.attackerDamage != null && round.summary.defenderDamage != null
-            ? round.summary.attackerDamage + round.summary.defenderDamage
-            : undefined;
-          return (
-            <section key={round.index} className={`battle-round-v1 ${open ? 'open' : ''}`}>
-              <button
-                type="button"
-                aria-expanded={open}
-                aria-controls={`battle-round-${report.id}-${round.index}`}
-                onClick={() => toggleRound(round.index)}
-              >
-                <span><small>РАУНД</small><strong>{String(round.index).padStart(2, '0')}</strong></span>
-                <em>{round.events.length} СОБЫТИЙ · УРОН {roundDamage != null ? formatNumber(roundDamage) : 'не указан'}</em>
-                <b aria-hidden="true">{open ? '−' : '+'}</b>
-              </button>
-              <div id={`battle-round-${report.id}-${round.index}`} className="battle-round-body-v1" hidden={!open}>
-                {viewRound?.events.length ? viewRound.events.map((event) => <EventCard key={`${round.index}-${event.sequence}`} event={event} />) : <p>В этом раунде нет зафиксированных событий.</p>}
-              </div>
-            </section>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function TechnologyPanel({ report }: { report: BattleReport }) {
-  const render = (label: string, force: BattleReport['attackerForce']) => (
-    <div className="battle-technology-column-v1">
-      <h4>{label}</h4>
-      <div className="battle-technology-list-v1">
-        {(force.technologySnapshots ?? []).map((technology) => (
-          <span key={technology.id}>
-            <strong>{technology.id}</strong>
-            <small>{technology.level} / {technology.maxLevel} · {technology.status.toUpperCase()}</small>
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-  if (!(report.attackerForce.technologySnapshots?.length || report.defenderForce.technologySnapshots?.length)) return null;
-  return (
-    <section className="battle-section-v1 battle-technologies-v1">
-      <header className="battle-section-head-v1"><div><small>ТЕХНОЛОГИЧЕСКИЕ ПРОФИЛИ</small><h3>УРОВНИ И СТАТУСЫ</h3></div></header>
-      <div className="battle-technology-grid-v1">
-        {render('АТАКУЮЩИЙ', report.attackerForce)}
-        {render('ЗАЩИТНИК', report.defenderForce)}
-      </div>
-    </section>
-  );
-}
-
-function ProvenancePanel({ report }: { report: BattleReport }) {
-  const metadata = report.metadata;
-  if (!metadata) return null;
-  const rng = metadata.rngProvenance;
-  const targetPriorityLabel = (value: 'threat' | 'population' | 'catalog') => value === 'threat'
-    ? 'УГРОЗА → НАСЕЛЕНИЕ → КАТАЛОГ'
-    : value === 'population'
-      ? 'НАСЕЛЕНИЕ → УГРОЗА → КАТАЛОГ'
-      : 'КАТАЛОГ → УГРОЗА → НАСЕЛЕНИЕ';
-  return (
-    <section className="battle-section-v1 battle-provenance-v1">
-      <header className="battle-section-head-v1"><div><small>ПРОИСХОЖДЕНИЕ РАСЧЁТА</small><h3>{metadata.engineVersion ?? report.engineVersion ?? 'LEGACY REPORT'}</h3></div></header>
-      <div className="battle-provenance-grid-v1">
-        <span><small>СХЕМА</small><b>v{report.schemaVersion ?? 1}</b></span>
-        <span><small>ПРОФИЛЬ</small><b>{metadata.profileId ?? 'не указан'}</b></span>
-        <span><small>РЕЖИМ</small><b>{metadata.executionMode ?? 'не указан'} · {metadata.technologyMode ?? 'independent'}</b></span>
-        <span><small>RNG</small><b>{rng?.mode ?? 'unknown'}{rng?.seed ? ` · ${rng.seed}` : ''}</b></span>
-      </div>
-      {metadata.targetPriority ? (
-        <div className="battle-target-priority-v1">
-          <span><small>ЦЕЛЬ АТАКУЮЩЕГО</small><b>{targetPriorityLabel(metadata.targetPriority.attacker)}</b><em>{metadata.provenance?.targetSelection?.status ?? 'not-calibrated'}</em></span>
-          <span><small>ЦЕЛЬ ЗАЩИТНИКА</small><b>{targetPriorityLabel(metadata.targetPriority.defender)}</b><em>{metadata.provenance?.targetSelection?.status ?? 'not-calibrated'}</em></span>
-        </div>
-      ) : null}
-      {metadata.unknowns?.length ? <ul className="battle-unknown-list-v1">{metadata.unknowns.map((unknown) => <li key={unknown}>{unknown}</li>)}</ul> : null}
-    </section>
   );
 }
 
@@ -1020,13 +916,10 @@ export function BattleReportDetailBody({
   return (
     <>
       <BattleOutcome viewModel={viewModel} />
-      <PopulationPanel viewModel={viewModel} />
+      <PopulationPanel viewModel={viewModel} executionMode={report.metadata?.executionMode} />
       <BattleVisualReport viewModel={viewModel} scrollRef={scrollRef} celestialMode={celestialMode} />
       <BattleComposition viewModel={viewModel} />
       <CommanderSnapshot viewModel={viewModel} />
-      <TechnologyPanel report={report} />
-      <ProvenancePanel report={report} />
-      <RoundLog report={report} viewModel={viewModel} />
     </>
   );
 }
