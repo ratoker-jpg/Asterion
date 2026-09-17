@@ -265,6 +265,18 @@
   font-variant-numeric:tabular-nums;
   text-shadow:0 0 14px rgba(70,216,247,.12);
 }
+.resource-zone-energy-summary{
+  margin-top:10px;
+  padding:9px 0 0;
+  border-top:1px solid rgba(239,177,76,.25);
+}
+.resource-zone-energy-total-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 10px;color:#b0cbd1;font-size:9px}
+.resource-zone-energy-total-row strong{color:#f5dfad;font-size:12px;font-variant-numeric:tabular-nums}
+.resource-zone-energy-total-row.available{margin-top:3px;border:1px solid rgba(239,177,76,.38);background:rgba(79,52,18,.36);color:#ffe4a8}
+.resource-zone-energy-total-row.available strong{color:#fff0c7;font-size:15px}
+.resource-zone-energy-sources{display:grid;gap:3px;margin-top:7px;padding-top:6px;border-top:1px solid rgba(239,177,76,.14)}
+.resource-zone-energy-sources>div{display:flex;justify-content:space-between;gap:8px;padding:2px 10px;color:#997e51;font-size:8px}
+.resource-zone-energy-sources strong{color:#d6af6b;font-variant-numeric:tabular-nums}
 
 .resource-zone-scene{
   position:relative;
@@ -494,6 +506,7 @@
 .resource-building-effect-card strong{display:block;margin-top:6px;font-size:12px;line-height:1.35;color:#e2faff}
 .resource-building-effect-card>span{display:block;margin-top:6px;font-size:8px;line-height:1.35;color:#789da8}
 .resource-building-effect-card.next>span{color:#b89a61}
+.resource-building-effect-card.next>em{display:block;margin-top:7px;color:#ffd17a;font-size:9px;font-style:normal;font-weight:800;letter-spacing:.05em}
 .resource-building-costs{margin-top:11px}
 .resource-building-time-panel{display:grid;grid-template-columns:minmax(0,1fr) 1.15fr;gap:12px;align-items:stretch;padding:12px 14px;border:1px solid rgba(76,215,245,.42);border-left:3px solid #4cddf7;background:linear-gradient(105deg,rgba(7,59,76,.7),rgba(3,27,40,.84));box-shadow:inset 0 0 20px rgba(37,200,235,.06)}
 .resource-building-time-summary{display:flex;min-width:0;flex-direction:column;justify-content:center;gap:4px}

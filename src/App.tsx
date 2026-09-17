@@ -118,6 +118,7 @@ import {
 import { bindCombatResolutionEventBridge } from './application/combat.ts';
 import { getFleetProductionEntity } from './domain/fleet/production.ts';
 import { getFleetBuildBudget, getFleetSummaryForState } from './application/fleet.ts';
+import { energySummaryForPlanet, getPlanetEnergyCoordinates } from './application/energy.ts';
 import { getEffectiveResourceIncomePerHour } from './application/resource-clock.ts';
 import { publishApplicationRuntimeSnapshot } from './application/runtime.ts';
 import { reconcileRuntime } from './application/reconcile.ts';
@@ -395,6 +396,14 @@ export function App() {
   const currentPlanet = ownedPlanets[0];
   const currentPlanetState = state.planets['helion-01'];
   const currentPlanetName = currentPlanetState.name;
+  const currentEnergyLedger = useMemo(
+    () => energySummaryForPlanet(currentPlanetState, state.science.levels),
+    [currentPlanetState, state.science.levels],
+  );
+  const currentEnergyCoordinates = useMemo(
+    () => getPlanetEnergyCoordinates(currentPlanetState),
+    [currentPlanetState.universePosition, currentPlanetState.universeSystem],
+  );
   const fleetSummary = useMemo(
     () => getFleetSummaryForState(state),
     [state],
@@ -418,7 +427,7 @@ export function App() {
     metal: state.metal,
     minerals: state.minerals,
     gas: state.gas,
-    energy: currentPlanetState.energy,
+    energy: currentEnergyLedger.availableEnergy,
   };
   const tradeWallet: TradeWallet = {
     metal: state.metal,
@@ -925,7 +934,7 @@ export function App() {
              { kind: 'metal', label: 'МЕТАЛЛ', value: state.metal, capacity: storageCapacities.metal, hourlyGain: effectiveResourceIncomePerHour.metal },
              { kind: 'mineral', label: 'МИНЕРАЛЫ', value: state.minerals, capacity: storageCapacities.minerals, hourlyGain: effectiveResourceIncomePerHour.minerals },
              { kind: 'gas', label: 'ГАЗ', value: state.gas, capacity: storageCapacities.gas, hourlyGain: effectiveResourceIncomePerHour.gas },
-             { kind: 'energy', label: 'ЭНЕРГИЯ', value: currentPlanetState.energy },
+             { kind: 'energy', label: 'ЭНЕРГИЯ', value: currentEnergyLedger.availableEnergy, description: `Источники: ${currentEnergyLedger.producedEnergy} · Потрачено: ${currentEnergyLedger.consumedEnergy}` },
             {
               kind: 'population',
               label: isDefenseFleetView ? 'НАСЕЛЕНИЕ ОБОРОНЫ' : 'НАСЕЛЕНИЕ',
@@ -1045,6 +1054,8 @@ export function App() {
               buildings={currentPlanetState.buildings}
               queue={currentQueue}
               scienceLevels={state.science.levels}
+              energyLedger={currentEnergyLedger}
+              energyCoordinates={currentEnergyCoordinates}
               now={now}
               selectedRole={selectedBuildingRole}
               onSelectedRoleChange={setSelectedBuildingRole}
@@ -1079,7 +1090,7 @@ export function App() {
                       <div><dt>Фракция</dt><dd>{PLAYER_FACTION_LABELS[state.profile.factionId]}</dd></div>
                       <div><dt>Координаты</dt><dd>{currentPlanet.coords}</dd></div>
                       <div><dt>Население</dt><dd>{fleetSummary.population} / {fleetSummary.capacity}</dd></div>
-                      <div><dt>Энергия</dt><dd>{currentPlanetState.energy}</dd></div>
+                      <div><dt>Энергия</dt><dd>{currentEnergyLedger.availableEnergy}</dd></div>
                       <div><dt>Ресурсные здания</dt><dd>{resourceBuildingCount} / 10</dd></div>
                       <div><dt>Стабильность</dt><dd className="summary-stable">{currentPlanetState.stability}%</dd></div>
                     </dl>

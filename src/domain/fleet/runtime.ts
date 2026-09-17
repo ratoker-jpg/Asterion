@@ -1,7 +1,7 @@
 import { COMMANDER_COMBAT_CATALOG } from '../combat/catalog.ts';
 import { getFactionShipCatalog } from '../combat/faction-catalog.ts';
 import { COMMANDER_IDS, type CommanderId } from '../combat/commanders.ts';
-import { SHIP_IDS, type ShipId } from '../combat/ids.ts';
+import { SHIP_IDS, SOLAR_SATELLITE_ID, type ShipId } from '../combat/ids.ts';
 import type { CombatFactionId } from '../combat/factions.ts';
 import { getHangarCapacity } from '../buildings/balance-v1.ts';
 
@@ -49,6 +49,25 @@ export function createCanonicalStartingFleet(factionId: CombatFactionId = 'aegis
     fleet.ships[id as ShipId] = quantity;
   }
   return fleet;
+}
+
+export function getSolarSatelliteFleetCount(fleet: OwnedFleetState): number {
+  return Math.max(0, Math.floor(fleet.ships[SOLAR_SATELLITE_ID] ?? 0));
+}
+
+/** Migrates orbital presence out of the outgoing fleet roster. */
+export function removeSolarSatellitesFromFleet(
+  fleet: OwnedFleetState,
+): { fleet: OwnedFleetState; count: number } {
+  const count = getSolarSatelliteFleetCount(fleet);
+  if (count <= 0) return { fleet, count: 0 };
+  return {
+    count,
+    fleet: {
+      ...fleet,
+      ships: { ...fleet.ships, [SOLAR_SATELLITE_ID]: 0 },
+    },
+  };
 }
 
 function safeOwnedQuantity(value: unknown): number {
@@ -104,6 +123,16 @@ export function addFleetUnits(
   hangarLevel: number,
   factionId: CombatFactionId = 'aegis',
 ): FleetPopulationTransition {
+  if (kind === 'ship' && id === SOLAR_SATELLITE_ID) {
+    return {
+      ok: false,
+      fleet,
+      addedPopulation: 0,
+      population: calculateFleetPopulation(fleet, factionId),
+      capacity: calculateFleetCapacity(hangarLevel),
+      reason: 'Солнечный спутник является орбитальным присутствием планеты и не входит в исходящий флот.',
+    };
+  }
   const capacity = calculateFleetCapacity(hangarLevel);
   const population = calculateFleetPopulation(fleet, factionId);
   const safeQuantity = typeof quantity === 'number' && Number.isFinite(quantity) ? Math.floor(quantity) : 0;
@@ -149,7 +178,10 @@ export function normalizeFleetStateForCapacity(
   };
   const removable = [
     ...COMMANDER_COMBAT_CATALOG.map((entity) => ({ kind: 'commander' as const, id: entity.id, population: Math.max(0, Math.floor(entity.population)) })).reverse(),
-    ...getFactionShipCatalog(factionId).map((entity) => ({ kind: 'ship' as const, id: entity.id, population: Math.max(0, Math.floor(entity.population)) })).reverse(),
+    ...getFactionShipCatalog(factionId)
+      .filter((entity) => entity.id !== SOLAR_SATELLITE_ID)
+      .map((entity) => ({ kind: 'ship' as const, id: entity.id, population: Math.max(0, Math.floor(entity.population)) }))
+      .reverse(),
   ];
   for (const entity of removable) {
     if (population <= capacity || entity.population <= 0) break;
@@ -169,7 +201,12 @@ export function calculateFleetPopulation(
   factionId: CombatFactionId = 'aegis',
 ): number {
   const ships = getFactionShipCatalog(factionId);
-  const shipPopulation = ships.reduce((total, entity) => total + (fleet.ships[entity.id as ShipId] ?? 0) * entity.population, 0);
+  const shipPopulation = ships.reduce(
+    (total, entity) => entity.id === SOLAR_SATELLITE_ID
+      ? total
+      : total + (fleet.ships[entity.id as ShipId] ?? 0) * entity.population,
+    0,
+  );
   const commanderPopulation = COMMANDER_COMBAT_CATALOG.reduce(
     (total, entity) => total + (fleet.commanders[entity.id as CommanderId] ?? 0) * entity.population,
     0,

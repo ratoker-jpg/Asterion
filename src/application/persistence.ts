@@ -54,6 +54,7 @@ import {
 import {
   createCanonicalStartingFleet,
   normalizeFleetStateForCapacity,
+  removeSolarSatellitesFromFleet,
   resolveSavedFleetState,
 } from '../domain/fleet/runtime.ts';
 import {
@@ -91,6 +92,8 @@ import {
   createTestRepairWorkshopState,
   migrateRepairWorkshopState,
 } from '../domain/repair/workshop.ts';
+import { initializePlanetEnergy, syncPlanetEnergySources } from './energy.ts';
+import type { EnergyLedger } from '../domain/energy/runtime.ts';
 import type { ResourceClock, SaveState, PlanetRuntime } from './contracts.ts';
 
 export const SAVE_SCHEMA_VERSION = Math.max(
@@ -120,6 +123,15 @@ type StoredPlanetRuntime = {
   fleetProduction?: unknown;
   repair?: unknown;
   energy?: unknown;
+  energyLedger?: unknown;
+  producedEnergy?: unknown;
+  consumedEnergy?: unknown;
+  availableEnergy?: unknown;
+  energySources?: unknown;
+  energyExpenseAttribution?: unknown;
+  solarSatellites?: unknown;
+  universeSystem?: unknown;
+  universePosition?: unknown;
   buildings?: unknown;
   productionBots?: unknown;
   recycling?: unknown;
@@ -173,6 +185,10 @@ function numberOr(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
+function optionalNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 function nonNegativeNumberOr(value: unknown, fallback: number): number {
   const resolved = numberOr(value, fallback);
   return Math.max(0, resolved);
@@ -219,6 +235,7 @@ function normalizeStoredResource(value: unknown, fallback: number, capacity: num
 
 function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.now()): SaveState {
   const command = createDefaultCommandState();
+  const science = createDefaultScienceState();
   const buildings = createCanonicalStartingBuildingLevels();
   if (mode === 'test') {
     buildings['metal-storage'] = 20;
@@ -226,29 +243,31 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     buildings['gas-storage'] = 20;
   }
   const storageCapacities = getStorageCapacities(buildings);
+  const initialPlanet: PlanetRuntime = {
+    name: DEFAULT_PLANET_NAME,
+    skin: 'colonized',
+    fleet: createCanonicalStartingFleet(),
+    defense: createEmptyDefenseState(),
+    fleetProduction: createDefaultFleetProductionState(),
+    energy: mode === 'test' ? TEST_MODE_RESOURCE_AMOUNT : 140,
+    solarSatellites: 0,
+    universeSystem: 1,
+    universePosition: 1,
+    buildings,
+    productionBots: createEmptyBotAssignment(),
+    recycling: createDefaultRecyclingState(),
+    trade: createDefaultTradeState(),
+    spaceportUpgrades: createDefaultSpaceportUpgradeState(),
+    repair: mode === 'test' ? createTestRepairWorkshopState() : createDefaultRepairWorkshopState(),
+    stability: 100,
+  };
   return {
     schemaVersion: SAVE_SCHEMA_VERSION,
     metal: mode === 'test' ? storageCapacities.metal : 15_880,
     minerals: mode === 'test' ? storageCapacities.minerals : 12_712,
     gas: mode === 'test' ? storageCapacities.gas : 6_421,
     currentPlanetId: 'helion-01',
-    planets: {
-      'helion-01': {
-        name: DEFAULT_PLANET_NAME,
-        skin: 'colonized',
-        energy: mode === 'test' ? TEST_MODE_RESOURCE_AMOUNT : 140,
-        buildings,
-        fleet: createCanonicalStartingFleet(),
-        defense: createEmptyDefenseState(),
-        fleetProduction: createDefaultFleetProductionState(),
-        repair: mode === 'test' ? createTestRepairWorkshopState() : createDefaultRepairWorkshopState(),
-        productionBots: createEmptyBotAssignment(),
-        recycling: createDefaultRecyclingState(),
-        trade: createDefaultTradeState(),
-        spaceportUpgrades: createDefaultSpaceportUpgradeState(),
-        stability: 100,
-      },
-    },
+    planets: { 'helion-01': initializePlanetEnergy(initialPlanet, science.levels) },
     queues: { 'helion-01': [] },
     rating: createDefaultRatingPrototypeState(),
     profile: syncPlayerProfileWithAlliance(createDefaultPlayerProfileState(), command.alliance),
@@ -258,7 +277,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     operations: createDefaultOperationsState(),
     command,
     reports: createDefaultReportsState(),
-    science: createDefaultScienceState(),
+    science,
     resourceClock: createResourceClock(now),
   };
 }
@@ -302,8 +321,11 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       command.alliance,
     );
     const reportIds = buildReportsFeed(combat.reports, operations, command).map((item) => item.id);
-    const savedFleet = normalizeFleetStateForCapacity(
+    const migratedSavedFleet = removeSolarSatellitesFromFleet(
       resolveSavedFleetState(savedHomeworld?.fleet, profile.factionId),
+    );
+    const savedFleet = normalizeFleetStateForCapacity(
+      migratedSavedFleet.fleet,
       buildings.hangar,
       profile.factionId,
     );
@@ -321,7 +343,14 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       profile.factionId,
       timestamp,
     );
-    const homeworld: PlanetRuntime = {
+    const completedSatellites = reconciledFleetProduction.completed
+      .filter((item) => item.itemId === 'solar-satellite')
+      .reduce((total, item) => total + Math.max(0, Math.floor(item.quantity)), 0);
+    const savedSatelliteCount = Math.max(
+      0,
+      Math.floor(numberOr(savedHomeworld?.solarSatellites, migratedSavedFleet.count) + completedSatellites),
+    );
+    const homeworldBase: PlanetRuntime = {
       name: typeof savedHomeworld?.name === 'string' && savedHomeworld.name.trim()
         ? savedHomeworld.name.trim().slice(0, 28)
         : DEFAULT_PLANET_NAME,
@@ -336,7 +365,22 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       repair: mode === 'test' && savedHomeworld?.repair === undefined
         ? createTestRepairWorkshopState()
         : migrateRepairWorkshopState(savedHomeworld?.repair),
-      energy: nonNegativeNumberOr(savedHomeworld?.energy, numberOr(parsed.energy, initialState.planets['helion-01'].energy)),
+      energy: numberOr(savedHomeworld?.energy, numberOr(parsed.energy, initialState.planets['helion-01'].energy)),
+      energyLedger: savedHomeworld?.energyLedger && typeof savedHomeworld.energyLedger === 'object'
+        ? savedHomeworld.energyLedger as EnergyLedger
+        : undefined,
+      producedEnergy: optionalNumber(savedHomeworld?.producedEnergy),
+      consumedEnergy: optionalNumber(savedHomeworld?.consumedEnergy),
+      availableEnergy: optionalNumber(savedHomeworld?.availableEnergy),
+      energySources: Array.isArray(savedHomeworld?.energySources)
+        ? savedHomeworld.energySources as EnergyLedger['sources']
+        : undefined,
+      energyExpenseAttribution: savedHomeworld?.energyExpenseAttribution && typeof savedHomeworld.energyExpenseAttribution === 'object'
+        ? savedHomeworld.energyExpenseAttribution as Partial<Record<string, number>>
+        : undefined,
+      solarSatellites: savedSatelliteCount,
+      universeSystem: numberOr(savedHomeworld?.universeSystem, 1),
+      universePosition: numberOr(savedHomeworld?.universePosition, 1),
       buildings,
       productionBots: migrateProductionBotAssignment(savedHomeworld?.productionBots, buildings),
       recycling: migrateRecyclingState(savedHomeworld?.recycling, buildings.recycling, timestamp),
@@ -344,6 +388,7 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       spaceportUpgrades,
       stability: numberOr(savedHomeworld?.stability, initialState.planets['helion-01'].stability),
     };
+    const homeworld = syncPlanetEnergySources(homeworldBase, science.levels);
     const savedQueue = parsed.queues?.['helion-01'] ?? parsed.queue ?? null;
     const queue = migrateBuildingQueue(savedQueue, 'helion-01', homeworld.buildings, science.levels);
     const storageCapacities = getStorageCapacities(homeworld.buildings);

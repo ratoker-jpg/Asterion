@@ -4,6 +4,12 @@ import type { CombatTechnologyId, CombatTechnologyLevels } from './technologies.
 import type { CombatTargetPriority } from './config.ts';
 
 export const ASTERION_LOCAL_PLAYER_ID = 'player-aster';
+/** The profile fixture uses this id; keep the legacy combat id compatible. */
+export const ASTERION_PROFILE_PLAYER_ID = 'player-current';
+
+export function isAsterionLocalPlayerId(playerId: string | undefined): boolean {
+  return playerId === ASTERION_LOCAL_PLAYER_ID || playerId === ASTERION_PROFILE_PLAYER_ID;
+}
 
 export type BattleSide = 'attacker' | 'defender';
 export type BattleWinner = BattleSide | 'draw';

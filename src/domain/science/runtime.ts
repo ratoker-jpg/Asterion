@@ -423,9 +423,14 @@ export function selectScienceCancelRefundPercent(rng: () => number = Math.random
 }
 
 function refundScienceCost(cost: ScienceResourceCost, refundPercent: number): ScienceResourceCost {
-  return Object.fromEntries(
-    RESOURCE_KEYS.map((key) => [key, Math.floor(cost[key] * refundPercent / 100)]),
-  ) as ScienceResourceCost;
+  // Energy is a one-time stock. Cancelling research never refunds it;
+  // ordinary resources keep the established 60–80% refund range.
+  return {
+    ...Object.fromEntries(
+      (['metal', 'minerals', 'gas'] as const).map((key) => [key, Math.floor(cost[key] * refundPercent / 100)]),
+    ),
+    energy: 0,
+  } as ScienceResourceCost;
 }
 
 function rescheduleScienceQueue(queue: readonly ScienceQueueTask[], canceledWasActive: boolean, now: number): ScienceQueueTask[] {

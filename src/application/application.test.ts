@@ -31,8 +31,10 @@ import { bindScienceEventBridge, cancelScience, startScience } from './science.t
 import {
   bindFleetProductionEventBridge,
   cancelFleetProduction,
+  dismantleSolarSatellites,
   startFleetProduction,
 } from './fleet-production.ts';
+import { getPlanetEnergyLedger, syncPlanetEnergySources } from './energy.ts';
 import { reconcileRuntime } from './reconcile.ts';
 import { getEffectiveResourceIncomePerHour } from './resource-clock.ts';
 import { publishApplicationRuntimeSnapshot } from './runtime.ts';
@@ -161,6 +163,43 @@ test('persistence facade keeps the existing save key, envelope migration, and on
   assert.deepEqual(new Set(Object.values(production.planets['helion-01'].repair.defenses)), new Set([0]));
 });
 
+test('persistence keeps one-time energy attribution and migrates legacy satellite fleet counts to orbit', () => {
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => 1_000 });
+  const initial = createInitialSaveState('production', 0);
+  const withSatellites = {
+    ...initial,
+    planets: {
+      ...initial.planets,
+      'helion-01': syncPlanetEnergySources({
+        ...initial.planets['helion-01'],
+        solarSatellites: 2,
+      }, initial.science.levels),
+    },
+  };
+  const beforeWrite = getPlanetEnergyLedger(withSatellites.planets['helion-01'], withSatellites.science.levels);
+  assert.equal(persistence.write(withSatellites).ok, true);
+  const roundTripped = persistence.read();
+  const afterRead = getPlanetEnergyLedger(roundTripped.planets['helion-01'], roundTripped.science.levels);
+  assert.equal(roundTripped.planets['helion-01'].solarSatellites, 2);
+  assert.equal(roundTripped.planets['helion-01'].fleet.ships['solar-satellite'], 0);
+  assert.equal(afterRead.availableEnergy, beforeWrite.availableEnergy);
+  assert.equal(afterRead.consumedEnergy, beforeWrite.consumedEnergy);
+
+  storage.values.set(persistence.saveKey, JSON.stringify({
+    schemaVersion: 13,
+    planets: {
+      'helion-01': {
+        fleet: { ships: { 'solar-satellite': 3 }, commanders: {} },
+        energy: 140,
+      },
+    },
+  }));
+  const migrated = persistence.read();
+  assert.equal(migrated.planets['helion-01'].solarSatellites, 3);
+  assert.equal(migrated.planets['helion-01'].fleet.ships['solar-satellite'], 0);
+});
+
 test('building application owns start, queue cancellation, completion, destroy, and production bot transitions', () => {
   const initial = withBuildingSetup(createInitialSaveState('test'));
   const buildingContext = context(10_000);
@@ -192,6 +231,49 @@ test('building application owns start, queue cancellation, completion, destroy, 
 
   const assigned = applyProductionBots(destroyed.state, buildingContext, { metal: 1, minerals: 0, gas: 0 });
   assert.equal(assigned.planets['helion-01'].productionBots.metal, 1);
+});
+
+test('one-time energy is added by source completion and never by the hourly resource clock', () => {
+  const base = createInitialSaveState('test', 0);
+  const sourceReady = syncPlanetEnergySources({
+    ...base.planets['helion-01'],
+    buildings: { ...base.planets['helion-01'].buildings, 'basic-energy': 22 },
+  }, base.science.levels);
+  const initial = {
+    ...base,
+    planets: { ...base.planets, 'helion-01': sourceReady },
+  } satisfies SaveState;
+  const before = getPlanetEnergyLedger(initial.planets['helion-01'], initial.science.levels);
+  const started = startBuilding(initial, context(10_000), 'basic-energy');
+  assert.equal(started.ok, true);
+  const afterStart = getPlanetEnergyLedger(started.state.planets['helion-01'], started.state.science.levels);
+  assert.equal(afterStart.availableEnergy, before.availableEnergy);
+
+  const task = started.state.queues['helion-01'][0];
+  assert.ok(task);
+  const completed = reconcileRuntime(started.state, { ...context(10_000), now: task.finishAt });
+  const afterCompletion = getPlanetEnergyLedger(completed.state.planets['helion-01'], completed.state.science.levels);
+  const beforeSource = before.sources.find((source) => source.id === 'solar-station');
+  const afterSource = afterCompletion.sources.find((source) => source.id === 'solar-station');
+  assert.equal(completed.state.planets['helion-01'].buildings['basic-energy'], 23);
+  assert.ok(beforeSource);
+  assert.ok(afterSource);
+  assert.equal(
+    afterCompletion.availableEnergy - afterStart.availableEnergy,
+    afterSource.fullContribution - beforeSource.fullContribution,
+  );
+
+  const paidBuilding = startBuilding(initial, context(20_000), 'construction');
+  assert.equal(paidBuilding.ok, true);
+  const afterPaidBuilding = getPlanetEnergyLedger(paidBuilding.state.planets['helion-01'], paidBuilding.state.science.levels);
+  assert.equal(afterPaidBuilding.availableEnergy, before.availableEnergy - 3);
+
+  const later = reconcileRuntime(completed.state, { ...context(10_000), now: task.finishAt + 3_600_000 });
+  assert.equal(
+    getPlanetEnergyLedger(later.state.planets['helion-01'], later.state.science.levels).availableEnergy,
+    afterCompletion.availableEnergy,
+  );
+  assert.equal(later.state.resourceClock.remainder.energy, 0);
 });
 
 test('over-capacity fleet rejects hangar downgrade without changing state or refunding', () => {
@@ -356,6 +438,45 @@ test('fleet production application persists, reconciles, and bridges all three q
   unbind();
   const canceled = cancelFleetProduction(current, { ...context(3_002), rng: () => 0 }, 'missing');
   assert.equal(canceled.transition.ok, false);
+});
+
+test('satellite production creates orbital presence and dismantling removes only its unused contribution', () => {
+  const initial = withBuildingSetup(createInitialSaveState('test', 0));
+  const before = getPlanetEnergyLedger(initial.planets['helion-01'], initial.science.levels);
+  const started = startFleetProduction(
+    initial,
+    context(2_000),
+    'ships',
+    'solar-satellite',
+    2,
+    'app-satellites',
+  );
+  assert.equal(started.transition.ok, true);
+  assert.equal(getFleetSummaryForState(started.state).population, getFleetSummaryForState(initial).population);
+  const task = started.state.planets['helion-01'].fleetProduction.shipQueue[0];
+  assert.ok(task);
+
+  const completed = reconcileRuntime(started.state, { ...context(2_000), now: task.finishAt });
+  const completedPlanet = completed.state.planets['helion-01'];
+  const afterCompletion = getPlanetEnergyLedger(completedPlanet, completed.state.science.levels);
+  assert.equal(completedPlanet.solarSatellites, 2);
+  assert.equal(completedPlanet.fleet.ships['solar-satellite'], 0);
+  assert.equal(afterCompletion.availableEnergy > before.availableEnergy, true);
+
+  const dismantled = dismantleSolarSatellites(completed.state, { planetId: 'helion-01' }, 1);
+  assert.equal(dismantled.ok, true);
+  const dismantledPlanet = dismantled.state.planets['helion-01'];
+  const afterDismantle = getPlanetEnergyLedger(dismantledPlanet, dismantled.state.science.levels);
+  const completedSatellites = afterCompletion.sources.find((source) => source.id === 'solar-satellite');
+  const remainingSatellites = afterDismantle.sources.find((source) => source.id === 'solar-satellite');
+  assert.equal(dismantledPlanet.solarSatellites, 1);
+  assert.equal(dismantledPlanet.fleet.ships['solar-satellite'], 0);
+  assert.ok(completedSatellites);
+  assert.ok(remainingSatellites);
+  assert.equal(
+    afterCompletion.availableEnergy - afterDismantle.availableEnergy,
+    completedSatellites.fullContribution - remainingSatellites.fullContribution,
+  );
 });
 
 test('science application uses one clock, reconciles idempotently, and event bridge reads latest state', () => {

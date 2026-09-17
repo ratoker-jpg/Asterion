@@ -16,6 +16,8 @@ export const SHIP_IDS = [
   'death-star',
 ] as const;
 
+export const SOLAR_SATELLITE_ID = 'solar-satellite' as const;
+
 export const DEFENSE_IDS = [
   'ballistic-turret',
   'laser-turret',

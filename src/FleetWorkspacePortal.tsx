@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
 import { getCombatFactionName } from './domain/combat/factions.ts';
 import type { ShipId } from './domain/combat/ids.ts';
+import { SOLAR_SATELLITE_ID } from './domain/combat/ids.ts';
 import { getBuildingPresentation } from './domain/buildings/balance-v1.ts';
 import { RUNTIME_STATE_CHANGED_EVENT } from './domain/runtime/mode.ts';
 import {
@@ -21,6 +22,7 @@ import { FLEET_CONSTRUCTION_REQUEST_EVENT } from './building-interior-navigation
 import { ShipyardView } from './ShipyardView';
 import { SimulatorView } from './SimulatorView';
 import type { FleetProductionQueueKind } from './domain/fleet/production.ts';
+import { FLEET_PRODUCTION_DISMANTLE_SATELLITES_REQUEST_EVENT } from './application/fleet-production.ts';
 import {
   FLEET_CONSTRUCTION_NAVIGATION,
   FLEET_MANAGEMENT_NAVIGATION,
@@ -109,6 +111,10 @@ function FleetWorkspace({
   const factionId = fleetSnapshot.factionId;
   const factionName = getCombatFactionName(factionId);
   const shipDefinitions = useMemo(() => getFactionShipCatalog(factionId), [factionId]);
+  const satelliteDefinition = useMemo(
+    () => shipDefinitions.find((ship) => ship.id === SOLAR_SATELLITE_ID) ?? null,
+    [shipDefinitions],
+  );
   const shipyardPresentation = useMemo(
     () => getBuildingPresentation('shipyard', factionId),
     [factionId],
@@ -118,7 +124,7 @@ function FleetWorkspace({
     [fleetSnapshot.factionId, fleetSnapshot.fleet, fleetSnapshot.fleetProduction, fleetSnapshot.hangarLevel],
   );
   const ownedShipDefinitions = useMemo(
-    () => shipDefinitions.filter((ship) => (fleetSnapshot.fleet.ships[ship.id] ?? 0) > 0),
+    () => shipDefinitions.filter((ship) => ship.id !== SOLAR_SATELLITE_ID && (fleetSnapshot.fleet.ships[ship.id] ?? 0) > 0),
     [fleetSnapshot.fleet, shipDefinitions],
   );
   const availableShipCount = useMemo(
@@ -288,8 +294,33 @@ function FleetWorkspace({
             <section className="fleet-panel-v1 fleet-compose-v1">
               <header className="fleet-panel-header-v1 compact">
                 <div><small>ФОРМИРОВАНИЕ</small><h2>ВЫБЕРИ КОРАБЛИ</h2></div>
-                <span data-qa-fleet-population>ФЛОТ: {fleetSummary.population} / {fleetSummary.capacity} · В НАЛИЧИИ {availableShipCount} КОРАБЛЯ</span>
+                <span data-qa-fleet-population>ФЛОТ: {fleetSummary.population} / {fleetSummary.capacity} · В НАЛИЧИИ {availableShipCount} КОРАБЛЯ · СПУТНИКИ {fleetSnapshot.solarSatellites}</span>
               </header>
+
+              <div className="fleet-satellite-presence-v1" data-qa-fleet-satellites>
+                <div className="fleet-satellite-art-v1">
+                  {satelliteDefinition ? <img src={satelliteDefinition.art} alt="" draggable={false} /> : null}
+                </div>
+                <div className="fleet-satellite-copy-v1">
+                  <small>ОРБИТАЛЬНОЕ ПРИСУТСТВИЕ</small>
+                  <strong>{satelliteDefinition?.name ?? 'Солнечные спутники'}</strong>
+                  <span>{fleetSnapshot.solarSatellites > 0 ? `На орбите: ${fleetSnapshot.solarSatellites}` : 'На орбите нет спутников'} · население: {fleetSnapshot.solarSatellites}</span>
+                </div>
+                <button
+                  type="button"
+                  className="fleet-satellite-dismantle-v1"
+                  aria-label="Уничтожить солнечные спутники"
+                  title="Уничтожить солнечные спутники"
+                  disabled={fleetSnapshot.solarSatellites <= 0}
+                  onClick={() => {
+                    if (fleetSnapshot.solarSatellites <= 0) return;
+                    if (!window.confirm('Спутники будут уничтожены. Ресурсы за них не возвращаются')) return;
+                    window.dispatchEvent(new CustomEvent(FLEET_PRODUCTION_DISMANTLE_SATELLITES_REQUEST_EVENT, {
+                      detail: { count: fleetSnapshot.solarSatellites },
+                    }));
+                  }}
+                >X</button>
+              </div>
 
               <div className="fleet-ship-roster-v1" data-qa-fleet-roster>
                 {ownedShipDefinitions.map((ship) => {

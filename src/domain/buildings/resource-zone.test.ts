@@ -516,7 +516,7 @@ test('Improved Construction is used consistently for preview, charge, cancellati
   assert.equal(destroyed.refund?.metal, Math.floor(discountedCost.metal * 0.65));
 });
 
-test('energy-building completion deducts construction energy but hourly income stays derived', () => {
+test('energy-building completion keeps construction energy separate from the hourly resource clock', () => {
   let resource = startBuildingProject(createState(), 'basic-energy', 'helion-01', 1_000).state;
   const resourceBefore = resource.resources.energy;
   resource = completeBuildingProject(resource, resource.queue[0].finishAt).state;

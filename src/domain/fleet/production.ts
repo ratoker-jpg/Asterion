@@ -5,7 +5,7 @@ import {
 import { COMMANDER_IDS, type CommanderId } from '../combat/commanders.ts';
 import { getFactionDefenseCatalog, getFactionShipCatalog } from '../combat/faction-catalog.ts';
 import type { CombatFactionId } from '../combat/factions.ts';
-import { DEFENSE_IDS, SHIP_IDS, type DefenseId, type ShipId } from '../combat/ids.ts';
+import { DEFENSE_IDS, SHIP_IDS, SOLAR_SATELLITE_ID, type DefenseId, type ShipId } from '../combat/ids.ts';
 import type { ResourceCost } from '../combat/types.ts';
 import {
   calculateUnitProductionDurationMs,
@@ -233,8 +233,9 @@ function pendingOrderCost(order: FleetProductionOrder): ResourceCost {
   };
 }
 
-function entityPopulation(entity: CatalogEntity | null): number {
-  return entity ? Math.max(0, Math.floor(entity.population)) : 0;
+function entityPopulation(entity: CatalogEntity | null, queueKind?: FleetProductionQueueKind): number {
+  if (!entity || (queueKind === 'ships' && entity.id === SOLAR_SATELLITE_ID)) return 0;
+  return Math.max(0, Math.floor(entity.population));
 }
 
 function queuePopulation(
@@ -242,7 +243,7 @@ function queuePopulation(
   queueKind: FleetProductionQueueKind,
   factionId: CombatFactionId,
 ): number {
-  return queue.reduce((total, order) => total + pendingQuantity(order) * entityPopulation(entityFor(queueKind, order.itemId, factionId)), 0);
+  return queue.reduce((total, order) => total + pendingQuantity(order) * entityPopulation(entityFor(queueKind, order.itemId, factionId), queueKind), 0);
 }
 
 export function getPendingFleetPopulation(state: FleetProductionState, factionId: CombatFactionId): number {
@@ -256,7 +257,7 @@ export function getPendingDefensePopulation(state: FleetProductionState, faction
 
 export function calculateDefensePopulation(defense: OwnedDefenseState, factionId: CombatFactionId): number {
   return getFactionDefenseCatalog(factionId).reduce(
-    (total, entity) => total + Math.max(0, Math.floor(defense.defenses[entity.id as DefenseId] ?? 0)) * entityPopulation(entity),
+    (total, entity) => total + Math.max(0, Math.floor(defense.defenses[entity.id as DefenseId] ?? 0)) * entityPopulation(entity, 'defense'),
     0,
   );
 }
@@ -420,7 +421,9 @@ export function enqueueFleetProduction(
       : 'Этот щит уже построен или находится в очереди.');
   }
 
-  const population = entityPopulation(entity) * safeQuantity;
+  // Orbital satellites are completed into planet presence and never reserve
+  // outgoing fleet population or hangar capacity.
+  const population = entityPopulation(entity, queueKind) * safeQuantity;
   if (queueKind === 'defense') {
     const summary = getDefensePopulationSummary(workingDefense, workingState, context.hangarLevel, context.factionId);
     if (summary.population + population > summary.capacity) return noEnqueue(context, settled, 'Недостаточно населения обороны.');
@@ -577,6 +580,7 @@ function addOwnedUnits(
   quantity: number,
 ): { fleet: OwnedFleetState; defense: OwnedDefenseState } {
   if (queueKind === 'ships') {
+    if (itemId === SOLAR_SATELLITE_ID) return { fleet, defense };
     return {
       fleet: { ...fleet, ships: { ...fleet.ships, [itemId]: (fleet.ships[itemId as ShipId] ?? 0) + quantity } },
       defense,
@@ -760,7 +764,7 @@ function migrateQueue(
     };
 
     if (enforceCapacity) {
-      const population = entityPopulation(entity) * pendingQuantity(order);
+      const population = entityPopulation(entity, queueKind) * pendingQuantity(order);
       if (queueKind === 'defense') {
         const cap = calculateDefenseCapacity(options.hangarLevel ?? 1);
         if (calculateDefensePopulation(ownedDefense, factionId) + capacityState.defensePendingPopulation + population > cap) continue;

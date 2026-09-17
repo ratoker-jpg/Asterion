@@ -22,6 +22,16 @@ import {
   type ResourceWallet,
   type ScienceLevels,
 } from './domain/buildings/resource-zone.ts';
+import { getBuildingEnergyBaseContribution } from './domain/energy/balance-adapter.ts';
+import {
+  calculateNuclearReactorContribution,
+  calculateSolarStationContribution,
+  getPhysicsMultiplier,
+  getPositionMultiplier,
+  getSunMultiplier,
+  type EnergyLedger,
+} from './domain/energy/runtime.ts';
+import type { PlanetEnergyCoordinates } from './application/energy.ts';
 import { getProductionBotBonusPercent, type BotAssignment, type ProductionResourceIncome } from './domain/buildings/production-bots.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 
@@ -83,11 +93,32 @@ function playerEffectForLevel(
   level: number,
   productionBots: BotAssignment,
   scienceLevels: ScienceLevels,
+  energyCoordinates: PlanetEnergyCoordinates,
 ) {
   const effect = getBuildingEffect(role, level);
+  if ((role === 'basic-energy' || role === 'advanced-energy') && level > 0) {
+    const physicsLevel = scienceLevels[1] ?? 0;
+    const base = getBuildingEnergyBaseContribution(role, level);
+    const value = role === 'basic-energy'
+      ? calculateSolarStationContribution(level, physicsLevel, energyCoordinates.system, energyCoordinates.position)
+      : calculateNuclearReactorContribution(level, physicsLevel);
+    const factors = [
+      `База ${formatNumber(base)}`,
+      `Физика ×${getPhysicsMultiplier(physicsLevel).toFixed(2)}`,
+      ...(role === 'basic-energy'
+        ? [`Солнце ×${getSunMultiplier(energyCoordinates.system).toFixed(2)}`, `Позиция ×${getPositionMultiplier(energyCoordinates.position).toFixed(2)}`]
+        : []),
+    ];
+    return {
+      primary: `Итого ${formatNumber(value)}`,
+      secondary: factors.join(' · '),
+      value,
+      energy: true,
+    };
+  }
   const scienceEffect = getBuildingEffectWithScience(role, level, scienceLevels);
   if (scienceEffect.kind !== 'resource-income' && scienceEffect.kind !== 'energy-income') {
-    return { primary: formatBalanceEffect(effect), secondary: null };
+    return { primary: formatBalanceEffect(effect), secondary: null, value: null, energy: false };
   }
 
   const scienceBonusPercent = scienceEffect.kind === 'resource-income'
@@ -109,6 +140,8 @@ function playerEffectForLevel(
     secondary: bonusParts.length > 0
       ? `База ${formatBalanceEffect(effect)} · ${bonusParts.join(' · ')}`
       : null,
+    value: null,
+    energy: false,
   };
 }
 
@@ -162,6 +195,8 @@ export type ZoneViewProps = {
   buildings: BuildingLevels;
   queue: BuildingQueueItem[];
   scienceLevels: ScienceLevels;
+  energyLedger: EnergyLedger;
+  energyCoordinates: PlanetEnergyCoordinates;
   now: number;
   selectedRole: BuildingRole | null;
   onSelectedRoleChange: (role: BuildingRole | null) => void;
@@ -185,6 +220,8 @@ export function ZoneView({
   buildings,
   queue,
   scienceLevels,
+  energyLedger,
+  energyCoordinates,
   now,
   selectedRole,
   onSelectedRoleChange,
@@ -213,10 +250,13 @@ export function ZoneView({
   const constructionFactor = getConstructionTimeFactor(buildings.construction);
   const constructionBonusPercent = Math.round((1 - constructionFactor) * 100);
   const currentEffect = selectedRole && availability
-    ? playerEffectForLevel(selectedRole, availability.currentLevel, productionBotAssignment, scienceLevels)
+    ? playerEffectForLevel(selectedRole, availability.currentLevel, productionBotAssignment, scienceLevels, energyCoordinates)
     : null;
   const nextEffect = selectedRole && availability?.nextLevel != null
-    ? playerEffectForLevel(selectedRole, availability.nextLevel, productionBotAssignment, scienceLevels)
+    ? playerEffectForLevel(selectedRole, availability.nextLevel, productionBotAssignment, scienceLevels, energyCoordinates)
+    : null;
+  const energyUpgradeDelta = currentEffect?.energy && nextEffect?.energy && currentEffect.value != null && nextEffect.value != null
+    ? nextEffect.value - currentEffect.value
     : null;
   const levelProgress = availability && availability.maxLevel > 0
     ? Math.min(availability.maxLevel, Math.max(0, availability.currentLevel))
@@ -324,6 +364,7 @@ export function ZoneView({
         </section>
 
         {zone === 'resource' ? (
+          <>
           <section className="resource-zone-economy" aria-label="Добыча за 1 час">
             <div className="resource-zone-economy-title">ДОБЫЧА ЗА 1 ЧАС</div>
             <div className="resource-zone-income-list">
@@ -344,6 +385,21 @@ export function ZoneView({
               </div>
             </div>
           </section>
+          <section className="resource-zone-energy-summary" aria-label="Баланс энергии" data-qa-energy-summary>
+            <div className="resource-zone-economy-title">ЭНЕРГИЯ · ЕДИНОВРЕМЕННЫЙ БАЛАНС</div>
+            <div className="resource-zone-energy-total-row"><span>Произведено</span><strong>{formatNumber(energyLedger.producedEnergy)}</strong></div>
+            <div className="resource-zone-energy-total-row"><span>Потрачено</span><strong>{formatNumber(energyLedger.consumedEnergy)}</strong></div>
+            <div className="resource-zone-energy-total-row available"><span>Доступно</span><strong>{formatNumber(energyLedger.availableEnergy)}</strong></div>
+            <div className="resource-zone-energy-sources">
+              {energyLedger.sources.map((source) => (
+                <div key={source.id} data-qa-energy-source={source.id}>
+                  <span>{source.id === 'solar-satellite' ? 'Спутники' : source.id === 'solar-station' ? 'Солнечная станция' : 'Ядерный реактор'}</span>
+                  <strong>{formatNumber(source.fullContribution)}</strong>
+                </div>
+              ))}
+            </div>
+          </section>
+          </>
         ) : null}
       </aside>
 
@@ -567,9 +623,10 @@ export function ZoneView({
                       {availability.nextLevel != null ? (
                         <div className="resource-building-effect-card next" data-qa-building-effect-next>
                           <small>СЛЕДУЮЩИЙ УРОВЕНЬ · {availability.nextLevel}</small>
-                          <strong>{nextEffect?.primary}</strong>
-                          {nextEffect?.secondary ? <span>{nextEffect.secondary}</span> : null}
-                        </div>
+                        <strong>{nextEffect?.primary}</strong>
+                        {nextEffect?.secondary ? <span>{nextEffect.secondary}</span> : null}
+                        {energyUpgradeDelta != null ? <em data-qa-energy-upgrade-delta>ПРИБАВКА +{formatNumber(energyUpgradeDelta)}</em> : null}
+                      </div>
                       ) : null}
                     </div>
                   </div>

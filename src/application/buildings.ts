@@ -56,6 +56,11 @@ import {
   type PlanetId,
   type SaveState,
 } from './contracts.ts';
+import {
+  energySourceChangeForBuilding,
+  getPlanetEnergyLedger,
+  settlePlanetEnergyWallet,
+} from './energy.ts';
 
 export type BuildingApplicationContext = {
   planetId: PlanetId;
@@ -83,12 +88,13 @@ export type BuildingPreviewResult = {
 
 function economyFor(state: SaveState, context: BuildingApplicationContext): BuildingEconomyState {
   const planet = getPlanetState(state, context.planetId);
+  const energy = getPlanetEnergyLedger(planet, state.science.levels).availableEnergy;
   return {
     resources: {
       metal: state.metal,
       minerals: state.minerals,
       gas: state.gas,
-      energy: planet.energy,
+      energy,
     },
     buildings: planet.buildings,
     queue: state.queues[context.planetId] ?? [],
@@ -101,14 +107,23 @@ function stateFromEconomy(
   state: SaveState,
   context: BuildingApplicationContext,
   economy: BuildingEconomyState,
+  energyOptions: Parameters<typeof settlePlanetEnergyWallet>[3] = {},
 ): SaveState {
   const planet = getPlanetState(state, context.planetId);
+  const nextPlanet = {
+    ...planet,
+    energy: economy.resources.energy,
+    buildings: economy.buildings,
+  };
+  const settledEnergy = settlePlanetEnergyWallet(
+    planet,
+    state.science.levels,
+    economy.resources.energy,
+    energyOptions,
+    nextPlanet,
+  );
   return {
-    ...replacePlanetState(state, context.planetId, {
-      ...planet,
-      energy: economy.resources.energy,
-      buildings: economy.buildings,
-    }),
+    ...replacePlanetState(state, context.planetId, settledEnergy.planet),
     schemaVersion: SAVE_SCHEMA_VERSION,
     metal: economy.resources.metal,
     minerals: economy.resources.minerals,
@@ -211,13 +226,16 @@ export function destroyBuilding(
   const transition = destroyBuildingLevel(economyFor(state, context), assetRole, refundPercent);
   if (!transition.ok) return { ok: false, state, reason: transition.reason, refundPercent: null };
 
-  const next = stateFromEconomy(state, context, transition.state);
+  const next = stateFromEconomy(
+    state,
+    context,
+    transition.state,
+    { sourceChanges: energySourceChangeForBuilding(assetRole) },
+  );
   return {
     ok: true,
     state: replacePlanetState(next, context.planetId, {
-      ...planet,
-      energy: transition.state.resources.energy,
-      buildings: transition.state.buildings,
+      ...getPlanetState(next, context.planetId),
       productionBots: migrateProductionBotAssignment(planet.productionBots, transition.state.buildings),
     }),
     reason: null,
@@ -294,7 +312,7 @@ export function collectRecycling(
     return { ok: false, state: nextState, reason: transition.reason ?? 'Ресурс пока недоступен.', output: null, credit: null };
   }
   const credit = creditResources(
-    { metal: state.metal, minerals: state.minerals, gas: state.gas, energy: planet.energy },
+    { metal: state.metal, minerals: state.minerals, gas: state.gas, energy: getPlanetEnergyLedger(planet, state.science.levels).availableEnergy },
     getStorageCapacities(planet.buildings),
     transition.output,
   );
@@ -321,7 +339,7 @@ export function reconcileRecycling(
   const transition = advanceRecyclingState(planet.recycling, context.now);
   if (!transition.changed) return { ok: true, state, reason: null, autoCollectedJobIds: [], credit: null };
   const credit = creditResources(
-    { metal: state.metal, minerals: state.minerals, gas: state.gas, energy: planet.energy },
+    { metal: state.metal, minerals: state.minerals, gas: state.gas, energy: getPlanetEnergyLedger(planet, state.science.levels).availableEnergy },
     getStorageCapacities(planet.buildings),
     transition.autoCollectedOutput,
   );

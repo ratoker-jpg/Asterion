@@ -161,6 +161,36 @@
   overflow: visible;
 }
 
+.fleet-satellite-presence-v1 {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 42px;
+  gap: 12px;
+  align-items: center;
+  min-height: 68px;
+  padding: 7px 12px;
+  border: 1px solid rgba(244, 94, 83, .28);
+  background: linear-gradient(90deg, rgba(111, 42, 37, .28), rgba(3, 25, 36, .3));
+}
+.fleet-satellite-art-v1 { display: grid; place-items: center; height: 54px; border-right: 1px solid rgba(244, 94, 83, .18); }
+.fleet-satellite-art-v1 img { width: 52px; height: 52px; object-fit: contain; filter: drop-shadow(0 0 9px rgba(255, 121, 72, .28)); }
+.fleet-satellite-copy-v1 { display: grid; gap: 4px; min-width: 0; }
+.fleet-satellite-copy-v1 small { color: #e78b80; font-size: 8px; letter-spacing: .12em; }
+.fleet-satellite-copy-v1 strong { color: #fff0ec; font-size: 14px; }
+.fleet-satellite-copy-v1 span { color: #c99891; font-size: 10px; }
+.fleet-satellite-dismantle-v1 {
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(255, 93, 81, .72);
+  background: rgba(105, 26, 25, .72);
+  color: #ff9e94;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.fleet-satellite-dismantle-v1:hover,
+.fleet-satellite-dismantle-v1:focus-visible { border-color: #ffb0a8; background: rgba(167, 44, 36, .86); color: #fff; outline: 0; }
+.fleet-satellite-dismantle-v1:disabled { opacity: .32; cursor: default; }
+
 /* Nemexia-inspired roster: every owned ordinary ship gets its own selectable row. */
 .fleet-ship-roster-v1 {
   min-height: auto;
