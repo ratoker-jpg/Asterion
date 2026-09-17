@@ -155,7 +155,7 @@ async function runViewport(width, height) {
       };
     })()`);
     const stationText = JSON.stringify(station);
-    if (!station.current.includes('Итого 17 962') || !station.next.includes('Итого 19 978') || station.delta !== 'ПРИБАВКА +2 016' || station.summary.includes('/ч') || station.energyTooltip.includes('/ч') || station.horizontalOverflow) {
+    if (!station.current.includes('Итого 17 962') || !station.next.includes('Прибавка +2 016') || station.next.includes('Итого 19 978') || station.delta !== 'ПРИБАВКА +2 016' || station.summary.includes('/ч') || station.energyTooltip.includes('/ч') || station.horizontalOverflow) {
       throw new Error(`${label}: energy station UI contract failed: ${stationText}`);
     }
     await capture(win, directory, 'energy-station-levels', width, height);
@@ -175,7 +175,7 @@ async function runViewport(width, height) {
       };
     })()`);
     const parsePopulation = (value) => Number(value.replace(/[^0-9-]/g, ''));
-    if (!satellite.text.includes('На орбите: 2') || satellite.dismantleDisabled || satellite.ordinarySatelliteRow || !satellite.population.includes('СПУТНИКИ 2') || !Number.isFinite(satellite.fleetPopulation) || parsePopulation(satellite.headerPopulation) !== satellite.fleetPopulation + 2) {
+    if (!satellite.text.includes('На орбите: 2') || satellite.dismantleDisabled || satellite.ordinarySatelliteRow || !satellite.population.includes('СПУТНИКИ 2') || !Number.isFinite(satellite.fleetPopulation) || parsePopulation(satellite.headerPopulation) !== satellite.fleetPopulation) {
       throw new Error(`${label}: satellite presence UI contract failed: ${JSON.stringify(satellite)}`);
     }
     await capture(win, directory, 'satellite-presence', width, height);
@@ -217,7 +217,7 @@ async function runViewport(width, height) {
         headerPopulation: document.querySelector('[data-qa-resource-chip="population"] strong')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
       };
     })()`);
-    if (afterDismantle.satellites !== 0 || afterDismantle.availableEnergy !== 17962 || parsePopulation(afterDismantle.headerPopulation) !== satellite.fleetPopulation || !afterDismantle.notice.includes('Ресурсы за них не возвращаются')) {
+    if (afterDismantle.satellites !== 0 || afterDismantle.availableEnergy !== 17962 || parsePopulation(afterDismantle.headerPopulation) !== satellite.fleetPopulation - 2 || !afterDismantle.notice.includes('Ресурсы за них не возвращаются')) {
       throw new Error(`${label}: satellite dismantle UI contract failed: ${JSON.stringify(afterDismantle)}`);
     }
 

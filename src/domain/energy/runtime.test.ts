@@ -13,6 +13,8 @@ import {
   getPhysicsMultiplier,
   getPositionCoefficientPercent,
   getSunEfficiencyPercent,
+  hydrateEnergyLedger,
+  refundEnergy,
   rebuildEnergyLedger,
   removeEnergySource,
   type EnergySourceId,
@@ -119,6 +121,68 @@ test('environment and coefficient decreases never create a new debt from spent e
 
   assert.equal(reduced.availableEnergy, 0);
   assert.equal(reduced.debtCause, null);
+});
+
+test('sun efficiency changes preserve consumed energy across a decrease and recovery', () => {
+  const initial = createEnergyLedger([fixtureSource('solar-station', 100)]);
+  const spent = consumeEnergy(initial, 80);
+  assert.equal(spent.ok, true);
+  assert.equal(spent.ledger.availableEnergy, 20);
+
+  const reduced = rebuildEnergyLedger(
+    spent.ledger,
+    [fixtureSource('solar-station', 70)],
+    { sourceChanges: { 'solar-station': 'environment' } },
+  );
+  assert.equal(reduced.producedEnergy, 70);
+  assert.equal(reduced.consumedEnergy, 80);
+  assert.equal(reduced.availableEnergy, 0);
+  assert.equal(reduced.debtCause, null);
+
+  const restored = rebuildEnergyLedger(
+    reduced,
+    [fixtureSource('solar-station', 100)],
+    { sourceChanges: { 'solar-station': 'environment' } },
+  );
+  assert.equal(restored.producedEnergy, 100);
+  assert.equal(restored.consumedEnergy, 80);
+  assert.equal(restored.availableEnergy, 20);
+});
+
+test('energy refunds add stock without losing debt or exceeding the consumed balance', () => {
+  const noExpenseRefund = refundEnergy(createEnergyLedger([fixtureSource('solar-station', 140)]), 8);
+  assert.equal(noExpenseRefund.amount, 8);
+  assert.equal(noExpenseRefund.ledger.producedEnergy, 148);
+  assert.equal(noExpenseRefund.ledger.consumedEnergy, 0);
+  assert.equal(noExpenseRefund.ledger.availableEnergy, 148);
+
+  const debt = createEnergyLedger([fixtureSource('solar-station', 100)], -50);
+  assert.equal(debt.availableEnergy, -50);
+  const recovered = refundEnergy(debt, 8);
+  assert.equal(recovered.ledger.availableEnergy, -42);
+  assert.equal(recovered.ledger.consumedEnergy, 142);
+});
+
+test('partial ledgers without sources keep scalar energy authoritative during migration', () => {
+  const migrated = hydrateEnergyLedger(
+    { producedEnergy: 17_962, availableEnergy: 17_962, consumedEnergy: 0 },
+    [fixtureSource('solar-station', 17_962)],
+    140,
+  );
+  assert.equal(migrated.producedEnergy, 17_962);
+  assert.equal(migrated.consumedEnergy, 0);
+  assert.equal(migrated.availableEnergy, 17_962);
+  assert.equal(migrated.sources.length, 1);
+
+  const negative = hydrateEnergyLedger(
+    { producedEnergy: 100, availableEnergy: -50, consumedEnergy: 150 },
+    [fixtureSource('solar-station', 100)],
+    140,
+  );
+  assert.equal(negative.producedEnergy, 100);
+  assert.equal(negative.consumedEnergy, 150);
+  assert.equal(negative.availableEnergy, -50);
+  assert.equal(negative.debtCause, 'source-removal');
 });
 
 test('positive source changes are retroactive and transaction ids are idempotent', () => {

@@ -328,8 +328,13 @@ function finalizeLedger(
   next.producedEnergy = finiteNumber(next.producedEnergy);
   next.consumedEnergy = Math.max(0, finiteNumber(next.consumedEnergy));
   next.unattributedConsumedEnergy = Math.max(0, finiteNumber(next.unattributedConsumedEnergy));
-  next.availableEnergy = next.producedEnergy - next.consumedEnergy;
-  next.debtCause = next.availableEnergy < 0 ? debtCause : null;
+  const rawAvailableEnergy = next.producedEnergy - next.consumedEnergy;
+  next.availableEnergy = debtCause === 'source-removal'
+    ? rawAvailableEnergy
+    : Math.max(0, rawAvailableEnergy);
+  next.debtCause = debtCause === 'source-removal' && rawAvailableEnergy < 0
+    ? 'source-removal'
+    : null;
   return next;
 }
 
@@ -410,13 +415,15 @@ export function rebuildEnergyLedger(
     if (delta >= 0) {
       // Positive changes are retroactive against the full original source.
       producedEnergy += delta;
-    } else if (changeKind === 'building') {
-      // A downgrade is an explicit source reduction and may create debt.
-      producedEnergy += delta;
-    } else {
-      // Environment changes and satellite dismantling remove only unused
-      // energy; spent energy is retained and cannot turn into a new debt.
+    } else if (changeKind === 'satellite') {
+      // Dismantling satellites returns no energy: only their unused contribution
+      // leaves the ledger, while already-spent energy remains spent.
       producedEnergy -= Math.min(-delta, Math.max(0, oldSource.unusedContribution));
+    } else {
+      // Building and environment changes update the full source contribution.
+      // Environment changes clamp a temporary shortfall to zero without creating
+      // debt; the original consumed amount is retained for a later recovery.
+      producedEnergy += delta;
     }
 
     const activeConsumed = attributionValue(consumedBySource[id] ?? oldSource.consumedContribution);
@@ -427,7 +434,15 @@ export function rebuildEnergyLedger(
     consumedBySource[id] = nextActiveConsumed;
   }
 
-  const consumedEnergy = Math.max(0, finiteNumber(prior.consumedEnergy, sumAttribution(consumedBySource) + sumAttribution(retiredConsumedBySource) + finiteNumber(prior.unattributedConsumedEnergy)));
+  const attributedConsumedEnergy = sumAttribution(consumedBySource) + sumAttribution(retiredConsumedBySource);
+  const unattributedConsumedEnergy = Math.max(
+    finiteNumber(prior.unattributedConsumedEnergy),
+    Math.max(0, finiteNumber(prior.consumedEnergy) - attributedConsumedEnergy),
+  );
+  const consumedEnergy = Math.max(
+    0,
+    finiteNumber(prior.consumedEnergy, attributedConsumedEnergy + unattributedConsumedEnergy),
+  );
   const debtCause: EnergyLedger['debtCause'] = producedEnergy - consumedEnergy < 0
     ? (Object.values(sourceChanges).includes('building') ? 'source-removal' : prior.debtCause)
     : null;
@@ -437,6 +452,7 @@ export function rebuildEnergyLedger(
     consumedEnergy,
     consumedBySource,
     retiredConsumedBySource,
+    unattributedConsumedEnergy,
     debtCause,
   }, next, debtCause);
 }
@@ -473,6 +489,10 @@ export function refundEnergy(ledger: EnergyLedger, amount: number, transactionId
   if (markTransaction(next, transactionId)) return { ok: true, ledger: next, amount: 0, reason: null };
   const requested = roundEnergy(amount);
   const refunded = Math.min(requested, next.consumedEnergy);
+  const attributedBeforeRefund = sumAttribution(next.consumedBySource)
+    + sumAttribution(next.retiredConsumedBySource)
+    + Math.max(0, next.unattributedConsumedEnergy);
+  next.unattributedConsumedEnergy += Math.max(0, next.consumedEnergy - attributedBeforeRefund);
   let remaining = refunded;
   const consumedBySource = { ...next.consumedBySource };
   const retiredConsumedBySource = { ...next.retiredConsumedBySource };
@@ -491,8 +511,11 @@ export function refundEnergy(ledger: EnergyLedger, amount: number, transactionId
   remaining -= unattributed;
   next.consumedBySource = consumedBySource;
   next.retiredConsumedBySource = retiredConsumedBySource;
-  next.consumedEnergy -= refunded - remaining;
-  return { ok: true, ledger: finalizeLedger(next, next.sources), amount: refunded - remaining, reason: null };
+  const consumedReduction = refunded - remaining;
+  next.consumedEnergy -= consumedReduction;
+  const stockCredit = requested - consumedReduction;
+  if (stockCredit > 0) next.producedEnergy += stockCredit;
+  return { ok: true, ledger: finalizeLedger(next, next.sources), amount: requested, reason: null };
 }
 
 export function removeEnergySource(
@@ -530,6 +553,40 @@ export function hydrateEnergyLedger(
   if (typeof raw.producedEnergy !== 'number' && typeof raw.consumedEnergy !== 'number' && rawSources.length === 0) {
     return createEnergyLedger(nextSources, legacyAvailableEnergy);
   }
+  if (rawSources.length === 0) {
+    // Some intermediate saves persisted the scalar ledger fields before the
+    // source snapshots. Treat those scalars as authoritative and attach the
+    // current source metadata without adding the sources a second time.
+    const producedEnergy = finiteNumber(raw.producedEnergy, finiteNumber(raw.availableEnergy, legacyAvailableEnergy));
+    const availableEnergy = finiteNumber(raw.availableEnergy, producedEnergy - finiteNumber(raw.consumedEnergy));
+    const consumedEnergy = Math.max(0, finiteNumber(raw.consumedEnergy, Math.max(0, producedEnergy - availableEnergy)));
+    const consumedBySource = raw.consumedBySource && typeof raw.consumedBySource === 'object'
+      ? raw.consumedBySource as Partial<Record<EnergySourceId, number>>
+      : {};
+    const retiredConsumedBySource = raw.retiredConsumedBySource && typeof raw.retiredConsumedBySource === 'object'
+      ? raw.retiredConsumedBySource as Partial<Record<EnergySourceId, number>>
+      : {};
+    const attributedConsumedEnergy = sumAttribution(consumedBySource) + sumAttribution(retiredConsumedBySource);
+    const debtCause: EnergyLedger['debtCause'] = raw.debtCause === 'source-removal' || availableEnergy < 0
+      ? 'source-removal'
+      : null;
+    return finalizeLedger({
+      producedEnergy,
+      consumedEnergy,
+      availableEnergy,
+      sources: cloneSources(nextSources),
+      consumedBySource,
+      retiredConsumedBySource,
+      unattributedConsumedEnergy: Math.max(
+        finiteNumber(raw.unattributedConsumedEnergy),
+        Math.max(0, consumedEnergy - attributedConsumedEnergy),
+      ),
+      appliedTransactionIds: Array.isArray(raw.appliedTransactionIds)
+        ? raw.appliedTransactionIds.filter((id): id is string => typeof id === 'string').slice(-256)
+        : [],
+      debtCause,
+    }, nextSources, debtCause);
+  }
   const previous: EnergyLedger = {
     producedEnergy: finiteNumber(raw.producedEnergy, legacyAvailableEnergy),
     consumedEnergy: Math.max(0, finiteNumber(raw.consumedEnergy)),
@@ -541,7 +598,7 @@ export function hydrateEnergyLedger(
     retiredConsumedBySource: raw.retiredConsumedBySource && typeof raw.retiredConsumedBySource === 'object'
       ? raw.retiredConsumedBySource as Partial<Record<EnergySourceId, number>>
       : {},
-    unattributedConsumedEnergy: Math.max(0, finiteNumber(raw.unattributedConsumedEnergy)),
+    unattributedConsumedEnergy: Math.max(0, finiteNumber(raw.unattributedConsumedEnergy, Math.max(0, finiteNumber(raw.consumedEnergy) - sumAttribution(raw.consumedBySource as Partial<Record<EnergySourceId, number>>)))),
     appliedTransactionIds: Array.isArray(raw.appliedTransactionIds)
       ? raw.appliedTransactionIds.filter((id): id is string => typeof id === 'string').slice(-256)
       : [],

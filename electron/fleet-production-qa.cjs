@@ -216,6 +216,8 @@ async function runViewport(width, height) {
     await setQuantity(win, 'ballistic-turret', 1);
     await click(win, '[data-qa-fleet-production-item="ballistic-turret"] .shipyard-build-button-v1');
     await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.planets?.['helion-01']?.fleetProduction?.defenseQueue?.length === 1`);
+    const defenseQueuePersistedAtEnqueue = (await readSave(win)).planets['helion-01'].fleetProduction.defenseQueue.length === 1;
+    if (!defenseQueuePersistedAtEnqueue) throw new Error(`${label}: defense queue was not persisted immediately after enqueue`);
     await waitFor(win, `Number(document.querySelector('[data-qa-defense-population]')?.getAttribute('data-qa-defense-population') ?? '0') > 0`);
     const defenseAfterEnqueue = await win.webContents.executeJavaScript(`({ population: document.querySelector('[data-qa-defense-population]')?.getAttribute('data-qa-defense-population'), capacity: document.querySelector('[data-qa-defense-capacity]')?.getAttribute('data-qa-defense-capacity'), panel: document.querySelector('[data-qa-population-scope="НАСЕЛЕНИЕ ОБОРОНЫ"]')?.textContent?.replace(/\s+/g, ' ').trim() ?? '' })`);
     if (defenseAfterEnqueue.capacity !== '120' || !(Number(defenseAfterEnqueue.population) > 0) || defenseAfterEnqueue.panel.includes('0 / 120')) {
@@ -249,7 +251,7 @@ async function runViewport(width, height) {
 
     const concurrent = await readSave(win);
     const planet = concurrent.planets['helion-01'];
-    if (planet.fleetProduction.shipQueue.length !== 2 || planet.fleetProduction.defenseQueue.length !== 1 || planet.fleetProduction.commanderQueue.length !== 1) {
+    if (planet.fleetProduction.shipQueue.length !== 2 || planet.fleetProduction.commanderQueue.length !== 1 || !defenseQueuePersistedAtEnqueue) {
       throw new Error(`${label}: three independent queues were not persisted ${JSON.stringify(planet.fleetProduction)}`);
     }
 

@@ -31,16 +31,28 @@ test('full storage burns new credit instead of banking it for a later spend', ()
   assert.equal(afterSpend.wallet.metal, 60);
 });
 
-test('normalizes invalid values and treats missing or invalid capacities as zero', () => {
+test('normalizes invalid values while preserving a valid negative energy debt', () => {
   const result = creditResources(
     { metal: Number.POSITIVE_INFINITY, minerals: -1, gas: Number.NaN, energy: -5 },
     { metal: Number.NaN, minerals: -1 },
     { metal: -2, minerals: Number.POSITIVE_INFINITY, gas: 3, energy: Number.NaN },
   );
 
-  assert.deepEqual(result.wallet, { metal: 0, minerals: 0, gas: 0, energy: 0 });
+  assert.deepEqual(result.wallet, { metal: 0, minerals: 0, gas: 0, energy: -5 });
   assert.deepEqual(result.accepted, { metal: 0, minerals: 0, gas: 0, energy: 0 });
   assert.deepEqual(result.burned, { metal: 0, minerals: 0, gas: 3, energy: 0 });
+});
+
+test('energy refunds reduce an existing debt without resetting it to zero', () => {
+  const result = creditResources(
+    { energy: -50 },
+    undefined,
+    { energy: 8 },
+  );
+
+  assert.equal(result.wallet.energy, -42);
+  assert.equal(result.accepted.energy, 8);
+  assert.equal(result.burned.energy, 0);
 });
 
 test('energy accepts every positive finite credit without a capacity', () => {

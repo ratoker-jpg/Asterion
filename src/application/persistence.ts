@@ -324,6 +324,10 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
     const migratedSavedFleet = removeSolarSatellitesFromFleet(
       resolveSavedFleetState(savedHomeworld?.fleet, profile.factionId),
     );
+    const persistedSatelliteCount = Math.max(
+      0,
+      Math.floor(numberOr(savedHomeworld?.solarSatellites, migratedSavedFleet.count)),
+    );
     const savedFleet = normalizeFleetStateForCapacity(
       migratedSavedFleet.fleet,
       buildings.hangar,
@@ -335,6 +339,7 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       fleet: savedFleet,
       defense: savedDefense,
       hangarLevel: buildings.hangar,
+      solarSatellites: persistedSatelliteCount,
     });
     const reconciledFleetProduction = reconcileFleetProductionState(
       migratedFleetProduction,
@@ -348,7 +353,7 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       .reduce((total, item) => total + Math.max(0, Math.floor(item.quantity)), 0);
     const savedSatelliteCount = Math.max(
       0,
-      Math.floor(numberOr(savedHomeworld?.solarSatellites, migratedSavedFleet.count) + completedSatellites),
+      Math.floor(persistedSatelliteCount + completedSatellites),
     );
     const homeworldBase: PlanetRuntime = {
       name: typeof savedHomeworld?.name === 'string' && savedHomeworld.name.trim()

@@ -65,6 +65,8 @@ export type FleetProductionContext = FleetProductionDurationContext & {
   state: FleetProductionState;
   fleet: OwnedFleetState;
   defense: OwnedDefenseState;
+  /** Completed orbital satellites occupy the shared hangar population pool. */
+  solarSatellites?: number;
   wallet: FleetProductionWallet;
   capacities?: ResourceCapacitiesInput;
   hangarLevel: number;
@@ -101,6 +103,7 @@ export type FleetProductionTransition = {
   defense: OwnedDefenseState;
   wallet: FleetProductionWallet;
   order: FleetProductionOrder | null;
+  completed: FleetProductionCompletion[];
   reason: string | null;
 };
 
@@ -111,6 +114,7 @@ export type FleetProductionCancellationTransition = {
   defense: OwnedDefenseState;
   wallet: FleetProductionWallet;
   canceled: FleetProductionOrder | null;
+  completed: FleetProductionCompletion[];
   refund: FleetProductionWallet | null;
   refundPercent: number | null;
   reason: string | null;
@@ -233,8 +237,8 @@ function pendingOrderCost(order: FleetProductionOrder): ResourceCost {
   };
 }
 
-function entityPopulation(entity: CatalogEntity | null, queueKind?: FleetProductionQueueKind): number {
-  if (!entity || (queueKind === 'ships' && entity.id === SOLAR_SATELLITE_ID)) return 0;
+function entityPopulation(entity: CatalogEntity | null, queueKind?: FleetProductionQueueKind, includeSolarSatellite = true): number {
+  if (!entity || (!includeSolarSatellite && queueKind === 'ships' && entity.id === SOLAR_SATELLITE_ID)) return 0;
   return Math.max(0, Math.floor(entity.population));
 }
 
@@ -242,12 +246,13 @@ function queuePopulation(
   queue: readonly FleetProductionOrder[],
   queueKind: FleetProductionQueueKind,
   factionId: CombatFactionId,
+  includeSolarSatellite = true,
 ): number {
-  return queue.reduce((total, order) => total + pendingQuantity(order) * entityPopulation(entityFor(queueKind, order.itemId, factionId), queueKind), 0);
+  return queue.reduce((total, order) => total + pendingQuantity(order) * entityPopulation(entityFor(queueKind, order.itemId, factionId), queueKind, includeSolarSatellite), 0);
 }
 
-export function getPendingFleetPopulation(state: FleetProductionState, factionId: CombatFactionId): number {
-  return queuePopulation(state.shipQueue, 'ships', factionId)
+export function getPendingFleetPopulation(state: FleetProductionState, factionId: CombatFactionId, includeSolarSatellite = true): number {
+  return queuePopulation(state.shipQueue, 'ships', factionId, includeSolarSatellite)
     + queuePopulation(state.commanderQueue, 'commanders', factionId);
 }
 
@@ -272,9 +277,12 @@ export function getFleetProductionPopulationSummary(
   state: FleetProductionState,
   hangarLevel: number,
   factionId: CombatFactionId,
+  solarSatellites = 0,
+  includeSolarSatelliteQueue = true,
 ): FleetProductionPopulationSummary {
-  const ownedPopulation = calculateFleetPopulation(fleet, factionId);
-  const pendingPopulation = getPendingFleetPopulation(state, factionId);
+  const ownedPopulation = calculateFleetPopulation(fleet, factionId)
+    + (includeSolarSatelliteQueue ? Math.max(0, Math.floor(solarSatellites)) : 0);
+  const pendingPopulation = getPendingFleetPopulation(state, factionId, includeSolarSatelliteQueue);
   const capacity = calculateFleetCapacity(hangarLevel);
   return {
     ownedPopulation,
@@ -383,6 +391,7 @@ function noEnqueue(
     defense: settled.defense,
     wallet: emptyWalletLike(context.wallet),
     order: null,
+    completed: settled.completed,
     reason,
   };
 }
@@ -421,14 +430,20 @@ export function enqueueFleetProduction(
       : 'Этот щит уже построен или находится в очереди.');
   }
 
-  // Orbital satellites are completed into planet presence and never reserve
-  // outgoing fleet population or hangar capacity.
+  // Orbital satellites are completed into planet presence rather than the
+  // outgoing fleet roster, but they still reserve shared hangar population.
   const population = entityPopulation(entity, queueKind) * safeQuantity;
   if (queueKind === 'defense') {
     const summary = getDefensePopulationSummary(workingDefense, workingState, context.hangarLevel, context.factionId);
     if (summary.population + population > summary.capacity) return noEnqueue(context, settled, 'Недостаточно населения обороны.');
   } else {
-    const summary = getFleetProductionPopulationSummary(workingFleet, workingState, context.hangarLevel, context.factionId);
+    const summary = getFleetProductionPopulationSummary(
+      workingFleet,
+      workingState,
+      context.hangarLevel,
+      context.factionId,
+      context.solarSatellites,
+    );
     if (summary.population + population > summary.capacity) return noEnqueue(context, settled, 'Недостаточно населения флота.');
   }
 
@@ -468,6 +483,7 @@ export function enqueueFleetProduction(
     defense: workingDefense,
     wallet: subtractCost(context.wallet, batchCost),
     order: task,
+    completed: settled.completed,
     reason: null,
   };
 }
@@ -519,6 +535,7 @@ export function cancelFleetProduction(
       defense: settled.defense,
       wallet: emptyWalletLike(context.wallet),
       canceled: null,
+      completed: settled.completed,
       refund: null,
       refundPercent: null,
       reason: 'Заказ уже завершён или недоступен для отмены.',
@@ -535,6 +552,7 @@ export function cancelFleetProduction(
       defense: settled.defense,
       wallet: emptyWalletLike(context.wallet),
       canceled: null,
+      completed: settled.completed,
       refund: null,
       refundPercent: null,
       reason: 'Невозможно подтвердить сохранённую стоимость заказа.',
@@ -566,6 +584,7 @@ export function cancelFleetProduction(
     defense: settled.defense,
     wallet: nextWallet,
     canceled,
+    completed: settled.completed,
     refund,
     refundPercent,
     reason: null,
@@ -633,10 +652,15 @@ function reconcileQueue(
       nextDefense = added.defense;
       queue[0] = { ...order, completedQuantity: targetCompleted };
       changed = true;
+      if (queueKind === 'ships' && order.itemId === SOLAR_SATELLITE_ID) {
+        completed.push({ orderId: order.id, queueKind, itemId: order.itemId, quantity: delta });
+      }
     }
     if (targetCompleted >= quantity) {
       queue.shift();
-      completed.push({ orderId: order.id, queueKind, itemId: order.itemId, quantity });
+      if (!(queueKind === 'ships' && order.itemId === SOLAR_SATELLITE_ID && delta > 0)) {
+        completed.push({ orderId: order.id, queueKind, itemId: order.itemId, quantity });
+      }
       changed = true;
       continue;
     }
@@ -689,6 +713,7 @@ type FleetProductionMigrationOptions = {
   fleet?: OwnedFleetState;
   defense?: OwnedDefenseState;
   hangarLevel?: number;
+  solarSatellites?: number;
 };
 
 type FleetProductionMigrationCapacity = {
@@ -771,7 +796,8 @@ function migrateQueue(
         capacityState.defensePendingPopulation += population;
       } else {
         const cap = calculateFleetCapacity(options.hangarLevel ?? 1);
-        if (calculateFleetPopulation(ownedFleet, factionId) + capacityState.fleetPendingPopulation + population > cap) continue;
+        const orbitalPopulation = Math.max(0, Math.floor(options.solarSatellites ?? 0));
+        if (calculateFleetPopulation(ownedFleet, factionId) + orbitalPopulation + capacityState.fleetPendingPopulation + population > cap) continue;
         capacityState.fleetPendingPopulation += population;
       }
     }

@@ -86,6 +86,7 @@ export function getFleetSummaryForState(state: SaveState, planetId: PlanetId = s
     snapshot.fleetProduction,
     snapshot.hangarLevel,
     snapshot.factionId,
+    snapshot.solarSatellites,
   );
 }
 
@@ -95,16 +96,32 @@ export function getFleetSummaryForSnapshot(snapshot: FleetSnapshot): FleetSummar
     snapshot.fleetProduction,
     snapshot.hangarLevel,
     snapshot.factionId,
+    snapshot.solarSatellites,
   );
 }
 
-/** Planet population includes orbital satellites; outgoing fleet capacity does not. */
+export function getOutgoingFleetSummaryForSnapshot(snapshot: FleetSnapshot): FleetSummary {
+  return getFleetProductionPopulationSummary(
+    snapshot.fleet,
+    snapshot.fleetProduction,
+    snapshot.hangarLevel,
+    snapshot.factionId,
+    0,
+    false,
+  );
+}
+
+/** Planet population includes orbital satellites, which occupy hangar capacity. */
 export function getPlanetPopulationForSnapshot(snapshot: FleetSnapshot): number {
-  return getFleetSummaryForSnapshot(snapshot).population + snapshot.solarSatellites;
+  return getFleetSummaryForSnapshot(snapshot).population;
 }
 
 export function getPlanetPopulationForState(state: SaveState, planetId: PlanetId = state.currentPlanetId): number {
   return getPlanetPopulationForSnapshot(getFleetSnapshot(state, planetId));
+}
+
+export function getOutgoingFleetSummaryForState(state: SaveState, planetId: PlanetId = state.currentPlanetId): FleetSummary {
+  return getOutgoingFleetSummaryForSnapshot(getFleetSnapshot(state, planetId));
 }
 
 export function readFleetSnapshot(options: PersistenceOptions = {}): FleetSnapshot {

@@ -117,7 +117,7 @@ import {
 } from './application/repair.ts';
 import { bindCombatResolutionEventBridge } from './application/combat.ts';
 import { getFleetProductionEntity } from './domain/fleet/production.ts';
-import { getFleetBuildBudget, getFleetSummaryForState, getPlanetPopulationForState } from './application/fleet.ts';
+import { getFleetBuildBudget, getFleetSummaryForState, getOutgoingFleetSummaryForState, getPlanetPopulationForState } from './application/fleet.ts';
 import { energySummaryForPlanet, getPlanetEnergyCoordinates } from './application/energy.ts';
 import { getEffectiveResourceIncomePerHour } from './application/resource-clock.ts';
 import { publishApplicationRuntimeSnapshot } from './application/runtime.ts';
@@ -408,6 +408,10 @@ export function App() {
     () => getFleetSummaryForState(state),
     [state],
   );
+  const outgoingFleetSummary = useMemo(
+    () => getOutgoingFleetSummaryForState(state),
+    [state],
+  );
   const defenseSummary = useMemo(
     () => getFleetBuildBudget(state).defenseSummary,
     [state],
@@ -417,7 +421,7 @@ export function App() {
     () => getPlanetPopulationForState(state),
     [state],
   );
-  const headerPopulationSummary = isDefenseFleetView ? defenseSummary : { ...fleetSummary, population: planetPopulation };
+  const headerPopulationSummary = isDefenseFleetView ? defenseSummary : fleetSummary;
   const currentSkin = useMemo(
     () => planetSkins.find((skin) => skin.id === currentPlanetState.skin) ?? planetSkins[0],
     [currentPlanetState.skin],
@@ -947,8 +951,8 @@ export function App() {
               showCapacity: isDefenseFleetView,
               populationBreakdown: {
                 fleet: {
-                  value: fleetSummary.population,
-                  capacity: fleetSummary.capacity,
+                  value: outgoingFleetSummary.population,
+                  capacity: outgoingFleetSummary.capacity,
                 },
                 defense: {
                   value: defenseSummary.population,

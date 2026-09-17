@@ -3,6 +3,7 @@ import {
   enqueueFleetProduction,
   reconcileFleetProductionState,
   type FleetProductionCancellationTransition,
+  type FleetProductionCompletion,
   type FleetProductionQueueKind,
   type FleetProductionTransition,
 } from '../domain/fleet/production.ts';
@@ -45,10 +46,12 @@ function productionContext(
   now: number,
 ) {
   const planet = getPlanetState(state, context.planetId);
+  const migratedFleet = removeSolarSatellitesFromFleet(planet.fleet);
   return {
     state: planet.fleetProduction,
     fleet: planet.fleet,
     defense: planet.defense,
+    solarSatellites: Math.max(0, Math.floor(planet.solarSatellites ?? migratedFleet.count)),
     wallet: { metal: state.metal, minerals: state.minerals, gas: state.gas },
     capacities: getStorageCapacities(planet.buildings),
     factionId: state.profile.factionId,
@@ -74,15 +77,20 @@ function stateFromTransition(
     fleet: SaveState['planets'][PlanetId]['fleet'];
     defense: SaveState['planets'][PlanetId]['defense'];
     wallet: { metal: number; minerals: number; gas: number };
+    completed: FleetProductionCompletion[];
   },
 ): SaveState {
   const planet = getPlanetState(state, context.planetId);
   const migratedPlanetFleet = removeSolarSatellitesFromFleet(transition.fleet);
+  const previousPlanetFleet = removeSolarSatellitesFromFleet(planet.fleet);
   const satelliteCount = Math.max(
     0,
-    Math.floor(planet.solarSatellites ?? removeSolarSatellitesFromFleet(planet.fleet).count),
+    Math.floor(planet.solarSatellites ?? previousPlanetFleet.count),
   );
-  const previousPlanet = { ...planet, fleet: removeSolarSatellitesFromFleet(planet.fleet).fleet, solarSatellites: satelliteCount };
+  const completedSatellites = transition.completed
+    .filter((item) => item.queueKind === 'ships' && item.itemId === 'solar-satellite')
+    .reduce((total, item) => total + Math.max(0, Math.floor(item.quantity)), 0);
+  const previousPlanet = { ...planet, fleet: previousPlanetFleet.fleet, solarSatellites: satelliteCount };
   const nextPlanet = transitionPlanetEnergySources(
     previousPlanet,
     {
@@ -90,7 +98,7 @@ function stateFromTransition(
       fleet: migratedPlanetFleet.fleet,
       defense: transition.defense,
       fleetProduction: transition.state,
-      solarSatellites: satelliteCount,
+      solarSatellites: satelliteCount + completedSatellites,
     },
     state.science.levels,
     state.science.levels,

@@ -20,6 +20,7 @@ import {
 } from '../domain/buildings/production-bots.ts';
 import {
   calculateFleetCapacity,
+  removeSolarSatellitesFromFleet,
 } from '../domain/fleet/runtime.ts';
 import {
   getDefensePopulationSummary,
@@ -197,11 +198,14 @@ export function destroyBuilding(
     const currentLevel = Math.max(0, Math.floor(planet.buildings.hangar ?? 0));
     if (currentLevel > 0) {
       const nextCapacity = calculateFleetCapacity(currentLevel - 1);
+      const migratedFleet = removeSolarSatellitesFromFleet(planet.fleet);
+      const solarSatellites = Math.max(0, Math.floor(planet.solarSatellites ?? migratedFleet.count));
       const currentPopulation = getFleetProductionPopulationSummary(
         planet.fleet,
         planet.fleetProduction,
         currentLevel,
         state.profile.factionId,
+        solarSatellites,
       ).population;
       const defensePopulation = getDefensePopulationSummary(
         planet.defense,

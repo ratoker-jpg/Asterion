@@ -94,6 +94,7 @@ function playerEffectForLevel(
   productionBots: BotAssignment,
   scienceLevels: ScienceLevels,
   energyCoordinates: PlanetEnergyCoordinates,
+  energyComparisonValue: number | null = null,
 ) {
   const effect = getBuildingEffect(role, level);
   if ((role === 'basic-energy' || role === 'advanced-energy') && level > 0) {
@@ -110,7 +111,9 @@ function playerEffectForLevel(
         : []),
     ];
     return {
-      primary: `Итого ${formatNumber(value)}`,
+      primary: energyComparisonValue == null
+        ? `Итого ${formatNumber(value)}`
+        : `Прибавка +${formatNumber(value - energyComparisonValue)}`,
       secondary: factors.join(' · '),
       value,
       energy: true,
@@ -253,7 +256,14 @@ export function ZoneView({
     ? playerEffectForLevel(selectedRole, availability.currentLevel, productionBotAssignment, scienceLevels, energyCoordinates)
     : null;
   const nextEffect = selectedRole && availability?.nextLevel != null
-    ? playerEffectForLevel(selectedRole, availability.nextLevel, productionBotAssignment, scienceLevels, energyCoordinates)
+    ? playerEffectForLevel(
+      selectedRole,
+      availability.nextLevel,
+      productionBotAssignment,
+      scienceLevels,
+      energyCoordinates,
+      currentEffect?.energy && currentEffect.value != null ? currentEffect.value : null,
+    )
     : null;
   const energyUpgradeDelta = currentEffect?.energy && nextEffect?.energy && currentEffect.value != null && nextEffect.value != null
     ? nextEffect.value - currentEffect.value
