@@ -92,6 +92,21 @@ test('view model binds scene stacks to saved snapshots across rounds', () => {
   assert.equal(viewModel.attacker.stacks.find((stack) => stack.entityId === 'spy-probe')?.countAfter, 0);
 });
 
+test('view model derives round population from saved counts for older reports', () => {
+  const viewModel = createBattleReportViewModel(DEMO_BATTLE_REPORTS[2]);
+  const firstRound = viewModel.rounds.find((round) => round.index === 1);
+
+  assert.deepEqual(
+    {
+      attackerBefore: firstRound?.attackerSnapshot?.fleetPopulationBefore,
+      attackerAfter: firstRound?.attackerSnapshot?.fleetPopulationAfter,
+      defenderBefore: firstRound?.defenderSnapshot?.fleetPopulationBefore,
+      defenderAfter: firstRound?.defenderSnapshot?.fleetPopulationAfter,
+    },
+    { attackerBefore: 284, attackerAfter: 284, defenderBefore: 140, defenderAfter: 132 },
+  );
+});
+
 test('view model resolves faction presentation and falls back safely for unknown data', () => {
   const factionReport = {
     ...DEMO_BATTLE_REPORTS[2],

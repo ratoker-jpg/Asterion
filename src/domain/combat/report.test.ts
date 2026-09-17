@@ -42,7 +42,8 @@ function allFixtureEntityIds() {
     collectStacks(report.defenderForce.defenses);
     report.rounds.forEach((round) => {
       round.events.forEach((event) => {
-        ids.push(event.actorEntityId, event.targetEntityId);
+        ids.push(event.actorEntityId);
+        if (event.targetEntityId) ids.push(event.targetEntityId);
       });
       collectStacks(round.attackerSnapshot?.stacks);
       collectStacks(round.attackerSnapshot?.defenses);
@@ -160,7 +161,7 @@ test('stored reports survive migration while missing demo fixtures are restored'
   assert.deepEqual(migrated.savedReportIds, [customReport.id]);
 });
 
-test('legacy simulation reports are excluded from real battle history during migration', () => {
+test('saved simulation reports remain readable in battle history after migration', () => {
   const simulation = {
     ...DEMO_BATTLE_REPORTS[0],
     id: 'battle-imported-simulation',
@@ -168,8 +169,8 @@ test('legacy simulation reports are excluded from real battle history during mig
   };
   const migrated = migrateBattleHistory({ reports: [simulation], savedReportIds: [simulation.id] });
 
-  assert.equal(migrated.reports.some((report) => report.id === simulation.id), false);
-  assert.equal(migrated.savedReportIds.includes(simulation.id), false);
+  assert.equal(migrated.reports.some((report) => report.id === simulation.id), true);
+  assert.equal(migrated.savedReportIds.includes(simulation.id), true);
 });
 
 test('recent and saved list selectors stay independent', () => {

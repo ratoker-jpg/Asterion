@@ -29,14 +29,68 @@
   gap: 7px;
 }
 
+.sim-execution-v1,
+.sim-seed-v1 {
+  display: grid;
+  gap: 4px;
+  color: #69acc3;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .12em;
+}
+
+.sim-execution-v1 select,
+.sim-seed-v1 input {
+  height: 32px;
+  min-width: 118px;
+  padding: 0 8px;
+  border: 1px solid rgba(46, 158, 192, .56);
+  background: rgba(2, 21, 31, .96);
+  color: #effcff;
+  font: inherit;
+  font-size: 10px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.sim-execution-v1,
+.sim-seed-v1 {
+  min-width: 0;
+  max-width: 260px;
+}
+
+.sim-execution-v1 small,
+.sim-seed-v1 small,
+.sim-target-priority-v1 small {
+  color: #5e91a3;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.3;
+}
+
+.sim-mode-note-v1 {
+  display: grid;
+  gap: 3px;
+  padding: 9px 12px;
+  border: 1px solid rgba(55, 191, 229, .18);
+  background: rgba(3, 30, 42, .72);
+  color: #8ab7c5;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.sim-mode-note-v1 strong { color: #b8effb; font-size: 10px; letter-spacing: .08em; }
+
+.sim-seed-v1 input { min-width: 150px; letter-spacing: 0; }
+
 .sim-rounds-v1 > span,
 .sim-presets-v1 label,
 .sim-side-v1 > header small,
-.sim-active-commander-v1 span,
 .sim-population-v1 span,
 .sim-result-head-v1 small {
   color: #69acc3;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 750;
   letter-spacing: .12em;
 }
@@ -53,7 +107,7 @@
   background: rgba(3, 31, 43, .94);
   color: #8fdcf0;
   font: inherit;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 750;
   letter-spacing: .06em;
   cursor: pointer;
@@ -157,12 +211,13 @@
 }
 
 .sim-population-v1,
-.sim-active-commander-v1 {
+.sim-commander-select-v1,
+.sim-target-priority-v1 {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  min-height: 38px;
+  min-height: 44px;
   margin-top: 8px;
   padding: 0 10px;
   border: 1px solid rgba(56, 185, 222, .14);
@@ -170,11 +225,51 @@
   box-sizing: border-box;
 }
 
-.sim-population-v1 strong,
-.sim-active-commander-v1 strong {
-  color: #e9fbff;
+.sim-target-priority-v1 {
+  display: grid;
+  grid-template-columns: minmax(180px, .8fr) minmax(220px, 1.2fr);
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+}
+
+.sim-target-priority-v1 > span {
+  color: #69acc3;
   font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .1em;
+}
+
+.sim-target-priority-v1 select {
+  min-width: 0;
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid rgba(46, 158, 192, .56);
+  background: rgba(2, 21, 31, .96);
+  color: #effcff;
+  font: inherit;
+  font-size: 11px;
+  outline: none;
+}
+
+.sim-target-priority-v1 small { grid-column: 1 / -1; }
+
+.sim-population-v1 strong,
+.sim-population-v1 > div strong {
+  color: #e9fbff;
+  font-size: 13px;
   text-align: right;
+}
+
+.sim-population-v1 > div {
+  display: grid;
+  gap: 2px;
+  justify-items: end;
+}
+
+.sim-population-v1 small {
+  color: #5e91a3;
+  font-size: 9px;
 }
 
 .sim-population-v1.error {
@@ -192,7 +287,7 @@
 
 .sim-section-toggle-v1 {
   width: 100%;
-  min-height: 42px;
+  min-height: 48px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -209,22 +304,27 @@
 }
 
 .sim-section-toggle-v1 span { display: grid; gap: 2px; }
-.sim-section-toggle-v1 strong { color: #eafbff; font-size: 10px; letter-spacing: .08em; }
-.sim-section-toggle-v1 small { color: #659fb4; font-size: 8px; }
-.sim-section-toggle-v1 b { color: #42d9fb; font-size: 16px; }
+.sim-section-toggle-v1 strong { color: #eafbff; font-size: 11px; letter-spacing: .08em; }
+.sim-section-toggle-v1 small { color: #659fb4; font-size: 9px; }
+.sim-section-toggle-v1 b { color: #42d9fb; font-size: 18px; }
 
 .sim-unit-list-v1 {
   display: grid;
 }
 
+.sim-unit-list-v1[hidden],
+.sim-tech-list-v1[hidden] {
+  display: none;
+}
+
 .sim-unit-row-v1 {
   min-width: 0;
   display: grid;
-  grid-template-columns: 58px minmax(0, 1fr) 214px;
-  gap: 10px;
+  grid-template-columns: 88px minmax(0, 1fr) minmax(196px, 236px);
+  gap: 14px;
   align-items: center;
-  min-height: 76px;
-  padding: 7px 9px;
+  min-height: 116px;
+  padding: 11px 13px;
   border-bottom: 1px solid rgba(51, 178, 216, .1);
   box-sizing: border-box;
 }
@@ -232,8 +332,8 @@
 .sim-unit-row-v1:last-child { border-bottom: 0; }
 
 .sim-unit-row-v1 > img {
-  width: 54px;
-  height: 54px;
+  width: 84px;
+  height: 84px;
   object-fit: contain;
   filter: drop-shadow(0 0 8px rgba(37, 182, 239, .2));
 }
@@ -244,32 +344,142 @@
   gap: 2px;
 }
 
-.sim-unit-copy-v1 strong { color: #effcff; font-size: 11px; }
-.sim-unit-copy-v1 span { color: #7caaba; font-size: 9px; }
-.sim-unit-copy-v1 small { color: #5e91a3; font-size: 8px; }
-.sim-unit-copy-v1 em { color: #8ecad9; font-size: 8px; font-style: normal; }
+.sim-unit-copy-v1 strong { color: #effcff; font-size: 17px; }
+.sim-unit-copy-v1 span { color: #7caaba; font-size: 12px; }
+.sim-unit-copy-v1 small { color: #6fabbc; font-size: 11px; line-height: 1.4; }
+.sim-unit-copy-v1 em { color: #8ecad9; font-size: 11px; font-style: normal; }
+.sim-unit-copy-v1 em.sim-unit-stats-v1 { color: #b6f5df; font-size: 11px; font-weight: 700; }
 
 .sim-unit-controls-v1 {
-  display: grid;
-  grid-template-columns: 32px minmax(58px, 1fr) 32px 64px;
-  gap: 5px;
+  display: flex;
   align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
 }
 
-.sim-unit-controls-v1 button,
-.sim-unit-controls-v1 input {
-  height: 30px;
+.sim-count-control-v1,
+.sim-level-control-v1 {
+  display: grid;
+  gap: 4px;
+  align-items: end;
 }
 
-.sim-unit-controls-v1 input {
+.sim-count-control-v1 { min-width: 108px; }
+.sim-count-control-v1 > span,
+.sim-level-control-v1 > span { color: #6daabd; font-size: 9px; font-weight: 750; letter-spacing: .08em; white-space: nowrap; }
+
+.sim-number-stepper-v1 {
+  display: grid;
+  grid-template-columns: minmax(62px, 1fr) 25px;
+  min-width: 0;
+}
+
+.sim-number-stepper-v1 input {
   width: 100%;
+  height: 40px;
   padding: 0 5px;
+  border: 1px solid rgba(46, 158, 192, .56);
+  background: rgba(2, 21, 31, .96);
+  color: #effcff;
   text-align: center;
-  font-size: 10px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+  appearance: textfield;
 }
 
-.sim-unit-controls-v1 button { padding: 0; }
-.sim-unit-controls-v1 .sim-max-v1 { padding: 0 7px; }
+.sim-number-stepper-v1 input::-webkit-inner-spin-button,
+.sim-number-stepper-v1 input::-webkit-outer-spin-button { margin: 0; appearance: none; }
+
+.sim-number-stepper-arrows-v1 {
+  display: grid;
+  grid-template-rows: repeat(2, 20px);
+}
+
+.sim-unit-controls-v1 .sim-number-stepper-arrows-v1 button {
+  height: 20px;
+  min-height: 20px;
+  padding: 0;
+  border: 1px solid rgba(55, 191, 229, .34);
+  color: #8fdcf0;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.sim-number-stepper-arrows-v1 button:first-child { border-bottom: 0; }
+
+.sim-level-control-v1 {
+  display: grid;
+  gap: 4px;
+  align-items: end;
+  min-width: 108px;
+  margin-right: 8px;
+  color: #6daabd;
+  font-size: 10px;
+  letter-spacing: .06em;
+}
+
+.sim-level-control-v1 .sim-number-stepper-v1 { width: 100%; }
+
+.sim-commander-select-v1 {
+  display: grid;
+  grid-template-columns: minmax(150px, .8fr) minmax(220px, 1.6fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.sim-commander-select-v1 > span {
+  color: #69acc3;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: .12em;
+}
+
+.sim-commander-select-v1 select {
+  min-width: 0;
+  height: 40px;
+  padding: 0 9px;
+  border: 1px solid rgba(46, 158, 192, .56);
+  background: rgba(2, 21, 31, .96);
+  color: #effcff;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.sim-commander-select-v1 small {
+  grid-column: 1 / -1;
+  color: #5e91a3;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.sim-level-control-v1 input {
+  width: 100%;
+}
+
+.sim-copy-tech-v1 {
+  width: 100%;
+  min-height: 36px;
+  margin-top: 9px;
+  border: 1px solid rgba(55, 191, 229, .34);
+  background: rgba(3, 31, 43, .94);
+  color: #8fdcf0;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .06em;
+  cursor: pointer;
+}
+
+.sim-tech-note-v1 {
+  margin: 0;
+  padding: 10px 12px;
+  color: #79a9b8;
+  font-size: 11px;
+  line-height: 1.4;
+}
 
 .sim-validation-v1 {
   display: grid;
@@ -290,13 +500,13 @@
 }
 
 .sim-validation-v1 > div strong { color: #e9fbff; font-size: 11px; letter-spacing: .08em; }
-.sim-validation-v1 > div span { color: #7fb0c0; font-size: 9px; }
+.sim-validation-v1 > div span { color: #7fb0c0; font-size: 10px; }
 .sim-validation-v1 ul {
   grid-column: 1 / -1;
   margin: 0;
   padding-left: 18px;
   color: #ffaaa1;
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.45;
 }
 
@@ -347,16 +557,37 @@
   outline-offset: 2px;
 }
 
+.simulator-view-v1 .sim-copy-tech-v1:focus-visible,
+.simulator-view-v1 .sim-number-stepper-v1 input:focus-visible {
+  outline: 2px solid rgba(72, 218, 250, .8);
+  outline-offset: 2px;
+}
+
+.simulator-view-v1 .sim-commander-select-v1 select:focus-visible {
+  outline: 2px solid rgba(72, 218, 250, .8);
+  outline-offset: 2px;
+}
+
 @media (max-width: 1500px) {
   .sim-sides-v1 { grid-template-columns: 1fr; }
   .sim-presets-v1 { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 1120px) {
-  .sim-unit-row-v1 { grid-template-columns: 50px minmax(0, 1fr); }
-  .sim-unit-row-v1 > img { width: 46px; height: 46px; }
+  .sim-unit-row-v1 { grid-template-columns: 56px minmax(0, 1fr); }
+  .sim-unit-row-v1 > img { width: 52px; height: 52px; }
   .sim-unit-controls-v1 { grid-column: 1 / -1; }
+  .sim-unit-controls-v1 { justify-content: flex-start; }
   .simulator-toolbar-v1,
   .sim-result-head-v1 { align-items: stretch; flex-direction: column; }
   .sim-result-head-v1 > div:last-child { flex-wrap: wrap; }
+  .sim-commander-select-v1 { grid-template-columns: 1fr; gap: 5px; padding: 8px 10px; }
+  .sim-commander-select-v1 small { grid-column: auto; }
+  .sim-target-priority-v1 { grid-template-columns: 1fr; gap: 5px; }
+  .sim-target-priority-v1 small { grid-column: auto; }
+}
+
+@media (max-width: 860px) {
+  .sim-execution-v1,
+  .sim-seed-v1 { max-width: none; }
 }

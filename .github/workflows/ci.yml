@@ -54,6 +54,10 @@ jobs:
         env:
           ASTERION_SKIP_SCREENSHOTS: '1'
         run: npm run test:battle-reports-ui
+      - name: Simulator Electron QA
+        env:
+          ASTERION_SKIP_SCREENSHOTS: '1'
+        run: npm run test:simulator-ui
       - name: Resource asset Electron QA
         run: npm run test:resource-assets-ui
       - name: Test Mode Electron QA

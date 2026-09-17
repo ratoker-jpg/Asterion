@@ -57,12 +57,52 @@ import { FACTION_DEFENSE_CONSTRUCTION_BALANCE } from './defense-construction-dat
 import { FACTION_SHIP_MECHANICS } from './faction-ship-data.ts';
 import type { CombatFactionId } from './factions.ts';
 import type { CombatEntityId, DefenseId, ShipId } from './ids.ts';
+import type { CombatSpecialBonus } from './types.ts';
 
 type PresentationOverride = {
   id: CombatEntityId;
   name: string;
   role: string;
   art: string;
+};
+
+const SPECIAL_BONUS_SOURCE = 'ASTERION_FULL_BATTLE_IMPLEMENTATION_PROMPT.md §4.3.2';
+
+const FACTION_SPECIAL_BONUSES: Readonly<Record<CombatFactionId, Partial<Record<ShipId, CombatSpecialBonus>>>> = {
+  aegis: {
+    defender: {
+      kind: 'life', rate: 0.0005, cap: 0.3, capStatus: 'known', scope: 'asterion', status: 'confirmed',
+      source: SPECIAL_BONUS_SOURCE, note: 'Защитник усиливает жизнь других живых боевых стеков; собственный донор бонус не получает.',
+    },
+    battleship: {
+      kind: 'armor', rate: 0.00038, capStatus: 'unknown', scope: 'asterion', status: 'inferred',
+      source: SPECIAL_BONUS_SOURCE, note: 'Боевой корабль усиливает броню других живых боевых стеков; cap не выделен в evidence.',
+    },
+  },
+  synod: {
+    defender: {
+      kind: 'life', rate: 0.00075, cap: 0.3, capStatus: 'known', scope: 'asterion', status: 'confirmed',
+      source: SPECIAL_BONUS_SOURCE, note: 'Бот Щит усиливает жизнь других живых боевых стеков; собственный донор бонус не получает.',
+    },
+    battleship: {
+      kind: 'armor', rate: 0.00025, cap: 0.3, capStatus: 'known', scope: 'asterion', status: 'confirmed',
+      source: SPECIAL_BONUS_SOURCE, note: 'Звездная Армада усиливает броню других живых боевых стеков; собственный донор бонус не получает.',
+    },
+    destroyer: {
+      kind: 'attack', rate: 0.0009, cap: 0.8, capStatus: 'known', scope: 'asterion', status: 'confirmed',
+      source: SPECIAL_BONUS_SOURCE, note: 'Голиаф усиливает атаку других живых боевых стеков; собственный донор бонус не получает.',
+    },
+  },
+  veyra: {
+    cruiser: {
+      kind: 'life', rate: 0.0005, cap: 0.3, capStatus: 'known', scope: 'asterion', status: 'inferred',
+      source: SPECIAL_BONUS_SOURCE, note: 'Абсорбатор усиливает жизнь других живых боевых стеков; коэффициент inferred по capped baseline.',
+    },
+    battleship: {
+      kind: 'armor', rate: 0.00018, capStatus: 'unknown', scope: 'asterion', status: 'inferred',
+      source: SPECIAL_BONUS_SOURCE, note: 'Призрак усиливает броню других живых боевых стеков; cap не выделен в evidence.',
+    },
+  },
 };
 
 function applyOverrides<TId extends CombatEntityId>(
@@ -91,6 +131,7 @@ function applyMechanicalData(
       combat: data.combat,
       ship: data.ship,
       construction: data.construction,
+      specialBonus: FACTION_SPECIAL_BONUSES[factionId][entity.id],
     };
   });
 }

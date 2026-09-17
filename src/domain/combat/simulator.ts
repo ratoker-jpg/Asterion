@@ -1,10 +1,22 @@
 import { COMBAT_ENTITY_BY_ID, getCombatEntity } from './catalog.ts';
-import type { CommanderId } from './commanders.ts';
+import { isCommanderId, type CommanderId } from './commanders.ts';
+import {
+  COMBAT_PROFILE_ID,
+  COMBAT_ENTITY_LEVEL_LIMITS,
+  DEFAULT_COMBAT_TARGET_PRIORITY,
+  SIMULATOR_MAX_ROUNDS as PROFILE_MAX_ROUNDS,
+  SIMULATOR_POPULATION_LIMITS,
+  type CombatExecutionMode,
+  type CombatTargetPriority,
+  type CombatTechnologyMode,
+} from './config.ts';
 import {
   DEFAULT_COMBAT_FACTION_ID,
+  getCombatFactionId,
   getCombatFactionName,
   type CombatFactionId,
 } from './factions.ts';
+import { getFactionCombatEntity } from './faction-catalog.ts';
 import type { CombatEntityId } from './ids.ts';
 import type { CombatPriorityState } from './priority.ts';
 import type { BattleParticipant } from './report.ts';
@@ -15,19 +27,26 @@ import {
 } from './technologies.ts';
 import type { CombatEntityKind } from './types.ts';
 
-export const SIMULATOR_POPULATION_LIMIT = 35_000;
-export const SIMULATOR_MAX_ROUNDS = [5, 8, 12] as const;
+export const SIMULATOR_POPULATION_LIMIT = SIMULATOR_POPULATION_LIMITS.attackerFleet;
+export const SIMULATOR_MAX_ROUNDS = PROFILE_MAX_ROUNDS;
 export type SimulatorMaxRounds = (typeof SIMULATOR_MAX_ROUNDS)[number];
 
 export type CombatStackInput = {
   entityId: CombatEntityId;
   count: number;
+  level?: number;
 };
 
 export type CombatSideInput = {
   participant: BattleParticipant;
+  factionId?: CombatFactionId;
   ships: CombatStackInput[];
-  commanders: CombatStackInput[];
+  /** Canonical commander field. It is nullable because a side may have none. */
+  commander?: CombatStackInput | null;
+  /** @deprecated Kept as a migration adapter for pre-v2 simulator inputs. */
+  commanders?: CombatStackInput[];
+  /** Explicit simulator selection. If absent, the first selected commander is used. */
+  activeCommanderId?: CommanderId | null;
   defenses?: CombatStackInput[];
 };
 
@@ -41,6 +60,14 @@ export type CombatInput = {
   defenderPriority: CommanderId[];
   attackerTechnologies?: CombatTechnologyLevels;
   defenderTechnologies?: CombatTechnologyLevels;
+  technologyMode?: CombatTechnologyMode;
+  executionMode?: CombatExecutionMode;
+  attackerTargetPriority?: CombatTargetPriority;
+  defenderTargetPriority?: CombatTargetPriority;
+  seed?: string;
+  profileId?: string;
+  /** Set by save migration when a legacy scenario needs user correction. */
+  migrationErrors?: string[];
 };
 
 export type SimulatorScenario = {
@@ -48,13 +75,26 @@ export type SimulatorScenario = {
   defenderFactionId?: CombatFactionId;
   attackerTechnologies?: CombatTechnologyLevels;
   defenderTechnologies?: CombatTechnologyLevels;
+  technologyMode?: CombatTechnologyMode;
+  executionMode?: CombatExecutionMode;
+  attackerTargetPriority?: CombatTargetPriority;
+  defenderTargetPriority?: CombatTargetPriority;
+  seed?: string;
+  profileId?: string;
+  migrationErrors?: string[];
   attacker: {
+    factionId?: CombatFactionId;
     ships: CombatStackInput[];
     commanders: CombatStackInput[];
+    commander?: CombatStackInput | null;
+    activeCommanderId?: CommanderId | null;
   };
   defender: {
+    factionId?: CombatFactionId;
     ships: CombatStackInput[];
     commanders: CombatStackInput[];
+    commander?: CombatStackInput | null;
+    activeCommanderId?: CommanderId | null;
     defenses: CombatStackInput[];
   };
   maxRounds: SimulatorMaxRounds;
@@ -69,7 +109,17 @@ export type CombatValidationCode =
   | 'empty-side'
   | 'invalid-round-limit'
   | 'population-overflow'
-  | 'participant-side';
+  | 'participant-side'
+  | 'invalid-level'
+  | 'level-overflow'
+  | 'entity-limit'
+  | 'invalid-commander-selection'
+  | 'migration-error'
+  | 'invalid-technology-mode'
+  | 'technology-profile-mismatch'
+  | 'invalid-target-priority'
+  | 'exclusive-technology'
+  | 'invalid-seed';
 
 export type CombatValidationError = {
   code: CombatValidationCode;
@@ -89,8 +139,12 @@ export function createEmptySimulatorScenario(): SimulatorScenario {
     defenderFactionId: DEFAULT_COMBAT_FACTION_ID,
     attackerTechnologies: createDefaultCombatTechnologies(),
     defenderTechnologies: createDefaultCombatTechnologies(),
-    attacker: { ships: [], commanders: [] },
-    defender: { ships: [], commanders: [], defenses: [] },
+    technologyMode: 'independent',
+    executionMode: 'production',
+    attackerTargetPriority: DEFAULT_COMBAT_TARGET_PRIORITY,
+    defenderTargetPriority: DEFAULT_COMBAT_TARGET_PRIORITY,
+    attacker: { ships: [], commanders: [], commander: null },
+    defender: { ships: [], commanders: [], commander: null, defenses: [] },
     maxRounds: 8,
   };
 }
@@ -105,7 +159,7 @@ export function setScenarioFaction(
     return {
       ...scenario,
       attackerFactionId: factionId,
-      attacker: { ships: [], commanders: [] },
+      attacker: { ships: [], commanders: [], commander: null },
     };
   }
 
@@ -113,12 +167,16 @@ export function setScenarioFaction(
   return {
     ...scenario,
     defenderFactionId: factionId,
-    defender: { ships: [], commanders: [], defenses: [] },
+    defender: { ships: [], commanders: [], commander: null, defenses: [] },
   };
 }
 
 function isMaxRounds(value: unknown): value is SimulatorMaxRounds {
   return typeof value === 'number' && (SIMULATOR_MAX_ROUNDS as readonly number[]).includes(value);
+}
+
+function isTargetPriority(value: unknown): value is CombatTargetPriority {
+  return value === 'threat' || value === 'population' || value === 'catalog';
 }
 
 function isCombatEntityId(value: unknown): value is CombatEntityId {
@@ -128,7 +186,30 @@ function isCombatEntityId(value: unknown): value is CombatEntityId {
 function normalizeStacks(stacks: readonly CombatStackInput[] | undefined) {
   return (stacks ?? [])
     .filter((stack) => Number.isFinite(stack.count) && Number.isInteger(stack.count) && stack.count > 0)
-    .map((stack) => ({ entityId: stack.entityId, count: stack.count }));
+    .map((stack) => ({
+      entityId: stack.entityId,
+      count: stack.count,
+      level: normalizeEntityLevel(stack.entityId, stack.level),
+    }));
+}
+
+function normalizeEntityLevel(entityId: CombatEntityId, value: unknown) {
+  if (!COMBAT_ENTITY_BY_ID.has(entityId)) return 0;
+  const kind = getCombatEntity(entityId).kind;
+  const max = COMBAT_ENTITY_LEVEL_LIMITS[kind];
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  return Math.min(max, Math.max(0, Math.floor(value)));
+}
+
+export function getSideCommanders(side: Pick<CombatSideInput, 'commander' | 'commanders'>): CombatStackInput[] {
+  if (side.commanders?.length) return side.commanders.map((stack) => ({ ...stack }));
+  if (side.commander !== undefined) return side.commander ? [{ ...side.commander }] : [];
+  return [...(side.commanders ?? [])];
+}
+
+function normalizeSideCommanders(side: Pick<CombatSideInput, 'commander' | 'commanders'>) {
+  const commanders = normalizeStacks(getSideCommanders(side));
+  return { commanders, commander: commanders[0] ?? null };
 }
 
 export function normalizeCombatInput(input: CombatInput): CombatInput {
@@ -136,35 +217,56 @@ export function normalizeCombatInput(input: CombatInput): CombatInput {
     ...input,
     attacker: {
       ...input.attacker,
+      factionId: getCombatFactionId(input.attacker.factionId ?? input.attacker.participant.race),
       ships: normalizeStacks(input.attacker.ships),
-      commanders: normalizeStacks(input.attacker.commanders),
+      ...normalizeSideCommanders(input.attacker),
       defenses: normalizeStacks(input.attacker.defenses),
     },
     defender: {
       ...input.defender,
+      factionId: getCombatFactionId(input.defender.factionId ?? input.defender.participant.race),
       ships: normalizeStacks(input.defender.ships),
-      commanders: normalizeStacks(input.defender.commanders),
+      ...normalizeSideCommanders(input.defender),
       defenses: normalizeStacks(input.defender.defenses),
     },
     attackerPriority: [...input.attackerPriority],
     defenderPriority: [...input.defenderPriority],
     attackerTechnologies: normalizeCombatTechnologies(input.attackerTechnologies),
     defenderTechnologies: normalizeCombatTechnologies(input.defenderTechnologies),
+    technologyMode: input.technologyMode === 'shared' ? 'shared' : 'independent',
+    // Legacy direct CombatInput callers retain the v1 production-neutral
+    // behavior; SimulatorScenario always persists its explicit mode.
+    executionMode: input.executionMode === 'calibration' ? 'calibration' : 'production',
+    attackerTargetPriority: isTargetPriority(input.attackerTargetPriority)
+      ? input.attackerTargetPriority
+      : DEFAULT_COMBAT_TARGET_PRIORITY,
+    defenderTargetPriority: isTargetPriority(input.defenderTargetPriority)
+      ? input.defenderTargetPriority
+      : DEFAULT_COMBAT_TARGET_PRIORITY,
+    ...(typeof input.seed === 'string' && input.seed.trim() ? { seed: input.seed.trim() } : {}),
+    profileId: input.profileId ?? COMBAT_PROFILE_ID,
+    ...(input.migrationErrors?.length ? { migrationErrors: [...input.migrationErrors] } : {}),
   };
 }
 
-export function calculateStacksPopulation(stacks: readonly CombatStackInput[]) {
+export function calculateStacksPopulation(stacks: readonly CombatStackInput[], factionId: CombatFactionId = DEFAULT_COMBAT_FACTION_ID) {
   return stacks.reduce((total, stack) => {
     if (!COMBAT_ENTITY_BY_ID.has(stack.entityId)) return total;
-    return total + stack.count * getCombatEntity(stack.entityId).population;
+    return total + stack.count * getFactionCombatEntity(factionId, stack.entityId).population;
   }, 0);
 }
 
 export function calculateScenarioPopulation(scenario: SimulatorScenario) {
+  const attackerCommanders = getSideCommanders(scenario.attacker);
+  const defenderCommanders = getSideCommanders(scenario.defender);
+  const attackerFactionId = getCombatFactionId(scenario.attackerFactionId);
+  const defenderFactionId = getCombatFactionId(scenario.defenderFactionId);
   return {
-    attackerFleet: calculateStacksPopulation([...scenario.attacker.ships, ...scenario.attacker.commanders]),
-    defenderFleet: calculateStacksPopulation([...scenario.defender.ships, ...scenario.defender.commanders]),
-    defenderDefense: calculateStacksPopulation(scenario.defender.defenses),
+    attackerFleet: calculateStacksPopulation([...scenario.attacker.ships, ...attackerCommanders], attackerFactionId),
+    attackerCommander: calculateStacksPopulation(attackerCommanders, attackerFactionId),
+    defenderFleet: calculateStacksPopulation([...scenario.defender.ships, ...defenderCommanders], defenderFactionId),
+    defenderCommander: calculateStacksPopulation(defenderCommanders, defenderFactionId),
+    defenderDefense: calculateStacksPopulation(scenario.defender.defenses, defenderFactionId),
   };
 }
 
@@ -182,6 +284,14 @@ function validateStackCollection(
         code: 'invalid-count',
         path: `${stackPath}.count`,
         message: 'Количество должно быть конечным целым числом >= 0.',
+      });
+    }
+
+    if (stack.level !== undefined && (!Number.isFinite(stack.level) || !Number.isInteger(stack.level) || stack.level < 0)) {
+      errors.push({
+        code: 'invalid-level',
+        path: `${stackPath}.level`,
+        message: 'Уровень должен быть конечным целым числом >= 0.',
       });
     }
 
@@ -210,6 +320,25 @@ function validateStackCollection(
         path: `${stackPath}.entityId`,
         message: `${entity.name} имеет kind=${entity.kind}, ожидается kind=${expectedKind}.`,
       });
+      return;
+    }
+
+    const maxLevel = COMBAT_ENTITY_LEVEL_LIMITS[entity.kind];
+    if ((stack.level ?? 0) > maxLevel) {
+      errors.push({
+        code: 'level-overflow',
+        path: `${stackPath}.level`,
+        message: `${entity.name}: максимальный уровень для ${entity.kind} — ${maxLevel}.`,
+      });
+    }
+
+    const uniqueLimit = entity.maxOwned ?? (expectedKind === 'defense' && (entity.id === 'tower-shield' || entity.id === 'planetary-shield') ? 1 : undefined);
+    if (uniqueLimit !== undefined && stack.count > uniqueLimit) {
+      errors.push({
+        code: 'entity-limit',
+        path: `${stackPath}.count`,
+        message: `${entity.name}: можно выбрать не больше ${uniqueLimit} экземпляра.`,
+      });
     }
   });
 }
@@ -217,12 +346,33 @@ function validateStackCollection(
 export function validateCombatInput(input: CombatInput): CombatValidationResult {
   const errors: CombatValidationError[] = [];
 
+  for (const migrationError of input.migrationErrors ?? []) {
+    errors.push({
+      code: 'migration-error',
+      path: 'migration',
+      message: migrationError,
+    });
+  }
+
   validateStackCollection(input.attacker.ships, 'ship', 'attacker.ships', errors);
-  validateStackCollection(input.attacker.commanders, 'commander', 'attacker.commanders', errors);
+  const attackerCommanders = getSideCommanders(input.attacker);
+  const defenderCommanders = getSideCommanders(input.defender);
+  validateStackCollection(attackerCommanders, 'commander', 'attacker.commander', errors);
   validateStackCollection(input.attacker.defenses, 'defense', 'attacker.defenses', errors);
   validateStackCollection(input.defender.ships, 'ship', 'defender.ships', errors);
-  validateStackCollection(input.defender.commanders, 'commander', 'defender.commanders', errors);
+  validateStackCollection(defenderCommanders, 'commander', 'defender.commander', errors);
   validateStackCollection(input.defender.defenses, 'defense', 'defender.defenses', errors);
+
+  for (const [side, commanders] of [['attacker', attackerCommanders] as const, ['defender', defenderCommanders] as const]) {
+    const activeCommanderId = input[side].activeCommanderId;
+    if (activeCommanderId !== undefined && activeCommanderId !== null && (!isCommanderId(activeCommanderId) || !commanders.some((stack) => stack.entityId === activeCommanderId && stack.count > 0))) {
+      errors.push({
+        code: 'invalid-commander-selection',
+        path: `${side}.activeCommanderId`,
+        message: 'Ведущим можно выбрать только выбранный командирский корабль.',
+      });
+    }
+  }
 
   if ((input.attacker.defenses ?? []).length > 0) {
     errors.push({
@@ -243,9 +393,56 @@ export function validateCombatInput(input: CombatInput): CombatValidationResult 
     errors.push({ code: 'invalid-round-limit', path: 'maxRounds', message: 'maxRounds должен быть 5, 8 или 12.' });
   }
 
+  if (input.technologyMode !== undefined && input.technologyMode !== 'independent' && input.technologyMode !== 'shared') {
+    errors.push({ code: 'invalid-technology-mode', path: 'technologyMode', message: 'Режим технологий должен быть independent или shared.' });
+  }
+
+  for (const [path, value] of [
+    ['attackerTargetPriority', input.attackerTargetPriority],
+    ['defenderTargetPriority', input.defenderTargetPriority],
+  ] as const) {
+    if (value !== undefined && !isTargetPriority(value)) {
+      errors.push({
+        code: 'invalid-target-priority',
+        path,
+        message: 'Приоритет цели должен быть threat, population или catalog.',
+      });
+    }
+  }
+
+  const attackerTechnologies = normalizeCombatTechnologies(input.attackerTechnologies);
+  const defenderTechnologies = normalizeCombatTechnologies(input.defenderTechnologies);
+  for (const [path, levels] of [['attackerTechnologies', attackerTechnologies], ['defenderTechnologies', defenderTechnologies]] as const) {
+    const additional = ['piercingAttack', 'maneuverDefense', 'criticalHit']
+      .filter((id) => levels[id as keyof CombatTechnologyLevels] > 0);
+    if (additional.filter((id) => id === 'piercingAttack' || id === 'maneuverDefense' || id === 'criticalHit').length > 1) {
+      errors.push({
+        code: 'exclusive-technology',
+        path,
+        message: 'Можно выбрать только одну дополнительную технологию: пробивающая атака, маневренная защита или критический удар.',
+      });
+    }
+  }
+
+  if (input.seed !== undefined && (typeof input.seed !== 'string' || input.seed.trim().length === 0)) {
+    errors.push({ code: 'invalid-seed', path: 'seed', message: 'Seed должен быть непустой строкой.' });
+  }
+
   const normalized = normalizeCombatInput(input);
-  const attackerUnits = normalized.attacker.ships.length + normalized.attacker.commanders.length;
-  const defenderUnits = normalized.defender.ships.length + normalized.defender.commanders.length + (normalized.defender.defenses?.length ?? 0);
+  if (normalized.technologyMode === 'shared') {
+    const attackerTech = normalized.attackerTechnologies ?? createDefaultCombatTechnologies();
+    const defenderTech = normalized.defenderTechnologies ?? createDefaultCombatTechnologies();
+    const sharedProfileMatches = Object.keys(attackerTech).every((id) => attackerTech[id as keyof CombatTechnologyLevels] === defenderTech[id as keyof CombatTechnologyLevels]);
+    if (!sharedProfileMatches) {
+      errors.push({
+        code: 'technology-profile-mismatch',
+        path: 'defenderTechnologies',
+        message: 'В режиме общего тестового профиля технологии атакующего и защитника должны совпадать. Скопируйте профиль или выберите независимый режим.',
+      });
+    }
+  }
+  const attackerUnits = normalized.attacker.ships.length + getSideCommanders(normalized.attacker).length;
+  const defenderUnits = normalized.defender.ships.length + getSideCommanders(normalized.defender).length + (normalized.defender.defenses?.length ?? 0);
 
   if (attackerUnits === 0) {
     errors.push({ code: 'empty-side', path: 'attacker', message: 'Для запуска у атакующего должна быть хотя бы одна единица.' });
@@ -254,29 +451,29 @@ export function validateCombatInput(input: CombatInput): CombatValidationResult 
     errors.push({ code: 'empty-side', path: 'defender', message: 'Для запуска у защитника должна быть хотя бы одна единица.' });
   }
 
-  const attackerPopulation = calculateStacksPopulation([...normalized.attacker.ships, ...normalized.attacker.commanders]);
-  const defenderFleetPopulation = calculateStacksPopulation([...normalized.defender.ships, ...normalized.defender.commanders]);
-  const defenderDefensePopulation = calculateStacksPopulation(normalized.defender.defenses ?? []);
+  const attackerPopulation = calculateStacksPopulation([...normalized.attacker.ships, ...getSideCommanders(normalized.attacker)], normalized.attacker.factionId);
+  const defenderFleetPopulation = calculateStacksPopulation([...normalized.defender.ships, ...getSideCommanders(normalized.defender)], normalized.defender.factionId);
+  const defenderDefensePopulation = calculateStacksPopulation(normalized.defender.defenses ?? [], normalized.defender.factionId);
 
-  if (attackerPopulation > SIMULATOR_POPULATION_LIMIT) {
+  if (attackerPopulation > SIMULATOR_POPULATION_LIMITS.attackerFleet) {
     errors.push({
       code: 'population-overflow',
       path: 'attacker',
-      message: `Флот атакующего превышает лимит ${SIMULATOR_POPULATION_LIMIT.toLocaleString('ru-RU')}.`,
+      message: `Флот атакующего превышает лимит ${SIMULATOR_POPULATION_LIMITS.attackerFleet.toLocaleString('ru-RU')}.`,
     });
   }
-  if (defenderFleetPopulation > SIMULATOR_POPULATION_LIMIT) {
+  if (defenderFleetPopulation > SIMULATOR_POPULATION_LIMITS.defenderFleet) {
     errors.push({
       code: 'population-overflow',
       path: 'defender',
-      message: `Флот защитника превышает лимит ${SIMULATOR_POPULATION_LIMIT.toLocaleString('ru-RU')}.`,
+      message: `Флот защитника превышает лимит ${SIMULATOR_POPULATION_LIMITS.defenderFleet.toLocaleString('ru-RU')}.`,
     });
   }
-  if (defenderDefensePopulation > SIMULATOR_POPULATION_LIMIT) {
+  if (defenderDefensePopulation > SIMULATOR_POPULATION_LIMITS.defenderDefense) {
     errors.push({
       code: 'population-overflow',
       path: 'defender.defenses',
-      message: `Оборона защитника превышает лимит ${SIMULATOR_POPULATION_LIMIT.toLocaleString('ru-RU')}.`,
+      message: `Оборона защитника превышает лимит ${SIMULATOR_POPULATION_LIMITS.defenderDefense.toLocaleString('ru-RU')}.`,
     });
   }
 
@@ -293,6 +490,8 @@ export function scenarioToCombatInput(
     priority: CombatPriorityState;
   },
 ): CombatInput {
+  const attackerCommanders = getSideCommanders(scenario.attacker).map((stack) => ({ ...stack }));
+  const defenderCommanders = getSideCommanders(scenario.defender).map((stack) => ({ ...stack }));
   return {
     scenarioId: context.scenarioId,
     timestamp: context.timestamp,
@@ -302,8 +501,11 @@ export function scenarioToCombatInput(
         side: 'attacker',
         race: getCombatFactionName(scenario.attackerFactionId),
       },
+      factionId: getCombatFactionId(scenario.attackerFactionId),
       ships: scenario.attacker.ships.map((stack) => ({ ...stack })),
-      commanders: scenario.attacker.commanders.map((stack) => ({ ...stack })),
+      commander: attackerCommanders.find((stack) => stack.count > 0) ?? null,
+      commanders: attackerCommanders,
+      ...(scenario.attacker.activeCommanderId !== undefined ? { activeCommanderId: scenario.attacker.activeCommanderId } : {}),
     },
     defender: {
       participant: {
@@ -311,8 +513,11 @@ export function scenarioToCombatInput(
         side: 'defender',
         race: getCombatFactionName(scenario.defenderFactionId),
       },
+      factionId: getCombatFactionId(scenario.defenderFactionId),
       ships: scenario.defender.ships.map((stack) => ({ ...stack })),
-      commanders: scenario.defender.commanders.map((stack) => ({ ...stack })),
+      commander: defenderCommanders.find((stack) => stack.count > 0) ?? null,
+      commanders: defenderCommanders,
+      ...(scenario.defender.activeCommanderId !== undefined ? { activeCommanderId: scenario.defender.activeCommanderId } : {}),
       defenses: scenario.defender.defenses.map((stack) => ({ ...stack })),
     },
     maxRounds: scenario.maxRounds,
@@ -320,5 +525,12 @@ export function scenarioToCombatInput(
     defenderPriority: [...context.priority.defense],
     attackerTechnologies: normalizeCombatTechnologies(scenario.attackerTechnologies),
     defenderTechnologies: normalizeCombatTechnologies(scenario.defenderTechnologies),
+    technologyMode: scenario.technologyMode,
+    executionMode: scenario.executionMode,
+    attackerTargetPriority: scenario.attackerTargetPriority,
+    defenderTargetPriority: scenario.defenderTargetPriority,
+    ...(scenario.seed ? { seed: scenario.seed } : {}),
+    profileId: COMBAT_PROFILE_ID,
+    ...(scenario.migrationErrors?.length ? { migrationErrors: [...scenario.migrationErrors] } : {}),
   };
 }

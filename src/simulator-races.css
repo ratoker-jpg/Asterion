@@ -47,18 +47,27 @@
   background: rgba(49, 178, 215, .13);
 }
 
+.sim-tech-list-v1[hidden] { display: none; }
+
 .sim-tech-row-v1 {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  grid-template-columns: 60px minmax(0, 1fr) auto;
+  gap: 11px;
   align-items: center;
-  min-height: 52px;
-  padding: 7px 10px;
+  min-height: 76px;
+  padding: 10px 13px;
   background: rgba(2, 23, 33, .98);
   box-sizing: border-box;
 }
 
-.sim-tech-row-v1 > div:first-child {
+.sim-tech-row-v1 > img {
+  width: 58px;
+  height: 58px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 8px rgba(37, 182, 239, .24));
+}
+
+.sim-tech-row-v1 > div:nth-child(2) {
   display: grid;
   gap: 3px;
   min-width: 0;
@@ -66,62 +75,44 @@
 
 .sim-tech-row-v1 strong {
   color: #d9f6ff;
-  font-size: 10px;
+  font-size: 14px;
 }
 
 .sim-tech-row-v1 small {
   color: #6895a4;
-  font-size: 8px;
+  font-size: 11px;
   line-height: 1.35;
 }
 
 .sim-tech-controls-v1 {
-  display: grid;
-  grid-template-columns: 28px 56px 28px;
+  display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
-.sim-tech-controls-v1 button,
-.sim-tech-controls-v1 input {
-  height: 28px;
-  border: 1px solid rgba(51, 185, 222, .38);
-  background: rgba(2, 22, 31, .95);
-  color: #dff9ff;
+.sim-tech-controls-v1 .sim-number-stepper-v1 { min-width: 94px; }
+
+.sim-tech-controls-v1 .sim-number-stepper-arrows-v1 button {
+  height: 20px;
+  min-height: 20px;
+  padding: 0;
+  border: 1px solid rgba(55, 191, 229, .34);
+  background: rgba(3, 31, 43, .94);
+  color: #8fdcf0;
   font: inherit;
-  font-size: 9px;
-  font-weight: 700;
-  text-align: center;
-  box-sizing: border-box;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1;
 }
 
-.sim-tech-controls-v1 button {
-  cursor: pointer;
-}
+.sim-tech-controls-v1 .sim-number-stepper-arrows-v1 button:first-child { border-bottom: 0; }
 
-.sim-tech-controls-v1 button:disabled {
-  opacity: .35;
-  cursor: default;
-}
-
-.sim-tech-controls-v1 input {
-  width: 56px;
-  padding: 0 3px;
-}
-
-/* The saved Nemexia simulator confirms editable science levels, but not an
-   authoritative maximum. Keep the technical input guard internal and never
-   render it as a game rule. */
-.sim-tech-controls-v1 span,
-.sim-tech-controls-v1 .sim-max-v1 {
-  display: none;
-}
-
-/* Older Simulator markup contained a critical-hit explanation that went beyond
-   the facts available in the saved page. Per-technology copy now states the
-   supported fact precisely, so suppress that provisional note. */
 .sim-tech-note-v1 {
-  display: none;
+  margin: 0;
+  padding: 10px 12px;
+  color: #79a9b8;
+  font-size: 10px;
+  line-height: 1.4;
 }
 
 .sim-race-mechanics-note-v1 {
@@ -155,10 +146,11 @@
   }
 
   .sim-tech-row-v1 {
-    grid-template-columns: 1fr;
+    grid-template-columns: 60px minmax(0, 1fr);
   }
 
   .sim-tech-controls-v1 {
+    grid-column: 1 / -1;
     justify-content: start;
   }
 
