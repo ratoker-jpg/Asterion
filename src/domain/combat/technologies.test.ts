@@ -76,7 +76,7 @@ test('legacy provisional science keys migrate without losing saved levels', () =
   assert.equal(migrated.maneuverDefense, 3);
 });
 
-test('unverified science coefficients remain neutral in production', () => {
+test('documented science coefficients participate in production from the original base', () => {
   const levels = normalizeCombatTechnologies({
     laserScience: 9,
     ionScience: 8,
@@ -90,7 +90,7 @@ test('unverified science coefficients remain neutral in production', () => {
     criticalHit: 10,
   });
   const scout = getCombatEntity('scout');
-  assert.equal(getTechnologyAttackMultiplier(scout, levels), 1);
-  assert.equal(getTechnologyLifeMultiplier(scout, levels), 1);
-  assert.equal(getTechnologyArmorPercent(scout, levels), scout.combat.armorStrength);
+  assert.equal(getTechnologyAttackMultiplier(scout, levels), 2.65);
+  assert.equal(getTechnologyLifeMultiplier(scout, levels), 1.25);
+  assert.equal(getTechnologyArmorPercent(scout, levels), 8);
 });

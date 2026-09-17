@@ -1,5 +1,26 @@
 export type CombatEntityKind = 'ship' | 'defense' | 'commander';
 
+export type CombatOrdinaryClass =
+  | 'scout'
+  | 'cruiser'
+  | 'defender'
+  | 'battleship'
+  | 'destroyer'
+  | 'bomber';
+
+export type CombatSpecialBonus = {
+  kind: 'attack' | 'life' | 'armor';
+  rate: number;
+  cap?: number;
+  /** The source did not establish a cap for some inferred bonuses. */
+  capStatus?: 'known' | 'unknown';
+  /** Marks the documented fleet rule and the explicit Asterion recipient scope. */
+  scope?: 'fleet' | 'asterion';
+  status: 'confirmed' | 'inferred' | 'unknown' | 'not-calibrated';
+  source?: string;
+  note?: string;
+};
+
 export type ResourceCost = {
   metal: number;
   minerals: number;
@@ -50,6 +71,11 @@ export type CombatEntityDefinition = {
   cost: ResourceCost;
   combat: CombatStats;
   category: string;
+  /** Stable combat archetype used by the Asterion matchup and level rules. */
+  ordinaryClass?: CombatOrdinaryClass;
+  /** Start-of-round bonus donated to other allied combat stacks. */
+  specialBonus?: CombatSpecialBonus;
+  combatEligible?: boolean;
   ship?: ShipCombatTraits;
   tactical?: TacticalCombatTraits;
   commanderAbility?: CommanderAbilityTraits;

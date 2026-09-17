@@ -23,7 +23,7 @@ function makeInput(overrides: Partial<CombatInput> = {}): CombatInput {
   };
 }
 
-test('production resolver keeps inferred science neutral', () => {
+test('production resolver applies documented science independently to both sides', () => {
   const baseline = resolveCombat(makeInput(), { reportId: 'baseline' });
   const configured = resolveCombat(makeInput({
     attackerTechnologies: normalizeCombatTechnologies({
@@ -39,9 +39,10 @@ test('production resolver keeps inferred science neutral', () => {
   const configuredAttack = configured.rounds[0]?.events.find((event) => event.actorSide === 'attacker');
   assert.ok(baselineAttack);
   assert.ok(configuredAttack);
-  assert.equal(configuredAttack.attackValue, baselineAttack.attackValue);
-  assert.equal(configuredAttack.damage, baselineAttack.damage);
-  assert.equal(configuredAttack.lifeBefore, baselineAttack.lifeBefore);
+  assert.equal(configuredAttack.attackValue, 2_240);
+  assert.notEqual(configuredAttack.damage, baselineAttack.damage);
+  assert.equal(configuredAttack.lifeBefore, 54_000);
+  assert.equal(configuredAttack.armorBefore, 24);
 });
 
 test('calibration resolver applies only the documented inferred curves', () => {

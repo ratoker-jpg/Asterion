@@ -14,6 +14,7 @@ import {
   COMBAT_ENTITY_LEVEL_LIMITS,
   COMBAT_PROFILE_ID,
   DEFAULT_COMBAT_TARGET_PRIORITY,
+  MAX_COMMANDERS_PER_SIDE,
 } from './config.ts';
 import {
   COMBAT_TECHNOLOGIES,
@@ -103,6 +104,16 @@ function readCommanderStacks(side: { commanders?: unknown; commander?: unknown }
   return legacyCommander ? [legacyCommander] : [];
 }
 
+function commanderMigrationErrors(
+  sideName: 'attacker' | 'defender',
+  commanders: readonly CombatStackInput[],
+) {
+  const count = commanders.reduce((total, stack) => total + Math.max(0, Math.floor(stack.count)), 0);
+  return count > MAX_COMMANDERS_PER_SIDE
+    ? [`Сценарий требует миграции: у ${sideName === 'attacker' ? 'атакующего' : 'защитника'} сохранено несколько командирских кораблей. Оставьте не больше ${MAX_COMMANDERS_PER_SIDE} перед запуском.`]
+    : [];
+}
+
 export function normalizeSimulatorScenario(value: unknown): SimulatorScenario {
   if (!value || typeof value !== 'object') return createEmptySimulatorScenario();
   const candidate = value as {
@@ -115,6 +126,7 @@ export function normalizeSimulatorScenario(value: unknown): SimulatorScenario {
     attackerTargetPriority?: unknown;
     defenderTargetPriority?: unknown;
     seed?: unknown;
+    migrationErrors?: unknown;
     attacker?: { factionId?: unknown; ships?: unknown; commanders?: unknown; commander?: unknown; activeCommanderId?: unknown };
     defender?: { factionId?: unknown; ships?: unknown; commanders?: unknown; commander?: unknown; activeCommanderId?: unknown; defenses?: unknown };
     maxRounds?: unknown;
@@ -126,6 +138,11 @@ export function normalizeSimulatorScenario(value: unknown): SimulatorScenario {
   const defenderLegacyCommander = readCommander(candidate.defender?.commander);
   const attackerActiveCommanderId = readCommanderSelection(candidate.attacker?.activeCommanderId, attackerCommanders, attackerLegacyCommander);
   const defenderActiveCommanderId = readCommanderSelection(candidate.defender?.activeCommanderId, defenderCommanders, defenderLegacyCommander);
+  const migrationErrors = [
+    ...(Array.isArray(candidate.migrationErrors) ? candidate.migrationErrors.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : []),
+    ...commanderMigrationErrors('attacker', attackerCommanders),
+    ...commanderMigrationErrors('defender', defenderCommanders),
+  ];
 
   return {
     attackerFactionId: normalizeCombatFactionId(candidate.attackerFactionId),
@@ -141,6 +158,7 @@ export function normalizeSimulatorScenario(value: unknown): SimulatorScenario {
       ? candidate.defenderTargetPriority
       : DEFAULT_COMBAT_TARGET_PRIORITY,
     ...(typeof candidate.seed === 'string' && candidate.seed.trim() ? { seed: candidate.seed.trim() } : {}),
+    ...(migrationErrors.length ? { migrationErrors: [...new Set(migrationErrors)] } : {}),
     attacker: {
       factionId: normalizeCombatFactionId(candidate.attacker?.factionId ?? candidate.attackerFactionId),
       ships: normalizeStacks(candidate.attacker?.ships, 'ship'),
@@ -222,6 +240,29 @@ export function readSavedCombatTechnologies(storage?: StorageLike): CombatTechno
     ));
   } catch {
     return createDefaultCombatTechnologies();
+  }
+}
+
+export function readSavedCombatTechnologyProfiles(storage?: StorageLike): {
+  attacker: CombatTechnologyLevels;
+  defender: CombatTechnologyLevels;
+} {
+  const fallback = readSavedCombatTechnologies(storage);
+  const target = resolveStorage(storage);
+  if (!target) return { attacker: fallback, defender: { ...fallback } };
+
+  try {
+    const raw = target.getItem(ASTERION_SAVE_KEY);
+    if (!raw) return { attacker: fallback, defender: { ...fallback } };
+    const envelope = JSON.parse(raw) as SaveEnvelope;
+    const simulator = migrateSimulatorState(envelope.combatSimulator);
+    const scenario = simulator.lastScenario;
+    return {
+      attacker: normalizeCombatTechnologies(scenario?.attackerTechnologies ?? fallback),
+      defender: normalizeCombatTechnologies(scenario?.defenderTechnologies ?? fallback),
+    };
+  } catch {
+    return { attacker: fallback, defender: { ...fallback } };
   }
 }
 
