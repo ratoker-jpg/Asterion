@@ -24,6 +24,7 @@ import {
 } from './buildings.ts';
 import {
   getFleetBuildBudget,
+  getPlanetPopulationForState,
   getFleetSummaryForState,
   readFleetBuildBudget,
 } from './fleet.ts';
@@ -546,6 +547,23 @@ test('fleet adapter is the only UI-facing source for fleet budget and summary', 
   assert.equal(persistence.write(state).ok, true);
   const readBudget = readFleetBuildBudget({ mode: 'production', storage });
   assert.deepEqual(readBudget.summary, summary);
+});
+
+test('planet population adds one per orbital satellite for every faction without changing outgoing fleet capacity', () => {
+  const initial = createInitialSaveState(ACTIVE_RUNTIME_MODE);
+  for (const factionId of ['aegis', 'synod', 'veyra'] as const) {
+    const state = {
+      ...initial,
+      profile: { ...initial.profile, factionId },
+      planets: {
+        ...initial.planets,
+        'helion-01': { ...initial.planets['helion-01'], solarSatellites: 7 },
+      },
+    } satisfies SaveState;
+    const fleetSummary = getFleetSummaryForState(state);
+    assert.equal(getPlanetPopulationForState(state), fleetSummary.population + 7, factionId);
+    assert.equal(getFleetBuildBudget(state).summary.population, fleetSummary.population, factionId);
+  }
 });
 
 test('runtime snapshot adapter emits one science event and one runtime event per publication', () => {

@@ -98,6 +98,15 @@ export function getFleetSummaryForSnapshot(snapshot: FleetSnapshot): FleetSummar
   );
 }
 
+/** Planet population includes orbital satellites; outgoing fleet capacity does not. */
+export function getPlanetPopulationForSnapshot(snapshot: FleetSnapshot): number {
+  return getFleetSummaryForSnapshot(snapshot).population + snapshot.solarSatellites;
+}
+
+export function getPlanetPopulationForState(state: SaveState, planetId: PlanetId = state.currentPlanetId): number {
+  return getPlanetPopulationForSnapshot(getFleetSnapshot(state, planetId));
+}
+
 export function readFleetSnapshot(options: PersistenceOptions = {}): FleetSnapshot {
   const state = createPersistenceFacade(options).read();
   return getFleetSnapshot(state);

@@ -117,7 +117,7 @@ import {
 } from './application/repair.ts';
 import { bindCombatResolutionEventBridge } from './application/combat.ts';
 import { getFleetProductionEntity } from './domain/fleet/production.ts';
-import { getFleetBuildBudget, getFleetSummaryForState } from './application/fleet.ts';
+import { getFleetBuildBudget, getFleetSummaryForState, getPlanetPopulationForState } from './application/fleet.ts';
 import { energySummaryForPlanet, getPlanetEnergyCoordinates } from './application/energy.ts';
 import { getEffectiveResourceIncomePerHour } from './application/resource-clock.ts';
 import { publishApplicationRuntimeSnapshot } from './application/runtime.ts';
@@ -413,7 +413,11 @@ export function App() {
     [state],
   );
   const isDefenseFleetView = activeRoute === 'fleets' && activeFleetSection === 'defense';
-  const headerPopulationSummary = isDefenseFleetView ? defenseSummary : fleetSummary;
+  const planetPopulation = useMemo(
+    () => getPlanetPopulationForState(state),
+    [state],
+  );
+  const headerPopulationSummary = isDefenseFleetView ? defenseSummary : { ...fleetSummary, population: planetPopulation };
   const currentSkin = useMemo(
     () => planetSkins.find((skin) => skin.id === currentPlanetState.skin) ?? planetSkins[0],
     [currentPlanetState.skin],
@@ -950,6 +954,7 @@ export function App() {
                   value: defenseSummary.population,
                   capacity: defenseSummary.capacity,
                 },
+                satellites: isDefenseFleetView ? undefined : Math.max(0, Math.floor(currentPlanetState.solarSatellites ?? 0)),
               },
             },
           ]}
@@ -1089,7 +1094,7 @@ export function App() {
                       <div><dt>Статус</dt><dd>★ {currentPlanet.status}</dd></div>
                       <div><dt>Фракция</dt><dd>{PLAYER_FACTION_LABELS[state.profile.factionId]}</dd></div>
                       <div><dt>Координаты</dt><dd>{currentPlanet.coords}</dd></div>
-                      <div><dt>Население</dt><dd>{fleetSummary.population} / {fleetSummary.capacity}</dd></div>
+                      <div><dt>Население</dt><dd>{planetPopulation} / {fleetSummary.capacity}</dd></div>
                       <div><dt>Энергия</dt><dd>{currentEnergyLedger.availableEnergy}</dd></div>
                       <div><dt>Ресурсные здания</dt><dd>{resourceBuildingCount} / 10</dd></div>
                       <div><dt>Стабильность</dt><dd className="summary-stable">{currentPlanetState.stability}%</dd></div>

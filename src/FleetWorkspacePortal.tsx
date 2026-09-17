@@ -348,7 +348,7 @@ function FleetWorkspace({
                 <div className="fleet-satellite-copy-v1">
                   <small>ОРБИТАЛЬНОЕ ПРИСУТСТВИЕ</small>
                   <strong>{satelliteDefinition?.name ?? 'Солнечные спутники'}</strong>
-                  <span>{fleetSnapshot.solarSatellites > 0 ? `На орбите: ${fleetSnapshot.solarSatellites}` : 'На орбите нет спутников'} · население: {fleetSnapshot.solarSatellites}</span>
+                  <span>{fleetSnapshot.solarSatellites > 0 ? `На орбите: ${fleetSnapshot.solarSatellites}` : 'На орбите нет спутников'} · население/ед.: 1</span>
                 </div>
                 <button
                   type="button"

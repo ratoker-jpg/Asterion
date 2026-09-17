@@ -13,6 +13,7 @@ export type HeaderPopulationBreakdown = {
     value: number;
     capacity: number;
   };
+  satellites?: number;
 };
 
 export type HeaderResourceModel = {

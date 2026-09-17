@@ -170,9 +170,12 @@ async function runViewport(width, height) {
         dismantleDisabled: Boolean(row?.querySelector('.fleet-satellite-dismantle-v1')?.disabled),
         ordinarySatelliteRow: Boolean(document.querySelector('[data-qa-fleet-ship="solar-satellite"]')),
         population: document.querySelector('[data-qa-fleet-population]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        headerPopulation: document.querySelector('[data-qa-resource-chip="population"] strong')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        fleetPopulation: Number((document.querySelector('[data-qa-fleet-population]')?.textContent?.match(/ФЛОТ: ([0-9]+(?: [0-9]{3})*)/)?.[1] || '').replace(/ /g, '')),
       };
     })()`);
-    if (!satellite.text.includes('На орбите: 2') || satellite.dismantleDisabled || satellite.ordinarySatelliteRow || !satellite.population.includes('СПУТНИКИ 2')) {
+    const parsePopulation = (value) => Number(value.replace(/[^0-9-]/g, ''));
+    if (!satellite.text.includes('На орбите: 2') || satellite.dismantleDisabled || satellite.ordinarySatelliteRow || !satellite.population.includes('СПУТНИКИ 2') || !Number.isFinite(satellite.fleetPopulation) || parsePopulation(satellite.headerPopulation) !== satellite.fleetPopulation + 2) {
       throw new Error(`${label}: satellite presence UI contract failed: ${JSON.stringify(satellite)}`);
     }
     await capture(win, directory, 'satellite-presence', width, height);
@@ -211,9 +214,10 @@ async function runViewport(width, height) {
         satellites: planet?.solarSatellites ?? -1,
         availableEnergy: planet?.availableEnergy ?? planet?.energy ?? -1,
         notice: document.querySelector('.shell-notice span')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        headerPopulation: document.querySelector('[data-qa-resource-chip="population"] strong')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
       };
     })()`);
-    if (afterDismantle.satellites !== 0 || afterDismantle.availableEnergy !== 17962 || !afterDismantle.notice.includes('Ресурсы за них не возвращаются')) {
+    if (afterDismantle.satellites !== 0 || afterDismantle.availableEnergy !== 17962 || parsePopulation(afterDismantle.headerPopulation) !== satellite.fleetPopulation || !afterDismantle.notice.includes('Ресурсы за них не возвращаются')) {
       throw new Error(`${label}: satellite dismantle UI contract failed: ${JSON.stringify(afterDismantle)}`);
     }
 
