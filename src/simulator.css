@@ -53,6 +53,35 @@
   box-sizing: border-box;
 }
 
+.sim-execution-v1,
+.sim-seed-v1 {
+  min-width: 0;
+  max-width: 260px;
+}
+
+.sim-execution-v1 small,
+.sim-seed-v1 small,
+.sim-target-priority-v1 small {
+  color: #5e91a3;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.3;
+}
+
+.sim-mode-note-v1 {
+  display: grid;
+  gap: 3px;
+  padding: 9px 12px;
+  border: 1px solid rgba(55, 191, 229, .18);
+  background: rgba(3, 30, 42, .72);
+  color: #8ab7c5;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.sim-mode-note-v1 strong { color: #b8effb; font-size: 10px; letter-spacing: .08em; }
+
 .sim-seed-v1 input { min-width: 150px; letter-spacing: 0; }
 
 .sim-rounds-v1 > span,
@@ -182,7 +211,8 @@
 }
 
 .sim-population-v1,
-.sim-commander-select-v1 {
+.sim-commander-select-v1,
+.sim-target-priority-v1 {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -194,6 +224,35 @@
   background: rgba(3, 25, 35, .72);
   box-sizing: border-box;
 }
+
+.sim-target-priority-v1 {
+  display: grid;
+  grid-template-columns: minmax(180px, .8fr) minmax(220px, 1.2fr);
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+}
+
+.sim-target-priority-v1 > span {
+  color: #69acc3;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .1em;
+}
+
+.sim-target-priority-v1 select {
+  min-width: 0;
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid rgba(46, 158, 192, .56);
+  background: rgba(2, 21, 31, .96);
+  color: #effcff;
+  font: inherit;
+  font-size: 11px;
+  outline: none;
+}
+
+.sim-target-priority-v1 small { grid-column: 1 / -1; }
 
 .sim-population-v1 strong,
 .sim-population-v1 > div strong {
@@ -289,6 +348,8 @@
 .sim-unit-copy-v1 span { color: #7caaba; font-size: 11px; }
 .sim-unit-copy-v1 small { color: #5e91a3; font-size: 10px; line-height: 1.35; }
 .sim-unit-copy-v1 em { color: #8ecad9; font-size: 10px; font-style: normal; }
+.sim-unit-copy-v1 em.sim-unit-stats-v1 { color: #b6f5df; font-size: 10px; font-weight: 700; }
+.sim-unit-copy-v1 em.sim-unit-unavailable-v1 { color: #f0bb78; font-weight: 700; }
 
 .sim-unit-controls-v1 {
   display: flex;
@@ -500,4 +561,11 @@
   .sim-result-head-v1 > div:last-child { flex-wrap: wrap; }
   .sim-commander-select-v1 { grid-template-columns: 1fr; gap: 5px; padding: 8px 10px; }
   .sim-commander-select-v1 small { grid-column: auto; }
+  .sim-target-priority-v1 { grid-template-columns: 1fr; gap: 5px; }
+  .sim-target-priority-v1 small { grid-column: auto; }
+}
+
+@media (max-width: 860px) {
+  .sim-execution-v1,
+  .sim-seed-v1 { max-width: none; }
 }

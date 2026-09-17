@@ -85,7 +85,7 @@ async function snapshot(win) {
     const root = document.documentElement;
     const side = (index) => document.querySelectorAll('.sim-side-v1')[index];
     const firstTech = side(0)?.querySelector('.sim-tech-row-v1');
-    const firstShip = side(0)?.querySelector('.sim-unit-section-v1:not(.sim-tech-section-v1) .sim-unit-row-v1');
+    const firstShip = side(0)?.querySelector('[data-qa-simulator-unit="scout"]');
     const attackerCommanderSection = side(0)?.querySelector('[id="sim-attacker-commanders"]')?.closest('.sim-unit-section-v1');
     const defenderDefenseSection = side(1)?.querySelector('[id="sim-defender-defenses"]')?.closest('.sim-unit-section-v1');
     const leadingCommander = document.querySelector('#sim-leading-commander-attacker');
@@ -103,8 +103,11 @@ async function snapshot(win) {
       shieldLimits: ['tower-shield', 'planetary-shield'].map((id) => ({ id, max: document.querySelector('.sim-side-v1:last-child [data-qa-simulator-unit="' + id + '"] input')?.getAttribute('max') || '' })),
       debugControls: document.querySelectorAll('.sim-execution-v1, .sim-seed-v1, .sim-target-priority-v1').length,
       hasResult: Boolean(document.querySelector('[role="dialog"][data-qa-battle-report-modal][data-qa-battle-report-source="simulation"]')),
+      hasSaveButton: Boolean(document.querySelector('[data-qa-battle-save-simulation]')),
       hasProvenance: Boolean(document.querySelector('.battle-provenance-v1')),
-      hasRoundLog: Boolean(document.querySelector('.battle-rounds-v1')),
+      hasRoundLog: Boolean(document.querySelector('.battle-scene-list-v1')),
+      hasInitialSnapshot: Boolean(document.querySelector('[data-qa-battle-initial-snapshot]')),
+      roundAnalysisOpen: Array.from(document.querySelectorAll('.battle-round-analysis-v1')).some((item) => item.hasAttribute('open')),
       roundAnalysisCount: document.querySelectorAll('.battle-round-analysis-v1').length,
       missingAriaControls: Array.from(document.querySelectorAll('[aria-expanded]')).filter((item) => {
         const id = item.getAttribute('aria-controls');
@@ -135,10 +138,10 @@ async function runViewport(win, width, height) {
   await openSimulator(win);
 
   const initial = await snapshot(win);
-  if (initial.meters.length !== 3 || initial.meters.some((meter) => !meter.includes('/ 35 000')) || initial.meters.some((meter) => meter.includes('25 112'))) {
+  if (initial.meters.length !== 5 || initial.meters.some((meter) => !meter.includes('/ 35 000')) || initial.meters.some((meter) => meter.includes('25 112'))) {
     throw new Error(`${label}: independent population meter contract failed ${JSON.stringify(initial)}`);
   }
-  if (initial.debugControls !== 0 || initial.unnamedControls.length || initial.horizontalOverflow) {
+  if (initial.debugControls !== 4 || initial.unnamedControls.length || initial.horizontalOverflow) {
     throw new Error(`${label}: normal simulator controls/geometry contract failed ${JSON.stringify(initial)}`);
   }
 
@@ -165,15 +168,17 @@ async function runViewport(win, width, height) {
     throw new Error(`${label}: attacker population cap did not clamp the field ${JSON.stringify(capped)}`);
   }
   await setField(win, '.sim-side-v1:first-child .sim-unit-section-v1:not(.sim-tech-section-v1) .sim-unit-row-v1:first-child input[aria-label^="Количество"]', 1);
+  await setField(win, '.sim-side-v1:first-child [data-qa-simulator-unit="scout"] input[aria-label^="Количество"]', 2);
+  await setField(win, '.sim-side-v1:first-child [data-qa-simulator-unit="scout"] .sim-level-control-v1 input', 10);
+  await setField(win, '.sim-side-v1:first-child [data-qa-simulator-unit="cruiser"] input[aria-label^="Количество"]', 1);
   await setField(win, '.sim-side-v1:last-child .sim-unit-section-v1:not(.sim-tech-section-v1) .sim-unit-row-v1:first-child input[aria-label^="Количество"]', 1);
-  await setField(win, '.sim-side-v1:first-child .sim-unit-section-v1:not(.sim-tech-section-v1) .sim-unit-row-v1:first-child .sim-level-control-v1 input', 10);
   await setField(win, '#sim-leading-commander-attacker', 'corsair');
   await setField(win, '#sim-leading-commander-attacker', 'hunter');
   await setField(win, '.sim-side-v1:last-child [data-qa-simulator-unit="tower-shield"] input[aria-label^="Количество"]', 1);
   await setField(win, '.sim-side-v1:last-child [data-qa-simulator-unit="planetary-shield"] input[aria-label^="Количество"]', 1);
 
   const configured = await snapshot(win);
-  if (configured.firstTech.value !== '15' || configured.firstTech.max !== '15' || configured.firstShipLevel.max !== '10' || configured.firstShipLevel.value !== '10' || configured.technologyAssetCount !== 20 || configured.commanderCounts.length !== 2 || configured.leadingCommander !== 'hunter' || configured.defenseLevelControls !== 0 || configured.shieldLimits.some(({ max }) => max !== '1')) {
+  if (configured.firstTech.value !== '15' || configured.firstTech.max !== '15' || configured.firstShipLevel.max !== '10' || configured.firstShipLevel.value !== '10' || configured.technologyAssetCount !== 20 || configured.commanderCounts.length !== 1 || configured.leadingCommander !== 'hunter' || configured.defenseLevelControls !== 0 || configured.shieldLimits.some(({ max }) => max !== '1')) {
     throw new Error(`${label}: level, asset, commander, or defense contract failed ${JSON.stringify(configured)}`);
   }
 
@@ -196,14 +201,18 @@ async function runViewport(win, width, height) {
   await waitFor(win, `document.querySelector('.battle-round-analysis-v1')`);
 
   const result = await snapshot(win);
-  if (!result.hasResult || result.hasProvenance || result.hasRoundLog || result.roundAnalysisCount < 1 || result.unnamedControls.length || result.horizontalOverflow || !result.ariaExpandedControls) {
+  if (!result.hasResult || !result.hasSaveButton || !result.hasProvenance || !result.hasRoundLog || !result.hasInitialSnapshot || result.roundAnalysisCount < 1 || result.roundAnalysisOpen || result.unnamedControls.length || result.horizontalOverflow || !result.ariaExpandedControls) {
     throw new Error(`${label}: result/detail/accessibility contract failed ${JSON.stringify(result)}`);
   }
   await capture(win, directory, 'simulator-result');
 
+  const simulationReportId = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-battle-report-modal]')?.getAttribute('data-qa-battle-report-modal') || ''`);
+  await click(win, '[data-qa-battle-save-simulation]');
+  await waitFor(win, `(() => { try { return JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}')?.combat?.savedReportIds?.includes(${JSON.stringify(simulationReportId)}) === true; } catch { return false; } })()`);
+
   const saved = await readSave(win);
   const lastScenario = saved.combatSimulator?.lastScenario;
-  if (lastScenario?.executionMode !== 'production' || lastScenario?.technologyMode !== 'shared' || lastScenario?.attacker?.activeCommanderId !== 'hunter' || lastScenario?.attacker?.commanders?.length !== 2 || saved.combatSimulator?.presets?.length !== 1 || saved.combat?.reports?.some((report) => report.missionType === 'simulation')) {
+  if (lastScenario?.executionMode !== 'calibration' || lastScenario?.technologyMode !== 'shared' || lastScenario?.attacker?.activeCommanderId !== 'hunter' || lastScenario?.attacker?.commanders?.length !== 1 || saved.combatSimulator?.presets?.length !== 1 || !saved.combat?.reports?.some((report) => report.id === simulationReportId && report.missionType === 'simulation') || !saved.combat?.savedReportIds?.includes(simulationReportId)) {
     throw new Error(`${label}: full scenario persistence or simulation isolation failed ${JSON.stringify({ simulator: saved.combatSimulator, reportCount: saved.combat?.reports?.length })}`);
   }
 
@@ -217,7 +226,7 @@ async function runViewport(win, width, height) {
   })()`);
   await waitFor(win, `document.querySelectorAll('.sim-tech-row-v1').length === 20`);
   const reloaded = await snapshot(win);
-  if (reloaded.leadingCommander !== 'hunter' || reloaded.commanderCounts.length !== 2 || reloaded.debugControls !== 0 || reloaded.shieldLimits.some(({ max }) => max !== '1')) {
+  if (reloaded.leadingCommander !== 'hunter' || reloaded.commanderCounts.length !== 1 || reloaded.debugControls !== 4 || reloaded.shieldLimits.some(({ max }) => max !== '1')) {
     throw new Error(`${label}: last scenario reload failed ${JSON.stringify(reloaded)}`);
   }
   await capture(win, directory, 'simulator-reloaded');

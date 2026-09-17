@@ -143,11 +143,11 @@ async function modalSnapshot(win) {
       technologyRowCount: technologyRows.length,
       technologyTooltipCount: modal?.querySelectorAll('.battle-tech-tooltip-v1').length || 0,
       technologyTooltipImageCount: modal?.querySelectorAll('.battle-tech-tooltip-row-v1 img').length || 0,
-      visibleTechnologyLevel: technologyRows.some((row) => (row.querySelector(':scope > span')?.textContent || '').toLowerCase().includes('уровень')),
+      visibleTechnologyLevel: technologyRows.some((row) => (row.querySelector(':scope > span')?.textContent || '').includes('/')),
       technologyRowsFocusable: technologyRows.every((row) => row.tabIndex >= 0),
       eventCardCount: modal?.querySelectorAll('[data-qa-battle-event]').length || 0,
       hasBattlePoints: Boolean(modal?.querySelector('[data-qa-battle-points]')),
-      hasVisualAnchor: Boolean(modal?.querySelector('[data-qa-battle-visual-anchor]')),
+      hasVisualReport: Boolean(modal?.querySelector('[data-qa-battle-visual-report]')),
       hasComposition: Boolean(modal?.querySelector('[data-qa-battle-composition]')),
       hasOutcome: Boolean(modal?.querySelector('[data-qa-battle-outcome]')),
       outcomeBeforeVisual: Boolean(outcome && visual && (outcome.compareDocumentPosition(visual) & 4)),
@@ -450,7 +450,7 @@ async function exerciseSimulatorModalFlow(win) {
   if (!opened) throw new Error('Simulator fleet section not found');
   await waitFor(win, `document.querySelector('.simulator-view-v1')`);
   const attackerAdded = await win.webContents.executeJavaScript(`(() => {
-    const button = document.querySelector('#sim-attacker-ships button[aria-label^="Увеличить"]');
+    const button = document.querySelector('#sim-attacker-ships [data-qa-simulator-unit="scout"] button[aria-label^="Увеличить"]');
     if (!button) return false;
     button.click();
     return true;
@@ -458,7 +458,7 @@ async function exerciseSimulatorModalFlow(win) {
   if (!attackerAdded) throw new Error('Simulator attacker unit control not available');
   await settle(win);
   const defenderAdded = await win.webContents.executeJavaScript(`(() => {
-    const button = document.querySelector('#sim-defender-ships button[aria-label^="Увеличить"]');
+    const button = document.querySelector('#sim-defender-ships [data-qa-simulator-unit="scout"] button[aria-label^="Увеличить"]');
     if (!button) return false;
     button.click();
     return true;
@@ -494,13 +494,13 @@ async function exerciseSimulatorModalFlow(win) {
     const text = modal?.textContent || '';
     return {
       source: modal?.getAttribute('data-qa-battle-report-source') || '',
-      hasSaveButton: Boolean(modal?.querySelector('.battle-save-v1')),
+      hasSaveButton: Boolean(modal?.querySelector('[data-qa-battle-save-simulation]')),
       hasGenericAttacker: text.includes('Атакующий'),
       hasGenericDefender: text.includes('Защитник'),
       hasInlineResult: Boolean(document.querySelector('.sim-result-v1')),
     };
   })()`);
-  if (!simulationModal.present || simulationModal.sceneCount < 1 || simulationModal.internalHorizontalOverflow || simulationPresentation.source !== 'simulation' || simulationPresentation.hasSaveButton || !simulationPresentation.hasGenericAttacker || !simulationPresentation.hasGenericDefender || simulationPresentation.hasInlineResult) {
+  if (!simulationModal.present || simulationModal.sceneCount < 1 || simulationModal.internalHorizontalOverflow || simulationPresentation.source !== 'simulation' || !simulationPresentation.hasSaveButton || !simulationPresentation.hasGenericAttacker || !simulationPresentation.hasGenericDefender || simulationPresentation.hasInlineResult) {
     throw new Error(`Simulator modal contract failed: ${JSON.stringify({ simulationModal, simulationPresentation })}`);
   }
 
@@ -568,7 +568,7 @@ async function runViewport(win, width, height) {
   const sceneGeometry = await measureBattleSceneGeometry(win);
   assertBattleSceneGeometry(sceneGeometry, label);
   const modal = await modalSnapshot(win);
-  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.sceneCount !== 5 || modal.spaceLayerCount !== modal.sceneCount || modal.legacyLayerCount !== 0 || modal.celestialLayerCount !== modal.sceneCount || modal.celestialObjectCount !== modal.sceneCount || modal.celestialModes.some((mode) => mode !== 'planet') || modal.celestialObjectBackgroundImages.some((image) => !image.includes('battle-planet-transparent-v1')) || modal.celestialObjectBackgroundSizes.some((size) => size !== 'contain') || modal.celestialLayerOverflows.some((overflow) => overflow !== 'hidden') || modal.analysisOpenCount !== 0 || modal.cellSizes.some((value) => value !== '100px') || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount < 1 || modal.technologyTooltipCount !== modal.technologyRowCount || modal.technologyTooltipImageCount < modal.technologyRowCount || !modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || modal.eventCardCount < 1 || !modal.hasBattlePoints || modal.hasVisualAnchor || !modal.hasComposition || !modal.hasOutcome || !modal.outcomeBeforeVisual || !modal.internalScroll || modal.internalHorizontalOverflow || modal.layoutOverflowCount !== 0 || modal.tooltipHorizontalClips !== 0 || modal.visibleGridLineCount !== 0 || !modal.bodyLocked || !modal.stageInert) {
+  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.sceneCount !== 5 || modal.spaceLayerCount !== modal.sceneCount || modal.legacyLayerCount !== 0 || modal.celestialLayerCount !== modal.sceneCount || modal.celestialObjectCount !== modal.sceneCount || modal.celestialModes.some((mode) => mode !== 'planet') || modal.celestialObjectBackgroundImages.some((image) => !image.includes('battle-planet-transparent-v1')) || modal.celestialObjectBackgroundSizes.some((size) => size !== 'contain') || modal.celestialLayerOverflows.some((overflow) => overflow !== 'hidden') || modal.analysisOpenCount !== 0 || modal.cellSizes.some((value) => value !== '100px') || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount < 1 || modal.technologyTooltipCount !== modal.technologyRowCount || modal.technologyTooltipImageCount < modal.technologyRowCount || !modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || modal.eventCardCount < 1 || !modal.hasBattlePoints || !modal.hasVisualReport || !modal.hasComposition || !modal.hasOutcome || !modal.outcomeBeforeVisual || !modal.internalScroll || modal.internalHorizontalOverflow || modal.layoutOverflowCount !== 0 || modal.tooltipHorizontalClips !== 0 || modal.visibleGridLineCount !== 0 || !modal.bodyLocked || !modal.stageInert) {
     throw new Error(`Battle modal contract failed at ${label}: ${JSON.stringify(modal)}`);
   }
   await capture(win, directory, 'battle-report-modal');
