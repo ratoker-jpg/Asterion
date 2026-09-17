@@ -208,7 +208,7 @@ async function runViewport(win, width, height) {
   await waitFor(win, `document.querySelector('.battle-round-analysis-v1')`);
 
   const result = await snapshot(win);
-  if (!result.hasResult || result.hasSaveButton || result.hasProvenance || !result.hasRoundLog || result.hasInitialSnapshot || result.hasRoundSummary || result.hasVisualReport || result.hasTechnicalLabels || result.roundAnalysisCount < 1 || result.roundAnalysisOpen || result.unnamedControls.length || result.horizontalOverflow || !result.ariaExpandedControls) {
+  if (!result.hasResult || result.hasSaveButton || result.hasProvenance || !result.hasRoundLog || result.hasInitialSnapshot || result.hasRoundSummary || !result.hasVisualReport || result.hasTechnicalLabels || result.roundAnalysisCount < 1 || result.roundAnalysisOpen || result.unnamedControls.length || result.horizontalOverflow || !result.ariaExpandedControls) {
     throw new Error(`${label}: result/detail/accessibility contract failed ${JSON.stringify(result)}`);
   }
   await capture(win, directory, 'simulator-result');

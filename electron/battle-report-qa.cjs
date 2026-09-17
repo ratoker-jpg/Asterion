@@ -476,7 +476,7 @@ async function exerciseSimulatorModalFlow(win) {
       hasInlineResult: Boolean(document.querySelector('.sim-result-v1')),
     };
   })()`);
-  if (!simulationModal.present || simulationModal.hasVisualReport || simulationModal.hasInitialSnapshot || simulationModal.hasProvenance || simulationModal.hasRoundSummary || !simulationModal.hasRoundLog || simulationModal.roundCount < 1 || simulationModal.internalHorizontalOverflow || simulationPresentation.source !== 'simulation' || simulationPresentation.hasSaveButton || simulationPresentation.hasTechnicalLabels || !simulationPresentation.hasGenericAttacker || !simulationPresentation.hasGenericDefender || simulationPresentation.hasInlineResult) {
+  if (!simulationModal.present || !simulationModal.hasVisualReport || simulationModal.hasInitialSnapshot || simulationModal.hasProvenance || simulationModal.hasRoundSummary || !simulationModal.hasRoundLog || simulationModal.roundCount < 1 || simulationModal.internalHorizontalOverflow || simulationPresentation.source !== 'simulation' || simulationPresentation.hasSaveButton || simulationPresentation.hasTechnicalLabels || !simulationPresentation.hasGenericAttacker || !simulationPresentation.hasGenericDefender || simulationPresentation.hasInlineResult) {
     throw new Error(`Simulator modal contract failed: ${JSON.stringify({ simulationModal, simulationPresentation })}`);
   }
 
@@ -542,10 +542,12 @@ async function runViewport(win, width, height) {
 
   await openBattle(win, 'battle-demo-attacker-victory');
   const modal = await modalSnapshot(win);
-  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.roundCount !== 5 || modal.analysisOpenCount !== 0 || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount < 1 || modal.technologyTooltipCount !== modal.technologyRowCount || modal.technologyTooltipImageCount < modal.technologyRowCount || !modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || modal.eventCardCount < 1 || !modal.hasBattlePoints || modal.hasVisualReport || modal.hasInitialSnapshot || modal.hasProvenance || modal.hasRoundSummary || !modal.hasRoundLog || !modal.hasComposition || !modal.hasOutcome || !modal.hasOutcomeBeforeAfter || !modal.outcomeBeforeRoundLog || !modal.internalScroll || modal.internalHorizontalOverflow || modal.technicalText || !modal.bodyLocked || !modal.stageInert) {
+  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.roundCount !== 5 || modal.analysisOpenCount !== 0 || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount < 1 || modal.technologyTooltipCount !== modal.technologyRowCount || modal.technologyTooltipImageCount < modal.technologyRowCount || !modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || modal.eventCardCount < 1 || !modal.hasBattlePoints || !modal.hasVisualReport || modal.hasInitialSnapshot || modal.hasProvenance || modal.hasRoundSummary || !modal.hasRoundLog || !modal.hasComposition || !modal.hasOutcome || !modal.hasOutcomeBeforeAfter || !modal.outcomeBeforeRoundLog || !modal.internalScroll || modal.internalHorizontalOverflow || modal.technicalText || !modal.bodyLocked || !modal.stageInert) {
     throw new Error(`Battle modal contract failed at ${label}: ${JSON.stringify(modal)}`);
   }
   await capture(win, directory, 'battle-report-modal');
+  await positionBattleScene(win, 1);
+  await capture(win, directory, 'battle-report-scene');
   await win.webContents.executeJavaScript(`(() => {
     const scroll = document.querySelector('[role="dialog"][data-qa-battle-report-modal] .battle-report-modal-scroll-v1');
     const outcome = scroll?.querySelector('[data-qa-battle-outcome]');

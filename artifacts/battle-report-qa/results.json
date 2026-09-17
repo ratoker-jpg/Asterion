@@ -31,7 +31,7 @@
         "technologyRowsFocusable": true,
         "eventCardCount": 9,
         "hasBattlePoints": true,
-        "hasVisualReport": false,
+        "hasVisualReport": true,
         "hasInitialSnapshot": false,
         "hasProvenance": false,
         "hasRoundSummary": false,
@@ -46,7 +46,7 @@
         "technicalText": false,
         "bodyLocked": true,
         "stageInert": true,
-        "focusableCount": 28
+        "focusableCount": 63
       },
       "analysis": {
         "available": true,
@@ -79,7 +79,7 @@
         "simulationModal": {
           "present": true,
           "ariaModal": "true",
-          "labelledBy": "battle-report-modal-title-simulation-mu5hzrbq-2",
+          "labelledBy": "battle-report-modal-title-simulation-mu5if39h-2",
           "analysisOpenCount": 0,
           "hasOverallLosses": true,
           "hasHeaderTable": true,
@@ -91,7 +91,7 @@
           "technologyRowsFocusable": true,
           "eventCardCount": 9,
           "hasBattlePoints": true,
-          "hasVisualReport": false,
+          "hasVisualReport": true,
           "hasInitialSnapshot": false,
           "hasProvenance": false,
           "hasRoundSummary": false,
@@ -106,7 +106,7 @@
           "technicalText": false,
           "bodyLocked": true,
           "stageInert": true,
-          "focusableCount": 27
+          "focusableCount": 37
         },
         "simulationPresentation": {
           "source": "simulation",
@@ -169,7 +169,7 @@
         "technologyRowsFocusable": true,
         "eventCardCount": 9,
         "hasBattlePoints": true,
-        "hasVisualReport": false,
+        "hasVisualReport": true,
         "hasInitialSnapshot": false,
         "hasProvenance": false,
         "hasRoundSummary": false,
@@ -184,7 +184,7 @@
         "technicalText": false,
         "bodyLocked": true,
         "stageInert": true,
-        "focusableCount": 28
+        "focusableCount": 63
       },
       "analysis": {
         "available": true,
@@ -217,7 +217,7 @@
         "simulationModal": {
           "present": true,
           "ariaModal": "true",
-          "labelledBy": "battle-report-modal-title-simulation-mu5hzt1m-2",
+          "labelledBy": "battle-report-modal-title-simulation-mu5if57j-2",
           "analysisOpenCount": 0,
           "hasOverallLosses": true,
           "hasHeaderTable": true,
@@ -229,7 +229,7 @@
           "technologyRowsFocusable": true,
           "eventCardCount": 9,
           "hasBattlePoints": true,
-          "hasVisualReport": false,
+          "hasVisualReport": true,
           "hasInitialSnapshot": false,
           "hasProvenance": false,
           "hasRoundSummary": false,
@@ -244,7 +244,7 @@
           "technicalText": false,
           "bodyLocked": true,
           "stageInert": true,
-          "focusableCount": 27
+          "focusableCount": 37
         },
         "simulationPresentation": {
           "source": "simulation",

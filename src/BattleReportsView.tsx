@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type MouseEvent,
   type SyntheticEvent,
 } from 'react';
@@ -26,6 +27,7 @@ import {
 import {
   BATTLE_MISSING_DATA,
   createBattleReportViewModel,
+  type BattleEntityKind,
   type BattleEventViewModel,
   type BattleParticipantViewModel,
   type BattleReportViewModel,
@@ -45,6 +47,8 @@ import mediumArmorArt from '../assets/source/New assets/technologies/technology.
 import piercingAttackArt from '../assets/source/New assets/technologies/technology.shared.piercing-attack.png';
 import plasmaScienceArt from '../assets/source/New assets/technologies/technology.shared.plasma-science.png';
 import shipArmorArt from '../assets/source/New assets/technologies/technology.shared.ship-armor.png';
+import battlePlanet from '../assets/source/battle-report-v2/battle-planet-transparent-v1.png';
+import battleSpaceBackground from '../assets/source/battle-report-v2/battle-space-background-v1.png';
 import aegisGeneral from '../assets/source/generated-factions-v1/factions/aegis_general.png';
 import synodGeneral from '../assets/source/generated-factions-v1/factions/synod_general.png';
 import veyraGeneral from '../assets/source/generated-factions-v1/factions/veyra_general.png';
@@ -52,6 +56,7 @@ import './battle-reports.css';
 
 type SaveNotice = { kind: 'saved' | 'error'; message: string };
 type ScrollRef = { current: HTMLElement | null };
+type BattleCelestialMode = 'planet';
 
 function formatNumber(value: number | null | undefined) {
   return value == null ? BATTLE_MISSING_DATA : new Intl.NumberFormat('ru-RU').format(value);
@@ -674,6 +679,130 @@ function RoundAnalysis({ round, scrollRef }: { round: BattleRoundViewModel; scro
   );
 }
 
+function entityKindLabel(kind: BattleEntityKind) {
+  if (kind === 'commander') return 'командирский корабль';
+  if (kind === 'defense') return 'оборона';
+  if (kind === 'ship') return 'корабль';
+  return BATTLE_MISSING_DATA;
+}
+
+function tooltipAriaLabel(stack: BattleStackViewModel) {
+  return `${stack.name}, ${entityKindLabel(stack.kind)}, количество до действий ${formatNumber(stack.countBefore)}`;
+}
+
+function sceneCount(stack: BattleStackViewModel) {
+  return stack.countBefore ?? stack.countAfter;
+}
+
+function SceneStack({ stack, side, roundIndex }: { stack: BattleStackViewModel; side: 'attacker' | 'defender'; roundIndex: number }) {
+  const tooltipId = `battle-tooltip-${roundIndex}-${side}-${stack.key.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+  const isDefense = stack.kind === 'defense';
+  const count = sceneCount(stack);
+  return (
+    <button
+      type="button"
+      className={`battle-scene-stack-v1 ${side} ${isDefense ? 'defense' : ''}`}
+      data-qa-battle-stack={stack.entityId}
+      data-qa-battle-stack-kind={stack.kind}
+      data-qa-battle-stack-count={count == null ? '' : count}
+      data-qa-battle-stack-count-after={stack.countAfter == null ? '' : stack.countAfter}
+      aria-label={tooltipAriaLabel(stack)}
+      aria-describedby={tooltipId}
+      onClick={(event) => event.preventDefault()}
+    >
+      <span className="battle-scene-sprite-v1">
+        <img src={stack.art} alt="" draggable={false} />
+        <span className="battle-scene-count-v1">{formatNumber(count)}</span>
+      </span>
+      <span id={tooltipId} className="battle-scene-tooltip-v1" role="tooltip">
+        <strong>{stack.tooltip.name}</strong>
+        <span>{stack.tooltip.type}</span>
+        {!isDefense ? <span>Уровень: <b>{formatNumber(stack.tooltip.level)}</b></span> : null}
+        <span>Атака 1 корабля: <b>{formatNumber(stack.attackPerUnit)}</b></span>
+        <span>Атака всей группы: <b>{formatNumber(stack.totalAttack)}</b></span>
+        <span>Жизнь 1 корабля: <b>{formatNumber(stack.lifePerUnit)}</b></span>
+        <span>Жизнь всей группы: <b>{formatNumber(stack.hpPool)}</b></span>
+        <span>Броня: <b>{formatNumber(stack.tooltip.armor)}</b></span>
+      </span>
+    </button>
+  );
+}
+
+function isSceneVisible(stack: BattleStackViewModel) {
+  const count = sceneCount(stack);
+  return count == null || count > 0;
+}
+
+function SceneSide({ stacks, side, roundIndex }: { stacks: BattleStackViewModel[]; side: 'attacker' | 'defender'; roundIndex: number }) {
+  const visible = stacks.filter(isSceneVisible);
+  const regular = visible.filter((stack) => stack.kind !== 'commander');
+  const commanders = visible.filter((stack) => stack.kind === 'commander');
+  return (
+    <div className={`battle-scene-side-v1 ${side}`} aria-label={side === 'attacker' ? 'Корабли атакующего' : 'Корабли защитника'}>
+      <div className="battle-scene-zone-v1">
+        {regular.map((stack) => <SceneStack key={stack.key} stack={stack} side={side} roundIndex={roundIndex} />)}
+      </div>
+      {commanders.length ? (
+        <div className="battle-scene-commander-zone-v1" aria-label="Командирские корабли">
+          {commanders.map((stack) => <SceneStack key={stack.key} stack={stack} side={side} roundIndex={roundIndex} />)}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function BattleVisualReport({ viewModel, celestialMode = 'planet' }: { viewModel: BattleReportViewModel; celestialMode?: BattleCelestialMode }) {
+  return (
+    <section className="battle-section-v1 battle-visual-report-v1" data-qa-battle-visual-report>
+      <header className="battle-section-head-v1">
+        <div><small>ХОД БОЯ</small><h3>ВИЗУАЛ БОЯ</h3></div>
+        <span>{formatNumber(viewModel.roundCount)} РАУНДОВ</span>
+      </header>
+      <div className="battle-scene-list-v1">
+        {viewModel.rounds.length ? viewModel.rounds.map((round) => {
+          const attackerStacks = round.attackerSnapshot?.stacks ?? [];
+          const defenderStacks = round.defenderSnapshot?.stacks ?? [];
+          const defenses = (round.defenderSnapshot?.defenses ?? []).filter(isSceneVisible);
+          return (
+            <article className="battle-round-report-v1" key={`${viewModel.id}-${round.index}`} data-qa-battle-visual-round={round.index}>
+              <div className="battle-round-report-head-v1"><div><strong>РАУНД {round.index}</strong><small>СОСТАВ НА НАЧАЛО РАУНДА</small></div><span>КОРАБЛИ И ОБОРОНА</span></div>
+              <div
+                className="battle-scene-v1"
+                data-qa-battle-scene={round.index}
+                data-qa-battle-cell-size="100px"
+                data-qa-battle-celestial-mode={celestialMode}
+                style={{
+                  '--battle-space-image': `url("${battleSpaceBackground}")`,
+                  '--battle-celestial-planet-image': `url("${battlePlanet}")`,
+                  '--battle-fleet-rows': round.fleetRows,
+                } as CSSProperties}
+              >
+                <div className="battle-scene-space-layer-v1" aria-hidden="true" />
+                <div className="battle-scene-fleet-field-v1">
+                  <div className="battle-scene-side-label-v1 attacker"><span>АТАКУЮЩИЙ</span><strong>{participantLabel(viewModel.attacker.participant)}</strong></div>
+                  <div className="battle-scene-side-label-v1 defender"><span>ЗАЩИТНИК</span><strong>{participantLabel(viewModel.defender.participant)}</strong></div>
+                  <div className="battle-scene-fleet-grid-v1">
+                    <SceneSide stacks={attackerStacks} side="attacker" roundIndex={round.index} />
+                    <SceneSide stacks={defenderStacks} side="defender" roundIndex={round.index} />
+                  </div>
+                </div>
+                <div className="battle-scene-celestial-layer-v2" data-qa-battle-celestial-layer>
+                  <div className="battle-scene-celestial-object-v2" data-qa-battle-celestial-object aria-hidden="true" />
+                  {defenses.length ? (
+                    <div className="battle-scene-defense-zone-v1" data-qa-battle-defense-zone aria-label="Оборона защитника">
+                      {defenses.map((stack) => <SceneStack key={stack.key} stack={stack} side="defender" roundIndex={round.index} />)}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </article>
+          );
+        }) : <p className="battle-empty-inline-v1">Визуальные данные раундов отсутствуют.</p>}
+      </div>
+    </section>
+  );
+}
+
 function roundStateLine(round: BattleRoundViewModel) {
   const attacker = round.attackerSnapshot;
   const defender = round.defenderSnapshot;
@@ -916,6 +1045,7 @@ export function BattleReportDetailBody({
       <PopulationPanel viewModel={viewModel} />
       <BattleComposition viewModel={viewModel} />
       <CommanderSnapshot viewModel={viewModel} />
+      <BattleVisualReport viewModel={viewModel} />
       <BattleRoundLog viewModel={viewModel} scrollRef={scrollRef} />
     </>
   );
