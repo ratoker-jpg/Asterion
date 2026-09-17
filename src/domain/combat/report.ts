@@ -8,9 +8,9 @@ export const ASTERION_LOCAL_PLAYER_ID = 'player-aster';
 export type BattleSide = 'attacker' | 'defender';
 export type BattleWinner = BattleSide | 'draw';
 export type BattleMissionType = 'attack' | 'raid' | 'defense' | 'arena' | 'simulation';
-export type CombatActionType = 'attack' | 'ability' | 'shield' | 'status' | 'destroyed';
-export const BATTLE_REPORT_SCHEMA_VERSION = 2;
-export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v2';
+export type CombatActionType = 'attack' | 'ability' | 'shield' | 'status' | 'destroyed' | 'special-bonus';
+export const BATTLE_REPORT_SCHEMA_VERSION = 3;
+export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v3';
 
 export type RngProvenance = {
   mode: 'seeded' | 'recorded-sequence' | 'non-replayable';
@@ -45,6 +45,9 @@ export type BattleRoundSummary = {
   destroyedUnits?: number;
   procs?: number;
   repairs?: number;
+  criticalHits?: number;
+  paralyzes?: number;
+  cancelledAttacks?: number;
   survivingPopulation?: Readonly<{ attacker: number; defender: number }>;
   survivingDefensePopulation?: number;
 };
@@ -65,6 +68,14 @@ export type BattleStackSnapshot = {
   destroyed: number;
   /** Optional historical level captured by a future combat producer. */
   level?: number;
+  /** Effective characteristic of one unit after level, science and side bonuses. */
+  attackPerUnit?: number;
+  /** Effective attack of the whole living stack. */
+  totalAttack?: number;
+  /** Effective life of one unit after level, science and side bonuses. */
+  lifePerUnit?: number;
+  /** Current pooled life of the whole stack. */
+  hpPool?: number;
   life?: number;
   lifeBefore?: number;
   lifeAfter?: number;
@@ -98,14 +109,36 @@ export type CombatEvent = {
   actorCount?: number;
   targetCount?: number;
   attackValue?: number;
+  baseAttack?: number;
+  attackPerUnit?: number;
+  totalAttack?: number;
+  lifePerUnit?: number;
+  hpPool?: number;
   rawDamage?: number;
+  rawDamageBeforeArmor?: number;
+  matchupMultiplier?: number;
+  reportedBonus?: number;
+  matchupStatus?: 'inferred' | 'not-calibrated';
+  criticalChance?: number;
+  criticalMultiplier?: number;
+  abilityChance?: number;
+  abilityDraw?: number;
   effectiveDamage?: number;
   mitigation?: number;
   weaponType?: string;
   armorType?: string;
   damage?: number;
   destroyedCount?: number;
+  repairedCount?: number;
+  repairLimit?: number;
   commanderAbilityId?: CommanderId;
+  specialBonusKind?: 'attack' | 'life' | 'armor';
+  specialBonusRate?: number;
+  specialBonusCap?: number;
+  specialBonusCapStatus?: 'known' | 'unknown';
+  specialBonusLivingCount?: number;
+  specialBonusAmount?: number;
+  specialBonusScope?: 'fleet' | 'asterion';
   provenance?: CombatProvenance;
   note?: string;
 } & ShieldTransition & ArmorTransition & LifeTransition;
@@ -117,6 +150,12 @@ export type CombatRoundSnapshot = {
   fleetPopulationAfter?: number;
   defensePopulationBefore?: number;
   defensePopulationAfter?: number;
+  modifiers?: Readonly<Record<string, number | string>>;
+};
+
+export type BattleInitialSnapshot = {
+  attacker: CombatRoundSnapshot;
+  defender: CombatRoundSnapshot;
 };
 
 export type CombatRound = {
@@ -185,6 +224,8 @@ export type BattleReport = {
   roundCount: number;
   attackerForce: BattleForceSnapshot;
   defenderForce: BattleForceSnapshot;
+  /** State before round 1; this is not a synthetic round zero. */
+  initialSnapshot?: BattleInitialSnapshot;
   rounds: CombatRound[];
   experience?: number;
   debris?: number;

@@ -10,8 +10,8 @@ import { calculateBattlePoints, type BattlePointResult } from './battle-points.t
 import { getFactionDefenseCatalog, getFactionShipCatalog } from './faction-catalog.ts';
 import { getCombatFactionId, type CombatFactionId } from './factions.ts';
 import type { CombatEntityId } from './ids.ts';
-import { calculatePopulationLoss, type BattleMissionType, type BattleSide, type BattleWinner, type CombatProvenance } from './report.ts';
-import { COMBAT_TECHNOLOGIES, normalizeCombatTechnologies, type CombatTechnologyId } from './technologies.ts';
+import { calculatePopulationLoss, type BattleMissionType, type BattleSide, type BattleWinner, type CombatActionType, type CombatProvenance, type RngProvenance } from './report.ts';
+import { COMBAT_TECHNOLOGIES, getCombatTechnologyDefinition, normalizeCombatTechnologies, type CombatTechnologyId } from './technologies.ts';
 
 export const BATTLE_MISSING_DATA = 'Нет данных' as const;
 
@@ -32,7 +32,11 @@ export type BattleTooltipViewModel = {
   type: string;
   level: number | null;
   attack: number | null;
+  attackPerUnit: number | null;
+  totalAttack: number | null;
   life: number | null;
+  lifePerUnit: number | null;
+  hpPool: number | null;
   armor: number | null;
   count: number | null;
 };
@@ -50,6 +54,10 @@ export type BattleStackViewModel = {
   countAfter: number | null;
   destroyed: number | null;
   populationPerUnit: number | null;
+  attackPerUnit: number | null;
+  totalAttack: number | null;
+  lifePerUnit: number | null;
+  hpPool: number | null;
   tooltip: BattleTooltipViewModel;
 };
 
@@ -60,19 +68,41 @@ export type BattleEventViewModel = {
   targetSide: BattleSide;
   targetEntityId: string | null;
   target: BattleStackViewModel;
-  actionType: 'attack' | 'ability' | 'shield' | 'status' | 'destroyed';
+  actionType: CombatActionType;
   actorCount: number | null;
   targetCount: number | null;
   attackValue: number | null;
+  baseAttack: number | null;
+  attackPerUnit: number | null;
+  totalAttack: number | null;
+  lifePerUnit: number | null;
+  hpPool: number | null;
   rawDamage: number | null;
+  rawDamageBeforeArmor: number | null;
+  matchupMultiplier: number | null;
+  reportedBonus: number | null;
+  matchupStatus: 'inferred' | 'not-calibrated' | null;
+  criticalChance: number | null;
+  criticalMultiplier: number | null;
+  abilityChance: number | null;
+  abilityDraw: number | null;
   effectiveDamage: number | null;
   mitigation: number | null;
   weaponType: string | null;
   armorType: string | null;
   damage: number | null;
   destroyedCount: number | null;
+  repairedCount: number | null;
+  repairLimit: number | null;
   commanderAbilityId: CommanderId | null;
   commanderAbility: string | null;
+  specialBonusKind: 'attack' | 'life' | 'armor' | null;
+  specialBonusRate: number | null;
+  specialBonusCap: number | null;
+  specialBonusCapStatus: 'known' | 'unknown' | null;
+  specialBonusLivingCount: number | null;
+  specialBonusAmount: number | null;
+  specialBonusScope: 'fleet' | 'asterion' | null;
   note: string | null;
   shieldBefore: number | null;
   shieldAfter: number | null;
@@ -86,6 +116,25 @@ export type BattleEventViewModel = {
 export type BattleRoundSnapshotViewModel = {
   stacks: BattleStackViewModel[];
   defenses: BattleStackViewModel[];
+  fleetPopulationBefore: number | null;
+  fleetPopulationAfter: number | null;
+  defensePopulationBefore: number | null;
+  defensePopulationAfter: number | null;
+  modifiers: BattleModifierViewModel[];
+};
+
+export type BattleRoundSummaryViewModel = {
+  attackerDamage: number | null;
+  defenderDamage: number | null;
+  destroyedUnits: number | null;
+  destroyedPopulation: number | null;
+  procs: number | null;
+  criticalHits: number | null;
+  paralyzes: number | null;
+  cancelledAttacks: number | null;
+  repairs: number | null;
+  survivingPopulation: { attacker: number | null; defender: number | null };
+  survivingDefensePopulation: number | null;
 };
 
 export type BattleRoundViewModel = {
@@ -94,6 +143,7 @@ export type BattleRoundViewModel = {
   analysis: string[];
   attackerSnapshot: BattleRoundSnapshotViewModel | null;
   defenderSnapshot: BattleRoundSnapshotViewModel | null;
+  summary: BattleRoundSummaryViewModel | null;
   fleetRows: number;
 };
 
@@ -120,7 +170,10 @@ export type BattleTechnologyViewModel = {
   id: CombatTechnologyId;
   name: string;
   level: number;
+  maxLevel: number;
   bonusPercent: number;
+  effect: string;
+  status: CombatProvenance['status'];
 };
 
 export type BattleSideViewModel = {
@@ -155,6 +208,15 @@ export type BattleReportViewModel = {
   attacker: BattleSideViewModel;
   defender: BattleSideViewModel;
   winner: BattleWinner;
+  schemaVersion: number | null;
+  engineVersion: string | null;
+  profileId: string | null;
+  executionMode: 'production' | 'calibration' | null;
+  technologyMode: 'independent' | 'shared' | null;
+  targetPriority: { attacker: string | null; defender: string | null };
+  rngProvenance: RngProvenance;
+  unknowns: string[];
+  initialSnapshot: { attacker: BattleRoundSnapshotViewModel; defender: BattleRoundSnapshotViewModel } | null;
   roundCount: number;
   rounds: BattleRoundViewModel[];
   experience: number | null;
@@ -167,7 +229,7 @@ export type BattleReportViewModel = {
 type RecordValue = Record<string, unknown>;
 
 const MISSION_TYPES: readonly BattleMissionType[] = ['attack', 'raid', 'defense', 'arena', 'simulation'];
-const ACTION_TYPES: readonly BattleEventViewModel['actionType'][] = ['attack', 'ability', 'shield', 'status', 'destroyed'];
+const ACTION_TYPES: readonly BattleEventViewModel['actionType'][] = ['attack', 'ability', 'shield', 'status', 'destroyed', 'special-bonus'];
 
 function asRecord(value: unknown): RecordValue {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as RecordValue : {};
@@ -317,12 +379,18 @@ function readTechnologies(value: unknown): BattleTechnologyViewModel[] {
     || ['shipDefense', 'forceAttack', 'promptDefense'].some((id) => Object.prototype.hasOwnProperty.call(record, id));
   if (!hasSnapshot) return [];
   const levels = normalizeCombatTechnologies(record);
-  return COMBAT_TECHNOLOGIES.map((technology) => ({
-    id: technology.id,
-    name: technology.name,
-    level: levels[technology.id],
-    bonusPercent: levels[technology.id] * technology.displayBonusPercentPerLevel,
-  }));
+  return COMBAT_TECHNOLOGIES.map((technology) => {
+    const definition = getCombatTechnologyDefinition(technology.id);
+    return {
+      id: technology.id,
+      name: technology.name,
+      level: levels[technology.id],
+      maxLevel: definition.maxLevel,
+      bonusPercent: levels[technology.id] * technology.displayBonusPercentPerLevel,
+      effect: definition.effect,
+      status: definition.effectStatus,
+    };
+  });
 }
 
 function readStack(
@@ -342,13 +410,21 @@ function readStack(
       : null
   );
   const catalog = resolved.entity;
+  const attackPerUnit = readNumber(record.attackPerUnit);
+  const totalAttack = readNumber(record.totalAttack);
+  const lifePerUnit = readNumber(record.lifePerUnit);
+  const hpPool = readNumber(record.hpPool) ?? readNumber(record.lifeAfter) ?? readNumber(record.life);
   const tooltip = {
     name: resolved.name,
     type: resolved.category,
     level: readCount(record.level),
-    attack: catalog?.combat.attack ?? null,
-    life: readNumber(record.life) ?? catalog?.combat.life ?? null,
-    armor: readNumber(record.armor) ?? catalog?.combat.armorStrength ?? null,
+    attack: totalAttack,
+    attackPerUnit,
+    totalAttack,
+    life: hpPool,
+    lifePerUnit,
+    hpPool,
+    armor: readNumber(record.armor),
     count: countAfter,
   } satisfies BattleTooltipViewModel;
 
@@ -365,6 +441,10 @@ function readStack(
     countAfter,
     destroyed,
     populationPerUnit: catalog?.population ?? null,
+    attackPerUnit,
+    totalAttack,
+    lifePerUnit,
+    hpPool,
     tooltip,
   };
 }
@@ -448,7 +528,7 @@ function readForce(value: unknown, participant: BattleParticipantViewModel, fact
     remainingDefenses: defense.countAfter,
     activeCommander,
     modifiers: readModifiers(record.modifiers),
-    technologies: readTechnologies(record.technologies),
+    technologies: readTechnologies(record.technologies ?? record.technologyLevels),
   };
 }
 
@@ -479,15 +559,43 @@ function readEvent(value: unknown, index: number, attackerFactionId: CombatFacti
     actorCount: readCount(record.actorCount),
     targetCount: readCount(record.targetCount),
     attackValue: readNumber(record.attackValue),
+    baseAttack: readNumber(record.baseAttack),
+    attackPerUnit: readNumber(record.attackPerUnit),
+    totalAttack: readNumber(record.totalAttack),
+    lifePerUnit: readNumber(record.lifePerUnit),
+    hpPool: readNumber(record.hpPool),
     rawDamage: readNumber(record.rawDamage),
+    rawDamageBeforeArmor: readNumber(record.rawDamageBeforeArmor),
+    matchupMultiplier: readNumber(record.matchupMultiplier),
+    reportedBonus: readNumber(record.reportedBonus),
+    matchupStatus: record.matchupStatus === 'inferred' || record.matchupStatus === 'not-calibrated' ? record.matchupStatus : null,
+    criticalChance: readNumber(record.criticalChance),
+    criticalMultiplier: readNumber(record.criticalMultiplier),
+    abilityChance: readNumber(record.abilityChance),
+    abilityDraw: readNumber(record.abilityDraw),
     effectiveDamage: readNumber(record.effectiveDamage),
     mitigation: readNumber(record.mitigation),
     weaponType: readString(record.weaponType),
     armorType: readString(record.armorType),
     damage: readNumber(record.damage),
     destroyedCount: readCount(record.destroyedCount),
+    repairedCount: readCount(record.repairedCount),
+    repairLimit: readCount(record.repairLimit),
     commanderAbilityId: safeCommanderAbilityId,
     commanderAbility: safeCommanderAbilityId ? COMMANDER_ABILITIES[safeCommanderAbilityId].ability : null,
+    specialBonusKind: record.specialBonusKind === 'attack' || record.specialBonusKind === 'life' || record.specialBonusKind === 'armor'
+      ? record.specialBonusKind
+      : null,
+    specialBonusRate: readNumber(record.specialBonusRate),
+    specialBonusCap: readNumber(record.specialBonusCap),
+    specialBonusCapStatus: record.specialBonusCapStatus === 'known' || record.specialBonusCapStatus === 'unknown'
+      ? record.specialBonusCapStatus
+      : null,
+    specialBonusLivingCount: readCount(record.specialBonusLivingCount),
+    specialBonusAmount: readNumber(record.specialBonusAmount),
+    specialBonusScope: record.specialBonusScope === 'fleet' || record.specialBonusScope === 'asterion'
+      ? record.specialBonusScope
+      : null,
     note: readString(record.note),
     shieldBefore: readNumber(record.shieldBefore),
     shieldAfter: readNumber(record.shieldAfter),
@@ -506,7 +614,9 @@ function formatAnalysisNumber(value: number) {
 }
 
 function analysisForEvent(event: BattleEventViewModel) {
-  const details = [`${event.actor.name} → ${event.target.name}`];
+  const details = [event.actionType === 'special-bonus'
+    ? `${event.actor.name} → союзные стеки`
+    : `${event.actor.name} → ${event.target.name}`];
   if (event.actionType !== 'attack') details.push(event.actionType.toUpperCase());
   if (event.attackValue != null) details.push(`атака ${formatAnalysisNumber(event.attackValue)}`);
   if (event.damage != null) details.push(`урон ${formatAnalysisNumber(event.damage)}`);
@@ -514,6 +624,12 @@ function analysisForEvent(event: BattleEventViewModel) {
   if (event.shieldBefore != null || event.shieldAfter != null) details.push(`щит ${event.shieldBefore == null ? BATTLE_MISSING_DATA : formatAnalysisNumber(event.shieldBefore)} → ${event.shieldAfter == null ? BATTLE_MISSING_DATA : formatAnalysisNumber(event.shieldAfter)}`);
   if (event.armorBefore != null || event.armorAfter != null) details.push(`броня ${event.armorBefore == null ? BATTLE_MISSING_DATA : formatAnalysisNumber(event.armorBefore)} → ${event.armorAfter == null ? BATTLE_MISSING_DATA : formatAnalysisNumber(event.armorAfter)}`);
   if (event.lifeBefore != null || event.lifeAfter != null) details.push(`жизнь ${event.lifeBefore == null ? BATTLE_MISSING_DATA : formatAnalysisNumber(event.lifeBefore)} → ${event.lifeAfter == null ? BATTLE_MISSING_DATA : formatAnalysisNumber(event.lifeAfter)}`);
+  if (event.specialBonusAmount != null) {
+    const amount = event.specialBonusKind === 'armor'
+      ? `${formatAnalysisNumber(event.specialBonusAmount)} п.п.`
+      : `${formatAnalysisNumber(event.specialBonusAmount * 100)}%`;
+    details.push(`бонус ${amount}`);
+  }
   if (event.commanderAbility) details.push(`способность: ${event.commanderAbility}`);
   if (event.note) details.push(event.note);
   return details.join(' · ');
@@ -525,13 +641,40 @@ function readSnapshot(value: unknown, factionId: CombatFactionId): BattleRoundSn
   return {
     stacks: readStacks(record.stacks, factionId, 'ship'),
     defenses: readStacks(record.defenses, factionId, 'defense').map((stack) => ({ ...stack, kind: 'defense' as const })),
+    fleetPopulationBefore: readNumber(record.fleetPopulationBefore),
+    fleetPopulationAfter: readNumber(record.fleetPopulationAfter),
+    defensePopulationBefore: readNumber(record.defensePopulationBefore),
+    defensePopulationAfter: readNumber(record.defensePopulationAfter),
+    modifiers: readModifiers(record.modifiers),
+  };
+}
+
+function readRoundSummary(value: unknown): BattleRoundSummaryViewModel | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = asRecord(value);
+  const surviving = asRecord(record.survivingPopulation);
+  return {
+    attackerDamage: readNumber(record.attackerDamage),
+    defenderDamage: readNumber(record.defenderDamage),
+    destroyedUnits: readCount(record.destroyedUnits),
+    destroyedPopulation: readNumber(record.destroyedPopulation),
+    procs: readCount(record.procs),
+    criticalHits: readCount(record.criticalHits),
+    paralyzes: readCount(record.paralyzes),
+    cancelledAttacks: readCount(record.cancelledAttacks),
+    repairs: readCount(record.repairs),
+    survivingPopulation: {
+      attacker: readNumber(surviving.attacker),
+      defender: readNumber(surviving.defender),
+    },
+    survivingDefensePopulation: readNumber(record.survivingDefensePopulation),
   };
 }
 
 function visibleRows(snapshot: BattleRoundSnapshotViewModel | null) {
   if (!snapshot) return 0;
-  const regular = snapshot.stacks.filter((stack) => stack.kind !== 'commander' && (stack.countAfter ?? 0) > 0).length;
-  const commanders = snapshot.stacks.filter((stack) => stack.kind === 'commander' && (stack.countAfter ?? 0) > 0).length;
+  const regular = snapshot.stacks.filter((stack) => stack.kind !== 'commander' && (stack.countBefore ?? stack.countAfter ?? 0) > 0).length;
+  const commanders = snapshot.stacks.filter((stack) => stack.kind === 'commander' && (stack.countBefore ?? stack.countAfter ?? 0) > 0).length;
   return Math.ceil(regular / 5) + (commanders ? 1 : 0);
 }
 
@@ -546,6 +689,7 @@ function readRound(value: unknown, index: number, attackerFactionId: CombatFacti
     analysis: events.map(analysisForEvent),
     attackerSnapshot,
     defenderSnapshot,
+    summary: readRoundSummary(record.summary),
     fleetRows: Math.max(1, visibleRows(attackerSnapshot), visibleRows(defenderSnapshot)),
   };
 }
@@ -564,8 +708,27 @@ function readResources(value: unknown) {
     }, []);
 }
 
+function readRngProvenance(value: unknown): RngProvenance {
+  const record = asRecord(value);
+  const mode = record.mode === 'seeded' || record.mode === 'recorded-sequence' || record.mode === 'non-replayable'
+    ? record.mode
+    : 'non-replayable';
+  return {
+    mode,
+    ...(readString(record.algorithmVersion) ? { algorithmVersion: readString(record.algorithmVersion)! } : {}),
+    ...(readString(record.seed) ? { seed: readString(record.seed)! } : {}),
+    ...(readCount(record.drawCount) != null ? { drawCount: readCount(record.drawCount)! } : {}),
+    note: readString(record.note) ?? 'Для этого отчёта нет полной информации о воспроизведении RNG.',
+  };
+}
+
+function readUnknowns(value: unknown) {
+  return asArray(value).filter((item): item is string => typeof item === 'string' && Boolean(item.trim())).map((item) => item.trim());
+}
+
 export function createBattleReportViewModel(input: unknown): BattleReportViewModel {
   const record = asRecord(input);
+  const metadata = asRecord(record.metadata);
   const attacker = readParticipant(record.attacker, 'attacker');
   const defender = readParticipant(record.defender, 'defender');
   const attackerFactionId = getCombatFactionId(attacker.race);
@@ -576,6 +739,19 @@ export function createBattleReportViewModel(input: unknown): BattleReportViewMod
   const attackerViewModel = readForce(record.attackerForce, attacker, attackerFactionId);
   const defenderViewModel = readForce(record.defenderForce, defender, defenderFactionId);
   const winner = readWinner(record.winner);
+  const initialRecord = asRecord(record.initialSnapshot);
+  const initialAttacker = readSnapshot(initialRecord.attacker, attackerFactionId);
+  const initialDefender = readSnapshot(initialRecord.defender, defenderFactionId);
+  const initialSnapshot = initialAttacker && initialDefender
+    ? { attacker: initialAttacker, defender: initialDefender }
+    : null;
+  const executionMode = metadata.executionMode === 'production' || metadata.executionMode === 'calibration'
+    ? metadata.executionMode
+    : null;
+  const technologyMode = metadata.technologyMode === 'independent' || metadata.technologyMode === 'shared'
+    ? metadata.technologyMode
+    : null;
+  const targetPriorityRecord = asRecord(metadata.targetPriority);
 
   return {
     id: readString(record.id) ?? 'invalid-battle-report',
@@ -584,6 +760,20 @@ export function createBattleReportViewModel(input: unknown): BattleReportViewMod
     attacker: attackerViewModel,
     defender: defenderViewModel,
     winner,
+    schemaVersion: readNumber(record.schemaVersion),
+    engineVersion: readString(record.engineVersion) ?? readString(metadata.engineVersion),
+    profileId: readString(metadata.profileId),
+    executionMode,
+    technologyMode,
+    targetPriority: {
+      attacker: readString(targetPriorityRecord.attacker),
+      defender: readString(targetPriorityRecord.defender),
+    },
+    rngProvenance: readRngProvenance(metadata.rngProvenance),
+    unknowns: readUnknowns(metadata.unknowns).length
+      ? readUnknowns(metadata.unknowns)
+      : ['Полная provenance этого отчёта не зафиксирована; новые значения не восстанавливаются выдуманными числами.'],
+    initialSnapshot,
     roundCount: readCount(record.roundCount) ?? rounds.length,
     rounds,
     experience: readNumber(record.experience),

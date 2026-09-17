@@ -58,7 +58,7 @@ function input(overrides: Partial<CombatInput> = {}): CombatInput {
     scenarioId: 'scenario-test',
     timestamp: '2026-09-05T09:00:00.000Z',
     attacker: { participant: attackerParticipant, ships: [{ entityId: 'scout', count: 1 }], commanders: [] },
-    defender: { participant: defenderParticipant, ships: [{ entityId: 'spy-probe', count: 1 }], commanders: [], defenses: [] },
+    defender: { participant: defenderParticipant, ships: [{ entityId: 'scout', count: 1 }], commanders: [], defenses: [] },
     maxRounds: 8,
     attackerPriority: [...priority.attack],
     defenderPriority: [...priority.defense],
@@ -144,7 +144,7 @@ test('positive raw damage never rounds to zero', () => {
 test('partial HP on last unit carries between rounds', () => {
   const report = resolve(input({
     attacker: { participant: attackerParticipant, ships: [{ entityId: 'scout', count: 1 }], commanders: [] },
-    defender: { participant: defenderParticipant, ships: [{ entityId: 'transporter', count: 1 }], commanders: [], defenses: [] },
+    defender: { participant: defenderParticipant, ships: [{ entityId: 'scout', count: 1 }], commanders: [], defenses: [] },
     maxRounds: 5,
   }));
   const round1 = report.rounds[0];
@@ -191,8 +191,8 @@ test('target selection remains deterministic at lexical fallback boundary', () =
 
 test('sequential resolution stops the defender after attacker destroys it', () => {
   const report = resolve(input({
-    attacker: { participant: attackerParticipant, ships: [{ entityId: 'spy-probe', count: 1 }], commanders: [] },
-    defender: { participant: defenderParticipant, ships: [{ entityId: 'spy-probe', count: 1 }], commanders: [], defenses: [] },
+    attacker: { participant: attackerParticipant, ships: [{ entityId: 'death-star', count: 1 }], commanders: [] },
+    defender: { participant: defenderParticipant, ships: [{ entityId: 'scout', count: 1 }], commanders: [], defenses: [] },
     maxRounds: 5,
   }));
   assert.equal(report.rounds[0].events.length, 1);
@@ -204,22 +204,23 @@ test('sequential resolution retargets after a target is destroyed in same round'
   const report = resolve(input({
     attacker: {
       participant: attackerParticipant,
-      ships: [{ entityId: 'transporter', count: 1 }, { entityId: 'scout', count: 1 }],
+      ships: [{ entityId: 'destroyer', count: 1 }, { entityId: 'death-star', count: 1 }],
       commanders: [],
     },
     defender: {
       participant: defenderParticipant,
-      ships: [{ entityId: 'spy-probe', count: 2 }, { entityId: 'solar-satellite', count: 1 }],
+      ships: [{ entityId: 'scout', count: 2 }, { entityId: 'defender', count: 1 }],
       commanders: [],
       defenses: [],
     },
     maxRounds: 5,
+    attackerTargetPriority: 'catalog',
   }));
   const attackerEvents = report.rounds[0].events.filter((event) => event.actorSide === 'attacker');
-  assert.equal(attackerEvents[0].targetEntityId, 'spy-probe');
-  assert.equal(attackerEvents[1].targetEntityId, 'solar-satellite');
+  assert.equal(attackerEvents[0].targetEntityId, 'scout');
+  assert.equal(attackerEvents[1].targetEntityId, 'defender');
   assert.ok((attackerEvents[1].damage ?? 0) > 0);
-  assert.equal(report.rounds[0].defenderSnapshot?.stacks.find((stack) => stack.entityId === 'solar-satellite')?.countAfter, 1);
+  assert.equal(report.rounds[0].defenderSnapshot?.stacks.find((stack) => stack.entityId === 'defender')?.countAfter, 0);
 });
 
 test('attacker victory is detected', () => {
@@ -228,24 +229,24 @@ test('attacker victory is detected', () => {
 
 test('defender victory is detected', () => {
   const report = resolve(input({
-    attacker: { participant: attackerParticipant, ships: [{ entityId: 'spy-probe', count: 1 }], commanders: [] },
-    defender: { participant: defenderParticipant, ships: [{ entityId: 'scout', count: 1 }], commanders: [], defenses: [] },
+    attacker: { participant: attackerParticipant, ships: [{ entityId: 'scout', count: 1 }], commanders: [] },
+    defender: { participant: defenderParticipant, ships: [{ entityId: 'death-star', count: 1 }], commanders: [], defenses: [] },
   }));
   assert.equal(report.winner, 'defender');
 });
 
 test('attacker priority resolves before defender in a baseline exchange', () => {
   const report = resolve(input({
-    attacker: { participant: attackerParticipant, ships: [{ entityId: 'spy-probe', count: 1 }], commanders: [] },
-    defender: { participant: defenderParticipant, ships: [{ entityId: 'spy-probe', count: 1 }], commanders: [], defenses: [] },
+    attacker: { participant: attackerParticipant, ships: [{ entityId: 'death-star', count: 1 }], commanders: [] },
+    defender: { participant: defenderParticipant, ships: [{ entityId: 'scout', count: 1 }], commanders: [], defenses: [] },
   }));
   assert.equal(report.winner, 'attacker');
 });
 
 test('living sides at max round limit produce draw and never exceed limit', () => {
   const report = resolve(input({
-    attacker: { participant: attackerParticipant, ships: [{ entityId: 'solar-satellite', count: 1 }], commanders: [] },
-    defender: { participant: defenderParticipant, ships: [{ entityId: 'solar-satellite', count: 1 }], commanders: [], defenses: [] },
+    attacker: { participant: attackerParticipant, ships: [], commanders: [{ entityId: 'corsair', count: 1 }] },
+    defender: { participant: defenderParticipant, ships: [], commanders: [{ entityId: 'corsair', count: 1 }], defenses: [] },
     maxRounds: 5,
   }));
   assert.equal(report.winner, 'draw');
@@ -257,7 +258,7 @@ test('population before and after uses canonical catalog population and survivor
   const report = resolve(input());
   assert.equal(report.attackerForce.populationBefore, 2);
   assert.equal(report.attackerForce.populationAfter, 2);
-  assert.equal(report.defenderForce.populationBefore, 1);
+  assert.equal(report.defenderForce.populationBefore, 2);
   assert.equal(report.defenderForce.populationAfter, 0);
 });
 
@@ -296,7 +297,7 @@ test('commander selection is asymmetric and commander stats are reported', () =>
   assert.notDeepEqual(stripCommanderSelection(corsairFirst), stripCommanderSelection(hunterFirst));
 });
 
-test('all commander abilities remain selection-only in the v2 resolver', () => {
+test('all commander selections are reported and active combat effects are not hidden', () => {
   const priority = createDefaultCombatPriority();
   COMMANDER_IDS.forEach((commanderId: CommanderId) => {
     const report = resolve(input({
@@ -305,15 +306,18 @@ test('all commander abilities remain selection-only in the v2 resolver', () => {
       attackerPriority: [commanderId, ...priority.attack.filter((id) => id !== commanderId)],
     }), `report-${commanderId}`);
     assert.equal(report.attackerForce.activeCommanderId, commanderId);
-    assert.equal(report.attackerForce.modifiers, undefined);
+    assert.equal(report.attackerForce.modifiers?.commanderId, commanderId);
   });
 });
 
 test('generated report uses existing BattleReport contract without fake optional outcomes', () => {
   const report = resolve(input());
   assert.equal(report.missionType, 'simulation');
+  assert.equal(report.schemaVersion, 3);
+  assert.equal(report.engineVersion, 'asterion-combat-engine-v3');
+  assert.ok(report.initialSnapshot);
   assert.equal(report.metadata?.source, 'combat-resolver');
-  assert.match(report.metadata?.note ?? '', /asterion-combat-engine-v2/);
+  assert.match(report.metadata?.note ?? '', /asterion-combat-engine-v3/);
   assert.equal(report.experience, undefined);
   assert.equal(report.debris, undefined);
   assert.equal(report.resources, undefined);
@@ -405,16 +409,16 @@ test('simulation result is not added to Battles automatically', () => {
   assert.equal(history.reports.some((item) => item.id === report.id), false);
 });
 
-test('simulation reports stay out of Battles even when a caller tries to save them', () => {
+test('simulation reports can be explicitly saved to Battles and survive reload', () => {
   const storage = new MemoryStorage();
   const report = resolve(input(), 'simulation-explicit-save');
   const saved = addBattleReportSaved(createDefaultBattleHistory(), report);
-  assert.equal(saved.reports.some((item) => item.id === report.id), false);
-  assert.equal(saved.savedReportIds.includes(report.id), false);
+  assert.equal(saved.reports.some((item) => item.id === report.id), true);
+  assert.equal(saved.savedReportIds.includes(report.id), true);
   persistBattleHistory(saved, storage);
   const reloaded = readBattleHistory(storage);
-  assert.equal(reloaded.reports.some((item) => item.id === report.id), false);
-  assert.equal(reloaded.savedReportIds.includes(report.id), false);
+  assert.equal(reloaded.reports.some((item) => item.id === report.id), true);
+  assert.equal(reloaded.savedReportIds.includes(report.id), true);
 });
 
 test('generated report stores the technologies used for each side as historical snapshots', () => {
@@ -429,12 +433,12 @@ test('generated report stores the technologies used for each side as historical 
   assert.notEqual(report.attackerForce.technologies, report.defenderForce.technologies);
 });
 
-test('attempting to save the same simulation report twice keeps it out of Battles', () => {
+test('saving the same simulation report twice keeps one saved copy', () => {
   const report = resolve(input(), 'simulation-no-duplicate');
   const once = addBattleReportSaved(createDefaultBattleHistory(), report);
   const twice = addBattleReportSaved(once, report);
-  assert.equal(twice.reports.filter((item) => item.id === report.id).length, 0);
-  assert.equal(twice.savedReportIds.includes(report.id), false);
+  assert.equal(twice.reports.filter((item) => item.id === report.id).length, 1);
+  assert.equal(twice.savedReportIds.includes(report.id), true);
 });
 
 test('saving simulation does not mutate demo reports', () => {

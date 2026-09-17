@@ -1,22 +1,24 @@
 import { COMBAT_CATALOG, getCombatEntity } from './catalog.ts';
 import { getFactionCombatEntity } from './faction-catalog.ts';
-import type { CommanderId } from './commanders.ts';
+import { getCommanderCombatEffect, type CommanderId } from './commanders.ts';
 import {
   COMBAT_PROFILE_ID,
   COMBAT_RULE_PROVENANCE,
+  COMBAT_SHIP_LEVEL_COEFFICIENTS,
   DEFAULT_COMBAT_TARGET_PRIORITY,
   type CombatExecutionMode,
   type CombatTargetPriority,
   type CombatTechnologyMode,
 } from './config.ts';
 import type { CombatEntityId } from './ids.ts';
-import { selectActiveCommander } from './priority.ts';
+import type { CombatEntityKind, CombatOrdinaryClass, CombatSpecialBonus } from './types.ts';
 import {
   BATTLE_REPORT_SCHEMA_VERSION,
   COMBAT_ENGINE_VERSION,
 } from './report.ts';
 import type {
   BattleForceSnapshot,
+  BattleInitialSnapshot,
   BattleMissionType,
   BattleReport,
   BattleRoundSummary,
@@ -43,6 +45,7 @@ import {
   getCombatTechnologyDefinition,
   getTechnologyArmorPercent,
   getTechnologyAttackMultiplier,
+  getTechnologyCriticalChance,
   getTechnologyLifeMultiplier,
   normalizeCombatTechnologies,
   type CombatTechnologyLevels,
@@ -59,17 +62,24 @@ type RuntimeBucket = 'stacks' | 'defenses';
 type RuntimeStack = {
   side: BattleSide;
   bucket: RuntimeBucket;
+  kind: CombatEntityKind;
   entityId: CombatEntityId;
   level: number;
   startingCount: number;
   count: number;
   hpPool: number;
+  baseLifePerUnit: number;
   lifePerUnit: number;
+  baseAttackPerUnit: number;
   attackPerUnit: number;
+  baseArmorPercent: number;
   armorPercent: number;
+  criticalChance: number;
   populationPerUnit: number;
   weaponType: string;
   armorType: string;
+  ordinaryClass?: CombatOrdinaryClass;
+  specialBonus?: CombatSpecialBonus;
 };
 
 export type TargetSelectionCandidate = {
@@ -133,6 +143,7 @@ export function createNonReplayableCombatRng(): CombatRng {
     },
     provenance: () => ({
       mode: 'non-replayable',
+      algorithmVersion: 'system-random-v1',
       drawCount,
       note: 'Seed не задан. В текущем baseline случайные механики не активны.',
     }),
@@ -140,6 +151,31 @@ export function createNonReplayableCombatRng(): CombatRng {
 }
 
 const CATALOG_ORDER = new Map<CombatEntityId, number>(COMBAT_CATALOG.map((entity, index) => [entity.id, index]));
+
+const MATCHUP_MULTIPLIERS: Readonly<Record<CombatOrdinaryClass, Readonly<Record<CombatOrdinaryClass, number>>>> = {
+  scout: { scout: 0.70, cruiser: 1.00, defender: 1.70, battleship: 1.70, destroyer: 1.00, bomber: 1.00 },
+  cruiser: { scout: 1.70, cruiser: 0.70, defender: 1.70, battleship: 0.70, destroyer: 1.00, bomber: 1.00 },
+  defender: { scout: 0.70, cruiser: 1.00, defender: 0.70, battleship: 1.00, destroyer: 1.00, bomber: 1.70 },
+  battleship: { scout: 1.00, cruiser: 1.70, defender: 1.70, battleship: 0.70, destroyer: 0.70, bomber: 1.00 },
+  destroyer: { scout: 1.00, cruiser: 1.00, defender: 1.00, battleship: 1.70, destroyer: 0.70, bomber: 0.70 },
+  bomber: { scout: 1.00, cruiser: 0.70, defender: 1.00, battleship: 1.00, destroyer: 1.70, bomber: 0.70 },
+};
+
+function levelCoefficient(entity: ReturnType<typeof getCombatEntity>) {
+  return entity.ordinaryClass ? COMBAT_SHIP_LEVEL_COEFFICIENTS[entity.ordinaryClass] : 0;
+}
+
+function matchupFor(actor: RuntimeStack, target: RuntimeStack) {
+  const actorClass = actor.ordinaryClass;
+  const targetClass = target.ordinaryClass;
+  if (actorClass && targetClass) {
+    return { multiplier: MATCHUP_MULTIPLIERS[actorClass][targetClass], status: 'inferred' as const };
+  }
+  return {
+    multiplier: 1,
+    status: 'not-calibrated' as const,
+  };
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -196,29 +232,43 @@ function runtimeFromInput(
 ): RuntimeStack[] {
   return stacks.map((stack) => {
     const entity = getFactionCombatEntity(factionId, stack.entityId);
-    const lifePerUnit = Math.max(1, entity.combat.life * getTechnologyLifeMultiplier(entity, technologies, executionMode));
-    const attackPerUnit = Math.max(0, entity.combat.attack * getTechnologyAttackMultiplier(entity, technologies, executionMode));
-    const armorPercent = clamp(getTechnologyArmorPercent(entity, technologies, executionMode), 0, 80);
+    const level = stack.level ?? 0;
+    const coefficient = levelCoefficient(entity);
+    const levelAndTechnologyAttack = 1 + coefficient * level + (getTechnologyAttackMultiplier(entity, technologies, executionMode) - 1);
+    const levelAndTechnologyLife = 1 + coefficient * level + (getTechnologyLifeMultiplier(entity, technologies, executionMode) - 1);
+    const baseAttackPerUnit = Math.max(0, Math.floor(entity.combat.attack * levelAndTechnologyAttack));
+    const baseLifePerUnit = Math.max(1, Math.floor(entity.combat.life * levelAndTechnologyLife));
+    const baseArmorPercent = clamp(getTechnologyArmorPercent(entity, technologies, executionMode), 0, 80);
     return {
       side,
       bucket,
+      kind: entity.kind,
       entityId: stack.entityId,
-      level: stack.level ?? 0,
+      level,
       startingCount: stack.count,
       count: stack.count,
-      hpPool: stack.count * lifePerUnit,
-      lifePerUnit,
-      attackPerUnit,
-      armorPercent,
+      hpPool: stack.count * baseLifePerUnit,
+      baseLifePerUnit,
+      lifePerUnit: baseLifePerUnit,
+      baseAttackPerUnit,
+      attackPerUnit: baseAttackPerUnit,
+      baseArmorPercent,
+      armorPercent: baseArmorPercent,
+      criticalChance: getTechnologyCriticalChance(technologies),
       populationPerUnit: entity.population,
       weaponType: entity.combat.weaponType,
       armorType: entity.combat.armorType,
+      ...(entity.ordinaryClass ? { ordinaryClass: entity.ordinaryClass } : {}),
+      ...(entity.specialBonus ? { specialBonus: entity.specialBonus } : {}),
     };
   });
 }
 
 function sortRuntime(stacks: readonly RuntimeStack[]) {
   return [...stacks].sort((left, right) => {
+    const kindOrder = { ship: 0, commander: 1, defense: 2 } as const;
+    const kindDelta = kindOrder[left.kind] - kindOrder[right.kind];
+    if (kindDelta !== 0) return kindDelta;
     const orderDelta = catalogOrder(left.entityId) - catalogOrder(right.entityId);
     if (orderDelta !== 0) return orderDelta;
     return left.entityId.localeCompare(right.entityId);
@@ -247,10 +297,169 @@ function runtimeCountFromHp(stack: RuntimeStack) {
   return stack.hpPool <= 0 ? 0 : Math.ceil(stack.hpPool / stack.lifePerUnit);
 }
 
+type RoundSideModifiers = {
+  commanderAttackMultiplier: number;
+  commanderLifeMultiplier: number;
+  commanderArmorPenalty: number;
+  criticalBonus: number;
+  specialBonuses: ReadonlyMap<CombatEntityId, { attack: number; life: number; armor: number }>;
+  specialBonusDetails: readonly SpecialBonusDetail[];
+  snapshot: Readonly<Record<string, number | string>>;
+};
+
+type SpecialBonusDetail = {
+  entityId: CombatEntityId;
+  actorSide: BattleSide;
+  livingCount: number;
+  kind: CombatSpecialBonus['kind'];
+  rate: number;
+  cap?: number;
+  capStatus: 'known' | 'unknown';
+  amount: number;
+  scope: 'fleet' | 'asterion';
+  status: CombatSpecialBonus['status'];
+  source?: string;
+  note?: string;
+};
+
+function commanderFor(stacks: readonly RuntimeStack[], commanderId: CommanderId | null) {
+  return commanderId
+    ? stacks.find((stack) => stack.entityId === commanderId && stack.kind === 'commander' && stack.count > 0)
+    : undefined;
+}
+
+function calculateRoundSideModifiers(stacks: readonly RuntimeStack[], commanderId: CommanderId | null): RoundSideModifiers {
+  const commander = commanderFor(stacks, commanderId);
+  const commanderEffect = getCommanderCombatEffect(commanderId);
+  const commanderLevel = commander?.level ?? 0;
+  const commanderRate = commanderEffect ? commanderEffect.ratePerLevel * commanderLevel : 0;
+  const specialBonuses = new Map<CombatEntityId, { attack: number; life: number; armor: number }>();
+  const specialBonusDetails: SpecialBonusDetail[] = [];
+  const snapshot: Record<string, number | string> = {};
+
+  if (commanderId) {
+    snapshot.commanderId = commanderId;
+    snapshot.commanderLevel = commanderLevel;
+    snapshot.commanderAbility = commanderEffect?.kind ?? 'not-calibrated';
+    snapshot.commanderRate = commanderRate;
+  }
+
+  for (const donor of stacks) {
+    if (!donor.specialBonus || donor.count <= 0) continue;
+    const amount = Math.min(donor.specialBonus.cap ?? Number.POSITIVE_INFINITY, donor.specialBonus.rate * donor.count);
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    specialBonusDetails.push({
+      entityId: donor.entityId,
+      actorSide: donor.side,
+      livingCount: donor.count,
+      kind: donor.specialBonus.kind,
+      rate: donor.specialBonus.rate,
+      ...(donor.specialBonus.cap !== undefined ? { cap: donor.specialBonus.cap } : {}),
+      capStatus: donor.specialBonus.capStatus ?? (donor.specialBonus.cap === undefined ? 'unknown' : 'known'),
+      amount,
+      scope: donor.specialBonus.scope ?? 'fleet',
+      status: donor.specialBonus.status,
+      ...(donor.specialBonus.source ? { source: donor.specialBonus.source } : {}),
+      ...(donor.specialBonus.note ? { note: donor.specialBonus.note } : {}),
+    });
+    snapshot[`specialBonus:${donor.entityId}`] = amount;
+    for (const recipient of stacks) {
+      // The source stack is a donor, not a recipient. This matters for the
+      // extracted special-unit rules: a Goliath/Defender/Star Armada does not
+      // amplify itself, while every other living allied stack receives the
+      // frozen round-start contribution.
+      if (recipient.entityId === donor.entityId || recipient.count <= 0) continue;
+      const current = specialBonuses.get(recipient.entityId) ?? { attack: 0, life: 0, armor: 0 };
+      if (donor.specialBonus.kind === 'attack') current.attack += amount;
+      if (donor.specialBonus.kind === 'life') current.life += amount;
+      if (donor.specialBonus.kind === 'armor') current.armor += amount * 100;
+      specialBonuses.set(recipient.entityId, current);
+    }
+  }
+
+  return {
+    commanderAttackMultiplier: commanderEffect?.kind === 'attack-bonus' ? 1 + commanderRate : 1,
+    commanderLifeMultiplier: commanderEffect?.kind === 'life-bonus' ? 1 + commanderRate : 1,
+    commanderArmorPenalty: commanderEffect?.kind === 'armor-debuff' ? commanderRate * 100 : 0,
+    criticalBonus: commanderEffect?.kind === 'critical' ? commanderRate : 0,
+    specialBonuses,
+    specialBonusDetails,
+    snapshot,
+  };
+}
+
+function applyRoundModifiers(
+  attacker: readonly RuntimeStack[],
+  defender: readonly RuntimeStack[],
+  attackerCommanderId: CommanderId | null,
+  defenderCommanderId: CommanderId | null,
+) {
+  const attackerModifiers = calculateRoundSideModifiers(attacker, attackerCommanderId);
+  const defenderModifiers = calculateRoundSideModifiers(defender, defenderCommanderId);
+
+  const apply = (own: readonly RuntimeStack[], ownModifiers: RoundSideModifiers, enemyModifiers: RoundSideModifiers) => {
+    for (const stack of own) {
+      const special = ownModifiers.specialBonuses.get(stack.entityId) ?? { attack: 0, life: 0, armor: 0 };
+      const previousLife = stack.lifePerUnit;
+      const previousCount = stack.count;
+      const previousLostHp = Math.max(0, previousCount * previousLife - stack.hpPool);
+      stack.attackPerUnit = Math.max(0, Math.floor(stack.baseAttackPerUnit * (1 + special.attack) * ownModifiers.commanderAttackMultiplier));
+      stack.lifePerUnit = Math.max(1, Math.floor(stack.baseLifePerUnit * (1 + special.life) * ownModifiers.commanderLifeMultiplier));
+      stack.armorPercent = clamp(stack.baseArmorPercent + special.armor - enemyModifiers.commanderArmorPenalty, 0, 80);
+      if (previousLife !== stack.lifePerUnit && previousCount > 0) {
+        stack.hpPool = Math.max(0, previousCount * stack.lifePerUnit - previousLostHp);
+        stack.count = runtimeCountFromHp(stack);
+      }
+    }
+  };
+
+  apply(attacker, attackerModifiers, defenderModifiers);
+  apply(defender, defenderModifiers, attackerModifiers);
+  return { attacker: attackerModifiers, defender: defenderModifiers };
+}
+
+export type CombatStackPreview = {
+  attackPerUnit: number;
+  totalAttack: number;
+  lifePerUnit: number;
+  hpPool: number;
+  armorPercent: number;
+};
+
+/**
+ * Shared preview for the simulator. It intentionally uses the same runtime
+ * construction and round-start modifiers as resolveCombat, so the UI never
+ * has to maintain a second approximation of level/science/commander math.
+ */
+export function calculateCombatStackPreview(
+  stack: CombatStackInput,
+  factionId: CombatFactionId,
+  technologies: CombatTechnologyLevels,
+  executionMode: CombatExecutionMode = 'production',
+  alliedStacks: readonly CombatStackInput[] = [stack],
+  activeCommanderId: CommanderId | null = null,
+): CombatStackPreview | null {
+  if (getFactionCombatEntity(factionId, stack.entityId).combatEligible === false) return null;
+  const own = runtimeFromInput('attacker', 'stacks', alliedStacks, technologies, executionMode, factionId);
+  if (!own.some((candidate) => candidate.entityId === stack.entityId)) return null;
+  const modifiers = applyRoundModifiers(own, [], activeCommanderId, null);
+  const runtime = own.find((candidate) => candidate.entityId === stack.entityId);
+  if (!runtime) return null;
+  void modifiers;
+  return {
+    attackPerUnit: runtime.attackPerUnit,
+    totalAttack: runtime.count * runtime.attackPerUnit,
+    lifePerUnit: runtime.lifePerUnit,
+    hpPool: runtime.hpPool,
+    armorPercent: runtime.armorPercent,
+  };
+}
+
 function createRoundSnapshot(
   stacks: readonly RuntimeStack[],
   roundStartCounts: ReadonlyMap<CombatEntityId, number>,
   roundStartHp: ReadonlyMap<CombatEntityId, number>,
+  modifiers?: Readonly<Record<string, number | string>>,
 ): CombatRoundSnapshot {
   const build = (bucket: RuntimeBucket): BattleStackSnapshot[] => sortRuntime(stacks)
     .filter((stack) => stack.bucket === bucket)
@@ -265,7 +474,14 @@ function createRoundSnapshot(
         level: stack.level,
         lifeBefore,
         lifeAfter: stack.hpPool,
-        life: stack.hpPool,
+        // Round snapshots describe the state before actions. The explicit
+        // lifeAfter/countAfter fields carry the result of this round, while
+        // the legacy aliases stay aligned with the visible before-state.
+        life: lifeBefore,
+        lifePerUnit: stack.lifePerUnit,
+        hpPool: lifeBefore,
+        attackPerUnit: stack.attackPerUnit,
+        totalAttack: countBefore * stack.attackPerUnit,
         armor: stack.armorPercent,
       };
     });
@@ -276,6 +492,7 @@ function createRoundSnapshot(
     stacks: regularStacks,
     fleetPopulationBefore: bucketPopulation(stacks, 'stacks', roundStartCounts),
     fleetPopulationAfter: bucketPopulation(stacks, 'stacks'),
+    ...(modifiers ? { modifiers } : {}),
     ...(defenses.length
       ? {
           defenses,
@@ -292,6 +509,7 @@ function createForceSnapshot(
   activeCommanderLevel: number | undefined,
   technologyLevels: CombatTechnologyLevels,
   technologySnapshots: BattleTechnologySnapshot[],
+  modifiers?: Readonly<Record<string, number | string>>,
 ): BattleForceSnapshot {
   const build = (bucket: RuntimeBucket): BattleStackSnapshot[] => sortRuntime(stacks)
     .filter((stack) => stack.bucket === bucket)
@@ -303,6 +521,10 @@ function createForceSnapshot(
       level: stack.level,
       life: stack.hpPool,
       lifeAfter: stack.hpPool,
+      lifePerUnit: stack.lifePerUnit,
+      hpPool: stack.hpPool,
+      attackPerUnit: stack.attackPerUnit,
+      totalAttack: stack.count * stack.attackPerUnit,
       armor: stack.armorPercent,
     }));
 
@@ -330,6 +552,7 @@ function createForceSnapshot(
     technologyLevels,
     technologies: technologyLevels,
     technologySnapshots,
+    ...(modifiers ? { modifiers } : {}),
   };
 }
 
@@ -372,6 +595,11 @@ function createRoundSummary(
   let defenderDamage = 0;
   let destroyedUnits = 0;
   let destroyedPopulation = 0;
+  let procs = 0;
+  let repairs = 0;
+  let criticalHits = 0;
+  let paralyzes = 0;
+  let cancelledAttacks = 0;
 
   events.forEach((event) => {
     const damage = event.damage ?? 0;
@@ -384,6 +612,11 @@ function createRoundSummary(
       const targetStacks = event.targetSide === 'attacker' ? attacker : defender;
       destroyedPopulation += destroyed * (targetStacks.find((stack) => stack.entityId === event.targetEntityId)?.populationPerUnit ?? 0);
     }
+    if (event.actionType === 'ability') procs += 1;
+    repairs += event.repairedCount ?? 0;
+    if (event.criticalMultiplier && event.criticalMultiplier > 1) criticalHits += 1;
+    if (event.commanderAbilityId === 'scorpion') paralyzes += event.actionType === 'ability' ? 1 : 0;
+    if (event.commanderAbilityId === 'phantom') cancelledAttacks += event.actionType === 'ability' ? 1 : 0;
   });
 
   return {
@@ -392,6 +625,11 @@ function createRoundSummary(
     damageByWeapon,
     destroyedUnits,
     destroyedPopulation,
+    procs,
+    repairs,
+    criticalHits,
+    paralyzes,
+    cancelledAttacks,
     survivingPopulation: { attacker: sidePopulation(attacker), defender: sidePopulation(defender) },
     ...(defender.some((stack) => stack.bucket === 'defenses')
       ? { survivingDefensePopulation: bucketPopulation(defender, 'defenses') }
@@ -399,10 +637,93 @@ function createRoundSummary(
   };
 }
 
-function createAttackEvent(sequence: number, actor: RuntimeStack, target: RuntimeStack): CombatEvent {
+function createAbilityEvent(
+  sequence: number,
+  actor: RuntimeStack,
+  commanderId: CommanderId,
+  chance: number,
+  draw: number,
+  target?: RuntimeStack,
+  note?: string,
+): CombatEvent {
+  return {
+    sequence,
+    actorSide: actor.side,
+    actorEntityId: actor.entityId,
+    ...(target ? {
+      targetSide: target.side,
+      targetEntityId: target.entityId,
+      targetCount: target.count,
+    } : {}),
+    actionType: 'ability',
+    actorCount: actor.count,
+    commanderAbilityId: commanderId,
+    abilityChance: chance,
+    abilityDraw: draw,
+    provenance: {
+      status: commanderId === 'phantom' || commanderId === 'reanimator' ? 'inferred' : 'confirmed',
+      source: 'ASTERION_FULL_BATTLE_IMPLEMENTATION_PROMPT.md §4.5',
+      confidence: 'high',
+    },
+    note,
+  };
+}
+
+function createSpecialBonusEvent(sequence: number, detail: SpecialBonusDetail): CombatEvent {
+  const amount = detail.kind === 'armor' ? `${(detail.amount * 100).toFixed(3)} п.п.` : `${(detail.amount * 100).toFixed(3)}%`;
+  const cap = detail.cap === undefined ? 'cap unknown' : `${(detail.cap * 100).toFixed(3)}%`;
+  return {
+    sequence,
+    actorSide: detail.actorSide,
+    actorEntityId: detail.entityId,
+    actionType: 'special-bonus',
+    actorCount: detail.livingCount,
+    specialBonusKind: detail.kind,
+    specialBonusRate: detail.rate,
+    ...(detail.cap !== undefined ? { specialBonusCap: detail.cap } : {}),
+    specialBonusCapStatus: detail.capStatus,
+    specialBonusLivingCount: detail.livingCount,
+    specialBonusAmount: detail.amount,
+    specialBonusScope: detail.scope,
+    provenance: {
+      status: detail.status,
+      ...(detail.source ? { source: detail.source } : {}),
+      confidence: detail.status === 'confirmed' ? 'high' : detail.status === 'inferred' ? 'medium' : 'low',
+      note: detail.note,
+    },
+    note: `Бонус начала раунда: ${detail.kind} = rate ${(detail.rate * 100).toFixed(3)}% × ${detail.livingCount} живых юнитов, cap ${cap}, итог ${amount}. Источник не получает собственный бонус; получатели — другие живые combat-eligible стеки (${detail.scope}).`,
+  };
+}
+
+function appendSpecialBonusEvents(
+  events: CombatEvent[],
+  sequence: { value: number },
+  modifiers: RoundSideModifiers,
+) {
+  modifiers.specialBonusDetails.forEach((detail) => {
+    events.push(createSpecialBonusEvent(sequence.value++, detail));
+  });
+}
+
+function createAttackEvent(
+  sequence: number,
+  actor: RuntimeStack,
+  target: RuntimeStack,
+  rng: CombatRng,
+  criticalBonus: number,
+): CombatEvent {
   const countBeforeEvent = target.count;
   const hpBefore = target.hpPool;
-  const rawDamage = actor.count * actor.attackPerUnit;
+  const baseAttack = Math.max(0, Math.floor(actor.count * actor.attackPerUnit));
+  const matchup = matchupFor(actor, target);
+  const reportedBonus = matchup.multiplier === 1
+    ? 0
+    : Math.sign(matchup.multiplier - 1) * Math.floor(baseAttack * Math.abs(matchup.multiplier - 1));
+  const rawDamageBeforeArmor = Math.max(0, Math.floor(baseAttack * matchup.multiplier));
+  const criticalChance = clamp(actor.criticalChance + criticalBonus, 0, 1);
+  const criticalDraw = criticalChance > 0 ? rng.next() : undefined;
+  const criticalMultiplier = criticalDraw !== undefined && criticalDraw < criticalChance ? 2 : 1;
+  const rawDamage = Math.floor(rawDamageBeforeArmor * criticalMultiplier);
   const effectiveDamage = calculateEffectiveDamage(rawDamage, target.armorPercent);
   const actualDamage = target.hpPool <= 0 ? 0 : Math.min(effectiveDamage, target.hpPool);
   target.hpPool = Math.max(0, target.hpPool - actualDamage);
@@ -418,8 +739,20 @@ function createAttackEvent(sequence: number, actor: RuntimeStack, target: Runtim
     actionType: 'attack',
     actorCount: actor.count,
     targetCount: countBeforeEvent,
-    attackValue: rawDamage,
+    attackValue: baseAttack,
+    baseAttack,
+    attackPerUnit: actor.attackPerUnit,
+    totalAttack: actor.count * actor.attackPerUnit,
+    lifePerUnit: target.lifePerUnit,
+    hpPool: hpBefore,
     rawDamage,
+    rawDamageBeforeArmor,
+    matchupMultiplier: matchup.multiplier,
+    reportedBonus,
+    matchupStatus: matchup.status,
+    criticalChance,
+    ...(criticalDraw !== undefined ? { abilityDraw: criticalDraw } : {}),
+    criticalMultiplier,
     effectiveDamage,
     mitigation: Math.max(0, rawDamage - effectiveDamage),
     weaponType: actor.weaponType,
@@ -433,7 +766,7 @@ function createAttackEvent(sequence: number, actor: RuntimeStack, target: Runtim
     provenance: DAMAGE_PROVENANCE,
     note: actualDamage === 0
       ? 'Залп не нанёс урон: цель уже уничтожена.'
-      : `Урон после брони ${target.armorPercent}%. Следующий живой стек выбирается заново.`,
+      : `${matchup.multiplier === 1 ? 'Нейтральный модификатор пары' : `Модификатор пары ×${matchup.multiplier.toFixed(2)}`}; урон после брони ${target.armorPercent}%.${criticalMultiplier > 1 ? ' Критический залп ×2.' : ''} Следующая живая цель выбирается заново.`,
   };
 }
 
@@ -449,16 +782,61 @@ function createNoTargetEvent(sequence: number, actor: RuntimeStack): CombatEvent
   };
 }
 
-function createSkippedActionEvent(sequence: number, actor: RuntimeStack): CombatEvent {
+function createSkippedActionEvent(sequence: number, actor: RuntimeStack, note = 'Залп пропущен: стек уничтожен до своей очереди и не совершает действие.', commanderId?: CommanderId): CombatEvent {
   return {
     sequence,
     actorSide: actor.side,
     actorEntityId: actor.entityId,
     actionType: 'status',
     actorCount: actor.count,
+    ...(commanderId ? { commanderAbilityId: commanderId } : {}),
     provenance: { status: 'structural', source: 'Asterion sequential resolver', confidence: 'high' },
-    note: 'Залп пропущен: стек уничтожен до своей очереди и не совершает действие.',
+    note,
   };
+}
+
+function createNoAttackEvent(sequence: number, actor: RuntimeStack): CombatEvent {
+  return {
+    sequence,
+    actorSide: actor.side,
+    actorEntityId: actor.entityId,
+    actionType: 'status',
+    actorCount: actor.count,
+    provenance: { status: 'not-calibrated', source: 'Asterion combat catalog', confidence: 'medium' },
+    note: 'Действие не выполнено: у сущности нет подтверждённой атаки в этом профиле.',
+  };
+}
+
+function commanderAtSide(stacks: readonly RuntimeStack[], id: CommanderId | null, expectedId: CommanderId) {
+  return id === expectedId ? commanderFor(stacks, id) : undefined;
+}
+
+function resolveReanimator(
+  stacks: readonly RuntimeStack[],
+  activeCommanderId: CommanderId | null,
+  events: CombatEvent[],
+  sequence: { value: number },
+  rng: CombatRng,
+) {
+  const reanimator = commanderAtSide(stacks, activeCommanderId, 'reanimator');
+  if (!reanimator) return;
+  const effect = getCommanderCombatEffect('reanimator');
+  const chance = effect ? effect.ratePerLevel * reanimator.level : 0;
+  const draw = rng.next();
+  if (draw >= chance) return;
+  const target = sortRuntime(stacks).find((stack) => stack.count > 0 && stack.startingCount > stack.count);
+  if (!target) return;
+  const repairedCount = Math.min(effect?.cap ?? 15, target.startingCount - target.count);
+  if (repairedCount <= 0) return;
+  target.count += repairedCount;
+  target.hpPool += repairedCount * target.lifePerUnit;
+  events.push({
+    ...createAbilityEvent(sequence.value++, reanimator, 'reanimator', chance, draw, target, `Восстановлено ${repairedCount} кораблей; лимит за фазу ${effect?.cap ?? 15}.`),
+    repairedCount,
+    repairLimit: effect?.cap ?? 15,
+    lifeBefore: target.hpPool - repairedCount * target.lifePerUnit,
+    lifeAfter: target.hpPool,
+  });
 }
 
 function resolveSideActions(
@@ -467,13 +845,42 @@ function resolveSideActions(
   events: CombatEvent[],
   sequence: { value: number },
   targetPriority: CombatTargetPriority,
+  activeCommanderId: CommanderId | null,
+  opposingCommanderId: CommanderId | null,
+  rng: CombatRng,
+  paralyzedActorsNext: Set<CombatEntityId>,
+  paralyzedTargetsNext: Set<CombatEntityId>,
 ) {
+  const criticalEffect = getCommanderCombatEffect(activeCommanderId);
+  const criticalBonus = criticalEffect?.kind === 'critical'
+    ? criticalEffect.ratePerLevel * (commanderFor(actorStacks, activeCommanderId)?.level ?? 0)
+    : 0;
+  const opposingPhantom = commanderAtSide(targetStacks, opposingCommanderId, 'phantom');
+  const phantomEffect = opposingPhantom ? getCommanderCombatEffect('phantom') : null;
+
   for (const actor of sortRuntime(actorStacks)) {
     if (actor.count <= 0) {
       events.push(createSkippedActionEvent(sequence.value++, actor));
       continue;
     }
-    if (actor.attackPerUnit <= 0) continue;
+    if (paralyzedActorsNext.has(actor.entityId)) {
+      paralyzedActorsNext.delete(actor.entityId);
+      events.push(createSkippedActionEvent(sequence.value++, actor, 'Атака пропущена: командир Скорпион парализовал ближайшее действие.', 'scorpion'));
+      continue;
+    }
+    if (phantomEffect && opposingPhantom) {
+      const chance = phantomEffect.ratePerLevel * opposingPhantom.level;
+      const draw = rng.next();
+      if (draw < chance) {
+        events.push(createAbilityEvent(sequence.value++, opposingPhantom, 'phantom', chance, draw, actor, 'Атака цели отменена способностью Фантом.'));
+        events.push(createSkippedActionEvent(sequence.value++, actor, 'Атака отменена способностью Фантом.', 'phantom'));
+        continue;
+      }
+    }
+    if (actor.attackPerUnit <= 0) {
+      events.push(createNoAttackEvent(sequence.value++, actor));
+      continue;
+    }
     const target = selectCombatTarget(targetStacks.map((stack) => ({
       entityId: stack.entityId,
       currentCount: stack.count,
@@ -489,7 +896,17 @@ function resolveSideActions(
       events.push(createNoTargetEvent(sequence.value++, actor));
       continue;
     }
-    events.push(createAttackEvent(sequence.value++, actor, targetRuntime));
+    events.push(createAttackEvent(sequence.value++, actor, targetRuntime, rng, criticalBonus));
+    const scorpion = commanderAtSide(actorStacks, activeCommanderId, 'scorpion');
+    if (scorpion) {
+      const effect = getCommanderCombatEffect('scorpion');
+      const chance = effect ? effect.ratePerLevel * scorpion.level : 0;
+      const draw = rng.next();
+      if (targetRuntime.count > 0 && draw < chance) {
+        paralyzedTargetsNext.add(targetRuntime.entityId);
+        events.push(createAbilityEvent(sequence.value++, scorpion, 'scorpion', chance, draw, targetRuntime, 'Цель пропустит ближайшую атаку в своей фазе.'));
+      }
+    }
   }
 }
 
@@ -499,11 +916,20 @@ function activeCommanderLevel(stacks: readonly CombatStackInput[], id: Commander
 
 function chooseActiveCommander(
   requested: CommanderId | null | undefined,
-  priority: CommanderId[],
+  _priority: CommanderId[],
   available: readonly CommanderId[],
 ) {
   if (requested && available.includes(requested)) return requested;
-  return selectActiveCommander(priority, available);
+  return available[0] ?? null;
+}
+
+function createInitialSnapshot(
+  stacks: readonly RuntimeStack[],
+  modifiers: Readonly<Record<string, number | string>>,
+): CombatRoundSnapshot {
+  const counts = new Map(sortRuntime(stacks).map((stack) => [stack.entityId, stack.count]));
+  const hitPoints = new Map(sortRuntime(stacks).map((stack) => [stack.entityId, stack.hpPool]));
+  return createRoundSnapshot(stacks, counts, hitPoints, modifiers);
 }
 
 export function resolveCombat(input: CombatInput, context: CombatResolverContext): BattleReport {
@@ -521,10 +947,6 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
   const rng = normalized.seed ? createSeededCombatRng(normalized.seed) : createNonReplayableCombatRng();
   const attackerFactionId = normalized.attacker.factionId ?? getCombatFactionId(normalized.attacker.participant.race);
   const defenderFactionId = normalized.defender.factionId ?? getCombatFactionId(normalized.defender.participant.race);
-
-  // Unknown mechanics are deliberately inactive. The RNG interface is still
-  // included so future evidence-backed mechanics can consume it reproducibly.
-  void rng.next;
 
   const attacker = [
     ...runtimeFromInput('attacker', 'stacks', normalized.attacker.ships, attackerTechnologies, executionMode, attackerFactionId),
@@ -545,11 +967,21 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
   const activeAttackerCommander = chooseActiveCommander(normalized.attacker.activeCommanderId, normalized.attackerPriority, attackerCommanderIds);
   const activeDefenderCommander = chooseActiveCommander(normalized.defender.activeCommanderId, normalized.defenderPriority, defenderCommanderIds);
 
+  const initialModifiers = applyRoundModifiers(attacker, defender, activeAttackerCommander, activeDefenderCommander);
+  const initialSnapshot: BattleInitialSnapshot = {
+    attacker: createInitialSnapshot(attacker, initialModifiers.attacker.snapshot),
+    defender: createInitialSnapshot(defender, initialModifiers.defender.snapshot),
+  };
+
   const rounds: CombatRound[] = [];
   let winner: BattleWinner | null = determineWinner(attacker, defender);
   let eventSequence = 1;
+  const paralyzedAttackerNext = new Set<CombatEntityId>();
+  const paralyzedDefenderNext = new Set<CombatEntityId>();
+  let lastModifiers = initialModifiers;
 
   for (let roundIndex = 1; roundIndex <= normalized.maxRounds && !winner; roundIndex += 1) {
+    lastModifiers = applyRoundModifiers(attacker, defender, activeAttackerCommander, activeDefenderCommander);
     const attackerStartCounts = new Map(sortRuntime(attacker).map((stack) => [stack.entityId, stack.count]));
     const defenderStartCounts = new Map(sortRuntime(defender).map((stack) => [stack.entityId, stack.count]));
     const attackerStartHp = new Map(sortRuntime(attacker).map((stack) => [stack.entityId, stack.hpPool]));
@@ -557,9 +989,38 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
     const events: CombatEvent[] = [];
     const sequence = { value: eventSequence };
 
-    resolveSideActions(attacker, defender, events, sequence, attackerTargetPriority);
+    appendSpecialBonusEvents(events, sequence, lastModifiers.attacker);
+    appendSpecialBonusEvents(events, sequence, lastModifiers.defender);
+
+    resolveSideActions(
+      attacker,
+      defender,
+      events,
+      sequence,
+      attackerTargetPriority,
+      activeAttackerCommander,
+      activeDefenderCommander,
+      rng,
+      paralyzedAttackerNext,
+      paralyzedDefenderNext,
+    );
+    resolveReanimator(attacker, activeAttackerCommander, events, sequence, rng);
     winner = determineWinner(attacker, defender);
-    if (!winner) resolveSideActions(defender, attacker, events, sequence, defenderTargetPriority);
+    if (!winner) {
+      resolveSideActions(
+        defender,
+        attacker,
+        events,
+        sequence,
+        defenderTargetPriority,
+        activeDefenderCommander,
+        activeAttackerCommander,
+        rng,
+        paralyzedDefenderNext,
+        paralyzedAttackerNext,
+      );
+      resolveReanimator(defender, activeDefenderCommander, events, sequence, rng);
+    }
     winner = determineWinner(attacker, defender);
     eventSequence = sequence.value;
 
@@ -567,8 +1028,8 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
       index: roundIndex,
       events,
       summary: createRoundSummary(events, attacker, defender),
-      attackerSnapshot: createRoundSnapshot(attacker, attackerStartCounts, attackerStartHp),
-      defenderSnapshot: createRoundSnapshot(defender, defenderStartCounts, defenderStartHp),
+      attackerSnapshot: createRoundSnapshot(attacker, attackerStartCounts, attackerStartHp, lastModifiers.attacker.snapshot),
+      defenderSnapshot: createRoundSnapshot(defender, defenderStartCounts, defenderStartHp, lastModifiers.defender.snapshot),
     });
   }
 
@@ -578,7 +1039,10 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
   const unknowns = COMBAT_TECHNOLOGIES
     .filter((technology) => technology.effectStatus === 'unknown')
     .map((technology) => `${technology.name}: эффект не калиброван и не активирован.`)
-    .concat('Уровни стеков: коэффициенты влияния на бой не подтверждены и не активированы.');
+    .concat([
+      'Дополнительные спецэффекты обычных корпусов не калиброваны и не активированы.',
+      'Игнорирование брони у оборонных установок не калибровано и не активировано.',
+    ]);
 
   return {
     id: context.reportId,
@@ -590,12 +1054,14 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
     defender: { ...normalized.defender.participant, side: 'defender' },
     winner,
     roundCount: rounds.length,
+    initialSnapshot,
     attackerForce: createForceSnapshot(
       attacker,
       activeAttackerCommander,
       activeCommanderLevel(getSideCommanders(normalized.attacker), activeAttackerCommander),
       attackerTechnologies,
       attackerTechSnapshots,
+      lastModifiers.attacker.snapshot,
     ),
     defenderForce: createForceSnapshot(
       defender,
@@ -603,6 +1069,7 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
       activeCommanderLevel(getSideCommanders(normalized.defender), activeDefenderCommander),
       defenderTechnologies,
       defenderTechSnapshots,
+      lastModifiers.defender.snapshot,
     ),
     rounds,
     metadata: {
@@ -618,7 +1085,7 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
       provenance: {
         ...COMBAT_RULE_PROVENANCE,
         damageFormula: DAMAGE_PROVENANCE,
-        criticalHit: { status: 'unknown', source: 'Evidence ledger', confidence: 'low', note: 'Not activated.' },
+        criticalHit: { status: 'inferred', source: 'ASTERION_FULL_BATTLE_IMPLEMENTATION_PROMPT.md §4.3/§4.5', confidence: 'high', note: 'Asterion decision: 1% per science level and +0.075% per Viper level; successful crit doubles the pre-armour volley.' },
       },
       unknowns,
     },

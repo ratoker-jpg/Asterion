@@ -28,7 +28,7 @@ function input(overrides: Partial<CombatInput> = {}): CombatInput {
     scenarioId: 'combat-v2-test',
     timestamp: '2026-09-16T00:00:00.000Z',
     attacker: { participant: attackerParticipant, ships: [{ entityId: 'scout', count: 1 }], commanders: [] },
-    defender: { participant: defenderParticipant, ships: [{ entityId: 'spy-probe', count: 2 }], commanders: [], defenses: [] },
+    defender: { participant: defenderParticipant, ships: [{ entityId: 'scout', count: 2 }], commanders: [], defenses: [] },
     maxRounds: 8,
     attackerPriority: [...priority.attack],
     defenderPriority: [...priority.defense],
@@ -78,7 +78,7 @@ test('one side may omit its commander and the commander level is retained', () =
   assert.equal(report.defenderForce.activeCommanderId, undefined);
 });
 
-test('different commander types can coexist while each type is limited to one', () => {
+test('a side may field at most one commander, independently of the other side', () => {
   const result = validateCombatInput(input({
     attacker: {
       participant: attackerParticipant,
@@ -86,7 +86,8 @@ test('different commander types can coexist while each type is limited to one', 
       commanders: [{ entityId: 'corsair', count: 1 }, { entityId: 'hunter', count: 1 }],
     },
   }));
-  assert.equal(result.ok, true);
+  assert.equal(result.ok, false);
+  assert.equal(result.errors.some((error) => error.code === 'commander-limit'), true);
   assert.equal(validateCombatInput(input({
     attacker: {
       participant: attackerParticipant,
@@ -129,12 +130,12 @@ test('matrix and planetary shields may coexist but each is unique', () => {
   assert.equal(duplicatePlanetary.errors.some((error) => error.code === 'entity-limit' && error.path === 'defender.defenses[0].count'), true);
 });
 
-test('explicit leading commander must be one of the selected commander types', () => {
+test('explicit leading commander is retained when exactly one commander is selected', () => {
   const report = resolveCombat(input({
     attacker: {
       participant: attackerParticipant,
       ships: [{ entityId: 'scout', count: 1 }],
-      commanders: [{ entityId: 'corsair', count: 1 }, { entityId: 'hunter', count: 1 }],
+      commanders: [{ entityId: 'hunter', count: 1 }],
       activeCommanderId: 'hunter',
     },
   }), { reportId: 'explicit-leading-commander' });
@@ -173,12 +174,12 @@ test('science maxima are real and additional technologies are mutually exclusive
   assert.equal(result.errors.some((error) => error.code === 'exclusive-technology'), true);
 });
 
-test('shared technology mode applies the attacker profile to both force snapshots', () => {
+test('shared technology mode applies one matching profile to both force snapshots', () => {
   const report = resolveCombat(input({
     technologyMode: 'shared',
     executionMode: 'calibration',
     attackerTechnologies: normalizeCombatTechnologies({ laserScience: 4 }),
-    defenderTechnologies: normalizeCombatTechnologies({ shipArmor: 5 }),
+    defenderTechnologies: normalizeCombatTechnologies({ laserScience: 4 }),
   }), { reportId: 'shared-tech' });
   assert.equal(report.metadata?.technologyMode, 'shared');
   assert.equal(report.defenderForce.technologyLevels?.laserScience, 4);
@@ -229,8 +230,8 @@ test('runs without a seed are explicitly non-replayable', () => {
 
 test('report event sequences are unique and monotonic across rounds', () => {
   const report = resolveCombat(input({
-    attacker: { participant: attackerParticipant, ships: [{ entityId: 'solar-satellite', count: 1 }], commanders: [] },
-    defender: { participant: defenderParticipant, ships: [{ entityId: 'solar-satellite', count: 1 }], commanders: [], defenses: [] },
+    attacker: { participant: attackerParticipant, ships: [{ entityId: 'scout', count: 1 }], commanders: [] },
+    defender: { participant: defenderParticipant, ships: [{ entityId: 'scout', count: 1 }], commanders: [], defenses: [] },
     maxRounds: 5,
   }), { reportId: 'sequence-report' });
   const sequences = report.rounds.flatMap((round) => round.events.map((event) => event.sequence));
@@ -262,10 +263,10 @@ test('faction-specific combat population and stats reach the resolver', () => {
       ships: [{ entityId: 'destroyer', count: 1 }],
       commanders: [],
     },
-    defender: { participant: defenderParticipant, ships: [{ entityId: 'solar-satellite', count: 1 }], commanders: [], defenses: [] },
+    defender: { participant: defenderParticipant, ships: [{ entityId: 'scout', count: 1 }], commanders: [], defenses: [] },
   }), { reportId: 'faction-runtime' });
   assert.equal(report.attackerForce.populationBefore, 28);
-  assert.equal(report.rounds[0]?.events.find((event) => event.actorEntityId === 'destroyer')?.attackValue, 18_200);
+  assert.equal(report.rounds[0]?.events.find((event) => event.actorEntityId === 'destroyer' && event.actionType === 'attack')?.attackValue, 18_200);
 });
 
 test('legacy reports migrate with unknown provenance and without fabricated numeric values', () => {
@@ -293,7 +294,7 @@ test('legacy reports migrate with unknown provenance and without fabricated nume
   assert.deepEqual(migrated?.rounds.flatMap((round) => round.events.map((event) => event.sequence)), [1, 2]);
 });
 
-test('legacy scenarios retain multiple commanders and the new per-type rule permits them', () => {
+test('legacy scenarios retain multiple commanders and block launch until migration', () => {
   const legacy = normalizeSimulatorScenario({
     attacker: {
       ships: [{ entityId: 'scout', count: 1 }],
@@ -311,8 +312,11 @@ test('legacy scenarios retain multiple commanders and the new per-type rule perm
     priority,
   });
   assert.equal(combatInput.attacker.commanders?.length, 2);
+  assert.equal(combatInput.migrationErrors?.length, 1);
   const checked = validateCombatInput(combatInput);
-  assert.equal(checked.ok, true);
+  assert.equal(checked.ok, false);
+  assert.equal(checked.errors.some((error) => error.code === 'migration-error'), true);
+  assert.equal(checked.errors.some((error) => error.code === 'commander-limit'), true);
 });
 
 test('destroyed stacks emit a skipped-volley status and never attack', () => {
@@ -320,16 +324,16 @@ test('destroyed stacks emit a skipped-volley status and never attack', () => {
     attacker: { participant: attackerParticipant, ships: [{ entityId: 'death-star', count: 1 }], commanders: [] },
     defender: {
       participant: defenderParticipant,
-      ships: [{ entityId: 'solar-satellite', count: 1 }, { entityId: 'spy-probe', count: 1 }],
+      ships: [{ entityId: 'scout', count: 1 }, { entityId: 'cruiser', count: 1 }],
       commanders: [],
       defenses: [],
     },
     attackerTargetPriority: 'catalog',
   }), { reportId: 'skipped-volley' });
-  const skipped = report.rounds[0]?.events.find((event) => event.actorSide === 'defender' && event.actorEntityId === 'solar-satellite');
+  const skipped = report.rounds[0]?.events.find((event) => event.actorSide === 'defender' && event.actorEntityId === 'scout');
   assert.equal(skipped?.actionType, 'status');
   assert.match(skipped?.note ?? '', /пропущен/);
-  assert.equal(report.rounds.flatMap((round) => round.events).some((event) => event.actorSide === 'defender' && event.actorEntityId === 'solar-satellite' && event.actionType === 'attack'), false);
+  assert.equal(report.rounds.flatMap((round) => round.events).some((event) => event.actorSide === 'defender' && event.actorEntityId === 'scout' && event.actionType === 'attack'), false);
 });
 
 test('golden victory, defeat, and draw fixtures preserve provenance and structural invariants', () => {
@@ -341,8 +345,10 @@ test('golden victory, defeat, and draw fixtures preserve provenance and structur
 
   Object.entries(COMBAT_GOLDEN_FIXTURES).forEach(([fixtureName, report]) => {
     assert.equal(report.winner, expectedWinners[fixtureName as keyof typeof expectedWinners]);
-    assert.equal(report.schemaVersion, 2);
-    assert.equal(report.engineVersion, 'asterion-combat-engine-v2');
+    assert.equal(report.schemaVersion, 3);
+    assert.equal(report.engineVersion, 'asterion-combat-engine-v3');
+    assert.ok(report.initialSnapshot);
+    assert.equal(report.rounds.some((round) => round.index === 0), false);
     assert.equal(report.metadata?.rngProvenance?.mode, 'seeded');
     assert.equal(report.metadata?.provenance?.damageFormula?.status, 'inferred');
 

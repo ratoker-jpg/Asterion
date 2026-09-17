@@ -12,12 +12,16 @@ function fixtureInput(
   defenderShips: CombatInput['defender']['ships'],
   seed: string,
   maxRounds: CombatInput['maxRounds'] = 5,
+  commanders: {
+    attacker?: CombatInput['attacker']['commanders'];
+    defender?: CombatInput['defender']['commanders'];
+  } = {},
 ): CombatInput {
   return {
     scenarioId: `golden-${seed}`,
     timestamp: '2026-09-16T00:00:00.000Z',
-    attacker: { participant: attacker, ships: attackerShips, commanders: [] },
-    defender: { participant: defender, ships: defenderShips, commanders: [], defenses: [] },
+    attacker: { participant: attacker, ships: attackerShips, commanders: commanders.attacker ?? [] },
+    defender: { participant: defender, ships: defenderShips, commanders: commanders.defender ?? [], defenses: [] },
     maxRounds,
     attackerPriority: [...priority.attack],
     defenderPriority: [...priority.defense],
@@ -29,15 +33,15 @@ function fixtureInput(
 
 export const COMBAT_GOLDEN_FIXTURES: Readonly<Record<'victory' | 'defeat' | 'draw', BattleReport>> = {
   victory: resolveCombat(
-    fixtureInput([{ entityId: 'death-star', count: 1 }], [{ entityId: 'spy-probe', count: 1 }], 'golden-victory'),
+    fixtureInput([{ entityId: 'death-star', count: 1 }], [{ entityId: 'scout', count: 1 }], 'golden-victory'),
     { reportId: 'golden-victory' },
   ),
   defeat: resolveCombat(
-    fixtureInput([{ entityId: 'spy-probe', count: 1 }], [{ entityId: 'death-star', count: 1 }], 'golden-defeat'),
+    fixtureInput([{ entityId: 'scout', count: 1 }], [{ entityId: 'death-star', count: 1 }], 'golden-defeat'),
     { reportId: 'golden-defeat' },
   ),
   draw: resolveCombat(
-    fixtureInput([{ entityId: 'solar-satellite', count: 1 }], [{ entityId: 'solar-satellite', count: 1 }], 'golden-draw'),
+    fixtureInput([], [], 'golden-draw', 5, { attacker: [{ entityId: 'corsair', count: 1 }], defender: [{ entityId: 'corsair', count: 1 }] }),
     { reportId: 'golden-draw' },
   ),
 };
