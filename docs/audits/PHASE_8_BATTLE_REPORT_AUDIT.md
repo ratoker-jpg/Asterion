@@ -1,25 +1,33 @@
-# Phase 8: Battle report visual audit
+# Historical audit — Phase 8: Battle report visual
 
-Короткий аудит перед изменениями, зафиксированный для feature branch `codex/phase8-battle-report-visual`.
+Это исторический аудит Phase 8, зафиксированный до последующих изменений интерфейса. Актуальный контекст продолжения работы — Draft PR #66, ветка `codex/nemexia-battle-reconstruction`.
 
-## Подтверждённые факты
+Документ сохраняет исходный baseline Phase 8 и не является актуальной спецификацией текущего UI.
 
-- `src/domain/combat/report.ts` уже хранит участников, winner, население до/после, составы сил, rounds/events и опциональные `experience`, `debris`, `resources`.
-- `CombatRoundSnapshot` и snapshots сил были опциональными; сохранённые demo-отчёты не давали стабильной визуальной модели каждого раунда.
-- `src/domain/combat/resolver.ts` создаёт snapshots для результатов симулятора, но не формирует награды и не реализует реальные атаки.
-- `src/BattleReportsView.tsx` показывал список и inline-detail без полноценной visual scene; карточки не показывали разбивку потерь.
-- Faction catalogs уже содержат Asterion presentation names и art, но report participant сохраняет только `race`, без отдельного faction id.
-- Approved background asset доступен вне репозитория в `artifacts/battle-report-visual/assets/battle-bg-approved-candidate.png`; для сборки он копируется в `src/assets/battle-report/`.
+## Исторический baseline на момент Phase 8
 
-## Ограничения Phase 8
+- На момент аудита `src/domain/combat/report.ts` уже хранил участников, winner, население до/после, составы сил, rounds/events и опциональные `experience`, `debris`, `resources`.
+- На момент аудита `CombatRoundSnapshot` и snapshots сил были опциональными; сохранённые demo-отчёты не давали стабильной визуальной модели каждого раунда.
+- На момент аудита `src/domain/combat/resolver.ts` создавал snapshots для результатов симулятора, но не формировал награды и не реализовывал реальные атаки. Это утверждение не описывает текущую боевую механику.
+- На момент аудита `src/BattleReportsView.tsx` показывал список и inline-detail без полноценной visual scene; карточки не показывали разбивку потерь. Этот baseline был изменён последующими PR #66 коммитами.
+- На момент аудита Faction catalogs уже содержали Asterion presentation names и art, но report participant сохранял только `race`, без отдельного faction id.
+- На момент аудита approved background asset был доступен вне репозитория в `artifacts/battle-report-visual/assets/battle-bg-approved-candidate.png`; дальнейшее состояние ассета этим документом не фиксируется.
 
-- Источники данных: три demo fixtures и reports, сохранённые SimulatorView.
-- Отчёт открывается поверх Fleet Workspace в большом скроллируемом overlay; страницу и router не переписываем.
-- Visual scene статична, строится только из сохранённых round snapshots; CombatEvent показывается в свёрнутом analysis panel внутри соответствующего раунда.
-- Немексовские формулы, реальные missions/attacks, repair workshop и combat priority в этот scope не входят.
+## Исторические ограничения Phase 8
 
-## Реализационные решения
+- Источники данных для аудита: три demo fixtures и reports, сохранённые SimulatorView.
+- В рамках аудита отчёт открывался поверх Fleet Workspace в большом скроллируемом overlay; страницу и router не переписывали.
+- В рамках аудита visual scene была статичной и строилась только из сохранённых round snapshots; CombatEvent показывался в свёрнутом analysis panel внутри соответствующего раунда.
+- Немексовские формулы, реальные missions/attacks, repair workshop и combat priority в исторический scope не входили.
 
-- Ввод report проходит через `createBattleReportViewModel`, который нормализует неизвестные/неполные данные и возвращает `Нет данных`, не вызывая catalog resolver из UI напрямую.
-- Demo fixtures получили явные snapshots для каждого раунда; добавлен переход `spy-probe` в третьем отчёте, чтобы проверять отсутствие стека после его исчезновения из следующего snapshot.
-- Для обратной совместимости в `BattleStackSnapshot` добавлено только опциональное историческое поле `level`; существующий combat meaning не меняется.
+## Исторические реализационные решения
+
+- В исторической версии ввод report проходил через `createBattleReportViewModel`, который нормализовал неизвестные/неполные данные и возвращал `Нет данных`, не вызывая catalog resolver из UI напрямую.
+- В исторической версии demo fixtures получили явные snapshots для каждого раунда; был добавлен переход `spy-probe` в третьем отчёте, чтобы проверять отсутствие стека после его исчезновения из следующего snapshot.
+- В исторической версии для обратной совместимости в `BattleStackSnapshot` добавлялось только опциональное поле `level`; существующий combat meaning не менялся.
+
+## Актуальная привязка после последующих изменений
+
+- Этот файл остаётся справочным аудитом Phase 8; актуальная работа ведётся в Draft PR #66 на `codex/nemexia-battle-reconstruction`.
+- Текущий отчёт использует сохранённые визуальные раунды, а анализ раунда находится внутри каждого соответствующего визуального раунда.
+- Документация не требует и не вносит изменений в боевые формулы, технологии, уровни кораблей или сохранение отчётов.

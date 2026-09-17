@@ -105,7 +105,25 @@ async function modalSnapshot(win) {
     const roundLog = modal?.querySelector('[data-qa-battle-round-log]');
     const visualReport = modal?.querySelector('[data-qa-battle-visual-report]');
     const visualRounds = Array.from(visualReport?.querySelectorAll('[data-qa-battle-visual-round]') || []);
-    const firstVisualRound = visualReport?.querySelector('[data-qa-battle-visual-round="1"]');
+    const roundAnalysisChecks = visualRounds.map((round) => {
+      const roundIndex = round.getAttribute('data-qa-battle-visual-round') || '';
+      const analyses = Array.from(round.querySelectorAll('[data-qa-battle-round-analysis]'));
+      const analysis = analyses.length === 1 ? analyses[0] : null;
+      const eventCount = round.querySelectorAll('[data-qa-battle-event]').length;
+      const analysisEventCount = analysis?.querySelectorAll('[data-qa-battle-event]').length || 0;
+      const hasEmptyState = Boolean(analysis?.querySelector('ul, p'));
+      return {
+        roundIndex,
+        analysisCount: analyses.length,
+        analysisIndex: analyses[0]?.getAttribute('data-qa-battle-round-analysis') || '',
+        eventCount,
+        analysisEventCount,
+        hasEmptyState,
+        valid: analyses.length === 1
+          && analyses[0].getAttribute('data-qa-battle-round-analysis') === roundIndex
+          && (eventCount > 0 ? analysisEventCount === eventCount : hasEmptyState),
+      };
+    });
     const outcomeStateHeader = modal?.querySelector('.battle-outcome-mini-table-head-v1')?.textContent || '';
     const text = modal?.textContent || '';
     return {
@@ -130,7 +148,8 @@ async function modalSnapshot(win) {
       hasProvenance: Boolean(modal?.querySelector('[data-qa-battle-provenance]')),
       hasRoundSummary: Boolean(modal?.querySelector('.battle-round-summary-v1')),
       hasRoundLog: Boolean(roundLog),
-      analysisInsideVisualRound: Boolean(firstVisualRound?.querySelector('[data-qa-battle-round-analysis="1"]')),
+      roundAnalysisValid: visualRounds.length > 0 && roundAnalysisChecks.every((check) => check.valid),
+      roundAnalysisChecks,
       roundCount: visualRounds.length,
       hasComposition: Boolean(modal?.querySelector('[data-qa-battle-composition]')),
       hasOutcome: Boolean(modal?.querySelector('[data-qa-battle-outcome]')),
@@ -378,23 +397,57 @@ async function captureBattleCelestialModes(win, directory) {
 }
 
 async function exerciseRoundAnalysis(win) {
-  return win.webContents.executeJavaScript(`(() => {
+  return win.webContents.executeJavaScript(`(async () => {
     const modal = document.querySelector('[role="dialog"][data-qa-battle-report-modal]');
     const scroll = modal?.querySelector('.battle-report-modal-scroll-v1');
-    const visualRound = modal?.querySelector('[data-qa-battle-visual-round="1"]');
-    const details = visualRound?.querySelector('[data-qa-battle-round-analysis="1"]');
-    const summary = details?.querySelector('summary');
-    if (!scroll || !visualRound || !details || !summary) return { available: false, insideVisualRound: false };
+    const visualRounds = Array.from(modal?.querySelectorAll('[data-qa-battle-visual-round]') || []);
+    const roundEntries = visualRounds.map((round) => ({
+      round,
+      roundIndex: round.getAttribute('data-qa-battle-visual-round') || '',
+      details: Array.from(round.querySelectorAll('[data-qa-battle-round-analysis]')),
+    }));
+    const allRoundsChecked = roundEntries.length > 0 && roundEntries.every(({ round, roundIndex, details: analyses }) => {
+      const eventCount = round.querySelectorAll('[data-qa-battle-event]').length;
+      const analysis = analyses.length === 1 ? analyses[0] : null;
+      const analysisEventCount = analysis?.querySelectorAll('[data-qa-battle-event]').length || 0;
+      const hasEmptyState = Boolean(analysis?.querySelector('ul, p'));
+      return analyses.length === 1
+        && analyses[0].getAttribute('data-qa-battle-round-analysis') === roundIndex
+        && (eventCount > 0 ? analysisEventCount === eventCount : hasEmptyState);
+    });
+    if (!scroll || !allRoundsChecked) return { available: false, allRoundsChecked, roundsChecked: roundEntries.length };
     scroll.scrollTop = Math.min(120, Math.max(0, scroll.scrollHeight - scroll.clientHeight));
     const before = scroll.scrollTop;
-    summary.click();
-    return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
-      const after = scroll.scrollTop;
-      const expanded = details.open;
-      const eventCardCount = details.querySelectorAll('[data-qa-battle-event]').length;
+    const waitForPaint = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const expansionChecks = [];
+    for (const { round, roundIndex, details: analyses } of roundEntries) {
+      const analysis = analyses[0];
+      const summary = analysis?.querySelector('summary');
+      if (!analysis || !summary) continue;
       summary.click();
-      resolve({ available: true, insideVisualRound: Boolean(details.closest('[data-qa-battle-visual-round]')), before, after, delta: Number((after - before).toFixed(2)), expanded, eventCardCount });
-    })));
+      await waitForPaint();
+      const eventCount = round.querySelectorAll('[data-qa-battle-event]').length;
+      const analysisEventCount = analysis.querySelectorAll('[data-qa-battle-event]').length;
+      const hasEmptyState = Boolean(analysis.querySelector('ul, p'));
+      expansionChecks.push({
+        roundIndex,
+        expanded: analysis.open,
+        contentValid: eventCount > 0 ? analysisEventCount === eventCount : hasEmptyState,
+      });
+      summary.click();
+      await waitForPaint();
+    }
+    const after = scroll.scrollTop;
+    return {
+      available: true,
+      allRoundsChecked,
+      roundsChecked: roundEntries.length,
+      expansionsValid: expansionChecks.length === roundEntries.length && expansionChecks.every((check) => check.expanded && check.contentValid),
+      expansionChecks,
+      before,
+      after,
+      delta: Number((after - before).toFixed(2)),
+    };
   })()`);
 }
 
@@ -482,7 +535,7 @@ async function exerciseSimulatorModalFlow(win) {
       hasInlineResult: Boolean(document.querySelector('.sim-result-v1')),
     };
   })()`);
-  if (!simulationModal.present || !simulationModal.hasVisualReport || simulationModal.hasInitialSnapshot || simulationModal.hasProvenance || simulationModal.hasRoundSummary || simulationModal.hasRoundLog || !simulationModal.analysisInsideVisualRound || simulationModal.roundCount < 1 || simulationModal.internalHorizontalOverflow || simulationPresentation.source !== 'simulation' || simulationPresentation.hasSaveButton || simulationPresentation.hasTechnicalLabels || !simulationPresentation.hasGenericAttacker || !simulationPresentation.hasGenericDefender || simulationPresentation.hasInlineResult) {
+  if (!simulationModal.present || !simulationModal.hasVisualReport || simulationModal.hasInitialSnapshot || simulationModal.hasProvenance || simulationModal.hasRoundSummary || simulationModal.hasRoundLog || !simulationModal.roundAnalysisValid || simulationModal.roundCount < 1 || simulationModal.internalHorizontalOverflow || simulationPresentation.source !== 'simulation' || simulationPresentation.hasSaveButton || simulationPresentation.hasTechnicalLabels || !simulationPresentation.hasGenericAttacker || !simulationPresentation.hasGenericDefender || simulationPresentation.hasInlineResult) {
     throw new Error(`Simulator modal contract failed: ${JSON.stringify({ simulationModal, simulationPresentation })}`);
   }
 
@@ -548,7 +601,7 @@ async function runViewport(win, width, height) {
 
   await openBattle(win, 'battle-demo-attacker-victory');
   const modal = await modalSnapshot(win);
-  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.roundCount !== 5 || modal.analysisOpenCount !== 0 || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount < 1 || modal.technologyTooltipCount !== modal.technologyRowCount || modal.technologyTooltipImageCount < modal.technologyRowCount || modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || modal.eventCardCount < 1 || !modal.hasBattlePoints || modal.commanderTechnicalText || !modal.hasHumanCommanderEffect || !modal.hasVisualReport || modal.hasInitialSnapshot || modal.hasProvenance || modal.hasRoundSummary || modal.hasRoundLog || !modal.analysisInsideVisualRound || modal.hasComposition || !modal.hasOutcome || !modal.hasOutcomeBeforeAfter || !modal.outcomeBeforeVisualReport || !modal.internalScroll || modal.internalHorizontalOverflow || modal.technicalText || !modal.bodyLocked || !modal.stageInert) {
+  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.roundCount !== 5 || modal.analysisOpenCount !== 0 || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount < 1 || modal.technologyTooltipCount !== modal.technologyRowCount || modal.technologyTooltipImageCount < modal.technologyRowCount || modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || modal.eventCardCount < 1 || !modal.hasBattlePoints || modal.commanderTechnicalText || !modal.hasHumanCommanderEffect || !modal.hasVisualReport || modal.hasInitialSnapshot || modal.hasProvenance || modal.hasRoundSummary || modal.hasRoundLog || !modal.roundAnalysisValid || modal.hasComposition || !modal.hasOutcome || !modal.hasOutcomeBeforeAfter || !modal.outcomeBeforeVisualReport || !modal.internalScroll || modal.internalHorizontalOverflow || modal.technicalText || !modal.bodyLocked || !modal.stageInert) {
     throw new Error(`Battle modal contract failed at ${label}: ${JSON.stringify(modal)}`);
   }
   await capture(win, directory, 'battle-report-modal');
@@ -577,7 +630,7 @@ async function runViewport(win, width, height) {
 
   const analysis = await exerciseRoundAnalysis(win);
   await settle(win);
-  if (!analysis.available || !analysis.insideVisualRound || !analysis.expanded || analysis.eventCardCount < 1 || Math.abs(analysis.delta) > 1) {
+  if (!analysis.available || !analysis.allRoundsChecked || analysis.roundsChecked !== modal.roundCount || !analysis.expansionsValid || Math.abs(analysis.delta) > 1) {
     throw new Error(`Battle round analysis contract failed at ${label}: ${JSON.stringify(analysis)}`);
   }
 

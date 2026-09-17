@@ -90,7 +90,26 @@ async function snapshot(win) {
     const defenderDefenseSection = side(1)?.querySelector('[id="sim-defender-defenses"]')?.closest('.sim-unit-section-v1');
     const leadingCommander = document.querySelector('#sim-leading-commander-attacker');
     const visualReport = document.querySelector('[data-qa-battle-visual-report]');
-    const firstVisualRound = visualReport?.querySelector('[data-qa-battle-visual-round="1"]');
+    const visualRounds = Array.from(visualReport?.querySelectorAll('[data-qa-battle-visual-round]') || []);
+    const roundAnalysisChecks = visualRounds.map((round) => {
+      const roundIndex = round.getAttribute('data-qa-battle-visual-round') || '';
+      const analyses = Array.from(round.querySelectorAll('[data-qa-battle-round-analysis]'));
+      const analysis = analyses.length === 1 ? analyses[0] : null;
+      const eventCount = round.querySelectorAll('[data-qa-battle-event]').length;
+      const analysisEventCount = analysis?.querySelectorAll('[data-qa-battle-event]').length || 0;
+      const hasEmptyState = Boolean(analysis?.querySelector('ul, p'));
+      return {
+        roundIndex,
+        analysisCount: analyses.length,
+        analysisIndex: analyses[0]?.getAttribute('data-qa-battle-round-analysis') || '',
+        eventCount,
+        analysisEventCount,
+        hasEmptyState,
+        valid: analyses.length === 1
+          && analyses[0].getAttribute('data-qa-battle-round-analysis') === roundIndex
+          && (eventCount > 0 ? analysisEventCount === eventCount : hasEmptyState),
+      };
+    });
     return {
       meters: Array.from(document.querySelectorAll('.sim-population-v1')).map((item) => item.textContent?.replace(/\\s+/g, ' ').trim() || ''),
       firstTech: { value: firstTech?.querySelector('input')?.value || '', max: firstTech?.querySelector('input')?.getAttribute('max') || '' },
@@ -115,7 +134,8 @@ async function snapshot(win) {
       hasInitialSnapshot: Boolean(document.querySelector('[data-qa-battle-initial-snapshot]')),
       hasRoundSummary: Boolean(document.querySelector('.battle-round-summary-v1')),
       hasVisualReport: Boolean(document.querySelector('[data-qa-battle-visual-report]')),
-      analysisInsideVisualRound: Boolean(firstVisualRound?.querySelector('[data-qa-battle-round-analysis="1"]')),
+      roundAnalysisValid: visualRounds.length > 0 && roundAnalysisChecks.every((check) => check.valid),
+      roundAnalysisChecks,
       visibleTechnologyLevel: Array.from(document.querySelectorAll('.battle-tech-table-row-v1')).some((row) => (row.querySelector(':scope > span')?.textContent || '').includes('из')),
       hasComposition: Boolean(document.querySelector('[data-qa-battle-composition]')),
       hasTechnicalLabels: /CONFIRMED|INFERRED|NOT CALIBRATED|REPLAYABLE|SNAPSHOT|РЕЖИМ РАСЧЁТА|КАК ВЫБИРАТЬ ЦЕЛЬ|SHARED|INDEPENDENT|RAW|МИТИГАЦИЯ|МАТЧАП/i.test(document.body.textContent || ''),
@@ -215,7 +235,7 @@ async function runViewport(win, width, height) {
   await waitFor(win, `document.querySelector('.battle-round-analysis-v1')`);
 
   const result = await snapshot(win);
-  if (!result.hasResult || result.hasSaveButton || result.hasProvenance || result.hasRoundLog || !result.analysisInsideVisualRound || result.hasInitialSnapshot || result.hasRoundSummary || !result.hasVisualReport || result.visibleTechnologyLevel || result.hasComposition || result.hasTechnicalLabels || result.roundAnalysisCount < 1 || result.roundAnalysisOpen || result.unnamedControls.length || result.horizontalOverflow || !result.ariaExpandedControls) {
+  if (!result.hasResult || result.hasSaveButton || result.hasProvenance || result.hasRoundLog || !result.roundAnalysisValid || result.hasInitialSnapshot || result.hasRoundSummary || !result.hasVisualReport || result.visibleTechnologyLevel || result.hasComposition || result.hasTechnicalLabels || result.roundAnalysisCount < 1 || result.roundAnalysisOpen || result.unnamedControls.length || result.horizontalOverflow || !result.ariaExpandedControls) {
     throw new Error(`${label}: result/detail/accessibility contract failed ${JSON.stringify(result)}`);
   }
   await capture(win, directory, 'simulator-result');
