@@ -92,7 +92,10 @@ async function snapshot(win) {
     return {
       meters: Array.from(document.querySelectorAll('.sim-population-v1')).map((item) => item.textContent?.replace(/\\s+/g, ' ').trim() || ''),
       firstTech: { value: firstTech?.querySelector('input')?.value || '', max: firstTech?.querySelector('input')?.getAttribute('max') || '' },
+      firstTechIncreaseDisabled: Boolean(firstTech?.querySelector('button[aria-label^="Увеличить"]')?.disabled),
       firstShipLevel: { value: firstShip?.querySelector('.sim-level-control-v1 input')?.value || '', max: firstShip?.querySelector('.sim-level-control-v1 input')?.getAttribute('max') || '' },
+      firstShipLevelIncreaseDisabled: Boolean(firstShip?.querySelector('.sim-level-control-v1 button[aria-label^="Увеличить"]')?.disabled),
+      maxSuffixCount: document.querySelectorAll('.sim-level-control-v1 > small, .sim-tech-controls-v1 > span:not(.sim-number-stepper-v1)').length,
       commanderCounts: Array.from(attackerCommanderSection?.querySelectorAll('input[aria-label^="Количество"]') || []).filter((item) => Number(item.value) > 0).map((item) => item.value),
       leadingCommander: leadingCommander?.value || '',
       technologyAssetCount: document.querySelectorAll('.sim-tech-row-v1 > img[src]').length,
@@ -101,12 +104,16 @@ async function snapshot(win) {
       technologyHidden: document.querySelector('.sim-tech-list-v1')?.hasAttribute('hidden') ?? false,
       defenseLevelControls: defenderDefenseSection?.querySelectorAll('.sim-level-control-v1').length || 0,
       shieldLimits: ['tower-shield', 'planetary-shield'].map((id) => ({ id, max: document.querySelector('.sim-side-v1:last-child [data-qa-simulator-unit="' + id + '"] input')?.getAttribute('max') || '' })),
+      serviceUnit: { count: document.querySelector('[data-qa-simulator-unit="solar-satellite"] input[aria-label^="Количество"]')?.value || '', unavailable: Boolean(document.querySelector('.sim-unit-unavailable-v1')) },
       debugControls: document.querySelectorAll('.sim-execution-v1, .sim-seed-v1, .sim-target-priority-v1').length,
       hasResult: Boolean(document.querySelector('[role="dialog"][data-qa-battle-report-modal][data-qa-battle-report-source="simulation"]')),
       hasSaveButton: Boolean(document.querySelector('[data-qa-battle-save-simulation]')),
       hasProvenance: Boolean(document.querySelector('.battle-provenance-v1')),
-      hasRoundLog: Boolean(document.querySelector('.battle-scene-list-v1')),
+      hasRoundLog: Boolean(document.querySelector('[data-qa-battle-round-log]')),
       hasInitialSnapshot: Boolean(document.querySelector('[data-qa-battle-initial-snapshot]')),
+      hasRoundSummary: Boolean(document.querySelector('.battle-round-summary-v1')),
+      hasVisualReport: Boolean(document.querySelector('[data-qa-battle-visual-report]')),
+      hasTechnicalLabels: /CONFIRMED|INFERRED|NOT CALIBRATED|REPLAYABLE|SNAPSHOT|РЕЖИМ РАСЧЁТА|КАК ВЫБИРАТЬ ЦЕЛЬ|SHARED|INDEPENDENT|RAW|МИТИГАЦИЯ|МАТЧАП/i.test(document.body.textContent || ''),
       roundAnalysisOpen: Array.from(document.querySelectorAll('.battle-round-analysis-v1')).some((item) => item.hasAttribute('open')),
       roundAnalysisCount: document.querySelectorAll('.battle-round-analysis-v1').length,
       missingAriaControls: Array.from(document.querySelectorAll('[aria-expanded]')).filter((item) => {
@@ -141,7 +148,7 @@ async function runViewport(win, width, height) {
   if (initial.meters.length !== 5 || initial.meters.some((meter) => !meter.includes('/ 35 000')) || initial.meters.some((meter) => meter.includes('25 112'))) {
     throw new Error(`${label}: independent population meter contract failed ${JSON.stringify(initial)}`);
   }
-  if (initial.debugControls !== 4 || initial.unnamedControls.length || initial.horizontalOverflow) {
+  if (initial.debugControls !== 0 || initial.unnamedControls.length || initial.horizontalOverflow || initial.serviceUnit.unavailable) {
     throw new Error(`${label}: normal simulator controls/geometry contract failed ${JSON.stringify(initial)}`);
   }
 
@@ -161,7 +168,7 @@ async function runViewport(win, width, height) {
   await waitFor(win, `document.querySelectorAll('.sim-tech-row-v1').length === 20`);
   const firstTechnologySelector = '.sim-side-v1:first-child .sim-tech-row-v1:first-child input';
   await setField(win, firstTechnologySelector, 14);
-  await click(win, '.sim-side-v1:first-child .sim-tech-row-v1:first-child .sim-tech-controls-v1 button:last-child');
+  await click(win, '.sim-side-v1:first-child .sim-tech-row-v1:first-child .sim-tech-controls-v1 button[aria-label^="Увеличить"]');
   await setField(win, '.sim-side-v1:first-child .sim-unit-section-v1:not(.sim-tech-section-v1) .sim-unit-row-v1:first-child input[aria-label^="Количество"]', 999999);
   const capped = await snapshot(win);
   if (capped.meters.some((meter) => /[0-9]{2,3} ?[0-9]{3} ?\/ ?35 000/.test(meter) && Number(meter.match(/[0-9 ]+(?=\s*\/)/)?.[0]?.replace(/\s/g, '') || 0) > 35000)) {
@@ -178,7 +185,7 @@ async function runViewport(win, width, height) {
   await setField(win, '.sim-side-v1:last-child [data-qa-simulator-unit="planetary-shield"] input[aria-label^="Количество"]', 1);
 
   const configured = await snapshot(win);
-  if (configured.firstTech.value !== '15' || configured.firstTech.max !== '15' || configured.firstShipLevel.max !== '10' || configured.firstShipLevel.value !== '10' || configured.technologyAssetCount !== 20 || configured.commanderCounts.length !== 1 || configured.leadingCommander !== 'hunter' || configured.defenseLevelControls !== 0 || configured.shieldLimits.some(({ max }) => max !== '1')) {
+  if (configured.firstTech.value !== '15' || configured.firstTech.max !== '15' || !configured.firstTechIncreaseDisabled || configured.firstShipLevel.max !== '10' || configured.firstShipLevel.value !== '10' || !configured.firstShipLevelIncreaseDisabled || configured.maxSuffixCount !== 0 || configured.technologyAssetCount !== 20 || configured.commanderCounts.length !== 1 || configured.leadingCommander !== 'hunter' || configured.defenseLevelControls !== 0 || configured.shieldLimits.some(({ max }) => max !== '1')) {
     throw new Error(`${label}: level, asset, commander, or defense contract failed ${JSON.stringify(configured)}`);
   }
 
@@ -201,18 +208,14 @@ async function runViewport(win, width, height) {
   await waitFor(win, `document.querySelector('.battle-round-analysis-v1')`);
 
   const result = await snapshot(win);
-  if (!result.hasResult || !result.hasSaveButton || !result.hasProvenance || !result.hasRoundLog || !result.hasInitialSnapshot || result.roundAnalysisCount < 1 || result.roundAnalysisOpen || result.unnamedControls.length || result.horizontalOverflow || !result.ariaExpandedControls) {
+  if (!result.hasResult || result.hasSaveButton || result.hasProvenance || !result.hasRoundLog || result.hasInitialSnapshot || result.hasRoundSummary || result.hasVisualReport || result.hasTechnicalLabels || result.roundAnalysisCount < 1 || result.roundAnalysisOpen || result.unnamedControls.length || result.horizontalOverflow || !result.ariaExpandedControls) {
     throw new Error(`${label}: result/detail/accessibility contract failed ${JSON.stringify(result)}`);
   }
   await capture(win, directory, 'simulator-result');
 
-  const simulationReportId = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-battle-report-modal]')?.getAttribute('data-qa-battle-report-modal') || ''`);
-  await click(win, '[data-qa-battle-save-simulation]');
-  await waitFor(win, `(() => { try { return JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}')?.combat?.savedReportIds?.includes(${JSON.stringify(simulationReportId)}) === true; } catch { return false; } })()`);
-
   const saved = await readSave(win);
   const lastScenario = saved.combatSimulator?.lastScenario;
-  if (lastScenario?.executionMode !== 'calibration' || lastScenario?.technologyMode !== 'shared' || lastScenario?.attacker?.activeCommanderId !== 'hunter' || lastScenario?.attacker?.commanders?.length !== 1 || saved.combatSimulator?.presets?.length !== 1 || !saved.combat?.reports?.some((report) => report.id === simulationReportId && report.missionType === 'simulation') || !saved.combat?.savedReportIds?.includes(simulationReportId)) {
+  if (lastScenario?.executionMode !== 'production' || lastScenario?.technologyMode !== 'shared' || lastScenario?.attacker?.activeCommanderId !== 'hunter' || lastScenario?.attacker?.commanders?.length !== 1 || saved.combatSimulator?.presets?.length !== 1 || saved.combat?.reports?.some((report) => report.missionType === 'simulation') || saved.combat?.savedReportIds?.some((id) => saved.combat?.reports?.some((report) => report.id === id && report.missionType === 'simulation'))) {
     throw new Error(`${label}: full scenario persistence or simulation isolation failed ${JSON.stringify({ simulator: saved.combatSimulator, reportCount: saved.combat?.reports?.length })}`);
   }
 
@@ -226,7 +229,7 @@ async function runViewport(win, width, height) {
   })()`);
   await waitFor(win, `document.querySelectorAll('.sim-tech-row-v1').length === 20`);
   const reloaded = await snapshot(win);
-  if (reloaded.leadingCommander !== 'hunter' || reloaded.commanderCounts.length !== 1 || reloaded.debugControls !== 4 || reloaded.shieldLimits.some(({ max }) => max !== '1')) {
+  if (reloaded.leadingCommander !== 'hunter' || reloaded.commanderCounts.length !== 1 || reloaded.debugControls !== 0 || reloaded.shieldLimits.some(({ max }) => max !== '1') || reloaded.serviceUnit.unavailable) {
     throw new Error(`${label}: last scenario reload failed ${JSON.stringify(reloaded)}`);
   }
   await capture(win, directory, 'simulator-reloaded');

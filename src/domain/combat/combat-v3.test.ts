@@ -61,12 +61,21 @@ test('ship level changes one-unit stats and count scales the whole group', () =>
   );
 });
 
-test('service ships remain visible in the catalog but cannot enter combat', () => {
+test('service and civil ships remain selectable and participate in combat', () => {
+  const serviceAndCivilShips = ['solar-satellite', 'spy-probe', 'transporter', 'mega-transporter', 'colonizer', 'recycler'] as const;
   const result = validateCombatInput(input({
-    attacker: { participant: attacker, ships: [{ entityId: 'transporter', count: 1 }], commanders: [] },
+    attacker: { participant: attacker, ships: serviceAndCivilShips.map((entityId) => ({ entityId, count: 1 })), commanders: [] },
   }));
-  assert.equal(result.ok, false);
-  assert.equal(result.errors.some((error) => error.code === 'combat-ineligible'), true);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  const report = resolveCombat(result.value, { reportId: 'v3-service-ship' });
+  serviceAndCivilShips.forEach((entityId) => {
+    const attack = firstAttack(report, entityId);
+    const stack = report.initialSnapshot?.attacker.stacks.find((candidate) => candidate.entityId === entityId);
+    assert.equal(stack?.countBefore, 1);
+    assert.equal(attack.totalAttack, attack.attackValue);
+    assert.ok((attack.attackPerUnit ?? 0) > 0);
+  });
 });
 
 test('independent technology profiles affect their own attack and life calculations', () => {
@@ -132,6 +141,19 @@ test('commander type and level modify combat while the other side may have none'
   assert.equal(executioner.attackerForce.modifiers?.commanderRate, 0.06);
   assert.equal(firstAttack(baseline).attackValue, 8_000);
   assert.equal(firstAttack(executioner).attackValue, 8_480);
+
+  const executionerPreview = calculateCombatStackPreview(
+    { entityId: 'scout', count: 10 },
+    'aegis',
+    createDefaultCombatTechnologies(),
+    'production',
+    [{ entityId: 'scout', count: 10 }, { entityId: 'executioner', count: 1, level: 40 }],
+    'executioner',
+  );
+  assert.deepEqual(
+    { attackPerUnit: executionerPreview?.attackPerUnit, totalAttack: executionerPreview?.totalAttack },
+    { attackPerUnit: 848, totalAttack: 8_480 },
+  );
 
   const judge = resolveCombat(input({
     attacker: {

@@ -5,7 +5,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type MouseEvent,
   type SyntheticEvent,
 } from 'react';
@@ -27,7 +26,6 @@ import {
 import {
   BATTLE_MISSING_DATA,
   createBattleReportViewModel,
-  type BattleEntityKind,
   type BattleEventViewModel,
   type BattleParticipantViewModel,
   type BattleReportViewModel,
@@ -37,9 +35,6 @@ import {
   type BattleTechnologyViewModel,
 } from './domain/combat/battle-report-view-model.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
-import battlePlanet from '../assets/source/battle-report-v2/battle-planet-transparent-v1.png';
-import battleSpaceBackground from '../assets/source/battle-report-v2/battle-space-background-v1.png';
-import battleSun from '../assets/source/battle-report-v2/battle-sun-transparent-v1.png';
 import criticalHitArt from '../assets/source/New assets/technologies/technology.shared.critical-hit.png';
 import heavyArmorArt from '../assets/source/New assets/technologies/technology.shared.heavy-armor.png';
 import ionScienceArt from '../assets/source/New assets/technologies/technology.shared.ion-science.png';
@@ -57,7 +52,6 @@ import './battle-reports.css';
 
 type SaveNotice = { kind: 'saved' | 'error'; message: string };
 type ScrollRef = { current: HTMLElement | null };
-type BattleCelestialMode = 'planet' | 'sun' | 'clean-space';
 
 function formatNumber(value: number | null | undefined) {
   return value == null ? BATTLE_MISSING_DATA : new Intl.NumberFormat('ru-RU').format(value);
@@ -150,13 +144,17 @@ type BattleCardMetric = {
 function battleCardMetrics(side: BattleSideViewModel): BattleCardMetric[] {
   return [
     { id: 'population', label: 'Население', unit: 'населения', before: side.populationBefore, after: side.populationAfter, lost: side.losses.population },
-    { id: 'ships', label: 'Корабли', unit: 'кораблей', before: side.fleet.countBefore, after: side.fleet.countAfter, lost: side.losses.ships },
-    { id: 'defense', label: 'Оборона', unit: 'сооружений', before: side.defense.countBefore, after: side.defense.countAfter, lost: side.losses.defenses },
+    { id: 'ships', label: 'Корабли · население', unit: '', before: side.fleet.populationBefore, after: side.fleet.populationAfter, lost: populationLoss(side.fleet.populationBefore, side.fleet.populationAfter) },
+    { id: 'defense', label: 'Оборона · население', unit: '', before: side.defense.populationBefore, after: side.defense.populationAfter, lost: populationLoss(side.defense.populationBefore, side.defense.populationAfter) },
   ];
 }
 
+function populationLoss(before: number | null, after: number | null) {
+  return before != null && after != null ? Math.max(0, before - after) : null;
+}
+
 function battleCardMetricValue(value: number | null, unit: string) {
-  return value == null ? '—' : `${formatNumber(value)} ${unit}`;
+  return value == null ? '—' : unit ? `${formatNumber(value)} ${unit}` : formatNumber(value);
 }
 
 function battleCardSideName(side: BattleSideViewModel) {
@@ -191,11 +189,16 @@ function CardSideTitle({ side, winner = false, className = '' }: { side: BattleS
 
 function LossSummary({ side, className = '' }: { side: BattleSideViewModel; className?: string }) {
   const losses = battleCardMetrics(side).filter((metric) => metric.lost != null);
+  const lossLabel = (metric: BattleCardMetric) => metric.id === 'ships'
+    ? 'населения кораблей'
+    : metric.id === 'defense'
+      ? 'населения обороны'
+      : metric.unit;
   return (
     <div className={`battle-card-losses-v1 ${className}`} data-qa-battle-losses={side.participant.side}>
       <small>ПОТЕРЯНО В БОЮ</small>
       <div>
-        {losses.map((metric) => <span key={metric.id}><b>−{formatNumber(metric.lost)}</b><em>{metric.label.toLowerCase()}</em></span>)}
+        {losses.map((metric) => <span key={metric.id}><b>−{formatNumber(metric.lost)}</b><em>{lossLabel(metric)}</em></span>)}
       </div>
     </div>
   );
@@ -358,7 +361,7 @@ function battleSideInitials(side: BattleSideViewModel) {
 function UnitSummaryTable({ side }: { side: BattleSideViewModel }) {
   return (
     <div className="battle-unit-table-v1" data-qa-battle-unit-table={side.participant.side}>
-      <div className="battle-unit-table-head-v1"><span>ЕДИНИЦЫ</span><span>БЫЛО</span><span>ОСТАЛОСЬ</span></div>
+      <div className="battle-unit-table-head-v1"><span>ЕДИНИЦЫ · НАСЕЛЕНИЕ</span><span>БЫЛО</span><span>СТАЛО</span></div>
       <div className="battle-unit-table-row-v1">
         <strong>Население</strong>
         <b>{formatKnownNumber(side.populationBefore)}</b>
@@ -366,23 +369,16 @@ function UnitSummaryTable({ side }: { side: BattleSideViewModel }) {
       </div>
       <div className="battle-unit-table-row-v1">
         <strong>Корабли</strong>
-        <b>{formatKnownNumber(side.fleet.countBefore)}</b>
-        <b>{formatKnownNumber(side.fleet.countAfter)}</b>
+        <b>{formatKnownNumber(side.fleet.populationBefore)}</b>
+        <b>{formatKnownNumber(side.fleet.populationAfter)}</b>
       </div>
       <div className="battle-unit-table-row-v1">
         <strong>Оборона</strong>
-        <b>{formatKnownNumber(side.defense.countBefore)}</b>
-        <b>{formatKnownNumber(side.defense.countAfter)}</b>
+        <b>{formatKnownNumber(side.defense.populationBefore)}</b>
+        <b>{formatKnownNumber(side.defense.populationAfter)}</b>
       </div>
     </div>
   );
-}
-
-function technologyStatusLabel(status: BattleTechnologyViewModel['status']) {
-  if (status === 'confirmed') return 'CONFIRMED';
-  if (status === 'inferred') return 'INFERRED';
-  if (status === 'not-calibrated') return 'NOT CALIBRATED';
-  return 'UNKNOWN';
 }
 
 function TechnologyBonusTooltip({ technologies }: { technologies: readonly BattleTechnologyViewModel[] }) {
@@ -393,7 +389,7 @@ function TechnologyBonusTooltip({ technologies }: { technologies: readonly Battl
           <img src={BATTLE_TECHNOLOGY_ART[technology.id]} alt="" draggable={false} />
           <span>
             <strong>{technology.name}:</strong>
-            <small>{formatNumber(technology.level)} / {formatNumber(technology.maxLevel)} ур. <b>{technology.effect} · {technologyStatusLabel(technology.status)}</b></small>
+            <small>{formatNumber(technology.level)} из {formatNumber(technology.maxLevel)} уровня · <b>{technology.effect}</b></small>
           </span>
         </span>
       ))}
@@ -401,32 +397,31 @@ function TechnologyBonusTooltip({ technologies }: { technologies: readonly Battl
   );
 }
 
-function TechnologyBonusTable({ side, executionMode }: { side: BattleSideViewModel; executionMode?: 'production' | 'calibration' }) {
+function TechnologyBonusTable({ side }: { side: BattleSideViewModel }) {
   const hasSnapshot = side.technologies.length > 0;
   return (
     <div className="battle-tech-table-v1" data-qa-battle-technologies={side.participant.side}>
-      <div className="battle-tech-table-head-v1"><span>ТЕХНОЛОГИИ · {executionMode === 'calibration' ? 'CALIBRATION' : 'PRODUCTION'}</span><span>УРОВЕНЬ / ЭФФЕКТ</span></div>
+      <div className="battle-tech-table-head-v1"><span>ТЕХНОЛОГИИ</span><span>УРОВЕНЬ / ЭФФЕКТ</span></div>
       {hasSnapshot ? side.technologies.map((technology) => {
-        const isUnknown = technology.status === 'unknown' || technology.status === 'not-calibrated';
         const bonusText = technology.level > 0 ? `+${formatNumber(technology.bonusPercent)}% / ур.` : 'уровень 0';
         return (
           <div
             className="battle-tech-table-row-v1"
             key={technology.id}
             tabIndex={0}
-            aria-label={`${technology.name}: уровень ${technology.level} из ${technology.maxLevel}. ${technology.effect}. Статус ${technologyStatusLabel(technology.status)}.`}
+            aria-label={`${technology.name}: уровень ${technology.level} из ${technology.maxLevel}. ${technology.effect}. ${bonusText}.`}
           >
-            <span><strong>{technology.name}</strong><small>{technology.level} / {technology.maxLevel} · {technologyStatusLabel(technology.status)}</small></span>
-            <b className={isUnknown ? 'not-calibrated' : ''}>{bonusText}</b>
+            <span><strong>{technology.name}</strong><small>{technology.level} из {technology.maxLevel} уровня · {technology.effect}</small></span>
+            <b>{bonusText}</b>
             <TechnologyBonusTooltip technologies={[technology]} />
           </div>
         );
-      }) : <p className="battle-tech-empty-v1">Снимок технологий не зафиксирован.</p>}
+      }) : <p className="battle-tech-empty-v1">Технологии не зафиксированы.</p>}
     </div>
   );
 }
 
-function BattleHeaderSide({ side, executionMode }: { side: BattleSideViewModel; executionMode?: 'production' | 'calibration' }) {
+function BattleHeaderSide({ side }: { side: BattleSideViewModel }) {
   const avatar = battleSideAvatar(side);
   const participantMeta = [side.participant.coordinates, side.participant.race].filter(Boolean).join(' · ') || 'Идентификатор не зафиксирован';
   return (
@@ -445,17 +440,17 @@ function BattleHeaderSide({ side, executionMode }: { side: BattleSideViewModel; 
         <span className="battle-header-side-mark-v1" aria-hidden="true">{side.participant.side === 'attacker' ? '→' : '◆'}</span>
       </header>
       <UnitSummaryTable side={side} />
-      <TechnologyBonusTable side={side} executionMode={executionMode} />
+      <TechnologyBonusTable side={side} />
     </article>
   );
 }
 
-function PopulationPanel({ viewModel, executionMode }: { viewModel: BattleReportViewModel; executionMode?: 'production' | 'calibration' }) {
+function PopulationPanel({ viewModel }: { viewModel: BattleReportViewModel }) {
   return (
     <section className="battle-summary-v1" data-qa-battle-summary>
       <div className="battle-header-sides-v1">
-        <BattleHeaderSide side={viewModel.attacker} executionMode={executionMode} />
-        <BattleHeaderSide side={viewModel.defender} executionMode={executionMode} />
+        <BattleHeaderSide side={viewModel.attacker} />
+        <BattleHeaderSide side={viewModel.defender} />
       </div>
     </section>
   );
@@ -469,7 +464,7 @@ function StackRow({ stack }: { stack: BattleStackViewModel }) {
       <span className="battle-stack-name-v1">
         <strong>{stack.name}</strong>
         <small>{stack.category}{stack.kind !== 'defense' && stack.tooltip.level != null ? ` · уровень ${stack.tooltip.level}` : ''}</small>
-        {hasStats ? <small className="battle-stack-stats-v1">1 корабль · атака {formatKnownNumber(stack.attackPerUnit)} · жизнь {formatKnownNumber(stack.lifePerUnit)} · группа · атака {formatKnownNumber(stack.totalAttack)} · жизнь {formatKnownNumber(stack.hpPool)}</small> : <small className="battle-stack-stats-v1 unknown">Характеристики группы не зафиксированы</small>}
+        {hasStats ? <small className="battle-stack-stats-v1">Группа: атака {formatKnownNumber(stack.totalAttack)} · жизнь {formatKnownNumber(stack.hpPool)} · 1 корабль: атака {formatKnownNumber(stack.attackPerUnit)} · жизнь {formatKnownNumber(stack.lifePerUnit)}</small> : <small className="battle-stack-stats-v1 unknown">Характеристики группы не зафиксированы</small>}
       </span>
       <span><small>БЫЛО</small><b>{formatNumber(stack.countBefore)}</b></span>
       <span><small>ОСТАЛОСЬ</small><b>{formatNumber(stack.countAfter)}</b></span>
@@ -520,10 +515,11 @@ function BattleComposition({ viewModel }: { viewModel: BattleReportViewModel }) 
 function CommanderSnapshot({ viewModel }: { viewModel: BattleReportViewModel }) {
   const commanderRows = [viewModel.attacker, viewModel.defender].map((side) => ({ side, commander: side.activeCommander }));
   const modifierRows = [viewModel.attacker, viewModel.defender].filter((side) => side.modifiers.length);
+  const friendlyModifierLabel = (label: string) => label.replace(/snapshot/gi, 'бонус');
 
   return (
       <section className="battle-section-v1" data-qa-battle-commanders>
-        <header className="battle-section-head-v1"><div><small>КОМАНДИРСКИЙ SNAPSHOT</small><h3>КОМАНДИР И БОНУСЫ</h3></div></header>
+        <header className="battle-section-head-v1"><div><small>КОМАНДИРЫ</small><h3>КОМАНДИРЫ И БОНУСЫ</h3></div></header>
       {commanderRows.length ? (
         <div className="battle-commanders-v1">
           {commanderRows.map(({ side, commander }) => {
@@ -554,7 +550,7 @@ function CommanderSnapshot({ viewModel }: { viewModel: BattleReportViewModel }) 
           {modifierRows.map((side) => (
             <div key={side.participant.side}>
               <strong>{side.participant.side === 'attacker' ? 'АТАКУЮЩИЙ' : 'ЗАЩИТНИК'}</strong>
-              {side.modifiers.map((modifier) => <span key={modifier.key}>{modifier.label}: <b>{modifier.value}</b></span>)}
+              {side.modifiers.map((modifier) => <span key={modifier.key}>{friendlyModifierLabel(modifier.label)}: <b>{modifier.value}</b></span>)}
             </div>
           ))}
         </div>
@@ -575,8 +571,18 @@ function EventCard({ event }: { event: BattleEventViewModel }) {
     shield: 'ЩИТ',
     status: 'СТАТУС',
     destroyed: 'УНИЧТОЖЕНИЕ',
-    'special-bonus': 'БОНУС СТЕКА',
+    'special-bonus': 'БОНУС ГРУППЫ',
   }[event.actionType];
+  const eventNote = event.note
+    ?.replace(/Нейтральный модификатор пары/g, 'Обычное взаимодействие')
+    .replace(/Модификатор пары/g, 'Бонус взаимодействия')
+    .replace(/Следующая живая цель выбирается заново\./g, 'Следующая цель выбирается автоматически.')
+    .replace(/combat-eligible стеки/g, 'боевые группы')
+    .replace(/живых юнитов/g, 'живых кораблей')
+    .replace(/rate /g, 'коэффициент ')
+    .replace(/cap unknown/g, 'без верхнего ограничения')
+    .replace(/cap /g, 'предел ')
+    .replace(/итог /g, 'результат ');
 
   return (
     <article className="battle-event-v1" data-qa-battle-event={event.sequence} data-qa-battle-event-action={event.actionType}>
@@ -591,17 +597,17 @@ function EventCard({ event }: { event: BattleEventViewModel }) {
       <div className="battle-event-metrics-v1">
         {event.attackPerUnit != null ? <span><small>АТАКА · 1 КОРАБЛЬ</small><b>{formatNumber(event.attackPerUnit)}</b></span> : null}
         {event.attackValue != null ? <span><small>АТАКА · ГРУППА</small><b>{formatNumber(event.attackValue)}</b></span> : null}
-        {event.baseAttack != null && event.baseAttack !== event.attackValue ? <span><small>БАЗА ГРУППЫ</small><b>{formatNumber(event.baseAttack)}</b></span> : null}
+        {event.baseAttack != null && event.baseAttack !== event.attackValue ? <span><small>БАЗОВАЯ АТАКА ГРУППЫ</small><b>{formatNumber(event.baseAttack)}</b></span> : null}
         {event.damage != null ? <span><small>УРОН</small><b>{formatNumber(event.damage)}</b></span> : null}
-        {event.rawDamageBeforeArmor != null ? <span><small>RAW ДО БРОНИ</small><b>{formatNumber(event.rawDamageBeforeArmor)}</b></span> : null}
-        {event.rawDamage != null ? <span><small>RAW ПОСЛЕ КРИТА</small><b>{formatNumber(event.rawDamage)}</b></span> : null}
+        {event.rawDamageBeforeArmor != null ? <span><small>УРОН ДО БРОНИ</small><b>{formatNumber(event.rawDamageBeforeArmor)}</b></span> : null}
+        {event.rawDamage != null && event.rawDamage !== event.rawDamageBeforeArmor ? <span><small>УРОН ПОСЛЕ КРИТА</small><b>{formatNumber(event.rawDamage)}</b></span> : null}
         {event.effectiveDamage != null ? <span><small>ПОСЛЕ БРОНИ</small><b>{formatNumber(event.effectiveDamage)}</b></span> : null}
-        {event.mitigation != null ? <span><small>МИТИГАЦИЯ</small><b>{formatNumber(event.mitigation)}</b></span> : null}
-        {event.matchupMultiplier != null ? <span><small>МАТЧАП</small><b>×{event.matchupMultiplier.toFixed(2)} · {event.matchupStatus === 'inferred' ? 'INFERRED' : 'NOT CALIBRATED'}</b></span> : null}
-        {event.reportedBonus != null && event.reportedBonus !== 0 ? <span><small>БОНУС ПАРЫ</small><b>{event.reportedBonus > 0 ? '+' : ''}{formatNumber(event.reportedBonus)}</b></span> : null}
+        {event.mitigation != null ? <span><small>СНИЖЕНО БРОНЁЙ</small><b>{formatNumber(event.mitigation)}</b></span> : null}
+        {event.matchupMultiplier != null ? <span><small>ВЗАИМОДЕЙСТВИЕ ТИПОВ</small><b>×{event.matchupMultiplier.toFixed(2)}</b></span> : null}
+        {event.reportedBonus != null && event.reportedBonus !== 0 ? <span><small>ДОПОЛНИТЕЛЬНЫЙ УРОН</small><b>{event.reportedBonus > 0 ? '+' : ''}{formatNumber(event.reportedBonus)}</b></span> : null}
         {event.destroyedCount != null ? <span><small>УНИЧТОЖЕНО</small><b>{formatNumber(event.destroyedCount)}</b></span> : null}
-        {event.criticalChance != null ? <span><small>КРИТ · ШАНС</small><b>{formatNumber(event.criticalChance * 100)}%{event.criticalMultiplier && event.criticalMultiplier > 1 ? ' · ×2' : ''}</b></span> : null}
-        {event.abilityChance != null ? <span><small>СПОСОБНОСТЬ · ШАНС</small><b>{formatNumber(event.abilityChance * 100)}%{event.abilityDraw != null ? ` · бросок ${formatNumber(event.abilityDraw)}` : ''}</b></span> : null}
+        {event.criticalChance != null ? <span><small>КРИТИЧЕСКИЙ УДАР</small><b>{formatNumber(event.criticalChance * 100)}%{event.criticalMultiplier && event.criticalMultiplier > 1 ? ' · ×2' : ''}</b></span> : null}
+        {event.abilityChance != null ? <span><small>СРАБАТЫВАНИЕ СПОСОБНОСТИ</small><b>{formatNumber(event.abilityChance * 100)}%</b></span> : null}
         {event.repairedCount != null ? <span><small>ВОССТАНОВЛЕНО</small><b>{formatNumber(event.repairedCount)} / {formatNumber(event.repairLimit)}</b></span> : null}
         {event.specialBonusAmount != null ? <span><small>БОНУС НАЧАЛА РАУНДА</small><b>{formatNumber(event.specialBonusAmount * 100)}{event.specialBonusKind === 'armor' ? ' п.п.' : '%'}</b></span> : null}
         <OptionalMetric label="ЩИТ" before={event.shieldBefore} after={event.shieldAfter} />
@@ -609,7 +615,7 @@ function EventCard({ event }: { event: BattleEventViewModel }) {
         <OptionalMetric label="ЖИЗНЬ" before={event.lifeBefore} after={event.lifeAfter} />
       </div>
       {event.commanderAbility ? <div className="battle-event-ability-v1">◆ {event.commanderAbility}</div> : null}
-      {event.note ? <p>{event.note}</p> : null}
+      {eventNote ? <p>{eventNote}</p> : null}
     </article>
   );
 }
@@ -662,212 +668,94 @@ function RoundAnalysis({ round, scrollRef }: { round: BattleRoundViewModel; scro
       ) : round.analysis.length ? (
         <ul id={eventsId}>{round.analysis.map((line, index) => <li key={`${round.index}-${index}`}>{line}</li>)}</ul>
       ) : (
-        <p id={eventsId}>Анализ недоступен для этого demo-отчёта.</p>
+        <p id={eventsId}>Подробности событий для этого отчёта отсутствуют.</p>
       )}
     </details>
   );
 }
 
-function entityKindLabel(kind: BattleEntityKind) {
-  if (kind === 'commander') return 'Командирский корабль';
-  if (kind === 'defense') return 'Оборона';
-  if (kind === 'ship') return 'Корабль';
-  return BATTLE_MISSING_DATA;
-}
-
-function tooltipAriaLabel(stack: BattleStackViewModel) {
-  return `${stack.name}, ${entityKindLabel(stack.kind)}, количество до действий ${formatNumber(stack.countBefore)}`;
-}
-
-function sceneCount(stack: BattleStackViewModel) {
-  return stack.countBefore ?? stack.countAfter;
-}
-
-function SceneStack({ stack, side, roundIndex }: { stack: BattleStackViewModel; side: 'attacker' | 'defender'; roundIndex: number | 'initial' }) {
-  const tooltipId = `battle-tooltip-${roundIndex}-${side}-${stack.key.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
-  const isDefense = stack.kind === 'defense';
-  const count = sceneCount(stack);
-  return (
-    <button
-      type="button"
-      className={`battle-scene-stack-v1 ${side} ${isDefense ? 'defense' : ''}`}
-      data-qa-battle-stack={stack.entityId}
-      data-qa-battle-stack-kind={stack.kind}
-      data-qa-battle-stack-count={count == null ? '' : count}
-      data-qa-battle-stack-count-after={stack.countAfter == null ? '' : stack.countAfter}
-      aria-label={tooltipAriaLabel(stack)}
-      aria-describedby={tooltipId}
-      onClick={(event) => event.preventDefault()}
-    >
-      <span className="battle-scene-sprite-v1">
-        <img src={stack.art} alt="" draggable={false} />
-        <span className="battle-scene-count-v1">{formatNumber(count)}</span>
-      </span>
-      <span id={tooltipId} className="battle-scene-tooltip-v1" role="tooltip">
-        <strong>{stack.tooltip.name}</strong>
-        <span>{stack.tooltip.type}</span>
-        {!isDefense ? <span>Уровень: <b>{formatNumber(stack.tooltip.level)}</b></span> : null}
-        <span>Атака 1 корабля: <b>{formatNumber(stack.attackPerUnit)}</b></span>
-        <span>Атака всей группы: <b>{formatNumber(stack.totalAttack)}</b></span>
-        <span>Жизнь 1 корабля: <b>{formatNumber(stack.lifePerUnit)}</b></span>
-        <span>Жизнь всей группы: <b>{formatNumber(stack.hpPool)}</b></span>
-        <span>Броня: <b>{formatNumber(stack.tooltip.armor)}</b></span>
-      </span>
-    </button>
-  );
-}
-
-function isSceneVisible(stack: BattleStackViewModel) {
-  const count = sceneCount(stack);
-  return count == null || count > 0;
-}
-
-function visualReportAnchorId(viewModel: BattleReportViewModel) {
-  return `battle-report-visual-${viewModel.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
-}
-
-function SnapshotLedger({
-  side,
-  snapshot,
-  label,
-}: {
-  side: 'attacker' | 'defender';
-  snapshot: NonNullable<BattleReportViewModel['initialSnapshot']>['attacker'];
-  label: string;
-}) {
-  const stacks = [...snapshot.stacks, ...snapshot.defenses];
-  const count = stacks.reduce<number | null>((total, stack) => total == null || stack.countBefore == null ? null : total + stack.countBefore, 0);
-  const population = side === 'defender' && snapshot.defensePopulationBefore != null
-    ? (snapshot.fleetPopulationBefore ?? 0) + snapshot.defensePopulationBefore
-    : snapshot.fleetPopulationBefore;
-  return (
-    <article className={`battle-initial-side-v1 ${side}`} data-qa-battle-initial-side={side}>
-      <header><small>{label}</small><strong>ДО НАЧАЛА РАУНДА 1</strong></header>
-      <div className="battle-initial-metrics-v1">
-        <span><small>ЕДИНИЦЫ</small><b>{formatKnownNumber(count)}</b></span>
-        <span><small>НАСЕЛЕНИЕ</small><b>{formatKnownNumber(population)}</b></span>
-        <span><small>ГРУПП</small><b>{formatNumber(stacks.length)}</b></span>
-      </div>
-      <div className="battle-initial-stack-list-v1">
-        {stacks.length ? stacks.map((stack) => (
-          <span key={stack.key}>
-            <img src={stack.art} alt="" draggable={false} />
-            <strong>{stack.name}</strong>
-            <b>{formatNumber(stack.countBefore)}</b>
-            <small>атака группы {formatKnownNumber(stack.totalAttack)} · жизнь группы {formatKnownNumber(stack.hpPool)}</small>
-          </span>
-        )) : <em>Состав до начала боя не зафиксирован.</em>}
-      </div>
-    </article>
-  );
-}
-
-function InitialSnapshot({ viewModel }: { viewModel: BattleReportViewModel }) {
-  if (!viewModel.initialSnapshot) {
-    return (
-      <div className="battle-initial-snapshot-v1 missing" data-qa-battle-initial-snapshot="missing">
-        Начальный снимок до раунда 1 отсутствует в этом старом отчёте. Новые значения не подставлены.
-      </div>
-    );
+function roundStateLine(round: BattleRoundViewModel) {
+  const attacker = round.attackerSnapshot;
+  const defender = round.defenderSnapshot;
+  if (!attacker && !defender) return 'Состояние сторон для этого раунда не зафиксировано.';
+  const parts = [
+    `До действий: флот атакующего — ${formatKnownNumber(attacker?.fleetPopulationBefore)} населения, защитника — ${formatKnownNumber(defender?.fleetPopulationBefore)} населения`,
+    `после действий: флот атакующего — ${formatKnownNumber(attacker?.fleetPopulationAfter)} населения, защитника — ${formatKnownNumber(defender?.fleetPopulationAfter)} населения`,
+  ];
+  if (defender?.defensePopulationBefore != null || defender?.defensePopulationAfter != null) {
+    parts.push(`оборона защитника: ${formatKnownNumber(defender.defensePopulationBefore)} → ${formatKnownNumber(defender.defensePopulationAfter)} населения`);
   }
-  return (
-    <section className="battle-initial-snapshot-v1" data-qa-battle-initial-snapshot>
-      <header><div><small>НАЧАЛЬНЫЙ СНИМОК</small><h4>ДО НАЧАЛА БОЯ</h4></div><span>ЭТО НЕ РАУНД 0</span></header>
-      <div className="battle-initial-grid-v1">
-        <SnapshotLedger side="attacker" snapshot={viewModel.initialSnapshot.attacker} label="АТАКУЮЩИЙ" />
-        <SnapshotLedger side="defender" snapshot={viewModel.initialSnapshot.defender} label="ЗАЩИТНИК" />
-      </div>
-    </section>
-  );
+  return parts.join(' · ');
 }
 
-function RoundSummaryStrip({ round }: { round: BattleRoundViewModel }) {
-  const summary = round.summary;
-  if (!summary) return <div className="battle-round-summary-v1 missing">Сводка раунда не зафиксирована.</div>;
-  return (
-    <div className="battle-round-summary-v1" data-qa-battle-round-summary={round.index}>
-      <span><small>УРОН АТАКУЮЩЕГО</small><b>{formatKnownNumber(summary.attackerDamage)}</b></span>
-      <span><small>УРОН ЗАЩИТНИКА</small><b>{formatKnownNumber(summary.defenderDamage)}</b></span>
-      <span><small>ПОТЕРИ</small><b>{formatKnownNumber(summary.destroyedUnits)}</b></span>
-      <span><small>СПОСОБНОСТИ</small><b>{formatKnownNumber(summary.procs)}</b></span>
-      <span><small>КРИТ. / СТАТУСЫ</small><b>{formatKnownNumber(summary.criticalHits == null || summary.paralyzes == null || summary.cancelledAttacks == null ? null : summary.criticalHits + summary.paralyzes + summary.cancelledAttacks)}</b></span>
-      <span><small>ВОССТАНОВЛЕНО</small><b>{formatKnownNumber(summary.repairs)}</b></span>
-      <span><small>ОСТАЛОСЬ НАСЕЛЕНИЯ</small><b>{formatKnownNumber(summary.survivingPopulation.attacker)} / {formatKnownNumber(summary.survivingPopulation.defender)}</b></span>
-      <span><small>ОБОРОНА ОСТАЛОСЬ</small><b>{formatKnownNumber(summary.survivingDefensePopulation)}</b></span>
-    </div>
-  );
+function roundActionLine(round: BattleRoundViewModel) {
+  const snapshotPopulation = (snapshot: BattleRoundViewModel['attackerSnapshot'], includeDefense = false) => {
+    if (!snapshot || snapshot.fleetPopulationAfter == null) return null;
+    if (!includeDefense || snapshot.defensePopulationAfter == null) return snapshot.fleetPopulationAfter;
+    return snapshot.fleetPopulationAfter + snapshot.defensePopulationAfter;
+  };
+  const summary = round.summary ?? (() => {
+    const knownDamage = round.events.map((event) => event.damage).filter((damage): damage is number => damage != null);
+    const destroyedEvents = round.events.filter((event) => event.destroyedCount != null);
+    const knownDestroyedPopulation = destroyedEvents.map((event) => event.target.populationPerUnit != null && event.destroyedCount != null
+      ? event.target.populationPerUnit * event.destroyedCount
+      : null);
+    const knownRepairs = round.events.map((event) => event.repairedCount).filter((repairs): repairs is number => repairs != null);
+    return {
+      attackerDamage: knownDamage.length ? round.events.reduce((total, event) => total + (event.actorSide === 'attacker' ? event.damage ?? 0 : 0), 0) : null,
+      defenderDamage: knownDamage.length ? round.events.reduce((total, event) => total + (event.actorSide === 'defender' ? event.damage ?? 0 : 0), 0) : null,
+      destroyedUnits: destroyedEvents.length ? destroyedEvents.reduce((total, event) => total + (event.destroyedCount ?? 0), 0) : null,
+      destroyedPopulation: knownDestroyedPopulation.length && knownDestroyedPopulation.every((population): population is number => population != null)
+        ? knownDestroyedPopulation.reduce((total, population) => total + population, 0)
+        : null,
+      procs: round.events.filter((event) => event.actionType === 'ability').length,
+      repairs: knownRepairs.length ? knownRepairs.reduce((total, repairs) => total + repairs, 0) : 0,
+      survivingPopulation: {
+        attacker: snapshotPopulation(round.attackerSnapshot),
+        defender: snapshotPopulation(round.defenderSnapshot, true),
+      },
+      survivingDefensePopulation: round.defenderSnapshot?.defensePopulationAfter ?? null,
+    };
+  })();
+  const parts: string[] = [];
+  if (summary.attackerDamage != null || summary.defenderDamage != null) {
+    parts.push(`урон: атакующий ${formatKnownNumber(summary.attackerDamage)}, защитник ${formatKnownNumber(summary.defenderDamage)}`);
+  }
+  if (summary.destroyedPopulation != null || summary.destroyedUnits != null) {
+    parts.push(`потери: ${formatKnownNumber(summary.destroyedPopulation ?? summary.destroyedUnits)}${summary.destroyedPopulation != null ? ' населения' : ' кораблей'}${summary.destroyedUnits != null ? ` (${formatKnownNumber(summary.destroyedUnits)} кораблей/сооружений)` : ''}`);
+  }
+  if (summary.procs != null || summary.repairs != null) {
+    parts.push(`способности: ${formatKnownNumber(summary.procs)}, восстановлено ${formatKnownNumber(summary.repairs)}`);
+  }
+  if (summary.survivingPopulation.attacker != null || summary.survivingPopulation.defender != null) {
+    parts.push(`остаток населения: атакующий ${formatKnownNumber(summary.survivingPopulation.attacker)}, защитник ${formatKnownNumber(summary.survivingPopulation.defender)}`);
+  }
+  if (summary.survivingDefensePopulation != null) parts.push(`оборона: ${formatKnownNumber(summary.survivingDefensePopulation)} населения`);
+  return parts.length ? parts.join(' · ') : 'В этом раунде числовых изменений не зафиксировано.';
 }
 
-function SceneSide({ stacks, side, roundIndex }: { stacks: BattleStackViewModel[]; side: 'attacker' | 'defender'; roundIndex: number | 'initial' }) {
-  const visible = stacks.filter(isSceneVisible);
-  const regular = visible.filter((stack) => stack.kind !== 'commander');
-  const commanders = visible.filter((stack) => stack.kind === 'commander');
+function BattleRoundLog({ viewModel, scrollRef }: { viewModel: BattleReportViewModel; scrollRef?: ScrollRef }) {
   return (
-    <div className={`battle-scene-side-v1 ${side}`} aria-label={side === 'attacker' ? 'Корабли атакующего' : 'Корабли защитника'}>
-      <div className="battle-scene-zone-v1">
-        {regular.map((stack) => <SceneStack key={stack.key} stack={stack} side={side} roundIndex={roundIndex} />)}
-      </div>
-      {commanders.length ? (
-        <div className="battle-scene-commander-zone-v1" aria-label="Командирские корабли">
-          {commanders.map((stack) => <SceneStack key={stack.key} stack={stack} side={side} roundIndex={roundIndex} />)}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function BattleVisualReport({ viewModel, scrollRef, celestialMode = 'planet' }: { viewModel: BattleReportViewModel; scrollRef?: ScrollRef; celestialMode?: BattleCelestialMode }) {
-  return (
-    <section id={visualReportAnchorId(viewModel)} className="battle-section-v1 battle-visual-report-v1" data-qa-battle-visual-report>
+    <section className="battle-section-v1 battle-round-log-v1" data-qa-battle-round-log>
       <header className="battle-section-head-v1">
-        <div><small>СТАТИЧНЫЙ ПРОСМОТР SNAPSHOT</small><h3>ВИЗУАЛЬНЫЙ БОЕВОЙ ДОКЛАД</h3></div>
-        <span>СЦЕНА ПОКАЗЫВАЕТ СОСТОЯНИЕ ДО ДЕЙСТВИЙ РАУНДА</span>
+        <div><small>ХОД БОЯ</small><h3>РАУНДЫ</h3></div>
+        <span>{formatNumber(viewModel.roundCount)} РАУНДОВ</span>
       </header>
-      <InitialSnapshot viewModel={viewModel} />
-      <div className="battle-scene-list-v1">
-        {viewModel.rounds.length ? viewModel.rounds.map((round) => {
-          const attackerStacks = round.attackerSnapshot?.stacks ?? [];
-          const defenderStacks = round.defenderSnapshot?.stacks ?? [];
-          const defenses = (round.defenderSnapshot?.defenses ?? []).filter(isSceneVisible);
-          return (
-            <article className="battle-round-report-v1" key={`${viewModel.id}-${round.index}`} data-qa-battle-round={round.index}>
-              <div className="battle-round-report-head-v1"><div><strong>РАУНД {round.index} / {viewModel.roundCount}</strong><small>СОСТОЯНИЕ ДО ДЕЙСТВИЙ</small></div><span>{round.attackerSnapshot && round.defenderSnapshot ? 'SNAPSHOT СОХРАНЁН' : 'SNAPSHOT НЕДОСТУПЕН'}</span></div>
-              <RoundSummaryStrip round={round} />
-              <div
-                className="battle-scene-v1"
-                data-qa-battle-scene={round.index}
-                data-qa-battle-cell-size="100px"
-                data-qa-battle-celestial-mode={celestialMode}
-                style={{
-                  '--battle-space-image': `url("${battleSpaceBackground}")`,
-                  '--battle-celestial-planet-image': `url("${battlePlanet}")`,
-                  '--battle-celestial-sun-image': `url("${battleSun}")`,
-                  '--battle-fleet-rows': round.fleetRows,
-                } as CSSProperties}
-              >
-                <div className="battle-scene-space-layer-v1" aria-hidden="true" />
-                <div className="battle-scene-fleet-field-v1">
-                  <div className="battle-scene-side-label-v1 attacker"><span>АТАКУЮЩИЙ</span><strong>{participantLabel(viewModel.attacker.participant)}</strong></div>
-                  <div className="battle-scene-side-label-v1 defender"><span>ЗАЩИТНИК</span><strong>{participantLabel(viewModel.defender.participant)}</strong></div>
-                  <div className="battle-scene-fleet-grid-v1">
-                    <SceneSide stacks={attackerStacks} side="attacker" roundIndex={round.index} />
-                    <SceneSide stacks={defenderStacks} side="defender" roundIndex={round.index} />
-                  </div>
-                </div>
-                <div className="battle-scene-celestial-layer-v2" data-qa-battle-celestial-layer>
-                  <div className="battle-scene-celestial-object-v2" data-qa-battle-celestial-object aria-hidden="true" />
-                  {defenses.length ? (
-                    <div className="battle-scene-defense-zone-v1" data-qa-battle-defense-zone aria-label="Оборона защитника">
-                      {defenses.map((stack) => <SceneStack key={stack.key} stack={stack} side="defender" roundIndex={round.index} />)}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
+      {viewModel.rounds.length ? (
+        <div className="battle-round-list-v1">
+          {viewModel.rounds.map((round) => (
+            <article className="battle-round-v1" key={`${viewModel.id}-${round.index}`} data-qa-battle-round={round.index}>
+              <header className="battle-round-head-v1">
+                <strong>РАУНД {round.index}</strong>
+                <span>{formatNumber(round.events.length)} СОБЫТИЙ</span>
+              </header>
+              <p className="battle-round-state-v1">{roundStateLine(round)}</p>
+              <p className="battle-round-action-v1">{roundActionLine(round)}</p>
               <RoundAnalysis round={round} scrollRef={scrollRef} />
             </article>
-          );
-        }) : <p className="battle-empty-inline-v1">Сохранённые snapshots раундов отсутствуют.</p>}
-      </div>
+          ))}
+        </div>
+      ) : <p className="battle-empty-inline-v1">События раундов отсутствуют.</p>}
     </section>
   );
 }
@@ -876,20 +764,20 @@ type BattleOutcomeStat = {
   id: 'population' | 'ships' | 'defense';
   label: string;
   unit: string;
-  remaining: number | null;
-  lost: number | null;
+  before: number | null;
+  after: number | null;
 };
 
 function outcomeStats(side: BattleSideViewModel): BattleOutcomeStat[] {
   return [
-    { id: 'population', label: 'Население', unit: 'населения', remaining: side.populationAfter, lost: side.losses.population },
-    { id: 'ships', label: 'Корабли', unit: 'кораблей', remaining: side.fleet.countAfter, lost: side.losses.ships },
-    { id: 'defense', label: 'Оборона', unit: 'сооружений', remaining: side.defense.countAfter, lost: side.losses.defenses },
+    { id: 'population', label: 'Население', unit: 'населения', before: side.populationBefore, after: side.populationAfter },
+    { id: 'ships', label: 'Корабли · население', unit: '', before: side.fleet.populationBefore, after: side.fleet.populationAfter },
+    { id: 'defense', label: 'Оборона · население', unit: '', before: side.defense.populationBefore, after: side.defense.populationAfter },
   ];
 }
 
 function formatOutcomeWithUnit(value: number | null, unit: string) {
-  return value == null ? '—' : `${formatNumber(value)} ${unit}`;
+  return value == null ? '—' : unit ? `${formatNumber(value)} ${unit}` : formatNumber(value);
 }
 
 function OutcomeIntro({
@@ -930,12 +818,12 @@ function OutcomeSideHeader({ side, winner }: { side: BattleSideViewModel; winner
 function OutcomeMiniStateTable({ side, className = '' }: { side: BattleSideViewModel; className?: string }) {
   return (
     <div className={`battle-outcome-mini-table-v1 ${className}`}>
-      <div className="battle-outcome-mini-table-head-v1"><span>ПАРАМЕТР</span><span>ОСТАЛОСЬ</span><span>ПОТЕРЯНО</span></div>
+      <div className="battle-outcome-mini-table-head-v1"><span>ПАРАМЕТР</span><span>БЫЛО</span><span>ОСТАЛОСЬ</span></div>
       {outcomeStats(side).map((stat) => (
         <div className="battle-outcome-mini-table-row-v1" key={stat.id}>
           <strong>{stat.label}</strong>
-          <b>{formatOutcomeWithUnit(stat.remaining, stat.unit)}</b>
-          <b className="loss">{formatOutcomeWithUnit(stat.lost, stat.unit)}</b>
+          <b>{formatOutcomeWithUnit(stat.before, stat.unit)}</b>
+          <b>{formatOutcomeWithUnit(stat.after, stat.unit)}</b>
         </div>
       ))}
     </div>
@@ -1012,60 +900,23 @@ function BattleOutcome({ viewModel }: { viewModel: BattleReportViewModel }) {
   );
 }
 
-function ReportProvenance({ viewModel }: { viewModel: BattleReportViewModel }) {
-  const rng = viewModel.rngProvenance;
-  const replayable = rng.mode === 'seeded' || rng.mode === 'recorded-sequence';
-  const priorityLabel = (value: string | null) => value === 'threat'
-    ? 'Угроза — самый сильный стек'
-    : value === 'population'
-      ? 'Население — самый большой стек'
-      : value === 'catalog'
-        ? 'Каталог — стабильный порядок'
-        : BATTLE_MISSING_DATA;
-  return (
-    <section className="battle-section-v1 battle-provenance-v1" data-qa-battle-provenance>
-      <header className="battle-section-head-v1">
-        <div><small>ПРОИСХОЖДЕНИЕ РАСЧЁТА</small><h3>ПРОФИЛЬ И ВОСПРОИЗВОДИМОСТЬ</h3></div>
-        <span className={replayable ? '' : 'battle-provenance-warning-v1'}>{replayable ? 'REPLAYABLE' : 'NON-REPLAYABLE'}</span>
-      </header>
-      <div className="battle-provenance-grid-v1">
-        <span><small>СХЕМА</small><b>{formatKnownNumber(viewModel.schemaVersion)}</b></span>
-        <span><small>ДВИЖОК</small><b>{viewModel.engineVersion ?? BATTLE_MISSING_DATA}</b></span>
-        <span><small>ПРОФИЛЬ</small><b>{viewModel.profileId ?? BATTLE_MISSING_DATA}</b></span>
-        <span><small>РЕЖИМ</small><b>{viewModel.executionMode ?? BATTLE_MISSING_DATA} · {viewModel.technologyMode ?? BATTLE_MISSING_DATA}</b></span>
-        <span><small>RNG</small><b>{rng.mode}{rng.seed ? ` · ${rng.seed}` : ''}</b></span>
-        <span><small>РАУНДЫ</small><b>{formatNumber(viewModel.roundCount)}</b></span>
-      </div>
-      <div className="battle-target-priority-v1">
-        <span><small>ЦЕЛЬ АТАКУЮЩЕГО</small><b>{priorityLabel(viewModel.targetPriority.attacker)}</b></span>
-        <span><small>ЦЕЛЬ ЗАЩИТНИКА</small><b>{priorityLabel(viewModel.targetPriority.defender)}</b></span>
-      </div>
-      {!replayable ? <p className="battle-provenance-warning-v1">Seed не сохранён: этот отчёт нельзя точно воспроизвести. Числа отчёта сохранены как есть.</p> : null}
-      {viewModel.unknowns.length ? <ul className="battle-unknown-list-v1">{viewModel.unknowns.map((unknown, index) => <li key={`${index}-${unknown}`}>{unknown}</li>)}</ul> : null}
-    </section>
-  );
-}
-
 export function BattleReportDetailBody({
   report,
   viewModel: providedViewModel,
   scrollRef,
-  celestialMode,
 }: {
   report: BattleReport;
   viewModel?: BattleReportViewModel;
   scrollRef?: ScrollRef;
-  celestialMode?: BattleCelestialMode;
 }) {
   const viewModel = providedViewModel ?? createBattleReportViewModel(report);
   return (
     <>
       <BattleOutcome viewModel={viewModel} />
-      <PopulationPanel viewModel={viewModel} executionMode={report.metadata?.executionMode} />
-      <ReportProvenance viewModel={viewModel} />
-      <BattleVisualReport viewModel={viewModel} scrollRef={scrollRef} celestialMode={celestialMode} />
+      <PopulationPanel viewModel={viewModel} />
       <BattleComposition viewModel={viewModel} />
       <CommanderSnapshot viewModel={viewModel} />
+      <BattleRoundLog viewModel={viewModel} scrollRef={scrollRef} />
     </>
   );
 }
@@ -1077,21 +928,15 @@ export function BattleReportModal({
   viewModel: providedViewModel,
   saved = false,
   onToggleSaved,
-  onSaveToHistory,
-  savedToHistory = false,
   onClose,
   context = 'battle',
-  celestialMode,
 }: {
   report: BattleReport;
   viewModel?: BattleReportViewModel;
   saved?: boolean;
   onToggleSaved?: () => void;
-  onSaveToHistory?: () => void;
-  savedToHistory?: boolean;
   onClose: () => void;
   context?: 'battle' | 'simulation';
-  celestialMode?: BattleCelestialMode;
 }) {
   const viewModel = providedViewModel ?? createBattleReportViewModel(report);
   const modalRef = useRef<HTMLElement>(null);
@@ -1159,23 +1004,11 @@ export function BattleReportModal({
           </div>
           <div className="battle-report-modal-actions-v1">
             {context === 'battle' && onToggleSaved ? <SaveButton saved={saved} onToggle={onToggleSaved} reportId={viewModel.id} /> : null}
-            {context === 'simulation' && onSaveToHistory ? (
-              <button
-                type="button"
-                className="battle-save-result-v1"
-                data-qa-battle-save-simulation
-                onClick={onSaveToHistory}
-                disabled={savedToHistory}
-                aria-label={savedToHistory ? 'Симуляционный отчёт уже сохранён в Битвы' : 'Сохранить симуляционный отчёт в Битвы'}
-              >
-                {savedToHistory ? 'СОХРАНЕНО В БИТВАХ' : 'СОХРАНИТЬ В БИТВЫ'}
-              </button>
-            ) : null}
             <button ref={closeRef} type="button" className="battle-report-modal-close-v1" onClick={onClose} aria-label="Закрыть боевой отчёт">×</button>
           </div>
         </header>
         <div ref={scrollRef} className="battle-report-modal-scroll-v1">
-          <BattleReportDetailBody report={report} viewModel={viewModel} scrollRef={scrollRef} celestialMode={celestialMode} />
+          <BattleReportDetailBody report={report} viewModel={viewModel} scrollRef={scrollRef} />
           <button type="button" className="battle-list-back-v1 battle-modal-back-v1" onClick={onClose}>{context === 'simulation' ? '← К СИМУЛЯТОРУ' : '← К СПИСКУ БИТВ'}</button>
         </div>
       </section>
@@ -1217,7 +1050,7 @@ export function BattleReportsView({ planetName, coords, onBack }: { planetName: 
     setHistory(result.value);
     setSaveNotice(result.ok
       ? { kind: 'saved', message: '✓ Сохранено' }
-      : { kind: 'error', message: `⚠ ${result.error}` });
+      : { kind: 'error', message: `Ошибка: ${result.error}` });
   };
 
   return (

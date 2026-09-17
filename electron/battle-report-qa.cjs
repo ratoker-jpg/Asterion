@@ -99,66 +99,41 @@ async function modalSnapshot(win) {
   return win.webContents.executeJavaScript(`(() => {
     const modal = document.querySelector('[role="dialog"][data-qa-battle-report-modal]');
     const scroll = modal?.querySelector('.battle-report-modal-scroll-v1');
-    const scenes = Array.from(modal?.querySelectorAll('[data-qa-battle-scene]') || []);
-    const spaceLayers = Array.from(modal?.querySelectorAll('.battle-scene-space-layer-v1') || []);
-    const legacyBackdrops = Array.from(modal?.querySelectorAll('.battle-scene-backdrop-v1, .battle-scene-planet-layer-v1, .battle-scene-planet-art-v1') || []);
-    const celestialLayers = Array.from(modal?.querySelectorAll('.battle-scene-celestial-layer-v2') || []);
-    const celestialObjects = Array.from(modal?.querySelectorAll('.battle-scene-celestial-object-v2') || []);
     const outcome = modal?.querySelector('[data-qa-battle-outcome]');
-    const visual = modal?.querySelector('[data-qa-battle-visual-report]');
     const focusables = Array.from(modal?.querySelectorAll('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]:not([tabindex="-1"])') || []);
     const technologyRows = Array.from(modal?.querySelectorAll('.battle-tech-table-row-v1') || []);
-    const layoutNodes = Array.from(modal?.querySelectorAll('.battle-stack-row-v1, .battle-scene-v1, .battle-scene-space-layer-v1, .battle-scene-fleet-field-v1, .battle-scene-celestial-object-v2, .battle-scene-zone-v1, .battle-scene-defense-zone-v1') || []);
-    const tooltipClips = Array.from(modal?.querySelectorAll('.battle-scene-stack-v1') || []).reduce((count, stack) => {
-      const tooltip = stack.querySelector('.battle-scene-tooltip-v1');
-      if (!tooltip || !scroll) return count;
-      const previousVisibility = tooltip.style.visibility;
-      const previousOpacity = tooltip.style.opacity;
-      tooltip.style.visibility = 'visible';
-      tooltip.style.opacity = '1';
-      const tooltipRect = tooltip.getBoundingClientRect();
-      const scrollRect = scroll.getBoundingClientRect();
-      tooltip.style.visibility = previousVisibility;
-      tooltip.style.opacity = previousOpacity;
-      return count + (tooltipRect.left < scrollRect.left - 1 || tooltipRect.right > scrollRect.right + 1 ? 1 : 0);
-    }, 0);
+    const roundLog = modal?.querySelector('[data-qa-battle-round-log]');
+    const rounds = Array.from(modal?.querySelectorAll('[data-qa-battle-round]') || []);
+    const outcomeStateHeader = modal?.querySelector('.battle-outcome-mini-table-head-v1')?.textContent || '';
+    const text = modal?.textContent || '';
     return {
       present: Boolean(modal),
       ariaModal: modal?.getAttribute('aria-modal') || '',
       labelledBy: modal?.getAttribute('aria-labelledby') || '',
-      sceneCount: scenes.length,
-      spaceLayerCount: spaceLayers.length,
-      legacyLayerCount: legacyBackdrops.length,
-      celestialLayerCount: celestialLayers.length,
-      celestialObjectCount: celestialObjects.length,
-      celestialModes: scenes.map((scene) => scene.getAttribute('data-qa-battle-celestial-mode') || ''),
-      celestialObjectBackgroundImages: celestialObjects.map((node) => getComputedStyle(node).backgroundImage),
-      celestialObjectBackgroundSizes: celestialObjects.map((node) => getComputedStyle(node).backgroundSize),
-      celestialLayerOverflows: celestialLayers.map((node) => getComputedStyle(node).overflow),
       analysisOpenCount: modal?.querySelectorAll('[data-qa-battle-round-analysis][open]').length || 0,
-      cellSizes: scenes.map((scene) => scene.getAttribute('data-qa-battle-cell-size') || ''),
       hasOverallLosses: Boolean(modal?.querySelector('[data-qa-battle-summary]')),
       hasHeaderTable: Boolean(modal?.querySelector('[data-qa-battle-unit-table]')),
       headerAvatarCount: modal?.querySelectorAll('[data-qa-battle-side-avatar]').length || 0,
       technologyRowCount: technologyRows.length,
       technologyTooltipCount: modal?.querySelectorAll('.battle-tech-tooltip-v1').length || 0,
       technologyTooltipImageCount: modal?.querySelectorAll('.battle-tech-tooltip-row-v1 img').length || 0,
-      visibleTechnologyLevel: technologyRows.some((row) => (row.querySelector(':scope > span')?.textContent || '').includes('/')),
+      visibleTechnologyLevel: technologyRows.some((row) => (row.querySelector(':scope > span')?.textContent || '').includes('из')),
       technologyRowsFocusable: technologyRows.every((row) => row.tabIndex >= 0),
       eventCardCount: modal?.querySelectorAll('[data-qa-battle-event]').length || 0,
       hasBattlePoints: Boolean(modal?.querySelector('[data-qa-battle-points]')),
       hasVisualReport: Boolean(modal?.querySelector('[data-qa-battle-visual-report]')),
+      hasInitialSnapshot: Boolean(modal?.querySelector('[data-qa-battle-initial-snapshot]')),
+      hasProvenance: Boolean(modal?.querySelector('[data-qa-battle-provenance]')),
+      hasRoundSummary: Boolean(modal?.querySelector('.battle-round-summary-v1')),
+      hasRoundLog: Boolean(roundLog),
+      roundCount: rounds.length,
       hasComposition: Boolean(modal?.querySelector('[data-qa-battle-composition]')),
       hasOutcome: Boolean(modal?.querySelector('[data-qa-battle-outcome]')),
-      outcomeBeforeVisual: Boolean(outcome && visual && (outcome.compareDocumentPosition(visual) & 4)),
+      hasOutcomeBeforeAfter: outcomeStateHeader.includes('БЫЛО') && outcomeStateHeader.includes('ОСТАЛОСЬ'),
+      outcomeBeforeRoundLog: Boolean(outcome && roundLog && (outcome.compareDocumentPosition(roundLog) & 4)),
       internalScroll: Boolean(scroll && scroll.scrollHeight > scroll.clientHeight),
       internalHorizontalOverflow: Boolean(scroll && scroll.scrollWidth > scroll.clientWidth + 2),
-      layoutOverflowCount: layoutNodes.filter((node) => node.scrollWidth > node.clientWidth + 2).length,
-      tooltipHorizontalClips: tooltipClips,
-      visibleGridLineCount: [...scenes, ...spaceLayers, ...celestialLayers, ...celestialObjects].filter((node) => {
-        const style = getComputedStyle(node);
-        return (style.backgroundImage + ' ' + style.borderImage).includes('gradient') || style.borderTopStyle !== 'none' && node.matches('.battle-scene-v1, .battle-scene-space-layer-v1, .battle-scene-celestial-layer-v2, .battle-scene-celestial-object-v2');
-      }).length,
+      technicalText: /CONFIRMED|INFERRED|NOT CALIBRATED|REPLAYABLE|SNAPSHOT|CALIBRATION|PRODUCTION|SHARED|INDEPENDENT|ПРОФИЛЬ И ВОСПРОИЗВОДИМОСТЬ|RAW|МИТИГАЦИЯ|МАТЧАП/i.test(text),
       bodyLocked: document.body.style.overflow === 'hidden',
       stageInert: Boolean(document.querySelector('.stage')?.inert),
       focusableCount: focusables.length,
@@ -497,10 +472,11 @@ async function exerciseSimulatorModalFlow(win) {
       hasSaveButton: Boolean(modal?.querySelector('[data-qa-battle-save-simulation]')),
       hasGenericAttacker: text.includes('Атакующий'),
       hasGenericDefender: text.includes('Защитник'),
+      hasTechnicalLabels: /CONFIRMED|INFERRED|NOT CALIBRATED|REPLAYABLE|SNAPSHOT|CALIBRATION|PRODUCTION|SHARED|INDEPENDENT|ПРОФИЛЬ И ВОСПРОИЗВОДИМОСТЬ/i.test(text),
       hasInlineResult: Boolean(document.querySelector('.sim-result-v1')),
     };
   })()`);
-  if (!simulationModal.present || simulationModal.sceneCount < 1 || simulationModal.internalHorizontalOverflow || simulationPresentation.source !== 'simulation' || !simulationPresentation.hasSaveButton || !simulationPresentation.hasGenericAttacker || !simulationPresentation.hasGenericDefender || simulationPresentation.hasInlineResult) {
+  if (!simulationModal.present || simulationModal.hasVisualReport || simulationModal.hasInitialSnapshot || simulationModal.hasProvenance || simulationModal.hasRoundSummary || !simulationModal.hasRoundLog || simulationModal.roundCount < 1 || simulationModal.internalHorizontalOverflow || simulationPresentation.source !== 'simulation' || simulationPresentation.hasSaveButton || simulationPresentation.hasTechnicalLabels || !simulationPresentation.hasGenericAttacker || !simulationPresentation.hasGenericDefender || simulationPresentation.hasInlineResult) {
     throw new Error(`Simulator modal contract failed: ${JSON.stringify({ simulationModal, simulationPresentation })}`);
   }
 
@@ -565,19 +541,11 @@ async function runViewport(win, width, height) {
   }
 
   await openBattle(win, 'battle-demo-attacker-victory');
-  const sceneGeometry = await measureBattleSceneGeometry(win);
-  assertBattleSceneGeometry(sceneGeometry, label);
   const modal = await modalSnapshot(win);
-  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.sceneCount !== 5 || modal.spaceLayerCount !== modal.sceneCount || modal.legacyLayerCount !== 0 || modal.celestialLayerCount !== modal.sceneCount || modal.celestialObjectCount !== modal.sceneCount || modal.celestialModes.some((mode) => mode !== 'planet') || modal.celestialObjectBackgroundImages.some((image) => !image.includes('battle-planet-transparent-v1')) || modal.celestialObjectBackgroundSizes.some((size) => size !== 'contain') || modal.celestialLayerOverflows.some((overflow) => overflow !== 'hidden') || modal.analysisOpenCount !== 0 || modal.cellSizes.some((value) => value !== '100px') || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount < 1 || modal.technologyTooltipCount !== modal.technologyRowCount || modal.technologyTooltipImageCount < modal.technologyRowCount || !modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || modal.eventCardCount < 1 || !modal.hasBattlePoints || !modal.hasVisualReport || !modal.hasComposition || !modal.hasOutcome || !modal.outcomeBeforeVisual || !modal.internalScroll || modal.internalHorizontalOverflow || modal.layoutOverflowCount !== 0 || modal.tooltipHorizontalClips !== 0 || modal.visibleGridLineCount !== 0 || !modal.bodyLocked || !modal.stageInert) {
+  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.roundCount !== 5 || modal.analysisOpenCount !== 0 || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount < 1 || modal.technologyTooltipCount !== modal.technologyRowCount || modal.technologyTooltipImageCount < modal.technologyRowCount || !modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || modal.eventCardCount < 1 || !modal.hasBattlePoints || modal.hasVisualReport || modal.hasInitialSnapshot || modal.hasProvenance || modal.hasRoundSummary || !modal.hasRoundLog || !modal.hasComposition || !modal.hasOutcome || !modal.hasOutcomeBeforeAfter || !modal.outcomeBeforeRoundLog || !modal.internalScroll || modal.internalHorizontalOverflow || modal.technicalText || !modal.bodyLocked || !modal.stageInert) {
     throw new Error(`Battle modal contract failed at ${label}: ${JSON.stringify(modal)}`);
   }
   await capture(win, directory, 'battle-report-modal');
-  const celestialModes = await captureBattleCelestialModes(win, directory);
-
-  await positionBattleScene(win, 1);
-  await capture(win, directory, 'battle-report-scene');
-  await positionBattleScene(win, 5);
-  await capture(win, directory, 'battle-report-scene-5-rows');
   await win.webContents.executeJavaScript(`(() => {
     const scroll = document.querySelector('[role="dialog"][data-qa-battle-report-modal] .battle-report-modal-scroll-v1');
     const outcome = scroll?.querySelector('[data-qa-battle-outcome]');
@@ -599,7 +567,6 @@ async function runViewport(win, width, height) {
   await settle(win);
   if (!bottom.atBottom || !bottom.backButtonVisible) throw new Error(`Battle modal bottom scroll contract failed at ${label}: ${JSON.stringify(bottom)}`);
 
-  await positionBattleScene(win, 1);
   const analysis = await exerciseRoundAnalysis(win);
   await settle(win);
   if (!analysis.available || !analysis.expanded || analysis.eventCardCount < 1 || Math.abs(analysis.delta) > 1) {
@@ -620,24 +587,31 @@ async function runViewport(win, width, height) {
   await openBattle(win, 'battle-demo-round-limit-draw');
   const transition = await win.webContents.executeJavaScript(`(() => {
     const modal = document.querySelector('[role="dialog"][data-qa-battle-report-modal]');
-    const tooltipText = Array.from(modal?.querySelectorAll('.battle-scene-tooltip-v1') || []).map((node) => node.textContent || '').join(' ');
     const lastRound = modal?.querySelector('[data-qa-battle-round="5"]');
+    const firstRound = modal?.querySelector('[data-qa-battle-round="1"]');
     return {
-    firstRoundSpyCount: document.querySelector('[data-qa-battle-round="1"] [data-qa-battle-stack="spy-probe"]')?.getAttribute('data-qa-battle-stack-count') || '',
-    secondRoundSpyPresent: Boolean(document.querySelector('[data-qa-battle-round="2"] [data-qa-battle-stack="spy-probe"]')),
-    missingDataText: Boolean(lastRound?.querySelector('.battle-scene-empty-v1')) || /ОБОРОНА НЕ ЗАФИКСИРОВАНА|Оборона не зафиксирована/.test(lastRound?.textContent || ''),
-    tooltipHasQuantity: tooltipText.includes('Количество'),
+    firstRoundBeforeState: Boolean(firstRound?.textContent?.includes('До действий')),
+    firstRoundAfterState: Boolean(firstRound?.textContent?.includes('после действий')),
+    secondRoundPresent: Boolean(modal?.querySelector('[data-qa-battle-round="2"]')),
+    lastRoundPresent: Boolean(lastRound),
+    hasActionsSummary: Boolean(lastRound?.querySelector('.battle-round-action-v1')),
   };
   })()`);
-  if (transition.firstRoundSpyCount !== '6' || transition.secondRoundSpyPresent || transition.missingDataText || transition.tooltipHasQuantity) {
+  if (!transition.firstRoundBeforeState || !transition.firstRoundAfterState || !transition.secondRoundPresent || !transition.lastRoundPresent || !transition.hasActionsSummary) {
     throw new Error(`Battle snapshot transition contract failed at ${label}: ${JSON.stringify(transition)}`);
   }
-  await capture(win, directory, 'battle-report-snapshot-transition');
+  await win.webContents.executeJavaScript(`(() => {
+    const scroll = document.querySelector('[role="dialog"][data-qa-battle-report-modal] .battle-report-modal-scroll-v1');
+    const roundLog = scroll?.querySelector('[data-qa-battle-round-log]');
+    if (scroll && roundLog) scroll.scrollTop = Math.max(0, roundLog.offsetTop - 16);
+  })()`);
+  await settle(win);
+  await capture(win, directory, 'battle-report-round-log');
 
   await win.webContents.executeJavaScript(`document.querySelector('.battle-report-modal-close-v1')?.click()`);
   await waitFor(win, `!document.querySelector('[role="dialog"][data-qa-battle-report-modal]')`);
   const simulator = await exerciseSimulatorModalFlow(win);
-  return { viewport: label, list, modal, sceneGeometry, celestialModes, analysis, focus, closeState, transition, bottom, simulator };
+  return { viewport: label, list, modal, analysis, focus, closeState, transition, bottom, simulator };
 }
 
 app.whenReady().then(async () => {
@@ -657,7 +631,7 @@ app.whenReady().then(async () => {
     const results = [];
     for (const [width, height] of VIEWPORTS) results.push(await runViewport(win, width, height));
     fs.writeFileSync(path.join(OUTPUT, 'results.json'), JSON.stringify({ results, screenshotsSkipped: skipScreenshots }, null, 2));
-    console.log('Battle report QA passed: list losses, accessible scrollable modal, independent space/celestial layers, real 1/5-row fleet geometry, multi-row defense anchoring, celestial modes, 100px cell contract, event analysis stability, focus trap, Escape restoration, mobile overflow, rewards and snapshot transitions.');
+    console.log('Battle report QA passed: list losses, population ledgers, readable technology rows, text round log, simulator isolation, focus trap, Escape restoration, mobile overflow, rewards and round transitions.');
     win.destroy();
     app.exit(0);
   } catch (error) {

@@ -638,13 +638,26 @@ function analysisForEvent(event: BattleEventViewModel) {
 function readSnapshot(value: unknown, factionId: CombatFactionId): BattleRoundSnapshotViewModel | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = asRecord(value);
+  const stacks = readStacks(record.stacks, factionId, 'ship');
+  const defenses = readStacks(record.defenses, factionId, 'defense').map((stack) => ({ ...stack, kind: 'defense' as const }));
+  const sumPopulation = (items: readonly BattleStackViewModel[], field: 'countBefore' | 'countAfter') => {
+    if (!items.length) return null;
+    const populations = items.map((stack) => {
+      const count = stack[field];
+      return count != null && stack.populationPerUnit != null ? count * stack.populationPerUnit : null;
+    });
+    return populations.every((population): population is number => population != null)
+      ? populations.reduce((total, population) => total + population, 0)
+      : null;
+  };
+  const fleetStacks = stacks.filter((stack) => stack.kind !== 'defense');
   return {
-    stacks: readStacks(record.stacks, factionId, 'ship'),
-    defenses: readStacks(record.defenses, factionId, 'defense').map((stack) => ({ ...stack, kind: 'defense' as const })),
-    fleetPopulationBefore: readNumber(record.fleetPopulationBefore),
-    fleetPopulationAfter: readNumber(record.fleetPopulationAfter),
-    defensePopulationBefore: readNumber(record.defensePopulationBefore),
-    defensePopulationAfter: readNumber(record.defensePopulationAfter),
+    stacks,
+    defenses,
+    fleetPopulationBefore: readNumber(record.fleetPopulationBefore) ?? sumPopulation(fleetStacks, 'countBefore'),
+    fleetPopulationAfter: readNumber(record.fleetPopulationAfter) ?? sumPopulation(fleetStacks, 'countAfter'),
+    defensePopulationBefore: readNumber(record.defensePopulationBefore) ?? sumPopulation(defenses, 'countBefore'),
+    defensePopulationAfter: readNumber(record.defensePopulationAfter) ?? sumPopulation(defenses, 'countAfter'),
     modifiers: readModifiers(record.modifiers),
   };
 }

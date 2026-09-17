@@ -439,13 +439,11 @@ export function calculateCombatStackPreview(
   alliedStacks: readonly CombatStackInput[] = [stack],
   activeCommanderId: CommanderId | null = null,
 ): CombatStackPreview | null {
-  if (getFactionCombatEntity(factionId, stack.entityId).combatEligible === false) return null;
   const own = runtimeFromInput('attacker', 'stacks', alliedStacks, technologies, executionMode, factionId);
   if (!own.some((candidate) => candidate.entityId === stack.entityId)) return null;
-  const modifiers = applyRoundModifiers(own, [], activeCommanderId, null);
+  applyRoundModifiers(own, [], activeCommanderId, null);
   const runtime = own.find((candidate) => candidate.entityId === stack.entityId);
   if (!runtime) return null;
-  void modifiers;
   return {
     attackPerUnit: runtime.attackPerUnit,
     totalAttack: runtime.count * runtime.attackPerUnit,

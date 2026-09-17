@@ -104,7 +104,6 @@ export type SimulatorScenario = {
 export type CombatValidationCode =
   | 'unknown-entity'
   | 'wrong-kind'
-  | 'combat-ineligible'
   | 'attacker-defense'
   | 'invalid-count'
   | 'duplicate-stack'
@@ -324,14 +323,6 @@ function validateStackCollection(
         message: `${entity.name} имеет kind=${entity.kind}, ожидается kind=${expectedKind}.`,
       });
       return;
-    }
-
-    if (entity.combatEligible === false) {
-      errors.push({
-        code: 'combat-ineligible',
-        path: `${stackPath}.entityId`,
-        message: `${entity.name} — служебная единица и не участвует в боевом расчёте. Удали её из сценария перед запуском.`,
-      });
     }
 
     const maxLevel = COMBAT_ENTITY_LEVEL_LIMITS[entity.kind];
