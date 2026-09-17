@@ -15,7 +15,7 @@
 
 - Источники данных: три demo fixtures и reports, сохранённые SimulatorView.
 - Отчёт открывается поверх Fleet Workspace в большом скроллируемом overlay; страницу и router не переписываем.
-- Visual scene статична, строится только из сохранённых round snapshots; CombatEvent используется отдельным свёрнутым analysis panel.
+- Visual scene статична, строится только из сохранённых round snapshots; CombatEvent показывается в свёрнутом analysis panel внутри соответствующего раунда.
 - Немексовские формулы, реальные missions/attacks, repair workshop и combat priority в этот scope не входят.
 
 ## Реализационные решения

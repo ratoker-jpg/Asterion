@@ -103,7 +103,9 @@ async function modalSnapshot(win) {
     const focusables = Array.from(modal?.querySelectorAll('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]:not([tabindex="-1"])') || []);
     const technologyRows = Array.from(modal?.querySelectorAll('.battle-tech-table-row-v1') || []);
     const roundLog = modal?.querySelector('[data-qa-battle-round-log]');
-    const rounds = Array.from(modal?.querySelectorAll('[data-qa-battle-round]') || []);
+    const visualReport = modal?.querySelector('[data-qa-battle-visual-report]');
+    const visualRounds = Array.from(visualReport?.querySelectorAll('[data-qa-battle-visual-round]') || []);
+    const firstVisualRound = visualReport?.querySelector('[data-qa-battle-visual-round="1"]');
     const outcomeStateHeader = modal?.querySelector('.battle-outcome-mini-table-head-v1')?.textContent || '';
     const text = modal?.textContent || '';
     return {
@@ -121,16 +123,19 @@ async function modalSnapshot(win) {
       technologyRowsFocusable: technologyRows.every((row) => row.tabIndex >= 0),
       eventCardCount: modal?.querySelectorAll('[data-qa-battle-event]').length || 0,
       hasBattlePoints: Boolean(modal?.querySelector('[data-qa-battle-points]')),
+      commanderTechnicalText: /Commander Id|Commander Level|Commander Ability|Commander Rate|Special Bonus|armor-debuff/i.test(text),
+      hasHumanCommanderEffect: Array.from(modal?.querySelectorAll('[data-qa-battle-commanders] em') || []).some((item) => /Снижает|Уменьшает|Увеличивает|Даёт/i.test(item.textContent || '')),
       hasVisualReport: Boolean(modal?.querySelector('[data-qa-battle-visual-report]')),
       hasInitialSnapshot: Boolean(modal?.querySelector('[data-qa-battle-initial-snapshot]')),
       hasProvenance: Boolean(modal?.querySelector('[data-qa-battle-provenance]')),
       hasRoundSummary: Boolean(modal?.querySelector('.battle-round-summary-v1')),
       hasRoundLog: Boolean(roundLog),
-      roundCount: rounds.length,
+      analysisInsideVisualRound: Boolean(firstVisualRound?.querySelector('[data-qa-battle-round-analysis="1"]')),
+      roundCount: visualRounds.length,
       hasComposition: Boolean(modal?.querySelector('[data-qa-battle-composition]')),
       hasOutcome: Boolean(modal?.querySelector('[data-qa-battle-outcome]')),
       hasOutcomeBeforeAfter: outcomeStateHeader.includes('БЫЛО') && outcomeStateHeader.includes('ОСТАЛОСЬ'),
-      outcomeBeforeRoundLog: Boolean(outcome && roundLog && (outcome.compareDocumentPosition(roundLog) & 4)),
+      outcomeBeforeVisualReport: Boolean(outcome && visualReport && (outcome.compareDocumentPosition(visualReport) & 4)),
       internalScroll: Boolean(scroll && scroll.scrollHeight > scroll.clientHeight),
       internalHorizontalOverflow: Boolean(scroll && scroll.scrollWidth > scroll.clientWidth + 2),
       technicalText: /CONFIRMED|INFERRED|NOT CALIBRATED|REPLAYABLE|SNAPSHOT|CALIBRATION|PRODUCTION|SHARED|INDEPENDENT|ПРОФИЛЬ И ВОСПРОИЗВОДИМОСТЬ|RAW|МИТИГАЦИЯ|МАТЧАП/i.test(text),
@@ -376,9 +381,10 @@ async function exerciseRoundAnalysis(win) {
   return win.webContents.executeJavaScript(`(() => {
     const modal = document.querySelector('[role="dialog"][data-qa-battle-report-modal]');
     const scroll = modal?.querySelector('.battle-report-modal-scroll-v1');
-    const details = modal?.querySelector('[data-qa-battle-round-analysis="1"]');
+    const visualRound = modal?.querySelector('[data-qa-battle-visual-round="1"]');
+    const details = visualRound?.querySelector('[data-qa-battle-round-analysis="1"]');
     const summary = details?.querySelector('summary');
-    if (!scroll || !details || !summary) return { available: false };
+    if (!scroll || !visualRound || !details || !summary) return { available: false, insideVisualRound: false };
     scroll.scrollTop = Math.min(120, Math.max(0, scroll.scrollHeight - scroll.clientHeight));
     const before = scroll.scrollTop;
     summary.click();
@@ -387,7 +393,7 @@ async function exerciseRoundAnalysis(win) {
       const expanded = details.open;
       const eventCardCount = details.querySelectorAll('[data-qa-battle-event]').length;
       summary.click();
-      resolve({ available: true, before, after, delta: Number((after - before).toFixed(2)), expanded, eventCardCount });
+      resolve({ available: true, insideVisualRound: Boolean(details.closest('[data-qa-battle-visual-round]')), before, after, delta: Number((after - before).toFixed(2)), expanded, eventCardCount });
     })));
   })()`);
 }
@@ -476,7 +482,7 @@ async function exerciseSimulatorModalFlow(win) {
       hasInlineResult: Boolean(document.querySelector('.sim-result-v1')),
     };
   })()`);
-  if (!simulationModal.present || !simulationModal.hasVisualReport || simulationModal.hasInitialSnapshot || simulationModal.hasProvenance || simulationModal.hasRoundSummary || !simulationModal.hasRoundLog || simulationModal.roundCount < 1 || simulationModal.internalHorizontalOverflow || simulationPresentation.source !== 'simulation' || simulationPresentation.hasSaveButton || simulationPresentation.hasTechnicalLabels || !simulationPresentation.hasGenericAttacker || !simulationPresentation.hasGenericDefender || simulationPresentation.hasInlineResult) {
+  if (!simulationModal.present || !simulationModal.hasVisualReport || simulationModal.hasInitialSnapshot || simulationModal.hasProvenance || simulationModal.hasRoundSummary || simulationModal.hasRoundLog || !simulationModal.analysisInsideVisualRound || simulationModal.roundCount < 1 || simulationModal.internalHorizontalOverflow || simulationPresentation.source !== 'simulation' || simulationPresentation.hasSaveButton || simulationPresentation.hasTechnicalLabels || !simulationPresentation.hasGenericAttacker || !simulationPresentation.hasGenericDefender || simulationPresentation.hasInlineResult) {
     throw new Error(`Simulator modal contract failed: ${JSON.stringify({ simulationModal, simulationPresentation })}`);
   }
 
@@ -542,7 +548,7 @@ async function runViewport(win, width, height) {
 
   await openBattle(win, 'battle-demo-attacker-victory');
   const modal = await modalSnapshot(win);
-  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.roundCount !== 5 || modal.analysisOpenCount !== 0 || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount < 1 || modal.technologyTooltipCount !== modal.technologyRowCount || modal.technologyTooltipImageCount < modal.technologyRowCount || !modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || modal.eventCardCount < 1 || !modal.hasBattlePoints || !modal.hasVisualReport || modal.hasInitialSnapshot || modal.hasProvenance || modal.hasRoundSummary || !modal.hasRoundLog || !modal.hasComposition || !modal.hasOutcome || !modal.hasOutcomeBeforeAfter || !modal.outcomeBeforeRoundLog || !modal.internalScroll || modal.internalHorizontalOverflow || modal.technicalText || !modal.bodyLocked || !modal.stageInert) {
+  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.roundCount !== 5 || modal.analysisOpenCount !== 0 || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount < 1 || modal.technologyTooltipCount !== modal.technologyRowCount || modal.technologyTooltipImageCount < modal.technologyRowCount || modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || modal.eventCardCount < 1 || !modal.hasBattlePoints || modal.commanderTechnicalText || !modal.hasHumanCommanderEffect || !modal.hasVisualReport || modal.hasInitialSnapshot || modal.hasProvenance || modal.hasRoundSummary || modal.hasRoundLog || !modal.analysisInsideVisualRound || modal.hasComposition || !modal.hasOutcome || !modal.hasOutcomeBeforeAfter || !modal.outcomeBeforeVisualReport || !modal.internalScroll || modal.internalHorizontalOverflow || modal.technicalText || !modal.bodyLocked || !modal.stageInert) {
     throw new Error(`Battle modal contract failed at ${label}: ${JSON.stringify(modal)}`);
   }
   await capture(win, directory, 'battle-report-modal');
@@ -571,7 +577,7 @@ async function runViewport(win, width, height) {
 
   const analysis = await exerciseRoundAnalysis(win);
   await settle(win);
-  if (!analysis.available || !analysis.expanded || analysis.eventCardCount < 1 || Math.abs(analysis.delta) > 1) {
+  if (!analysis.available || !analysis.insideVisualRound || !analysis.expanded || analysis.eventCardCount < 1 || Math.abs(analysis.delta) > 1) {
     throw new Error(`Battle round analysis contract failed at ${label}: ${JSON.stringify(analysis)}`);
   }
 
@@ -589,12 +595,12 @@ async function runViewport(win, width, height) {
   await openBattle(win, 'battle-demo-round-limit-draw');
   const transition = await win.webContents.executeJavaScript(`(() => {
     const modal = document.querySelector('[role="dialog"][data-qa-battle-report-modal]');
-    const lastRound = modal?.querySelector('[data-qa-battle-round="5"]');
-    const firstRound = modal?.querySelector('[data-qa-battle-round="1"]');
+    const lastRound = modal?.querySelector('[data-qa-battle-visual-round="5"]');
+    const firstRound = modal?.querySelector('[data-qa-battle-visual-round="1"]');
     return {
     firstRoundBeforeState: Boolean(firstRound?.textContent?.includes('До действий')),
     firstRoundAfterState: Boolean(firstRound?.textContent?.includes('после действий')),
-    secondRoundPresent: Boolean(modal?.querySelector('[data-qa-battle-round="2"]')),
+    secondRoundPresent: Boolean(modal?.querySelector('[data-qa-battle-visual-round="2"]')),
     lastRoundPresent: Boolean(lastRound),
     hasActionsSummary: Boolean(lastRound?.querySelector('.battle-round-action-v1')),
   };
@@ -604,11 +610,11 @@ async function runViewport(win, width, height) {
   }
   await win.webContents.executeJavaScript(`(() => {
     const scroll = document.querySelector('[role="dialog"][data-qa-battle-report-modal] .battle-report-modal-scroll-v1');
-    const roundLog = scroll?.querySelector('[data-qa-battle-round-log]');
-    if (scroll && roundLog) scroll.scrollTop = Math.max(0, roundLog.offsetTop - 16);
+    const visualReport = scroll?.querySelector('[data-qa-battle-visual-report]');
+    if (scroll && visualReport) scroll.scrollTop = Math.max(0, visualReport.offsetTop - 16);
   })()`);
   await settle(win);
-  await capture(win, directory, 'battle-report-round-log');
+  await capture(win, directory, 'battle-report-rounds');
 
   await win.webContents.executeJavaScript(`document.querySelector('.battle-report-modal-close-v1')?.click()`);
   await waitFor(win, `!document.querySelector('[role="dialog"][data-qa-battle-report-modal]')`);
@@ -633,7 +639,7 @@ app.whenReady().then(async () => {
     const results = [];
     for (const [width, height] of VIEWPORTS) results.push(await runViewport(win, width, height));
     fs.writeFileSync(path.join(OUTPUT, 'results.json'), JSON.stringify({ results, screenshotsSkipped: skipScreenshots }, null, 2));
-    console.log('Battle report QA passed: list losses, population ledgers, readable technology rows, text round log, simulator isolation, focus trap, Escape restoration, mobile overflow, rewards and round transitions.');
+    console.log('Battle report QA passed: list losses, population ledgers, readable technology rows, inline round analysis, simulator isolation, focus trap, Escape restoration, mobile overflow, rewards and round transitions.');
     win.destroy();
     app.exit(0);
   } catch (error) {

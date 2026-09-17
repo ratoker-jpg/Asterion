@@ -406,9 +406,9 @@ function TechnologyBonusTable({ side }: { side: BattleSideViewModel }) {
   const hasSnapshot = side.technologies.length > 0;
   return (
     <div className="battle-tech-table-v1" data-qa-battle-technologies={side.participant.side}>
-      <div className="battle-tech-table-head-v1"><span>ТЕХНОЛОГИИ</span><span>УРОВЕНЬ / ЭФФЕКТ</span></div>
+      <div className="battle-tech-table-head-v1"><span>ТЕХНОЛОГИИ</span><span>БОНУС</span></div>
       {hasSnapshot ? side.technologies.map((technology) => {
-        const bonusText = technology.level > 0 ? `+${formatNumber(technology.bonusPercent)}% / ур.` : 'уровень 0';
+        const bonusText = `+${formatNumber(technology.bonusPercent)}%`;
         return (
           <div
             className="battle-tech-table-row-v1"
@@ -416,7 +416,7 @@ function TechnologyBonusTable({ side }: { side: BattleSideViewModel }) {
             tabIndex={0}
             aria-label={`${technology.name}: уровень ${technology.level} из ${technology.maxLevel}. ${technology.effect}. ${bonusText}.`}
           >
-            <span><strong>{technology.name}</strong><small>{technology.level} из {technology.maxLevel} уровня · {technology.effect}</small></span>
+            <span><strong>{technology.name}</strong></span>
             <b>{bonusText}</b>
             <TechnologyBonusTooltip technologies={[technology]} />
           </div>
@@ -461,70 +461,25 @@ function PopulationPanel({ viewModel }: { viewModel: BattleReportViewModel }) {
   );
 }
 
-function StackRow({ stack }: { stack: BattleStackViewModel }) {
-  const hasStats = stack.attackPerUnit != null || stack.totalAttack != null || stack.lifePerUnit != null || stack.hpPool != null;
-  return (
-    <div className="battle-stack-row-v1" data-qa-battle-composition-stack={stack.entityId}>
-      <span className="battle-stack-art-v1"><img src={stack.art} alt="" draggable={false} /></span>
-      <span className="battle-stack-name-v1">
-        <strong>{stack.name}</strong>
-        <small>{stack.category}{stack.kind !== 'defense' && stack.tooltip.level != null ? ` · уровень ${stack.tooltip.level}` : ''}</small>
-        {hasStats ? <small className="battle-stack-stats-v1">Группа: атака {formatKnownNumber(stack.totalAttack)} · жизнь {formatKnownNumber(stack.hpPool)} · 1 корабль: атака {formatKnownNumber(stack.attackPerUnit)} · жизнь {formatKnownNumber(stack.lifePerUnit)}</small> : <small className="battle-stack-stats-v1 unknown">Характеристики группы не зафиксированы</small>}
-      </span>
-      <span><small>БЫЛО</small><b>{formatNumber(stack.countBefore)}</b></span>
-      <span><small>ОСТАЛОСЬ</small><b>{formatNumber(stack.countAfter)}</b></span>
-      <span><small>УНИЧТОЖЕНО</small><b>{formatNumber(stack.destroyed)}</b></span>
-    </div>
-  );
-}
-
-function StackList({ stacks, emptyLabel = 'Состав недоступен для этого отчёта.' }: { stacks: BattleStackViewModel[]; emptyLabel?: string }) {
-  return stacks.length
-    ? <div className="battle-stack-list-v1">{stacks.map((stack) => <StackRow key={stack.key} stack={stack} />)}</div>
-    : <p className="battle-empty-inline-v1">{emptyLabel}</p>;
-}
-
-function CompositionSide({ side }: { side: BattleSideViewModel }) {
-  return (
-    <section>
-      <h4>{side.participant.side === 'attacker' ? 'АТАКУЮЩИЙ' : 'ЗАЩИТНИК'}</h4>
-      <StackList stacks={side.ships} />
-      {side.commanders.length ? (
-        <div className="battle-composition-subgroup-v1">
-          <h5>КОМАНДИРЫ</h5>
-          <StackList stacks={side.commanders} />
-        </div>
-      ) : null}
-      {side.defenses.length ? (
-        <div className="battle-defense-v1">
-          <h4>ОБОРОНА</h4>
-          <StackList stacks={side.defenses} />
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-function BattleComposition({ viewModel }: { viewModel: BattleReportViewModel }) {
-  return (
-    <section className="battle-section-v1" data-qa-battle-composition>
-      <header className="battle-section-head-v1"><div><small>СОСТАВ БОЯ</small><h3>ДО / ПОСЛЕ</h3></div></header>
-      <div className="battle-composition-grid-v1">
-        <CompositionSide side={viewModel.attacker} />
-        <CompositionSide side={viewModel.defender} />
-      </div>
-    </section>
-  );
+function commanderEffectText(effect: ReturnType<typeof getCommanderCombatEffect>, effectValue: number | null) {
+  if (!effect || effectValue == null) return null;
+  const value = formatNumber(effectValue);
+  if (effect.kind === 'attack-bonus') return `Увеличивает атаку флота на ${value}%.`;
+  if (effect.kind === 'life-bonus') return `Увеличивает жизнь флота на ${value}%.`;
+  if (effect.kind === 'armor-debuff') return `Снижает броню противника на ${value} процентных пунктов.`;
+  if (effect.kind === 'critical') return `Увеличивает шанс критического удара на ${value}%.`;
+  if (effect.kind === 'paralyze') return `Увеличивает шанс парализовать ближайшую атаку противника на ${value}%.`;
+  if (effect.kind === 'cancel-attack') return `Даёт ${value}% шанс отменить ближайшую атаку противника.`;
+  if (effect.kind === 'reanimator') return `Даёт ${value}% шанс восстановить до ${formatNumber(effect.cap)} кораблей.`;
+  return null;
 }
 
 function CommanderSnapshot({ viewModel }: { viewModel: BattleReportViewModel }) {
   const commanderRows = [viewModel.attacker, viewModel.defender].map((side) => ({ side, commander: side.activeCommander }));
-  const modifierRows = [viewModel.attacker, viewModel.defender].filter((side) => side.modifiers.length);
-  const friendlyModifierLabel = (label: string) => label.replace(/snapshot/gi, 'бонус');
 
   return (
-      <section className="battle-section-v1" data-qa-battle-commanders>
-        <header className="battle-section-head-v1"><div><small>КОМАНДИРЫ</small><h3>КОМАНДИРЫ И БОНУСЫ</h3></div></header>
+    <section className="battle-section-v1" data-qa-battle-commanders>
+      <header className="battle-section-head-v1"><div><small>КОМАНДИРЫ</small><h3>КОМАНДИРЫ И БОНУСЫ</h3></div></header>
       {commanderRows.length ? (
         <div className="battle-commanders-v1">
           {commanderRows.map(({ side, commander }) => {
@@ -532,32 +487,20 @@ function CommanderSnapshot({ viewModel }: { viewModel: BattleReportViewModel }) 
             const effect = commander && isCommanderId(commander.entityId) ? getCommanderCombatEffect(commander.entityId) : null;
             const level = commander?.tooltip.level ?? null;
             const effectValue = effect && level != null ? effect.ratePerLevel * level * 100 : null;
+            const effectText = commanderEffectText(effect, effectValue);
             return (
               <article key={`${side.participant.side}-${commander?.entityId ?? 'none'}`}>
                 {commander ? <img src={commander.art} alt="" draggable={false} /> : <span className="battle-commander-empty-v1" aria-hidden="true">—</span>}
                 <div>
                   <small>{side.participant.side === 'attacker' ? 'АТАКУЮЩИЙ' : 'ЗАЩИТНИК'}</small>
                   <strong>{commander?.name ?? 'Командир не выбран'}</strong>
-                  <span>Уровень: {formatNumber(level)}</span>
-                  <span>Способность: {ability?.ability ?? 'Нет активного командира'}</span>
-                  <em>{effect && effectValue != null
-                    ? `В бою: ${effect.kind === 'armor-debuff' ? `−${formatNumber(effectValue)} п.п. брони цели` : `+${formatNumber(effectValue)}% к ${effect.kind === 'attack-bonus' ? 'атаке' : effect.kind === 'life-bonus' ? 'жизни' : effect.kind === 'critical' ? 'шансу крита' : 'шансу способности'}`}.`
-                    : commander ? 'Для этого корабля активный модификатор не задан: нейтрально в обычном бою.' : 'Сторона участвует без командирского корабля.'}</em>
+                  {commander ? <span>Уровень {formatNumber(level)}</span> : null}
+                  {ability ? <span>{ability.ability}</span> : null}
+                  <em>{effectText ?? ability?.description ?? (commander ? 'Эффект этого командира не указан.' : 'Командир не выбран.')}</em>
                 </div>
               </article>
             );
           })}
-        </div>
-      ) : null}
-      {modifierRows.length ? (
-        <div className="battle-command-bonuses-v1" data-qa-battle-bonuses>
-          <small>ЗАФИКСИРОВАННЫЕ БОНУСЫ И МОДИФИКАТОРЫ</small>
-          {modifierRows.map((side) => (
-            <div key={side.participant.side}>
-              <strong>{side.participant.side === 'attacker' ? 'АТАКУЮЩИЙ' : 'ЗАЩИТНИК'}</strong>
-              {side.modifiers.map((modifier) => <span key={modifier.key}>{friendlyModifierLabel(modifier.label)}: <b>{modifier.value}</b></span>)}
-            </div>
-          ))}
         </div>
       ) : null}
     </section>
@@ -751,11 +694,11 @@ function SceneSide({ stacks, side, roundIndex }: { stacks: BattleStackViewModel[
   );
 }
 
-function BattleVisualReport({ viewModel, celestialMode = 'planet' }: { viewModel: BattleReportViewModel; celestialMode?: BattleCelestialMode }) {
+function BattleVisualReport({ viewModel, scrollRef, celestialMode = 'planet' }: { viewModel: BattleReportViewModel; scrollRef?: ScrollRef; celestialMode?: BattleCelestialMode }) {
   return (
     <section className="battle-section-v1 battle-visual-report-v1" data-qa-battle-visual-report>
       <header className="battle-section-head-v1">
-        <div><small>ХОД БОЯ</small><h3>ВИЗУАЛ БОЯ</h3></div>
+        <div><small>ВИЗУАЛ БОЯ</small><h3>РАУНДЫ</h3></div>
         <span>{formatNumber(viewModel.roundCount)} РАУНДОВ</span>
       </header>
       <div className="battle-scene-list-v1">
@@ -795,6 +738,9 @@ function BattleVisualReport({ viewModel, celestialMode = 'planet' }: { viewModel
                   ) : null}
                 </div>
               </div>
+              <p className="battle-round-state-v1">{roundStateLine(round)}</p>
+              <p className="battle-round-action-v1">{roundActionLine(round)}</p>
+              <RoundAnalysis round={round} scrollRef={scrollRef} />
             </article>
           );
         }) : <p className="battle-empty-inline-v1">Визуальные данные раундов отсутствуют.</p>}
@@ -861,32 +807,6 @@ function roundActionLine(round: BattleRoundViewModel) {
   }
   if (summary.survivingDefensePopulation != null) parts.push(`оборона: ${formatKnownNumber(summary.survivingDefensePopulation)} населения`);
   return parts.length ? parts.join(' · ') : 'В этом раунде числовых изменений не зафиксировано.';
-}
-
-function BattleRoundLog({ viewModel, scrollRef }: { viewModel: BattleReportViewModel; scrollRef?: ScrollRef }) {
-  return (
-    <section className="battle-section-v1 battle-round-log-v1" data-qa-battle-round-log>
-      <header className="battle-section-head-v1">
-        <div><small>ХОД БОЯ</small><h3>РАУНДЫ</h3></div>
-        <span>{formatNumber(viewModel.roundCount)} РАУНДОВ</span>
-      </header>
-      {viewModel.rounds.length ? (
-        <div className="battle-round-list-v1">
-          {viewModel.rounds.map((round) => (
-            <article className="battle-round-v1" key={`${viewModel.id}-${round.index}`} data-qa-battle-round={round.index}>
-              <header className="battle-round-head-v1">
-                <strong>РАУНД {round.index}</strong>
-                <span>{formatNumber(round.events.length)} СОБЫТИЙ</span>
-              </header>
-              <p className="battle-round-state-v1">{roundStateLine(round)}</p>
-              <p className="battle-round-action-v1">{roundActionLine(round)}</p>
-              <RoundAnalysis round={round} scrollRef={scrollRef} />
-            </article>
-          ))}
-        </div>
-      ) : <p className="battle-empty-inline-v1">События раундов отсутствуют.</p>}
-    </section>
-  );
 }
 
 type BattleOutcomeStat = {
@@ -1043,10 +963,8 @@ export function BattleReportDetailBody({
     <>
       <BattleOutcome viewModel={viewModel} />
       <PopulationPanel viewModel={viewModel} />
-      <BattleComposition viewModel={viewModel} />
       <CommanderSnapshot viewModel={viewModel} />
-      <BattleVisualReport viewModel={viewModel} />
-      <BattleRoundLog viewModel={viewModel} scrollRef={scrollRef} />
+      <BattleVisualReport viewModel={viewModel} scrollRef={scrollRef} />
     </>
   );
 }

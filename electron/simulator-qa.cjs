@@ -89,6 +89,8 @@ async function snapshot(win) {
     const attackerCommanderSection = side(0)?.querySelector('[id="sim-attacker-commanders"]')?.closest('.sim-unit-section-v1');
     const defenderDefenseSection = side(1)?.querySelector('[id="sim-defender-defenses"]')?.closest('.sim-unit-section-v1');
     const leadingCommander = document.querySelector('#sim-leading-commander-attacker');
+    const visualReport = document.querySelector('[data-qa-battle-visual-report]');
+    const firstVisualRound = visualReport?.querySelector('[data-qa-battle-visual-round="1"]');
     return {
       meters: Array.from(document.querySelectorAll('.sim-population-v1')).map((item) => item.textContent?.replace(/\\s+/g, ' ').trim() || ''),
       firstTech: { value: firstTech?.querySelector('input')?.value || '', max: firstTech?.querySelector('input')?.getAttribute('max') || '' },
@@ -113,6 +115,9 @@ async function snapshot(win) {
       hasInitialSnapshot: Boolean(document.querySelector('[data-qa-battle-initial-snapshot]')),
       hasRoundSummary: Boolean(document.querySelector('.battle-round-summary-v1')),
       hasVisualReport: Boolean(document.querySelector('[data-qa-battle-visual-report]')),
+      analysisInsideVisualRound: Boolean(firstVisualRound?.querySelector('[data-qa-battle-round-analysis="1"]')),
+      visibleTechnologyLevel: Array.from(document.querySelectorAll('.battle-tech-table-row-v1')).some((row) => (row.querySelector(':scope > span')?.textContent || '').includes('из')),
+      hasComposition: Boolean(document.querySelector('[data-qa-battle-composition]')),
       hasTechnicalLabels: /CONFIRMED|INFERRED|NOT CALIBRATED|REPLAYABLE|SNAPSHOT|РЕЖИМ РАСЧЁТА|КАК ВЫБИРАТЬ ЦЕЛЬ|SHARED|INDEPENDENT|RAW|МИТИГАЦИЯ|МАТЧАП/i.test(document.body.textContent || ''),
       roundAnalysisOpen: Array.from(document.querySelectorAll('.battle-round-analysis-v1')).some((item) => item.hasAttribute('open')),
       roundAnalysisCount: document.querySelectorAll('.battle-round-analysis-v1').length,
@@ -210,7 +215,7 @@ async function runViewport(win, width, height) {
   await waitFor(win, `document.querySelector('.battle-round-analysis-v1')`);
 
   const result = await snapshot(win);
-  if (!result.hasResult || result.hasSaveButton || result.hasProvenance || !result.hasRoundLog || result.hasInitialSnapshot || result.hasRoundSummary || !result.hasVisualReport || result.hasTechnicalLabels || result.roundAnalysisCount < 1 || result.roundAnalysisOpen || result.unnamedControls.length || result.horizontalOverflow || !result.ariaExpandedControls) {
+  if (!result.hasResult || result.hasSaveButton || result.hasProvenance || result.hasRoundLog || !result.analysisInsideVisualRound || result.hasInitialSnapshot || result.hasRoundSummary || !result.hasVisualReport || result.visibleTechnologyLevel || result.hasComposition || result.hasTechnicalLabels || result.roundAnalysisCount < 1 || result.roundAnalysisOpen || result.unnamedControls.length || result.horizontalOverflow || !result.ariaExpandedControls) {
     throw new Error(`${label}: result/detail/accessibility contract failed ${JSON.stringify(result)}`);
   }
   await capture(win, directory, 'simulator-result');
