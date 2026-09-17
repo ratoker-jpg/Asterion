@@ -468,7 +468,7 @@ async function verifyResourceZoneFlow(win, directory) {
     localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
   })()`);
   await reload(win);
-  await waitFor(win, `(() => { try { const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}'); const q=save.queues?.['helion-01']; return Array.isArray(q)&&q.length===2&&q[0]?.assetRole==='gas-production-1'&&save.planets?.['helion-01']?.buildings?.['basic-energy']===2&&save.planets?.['helion-01']?.energy===104; } catch { return false; } })()`,8000);
+  await waitFor(win, `(() => { try { const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}'); const q=save.queues?.['helion-01']; return Array.isArray(q)&&q.length===2&&q[0]?.assetRole==='gas-production-1'&&save.planets?.['helion-01']?.buildings?.['basic-energy']===2&&save.planets?.['helion-01']?.energy===155; } catch { return false; } })()`,8000);
   await activateResourceZone(win);
   await waitFor(win, `document.querySelector('[data-qa-queue-slot="1"]')?.getAttribute('data-qa-queue-role')==='gas-production-1'`);
   const fifo=await win.webContents.executeJavaScript(`(() => {
@@ -476,7 +476,7 @@ async function verifyResourceZoneFlow(win, directory) {
     const first=document.querySelector('[data-qa-queue-slot="1"]');
     return {queue:save.queues?.['helion-01']?.map((item)=>item.assetRole)??null,level:save.planets?.['helion-01']?.buildings?.['basic-energy']??null,energy:save.planets?.['helion-01']?.energy??null,activeRole:first?.getAttribute('data-qa-queue-role')??null,activeText:first?.textContent?.replace(/\s+/g,' ').trim()??''};
   })()`);
-  if(JSON.stringify(fifo.queue)!==JSON.stringify(['gas-production-1','hangar']) || fifo.activeRole!=='gas-production-1' || fifo.level!==2 || fifo.energy!==104 || !fifo.activeText.includes('Осталось')) throw new Error(`FIFO transition failed: ${JSON.stringify(fifo)}`);
+  if(JSON.stringify(fifo.queue)!==JSON.stringify(['gas-production-1','hangar']) || fifo.activeRole!=='gas-production-1' || fifo.level!==2 || fifo.energy!==155 || !fifo.activeText.includes('Осталось')) throw new Error(`FIFO transition failed: ${JSON.stringify(fifo)}`);
   await capture(win,directory,'resource-zone-fifo-next');
 
   await reload(win);
@@ -486,7 +486,7 @@ async function verifyResourceZoneFlow(win, directory) {
     const q=save.queues?.['helion-01'];
     return {queue:Array.isArray(q)?q.map((item)=>item.assetRole):null,level:save.planets?.['helion-01']?.buildings?.['basic-energy']??null,energy:save.planets?.['helion-01']?.energy??null};
   })()`);
-  if(JSON.stringify(persisted.queue)!==JSON.stringify(['gas-production-1','hangar']) || persisted.level!==2 || persisted.energy!==104) throw new Error(`Reload persistence failed: ${JSON.stringify(persisted)}`);
+  if(JSON.stringify(persisted.queue)!==JSON.stringify(['gas-production-1','hangar']) || persisted.level!==2 || persisted.energy!==155) throw new Error(`Reload persistence failed: ${JSON.stringify(persisted)}`);
 
   const result={
     screen:'resource-zone-flow',
