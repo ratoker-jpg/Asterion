@@ -177,8 +177,32 @@ async function runViewport(width, height) {
     }
     await capture(win, directory, 'satellite-presence', width, height);
 
-    await win.webContents.executeJavaScript('window.confirm = () => true; true');
+    win.showInactive();
     await click(win, '.fleet-satellite-dismantle-v1');
+    await waitFor(win, `document.querySelector('[data-qa-satellite-dismantle-confirm]')`);
+    const confirmation = await win.webContents.executeJavaScript(`(() => {
+      const dialog = document.querySelector('[data-qa-satellite-dismantle-confirm]');
+      const text = (selector) => document.querySelector(selector)?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+      return {
+        title: text('#satellite-dismantle-confirm-title'),
+        description: text('#satellite-dismantle-confirm-description'),
+        role: dialog?.getAttribute('role') || '',
+        ariaModal: dialog?.getAttribute('aria-modal') || '',
+        confirmFocused: document.activeElement?.matches('[data-qa-satellite-dismantle-confirm-yes]') || false,
+        horizontalOverflow: document.documentElement.scrollWidth > innerWidth + 2 || document.body.scrollWidth > innerWidth + 2,
+      };
+    })()`);
+    if (!confirmation.title.includes('Уничтожить спутники?') || !confirmation.description.includes('Ресурсы за них не возвращаются') || confirmation.role !== 'alertdialog' || confirmation.ariaModal !== 'true' || !confirmation.confirmFocused || confirmation.horizontalOverflow) {
+      throw new Error(`${label}: satellite dismantle confirmation contract failed: ${JSON.stringify(confirmation)}`);
+    }
+    await capture(win, directory, 'satellite-dismantle-confirm', width, height);
+
+    await win.webContents.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); true`);
+    await waitFor(win, `!document.querySelector('[data-qa-satellite-dismantle-confirm]')`);
+    win.showInactive();
+    await click(win, '.fleet-satellite-dismantle-v1');
+    await waitFor(win, `document.querySelector('[data-qa-satellite-dismantle-confirm]')`);
+    await click(win, '[data-qa-satellite-dismantle-confirm-yes]');
     await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}')?.planets?.['helion-01']?.solarSatellites === 0`);
     const afterDismantle = await win.webContents.executeJavaScript(`(() => {
       const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
@@ -193,7 +217,7 @@ async function runViewport(width, height) {
       throw new Error(`${label}: satellite dismantle UI contract failed: ${JSON.stringify(afterDismantle)}`);
     }
 
-    return { viewport: label, station, satellite, afterDismantle, screenshots: fs.readdirSync(directory).filter((name) => name.endsWith('.png')).sort() };
+    return { viewport: label, station, satellite, confirmation, afterDismantle, screenshots: fs.readdirSync(directory).filter((name) => name.endsWith('.png')).sort() };
   } finally {
     try { if (win.webContents.debugger.isAttached()) win.webContents.debugger.detach(); } catch {}
     if (!win.isDestroyed()) await win.close();
