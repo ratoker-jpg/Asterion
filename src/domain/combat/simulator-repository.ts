@@ -14,7 +14,6 @@ import {
   COMBAT_ENTITY_LEVEL_LIMITS,
   COMBAT_PROFILE_ID,
   DEFAULT_COMBAT_TARGET_PRIORITY,
-  MAX_COMMANDERS_PER_SIDE,
 } from './config.ts';
 import {
   COMBAT_TECHNOLOGIES,
@@ -104,14 +103,8 @@ function readCommanderStacks(side: { commanders?: unknown; commander?: unknown }
   return legacyCommander ? [legacyCommander] : [];
 }
 
-function commanderMigrationErrors(
-  sideName: 'attacker' | 'defender',
-  commanders: readonly CombatStackInput[],
-) {
-  const count = commanders.reduce((total, stack) => total + Math.max(0, Math.floor(stack.count)), 0);
-  return count > MAX_COMMANDERS_PER_SIDE
-    ? [`Сценарий требует миграции: у ${sideName === 'attacker' ? 'атакующего' : 'защитника'} сохранено несколько командирских кораблей. Оставьте не больше ${MAX_COMMANDERS_PER_SIDE} перед запуском.`]
-    : [];
+function isObsoleteCommanderLimitError(message: string) {
+  return /несколько командирских кораблей|не больше\s+\d+\s+командирск/i.test(message);
 }
 
 export function normalizeSimulatorScenario(value: unknown): SimulatorScenario {
@@ -139,9 +132,9 @@ export function normalizeSimulatorScenario(value: unknown): SimulatorScenario {
   const attackerActiveCommanderId = readCommanderSelection(candidate.attacker?.activeCommanderId, attackerCommanders, attackerLegacyCommander);
   const defenderActiveCommanderId = readCommanderSelection(candidate.defender?.activeCommanderId, defenderCommanders, defenderLegacyCommander);
   const migrationErrors = [
-    ...(Array.isArray(candidate.migrationErrors) ? candidate.migrationErrors.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : []),
-    ...commanderMigrationErrors('attacker', attackerCommanders),
-    ...commanderMigrationErrors('defender', defenderCommanders),
+    ...(Array.isArray(candidate.migrationErrors)
+      ? candidate.migrationErrors.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()) && !isObsoleteCommanderLimitError(item))
+      : []),
   ];
 
   return {

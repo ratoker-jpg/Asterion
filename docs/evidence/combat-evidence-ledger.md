@@ -8,7 +8,7 @@ This ledger separates source-backed facts from Asterion decisions and uncalibrat
 | Simulator defender fleet cap | CONFIRMED | User decision, 2026-09-16 | high | 35,000 population |
 | Simulator defender defense cap | CONFIRMED | User decision, 2026-09-16 | high | 35,000 population, independent from fleet |
 | Planet hangar capacity | CONFIRMED | `src/domain/fleet/runtime.ts`, user decision | high | 25,112 is not a combat cap; retained as external evidence only |
-| Commander presence and cardinality | CONFIRMED | User decision, 2026-09-17; implementation brief §4.2 | high | Each side has either no commander or exactly one commander stack with count 1; legacy multi-commander data is preserved and blocks launch with a migration error |
+| Commander presence and cardinality | CONFIRMED | User decision, 2026-09-17; simulator clarification | high | Each commander type may be selected at most once per side; any number of distinct commander types may join the battle; the leading commander is selected separately and supplies the active commander effect |
 | Commander maximum level | CONFIRMED | `src/domain/buildings/spaceport-upgrades.ts` | high | 0..40 |
 | Ship maximum level | CONFIRMED | `src/domain/buildings/spaceport-upgrades.ts` | high | 0..10 |
 | Combat eligibility | CONFIRMED | Implementation brief §4.3; catalog roles | high | Service/civil ships are shown for fleet context but are rejected by combat validation; only combat entities enter the resolver |

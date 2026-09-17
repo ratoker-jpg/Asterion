@@ -78,16 +78,20 @@ test('one side may omit its commander and the commander level is retained', () =
   assert.equal(report.defenderForce.activeCommanderId, undefined);
 });
 
-test('a side may field at most one commander, independently of the other side', () => {
-  const result = validateCombatInput(input({
+test('a side may field one of each commander type while the leading commander stays separate', () => {
+  const multiple = input({
     attacker: {
       participant: attackerParticipant,
       ships: [{ entityId: 'scout', count: 1 }],
       commanders: [{ entityId: 'corsair', count: 1 }, { entityId: 'hunter', count: 1 }],
+      activeCommanderId: 'hunter',
     },
-  }));
-  assert.equal(result.ok, false);
-  assert.equal(result.errors.some((error) => error.code === 'commander-limit'), true);
+  });
+  const result = validateCombatInput(multiple);
+  assert.equal(result.ok, true);
+  assert.equal(result.errors.length, 0);
+  assert.equal(multiple.attacker.commanders?.length, 2);
+  assert.equal(multiple.attacker.activeCommanderId, 'hunter');
   assert.equal(validateCombatInput(input({
     attacker: {
       participant: attackerParticipant,
@@ -294,13 +298,14 @@ test('legacy reports migrate with unknown provenance and without fabricated nume
   assert.deepEqual(migrated?.rounds.flatMap((round) => round.events.map((event) => event.sequence)), [1, 2]);
 });
 
-test('legacy scenarios retain multiple commanders and block launch until migration', () => {
+test('legacy scenarios retain multiple commander types without a global migration error', () => {
   const legacy = normalizeSimulatorScenario({
     attacker: {
       ships: [{ entityId: 'scout', count: 1 }],
       commanders: [{ entityId: 'corsair', count: 1 }, { entityId: 'hunter', count: 1 }],
     },
     defender: { ships: [{ entityId: 'scout', count: 1 }], commanders: [], defenses: [] },
+    migrationErrors: ['Сценарий требует миграции: у атакующего сохранено несколько командирских кораблей. Оставьте не больше 1 перед запуском.'],
     maxRounds: 5,
   });
   assert.equal(legacy.attacker.commanders.length, 2);
@@ -312,11 +317,9 @@ test('legacy scenarios retain multiple commanders and block launch until migrati
     priority,
   });
   assert.equal(combatInput.attacker.commanders?.length, 2);
-  assert.equal(combatInput.migrationErrors?.length, 1);
+  assert.equal(combatInput.migrationErrors?.length ?? 0, 0);
   const checked = validateCombatInput(combatInput);
-  assert.equal(checked.ok, false);
-  assert.equal(checked.errors.some((error) => error.code === 'migration-error'), true);
-  assert.equal(checked.errors.some((error) => error.code === 'commander-limit'), true);
+  assert.equal(checked.ok, true);
 });
 
 test('destroyed stacks emit a skipped-volley status and never attack', () => {

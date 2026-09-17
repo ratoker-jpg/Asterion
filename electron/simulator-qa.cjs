@@ -179,13 +179,15 @@ async function runViewport(win, width, height) {
   await setField(win, '.sim-side-v1:first-child [data-qa-simulator-unit="scout"] .sim-level-control-v1 input', 10);
   await setField(win, '.sim-side-v1:first-child [data-qa-simulator-unit="cruiser"] input[aria-label^="Количество"]', 1);
   await setField(win, '.sim-side-v1:last-child .sim-unit-section-v1:not(.sim-tech-section-v1) .sim-unit-row-v1:first-child input[aria-label^="Количество"]', 1);
+  await setField(win, '.sim-side-v1:first-child [data-qa-simulator-unit="corsair"] input[aria-label^="Количество"]', 1);
+  await setField(win, '.sim-side-v1:first-child [data-qa-simulator-unit="hunter"] input[aria-label^="Количество"]', 1);
   await setField(win, '#sim-leading-commander-attacker', 'corsair');
   await setField(win, '#sim-leading-commander-attacker', 'hunter');
   await setField(win, '.sim-side-v1:last-child [data-qa-simulator-unit="tower-shield"] input[aria-label^="Количество"]', 1);
   await setField(win, '.sim-side-v1:last-child [data-qa-simulator-unit="planetary-shield"] input[aria-label^="Количество"]', 1);
 
   const configured = await snapshot(win);
-  if (configured.firstTech.value !== '15' || configured.firstTech.max !== '15' || !configured.firstTechIncreaseDisabled || configured.firstShipLevel.max !== '10' || configured.firstShipLevel.value !== '10' || !configured.firstShipLevelIncreaseDisabled || configured.maxSuffixCount !== 0 || configured.technologyAssetCount !== 20 || configured.commanderCounts.length !== 1 || configured.leadingCommander !== 'hunter' || configured.defenseLevelControls !== 0 || configured.shieldLimits.some(({ max }) => max !== '1')) {
+  if (configured.firstTech.value !== '15' || configured.firstTech.max !== '15' || !configured.firstTechIncreaseDisabled || configured.firstShipLevel.max !== '10' || configured.firstShipLevel.value !== '10' || !configured.firstShipLevelIncreaseDisabled || configured.maxSuffixCount !== 0 || configured.technologyAssetCount !== 20 || configured.commanderCounts.length !== 2 || configured.leadingCommander !== 'hunter' || configured.defenseLevelControls !== 0 || configured.shieldLimits.some(({ max }) => max !== '1')) {
     throw new Error(`${label}: level, asset, commander, or defense contract failed ${JSON.stringify(configured)}`);
   }
 
@@ -215,7 +217,7 @@ async function runViewport(win, width, height) {
 
   const saved = await readSave(win);
   const lastScenario = saved.combatSimulator?.lastScenario;
-  if (lastScenario?.executionMode !== 'production' || lastScenario?.technologyMode !== 'shared' || lastScenario?.attacker?.activeCommanderId !== 'hunter' || lastScenario?.attacker?.commanders?.length !== 1 || saved.combatSimulator?.presets?.length !== 1 || saved.combat?.reports?.some((report) => report.missionType === 'simulation') || saved.combat?.savedReportIds?.some((id) => saved.combat?.reports?.some((report) => report.id === id && report.missionType === 'simulation'))) {
+  if (lastScenario?.executionMode !== 'production' || lastScenario?.technologyMode !== 'shared' || lastScenario?.attacker?.activeCommanderId !== 'hunter' || lastScenario?.attacker?.commanders?.length !== 2 || saved.combatSimulator?.presets?.length !== 1 || saved.combat?.reports?.some((report) => report.missionType === 'simulation') || saved.combat?.savedReportIds?.some((id) => saved.combat?.reports?.some((report) => report.id === id && report.missionType === 'simulation'))) {
     throw new Error(`${label}: full scenario persistence or simulation isolation failed ${JSON.stringify({ simulator: saved.combatSimulator, reportCount: saved.combat?.reports?.length })}`);
   }
 
@@ -229,7 +231,7 @@ async function runViewport(win, width, height) {
   })()`);
   await waitFor(win, `document.querySelectorAll('.sim-tech-row-v1').length === 20`);
   const reloaded = await snapshot(win);
-  if (reloaded.leadingCommander !== 'hunter' || reloaded.commanderCounts.length !== 1 || reloaded.debugControls !== 0 || reloaded.shieldLimits.some(({ max }) => max !== '1') || reloaded.serviceUnit.unavailable) {
+  if (reloaded.leadingCommander !== 'hunter' || reloaded.commanderCounts.length !== 2 || reloaded.debugControls !== 0 || reloaded.shieldLimits.some(({ max }) => max !== '1') || reloaded.serviceUnit.unavailable) {
     throw new Error(`${label}: last scenario reload failed ${JSON.stringify(reloaded)}`);
   }
   await capture(win, directory, 'simulator-reloaded');

@@ -4,7 +4,6 @@ import {
   COMBAT_PROFILE_ID,
   COMBAT_ENTITY_LEVEL_LIMITS,
   DEFAULT_COMBAT_TARGET_PRIORITY,
-  MAX_COMMANDERS_PER_SIDE,
   SIMULATOR_MAX_ROUNDS as PROFILE_MAX_ROUNDS,
   SIMULATOR_POPULATION_LIMITS,
   type CombatExecutionMode,
@@ -115,7 +114,6 @@ export type CombatValidationCode =
   | 'level-overflow'
   | 'entity-limit'
   | 'invalid-commander-selection'
-  | 'commander-limit'
   | 'migration-error'
   | 'invalid-technology-mode'
   | 'technology-profile-mismatch'
@@ -366,14 +364,6 @@ export function validateCombatInput(input: CombatInput): CombatValidationResult 
   validateStackCollection(input.defender.defenses, 'defense', 'defender.defenses', errors);
 
   for (const [side, commanders] of [['attacker', attackerCommanders] as const, ['defender', defenderCommanders] as const]) {
-    const commanderCount = commanders.reduce((total, stack) => total + Math.max(0, Math.floor(stack.count)), 0);
-    if (commanderCount > MAX_COMMANDERS_PER_SIDE) {
-      errors.push({
-        code: 'commander-limit',
-        path: `${side}.commander`,
-        message: `На стороне можно выбрать не больше ${MAX_COMMANDERS_PER_SIDE} командирского корабля. Старый сценарий нужно исправить перед запуском.`,
-      });
-    }
     const activeCommanderId = input[side].activeCommanderId;
     if (activeCommanderId !== undefined && activeCommanderId !== null && (!isCommanderId(activeCommanderId) || !commanders.some((stack) => stack.entityId === activeCommanderId && stack.count > 0))) {
       errors.push({

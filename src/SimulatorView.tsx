@@ -23,7 +23,6 @@ import {
 } from './domain/combat/simulator-repository.ts';
 import {
   COMBAT_ENTITY_LEVEL_LIMITS,
-  MAX_COMMANDERS_PER_SIDE,
   SIMULATOR_POPULATION_LIMITS,
 } from './domain/combat/config.ts';
 import {
@@ -123,17 +122,17 @@ function replaceStackCount(
   const current = getStacks(scenario, side, category);
   const existing = current.find((stack) => stack.entityId === entityId);
   const nextStack = { entityId, count: nextCount, level: existing?.level ?? 0 };
-  // A side may field many ordinary combat stacks, but only one commander
-  // ship. Selecting a commander row replaces the previous commander instead
-  // of silently adding a second one.
-  const next = category === 'commanders'
-    ? (nextCount > 0 ? [nextStack] : [])
-    : current.filter((stack) => stack.entityId !== entityId);
-  if (category !== 'commanders' && nextCount > 0) next.push(nextStack);
+  const next = current.filter((stack) => stack.entityId !== entityId);
+  if (nextCount > 0) next.push(nextStack);
+  const currentActive = scenario[side].activeCommanderId;
+  const activeId = category === 'commanders'
+    ? (next.some((stack) => stack.entityId === currentActive && stack.count > 0)
+      ? currentActive
+      : (next[0]?.entityId as CommanderId | undefined) ?? null)
+    : undefined;
 
   if (side === 'attacker') {
     if (category === 'defenses') return scenario;
-    const activeId = category === 'commanders' ? (next[0]?.entityId as CommanderId | undefined) ?? null : undefined;
     return {
       ...scenario,
       attacker: {
@@ -147,7 +146,6 @@ function replaceStackCount(
     };
   }
 
-  const activeId = category === 'commanders' ? (next[0]?.entityId as CommanderId | undefined) ?? null : undefined;
   return {
     ...scenario,
     defender: {
@@ -218,12 +216,10 @@ function maxForEntity(
   const currentContribution = currentCount * entity.population;
   const used = category === 'defenses'
     ? categoryPopulation(scenario, 'defender', 'defenses')
-    : category === 'commanders'
-      ? categoryPopulation(scenario, side, 'ships')
     : side === 'attacker'
       ? categoryPopulation(scenario, 'attacker', 'ships') + categoryPopulation(scenario, 'attacker', 'commanders')
       : categoryPopulation(scenario, 'defender', 'ships') + categoryPopulation(scenario, 'defender', 'commanders');
-  const budgetWithoutCurrent = Math.max(0, used - (category === 'commanders' ? 0 : currentContribution));
+  const budgetWithoutCurrent = Math.max(0, used - currentContribution);
   const limit = category === 'defenses'
     ? SIMULATOR_POPULATION_LIMITS.defenderDefense
     : side === 'attacker'
@@ -231,11 +227,9 @@ function maxForEntity(
       : SIMULATOR_POPULATION_LIMITS.defenderFleet;
   const populationMax = Math.max(0, Math.floor((limit - budgetWithoutCurrent) / Math.max(1, entity.population)));
   const ownedMax = entity.maxOwned
-    ?? (category === 'commanders'
-      ? MAX_COMMANDERS_PER_SIDE
-      : category === 'defenses' && UNIQUE_DEFENSE_IDS.has(entity.id)
-        ? 1
-        : Number.MAX_SAFE_INTEGER);
+    ?? (category === 'defenses' && UNIQUE_DEFENSE_IDS.has(entity.id)
+      ? 1
+      : Number.MAX_SAFE_INTEGER);
   return Math.min(ownedMax, populationMax);
 }
 
@@ -512,11 +506,12 @@ function CommanderSelector({
 }) {
   const selected = selectedCommanders(scenario, side);
   const active = scenario[side].activeCommanderId;
+  const activeEntity = COMMANDER_COMBAT_CATALOG.find((entity) => entity.id === active);
   const selectedLabel = selected.length === 0
-    ? 'Нет командира'
-    : selected.length > 1
-       ? 'Нужно оставить одного командира'
-      : `Выбран: ${COMMANDER_COMBAT_CATALOG.find((entity) => entity.id === (active ?? selected[0]?.entityId))?.name ?? 'командир'}`;
+    ? 'Нет ведущего командира'
+    : activeEntity
+      ? `Ведущий: ${activeEntity.name}`
+      : 'Выбери ведущего командира';
   return (
     <label className="sim-commander-select-v1" htmlFor={`sim-leading-commander-${side}`}>
       <span>ВЕДУЩИЙ КОМАНДИР</span>
@@ -528,9 +523,12 @@ function CommanderSelector({
         aria-describedby={`sim-leading-commander-help-${side}`}
       >
         <option value="">{selectedLabel}</option>
-        {COMMANDER_COMBAT_CATALOG.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}
+        {selected.map((stack) => {
+          const entity = COMMANDER_COMBAT_CATALOG.find((item) => item.id === stack.entityId);
+          return entity ? <option key={entity.id} value={entity.id}>{entity.name}</option> : null;
+        })}
       </select>
-      <small id={`sim-leading-commander-help-${side}`}>На стороне может быть не больше одного командирского корабля. Выбор здесь добавляет или заменяет его; уровень задаётся в раскрытом разделе «Командирские».</small>
+      <small id={`sim-leading-commander-help-${side}`}>Добавь по одному кораблю каждого типа в разделе «Командирские». Здесь выбери ведущего; остальные командирские корабли тоже участвуют в бою.</small>
     </label>
   );
 }
@@ -720,20 +718,15 @@ export function SimulatorView({ planetName, coords, onBack }: { planetName: stri
   const changeActiveCommander = (side: ScenarioSide, commanderId: CommanderId | null) => {
     updateScenario((current) => {
       const currentCommanders = getStacks(current, side, 'commanders');
-      const existing = commanderId ? currentCommanders.find((stack) => stack.entityId === commanderId && stack.count > 0) : null;
-      if (commanderId) {
-        const entity = COMMANDER_COMBAT_CATALOG.find((item) => item.id === commanderId);
-        if (!entity || maxForEntity(current, side, 'commanders', entity) < 1) return current;
-      }
-      const commanders = commanderId
-        ? [{ entityId: commanderId, count: 1, level: existing?.level ?? 0 }]
-        : [];
-      const nextActive = commanderId;
+      const selected = commanderId
+        ? currentCommanders.find((stack) => stack.entityId === commanderId && stack.count > 0) ?? null
+        : null;
+      if (commanderId && !selected) return current;
       return side === 'attacker'
-        ? { ...current, attacker: { ...current.attacker, commanders, commander: commanders.find((stack) => stack.entityId === nextActive) ?? null, activeCommanderId: nextActive } }
-        : { ...current, defender: { ...current.defender, commanders, commander: commanders.find((stack) => stack.entityId === nextActive) ?? null, activeCommanderId: nextActive } };
+        ? { ...current, attacker: { ...current.attacker, commander: selected, activeCommanderId: commanderId } }
+        : { ...current, defender: { ...current.defender, commander: selected, activeCommanderId: commanderId } };
     });
-    setNotice(commanderId ? 'Командир выбран. На стороне остаётся один командирский корабль.' : 'Командир снят.');
+    setNotice(commanderId ? 'Ведущий командир выбран. Остальные командирские корабли остаются в составе.' : 'Ведущий командир снят. Командирские корабли остаются в составе.');
   };
 
   return (
