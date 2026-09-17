@@ -411,12 +411,16 @@
 
 .sim-level-control-v1 {
   display: grid;
-  grid-template-columns: auto minmax(74px, 1fr);
-  min-width: 124px;
+  gap: 4px;
+  align-items: end;
+  min-width: 108px;
+  margin-right: 8px;
   color: #6daabd;
   font-size: 10px;
   letter-spacing: .06em;
 }
+
+.sim-level-control-v1 .sim-number-stepper-v1 { width: 100%; }
 
 .sim-commander-select-v1 {
   display: grid;
