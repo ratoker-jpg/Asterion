@@ -80,7 +80,7 @@ export function dispatchFlight(state: FlightState, input: DispatchFlightInput): 
 
 export function recallFlight(state: FlightState, flightId: string, nowMs: number): FlightState {
   const flight = state.records.find((record) => record.id === flightId);
-  if (!flight || flight.phase !== 'outbound') return state;
+  if (!flight || flight.phase !== 'outbound' || nowMs >= flight.arrivalAt) return state;
   const elapsed = Math.min(flight.oneWayDurationMs, Math.max(0, nowMs - flight.departedAt));
   const next: FlightRecord = { ...flight, phase: 'returning', recalledAt: nowMs, returnAt: nowMs + elapsed, completionReason: 'recalled' };
   return { ...state, records: state.records.map((record) => record.id === flightId ? next : record) };

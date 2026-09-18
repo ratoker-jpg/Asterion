@@ -9,7 +9,13 @@ import {
 } from '../domain/buildings/production-bots.ts';
 import { creditResources, type ResourceCreditResult } from '../domain/resources/credit.ts';
 import { normalizeTestTimeScale, type RuntimeMode, type TestTimeScale } from '../domain/runtime/mode.ts';
-import { getPlanetResources, replacePlanetResources, type ResourceClock, type SaveState } from './contracts.ts';
+import {
+  getPlanetResources,
+  replacePlanetResources,
+  type ResourceClock,
+  type ResourceClockEntry,
+  type SaveState,
+} from './contracts.ts';
 
 const RESOURCE_KEYS = ['metal', 'minerals', 'gas'] as const satisfies readonly ProductionResource[];
 const CAPPED_RESOURCE_KEYS = ['metal', 'minerals', 'gas'] as const;
@@ -50,7 +56,7 @@ export function getEffectiveResourceIncomePerHour(
   };
 }
 
-function normalizeClock(clock: ResourceClock | undefined, now: number): ResourceClock {
+function normalizeClock(clock: Partial<ResourceClockEntry> | undefined, now: number): ResourceClockEntry {
   const safeNow = finiteNonNegative(now, Date.now());
   const last = Math.min(safeNow, finiteNonNegative(clock?.lastReconciledAt, safeNow));
   const source = clock?.remainder;
@@ -71,7 +77,7 @@ function normalizeClock(clock: ResourceClock | undefined, now: number): Resource
   };
 }
 
-function clocksEqual(left: ResourceClock, right: ResourceClock): boolean {
+function clocksEqual(left: ResourceClockEntry, right: ResourceClockEntry): boolean {
   return left.lastReconciledAt === right.lastReconciledAt
     && RESOURCE_KEYS.every((key) => left.remainder[key] === right.remainder[key]);
 }
@@ -82,6 +88,50 @@ function resourcesEqual(left: SaveState, right: SaveState, planetId: SaveState['
   return leftWallet.metal === rightWallet.metal
     && leftWallet.minerals === rightWallet.minerals
     && leftWallet.gas === rightWallet.gas;
+}
+
+function getClockForPlanet(state: SaveState, planetId: SaveState['currentPlanetId'], now: number): ResourceClockEntry {
+  const stored = state.resourceClock?.byPlanet?.[planetId];
+  if (stored) return normalizeClock(stored, now);
+
+  // Fixtures and saves from before the per-planet clock migration only have a
+  // meaningful clock for the legacy homeworld. Never apply that timestamp to
+  // a colony that has no migrated entry.
+  if (!state.resourceClock?.byPlanet && planetId === 'helion-01') {
+    return normalizeClock(state.resourceClock, now);
+  }
+  return normalizeClock(undefined, now);
+}
+
+function withPlanetClock(state: SaveState, planetId: SaveState['currentPlanetId'], clock: ResourceClockEntry): SaveState {
+  const byPlanet = {
+    ...(state.resourceClock?.byPlanet ?? {}),
+    [planetId]: clock,
+  };
+  const legacyAlias = planetId === 'helion-01'
+    ? clock
+    : {
+      lastReconciledAt: state.resourceClock.lastReconciledAt,
+      remainder: { ...state.resourceClock.remainder },
+    };
+  return {
+    ...state,
+    resourceClock: {
+      ...state.resourceClock,
+      ...legacyAlias,
+      byPlanet,
+    },
+  };
+}
+
+/** Adds a newly-created planet clock without borrowing the homeworld's time. */
+export function initializePlanetResourceClock(
+  state: SaveState,
+  planetId: SaveState['currentPlanetId'],
+  now: number,
+): SaveState {
+  if (state.resourceClock.byPlanet?.[planetId]) return state;
+  return withPlanetClock(state, planetId, normalizeClock(undefined, now));
 }
 
 /**
@@ -100,11 +150,14 @@ export function reconcileResourceIncome(
     return { changed: false, state, credit: { wallet: { ...resources, energy: 0 }, accepted: { metal: 0, minerals: 0, gas: 0, energy: 0 }, burned: { metal: 0, minerals: 0, gas: 0, energy: 0 } } };
   }
 
-  const clock = normalizeClock(state.resourceClock, now);
+  const storedClock = state.resourceClock.byPlanet?.[context.planetId];
+  const clock = getClockForPlanet(state, context.planetId, now);
+  const clockWasPersisted = Boolean(storedClock);
   if (now < clock.lastReconciledAt) {
+    const normalizedState = clockWasPersisted ? state : withPlanetClock(state, context.planetId, clock);
     return {
-      changed: !clocksEqual(clock, state.resourceClock),
-      state: clocksEqual(clock, state.resourceClock) ? state : { ...state, resourceClock: clock },
+      changed: !clockWasPersisted,
+      state: normalizedState,
       credit: { wallet: { ...getPlanetResources(state, context.planetId), energy: planet.energy }, accepted: { metal: 0, minerals: 0, gas: 0, energy: 0 }, burned: { metal: 0, minerals: 0, gas: 0, energy: 0 } },
     };
   }
@@ -144,12 +197,13 @@ export function reconcileResourceIncome(
     }
   }
 
-  const nextClock: ResourceClock = { lastReconciledAt: now, remainder };
+  const nextClock: ResourceClockEntry = { lastReconciledAt: now, remainder };
+  const withClock = withPlanetClock({ ...state }, context.planetId, nextClock);
   const next = replacePlanetResources(
-    { ...state, resourceClock: nextClock },
+    withClock,
     context.planetId,
     credit.wallet,
   );
-  const changed = !resourcesEqual(state, next, context.planetId) || !clocksEqual(clock, nextClock);
+  const changed = !resourcesEqual(state, next, context.planetId) || !clockWasPersisted || !clocksEqual(clock, nextClock);
   return { changed, state: changed ? next : state, credit };
 }

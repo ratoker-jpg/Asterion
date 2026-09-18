@@ -96,7 +96,7 @@ import {
 } from '../domain/repair/workshop.ts';
 import { initializePlanetEnergy, syncPlanetEnergySources } from './energy.ts';
 import type { EnergyLedger } from '../domain/energy/runtime.ts';
-import type { PlanetQueueRecord, PlanetResources, PlanetStateRecord, ResourceClock, SaveState, PlanetRuntime } from './contracts.ts';
+import type { PlanetQueueRecord, PlanetResources, PlanetStateRecord, ResourceClock, ResourceClockEntry, SaveState, PlanetRuntime } from './contracts.ts';
 import type { FlightState } from '../domain/flights/types.ts';
 
 export const SAVE_SCHEMA_VERSION = Math.max(
@@ -201,7 +201,7 @@ function nonNegativeNumberOr(value: unknown, fallback: number): number {
   return Math.max(0, resolved);
 }
 
-function createResourceClock(now: number): ResourceClock {
+function createResourceClockEntry(now: number): ResourceClockEntry {
   const safeNow = nonNegativeNumberOr(now, Date.now());
   return {
     lastReconciledAt: safeNow,
@@ -209,17 +209,26 @@ function createResourceClock(now: number): ResourceClock {
   };
 }
 
-function migrateResourceClock(value: unknown, now: number): ResourceClock {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return createResourceClock(now);
-  const source = value as Record<string, unknown>;
+function createResourceClock(now: number, planetIds: readonly string[] = ['helion-01']): ResourceClock {
+  const entry = createResourceClockEntry(now);
+  return {
+    ...entry,
+    byPlanet: Object.fromEntries(planetIds.map((planetId) => [planetId, { ...entry, remainder: { ...entry.remainder } }])) as Record<string, ResourceClockEntry>,
+  };
+}
+
+function migrateResourceClockEntry(value: unknown, now: number, fallback?: ResourceClockEntry): ResourceClockEntry {
+  const source = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
   const safeNow = nonNegativeNumberOr(now, Date.now());
-  const rawLast = numberOr(source.lastReconciledAt, safeNow);
+  const rawLast = numberOr(source.lastReconciledAt, fallback?.lastReconciledAt ?? safeNow);
   const lastReconciledAt = Math.min(safeNow, Math.max(0, rawLast));
   const rawRemainder = source.remainder && typeof source.remainder === 'object' && !Array.isArray(source.remainder)
     ? source.remainder as Record<string, unknown>
     : {};
   const remainder = (key: keyof ResourceClock['remainder']) => {
-    const resolved = numberOr(rawRemainder[key], 0);
+    const resolved = numberOr(rawRemainder[key], fallback?.remainder[key] ?? 0);
     return Math.min(0.999_999_999, Math.max(0, resolved));
   };
   return {
@@ -233,6 +242,24 @@ function migrateResourceClock(value: unknown, now: number): ResourceClock {
       energy: 0,
     },
   };
+}
+
+function migrateResourceClock(value: unknown, now: number, planetIds: readonly string[]): ResourceClock {
+  const source = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const legacy = migrateResourceClockEntry(source, now);
+  const rawByPlanet = source.byPlanet && typeof source.byPlanet === 'object' && !Array.isArray(source.byPlanet)
+    ? source.byPlanet as Record<string, unknown>
+    : source.planets && typeof source.planets === 'object' && !Array.isArray(source.planets)
+      ? source.planets as Record<string, unknown>
+      : {};
+  const byPlanet = Object.fromEntries(planetIds.map((planetId) => [
+    planetId,
+    migrateResourceClockEntry(rawByPlanet[planetId], now, legacy),
+  ])) as Record<string, ResourceClockEntry>;
+  const homeworld = byPlanet['helion-01'] ?? legacy;
+  return { ...homeworld, byPlanet };
 }
 
 function normalizeStoredResource(value: unknown, fallback: number, capacity: number): number {
@@ -338,7 +365,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     command,
     reports: createDefaultReportsState(),
     science,
-    resourceClock: createResourceClock(now),
+    resourceClock: createResourceClock(now, ['helion-01']),
     flights: createDefaultFlightState(),
   };
 }
@@ -560,7 +587,7 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       profile,
       reports: migrateReportsState(parsed.reports, reportIds),
       science,
-      resourceClock: migrateResourceClock(parsed.resourceClock, timestamp),
+      resourceClock: migrateResourceClock(parsed.resourceClock, timestamp, Object.keys(planets)),
       flights: migrateFlightState(parsed.flights),
     };
   } catch {

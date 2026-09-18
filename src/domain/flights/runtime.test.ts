@@ -43,6 +43,12 @@ test('recall uses elapsed outbound time, does not change gas, and completes once
   assert.equal(reconcileFlightState(completed, returning.returnAt! + 1), completed);
 });
 
+test('recall at and after arrival is phase-safe and leaves the outbound record unchanged', () => {
+  const { state, flight } = dispatch('arrival-boundary');
+  assert.equal(recallFlight(state, flight.id, flight.arrivalAt), state);
+  assert.equal(recallFlight(state, flight.id, flight.arrivalAt + 1), state);
+});
+
 test('arrival and normal return transitions are phase-guarded and idempotent', () => {
   const { state, flight } = dispatch();
   const arrived = reconcileFlightState(state, flight.arrivalAt);

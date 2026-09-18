@@ -114,6 +114,30 @@ test('recall returns the colonizer with elapsed reverse timer and no gas refund'
   assert.equal(Object.keys(completed.state.planets).length, 1);
 });
 
+test('recall at or after arrival refuses to create a reverse leg and does not refund gas', () => {
+  const initial = createInitialSaveState('production', 1_000);
+  const sent = dispatchFlight(initial, command('arrival-boundary'), 1_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const gasAfterDispatch = getPlanetResources(sent.state).gas;
+
+  for (const now of [sent.flight.arrivalAt, sent.flight.arrivalAt + 1]) {
+    const recalled = recallFlight(sent.state, sent.flight.id, now);
+    assert.equal(recalled.ok, false);
+    if (recalled.ok) continue;
+    assert.equal(recalled.error.code, 'flight-already-arrived');
+    assert.equal(recalled.error.message, 'Рейс уже прибыл.');
+    assert.equal(recalled.state, sent.state);
+    assert.equal(getPlanetResources(recalled.state).gas, gasAfterDispatch);
+    assert.equal(recalled.state.flights.records[0].phase, 'outbound');
+  }
+
+  const processedArrival = reconcileFlights(sent.state, sent.flight.arrivalAt).state;
+  const afterProcessedArrival = recallFlight(processedArrival, sent.flight.id, sent.flight.arrivalAt + 1);
+  assert.equal(afterProcessedArrival.ok, false);
+  if (!afterProcessedArrival.ok) assert.equal(afterProcessedArrival.error.code, 'flight-already-arrived');
+});
+
 test('successful arrival creates one deterministic isolated colony and consumes payload only at arrival', () => {
   const initial = createInitialSaveState('production', 1_000);
   const sent = dispatchFlight(initial, command('colonize-me'), 1_000);
@@ -162,6 +186,54 @@ test('target occupied at arrival starts a full return once and completes as targ
   assert.equal(returned.state.flights.records[0].completionReason, 'target-occupied');
   assert.equal(returned.state.planets['helion-01'].fleet.ships.colonizer, 1);
   assert.equal(Object.keys(returned.state.planets).filter((id) => id.startsWith('planet-')).length, 0);
+});
+
+test('a damaged save with an existing deterministic planet id returns instead of hanging outbound', () => {
+  const initial = createInitialSaveState('production', 1_000);
+  const sent = dispatchFlight(initial, command('damaged-planet-id'), 1_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const danglingPlanetId = 'planet-1-2-1';
+  const damaged = {
+    ...sent.state,
+    planets: {
+      ...sent.state.planets,
+      [danglingPlanetId]: {
+        ...sent.state.planets['helion-01'],
+        name: 'Повреждённая запись',
+        universeSystem: 9,
+        universePosition: 9,
+      },
+    },
+  };
+  const arrived = reconcileFlights(damaged, sent.flight.arrivalAt);
+  assert.equal(arrived.events[0]?.status, 'target-occupied');
+  assert.match(arrived.events[0]?.notice ?? '', /Координата уже занята/);
+  assert.equal(arrived.state.flights.records[0].phase, 'returning');
+  assert.equal(arrived.state.planets['helion-01'].fleet.ships.colonizer, 1);
+
+  const returned = reconcileFlights(arrived.state, arrived.state.flights.records[0].returnAt!);
+  assert.equal(returned.state.flights.records[0].phase, 'completed');
+  assert.equal(returned.state.flights.records[0].completionReason, 'target-occupied');
+  assert.equal(returned.state.planets['helion-01'].fleet.ships.colonizer, 1);
+});
+
+test('a damaged save without the origin planet completes the flight with a clear failure and no duplicate colony', () => {
+  const initial = createInitialSaveState('production', 1_000);
+  const sent = dispatchFlight(initial, command('missing-origin'), 1_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const damaged = {
+    ...sent.state,
+    planets: {},
+    queues: {},
+  } as typeof sent.state;
+  const reconciled = reconcileFlights(damaged, sent.flight.arrivalAt);
+  assert.equal(reconciled.events[0]?.status, 'arrived');
+  assert.match(reconciled.events[0]?.notice ?? '', /исходная планета не найдена/);
+  assert.equal(reconciled.state.flights.records[0].phase, 'completed');
+  assert.equal(reconciled.state.flights.records[0].completionReason, 'mission-failed');
+  assert.equal(Object.keys(reconciled.state.planets).length, 0);
 });
 
 test('an asteroid overlay does not block a free underlying coordinate', () => {

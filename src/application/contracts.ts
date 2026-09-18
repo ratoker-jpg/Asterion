@@ -64,7 +64,7 @@ export type PlanetRuntime = {
   resources?: PlanetResources;
 };
 
-export type ResourceClock = {
+export type ResourceClockEntry = {
   lastReconciledAt: number;
   remainder: {
     metal: number;
@@ -72,6 +72,15 @@ export type ResourceClock = {
     gas: number;
     energy: number;
   };
+};
+
+export type ResourceClock = ResourceClockEntry & {
+  /**
+   * Resource income is settled independently for every owned planet. The
+   * top-level fields remain as a compatibility alias for legacy consumers and
+   * old fixtures that only know about the homeworld clock.
+   */
+  byPlanet?: Record<PlanetId, ResourceClockEntry>;
 };
 
 export type PlanetStateRecord = Record<PlanetId, PlanetRuntime> & {

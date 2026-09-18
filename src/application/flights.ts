@@ -41,6 +41,7 @@ import type {
 } from '../domain/flights/types.ts';
 import { createUniverseSystem } from '../domain/universe/runtime.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPlanet } from '../domain/universe/types.ts';
+import { initializePlanetResourceClock } from './resource-clock.ts';
 
 export const FLIGHT_LAUNCH_CONTEXT_EVENT = 'asterion:flight-launch-context';
 export const FLIGHT_EDIT_TARGET_REQUEST_EVENT = 'asterion:flight-edit-target-request';
@@ -65,6 +66,7 @@ export type FlightErrorCode =
   | 'insufficient-gas'
   | 'mission-not-supported'
   | 'flight-not-recallable'
+  | 'flight-already-arrived'
   | 'invalid-command';
 
 export type FlightError = {
@@ -344,7 +346,9 @@ export function recallFlight(
   const now = typeof options === 'number' ? options : (options.now ?? Date.now());
   const flights = currentFlightState(state);
   const flight = flights.records.find((item) => item.id === flightId);
-  if (!flight || flight.phase !== 'outbound') return failure(state, 'flight-not-recallable', 'Отозвать можно только исходящий рейс.');
+  if (!flight) return failure(state, 'flight-not-recallable', 'Отозвать можно только исходящий рейс.');
+  if (now >= flight.arrivalAt) return failure(state, 'flight-already-arrived', 'Рейс уже прибыл.');
+  if (flight.phase !== 'outbound') return failure(state, 'flight-not-recallable', 'Отозвать можно только исходящий рейс.');
   const nextFlights = recallDomainFlight(flights, flightId, now);
   const nextFlight = nextFlights.records.find((item) => item.id === flightId)!;
   return {
@@ -386,10 +390,30 @@ export function reconcileFlights(state: SaveState, now: number): FlightReconcile
       }
 
       const planetId = makePlanetId(current.destinationCoordinate);
-      if (next.planets[planetId]) continue;
+      if (next.planets[planetId]) {
+        const returningState = beginDomainFlightReturn(next.flights, current.id, now, 'target-occupied');
+        const returning = returningState.records.find((flight) => flight.id === current.id)!;
+        const withArrival: FlightRecord = { ...returning, arrivedAt: now, completionReason: 'target-occupied' };
+        next = { ...next, flights: updateFlight(returningState, withArrival) };
+        changed = true;
+        events.push({ flight: withArrival, status: 'target-occupied', notice: 'Координата уже занята. Колонизатор возвращается.' });
+        continue;
+      }
       const colony = createColonyPlanet(next, current.destinationCoordinate);
       const origin = next.planets[current.originPlanetId];
-      if (!origin) continue;
+      if (!origin) {
+        const failed: FlightRecord = {
+          ...current,
+          phase: 'completed',
+          arrivedAt: current.arrivalAt,
+          completedAt: now,
+          completionReason: 'mission-failed',
+        };
+        next = completeFlight(next, current, failed);
+        changed = true;
+        events.push({ flight: failed, status: 'arrived', notice: 'Рейс завершён: исходная планета не найдена, корабль не был продублирован.' });
+        continue;
+      }
       const originFleet = removeSolarSatellitesFromFleet(resolveSavedFleetState(origin.fleet, next.profile.factionId)).fleet;
       const consumedFleet: OwnedFleetState = {
         ...originFleet,
@@ -410,6 +434,7 @@ export function reconcileFlights(state: SaveState, now: number): FlightReconcile
         queues: { ...next.queues, [planetId]: [] },
         flights: updateFlight(next.flights, completed),
       };
+      next = initializePlanetResourceClock(next, planetId, now);
       changed = true;
       events.push({ flight: completed, status: 'colonized', notice: `Колония основана в [${current.destinationCoordinate.galaxy}:${current.destinationCoordinate.system}:${current.destinationCoordinate.position}] · ресурсы 500/500/500.` });
       continue;

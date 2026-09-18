@@ -45,6 +45,7 @@ import {
 import { createEnergyLedger } from '../domain/energy/runtime.ts';
 import { reconcileRuntime } from './reconcile.ts';
 import { getEffectiveResourceIncomePerHour } from './resource-clock.ts';
+import { dispatchFlight, reconcileFlights } from './flights.ts';
 import { publishApplicationRuntimeSnapshot } from './runtime.ts';
 import { enqueueApplicationStateUpdate } from './state.ts';
 import {
@@ -169,6 +170,38 @@ test('persistence facade keeps the existing save key, envelope migration, and on
   const production = createPersistenceFacade({ mode: 'production', storage: new MemoryStorage(), now: () => 1_000 }).read();
   assert.deepEqual(new Set(Object.values(production.planets['helion-01'].repair.ships)), new Set([0]));
   assert.deepEqual(new Set(Object.values(production.planets['helion-01'].repair.defenses)), new Set([0]));
+});
+
+test('legacy resource clock migrates to every saved planet without sharing a mutable clock', () => {
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => 10_000 });
+  const initial = createInitialSaveState('production', 0);
+  const colonyId = 'planet-1-2-1';
+  const colony = {
+    ...initial.planets['helion-01'],
+    name: 'Колония 2-1',
+    universeSystem: 2,
+    universePosition: 1,
+    resources: { metal: 25, minerals: 35, gas: 45 },
+  };
+  storage.values.set(persistence.saveKey, JSON.stringify({
+    ...initial,
+    currentPlanetId: colonyId,
+    planets: { ...initial.planets, [colonyId]: colony },
+    queues: { ...initial.queues, [colonyId]: [] },
+    resourceClock: {
+      lastReconciledAt: 4_000,
+      remainder: { metal: 0.25, minerals: 0.5, gas: 0.75, energy: 0 },
+    },
+  }));
+
+  const migrated = persistence.read();
+  assert.deepEqual(migrated.resourceClock.byPlanet?.['helion-01'], {
+    lastReconciledAt: 4_000,
+    remainder: { metal: 0.25, minerals: 0.5, gas: 0.75, energy: 0 },
+  });
+  assert.deepEqual(migrated.resourceClock.byPlanet?.[colonyId], migrated.resourceClock.byPlanet?.['helion-01']);
+  assert.equal(migrated.currentPlanetId, colonyId);
 });
 
 test('persistence keeps one-time energy attribution and migrates legacy satellite fleet counts to orbit', () => {
@@ -897,6 +930,89 @@ test('resource clock accrues canonical income once, scales only Test Mode, and p
   assert.equal(twoTicks.state.metal, production.state.metal);
   assert.equal(twoTicks.state.minerals, production.state.minerals);
   assert.equal(twoTicks.state.gas, production.state.gas);
+});
+
+test('resource income uses an independent persisted clock per planet and reconciles repeatedly without duplication', () => {
+  const base = createInitialSaveState('production', 0);
+  const sent = dispatchFlight(base, {
+    requestId: 'resource-clock-colony',
+    missionId: 'colonize',
+    originPlanetId: 'helion-01',
+    destination: { kind: 'coordinate', coordinate: { galaxy: 1, system: 2, position: 1 } },
+    targetKind: 'empty',
+    selectedShips: { colonizer: 1 },
+    departedAt: 0,
+  }, 0);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const created = reconcileFlights(sent.state, sent.flight.arrivalAt);
+  assert.equal(created.events[0]?.status, 'colonized');
+  const colonyId = 'planet-1-2-1';
+  assert.ok(created.state.planets[colonyId]);
+  const productionBuildings = {
+    ...base.planets['helion-01'].buildings,
+    'metal-production-1': 1,
+    'mineral-production-1': 1,
+    'gas-production-1': 1,
+    'metal-storage': 1,
+    'mineral-storage': 1,
+    'gas-storage': 1,
+  };
+  const state = {
+    ...created.state,
+    metal: 0,
+    minerals: 0,
+    gas: 0,
+    planets: {
+      ...created.state.planets,
+      'helion-01': {
+        ...created.state.planets['helion-01'],
+        buildings: productionBuildings,
+        resources: { metal: 0, minerals: 0, gas: 0 },
+      },
+      [colonyId]: {
+        ...created.state.planets[colonyId],
+        buildings: productionBuildings,
+        resources: { metal: 0, minerals: 0, gas: 0 },
+      },
+    },
+    queues: { ...created.state.queues, [colonyId]: [] },
+    resourceClock: {
+      ...created.state.resourceClock,
+      lastReconciledAt: sent.flight.arrivalAt,
+      byPlanet: {
+        ...created.state.resourceClock.byPlanet,
+        'helion-01': {
+          lastReconciledAt: sent.flight.arrivalAt,
+          remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+        },
+      },
+    },
+  } satisfies SaveState;
+  const planetContext = (planetId: string, now: number) => ({
+    planetId,
+    now,
+    mode: 'production' as const,
+    testTimeScale: 10 as const,
+  });
+
+  const firstTick = sent.flight.arrivalAt + 3_600_000;
+  const secondTick = sent.flight.arrivalAt + 7_200_000;
+  const firstPlanet = reconcileRuntime(state, planetContext('helion-01', firstTick));
+  assert.equal(firstPlanet.state.planets['helion-01'].resources?.metal, 150);
+  assert.equal(firstPlanet.state.planets[colonyId].resources?.metal, 0);
+
+  const secondPlanet = reconcileRuntime(firstPlanet.state, planetContext(colonyId, secondTick));
+  assert.equal(secondPlanet.state.planets[colonyId].resources?.metal, 300);
+  assert.equal(secondPlanet.state.planets['helion-01'].resources?.metal, 150);
+
+  const switchedBack = reconcileRuntime(secondPlanet.state, planetContext('helion-01', secondTick));
+  assert.equal(switchedBack.state.planets['helion-01'].resources?.metal, 300);
+  assert.equal(switchedBack.state.planets[colonyId].resources?.metal, 300);
+
+  const repeated = reconcileRuntime(switchedBack.state, planetContext(colonyId, secondTick));
+  assert.equal(repeated.changed, false);
+  assert.deepEqual(repeated.state.planets[colonyId].resources, switchedBack.state.planets[colonyId].resources);
 });
 
 test('resource credit stops at dynamic capacity and does not bank time spent full', () => {
