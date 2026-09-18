@@ -411,7 +411,7 @@ async function enqueueThree(win, shipId) {
 }
 
 async function seedMaxLevels(win) {
-  const ok = await win.webContents.executeJavaScript(`(() => {
+  const seed = await win.webContents.executeJavaScript(`(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
     const state = save.planets?.['helion-01']?.spaceportUpgrades;
     if (!state) return false;
@@ -422,7 +422,25 @@ async function seedMaxLevels(win) {
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     return true;
   })()`);
-  if (!ok) throw new Error('Could not seed max-level state');
+  if (!seed) throw new Error('Could not seed max-level state');
+
+  // The app persists its current React state in an effect. Re-apply the
+  // fixture after that first effect has settled so it cannot overwrite the
+  // injected max-level values before the following reload.
+  await sleep(180);
+  const stabilized = await win.webContents.executeJavaScript(`(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+    const state = save.planets?.['helion-01']?.spaceportUpgrades;
+    if (!state) return false;
+    state.shipQueue = [];
+    state.commanderQueue = [];
+    state.shipLevels = state.shipLevels || {};
+    state.shipLevels.transporter = 10;
+    state.shipLevels.corsair = 40;
+    localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    return true;
+  })()`);
+  if (!stabilized) throw new Error('Could not stabilize max-level state');
 }
 
 async function assertMaxProgress(win, shipId, maxLevel, label) {
