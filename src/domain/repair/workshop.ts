@@ -122,6 +122,7 @@ export type RepairTransitionContext = {
   wallet: RepairWallet;
   factionId: CombatFactionId;
   hangarLevel: number;
+  solarSatellites: number;
 };
 
 function emptyRecord<T extends string>(ids: readonly T[]): Record<T, number> {
@@ -237,6 +238,7 @@ function populationSummary(
       context.fleetProduction,
       context.hangarLevel,
       context.factionId,
+      context.solarSatellites,
     )
     : getDefensePopulationSummary(
       context.defense,

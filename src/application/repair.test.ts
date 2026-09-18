@@ -13,6 +13,7 @@ import {
 } from './combat.ts';
 import {
   applyBattleResult,
+  getRepairWorkshopSnapshot,
   removeRepairUnits,
   repairUnits,
 } from './repair.ts';
@@ -21,6 +22,7 @@ import {
   createPersistenceFacade,
   type StorageLike,
 } from './persistence.ts';
+import { createEmptyFleetState } from '../domain/fleet/runtime.ts';
 
 class MemoryStorage implements StorageLike {
   readonly values = new Map<string, string>();
@@ -147,6 +149,57 @@ test('owned defender losses remove satellites from orbit and repair restores the
   assert.equal(repaired.state.planets['helion-01'].fleet.ships[SOLAR_SATELLITE_ID], 0);
   assert.equal(repaired.state.planets['helion-01'].repair.ships[SOLAR_SATELLITE_ID], 0);
   assert.ok((repaired.state.planets['helion-01'].availableEnergy ?? repaired.state.planets['helion-01'].energy) > (afterLoss.availableEnergy ?? afterLoss.energy));
+});
+
+test('repair rejects a satellite when current or legacy orbital presence fills hangar capacity', () => {
+  const initial = createInitialSaveState('production', 0);
+  const basePlanet = initial.planets['helion-01'];
+  const cases = [
+    {
+      name: 'current orbital count',
+      fleet: createEmptyFleetState(),
+      solarSatellites: 1,
+    },
+    {
+      name: 'legacy fleet count',
+      fleet: createEmptyFleetState(),
+      solarSatellites: undefined,
+    },
+  ];
+
+  for (const fixture of cases) {
+    fixture.fleet.ships.transporter = 119;
+    if (fixture.name === 'legacy fleet count') fixture.fleet.ships[SOLAR_SATELLITE_ID] = 1;
+    const state = {
+      ...initial,
+      planets: {
+        ...initial.planets,
+        'helion-01': {
+          ...basePlanet,
+          fleet: fixture.fleet,
+          solarSatellites: fixture.solarSatellites,
+          repair: {
+            ...basePlanet.repair,
+            ships: { ...basePlanet.repair.ships, [SOLAR_SATELLITE_ID]: 1 },
+          },
+        },
+      },
+    };
+    const snapshot = getRepairWorkshopSnapshot(state);
+    assert.equal(snapshot.solarSatellites, 1, fixture.name);
+    assert.equal(snapshot.fleet.ships[SOLAR_SATELLITE_ID], 0, fixture.name);
+
+    const result = repairUnits(state, 'helion-01', 'ship', SOLAR_SATELLITE_ID, 1, 'tokens');
+    assert.equal(result.transition.ok, false, fixture.name);
+    assert.equal(result.transition.code, 'capacity', fixture.name);
+    assert.equal(result.transition.capacity.population, 120, fixture.name);
+    assert.equal(result.transition.capacity.addedPopulation, 1, fixture.name);
+    assert.strictEqual(result.state, state, fixture.name);
+    assert.equal(state.planets['helion-01'].repair.ships[SOLAR_SATELLITE_ID], 1, fixture.name);
+    assert.equal(state.planets['helion-01'].solarSatellites, fixture.solarSatellites, fixture.name);
+    assert.equal(state.planets['helion-01'].fleet.ships[SOLAR_SATELLITE_ID], fixture.name === 'legacy fleet count' ? 1 : 0, fixture.name);
+    assert.equal(state.planets['helion-01'].repair.tokens, basePlanet.repair.tokens, fixture.name);
+  }
 });
 
 test('production combat boundary classifies a defensive resolver result and awards repair once', () => {

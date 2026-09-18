@@ -3,11 +3,12 @@ import test from 'node:test';
 
 import { getFactionShipCatalog } from '../combat/faction-catalog.ts';
 import type { BattleReport } from '../combat/report.ts';
+import { SOLAR_SATELLITE_ID } from '../combat/ids.ts';
 import {
   createDefaultFleetProductionState,
   type FleetProductionOrder,
 } from '../fleet/production.ts';
-import { createCanonicalStartingFleet } from '../fleet/runtime.ts';
+import { createCanonicalStartingFleet, createEmptyFleetState } from '../fleet/runtime.ts';
 import { createEmptyDefenseState } from '../fleet/production.ts';
 import {
   calculateRepairCost,
@@ -31,6 +32,7 @@ function context(overrides: Partial<RepairTransitionContext> = {}): RepairTransi
     wallet: { metal: 1_000_000, minerals: 1_000_000, gas: 1_000_000 },
     factionId: 'aegis',
     hangarLevel: 1,
+    solarSatellites: 0,
     ...overrides,
   };
 }
@@ -229,6 +231,27 @@ test('fleet capacity includes owned and pending population', () => {
   assert.match(result.reason ?? '', /флота/);
   assert.equal(result.capacity.population, 118);
   assert.equal(result.capacity.addedPopulation, 4);
+});
+
+test('repair capacity includes already orbiting solar satellites', () => {
+  const fleet = createEmptyFleetState();
+  fleet.ships.transporter = 119;
+  const baseRepair = createDefaultRepairWorkshopState();
+  const result = repairForTokens(context({
+    fleet,
+    solarSatellites: 1,
+    repair: {
+      ...baseRepair,
+      ships: { ...baseRepair.ships, [SOLAR_SATELLITE_ID]: 1 },
+    },
+  }), 'ship', SOLAR_SATELLITE_ID, 1);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'capacity');
+  assert.equal(result.capacity.ownedPopulation, 120);
+  assert.equal(result.capacity.population, 120);
+  assert.equal(result.capacity.addedPopulation, 1);
+  assert.equal(result.capacity.available, 0);
 });
 
 test('defense capacity is separate and includes pending defenses', () => {

@@ -46,15 +46,21 @@ export function getRepairWorkshopSnapshot(
   planetId: PlanetId = state.currentPlanetId,
 ): RepairWorkshopSnapshot {
   const planet = getPlanetState(state, planetId);
+  const migratedFleet = removeSolarSatellitesFromFleet(planet.fleet);
+  const solarSatellites = Math.max(
+    0,
+    Math.floor(planet.solarSatellites ?? migratedFleet.count),
+  );
   return {
     planetId,
     repair: planet.repair,
-    fleet: planet.fleet,
+    fleet: migratedFleet.fleet,
     defense: planet.defense,
     fleetProduction: planet.fleetProduction,
     wallet: { metal: state.metal, minerals: state.minerals, gas: state.gas },
     factionId: state.profile.factionId,
     hangarLevel: planet.buildings.hangar,
+    solarSatellites,
   };
 }
 
