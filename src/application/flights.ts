@@ -44,6 +44,7 @@ import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPla
 import { initializePlanetResourceClock } from './resource-clock.ts';
 
 export const FLIGHT_LAUNCH_CONTEXT_EVENT = 'asterion:flight-launch-context';
+export const FLIGHT_LAUNCH_CONTEXT_CLEAR_EVENT = 'asterion:flight-launch-context-clear';
 export const FLIGHT_EDIT_TARGET_REQUEST_EVENT = 'asterion:flight-edit-target-request';
 export const FLIGHT_DISPATCH_REQUEST_EVENT = 'asterion:flight-dispatch-request';
 export const FLIGHT_RECALL_REQUEST_EVENT = 'asterion:flight-recall-request';
@@ -371,18 +372,22 @@ export function reconcileFlights(state: SaveState, now: number): FlightReconcile
 
   for (const original of next.flights.records) {
     const current = next.flights.records.find((flight) => flight.id === original.id) ?? original;
-    if (current.phase === 'outbound' && now >= current.arrivalAt) {
+    const arrivalAt = current.arrivedAt ?? current.arrivalAt;
+    const arrivalReady = current.phase === 'arrived' || (current.phase === 'outbound' && now >= current.arrivalAt);
+    if (arrivalReady) {
+      const arrivalCheckAt = current.phase === 'arrived' ? arrivalAt : now;
       if (current.missionId !== 'colonize') {
-        const failed: FlightRecord = { ...current, phase: 'completed', arrivedAt: current.arrivalAt, completedAt: now, completionReason: 'mission-failed' };
+        const failed: FlightRecord = { ...current, phase: 'completed', arrivedAt: arrivalAt, completedAt: now, completionReason: 'mission-failed' };
         next = completeFlight(next, current, failed);
         changed = true;
         events.push({ flight: failed, status: 'arrived', notice: 'Миссия пока не поддерживается и завершена без результата.' });
         continue;
       }
-      if (targetOccupied(next, current.destinationCoordinate, now, current.id) || targetHasInvalidKind(current.targetKind)) {
-        const returningState = beginDomainFlightReturn(next.flights, current.id, now, 'target-occupied');
+      if (targetOccupied(next, current.destinationCoordinate, arrivalCheckAt, current.id) || targetHasInvalidKind(current.targetKind)) {
+        const returnStartedAt = current.phase === 'arrived' ? Math.max(now, arrivalAt) : now;
+        const returningState = beginDomainFlightReturn(next.flights, current.id, returnStartedAt, 'target-occupied');
         const returning = returningState.records.find((flight) => flight.id === current.id)!;
-        const withArrival: FlightRecord = { ...returning, arrivedAt: now, completionReason: 'target-occupied' };
+        const withArrival: FlightRecord = { ...returning, arrivedAt: arrivalAt, completionReason: 'target-occupied' };
         next = { ...next, flights: updateFlight(returningState, withArrival) };
         changed = true;
         events.push({ flight: withArrival, status: 'target-occupied', notice: 'Координата уже занята. Колонизатор возвращается.' });
@@ -391,9 +396,10 @@ export function reconcileFlights(state: SaveState, now: number): FlightReconcile
 
       const planetId = makePlanetId(current.destinationCoordinate);
       if (next.planets[planetId]) {
-        const returningState = beginDomainFlightReturn(next.flights, current.id, now, 'target-occupied');
+        const returnStartedAt = current.phase === 'arrived' ? Math.max(now, arrivalAt) : now;
+        const returningState = beginDomainFlightReturn(next.flights, current.id, returnStartedAt, 'target-occupied');
         const returning = returningState.records.find((flight) => flight.id === current.id)!;
-        const withArrival: FlightRecord = { ...returning, arrivedAt: now, completionReason: 'target-occupied' };
+        const withArrival: FlightRecord = { ...returning, arrivedAt: arrivalAt, completionReason: 'target-occupied' };
         next = { ...next, flights: updateFlight(returningState, withArrival) };
         changed = true;
         events.push({ flight: withArrival, status: 'target-occupied', notice: 'Координата уже занята. Колонизатор возвращается.' });
@@ -405,7 +411,7 @@ export function reconcileFlights(state: SaveState, now: number): FlightReconcile
         const failed: FlightRecord = {
           ...current,
           phase: 'completed',
-          arrivedAt: current.arrivalAt,
+          arrivedAt: arrivalAt,
           completedAt: now,
           completionReason: 'mission-failed',
         };
@@ -423,7 +429,7 @@ export function reconcileFlights(state: SaveState, now: number): FlightReconcile
       const completed: FlightRecord = {
         ...current,
         phase: 'completed',
-        arrivedAt: current.arrivalAt,
+        arrivedAt: arrivalAt,
         completedAt: now,
         completionReason: 'colonized',
       };

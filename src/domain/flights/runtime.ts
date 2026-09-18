@@ -88,7 +88,7 @@ export function recallFlight(state: FlightState, flightId: string, nowMs: number
 
 export function beginFlightReturn(state: FlightState, flightId: string, nowMs: number, reason: FlightCompletionReason = 'normal'): FlightState {
   const flight = state.records.find((record) => record.id === flightId);
-  if (!flight || flight.phase !== 'outbound') return state;
+  if (!flight || (flight.phase !== 'outbound' && flight.phase !== 'arrived')) return state;
   const next: FlightRecord = { ...flight, phase: 'returning', returnAt: nowMs + flight.oneWayDurationMs, completionReason: reason };
   return { ...state, records: state.records.map((record) => record.id === flightId ? next : record) };
 }

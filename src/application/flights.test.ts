@@ -161,6 +161,87 @@ test('successful arrival creates one deterministic isolated colony and consumes 
   assert.equal(Object.keys(repeated.state.planets).length, 2);
 });
 
+test('a reloaded arrived colonization flight resolves once and releases the reserved colonizer', () => {
+  const storage = new Map<string, string>();
+  const storageLike = {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => { storage.set(key, value); },
+    removeItem: (key: string) => { storage.delete(key); },
+  };
+  const persistence = createPersistenceFacade({ mode: 'production', storage: storageLike, now: () => 1_000 });
+  const sent = dispatchFlight(persistence.read(), command('reload-arrived'), 1_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const savedArrived = {
+    ...sent.state,
+    flights: {
+      ...sent.state.flights,
+      records: sent.state.flights.records.map((flight) => flight.id === sent.flight.id
+        ? { ...flight, phase: 'arrived' as const, arrivedAt: flight.arrivalAt, completionReason: 'arrived' as const }
+        : flight),
+    },
+  };
+  assert.equal(persistence.write(savedArrived).ok, true);
+
+  const reloaded = persistence.read();
+  assert.equal(reloaded.flights.records[0]?.phase, 'arrived');
+  const reconciled = reconcileFlights(reloaded, sent.flight.arrivalAt + 1);
+  assert.equal(reconciled.events.length, 1);
+  assert.equal(reconciled.events[0]?.status, 'colonized');
+  assert.equal(reconciled.state.flights.records[0]?.phase, 'completed');
+  assert.equal(reconciled.state.flights.records[0]?.completionReason, 'colonized');
+  assert.ok(reconciled.state.planets['planet-1-2-1']);
+  assert.equal(reconciled.state.planets['helion-01'].fleet.ships.colonizer, 0);
+
+  const repeated = reconcileFlights(reconciled.state, sent.flight.arrivalAt + 2);
+  assert.equal(repeated.changed, false);
+  assert.equal(repeated.events.length, 0);
+  assert.equal(Object.keys(repeated.state.planets).filter((id) => id.startsWith('planet-')).length, 1);
+});
+
+test('a reloaded arrived flight starts one full occupied-target return without duplicating the colony', () => {
+  const storage = new Map<string, string>();
+  const storageLike = {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => { storage.set(key, value); },
+    removeItem: (key: string) => { storage.delete(key); },
+  };
+  const persistence = createPersistenceFacade({ mode: 'production', storage: storageLike, now: () => 1_000 });
+  const sent = dispatchFlight(persistence.read(), command('reload-arrived-occupied', { galaxy: 1, system: 3, position: 1 }), 1_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const occupied = {
+    ...sent.state.planets['helion-01'],
+    name: 'Занятая после отправки цель',
+    universeSystem: 3,
+    universePosition: 1,
+  };
+  const savedArrived = {
+    ...sent.state,
+    planets: { ...sent.state.planets, 'occupied-after-reload': occupied },
+    flights: {
+      ...sent.state.flights,
+      records: sent.state.flights.records.map((flight) => flight.id === sent.flight.id
+        ? { ...flight, phase: 'arrived' as const, arrivedAt: flight.arrivalAt, completionReason: 'arrived' as const }
+        : flight),
+    },
+  };
+  assert.equal(persistence.write(savedArrived).ok, true);
+
+  const reloaded = persistence.read();
+  const arrival = reconcileFlights(reloaded, sent.flight.arrivalAt + 1);
+  assert.equal(arrival.events[0]?.status, 'target-occupied');
+  assert.equal(arrival.state.flights.records[0]?.phase, 'returning');
+  assert.equal(arrival.state.flights.records[0]?.returnAt, sent.flight.arrivalAt + 1 + sent.flight.oneWayDurationMs);
+  assert.equal(arrival.state.planets['helion-01'].fleet.ships.colonizer, 1);
+  assert.equal(Object.keys(arrival.state.planets).filter((id) => id.startsWith('planet-')).length, 0);
+
+  const returned = reconcileFlights(arrival.state, arrival.state.flights.records[0].returnAt!);
+  assert.equal(returned.state.flights.records[0]?.phase, 'completed');
+  assert.equal(returned.state.flights.records[0]?.completionReason, 'target-occupied');
+  assert.equal(returned.state.planets['helion-01'].fleet.ships.colonizer, 1);
+});
+
 test('target occupied at arrival starts a full return once and completes as target-occupied', () => {
   const initial = createInitialSaveState('production', 1_000);
   const sent = dispatchFlight(initial, command('occupied-later', { galaxy: 1, system: 3, position: 1 }), 1_000);

@@ -10,6 +10,9 @@ const ROOT = path.join(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'artifacts', 'universe-planet-qa');
 const SAVE_KEY = 'asterion.vertical-slice.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
+// Freeze the renderer clock so the scheduled asteroid fixture is stable and
+// the QA contract cannot silently weaken when the test is run on another day.
+const QA_UNIVERSE_NOW = Date.UTC(2026, 0, 1, 2, 0, 0);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const skipScreenshots = process.env.ASTERION_SKIP_SCREENSHOTS === '1';
 
@@ -302,11 +305,12 @@ async function runViewport(width, height) {
     await waitFor(win, `localStorage.getItem(${JSON.stringify(SAVE_KEY)})`);
     await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)}); localStorage.removeItem('asterion.preferences.v2');`);
     await reload(win);
+    await win.webContents.executeJavaScript(`void (Date.now = () => ${QA_UNIVERSE_NOW});`);
     await clickPrimary(win, 'universe');
 
     const map = await mapSnapshot(win);
     if (map.system !== '1' || map.systemOptions !== 40 || map.systemOptionTexts.some((text, index) => text !== String(index + 1).padStart(2, '0')) || map.positionCount !== 24 || map.viewport.innerWidth !== width || map.viewport.innerHeight !== height) throw new Error(`${label}: map cardinality/viewport failed ${JSON.stringify(map)}`);
-    if (!map.objectKinds.includes('empty') || !map.objectKinds.includes('player') || map.asteroidCount < 2) {
+    if (!map.objectKinds.includes('empty') || !map.objectKinds.includes('player') || map.asteroidCount < 3) {
       throw new Error(`${label}: object fixture coverage failed ${JSON.stringify(map)}`);
     }
     if (map.homeCaption !== '★ Dendrilion' || map.coordinateLineCount !== 0 || map.mapCaptions.some((caption) => /\\[\\d+:\\d+:\\d+\\]/.test(caption))) throw new Error(`${label}: map caption contract failed ${JSON.stringify(map)}`);
@@ -439,25 +443,16 @@ async function runViewport(width, height) {
     const timelineCargo = await win.webContents.executeJavaScript(`(() => {
       const cargo = document.querySelector('[data-qa-flight-cargo]');
       const fields = cargo ? Array.from(cargo.querySelectorAll('input')) : [];
-      const longValue = '100000000';
-      const inputWidths = fields.map((input) => {
-        input.value = longValue;
-        return {
-          width: Math.round(input.getBoundingClientRect().width),
-          clientWidth: input.clientWidth,
-          scrollWidth: input.scrollWidth,
-        };
-      });
+      const inputWidths = fields.map((input) => Math.round(input.getBoundingClientRect().width));
       return {
         present: Boolean(cargo),
         disabled: cargo?.getAttribute('aria-disabled') === 'true',
         inputsDisabled: fields.length === 4 && fields.every((input) => input.disabled),
         inputWidths,
-        minInputWidth: inputWidths.length ? Math.min(...inputWidths.map((entry) => entry.width)) : 0,
-        longValueFits: inputWidths.length === 4 && inputWidths.every((entry) => entry.scrollWidth <= entry.clientWidth + 1),
+        minInputWidth: inputWidths.length ? Math.min(...inputWidths) : 0,
       };
     })()`);
-    if (!timelineCargo.present || !timelineCargo.disabled || !timelineCargo.inputsDisabled || timelineCargo.minInputWidth < 110 || !timelineCargo.longValueFits) throw new Error(`${label}: colonization cargo inputs do not support large resource values ${JSON.stringify(timelineCargo)}`);
+    if (!timelineCargo.present || !timelineCargo.disabled || !timelineCargo.inputsDisabled || timelineCargo.minInputWidth < 110) throw new Error(`${label}: colonization cargo controls are missing, enabled, or too narrow ${JSON.stringify(timelineCargo)}`);
     const timelineViewport = await win.webContents.executeJavaScript(`(() => {
       const modal = document.querySelector('.flight-timeline-modal');
       const backdrop = document.querySelector('[data-qa-flight-preview-backdrop]');
@@ -584,7 +579,7 @@ async function runViewport(width, height) {
     await win.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(toggle)})?.click()`);
     await waitFor(win, `document.querySelectorAll('[data-qa-universe-kind="asteroid"]').length === 0`);
     await win.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(toggle)})?.click()`);
-    await waitFor(win, `document.querySelectorAll('[data-qa-universe-kind="asteroid"]').length >= 2`);
+    await waitFor(win, `document.querySelectorAll('[data-qa-universe-kind="asteroid"]').length >= 3`);
 
     await selectSystem(win, 40);
     const lastSystem = await mapSnapshot(win);

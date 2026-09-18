@@ -26,6 +26,7 @@ import { FLEET_PRODUCTION_DISMANTLE_SATELLITES_REQUEST_EVENT } from './applicati
 import {
   FLIGHT_COMMAND_RESULT_EVENT,
   FLIGHT_DISPATCH_REQUEST_EVENT,
+  FLIGHT_LAUNCH_CONTEXT_CLEAR_EVENT,
   FLIGHT_LAUNCH_CONTEXT_EVENT,
   FLIGHT_RECALL_REQUEST_EVENT,
   previewFlight,
@@ -257,13 +258,34 @@ function FleetWorkspace({
     [flightRecords],
   );
 
+  const resetFlightWorkspace = () => {
+    setMissionId('transport');
+    setHoveredMissionId(null);
+    setSelectedQuantities({});
+    setPreviewOpen(false);
+    setPreviewResult(null);
+    setPreviewOriginPlanetId(null);
+    setPreviewDestination(null);
+    setEditingPreviewTarget(false);
+    setPreviewTargetDraft({ galaxy: '', system: '', position: '' });
+    setPreviewTargetError(null);
+  };
+
+  const clearLaunchContext = () => {
+    resetFlightWorkspace();
+    window.dispatchEvent(new Event(FLIGHT_LAUNCH_CONTEXT_CLEAR_EVENT));
+  };
+
   useEffect(() => {
     const timer = window.setInterval(() => setClockNow(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
-    if (!launchContext) return;
+    if (!launchContext) {
+      resetFlightWorkspace();
+      return;
+    }
     setMissionId(launchContext.missionId);
     setSelectedQuantities(launchContext.missionId === 'colonize' ? { colonizer: 1 } : {});
     setPreviewOriginPlanetId(null);
@@ -278,14 +300,8 @@ function FleetWorkspace({
     const onCommandResult = (event: Event) => {
       const result = (event as CustomEvent<FlightCommandResult>).detail;
       if (result.ok) {
+        resetFlightWorkspace();
         setStatus(result.notice);
-        setPreviewOpen(false);
-        setPreviewResult(null);
-        setPreviewOriginPlanetId(null);
-        setPreviewDestination(null);
-        setEditingPreviewTarget(false);
-        setPreviewTargetError(null);
-        setSelectedQuantities({});
       } else {
         setStatus(result.error.message);
       }
@@ -295,6 +311,7 @@ function FleetWorkspace({
   }, []);
 
   const openFleetRoot = () => {
+    clearLaunchContext();
     setFleetSection('ships');
     setConstructionView(null);
     setStatus(FLEET_ROOT_STATUS);
@@ -448,6 +465,7 @@ function FleetWorkspace({
   };
 
   const chooseSection = (section: FleetSectionId) => {
+    clearLaunchContext();
     setFleetSection(section);
 
     if (section === 'ships') {
@@ -718,7 +736,7 @@ function FleetWorkspace({
         document.body,
       ) : null}
       {previewOpen && previewResult ? createPortal(
-        <div className="resource-building-action-confirm-backdrop" data-qa-flight-preview-backdrop onMouseDown={() => setPreviewOpen(false)}>
+        <div className="resource-building-action-confirm-backdrop" data-qa-flight-preview-backdrop onMouseDown={clearLaunchContext}>
           <section className="resource-building-action-confirm flight-preview-modal flight-timeline-modal" role="dialog" aria-modal="true" aria-labelledby="flight-preview-title" onMouseDown={(event) => event.stopPropagation()}>
             <header className="flight-timeline-head">
               <div>
@@ -726,7 +744,7 @@ function FleetWorkspace({
                 <h3 id="flight-preview-title">ПЛАН ПЕРЕЛЁТА</h3>
                 <p>Последовательность подготовки: источник → цель → колонизатор → подтверждение.</p>
               </div>
-              <button type="button" className="flight-timeline-close" aria-label="Закрыть план перелёта" onClick={() => setPreviewOpen(false)}>×</button>
+              <button type="button" className="flight-timeline-close" aria-label="Закрыть план перелёта" onClick={clearLaunchContext}>×</button>
               </header>
             <div className="flight-timeline-body">
               <ol className="flight-timeline-steps" aria-label="Шаги подготовки рейса">
@@ -833,7 +851,7 @@ function FleetWorkspace({
             </div>
             <div className="flight-timeline-meta">{previewResult.ok && previewFlightRecord ? <>РАСЧЁТ · PERSISTED FLIGHT RUNTIME · ПРИБЫТИЕ: {flightArrivalLabel(previewFlightRecord.arrivalAt)} · МОСКОВСКОЕ ВРЕМЯ · КОЛОНИЗАЦИЯ</> : 'РАСЧЁТ НЕДОСТУПЕН'}</div>
             <div className="resource-building-action-confirm-actions flight-timeline-actions">
-              <button type="button" data-qa-flight-preview-cancel onClick={() => setPreviewOpen(false)}>ОТМЕНА</button>
+              <button type="button" data-qa-flight-preview-cancel onClick={clearLaunchContext}>ОТМЕНА</button>
               {previewResult.ok ? <button type="button" data-qa-flight-dispatch-confirm onClick={confirmFlightDispatch}>ОТПРАВИТЬ</button> : null}
             </div>
           </section>
@@ -898,6 +916,7 @@ export function FleetWorkspacePortal() {
     };
 
     const onLaunchContext = (event: Event) => setLaunchContext((event as CustomEvent<FlightLaunchContext>).detail);
+    const onLaunchContextClear = () => setLaunchContext(null);
     const onCommandResult = (event: Event) => {
       const result = (event as CustomEvent<FlightCommandResult>).detail;
       if (result.ok) {
@@ -907,12 +926,15 @@ export function FleetWorkspacePortal() {
     };
 
     syncPlanet();
+    if (route !== 'fleets') setLaunchContext(null);
     window.addEventListener(FLIGHT_LAUNCH_CONTEXT_EVENT, onLaunchContext);
+    window.addEventListener(FLIGHT_LAUNCH_CONTEXT_CLEAR_EVENT, onLaunchContextClear);
     window.addEventListener(FLIGHT_COMMAND_RESULT_EVENT, onCommandResult);
     window.addEventListener(RUNTIME_STATE_CHANGED_EVENT, syncPlanet);
     window.addEventListener('storage', syncPlanet);
     return () => {
       window.removeEventListener(FLIGHT_LAUNCH_CONTEXT_EVENT, onLaunchContext);
+      window.removeEventListener(FLIGHT_LAUNCH_CONTEXT_CLEAR_EVENT, onLaunchContextClear);
       window.removeEventListener(FLIGHT_COMMAND_RESULT_EVENT, onCommandResult);
       window.removeEventListener(RUNTIME_STATE_CHANGED_EVENT, syncPlanet);
       window.removeEventListener('storage', syncPlanet);
