@@ -104,6 +104,25 @@ function flightCountdown(targetAt: number | undefined, now: number) {
   return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
+function flightDurationLabel(durationMs: number) {
+  const seconds = Math.max(0, Math.ceil(durationMs / 1000));
+  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+function flightNumberLabel(value: number) {
+  return new Intl.NumberFormat('ru-RU').format(value);
+}
+
+function flightArrivalLabel(timestamp: number) {
+  return new Date(timestamp).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 function FleetWorkspace({
   planetName,
   coords,
@@ -144,6 +163,10 @@ function FleetWorkspace({
   const shipDefinitions = useMemo(() => getFactionShipCatalog(factionId), [factionId]);
   const satelliteDefinition = useMemo(
     () => shipDefinitions.find((ship) => ship.id === SOLAR_SATELLITE_ID) ?? null,
+    [shipDefinitions],
+  );
+  const colonizerDefinition = useMemo(
+    () => shipDefinitions.find((ship) => ship.id === 'colonizer') ?? null,
     [shipDefinitions],
   );
   const shipyardPresentation = useMemo(
@@ -627,9 +650,12 @@ function FleetWorkspace({
         <div className="resource-building-action-confirm-backdrop" data-qa-flight-preview-backdrop onMouseDown={() => setPreviewOpen(false)}>
           <section className="resource-building-action-confirm flight-preview-modal flight-timeline-modal" role="dialog" aria-modal="true" aria-labelledby="flight-preview-title" onMouseDown={(event) => event.stopPropagation()}>
             <header className="flight-timeline-head">
-              <small>FLIGHT PLAN / ОПЕРАТИВНЫЙ МАРШРУТ</small>
-              <h3 id="flight-preview-title">План перелёта</h3>
-              <p>Проверьте источник, цель и расчёт перед отправкой колонизатора.</p>
+              <div>
+                <small>FLIGHT PLAN / ОПЕРАТИВНЫЙ МАРШРУТ</small>
+                <h3 id="flight-preview-title">ПЛАН ПЕРЕЛЁТА</h3>
+                <p>Последовательность подготовки: источник → цель → колонизатор → подтверждение.</p>
+              </div>
+              <button type="button" className="flight-timeline-close" aria-label="Закрыть план перелёта" onClick={() => setPreviewOpen(false)}>×</button>
             </header>
             <div className="flight-timeline-body">
               <ol className="flight-timeline-steps" aria-label="Шаги подготовки рейса">
@@ -639,25 +665,19 @@ function FleetWorkspace({
                     <small>ИСТОЧНИК</small>
                     {editingPreviewSource ? <select name="flight-preview-source" aria-label="Планета-источник" value={previewSourceId ?? ''} onChange={(event) => changePreviewOrigin(event.target.value)}>
                       {ownedPreviewPlanets.map((planet) => <option key={planet.id} value={planet.id}>{planet.name} {planet.coordinate}</option>)}
-                    </select> : <>
-                      <strong>{previewSource?.name ?? planetName}</strong>
-                      <em>{previewSource ? `[${previewSource.universeGalaxy}:${previewSource.universeSystem}:${previewSource.universePosition}]` : coords}</em>
-                    </>}
-                    <button type="button" className="flight-timeline-edit" onClick={() => setEditingPreviewSource((value) => !value)}>ИЗМЕНИТЬ</button>
+                    </select> : <strong>{previewSource?.name ?? planetName}</strong>}
+                    <em>{previewSource ? `[${previewSource.universeGalaxy}:${previewSource.universeSystem}:${previewSource.universePosition}]` : coords} <button type="button" className="flight-timeline-edit" onClick={() => setEditingPreviewSource((value) => !value)}>ИЗМЕНИТЬ</button></em>
                   </div>
                 </li>
                 <li className="flight-timeline-step is-complete">
                   <span aria-hidden="true">02</span>
                   <div>
                     <small>ЦЕЛЬ</small>
-                    <>
-                      <strong>{previewCoordinate ? flightCoordinateLabel(previewCoordinate) : 'Не выбрана'}</strong>
-                      <em>Свободная координата</em>
-                    </>
-                    <button type="button" className="flight-timeline-edit" onClick={() => {
+                    <strong>{previewCoordinate ? flightCoordinateLabel(previewCoordinate) : 'Не выбрана'}</strong>
+                    <em>Свободная координата <button type="button" className="flight-timeline-edit" onClick={() => {
                       setPreviewOpen(false);
                       window.dispatchEvent(new Event(FLIGHT_EDIT_TARGET_REQUEST_EVENT));
-                    }}>ИЗМЕНИТЬ</button>
+                    }}>ИЗМЕНИТЬ</button></em>
                   </div>
                 </li>
                 <li className="flight-timeline-step">
@@ -665,37 +685,50 @@ function FleetWorkspace({
                   <div>
                     <small>КОРАБЛЬ</small>
                     <strong>Колонизатор × 1</strong>
-                    <em>Население: 12 · миссия зафиксирована</em>
+                    <em>Население: 12</em>
                   </div>
                 </li>
               </ol>
               <section className="flight-timeline-summary" aria-live="polite">
+                <small className="flight-timeline-route-label">МАРШРУТ СИСТЕМЫ</small>
                 <div className="flight-timeline-route">
-                  <div><small>ОТКУДА</small><strong>{previewSource?.name ?? planetName}</strong><em>{previewSource ? `[${previewSource.universeGalaxy}:${previewSource.universeSystem}:${previewSource.universePosition}]` : coords}</em></div>
-                  <span aria-hidden="true">→</span>
-                  <div><small>КУДА</small><strong>{previewCoordinate ? flightCoordinateLabel(previewCoordinate) : '—'}</strong><em>Свободная позиция</em></div>
+                  <div>
+                    <small>ОТКУДА</small>
+                    <strong>{previewSource?.name ?? planetName}</strong>
+                    <em>{previewSource ? `[${previewSource.universeGalaxy}:${previewSource.universeSystem}:${previewSource.universePosition}]` : coords} <button type="button" className="flight-timeline-edit" onClick={() => setEditingPreviewSource((value) => !value)}>ИЗМЕНИТЬ</button></em>
+                  </div>
+                  <span className="flight-timeline-route-arrow" aria-label="Расстояние маршрута"><strong aria-hidden="true">→</strong><small>{previewResult.ok ? `${flightNumberLabel(previewResult.flight.routeDistance)} ед.` : '—'}</small></span>
+                  <div>
+                    <small>КУДА</small>
+                    <strong>Свободный слот</strong>
+                    <em>{previewCoordinate ? flightCoordinateLabel(previewCoordinate) : '—'} <button type="button" className="flight-timeline-edit" onClick={() => {
+                      setPreviewOpen(false);
+                      window.dispatchEvent(new Event(FLIGHT_EDIT_TARGET_REQUEST_EVENT));
+                    }}>ИЗМЕНИТЬ</button></em>
+                  </div>
                 </div>
                 {previewResult.ok ? <>
-                  <div className="flight-timeline-ship"><img src={missionColonizeIcon} alt="" /><div><strong>Колонизатор</strong><small>Ровно один корабль · население {previewResult.flight.populationReserved}</small></div><b>1</b></div>
+                  <div className="flight-timeline-ship"><img src={colonizerDefinition?.art ?? missionColonizeIcon} alt="" /><div><strong>Колонизатор</strong><small>Колонизационный корабль · население {previewResult.flight.populationReserved}</small></div><b>1<small> КОРАБЛЬ</small></b></div>
                   <div className="flight-timeline-metrics" data-qa-flight-preview>
-                    <div><small>РАССТОЯНИЕ</small><strong>{previewResult.flight.routeDistance} ед.</strong></div>
-                    <div><small>ЭФФ. СКОРОСТЬ</small><strong>{previewResult.flight.effectiveSpeed}</strong></div>
-                    <div><small>ТУДА</small><strong>{Math.ceil(previewResult.flight.oneWayDurationMs / 60_000)} мин</strong></div>
-                    <div><small>ОБРАТНО</small><strong>{Math.ceil(previewResult.flight.oneWayDurationMs / 60_000)} мин</strong></div>
-                    <div><small>ПОЛНЫЙ ЦИКЛ</small><strong>{Math.ceil(previewResult.flight.oneWayDurationMs * 2 / 60_000)} мин</strong></div>
+                    <div><small>РАССТОЯНИЕ</small><strong>{flightNumberLabel(previewResult.flight.routeDistance)} ед.</strong></div>
+                    <div><small>ЭФФ. СКОРОСТЬ</small><strong>{flightNumberLabel(previewResult.flight.effectiveSpeed)}</strong></div>
+                    <div><small>ТУДА</small><strong>{flightDurationLabel(previewResult.flight.oneWayDurationMs)}</strong></div>
+                    <div><small>ОБРАТНО</small><strong>{flightDurationLabel(previewResult.flight.oneWayDurationMs)}</strong></div>
+                    <div><small>ПОЛНЫЙ ЦИКЛ</small><strong>{flightDurationLabel(previewResult.flight.oneWayDurationMs * 2)}</strong></div>
                     <div><small>ГАЗ</small><strong>{previewResult.flight.gasCost}</strong></div>
                   </div>
-                  <div className="flight-timeline-notes">
-                    <p><strong>Прибытие:</strong> {new Date(previewResult.flight.arrivalAt).toLocaleString('ru-RU')}</p>
-                    <p>Газ списывается только за исходящий участок. При отзыве колонизатор возвращается, но газ не возвращается.</p>
+                <div className="flight-timeline-notes">
+                    <p className="flight-timeline-note-info">Газ списывается только за один путь туда. Обратный участок не требует повторной оплаты.</p>
+                    <p className="flight-timeline-note-warning">При отзыве колонизатор возвращается, но газ не возвращается.</p>
                   </div>
                 </> : <p className="flight-timeline-error" data-qa-flight-preview-error>{previewResult.error.message}</p>}
               </section>
             </div>
+            <div className="flight-timeline-meta">{previewResult.ok ? <>РАСЧЁТ · PERSISTED FLIGHT RUNTIME · ПРИБЫТИЕ: {flightArrivalLabel(previewResult.flight.arrivalAt)} · КОЛОНИЗАЦИЯ</> : 'РАСЧЁТ НЕДОСТУПЕН'}</div>
             <div className="resource-building-action-confirm-actions flight-timeline-actions">
-              <button type="button" className="flight-timeline-back" onClick={() => setPreviewOpen(false)}>ВЕРНУТЬСЯ К РЕДАКТИРОВАНИЮ</button>
-              {previewResult.ok ? <button type="button" data-qa-flight-dispatch-confirm onClick={confirmFlightDispatch}>ОТПРАВИТЬ</button> : null}
+              <button type="button" className="flight-timeline-back" onClick={() => setPreviewOpen(false)}>← ВЕРНУТЬСЯ К РЕДАКТИРОВАНИЮ</button>
               <button type="button" data-qa-flight-preview-cancel onClick={() => setPreviewOpen(false)}>ОТМЕНА</button>
+              {previewResult.ok ? <button type="button" data-qa-flight-dispatch-confirm onClick={confirmFlightDispatch}>ОТПРАВИТЬ</button> : null}
             </div>
           </section>
         </div>,
