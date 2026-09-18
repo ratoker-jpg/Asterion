@@ -143,6 +143,11 @@
 }
 .fleet-flight-empty-v1 strong { color: #eefbff; font-size: 12px; }
 .fleet-flight-empty-v1 span { font-size: 10px; }
+.fleet-flight-row-v1:not(.fleet-flight-head-v1) { min-height: 48px; align-items: center; border-top: 1px solid rgba(42, 193, 238, .1); color: #c9e8ef; font-size: 10px; }
+.fleet-flight-row-v1:not(.fleet-flight-head-v1) > span { padding: 0 9px; }
+.fleet-flight-row-v1 button { min-height: 26px; padding: 0 7px; border: 1px solid #168cb3; background: #064864; color: #eafbff; font-size: 9px; cursor: pointer; }
+.fleet-flight-row-v1 button:disabled { opacity: .4; cursor: default; }
+.fleet-flight-mission-icon { width: 20px; height: 20px; object-fit: contain; vertical-align: middle; margin-right: 5px; }
 .fleet-flight-actions-v1 { display: flex; justify-content: center; gap: 9px; margin-top: 11px; }
 .fleet-flight-actions-v1 button,
 .fleet-compose-footer-v1 button {
@@ -329,7 +334,7 @@
   cursor: pointer;
   transition: color .12s ease, border-color .12s ease, background .12s ease, box-shadow .12s ease;
 }
-.fleet-mission-icons-v1 button svg { width: 30px; height: 30px; }
+.fleet-mission-icons-v1 button img { width: 30px; height: 30px; object-fit: contain; }
 .fleet-mission-icons-v1 button:hover,
 .fleet-mission-icons-v1 button:focus-visible,
 .fleet-mission-icons-v1 button.active {

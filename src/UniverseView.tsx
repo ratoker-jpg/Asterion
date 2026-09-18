@@ -78,7 +78,9 @@ import type {
   UniverseOwnerAlliance,
   UniverseOwnerPoints,
   UniverseOwnerProfile,
+  UniversePersistedPlayerPlanet,
   UniversePlanetNode,
+  UniverseCoordinate,
 } from './domain/universe/types.ts';
 
 const planetArts = [
@@ -98,6 +100,8 @@ type UniverseViewProps = {
   profile: PlayerProfileState;
   rating: RatingPrototypeState;
   command: CommandState;
+  playerPlanets: readonly UniversePersistedPlayerPlanet[];
+  onColonize: (coordinate: UniverseCoordinate) => void;
 };
 
 const POINT_LABELS: ReadonlyArray<{ key: keyof UniverseOwnerPoints; label: string }> = [
@@ -277,7 +281,7 @@ function OwnerInspector({
   );
 }
 
-function SpecialInspector({ node, nowMs }: { node: UniversePlanetNode; nowMs: number }) {
+function SpecialInspector({ node, nowMs, onColonize }: { node: UniversePlanetNode; nowMs: number; onColonize: (coordinate: UniverseCoordinate) => void }) {
   const isEmpty = node.kind === 'empty';
   const isPirate = node.kind === 'pirate';
   const isAnomaly = node.kind === 'anomaly';
@@ -307,7 +311,7 @@ function SpecialInspector({ node, nowMs }: { node: UniversePlanetNode; nowMs: nu
       <p className="universe-special-description">{node.description}</p>
 
       {isEmpty ? (
-        <button type="button" className="universe-disabled-operation" disabled title="Колонизация не подключена" data-qa-universe-special-action="colonize">КОЛОНИЗАЦИЯ · СКОРО</button>
+        <button type="button" className="universe-enabled-operation" title="Открыть подготовку колонизации" data-qa-universe-special-action="colonize" data-qa-universe-target-coordinate={formatUniverseCoordinate(node.coordinate)} onClick={() => onColonize(node.coordinate)}>КОЛОНИЗИРОВАТЬ</button>
       ) : isPirate ? (
         <button type="button" className="universe-disabled-operation" disabled title="Разведка пока недоступна" data-qa-universe-special-action="pirate">РАЗВЕДАТЬ · СКОРО</button>
       ) : isAnomaly ? (
@@ -345,7 +349,7 @@ function MovingAsteroid({ node, nowMs, occupiedNodes, onSelect }: { node: Univer
   </button>;
 }
 
-export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, rating, command }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, rating, command, playerPlanets, onColonize }: UniverseViewProps) {
   const [system, setSystem] = useState(1);
   const [focusEmpty, setFocusEmpty] = useState(false);
   const [showSlotLabels, setShowSlotLabels] = useState(true);
@@ -370,8 +374,8 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
     raceId: profile.factionId,
     alliance,
     points: currentOwnerPoints(profile, rating),
-    planetIds: ['player-planet-helion-01'],
-  }), [alliance, profile, rating]);
+    planetIds: playerPlanets.map((planet) => planet.id),
+  }), [alliance, playerPlanets, profile, rating]);
   const owners = useMemo(() => {
     const npc = createUniverseNpcOwnerProfile();
     return new Map<string, UniverseOwnerProfile>([[owner.id, owner], [npc.id, npc]]);
@@ -384,7 +388,8 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
     assets,
     nowMs,
     galaxyCount: 1,
-  }), [nowMs, ownedPlanetArt, ownedPlanetName, owner.id]);
+    playerPlanets,
+  }), [nowMs, ownedPlanetArt, ownedPlanetName, owner.id, playerPlanets]);
   const systemData = galaxyData.systems[system - 1];
   const asteroidAttachmentNodes = useMemo(() => [...systemData.positions, ...systemData.asteroids], [systemData]);
   const nodesById = useMemo(() => new Map(galaxyData.systems.flatMap((item) => [...item.positions, ...item.asteroids]).map((node) => [node.id, node])), [galaxyData]);
@@ -521,7 +526,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
               style={toStyle(point)}
               title={`${node.name} · ${node.statusLabel} · ${coordinate}`}
               aria-label={ariaLabel}
-              data-qa-universe-object={node.id}
+              data-qa-universe-object={node.isHomeworld ? 'player-planet-helion-01' : node.id}
               data-qa-universe-kind={node.kind}
               data-qa-universe-relation={relation ?? undefined}
               onClick={() => selectNode(node)}
@@ -551,7 +556,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
             <button ref={closeButtonRef} type="button" className="universe-inspector-close" aria-label="Закрыть инспектор" title="Закрыть инспектор" onClick={() => setSelectedNodeId(null)}>×</button>
           </header>
           <div className="universe-inspector-body">
-            {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} planets={ownerPlanets} currentOwnerId={owner.id} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} nowMs={nowMs} />}
+            {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} planets={ownerPlanets} currentOwnerId={owner.id} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} nowMs={nowMs} onColonize={onColonize} />}
           </div>
         </aside>
         </div>, document.body) : null}

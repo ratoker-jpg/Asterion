@@ -361,7 +361,7 @@ async function runViewport(width, height) {
     await clickObject(win, '[data-qa-universe-kind="empty"]');
     const empty = await inspectorSnapshot(win);
     checkCopy(empty);
-    if (empty.kind !== 'empty' || !empty.text.includes('Свободная позиция') || !empty.text.includes('Свободная орбитальная позиция') || !empty.specialActionDisabled) throw new Error(`${label}: empty inspector contract failed ${JSON.stringify(empty)}`);
+    if (empty.kind !== 'empty' || !empty.text.includes('Свободная позиция') || !empty.text.includes('Свободная орбитальная позиция') || empty.specialActionDisabled) throw new Error(`${label}: empty inspector contract failed ${JSON.stringify(empty)}`);
     await capture(win, directory, 'empty-inspector');
     await dismissInspector(win);
 

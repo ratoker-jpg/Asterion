@@ -53,6 +53,8 @@ import { scaleRuntimeDuration, type RuntimeMode, type TestTimeScale } from '../d
 import { SAVE_SCHEMA_VERSION } from './persistence.ts';
 import {
   getPlanetState,
+  getPlanetResources,
+  replacePlanetResources,
   replacePlanetState,
   type PlanetId,
   type SaveState,
@@ -89,12 +91,11 @@ export type BuildingPreviewResult = {
 
 function economyFor(state: SaveState, context: BuildingApplicationContext): BuildingEconomyState {
   const planet = getPlanetState(state, context.planetId);
+  const resources = getPlanetResources(state, context.planetId);
   const energy = getPlanetEnergyLedger(planet, state.science.levels).availableEnergy;
   return {
     resources: {
-      metal: state.metal,
-      minerals: state.minerals,
-      gas: state.gas,
+      ...resources,
       energy,
     },
     buildings: planet.buildings,
@@ -123,12 +124,16 @@ function stateFromEconomy(
     energyOptions,
     nextPlanet,
   );
-  return {
-    ...replacePlanetState(state, context.planetId, settledEnergy.planet),
+  const withPlanet = replacePlanetState({
+    ...state,
     schemaVersion: SAVE_SCHEMA_VERSION,
-    metal: economy.resources.metal,
-    minerals: economy.resources.minerals,
-    gas: economy.resources.gas,
+  }, context.planetId, settledEnergy.planet);
+  return {
+    ...replacePlanetResources(withPlanet, context.planetId, {
+      metal: economy.resources.metal,
+      minerals: economy.resources.minerals,
+      gas: economy.resources.gas,
+    }),
     queues: {
       ...state.queues,
       [context.planetId]: economy.queue,
@@ -316,19 +321,14 @@ export function collectRecycling(
     return { ok: false, state: nextState, reason: transition.reason ?? 'Ресурс пока недоступен.', output: null, credit: null };
   }
   const credit = creditResources(
-    { metal: state.metal, minerals: state.minerals, gas: state.gas, energy: getPlanetEnergyLedger(planet, state.science.levels).availableEnergy },
+    { ...getPlanetResources(state, context.planetId), energy: getPlanetEnergyLedger(planet, state.science.levels).availableEnergy },
     getStorageCapacities(planet.buildings),
     transition.output,
   );
+  const withWallet = replacePlanetResources({ ...state, schemaVersion: SAVE_SCHEMA_VERSION }, context.planetId, credit.wallet);
   return {
     ok: true,
-    state: replacePlanetState({
-      ...state,
-      schemaVersion: SAVE_SCHEMA_VERSION,
-      metal: credit.wallet.metal,
-      minerals: credit.wallet.minerals,
-      gas: credit.wallet.gas,
-    }, context.planetId, { ...planet, recycling: transition.state }),
+    state: replacePlanetState(withWallet, context.planetId, { ...planet, recycling: transition.state }),
     reason: null,
     output: transition.output,
     credit,
@@ -343,19 +343,14 @@ export function reconcileRecycling(
   const transition = advanceRecyclingState(planet.recycling, context.now);
   if (!transition.changed) return { ok: true, state, reason: null, autoCollectedJobIds: [], credit: null };
   const credit = creditResources(
-    { metal: state.metal, minerals: state.minerals, gas: state.gas, energy: getPlanetEnergyLedger(planet, state.science.levels).availableEnergy },
+    { ...getPlanetResources(state, context.planetId), energy: getPlanetEnergyLedger(planet, state.science.levels).availableEnergy },
     getStorageCapacities(planet.buildings),
     transition.autoCollectedOutput,
   );
+  const withWallet = replacePlanetResources({ ...state, schemaVersion: SAVE_SCHEMA_VERSION }, context.planetId, credit.wallet);
   return {
     ok: true,
-    state: replacePlanetState({
-      ...state,
-      schemaVersion: SAVE_SCHEMA_VERSION,
-      metal: credit.wallet.metal,
-      minerals: credit.wallet.minerals,
-      gas: credit.wallet.gas,
-    }, context.planetId, { ...planet, recycling: transition.state }),
+    state: replacePlanetState(withWallet, context.planetId, { ...planet, recycling: transition.state }),
     reason: null,
     autoCollectedJobIds: transition.autoCollectedJobIds,
     credit,
@@ -372,9 +367,7 @@ export function executeTradeAction(
   const execution = executeTrade(
     {
       wallet: {
-        metal: state.metal,
-        minerals: state.minerals,
-        gas: state.gas,
+        ...getPlanetResources(state, context.planetId),
         debris: planet.recycling.availableDebris,
       },
       trade: planet.trade,
@@ -386,15 +379,10 @@ export function executeTradeAction(
     context.now,
   );
   if (!execution.ok) return { state, execution };
+  const withWallet = replacePlanetResources({ ...state, schemaVersion: SAVE_SCHEMA_VERSION }, context.planetId, execution.state.wallet);
   return {
     execution,
-    state: replacePlanetState({
-      ...state,
-      schemaVersion: SAVE_SCHEMA_VERSION,
-      metal: execution.state.wallet.metal,
-      minerals: execution.state.wallet.minerals,
-      gas: execution.state.wallet.gas,
-    }, context.planetId, {
+    state: replacePlanetState(withWallet, context.planetId, {
       ...planet,
       trade: execution.state.trade,
       recycling: { ...planet.recycling, availableDebris: execution.state.wallet.debris },
@@ -429,7 +417,7 @@ export function startSpaceportUpgrade(
   const planet = getPlanetState(state, context.planetId);
   const transition = enqueueSpaceportUpgrade({
     state: planet.spaceportUpgrades,
-    wallet: { metal: state.metal, minerals: state.minerals, gas: state.gas },
+    wallet: getPlanetResources(state, context.planetId),
     buildings: planet.buildings,
     scienceLevels: state.science.levels,
     spaceportLevel: planet.buildings.spaceport,
@@ -440,15 +428,10 @@ export function startSpaceportUpgrade(
   }, track, shipId, context.now, taskId);
   if (!transition.ok) return { ok: false, state, reason: transition.reason, entityName: shipId };
   const entityName = getSpaceportUpgradeEntity(track, shipId, state.profile.factionId)?.name ?? shipId;
+  const withWallet = replacePlanetResources({ ...state, schemaVersion: SAVE_SCHEMA_VERSION }, context.planetId, transition.wallet);
   return {
     ok: true,
-    state: replacePlanetState({
-      ...state,
-      schemaVersion: SAVE_SCHEMA_VERSION,
-      metal: transition.wallet.metal,
-      minerals: transition.wallet.minerals,
-      gas: transition.wallet.gas,
-    }, context.planetId, { ...planet, spaceportUpgrades: transition.state }),
+    state: replacePlanetState(withWallet, context.planetId, { ...planet, spaceportUpgrades: transition.state }),
     reason: null,
     entityName,
   };
@@ -462,7 +445,7 @@ export function cancelSpaceportUpgrade(
   const planet = getPlanetState(state, context.planetId);
   const transition = cancelSpaceportUpgradeDomain({
     state: planet.spaceportUpgrades,
-    wallet: { metal: state.metal, minerals: state.minerals, gas: state.gas },
+    wallet: getPlanetResources(state, context.planetId),
     buildings: planet.buildings,
     scienceLevels: state.science.levels,
     spaceportLevel: planet.buildings.spaceport,
@@ -471,13 +454,8 @@ export function cancelSpaceportUpgrade(
     mode: context.mode,
     testTimeScale: context.testTimeScale,
   }, taskId, context.now, context.rng);
-  const nextState = replacePlanetState({
-    ...state,
-    schemaVersion: SAVE_SCHEMA_VERSION,
-    metal: transition.wallet.metal,
-    minerals: transition.wallet.minerals,
-    gas: transition.wallet.gas,
-  }, context.planetId, { ...planet, spaceportUpgrades: transition.state });
+  const withWallet = replacePlanetResources({ ...state, schemaVersion: SAVE_SCHEMA_VERSION }, context.planetId, transition.wallet);
+  const nextState = replacePlanetState(withWallet, context.planetId, { ...planet, spaceportUpgrades: transition.state });
   return {
     ok: transition.ok,
     state: transition.ok || nextState !== state ? nextState : state,

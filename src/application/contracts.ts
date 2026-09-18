@@ -22,9 +22,16 @@ import type { SpaceportUpgradeState } from '../domain/buildings/spaceport-upgrad
 import type { TradeState } from '../domain/buildings/trade.ts';
 import type { RepairWorkshopState } from '../domain/repair/workshop.ts';
 import type { EnergyLedger, EnergySourceSnapshot } from '../domain/energy/runtime.ts';
+import type { FlightState } from '../domain/flights/types.ts';
 
-/** Phase 4 deliberately preserves the current single-homeworld data contract. */
-export type PlanetId = 'helion-01';
+/** Planet ids are stable save keys; the legacy homeworld remains `helion-01`. */
+export type PlanetId = string;
+
+export type PlanetResources = {
+  metal: number;
+  minerals: number;
+  gas: number;
+};
 
 export type PlanetRuntime = {
   name: string;
@@ -44,6 +51,7 @@ export type PlanetRuntime = {
   energyExpenseAttribution?: Partial<Record<string, number>>;
   /** Orbital presence is separate from the outgoing fleet roster. */
   solarSatellites?: number;
+  universeGalaxy?: number;
   universeSystem?: number;
   universePosition?: number;
   buildings: BuildingLevels;
@@ -52,6 +60,8 @@ export type PlanetRuntime = {
   trade: TradeState;
   spaceportUpgrades: SpaceportUpgradeState;
   stability: number;
+  /** Per-planet wallet. Legacy saves may omit it and are migrated from root resources. */
+  resources?: PlanetResources;
 };
 
 export type ResourceClock = {
@@ -64,14 +74,22 @@ export type ResourceClock = {
   };
 };
 
+export type PlanetStateRecord = Record<PlanetId, PlanetRuntime> & {
+  'helion-01': PlanetRuntime;
+};
+
+export type PlanetQueueRecord = Record<PlanetId, BuildingQueueItem[]> & {
+  'helion-01': BuildingQueueItem[];
+};
+
 export type SaveState = {
   schemaVersion: number;
   metal: number;
   minerals: number;
   gas: number;
   currentPlanetId: PlanetId;
-  planets: Record<PlanetId, PlanetRuntime>;
-  queues: Record<PlanetId, BuildingQueueItem[]>;
+  planets: PlanetStateRecord;
+  queues: PlanetQueueRecord;
   rating: RatingPrototypeState;
   profile: PlayerProfileState;
   combatPriority: CombatPriorityState;
@@ -82,6 +100,7 @@ export type SaveState = {
   reports: ReportsState;
   science: ScienceState;
   resourceClock: ResourceClock;
+  flights: FlightState;
 };
 
 export function getPlanetState(state: SaveState, planetId: PlanetId): PlanetRuntime {
@@ -100,4 +119,31 @@ export function replacePlanetState(
       [planetId]: planet,
     },
   };
+}
+
+export function getPlanetResources(state: SaveState, planetId: PlanetId = state.currentPlanetId): PlanetResources {
+  // The root wallet remains the authoritative compatibility alias for the
+  // legacy homeworld while colonies use their own persisted wallet.
+  if (planetId === 'helion-01') return { metal: state.metal, minerals: state.minerals, gas: state.gas };
+  const planet = state.planets[planetId];
+  if (planet?.resources) return { ...planet.resources };
+  return { metal: state.metal, minerals: state.minerals, gas: state.gas };
+}
+
+export function replacePlanetResources(
+  state: SaveState,
+  planetId: PlanetId,
+  resources: PlanetResources,
+): SaveState {
+  const planet = state.planets[planetId];
+  if (!planet) return state;
+  const nextPlanet = { ...planet, resources: { ...resources } };
+  const next: SaveState = {
+    ...state,
+    planets: { ...state.planets, [planetId]: nextPlanet },
+  };
+  // Keep the old root wallet as a compatibility alias for the existing UI and
+  // economy while the homeworld remains the active planet.
+  if (planetId !== 'helion-01') return next;
+  return { ...next, metal: resources.metal, minerals: resources.minerals, gas: resources.gas };
 }

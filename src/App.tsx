@@ -52,7 +52,7 @@ import {
   updateAllianceSettings,
 } from './domain/command/repository.ts';
 import type { AllianceSettingsInput } from './domain/command/types.ts';
-import { CURRENT_PLAYER_FACTION_ID, syncPlayerProfileWithAlliance } from './domain/profile/repository.ts';
+import { syncPlayerProfileWithAlliance } from './domain/profile/repository.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import {
   ACTIVE_RUNTIME_MODE,
@@ -122,8 +122,18 @@ import { energySummaryForPlanet, getPlanetEnergyCoordinates } from './applicatio
 import { getEffectiveResourceIncomePerHour } from './application/resource-clock.ts';
 import { publishApplicationRuntimeSnapshot } from './application/runtime.ts';
 import { reconcileRuntime } from './application/reconcile.ts';
+import {
+  FLIGHT_COMMAND_RESULT_EVENT,
+  FLIGHT_DISPATCH_REQUEST_EVENT,
+  FLIGHT_LAUNCH_CONTEXT_EVENT,
+  FLIGHT_RECALL_REQUEST_EVENT,
+  dispatchFlight,
+  recallFlight,
+  type DispatchFlightCommand,
+  type FlightLaunchContext,
+} from './application/flights.ts';
 import { enqueueApplicationStateUpdate } from './application/state.ts';
-import type { PlanetId, SaveState } from './application/contracts.ts';
+import { getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import planetColonized from '../assets/source/starter/planets/planet_colonized.png';
@@ -180,13 +190,9 @@ type BuildingInteriorContext = BuildingInteriorNavigationContext<PlanetId>;
 type PlanetDefinition = {
   id: PlanetId;
   coords: string;
-  status: 'Основная планета';
+  status: string;
   factionId: PlayerFactionId;
 };
-
-const ownedPlanets: PlanetDefinition[] = [
-  { id: 'helion-01', coords: '[1:1:1]', status: 'Основная планета', factionId: CURRENT_PLAYER_FACTION_ID },
-];
 
 const RUNTIME_MODE: RuntimeMode = ACTIVE_RUNTIME_MODE;
 
@@ -242,10 +248,68 @@ export function App() {
     }
   };
 
+  const openColonizationLaunch = (coordinate: { galaxy: number; system: number; position: number }) => {
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    setNotice(`Цель колонизации выбрана: [${coordinate.galaxy}:${coordinate.system}:${coordinate.position}].`);
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, {
+        detail: {
+          missionId: 'colonize',
+          targetKind: 'empty',
+          destination: { kind: 'coordinate', coordinate },
+        },
+      }));
+    }, 40);
+  };
+
   useEffect(() => {
     if (RUNTIME_MODE !== 'test') return;
     persistence.writeTestTimeScale(testTimeScale);
   }, [persistence, testTimeScale]);
+
+  useEffect(() => {
+    const onDispatchRequest = (event: Event) => {
+      const detail = (event as CustomEvent<DispatchFlightCommand & { now?: number }>).detail;
+      const result = dispatchFlight(stateRef.current, detail, {
+        now: detail.now ?? Date.now(),
+        mode: RUNTIME_MODE,
+        testTimeScale,
+      });
+      if (result.ok) {
+        stateRef.current = result.state;
+        setState(result.state);
+        setNotice(result.notice);
+      } else {
+        setNotice(result.error.message);
+      }
+      window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
+    };
+    const onRecallRequest = (event: Event) => {
+      const detail = (event as CustomEvent<{ flightId: string; now?: number }>).detail;
+      const result = recallFlight(stateRef.current, detail.flightId, {
+        now: detail.now ?? Date.now(),
+        mode: RUNTIME_MODE,
+        testTimeScale,
+      });
+      if (result.ok) {
+        stateRef.current = result.state;
+        setState(result.state);
+        setNotice(result.notice);
+      } else {
+        setNotice(result.error.message);
+      }
+      window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
+    };
+    window.addEventListener(FLIGHT_DISPATCH_REQUEST_EVENT, onDispatchRequest);
+    window.addEventListener(FLIGHT_RECALL_REQUEST_EVENT, onRecallRequest);
+    return () => {
+      window.removeEventListener(FLIGHT_DISPATCH_REQUEST_EVENT, onDispatchRequest);
+      window.removeEventListener(FLIGHT_RECALL_REQUEST_EVENT, onRecallRequest);
+    };
+  }, [testTimeScale]);
 
   useEffect(() => {
     const onCombatPriorityChanged = (event: Event) => {
@@ -294,7 +358,7 @@ export function App() {
     target: window,
     getState: () => stateRef.current,
     getContext: (eventNow) => ({
-      planetId: 'helion-01',
+      planetId: stateRef.current.currentPlanetId,
       mode: RUNTIME_MODE,
       testTimeScale,
       now: eventNow,
@@ -310,7 +374,7 @@ export function App() {
     target: window,
     getState: () => stateRef.current,
     getContext: (eventNow) => ({
-      planetId: 'helion-01',
+      planetId: stateRef.current.currentPlanetId,
       mode: RUNTIME_MODE,
       testTimeScale,
       now: eventNow,
@@ -355,13 +419,13 @@ export function App() {
   useEffect(() => {
     publishApplicationRuntimeSnapshot(
       state,
-      { planetId: 'helion-01', now, mode: RUNTIME_MODE, testTimeScale },
+      { planetId: state.currentPlanetId, now, mode: RUNTIME_MODE, testTimeScale },
       window,
     );
   }, [now, state, testTimeScale]);
   useEffect(() => {
     const result = reconcileRuntime(stateRef.current, {
-      planetId: 'helion-01',
+      planetId: stateRef.current.currentPlanetId,
       now,
       mode: RUNTIME_MODE,
       testTimeScale,
@@ -376,7 +440,7 @@ export function App() {
           .join(', ');
         setNotice(`Наука: исследование завершено — ${names}.`);
       } else if (event.kind === 'building') {
-        setNotice(`${result.state.planets['helion-01'].name}: ${getBuildingDefinition(event.assetRole, result.state.profile.factionId).name} завершено.`);
+        setNotice(`${result.state.planets[result.state.currentPlanetId].name}: ${getBuildingDefinition(event.assetRole, result.state.profile.factionId).name} завершено.`);
       } else if (event.kind === 'recycling') {
         setNotice('Результат переработки автоматически зачислен');
       } else if (event.kind === 'spaceport') {
@@ -389,12 +453,20 @@ export function App() {
           .map((item) => getFleetProductionEntity(item.queueKind, item.itemId, result.state.profile.factionId)?.name ?? item.itemId)
           .join(', ');
         setNotice(`Верфь: производство завершено — ${names}.`);
+      } else if (event.kind === 'flight') {
+        event.events.forEach((flightEvent) => setNotice(flightEvent.notice));
       }
     });
   }, [now, state, testTimeScale]);
 
-  const currentPlanet = ownedPlanets[0];
-  const currentPlanetState = state.planets['helion-01'];
+  const ownedPlanets = useMemo<PlanetDefinition[]>(() => Object.entries(state.planets).map(([id, planet]) => ({
+    id,
+    coords: `[${planet.universeGalaxy ?? 1}:${planet.universeSystem ?? 1}:${planet.universePosition ?? 1}]`,
+    status: id === 'helion-01' ? 'Основная планета' : 'Колония',
+    factionId: state.profile.factionId,
+  })), [state.planets, state.profile.factionId]);
+  const currentPlanet = ownedPlanets.find((planet) => planet.id === state.currentPlanetId) ?? ownedPlanets[0];
+  const currentPlanetState = state.planets[currentPlanet.id];
   const currentPlanetName = currentPlanetState.name;
   const currentEnergyLedger = useMemo(
     () => energySummaryForPlanet(currentPlanetState, state.science.levels),
@@ -426,27 +498,37 @@ export function App() {
     () => planetSkins.find((skin) => skin.id === currentPlanetState.skin) ?? planetSkins[0],
     [currentPlanetState.skin],
   );
-  const currentQueue = state.queues['helion-01'];
+  const universePlayerPlanets = useMemo(() => ownedPlanets.map((planet) => {
+    const runtimePlanet = state.planets[planet.id];
+    const art = planetSkins.find((skin) => skin.id === runtimePlanet.skin)?.art ?? planetSkins[0].art;
+    return {
+      id: planet.id,
+      coordinate: {
+        galaxy: runtimePlanet.universeGalaxy ?? 1,
+        system: runtimePlanet.universeSystem ?? 1,
+        position: runtimePlanet.universePosition ?? 1,
+      },
+      name: runtimePlanet.name,
+      art,
+      isHomeworld: planet.id === 'helion-01',
+      ownerId: state.profile.playerId,
+    };
+  }), [ownedPlanets, state.planets, state.profile.playerId]);
+  const currentQueue = state.queues[currentPlanet.id] ?? [];
   const currentActiveQueueItem = currentQueue[0] ?? null;
   const currentQueueDefinition = currentActiveQueueItem
     ? getBuildingDefinition(currentActiveQueueItem.assetRole, state.profile.factionId)
     : null;
   const resourceWallet: ResourceWallet = {
-    metal: state.metal,
-    minerals: state.minerals,
-    gas: state.gas,
+    ...getPlanetResources(state, currentPlanet.id),
     energy: currentEnergyLedger.availableEnergy,
   };
   const tradeWallet: TradeWallet = {
-    metal: state.metal,
-    minerals: state.minerals,
-    gas: state.gas,
+    ...getPlanetResources(state, currentPlanet.id),
     debris: currentPlanetState.recycling.availableDebris,
   };
   const spaceportWallet: SpaceportUpgradeWallet = {
-    metal: state.metal,
-    minerals: state.minerals,
-    gas: state.gas,
+    ...getPlanetResources(state, currentPlanet.id),
   };
   const resourceIncomePerHour = useMemo(
     () => getProductionBotIncomePerHour(
@@ -470,8 +552,8 @@ export function App() {
     ? getBuildingDefinition(buildingInterior.buildingRole, state.profile.factionId)
     : null;
 
-  const editingPlanet = editingPlanetId ? currentPlanet : null;
-  const editingPlanetState = editingPlanet ? state.planets['helion-01'] : null;
+  const editingPlanet = editingPlanetId ? ownedPlanets.find((planet) => planet.id === editingPlanetId) ?? null : null;
+  const editingPlanetState = editingPlanet ? state.planets[editingPlanet.id] : null;
 
   const progress = useMemo(() => {
     if (!currentActiveQueueItem) return 0;
@@ -488,17 +570,20 @@ export function App() {
     setSelectedBuildingRole(null);
   };
 
-  const selectPlanet = (_planetId: PlanetId) => {
+  const selectPlanet = (planetId: PlanetId) => {
+    const nextPlanet = state.planets[planetId];
+    if (!nextPlanet) return;
     clearBuildingInterior();
-    setState((current) => ({ ...current, currentPlanetId: 'helion-01' }));
+    setState((current) => ({ ...current, currentPlanetId: planetId }));
     setPlanetMenuOpen(false);
     setPlanetViewMode('overview');
-    setNotice(`${currentPlanetName} ${currentPlanet.coords} выбрана как текущая планета.`);
+    setNotice(`${nextPlanet.name} ${ownedPlanets.find((planet) => planet.id === planetId)?.coords ?? currentPlanet.coords} выбрана как текущая планета.`);
   };
 
   const openPlanetEditor = (planetId: PlanetId) => {
+    if (!state.planets[planetId]) return;
     clearBuildingInterior();
-    setState((current) => ({ ...current, currentPlanetId: 'helion-01' }));
+    setState((current) => ({ ...current, currentPlanetId: planetId }));
     navigateTo('planet');
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
@@ -517,7 +602,8 @@ export function App() {
     setState((current) => ({
       ...current,
       planets: {
-        'helion-01': { ...current.planets['helion-01'], name: safeName },
+        ...current.planets,
+        [editingPlanetId]: { ...current.planets[editingPlanetId], name: safeName },
       },
     }));
     setEditingName(safeName);
@@ -529,16 +615,17 @@ export function App() {
     setState((current) => ({
       ...current,
       planets: {
-        'helion-01': { ...current.planets['helion-01'], skin: skin.id },
+        ...current.planets,
+        [editingPlanetId]: { ...current.planets[editingPlanetId], skin: skin.id },
       },
     }));
-    setNotice(`Облик ${state.planets['helion-01'].name} изменён: ${skin.label}.`);
+    setNotice(`Облик ${state.planets[editingPlanetId].name} изменён: ${skin.label}.`);
   };
 
   const applyProductionBots = (assignment: BotAssignment) => {
     enqueueApplicationStateUpdate(stateRef, setState, (current) => ({
       state: applyProductionBotsAction(current, {
-        planetId: 'helion-01',
+        planetId: state.currentPlanetId,
         now,
         mode: RUNTIME_MODE,
         testTimeScale,
@@ -553,7 +640,7 @@ export function App() {
     const jobId = globalThis.crypto?.randomUUID?.() ?? `recycling-${startedAt}-${Math.random().toString(36).slice(2, 9)}`;
     const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
       const transition = startRecyclingAction(current, {
-        planetId: 'helion-01',
+        planetId: state.currentPlanetId,
         now: startedAt,
         mode: RUNTIME_MODE,
         testTimeScale,
@@ -575,7 +662,7 @@ export function App() {
     const collectedAt = Date.now();
     const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
       const transition = collectRecyclingAction(current, {
-        planetId: 'helion-01',
+        planetId: state.currentPlanetId,
         now: collectedAt,
         mode: RUNTIME_MODE,
         testTimeScale,
@@ -594,7 +681,7 @@ export function App() {
     const tradedAt = Date.now();
     const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
       const transition = executeTradeAction(current, {
-        planetId: 'helion-01',
+        planetId: state.currentPlanetId,
         now: tradedAt,
         mode: RUNTIME_MODE,
         testTimeScale,
@@ -613,7 +700,7 @@ export function App() {
     const enqueuedAt = Date.now();
     const taskId = globalThis.crypto?.randomUUID?.() ?? `spaceport-${track}-${shipId}-${enqueuedAt}-${Math.random().toString(36).slice(2, 9)}`;
     const result = startSpaceportUpgradeAction(stateRef.current, {
-      planetId: 'helion-01',
+      planetId: state.currentPlanetId,
       now: enqueuedAt,
       mode: RUNTIME_MODE,
       testTimeScale,
@@ -631,7 +718,7 @@ export function App() {
   const cancelSpaceportUpgrade = (taskId: string) => {
     const canceledAt = Date.now();
     const result = cancelSpaceportUpgradeAction(stateRef.current, {
-      planetId: 'helion-01',
+      planetId: state.currentPlanetId,
       now: canceledAt,
       mode: RUNTIME_MODE,
       testTimeScale,
@@ -653,7 +740,7 @@ export function App() {
 
   const buildBuilding = (assetRole: BuildingRole) => {
     const enqueuedAt = Date.now();
-    const context = { planetId: 'helion-01' as PlanetId, now: enqueuedAt, mode: RUNTIME_MODE, testTimeScale };
+    const context = { planetId: state.currentPlanetId, now: enqueuedAt, mode: RUNTIME_MODE, testTimeScale };
     const result = enqueueApplicationStateUpdate(stateRef, setState, (current) => {
       const availability = previewBuilding(current, context, assetRole).availability;
       if (!availability.canBuild) {
@@ -680,7 +767,7 @@ export function App() {
     const canceledAt = Date.now();
     const current = stateRef.current;
     const result = cancelBuildingAction(current, {
-      planetId: 'helion-01',
+      planetId: state.currentPlanetId,
       now: canceledAt,
       mode: RUNTIME_MODE,
       testTimeScale,
@@ -702,7 +789,7 @@ export function App() {
   const destroyBuilding = (assetRole: BuildingRole) => {
     const current = stateRef.current;
     const result = destroyBuildingAction(current, {
-      planetId: 'helion-01',
+      planetId: state.currentPlanetId,
       now,
       mode: RUNTIME_MODE,
       testTimeScale,
@@ -719,7 +806,7 @@ export function App() {
 
   const closePlanetEditor = () => {
     setEditingPlanetId(null);
-    setEditingName(state.planets['helion-01'].name);
+    setEditingName(currentPlanetState.name);
   };
 
   const reset = () => {
@@ -933,15 +1020,15 @@ export function App() {
           }}
           planets={ownedPlanets.map((planet) => ({
             id: planet.id,
-            name: planet.id === currentPlanet.id ? currentPlanetName : planet.id,
+            name: state.planets[planet.id].name,
             coords: planet.coords,
             status: planet.status,
-            art: planet.id === currentPlanet.id ? currentSkin.art : currentSkin.art,
+            art: planetSkins.find((skin) => skin.id === state.planets[planet.id].skin)?.art ?? planetSkins[0].art,
           }))}
           resources={[
-             { kind: 'metal', label: 'МЕТАЛЛ', value: state.metal, capacity: storageCapacities.metal, hourlyGain: effectiveResourceIncomePerHour.metal },
-             { kind: 'mineral', label: 'МИНЕРАЛЫ', value: state.minerals, capacity: storageCapacities.minerals, hourlyGain: effectiveResourceIncomePerHour.minerals },
-             { kind: 'gas', label: 'ГАЗ', value: state.gas, capacity: storageCapacities.gas, hourlyGain: effectiveResourceIncomePerHour.gas },
+             { kind: 'metal', label: 'МЕТАЛЛ', value: resourceWallet.metal, capacity: storageCapacities.metal, hourlyGain: effectiveResourceIncomePerHour.metal },
+             { kind: 'mineral', label: 'МИНЕРАЛЫ', value: resourceWallet.minerals, capacity: storageCapacities.minerals, hourlyGain: effectiveResourceIncomePerHour.minerals },
+             { kind: 'gas', label: 'ГАЗ', value: resourceWallet.gas, capacity: storageCapacities.gas, hourlyGain: effectiveResourceIncomePerHour.gas },
              { kind: 'energy', label: 'ЭНЕРГИЯ', value: currentEnergyLedger.availableEnergy, description: `Источники: ${currentEnergyLedger.producedEnergy} · Потрачено: ${currentEnergyLedger.consumedEnergy}` },
             {
               kind: 'population',
@@ -969,9 +1056,7 @@ export function App() {
             campaign={{ now, mode: RUNTIME_MODE, timeScale: testTimeScale, saveKey: persistence.saveKey, timeScaleOptions: TEST_TIME_SCALE_OPTIONS, onTimeScaleChange: setTestTimeScale }}
           onRouteChange={chooseRoute}
           onZoneChange={chooseZone}
-          onPlanetChange={(planetId) => {
-            if (planetId === currentPlanet.id) selectPlanet(currentPlanet.id);
-          }}
+          onPlanetChange={(planetId) => selectPlanet(planetId)}
           onPlanetMenuToggle={() => setPlanetMenuOpen((open) => !open)}
          />
 
@@ -1021,6 +1106,8 @@ export function App() {
               profile={state.profile}
               rating={state.rating}
               command={state.command}
+              playerPlanets={universePlayerPlanets}
+              onColonize={openColonizationLaunch}
             />
           ) : activeRoute === 'operations' ? (
             <OperationsView
@@ -1076,16 +1163,20 @@ export function App() {
           ) : activeRoute === 'planet' ? (
             <div className="planet-page-v3 planet-page-v4">
               <aside className="planet-summary-v3 planet-list-panel-v4">
-                <div className="page-panel-title"><strong>ПЛАНЕТЫ</strong><small>1 ПЛАНЕТА</small></div>
+                <div className="page-panel-title"><strong>ПЛАНЕТЫ</strong><small>{ownedPlanets.length} {ownedPlanets.length === 1 ? 'ПЛАНЕТА' : 'ПЛАНЕТЫ'}</small></div>
 
                 <div className="owned-planets-v4">
-                  <div className="owned-planet-row-v4 active">
-                    <button className="owned-planet-main-v4" type="button" onClick={() => selectPlanet('helion-01')}>
-                      <img src={currentSkin.art} alt="" />
-                      <span><strong>{currentPlanetName}</strong><small>{currentPlanet.coords} · {currentPlanet.status}</small></span>
-                    </button>
-                    <button className="owned-planet-edit-v4" type="button" title={`Редактировать ${currentPlanetName}`} onClick={() => openPlanetEditor('helion-01')}>✎</button>
-                  </div>
+                  {ownedPlanets.map((planet) => {
+                    const planetState = state.planets[planet.id];
+                    const art = planetSkins.find((skin) => skin.id === planetState.skin)?.art ?? planetSkins[0].art;
+                    return <div className={`owned-planet-row-v4 ${planet.id === currentPlanet.id ? 'active' : ''}`} key={planet.id}>
+                      <button className="owned-planet-main-v4" type="button" onClick={() => selectPlanet(planet.id)}>
+                        <img src={art} alt="" />
+                        <span><strong>{planetState.name}</strong><small>{planet.coords} · {planet.status}</small></span>
+                      </button>
+                      <button className="owned-planet-edit-v4" type="button" title={`Редактировать ${planetState.name}`} onClick={() => openPlanetEditor(planet.id)}>✎</button>
+                    </div>;
+                  })}
                 </div>
 
                 <button className={`planet-details-toggle-v4 ${detailsOpen ? 'open' : ''}`} type="button" onClick={() => setDetailsOpen((open) => !open)}>

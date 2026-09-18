@@ -62,6 +62,16 @@ export type UniversePlanetNode = {
   positionCoefficientPercent?: number;
 };
 
+/** Persisted player-owned planet projected onto the procedural atlas. */
+export type UniversePersistedPlayerPlanet = {
+  id: string;
+  coordinate: UniverseCoordinate;
+  name: string;
+  art?: string;
+  isHomeworld?: boolean;
+  ownerId?: string;
+};
+
 export type UniverseSystem = {
   galaxy: number;
   system: number;

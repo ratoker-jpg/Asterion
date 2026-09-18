@@ -1,0 +1,181 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
+import {
+  dispatchFlight,
+  getAvailableFleetForPlanet,
+  getReservedShipsForPlanet,
+  previewFlight,
+  reconcileFlights,
+  recallFlight,
+} from './flights.ts';
+import { startBuilding } from './buildings.ts';
+import { getPlanetResources, replacePlanetResources } from './contracts.ts';
+
+const origin = { galaxy: 1, system: 1, position: 1 };
+
+function command(requestId: string, destination = { galaxy: 1, system: 2, position: 1 }) {
+  return {
+    requestId,
+    missionId: 'colonize' as const,
+    originPlanetId: 'helion-01',
+    destination: { kind: 'coordinate' as const, coordinate: destination },
+    targetKind: 'empty' as const,
+    selectedShips: { colonizer: 1 as const },
+    departedAt: 1_000,
+  };
+}
+
+test('dispatch is atomic and persisted request IDs make retries idempotent', () => {
+  const initial = createInitialSaveState('production', 1_000);
+  const first = dispatchFlight(initial, command('request-1'), 1_000);
+  assert.equal(first.ok, true);
+  if (!first.ok) return;
+  const gasAfter = getPlanetResources(first.state).gas;
+  const retried = dispatchFlight(first.state, { ...command('request-1'), selectedShips: { scout: 99 } }, 5_000);
+  assert.equal(retried.ok, true);
+  if (!retried.ok) return;
+  assert.equal(retried.created, false);
+  assert.equal(retried.flight.id, first.flight.id);
+  assert.equal(getPlanetResources(retried.state).gas, gasAfter);
+  assert.equal(retried.state.flights.records.length, 1);
+  assert.equal(getReservedShipsForPlanet(retried.state, 'helion-01').colonizer, 1);
+  assert.equal(getAvailableFleetForPlanet(retried.state, 'helion-01').ships.colonizer, 0);
+
+  const second = dispatchFlight(first.state, command('request-2', { galaxy: 1, system: 3, position: 1 }), 5_000);
+  assert.equal(second.ok, false);
+  if (!second.ok) assert.equal(second.error.code, 'ship-already-reserved');
+});
+
+test('insufficient gas leaves the state untouched', () => {
+  const initial = createInitialSaveState('production', 1_000);
+  const noGas = replacePlanetResources(initial, 'helion-01', { metal: 1, minerals: 1, gas: 0 });
+  const result = dispatchFlight(noGas, command('no-gas'), 1_000);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.code, 'insufficient-gas');
+  assert.equal(result.state, noGas);
+  assert.equal(result.state.flights.records.length, 0);
+});
+
+test('preview is read-only and a persisted request remains idempotent after reload', () => {
+  const initial = createInitialSaveState('production', 1_000);
+  const preview = previewFlight(initial, command('preview-only'), 1_000);
+  assert.equal(preview.ok, true);
+  if (!preview.ok) return;
+  assert.equal(preview.created, false);
+  assert.equal(preview.state, initial);
+  assert.equal(preview.state.flights.records.length, 0);
+
+  const storage = new Map<string, string>();
+  const storageLike = {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => { storage.set(key, value); },
+    removeItem: (key: string) => { storage.delete(key); },
+  };
+  const persistence = createPersistenceFacade({ mode: 'production', storage: storageLike, now: () => 1_000 });
+  const sent = dispatchFlight(persistence.read(), command('reload-safe'), 1_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.equal(persistence.write(sent.state).ok, true);
+  const reloaded = persistence.read();
+  const retried = dispatchFlight(reloaded, { ...command('reload-safe'), selectedShips: { scout: 99 } }, 99_000);
+  assert.equal(retried.ok, true);
+  if (!retried.ok) return;
+  assert.equal(retried.created, false);
+  assert.equal(retried.flight.id, sent.flight.id);
+  assert.equal(retried.state.flights.records.length, 1);
+  assert.equal(getPlanetResources(retried.state).gas, getPlanetResources(sent.state).gas);
+});
+
+test('recall returns the colonizer with elapsed reverse timer and no gas refund', () => {
+  const initial = createInitialSaveState('production', 1_000);
+  const sent = dispatchFlight(initial, command('recall-me'), 1_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const gasAfterDispatch = getPlanetResources(sent.state).gas;
+  const recalled = recallFlight(sent.state, sent.flight.id, sent.flight.departedAt + 37_000);
+  assert.equal(recalled.ok, true);
+  if (!recalled.ok) return;
+  assert.equal(recalled.flight.phase, 'returning');
+  assert.equal(recalled.flight.returnAt, sent.flight.departedAt + 74_000);
+  assert.equal(getPlanetResources(recalled.state).gas, gasAfterDispatch);
+  const completed = reconcileFlights(recalled.state, recalled.flight.returnAt!);
+  assert.equal(completed.events.length, 1);
+  assert.equal(completed.state.flights.records[0].phase, 'completed');
+  assert.equal(completed.state.flights.records[0].completionReason, 'recalled');
+  assert.equal(completed.state.planets['helion-01'].fleet.ships.colonizer, 1);
+  assert.equal(Object.keys(completed.state.planets).length, 1);
+});
+
+test('successful arrival creates one deterministic isolated colony and consumes payload only at arrival', () => {
+  const initial = createInitialSaveState('production', 1_000);
+  const sent = dispatchFlight(initial, command('colonize-me'), 1_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.equal(sent.state.planets['helion-01'].fleet.ships.colonizer, 1);
+  const arrived = reconcileFlights(sent.state, sent.flight.arrivalAt);
+  assert.equal(arrived.events[0]?.status, 'colonized');
+  const colonyId = 'planet-1-2-1';
+  assert.ok(arrived.state.planets[colonyId]);
+  assert.deepEqual(arrived.state.planets[colonyId].resources, { metal: 500, minerals: 500, gas: 500 });
+  assert.equal(arrived.state.planets[colonyId].fleet.ships.colonizer, 0);
+  assert.equal(arrived.state.planets[colonyId].buildings.hangar, 0);
+  assert.equal(arrived.state.planets[colonyId].universeGalaxy, 1);
+  assert.equal(arrived.state.currentPlanetId, 'helion-01');
+  assert.equal(arrived.state.planets['helion-01'].fleet.ships.colonizer, 0);
+  assert.equal(arrived.state.flights.records[0].phase, 'completed');
+  assert.equal(arrived.state.flights.records[0].completionReason, 'colonized');
+  const repeated = reconcileFlights(arrived.state, sent.flight.arrivalAt + 1);
+  assert.equal(repeated.changed, false);
+  assert.equal(Object.keys(repeated.state.planets).length, 2);
+});
+
+test('target occupied at arrival starts a full return once and completes as target-occupied', () => {
+  const initial = createInitialSaveState('production', 1_000);
+  const sent = dispatchFlight(initial, command('occupied-later', { galaxy: 1, system: 3, position: 1 }), 1_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const occupied = {
+    ...sent.state.planets['helion-01'],
+    name: 'Новая занятая цель',
+    universeSystem: 3,
+    universePosition: 1,
+  };
+  const stateAtArrival = { ...sent.state, planets: { ...sent.state.planets, 'occupied-target': occupied } };
+  const arrival = reconcileFlights(stateAtArrival, sent.flight.arrivalAt);
+  assert.equal(arrival.events.length, 1);
+  assert.equal(arrival.events[0]?.status, 'target-occupied');
+  assert.equal(arrival.state.flights.records[0].phase, 'returning');
+  assert.equal(arrival.state.flights.records[0].returnAt, sent.flight.arrivalAt + sent.flight.oneWayDurationMs);
+  const repeated = reconcileFlights(arrival.state, sent.flight.arrivalAt + 1);
+  assert.equal(repeated.changed, false);
+  assert.equal(repeated.events.length, 0);
+  const returned = reconcileFlights(arrival.state, arrival.state.flights.records[0].returnAt!);
+  assert.equal(returned.state.flights.records[0].phase, 'completed');
+  assert.equal(returned.state.flights.records[0].completionReason, 'target-occupied');
+  assert.equal(returned.state.planets['helion-01'].fleet.ships.colonizer, 1);
+  assert.equal(Object.keys(returned.state.planets).filter((id) => id.startsWith('planet-')).length, 0);
+});
+
+test('colony actions spend the colony wallet without changing the homeworld alias', () => {
+  const initial = createInitialSaveState('production', 1_000);
+  const sent = dispatchFlight(initial, command('colony-wallet'), 1_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const colonized = reconcileFlights(sent.state, sent.flight.arrivalAt).state;
+  const colonyId = 'planet-1-2-1';
+  const beforeHomeworld = { metal: colonized.metal, minerals: colonized.minerals, gas: colonized.gas };
+  const started = startBuilding(colonized, {
+    planetId: colonyId,
+    now: sent.flight.arrivalAt,
+    mode: 'production',
+    testTimeScale: 1,
+  }, 'basic-energy');
+  assert.equal(started.ok, true);
+  assert.deepEqual(
+    { metal: started.state.metal, minerals: started.state.minerals, gas: started.state.gas },
+    beforeHomeworld,
+  );
+  assert.deepEqual(started.state.planets[colonyId].resources, { metal: 425, minerals: 470, gas: 500 });
+});

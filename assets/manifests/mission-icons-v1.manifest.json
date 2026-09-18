@@ -1,0 +1,182 @@
+[
+  {
+    "output_name": "01_transport.png",
+    "source_index": 44,
+    "source_file": "a_high_tech_sci_fi_digital_hud_icon_scene_clean_v_11_batch_1.png"
+  },
+  {
+    "output_name": "02_espionage.png",
+    "source_index": 12,
+    "source_file": "a_crisp_high_contrast_futuristic_sci_fi_ui_hud_ic_12_batch_2.png"
+  },
+  {
+    "output_name": "03_attack.png",
+    "source_index": 16,
+    "source_file": "a_crisp_high_tech_sci_fi_hud_video_game_icon_st_13_batch_3.png"
+  },
+  {
+    "output_name": "04_deployment.png",
+    "source_index": 37,
+    "source_file": "a_high_detail_sci_fi_hud_style_icon_scene_a_glowi_14_batch_4.png"
+  },
+  {
+    "output_name": "05_colonize.png",
+    "source_index": 36,
+    "source_file": "a_high_detail_futuristic_sci_fi_hud_icon_overlay_i_15_batch_5.png"
+  },
+  {
+    "output_name": "06_recycle.png",
+    "source_index": 19,
+    "source_file": "a_detailed_futuristic_sci_fi_hud_icon_scene_a_hig_16_batch_6.png"
+  },
+  {
+    "output_name": "07_gas_harvest.png",
+    "source_index": 41,
+    "source_file": "a_high_resolution_square_futuristic_sci_fi_ui_ic_17_batch_7.png"
+  },
+  {
+    "output_name": "08_sun_support.png",
+    "source_index": 34,
+    "source_file": "a_futuristic_sci_fi_ui_icon_graphics_scene_a_squa_18_batch_8.png"
+  },
+  {
+    "output_name": "09_space_flight.png",
+    "source_index": 25,
+    "source_file": "a_futuristic_sci_fi_hud_icon_graphic_scene_a_squa_19_batch_9.png"
+  },
+  {
+    "output_name": "10_pirate_elimination.png",
+    "source_index": 38,
+    "source_file": "a_high_resolution_sci_fi_cyberpunk_hud_style_emb_2.png"
+  },
+  {
+    "output_name": "11_pirate_raid.png",
+    "source_index": 35,
+    "source_file": "a_high_contrast_futuristic_sci_fi_hud_tech_icon_s_20_batch_10.png"
+  },
+  {
+    "output_name": "12_unknown_signal.png",
+    "source_index": 30,
+    "source_file": "a_futuristic_sci_fi_hud_tech_icon_scene_in_a_squar_2_batch_2.png"
+  },
+  {
+    "output_name": "13_derelict_ship.png",
+    "source_index": 50,
+    "source_file": "a_high_tech_sci_fi_hud_ui_style_digital_icon_ill_3_batch_3.png"
+  },
+  {
+    "output_name": "14_anomaly_scan.png",
+    "source_index": 49,
+    "source_file": "a_high_tech_sci_fi_hud_technology_interface_illust_4_batch_4.png"
+  },
+  {
+    "output_name": "15_intercept.png",
+    "source_index": 53,
+    "source_file": "a_single_panel_sci_fi_hud_tech_interface_illustrat_2_batch_2.png"
+  },
+  {
+    "output_name": "16_patrol.png",
+    "source_index": 3,
+    "source_file": "a_clean_high_tech_sci_fi_hud_futuristic_interfa_6_batch_6.png"
+  },
+  {
+    "output_name": "17_defend.png",
+    "source_index": 20,
+    "source_file": "a_detailed_futuristic_sci_fi_hud_style_icon_illust_7_batch_7.png"
+  },
+  {
+    "output_name": "18_escort.png",
+    "source_index": 24,
+    "source_file": "a_futuristic_sci_fi_hud_game_ui_icon_style_illus_4_batch_4.png"
+  },
+  {
+    "output_name": "19_blockade.png",
+    "source_index": 32,
+    "source_file": "a_futuristic_sci_fi_hud_tech_interface_style_illus_5_batch_5.png"
+  },
+  {
+    "output_name": "20_bombardment.png",
+    "source_index": 39,
+    "source_file": "a_high_resolution_sci_fi_hud_game_ui_style_icon_10_batch_10.png"
+  },
+  {
+    "output_name": "21_reinforce.png",
+    "source_index": 6,
+    "source_file": "a_clean_high_tech_sci_fi_hud_tech_interface_graph_7_batch_7.png"
+  },
+  {
+    "output_name": "22_boarding.png",
+    "source_index": 22,
+    "source_file": "a_futuristic_sci_fi_digital_hud_ui_icon_scene_in_8_batch_8.png"
+  },
+  {
+    "output_name": "23_deep_scan.png",
+    "source_index": 43,
+    "source_file": "a_high_tech_futuristic_sci_fi_hud_style_graphic_sc_9_batch_9.png"
+  },
+  {
+    "output_name": "24_track_target.png",
+    "source_index": 17,
+    "source_file": "a_detailed_crisp_futuristic_sci_fi_hud_targeti_10_batch_10.png"
+  },
+  {
+    "output_name": "25_sabotage.png",
+    "source_index": 54,
+    "source_file": "a_sleek_futuristic_sci_fi_hud_tech_interface_illu_11_batch_1.png"
+  },
+  {
+    "output_name": "26_stealth.png",
+    "source_index": 1,
+    "source_file": "a_clean_futuristic_sci_fi_hud_ui_style_icon_ill_12_batch_2.png"
+  },
+  {
+    "output_name": "27_signal_trace.png",
+    "source_index": 46,
+    "source_file": "a_high_tech_sci_fi_hud_futuristic_ui_style_illus_13_batch_3.png"
+  },
+  {
+    "output_name": "28_artifact_search.png",
+    "source_index": 4,
+    "source_file": "a_clean_high_tech_sci_fi_hud_interface_style_illu_14_batch_4.png"
+  },
+  {
+    "output_name": "29_wormhole_expedition.png",
+    "source_index": 7,
+    "source_file": "a_clean_high_tech_sci_fi_hud_ui_style_square_di_15_batch_5.png"
+  },
+  {
+    "output_name": "30_science_sample.png",
+    "source_index": 10,
+    "source_file": "a_clean_sci_fi_hud_style_icon_illustration_a_squa_16_batch_6.png"
+  },
+  {
+    "output_name": "31_expedition.png",
+    "source_index": 8,
+    "source_file": "a_clean_sci_fi_futuristic_hud_icon_scene_a_squa_17_batch_7.png"
+  },
+  {
+    "output_name": "32_asteroid_mining.png",
+    "source_index": 14,
+    "source_file": "a_crisp_high_resolution_sci_fi_hud_tech_interface_18_batch_8.png"
+  },
+  {
+    "output_name": "33_trade_convoy.png",
+    "source_index": 47,
+    "source_file": "a_high_tech_sci_fi_hud_style_icon_graphic_a_clean_19_batch_9.png"
+  },
+  {
+    "output_name": "34_rescue.png",
+    "source_index": 31,
+    "source_file": "a_futuristic_sci_fi_hud_tech_interface_style_graph_20_batch_10.png"
+  },
+  {
+    "output_name": "35_evacuation.png",
+    "source_index": 42,
+    "source_file": "a_high_tech_futuristic_hud_sci_fi_interface_icon_g_1_batch_1.png"
+  },
+  {
+    "output_name": "36_salvage.png",
+    "source_index": 56,
+    "source_file": "a_stylized_futuristic_sci_fi_hud_interface_scene_2_batch_2.png"
+  }
+]

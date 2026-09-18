@@ -26,6 +26,8 @@ import {
 } from './persistence.ts';
 import {
   getPlanetState,
+  getPlanetResources,
+  replacePlanetResources,
   replacePlanetState,
   type PlanetId,
   type SaveState,
@@ -53,9 +55,7 @@ export type ScienceActionResult = {
 function walletFor(state: SaveState, planetId: PlanetId) {
   const planet = getPlanetState(state, planetId);
   return {
-    metal: state.metal,
-    minerals: state.minerals,
-    gas: state.gas,
+    ...getPlanetResources(state, planetId),
     energy: getPlanetEnergyLedger(planet, state.science.levels).availableEnergy,
   };
 }
@@ -75,14 +75,12 @@ function stateFromScienceTransition(
     {},
     nextPlanet,
   );
-  return replacePlanetState({
+  const withPlanet = replacePlanetState({
     ...state,
     schemaVersion: SAVE_SCHEMA_VERSION,
-    metal: wallet.metal,
-    minerals: wallet.minerals,
-    gas: wallet.gas,
     science: nextScience,
   }, planetId, settledEnergy.planet);
+  return replacePlanetResources(withPlanet, planetId, wallet);
 }
 
 function defaultScienceTaskId(scienceId: ScienceId, now: number): string {

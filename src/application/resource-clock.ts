@@ -9,7 +9,7 @@ import {
 } from '../domain/buildings/production-bots.ts';
 import { creditResources, type ResourceCreditResult } from '../domain/resources/credit.ts';
 import { normalizeTestTimeScale, type RuntimeMode, type TestTimeScale } from '../domain/runtime/mode.ts';
-import type { ResourceClock, SaveState } from './contracts.ts';
+import { getPlanetResources, replacePlanetResources, type ResourceClock, type SaveState } from './contracts.ts';
 
 const RESOURCE_KEYS = ['metal', 'minerals', 'gas'] as const satisfies readonly ProductionResource[];
 const CAPPED_RESOURCE_KEYS = ['metal', 'minerals', 'gas'] as const;
@@ -76,22 +76,12 @@ function clocksEqual(left: ResourceClock, right: ResourceClock): boolean {
     && RESOURCE_KEYS.every((key) => left.remainder[key] === right.remainder[key]);
 }
 
-function resourcesEqual(left: SaveState, right: SaveState): boolean {
-  return left.metal === right.metal
-    && left.minerals === right.minerals
-    && left.gas === right.gas;
-}
-
-function withResourceValues(
-  state: SaveState,
-  wallet: Pick<Record<ProductionResource, number>, ProductionResource>,
-): SaveState {
-  return {
-    ...state,
-    metal: wallet.metal,
-    minerals: wallet.minerals,
-    gas: wallet.gas,
-  };
+function resourcesEqual(left: SaveState, right: SaveState, planetId: SaveState['currentPlanetId']): boolean {
+  const leftWallet = getPlanetResources(left, planetId);
+  const rightWallet = getPlanetResources(right, planetId);
+  return leftWallet.metal === rightWallet.metal
+    && leftWallet.minerals === rightWallet.minerals
+    && leftWallet.gas === rightWallet.gas;
 }
 
 /**
@@ -105,14 +95,17 @@ export function reconcileResourceIncome(
 ): ResourceReconcileResult {
   const now = finiteNonNegative(context.now, Date.now());
   const planet = state.planets[context.planetId];
-  if (!planet) return { changed: false, state, credit: { wallet: { metal: state.metal, minerals: state.minerals, gas: state.gas, energy: 0 }, accepted: { metal: 0, minerals: 0, gas: 0, energy: 0 }, burned: { metal: 0, minerals: 0, gas: 0, energy: 0 } } };
+  if (!planet) {
+    const resources = getPlanetResources(state, context.planetId);
+    return { changed: false, state, credit: { wallet: { ...resources, energy: 0 }, accepted: { metal: 0, minerals: 0, gas: 0, energy: 0 }, burned: { metal: 0, minerals: 0, gas: 0, energy: 0 } } };
+  }
 
   const clock = normalizeClock(state.resourceClock, now);
   if (now < clock.lastReconciledAt) {
     return {
       changed: !clocksEqual(clock, state.resourceClock),
       state: clocksEqual(clock, state.resourceClock) ? state : { ...state, resourceClock: clock },
-      credit: { wallet: { metal: state.metal, minerals: state.minerals, gas: state.gas, energy: planet.energy }, accepted: { metal: 0, minerals: 0, gas: 0, energy: 0 }, burned: { metal: 0, minerals: 0, gas: 0, energy: 0 } },
+      credit: { wallet: { ...getPlanetResources(state, context.planetId), energy: planet.energy }, accepted: { metal: 0, minerals: 0, gas: 0, energy: 0 }, burned: { metal: 0, minerals: 0, gas: 0, energy: 0 } },
     };
   }
 
@@ -130,7 +123,7 @@ export function reconcileResourceIncome(
   const wholeCredits = Object.fromEntries(
     RESOURCE_KEYS.map((key) => [key, Number.isFinite(rawCredits[key]) ? Math.floor(Math.max(0, rawCredits[key])) : 0]),
   ) as Record<ProductionResource, number>;
-  const wallet = { metal: state.metal, minerals: state.minerals, gas: state.gas, energy: planet.energy };
+  const wallet = { ...getPlanetResources(state, context.planetId), energy: planet.energy };
   const credit = creditResources(wallet, capacities, wholeCredits);
   const remainder = { ...clock.remainder };
 
@@ -152,7 +145,11 @@ export function reconcileResourceIncome(
   }
 
   const nextClock: ResourceClock = { lastReconciledAt: now, remainder };
-  const next = withResourceValues({ ...state, resourceClock: nextClock }, credit.wallet);
-  const changed = !resourcesEqual(state, next) || !clocksEqual(clock, nextClock);
+  const next = replacePlanetResources(
+    { ...state, resourceClock: nextClock },
+    context.planetId,
+    credit.wallet,
+  );
+  const changed = !resourcesEqual(state, next, context.planetId) || !clocksEqual(clock, nextClock);
   return { changed, state: changed ? next : state, credit };
 }

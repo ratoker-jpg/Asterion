@@ -11,6 +11,8 @@ import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { SAVE_SCHEMA_VERSION } from './persistence.ts';
 import {
   getPlanetState,
+  getPlanetResources,
+  replacePlanetResources,
   replacePlanetState,
   type PlanetId,
   type SaveState,
@@ -52,7 +54,7 @@ function productionContext(
     fleet: planet.fleet,
     defense: planet.defense,
     solarSatellites: Math.max(0, Math.floor(planet.solarSatellites ?? migratedFleet.count)),
-    wallet: { metal: state.metal, minerals: state.minerals, gas: state.gas },
+    wallet: getPlanetResources(state, context.planetId),
     capacities: getStorageCapacities(planet.buildings),
     factionId: state.profile.factionId,
     hangarLevel: planet.buildings.hangar,
@@ -103,13 +105,11 @@ function stateFromTransition(
     state.science.levels,
     state.science.levels,
   );
-  return replacePlanetState({
+  const withPlanet = replacePlanetState({
     ...state,
     schemaVersion: SAVE_SCHEMA_VERSION,
-    metal: transition.wallet.metal,
-    minerals: transition.wallet.minerals,
-    gas: transition.wallet.gas,
   }, context.planetId, nextPlanet);
+  return replacePlanetResources(withPlanet, context.planetId, transition.wallet);
 }
 
 export type FleetProductionActionResult = {
