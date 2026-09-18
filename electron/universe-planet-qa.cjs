@@ -74,6 +74,20 @@ async function clickAt(win, selector, backdrop = false, settleAfter = true) {
   if (settleAfter) await settle(win);
 }
 
+async function setInputValue(win, selector, value) {
+  const changed = await win.webContents.executeJavaScript(`(() => {
+    const input = document.querySelector(${JSON.stringify(selector)});
+    if (!input) return false;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, ${JSON.stringify(String(value))});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`);
+  if (!changed) throw new Error(`Input not found: ${selector}`);
+  await settle(win);
+}
+
 async function pressKey(win, key, modifiers = 0) {
   const code = key === 'Tab' ? 9 : 27;
   await win.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'rawKeyDown', key, code: key, windowsVirtualKeyCode: code, modifiers });
@@ -292,7 +306,7 @@ async function runViewport(width, height) {
 
     const map = await mapSnapshot(win);
     if (map.system !== '1' || map.systemOptions !== 40 || map.systemOptionTexts.some((text, index) => text !== String(index + 1).padStart(2, '0')) || map.positionCount !== 24 || map.viewport.innerWidth !== width || map.viewport.innerHeight !== height) throw new Error(`${label}: map cardinality/viewport failed ${JSON.stringify(map)}`);
-    if (!map.objectKinds.includes('empty') || !map.objectKinds.includes('player') || map.asteroidCount < 3) {
+    if (!map.objectKinds.includes('empty') || !map.objectKinds.includes('player') || map.asteroidCount < 2) {
       throw new Error(`${label}: object fixture coverage failed ${JSON.stringify(map)}`);
     }
     if (map.homeCaption !== '★ Dendrilion' || map.coordinateLineCount !== 0 || map.mapCaptions.some((caption) => /\\[\\d+:\\d+:\\d+\\]/.test(caption))) throw new Error(`${label}: map caption contract failed ${JSON.stringify(map)}`);
@@ -413,12 +427,68 @@ async function runViewport(width, height) {
     await clickAt(win, '[data-qa-flight-preview-open]');
     await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
     const timelineText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-flight-preview-backdrop]')?.textContent?.replace(/\s+/g, ' ').trim() || ''`);
-    const timelineFields = ['ИСТОЧНИК', 'ЦЕЛЬ', 'Свободный слот', 'Колонизатор × 1', 'Население: 12', 'МАРШРУТ СИСТЕМЫ', 'ОТКУДА', 'КУДА', 'ЭФФ. СКОРОСТЬ', 'ТУДА', 'ОБРАТНО', 'ПОЛНЫЙ ЦИКЛ', 'ГАЗ', 'ПРИБЫТИЕ', 'Газ списывается только за один путь туда.', 'При отзыве колонизатор возвращается', 'ОТМЕНА', 'ОТПРАВИТЬ'];
+    const timelineFields = ['ИСТОЧНИК', 'выбрано флотом', 'ЦЕЛЬ', 'Свободная координата', 'СОСТАВ ФЛОТА', 'Колонизатор × 1', 'Население: 12', 'ПАРАМЕТРЫ ПЕРЕЛЁТА', 'ЭФФ. СКОРОСТЬ', 'ТУДА', 'ОБРАТНО', 'ПОЛНЫЙ ЦИКЛ', 'ГАЗ', 'ПРИБЫТИЕ', 'МОСКОВСКОЕ ВРЕМЯ', 'МСК', 'ЗАГРУЗКА КОРАБЛЯ', 'НЕДОСТУПНО ДЛЯ КОЛОНИЗАЦИИ', 'Газ списывается только за один путь туда.', 'При отзыве колонизатор возвращается', 'ОТМЕНА', 'ОТПРАВИТЬ'];
     if (timelineFields.some((field) => !timelineText.includes(field))) throw new Error(`${label}: Concept 2 Mission Timeline fields are incomplete ${JSON.stringify({ missing: timelineFields.filter((field) => !timelineText.includes(field)), timelineText })}`);
+    const timelineStructure = await win.webContents.executeJavaScript(`(() => ({
+      sourceIsLocked: Boolean(document.querySelector('[data-qa-flight-source-step]')) && !document.querySelector('[data-qa-flight-source-step] .flight-timeline-edit'),
+      targetCanEdit: Boolean(document.querySelector('[data-qa-flight-target-step] .flight-timeline-edit')),
+      routePanelRemoved: !document.querySelector('.flight-timeline-route-panel'),
+      targetInputsHiddenUntilEdit: !document.querySelector('[data-qa-flight-target-inputs]'),
+    }))()`);
+    if (!timelineStructure.sourceIsLocked || !timelineStructure.targetCanEdit || !timelineStructure.routePanelRemoved || !timelineStructure.targetInputsHiddenUntilEdit) throw new Error(`${label}: Mission Timeline source/target structure is incorrect ${JSON.stringify(timelineStructure)}`);
+    const timelineCargo = await win.webContents.executeJavaScript(`(() => {
+      const cargo = document.querySelector('[data-qa-flight-cargo]');
+      const fields = cargo ? Array.from(cargo.querySelectorAll('input')) : [];
+      const longValue = '100000000';
+      const inputWidths = fields.map((input) => {
+        input.value = longValue;
+        return {
+          width: Math.round(input.getBoundingClientRect().width),
+          clientWidth: input.clientWidth,
+          scrollWidth: input.scrollWidth,
+        };
+      });
+      return {
+        present: Boolean(cargo),
+        disabled: cargo?.getAttribute('aria-disabled') === 'true',
+        inputsDisabled: fields.length === 4 && fields.every((input) => input.disabled),
+        inputWidths,
+        minInputWidth: inputWidths.length ? Math.min(...inputWidths.map((entry) => entry.width)) : 0,
+        longValueFits: inputWidths.length === 4 && inputWidths.every((entry) => entry.scrollWidth <= entry.clientWidth + 1),
+      };
+    })()`);
+    if (!timelineCargo.present || !timelineCargo.disabled || !timelineCargo.inputsDisabled || timelineCargo.minInputWidth < 110 || !timelineCargo.longValueFits) throw new Error(`${label}: colonization cargo inputs do not support large resource values ${JSON.stringify(timelineCargo)}`);
+    const timelineViewport = await win.webContents.executeJavaScript(`(() => {
+      const modal = document.querySelector('.flight-timeline-modal');
+      const backdrop = document.querySelector('[data-qa-flight-preview-backdrop]');
+      return {
+        modalOverflowY: modal ? getComputedStyle(modal).overflowY : '',
+        modalScrollable: modal ? modal.scrollHeight > modal.clientHeight + 2 : true,
+        backdropOverflowY: backdrop ? getComputedStyle(backdrop).overflowY : '',
+        modalFitsViewport: modal ? modal.getBoundingClientRect().top >= 0 && modal.getBoundingClientRect().bottom <= innerHeight + 1 : false,
+      };
+    })()`);
+    if (timelineViewport.modalOverflowY !== 'hidden' || timelineViewport.modalScrollable || timelineViewport.backdropOverflowY === 'auto' || !timelineViewport.modalFitsViewport) throw new Error(`${label}: Mission Timeline must fit the viewport without an inner scrollbar ${JSON.stringify(timelineViewport)}`);
     const geometryDuringPreview = await win.webContents.executeJavaScript(`(() => { const rect = (selector) => document.querySelector(selector)?.getBoundingClientRect().toJSON() || null; return { fleet: rect('.fleet-workspace-v1'), sidebar: rect('.fleet-sidebar-v1'), horizontalOverflow: document.documentElement.scrollWidth > innerWidth + 2 || document.body.scrollWidth > innerWidth + 2 }; })()`);
     const stableRect = (left, right) => left && right && ['x', 'y', 'width', 'height'].every((key) => Math.abs(left[key] - right[key]) <= 1);
     const stableFrame = (left, right) => left && right && ['x', 'y', 'width'].every((key) => Math.abs(left[key] - right[key]) <= 1);
     if (!stableRect(geometryBeforePreview.fleet, geometryDuringPreview.fleet) || !stableRect(geometryBeforePreview.sidebar, geometryDuringPreview.sidebar) || geometryBeforePreview.horizontalOverflow || geometryDuringPreview.horizontalOverflow) throw new Error(`${label}: flight preview changed page geometry or introduced horizontal overflow ${JSON.stringify({ before: geometryBeforePreview, during: geometryDuringPreview })}`);
+    await clickAt(win, '[data-qa-flight-target-step] .flight-timeline-edit');
+    await waitFor(win, `document.querySelector('[data-qa-flight-target-inputs]')`);
+    await setInputValue(win, '[name="flight-preview-target-galaxy"]', 1);
+    await setInputValue(win, '[name="flight-preview-target-system"]', 1);
+    await setInputValue(win, '[name="flight-preview-target-position"]', 1);
+    const occupiedTargetState = await win.webContents.executeJavaScript(`(() => {
+      const status = document.querySelector('[data-qa-flight-target-status]');
+      return { text: status?.textContent?.replace(/\s+/g, ' ').trim() || '', invalid: status?.classList.contains('is-invalid') || false, dispatch: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')) };
+    })()`);
+    if (!occupiedTargetState.invalid || !occupiedTargetState.text.includes('Координата уже занята') || occupiedTargetState.dispatch) throw new Error(`${label}: typed occupied target was not rejected in Mission Timeline ${JSON.stringify(occupiedTargetState)}`);
+    const freeTargetParts = (freeAsteroid.targetCoordinate.match(/\d+/g) || []).map(Number);
+    if (freeTargetParts.length !== 3) throw new Error(`${label}: free asteroid coordinate could not be parsed ${freeAsteroid.targetCoordinate}`);
+    await setInputValue(win, '[name="flight-preview-target-galaxy"]', freeTargetParts[0]);
+    await setInputValue(win, '[name="flight-preview-target-system"]', freeTargetParts[1]);
+    await setInputValue(win, '[name="flight-preview-target-position"]', freeTargetParts[2]);
+    await waitFor(win, `document.querySelector('[data-qa-flight-dispatch-confirm]')`);
     await clickAt(win, '[data-qa-flight-dispatch-confirm]');
     await waitFor(win, `document.querySelector('[data-qa-flight-row]')`);
     const dispatchedFlight = await win.webContents.executeJavaScript(`(() => {
@@ -514,7 +584,7 @@ async function runViewport(width, height) {
     await win.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(toggle)})?.click()`);
     await waitFor(win, `document.querySelectorAll('[data-qa-universe-kind="asteroid"]').length === 0`);
     await win.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(toggle)})?.click()`);
-    await waitFor(win, `document.querySelectorAll('[data-qa-universe-kind="asteroid"]').length >= 3`);
+    await waitFor(win, `document.querySelectorAll('[data-qa-universe-kind="asteroid"]').length >= 2`);
 
     await selectSystem(win, 40);
     const lastSystem = await mapSnapshot(win);

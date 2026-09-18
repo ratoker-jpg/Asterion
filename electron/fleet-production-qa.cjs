@@ -100,6 +100,10 @@ async function chooseFreeColonizationTarget(win) {
 async function runFlightRuntimeCycle(win, label) {
   await seedProductionSave(win, (save, planetState) => {
     planetState.fleet.ships.colonizer = 1;
+    // Keep the recall assertion deterministic. Resource production is tested
+    // separately; passive gas income must not race the no-refund check.
+    planetState.buildings = { ...planetState.buildings, 'gas-production-1': 0, 'gas-production-2': 0 };
+    planetState.productionBots = { ...planetState.productionBots, gas: 0 };
     planetState.resources = { ...planetState.resources, gas: 189_000_000 };
     save.gas = 189_000_000;
     save.currentPlanetId = 'helion-01';

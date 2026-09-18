@@ -54,7 +54,7 @@ import {
   type StorageLike,
 } from './persistence.ts';
 import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
-import type { SaveState } from './contracts.ts';
+import { getPlanetResources, type SaveState } from './contracts.ts';
 
 class MemoryStorage implements StorageLike {
   readonly values = new Map<string, string>();
@@ -170,6 +170,67 @@ test('persistence facade keeps the existing save key, envelope migration, and on
   const production = createPersistenceFacade({ mode: 'production', storage: new MemoryStorage(), now: () => 1_000 }).read();
   assert.deepEqual(new Set(Object.values(production.planets['helion-01'].repair.ships)), new Set([0]));
   assert.deepEqual(new Set(Object.values(production.planets['helion-01'].repair.defenses)), new Set([0]));
+});
+
+test('persistence drops incomplete flight records and rebuilds only a validated request index', () => {
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => 1_000 });
+  const sent = dispatchFlight(createInitialSaveState('production', 1_000), {
+    requestId: 'persisted-valid-flight',
+    missionId: 'colonize',
+    originPlanetId: 'helion-01',
+    destination: { kind: 'coordinate', coordinate: { galaxy: 1, system: 2, position: 1 } },
+    targetKind: 'empty',
+    selectedShips: { colonizer: 1 },
+    departedAt: 1_000,
+  }, 1_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+
+  const missingArrival = { ...sent.flight, id: 'flight-corrupt-arrival', requestId: 'corrupt-arrival' } as Record<string, unknown>;
+  delete missingArrival.arrivalAt;
+  const missingCoordinates = { ...sent.flight, id: 'flight-corrupt-coordinate', requestId: 'corrupt-coordinate' } as Record<string, unknown>;
+  delete missingCoordinates.destinationCoordinate;
+  const missingShips = { ...sent.flight, id: 'flight-corrupt-ships', requestId: 'corrupt-ships' } as Record<string, unknown>;
+  delete missingShips.selectedShips;
+
+  storage.values.set(persistence.saveKey, JSON.stringify({
+    ...sent.state,
+    flights: {
+      records: [sent.flight, missingArrival, missingCoordinates, missingShips],
+      requestIndex: {
+        [sent.flight.requestId]: sent.flight.id,
+        'corrupt-arrival': 'flight-corrupt-arrival',
+        'corrupt-coordinate': 'flight-corrupt-coordinate',
+        'corrupt-ships': 'flight-corrupt-ships',
+        forged: 'flight-corrupt-arrival',
+      },
+    },
+  }));
+
+  const reloaded = persistence.read();
+  assert.deepEqual(reloaded.flights.records.map((flight) => flight.requestId), ['persisted-valid-flight']);
+  assert.equal(reloaded.flights.requestIndex['persisted-valid-flight'], sent.flight.id);
+  assert.equal(reloaded.flights.requestIndex['corrupt-arrival'], undefined);
+  assert.equal(reloaded.flights.requestIndex['corrupt-coordinate'], undefined);
+  assert.equal(reloaded.flights.requestIndex['corrupt-ships'], undefined);
+  assert.equal(reloaded.flights.requestIndex.forged, undefined);
+
+  const gasAfterReload = getPlanetResources(reloaded, 'helion-01').gas;
+  const retried = dispatchFlight(reloaded, {
+    requestId: 'persisted-valid-flight',
+    missionId: 'colonize',
+    originPlanetId: 'helion-01',
+    destination: { kind: 'coordinate', coordinate: { galaxy: 1, system: 9, position: 9 } },
+    targetKind: 'empty',
+    selectedShips: { scout: 99 },
+    departedAt: 50_000,
+  }, 50_000);
+  assert.equal(retried.ok, true);
+  if (!retried.ok) return;
+  assert.equal(retried.created, false);
+  assert.equal(retried.flight.id, sent.flight.id);
+  assert.equal(getPlanetResources(retried.state, 'helion-01').gas, gasAfterReload);
 });
 
 test('legacy resource clock migrates to every saved planet without sharing a mutable clock', () => {
