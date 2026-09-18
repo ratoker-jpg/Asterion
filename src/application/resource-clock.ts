@@ -1,8 +1,8 @@
 import {
   getBuildingResourceIncomePerHour,
   getStorageCapacities,
-  type ResourceKey,
 } from '../domain/buildings/resource-zone.ts';
+import type { ProductionResource } from '../domain/buildings/balance-v1.ts';
 import {
   getProductionBotIncomePerHour,
   type ProductionResourceIncome,
@@ -11,7 +11,7 @@ import { creditResources, type ResourceCreditResult } from '../domain/resources/
 import { normalizeTestTimeScale, type RuntimeMode, type TestTimeScale } from '../domain/runtime/mode.ts';
 import type { ResourceClock, SaveState } from './contracts.ts';
 
-const RESOURCE_KEYS = ['metal', 'minerals', 'gas', 'energy'] as const satisfies readonly ResourceKey[];
+const RESOURCE_KEYS = ['metal', 'minerals', 'gas'] as const satisfies readonly ProductionResource[];
 const CAPPED_RESOURCE_KEYS = ['metal', 'minerals', 'gas'] as const;
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -64,8 +64,8 @@ function normalizeClock(clock: ResourceClock | undefined, now: number): Resource
       metal: remainder('metal'),
       minerals: remainder('minerals'),
       gas: remainder('gas'),
-      // Kept in the persisted shape for backwards compatibility, but energy
-      // is static until a dedicated energy-income mechanic is introduced.
+      // Kept in the persisted shape for backwards compatibility. Energy is
+      // settled by the one-time ledger, never by this hourly clock.
       energy: 0,
     },
   };
@@ -79,21 +79,18 @@ function clocksEqual(left: ResourceClock, right: ResourceClock): boolean {
 function resourcesEqual(left: SaveState, right: SaveState): boolean {
   return left.metal === right.metal
     && left.minerals === right.minerals
-    && left.gas === right.gas
-    && left.planets[left.currentPlanetId]?.energy === right.planets[right.currentPlanetId]?.energy;
+    && left.gas === right.gas;
 }
 
-function withResourceValues(state: SaveState, planetId: SaveState['currentPlanetId'], wallet: Record<ResourceKey, number>): SaveState {
-  const planet = state.planets[planetId];
+function withResourceValues(
+  state: SaveState,
+  wallet: Pick<Record<ProductionResource, number>, ProductionResource>,
+): SaveState {
   return {
     ...state,
     metal: wallet.metal,
     minerals: wallet.minerals,
     gas: wallet.gas,
-    planets: {
-      ...state.planets,
-      [planetId]: { ...planet, energy: wallet.energy },
-    },
   };
 }
 
@@ -129,12 +126,10 @@ export function reconcileResourceIncome(
     metal: hourly.metal * elapsedHours + clock.remainder.metal,
     minerals: hourly.minerals * elapsedHours + clock.remainder.minerals,
     gas: hourly.gas * elapsedHours + clock.remainder.gas,
-    // Energy remains spendable, but is not passively accrued by the runtime.
-    energy: 0,
   };
   const wholeCredits = Object.fromEntries(
     RESOURCE_KEYS.map((key) => [key, Number.isFinite(rawCredits[key]) ? Math.floor(Math.max(0, rawCredits[key])) : 0]),
-  ) as Record<ResourceKey, number>;
+  ) as Record<ProductionResource, number>;
   const wallet = { metal: state.metal, minerals: state.minerals, gas: state.gas, energy: planet.energy };
   const credit = creditResources(wallet, capacities, wholeCredits);
   const remainder = { ...clock.remainder };
@@ -157,7 +152,7 @@ export function reconcileResourceIncome(
   }
 
   const nextClock: ResourceClock = { lastReconciledAt: now, remainder };
-  const next = withResourceValues({ ...state, resourceClock: nextClock }, context.planetId, credit.wallet);
+  const next = withResourceValues({ ...state, resourceClock: nextClock }, credit.wallet);
   const changed = !resourcesEqual(state, next) || !clocksEqual(clock, nextClock);
   return { changed, state: changed ? next : state, credit };
 }

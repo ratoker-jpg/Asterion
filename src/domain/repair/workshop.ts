@@ -4,7 +4,7 @@ import {
 } from '../combat/faction-catalog.ts';
 import { COMBAT_ENTITY_BY_ID } from '../combat/catalog.ts';
 import {
-  ASTERION_LOCAL_PLAYER_ID,
+  isAsterionLocalPlayerId,
   type BattleReport,
 } from '../combat/report.ts';
 import {
@@ -122,6 +122,7 @@ export type RepairTransitionContext = {
   wallet: RepairWallet;
   factionId: CombatFactionId;
   hangarLevel: number;
+  solarSatellites: number;
 };
 
 function emptyRecord<T extends string>(ids: readonly T[]): Record<T, number> {
@@ -237,6 +238,7 @@ function populationSummary(
       context.fleetProduction,
       context.hangarLevel,
       context.factionId,
+      context.solarSatellites,
     )
     : getDefensePopulationSummary(
       context.defense,
@@ -550,7 +552,7 @@ function addLoss(
 
 export function calculateRepairLosses(report: BattleReport): RepairBattleLosses {
   const eligible = report.missionType === 'defense'
-    && report.defender.playerId === ASTERION_LOCAL_PLAYER_ID
+    && isAsterionLocalPlayerId(report.defender.playerId)
     && report.defender.side === 'defender';
   if (!eligible) {
     return {

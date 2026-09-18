@@ -472,8 +472,20 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
 
         {[0, 1, 2, 3].map((ring) => <div key={ring} className={`system-orbit ring-${ring + 1}`} />)}
 
-        <div className="system-star-wrap" aria-label={`Звезда солнечной системы ${system}`}>
-          <img className="system-star" src={systemData.starArt} alt={`Звезда системы ${system}`} draggable={false} />
+        <div className="system-star-wrap">
+          <button
+            type="button"
+            className="system-star-button"
+            aria-label={`Система ${system}. Эффективность солнца: ${systemData.sunEfficiencyPercent}%`}
+            aria-describedby="universe-star-efficiency"
+            data-qa-universe-sun-efficiency={systemData.sunEfficiencyPercent}
+          >
+            <img className="system-star" src={systemData.starArt} alt="" draggable={false} />
+            <span className="system-star-tooltip" id="universe-star-efficiency" role="tooltip">
+              <strong>СИСТЕМА {String(system).padStart(2, '0')}</strong>
+              <small>Эффективность солнца: {systemData.sunEfficiencyPercent}%</small>
+            </span>
+          </button>
         </div>
 
         {systemData.positions.map((node) => {

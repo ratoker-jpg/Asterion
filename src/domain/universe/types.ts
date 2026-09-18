@@ -58,12 +58,16 @@ export type UniversePlanetNode = {
   asteroid?: UniverseAsteroidState;
   pirate?: UniversePirateState;
   special?: UniverseTimedObjectState;
+  /** Position coefficient used by one-time solar energy sources. */
+  positionCoefficientPercent?: number;
 };
 
 export type UniverseSystem = {
   galaxy: number;
   system: number;
   starArt: string;
+  /** Stable solar efficiency for this numbered system. */
+  sunEfficiencyPercent: number;
   positions: UniversePlanetNode[];
   asteroids: UniversePlanetNode[];
 };

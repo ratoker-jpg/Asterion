@@ -248,7 +248,7 @@ test('migration preserves a saved task cost for refunds instead of recalculating
   assert.deepEqual(migrated.queue[0]?.cost, { metal: 777, minerals: 333, gas: 222, energy: 111 });
   const canceled = cancelScienceResearch({ ...context(migrated, 1, 150), rng: () => 0 }, 'saved-cost');
   assert.equal(canceled.ok, true);
-  assert.deepEqual(canceled.refund, { metal: 466, minerals: 199, gas: 133, energy: 66 });
+  assert.deepEqual(canceled.refund, { metal: 466, minerals: 199, gas: 133, energy: 0 });
 });
 
 test('science cancellation cascades dependent successors and refunds each saved cost with its own 60–80% roll', () => {
@@ -269,7 +269,7 @@ test('science cancellation cascades dependent successors and refunds each saved 
     metal: Math.floor(canceledTask.cost.metal * 0.6) + Math.floor(current.state.queue[2].cost.metal * 0.8),
     minerals: Math.floor(canceledTask.cost.minerals * 0.6) + Math.floor(current.state.queue[2].cost.minerals * 0.8),
     gas: Math.floor(canceledTask.cost.gas * 0.6) + Math.floor(current.state.queue[2].cost.gas * 0.8),
-    energy: Math.floor(canceledTask.cost.energy * 0.6) + Math.floor(current.state.queue[2].cost.energy * 0.8),
+    energy: 0,
   });
   assert.deepEqual(canceled.state.queue.map((task) => task.id), ['cancel-1']);
   const repeated = cancelScienceResearch({ ...current, state: canceled.state, wallet: canceled.wallet, rng: () => 0 }, canceledTask.id);
@@ -336,7 +336,7 @@ test('mixed cascade keeps independent work and does not claim a refund for damag
     metal: Math.floor(damagedQueue[1].cost.metal * 0.6),
     minerals: Math.floor(damagedQueue[1].cost.minerals * 0.6),
     gas: Math.floor(damagedQueue[1].cost.gas * 0.6),
-    energy: Math.floor(damagedQueue[1].cost.energy * 0.6),
+    energy: 0,
   });
 });
 

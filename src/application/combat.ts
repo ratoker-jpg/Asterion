@@ -2,8 +2,10 @@ import {
   resolveCombat,
   type CombatResolverContext,
 } from '../domain/combat/resolver.ts';
-import type { BattleMissionType } from '../domain/combat/report.ts';
+import { isAsterionLocalPlayerId, type BattleMissionType } from '../domain/combat/report.ts';
 import type { CombatInput } from '../domain/combat/simulator.ts';
+import { SOLAR_SATELLITE_ID } from '../domain/combat/ids.ts';
+import { removeSolarSatellitesFromFleet } from '../domain/fleet/runtime.ts';
 import type { PlanetId, SaveState } from './contracts.ts';
 import {
   applyBattleResult,
@@ -23,6 +25,38 @@ export type CombatResolutionRequest = {
   context?: ProductionCombatResolutionContext;
 };
 
+function withOwnedSolarSatellites(
+  state: SaveState,
+  planetId: PlanetId,
+  input: CombatInput,
+  missionType: ProductionCombatResolutionContext['missionType'],
+): CombatInput {
+  if (
+    missionType !== 'defense'
+    || (input.defender.participant.playerId !== state.profile.playerId && !isAsterionLocalPlayerId(input.defender.participant.playerId))
+  ) return input;
+  const planet = state.planets[planetId];
+  if (!planet) return input;
+  const migratedFleet = removeSolarSatellitesFromFleet(planet.fleet);
+  const satelliteCount = Math.max(
+    0,
+    Math.floor(planet.solarSatellites ?? migratedFleet.count),
+  );
+  if (satelliteCount <= 0) return input;
+  const hasSatellite = input.defender.ships.some((stack) => stack.entityId === SOLAR_SATELLITE_ID);
+  return {
+    ...input,
+    defender: {
+      ...input.defender,
+      ships: hasSatellite
+        ? input.defender.ships.map((stack) => stack.entityId === SOLAR_SATELLITE_ID
+          ? { ...stack, count: satelliteCount }
+          : stack)
+        : [...input.defender.ships, { entityId: SOLAR_SATELLITE_ID, count: satelliteCount }],
+    },
+  };
+}
+
 /**
  * Production combat boundary. SimulatorView resolves temporary simulations
  * and persists only its editable scenarios; only a real combat caller should
@@ -35,7 +69,10 @@ export function resolveAndApplyCombat(
   input: CombatInput,
   context: ProductionCombatResolutionContext,
 ): CombatResultApplication {
-  const report = resolveCombat(input, context);
+  const report = resolveCombat(
+    withOwnedSolarSatellites(state, planetId, input, context.missionType),
+    context,
+  );
   return applyBattleResult(state, planetId, report);
 }
 

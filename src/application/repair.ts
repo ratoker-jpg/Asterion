@@ -10,9 +10,16 @@ import {
   type RepairTransition,
   type RepairTransitionContext,
 } from '../domain/repair/workshop.ts';
-import type { BattleReport } from '../domain/combat/report.ts';
+import { COMBAT_ENTITY_BY_ID } from '../domain/combat/catalog.ts';
+import { isAsterionLocalPlayerId, type BattleReport } from '../domain/combat/report.ts';
+import { SOLAR_SATELLITE_ID, type CombatEntityId } from '../domain/combat/ids.ts';
+import {
+  removeSolarSatellitesFromFleet,
+  type OwnedFleetState,
+} from '../domain/fleet/runtime.ts';
 import type { PlanetId, SaveState } from './contracts.ts';
 import { getPlanetState, replacePlanetState } from './contracts.ts';
+import { transitionPlanetEnergySources } from './energy.ts';
 import { SAVE_SCHEMA_VERSION } from './persistence.ts';
 
 export const REPAIR_REQUEST_EVENT = 'asterion:repair-request';
@@ -39,15 +46,21 @@ export function getRepairWorkshopSnapshot(
   planetId: PlanetId = state.currentPlanetId,
 ): RepairWorkshopSnapshot {
   const planet = getPlanetState(state, planetId);
+  const migratedFleet = removeSolarSatellitesFromFleet(planet.fleet);
+  const solarSatellites = Math.max(
+    0,
+    Math.floor(planet.solarSatellites ?? migratedFleet.count),
+  );
   return {
     planetId,
     repair: planet.repair,
-    fleet: planet.fleet,
+    fleet: migratedFleet.fleet,
     defense: planet.defense,
     fleetProduction: planet.fleetProduction,
     wallet: { metal: state.metal, minerals: state.minerals, gas: state.gas },
     factionId: state.profile.factionId,
     hangarLevel: planet.buildings.hangar,
+    solarSatellites,
   };
 }
 
@@ -60,9 +73,35 @@ function stateFromRepairTransition(
   state: SaveState,
   planetId: PlanetId,
   transition: RepairTransition,
+  restoreUnit: boolean,
 ): SaveState {
   if (!transition.ok) return state;
   const planet = getPlanetState(state, planetId);
+  const migratedFleet = removeSolarSatellitesFromFleet(transition.fleet);
+  const currentSatelliteCount = Math.max(
+    0,
+    Math.floor(planet.solarSatellites ?? removeSolarSatellitesFromFleet(planet.fleet).count),
+  );
+  const restoresSatellite = restoreUnit
+    && transition.category === 'ship'
+    && transition.entityId === SOLAR_SATELLITE_ID;
+  const previousPlanet = {
+    ...planet,
+    fleet: removeSolarSatellitesFromFleet(planet.fleet).fleet,
+    solarSatellites: currentSatelliteCount,
+  };
+  const nextBasePlanet = {
+    ...planet,
+    fleet: migratedFleet.fleet,
+    defense: transition.defense,
+    solarSatellites: currentSatelliteCount + (restoresSatellite ? transition.quantity : 0),
+  };
+  const nextPlanet = transitionPlanetEnergySources(
+    previousPlanet,
+    nextBasePlanet,
+    state.science.levels,
+    state.science.levels,
+  );
   return replacePlanetState({
     ...state,
     schemaVersion: SAVE_SCHEMA_VERSION,
@@ -70,10 +109,8 @@ function stateFromRepairTransition(
     minerals: transition.wallet.minerals,
     gas: transition.wallet.gas,
   }, planetId, {
-    ...planet,
+    ...nextPlanet,
     repair: transition.repair,
-    fleet: transition.fleet,
-    defense: transition.defense,
   });
 }
 
@@ -90,7 +127,7 @@ export function repairUnits(
     ? repairForResources(context, category, entityId, quantity)
     : repairForTokens(context, category, entityId, quantity);
   return {
-    state: stateFromRepairTransition(state, planetId, transition),
+    state: stateFromRepairTransition(state, planetId, transition, true),
     transition,
   };
 }
@@ -105,7 +142,7 @@ export function removeRepairUnits(
   const context = getRepairWorkshopSnapshot(state, planetId);
   const transition = removeFromRepairPool(context, category, entityId, quantity);
   return {
-    state: stateFromRepairTransition(state, planetId, transition),
+    state: stateFromRepairTransition(state, planetId, transition, false),
     transition,
   };
 }
@@ -160,7 +197,7 @@ export function bindRepairEventBridge(options: RepairEventBridgeOptions): () => 
     const notice = result.transition.ok
       ? operation === 'remove'
         ? `${result.transition.quantity} × ${entity?.name ?? request.entityId} удалено из ремонтной мастерской без возврата ресурсов.`
-        : `${result.transition.quantity} × ${entity?.name ?? request.entityId} восстановлено ${request.method === 'tokens' ? 'за жетоны' : 'за ресурсы'} и возвращено ${request.category === 'ship' ? 'в флот' : 'в оборону планеты'}.`
+        : `${result.transition.quantity} × ${entity?.name ?? request.entityId} восстановлено ${request.method === 'tokens' ? 'за жетоны' : 'за ресурсы'} и возвращено ${request.entityId === SOLAR_SATELLITE_ID ? 'на орбиту' : request.category === 'ship' ? 'в флот' : 'в оборону планеты'}.`
       : result.transition.reason ?? 'Восстановление сейчас недоступно.';
     if (result.transition.ok) options.commit(result.state);
     options.onNotice(notice);
@@ -182,10 +219,109 @@ export type CombatResultApplication = {
   changed: boolean;
 };
 
+function safeDestroyed(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.floor(value))
+    : 0;
+}
+
+function applyOwnedDefenderLosses(
+  state: SaveState,
+  planetId: PlanetId,
+  report: BattleReport,
+): { planet: SaveState['planets'][PlanetId]; changed: boolean } {
+  const planet = getPlanetState(state, planetId);
+  if (
+    report.defender.side !== 'defender'
+    || (report.defender.playerId !== state.profile.playerId && !isAsterionLocalPlayerId(report.defender.playerId))
+  ) {
+    return { planet, changed: false };
+  }
+
+  const migratedFleet = removeSolarSatellitesFromFleet(planet.fleet);
+  const satelliteCount = Math.max(
+    0,
+    Math.floor(planet.solarSatellites ?? migratedFleet.count),
+  );
+  const nextFleet: OwnedFleetState = {
+    ...migratedFleet.fleet,
+    ships: { ...migratedFleet.fleet.ships },
+    commanders: { ...migratedFleet.fleet.commanders },
+  };
+  const nextDefense = {
+    ...planet.defense,
+    defenses: { ...planet.defense.defenses },
+  };
+  let nextSatelliteCount = satelliteCount;
+  let changed = migratedFleet.count > 0;
+
+  const applyDestroyed = (entityId: string, destroyed: unknown) => {
+    const quantity = safeDestroyed(destroyed);
+    if (quantity <= 0) return;
+    const entity = COMBAT_ENTITY_BY_ID.get(entityId as CombatEntityId);
+    if (!entity) return;
+    if (entity.kind === 'ship') {
+      if (entity.id === SOLAR_SATELLITE_ID) {
+        const removed = Math.min(nextSatelliteCount, quantity);
+        if (removed > 0) {
+          nextSatelliteCount -= removed;
+          changed = true;
+        }
+        return;
+      }
+      const shipId = entity.id as keyof typeof nextFleet.ships;
+      const current = Math.max(0, Math.floor(nextFleet.ships[shipId] ?? 0));
+      const removed = Math.min(current, quantity);
+      if (removed > 0) {
+        nextFleet.ships[shipId] = current - removed;
+        changed = true;
+      }
+      return;
+    }
+    if (entity.kind === 'defense') {
+      const defenseId = entity.id as keyof typeof nextDefense.defenses;
+      const current = Math.max(0, Math.floor(nextDefense.defenses[defenseId] ?? 0));
+      const removed = Math.min(current, quantity);
+      if (removed > 0) {
+        nextDefense.defenses[defenseId] = current - removed;
+        changed = true;
+      }
+    }
+  };
+
+  (report.defenderForce?.stacks ?? []).forEach((stack) => applyDestroyed(stack.entityId, stack.destroyed));
+  (report.defenderForce?.defenses ?? []).forEach((stack) => applyDestroyed(stack.entityId, stack.destroyed));
+  if (!changed) return { planet, changed: false };
+
+  const previousPlanet = {
+    ...planet,
+    fleet: migratedFleet.fleet,
+    solarSatellites: satelliteCount,
+  };
+  const nextBasePlanet = {
+    ...planet,
+    fleet: nextFleet,
+    defense: nextDefense,
+    solarSatellites: nextSatelliteCount,
+  };
+  const sourceChanges = nextSatelliteCount < satelliteCount
+    ? { 'solar-satellite': 'satellite' as const }
+    : undefined;
+  return {
+    planet: transitionPlanetEnergySources(
+      previousPlanet,
+      nextBasePlanet,
+      state.science.levels,
+      state.science.levels,
+      sourceChanges ? { sourceChanges } : {},
+    ),
+    changed: true,
+  };
+}
+
 /**
- * Application boundary for a real combat result. The combat caller is
- * responsible for applying the battle's losses to the owned rosters; this
- * transition records the report and awards defensive repair exactly once.
+ * Application boundary for a real combat result. It applies owned defender
+ * losses, records the report, and awards defensive repair exactly once.
  * Simulator and report UI code intentionally do not call this function.
  */
 export function applyBattleResult(
@@ -194,8 +330,11 @@ export function applyBattleResult(
   report: BattleReport,
 ): CombatResultApplication {
   const planet = getPlanetState(state, planetId);
-  const claim = claimDefensiveBattleRepair(planet.repair, report);
   const reportIndex = state.combat.reports.findIndex((candidate) => candidate.id === report.id);
+  const defenderLosses = reportIndex < 0
+    ? applyOwnedDefenderLosses(state, planetId, report)
+    : { planet, changed: false };
+  const claim = claimDefensiveBattleRepair(planet.repair, report);
   const storedReport = reportIndex >= 0 ? state.combat.reports[reportIndex] : report;
   const nextReport = annotateBattleReportRepair(storedReport, claim);
   const nextReports = reportIndex < 0
@@ -204,14 +343,14 @@ export function applyBattleResult(
       ? state.combat.reports
       : state.combat.reports.map((candidate, index) => index === reportIndex ? nextReport : candidate);
   const reportsChanged = nextReports !== state.combat.reports;
-  if (!claim.changed && !reportsChanged) return { state, report: nextReport, changed: false };
+  if (!claim.changed && !reportsChanged && !defenderLosses.changed) return { state, report: nextReport, changed: false };
 
   const nextState = replacePlanetState({
     ...state,
     schemaVersion: SAVE_SCHEMA_VERSION,
     combat: reportsChanged ? { ...state.combat, reports: nextReports } : state.combat,
   }, planetId, {
-    ...planet,
+    ...defenderLosses.planet,
     repair: claim.state,
   });
   return { state: nextState, report: nextReport, changed: true };

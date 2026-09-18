@@ -1,6 +1,7 @@
 import {
   createCanonicalStartingFleet,
   normalizeFleetStateForCapacity,
+  removeSolarSatellitesFromFleet,
   resolveSavedFleetState,
   type OwnedFleetState,
 } from '../domain/fleet/runtime.ts';
@@ -26,6 +27,7 @@ export type FleetSnapshot = {
   hangarLevel: number;
   shipyardLevel: number;
   advancedFactoryLevel: number;
+  solarSatellites: number;
 };
 
 export type FleetSummary = ReturnType<typeof getFleetProductionPopulationSummary>;
@@ -46,6 +48,7 @@ export type FleetBuildBudget = {
   spaceportUpgrades: SpaceportUpgradeState;
   summary: FleetSummary;
   defenseSummary: ReturnType<typeof getDefensePopulationSummary>;
+  solarSatellites: number;
 };
 
 function safeLevel(value: unknown, fallback: number): number {
@@ -55,8 +58,11 @@ function safeLevel(value: unknown, fallback: number): number {
 export function getFleetSnapshot(state: SaveState, planetId: PlanetId = state.currentPlanetId): FleetSnapshot {
   const planet = state.planets[planetId];
   const hangarLevel = safeLevel(planet?.buildings.hangar, 1);
-  const fleet = normalizeFleetStateForCapacity(
+  const migratedFleet = removeSolarSatellitesFromFleet(
     resolveSavedFleetState(planet?.fleet, state.profile.factionId),
+  );
+  const fleet = normalizeFleetStateForCapacity(
+    migratedFleet.fleet,
     hangarLevel,
     state.profile.factionId,
   );
@@ -69,6 +75,7 @@ export function getFleetSnapshot(state: SaveState, planetId: PlanetId = state.cu
     hangarLevel,
     shipyardLevel: safeLevel(planet?.buildings.shipyard, 0),
     advancedFactoryLevel: safeLevel(planet?.buildings['advanced-factory'], 0),
+    solarSatellites: Math.max(0, Math.floor(planet?.solarSatellites ?? migratedFleet.count)),
   };
 }
 
@@ -79,6 +86,7 @@ export function getFleetSummaryForState(state: SaveState, planetId: PlanetId = s
     snapshot.fleetProduction,
     snapshot.hangarLevel,
     snapshot.factionId,
+    snapshot.solarSatellites,
   );
 }
 
@@ -88,7 +96,32 @@ export function getFleetSummaryForSnapshot(snapshot: FleetSnapshot): FleetSummar
     snapshot.fleetProduction,
     snapshot.hangarLevel,
     snapshot.factionId,
+    snapshot.solarSatellites,
   );
+}
+
+export function getOutgoingFleetSummaryForSnapshot(snapshot: FleetSnapshot): FleetSummary {
+  return getFleetProductionPopulationSummary(
+    snapshot.fleet,
+    snapshot.fleetProduction,
+    snapshot.hangarLevel,
+    snapshot.factionId,
+    0,
+    false,
+  );
+}
+
+/** Planet population includes orbital satellites, which occupy hangar capacity. */
+export function getPlanetPopulationForSnapshot(snapshot: FleetSnapshot): number {
+  return getFleetSummaryForSnapshot(snapshot).population;
+}
+
+export function getPlanetPopulationForState(state: SaveState, planetId: PlanetId = state.currentPlanetId): number {
+  return getPlanetPopulationForSnapshot(getFleetSnapshot(state, planetId));
+}
+
+export function getOutgoingFleetSummaryForState(state: SaveState, planetId: PlanetId = state.currentPlanetId): FleetSummary {
+  return getOutgoingFleetSummaryForSnapshot(getFleetSnapshot(state, planetId));
 }
 
 export function readFleetSnapshot(options: PersistenceOptions = {}): FleetSnapshot {
@@ -121,6 +154,7 @@ export function getFleetBuildBudget(state: SaveState, planetId: PlanetId = state
     spaceportUpgrades: snapshot.spaceportUpgrades,
     summary,
     defenseSummary,
+    solarSatellites: snapshot.solarSatellites,
   };
 }
 
@@ -139,5 +173,6 @@ export function createDefaultFleetSnapshot(): FleetSnapshot {
     hangarLevel: 1,
     shipyardLevel: 0,
     advancedFactoryLevel: 0,
+    solarSatellites: 0,
   };
 }

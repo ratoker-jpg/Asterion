@@ -128,6 +128,62 @@ test('batch completion is sequential and idempotent while total population stays
   assert.equal(finished.state.shipQueue.length, 0);
 });
 
+test('satellite batches emit one orbital completion per finished unit without entering fleet.ships', () => {
+  const started = enqueueFleetProduction(context(), 'ships', 'solar-satellite', 2, 'satellite-batch');
+  assert.equal(started.ok, true);
+  const task = started.order!;
+  const first = reconcileFleetProductionState(
+    started.state,
+    started.fleet,
+    started.defense,
+    'aegis',
+    task.startedAt + task.effectiveDurationMs + 1,
+  );
+  assert.equal(first.completed.length, 1);
+  assert.equal(first.completed[0]?.quantity, 1);
+  assert.equal(first.state.shipQueue[0]?.completedQuantity, 1);
+  assert.equal(first.fleet.ships['solar-satellite'], 0);
+  assert.equal(getFleetProductionPopulationSummary(first.fleet, first.state, 1, 'aegis').population, 1);
+
+  const repeated = reconcileFleetProductionState(first.state, first.fleet, first.defense, 'aegis', task.startedAt + task.effectiveDurationMs + 1);
+  assert.equal(repeated.changed, false);
+  assert.equal(repeated.completed.length, 0);
+
+  const finished = reconcileFleetProductionState(first.state, first.fleet, first.defense, 'aegis', task.finishAt);
+  assert.equal(finished.completed.length, 1);
+  assert.equal(finished.completed[0]?.quantity, 1);
+  assert.equal(finished.state.shipQueue.length, 0);
+  assert.equal(finished.fleet.ships['solar-satellite'], 0);
+});
+
+test('satellite cancellation refunds only the unfinished unit after partial completion', () => {
+  const started = enqueueFleetProduction(context(), 'ships', 'solar-satellite', 2, 'satellite-cancel');
+  assert.equal(started.ok, true);
+  const task = started.order!;
+  const first = reconcileFleetProductionState(
+    started.state,
+    started.fleet,
+    started.defense,
+    'aegis',
+    task.startedAt + task.effectiveDurationMs + 1,
+  );
+  const canceled = cancelFleetProduction({
+    ...context({
+      state: first.state,
+      fleet: first.fleet,
+      defense: first.defense,
+      wallet: started.wallet,
+      solarSatellites: 1,
+      now: task.startedAt + task.effectiveDurationMs + 1,
+    }),
+  }, 'satellite-cancel', () => 0);
+  assert.equal(canceled.ok, true);
+  assert.equal(canceled.completed.length, 0);
+  assert.equal(canceled.state.shipQueue.length, 0);
+  assert.deepEqual(canceled.refund, { metal: Math.floor(task.cost.metal / 2 * 0.6), minerals: Math.floor(task.cost.minerals / 2 * 0.6), gas: Math.floor(task.cost.gas / 2 * 0.6) });
+  assert.equal(canceled.fleet.ships['solar-satellite'], 0);
+});
+
 test('cancel removes only the selected batch, releases pending population, and applies 60 percent refund at rng zero', () => {
   let current = context();
   const first = enqueueFleetProduction(current, 'ships', 'scout', 2, 'cancel-first');

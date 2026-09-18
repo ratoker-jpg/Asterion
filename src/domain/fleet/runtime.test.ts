@@ -78,3 +78,18 @@ test('population guard rejects additions over hangar capacity and damaged roster
   assert.equal(calculateFleetPopulation(normalized), 25_110);
   assert.equal(getFleetSummary(damaged, 20).population, 25_110);
 });
+
+test('solar satellites stay outside the ordinary fleet roster and cannot be added as fleet units', () => {
+  const fleet = createCanonicalStartingFleet();
+  fleet.ships['solar-satellite'] = 10;
+  assert.equal(calculateFleetPopulation(fleet), 58);
+  assert.deepEqual(getFleetSummary(fleet, 1), { population: 58, capacity: 120, available: 62 });
+
+  const rejected = addFleetUnits(fleet, 'ship', 'solar-satellite', 1, 1);
+  assert.equal(rejected.ok, false);
+  assert.match(rejected.reason ?? '', /орбитальным присутствием/);
+  assert.equal(rejected.fleet.ships['solar-satellite'], 10);
+
+  const normalized = normalizeFleetStateForCapacity(fleet, 0);
+  assert.equal(normalized.ships['solar-satellite'], 10);
+});

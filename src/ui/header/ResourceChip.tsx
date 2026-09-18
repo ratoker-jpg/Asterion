@@ -76,6 +76,7 @@ export function ResourceChip({ kind, label, value, capacity, showCapacity = fals
           <div className="asterion-header__resource-population-breakdown" data-qa-population-breakdown>
             <span data-qa-population-breakdown-item="fleet"><small>Корабли</small><b>{formatNumber(populationBreakdown.fleet.value)} / {formatNumber(populationBreakdown.fleet.capacity)}</b></span>
             <span data-qa-population-breakdown-item="defense"><small>Оборона</small><b>{formatNumber(populationBreakdown.defense.value)} / {formatNumber(populationBreakdown.defense.capacity)}</b></span>
+            {populationBreakdown.satellites != null ? <span data-qa-population-breakdown-item="satellites"><small>Спутники</small><b>{formatNumber(populationBreakdown.satellites)} · 1/ед.</b></span> : null}
           </div>
         ) : null}
         {description ? <span>{description}</span> : null}

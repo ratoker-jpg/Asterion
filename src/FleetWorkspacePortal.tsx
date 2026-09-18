@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
 import { getCombatFactionName } from './domain/combat/factions.ts';
 import type { ShipId } from './domain/combat/ids.ts';
+import { SOLAR_SATELLITE_ID } from './domain/combat/ids.ts';
 import { getBuildingPresentation } from './domain/buildings/balance-v1.ts';
 import { RUNTIME_STATE_CHANGED_EVENT } from './domain/runtime/mode.ts';
 import {
@@ -21,6 +22,7 @@ import { FLEET_CONSTRUCTION_REQUEST_EVENT } from './building-interior-navigation
 import { ShipyardView } from './ShipyardView';
 import { SimulatorView } from './SimulatorView';
 import type { FleetProductionQueueKind } from './domain/fleet/production.ts';
+import { FLEET_PRODUCTION_DISMANTLE_SATELLITES_REQUEST_EVENT } from './application/fleet-production.ts';
 import {
   FLEET_CONSTRUCTION_NAVIGATION,
   FLEET_MANAGEMENT_NAVIGATION,
@@ -106,9 +108,16 @@ function FleetWorkspace({
   const [status, setStatus] = useState(FLEET_ROOT_STATUS);
   const [fleetSnapshot, setFleetSnapshot] = useState<FleetSnapshot>(readApplicationFleetSnapshot);
   const [fleetBudget, setFleetBudget] = useState<FleetBuildBudget>(initialFleetBudget);
+  const [pendingSatelliteDismantle, setPendingSatelliteDismantle] = useState<number | null>(null);
+  const satelliteConfirmYesRef = useRef<HTMLButtonElement>(null);
+  const satelliteConfirmNoRef = useRef<HTMLButtonElement>(null);
   const factionId = fleetSnapshot.factionId;
   const factionName = getCombatFactionName(factionId);
   const shipDefinitions = useMemo(() => getFactionShipCatalog(factionId), [factionId]);
+  const satelliteDefinition = useMemo(
+    () => shipDefinitions.find((ship) => ship.id === SOLAR_SATELLITE_ID) ?? null,
+    [shipDefinitions],
+  );
   const shipyardPresentation = useMemo(
     () => getBuildingPresentation('shipyard', factionId),
     [factionId],
@@ -118,7 +127,7 @@ function FleetWorkspace({
     [fleetSnapshot.factionId, fleetSnapshot.fleet, fleetSnapshot.fleetProduction, fleetSnapshot.hangarLevel],
   );
   const ownedShipDefinitions = useMemo(
-    () => shipDefinitions.filter((ship) => (fleetSnapshot.fleet.ships[ship.id] ?? 0) > 0),
+    () => shipDefinitions.filter((ship) => ship.id !== SOLAR_SATELLITE_ID && (fleetSnapshot.fleet.ships[ship.id] ?? 0) > 0),
     [fleetSnapshot.fleet, shipDefinitions],
   );
   const availableShipCount = useMemo(
@@ -172,6 +181,47 @@ function FleetWorkspace({
     setConstructionView('ships');
     onConstructionOpened();
   }, [onConstructionOpened, openConstruction, setFleetSection]);
+
+  useEffect(() => {
+    if (pendingSatelliteDismantle == null) return;
+    const previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusFrame = window.requestAnimationFrame(() => satelliteConfirmYesRef.current?.focus());
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setPendingSatelliteDismantle(null);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const controls = [satelliteConfirmYesRef.current, satelliteConfirmNoRef.current]
+        .filter((control): control is HTMLButtonElement => Boolean(control));
+      if (controls.length === 0) return;
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener('keydown', onKeyDown);
+      if (previousActiveElement?.isConnected) previousActiveElement.focus();
+    };
+  }, [pendingSatelliteDismantle]);
+
+  const confirmSatelliteDismantle = () => {
+    if (pendingSatelliteDismantle == null) return;
+    const count = pendingSatelliteDismantle;
+    setPendingSatelliteDismantle(null);
+    window.dispatchEvent(new CustomEvent(FLEET_PRODUCTION_DISMANTLE_SATELLITES_REQUEST_EVENT, {
+      detail: { count },
+    }));
+  };
 
   const chooseSection = (section: FleetSectionId) => {
     setFleetSection(section);
@@ -288,8 +338,30 @@ function FleetWorkspace({
             <section className="fleet-panel-v1 fleet-compose-v1">
               <header className="fleet-panel-header-v1 compact">
                 <div><small>ФОРМИРОВАНИЕ</small><h2>ВЫБЕРИ КОРАБЛИ</h2></div>
-                <span data-qa-fleet-population>ФЛОТ: {fleetSummary.population} / {fleetSummary.capacity} · В НАЛИЧИИ {availableShipCount} КОРАБЛЯ</span>
+                <span data-qa-fleet-population>ФЛОТ: {fleetSummary.population} / {fleetSummary.capacity} · В НАЛИЧИИ {availableShipCount} КОРАБЛЯ · СПУТНИКИ {fleetSnapshot.solarSatellites}</span>
               </header>
+
+              <div className="fleet-satellite-presence-v1" data-qa-fleet-satellites>
+                <div className="fleet-satellite-art-v1">
+                  {satelliteDefinition ? <img src={satelliteDefinition.art} alt="" draggable={false} /> : null}
+                </div>
+                <div className="fleet-satellite-copy-v1">
+                  <small>ОРБИТАЛЬНОЕ ПРИСУТСТВИЕ</small>
+                  <strong>{satelliteDefinition?.name ?? 'Солнечные спутники'}</strong>
+                  <span>{fleetSnapshot.solarSatellites > 0 ? `На орбите: ${fleetSnapshot.solarSatellites}` : 'На орбите нет спутников'} · население/ед.: 1</span>
+                </div>
+                <button
+                  type="button"
+                  className="fleet-satellite-dismantle-v1"
+                  aria-label="Уничтожить солнечные спутники"
+                  title="Уничтожить солнечные спутники"
+                  disabled={fleetSnapshot.solarSatellites <= 0}
+                  onClick={() => {
+                    if (fleetSnapshot.solarSatellites <= 0) return;
+                    setPendingSatelliteDismantle(fleetSnapshot.solarSatellites);
+                  }}
+                >X</button>
+              </div>
 
               <div className="fleet-ship-roster-v1" data-qa-fleet-roster>
                 {ownedShipDefinitions.map((ship) => {
@@ -372,6 +444,35 @@ function FleetWorkspace({
           </>
         )}
       </main>
+
+      {pendingSatelliteDismantle != null ? createPortal(
+        <div
+          className="resource-building-action-confirm-backdrop"
+          data-qa-satellite-dismantle-backdrop
+          onMouseDown={() => setPendingSatelliteDismantle(null)}
+        >
+          <section
+            className="resource-building-action-confirm"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="satellite-dismantle-confirm-title"
+            aria-describedby="satellite-dismantle-confirm-description"
+            data-qa-satellite-dismantle-confirm
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <small>ПОДТВЕРЖДЕНИЕ ДЕЙСТВИЯ</small>
+            <h3 id="satellite-dismantle-confirm-title">Уничтожить спутники?</h3>
+            <p id="satellite-dismantle-confirm-description">
+              Вы уверены, что хотите уничтожить солнечные спутники ({pendingSatelliteDismantle} шт.)? Ресурсы за них не возвращаются.
+            </p>
+            <div className="resource-building-action-confirm-actions">
+              <button ref={satelliteConfirmYesRef} type="button" data-qa-satellite-dismantle-confirm-yes onClick={confirmSatelliteDismantle}>ДА</button>
+              <button ref={satelliteConfirmNoRef} type="button" data-qa-satellite-dismantle-confirm-no onClick={() => setPendingSatelliteDismantle(null)}>НЕТ</button>
+            </div>
+          </section>
+        </div>,
+        document.body,
+      ) : null}
     </div>
   );
 }

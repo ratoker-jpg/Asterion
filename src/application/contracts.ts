@@ -21,6 +21,7 @@ import type { RecyclingState } from '../domain/buildings/recycling.ts';
 import type { SpaceportUpgradeState } from '../domain/buildings/spaceport-upgrades.ts';
 import type { TradeState } from '../domain/buildings/trade.ts';
 import type { RepairWorkshopState } from '../domain/repair/workshop.ts';
+import type { EnergyLedger, EnergySourceSnapshot } from '../domain/energy/runtime.ts';
 
 /** Phase 4 deliberately preserves the current single-homeworld data contract. */
 export type PlanetId = 'helion-01';
@@ -32,7 +33,19 @@ export type PlanetRuntime = {
   defense: OwnedDefenseState;
   fleetProduction: FleetProductionState;
   repair: RepairWorkshopState;
+  /** Legacy alias for the available energy balance. */
   energy: number;
+  /** One-time energy ledger. Optional for source compatibility with old test fixtures. */
+  energyLedger?: EnergyLedger;
+  producedEnergy?: number;
+  consumedEnergy?: number;
+  availableEnergy?: number;
+  energySources?: EnergySourceSnapshot[];
+  energyExpenseAttribution?: Partial<Record<string, number>>;
+  /** Orbital presence is separate from the outgoing fleet roster. */
+  solarSatellites?: number;
+  universeSystem?: number;
+  universePosition?: number;
   buildings: BuildingLevels;
   productionBots: BotAssignment;
   recycling: RecyclingState;

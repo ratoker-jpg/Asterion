@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { BattleReport } from '../domain/combat/report.ts';
+import { SOLAR_SATELLITE_ID } from '../domain/combat/ids.ts';
 import { createDefaultCombatPriority } from '../domain/combat/priority.ts';
 import type { CombatInput } from '../domain/combat/simulator.ts';
+import { syncPlanetEnergySources } from './energy.ts';
 import {
   bindCombatResolutionEventBridge,
   COMBAT_RESOLVE_REQUEST_EVENT,
@@ -11,6 +13,7 @@ import {
 } from './combat.ts';
 import {
   applyBattleResult,
+  getRepairWorkshopSnapshot,
   removeRepairUnits,
   repairUnits,
 } from './repair.ts';
@@ -19,6 +22,7 @@ import {
   createPersistenceFacade,
   type StorageLike,
 } from './persistence.ts';
+import { createEmptyFleetState } from '../domain/fleet/runtime.ts';
 
 class MemoryStorage implements StorageLike {
   readonly values = new Map<string, string>();
@@ -111,6 +115,93 @@ test('real combat application awards defensive repair once and stores an annotat
   assert.equal(second.state.planets['helion-01'].repair.defenses['ballistic-turret'], 2);
 });
 
+test('owned defender losses remove satellites from orbit and repair restores them to orbit', () => {
+  const initial = createInitialSaveState('production', 0);
+  const basePlanet = initial.planets['helion-01'];
+  const withSatellites = {
+    ...initial,
+    planets: {
+      ...initial.planets,
+      'helion-01': syncPlanetEnergySources({ ...basePlanet, solarSatellites: 2 }, initial.science.levels),
+    },
+  };
+  const before = withSatellites.planets['helion-01'];
+  const beforeAvailable = before.availableEnergy ?? before.energy;
+  const applied = applyBattleResult(withSatellites, 'helion-01', report({
+    id: 'repair-application-satellite-battle-1',
+    defenderForce: {
+      populationBefore: 2,
+      populationAfter: 0,
+      stacks: [{ entityId: SOLAR_SATELLITE_ID, countBefore: 2, countAfter: 0, destroyed: 2 }],
+      defenses: [],
+    },
+  }));
+  const afterLoss = applied.state.planets['helion-01'];
+
+  assert.equal(afterLoss.solarSatellites, 0);
+  assert.equal(afterLoss.fleet.ships[SOLAR_SATELLITE_ID], 0);
+  assert.equal(afterLoss.repair.ships[SOLAR_SATELLITE_ID], 1);
+  assert.ok((afterLoss.availableEnergy ?? afterLoss.energy) < beforeAvailable);
+
+  const repaired = repairUnits(applied.state, 'helion-01', 'ship', SOLAR_SATELLITE_ID, 1, 'tokens');
+  assert.equal(repaired.transition.ok, true);
+  assert.equal(repaired.state.planets['helion-01'].solarSatellites, 1);
+  assert.equal(repaired.state.planets['helion-01'].fleet.ships[SOLAR_SATELLITE_ID], 0);
+  assert.equal(repaired.state.planets['helion-01'].repair.ships[SOLAR_SATELLITE_ID], 0);
+  assert.ok((repaired.state.planets['helion-01'].availableEnergy ?? repaired.state.planets['helion-01'].energy) > (afterLoss.availableEnergy ?? afterLoss.energy));
+});
+
+test('repair rejects a satellite when current or legacy orbital presence fills hangar capacity', () => {
+  const initial = createInitialSaveState('production', 0);
+  const basePlanet = initial.planets['helion-01'];
+  const cases = [
+    {
+      name: 'current orbital count',
+      fleet: createEmptyFleetState(),
+      solarSatellites: 1,
+    },
+    {
+      name: 'legacy fleet count',
+      fleet: createEmptyFleetState(),
+      solarSatellites: undefined,
+    },
+  ];
+
+  for (const fixture of cases) {
+    fixture.fleet.ships.transporter = 119;
+    if (fixture.name === 'legacy fleet count') fixture.fleet.ships[SOLAR_SATELLITE_ID] = 1;
+    const state = {
+      ...initial,
+      planets: {
+        ...initial.planets,
+        'helion-01': {
+          ...basePlanet,
+          fleet: fixture.fleet,
+          solarSatellites: fixture.solarSatellites,
+          repair: {
+            ...basePlanet.repair,
+            ships: { ...basePlanet.repair.ships, [SOLAR_SATELLITE_ID]: 1 },
+          },
+        },
+      },
+    };
+    const snapshot = getRepairWorkshopSnapshot(state);
+    assert.equal(snapshot.solarSatellites, 1, fixture.name);
+    assert.equal(snapshot.fleet.ships[SOLAR_SATELLITE_ID], 0, fixture.name);
+
+    const result = repairUnits(state, 'helion-01', 'ship', SOLAR_SATELLITE_ID, 1, 'tokens');
+    assert.equal(result.transition.ok, false, fixture.name);
+    assert.equal(result.transition.code, 'capacity', fixture.name);
+    assert.equal(result.transition.capacity.population, 120, fixture.name);
+    assert.equal(result.transition.capacity.addedPopulation, 1, fixture.name);
+    assert.strictEqual(result.state, state, fixture.name);
+    assert.equal(state.planets['helion-01'].repair.ships[SOLAR_SATELLITE_ID], 1, fixture.name);
+    assert.equal(state.planets['helion-01'].solarSatellites, fixture.solarSatellites, fixture.name);
+    assert.equal(state.planets['helion-01'].fleet.ships[SOLAR_SATELLITE_ID], fixture.name === 'legacy fleet count' ? 1 : 0, fixture.name);
+    assert.equal(state.planets['helion-01'].repair.tokens, basePlanet.repair.tokens, fixture.name);
+  }
+});
+
 test('production combat boundary classifies a defensive resolver result and awards repair once', () => {
   const initial = createInitialSaveState('production', 0);
   const priority = createDefaultCombatPriority();
@@ -143,6 +234,47 @@ test('production combat boundary classifies a defensive resolver result and awar
   const second = resolveAndApplyCombat(first.state, 'helion-01', input, resolutionContext);
   assert.equal(second.changed, false);
   assert.strictEqual(second.state, first.state);
+});
+
+test('production defensive combat automatically includes owned satellites', () => {
+  const initial = createInitialSaveState('production', 0);
+  const planet = initial.planets['helion-01'];
+  const withSatellites = {
+    ...initial,
+    planets: {
+      ...initial.planets,
+      'helion-01': syncPlanetEnergySources({ ...planet, solarSatellites: 2 }, initial.science.levels),
+    },
+  };
+  const priority = createDefaultCombatPriority();
+  const input: CombatInput = {
+    scenarioId: 'production-satellite-defense-scenario',
+    timestamp: '2026-09-13T00:00:00.000Z',
+    attacker: {
+      participant: { playerId: 'raider', playerName: 'Raider', side: 'attacker' },
+      ships: [{ entityId: 'death-star', count: 1 }],
+      commanders: [],
+    },
+    defender: {
+      participant: { playerId: 'player-aster', playerName: 'Asterion', side: 'defender' },
+      ships: [{ entityId: 'scout', count: 5 }],
+      commanders: [],
+      defenses: [{ entityId: 'ballistic-turret', count: 4 }],
+    },
+    maxRounds: 8,
+    attackerPriority: [...priority.attack],
+    defenderPriority: [...priority.defense],
+  };
+
+  const result = resolveAndApplyCombat(
+    withSatellites,
+    'helion-01',
+    input,
+    { reportId: 'production-satellite-defense-report-1', missionType: 'defense' },
+  );
+
+  assert.equal(result.report.defenderForce.stacks.some((stack) => stack.entityId === SOLAR_SATELLITE_ID), true);
+  assert.equal(result.report.repairEligibility?.claimState, 'claimed');
 });
 
 test('production combat event bridge commits the resolver result without simulator coupling', () => {

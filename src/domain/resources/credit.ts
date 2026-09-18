@@ -21,6 +21,10 @@ function toNonNegativeFinite(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
 }
 
+function toFinite(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
 function emptyWallet(): ResourceWallet {
   return { metal: 0, minerals: 0, gas: 0, energy: 0 };
 }
@@ -52,7 +56,9 @@ export function creditResources(
   }
 
   const energyCredit = toNonNegativeFinite(credit.energy);
-  const currentEnergy = toNonNegativeFinite(wallet.energy);
+  // Energy has no storage cap and may legitimately be negative after an
+  // energy-source downgrade. Preserve that debt while applying a refund.
+  const currentEnergy = toFinite(wallet.energy);
   const acceptedEnergy = Math.min(energyCredit, Number.MAX_VALUE - currentEnergy);
   nextWallet.energy = currentEnergy + acceptedEnergy;
   accepted.energy = acceptedEnergy;

@@ -30,6 +30,11 @@ import {
   type PlanetId,
   type SaveState,
 } from './contracts.ts';
+import {
+  getPlanetEnergyLedger,
+  settlePlanetEnergyWallet,
+  transitionPlanetEnergySources,
+} from './energy.ts';
 
 export type ScienceApplicationContext = {
   planetId: PlanetId;
@@ -51,7 +56,7 @@ function walletFor(state: SaveState, planetId: PlanetId) {
     metal: state.metal,
     minerals: state.minerals,
     gas: state.gas,
-    energy: planet.energy,
+    energy: getPlanetEnergyLedger(planet, state.science.levels).availableEnergy,
   };
 }
 
@@ -62,6 +67,14 @@ function stateFromScienceTransition(
   wallet: ReturnType<typeof walletFor>,
 ): SaveState {
   const planet = getPlanetState(state, planetId);
+  const nextPlanet = { ...planet, energy: wallet.energy };
+  const settledEnergy = settlePlanetEnergyWallet(
+    planet,
+    state.science.levels,
+    wallet.energy,
+    {},
+    nextPlanet,
+  );
   return replacePlanetState({
     ...state,
     schemaVersion: SAVE_SCHEMA_VERSION,
@@ -69,7 +82,7 @@ function stateFromScienceTransition(
     minerals: wallet.minerals,
     gas: wallet.gas,
     science: nextScience,
-  }, planetId, { ...planet, energy: wallet.energy });
+  }, planetId, settledEnergy.planet);
 }
 
 function defaultScienceTaskId(scienceId: ScienceId, now: number): string {
@@ -134,11 +147,19 @@ export function reconcileScience(
   context: Pick<ScienceApplicationContext, 'planetId' | 'now'>,
 ): ScienceReconcileResult {
   const transition = reconcileScienceState(state.science, context.now);
+  if (!transition.changed) {
+    return { changed: false, state, completedScienceIds: [] };
+  }
+  const planet = getPlanetState(state, context.planetId);
+  const nextPlanet = transitionPlanetEnergySources(
+    planet,
+    planet,
+    state.science.levels,
+    transition.state.levels,
+  );
   return {
-    changed: transition.changed,
-    state: transition.changed
-      ? { ...state, schemaVersion: SAVE_SCHEMA_VERSION, science: transition.state }
-      : state,
+    changed: true,
+    state: replacePlanetState({ ...state, schemaVersion: SAVE_SCHEMA_VERSION, science: transition.state }, context.planetId, nextPlanet),
     completedScienceIds: transition.completed.map((task) => task.scienceId),
   };
 }

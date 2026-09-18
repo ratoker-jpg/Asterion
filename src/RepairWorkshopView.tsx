@@ -330,7 +330,13 @@ export function RepairWorkshopView({
     [repairUnits, snapshot],
   );
   const fleetCapacity = useMemo(
-    () => getFleetProductionPopulationSummary(snapshot.fleet, snapshot.fleetProduction, snapshot.hangarLevel, snapshot.factionId),
+    () => getFleetProductionPopulationSummary(
+      snapshot.fleet,
+      snapshot.fleetProduction,
+      snapshot.hangarLevel,
+      snapshot.factionId,
+      snapshot.solarSatellites,
+    ),
     [snapshot],
   );
   const defenseCapacity = useMemo(

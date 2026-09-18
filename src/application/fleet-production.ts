@@ -3,6 +3,7 @@ import {
   enqueueFleetProduction,
   reconcileFleetProductionState,
   type FleetProductionCancellationTransition,
+  type FleetProductionCompletion,
   type FleetProductionQueueKind,
   type FleetProductionTransition,
 } from '../domain/fleet/production.ts';
@@ -15,9 +16,12 @@ import {
   type SaveState,
 } from './contracts.ts';
 import type { BuildingApplicationContext } from './buildings.ts';
+import { removeSolarSatellitesFromFleet } from '../domain/fleet/runtime.ts';
+import { transitionPlanetEnergySources } from './energy.ts';
 
 export const FLEET_PRODUCTION_START_REQUEST_EVENT = 'asterion:fleet-production-start-request';
 export const FLEET_PRODUCTION_CANCEL_REQUEST_EVENT = 'asterion:fleet-production-cancel-request';
+export const FLEET_PRODUCTION_DISMANTLE_SATELLITES_REQUEST_EVENT = 'asterion:fleet-production-dismantle-satellites-request';
 
 export type FleetProductionStartRequest = {
   queueKind?: FleetProductionQueueKind;
@@ -32,16 +36,22 @@ export type FleetProductionCancelRequest = {
   now?: number;
 };
 
+export type SolarSatelliteDismantleRequest = {
+  count?: number;
+};
+
 function productionContext(
   state: SaveState,
   context: BuildingApplicationContext,
   now: number,
 ) {
   const planet = getPlanetState(state, context.planetId);
+  const migratedFleet = removeSolarSatellitesFromFleet(planet.fleet);
   return {
     state: planet.fleetProduction,
     fleet: planet.fleet,
     defense: planet.defense,
+    solarSatellites: Math.max(0, Math.floor(planet.solarSatellites ?? migratedFleet.count)),
     wallet: { metal: state.metal, minerals: state.minerals, gas: state.gas },
     capacities: getStorageCapacities(planet.buildings),
     factionId: state.profile.factionId,
@@ -67,21 +77,39 @@ function stateFromTransition(
     fleet: SaveState['planets'][PlanetId]['fleet'];
     defense: SaveState['planets'][PlanetId]['defense'];
     wallet: { metal: number; minerals: number; gas: number };
+    completed: FleetProductionCompletion[];
   },
 ): SaveState {
   const planet = getPlanetState(state, context.planetId);
+  const migratedPlanetFleet = removeSolarSatellitesFromFleet(transition.fleet);
+  const previousPlanetFleet = removeSolarSatellitesFromFleet(planet.fleet);
+  const satelliteCount = Math.max(
+    0,
+    Math.floor(planet.solarSatellites ?? previousPlanetFleet.count),
+  );
+  const completedSatellites = transition.completed
+    .filter((item) => item.queueKind === 'ships' && item.itemId === 'solar-satellite')
+    .reduce((total, item) => total + Math.max(0, Math.floor(item.quantity)), 0);
+  const previousPlanet = { ...planet, fleet: previousPlanetFleet.fleet, solarSatellites: satelliteCount };
+  const nextPlanet = transitionPlanetEnergySources(
+    previousPlanet,
+    {
+      ...planet,
+      fleet: migratedPlanetFleet.fleet,
+      defense: transition.defense,
+      fleetProduction: transition.state,
+      solarSatellites: satelliteCount + completedSatellites,
+    },
+    state.science.levels,
+    state.science.levels,
+  );
   return replacePlanetState({
     ...state,
     schemaVersion: SAVE_SCHEMA_VERSION,
     metal: transition.wallet.metal,
     minerals: transition.wallet.minerals,
     gas: transition.wallet.gas,
-  }, context.planetId, {
-    ...planet,
-    fleet: transition.fleet,
-    defense: transition.defense,
-    fleetProduction: transition.state,
-  });
+  }, context.planetId, nextPlanet);
 }
 
 export type FleetProductionActionResult = {
@@ -136,6 +164,13 @@ export type FleetProductionReconcileResult = {
   completed: ReturnType<typeof reconcileFleetProductionState>['completed'];
 };
 
+export type SolarSatelliteDismantleResult = {
+  ok: boolean;
+  state: SaveState;
+  removed: number;
+  reason: string | null;
+};
+
 export function reconcileFleetProduction(
   state: SaveState,
   context: Pick<BuildingApplicationContext, 'planetId' | 'now'>,
@@ -149,15 +184,63 @@ export function reconcileFleetProduction(
     context.now,
   );
   if (!transition.changed) return { changed: false, state, completed: [] };
-  return {
-    changed: true,
-    state: replacePlanetState({ ...state, schemaVersion: SAVE_SCHEMA_VERSION }, context.planetId, {
+  const migratedFleet = removeSolarSatellitesFromFleet(transition.fleet);
+  const currentSatelliteCount = Math.max(
+    0,
+    Math.floor(planet.solarSatellites ?? removeSolarSatellitesFromFleet(planet.fleet).count),
+  );
+  const completedSatellites = transition.completed
+    .filter((item) => item.queueKind === 'ships' && item.itemId === 'solar-satellite')
+    .reduce((total, item) => total + Math.max(0, Math.floor(item.quantity)), 0);
+  const previousPlanet = {
+    ...planet,
+    fleet: removeSolarSatellitesFromFleet(planet.fleet).fleet,
+    solarSatellites: currentSatelliteCount,
+  };
+  const nextPlanet = transitionPlanetEnergySources(
+    previousPlanet,
+    {
       ...planet,
-      fleet: transition.fleet,
+      fleet: migratedFleet.fleet,
       defense: transition.defense,
       fleetProduction: transition.state,
-    }),
+      solarSatellites: currentSatelliteCount + completedSatellites,
+    },
+    state.science.levels,
+    state.science.levels,
+  );
+  return {
+    changed: true,
+    state: replacePlanetState({ ...state, schemaVersion: SAVE_SCHEMA_VERSION }, context.planetId, nextPlanet),
     completed: transition.completed,
+  };
+}
+
+export function dismantleSolarSatellites(
+  state: SaveState,
+  context: Pick<BuildingApplicationContext, 'planetId'>,
+  count?: number,
+): SolarSatelliteDismantleResult {
+  const planet = getPlanetState(state, context.planetId);
+  const migratedFleet = removeSolarSatellitesFromFleet(planet.fleet);
+  const currentCount = Math.max(0, Math.floor(planet.solarSatellites ?? migratedFleet.count));
+  if (currentCount <= 0) return { ok: false, state, removed: 0, reason: 'На планете нет солнечных спутников.' };
+  const requested = count == null || !Number.isFinite(count) ? currentCount : Math.floor(count);
+  const removed = Math.min(currentCount, Math.max(0, requested));
+  if (removed <= 0) return { ok: false, state, removed: 0, reason: 'Количество спутников должно быть положительным.' };
+  const previousPlanet = { ...planet, fleet: migratedFleet.fleet, solarSatellites: currentCount };
+  const nextPlanet = transitionPlanetEnergySources(
+    previousPlanet,
+    { ...previousPlanet, solarSatellites: currentCount - removed },
+    state.science.levels,
+    state.science.levels,
+    { sourceChanges: { 'solar-satellite': 'satellite' } },
+  );
+  return {
+    ok: true,
+    state: replacePlanetState({ ...state, schemaVersion: SAVE_SCHEMA_VERSION }, context.planetId, nextPlanet),
+    removed,
+    reason: null,
   };
 }
 
@@ -207,10 +290,23 @@ export function bindFleetProductionEventBridge(options: FleetProductionEventBrid
       : transition.reason ?? 'Заказ недоступен для отмены.');
   };
 
+  const onDismantleSatellites = (event: Event) => {
+    const request = (event as CustomEvent<SolarSatelliteDismantleRequest>).detail;
+    const result = dismantleSolarSatellites(options.getState(), options.getContext(Date.now()), request?.count);
+    if (!result.ok) {
+      options.onNotice(result.reason ?? 'Спутники сейчас недоступны для демонтажа.');
+      return;
+    }
+    options.commit(result.state);
+    options.onNotice(`Уничтожено солнечных спутников: ${result.removed}. Ресурсы за них не возвращаются.`);
+  };
+
   options.target.addEventListener(FLEET_PRODUCTION_START_REQUEST_EVENT, onStart);
   options.target.addEventListener(FLEET_PRODUCTION_CANCEL_REQUEST_EVENT, onCancel);
+  options.target.addEventListener(FLEET_PRODUCTION_DISMANTLE_SATELLITES_REQUEST_EVENT, onDismantleSatellites);
   return () => {
     options.target.removeEventListener(FLEET_PRODUCTION_START_REQUEST_EVENT, onStart);
     options.target.removeEventListener(FLEET_PRODUCTION_CANCEL_REQUEST_EVENT, onCancel);
+    options.target.removeEventListener(FLEET_PRODUCTION_DISMANTLE_SATELLITES_REQUEST_EVENT, onDismantleSatellites);
   };
 }

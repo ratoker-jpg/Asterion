@@ -13,6 +13,7 @@ import type {
   UniverseSystem,
   UniverseTimedObjectState,
 } from './types.ts';
+import { getPositionCoefficientPercent, getSunEfficiencyPercent } from '../energy/runtime.ts';
 
 export const GALAXY = 1;
 export const SYSTEM_COUNT = 40;
@@ -353,6 +354,7 @@ function createPositionNode(
     statusLabel: KIND_LABELS[kind],
     description: KIND_DESCRIPTIONS[kind],
     known: fixture?.known ?? true,
+    positionCoefficientPercent: getPositionCoefficientPercent(slot),
   };
 }
 
@@ -379,12 +381,14 @@ function createUniverseSystemBase(options: CreateUniverseSystemOptions, assets: 
       statusLabel: KIND_LABELS.empty,
       description: KIND_DESCRIPTIONS.empty,
       known: true,
+      positionCoefficientPercent: getPositionCoefficientPercent(slot),
     });
 
   return {
     galaxy,
     system,
     starArt: pickAsset(assets.starArts, system - 1, 'star-default'),
+    sunEfficiencyPercent: getSunEfficiencyPercent(system),
     positions,
     asteroids: [],
   };
