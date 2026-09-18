@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
 import {
+  createPlanetIdForCoordinate,
   dispatchFlight,
   getAvailableFleetForPlanet,
   getReservedShipsForPlanet,
@@ -267,6 +268,110 @@ test('target occupied at arrival starts a full return once and completes as targ
   assert.equal(returned.state.flights.records[0].completionReason, 'target-occupied');
   assert.equal(returned.state.planets['helion-01'].fleet.ships.colonizer, 1);
   assert.equal(Object.keys(returned.state.planets).filter((id) => id.startsWith('planet-')).length, 0);
+});
+
+test('late reconcile uses arrivalAt when a target was occupied at arrival but is free later', () => {
+  const schedule = getUniverseTimedObjectSchedule('pirate', 1, 2, 0);
+  assert.equal(schedule.present, true);
+  const pirateAt = schedule.startAt + 1_000;
+  const pirate = createUniverseSystem({ system: 2, nowMs: pirateAt }).positions.find((node) => node.kind === 'pirate');
+  assert.ok(pirate);
+  if (!pirate) return;
+  const planetId = createPlanetIdForCoordinate(pirate.coordinate);
+
+  const departedAt = schedule.startAt - 1_000;
+  const sent = dispatchFlight(createInitialSaveState('production', departedAt), {
+    ...command('late-arrival-occupied', pirate.coordinate),
+    departedAt,
+  }, departedAt);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.ok(sent.flight.arrivalAt > schedule.startAt);
+  assert.ok(sent.flight.arrivalAt < schedule.expiresAt);
+  const lateNow = schedule.expiresAt + 1_000;
+  assert.equal(createUniverseSystem({ system: 2, nowMs: lateNow }).positions.find((node) => node.coordinate.position === pirate.coordinate.position)?.kind, 'empty');
+
+  const reconciled = reconcileFlights(sent.state, lateNow);
+  assert.equal(reconciled.events[0]?.status, 'target-occupied');
+  assert.equal(reconciled.state.flights.records[0]?.phase, 'returning');
+  assert.equal(reconciled.state.flights.records[0]?.returnAt, lateNow + sent.flight.oneWayDurationMs);
+  assert.equal(reconciled.state.planets['helion-01'].fleet.ships.colonizer, 1);
+  assert.equal(reconciled.state.planets[planetId], undefined);
+});
+
+test('late reconcile creates a colony when the target was free at arrival but became occupied later', () => {
+  const schedule = getUniverseTimedObjectSchedule('pirate', 1, 2, 0);
+  assert.equal(schedule.present, true);
+  const pirateAt = schedule.startAt + 1_000;
+  const pirate = createUniverseSystem({ system: 2, nowMs: pirateAt }).positions.find((node) => node.kind === 'pirate');
+  assert.ok(pirate);
+  if (!pirate) return;
+  const planetId = createPlanetIdForCoordinate(pirate.coordinate);
+
+  const departedAt = schedule.startAt - 10 * 60 * 1_000;
+  const sent = dispatchFlight(createInitialSaveState('production', departedAt), {
+    ...command('late-arrival-free', pirate.coordinate),
+    departedAt,
+  }, departedAt);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.ok(sent.flight.arrivalAt < schedule.startAt);
+  const lateNow = schedule.startAt + 1_000;
+  assert.equal(createUniverseSystem({ system: 2, nowMs: sent.flight.arrivalAt }).positions.find((node) => node.coordinate.position === pirate.coordinate.position)?.kind, 'empty');
+  assert.equal(createUniverseSystem({ system: 2, nowMs: lateNow }).positions.find((node) => node.coordinate.position === pirate.coordinate.position)?.kind, 'pirate');
+
+  const reconciled = reconcileFlights(sent.state, lateNow);
+  assert.equal(reconciled.events[0]?.status, 'colonized');
+  assert.equal(reconciled.state.flights.records[0]?.phase, 'completed');
+  assert.equal(reconciled.state.flights.records[0]?.completionReason, 'colonized');
+  assert.ok(reconciled.state.planets[planetId]);
+  assert.equal(reconciled.state.planets['helion-01'].fleet.ships.colonizer, 0);
+});
+
+test('persisted arrived phase keeps the arrival-time occupancy result after a late reload reconcile', () => {
+  const schedule = getUniverseTimedObjectSchedule('pirate', 1, 2, 0);
+  assert.equal(schedule.present, true);
+  const pirateAt = schedule.startAt + 1_000;
+  const pirate = createUniverseSystem({ system: 2, nowMs: pirateAt }).positions.find((node) => node.kind === 'pirate');
+  assert.ok(pirate);
+  if (!pirate) return;
+  const planetId = createPlanetIdForCoordinate(pirate.coordinate);
+
+  const departedAt = schedule.startAt - 1_000;
+  const storage = new Map<string, string>();
+  const storageLike = {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => { storage.set(key, value); },
+    removeItem: (key: string) => { storage.delete(key); },
+  };
+  const persistence = createPersistenceFacade({ mode: 'production', storage: storageLike, now: () => departedAt });
+  const sent = dispatchFlight(persistence.read(), {
+    ...command('reload-late-arrival-occupied', pirate.coordinate),
+    departedAt,
+  }, departedAt);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.ok(sent.flight.arrivalAt < schedule.expiresAt);
+  const savedArrived = {
+    ...sent.state,
+    flights: {
+      ...sent.state.flights,
+      records: sent.state.flights.records.map((flight) => flight.id === sent.flight.id
+        ? { ...flight, phase: 'arrived' as const, arrivedAt: flight.arrivalAt, completionReason: 'arrived' as const }
+        : flight),
+    },
+  };
+  assert.equal(persistence.write(savedArrived).ok, true);
+
+  const lateNow = schedule.expiresAt + 1_000;
+  const reloaded = persistence.read();
+  assert.equal(reloaded.flights.records[0]?.phase, 'arrived');
+  const reconciled = reconcileFlights(reloaded, lateNow);
+  assert.equal(reconciled.events[0]?.status, 'target-occupied');
+  assert.equal(reconciled.state.flights.records[0]?.phase, 'returning');
+  assert.equal(reconciled.state.flights.records[0]?.returnAt, lateNow + sent.flight.oneWayDurationMs);
+  assert.equal(reconciled.state.planets['helion-01'].fleet.ships.colonizer, 1);
+  assert.equal(reconciled.state.planets[planetId], undefined);
 });
 
 test('a damaged save with an existing deterministic planet id returns instead of hanging outbound', () => {

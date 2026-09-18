@@ -373,9 +373,9 @@ export function reconcileFlights(state: SaveState, now: number): FlightReconcile
   for (const original of next.flights.records) {
     const current = next.flights.records.find((flight) => flight.id === original.id) ?? original;
     const arrivalAt = current.arrivedAt ?? current.arrivalAt;
+    const arrivalCheckAt = current.arrivedAt ?? current.arrivalAt;
     const arrivalReady = current.phase === 'arrived' || (current.phase === 'outbound' && now >= current.arrivalAt);
     if (arrivalReady) {
-      const arrivalCheckAt = current.phase === 'arrived' ? arrivalAt : now;
       if (current.missionId !== 'colonize') {
         const failed: FlightRecord = { ...current, phase: 'completed', arrivedAt: arrivalAt, completedAt: now, completionReason: 'mission-failed' };
         next = completeFlight(next, current, failed);
