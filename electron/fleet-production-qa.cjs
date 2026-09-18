@@ -122,6 +122,29 @@ async function runViewport(width, height) {
     await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
     const baseCardTag = await win.webContents.executeJavaScript(`document.querySelector('.fleet-yard-card-v1')?.tagName ?? ''`);
     if (baseCardTag === 'BUTTON') throw new Error(`${label}: fleet base card is still a button`);
+    const missionSlots = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('.fleet-mission-icons-v1 button')).map((button) => {
+      const buttonRect = button.getBoundingClientRect();
+      const image = button.querySelector('img');
+      const imageRect = image?.getBoundingClientRect();
+      const buttonStyle = getComputedStyle(button);
+      const imageStyle = image ? getComputedStyle(image) : null;
+      return {
+        label: button.getAttribute('aria-label') || '',
+        button: { x: buttonRect.x, y: buttonRect.y, width: buttonRect.width, height: buttonRect.height },
+        image: imageRect ? { x: imageRect.x, y: imageRect.y, width: imageRect.width, height: imageRect.height } : null,
+        naturalWidth: image?.naturalWidth || 0,
+        naturalHeight: image?.naturalHeight || 0,
+        buttonOverflow: buttonStyle.overflow,
+        objectFit: imageStyle?.objectFit || '',
+      };
+    })`);
+    const missionIconsFit = missionSlots.length === 9 && missionSlots.every((slot) => {
+      const button = slot.button;
+      const image = slot.image;
+      const epsilon = 0.5;
+      return button.width > 0 && Math.abs(button.width - button.height) <= epsilon && image && image.width > 0 && Math.abs(image.width - image.height) <= epsilon && image.x >= button.x - epsilon && image.y >= button.y - epsilon && image.x + image.width <= button.x + button.width + epsilon && image.y + image.height <= button.y + button.height + epsilon && slot.naturalWidth > 0 && slot.naturalHeight > 0 && slot.objectFit === 'contain';
+    });
+    if (!missionIconsFit) throw new Error(`${label}: mission icon slot contract failed ${JSON.stringify(missionSlots)}`);
 
     await click(win, '[data-qa-fleet-section="ships"]');
     await waitFor(win, `document.querySelector('[data-qa-construction-mode="ships"]')`);
@@ -310,6 +333,7 @@ async function runViewport(width, height) {
     await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
     await click(win, '[data-qa-fleet-section="ships"]');
     await waitFor(win, `document.querySelector('[data-qa-fleet-production-queue="ships"] [data-qa-fleet-production-order]')`);
+    await waitFor(win, `document.documentElement.classList.contains('asterion-long-page')`);
     const layout = await win.webContents.executeJavaScript(`(() => {
       const list = document.querySelector('[data-qa-fleet-production-queue="ships"] .fleet-production-queue-list-v1');
       const styles = list ? getComputedStyle(list) : null;
@@ -325,7 +349,7 @@ async function runViewport(width, height) {
     })()`);
     if (layout.horizontalOverflow || !layout.longPage || layout.orderCount !== 8 || layout.queueOverflowY !== 'visible' || layout.queueMaxHeight !== 'none' || layout.queueScrollHeight < layout.queueClientHeight) throw new Error(`${label}: fleet production layout overflow/long-page contract failed ${JSON.stringify(layout)}`);
     await capture(win, directory, 'fleet-production');
-    return { viewport: label, layout, screenshotsSkipped: skipScreenshots };
+    return { viewport: label, layout, missionSlots, screenshotsSkipped: skipScreenshots };
   } finally {
     if (!win.isDestroyed()) await win.close();
   }

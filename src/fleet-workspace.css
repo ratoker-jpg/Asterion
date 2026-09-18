@@ -499,8 +499,16 @@ html.asterion-long-page .fleet-ship-roster-v1 {
   .flight-timeline-actions .flight-timeline-back { margin-right: 0; }
 }
 
-html.asterion-long-page:has([data-qa-flight-preview-backdrop]),
+/* Keep the html scrolling context alive while locking the app shell behind
+   the modal; hiding html itself would release the reserved gutter and shift
+   the Fleet workspace horizontally. */
+html.asterion-long-page:has([data-qa-flight-preview-backdrop]) {
+  overflow-y: auto !important;
+  scrollbar-gutter: stable !important;
+}
+
 html.asterion-long-page:has([data-qa-flight-preview-backdrop]) body,
 html.asterion-long-page:has([data-qa-flight-preview-backdrop]) #root {
-  overflow-y: hidden !important;
+  overflow-y: auto !important;
+  scrollbar-gutter: stable !important;
 }

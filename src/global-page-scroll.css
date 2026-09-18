@@ -17,6 +17,16 @@
   scrollbar-gutter: auto;
 }
 
+/* Fleet can cross the fixed/long-page boundary when a dispatch changes the
+   roster height. Keep the document width invariant so the workspace does not
+   jump when the shared scrollbar appears or disappears. */
+html:has(.fleet-workspace-v1),
+html:has(.fleet-workspace-v1) body,
+html:has(.fleet-workspace-v1) #root {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
 html.asterion-long-page,
 html.asterion-long-page body,
 html.asterion-long-page #root {

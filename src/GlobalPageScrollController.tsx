@@ -147,10 +147,16 @@ export function GlobalPageScrollController() {
           root.classList.add('asterion-long-page');
         }
       } else {
-        if (root.classList.contains('asterion-long-page')) {
+        // Fleet can legitimately become a few pixels shorter when a dispatch
+        // moves a colonizer from the compose roster into the active-flight
+        // table. Keep the already-established long-page shell for the rest of
+        // the Fleet session so that the document scrollbar cannot disappear
+        // and re-center the fixed 1920px stage underneath the user.
+        const preserveFleetShell = isFleetPage && root.classList.contains('asterion-long-page');
+        if (root.classList.contains('asterion-long-page') && !preserveFleetShell) {
           root.classList.remove('asterion-long-page');
         }
-        clearGeometry();
+        if (!preserveFleetShell) clearGeometry();
       }
 
       observeCurrentPage(pageRoots);
