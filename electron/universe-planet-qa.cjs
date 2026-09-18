@@ -177,6 +177,11 @@ async function inspectorSnapshot(win) {
       disabled: Boolean(node.disabled),
       title: node.getAttribute('title') || '',
     }));
+    const specialActions = Array.from(document.querySelectorAll('[data-qa-universe-special-action]')).map((node) => ({
+      action: node.getAttribute('data-qa-universe-special-action'),
+      disabled: Boolean(node.disabled),
+      title: node.getAttribute('title') || '',
+    }));
     return {
       kind: inspector?.getAttribute('data-qa-inspector-kind') || '',
       text: inspector?.textContent?.replace(/\\s+/g, ' ').trim() || '',
@@ -191,7 +196,10 @@ async function inspectorSnapshot(win) {
         visitId: row.querySelector('[data-qa-universe-visit]')?.getAttribute('data-qa-universe-visit'),
       })),
       actions,
+      specialActions,
       specialActionDisabled: Boolean(document.querySelector('[data-qa-universe-special-action]')?.disabled),
+      targetCoordinate: document.querySelector('[data-qa-universe-target-coordinate]')?.getAttribute('data-qa-universe-target-coordinate') || '',
+      underlyingKind: document.querySelector('[data-qa-universe-special]')?.getAttribute('data-qa-universe-underlying-kind') || '',
     };
   })()`);
 }
@@ -365,16 +373,43 @@ async function runViewport(width, height) {
     await capture(win, directory, 'empty-inspector');
     await dismissInspector(win);
 
-    const asteroidId = await win.webContents.executeJavaScript(`(() => {
+    const asteroidIds = await win.webContents.executeJavaScript(`(() => {
       const asteroids = [...document.querySelectorAll('[data-qa-universe-kind="asteroid"]')];
-      return (asteroids.find((node) => { const rect = node.getBoundingClientRect(); const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2); return hit === node || node.contains(hit); }) || asteroids[0])?.getAttribute('data-qa-universe-object') || '';
+      return {
+        free: asteroids.find((node) => node.getAttribute('data-qa-universe-underlying-kind') === 'empty')?.getAttribute('data-qa-universe-object') || '',
+        occupied: asteroids.find((node) => node.getAttribute('data-qa-universe-underlying-kind') && node.getAttribute('data-qa-universe-underlying-kind') !== 'empty')?.getAttribute('data-qa-universe-object') || '',
+      };
     })()`);
-    await clickObject(win, `[data-qa-universe-object="${asteroidId}"]`);
-    const asteroid = await inspectorSnapshot(win);
-    checkCopy(asteroid);
+    if (!asteroidIds.free || !asteroidIds.occupied) throw new Error(`${label}: asteroid overlay fixtures did not include both free and occupied underlying positions ${JSON.stringify(asteroidIds)}`);
+    await clickObject(win, `[data-qa-universe-object="${asteroidIds.free}"]`);
+    const freeAsteroid = await inspectorSnapshot(win);
+    checkCopy(freeAsteroid);
     await checkModal(win);
-    if (asteroid.kind !== 'asteroid' || !asteroid.text.includes('СКРЫТ ДО ПЕРЕРАБОТКИ') || !asteroid.text.includes('Следующее перемещение через') || !asteroid.specialActionDisabled) throw new Error(`${label}: asteroid inspector contract failed ${JSON.stringify(asteroid)}`);
+    if (freeAsteroid.kind !== 'asteroid' || freeAsteroid.underlyingKind !== 'empty' || !freeAsteroid.text.includes('СКРЫТ ДО ПЕРЕРАБОТКИ') || !freeAsteroid.text.includes('Следующее перемещение через') || !freeAsteroid.specialActions.some((action) => action.action === 'colonize' && !action.disabled) || !freeAsteroid.specialActions.some((action) => action.action === 'asteroid-recycler' && action.disabled)) throw new Error(`${label}: free asteroid inspector contract failed ${JSON.stringify(freeAsteroid)}`);
     await capture(win, directory, 'asteroid-inspector');
+    await clickAt(win, '[data-qa-universe-special-action="colonize"]');
+    await waitFor(win, `document.querySelector('.fleet-workspace-v1[data-qa-flight-launch-context]')`);
+    const launchContext = await win.webContents.executeJavaScript(`document.querySelector('.fleet-workspace-v1')?.getAttribute('data-qa-flight-launch-context') || ''`);
+    if (launchContext !== freeAsteroid.targetCoordinate) throw new Error(`${label}: asteroid colonization target context was not preserved ${JSON.stringify({ launchContext, target: freeAsteroid.targetCoordinate })}`);
+    await waitFor(win, `document.querySelector('[data-qa-flight-preview-open]') && !document.querySelector('[data-qa-flight-preview-open]').disabled`);
+    const geometryBeforePreview = await win.webContents.executeJavaScript(`(() => { const rect = (selector) => document.querySelector(selector)?.getBoundingClientRect().toJSON() || null; return { fleet: rect('.fleet-workspace-v1'), sidebar: rect('.fleet-sidebar-v1'), horizontalOverflow: document.documentElement.scrollWidth > innerWidth + 2 || document.body.scrollWidth > innerWidth + 2 }; })()`);
+    await clickAt(win, '[data-qa-flight-preview-open]');
+    await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
+    const geometryDuringPreview = await win.webContents.executeJavaScript(`(() => { const rect = (selector) => document.querySelector(selector)?.getBoundingClientRect().toJSON() || null; return { fleet: rect('.fleet-workspace-v1'), sidebar: rect('.fleet-sidebar-v1'), horizontalOverflow: document.documentElement.scrollWidth > innerWidth + 2 || document.body.scrollWidth > innerWidth + 2 }; })()`);
+    const stableRect = (left, right) => left && right && ['x', 'y', 'width', 'height'].every((key) => Math.abs(left[key] - right[key]) <= 1);
+    if (!stableRect(geometryBeforePreview.fleet, geometryDuringPreview.fleet) || !stableRect(geometryBeforePreview.sidebar, geometryDuringPreview.sidebar) || geometryBeforePreview.horizontalOverflow || geometryDuringPreview.horizontalOverflow) throw new Error(`${label}: flight preview changed page geometry or introduced horizontal overflow ${JSON.stringify({ before: geometryBeforePreview, during: geometryDuringPreview })}`);
+    await clickAt(win, '[data-qa-flight-preview-cancel]');
+    await waitFor(win, `!document.querySelector('[data-qa-flight-preview-backdrop]')`);
+    const returnedToUniverse = await win.webContents.executeJavaScript(`(() => { const button = document.querySelector('[data-qa-route="universe"]'); if (!button) return false; button.click(); return true; })()`);
+    if (!returnedToUniverse) throw new Error(`${label}: could not return to Universe after asteroid flight preview`);
+    await waitFor(win, `document.querySelector('[data-qa-universe]')`);
+    await settle(win);
+
+    await clickObject(win, `[data-qa-universe-object="${asteroidIds.occupied}"]`);
+    const occupiedAsteroid = await inspectorSnapshot(win);
+    checkCopy(occupiedAsteroid);
+    await checkModal(win);
+    if (occupiedAsteroid.kind !== 'asteroid' || occupiedAsteroid.underlyingKind === 'empty' || occupiedAsteroid.specialActions.some((action) => action.action === 'colonize') || !occupiedAsteroid.specialActions.some((action) => action.action === 'asteroid-recycler' && action.disabled)) throw new Error(`${label}: occupied asteroid inspector contract failed ${JSON.stringify(occupiedAsteroid)}`);
     await dismissInspector(win);
 
     const pirateSystem = await findObject(win, '[data-qa-universe-kind="pirate"]');
@@ -452,7 +487,7 @@ async function runViewport(width, height) {
       layout: { htmlClass: map.htmlClass, webStageScale: map.webStageScale, visualViewport: map.visualViewport, stageRect: map.stageRect },
       player: { ownerName: player.ownerName, points: player.points, planetRows: player.planetRows },
       npc: { ownerName: npc.ownerName, planetRows: npc.planetRows, rows: npc.rows, prototypeNotice },
-      specialInspectors: { empty: empty.kind, asteroid: asteroid.kind, pirate: pirate.kind, anomaly: anomaly.kind, uninhabited: 'uninhabited', unique: 'unique' },
+      specialInspectors: { empty: empty.kind, asteroid: freeAsteroid.kind, occupiedAsteroid: occupiedAsteroid.kind, pirate: pirate.kind, anomaly: anomaly.kind, uninhabited: 'uninhabited', unique: 'unique' },
       asteroidsHoldPosition,
       timedObjectSystems: { pirate: pirateSystem, anomaly: anomalySystem, unique: uniqueSystem },
       pirateAnimation,

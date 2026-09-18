@@ -39,7 +39,8 @@ import type {
   FlightState,
   MissionId,
 } from '../domain/flights/types.ts';
-import type { UniverseCoordinate, UniverseObjectKind } from '../domain/universe/types.ts';
+import { createUniverseSystem } from '../domain/universe/runtime.ts';
+import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPlanet } from '../domain/universe/types.ts';
 
 export const FLIGHT_LAUNCH_CONTEXT_EVENT = 'asterion:flight-launch-context';
 export const FLIGHT_EDIT_TARGET_REQUEST_EVENT = 'asterion:flight-edit-target-request';
@@ -142,6 +143,16 @@ function activeFlights(state: SaveState): FlightRecord[] {
   return currentFlightState(state).records.filter((flight) => ACTIVE_FLIGHT_PHASES.has(flight.phase));
 }
 
+function persistedPlayerPlanets(state: SaveState): UniversePersistedPlayerPlanet[] {
+  return Object.entries(state.planets).map(([id, planet]) => ({
+    id,
+    coordinate: coordinateOfPlanet(planet),
+    name: planet.name,
+    isHomeworld: id === 'helion-01',
+    ownerId: state.profile.playerId,
+  }));
+}
+
 export function getReservedShipsForPlanet(
   state: SaveState,
   planetId: PlanetId,
@@ -173,15 +184,27 @@ function failure(state: SaveState, code: FlightErrorCode, message: string): Flig
   return { ok: false, state, error: { code, message } };
 }
 
-function targetOccupied(state: SaveState, coordinate: UniverseCoordinate, currentFlightId?: string): boolean {
-  if (Object.values(state.planets).some((planet) => coordinatesEqual(coordinateOfPlanet(planet), coordinate))) return true;
+function targetOccupied(state: SaveState, coordinate: UniverseCoordinate, nowMs: number, currentFlightId?: string): boolean {
+  const system = createUniverseSystem({
+    galaxy: coordinate.galaxy,
+    system: coordinate.system,
+    nowMs,
+    galaxyCount: 1,
+    playerPlanets: persistedPlayerPlanets(state),
+  });
+  const underlyingNode = system.positions.find((node) => coordinatesEqual(node.coordinate, coordinate));
+  // Asteroids are a visual overlay. Only the underlying coordinate object can
+  // block colonization; a free position with an asteroid remains available.
+  if (underlyingNode && underlyingNode.kind !== 'empty') return true;
   return activeFlights(state).some((flight) => flight.id !== currentFlightId
     && flight.missionId === 'colonize'
     && coordinatesEqual(flight.destinationCoordinate, coordinate));
 }
 
 function targetHasInvalidKind(targetKind: UniverseObjectKind | undefined): boolean {
-  return targetKind !== undefined && targetKind !== 'empty';
+  // A caller may pass the visual asteroid layer as the snapshot kind. The
+  // coordinate check above decides whether the underlying position is free.
+  return targetKind !== undefined && targetKind !== 'empty' && targetKind !== 'asteroid';
 }
 
 function selectedColonizerOnly(selectedShips: Partial<Record<ShipId, number>>): boolean {
@@ -257,13 +280,16 @@ export function dispatchFlight(
   }
   if (!requestId) return failure(state, 'invalid-command', 'Для отправки требуется requestId/commandId.');
   if (command.missionId !== 'colonize') return failure(state, 'mission-not-supported', 'Эта миссия пока не подключена к flight runtime.');
+  if (command.destination.kind !== 'coordinate') return failure(state, 'target-not-colonizable', 'Колонизация допускает только свободную координату.');
   if (!isFlightCoordinate(command.destination.coordinate)) return failure(state, 'invalid-coordinate', 'Координата цели некорректна.');
   if (targetHasInvalidKind(command.targetKind)) return failure(state, 'target-not-colonizable', 'Эта позиция не подходит для колонизации.');
+
+  const departedAt = Number.isFinite(command.departedAt) ? command.departedAt! : (runtimeOptions.now ?? Date.now());
 
   const originPlanetId = command.originPlanetId ?? state.currentPlanetId;
   const originPlanet = state.planets[originPlanetId];
   if (!originPlanet) return failure(state, 'invalid-command', 'Исходная планета не найдена.');
-  if (targetOccupied(state, command.destination.coordinate)) return failure(state, 'target-occupied', 'Координата уже занята.');
+  if (targetOccupied(state, command.destination.coordinate, departedAt)) return failure(state, 'target-occupied', 'Координата уже занята.');
   if (!selectedColonizerOnly(command.selectedShips)) return failure(state, 'wrong-ship-composition', 'Для колонизации нужен ровно один колонизатор и никаких других кораблей.');
 
   const availableFleet = getAvailableFleetForPlanet(state, originPlanetId);
@@ -272,7 +298,6 @@ export function dispatchFlight(
     return failure(state, reserved > 0 ? 'ship-already-reserved' : 'insufficient-ships', reserved > 0 ? 'Колонизатор уже зарезервирован другим рейсом.' : 'На исходной планете нет доступного колонизатора.');
   }
 
-  const departedAt = Number.isFinite(command.departedAt) ? command.departedAt! : (runtimeOptions.now ?? Date.now());
   const science = state.science.levels;
   const domainResult = dispatchDomainFlight(flights, {
     requestId,
@@ -350,7 +375,7 @@ export function reconcileFlights(state: SaveState, now: number): FlightReconcile
         events.push({ flight: failed, status: 'arrived', notice: 'Миссия пока не поддерживается и завершена без результата.' });
         continue;
       }
-      if (targetOccupied(next, current.destinationCoordinate, current.id) || current.targetKind !== undefined && current.targetKind !== 'empty') {
+      if (targetOccupied(next, current.destinationCoordinate, now, current.id) || targetHasInvalidKind(current.targetKind)) {
         const returningState = beginDomainFlightReturn(next.flights, current.id, now, 'target-occupied');
         const returning = returningState.records.find((flight) => flight.id === current.id)!;
         const withArrival: FlightRecord = { ...returning, arrivedAt: now, completionReason: 'target-occupied' };

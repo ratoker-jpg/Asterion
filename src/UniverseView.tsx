@@ -281,12 +281,13 @@ function OwnerInspector({
   );
 }
 
-function SpecialInspector({ node, nowMs, onColonize }: { node: UniversePlanetNode; nowMs: number; onColonize: (coordinate: UniverseCoordinate) => void }) {
+function SpecialInspector({ node, underlyingNode, nowMs, onColonize }: { node: UniversePlanetNode; underlyingNode?: UniversePlanetNode; nowMs: number; onColonize: (coordinate: UniverseCoordinate) => void }) {
   const isEmpty = node.kind === 'empty';
   const isPirate = node.kind === 'pirate';
   const isAnomaly = node.kind === 'anomaly';
   const isUnique = node.kind === 'unique';
   const isAsteroid = node.kind === 'asteroid';
+  const canColonize = isEmpty || (isAsteroid && underlyingNode?.kind === 'empty');
   const title = isEmpty ? 'Свободная позиция' : node.name;
   const timedState = node.pirate ?? node.special;
   const status = isAsteroid
@@ -295,7 +296,7 @@ function SpecialInspector({ node, nowMs, onColonize }: { node: UniversePlanetNod
       ? `Активен · исчезнет через ${countdownLabel(nowMs, timedState.expiresAt)}`
       : node.statusLabel;
   return (
-    <div className={`universe-inspector-special universe-inspector-special--${node.kind}`} data-qa-universe-special={node.kind}>
+    <div className={`universe-inspector-special universe-inspector-special--${node.kind}`} data-qa-universe-special={node.kind} data-qa-universe-underlying-kind={underlyingNode?.kind ?? (isEmpty ? 'empty' : '')}>
       <section className="universe-special-preview">
         {node.art ? <img src={node.art} alt="" draggable={false} /> : <span className="universe-special-symbol" aria-hidden="true">{isEmpty ? '＋' : '◌'}</span>}
         <div><small>{getUniverseObjectKindLabel(node.kind)}</small><h3>{title}</h3><span>{node.known === false ? 'Неизученный сигнал' : isAsteroid ? 'Траектория наблюдается · содержание неизвестно' : node.kind === 'uninhabited' || isUnique || isAnomaly ? 'Владелец отсутствует' : 'Галактика 01 · Система ' + String(node.coordinate.system).padStart(2, '0')}</span></div>
@@ -310,24 +311,25 @@ function SpecialInspector({ node, nowMs, onColonize }: { node: UniversePlanetNod
 
       <p className="universe-special-description">{node.description}</p>
 
-      {isEmpty ? (
+      {canColonize ? (
         <button type="button" className="universe-enabled-operation" title="Открыть подготовку колонизации" data-qa-universe-special-action="colonize" data-qa-universe-target-coordinate={formatUniverseCoordinate(node.coordinate)} onClick={() => onColonize(node.coordinate)}>КОЛОНИЗИРОВАТЬ</button>
+      ) : isAsteroid ? (
+        <button type="button" className="universe-disabled-operation" disabled title="Миссия добычи газа пока недоступна" data-qa-universe-special-action="asteroid-recycler">ОТПРАВИТЬ ПЕРЕРАБОТЧИКА · НЕ ПОДКЛЮЧЕНО</button>
       ) : isPirate ? (
         <button type="button" className="universe-disabled-operation" disabled title="Разведка пока недоступна" data-qa-universe-special-action="pirate">РАЗВЕДАТЬ · СКОРО</button>
       ) : isAnomaly ? (
         <button type="button" className="universe-disabled-operation" disabled title="Исследование пока недоступно" data-qa-universe-special-action="anomaly">ИССЛЕДОВАТЬ · СКОРО</button>
-      ) : isAsteroid ? (
-        <button type="button" className="universe-disabled-operation" disabled title="Миссия добычи газа пока недоступна" data-qa-universe-special-action="asteroid-recycler">ОТПРАВИТЬ ПЕРЕРАБОТЧИКА · НЕ ПОДКЛЮЧЕНО</button>
       ) : (
         <button type="button" className="universe-disabled-operation" disabled data-qa-universe-special-action="disabled">{node.kind === 'uninhabited' ? 'КОЛОНИЗАЦИЯ' : 'ИССЛЕДОВАНИЕ'} · СКОРО</button>
       )}
+      {canColonize && isAsteroid ? <button type="button" className="universe-disabled-operation" disabled title="Миссия добычи газа пока недоступна" data-qa-universe-special-action="asteroid-recycler">ОТПРАВИТЬ ПЕРЕРАБОТЧИКА · НЕ ПОДКЛЮЧЕНО</button> : null}
     </div>
   );
 }
 
 // The clock belongs to the map, not to a render or a selected object. Toggling
 // the layer and visiting another system must not restart orbital motion.
-function MovingAsteroid({ node, nowMs, occupiedNodes, onSelect }: { node: UniversePlanetNode; nowMs: number; occupiedNodes: readonly UniversePlanetNode[]; onSelect: (node: UniversePlanetNode) => void }) {
+function MovingAsteroid({ node, underlyingKind, nowMs, occupiedNodes, onSelect }: { node: UniversePlanetNode; underlyingKind?: UniversePlanetNode['kind']; nowMs: number; occupiedNodes: readonly UniversePlanetNode[]; onSelect: (node: UniversePlanetNode) => void }) {
   const ref = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const point = getUniverseAsteroidPoint(node, nowMs, occupiedNodes);
@@ -344,7 +346,7 @@ function MovingAsteroid({ node, nowMs, occupiedNodes, onSelect }: { node: Univer
     data-qa-universe-asteroid-next-move={node.asteroid?.nextMoveAt ?? ''}
     data-qa-universe-asteroid-next-coordinate={nextCoordinate}
     data-qa-universe-asteroid-gas="hidden"
-    data-qa-universe-object={node.id} data-qa-universe-kind="asteroid" onClick={() => onSelect(node)}>
+    data-qa-universe-object={node.id} data-qa-universe-kind="asteroid" data-qa-universe-underlying-kind={underlyingKind ?? ''} onClick={() => onSelect(node)}>
     <img src={node.art} alt="" draggable={false} /><span>АСТЕРОИД · {node.coordinate.position}</span>
   </button>;
 }
@@ -394,6 +396,9 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
   const asteroidAttachmentNodes = useMemo(() => [...systemData.positions, ...systemData.asteroids], [systemData]);
   const nodesById = useMemo(() => new Map(galaxyData.systems.flatMap((item) => [...item.positions, ...item.asteroids]).map((node) => [node.id, node])), [galaxyData]);
   const selectedNode = selectedNodeId ? nodesById.get(selectedNodeId) ?? null : null;
+  const selectedUnderlyingNode = selectedNode?.kind === 'asteroid'
+    ? galaxyData.systems[selectedNode.coordinate.system - 1]?.positions.find((node) => node.coordinate.position === selectedNode.coordinate.position)
+    : undefined;
 
   const ownerPlanets = useMemo(() => {
     if (!selectedNode || (selectedNode.kind !== 'player' && selectedNode.kind !== 'npc')) return [];
@@ -538,7 +543,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
           );
         })}
 
-        {showAsteroids ? systemData.asteroids.map((asteroid) => <MovingAsteroid key={asteroid.id} node={asteroid} nowMs={nowMs} occupiedNodes={asteroidAttachmentNodes} onSelect={selectNode} />) : null}
+        {showAsteroids ? systemData.asteroids.map((asteroid) => <MovingAsteroid key={asteroid.id} node={asteroid} underlyingKind={systemData.positions.find((node) => node.coordinate.position === asteroid.coordinate.position)?.kind} nowMs={nowMs} occupiedNodes={asteroidAttachmentNodes} onSelect={selectNode} />) : null}
         <div className="universe-map-hint">Выберите мир, чтобы открыть сведения <span>Астероиды стоят 15–30 мин и переходят к следующей позиции</span></div>
       </div>
 
@@ -556,7 +561,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
             <button ref={closeButtonRef} type="button" className="universe-inspector-close" aria-label="Закрыть инспектор" title="Закрыть инспектор" onClick={() => setSelectedNodeId(null)}>×</button>
           </header>
           <div className="universe-inspector-body">
-            {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} planets={ownerPlanets} currentOwnerId={owner.id} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} nowMs={nowMs} onColonize={onColonize} />}
+            {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} planets={ownerPlanets} currentOwnerId={owner.id} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} underlyingNode={selectedUnderlyingNode} nowMs={nowMs} onColonize={onColonize} />}
           </div>
         </aside>
         </div>, document.body) : null}

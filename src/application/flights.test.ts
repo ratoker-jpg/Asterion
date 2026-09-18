@@ -12,6 +12,12 @@ import {
 } from './flights.ts';
 import { startBuilding } from './buildings.ts';
 import { getPlanetResources, replacePlanetResources } from './contracts.ts';
+import {
+  ASTEROID_SCHEDULE_EPOCH_MS,
+  createUniverseSystem,
+  getUniverseAsteroidState,
+  getUniverseTimedObjectSchedule,
+} from '../domain/universe/runtime.ts';
 
 const origin = { galaxy: 1, system: 1, position: 1 };
 
@@ -156,6 +162,84 @@ test('target occupied at arrival starts a full return once and completes as targ
   assert.equal(returned.state.flights.records[0].completionReason, 'target-occupied');
   assert.equal(returned.state.planets['helion-01'].fleet.ships.colonizer, 1);
   assert.equal(Object.keys(returned.state.planets).filter((id) => id.startsWith('planet-')).length, 0);
+});
+
+test('an asteroid overlay does not block a free underlying coordinate', () => {
+  const now = ASTEROID_SCHEDULE_EPOCH_MS + 60 * 60 * 1_000 + 1;
+  const asteroid = getUniverseAsteroidState(1, now)!;
+  const system = createUniverseSystem({ system: asteroid.coordinate.system, nowMs: now });
+  const underlying = system.positions.find((node) => node.coordinate.position === asteroid.coordinate.position);
+  assert.equal(underlying?.kind, 'empty');
+
+  const initial = createInitialSaveState('production', now);
+  const sent = dispatchFlight(initial, {
+    ...command('asteroid-overlay', asteroid.coordinate),
+    targetKind: 'asteroid',
+    departedAt: now,
+  }, now);
+  assert.equal(sent.ok, true);
+  if (sent.ok) assert.equal(sent.flight.destinationCoordinate.position, asteroid.coordinate.position);
+});
+
+test('an asteroid over an occupied coordinate remains blocked', () => {
+  const now = ASTEROID_SCHEDULE_EPOCH_MS + 1;
+  const asteroid = getUniverseAsteroidState(0, now)!;
+  const initial = createInitialSaveState('production', now);
+  const occupiedTarget = {
+    ...initial.planets['helion-01'],
+    name: 'Планета под астероидом',
+    universeGalaxy: asteroid.coordinate.galaxy,
+    universeSystem: asteroid.coordinate.system,
+    universePosition: asteroid.coordinate.position,
+  };
+  const state = { ...initial, planets: { ...initial.planets, 'occupied-under-asteroid': occupiedTarget } };
+  const result = dispatchFlight(state, {
+    ...command('occupied-under-asteroid', asteroid.coordinate),
+    targetKind: 'asteroid',
+    departedAt: now,
+  }, now);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.code, 'target-occupied');
+});
+
+test('colonization rejects non-coordinate destinations at the application boundary', () => {
+  const initial = createInitialSaveState('production', 1_000);
+  const result = dispatchFlight(initial, {
+    ...command('planet-destination'),
+    destination: { kind: 'planet', planetId: 'helion-01', coordinate: { galaxy: 1, system: 2, position: 1 } },
+  }, 1_000);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.code, 'target-not-colonizable');
+  assert.equal(result.state, initial);
+});
+
+test('dispatch and arrival re-check dynamic objects while ignoring asteroid-only overlays', () => {
+  const pirateSchedule = getUniverseTimedObjectSchedule('pirate', 1, 2, 0);
+  assert.equal(pirateSchedule.present, true);
+  const pirateNow = pirateSchedule.startAt + 1;
+  const pirateSystem = createUniverseSystem({ system: 2, nowMs: pirateNow });
+  const pirate = pirateSystem.positions.find((node) => node.kind === 'pirate');
+  assert.ok(pirate);
+
+  const blocked = dispatchFlight(createInitialSaveState('production', pirateNow), {
+    ...command('pirate-dispatch-blocked', pirate.coordinate),
+    departedAt: pirateNow,
+  }, pirateNow);
+  assert.equal(blocked.ok, false);
+  if (!blocked.ok) assert.equal(blocked.error.code, 'target-occupied');
+
+  const departedAt = pirateSchedule.startAt - 1_000;
+  const sent = dispatchFlight(createInitialSaveState('production', departedAt), {
+    ...command('pirate-arrival-blocked', pirate.coordinate),
+    departedAt,
+  }, departedAt);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.ok(sent.flight.arrivalAt > pirateSchedule.startAt);
+  const arrival = reconcileFlights(sent.state, sent.flight.arrivalAt);
+  assert.equal(arrival.events[0]?.status, 'target-occupied');
+  assert.equal(arrival.state.flights.records[0].phase, 'returning');
+  assert.equal(arrival.state.flights.records[0].returnAt, sent.flight.arrivalAt + sent.flight.oneWayDurationMs);
 });
 
 test('colony actions spend the colony wallet without changing the homeworld alias', () => {
