@@ -125,6 +125,7 @@ import { reconcileRuntime } from './application/reconcile.ts';
 import {
   FLIGHT_COMMAND_RESULT_EVENT,
   FLIGHT_DISPATCH_REQUEST_EVENT,
+  FLIGHT_EDIT_TARGET_REQUEST_EVENT,
   FLIGHT_LAUNCH_CONTEXT_EVENT,
   FLIGHT_RECALL_REQUEST_EVENT,
   dispatchFlight,
@@ -303,11 +304,18 @@ export function App() {
       }
       window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
     };
+    const onEditTargetRequest = () => {
+      clearBuildingInterior();
+      navigateTo('universe');
+      setNotice('Выберите новую свободную координату для колонизации.');
+    };
     window.addEventListener(FLIGHT_DISPATCH_REQUEST_EVENT, onDispatchRequest);
     window.addEventListener(FLIGHT_RECALL_REQUEST_EVENT, onRecallRequest);
+    window.addEventListener(FLIGHT_EDIT_TARGET_REQUEST_EVENT, onEditTargetRequest);
     return () => {
       window.removeEventListener(FLIGHT_DISPATCH_REQUEST_EVENT, onDispatchRequest);
       window.removeEventListener(FLIGHT_RECALL_REQUEST_EVENT, onRecallRequest);
+      window.removeEventListener(FLIGHT_EDIT_TARGET_REQUEST_EVENT, onEditTargetRequest);
     };
   }, [testTimeScale]);
 

@@ -42,6 +42,7 @@ import type {
 import type { UniverseCoordinate, UniverseObjectKind } from '../domain/universe/types.ts';
 
 export const FLIGHT_LAUNCH_CONTEXT_EVENT = 'asterion:flight-launch-context';
+export const FLIGHT_EDIT_TARGET_REQUEST_EVENT = 'asterion:flight-edit-target-request';
 export const FLIGHT_DISPATCH_REQUEST_EVENT = 'asterion:flight-dispatch-request';
 export const FLIGHT_RECALL_REQUEST_EVENT = 'asterion:flight-recall-request';
 export const FLIGHT_COMMAND_RESULT_EVENT = 'asterion:flight-command-result';

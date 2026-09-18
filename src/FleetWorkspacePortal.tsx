@@ -26,13 +26,14 @@ import { FLEET_PRODUCTION_DISMANTLE_SATELLITES_REQUEST_EVENT } from './applicati
 import {
   FLIGHT_COMMAND_RESULT_EVENT,
   FLIGHT_DISPATCH_REQUEST_EVENT,
+  FLIGHT_EDIT_TARGET_REQUEST_EVENT,
   FLIGHT_LAUNCH_CONTEXT_EVENT,
   FLIGHT_RECALL_REQUEST_EVENT,
   previewFlight,
   type FlightCommandResult,
   type FlightLaunchContext,
 } from './application/flights.ts';
-import type { FlightRecord, MissionId } from './domain/flights/types.ts';
+import type { FlightDestination, FlightRecord, MissionId } from './domain/flights/types.ts';
 import { ACTIVE_RUNTIME_MODE, resolveTestTimeScale } from './domain/runtime/mode.ts';
 import { createPersistenceFacade } from './application/persistence.ts';
 import {
@@ -128,6 +129,9 @@ function FleetWorkspace({
   const [status, setStatus] = useState(FLEET_ROOT_STATUS);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewResult, setPreviewResult] = useState<FlightCommandResult | null>(null);
+  const [previewOriginPlanetId, setPreviewOriginPlanetId] = useState<string | null>(null);
+  const [previewDestination, setPreviewDestination] = useState<FlightDestination | null>(null);
+  const [editingPreviewSource, setEditingPreviewSource] = useState(false);
   const [pendingRecall, setPendingRecall] = useState<FlightRecord | null>(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [fleetSnapshot, setFleetSnapshot] = useState<FleetSnapshot>(readApplicationFleetSnapshot);
@@ -190,6 +194,9 @@ function FleetWorkspace({
     if (!launchContext) return;
     setMissionId(launchContext.missionId);
     setSelectedQuantities(launchContext.missionId === 'colonize' ? { colonizer: 1 } : {});
+    setPreviewOriginPlanetId(null);
+    setPreviewDestination(null);
+    setEditingPreviewSource(false);
     setStatus(`Цель: ${launchContext.destination.coordinate ? `[${launchContext.destination.coordinate.galaxy}:${launchContext.destination.coordinate.system}:${launchContext.destination.coordinate.position}]` : 'выбрана'}.`);
   }, [launchContext]);
 
@@ -200,6 +207,10 @@ function FleetWorkspace({
         setStatus(result.notice);
         setPreviewOpen(false);
         setPreviewResult(null);
+        setPreviewOriginPlanetId(null);
+        setPreviewDestination(null);
+        setEditingPreviewSource(false);
+        setSelectedQuantities({});
       } else {
         setStatus(result.error.message);
       }
@@ -281,14 +292,14 @@ function FleetWorkspace({
     }));
   };
 
-  const createColonizationCommand = (requestId: string) => {
+  const createColonizationCommand = (requestId: string, draft?: { originPlanetId?: string; destination?: FlightDestination }) => {
     if (!launchContext || missionId !== 'colonize') return null;
     const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
     return {
       requestId,
       missionId: 'colonize' as const,
-      originPlanetId: runtimeState.currentPlanetId,
-      destination: launchContext.destination,
+      originPlanetId: draft?.originPlanetId ?? previewOriginPlanetId ?? runtimeState.currentPlanetId,
+      destination: draft?.destination ?? previewDestination ?? launchContext.destination,
       targetKind: launchContext.targetKind ?? 'empty',
       selectedShips: { colonizer: 1 as const },
       operationId: launchContext.operationId,
@@ -301,13 +312,37 @@ function FleetWorkspace({
       setStatus('Эта миссия пока не подключена к flight runtime.');
       return;
     }
-    const command = createColonizationCommand(`preview-${Date.now()}`);
-    if (!command) {
+    const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
+    const originPlanetId = runtimeState.currentPlanetId;
+    const destination = launchContext?.destination;
+    const command = destination
+      ? createColonizationCommand(`preview-${Date.now()}`, { originPlanetId, destination })
+      : null;
+    if (!destination || !command) {
       setStatus('Сначала выберите свободную координату во Вселенной.');
       return;
     }
-    setPreviewResult(previewFlight(createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read(), command, { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale() }));
+    setPreviewOriginPlanetId(originPlanetId);
+    setPreviewDestination(destination);
+    setEditingPreviewSource(false);
+    setPreviewResult(previewFlight(runtimeState, command, { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale() }));
     setPreviewOpen(true);
+  };
+
+  const refreshFlightPreview = (originPlanetId: string, destination: FlightDestination) => {
+    const command = createColonizationCommand(`preview-${Date.now()}`, { originPlanetId, destination });
+    if (!command) return;
+    setPreviewResult(previewFlight(createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read(), command, {
+      mode: ACTIVE_RUNTIME_MODE,
+      testTimeScale: resolveTestTimeScale(),
+    }));
+  };
+
+  const changePreviewOrigin = (originPlanetId: string) => {
+    const destination = previewDestination ?? launchContext?.destination;
+    if (!destination) return;
+    setPreviewOriginPlanetId(originPlanetId);
+    refreshFlightPreview(originPlanetId, destination);
   };
 
   const confirmFlightDispatch = () => {
@@ -358,6 +393,17 @@ function FleetWorkspace({
     selectedSection === 'simulator' ? 'fleet-main-v1--subpage' : '',
   ].filter(Boolean).join(' ');
   const productionQueueKind = queueKindForConstructionView(constructionView);
+  const previewRuntimeState = previewOpen ? createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read() : null;
+  const previewSourceId = previewOriginPlanetId ?? previewRuntimeState?.currentPlanetId ?? null;
+  const previewSource = previewSourceId ? previewRuntimeState?.planets[previewSourceId] : null;
+  const previewCoordinate = previewDestination?.coordinate ?? launchContext?.destination.coordinate ?? null;
+  const ownedPreviewPlanets = previewRuntimeState
+    ? Object.entries(previewRuntimeState.planets).map(([id, item]) => ({
+      id,
+      name: item.name,
+      coordinate: `[${item.universeGalaxy}:${item.universeSystem}:${item.universePosition}]`,
+    }))
+    : [];
 
   return (
     <div className="fleet-workspace-v1" data-qa-flight-launch-context={launchContext ? flightCoordinateLabel(launchContext.destination.coordinate) : undefined}>
@@ -579,21 +625,78 @@ function FleetWorkspace({
       ) : null}
       {previewOpen && previewResult ? createPortal(
         <div className="resource-building-action-confirm-backdrop" data-qa-flight-preview-backdrop onMouseDown={() => setPreviewOpen(false)}>
-          <section className="resource-building-action-confirm flight-preview-modal" role="dialog" aria-modal="true" aria-labelledby="flight-preview-title" onMouseDown={(event) => event.stopPropagation()}>
-            <small>ПРЕДПРОСМОТР РЕЙСА</small>
-            <h3 id="flight-preview-title">{previewResult.ok ? 'Подтвердить колонизацию?' : 'Рейс недоступен'}</h3>
-            {previewResult.ok ? <>
-              <p data-qa-flight-preview>Цель: {flightCoordinateLabel(previewResult.flight.destinationCoordinate)} · маршрут {previewResult.flight.routeDistance} ед.</p>
-              <p>В один конец: {Math.ceil(previewResult.flight.oneWayDurationMs / 60_000)} мин · газ: {previewResult.flight.gasCost} · прибытие: {new Date(previewResult.flight.arrivalAt).toLocaleString('ru-RU')}</p>
-              <p>Будет отправлен ровно один колонизатор. Газ списывается только за исходящий участок.</p>
-              <div className="resource-building-action-confirm-actions">
-                <button type="button" data-qa-flight-dispatch-confirm onClick={confirmFlightDispatch}>ОТПРАВИТЬ</button>
-                <button type="button" data-qa-flight-preview-cancel onClick={() => setPreviewOpen(false)}>ОТМЕНА</button>
-              </div>
-            </> : <>
-              <p data-qa-flight-preview-error>{previewResult.error.message}</p>
-              <div className="resource-building-action-confirm-actions"><button type="button" onClick={() => setPreviewOpen(false)}>ЗАКРЫТЬ</button></div>
-            </>}
+          <section className="resource-building-action-confirm flight-preview-modal flight-timeline-modal" role="dialog" aria-modal="true" aria-labelledby="flight-preview-title" onMouseDown={(event) => event.stopPropagation()}>
+            <header className="flight-timeline-head">
+              <small>FLIGHT PLAN / ОПЕРАТИВНЫЙ МАРШРУТ</small>
+              <h3 id="flight-preview-title">План перелёта</h3>
+              <p>Проверьте источник, цель и расчёт перед отправкой колонизатора.</p>
+            </header>
+            <div className="flight-timeline-body">
+              <ol className="flight-timeline-steps" aria-label="Шаги подготовки рейса">
+                <li className="flight-timeline-step is-complete">
+                  <span aria-hidden="true">01</span>
+                  <div>
+                    <small>ИСТОЧНИК</small>
+                    {editingPreviewSource ? <select name="flight-preview-source" aria-label="Планета-источник" value={previewSourceId ?? ''} onChange={(event) => changePreviewOrigin(event.target.value)}>
+                      {ownedPreviewPlanets.map((planet) => <option key={planet.id} value={planet.id}>{planet.name} {planet.coordinate}</option>)}
+                    </select> : <>
+                      <strong>{previewSource?.name ?? planetName}</strong>
+                      <em>{previewSource ? `[${previewSource.universeGalaxy}:${previewSource.universeSystem}:${previewSource.universePosition}]` : coords}</em>
+                    </>}
+                    <button type="button" className="flight-timeline-edit" onClick={() => setEditingPreviewSource((value) => !value)}>ИЗМЕНИТЬ</button>
+                  </div>
+                </li>
+                <li className="flight-timeline-step is-complete">
+                  <span aria-hidden="true">02</span>
+                  <div>
+                    <small>ЦЕЛЬ</small>
+                    <>
+                      <strong>{previewCoordinate ? flightCoordinateLabel(previewCoordinate) : 'Не выбрана'}</strong>
+                      <em>Свободная координата</em>
+                    </>
+                    <button type="button" className="flight-timeline-edit" onClick={() => {
+                      setPreviewOpen(false);
+                      window.dispatchEvent(new Event(FLIGHT_EDIT_TARGET_REQUEST_EVENT));
+                    }}>ИЗМЕНИТЬ</button>
+                  </div>
+                </li>
+                <li className="flight-timeline-step">
+                  <span aria-hidden="true">03</span>
+                  <div>
+                    <small>КОРАБЛЬ</small>
+                    <strong>Колонизатор × 1</strong>
+                    <em>Население: 12 · миссия зафиксирована</em>
+                  </div>
+                </li>
+              </ol>
+              <section className="flight-timeline-summary" aria-live="polite">
+                <div className="flight-timeline-route">
+                  <div><small>ОТКУДА</small><strong>{previewSource?.name ?? planetName}</strong><em>{previewSource ? `[${previewSource.universeGalaxy}:${previewSource.universeSystem}:${previewSource.universePosition}]` : coords}</em></div>
+                  <span aria-hidden="true">→</span>
+                  <div><small>КУДА</small><strong>{previewCoordinate ? flightCoordinateLabel(previewCoordinate) : '—'}</strong><em>Свободная позиция</em></div>
+                </div>
+                {previewResult.ok ? <>
+                  <div className="flight-timeline-ship"><img src={missionColonizeIcon} alt="" /><div><strong>Колонизатор</strong><small>Ровно один корабль · население {previewResult.flight.populationReserved}</small></div><b>1</b></div>
+                  <div className="flight-timeline-metrics" data-qa-flight-preview>
+                    <div><small>РАССТОЯНИЕ</small><strong>{previewResult.flight.routeDistance} ед.</strong></div>
+                    <div><small>ЭФФ. СКОРОСТЬ</small><strong>{previewResult.flight.effectiveSpeed}</strong></div>
+                    <div><small>ТУДА</small><strong>{Math.ceil(previewResult.flight.oneWayDurationMs / 60_000)} мин</strong></div>
+                    <div><small>ОБРАТНО</small><strong>{Math.ceil(previewResult.flight.oneWayDurationMs / 60_000)} мин</strong></div>
+                    <div><small>ПОЛНЫЙ ЦИКЛ</small><strong>{Math.ceil(previewResult.flight.oneWayDurationMs * 2 / 60_000)} мин</strong></div>
+                    <div><small>ГАЗ</small><strong>{previewResult.flight.gasCost}</strong></div>
+                  </div>
+                  <div className="flight-timeline-notes">
+                    <p><strong>Прибытие:</strong> {new Date(previewResult.flight.arrivalAt).toLocaleString('ru-RU')}</p>
+                    <p>Газ списывается только за исходящий участок. При отзыве колонизатор возвращается, но газ не возвращается.</p>
+                  </div>
+                </> : <p className="flight-timeline-error" data-qa-flight-preview-error>{previewResult.error.message}</p>}
+              </section>
+            </div>
+            <div className="resource-building-action-confirm-actions flight-timeline-actions">
+              <button type="button" className="flight-timeline-back" onClick={() => setPreviewOpen(false)}>ВЕРНУТЬСЯ К РЕДАКТИРОВАНИЮ</button>
+              {previewResult.ok ? <button type="button" data-qa-flight-dispatch-confirm onClick={confirmFlightDispatch}>ОТПРАВИТЬ</button> : null}
+              <button type="button" data-qa-flight-preview-cancel onClick={() => setPreviewOpen(false)}>ОТМЕНА</button>
+            </div>
           </section>
         </div>,
         document.body,
@@ -658,7 +761,10 @@ export function FleetWorkspacePortal() {
     const onLaunchContext = (event: Event) => setLaunchContext((event as CustomEvent<FlightLaunchContext>).detail);
     const onCommandResult = (event: Event) => {
       const result = (event as CustomEvent<FlightCommandResult>).detail;
-      if (result.ok) setFlightRecords(result.state.flights.records);
+      if (result.ok) {
+        setFlightRecords(result.state.flights.records);
+        setLaunchContext(null);
+      }
     };
 
     syncPlanet();
