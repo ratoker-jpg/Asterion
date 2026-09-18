@@ -77,6 +77,11 @@ async function reload(win) {
   await settle(win);
 }
 
+async function resetTestSave(win) {
+  await win.webContents.session.clearStorageData({ storages: ['localstorage'] });
+  await reload(win);
+}
+
 async function activateScreen(win, route, label, expectedClass) {
   const clicked = await win.webContents.executeJavaScript(`(() => {
     const button = document.querySelector('[data-qa-navigation="utility"] [data-qa-route="${route}"]');
@@ -309,8 +314,7 @@ async function verifyCommandScrollStability(win, directory, label) {
 }
 
 async function verifyResourceZoneFlow(win, directory) {
-  await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);
-  await reload(win);
+  await resetTestSave(win);
 
   await activateMainScreen(win,'planet','.planet-page-v3 .scene-title h1');
   const hotspotOpened = await win.webContents.executeJavaScript(`(() => {
@@ -418,8 +422,7 @@ async function verifyResourceZoneFlow(win, directory) {
   if(insufficient.status!=='insufficient-resource' || !insufficient.disabled) throw new Error(`Insufficient-resource dialog failed: ${JSON.stringify(insufficient)}`);
   await capture(win,directory,'resource-zone-insufficient');
 
-  await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);
-  await reload(win);
+  await resetTestSave(win);
   await activateResourceZone(win);
 
   for(const [index, role] of ['basic-energy','gas-production-1','hangar'].entries()) {
@@ -503,8 +506,7 @@ async function verifyResourceZoneFlow(win, directory) {
   };
   console.log(`Resource zone QA passed: terrain, canonical names, requirements, three-slot FIFO queue, completion transition and reload persistence.`);
 
-  await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);
-  await reload(win);
+  await resetTestSave(win);
   return result;
 }
 
