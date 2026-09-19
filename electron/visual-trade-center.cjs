@@ -314,6 +314,7 @@ async function verifyFlow(win, directory, label) {
   if (screen?.submitDisabled || screen.receive !== 1000) throw new Error(`${label}: base 1:1 trade should be valid ${JSON.stringify(screen)}`);
   await click(win, '[data-qa-trade-submit]');
   await waitFor(win, `document.querySelector('[data-qa-trade-toast]')?.textContent?.includes('Обмен выполнен')`);
+  await waitFor(win, `document.querySelector('[data-qa-trade-slots]')?.getAttribute('data-qa-trade-slots') === '2/3' && document.querySelectorAll('[data-qa-trade-refill-segment]').length === 1`);
   screen = await readScreen(win);
   if (screen?.amount !== 0 || screen.source !== 'metal' || screen.target !== 'minerals' || screen.slots !== '2/3' || screen.queueCount !== 1 || screen.queueSegments !== 1) throw new Error(`${label}: first trade UI state mismatch ${JSON.stringify(screen)}`);
   let saved = await readSave(win);
