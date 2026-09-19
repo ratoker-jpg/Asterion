@@ -62,6 +62,7 @@ import {
   MAX_PLANETS_PER_OWNER,
   SYSTEM_COUNT,
   createUniverseNpcOwnerProfile,
+  TEST_MODE_ALLY_PLANET_FIXTURE,
   createUniverseMap,
   formatUniverseCoordinate,
   getUniverseActionState,
@@ -82,6 +83,7 @@ import type {
   UniversePlanetNode,
   UniverseCoordinate,
 } from './domain/universe/types.ts';
+import type { TargetRelation } from './domain/flights/types.ts';
 
 const planetArts = [
   planet01, planet02, planet03, planet04, planet05, planet06, planet07, planet08, planet09, planet10, planet11, planet12,
@@ -103,6 +105,7 @@ type UniverseViewProps = {
   playerPlanets: readonly UniversePersistedPlayerPlanet[];
   mode: RuntimeMode;
   onColonize: (coordinate: UniverseCoordinate) => void;
+  onTransport: (target: { planetId: string; coordinate: UniverseCoordinate; relation: TargetRelation }) => void;
 };
 
 const POINT_LABELS: ReadonlyArray<{ key: keyof UniverseOwnerPoints; label: string }> = [
@@ -277,7 +280,7 @@ function OwnerInspector({
             </li>
           ))}
         </ul>
-        <p className="universe-data-note">Нажмите на планету, чтобы перейти к её системе. Отправка флота и разведка пока недоступны.</p>
+        <p className="universe-data-note">Нажмите на планету, чтобы перейти к её системе. Отправка флота доступна на свои и явные союзные планеты; разведка остаётся прототипом.</p>
       </section>
     </div>
   );
@@ -353,7 +356,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, occupiedNodes, onSelect }
   </button>;
 }
 
-export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, rating, command, playerPlanets, mode, onColonize }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, rating, command, playerPlanets, mode, onColonize, onTransport }: UniverseViewProps) {
   const [system, setSystem] = useState(1);
   const [focusEmpty, setFocusEmpty] = useState(false);
   const [showSlotLabels, setShowSlotLabels] = useState(true);
@@ -383,6 +386,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
     if (mode === 'test') {
       const npc = createUniverseNpcOwnerProfile(owner.points);
       next.set(npc.id, npc);
+      next.set(TEST_MODE_ALLY_PLANET_FIXTURE.owner.id, normalizeUniverseOwnerProfile(TEST_MODE_ALLY_PLANET_FIXTURE.owner));
     }
     return next;
   }, [mode, owner]);
@@ -458,6 +462,14 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
 
   const handleAction = (action: UniverseAction, node: UniversePlanetNode) => {
     const actionState = getUniverseActionState(action, node, owner.id);
+    if (action === 'fleet' && actionState.enabled) {
+      onTransport({
+        planetId: node.id,
+        coordinate: node.coordinate,
+        relation: node.ownerId === owner.id || node.isHomeworld ? 'self' : 'ally',
+      });
+      return;
+    }
     onNotice(`${actionState.label}: ${actionState.reason} Цель ${formatUniverseCoordinate(node.coordinate)}.`);
   };
 

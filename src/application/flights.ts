@@ -1,4 +1,5 @@
 import type { CombatFactionId } from '../domain/combat/factions.ts';
+import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import { createEmptyDefenseState } from '../domain/fleet/production.ts';
 import {
   createEmptyFleetState,
@@ -7,9 +8,9 @@ import {
   type OwnedFleetState,
 } from '../domain/fleet/runtime.ts';
 import { createDefaultFleetProductionState } from '../domain/fleet/production.ts';
-import type { ShipId } from '../domain/combat/ids.ts';
 import {
   createDefaultBuildingLevels,
+  getStorageCapacities,
 } from '../domain/buildings/resource-zone.ts';
 import { createEmptyBotAssignment } from '../domain/buildings/production-bots.ts';
 import { createDefaultSpaceportUpgradeState } from '../domain/buildings/spaceport-upgrades.ts';
@@ -20,6 +21,8 @@ import {
   getPlanetResources,
   replacePlanetResources,
   replacePlanetState,
+  replaceAlliedPlanetState,
+  type AlliedPlanetState,
   type PlanetId,
   type PlanetRuntime,
   type SaveState,
@@ -32,12 +35,24 @@ import {
   recallFlight as recallDomainFlight,
 } from '../domain/flights/runtime.ts';
 import { isFlightCoordinate } from '../domain/flights/distance.ts';
+import {
+  addDebris,
+  clampCargoToSourceAndCapacity,
+  getCappedDelivery,
+  getCargoUsed,
+  getFleetCargoCapacity,
+  getOverflowWarning,
+  normalizeTransportCargo,
+  type TransportCargo,
+} from '../domain/flights/cargo.ts';
+import { SHIP_IDS, type ShipId } from '../domain/combat/ids.ts';
 import { scaleRuntimeDuration, type RuntimeMode, type TestTimeScale } from '../domain/runtime/mode.ts';
 import type {
   FlightDestination,
   FlightRecord,
   FlightState,
   MissionId,
+  TargetRelation,
 } from '../domain/flights/types.ts';
 import { createUniverseSystem } from '../domain/universe/runtime.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPlanet } from '../domain/universe/types.ts';
@@ -52,7 +67,8 @@ export const FLIGHT_COMMAND_RESULT_EVENT = 'asterion:flight-command-result';
 
 export type FlightLaunchContext = {
   missionId: MissionId;
-  destination: FlightDestination;
+  destination?: FlightDestination;
+  targetRelation?: TargetRelation;
   targetKind?: UniverseObjectKind;
   operationId?: string;
 };
@@ -61,10 +77,14 @@ export type FlightErrorCode =
   | 'invalid-coordinate'
   | 'target-occupied'
   | 'target-not-colonizable'
+  | 'target-not-available'
+  | 'target-is-origin'
   | 'wrong-ship-composition'
   | 'insufficient-ships'
   | 'ship-already-reserved'
   | 'insufficient-gas'
+  | 'invalid-cargo'
+  | 'insufficient-cargo-capacity'
   | 'mission-not-supported'
   | 'flight-not-recallable'
   | 'flight-already-arrived'
@@ -80,7 +100,9 @@ export type DispatchFlightCommand = {
   commandId?: string;
   missionId: MissionId;
   originPlanetId?: PlanetId;
-  destination: FlightDestination;
+  destination?: FlightDestination;
+  targetRelation?: TargetRelation;
+  cargo?: TransportCargo;
   targetKind?: UniverseObjectKind;
   selectedShips: Partial<Record<ShipId, number>>;
   operationId?: string;
@@ -111,7 +133,7 @@ export type FlightCommandResult = FlightCommandSuccess | FlightCommandFailure;
 
 export type FlightReconcileEvent = {
   flight: FlightRecord;
-  status: 'arrived' | 'returned' | 'target-occupied' | 'colonized';
+  status: 'arrived' | 'returned' | 'target-occupied' | 'target-unavailable' | 'delivered' | 'colonized';
   notice: string;
 };
 
@@ -122,6 +144,15 @@ export type FlightReconcileResult = {
 };
 
 const ACTIVE_FLIGHT_PHASES = new Set<FlightRecord['phase']>(['outbound', 'returning', 'arrived']);
+
+export type ResolvedTransportTarget = {
+  planetId: PlanetId;
+  coordinate: UniverseCoordinate;
+  ownerId: string;
+  relation: 'self' | 'ally' | 'enemy' | 'neutral' | 'empty';
+  runtime: PlanetRuntime | null;
+  acceptsTransport: boolean;
+};
 function currentFlightState(state: SaveState): FlightState {
   return state.flights ?? createFlightState();
 }
@@ -156,6 +187,109 @@ function persistedPlayerPlanets(state: SaveState): UniversePersistedPlayerPlanet
   }));
 }
 
+function targetCoordinateFromPlanet(planet: PlanetRuntime): UniverseCoordinate {
+  return coordinateOfPlanet(planet);
+}
+
+function emptyTransportTarget(destination?: FlightDestination): ResolvedTransportTarget {
+  const coordinate = destination?.coordinate ?? { galaxy: 1, system: 1, position: 1 };
+  return {
+    planetId: destination?.kind === 'planet' ? destination.planetId : '',
+    coordinate,
+    ownerId: '',
+    relation: 'empty',
+    runtime: null,
+    acceptsTransport: false,
+  };
+}
+
+/** Resolves only authoritative SaveState targets; Universe paint cannot grant access. */
+export function resolveTransportTarget(
+  state: SaveState,
+  destination?: FlightDestination,
+): ResolvedTransportTarget {
+  if (!destination || !isFlightCoordinate(destination.coordinate)) return emptyTransportTarget(destination);
+  const coordinate = destination.coordinate;
+  const ownEntry = Object.entries(state.planets).find(([, planet]) => coordinatesEqual(targetCoordinateFromPlanet(planet), coordinate));
+  const allyEntry = Object.entries(state.alliedPlanets ?? {}).find(([, planet]) => coordinatesEqual(targetCoordinateFromPlanet(planet), coordinate));
+  const byCoordinate = ownEntry ?? allyEntry;
+  const byId = destination.kind === 'planet'
+    ? state.planets[destination.planetId]
+      ? { id: destination.planetId, planet: state.planets[destination.planetId], relation: 'self' as const }
+      : state.alliedPlanets?.[destination.planetId]
+        ? { id: destination.planetId, planet: state.alliedPlanets[destination.planetId], relation: 'ally' as const }
+        : undefined
+    : undefined;
+
+  if (destination.kind === 'planet' && (!byId || !coordinatesEqual(targetCoordinateFromPlanet(byId.planet), coordinate))) {
+    return emptyTransportTarget(destination);
+  }
+  if (!byCoordinate && !byId) return emptyTransportTarget(destination);
+
+  const id = byId?.id ?? byCoordinate?.[0] ?? '';
+  const planet = byId?.planet ?? byCoordinate?.[1];
+  if (!planet) return emptyTransportTarget(destination);
+  const relation = byId?.relation ?? (ownEntry ? 'self' : 'ally');
+  const ownerId = relation === 'self' ? state.profile.playerId : (planet as AlliedPlanetState).ownerId;
+  return {
+    planetId: id,
+    coordinate,
+    ownerId,
+    relation,
+    runtime: planet,
+    acceptsTransport: relation === 'self' || relation === 'ally',
+  };
+}
+
+function normalizeSelectedShips(selectedShips: Partial<Record<ShipId, number>>): Partial<Record<ShipId, number>> | null {
+  const normalized: Partial<Record<ShipId, number>> = {};
+  for (const [rawShipId, rawQuantity] of Object.entries(selectedShips)) {
+    if (!SHIP_IDS.includes(rawShipId as ShipId)) return null;
+    if (!Number.isFinite(rawQuantity) || !Number.isInteger(rawQuantity) || (rawQuantity ?? 0) < 0) return null;
+    if ((rawQuantity ?? 0) > 0) normalized[rawShipId as ShipId] = rawQuantity as number;
+  }
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
+export type TransportCargoSummary = {
+  cargo: TransportCargo;
+  capacity: { used: number; total: number; free: number };
+  overflowWarning: boolean;
+};
+
+export function getTransportCargoSummary(
+  state: SaveState,
+  originPlanetId: PlanetId,
+  selectedShips: Partial<Record<ShipId, number>>,
+  requestedCargo: unknown,
+  destination?: FlightDestination,
+): TransportCargoSummary {
+  const origin = state.planets[originPlanetId];
+  const factionId = state.profile.factionId as CombatFactionId;
+  const cargoCatalog = Object.fromEntries(
+    getFactionShipCatalog(factionId).map((entity) => [entity.id, { cargo: entity.ship?.cargo ?? 0 }]),
+  );
+  const capacityTotal = getFleetCargoCapacity(selectedShips, cargoCatalog);
+  const sourceResources = origin?.resources ?? getPlanetResources(state, originPlanetId);
+  const sourceDebris = origin?.recycling.availableDebris ?? 0;
+  const cargo = clampCargoToSourceAndCapacity(requestedCargo, sourceResources, sourceDebris, capacityTotal);
+  // A coordinate draft may use the persisted own/ally match only to derive
+  // the overflow warning. This lookup does not surface ownership or
+  // occupancy errors; dispatchFlight remains the authoritative Send check.
+  const target = destination
+    ? resolveTransportTarget(state, destination)
+    : emptyTransportTarget(destination);
+  const targetResources = target.runtime?.resources ?? { metal: 0, minerals: 0, gas: 0 };
+  const targetCaps = target.runtime ? getStorageCapacities(target.runtime.buildings) : undefined;
+  return {
+    cargo,
+    capacity: { used: getCargoUsed(cargo), total: capacityTotal, free: Math.max(0, capacityTotal - getCargoUsed(cargo)) },
+    overflowWarning: target.acceptsTransport && target.runtime
+      ? getOverflowWarning(cargo, targetResources, target.runtime.recycling.availableDebris, targetCaps)
+      : false,
+  };
+}
+
 export function getReservedShipsForPlanet(
   state: SaveState,
   planetId: PlanetId,
@@ -187,8 +321,15 @@ function failure(state: SaveState, code: FlightErrorCode, message: string): Flig
   return { ok: false, state, error: { code, message } };
 }
 
-function targetOccupied(state: SaveState, coordinate: UniverseCoordinate, nowMs: number, currentFlightId?: string): boolean {
+function targetOccupied(
+  state: SaveState,
+  coordinate: UniverseCoordinate,
+  nowMs: number,
+  currentFlightId?: string,
+  mode: RuntimeMode = Object.keys(state.alliedPlanets ?? {}).length > 0 ? 'test' : 'production',
+): boolean {
   const system = createUniverseSystem({
+    mode,
     galaxy: coordinate.galaxy,
     system: coordinate.system,
     nowMs,
@@ -221,7 +362,7 @@ function scaledRecord(record: FlightRecord, options: FlightRuntimeOptions): Flig
     ...record,
     oneWayDurationMs: duration,
     arrivalAt: record.departedAt + duration,
-    populationReserved: 12,
+    populationReserved: record.populationReserved,
   };
 }
 
@@ -282,23 +423,56 @@ export function dispatchFlight(
     if (existing) return { ok: true, state, flight: existing, created: false, notice: noticeForDispatch(existing) };
   }
   if (!requestId) return failure(state, 'invalid-command', 'Для отправки требуется requestId/commandId.');
-  if (command.missionId !== 'colonize') return failure(state, 'mission-not-supported', 'Эта миссия пока не подключена к flight runtime.');
-  if (command.destination.kind !== 'coordinate') return failure(state, 'target-not-colonizable', 'Колонизация допускает только свободную координату.');
-  if (!isFlightCoordinate(command.destination.coordinate)) return failure(state, 'invalid-coordinate', 'Координата цели некорректна.');
-  if (targetHasInvalidKind(command.targetKind)) return failure(state, 'target-not-colonizable', 'Эта позиция не подходит для колонизации.');
-
+  if (command.missionId !== 'colonize' && command.missionId !== 'transport') {
+    return failure(state, 'mission-not-supported', 'Эта миссия пока не подключена к flight runtime.');
+  }
   const departedAt = Number.isFinite(command.departedAt) ? command.departedAt! : (runtimeOptions.now ?? Date.now());
-
   const originPlanetId = command.originPlanetId ?? state.currentPlanetId;
   const originPlanet = state.planets[originPlanetId];
   if (!originPlanet) return failure(state, 'invalid-command', 'Исходная планета не найдена.');
-  if (targetOccupied(state, command.destination.coordinate, departedAt)) return failure(state, 'target-occupied', 'Координата уже занята.');
-  if (!selectedColonizerOnly(command.selectedShips)) return failure(state, 'wrong-ship-composition', 'Для колонизации нужен ровно один колонизатор и никаких других кораблей.');
-
+  const selectedShips = normalizeSelectedShips(command.selectedShips);
+  if (!selectedShips) return failure(state, 'wrong-ship-composition', 'Выберите хотя бы один доступный корабль.');
   const availableFleet = getAvailableFleetForPlanet(state, originPlanetId);
-  if ((availableFleet.ships.colonizer ?? 0) < 1) {
-    const reserved = getReservedShipsForPlanet(state, originPlanetId).colonizer ?? 0;
-    return failure(state, reserved > 0 ? 'ship-already-reserved' : 'insufficient-ships', reserved > 0 ? 'Колонизатор уже зарезервирован другим рейсом.' : 'На исходной планете нет доступного колонизатора.');
+  const reservedShips = getReservedShipsForPlanet(state, originPlanetId);
+  for (const [shipId, quantity] of Object.entries(selectedShips) as [ShipId, number][]) {
+    if ((availableFleet.ships[shipId] ?? 0) < quantity) {
+      const reserved = reservedShips[shipId] ?? 0;
+      return failure(
+        state,
+        reserved > 0 ? 'ship-already-reserved' : 'insufficient-ships',
+        reserved > 0 ? 'Выбранный корабль уже зарезервирован другим рейсом.' : 'На исходной планете недостаточно выбранных кораблей.',
+      );
+    }
+  }
+
+  if (command.missionId === 'colonize') {
+    if (!command.destination || command.destination.kind !== 'coordinate') return failure(state, 'target-not-colonizable', 'Колонизация допускает только свободную координату.');
+    if (!isFlightCoordinate(command.destination.coordinate)) return failure(state, 'invalid-coordinate', 'Координата цели некорректна.');
+    if (targetHasInvalidKind(command.targetKind)) return failure(state, 'target-not-colonizable', 'Эта позиция не подходит для колонизации.');
+    if (targetOccupied(state, command.destination.coordinate, departedAt, undefined, runtimeOptions.mode)) return failure(state, 'target-occupied', 'Координата уже занята.');
+    if (!selectedColonizerOnly(selectedShips)) return failure(state, 'wrong-ship-composition', 'Для колонизации нужен ровно один колонизатор и никаких других кораблей.');
+  }
+
+  let transportTarget: ResolvedTransportTarget | undefined;
+  let transportCargo: TransportCargo | undefined;
+  let transportOverflowWarning = false;
+  if (command.missionId === 'transport') {
+    if (!command.destination || !isFlightCoordinate(command.destination.coordinate)) {
+      return failure(state, 'invalid-coordinate', 'Координата цели некорректна.');
+    }
+    transportTarget = resolveTransportTarget(state, command.destination);
+    if (!transportTarget.acceptsTransport || !transportTarget.runtime) {
+      return failure(state, 'target-not-available', 'Транспортировка возможна только на вашу или союзную планету.');
+    }
+    if (transportTarget.planetId === originPlanetId) {
+      return failure(state, 'target-is-origin', 'Нельзя перевозить ресурсы на планету-источник.');
+    }
+    if (command.targetRelation !== undefined && command.targetRelation !== transportTarget.relation) {
+      return failure(state, 'target-not-available', 'Транспортировка возможна только на вашу или союзную планету.');
+    }
+    const summary = getTransportCargoSummary(state, originPlanetId, selectedShips, command.cargo, command.destination);
+    transportCargo = summary.cargo;
+    transportOverflowWarning = summary.overflowWarning;
   }
 
   const science = state.science.levels;
@@ -307,24 +481,49 @@ export function dispatchFlight(
     missionId: command.missionId,
     originPlanetId,
     originCoordinate: coordinateOfPlanet(originPlanet),
-    destination: command.destination,
+    destination: command.destination!,
     targetKind: command.targetKind,
-    selectedShips: { colonizer: 1 },
-    populationReserved: 12,
+    selectedShips,
+    populationReserved: command.missionId === 'colonize' ? 12 : 0,
     departedAt,
     factionId: state.profile.factionId as CombatFactionId,
     science,
     operationId: command.operationId,
+    ...(transportTarget ? {
+      destinationPlanetId: transportTarget.planetId,
+      destinationOwnerId: transportTarget.ownerId,
+      targetRelation: transportTarget.relation as TargetRelation,
+      cargo: transportCargo,
+      overflowWarning: transportOverflowWarning,
+    } : {}),
   });
   const flight = scaledRecord(domainResult.flight, runtimeOptions);
   const gas = getPlanetResources(state, originPlanetId);
   if (gas.gas < flight.gasCost) return failure(state, 'insufficient-gas', 'Недостаточно газа для исходящего участка.');
 
   const nextFlights = domainResult.created ? updateFlight(domainResult.state, flight) : domainResult.state;
-  const nextState = replacePlanetResources({ ...state, flights: nextFlights }, originPlanetId, {
+  let nextState = replacePlanetResources({ ...state, flights: nextFlights }, originPlanetId, {
     ...gas,
     gas: gas.gas - flight.gasCost,
   });
+  if (command.missionId === 'transport' && transportCargo) {
+    const nextOrigin = nextState.planets[originPlanetId];
+    if (!nextOrigin) return failure(state, 'invalid-command', 'Исходная планета не найдена.');
+    nextState = replacePlanetState(nextState, originPlanetId, {
+      ...nextOrigin,
+      recycling: {
+        ...nextOrigin.recycling,
+        availableDebris: Math.max(0, nextOrigin.recycling.availableDebris - transportCargo.debris),
+      },
+    });
+    const debited = getPlanetResources(nextState, originPlanetId);
+    const nextResources = {
+      metal: Math.max(0, debited.metal - transportCargo.metal),
+      minerals: Math.max(0, debited.minerals - transportCargo.minerals),
+      gas: Math.max(0, debited.gas - transportCargo.gas),
+    };
+    nextState = replacePlanetResources(nextState, originPlanetId, nextResources);
+  }
   return { ok: true, state: nextState, flight, created: true, notice: noticeForDispatch(flight) };
 }
 
@@ -361,6 +560,91 @@ export function recallFlight(
   };
 }
 
+function transportArrivalTarget(state: SaveState, flight: FlightRecord): ResolvedTransportTarget {
+  if (!flight.destinationPlanetId || !flight.targetRelation) return emptyTransportTarget(flight.destination);
+  const destination: FlightDestination = {
+    kind: 'planet',
+    planetId: flight.destinationPlanetId,
+    coordinate: flight.destinationCoordinate,
+  };
+  const target = resolveTransportTarget(state, destination);
+  if (target.relation !== flight.targetRelation || target.ownerId !== flight.destinationOwnerId) {
+    return { ...target, acceptsTransport: false };
+  }
+  return target;
+}
+
+function updatePlanetCargoState(
+  state: SaveState,
+  target: ResolvedTransportTarget,
+  resources: { metal: number; minerals: number; gas: number },
+  debris: number,
+): SaveState {
+  if (!target.runtime) return state;
+  if (target.relation === 'self') {
+    const withResources = replacePlanetResources(state, target.planetId, resources);
+    const planet = withResources.planets[target.planetId];
+    if (!planet) return withResources;
+    return replacePlanetState(withResources, target.planetId, {
+      ...planet,
+      recycling: { ...planet.recycling, availableDebris: addDebris(planet.recycling.availableDebris, debris) },
+    });
+  }
+  const ally = state.alliedPlanets?.[target.planetId];
+  if (!ally) return state;
+  return replaceAlliedPlanetState(state, target.planetId, {
+    ...ally,
+    resources,
+    recycling: { ...ally.recycling, availableDebris: addDebris(ally.recycling.availableDebris, debris) },
+  });
+}
+
+function returnTransportCargo(
+  state: SaveState,
+  flight: FlightRecord,
+  now: number,
+): { state: SaveState; flight: FlightRecord } {
+  if (flight.cargoState === 'delivered' || flight.cargoState === 'returned' || flight.cargoState === 'voided') return { state, flight };
+  const cargo = normalizeTransportCargo(flight.cargo);
+  const origin = state.planets[flight.originPlanetId];
+  if (!origin) {
+    return {
+      state,
+      flight: { ...flight, cargoState: 'returned', cargoResolvedAt: now },
+    };
+  }
+  const currentResources = getPlanetResources(state, flight.originPlanetId);
+  const credit = getCappedDelivery(currentResources, getStorageCapacities(origin.buildings), cargo);
+  let next = replacePlanetResources(state, flight.originPlanetId, credit.resources);
+  const nextOrigin = next.planets[flight.originPlanetId];
+  if (nextOrigin) {
+    next = replacePlanetState(next, flight.originPlanetId, {
+      ...nextOrigin,
+      recycling: {
+        ...nextOrigin.recycling,
+        availableDebris: addDebris(nextOrigin.recycling.availableDebris, cargo.debris),
+      },
+    });
+  }
+  return {
+    state: next,
+    flight: { ...flight, cargoState: 'returned', cargoResolvedAt: now },
+  };
+}
+
+function beginTransportReturn(
+  state: SaveState,
+  flight: FlightRecord,
+  now: number,
+  reason: 'normal-return' | 'recalled' | 'target-unavailable',
+): FlightRecord {
+  const returnStartedAt = flight.phase === 'arrived' ? Math.max(now, flight.arrivedAt ?? flight.arrivalAt) : now;
+  const withSnapshot = updateFlight(state.flights, flight);
+  const returningState = beginDomainFlightReturn(withSnapshot, flight.id, returnStartedAt, reason);
+  const returning = returningState.records.find((item) => item.id === flight.id) ?? flight;
+  return { ...returning, arrivedAt: flight.arrivedAt ?? flight.arrivalAt };
+}
+
 function completeFlight(state: SaveState, flight: FlightRecord, completed: FlightRecord): SaveState {
   return { ...state, flights: updateFlight(currentFlightState(state), completed) };
 }
@@ -376,6 +660,58 @@ export function reconcileFlights(state: SaveState, now: number): FlightReconcile
     const arrivalCheckAt = current.arrivedAt ?? current.arrivalAt;
     const arrivalReady = current.phase === 'arrived' || (current.phase === 'outbound' && now >= current.arrivalAt);
     if (arrivalReady) {
+      if (current.missionId === 'transport') {
+        const target = transportArrivalTarget(next, current);
+        const cargo = normalizeTransportCargo(current.cargo);
+        if (!target.acceptsTransport || !target.runtime) {
+          const voided: FlightRecord = {
+            ...current,
+            arrivedAt: arrivalAt,
+            cargoState: current.cargoState === 'returned' ? 'returned' : 'voided',
+            cargoResolvedAt: current.cargoState === 'returned' ? current.cargoResolvedAt : now,
+          };
+          const returning = beginTransportReturn(next, voided, now, 'target-unavailable');
+          next = { ...next, flights: updateFlight(next.flights, returning) };
+          changed = true;
+          events.push({
+            flight: returning,
+            status: 'target-unavailable',
+            notice: 'Цель недоступна; груз будет потерян, корабли возвращаются.',
+          });
+          continue;
+        }
+
+        if (current.cargoState !== 'delivered' && current.cargoState !== 'returned') {
+          const targetResources = target.runtime.resources ?? { metal: 0, minerals: 0, gas: 0 };
+          const delivery = getCappedDelivery(
+            targetResources,
+            getStorageCapacities(target.runtime.buildings),
+            cargo,
+          );
+          next = updatePlanetCargoState(next, target, delivery.resources, cargo.debris);
+          const delivered: FlightRecord = {
+            ...current,
+            arrivedAt: arrivalAt,
+            cargoState: 'delivered',
+            deliveredAt: now,
+            cargoResolvedAt: now,
+          };
+          const returning = beginTransportReturn(next, delivered, now, 'normal-return');
+          next = { ...next, flights: updateFlight(next.flights, returning) };
+          changed = true;
+          events.push({
+            flight: returning,
+            status: 'delivered',
+            notice: 'Груз доставлен. Корабли возвращаются.',
+          });
+          continue;
+        }
+
+        const returning = beginTransportReturn(next, current, now, current.cargoState === 'returned' ? 'recalled' : 'normal-return');
+        next = { ...next, flights: updateFlight(next.flights, returning) };
+        changed = true;
+        continue;
+      }
       if (current.missionId !== 'colonize') {
         const failed: FlightRecord = { ...current, phase: 'completed', arrivedAt: arrivalAt, completedAt: now, completionReason: 'mission-failed' };
         next = completeFlight(next, current, failed);
@@ -448,18 +784,32 @@ export function reconcileFlights(state: SaveState, now: number): FlightReconcile
 
     const refreshed = next.flights.records.find((flight) => flight.id === original.id) ?? original;
     if (refreshed.phase === 'returning' && refreshed.returnAt !== undefined && now >= refreshed.returnAt) {
+      let returnedFlight = refreshed;
+      if (refreshed.missionId === 'transport') {
+        const returned = returnTransportCargo(next, refreshed, refreshed.returnAt);
+        next = returned.state;
+        returnedFlight = returned.flight;
+      }
       const completed: FlightRecord = {
-        ...refreshed,
+        ...returnedFlight,
         phase: 'completed',
         completedAt: refreshed.returnAt,
-        completionReason: refreshed.completionReason === 'target-occupied' ? 'target-occupied' : 'recalled',
+        completionReason: returnedFlight.missionId === 'transport'
+          ? returnedFlight.completionReason ?? 'recalled'
+          : returnedFlight.completionReason === 'target-occupied' ? 'target-occupied' : 'recalled',
       };
-      next = completeFlight(next, refreshed, completed);
+      next = completeFlight(next, returnedFlight, completed);
       changed = true;
       events.push({
         flight: completed,
         status: 'returned',
-        notice: completed.completionReason === 'target-occupied' ? 'Колонизатор вернулся: координата уже занята.' : 'Колонизатор вернулся после отзыва рейса.',
+        notice: completed.missionId === 'transport'
+          ? completed.completionReason === 'target-unavailable'
+            ? 'Транспорт вернулся: цель недоступна, груз потерян.'
+            : completed.completionReason === 'normal-return'
+              ? 'Транспорт вернулся после доставки.'
+              : 'Транспорт вернулся после отзыва рейса.'
+          : completed.completionReason === 'target-occupied' ? 'Колонизатор вернулся: координата уже занята.' : 'Колонизатор вернулся после отзыва рейса.',
       });
     }
   }

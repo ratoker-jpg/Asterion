@@ -1,8 +1,8 @@
 export const HEADER_ZONE_IDS = ['resource', 'industry', 'military'] as const;
 
 export type HeaderZoneId = (typeof HEADER_ZONE_IDS)[number];
-export type HeaderResourceKind = 'metal' | 'mineral' | 'gas' | 'energy' | 'population';
-export type HeaderIconKind = HeaderResourceKind | HeaderZoneId;
+export type HeaderResourceKind = 'metal' | 'mineral' | 'gas' | 'energy' | 'debris' | 'population';
+export type HeaderIconKind = Exclude<HeaderResourceKind, 'debris'> | HeaderZoneId;
 
 export type HeaderPopulationBreakdown = {
   fleet: {
@@ -24,6 +24,8 @@ export type HeaderResourceModel = {
   showCapacity?: boolean;
   hourlyGain?: number;
   description?: string;
+  /** Debris shares the energy card and deliberately has no capacity indicator. */
+  debris?: number;
   populationBreakdown?: HeaderPopulationBreakdown;
 };
 

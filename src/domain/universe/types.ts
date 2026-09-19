@@ -16,6 +16,13 @@ export type UniverseCoordinate = {
   position: number;
 };
 
+export type UniverseFixtureId = 'test-mode-ally-ira-vel-v1';
+
+export type UniverseFixtureMarker = {
+  id: UniverseFixtureId;
+  version: 1;
+};
+
 export type UniversePoint = {
   x: number;
   y: number;
@@ -55,6 +62,8 @@ export type UniversePlanetNode = {
   statusLabel: string;
   description: string;
   known?: boolean;
+  /** Versioned test-only seed identity, retained for later persistence wiring. */
+  fixture?: UniverseFixtureMarker;
   asteroid?: UniverseAsteroidState;
   pirate?: UniversePirateState;
   special?: UniverseTimedObjectState;
@@ -110,6 +119,14 @@ export type UniverseOwnerProfile = {
   alliance?: UniverseOwnerAlliance | null;
   points?: UniverseOwnerPoints;
   planetIds: string[];
+};
+
+/** A fixture is explicit metadata, not an owner-relation classification. */
+export type UniverseFixtureDescriptor = {
+  marker: UniverseFixtureMarker;
+  coordinate: UniverseCoordinate;
+  planet: Pick<UniversePlanetNode, 'id' | 'name' | 'art'>;
+  owner: UniverseOwnerProfile;
 };
 
 export type UniverseAssetCatalog = {

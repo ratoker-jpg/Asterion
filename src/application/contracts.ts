@@ -23,6 +23,7 @@ import type { TradeState } from '../domain/buildings/trade.ts';
 import type { RepairWorkshopState } from '../domain/repair/workshop.ts';
 import type { EnergyLedger, EnergySourceSnapshot } from '../domain/energy/runtime.ts';
 import type { FlightState } from '../domain/flights/types.ts';
+import type { UniverseOwnerAlliance } from '../domain/universe/types.ts';
 
 /** Planet ids are stable save keys; the legacy homeworld remains `helion-01`. */
 export type PlanetId = string;
@@ -62,6 +63,20 @@ export type PlanetRuntime = {
   stability: number;
   /** Per-planet wallet. Legacy saves may omit it and are migrated from root resources. */
   resources?: PlanetResources;
+};
+
+/**
+ * A serialized non-player planet that the application has explicitly
+ * authorized as an allied transport target. It intentionally reuses the
+ * normal planet runtime so delivery/recycling cannot become a UI-only path.
+ */
+export type AlliedPlanetState = PlanetRuntime & {
+  id: PlanetId;
+  ownerId: string;
+  displayName: string;
+  raceId: string;
+  alliance: UniverseOwnerAlliance | null;
+  fixtureId?: string;
 };
 
 export type ResourceClockEntry = {
@@ -110,6 +125,8 @@ export type SaveState = {
   science: ScienceState;
   resourceClock: ResourceClock;
   flights: FlightState;
+  /** Optional for backwards compatibility; fresh states always materialize it. */
+  alliedPlanets?: Record<PlanetId, AlliedPlanetState>;
 };
 
 export function getPlanetState(state: SaveState, planetId: PlanetId): PlanetRuntime {
@@ -155,4 +172,18 @@ export function replacePlanetResources(
   // economy while the homeworld remains the active planet.
   if (planetId !== 'helion-01') return next;
   return { ...next, metal: resources.metal, minerals: resources.minerals, gas: resources.gas };
+}
+
+export function replaceAlliedPlanetState(
+  state: SaveState,
+  planetId: PlanetId,
+  planet: AlliedPlanetState,
+): SaveState {
+  return {
+    ...state,
+    alliedPlanets: {
+      ...(state.alliedPlanets ?? {}),
+      [planetId]: planet,
+    },
+  };
 }

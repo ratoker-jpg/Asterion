@@ -39,6 +39,8 @@ import {
   getUniverseSlotPoint,
   getUniverseTimedObjectSchedule,
   resolveUniverseAsteroidCollisions,
+  resolveUniverseFixtures,
+  TEST_MODE_ALLY_PLANET_FIXTURE,
   UNIVERSE_NPC_OWNER_ID,
 } from './runtime.ts';
 import type { UniverseOwnerAlliance, UniversePlanetNode } from './types.ts';
@@ -119,12 +121,12 @@ test('owner planet ids are unique and capped at seven in the domain layer', () =
   assert.equal(npc.planetIds.length, MAX_PLANETS_PER_OWNER);
 });
 
-test('one seeded owner has exactly seven planets across seven systems, without extra NPCs', () => {
+test('one seeded owner keeps exactly seven legacy NPC planets across seven systems', () => {
   const nowMs = Date.UTC(2026, 8, 8, 12);
   const map = createUniverseMap({ nowMs });
   assert.deepEqual(createUniverseMap({ nowMs }), map);
   const nodes = map.systems.flatMap((system) => system.positions);
-  const planets = nodes.filter((node) => node.kind === 'npc');
+  const planets = nodes.filter((node) => node.ownerId === UNIVERSE_NPC_OWNER_ID);
   const profile = createUniverseNpcOwnerProfile();
   assert.equal(planets.length, 7);
   assert.equal(new Set(planets.map((node) => node.coordinate.system)).size, 7);
@@ -156,6 +158,32 @@ test('production universe has no NPC fixture planets while preserving the player
   assert.equal(nodes.filter((node) => node.kind === 'npc').length, 0);
   assert.equal(nodes.filter((node) => node.kind === 'player').length, 1);
   assert.equal(nodes.find((node) => node.id === 'player-planet-helion-01')?.isHomeworld, true);
+});
+
+test('Test Mode adds exactly one explicit Command ally fixture and Production omits it', () => {
+  const fixture = resolveUniverseFixtures('test');
+  assert.deepEqual(fixture, [TEST_MODE_ALLY_PLANET_FIXTURE]);
+  assert.deepEqual(resolveUniverseFixtures('production'), []);
+  assert.deepEqual(TEST_MODE_ALLY_PLANET_FIXTURE.coordinate, { galaxy: 1, system: 1, position: 2 });
+  assert.equal(TEST_MODE_ALLY_PLANET_FIXTURE.owner.id, 'member-ira-vel');
+  assert.equal(TEST_MODE_ALLY_PLANET_FIXTURE.owner.displayName, 'Ира Вель');
+  assert.equal(TEST_MODE_ALLY_PLANET_FIXTURE.owner.raceId, 'aegis');
+
+  const testSystem = createUniverseSystem({ mode: 'test', system: 1, nowMs: 0 });
+  const ally = testSystem.positions.find((node) => node.id === TEST_MODE_ALLY_PLANET_FIXTURE.planet.id)!;
+  assert.deepEqual(ally.coordinate, TEST_MODE_ALLY_PLANET_FIXTURE.coordinate);
+  assert.deepEqual(ally.fixture, TEST_MODE_ALLY_PLANET_FIXTURE.marker);
+  assert.equal(ally.ownerId, TEST_MODE_ALLY_PLANET_FIXTURE.owner.id);
+
+  const currentAlliance = TEST_MODE_ALLY_PLANET_FIXTURE.owner.alliance!;
+  const ordinaryNpc = createUniverseMap({ mode: 'test', nowMs: 0 }).systems
+    .flatMap((system) => system.positions)
+    .find((node) => node.id === 'npc-bot-01-prime')!;
+  assert.equal(getUniverseOwnerRelation(ally, 'player-current', currentAlliance, TEST_MODE_ALLY_PLANET_FIXTURE.owner), 'ally');
+  assert.equal(getUniverseOwnerRelation(ordinaryNpc, 'player-current', currentAlliance, createUniverseNpcOwnerProfile()), 'neutral');
+
+  const productionSystem = createUniverseSystem({ mode: 'production', system: 1, nowMs: 0 });
+  assert.equal(productionSystem.positions.some((node) => node.id === TEST_MODE_ALLY_PLANET_FIXTURE.planet.id), false);
 });
 
 test('asset catalogs select the correct kinds and unique art has a default fallback', () => {
@@ -190,7 +218,7 @@ test('asset catalogs select the correct kinds and unique art has a default fallb
   assert.deepEqual([...new Set(uniques.map((node) => node.art))].sort(), [...specialArts].sort());
   const botAssetCatalog = Array.from({ length: 25 }, (_, index) => `planet-${index}`);
   const botPlanets = createUniverseMap({ assets: { planetArts: botAssetCatalog } }).systems
-    .flatMap((system) => system.positions).filter((node) => node.kind === 'npc');
+    .flatMap((system) => system.positions).filter((node) => node.ownerId === UNIVERSE_NPC_OWNER_ID);
   assert.equal(new Set(botPlanets.map((node) => node.art)).size, MAX_PLANETS_PER_OWNER);
 });
 
@@ -275,12 +303,17 @@ test('timed object schedules use the confirmed lifetime, quiet period, and chanc
 test('spy and fleet actions are honest about unsupported runtime', () => {
   const system = createUniverseSystem({ system: 1, currentOwnerId: 'player-current' });
   const homeworld = system.positions.find((node) => node.isHomeworld)!;
-  const foreign = createUniverseMap().systems.flatMap((item) => item.positions).find((node) => node.kind === 'npc')!;
+  const ally = createUniverseMap({ mode: 'test' }).systems.flatMap((item) => item.positions).find((node) => node.fixture?.id === 'test-mode-ally-ira-vel-v1')!;
+  const foreign = createUniverseMap({ mode: 'test' }).systems.flatMap((item) => item.positions).find((node) => node.kind === 'npc' && !node.fixture)!;
   const empty = system.positions.find((node) => node.kind === 'empty')!;
 
   assert.equal(getUniverseActionState('spy', homeworld, 'player-current').enabled, false);
-  assert.equal(getUniverseActionState('fleet', homeworld, 'player-current').reason, 'Это ваша планета.');
+  assert.equal(getUniverseActionState('fleet', homeworld, 'player-current').status, 'supported');
+  assert.equal(getUniverseActionState('fleet', homeworld, 'player-current').enabled, true);
+  assert.equal(getUniverseActionState('fleet', homeworld, 'player-current').reason, 'Своя планета принимает транспортировку.');
   assert.equal(getUniverseActionState('spy', foreign, 'player-current').status, 'prototype');
-  assert.equal(getUniverseActionState('fleet', foreign, 'player-current').enabled, true);
+  assert.equal(getUniverseActionState('fleet', foreign, 'player-current').enabled, false);
+  assert.equal(getUniverseActionState('fleet', ally, 'player-current').status, 'supported');
+  assert.equal(getUniverseActionState('fleet', ally, 'player-current').enabled, true);
   assert.equal(getUniverseActionState('spy', empty, 'player-current').status, 'disabled');
 });

@@ -53,6 +53,7 @@ import {
 } from '../domain/runtime/mode.ts';
 import {
   createCanonicalStartingFleet,
+  createEmptyFleetState,
   normalizeFleetStateForCapacity,
   removeSolarSatellitesFromFleet,
   resolveSavedFleetState,
@@ -79,6 +80,7 @@ import {
 import {
   createDefaultRecyclingState,
   migrateRecyclingState,
+  resolveRecyclingFixture,
 } from '../domain/buildings/recycling.ts';
 import {
   createDefaultSpaceportUpgradeState,
@@ -97,6 +99,7 @@ import {
 import { initializePlanetEnergy, syncPlanetEnergySources } from './energy.ts';
 import type { EnergyLedger } from '../domain/energy/runtime.ts';
 import type { PlanetQueueRecord, PlanetResources, PlanetStateRecord, ResourceClock, ResourceClockEntry, SaveState, PlanetRuntime } from './contracts.ts';
+import type { AlliedPlanetState } from './contracts.ts';
 import { SHIP_IDS } from '../domain/combat/ids.ts';
 import { isFlightCoordinate } from '../domain/flights/distance.ts';
 import type {
@@ -106,8 +109,12 @@ import type {
   FlightRecord,
   FlightState,
   MissionId,
+  TargetRelation,
+  TransportCargoState,
 } from '../domain/flights/types.ts';
+import { normalizePersistedTransportCargo } from '../domain/flights/cargo.ts';
 import type { UniverseObjectKind } from '../domain/universe/types.ts';
+import { TEST_MODE_ALLY_PLANET_FIXTURE } from '../domain/universe/runtime.ts';
 
 export const SAVE_SCHEMA_VERSION = Math.max(
   COMBAT_SAVE_SCHEMA_VERSION,
@@ -180,6 +187,7 @@ type StoredSave = {
   resourceClock?: unknown;
   currentPlanetId?: unknown;
   flights?: unknown;
+  alliedPlanets?: Record<string, unknown>;
 };
 
 export type PersistenceWriteResult =
@@ -320,6 +328,7 @@ const PERSISTED_FLIGHT_COMPLETION_REASONS = new Set<FlightCompletionReason>([
   'recalled',
   'colonized',
   'target-occupied',
+  'target-unavailable',
   'arrived',
   'mission-failed',
 ]);
@@ -338,6 +347,8 @@ const PERSISTED_UNIVERSE_OBJECT_KINDS = new Set<UniverseObjectKind>([
   'anomaly',
   'asteroid',
 ]);
+const PERSISTED_TARGET_RELATIONS = new Set<TargetRelation>(['self', 'ally']);
+const PERSISTED_CARGO_STATES = new Set<TransportCargoState>(['loaded', 'delivered', 'voided', 'returned']);
 
 function isFinitePersistedNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
@@ -389,6 +400,15 @@ function isPersistedFlightRecord(value: unknown): value is FlightRecord {
 
   if (item.operationId !== undefined && !isNonEmptyPersistedString(item.operationId)) return false;
   if (item.destinationPlanetId !== undefined && !isNonEmptyPersistedString(item.destinationPlanetId)) return false;
+  if (item.destinationOwnerId !== undefined && !isNonEmptyPersistedString(item.destinationOwnerId)) return false;
+  if (item.targetRelation !== undefined && !PERSISTED_TARGET_RELATIONS.has(item.targetRelation as TargetRelation)) return false;
+  if (item.cargoState !== undefined && !PERSISTED_CARGO_STATES.has(item.cargoState as TransportCargoState)) return false;
+  if (item.missionId === 'transport') {
+    const cargo = normalizePersistedTransportCargo(item.cargo);
+    if (!cargo) return false;
+    if (item.targetRelation === undefined || item.destinationPlanetId === undefined) return false;
+    if (item.cargoState === undefined) return false;
+  }
   if (item.targetKind !== undefined && !PERSISTED_UNIVERSE_OBJECT_KINDS.has(item.targetKind as UniverseObjectKind)) return false;
   if (item.completionReason !== undefined
     && !PERSISTED_FLIGHT_COMPLETION_REASONS.has(item.completionReason as FlightCompletionReason)) return false;
@@ -404,7 +424,7 @@ function isPersistedFlightRecord(value: unknown): value is FlightRecord {
   if (destinationRecord.kind === 'planet') {
     if (!isNonEmptyPersistedString(destinationRecord.planetId)
       || item.destinationPlanetId !== destinationRecord.planetId) return false;
-  } else if (item.destinationPlanetId !== undefined) {
+  } else if (item.destinationPlanetId !== undefined && item.missionId !== 'transport') {
     return false;
   }
   if (destinationRecord.kind === 'operation') {
@@ -429,6 +449,15 @@ function isPersistedFlightRecord(value: unknown): value is FlightRecord {
   return true;
 }
 
+function normalizePersistedFlightRecord(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const source = value as Record<string, unknown>;
+  if (source.missionId !== 'transport') return value;
+  const cargo = normalizePersistedTransportCargo(source.cargo);
+  if (!cargo) return value;
+  return { ...source, cargo };
+}
+
 function migrateFlightState(value: unknown): FlightState {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return createDefaultFlightState();
   const source = value as Record<string, unknown>;
@@ -436,7 +465,8 @@ function migrateFlightState(value: unknown): FlightState {
   const seenIds = new Set<string>();
   const seenRequestIds = new Set<string>();
   if (Array.isArray(source.records)) {
-    for (const candidate of source.records) {
+    for (const rawCandidate of source.records) {
+      const candidate = normalizePersistedFlightRecord(rawCandidate);
       if (!isPersistedFlightRecord(candidate)) continue;
       if (seenIds.has(candidate.id) || seenRequestIds.has(candidate.requestId)) continue;
       seenIds.add(candidate.id);
@@ -448,6 +478,86 @@ function migrateFlightState(value: unknown): FlightState {
   // never resurrect a dropped flight or point a request at another flight.
   const requestIndex = Object.fromEntries(records.map((record) => [record.requestId, record.id]));
   return { records, requestIndex };
+}
+
+function createDefaultAlliedPlanetState(
+  mode: RuntimeMode,
+  now: number,
+  scienceLevels: ReturnType<typeof createDefaultScienceState>['levels'],
+): AlliedPlanetState {
+  const fixture = TEST_MODE_ALLY_PLANET_FIXTURE;
+  const buildings = createCanonicalStartingBuildingLevels();
+  if (mode === 'test') {
+    buildings['metal-storage'] = 20;
+    buildings['mineral-storage'] = 20;
+    buildings['gas-storage'] = 20;
+  }
+  const planet: PlanetRuntime = {
+    name: fixture.planet.name,
+    skin: 'colonized',
+    fleet: createEmptyFleetState(),
+    defense: createEmptyDefenseState(),
+    fleetProduction: createDefaultFleetProductionState(),
+    repair: createDefaultRepairWorkshopState(),
+    energy: 0,
+    universeGalaxy: fixture.coordinate.galaxy,
+    universeSystem: fixture.coordinate.system,
+    universePosition: fixture.coordinate.position,
+    buildings,
+    productionBots: createEmptyBotAssignment(),
+    recycling: createDefaultRecyclingState({ mode, fixture: resolveRecyclingFixture(mode) }),
+    trade: createDefaultTradeState(),
+    spaceportUpgrades: createDefaultSpaceportUpgradeState(),
+    stability: 100,
+    resources: { metal: 500, minerals: 500, gas: 500 },
+  };
+  const energized = initializePlanetEnergy(planet, scienceLevels);
+  return {
+    ...energized,
+    id: fixture.planet.id,
+    ownerId: fixture.owner.id,
+    displayName: fixture.owner.displayName,
+    raceId: fixture.owner.raceId ?? CURRENT_PLAYER_FACTION_ID,
+    alliance: fixture.owner.alliance ?? null,
+    fixtureId: fixture.marker.id,
+  };
+}
+
+function migrateAlliedPlanets(
+  value: Record<string, unknown> | undefined,
+  mode: RuntimeMode,
+  now: number,
+  scienceLevels: ReturnType<typeof createDefaultScienceState>['levels'],
+): Record<string, AlliedPlanetState> {
+  if (mode !== 'test') return {};
+  const fixture = TEST_MODE_ALLY_PLANET_FIXTURE;
+  const fallback = createDefaultAlliedPlanetState(mode, now, scienceLevels);
+  const raw = value?.[fixture.planet.id];
+  const source = raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? raw as StoredPlanetRuntime
+    : undefined;
+  const buildings = migrateBuildingLevels(source?.buildings);
+  const resources = normalizePlanetResources(
+    source?.resources,
+    fallback.resources ?? { metal: 500, minerals: 500, gas: 500 },
+    getStorageCapacities(buildings),
+  );
+  const recycling = migrateRecyclingState(
+    source?.recycling,
+    buildings.recycling,
+    now,
+    { mode, fixture: resolveRecyclingFixture(mode) },
+  );
+  return {
+    [fixture.planet.id]: {
+      ...fallback,
+      buildings,
+      resources,
+      recycling,
+      energy: numberOr(source?.energy, fallback.energy),
+      stability: numberOr(source?.stability, fallback.stability),
+    },
+  };
 }
 
 function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.now()): SaveState {
@@ -478,7 +588,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     universePosition: 1,
     buildings,
     productionBots: createEmptyBotAssignment(),
-    recycling: createDefaultRecyclingState(),
+    recycling: createDefaultRecyclingState({ mode, fixture: resolveRecyclingFixture(mode) }),
     trade: createDefaultTradeState(),
     spaceportUpgrades: createDefaultSpaceportUpgradeState(),
     repair: mode === 'test' ? createTestRepairWorkshopState() : createDefaultRepairWorkshopState(),
@@ -504,6 +614,9 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     science,
     resourceClock: createResourceClock(now, ['helion-01']),
     flights: createDefaultFlightState(),
+    alliedPlanets: mode === 'test'
+      ? { [TEST_MODE_ALLY_PLANET_FIXTURE.planet.id]: createDefaultAlliedPlanetState(mode, now, science.levels) }
+      : {},
   };
 }
 
@@ -626,7 +739,12 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       universePosition: numberOr(savedHomeworld?.universePosition, 1),
       buildings,
       productionBots: migrateProductionBotAssignment(savedHomeworld?.productionBots, buildings),
-      recycling: migrateRecyclingState(savedHomeworld?.recycling, buildings.recycling, timestamp),
+      recycling: migrateRecyclingState(
+        savedHomeworld?.recycling,
+        buildings.recycling,
+        timestamp,
+        { mode, fixture: resolveRecyclingFixture(mode) },
+      ),
       trade: migrateTradeState(savedHomeworld?.trade, buildings['trade-center'], timestamp),
       spaceportUpgrades,
       stability: numberOr(savedHomeworld?.stability, initialState.planets['helion-01'].stability),
@@ -684,7 +802,12 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
         universePosition: numberOr(raw.universePosition, 1),
         buildings: planetBuildings,
         productionBots: migrateProductionBotAssignment(raw.productionBots, planetBuildings),
-        recycling: migrateRecyclingState(raw.recycling, planetBuildings.recycling, timestamp),
+        recycling: migrateRecyclingState(
+          raw.recycling,
+          planetBuildings.recycling,
+          timestamp,
+          { mode, fixture: resolveRecyclingFixture(mode) },
+        ),
         trade: migrateTradeState(raw.trade, planetBuildings['trade-center'], timestamp),
         spaceportUpgrades: reconcileSpaceportUpgradeState(migrateSpaceportUpgradeState(raw.spaceportUpgrades), timestamp).state,
         stability: numberOr(raw.stability, 100),
@@ -706,6 +829,7 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       && parsed.planets?.[parsed.currentPlanetId.trim()]
       ? parsed.currentPlanetId.trim()
       : 'helion-01';
+    const alliedPlanets = migrateAlliedPlanets(parsed.alliedPlanets, mode, timestamp, science.levels);
 
     return {
       schemaVersion: SAVE_SCHEMA_VERSION,
@@ -726,6 +850,7 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       science,
       resourceClock: migrateResourceClock(parsed.resourceClock, timestamp, Object.keys(planets)),
       flights: migrateFlightState(parsed.flights),
+      alliedPlanets,
     };
   } catch {
     return initialState;

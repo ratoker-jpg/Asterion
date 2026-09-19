@@ -8,6 +8,8 @@ import type {
   UniverseOwnerAlliance,
   UniverseOwnerProfile,
   UniverseOwnerPoints,
+  UniverseFixtureDescriptor,
+  UniverseFixtureMarker,
   UniversePersistedPlayerPlanet,
   UniversePlanetNode,
   UniversePoint,
@@ -17,6 +19,9 @@ import type {
 } from './types.ts';
 import { getPositionCoefficientPercent, getSunEfficiencyPercent } from '../energy/runtime.ts';
 import type { RuntimeMode } from '../runtime/mode.ts';
+import { DEFAULT_ALLIANCE_MEMBERS, DEFAULT_ALLIANCE_PROFILE } from '../command/catalog.ts';
+import { CURRENT_COMMAND_ALLIANCE_ID } from '../command/selectors.ts';
+import { CURRENT_PLAYER_FACTION_ID } from '../profile/repository.ts';
 
 export const GALAXY = 1;
 export const SYSTEM_COUNT = 40;
@@ -59,6 +64,36 @@ const DEFAULT_ASSETS: UniverseAssetCatalog = {
 };
 
 const NPC_OWNER_ID = 'npc-bot-01';
+const TEST_MODE_ALLY_FIXTURE_MARKER: UniverseFixtureMarker = { id: 'test-mode-ally-ira-vel-v1', version: 1 };
+const TEST_MODE_ALLY_PARTICIPANT = DEFAULT_ALLIANCE_MEMBERS.find((member) => member.id === 'member-ira-vel');
+
+if (!TEST_MODE_ALLY_PARTICIPANT) throw new Error('Command fixture participant member-ira-vel is required for the universe ally fixture.');
+
+export const TEST_MODE_ALLY_PLANET_FIXTURE: UniverseFixtureDescriptor = {
+  marker: TEST_MODE_ALLY_FIXTURE_MARKER,
+  // Position 2 is empty in the existing system-1 Test Mode atlas; position 4
+  // is an uninhabited fixture and must remain available for that scenario.
+  coordinate: { galaxy: GALAXY, system: 1, position: 2 },
+  planet: { id: 'test-mode-ally-ira-vel-v1', name: 'Aster', art: 'planet-default' },
+  owner: {
+    id: TEST_MODE_ALLY_PARTICIPANT.id,
+    displayName: TEST_MODE_ALLY_PARTICIPANT.callsign,
+    raceId: CURRENT_PLAYER_FACTION_ID,
+    alliance: {
+      id: CURRENT_COMMAND_ALLIANCE_ID,
+      name: DEFAULT_ALLIANCE_PROFILE.name,
+      tag: DEFAULT_ALLIANCE_PROFILE.tag,
+      emblem: { ...DEFAULT_ALLIANCE_PROFILE.emblem },
+      glyph: DEFAULT_ALLIANCE_PROFILE.emblem.glyph,
+    },
+    planetIds: ['test-mode-ally-ira-vel-v1'],
+  },
+};
+
+/** Resolves explicit universe fixtures; unrelated NPCs remain relation-neutral by default. */
+export function resolveUniverseFixtures(mode: RuntimeMode): readonly UniverseFixtureDescriptor[] {
+  return mode === 'test' ? [TEST_MODE_ALLY_PLANET_FIXTURE] : [];
+}
 
 const BOT_PLANET_PRESETS = [
   { name: 'Аурелия', artIndex: 12 },
@@ -70,8 +105,18 @@ const BOT_PLANET_PRESETS = [
   { name: 'Ноктис', artIndex: 18 },
 ] as const;
 
-const SYSTEM_ONE_FIXTURES: Readonly<Record<number, { kind: UniversePlanetNode['kind']; name?: string; ownerId?: string; id?: string; artIndex?: number; known?: boolean }>> = {
+const SYSTEM_ONE_FIXTURES: Readonly<Record<number, { kind: UniversePlanetNode['kind']; name?: string; ownerId?: string; id?: string; artIndex?: number; known?: boolean; mode?: RuntimeMode; fixture?: UniverseFixtureMarker }>> = {
   1: { kind: 'player', id: 'player-planet-helion-01', ownerId: 'player-current', known: true },
+  2: {
+    kind: 'npc',
+    id: TEST_MODE_ALLY_PLANET_FIXTURE.planet.id,
+    name: TEST_MODE_ALLY_PLANET_FIXTURE.planet.name,
+    ownerId: TEST_MODE_ALLY_PLANET_FIXTURE.owner.id,
+    artIndex: 4,
+    known: true,
+    mode: 'test',
+    fixture: TEST_MODE_ALLY_PLANET_FIXTURE.marker,
+  },
   21: { kind: 'uninhabited', name: 'Необитаемый мир', artIndex: 8, known: true },
 };
 
@@ -329,7 +374,10 @@ function fixtureFor(system: number, slot: number, mode: RuntimeMode = 'test') {
     ? NPC_PLANET_FIXTURES.find((planet) => planet.system === system && planet.position === slot)
     : undefined;
   if (npc) return { ...npc, kind: 'npc' as const, ownerId: NPC_OWNER_ID, known: true };
-  if (system === 1) return SYSTEM_ONE_FIXTURES[slot];
+  if (system === 1) {
+    const fixture = SYSTEM_ONE_FIXTURES[slot];
+    return fixture?.mode && fixture.mode !== mode ? undefined : fixture;
+  }
   return undefined;
 }
 
@@ -368,6 +416,7 @@ function createPositionNode(
     statusLabel: KIND_LABELS[kind],
     description: KIND_DESCRIPTIONS[kind],
     known: fixture?.known ?? true,
+    ...(fixture?.fixture ? { fixture: fixture.fixture } : {}),
     positionCoefficientPercent: getPositionCoefficientPercent(slot),
   };
 }
@@ -712,12 +761,39 @@ export function getUniverseActionState(
     };
   }
   if (node.ownerId === currentOwnerId || node.isHomeworld) {
+    if (action === 'fleet') {
+      return {
+        action,
+        enabled: true,
+        status: 'supported',
+        label,
+        reason: 'Своя планета принимает транспортировку.',
+      };
+    }
     return {
       action,
       enabled: false,
       status: 'disabled',
       label,
       reason: 'Это ваша планета.',
+    };
+  }
+  if (action === 'fleet' && node.fixture?.id === TEST_MODE_ALLY_PLANET_FIXTURE.marker.id) {
+    return {
+      action,
+      enabled: true,
+      status: 'supported',
+      label,
+      reason: 'Союзная планета принимает транспортировку.',
+    };
+  }
+  if (action === 'fleet') {
+    return {
+      action,
+      enabled: false,
+      status: 'disabled',
+      label,
+      reason: 'Транспортировка доступна только на свою или явную союзную планету.',
     };
   }
   return {

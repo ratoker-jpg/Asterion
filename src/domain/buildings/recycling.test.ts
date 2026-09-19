@@ -12,6 +12,7 @@ import {
   getRecyclingOutput,
   getRecyclingStartValidation,
   migrateRecyclingState,
+  resolveRecyclingFixture,
   startRecyclingJob,
   type RecyclingJob,
   type RecyclingState,
@@ -19,6 +20,8 @@ import {
 } from './recycling.ts';
 
 const allocation: ResourceAllocationPercent = { metal: 60, minerals: 40, gas: 0 };
+const TEST_RECYCLING_CONTEXT = { mode: 'test' as const, fixture: resolveRecyclingFixture('test') };
+const PRODUCTION_RECYCLING_CONTEXT = { mode: 'production' as const, fixture: resolveRecyclingFixture('production') };
 
 function start(
   state: RecyclingState,
@@ -49,16 +52,18 @@ test('duration follows Balance v1 debris-per-second throughput and is never zero
   assert.equal(getRecyclingDurationMs(1), 1000);
 });
 
-test('new planet recycling state starts with the temporary 100,000 debris stock', () => {
-  assert.deepEqual(createDefaultRecyclingState(), {
+test('fresh Test Mode recycling state has only the versioned 100,000 debris fixture', () => {
+  assert.deepEqual(createDefaultRecyclingState(TEST_RECYCLING_CONTEXT), {
     availableDebris: RECYCLING_INITIAL_DEBRIS,
     jobs: [],
+    fixtureId: 'test-recycling-debris-v1',
   });
   assert.equal(RECYCLING_INITIAL_DEBRIS, 100_000);
+  assert.deepEqual(createDefaultRecyclingState(PRODUCTION_RECYCLING_CONTEXT), { availableDebris: 0, jobs: [] });
 });
 
 test('start reserves debris immediately and cannot exceed free stock or slot limit', () => {
-  const initial = createDefaultRecyclingState();
+  const initial = createDefaultRecyclingState(TEST_RECYCLING_CONTEXT);
   const first = start(initial, 1, 10_000, 10_000, 'job-1');
   assert.equal(first.canStart, true);
   assert.equal(first.state.availableDebris, 90_000);
@@ -76,7 +81,7 @@ test('start reserves debris immediately and cannot exceed free stock or slot lim
 });
 
 test('60/30/0 is rejected while 60/40/0 starts', () => {
-  const state = createDefaultRecyclingState();
+  const state = createDefaultRecyclingState(TEST_RECYCLING_CONTEXT);
   const invalid = getRecyclingStartValidation(state, 1, 10_000, { metal: 60, minerals: 30, gas: 0 });
   assert.equal(invalid.canStart, false);
   assert.equal(invalid.reason, 'Распределите оставшиеся 10%');
@@ -102,7 +107,7 @@ test('integer allocation never loses output remainder', () => {
 
 test('collect is disabled before finish, succeeds once after finish and never pays twice', () => {
   const startedAt = 50_000;
-  const started = start(createDefaultRecyclingState(), 1, 10_000, startedAt, 'collect-once', { metal: 100, minerals: 0, gas: 0 });
+  const started = start(createDefaultRecyclingState(TEST_RECYCLING_CONTEXT), 1, 10_000, startedAt, 'collect-once', { metal: 100, minerals: 0, gas: 0 });
   assert.equal(started.canStart, true);
   const job = started.job!;
 
@@ -123,7 +128,7 @@ test('collect is disabled before finish, succeeds once after finish and never pa
 });
 
 test('ready result auto-collects after 24 hours and emits its payout exactly once', () => {
-  const started = start(createDefaultRecyclingState(), 1, 1_000, 100_000, 'auto-collect', { metal: 100, minerals: 0, gas: 0 });
+  const started = start(createDefaultRecyclingState(TEST_RECYCLING_CONTEXT), 1, 1_000, 100_000, 'auto-collect', { metal: 100, minerals: 0, gas: 0 });
   const job = started.job!;
   const ready = advanceRecyclingState(started.state, job.finishAt);
   assert.equal(ready.state.jobs[0].status, 'ready');
@@ -168,7 +173,7 @@ test('processing, ready and auto-collect boundary are derived from absolute time
     ],
   };
 
-  const migrated = migrateRecyclingState(source, 2, now);
+  const migrated = migrateRecyclingState(source, 2, now, TEST_RECYCLING_CONTEXT);
   assert.equal(migrated.availableDebris, 77_777);
   assert.equal(migrated.jobs.length, 2);
   assert.equal(migrated.jobs[0].status, 'processing');
@@ -180,7 +185,7 @@ test('processing, ready and auto-collect boundary are derived from absolute time
   assert.equal(migrated.jobs[1].collectExpiresAt, readyStartedAt + readyDuration + RECYCLING_STORAGE_MS);
 
   const autoCollectAt = readyStartedAt + readyDuration + RECYCLING_STORAGE_MS;
-  const afterOfflineReload = migrateRecyclingState(source, 2, autoCollectAt);
+  const afterOfflineReload = migrateRecyclingState(source, 2, autoCollectAt, TEST_RECYCLING_CONTEXT);
   assert.equal(afterOfflineReload.jobs.some((job) => job.id === 'ready'), true);
   const advanced = advanceRecyclingState(afterOfflineReload, autoCollectAt);
   assert.deepEqual(advanced.autoCollectedJobIds, ['ready']);
@@ -209,7 +214,7 @@ test('damaged recycling save is sanitized and jobs above the level slot limit ar
       job('two'),
       job('three'),
     ],
-  }, 1, now + 1);
+  }, 1, now + 1, TEST_RECYCLING_CONTEXT);
 
   assert.equal(migrated.availableDebris, 0);
   assert.equal(migrated.jobs.length, 1);
@@ -217,4 +222,12 @@ test('damaged recycling save is sanitized and jobs above the level slot limit ar
   assert.equal(migrated.jobs[0].output.metal >= 0, true);
   assert.equal(migrated.jobs[0].output.minerals >= 0, true);
   assert.equal(migrated.jobs[0].output.gas >= 0, true);
+});
+
+test('production migration removes only the verified untouched Test Mode debris fixture', () => {
+  const markedFixture = { availableDebris: 100_000, jobs: [], fixtureId: 'test-recycling-debris-v1' };
+  assert.deepEqual(migrateRecyclingState(markedFixture, 0, 1, PRODUCTION_RECYCLING_CONTEXT), { availableDebris: 0, jobs: [] });
+
+  const unmarkedLegacyStock = { availableDebris: 100_000, jobs: [] };
+  assert.deepEqual(migrateRecyclingState(unmarkedLegacyStock, 0, 1, PRODUCTION_RECYCLING_CONTEXT), unmarkedLegacyStock);
 });

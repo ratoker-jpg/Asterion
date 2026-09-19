@@ -87,6 +87,20 @@ async function seedProductionSave(win, mutator) {
   await reload(win);
 }
 
+async function setStoredSourceGas(win, gas) {
+  const ok = await win.webContents.executeJavaScript(`(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
+    const planet = save?.planets?.['helion-01'];
+    if (!save || !planet) return false;
+    save.gas = ${JSON.stringify(gas)};
+    planet.resources = { ...planet.resources, gas: ${JSON.stringify(gas)} };
+    localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
+    return true;
+  })()`);
+  if (!ok) throw new Error('Could not set stored source gas');
+  await reload(win);
+}
+
 async function chooseFreeColonizationTarget(win) {
   await click(win, '[data-qa-route="universe"]');
   await waitFor(win, `document.querySelector('[data-qa-universe]')`);
@@ -95,6 +109,277 @@ async function chooseFreeColonizationTarget(win) {
   await click(win, '[data-qa-universe-special-action="colonize"]');
   await waitFor(win, `document.querySelector('.fleet-workspace-v1[data-qa-flight-launch-context]')`);
   await waitFor(win, `document.querySelector('[data-qa-flight-preview-open]') && !document.querySelector('[data-qa-flight-preview-open]').disabled`);
+}
+
+async function chooseAllyTransportTarget(win) {
+  await click(win, '[data-qa-route="universe"]');
+  await waitFor(win, `document.querySelector('[data-qa-universe]')`);
+  await click(win, '[data-qa-universe-object="test-mode-ally-ira-vel-v1"]');
+  await waitFor(win, `document.querySelector('[data-qa-universe-inspector]')`);
+  await click(win, '[data-qa-universe-action="fleet"]');
+  await waitFor(win, `document.querySelector('.fleet-workspace-v1[data-qa-flight-launch-context]')`);
+}
+
+async function setFleetShipQuantity(win, shipId, quantity) {
+  const result = await win.webContents.executeJavaScript(`(() => {
+    const input = document.querySelector(${JSON.stringify(`[data-qa-fleet-ship="${shipId}"] input[type="number"]`)});
+    if (!input) return false;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, ${JSON.stringify(String(quantity))});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return input.value === ${JSON.stringify(String(quantity))};
+  })()`);
+  if (!result) throw new Error(`Could not select fleet ship ${shipId}`);
+  await settle(win);
+}
+
+async function setFlightCoordinate(win, field, value) {
+  const result = await win.webContents.executeJavaScript(`(() => {
+    const input = document.querySelector(${JSON.stringify(`[name="flight-preview-target-${field}"]`)});
+    if (!input) return false;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, ${JSON.stringify(String(value))});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return input.value === ${JSON.stringify(String(value))};
+  })()`);
+  if (!result) throw new Error(`Could not set flight coordinate ${field}`);
+  await settle(win);
+}
+
+async function selectTransportTarget(win, targetId) {
+  const result = await win.webContents.executeJavaScript(`(() => {
+    const select = document.querySelector('[data-qa-transport-target-select] select');
+    if (!select) return false;
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+    setter?.call(select, ${JSON.stringify(targetId)});
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return select.value === ${JSON.stringify(targetId)};
+  })()`);
+  if (!result) throw new Error(`Could not select transport target ${targetId}`);
+  await settle(win);
+}
+
+async function setCargoValue(win, kind, quantity) {
+  const result = await win.webContents.executeJavaScript(`(() => {
+    const input = document.querySelector(${JSON.stringify(`[data-qa-cargo="${kind}"]`)});
+    if (!input) return false;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, ${JSON.stringify(String(quantity))});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return input.value === ${JSON.stringify(String(quantity))};
+  })()`);
+  if (!result) throw new Error(`Could not set transport cargo ${kind}`);
+  await settle(win);
+}
+
+async function runTransportUiCycle(win, label, directory) {
+  await seedProductionSave(win, (save, planetState) => {
+    planetState.fleet.ships = {
+      ...planetState.fleet.ships,
+      scout: 4,
+      transporter: 1,
+      recycler: 1,
+      colonizer: 1,
+      'spy-probe': 1,
+    };
+    planetState.buildings = { ...planetState.buildings, 'gas-production-1': 0, 'gas-production-2': 0 };
+    planetState.productionBots = { ...planetState.productionBots, gas: 0 };
+    planetState.resources = { ...planetState.resources, metal: 500_000, minerals: 500_000, gas: 189_000_000 };
+    planetState.recycling = { ...planetState.recycling, availableDebris: 100_000 };
+    const ownTarget = JSON.parse(JSON.stringify(planetState));
+    ownTarget.id = 'qa-own-target';
+    ownTarget.name = 'QA Target';
+    ownTarget.universeGalaxy = 1;
+    ownTarget.universeSystem = 1;
+    ownTarget.universePosition = 3;
+    ownTarget.resources = { metal: 999_999_999, minerals: 999_999_999, gas: 999_999_999 };
+    const ally = save.alliedPlanets?.['test-mode-ally-ira-vel-v1'];
+    if (ally) ally.resources = { metal: 999_999_999, minerals: 999_999_999, gas: 999_999_999 };
+    save.metal = 500_000;
+    save.minerals = 500_000;
+    save.gas = 189_000_000;
+    save.currentPlanetId = 'helion-01';
+    save.planets = { 'helion-01': planetState, 'qa-own-target': ownTarget };
+    save.queues = { 'helion-01': [], 'qa-own-target': [] };
+    save.flights = { records: [], requestIndex: {} };
+  });
+  await click(win, '[data-qa-test-speed="15"]');
+  await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×15')`);
+
+  await click(win, '[data-qa-route="fleets"]');
+  await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
+  for (const [shipId, quantity] of [['scout', 2], ['transporter', 1], ['recycler', 1], ['colonizer', 1], ['spy-probe', 1]]) {
+    await setFleetShipQuantity(win, shipId, quantity);
+  }
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-open]') && !document.querySelector('[data-qa-flight-preview-open]').disabled`);
+  await click(win, '[data-qa-flight-preview-open]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
+  const normalTarget = await win.webContents.executeJavaScript(`(() => ({
+    hasSelect: Boolean(document.querySelector('[data-qa-transport-target-select] select')),
+    hasCoordinateInputs: Boolean(document.querySelector('[data-qa-flight-target-inputs]')),
+    relation: document.querySelector('.fleet-workspace-v1')?.getAttribute('data-qa-target-relation') || '',
+    options: Array.from(document.querySelectorAll('[data-qa-transport-target-select] option')).map((option) => option.textContent?.trim() || ''),
+  }))()`);
+  if (!normalTarget.hasSelect || !normalTarget.hasCoordinateInputs || normalTarget.relation === 'ally'
+    || normalTarget.options.some((option) => option.includes('Союзная') || option.includes('[1:1:1]'))
+    || !normalTarget.options.some((option) => option.includes('QA Target'))) {
+    throw new Error(`${label}: ordinary fleet target dropdown contract failed ${JSON.stringify(normalTarget)}`);
+  }
+  await setFlightCoordinate(win, 'galaxy', 1);
+  await setFlightCoordinate(win, 'system', 1);
+  await setFlightCoordinate(win, 'position', 3);
+  await setCargoValue(win, 'metal', 100);
+  const manualOverflow = await win.webContents.executeJavaScript(`(() => ({
+    warning: Boolean(document.querySelector('[data-qa-transport-overflow-warning]')),
+    sendDisabled: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled),
+    status: document.querySelector('[data-qa-flight-target-status]')?.className || '',
+  }))()`);
+  if (!manualOverflow.warning || manualOverflow.sendDisabled || manualOverflow.status.includes('is-invalid')) {
+    throw new Error(`${label}: manual coordinate overflow warning contract failed ${JSON.stringify(manualOverflow)}`);
+  }
+  await setFlightCoordinate(win, 'position', 24);
+  const beforeSend = await win.webContents.executeJavaScript(`(() => ({
+    values: Object.fromEntries(['galaxy', 'system', 'position'].map((field) => [field, document.querySelector(${JSON.stringify('[name="flight-preview-target-PLACEHOLDER"]')}.replace('PLACEHOLDER', field))?.value || ''])),
+    sendDisabled: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled),
+    hasPreviewMetrics: Boolean(document.querySelector('[data-qa-flight-preview]')),
+    targetError: document.querySelector('[data-qa-flight-target-status]')?.className || '',
+  }))()`);
+  if (JSON.stringify(beforeSend.values) !== JSON.stringify({ galaxy: '1', system: '1', position: '24' }) || beforeSend.sendDisabled || beforeSend.hasPreviewMetrics || beforeSend.targetError.includes('is-invalid')) {
+    throw new Error(`${label}: valid manual coordinates were checked before Send ${JSON.stringify(beforeSend)}`);
+  }
+  await click(win, '[data-qa-flight-dispatch-confirm]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-target-status].is-invalid')`);
+  const failedSend = await win.webContents.executeJavaScript(`(() => ({
+    modalOpen: Boolean(document.querySelector('[data-qa-flight-preview-backdrop]')),
+    values: Object.fromEntries(['galaxy', 'system', 'position'].map((field) => [field, document.querySelector(${JSON.stringify('[name="flight-preview-target-PLACEHOLDER"]')}.replace('PLACEHOLDER', field))?.value || ''])),
+    sendDisabled: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled),
+    error: document.querySelector('[data-qa-flight-target-status]')?.textContent?.trim() || '',
+  }))()`);
+  if (!failedSend.modalOpen || failedSend.sendDisabled || JSON.stringify(failedSend.values) !== JSON.stringify({ galaxy: '1', system: '1', position: '24' }) || !/транспортиров|доступ|занят/i.test(failedSend.error)) {
+    throw new Error(`${label}: invalid target Send did not preserve editable modal state ${JSON.stringify(failedSend)}`);
+  }
+  await click(win, '[data-qa-flight-preview-cancel]');
+  await waitFor(win, `!document.querySelector('[data-qa-flight-preview-backdrop]')`);
+
+  await setStoredSourceGas(win, 0);
+  await click(win, '[data-qa-test-speed="15"]');
+  await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×15')`);
+  await click(win, '[data-qa-route="fleets"]');
+  await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
+  await setFleetShipQuantity(win, 'transporter', 1);
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-open]') && !document.querySelector('[data-qa-flight-preview-open]').disabled`);
+  await click(win, '[data-qa-flight-preview-open]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
+  await selectTransportTarget(win, 'qa-own-target');
+  const insufficientGas = await win.webContents.executeJavaScript(`(() => ({
+    sendDisabled: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled),
+    error: document.querySelector('[data-qa-flight-preview-error]')?.textContent?.trim() || document.querySelector('[data-qa-flight-target-status]')?.textContent?.trim() || '',
+  }))()`);
+  if (!insufficientGas.sendDisabled || !/недостаточно газа/i.test(insufficientGas.error)) {
+    throw new Error(`${label}: insufficient-gas preview did not disable Send ${JSON.stringify(insufficientGas)}`);
+  }
+  await click(win, '[data-qa-flight-preview-cancel]');
+  await waitFor(win, `!document.querySelector('[data-qa-flight-preview-backdrop]')`);
+  await setStoredSourceGas(win, 189_000_000);
+  await click(win, '[data-qa-test-speed="15"]');
+  await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×15')`);
+
+  await chooseAllyTransportTarget(win);
+  for (const [shipId, quantity] of [['scout', 2], ['transporter', 1], ['recycler', 1], ['colonizer', 1], ['spy-probe', 1]]) {
+    await setFleetShipQuantity(win, shipId, quantity);
+  }
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-open]') && !document.querySelector('[data-qa-flight-preview-open]').disabled`);
+  await click(win, '[data-qa-flight-preview-open]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
+  await capture(win, directory, 'transport-preview');
+  const beforeCargo = await win.webContents.executeJavaScript(`(() => ({
+    relation: document.querySelector('.fleet-workspace-v1')?.getAttribute('data-qa-target-relation') || '',
+    readOnlyTarget: document.querySelector('[data-qa-transport-target-readonly]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+    hasTargetSelect: Boolean(document.querySelector('[data-qa-transport-target-select] select')),
+    hasCoordinateInputs: Boolean(document.querySelector('[data-qa-flight-target-inputs]')),
+    kinds: Array.from(document.querySelectorAll('[data-qa-flight-cargo] input')).map((input) => input.getAttribute('data-qa-cargo') || ''),
+    hasEnergy: Boolean(document.querySelector('[data-qa-flight-cargo] [data-qa-cargo="energy"]')),
+    capacity: document.querySelector('[data-qa-flight-cargo]')?.getAttribute('data-qa-cargo-capacity') || '',
+    maxValues: Object.fromEntries(Array.from(document.querySelectorAll('[data-qa-flight-cargo] input')).map((input) => [input.getAttribute('data-qa-cargo') || '', Number(input.max)])),
+  }))()`);
+  const totalCapacity = Number(beforeCargo.capacity.split('/')[1]);
+  if (beforeCargo.relation !== 'ally' || !beforeCargo.readOnlyTarget.includes('СОЮЗНАЯ ПЛАНЕТА') || beforeCargo.hasTargetSelect || beforeCargo.hasCoordinateInputs || JSON.stringify(beforeCargo.kinds) !== JSON.stringify(['metal', 'minerals', 'gas', 'debris']) || beforeCargo.hasEnergy || !beforeCargo.capacity || beforeCargo.maxValues.metal !== totalCapacity) {
+    throw new Error(`${label}: transport cargo editor contract failed ${JSON.stringify(beforeCargo)}`);
+  }
+  const layout = await win.webContents.executeJavaScript(`(() => {
+    const list = document.querySelector('[data-qa-flight-ships]');
+    const listStyle = list ? getComputedStyle(list) : null;
+    const cards = Array.from(document.querySelectorAll('[data-qa-flight-ships] .flight-timeline-ship-card')).map((card) => {
+      const cardRect = card.getBoundingClientRect();
+      const content = Array.from(card.querySelectorAll('img, strong, small, b')).map((node) => node.getBoundingClientRect());
+      return {
+        height: cardRect.height,
+        contentFits: content.every((rect) => rect.top >= cardRect.top - 1 && rect.bottom <= cardRect.bottom + 1),
+      };
+    });
+    const cargoRect = document.querySelector('[data-qa-flight-cargo]')?.getBoundingClientRect();
+    return {
+      list: list ? { overflowY: listStyle?.overflowY || '', clientHeight: list.clientHeight, scrollHeight: list.scrollHeight } : null,
+      cards,
+      cargoFits: Boolean(cargoRect && cargoRect.left >= -1 && cargoRect.top >= -1 && cargoRect.right <= innerWidth + 1 && cargoRect.bottom <= innerHeight + 1),
+    };
+  })()`);
+  if (!layout.list || layout.cards.length !== 5 || !['auto', 'scroll'].includes(layout.list.overflowY) || layout.cards.some((card) => card.height > 96 || !card.contentFits) || !layout.cargoFits || (label === '1280x720' && layout.list.scrollHeight <= layout.list.clientHeight)) {
+    throw new Error(`${label}: transport composition/cargo geometry contract failed ${JSON.stringify(layout)}`);
+  }
+  const halfCapacity = Math.floor(totalCapacity / 2);
+  await setCargoValue(win, 'metal', halfCapacity);
+  const remainingCapacity = await win.webContents.executeJavaScript(`(() => ({
+    metal: Number(document.querySelector('[data-qa-cargo="metal"]')?.max || 0),
+    minerals: Number(document.querySelector('[data-qa-cargo="minerals"]')?.max || 0),
+    gas: Number(document.querySelector('[data-qa-cargo="gas"]')?.max || 0),
+  }))()`);
+  if (remainingCapacity.metal !== totalCapacity || remainingCapacity.minerals !== totalCapacity - halfCapacity || remainingCapacity.gas !== totalCapacity - halfCapacity) {
+    throw new Error(`${label}: cargo field maxima did not follow remaining shared capacity ${JSON.stringify({ totalCapacity, halfCapacity, remainingCapacity })}`);
+  }
+  await setCargoValue(win, 'metal', 100);
+  await setCargoValue(win, 'minerals', 50);
+  await setCargoValue(win, 'gas', 25);
+  await setCargoValue(win, 'debris', 10);
+  const cargo = await win.webContents.executeJavaScript(`(() => ({
+    values: Object.fromEntries(Array.from(document.querySelectorAll('[data-qa-flight-cargo] input')).map((input) => [input.getAttribute('data-qa-cargo') || '', Number(input.value)])),
+    overflow: Boolean(document.querySelector('[data-qa-transport-overflow-warning]')),
+  }))()`);
+  if (JSON.stringify(cargo.values) !== JSON.stringify({ metal: 100, minerals: 50, gas: 25, debris: 10 }) || !cargo.overflow) {
+    throw new Error(`${label}: transport cargo values/warning mismatch ${JSON.stringify(cargo)}`);
+  }
+  await click(win, '[data-qa-flight-preview-cancel]');
+  await waitFor(win, `!document.querySelector('[data-qa-flight-preview-backdrop]')`);
+  const preservedSelection = await win.webContents.executeJavaScript(`(() => ({
+    transporter: document.querySelector('[data-qa-fleet-ship="transporter"] input[type="number"]')?.value || '',
+    previewEnabled: Boolean(document.querySelector('[data-qa-flight-preview-open]') && !document.querySelector('[data-qa-flight-preview-open]').disabled),
+  }))()`);
+  if (preservedSelection.transporter !== '1' || !preservedSelection.previewEnabled) throw new Error(`${label}: cancel cleared the selected fleet ${JSON.stringify(preservedSelection)}`);
+  await click(win, '[data-qa-flight-preview-open]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
+  const reopened = await win.webContents.executeJavaScript(`(() => ({
+    ship: document.querySelector('[data-qa-flight-ships]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+    metal: Number(document.querySelector('[data-qa-cargo="metal"]')?.value || 0),
+    minerals: Number(document.querySelector('[data-qa-cargo="minerals"]')?.value || 0),
+    relation: document.querySelector('.fleet-workspace-v1')?.getAttribute('data-qa-target-relation') || '',
+    readOnlyTarget: Boolean(document.querySelector('[data-qa-transport-target-readonly]')),
+  }))()`);
+  if (!reopened.ship.includes('Транспорт') || !reopened.ship.includes('Зонд') || reopened.metal !== 100 || reopened.minerals !== 50 || reopened.relation !== 'ally' || !reopened.readOnlyTarget) {
+    throw new Error(`${label}: reopening preview did not preserve the draft ${JSON.stringify(reopened)}`);
+  }
+  await click(win, '[data-qa-flight-dispatch-confirm]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-row]')`);
+  const activeOverflow = await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-flight-overflow-warning]'))`);
+  if (!activeOverflow) throw new Error(`${label}: active transport row lost the overflow indicator`);
+  const persisted = await readSave(win);
+  const flight = persisted.flights?.records?.find((record) => record.missionId === 'transport');
+  if (!flight || flight.targetRelation !== 'ally' || flight.cargoState !== 'loaded' || JSON.stringify(flight.cargo) !== JSON.stringify({ metal: 100, minerals: 50, gas: 25, debris: 10 })) {
+    throw new Error(`${label}: transport dispatch was not persisted atomically ${JSON.stringify({ flight, resources: persisted.planets?.['helion-01']?.resources })}`);
+  }
+  return { relation: flight.targetRelation, cargo: flight.cargo, phase: flight.phase, capacity: beforeCargo.capacity, layout };
 }
 
 async function runFlightRuntimeCycle(win, label) {
@@ -406,6 +691,7 @@ async function runViewport(width, height) {
       throw new Error(`${label}: offline fleet completion duplicated after reload`);
     }
 
+    const transportCycle = await runTransportUiCycle(win, label, directory);
     const flightCycle = await runFlightRuntimeCycle(win, label);
 
     await seedProductionSave(win, (save, planetState) => {
@@ -448,7 +734,7 @@ async function runViewport(width, height) {
     })()`);
     if (layout.horizontalOverflow || !layout.longPage || layout.orderCount !== 8 || layout.queueOverflowY !== 'visible' || layout.queueMaxHeight !== 'none' || layout.queueScrollHeight < layout.queueClientHeight) throw new Error(`${label}: fleet production layout overflow/long-page contract failed ${JSON.stringify(layout)}`);
     await capture(win, directory, 'fleet-production');
-    return { viewport: label, layout, missionSlots, flightCycle, screenshotsSkipped: skipScreenshots };
+    return { viewport: label, layout, missionSlots, transportCycle, flightCycle, screenshotsSkipped: skipScreenshots };
   } finally {
     if (!win.isDestroyed()) await win.close();
   }

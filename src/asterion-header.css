@@ -238,10 +238,29 @@
 .asterion-header__resource--mineral .asterion-header__resource-icon{color:#a6adff}
 .asterion-header__resource--gas .asterion-header__resource-icon{color:#4df0a7}
 .asterion-header__resource--energy .asterion-header__resource-icon{color:#ffd34f}
+.asterion-header__resource--debris .asterion-header__resource-icon{color:#e6ad50}
 .asterion-header__resource--population .asterion-header__resource-icon{color:#dffaff}
+.asterion-header__resource-rail .asterion-header__resource.is-energy-split{display:block;padding:0;overflow:visible}
+.asterion-header__resource-energy-split{display:grid;grid-template-rows:repeat(2,minmax(0,1fr));height:100%;min-height:0}
+.asterion-header__resource-energy-half{display:grid;grid-template-columns:24px minmax(0,1fr);align-items:center;gap:6px;min-width:0;min-height:0;padding:4px 12px;color:#ffd34f;overflow:hidden}
+.asterion-header__resource-energy-half+.asterion-header__resource-energy-half{border-top:1px solid rgba(71,197,222,.28)}
+.asterion-header__resource-debris-half{color:#e6ad50}
+.asterion-header__resource-half-icon{width:24px;height:24px;display:grid;place-items:center;filter:drop-shadow(0 0 7px rgba(0,205,255,.28))}
+.asterion-header__resource-half-icon .asterion-header-icon{width:25px;height:25px;object-fit:contain}
+.asterion-header__resource-half-icon .asterion-resource-icon{width:20px;height:20px;object-fit:contain}
+.asterion-header__resource-half-copy{display:grid;gap:3px;min-width:0}
+.asterion-header__resource-half-copy small{display:block;overflow:hidden;color:#a6d9e1;font-size:8px;font-weight:700;letter-spacing:1px;line-height:1;white-space:nowrap;text-overflow:ellipsis}
+.asterion-header__resource-half-copy strong{display:block;overflow:hidden;margin:0;color:#effcff;font-size:13px;line-height:1;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;text-overflow:ellipsis}
+.asterion-header__resource-debris-half .asterion-header__resource-half-copy small{color:#d1bd91}
+.asterion-header__resource-debris-half .asterion-header__resource-half-copy strong{color:#f3dfb0}
 .asterion-header__resource-text{position:static;min-width:0;display:block;height:54px;overflow:visible;transform:translateY(12px)}
 .asterion-header__resource small{display:block;color:#a6d9e1;font-size:11px;font-weight:700;letter-spacing:1.25px;line-height:1;white-space:nowrap}
 .asterion-header__resource strong{display:block;margin-top:6px;color:#effcff;font-size:18px;line-height:1;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.asterion-header__resource-compound{display:flex;align-items:center;gap:5px;margin-top:6px;padding-top:5px;border-top:1px solid rgba(71,197,222,.16)}
+.asterion-header__resource-compound .asterion-resource-icon{width:17px;height:17px;flex:0 0 17px;color:#e6ad50}
+.asterion-header__resource-compound span{display:flex;align-items:baseline;gap:5px;min-width:0}
+.asterion-header__resource-compound small{font-size:8px;letter-spacing:.1em}
+.asterion-header__resource-compound b{color:#f3dfb0;font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .asterion-header__resource-fill{
   display:block;
   width:100%;
