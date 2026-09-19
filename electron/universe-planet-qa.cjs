@@ -517,7 +517,21 @@ async function runViewport(width, height) {
         inputs: Array.from(document.querySelectorAll('[data-qa-flight-target-inputs] input')).map((input) => input.value),
       };
      })()`);
-    if (!occupiedTargetState.invalid || !occupiedTargetState.text.includes('Координата уже занята') || occupiedTargetState.dispatchEnabled) throw new Error(`${label}: typed occupied target was not rejected in Mission Timeline ${JSON.stringify(occupiedTargetState)}`);
+    if (occupiedTargetState.invalid || !occupiedTargetState.text.includes('Координаты будут проверены при отправке') || !occupiedTargetState.dispatchEnabled) throw new Error(`${label}: occupied target was checked before Send in Mission Timeline ${JSON.stringify(occupiedTargetState)}`);
+    await clickAt(win, '[data-qa-flight-dispatch-confirm]');
+    await waitFor(win, `document.querySelector('[data-qa-flight-target-status].is-invalid')`);
+    const rejectedOccupiedTarget = await win.webContents.executeJavaScript(`(() => {
+      const status = document.querySelector('[data-qa-flight-target-status]');
+      const dispatch = document.querySelector('[data-qa-flight-dispatch-confirm]');
+      return {
+        text: status?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        invalid: status?.classList.contains('is-invalid') || false,
+        dispatchEnabled: Boolean(dispatch && !dispatch.disabled),
+        modalOpen: Boolean(document.querySelector('[data-qa-flight-preview-backdrop]')),
+        inputs: Array.from(document.querySelectorAll('[data-qa-flight-target-inputs] input')).map((input) => input.value),
+      };
+    })()`);
+    if (!rejectedOccupiedTarget.invalid || !rejectedOccupiedTarget.text.includes('Координата уже занята') || rejectedOccupiedTarget.dispatchEnabled || !rejectedOccupiedTarget.modalOpen || JSON.stringify(rejectedOccupiedTarget.inputs) !== JSON.stringify(['1', '1', '1'])) throw new Error(`${label}: Send did not reject occupied target while preserving Mission Timeline editing ${JSON.stringify(rejectedOccupiedTarget)}`);
     const freeTargetParts = (freeAsteroid.targetCoordinate.match(/\d+/g) || []).map(Number);
     if (freeTargetParts.length !== 3) throw new Error(`${label}: free asteroid coordinate could not be parsed ${freeAsteroid.targetCoordinate}`);
     await setInputValue(win, '[name="flight-preview-target-galaxy"]', freeTargetParts[0]);
