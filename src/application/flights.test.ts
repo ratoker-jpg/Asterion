@@ -7,6 +7,7 @@ import {
   dispatchFlight,
   getAvailableFleetForPlanet,
   getReservedShipsForPlanet,
+  getTransportCargoSummary,
   previewFlight,
   reconcileFlights,
   recallFlight,
@@ -625,6 +626,35 @@ test('transport overflow keeps the pre-send warning but uses the normal delivery
   assert.equal(arrival.events[0]?.status, 'delivered');
   assert.equal(arrival.events[0]?.notice, 'Груз доставлен. Корабли возвращаются.');
   assert.doesNotMatch(arrival.events[0]?.notice ?? '', /переполн|потерян/i);
+});
+
+test('manual coordinate cargo summary warns when the matched allied storage is full', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const destination = {
+    kind: 'coordinate' as const,
+    coordinate: { galaxy: 1, system: 1, position: 2 },
+  };
+  const ally = initial.alliedPlanets?.['test-mode-ally-ira-vel-v1'];
+  assert.ok(ally);
+  if (!ally) return;
+  const capacities = getStorageCapacities(ally.buildings);
+  const fullTarget = replaceAlliedPlanetState(initial, ally.id, {
+    ...ally,
+    resources: {
+      metal: capacities.metal,
+      minerals: capacities.minerals,
+      gas: capacities.gas,
+    },
+  });
+  const summary = getTransportCargoSummary(
+    fullTarget,
+    'helion-01',
+    { scout: 1 },
+    { metal: 100, minerals: 0, gas: 0, debris: 0 },
+    destination,
+  );
+  assert.equal(summary.cargo.metal, 100);
+  assert.equal(summary.overflowWarning, true);
 });
 
 test('transport recall returns loaded cargo using the current source caps and never refunds gas', () => {

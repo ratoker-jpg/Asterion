@@ -273,11 +273,10 @@ export function getTransportCargoSummary(
   const sourceResources = origin?.resources ?? getPlanetResources(state, originPlanetId);
   const sourceDebris = origin?.recycling.availableDebris ?? 0;
   const cargo = clampCargoToSourceAndCapacity(requestedCargo, sourceResources, sourceDebris, capacityTotal);
-  // Coordinate drafts are intentionally local-only until Send. Resolving a
-  // target here would turn every keystroke into an authoritative availability
-  // check and would make an unavailable/occupied coordinate look invalid
-  // before the user submits the flight.
-  const target = destination?.kind === 'planet'
+  // A coordinate draft may use the persisted own/ally match only to derive
+  // the overflow warning. This lookup does not surface ownership or
+  // occupancy errors; dispatchFlight remains the authoritative Send check.
+  const target = destination
     ? resolveTransportTarget(state, destination)
     : emptyTransportTarget(destination);
   const targetResources = target.runtime?.resources ?? { metal: 0, minerals: 0, gas: 0 };

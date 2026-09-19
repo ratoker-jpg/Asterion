@@ -87,6 +87,20 @@ async function seedProductionSave(win, mutator) {
   await reload(win);
 }
 
+async function setStoredSourceGas(win, gas) {
+  const ok = await win.webContents.executeJavaScript(`(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
+    const planet = save?.planets?.['helion-01'];
+    if (!save || !planet) return false;
+    save.gas = ${JSON.stringify(gas)};
+    planet.resources = { ...planet.resources, gas: ${JSON.stringify(gas)} };
+    localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
+    return true;
+  })()`);
+  if (!ok) throw new Error('Could not set stored source gas');
+  await reload(win);
+}
+
 async function chooseFreeColonizationTarget(win) {
   await click(win, '[data-qa-route="universe"]');
   await waitFor(win, `document.querySelector('[data-qa-universe]')`);
@@ -134,6 +148,19 @@ async function setFlightCoordinate(win, field, value) {
   await settle(win);
 }
 
+async function selectTransportTarget(win, targetId) {
+  const result = await win.webContents.executeJavaScript(`(() => {
+    const select = document.querySelector('[data-qa-transport-target-select] select');
+    if (!select) return false;
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+    setter?.call(select, ${JSON.stringify(targetId)});
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return select.value === ${JSON.stringify(targetId)};
+  })()`);
+  if (!result) throw new Error(`Could not select transport target ${targetId}`);
+  await settle(win);
+}
+
 async function setCargoValue(win, kind, quantity) {
   const result = await win.webContents.executeJavaScript(`(() => {
     const input = document.querySelector(${JSON.stringify(`[data-qa-cargo="${kind}"]`)});
@@ -168,6 +195,7 @@ async function runTransportUiCycle(win, label, directory) {
     ownTarget.universeGalaxy = 1;
     ownTarget.universeSystem = 1;
     ownTarget.universePosition = 3;
+    ownTarget.resources = { metal: 999_999_999, minerals: 999_999_999, gas: 999_999_999 };
     const ally = save.alliedPlanets?.['test-mode-ally-ira-vel-v1'];
     if (ally) ally.resources = { metal: 999_999_999, minerals: 999_999_999, gas: 999_999_999 };
     save.metal = 500_000;
@@ -202,6 +230,16 @@ async function runTransportUiCycle(win, label, directory) {
   }
   await setFlightCoordinate(win, 'galaxy', 1);
   await setFlightCoordinate(win, 'system', 1);
+  await setFlightCoordinate(win, 'position', 3);
+  await setCargoValue(win, 'metal', 100);
+  const manualOverflow = await win.webContents.executeJavaScript(`(() => ({
+    warning: Boolean(document.querySelector('[data-qa-transport-overflow-warning]')),
+    sendDisabled: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled),
+    status: document.querySelector('[data-qa-flight-target-status]')?.className || '',
+  }))()`);
+  if (!manualOverflow.warning || manualOverflow.sendDisabled || manualOverflow.status.includes('is-invalid')) {
+    throw new Error(`${label}: manual coordinate overflow warning contract failed ${JSON.stringify(manualOverflow)}`);
+  }
   await setFlightCoordinate(win, 'position', 24);
   const beforeSend = await win.webContents.executeJavaScript(`(() => ({
     values: Object.fromEntries(['galaxy', 'system', 'position'].map((field) => [field, document.querySelector(${JSON.stringify('[name="flight-preview-target-PLACEHOLDER"]')}.replace('PLACEHOLDER', field))?.value || ''])),
@@ -225,6 +263,29 @@ async function runTransportUiCycle(win, label, directory) {
   }
   await click(win, '[data-qa-flight-preview-cancel]');
   await waitFor(win, `!document.querySelector('[data-qa-flight-preview-backdrop]')`);
+
+  await setStoredSourceGas(win, 0);
+  await click(win, '[data-qa-test-speed="15"]');
+  await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×15')`);
+  await click(win, '[data-qa-route="fleets"]');
+  await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
+  await setFleetShipQuantity(win, 'transporter', 1);
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-open]') && !document.querySelector('[data-qa-flight-preview-open]').disabled`);
+  await click(win, '[data-qa-flight-preview-open]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
+  await selectTransportTarget(win, 'qa-own-target');
+  const insufficientGas = await win.webContents.executeJavaScript(`(() => ({
+    sendDisabled: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled),
+    error: document.querySelector('[data-qa-flight-preview-error]')?.textContent?.trim() || document.querySelector('[data-qa-flight-target-status]')?.textContent?.trim() || '',
+  }))()`);
+  if (!insufficientGas.sendDisabled || !/недостаточно газа/i.test(insufficientGas.error)) {
+    throw new Error(`${label}: insufficient-gas preview did not disable Send ${JSON.stringify(insufficientGas)}`);
+  }
+  await click(win, '[data-qa-flight-preview-cancel]');
+  await waitFor(win, `!document.querySelector('[data-qa-flight-preview-backdrop]')`);
+  await setStoredSourceGas(win, 189_000_000);
+  await click(win, '[data-qa-test-speed="15"]');
+  await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×15')`);
 
   await chooseAllyTransportTarget(win);
   for (const [shipId, quantity] of [['scout', 2], ['transporter', 1], ['recycler', 1], ['colonizer', 1], ['spy-probe', 1]]) {

@@ -622,8 +622,10 @@ function FleetWorkspace({
     ? previewDestination.planetId
     : '';
   const targetIsLocallyValid = coordinateDraftError(previewTargetDraft) === null;
+  const previewErrorCode = previewResult && !previewResult.ok ? previewResult.error.code : null;
+  const targetCheckIsDeferred = previewErrorCode === 'target-not-available' || previewErrorCode === 'target-is-origin';
   const canDispatchPreview = missionId === 'transport'
-    ? targetIsLocallyValid
+    ? targetIsLocallyValid && (!previewResult || previewResult.ok || targetCheckIsDeferred)
     : missionId !== 'colonize'
       || (targetIsLocallyValid && (!previewResult || previewResult.ok));
   const previewTargetLabel = previewTargetError
