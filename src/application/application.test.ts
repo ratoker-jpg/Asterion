@@ -101,7 +101,8 @@ test('production and test persistence seeds stay isolated at every fixture bound
   assert.ok(testMode.command.jointOperations.length > 0);
   assert.equal(testMode.operations.items.length, 4);
   assert.ok(testMode.combat.reports.length > 0);
-  assert.equal(createUniverseMap({ mode: 'test' }).systems.flatMap((system) => system.positions).filter((node) => node.kind === 'npc').length, 7);
+  assert.equal(createUniverseMap({ mode: 'test' }).systems.flatMap((system) => system.positions).filter((node) => node.kind === 'npc').length, 8);
+  assert.equal(Object.keys(testMode.alliedPlanets ?? {}).length, 1);
   assert.equal(createPlayerRatingEntries(testMode.rating.resourcePoints, 'test').length, 84);
   assert.equal(createAllianceRatingEntries(null, 'test').length, 42);
 });

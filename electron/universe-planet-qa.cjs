@@ -319,7 +319,11 @@ async function runViewport(width, height) {
     }
     if (map.homeCaption !== '★ Dendrilion' || map.coordinateLineCount !== 0 || map.mapCaptions.some((caption) => /\\[\\d+:\\d+:\\d+\\]/.test(caption))) throw new Error(`${label}: map caption contract failed ${JSON.stringify(map)}`);
     const expectedLegend = ['Ваш мир', 'Союзная', 'Вражеская', 'Нейтральная', 'Необитаемые', 'Уникальные', 'Отступники', 'Аномалии'];
-    if (JSON.stringify(map.legend.map((item) => item.text)) !== JSON.stringify(expectedLegend) || map.ownerRelations.find((item) => item.id === 'player-planet-helion-01')?.relation !== 'self') throw new Error(`${label}: relation color legend contract failed ${JSON.stringify({ legend: map.legend, ownerRelations: map.ownerRelations })}`);
+    if (JSON.stringify(map.legend.map((item) => item.text)) !== JSON.stringify(expectedLegend)
+      || map.ownerRelations.find((item) => item.id === 'player-planet-helion-01')?.relation !== 'self'
+      || map.ownerRelations.find((item) => item.id === 'test-mode-ally-ira-vel-v1')?.relation !== 'ally') {
+      throw new Error(`${label}: relation color legend contract failed ${JSON.stringify({ legend: map.legend, ownerRelations: map.ownerRelations })}`);
+    }
     if (Object.values(map.animated).some((name) => name !== null && name !== 'none')) throw new Error(`${label}: map wrappers must remain static ${JSON.stringify(map.animated)}`);
     if (map.horizontalOverflow || map.bodyHorizontalOverflow || !map.stageRect || Math.abs(map.stageRect.x) > 2 || Math.abs(map.stageRect.y) > 2 || Math.abs(map.stageRect.width - width) > 2 || Math.abs(map.stageRect.height - height) > 2) throw new Error(`${label}: map layout/overflow failed ${JSON.stringify(map)}`);
     if (!map.localStorageKeys.includes(SAVE_KEY) || map.localStorageKeys.some((key) => /universe/i.test(key))) throw new Error(`${label}: unexpected universe save key ${JSON.stringify(map.localStorageKeys)}`);
@@ -350,38 +354,43 @@ async function runViewport(width, height) {
     await dismissInspector(win);
     await checkRestoredFocus(win, 'player-planet-helion-01');
 
-    const npcSystem = await findObject(win, '[data-qa-universe-kind="npc"]');
-    const npcId = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-universe-kind="npc"]').getAttribute('data-qa-universe-object')`);
-    const npcRelation = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-universe-kind="npc"]').getAttribute('data-qa-universe-relation')`);
+    const npcSelector = '[data-qa-universe-kind="npc"][data-qa-universe-relation="neutral"]';
+    const npcSystem = await findObject(win, npcSelector);
+    const npcId = await win.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(npcSelector)}).getAttribute('data-qa-universe-object')`);
+    const npcRelation = await win.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(npcSelector)}).getAttribute('data-qa-universe-relation')`);
     if (npcRelation !== 'neutral') throw new Error(`${label}: unassigned bot must remain neutral, got ${npcRelation}`);
-    await clickObject(win, '[data-qa-universe-kind="npc"]');
+    await clickObject(win, npcSelector);
     const npc = await inspectorSnapshot(win);
     checkCopy(npc);
     await checkModal(win);
     const npcPortraits = await inspectRenderedFactionGeneralPortraits(win, '[data-qa-universe-inspector] [data-qa-faction-general]');
     assertRenderedFactionGeneralPortraits(npcPortraits, ['veyra'], `${label} NPC universe`);
-    if (npc.kind !== 'npc' || npc.ownerName !== 'Бот 01' || !npc.ownerId || npc.planetRows !== 7 || npc.actions.length !== 14 || npc.actions.some((action) => action.disabled || action.status !== 'prototype')) throw new Error(`${label}: NPC action/list contract failed ${JSON.stringify(npc)}`);
+    const npcSpyActions = npc.actions.filter((action) => action.action === 'spy');
+    const npcFleetActions = npc.actions.filter((action) => action.action === 'fleet');
+    if (npc.kind !== 'npc' || npc.ownerName !== 'Бот 01' || !npc.ownerId || npc.planetRows !== 7 || npc.actions.length !== 14
+      || npcSpyActions.length !== 7 || npcSpyActions.some((action) => action.disabled || action.status !== 'prototype')
+      || npcFleetActions.length !== 7 || npcFleetActions.some((action) => !action.disabled || action.status !== 'disabled' || !action.title.includes('только на свою или явную союзную планету'))) {
+      throw new Error(`${label}: NPC action/list contract failed ${JSON.stringify(npc)}`);
+    }
     const systems = npc.rows.map((row) => Number(row.coordinate.slice(1, -1).split(':')[1]));
     if (new Set(systems).size !== 7 || systems.some((system) => !Number.isInteger(system) || system < 1 || system > 40) || new Set(npc.rows.map((row) => row.id)).size !== 7 || npc.rows.some((row) => row.visitId !== row.id || !/^\[1:\d+:\d+\]$/.test(row.coordinate) || Number(row.coordinate.slice(1, -1).split(':')[2]) < 1 || Number(row.coordinate.slice(1, -1).split(':')[2]) > 24)) throw new Error(`${label}: NPC coordinates/visit targets failed ${JSON.stringify(npc.rows)}`);
     await capture(win, directory, 'npc-inspector');
-    const saveWithoutRuntimeClock = `(() => {
-      const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
-      if (save) delete save.resourceClock;
-      return JSON.stringify(save);
-    })()`;
-    const beforePrototypeAction = await win.webContents.executeJavaScript(saveWithoutRuntimeClock);
-    // Read the envelope immediately after the prototype click. Waiting for
-    // the notice first can cross App's one-second runtime reconciliation tick,
-    // which legitimately persists a new resource clock and creates a false
-    // positive for an action that itself does not mutate the save.
-    await clickAt(win, '[data-qa-universe-action="fleet"]', false, false);
-    const afterPrototypeAction = await win.webContents.executeJavaScript(saveWithoutRuntimeClock);
-    if (beforePrototypeAction !== afterPrototypeAction) throw new Error(`${label}: prototype action mutated the save envelope`);
-    await waitFor(win, `document.querySelector('.shell-notice span')?.textContent?.includes('Прототип — отправка не подключена')`);
-    const prototypeNotice = await win.webContents.executeJavaScript(`document.querySelector('.shell-notice span')?.textContent?.replace(/\\s+/g, ' ').trim() || ''`);
-    if (!prototypeNotice.includes(npc.rows[0].coordinate)) throw new Error(`${label}: prototype action target missing ${prototypeNotice}`);
     await dismissInspector(win);
     await checkRestoredFocus(win, npcId);
+
+    const allySelector = '[data-qa-universe-object="test-mode-ally-ira-vel-v1"]';
+    await findObject(win, allySelector);
+    await clickObject(win, allySelector);
+    const ally = await inspectorSnapshot(win);
+    const allyFleetAction = ally.actions.find((action) => action.action === 'fleet');
+    if (ally.kind !== 'npc' || ally.ownerName !== 'Ира Вель' || ally.ownerId !== 'member-ira-vel' || ally.planetRows !== 1
+      || !allyFleetAction || allyFleetAction.disabled || allyFleetAction.status !== 'supported') {
+      throw new Error(`${label}: explicit ally transport action contract failed ${JSON.stringify(ally)}`);
+    }
+    await clickAt(win, '[data-qa-universe-action="fleet"]');
+    await waitFor(win, `document.querySelector('[data-qa-flight-launch-context]')?.getAttribute('data-qa-flight-launch-context') === '[1:1:2]'`);
+    await clickPrimary(win, 'universe');
+    await selectSystem(win, npcSystem);
 
     // Visit every holding through its row, then reopen the actual map planet.
     await clickObject(win, `[data-qa-universe-object="${npcId}"]`);
@@ -391,7 +400,13 @@ async function runViewport(width, height) {
       await waitFor(win, `!document.querySelector('[data-qa-universe-inspector]') && !document.querySelector('.stage').inert && document.querySelector('[data-qa-universe]')?.getAttribute('data-qa-universe-system') === ${JSON.stringify(String(targetSystem))}`);
       await clickObject(win, `[data-qa-universe-object="${row.id}"]`);
       const reopened = await inspectorSnapshot(win);
-      if (reopened.ownerId !== npc.ownerId || reopened.ownerName !== 'Бот 01' || JSON.stringify(reopened.rows) !== JSON.stringify(npc.rows) || reopened.actions.length !== 14 || reopened.actions.some((action) => action.disabled || action.status !== 'prototype')) throw new Error(`${label}: visit did not reopen the same seven holdings ${JSON.stringify(reopened)}`);
+      const reopenedSpyActions = reopened.actions.filter((action) => action.action === 'spy');
+      const reopenedFleetActions = reopened.actions.filter((action) => action.action === 'fleet');
+      if (reopened.ownerId !== npc.ownerId || reopened.ownerName !== 'Бот 01' || JSON.stringify(reopened.rows) !== JSON.stringify(npc.rows) || reopened.actions.length !== 14
+        || reopenedSpyActions.length !== 7 || reopenedSpyActions.some((action) => action.disabled || action.status !== 'prototype')
+        || reopenedFleetActions.length !== 7 || reopenedFleetActions.some((action) => !action.disabled || action.status !== 'disabled' || !action.title.includes('только на свою или явную союзную планету'))) {
+        throw new Error(`${label}: visit did not reopen the same seven holdings ${JSON.stringify(reopened)}`);
+      }
       const selectedCoordinate = await win.webContents.executeJavaScript(`document.querySelector('.universe-inspector-header span')?.textContent`);
       if (selectedCoordinate !== row.coordinate) throw new Error(`${label}: visited planet coordinate mismatch ${selectedCoordinate}`);
     }
@@ -439,7 +454,7 @@ async function runViewport(width, height) {
     await clickAt(win, '[data-qa-flight-preview-open]');
     await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
     const timelineText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-flight-preview-backdrop]')?.textContent?.replace(/\s+/g, ' ').trim() || ''`);
-    const timelineFields = ['ИСТОЧНИК', 'выбрано флотом', 'ЦЕЛЬ', 'Свободная координата', 'СОСТАВ ФЛОТА', 'Колонизатор × 1', 'Население: 12', 'ПАРАМЕТРЫ ПЕРЕЛЁТА', 'ЭФФ. СКОРОСТЬ', 'ТУДА', 'ОБРАТНО', 'ПОЛНЫЙ ЦИКЛ', 'ГАЗ', 'ПРИБЫТИЕ', 'МОСКОВСКОЕ ВРЕМЯ', 'МСК', 'ЗАГРУЗКА КОРАБЛЯ', 'НЕДОСТУПНО ДЛЯ КОЛОНИЗАЦИИ', 'Газ списывается только за один путь туда.', 'При отзыве колонизатор возвращается', 'ОТМЕНА', 'ОТПРАВИТЬ'];
+    const timelineFields = ['ИСТОЧНИК', 'выбрано флотом', 'ЦЕЛЬ', 'Цель подтверждена', 'СОСТАВ ФЛОТА', 'Колонизатор × 1', 'Население: 12', 'ПАРАМЕТРЫ ПЕРЕЛЁТА', 'ЭФФ. СКОРОСТЬ', 'ТУДА', 'ОБРАТНО', 'ПОЛНЫЙ ЦИКЛ', 'ГАЗ', 'ПРИБЫТИЕ', 'МОСКОВСКОЕ ВРЕМЯ', 'МСК', 'Газ списывается только за один путь туда.', 'При отзыве колонизатор возвращается', 'ОТМЕНА', 'ОТПРАВИТЬ'];
     if (timelineFields.some((field) => !timelineText.includes(field))) throw new Error(`${label}: Concept 2 Mission Timeline fields are incomplete ${JSON.stringify({ missing: timelineFields.filter((field) => !timelineText.includes(field)), timelineText })}`);
     const timelineStructure = await win.webContents.executeJavaScript(`(() => ({
       sourceIsLocked: Boolean(document.querySelector('[data-qa-flight-source-step]')) && !document.querySelector('[data-qa-flight-source-step] .flight-timeline-edit'),
@@ -460,7 +475,7 @@ async function runViewport(width, height) {
         minInputWidth: inputWidths.length ? Math.min(...inputWidths) : 0,
       };
     })()`);
-    if (!timelineCargo.present || !timelineCargo.disabled || !timelineCargo.inputsDisabled || timelineCargo.minInputWidth < 110) throw new Error(`${label}: colonization cargo controls are missing, enabled, or too narrow ${JSON.stringify(timelineCargo)}`);
+    if (timelineCargo.present) throw new Error(`${label}: colonization must not expose a resource cargo editor ${JSON.stringify(timelineCargo)}`);
     const timelineViewport = await win.webContents.executeJavaScript(`(() => {
       const modal = document.querySelector('.flight-timeline-modal');
       const backdrop = document.querySelector('[data-qa-flight-preview-backdrop]');
@@ -483,9 +498,15 @@ async function runViewport(width, height) {
     await setInputValue(win, '[name="flight-preview-target-position"]', 1);
     const occupiedTargetState = await win.webContents.executeJavaScript(`(() => {
       const status = document.querySelector('[data-qa-flight-target-status]');
-      return { text: status?.textContent?.replace(/\s+/g, ' ').trim() || '', invalid: status?.classList.contains('is-invalid') || false, dispatch: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')) };
-    })()`);
-    if (!occupiedTargetState.invalid || !occupiedTargetState.text.includes('Координата уже занята') || occupiedTargetState.dispatch) throw new Error(`${label}: typed occupied target was not rejected in Mission Timeline ${JSON.stringify(occupiedTargetState)}`);
+      const dispatch = document.querySelector('[data-qa-flight-dispatch-confirm]');
+      return {
+        text: status?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        invalid: status?.classList.contains('is-invalid') || false,
+        dispatchEnabled: Boolean(dispatch && !dispatch.disabled),
+        inputs: Array.from(document.querySelectorAll('[data-qa-flight-target-inputs] input')).map((input) => input.value),
+      };
+     })()`);
+    if (!occupiedTargetState.invalid || !occupiedTargetState.text.includes('Координата уже занята') || occupiedTargetState.dispatchEnabled) throw new Error(`${label}: typed occupied target was not rejected in Mission Timeline ${JSON.stringify(occupiedTargetState)}`);
     const freeTargetParts = (freeAsteroid.targetCoordinate.match(/\d+/g) || []).map(Number);
     if (freeTargetParts.length !== 3) throw new Error(`${label}: free asteroid coordinate could not be parsed ${freeAsteroid.targetCoordinate}`);
     await setInputValue(win, '[name="flight-preview-target-galaxy"]', freeTargetParts[0]);
@@ -603,7 +624,7 @@ async function runViewport(width, height) {
       map: { system: map.system, systemOptions: map.systemOptions, positionCount: map.positionCount, asteroidCount: map.asteroidCount, objectKinds: map.objectKinds, homeCaption: map.homeCaption },
       layout: { htmlClass: map.htmlClass, webStageScale: map.webStageScale, visualViewport: map.visualViewport, stageRect: map.stageRect },
       player: { ownerName: player.ownerName, points: player.points, planetRows: player.planetRows },
-      npc: { ownerName: npc.ownerName, planetRows: npc.planetRows, rows: npc.rows, prototypeNotice },
+      npc: { ownerName: npc.ownerName, planetRows: npc.planetRows, rows: npc.rows, fleetActionsDisabled: npcFleetActions.every((action) => action.disabled && action.status === 'disabled') },
       specialInspectors: { empty: empty.kind, asteroid: freeAsteroid.kind, occupiedAsteroid: occupiedAsteroid.kind, pirate: pirate.kind, anomaly: anomaly.kind, uninhabited: 'uninhabited', unique: 'unique' },
       asteroidsHoldPosition,
       timedObjectSystems: { pirate: pirateSystem, anomaly: anomalySystem, unique: uniqueSystem },

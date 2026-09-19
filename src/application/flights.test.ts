@@ -521,3 +521,162 @@ test('colony actions spend the colony wallet without changing the homeworld alia
   );
   assert.deepEqual(started.state.planets[colonyId].resources, { metal: 425, minerals: 470, gas: 500 });
 });
+
+test('Test Mode seeds one persisted ally and Production keeps the fixture boundary empty', () => {
+  const testState = createInitialSaveState('test', 1_000);
+  const productionState = createInitialSaveState('production', 1_000);
+  assert.equal(testState.planets['helion-01'].recycling.availableDebris, 100_000);
+  assert.equal(Object.keys(testState.alliedPlanets ?? {}).length, 1);
+  assert.equal(testState.alliedPlanets?.['test-mode-ally-ira-vel-v1'].ownerId, 'member-ira-vel');
+  assert.equal(productionState.planets['helion-01'].recycling.availableDebris, 0);
+  assert.deepEqual(productionState.alliedPlanets, {});
+});
+
+test('transport dispatches an atomic cargo snapshot to the Test Mode ally and returns empty', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const destination = {
+    kind: 'planet' as const,
+    planetId: 'test-mode-ally-ira-vel-v1',
+    coordinate: { galaxy: 1, system: 1, position: 2 },
+  };
+  const sent = dispatchFlight(initial, {
+    requestId: 'transport-ally-1',
+    missionId: 'transport',
+    originPlanetId: 'helion-01',
+    destination,
+    targetRelation: 'ally',
+    selectedShips: { scout: 1 },
+    cargo: { metal: 100, minerals: 50, gas: 25, debris: 75 },
+    departedAt: 1_000,
+  }, { now: 1_000, mode: 'test' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.deepEqual(sent.flight.cargo, { metal: 100, minerals: 50, gas: 25, debris: 75 });
+  assert.equal(sent.flight.cargoState, 'loaded');
+  assert.equal(sent.state.planets['helion-01'].recycling.availableDebris, 99_925);
+  assert.equal(sent.state.planets['helion-01'].resources!.metal, initial.planets['helion-01'].resources!.metal - 100);
+  const retried = dispatchFlight(sent.state, {
+    requestId: 'transport-ally-1',
+    missionId: 'transport',
+    originPlanetId: 'helion-01',
+    destination,
+    targetRelation: 'ally',
+    selectedShips: { scout: 20 },
+    cargo: { metal: 999_999, minerals: 999_999, gas: 999_999, debris: 999_999 },
+    departedAt: 9_000,
+  }, { now: 9_000, mode: 'test' });
+  assert.equal(retried.ok, true);
+  if (!retried.ok) return;
+  assert.equal(retried.created, false);
+  assert.equal(retried.flight.id, sent.flight.id);
+  assert.equal(retried.state.planets['helion-01'].resources!.metal, sent.state.planets['helion-01'].resources!.metal);
+
+  const arrival = reconcileFlights(sent.state, sent.flight.arrivalAt);
+  assert.equal(arrival.events[0]?.status, 'delivered');
+  assert.equal(arrival.state.alliedPlanets?.[destination.planetId].resources?.metal, 600);
+  assert.equal(arrival.state.alliedPlanets?.[destination.planetId].recycling.availableDebris, 100_075);
+  assert.equal(arrival.state.flights.records[0].phase, 'returning');
+  assert.equal(arrival.state.flights.records[0].cargoState, 'delivered');
+
+  const returned = reconcileFlights(arrival.state, arrival.state.flights.records[0].returnAt!);
+  assert.equal(returned.events[0]?.status, 'returned');
+  assert.equal(returned.state.flights.records[0].phase, 'completed');
+  assert.equal(returned.state.flights.records[0].cargoState, 'delivered');
+  assert.equal(returned.state.planets['helion-01'].resources!.metal, sent.state.planets['helion-01'].resources!.metal);
+  assert.equal(reconcileFlights(returned.state, arrival.state.flights.records[0].returnAt! + 1).changed, false);
+});
+
+test('transport recall returns loaded cargo using the current source caps and never refunds gas', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const sent = dispatchFlight(initial, {
+    requestId: 'transport-recall-1',
+    missionId: 'transport',
+    destination: {
+      kind: 'planet',
+      planetId: 'test-mode-ally-ira-vel-v1',
+      coordinate: { galaxy: 1, system: 1, position: 2 },
+    },
+    targetRelation: 'ally',
+    selectedShips: { scout: 1 },
+    cargo: { metal: 100, minerals: 0, gas: 0, debris: 25 },
+    departedAt: 1_000,
+  }, { now: 1_000, mode: 'test' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const gasAfterSend = sent.state.planets['helion-01'].resources!.gas;
+  const recalled = recallFlight(sent.state, sent.flight.id, sent.flight.departedAt + 1_000);
+  assert.equal(recalled.ok, true);
+  if (!recalled.ok) return;
+  assert.equal(recalled.flight.cargoState, 'loaded');
+  assert.equal(recalled.state.planets['helion-01'].resources!.gas, gasAfterSend);
+  const returned = reconcileFlights(recalled.state, recalled.flight.returnAt!);
+  assert.equal(returned.state.flights.records[0].cargoState, 'returned');
+  assert.equal(returned.state.planets['helion-01'].resources!.metal, initial.planets['helion-01'].resources!.metal);
+  assert.equal(returned.state.planets['helion-01'].recycling.availableDebris, 100_000);
+});
+
+test('transport voids cargo when the allied target disappears and keeps the flight until empty return', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const sent = dispatchFlight(initial, {
+    requestId: 'transport-void-1',
+    missionId: 'transport',
+    destination: {
+      kind: 'planet',
+      planetId: 'test-mode-ally-ira-vel-v1',
+      coordinate: { galaxy: 1, system: 1, position: 2 },
+    },
+    targetRelation: 'ally',
+    selectedShips: { scout: 1 },
+    cargo: { metal: 100, minerals: 0, gas: 0, debris: 50 },
+    departedAt: 1_000,
+  }, { now: 1_000, mode: 'test' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const destroyed = { ...sent.state, alliedPlanets: {} };
+  const arrival = reconcileFlights(destroyed, sent.flight.arrivalAt);
+  assert.equal(arrival.events[0]?.status, 'target-unavailable');
+  assert.equal(arrival.state.flights.records[0].cargoState, 'voided');
+  assert.equal(arrival.state.flights.records[0].phase, 'returning');
+  const returned = reconcileFlights(arrival.state, arrival.state.flights.records[0].returnAt!);
+  assert.equal(returned.state.flights.records[0].phase, 'completed');
+  assert.equal(returned.state.flights.records[0].cargoState, 'voided');
+  assert.equal(returned.state.planets['helion-01'].resources!.metal, sent.state.planets['helion-01'].resources!.metal);
+});
+
+test('transport cargo and ally state survive the existing persistence facade without duplication', () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+    removeItem: (key: string) => { values.delete(key); },
+  };
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 1_000 });
+  const initial = persistence.read();
+  const sent = dispatchFlight(initial, {
+    requestId: 'transport-persist-1',
+    missionId: 'transport',
+    destination: {
+      kind: 'planet',
+      planetId: 'test-mode-ally-ira-vel-v1',
+      coordinate: { galaxy: 1, system: 1, position: 2 },
+    },
+    targetRelation: 'ally',
+    selectedShips: { scout: 1 },
+    cargo: { metal: 100, minerals: 0, gas: 0, debris: 10 },
+    departedAt: 1_000,
+  }, { now: 1_000, mode: 'test' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.equal(persistence.write(sent.state).ok, true);
+  const reloaded = persistence.read();
+  assert.equal(Object.keys(reloaded.alliedPlanets ?? {}).length, 1);
+  assert.equal(reloaded.flights.records[0].cargoState, 'loaded');
+  const arrived = reconcileFlights(reloaded, sent.flight.arrivalAt);
+  assert.equal(persistence.write(arrived.state).ok, true);
+  const reloadedArrived = persistence.read();
+  assert.equal(reloadedArrived.flights.records[0].cargoState, 'delivered');
+  assert.equal(reloadedArrived.alliedPlanets?.['test-mode-ally-ira-vel-v1'].recycling.availableDebris, 100_010);
+  const repeated = reconcileFlights(reloadedArrived, sent.flight.arrivalAt + 1);
+  assert.equal(repeated.changed, false);
+  assert.equal(Object.keys(repeated.state.alliedPlanets ?? {}).length, 1);
+});

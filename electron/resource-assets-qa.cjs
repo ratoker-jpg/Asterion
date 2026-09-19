@@ -225,7 +225,7 @@ async function seedSave(win) {
 async function assertHeader(win) {
   await waitForResourceImages(win, '[data-qa-resource-rail]');
   const images = await readResourceImages(win, '[data-qa-resource-rail]');
-  assertResourceImages('header', images, ['metal', 'minerals', 'gas', 'energy', 'population'], { exact: true });
+  assertResourceImages('header', images, ['metal', 'minerals', 'gas', 'energy', 'debris', 'population'], { exact: true });
 }
 
 async function assertBuildingDialog(win, role) {

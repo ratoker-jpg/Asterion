@@ -3,6 +3,9 @@ import type { ShipId } from '../combat/ids.ts';
 import { calculateRouteDistance, assertFlightCoordinate } from './distance.ts';
 import { calculateFlightFuel } from './fuel.ts';
 import { calculateEffectiveFleetSpeed, calculateOneWayDurationMs } from './speed.ts';
+import { normalizeTransportCargo } from './cargo.ts';
+import type { TransportCargo } from './cargo.ts';
+import type { TargetRelation } from './types.ts';
 import type { FlightCompletionReason, FlightDestination, FlightRecord, FlightScienceLevels, FlightState, MissionId } from './types.ts';
 
 export type DispatchFlightInput = {
@@ -18,6 +21,12 @@ export type DispatchFlightInput = {
   science?: FlightScienceLevels;
   operationId?: string;
   targetKind?: FlightRecord['targetKind'];
+  /** Resolved target snapshot for a coordinate-addressed transport. */
+  destinationPlanetId?: string;
+  destinationOwnerId?: string;
+  targetRelation?: TargetRelation;
+  cargo?: TransportCargo;
+  overflowWarning?: boolean;
 };
 
 export function createFlightState(): FlightState {
@@ -38,7 +47,11 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
   const routeDistance = calculateRouteDistance(input.originCoordinate, input.destination.coordinate);
   const effectiveSpeed = calculateEffectiveFleetSpeed(input.factionId, input.selectedShips, input.science);
   const oneWayDurationMs = calculateOneWayDurationMs(input.originCoordinate, input.destination.coordinate, effectiveSpeed);
-  const destinationPlanetId = input.destination.kind === 'planet' ? input.destination.planetId : undefined;
+  const destinationPlanetId = input.destination.kind === 'planet' ? input.destination.planetId : input.destinationPlanetId;
+  if (input.missionId === 'transport' && input.cargo === undefined) {
+    throw new Error('Transport flights require a cargo snapshot.');
+  }
+  const cargo = input.missionId === 'transport' ? normalizeTransportCargo(input.cargo) : undefined;
   return {
     id: `flight-${input.requestId}`,
     requestId: input.requestId,
@@ -53,6 +66,8 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
         : { kind: 'operation', operationId: input.destination.operationId, coordinate: { ...input.destination.coordinate } },
     destinationPlanetId,
     targetKind: input.targetKind,
+    destinationOwnerId: input.destinationOwnerId,
+    targetRelation: input.targetRelation,
     destinationCoordinate: { ...input.destination.coordinate },
     selectedShips: { ...input.selectedShips },
     populationReserved: Math.max(0, Math.floor(input.populationReserved ?? 0)),
@@ -62,6 +77,9 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
     departedAt: input.departedAt,
     arrivalAt: input.departedAt + oneWayDurationMs,
     gasCost: calculateFlightFuel(input.factionId, input.selectedShips, routeDistance, input.science),
+    cargo,
+    cargoState: cargo ? 'loaded' : undefined,
+    overflowWarning: cargo ? Boolean(input.overflowWarning) : undefined,
     phase: 'outbound',
   };
 }

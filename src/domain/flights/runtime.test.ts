@@ -30,6 +30,40 @@ test('dispatch snapshots calculations and is idempotent by persisted request ID'
   assert.ok(first.flight.gasCost > 0);
 });
 
+test('transport snapshots normalized cargo and the resolved destination identity without changing flight formulas', () => {
+  const { flight } = dispatchFlight(createFlightState(), {
+    requestId: 'transport-1',
+    missionId: 'transport',
+    originPlanetId: 'helion-01',
+    originCoordinate: { galaxy: 1, system: 1, position: 1 },
+    destination: { kind: 'coordinate', coordinate: { galaxy: 1, system: 2, position: 1 } },
+    destinationPlanetId: 'ally-01',
+    destinationOwnerId: 'ally-owner',
+    targetRelation: 'ally',
+    selectedShips: { colonizer: 1 },
+    cargo: { metal: 10.8, minerals: -1, gas: 2, debris: Number.NaN },
+    departedAt: 1_000,
+    factionId: 'aegis',
+    science: { 2: 7 },
+  });
+
+  assert.deepEqual(flight.cargo, { metal: 10, minerals: 0, gas: 2, debris: 0 });
+  assert.equal(flight.cargoState, 'loaded');
+  assert.equal(flight.destinationPlanetId, 'ally-01');
+  assert.equal(flight.destinationOwnerId, 'ally-owner');
+  assert.equal(flight.targetRelation, 'ally');
+  assert.equal(flight.oneWayDurationMs, dispatch('formula-control').flight.oneWayDurationMs);
+});
+
+test('transport cannot create an ambiguous persisted flight without cargo', () => {
+  assert.throws(() => dispatchFlight(createFlightState(), {
+    requestId: 'missing-cargo', missionId: 'transport', originPlanetId: 'helion-01',
+    originCoordinate: { galaxy: 1, system: 1, position: 1 },
+    destination: { kind: 'coordinate', coordinate: { galaxy: 1, system: 2, position: 1 } },
+    selectedShips: { colonizer: 1 }, departedAt: 1_000, factionId: 'aegis',
+  }), /require a cargo snapshot/);
+});
+
 test('recall uses elapsed outbound time, does not change gas, and completes once', () => {
   const { state, flight } = dispatch();
   const recalled = recallFlight(state, flight.id, flight.departedAt + 37_000);

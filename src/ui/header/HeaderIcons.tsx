@@ -2,13 +2,14 @@ import type { NavigationIconKind } from '../navigation.tsx';
 import type { HeaderIconKind } from './types.ts';
 import { ResourceIcon } from '../resources/ResourceIcon';
 
-export function GameIcon({ kind }: { kind: HeaderIconKind }) {
+export function GameIcon({ kind }: { kind: HeaderIconKind | 'debris' }) {
   const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.65, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
 
   if (kind === 'metal') return <ResourceIcon kind="metal" />;
   if (kind === 'mineral') return <ResourceIcon kind="minerals" />;
   if (kind === 'gas') return <ResourceIcon kind="gas" />;
   if (kind === 'energy') return <ResourceIcon kind="energy" />;
+  if (kind === 'debris') return <ResourceIcon kind="debris" />;
   if (kind === 'population') return <ResourceIcon kind="population" />;
   if (kind === 'resource') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m12 2 4 6-4 6-4-6 4-6Zm-6 9 3 4-3 5-3-5 3-4Zm12 0 3 4-3 5-3-5 3-4Z"/></svg>;
   if (kind === 'industry') return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M3 21V10l6 3v-3l6 3V6h4v15H3Z"/><path {...common} d="M6 17h2m3 0h2m3 0h2M16 6V3h3v3"/></svg>;

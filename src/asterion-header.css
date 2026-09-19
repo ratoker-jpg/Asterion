@@ -238,10 +238,16 @@
 .asterion-header__resource--mineral .asterion-header__resource-icon{color:#a6adff}
 .asterion-header__resource--gas .asterion-header__resource-icon{color:#4df0a7}
 .asterion-header__resource--energy .asterion-header__resource-icon{color:#ffd34f}
+.asterion-header__resource--debris .asterion-header__resource-icon{color:#e6ad50}
 .asterion-header__resource--population .asterion-header__resource-icon{color:#dffaff}
 .asterion-header__resource-text{position:static;min-width:0;display:block;height:54px;overflow:visible;transform:translateY(12px)}
 .asterion-header__resource small{display:block;color:#a6d9e1;font-size:11px;font-weight:700;letter-spacing:1.25px;line-height:1;white-space:nowrap}
 .asterion-header__resource strong{display:block;margin-top:6px;color:#effcff;font-size:18px;line-height:1;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.asterion-header__resource-compound{display:flex;align-items:center;gap:5px;margin-top:6px;padding-top:5px;border-top:1px solid rgba(71,197,222,.16)}
+.asterion-header__resource-compound .asterion-resource-icon{width:17px;height:17px;flex:0 0 17px;color:#e6ad50}
+.asterion-header__resource-compound span{display:flex;align-items:baseline;gap:5px;min-width:0}
+.asterion-header__resource-compound small{font-size:8px;letter-spacing:.1em}
+.asterion-header__resource-compound b{color:#f3dfb0;font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .asterion-header__resource-fill{
   display:block;
   width:100%;
