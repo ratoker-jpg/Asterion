@@ -36,6 +36,7 @@ import './rating.css';
 import './science.css';
 import './utility-source-rebuild-polish.css';
 import './universe-interaction.css';
+import './asterion-unified-theme.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
 

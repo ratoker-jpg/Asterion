@@ -1,0 +1,510 @@
+/* ============================================================
+   ASTERION UNIFIED THEME — one rounded, readable language everywhere
+   ------------------------------------------------------------
+   Loaded LAST in main.tsx so it wins the cascade.
+   Presentation-only overlay: radius / typography / button & panel
+   skins. No layout grids, no mechanics, no data changes.
+
+   Reference language: the approved "ПЛАН ПЕРЕЛЁТА" modal (PR #71):
+   rounded cards 18-22px, amber/cyan accents, readable labels
+   (>=10.5px), tabular numerals, pill-like clear buttons.
+   ============================================================ */
+
+/* === 0. TOKENS ============================================== */
+:root{
+  --ut-r-panel:18px;        /* outer panels */
+  --ut-r-card:13px;         /* inner cards / tiles */
+  --ut-r-chip:9px;          /* chips, small plates */
+  --ut-r-btn:10px;          /* buttons */
+  --ut-r-input:9px;         /* inputs / selects */
+  --ut-surface:rgba(12,20,24,.92);
+  --ut-surface-2:rgba(16,26,31,.88);
+  --ut-border:rgba(126,200,220,.16);
+  --ut-border-strong:rgba(126,200,220,.30);
+  --ut-accent:#56d9f2;
+  --ut-amber:#e6ad50;
+  --ut-danger:#f0445e;
+  --ut-positive:#35e58a;
+  --ut-label:#8fb6c0;
+}
+
+/* === 1. GLOBAL PRIMITIVES =================================== */
+
+/* --- inputs & selects: never angular, never unreadable --- */
+.asterion-shell input[type="text"],
+.asterion-shell input[type="number"],
+.asterion-shell input:not([type]),
+.asterion-shell select,
+.asterion-shell textarea{
+  border-radius:var(--ut-r-input);
+  font-size:13px;
+  font-variant-numeric:tabular-nums;
+}
+
+/* --- scrollbars --- */
+::-webkit-scrollbar{ width:10px; height:10px; }
+::-webkit-scrollbar-track{ background:rgba(8,14,17,.5); border-radius:8px; }
+::-webkit-scrollbar-thumb{
+  background:rgba(126,200,220,.22);
+  border-radius:8px;
+  border:2px solid transparent;
+  background-clip:padding-box;
+}
+::-webkit-scrollbar-thumb:hover{ background:rgba(126,200,220,.4); background-clip:padding-box; }
+
+/* --- header resource tooltip: readable pop --- */
+.asterion-header__resource-tooltip{
+  border-radius:var(--ut-r-card) !important;
+  box-shadow:0 18px 44px rgba(0,0,0,.55);
+}
+.asterion-header__resource-tooltip *{ line-height:1.35; }
+
+/* --- generic modal confirm (ОТПРАВИТЬ/ОТМЕНА small dialog) --- */
+.resource-building-action-confirm{
+  border-radius:var(--ut-r-panel) !important;
+}
+.resource-building-action-confirm-actions button{
+  border-radius:var(--ut-r-btn);
+}
+
+/* === 2. ZONES (ресурсная / промышленная / военная) =========== */
+
+/* --- side summary panels --- */
+.resource-zone-summary{
+  border-radius:var(--ut-r-panel);
+  background:var(--ut-surface);
+  border:1px solid var(--ut-border);
+  box-shadow:0 20px 50px rgba(0,0,0,.4);
+}
+.resource-zone-panel-title{
+  font-size:11px;
+  letter-spacing:.12em;
+  color:var(--ut-label);
+}
+
+/* --- building selector tiles --- */
+.resource-zone-selector-grid{ gap:9px; }
+.resource-zone-selector-tile{
+  border-radius:var(--ut-r-card) !important;
+  overflow:hidden;
+  transition:transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+.resource-zone-selector-tile:hover{
+  transform:translateY(-2px);
+  box-shadow:0 10px 26px rgba(0,0,0,.45);
+  border-color:var(--ut-border-strong) !important;
+}
+.resource-zone-selector-level{
+  border-radius:7px;
+  font-size:10.5px;
+  font-variant-numeric:tabular-nums;
+}
+.resource-zone-selector-lock{ border-radius:8px; }
+
+/* --- THE tooltip fix (was 6.5px on the scene) --- */
+.resource-zone-selector-tooltip{
+  border-radius:var(--ut-r-chip) !important;
+  background:rgba(8,15,19,.96) !important;
+  border:1px solid var(--ut-border-strong);
+  padding:8px 11px !important;
+  box-shadow:0 14px 34px rgba(0,0,0,.55);
+}
+.resource-zone-selector-tooltip,
+.resource-zone-selector-tooltip *{
+  font-size:11.5px !important;
+  line-height:1.4;
+}
+
+/* --- economy / income rows --- */
+.resource-zone-economy{
+  border-radius:var(--ut-r-card);
+}
+.resource-zone-income-row{
+  border-radius:var(--ut-r-chip);
+  background:var(--ut-surface-2);
+  border:1px solid var(--ut-border);
+}
+.resource-zone-income-name{ font-size:12px; color:#d7e9ee; }
+.resource-zone-income-icon{ border-radius:8px; }
+.resource-zone-energy-summary,
+.resource-zone-energy-sources{
+  border-radius:var(--ut-r-card);
+}
+.resource-zone-energy-total-row span,
+.resource-zone-energy-sources span,
+.resource-zone-energy-sources strong{ font-size:10.5px !important; }
+.resource-zone-energy-total-row{ border-radius:var(--ut-r-chip); }
+
+/* --- scene: building captions on terrain --- */
+.resource-building-caption{
+  border-radius:var(--ut-r-chip) !important;
+  background:rgba(8,15,19,.9) !important;
+  border:1px solid var(--ut-border);
+  padding:4px 9px;
+}
+.resource-building-caption,
+.resource-building-caption strong,
+.resource-building-caption small,
+.resource-building-caption *{ font-size:10.5px !important; }
+.resource-zone-panel-title small,
+.resource-zone-panel-title span{ font-size:10.5px !important; }
+.resource-zone-scene-copy small{ font-size:10.5px !important; }
+.resource-zone-economy-title{ font-size:11px !important; letter-spacing:.12em; }
+.resource-zone-summary > div > span{ font-size:10.5px !important; }
+.resource-zone-scene-copy{
+  border-radius:var(--ut-r-panel);
+  background:linear-gradient(180deg, rgba(8,14,17,.86), rgba(8,14,17,.55));
+}
+
+/* --- queue cards (right rail) --- */
+.resource-zone-queue{
+  border-radius:var(--ut-r-panel);
+  background:var(--ut-surface);
+  border:1px solid var(--ut-border);
+}
+.resource-zone-queue-card{
+  border-radius:var(--ut-r-card) !important;
+}
+.resource-zone-queue-card small,
+.resource-zone-queue-card strong{ font-size:10.5px !important; }
+.resource-zone-queue-card-main{ border-radius:var(--ut-r-chip); }
+.resource-zone-queue-cancel{ border-radius:7px; }
+.resource-zone-queue-full{ border-radius:var(--ut-r-chip); font-size:11px; }
+.resource-zone-section-label{ font-size:11px; letter-spacing:.12em; }
+
+/* --- building dialog --- */
+.resource-building-dialog{
+  border-radius:var(--ut-r-panel) !important;
+  background:var(--ut-surface);
+  border:1px solid var(--ut-border);
+  box-shadow:0 30px 90px rgba(0,0,0,.6);
+}
+.resource-building-dialog-art{ border-radius:var(--ut-r-card); }
+.resource-building-dialog-close{ border-radius:9px; }
+.resource-building-levels{ border-radius:var(--ut-r-card); }
+.resource-building-level-track{ border-radius:6px; overflow:hidden; }
+.resource-building-level-track > *{ border-radius:6px; }
+.resource-building-effect,
+.resource-building-time-panel,
+.resource-building-availability{
+  border-radius:var(--ut-r-card) !important;
+}
+.resource-building-effect-card{
+  border-radius:var(--ut-r-chip) !important;
+}
+.resource-building-cost-grid{
+  border-radius:var(--ut-r-chip);
+}
+.resource-building-cost-copy{ font-size:11px; color:var(--ut-label); }
+.resource-building-time-breakdown,
+.resource-building-time-summary{ border-radius:var(--ut-r-chip); font-size:11px; }
+.resource-building-requirements{ border-radius:var(--ut-r-chip); font-size:11px; }
+
+/* dialog buttons: clear, readable, in the ОТПРАВИТЬ/ОТМЕНА language */
+.resource-building-build-button,
+.resource-building-destroy-button,
+.resource-building-enter-button{
+  border-radius:var(--ut-r-btn) !important;
+  min-height:38px;
+  font-size:13px;
+  letter-spacing:.05em;
+  font-weight:600;
+  transition:filter .15s ease, transform .15s ease;
+}
+.resource-building-build-button:hover{ filter:brightness(1.12); }
+.resource-building-destroy-button:hover{ filter:brightness(1.18); }
+
+/* === 3. PLANET SCREEN ======================================= */
+.planet-summary-v3{
+  border-radius:var(--ut-r-panel) !important;
+}
+.owned-planet-row-v4{
+  border-radius:var(--ut-r-card) !important;
+}
+.owned-planet-edit-v4{ border-radius:8px; }
+.planet-details-toggle-v4{ border-radius:8px; }
+.planet-details-v4{ border-radius:var(--ut-r-chip); }
+.zone-hotspot__label{
+  border-radius:var(--ut-r-chip) !important;
+  background:rgba(8,15,19,.88);
+  border:1px solid var(--ut-border-strong);
+  backdrop-filter:blur(4px);
+}
+.queue-card-v2{
+  border-radius:var(--ut-r-card) !important;
+}
+.queue-card-v2__icon,
+.build-preview-v2__icon{ border-radius:9px; }
+.build-preview-v2{
+  border-radius:var(--ut-r-card) !important;
+}
+.aegis-button{
+  border-radius:var(--ut-r-card) !important;
+}
+
+/* === 4. FLEETS ROOT (военная зона → флот) ==================== */
+/* NOTE: the flight-preview modal is NOT inside .fleet-workspace-v1
+   (separate portal) — already themed by the PR-71 section. */
+.fleet-workspace-v1{
+  border-radius:var(--ut-r-panel);
+}
+.fleet-sidebar-v1{
+  border-radius:var(--ut-r-panel);
+  background:var(--ut-surface);
+  border:1px solid var(--ut-border);
+}
+.fleet-sidebar-title-v1{ border-radius:0 0 var(--ut-r-card) var(--ut-r-card); }
+.fleet-sidebar-v1 button,
+.fleet-sidebar-v1 .fleet-nav-item-v1{
+  border-radius:var(--ut-r-chip) !important;
+  font-size:12.5px;
+}
+.fleet-yard-level-v1{
+  border-radius:999px;
+  font-size:10.5px;
+}
+.fleet-panel-v1{
+  border-radius:var(--ut-r-panel) !important;
+  background:var(--ut-surface-2);
+  border:1px solid var(--ut-border);
+  overflow:hidden;
+}
+.fleet-panel-header-v1{
+  border-radius:var(--ut-r-panel) var(--ut-r-panel) 0 0;
+  background:linear-gradient(180deg, rgba(126,200,220,.10), rgba(126,200,220,.03));
+}
+.fleet-flight-table-v1{ border-radius:var(--ut-r-chip); overflow:hidden; }
+.fleet-flight-row-v1{ border-radius:0; }
+.fleet-flight-row-v1:last-child{ border-radius:0 0 var(--ut-r-chip) var(--ut-r-chip); }
+.fleet-flight-head-v1{
+  border-radius:var(--ut-r-chip) var(--ut-r-chip) 0 0;
+  font-size:11px;
+  letter-spacing:.1em;
+}
+.fleet-satellite-presence-v1{ border-radius:var(--ut-r-chip); }
+.fleet-satellite-dismantle-v1{ border-radius:7px; }
+.fleet-ship-line-v1{
+  border-radius:var(--ut-r-card) !important;
+  transition:border-color .15s ease, background .15s ease;
+}
+.fleet-ship-line-v1:hover{ border-color:var(--ut-border-strong); }
+.fleet-compose-footer-v1{
+  border-radius:var(--ut-r-panel) var(--ut-r-panel) 0 0;
+}
+.building-card-v2{
+  border-radius:var(--ut-r-card) !important;
+}
+
+/* fleet screen buttons: readable like ОТПРАВИТЬ */
+.fleet-workspace-v1 button:not([class*="icon"]):not([class*="close"]){
+  border-radius:var(--ut-r-btn);
+}
+.fleet-workspace-v1 button{
+  font-variant-numeric:tabular-nums;
+}
+
+/* === 5. UNIVERSE ============================================ */
+.universe-view{ border-radius:var(--ut-r-panel); }
+.universe-nav{
+  border-radius:var(--ut-r-panel);
+  background:var(--ut-surface);
+  border:1px solid var(--ut-border);
+}
+.universe-nav .step{ border-radius:var(--ut-r-chip); }
+.universe-jump{
+  border-radius:var(--ut-r-btn) !important;
+  min-height:34px;
+  font-size:12.5px;
+}
+.system-scene{ border-radius:var(--ut-r-panel); }
+.system-star-tooltip{
+  border-radius:var(--ut-r-card) !important;
+  background:rgba(8,15,19,.96);
+  border:1px solid var(--ut-border-strong);
+  box-shadow:0 16px 40px rgba(0,0,0,.55);
+}
+.system-star-tooltip *{ font-size:11.5px; line-height:1.45; }
+
+/* === 6. OPERATIONS ========================================== */
+.operations-topbar-v2{
+  border-radius:var(--ut-r-panel) !important;
+  background:var(--ut-surface);
+  border:1px solid var(--ut-border);
+}
+.operations-feed-v2{ gap:10px; }
+.operation-feed-card-v2{
+  border-radius:var(--ut-r-card) !important;
+  transition:transform .16s ease, border-color .16s ease;
+}
+.operation-feed-card-v2:hover{
+  transform:translateY(-1px);
+  border-color:var(--ut-border-strong);
+}
+.operation-feed-threat-v2{ border-radius:var(--ut-r-chip); font-size:10.5px; }
+.operation-feed-meta-v2{ font-size:11px; }
+.operations-dossier-v2,
+.operations-command-v2{
+  border-radius:var(--ut-r-panel) !important;
+  background:var(--ut-surface-2);
+  border:1px solid var(--ut-border);
+}
+.operations-dossier-glyph-v2{ border-radius:var(--ut-r-card); }
+.operations-scope-v2{
+  border-radius:var(--ut-r-chip);
+  font-size:10.5px;
+}
+.operations-intel-line-v2{ border-radius:var(--ut-r-chip); }
+.operations-primary-v2{
+  border-radius:var(--ut-r-btn) !important;
+  min-height:36px;
+  font-size:12.5px;
+}
+
+/* === 7. COMMAND (союз) ====================================== */
+.command-view__status{
+  border-radius:var(--ut-r-chip);
+}
+.command-tabs{
+  border-radius:var(--ut-r-chip) var(--ut-r-chip) 0 0;
+  overflow:hidden;
+}
+.command-tabs button{
+  border-radius:var(--ut-r-chip);
+  font-size:12px !important;
+  letter-spacing:.06em;
+}
+.command-panel{
+  border-radius:var(--ut-r-card) !important;
+}
+.command-operation-card{
+  border-radius:var(--ut-r-card) !important;
+  background:var(--ut-surface-2);
+  border:1px solid var(--ut-border);
+}
+.command-state{ font-size:11px !important; }
+.command-view button.primary,
+.command-view button{
+  border-radius:var(--ut-r-btn);
+  font-size:12px;
+}
+.command-relation-badge{
+  border-radius:999px !important;
+  font-size:10px !important;
+  letter-spacing:.08em;
+}
+.command-alliance-summary,
+.command-detail-panel,
+.command-diplomacy-summary,
+.command-empty-state,
+.command-emblem-shield{
+  border-radius:var(--ut-r-card) !important;
+}
+.command-activity{
+  border-radius:999px;
+  font-size:10.5px;
+}
+.command-diplomacy-mark{
+  border-radius:var(--ut-r-chip);
+}
+.command-diplomacy-mark--large{ border-radius:var(--ut-r-card); }
+
+/* === 8. MESSAGES / REPORTS ================================== */
+.reports-categories{
+  border-radius:var(--ut-r-panel);
+  background:var(--ut-surface);
+  border:1px solid var(--ut-border);
+  overflow:hidden;
+}
+.reports-categories button{
+  border-radius:var(--ut-r-chip);
+  font-size:12px;
+}
+.reports-mark-all{ border-radius:var(--ut-r-chip); font-size:11.5px; }
+.reports-ai-note{
+  border-radius:var(--ut-r-card);
+  font-size:11.5px;
+}
+.reports-profile-card{
+  border-radius:var(--ut-r-panel) !important;
+}
+.reports-profile-title-plate,
+.reports-profile-name-plate{ border-radius:var(--ut-r-card); }
+.reports-profile-metric{ border-radius:var(--ut-r-chip); }
+.reports-profile-metric__glyph{ border-radius:8px; }
+.reports-profile-identity,
+.reports-profile-alliance{ border-radius:var(--ut-r-chip); }
+.reports-profile-nav button{ border-radius:var(--ut-r-chip); }
+.reports-fixture-note{ border-radius:var(--ut-r-chip); font-size:11px; }
+
+/* === 9. FOOTER / STATUS STRIPS ============================== */
+.footer-status{
+  border-radius:var(--ut-r-chip);
+  font-size:10.5px;
+  letter-spacing:.1em;
+}
+
+/* flight-plan modal: floor the last 7px micro-labels (readonly target) */
+.flight-timeline-readonly-target small,
+.flight-timeline-readonly-target span{ font-size:10.5px !important; }
+
+/* === 10. TYPOGRAPHY FLOOR (per-screen offenders) ============= */
+
+/* --- planet screen --- */
+.planet-page-v3 .page-panel-title small{ font-size:10.5px !important; }
+.planet-page-v3 .planet-details-toggle-v4 span{ font-size:10.5px !important; }
+.planet-page-v3 .scene-title small{ font-size:10px !important; }
+.zone-hotspot__label small{ font-size:10px !important; letter-spacing:.14em; }
+.planet-page-v3 .queue-card-v2 small{ font-size:10.5px !important; }
+
+/* --- fleets sidebar & ship cards --- */
+.fleet-sidebar-title-v1,
+.fleet-sidebar-title-v1 em{ font-size:10.5px !important; letter-spacing:.14em; }
+.fleet-menu-group-v1 > h3{ font-size:10.5px !important; letter-spacing:.12em; }
+.fleet-yard-level-v1{ font-size:10.5px !important; }
+.building-card-v2 small,
+.building-card-v2 p,
+.building-card-v2 .building-card-meta{ font-size:10.5px !important; }
+.fleet-satellite-copy-v1 small{ font-size:10.5px !important; }
+.fleet-quantity-v1 span{ font-size:10.5px !important; }
+.fleet-panel-v1 .fleet-panel-header-v1 small,
+.fleet-panel-header-v1 span{ font-size:10.5px !important; }
+.fleet-sidebar-title-v1 small{ font-size:10px !important; letter-spacing:.16em; }
+.fleet-ship-info-v1 small{ font-size:10.5px !important; }
+.fleet-quantity-v1 small{ font-size:10px !important; }
+.fleet-quantity-shortcuts-v1 button{ font-size:10.5px !important; }
+
+/* --- universe --- */
+.universe-view .universe-breadcrumb span,
+.universe-view .universe-breadcrumb{ font-size:11px !important; letter-spacing:.12em; }
+.universe-view .universe-jump span,
+.universe-view .universe-jump small,
+.universe-view .universe-jump label{ font-size:10.5px !important; }
+.universe-view .system-star-tooltip strong,
+.universe-view .system-star-tooltip span,
+.system-star-tooltip small,
+.system-star-tooltip .system-star-sub{ font-size:10.5px !important; }
+.universe-view .system-scene .empty-slot,
+.universe-view .system-scene .empty-slot span,
+.universe-view .system-scene .empty-slot small,
+.universe-view .system-scene .system-asteroid span{ font-size:10.5px !important; }
+.universe-view .system-scene .step{ font-size:10.5px !important; }
+
+/* --- reports / messages nav --- */
+.reports-view .reports-profile-nav strong,
+.reports-categories .reports-profile-nav strong{ font-size:12.5px !important; }
+.reports-view .reports-profile-nav b{ font-size:10.5px !important; letter-spacing:.1em; }
+.reports-view .reports-message-nav button strong{ font-size:12px !important; }
+.reports-view .reports-message-nav small,
+.reports-view .reports-message-nav b{ font-size:10.5px !important; }
+.reports-view .reports-profile-title-plate__side{ font-size:10px !important; }
+.reports-view .reports-ai-note,
+.reports-view .reports-ai-note small,
+.reports-view .reports-ai-note strong,
+.reports-view .reports-ai-note span{ font-size:11px !important; }
+.reports-view .reports-profile-name-plate small,
+.reports-view .reports-profile-name-plate span{ font-size:10.5px !important; }
+.reports-view .reports-profile-metric small{ font-size:10.5px !important; }
+.reports-view .reports-profile-alliance small{ font-size:10px !important; }
+.shell-notice{ font-size:11px !important; }
+.reports-categories .reports-count,
+.reports-view .reports-profile-nav span{ font-size:10.5px !important; }
