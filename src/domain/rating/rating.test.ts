@@ -81,3 +81,14 @@ test('alliance mode is deterministic and can reuse current Command alliance iden
   assert.equal(current?.tag, 'AST');
   assert.equal(filterAlliances(first, 'ast').some((entry) => entry.isCurrentAlliance), true);
 });
+
+test('production rating exposes only the current player and no alliance rows', () => {
+  const players = createPlayerRatingEntries(900_001, 'production');
+  const alliances = createAllianceRatingEntries(null, 'production');
+
+  assert.equal(players.length, 1);
+  assert.equal(players[0].isCurrentPlayer, true);
+  assert.equal(players[0].rank, 1);
+  assert.equal(players[0].totalPoints, 900_001);
+  assert.deepEqual(alliances, []);
+});

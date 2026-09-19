@@ -8,7 +8,7 @@ app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'visual-qa');
-const SAVE_KEY = 'asterion.vertical-slice.v1';
+const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -346,7 +346,7 @@ app.whenReady().then(async () => {
         partition: 'qa-production-bots-functional',
       },
     });
-    await win.loadFile(path.join(ROOT, 'dist', 'index.html'));
+    await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: '?mode=test' });
     win.webContents.debugger.attach('1.3');
 
     for (const [width, height] of VIEWPORTS) {

@@ -22,6 +22,7 @@ type CommandViewProps = {
   onReviewRequest: (requestId: string) => void;
   onSaveSettings: (input: AllianceSettingsInput) => void;
   onOpenFleets: () => void;
+  onCreateAlliance: () => void;
 };
 
 type CommandTab = 'overview' | 'members' | 'requests' | 'diplomacy' | 'operations' | 'settings';
@@ -493,13 +494,14 @@ function SettingsTab({ state, onSaveSettings }: { state: CommandState; onSaveSet
   );
 }
 
-export function CommandView({ state, onJoinOperation, onReviewRequest, onSaveSettings, onOpenFleets }: CommandViewProps) {
+export function CommandView({ state, onJoinOperation, onReviewRequest, onSaveSettings, onOpenFleets, onCreateAlliance }: CommandViewProps) {
   const [tab, setTab] = useState<CommandTab>('overview');
   const [selectedMemberId, setSelectedMemberId] = useState(state.members[0]?.id ?? '');
   const [selectedRequestId, setSelectedRequestId] = useState(state.resourceRequests[0]?.id ?? '');
   const [selectedRelationId, setSelectedRelationId] = useState(state.diplomacy[0]?.id ?? '');
   const [selectedOperationId, setSelectedOperationId] = useState(state.jointOperations.find((operation) => operation.kind === 'sun_raid')?.id ?? state.jointOperations[0]?.id ?? '');
 
+  const hasAlliance = Boolean(state.alliance.name.trim() && state.alliance.tag.trim());
   const joinedCount = useMemo(() => state.jointOperations.filter((operation) => operation.joinedByPlayer).length, [state.jointOperations]);
 
   const openRequest = (requestId: string) => { setSelectedRequestId(requestId); setTab('requests'); };
@@ -509,7 +511,11 @@ export function CommandView({ state, onJoinOperation, onReviewRequest, onSaveSet
     <main className="command-view" aria-label="Командование союза">
       <header className="command-view__header">
         <div><small>ALLIANCE COMMAND // FOUNDATION V1</small><h1>КОМАНДОВАНИЕ</h1></div>
-        <div className="command-view__status"><span>● СВЯЗЬ С СОЮЗОМ</span><strong>{state.alliance.name} [{state.alliance.tag}]</strong><small>{joinedCount} совместн. задач в вашем контуре</small></div>
+        <div className="command-view__status">
+          <span>{hasAlliance ? '● СВЯЗЬ С СОЮЗОМ' : '● КОНТУР ДОСТУПЕН'}</span>
+          <strong>{hasAlliance ? `${state.alliance.name} [${state.alliance.tag}]` : 'СОЮЗ НЕ СОЗДАН'}</strong>
+          <small>{hasAlliance ? `${joinedCount} совместн. задач в вашем контуре` : 'Создайте союз, чтобы открыть командные функции'}</small>
+        </div>
       </header>
 
       <nav className="command-tabs" aria-label="Разделы Командования">
@@ -517,12 +523,23 @@ export function CommandView({ state, onJoinOperation, onReviewRequest, onSaveSet
       </nav>
 
       <section className="command-content">
-        {tab === 'overview' ? <Overview state={state} setTab={setTab} openRequest={openRequest} openOperation={openOperation} onJoinOperation={onJoinOperation} /> : null}
-        {tab === 'members' ? <MembersTab state={state} selectedId={selectedMemberId} onSelect={setSelectedMemberId} openRequest={openRequest} /> : null}
-        {tab === 'requests' ? <RequestsTab state={state} selectedId={selectedRequestId} onSelect={setSelectedRequestId} onReviewRequest={onReviewRequest} onOpenFleets={onOpenFleets} /> : null}
-        {tab === 'diplomacy' ? <DiplomacyTab state={state} selectedId={selectedRelationId} onSelect={setSelectedRelationId} /> : null}
-        {tab === 'operations' ? <OperationsTab state={state} selectedId={selectedOperationId} onSelect={setSelectedOperationId} onJoinOperation={onJoinOperation} onOpenFleets={onOpenFleets} /> : null}
-        {tab === 'settings' ? <SettingsTab state={state} onSaveSettings={onSaveSettings} /> : null}
+        {!hasAlliance ? (
+          <div className="command-empty-state" data-qa-command-empty>
+            <small>ПАЛАТА УПРАВЛЕНИЯ</small>
+            <h2>Вы пока не состоите в союзе.</h2>
+            <p>Здесь появятся участники, дипломатия и совместные операции после создания союза.</p>
+            <button type="button" data-qa-create-alliance onClick={onCreateAlliance}>СОЗДАТЬ СОЮЗ</button>
+          </div>
+        ) : (
+          <>
+            {tab === 'overview' ? <Overview state={state} setTab={setTab} openRequest={openRequest} openOperation={openOperation} onJoinOperation={onJoinOperation} /> : null}
+            {tab === 'members' ? <MembersTab state={state} selectedId={selectedMemberId} onSelect={setSelectedMemberId} openRequest={openRequest} /> : null}
+            {tab === 'requests' ? <RequestsTab state={state} selectedId={selectedRequestId} onSelect={setSelectedRequestId} onReviewRequest={onReviewRequest} onOpenFleets={onOpenFleets} /> : null}
+            {tab === 'diplomacy' ? <DiplomacyTab state={state} selectedId={selectedRelationId} onSelect={setSelectedRelationId} /> : null}
+            {tab === 'operations' ? <OperationsTab state={state} selectedId={selectedOperationId} onSelect={setSelectedOperationId} onJoinOperation={onJoinOperation} onOpenFleets={onOpenFleets} /> : null}
+            {tab === 'settings' ? <SettingsTab state={state} onSaveSettings={onSaveSettings} /> : null}
+          </>
+        )}
       </section>
     </main>
   );

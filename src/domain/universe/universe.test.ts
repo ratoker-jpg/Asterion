@@ -149,6 +149,15 @@ test('one seeded owner has exactly seven planets across seven systems, without e
   }
 });
 
+test('production universe has no NPC fixture planets while preserving the player homeworld', () => {
+  const map = createUniverseMap({ mode: 'production' });
+  const nodes = map.systems.flatMap((system) => system.positions);
+
+  assert.equal(nodes.filter((node) => node.kind === 'npc').length, 0);
+  assert.equal(nodes.filter((node) => node.kind === 'player').length, 1);
+  assert.equal(nodes.find((node) => node.id === 'player-planet-helion-01')?.isHomeworld, true);
+});
+
 test('asset catalogs select the correct kinds and unique art has a default fallback', () => {
   const assets = {
     planetArts: ['planet'], asteroidArts: ['asteroid'], pirateArts: ['pirate'],

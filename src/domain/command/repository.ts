@@ -10,6 +10,7 @@ import type {
   AllianceAccent,
   AllianceEmblem,
   AllianceEmblemGlyph,
+  AllianceProfile,
   AllianceSettingsInput,
   CommandState,
   JointOperationState,
@@ -18,9 +19,9 @@ import type {
   ResourceRequestState,
   ResourceType,
 } from './types.ts';
-import { getRuntimeSaveKey } from '../runtime/mode.ts';
+import { getRuntimeSaveKey, type RuntimeMode } from '../runtime/mode.ts';
 
-const ASTERION_SAVE_KEY = getRuntimeSaveKey();
+const LEGACY_SAVE_KEY = getRuntimeSaveKey();
 const EMBLEM_GLYPHS: readonly AllianceEmblemGlyph[] = ['starforge', 'orbit', 'vanguard'];
 const EMBLEM_ACCENTS: readonly AllianceAccent[] = ['cyan', 'amber', 'violet'];
 const RESOURCE_TYPES: readonly ResourceType[] = ['metal', 'minerals', 'gas', 'energy'];
@@ -28,6 +29,17 @@ const REQUEST_PRIORITIES: readonly RequestPriority[] = ['standard', 'high', 'cri
 const REQUEST_STATES: readonly ResourceRequestState[] = ['open', 'reviewing'];
 const RELATION_STATUSES: readonly RelationStatus[] = ['ally', 'trade_pact', 'neutral', 'tense', 'hostile'];
 const JOINT_STATES: readonly JointOperationState[] = ['preparing', 'mustering', 'active', 'awaiting'];
+
+const EMPTY_ALLIANCE_PROFILE: AllianceProfile = {
+  name: '',
+  tag: '',
+  leaderMemberId: '',
+  motto: '',
+  description: '',
+  status: 'active',
+  foundedLabel: '',
+  emblem: { glyph: 'starforge', accent: 'cyan' },
+};
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 type SaveEnvelope = { command?: unknown; [key: string]: unknown };
@@ -64,7 +76,18 @@ function normalizeEmblem(value: unknown, fallback: AllianceEmblem): AllianceEmbl
   };
 }
 
-function createDefaultStateInternal(): CommandState {
+function createDefaultStateInternal(mode: RuntimeMode = 'test'): CommandState {
+  if (mode === 'production') {
+    return {
+      alliance: { ...EMPTY_ALLIANCE_PROFILE, emblem: cloneEmblem(EMPTY_ALLIANCE_PROFILE.emblem) },
+      members: [],
+      resourceRequests: [],
+      diplomacy: [],
+      jointOperations: [],
+      events: [],
+    };
+  }
+
   return {
     alliance: { ...DEFAULT_ALLIANCE_PROFILE, emblem: cloneEmblem(DEFAULT_ALLIANCE_PROFILE.emblem) },
     members: DEFAULT_ALLIANCE_MEMBERS.map((member) => ({ ...member })),
@@ -75,19 +98,22 @@ function createDefaultStateInternal(): CommandState {
   };
 }
 
-export function createDefaultCommandState(): CommandState {
-  return createDefaultStateInternal();
+export function createDefaultCommandState(mode: RuntimeMode = 'test'): CommandState {
+  return createDefaultStateInternal(mode);
 }
 
-export function resetCommandState(): CommandState {
-  return createDefaultStateInternal();
+export function resetCommandState(mode: RuntimeMode = 'test'): CommandState {
+  return createDefaultStateInternal(mode);
 }
 
-export function migrateCommandState(value: unknown): CommandState {
-  const defaults = createDefaultStateInternal();
+export function migrateCommandState(value: unknown, mode: RuntimeMode = 'test'): CommandState {
+  const defaults = createDefaultStateInternal(mode);
   if (!isRecord(value)) return defaults;
 
-  const alliance = isRecord(value.alliance) ? value.alliance : {};
+  const persistedAlliance = isRecord(value.alliance) ? value.alliance : {};
+  const isFixtureAlliance = persistedAlliance.name === DEFAULT_ALLIANCE_PROFILE.name
+    && String(persistedAlliance.tag ?? '').trim().toUpperCase() === DEFAULT_ALLIANCE_PROFILE.tag;
+  const alliance = mode === 'production' && isFixtureAlliance ? {} : persistedAlliance;
   const migrated: CommandState = {
     ...defaults,
     alliance: {
@@ -197,8 +223,8 @@ export function migrateCommandState(value: unknown): CommandState {
   return migrated;
 }
 
-export function joinJointOperation(state: CommandState, operationId: string): CommandState {
-  const normalized = migrateCommandState(state);
+export function joinJointOperation(state: CommandState, operationId: string, mode: RuntimeMode = 'test'): CommandState {
+  const normalized = migrateCommandState(state, mode);
   return {
     ...normalized,
     jointOperations: normalized.jointOperations.map((operation) => {
@@ -208,8 +234,8 @@ export function joinJointOperation(state: CommandState, operationId: string): Co
   };
 }
 
-export function markResourceRequestReviewing(state: CommandState, requestId: string): CommandState {
-  const normalized = migrateCommandState(state);
+export function markResourceRequestReviewing(state: CommandState, requestId: string, mode: RuntimeMode = 'test'): CommandState {
+  const normalized = migrateCommandState(state, mode);
   return {
     ...normalized,
     resourceRequests: normalized.resourceRequests.map((request) => request.id === requestId && request.state === 'open'
@@ -218,8 +244,8 @@ export function markResourceRequestReviewing(state: CommandState, requestId: str
   };
 }
 
-export function updateAllianceSettings(state: CommandState, input: AllianceSettingsInput): CommandState {
-  const normalized = migrateCommandState(state);
+export function updateAllianceSettings(state: CommandState, input: AllianceSettingsInput, mode: RuntimeMode = 'test'): CommandState {
+  const normalized = migrateCommandState(state, mode);
   return {
     ...normalized,
     alliance: {
@@ -239,17 +265,19 @@ function resolveStorage(storage?: StorageLike): StorageLike | null {
   return window.localStorage;
 }
 
-export function readCommandState(storage?: StorageLike): CommandState {
+export function readCommandState(storage?: StorageLike, mode?: RuntimeMode): CommandState {
+  const runtimeMode = mode ?? 'test';
+  const saveKey = mode === undefined ? LEGACY_SAVE_KEY : getRuntimeSaveKey(runtimeMode);
   const target = resolveStorage(storage);
-  if (!target) return createDefaultCommandState();
+  if (!target) return createDefaultCommandState(runtimeMode);
 
   try {
-    const raw = target.getItem(ASTERION_SAVE_KEY);
-    if (!raw) return createDefaultCommandState();
+    const raw = target.getItem(saveKey);
+    if (!raw) return createDefaultCommandState(runtimeMode);
     const envelope = JSON.parse(raw) as SaveEnvelope;
-    return migrateCommandState(envelope.command);
+    return migrateCommandState(envelope.command, runtimeMode);
   } catch {
-    return createDefaultCommandState();
+    return createDefaultCommandState(runtimeMode);
   }
 }
 
@@ -257,15 +285,17 @@ export type PersistCommandResult =
   | { ok: true; value: CommandState }
   | { ok: false; value: CommandState; error: string };
 
-export function persistCommandState(value: CommandState, storage?: StorageLike): PersistCommandResult {
-  const normalized = migrateCommandState(value);
+export function persistCommandState(value: CommandState, storage?: StorageLike, mode?: RuntimeMode): PersistCommandResult {
+  const runtimeMode = mode ?? 'test';
+  const saveKey = mode === undefined ? LEGACY_SAVE_KEY : getRuntimeSaveKey(runtimeMode);
+  const normalized = migrateCommandState(value, runtimeMode);
   const target = resolveStorage(storage);
   if (!target) return { ok: false, value: normalized, error: 'Локальное сохранение недоступно.' };
 
   try {
-    const raw = target.getItem(ASTERION_SAVE_KEY);
+    const raw = target.getItem(saveKey);
     const envelope = raw ? JSON.parse(raw) as SaveEnvelope : {};
-    target.setItem(ASTERION_SAVE_KEY, JSON.stringify({ ...envelope, command: normalized }));
+    target.setItem(saveKey, JSON.stringify({ ...envelope, command: normalized }));
     return { ok: true, value: normalized };
   } catch (error) {
     return {

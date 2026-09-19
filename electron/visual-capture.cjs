@@ -8,7 +8,7 @@ app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'visual-qa');
-const SAVE_KEY = 'asterion.vertical-slice.v1';
+const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const VIEWPORTS = [[1920,1080],[1600,900],[1280,720],[2560,1440]];
 const RESOURCE_QA_VIEWPORTS = new Set(['1920x1080','1600x900','1280x720']);
 const SCREENS = [
@@ -515,7 +515,7 @@ app.whenReady().then(async()=>{
   try {
     fs.rmSync(OUTPUT,{recursive:true,force:true}); fs.mkdirSync(OUTPUT,{recursive:true});
     win=new BrowserWindow({width:1000,height:700,show:false,backgroundColor:'#02050a',webPreferences:{offscreen:true,contextIsolation:true,nodeIntegration:false,sandbox:true,partition:'qa-utility'}});
-    await win.loadFile(path.join(ROOT,'dist','index.html'));
+    await win.loadFile(path.join(ROOT,'dist','index.html'), { search: '?mode=test' });
     win.webContents.debugger.attach('1.3');
 
     for(const [width,height] of VIEWPORTS){

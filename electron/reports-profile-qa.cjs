@@ -8,7 +8,7 @@ app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'artifacts', 'reports-profile-qa');
-const SAVE_KEY = 'asterion.vertical-slice.v1';
+const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const EXPECTED_FOLDER_IDS = ['system', 'battle', 'command', 'arena', 'flights', 'alliances', 'achievements'];
 const EXPECTED_FOLDER_LABELS = ['Система', 'Доклады', 'Командные доклады', 'Арена', 'Полёты', 'Союзы', 'Достижения'];
@@ -181,7 +181,7 @@ async function runViewport(win, width, height) {
   await clickPrimary(win, 'reports');
 
   const profile = await profileSnapshot(win);
-  if (!profile.visible || profile.name !== 'Dendrilion' || !profile.avatar.includes('aegis_profile_avatar') || profile.alliance !== 'Содружество Гелион' || profile.allianceTag !== 'HLN') throw new Error(`Profile contract failed at ${label}: ${JSON.stringify(profile)}`);
+  if (!profile.visible || profile.name !== 'Dendrilion' || !profile.avatar.includes('aegis_general') || profile.alliance !== 'Содружество Гелион' || profile.allianceTag !== 'HLN') throw new Error(`Profile contract failed at ${label}: ${JSON.stringify(profile)}`);
   if (JSON.stringify(profile.folderIds) !== JSON.stringify(EXPECTED_FOLDER_IDS) || JSON.stringify(profile.folderLabels) !== JSON.stringify(EXPECTED_FOLDER_LABELS)) throw new Error(`Reports folder contract failed at ${label}: ${JSON.stringify(profile)}`);
   if (profile.metricValues.length !== 4 || profile.focusableMetrics !== 4 || profile.horizontalOverflow || profile.bodyHorizontalOverflow) throw new Error(`Profile geometry/metrics contract failed at ${label}: ${JSON.stringify(profile)}`);
   await win.webContents.executeJavaScript(`document.querySelector('[data-qa-profile-metric="resourcePoints"]')?.focus()`);
@@ -281,7 +281,7 @@ app.whenReady().then(async () => {
     fs.rmSync(OUTPUT, { recursive: true, force: true });
     fs.mkdirSync(OUTPUT, { recursive: true });
     win = new BrowserWindow({ width: 1920, height: 1080, useContentSize: true, show: false, backgroundColor: '#02050a', webPreferences: { offscreen: true, contextIsolation: true, nodeIntegration: false, sandbox: true, partition: 'qa-reports-profile' } });
-    await win.loadFile(path.join(ROOT, 'dist', 'index.html'));
+    await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: '?mode=test' });
     const results = [];
     for (const [width, height] of VIEWPORTS) results.push(await runViewport(win, width, height));
     fs.writeFileSync(path.join(OUTPUT, 'results.json'), JSON.stringify({ results }, null, 2));

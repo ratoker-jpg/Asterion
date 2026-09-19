@@ -55,6 +55,8 @@ import {
 } from './persistence.ts';
 import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { getPlanetResources, type SaveState } from './contracts.ts';
+import { createAllianceRatingEntries, createPlayerRatingEntries } from '../domain/rating/fixtures.ts';
+import { createUniverseMap } from '../domain/universe/runtime.ts';
 
 class MemoryStorage implements StorageLike {
   readonly values = new Map<string, string>();
@@ -79,6 +81,29 @@ const context = (now: number, mode: 'production' | 'test' = 'test') => ({
   now,
   mode,
   testTimeScale: 10 as const,
+});
+
+test('production and test persistence seeds stay isolated at every fixture boundary', () => {
+  const production = createInitialSaveState('production', 1_000);
+  const testMode = createInitialSaveState('test', 1_000);
+
+  assert.equal(production.command.alliance.name, '');
+  assert.equal(production.command.members.length, 0);
+  assert.equal(production.command.jointOperations.length, 0);
+  assert.equal(production.operations.items.length, 0);
+  assert.equal(production.combat.reports.length, 0);
+  assert.equal(createUniverseMap({ mode: 'production' }).systems.flatMap((system) => system.positions).filter((node) => node.kind === 'npc').length, 0);
+  assert.equal(createPlayerRatingEntries(production.rating.resourcePoints, 'production').length, 1);
+  assert.equal(createAllianceRatingEntries(null, 'production').length, 0);
+
+  assert.equal(testMode.command.alliance.name, 'Содружество Гелион');
+  assert.ok(testMode.command.members.length > 0);
+  assert.ok(testMode.command.jointOperations.length > 0);
+  assert.equal(testMode.operations.items.length, 4);
+  assert.ok(testMode.combat.reports.length > 0);
+  assert.equal(createUniverseMap({ mode: 'test' }).systems.flatMap((system) => system.positions).filter((node) => node.kind === 'npc').length, 7);
+  assert.equal(createPlayerRatingEntries(testMode.rating.resourcePoints, 'test').length, 84);
+  assert.equal(createAllianceRatingEntries(null, 'test').length, 42);
 });
 
 function withBuildingSetup(state: SaveState): SaveState {

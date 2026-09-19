@@ -8,7 +8,7 @@ app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'artifacts', 'combat-simulator-qa');
-const SAVE_KEY = 'asterion.vertical-slice.v1';
+const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -269,7 +269,7 @@ app.whenReady().then(async () => {
     fs.rmSync(OUTPUT, { recursive: true, force: true });
     fs.mkdirSync(OUTPUT, { recursive: true });
     win = new BrowserWindow({ width: 1920, height: 1080, useContentSize: true, show: false, backgroundColor: '#02050a', webPreferences: { offscreen: true, contextIsolation: true, nodeIntegration: false, sandbox: true, partition: 'qa-combat-simulator' } });
-    await win.loadFile(path.join(ROOT, 'dist', 'index.html'));
+    await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: '?mode=test' });
     const results = [];
     for (const [width, height] of VIEWPORTS) results.push(await runViewport(win, width, height));
     fs.writeFileSync(path.join(OUTPUT, 'results.json'), JSON.stringify({ results }, null, 2));

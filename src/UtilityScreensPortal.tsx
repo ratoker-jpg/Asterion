@@ -96,7 +96,13 @@ export function UtilityScreensPortal() {
       {active === 'settings' ? (
         <SettingsView preferences={preferences} onPreferencesChange={updatePreferences} onReset={resetUiPreferences} />
       ) : active === 'rating' ? (
-        runtimeState ? <RatingView command={runtimeState.command} currentPlayerResourcePoints={runtimeState.rating.resourcePoints} /> : null
+        runtimeState ? (
+          <RatingView
+            mode={runtimeState.mode}
+            command={runtimeState.command}
+            currentPlayerResourcePoints={runtimeState.rating.resourcePoints}
+          />
+        ) : null
       ) : (
         <ScienceView />
       )}

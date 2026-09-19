@@ -8,7 +8,7 @@ app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'artifacts-pass1', 'science-qa');
-const SAVE_KEY = 'asterion.vertical-slice.v1';
+const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const SCIENCE_ID = 1;
 // Science 1 at level 1 with laboratory level 1: 45,000 ms × 95%.
@@ -203,7 +203,7 @@ async function runViewport(width, height) {
   win.webContents.on('console-message', (_event, _level, message) => {
     if (/error/i.test(message)) console.warn(`[${label}] renderer: ${message}`);
   });
-  await win.loadFile(path.join(ROOT, 'dist', 'index.html'));
+  await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: '?mode=test' });
   stage('loaded');
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
 

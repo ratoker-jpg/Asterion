@@ -161,6 +161,20 @@ test('stored reports survive migration while missing demo fixtures are restored'
   assert.deepEqual(migrated.savedReportIds, [customReport.id]);
 });
 
+test('production battle history starts empty and preserves only custom reports', () => {
+  const customReport = {
+    ...DEMO_BATTLE_REPORTS[0],
+    id: 'battle-production-custom',
+    metadata: { source: 'imported' as const },
+  };
+  const empty = createDefaultBattleHistory('production');
+  const migrated = migrateBattleHistory({ reports: [...DEMO_BATTLE_REPORTS, customReport], savedReportIds: [customReport.id] }, 'production');
+
+  assert.deepEqual(empty.reports, []);
+  assert.deepEqual(migrated.reports.map((report) => report.id), [customReport.id]);
+  assert.deepEqual(migrated.savedReportIds, [customReport.id]);
+});
+
 test('saved simulation reports remain readable in battle history after migration', () => {
   const simulation = {
     ...DEMO_BATTLE_REPORTS[0],

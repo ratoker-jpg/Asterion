@@ -7,6 +7,7 @@ import type {
   UniverseMap,
   UniverseOwnerAlliance,
   UniverseOwnerProfile,
+  UniverseOwnerPoints,
   UniversePersistedPlayerPlanet,
   UniversePlanetNode,
   UniversePoint,
@@ -15,6 +16,7 @@ import type {
   UniverseTimedObjectState,
 } from './types.ts';
 import { getPositionCoefficientPercent, getSunEfficiencyPercent } from '../energy/runtime.ts';
+import type { RuntimeMode } from '../runtime/mode.ts';
 
 export const GALAXY = 1;
 export const SYSTEM_COUNT = 40;
@@ -280,7 +282,7 @@ export function getUniverseOwnerRelation(
   return currentAlliance.id === targetAlliance.id || currentAlliance.tag === targetAlliance.tag ? 'ally' : 'enemy';
 }
 
-export function getUniverseNodeCaption(node: UniversePlanetNode, currentPlayerName: string, ownerDisplayName = 'Бот 01') {
+export function getUniverseNodeCaption(node: UniversePlanetNode, currentPlayerName: string, ownerDisplayName = 'Владелец планеты') {
   if (node.isHomeworld) return `★ ${currentPlayerName}`;
   if (node.kind === 'npc') return ownerDisplayName;
   if (node.kind === 'uninhabited') return 'Необитаемая';
@@ -304,6 +306,7 @@ export function normalizeUniverseOwnerProfile(profile: UniverseOwnerProfile): Un
 }
 
 export type CreateUniverseSystemOptions = {
+  mode?: RuntimeMode;
   galaxy?: number;
   system: number;
   currentOwnerId?: string;
@@ -321,8 +324,10 @@ function persistedPlanetFor(options: CreateUniverseSystemOptions, galaxy: number
     && planet.coordinate.position === slot);
 }
 
-function fixtureFor(system: number, slot: number) {
-  const npc = NPC_PLANET_FIXTURES.find((planet) => planet.system === system && planet.position === slot);
+function fixtureFor(system: number, slot: number, mode: RuntimeMode = 'test') {
+  const npc = mode === 'test'
+    ? NPC_PLANET_FIXTURES.find((planet) => planet.system === system && planet.position === slot)
+    : undefined;
   if (npc) return { ...npc, kind: 'npc' as const, ownerId: NPC_OWNER_ID, known: true };
   if (system === 1) return SYSTEM_ONE_FIXTURES[slot];
   return undefined;
@@ -340,7 +345,7 @@ function createPositionNode(
   assets: UniverseAssetCatalog,
 ): UniversePlanetNode {
   const persisted = persistedPlanetFor(options, galaxy, system, slot);
-  const fixture = persisted ? undefined : fixtureFor(system, slot);
+  const fixture = persisted ? undefined : fixtureFor(system, slot, options.mode);
   const coordinate = { galaxy, system, position: slot };
   const kind = persisted ? 'player' : fixture?.kind ?? generatedKind();
   const ownerId = persisted?.ownerId ?? fixture?.ownerId;
@@ -372,7 +377,7 @@ function createUniverseSystemBase(options: CreateUniverseSystemOptions, assets: 
   const system = Math.min(SYSTEM_COUNT, Math.max(1, Math.floor(options.system)));
   const random = mulberry32(10_000 + galaxy * 977 + system * 1_003);
   const fixtureSlots = Array.from({ length: POSITION_COUNT }, (_, index) => index + 1)
-    .filter((slot) => fixtureFor(system, slot));
+    .filter((slot) => fixtureFor(system, slot, options.mode));
   const persistedSlots = (options.playerPlanets ?? [])
     .filter((planet) => planet.coordinate.galaxy === galaxy && planet.coordinate.system === system)
     .map((planet) => planet.coordinate.position);
@@ -724,11 +729,12 @@ export function getUniverseActionState(
   };
 }
 
-export function createUniverseNpcOwnerProfile(): UniverseOwnerProfile {
+export function createUniverseNpcOwnerProfile(points?: UniverseOwnerPoints): UniverseOwnerProfile {
   return normalizeUniverseOwnerProfile({
     id: NPC_OWNER_ID,
     displayName: 'Бот 01',
     raceId: 'veyra',
+    ...(points ? { points } : {}),
     planetIds: NPC_PLANET_FIXTURES.map((planet) => planet.id),
   });
 }

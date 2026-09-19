@@ -8,7 +8,7 @@ app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'artifacts', 'universe-planet-qa');
-const SAVE_KEY = 'asterion.vertical-slice.v1';
+const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 // Freeze the renderer clock so the scheduled asteroid fixture is stable and
 // the QA contract cannot silently weaken when the test is run on another day.
@@ -289,7 +289,7 @@ async function runViewport(width, height) {
 
   try {
     const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-    await win.loadFile(path.join(ROOT, 'dist', 'index.html'));
+    await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: '?mode=test' });
     await loaded;
     await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
     win.webContents.debugger.attach('1.3');
@@ -336,7 +336,7 @@ async function runViewport(width, height) {
     const player = await inspectorSnapshot(win);
     checkCopy(player);
     await checkModal(win);
-    if (player.kind !== 'player' || player.ownerName !== 'Dendrilion' || !player.avatar.includes('aegis_profile_avatar') || player.points.length !== 4 || player.planetRows !== 1 || player.actions.length !== 2 || player.actions.some((action) => !action.disabled || action.status !== 'disabled' || !action.title.includes('Это ваша планета'))) {
+    if (player.kind !== 'player' || player.ownerName !== 'Dendrilion' || !player.avatar.includes('aegis_general') || player.points.length !== 4 || player.planetRows !== 1 || player.actions.length !== 2 || player.actions.some((action) => !action.disabled || action.status !== 'disabled' || !action.title.includes('Это ваша планета'))) {
       throw new Error(`${label}: player inspector contract failed ${JSON.stringify(player)}`);
     }
     if (!player.text.includes('Астеры') || !player.text.includes('Содружество Гелион') || !player.text.includes('[HLN]')) throw new Error(`${label}: player profile identity contract failed ${JSON.stringify(player)}`);

@@ -51,6 +51,20 @@ test('missing command migrates to canonical default', () => {
   assert.deepEqual(readCommandState(storage), createDefaultCommandState());
 });
 
+test('production command migration never resurrects the alliance fixture', () => {
+  const production = createDefaultCommandState('production');
+  const migrated = migrateCommandState(createDefaultCommandState(), 'production');
+
+  assert.equal(production.alliance.name, '');
+  assert.equal(production.alliance.tag, '');
+  assert.deepEqual(production.members, []);
+  assert.deepEqual(production.resourceRequests, []);
+  assert.deepEqual(production.diplomacy, []);
+  assert.deepEqual(production.jointOperations, []);
+  assert.deepEqual(production.events, []);
+  assert.deepEqual(migrated, production);
+});
+
 test('malformed command data does not break migration', () => {
   const migrated = migrateCommandState({
     alliance: { name: '', tag: null, emblem: { glyph: 'broken', accent: 'broken' } },

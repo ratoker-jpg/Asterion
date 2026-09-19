@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { EmblemGlyph } from './CommandView';
-
-import aegisProfileAvatar from '../assets/source/generated-factions-v1/factions/aegis_profile_avatar.png';
+import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
 import asteroid01 from '../assets/source/universe-navigation/asteroids/asteroid.variant-01.png';
 import asteroid02 from '../assets/source/universe-navigation/asteroids/asteroid.variant-02.png';
 import asteroid03 from '../assets/source/universe-navigation/asteroids/asteroid.variant-03.png';
@@ -57,6 +56,7 @@ import { playerFactionLabel } from './domain/profile/repository.ts';
 import { selectPlayerProfileMetrics } from './domain/profile/selectors.ts';
 import type { PlayerProfileState } from './domain/profile/types.ts';
 import type { RatingPrototypeState } from './domain/rating/fixtures.ts';
+import type { RuntimeMode } from './domain/runtime/mode.ts';
 import {
   GALAXY,
   MAX_PLANETS_PER_OWNER,
@@ -101,6 +101,7 @@ type UniverseViewProps = {
   rating: RatingPrototypeState;
   command: CommandState;
   playerPlanets: readonly UniversePersistedPlayerPlanet[];
+  mode: RuntimeMode;
   onColonize: (coordinate: UniverseCoordinate) => void;
 };
 
@@ -117,8 +118,8 @@ function pointValue(metrics: ReturnType<typeof selectPlayerProfileMetrics>, key:
   return metrics.find((metric) => metric.key === key)?.value ?? 0;
 }
 
-function currentOwnerPoints(profile: PlayerProfileState, rating: RatingPrototypeState): UniverseOwnerPoints {
-  const metrics = selectPlayerProfileMetrics(profile, rating);
+function currentOwnerPoints(profile: PlayerProfileState, rating: RatingPrototypeState, mode: RuntimeMode): UniverseOwnerPoints {
+  const metrics = selectPlayerProfileMetrics(profile, rating, mode);
   return {
     resource: pointValue(metrics, 'resourcePoints'),
     battle: pointValue(metrics, 'battlePoints'),
@@ -151,6 +152,7 @@ function raceLabel(raceId?: string) {
 }
 
 function OwnerAvatar({ owner }: { owner: UniverseOwnerProfile }) {
+  if (owner.raceId) return <FactionGeneralPortrait factionId={owner.raceId} className="universe-owner-avatar__image" />;
   if (owner.avatarArt) return <img className="universe-owner-avatar__image" src={owner.avatarArt} alt="" draggable={false} />;
   return <span className="universe-owner-avatar__fallback" aria-hidden="true">{owner.displayName.slice(0, 2).toUpperCase()}</span>;
 }
@@ -233,7 +235,7 @@ function OwnerInspector({
           <small>ВЛАДЕЛЕЦ ОБЪЕКТА</small>
           <h3 data-qa-universe-owner-name>{owner.displayName}</h3>
           <span>{raceLabel(owner.raceId)}</span>
-          <strong>{owner.id === currentOwnerId ? 'ВАШ ПРОФИЛЬ' : 'БОТ · ДЕМОНСТРАЦИОННЫЙ ПРОФИЛЬ'}</strong>
+          <strong>{owner.id === currentOwnerId ? 'ВАШ ПРОФИЛЬ' : 'ПРОФИЛЬ ВЛАДЕЛЬЦА'}</strong>
         </div>
         <div className="universe-owner-alliance">
           <AllianceMark alliance={alliance} />
@@ -351,7 +353,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, occupiedNodes, onSelect }
   </button>;
 }
 
-export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, rating, command, playerPlanets, onColonize }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, rating, command, playerPlanets, mode, onColonize }: UniverseViewProps) {
   const [system, setSystem] = useState(1);
   const [focusEmpty, setFocusEmpty] = useState(false);
   const [showSlotLabels, setShowSlotLabels] = useState(true);
@@ -366,32 +368,35 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
   }, []);
 
   const alliance = useMemo(() => {
-    const selected = selectCurrentAlliance(command);
-    return selected.name && selected.tag ? selected : null;
+    return selectCurrentAlliance(command);
   }, [command]);
   const owner = useMemo(() => normalizeUniverseOwnerProfile({
     id: profile.playerId,
     displayName: profile.displayName,
-    avatarArt: aegisProfileAvatar,
     raceId: profile.factionId,
     alliance,
-    points: currentOwnerPoints(profile, rating),
+    points: currentOwnerPoints(profile, rating, mode),
     planetIds: playerPlanets.map((planet) => planet.id),
-  }), [alliance, playerPlanets, profile, rating]);
+  }), [alliance, mode, playerPlanets, profile, rating]);
   const owners = useMemo(() => {
-    const npc = createUniverseNpcOwnerProfile();
-    return new Map<string, UniverseOwnerProfile>([[owner.id, owner], [npc.id, npc]]);
-  }, [owner]);
+    const next = new Map<string, UniverseOwnerProfile>([[owner.id, owner]]);
+    if (mode === 'test') {
+      const npc = createUniverseNpcOwnerProfile(owner.points);
+      next.set(npc.id, npc);
+    }
+    return next;
+  }, [mode, owner]);
   const galaxyData = useMemo(() => createUniverseMap({
     galaxy: GALAXY,
     currentOwnerId: owner.id,
     currentPlanetName: ownedPlanetName,
     currentPlanetArt: ownedPlanetArt,
     assets,
+    mode,
     nowMs,
     galaxyCount: 1,
     playerPlanets,
-  }), [nowMs, ownedPlanetArt, ownedPlanetName, owner.id, playerPlanets]);
+  }), [mode, nowMs, ownedPlanetArt, ownedPlanetName, owner.id, playerPlanets]);
   const systemData = galaxyData.systems[system - 1];
   const asteroidAttachmentNodes = useMemo(() => [...systemData.positions, ...systemData.asteroids], [systemData]);
   const nodesById = useMemo(() => new Map(galaxyData.systems.flatMap((item) => [...item.positions, ...item.asteroids]).map((node) => [node.id, node])), [galaxyData]);
@@ -461,7 +466,12 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
     : null;
 
   return (
-    <main className="universe-view universe-view-v3" data-qa-universe data-qa-universe-system={system}>
+    <main
+      className="universe-view universe-view-v3"
+      data-qa-universe
+      data-qa-universe-system={system}
+      data-qa-universe-npc-count={galaxyData.systems.reduce((total, item) => total + item.positions.filter((node) => node.kind === 'npc').length, 0)}
+    >
       <div className="universe-nav universe-nav-v3">
         <div className="universe-breadcrumb">
           <span>ВСЕЛЕННАЯ</span><b>›</b><strong>Галактика {GALAXY}</strong><b>›</b><strong>Солнечная система {system}</strong>
