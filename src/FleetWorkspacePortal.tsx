@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
@@ -183,6 +184,15 @@ function flightDurationLabel(durationMs: number) {
 
 function flightNumberLabel(value: number) {
   return new Intl.NumberFormat('ru-RU').format(value);
+}
+
+function capacityFillPct(used: number, total: number) {
+  return total > 0 ? Math.min(100, Math.max(0, (used / total) * 100)) : 0;
+}
+
+function capacityFillTone(used: number, total: number) {
+  const pct = capacityFillPct(used, total);
+  return pct <= 20 ? 'normal' : pct <= 40 ? 'positive' : pct <= 55 ? 'watch' : pct <= 70 ? 'warning' : pct <= 85 ? 'danger' : 'critical';
 }
 
 function flightArrivalLabel(timestamp: number) {
@@ -950,7 +960,13 @@ function FleetWorkspace({
                     <small>ЗАГРУЗКА КОРАБЛЯ</small>
                     <strong>РЕСУРСНЫЙ ГРУЗ</strong>
                   </div>
-                  <span>ГРУЗОПОДЪЁМНОСТЬ: {flightNumberLabel(transportSummary.capacity.used)} / {flightNumberLabel(transportSummary.capacity.total)}<br />СВОБОДНО: {flightNumberLabel(transportSummary.capacity.free)}</span>
+                  <span>
+                    <small>ГРУЗОПОДЪЁМНОСТЬ</small>
+                    <span className={`flight-timeline-cargo-capacity-fill is-${capacityFillTone(transportSummary.capacity.used, transportSummary.capacity.total)}`} aria-hidden="true" data-qa-cargo-capacity-fill>
+                      <i style={{ '--fill': `${capacityFillPct(transportSummary.capacity.used, transportSummary.capacity.total)}%` } as CSSProperties} />
+                    </span>
+                    <em>СВОБОДНО: {flightNumberLabel(transportSummary.capacity.free)}</em>
+                  </span>
                 </div>
                 <div className="flight-timeline-cargo-grid">
                   {flightCargoResources.map((resource) => (

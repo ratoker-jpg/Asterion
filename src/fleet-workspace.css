@@ -1181,3 +1181,177 @@ html.asterion-long-page:has([data-qa-flight-preview-backdrop]) #root {
 }
 .resource-building-action-confirm.flight-timeline-modal .flight-timeline-metrics [data-qa-flight-metric="population"] strong { color: #65dcf3; }
 .resource-building-action-confirm.flight-timeline-modal .flight-timeline-metrics [data-qa-flight-metric="cargo-capacity"] strong { color: #78e0ae; }
+
+/* ============================================================
+   Flight plan modal readability redesign.
+   Presentation-only restyle of the flight preview modal:
+   - rounded shell + bottom-right actions
+   - readable typography scale instead of 7-9px microtype
+   - "Параметры перелёта" rendered as rounded stat tiles
+   - cargo capacity rendered as a resource-style meter (fill
+     tones follow the header resource bars) + small "СВОБОДНО"
+     line that fits any number
+   Kept as the last block so it wins over the legacy overrides.
+   ============================================================ */
+.resource-building-action-confirm.flight-timeline-modal {
+  border-radius: 22px;
+  clip-path: none;
+  border-color: rgba(114, 226, 255, .38);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .72),
+              0 0 0 1px rgba(126, 232, 255, .08),
+              0 0 46px rgba(0, 190, 235, .13),
+              inset 0 0 42px rgba(0, 185, 230, .045);
+  padding: 26px 30px 22px;
+  font-feature-settings: "tnum" 0;
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-head small { font-size: 11px; letter-spacing: .16em; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-head h3 { font-size: 28px; letter-spacing: .07em; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-head p { font-size: 11.5px; color: #8fc2d2; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-step small { font-size: 10px; letter-spacing: .15em; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-step strong { font-size: 14.5px; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-step em { font-size: 10.5px; color: #8ab8c6; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-summary-head small { font-size: 11px; letter-spacing: .16em; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-summary-head span { font-size: 9.5px; letter-spacing: .12em; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-metrics {
+  gap: 8px;
+  margin-top: 12px;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-metrics > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-height: 64px;
+  padding: 11px 13px 12px;
+  border: 1px solid rgba(103, 204, 230, .17);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(10, 44, 60, .55), rgba(4, 20, 30, .62));
+  box-shadow: inset 0 1px 0 rgba(126, 232, 255, .05);
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-metrics small { font-size: 10px !important; letter-spacing: .14em; color: #79c7dd !important; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-metrics strong {
+  margin-top: 8px;
+  font-size: 19px !important;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-metrics > div[data-qa-flight-metric="cargo-capacity"] { grid-column: span 2; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-eta-card small { font-size: 10.5px; letter-spacing: .14em; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-eta-card strong { margin-top: 6px; font-size: 18px; letter-spacing: .02em; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-eta-card span { margin-top: 6px; font-size: 11px; font-variant-numeric: tabular-nums; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-eta-card em { margin-top: 5px; font-size: 9.5px; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-notes p { font-size: 10px; padding: 6px 10px; line-height: 1.45; border-radius: 8px; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-head { display: grid; gap: 10px; justify-content: stretch; align-content: start; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-head small { font-size: 10.5px; letter-spacing: .15em; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-head strong { font-size: 14px; letter-spacing: .06em; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-head > span {
+  display: grid;
+  gap: 8px;
+  padding: 11px 13px 12px !important;
+  border: 1px solid rgba(230, 173, 80, .34) !important;
+  border-radius: 11px !important;
+  background: rgba(118, 75, 17, .13) !important;
+  color: #cbb98d !important;
+  text-align: left !important;
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-head > span small {
+  font-size: 10px;
+  letter-spacing: .15em;
+  color: #b39a67;
+  font-weight: 600;
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-capacity-fill {
+  display: block;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: rgba(4, 29, 42, .96);
+  border: 1px solid rgba(71, 197, 222, .16);
+  box-shadow: inset 0 0 8px rgba(0, 0, 0, .36);
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-capacity-fill i {
+  display: block;
+  width: var(--fill, 0%);
+  height: 100%;
+  background: #35e58a;
+  box-shadow: 0 0 8px rgba(53, 229, 138, .5);
+  transition: width .25s ease, background .25s ease, box-shadow .25s ease;
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-capacity-fill.is-positive i { background: #8be36b; box-shadow: 0 0 8px rgba(139, 227, 107, .5); }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-capacity-fill.is-watch i { background: #d9ed79; box-shadow: 0 0 8px rgba(217, 237, 121, .5); }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-capacity-fill.is-warning i { background: #ffe15a; box-shadow: 0 0 8px rgba(255, 225, 90, .5); }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-capacity-fill.is-danger i { background: #ffb347; box-shadow: 0 0 8px rgba(255, 179, 71, .5); }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-capacity-fill.is-critical i { background: #f0445e; box-shadow: 0 0 9px rgba(240, 68, 94, .54); }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-head > span em {
+  font-style: normal;
+  font-size: 11.5px;
+  letter-spacing: .05em;
+  color: #cbb98d;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo {
+  border-radius: 14px;
+  padding: 14px 15px 12px;
+  border-color: rgba(230, 173, 80, .38);
+  border-left: 3px solid #e6ad50;
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-resource { font-size: 11.5px !important; color: #d3e9ee !important; letter-spacing: .05em; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-field {
+  grid-template-columns: minmax(0, 1fr) 72px;
+  border-bottom-color: rgba(230, 173, 80, .16);
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-field input {
+  height: 34px;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+  border-radius: 8px;
+  border-color: rgba(230, 190, 120, .34);
+  background: rgba(20, 26, 28, .82);
+  color: #f4f9fb;
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-field em { font-size: 9.5px; color: #a98f5e; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-meta { font-size: 9.5px; letter-spacing: .1em; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-actions { justify-content: flex-end !important; gap: 12px; margin-top: 10px; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-actions button {
+  min-width: 128px;
+  min-height: 40px;
+  border-radius: 11px;
+  font-size: 11.5px;
+  letter-spacing: .1em;
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-actions button:first-child {
+  border: 1px solid rgba(255, 128, 112, .44);
+  background: rgba(66, 20, 18, .38);
+  color: #ffb9ae;
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-actions button:first-child:hover {
+  border-color: rgba(255, 148, 130, .75);
+  color: #ffd6cf;
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-actions button:last-child {
+  border: 1px solid rgba(126, 232, 255, .6);
+  background: linear-gradient(180deg, #1695ae, #0a5f76);
+  color: #f2feff;
+  box-shadow: 0 0 22px rgba(0, 196, 242, .22), inset 0 0 14px rgba(120, 232, 255, .12);
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-actions button:last-child:disabled {
+  opacity: .4;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-close { border-radius: 10px; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-step > span { border-radius: 9px; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-step select { border-radius: 8px; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-ship-card { border-radius: 10px; padding: 10px 12px; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-eta-card { border-radius: 12px; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-own-target,
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-readonly-target { border-radius: 10px; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-target-status .flight-timeline-edit { border-radius: 7px; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-error { border-radius: 10px; }
