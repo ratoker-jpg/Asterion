@@ -1619,7 +1619,7 @@
   align-items: flex-end;
   justify-content: center;
   overflow: hidden;
-  background: radial-gradient(ellipse at 50% 78%, rgba(35, 158, 220, .2), transparent 58%);
+  background: transparent;
 }
 
 .reports-profile-avatar__art::after {

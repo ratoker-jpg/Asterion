@@ -51,9 +51,18 @@ test('missing command migrates to canonical default', () => {
   assert.deepEqual(readCommandState(storage), createDefaultCommandState());
 });
 
-test('production command migration never resurrects the alliance fixture', () => {
+test('production command migration drops only the explicitly marked alliance fixture', () => {
   const production = createDefaultCommandState('production');
   const migrated = migrateCommandState(createDefaultCommandState(), 'production');
+  const realAllianceWithFixtureName = migrateCommandState({
+    alliance: {
+      name: 'Содружество Гелион',
+      tag: 'HLN',
+      motto: 'Живой союз.',
+      description: 'Настоящие сохранённые данные игрока.',
+      emblem: { glyph: 'orbit', accent: 'amber' },
+    },
+  }, 'production');
 
   assert.equal(production.alliance.name, '');
   assert.equal(production.alliance.tag, '');
@@ -63,6 +72,9 @@ test('production command migration never resurrects the alliance fixture', () =>
   assert.deepEqual(production.jointOperations, []);
   assert.deepEqual(production.events, []);
   assert.deepEqual(migrated, production);
+  assert.equal(realAllianceWithFixtureName.alliance.name, 'Содружество Гелион');
+  assert.equal(realAllianceWithFixtureName.alliance.tag, 'HLN');
+  assert.deepEqual(realAllianceWithFixtureName.alliance.emblem, { glyph: 'orbit', accent: 'amber' });
 });
 
 test('malformed command data does not break migration', () => {

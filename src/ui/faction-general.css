@@ -3,6 +3,7 @@
   display: block;
   overflow: hidden;
   isolation: isolate;
+  background: transparent;
 }
 
 .faction-general-portrait img {

@@ -1,6 +1,10 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const {
+  assertRenderedFactionGeneralPortraits,
+  inspectRenderedFactionGeneralPortraits,
+} = require('./faction-general-qa.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -601,6 +605,8 @@ async function runViewport(win, width, height) {
 
   await openBattle(win, 'battle-demo-attacker-victory');
   const modal = await modalSnapshot(win);
+  const battlePortraits = await inspectRenderedFactionGeneralPortraits(win, '[role="dialog"][data-qa-battle-report-modal] [data-qa-battle-side-avatar] [data-qa-faction-general]');
+  assertRenderedFactionGeneralPortraits(battlePortraits, ['aegis', 'veyra'], `${label} battle report`);
   if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.roundCount !== 5 || modal.analysisOpenCount !== 0 || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount < 1 || modal.technologyTooltipCount !== modal.technologyRowCount || modal.technologyTooltipImageCount < modal.technologyRowCount || modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || modal.eventCardCount < 1 || !modal.hasBattlePoints || modal.commanderTechnicalText || !modal.hasHumanCommanderEffect || !modal.hasVisualReport || modal.hasInitialSnapshot || modal.hasProvenance || modal.hasRoundSummary || modal.hasRoundLog || !modal.roundAnalysisValid || modal.hasComposition || !modal.hasOutcome || !modal.hasOutcomeBeforeAfter || !modal.outcomeBeforeVisualReport || !modal.internalScroll || modal.internalHorizontalOverflow || modal.technicalText || !modal.bodyLocked || !modal.stageInert) {
     throw new Error(`Battle modal contract failed at ${label}: ${JSON.stringify(modal)}`);
   }

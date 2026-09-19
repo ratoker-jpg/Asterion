@@ -40,6 +40,10 @@ jobs:
         run: npm run test:fleet
       - name: Build renderer
         run: npm run build
+      - name: Production/test isolation Electron QA
+        env:
+          ASTERION_SKIP_SCREENSHOTS: '1'
+        run: npm run test:production-test-isolation-ui
       - name: Science Electron QA
         env:
           ASTERION_SKIP_SCREENSHOTS: '1'

@@ -22,6 +22,7 @@ export function FactionGeneralPortrait({
       className={classes}
       data-qa-faction-general
       data-faction={factionId ?? 'unknown'}
+      data-asset={asset ? `${factionId}_general.png` : undefined}
       data-crop="upper"
       aria-hidden={decorative || undefined}
       aria-label={!decorative ? alt : undefined}

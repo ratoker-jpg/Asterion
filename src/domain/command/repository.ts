@@ -5,6 +5,7 @@ import {
   DEFAULT_DIPLOMACY,
   DEFAULT_JOINT_OPERATIONS,
   DEFAULT_RESOURCE_REQUESTS,
+  TEST_COMMAND_DEFAULT_FIXTURE_ID,
 } from './catalog.ts';
 import type {
   AllianceAccent,
@@ -111,13 +112,20 @@ export function migrateCommandState(value: unknown, mode: RuntimeMode = 'test'):
   if (!isRecord(value)) return defaults;
 
   const persistedAlliance = isRecord(value.alliance) ? value.alliance : {};
-  const isFixtureAlliance = persistedAlliance.name === DEFAULT_ALLIANCE_PROFILE.name
-    && String(persistedAlliance.tag ?? '').trim().toUpperCase() === DEFAULT_ALLIANCE_PROFILE.tag;
+  const isFixtureAlliance = persistedAlliance.fixtureId === TEST_COMMAND_DEFAULT_FIXTURE_ID;
   const alliance = mode === 'production' && isFixtureAlliance ? {} : persistedAlliance;
+  const fixtureId = mode === 'test'
+    ? persistedAlliance.fixtureId === TEST_COMMAND_DEFAULT_FIXTURE_ID
+      ? TEST_COMMAND_DEFAULT_FIXTURE_ID
+      : isRecord(value.alliance) ? undefined : defaults.alliance.fixtureId
+    : undefined;
+  const defaultAlliance = { ...defaults.alliance };
+  delete defaultAlliance.fixtureId;
   const migrated: CommandState = {
     ...defaults,
     alliance: {
-      ...defaults.alliance,
+      ...defaultAlliance,
+      ...(fixtureId ? { fixtureId } : {}),
       name: normalizeText(alliance.name, defaults.alliance.name, 42, 1),
       tag: normalizeText(alliance.tag, defaults.alliance.tag, 8, 1).toUpperCase(),
       motto: normalizeText(alliance.motto, defaults.alliance.motto, 72, 1),
@@ -246,16 +254,18 @@ export function markResourceRequestReviewing(state: CommandState, requestId: str
 
 export function updateAllianceSettings(state: CommandState, input: AllianceSettingsInput, mode: RuntimeMode = 'test'): CommandState {
   const normalized = migrateCommandState(state, mode);
+  const updatedAlliance: AllianceProfile = {
+    ...normalized.alliance,
+    name: normalizeText(input.name, normalized.alliance.name, 42, 1),
+    tag: normalizeText(input.tag, normalized.alliance.tag, 8, 1).toUpperCase(),
+    motto: normalizeText(input.motto, normalized.alliance.motto, 72, 1),
+    description: normalizeText(input.description, normalized.alliance.description, 220, 1),
+    emblem: normalizeEmblem(input.emblem, normalized.alliance.emblem),
+  };
+  delete updatedAlliance.fixtureId;
   return {
     ...normalized,
-    alliance: {
-      ...normalized.alliance,
-      name: normalizeText(input.name, normalized.alliance.name, 42, 1),
-      tag: normalizeText(input.tag, normalized.alliance.tag, 8, 1).toUpperCase(),
-      motto: normalizeText(input.motto, normalized.alliance.motto, 72, 1),
-      description: normalizeText(input.description, normalized.alliance.description, 220, 1),
-      emblem: normalizeEmblem(input.emblem, normalized.alliance.emblem),
-    },
+    alliance: updatedAlliance,
   };
 }
 

@@ -371,11 +371,11 @@
 }
 
 .battle-side-identity-v1 { display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: center; gap: 10px; min-width: 0; }
-.battle-side-avatar-v1 { display: grid; place-items: center; width: 50px; height: 50px; overflow: hidden; border: 1px solid rgba(75, 207, 239, .48); background: radial-gradient(circle at 50% 36%, rgba(26, 118, 150, .56), rgba(2, 21, 32, .9) 72%); box-shadow: inset 0 0 13px rgba(24, 181, 226, .16); }
+.battle-side-avatar-v1 { display: grid; place-items: center; width: 50px; height: 50px; overflow: hidden; border: 1px solid rgba(75, 207, 239, .48); background: transparent; box-shadow: inset 0 0 13px rgba(24, 181, 226, .16); }
 .battle-side-avatar-v1 img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 8%; }
 .battle-side-avatar-v1 .faction-general-portrait { width: 100%; height: 100%; }
 .battle-side-avatar-v1 .faction-general-portrait img { width: 100%; height: 205%; object-fit: cover; object-position: 50% 0; }
-.battle-header-side-v1.defender .battle-side-avatar-v1 { border-color: rgba(228, 201, 112, .5); background: radial-gradient(circle at 50% 50%, rgba(111, 63, 56, .68), rgba(25, 18, 19, .94) 72%); }
+.battle-header-side-v1.defender .battle-side-avatar-v1 { border-color: rgba(228, 201, 112, .5); background: transparent; }
 .battle-header-side-v1.defender .battle-side-avatar-v1 img { padding: 0; object-fit: cover; object-position: 50% 8%; }
 .battle-side-avatar-v1 b { color: #dff9ff; font-size: 13px; letter-spacing: .08em; }
 .battle-side-copy-v1 { display: grid; gap: 3px; min-width: 0; }

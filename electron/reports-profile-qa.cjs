@@ -1,6 +1,10 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const {
+  assertRenderedFactionGeneralPortraits,
+  inspectRenderedFactionGeneralPortraits,
+} = require('./faction-general-qa.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -182,6 +186,8 @@ async function runViewport(win, width, height) {
 
   const profile = await profileSnapshot(win);
   if (!profile.visible || profile.name !== 'Dendrilion' || !profile.avatar.includes('aegis_general') || profile.alliance !== 'Содружество Гелион' || profile.allianceTag !== 'HLN') throw new Error(`Profile contract failed at ${label}: ${JSON.stringify(profile)}`);
+  const profilePortraits = await inspectRenderedFactionGeneralPortraits(win, '[data-qa-profile] [data-qa-faction-general]');
+  assertRenderedFactionGeneralPortraits(profilePortraits, ['aegis'], `${label} profile`);
   if (JSON.stringify(profile.folderIds) !== JSON.stringify(EXPECTED_FOLDER_IDS) || JSON.stringify(profile.folderLabels) !== JSON.stringify(EXPECTED_FOLDER_LABELS)) throw new Error(`Reports folder contract failed at ${label}: ${JSON.stringify(profile)}`);
   if (profile.metricValues.length !== 4 || profile.focusableMetrics !== 4 || profile.horizontalOverflow || profile.bodyHorizontalOverflow) throw new Error(`Profile geometry/metrics contract failed at ${label}: ${JSON.stringify(profile)}`);
   await win.webContents.executeJavaScript(`document.querySelector('[data-qa-profile-metric="resourcePoints"]')?.focus()`);

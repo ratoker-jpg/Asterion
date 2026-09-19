@@ -7,9 +7,12 @@ import type {
   ResourceRequest,
 } from './types.ts';
 
+export const TEST_COMMAND_DEFAULT_FIXTURE_ID = 'test-command-default-v1' as const;
+
 export const DEFAULT_ALLIANCE_PROFILE: AllianceProfile = {
   name: 'Содружество Гелион',
   tag: 'HLN',
+  fixtureId: TEST_COMMAND_DEFAULT_FIXTURE_ID,
   leaderMemberId: 'member-kai-norden',
   motto: 'Единый курс. Общая орбита.',
   description: 'Тактический союз колоний внутреннего сектора. Совместные операции координируются через Командование.',
