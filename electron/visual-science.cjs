@@ -9,6 +9,7 @@ app.on('window-all-closed', () => {});
 const ROOT = path.join(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'artifacts-pass1', 'science-qa');
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
+const TEST_TIME_SCALE_KEY = 'asterion.test-time-scale.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const SCIENCE_ID = 1;
 // Science 1 at level 1 with laboratory level 1: 45,000 ms × 95%.
@@ -79,11 +80,13 @@ async function seed(win, science) {
     save.minerals = 1_000_000;
     save.gas = 1_000_000;
     planet.energy = 1_000_000;
+    save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     Object.assign(save.science.levels, ${JSON.stringify(science.levels ?? {})});
     save.science.levels[1] = ${science.level};
     save.science.queue = ${JSON.stringify(science.queue)};
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 10);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
     return true;
   })()`);
   if (!ok) throw new Error('Could not seed Science save');
