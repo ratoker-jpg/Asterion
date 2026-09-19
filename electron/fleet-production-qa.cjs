@@ -134,15 +134,15 @@ async function setCargoValue(win, kind, quantity) {
   await settle(win);
 }
 
-async function runTransportUiCycle(win, label) {
+async function runTransportUiCycle(win, label, directory) {
   await seedProductionSave(win, (save, planetState) => {
     planetState.fleet.ships.transporter = 1;
     planetState.buildings = { ...planetState.buildings, 'gas-production-1': 0, 'gas-production-2': 0 };
     planetState.productionBots = { ...planetState.productionBots, gas: 0 };
-    planetState.resources = { ...planetState.resources, metal: 1_000, minerals: 1_000, gas: 189_000_000 };
+    planetState.resources = { ...planetState.resources, metal: 500_000, minerals: 500_000, gas: 189_000_000 };
     planetState.recycling = { ...planetState.recycling, availableDebris: 100_000 };
-    save.metal = 1_000;
-    save.minerals = 1_000;
+    save.metal = 500_000;
+    save.minerals = 500_000;
     save.gas = 189_000_000;
     save.currentPlanetId = 'helion-01';
     save.planets = { 'helion-01': planetState };
@@ -156,14 +156,29 @@ async function runTransportUiCycle(win, label) {
   await waitFor(win, `document.querySelector('[data-qa-flight-preview-open]') && !document.querySelector('[data-qa-flight-preview-open]').disabled`);
   await click(win, '[data-qa-flight-preview-open]');
   await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
+  await capture(win, directory, 'transport-preview');
   const beforeCargo = await win.webContents.executeJavaScript(`(() => ({
     relation: document.querySelector('.fleet-workspace-v1')?.getAttribute('data-qa-target-relation') || '',
+    targetValue: document.querySelector('[data-qa-transport-target-select] select')?.value || '',
+    targetOptions: Array.from(document.querySelectorAll('[data-qa-transport-target-select] option')).map((option) => option.textContent?.trim() || ''),
     kinds: Array.from(document.querySelectorAll('[data-qa-flight-cargo] input')).map((input) => input.getAttribute('data-qa-cargo') || ''),
     hasEnergy: Boolean(document.querySelector('[data-qa-flight-cargo] [data-qa-cargo="energy"]')),
     capacity: document.querySelector('[data-qa-flight-cargo]')?.getAttribute('data-qa-cargo-capacity') || '',
+    maxValues: Object.fromEntries(Array.from(document.querySelectorAll('[data-qa-flight-cargo] input')).map((input) => [input.getAttribute('data-qa-cargo') || '', Number(input.max)])),
   }))()`);
-  if (beforeCargo.relation !== 'ally' || JSON.stringify(beforeCargo.kinds) !== JSON.stringify(['metal', 'minerals', 'gas', 'debris']) || beforeCargo.hasEnergy || !beforeCargo.capacity) {
+  const totalCapacity = Number(beforeCargo.capacity.split('/')[1]);
+  if (beforeCargo.relation !== 'ally' || beforeCargo.targetValue !== 'test-mode-ally-ira-vel-v1' || !beforeCargo.targetOptions.some((option) => option.includes('Союзная')) || JSON.stringify(beforeCargo.kinds) !== JSON.stringify(['metal', 'minerals', 'gas', 'debris']) || beforeCargo.hasEnergy || !beforeCargo.capacity || beforeCargo.maxValues.metal !== totalCapacity) {
     throw new Error(`${label}: transport cargo editor contract failed ${JSON.stringify(beforeCargo)}`);
+  }
+  const halfCapacity = Math.floor(totalCapacity / 2);
+  await setCargoValue(win, 'metal', halfCapacity);
+  const remainingCapacity = await win.webContents.executeJavaScript(`(() => ({
+    metal: Number(document.querySelector('[data-qa-cargo="metal"]')?.max || 0),
+    minerals: Number(document.querySelector('[data-qa-cargo="minerals"]')?.max || 0),
+    gas: Number(document.querySelector('[data-qa-cargo="gas"]')?.max || 0),
+  }))()`);
+  if (remainingCapacity.metal !== totalCapacity || remainingCapacity.minerals !== totalCapacity - halfCapacity || remainingCapacity.gas !== totalCapacity - halfCapacity) {
+    throw new Error(`${label}: cargo field maxima did not follow remaining shared capacity ${JSON.stringify({ totalCapacity, halfCapacity, remainingCapacity })}`);
   }
   await setCargoValue(win, 'metal', 100);
   await setCargoValue(win, 'minerals', 50);
@@ -175,6 +190,24 @@ async function runTransportUiCycle(win, label) {
   }))()`);
   if (JSON.stringify(cargo.values) !== JSON.stringify({ metal: 100, minerals: 50, gas: 25, debris: 10 }) || cargo.overflow) {
     throw new Error(`${label}: transport cargo values/warning mismatch ${JSON.stringify(cargo)}`);
+  }
+  await click(win, '[data-qa-flight-preview-cancel]');
+  await waitFor(win, `!document.querySelector('[data-qa-flight-preview-backdrop]')`);
+  const preservedSelection = await win.webContents.executeJavaScript(`(() => ({
+    transporter: document.querySelector('[data-qa-fleet-ship="transporter"] input[type="number"]')?.value || '',
+    previewEnabled: Boolean(document.querySelector('[data-qa-flight-preview-open]') && !document.querySelector('[data-qa-flight-preview-open]').disabled),
+  }))()`);
+  if (preservedSelection.transporter !== '1' || !preservedSelection.previewEnabled) throw new Error(`${label}: cancel cleared the selected fleet ${JSON.stringify(preservedSelection)}`);
+  await click(win, '[data-qa-flight-preview-open]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
+  const reopened = await win.webContents.executeJavaScript(`(() => ({
+    ship: document.querySelector('[data-qa-flight-ships]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+    metal: Number(document.querySelector('[data-qa-cargo="metal"]')?.value || 0),
+    minerals: Number(document.querySelector('[data-qa-cargo="minerals"]')?.value || 0),
+    relation: document.querySelector('.fleet-workspace-v1')?.getAttribute('data-qa-target-relation') || '',
+  }))()`);
+  if (!reopened.ship.includes('Транспорт') || reopened.metal !== 100 || reopened.minerals !== 50 || reopened.relation !== 'ally') {
+    throw new Error(`${label}: reopening preview did not preserve the draft ${JSON.stringify(reopened)}`);
   }
   await click(win, '[data-qa-flight-dispatch-confirm]');
   await waitFor(win, `document.querySelector('[data-qa-flight-row]')`);
@@ -495,7 +528,7 @@ async function runViewport(width, height) {
       throw new Error(`${label}: offline fleet completion duplicated after reload`);
     }
 
-    const transportCycle = await runTransportUiCycle(win, label);
+    const transportCycle = await runTransportUiCycle(win, label, directory);
     const flightCycle = await runFlightRuntimeCycle(win, label);
 
     await seedProductionSave(win, (save, planetState) => {

@@ -1007,9 +1007,11 @@ html.asterion-long-page:has([data-qa-flight-preview-backdrop]) #root {
   .flight-timeline-summary-head small { font-size: 8px; }
   .flight-timeline-summary-head span { font-size: 7px; }
   .resource-building-action-confirm.flight-timeline-modal .flight-timeline-summary > .flight-timeline-metrics { margin-top: 7px; }
-  .resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo { padding: 10px 12px 9px; }
-  .resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-field { grid-template-columns: minmax(0, 1fr) minmax(112px, 128px); gap: 8px; padding-bottom: 7px; }
-  .resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-field input { height: 34px; padding-inline: 8px; font-size: 13px; }
+  .resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo { padding: 10px 12px 7px; }
+  .resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-grid { gap: 4px; margin-top: 7px; }
+  .resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-field { grid-template-columns: minmax(0, 1fr) minmax(112px, 128px); gap: 6px; padding-bottom: 3px; }
+  .resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-field input { height: 30px; padding-inline: 8px; font-size: 13px; }
+  .resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo > p { padding-top: 3px; line-height: 1.2; }
 }
 
 @media (max-width: 1050px) and (min-width: 761px) {
@@ -1116,3 +1118,56 @@ html.asterion-long-page:has([data-qa-flight-preview-backdrop]) #root {
   .flight-timeline-target-status { margin-top: 3px; font-size: 7px; }
   .flight-timeline-target-status.is-invalid { padding: 3px 4px; }
 }
+
+/* Transport cargo is available for every transport target; green distinguishes
+   it from the intentionally locked colonization loadout. */
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo {
+  border-color: rgba(82, 214, 160, .42);
+  border-left-color: #52d6a0;
+  background: linear-gradient(155deg, rgba(17, 66, 58, .58), rgba(4, 25, 34, .88));
+  box-shadow: inset 0 0 24px rgba(82, 214, 160, .055);
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-head strong { color: #c9f2dd; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-head > span {
+  border-color: rgba(82, 214, 160, .48);
+  background: rgba(27, 126, 91, .14);
+  color: #b8f0d1;
+  font-size: 9px;
+  line-height: 1.45;
+  letter-spacing: .06em;
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-field { border-bottom-color: rgba(82, 214, 160, .18); }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-field input:not(:disabled) { border-color: rgba(82, 214, 160, .62); }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-field input:not(:disabled):focus {
+  border-color: #52d6a0;
+  outline-color: rgba(82, 214, 160, .28);
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-field em {
+  color: #78cba5;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo > p { color: #9bd9bb; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-step.is-ship-step > div {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-ship-list {
+  min-height: 0;
+  flex: 1 1 auto;
+  align-content: start;
+  align-items: start;
+  grid-auto-rows: max-content;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-color: rgba(82, 214, 160, .72) rgba(3, 25, 37, .6);
+  scrollbar-width: thin;
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-ship-card {
+  align-self: start;
+  height: fit-content;
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-metrics [data-qa-flight-metric="population"] strong { color: #65dcf3; }
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-metrics [data-qa-flight-metric="cargo-capacity"] strong { color: #78e0ae; }

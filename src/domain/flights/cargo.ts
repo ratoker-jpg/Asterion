@@ -74,6 +74,22 @@ export function getCargoCapacity(cargo: unknown, totalCapacity: unknown): CargoC
   return { used, total, free: Math.max(0, total - used) };
 }
 
+/** Returns the amount that can still be entered in one resource field. */
+export function getCargoFieldMaximum(
+  key: TransportCargoKey,
+  cargo: unknown,
+  sourceResources: TransportResourceWallet,
+  sourceDebris: unknown,
+  totalCapacity: unknown,
+): number {
+  const normalized = normalizeTransportCargo(cargo);
+  const sourceAvailable = key === 'debris'
+    ? normalizeCargoAmount(sourceDebris)
+    : normalizeCargoAmount(sourceResources[key]);
+  const freeCapacity = getCargoCapacity(normalized, totalCapacity).free;
+  return Math.min(sourceAvailable, normalized[key] + freeCapacity);
+}
+
 /** Clamps draft cargo in stable resource order to source balances and shared fleet capacity. */
 export function clampCargoToSourceAndCapacity(
   requested: unknown,

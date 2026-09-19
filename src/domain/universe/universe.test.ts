@@ -308,7 +308,9 @@ test('spy and fleet actions are honest about unsupported runtime', () => {
   const empty = system.positions.find((node) => node.kind === 'empty')!;
 
   assert.equal(getUniverseActionState('spy', homeworld, 'player-current').enabled, false);
-  assert.equal(getUniverseActionState('fleet', homeworld, 'player-current').reason, 'Это ваша планета.');
+  assert.equal(getUniverseActionState('fleet', homeworld, 'player-current').status, 'supported');
+  assert.equal(getUniverseActionState('fleet', homeworld, 'player-current').enabled, true);
+  assert.equal(getUniverseActionState('fleet', homeworld, 'player-current').reason, 'Своя планета принимает транспортировку.');
   assert.equal(getUniverseActionState('spy', foreign, 'player-current').status, 'prototype');
   assert.equal(getUniverseActionState('fleet', foreign, 'player-current').enabled, false);
   assert.equal(getUniverseActionState('fleet', ally, 'player-current').status, 'supported');

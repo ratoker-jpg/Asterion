@@ -6,6 +6,7 @@ import {
   clampCargoToSourceAndCapacity,
   creditTransportCargo,
   getCargoCapacity,
+  getCargoFieldMaximum,
   getFleetCargoCapacity,
   getOverflowWarning,
   normalizePersistedTransportCargo,
@@ -39,6 +40,16 @@ test('clamps every cargo kind to source stock and the shared fleet capacity', ()
     ),
     { metal: 10_000, minerals: 500, gas: 400, debris: 0 },
   );
+});
+
+test('reports each cargo field against remaining shared capacity', () => {
+  const source = { metal: 449_795_473, minerals: 299_903_040, gas: 189_382_930 };
+  const capacity = 240_000;
+
+  assert.equal(getCargoFieldMaximum('metal', { metal: 0, minerals: 0, gas: 0, debris: 0 }, source, 100_000, capacity), 240_000);
+  assert.equal(getCargoFieldMaximum('minerals', { metal: 120_000, minerals: 0, gas: 0, debris: 0 }, source, 100_000, capacity), 120_000);
+  assert.equal(getCargoFieldMaximum('metal', { metal: 120_000, minerals: 0, gas: 0, debris: 0 }, source, 100_000, capacity), 240_000);
+  assert.equal(getCargoFieldMaximum('gas', { metal: 120_000, minerals: 120_000, gas: 0, debris: 0 }, source, 100_000, capacity), 0);
 });
 
 test('credits capped resources once and returns debris without a capacity cap', () => {

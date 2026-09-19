@@ -761,6 +761,15 @@ export function getUniverseActionState(
     };
   }
   if (node.ownerId === currentOwnerId || node.isHomeworld) {
+    if (action === 'fleet') {
+      return {
+        action,
+        enabled: true,
+        status: 'supported',
+        label,
+        reason: 'Своя планета принимает транспортировку.',
+      };
+    }
     return {
       action,
       enabled: false,

@@ -346,13 +346,24 @@ async function runViewport(width, height) {
     await checkModal(win);
     const playerPortraits = await inspectRenderedFactionGeneralPortraits(win, '[data-qa-universe-inspector] [data-qa-faction-general]');
     assertRenderedFactionGeneralPortraits(playerPortraits, ['aegis'], `${label} player universe`);
-    if (player.kind !== 'player' || player.ownerName !== 'Dendrilion' || !player.avatar.includes('aegis_general') || player.points.length !== 4 || player.planetRows !== 1 || player.actions.length !== 2 || player.actions.some((action) => !action.disabled || action.status !== 'disabled' || !action.title.includes('Это ваша планета'))) {
+    const playerSpyAction = player.actions.find((action) => action.action === 'spy');
+    const playerFleetAction = player.actions.find((action) => action.action === 'fleet');
+    if (player.kind !== 'player' || player.ownerName !== 'Dendrilion' || !player.avatar.includes('aegis_general') || player.points.length !== 4 || player.planetRows !== 1 || player.actions.length !== 2
+      || !playerSpyAction || !playerSpyAction.disabled || playerSpyAction.status !== 'disabled' || !playerSpyAction.title.includes('Это ваша планета')
+      || !playerFleetAction || playerFleetAction.disabled || playerFleetAction.status !== 'supported' || !playerFleetAction.title.includes('Своя планета принимает транспортировку')) {
       throw new Error(`${label}: player inspector contract failed ${JSON.stringify(player)}`);
     }
     if (!player.text.includes('Астеры') || !player.text.includes('Содружество Гелион') || !player.text.includes('[HLN]')) throw new Error(`${label}: player profile identity contract failed ${JSON.stringify(player)}`);
     await capture(win, directory, 'player-inspector');
     await dismissInspector(win);
     await checkRestoredFocus(win, 'player-planet-helion-01');
+    await clickObject(win, '[data-qa-universe-object="player-planet-helion-01"]');
+    await clickAt(win, '[data-qa-universe-action="fleet"]');
+    await waitFor(win, `document.querySelector('.fleet-workspace-v1[data-qa-flight-launch-context]')?.getAttribute('data-qa-flight-launch-context') === '[1:1:1]'`);
+    const ownLaunchRelation = await win.webContents.executeJavaScript(`document.querySelector('.fleet-workspace-v1')?.getAttribute('data-qa-target-relation') || ''`);
+    if (ownLaunchRelation !== 'self') throw new Error(`${label}: own planet fleet action did not preserve self relation: ${ownLaunchRelation}`);
+    await clickPrimary(win, 'universe');
+    await selectSystem(win, 1);
 
     const npcSelector = '[data-qa-universe-kind="npc"][data-qa-universe-relation="neutral"]';
     const npcSystem = await findObject(win, npcSelector);
@@ -454,7 +465,7 @@ async function runViewport(width, height) {
     await clickAt(win, '[data-qa-flight-preview-open]');
     await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
     const timelineText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-flight-preview-backdrop]')?.textContent?.replace(/\s+/g, ' ').trim() || ''`);
-    const timelineFields = ['ИСТОЧНИК', 'выбрано флотом', 'ЦЕЛЬ', 'Цель подтверждена', 'СОСТАВ ФЛОТА', 'Колонизатор × 1', 'Население: 12', 'ПАРАМЕТРЫ ПЕРЕЛЁТА', 'ЭФФ. СКОРОСТЬ', 'ТУДА', 'ОБРАТНО', 'ПОЛНЫЙ ЦИКЛ', 'ГАЗ', 'ПРИБЫТИЕ', 'МОСКОВСКОЕ ВРЕМЯ', 'МСК', 'Газ списывается только за один путь туда.', 'При отзыве колонизатор возвращается', 'ОТМЕНА', 'ОТПРАВИТЬ'];
+    const timelineFields = ['ИСТОЧНИК', 'выбрано флотом', 'ЦЕЛЬ', 'Цель подтверждена', 'СОСТАВ ФЛОТА', 'Колонизатор', 'Население: 12', 'ПАРАМЕТРЫ ПЕРЕЛЁТА', 'ЭФФ. СКОРОСТЬ', 'ТУДА', 'ОБРАТНО', 'ПОЛНЫЙ ЦИКЛ', 'ГАЗ', 'НАСЕЛЕНИЕ', 'ПРИБЫТИЕ', 'МОСКОВСКОЕ ВРЕМЯ', 'МСК', 'Газ списывается только за один путь туда.', 'При отзыве колонизатор возвращается', 'ОТМЕНА', 'ОТПРАВИТЬ'];
     if (timelineFields.some((field) => !timelineText.includes(field))) throw new Error(`${label}: Concept 2 Mission Timeline fields are incomplete ${JSON.stringify({ missing: timelineFields.filter((field) => !timelineText.includes(field)), timelineText })}`);
     const timelineStructure = await win.webContents.executeJavaScript(`(() => ({
       sourceIsLocked: Boolean(document.querySelector('[data-qa-flight-source-step]')) && !document.querySelector('[data-qa-flight-source-step] .flight-timeline-edit'),

@@ -135,6 +135,7 @@ import {
 } from './application/flights.ts';
 import { enqueueApplicationStateUpdate } from './application/state.ts';
 import { getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
+import type { TargetRelation } from './domain/flights/types.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import planetColonized from '../assets/source/starter/planets/planet_colonized.png';
@@ -874,17 +875,17 @@ export function App() {
     setNotice('Настройки союза сохранены в локальном прототипе.');
   };
 
-  const openTransportLaunch = (target: { planetId: string; coordinate: { galaxy: number; system: number; position: number } }) => {
+  const openTransportLaunch = (target: { planetId: string; coordinate: { galaxy: number; system: number; position: number }; relation: TargetRelation }) => {
     clearBuildingInterior();
     navigateTo('fleets');
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
-    setNotice(`Союзная цель выбрана: [${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}].`);
+    setNotice(`${target.relation === 'self' ? 'Своя' : 'Союзная'} цель выбрана: [${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}].`);
     window.setTimeout(() => {
       window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, {
         detail: {
           missionId: 'transport',
-          targetRelation: 'ally',
+          targetRelation: target.relation,
           destination: { kind: 'planet', planetId: target.planetId, coordinate: target.coordinate },
         },
       }));

@@ -41,7 +41,7 @@ export function ResourceChip({ kind, label, value, capacity, showCapacity = fals
 
   return (
     <div
-      className={`asterion-header__resource asterion-header__resource--${kind}${shouldPulse ? ' is-pulsing' : ''}`}
+      className={`asterion-header__resource asterion-header__resource--${kind}${shouldPulse ? ' is-pulsing' : ''}${kind === 'energy' && debris !== undefined ? ' is-energy-split' : ''}`}
       tabIndex={0}
       data-qa-resource-chip={kind}
       data-qa-resource-kind={kind}
@@ -50,27 +50,34 @@ export function ResourceChip({ kind, label, value, capacity, showCapacity = fals
       data-qa-resource-pulse={shouldPulse}
       aria-describedby={tooltipId}
     >
-      <span className="asterion-header__resource-icon"><HeaderGameIcon kind={kind === 'debris' ? 'energy' : kind} /></span>
-      <span className="asterion-header__resource-text">
-        <small>{label}</small>
-        <strong>{showCapacity && capacity ? `${formatNumber(value)} / ${formatNumber(capacity)}` : formatNumber(value)}</strong>
-        {kind === 'energy' && debris !== undefined ? <span className="asterion-header__resource-compound" data-qa-debris-header>
-          <GameIcon kind="debris" />
-          <span><small>ОБЛОМКИ</small><b data-qa-debris-header-value>{formatNumber(debris)}</b></span>
-        </span> : null}
-        {hasFill ? (
-          <span
-            className={`asterion-header__resource-fill asterion-header__resource-fill--${fillTone}${shouldPulse ? ' is-pulsing' : ''}`}
-            data-qa-resource-fill={kind}
-            data-qa-resource-kind={kind}
-            data-qa-resource-ratio={fill}
-            data-qa-resource-tone={fillTone}
-            data-qa-resource-pulse={shouldPulse}
-          >
-            <i style={{ '--fill': `${fill}%` } as CSSProperties} />
-          </span>
-        ) : null}
-      </span>
+      {kind === 'energy' && debris !== undefined ? <span className="asterion-header__resource-energy-split">
+        <span className="asterion-header__resource-energy-half" data-qa-energy-header>
+          <span className="asterion-header__resource-half-icon"><HeaderGameIcon kind="energy" /></span>
+          <span className="asterion-header__resource-half-copy"><small>{label}</small><strong>{formatNumber(value)}</strong></span>
+        </span>
+        <span className="asterion-header__resource-energy-half asterion-header__resource-debris-half" data-qa-debris-header>
+          <span className="asterion-header__resource-half-icon"><GameIcon kind="debris" /></span>
+          <span className="asterion-header__resource-half-copy"><small>ОБЛОМКИ</small><strong data-qa-debris-header-value>{formatNumber(debris)}</strong></span>
+        </span>
+      </span> : <>
+        <span className="asterion-header__resource-icon"><HeaderGameIcon kind={kind === 'debris' ? 'energy' : kind} /></span>
+        <span className="asterion-header__resource-text">
+          <small>{label}</small>
+          <strong>{showCapacity && capacity ? `${formatNumber(value)} / ${formatNumber(capacity)}` : formatNumber(value)}</strong>
+          {hasFill ? (
+            <span
+              className={`asterion-header__resource-fill asterion-header__resource-fill--${fillTone}${shouldPulse ? ' is-pulsing' : ''}`}
+              data-qa-resource-fill={kind}
+              data-qa-resource-kind={kind}
+              data-qa-resource-ratio={fill}
+              data-qa-resource-tone={fillTone}
+              data-qa-resource-pulse={shouldPulse}
+            >
+              <i style={{ '--fill': `${fill}%` } as CSSProperties} />
+            </span>
+          ) : null}
+        </span>
+      </>}
       <span id={tooltipId} className="asterion-header__resource-tooltip" data-qa-resource-tooltip={kind} role="tooltip">
         <strong>{label}</strong>
         {capacity ? <span>{formatNumber(value)} / {formatNumber(capacity)}</span> : <span>{formatNumber(value)}</span>}
