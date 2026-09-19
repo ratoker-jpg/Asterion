@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { HeaderGameIcon } from './HeaderAssetIcons';
+import { GameIcon } from './HeaderIcons';
 import type { HeaderResourceModel } from './types.ts';
 
 function formatNumber(value: number) {
@@ -21,7 +22,7 @@ function formatStorageEta(current: number, capacity: number, hourlyGain: number)
   return parts.join(' ');
 }
 
-export function ResourceChip({ kind, label, value, capacity, showCapacity = false, hourlyGain, description, populationBreakdown }: HeaderResourceModel) {
+export function ResourceChip({ kind, label, value, capacity, showCapacity = false, hourlyGain, description, debris, populationBreakdown }: HeaderResourceModel) {
   const fill = capacity ? Math.min(100, Math.max(0, (value / capacity) * 100)) : 0;
   const fillTone = fill <= 20
     ? 'normal'
@@ -34,7 +35,7 @@ export function ResourceChip({ kind, label, value, capacity, showCapacity = fals
           : fill <= 85
             ? 'danger'
             : 'critical';
-  const hasFill = kind !== 'energy' && Boolean(capacity);
+  const hasFill = kind !== 'energy' && kind !== 'debris' && Boolean(capacity);
   const shouldPulse = (kind === 'metal' || kind === 'mineral' || kind === 'gas') && fill > 85;
   const tooltipId = `asterion-header-resource-tooltip-${kind}`;
 
@@ -49,10 +50,14 @@ export function ResourceChip({ kind, label, value, capacity, showCapacity = fals
       data-qa-resource-pulse={shouldPulse}
       aria-describedby={tooltipId}
     >
-      <span className="asterion-header__resource-icon"><HeaderGameIcon kind={kind} /></span>
+      <span className="asterion-header__resource-icon"><HeaderGameIcon kind={kind === 'debris' ? 'energy' : kind} /></span>
       <span className="asterion-header__resource-text">
         <small>{label}</small>
         <strong>{showCapacity && capacity ? `${formatNumber(value)} / ${formatNumber(capacity)}` : formatNumber(value)}</strong>
+        {kind === 'energy' && debris !== undefined ? <span className="asterion-header__resource-compound" data-qa-debris-header>
+          <GameIcon kind="debris" />
+          <span><small>ОБЛОМКИ</small><b data-qa-debris-header-value>{formatNumber(debris)}</b></span>
+        </span> : null}
         {hasFill ? (
           <span
             className={`asterion-header__resource-fill asterion-header__resource-fill--${fillTone}${shouldPulse ? ' is-pulsing' : ''}`}
@@ -80,6 +85,7 @@ export function ResourceChip({ kind, label, value, capacity, showCapacity = fals
           </div>
         ) : null}
         {description ? <span>{description}</span> : null}
+        {kind === 'energy' && debris !== undefined ? <span data-qa-debris-header-tooltip>Обломки: {formatNumber(debris)}</span> : null}
       </span>
     </div>
   );

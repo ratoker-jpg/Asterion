@@ -77,7 +77,7 @@ async function capture(win, directory, name) {
 }
 
 async function inspectMode(win, mode, label) {
-  const expectedNpcCount = mode === 'test' ? 7 : 0;
+  const expectedNpcCount = mode === 'test' ? 8 : 0;
   const expectedReports = mode === 'test' ? 3 : 0;
   const expectedOperations = mode === 'test' ? 4 : 0;
   const envelope = await readEnvelope(win, mode === 'test' ? TEST_KEY : PRODUCTION_KEY);
@@ -141,7 +141,7 @@ async function inspectMode(win, mode, label) {
     for (let system = 1; system <= 40 && !npcPortrait; system += 1) {
       await win.webContents.executeJavaScript(`(() => { const select = document.querySelector('select[aria-label="Солнечная система"]'); if (select) { select.value = '${system}'; select.dispatchEvent(new Event('change', { bubbles: true })); } })()`);
       await settle(win);
-      npcPortrait = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-universe-kind="npc"]')?.getAttribute('data-qa-universe-object') || ''`);
+      npcPortrait = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-universe-kind="npc"][data-qa-universe-relation="neutral"]')?.getAttribute('data-qa-universe-object') || ''`);
     }
     if (!npcPortrait) throw new Error(`${label}: Test Mode NPC nodes were not reachable from the universe selector`);
     await win.webContents.executeJavaScript(`document.querySelector('[data-qa-universe-object="${npcPortrait}"]')?.click()`);

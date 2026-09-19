@@ -1,5 +1,6 @@
 import type { ShipId } from '../combat/ids.ts';
 import type { UniverseCoordinate, UniverseObjectKind } from '../universe/types.ts';
+import type { TransportCargo } from './cargo.ts';
 
 export type MissionId =
   | 'transport'
@@ -20,8 +21,12 @@ export type FlightCompletionReason =
   | 'recalled'
   | 'colonized'
   | 'target-occupied'
+  | 'target-unavailable'
   | 'arrived'
   | 'mission-failed';
+
+export type TargetRelation = 'self' | 'ally';
+export type TransportCargoState = 'loaded' | 'delivered' | 'voided' | 'returned';
 
 export type FlightDestination =
   | { kind: 'coordinate'; coordinate: UniverseCoordinate }
@@ -40,6 +45,9 @@ export type FlightRecord = {
   /** Target snapshot retained so arrival validation is not based on UI state. */
   targetKind?: UniverseObjectKind;
   destinationPlanetId?: string;
+  /** Destination identity/relation are dispatch-time snapshots, not live authorization. */
+  destinationOwnerId?: string;
+  targetRelation?: TargetRelation;
   destinationCoordinate: UniverseCoordinate;
   selectedShips: Partial<Record<ShipId, number>>;
   populationReserved: number;
@@ -50,6 +58,12 @@ export type FlightRecord = {
   arrivalAt: number;
   returnAt?: number;
   gasCost: number;
+  /** Present for transport; absent remains valid for legacy colonization records. */
+  cargo?: TransportCargo;
+  cargoState?: TransportCargoState;
+  overflowWarning?: boolean;
+  deliveredAt?: number;
+  cargoResolvedAt?: number;
   phase: FlightPhase;
   completionReason?: FlightCompletionReason;
   recalledAt?: number;

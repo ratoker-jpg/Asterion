@@ -1,8 +1,11 @@
 import type { BuildingLevels } from './resource-zone.ts';
 import { getRecyclingBalance } from './balance-v1.ts';
+import type { RuntimeMode } from '../runtime/mode.ts';
 
 export const RECYCLING_MAX_LEVEL = 10;
 export const RECYCLING_INITIAL_DEBRIS = 100_000;
+export const TEST_RECYCLING_DEBRIS_FIXTURE_ID = 'test-recycling-debris-v1' as const;
+export const TEST_RECYCLING_DEBRIS_FIXTURE_VERSION = 1 as const;
 export const RECYCLING_STORAGE_MS = 24 * 60 * 60 * 1000;
 export const RECYCLING_RESOURCES = ['metal', 'minerals', 'gas'] as const;
 
@@ -35,7 +38,31 @@ export type RecyclingJob = {
 export type RecyclingState = {
   availableDebris: number;
   jobs: RecyclingJob[];
+  /** Persisted only for the versioned Test Mode starting stock. */
+  fixtureId?: typeof TEST_RECYCLING_DEBRIS_FIXTURE_ID;
 };
+
+export type RecyclingFixtureDescriptor = {
+  id: typeof TEST_RECYCLING_DEBRIS_FIXTURE_ID;
+  version: typeof TEST_RECYCLING_DEBRIS_FIXTURE_VERSION;
+  initialDebris: typeof RECYCLING_INITIAL_DEBRIS;
+};
+
+export type RecyclingFixtureContext = {
+  mode: RuntimeMode;
+  fixture: RecyclingFixtureDescriptor | null;
+};
+
+const TEST_RECYCLING_DEBRIS_FIXTURE: RecyclingFixtureDescriptor = {
+  id: TEST_RECYCLING_DEBRIS_FIXTURE_ID,
+  version: TEST_RECYCLING_DEBRIS_FIXTURE_VERSION,
+  initialDebris: RECYCLING_INITIAL_DEBRIS,
+};
+
+/** Resolves the only recycling fixture that application persistence may store. */
+export function resolveRecyclingFixture(mode: RuntimeMode): RecyclingFixtureDescriptor | null {
+  return mode === 'test' ? TEST_RECYCLING_DEBRIS_FIXTURE : null;
+}
 
 export type RecyclingStartValidation = {
   canStart: boolean;
@@ -95,10 +122,16 @@ export function createEmptyRecyclingAllocation(): ResourceAllocationPercent {
   return { metal: 0, minerals: 0, gas: 0 };
 }
 
-export function createDefaultRecyclingState(): RecyclingState {
+export function createDefaultRecyclingState(context: RecyclingFixtureContext): RecyclingState {
+  const fixture = context.mode === 'test'
+    && context.fixture?.id === TEST_RECYCLING_DEBRIS_FIXTURE_ID
+    && context.fixture.version === TEST_RECYCLING_DEBRIS_FIXTURE_VERSION
+    ? context.fixture
+    : null;
   return {
-    availableDebris: RECYCLING_INITIAL_DEBRIS,
+    availableDebris: fixture?.initialDebris ?? 0,
     jobs: [],
+    ...(fixture ? { fixtureId: fixture.id } : {}),
   };
 }
 
@@ -210,11 +243,17 @@ export function migrateRecyclingState(
   value: unknown,
   recyclingLevel: number,
   now = Date.now(),
+  context: RecyclingFixtureContext,
 ): RecyclingState {
   const source = value && typeof value === 'object' ? value as Record<string, unknown> : null;
-  const availableDebris = source
-    ? toNonNegativeInteger(source.availableDebris)
-    : RECYCLING_INITIAL_DEBRIS;
+  if (!source) return createDefaultRecyclingState(context);
+
+  const hasVerifiedTestFixtureMarker = source.fixtureId === TEST_RECYCLING_DEBRIS_FIXTURE_ID;
+  const availableDebris = context.mode === 'production'
+    && hasVerifiedTestFixtureMarker
+    && toNonNegativeInteger(source.availableDebris) === RECYCLING_INITIAL_DEBRIS
+    ? 0
+    : toNonNegativeInteger(source.availableDebris);
   const maxJobs = getRecyclingMaxConcurrentJobs(recyclingLevel);
   const sourceJobs = source && Array.isArray(source.jobs) ? source.jobs : [];
   const jobs: RecyclingJob[] = [];
@@ -225,7 +264,11 @@ export function migrateRecyclingState(
     if (migrated) jobs.push(migrated);
   }
 
-  return { availableDebris, jobs };
+  return {
+    availableDebris,
+    jobs,
+    ...(context.mode === 'test' && hasVerifiedTestFixtureMarker ? { fixtureId: TEST_RECYCLING_DEBRIS_FIXTURE_ID } : {}),
+  };
 }
 
 export function advanceRecyclingState(state: RecyclingState, now: number): RecyclingAdvanceTransition {
