@@ -18,7 +18,7 @@ import {
   type OwnedFleetState,
 } from '../domain/fleet/runtime.ts';
 import type { PlanetId, SaveState } from './contracts.ts';
-import { getPlanetState, replacePlanetState } from './contracts.ts';
+import { getPlanetResources, getPlanetState, replacePlanetResources, replacePlanetState } from './contracts.ts';
 import { transitionPlanetEnergySources } from './energy.ts';
 import { SAVE_SCHEMA_VERSION } from './persistence.ts';
 
@@ -57,7 +57,7 @@ export function getRepairWorkshopSnapshot(
     fleet: migratedFleet.fleet,
     defense: planet.defense,
     fleetProduction: planet.fleetProduction,
-    wallet: { metal: state.metal, minerals: state.minerals, gas: state.gas },
+    wallet: getPlanetResources(state, planetId),
     factionId: state.profile.factionId,
     hangarLevel: planet.buildings.hangar,
     solarSatellites,
@@ -102,16 +102,14 @@ function stateFromRepairTransition(
     state.science.levels,
     state.science.levels,
   );
-  return replacePlanetState({
+  const withPlanet = replacePlanetState({
     ...state,
     schemaVersion: SAVE_SCHEMA_VERSION,
-    metal: transition.wallet.metal,
-    minerals: transition.wallet.minerals,
-    gas: transition.wallet.gas,
   }, planetId, {
     ...nextPlanet,
     repair: transition.repair,
   });
+  return replacePlanetResources(withPlanet, planetId, transition.wallet);
 }
 
 export function repairUnits(

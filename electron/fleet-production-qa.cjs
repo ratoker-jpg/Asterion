@@ -87,6 +87,103 @@ async function seedProductionSave(win, mutator) {
   await reload(win);
 }
 
+async function chooseFreeColonizationTarget(win) {
+  await click(win, '[data-qa-route="universe"]');
+  await waitFor(win, `document.querySelector('[data-qa-universe]')`);
+  await click(win, '[data-qa-universe-kind="empty"]');
+  await waitFor(win, `document.querySelector('[data-qa-universe-inspector]')`);
+  await click(win, '[data-qa-universe-special-action="colonize"]');
+  await waitFor(win, `document.querySelector('.fleet-workspace-v1[data-qa-flight-launch-context]')`);
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-open]') && !document.querySelector('[data-qa-flight-preview-open]').disabled`);
+}
+
+async function runFlightRuntimeCycle(win, label) {
+  await seedProductionSave(win, (save, planetState) => {
+    planetState.fleet.ships.colonizer = 1;
+    // Keep the recall assertion deterministic. Resource production is tested
+    // separately; passive gas income must not race the no-refund check.
+    planetState.buildings = { ...planetState.buildings, 'gas-production-1': 0, 'gas-production-2': 0 };
+    planetState.productionBots = { ...planetState.productionBots, gas: 0 };
+    planetState.resources = { ...planetState.resources, gas: 189_000_000 };
+    save.gas = 189_000_000;
+    save.currentPlanetId = 'helion-01';
+    save.planets = { 'helion-01': planetState };
+    save.queues = { 'helion-01': [] };
+    save.flights = { records: [], requestIndex: {} };
+  });
+
+  await click(win, '[data-qa-test-speed="15"]');
+  await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×15')`);
+  await chooseFreeColonizationTarget(win);
+  await click(win, '[data-qa-flight-preview-open]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
+  await click(win, '[data-qa-flight-dispatch-confirm]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-row]')`);
+  const outbound = await win.webContents.executeJavaScript(`(() => {
+    const row = document.querySelector('[data-qa-flight-row]');
+    return { phase: row?.getAttribute('data-qa-flight-phase') || '', target: row?.querySelector('[data-qa-flight-target]')?.textContent?.trim() || '' };
+  })()`);
+  if (outbound.phase !== 'outbound' || !outbound.target) throw new Error(`${label}: UI did not render the active outbound flight ${JSON.stringify(outbound)}`);
+
+  await click(win, '[data-qa-flight-recall]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-recall-backdrop]')`);
+  await click(win, '[data-qa-flight-recall-confirm]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-row]')?.getAttribute('data-qa-flight-phase') === 'returning'`);
+  const returning = await win.webContents.executeJavaScript(`(() => {
+    const row = document.querySelector('[data-qa-flight-row]');
+    return { phase: row?.getAttribute('data-qa-flight-phase') || '', timer: row?.querySelector('[data-qa-flight-return]')?.textContent?.trim() || '—' };
+  })()`);
+  if (returning.phase !== 'returning' || returning.timer === '—') throw new Error(`${label}: recall did not render the reverse timer ${JSON.stringify(returning)}`);
+  const gasAfterRecall = (await readSave(win)).gas;
+  await waitFor(win, `(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}');
+    const flight = save.flights?.records?.find((item) => item.completionReason === 'recalled');
+    return flight?.phase === 'completed' && save.planets?.['helion-01']?.fleet?.ships?.colonizer === 1;
+  })()`);
+  const recalledSave = await readSave(win);
+  if (recalledSave.gas !== gasAfterRecall || recalledSave.planets?.['helion-01']?.fleet?.ships?.colonizer !== 1) {
+    throw new Error(`${label}: recall changed gas or failed to return the colonizer ${JSON.stringify({ gasAfterRecall, recalledSave })}`);
+  }
+
+  await reload(win);
+  await click(win, '[data-qa-route="fleets"]');
+  await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
+  if (await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-flight-row]'))`)) throw new Error(`${label}: recalled flight reappeared after reload`);
+
+  await click(win, '[data-qa-test-speed="500"]');
+  await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×500')`);
+  await chooseFreeColonizationTarget(win);
+  await click(win, '[data-qa-flight-preview-open]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
+  await click(win, '[data-qa-flight-dispatch-confirm]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-row]')`);
+  const successfulTarget = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-flight-target]')?.textContent?.trim() || ''`);
+  await waitFor(win, `(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}');
+    return save.flights?.records?.some((item) => item.phase === 'completed' && item.completionReason === 'colonized')
+      && Object.keys(save.planets || {}).some((id) => id.startsWith('planet-'))
+      && save.planets?.['helion-01']?.fleet?.ships?.colonizer === 0;
+  })()`);
+  await waitFor(win, `!document.querySelector('[data-qa-flight-row]')`);
+  const arrivedSave = await readSave(win);
+  const colonyId = Object.keys(arrivedSave.planets || {}).find((id) => id.startsWith('planet-'));
+  if (!colonyId || !/^planet-\d+-\d+-\d+$/.test(colonyId) || arrivedSave.planets['helion-01'].fleet.ships.colonizer !== 0) {
+    throw new Error(`${label}: successful arrival did not create a deterministic colony or consume the colonizer ${JSON.stringify({ successfulTarget, colonyId, arrivedSave })}`);
+  }
+
+  await reload(win);
+  await click(win, '[data-qa-route="fleets"]');
+  await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
+  const persisted = await readSave(win);
+  const persistedColonyId = Object.keys(persisted.planets || {}).find((id) => id.startsWith('planet-'));
+  const persistedColonized = persisted.flights?.records?.some((item) => item.phase === 'completed' && item.completionReason === 'colonized');
+  const persistedNoActiveRow = !(await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-flight-row]'))`));
+  if (persistedColonyId !== colonyId || !persistedColonized || persisted.planets['helion-01'].fleet.ships.colonizer !== 0 || !persistedNoActiveRow) {
+    throw new Error(`${label}: successful arrival was not durable after reload ${JSON.stringify({ colonyId, persistedColonyId, persistedColonized, persistedNoActiveRow })}`);
+  }
+  return { recalledPhase: 'returning', successfulPhase: 'completed', colonyId, persisted: true };
+}
+
 async function capture(win, directory, name) {
   if (skipScreenshots) return;
   fs.mkdirSync(directory, { recursive: true });
@@ -122,6 +219,29 @@ async function runViewport(width, height) {
     await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
     const baseCardTag = await win.webContents.executeJavaScript(`document.querySelector('.fleet-yard-card-v1')?.tagName ?? ''`);
     if (baseCardTag === 'BUTTON') throw new Error(`${label}: fleet base card is still a button`);
+    const missionSlots = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('.fleet-mission-icons-v1 button')).map((button) => {
+      const buttonRect = button.getBoundingClientRect();
+      const image = button.querySelector('img');
+      const imageRect = image?.getBoundingClientRect();
+      const buttonStyle = getComputedStyle(button);
+      const imageStyle = image ? getComputedStyle(image) : null;
+      return {
+        label: button.getAttribute('aria-label') || '',
+        button: { x: buttonRect.x, y: buttonRect.y, width: buttonRect.width, height: buttonRect.height },
+        image: imageRect ? { x: imageRect.x, y: imageRect.y, width: imageRect.width, height: imageRect.height } : null,
+        naturalWidth: image?.naturalWidth || 0,
+        naturalHeight: image?.naturalHeight || 0,
+        buttonOverflow: buttonStyle.overflow,
+        objectFit: imageStyle?.objectFit || '',
+      };
+    })`);
+    const missionIconsFit = missionSlots.length === 9 && missionSlots.every((slot) => {
+      const button = slot.button;
+      const image = slot.image;
+      const epsilon = 0.5;
+      return button.width > 0 && Math.abs(button.width - button.height) <= epsilon && image && image.width > 0 && Math.abs(image.width - image.height) <= epsilon && image.x >= button.x - epsilon && image.y >= button.y - epsilon && image.x + image.width <= button.x + button.width + epsilon && image.y + image.height <= button.y + button.height + epsilon && slot.naturalWidth > 0 && slot.naturalHeight > 0 && slot.objectFit === 'contain';
+    });
+    if (!missionIconsFit) throw new Error(`${label}: mission icon slot contract failed ${JSON.stringify(missionSlots)}`);
 
     await click(win, '[data-qa-fleet-section="ships"]');
     await waitFor(win, `document.querySelector('[data-qa-construction-mode="ships"]')`);
@@ -286,6 +406,8 @@ async function runViewport(width, height) {
       throw new Error(`${label}: offline fleet completion duplicated after reload`);
     }
 
+    const flightCycle = await runFlightRuntimeCycle(win, label);
+
     await seedProductionSave(win, (save, planetState) => {
       const seedNow = Date.now();
       planetState.fleetProduction = {
@@ -310,6 +432,7 @@ async function runViewport(width, height) {
     await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
     await click(win, '[data-qa-fleet-section="ships"]');
     await waitFor(win, `document.querySelector('[data-qa-fleet-production-queue="ships"] [data-qa-fleet-production-order]')`);
+    await waitFor(win, `document.documentElement.classList.contains('asterion-long-page')`);
     const layout = await win.webContents.executeJavaScript(`(() => {
       const list = document.querySelector('[data-qa-fleet-production-queue="ships"] .fleet-production-queue-list-v1');
       const styles = list ? getComputedStyle(list) : null;
@@ -325,7 +448,7 @@ async function runViewport(width, height) {
     })()`);
     if (layout.horizontalOverflow || !layout.longPage || layout.orderCount !== 8 || layout.queueOverflowY !== 'visible' || layout.queueMaxHeight !== 'none' || layout.queueScrollHeight < layout.queueClientHeight) throw new Error(`${label}: fleet production layout overflow/long-page contract failed ${JSON.stringify(layout)}`);
     await capture(win, directory, 'fleet-production');
-    return { viewport: label, layout, screenshotsSkipped: skipScreenshots };
+    return { viewport: label, layout, missionSlots, flightCycle, screenshotsSkipped: skipScreenshots };
   } finally {
     if (!win.isDestroyed()) await win.close();
   }

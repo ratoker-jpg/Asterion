@@ -7,6 +7,7 @@ import type {
   UniverseMap,
   UniverseOwnerAlliance,
   UniverseOwnerProfile,
+  UniversePersistedPlayerPlanet,
   UniversePlanetNode,
   UniversePoint,
   UniversePirateState,
@@ -311,7 +312,14 @@ export type CreateUniverseSystemOptions = {
   assets?: Partial<UniverseAssetCatalog>;
   nowMs?: number;
   galaxyCount?: number;
+  playerPlanets?: readonly UniversePersistedPlayerPlanet[];
 };
+
+function persistedPlanetFor(options: CreateUniverseSystemOptions, galaxy: number, system: number, slot: number) {
+  return options.playerPlanets?.find((planet) => planet.coordinate.galaxy === galaxy
+    && planet.coordinate.system === system
+    && planet.coordinate.position === slot);
+}
 
 function fixtureFor(system: number, slot: number) {
   const npc = NPC_PLANET_FIXTURES.find((planet) => planet.system === system && planet.position === slot);
@@ -331,25 +339,26 @@ function createPositionNode(
   options: CreateUniverseSystemOptions,
   assets: UniverseAssetCatalog,
 ): UniversePlanetNode {
-  const fixture = fixtureFor(system, slot);
+  const persisted = persistedPlanetFor(options, galaxy, system, slot);
+  const fixture = persisted ? undefined : fixtureFor(system, slot);
   const coordinate = { galaxy, system, position: slot };
-  const kind = fixture?.kind ?? generatedKind();
-  const ownerId = fixture?.ownerId;
-  const isHomeworld = kind === 'player' && system === 1 && slot === 1;
-  const name = isHomeworld
+  const kind = persisted ? 'player' : fixture?.kind ?? generatedKind();
+  const ownerId = persisted?.ownerId ?? fixture?.ownerId;
+  const isHomeworld = persisted?.isHomeworld ?? (kind === 'player' && system === 1 && slot === 1);
+  const name = persisted?.name?.trim() || (isHomeworld
     ? options.currentPlanetName?.trim() || 'Helion 01'
-    : fixture?.name ?? `Планета ${String(system).padStart(2, '0')}-${String(slot).padStart(2, '0')}`;
-  const art = isHomeworld
+    : fixture?.name ?? `Планета ${String(system).padStart(2, '0')}-${String(slot).padStart(2, '0')}`);
+  const art = persisted?.art?.trim() || (isHomeworld
     ? options.currentPlanetArt?.trim() || pickAsset(assets.planetArts, slot, 'planet-home')
-    : pickAsset(assets.planetArts, fixture?.artIndex ?? system * 5 + slot, 'planet-default');
+    : pickAsset(assets.planetArts, fixture?.artIndex ?? system * 5 + slot, 'planet-default'));
 
   return {
-    id: fixture?.id ?? `universe-${galaxy}-${system}-${slot}`,
+    id: persisted?.id ?? fixture?.id ?? `universe-${galaxy}-${system}-${slot}`,
     coordinate,
     kind,
     name,
     art: kind === 'empty' ? '' : art,
-    ownerId: isHomeworld ? options.currentOwnerId ?? 'player-current' : ownerId,
+    ownerId: kind === 'player' ? ownerId ?? options.currentOwnerId ?? 'player-current' : ownerId,
     isHomeworld,
     statusLabel: KIND_LABELS[kind],
     description: KIND_DESCRIPTIONS[kind],
@@ -364,12 +373,15 @@ function createUniverseSystemBase(options: CreateUniverseSystemOptions, assets: 
   const random = mulberry32(10_000 + galaxy * 977 + system * 1_003);
   const fixtureSlots = Array.from({ length: POSITION_COUNT }, (_, index) => index + 1)
     .filter((slot) => fixtureFor(system, slot));
+  const persistedSlots = (options.playerPlanets ?? [])
+    .filter((planet) => planet.coordinate.galaxy === galaxy && planet.coordinate.system === system)
+    .map((planet) => planet.coordinate.position);
   const planetCount = 8 + ((galaxy + system) % 7);
   const remainingSlots = shuffle(
     Array.from({ length: POSITION_COUNT }, (_, index) => index + 1).filter((slot) => !fixtureSlots.includes(slot)),
     random,
   );
-  const occupiedSlots = new Set([...fixtureSlots, ...remainingSlots.slice(0, Math.max(0, planetCount - fixtureSlots.length))]);
+  const occupiedSlots = new Set([...fixtureSlots, ...persistedSlots, ...remainingSlots.slice(0, Math.max(0, planetCount - fixtureSlots.length - persistedSlots.length))]);
   const positions = Array.from({ length: POSITION_COUNT }, (_, index) => index + 1).map((slot) => occupiedSlots.has(slot)
     ? createPositionNode(galaxy, system, slot, options, assets)
     : {

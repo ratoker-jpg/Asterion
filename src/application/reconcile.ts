@@ -14,13 +14,15 @@ import type { SaveState } from './contracts.ts';
 import { reconcileResourceIncome } from './resource-clock.ts';
 import type { ResourceCreditResult } from '../domain/resources/credit.ts';
 import type { FleetProductionCompletion } from '../domain/fleet/production.ts';
+import { reconcileFlights, type FlightReconcileEvent } from './flights.ts';
 
 export type RuntimeReconcileEvent =
   | { kind: 'science'; scienceIds: ScienceId[] }
   | { kind: 'building'; assetRole: BuildingRole }
   | { kind: 'recycling'; jobIds: string[] }
   | { kind: 'spaceport'; tasks: Array<{ track: SpaceportUpgradeTrack; shipId: string }> }
-  | { kind: 'fleet-production'; completed: FleetProductionCompletion[] };
+  | { kind: 'fleet-production'; completed: FleetProductionCompletion[] }
+  | { kind: 'flight'; events: FlightReconcileEvent[] };
 
 export type RuntimeReconcileResult = {
   changed: boolean;
@@ -85,6 +87,12 @@ export function reconcileRuntime(
     if (fleetProduction.completed.length > 0) {
       events.push({ kind: 'fleet-production', completed: fleetProduction.completed });
     }
+  }
+
+  const flights = reconcileFlights(next, context.now);
+  if (flights.changed) {
+    next = flights.state;
+    if (flights.events.length > 0) events.push({ kind: 'flight', events: flights.events });
   }
 
   return { changed: next !== state, state: next, events, credit: resources.credit };

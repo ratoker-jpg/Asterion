@@ -66,9 +66,11 @@ import {
 } from '../domain/fleet/production.ts';
 import {
   createCanonicalStartingBuildingLevels,
+  createDefaultBuildingLevels,
   getStorageCapacities,
   migrateBuildingLevels,
   migrateBuildingQueue,
+  type BuildingQueueItem,
 } from '../domain/buildings/resource-zone.ts';
 import {
   createEmptyBotAssignment,
@@ -94,7 +96,18 @@ import {
 } from '../domain/repair/workshop.ts';
 import { initializePlanetEnergy, syncPlanetEnergySources } from './energy.ts';
 import type { EnergyLedger } from '../domain/energy/runtime.ts';
-import type { ResourceClock, SaveState, PlanetRuntime } from './contracts.ts';
+import type { PlanetQueueRecord, PlanetResources, PlanetStateRecord, ResourceClock, ResourceClockEntry, SaveState, PlanetRuntime } from './contracts.ts';
+import { SHIP_IDS } from '../domain/combat/ids.ts';
+import { isFlightCoordinate } from '../domain/flights/distance.ts';
+import type {
+  FlightCompletionReason,
+  FlightDestination,
+  FlightPhase,
+  FlightRecord,
+  FlightState,
+  MissionId,
+} from '../domain/flights/types.ts';
+import type { UniverseObjectKind } from '../domain/universe/types.ts';
 
 export const SAVE_SCHEMA_VERSION = Math.max(
   COMBAT_SAVE_SCHEMA_VERSION,
@@ -131,6 +144,7 @@ type StoredPlanetRuntime = {
   energyExpenseAttribution?: unknown;
   solarSatellites?: unknown;
   universeSystem?: unknown;
+  universeGalaxy?: unknown;
   universePosition?: unknown;
   buildings?: unknown;
   productionBots?: unknown;
@@ -139,6 +153,7 @@ type StoredPlanetRuntime = {
   spaceportUpgrades?: unknown;
   solarStations?: unknown;
   stability?: unknown;
+  resources?: unknown;
 };
 
 type StoredSave = {
@@ -163,6 +178,8 @@ type StoredSave = {
   reports?: unknown;
   science?: unknown;
   resourceClock?: unknown;
+  currentPlanetId?: unknown;
+  flights?: unknown;
 };
 
 export type PersistenceWriteResult =
@@ -194,7 +211,7 @@ function nonNegativeNumberOr(value: unknown, fallback: number): number {
   return Math.max(0, resolved);
 }
 
-function createResourceClock(now: number): ResourceClock {
+function createResourceClockEntry(now: number): ResourceClockEntry {
   const safeNow = nonNegativeNumberOr(now, Date.now());
   return {
     lastReconciledAt: safeNow,
@@ -202,17 +219,26 @@ function createResourceClock(now: number): ResourceClock {
   };
 }
 
-function migrateResourceClock(value: unknown, now: number): ResourceClock {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return createResourceClock(now);
-  const source = value as Record<string, unknown>;
+function createResourceClock(now: number, planetIds: readonly string[] = ['helion-01']): ResourceClock {
+  const entry = createResourceClockEntry(now);
+  return {
+    ...entry,
+    byPlanet: Object.fromEntries(planetIds.map((planetId) => [planetId, { ...entry, remainder: { ...entry.remainder } }])) as Record<string, ResourceClockEntry>,
+  };
+}
+
+function migrateResourceClockEntry(value: unknown, now: number, fallback?: ResourceClockEntry): ResourceClockEntry {
+  const source = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
   const safeNow = nonNegativeNumberOr(now, Date.now());
-  const rawLast = numberOr(source.lastReconciledAt, safeNow);
+  const rawLast = numberOr(source.lastReconciledAt, fallback?.lastReconciledAt ?? safeNow);
   const lastReconciledAt = Math.min(safeNow, Math.max(0, rawLast));
   const rawRemainder = source.remainder && typeof source.remainder === 'object' && !Array.isArray(source.remainder)
     ? source.remainder as Record<string, unknown>
     : {};
   const remainder = (key: keyof ResourceClock['remainder']) => {
-    const resolved = numberOr(rawRemainder[key], 0);
+    const resolved = numberOr(rawRemainder[key], fallback?.remainder[key] ?? 0);
     return Math.min(0.999_999_999, Math.max(0, resolved));
   };
   return {
@@ -228,9 +254,200 @@ function migrateResourceClock(value: unknown, now: number): ResourceClock {
   };
 }
 
+function migrateResourceClock(value: unknown, now: number, planetIds: readonly string[]): ResourceClock {
+  const source = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const legacy = migrateResourceClockEntry(source, now);
+  const rawByPlanet = source.byPlanet && typeof source.byPlanet === 'object' && !Array.isArray(source.byPlanet)
+    ? source.byPlanet as Record<string, unknown>
+    : source.planets && typeof source.planets === 'object' && !Array.isArray(source.planets)
+      ? source.planets as Record<string, unknown>
+      : {};
+  const byPlanet = Object.fromEntries(planetIds.map((planetId) => [
+    planetId,
+    migrateResourceClockEntry(rawByPlanet[planetId], now, legacy),
+  ])) as Record<string, ResourceClockEntry>;
+  const homeworld = byPlanet['helion-01'] ?? legacy;
+  return { ...homeworld, byPlanet };
+}
+
 function normalizeStoredResource(value: unknown, fallback: number, capacity: number): number {
   const candidate = value === undefined ? fallback : nonNegativeNumberOr(value, 0);
   return Math.min(Math.max(0, capacity), candidate);
+}
+
+function normalizePlanetResources(
+  value: unknown,
+  fallback: PlanetResources,
+  capacities?: ReturnType<typeof getStorageCapacities>,
+): PlanetResources {
+  const source = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  return {
+    metal: Math.min(capacities?.metal ?? Number.POSITIVE_INFINITY, nonNegativeNumberOr(source.metal, fallback.metal)),
+    minerals: Math.min(capacities?.minerals ?? Number.POSITIVE_INFINITY, nonNegativeNumberOr(source.minerals, fallback.minerals)),
+    gas: Math.min(capacities?.gas ?? Number.POSITIVE_INFINITY, nonNegativeNumberOr(source.gas, fallback.gas)),
+  };
+}
+
+function createDefaultFlightState(): FlightState {
+  return { records: [], requestIndex: {} };
+}
+
+const PERSISTED_FLIGHT_MISSIONS = new Set<MissionId>([
+  'transport',
+  'espionage',
+  'attack',
+  'deployment',
+  'colonize',
+  'recycle',
+  'gas',
+  'sun-support',
+  'space-flight',
+]);
+const PERSISTED_FLIGHT_PHASES = new Set<FlightPhase>([
+  'outbound',
+  'returning',
+  'arrived',
+  'completed',
+  'failed',
+]);
+const PERSISTED_FLIGHT_COMPLETION_REASONS = new Set<FlightCompletionReason>([
+  'normal',
+  'normal-return',
+  'recalled',
+  'colonized',
+  'target-occupied',
+  'arrived',
+  'mission-failed',
+]);
+const PERSISTED_FLIGHT_DESTINATION_KINDS = new Set<FlightDestination['kind']>([
+  'coordinate',
+  'planet',
+  'operation',
+]);
+const PERSISTED_UNIVERSE_OBJECT_KINDS = new Set<UniverseObjectKind>([
+  'empty',
+  'player',
+  'npc',
+  'uninhabited',
+  'unique',
+  'pirate',
+  'anomaly',
+  'asteroid',
+]);
+
+function isFinitePersistedNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return isFinitePersistedNumber(value) && Number.isInteger(value) && value >= 0;
+}
+
+function isNonEmptyPersistedString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function coordinatesMatch(left: unknown, right: unknown): boolean {
+  if (!isFlightCoordinate(left) || !isFlightCoordinate(right)) return false;
+  return left.galaxy === right.galaxy
+    && left.system === right.system
+    && left.position === right.position;
+}
+
+/**
+ * Flight records are consumed by reconciliation as executable state, not as
+ * optional UI history. Reject incomplete nested records at the persistence
+ * boundary so a damaged save cannot reserve ships forever or strand an
+ * outbound flight whose timers/coordinates are missing.
+ */
+function isPersistedFlightRecord(value: unknown): value is FlightRecord {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const item = value as Record<string, unknown>;
+  if (!isNonEmptyPersistedString(item.id)
+    || !isNonEmptyPersistedString(item.requestId)
+    || !isNonEmptyPersistedString(item.originPlanetId)
+    || !PERSISTED_FLIGHT_MISSIONS.has(item.missionId as MissionId)
+    || !PERSISTED_FLIGHT_PHASES.has(item.phase as FlightPhase)
+    || !isFlightCoordinate(item.originCoordinate)
+    || !isFlightCoordinate(item.destinationCoordinate)
+    || !isNonNegativeInteger(item.populationReserved)
+    || !isFinitePersistedNumber(item.routeDistance)
+    || item.routeDistance <= 0
+    || !isFinitePersistedNumber(item.effectiveSpeed)
+    || item.effectiveSpeed <= 0
+    || !isFinitePersistedNumber(item.oneWayDurationMs)
+    || item.oneWayDurationMs <= 0
+    || !isFinitePersistedNumber(item.departedAt)
+    || !isFinitePersistedNumber(item.arrivalAt)
+    || item.arrivalAt <= item.departedAt
+    || !isFinitePersistedNumber(item.gasCost)
+    || item.gasCost < 0) return false;
+
+  if (item.operationId !== undefined && !isNonEmptyPersistedString(item.operationId)) return false;
+  if (item.destinationPlanetId !== undefined && !isNonEmptyPersistedString(item.destinationPlanetId)) return false;
+  if (item.targetKind !== undefined && !PERSISTED_UNIVERSE_OBJECT_KINDS.has(item.targetKind as UniverseObjectKind)) return false;
+  if (item.completionReason !== undefined
+    && !PERSISTED_FLIGHT_COMPLETION_REASONS.has(item.completionReason as FlightCompletionReason)) return false;
+  for (const timestamp of ['returnAt', 'recalledAt', 'arrivedAt', 'completedAt'] as const) {
+    if (item[timestamp] !== undefined && !isFinitePersistedNumber(item[timestamp])) return false;
+  }
+
+  const destination = item.destination;
+  if (!destination || typeof destination !== 'object' || Array.isArray(destination)) return false;
+  const destinationRecord = destination as Record<string, unknown>;
+  if (!PERSISTED_FLIGHT_DESTINATION_KINDS.has(destinationRecord.kind as FlightDestination['kind'])
+    || !coordinatesMatch(destinationRecord.coordinate, item.destinationCoordinate)) return false;
+  if (destinationRecord.kind === 'planet') {
+    if (!isNonEmptyPersistedString(destinationRecord.planetId)
+      || item.destinationPlanetId !== destinationRecord.planetId) return false;
+  } else if (item.destinationPlanetId !== undefined) {
+    return false;
+  }
+  if (destinationRecord.kind === 'operation') {
+    if (!isNonEmptyPersistedString(destinationRecord.operationId)
+      || item.operationId !== destinationRecord.operationId) return false;
+  }
+
+  const selectedShips = item.selectedShips;
+  if (!selectedShips || typeof selectedShips !== 'object' || Array.isArray(selectedShips)) return false;
+  const shipEntries = Object.entries(selectedShips);
+  if (shipEntries.length === 0) return false;
+  for (const [shipId, quantity] of shipEntries) {
+    if (!SHIP_IDS.includes(shipId as (typeof SHIP_IDS)[number])
+      || !isNonNegativeInteger(quantity)
+      || quantity <= 0) return false;
+  }
+
+  const phase = item.phase as FlightPhase;
+  if (phase === 'returning' && (!isFinitePersistedNumber(item.returnAt) || item.returnAt < item.departedAt)) return false;
+  if (phase === 'arrived' && !isFinitePersistedNumber(item.arrivedAt)) return false;
+  if ((phase === 'completed' || phase === 'failed') && !isFinitePersistedNumber(item.completedAt)) return false;
+  return true;
+}
+
+function migrateFlightState(value: unknown): FlightState {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return createDefaultFlightState();
+  const source = value as Record<string, unknown>;
+  const records: FlightRecord[] = [];
+  const seenIds = new Set<string>();
+  const seenRequestIds = new Set<string>();
+  if (Array.isArray(source.records)) {
+    for (const candidate of source.records) {
+      if (!isPersistedFlightRecord(candidate)) continue;
+      if (seenIds.has(candidate.id) || seenRequestIds.has(candidate.requestId)) continue;
+      seenIds.add(candidate.id);
+      seenRequestIds.add(candidate.requestId);
+      records.push(candidate);
+    }
+  }
+  // The index is derived from validated records. A stale or forged index must
+  // never resurrect a dropped flight or point a request at another flight.
+  const requestIndex = Object.fromEntries(records.map((record) => [record.requestId, record.id]));
+  return { records, requestIndex };
 }
 
 function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.now()): SaveState {
@@ -243,6 +460,11 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     buildings['gas-storage'] = 20;
   }
   const storageCapacities = getStorageCapacities(buildings);
+  const initialResources: PlanetResources = {
+    metal: mode === 'test' ? storageCapacities.metal : 15_880,
+    minerals: mode === 'test' ? storageCapacities.minerals : 12_712,
+    gas: mode === 'test' ? storageCapacities.gas : 6_421,
+  };
   const initialPlanet: PlanetRuntime = {
     name: DEFAULT_PLANET_NAME,
     skin: 'colonized',
@@ -252,6 +474,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     energy: mode === 'test' ? TEST_MODE_RESOURCE_AMOUNT : 140,
     solarSatellites: 0,
     universeSystem: 1,
+    universeGalaxy: 1,
     universePosition: 1,
     buildings,
     productionBots: createEmptyBotAssignment(),
@@ -260,12 +483,13 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     spaceportUpgrades: createDefaultSpaceportUpgradeState(),
     repair: mode === 'test' ? createTestRepairWorkshopState() : createDefaultRepairWorkshopState(),
     stability: 100,
+    resources: initialResources,
   };
   return {
     schemaVersion: SAVE_SCHEMA_VERSION,
-    metal: mode === 'test' ? storageCapacities.metal : 15_880,
-    minerals: mode === 'test' ? storageCapacities.minerals : 12_712,
-    gas: mode === 'test' ? storageCapacities.gas : 6_421,
+    metal: initialResources.metal,
+    minerals: initialResources.minerals,
+    gas: initialResources.gas,
     currentPlanetId: 'helion-01',
     planets: { 'helion-01': initializePlanetEnergy(initialPlanet, science.levels) },
     queues: { 'helion-01': [] },
@@ -278,7 +502,8 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     command,
     reports: createDefaultReportsState(),
     science,
-    resourceClock: createResourceClock(now),
+    resourceClock: createResourceClock(now, ['helion-01']),
+    flights: createDefaultFlightState(),
   };
 }
 
@@ -355,6 +580,18 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       0,
       Math.floor(persistedSatelliteCount + completedSatellites),
     );
+    const homeworldStorageCapacities = getStorageCapacities(buildings);
+    const legacyHomeworldResources: PlanetResources = {
+      metal: normalizeStoredResource(parsed.metal, initialState.metal, homeworldStorageCapacities.metal),
+      minerals: normalizeStoredResource(parsed.minerals, initialState.minerals, homeworldStorageCapacities.minerals),
+      gas: normalizeStoredResource(parsed.gas, initialState.gas, homeworldStorageCapacities.gas),
+    };
+    const hasRootHomeworldWallet = parsed.metal !== undefined || parsed.minerals !== undefined || parsed.gas !== undefined;
+    const homeworldResources = normalizePlanetResources(
+      hasRootHomeworldWallet ? legacyHomeworldResources : savedHomeworld?.resources,
+      legacyHomeworldResources,
+      homeworldStorageCapacities,
+    );
     const homeworldBase: PlanetRuntime = {
       name: typeof savedHomeworld?.name === 'string' && savedHomeworld.name.trim()
         ? savedHomeworld.name.trim().slice(0, 28)
@@ -384,6 +621,7 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
         ? savedHomeworld.energyExpenseAttribution as Partial<Record<string, number>>
         : undefined,
       solarSatellites: savedSatelliteCount,
+      universeGalaxy: numberOr(savedHomeworld?.universeGalaxy, 1),
       universeSystem: numberOr(savedHomeworld?.universeSystem, 1),
       universePosition: numberOr(savedHomeworld?.universePosition, 1),
       buildings,
@@ -392,20 +630,91 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       trade: migrateTradeState(savedHomeworld?.trade, buildings['trade-center'], timestamp),
       spaceportUpgrades,
       stability: numberOr(savedHomeworld?.stability, initialState.planets['helion-01'].stability),
+      resources: homeworldResources,
     };
     const homeworld = syncPlanetEnergySources(homeworldBase, science.levels);
     const savedQueue = parsed.queues?.['helion-01'] ?? parsed.queue ?? null;
     const queue = migrateBuildingQueue(savedQueue, 'helion-01', homeworld.buildings, science.levels);
     const storageCapacities = getStorageCapacities(homeworld.buildings);
 
+    const planets: PlanetStateRecord = { 'helion-01': homeworld };
+    for (const [planetId, rawValue] of Object.entries(parsed.planets ?? {})) {
+      if (planetId === 'helion-01' || !rawValue || typeof rawValue !== 'object') continue;
+      const raw = rawValue as StoredPlanetRuntime;
+      const planetBuildings = migrateBuildingLevels(raw.buildings);
+      const migratedPlanetFleet = removeSolarSatellitesFromFleet(
+        resolveSavedFleetState(raw.fleet, profile.factionId),
+      );
+      const planetSatelliteCount = Math.max(
+        0,
+        Math.floor(numberOr(raw.solarSatellites, migratedPlanetFleet.count)),
+      );
+      const planetFleet = normalizeFleetStateForCapacity(
+        migratedPlanetFleet.fleet,
+        planetBuildings.hangar,
+        profile.factionId,
+      );
+      const planetDefense = migrateDefenseState(raw.defense);
+      const planetProduction = migrateFleetProductionState(raw.fleetProduction, {
+        factionId: profile.factionId,
+        fleet: planetFleet,
+        defense: planetDefense,
+        hangarLevel: planetBuildings.hangar,
+        solarSatellites: planetSatelliteCount,
+      });
+      const planetBase: PlanetRuntime = {
+        name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 28) : `Колония ${planetId}`,
+        skin: typeof raw.skin === 'string' && KNOWN_PLANET_SKINS.has(raw.skin) ? raw.skin : 'colonized',
+        fleet: planetFleet,
+        defense: planetDefense,
+        fleetProduction: planetProduction,
+        repair: mode === 'test' && raw.repair === undefined ? createTestRepairWorkshopState() : migrateRepairWorkshopState(raw.repair),
+        energy: numberOr(raw.energy, 0),
+        energyLedger: raw.energyLedger && typeof raw.energyLedger === 'object' ? raw.energyLedger as EnergyLedger : undefined,
+        producedEnergy: optionalNumber(raw.producedEnergy),
+        consumedEnergy: optionalNumber(raw.consumedEnergy),
+        availableEnergy: optionalNumber(raw.availableEnergy),
+        energySources: Array.isArray(raw.energySources) ? raw.energySources as EnergyLedger['sources'] : undefined,
+        energyExpenseAttribution: raw.energyExpenseAttribution && typeof raw.energyExpenseAttribution === 'object'
+          ? raw.energyExpenseAttribution as Partial<Record<string, number>>
+          : undefined,
+        solarSatellites: planetSatelliteCount,
+        universeGalaxy: numberOr(raw.universeGalaxy, 1),
+        universeSystem: numberOr(raw.universeSystem, 1),
+        universePosition: numberOr(raw.universePosition, 1),
+        buildings: planetBuildings,
+        productionBots: migrateProductionBotAssignment(raw.productionBots, planetBuildings),
+        recycling: migrateRecyclingState(raw.recycling, planetBuildings.recycling, timestamp),
+        trade: migrateTradeState(raw.trade, planetBuildings['trade-center'], timestamp),
+        spaceportUpgrades: reconcileSpaceportUpgradeState(migrateSpaceportUpgradeState(raw.spaceportUpgrades), timestamp).state,
+        stability: numberOr(raw.stability, 100),
+        resources: normalizePlanetResources(raw.resources, { metal: 500, minerals: 500, gas: 500 }, getStorageCapacities(planetBuildings)),
+      };
+      planets[planetId] = syncPlanetEnergySources(planetBase, science.levels);
+    }
+
+    const queues: PlanetQueueRecord = { 'helion-01': queue };
+    for (const planetId of Object.keys(planets)) {
+      if (planetId === 'helion-01') continue;
+      const planet = planets[planetId];
+      queues[planetId] = migrateBuildingQueue(parsed.queues?.[planetId], planetId, planet.buildings, science.levels);
+    }
+
+    const currentPlanetId = typeof parsed.currentPlanetId === 'string'
+      && parsed.currentPlanetId.trim()
+      && parsed.currentPlanetId.trim() !== 'helion-01'
+      && parsed.planets?.[parsed.currentPlanetId.trim()]
+      ? parsed.currentPlanetId.trim()
+      : 'helion-01';
+
     return {
       schemaVersion: SAVE_SCHEMA_VERSION,
-      metal: normalizeStoredResource(parsed.metal, initialState.metal, storageCapacities.metal),
-      minerals: normalizeStoredResource(parsed.minerals, initialState.minerals, storageCapacities.minerals),
-      gas: normalizeStoredResource(parsed.gas, initialState.gas, storageCapacities.gas),
-      currentPlanetId: 'helion-01',
-      planets: { 'helion-01': homeworld },
-      queues: { 'helion-01': queue },
+      metal: homeworldResources.metal,
+      minerals: homeworldResources.minerals,
+      gas: homeworldResources.gas,
+      currentPlanetId,
+      planets,
+      queues,
       rating: migrateRatingPrototypeState(parsed.rating),
       combatPriority: migrateCombatPriority(parsed.combatPriority),
       combat,
@@ -415,7 +724,8 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       profile,
       reports: migrateReportsState(parsed.reports, reportIds),
       science,
-      resourceClock: migrateResourceClock(parsed.resourceClock, timestamp),
+      resourceClock: migrateResourceClock(parsed.resourceClock, timestamp, Object.keys(planets)),
+      flights: migrateFlightState(parsed.flights),
     };
   } catch {
     return initialState;
