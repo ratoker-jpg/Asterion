@@ -508,3 +508,428 @@
 .shell-notice{ font-size:11px !important; }
 .reports-categories .reports-count,
 .reports-view .reports-profile-nav span{ font-size:10.5px !important; }
+
+/* ============================================================
+   PHASE 2 — TOTAL ROUNDED SWEEP
+   ------------------------------------------------------------
+   Feedback pass: no angular shape may survive anywhere.
+   1) kill every decorative chamfer (clip-path polygons);
+   2) kill the square accent lines that poke past rounded
+      corners (the "overlay artifacts");
+   3) round the remaining screens (spaceport, science,
+      settings, rating, interiors: production bots, recycling,
+      trade, shipyard);
+   4) building tooltip pops OUT of the panel to its right.
+   ============================================================ */
+
+/* === P2.1 GLOBAL PRIMITIVES (unscoped — old rule was dead) == */
+#root input[type="text"],
+#root input[type="number"],
+#root input:not([type]),
+#root select,
+#root textarea{
+  border-radius:var(--ut-r-input);
+  font-variant-numeric:tabular-nums;
+}
+#root button{ border-radius:var(--ut-r-btn); }
+
+/* === P2.2 CHAMFER KILL — clip-path:none everywhere ========== */
+
+/* planet screen + legacy planet skins */
+.planet-summary-v3,
+.queue-panel-v3,
+.queue-card-v2,
+.aegis-button,
+.zone-hotspot__label,
+.owned-planet-edit-v4,
+.planet-editor-name-v5 button,
+.passport-panel-v2,
+.planet-selector-v2,
+.details-button,
+.notice-panel-v2,
+.queue-panel-v2,
+.main-tabs button,
+.resource-chip,
+.resource-chip__icon,
+.brand-block,
+.campaign-block,
+.campaign-block.campaign-v2,
+.skin-picker-modal{
+  clip-path:none !important;
+}
+/* art child of the aegis CTA must follow the rounded corners */
+.aegis-button{ overflow:hidden; }
+
+/* fleets root + fleet/shipyard/repair/combat/battle page heads */
+.fleet-sidebar-v1,
+.fleet-panel-v1,
+.fleet-page-head-v1,
+.shipyard-page-head-v1,
+.repair-page-head-v1,
+.combat-priority-page-head-v1,
+.battle-page-head-v1,
+.shipyard-card-v1,
+.repair-card-v1{
+  clip-path:none !important;
+}
+/* page heads draw themselves via ::before/::after layers —
+   round those layers instead of removing them */
+.fleet-page-head-v1,
+.shipyard-page-head-v1,
+.repair-page-head-v1,
+.combat-priority-page-head-v1,
+.battle-page-head-v1{
+  border-radius:var(--ut-r-panel);
+}
+.fleet-page-head-v1::before,
+.shipyard-page-head-v1::before,
+.repair-page-head-v1::before,
+.combat-priority-page-head-v1::before,
+.battle-page-head-v1::before,
+.fleet-page-head-v1::after,
+.shipyard-page-head-v1::after,
+.repair-page-head-v1::after,
+.combat-priority-page-head-v1::after,
+.battle-page-head-v1::after,
+html.asterion-repair-page .repair-page-head-v1::before,
+html.asterion-repair-page .repair-page-head-v1::after{
+  clip-path:none !important;
+  border-radius:inherit;
+}
+
+/* command / operations / messages / universe */
+.command-view__status,
+.command-panel,
+.reports-profile-title-plate,
+.reports-profile-name-plate,
+.reports-profile-avatar > strong,
+.universe-view,
+.universe-nav,
+.nav-coordinate > .step,
+.nav-coordinate > .step:last-child{
+  clip-path:none !important;
+}
+/* hexagon badges become circles */
+.universe-alliance-mark,
+.shipyard-page-art-v1{
+  clip-path:none !important;
+  border-radius:50% !important;
+}
+
+/* building interiors */
+.production-bots-back,
+.production-bots-building-panel,
+.production-bots-targets,
+.production-bots-distribute,
+.recycling-info-panel,
+.recycling-section,
+.trade-info-panel,
+.trade-workspace{
+  clip-path:none !important;
+}
+
+/* === P2.3 ARTIFACT KILL — square accent lines =============== */
+.resource-zone-summary::before,
+.resource-zone-queue::before,
+.operations-dossier-v2::before,
+.operation-feed-card-v2::after,
+.battle-summary-v1::before,
+.battle-section-v1::before,
+.battle-card-v1::before,
+.battle-header-side-head-v1::before,
+.combat-priority-column-v1::before,
+.repair-card-v1::before,
+.shipyard-card-v1::before,
+.reports-profile-title-plate::before,
+.reports-profile-title-plate::after,
+.reports-profile-avatar__art::after,
+.reports-profile-view::before,
+.passport-panel-v2::after,
+.queue-panel-v2::after{
+  display:none !important;
+}
+
+/* === P2.4 ROUND THE REMAINING SCREENS ======================= */
+
+/* --- planet right rail --- */
+.queue-panel-v3{
+  border-radius:var(--ut-r-panel);
+  background:var(--ut-surface);
+  border:1px solid var(--ut-border);
+}
+.planet-editor-name-v5 button{ border-radius:var(--ut-r-chip); }
+.passport-panel-v2,
+.planet-selector-v2,
+.notice-panel-v2,
+.queue-panel-v2{ border-radius:var(--ut-r-panel); }
+.details-button{ border-radius:var(--ut-r-btn); }
+.main-tabs button{ border-radius:var(--ut-r-chip); }
+
+/* --- fleet workspace leftovers --- */
+.fleet-production-queue-v1,
+.fleet-production-queue-empty-v1,
+.fleet-production-queue-foot-v1{
+  border-radius:var(--ut-r-card);
+  background:var(--ut-surface-2);
+  border:1px solid var(--ut-border);
+}
+
+/* --- КОСМОДРОМ (spaceport interior) --- */
+.spaceport-sidebar-v2{
+  border-radius:var(--ut-r-panel);
+  background:var(--ut-surface);
+  border:1px solid var(--ut-border);
+}
+.spaceport-side-queue,
+.spaceport-main-v2{
+  border-radius:var(--ut-r-card);
+  background:var(--ut-surface-2);
+  border:1px solid var(--ut-border);
+}
+.spaceport-queue-empty{ border-radius:var(--ut-r-chip); }
+.spaceport-back-v2{ border-radius:var(--ut-r-btn); }
+.spaceport-main-heading-v2{ border-radius:var(--ut-r-card) var(--ut-r-card) 0 0; }
+.spaceport-prototype-note-v2{ border-radius:var(--ut-r-chip); }
+.spaceport-row-v2{
+  border-radius:var(--ut-r-card) !important;
+  overflow:hidden;
+}
+.spaceport-row-art-v2{ border-radius:var(--ut-r-chip); }
+.spaceport-level-progress-v2{ border-radius:999px; overflow:hidden; }
+.spaceport-level-progress-v2 > *{ border-radius:999px; }
+.spaceport-cost-chip-v2,
+.spaceport-requirement-line-v2,
+.spaceport-state-strip-v2,
+.spaceport-row-time-v2{ border-radius:var(--ut-r-chip); }
+.spaceport-requirement-badge-v2{ border-radius:7px; }
+.spaceport-requirement-tooltip-v2{
+  border-radius:12px;
+  background:rgba(8,15,19,.97);
+  border:1px solid var(--ut-border-strong);
+  box-shadow:0 14px 34px rgba(0,0,0,.55);
+}
+.spaceport-row-action-v2{ border-radius:0 0 var(--ut-r-card) 0; }
+.spaceport-upgrade-cta-v2{
+  border-radius:var(--ut-r-btn) !important;
+  min-height:38px;
+  font-weight:600;
+}
+
+/* --- science --- */
+.utility-screen-host{
+  border-radius:var(--ut-r-panel);
+  background:var(--ut-surface);
+  border:1px solid var(--ut-border);
+}
+.science-sidebar-v2{
+  border-radius:var(--ut-r-card);
+  background:var(--ut-surface-2);
+  border:1px solid var(--ut-border);
+}
+.science-lab-card-v2{ border-radius:var(--ut-r-card); }
+.science-queue-v2{ border-radius:var(--ut-r-card); }
+.science-main-v2{
+  border-radius:var(--ut-r-card);
+  background:var(--ut-surface-2);
+  border:1px solid var(--ut-border);
+}
+.science-main-heading-v2{ border-radius:var(--ut-r-card) var(--ut-r-card) 0 0; }
+.science-row-v2{ border-radius:var(--ut-r-card) !important; }
+.science-art-v2{ border-radius:var(--ut-r-chip); }
+.science-level-progress-v2{ border-radius:999px; overflow:hidden; }
+.science-level-progress-v2 > *{ border-radius:999px; }
+.science-cost-v2,
+.science-time-v2,
+.science-requirements-v2,
+.science-action-v2,
+.science-missing-banner-v2{ border-radius:var(--ut-r-chip); }
+.science-requirement-badge-v2{ border-radius:7px; }
+
+/* --- settings --- */
+.settings-nav-v2{
+  border-radius:var(--ut-r-card);
+  background:var(--ut-surface-2);
+  border:1px solid var(--ut-border);
+}
+.settings-content-v2{ border-radius:var(--ut-r-panel); }
+.typography-row-v2{ border-radius:var(--ut-r-card); }
+.typography-stepper-v2{ border-radius:var(--ut-r-chip); }
+.typography-preview-v2{
+  border-radius:var(--ut-r-card);
+  background:var(--ut-surface-2);
+  border:1px solid var(--ut-border);
+}
+
+/* --- rating --- */
+.rating-mode-tabs-v2{ border-radius:var(--ut-r-chip); }
+.rating-search-v2{
+  border-radius:var(--ut-r-chip);
+  background:var(--ut-surface-2);
+  border:1px solid var(--ut-border);
+}
+.rating-panel-v2{
+  border-radius:var(--ut-r-panel);
+  background:var(--ut-surface);
+  border:1px solid var(--ut-border);
+  overflow:hidden;
+}
+.rating-row-v2{ border-radius:var(--ut-r-chip) !important; }
+.race-emblem-v2{ border-radius:8px; }
+.rating-bottom-v2{ border-radius:var(--ut-r-chip); }
+
+/* --- production bots interior --- */
+.production-bots-building-panel{
+  border-radius:var(--ut-r-panel);
+  background:var(--ut-surface);
+  border:1px solid var(--ut-border);
+}
+.production-bots-building-art{ border-radius:var(--ut-r-card); }
+.production-bots-building-level{ border-radius:var(--ut-r-chip); }
+.production-bots-targets{
+  border-radius:var(--ut-r-panel);
+  background:var(--ut-surface-2);
+  border:1px solid var(--ut-border);
+}
+.production-bot-step{ border-radius:var(--ut-r-chip); }
+.production-bot-target__effect{ border-radius:var(--ut-r-chip); }
+.production-bots-targets-footer{ border-radius:var(--ut-r-chip); }
+.production-bots-back,
+.production-bots-distribute{
+  border-radius:var(--ut-r-btn) !important;
+  min-height:36px;
+  font-weight:600;
+}
+
+/* --- recycling interior --- */
+.recycling-info-panel{
+  border-radius:var(--ut-r-panel);
+  background:var(--ut-surface);
+  border:1px solid var(--ut-border);
+}
+.recycling-info-art{ border-radius:var(--ut-r-card); }
+.recycling-level{ border-radius:var(--ut-r-chip); }
+.recycling-info-stats{ border-radius:var(--ut-r-card); }
+.recycling-back{ border-radius:var(--ut-r-btn); }
+.recycling-section{
+  border-radius:var(--ut-r-panel);
+  background:var(--ut-surface-2);
+  border:1px solid var(--ut-border);
+}
+.recycling-debris-time,
+.recycling-target-preview,
+.recycling-target-footer,
+.recycling-validation{ border-radius:var(--ut-r-chip); }
+.recycling-max-button{ border-radius:var(--ut-r-btn); }
+.recycling-start{
+  border-radius:var(--ut-r-btn);
+  min-height:38px;
+  font-weight:600;
+}
+
+/* --- trade interior --- */
+.trade-info-panel{
+  border-radius:var(--ut-r-panel);
+  background:var(--ut-surface);
+  border:1px solid var(--ut-border);
+}
+.trade-info-art{ border-radius:var(--ut-r-card); }
+.trade-level{ border-radius:var(--ut-r-chip); }
+.trade-info-stats{ border-radius:var(--ut-r-card); }
+.trade-refill{ border-radius:var(--ut-r-card); }
+.trade-back{ border-radius:var(--ut-r-btn); }
+.trade-workspace{
+  border-radius:var(--ut-r-panel);
+  background:var(--ut-surface-2);
+  border:1px solid var(--ut-border);
+}
+.trade-resource-panel,
+.trade-ratio-panel,
+.trade-amount-panel,
+.trade-summary-grid{ border-radius:var(--ut-r-card); }
+.trade-resource-card{ border-radius:var(--ut-r-chip); }
+.trade-resource-icon{ border-radius:8px; }
+.trade-resource-tooltip{
+  border-radius:12px;
+  background:rgba(8,15,19,.97);
+  border:1px solid var(--ut-border-strong);
+  box-shadow:0 14px 34px rgba(0,0,0,.55);
+}
+.trade-max{ border-radius:var(--ut-r-btn); }
+.trade-validation{ border-radius:var(--ut-r-chip); }
+.trade-submit{
+  border-radius:var(--ut-r-btn);
+  min-height:38px;
+  font-weight:600;
+}
+
+/* --- shipyard interior (верфь) --- */
+.shipyard-card-v1{
+  border-radius:var(--ut-r-card) !important;
+  overflow:hidden;
+}
+.shipyard-card-title-v1{ border-radius:var(--ut-r-card) var(--ut-r-card) 0 0; }
+.shipyard-owned-v1,
+.shipyard-art-v1,
+.shipyard-time-v1,
+.shipyard-visible-level-v1,
+.shipyard-tooltip-level-v1,
+.shipyard-cost-row-v1{ border-radius:var(--ut-r-chip); }
+.shipyard-stats-tooltip-v1{
+  border-radius:12px;
+  background:rgba(8,15,19,.97);
+  border:1px solid var(--ut-border-strong);
+  box-shadow:0 14px 34px rgba(0,0,0,.55);
+}
+
+/* --- operations leftovers --- */
+.operations-scope-v2{ border-radius:var(--ut-r-card) !important; }
+
+/* --- messages profile --- */
+.reports-profile-view{
+  border-radius:var(--ut-r-panel);
+  background:var(--ut-surface);
+  border:1px solid var(--ut-border);
+}
+.reports-profile-metrics{ border-radius:var(--ut-r-card); }
+.reports-profile-avatar > strong{ border-radius:50%; }
+
+/* --- universe leftovers --- */
+.universe-nav .step{ border-radius:var(--ut-r-chip) !important; }
+
+/* === P2.5 BUILDING TOOLTIP — POP OUT TO THE RIGHT =========== */
+/* The panel must not clip the floating tooltip anymore. */
+.resource-zone-summary{ overflow:visible !important; }
+.resource-zone-selector-tile{ overflow:visible !important; }
+.resource-zone-selector-tile > img{ border-radius:inherit; }
+.resource-zone-selector-tooltip{
+  left:auto !important;
+  right:auto !important;
+  bottom:auto !important;
+  top:50% !important;
+  width:max-content;
+  max-width:250px;
+  z-index:80 !important;
+}
+/* first grid column: jump over the neighbour tile so the
+   tooltip always lands just past the panel edge */
+.resource-zone-selector-tile:nth-child(odd) .resource-zone-selector-tooltip{
+  left:calc(200% + 28px) !important;
+}
+.resource-zone-selector-tile:nth-child(even) .resource-zone-selector-tooltip{
+  left:calc(100% + 22px) !important;
+}
+.resource-zone-selector-tile:hover .resource-zone-selector-tooltip,
+.resource-zone-selector-tile:focus-visible .resource-zone-selector-tooltip{
+  transform:translateY(-50%) !important;
+  opacity:1;
+}
+
+/* === P2.6 FINAL POLISH (stray boxes) ========================= */
+.preview-hud-v2,
+.preview-table-v2{ border-radius:var(--ut-r-chip); }
+.production-bot-target__icon{ border-radius:8px; }
+.science-art-v2 img{ border-radius:inherit; }
+.recycling-section-header strong{ border-radius:7px; }
+.asterion-header__test-mode-banner{ border-radius:8px; }
+.asterion-header__resource-energy-half{ border-radius:6px; }
+.asterion-header__resource-population-breakdown{ border-radius:10px; }
