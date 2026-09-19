@@ -1,3 +1,13 @@
+/* Bundled Inter (variable, OFL) — the UI declares font-family: Inter first,
+   so every machine gets the same rendering without relying on system fonts. */
+@font-face{
+  font-family:"Inter";
+  src:url("/fonts/Inter-Variable.ttf") format("truetype");
+  font-weight:100 900;
+  font-style:normal;
+  font-display:swap;
+}
+
 :root{
   --text-scale-hud:1;
   --text-scale-page-title:1;
