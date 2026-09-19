@@ -12,7 +12,8 @@ import {
   recallFlight,
 } from './flights.ts';
 import { startBuilding } from './buildings.ts';
-import { getPlanetResources, replacePlanetResources } from './contracts.ts';
+import { getPlanetResources, replaceAlliedPlanetState, replacePlanetResources } from './contracts.ts';
+import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import {
   ASTEROID_SCHEDULE_EPOCH_MS,
   createUniverseSystem,
@@ -573,6 +574,7 @@ test('transport dispatches an atomic cargo snapshot to the Test Mode ally and re
 
   const arrival = reconcileFlights(sent.state, sent.flight.arrivalAt);
   assert.equal(arrival.events[0]?.status, 'delivered');
+  assert.equal(arrival.events[0]?.notice, 'Груз доставлен. Корабли возвращаются.');
   assert.equal(arrival.state.alliedPlanets?.[destination.planetId].resources?.metal, 600);
   assert.equal(arrival.state.alliedPlanets?.[destination.planetId].recycling.availableDebris, 100_075);
   assert.equal(arrival.state.flights.records[0].phase, 'returning');
@@ -584,6 +586,45 @@ test('transport dispatches an atomic cargo snapshot to the Test Mode ally and re
   assert.equal(returned.state.flights.records[0].cargoState, 'delivered');
   assert.equal(returned.state.planets['helion-01'].resources!.metal, sent.state.planets['helion-01'].resources!.metal);
   assert.equal(reconcileFlights(returned.state, arrival.state.flights.records[0].returnAt! + 1).changed, false);
+});
+
+test('transport overflow keeps the pre-send warning but uses the normal delivery notice', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const destination = {
+    kind: 'planet' as const,
+    planetId: 'test-mode-ally-ira-vel-v1',
+    coordinate: { galaxy: 1, system: 1, position: 2 },
+  };
+  const ally = initial.alliedPlanets?.[destination.planetId];
+  assert.ok(ally);
+  if (!ally) return;
+  const capacities = getStorageCapacities(ally.buildings);
+  const fullTarget = replaceAlliedPlanetState(initial, destination.planetId, {
+    ...ally,
+    resources: {
+      metal: capacities.metal,
+      minerals: capacities.minerals,
+      gas: capacities.gas,
+    },
+  });
+  const sent = dispatchFlight(fullTarget, {
+    requestId: 'transport-overflow-notice',
+    missionId: 'transport',
+    originPlanetId: 'helion-01',
+    destination,
+    targetRelation: 'ally',
+    selectedShips: { scout: 1 },
+    cargo: { metal: 100, minerals: 0, gas: 0, debris: 0 },
+    departedAt: 1_000,
+  }, { now: 1_000, mode: 'test' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.equal(sent.flight.overflowWarning, true);
+
+  const arrival = reconcileFlights(sent.state, sent.flight.arrivalAt);
+  assert.equal(arrival.events[0]?.status, 'delivered');
+  assert.equal(arrival.events[0]?.notice, 'Груз доставлен. Корабли возвращаются.');
+  assert.doesNotMatch(arrival.events[0]?.notice ?? '', /переполн|потерян/i);
 });
 
 test('transport recall returns loaded cargo using the current source caps and never refunds gas', () => {

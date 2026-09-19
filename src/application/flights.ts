@@ -273,7 +273,13 @@ export function getTransportCargoSummary(
   const sourceResources = origin?.resources ?? getPlanetResources(state, originPlanetId);
   const sourceDebris = origin?.recycling.availableDebris ?? 0;
   const cargo = clampCargoToSourceAndCapacity(requestedCargo, sourceResources, sourceDebris, capacityTotal);
-  const target = resolveTransportTarget(state, destination);
+  // Coordinate drafts are intentionally local-only until Send. Resolving a
+  // target here would turn every keystroke into an authoritative availability
+  // check and would make an unavailable/occupied coordinate look invalid
+  // before the user submits the flight.
+  const target = destination?.kind === 'planet'
+    ? resolveTransportTarget(state, destination)
+    : emptyTransportTarget(destination);
   const targetResources = target.runtime?.resources ?? { metal: 0, minerals: 0, gas: 0 };
   const targetCaps = target.runtime ? getStorageCapacities(target.runtime.buildings) : undefined;
   return {
@@ -697,9 +703,7 @@ export function reconcileFlights(state: SaveState, now: number): FlightReconcile
           events.push({
             flight: returning,
             status: 'delivered',
-            notice: current.overflowWarning
-              ? 'Груз доставлен с возможным переполнением склада цели. Корабли возвращаются.'
-              : 'Груз доставлен. Корабли возвращаются.',
+            notice: 'Груз доставлен. Корабли возвращаются.',
           });
           continue;
         }

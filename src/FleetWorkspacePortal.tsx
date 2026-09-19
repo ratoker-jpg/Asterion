@@ -119,7 +119,7 @@ type FlightCoordinateDraft = {
 type TransportTargetOption = {
   id: string;
   name: string;
-  relation: 'self' | 'ally';
+  relation: 'self';
   coordinate: FlightDestination['coordinate'];
 };
 
@@ -487,22 +487,18 @@ function FleetWorkspace({
 
   const changePreviewTargetField = (field: keyof FlightCoordinateDraft, value: string) => {
     const nextDraft = { ...previewTargetDraft, [field]: value };
-    const nextCoordinate = coordinateFromDraft(nextDraft);
-    const destination: FlightDestination = { kind: 'coordinate', coordinate: nextCoordinate };
     setPreviewTargetDraft(nextDraft);
-    setPreviewDestination(destination);
     setPreviewTargetRelation(undefined);
     const draftError = coordinateDraftError(nextDraft);
     if (draftError) {
+      setPreviewDestination(null);
       setPreviewResult(null);
       setPreviewTargetError(draftError);
       return;
     }
-    refreshFlightPreview(
-      previewOriginPlanetId ?? createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read().currentPlanetId,
-      destination,
-      null,
-    );
+    setPreviewDestination({ kind: 'coordinate', coordinate: coordinateFromDraft(nextDraft) });
+    setPreviewResult(null);
+    setPreviewTargetError(null);
   };
 
   const selectTransportTarget = (targetId: string) => {
@@ -602,35 +598,34 @@ function FleetWorkspace({
     : { metal: 0, minerals: 0, gas: 0 };
   const transportSourceDebris = previewSource?.recycling.availableDebris ?? 0;
   const transportTargetOptions: TransportTargetOption[] = previewRuntimeState
-    ? [
-      ...Object.entries(previewRuntimeState.planets)
-        .filter(([id]) => id !== previewSourceId)
-        .map(([id, planet]) => ({
-          id,
-          name: planet.name,
-          relation: 'self' as const,
-          coordinate: {
-            galaxy: planet.universeGalaxy ?? 1,
-            system: planet.universeSystem ?? 1,
-            position: planet.universePosition ?? 1,
-          },
-        })),
-      ...Object.entries(previewRuntimeState.alliedPlanets ?? {}).map(([id, planet]) => ({
+    ? Object.entries(previewRuntimeState.planets)
+      .filter(([id]) => id !== previewSourceId)
+      .map(([id, planet]) => ({
         id,
         name: planet.name,
-        relation: 'ally' as const,
+        relation: 'self' as const,
         coordinate: {
           galaxy: planet.universeGalaxy ?? 1,
           system: planet.universeSystem ?? 1,
           position: planet.universePosition ?? 1,
         },
-      })),
-    ]
+      }))
     : [];
-  const selectedTransportTargetId = previewDestination?.kind === 'planet' ? previewDestination.planetId : '';
+  const previewTargetDestination = previewDestination ?? launchContext?.destination;
+  const previewTargetPlanet = previewRuntimeState && previewTargetDestination?.kind === 'planet'
+    ? previewRuntimeState.planets[previewTargetDestination.planetId] ?? previewRuntimeState.alliedPlanets?.[previewTargetDestination.planetId]
+    : null;
+  const isReadOnlyAllyTarget = missionId === 'transport'
+    && previewTargetRelation === 'ally'
+    && previewTargetDestination?.kind === 'planet';
+  const selectedTransportTargetId = previewDestination?.kind === 'planet' && previewTargetRelation === 'self'
+    ? previewDestination.planetId
+    : '';
   const targetIsLocallyValid = coordinateDraftError(previewTargetDraft) === null;
-  const canDispatchPreview = missionId !== 'transport' && missionId !== 'colonize'
-    || (targetIsLocallyValid && (!previewResult || previewResult.ok));
+  const canDispatchPreview = missionId === 'transport'
+    ? targetIsLocallyValid
+    : missionId !== 'colonize'
+      || (targetIsLocallyValid && (!previewResult || previewResult.ok));
   const previewTargetLabel = previewTargetError
     ? `[${previewTargetDraft.galaxy || '—'}:${previewTargetDraft.system || '—'}:${previewTargetDraft.position || '—'}]`
     : previewCoordinate
@@ -884,15 +879,18 @@ function FleetWorkspace({
                   <span aria-hidden="true">02</span>
                   <div>
                     <small>ЦЕЛЬ</small>
-                    {missionId === 'transport' ? <label className="flight-timeline-own-target" data-qa-transport-target-select><span>ПЛАНЕТА-ЦЕЛЬ</span><select value={selectedTransportTargetId} onChange={(event) => selectTransportTarget(event.target.value)}><option value="">Выберите планету</option>{transportTargetOptions.map((target) => <option key={`${target.relation}-${target.id}`} value={target.id}>{target.relation === 'ally' ? 'Союзная' : 'Своя'} · {target.name} [{target.coordinate.galaxy}:{target.coordinate.system}:{target.coordinate.position}]</option>)}</select></label> : null}
-                    {editingPreviewTarget ? <div className="flight-timeline-coordinate-inputs" data-qa-flight-target-inputs>
+                    {missionId === 'transport' && isReadOnlyAllyTarget ? <div className="flight-timeline-readonly-target" data-qa-transport-target-readonly>
+                      <span>СОЮЗНАЯ ПЛАНЕТА</span>
+                      <strong>{previewTargetPlanet?.name ?? 'Союзная планета'} {previewTargetDestination?.kind === 'planet' ? flightCoordinateLabel(previewTargetDestination.coordinate) : ''}</strong>
+                    </div> : missionId === 'transport' ? <label className="flight-timeline-own-target" data-qa-transport-target-select><span>СВОЯ ПЛАНЕТА</span><select value={selectedTransportTargetId} onChange={(event) => selectTransportTarget(event.target.value)}><option value="">Выберите планету</option>{transportTargetOptions.map((target) => <option key={target.id} value={target.id}>Своя · {target.name} [{target.coordinate.galaxy}:{target.coordinate.system}:{target.coordinate.position}]</option>)}</select></label> : null}
+                    {!isReadOnlyAllyTarget && editingPreviewTarget ? <div className="flight-timeline-coordinate-inputs" data-qa-flight-target-inputs>
                       <label><span>ГАЛ.</span><input name="flight-preview-target-galaxy" inputMode="numeric" value={previewTargetDraft.galaxy} onInput={(event) => changePreviewTargetField('galaxy', event.currentTarget.value)} onChange={(event) => changePreviewTargetField('galaxy', event.currentTarget.value)} aria-label="Галактика цели" /></label>
                       <label><span>СИСТ.</span><input name="flight-preview-target-system" inputMode="numeric" value={previewTargetDraft.system} onInput={(event) => changePreviewTargetField('system', event.currentTarget.value)} onChange={(event) => changePreviewTargetField('system', event.currentTarget.value)} aria-label="Система цели" /></label>
                       <label><span>ПОЗ.</span><input name="flight-preview-target-position" inputMode="numeric" value={previewTargetDraft.position} onInput={(event) => changePreviewTargetField('position', event.currentTarget.value)} onChange={(event) => changePreviewTargetField('position', event.currentTarget.value)} aria-label="Позиция цели" /></label>
-                    </div> : <strong>{previewTargetLabel}</strong>}
+                    </div> : !isReadOnlyAllyTarget ? <strong>{previewTargetLabel}</strong> : null}
                     <div className={`flight-timeline-target-status ${previewTargetError ? 'is-invalid' : 'is-valid'}`} data-qa-flight-target-status>
                       <span data-qa-target-relation={previewTargetRelation}>{previewTargetError ?? (previewTargetRelation === 'ally' ? 'Союзная планета' : previewTargetRelation === 'self' ? 'Своя планета' : previewResult?.ok ? 'Цель подтверждена' : 'Координаты будут проверены при отправке')}</span>
-                      <button type="button" className="flight-timeline-edit" onClick={() => setEditingPreviewTarget((value) => !value)}>{editingPreviewTarget ? 'ГОТОВО' : 'ИЗМЕНИТЬ'}</button>
+                      {!isReadOnlyAllyTarget ? <button type="button" className="flight-timeline-edit" onClick={() => setEditingPreviewTarget((value) => !value)}>{editingPreviewTarget ? 'ГОТОВО' : 'ИЗМЕНИТЬ'}</button> : null}
                     </div>
                   </div>
                 </li>
@@ -942,7 +940,7 @@ function FleetWorkspace({
                     <p className="flight-timeline-note-info">Газ списывается только за один путь туда. Обратный участок не требует повторной оплаты.</p>
                     <p className="flight-timeline-note-warning">При отзыве колонизатор возвращается, но газ не возвращается.</p>
                   </div>
-                </> : <p className="flight-timeline-error" data-qa-flight-preview-error>{previewResult && !previewResult.ok ? previewResult.error.message : 'Укажите координаты цели. Проверка доступности выполняется при отправке.'}</p>}
+                </> : <p className="flight-timeline-error" data-qa-flight-preview-error>{previewResult && !previewResult.ok ? previewResult.error.message : targetIsLocallyValid ? 'Проверка цели будет выполнена при отправке.' : 'Укажите координаты цели. Проверка доступности выполняется при отправке.'}</p>}
               </section>
               {missionId === 'transport' && transportSummary ? <section className="flight-timeline-cargo" data-qa-flight-cargo data-qa-cargo-capacity={`${transportSummary.capacity.used}/${transportSummary.capacity.total}`} aria-label="Загрузка ресурсов">
                 <div className="flight-timeline-cargo-head">

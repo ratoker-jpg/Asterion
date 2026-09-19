@@ -1085,6 +1085,16 @@ html.asterion-long-page:has([data-qa-flight-preview-backdrop]) #root {
   font-size: 10px;
 }
 .flight-timeline-own-target select:focus { border-color: #66e1f7; outline: 2px solid rgba(84, 223, 247, .2); outline-offset: 1px; }
+.flight-timeline-readonly-target {
+  display: grid;
+  gap: 4px;
+  margin-top: 5px;
+  padding: 6px 8px;
+  border: 1px solid rgba(82, 214, 160, .42);
+  background: rgba(17, 91, 78, .22);
+}
+.flight-timeline-readonly-target > span { color: #79c9a9; font-size: 7px; letter-spacing: .08em; }
+.flight-timeline-readonly-target strong { color: #effff7; font-size: 11px; line-height: 1.25; }
 .flight-timeline-cargo-field input:not(:disabled) { color: #effcff; border-color: rgba(103, 204, 230, .58); }
 .flight-timeline-cargo-field input:not(:disabled):focus { border-color: #e6ad50; outline: 2px solid rgba(230, 173, 80, .24); outline-offset: 1px; }
 .flight-timeline-target-status {
