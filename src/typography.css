@@ -1,8 +1,10 @@
-/* Bundled Inter (variable, OFL) — the UI declares font-family: Inter first,
-   so every machine gets the same rendering without relying on system fonts. */
+/* Bundled Montserrat (variable, OFL) — the UI declares font-family: Montserrat first,
+   so every machine gets the same rendering without relying on system fonts.
+   Regular (400) for body text, SemiBold (600) for emphasis/labels, true heavier
+   instances for the game's legacy 700-900 headings. */
 @font-face{
-  font-family:"Inter";
-  src:url("/fonts/Inter-Variable.ttf") format("truetype");
+  font-family:"Montserrat";
+  src:url("/fonts/Montserrat-Variable.ttf") format("truetype");
   font-weight:100 900;
   font-style:normal;
   font-display:swap;
