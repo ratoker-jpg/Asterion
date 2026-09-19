@@ -8,7 +8,8 @@ app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'visual-qa');
-const SAVE_KEY = 'asterion.vertical-slice.v1';
+const SAVE_KEY = 'asterion.vertical-slice.test.v1';
+const TEST_TIME_SCALE_KEY = 'asterion.test-time-scale.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const REFILL_MS = 15 * 60 * 1000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -95,8 +96,10 @@ async function seedTradeCenter(win) {
     save.metal = 15880;
     save.minerals = 12712;
     save.gas = 6421;
+    save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 7);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
     return true;
   })()`);
   if (!ok) throw new Error('Could not seed Trade Center state');
@@ -311,6 +314,7 @@ async function verifyFlow(win, directory, label) {
   if (screen?.submitDisabled || screen.receive !== 1000) throw new Error(`${label}: base 1:1 trade should be valid ${JSON.stringify(screen)}`);
   await click(win, '[data-qa-trade-submit]');
   await waitFor(win, `document.querySelector('[data-qa-trade-toast]')?.textContent?.includes('Обмен выполнен')`);
+  await waitFor(win, `document.querySelector('[data-qa-trade-slots]')?.getAttribute('data-qa-trade-slots') === '2/3' && document.querySelectorAll('[data-qa-trade-refill-segment]').length === 1`);
   screen = await readScreen(win);
   if (screen?.amount !== 0 || screen.source !== 'metal' || screen.target !== 'minerals' || screen.slots !== '2/3' || screen.queueCount !== 1 || screen.queueSegments !== 1) throw new Error(`${label}: first trade UI state mismatch ${JSON.stringify(screen)}`);
   let saved = await readSave(win);
@@ -403,7 +407,7 @@ app.whenReady().then(async () => {
         partition: 'qa-trade-center-functional',
       },
     });
-    await win.loadFile(path.join(ROOT, 'dist', 'index.html'));
+    await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: '?mode=test' });
     win.webContents.debugger.attach('1.3');
 
     for (const [width, height] of VIEWPORTS) {

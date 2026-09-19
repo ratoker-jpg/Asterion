@@ -10,8 +10,9 @@ export type CurrentAllianceIdentity = {
   glyph: AllianceEmblem['glyph'];
 };
 
-export function selectCurrentAlliance(state: Pick<CommandState, 'alliance'>): CurrentAllianceIdentity {
+export function selectCurrentAlliance(state: Pick<CommandState, 'alliance'>): CurrentAllianceIdentity | null {
   const alliance = state.alliance;
+  if (!alliance.name.trim() || !alliance.tag.trim()) return null;
   const emblem = { glyph: alliance.emblem.glyph, accent: alliance.emblem.accent };
 
   return {

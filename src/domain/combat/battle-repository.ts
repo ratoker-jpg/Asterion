@@ -1,7 +1,9 @@
 import { DEMO_BATTLE_REPORTS } from './battle-fixtures.ts';
-import { ASTERION_SAVE_KEY, COMBAT_SAVE_SCHEMA_VERSION } from './priority.ts';
+import { COMBAT_SAVE_SCHEMA_VERSION } from './priority.ts';
 import { normalizeBattleReport, type BattleReport } from './report.ts';
+import { getRuntimeSaveKey, type RuntimeMode } from '../runtime/mode.ts';
 
+const LEGACY_SAVE_KEY = getRuntimeSaveKey();
 export const BATTLE_HISTORY_CHANGED_EVENT = 'asterion:battle-history-changed';
 
 export type BattleHistoryState = {
@@ -29,20 +31,20 @@ function resolveStorage(storage?: StorageLike): StorageLike | null {
   return window.localStorage;
 }
 
-export function createDefaultBattleHistory(): BattleHistoryState {
+export function createDefaultBattleHistory(mode: RuntimeMode = 'test'): BattleHistoryState {
   return {
-    reports: [...DEMO_BATTLE_REPORTS],
+    reports: mode === 'test' ? [...DEMO_BATTLE_REPORTS] : [],
     savedReportIds: [],
   };
 }
 
-export function migrateBattleHistory(value: unknown): BattleHistoryState {
+export function migrateBattleHistory(value: unknown, mode: RuntimeMode = 'test'): BattleHistoryState {
   const candidate = value && typeof value === 'object'
     ? value as { reports?: unknown; savedReportIds?: unknown }
     : {};
 
   const reportById = new Map<string, BattleReport>();
-  DEMO_BATTLE_REPORTS.forEach((report) => reportById.set(report.id, report));
+  if (mode === 'test') DEMO_BATTLE_REPORTS.forEach((report) => reportById.set(report.id, report));
 
   if (Array.isArray(candidate.reports)) {
     candidate.reports.forEach((report) => {
@@ -61,17 +63,19 @@ export function migrateBattleHistory(value: unknown): BattleHistoryState {
   return { reports, savedReportIds };
 }
 
-export function readBattleHistory(storage?: StorageLike): BattleHistoryState {
+export function readBattleHistory(storage?: StorageLike, mode?: RuntimeMode): BattleHistoryState {
+  const runtimeMode = mode ?? 'test';
+  const saveKey = mode === undefined ? LEGACY_SAVE_KEY : getRuntimeSaveKey(runtimeMode);
   const target = resolveStorage(storage);
-  if (!target) return createDefaultBattleHistory();
+  if (!target) return createDefaultBattleHistory(runtimeMode);
 
   try {
-    const raw = target.getItem(ASTERION_SAVE_KEY);
-    if (!raw) return createDefaultBattleHistory();
+    const raw = target.getItem(saveKey);
+    if (!raw) return createDefaultBattleHistory(runtimeMode);
     const parsed = JSON.parse(raw) as SaveEnvelope;
-    return migrateBattleHistory(parsed.combat);
+    return migrateBattleHistory(parsed.combat, runtimeMode);
   } catch {
-    return createDefaultBattleHistory();
+    return createDefaultBattleHistory(runtimeMode);
   }
 }
 
@@ -82,13 +86,16 @@ export type PersistBattleHistoryResult =
 export function persistBattleHistory(
   value: BattleHistoryState,
   storage?: StorageLike,
+  mode?: RuntimeMode,
 ): PersistBattleHistoryResult {
-  const normalized = migrateBattleHistory(value);
+  const runtimeMode = mode ?? 'test';
+  const saveKey = mode === undefined ? LEGACY_SAVE_KEY : getRuntimeSaveKey(runtimeMode);
+  const normalized = migrateBattleHistory(value, runtimeMode);
   const target = resolveStorage(storage);
   if (!target) return { ok: false, value: normalized, error: 'Локальное сохранение недоступно.' };
 
   try {
-    const raw = target.getItem(ASTERION_SAVE_KEY);
+    const raw = target.getItem(saveKey);
     let parsed: SaveEnvelope = {};
     if (raw) parsed = JSON.parse(raw) as SaveEnvelope;
 
@@ -97,7 +104,7 @@ export function persistBattleHistory(
       schemaVersion: COMBAT_SAVE_SCHEMA_VERSION,
       combat: normalized,
     };
-    target.setItem(ASTERION_SAVE_KEY, JSON.stringify(nextSave));
+    target.setItem(saveKey, JSON.stringify(nextSave));
 
     if (typeof window !== 'undefined' && target === window.localStorage) {
       window.dispatchEvent(new CustomEvent<BattleHistoryState>(BATTLE_HISTORY_CHANGED_EVENT, { detail: normalized }));
@@ -117,8 +124,9 @@ export function setBattleReportSaved(
   history: BattleHistoryState,
   reportId: string,
   saved: boolean,
+  mode: RuntimeMode = 'test',
 ): BattleHistoryState {
-  if (!history.reports.some((report) => report.id === reportId)) return migrateBattleHistory(history);
+  if (!history.reports.some((report) => report.id === reportId)) return migrateBattleHistory(history, mode);
 
   const savedIds = new Set(history.savedReportIds);
   if (saved) savedIds.add(reportId);

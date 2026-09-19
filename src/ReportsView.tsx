@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { BattleReportDetailBody } from './BattleReportsView';
 import { EmblemGlyph } from './CommandView';
-import aegisProfileAvatar from '../assets/source/generated-factions-v1/factions/aegis_profile_avatar.png';
+import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
 import type { BattleReport } from './domain/combat/report.ts';
 import type { CommandState } from './domain/command/types.ts';
 import { selectCurrentAlliance } from './domain/command/selectors.ts';
@@ -25,6 +25,7 @@ import type { ReportCategory, ReportFilter, ReportItem, ReportsState } from './d
 import type { PlayerProfileState } from './domain/profile/types.ts';
 import { selectPlayerProfileMetrics } from './domain/profile/selectors.ts';
 import type { RatingPrototypeState } from './domain/rating/fixtures.ts';
+import type { RuntimeMode } from './domain/runtime/mode.ts';
 import './reports.css';
 
 const PAGE_SIZE = 7;
@@ -185,10 +186,10 @@ function EmptyFolder({ folder }: { folder: MessageFolder }) {
 
 const PROFILE_EMBLEM = { glyph: 'starforge', accent: 'cyan' } as const;
 
-function ProfileAvatar({ displayName }: { displayName: string }) {
+function ProfileAvatar({ displayName, factionId }: { displayName: string; factionId: string }) {
   return (
     <div className="reports-profile-avatar">
-      <div className="reports-profile-avatar__art"><img src={aegisProfileAvatar} alt="" /></div>
+      <div className="reports-profile-avatar__art"><FactionGeneralPortrait factionId={factionId} className="reports-profile-avatar__portrait faction-general-portrait--large" /></div>
       <strong>{displayName}</strong>
     </div>
   );
@@ -201,8 +202,8 @@ function MetricGlyph({ metric }: { metric: string }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.6 5.3 5.9.8-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.8L12 3Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>;
 }
 
-function PlayerProfile({ profile, rating, command, onOpenCommand }: { profile: PlayerProfileState; rating: RatingPrototypeState; command: CommandState; onOpenCommand: () => void }) {
-  const metrics = selectPlayerProfileMetrics(profile, rating);
+function PlayerProfile({ profile, rating, command, mode, onOpenCommand }: { profile: PlayerProfileState; rating: RatingPrototypeState; command: CommandState; mode: RuntimeMode; onOpenCommand: () => void }) {
+  const metrics = selectPlayerProfileMetrics(profile, rating, mode);
   const alliance = selectCurrentAlliance(command);
   return (
     <section className="reports-profile-view" data-qa-profile aria-labelledby="reports-profile-title">
@@ -210,7 +211,7 @@ function PlayerProfile({ profile, rating, command, onOpenCommand }: { profile: P
       <div className="reports-profile-name-plate"><small>ИМЯ ИГРОКА</small><h3>{profile.displayName}</h3><span>{profile.playerId}</span></div>
       <div className="reports-profile-card">
         <div className="reports-profile-asterion-mark" aria-hidden="true"><EmblemGlyph emblem={PROFILE_EMBLEM} /></div>
-        <section className="reports-profile-identity" aria-label="Аватар игрока"><ProfileAvatar displayName={profile.displayName} /></section>
+        <section className="reports-profile-identity" aria-label="Аватар игрока"><ProfileAvatar displayName={profile.displayName} factionId={profile.factionId} /></section>
         <section className="reports-profile-metrics" aria-label="Рейтинг игрока">
           {metrics.map((metric) => <div key={metric.key} className="reports-profile-metric" data-qa-profile-metric={metric.key} tabIndex={0} role="img" title={metric.description} aria-label={`${metric.label}: ${metric.value == null ? 'нет данных' : numberFormat.format(metric.value)}. ${metric.description}`}><span className="reports-profile-metric__glyph"><MetricGlyph metric={metric.key} /></span><span><small>{metric.label}</small><strong>{metric.value == null ? '—' : numberFormat.format(metric.value)}</strong></span></div>)}
         </section>
@@ -220,7 +221,7 @@ function PlayerProfile({ profile, rating, command, onOpenCommand }: { profile: P
         </section>
       </div>
       {profile.protectionMode ? <div className="reports-profile-protection"><i /> ЗАЩИТНЫЙ РЕЖИМ АКТИВЕН</div> : null}
-      <p className="reports-fixture-note">Профильная идентичность и четыре очка — prototype fixture, сохранённые в общем состоянии. Формулы рейтинга остаются в существующем доменном провайдере.</p>
+      {mode === 'test' ? <p className="reports-fixture-note">Профильная идентичность и четыре очка — prototype fixture, сохранённые в общем состоянии. Формулы рейтинга остаются в существующем доменном провайдере.</p> : null}
     </section>
   );
 }
@@ -235,13 +236,14 @@ function FolderActions({ folder, items, selectedIds, onSelectAll, onDeleteAll, o
   );
 }
 
-export function ReportsView({ battleReports, savedBattleReportIds, operations, command, profile, rating, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand }: {
+export function ReportsView({ battleReports, savedBattleReportIds, operations, command, profile, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand }: {
   battleReports: readonly BattleReport[];
   savedBattleReportIds: readonly string[];
   operations: OperationsState;
   command: CommandState;
   profile: PlayerProfileState;
   rating: RatingPrototypeState;
+  mode: RuntimeMode;
   state: ReportsState;
   onStateChange: (next: ReportsState) => void;
   onToggleBattleSaved: (reportId: string, saved: boolean) => void;
@@ -346,7 +348,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
         <div className="reports-ai-note"><small>MESSAGE CENTER CORE</small><strong>БЕЗ ФАЛЬШИВЫХ СОБЫТИЙ</strong><span>Доклады читают BattleHistory. Остальные каналы наполняются только из существующих игровых контуров.</span></div>
       </aside>
 
-      {activeFolder === 'profile' ? <PlayerProfile profile={profile} rating={rating} command={command} onOpenCommand={onOpenCommand} /> : <section className="reports-folder-workspace" data-qa-folder-view={activeFolder}>
+      {activeFolder === 'profile' ? <PlayerProfile profile={profile} rating={rating} command={command} mode={mode} onOpenCommand={onOpenCommand} /> : <section className="reports-folder-workspace" data-qa-folder-view={activeFolder}>
         <section className="reports-feed" data-qa-message-folder-view={activeFolder}>
           <header className="reports-feed-head"><div><small>MESSAGE FOLDER</small><h2>{activeFolderMeta.label.toUpperCase()}</h2></div>{activeCategory ? <div className="reports-feed-head-tools"><span className="reports-folder-count">{counts[activeCategory]} СООБЩЕНИЙ</span><select value={filter} onChange={(event) => setFilter(event.target.value as ReportFilter)} aria-label="Фильтр сообщений">{availableFilters.map((key) => <option key={key} value={key}>{FILTER_LABELS[key]}</option>)}</select></div> : null}</header>
           {activeCategory ? <FolderActions folder={activeFolderMeta} items={folderItems} selectedIds={selectedIds} onSelectAll={selectAll} onDeleteAll={deleteAll} onDeleteSelected={deleteSelected} /> : null}

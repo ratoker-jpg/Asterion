@@ -36,7 +36,10 @@ import {
   type BattleStackViewModel,
   type BattleTechnologyViewModel,
 } from './domain/combat/battle-report-view-model.ts';
+import { getFactionGeneralAsset } from './domain/profile/faction-assets.ts';
+import { ACTIVE_RUNTIME_MODE } from './domain/runtime/mode.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
+import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
 import criticalHitArt from '../assets/source/New assets/technologies/technology.shared.critical-hit.png';
 import heavyArmorArt from '../assets/source/New assets/technologies/technology.shared.heavy-armor.png';
 import ionScienceArt from '../assets/source/New assets/technologies/technology.shared.ion-science.png';
@@ -49,9 +52,6 @@ import plasmaScienceArt from '../assets/source/New assets/technologies/technolog
 import shipArmorArt from '../assets/source/New assets/technologies/technology.shared.ship-armor.png';
 import battlePlanet from '../assets/source/battle-report-v2/battle-planet-transparent-v1.png';
 import battleSpaceBackground from '../assets/source/battle-report-v2/battle-space-background-v1.png';
-import aegisGeneral from '../assets/source/generated-factions-v1/factions/aegis_general.png';
-import synodGeneral from '../assets/source/generated-factions-v1/factions/synod_general.png';
-import veyraGeneral from '../assets/source/generated-factions-v1/factions/veyra_general.png';
 import './battle-reports.css';
 
 type SaveNotice = { kind: 'saved' | 'error'; message: string };
@@ -317,12 +317,6 @@ function sideTitle(side: BattleSideViewModel) {
   return side.participant.side === 'attacker' ? 'АТАКУЮЩИЙ' : 'ЗАЩИТНИК';
 }
 
-const BATTLE_FACTION_AVATARS = {
-  aegis: aegisGeneral,
-  synod: synodGeneral,
-  veyra: veyraGeneral,
-} as const;
-
 type BattleTechnologyId = BattleTechnologyViewModel['id'];
 
 const BATTLE_TECHNOLOGY_ART: Record<BattleTechnologyId, string> = {
@@ -348,10 +342,6 @@ const BATTLE_BONUS_GROUPS: readonly { id: string; label: string; technologyIds: 
   { id: 'shipLife', label: 'Жизни Кораблей', technologyIds: ['shipArmor', 'maneuverDefense'] },
   { id: 'criticalHit', label: 'Критический удар', technologyIds: ['criticalHit'] },
 ];
-
-function battleSideAvatar(side: BattleSideViewModel) {
-  return BATTLE_FACTION_AVATARS[side.factionId];
-}
 
 function battleSideInitials(side: BattleSideViewModel) {
   const initials = side.participant.playerName
@@ -427,14 +417,14 @@ function TechnologyBonusTable({ side }: { side: BattleSideViewModel }) {
 }
 
 function BattleHeaderSide({ side }: { side: BattleSideViewModel }) {
-  const avatar = battleSideAvatar(side);
+  const avatar = getFactionGeneralAsset(side.factionId);
   const participantMeta = [side.participant.coordinates, side.participant.race].filter(Boolean).join(' · ') || 'Идентификатор не зафиксирован';
   return (
     <article className={`battle-header-side-v1 ${side.participant.side}`} data-qa-battle-header-side={side.participant.side}>
       <header className="battle-header-side-head-v1">
         <div className="battle-side-identity-v1">
           <span className="battle-side-avatar-v1" data-qa-battle-side-avatar aria-hidden="true">
-            {avatar ? <img src={avatar} alt="" draggable={false} /> : <b>{battleSideInitials(side)}</b>}
+            {avatar ? <FactionGeneralPortrait factionId={side.factionId} /> : <b>{battleSideInitials(side)}</b>}
           </span>
           <div className="battle-side-copy-v1">
             <small>{sideTitle(side)}</small>
@@ -1066,14 +1056,14 @@ export function BattleReportModal({
 }
 
 export function BattleReportsView({ planetName, coords, onBack }: { planetName: string; coords: string; onBack: () => void }) {
-  const [history, setHistory] = useState<BattleHistoryState>(() => readBattleHistory());
+  const [history, setHistory] = useState<BattleHistoryState>(() => readBattleHistory(undefined, ACTIVE_RUNTIME_MODE));
   const [mode, setMode] = useState<BattleListMode>('recent');
   const [openReportId, setOpenReportId] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<SaveNotice>({ kind: 'saved', message: '✓ Автосохранение активно' });
   const closeReport = useCallback(() => setOpenReportId(null), []);
 
   useEffect(() => {
-    const sync = () => setHistory(readBattleHistory());
+    const sync = () => setHistory(readBattleHistory(undefined, ACTIVE_RUNTIME_MODE));
     window.addEventListener(BATTLE_HISTORY_CHANGED_EVENT, sync);
     return () => window.removeEventListener(BATTLE_HISTORY_CHANGED_EVENT, sync);
   }, []);
@@ -1093,8 +1083,8 @@ export function BattleReportsView({ planetName, coords, onBack }: { planetName: 
 
   const toggleSaved = (reportId: string) => {
     const currentlySaved = history.savedReportIds.includes(reportId);
-    const next = setBattleReportSaved(history, reportId, !currentlySaved);
-    const result = persistBattleHistory(next);
+    const next = setBattleReportSaved(history, reportId, !currentlySaved, ACTIVE_RUNTIME_MODE);
+    const result = persistBattleHistory(next, undefined, ACTIVE_RUNTIME_MODE);
     setHistory(result.value);
     setSaveNotice(result.ok
       ? { kind: 'saved', message: '✓ Сохранено' }

@@ -63,3 +63,6 @@
 .rating-selection-v2{min-width:420px;height:36px;display:flex;align-items:center;justify-content:flex-end;gap:14px;color:#73949e;white-space:nowrap}
 .rating-selection-v2 strong{color:#dffaff}
 .rating-selection-v2 .utility-data-text{color:#9ec8d2}
+.rating-empty-v2{min-height:260px;display:grid;place-content:center;gap:10px;padding:32px;text-align:center;color:#8faeb9}
+.rating-empty-v2 strong{color:#e2f7fb;font-size:18px;font-weight:500;letter-spacing:.4px}
+.rating-empty-v2 span{color:#6f8f9b;font-size:12px}

@@ -1,6 +1,10 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const {
+  assertRenderedFactionGeneralPortraits,
+  inspectRenderedFactionGeneralPortraits,
+} = require('./faction-general-qa.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -8,7 +12,7 @@ app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'artifacts', 'universe-planet-qa');
-const SAVE_KEY = 'asterion.vertical-slice.v1';
+const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 // Freeze the renderer clock so the scheduled asteroid fixture is stable and
 // the QA contract cannot silently weaken when the test is run on another day.
@@ -289,7 +293,7 @@ async function runViewport(width, height) {
 
   try {
     const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-    await win.loadFile(path.join(ROOT, 'dist', 'index.html'));
+    await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: '?mode=test' });
     await loaded;
     await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
     win.webContents.debugger.attach('1.3');
@@ -336,7 +340,9 @@ async function runViewport(width, height) {
     const player = await inspectorSnapshot(win);
     checkCopy(player);
     await checkModal(win);
-    if (player.kind !== 'player' || player.ownerName !== 'Dendrilion' || !player.avatar.includes('aegis_profile_avatar') || player.points.length !== 4 || player.planetRows !== 1 || player.actions.length !== 2 || player.actions.some((action) => !action.disabled || action.status !== 'disabled' || !action.title.includes('Это ваша планета'))) {
+    const playerPortraits = await inspectRenderedFactionGeneralPortraits(win, '[data-qa-universe-inspector] [data-qa-faction-general]');
+    assertRenderedFactionGeneralPortraits(playerPortraits, ['aegis'], `${label} player universe`);
+    if (player.kind !== 'player' || player.ownerName !== 'Dendrilion' || !player.avatar.includes('aegis_general') || player.points.length !== 4 || player.planetRows !== 1 || player.actions.length !== 2 || player.actions.some((action) => !action.disabled || action.status !== 'disabled' || !action.title.includes('Это ваша планета'))) {
       throw new Error(`${label}: player inspector contract failed ${JSON.stringify(player)}`);
     }
     if (!player.text.includes('Астеры') || !player.text.includes('Содружество Гелион') || !player.text.includes('[HLN]')) throw new Error(`${label}: player profile identity contract failed ${JSON.stringify(player)}`);
@@ -352,6 +358,8 @@ async function runViewport(width, height) {
     const npc = await inspectorSnapshot(win);
     checkCopy(npc);
     await checkModal(win);
+    const npcPortraits = await inspectRenderedFactionGeneralPortraits(win, '[data-qa-universe-inspector] [data-qa-faction-general]');
+    assertRenderedFactionGeneralPortraits(npcPortraits, ['veyra'], `${label} NPC universe`);
     if (npc.kind !== 'npc' || npc.ownerName !== 'Бот 01' || !npc.ownerId || npc.planetRows !== 7 || npc.actions.length !== 14 || npc.actions.some((action) => action.disabled || action.status !== 'prototype')) throw new Error(`${label}: NPC action/list contract failed ${JSON.stringify(npc)}`);
     const systems = npc.rows.map((row) => Number(row.coordinate.slice(1, -1).split(':')[1]));
     if (new Set(systems).size !== 7 || systems.some((system) => !Number.isInteger(system) || system < 1 || system > 40) || new Set(npc.rows.map((row) => row.id)).size !== 7 || npc.rows.some((row) => row.visitId !== row.id || !/^\[1:\d+:\d+\]$/.test(row.coordinate) || Number(row.coordinate.slice(1, -1).split(':')[2]) < 1 || Number(row.coordinate.slice(1, -1).split(':')[2]) > 24)) throw new Error(`${label}: NPC coordinates/visit targets failed ${JSON.stringify(npc.rows)}`);

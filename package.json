@@ -31,6 +31,7 @@
     "test:spaceport-ui": "electron electron/integration-spaceport-upgrades.cjs",
     "test:fleet-ui": "electron electron/fleet-production-qa.cjs",
     "test:test-mode-ui": "electron electron/test-mode-qa.cjs",
+    "test:production-test-isolation-ui": "electron electron/production-test-isolation-qa.cjs",
     "test:reports-ui": "electron electron/reports-profile-qa.cjs",
     "test:simulator-ui": "electron electron/simulator-qa.cjs",
     "test:battle-reports-ui": "electron electron/battle-report-qa.cjs",

@@ -22,6 +22,6 @@ export function publishApplicationRuntimeSnapshot(
 ): void {
   const scienceSnapshot = createScienceSnapshot(state, context);
   target.dispatchEvent(new CustomEvent(SCIENCE_RUNTIME_CHANGED_EVENT, { detail: scienceSnapshot }));
-  publishRuntimeStateSnapshot({ command: state.command, rating: state.rating });
+  publishRuntimeStateSnapshot({ mode: context.mode, command: state.command, rating: state.rating });
   target.dispatchEvent(new CustomEvent(RUNTIME_STATE_CHANGED_EVENT, { detail: state }));
 }

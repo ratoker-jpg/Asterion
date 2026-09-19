@@ -1,7 +1,9 @@
 import type { CommandState } from '../command/types.ts';
 import type { RatingPrototypeState } from '../rating/fixtures.ts';
+import type { RuntimeMode } from './mode.ts';
 
 export type RuntimeStateSnapshot = {
+  mode: RuntimeMode;
   command: CommandState;
   rating: RatingPrototypeState;
 };

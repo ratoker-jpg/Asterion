@@ -58,6 +58,14 @@ test('missing operations migrates to canonical defaults', () => {
   assert.deepEqual(migrateOperationsState({}), createDefaultOperationsState());
 });
 
+test('production operations stay empty even when an old fixture payload is present', () => {
+  const production = createDefaultOperationsState('production');
+  const migrated = migrateOperationsState(createDefaultOperationsState(), 'production');
+
+  assert.deepEqual(production.items, []);
+  assert.deepEqual(migrated.items, []);
+});
+
 test('malformed operations do not break migration', () => {
   assert.deepEqual(migrateOperationsState({ items: 'broken' }), createDefaultOperationsState());
   assert.deepEqual(migrateOperationsState({ items: [{ nope: true }] }), createDefaultOperationsState());

@@ -338,7 +338,7 @@ export function App() {
       setState((current) => ({
         ...current,
         schemaVersion: SAVE_SCHEMA_VERSION,
-        combat: migrateBattleHistory(history),
+        combat: migrateBattleHistory(history, RUNTIME_MODE),
       }));
     };
 
@@ -833,17 +833,17 @@ export function App() {
   };
 
   const acceptOperationsOperation = (operationId: OperationId) => {
-    setState((current) => ({ ...current, operations: acceptOperation(current.operations, operationId) }));
+    setState((current) => ({ ...current, operations: acceptOperation(current.operations, operationId, RUNTIME_MODE) }));
     setNotice('Операция принята. Подготовьте флот для выполнения.');
   };
 
   const cancelOperationsOperation = (operationId: OperationId) => {
-    setState((current) => ({ ...current, operations: cancelOperation(current.operations, operationId) }));
+    setState((current) => ({ ...current, operations: cancelOperation(current.operations, operationId, RUNTIME_MODE) }));
     setNotice('Операция отменена и возвращена в доступные без штрафа.');
   };
 
   const revealOperationsOperation = (operationId: OperationId) => {
-    setState((current) => ({ ...current, operations: revealOperation(current.operations, operationId) }));
+    setState((current) => ({ ...current, operations: revealOperation(current.operations, operationId, RUNTIME_MODE) }));
     setNotice('Сигнал просканирован. Классификация операции обновлена.');
   };
 
@@ -857,21 +857,25 @@ export function App() {
   };
 
   const joinCommandOperation = (operationId: string) => {
-    setState((current) => ({ ...current, command: joinJointOperation(current.command, operationId) }));
+    setState((current) => ({ ...current, command: joinJointOperation(current.command, operationId, RUNTIME_MODE) }));
     setNotice('Совместная операция добавлена в ваш союзный контур. Подготовка флота выполняется через раздел «Флоты».');
   };
 
   const reviewCommandRequest = (requestId: string) => {
-    setState((current) => ({ ...current, command: markResourceRequestReviewing(current.command, requestId) }));
+    setState((current) => ({ ...current, command: markResourceRequestReviewing(current.command, requestId, RUNTIME_MODE) }));
     setNotice('Запрос ресурсов принят к рассмотрению. Реальная транспортировка выполняется через раздел «Флоты».');
   };
 
   const saveCommandSettings = (input: AllianceSettingsInput) => {
     setState((current) => {
-      const command = updateAllianceSettings(current.command, input);
+      const command = updateAllianceSettings(current.command, input, RUNTIME_MODE);
       return { ...current, command, profile: syncPlayerProfileWithAlliance(current.profile, command.alliance) };
     });
     setNotice('Настройки союза сохранены в локальном прототипе.');
+  };
+
+  const createAlliancePlaceholder = () => {
+    setNotice('Создание союза пока недоступно в прототипе.');
   };
 
   const openFleetRootFromCommand = () => {
@@ -906,7 +910,7 @@ export function App() {
     const nextState: SaveState = {
       ...current,
       schemaVersion: SAVE_SCHEMA_VERSION,
-      combat: migrateBattleHistory(setBattleReportSaved(current.combat, reportId, saved)),
+      combat: migrateBattleHistory(setBattleReportSaved(current.combat, reportId, saved, RUNTIME_MODE), RUNTIME_MODE),
     };
     stateRef.current = nextState;
     setState(nextState);
@@ -1115,6 +1119,7 @@ export function App() {
               rating={state.rating}
               command={state.command}
               playerPlanets={universePlayerPlanets}
+              mode={RUNTIME_MODE}
               onColonize={openColonizationLaunch}
             />
           ) : activeRoute === 'operations' ? (
@@ -1132,6 +1137,7 @@ export function App() {
               onReviewRequest={reviewCommandRequest}
               onSaveSettings={saveCommandSettings}
               onOpenFleets={openFleetRootFromCommand}
+              onCreateAlliance={createAlliancePlaceholder}
             />
           ) : activeRoute === 'reports' ? (
             <ReportsView
@@ -1141,6 +1147,7 @@ export function App() {
               command={state.command}
               profile={state.profile}
               rating={state.rating}
+              mode={RUNTIME_MODE}
               state={state.reports}
               onStateChange={(reports) => setState((current) => ({ ...current, reports }))}
               onToggleBattleSaved={toggleBattleSavedFromReports}

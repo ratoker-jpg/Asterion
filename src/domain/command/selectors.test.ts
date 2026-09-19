@@ -40,6 +40,7 @@ test('legacy profile alliance cannot override the current CommandState alliance'
   });
 
   const current = selectCurrentAlliance(command);
+  assert.ok(current);
   assert.equal(current.name, 'Живой Контур');
   assert.equal(current.tag, 'LIVE');
   assert.notEqual(current.name, conflictingProfile.alliance?.name);

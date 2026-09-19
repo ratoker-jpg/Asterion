@@ -8,7 +8,12 @@ app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'visual-qa');
-const SAVE_KEY = 'asterion.vertical-slice.v1';
+const SAVE_KEY = 'asterion.vertical-slice.test.v1';
+const TEST_TIME_SCALE_KEY = 'asterion.test-time-scale.v1';
+const EXPECTED_METAL_AFTER_COLLECT = 20_980;
+const EXPECTED_MINERALS_AFTER_COLLECT = 16_112;
+const EXPECTED_GAS_AFTER_COLLECT = 6_421;
+const EXPECTED_GAS_AFTER_AUTO_COLLECT = 11_521;
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -94,8 +99,13 @@ async function seedPlanet(win) {
     planet.buildings.recycling = 3;
     planet.buildings.shipyard = Math.max(5, Number(planet.buildings.shipyard) || 0);
     planet.recycling = { availableDebris: 100000, jobs: [] };
+    save.metal = 15_880;
+    save.minerals = 12_712;
+    save.gas = 6_421;
+    save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 6);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
     return true;
   })()`);
   if (!ok) throw new Error('Could not seed recycling planet');
@@ -396,23 +406,23 @@ async function verifyFlow(win, directory, label) {
   await waitFor(win, `document.querySelector('[data-qa-recycling-toast]')?.textContent?.includes('Ресурсы получены')`);
   const collected = await readSave(win);
   if (collected.recycling?.jobs?.length !== 2) throw new Error(`${label}: collected job not removed exactly once`);
-  if (Number(collected.metal) !== 20980 || Number(collected.minerals) !== 16112 || Number(collected.gas) !== 6421) throw new Error(`${label}: wallet output mismatch ${JSON.stringify(collected)}`);
+  if (Number(collected.metal) !== EXPECTED_METAL_AFTER_COLLECT || Number(collected.minerals) !== EXPECTED_MINERALS_AFTER_COLLECT || Number(collected.gas) !== EXPECTED_GAS_AFTER_COLLECT) throw new Error(`${label}: wallet output mismatch ${JSON.stringify(collected)}`);
   if (JSON.stringify(collected.queue) !== queueBefore) throw new Error(`${label}: building FIFO changed after collect`);
 
   await makeExpiredForAutoCollect(win, 0);
   await waitFor(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
-    return save.planets?.['helion-01']?.recycling?.jobs?.length === 1 && Number(save.gas) === 11521;
+    return save.planets?.['helion-01']?.recycling?.jobs?.length === 1 && Number(save.gas) === ${EXPECTED_GAS_AFTER_AUTO_COLLECT};
   })()`);
   const autoCollected = await readSave(win);
   if (autoCollected.recycling?.jobs?.length !== 1) throw new Error(`${label}: auto-collected job was not removed ${JSON.stringify(autoCollected)}`);
-  if (Number(autoCollected.metal) !== 20980 || Number(autoCollected.minerals) !== 16112 || Number(autoCollected.gas) !== 11521) throw new Error(`${label}: 24h auto-collect did not atomically credit wallet ${JSON.stringify(autoCollected)}`);
+  if (Number(autoCollected.metal) !== EXPECTED_METAL_AFTER_COLLECT || Number(autoCollected.minerals) !== EXPECTED_MINERALS_AFTER_COLLECT || Number(autoCollected.gas) !== EXPECTED_GAS_AFTER_AUTO_COLLECT) throw new Error(`${label}: 24h auto-collect did not atomically credit wallet ${JSON.stringify(autoCollected)}`);
   if (JSON.stringify(autoCollected.queue) !== queueBefore) throw new Error(`${label}: building FIFO changed after auto-collect`);
 
   await reload(win);
   await settle(win);
   const afterRepeatReload = await readSave(win);
-  if (Number(afterRepeatReload.metal) !== 20980 || Number(afterRepeatReload.minerals) !== 16112 || Number(afterRepeatReload.gas) !== 11521) throw new Error(`${label}: auto-collect paid twice after reload ${JSON.stringify(afterRepeatReload)}`);
+  if (Number(afterRepeatReload.metal) !== EXPECTED_METAL_AFTER_COLLECT || Number(afterRepeatReload.minerals) !== EXPECTED_MINERALS_AFTER_COLLECT || Number(afterRepeatReload.gas) !== EXPECTED_GAS_AFTER_AUTO_COLLECT) throw new Error(`${label}: auto-collect paid twice after reload ${JSON.stringify(afterRepeatReload)}`);
   if (afterRepeatReload.recycling?.jobs?.length !== 1) throw new Error(`${label}: auto-collect state changed on repeated reload ${JSON.stringify(afterRepeatReload)}`);
 
   await activateIndustry(win);
@@ -467,7 +477,7 @@ app.whenReady().then(async () => {
         partition: 'qa-recycling-center-functional',
       },
     });
-    await win.loadFile(path.join(ROOT, 'dist', 'index.html'));
+    await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: '?mode=test' });
     win.webContents.debugger.attach('1.3');
 
     for (const [width, height] of VIEWPORTS) {

@@ -1619,7 +1619,7 @@
   align-items: flex-end;
   justify-content: center;
   overflow: hidden;
-  background: radial-gradient(ellipse at 50% 78%, rgba(35, 158, 220, .2), transparent 58%);
+  background: transparent;
 }
 
 .reports-profile-avatar__art::after {
@@ -1639,6 +1639,12 @@
   display: block;
   object-fit: contain;
   object-position: center bottom;
+  filter: drop-shadow(0 0 16px rgba(34, 158, 238, .35));
+}
+
+.reports-profile-avatar__portrait {
+  width: 100%;
+  height: 100%;
   filter: drop-shadow(0 0 16px rgba(34, 158, 238, .35));
 }
 
@@ -1696,6 +1702,8 @@
 .reports-profile-alliance-link .command-emblem { width: 78px; height: 92px; }
 .reports-profile-alliance-link strong { font-size: 13px; }
 .reports-profile-alliance-link b { margin-top: 4px; color: #6ed7ed; }
+
+.reports-profile-avatar__portrait img { width: 100%; height: 180%; object-fit: cover; object-position: 50% 0; }
 
 .reports-profile-asterion-mark {
   width: 300px;

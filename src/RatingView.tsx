@@ -3,6 +3,7 @@ import { EmblemGlyph } from './CommandView';
 import { createAllianceRatingEntries, createPlayerRatingEntries } from './domain/rating/fixtures.ts';
 import { selectCurrentAlliance } from './domain/command/selectors.ts';
 import type { CommandState } from './domain/command/types.ts';
+import type { RuntimeMode } from './domain/runtime/mode.ts';
 import {
   filterAlliances,
   filterPlayers,
@@ -23,9 +24,11 @@ import type {
 const PAGE_SIZE = 12;
 
 export function RatingView({
+  mode: runtimeMode = 'test',
   command,
   currentPlayerResourcePoints,
 }: {
+  mode?: RuntimeMode;
   command: CommandState;
   currentPlayerResourcePoints?: number;
 }) {
@@ -38,8 +41,8 @@ export function RatingView({
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const currentAlliance = useMemo(() => selectCurrentAlliance(command), [command]);
-  const players = useMemo(() => createPlayerRatingEntries(currentPlayerResourcePoints), [currentPlayerResourcePoints]);
-  const alliances = useMemo(() => createAllianceRatingEntries(currentAlliance), [currentAlliance]);
+  const players = useMemo(() => createPlayerRatingEntries(currentPlayerResourcePoints, runtimeMode), [currentPlayerResourcePoints, runtimeMode]);
+  const alliances = useMemo(() => createAllianceRatingEntries(currentAlliance, runtimeMode), [currentAlliance, runtimeMode]);
   const currentPlayer = useMemo(() => players.find((entry) => entry.isCurrentPlayer) ?? null, [players]);
 
   const playerResults = useMemo(
@@ -148,6 +151,11 @@ export function RatingView({
             onSelect={setSelectedId}
             onSort={sortPlayer}
           />
+        ) : alliances.length === 0 ? (
+          <div className="rating-empty-v2" data-qa-rating-empty role="status">
+            <strong>Союзов пока нет.</strong>
+            <span>Создайте союз, чтобы здесь появилась его позиция в рейтинге.</span>
+          </div>
         ) : (
           <AllianceTable
             entries={results.items as AllianceRatingEntry[]}
@@ -233,6 +241,7 @@ function PlayerRow({
         selectedId === entry.id ? 'selected' : '',
       ].filter(Boolean).join(' ')}
       onClick={() => onSelect(entry.id)}
+      data-qa-rating-player-row={entry.id}
     >
       <span className="rank-v2"><b>{entry.rank}</b></span>
       <span className="identity-v2"><RaceEmblem race={entry.race} /><strong className="utility-data-text">{entry.name}</strong></span>

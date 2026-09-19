@@ -451,7 +451,7 @@ function migrateFlightState(value: unknown): FlightState {
 }
 
 function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.now()): SaveState {
-  const command = createDefaultCommandState();
+  const command = createDefaultCommandState(mode);
   const science = createDefaultScienceState();
   const buildings = createCanonicalStartingBuildingLevels();
   if (mode === 'test') {
@@ -496,9 +496,9 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     rating: createDefaultRatingPrototypeState(),
     profile: syncPlayerProfileWithAlliance(createDefaultPlayerProfileState(), command.alliance),
     combatPriority: createDefaultCombatPriority(),
-    combat: createDefaultBattleHistory(),
+    combat: createDefaultBattleHistory(mode),
     combatSimulator: createDefaultSimulatorState(),
-    operations: createDefaultOperationsState(),
+    operations: createDefaultOperationsState(mode),
     command,
     reports: createDefaultReportsState(),
     science,
@@ -538,9 +538,9 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       testTimeScale,
       schemaVersion: numberOr(parsed.schemaVersion, 0),
     });
-    const combat = migrateBattleHistory(parsed.combat);
-    const operations = migrateOperationsState(parsed.operations);
-    const command = migrateCommandState(parsed.command);
+    const combat = migrateBattleHistory(parsed.combat, mode);
+    const operations = migrateOperationsState(parsed.operations, mode);
+    const command = migrateCommandState(parsed.command, mode);
     const profile = syncPlayerProfileWithAlliance(
       syncPlayerProfileWithFaction(migratePlayerProfileState(parsed.profile), CURRENT_PLAYER_FACTION_ID),
       command.alliance,

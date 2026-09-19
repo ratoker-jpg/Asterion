@@ -1,5 +1,6 @@
 import type { AllianceIdentity, AllianceRatingEntry, PlayerRatingEntry } from './types.ts';
 import { CURRENT_COMMAND_ALLIANCE_ID } from '../command/selectors.ts';
+import type { RuntimeMode } from '../runtime/mode.ts';
 
 const CALLSIGNS = ['Vega', 'Orion', 'Helios', 'Nyx', 'Astra', 'Kepler', 'Titan', 'Nova', 'Cygnus', 'Draco', 'Altair', 'Rigel'];
 const ALLIANCE_TAGS = ['ARC', 'NEX', 'VOID', 'AUR', 'ION', 'HEX', 'SOL', 'DRK'];
@@ -28,8 +29,26 @@ export function migrateRatingPrototypeState(value: unknown): RatingPrototypeStat
   };
 }
 
-export function createPlayerRatingEntries(currentPlayerResourcePoints = RATING_PROTOTYPE_RESOURCE_POINTS): PlayerRatingEntry[] {
+export function createPlayerRatingEntries(
+  currentPlayerResourcePoints = RATING_PROTOTYPE_RESOURCE_POINTS,
+  mode: RuntimeMode = 'test',
+): PlayerRatingEntry[] {
   const safeCurrentResourcePoints = Math.max(0, Math.floor(Number.isFinite(currentPlayerResourcePoints) ? currentPlayerResourcePoints : RATING_PROTOTYPE_RESOURCE_POINTS));
+  if (mode === 'production') {
+    return [{
+      id: CURRENT_PLAYER_ID,
+      rank: 1,
+      name: CURRENT_PLAYER_DISPLAY_NAME,
+      race: 'aster',
+      allianceTag: null,
+      achievementPoints: 0,
+      resourcePoints: safeCurrentResourcePoints,
+      battlePoints: 0,
+      totalPoints: safeCurrentResourcePoints,
+      isCurrentPlayer: true,
+    }];
+  }
+
   return Array.from({ length: 84 }, (_, index) => {
     const standing = index + 1;
     const fixtureResourcePoints = 1_150_000 - index * 8_170;
@@ -51,7 +70,12 @@ export function createPlayerRatingEntries(currentPlayerResourcePoints = RATING_P
   });
 }
 
-export function createAllianceRatingEntries(currentAlliance?: AllianceIdentity | null): AllianceRatingEntry[] {
+export function createAllianceRatingEntries(
+  currentAlliance?: AllianceIdentity | null,
+  mode: RuntimeMode = 'test',
+): AllianceRatingEntry[] {
+  if (mode === 'production') return [];
+
   const base = Array.from({ length: 42 }, (_, index): AllianceRatingEntry => {
     const standing = index + 1;
     const alliancePoints = 420_000 - index * 6_270;

@@ -8,9 +8,13 @@ app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'visual-qa');
-const SAVE_KEY = 'asterion.vertical-slice.v1';
+const SAVE_KEY = 'asterion.vertical-slice.test.v1';
+const TEST_TIME_SCALE_KEY = 'asterion.test-time-scale.v1';
 const VIEWPORTS = [[1920,1080],[1600,900],[1280,720],[2560,1440]];
 const RESOURCE_QA_VIEWPORTS = new Set(['1920x1080','1600x900','1280x720']);
+const TEST_QUEUE_METAL = 450_099_689;
+const TEST_QUEUE_ENERGY = 999_999_963;
+const TEST_COMPLETED_ENERGY = 1_000_000_014;
 const SCREENS = [
   ['settings','Настройки','settings-view-v2'],
   ['rating','Рейтинг','rating-view-v2'],
@@ -423,6 +427,13 @@ async function verifyResourceZoneFlow(win, directory) {
   await capture(win,directory,'resource-zone-insufficient');
 
   await resetTestSave(win);
+  await win.webContents.executeJavaScript(`(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+    save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
+    localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
+  })()`);
+  await reload(win);
   await activateResourceZone(win);
 
   for(const [index, role] of ['basic-energy','gas-production-1','hangar'].entries()) {
@@ -450,7 +461,7 @@ async function verifyResourceZoneFlow(win, directory) {
       full:Boolean(document.querySelector('[data-qa-queue-full]')),
     };
   })()`);
-  if(JSON.stringify(queued.roles)!==JSON.stringify(['basic-energy','gas-production-1','hangar']) || queued.metal!==15569 || queued.energy!==104 || !queued.full || !queued.slots[0]?.text.includes('Осталось')) throw new Error(`Three-slot queue state failed: ${JSON.stringify(queued)}`);
+  if(JSON.stringify(queued.roles)!==JSON.stringify(['basic-energy','gas-production-1','hangar']) || queued.metal!==TEST_QUEUE_METAL || queued.energy!==TEST_QUEUE_ENERGY || !queued.full || !queued.slots[0]?.text.includes('Осталось')) throw new Error(`Three-slot queue state failed: ${JSON.stringify(queued)}`);
   await capture(win,directory,'resource-zone-queue-3');
 
   await openResourceBuilding(win,'gas-production-2');
@@ -471,7 +482,7 @@ async function verifyResourceZoneFlow(win, directory) {
     localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
   })()`);
   await reload(win);
-  await waitFor(win, `(() => { try { const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}'); const q=save.queues?.['helion-01']; return Array.isArray(q)&&q.length===2&&q[0]?.assetRole==='gas-production-1'&&save.planets?.['helion-01']?.buildings?.['basic-energy']===2&&save.planets?.['helion-01']?.energy===155; } catch { return false; } })()`,8000);
+  await waitFor(win, `(() => { try { const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}'); const q=save.queues?.['helion-01']; return Array.isArray(q)&&q.length===2&&q[0]?.assetRole==='gas-production-1'&&save.planets?.['helion-01']?.buildings?.['basic-energy']===2&&save.planets?.['helion-01']?.energy===${TEST_COMPLETED_ENERGY}; } catch { return false; } })()`,8000);
   await activateResourceZone(win);
   await waitFor(win, `document.querySelector('[data-qa-queue-slot="1"]')?.getAttribute('data-qa-queue-role')==='gas-production-1'`);
   const fifo=await win.webContents.executeJavaScript(`(() => {
@@ -479,7 +490,7 @@ async function verifyResourceZoneFlow(win, directory) {
     const first=document.querySelector('[data-qa-queue-slot="1"]');
     return {queue:save.queues?.['helion-01']?.map((item)=>item.assetRole)??null,level:save.planets?.['helion-01']?.buildings?.['basic-energy']??null,energy:save.planets?.['helion-01']?.energy??null,activeRole:first?.getAttribute('data-qa-queue-role')??null,activeText:first?.textContent?.replace(/\s+/g,' ').trim()??''};
   })()`);
-  if(JSON.stringify(fifo.queue)!==JSON.stringify(['gas-production-1','hangar']) || fifo.activeRole!=='gas-production-1' || fifo.level!==2 || fifo.energy!==155 || !fifo.activeText.includes('Осталось')) throw new Error(`FIFO transition failed: ${JSON.stringify(fifo)}`);
+  if(JSON.stringify(fifo.queue)!==JSON.stringify(['gas-production-1','hangar']) || fifo.activeRole!=='gas-production-1' || fifo.level!==2 || fifo.energy!==TEST_COMPLETED_ENERGY || !fifo.activeText.includes('Осталось')) throw new Error(`FIFO transition failed: ${JSON.stringify(fifo)}`);
   await capture(win,directory,'resource-zone-fifo-next');
 
   await reload(win);
@@ -489,7 +500,7 @@ async function verifyResourceZoneFlow(win, directory) {
     const q=save.queues?.['helion-01'];
     return {queue:Array.isArray(q)?q.map((item)=>item.assetRole):null,level:save.planets?.['helion-01']?.buildings?.['basic-energy']??null,energy:save.planets?.['helion-01']?.energy??null};
   })()`);
-  if(JSON.stringify(persisted.queue)!==JSON.stringify(['gas-production-1','hangar']) || persisted.level!==2 || persisted.energy!==155) throw new Error(`Reload persistence failed: ${JSON.stringify(persisted)}`);
+  if(JSON.stringify(persisted.queue)!==JSON.stringify(['gas-production-1','hangar']) || persisted.level!==2 || persisted.energy!==TEST_COMPLETED_ENERGY) throw new Error(`Reload persistence failed: ${JSON.stringify(persisted)}`);
 
   const result={
     screen:'resource-zone-flow',
@@ -515,7 +526,7 @@ app.whenReady().then(async()=>{
   try {
     fs.rmSync(OUTPUT,{recursive:true,force:true}); fs.mkdirSync(OUTPUT,{recursive:true});
     win=new BrowserWindow({width:1000,height:700,show:false,backgroundColor:'#02050a',webPreferences:{offscreen:true,contextIsolation:true,nodeIntegration:false,sandbox:true,partition:'qa-utility'}});
-    await win.loadFile(path.join(ROOT,'dist','index.html'));
+    await win.loadFile(path.join(ROOT,'dist','index.html'), { search: '?mode=test' });
     win.webContents.debugger.attach('1.3');
 
     for(const [width,height] of VIEWPORTS){

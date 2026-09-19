@@ -13,9 +13,9 @@ import {
   type OperationState,
   type OperationThreatTier,
 } from './types.ts';
-import { getRuntimeSaveKey } from '../runtime/mode.ts';
+import { getRuntimeSaveKey, type RuntimeMode } from '../runtime/mode.ts';
 
-const ASTERION_SAVE_KEY = getRuntimeSaveKey();
+const LEGACY_SAVE_KEY = getRuntimeSaveKey();
 const OPERATION_STATES: readonly OperationState[] = ['available', 'active', 'completed'];
 const OPERATION_INTEL_LEVELS: readonly OperationIntelLevel[] = [0, 1, 2, 3];
 const OPERATION_THREAT_TIERS: readonly OperationThreatTier[] = [1, 2, 3, 4, 5, 6];
@@ -27,6 +27,12 @@ const OPERATION_MODIFIERS: readonly OperationModifier[] = [
   'ion_storm',
   'unknown_contact',
 ];
+const DEFAULT_OPERATION_IDS = new Set([
+  'op-pirate-patrol-01',
+  'op-pirate-outpost-01',
+  'op-signal-derelict-01',
+  'op-anomaly-01',
+]);
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 type SaveEnvelope = { operations?: unknown; [key: string]: unknown };
@@ -164,26 +170,26 @@ function resolveStorage(storage?: StorageLike): StorageLike | null {
   return window.localStorage;
 }
 
-export function createDefaultOperationsState(): OperationsState {
-  return { items: createDefaultOperationInstances() };
+export function createDefaultOperationsState(mode: RuntimeMode = 'test'): OperationsState {
+  return { items: mode === 'production' ? [] : createDefaultOperationInstances() };
 }
 
-export function migrateOperationsState(value: unknown): OperationsState {
-  if (!isRecord(value) || !Array.isArray(value.items)) return createDefaultOperationsState();
+export function migrateOperationsState(value: unknown, mode: RuntimeMode = 'test'): OperationsState {
+  if (!isRecord(value) || !Array.isArray(value.items)) return createDefaultOperationsState(mode);
 
   const seen = new Set<string>();
   const items = value.items.flatMap((candidate) => {
     const normalized = normalizeOperation(candidate);
-    if (!normalized || seen.has(normalized.id)) return [];
+    if (!normalized || (mode === 'production' && DEFAULT_OPERATION_IDS.has(normalized.id)) || seen.has(normalized.id)) return [];
     seen.add(normalized.id);
     return [normalized];
   });
 
-  return items.length ? { items } : createDefaultOperationsState();
+  return mode === 'production' ? { items } : items.length ? { items } : createDefaultOperationsState(mode);
 }
 
-export function acceptOperation(state: OperationsState, operationId: OperationId): OperationsState {
-  const normalized = migrateOperationsState(state);
+export function acceptOperation(state: OperationsState, operationId: OperationId, mode: RuntimeMode = 'test'): OperationsState {
+  const normalized = migrateOperationsState(state, mode);
   return {
     items: normalized.items.map((operation) => {
       if (operation.id !== operationId || operation.state !== 'available' || operation.intel === 0) return operation;
@@ -192,8 +198,8 @@ export function acceptOperation(state: OperationsState, operationId: OperationId
   };
 }
 
-export function cancelOperation(state: OperationsState, operationId: OperationId): OperationsState {
-  const normalized = migrateOperationsState(state);
+export function cancelOperation(state: OperationsState, operationId: OperationId, mode: RuntimeMode = 'test'): OperationsState {
+  const normalized = migrateOperationsState(state, mode);
   return {
     items: normalized.items.map((operation) => operation.id === operationId && operation.state === 'active'
       ? { ...operation, state: 'available' }
@@ -201,8 +207,8 @@ export function cancelOperation(state: OperationsState, operationId: OperationId
   };
 }
 
-export function revealOperation(state: OperationsState, operationId: OperationId): OperationsState {
-  const normalized = migrateOperationsState(state);
+export function revealOperation(state: OperationsState, operationId: OperationId, mode: RuntimeMode = 'test'): OperationsState {
+  const normalized = migrateOperationsState(state, mode);
   return {
     items: normalized.items.map((operation) => {
       if (operation.id !== operationId || operation.archetype !== 'unknown_signal' || operation.intel !== 0) return operation;
@@ -214,17 +220,19 @@ export function revealOperation(state: OperationsState, operationId: OperationId
   };
 }
 
-export function readOperationsState(storage?: StorageLike): OperationsState {
+export function readOperationsState(storage?: StorageLike, mode?: RuntimeMode): OperationsState {
+  const runtimeMode = mode ?? 'test';
+  const saveKey = mode === undefined ? LEGACY_SAVE_KEY : getRuntimeSaveKey(runtimeMode);
   const target = resolveStorage(storage);
-  if (!target) return createDefaultOperationsState();
+  if (!target) return createDefaultOperationsState(runtimeMode);
 
   try {
-    const raw = target.getItem(ASTERION_SAVE_KEY);
-    if (!raw) return createDefaultOperationsState();
+    const raw = target.getItem(saveKey);
+    if (!raw) return createDefaultOperationsState(runtimeMode);
     const envelope = JSON.parse(raw) as SaveEnvelope;
-    return migrateOperationsState(envelope.operations);
+    return migrateOperationsState(envelope.operations, runtimeMode);
   } catch {
-    return createDefaultOperationsState();
+    return createDefaultOperationsState(runtimeMode);
   }
 }
 
@@ -232,15 +240,17 @@ export type PersistOperationsResult =
   | { ok: true; value: OperationsState }
   | { ok: false; value: OperationsState; error: string };
 
-export function persistOperationsState(value: OperationsState, storage?: StorageLike): PersistOperationsResult {
-  const normalized = migrateOperationsState(value);
+export function persistOperationsState(value: OperationsState, storage?: StorageLike, mode?: RuntimeMode): PersistOperationsResult {
+  const runtimeMode = mode ?? 'test';
+  const saveKey = mode === undefined ? LEGACY_SAVE_KEY : getRuntimeSaveKey(runtimeMode);
+  const normalized = migrateOperationsState(value, runtimeMode);
   const target = resolveStorage(storage);
   if (!target) return { ok: false, value: normalized, error: 'Локальное сохранение недоступно.' };
 
   try {
-    const raw = target.getItem(ASTERION_SAVE_KEY);
+    const raw = target.getItem(saveKey);
     const envelope = raw ? JSON.parse(raw) as SaveEnvelope : {};
-    target.setItem(ASTERION_SAVE_KEY, JSON.stringify({ ...envelope, operations: normalized }));
+    target.setItem(saveKey, JSON.stringify({ ...envelope, operations: normalized }));
     return { ok: true, value: normalized };
   } catch (error) {
     return {

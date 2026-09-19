@@ -20,9 +20,12 @@ export type AllianceEmblem = {
   accent: AllianceAccent;
 };
 
+export type AllianceFixtureId = 'test-command-default-v1';
+
 export type AllianceProfile = {
   name: string;
   tag: string;
+  fixtureId?: AllianceFixtureId;
   leaderMemberId: string;
   motto: string;
   description: string;
