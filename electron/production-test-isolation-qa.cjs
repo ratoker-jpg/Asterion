@@ -107,10 +107,12 @@ async function inspectMode(win, mode, label) {
   await clickRoute(win, 'primary', 'reports', `document.querySelector('[data-qa-profile]')`);
   const profile = await win.webContents.executeJavaScript(`({
     general: document.querySelector('[data-qa-profile] [data-qa-faction-general]')?.getAttribute('data-faction') || '',
+    portraitBackground: document.querySelector('[data-qa-profile] [data-qa-faction-general]') ? getComputedStyle(document.querySelector('[data-qa-profile] [data-qa-faction-general]')).backgroundImage : '',
     battleFolders: document.querySelectorAll('[data-message-folder="battle"]').length,
     fixtureNote: Boolean(document.querySelector('[data-qa-profile] .reports-fixture-note')),
   })`);
   if (profile.general !== 'aegis' || profile.battleFolders !== 1) throw new Error(`${label}: faction profile contract mismatch ${JSON.stringify(profile)}`);
+  if (profile.portraitBackground !== 'none') throw new Error(`${label}: faction portrait has a generated background ${JSON.stringify(profile)}`);
   if (profile.fixtureNote !== (mode === 'test')) throw new Error(`${label}: profile fixture note visibility mismatch ${JSON.stringify(profile)}`);
   await win.webContents.executeJavaScript(`document.querySelector('[data-message-folder="battle"]')?.click()`);
   await waitFor(win, `document.querySelector('[data-qa-folder-view="battle"]')`);
@@ -136,8 +138,10 @@ async function inspectMode(win, mode, label) {
     if (!npcPortrait) throw new Error(`${label}: Test Mode NPC nodes were not reachable from the universe selector`);
     await win.webContents.executeJavaScript(`document.querySelector('[data-qa-universe-object="${npcPortrait}"]')?.click()`);
     await waitFor(win, `document.querySelector('[data-qa-universe-inspector]')`);
-    const npcFaction = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-universe-inspector] [data-qa-faction-general]')?.getAttribute('data-faction') || ''`);
+    const npcVisual = await win.webContents.executeJavaScript(`(() => { const node = document.querySelector('[data-qa-universe-inspector] [data-qa-faction-general]'); return { faction: node?.getAttribute('data-faction') || '', background: node ? getComputedStyle(node).backgroundImage : '' }; })()`);
+    const npcFaction = npcVisual.faction;
     if (npcFaction !== 'veyra') throw new Error(`${label}: Bot portrait faction mismatch ${npcFaction}`);
+    if (npcVisual.background !== 'none') throw new Error(`${label}: bot portrait has a generated background ${JSON.stringify(npcVisual)}`);
   }
   await capture(win, path.join(OUTPUT, label), `${mode}-universe`);
 

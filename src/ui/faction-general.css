@@ -3,7 +3,6 @@
   display: block;
   overflow: hidden;
   isolation: isolate;
-  background: linear-gradient(145deg, #364460, #131d2a);
 }
 
 .faction-general-portrait img {
