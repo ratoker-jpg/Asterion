@@ -1,9 +1,14 @@
 .resource-zone-view{
   position:absolute;
   inset:0;
+  width:100%;
+  height:100%;
+  min-height:0;
   display:grid;
   grid-template-columns:300px minmax(0,1fr) 300px;
+  grid-template-rows:minmax(0,1fr);
   gap:12px;
+  overflow:hidden;
   color:#dff8ff;
   background:transparent;
 }
@@ -14,6 +19,7 @@
   margin:8px 0 10px;
   padding:15px 13px;
   min-width:0;
+  min-height:0;
   overflow:hidden;
   border:1px solid rgba(62,190,222,.27);
   background:linear-gradient(180deg,rgba(4,23,35,.96),rgba(2,12,20,.98));
@@ -281,6 +287,7 @@
 .resource-zone-scene{
   position:relative;
   min-width:0;
+  min-height:0;
   margin:8px 0 10px;
   overflow:hidden;
   border:1px solid rgba(58,188,221,.24);

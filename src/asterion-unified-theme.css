@@ -1386,10 +1386,27 @@ html.asterion-repair-page .repair-page-head-v1::after{
   border-radius:var(--ut-r-card) !important;
 }
 
+/* The workspace outline is a legacy full-canvas frame, not a content
+   boundary. The rounded page panels already provide the visual grouping. */
+.workspace::before{
+  display:none !important;
+}
+
+/* The profile view is a layout surface; its old square outer border and glow
+   duplicate the rounded card inside it and remain visible along the bottom. */
+.reports-profile-view{
+  border-color:transparent !important;
+  box-shadow:none !important;
+}
+
 /* Profile identity is one name plate, not a label stack or a pill. */
 .reports-profile-name-plate{
   flex-basis:56px;
   min-height:56px;
+  width:100% !important;
+  max-width:none !important;
+  align-self:stretch;
+  margin:0 !important;
   border-radius:var(--ut-r-card) !important;
   clip-path:none !important;
 }
