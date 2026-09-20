@@ -7,7 +7,7 @@
 
    Reference language: the approved "ПЛАН ПЕРЕЛЁТА" modal (PR #71):
    rounded cards 18-22px, amber/cyan accents, readable labels
-   (>=14px for ordinary UI), tabular numerals, pill-like clear buttons.
+   (>=12px for ordinary UI), tabular numerals, pill-like clear buttons.
    ============================================================ */
 
 /* === 0. TOKENS ============================================== */
@@ -26,15 +26,15 @@
   --ut-danger:#f0445e;
   --ut-positive:#35e58a;
   --ut-label:#8fb6c0;
-  /* Fixed readable scale: display 32 / section 18 / data 16 / body 14. */
+  /* Fixed readable scale: display 18 / section 14 / data 12 / body 12. */
   --ut-font-hud:12px;
-  --ut-font-page-title:32px;
-  --ut-font-section-title:18px;
-  --ut-font-body:14px;
-  --ut-font-data:16px;
-  --ut-font-control:16px;
-  --ut-font-secondary:14px;
-  --ut-font-helper:14px;
+  --ut-font-page-title:18px;
+  --ut-font-section-title:14px;
+  --ut-font-body:12px;
+  --ut-font-data:12px;
+  --ut-font-control:12px;
+  --ut-font-secondary:11px;
+  --ut-font-helper:11px;
   --ut-focus:2px solid var(--ut-accent);
   --ut-motion-fast:160ms;
 }
@@ -1709,7 +1709,7 @@ body button[disabled]{ cursor:not-allowed; }
 .utility-screen-host .science-lab-speed-v2{ font-size:var(--ut-font-secondary); }
 .utility-screen-host .science-requirements-v2::before{ font-size:var(--ut-font-secondary); }
 
-/* Keep the science action column geometrically stable when a readable 16px
+/* Keep the science action column geometrically stable when a readable 12px
    control label wraps. The action itself stays anchored; only its note may
    use the remaining vertical space. */
 .science-action-v2{
@@ -1737,7 +1737,7 @@ body button[disabled]{ cursor:not-allowed; }
 }
 
 /* Last in the cascade by design: a component may tune colour and spacing,
-   but it may not silently reintroduce 6–10px text. */
+   but it may not silently reintroduce sub-11px text. */
 body [data-asterion-typography="pageTitle"]{ font-size:calc(var(--ut-font-page-title) * var(--text-scale-page-title)) !important; }
 body [data-asterion-typography="sectionTitle"]{ font-size:calc(var(--ut-font-section-title) * var(--text-scale-section-title)) !important; }
 body [data-asterion-typography="body"]{ font-size:calc(var(--ut-font-body) * var(--text-scale-body)) !important; }

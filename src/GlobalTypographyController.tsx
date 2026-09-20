@@ -11,13 +11,13 @@ const FORM_SELECTOR = 'input, select, textarea, option';
 // back into the micro-labels that caused the visual defects.
 const MIN_BASE_FONT_SIZE: Record<TypographyKey, number> = {
   hud: 12,
-  pageTitle: 32,
-  sectionTitle: 18,
-  body: 14,
-  table: 16,
-  control: 16,
-  secondary: 14,
-  helper: 14,
+  pageTitle: 18,
+  sectionTitle: 14,
+  body: 12,
+  table: 12,
+  control: 12,
+  secondary: 11,
+  helper: 11,
 };
 
 function hasDirectText(element: HTMLElement) {
