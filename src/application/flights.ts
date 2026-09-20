@@ -519,7 +519,8 @@ function createSpyReport(
         fleet: { ...target.fleet.ships },
         commanders: Object.fromEntries(Object.entries(target.commanders).map(([id, commander]) => [id, commander ? { ...commander } : commander])),
         population: {
-          total: target.population.civilian + target.population.fleet + target.population.defense,
+          civilian: target.population.civilian,
+          total: target.population.civilian,
           fleet: target.population.fleet,
           defense: target.population.defense,
         },

@@ -17,6 +17,8 @@ export type SpyPlanetPopulation = {
 };
 
 export type SpyReportPopulation = {
+  /** Civilian population on the target planet; ships and defense are reported separately. */
+  civilian: number;
   total: number;
   fleet: number;
   defense: number;

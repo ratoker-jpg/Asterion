@@ -6,6 +6,7 @@ import { UniverseView } from './UniverseView';
 import { OperationsView } from './OperationsView';
 import { CommandView } from './CommandView';
 import { ReportsView } from './ReportsView';
+import { buildReportsFeed, getReportUnreadCounts } from './domain/reports/adapters.ts';
 import { ZoneView } from './ZoneView';
 import { BuildingInteriorHost } from './BuildingInteriorHost';
 import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
@@ -596,6 +597,10 @@ export function App() {
     () => getStorageCapacities(currentPlanetState.buildings),
     [currentPlanetState.buildings],
   );
+  const reportsUnreadCount = useMemo(() => {
+    const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage);
+    return Object.values(getReportUnreadCounts(items, state.reports)).reduce((total, count) => total + count, 0);
+  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports]);
   const buildingInteriorTarget = buildingInterior
     ? getBuildingInteriorTarget(buildingInterior.buildingRole)
     : null;
@@ -1184,6 +1189,7 @@ export function App() {
           zoneMeta={zoneMeta}
           activeRoute={activeRoute}
           activeZone={activeRoute === 'planet' && planetViewMode !== 'overview' ? planetViewMode : null}
+          reportsUnreadCount={reportsUnreadCount}
           planetMenuOpen={planetMenuOpen}
             campaign={{ now, mode: RUNTIME_MODE, timeScale: testTimeScale, saveKey: persistence.saveKey, timeScaleOptions: TEST_TIME_SCALE_OPTIONS, onTimeScaleChange: setTestTimeScale }}
           onRouteChange={chooseRoute}
@@ -1401,7 +1407,7 @@ export function App() {
           )}
         </section>
 
-        <div className="shell-notice shell-notice-live" data-qa-runtime-mode={RUNTIME_MODE} role="status" aria-live="polite">
+        <div className="shell-notice shell-notice-live" data-qa-runtime-mode={RUNTIME_MODE} data-qa-runtime-notice role="status" aria-live="polite">
           <span>{notice}</span>
         </div>
 

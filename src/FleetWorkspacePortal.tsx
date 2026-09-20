@@ -1083,7 +1083,7 @@ function FleetWorkspace({
           <section className="resource-building-action-confirm spy-operations-modal" role="dialog" aria-modal="true" aria-labelledby="spy-operations-title" onMouseDown={(event) => event.stopPropagation()}>
             <header className="spy-operations-modal__head">
               <div>
-                <small>FLEET CONTROL / ШПИОНАЖ</small>
+                <small>УПРАВЛЕНИЕ ФЛОТОМ / ШПИОНАЖ</small>
                 <h3 id="spy-operations-title">ШПИОНСКИЕ ОТЧЁТЫ</h3>
                 <p>Активные зонды и управление готовыми снимками цели.</p>
               </div>
@@ -1105,7 +1105,7 @@ function FleetWorkspace({
                   <span role="cell"><strong>ШПИОНАЖ</strong><small>{spyStatusLabel(mission, flight, clockNow)} · {espionageState.reports.filter((report) => report.missionId === mission.id).length} отч.</small></span>
                   <span className="fleet-spy-row-actions-v1" role="cell">
                     <button type="button" disabled={!reportReady} onClick={() => window.dispatchEvent(new CustomEvent(SPY_REPORT_REQUEST_EVENT, { detail: { missionId: mission.id, now: Date.now() } }))}>ПОЛУЧИТЬ ОТЧЁТ</button>
-                    <button type="button" disabled={mission.status === 'returning'} onClick={() => { if (mission.status === 'transit' || mission.status === 'orbiting') setPendingRecall(flight); }}>ВЕРНУТЬ</button>
+                    <button type="button" disabled={mission.status === 'returning'} onClick={() => { if (mission.status === 'transit' || mission.status === 'orbiting') window.dispatchEvent(new CustomEvent(FLIGHT_RECALL_REQUEST_EVENT, { detail: { flightId: flight.id, now: Date.now() } })); }}>ВЕРНУТЬ</button>
                   </span>
                 </div>;
               }) : <p className="fleet-spy-empty-v1">Активных зондов нет. Отправьте один зонд на вражескую или нейтральную планету.</p>}

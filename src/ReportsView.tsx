@@ -32,6 +32,7 @@ import { getFactionCombatEntity } from './domain/combat/faction-catalog.ts';
 import { getCombatFactionName } from './domain/combat/factions.ts';
 import type { CombatEntityId } from './domain/combat/ids.ts';
 import type { UniverseCoordinate } from './domain/universe/types.ts';
+import { ResourceIcon } from './ui/resources/ResourceIcon.tsx';
 import './reports.css';
 
 const PAGE_SIZE = 7;
@@ -89,7 +90,7 @@ function formatDate(timestamp?: string) {
 }
 
 function formatTime(timestamp?: string) {
-  if (!timestamp) return 'NOW';
+  if (!timestamp) return 'СЕЙЧАС';
   return new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(new Date(timestamp));
 }
 
@@ -157,7 +158,7 @@ function GenericDossier({ item }: { item: ReportItem }) {
       </div>
       <section className={`reports-generic-hero reports-generic-hero--${item.category}`}>
         <ReportGlyph kind={item.category} />
-        <div><small>ASTERION REPORT CHANNEL</small><strong>{item.typeLabel.toUpperCase()}</strong><span>{item.statusLabel}</span></div>
+        <div><small>КАНАЛ ОТЧЁТОВ</small><strong>{item.typeLabel.toUpperCase()}</strong><span>{item.statusLabel}</span></div>
         <i />
       </section>
       <section className="reports-generic-details"><header>ДЕТАЛИ</header><dl>{item.details.map((detail) => <div key={`${detail.label}-${detail.value}`}><dt>{detail.label}</dt><dd>{detail.value}</dd></div>)}</dl></section>
@@ -183,6 +184,13 @@ function SpyDossier({ item, report, onOpenUniverseTarget }: {
   const defense = Object.entries(report.defense ?? {}).filter(([, count]) => Number(count) > 0);
   const commanders = Object.entries(report.commanders ?? {}).filter(([, value]) => Boolean(value));
   const factionName = getCombatFactionName(report.targetRaceId);
+  const resources = [
+    { kind: 'metal' as const, label: 'Металл', value: report.resources.metal },
+    { kind: 'minerals' as const, label: 'Минералы', value: report.resources.minerals },
+    { kind: 'gas' as const, label: 'Газ', value: report.resources.gas },
+    { kind: 'debris' as const, label: 'Обломки', value: report.resources.debris },
+    { kind: 'energy' as const, label: 'Энергия развития', value: report.resources.developmentEnergy },
+  ];
   return (
     <div className="reports-dossier reports-dossier--spy" data-qa-spy-report={report.id}>
       <div className="reports-dossier-heading">
@@ -197,13 +205,9 @@ function SpyDossier({ item, report, onOpenUniverseTarget }: {
         <div><dt>Отношение</dt><dd>{report.targetRelation === 'enemy' ? 'Враг' : 'Нейтральный'}</dd></div>
       </dl></section>
       <section className="spy-report-card"><header><strong>РЕСУРСЫ</strong><span>Снимок на момент передачи</span></header><div className="spy-report-resource-grid">
-        <div className="spy-report-resource"><span>Металл</span><strong>{numberFormat.format(report.resources.metal)}</strong></div>
-        <div className="spy-report-resource"><span>Минералы</span><strong>{numberFormat.format(report.resources.minerals)}</strong></div>
-        <div className="spy-report-resource"><span>Газ</span><strong>{numberFormat.format(report.resources.gas)}</strong></div>
-        <div className="spy-report-resource"><span>Обломки</span><strong>{numberFormat.format(report.resources.debris)}</strong></div>
-        <div className="spy-report-resource"><span>Энергия развития</span><strong>{numberFormat.format(report.resources.developmentEnergy)}</strong></div>
+        {resources.map((resource) => <div className={`spy-report-resource spy-report-resource--${resource.kind}`} key={resource.kind}><ResourceIcon kind={resource.kind} className="spy-report-resource__icon" /><span>{resource.label}</span><strong>{numberFormat.format(resource.value)}</strong></div>)}
       </div></section>
-      {report.population ? <section className="spy-report-card spy-report-card--population"><header><strong>НАСЕЛЕНИЕ</strong><span>Полный снимок планеты</span></header><div className="spy-report-population"><div><span>Население планеты</span><strong>{numberFormat.format(report.population.total)}</strong></div><div><span>Флот</span><strong>{numberFormat.format(report.population.fleet)}</strong></div><div><span>Оборона</span><strong>{numberFormat.format(report.population.defense)}</strong></div></div></section> : null}
+      {report.population ? <section className="spy-report-card spy-report-card--population"><header><strong>НАСЕЛЕНИЕ И СОСТАВ</strong><span>Население планеты отдельно от орбитальных сил</span></header><div className="spy-report-population"><div><span>Население планеты</span><strong>{numberFormat.format(report.population.civilian)}</strong></div><div><span>Корабли</span><strong>{numberFormat.format(report.population.fleet)}</strong></div><div><span>Оборона</span><strong>{numberFormat.format(report.population.defense)}</strong></div></div></section> : null}
       {report.quality !== 'basic' ? <section className="spy-report-card"><header><strong>ОБОРОНА</strong><span>{factionName}</span></header>{defense.length ? <div className="spy-report-entity-grid">{defense.map(([id, count]) => { const entity = getFactionCombatEntity(report.targetRaceId, id as CombatEntityId); return <article className="spy-report-entity" key={id}><img src={entity.art} alt="" /><div><strong>{entity.name}</strong><span>{entity.role}</span></div><b>{numberFormat.format(Number(count))}</b></article>; })}</div> : <p className="spy-report-empty">Оборона не найдена.</p>}</section> : null}
       {report.quality === 'full' ? <>
         <section className="spy-report-card"><header><strong>КОРАБЛИ</strong><span>Боевой и транспортный состав</span></header>{fleet.length ? <div className="spy-report-entity-grid">{fleet.map(([id, count]) => { const entity = getFactionCombatEntity(report.targetRaceId, id as CombatEntityId); return <article className="spy-report-entity" key={id}><img src={entity.art} alt="" /><div><strong>{entity.name}</strong><span>{entity.role}</span></div><b>{numberFormat.format(Number(count))}</b></article>; })}</div> : <p className="spy-report-empty">Корабли не найдены.</p>}</section>
@@ -261,7 +265,7 @@ function PlayerProfile({ profile, rating, command, mode, onOpenCommand }: { prof
   const alliance = selectCurrentAlliance(command);
   return (
     <section className="reports-profile-view" data-qa-profile aria-labelledby="reports-profile-title">
-      <header className="reports-profile-title-plate"><span className="reports-profile-title-plate__side">PLAYER PROFILE</span><h2 id="reports-profile-title">ПРОФИЛЬ ИГРОКА</h2><span className="reports-profile-title-plate__side reports-profile-title-plate__side--right">ASTERION // IDENTITY</span></header>
+      <header className="reports-profile-title-plate"><span className="reports-profile-title-plate__side">ПРОФИЛЬ ИГРОКА</span><h2 id="reports-profile-title">ПРОФИЛЬ ИГРОКА</h2><span className="reports-profile-title-plate__side reports-profile-title-plate__side--right">АСТЕРИОН // ЛИЧНОСТЬ</span></header>
       <div className="reports-profile-name-plate"><h3>{profile.displayName}</h3></div>
       <div className="reports-profile-card">
         <div className="reports-profile-asterion-mark" aria-hidden="true"><EmblemGlyph emblem={PROFILE_EMBLEM} /></div>
@@ -275,7 +279,7 @@ function PlayerProfile({ profile, rating, command, mode, onOpenCommand }: { prof
         </section>
       </div>
       {profile.protectionMode ? <div className="reports-profile-protection"><i /> ЗАЩИТНЫЙ РЕЖИМ АКТИВЕН</div> : null}
-      {mode === 'test' ? <p className="reports-fixture-note">Профильная идентичность и четыре очка — prototype fixture, сохранённые в общем состоянии. Формулы рейтинга остаются в существующем доменном провайдере.</p> : null}
+      {mode === 'test' ? <p className="reports-fixture-note">Профильная идентичность и четыре очка — тестовые данные, сохранённые в общем состоянии. Формулы рейтинга остаются в существующем доменном провайдере.</p> : null}
     </section>
   );
 }
@@ -403,12 +407,12 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
           })}
         </nav>
         <button className="reports-mark-all" type="button" disabled={!markableItems.some((item) => !state.readIds.includes(item.id))} onClick={() => onStateChange(markAllReportsRead(state, markableItems.map((item) => item.id)))}><span>✓</span> ОТМЕТИТЬ ВСЕ ПРОЧИТАННЫМИ</button>
-        <div className="reports-ai-note"><small>MESSAGE CENTER CORE</small><strong>БЕЗ ФАЛЬШИВЫХ СОБЫТИЙ</strong><span>Доклады читают BattleHistory. Остальные каналы наполняются только из существующих игровых контуров.</span></div>
+        <div className="reports-ai-note"><small>ЦЕНТР СООБЩЕНИЙ</small><strong>БЕЗ ФАЛЬШИВЫХ СОБЫТИЙ</strong><span>Боевые доклады читаются из журнала боёв. Остальные каналы наполняются только из существующих игровых контуров.</span></div>
       </aside>
 
       {activeFolder === 'profile' ? <PlayerProfile profile={profile} rating={rating} command={command} mode={mode} onOpenCommand={onOpenCommand} /> : <section className="reports-folder-workspace" data-qa-folder-view={activeFolder}>
         <section className="reports-feed" data-qa-message-folder-view={activeFolder}>
-          <header className="reports-feed-head"><div><small>MESSAGE FOLDER</small><h2>{activeFolderMeta.label.toUpperCase()}</h2></div>{activeCategory ? <div className="reports-feed-head-tools"><span className="reports-folder-count">{counts[activeCategory]} СООБЩЕНИЙ</span><select value={filter} onChange={(event) => setFilter(event.target.value as ReportFilter)} aria-label="Фильтр сообщений">{availableFilters.map((key) => <option key={key} value={key}>{FILTER_LABELS[key]}</option>)}</select></div> : null}</header>
+          <header className="reports-feed-head"><div><small>РАЗДЕЛ СООБЩЕНИЙ</small><h2>{activeFolderMeta.label.toUpperCase()}</h2></div>{activeCategory ? <div className="reports-feed-head-tools"><span className="reports-folder-count">{counts[activeCategory]} СООБЩЕНИЙ</span><select value={filter} onChange={(event) => setFilter(event.target.value as ReportFilter)} aria-label="Фильтр сообщений">{availableFilters.map((key) => <option key={key} value={key}>{FILTER_LABELS[key]}</option>)}</select></div> : null}</header>
           {activeCategory ? <FolderActions folder={activeFolderMeta} items={folderItems} selectedIds={selectedIds} onSelectAll={selectAll} onDeleteAll={deleteAll} onDeleteSelected={deleteSelected} /> : null}
           {activeCategory ? <label className="reports-search"><span aria-hidden="true"><SearchGlyph /></span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск в разделе..." aria-label="Поиск в разделе сообщений" /></label> : null}
           <div className="reports-list" data-qa-message-list>
@@ -418,7 +422,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
         </section>
 
         <section className="reports-preview">
-          <header className="reports-preview-head"><div><small>MESSAGE DOSSIER</small><h2>ПРОСМОТР СООБЩЕНИЯ</h2></div>{activeCategory ? <div className="reports-preview-actions"><button type="button" aria-label={selectedBattleSaved ? 'Убрать бой из сохранённых' : 'Сохранить бой'} aria-pressed={selectedBattleSaved} disabled={!selectedItem?.battleReportId} className={selectedBattleSaved ? 'active' : ''} onClick={() => selectedItem?.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)}><ActionGlyph kind="save" /></button><span /><button type="button" aria-label="Предыдущее сообщение" disabled={selectedIndex <= 0} onClick={() => navigateSelected(-1)}><ActionGlyph kind="prev" /></button><button type="button" aria-label="Следующее сообщение" disabled={selectedIndex < 0 || selectedIndex >= visibleItems.length - 1} onClick={() => navigateSelected(1)}><ActionGlyph kind="next" /></button></div> : null}</header>
+          <header className="reports-preview-head"><div><small>ДОСЬЕ СООБЩЕНИЯ</small><h2>ПРОСМОТР СООБЩЕНИЯ</h2></div>{activeCategory ? <div className="reports-preview-actions"><button type="button" aria-label={selectedBattleSaved ? 'Убрать бой из сохранённых' : 'Сохранить бой'} aria-pressed={selectedBattleSaved} disabled={!selectedItem?.battleReportId} className={selectedBattleSaved ? 'active' : ''} onClick={() => selectedItem?.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)}><ActionGlyph kind="save" /></button><span /><button type="button" aria-label="Предыдущее сообщение" disabled={selectedIndex <= 0} onClick={() => navigateSelected(-1)}><ActionGlyph kind="prev" /></button><button type="button" aria-label="Следующее сообщение" disabled={selectedIndex < 0 || selectedIndex >= visibleItems.length - 1} onClick={() => navigateSelected(1)}><ActionGlyph kind="next" /></button></div> : null}</header>
           <div className="reports-preview-scroll">{activeCategory ? selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} /> : selectedItem.spyReport ? <SpyDossier item={selectedItem} report={selectedItem.spyReport} onOpenUniverseTarget={onOpenUniverseTarget} /> : <GenericDossier item={selectedItem} />) : <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} /> : <EmptyFolder folder={activeFolderMeta} />}</div>
           {activeCategory && selectedItem?.action?.kind === 'open_fleets' ? <footer className="reports-preview-footer"><span>Выбери состав флота для совместной операции.</span><button type="button" onClick={onOpenFleets}>{selectedItem.action.label}</button></footer> : activeCategory && selectedItem?.source === 'espionage' && (selectedItem.action || selectedItem.secondaryAction) ? <footer className="reports-preview-footer"><span>{selectedItem.secondaryAction ? 'Связанный шпионский зонд ещё находится на орбите.' : 'Действия по полному снимку цели.'}</span><div className="reports-preview-footer-actions">
             {selectedItem.action?.kind === 'simulate_battle' && selectedItem.spyReport ? <button type="button" onClick={() => onSimulateBattle(selectedItem.spyReport!)}>{selectedItem.action.label}</button> : null}

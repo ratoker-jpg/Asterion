@@ -1887,3 +1887,137 @@ body button[data-asterion-close]:active{ transform:translateY(1px); }
 @media (min-width:701px){
   body .resource-building-dialog-art{ top:8px; }
 }
+
+/* === ESPIONAGE FOLLOW-UP =====================================
+   The probe action and its reports are primary feedback surfaces. Keep the
+   status visible, make the operations table fit its dialog, and keep unread
+   messages discoverable from the main navigation. */
+
+.stage .shell-notice.shell-notice-live{
+  position:absolute !important;
+  z-index:300 !important;
+  top:132px !important;
+  bottom:auto !important;
+  left:50% !important;
+  right:auto !important;
+  transform:translateX(-50%) !important;
+  box-sizing:border-box !important;
+  width:min(760px, calc(100% - 64px)) !important;
+  min-height:44px !important;
+  height:auto !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  margin:0 !important;
+  padding:10px 18px !important;
+  overflow:visible !important;
+  clip:auto !important;
+  clip-path:none !important;
+  white-space:normal !important;
+  border:1px solid rgba(65, 221, 242, .62) !important;
+  border-radius:var(--ut-r-card) !important;
+  background:linear-gradient(135deg, rgba(4, 71, 88, .97), rgba(3, 25, 38, .98)) !important;
+  box-shadow:0 14px 34px rgba(0, 0, 0, .42), 0 0 24px rgba(41, 205, 239, .16), inset 0 1px 0 rgba(190, 249, 255, .12) !important;
+  color:#e8fcff !important;
+  font-size:12px !important;
+  font-weight:700 !important;
+  line-height:1.35 !important;
+  letter-spacing:.01em !important;
+  text-align:center !important;
+  pointer-events:none !important;
+}
+.stage .shell-notice.shell-notice-live span{
+  display:block !important;
+  max-width:100% !important;
+  color:inherit !important;
+  font-size:inherit !important;
+  line-height:inherit !important;
+}
+
+.asterion-header__primary-navigation .asterion-header__nav-badge{
+  position:absolute;
+  z-index:2;
+  top:12px;
+  right:12px;
+  min-width:23px;
+  height:20px;
+  display:grid;
+  place-items:center;
+  padding:0 6px;
+  border:1px solid rgba(255, 118, 121, .78);
+  border-radius:999px;
+  background:linear-gradient(180deg, #c94f61, #7c263b);
+  box-shadow:0 0 12px rgba(255, 82, 105, .35), inset 0 1px 0 rgba(255, 221, 221, .22);
+  color:#fff5f5;
+  font-size:10px !important;
+  font-weight:900 !important;
+  line-height:1 !important;
+  letter-spacing:0 !important;
+  text-align:center;
+  white-space:nowrap !important;
+}
+
+body .resource-building-action-confirm.spy-operations-modal{
+  box-sizing:border-box;
+  width:min(1440px, calc(100vw - 48px)) !important;
+  max-width:calc(100vw - 48px) !important;
+  height:min(820px, calc(100vh - 48px));
+  max-height:calc(100vh - 48px) !important;
+  padding:24px !important;
+  text-align:left !important;
+}
+body .resource-building-action-confirm.spy-operations-modal .spy-operations-table-shell{
+  flex:1 1 auto;
+  width:100%;
+  min-width:0;
+  overflow-x:hidden;
+  overflow-y:auto;
+}
+body .resource-building-action-confirm.spy-operations-modal .spy-operations-row{
+  min-width:0 !important;
+  grid-template-columns:minmax(48px, .45fr) minmax(140px, 1fr) minmax(180px, 1.2fr) minmax(104px, .72fr) minmax(104px, .72fr) minmax(180px, 1fr) minmax(210px, 1.15fr);
+}
+body .resource-building-action-confirm.spy-operations-modal .spy-operations-modal__head h3{
+  font-size:18px !important;
+}
+body .resource-building-action-confirm.spy-operations-modal .spy-operations-row-actions-v1,
+body .resource-building-action-confirm.spy-operations-modal .fleet-spy-row-actions-v1{
+  min-width:0;
+}
+body .resource-building-action-confirm.spy-operations-modal .spy-operations-row-actions-v1 button,
+body .resource-building-action-confirm.spy-operations-modal .fleet-spy-row-actions-v1 button{
+  white-space:nowrap;
+}
+
+@media (max-width:1100px){
+  body .resource-building-action-confirm.spy-operations-modal{
+    width:calc(100vw - 24px) !important;
+    max-width:calc(100vw - 24px) !important;
+    height:calc(100vh - 24px);
+    max-height:calc(100vh - 24px) !important;
+    padding:17px !important;
+  }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-row{
+    grid-template-columns:24px minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "select origin target"
+      "select arrival return"
+      "select mission actions";
+    gap:10px;
+  }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-row--head{ display:none; }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-row > :nth-child(1){ grid-area:select; }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-row > :nth-child(2){ grid-area:origin; }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-row > :nth-child(3){ grid-area:target; }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-row > :nth-child(4){ grid-area:arrival; }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-row > :nth-child(5){ grid-area:return; }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-row > :nth-child(6){ grid-area:mission; }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-row > :nth-child(7){ grid-area:actions; }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-modal__footer{
+    align-items:stretch;
+    flex-direction:column;
+  }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-modal__actions{
+    justify-content:flex-start;
+  }
+}

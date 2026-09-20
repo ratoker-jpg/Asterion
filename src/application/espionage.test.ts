@@ -97,6 +97,8 @@ test('full report is an immutable permitted snapshot and later reconcile keeps t
   assert.equal(Boolean(report.fleet), true);
   assert.equal(Boolean(report.defense), true);
   assert.equal(Boolean(report.population), true);
+  assert.equal(report.population?.total, report.population?.civilian);
+  assert.equal(report.population?.total && report.population.total >= 5_000, true);
   assert.equal(arrived.state.espionage!.missions[0].status, 'orbiting');
 
   const later = reconcileFlights(arrived.state, dispatched.flight.arrivalAt + 1, () => 99);

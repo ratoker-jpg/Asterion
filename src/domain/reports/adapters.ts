@@ -195,7 +195,7 @@ export function spyReportToReportItem(report: SpyReportSnapshot, espionage?: Esp
     title: `${spyReportTitleLabel(report)} шпионский отчёт: ${report.targetPlanetName}`,
     preview: `${spyQualityLabel(report)} · ${coordinates} · цель ${report.targetOwnerName}.`,
     body: report.quality === 'full'
-      ? `Зонд передал полный снимок ${report.targetPlanetName}: ресурсы, население, флот и оборона цели.`
+      ? `Зонд передал полный снимок ${report.targetPlanetName}: ресурсы, население, корабли и оборона цели.`
       : report.quality === 'detailed'
         ? `Зонд передал детальный снимок ${report.targetPlanetName}: ресурсы и оборона цели.`
         : `Зонд передал базовую оценку ${report.targetPlanetName}: доступны только общие ресурсы цели.`,
@@ -209,7 +209,7 @@ export function spyReportToReportItem(report: SpyReportSnapshot, espionage?: Esp
       { label: 'Владелец', value: report.targetOwnerName },
       { label: 'Отношение', value: report.targetRelation === 'enemy' ? 'Враг' : 'Нейтральный' },
       { label: 'Качество', value: spyQualityLabel(report) },
-      ...(report.quality === 'full' && report.population ? [{ label: 'Население', value: `общее ${report.population.total} · флот ${report.population.fleet} · оборона ${report.population.defense}` }] : []),
+      ...(report.quality === 'full' && report.population ? [{ label: 'Население', value: `${report.population.total} · корабли ${report.population.fleet} · оборона ${report.population.defense}` }] : []),
     ],
     spyReport: report,
     action: report.quality === 'full' && spyReportHasCombatIntel(report) ? { kind: 'simulate_battle', label: 'МОДЕЛИРОВАТЬ СРАЖЕНИЕ' } : undefined,

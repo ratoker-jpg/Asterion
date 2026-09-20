@@ -110,10 +110,18 @@ function migrateReport(value: unknown): SpyReportSnapshot | null {
   if (quality === 'full') {
     base.fleet = record(source.fleet) as SpyReportSnapshot['fleet'];
     base.commanders = record(source.commanders) as SpyReportSnapshot['commanders'];
+    const fleetPopulation = nonNegative(population.fleet);
+    const defensePopulation = nonNegative(population.defense);
+    // Reports written before the population split stored a combined total.
+    // Recover the civilian value when possible so old saves do not keep showing
+    // ships and defenses as part of the planet's population.
+    const legacyTotal = nonNegative(population.total);
+    const civilianPopulation = nonNegative(population.civilian, Math.max(0, legacyTotal - fleetPopulation - defensePopulation));
     base.population = {
-      total: nonNegative(population.total, nonNegative(population.civilian) + nonNegative(population.fleet) + nonNegative(population.defense)),
-      fleet: nonNegative(population.fleet),
-      defense: nonNegative(population.defense),
+      civilian: civilianPopulation,
+      total: civilianPopulation,
+      fleet: fleetPopulation,
+      defense: defensePopulation,
     };
   }
   return base;

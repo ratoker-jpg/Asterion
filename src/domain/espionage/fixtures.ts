@@ -107,7 +107,9 @@ function createBotPlanet(index: number): Bot01PlanetState {
     defense,
     commanders,
     population: {
-      civilian: index === 0 ? 900 : 1_100 + index * 180,
+      // Planet population is civilian population. Orbital ships and defense
+      // have their own hangar populations and must not be folded into this value.
+      civilian: 5_000 + index * 850,
       fleet: fleetPopulation,
       defense: defensePopulation,
     },
