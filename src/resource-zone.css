@@ -437,7 +437,8 @@
   display:grid;
   place-items:center;
   padding:24px;
-  overflow:auto;
+  overflow:hidden;
+  overscroll-behavior:contain;
   background:rgba(0,5,9,.76);
   backdrop-filter:blur(3px);
 }
@@ -447,6 +448,7 @@
   min-height:0;
   max-height:calc(100dvh - 48px);
   overflow:auto;
+  overscroll-behavior:contain;
   display:block;
   border:1px solid rgba(66,215,246,.42);
   background:linear-gradient(180deg,rgba(4,28,41,.995),rgba(2,14,22,.998));

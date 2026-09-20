@@ -64,13 +64,30 @@ window.addEventListener(
   { capture: true },
 );
 
+// The fixed stage is not a document that should react to browser gesture
+// zoom. Chromium exposes pinch gestures as either gesture events or a
+// multi-touch move; stop both paths before they can change the CSS viewport.
+const preventGestureZoom = (event: Event) => event.preventDefault();
+window.addEventListener('gesturestart', preventGestureZoom, { passive: false, capture: true });
+window.addEventListener('gesturechange', preventGestureZoom, { passive: false, capture: true });
+window.addEventListener('gestureend', preventGestureZoom, { passive: false, capture: true });
+window.addEventListener(
+  'touchmove',
+  (event) => {
+    if (event.touches.length > 1) event.preventDefault();
+  },
+  { passive: false, capture: true },
+);
+
 if (!isElectron) {
   document.documentElement.classList.add('web-preview');
 
   const updateWebStageFit = () => {
-    const viewport = window.visualViewport;
-    const width = viewport?.width ?? window.innerWidth;
-    const height = viewport?.height ?? window.innerHeight;
+    // visualViewport changes during browser pinch zoom. Using it here feeds
+    // the zoom back into the fixed-stage scale and can look like an endless
+    // zoom/scroll loop. The layout viewport is the stable source of truth.
+    const width = window.innerWidth;
+    const height = window.innerHeight;
     const targetAspect = 1920 / 1080;
     const currentAspect = width / height;
     const containScale = Math.min(width / 1920, height / 1080);
@@ -83,7 +100,6 @@ if (!isElectron) {
 
   updateWebStageFit();
   window.addEventListener('resize', updateWebStageFit);
-  window.visualViewport?.addEventListener('resize', updateWebStageFit);
 }
 
 createRoot(document.getElementById('root')!).render(

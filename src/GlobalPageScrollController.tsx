@@ -173,7 +173,6 @@ export function GlobalPageScrollController() {
     });
 
     window.addEventListener('resize', schedule);
-    window.visualViewport?.addEventListener('resize', schedule);
     schedule();
 
     return () => {
@@ -182,7 +181,6 @@ export function GlobalPageScrollController() {
       window.cancelAnimationFrame(frame);
       window.clearTimeout(delayed);
       window.removeEventListener('resize', schedule);
-      window.visualViewport?.removeEventListener('resize', schedule);
       root.classList.remove('asterion-long-page');
       clearGeometry();
     };

@@ -644,6 +644,14 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .reports-profile-title-plate::after,
 .reports-profile-avatar__art::after,
 .reports-profile-view::before,
+.reports-profile-view::after,
+.reports-profile-name-plate::before,
+.reports-profile-name-plate::after,
+.reports-profile-card::before,
+.reports-profile-card::after,
+.aegis-button::before,
+.ship-info-art-v1::before,
+.ship-info-art-v1::after,
 .passport-panel-v2::after,
 .queue-panel-v2::after{
   display:none !important;
@@ -887,7 +895,7 @@ html.asterion-repair-page .repair-page-head-v1::after{
   border:1px solid var(--ut-border);
 }
 .reports-profile-metrics{ border-radius:var(--ut-r-card); }
-.reports-profile-avatar > strong{ border-radius:50%; }
+.reports-profile-avatar > strong{ border-radius:var(--ut-r-chip); }
 
 /* --- universe leftovers --- */
 .universe-nav .step{ border-radius:var(--ut-r-chip) !important; }
@@ -1350,3 +1358,102 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .ship-info-art-v1{ border-radius:var(--ut-r-chip); overflow:hidden; }
 /* .production-bot-range slider track/thumb left square — native control,
    rounding breaks the draggable hit-area look on webkit/gecko. */
+
+/* === FINAL VISUAL CLEANUP ===================================
+   The rounded surface is the component boundary. Legacy inset frames and
+   decorative pseudo-elements must not create a second rectangular panel
+   inside it. Keep real content borders; remove only these visual layers. */
+.aegis-button::before,
+.ship-info-art-v1::before,
+.ship-info-art-v1::after,
+.reports-profile-view::after,
+.reports-profile-name-plate::before,
+.reports-profile-name-plate::after,
+.reports-profile-card::before,
+.reports-profile-card::after{
+  display:none !important;
+}
+
+.aegis-button{
+  border-radius:var(--ut-r-card) !important;
+  clip-path:none !important;
+}
+.resource-building-dialog-art{
+  border-radius:var(--ut-r-card) !important;
+  box-shadow:inset 0 0 20px rgba(64,221,243,.12) !important;
+}
+.ship-info-art-v1{
+  border-radius:var(--ut-r-card) !important;
+}
+
+/* Profile identity is one name plate, not a label stack or a pill. */
+.reports-profile-name-plate{
+  flex-basis:56px;
+  min-height:56px;
+  border-radius:var(--ut-r-card) !important;
+  clip-path:none !important;
+}
+.reports-profile-name-plate h3{
+  font-size:22px;
+  line-height:1;
+  letter-spacing:.06em;
+}
+.reports-profile-name-plate small,
+.reports-profile-name-plate span{ display:none !important; }
+.reports-profile-avatar > strong{
+  min-width:160px;
+  padding:7px 18px 6px;
+  border-radius:var(--ut-r-chip) !important;
+  clip-path:none !important;
+}
+
+/* Fleet section labels are headings, while the queue is one section with
+   readable inner cards instead of three nested rectangular shells. */
+.fleet-menu-group-v1 > h3{
+  min-height:38px;
+  padding:8px 12px;
+  border-radius:var(--ut-r-card) !important;
+  font-size:13px !important;
+  letter-spacing:.11em !important;
+}
+.fleet-production-queue-v1{
+  margin-top:16px;
+  padding:12px 0 0;
+  border:0 !important;
+  border-top:1px solid var(--ut-border) !important;
+  border-radius:0 !important;
+  background:transparent !important;
+}
+.fleet-production-queue-head-v1{
+  min-height:38px;
+  padding:0 10px 9px;
+  border-bottom:1px solid var(--ut-border);
+  font-size:12.5px;
+  letter-spacing:.1em;
+}
+.fleet-production-queue-head-v1 strong{ font-size:13px; }
+.fleet-production-queue-empty-v1{
+  margin-top:10px;
+  border-radius:var(--ut-r-card) !important;
+  background:var(--ut-surface-2) !important;
+}
+.fleet-production-queue-foot-v1{
+  margin-top:10px;
+  padding:10px 0 0;
+  border:0 !important;
+  border-top:1px solid var(--ut-border) !important;
+  border-radius:0 !important;
+  background:transparent !important;
+}
+.fleet-production-back-v1{
+  min-height:42px;
+  border-radius:var(--ut-r-btn) !important;
+}
+.fleet-production-order-v1{ grid-template-columns:48px minmax(0,1fr) 34px; }
+.fleet-production-order-meta-v1 button{ width:30px; height:30px; }
+
+/* A three-digit defence count must have its own column; the old 94px rail
+   allowed ПОСТРОЕНО 500 to collide with the title. */
+.shipyard-card-title-v1:not(.commander){
+  grid-template-columns:132px minmax(0,1fr) 32px;
+}

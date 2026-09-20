@@ -1356,20 +1356,24 @@ html.asterion-long-page:has([data-qa-flight-preview-backdrop]) #root {
 .resource-building-action-confirm.flight-timeline-modal .flight-timeline-target-status .flight-timeline-edit { border-radius: 7px; }
 .resource-building-action-confirm.flight-timeline-modal .flight-timeline-error { border-radius: 10px; }
 
-/* --- follow-ups: wider cargo rail, wider inputs, wrapping ship names ---
+/* --- follow-ups: wider cargo rail, wider inputs, single-line ship names ---
    The cargo rail stretches a bit into the center column so long figures
    (МАКС. 400 000 and typed values) fit with the spinner buttons. */
 .resource-building-action-confirm.flight-timeline-modal .flight-timeline-body {
-  grid-template-columns: minmax(280px, 305px) minmax(0, 1fr) minmax(335px, 385px);
+  grid-template-columns: minmax(340px, 360px) minmax(0, 1fr) minmax(320px, 360px);
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-ship-card {
+  grid-template-columns: 43px minmax(0, 1fr) max-content;
 }
 .resource-building-action-confirm.flight-timeline-modal .flight-timeline-ship-card > div strong {
-  white-space: normal;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
   line-height: 1.18;
 }
 @media (max-height: 820px) and (min-width: 761px) {
   .resource-building-action-confirm.flight-timeline-modal .flight-timeline-body {
-    grid-template-columns: minmax(260px, 285px) minmax(0, 1fr) minmax(310px, 355px);
+    grid-template-columns: minmax(320px, 340px) minmax(0, 1fr) minmax(290px, 320px);
   }
   .resource-building-action-confirm.flight-timeline-modal .flight-timeline-cargo-field {
     grid-template-columns: minmax(0, 1fr) minmax(116px, 134px);
