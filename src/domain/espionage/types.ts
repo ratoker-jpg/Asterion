@@ -54,6 +54,8 @@ export type Bot01PlanetState = {
   population: SpyPlanetPopulation;
   hunterLevel: number;
   debris: number;
+  /** Seeded spaceport-style hull levels (upgradable ships only, 0..10). */
+  shipLevels?: Partial<Record<ShipId, number>>;
 };
 
 export type SpyReportSnapshot = {
@@ -76,6 +78,8 @@ export type SpyReportSnapshot = {
   resources: SpyResourcesSnapshot;
   defense?: Partial<Record<DefenseId, number>>;
   fleet?: Partial<Record<ShipId, number>>;
+  /** Seeded hull levels for the reported fleet; upgradable ships only. */
+  fleetLevels?: Partial<Record<ShipId, number>>;
   commanders?: Partial<Record<CommanderId, SpyCommanderSnapshot>>;
   population?: SpyReportPopulation;
   firstReport: boolean;

@@ -107,7 +107,7 @@ type UniverseViewProps = {
   onColonize: (coordinate: UniverseCoordinate) => void;
   onTransport: (target: { planetId: string; coordinate: UniverseCoordinate; relation: TargetRelation }) => void;
   onSpy: (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile }) => void;
-  focusTarget?: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string } | null;
+  focusTarget?: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string; mode?: 'inspect' | 'highlight' } | null;
   onFocusHandled?: () => void;
 };
 
@@ -369,6 +369,8 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
   const [showSlotLabels, setShowSlotLabels] = useState(true);
   const [showAsteroids, setShowAsteroids] = useState(true);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
+  const highlightTimerRef = useRef(0);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -426,6 +428,16 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
         && node.coordinate.position === focusTarget.coordinate.position);
     if (!target || (target.kind !== 'player' && target.kind !== 'npc')) return;
     setSystem(target.coordinate.system);
+    if (focusTarget.mode === 'highlight') {
+      // Coordinate links from spy reports only pinpoint the planet: pulse it
+      // for ~3s instead of opening the owner inspector.
+      setSelectedNodeId(null);
+      setHighlightedNodeId(target.id);
+      window.clearTimeout(highlightTimerRef.current);
+      highlightTimerRef.current = window.setTimeout(() => setHighlightedNodeId(null), 3_000);
+      onFocusHandled?.();
+      return;
+    }
     setSelectedNodeId(target.id);
     onFocusHandled?.();
   }, [focusTarget, nodesById, onFocusHandled]);
@@ -576,7 +588,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
             <button
               type="button"
               key={node.id}
-              className={`system-planet system-planet--${node.kind} ${relation ? `system-planet--${relation}` : ''} ${node.isHomeworld ? 'owned' : ''}`}
+              className={`system-planet system-planet--${node.kind} ${relation ? `system-planet--${relation}` : ''} ${node.isHomeworld ? 'owned' : ''} ${highlightedNodeId === node.id ? 'system-planet--highlight' : ''}`}
               style={toStyle(point)}
               title={`${node.name} · ${node.statusLabel} · ${coordinate}`}
               aria-label={ariaLabel}

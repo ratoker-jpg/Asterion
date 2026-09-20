@@ -511,6 +511,15 @@ function createSpyReport(
 ): SpyReportSnapshot {
   const delta = spyLevel - target.espionageLevel;
   const quality = resolveSpyReportQuality(delta, roll);
+  // Population contract: the planet's population counts every hangar — ship
+  // crews and defense garrisons — so the report always converges:
+  // total = fleet + defense.
+  const population = {
+    civilian: target.population.fleet + target.population.defense,
+    total: target.population.fleet + target.population.defense,
+    fleet: target.population.fleet,
+    defense: target.population.defense,
+  };
   return {
     id: `spy-report-${mission.id}-${mission.reportIds.length + 1}`,
     missionId: mission.id,
@@ -536,13 +545,9 @@ function createSpyReport(
     ...(quality === 'full'
       ? {
         fleet: { ...target.fleet.ships },
+        ...(target.shipLevels ? { fleetLevels: { ...target.shipLevels } } : {}),
         commanders: Object.fromEntries(Object.entries(target.commanders).map(([id, commander]) => [id, commander ? { ...commander } : commander])),
-        population: {
-          civilian: target.population.civilian,
-          total: target.population.civilian,
-          fleet: target.population.fleet,
-          defense: target.population.defense,
-        },
+        population,
       }
       : {}),
   };

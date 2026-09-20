@@ -8,6 +8,8 @@ import {
   resolveSpyReportQuality,
 } from './runtime.ts';
 import { createBot01Planets } from './fixtures.ts';
+import { calculateFleetPopulation } from '../fleet/runtime.ts';
+import { calculateDefensePopulation } from '../fleet/production.ts';
 
 test('spy report quality uses an integer 0..99 with lower-inclusive upper-exclusive intervals', () => {
   assert.equal(resolveSpyReportQuality(0, 0), 'full');
@@ -44,7 +46,7 @@ test('Hunter level 20 means a 35% detection interval', () => {
   assert.equal(hunterDetects(20, 99), false);
 });
 
-test('Bot 01 fixture keeps espionage level 10 and every planet has 5k+ civilian population', () => {
+test('Bot 01 fixture keeps espionage level 10 and seeded converging population', () => {
   const planets = Object.values(createBot01Planets());
   assert.equal(planets.length, 7);
   const main = planets[0];
@@ -52,11 +54,39 @@ test('Bot 01 fixture keeps espionage level 10 and every planet has 5k+ civilian 
   assert.equal(main.hunterLevel, 20);
   assert.equal(main.commanders.hunter?.count, 1);
   assert.equal(main.commanders.judge?.count, 1);
-  assert.equal(main.population.civilian >= 5_000, true);
-  assert.equal(main.population.fleet >= 5_000 && main.population.fleet <= 5_100, true);
-  assert.equal(main.population.defense >= 4_900 && main.population.defense <= 5_100, true);
-  assert.equal(planets.every((planet) => planet.population.civilian >= 5_000), true);
+  // Seeded total population: stable between resets, random-looking, 5k..25112.
+  const totals = planets.map((planet) => planet.population.fleet + planet.population.defense);
+  assert.equal(totals.every((total) => total >= 5_000 && total <= 25_112), true);
+  assert.equal(new Set(totals).size > 1, true);
+  // Population contract: planet population = fleet + defense, always converging.
+  for (const planet of planets) {
+    assert.equal(planet.population.civilian, planet.population.fleet + planet.population.defense);
+    assert.equal(planet.population.fleet, calculateFleetPopulation(planet.fleet, planet.raceId));
+    assert.equal(planet.population.defense, calculateDefensePopulation(planet.defense, planet.raceId));
+    assert.equal(planet.fleet.ships['spy-probe'], 0);
+  }
   assert.equal(planets.slice(1).every((planet) => planet.hunterLevel === 0), true);
+});
+
+test('Bot 01 hull levels cover every upgradable ship with seeded 0..10 values', () => {
+  const excluded = new Set(['solar-satellite', 'spy-probe', 'colonizer', 'recycler']);
+  const planets = Object.values(createBot01Planets());
+  for (const planet of planets) {
+    const levels = planet.shipLevels ?? {};
+    for (const [id, count] of Object.entries(planet.fleet.ships)) {
+      if (!count || count <= 0) continue;
+      if (excluded.has(id)) {
+        assert.equal(levels[id as keyof typeof levels], undefined);
+        continue;
+      }
+      const level = levels[id as keyof typeof levels];
+      assert.notEqual(level, undefined);
+      assert.equal(Number.isInteger(level) && level! >= 0 && level! <= 10, true);
+    }
+  }
+  // The seeded spread keeps some hulls at level 0 across the seven planets.
+  const allLevels = planets.flatMap((planet) => Object.values(planet.shipLevels ?? {}));
+  assert.equal(allLevels.includes(0), true);
 });
 
 test('seeded espionage rng replays the same stream for the same seed and stays within [0, 1)', () => {

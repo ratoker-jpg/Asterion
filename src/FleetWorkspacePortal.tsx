@@ -229,6 +229,7 @@ function FleetWorkspace({
   launchContext,
   flightRecords,
   espionageState,
+  entityLevels,
 }: {
   planetName: string;
   coords: string;
@@ -238,6 +239,7 @@ function FleetWorkspace({
   launchContext: FlightLaunchContext | null;
   flightRecords: FlightRecord[];
   espionageState: EspionageState;
+  entityLevels: Record<string, number>;
 }) {
   const { fleetSection: selectedSection, setFleetSection } = useNavigation();
   const [selectedQuantities, setSelectedQuantities] = useState<Partial<Record<ShipId, number>>>({});
@@ -773,7 +775,7 @@ function FleetWorkspace({
         ) : constructionView === 'defense' || constructionView === 'commander' ? (
           <ConstructionCatalogView mode={constructionView} planetName={planetName} coords={coords} budget={fleetBudget} />
         ) : selectedSection === 'combat-priority' ? (
-          <FleetCombatPriorityView planetName={planetName} coords={coords} onBack={openFleetRoot} />
+          <FleetCombatPriorityView planetName={planetName} coords={coords} entityLevels={entityLevels} onBack={openFleetRoot} />
         ) : selectedSection === 'battles' ? (
           <BattleReportsView planetName={planetName} coords={coords} onBack={openFleetRoot} />
         ) : selectedSection === 'simulator' ? (
@@ -1087,7 +1089,7 @@ function FleetWorkspace({
                 <h3 id="spy-operations-title">ШПИОНСКИЕ ОТЧЁТЫ</h3>
                 <p>Активные зонды и управление готовыми снимками цели.</p>
               </div>
-              <button type="button" className="spy-operations-modal__close" aria-label="Закрыть шпионские отчёты" onClick={() => setSpyOperationsOpen(false)}>×</button>
+              <button type="button" className="spy-operations-modal__close" data-asterion-close aria-label="Закрыть шпионские отчёты" onClick={() => setSpyOperationsOpen(false)}>×</button>
             </header>
             <div className="spy-operations-table-shell" role="table" aria-label="Активные шпионские зонды">
               <div className="spy-operations-row spy-operations-row--head" role="row">
@@ -1170,6 +1172,10 @@ export function FleetWorkspacePortal() {
   const [launchContext, setLaunchContext] = useState<FlightLaunchContext | null>(null);
   const [flightRecords, setFlightRecords] = useState<FlightRecord[]>(() => createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read().flights.records);
   const [espionageState, setEspionageState] = useState<EspionageState>(() => createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read().espionage ?? { missions: [], reports: [], hunterNotices: [] });
+  const [entityLevels, setEntityLevels] = useState<Record<string, number>>(() => {
+    const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
+    return runtimeState.planets[runtimeState.currentPlanetId]?.spaceportUpgrades?.shipLevels ?? {};
+  });
 
   useEffect(() => {
     const syncPlanet = () => {
@@ -1179,6 +1185,7 @@ export function FleetWorkspacePortal() {
       setFleetBudget(readFleetBuildBudget());
       setFlightRecords(runtimeState.flights.records);
       setEspionageState(runtimeState.espionage ?? { missions: [], reports: [], hunterNotices: [] });
+      setEntityLevels(runtimeState.planets[runtimeState.currentPlanetId]?.spaceportUpgrades?.shipLevels ?? {});
     };
 
     const onLaunchContext = (event: Event) => setLaunchContext((event as CustomEvent<FlightLaunchContext>).detail);
@@ -1225,6 +1232,7 @@ export function FleetWorkspacePortal() {
         launchContext={launchContext}
       flightRecords={flightRecords}
       espionageState={espionageState}
+      entityLevels={entityLevels}
       />,
     target,
   );
