@@ -81,12 +81,26 @@ function createWindow() {
 
   win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
 
+  // The game renders on a fixed 1920x1080 stage scaled by CSS — page zoom
+  // (Ctrl+wheel, touchpad pinch, Ctrl+/-/0) rescales it and the UI appears to
+  // magnify "infinitely". Pin zoom to 100% on every channel.
+  win.webContents.setZoomFactor(1);
+  win.webContents.setVisualZoomLevelLimits(1, 1);
+  win.webContents.on('zoom-changed', () => {
+    win.webContents.setZoomFactor(1);
+  });
+
   win.on('enter-full-screen', () => emitDisplayState(win));
   win.on('leave-full-screen', () => emitDisplayState(win));
   win.on('resize', () => emitDisplayState(win));
 
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return;
+
+    if ((input.control || input.meta) && ['+', '=', '-', '_', '0'].includes(input.key)) {
+      event.preventDefault();
+      return;
+    }
 
     if (input.key === 'F11') {
       event.preventDefault();

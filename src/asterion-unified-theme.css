@@ -695,8 +695,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
   overflow:hidden;
 }
 .spaceport-row-art-v2{ border-radius:var(--ut-r-chip); }
-.spaceport-level-progress-v2{ border-radius:999px; overflow:hidden; }
-.spaceport-level-progress-v2 > *{ border-radius:999px; }
 .spaceport-cost-chip-v2,
 .spaceport-requirement-line-v2,
 .spaceport-state-strip-v2,
@@ -736,8 +734,6 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .science-main-heading-v2{ border-radius:var(--ut-r-card) var(--ut-r-card) 0 0; }
 .science-row-v2{ border-radius:var(--ut-r-card) !important; }
 .science-art-v2{ border-radius:var(--ut-r-chip); }
-.science-level-progress-v2{ border-radius:999px; overflow:hidden; }
-.science-level-progress-v2 > *{ border-radius:999px; }
 .science-cost-v2,
 .science-time-v2,
 .science-requirements-v2,
@@ -933,3 +929,424 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .asterion-header__test-mode-banner{ border-radius:8px; }
 .asterion-header__resource-energy-half{ border-radius:6px; }
 .asterion-header__resource-population-breakdown{ border-radius:10px; }
+
+/* ============================================================
+   PHASE 3 — LEVEL BARS + REPAIR / COMBAT PRIORITY / BATTLES
+   ------------------------------------------------------------
+   Feedback pass #3:
+   1) level bars in космодром / науки must use the same rounded
+      language as the building dialog track (container 6px +
+      every segment 6px) — the 999px pill from P2 rounded only
+      the outer ends and left every segment square;
+   2) repair workshop / combat priority / battle reports kept
+      their square skeletons after the chamfer kill — the P2
+      pass removed clip-path silhouettes but never replaced
+      them with border-radius.
+   ============================================================ */
+
+/* === P3.1 LEVEL BARS — match the building track ============= */
+/* Superseded P2 pill rules (999px on the section and on every child) were
+   removed — this block is now the single source of truth for level bars. */
+.spaceport-level-progress-v2,
+.science-level-progress-v2{
+  border-radius:var(--ut-r-card);
+  overflow:hidden;
+}
+.spaceport-level-progress-v2 > *,
+.science-level-progress-v2 > *{
+  border-radius:var(--ut-r-chip);
+}
+.spaceport-level-segments-v2,
+.science-level-segments-v2{
+  border-radius:6px;
+  overflow:hidden;
+}
+.spaceport-level-segments-v2 i,
+.science-level-segments-v2 i{
+  border-radius:6px;
+}
+/* queue progress fill + track inside science/spaceport rows */
+.science-queue-card-v2 > i{ border-radius:4px; overflow:hidden; }
+.science-queue-card-v2 > i b{ border-radius:4px; }
+.spaceport-queue-task{ border-radius:var(--ut-r-chip); }
+.spaceport-queue-task img{ border-radius:7px; }
+.science-queue-card-v2 img{ border-radius:7px; }
+
+/* === P3.2 РЕМОНТНАЯ МАСТЕРСКАЯ (repair workshop) ============ */
+.repair-summary-v1{
+  border-radius:var(--ut-r-panel);
+  background:var(--ut-surface);
+  border:1px solid var(--ut-border);
+}
+.repair-summary-card-v1{
+  border-radius:var(--ut-r-card) !important;
+  background:var(--ut-surface-2);
+  border:1px solid var(--ut-border);
+}
+.repair-summary-icon-v2{ border-radius:9px; }
+.repair-notice-v1{ border-radius:var(--ut-r-chip); }
+.repair-card-v1{
+  border-radius:var(--ut-r-card) !important;
+  overflow:hidden;
+}
+.repair-card-art-v1{ border-radius:var(--ut-r-chip); }
+.repair-card-art-v1 img{ border-radius:inherit; }
+.repair-cost-row-v1{ border-radius:var(--ut-r-chip); }
+.repair-ready-mark-v1{ border-radius:8px; }
+.repair-stepper-v1 input,
+.repair-stepper-v1 button{ border-radius:7px; }
+.repair-button-v1,
+.repair-back-v1,
+.repair-help-v1 > button{ border-radius:var(--ut-r-btn) !important; }
+.repair-help-popover-v1{
+  border-radius:var(--ut-r-card);
+  background:rgba(8,15,19,.97);
+  border:1px solid var(--ut-border-strong);
+  box-shadow:0 14px 34px rgba(0,0,0,.55);
+}
+.repair-remove-confirm-v1{ border-radius:var(--ut-r-card); }
+.repair-remove-confirm-button-v1{ border-radius:var(--ut-r-btn) !important; }
+.repair-empty-v1{ border-radius:var(--ut-r-card); }
+
+/* === P3.3 БОЕВОЙ ПРИОРИТЕТ (combat priority) ================ */
+.combat-priority-rule-v1{ border-radius:var(--ut-r-card); }
+.combat-priority-column-v1{
+  border-radius:var(--ut-r-panel);
+  overflow:hidden;
+}
+.combat-priority-list-v1 > li{ border-radius:var(--ut-r-chip); }
+.combat-priority-art-v1{ border-radius:7px; }
+.combat-priority-column-head-v1 > span{ border-radius:7px; }
+.combat-priority-page-actions-v1 > button{ border-radius:var(--ut-r-btn) !important; }
+.combat-priority-tooltip-v1{
+  border-radius:12px;
+  border:1px solid var(--ut-border-strong);
+}
+
+/* === P3.4 ОТЧЁТЫ БИТВ (battle reports) ====================== */
+/* --- shells --- */
+.battle-summary-v1,
+.battle-section-v1,
+.battle-card-v1,
+.battle-empty-v1{ border-radius:var(--ut-r-panel); }
+.battle-tabs-v1{
+  border-radius:var(--ut-r-card);
+  overflow:hidden;
+}
+.battle-tabs-v1 button{ border-radius:var(--ut-r-chip); }
+.battle-list-back-v1,
+.battle-back-v1,
+.battle-open-v1,
+.battle-save-v1,
+.battle-save-result-v1{ border-radius:var(--ut-r-btn) !important; }
+.battle-route-v1{ border-radius:var(--ut-r-chip); }
+
+/* --- header sides / avatars --- */
+.battle-header-sides-v1 > article{ border-radius:var(--ut-r-card); }
+.battle-header-side-head-v1{ border-radius:var(--ut-r-chip); }
+.battle-side-avatar-v1{ border-radius:9px; }
+.battle-header-side-mark-v1{ border-radius:8px; }
+
+/* --- tables & lists --- */
+.battle-unit-table-head-v1,
+.battle-tech-table-head-v1,
+.battle-outcome-mini-table-head-v1{ border-radius:8px 8px 0 0; }
+.battle-unit-table-row-v1:last-child,
+.battle-tech-table-row-v1:last-child,
+.battle-outcome-mini-table-row-v1:last-child{ border-radius:0 0 8px 8px; }
+.battle-outcome-mini-table-v1{
+  border-radius:var(--ut-r-chip);
+  overflow:hidden;
+}
+
+/* --- commanders / events / tech plates --- */
+.battle-commanders-v1 article{ border-radius:var(--ut-r-card); }
+.battle-commander-empty-v1{ border-radius:9px; }
+.battle-event-v1{ border-radius:var(--ut-r-chip); }
+.battle-event-metrics-v1 > span{ border-radius:7px; }
+.battle-technology-column-v1,
+.battle-provenance-grid-v1 > span,
+.battle-target-priority-v1 > span{ border-radius:var(--ut-r-chip); }
+
+/* --- outcome ledgers --- */
+.battle-outcome-metrics-v1 > span,
+.battle-outcome-survivors-v1 > div,
+.battle-outcome-points-v1 > div,
+.battle-outcome-points-panel-v1 > div{ border-radius:var(--ut-r-chip); }
+.battle-outcome-duel-side-v1{ border-radius:var(--ut-r-card); }
+.battle-outcome-reward-strip-v1{ border-radius:var(--ut-r-card); }
+
+/* --- card inner plates --- */
+.battle-card-losses-v1 > div > span,
+.battle-card-points-v1 > span,
+.battle-card-versus-secondary-v1 > span{ border-radius:7px; }
+.battle-card-rewards-v1,
+.battle-card-versus-population-v1,
+.battle-card-versus-column-v1{ border-radius:var(--ut-r-chip); }
+.battle-card-versus-arrow-v1{ border-radius:50%; }
+.battle-summary-participant-v1{ border-radius:var(--ut-r-chip); }
+.battle-empty-inline-v1{ border-radius:var(--ut-r-chip); }
+
+/* --- tooltips & scene bits --- */
+.battle-tech-tooltip-v1{
+  border-radius:12px;
+  border:1px solid var(--ut-border-strong);
+}
+.battle-tech-tooltip-row-v1 img{ border-radius:6px; }
+.battle-scene-count-v1{ border-radius:7px; }
+.battle-scene-tooltip-v1{
+  border-radius:12px;
+  border:1px solid var(--ut-border-strong);
+}
+
+/* --- round reports & snapshots (visual report) --- */
+.battle-round-report-v1{
+  border-radius:var(--ut-r-card);
+  overflow:hidden;
+}
+.battle-initial-snapshot-v1{ border-radius:var(--ut-r-card); }
+.battle-initial-side-v1{ border-radius:var(--ut-r-chip); }
+.battle-initial-metrics-v1 > span,
+.battle-round-summary-v1 > span{ border-radius:7px; }
+
+/* --- battle report modal --- */
+.battle-report-modal-v1{ border-radius:var(--ut-r-panel); }
+.battle-report-modal-head-v1{ border-radius:var(--ut-r-panel) var(--ut-r-panel) 0 0; }
+.battle-report-modal-close-v1{ border-radius:var(--ut-r-btn) !important; }
+
+/* ============================================================
+   PHASE 4 — RESIDUAL SQUARES (sanity sweep r5)
+   ------------------------------------------------------------
+   Automated sweep (scripts/find_square_containers.py) found
+   styled block containers — visible border + background, no
+   own border-radius, no coverage by earlier theme passes —
+   across 26 legacy css files. Rounded here by visual role:
+   modals 18 / cards 13 / chips-rows 9 / buttons 10 /
+   inputs-selects 9 / micro-fills 4px. Radius only — no blind
+   overflow:hidden (tooltips must be allowed to escape).
+   ============================================================ */
+
+/* === P4.1 modals & big panels =============================== */
+.ship-info-modal-v1{ border-radius:var(--ut-r-panel); }
+.simulator-toolbar-v1,
+.sim-presets-v1,
+.sim-side-v1,
+.sim-validation-v1,
+.sim-result-v1,
+.sim-unit-section-v1,
+.sim-race-v1,
+.settings-card-v2,
+.settings-reset-card-v2,
+.settings-disabled-card-v2,
+.module-placeholder-v3,
+.flight-timeline-route-panel,
+.shipyard-processes-v1,
+.shipyard-requirements-v1,
+.fleet-production-order-v1,
+.fleet-defense-population-v1,
+.production-bots-pool > div,
+.rating-self-v2,
+.rating-head-v2 .score-head-v2,
+.universe-inspector-header,
+.planet-skin-menu,
+.asterion-header__planet-list,
+.reports-battle-hero,
+.reports-generic-hero,
+.command-tactical-grid,
+.galaxy-readout,
+.resource-zone-scene{
+  border-radius:var(--ut-r-card);
+}
+
+/* === P4.2 cards, rows, plates =============================== */
+.reports-list-item,
+.reports-versus,
+.reports-rewards,
+.reports-loss-block,
+.reports-population-metrics article,
+.reports-battle-details,
+.reports-generic-details,
+.reports-generic-body,
+.reports-folder-actions,
+.reports-profile-alliance-link,
+.reports-profile-protection,
+.operations-unknown-brief-v2,
+.command-request-row,
+.command-detail-note,
+.command-request-meter,
+.command-operation-readiness,
+.command-relation-history > div,
+.command-sun-scope,
+.flight-timeline-eta-card,
+.flight-timeline-cargo,
+.flight-timeline-ship,
+.flight-timeline-route > div,
+.flight-timeline-ship-card,
+.flight-timeline-target-status.is-invalid,
+.flight-timeline-error,
+.summary-planet-row,
+.universe-special-preview,
+.recycling-job-row,
+.recycling-job-table__header,
+.ship-info-head-v1,
+.ship-info-hero-v1,
+.ship-info-ident-v1 > div,
+.ship-info-stat-v1,
+.ship-info-ability-v1,
+.ship-info-ability-head-v1 > span,
+.ship-info-scaling-v1,
+.ship-info-target-v1,
+.shipyard-lock-v1,
+.shipyard-tooltip-head-v1 > span,
+.shipyard-tooltip-primary-v1 > div,
+.shipyard-tooltip-grid-v1 > div,
+.shipyard-tooltip-ability-v1,
+.battle-outcome-reward-grid-v1 > div,
+.trade-refill-queue > span,
+.trade-workspace-header > strong,
+.trade-toast span,
+.production-bots-targets-header > span,
+.production-bots-toast span,
+.building-interior-header dl > div,
+.building-interior-empty,
+.science-count-v2,
+.science-additional-hint-v2,
+.spaceport-heading-meta-v2 span,
+.spaceport-level-line-v2 span,
+.command-member-avatar,
+.command-emblem-options > button,
+.command-accent-options > button,
+.command-member-list > button,
+.command-member-requests > button,
+.command-diplomacy-list > button,
+.command-operation-catalog-grid > button,
+.command-form-error,
+.sim-population-v1,
+.sim-commander-select-v1,
+.sim-target-priority-v1,
+.sim-mode-note-v1,
+.sim-race-mechanics-note-v1,
+.system-counter,
+.star-coordinate,
+.planet-slot,
+.universe-tools,
+.workspace--universe .universe-view-v3 .system-planet .planet-name,
+.system-planet.owned .planet-name{
+  border-radius:var(--ut-r-chip);
+}
+
+/* === P4.3 buttons =========================================== */
+.asterion-header__primary-navigation button,
+.asterion-header__utility-navigation button,
+.asterion-header__test-mode-speed-picker button,
+.asterion-header__planet-list button,
+.zone-list button,
+.planet-selector,
+.summary-zone-list button,
+.operations-tabs-v2 button,
+.science-sections-v2 button,
+.science-ready-action-v2,
+.spaceport-sections-v2 button,
+.spaceport-queue-cancel,
+.settings-presets-v2 button,
+.typography-reset-v2,
+.preview-control-v2,
+.settings-segment-v2 button,
+.settings-reset-card-v2 .danger,
+.settings-disabled-card-v2 button,
+.reports-pagination button,
+.reports-preview-actions button,
+.reports-preview-footer button,
+.reports-delete-actions button,
+.recycling-job-action button,
+.recycling-debris-control button,
+.recycling-target-row > button,
+.fleet-selection-line-v1 button,
+.fleet-mission-icons-v1 button,
+.flight-timeline-close,
+.flight-timeline-edit,
+.shipyard-count-v1 button,
+.shipyard-build-button-v1,
+.fleet-production-order-meta-v1 button,
+.command-card-actions button,
+.command-detail-actions button,
+.sim-rounds-v1 button,
+.sim-clear-v1,
+.sim-presets-v1 button,
+.sim-side-v1 > header button,
+.sim-section-toggle-v1,
+.sim-unit-controls-v1 button,
+.sim-run-v1,
+.sim-result-head-v1 button,
+.sim-number-stepper-arrows-v1 button,
+.sim-copy-tech-v1,
+.rating-pagination-v2 button,
+.planet-skin-menu button,
+.trade-amount-controls button,
+.universe-tools button,
+.system-index button,
+.building-interior-back,
+.building-interior-return-overlay{
+  border-radius:var(--ut-r-btn);
+}
+.science-sections-v2 button b,
+.spaceport-sections-v2 button b,
+.fleet-mission-icons-v1 button span{ border-radius:inherit; }
+
+/* === P4.4 inputs & selects ================================== */
+.reports-search,
+.command-form-grid input,
+.command-form-grid textarea,
+.recycling-debris-field input,
+.trade-amount-input,
+.flight-timeline-cargo-field input,
+.flight-timeline-coordinate-inputs input,
+.flight-timeline-step select,
+.flight-timeline-own-target select,
+.fleet-mission-select-v1 select,
+.settings-select-v2 select,
+.shipyard-count-v1 input,
+.sim-execution-v1 select,
+.sim-seed-v1 input,
+.sim-presets-v1 input,
+.sim-presets-v1 select,
+.sim-unit-controls-v1 input,
+.sim-number-stepper-v1 input,
+.sim-race-v1 select,
+.sim-target-priority-v1 select,
+.sim-commander-select-v1 select{
+  border-radius:var(--ut-r-input);
+}
+
+/* === P4.5 micro-fills & small icons ========================= */
+.asterion-header__resource-fill,
+.stability i,
+.stability-v2 i,
+.recycling-job-progress,
+.rating-self-separator-v2{
+  border-radius:4px;
+}
+.command-operation-glyph,
+.command-resource-glyph,
+.reports-list-icon,
+.reports-dossier-heading__icon,
+.shipyard-cost-icon-v1{
+  border-radius:7px;
+}
+.resource-building-max-state{ border-radius:var(--ut-r-chip); }
+
+/* === P4.6 stragglers caught by the second sweep run ========= */
+.recycling-toast span,
+.repair-card-title-v1,
+.repair-available-v1,
+.repair-payment-reason-v1,
+.fleet-commander-level-v1,
+.shipyard-requirements-list-v1 span,
+.system-stepper{ border-radius:var(--ut-r-chip); }
+.system-stepper > button,
+.skin-picker-grid button,
+.ship-info-close-v1{ border-radius:var(--ut-r-btn); }
+.system-stepper select{ border-radius:var(--ut-r-input); }
+.ship-info-art-v1{ border-radius:var(--ut-r-chip); overflow:hidden; }
+/* .production-bot-range slider track/thumb left square — native control,
+   rounding breaks the draggable hit-area look on webkit/gecko. */

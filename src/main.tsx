@@ -40,6 +40,30 @@ import './asterion-unified-theme.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
 
+// The whole game renders on a fixed 1920x1080 stage scaled to fit the window.
+// Browser-style page zoom (Ctrl+wheel / touchpad pinch) rescales that stage and
+// "endlessly" magnifies the UI — block it at the input level for both Electron
+// and the web preview (Electron main additionally clamps zoomFactor).
+window.addEventListener(
+  'wheel',
+  (event) => {
+    if (event.ctrlKey || event.metaKey) event.preventDefault();
+  },
+  { passive: false, capture: true },
+);
+
+// Keyboard page zoom (Ctrl +/-/0) rescales the fixed stage the same way —
+// block it in the web preview too (Electron blocks it in the main process).
+window.addEventListener(
+  'keydown',
+  (event) => {
+    if ((event.ctrlKey || event.metaKey) && ['+', '=', '-', '_', '0'].includes(event.key)) {
+      event.preventDefault();
+    }
+  },
+  { capture: true },
+);
+
 if (!isElectron) {
   document.documentElement.classList.add('web-preview');
 
