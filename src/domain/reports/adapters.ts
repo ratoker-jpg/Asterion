@@ -13,6 +13,7 @@ import type {
   ReportsState,
   ReportUnreadCounts,
 } from './types.ts';
+import type { EspionageState, SpyHunterNotice, SpyReportSnapshot } from '../espionage/types.ts';
 
 const CATEGORY_TYPE_LABEL: Record<ReportItem['category'], string> = {
   system: 'Система',
@@ -168,10 +169,87 @@ export function allianceOperationToReportItem(operation: JointOperation): Report
   };
 }
 
+function spyQualityLabel(report: SpyReportSnapshot) {
+  return report.quality === 'full' ? 'ПОЛНЫЙ СНИМОК' : report.quality === 'detailed' ? 'ДЕТАЛЬНЫЙ СНИМОК' : 'БАЗОВЫЙ СНИМОК';
+}
+
+function spyReportTitleLabel(report: SpyReportSnapshot) {
+  return report.quality === 'full' ? 'Полный' : report.quality === 'detailed' ? 'Подробный' : 'Базовый';
+}
+
+function spyReportHasCombatIntel(report: SpyReportSnapshot) {
+  const hasFleet = Object.entries(report.fleet ?? {}).some(([id, count]) => id !== 'spy-probe' && Number(count) > 0);
+  const hasDefense = Object.values(report.defense ?? {}).some((count) => Number(count) > 0);
+  const hasCombatCommander = Object.entries(report.commanders ?? {}).some(([id, value]) => id !== 'hunter' && Boolean(value) && value.count > 0);
+  return hasFleet || hasDefense || hasCombatCommander;
+}
+
+export function spyReportToReportItem(report: SpyReportSnapshot, espionage?: EspionageState): ReportItem {
+  const coordinates = `[${report.targetCoordinate.galaxy}:${report.targetCoordinate.system}:${report.targetCoordinate.position}]`;
+  const resourceLabel = `${report.resources.metal}/${report.resources.minerals}/${report.resources.gas} · обломки ${report.resources.debris} · энергия развития ${report.resources.developmentEnergy}`;
+  const mission = espionage?.missions.find((candidate) => candidate.id === report.missionId);
+  return {
+    id: `espionage:${report.id}`,
+    source: 'espionage',
+    category: 'system',
+    typeLabel: `${spyReportTitleLabel(report)} шпионский отчёт`,
+    title: `${spyReportTitleLabel(report)} шпионский отчёт: ${report.targetPlanetName}`,
+    preview: `${spyQualityLabel(report)} · ${coordinates} · цель ${report.targetOwnerName}.`,
+    body: report.quality === 'full'
+      ? `Зонд передал полный снимок ${report.targetPlanetName}: ресурсы, население, флот и оборона цели.`
+      : report.quality === 'detailed'
+        ? `Зонд передал детальный снимок ${report.targetPlanetName}: ресурсы и оборона цели.`
+        : `Зонд передал базовую оценку ${report.targetPlanetName}: доступны только общие ресурсы цели.`,
+    timestamp: new Date(report.createdAt).toISOString(),
+    statusLabel: spyQualityLabel(report),
+    statusTone: report.quality === 'full' ? 'success' : report.quality === 'detailed' ? 'info' : 'neutral',
+    participantNames: [report.targetOwnerName],
+    planetNames: [report.targetPlanetName],
+    coordinates: [coordinates],
+    details: [
+      { label: 'Владелец', value: report.targetOwnerName },
+      { label: 'Отношение', value: report.targetRelation === 'enemy' ? 'Враг' : 'Нейтральный' },
+      { label: 'Уровень шпионажа', value: `${report.spyLevel} против ${report.targetEspionageLevel}` },
+      { label: 'Ресурсы', value: resourceLabel },
+      { label: 'Качество', value: spyQualityLabel(report) },
+      ...(report.quality === 'full' && report.population ? [{ label: 'Население', value: `общее ${report.population.total} · флот ${report.population.fleet} · оборона ${report.population.defense}` }] : []),
+    ],
+    spyReport: report,
+    action: report.quality === 'full' && spyReportHasCombatIntel(report) ? { kind: 'simulate_battle', label: 'МОДЕЛИРОВАТЬ СРАЖЕНИЕ' } : undefined,
+    secondaryAction: mission?.status === 'orbiting' ? { kind: 'recall_spy', label: 'ВЕРНУТЬ ШПИОНА', missionId: mission.id } : undefined,
+  };
+}
+
+export function spyHunterNoticeToReportItem(notice: SpyHunterNotice): ReportItem {
+  const coordinates = `[${notice.targetCoordinate.galaxy}:${notice.targetCoordinate.system}:${notice.targetCoordinate.position}]`;
+  return {
+    id: `espionage:hunter:${notice.id}`,
+    source: 'espionage',
+    category: 'system',
+    typeLabel: 'Контрразведка',
+    title: `Зонд уничтожен: ${notice.targetPlanetName}`,
+    preview: `Охотник ${notice.targetOwnerName} обнаружил шпионский зонд над целью.`,
+    body: `Шпионский зонд был уничтожен на орбите ${notice.targetPlanetName}. Данные не переданы.`,
+    timestamp: new Date(notice.createdAt).toISOString(),
+    statusLabel: 'ЗОНД УНИЧТОЖЕН',
+    statusTone: 'danger',
+    participantNames: [notice.targetOwnerName],
+    planetNames: [notice.targetPlanetName],
+    coordinates: [coordinates],
+    details: [
+      { label: 'Цель', value: notice.targetPlanetName },
+      { label: 'Охотник', value: `${notice.targetOwnerName} · уровень ${notice.hunterLevel}` },
+      { label: 'Координаты', value: coordinates },
+    ],
+    spyHunterNotice: notice,
+  };
+}
+
 export function buildReportsFeed(
   battleReports: readonly BattleReport[],
   operations: OperationsState,
   command: CommandState,
+  espionage?: EspionageState,
 ): ReportItem[] {
   const operationByBattleId = new Map(
     operations.items
@@ -191,7 +269,12 @@ export function buildReportsFeed(
     .map(allianceOperationToReportItem)
     .filter((item): item is ReportItem => Boolean(item));
 
-  return [...battleItems, ...systemItems, ...allianceItems].sort((a, b) => {
+  const espionageItems = [
+    ...(espionage?.reports ?? []).map((report) => spyReportToReportItem(report, espionage)),
+    ...(espionage?.hunterNotices ?? []).map(spyHunterNoticeToReportItem),
+  ];
+
+  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems].sort((a, b) => {
     if (a.timestamp && b.timestamp) return Date.parse(b.timestamp) - Date.parse(a.timestamp);
     if (!a.timestamp && b.timestamp) return -1;
     if (a.timestamp && !b.timestamp) return 1;

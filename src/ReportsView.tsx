@@ -26,6 +26,7 @@ import type { PlayerProfileState } from './domain/profile/types.ts';
 import { selectPlayerProfileMetrics } from './domain/profile/selectors.ts';
 import type { RatingPrototypeState } from './domain/rating/fixtures.ts';
 import type { RuntimeMode } from './domain/runtime/mode.ts';
+import type { SpyReportSnapshot } from './domain/espionage/types.ts';
 import './reports.css';
 
 const PAGE_SIZE = 7;
@@ -62,7 +63,7 @@ const MESSAGE_FOLDERS: readonly MessageFolder[] = [
 ];
 
 const EMPTY_COPY: Record<ReportCategory, { title: string; body: string }> = {
-  system: { title: 'Системных данных пока нет', body: 'Сюда попадут шпионские отчёты и результаты операций, которые дают новую информацию. Текущая отправка шпионских флотов ещё не подключена.' },
+  system: { title: 'Системных данных пока нет', body: 'Сюда попадут шпионские отчёты, уведомления контрразведки и результаты операций, которые дают новую информацию.' },
   battle: { title: 'Боевых докладов пока нет', body: 'Здесь хранятся реальные боевые отчёты и бои из операций. Симуляции и Арена в этот канал не попадают.' },
   command: { title: 'Командных докладов пока нет', body: 'Здесь будут отчёты об атаках на союзников и результаты атак на Солнце, когда эти события появятся в боевом контуре.' },
   arena: { title: 'Арена — пока пусто', body: 'Отчёты и очки Арены появятся здесь вместе с реализацией самой Арены.' },
@@ -160,6 +161,36 @@ function GenericDossier({ item }: { item: ReportItem }) {
   );
 }
 
+function SpyDossier({ item, report }: { item: ReportItem; report: SpyReportSnapshot }) {
+  const fleet = Object.entries(report.fleet ?? {}).filter(([, count]) => Number(count) > 0);
+  const defense = Object.entries(report.defense ?? {}).filter(([, count]) => Number(count) > 0);
+  const commanders = Object.entries(report.commanders ?? {}).filter(([, value]) => Boolean(value));
+  return (
+    <div className="reports-dossier reports-dossier--spy" data-qa-spy-report={report.id}>
+      <div className="reports-dossier-heading">
+        <div className="reports-dossier-heading__icon"><ReportGlyph kind="system" /></div>
+        <div><small>{item.typeLabel}</small><h2>{item.title}</h2><p>{item.preview}</p></div>
+        <div className="reports-dossier-heading__status"><StatusBadge item={item} /><time>{formatDate(item.timestamp)}</time></div>
+      </div>
+      <section className="reports-generic-details"><header>СВОДКА ЦЕЛИ</header><dl>
+        <div><dt>Планета</dt><dd>{report.targetPlanetName} · [{report.targetCoordinate.galaxy}:{report.targetCoordinate.system}:{report.targetCoordinate.position}]</dd></div>
+        <div><dt>Источник</dt><dd>{report.sourcePlanetId}</dd></div>
+        <div><dt>Владелец</dt><dd>{report.targetOwnerName}</dd></div>
+        <div><dt>Раса</dt><dd>{report.targetRaceId}</dd></div>
+        <div><dt>Уровень разведки</dt><dd>{report.spyLevel} против {report.targetEspionageLevel}</dd></div>
+        <div><dt>Ресурсы</dt><dd>металл {report.resources.metal} · минералы {report.resources.minerals} · газ {report.resources.gas} · обломки {report.resources.debris} · энергия развития {report.resources.developmentEnergy}</dd></div>
+        {report.quality === 'full' && report.population ? <div><dt>Население</dt><dd>общее {report.population.total} · флот {report.population.fleet} · оборона {report.population.defense}</dd></div> : null}
+      </dl></section>
+      {report.quality !== 'basic' ? <section className="reports-generic-details"><header>ОБОРОНА</header><dl>{defense.length ? defense.map(([id, count]) => <div key={id}><dt>{id}</dt><dd>{count}</dd></div>) : <div><dt>Состав</dt><dd>не обнаружен</dd></div>}</dl></section> : null}
+      {report.quality === 'full' ? <>
+        <section className="reports-generic-details"><header>ФЛОТ</header><dl>{fleet.length ? fleet.map(([id, count]) => <div key={id}><dt>{id}</dt><dd>{count}</dd></div>) : <div><dt>Состав</dt><dd>не обнаружен</dd></div>}</dl></section>
+        <section className="reports-generic-details"><header>КОМАНДИРЫ</header><dl>{commanders.length ? commanders.map(([id, value]) => <div key={id}><dt>{id}</dt><dd>уровень {value?.level ?? 0} · {value?.count ?? 0}</dd></div>) : <div><dt>Состав</dt><dd>не обнаружен</dd></div>}</dl></section>
+      </> : null}
+      <section className="reports-generic-body"><small>СВОДКА</small><p>{item.body}</p></section>
+    </div>
+  );
+}
+
 function BattleDossier({ item, report }: { item: ReportItem; report: BattleReport }) {
   return (
     <div className="reports-dossier reports-dossier--battle">
@@ -236,11 +267,12 @@ function FolderActions({ folder, items, selectedIds, onSelectAll, onDeleteAll, o
   );
 }
 
-export function ReportsView({ battleReports, savedBattleReportIds, operations, command, profile, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand }: {
+export function ReportsView({ battleReports, savedBattleReportIds, operations, command, espionage, profile, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy }: {
   battleReports: readonly BattleReport[];
   savedBattleReportIds: readonly string[];
   operations: OperationsState;
   command: CommandState;
+  espionage?: import('./domain/espionage/types.ts').EspionageState;
   profile: PlayerProfileState;
   rating: RatingPrototypeState;
   mode: RuntimeMode;
@@ -249,6 +281,8 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
   onToggleBattleSaved: (reportId: string, saved: boolean) => void;
   onOpenFleets: () => void;
   onOpenCommand: () => void;
+  onSimulateBattle: (report: SpyReportSnapshot) => void;
+  onRecallSpy: (missionId: string) => void;
 }) {
   const [activeFolder, setActiveFolder] = useState<MessageFolderId>('profile');
   const [filter, setFilter] = useState<ReportFilter>('all');
@@ -257,7 +291,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
   const [selectedId, setSelectedId] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
-  const items = useMemo(() => buildReportsFeed(battleReports, operations, command), [battleReports, operations, command]);
+  const items = useMemo(() => buildReportsFeed(battleReports, operations, command, espionage), [battleReports, operations, command, espionage]);
   const counts = useMemo(() => getReportCategoryCounts(items, state), [items, state]);
   const unreadCounts = useMemo(() => getReportUnreadCounts(items, state), [items, state]);
   const activeFolderMeta = MESSAGE_FOLDERS.find((folder) => folder.id === activeFolder) ?? MESSAGE_FOLDERS[0];
@@ -361,8 +395,11 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
 
         <section className="reports-preview">
           <header className="reports-preview-head"><div><small>MESSAGE DOSSIER</small><h2>ПРОСМОТР СООБЩЕНИЯ</h2></div>{activeCategory ? <div className="reports-preview-actions"><button type="button" aria-label={selectedBattleSaved ? 'Убрать бой из сохранённых' : 'Сохранить бой'} aria-pressed={selectedBattleSaved} disabled={!selectedItem?.battleReportId} className={selectedBattleSaved ? 'active' : ''} onClick={() => selectedItem?.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)}><ActionGlyph kind="save" /></button><span /><button type="button" aria-label="Предыдущее сообщение" disabled={selectedIndex <= 0} onClick={() => navigateSelected(-1)}><ActionGlyph kind="prev" /></button><button type="button" aria-label="Следующее сообщение" disabled={selectedIndex < 0 || selectedIndex >= visibleItems.length - 1} onClick={() => navigateSelected(1)}><ActionGlyph kind="next" /></button></div> : null}</header>
-          <div className="reports-preview-scroll">{activeCategory ? selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} /> : <GenericDossier item={selectedItem} />) : <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} /> : <EmptyFolder folder={activeFolderMeta} />}</div>
-          {activeCategory && selectedItem?.action?.kind === 'open_fleets' ? <footer className="reports-preview-footer"><span>Выбери состав флота для совместной операции.</span><button type="button" onClick={onOpenFleets}>{selectedItem.action.label}</button></footer> : activeCategory && selectedItem?.battleReportId ? <footer className="reports-preview-footer"><span>{selectedBattleSaved ? 'Бой находится в сохранённых.' : 'Этот бой можно сохранить и открыть позже во Флоты → Битвы.'}</span><button type="button" className={selectedBattleSaved ? 'restore' : ''} onClick={() => onToggleBattleSaved(selectedItem.battleReportId!, !selectedBattleSaved)}>{selectedBattleSaved ? 'УБРАТЬ ИЗ СОХРАНЁННЫХ' : 'СОХРАНИТЬ БОЙ'}</button></footer> : null}
+          <div className="reports-preview-scroll">{activeCategory ? selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} /> : selectedItem.spyReport ? <SpyDossier item={selectedItem} report={selectedItem.spyReport} /> : <GenericDossier item={selectedItem} />) : <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} /> : <EmptyFolder folder={activeFolderMeta} />}</div>
+          {activeCategory && selectedItem?.action?.kind === 'open_fleets' ? <footer className="reports-preview-footer"><span>Выбери состав флота для совместной операции.</span><button type="button" onClick={onOpenFleets}>{selectedItem.action.label}</button></footer> : activeCategory && selectedItem?.source === 'espionage' && (selectedItem.action || selectedItem.secondaryAction) ? <footer className="reports-preview-footer"><span>{selectedItem.secondaryAction ? 'Связанный шпионский зонд ещё находится на орбите.' : 'Действия по полному снимку цели.'}</span><div className="reports-preview-footer-actions">
+            {selectedItem.action?.kind === 'simulate_battle' && selectedItem.spyReport ? <button type="button" onClick={() => onSimulateBattle(selectedItem.spyReport!)}>{selectedItem.action.label}</button> : null}
+            {selectedItem.secondaryAction?.kind === 'recall_spy' && selectedItem.secondaryAction.missionId ? <button type="button" className="restore" onClick={() => onRecallSpy(selectedItem.secondaryAction!.missionId!)}>{selectedItem.secondaryAction.label}</button> : null}
+          </div></footer> : activeCategory && selectedItem?.battleReportId ? <footer className="reports-preview-footer"><span>{selectedBattleSaved ? 'Бой находится в сохранённых.' : 'Этот бой можно сохранить и открыть позже во Флоты → Битвы.'}</span><button type="button" className={selectedBattleSaved ? 'restore' : ''} onClick={() => onToggleBattleSaved(selectedItem.battleReportId!, !selectedBattleSaved)}>{selectedBattleSaved ? 'УБРАТЬ ИЗ СОХРАНЁННЫХ' : 'СОХРАНИТЬ БОЙ'}</button></footer> : null}
         </section>
       </section>}
     </main>

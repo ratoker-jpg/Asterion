@@ -106,6 +106,7 @@ type UniverseViewProps = {
   mode: RuntimeMode;
   onColonize: (coordinate: UniverseCoordinate) => void;
   onTransport: (target: { planetId: string; coordinate: UniverseCoordinate; relation: TargetRelation }) => void;
+  onSpy: (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile }) => void;
 };
 
 const POINT_LABELS: ReadonlyArray<{ key: keyof UniverseOwnerPoints; label: string }> = [
@@ -184,14 +185,16 @@ function UniverseActionButton({
   action,
   node,
   currentOwnerId,
+  relation,
   onAction,
 }: {
   action: UniverseAction;
   node: UniversePlanetNode;
   currentOwnerId: string;
+  relation: ReturnType<typeof getUniverseOwnerRelation>;
   onAction: (action: UniverseAction, node: UniversePlanetNode) => void;
 }) {
-  const state = getUniverseActionState(action, node, currentOwnerId);
+  const state = getUniverseActionState(action, node, currentOwnerId, relation);
   const Icon = action === 'spy' ? EyeIcon : FleetIcon;
   const label = action === 'spy' ? 'Отправить шпионский зонд' : 'Отправить флот';
   const title = `${label}: ${state.reason}`;
@@ -217,6 +220,7 @@ function OwnerInspector({
   owner,
   planets,
   currentOwnerId,
+  currentAlliance,
   onAction,
   onVisit,
 }: {
@@ -224,6 +228,7 @@ function OwnerInspector({
   owner: UniverseOwnerProfile;
   planets: UniversePlanetNode[];
   currentOwnerId: string;
+  currentAlliance: UniverseOwnerAlliance | null | undefined;
   onAction: (action: UniverseAction, node: UniversePlanetNode) => void;
   onVisit: (node: UniversePlanetNode) => void;
 }) {
@@ -274,13 +279,13 @@ function OwnerInspector({
                 <small>Система {String(planet.coordinate.system).padStart(2, '0')} <span>{formatUniverseCoordinate(planet.coordinate)} ↗</span></small>
               </button>
               <div className="universe-planet-row-actions">
-                <UniverseActionButton action="spy" node={planet} currentOwnerId={currentOwnerId} onAction={onAction} />
-                <UniverseActionButton action="fleet" node={planet} currentOwnerId={currentOwnerId} onAction={onAction} />
+                <UniverseActionButton action="spy" node={planet} currentOwnerId={currentOwnerId} relation={getUniverseOwnerRelation(planet, currentOwnerId, currentAlliance, owner)} onAction={onAction} />
+                <UniverseActionButton action="fleet" node={planet} currentOwnerId={currentOwnerId} relation={getUniverseOwnerRelation(planet, currentOwnerId, currentAlliance, owner)} onAction={onAction} />
               </div>
             </li>
           ))}
         </ul>
-        <p className="universe-data-note">Нажмите на планету, чтобы перейти к её системе. Отправка флота доступна на свои и явные союзные планеты; разведка остаётся прототипом.</p>
+        <p className="universe-data-note">Нажмите на планету, чтобы перейти к её системе. Свои и союзные миры принимают транспорт, вражеские и нейтральные доступны для шпионажа.</p>
       </section>
     </div>
   );
@@ -356,7 +361,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, occupiedNodes, onSelect }
   </button>;
 }
 
-export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, rating, command, playerPlanets, mode, onColonize, onTransport }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, rating, command, playerPlanets, mode, onColonize, onTransport, onSpy }: UniverseViewProps) {
   const [system, setSystem] = useState(1);
   const [focusEmpty, setFocusEmpty] = useState(false);
   const [showSlotLabels, setShowSlotLabels] = useState(true);
@@ -461,13 +466,19 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
   const selectNode = (node: UniversePlanetNode) => setSelectedNodeId(node.id);
 
   const handleAction = (action: UniverseAction, node: UniversePlanetNode) => {
-    const actionState = getUniverseActionState(action, node, owner.id);
+    const targetOwner = owners.get(node.ownerId ?? '');
+    const relation = getUniverseOwnerRelation(node, owner.id, owner.alliance, targetOwner);
+    const actionState = getUniverseActionState(action, node, owner.id, relation);
     if (action === 'fleet' && actionState.enabled) {
       onTransport({
         planetId: node.id,
         coordinate: node.coordinate,
         relation: node.ownerId === owner.id || node.isHomeworld ? 'self' : 'ally',
       });
+      return;
+    }
+    if (action === 'spy' && actionState.enabled && targetOwner && (relation === 'enemy' || relation === 'neutral')) {
+      onSpy({ planetId: node.id, planetName: node.name, coordinate: node.coordinate, relation, owner: targetOwner });
       return;
     }
     onNotice(`${actionState.label}: ${actionState.reason} Цель ${formatUniverseCoordinate(node.coordinate)}.`);
@@ -583,7 +594,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
             <button ref={closeButtonRef} type="button" className="universe-inspector-close" data-asterion-close aria-label="Закрыть инспектор" title="Закрыть инспектор" onClick={() => setSelectedNodeId(null)}>×</button>
           </header>
           <div className="universe-inspector-body">
-            {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} planets={ownerPlanets} currentOwnerId={owner.id} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} underlyingNode={selectedUnderlyingNode} nowMs={nowMs} onColonize={onColonize} />}
+            {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} planets={ownerPlanets} currentOwnerId={owner.id} currentAlliance={owner.alliance} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} underlyingNode={selectedUnderlyingNode} nowMs={nowMs} onColonize={onColonize} />}
           </div>
         </aside>
         </div>, document.body) : null}

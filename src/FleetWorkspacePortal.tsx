@@ -22,6 +22,8 @@ import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
 import { FLEET_CONSTRUCTION_REQUEST_EVENT } from './building-interior-navigation.ts';
 import { ShipyardView } from './ShipyardView';
 import { SimulatorView } from './SimulatorView';
+import type { SimulatorScenario } from './domain/combat/simulator.ts';
+import { consumeSimulatorHandoff, SIMULATOR_HANDOFF_REQUEST_EVENT } from './application/simulator-handoff.ts';
 import type { FleetProductionQueueKind } from './domain/fleet/production.ts';
 import { FLEET_PRODUCTION_DISMANTLE_SATELLITES_REQUEST_EVENT } from './application/fleet-production.ts';
 import {
@@ -30,6 +32,9 @@ import {
   FLIGHT_LAUNCH_CONTEXT_CLEAR_EVENT,
   FLIGHT_LAUNCH_CONTEXT_EVENT,
   FLIGHT_RECALL_REQUEST_EVENT,
+  SPY_REPORT_ALL_REQUEST_EVENT,
+  SPY_REPORT_REQUEST_EVENT,
+  SPY_REPORT_RESULT_EVENT,
   getTransportCargoSummary,
   resolveTransportTarget,
   previewFlight,
@@ -38,6 +43,7 @@ import {
   type FlightLaunchContext,
 } from './application/flights.ts';
 import type { FlightDestination, FlightRecord, MissionId, TargetRelation } from './domain/flights/types.ts';
+import type { EspionageState, SpyMission } from './domain/espionage/types.ts';
 import { emptyTransportCargo, getCargoFieldMaximum, type TransportCargo, type TransportCargoKey } from './domain/flights/cargo.ts';
 import { getOverflowWarning } from './domain/flights/cargo.ts';
 import { getPlanetResources } from './application/contracts.ts';
@@ -161,7 +167,7 @@ function shipCountLabel(count: number) {
 
 function targetErrorFromFlightResult(result: FlightCommandResult): string | null {
   if (result.ok) return null;
-  if (result.error.code === 'invalid-coordinate' || result.error.code === 'target-occupied' || result.error.code === 'target-not-colonizable' || result.error.code === 'target-not-available' || result.error.code === 'target-is-origin') {
+  if (result.error.code === 'invalid-coordinate' || result.error.code === 'target-occupied' || result.error.code === 'target-not-colonizable' || result.error.code === 'target-not-available' || result.error.code === 'target-is-origin' || result.error.code === 'spy-target-blocked' || result.error.code === 'spy-mission-not-found') {
     return result.error.message;
   }
   return null;
@@ -207,6 +213,13 @@ function flightArrivalLabel(timestamp: number) {
   });
 }
 
+function spyStatusLabel(mission: SpyMission, flight: FlightRecord, now: number) {
+  if (mission.status === 'transit') return `В ПУТИ · ${flightCountdown(flight.arrivalAt, now)}`;
+  if (mission.status === 'returning') return `ВОЗВРАЩЕНИЕ · ${flightCountdown(flight.returnAt, now)}`;
+  if (mission.nextReportAt !== undefined && now < mission.nextReportAt) return `НА ОРБИТЕ · CD ${flightCountdown(mission.nextReportAt, now)}`;
+  return 'НА ОРБИТЕ · ОТЧЁТ ГОТОВ';
+}
+
 function FleetWorkspace({
   planetName,
   coords,
@@ -215,6 +228,7 @@ function FleetWorkspace({
   fleetBudget: initialFleetBudget,
   launchContext,
   flightRecords,
+  espionageState,
 }: {
   planetName: string;
   coords: string;
@@ -223,6 +237,7 @@ function FleetWorkspace({
   fleetBudget: FleetBuildBudget;
   launchContext: FlightLaunchContext | null;
   flightRecords: FlightRecord[];
+  espionageState: EspionageState;
 }) {
   const { fleetSection: selectedSection, setFleetSection } = useNavigation();
   const [selectedQuantities, setSelectedQuantities] = useState<Partial<Record<ShipId, number>>>({});
@@ -234,7 +249,7 @@ function FleetWorkspace({
   const [previewResult, setPreviewResult] = useState<FlightCommandResult | null>(null);
   const [previewOriginPlanetId, setPreviewOriginPlanetId] = useState<string | null>(null);
   const [previewDestination, setPreviewDestination] = useState<FlightDestination | null>(null);
-  const [previewTargetRelation, setPreviewTargetRelation] = useState<'self' | 'ally' | undefined>(undefined);
+  const [previewTargetRelation, setPreviewTargetRelation] = useState<TargetRelation | undefined>(undefined);
   const [editingPreviewTarget, setEditingPreviewTarget] = useState(false);
   const [previewTargetDraft, setPreviewTargetDraft] = useState<FlightCoordinateDraft>({ galaxy: '', system: '', position: '' });
   const [previewTargetError, setPreviewTargetError] = useState<string | null>(null);
@@ -244,6 +259,10 @@ function FleetWorkspace({
   const [fleetSnapshot, setFleetSnapshot] = useState<FleetSnapshot>(readApplicationFleetSnapshot);
   const [fleetBudget, setFleetBudget] = useState<FleetBuildBudget>(initialFleetBudget);
   const [pendingSatelliteDismantle, setPendingSatelliteDismantle] = useState<number | null>(null);
+  const [simulatorHandoff, setSimulatorHandoff] = useState<SimulatorScenario | null>(() => consumeSimulatorHandoff());
+  const [spyPanelOpen, setSpyPanelOpen] = useState(true);
+  const [spyReportsOpen, setSpyReportsOpen] = useState(false);
+  const [selectedSpyMissionIds, setSelectedSpyMissionIds] = useState<Set<string>>(() => new Set());
   const satelliteConfirmYesRef = useRef<HTMLButtonElement>(null);
   const satelliteConfirmNoRef = useRef<HTMLButtonElement>(null);
   const factionId = fleetSnapshot.factionId;
@@ -280,7 +299,9 @@ function FleetWorkspace({
 
   const visibleShipDefinitions = missionId === 'colonize'
     ? ownedShipDefinitions.filter((ship) => ship.id === 'colonizer')
-    : ownedShipDefinitions;
+    : missionId === 'espionage'
+      ? ownedShipDefinitions.filter((ship) => ship.id === 'spy-probe')
+      : ownedShipDefinitions;
   const selectedShipCount = useMemo(
     () => visibleShipDefinitions.reduce((total, ship) => total + (selectedQuantities[ship.id] ?? 0), 0),
     [selectedQuantities, visibleShipDefinitions],
@@ -292,9 +313,13 @@ function FleetWorkspace({
   const selectedMission = missions.find((mission) => mission.id === missionId) ?? missions[0];
   const describedMission = missions.find((mission) => mission.id === hoveredMissionId) ?? selectedMission;
   const activeFlightRecords = useMemo(
-    () => flightRecords.filter((flight) => flight.phase === 'outbound' || flight.phase === 'returning' || flight.phase === 'arrived'),
+    () => flightRecords.filter((flight) => flight.missionId !== 'espionage' && (flight.phase === 'outbound' || flight.phase === 'returning' || flight.phase === 'arrived')),
     [flightRecords],
   );
+  const spyRows = useMemo(() => espionageState.missions
+    .filter((mission) => mission.status === 'transit' || mission.status === 'orbiting' || mission.status === 'returning')
+    .map((mission) => ({ mission, flight: flightRecords.find((flight) => flight.id === mission.flightId) }))
+    .filter((row): row is { mission: SpyMission; flight: FlightRecord } => Boolean(row.flight)), [espionageState.missions, flightRecords]);
 
   const getActiveTransportState = (flight: FlightRecord) => {
     if (flight.missionId !== 'transport') return { overflowWarning: false, targetUnavailable: false };
@@ -340,12 +365,26 @@ function FleetWorkspace({
   }, []);
 
   useEffect(() => {
+    const onSimulatorHandoff = () => {
+      const scenario = consumeSimulatorHandoff();
+      if (!scenario) return;
+      setSimulatorHandoff(scenario);
+      setFleetSection('simulator');
+      setConstructionView(null);
+    };
+    window.addEventListener(SIMULATOR_HANDOFF_REQUEST_EVENT, onSimulatorHandoff);
+    return () => window.removeEventListener(SIMULATOR_HANDOFF_REQUEST_EVENT, onSimulatorHandoff);
+  }, [setFleetSection]);
+
+  useEffect(() => {
     if (!launchContext) {
       resetFlightWorkspace();
       return;
     }
     setMissionId(launchContext.missionId);
-    setSelectedQuantities(launchContext.missionId === 'colonize' ? { colonizer: 1 } : {});
+    setSelectedQuantities(launchContext.missionId === 'colonize'
+      ? { colonizer: 1 }
+      : launchContext.missionId === 'espionage' ? { 'spy-probe': 1 } : {});
     setPreviewOriginPlanetId(null);
     setPreviewDestination(null);
     setPreviewTargetRelation(launchContext.targetRelation);
@@ -368,7 +407,15 @@ function FleetWorkspace({
       }
     };
     window.addEventListener(FLIGHT_COMMAND_RESULT_EVENT, onCommandResult);
-    return () => window.removeEventListener(FLIGHT_COMMAND_RESULT_EVENT, onCommandResult);
+    const onSpyReportResult = (event: Event) => {
+      const result = (event as CustomEvent<{ ok: boolean; notice?: string; error?: { message: string } }>).detail;
+      setStatus(result.ok ? (result.notice ?? 'Шпионский отчёт получен.') : (result.error?.message ?? 'Запрос отчёта отклонён.'));
+    };
+    window.addEventListener(SPY_REPORT_RESULT_EVENT, onSpyReportResult);
+    return () => {
+      window.removeEventListener(FLIGHT_COMMAND_RESULT_EVENT, onCommandResult);
+      window.removeEventListener(SPY_REPORT_RESULT_EVENT, onSpyReportResult);
+    };
   }, []);
 
   const openFleetRoot = () => {
@@ -455,7 +502,12 @@ function FleetWorkspace({
       destination,
       targetRelation: draft?.targetRelation === null ? undefined : draft?.targetRelation ?? previewTargetRelation,
       targetKind: missionId === 'colonize' ? launchContext?.targetKind ?? 'empty' : launchContext?.targetKind,
-      selectedShips: missionId === 'colonize' ? { colonizer: 1 } : selectedQuantities,
+      targetPlanetName: launchContext?.targetPlanetName,
+      targetOwnerId: launchContext?.targetOwnerId,
+      targetOwnerName: launchContext?.targetOwnerName,
+      targetRaceId: launchContext?.targetRaceId,
+      targetAlliance: launchContext?.targetAlliance,
+      selectedShips: missionId === 'colonize' ? { colonizer: 1 } : missionId === 'espionage' ? { 'spy-probe': 1 } : selectedQuantities,
       cargo: missionId === 'transport' ? transportCargoDraft : undefined,
       operationId: launchContext?.operationId,
       departedAt: Date.now(),
@@ -576,7 +628,7 @@ function FleetWorkspace({
   const setShipQuantity = (shipId: ShipId, raw: number) => {
     if (missionId === 'colonize' && shipId !== 'colonizer') return;
     const available = fleetSnapshot.fleet.ships[shipId] ?? 0;
-    const next = missionId === 'colonize'
+    const next = missionId === 'colonize' || missionId === 'espionage'
       ? Math.min(1, available)
       : Number.isFinite(raw) ? Math.max(0, Math.min(available, Math.floor(raw))) : 0;
     setSelectedQuantities((current) => ({ ...current, [shipId]: next }));
@@ -584,7 +636,7 @@ function FleetWorkspace({
 
   const setAllShipQuantities = (maximum: boolean) => {
     setSelectedQuantities(Object.fromEntries(
-      visibleShipDefinitions.map((ship) => [ship.id, maximum ? (missionId === 'colonize' ? 1 : fleetSnapshot.fleet.ships[ship.id] ?? 0) : 0]),
+      visibleShipDefinitions.map((ship) => [ship.id, maximum ? (missionId === 'colonize' || missionId === 'espionage' ? 1 : fleetSnapshot.fleet.ships[ship.id] ?? 0) : 0]),
     ) as Partial<Record<ShipId, number>>);
   };
 
@@ -628,13 +680,17 @@ function FleetWorkspace({
   const isReadOnlyAllyTarget = missionId === 'transport'
     && previewTargetRelation === 'ally'
     && previewTargetDestination?.kind === 'planet';
+  const isReadOnlySpyTarget = missionId === 'espionage' && previewTargetDestination?.kind === 'planet';
+  const isReadOnlyTarget = isReadOnlyAllyTarget || isReadOnlySpyTarget;
   const selectedTransportTargetId = previewDestination?.kind === 'planet' && previewTargetRelation === 'self'
     ? previewDestination.planetId
     : '';
   const targetIsLocallyValid = coordinateDraftError(previewTargetDraft) === null;
   const previewErrorCode = previewResult && !previewResult.ok ? previewResult.error.code : null;
   const targetCheckIsDeferred = previewErrorCode === 'target-not-available' || previewErrorCode === 'target-is-origin';
-  const canDispatchPreview = missionId === 'transport'
+  const canDispatchPreview = missionId === 'espionage'
+    ? targetIsLocallyValid && Boolean(previewResult?.ok) && selectedQuantities['spy-probe'] === 1
+    : missionId === 'transport'
     ? targetIsLocallyValid && (!previewResult || previewResult.ok || targetCheckIsDeferred)
     : missionId !== 'colonize'
       || (targetIsLocallyValid && (!previewResult || previewResult.ok));
@@ -691,7 +747,7 @@ function FleetWorkspace({
         ) : selectedSection === 'battles' ? (
           <BattleReportsView planetName={planetName} coords={coords} onBack={openFleetRoot} />
         ) : selectedSection === 'simulator' ? (
-          <SimulatorView planetName={planetName} coords={coords} onBack={openFleetRoot} />
+          <SimulatorView planetName={planetName} coords={coords} onBack={openFleetRoot} initialScenario={simulatorHandoff} />
         ) : (
           <>
             <section className="fleet-panel-v1 fleet-flights-v1">
@@ -720,10 +776,57 @@ function FleetWorkspace({
                 })}
               </div>
 
+              {spyPanelOpen ? <section className="fleet-spy-operations-v1" data-qa-spy-operations>
+                <header className="fleet-spy-operations-head-v1">
+                  <div><small>ОПЕРАТИВНЫЙ КАНАЛ</small><h3>ШПИОНСКИЕ ЗОНДЫ</h3></div>
+                  <span>{spyRows.length} АКТИВНЫХ</span>
+                </header>
+                {spyRows.length ? <div className="fleet-spy-table-v1">
+                  <div className="fleet-spy-row-v1 fleet-spy-row-head-v1"><span>ВЫБОР</span><span>ОТКУДА</span><span>КУДА</span><span>ПРИБЫТИЕ</span><span>ВОЗВРАЩАЕТСЯ</span><span>ВИД</span><span>ДЕЙСТВИЯ</span></div>
+                  {spyRows.map(({ mission, flight }) => {
+                    const selected = selectedSpyMissionIds.has(mission.id);
+                    const reportReady = mission.status === 'orbiting' && (mission.nextReportAt === undefined || clockNow >= mission.nextReportAt);
+                    return <div className="fleet-spy-row-v1" key={mission.id} data-qa-spy-mission={mission.id} data-qa-spy-status={mission.status}>
+                      <label><input type="checkbox" checked={selected} onChange={(event) => setSelectedSpyMissionIds((current) => { const next = new Set(current); if (event.currentTarget.checked) next.add(mission.id); else next.delete(mission.id); return next; })} aria-label={`Выбрать зонд у ${mission.targetPlanetName}`} /></label>
+                      <span><strong>{planetName}</strong><small>{flightCoordinateLabel(flight.originCoordinate)}</small></span>
+                      <span><strong>{mission.targetPlanetName}</strong><small>{flightCoordinateLabel(mission.targetCoordinate)} · {mission.targetOwnerName}</small></span>
+                      <span className="fleet-spy-status-v1">{mission.status === 'transit' ? flightCountdown(flight.arrivalAt, clockNow) : mission.status === 'orbiting' ? 'НА ОРБИТЕ' : '—'}</span>
+                      <span className="fleet-spy-status-v1">{mission.status === 'returning' ? flightCountdown(flight.returnAt, clockNow) : '—'}</span>
+                      <span><strong>ШПИОНАЖ</strong><small>{spyStatusLabel(mission, flight, clockNow)} · {mission.spyLevel} LVL · {espionageState.reports.filter((report) => report.missionId === mission.id).length} отч.</small></span>
+                      <span className="fleet-spy-row-actions-v1">
+                        <button type="button" disabled={!reportReady} onClick={() => window.dispatchEvent(new CustomEvent(SPY_REPORT_REQUEST_EVENT, { detail: { missionId: mission.id, now: Date.now() } }))}>ПОЛУЧИТЬ ОТЧЁТ</button>
+                        <button type="button" disabled={mission.status === 'returning'} onClick={() => { if (mission.status === 'transit' || mission.status === 'orbiting') setPendingRecall(flight); }}>ВЕРНУТЬ</button>
+                      </span>
+                    </div>;
+                  })}
+                </div> : <p className="fleet-spy-empty-v1">Активных зондов нет. Отправьте один зонд на вражескую или нейтральную планету.</p>}
+                {spyReportsOpen ? <section className="fleet-spy-reports-v1" data-qa-spy-reports>
+                  <header><small>ПОСЛЕДНИЕ ПЕРЕДАЧИ</small><strong>{espionageState.reports.length} ОТЧЁТОВ</strong></header>
+                  {espionageState.reports.slice(-5).reverse().map((report) => <article key={report.id}><strong>{report.targetPlanetName}</strong><span>{report.quality.toUpperCase()} · {new Date(report.createdAt).toLocaleTimeString('ru-RU')}</span><small>{report.resources.metal}/{report.resources.minerals}/{report.resources.gas}</small></article>)}
+                  {!espionageState.reports.length ? <p>Отчёты появятся после прибытия зонда.</p> : null}
+                </section> : null}
+              </section> : null}
+
               <div className="fleet-flight-actions-v1">
-                <button type="button" onClick={() => setStatus('Сейчас активных шпионских флотов нет.')}>ОТОЗВАТЬ ВСЕХ ШПИОНОВ</button>
-                <button type="button" onClick={() => setStatus('Выбранных шпионских флотов сейчас нет.')}>ОТОЗВАТЬ ВЫБРАННЫХ</button>
-                <button type="button" onClick={() => setStatus('Шпионские отчёты будут подключены вместе с системой отчётов.')}>ШПИОНСКИЕ ОТЧЁТЫ</button>
+                <button type="button" onClick={() => {
+                  const recallable = spyRows.filter(({ mission }) => mission.status === 'transit' || mission.status === 'orbiting');
+                  if (!recallable.length) { setStatus('Сейчас активных шпионских флотов нет.'); return; }
+                  recallable.forEach(({ flight }) => window.dispatchEvent(new CustomEvent(FLIGHT_RECALL_REQUEST_EVENT, { detail: { flightId: flight.id, now: Date.now() } })));
+                }}>ОТОЗВАТЬ ВСЕХ ШПИОНОВ</button>
+                <button type="button" onClick={() => {
+                  const recallable = spyRows.filter(({ mission }) => selectedSpyMissionIds.has(mission.id) && (mission.status === 'transit' || mission.status === 'orbiting'));
+                  if (!recallable.length) { setStatus('Выберите возвращаемые зонды.'); return; }
+                  recallable.forEach(({ flight }) => window.dispatchEvent(new CustomEvent(FLIGHT_RECALL_REQUEST_EVENT, { detail: { flightId: flight.id, now: Date.now() } })));
+                }}>ОТОЗВАТЬ ВЫБРАННЫХ</button>
+                <button type="button" onClick={() => {
+                  const activeMissionIds = spyRows
+                    .filter(({ mission }) => mission.status === 'orbiting')
+                    .map(({ mission }) => mission.id);
+                  if (!activeMissionIds.length) { setStatus('Активных зондов на орбите нет.'); return; }
+                  window.dispatchEvent(new CustomEvent(SPY_REPORT_ALL_REQUEST_EVENT, { detail: { missionIds: activeMissionIds, now: Date.now() } }));
+                }}>ПОЛУЧИТЬ ГОТОВЫЕ ОТЧЁТЫ</button>
+                <button type="button" onClick={() => setSpyReportsOpen((value) => !value)} aria-expanded={spyReportsOpen}>ШПИОНСКИЕ ОТЧЁТЫ</button>
+                <button type="button" onClick={() => setSpyPanelOpen((value) => !value)} aria-expanded={spyPanelOpen}>{spyPanelOpen ? 'СКРЫТЬ КАНАЛ' : 'ПОКАЗАТЬ ЗОНДЫ'}</button>
               </div>
             </section>
 
@@ -895,14 +998,14 @@ function FleetWorkspace({
                       <span>СОЮЗНАЯ ПЛАНЕТА</span>
                       <strong>{previewTargetPlanet?.name ?? 'Союзная планета'} {previewTargetDestination?.kind === 'planet' ? flightCoordinateLabel(previewTargetDestination.coordinate) : ''}</strong>
                     </div> : missionId === 'transport' ? <label className="flight-timeline-own-target" data-qa-transport-target-select><span>СВОЯ ПЛАНЕТА</span><select value={selectedTransportTargetId} onChange={(event) => selectTransportTarget(event.target.value)}><option value="">Выберите планету</option>{transportTargetOptions.map((target) => <option key={target.id} value={target.id}>Своя · {target.name} [{target.coordinate.galaxy}:{target.coordinate.system}:{target.coordinate.position}]</option>)}</select></label> : null}
-                    {!isReadOnlyAllyTarget && editingPreviewTarget ? <div className="flight-timeline-coordinate-inputs" data-qa-flight-target-inputs>
+                    {!isReadOnlyTarget && editingPreviewTarget ? <div className="flight-timeline-coordinate-inputs" data-qa-flight-target-inputs>
                       <label><span>ГАЛ.</span><input name="flight-preview-target-galaxy" inputMode="numeric" value={previewTargetDraft.galaxy} onInput={(event) => changePreviewTargetField('galaxy', event.currentTarget.value)} onChange={(event) => changePreviewTargetField('galaxy', event.currentTarget.value)} aria-label="Галактика цели" /></label>
                       <label><span>СИСТ.</span><input name="flight-preview-target-system" inputMode="numeric" value={previewTargetDraft.system} onInput={(event) => changePreviewTargetField('system', event.currentTarget.value)} onChange={(event) => changePreviewTargetField('system', event.currentTarget.value)} aria-label="Система цели" /></label>
                       <label><span>ПОЗ.</span><input name="flight-preview-target-position" inputMode="numeric" value={previewTargetDraft.position} onInput={(event) => changePreviewTargetField('position', event.currentTarget.value)} onChange={(event) => changePreviewTargetField('position', event.currentTarget.value)} aria-label="Позиция цели" /></label>
-                    </div> : !isReadOnlyAllyTarget ? <strong>{previewTargetLabel}</strong> : null}
+                    </div> : !isReadOnlyTarget ? <strong>{previewTargetLabel}</strong> : isReadOnlySpyTarget ? <strong>{launchContext?.targetPlanetName ?? previewTargetLabel}</strong> : null}
                     <div className={`flight-timeline-target-status ${previewTargetError ? 'is-invalid' : 'is-valid'}`} data-qa-flight-target-status>
                       <span data-qa-target-relation={previewTargetRelation}>{previewTargetError ?? (previewTargetRelation === 'ally' ? 'Союзная планета' : previewTargetRelation === 'self' ? 'Своя планета' : previewResult?.ok ? 'Цель подтверждена' : 'Координаты будут проверены при отправке')}</span>
-                      {!isReadOnlyAllyTarget ? <button type="button" className="flight-timeline-edit" onClick={() => setEditingPreviewTarget((value) => !value)}>{editingPreviewTarget ? 'ГОТОВО' : 'ИЗМЕНИТЬ'}</button> : null}
+                      {!isReadOnlyTarget ? <button type="button" className="flight-timeline-edit" onClick={() => setEditingPreviewTarget((value) => !value)}>{editingPreviewTarget ? 'ГОТОВО' : 'ИЗМЕНИТЬ'}</button> : null}
                     </div>
                   </div>
                 </li>
@@ -998,8 +1101,8 @@ function FleetWorkspace({
         <div className="resource-building-action-confirm-backdrop" data-qa-flight-recall-backdrop onMouseDown={() => setPendingRecall(null)}>
           <section className="resource-building-action-confirm" role="alertdialog" aria-modal="true" aria-labelledby="flight-recall-title" onMouseDown={(event) => event.stopPropagation()}>
             <small>ПОДТВЕРЖДЕНИЕ ОТЗЫВА</small>
-            <h3 id="flight-recall-title">Отозвать рейс?</h3>
-            <p>Колонизатор вернётся с обратным таймером. Газ за исходящий участок не возвращается.</p>
+            <h3 id="flight-recall-title">{pendingRecall.missionId === 'espionage' ? 'Вернуть шпионский зонд?' : 'Отозвать рейс?'}</h3>
+            <p>{pendingRecall.missionId === 'espionage' ? 'Зонд начнёт обратный путь с текущей позиции. Газ за исходящий участок не возвращается.' : 'Колонизатор вернётся с обратным таймером. Газ за исходящий участок не возвращается.'}</p>
             <div className="resource-building-action-confirm-actions">
               <button type="button" data-qa-flight-recall-confirm onClick={() => { window.dispatchEvent(new CustomEvent(FLIGHT_RECALL_REQUEST_EVENT, { detail: { flightId: pendingRecall.id, now: Date.now() } })); setPendingRecall(null); }}>ОТОЗВАТЬ</button>
               <button type="button" data-qa-flight-recall-cancel onClick={() => setPendingRecall(null)}>ОТМЕНА</button>
@@ -1041,6 +1144,7 @@ export function FleetWorkspacePortal() {
   const [fleetBudget, setFleetBudget] = useState<FleetBuildBudget>(readFleetBuildBudget);
   const [launchContext, setLaunchContext] = useState<FlightLaunchContext | null>(null);
   const [flightRecords, setFlightRecords] = useState<FlightRecord[]>(() => createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read().flights.records);
+  const [espionageState, setEspionageState] = useState<EspionageState>(() => createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read().espionage ?? { missions: [], reports: [], hunterNotices: [] });
 
   useEffect(() => {
     const syncPlanet = () => {
@@ -1049,6 +1153,7 @@ export function FleetWorkspacePortal() {
       setPlanet(readCurrentPlanet());
       setFleetBudget(readFleetBuildBudget());
       setFlightRecords(runtimeState.flights.records);
+      setEspionageState(runtimeState.espionage ?? { missions: [], reports: [], hunterNotices: [] });
     };
 
     const onLaunchContext = (event: Event) => setLaunchContext((event as CustomEvent<FlightLaunchContext>).detail);
@@ -1057,6 +1162,7 @@ export function FleetWorkspacePortal() {
       const result = (event as CustomEvent<FlightCommandResult>).detail;
       if (result.ok) {
         setFlightRecords(result.state.flights.records);
+        setEspionageState(result.state.espionage ?? { missions: [], reports: [], hunterNotices: [] });
         setLaunchContext(null);
       }
     };
@@ -1092,7 +1198,8 @@ export function FleetWorkspacePortal() {
         onConstructionOpened={() => setConstructionRequested(false)}
         fleetBudget={fleetBudget}
         launchContext={launchContext}
-        flightRecords={flightRecords}
+      flightRecords={flightRecords}
+      espionageState={espionageState}
       />,
     target,
   );

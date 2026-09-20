@@ -300,7 +300,7 @@ test('timed object schedules use the confirmed lifetime, quiet period, and chanc
   }
 });
 
-test('spy and fleet actions are honest about unsupported runtime', () => {
+test('spy and fleet actions follow the owner relation contract', () => {
   const system = createUniverseSystem({ system: 1, currentOwnerId: 'player-current' });
   const homeworld = system.positions.find((node) => node.isHomeworld)!;
   const ally = createUniverseMap({ mode: 'test' }).systems.flatMap((item) => item.positions).find((node) => node.fixture?.id === 'test-mode-ally-ira-vel-v1')!;
@@ -311,7 +311,8 @@ test('spy and fleet actions are honest about unsupported runtime', () => {
   assert.equal(getUniverseActionState('fleet', homeworld, 'player-current').status, 'supported');
   assert.equal(getUniverseActionState('fleet', homeworld, 'player-current').enabled, true);
   assert.equal(getUniverseActionState('fleet', homeworld, 'player-current').reason, 'Своя планета принимает транспортировку.');
-  assert.equal(getUniverseActionState('spy', foreign, 'player-current').status, 'prototype');
+  assert.equal(getUniverseActionState('spy', foreign, 'player-current', 'neutral').status, 'supported');
+  assert.equal(getUniverseActionState('spy', foreign, 'player-current', 'neutral').enabled, true);
   assert.equal(getUniverseActionState('fleet', foreign, 'player-current').enabled, false);
   assert.equal(getUniverseActionState('fleet', ally, 'player-current').status, 'supported');
   assert.equal(getUniverseActionState('fleet', ally, 'player-current').enabled, true);

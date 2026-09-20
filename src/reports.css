@@ -861,6 +861,7 @@
 }
 
 .reports-preview-footer span { color: #526f78; font-size: 7px; }
+.reports-preview-footer-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .reports-preview-footer button {
   min-width: 166px;
   height: 36px;

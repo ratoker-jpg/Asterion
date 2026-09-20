@@ -122,7 +122,7 @@ const SYSTEM_ONE_FIXTURES: Readonly<Record<number, { kind: UniversePlanetNode['k
 
 // Seeded once for a stable atlas: every bot system and position is sampled.
 const npcRandom = mulberry32(10_701);
-const NPC_PLANET_FIXTURES = shuffle(Array.from({ length: SYSTEM_COUNT }, (_, index) => index + 1), npcRandom)
+export const NPC_PLANET_FIXTURES = shuffle(Array.from({ length: SYSTEM_COUNT }, (_, index) => index + 1), npcRandom)
   .slice(0, MAX_PLANETS_PER_OWNER)
   .map((system, index) => {
     const slots = Array.from({ length: POSITION_COUNT }, (_, slot) => slot + 1)
@@ -135,6 +135,9 @@ const NPC_PLANET_FIXTURES = shuffle(Array.from({ length: SYSTEM_COUNT }, (_, ind
       artIndex: BOT_PLANET_PRESETS[index].artIndex,
     };
   });
+
+/** Stable seven-planet Bot 01 fixture consumed by the mod-test espionage slice. */
+export const BOT_01_PLANET_FIXTURES = NPC_PLANET_FIXTURES;
 
 const KIND_LABELS: Record<UniversePlanetNode['kind'], string> = {
   empty: 'Свободная позиция',
@@ -749,6 +752,7 @@ export function getUniverseActionState(
   action: UniverseAction,
   node: UniversePlanetNode,
   currentOwnerId: string,
+  relation?: UniverseOwnerRelation,
 ): UniverseActionState {
   const label = action === 'spy' ? 'Отправить шпионский зонд' : 'Отправить флот';
   if (node.kind !== 'player' && node.kind !== 'npc') {
@@ -796,12 +800,31 @@ export function getUniverseActionState(
       reason: 'Транспортировка доступна только на свою или явную союзную планету.',
     };
   }
+  const targetRelation = relation ?? 'neutral';
+  if (targetRelation === 'ally') {
+    return {
+      action,
+      enabled: false,
+      status: 'disabled',
+      label,
+      reason: 'Шпионаж запрещён против союзной планеты.',
+    };
+  }
+  if (targetRelation === 'self') {
+    return {
+      action,
+      enabled: false,
+      status: 'disabled',
+      label,
+      reason: 'Шпионаж запрещён против своей планеты.',
+    };
+  }
   return {
     action,
     enabled: true,
-    status: 'prototype',
+    status: 'supported',
     label,
-    reason: 'Прототип — отправка не подключена.',
+    reason: targetRelation === 'enemy' ? 'Вражеская цель доступна для шпионажа.' : 'Нейтральная цель доступна для шпионажа.',
   };
 }
 

@@ -23,6 +23,7 @@ import type { TradeState } from '../domain/buildings/trade.ts';
 import type { RepairWorkshopState } from '../domain/repair/workshop.ts';
 import type { EnergyLedger, EnergySourceSnapshot } from '../domain/energy/runtime.ts';
 import type { FlightState } from '../domain/flights/types.ts';
+import type { EspionageState } from '../domain/espionage/types.ts';
 import type { UniverseOwnerAlliance } from '../domain/universe/types.ts';
 
 /** Planet ids are stable save keys; the legacy homeworld remains `helion-01`. */
@@ -125,6 +126,8 @@ export type SaveState = {
   science: ScienceState;
   resourceClock: ResourceClock;
   flights: FlightState;
+  /** Fresh saves materialize this state; optional keeps legacy test fixtures source-compatible. */
+  espionage?: EspionageState;
   /** Optional for backwards compatibility; fresh states always materialize it. */
   alliedPlanets?: Record<PlanetId, AlliedPlanetState>;
 };

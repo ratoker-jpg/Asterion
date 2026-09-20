@@ -115,6 +115,9 @@ import type {
 import { normalizePersistedTransportCargo } from '../domain/flights/cargo.ts';
 import type { UniverseObjectKind } from '../domain/universe/types.ts';
 import { TEST_MODE_ALLY_PLANET_FIXTURE } from '../domain/universe/runtime.ts';
+import { migrateEspionageState } from '../domain/espionage/repository.ts';
+import { createDefaultEspionageState } from '../domain/espionage/runtime.ts';
+import { createDefaultTestEspionageState } from '../domain/espionage/fixtures.ts';
 
 export const SAVE_SCHEMA_VERSION = Math.max(
   COMBAT_SAVE_SCHEMA_VERSION,
@@ -187,6 +190,7 @@ type StoredSave = {
   resourceClock?: unknown;
   currentPlanetId?: unknown;
   flights?: unknown;
+  espionage?: unknown;
   alliedPlanets?: Record<string, unknown>;
 };
 
@@ -330,6 +334,7 @@ const PERSISTED_FLIGHT_COMPLETION_REASONS = new Set<FlightCompletionReason>([
   'target-occupied',
   'target-unavailable',
   'arrived',
+  'spy-destroyed',
   'mission-failed',
 ]);
 const PERSISTED_FLIGHT_DESTINATION_KINDS = new Set<FlightDestination['kind']>([
@@ -347,7 +352,7 @@ const PERSISTED_UNIVERSE_OBJECT_KINDS = new Set<UniverseObjectKind>([
   'anomaly',
   'asteroid',
 ]);
-const PERSISTED_TARGET_RELATIONS = new Set<TargetRelation>(['self', 'ally']);
+const PERSISTED_TARGET_RELATIONS = new Set<TargetRelation>(['self', 'ally', 'enemy', 'neutral']);
 const PERSISTED_CARGO_STATES = new Set<TransportCargoState>(['loaded', 'delivered', 'voided', 'returned']);
 
 function isFinitePersistedNumber(value: unknown): value is number {
@@ -399,6 +404,7 @@ function isPersistedFlightRecord(value: unknown): value is FlightRecord {
     || item.gasCost < 0) return false;
 
   if (item.operationId !== undefined && !isNonEmptyPersistedString(item.operationId)) return false;
+  if (item.spyMissionId !== undefined && !isNonEmptyPersistedString(item.spyMissionId)) return false;
   if (item.destinationPlanetId !== undefined && !isNonEmptyPersistedString(item.destinationPlanetId)) return false;
   if (item.destinationOwnerId !== undefined && !isNonEmptyPersistedString(item.destinationOwnerId)) return false;
   if (item.targetRelation !== undefined && !PERSISTED_TARGET_RELATIONS.has(item.targetRelation as TargetRelation)) return false;
@@ -440,6 +446,15 @@ function isPersistedFlightRecord(value: unknown): value is FlightRecord {
     if (!SHIP_IDS.includes(shipId as (typeof SHIP_IDS)[number])
       || !isNonNegativeInteger(quantity)
       || quantity <= 0) return false;
+  }
+  if (item.missionId === 'espionage') {
+    if (!isNonEmptyPersistedString(item.spyMissionId)
+      || destinationRecord.kind !== 'planet'
+      || item.destinationPlanetId !== destinationRecord.planetId
+      || (item.targetRelation !== 'enemy' && item.targetRelation !== 'neutral')
+      || shipEntries.length !== 1
+      || shipEntries[0][0] !== 'spy-probe'
+      || shipEntries[0][1] !== 1) return false;
   }
 
   const phase = item.phase as FlightPhase;
@@ -614,6 +629,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     science,
     resourceClock: createResourceClock(now, ['helion-01']),
     flights: createDefaultFlightState(),
+    espionage: mode === 'test' ? createDefaultTestEspionageState() : createDefaultEspionageState(),
     alliedPlanets: mode === 'test'
       ? { [TEST_MODE_ALLY_PLANET_FIXTURE.planet.id]: createDefaultAlliedPlanetState(mode, now, science.levels) }
       : {},
@@ -830,6 +846,12 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       ? parsed.currentPlanetId.trim()
       : 'helion-01';
     const alliedPlanets = migrateAlliedPlanets(parsed.alliedPlanets, mode, timestamp, science.levels);
+    const migratedEspionage = migrateEspionageState(parsed.espionage);
+    const espionage = mode === 'test'
+      ? (Object.keys(migratedEspionage.bot01Planets ?? {}).length
+        ? migratedEspionage
+        : { ...migratedEspionage, bot01Planets: createDefaultTestEspionageState().bot01Planets })
+      : { ...migratedEspionage, bot01Planets: undefined };
 
     return {
       schemaVersion: SAVE_SCHEMA_VERSION,
@@ -850,6 +872,7 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       science,
       resourceClock: migrateResourceClock(parsed.resourceClock, timestamp, Object.keys(planets)),
       flights: migrateFlightState(parsed.flights),
+      espionage,
       alliedPlanets,
     };
   } catch {
@@ -868,7 +891,10 @@ export function createPersistenceFacade(options: PersistenceOptions = {}) {
     write: (state: SaveState): PersistenceWriteResult => {
       if (!storage) return { ok: false, error: 'Storage is unavailable.' };
       try {
-        storage.setItem(saveKey, JSON.stringify(state));
+        const persistedState = mode === 'test' || !state.espionage
+          ? state
+          : { ...state, espionage: { ...state.espionage, bot01Planets: undefined } };
+        storage.setItem(saveKey, JSON.stringify(persistedState));
         return { ok: true };
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : String(error) };

@@ -128,11 +128,19 @@ import {
   FLIGHT_EDIT_TARGET_REQUEST_EVENT,
   FLIGHT_LAUNCH_CONTEXT_EVENT,
   FLIGHT_RECALL_REQUEST_EVENT,
+  SPY_REPORT_ALL_REQUEST_EVENT,
+  SPY_REPORT_REQUEST_EVENT,
+  SPY_REPORT_RESULT_EVENT,
   dispatchFlight,
+  requestAllSpyReports,
+  requestSpyReport,
   recallFlight,
   type DispatchFlightCommand,
   type FlightLaunchContext,
 } from './application/flights.ts';
+import { createSimulatorScenarioFromSpyReport, requestSimulatorHandoff } from './application/simulator-handoff.ts';
+import type { SpyReportSnapshot } from './domain/espionage/types.ts';
+import type { UniverseOwnerProfile } from './domain/universe/types.ts';
 import { enqueueApplicationStateUpdate } from './application/state.ts';
 import { getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
@@ -310,13 +318,37 @@ export function App() {
       navigateTo('universe');
       setNotice('Выберите новую свободную координату для колонизации.');
     };
+    const onSpyReportRequest = (event: Event) => {
+      const detail = (event as CustomEvent<{ missionId: string; now?: number }>).detail;
+      const result = requestSpyReport(stateRef.current, detail.missionId, { now: detail.now ?? Date.now(), rng: () => Math.random() });
+      if (result.ok) {
+        stateRef.current = result.state;
+        setState(result.state);
+        setNotice(`Проверьте системные сообщения. ${result.notice}`);
+      } else setNotice(result.error.message);
+      window.dispatchEvent(new CustomEvent(SPY_REPORT_RESULT_EVENT, { detail: result }));
+    };
+    const onSpyReportAllRequest = (event: Event) => {
+      const detail = (event as CustomEvent<{ missionIds?: string[]; now?: number }>).detail;
+      const result = requestAllSpyReports(stateRef.current, detail.missionIds ?? [], { now: detail.now ?? Date.now(), rng: () => Math.random() });
+      if (result.ok) {
+        stateRef.current = result.state;
+        setState(result.state);
+        setNotice(`Проверьте системные сообщения. ${result.notice}`);
+      } else setNotice(result.error.message);
+      window.dispatchEvent(new CustomEvent(SPY_REPORT_RESULT_EVENT, { detail: result }));
+    };
     window.addEventListener(FLIGHT_DISPATCH_REQUEST_EVENT, onDispatchRequest);
     window.addEventListener(FLIGHT_RECALL_REQUEST_EVENT, onRecallRequest);
     window.addEventListener(FLIGHT_EDIT_TARGET_REQUEST_EVENT, onEditTargetRequest);
+    window.addEventListener(SPY_REPORT_REQUEST_EVENT, onSpyReportRequest);
+    window.addEventListener(SPY_REPORT_ALL_REQUEST_EVENT, onSpyReportAllRequest);
     return () => {
       window.removeEventListener(FLIGHT_DISPATCH_REQUEST_EVENT, onDispatchRequest);
       window.removeEventListener(FLIGHT_RECALL_REQUEST_EVENT, onRecallRequest);
       window.removeEventListener(FLIGHT_EDIT_TARGET_REQUEST_EVENT, onEditTargetRequest);
+      window.removeEventListener(SPY_REPORT_REQUEST_EVENT, onSpyReportRequest);
+      window.removeEventListener(SPY_REPORT_ALL_REQUEST_EVENT, onSpyReportAllRequest);
     };
   }, [testTimeScale]);
 
@@ -463,7 +495,11 @@ export function App() {
           .join(', ');
         setNotice(`Верфь: производство завершено — ${names}.`);
       } else if (event.kind === 'flight') {
-        event.events.forEach((flightEvent) => setNotice(flightEvent.notice));
+        event.events.forEach((flightEvent) => setNotice(
+          flightEvent.status === 'spy-report' || flightEvent.status === 'spy-detected'
+            ? `Проверьте системные сообщения. ${flightEvent.notice}`
+            : flightEvent.notice,
+        ));
       }
     });
   }, [now, state, testTimeScale]);
@@ -892,6 +928,51 @@ export function App() {
     }, 40);
   };
 
+  const openSpyLaunch = (target: { planetId: string; planetName: string; coordinate: { galaxy: number; system: number; position: number }; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile }) => {
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    setNotice(`Шпионская цель выбрана: ${target.owner.displayName} · [${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}].`);
+    const targetRaceId = target.owner.raceId === 'synod' || target.owner.raceId === 'veyra' ? target.owner.raceId : 'aegis';
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, {
+        detail: {
+          missionId: 'espionage',
+          targetKind: 'npc',
+          targetRelation: target.relation,
+          targetPlanetName: target.planetName,
+          targetOwnerId: target.owner.id,
+          targetOwnerName: target.owner.displayName,
+          targetRaceId,
+          targetAlliance: target.owner.alliance ?? null,
+          destination: { kind: 'planet', planetId: target.planetId, coordinate: target.coordinate },
+        },
+      }));
+    }, 40);
+  };
+
+  const openSpySimulator = (report: SpyReportSnapshot) => {
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    closePlanetEditor();
+    const scenario = createSimulatorScenarioFromSpyReport(stateRef.current, report);
+    window.setTimeout(() => requestSimulatorHandoff(scenario), 50);
+    setNotice(`Симулятор подготовлен по полному отчёту: ${report.targetPlanetName}.`);
+  };
+
+  const recallSpyFromReport = (missionId: string) => {
+    const mission = stateRef.current.espionage?.missions.find((candidate) => candidate.id === missionId);
+    const flight = mission ? stateRef.current.flights.records.find((candidate) => candidate.id === mission.flightId) : undefined;
+    if (!mission || !flight || mission.status !== 'orbiting') {
+      setNotice('Связанный шпионский зонд уже не находится на орбите.');
+      return;
+    }
+    window.dispatchEvent(new CustomEvent(FLIGHT_RECALL_REQUEST_EVENT, { detail: { flightId: flight.id, now: Date.now() } }));
+  };
+
   const createAlliancePlaceholder = () => {
     setNotice('Создание союза пока недоступно в прототипе.');
   };
@@ -1151,6 +1232,7 @@ export function App() {
               mode={RUNTIME_MODE}
               onColonize={openColonizationLaunch}
               onTransport={openTransportLaunch}
+              onSpy={openSpyLaunch}
             />
           ) : activeRoute === 'operations' ? (
             <OperationsView
@@ -1175,6 +1257,7 @@ export function App() {
               savedBattleReportIds={state.combat.savedReportIds}
               operations={state.operations}
               command={state.command}
+              espionage={state.espionage}
               profile={state.profile}
               rating={state.rating}
               mode={RUNTIME_MODE}
@@ -1183,6 +1266,8 @@ export function App() {
               onToggleBattleSaved={toggleBattleSavedFromReports}
               onOpenFleets={openFleetRootFromReports}
               onOpenCommand={openCommandFromReports}
+              onSimulateBattle={openSpySimulator}
+              onRecallSpy={recallSpyFromReport}
             />
           ) : activeRoute === 'planet' && planetViewMode !== 'overview' ? (
             <ZoneView

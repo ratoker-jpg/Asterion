@@ -839,6 +839,72 @@ html.asterion-long-page:has([data-qa-flight-preview-backdrop]) #root {
   .flight-timeline-actions button { min-height: 34px; padding-inline: 15px; font-size: 9px; }
 }
 
+/* Espionage operations rail: compact enough for 1280px, still readable at 1920px. */
+.fleet-spy-operations-v1 {
+  margin: 18px 20px 0;
+  border: 1px solid rgba(93, 190, 218, .23);
+  background: linear-gradient(135deg, rgba(8, 21, 30, .94), rgba(13, 27, 34, .82));
+  box-shadow: inset 0 0 26px rgba(0, 190, 230, .05);
+}
+.fleet-spy-operations-head-v1,
+.fleet-spy-reports-v1 > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(93, 190, 218, .15);
+}
+.fleet-spy-operations-head-v1 small,
+.fleet-spy-reports-v1 small { color: #74b9c7; font-size: 9px; letter-spacing: .16em; }
+.fleet-spy-operations-head-v1 h3 { margin: 3px 0 0; color: #e8fbff; font-size: 14px; letter-spacing: .09em; }
+.fleet-spy-operations-head-v1 > span { color: #7ce6ed; font-size: 10px; letter-spacing: .12em; }
+.fleet-spy-table-v1 { overflow-x: auto; }
+.fleet-spy-row-v1 {
+  display: grid;
+  grid-template-columns: 52px minmax(150px, 1fr) minmax(190px, 1.35fr) 100px 120px minmax(155px, 1fr) minmax(210px, .95fr);
+  align-items: center;
+  min-width: 1050px;
+  gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px solid rgba(93, 190, 218, .09);
+  color: #c9e2e8;
+  font-size: 11px;
+}
+.fleet-spy-row-v1:last-child { border-bottom: 0; }
+.fleet-spy-row-head-v1 { color: #6c9ba5; font-size: 9px; letter-spacing: .13em; }
+.fleet-spy-row-v1 strong { display: block; color: #effcff; font-size: 12px; }
+.fleet-spy-row-v1 small { display: block; margin-top: 3px; color: #7fa5ad; font-size: 10px; }
+.fleet-spy-status-v1 { color: #82e2d2; font-variant-numeric: tabular-nums; }
+.fleet-spy-row-actions-v1 { display: flex; flex-wrap: wrap; gap: 6px; }
+.fleet-spy-row-actions-v1 button,
+.fleet-flight-actions-v1 button {
+  border: 1px solid rgba(118, 201, 215, .28);
+  background: rgba(13, 45, 55, .62);
+  color: #bcecf1;
+  min-height: 31px;
+  padding: 0 10px;
+  font-size: 9px;
+  letter-spacing: .08em;
+}
+.fleet-spy-row-actions-v1 button:hover,
+.fleet-flight-actions-v1 button:hover { border-color: rgba(126, 232, 255, .7); color: #f2feff; }
+.fleet-spy-row-actions-v1 button:disabled { opacity: .38; cursor: not-allowed; }
+.fleet-spy-empty-v1 { margin: 0; padding: 18px 16px; color: #8badb4; font-size: 11px; }
+.fleet-spy-reports-v1 { border-top: 1px solid rgba(93, 190, 218, .15); }
+.fleet-spy-reports-v1 > header { padding-block: 10px; }
+.fleet-spy-reports-v1 > header strong { color: #d7f7fb; font-size: 10px; letter-spacing: .12em; }
+.fleet-spy-reports-v1 article { display: grid; grid-template-columns: minmax(160px, 1fr) 170px 100px; gap: 10px; padding: 9px 16px; border-bottom: 1px solid rgba(93, 190, 218, .08); font-size: 10px; }
+.fleet-spy-reports-v1 article strong { color: #e5fbff; }
+.fleet-spy-reports-v1 article span { color: #80bbc4; letter-spacing: .08em; }
+.fleet-spy-reports-v1 article small { color: #c6e7eb; font-variant-numeric: tabular-nums; text-align: right; }
+.fleet-spy-reports-v1 > p { padding: 0 16px 14px; color: #8badb4; font-size: 11px; }
+.fleet-flight-actions-v1 { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 12px; }
+@media (max-width: 980px) {
+  .fleet-spy-operations-v1 { margin-inline: 12px; }
+  .fleet-spy-row-v1 { grid-template-columns: 40px minmax(140px, 1fr) minmax(165px, 1.2fr) 80px 105px minmax(140px, 1fr) minmax(190px, .9fr); padding-inline: 12px; }
+}
+
 @media (max-width: 1050px) and (min-width: 761px) {
   .resource-building-action-confirm.flight-timeline-modal { width: calc(100vw - 32px); max-width: calc(100vw - 32px); padding-inline: 16px; }
   .flight-timeline-body { grid-template-columns: 185px minmax(0, 1fr) 190px; gap: 10px; }

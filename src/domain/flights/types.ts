@@ -23,9 +23,10 @@ export type FlightCompletionReason =
   | 'target-occupied'
   | 'target-unavailable'
   | 'arrived'
+  | 'spy-destroyed'
   | 'mission-failed';
 
-export type TargetRelation = 'self' | 'ally';
+export type TargetRelation = 'self' | 'ally' | 'enemy' | 'neutral';
 export type TransportCargoState = 'loaded' | 'delivered' | 'voided' | 'returned';
 
 export type FlightDestination =
@@ -39,6 +40,8 @@ export type FlightRecord = {
   requestId: string;
   missionId: MissionId;
   operationId?: string;
+  /** Links a persisted espionage flight to its higher-level spy mission. */
+  spyMissionId?: string;
   originPlanetId: string;
   originCoordinate: UniverseCoordinate;
   destination: FlightDestination;

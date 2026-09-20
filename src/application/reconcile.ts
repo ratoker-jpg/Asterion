@@ -89,7 +89,7 @@ export function reconcileRuntime(
     }
   }
 
-  const flights = reconcileFlights(next, context.now);
+  const flights = reconcileFlights(next, context.now, context.rng ?? Math.random);
   if (flights.changed) {
     next = flights.state;
     if (flights.events.length > 0) events.push({ kind: 'flight', events: flights.events });
