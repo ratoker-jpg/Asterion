@@ -7,7 +7,7 @@
 
    Reference language: the approved "ПЛАН ПЕРЕЛЁТА" modal (PR #71):
    rounded cards 18-22px, amber/cyan accents, readable labels
-   (>=10.5px), tabular numerals, pill-like clear buttons.
+   (>=14px for ordinary UI), tabular numerals, pill-like clear buttons.
    ============================================================ */
 
 /* === 0. TOKENS ============================================== */
@@ -26,6 +26,17 @@
   --ut-danger:#f0445e;
   --ut-positive:#35e58a;
   --ut-label:#8fb6c0;
+  /* Fixed readable scale: display 32 / section 18 / data 16 / body 14. */
+  --ut-font-hud:12px;
+  --ut-font-page-title:32px;
+  --ut-font-section-title:18px;
+  --ut-font-body:14px;
+  --ut-font-data:16px;
+  --ut-font-control:16px;
+  --ut-font-secondary:14px;
+  --ut-font-helper:14px;
+  --ut-focus:2px solid var(--ut-accent);
+  --ut-motion-fast:160ms;
 }
 
 /* === 1. GLOBAL PRIMITIVES =================================== */
@@ -723,10 +734,12 @@ html.asterion-repair-page .repair-page-head-v1::after{
 
 /* --- science --- */
 .utility-screen-host{
-  border-radius:var(--ut-r-panel);
-  background:var(--ut-surface);
-  border:1px solid var(--ut-border);
+  border-radius:0;
+  background:transparent;
+  border:0;
+  box-shadow:none;
 }
+.utility-screen-host::before{ display:none !important; }
 .science-sidebar-v2{
   border-radius:var(--ut-r-card);
   background:var(--ut-surface-2);
@@ -1532,8 +1545,8 @@ html.asterion-repair-page .repair-page-head-v1::after{
 
 /* Resource income is a primary readout; the old energy separator was visible
    below the clipped side panel as an isolated amber line. */
-.resource-zone-economy-title{ font-size:12px !important; }
-.resource-zone-income-name{ font-size:11px !important; }
+.resource-zone-economy-title{ font-size:var(--ut-font-section-title) !important; }
+.resource-zone-income-name{ font-size:var(--ut-font-body) !important; }
 .resource-zone-energy-summary{
   /* The energy ledger remains available to the building dialog/QA state, but
      it must not leak a partial heading out of the compact income sidebar. */
@@ -1543,3 +1556,272 @@ html.asterion-repair-page .repair-page-head-v1::after{
   overflow:hidden;
   border-top:0 !important;
 }
+
+/* ============================================================
+   DEFAULT DESIGN CONTRACT — the source of truth for new UI
+   ------------------------------------------------------------
+   New surfaces should use these primitives instead of inventing a
+   second rectangle, radius, or button treatment. The selectors are
+   intentionally small and composable so legacy screens can migrate
+   without changing their layout contracts.
+   ============================================================ */
+
+/* One surface owns the boundary; nested content stays border-light. */
+.asterion-panel{
+  min-width:0;
+  border:1px solid var(--ut-border);
+  border-radius:var(--ut-r-panel);
+  background:var(--ut-surface);
+  box-shadow:0 20px 50px rgba(0,0,0,.4);
+  overflow:hidden;
+}
+.asterion-card{
+  min-width:0;
+  border:1px solid var(--ut-border);
+  border-radius:var(--ut-r-card);
+  background:var(--ut-surface-2);
+}
+.asterion-chip{
+  border:1px solid var(--ut-border);
+  border-radius:var(--ut-r-chip);
+  background:rgba(8,24,31,.72);
+}
+
+/* Shared control contract: readable label, visible keyboard focus, complete
+   hover/pressed feedback, and no new square control surfaces. */
+.asterion-button,
+.asterion-icon-button{
+  font:inherit;
+  border-radius:var(--ut-r-btn);
+  transition:
+    transform var(--ut-motion-fast) ease,
+    color var(--ut-motion-fast) ease,
+    border-color var(--ut-motion-fast) ease,
+    background var(--ut-motion-fast) ease,
+    box-shadow var(--ut-motion-fast) ease,
+    filter var(--ut-motion-fast) ease;
+}
+.asterion-button{
+  min-height:38px;
+  padding:0 16px;
+  font-size:var(--ut-font-control);
+  font-weight:700;
+  letter-spacing:.05em;
+  cursor:pointer;
+}
+.asterion-button--primary{
+  border:1px solid rgba(126,232,255,.6);
+  background:linear-gradient(180deg,#1695ae,#0a5f76);
+  color:#f2feff;
+  box-shadow:0 0 22px rgba(0,196,242,.22),inset 0 0 14px rgba(120,232,255,.12);
+}
+.asterion-button--primary:hover:not([disabled]),
+.asterion-button--primary:focus-visible:not([disabled]){
+  border-color:#d8fbff;
+  background:linear-gradient(180deg,#27b9d4,#0d708b);
+  color:#fff;
+  box-shadow:0 0 28px rgba(0,196,242,.36),inset 0 0 16px rgba(160,244,255,.18);
+}
+.asterion-button--danger{
+  border:1px solid rgba(255,128,112,.5);
+  background:rgba(66,20,18,.38);
+  color:#ffb9ae;
+}
+.asterion-button--danger:hover:not([disabled]),
+.asterion-button--danger:focus-visible:not([disabled]){
+  border-color:#ff8f84;
+  background:rgba(157,36,42,.48);
+  color:#fff5f3;
+  box-shadow:0 0 14px rgba(240,68,94,.24);
+}
+.asterion-button:not([disabled]):active,
+.asterion-icon-button:not([disabled]):active{
+  transform:translateY(1px);
+}
+.asterion-icon-button{
+  width:34px;
+  height:34px;
+  padding:0;
+  display:inline-grid;
+  place-items:center;
+  border:1px solid var(--ut-border-strong);
+  background:transparent;
+  color:#b9e7f2;
+  font-size:18px;
+  line-height:1;
+  cursor:pointer;
+}
+.asterion-button:hover:not([disabled]),
+.asterion-icon-button:hover:not([disabled]){
+  border-color:var(--ut-border-strong);
+  filter:brightness(1.08);
+}
+.asterion-icon-button:focus-visible:not([disabled]){
+  color:#fff;
+  background:rgba(24,102,121,.32);
+  box-shadow:0 0 16px rgba(86,217,242,.24);
+}
+.asterion-button[disabled],
+.asterion-icon-button[disabled]{
+  cursor:not-allowed;
+  filter:grayscale(.35);
+  opacity:.52;
+}
+body button:not([disabled]){
+  transition:
+    transform var(--ut-motion-fast) ease,
+    color var(--ut-motion-fast) ease,
+    border-color var(--ut-motion-fast) ease,
+    background var(--ut-motion-fast) ease,
+    box-shadow var(--ut-motion-fast) ease,
+    filter var(--ut-motion-fast) ease;
+}
+body button:not([disabled]):focus-visible,
+body input:not([disabled]):focus-visible,
+body select:not([disabled]):focus-visible,
+body textarea:not([disabled]):focus-visible{
+  outline:var(--ut-focus);
+  outline-offset:2px;
+}
+body button[disabled]{ cursor:not-allowed; }
+
+/* The utility host is only a portal mount. Its old full-canvas frame created
+   the visible rectangle behind the actual rounded panels. */
+.utility-screen-host{
+  border:0 !important;
+  border-radius:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+}
+.utility-screen-host::before{ display:none !important; }
+
+/* Utility screens opt out of the legacy observer, so their semantic classes
+   need an explicit readable floor. */
+.utility-screen-host .utility-page-title{ font-size:calc(var(--ut-font-page-title) * var(--text-scale-page-title)); }
+.utility-screen-host .utility-section-title{ font-size:calc(var(--ut-font-section-title) * var(--text-scale-section-title)); }
+.utility-screen-host .utility-body-text{ font-size:calc(var(--ut-font-body) * var(--text-scale-body)); }
+.utility-screen-host .utility-data-text{ font-size:calc(var(--ut-font-data) * var(--text-scale-table)); }
+.utility-screen-host .utility-control{ font-size:calc(var(--ut-font-control) * var(--text-scale-control)); }
+.utility-screen-host .utility-secondary{ font-size:calc(var(--ut-font-secondary) * var(--text-scale-secondary)); }
+.utility-screen-host .utility-helper{ font-size:calc(var(--ut-font-helper) * var(--text-scale-helper)); }
+.utility-screen-host .rating-head-v2 > span,
+.utility-screen-host .science-level-progress-meta-v2,
+.utility-screen-host .science-lab-speed-v2{ font-size:var(--ut-font-secondary); }
+.utility-screen-host .science-requirements-v2::before{ font-size:var(--ut-font-secondary); }
+
+/* Keep the science action column geometrically stable when a readable 16px
+   control label wraps. The action itself stays anchored; only its note may
+   use the remaining vertical space. */
+.science-action-v2{
+  justify-content:flex-start;
+  overflow:hidden;
+}
+.science-action-v2 > span{ min-height:18px; margin-top:2px; }
+.science-action-v2 > strong{ min-height:22px; margin-top:4px; }
+.science-ready-action-v2{
+  height:54px;
+  min-height:54px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:var(--ut-font-control) !important;
+  line-height:1.15;
+  white-space:normal;
+}
+.science-ready-note-v2,
+.science-blocked-note-v2{
+  width:100%;
+  min-height:40px;
+  max-width:none;
+  font-size:var(--ut-font-helper) !important;
+}
+
+/* Last in the cascade by design: a component may tune colour and spacing,
+   but it may not silently reintroduce 6–10px text. */
+body [data-asterion-typography="pageTitle"]{ font-size:calc(var(--ut-font-page-title) * var(--text-scale-page-title)) !important; }
+body [data-asterion-typography="sectionTitle"]{ font-size:calc(var(--ut-font-section-title) * var(--text-scale-section-title)) !important; }
+body [data-asterion-typography="body"]{ font-size:calc(var(--ut-font-body) * var(--text-scale-body)) !important; }
+body [data-asterion-typography="table"]{ font-size:calc(var(--ut-font-data) * var(--text-scale-table)) !important; }
+body [data-asterion-typography="control"]{ font-size:calc(var(--ut-font-control) * var(--text-scale-control)) !important; }
+body [data-asterion-typography="secondary"]{ font-size:calc(var(--ut-font-secondary) * var(--text-scale-secondary)) !important; }
+body [data-asterion-typography="helper"]{ font-size:calc(var(--ut-font-helper) * var(--text-scale-helper)) !important; }
+
+/* Settings rows retain their readable hierarchy at narrow desktop widths. */
+.settings-content-v2,
+.settings-panel-v2,
+.settings-presets-v2,
+.typography-controls-v2,
+.typography-preview-v2{ min-width:0; }
+.settings-reset-card-v2 > div{ min-width:0; }
+.settings-reset-card-v2 p,
+.settings-reset-card-v2 small,
+.settings-panel-heading-v2 p{ overflow-wrap:anywhere; }
+
+/* Operation cards are content, not HUD microcopy. The legacy typography
+   controller applies the category floor to their text nodes; these rules
+   cover the utility-specific screen that intentionally bypasses it. */
+.operations-tabs-v2 button,
+.operations-tabs-v2 button b,
+.operations-primary-v2,
+.operations-secondary-v2{ font-size:var(--ut-font-control) !important; }
+.operations-heading-v2 small,
+.operations-feed-v2 > header small,
+.operations-dossier-title-v2 small,
+.operations-dossier-threat-v2 small,
+.operations-briefing-v2 > small,
+.operations-objective-v2 > small,
+.operations-conditions-v2 > small,
+.operations-rewards-panel-v2 > small,
+.operations-command-v2 small,
+.operation-feed-threat-v2 small,
+.operation-feed-copy-v2 > small,
+.operation-feed-copy-v2 > em,
+.operation-feed-meta-v2 > i,
+.operation-feed-meta-v2 > b,
+.operations-conditions-v2 p,
+.operations-rewards-panel-v2 p,
+.operations-unknown-brief-v2 p,
+.operations-command-v2 > div:first-child span{ font-size:var(--ut-font-secondary) !important; }
+.operations-reward-v2 > span small,
+.operations-reward-compact-v2 span,
+.operations-unknown-brief-v2 small{ font-size:var(--ut-font-helper) !important; }
+.operations-primary-v2:hover,
+.operations-primary-v2:focus-visible,
+.operations-secondary-v2:hover,
+.operations-secondary-v2:focus-visible{
+  border-color:var(--op-accent, var(--ut-accent));
+  color:#fff;
+  outline-offset:2px;
+}
+.operations-primary-v2:active,
+.operations-secondary-v2:active{ transform:translateY(1px); }
+
+/* The approved flight-plan modal is the reference control language. Keep
+   send/close/cancel states explicit even when a viewport override is active. */
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-close{
+  border-radius:var(--ut-r-btn);
+  transition:transform var(--ut-motion-fast) ease, border-color var(--ut-motion-fast) ease, background var(--ut-motion-fast) ease, color var(--ut-motion-fast) ease, box-shadow var(--ut-motion-fast) ease;
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-close:hover,
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-close:focus-visible{
+  border-color:#ff7d72;
+  background:rgba(112,27,34,.4);
+  color:#fff5f3;
+  box-shadow:0 0 14px rgba(240,68,94,.24);
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-actions button[data-qa-flight-preview-cancel]:hover,
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-actions button[data-qa-flight-preview-cancel]:focus-visible{
+  border-color:#ff8f84;
+  background:rgba(157,36,42,.48);
+  color:#fff5f3;
+  box-shadow:0 0 14px rgba(240,68,94,.2);
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-actions button[data-qa-flight-dispatch-confirm]:not([disabled]):hover,
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-actions button[data-qa-flight-dispatch-confirm]:not([disabled]):focus-visible{
+  border-color:#d8fbff;
+  background:linear-gradient(180deg,#27b9d4,#0d708b);
+  color:#fff;
+  box-shadow:0 0 28px rgba(0,196,242,.36),inset 0 0 16px rgba(160,244,255,.18);
+}
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-actions button:active,
+.resource-building-action-confirm.flight-timeline-modal .flight-timeline-close:active{ transform:translateY(1px); }

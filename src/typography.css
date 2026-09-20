@@ -34,22 +34,22 @@
 .asterion-header .asterion-header__campaign:not(:has(.asterion-header__test-mode-banner)) time{font-size:calc(20px * var(--text-scale-hud))}
 .asterion-header .asterion-header__utility-navigation button span{font-size:calc(11px * var(--text-scale-hud))}
 
-.utility-page-title{font-size:calc(34px * var(--text-scale-page-title));line-height:1.05}
-.utility-section-title{font-size:calc(14px * var(--text-scale-section-title))}
-.utility-body-text{font-size:calc(12px * var(--text-scale-body));line-height:1.55}
-.utility-data-text{font-size:calc(12px * var(--text-scale-table))}
-.utility-control{font-size:calc(11px * var(--text-scale-control))}
-.utility-secondary{font-size:calc(9px * var(--text-scale-secondary))}
-.utility-helper{font-size:calc(9px * var(--text-scale-helper));line-height:1.45}
+.utility-page-title{font-size:calc(var(--ut-font-page-title, 32px) * var(--text-scale-page-title));line-height:1.05}
+.utility-section-title{font-size:calc(var(--ut-font-section-title, 18px) * var(--text-scale-section-title))}
+.utility-body-text{font-size:calc(var(--ut-font-body, 14px) * var(--text-scale-body));line-height:1.55}
+.utility-data-text{font-size:calc(var(--ut-font-data, 16px) * var(--text-scale-table))}
+.utility-control{font-size:calc(var(--ut-font-control, 16px) * var(--text-scale-control))}
+.utility-secondary{font-size:calc(var(--ut-font-secondary, 14px) * var(--text-scale-secondary))}
+.utility-helper{font-size:calc(var(--ut-font-helper, 14px) * var(--text-scale-helper));line-height:1.45}
 
 .preview-hud-v2{font-size:calc(12px * var(--text-scale-hud))}
-.preview-page-title-v2{font-size:calc(26px * var(--text-scale-page-title))}
-.preview-section-title-v2{font-size:calc(14px * var(--text-scale-section-title))}
-.preview-body-v2{font-size:calc(11px * var(--text-scale-body))}
-.preview-table-v2{font-size:calc(12px * var(--text-scale-table))}
-.preview-control-v2{font-size:calc(10px * var(--text-scale-control))}
-.preview-secondary-v2{font-size:calc(9px * var(--text-scale-secondary))}
-.preview-helper-v2{font-size:calc(8px * var(--text-scale-helper))}
+.preview-page-title-v2{font-size:calc(var(--ut-font-page-title, 32px) * var(--text-scale-page-title))}
+.preview-section-title-v2{font-size:calc(var(--ut-font-section-title, 18px) * var(--text-scale-section-title))}
+.preview-body-v2{font-size:calc(var(--ut-font-body, 14px) * var(--text-scale-body))}
+.preview-table-v2{font-size:calc(var(--ut-font-data, 16px) * var(--text-scale-table))}
+.preview-control-v2{font-size:calc(var(--ut-font-control, 16px) * var(--text-scale-control))}
+.preview-secondary-v2{font-size:calc(var(--ut-font-secondary, 14px) * var(--text-scale-secondary))}
+.preview-helper-v2{font-size:calc(var(--ut-font-helper, 14px) * var(--text-scale-helper))}
 
 /* Legacy/current screens are tagged once by GlobalTypographyController with a semantic
    category and their original computed font size. Preferences then remain pure CSS-variable
