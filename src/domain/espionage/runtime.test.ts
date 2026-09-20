@@ -38,7 +38,7 @@ test('Hunter level 20 means a 35% detection interval', () => {
   assert.equal(hunterDetects(20, 99), false);
 });
 
-test('Bot 01 fixture keeps espionage level 10 and one full combat reference planet', () => {
+test('Bot 01 fixture keeps espionage level 10 and all planets have a playable population', () => {
   const planets = Object.values(createBot01Planets());
   assert.equal(planets.length, 7);
   const main = planets[0];
@@ -48,5 +48,6 @@ test('Bot 01 fixture keeps espionage level 10 and one full combat reference plan
   assert.equal(main.commanders.judge?.count, 1);
   assert.equal(main.population.fleet >= 5_000 && main.population.fleet <= 5_100, true);
   assert.equal(main.population.defense >= 4_900 && main.population.defense <= 5_100, true);
+  assert.equal(planets.every((planet) => planet.population.civilian + planet.population.fleet + planet.population.defense >= 5_000), true);
   assert.equal(planets.slice(1).every((planet) => planet.hunterLevel === 0), true);
 });

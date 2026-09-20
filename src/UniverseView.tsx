@@ -107,6 +107,8 @@ type UniverseViewProps = {
   onColonize: (coordinate: UniverseCoordinate) => void;
   onTransport: (target: { planetId: string; coordinate: UniverseCoordinate; relation: TargetRelation }) => void;
   onSpy: (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile }) => void;
+  focusTarget?: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string } | null;
+  onFocusHandled?: () => void;
 };
 
 const POINT_LABELS: ReadonlyArray<{ key: keyof UniverseOwnerPoints; label: string }> = [
@@ -361,7 +363,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, occupiedNodes, onSelect }
   </button>;
 }
 
-export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, rating, command, playerPlanets, mode, onColonize, onTransport, onSpy }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, rating, command, playerPlanets, mode, onColonize, onTransport, onSpy, focusTarget, onFocusHandled }: UniverseViewProps) {
   const [system, setSystem] = useState(1);
   const [focusEmpty, setFocusEmpty] = useState(false);
   const [showSlotLabels, setShowSlotLabels] = useState(true);
@@ -413,6 +415,20 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
   const selectedUnderlyingNode = selectedNode?.kind === 'asteroid'
     ? galaxyData.systems[selectedNode.coordinate.system - 1]?.positions.find((node) => node.coordinate.position === selectedNode.coordinate.position)
     : undefined;
+
+  useEffect(() => {
+    if (!focusTarget) return;
+    const planetNodes = [...nodesById.values()].filter((node): node is UniversePlanetNode => node.kind === 'player' || node.kind === 'npc');
+    const target = (focusTarget.planetId ? nodesById.get(focusTarget.planetId) : undefined)
+      ?? planetNodes.find((node) => node.ownerId === focusTarget.ownerId)
+      ?? planetNodes.find((node) => node.coordinate.galaxy === focusTarget.coordinate.galaxy
+        && node.coordinate.system === focusTarget.coordinate.system
+        && node.coordinate.position === focusTarget.coordinate.position);
+    if (!target || (target.kind !== 'player' && target.kind !== 'npc')) return;
+    setSystem(target.coordinate.system);
+    setSelectedNodeId(target.id);
+    onFocusHandled?.();
+  }, [focusTarget, nodesById, onFocusHandled]);
 
   const ownerPlanets = useMemo(() => {
     if (!selectedNode || (selectedNode.kind !== 'player' && selectedNode.kind !== 'npc')) return [];

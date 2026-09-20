@@ -140,7 +140,7 @@ import {
 } from './application/flights.ts';
 import { createSimulatorScenarioFromSpyReport, requestSimulatorHandoff } from './application/simulator-handoff.ts';
 import type { SpyReportSnapshot } from './domain/espionage/types.ts';
-import type { UniverseOwnerProfile } from './domain/universe/types.ts';
+import type { UniverseCoordinate, UniverseOwnerProfile } from './domain/universe/types.ts';
 import { enqueueApplicationStateUpdate } from './application/state.ts';
 import { getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
@@ -196,6 +196,11 @@ const planetSkins = [
 type Zone = BuildingZone;
 type PlanetViewMode = 'overview' | Zone;
 type BuildingInteriorContext = BuildingInteriorNavigationContext<PlanetId>;
+type UniverseFocusTarget = {
+  coordinate: UniverseCoordinate;
+  planetId?: string;
+  ownerId?: string;
+};
 
 type PlanetDefinition = {
   id: PlanetId;
@@ -250,6 +255,7 @@ export function App() {
   const [editingName, setEditingName] = useState(DEFAULT_PLANET_NAME);
   const [selectedBuildingRole, setSelectedBuildingRole] = useState<BuildingRole | null>(null);
   const [buildingInterior, setBuildingInterior] = useState<BuildingInteriorContext | null>(null);
+  const [universeFocusTarget, setUniverseFocusTarget] = useState<UniverseFocusTarget | null>(null);
 
   const navigateTo = (nextRoute: AppRoute) => {
     navigate(nextRoute);
@@ -928,28 +934,43 @@ export function App() {
     }, 40);
   };
 
-  const openSpyLaunch = (target: { planetId: string; planetName: string; coordinate: { galaxy: number; system: number; position: number }; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile }) => {
+  const openSpyLaunch = (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile }) => {
+    const targetRaceId = target.owner.raceId === 'synod' || target.owner.raceId === 'veyra' ? target.owner.raceId : 'aegis';
+    const result = dispatchFlight(stateRef.current, {
+      requestId: `spy-universe-${target.planetId}-${Date.now()}`,
+      missionId: 'espionage',
+      originPlanetId: stateRef.current.currentPlanetId,
+      targetKind: 'npc',
+      targetRelation: target.relation,
+      targetPlanetName: target.planetName,
+      targetOwnerId: target.owner.id,
+      targetOwnerName: target.owner.displayName,
+      targetRaceId,
+      targetAlliance: target.owner.alliance ?? null,
+      selectedShips: { 'spy-probe': 1 },
+      destination: { kind: 'planet', planetId: target.planetId, coordinate: target.coordinate },
+      departedAt: Date.now(),
+    }, { now: Date.now(), mode: RUNTIME_MODE, testTimeScale });
+    if (result.ok) {
+      stateRef.current = result.state;
+      setState(result.state);
+      setNotice('Шпионский зонд успешно отправлен.');
+    } else if (result.error.message.startsWith('Зонд уже выполняет')) {
+      setNotice('На этой планете уже есть шпионский зонд. Откройте раздел «Шпионские зонды».');
+    } else {
+      setNotice(result.error.message);
+    }
+    window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
+  };
+
+  const openUniverseTarget = (target: UniverseFocusTarget) => {
     clearBuildingInterior();
-    navigateTo('fleets');
+    closePlanetEditor();
+    setUniverseFocusTarget(target);
+    navigateTo('universe');
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
-    setNotice(`Шпионская цель выбрана: ${target.owner.displayName} · [${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}].`);
-    const targetRaceId = target.owner.raceId === 'synod' || target.owner.raceId === 'veyra' ? target.owner.raceId : 'aegis';
-    window.setTimeout(() => {
-      window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, {
-        detail: {
-          missionId: 'espionage',
-          targetKind: 'npc',
-          targetRelation: target.relation,
-          targetPlanetName: target.planetName,
-          targetOwnerId: target.owner.id,
-          targetOwnerName: target.owner.displayName,
-          targetRaceId,
-          targetAlliance: target.owner.alliance ?? null,
-          destination: { kind: 'planet', planetId: target.planetId, coordinate: target.coordinate },
-        },
-      }));
-    }, 40);
+    setNotice(`Вселенная: открыта координата [${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}].`);
   };
 
   const openSpySimulator = (report: SpyReportSnapshot) => {
@@ -1233,6 +1254,8 @@ export function App() {
               onColonize={openColonizationLaunch}
               onTransport={openTransportLaunch}
               onSpy={openSpyLaunch}
+              focusTarget={universeFocusTarget}
+              onFocusHandled={() => setUniverseFocusTarget(null)}
             />
           ) : activeRoute === 'operations' ? (
             <OperationsView
@@ -1268,6 +1291,7 @@ export function App() {
               onOpenCommand={openCommandFromReports}
               onSimulateBattle={openSpySimulator}
               onRecallSpy={recallSpyFromReport}
+              onOpenUniverseTarget={openUniverseTarget}
             />
           ) : activeRoute === 'planet' && planetViewMode !== 'overview' ? (
             <ZoneView

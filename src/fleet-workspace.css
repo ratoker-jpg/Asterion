@@ -1422,6 +1422,111 @@ html.asterion-long-page:has([data-qa-flight-preview-backdrop]) #root {
 .resource-building-action-confirm.flight-timeline-modal .flight-timeline-target-status .flight-timeline-edit { border-radius: 7px; }
 .resource-building-action-confirm.flight-timeline-modal .flight-timeline-error { border-radius: 10px; }
 
+.spy-operations-backdrop { padding: 28px; }
+.spy-operations-modal {
+  width: min(1280px, calc(100vw - 56px));
+  max-height: min(820px, calc(100vh - 56px));
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow: hidden;
+  padding: 24px;
+  border-radius: 18px;
+  text-align: left;
+}
+.spy-operations-modal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(83, 198, 222, .2);
+}
+.spy-operations-modal__head small { color: #65d4ec; font-size: 9px; letter-spacing: .16em; }
+.spy-operations-modal__head h3 { margin: 7px 0 6px; color: #f2fdff; font-size: 19px; letter-spacing: .08em; }
+.spy-operations-modal__head p { margin: 0; color: #8fb8c2; font-size: 11px; line-height: 1.45; }
+.spy-operations-modal__close {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 130, 112, .62);
+  border-radius: 10px;
+  background: rgba(77, 27, 28, .6);
+  color: #ffc0b3;
+  font-size: 20px;
+  cursor: pointer;
+}
+.spy-operations-modal__close:hover,
+.spy-operations-modal__close:focus-visible { outline: none; border-color: #ffd0c7; box-shadow: 0 0 16px rgba(255, 104, 91, .2); }
+.spy-operations-table-shell {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid rgba(78, 188, 213, .22);
+  border-radius: 12px;
+  background: rgba(1, 17, 26, .72);
+}
+.spy-operations-row {
+  min-width: 1080px;
+  display: grid;
+  grid-template-columns: 58px minmax(145px, 1fr) minmax(190px, 1.2fr) 120px 120px minmax(200px, 1.2fr) 230px;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(74, 173, 197, .12);
+  color: #bad9df;
+  font-size: 11px;
+}
+.spy-operations-row:last-child { border-bottom: 0; }
+.spy-operations-row--head { position: sticky; top: 0; z-index: 1; padding-top: 11px; padding-bottom: 11px; background: #061d29; color: #6da5b1; font-size: 9px; letter-spacing: .12em; }
+.spy-operations-row > span:not(.fleet-spy-status-v1),
+.spy-operations-row > label { min-width: 0; }
+.spy-operations-row strong,
+.spy-operations-row small { display: block; }
+.spy-operations-row strong { color: #e7f8fb; font-size: 11px; }
+.spy-operations-row small { margin-top: 4px; color: #779ca7; font-size: 9px; line-height: 1.35; }
+.spy-operations-row .fleet-spy-status-v1 { color: #6de0d1; font-size: 10px; letter-spacing: .06em; }
+.spy-operations-select { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.spy-operations-select input { width: 16px; height: 16px; margin: 0; accent-color: #43d7ed; cursor: pointer; }
+.spy-operations-select input:focus-visible { outline: 2px solid #b4f7ff; outline-offset: 3px; }
+.spy-operations-row-actions-v1,
+.spy-operations-row .fleet-spy-row-actions-v1 { display: flex; flex-wrap: wrap; gap: 7px; }
+.spy-operations-row-actions-v1 button,
+.spy-operations-row .fleet-spy-row-actions-v1 button,
+.spy-operations-modal__actions button {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid rgba(76, 190, 216, .36);
+  border-radius: 9px;
+  background: rgba(7, 50, 64, .76);
+  color: #a8e0e8;
+  font-size: 9px;
+  letter-spacing: .06em;
+  font-weight: 700;
+  cursor: pointer;
+}
+.spy-operations-row-actions-v1 button:hover:not(:disabled),
+.spy-operations-row-actions-v1 button:focus-visible,
+.spy-operations-row .fleet-spy-row-actions-v1 button:hover:not(:disabled),
+.spy-operations-row .fleet-spy-row-actions-v1 button:focus-visible,
+.spy-operations-modal__actions button:hover:not(:disabled),
+.spy-operations-modal__actions button:focus-visible { outline: none; border-color: #86efff; color: #eaffff; box-shadow: 0 0 13px rgba(48, 206, 241, .16); }
+.spy-operations-row-actions-v1 button:disabled,
+.spy-operations-row .fleet-spy-row-actions-v1 button:disabled,
+.spy-operations-modal__actions button:disabled { opacity: .38; cursor: not-allowed; }
+.spy-operations-modal__footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 2px; }
+.spy-operations-modal__footer > span { color: #73b8c5; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.spy-operations-modal__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.spy-operations-modal__actions button { min-height: 34px; }
+.fleet-flight-actions-v1 button[aria-haspopup="dialog"] { border-radius: 9px; }
+.fleet-flight-actions-v1 button[aria-haspopup="dialog"]:focus-visible { outline: 2px solid #b4f7ff; outline-offset: 2px; }
+
+@media (max-width: 900px) {
+  .spy-operations-backdrop { padding: 12px; }
+  .spy-operations-modal { width: calc(100vw - 24px); max-height: calc(100vh - 24px); padding: 17px; border-radius: 14px; }
+  .spy-operations-modal__footer { align-items: stretch; flex-direction: column; }
+  .spy-operations-modal__actions { justify-content: flex-start; }
+}
+
 /* --- follow-ups: wider cargo rail, wider inputs, single-line ship names ---
    The cargo rail stretches a bit into the center column so long figures
    (МАКС. 400 000 and typed values) fit with the spinner buttons. */

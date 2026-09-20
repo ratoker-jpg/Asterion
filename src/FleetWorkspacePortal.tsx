@@ -216,8 +216,8 @@ function flightArrivalLabel(timestamp: number) {
 function spyStatusLabel(mission: SpyMission, flight: FlightRecord, now: number) {
   if (mission.status === 'transit') return `В ПУТИ · ${flightCountdown(flight.arrivalAt, now)}`;
   if (mission.status === 'returning') return `ВОЗВРАЩЕНИЕ · ${flightCountdown(flight.returnAt, now)}`;
-  if (mission.nextReportAt !== undefined && now < mission.nextReportAt) return `НА ОРБИТЕ · CD ${flightCountdown(mission.nextReportAt, now)}`;
-  return 'НА ОРБИТЕ · ОТЧЁТ ГОТОВ';
+  if (mission.nextReportAt !== undefined && now < mission.nextReportAt) return `ОТЧЁТ ЧЕРЕЗ ${flightCountdown(mission.nextReportAt, now)}`;
+  return 'ОТЧЁТ ГОТОВ';
 }
 
 function FleetWorkspace({
@@ -260,8 +260,7 @@ function FleetWorkspace({
   const [fleetBudget, setFleetBudget] = useState<FleetBuildBudget>(initialFleetBudget);
   const [pendingSatelliteDismantle, setPendingSatelliteDismantle] = useState<number | null>(null);
   const [simulatorHandoff, setSimulatorHandoff] = useState<SimulatorScenario | null>(() => consumeSimulatorHandoff());
-  const [spyPanelOpen, setSpyPanelOpen] = useState(true);
-  const [spyReportsOpen, setSpyReportsOpen] = useState(false);
+  const [spyOperationsOpen, setSpyOperationsOpen] = useState(false);
   const [selectedSpyMissionIds, setSelectedSpyMissionIds] = useState<Set<string>>(() => new Set());
   const satelliteConfirmYesRef = useRef<HTMLButtonElement>(null);
   const satelliteConfirmNoRef = useRef<HTMLButtonElement>(null);
@@ -640,6 +639,37 @@ function FleetWorkspace({
     ) as Partial<Record<ShipId, number>>);
   };
 
+  const recallAllSpies = () => {
+    const recallable = spyRows.filter(({ mission }) => mission.status === 'transit' || mission.status === 'orbiting');
+    if (!recallable.length) {
+      setStatus('Сейчас активных шпионских флотов нет.');
+      return;
+    }
+    const now = Date.now();
+    recallable.forEach(({ flight }) => window.dispatchEvent(new CustomEvent(FLIGHT_RECALL_REQUEST_EVENT, { detail: { flightId: flight.id, now } })));
+  };
+
+  const recallSelectedSpies = () => {
+    const recallable = spyRows.filter(({ mission }) => selectedSpyMissionIds.has(mission.id) && (mission.status === 'transit' || mission.status === 'orbiting'));
+    if (!recallable.length) {
+      setStatus('Выберите возвращаемые зонды.');
+      return;
+    }
+    const now = Date.now();
+    recallable.forEach(({ flight }) => window.dispatchEvent(new CustomEvent(FLIGHT_RECALL_REQUEST_EVENT, { detail: { flightId: flight.id, now } })));
+  };
+
+  const requestReadySpyReports = () => {
+    const activeMissionIds = spyRows
+      .filter(({ mission }) => mission.status === 'orbiting')
+      .map(({ mission }) => mission.id);
+    if (!activeMissionIds.length) {
+      setStatus('Активных зондов на орбите нет.');
+      return;
+    }
+    window.dispatchEvent(new CustomEvent(SPY_REPORT_ALL_REQUEST_EVENT, { detail: { missionIds: activeMissionIds, now: Date.now() } }));
+  };
+
   const mainClassName = [
     'fleet-main-v1',
     constructionView ? 'fleet-main-v1--shipyard' : '',
@@ -776,57 +806,8 @@ function FleetWorkspace({
                 })}
               </div>
 
-              {spyPanelOpen ? <section className="fleet-spy-operations-v1" data-qa-spy-operations>
-                <header className="fleet-spy-operations-head-v1">
-                  <div><small>ОПЕРАТИВНЫЙ КАНАЛ</small><h3>ШПИОНСКИЕ ЗОНДЫ</h3></div>
-                  <span>{spyRows.length} АКТИВНЫХ</span>
-                </header>
-                {spyRows.length ? <div className="fleet-spy-table-v1">
-                  <div className="fleet-spy-row-v1 fleet-spy-row-head-v1"><span>ВЫБОР</span><span>ОТКУДА</span><span>КУДА</span><span>ПРИБЫТИЕ</span><span>ВОЗВРАЩАЕТСЯ</span><span>ВИД</span><span>ДЕЙСТВИЯ</span></div>
-                  {spyRows.map(({ mission, flight }) => {
-                    const selected = selectedSpyMissionIds.has(mission.id);
-                    const reportReady = mission.status === 'orbiting' && (mission.nextReportAt === undefined || clockNow >= mission.nextReportAt);
-                    return <div className="fleet-spy-row-v1" key={mission.id} data-qa-spy-mission={mission.id} data-qa-spy-status={mission.status}>
-                      <label><input type="checkbox" checked={selected} onChange={(event) => setSelectedSpyMissionIds((current) => { const next = new Set(current); if (event.currentTarget.checked) next.add(mission.id); else next.delete(mission.id); return next; })} aria-label={`Выбрать зонд у ${mission.targetPlanetName}`} /></label>
-                      <span><strong>{planetName}</strong><small>{flightCoordinateLabel(flight.originCoordinate)}</small></span>
-                      <span><strong>{mission.targetPlanetName}</strong><small>{flightCoordinateLabel(mission.targetCoordinate)} · {mission.targetOwnerName}</small></span>
-                      <span className="fleet-spy-status-v1">{mission.status === 'transit' ? flightCountdown(flight.arrivalAt, clockNow) : mission.status === 'orbiting' ? 'НА ОРБИТЕ' : '—'}</span>
-                      <span className="fleet-spy-status-v1">{mission.status === 'returning' ? flightCountdown(flight.returnAt, clockNow) : '—'}</span>
-                      <span><strong>ШПИОНАЖ</strong><small>{spyStatusLabel(mission, flight, clockNow)} · {mission.spyLevel} LVL · {espionageState.reports.filter((report) => report.missionId === mission.id).length} отч.</small></span>
-                      <span className="fleet-spy-row-actions-v1">
-                        <button type="button" disabled={!reportReady} onClick={() => window.dispatchEvent(new CustomEvent(SPY_REPORT_REQUEST_EVENT, { detail: { missionId: mission.id, now: Date.now() } }))}>ПОЛУЧИТЬ ОТЧЁТ</button>
-                        <button type="button" disabled={mission.status === 'returning'} onClick={() => { if (mission.status === 'transit' || mission.status === 'orbiting') setPendingRecall(flight); }}>ВЕРНУТЬ</button>
-                      </span>
-                    </div>;
-                  })}
-                </div> : <p className="fleet-spy-empty-v1">Активных зондов нет. Отправьте один зонд на вражескую или нейтральную планету.</p>}
-                {spyReportsOpen ? <section className="fleet-spy-reports-v1" data-qa-spy-reports>
-                  <header><small>ПОСЛЕДНИЕ ПЕРЕДАЧИ</small><strong>{espionageState.reports.length} ОТЧЁТОВ</strong></header>
-                  {espionageState.reports.slice(-5).reverse().map((report) => <article key={report.id}><strong>{report.targetPlanetName}</strong><span>{report.quality.toUpperCase()} · {new Date(report.createdAt).toLocaleTimeString('ru-RU')}</span><small>{report.resources.metal}/{report.resources.minerals}/{report.resources.gas}</small></article>)}
-                  {!espionageState.reports.length ? <p>Отчёты появятся после прибытия зонда.</p> : null}
-                </section> : null}
-              </section> : null}
-
               <div className="fleet-flight-actions-v1">
-                <button type="button" onClick={() => {
-                  const recallable = spyRows.filter(({ mission }) => mission.status === 'transit' || mission.status === 'orbiting');
-                  if (!recallable.length) { setStatus('Сейчас активных шпионских флотов нет.'); return; }
-                  recallable.forEach(({ flight }) => window.dispatchEvent(new CustomEvent(FLIGHT_RECALL_REQUEST_EVENT, { detail: { flightId: flight.id, now: Date.now() } })));
-                }}>ОТОЗВАТЬ ВСЕХ ШПИОНОВ</button>
-                <button type="button" onClick={() => {
-                  const recallable = spyRows.filter(({ mission }) => selectedSpyMissionIds.has(mission.id) && (mission.status === 'transit' || mission.status === 'orbiting'));
-                  if (!recallable.length) { setStatus('Выберите возвращаемые зонды.'); return; }
-                  recallable.forEach(({ flight }) => window.dispatchEvent(new CustomEvent(FLIGHT_RECALL_REQUEST_EVENT, { detail: { flightId: flight.id, now: Date.now() } })));
-                }}>ОТОЗВАТЬ ВЫБРАННЫХ</button>
-                <button type="button" onClick={() => {
-                  const activeMissionIds = spyRows
-                    .filter(({ mission }) => mission.status === 'orbiting')
-                    .map(({ mission }) => mission.id);
-                  if (!activeMissionIds.length) { setStatus('Активных зондов на орбите нет.'); return; }
-                  window.dispatchEvent(new CustomEvent(SPY_REPORT_ALL_REQUEST_EVENT, { detail: { missionIds: activeMissionIds, now: Date.now() } }));
-                }}>ПОЛУЧИТЬ ГОТОВЫЕ ОТЧЁТЫ</button>
-                <button type="button" onClick={() => setSpyReportsOpen((value) => !value)} aria-expanded={spyReportsOpen}>ШПИОНСКИЕ ОТЧЁТЫ</button>
-                <button type="button" onClick={() => setSpyPanelOpen((value) => !value)} aria-expanded={spyPanelOpen}>{spyPanelOpen ? 'СКРЫТЬ КАНАЛ' : 'ПОКАЗАТЬ ЗОНДЫ'}</button>
+                <button type="button" onClick={() => setSpyOperationsOpen(true)} aria-haspopup="dialog">ШПИОНСКИЕ ОТЧЁТЫ</button>
               </div>
             </section>
 
@@ -1093,6 +1074,50 @@ function FleetWorkspace({
               <button type="button" data-qa-flight-preview-cancel onClick={closeFlightPreview}>ОТМЕНА</button>
               <button type="button" data-qa-flight-dispatch-confirm disabled={!canDispatchPreview} onClick={confirmFlightDispatch}>ОТПРАВИТЬ</button>
             </div>
+          </section>
+        </div>,
+        document.body,
+      ) : null}
+      {spyOperationsOpen ? createPortal(
+        <div className="resource-building-action-confirm-backdrop spy-operations-backdrop" data-qa-spy-operations-backdrop onMouseDown={() => setSpyOperationsOpen(false)}>
+          <section className="resource-building-action-confirm spy-operations-modal" role="dialog" aria-modal="true" aria-labelledby="spy-operations-title" onMouseDown={(event) => event.stopPropagation()}>
+            <header className="spy-operations-modal__head">
+              <div>
+                <small>FLEET CONTROL / ШПИОНАЖ</small>
+                <h3 id="spy-operations-title">ШПИОНСКИЕ ОТЧЁТЫ</h3>
+                <p>Активные зонды и управление готовыми снимками цели.</p>
+              </div>
+              <button type="button" className="spy-operations-modal__close" aria-label="Закрыть шпионские отчёты" onClick={() => setSpyOperationsOpen(false)}>×</button>
+            </header>
+            <div className="spy-operations-table-shell" role="table" aria-label="Активные шпионские зонды">
+              <div className="spy-operations-row spy-operations-row--head" role="row">
+                <span role="columnheader">ВЫБОР</span><span role="columnheader">ОТКУДА</span><span role="columnheader">КУДА</span><span role="columnheader">ПРИБЫТИЕ</span><span role="columnheader">ВОЗВРАЩЕНИЕ</span><span role="columnheader">МИССИЯ</span><span role="columnheader">ДЕЙСТВИЯ</span>
+              </div>
+              {spyRows.length ? spyRows.map(({ mission, flight }) => {
+                const selected = selectedSpyMissionIds.has(mission.id);
+                const reportReady = mission.status === 'orbiting' && (mission.nextReportAt === undefined || clockNow >= mission.nextReportAt);
+                return <div className="spy-operations-row" key={mission.id} data-qa-spy-mission={mission.id} data-qa-spy-status={mission.status} role="row">
+                  <label className="spy-operations-select" role="cell"><input type="checkbox" checked={selected} onChange={(event) => { const checked = event.currentTarget.checked; setSelectedSpyMissionIds((current) => { const next = new Set(current); if (checked) next.add(mission.id); else next.delete(mission.id); return next; }); }} aria-label={`Выбрать зонд у ${mission.targetPlanetName}`} /><span aria-hidden="true" /></label>
+                  <span role="cell"><strong>{planetName}</strong><small>{flightCoordinateLabel(flight.originCoordinate)}</small></span>
+                  <span role="cell"><strong>{mission.targetPlanetName}</strong><small>{flightCoordinateLabel(mission.targetCoordinate)} · {mission.targetOwnerName}</small></span>
+                  <span className="fleet-spy-status-v1" role="cell">{mission.status === 'transit' ? flightCountdown(flight.arrivalAt, clockNow) : mission.status === 'orbiting' ? 'НА ОРБИТЕ' : '—'}</span>
+                  <span className="fleet-spy-status-v1" role="cell">{mission.status === 'returning' ? flightCountdown(flight.returnAt, clockNow) : '—'}</span>
+                  <span role="cell"><strong>ШПИОНАЖ</strong><small>{spyStatusLabel(mission, flight, clockNow)} · {espionageState.reports.filter((report) => report.missionId === mission.id).length} отч.</small></span>
+                  <span className="fleet-spy-row-actions-v1" role="cell">
+                    <button type="button" disabled={!reportReady} onClick={() => window.dispatchEvent(new CustomEvent(SPY_REPORT_REQUEST_EVENT, { detail: { missionId: mission.id, now: Date.now() } }))}>ПОЛУЧИТЬ ОТЧЁТ</button>
+                    <button type="button" disabled={mission.status === 'returning'} onClick={() => { if (mission.status === 'transit' || mission.status === 'orbiting') setPendingRecall(flight); }}>ВЕРНУТЬ</button>
+                  </span>
+                </div>;
+              }) : <p className="fleet-spy-empty-v1">Активных зондов нет. Отправьте один зонд на вражескую или нейтральную планету.</p>}
+            </div>
+            <footer className="spy-operations-modal__footer">
+              <span>{spyRows.length} активных зондов</span>
+              <div className="spy-operations-modal__actions">
+                <button type="button" onClick={recallAllSpies}>ОТОЗВАТЬ ВСЕХ ШПИОНОВ</button>
+                <button type="button" onClick={recallSelectedSpies}>ОТОЗВАТЬ ВЫБРАННЫХ</button>
+                <button type="button" onClick={requestReadySpyReports}>ПОЛУЧИТЬ ГОТОВЫЕ ОТЧЁТЫ</button>
+              </div>
+            </footer>
           </section>
         </div>,
         document.body,

@@ -9,19 +9,67 @@ const BOT_FACTION = 'veyra' as const;
 function createBotPlanet(index: number): Bot01PlanetState {
   const fixture = BOT_01_PLANET_FIXTURES[index];
   const fleet = createEmptyFleetState();
-  fleet.ships.scout = index === 0 ? 900 : 80 + index * 35;
-  fleet.ships.cruiser = index === 0 ? 900 : 4 + index * 3;
-  fleet.ships.defender = index === 0 ? 690 : index % 2 === 0 ? 8 + index : 2 + index;
-  if (index === 0) fleet.ships.destroyer = 0;
+  if (index === 0) {
+    fleet.ships.scout = 900;
+    fleet.ships.cruiser = 900;
+    fleet.ships.defender = 690;
+  } else if (index === 1) {
+    fleet.ships.scout = 1_500;
+    fleet.ships.cruiser = 650;
+    fleet.ships.defender = 450;
+    fleet.ships.destroyer = 20;
+  } else if (index === 2) {
+    fleet.ships.scout = 200;
+    fleet.ships.cruiser = 100;
+    fleet.ships.defender = 60;
+  } else if (index === 3) {
+    fleet.ships.scout = 900;
+    fleet.ships.cruiser = 400;
+    fleet.ships.defender = 300;
+    fleet.ships.destroyer = 30;
+    fleet.ships.bomber = 20;
+  } else if (index === 4) {
+    fleet.ships.scout = 250;
+    fleet.ships.cruiser = 150;
+    fleet.ships.defender = 120;
+  } else if (index === 5) {
+    fleet.ships.scout = 1_200;
+    fleet.ships.cruiser = 500;
+    fleet.ships.defender = 400;
+    fleet.ships.bomber = 30;
+  } else {
+    fleet.ships.scout = 150;
+    fleet.ships.cruiser = 80;
+    fleet.ships.defender = 100;
+  }
   fleet.ships['spy-probe'] = 0;
 
   const defense = createEmptyDefenseState();
-  defense.defenses['ballistic-turret'] = index === 0 ? 1_000 : 40 + index * 9;
-  defense.defenses['laser-turret'] = index === 0 ? 30 : 5 + index * 4;
-  defense.defenses['ion-turret'] = index === 0 ? 500 : index % 3 === 0 ? 12 + index : index;
-  defense.defenses['plasma-turret'] = index === 0 ? 100 : 0;
-  defense.defenses['laser-ion-battery'] = index === 0 ? 90 : 0;
-  if (index === 0) defense.defenses['tower-shield'] = 20;
+  if (index === 0) {
+    defense.defenses['ballistic-turret'] = 1_000;
+    defense.defenses['laser-turret'] = 30;
+    defense.defenses['ion-turret'] = 500;
+    defense.defenses['plasma-turret'] = 100;
+    defense.defenses['laser-ion-battery'] = 90;
+    defense.defenses['tower-shield'] = 20;
+  } else if (index === 2) {
+    defense.defenses['ballistic-turret'] = 800;
+    defense.defenses['ion-turret'] = 500;
+    defense.defenses['plasma-turret'] = 300;
+  } else if (index === 4) {
+    defense.defenses['ballistic-turret'] = 1_200;
+    defense.defenses['laser-turret'] = 200;
+    defense.defenses['ion-turret'] = 250;
+    defense.defenses['plasma-turret'] = 200;
+  } else if (index === 6) {
+    defense.defenses['ballistic-turret'] = 900;
+    defense.defenses['ion-turret'] = 600;
+    defense.defenses['laser-ion-battery'] = 120;
+  } else {
+    defense.defenses['ballistic-turret'] = 60 + index * 20;
+    defense.defenses['laser-turret'] = 20 + index * 8;
+    defense.defenses['ion-turret'] = 12 + index * 6;
+  }
 
   const commanders: Bot01PlanetState['commanders'] = index === 0
     ? { hunter: { level: 20, count: 1 }, judge: { level: 1, count: 1 } }
@@ -59,7 +107,7 @@ function createBotPlanet(index: number): Bot01PlanetState {
     defense,
     commanders,
     population: {
-      civilian: 900 + index * 240,
+      civilian: index === 0 ? 900 : 1_100 + index * 180,
       fleet: fleetPopulation,
       defense: defensePopulation,
     },

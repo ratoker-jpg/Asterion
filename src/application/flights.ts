@@ -488,8 +488,10 @@ function createSpyReport(
   createdAt: number,
   roll: number,
   firstReport: boolean,
+  spyLevel: number,
 ): SpyReportSnapshot {
-  const quality = resolveSpyReportQuality(mission.spyLevel - target.espionageLevel, roll);
+  const delta = spyLevel - target.espionageLevel;
+  const quality = resolveSpyReportQuality(delta, roll);
   return {
     id: `spy-report-${mission.id}-${mission.reportIds.length + 1}`,
     missionId: mission.id,
@@ -502,9 +504,9 @@ function createSpyReport(
     targetRaceId: target.raceId,
     targetRelation: mission.targetRelation,
     targetCoordinate: { ...target.coordinate },
-    spyLevel: mission.spyLevel,
+    spyLevel,
     targetEspionageLevel: target.espionageLevel,
-    delta: mission.spyLevel - target.espionageLevel,
+    delta,
     roll,
     quality,
     resources: { ...target.resources },
@@ -578,9 +580,11 @@ function resolveSpyAtTarget(
     };
   }
 
-  const report = createSpyReport(mission, target, now, randomRoll(rng), firstReport);
+  const currentSpyLevel = Math.max(0, Math.floor(state.science.levels[5] ?? 0));
+  const report = createSpyReport(mission, target, now, randomRoll(rng), firstReport, currentSpyLevel);
   const nextMission: SpyMission = {
     ...mission,
+    spyLevel: currentSpyLevel,
     status: 'orbiting',
     arrivedAt: mission.arrivedAt ?? flight.arrivalAt,
     lastReportAt: now,
@@ -660,6 +664,17 @@ export function dispatchFlight(
   const originPlanetId = command.originPlanetId ?? state.currentPlanetId;
   const originPlanet = state.planets[originPlanetId];
   if (!originPlanet) return failure(state, 'invalid-command', 'Исходная планета не найдена.');
+  if (command.missionId === 'espionage' && command.destination?.kind === 'planet') {
+    const existingMission = activeSpyMissionForTarget(
+      currentEspionageState(state).missions,
+      state.profile.playerId,
+      command.destination.planetId,
+    );
+    if (existingMission) {
+      const targetName = state.espionage?.bot01Planets?.[command.destination.planetId]?.name ?? command.targetPlanetName ?? 'этой планете';
+      return failure(state, 'spy-target-blocked', `Зонд уже выполняет миссию у ${targetName}. Дождитесь возвращения или уничтожения.`);
+    }
+  }
   const selectedShips = normalizeSelectedShips(command.selectedShips);
   if (!selectedShips) return failure(state, 'wrong-ship-composition', 'Выберите хотя бы один доступный корабль.');
   const availableFleet = getAvailableFleetForPlanet(state, originPlanetId);

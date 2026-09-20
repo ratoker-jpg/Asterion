@@ -186,7 +186,6 @@ function spyReportHasCombatIntel(report: SpyReportSnapshot) {
 
 export function spyReportToReportItem(report: SpyReportSnapshot, espionage?: EspionageState): ReportItem {
   const coordinates = `[${report.targetCoordinate.galaxy}:${report.targetCoordinate.system}:${report.targetCoordinate.position}]`;
-  const resourceLabel = `${report.resources.metal}/${report.resources.minerals}/${report.resources.gas} · обломки ${report.resources.debris} · энергия развития ${report.resources.developmentEnergy}`;
   const mission = espionage?.missions.find((candidate) => candidate.id === report.missionId);
   return {
     id: `espionage:${report.id}`,
@@ -209,8 +208,6 @@ export function spyReportToReportItem(report: SpyReportSnapshot, espionage?: Esp
     details: [
       { label: 'Владелец', value: report.targetOwnerName },
       { label: 'Отношение', value: report.targetRelation === 'enemy' ? 'Враг' : 'Нейтральный' },
-      { label: 'Уровень шпионажа', value: `${report.spyLevel} против ${report.targetEspionageLevel}` },
-      { label: 'Ресурсы', value: resourceLabel },
       { label: 'Качество', value: spyQualityLabel(report) },
       ...(report.quality === 'full' && report.population ? [{ label: 'Население', value: `общее ${report.population.total} · флот ${report.population.fleet} · оборона ${report.population.defense}` }] : []),
     ],

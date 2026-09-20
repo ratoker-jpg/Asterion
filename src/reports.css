@@ -1706,6 +1706,59 @@
 
 .reports-profile-avatar__portrait img { width: 100%; height: 180%; object-fit: cover; object-position: 50% 0; }
 
+.reports-dossier--spy { gap: 12px; }
+.reports-dossier--spy .reports-dossier-heading { margin-bottom: 2px; }
+.reports-dossier--spy .reports-dossier-heading p { font-size: 9px; line-height: 1.45; }
+.spy-report-card {
+  border: 1px solid rgba(61, 188, 216, .24);
+  border-radius: 13px;
+  background: linear-gradient(145deg, rgba(4, 34, 47, .94), rgba(1, 18, 28, .9));
+  box-shadow: inset 0 0 22px rgba(38, 198, 232, .035);
+  overflow: hidden;
+}
+.spy-report-card > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 14px 9px;
+  border-bottom: 1px solid rgba(71, 188, 214, .15);
+}
+.spy-report-card > header strong { color: #6be0f4; font-size: 10px; letter-spacing: .12em; }
+.spy-report-card > header span { color: #759ca6; font-size: 9px; }
+.spy-report-summary-grid { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.spy-report-summary-grid > div { min-width: 0; display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; align-items: center; min-height: 38px; padding: 7px 14px; border-bottom: 1px solid rgba(71, 188, 214, .1); }
+.spy-report-summary-grid > div:nth-last-child(-n + 2) { border-bottom: 0; }
+.spy-report-summary-grid dt { color: #668b96; font-size: 9px; }
+.spy-report-summary-grid dd { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 9px; margin: 0; color: #d0e9ed; font-size: 11px; }
+.spy-report-summary-grid dd strong { color: #f0fcff; }
+.spy-report-link { padding: 0; border: 0; border-bottom: 1px dashed rgba(100, 222, 244, .62); border-radius: 2px; background: transparent; color: #61dff7; font: inherit; cursor: pointer; }
+.spy-report-link:hover, .spy-report-link:focus-visible { outline: none; border-bottom-color: #e0fbff; color: #e0fbff; }
+.spy-report-resource-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; padding: 12px 14px 14px; }
+.spy-report-resource { min-width: 0; display: flex; flex-direction: column; gap: 5px; padding: 10px 11px; border: 1px solid rgba(71, 188, 214, .16); border-radius: 10px; background: rgba(2, 23, 34, .76); }
+.spy-report-resource span { color: #789da7; font-size: 9px; }
+.spy-report-resource strong { color: #edfaff; font-size: 14px; font-variant-numeric: tabular-nums; }
+.spy-report-population { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; padding: 12px 14px 14px; }
+.spy-report-population > div { display: flex; flex-direction: column; gap: 5px; padding: 10px 11px; border-left: 2px solid rgba(76, 216, 235, .5); border-radius: 9px; background: rgba(2, 26, 38, .72); }
+.spy-report-population span { color: #7d9fa8; font-size: 9px; }
+.spy-report-population strong { color: #e9fbff; font-size: 14px; font-variant-numeric: tabular-nums; }
+.spy-report-entity-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 14px 14px; }
+.spy-report-entity { min-width: 0; display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 9px; min-height: 54px; padding: 7px 10px; border: 1px solid rgba(71, 188, 214, .15); border-radius: 10px; background: rgba(2, 23, 34, .74); }
+.spy-report-entity img { width: 34px; height: 34px; object-fit: contain; }
+.spy-report-entity > div { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.spy-report-entity > div strong { overflow: hidden; color: #e5f7fa; font-size: 10px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.spy-report-entity > div span { overflow: hidden; color: #779ba5; font-size: 8px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.spy-report-entity > b { color: #73e2ee; font-size: 13px; font-variant-numeric: tabular-nums; }
+.spy-report-empty { margin: 0; padding: 16px 14px 18px; color: #abcbd1; font-size: 11px; }
+.reports-dossier--spy .reports-generic-body { border: 1px solid rgba(61, 188, 216, .2); border-radius: 12px; background: rgba(2, 20, 30, .78); }
+.reports-dossier--spy .reports-generic-body p { font-size: 10px; line-height: 1.55; }
+
+@media (max-width: 900px) {
+  .spy-report-summary-grid, .spy-report-resource-grid, .spy-report-population, .spy-report-entity-grid { grid-template-columns: 1fr; }
+  .spy-report-summary-grid > div:nth-last-child(-n + 2) { border-bottom: 1px solid rgba(71, 188, 214, .1); }
+  .spy-report-summary-grid > div:last-child { border-bottom: 0; }
+}
+
 .reports-profile-asterion-mark {
   width: 300px;
   height: 360px;

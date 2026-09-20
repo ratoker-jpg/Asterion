@@ -27,6 +27,11 @@ import { selectPlayerProfileMetrics } from './domain/profile/selectors.ts';
 import type { RatingPrototypeState } from './domain/rating/fixtures.ts';
 import type { RuntimeMode } from './domain/runtime/mode.ts';
 import type { SpyReportSnapshot } from './domain/espionage/types.ts';
+import { COMMANDER_ABILITIES, type CommanderId } from './domain/combat/commanders.ts';
+import { getFactionCombatEntity } from './domain/combat/faction-catalog.ts';
+import { getCombatFactionName } from './domain/combat/factions.ts';
+import type { CombatEntityId } from './domain/combat/ids.ts';
+import type { UniverseCoordinate } from './domain/universe/types.ts';
 import './reports.css';
 
 const PAGE_SIZE = 7;
@@ -161,10 +166,23 @@ function GenericDossier({ item }: { item: ReportItem }) {
   );
 }
 
-function SpyDossier({ item, report }: { item: ReportItem; report: SpyReportSnapshot }) {
-  const fleet = Object.entries(report.fleet ?? {}).filter(([, count]) => Number(count) > 0);
+function reportCoordinate(coordinate: UniverseCoordinate) {
+  return `[${coordinate.galaxy}:${coordinate.system}:${coordinate.position}]`;
+}
+
+function sourcePlanetLabel(id: string) {
+  return id === 'helion-01' ? 'Helion 01' : 'Планета-источник';
+}
+
+function SpyDossier({ item, report, onOpenUniverseTarget }: {
+  item: ReportItem;
+  report: SpyReportSnapshot;
+  onOpenUniverseTarget: (target: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string }) => void;
+}) {
+  const fleet = Object.entries(report.fleet ?? {}).filter(([id, count]) => id !== 'spy-probe' && Number(count) > 0);
   const defense = Object.entries(report.defense ?? {}).filter(([, count]) => Number(count) > 0);
   const commanders = Object.entries(report.commanders ?? {}).filter(([, value]) => Boolean(value));
+  const factionName = getCombatFactionName(report.targetRaceId);
   return (
     <div className="reports-dossier reports-dossier--spy" data-qa-spy-report={report.id}>
       <div className="reports-dossier-heading">
@@ -172,19 +190,24 @@ function SpyDossier({ item, report }: { item: ReportItem; report: SpyReportSnaps
         <div><small>{item.typeLabel}</small><h2>{item.title}</h2><p>{item.preview}</p></div>
         <div className="reports-dossier-heading__status"><StatusBadge item={item} /><time>{formatDate(item.timestamp)}</time></div>
       </div>
-      <section className="reports-generic-details"><header>СВОДКА ЦЕЛИ</header><dl>
-        <div><dt>Планета</dt><dd>{report.targetPlanetName} · [{report.targetCoordinate.galaxy}:{report.targetCoordinate.system}:{report.targetCoordinate.position}]</dd></div>
-        <div><dt>Источник</dt><dd>{report.sourcePlanetId}</dd></div>
-        <div><dt>Владелец</dt><dd>{report.targetOwnerName}</dd></div>
-        <div><dt>Раса</dt><dd>{report.targetRaceId}</dd></div>
-        <div><dt>Уровень разведки</dt><dd>{report.spyLevel} против {report.targetEspionageLevel}</dd></div>
-        <div><dt>Ресурсы</dt><dd>металл {report.resources.metal} · минералы {report.resources.minerals} · газ {report.resources.gas} · обломки {report.resources.debris} · энергия развития {report.resources.developmentEnergy}</dd></div>
-        {report.quality === 'full' && report.population ? <div><dt>Население</dt><dd>общее {report.population.total} · флот {report.population.fleet} · оборона {report.population.defense}</dd></div> : null}
+      <section className="spy-report-card spy-report-card--summary"><header><strong>СВОДКА ЦЕЛИ</strong><span>{factionName}</span></header><dl className="spy-report-summary-grid">
+        <div><dt>Планета</dt><dd><strong>{report.targetPlanetName}</strong><button type="button" className="spy-report-link" onClick={() => onOpenUniverseTarget({ coordinate: report.targetCoordinate, planetId: report.targetPlanetId })}>{reportCoordinate(report.targetCoordinate)}</button></dd></div>
+        <div><dt>Источник</dt><dd>{sourcePlanetLabel(report.sourcePlanetId)}</dd></div>
+        <div><dt>Владелец</dt><dd><button type="button" className="spy-report-link" onClick={() => onOpenUniverseTarget({ coordinate: report.targetCoordinate, planetId: report.targetPlanetId, ownerId: report.targetOwnerId })}>{report.targetOwnerName}</button></dd></div>
+        <div><dt>Отношение</dt><dd>{report.targetRelation === 'enemy' ? 'Враг' : 'Нейтральный'}</dd></div>
       </dl></section>
-      {report.quality !== 'basic' ? <section className="reports-generic-details"><header>ОБОРОНА</header><dl>{defense.length ? defense.map(([id, count]) => <div key={id}><dt>{id}</dt><dd>{count}</dd></div>) : <div><dt>Состав</dt><dd>не обнаружен</dd></div>}</dl></section> : null}
+      <section className="spy-report-card"><header><strong>РЕСУРСЫ</strong><span>Снимок на момент передачи</span></header><div className="spy-report-resource-grid">
+        <div className="spy-report-resource"><span>Металл</span><strong>{numberFormat.format(report.resources.metal)}</strong></div>
+        <div className="spy-report-resource"><span>Минералы</span><strong>{numberFormat.format(report.resources.minerals)}</strong></div>
+        <div className="spy-report-resource"><span>Газ</span><strong>{numberFormat.format(report.resources.gas)}</strong></div>
+        <div className="spy-report-resource"><span>Обломки</span><strong>{numberFormat.format(report.resources.debris)}</strong></div>
+        <div className="spy-report-resource"><span>Энергия развития</span><strong>{numberFormat.format(report.resources.developmentEnergy)}</strong></div>
+      </div></section>
+      {report.population ? <section className="spy-report-card spy-report-card--population"><header><strong>НАСЕЛЕНИЕ</strong><span>Полный снимок планеты</span></header><div className="spy-report-population"><div><span>Население планеты</span><strong>{numberFormat.format(report.population.total)}</strong></div><div><span>Флот</span><strong>{numberFormat.format(report.population.fleet)}</strong></div><div><span>Оборона</span><strong>{numberFormat.format(report.population.defense)}</strong></div></div></section> : null}
+      {report.quality !== 'basic' ? <section className="spy-report-card"><header><strong>ОБОРОНА</strong><span>{factionName}</span></header>{defense.length ? <div className="spy-report-entity-grid">{defense.map(([id, count]) => { const entity = getFactionCombatEntity(report.targetRaceId, id as CombatEntityId); return <article className="spy-report-entity" key={id}><img src={entity.art} alt="" /><div><strong>{entity.name}</strong><span>{entity.role}</span></div><b>{numberFormat.format(Number(count))}</b></article>; })}</div> : <p className="spy-report-empty">Оборона не найдена.</p>}</section> : null}
       {report.quality === 'full' ? <>
-        <section className="reports-generic-details"><header>ФЛОТ</header><dl>{fleet.length ? fleet.map(([id, count]) => <div key={id}><dt>{id}</dt><dd>{count}</dd></div>) : <div><dt>Состав</dt><dd>не обнаружен</dd></div>}</dl></section>
-        <section className="reports-generic-details"><header>КОМАНДИРЫ</header><dl>{commanders.length ? commanders.map(([id, value]) => <div key={id}><dt>{id}</dt><dd>уровень {value?.level ?? 0} · {value?.count ?? 0}</dd></div>) : <div><dt>Состав</dt><dd>не обнаружен</dd></div>}</dl></section>
+        <section className="spy-report-card"><header><strong>КОРАБЛИ</strong><span>Боевой и транспортный состав</span></header>{fleet.length ? <div className="spy-report-entity-grid">{fleet.map(([id, count]) => { const entity = getFactionCombatEntity(report.targetRaceId, id as CombatEntityId); return <article className="spy-report-entity" key={id}><img src={entity.art} alt="" /><div><strong>{entity.name}</strong><span>{entity.role}</span></div><b>{numberFormat.format(Number(count))}</b></article>; })}</div> : <p className="spy-report-empty">Корабли не найдены.</p>}</section>
+        <section className="spy-report-card"><header><strong>КОМАНДИРЫ</strong><span>Выявленные командирские корабли</span></header>{commanders.length ? <div className="spy-report-entity-grid">{commanders.map(([id, value]) => { const entity = getFactionCombatEntity(report.targetRaceId, id as CombatEntityId); const commanderName = COMMANDER_ABILITIES[id as CommanderId]?.commanderName ?? entity.name; return <article className="spy-report-entity" key={id}><img src={entity.art} alt="" /><div><strong>{commanderName}</strong><span>Уровень {value?.level ?? 0}</span></div><b>{numberFormat.format(value?.count ?? 0)}</b></article>; })}</div> : <p className="spy-report-empty">Командиры не найдены.</p>}</section>
       </> : null}
       <section className="reports-generic-body"><small>СВОДКА</small><p>{item.body}</p></section>
     </div>
@@ -267,7 +290,7 @@ function FolderActions({ folder, items, selectedIds, onSelectAll, onDeleteAll, o
   );
 }
 
-export function ReportsView({ battleReports, savedBattleReportIds, operations, command, espionage, profile, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy }: {
+export function ReportsView({ battleReports, savedBattleReportIds, operations, command, espionage, profile, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget }: {
   battleReports: readonly BattleReport[];
   savedBattleReportIds: readonly string[];
   operations: OperationsState;
@@ -283,6 +306,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
   onOpenCommand: () => void;
   onSimulateBattle: (report: SpyReportSnapshot) => void;
   onRecallSpy: (missionId: string) => void;
+  onOpenUniverseTarget: (target: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string }) => void;
 }) {
   const [activeFolder, setActiveFolder] = useState<MessageFolderId>('profile');
   const [filter, setFilter] = useState<ReportFilter>('all');
@@ -395,7 +419,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
 
         <section className="reports-preview">
           <header className="reports-preview-head"><div><small>MESSAGE DOSSIER</small><h2>ПРОСМОТР СООБЩЕНИЯ</h2></div>{activeCategory ? <div className="reports-preview-actions"><button type="button" aria-label={selectedBattleSaved ? 'Убрать бой из сохранённых' : 'Сохранить бой'} aria-pressed={selectedBattleSaved} disabled={!selectedItem?.battleReportId} className={selectedBattleSaved ? 'active' : ''} onClick={() => selectedItem?.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)}><ActionGlyph kind="save" /></button><span /><button type="button" aria-label="Предыдущее сообщение" disabled={selectedIndex <= 0} onClick={() => navigateSelected(-1)}><ActionGlyph kind="prev" /></button><button type="button" aria-label="Следующее сообщение" disabled={selectedIndex < 0 || selectedIndex >= visibleItems.length - 1} onClick={() => navigateSelected(1)}><ActionGlyph kind="next" /></button></div> : null}</header>
-          <div className="reports-preview-scroll">{activeCategory ? selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} /> : selectedItem.spyReport ? <SpyDossier item={selectedItem} report={selectedItem.spyReport} /> : <GenericDossier item={selectedItem} />) : <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} /> : <EmptyFolder folder={activeFolderMeta} />}</div>
+          <div className="reports-preview-scroll">{activeCategory ? selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} /> : selectedItem.spyReport ? <SpyDossier item={selectedItem} report={selectedItem.spyReport} onOpenUniverseTarget={onOpenUniverseTarget} /> : <GenericDossier item={selectedItem} />) : <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} /> : <EmptyFolder folder={activeFolderMeta} />}</div>
           {activeCategory && selectedItem?.action?.kind === 'open_fleets' ? <footer className="reports-preview-footer"><span>Выбери состав флота для совместной операции.</span><button type="button" onClick={onOpenFleets}>{selectedItem.action.label}</button></footer> : activeCategory && selectedItem?.source === 'espionage' && (selectedItem.action || selectedItem.secondaryAction) ? <footer className="reports-preview-footer"><span>{selectedItem.secondaryAction ? 'Связанный шпионский зонд ещё находится на орбите.' : 'Действия по полному снимку цели.'}</span><div className="reports-preview-footer-actions">
             {selectedItem.action?.kind === 'simulate_battle' && selectedItem.spyReport ? <button type="button" onClick={() => onSimulateBattle(selectedItem.spyReport!)}>{selectedItem.action.label}</button> : null}
             {selectedItem.secondaryAction?.kind === 'recall_spy' && selectedItem.secondaryAction.missionId ? <button type="button" className="restore" onClick={() => onRecallSpy(selectedItem.secondaryAction!.missionId!)}>{selectedItem.secondaryAction.label}</button> : null}

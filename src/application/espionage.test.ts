@@ -105,6 +105,34 @@ test('full report is an immutable permitted snapshot and later reconcile keeps t
   assert.equal(later.state.espionage!.missions[0].status, 'orbiting');
 });
 
+test('spy reports use the current science level after the probe has arrived', () => {
+  let state = createInitialSaveState('test', 1_000);
+  state = {
+    ...state,
+    science: { ...state.science, levels: { ...state.science.levels, 5: 11 } },
+  };
+  const targetId = Object.keys(state.espionage!.bot01Planets!)[1];
+  const dispatched = dispatchFlight(state, spyCommand(state, 'spy-current-level', targetId), { now: 1_000, mode: 'test', testTimeScale: 15 });
+  assert.equal(dispatched.ok, true);
+  if (!dispatched.ok) return;
+  const arrived = reconcileFlights(dispatched.state, dispatched.flight.arrivalAt, () => 99);
+  const firstReport = arrived.state.espionage!.reports[0];
+  assert.equal(firstReport.spyLevel, 11);
+
+  state = {
+    ...arrived.state,
+    science: { ...arrived.state.science, levels: { ...arrived.state.science.levels, 5: 12 } },
+  };
+  const mission = state.espionage!.missions[0];
+  const next = requestSpyReport(state, mission.id, { now: dispatched.flight.arrivalAt + 5_000, rng: () => 99 });
+  assert.equal(next.ok, true);
+  if (!next.ok) return;
+  const secondReport = next.state.espionage!.reports.at(-1);
+  assert.equal(secondReport?.spyLevel, 12);
+  assert.equal(secondReport?.delta, 2);
+  assert.equal(next.state.espionage!.missions[0].spyLevel, 12);
+});
+
 test('one owner cannot send a second active probe from another origin to the same target', () => {
   let state = createInitialSaveState('test', 1_000);
   const targetId = Object.keys(state.espionage!.bot01Planets!)[1];
