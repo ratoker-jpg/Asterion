@@ -6,6 +6,7 @@ import type {
   SpyReportSnapshot,
 } from './types.ts';
 import { createDefaultEspionageState } from './runtime.ts';
+import { createBot01Planets } from './fixtures.ts';
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -112,14 +113,14 @@ function migrateReport(value: unknown): SpyReportSnapshot | null {
     base.commanders = record(source.commanders) as SpyReportSnapshot['commanders'];
     const fleetPopulation = nonNegative(population.fleet);
     const defensePopulation = nonNegative(population.defense);
-    // Reports written before the population split stored a combined total.
-    // Recover the civilian value when possible so old saves do not keep showing
-    // ships and defenses as part of the planet's population.
-    const legacyTotal = nonNegative(population.total);
-    const civilianPopulation = nonNegative(population.civilian, Math.max(0, legacyTotal - fleetPopulation - defensePopulation));
+    // Population contract: the planet population equals ship crews plus
+    // defense garrisons. Reports written before this contract stored a
+    // detached civilian value (1600 next to 160 crews and 300 garrisons);
+    // resync it so the report numbers always add up.
+    const syncedTotal = fleetPopulation + defensePopulation;
     base.population = {
-      civilian: civilianPopulation,
-      total: civilianPopulation,
+      civilian: syncedTotal,
+      total: syncedTotal,
       fleet: fleetPopulation,
       defense: defensePopulation,
     };
@@ -142,6 +143,27 @@ function migrateNotice(value: unknown): SpyHunterNotice | null {
     targetCoordinate: { galaxy: Number(coordinate.galaxy), system: Number(coordinate.system), position: Number(coordinate.position) },
     hunterLevel: nonNegative(source.hunterLevel),
   };
+}
+
+/**
+ * Bot 01 planets are static fixtures. Saves written before the fixture
+ * contract (no ship levels, planet population that does not equal the ship
+ * crews plus defense garrisons) must not survive a load: every new report
+ * would keep capturing mismatched numbers and levelless hulls. Anything that
+ * does not match the current contract is regenerated from the seeded
+ * fixtures, which keeps the universe popup, the spaceport and every report
+ * in agreement.
+ */
+function bot01PlanetMatchesCurrentContract(value: unknown): boolean {
+  const planet = record(value);
+  const population = record(planet.population);
+  const numeric = (input: unknown): number => (typeof input === 'number' && Number.isFinite(input) ? input : Number.NaN);
+  const fleet = numeric(population.fleet);
+  const defense = numeric(population.defense);
+  const civilian = numeric(population.civilian);
+  if (!Number.isFinite(fleet) || !Number.isFinite(defense) || !Number.isFinite(civilian)) return false;
+  if (civilian !== fleet + defense) return false;
+  return !!planet.shipLevels && typeof planet.shipLevels === 'object';
 }
 
 function migrateBotPlanet(value: unknown): Bot01PlanetState | null {
@@ -167,10 +189,15 @@ export function migrateEspionageState(value: unknown): EspionageState {
       return migrated ? [[id, migrated]] : [];
     }))
     : undefined;
+  // Old-contract planet snapshots are replaced wholesale: the fixtures are
+  // deterministic, so a regenerated set is exactly what a fresh save holds.
+  const bot01UpToDate = !!bot01Planets
+    && Object.keys(bot01Planets).length > 0
+    && Object.values(bot01Planets).every(bot01PlanetMatchesCurrentContract);
   return {
     missions: list(source.missions, migrateMission),
     reports: list(source.reports, migrateReport),
     hunterNotices: list(source.hunterNotices, migrateNotice),
-    ...(bot01Planets && Object.keys(bot01Planets).length ? { bot01Planets } : {}),
+    ...(bot01UpToDate ? { bot01Planets } : { bot01Planets: createBot01Planets() }),
   };
 }

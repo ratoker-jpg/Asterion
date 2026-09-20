@@ -1906,10 +1906,12 @@ body button[data-asterion-close]:active{ transform:translateY(1px); }
    manual close button. Navigation noise is filtered before it gets here.
    The stack portals to document.body and pins to the viewport: the stage
    can be taller than the screen in long-page mode, and a transformed stage
-   would trap position:fixed. */
+   would trap position:fixed. z-index sits above every overlay in the game
+   (spy operations 10001, ship info 30000) so notifications stay visible
+   while any modal or workspace panel is open. */
 .runtime-toast-stack{
   position:fixed;
-  z-index:400;
+  z-index:31000;
   left:26px;
   bottom:26px;
   display:flex;

@@ -8,6 +8,8 @@ import {
   requestSpyReport,
 } from './flights.ts';
 import { activeSpyMissionForTarget } from '../domain/espionage/runtime.ts';
+import { migrateEspionageState } from '../domain/espionage/repository.ts';
+import { EXCLUDED_SHIP_UPGRADE_IDS } from '../domain/buildings/spaceport-upgrades.ts';
 
 function spyCommand(state: ReturnType<typeof createInitialSaveState>, requestId: string, targetId: string) {
   const target = state.espionage!.bot01Planets![targetId];
@@ -202,4 +204,117 @@ test('seeded report rolls differ between distinct missions to the same target', 
   assert.ok(first !== undefined);
   assert.ok(second !== undefined);
   assert.notEqual(second, first);
+});
+
+test('full report carries a 0..10 level for every combat hull even when the planet state predates shipLevels', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const targetId = Object.keys(initial.espionage!.bot01Planets!)[1];
+  // Science level 10 keeps delta at 0 so a roll of 0 resolves to a full dossier.
+  const boosted = {
+    ...initial,
+    science: { ...initial.science, levels: { ...initial.science.levels, 5: 10 } },
+  } as typeof initial;
+  // Simulate an old save: the planet snapshot has no ship levels at all.
+  const aged = {
+    ...boosted,
+    espionage: {
+      ...boosted.espionage!,
+      bot01Planets: {
+        ...boosted.espionage!.bot01Planets!,
+        [targetId]: { ...boosted.espionage!.bot01Planets![targetId], shipLevels: undefined },
+      },
+    },
+  } as typeof initial;
+  const dispatched = dispatchFlight(aged, spyCommand(aged, 'spy-levels', targetId), { now: 1_000, mode: 'test', testTimeScale: 15 });
+  assert.equal(dispatched.ok, true);
+  if (!dispatched.ok) return;
+  // Roll sequence: hunter roll 99 (probe survives), report roll 0 (full dossier).
+  const rolls = [99, 0];
+  const arrived = reconcileFlights(dispatched.state, dispatched.flight.arrivalAt, () => rolls.shift() ?? 99);
+  const report = arrived.state.espionage!.reports[0];
+  assert.equal(report.quality, 'full');
+  const fleet = report.fleet ?? {};
+  const levels = report.fleetLevels ?? {};
+  let combatHulls = 0;
+  for (const [id, count] of Object.entries(fleet)) {
+    if (!count || count <= 0) continue;
+    if (EXCLUDED_SHIP_UPGRADE_IDS.has(id)) continue;
+    combatHulls += 1;
+    const level = levels[id as keyof typeof levels];
+    assert.equal(typeof level, 'number');
+    assert.ok((level as number) >= 0 && (level as number) <= 10, `level for ${id} must stay inside 0..10`);
+  }
+  assert.ok(combatHulls > 0, 'the fixture fleet must contain combat hulls');
+  // The replay of the same mission must keep the derived levels stable.
+  const replayRolls = [99, 0];
+  const replayed = reconcileFlights(dispatched.state, dispatched.flight.arrivalAt, () => replayRolls.shift() ?? 99);
+  assert.deepEqual(replayed.state.espionage!.reports[0]?.fleetLevels, levels);
+  assert.equal(report.population?.total, (report.population?.fleet ?? 0) + (report.population?.defense ?? 0));
+});
+
+test('old-contract bot planets and reports are regenerated and resynced on load', () => {
+  const legacy = {
+    missions: [],
+    reports: [{
+      id: 'spy-report-legacy-1',
+      missionId: 'mission-legacy-1',
+      createdAt: 1_000,
+      sourcePlanetId: 'helion-01',
+      targetPlanetId: 'bot-01',
+      targetPlanetName: 'Бот 01 I',
+      targetOwnerId: 'npc-bot-01',
+      targetOwnerName: 'Бот 01',
+      targetRaceId: 'veyra',
+      targetRelation: 'neutral',
+      targetCoordinate: { galaxy: 1, system: 2, position: 3 },
+      spyLevel: 10,
+      targetEspionageLevel: 10,
+      delta: 0,
+      roll: 99,
+      quality: 'full',
+      resources: { metal: 1, minerals: 1, gas: 1, debris: 0, developmentEnergy: 5 },
+      fleet: { scout: 10 },
+      commanders: {},
+      defense: { 'turret': 5 },
+      // Old contract: population is detached from the fleet/defense split.
+      population: { civilian: 1_600, total: 1_600, fleet: 160, defense: 300 },
+      firstReport: true,
+    }],
+    hunterNotices: [],
+    bot01Planets: {
+      'bot-01': {
+        id: 'bot-01',
+        name: 'Бот 01 I',
+        coordinate: { galaxy: 1, system: 2, position: 3 },
+        ownerId: 'npc-bot-01',
+        ownerName: 'Бот 01',
+        raceId: 'veyra',
+        alliance: null,
+        espionageLevel: 10,
+        resources: { metal: 0, minerals: 0, gas: 0, developmentEnergy: 0, debris: 0 },
+        buildings: {},
+        fleet: { ships: { scout: 100 }, commanders: { hunter: 0, judge: 0 } },
+        defense: { defenses: {} },
+        commanders: {},
+        population: { civilian: 1_600, total: 1_600, fleet: 160, defense: 300 },
+        hunterLevel: 0,
+        debris: 0,
+      },
+    },
+  };
+  const migrated = migrateEspionageState(legacy);
+  const planets = Object.values(migrated.bot01Planets ?? {});
+  assert.equal(planets.length, 7);
+  for (const planet of planets) {
+    assert.equal(!!planet.shipLevels && typeof planet.shipLevels === 'object', true, 'regenerated planets must carry ship levels');
+    assert.equal(planet.population.civilian, planet.population.fleet + planet.population.defense);
+    assert.ok(planet.population.civilian >= 5_000, 'regenerated population must follow the fixture range');
+  }
+  // The legacy report keeps its snapshot but the population adds up again.
+  const report = migrated.reports[0];
+  assert.equal(report.quality, 'full');
+  assert.equal(report.population?.fleet, 160);
+  assert.equal(report.population?.defense, 300);
+  assert.equal(report.population?.total, 460);
+  assert.equal(report.population?.civilian, 460);
 });

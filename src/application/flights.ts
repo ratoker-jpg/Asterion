@@ -13,7 +13,7 @@ import {
   getStorageCapacities,
 } from '../domain/buildings/resource-zone.ts';
 import { createEmptyBotAssignment } from '../domain/buildings/production-bots.ts';
-import { createDefaultSpaceportUpgradeState } from '../domain/buildings/spaceport-upgrades.ts';
+import { createDefaultSpaceportUpgradeState, EXCLUDED_SHIP_UPGRADE_IDS } from '../domain/buildings/spaceport-upgrades.ts';
 import { createDefaultTradeState } from '../domain/buildings/trade.ts';
 import { createDefaultRepairWorkshopState } from '../domain/repair/workshop.ts';
 import { initializePlanetEnergy } from './energy.ts';
@@ -501,6 +501,37 @@ function authoritativeSpyTargetRelation(state: SaveState, target: Bot01PlanetSta
   return getUniverseOwnerRelation(targetNode, state.profile.playerId, currentAlliance, targetOwner);
 }
 
+type PopulationSplit = {
+  civilian: number;
+  total: number;
+  fleet: number;
+  defense: number;
+};
+
+/**
+ * Level contract: every combat hull in the snapshot carries a level 0..10,
+ * utility hulls (solar satellite, spy probe, colonizer, recycler) stay
+ * level-less exactly like the spaceport upgrade contract. Levels come from
+ * the planet fixtures; a hull the planet state does not cover (an old save
+ * that predates shipLevels) gets a deterministic level derived from the
+ * mission id and hull id, so replays never reshuffle the dossier.
+ */
+function buildSnapshotFleetLevels(
+  ships: Record<string, number>,
+  planetLevels: Partial<Record<ShipId, number>> | undefined,
+  missionId: string,
+): Partial<Record<ShipId, number>> {
+  const levels: Partial<Record<ShipId, number>> = { ...(planetLevels ?? {}) };
+  for (const [id, count] of Object.entries(ships)) {
+    const shipId = id as ShipId;
+    if (!count || count <= 0) continue;
+    if (levels[shipId] !== undefined) continue;
+    if (EXCLUDED_SHIP_UPGRADE_IDS.has(shipId)) continue;
+    levels[shipId] = Math.floor(createSeededEspionageRng(`espionage:${missionId}:level:${shipId}`)() * 11);
+  }
+  return levels;
+}
+
 function createSpyReport(
   mission: SpyMission,
   target: Bot01PlanetState,
@@ -514,7 +545,7 @@ function createSpyReport(
   // Population contract: the planet's population counts every hangar — ship
   // crews and defense garrisons — so the report always converges:
   // total = fleet + defense.
-  const population = {
+  const population: PopulationSplit = {
     civilian: target.population.fleet + target.population.defense,
     total: target.population.fleet + target.population.defense,
     fleet: target.population.fleet,
@@ -545,7 +576,7 @@ function createSpyReport(
     ...(quality === 'full'
       ? {
         fleet: { ...target.fleet.ships },
-        ...(target.shipLevels ? { fleetLevels: { ...target.shipLevels } } : {}),
+        fleetLevels: buildSnapshotFleetLevels(target.fleet.ships, target.shipLevels, mission.id),
         commanders: Object.fromEntries(Object.entries(target.commanders).map(([id, commander]) => [id, commander ? { ...commander } : commander])),
         population,
       }
