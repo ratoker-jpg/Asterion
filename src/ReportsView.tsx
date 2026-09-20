@@ -208,7 +208,7 @@ function PlayerProfile({ profile, rating, command, mode, onOpenCommand }: { prof
   return (
     <section className="reports-profile-view" data-qa-profile aria-labelledby="reports-profile-title">
       <header className="reports-profile-title-plate"><span className="reports-profile-title-plate__side">PLAYER PROFILE</span><h2 id="reports-profile-title">ПРОФИЛЬ ИГРОКА</h2><span className="reports-profile-title-plate__side reports-profile-title-plate__side--right">ASTERION // IDENTITY</span></header>
-      <div className="reports-profile-name-plate"><small>ИМЯ ИГРОКА</small><h3>{profile.displayName}</h3><span>{profile.playerId}</span></div>
+      <div className="reports-profile-name-plate"><h3>{profile.displayName}</h3></div>
       <div className="reports-profile-card">
         <div className="reports-profile-asterion-mark" aria-hidden="true"><EmblemGlyph emblem={PROFILE_EMBLEM} /></div>
         <section className="reports-profile-identity" aria-label="Аватар игрока"><ProfileAvatar displayName={profile.displayName} factionId={profile.factionId} /></section>

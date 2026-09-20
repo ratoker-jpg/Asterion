@@ -228,6 +228,35 @@ async function assertHeader(win) {
   assertResourceImages('header', images, ['metal', 'minerals', 'gas', 'energy', 'debris', 'population'], { exact: true });
 }
 
+async function assertFixedResourceZone(win, label) {
+  const geometry = await win.webContents.executeJavaScript(`(() => {
+    const root = document.documentElement;
+    const workspace = document.querySelector('.workspace');
+    const scene = document.querySelector('.resource-zone-scene');
+    const rect = (element) => {
+      if (!element) return null;
+      const value = element.getBoundingClientRect();
+      return { bottom: value.bottom };
+    };
+    return {
+      longPage: root.classList.contains('asterion-long-page'),
+      documentHeight: Math.max(root.scrollHeight, document.body.scrollHeight),
+      viewportHeight: window.innerHeight,
+      workspace: rect(workspace),
+      scene: rect(scene),
+    };
+  })()`);
+  if (
+    geometry.longPage ||
+    geometry.documentHeight > geometry.viewportHeight + 2 ||
+    !geometry.workspace ||
+    !geometry.scene ||
+    geometry.scene.bottom > geometry.workspace.bottom + 2
+  ) {
+    throw new Error(`${label}: resource zone escaped fixed workspace ${JSON.stringify(geometry)}`);
+  }
+}
+
 async function assertBuildingDialog(win, role) {
   const selector = `[data-qa-building-dialog="${role}"]`;
   await waitForResourceImages(win, selector);
@@ -297,6 +326,7 @@ async function verifyViewport(width, height) {
 
     await activateZone(win, 'resource');
     await waitForResourceImages(win, '[data-qa-resource-zone]');
+    await assertFixedResourceZone(win, `${label}/resource`);
     assertResourceImages('resource zone', await readResourceImages(win, '[data-qa-resource-zone]'), ['metal', 'minerals', 'gas']);
     await openBuildingDialog(win, 'metal-production-1');
     await assertBuildingDialog(win, 'metal-production-1');

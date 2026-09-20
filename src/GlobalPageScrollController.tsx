@@ -124,6 +124,25 @@ export function GlobalPageScrollController() {
         return;
       }
 
+      // Resource/planet zones are fixed-screen compositions. Their scene and
+      // side panels are intentionally positioned inside the workspace, so
+      // feeding their absolute geometry into the document-level long-page
+      // measurement creates a feedback loop: the workspace grows, the scene
+      // grows with it, and the terrain's cover crop looks like an endless zoom.
+      const isFixedZonePage = Boolean(workspace.querySelector('.resource-zone-view'));
+      if (isFixedZonePage) {
+        observeCurrentPage(pageRoots);
+        if (root.classList.contains('asterion-long-page')) {
+          root.classList.remove('asterion-long-page');
+          clearGeometry();
+          schedule();
+        }
+        if (pageChanged) {
+          window.scrollTo(0, 0);
+        }
+        return;
+      }
+
       const isFleetPage = pageContainer.classList.contains('fleet-main-v1');
       const utilityPage = !isFleetPage && isUtilityRoot(pageRoots);
       const availableHeight = utilityPage || usesCompactWorkspaceHeight(workspace)
@@ -173,7 +192,6 @@ export function GlobalPageScrollController() {
     });
 
     window.addEventListener('resize', schedule);
-    window.visualViewport?.addEventListener('resize', schedule);
     schedule();
 
     return () => {
@@ -182,7 +200,6 @@ export function GlobalPageScrollController() {
       window.cancelAnimationFrame(frame);
       window.clearTimeout(delayed);
       window.removeEventListener('resize', schedule);
-      window.visualViewport?.removeEventListener('resize', schedule);
       root.classList.remove('asterion-long-page');
       clearGeometry();
     };

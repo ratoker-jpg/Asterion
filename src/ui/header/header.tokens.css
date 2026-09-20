@@ -15,7 +15,7 @@
   --hud-base-workspace-top: 176px;
   --hud-workspace-gap: 6px;
   --hud-workspace-top: calc(var(--hud-header-top) + var(--hud-header-height) + var(--hud-workspace-gap));
-  --hud-stage-bottom-gap: 58px;
+  --hud-stage-bottom-gap: 18px;
   --hud-base-workspace-height: calc(var(--hud-canvas-height) - var(--hud-base-workspace-top) - var(--hud-stage-bottom-gap));
   --hud-workspace-height: calc(var(--hud-canvas-height) - var(--hud-workspace-top) - var(--hud-stage-bottom-gap));
 }

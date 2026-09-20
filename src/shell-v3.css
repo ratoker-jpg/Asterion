@@ -3,6 +3,51 @@
 
 .workspace{position:absolute;z-index:10;left:38px;right:38px;top:var(--hud-base-workspace-top);bottom:var(--hud-stage-bottom-gap);overflow:hidden}.workspace:before{content:"";position:absolute;inset:0;pointer-events:none;border:1px solid rgba(64,181,213,.08)}
 
+.shell-reset-control{
+  position:absolute;
+  z-index:160;
+  left:14px;
+  top:5px;
+  width:38px;
+  height:38px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border:1px solid rgba(67,216,246,.66);
+  border-radius:50%;
+  background:linear-gradient(180deg,rgba(6,54,72,.96),rgba(2,22,34,.98));
+  color:#8cecff;
+  box-shadow:0 0 0 4px rgba(1,9,16,.72),inset 0 0 12px rgba(54,215,246,.12),0 0 16px rgba(0,193,241,.16);
+  cursor:pointer;
+  font-size:25px;
+  line-height:1;
+  transition:border-color .14s ease,background .14s ease,color .14s ease,box-shadow .14s ease,transform .14s ease;
+}
+.shell-reset-control:hover,
+.shell-reset-control:focus-visible{
+  border-color:#82f2ff;
+  background:linear-gradient(180deg,rgba(8,76,98,.98),rgba(3,34,47,.98));
+  color:#effcff;
+  box-shadow:0 0 0 4px rgba(1,9,16,.72),inset 0 0 14px rgba(54,215,246,.18),0 0 22px rgba(0,206,255,.3);
+  outline:0;
+  transform:scale(1.04);
+}
+
+/* Keep status text available to assistive technology and QA without restoring
+   the obsolete bottom strip in the visual layout. */
+.shell-notice-live{
+  position:absolute !important;
+  width:1px !important;
+  height:1px !important;
+  margin:-1px !important;
+  padding:0 !important;
+  overflow:hidden !important;
+  clip:rect(0 0 0 0) !important;
+  clip-path:inset(50%) !important;
+  white-space:nowrap !important;
+  border:0 !important;
+}
+
 /* Planet page is one replaceable workspace, not part of the global shell. */
 .planet-page-v3{position:absolute;inset:0;display:grid;grid-template-columns:310px minmax(0,1fr) 340px;gap:22px}
 .planet-summary-v3,.queue-panel-v3{position:relative;margin:12px 0 14px;padding:20px 18px;border:1px solid rgba(62,190,222,.27);background:linear-gradient(180deg,rgba(4,23,35,.94),rgba(2,12,20,.96));box-shadow:inset 0 0 34px rgba(0,180,230,.035);clip-path:polygon(0 0,94% 0,100% 5%,100% 95%,94% 100%,0 100%)}

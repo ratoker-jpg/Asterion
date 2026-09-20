@@ -73,6 +73,22 @@ async function clickText(win, selector, text) {
   await settle(win);
 }
 
+async function clickTestModeReset(win, label) {
+  const resetControl = await win.webContents.executeJavaScript(`(() => {
+    const button = document.querySelector('[data-qa-reset-progress]');
+    if (!button || button.disabled) return null;
+    return {
+      ariaLabel: button.getAttribute('aria-label'),
+      title: button.getAttribute('title'),
+    };
+  })()`);
+  const expectedLabel = 'Сбросить текущее тестовое сохранение';
+  if (!resetControl || resetControl.ariaLabel !== expectedLabel || resetControl.title !== expectedLabel) {
+    throw new Error(`${label}: reset control contract mismatch ${JSON.stringify(resetControl)}`);
+  }
+  await click(win, '[data-qa-reset-progress]');
+}
+
 async function capture(win, directory, name, { nativeCapture = false } = {}) {
   if (skipScreenshots) {
     console.log(`[test-mode-qa] screenshot skipped: ${name}`);
@@ -437,7 +453,7 @@ async function runViewport(width, height) {
       throw new Error(`${label}: canonical building/fleet mismatch ${JSON.stringify(initial)}`);
     }
     await capture(win, directory, 'test-overview');
-    await clickText(win, '.shell-notice button', 'СБРОСИТЬ ТЕСТОВОЕ СОХРАНЕНИЕ');
+    await clickTestModeReset(win, label);
     await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}').metal === 450100000`);
     const afterTestReset = await readQaState(win);
     const productionAfterReset = await readEnvelope(win, PRODUCTION_KEY);

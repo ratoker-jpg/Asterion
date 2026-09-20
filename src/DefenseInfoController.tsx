@@ -192,7 +192,7 @@ function DefenseInfoModal({ data, onClose }: { data: OpenDefenseInfo; onClose: (
             <h2>{data.name}</h2>
             <p>{data.role}</p>
           </div>
-          <button ref={closeRef} type="button" className="ship-info-close-v1" onClick={onClose} aria-label="Закрыть информацию">×</button>
+          <button ref={closeRef} type="button" className="ship-info-close-v1" data-asterion-close onClick={onClose} aria-label="Закрыть информацию">×</button>
         </header>
 
         <div className="ship-info-body-v1">

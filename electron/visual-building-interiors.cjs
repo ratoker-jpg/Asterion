@@ -202,8 +202,10 @@ async function verifyMilitaryDeepLinks(win, directory) {
     && shipyardIdentity.visual.imageWidth === expectedImageWidth
     && shipyardIdentity.visual.imageHeight === expectedImageHeight
     && shipyardIdentity.visual.imageFit === 'contain'
-    && shipyardIdentity.visual.titleSize === '11px'
-    && shipyardIdentity.visual.detailSize === '8px'
+    // The shared readable contract keeps ordinary fleet-card copy at 12px;
+    // the previous 11px/8px values belonged to the retired microcopy scale.
+    && shipyardIdentity.visual.titleSize === '12px'
+    && shipyardIdentity.visual.detailSize === '12px'
     && shipyardIdentity.visual.detailMargin === '6px';
   if (shipyardIdentity.fleetName !== 'Верфь' || shipyardIdentity.pageName !== 'Верфь' || shipyardIdentity.fleetCardTag !== 'DIV' || shipyardIdentity.fleetCardLabel || shipyardIdentity.hasLegacyName || shipyardIdentity.hasLegacyEmblem || shipyardIdentity.hasReturnToShipyardOverlay || !shipyardIdentity.hasSharedCardTemplate || !visualTemplateMatches || !/building\.aegis\.shipyard(?:-[^/]+)?\.png$/.test(shipyardIdentity.asset) || shipyardIdentity.image !== shipyardIdentity.asset) {
     throw new Error(`Shipyard identity contract failed: ${JSON.stringify(shipyardIdentity)}`);
@@ -296,8 +298,8 @@ async function verifyMilitaryDeepLinks(win, directory) {
     && visual.header.imageWidth === (visual.viewportWidth <= 1040 ? '58px' : visual.viewportWidth <= 1440 ? '68px' : '80px')
     && visual.header.imageHeight === (visual.viewportWidth <= 1040 ? '66px' : visual.viewportWidth <= 1440 ? '76px' : '86px')
     && visual.header.imageFit === 'contain'
-    && visual.header.titleSize === '13px'
-    && visual.header.detailSize === '10px'
+    && visual.header.titleSize === '12px'
+    && visual.header.detailSize === '12px'
     && visual.header.detailMargin === '7px'
     && visual.header.backWidth === ''
     && visual.header.backHeight === '';
@@ -305,7 +307,8 @@ async function verifyMilitaryDeepLinks(win, directory) {
   const sharedCardTemplate = (visual) => visual.card.minHeight === expectedConstructionCardMinHeight(visual)
     && visual.card.borderWidth === '1px'
     && visual.card.hasGradient
-    && visual.card.clipPath.startsWith('polygon(')
+    // Rounded-panel contract: legacy chamfer polygons are intentionally gone.
+    && visual.card.clipPath === 'none'
     && visual.card.titleGrid === shipConstructionVisual.card.titleGrid
     && visual.card.bodyGrid === shipConstructionVisual.card.bodyGrid;
   if (!sharedHeaderTemplate(shipConstructionVisual) || !sharedCardTemplate(shipConstructionVisual) || shipConstructionVisual.title !== 'Верфь' || shipConstructionVisual.image !== shipyardIdentity.asset) {

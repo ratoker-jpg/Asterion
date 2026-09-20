@@ -1090,6 +1090,17 @@ export function App() {
           onPlanetMenuToggle={() => setPlanetMenuOpen((open) => !open)}
          />
 
+        <button
+          className="shell-reset-control"
+          type="button"
+          data-qa-reset-progress
+          onClick={reset}
+          aria-label={RUNTIME_MODE === 'test' ? 'Сбросить текущее тестовое сохранение' : 'Сбросить текущий прогресс'}
+          title={RUNTIME_MODE === 'test' ? 'Сбросить текущее тестовое сохранение' : 'Сбросить текущий прогресс'}
+        >
+          <span aria-hidden="true">↻</span>
+        </button>
+
         <section className={`workspace workspace-v4 workspace--${workspaceKind}`}>
           {buildingInterior && buildingInteriorTarget && buildingInteriorTarget.kind !== 'host' && buildingInteriorTarget.kind !== 'fleet-construction' && buildingInteriorDefinition ? (
             <button
@@ -1281,9 +1292,8 @@ export function App() {
           )}
         </section>
 
-        <div className="shell-notice shell-notice-v4" data-qa-runtime-mode={RUNTIME_MODE}>
+        <div className="shell-notice shell-notice-live" data-qa-runtime-mode={RUNTIME_MODE} role="status" aria-live="polite">
           <span>{notice}</span>
-          <button type="button" onClick={reset}>{RUNTIME_MODE === 'test' ? 'СБРОСИТЬ ТЕСТОВОЕ СОХРАНЕНИЕ' : 'СБРОСИТЬ ПРОТОТИП'}</button>
         </div>
 
         {editingPlanet && editingPlanetState ? (
@@ -1291,7 +1301,13 @@ export function App() {
             <section className="skin-picker-modal planet-editor-modal-v5" onMouseDown={(event) => event.stopPropagation()}>
               <header>
                 <div><small>РЕДАКТИРОВАТЬ ПЛАНЕТУ</small><h2>{editingPlanetState.name}</h2><p>{editingPlanet.coords} · {editingPlanet.status}</p></div>
-                <button type="button" onClick={closePlanetEditor}>×</button>
+                <button
+                  type="button"
+                  data-asterion-close
+                  aria-label="Закрыть редактор планеты"
+                  title="Закрыть редактор планеты"
+                  onClick={closePlanetEditor}
+                >×</button>
               </header>
 
               <form className="planet-editor-name-v5" onSubmit={(event) => { event.preventDefault(); savePlanetName(); }}>
@@ -1322,7 +1338,6 @@ export function App() {
           </div>
         ) : null}
 
-        <footer className="footer-status"><span>ASTERION // COMMAND SHELL V5</span><span>1920×1080 BASE CANVAS</span><span>ESC — WINDOWED</span></footer>
       </div>
     </div>
   );

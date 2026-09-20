@@ -6,6 +6,20 @@ const BASE_SIZE_PROPERTY = '--asterion-base-font-size';
 const SKIP_SELECTOR = '.asterion-header, .utility-screen-host, script, style, svg, path, canvas';
 const FORM_SELECTOR = 'input, select, textarea, option';
 
+// Legacy screens still contain local 6–10px declarations. Keep the preference
+// multiplier useful, but never let the default 100% scale turn readable copy
+// back into the micro-labels that caused the visual defects.
+const MIN_BASE_FONT_SIZE: Record<TypographyKey, number> = {
+  hud: 12,
+  pageTitle: 18,
+  sectionTitle: 14,
+  body: 12,
+  table: 12,
+  control: 12,
+  secondary: 11,
+  helper: 11,
+};
+
 function hasDirectText(element: HTMLElement) {
   return Array.from(element.childNodes).some((node) => node.nodeType === Node.TEXT_NODE && Boolean(node.textContent?.trim()));
 }
@@ -28,7 +42,7 @@ export function inferTypographyCategory(element: HTMLElement): TypographyKey {
   if (element.closest('button, [role="button"], input, select, textarea') || tag === 'option') return 'control';
   if (element.closest('table, [role="table"], [role="row"]') || /table|score|rank|points|stat|metric|resource|cost|value|amount|counter|countdown|time/.test(signature)) return 'table';
   if (element.matches('.utility-helper') || /helper|hint|tooltip|description|caption|note/.test(signature)) return 'helper';
-  if (tag === 'small' || tag === 'label' || tag === 'dt' || /secondary|meta|subtitle|eyebrow|coords|status/.test(signature)) return 'secondary';
+  if (tag === 'small' || tag === 'label' || tag === 'dt' || tag === 'em' || /secondary|meta|subtitle|eyebrow|coords|status/.test(signature)) return 'secondary';
   if (/^h[2-6]$/.test(tag) || tag === 'legend' || /section-title|panel-title|card-title|block-title|heading/.test(signature)) return 'sectionTitle';
   return 'body';
 }
@@ -43,11 +57,13 @@ function tagElement(element: HTMLElement) {
   if (!isManagedTarget(element)) return;
   if (element.hasAttribute(CATEGORY_ATTR)) return;
 
-  const baseSize = Number.parseFloat(getComputedStyle(element).fontSize);
+  const category = inferTypographyCategory(element);
+  const declaredSize = Number.parseFloat(getComputedStyle(element).fontSize);
+  const baseSize = Math.max(declaredSize, MIN_BASE_FONT_SIZE[category]);
   if (!Number.isFinite(baseSize) || baseSize <= 0) return;
 
   element.style.setProperty(BASE_SIZE_PROPERTY, `${baseSize}px`);
-  element.setAttribute(CATEGORY_ATTR, inferTypographyCategory(element));
+  element.setAttribute(CATEGORY_ATTR, category);
 }
 
 function scan(root: ParentNode) {

@@ -269,9 +269,12 @@ function assertGeometry(snapshot, label, expectedJobRows = 0) {
   if (document.width > viewport.width + epsilon) throw new Error(`${label}: horizontal page scroll ${JSON.stringify(snapshot)}`);
   if (document.height <= viewport.height + epsilon) throw new Error(`${label}: document did not become vertically scrollable ${JSON.stringify(snapshot)}`);
   const stageCenter = (stage.left + stage.right) / 2;
-  const documentCenter = document.width / 2;
-  if (Math.abs(stageCenter - documentCenter) > epsilon || Math.abs(stage.top) > epsilon) {
-    throw new Error(`${label}: long-page stage not centered in document content ${JSON.stringify(snapshot)}`);
+  // The fixed 1920px canvas stays centered in the full viewport. A vertical
+  // scrollbar narrows document.clientWidth, but must not shift the canvas by
+  // half of the scrollbar width or the long-page shell will jump sideways.
+  const viewportCenter = viewport.width / 2;
+  if (Math.abs(stageCenter - viewportCenter) > epsilon || Math.abs(stage.top) > epsilon) {
+    throw new Error(`${label}: long-page stage not centered in viewport ${JSON.stringify(snapshot)}`);
   }
   if (stage.bottom <= viewport.height + epsilon) throw new Error(`${label}: long-page stage did not grow below viewport`);
   if (root.left < -epsilon || root.right > viewport.width + epsilon || root.top < -epsilon) throw new Error(`${label}: root clipped horizontally or above viewport`);

@@ -1042,7 +1042,7 @@ export function BattleReportModal({
           </div>
           <div className="battle-report-modal-actions-v1">
             {context === 'battle' && onToggleSaved ? <SaveButton saved={saved} onToggle={onToggleSaved} reportId={viewModel.id} /> : null}
-            <button ref={closeRef} type="button" className="battle-report-modal-close-v1" onClick={onClose} aria-label="Закрыть боевой отчёт">×</button>
+            <button ref={closeRef} type="button" className="battle-report-modal-close-v1" data-asterion-close onClick={onClose} aria-label="Закрыть боевой отчёт">×</button>
           </div>
         </header>
         <div ref={scrollRef} className="battle-report-modal-scroll-v1">
