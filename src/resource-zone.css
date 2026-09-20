@@ -216,7 +216,7 @@
 }
 .resource-zone-economy-title{
   margin:0 0 6px;
-  font-size:9px;
+  font-size:11px;
   line-height:1.2;
   letter-spacing:1.35px;
   color:#9cdce9;
@@ -252,7 +252,7 @@
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
-  font-size:8px;
+  font-size:10px;
   line-height:1.2;
   color:#8fb8c2;
 }
@@ -274,7 +274,7 @@
 .resource-zone-energy-summary{
   margin-top:10px;
   padding:9px 0 0;
-  border-top:1px solid rgba(239,177,76,.25);
+  border-top:0;
 }
 .resource-zone-energy-total-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 10px;color:#b0cbd1;font-size:9px}
 .resource-zone-energy-total-row strong{color:#f5dfad;font-size:12px;font-variant-numeric:tabular-nums}

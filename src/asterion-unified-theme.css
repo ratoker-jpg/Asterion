@@ -1418,7 +1418,9 @@ html.asterion-repair-page .repair-page-head-v1::after{
 .reports-profile-name-plate small,
 .reports-profile-name-plate span{ display:none !important; }
 .reports-profile-avatar > strong{
-  min-width:160px;
+  width:min(228px, calc(100% + 16px));
+  min-width:0;
+  box-sizing:border-box;
   padding:7px 18px 6px;
   border-radius:var(--ut-r-chip) !important;
   clip-path:none !important;
@@ -1473,4 +1475,71 @@ html.asterion-repair-page .repair-page-head-v1::after{
    allowed ПОСТРОЕНО 500 to collide with the title. */
 .shipyard-card-title-v1:not(.commander){
   grid-template-columns:132px minmax(0,1fr) 32px;
+}
+
+/* Keep fleet copy inside its rounded surfaces. Long ship names remain on one
+   line; narrow headers and table cells resolve with an intentional ellipsis
+   instead of painting over the neighbouring panel. */
+.fleet-panel-header-v1 > div,
+.fleet-panel-header-v1 > span,
+.fleet-ship-line-v1,
+.fleet-ship-info-v1,
+.fleet-flight-row-v1,
+.fleet-satellite-copy-v1{
+  min-width:0;
+}
+.fleet-panel-header-v1{
+  gap:18px;
+}
+.fleet-panel-header-v1 > div{
+  overflow:hidden;
+}
+.fleet-panel-header-v1 > div h2{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.fleet-panel-header-v1 > span{
+  flex:0 1 52%;
+  overflow:hidden;
+  text-align:right;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.fleet-flight-row-v1 > span{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.fleet-ship-info-v1 h3,
+.fleet-satellite-copy-v1 strong,
+.fleet-satellite-copy-v1 span{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.fleet-ship-meta-v1{
+  min-width:0;
+  overflow:hidden;
+}
+.fleet-ship-meta-v1 span{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+/* Resource income is a primary readout; the old energy separator was visible
+   below the clipped side panel as an isolated amber line. */
+.resource-zone-economy-title{ font-size:12px !important; }
+.resource-zone-income-name{ font-size:11px !important; }
+.resource-zone-energy-summary{
+  /* The energy ledger remains available to the building dialog/QA state, but
+     it must not leak a partial heading out of the compact income sidebar. */
+  max-height:0;
+  margin-top:0 !important;
+  padding-top:0 !important;
+  overflow:hidden;
+  border-top:0 !important;
 }
