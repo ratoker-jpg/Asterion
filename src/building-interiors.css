@@ -66,6 +66,24 @@
 .workspace:has(.command-view) .building-interior-return-overlay{right:430px}
 .building-interior-return-overlay span{margin-right:9px;color:#72e7ff}
 
+/* Keep the fixed 1920x1080 building canvas centered before Electron scales it
+   on narrow desktop viewports. Without this positioning, the transformed
+   stage keeps its unscaled grid offset and the right/bottom of an interior
+   is rendered outside the window. */
+@media (max-width:1919px){
+  .viewport:has(.workspace--building-interior){
+    position:relative;
+    display:block;
+  }
+  .viewport:has(.workspace--building-interior)>.stage{
+    position:absolute;
+    left:50%;
+    top:50%;
+    margin-left:-960px;
+    margin-top:-540px;
+  }
+}
+
 @media (max-width:1350px){
   .building-interior-host{padding:26px 30px 26px}
   .building-interior-header{min-height:90px}
