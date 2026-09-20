@@ -35,6 +35,8 @@
   --ut-font-control:12px;
   --ut-font-secondary:11px;
   --ut-font-helper:11px;
+  --ut-font-close:18px;
+  --ut-close-size:40px;
   --ut-focus:2px solid var(--ut-accent);
   --ut-motion-fast:160ms;
 }
@@ -1825,3 +1827,63 @@ body [data-asterion-typography="helper"]{ font-size:calc(var(--ut-font-helper) *
 }
 .resource-building-action-confirm.flight-timeline-modal .flight-timeline-actions button:active,
 .resource-building-action-confirm.flight-timeline-modal .flight-timeline-close:active{ transform:translateY(1px); }
+
+/* Modal and panel title contract. Screen identity remains 18px; every
+   heading inside a popup/panel uses the shared 14px section tier so titles
+   stay consistent across buildings, flight plans, reports, ships, and the
+   universe inspector. */
+body .resource-zone-economy-title,
+body .resource-building-dialog-copy h2,
+body .resource-building-action-confirm h3,
+body .flight-timeline-modal .flight-timeline-head h3,
+body .universe-inspector h2,
+body .universe-inspector h3,
+body .ship-info-modal-v1 h2,
+body .ship-info-modal-v1 h3,
+body .battle-report-modal-v1 h2,
+body .battle-report-modal-v1 h3,
+body .skin-picker-modal header h2{
+  font-size:calc(var(--ut-font-section-title) * var(--text-scale-section-title)) !important;
+}
+
+/* A close control is an icon button, not body copy. Keep the glyph and hit
+   area stable across every modal while preserving the danger treatment. */
+body button[data-asterion-close]{
+  box-sizing:border-box;
+  display:inline-grid;
+  place-items:center;
+  width:var(--ut-close-size) !important;
+  height:var(--ut-close-size) !important;
+  min-width:var(--ut-close-size) !important;
+  min-height:var(--ut-close-size) !important;
+  flex:0 0 var(--ut-close-size) !important;
+  padding:0 !important;
+  border:1px solid rgba(246,101,101,.84) !important;
+  border-radius:var(--ut-r-btn) !important;
+  background:rgba(75,27,25,.64) !important;
+  color:#ffb4a0 !important;
+  font-family:inherit;
+  font-size:var(--ut-font-close) !important;
+  font-weight:700;
+  line-height:1 !important;
+  letter-spacing:0;
+  text-align:center;
+  cursor:pointer;
+  transition:transform var(--ut-motion-fast) ease, border-color var(--ut-motion-fast) ease, background var(--ut-motion-fast) ease, color var(--ut-motion-fast) ease, box-shadow var(--ut-motion-fast) ease;
+}
+body button[data-asterion-close]:hover,
+body button[data-asterion-close]:focus-visible{
+  border-color:#ff8f84 !important;
+  background:rgba(157,36,42,.52) !important;
+  color:#fff5f3 !important;
+  outline:2px solid rgba(255,125,114,.8) !important;
+  outline-offset:2px;
+  box-shadow:0 0 14px rgba(240,68,94,.24);
+}
+body button[data-asterion-close]:active{ transform:translateY(1px); }
+
+/* Desktop building art sits above the level strip instead of occupying the
+   same vertical band. The mobile flow layout keeps its own natural position. */
+@media (min-width:701px){
+  body .resource-building-dialog-art{ top:8px; }
+}

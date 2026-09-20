@@ -580,7 +580,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
         <aside className={`universe-inspector universe-inspector--${selectedNode.kind}`} role="dialog" aria-modal="true" aria-label={`Инспектор: ${selectedNode.name}`} data-qa-universe-inspector data-qa-inspector-kind={selectedNode.kind}>
           <header className="universe-inspector-header">
             <div><small>ЗВЁЗДНЫЙ АТЛАС / {getUniverseObjectKindLabel(selectedNode.kind)}</small><h2>{selectedNode.name}</h2><span>{selectedNode.kind === 'asteroid' ? `${formatUniverseCoordinate(selectedNode.coordinate)} · кольцо ${Math.ceil(selectedNode.coordinate.position / 6)}` : formatUniverseCoordinate(selectedNode.coordinate)}</span></div>
-            <button ref={closeButtonRef} type="button" className="universe-inspector-close" aria-label="Закрыть инспектор" title="Закрыть инспектор" onClick={() => setSelectedNodeId(null)}>×</button>
+            <button ref={closeButtonRef} type="button" className="universe-inspector-close" data-asterion-close aria-label="Закрыть инспектор" title="Закрыть инспектор" onClick={() => setSelectedNodeId(null)}>×</button>
           </header>
           <div className="universe-inspector-body">
             {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} planets={ownerPlanets} currentOwnerId={owner.id} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} underlyingNode={selectedUnderlyingNode} nowMs={nowMs} onColonize={onColonize} />}

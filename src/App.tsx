@@ -1301,7 +1301,13 @@ export function App() {
             <section className="skin-picker-modal planet-editor-modal-v5" onMouseDown={(event) => event.stopPropagation()}>
               <header>
                 <div><small>РЕДАКТИРОВАТЬ ПЛАНЕТУ</small><h2>{editingPlanetState.name}</h2><p>{editingPlanet.coords} · {editingPlanet.status}</p></div>
-                <button type="button" onClick={closePlanetEditor}>×</button>
+                <button
+                  type="button"
+                  data-asterion-close
+                  aria-label="Закрыть редактор планеты"
+                  title="Закрыть редактор планеты"
+                  onClick={closePlanetEditor}
+                >×</button>
               </header>
 
               <form className="planet-editor-name-v5" onSubmit={(event) => { event.preventDefault(); savePlanetName(); }}>

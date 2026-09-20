@@ -874,7 +874,7 @@ function FleetWorkspace({
                 <h3 id="flight-preview-title">ПЛАН ПЕРЕЛЁТА</h3>
                 <p>Последовательность подготовки: источник → цель → состав флота → подтверждение.</p>
               </div>
-              <button type="button" className="flight-timeline-close" aria-label="Закрыть план перелёта" onClick={closeFlightPreview}>×</button>
+              <button type="button" className="flight-timeline-close" data-asterion-close aria-label="Закрыть план перелёта" onClick={closeFlightPreview}>×</button>
               </header>
             <div className="flight-timeline-body">
               <ol className="flight-timeline-steps" aria-label="Шаги подготовки рейса">

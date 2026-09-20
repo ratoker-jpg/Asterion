@@ -543,7 +543,7 @@ export function ZoneView({
             data-qa-building-zone={selected.zone}
             onMouseDown={(event) => event.stopPropagation()}
           >
-            <button className="resource-building-dialog-close" type="button" aria-label="Закрыть сведения о здании" onClick={() => onSelectedRoleChange(null)}>×</button>
+            <button className="resource-building-dialog-close" data-asterion-close type="button" aria-label="Закрыть сведения о здании" onClick={() => onSelectedRoleChange(null)}>×</button>
             {availability.currentLevel > 0 ? (
               <button
                 className="resource-building-destroy-button"

@@ -27,6 +27,8 @@ The product uses the bundled variable Montserrat font. The default scale is fixe
 
 New content must not introduce text below 11px. The 12px body size is the default reading size; use weight, contrast, and spacing before increasing it. A smaller HUD value is an existing fixed-chrome exception, not a default for panels, cards, operations, settings, or actions.
 
+Panel and modal headings are always the 14px section tier. The 18px tier is reserved for screen identity and the rare primary page title; a popup title must not become a one-off larger scale.
+
 ## Surfaces and shape
 
 Use the shared radius tokens: `--ut-r-panel` (18px), `--ut-r-card` (13px), `--ut-r-chip` (9px), `--ut-r-btn` (10px), and `--ut-r-input` (9px). Nested surfaces follow the concentric rule: an outer boundary is larger than its inner content boundary.
@@ -43,7 +45,7 @@ Do not add a flat opaque rectangle behind an already rounded panel. Prefer a res
 
 ## Controls and states
 
-Buttons and inputs use the shared radius tokens and 12px control text, with 14px reserved for a heading-like action that needs extra emphasis. Every interactive control has visible hover, keyboard focus, pressed, and disabled states. Focus uses the shared cyan outline. Primary actions use the cyan treatment; cancel, close, delete, and other destructive actions use the danger treatment. A close control is an icon button with an accessible label/title, not a tiny text label.
+Buttons and inputs use the shared radius tokens and 12px control text, with 14px reserved for a heading-like action that needs extra emphasis. Every interactive control has visible hover, keyboard focus, pressed, and disabled states. Focus uses the shared cyan outline. Primary actions use the cyan treatment; cancel, close, delete, and other destructive actions use the danger treatment. A close control is a red 18px icon inside a 40px hit area with an accessible label/title, not a tiny text label.
 
 ## Layout and overflow
 
