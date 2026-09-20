@@ -3,6 +3,8 @@ import type { EspionageState, SpyMission, SpyReportQuality } from './types.ts';
 export const SPY_REPORT_COOLDOWN_MS = 5_000;
 export const SPY_HUNTER_RATE_PER_LEVEL_PERCENT = 1.75;
 
+export type EspionageRollKind = 'hunter' | 'report';
+
 export function createDefaultEspionageState(): EspionageState {
   return { missions: [], reports: [], hunterNotices: [] };
 }
@@ -14,6 +16,41 @@ export function getEspionageState(state: { espionage?: EspionageState }): Espion
 export function normalizeRngRoll(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.min(99, Math.max(0, Math.floor(value)));
+}
+
+function hashEspionageSeed(seed: string): number {
+  let hash = 2_166_136_261;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return hash >>> 0 || 1;
+}
+
+/**
+ * Deterministic xorshift32 stream, the same algorithm family as the combat
+ * resolver ('asterion-xorshift32-v1'). Espionage rolls must be replayable:
+ * the same mission + attempt always yields the same canonical 0..99 roll.
+ */
+export function createSeededEspionageRng(seed: string): () => number {
+  let state = hashEspionageSeed(seed);
+  return () => {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    state >>>= 0;
+    return state / 4_294_967_296;
+  };
+}
+
+/**
+ * Roll seed contract: one stable seed per (mission, roll kind, attempt).
+ * The attempt is the 1-based report index the roll belongs to, so replaying
+ * a save or re-running reconcile never re-rolls a materialized outcome.
+ */
+export function espionageRollSeed(missionId: string, kind: EspionageRollKind, attempt: number): string {
+  const normalizedAttempt = Math.max(1, Math.floor(Number.isFinite(attempt) ? attempt : 1));
+  return `espionage:${missionId}:${kind}:${normalizedAttempt}`;
 }
 
 /**

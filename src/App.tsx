@@ -327,7 +327,7 @@ export function App() {
     };
     const onSpyReportRequest = (event: Event) => {
       const detail = (event as CustomEvent<{ missionId: string; now?: number }>).detail;
-      const result = requestSpyReport(stateRef.current, detail.missionId, { now: detail.now ?? Date.now(), rng: () => Math.random() });
+      const result = requestSpyReport(stateRef.current, detail.missionId, { now: detail.now ?? Date.now() });
       if (result.ok) {
         stateRef.current = result.state;
         setState(result.state);
@@ -337,7 +337,7 @@ export function App() {
     };
     const onSpyReportAllRequest = (event: Event) => {
       const detail = (event as CustomEvent<{ missionIds?: string[]; now?: number }>).detail;
-      const result = requestAllSpyReports(stateRef.current, detail.missionIds ?? [], { now: detail.now ?? Date.now(), rng: () => Math.random() });
+      const result = requestAllSpyReports(stateRef.current, detail.missionIds ?? [], { now: detail.now ?? Date.now() });
       if (result.ok) {
         stateRef.current = result.state;
         setState(result.state);

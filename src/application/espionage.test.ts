@@ -159,3 +159,47 @@ test('one owner cannot send a second active probe from another origin to the sam
   if (second.ok) return;
   assert.equal(second.error.code, 'spy-target-blocked');
 });
+
+test('production rolls are seeded: the same mission replays the same outcome without an injected rng', () => {
+  const runMission = () => {
+    const initial = createInitialSaveState('test', 1_000);
+    const targetId = Object.keys(initial.espionage!.bot01Planets!)[2];
+    const dispatched = dispatchFlight(initial, spyCommand(initial, 'spy-seeded', targetId), { now: 1_000, mode: 'test', testTimeScale: 15 });
+    assert.equal(dispatched.ok, true);
+    if (!dispatched.ok) return null;
+    // No rng argument: the runtime must derive its own deterministic seeded rolls.
+    const arrived = reconcileFlights(dispatched.state, dispatched.flight.arrivalAt);
+    return {
+      status: arrived.state.espionage!.missions[0].status,
+      roll: arrived.state.espionage!.reports[0]?.roll,
+      quality: arrived.state.espionage!.reports[0]?.quality,
+    };
+  };
+  const first = runMission();
+  const second = runMission();
+  assert.ok(first);
+  assert.ok(second);
+  if (!first || !second) return;
+  assert.equal(first.status, 'orbiting');
+  assert.equal(second.status, first.status);
+  assert.equal(second.roll, first.roll);
+  assert.equal(second.quality, first.quality);
+  assert.equal(Number.isInteger(first.roll) && first.roll! >= 0 && first.roll! <= 99, true);
+});
+
+test('seeded report rolls differ between distinct missions to the same target', () => {
+  const runMission = (requestId: string) => {
+    const initial = createInitialSaveState('test', 1_000);
+    const targetId = Object.keys(initial.espionage!.bot01Planets!)[3];
+    const dispatched = dispatchFlight(initial, spyCommand(initial, requestId, targetId), { now: 1_000, mode: 'test', testTimeScale: 15 });
+    assert.equal(dispatched.ok, true);
+    if (!dispatched.ok) return null;
+    const arrived = reconcileFlights(dispatched.state, dispatched.flight.arrivalAt);
+    return arrived.state.espionage!.reports[0]?.roll;
+  };
+  const first = runMission('spy-seed-one');
+  const second = runMission('spy-seed-two');
+  assert.ok(first !== undefined);
+  assert.ok(second !== undefined);
+  assert.notEqual(second, first);
+});

@@ -58,11 +58,14 @@ import {
   activeSpyMissionForTarget,
   canRequestSpyReport,
   createDefaultEspionageState,
+  createSeededEspionageRng,
+  espionageRollSeed,
   hunterDetects,
   normalizeRngRoll,
   resolveSpyReportQuality,
   SPY_REPORT_COOLDOWN_MS,
 } from '../domain/espionage/runtime.ts';
+import type { EspionageRollKind } from '../domain/espionage/runtime.ts';
 import type {
   Bot01PlanetState,
   EspionageState,
@@ -436,9 +439,25 @@ function withEspionageState(state: SaveState, espionage: EspionageState): SaveSt
 function randomRoll(rng: () => number): number {
   const raw = rng();
   if (!Number.isFinite(raw)) return 0;
-  // Math.random() is [0, 1); tests may provide the already materialized 0..99
-  // integer. Both paths end in the same canonical integer contract.
+  // Seeded streams return [0, 1); tests may provide the already materialized
+  // 0..99 integer. Both paths end in the same canonical integer contract.
   return raw >= 0 && raw < 1 ? Math.floor(raw * 100) : normalizeRngRoll(raw);
+}
+
+/**
+ * Espionage rolls are deterministic: production derives one seeded xorshift32
+ * stream per (mission, roll kind, attempt), so replaying a save or re-running
+ * reconcile never re-rolls a materialized outcome. Tests may still inject an
+ * explicit roll stream through the optional rng override.
+ */
+function materializeSpyRoll(
+  rng: (() => number) | undefined,
+  missionId: string,
+  kind: EspionageRollKind,
+  attempt: number,
+): number {
+  if (rng) return randomRoll(rng);
+  return randomRoll(createSeededEspionageRng(espionageRollSeed(missionId, kind, attempt)));
 }
 
 function spyTargetFor(state: SaveState, mission: Pick<SpyMission, 'targetPlanetId'> | FlightRecord): Bot01PlanetState | null {
@@ -540,12 +559,13 @@ function resolveSpyAtTarget(
   flight: FlightRecord,
   mission: SpyMission,
   now: number,
-  rng: () => number,
+  rng: (() => number) | undefined,
   firstReport: boolean,
 ): SpyResolution | null {
   const target = spyTargetFor(state, mission);
   if (!target) return null;
-  const hunterRoll = randomRoll(rng);
+  const attempt = mission.reportIds.length + 1;
+  const hunterRoll = materializeSpyRoll(rng, mission.id, 'hunter', attempt);
   if (hunterDetects(target.hunterLevel, hunterRoll)) {
     const destroyedMission: SpyMission = {
       ...mission,
@@ -582,7 +602,7 @@ function resolveSpyAtTarget(
   }
 
   const currentSpyLevel = Math.max(0, Math.floor(state.science.levels[5] ?? 0));
-  const report = createSpyReport(mission, target, now, randomRoll(rng), firstReport, currentSpyLevel);
+  const report = createSpyReport(mission, target, now, materializeSpyRoll(rng, mission.id, 'report', attempt), firstReport, currentSpyLevel);
   const nextMission: SpyMission = {
     ...mission,
     spyLevel: currentSpyLevel,
@@ -982,7 +1002,7 @@ function spyMissionForFlight(state: SaveState, flight: FlightRecord): SpyMission
   return currentEspionageState(state).missions.find((mission) => mission.flightId === flight.id);
 }
 
-export function reconcileFlights(state: SaveState, now: number, rng: () => number = Math.random): FlightReconcileResult {
+export function reconcileFlights(state: SaveState, now: number, rng?: () => number): FlightReconcileResult {
   let next = { ...state, flights: currentFlightState(state) };
   const events: FlightReconcileEvent[] = [];
   let changed = false;
@@ -1203,7 +1223,8 @@ export function requestSpyReport(
   options: SpyReportRuntimeOptions = {},
 ): SpyReportCommandResult {
   const now = options.now ?? Date.now();
-  const rng = options.rng ?? Math.random;
+  // options.rng stays a test-only override; production uses the seeded roll contract.
+  const rng = options.rng;
   const mission = currentEspionageState(state).missions.find((item) => item.id === missionId);
   if (!mission) return spyReportFailure(state, 'spy-mission-not-found', 'Шпионская миссия не найдена.');
   if (mission.status !== 'orbiting') return spyReportFailure(state, 'spy-mission-not-found', 'Запрос доступен только для зонда на орбите.');
