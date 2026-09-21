@@ -19,8 +19,8 @@ import {
   type BattleHistoryState,
 } from './domain/combat/battle-repository.ts';
 import {
-  ASTERION_LOCAL_PLAYER_ID,
   filterBattleReports,
+  isAsterionLocalPlayerId,
   type BattleListMode,
   type BattleReport,
 } from './domain/combat/report.ts';
@@ -94,15 +94,18 @@ function resultIcon(tone: BattleResultTone) {
 }
 
 function resultLabel(viewModel: BattleReportViewModel) {
-  const localSide = viewModel.attacker.participant.playerId === ASTERION_LOCAL_PLAYER_ID
+  const localSide = isAsterionLocalPlayerId(viewModel.attacker.participant.playerId)
     ? 'attacker'
-    : viewModel.defender.participant.playerId === ASTERION_LOCAL_PLAYER_ID
+    : isAsterionLocalPlayerId(viewModel.defender.participant.playerId)
       ? 'defender'
       : null;
   if (viewModel.winner === 'draw') return { label: 'НИЧЬЯ', tone: 'draw' } as const;
-  if (localSide) return viewModel.winner === localSide
-    ? { label: 'ПОБЕДА', tone: 'victory' } as const
-    : { label: 'ПОРАЖЕНИЕ', tone: 'defeat' } as const;
+  if (localSide) {
+    const suffix = viewModel.missionType === 'attack' ? (localSide === 'attacker' ? ' ПРИ АТАКЕ' : ' ПРИ ОБОРОНЕ') : '';
+    return viewModel.winner === localSide
+      ? { label: `ПОБЕДА${suffix}`, tone: 'victory' } as const
+      : { label: `ПОРАЖЕНИЕ${suffix}`, tone: 'defeat' } as const;
+  }
   return viewModel.winner === 'attacker'
     ? { label: 'ПОБЕДА АТАКУЮЩЕГО', tone: 'victory' } as const
     : { label: 'ПОБЕДА ЗАЩИТНИКА', tone: 'defeat' } as const;
@@ -219,15 +222,28 @@ function CardPoints({ viewModel, side, className = '' }: { viewModel: BattleRepo
 }
 
 function CardRewards({ viewModel, className = '' }: { viewModel: BattleReportViewModel; className?: string }) {
-  const hasRewards = viewModel.debris != null || viewModel.resources.length > 0;
+  const hasRewards = viewModel.resources.length > 0;
   if (!hasRewards) return null;
   return (
     <div className={`battle-card-rewards-v1 ${className}`}>
-      <small>НАГРАДЫ И ДОБЫЧА</small>
+      <small>ДОСТАВЛЕННАЯ ДОБЫЧА</small>
       <div>
-        {viewModel.debris != null ? <span className="battle-card-reward-item-v1"><ResourceIcon kind="debris" /><b>{formatNumber(viewModel.debris)}</b><em>обломков</em></span> : null}
         {viewModel.resources.map((resource) => <span className="battle-card-reward-item-v1" key={resource.kind}><ResourceIcon kind={resource.kind} /><b>{formatNumber(resource.value)}</b><em>{resource.label.toLowerCase()}</em></span>)}
       </div>
+    </div>
+  );
+}
+
+function CardOrbitDebris({ viewModel }: { viewModel: BattleReportViewModel }) {
+  if (viewModel.debrisOnOrbit == null) return null;
+  return (
+    <div className="battle-card-orbit-debris-v1" data-qa-debris-orbit>
+      <div>
+        <small>ОСТАЛИСЬ НА ОРБИТЕ</small>
+        <strong>ОБЛОМКИ НА ОРБИТЕ</strong>
+        <span>Не доставлены атакующим флотом.</span>
+      </div>
+      <span className="battle-card-reward-item-v1"><ResourceIcon kind="debris" /><b>{formatNumber(viewModel.debrisOnOrbit)}</b><em>обломков</em></span>
     </div>
   );
 }
@@ -276,6 +292,7 @@ function BattleCardSummaryBody({ viewModel, ...actions }: BattleCardBodyProps) {
         ))}
       </div>
       <CardRewards viewModel={viewModel} />
+      <CardOrbitDebris viewModel={viewModel} />
       <CardActions viewModel={viewModel} {...actions} />
     </div>
   );
@@ -568,9 +585,9 @@ function OperationOutcome({ report }: { report: BattleReport }) {
       <header className="battle-section-head-v1"><div><small>ИТОГ</small><h3>РЕЗУЛЬТАТЫ ОПЕРАЦИИ</h3></div></header>
       <div>
         {report.experience != null ? <span><small>БОЕВОЙ ОПЫТ</small><strong>{formatNumber(report.experience)}</strong></span> : null}
-        {report.debris != null ? <span className="battle-outcome-resource" data-qa-resource-kind="debris"><span className="battle-outcome-resource-icon"><ResourceIcon kind="debris" /></span><small>ОБЛОМКИ</small><strong>{formatNumber(report.debris)}</strong></span> : null}
         {resourceEntries.map(([kind, label, value]) => <span className="battle-outcome-resource" key={label} data-qa-resource-kind={kind}><span className="battle-outcome-resource-icon"><ResourceIcon kind={kind} /></span><small>{label.toUpperCase()}</small><strong>{formatNumber(value!)}</strong></span>)}
       </div>
+      {report.debris != null ? <div className="battle-detail-orbit-debris-v1" data-qa-debris-orbit><span className="battle-outcome-resource-icon"><ResourceIcon kind="debris" /></span><span><small>ОСТАЛИСЬ НА ОРБИТЕ</small><strong>ОБЛОМКИ НА ОРБИТЕ · {formatNumber(report.debris)}</strong><em>Не доставлены атакующим флотом.</em></span></div> : null}
     </section>
   );
 }
@@ -891,14 +908,13 @@ function OutcomePointsPanel({
 }
 
 function OutcomeRewardStrip({ viewModel, className = '' }: { viewModel: BattleReportViewModel; className?: string }) {
-  const hasRewards = viewModel.experience != null || viewModel.debris != null || viewModel.resources.length > 0;
+  const hasRewards = viewModel.experience != null || viewModel.resources.length > 0;
   return (
     <section className={`battle-outcome-reward-strip-v1 ${className}`}>
       <header><small>НАГРАДЫ И ДОБЫЧА</small><span>ПОЛУЧЕНО ПОСЛЕ БОЯ</span></header>
       {hasRewards ? (
         <div className="battle-outcome-reward-grid-v1">
           <div><small>БОЕВОЙ ОПЫТ</small><strong>{formatKnownNumber(viewModel.experience)}</strong></div>
-          {viewModel.debris != null ? <div className="battle-outcome-reward-resource-v1" data-qa-resource-kind="debris"><span><ResourceIcon kind="debris" /></span><small>ОБЛОМКИ</small><strong>{formatNumber(viewModel.debris)}</strong></div> : null}
           {viewModel.resources.map((resource) => <div className="battle-outcome-reward-resource-v1" key={resource.kind} data-qa-resource-kind={resource.kind}><span><ResourceIcon kind={resource.kind} /></span><small>{resource.label.toUpperCase()}</small><strong>{formatNumber(resource.value)}</strong></div>)}
         </div>
       ) : <p className="battle-empty-inline-v1">Награды и ресурсы не зафиксированы в этом отчёте.</p>}
@@ -924,6 +940,7 @@ function BattleOutcomeSummary({ viewModel, result, winnerName }: { viewModel: Ba
         ))}
       </div>
       <OutcomeRewardStrip viewModel={viewModel} />
+      {viewModel.debrisOnOrbit != null ? <div className="battle-detail-orbit-debris-v1" data-qa-debris-orbit><span className="battle-outcome-resource-icon"><ResourceIcon kind="debris" /></span><span><small>ОСТАЛИСЬ НА ОРБИТЕ</small><strong>ОБЛОМКИ НА ОРБИТЕ · {formatNumber(viewModel.debrisOnOrbit)}</strong><em>Не доставлены атакующим флотом.</em></span></div> : null}
     </div>
   );
 }

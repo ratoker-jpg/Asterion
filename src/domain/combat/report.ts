@@ -7,7 +7,7 @@ export const ASTERION_LOCAL_PLAYER_ID = 'player-aster';
 /** The profile fixture uses this id; keep the legacy combat id compatible. */
 export const ASTERION_PROFILE_PLAYER_ID = 'player-current';
 
-export function isAsterionLocalPlayerId(playerId: string | undefined): boolean {
+export function isAsterionLocalPlayerId(playerId: string | null | undefined): boolean {
   return playerId === ASTERION_LOCAL_PLAYER_ID || playerId === ASTERION_PROFILE_PLAYER_ID;
 }
 
@@ -359,9 +359,12 @@ export function filterBattleReports(
 export function getBattleResultForPlayer(report: BattleReport, playerId?: string) {
   if (report.winner === 'draw') return 'draw' as const;
   if (!playerId) return report.winner;
-  const playerSide = report.attacker.playerId === playerId
+  const matchesPlayer = (candidate: string | undefined) => isAsterionLocalPlayerId(playerId)
+    ? isAsterionLocalPlayerId(candidate)
+    : candidate === playerId;
+  const playerSide = matchesPlayer(report.attacker.playerId)
     ? 'attacker'
-    : report.defender.playerId === playerId
+    : matchesPlayer(report.defender.playerId)
       ? 'defender'
       : undefined;
   if (!playerSide) return report.winner;

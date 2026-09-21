@@ -71,7 +71,11 @@ export type SpyTargetState = {
   commanders: Partial<Record<CommanderId, SpyCommanderSnapshot>>;
   population: SpyPlanetPopulation;
   hunterLevel: number;
-  debris: number;
+  /**
+   * Legacy mirror accepted only while migrating old saves. The canonical
+   * target-orbit debris ledger is resources.debris.
+   */
+  debris?: number;
   /** Optional owner profile for injected non-Bot targets. */
   ownerProfile?: SpyOwnerProfile;
   /** Legacy per-planet experiment; migrated away in favor of ownerProfile. */

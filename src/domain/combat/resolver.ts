@@ -931,7 +931,9 @@ function createInitialSnapshot(
 }
 
 export function resolveCombat(input: CombatInput, context: CombatResolverContext): BattleReport {
-  const validation = validateCombatInput(input);
+  const validation = validateCombatInput(input, {
+    allowEmptyDefender: context.missionType === 'attack',
+  });
   if (!validation.ok) throw new CombatInputValidationError(validation.errors);
   const normalized = validation.value;
   const requestedAttackerTechnologies = normalizeCombatTechnologies(normalized.attackerTechnologies);

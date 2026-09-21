@@ -4,6 +4,7 @@ import test from 'node:test';
 import { createDefaultBattleHistory, setBattleReportSaved } from '../combat/battle-repository.ts';
 import { DEMO_BATTLE_REPORTS } from '../combat/battle-fixtures.ts';
 import { ASTERION_SAVE_KEY } from '../combat/priority.ts';
+import { getBattleResultForPlayer } from '../combat/report.ts';
 import type { BattleReport } from '../combat/report.ts';
 import { createDefaultCommandState, joinJointOperation } from '../command/repository.ts';
 import { createDefaultOperationsState, revealOperation } from '../operations/repository.ts';
@@ -58,6 +59,26 @@ test('Доклады uses BattleReport and excludes simulator and Arena output',
   assert.equal(battleItems.length, 1);
   assert.equal(battleItems[0].battleReportId, base.id);
   assert.equal(battleItems[0].source, 'combat');
+});
+
+test('local player aliases produce attack-specific report labels and results', () => {
+  const report = {
+    ...DEMO_BATTLE_REPORTS[0],
+    attacker: { ...DEMO_BATTLE_REPORTS[0].attacker, playerId: 'player-current' },
+  };
+  const item = battleReportToReportItem(report);
+  assert.equal(getBattleResultForPlayer(report, 'player-aster'), 'victory');
+  assert.equal(getBattleResultForPlayer(report, 'player-current'), 'victory');
+  assert.equal(item.statusLabel, 'ПОБЕДА ПРИ АТАКЕ');
+  assert.match(item.title, /^Победа при атаке/);
+
+  const defeat = {
+    ...report,
+    winner: 'attacker' as const,
+    attacker: { ...report.attacker, playerId: 'other-attacker' },
+    defender: { ...report.defender, playerId: 'player-aster' },
+  };
+  assert.equal(battleReportToReportItem(defeat).statusLabel, 'ПОРАЖЕНИЕ ПРИ ОБОРОНЕ');
 });
 
 test('operation battle remains canonical BattleReport but receives operation context', () => {

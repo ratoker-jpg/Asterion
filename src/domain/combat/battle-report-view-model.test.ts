@@ -15,6 +15,7 @@ test('view model exposes losses, rewards, and every saved round snapshot', () =>
   assert.equal(viewModel.defender.losses.defenses, 51);
   assert.equal(viewModel.experience, 84);
   assert.equal(viewModel.debris, 291_027);
+  assert.equal(viewModel.debrisOnOrbit, 291_027);
   assert.deepEqual(viewModel.resources.map((resource) => resource.kind), ['metal', 'minerals', 'gas']);
   assert.deepEqual(viewModel.attacker.modifiers.map((modifier) => modifier.label), ['Построение', 'Командирский snapshot']);
 });

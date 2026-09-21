@@ -153,7 +153,10 @@ function reportDestroyedDebris(report: BattleReport, side: 'attacker' | 'defende
   let debris = 0;
   for (const stack of [...(force.stacks ?? []), ...(force.defenses ?? [])]) {
     const entity = getFactionCombatEntity(factionId, stack.entityId);
-    if (entity.kind !== 'ship' && entity.kind !== 'defense') continue;
+    // Commanders are combat ships in the same construction catalog. Their
+    // destroyed hulls therefore contribute to orbit debris just like regular
+    // ships and defensive installations.
+    if (entity.kind !== 'ship' && entity.kind !== 'commander' && entity.kind !== 'defense') continue;
     const destroyed = safeCount(stack.destroyed);
     debris += Math.floor(entity.cost.metal * destroyed * 0.30)
       + Math.floor(entity.cost.minerals * destroyed * 0.30);
@@ -353,7 +356,7 @@ export function resolveAttackAtTarget(state: SaveState, flight: FlightRecord, no
   }
 
   const input = createAttackInput(state, flight, target);
-  if (input.attacker.ships.length === 0 || (input.defender.ships.length === 0 && (input.defender.defenses?.length ?? 0) === 0)) return null;
+  if (input.attacker.ships.length === 0) return null;
   const rawReport = resolveCombat(input, { reportId, missionType: 'attack' });
   const debris = calculateAttackDebris(rawReport, input.attacker.factionId!, input.defender.factionId!);
   const loot = calculateAttackLoot(rawReport, target.resources, input.attacker.factionId!);
@@ -376,10 +379,10 @@ export function resolveAttackAtTarget(state: SaveState, flight: FlightRecord, no
     gas: Math.max(0, targetAfterLosses.resources.gas - loot.gas),
     debris: addDebris(targetAfterLosses.resources.debris, debris),
   };
+  const { debris: _legacyDebris, ...targetWithoutLegacyDebris } = targetAfterLosses;
   const updatedTarget: SpyTargetState = {
-    ...targetAfterLosses,
+    ...targetWithoutLegacyDebris,
     resources: nextResources,
-    debris: addDebris(targetAfterLosses.debris, debris),
   };
   next = withTargetState(next, updatedTarget);
   next = addReport(next, report);

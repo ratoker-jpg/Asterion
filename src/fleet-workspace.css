@@ -123,7 +123,7 @@
 .fleet-panel-header-v1.compact h2 { font-size: 17px; }
 
 .fleet-flight-table-v1 { margin-top: 11px; border: 1px solid rgba(42, 193, 238, .16); }
-.fleet-flight-row-v1 { display: grid; grid-template-columns: 1.1fr 1.1fr 1fr 1fr 1fr .9fr; }
+.fleet-flight-row-v1 { display: grid; grid-template-columns: .9fr 1.35fr .95fr 1fr .95fr 1.35fr .8fr; }
 .fleet-flight-head-v1 {
   min-height: 30px;
   align-items: center;
@@ -145,6 +145,10 @@
 .fleet-flight-empty-v1 span { font-size: 10px; }
 .fleet-flight-row-v1:not(.fleet-flight-head-v1) { min-height: 48px; align-items: center; border-top: 1px solid rgba(42, 193, 238, .1); color: #c9e8ef; font-size: 10px; }
 .fleet-flight-row-v1:not(.fleet-flight-head-v1) > span { padding: 0 9px; }
+.fleet-flight-row-v1:not(.fleet-flight-head-v1) > span > strong,
+.fleet-flight-row-v1:not(.fleet-flight-head-v1) > span > small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fleet-flight-row-v1:not(.fleet-flight-head-v1) > span > small { margin-top: 2px; color: #79aebb; font-size: 8px; }
+.fleet-flight-row-v1:not(.fleet-flight-head-v1) > span[data-qa-flight-status] { color: #82e2d2; font-size: 9px; letter-spacing: .04em; }
 .fleet-flight-row-v1 button { min-height: 26px; padding: 0 7px; border: 1px solid #168cb3; background: #064864; color: #eafbff; font-size: 9px; cursor: pointer; }
 .fleet-flight-row-v1 button:disabled { opacity: .4; cursor: default; }
 .fleet-flight-mission-icon { width: 20px; height: 20px; object-fit: contain; vertical-align: middle; margin-right: 5px; }

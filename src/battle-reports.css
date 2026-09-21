@@ -576,6 +576,12 @@
 .battle-card-reward-item-v1 .asterion-resource-icon { grid-row: 1 / 3; width: 18px; height: 18px; object-fit: contain; }
 .battle-card-rewards-v1 > div b { color: #e7f9ff; font-size: 11px; font-variant-numeric: tabular-nums; }
 .battle-card-rewards-v1 > div em { color: #70c3a6; font-size: 8px; font-style: normal; }
+.battle-card-orbit-debris-v1 { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; padding: 8px 10px; border: 1px solid rgba(230, 173, 80, .28); background: rgba(65, 43, 14, .24); }
+.battle-card-orbit-debris-v1 > div { display: grid; gap: 2px; min-width: 0; }
+.battle-card-orbit-debris-v1 small { color: #d8b06c; font-size: 8px; font-weight: 800; letter-spacing: .1em; }
+.battle-card-orbit-debris-v1 strong { color: #f3dfb0; font-size: 10px; letter-spacing: .05em; }
+.battle-card-orbit-debris-v1 > div > span { color: #bda778; font-size: 8px; }
+.battle-card-orbit-debris-v1 > .battle-card-reward-item-v1 { flex: 0 0 auto; }
 .battle-card-footer-v1 > span { display: grid; gap: 2px; }
 .battle-card-footer-v1 > span small { color: #69acc3; font-size: 8px; font-weight: 800; letter-spacing: .1em; }
 .battle-card-footer-v1 > span b { color: #dff8ff; font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -691,6 +697,11 @@
 .battle-outcome-reward-resource-v1 { grid-template-columns: 20px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 6px; align-items: center; }
 .battle-outcome-reward-resource-v1 > span { grid-row: 1 / 3; display: grid; place-items: center; width: 20px; height: 20px; }
 .battle-outcome-reward-resource-v1 > span img { width: 20px; height: 20px; object-fit: contain; }
+.battle-detail-orbit-debris-v1 { display: flex; align-items: center; gap: 9px; margin-top: 10px; padding: 9px 10px; border: 1px solid rgba(230, 173, 80, .3); background: rgba(65, 43, 14, .24); }
+.battle-detail-orbit-debris-v1 > span:last-child { display: grid; gap: 2px; min-width: 0; }
+.battle-detail-orbit-debris-v1 small { color: #d8b06c; font-size: 8px; font-weight: 800; letter-spacing: .1em; }
+.battle-detail-orbit-debris-v1 strong { color: #f3dfb0; font-size: 11px; letter-spacing: .04em; }
+.battle-detail-orbit-debris-v1 em { color: #bda778; font-size: 9px; font-style: normal; }
 
 /* 1. Duel: each side gets a self-contained readable after/lost ledger. */
 .battle-outcome-duel-grid-v1 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }

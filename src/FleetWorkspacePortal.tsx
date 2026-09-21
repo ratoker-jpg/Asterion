@@ -330,9 +330,24 @@ function FleetWorkspace({
   const selectedMission = missions.find((mission) => mission.id === missionId) ?? missions[0];
   const describedMission = missions.find((mission) => mission.id === hoveredMissionId) ?? selectedMission;
   const activeFlightRecords = useMemo(
-    () => flightRecords.filter((flight) => flight.missionId !== 'espionage' && (flight.phase === 'outbound' || flight.phase === 'returning' || flight.phase === 'arrived')),
+    () => flightRecords
+      .filter((flight) => flight.missionId !== 'espionage' && (flight.phase === 'outbound' || flight.phase === 'returning' || flight.phase === 'arrived'))
+      .sort((left, right) => {
+        if (left.missionId === 'attack' && right.missionId === 'attack') {
+          const arrivalDelta = left.arrivalAt - right.arrivalAt;
+          if (arrivalDelta !== 0) return arrivalDelta;
+          return left.id.localeCompare(right.id);
+        }
+        if (left.missionId === 'attack') return -1;
+        if (right.missionId === 'attack') return 1;
+        return left.arrivalAt - right.arrivalAt || left.id.localeCompare(right.id);
+      }),
     [flightRecords],
   );
+  const attackOrderByFlightId = useMemo(() => {
+    let order = 0;
+    return new Map(activeFlightRecords.filter((flight) => flight.missionId === 'attack').map((flight) => [flight.id, ++order]));
+  }, [activeFlightRecords]);
   const spyRows = useMemo(() => espionageState.missions
     .filter((mission) => mission.status === 'transit' || mission.status === 'orbiting' || mission.status === 'returning')
     .map((mission) => ({ mission, flight: flightRecords.find((flight) => flight.id === mission.flightId) }))
@@ -828,19 +843,29 @@ function FleetWorkspace({
 
               <div className="fleet-flight-table-v1">
                 <div className="fleet-flight-row-v1 fleet-flight-head-v1">
-                  <span>ОТКУДА</span><span>КУДА</span><span>ПРИБЫТИЕ</span><span>ВОЗВРАЩЕНИЕ</span><span>МИССИЯ</span><span>ДЕЙСТВИЯ</span>
+                  <span>ОТКУДА</span><span>ЦЕЛЬ</span><span>ПРИБЫТИЕ</span><span>СТАТУС</span><span>ВОЗВРАТ</span><span>МИССИЯ · ПОРЯДОК</span><span>ДЕЙСТВИЯ</span>
                 </div>
                 {activeFlightRecords.length === 0 ? <div className="fleet-flight-empty-v1" data-qa-flight-empty>
                   <strong>Активных полётов нет</strong>
                   <span>Флоты, находящиеся в пути, будут отображаться здесь.</span>
                 </div> : activeFlightRecords.map((flight) => {
                   const liveTransportState = getActiveTransportState(flight);
+                  const targetUnavailable = flight.completionReason === 'target-unavailable' || liveTransportState.targetUnavailable;
+                  const statusLabel = targetUnavailable
+                    ? 'ЦЕЛЬ НЕДОСТУПНА'
+                    : flight.phase === 'outbound'
+                      ? 'В ПУТИ'
+                      : flight.phase === 'returning'
+                        ? 'ВОЗВРАЩАЕТСЯ'
+                        : 'ПРИБЫЛ';
+                  const attackOrder = attackOrderByFlightId.get(flight.id);
                   return <div className="fleet-flight-row-v1" key={flight.id} data-qa-flight-row={flight.id} data-qa-flight-phase={flight.phase}>
                   <span data-qa-flight-origin>{flightCoordinateLabel(flight.originCoordinate)}</span>
-                  <span data-qa-flight-target>{flightCoordinateLabel(flight.destinationCoordinate)} {flight.targetRelation === 'ally' ? '· СОЮЗНИК' : flight.targetRelation === 'self' ? '· СВОЯ' : ''}{flight.completionReason === 'target-unavailable' || liveTransportState.targetUnavailable ? <b data-qa-flight-target-unavailable> · ЦЕЛЬ НЕДОСТУПНА</b> : null}</span>
+                  <span data-qa-flight-target><strong>{flight.targetPlanetName ?? flightCoordinateLabel(flight.destinationCoordinate)}</strong>{flight.targetOwnerName ? <small>{flight.targetOwnerName}</small> : null}{flight.targetRelation === 'ally' ? '· СОЮЗНИК' : flight.targetRelation === 'self' ? '· СВОЯ' : ''}{targetUnavailable ? <b data-qa-flight-target-unavailable> · ЦЕЛЬ НЕДОСТУПНА</b> : null}</span>
                   <span data-qa-flight-arrival>{flight.phase === 'outbound' ? flightCountdown(flight.arrivalAt, clockNow) : '—'}</span>
+                  <span data-qa-flight-status>{statusLabel}</span>
                   <span data-qa-flight-return>{flight.phase === 'returning' ? flightCountdown(flight.returnAt, clockNow) : '—'}</span>
-                  <span><img className="fleet-flight-mission-icon" src={missions.find((mission) => mission.id === flight.missionId)?.icon} alt="" />{flightMissionLabel(flight.missionId)}{liveTransportState.overflowWarning ? <b className="fleet-flight-overflow-warning" aria-label="Часть груза может сгореть: склады цели заполнены" data-qa-flight-overflow-warning>!</b> : null}</span>
+                  <span><img className="fleet-flight-mission-icon" src={missions.find((mission) => mission.id === flight.missionId)?.icon} alt="" />{flightMissionLabel(flight.missionId)}{attackOrder ? <small data-qa-flight-attack-order> · АТАКА #{attackOrder}</small> : null}{liveTransportState.overflowWarning ? <b className="fleet-flight-overflow-warning" aria-label="Часть груза может сгореть: склады цели заполнены" data-qa-flight-overflow-warning>!</b> : null}</span>
                   <span><button type="button" data-qa-flight-recall={flight.id} disabled={flight.phase !== 'outbound'} onClick={() => setPendingRecall(flight)}>ОТОЗВАТЬ</button></span>
                 </div>;
                 })}

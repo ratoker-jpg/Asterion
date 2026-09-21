@@ -187,14 +187,17 @@ function migrateSpyTarget(value: unknown, now: number): SpyTargetState | null {
   const coordinate = record(source.coordinate);
   if (!text(source.id) || ![coordinate.galaxy, coordinate.system, coordinate.position].every((part) => Number.isInteger(part) && Number(part) >= 1)) return null;
   const resources = record(source.resources);
+  const legacyDebris = nonNegative(source.debris);
+  const canonicalDebris = nonNegative(resources.debris, legacyDebris);
   const commanders = record(source.commanders);
   const migratedCommanders = Object.fromEntries(Object.entries(commanders).flatMap(([id, candidate]) => {
     const entry = record(candidate);
     const count = nonNegative(entry.count);
     return count > 0 ? [[id, { level: nonNegative(entry.level), count }]] : [];
   }));
+  const { debris: _legacyDebris, ...sourceWithoutLegacyDebris } = source;
   return {
-    ...source,
+    ...sourceWithoutLegacyDebris,
     id: text(source.id),
     coordinate: { galaxy: Number(coordinate.galaxy), system: Number(coordinate.system), position: Number(coordinate.position) },
     ownerId: text(source.ownerId, 'unknown-owner'),
@@ -208,7 +211,7 @@ function migrateSpyTarget(value: unknown, now: number): SpyTargetState | null {
       metal: nonNegative(resources.metal),
       minerals: nonNegative(resources.minerals),
       gas: nonNegative(resources.gas),
-      debris: nonNegative(resources.debris),
+      debris: canonicalDebris,
       developmentEnergy: nonNegative(resources.developmentEnergy),
     },
     buildings: numericRecord(source.buildings),

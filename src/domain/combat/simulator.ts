@@ -343,7 +343,12 @@ function validateStackCollection(
   });
 }
 
-export function validateCombatInput(input: CombatInput): CombatValidationResult {
+export type CombatValidationOptions = {
+  /** Production attacks may resolve an empty planet as an immediate victory. */
+  allowEmptyDefender?: boolean;
+};
+
+export function validateCombatInput(input: CombatInput, options: CombatValidationOptions = {}): CombatValidationResult {
   const errors: CombatValidationError[] = [];
 
   for (const migrationError of input.migrationErrors ?? []) {
@@ -447,7 +452,7 @@ export function validateCombatInput(input: CombatInput): CombatValidationResult 
   if (attackerUnits === 0) {
     errors.push({ code: 'empty-side', path: 'attacker', message: 'Для запуска у атакующего должна быть хотя бы одна единица.' });
   }
-  if (defenderUnits === 0) {
+  if (defenderUnits === 0 && options.allowEmptyDefender !== true) {
     errors.push({ code: 'empty-side', path: 'defender', message: 'Для запуска у защитника должна быть хотя бы одна единица.' });
   }
 

@@ -932,6 +932,7 @@ export function dispatchFlight(
     ...(command.missionId === 'espionage' ? { spyMissionId: `spy-${requestId}` } : {}),
     ...(transportTarget ? {
       destinationPlanetId: transportTarget.planetId,
+      targetPlanetName: transportTarget.runtime?.name,
       destinationOwnerId: transportTarget.ownerId,
       targetRelation: transportTarget.relation as TargetRelation,
       cargo: transportCargo,
@@ -939,11 +940,15 @@ export function dispatchFlight(
     } : {}),
     ...(command.missionId === 'espionage' ? {
       destinationPlanetId: command.destination!.kind === 'planet' ? command.destination!.planetId : undefined,
+      targetPlanetName: command.targetPlanetName,
+      targetOwnerName: command.targetOwnerName,
       destinationOwnerId: command.targetOwnerId,
       targetRelation: command.targetRelation,
     } : {}),
     ...(command.missionId === 'attack' ? {
       destinationPlanetId: attackTarget?.target.id,
+      targetPlanetName: attackTarget?.target.name,
+      targetOwnerName: attackTarget?.target.ownerName,
       destinationOwnerId: attackTarget?.target.ownerId,
       targetRelation: attackTarget?.relation,
       selectedCommanders: attackCommanders,
@@ -1229,7 +1234,19 @@ export function reconcileFlights(
   const events: FlightReconcileEvent[] = [];
   let changed = targetResourcesChanged;
 
-  for (const original of next.flights.records) {
+  // Arrival effects are a shared resource transition. The persisted record
+  // order is dispatch order, so never let it decide which attack reaches the
+  // target first. Use the materialized arrival timestamp and a bytewise id
+  // tie-break so the result is identical after reloads and across runtimes.
+  const reconciliationOrder = [...next.flights.records].sort((left, right) => {
+    const arrivalDelta = left.arrivalAt - right.arrivalAt;
+    if (arrivalDelta !== 0) return arrivalDelta;
+    if (left.id < right.id) return -1;
+    if (left.id > right.id) return 1;
+    return 0;
+  });
+
+  for (const original of reconciliationOrder) {
     const current = next.flights.records.find((flight) => flight.id === original.id) ?? original;
     if (current.missionId === 'espionage') {
       const mission = spyMissionForFlight(next, current);

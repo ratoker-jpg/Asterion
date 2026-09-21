@@ -221,6 +221,8 @@ export type BattleReportViewModel = {
   rounds: BattleRoundViewModel[];
   experience: number | null;
   debris: number | null;
+  /** Debris remains in target orbit; `debris` is retained as a compatibility alias. */
+  debrisOnOrbit: number | null;
   resources: BattleResourceViewModel[];
   battlePoints: BattlePointResult;
   timestampAvailable: boolean;
@@ -765,6 +767,7 @@ export function createBattleReportViewModel(input: unknown): BattleReportViewMod
     ? metadata.technologyMode
     : null;
   const targetPriorityRecord = asRecord(metadata.targetPriority);
+  const debrisOnOrbit = readNumber(record.debris);
 
   return {
     id: readString(record.id) ?? 'invalid-battle-report',
@@ -790,7 +793,8 @@ export function createBattleReportViewModel(input: unknown): BattleReportViewMod
     roundCount: readCount(record.roundCount) ?? rounds.length,
     rounds,
     experience: readNumber(record.experience),
-    debris: readNumber(record.debris),
+    debris: debrisOnOrbit,
+    debrisOnOrbit,
     resources: readResources(record.resources),
     battlePoints: calculateBattlePoints(
       winner,

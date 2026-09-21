@@ -163,7 +163,6 @@ function createBotPlanet(index: number, profile: Bot01Profile, now: number): Spy
       defense: defensePopulation,
     },
     hunterLevel: index === 0 ? 20 : 0,
-    debris: index * 125,
     repair: createDefaultRepairWorkshopState(),
     resourceClock: {
       lastReconciledAt: Number.isFinite(now) ? Math.max(0, now) : 0,

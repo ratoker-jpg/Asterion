@@ -50,6 +50,9 @@ export type FlightRecord = {
   /** Target snapshot retained so arrival validation is not based on UI state. */
   targetKind?: UniverseObjectKind;
   destinationPlanetId?: string;
+  /** Human-readable target identity for the active-flight table. */
+  targetPlanetName?: string;
+  targetOwnerName?: string;
   /** Destination identity/relation are dispatch-time snapshots, not live authorization. */
   destinationOwnerId?: string;
   targetRelation?: TargetRelation;

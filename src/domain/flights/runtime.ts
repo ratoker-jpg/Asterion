@@ -29,6 +29,8 @@ export type DispatchFlightInput = {
   targetKind?: FlightRecord['targetKind'];
   /** Resolved target snapshot for a coordinate-addressed transport. */
   destinationPlanetId?: string;
+  targetPlanetName?: string;
+  targetOwnerName?: string;
   destinationOwnerId?: string;
   targetRelation?: TargetRelation;
   cargo?: TransportCargo;
@@ -73,6 +75,8 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
         : { kind: 'operation', operationId: input.destination.operationId, coordinate: { ...input.destination.coordinate } },
     destinationPlanetId,
     targetKind: input.targetKind,
+    ...(input.targetPlanetName ? { targetPlanetName: input.targetPlanetName } : {}),
+    ...(input.targetOwnerName ? { targetOwnerName: input.targetOwnerName } : {}),
     destinationOwnerId: input.destinationOwnerId,
     targetRelation: input.targetRelation,
     destinationCoordinate: { ...input.destination.coordinate },

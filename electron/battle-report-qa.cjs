@@ -13,7 +13,7 @@ app.on('window-all-closed', () => {});
 const ROOT = path.join(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'artifacts', 'battle-report-qa');
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
-const VIEWPORTS = [[1440, 900], [390, 844]];
+const VIEWPORTS = [[1920, 1080], [1280, 720], [390, 844]];
 const skipScreenshots = process.env.ASTERION_SKIP_SCREENSHOTS === '1';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -157,6 +157,8 @@ async function modalSnapshot(win) {
       roundCount: visualRounds.length,
       hasComposition: Boolean(modal?.querySelector('[data-qa-battle-composition]')),
       hasOutcome: Boolean(modal?.querySelector('[data-qa-battle-outcome]')),
+      orbitDebrisCount: modal?.querySelectorAll('[data-qa-debris-orbit]').length || 0,
+      orbitDebrisText: Array.from(modal?.querySelectorAll('[data-qa-debris-orbit]') || []).map((node) => node.textContent?.trim() || '').join(' '),
       hasOutcomeBeforeAfter: outcomeStateHeader.includes('БЫЛО') && outcomeStateHeader.includes('ОСТАЛОСЬ'),
       outcomeBeforeVisualReport: Boolean(outcome && visualReport && (outcome.compareDocumentPosition(visualReport) & 4)),
       internalScroll: Boolean(scroll && scroll.scrollHeight > scroll.clientHeight),
@@ -599,7 +601,7 @@ async function runViewport(win, width, height) {
   await clickBattleSection(win);
 
   const list = await listSnapshot(win);
-  if (list.cardCount !== 3 || list.collapsedCardCount !== 3 || list.cardLossCount !== 6 || list.openButtonCount !== 3 || list.resultIconCount !== 3 || JSON.stringify(list.resultLabels) !== JSON.stringify(['ПОБЕДА', 'ПОРАЖЕНИЕ', 'НИЧЬЯ']) || list.rootHorizontalOverflow || list.bodyHorizontalOverflow) {
+  if (list.cardCount !== 3 || list.collapsedCardCount !== 3 || list.cardLossCount !== 6 || list.openButtonCount !== 3 || list.resultIconCount !== 3 || JSON.stringify(list.resultLabels) !== JSON.stringify(['ПОБЕДА ПРИ АТАКЕ', 'ПОРАЖЕНИЕ ПРИ АТАКЕ', 'НИЧЬЯ']) || list.rootHorizontalOverflow || list.bodyHorizontalOverflow) {
     throw new Error(`Battle list contract failed at ${label}: ${JSON.stringify(list)}`);
   }
 
@@ -607,7 +609,7 @@ async function runViewport(win, width, height) {
   const modal = await modalSnapshot(win);
   const battlePortraits = await inspectRenderedFactionGeneralPortraits(win, '[role="dialog"][data-qa-battle-report-modal] [data-qa-battle-side-avatar] [data-qa-faction-general]');
   assertRenderedFactionGeneralPortraits(battlePortraits, ['aegis', 'veyra'], `${label} battle report`);
-  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.roundCount !== 5 || modal.analysisOpenCount !== 0 || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount < 1 || modal.technologyTooltipCount !== modal.technologyRowCount || modal.technologyTooltipImageCount < modal.technologyRowCount || modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || modal.eventCardCount < 1 || !modal.hasBattlePoints || modal.commanderTechnicalText || !modal.hasHumanCommanderEffect || !modal.hasVisualReport || modal.hasInitialSnapshot || modal.hasProvenance || modal.hasRoundSummary || modal.hasRoundLog || !modal.roundAnalysisValid || modal.hasComposition || !modal.hasOutcome || !modal.hasOutcomeBeforeAfter || !modal.outcomeBeforeVisualReport || !modal.internalScroll || modal.internalHorizontalOverflow || modal.technicalText || !modal.bodyLocked || !modal.stageInert) {
+  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.roundCount !== 5 || modal.analysisOpenCount !== 0 || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount < 1 || modal.technologyTooltipCount !== modal.technologyRowCount || modal.technologyTooltipImageCount < modal.technologyRowCount || modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || modal.eventCardCount < 1 || !modal.hasBattlePoints || modal.commanderTechnicalText || !modal.hasHumanCommanderEffect || !modal.hasVisualReport || modal.hasInitialSnapshot || modal.hasProvenance || modal.hasRoundSummary || modal.hasRoundLog || !modal.roundAnalysisValid || modal.hasComposition || !modal.hasOutcome || modal.orbitDebrisCount < 1 || !modal.orbitDebrisText.includes('ОБЛОМКИ НА ОРБИТЕ') || !modal.hasOutcomeBeforeAfter || !modal.outcomeBeforeVisualReport || !modal.internalScroll || modal.internalHorizontalOverflow || modal.technicalText || !modal.bodyLocked || !modal.stageInert) {
     throw new Error(`Battle modal contract failed at ${label}: ${JSON.stringify(modal)}`);
   }
   await capture(win, directory, 'battle-report-modal');
