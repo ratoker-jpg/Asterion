@@ -500,9 +500,18 @@
 
 .reports-preview-scroll {
   min-height: 0;
-  overflow: visible;
-  padding-top: 8px;
+  /* The dossier scrolls inside the preview pane, so the report footer with
+     «Моделировать сражение / Вернуть шпиона» stays visible and reachable no
+     matter how long the snapshot is (no invisible bottom cutoff). */
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding: 8px 4px 8px 0;
 }
+
+.reports-preview-scroll::-webkit-scrollbar { width: 8px; }
+.reports-preview-scroll::-webkit-scrollbar-track { background: rgba(2, 16, 25, .5); border-radius: 8px; }
+.reports-preview-scroll::-webkit-scrollbar-thumb { background: rgba(64, 188, 214, .35); border-radius: 8px; }
+.reports-preview-scroll::-webkit-scrollbar-thumb:hover { background: rgba(74, 226, 255, .55); }
 
 .reports-dossier {
   min-width: 0;
@@ -1749,6 +1758,32 @@
 .spy-report-entity > div strong { overflow: hidden; color: #e5f7fa; font-size: 10px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
 .spy-report-entity > div span { overflow: hidden; color: #779ba5; font-size: 8px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
 .spy-report-entity > b { color: #73e2ee; font-size: 13px; font-variant-numeric: tabular-nums; }
+.spy-report-entity--inspected { position: relative; cursor: help; }
+.spy-report-entity--inspected:hover,
+.spy-report-entity--inspected:focus-within { border-color: rgba(74, 226, 255, .55); }
+.spy-entity-tooltip {
+  position: absolute;
+  z-index: 40;
+  left: 8px;
+  right: 8px;
+  bottom: calc(100% + 6px);
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 11px;
+  border: 1px solid rgba(74, 226, 255, .5);
+  border-radius: 10px;
+  background: linear-gradient(150deg, rgba(5, 38, 54, .99), rgba(2, 16, 26, .99));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .5), 0 0 18px rgba(41, 205, 239, .14);
+  text-align: left;
+  pointer-events: none;
+}
+.spy-report-entity--inspected:hover .spy-entity-tooltip,
+.spy-report-entity--inspected:focus-within .spy-entity-tooltip { display: flex; }
+.spy-entity-tooltip strong { color: #7de9ff; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+.spy-entity-tooltip > span { color: #c8e6ec; font-size: 9px; line-height: 1.4; }
+.spy-entity-tooltip b { color: #8ff0b9; font-size: 9.5px; font-variant-numeric: tabular-nums; }
+.spy-entity-tooltip small { color: #6f93a0; font-size: 8px; line-height: 1.35; }
 .spy-report-empty { margin: 0; padding: 16px 14px 18px; color: #abcbd1; font-size: 11px; }
 .reports-dossier--spy .reports-generic-body { border: 1px solid rgba(61, 188, 216, .2); border-radius: 12px; background: rgba(2, 20, 30, .78); }
 .reports-dossier--spy .reports-generic-body p { font-size: 10px; line-height: 1.55; }

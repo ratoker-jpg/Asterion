@@ -14,7 +14,7 @@ import {
   getStorageCapacities,
 } from '../domain/buildings/resource-zone.ts';
 import { createEmptyBotAssignment } from '../domain/buildings/production-bots.ts';
-import { createDefaultSpaceportUpgradeState } from '../domain/buildings/spaceport-upgrades.ts';
+import { createDefaultSpaceportUpgradeState, EXCLUDED_SHIP_UPGRADE_IDS } from '../domain/buildings/spaceport-upgrades.ts';
 import { createDefaultTradeState } from '../domain/buildings/trade.ts';
 import { createDefaultRepairWorkshopState } from '../domain/repair/workshop.ts';
 import { initializePlanetEnergy } from './energy.ts';
@@ -59,11 +59,14 @@ import {
   activeSpyMissionForTarget,
   canRequestSpyReport,
   createDefaultEspionageState,
+  createSeededEspionageRng,
+  espionageRollSeed,
   hunterDetects,
   normalizeRngRoll,
   resolveSpyReportQuality,
   SPY_REPORT_COOLDOWN_MS,
 } from '../domain/espionage/runtime.ts';
+import type { EspionageRollKind } from '../domain/espionage/runtime.ts';
 import type {
   Bot01PlanetState,
   Bot01Profile,
@@ -442,9 +445,25 @@ function withEspionageState(state: SaveState, espionage: EspionageState): SaveSt
 function randomRoll(rng: () => number): number {
   const raw = rng();
   if (!Number.isFinite(raw)) return 0;
-  // Math.random() is [0, 1); tests may provide the already materialized 0..99
-  // integer. Both paths end in the same canonical integer contract.
+  // Seeded streams return [0, 1); tests may provide the already materialized
+  // 0..99 integer. Both paths end in the same canonical integer contract.
   return raw >= 0 && raw < 1 ? Math.floor(raw * 100) : normalizeRngRoll(raw);
+}
+
+/**
+ * Espionage rolls are deterministic: production derives one seeded xorshift32
+ * stream per (mission, roll kind, attempt), so replaying a save or re-running
+ * reconcile never re-rolls a materialized outcome. Tests may still inject an
+ * explicit roll stream through the optional rng override.
+ */
+function materializeSpyRoll(
+  rng: (() => number) | undefined,
+  missionId: string,
+  kind: EspionageRollKind,
+  attempt: number,
+): number {
+  if (rng) return randomRoll(rng);
+  return randomRoll(createSeededEspionageRng(espionageRollSeed(missionId, kind, attempt)));
 }
 
 function spyTargetFor(state: SaveState, mission: Pick<SpyMission, 'targetPlanetId'> | FlightRecord): Bot01PlanetState | null {
@@ -488,6 +507,29 @@ function authoritativeSpyTargetRelation(state: SaveState, target: Bot01PlanetSta
   return getUniverseOwnerRelation(targetNode, state.profile.playerId, currentAlliance, targetOwner);
 }
 
+/**
+ * Level contract: every combat hull in the snapshot carries a level 0..10,
+ * utility hulls (solar satellite, spy probe, colonizer, recycler) stay
+ * level-less exactly like the spaceport upgrade contract. Levels come from
+ * the owner's shared profile; a hull an old save predates gets a deterministic
+ * fallback so replaying a mission never reshuffles the dossier.
+ */
+function buildSnapshotFleetLevels(
+  ships: Record<string, number>,
+  ownerLevels: Partial<Record<ShipId, number>> | undefined,
+  missionId: string,
+): Partial<Record<ShipId, number>> {
+  const levels: Partial<Record<ShipId, number>> = { ...(ownerLevels ?? {}) };
+  for (const [id, count] of Object.entries(ships)) {
+    const shipId = id as ShipId;
+    if (!count || count <= 0) continue;
+    if (levels[shipId] !== undefined) continue;
+    if (EXCLUDED_SHIP_UPGRADE_IDS.has(shipId)) continue;
+    levels[shipId] = Math.floor(createSeededEspionageRng(`espionage:${missionId}:level:${shipId}`)() * 11);
+  }
+  return levels;
+}
+
 function createSpyReport(
   mission: SpyMission,
   target: Bot01PlanetState,
@@ -507,11 +549,6 @@ function createSpyReport(
         : commander,
     ]),
   ) as SpyReportSnapshot['commanders'];
-  const targetFleetLevels = Object.fromEntries(
-    Object.entries(target.fleet.ships)
-      .filter(([, count]) => Number(count) > 0)
-      .map(([id]) => [id, bot01Profile?.shipLevels[id as keyof Bot01Profile['shipLevels']] ?? 0]),
-  ) as SpyReportSnapshot['fleetLevels'];
   const targetEspionage = bot01Profile?.scienceLevels[5] ?? target.espionageLevel;
   const delta = spyLevel - targetEspionage;
   const quality = resolveSpyReportQuality(delta, roll);
@@ -540,7 +577,7 @@ function createSpyReport(
     ...(quality === 'full'
       ? {
         fleet: { ...target.fleet.ships },
-        fleetLevels: targetFleetLevels,
+        fleetLevels: buildSnapshotFleetLevels(target.fleet.ships, bot01Profile?.shipLevels, mission.id),
         commanders: targetCommanders,
         population: {
           total: targetFleetPopulation + targetDefensePopulation,
@@ -563,12 +600,13 @@ function resolveSpyAtTarget(
   flight: FlightRecord,
   mission: SpyMission,
   now: number,
-  rng: () => number,
+  rng: (() => number) | undefined,
   firstReport: boolean,
 ): SpyResolution | null {
   const target = spyTargetFor(state, mission);
   if (!target) return null;
-  const hunterRoll = randomRoll(rng);
+  const attempt = mission.reportIds.length + 1;
+  const hunterRoll = materializeSpyRoll(rng, mission.id, 'hunter', attempt);
   if (hunterDetects(target.hunterLevel, hunterRoll)) {
     const destroyedMission: SpyMission = {
       ...mission,
@@ -606,7 +644,15 @@ function resolveSpyAtTarget(
 
   const currentSpyLevel = Math.max(0, Math.floor(state.science.levels[5] ?? 0));
   const bot01Profile = currentEspionageState(state).bot01Profile;
-  const report = createSpyReport(mission, target, bot01Profile, now, randomRoll(rng), firstReport, currentSpyLevel);
+  const report = createSpyReport(
+    mission,
+    target,
+    bot01Profile,
+    now,
+    materializeSpyRoll(rng, mission.id, 'report', attempt),
+    firstReport,
+    currentSpyLevel,
+  );
   const nextMission: SpyMission = {
     ...mission,
     spyLevel: currentSpyLevel,
@@ -1006,7 +1052,7 @@ function spyMissionForFlight(state: SaveState, flight: FlightRecord): SpyMission
   return currentEspionageState(state).missions.find((mission) => mission.flightId === flight.id);
 }
 
-export function reconcileFlights(state: SaveState, now: number, rng: () => number = Math.random): FlightReconcileResult {
+export function reconcileFlights(state: SaveState, now: number, rng?: () => number): FlightReconcileResult {
   let next = { ...state, flights: currentFlightState(state) };
   const events: FlightReconcileEvent[] = [];
   let changed = false;
@@ -1227,7 +1273,8 @@ export function requestSpyReport(
   options: SpyReportRuntimeOptions = {},
 ): SpyReportCommandResult {
   const now = options.now ?? Date.now();
-  const rng = options.rng ?? Math.random;
+  // options.rng stays a test-only override; production uses the seeded roll contract.
+  const rng = options.rng;
   const mission = currentEspionageState(state).missions.find((item) => item.id === missionId);
   if (!mission) return spyReportFailure(state, 'spy-mission-not-found', 'Шпионская миссия не найдена.');
   if (mission.status !== 'orbiting') return spyReportFailure(state, 'spy-mission-not-found', 'Запрос доступен только для зонда на орбите.');

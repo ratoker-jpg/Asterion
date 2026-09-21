@@ -7,6 +7,7 @@ import type {
   SpyReportSnapshot,
 } from './types.ts';
 import { createDefaultEspionageState } from './runtime.ts';
+import { createBot01Planets, createDefaultBot01Profile } from './fixtures.ts';
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -176,6 +177,18 @@ function migrateBotPlanet(value: unknown): Bot01PlanetState | null {
   } as unknown as Bot01PlanetState;
 }
 
+function bot01PlanetMatchesCurrentContract(value: Bot01PlanetState): boolean {
+  const population = value.population as Bot01PlanetState['population'] & { civilian?: number };
+  return Number.isFinite(population.total)
+    && Number.isFinite(population.fleet)
+    && Number.isFinite(population.defense)
+    && population.total === population.fleet + population.defense
+    && !('civilian' in population)
+    // `shipLevels` was the old per-planet experiment. Current levels live in
+    // the owner profile and must not survive as a second source of truth.
+    && !('shipLevels' in value);
+}
+
 export function migrateEspionageState(value: unknown): EspionageState {
   if (!value || typeof value !== 'object') return createDefaultEspionageState();
   const source = record(value);
@@ -186,11 +199,16 @@ export function migrateEspionageState(value: unknown): EspionageState {
       return migrated ? [[id, migrated]] : [];
     }))
     : undefined;
+  const hasBot01Planets = Boolean(bot01Planets && Object.keys(bot01Planets).length);
+  const currentBot01Planets = hasBot01Planets && Object.values(bot01Planets!).every(bot01PlanetMatchesCurrentContract)
+    ? bot01Planets
+    : hasBot01Planets ? createBot01Planets() : undefined;
+  const currentBot01Profile = bot01Profile ?? (hasBot01Planets ? createDefaultBot01Profile() : undefined);
   return {
     missions: list(source.missions, migrateMission),
     reports: list(source.reports, migrateReport),
     hunterNotices: list(source.hunterNotices, migrateNotice),
-    ...(bot01Planets && Object.keys(bot01Planets).length ? { bot01Planets } : {}),
-    ...(bot01Profile ? { bot01Profile } : {}),
+    ...(currentBot01Planets ? { bot01Planets: currentBot01Planets } : {}),
+    ...(currentBot01Profile ? { bot01Profile: currentBot01Profile } : {}),
   };
 }

@@ -167,6 +167,47 @@ export function getCommanderCombatEffect(id: CommanderId | null | undefined) {
 
 export const COMMANDER_LIST = COMMANDER_IDS.map((id) => COMMANDER_ABILITIES[id]);
 
+/**
+ * Numeric per-level rates (in percent) behind the localized ratePerLevel
+ * strings. Needed by tooltips that show the computed figure
+ * (rate × level), e.g. Hunter 20 → «+35% (1,75% × 20)».
+ */
+export const COMMANDER_ABILITY_NUMERIC_RATES: Readonly<Record<CommanderId, number>> = {
+  annihilator: 0.5,
+  corsair: 1.25,
+  reanimator: 0.4,
+  viper: 0.075,
+  scorpion: 0.1,
+  phantom: 0.75,
+  hunter: 1.75,
+  typhoon: 0.1,
+  executioner: 0.15,
+  juggernaut: 0.15,
+  argo: 1,
+  judge: -0.15,
+  polias: -0.25,
+};
+
+const EFFECT_PERCENT_FORMAT = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 3 });
+
+function signedPercent(value: number): string {
+  const formatted = EFFECT_PERCENT_FORMAT.format(Math.abs(value));
+  if (value > 0) return `+${formatted}%`;
+  if (value < 0) return `−${formatted}%`;
+  return `0%`;
+}
+
+/**
+ * Human-readable computed ability figure for a commander at a given level:
+ * «+35% (1,75% × 20)». Negative rates (armor debuff, planet protection)
+ * keep their sign in both the rate and the total.
+ */
+export function formatCommanderAbilityEffect(id: CommanderId, level: number): string {
+  const rate = COMMANDER_ABILITY_NUMERIC_RATES[id] ?? 0;
+  const safeLevel = Math.max(0, Math.floor(Number.isFinite(level) ? level : 0));
+  return `${signedPercent(rate * safeLevel)} (${signedPercent(rate)} × ${safeLevel})`;
+}
+
 export function isCommanderId(value: unknown): value is CommanderId {
   return typeof value === 'string' && (COMMANDER_IDS as readonly string[]).includes(value);
 }

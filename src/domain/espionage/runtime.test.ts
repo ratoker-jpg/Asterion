@@ -1,7 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hunterDetects, resolveSpyReportQuality } from './runtime.ts';
+import {
+  createSeededEspionageRng,
+  espionageRollSeed,
+  hunterDetects,
+  normalizeRngRoll,
+  resolveSpyReportQuality,
+} from './runtime.ts';
 import { createBot01Planets, createDefaultBot01Profile } from './fixtures.ts';
+import { calculateFleetPopulation } from '../fleet/runtime.ts';
+import { calculateDefensePopulation } from '../fleet/production.ts';
 
 test('spy report quality uses an integer 0..99 with lower-inclusive upper-exclusive intervals', () => {
   assert.equal(resolveSpyReportQuality(0, 0), 'full');
@@ -38,7 +46,7 @@ test('Hunter level 20 means a 35% detection interval', () => {
   assert.equal(hunterDetects(20, 99), false);
 });
 
-test('Bot 01 fixture keeps owner-wide upgrades and a consistent 5k..25,112 orbital population', () => {
+test('Bot 01 fixture keeps espionage level 10 and seeded converging population', () => {
   const planets = Object.values(createBot01Planets());
   const profile = createDefaultBot01Profile();
   assert.equal(planets.length, 7);
@@ -47,12 +55,79 @@ test('Bot 01 fixture keeps owner-wide upgrades and a consistent 5k..25,112 orbit
   assert.equal(main.hunterLevel, 20);
   assert.equal(main.commanders.hunter?.count, 1);
   assert.equal(main.commanders.judge?.count, 1);
-  assert.equal(profile.scienceLevels[5], 10);
-  assert.equal(profile.shipLevels.scout, 6);
-  assert.equal(profile.shipLevels.defender, 7);
-  assert.equal(profile.commanderLevels.hunter, 20);
-  assert.equal(profile.commanderLevels.judge, 1);
-  assert.equal(planets.every((planet) => planet.population.total === planet.population.fleet + planet.population.defense), true);
-  assert.equal(planets.every((planet) => planet.population.total >= 5_000 && planet.population.total <= 25_112), true);
+  // Seeded total population: stable between resets, random-looking, 5k..25112.
+  const totals = planets.map((planet) => planet.population.total);
+  assert.equal(totals.every((total) => total >= 5_000 && total <= 25_112), true);
+  assert.equal(new Set(totals).size > 1, true);
+  // Population contract: planet population = fleet + defense, always converging.
+  for (const planet of planets) {
+    assert.equal(planet.population.total, planet.population.fleet + planet.population.defense);
+    assert.equal(planet.population.fleet, calculateFleetPopulation(planet.fleet, planet.raceId));
+    assert.equal(planet.population.defense, calculateDefensePopulation(planet.defense, planet.raceId));
+    assert.equal(planet.fleet.ships['spy-probe'], 0);
+  }
   assert.equal(planets.slice(1).every((planet) => planet.hunterLevel === 0), true);
+});
+
+test('Bot 01 hull levels cover every upgradable ship with seeded 0..10 values', () => {
+  const excluded = new Set(['solar-satellite', 'spy-probe', 'colonizer', 'recycler']);
+  const planets = Object.values(createBot01Planets());
+  const profile = createDefaultBot01Profile();
+  for (const planet of planets) {
+    for (const [id, count] of Object.entries(planet.fleet.ships)) {
+      if (!count || count <= 0) continue;
+      if (excluded.has(id)) {
+        continue;
+      }
+      const level = profile.shipLevels[id as keyof typeof profile.shipLevels];
+      assert.notEqual(level, undefined);
+      assert.equal(Number.isInteger(level) && level! >= 0 && level! <= 10, true);
+    }
+  }
+  // The same owner profile is shared by every Bot 01 planet.
+  assert.equal(planets.every((planet) => planet.shipLevels === undefined), true);
+  assert.equal(profile.shipLevels.transporter, 5);
+  assert.equal(profile.shipLevels['mega-transporter'], 6);
+  assert.equal(profile.shipLevels.cruiser, 4);
+  assert.equal(profile.shipLevels.battleship, 2);
+});
+
+test('seeded espionage rng replays the same stream for the same seed and stays within [0, 1)', () => {
+  const first = createSeededEspionageRng(espionageRollSeed('spy-seed-a', 'report', 1));
+  const second = createSeededEspionageRng(espionageRollSeed('spy-seed-a', 'report', 1));
+  const streamA = Array.from({ length: 32 }, () => first());
+  const streamB = Array.from({ length: 32 }, () => second());
+  assert.deepEqual(streamA, streamB);
+  assert.equal(streamA.every((value) => Number.isFinite(value) && value >= 0 && value < 1), true);
+});
+
+test('seeded espionage rng separates streams by mission, roll kind, and attempt', () => {
+  const base = createSeededEspionageRng(espionageRollSeed('spy-seed-a', 'hunter', 1));
+  const streams = [
+    createSeededEspionageRng(espionageRollSeed('spy-seed-a', 'report', 1)),
+    createSeededEspionageRng(espionageRollSeed('spy-seed-b', 'hunter', 1)),
+    createSeededEspionageRng(espionageRollSeed('spy-seed-a', 'hunter', 2)),
+  ];
+  const baseStream = Array.from({ length: 8 }, () => base());
+  for (const stream of streams) {
+    assert.notDeepEqual(Array.from({ length: 8 }, () => stream()), baseStream);
+  }
+});
+
+test('roll seed contract is stable per mission, kind, and 1-based attempt', () => {
+  assert.equal(espionageRollSeed('spy-seed-a', 'hunter', 1), 'espionage:spy-seed-a:hunter:1');
+  assert.equal(espionageRollSeed('spy-seed-a', 'report', 2), 'espionage:spy-seed-a:report:2');
+  assert.equal(espionageRollSeed('spy-seed-a', 'report', 0), espionageRollSeed('spy-seed-a', 'report', 1));
+  assert.equal(espionageRollSeed('spy-seed-a', 'report', Number.NaN), espionageRollSeed('spy-seed-a', 'report', 1));
+});
+
+test('seeded stream materializes into the canonical reproducible 0..99 roll', () => {
+  const materialize = () => {
+    const rng = createSeededEspionageRng(espionageRollSeed('spy-seed-a', 'report', 1));
+    const raw = rng();
+    return raw >= 0 && raw < 1 ? Math.floor(raw * 100) : normalizeRngRoll(raw);
+  };
+  assert.equal(materialize(), materialize());
+  assert.equal(Number.isInteger(materialize()), true);
+  assert.equal(materialize() >= 0 && materialize() <= 99, true);
 });

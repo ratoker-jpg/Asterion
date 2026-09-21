@@ -138,7 +138,8 @@ export type SpaceportReconciliation = {
   completed: SpaceportUpgradeTask[];
 };
 
-const EXCLUDED_SHIP_UPGRADE_IDS = new Set<string>([
+/** Ships without a spaceport upgrade track (orbital/utility hulls). */
+export const EXCLUDED_SHIP_UPGRADE_IDS = new Set<string>([
   'solar-satellite',
   'spy-probe',
   'colonizer',

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type DragEvent, type KeyboardEvent } from 'react';
 
-import { COMMANDER_ABILITIES, type CommanderId } from './domain/combat/commanders.ts';
+import { COMMANDER_ABILITIES, formatCommanderAbilityEffect, type CommanderId } from './domain/combat/commanders.ts';
 import { COMMANDER_COMBAT_CATALOG } from './domain/combat/catalog.ts';
 import {
   moveCommanderBefore,
@@ -32,6 +32,7 @@ function PriorityList({
   dragState,
   onDragState,
   onReorder,
+  entityLevels,
 }: {
   side: PrioritySide;
   title: string;
@@ -39,6 +40,7 @@ function PriorityList({
   dragState: DragState;
   onDragState: (value: DragState) => void;
   onReorder: (side: PrioritySide, nextOrder: CommanderId[]) => void;
+  entityLevels?: Record<string, number>;
 }) {
   const moveByKeyboard = (event: KeyboardEvent<HTMLButtonElement>, commanderId: CommanderId) => {
     if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
@@ -124,6 +126,7 @@ function PriorityList({
                   <strong>{ability.ability}</strong>
                   <span>{ability.description}</span>
                   <b>{ability.ratePerLevel}</b>
+                  <b>Эффект: {formatCommanderAbilityEffect(commanderId, entityLevels?.[commanderId] ?? 0)}</b>
                   {ability.note ? <small>{ability.note}</small> : null}
                 </span>
               </span>
@@ -138,10 +141,12 @@ function PriorityList({
 export function FleetCombatPriorityView({
   planetName,
   coords,
+  entityLevels,
   onBack,
 }: {
   planetName: string;
   coords: string;
+  entityLevels?: Record<string, number>;
   onBack: () => void;
 }) {
   const [priority, setPriority] = useState<CombatPriorityState>(() => readCombatPriority());
@@ -250,6 +255,7 @@ export function FleetCombatPriorityView({
           dragState={dragState}
           onDragState={setDragState}
           onReorder={reorder}
+          entityLevels={entityLevels}
         />
         <PriorityList
           side="attack"
@@ -258,6 +264,7 @@ export function FleetCombatPriorityView({
           dragState={dragState}
           onDragState={setDragState}
           onReorder={reorder}
+          entityLevels={entityLevels}
         />
       </div>
     </section>

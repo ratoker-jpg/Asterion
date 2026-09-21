@@ -16,6 +16,8 @@ export type SpyPlanetPopulation = {
   total: number;
   fleet: number;
   defense: number;
+  /** Legacy alias retained only while old test saves are migrated. */
+  civilian?: number;
 };
 
 export type SpyReportPopulation = {
@@ -64,6 +66,8 @@ export type Bot01PlanetState = {
   population: SpyPlanetPopulation;
   hunterLevel: number;
   debris: number;
+  /** Seeded spaceport-style hull levels (upgradable ships only, 0..10). */
+  shipLevels?: Partial<Record<ShipId, number>>;
 };
 
 export type SpyReportSnapshot = {
