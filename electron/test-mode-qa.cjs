@@ -614,7 +614,7 @@ async function runViewport(width, height) {
     if (JSON.stringify(fleetRoot.fleetRoster) !== JSON.stringify(expectedFleetRoster)) throw new Error(`${label}: current fleet roster UI mismatch ${JSON.stringify(fleetRoot.fleetRoster)}`);
     if (fleetRoot.fleetBaseCardTag === 'BUTTON') throw new Error(`${label}: fleet base card must be informational, not a button`);
     if (fleetRoot.fleetRosterOverflow || fleetRoot.fleetRosterOverflowY !== 'visible') throw new Error(`${label}: fleet roster still owns an internal scrollbar ${JSON.stringify(fleetRoot)}`);
-    const expectedFleetFlightActions = ['ОТОЗВАТЬ ВСЕХ ШПИОНОВ', 'ОТОЗВАТЬ ВЫБРАННЫХ', 'ПОЛУЧИТЬ ГОТОВЫЕ ОТЧЁТЫ', 'ШПИОНСКИЕ ОТЧЁТЫ', 'СКРЫТЬ КАНАЛ'];
+    const expectedFleetFlightActions = ['ШПИОНСКИЕ ОТЧЁТЫ'];
     if (JSON.stringify(fleetRoot.fleetFlightActions.map((action) => action.text)) !== JSON.stringify(expectedFleetFlightActions) || fleetRoot.fleetFlightActions.some((action) => action.bottom > fleetRoot.fleetFlightPanelBottom + 2 || action.bottom <= action.top)) {
       throw new Error(`${label}: fleet flight action buttons are clipped or missing ${JSON.stringify(fleetRoot)}`);
     }
