@@ -500,9 +500,18 @@
 
 .reports-preview-scroll {
   min-height: 0;
-  overflow: visible;
-  padding-top: 8px;
+  /* The dossier scrolls inside the preview pane, so the report footer with
+     «Моделировать сражение / Вернуть шпиона» stays visible and reachable no
+     matter how long the snapshot is (no invisible bottom cutoff). */
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding: 8px 4px 8px 0;
 }
+
+.reports-preview-scroll::-webkit-scrollbar { width: 8px; }
+.reports-preview-scroll::-webkit-scrollbar-track { background: rgba(2, 16, 25, .5); border-radius: 8px; }
+.reports-preview-scroll::-webkit-scrollbar-thumb { background: rgba(64, 188, 214, .35); border-radius: 8px; }
+.reports-preview-scroll::-webkit-scrollbar-thumb:hover { background: rgba(74, 226, 255, .55); }
 
 .reports-dossier {
   min-width: 0;
@@ -861,6 +870,7 @@
 }
 
 .reports-preview-footer span { color: #526f78; font-size: 7px; }
+.reports-preview-footer-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .reports-preview-footer button {
   min-width: 166px;
   height: 36px;
@@ -1705,6 +1715,85 @@
 
 .reports-profile-avatar__portrait img { width: 100%; height: 180%; object-fit: cover; object-position: 50% 0; }
 
+.reports-dossier--spy { gap: 12px; }
+.reports-dossier--spy .reports-dossier-heading { margin-bottom: 2px; }
+.reports-dossier--spy .reports-dossier-heading p { font-size: 9px; line-height: 1.45; }
+.spy-report-card {
+  border: 1px solid rgba(61, 188, 216, .24);
+  border-radius: 13px;
+  background: linear-gradient(145deg, rgba(4, 34, 47, .94), rgba(1, 18, 28, .9));
+  box-shadow: inset 0 0 22px rgba(38, 198, 232, .035);
+  overflow: hidden;
+}
+.spy-report-card > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 14px 9px;
+  border-bottom: 1px solid rgba(71, 188, 214, .15);
+}
+.spy-report-card > header strong { color: #6be0f4; font-size: 10px; letter-spacing: .12em; }
+.spy-report-card > header span { color: #759ca6; font-size: 9px; }
+.spy-report-summary-grid { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.spy-report-summary-grid > div { min-width: 0; display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; align-items: center; min-height: 38px; padding: 7px 14px; border-bottom: 1px solid rgba(71, 188, 214, .1); }
+.spy-report-summary-grid > div:nth-last-child(-n + 2) { border-bottom: 0; }
+.spy-report-summary-grid dt { color: #668b96; font-size: 9px; }
+.spy-report-summary-grid dd { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 9px; margin: 0; color: #d0e9ed; font-size: 11px; }
+.spy-report-summary-grid dd strong { color: #f0fcff; }
+.spy-report-link { padding: 0; border: 0; border-bottom: 1px dashed rgba(100, 222, 244, .62); border-radius: 2px; background: transparent; color: #61dff7; font: inherit; cursor: pointer; }
+.spy-report-link:hover, .spy-report-link:focus-visible { outline: none; border-bottom-color: #e0fbff; color: #e0fbff; }
+.spy-report-resource-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; padding: 12px 14px 14px; }
+.spy-report-resource { min-width: 0; display: flex; flex-direction: column; gap: 5px; padding: 10px 11px; border: 1px solid rgba(71, 188, 214, .16); border-radius: 10px; background: rgba(2, 23, 34, .76); }
+.spy-report-resource span { color: #789da7; font-size: 9px; }
+.spy-report-resource strong { color: #edfaff; font-size: 14px; font-variant-numeric: tabular-nums; }
+.spy-report-population { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; padding: 12px 14px 14px; }
+.spy-report-population > div { display: flex; flex-direction: column; gap: 5px; padding: 10px 11px; border-left: 2px solid rgba(76, 216, 235, .5); border-radius: 9px; background: rgba(2, 26, 38, .72); }
+.spy-report-population span { color: #7d9fa8; font-size: 9px; }
+.spy-report-population strong { color: #e9fbff; font-size: 14px; font-variant-numeric: tabular-nums; }
+.spy-report-entity-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 14px 14px; }
+.spy-report-entity { min-width: 0; display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 9px; min-height: 54px; padding: 7px 10px; border: 1px solid rgba(71, 188, 214, .15); border-radius: 10px; background: rgba(2, 23, 34, .74); }
+.spy-report-entity img { width: 34px; height: 34px; object-fit: contain; }
+.spy-report-entity > div { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.spy-report-entity > div strong { overflow: hidden; color: #e5f7fa; font-size: 10px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.spy-report-entity > div span { overflow: hidden; color: #779ba5; font-size: 8px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.spy-report-entity > b { color: #73e2ee; font-size: 13px; font-variant-numeric: tabular-nums; }
+.spy-report-entity--inspected { position: relative; cursor: help; }
+.spy-report-entity--inspected:hover,
+.spy-report-entity--inspected:focus-within { border-color: rgba(74, 226, 255, .55); }
+.spy-entity-tooltip {
+  position: absolute;
+  z-index: 40;
+  left: 8px;
+  right: 8px;
+  bottom: calc(100% + 6px);
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 11px;
+  border: 1px solid rgba(74, 226, 255, .5);
+  border-radius: 10px;
+  background: linear-gradient(150deg, rgba(5, 38, 54, .99), rgba(2, 16, 26, .99));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .5), 0 0 18px rgba(41, 205, 239, .14);
+  text-align: left;
+  pointer-events: none;
+}
+.spy-report-entity--inspected:hover .spy-entity-tooltip,
+.spy-report-entity--inspected:focus-within .spy-entity-tooltip { display: flex; }
+.spy-entity-tooltip strong { color: #7de9ff; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+.spy-entity-tooltip > span { color: #c8e6ec; font-size: 9px; line-height: 1.4; }
+.spy-entity-tooltip b { color: #8ff0b9; font-size: 9.5px; font-variant-numeric: tabular-nums; }
+.spy-entity-tooltip small { color: #6f93a0; font-size: 8px; line-height: 1.35; }
+.spy-report-empty { margin: 0; padding: 16px 14px 18px; color: #abcbd1; font-size: 11px; }
+.reports-dossier--spy .reports-generic-body { border: 1px solid rgba(61, 188, 216, .2); border-radius: 12px; background: rgba(2, 20, 30, .78); }
+.reports-dossier--spy .reports-generic-body p { font-size: 10px; line-height: 1.55; }
+
+@media (max-width: 900px) {
+  .spy-report-summary-grid, .spy-report-resource-grid, .spy-report-population, .spy-report-entity-grid { grid-template-columns: 1fr; }
+  .spy-report-summary-grid > div:nth-last-child(-n + 2) { border-bottom: 1px solid rgba(71, 188, 214, .1); }
+  .spy-report-summary-grid > div:last-child { border-bottom: 0; }
+}
+
 .reports-profile-asterion-mark {
   width: 300px;
   height: 360px;
@@ -1731,4 +1820,234 @@
   .reports-profile-avatar__art { height: 240px; }
   .reports-profile-metrics { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(4, minmax(64px, 1fr)); }
   .reports-profile-alliance { min-height: 250px; border-left: 0; border-top: 1px solid rgba(57, 185, 211, .16); }
+}
+
+/* Final folder pass: the feed is a compact independent list, while the
+   dossier owns its own scroll area instead of stretching the list beside it. */
+.reports-view--folder {
+  align-items: start;
+}
+
+.reports-view--folder > .reports-categories,
+.reports-view--folder > .reports-folder-workspace,
+.reports-view--folder .reports-feed,
+.reports-view--folder .reports-preview {
+  align-self: start;
+}
+
+.reports-view--folder > .reports-categories,
+.reports-view--folder > .reports-folder-workspace,
+.reports-view--folder .reports-feed {
+  height: max-content;
+}
+
+.reports-folder-workspace {
+  align-items: start;
+  height: max-content;
+}
+
+.reports-view--folder .reports-feed {
+  overflow: hidden;
+}
+
+.reports-view--folder .reports-list {
+  overflow-y: auto;
+}
+
+.reports-view--folder .reports-preview {
+  max-height: 820px;
+  overflow: hidden;
+  border-radius: var(--ut-r-panel);
+}
+
+.reports-view--folder .reports-preview-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.reports-view--folder .reports-categories,
+.reports-view--folder .reports-feed,
+.reports-view--folder .reports-folder-actions,
+.reports-view--folder .reports-search,
+.reports-view--folder .reports-list-item,
+.reports-view--folder .reports-pagination,
+.reports-view--folder .reports-generic-details,
+.reports-view--folder .reports-generic-body,
+.reports-view--folder .reports-generic-hero,
+.reports-view--folder .spy-report-card {
+  border-radius: var(--ut-r-card);
+}
+
+.reports-view--folder .reports-list-item.active {
+  box-shadow: inset 3px 0 0 var(--reports-cyan), 0 0 20px rgba(41, 207, 240, .12);
+}
+
+.reports-view--folder .reports-dossier--spy {
+  padding: 0 2px 8px;
+}
+
+.reports-view--folder .reports-dossier--spy .reports-dossier-heading {
+  padding: 3px 3px 5px;
+}
+
+.reports-view--folder .spy-report-card > header {
+  min-height: 40px;
+}
+
+.reports-view--folder .spy-report-card > header strong {
+  font-size: 12px;
+}
+
+.reports-view--folder .spy-report-card > header span {
+  max-width: 55%;
+  color: #82aab4;
+  font-size: 11px;
+  line-height: 1.25;
+  text-align: right;
+}
+
+.reports-view--folder .spy-report-summary-grid dt,
+.reports-view--folder .spy-report-summary-grid dd {
+  font-size: 11px;
+}
+
+.reports-view--folder .spy-report-summary-grid dd {
+  font-size: 12px;
+}
+
+.reports-view--folder .spy-report-resource {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 4px;
+  min-height: 64px;
+  padding: 9px 10px;
+  border-radius: var(--ut-r-card);
+}
+
+.reports-view--folder .spy-report-resource__icon {
+  grid-row: 1 / 3;
+  width: 29px;
+  height: 29px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 7px rgba(73, 214, 242, .22));
+}
+
+.reports-view--folder .spy-report-resource span {
+  font-size: 10px;
+  line-height: 1.15;
+}
+
+.reports-view--folder .spy-report-resource strong {
+  font-size: 16px;
+  line-height: 1.1;
+}
+
+.reports-view--folder .spy-report-population > div {
+  min-height: 62px;
+  border-left-width: 3px;
+  border-radius: var(--ut-r-card);
+}
+
+.reports-view--folder .spy-report-population span {
+  font-size: 10px;
+}
+
+.reports-view--folder .spy-report-population strong {
+  font-size: 16px;
+}
+
+.reports-view--folder .spy-report-entity {
+  border-radius: var(--ut-r-card);
+}
+
+@media (max-width: 1100px) {
+  .reports-view--folder .reports-preview {
+    max-height: none;
+  }
+
+  .reports-view--folder .reports-preview-scroll {
+    overflow: visible;
+  }
+}
+
+/* The dossier owns the available workspace height. The feed and category
+   rail remain content-sized, so a long full report never stretches them or
+   pushes its footer below the viewport. */
+.reports-view--folder {
+  height: 100%;
+  min-height: 0;
+  align-items: start;
+}
+.reports-view--folder > .reports-folder-workspace {
+  height: 100%;
+  min-height: 0;
+  align-self: stretch;
+}
+.reports-view--folder .reports-preview {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  box-sizing: border-box;
+}
+.reports-view--folder .reports-preview-scroll {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 8px 8px 18px 0;
+}
+
+.spy-report-entity--commander {
+  position: relative;
+  cursor: help;
+}
+.spy-report-entity--commander:focus-visible {
+  outline: 2px solid rgba(90, 226, 247, .82);
+  outline-offset: 2px;
+}
+.spy-report-entity__tooltip {
+  position: absolute;
+  z-index: 6;
+  left: 42px;
+  bottom: calc(100% + 7px);
+  width: min(300px, calc(100vw - 44px));
+  display: block !important;
+  padding: 8px 10px;
+  border: 1px solid rgba(75, 213, 238, .5);
+  border-radius: 8px;
+  background: rgba(2, 20, 31, .98);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .42), 0 0 14px rgba(39, 198, 226, .13);
+  color: #d9f8fd !important;
+  font-size: 9px !important;
+  line-height: 1.4 !important;
+  white-space: normal !important;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity .14s ease, transform .14s ease;
+}
+.spy-report-entity--commander:hover .spy-report-entity__tooltip,
+.spy-report-entity--commander:focus-visible .spy-report-entity__tooltip {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (max-width: 1100px) {
+  .reports-view--folder,
+  .reports-view--folder > .reports-folder-workspace {
+    height: auto;
+    min-height: 0;
+  }
+
+  .reports-view--folder .reports-preview {
+    height: auto;
+    min-height: 480px;
+  }
+
+  .reports-view--folder .reports-preview-scroll {
+    overflow: visible;
+  }
 }

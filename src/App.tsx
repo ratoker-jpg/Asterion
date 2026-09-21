@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { flushSync } from 'react-dom';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { flushSync, createPortal } from 'react-dom';
 import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
 import { OperationsView } from './OperationsView';
 import { CommandView } from './CommandView';
 import { ReportsView } from './ReportsView';
+import { buildReportsFeed, getReportUnreadCounts } from './domain/reports/adapters.ts';
 import { ZoneView } from './ZoneView';
 import { BuildingInteriorHost } from './BuildingInteriorHost';
 import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
@@ -128,11 +129,20 @@ import {
   FLIGHT_EDIT_TARGET_REQUEST_EVENT,
   FLIGHT_LAUNCH_CONTEXT_EVENT,
   FLIGHT_RECALL_REQUEST_EVENT,
+  SPY_REPORT_ALL_REQUEST_EVENT,
+  SPY_REPORT_REQUEST_EVENT,
+  SPY_REPORT_RESULT_EVENT,
   dispatchFlight,
+  requestAllSpyReports,
+  requestSpyReport,
   recallFlight,
   type DispatchFlightCommand,
   type FlightLaunchContext,
 } from './application/flights.ts';
+import { createSimulatorScenarioFromSpyReport, requestSimulatorHandoff } from './application/simulator-handoff.ts';
+import type { SpyReportSnapshot } from './domain/espionage/types.ts';
+import { getEspionageTargets } from './domain/espionage/runtime.ts';
+import type { UniverseCoordinate, UniverseOwnerProfile } from './domain/universe/types.ts';
 import { enqueueApplicationStateUpdate } from './application/state.ts';
 import { getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
@@ -188,6 +198,47 @@ const planetSkins = [
 type Zone = BuildingZone;
 type PlanetViewMode = 'overview' | Zone;
 type BuildingInteriorContext = BuildingInteriorNavigationContext<PlanetId>;
+type UniverseFocusTarget = {
+  coordinate: UniverseCoordinate;
+  planetId?: string;
+  ownerId?: string;
+  /** 'inspect' opens the owner inspector; 'highlight' only pulses the planet. */
+  mode?: 'inspect' | 'highlight';
+};
+
+/** Runtime toasts replace the legacy single status strip. */
+type RuntimeToast = {
+  id: number;
+  text: string;
+  tone: 'info' | 'success' | 'error';
+};
+
+const TOAST_AUTO_CLOSE_MS = 3_000;
+const TOAST_STACK_LIMIT = 3;
+
+/**
+ * Navigation noise the plan explicitly silences: section/route openings, zone
+ * scenes, planet selection and placeholder screens never become toasts.
+ * Everything else (completions, spy reports, action errors) stays visible.
+ */
+const SILENT_NOTICE_PATTERNS: readonly RegExp[] = [
+  /^Система готова/,
+  /^Галактика \d+ загружена/,
+  /^Операции: доступные PvE-сценарии загружены/,
+  /^Командование: союзный контур загружен/,
+  /^Отчёты: центр сообщений/,
+  /пока в разработке\.$/,
+  /^Вселенная: открыта координата/,
+  /^Галактика \d+ · Солнечная система \d+/,
+  /выбрана как текущая планета\.$/,
+  /^Цель колонизации выбрана/,
+  /^Лаборатория: открыт существующий раздел/,
+  /^Палата управления: открыт существующий раздел/,
+  /: сцена открыта для /,
+  /^Флоты: подготовьте состав/,
+  /^(?:Своя|Союзная) цель выбрана/,
+  /: обзор планеты\.$/,
+];
 
 type PlanetDefinition = {
   id: PlanetId;
@@ -235,15 +286,43 @@ export function App() {
   stateRef.current = state;
   const [now, setNow] = useState(Date.now());
   const [testTimeScale, setTestTimeScale] = useState<TestTimeScale>(() => resolveTestTimeScale());
-  const [notice, setNotice] = useState('Система готова. Локальное сохранение активно.');
+  const [toasts, setToasts] = useState<RuntimeToast[]>([]);
+  const [lastNotice, setLastNotice] = useState('Система готова. Локальное сохранение активно.');
+  const noticeSeq = useRef(0);
+
+  /**
+   * Keeps the QA notice layer in sync and emits a bottom-left toast. Silent
+   * navigation noise still lands in the QA layer but never renders a toast.
+   */
+  const setNotice = useCallback((text: string, tone: RuntimeToast['tone'] = 'info') => {
+    setLastNotice(text);
+    if (SILENT_NOTICE_PATTERNS.some((pattern) => pattern.test(text))) return;
+    noticeSeq.current += 1;
+    const id = noticeSeq.current;
+    setToasts((current) => [...current, { id, text, tone }].slice(-TOAST_STACK_LIMIT));
+    window.setTimeout(() => {
+      setToasts((current) => current.filter((toast) => toast.id !== id));
+    }, TOAST_AUTO_CLOSE_MS);
+  }, []);
+  const dismissToast = useCallback((id: number) => {
+    setToasts((current) => current.filter((toast) => toast.id !== id));
+  }, []);
   const [planetMenuOpen, setPlanetMenuOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(true);
   const [editingPlanetId, setEditingPlanetId] = useState<PlanetId | null>(null);
   const [editingName, setEditingName] = useState(DEFAULT_PLANET_NAME);
   const [selectedBuildingRole, setSelectedBuildingRole] = useState<BuildingRole | null>(null);
   const [buildingInterior, setBuildingInterior] = useState<BuildingInteriorContext | null>(null);
+  const [universeFocusTarget, setUniverseFocusTarget] = useState<UniverseFocusTarget | null>(null);
 
+  const activeRouteRef = useRef(activeRoute);
   const navigateTo = (nextRoute: AppRoute) => {
+    // A screen switch closes the active toasts: stale cross-screen notices
+    // must not linger over the newly opened section.
+    if (activeRouteRef.current !== nextRoute) {
+      activeRouteRef.current = nextRoute;
+      setToasts([]);
+    }
     navigate(nextRoute);
     if (nextRoute === 'fleets') {
       window.setTimeout(() => window.dispatchEvent(new Event(FLEET_ROOT_REQUEST_EVENT)), 0);
@@ -285,7 +364,7 @@ export function App() {
         setState(result.state);
         setNotice(result.notice);
       } else {
-        setNotice(result.error.message);
+        setNotice(result.error.message, 'error');
       }
       window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
     };
@@ -301,7 +380,7 @@ export function App() {
         setState(result.state);
         setNotice(result.notice);
       } else {
-        setNotice(result.error.message);
+        setNotice(result.error.message, 'error');
       }
       window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
     };
@@ -310,13 +389,49 @@ export function App() {
       navigateTo('universe');
       setNotice('Выберите новую свободную координату для колонизации.');
     };
+    const onSpyReportRequest = (event: Event) => {
+      const detail = (event as CustomEvent<{ missionId: string; now?: number }>).detail;
+      const result = requestSpyReport(stateRef.current, detail.missionId, { now: detail.now ?? Date.now() });
+      if (result.ok) {
+        stateRef.current = result.state;
+        setState(result.state);
+        setNotice(result.notice);
+      } else {
+        if (result.state !== stateRef.current) {
+          stateRef.current = result.state;
+          setState(result.state);
+        }
+        setNotice(result.error.message, 'error');
+      }
+      window.dispatchEvent(new CustomEvent(SPY_REPORT_RESULT_EVENT, { detail: result }));
+    };
+    const onSpyReportAllRequest = (event: Event) => {
+      const detail = (event as CustomEvent<{ missionIds?: string[]; now?: number }>).detail;
+      const result = requestAllSpyReports(stateRef.current, detail.missionIds ?? [], { now: detail.now ?? Date.now() });
+      if (result.ok) {
+        stateRef.current = result.state;
+        setState(result.state);
+        setNotice(result.notice);
+      } else {
+        if (result.state !== stateRef.current) {
+          stateRef.current = result.state;
+          setState(result.state);
+        }
+        setNotice(result.error.message, 'error');
+      }
+      window.dispatchEvent(new CustomEvent(SPY_REPORT_RESULT_EVENT, { detail: result }));
+    };
     window.addEventListener(FLIGHT_DISPATCH_REQUEST_EVENT, onDispatchRequest);
     window.addEventListener(FLIGHT_RECALL_REQUEST_EVENT, onRecallRequest);
     window.addEventListener(FLIGHT_EDIT_TARGET_REQUEST_EVENT, onEditTargetRequest);
+    window.addEventListener(SPY_REPORT_REQUEST_EVENT, onSpyReportRequest);
+    window.addEventListener(SPY_REPORT_ALL_REQUEST_EVENT, onSpyReportAllRequest);
     return () => {
       window.removeEventListener(FLIGHT_DISPATCH_REQUEST_EVENT, onDispatchRequest);
       window.removeEventListener(FLIGHT_RECALL_REQUEST_EVENT, onRecallRequest);
       window.removeEventListener(FLIGHT_EDIT_TARGET_REQUEST_EVENT, onEditTargetRequest);
+      window.removeEventListener(SPY_REPORT_REQUEST_EVENT, onSpyReportRequest);
+      window.removeEventListener(SPY_REPORT_ALL_REQUEST_EVENT, onSpyReportAllRequest);
     };
   }, [testTimeScale]);
 
@@ -447,23 +562,27 @@ export function App() {
         const names = event.scienceIds
           .map((scienceId) => SCIENCE_CATALOG.find((science) => science.id === scienceId)?.name ?? `Наука ${scienceId}`)
           .join(', ');
-        setNotice(`Наука: исследование завершено — ${names}.`);
+        setNotice(`Наука: исследование завершено — ${names}.`, 'success');
       } else if (event.kind === 'building') {
-        setNotice(`${result.state.planets[result.state.currentPlanetId].name}: ${getBuildingDefinition(event.assetRole, result.state.profile.factionId).name} завершено.`);
+        setNotice(`${result.state.planets[result.state.currentPlanetId].name}: ${getBuildingDefinition(event.assetRole, result.state.profile.factionId).name} завершено.`, 'success');
       } else if (event.kind === 'recycling') {
-        setNotice('Результат переработки автоматически зачислен');
+        setNotice('Результат переработки автоматически зачислен', 'success');
       } else if (event.kind === 'spaceport') {
         const names = event.tasks
           .map((task) => getSpaceportUpgradeEntity(task.track, task.shipId, result.state.profile.factionId)?.name ?? task.shipId)
           .join(', ');
-        setNotice(`Космодром: улучшение завершено — ${names}.`);
+        setNotice(`Космодром: улучшение завершено — ${names}.`, 'success');
       } else if (event.kind === 'fleet-production') {
         const names = event.completed
           .map((item) => getFleetProductionEntity(item.queueKind, item.itemId, result.state.profile.factionId)?.name ?? item.itemId)
           .join(', ');
-        setNotice(`Верфь: производство завершено — ${names}.`);
+        setNotice(`Верфь: производство завершено — ${names}.`, 'success');
       } else if (event.kind === 'flight') {
-        event.events.forEach((flightEvent) => setNotice(flightEvent.notice));
+        event.events.forEach((flightEvent) => setNotice(
+          flightEvent.status === 'spy-report' || flightEvent.status === 'spy-detected'
+            ? `Проверьте системные сообщения. ${flightEvent.notice}`
+            : flightEvent.notice,
+        ));
       }
     });
   }, [now, state, testTimeScale]);
@@ -554,6 +673,10 @@ export function App() {
     () => getStorageCapacities(currentPlanetState.buildings),
     [currentPlanetState.buildings],
   );
+  const reportsUnreadCount = useMemo(() => {
+    const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage);
+    return Object.values(getReportUnreadCounts(items, state.reports)).reduce((total, count) => total + count, 0);
+  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports]);
   const buildingInteriorTarget = buildingInterior
     ? getBuildingInteriorTarget(buildingInterior.buildingRole)
     : null;
@@ -892,6 +1015,68 @@ export function App() {
     }, 40);
   };
 
+  const openSpyLaunch = (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile }) => {
+    const targetRaceId = target.owner.raceId === 'synod' || target.owner.raceId === 'veyra' ? target.owner.raceId : 'aegis';
+    const result = dispatchFlight(stateRef.current, {
+      requestId: `spy-universe-${target.planetId}-${Date.now()}`,
+      missionId: 'espionage',
+      originPlanetId: stateRef.current.currentPlanetId,
+      targetKind: 'npc',
+      targetRelation: target.relation,
+      targetPlanetName: target.planetName,
+      targetOwnerId: target.owner.id,
+      targetOwnerName: target.owner.displayName,
+      targetRaceId,
+      targetAlliance: target.owner.alliance ?? null,
+      selectedShips: { 'spy-probe': 1 },
+      destination: { kind: 'planet', planetId: target.planetId, coordinate: target.coordinate },
+      departedAt: Date.now(),
+    }, { now: Date.now(), mode: RUNTIME_MODE, testTimeScale });
+    if (result.ok) {
+      stateRef.current = result.state;
+      setState(result.state);
+      setNotice('Шпионский зонд успешно отправлен.');
+    } else if (result.error.message.startsWith('Зонд уже выполняет')) {
+      setNotice('На этой планете уже есть шпионский зонд. Откройте раздел «Шпионские зонды».');
+    } else {
+      setNotice(result.error.message, 'error');
+    }
+    window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
+  };
+
+  const openUniverseTarget = (target: UniverseFocusTarget) => {
+    clearBuildingInterior();
+    closePlanetEditor();
+    // Coordinate links pinpoint the planet with a pulse; the owner name keeps
+    // opening the profile inspector.
+    setUniverseFocusTarget({ ...target, mode: target.ownerId ? 'inspect' : 'highlight' });
+    navigateTo('universe');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    setNotice(`Вселенная: открыта координата [${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}].`);
+  };
+
+  const openSpySimulator = (report: SpyReportSnapshot) => {
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    closePlanetEditor();
+    const scenario = createSimulatorScenarioFromSpyReport(stateRef.current, report);
+    window.setTimeout(() => requestSimulatorHandoff(scenario), 50);
+    setNotice(`Симулятор подготовлен по полному отчёту: ${report.targetPlanetName}.`);
+  };
+
+  const recallSpyFromReport = (missionId: string) => {
+    const mission = stateRef.current.espionage?.missions.find((candidate) => candidate.id === missionId);
+    const flight = mission ? stateRef.current.flights.records.find((candidate) => candidate.id === mission.flightId) : undefined;
+    if (!mission || !flight || mission.status !== 'orbiting') {
+      setNotice('Связанный шпионский зонд уже не находится на орбите.');
+      return;
+    }
+    window.dispatchEvent(new CustomEvent(FLIGHT_RECALL_REQUEST_EVENT, { detail: { flightId: flight.id, now: Date.now() } }));
+  };
+
   const createAlliancePlaceholder = () => {
     setNotice('Создание союза пока недоступно в прототипе.');
   };
@@ -1082,6 +1267,7 @@ export function App() {
           zoneMeta={zoneMeta}
           activeRoute={activeRoute}
           activeZone={activeRoute === 'planet' && planetViewMode !== 'overview' ? planetViewMode : null}
+          reportsUnreadCount={reportsUnreadCount}
           planetMenuOpen={planetMenuOpen}
             campaign={{ now, mode: RUNTIME_MODE, timeScale: testTimeScale, saveKey: persistence.saveKey, timeScaleOptions: TEST_TIME_SCALE_OPTIONS, onTimeScaleChange: setTestTimeScale }}
           onRouteChange={chooseRoute}
@@ -1148,9 +1334,13 @@ export function App() {
               rating={state.rating}
               command={state.command}
               playerPlanets={universePlayerPlanets}
+              spyTargets={Object.values(getEspionageTargets(state.espionage))}
               mode={RUNTIME_MODE}
               onColonize={openColonizationLaunch}
               onTransport={openTransportLaunch}
+              onSpy={openSpyLaunch}
+              focusTarget={universeFocusTarget}
+              onFocusHandled={() => setUniverseFocusTarget(null)}
             />
           ) : activeRoute === 'operations' ? (
             <OperationsView
@@ -1175,6 +1365,7 @@ export function App() {
               savedBattleReportIds={state.combat.savedReportIds}
               operations={state.operations}
               command={state.command}
+              espionage={state.espionage}
               profile={state.profile}
               rating={state.rating}
               mode={RUNTIME_MODE}
@@ -1183,6 +1374,9 @@ export function App() {
               onToggleBattleSaved={toggleBattleSavedFromReports}
               onOpenFleets={openFleetRootFromReports}
               onOpenCommand={openCommandFromReports}
+              onSimulateBattle={openSpySimulator}
+              onRecallSpy={recallSpyFromReport}
+              onOpenUniverseTarget={openUniverseTarget}
             />
           ) : activeRoute === 'planet' && planetViewMode !== 'overview' ? (
             <ZoneView
@@ -1292,9 +1486,21 @@ export function App() {
           )}
         </section>
 
-        <div className="shell-notice shell-notice-live" data-qa-runtime-mode={RUNTIME_MODE} role="status" aria-live="polite">
-          <span>{notice}</span>
+        <div className="shell-notice shell-notice-live" data-qa-runtime-mode={RUNTIME_MODE} data-qa-runtime-notice role="status" aria-live="polite">
+          <span>{lastNotice}</span>
         </div>
+
+        {createPortal(
+          <div className="runtime-toast-stack" data-qa-runtime-toast-stack aria-live="polite">
+            {toasts.map((toast) => (
+              <div key={toast.id} className={`runtime-toast runtime-toast--${toast.tone}`} data-qa-runtime-toast>
+                <span>{toast.text}</span>
+                <button type="button" aria-label="Закрыть уведомление" title="Закрыть" onClick={() => dismissToast(toast.id)}>×</button>
+              </div>
+            ))}
+          </div>,
+          document.body,
+        )}
 
         {editingPlanet && editingPlanetState ? (
           <div className="skin-picker-backdrop" onMouseDown={closePlanetEditor}>

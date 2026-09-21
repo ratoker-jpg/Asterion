@@ -89,7 +89,9 @@ export function reconcileRuntime(
     }
   }
 
-  const flights = reconcileFlights(next, context.now);
+  // No rng fallback here: espionage rolls derive their own deterministic
+  // seeded streams when context.rng is not provided.
+  const flights = reconcileFlights(next, context.now, context.rng);
   if (flights.changed) {
     next = flights.state;
     if (flights.events.length > 0) events.push({ kind: 'flight', events: flights.events });

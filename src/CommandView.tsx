@@ -62,6 +62,7 @@ const RELATION_LABELS: Record<RelationStatus, string> = {
   neutral: 'НЕЙТРАЛИТЕТ',
   tense: 'НАПРЯЖЁННОСТЬ',
   hostile: 'ВРАЖДЕБНОСТЬ',
+  war: 'ВОЙНА',
 };
 
 const OPERATION_STATE_LABELS: Record<JointOperation['state'], string> = {

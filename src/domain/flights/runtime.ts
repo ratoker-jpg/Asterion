@@ -20,6 +20,7 @@ export type DispatchFlightInput = {
   factionId: CombatFactionId;
   science?: FlightScienceLevels;
   operationId?: string;
+  spyMissionId?: string;
   targetKind?: FlightRecord['targetKind'];
   /** Resolved target snapshot for a coordinate-addressed transport. */
   destinationPlanetId?: string;
@@ -57,6 +58,7 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
     requestId: input.requestId,
     missionId: input.missionId,
     operationId: input.operationId ?? (input.destination.kind === 'operation' ? input.destination.operationId : undefined),
+    spyMissionId: input.spyMissionId,
     originPlanetId: input.originPlanetId,
     originCoordinate: { ...input.originCoordinate },
     destination: input.destination.kind === 'coordinate'

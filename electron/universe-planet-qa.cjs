@@ -62,22 +62,25 @@ async function clickObject(win, selector) {
   await settle(win);
 }
 
-async function clickAt(win, selector, backdrop = false, settleAfter = true) {
+async function clickAt(win, selector, backdrop = false, settleAfter = true, preserveScroll = false) {
   const point = await win.webContents.executeJavaScript(`(() => {
     const element = document.querySelector(${JSON.stringify(selector)});
     if (!element) return null;
+    const scrollY = window.scrollY;
     element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     const rect = element.getBoundingClientRect();
     const x = ${backdrop} ? rect.left + 3 : rect.left + rect.width / 2;
     const y = ${backdrop} ? rect.top + 3 : rect.top + rect.height / 2;
     const hit = document.elementFromPoint(x, y);
     if (${backdrop} ? hit !== element : !element.contains(hit)) throw new Error('Click target occluded: ' + ${JSON.stringify(selector)});
-    return { x, y };
+    return { x, y, scrollY };
   })()`);
   if (!point) throw new Error(`Click target missing: ${selector}`);
-  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
-  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mousePressed', ...point, button: 'left', clickCount: 1 });
-  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseReleased', ...point, button: 'left', clickCount: 1 });
+  const { x, y } = point;
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+  if (preserveScroll) await win.webContents.executeJavaScript(`window.scrollTo(0, ${point.scrollY})`);
   if (settleAfter) await settle(win);
 }
 
@@ -379,7 +382,7 @@ async function runViewport(width, height) {
     const npcSpyActions = npc.actions.filter((action) => action.action === 'spy');
     const npcFleetActions = npc.actions.filter((action) => action.action === 'fleet');
     if (npc.kind !== 'npc' || npc.ownerName !== 'Бот 01' || !npc.ownerId || npc.planetRows !== 7 || npc.actions.length !== 14
-      || npcSpyActions.length !== 7 || npcSpyActions.some((action) => action.disabled || action.status !== 'prototype')
+      || npcSpyActions.length !== 7 || npcSpyActions.some((action) => action.disabled || action.status !== 'supported' || !action.title.includes('доступна для шпионажа'))
       || npcFleetActions.length !== 7 || npcFleetActions.some((action) => !action.disabled || action.status !== 'disabled' || !action.title.includes('только на свою или явную союзную планету'))) {
       throw new Error(`${label}: NPC action/list contract failed ${JSON.stringify(npc)}`);
     }
@@ -414,7 +417,7 @@ async function runViewport(width, height) {
       const reopenedSpyActions = reopened.actions.filter((action) => action.action === 'spy');
       const reopenedFleetActions = reopened.actions.filter((action) => action.action === 'fleet');
       if (reopened.ownerId !== npc.ownerId || reopened.ownerName !== 'Бот 01' || JSON.stringify(reopened.rows) !== JSON.stringify(npc.rows) || reopened.actions.length !== 14
-        || reopenedSpyActions.length !== 7 || reopenedSpyActions.some((action) => action.disabled || action.status !== 'prototype')
+        || reopenedSpyActions.length !== 7 || reopenedSpyActions.some((action) => action.disabled || action.status !== 'supported' || !action.title.includes('доступна для шпионажа'))
         || reopenedFleetActions.length !== 7 || reopenedFleetActions.some((action) => !action.disabled || action.status !== 'disabled' || !action.title.includes('только на свою или явную союзную планету'))) {
         throw new Error(`${label}: visit did not reopen the same seven holdings ${JSON.stringify(reopened)}`);
       }
@@ -462,7 +465,7 @@ async function runViewport(width, height) {
     if (launchContext !== freeAsteroid.targetCoordinate) throw new Error(`${label}: asteroid colonization target context was not preserved ${JSON.stringify({ launchContext, target: freeAsteroid.targetCoordinate })}`);
     await waitFor(win, `document.querySelector('[data-qa-flight-preview-open]') && !document.querySelector('[data-qa-flight-preview-open]').disabled`);
     const geometryBeforePreview = await win.webContents.executeJavaScript(`(() => { const rect = (selector) => document.querySelector(selector)?.getBoundingClientRect().toJSON() || null; return { fleet: rect('.fleet-workspace-v1'), sidebar: rect('.fleet-sidebar-v1'), horizontalOverflow: document.documentElement.scrollWidth > innerWidth + 2 || document.body.scrollWidth > innerWidth + 2 }; })()`);
-    await clickAt(win, '[data-qa-flight-preview-open]');
+    await clickAt(win, '[data-qa-flight-preview-open]', false, true, true);
     await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
     const timelineText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-flight-preview-backdrop]')?.textContent?.replace(/\s+/g, ' ').trim() || ''`);
     const timelineFields = ['ИСТОЧНИК', 'выбрано флотом', 'ЦЕЛЬ', 'Цель подтверждена', 'СОСТАВ ФЛОТА', 'Колонизатор', 'Население: 12', 'ПАРАМЕТРЫ ПЕРЕЛЁТА', 'ЭФФ. СКОРОСТЬ', 'ТУДА', 'ОБРАТНО', 'ПОЛНЫЙ ЦИКЛ', 'ГАЗ', 'НАСЕЛЕНИЕ', 'ПРИБЫТИЕ', 'МОСКОВСКОЕ ВРЕМЯ', 'МСК', 'Газ списывается только за один путь туда.', 'При отзыве колонизатор возвращается', 'ОТМЕНА', 'ОТПРАВИТЬ'];

@@ -7,7 +7,7 @@ app.commandLine.appendSwitch('disable-gpu');
 app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
-const OUTPUT = path.join(ROOT, 'artifacts', 'combat-simulator-qa');
+const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'artifacts-pass1', 'combat-simulator-qa');
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -266,7 +266,6 @@ async function runViewport(win, width, height) {
 app.whenReady().then(async () => {
   let win;
   try {
-    fs.rmSync(OUTPUT, { recursive: true, force: true });
     fs.mkdirSync(OUTPUT, { recursive: true });
     win = new BrowserWindow({ width: 1920, height: 1080, useContentSize: true, show: false, backgroundColor: '#02050a', webPreferences: { offscreen: true, contextIsolation: true, nodeIntegration: false, sandbox: true, partition: 'qa-combat-simulator' } });
     await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: '?mode=test' });

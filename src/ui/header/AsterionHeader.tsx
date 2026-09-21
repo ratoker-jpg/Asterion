@@ -27,6 +27,7 @@ export type AsterionHeaderProps = {
   zoneMeta: Record<HeaderZoneId, HeaderZoneMeta>;
   activeRoute: AppRoute;
   activeZone: HeaderZoneId | null;
+  reportsUnreadCount: number;
   planetMenuOpen: boolean;
   campaign: HeaderCampaignModel;
   onRouteChange: (route: AppRoute) => void;
@@ -43,6 +44,7 @@ export function AsterionHeader({
   zoneMeta,
   activeRoute,
   activeZone,
+  reportsUnreadCount,
   planetMenuOpen,
   campaign,
   onRouteChange,
@@ -191,12 +193,16 @@ export function AsterionHeader({
         <nav className="asterion-header__primary-navigation" aria-label="Основная навигация" data-qa-navigation="primary">
           {PRIMARY_NAVIGATION.map(({ id, label, icon }) => {
             const isActive = activeRoute === id && !(id === 'planet' && activeZone !== null);
+            const reportsBadge = id === 'reports' && reportsUnreadCount > 0
+              ? reportsUnreadCount > 99 ? '99+' : String(reportsUnreadCount)
+              : null;
             return (
               <button
                 key={id}
                 type="button"
                 className={isActive ? 'active' : ''}
                 aria-current={isActive ? 'page' : undefined}
+                aria-label={id === 'reports' && reportsUnreadCount > 0 ? `${label}, ${reportsUnreadCount} непрочитанных сообщений` : label}
                 data-route={id}
                 data-qa-route={id}
                 onClick={() => {
@@ -206,6 +212,7 @@ export function AsterionHeader({
               >
                 <HeaderNavigationIcon kind={icon} factionId={factionId} />
                 <span>{label}</span>
+                {reportsBadge ? <b className="asterion-header__nav-badge" aria-hidden="true">{reportsBadge}</b> : null}
               </button>
             );
           })}

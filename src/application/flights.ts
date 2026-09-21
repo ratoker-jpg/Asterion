@@ -1,7 +1,8 @@
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
-import { createEmptyDefenseState } from '../domain/fleet/production.ts';
+import { calculateDefensePopulation, createEmptyDefenseState } from '../domain/fleet/production.ts';
 import {
+  calculateFleetPopulation,
   createEmptyFleetState,
   removeSolarSatellitesFromFleet,
   resolveSavedFleetState,
@@ -13,7 +14,7 @@ import {
   getStorageCapacities,
 } from '../domain/buildings/resource-zone.ts';
 import { createEmptyBotAssignment } from '../domain/buildings/production-bots.ts';
-import { createDefaultSpaceportUpgradeState } from '../domain/buildings/spaceport-upgrades.ts';
+import { createDefaultSpaceportUpgradeState, EXCLUDED_SHIP_UPGRADE_IDS } from '../domain/buildings/spaceport-upgrades.ts';
 import { createDefaultTradeState } from '../domain/buildings/trade.ts';
 import { createDefaultRepairWorkshopState } from '../domain/repair/workshop.ts';
 import { initializePlanetEnergy } from './energy.ts';
@@ -54,9 +55,31 @@ import type {
   MissionId,
   TargetRelation,
 } from '../domain/flights/types.ts';
-import { createUniverseSystem } from '../domain/universe/runtime.ts';
+import {
+  activeSpyMissionForTarget,
+  canRequestSpyReport,
+  createDefaultEspionageState,
+  createSeededEspionageRng,
+  espionageRollSeed,
+  hunterDetects,
+  normalizeRngRoll,
+  resolveSpyReportQuality,
+  SPY_REPORT_COOLDOWN_MS,
+} from '../domain/espionage/runtime.ts';
+import type { EspionageRollKind } from '../domain/espionage/runtime.ts';
+import type {
+  EspionageState,
+  SpyHunterNotice,
+  SpyMission,
+  SpyOwnerProfile,
+  SpyReportSnapshot,
+  SpyTargetRelation,
+  SpyTargetState,
+} from '../domain/espionage/types.ts';
+import { createUniverseSystem, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPlanet } from '../domain/universe/types.ts';
 import { initializePlanetResourceClock } from './resource-clock.ts';
+import { resolveSpyTarget, type ResolvedSpyTarget } from './espionage-targets.ts';
 
 export const FLIGHT_LAUNCH_CONTEXT_EVENT = 'asterion:flight-launch-context';
 export const FLIGHT_LAUNCH_CONTEXT_CLEAR_EVENT = 'asterion:flight-launch-context-clear';
@@ -64,6 +87,9 @@ export const FLIGHT_EDIT_TARGET_REQUEST_EVENT = 'asterion:flight-edit-target-req
 export const FLIGHT_DISPATCH_REQUEST_EVENT = 'asterion:flight-dispatch-request';
 export const FLIGHT_RECALL_REQUEST_EVENT = 'asterion:flight-recall-request';
 export const FLIGHT_COMMAND_RESULT_EVENT = 'asterion:flight-command-result';
+export const SPY_REPORT_REQUEST_EVENT = 'asterion:spy-report-request';
+export const SPY_REPORT_ALL_REQUEST_EVENT = 'asterion:spy-report-all-request';
+export const SPY_REPORT_RESULT_EVENT = 'asterion:spy-report-result';
 
 export type FlightLaunchContext = {
   missionId: MissionId;
@@ -71,6 +97,11 @@ export type FlightLaunchContext = {
   targetRelation?: TargetRelation;
   targetKind?: UniverseObjectKind;
   operationId?: string;
+  targetPlanetName?: string;
+  targetOwnerId?: string;
+  targetOwnerName?: string;
+  targetRaceId?: 'aegis' | 'synod' | 'veyra';
+  targetAlliance?: import('../domain/universe/types.ts').UniverseOwnerAlliance | null;
 };
 
 export type FlightErrorCode =
@@ -88,6 +119,9 @@ export type FlightErrorCode =
   | 'mission-not-supported'
   | 'flight-not-recallable'
   | 'flight-already-arrived'
+  | 'spy-target-blocked'
+  | 'spy-report-cooldown'
+  | 'spy-mission-not-found'
   | 'invalid-command';
 
 export type FlightError = {
@@ -106,6 +140,11 @@ export type DispatchFlightCommand = {
   targetKind?: UniverseObjectKind;
   selectedShips: Partial<Record<ShipId, number>>;
   operationId?: string;
+  targetPlanetName?: string;
+  targetOwnerId?: string;
+  targetOwnerName?: string;
+  targetRaceId?: 'aegis' | 'synod' | 'veyra';
+  targetAlliance?: import('../domain/universe/types.ts').UniverseOwnerAlliance | null;
   departedAt?: number;
 };
 
@@ -131,9 +170,24 @@ export type FlightCommandFailure = {
 
 export type FlightCommandResult = FlightCommandSuccess | FlightCommandFailure;
 
+export type SpyReportCommandSuccess = {
+  ok: true;
+  state: SaveState;
+  report?: SpyReportSnapshot;
+  notice: string;
+};
+
+export type SpyReportCommandFailure = {
+  ok: false;
+  state: SaveState;
+  error: FlightError;
+};
+
+export type SpyReportCommandResult = SpyReportCommandSuccess | SpyReportCommandFailure;
+
 export type FlightReconcileEvent = {
   flight: FlightRecord;
-  status: 'arrived' | 'returned' | 'target-occupied' | 'target-unavailable' | 'delivered' | 'colonized';
+  status: 'arrived' | 'returned' | 'target-occupied' | 'target-unavailable' | 'delivered' | 'colonized' | 'spy-report' | 'spy-detected';
   notice: string;
 };
 
@@ -373,6 +427,254 @@ function updateFlight(state: FlightState, flight: FlightRecord): FlightState {
   };
 }
 
+function selectedSpyProbeOnly(selectedShips: Partial<Record<ShipId, number>>): boolean {
+  const entries = Object.entries(selectedShips).filter(([, quantity]) => Number.isFinite(quantity) && Math.floor(quantity ?? 0) > 0);
+  return entries.length === 1 && entries[0][0] === 'spy-probe' && Math.floor(entries[0][1] as number) === 1;
+}
+
+function currentEspionageState(state: SaveState): EspionageState {
+  return state.espionage ?? createDefaultEspionageState();
+}
+
+function targetOwnerProfile(state: SaveState, target: SpyTargetState): SpyOwnerProfile | undefined {
+  return target.ownerProfile
+    ?? (target.ownerId === UNIVERSE_NPC_OWNER_ID ? currentEspionageState(state).bot01Profile : undefined);
+}
+
+function targetEspionageLevel(state: SaveState, target: SpyTargetState): number {
+  return Math.max(0, Math.floor(targetOwnerProfile(state, target)?.scienceLevels[5] ?? target.espionageLevel));
+}
+
+function withEspionageState(state: SaveState, espionage: EspionageState): SaveState {
+  return { ...state, espionage };
+}
+
+function randomRoll(rng: () => number): number {
+  const raw = rng();
+  if (!Number.isFinite(raw)) return 0;
+  // Seeded streams return [0, 1); tests may provide the already materialized
+  // 0..99 integer. Both paths end in the same canonical integer contract.
+  return raw >= 0 && raw < 1 ? Math.floor(raw * 100) : normalizeRngRoll(raw);
+}
+
+/**
+ * Espionage rolls are deterministic: production derives one seeded xorshift32
+ * stream per (mission, roll kind, attempt), so replaying a save or re-running
+ * reconcile never re-rolls a materialized outcome. Tests may still inject an
+ * explicit roll stream through the optional rng override.
+ */
+function materializeSpyRoll(
+  rng: (() => number) | undefined,
+  missionId: string,
+  kind: EspionageRollKind,
+  attempt: number,
+): number {
+  if (rng) return randomRoll(rng);
+  return randomRoll(createSeededEspionageRng(espionageRollSeed(missionId, kind, attempt)));
+}
+
+function updateSpyMission(espionage: EspionageState, mission: SpyMission): EspionageState {
+  return {
+    ...espionage,
+    missions: espionage.missions.map((item) => item.id === mission.id ? mission : item),
+  };
+}
+
+function removeSpyProbeFromOrigin(state: SaveState, mission: SpyMission): SaveState {
+  const origin = state.planets[mission.originPlanetId];
+  if (!origin) return state;
+  const fleet = removeSolarSatellitesFromFleet(resolveSavedFleetState(origin.fleet, state.profile.factionId)).fleet;
+  return replacePlanetState(state, mission.originPlanetId, {
+    ...origin,
+    fleet: {
+      ...fleet,
+      ships: { ...fleet.ships, 'spy-probe': Math.max(0, (fleet.ships['spy-probe'] ?? 0) - 1) },
+    },
+  });
+}
+
+/**
+ * Level contract: every combat hull in the snapshot carries a level 0..10,
+ * utility hulls (solar satellite, spy probe, colonizer, recycler) stay
+ * level-less exactly like the spaceport upgrade contract. Levels come from
+ * the owner's shared profile; a hull an old save predates gets a deterministic
+ * fallback so replaying a mission never reshuffles the dossier.
+ */
+function buildSnapshotFleetLevels(
+  ships: Record<string, number>,
+  ownerLevels: Partial<Record<ShipId, number>> | undefined,
+  missionId: string,
+): Partial<Record<ShipId, number>> {
+  const levels: Partial<Record<ShipId, number>> = { ...(ownerLevels ?? {}) };
+  for (const [id, count] of Object.entries(ships)) {
+    const shipId = id as ShipId;
+    if (!count || count <= 0) continue;
+    if (levels[shipId] !== undefined) continue;
+    if (EXCLUDED_SHIP_UPGRADE_IDS.has(shipId)) continue;
+    levels[shipId] = Math.floor(createSeededEspionageRng(`espionage:${missionId}:level:${shipId}`)() * 11);
+  }
+  return levels;
+}
+
+function createSpyReport(
+  mission: SpyMission,
+  target: SpyTargetState,
+  ownerProfile: SpyOwnerProfile | undefined,
+  createdAt: number,
+  roll: number,
+  firstReport: boolean,
+  spyLevel: number,
+): SpyReportSnapshot {
+  const targetFleetPopulation = calculateFleetPopulation(target.fleet, target.raceId);
+  const targetDefensePopulation = calculateDefensePopulation(target.defense, target.raceId);
+  const targetCommanders = Object.fromEntries(
+    Object.entries(target.commanders).map(([id, commander]) => [
+      id,
+      commander
+        ? { ...commander, level: ownerProfile?.commanderLevels[id as keyof SpyOwnerProfile['commanderLevels']] ?? commander.level }
+        : commander,
+    ]),
+  ) as SpyReportSnapshot['commanders'];
+  const targetEspionage = ownerProfile?.scienceLevels[5] ?? target.espionageLevel;
+  const delta = spyLevel - targetEspionage;
+  const quality = resolveSpyReportQuality(delta, roll);
+  return {
+    id: `spy-report-${mission.id}-${mission.reportIds.length + 1}`,
+    missionId: mission.id,
+    createdAt,
+    sourcePlanetId: mission.originPlanetId,
+    targetPlanetId: target.id,
+    targetPlanetName: target.name,
+    targetOwnerId: target.ownerId,
+    targetOwnerName: target.ownerName,
+    targetRaceId: target.raceId,
+    targetRelation: mission.targetRelation === 'enemy' || mission.targetRelation === 'neutral' ? mission.targetRelation : 'neutral',
+    targetCoordinate: { ...target.coordinate },
+    spyLevel,
+    targetEspionageLevel: targetEspionage,
+    delta,
+    roll,
+    quality,
+    resources: { ...target.resources },
+    firstReport,
+    ...(quality !== 'basic'
+      ? { defense: { ...target.defense.defenses } }
+      : {}),
+    ...(quality === 'full'
+      ? {
+        fleet: { ...target.fleet.ships },
+        fleetLevels: buildSnapshotFleetLevels(target.fleet.ships, ownerProfile?.shipLevels, mission.id),
+        commanders: targetCommanders,
+        population: {
+          total: targetFleetPopulation + targetDefensePopulation,
+          fleet: targetFleetPopulation,
+          defense: targetDefensePopulation,
+        },
+      }
+      : {}),
+  };
+}
+
+type SpyResolution = {
+  state: SaveState;
+  flight: FlightRecord;
+  event: FlightReconcileEvent;
+};
+
+function resolveSpyAtTarget(
+  state: SaveState,
+  flight: FlightRecord,
+  mission: SpyMission,
+  now: number,
+  rng: (() => number) | undefined,
+  firstReport: boolean,
+): SpyResolution | null {
+  const resolvedTarget = resolveSpyTarget(state, mission.targetPlanetId, {
+    coordinate: mission.targetCoordinate,
+  });
+  if (!resolvedTarget || (resolvedTarget.relation !== 'enemy' && resolvedTarget.relation !== 'neutral')) return null;
+  const target = resolvedTarget.target;
+  const missionAtTarget: SpyMission & { targetRelation: SpyTargetRelation } = {
+    ...mission,
+    targetRelation: resolvedTarget.relation,
+    targetOwnerId: target.ownerId,
+    targetAlliance: target.alliance,
+    targetOwnerName: target.ownerName,
+    targetRaceId: target.raceId,
+    targetEspionageLevel: targetEspionageLevel(state, target),
+  };
+  const attempt = mission.reportIds.length + 1;
+  const hunterRoll = materializeSpyRoll(rng, mission.id, 'hunter', attempt);
+  if (hunterDetects(target.hunterLevel, hunterRoll)) {
+    const destroyedMission: SpyMission = {
+      ...missionAtTarget,
+      status: 'destroyed',
+      destroyedAt: now,
+      nextReportAt: undefined,
+    };
+    const destroyedFlight: FlightRecord = {
+      ...flight,
+      phase: 'completed',
+      arrivedAt: flight.arrivedAt ?? flight.arrivalAt,
+      completedAt: now,
+      completionReason: 'spy-destroyed',
+    };
+    const notice: SpyHunterNotice = {
+      id: `spy-hunter-${mission.id}-${mission.reportIds.length + 1}`,
+      missionId: mission.id,
+      createdAt: now,
+      targetPlanetId: target.id,
+      targetPlanetName: target.name,
+      targetOwnerName: target.ownerName,
+      targetCoordinate: { ...target.coordinate },
+      hunterLevel: target.hunterLevel,
+    };
+    let next = removeSpyProbeFromOrigin(state, mission);
+    const espionage = updateSpyMission(currentEspionageState(next), destroyedMission);
+    next = withEspionageState(next, { ...espionage, hunterNotices: [...espionage.hunterNotices, notice] });
+    next = { ...next, flights: updateFlight(currentFlightState(next), destroyedFlight) };
+    return {
+      state: next,
+      flight: destroyedFlight,
+      event: { flight: destroyedFlight, status: 'spy-detected', notice: `Шпионский зонд уничтожен над планетой ${target.name}: Охотник обнаружил вторжение.` },
+    };
+  }
+
+  const currentSpyLevel = Math.max(0, Math.floor(state.science.levels[5] ?? 0));
+  const report = createSpyReport(
+    missionAtTarget,
+    target,
+    targetOwnerProfile(state, target),
+    now,
+    materializeSpyRoll(rng, mission.id, 'report', attempt),
+    firstReport,
+    currentSpyLevel,
+  );
+  const nextMission: SpyMission = {
+    ...missionAtTarget,
+    spyLevel: currentSpyLevel,
+    status: 'orbiting',
+    arrivedAt: mission.arrivedAt ?? flight.arrivalAt,
+    lastReportAt: now,
+    nextReportAt: now + SPY_REPORT_COOLDOWN_MS,
+    reportIds: [...mission.reportIds, report.id],
+  };
+  const arrivedFlight: FlightRecord = {
+    ...flight,
+    phase: 'arrived',
+    arrivedAt: flight.arrivedAt ?? flight.arrivalAt,
+    completionReason: 'arrived',
+  };
+  const espionage = currentEspionageState(state);
+  const nextEspionage = updateSpyMission({ ...espionage, reports: [...espionage.reports, report] }, nextMission);
+  const next = withEspionageState({ ...state, flights: updateFlight(currentFlightState(state), arrivedFlight) }, nextEspionage);
+  return {
+    state: next,
+    flight: arrivedFlight,
+    event: { flight: arrivedFlight, status: 'spy-report', notice: `Шпионский отчёт готов: ${target.name} · ${report.quality === 'full' ? 'полный' : report.quality === 'detailed' ? 'детальный' : 'базовый'} уровень.` },
+  };
+}
+
 function makePlanetId(coordinate: UniverseCoordinate): PlanetId {
   return `planet-${coordinate.galaxy}-${coordinate.system}-${coordinate.position}`;
 }
@@ -423,13 +725,26 @@ export function dispatchFlight(
     if (existing) return { ok: true, state, flight: existing, created: false, notice: noticeForDispatch(existing) };
   }
   if (!requestId) return failure(state, 'invalid-command', 'Для отправки требуется requestId/commandId.');
-  if (command.missionId !== 'colonize' && command.missionId !== 'transport') {
+  if (command.missionId !== 'colonize' && command.missionId !== 'transport' && command.missionId !== 'espionage') {
     return failure(state, 'mission-not-supported', 'Эта миссия пока не подключена к flight runtime.');
   }
   const departedAt = Number.isFinite(command.departedAt) ? command.departedAt! : (runtimeOptions.now ?? Date.now());
   const originPlanetId = command.originPlanetId ?? state.currentPlanetId;
   const originPlanet = state.planets[originPlanetId];
   if (!originPlanet) return failure(state, 'invalid-command', 'Исходная планета не найдена.');
+  if (command.missionId === 'espionage' && command.destination?.kind === 'planet') {
+    const existingMission = activeSpyMissionForTarget(
+      currentEspionageState(state).missions,
+      state.profile.playerId,
+      command.destination.planetId,
+    );
+    if (existingMission) {
+      const targetName = resolveSpyTarget(state, command.destination.planetId)?.target.name
+        ?? command.targetPlanetName
+        ?? 'этой планете';
+      return failure(state, 'spy-target-blocked', `Зонд уже выполняет миссию у ${targetName}. Дождитесь возвращения или уничтожения.`);
+    }
+  }
   const selectedShips = normalizeSelectedShips(command.selectedShips);
   if (!selectedShips) return failure(state, 'wrong-ship-composition', 'Выберите хотя бы один доступный корабль.');
   const availableFleet = getAvailableFleetForPlanet(state, originPlanetId);
@@ -442,6 +757,38 @@ export function dispatchFlight(
         reserved > 0 ? 'ship-already-reserved' : 'insufficient-ships',
         reserved > 0 ? 'Выбранный корабль уже зарезервирован другим рейсом.' : 'На исходной планете недостаточно выбранных кораблей.',
       );
+    }
+  }
+
+  if (command.missionId === 'espionage') {
+    if (!command.destination || command.destination.kind !== 'planet' || !isFlightCoordinate(command.destination.coordinate)) {
+      return failure(state, 'target-not-available', 'Для шпионажа выберите известную планету владельца.');
+    }
+    if (!selectedSpyProbeOnly(selectedShips)) {
+      return failure(state, 'wrong-ship-composition', 'Для шпионажа нужен ровно один шпионский зонд.');
+    }
+    if (command.destination.planetId === originPlanetId) {
+      return failure(state, 'target-is-origin', 'Нельзя отправить шпионский зонд на планету-источник.');
+    }
+    const resolvedTarget = resolveSpyTarget(state, command.destination.planetId, {
+      ownerId: command.targetOwnerId,
+      coordinate: command.destination.coordinate,
+    });
+    if (!resolvedTarget) {
+      return failure(state, 'target-not-available', 'Цель шпионажа больше не подтверждена авторитетным состоянием игры.');
+    }
+    const target = resolvedTarget.target;
+    const targetRelation = resolvedTarget.relation;
+    if ((targetRelation !== 'enemy' && targetRelation !== 'neutral') || command.targetRelation !== targetRelation) {
+      return failure(state, 'spy-target-blocked', 'Шпионаж запрещён против своей или союзной планеты.');
+    }
+    const existingMission = activeSpyMissionForTarget(
+      currentEspionageState(state).missions,
+      state.profile.playerId,
+      target.id,
+    );
+    if (existingMission) {
+      return failure(state, 'spy-target-blocked', `Зонд уже выполняет миссию у планеты ${target.name}. Дождитесь возвращения или уничтожения.`);
     }
   }
 
@@ -489,12 +836,18 @@ export function dispatchFlight(
     factionId: state.profile.factionId as CombatFactionId,
     science,
     operationId: command.operationId,
+    ...(command.missionId === 'espionage' ? { spyMissionId: `spy-${requestId}` } : {}),
     ...(transportTarget ? {
       destinationPlanetId: transportTarget.planetId,
       destinationOwnerId: transportTarget.ownerId,
       targetRelation: transportTarget.relation as TargetRelation,
       cargo: transportCargo,
       overflowWarning: transportOverflowWarning,
+    } : {}),
+    ...(command.missionId === 'espionage' ? {
+      destinationPlanetId: command.destination!.kind === 'planet' ? command.destination!.planetId : undefined,
+      destinationOwnerId: command.targetOwnerId,
+      targetRelation: command.targetRelation,
     } : {}),
   });
   const flight = scaledRecord(domainResult.flight, runtimeOptions);
@@ -524,6 +877,41 @@ export function dispatchFlight(
     };
     nextState = replacePlanetResources(nextState, originPlanetId, nextResources);
   }
+  if (command.missionId === 'espionage' && domainResult.created) {
+    const targetPlanetId = command.destination!.kind === 'planet' ? command.destination!.planetId : '';
+    const resolvedTarget = resolveSpyTarget(nextState, targetPlanetId, {
+      ownerId: command.targetOwnerId,
+      coordinate: command.destination!.coordinate,
+    });
+    if (!resolvedTarget || (resolvedTarget.relation !== 'enemy' && resolvedTarget.relation !== 'neutral')) {
+      return failure(state, 'target-not-available', 'Цель шпионажа больше не доступна.');
+    }
+    const target = resolvedTarget.target;
+    const mission: SpyMission = {
+      id: `spy-${requestId}`,
+      flightId: flight.id,
+      ownerId: state.profile.playerId,
+      originPlanetId,
+      targetPlanetId: target.id,
+      targetPlanetName: target.name,
+      targetOwnerId: target.ownerId,
+      targetOwnerName: target.ownerName,
+      targetRaceId: target.raceId,
+      targetAlliance: target.alliance,
+      targetRelation: resolvedTarget.relation,
+      targetCoordinate: { ...target.coordinate },
+      spyLevel: Math.max(0, Math.floor(state.science.levels[5] ?? 0)),
+      targetEspionageLevel: targetEspionageLevel(state, target),
+      status: 'transit',
+      sentAt: flight.departedAt,
+      arrivalAt: flight.arrivalAt,
+      reportIds: [],
+    };
+    nextState = withEspionageState(nextState, {
+      ...currentEspionageState(nextState),
+      missions: [...currentEspionageState(nextState).missions, mission],
+    });
+  }
   return { ok: true, state: nextState, flight, created: true, notice: noticeForDispatch(flight) };
 }
 
@@ -547,13 +935,32 @@ export function recallFlight(
   const flights = currentFlightState(state);
   const flight = flights.records.find((item) => item.id === flightId);
   if (!flight) return failure(state, 'flight-not-recallable', 'Отозвать можно только исходящий рейс.');
-  if (now >= flight.arrivalAt) return failure(state, 'flight-already-arrived', 'Рейс уже прибыл.');
-  if (flight.phase !== 'outbound') return failure(state, 'flight-not-recallable', 'Отозвать можно только исходящий рейс.');
+  const spyMission = flight.missionId === 'espionage' ? spyMissionForFlight(state, flight) : undefined;
+  if (flight.missionId === 'espionage' && flight.phase === 'arrived' && spyMission?.status === 'orbiting') {
+    const returnedState = beginDomainFlightReturn(flights, flightId, now, 'recalled');
+    const nextFlight = returnedState.records.find((item) => item.id === flightId)!;
+    const nextMission: SpyMission = { ...spyMission, status: 'returning', nextReportAt: undefined };
+    return {
+      ok: true,
+      state: withEspionageState({ ...state, flights: returnedState }, updateSpyMission(currentEspionageState(state), nextMission)),
+      flight: nextFlight,
+      created: false,
+      notice: `Шпионский зонд отозван. Возврат через ${Math.ceil((nextFlight.returnAt! - now) / 1_000)} с.`,
+    };
+  }
+  if (flight.missionId !== 'espionage' && now >= flight.arrivalAt) {
+    return failure(state, 'flight-already-arrived', 'Рейс уже прибыл.');
+  }
+  if (now >= flight.arrivalAt && flight.phase === 'outbound') return failure(state, 'flight-already-arrived', 'Рейс уже прибыл.');
+  if (flight.phase !== 'outbound') return failure(state, 'flight-not-recallable', 'Отозвать можно только исходящий рейс или зонд на орбите.');
   const nextFlights = recallDomainFlight(flights, flightId, now);
   const nextFlight = nextFlights.records.find((item) => item.id === flightId)!;
+  const nextState = spyMission
+    ? withEspionageState({ ...state, flights: nextFlights }, updateSpyMission(currentEspionageState(state), { ...spyMission, status: 'returning', nextReportAt: undefined }))
+    : { ...state, flights: nextFlights };
   return {
     ok: true,
-    state: { ...state, flights: nextFlights },
+    state: nextState,
     flight: nextFlight,
     created: false,
     notice: `Рейс отозван. Возврат через ${Math.ceil((nextFlight.returnAt! - now) / 1000)} с; газ не возвращается.`,
@@ -649,17 +1056,124 @@ function completeFlight(state: SaveState, flight: FlightRecord, completed: Fligh
   return { ...state, flights: updateFlight(currentFlightState(state), completed) };
 }
 
-export function reconcileFlights(state: SaveState, now: number): FlightReconcileResult {
+function spyMissionForFlight(state: SaveState, flight: FlightRecord): SpyMission | undefined {
+  return currentEspionageState(state).missions.find((mission) => mission.flightId === flight.id);
+}
+
+function beginSpyTargetReturn(
+  state: SaveState,
+  flight: FlightRecord,
+  mission: SpyMission,
+  resolved: ResolvedSpyTarget,
+  now: number,
+): { state: SaveState; flight: FlightRecord; mission: SpyMission } | null {
+  const flights = currentFlightState(state);
+  let returningState: FlightState;
+  if (flight.phase === 'outbound' && now < flight.arrivalAt) {
+    returningState = recallDomainFlight(flights, flight.id, now);
+  } else if (flight.phase === 'outbound' || flight.phase === 'arrived') {
+    returningState = beginDomainFlightReturn(flights, flight.id, now, 'target-unavailable');
+  } else {
+    return null;
+  }
+  const returningRecord = returningState.records.find((item) => item.id === flight.id);
+  if (!returningRecord || returningRecord.phase !== 'returning') return null;
+  const returningFlight: FlightRecord = {
+    ...returningRecord,
+    ...(flight.phase === 'arrived' ? { arrivedAt: flight.arrivedAt ?? flight.arrivalAt } : {}),
+    completionReason: 'target-unavailable',
+  };
+  const returningMission: SpyMission = {
+    ...mission,
+    targetRelation: resolved.relation,
+    targetOwnerId: resolved.target.ownerId,
+    targetAlliance: resolved.target.alliance,
+    targetOwnerName: resolved.target.ownerName,
+    targetRaceId: resolved.target.raceId,
+    targetEspionageLevel: targetEspionageLevel(state, resolved.target),
+    status: 'returning',
+    nextReportAt: undefined,
+  };
+  let next = { ...state, flights: updateFlight(returningState, returningFlight) };
+  next = withEspionageState(next, updateSpyMission(currentEspionageState(next), returningMission));
+  return { state: next, flight: returningFlight, mission: returningMission };
+}
+
+export function reconcileFlights(state: SaveState, now: number, rng?: () => number): FlightReconcileResult {
   let next = { ...state, flights: currentFlightState(state) };
   const events: FlightReconcileEvent[] = [];
   let changed = false;
 
   for (const original of next.flights.records) {
     const current = next.flights.records.find((flight) => flight.id === original.id) ?? original;
+    if (current.missionId === 'espionage') {
+      const mission = spyMissionForFlight(next, current);
+      if (mission && mission.status !== 'returning' && mission.status !== 'returned' && mission.status !== 'destroyed') {
+        const resolved = resolveSpyTarget(next, mission.targetPlanetId, {
+          coordinate: mission.targetCoordinate,
+        });
+        if (resolved && (resolved.relation === 'self' || resolved.relation === 'ally')) {
+          const returning = beginSpyTargetReturn(next, current, mission, resolved, now);
+          if (returning) {
+            next = returning.state;
+            changed = true;
+            events.push({
+              flight: returning.flight,
+              status: 'target-unavailable',
+              notice: `Шпионский зонд возвращается: планета ${resolved.target.name} стала недоступна для шпионажа.`,
+            });
+            continue;
+          }
+        }
+        if (resolved && (resolved.relation === 'enemy' || resolved.relation === 'neutral')
+          && (mission.targetOwnerId !== resolved.target.ownerId
+            || mission.targetRelation !== resolved.relation
+            || mission.targetAlliance?.id !== resolved.target.alliance?.id
+            || mission.targetAlliance?.tag !== resolved.target.alliance?.tag)) {
+          next = withEspionageState(next, updateSpyMission(currentEspionageState(next), {
+            ...mission,
+            targetRelation: resolved.relation,
+            targetOwnerId: resolved.target.ownerId,
+            targetAlliance: resolved.target.alliance,
+            targetOwnerName: resolved.target.ownerName,
+            targetRaceId: resolved.target.raceId,
+            targetEspionageLevel: targetEspionageLevel(next, resolved.target),
+          }));
+          changed = true;
+        }
+      }
+    }
     const arrivalAt = current.arrivedAt ?? current.arrivalAt;
     const arrivalCheckAt = current.arrivedAt ?? current.arrivalAt;
     const arrivalReady = current.phase === 'arrived' || (current.phase === 'outbound' && now >= current.arrivalAt);
     if (arrivalReady) {
+      if (current.missionId === 'espionage') {
+        const mission = spyMissionForFlight(next, current);
+        if (!mission) {
+          const failed: FlightRecord = { ...current, phase: 'completed', arrivedAt: arrivalAt, completedAt: now, completionReason: 'mission-failed' };
+          next = completeFlight(next, current, failed);
+          changed = true;
+          events.push({ flight: failed, status: 'arrived', notice: 'Шпионская миссия завершена: снимок миссии не найден.' });
+          continue;
+        }
+        if (mission.status === 'transit') {
+          const resolved = resolveSpyAtTarget(next, current, mission, now, rng, true);
+          if (!resolved) {
+            const failedMission: SpyMission = { ...mission, status: 'destroyed', destroyedAt: now };
+            const failedFlight: FlightRecord = { ...current, phase: 'completed', arrivedAt: arrivalAt, completedAt: now, completionReason: 'mission-failed' };
+            next = removeSpyProbeFromOrigin(next, mission);
+            next = withEspionageState(completeFlight(next, current, failedFlight), updateSpyMission(currentEspionageState(next), failedMission));
+            changed = true;
+            events.push({ flight: failedFlight, status: 'target-unavailable', notice: 'Шпионская миссия завершена: цель больше недоступна.' });
+            continue;
+          }
+          next = resolved.state;
+          changed = true;
+          events.push(resolved.event);
+          continue;
+        }
+        if (mission.status === 'orbiting') continue;
+      }
       if (current.missionId === 'transport') {
         const target = transportArrivalTarget(next, current);
         const cargo = normalizeTransportCargo(current.cargo);
@@ -790,15 +1304,26 @@ export function reconcileFlights(state: SaveState, now: number): FlightReconcile
         next = returned.state;
         returnedFlight = returned.flight;
       }
+      const spyMission = refreshed.missionId === 'espionage' ? spyMissionForFlight(next, refreshed) : undefined;
       const completed: FlightRecord = {
         ...returnedFlight,
         phase: 'completed',
         completedAt: refreshed.returnAt,
         completionReason: returnedFlight.missionId === 'transport'
           ? returnedFlight.completionReason ?? 'recalled'
-          : returnedFlight.completionReason === 'target-occupied' ? 'target-occupied' : 'recalled',
+          : returnedFlight.completionReason === 'target-unavailable'
+            ? 'target-unavailable'
+            : returnedFlight.completionReason === 'target-occupied' ? 'target-occupied' : 'recalled',
       };
       next = completeFlight(next, returnedFlight, completed);
+      if (spyMission && spyMission.status === 'returning') {
+        next = withEspionageState(next, updateSpyMission(currentEspionageState(next), {
+          ...spyMission,
+          status: 'returned',
+          returnedAt: refreshed.returnAt,
+          nextReportAt: undefined,
+        }));
+      }
       changed = true;
       events.push({
         flight: completed,
@@ -809,12 +1334,116 @@ export function reconcileFlights(state: SaveState, now: number): FlightReconcile
             : completed.completionReason === 'normal-return'
               ? 'Транспорт вернулся после доставки.'
               : 'Транспорт вернулся после отзыва рейса.'
-          : completed.completionReason === 'target-occupied' ? 'Колонизатор вернулся: координата уже занята.' : 'Колонизатор вернулся после отзыва рейса.',
+          : completed.missionId === 'espionage'
+            ? completed.completionReason === 'target-unavailable'
+              ? 'Шпионский зонд вернулся: цель стала союзной и недоступна для шпионажа.'
+              : 'Шпионский зонд вернулся на исходную планету.'
+            : completed.completionReason === 'target-occupied' ? 'Колонизатор вернулся: координата уже занята.' : 'Колонизатор вернулся после отзыва рейса.',
       });
     }
   }
 
   return { changed, state: changed ? next : state, events };
+}
+
+export type SpyReportRuntimeOptions = {
+  now?: number;
+  rng?: () => number;
+};
+
+function spyReportFailure(state: SaveState, code: FlightErrorCode, message: string): SpyReportCommandFailure {
+  return { ok: false, state, error: { code, message } };
+}
+
+export function requestSpyReport(
+  state: SaveState,
+  missionId: string,
+  options: SpyReportRuntimeOptions = {},
+): SpyReportCommandResult {
+  const now = options.now ?? Date.now();
+  // options.rng stays a test-only override; production uses the seeded roll contract.
+  const rng = options.rng;
+  const mission = currentEspionageState(state).missions.find((item) => item.id === missionId);
+  if (!mission) return spyReportFailure(state, 'spy-mission-not-found', 'Шпионская миссия не найдена.');
+  if (mission.status === 'returning') return spyReportFailure(state, 'spy-target-blocked', 'Зонд уже возвращается; новые отчёты недоступны.');
+  if (mission.status !== 'orbiting') return spyReportFailure(state, 'spy-mission-not-found', 'Запрос доступен только для зонда на орбите.');
+  const flight = getFlightById(state, mission.flightId);
+  if (!flight || flight.phase !== 'arrived') return spyReportFailure(state, 'spy-mission-not-found', 'Полёт шпионского зонда больше не активен.');
+  const resolvedTarget = resolveSpyTarget(state, mission.targetPlanetId, {
+    coordinate: mission.targetCoordinate,
+  });
+  if (!resolvedTarget) return spyReportFailure(state, 'target-not-available', 'Цель шпионажа больше недоступна.');
+  if (resolvedTarget.relation === 'self' || resolvedTarget.relation === 'ally') {
+    const returning = beginSpyTargetReturn(state, flight, mission, resolvedTarget, now);
+    if (!returning) return spyReportFailure(state, 'spy-target-blocked', 'Зонд уже возвращается; новые отчёты недоступны.');
+    return spyReportFailure(returning.state, 'spy-target-blocked', 'Владелец цели стал союзником: зонд возвращается, новые отчёты запрещены.');
+  }
+  if (resolvedTarget.relation !== 'enemy' && resolvedTarget.relation !== 'neutral') {
+    return spyReportFailure(state, 'target-not-available', 'Цель шпионажа больше недоступна.');
+  }
+  const currentMission: SpyMission = {
+    ...mission,
+    targetRelation: resolvedTarget.relation,
+    targetOwnerId: resolvedTarget.target.ownerId,
+    targetAlliance: resolvedTarget.target.alliance,
+    targetOwnerName: resolvedTarget.target.ownerName,
+    targetRaceId: resolvedTarget.target.raceId,
+    targetEspionageLevel: targetEspionageLevel(state, resolvedTarget.target),
+  };
+  const relationState = currentMission.targetRelation !== mission.targetRelation
+    || currentMission.targetAlliance?.id !== mission.targetAlliance?.id
+    || currentMission.targetAlliance?.tag !== mission.targetAlliance?.tag
+    ? withEspionageState(state, updateSpyMission(currentEspionageState(state), currentMission))
+    : state;
+  if (!canRequestSpyReport(currentMission, now)) {
+    return spyReportFailure(relationState, 'spy-report-cooldown', `Следующий отчёт будет доступен через ${Math.max(0, Math.ceil((currentMission.nextReportAt! - now) / 1_000))} с.`);
+  }
+  const reportId = `spy-report-${currentMission.id}-${currentMission.reportIds.length + 1}`;
+  const resolved = resolveSpyAtTarget(relationState, flight, currentMission, now, rng, false);
+  if (!resolved) return spyReportFailure(relationState, 'target-not-available', 'Цель шпионажа больше недоступна.');
+  const report = resolved.state.espionage?.reports.find((item) => item.id === reportId);
+  return { ok: true, state: resolved.state, report, notice: resolved.event.notice };
+}
+
+export function requestAllSpyReports(
+  state: SaveState,
+  missionIds: readonly string[] = [],
+  options: SpyReportRuntimeOptions = {},
+): SpyReportCommandResult {
+  let next = state;
+  const selected = new Set(missionIds);
+  let count = 0;
+  let processed = 0;
+  let skippedCooldown = 0;
+  let blocked = 0;
+  let destroyed = 0;
+  for (const mission of currentEspionageState(next).missions) {
+    if (mission.status !== 'orbiting' || (selected.size > 0 && !selected.has(mission.id))) continue;
+    const result = requestSpyReport(next, mission.id, options);
+    if (result.ok) {
+      next = result.state;
+      processed += 1;
+      count += result.report ? 1 : 0;
+      if (!result.report) destroyed += 1;
+    } else if (result.error.code === 'spy-report-cooldown') {
+      skippedCooldown += 1;
+    } else if (result.error.code === 'spy-target-blocked') {
+      next = result.state;
+      blocked += 1;
+    }
+  }
+  if (processed === 0) {
+    return spyReportFailure(next, blocked > 0 ? 'spy-target-blocked' : 'spy-report-cooldown', blocked > 0
+      ? `Заблокировано зондов после смены дипломатического статуса: ${blocked}.`
+      : skippedCooldown > 0
+        ? `Нет зондов с готовым отчётом. На cooldown: ${skippedCooldown}.`
+        : 'Нет активных зондов с готовым отчётом.');
+  }
+  return {
+    ok: true,
+    state: next,
+    notice: `Получено новых шпионских отчётов: ${count}.${skippedCooldown ? ` Пропущено на cooldown: ${skippedCooldown}.` : ''}${destroyed ? ` Уничтожено зондов: ${destroyed}.` : ''}`,
+  };
 }
 
 export function getFlightById(state: SaveState, flightId: string): FlightRecord | undefined {

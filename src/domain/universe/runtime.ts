@@ -11,6 +11,7 @@ import type {
   UniverseFixtureDescriptor,
   UniverseFixtureMarker,
   UniversePersistedPlayerPlanet,
+  UniverseRegisteredPlanet,
   UniversePlanetNode,
   UniversePoint,
   UniversePirateState,
@@ -21,6 +22,7 @@ import { getPositionCoefficientPercent, getSunEfficiencyPercent } from '../energ
 import type { RuntimeMode } from '../runtime/mode.ts';
 import { DEFAULT_ALLIANCE_MEMBERS, DEFAULT_ALLIANCE_PROFILE } from '../command/catalog.ts';
 import { CURRENT_COMMAND_ALLIANCE_ID } from '../command/selectors.ts';
+import type { DiplomaticRelation } from '../command/types.ts';
 import { CURRENT_PLAYER_FACTION_ID } from '../profile/repository.ts';
 
 export const GALAXY = 1;
@@ -122,7 +124,7 @@ const SYSTEM_ONE_FIXTURES: Readonly<Record<number, { kind: UniversePlanetNode['k
 
 // Seeded once for a stable atlas: every bot system and position is sampled.
 const npcRandom = mulberry32(10_701);
-const NPC_PLANET_FIXTURES = shuffle(Array.from({ length: SYSTEM_COUNT }, (_, index) => index + 1), npcRandom)
+export const NPC_PLANET_FIXTURES = shuffle(Array.from({ length: SYSTEM_COUNT }, (_, index) => index + 1), npcRandom)
   .slice(0, MAX_PLANETS_PER_OWNER)
   .map((system, index) => {
     const slots = Array.from({ length: POSITION_COUNT }, (_, slot) => slot + 1)
@@ -135,6 +137,9 @@ const NPC_PLANET_FIXTURES = shuffle(Array.from({ length: SYSTEM_COUNT }, (_, ind
       artIndex: BOT_PLANET_PRESETS[index].artIndex,
     };
   });
+
+/** Stable seven-planet Bot 01 fixture consumed by the mod-test espionage slice. */
+export const BOT_01_PLANET_FIXTURES = NPC_PLANET_FIXTURES;
 
 const KIND_LABELS: Record<UniversePlanetNode['kind'], string> = {
   empty: 'Свободная позиция',
@@ -319,12 +324,19 @@ export function getUniverseOwnerRelation(
   currentOwnerId: string,
   currentAlliance?: UniverseOwnerAlliance | null,
   targetOwner?: UniverseOwnerProfile,
+  diplomacy?: readonly Pick<DiplomaticRelation, 'id' | 'tag' | 'status'>[],
 ): UniverseOwnerRelation {
   if (node.isHomeworld || node.ownerId === currentOwnerId) return 'self';
 
   const targetAlliance = targetOwner?.alliance;
   if (!currentAlliance || !targetAlliance) return 'neutral';
-  return currentAlliance.id === targetAlliance.id || currentAlliance.tag === targetAlliance.tag ? 'ally' : 'enemy';
+  if (currentAlliance.id === targetAlliance.id || currentAlliance.tag.toUpperCase() === targetAlliance.tag.toUpperCase()) return 'ally';
+
+  const diplomaticRelation = diplomacy?.find((relation) => relation.id === targetAlliance.id
+    || relation.tag.toUpperCase() === targetAlliance.tag.toUpperCase());
+  return diplomaticRelation?.status === 'war' || diplomaticRelation?.status === 'hostile'
+    ? 'enemy'
+    : 'neutral';
 }
 
 export function getUniverseNodeCaption(node: UniversePlanetNode, currentPlayerName: string, ownerDisplayName = 'Владелец планеты') {
@@ -361,10 +373,17 @@ export type CreateUniverseSystemOptions = {
   nowMs?: number;
   galaxyCount?: number;
   playerPlanets?: readonly UniversePersistedPlayerPlanet[];
+  registeredPlanets?: readonly UniverseRegisteredPlanet[];
 };
 
 function persistedPlanetFor(options: CreateUniverseSystemOptions, galaxy: number, system: number, slot: number) {
   return options.playerPlanets?.find((planet) => planet.coordinate.galaxy === galaxy
+    && planet.coordinate.system === system
+    && planet.coordinate.position === slot);
+}
+
+function registeredPlanetFor(options: CreateUniverseSystemOptions, galaxy: number, system: number, slot: number) {
+  return options.registeredPlanets?.find((planet) => planet.coordinate.galaxy === galaxy
     && planet.coordinate.system === system
     && planet.coordinate.position === slot);
 }
@@ -393,20 +412,23 @@ function createPositionNode(
   assets: UniverseAssetCatalog,
 ): UniversePlanetNode {
   const persisted = persistedPlanetFor(options, galaxy, system, slot);
-  const fixture = persisted ? undefined : fixtureFor(system, slot, options.mode);
+  const registered = persisted ? undefined : registeredPlanetFor(options, galaxy, system, slot);
+  const fixture = persisted || registered
+    ? undefined
+    : fixtureFor(system, slot, options.mode);
   const coordinate = { galaxy, system, position: slot };
-  const kind = persisted ? 'player' : fixture?.kind ?? generatedKind();
-  const ownerId = persisted?.ownerId ?? fixture?.ownerId;
-  const isHomeworld = persisted?.isHomeworld ?? (kind === 'player' && system === 1 && slot === 1);
+  const kind = persisted ? 'player' : registered?.kind ?? fixture?.kind ?? generatedKind();
+  const ownerId = persisted?.ownerId ?? registered?.ownerId ?? fixture?.ownerId;
+  const isHomeworld = persisted?.isHomeworld ?? registered?.isHomeworld ?? (kind === 'player' && system === 1 && slot === 1);
   const name = persisted?.name?.trim() || (isHomeworld
     ? options.currentPlanetName?.trim() || 'Helion 01'
-    : fixture?.name ?? `Планета ${String(system).padStart(2, '0')}-${String(slot).padStart(2, '0')}`);
-  const art = persisted?.art?.trim() || (isHomeworld
+    : (registered?.name?.trim() || fixture?.name || `Планета ${String(system).padStart(2, '0')}-${String(slot).padStart(2, '0')}`));
+  const art = persisted?.art?.trim() || registered?.art?.trim() || (isHomeworld
     ? options.currentPlanetArt?.trim() || pickAsset(assets.planetArts, slot, 'planet-home')
     : pickAsset(assets.planetArts, fixture?.artIndex ?? system * 5 + slot, 'planet-default'));
 
   return {
-    id: persisted?.id ?? fixture?.id ?? `universe-${galaxy}-${system}-${slot}`,
+    id: persisted?.id ?? registered?.id ?? fixture?.id ?? `universe-${galaxy}-${system}-${slot}`,
     coordinate,
     kind,
     name,
@@ -415,7 +437,7 @@ function createPositionNode(
     isHomeworld,
     statusLabel: KIND_LABELS[kind],
     description: KIND_DESCRIPTIONS[kind],
-    known: fixture?.known ?? true,
+    known: registered?.known ?? fixture?.known ?? true,
     ...(fixture?.fixture ? { fixture: fixture.fixture } : {}),
     positionCoefficientPercent: getPositionCoefficientPercent(slot),
   };
@@ -430,12 +452,16 @@ function createUniverseSystemBase(options: CreateUniverseSystemOptions, assets: 
   const persistedSlots = (options.playerPlanets ?? [])
     .filter((planet) => planet.coordinate.galaxy === galaxy && planet.coordinate.system === system)
     .map((planet) => planet.coordinate.position);
+  const registeredSlots = (options.registeredPlanets ?? [])
+    .filter((planet) => planet.coordinate.galaxy === galaxy && planet.coordinate.system === system)
+    .map((planet) => planet.coordinate.position);
   const planetCount = 8 + ((galaxy + system) % 7);
+  const fixedSlots = [...new Set([...fixtureSlots, ...persistedSlots, ...registeredSlots])];
   const remainingSlots = shuffle(
-    Array.from({ length: POSITION_COUNT }, (_, index) => index + 1).filter((slot) => !fixtureSlots.includes(slot)),
+    Array.from({ length: POSITION_COUNT }, (_, index) => index + 1).filter((slot) => !fixedSlots.includes(slot)),
     random,
   );
-  const occupiedSlots = new Set([...fixtureSlots, ...persistedSlots, ...remainingSlots.slice(0, Math.max(0, planetCount - fixtureSlots.length - persistedSlots.length))]);
+  const occupiedSlots = new Set([...fixedSlots, ...remainingSlots.slice(0, Math.max(0, planetCount - fixedSlots.length))]);
   const positions = Array.from({ length: POSITION_COUNT }, (_, index) => index + 1).map((slot) => occupiedSlots.has(slot)
     ? createPositionNode(galaxy, system, slot, options, assets)
     : {
@@ -749,6 +775,7 @@ export function getUniverseActionState(
   action: UniverseAction,
   node: UniversePlanetNode,
   currentOwnerId: string,
+  relation?: UniverseOwnerRelation,
 ): UniverseActionState {
   const label = action === 'spy' ? 'Отправить шпионский зонд' : 'Отправить флот';
   if (node.kind !== 'player' && node.kind !== 'npc') {
@@ -796,12 +823,31 @@ export function getUniverseActionState(
       reason: 'Транспортировка доступна только на свою или явную союзную планету.',
     };
   }
+  const targetRelation = relation ?? 'neutral';
+  if (targetRelation === 'ally') {
+    return {
+      action,
+      enabled: false,
+      status: 'disabled',
+      label,
+      reason: 'Шпионаж запрещён против союзной планеты.',
+    };
+  }
+  if (targetRelation === 'self') {
+    return {
+      action,
+      enabled: false,
+      status: 'disabled',
+      label,
+      reason: 'Шпионаж запрещён против своей планеты.',
+    };
+  }
   return {
     action,
     enabled: true,
-    status: 'prototype',
+    status: 'supported',
     label,
-    reason: 'Прототип — отправка не подключена.',
+    reason: targetRelation === 'enemy' ? 'Вражеская цель доступна для шпионажа.' : 'Нейтральная цель доступна для шпионажа.',
   };
 }
 

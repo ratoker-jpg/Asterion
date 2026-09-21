@@ -87,7 +87,73 @@ test('owner color relation follows ownership and alliance status instead of bot 
   assert.equal(getUniverseOwnerRelation(homeworld, 'player-current', currentAlliance, undefined), 'self');
   assert.equal(getUniverseOwnerRelation(botPlanet, 'player-current', currentAlliance, bot), 'neutral');
   assert.equal(getUniverseOwnerRelation(botPlanet, 'player-current', currentAlliance, { ...bot, alliance: currentAlliance }), 'ally');
-  assert.equal(getUniverseOwnerRelation(botPlanet, 'player-current', currentAlliance, { ...bot, alliance: alliance('alliance-b', 'B') }), 'enemy');
+  const otherAlliance = { ...bot, alliance: alliance('alliance-b', 'B') };
+  assert.equal(getUniverseOwnerRelation(botPlanet, 'player-current', currentAlliance, otherAlliance, [{ id: 'relation-b', tag: 'B', status: 'neutral' }]), 'neutral');
+  assert.equal(getUniverseOwnerRelation(botPlanet, 'player-current', currentAlliance, otherAlliance, [{ id: 'relation-b', tag: 'B', status: 'war' }]), 'enemy');
+});
+
+test('war is an explicit enemy status for a different alliance', () => {
+  const node = createUniverseSystem({ system: 2 }).positions.find((item) => item.kind === 'uninhabited')!;
+  const currentAlliance: UniverseOwnerAlliance = {
+    id: 'alliance-current',
+    name: 'Current',
+    tag: 'CUR',
+    emblem: { glyph: 'orbit', accent: 'cyan' },
+    glyph: 'orbit',
+  };
+  const targetOwner = {
+    ...createUniverseNpcOwnerProfile(),
+    alliance: {
+      id: 'alliance-other',
+      name: 'Other',
+      tag: 'OTH',
+      emblem: { glyph: 'orbit' as const, accent: 'violet' as const },
+      glyph: 'orbit' as const,
+    },
+  };
+
+  assert.equal(getUniverseOwnerRelation(node, 'player-current', currentAlliance, targetOwner, [{ id: 'war-with-other', tag: 'OTH', status: 'war' }]), 'enemy');
+});
+
+test('registered production targets become selectable map nodes without adding fixtures', () => {
+  const registered = {
+    id: 'production-future-target',
+    coordinate: { galaxy: 1, system: 40, position: 24 },
+    name: 'Будущая цель',
+    kind: 'npc' as const,
+    ownerId: 'future-owner',
+  };
+  const map = createUniverseMap({ mode: 'production', registeredPlanets: [registered] });
+  const nodes = map.systems.flatMap((system) => system.positions);
+  const node = nodes.find((item) => item.id === registered.id);
+
+  assert.ok(node);
+  assert.equal(node?.kind, 'npc');
+  assert.equal(node?.ownerId, registered.ownerId);
+  assert.equal(node?.name, registered.name);
+  assert.equal(nodes.filter((item) => item.kind === 'npc').length, 1);
+});
+
+test('registered Test Mode targets override coordinate fixtures and block fleet actions', () => {
+  for (const relation of ['neutral', 'enemy'] as const) {
+    const registered = {
+      id: `test-mode-${relation}-target`,
+      coordinate: { galaxy: 1, system: 1, position: 2 },
+      name: `Чужая ${relation} цель`,
+      kind: 'npc' as const,
+      ownerId: `foreign-${relation}-owner`,
+    };
+    const system = createUniverseSystem({
+      mode: 'test',
+      system: 1,
+      registeredPlanets: [registered],
+    });
+    const node = system.positions.find((item) => item.id === registered.id);
+
+    assert.ok(node);
+    assert.equal(node?.fixture, undefined);
+    assert.equal(getUniverseActionState('fleet', node!, 'player-current', relation).enabled, false);
+  }
 });
 
 test('dynamic objects are scheduled independently and never duplicate within a system', () => {
@@ -300,7 +366,7 @@ test('timed object schedules use the confirmed lifetime, quiet period, and chanc
   }
 });
 
-test('spy and fleet actions are honest about unsupported runtime', () => {
+test('spy and fleet actions follow the owner relation contract', () => {
   const system = createUniverseSystem({ system: 1, currentOwnerId: 'player-current' });
   const homeworld = system.positions.find((node) => node.isHomeworld)!;
   const ally = createUniverseMap({ mode: 'test' }).systems.flatMap((item) => item.positions).find((node) => node.fixture?.id === 'test-mode-ally-ira-vel-v1')!;
@@ -311,7 +377,8 @@ test('spy and fleet actions are honest about unsupported runtime', () => {
   assert.equal(getUniverseActionState('fleet', homeworld, 'player-current').status, 'supported');
   assert.equal(getUniverseActionState('fleet', homeworld, 'player-current').enabled, true);
   assert.equal(getUniverseActionState('fleet', homeworld, 'player-current').reason, 'Своя планета принимает транспортировку.');
-  assert.equal(getUniverseActionState('spy', foreign, 'player-current').status, 'prototype');
+  assert.equal(getUniverseActionState('spy', foreign, 'player-current', 'neutral').status, 'supported');
+  assert.equal(getUniverseActionState('spy', foreign, 'player-current', 'neutral').enabled, true);
   assert.equal(getUniverseActionState('fleet', foreign, 'player-current').enabled, false);
   assert.equal(getUniverseActionState('fleet', ally, 'player-current').status, 'supported');
   assert.equal(getUniverseActionState('fleet', ally, 'player-current').enabled, true);

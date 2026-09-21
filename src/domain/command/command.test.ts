@@ -82,7 +82,7 @@ test('malformed command data does not break migration', () => {
     alliance: { name: '', tag: null, emblem: { glyph: 'broken', accent: 'broken' } },
     members: 'broken',
     resourceRequests: [{ id: 'request-nora-gas', amount: -400, state: 'done' }],
-    diplomacy: [{ id: 'relation-aurora', status: 'war' }],
+    diplomacy: [{ id: 'relation-aurora', status: 'broken' }],
     jointOperations: [{ id: 'joint-sun-raid', participants: -8, joinedByPlayer: 'yes' }],
   });
 
@@ -178,6 +178,12 @@ test('diplomacy fixtures are valid and unique', () => {
   assert.equal(new Set(relations.map((relation) => relation.id)).size, relations.length);
   assert.equal(new Set(relations.map((relation) => relation.tag)).size, relations.length);
   assert.ok(relations.every((relation) => relation.history.length > 0 && relation.meaning.length > 0));
+});
+
+test('Рука Пустоты starts hostile until an explicit war decision is recorded', () => {
+  const relation = createDefaultCommandState().diplomacy.find((item) => item.id === 'relation-void-hand');
+
+  assert.equal(relation?.status, 'hostile');
 });
 
 test('persisting command preserves unrelated save fields', () => {

@@ -28,7 +28,7 @@ const EMBLEM_ACCENTS: readonly AllianceAccent[] = ['cyan', 'amber', 'violet'];
 const RESOURCE_TYPES: readonly ResourceType[] = ['metal', 'minerals', 'gas', 'energy'];
 const REQUEST_PRIORITIES: readonly RequestPriority[] = ['standard', 'high', 'critical'];
 const REQUEST_STATES: readonly ResourceRequestState[] = ['open', 'reviewing'];
-const RELATION_STATUSES: readonly RelationStatus[] = ['ally', 'trade_pact', 'neutral', 'tense', 'hostile'];
+const RELATION_STATUSES: readonly RelationStatus[] = ['ally', 'trade_pact', 'neutral', 'tense', 'hostile', 'war'];
 const JOINT_STATES: readonly JointOperationState[] = ['preparing', 'mustering', 'active', 'awaiting'];
 
 const EMPTY_ALLIANCE_PROFILE: AllianceProfile = {

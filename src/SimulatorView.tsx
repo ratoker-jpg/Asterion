@@ -544,9 +544,10 @@ function RaceSelector({ id, label, value, onChange }: { id: string; label: strin
   );
 }
 
-export function SimulatorView({ planetName, coords, onBack }: { planetName: string; coords: string; onBack: () => void }) {
+export function SimulatorView({ planetName, coords, onBack, initialScenario }: { planetName: string; coords: string; onBack: () => void; initialScenario?: SimulatorScenario | null }) {
   const initialPersistence = useMemo(() => readSimulatorState(), []);
   const [scenario, setScenario] = useState<SimulatorScenario>(() => {
+    if (initialScenario) return initialScenario;
     if (initialPersistence.lastScenario) return initialPersistence.lastScenario;
     const savedTechnologyProfiles = readSavedCombatTechnologyProfiles();
     const empty = createEmptySimulatorScenario();

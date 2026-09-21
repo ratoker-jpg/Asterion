@@ -1887,3 +1887,272 @@ body button[data-asterion-close]:active{ transform:translateY(1px); }
 @media (min-width:701px){
   body .resource-building-dialog-art{ top:8px; }
 }
+
+/* === ESPIONAGE FOLLOW-UP =====================================
+   The probe action and its reports are primary feedback surfaces. Keep the
+   status visible, make the operations table fit its dialog, and keep unread
+   messages discoverable from the main navigation. */
+
+/* The legacy QA notice layer stays in the DOM for the Electron tests (they
+   read its text) but is no longer a visible toast. Runtime feedback moved to
+   the bottom-left toast stack below. */
+.stage .shell-notice.shell-notice-live{
+  visibility:hidden !important;
+  pointer-events:none !important;
+}
+
+/* === RUNTIME TOAST STACK =====================================
+   Bottom-left stacked toasts: up to 3, slide-up entry, 3s auto-close,
+   manual close button. Navigation noise is filtered before it gets here.
+   The stack portals to document.body and pins to the viewport: the stage
+   can be taller than the screen in long-page mode, and a transformed stage
+   would trap position:fixed. z-index sits above every overlay in the game
+   (spy operations 10001, ship info 30000) so notifications stay visible
+   while any modal or workspace panel is open. */
+.runtime-toast-stack{
+  position:fixed;
+  z-index:31000;
+  left:26px;
+  bottom:26px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  width:min(420px, calc(100vw - 52px));
+  pointer-events:none;
+}
+.runtime-toast{
+  pointer-events:auto;
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  box-sizing:border-box;
+  padding:10px 12px 10px 14px;
+  border:1px solid rgba(65, 221, 242, .55);
+  border-left:3px solid #35dcf5;
+  border-radius:var(--ut-r-card, 12px);
+  background:linear-gradient(135deg, rgba(4, 71, 88, .97), rgba(3, 25, 38, .98));
+  box-shadow:0 14px 34px rgba(0, 0, 0, .42), 0 0 24px rgba(41, 205, 239, .16), inset 0 1px 0 rgba(190, 249, 255, .12);
+  color:#e8fcff;
+  font-size:12px;
+  font-weight:600;
+  line-height:1.35;
+  letter-spacing:.01em;
+  animation:runtimeToastIn .25s ease-out;
+}
+.runtime-toast span:first-of-type{
+  flex:1 1 auto;
+  min-width:0;
+  overflow-wrap:anywhere;
+}
+.runtime-toast button{
+  flex:0 0 auto;
+  width:22px;
+  height:22px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border:1px solid rgba(190, 240, 252, .28);
+  border-radius:7px;
+  background:rgba(2, 20, 29, .72);
+  color:#9fdfea;
+  font-size:13px;
+  line-height:1;
+  cursor:pointer;
+}
+.runtime-toast button:hover,
+.runtime-toast button:focus-visible{
+  color:#fff;
+  border-color:rgba(190, 240, 252, .65);
+  outline:none;
+}
+.runtime-toast--success{
+  border-color:rgba(74, 233, 168, .55);
+  border-left-color:#3ee6a4;
+  box-shadow:0 14px 34px rgba(0, 0, 0, .42), 0 0 24px rgba(62, 230, 164, .14), inset 0 1px 0 rgba(203, 255, 233, .12);
+}
+.runtime-toast--error{
+  border-color:rgba(255, 118, 121, .62);
+  border-left-color:#ff6f78;
+  box-shadow:0 14px 34px rgba(0, 0, 0, .42), 0 0 24px rgba(255, 92, 105, .18), inset 0 1px 0 rgba(255, 221, 221, .14);
+}
+@keyframes runtimeToastIn{
+  from{ opacity:0; transform:translateY(14px); }
+  to{ opacity:1; transform:translateY(0); }
+}
+
+/* === SPY REPORT COORDINATE PULSE =============================
+   A coordinate link from a spy report pinpoints the planet in the star
+   atlas: three soft pulses (~3s) instead of the owner inspector modal. */
+@keyframes universeTargetPulse{
+  0%, 100%{
+    box-shadow:0 0 0 0 rgba(94, 234, 255, 0), 0 0 16px rgba(94, 234, 255, .4);
+  }
+  50%{
+    box-shadow:0 0 0 12px rgba(94, 234, 255, .14), 0 0 34px rgba(94, 234, 255, .8);
+  }
+}
+.system-planet--highlight{
+  animation:universeTargetPulse 1s ease-in-out 3;
+  z-index:5;
+}
+
+.asterion-header__primary-navigation .asterion-header__nav-badge{
+  position:absolute;
+  z-index:2;
+  top:12px;
+  right:12px;
+  min-width:23px;
+  height:20px;
+  display:grid;
+  place-items:center;
+  padding:0 6px;
+  border:1px solid rgba(255, 118, 121, .78);
+  border-radius:999px;
+  background:linear-gradient(180deg, #c94f61, #7c263b);
+  box-shadow:0 0 12px rgba(255, 82, 105, .35), inset 0 1px 0 rgba(255, 221, 221, .22);
+  color:#fff5f5;
+  font-size:10px !important;
+  font-weight:900 !important;
+  line-height:1 !important;
+  letter-spacing:0 !important;
+  text-align:center;
+  white-space:nowrap !important;
+}
+
+body .resource-building-action-confirm.spy-operations-modal{
+  box-sizing:border-box;
+  width:min(1440px, calc(100vw - 48px)) !important;
+  max-width:calc(100vw - 48px) !important;
+  height:min(820px, calc(100vh - 48px));
+  max-height:calc(100vh - 48px) !important;
+  padding:24px !important;
+  text-align:left !important;
+}
+body .resource-building-action-confirm.spy-operations-modal .spy-operations-table-shell{
+  flex:1 1 auto;
+  width:100%;
+  min-width:0;
+  overflow-x:hidden;
+  overflow-y:auto;
+}
+body .resource-building-action-confirm.spy-operations-modal .spy-operations-row{
+  min-width:0 !important;
+  grid-template-columns:minmax(48px, .45fr) minmax(140px, 1fr) minmax(180px, 1.2fr) minmax(104px, .72fr) minmax(104px, .72fr) minmax(180px, 1fr) minmax(210px, 1.15fr);
+}
+body .resource-building-action-confirm.spy-operations-modal .spy-operations-modal__head h3{
+  font-size:18px !important;
+}
+body .resource-building-action-confirm.spy-operations-modal .spy-operations-row-actions-v1,
+body .resource-building-action-confirm.spy-operations-modal .fleet-spy-row-actions-v1{
+  min-width:0;
+}
+body .resource-building-action-confirm.spy-operations-modal .spy-operations-row-actions-v1 button,
+body .resource-building-action-confirm.spy-operations-modal .fleet-spy-row-actions-v1 button{
+  white-space:nowrap;
+}
+
+@media (max-width:1100px){
+  body .resource-building-action-confirm.spy-operations-modal{
+    width:calc(100vw - 24px) !important;
+    max-width:calc(100vw - 24px) !important;
+    height:calc(100vh - 24px);
+    max-height:calc(100vh - 24px) !important;
+    padding:17px !important;
+  }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-row{
+    grid-template-columns:24px minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "select origin target"
+      "select arrival return"
+      "select mission actions";
+    gap:10px;
+  }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-row--head{ display:none; }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-row > :nth-child(1){ grid-area:select; }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-row > :nth-child(2){ grid-area:origin; }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-row > :nth-child(3){ grid-area:target; }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-row > :nth-child(4){ grid-area:arrival; }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-row > :nth-child(5){ grid-area:return; }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-row > :nth-child(6){ grid-area:mission; }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-row > :nth-child(7){ grid-area:actions; }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-modal__footer{
+    align-items:stretch;
+    flex-direction:column;
+  }
+  body .resource-building-action-confirm.spy-operations-modal .spy-operations-modal__actions{
+    justify-content:flex-start;
+  }
+}
+
+/* Useful runtime events are transient toasts, not a permanent header banner.
+   The toast is portalled to body so reports and flight dialogs cannot cover it. */
+body .shell-notice.shell-notice-live{
+  position:fixed !important;
+  z-index:10002 !important;
+  left:clamp(16px, 2.4vw, 36px) !important;
+  right:auto !important;
+  bottom:clamp(16px, 2.8vh, 30px) !important;
+  top:auto !important;
+  transform:none !important;
+  box-sizing:border-box !important;
+  width:min(430px, calc(100vw - 32px)) !important;
+  min-height:50px !important;
+  height:auto !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:space-between !important;
+  gap:14px !important;
+  margin:0 !important;
+  padding:12px 12px 12px 16px !important;
+  overflow:visible !important;
+  clip:auto !important;
+  clip-path:none !important;
+  pointer-events:auto !important;
+  border:1px solid rgba(65, 221, 242, .7) !important;
+  border-radius:var(--ut-r-card) !important;
+  background:linear-gradient(135deg, rgba(4, 71, 88, .98), rgba(3, 25, 38, .99)) !important;
+  box-shadow:0 14px 34px rgba(0, 0, 0, .5), 0 0 24px rgba(41, 205, 239, .2), inset 0 1px 0 rgba(190, 249, 255, .12) !important;
+  color:#e8fcff !important;
+  font-size:12px !important;
+  font-weight:700 !important;
+  line-height:1.35 !important;
+  letter-spacing:.01em !important;
+  text-align:left !important;
+  animation:asterion-runtime-toast-in .2s cubic-bezier(.2,.8,.25,1) both !important;
+}
+body .shell-notice.shell-notice-live > span{
+  display:block !important;
+  min-width:0 !important;
+  flex:1 1 auto !important;
+  color:inherit !important;
+  font-size:inherit !important;
+  line-height:inherit !important;
+  text-align:left !important;
+}
+body .shell-notice__close{
+  width:28px !important;
+  height:28px !important;
+  min-width:28px !important;
+  min-height:28px !important;
+  display:grid !important;
+  place-items:center !important;
+  padding:0 !important;
+  border:1px solid rgba(246,101,101,.72) !important;
+  border-radius:var(--ut-r-btn) !important;
+  background:rgba(75,27,25,.54) !important;
+  color:#ffb4a0 !important;
+  font:700 18px/1 inherit !important;
+  cursor:pointer !important;
+}
+body .shell-notice__close:hover,
+body .shell-notice__close:focus-visible{
+  border-color:#ff8f84 !important;
+  background:rgba(157,36,42,.52) !important;
+  color:#fff5f3 !important;
+  outline:2px solid rgba(255,125,114,.8) !important;
+  outline-offset:2px;
+}
+@keyframes asterion-runtime-toast-in{
+  from{ opacity:0; transform:translateY(16px); }
+  to{ opacity:1; transform:translateY(0); }
+}

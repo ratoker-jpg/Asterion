@@ -1,3 +1,6 @@
+
+import type { SpyHunterNotice, SpyReportSnapshot } from '../espionage/types.ts';
+
 export type ReportCategory =
   | 'system'
   | 'battle'
@@ -9,7 +12,7 @@ export type ReportCategory =
 
 export type ReportFilter = 'all' | 'unread' | 'saved';
 export type ReportStatusTone = 'success' | 'danger' | 'warning' | 'info' | 'neutral';
-export type ReportSource = 'combat' | 'operations' | 'command';
+export type ReportSource = 'combat' | 'operations' | 'command' | 'espionage';
 
 export type ReportDetail = {
   label: string;
@@ -17,8 +20,9 @@ export type ReportDetail = {
 };
 
 export type ReportAction = {
-  kind: 'open_fleets';
+  kind: 'open_fleets' | 'simulate_battle' | 'recall_spy';
   label: string;
+  missionId?: string;
 };
 
 export type ReportItem = {
@@ -39,7 +43,10 @@ export type ReportItem = {
   battleReportId?: string;
   operationId?: string;
   commandOperationId?: string;
+  spyReport?: SpyReportSnapshot;
+  spyHunterNotice?: SpyHunterNotice;
   action?: ReportAction;
+  secondaryAction?: ReportAction;
 };
 
 export type ReportsState = {

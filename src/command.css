@@ -288,6 +288,7 @@
 .command-relation-badge--neutral { color: #92a4ad; border-color: rgba(142, 163, 172, .25); }
 .command-relation-badge--tense { color: #f0bd62; border-color: rgba(232, 170, 59, .3); }
 .command-relation-badge--hostile { color: #f27069; border-color: rgba(231, 84, 77, .35); }
+.command-relation-badge--war { color: #f27069; border-color: rgba(231, 84, 77, .35); }
 
 .command-request-stack { padding: 8px; }
 .command-request-row { position: relative; width: 100%; min-height: 56px; display: grid; grid-template-columns: 31px minmax(0, 1fr) 72px; grid-template-rows: auto auto; gap: 3px 8px; align-items: center; padding: 7px 9px; border: 0; border-bottom: 1px solid rgba(77, 148, 173, .12); background: transparent; text-align: left; cursor: pointer; }
