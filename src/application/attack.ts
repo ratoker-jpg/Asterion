@@ -1,14 +1,15 @@
 import { COMMANDER_IDS, type CommanderId } from '../domain/combat/commanders.ts';
 import { getCombatFactionName, type CombatFactionId } from '../domain/combat/factions.ts';
 import { getFactionCombatEntity, getFactionDefenseCatalog, getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
-import type { CombatEntityId, DefenseId, ShipId } from '../domain/combat/ids.ts';
+import { SOLAR_SATELLITE_ID, type CombatEntityId, type DefenseId, type ShipId } from '../domain/combat/ids.ts';
 import { DEFAULT_COMBAT_PRIORITY as DEFAULT_PRIORITY } from '../domain/combat/priority.ts';
 import { resolveCombat } from '../domain/combat/resolver.ts';
 import type { BattleReport } from '../domain/combat/report.ts';
 import { COMBAT_TECHNOLOGIES, normalizeCombatTechnologies, type CombatTechnologyLevels } from '../domain/combat/technologies.ts';
 import type { CombatInput, CombatStackInput, SimulatorMaxRounds } from '../domain/combat/simulator.ts';
 import { getEspionageTargets } from '../domain/espionage/runtime.ts';
-import type { SpyOwnerProfile, SpyTargetState } from '../domain/espionage/types.ts';
+import type { SpyTargetState } from '../domain/espionage/types.ts';
+import { resolveSpyOwnerProfile } from '../domain/espionage/owner-profile.ts';
 import { calculateDefensePopulation } from '../domain/fleet/production.ts';
 import { calculateFleetPopulation, removeSolarSatellitesFromFleet, type OwnedFleetState } from '../domain/fleet/runtime.ts';
 import { addDebris, getCappedDelivery, getFleetCargoCapacity, type TransportCargo } from '../domain/flights/cargo.ts';
@@ -19,19 +20,9 @@ import type { SaveState } from './contracts.ts';
 import { getPlanetResources, replacePlanetResources, replacePlanetState } from './contracts.ts';
 import { resolveSpyTarget } from './espionage-targets.ts';
 import type { AttackLaunchSnapshot, AttackLoot, AttackResolution } from '../domain/attack/types.ts';
-import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 
 const ATTACK_MAX_ROUNDS: readonly SimulatorMaxRounds[] = [5, 8, 12];
 const ATTACK_REPORT_PREFIX = 'battle-attack-';
-const ATTACK_UTILITY_SHIPS = new Set<ShipId>([
-  'solar-satellite',
-  'spy-probe',
-  'transporter',
-  'mega-transporter',
-  'colonizer',
-  'recycler',
-]);
-
 function safeCount(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 }
@@ -97,7 +88,7 @@ function selectedCommanderStacks(
   priority: readonly CommanderId[],
 ): CombatStackInput[] {
   const result = COMMANDER_IDS.flatMap((id) => {
-    const count = safeCount(selected?.[id]);
+    const count = Math.min(1, safeCount(selected?.[id]));
     return count > 0 ? [{ entityId: id as CombatEntityId, count, level: safeLevel(levels?.[id]) }] : [];
   });
   return [...priority.filter((id) => result.some((stack) => stack.entityId === id)), ...result.map((stack) => stack.entityId as CommanderId)
@@ -109,25 +100,19 @@ function shipStacks(
   factionId: CombatFactionId,
   selected: Partial<Record<ShipId, number>>,
   levels: Partial<Record<ShipId, number>> | undefined,
-  excludeUtility: boolean,
 ): CombatStackInput[] {
   const catalog = getFactionShipCatalog(factionId);
   return Object.entries(selected).flatMap(([rawId, rawCount]) => {
     const id = rawId as ShipId;
     const count = safeCount(rawCount);
     const entity = catalog.find((candidate) => candidate.id === id);
-    if (!entity || count <= 0 || (excludeUtility && ATTACK_UTILITY_SHIPS.has(id))) return [];
+    if (!entity || count <= 0 || id === SOLAR_SATELLITE_ID) return [];
     return [{ entityId: id as CombatEntityId, count, level: safeLevel(levels?.[id]) }];
   });
 }
 
-function targetOwnerProfile(state: SaveState, target: SpyTargetState): SpyOwnerProfile | undefined {
-  return target.ownerProfile
-    ?? (target.ownerId === UNIVERSE_NPC_OWNER_ID ? state.espionage?.bot01Profile : undefined);
-}
-
 function targetCommanderStacks(state: SaveState, target: SpyTargetState, priority: readonly CommanderId[]): CombatStackInput[] {
-  const profile = targetOwnerProfile(state, target);
+  const profile = resolveSpyOwnerProfile(target, state.espionage?.bot01Profile);
   const selected = Object.fromEntries(COMMANDER_IDS.map((id) => [id, target.fleet.commanders[id] ?? target.commanders?.[id]?.count ?? 0])) as Partial<Record<CommanderId, number>>;
   const levels = Object.fromEntries(COMMANDER_IDS.map((id) => [id, safeLevel(target.commanders?.[id]?.level ?? profile?.commanderLevels[id])])) as Partial<Record<CommanderId, number>>;
   return selectedCommanderStacks(selected, levels, priority);
@@ -145,7 +130,7 @@ function targetDefenseStacks(target: SpyTargetState): CombatStackInput[] {
 }
 
 function targetShipStacksWithProfile(state: SaveState, target: SpyTargetState): CombatStackInput[] {
-  return shipStacks(target.raceId, target.fleet.ships, targetOwnerProfile(state, target)?.shipLevels, false);
+  return shipStacks(target.raceId, target.fleet.ships, resolveSpyOwnerProfile(target, state.espionage?.bot01Profile)?.shipLevels);
 }
 
 function reportDestroyedDebris(report: BattleReport, side: 'attacker' | 'defender', factionId: CombatFactionId): number {
@@ -174,7 +159,7 @@ function survivorsCargo(report: BattleReport, factionId: CombatFactionId) {
   for (const stack of report.attackerForce.stacks ?? []) {
     const id = stack.entityId as ShipId;
     const entity = getFactionCombatEntity(factionId, stack.entityId);
-    if (entity.kind !== 'ship' || ATTACK_UTILITY_SHIPS.has(id)) continue;
+    if (entity.kind !== 'ship' || id === SOLAR_SATELLITE_ID) continue;
     if (safeCount(stack.countAfter) > 0) ships[id] = safeCount(stack.countAfter);
   }
   const catalog = Object.fromEntries(getFactionShipCatalog(factionId).map((entity) => [entity.id, { cargo: entity.ship?.cargo ?? 0 }]));
@@ -278,9 +263,9 @@ function resolveTargetForFlight(state: SaveState, flight: FlightRecord): SpyTarg
 
 function createAttackInput(state: SaveState, flight: FlightRecord, target: SpyTargetState): CombatInput {
   const snapshot = flight.attackSnapshot!;
-  const targetProfile = targetOwnerProfile(state, target);
+  const targetProfile = resolveSpyOwnerProfile(target, state.espionage?.bot01Profile);
   const defenderPriority = [...DEFAULT_PRIORITY.defense];
-  const attackerShips = shipStacks(snapshot.attackerFactionId, flight.selectedShips, snapshot.attackerShipLevels, true);
+  const attackerShips = shipStacks(snapshot.attackerFactionId, flight.selectedShips, snapshot.attackerShipLevels);
   const attackerCommanders = selectedCommanderStacks(flight.selectedCommanders, snapshot.attackerCommanderLevels, snapshot.attackerPriority);
   const defenderShips = targetShipStacksWithProfile(state, target);
   const defenderCommanders = targetCommanderStacks(state, target, defenderPriority);
@@ -413,7 +398,9 @@ export function creditAttackLoot(state: SaveState, flight: FlightRecord, now: nu
 
 export function isAttackCombatShip(shipId: ShipId, factionId: CombatFactionId): boolean {
   const entity = getFactionShipCatalog(factionId).find((candidate) => candidate.id === shipId);
-  return Boolean(entity?.ordinaryClass && !ATTACK_UTILITY_SHIPS.has(shipId));
+  // Every dispatched ship participates, including civilian/service hulls.
+  // Solar satellites are orbital state, not an outgoing fleet unit.
+  return Boolean(entity && shipId !== SOLAR_SATELLITE_ID);
 }
 
 export function getAttackCommanderSelection(state: SaveState, planetId: string): Partial<Record<CommanderId, number>> {

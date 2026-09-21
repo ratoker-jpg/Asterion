@@ -4,6 +4,7 @@ import type {
   EspionageState,
   SpyHunterNotice,
   SpyMission,
+  SpyOwnerProfile,
   SpyReportSnapshot,
   SpyTargetState,
 } from './types.ts';
@@ -158,10 +159,16 @@ function migrateReport(value: unknown): SpyReportSnapshot | null {
 function migrateBot01Profile(value: unknown): Bot01Profile | null {
   const source = record(value);
   if (!Object.keys(source).length) return null;
+  return migrateSpyOwnerProfile(source) as Bot01Profile;
+}
+
+function migrateSpyOwnerProfile(value: unknown): SpyOwnerProfile | undefined {
+  const source = record(value);
+  if (!Object.keys(source).length) return undefined;
   return {
-    scienceLevels: numericRecord(source.scienceLevels) as Bot01Profile['scienceLevels'],
-    shipLevels: numericRecord(source.shipLevels) as Bot01Profile['shipLevels'],
-    commanderLevels: numericRecord(source.commanderLevels) as Bot01Profile['commanderLevels'],
+    scienceLevels: numericRecord(source.scienceLevels) as SpyOwnerProfile['scienceLevels'],
+    shipLevels: numericRecord(source.shipLevels) as SpyOwnerProfile['shipLevels'],
+    commanderLevels: numericRecord(source.commanderLevels) as SpyOwnerProfile['commanderLevels'],
   };
 }
 
@@ -192,12 +199,21 @@ function migrateSpyTarget(value: unknown, now: number): SpyTargetState | null {
   const commanders = record(source.commanders);
   const migratedCommanders = Object.fromEntries(Object.entries(commanders).flatMap(([id, candidate]) => {
     const entry = record(candidate);
-    const count = nonNegative(entry.count);
+    const count = Math.min(1, nonNegative(entry.count));
     return count > 0 ? [[id, { level: nonNegative(entry.level), count }]] : [];
   }));
-  const { debris: _legacyDebris, ...sourceWithoutLegacyDebris } = source;
+  const ownerProfile = migrateSpyOwnerProfile(source.ownerProfile)
+    ?? (Object.keys(record(source.shipLevels)).length
+      ? migrateSpyOwnerProfile({ shipLevels: source.shipLevels })
+      : undefined);
+  const {
+    debris: _legacyDebris,
+    ownerProfile: _legacyOwnerProfile,
+    shipLevels: _legacyShipLevels,
+    ...sourceWithoutLegacyProfile
+  } = source;
   return {
-    ...sourceWithoutLegacyDebris,
+    ...sourceWithoutLegacyProfile,
     id: text(source.id),
     coordinate: { galaxy: Number(coordinate.galaxy), system: Number(coordinate.system), position: Number(coordinate.position) },
     ownerId: text(source.ownerId, 'unknown-owner'),
@@ -218,6 +234,7 @@ function migrateSpyTarget(value: unknown, now: number): SpyTargetState | null {
     fleet: migrateFleetState(source.fleet),
     defense: migrateDefenseState(source.defense),
     commanders: migratedCommanders as SpyTargetState['commanders'],
+    ...(ownerProfile ? { ownerProfile } : {}),
     repair: migrateRepairWorkshopState(source.repair),
     resourceClock: migrateTargetResourceClock(source.resourceClock, now),
   } as unknown as SpyTargetState;

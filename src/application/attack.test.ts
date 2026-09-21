@@ -4,7 +4,7 @@ import { createInitialSaveState, createPersistenceFacade } from './persistence.t
 import { dispatchFlight, recallFlight, reconcileFlights } from './flights.ts';
 import { getPlanetResources, replacePlanetResources } from './contracts.ts';
 import { selectCurrentAlliance } from '../domain/command/selectors.ts';
-import { calculateAttackDebris, calculateAttackLoot } from './attack.ts';
+import { calculateAttackDebris, calculateAttackLoot, technologiesFromScience } from './attack.ts';
 import { getFactionCombatEntity } from '../domain/combat/faction-catalog.ts';
 import type { BattleReport } from '../domain/combat/report.ts';
 import type { FlightDestination } from '../domain/flights/types.ts';
@@ -126,6 +126,10 @@ test('attack resolves one live combat, records debris/repair, and credits loot o
   const report = arrival.state.combat.reports.at(-1)!;
   assert.equal(report.missionType, 'attack');
   assert.equal(report.id, `battle-attack-${sent.flight.id}`);
+  assert.equal(report.defenderForce.populationBefore, sent.state.espionage!.targets![targetId].population.total);
+  assert.ok((report.defenderForce.defenses ?? []).every((stack) => (
+    (stack.entityId === 'tower-shield' || stack.entityId === 'planetary-shield') ? stack.countBefore <= 1 : true
+  )));
   assert.equal(arrival.state.flights.records[0]?.phase, 'returning');
   assert.equal(arrival.state.flights.records[0]?.attackResolution?.reportId, report.id);
   assert.ok(arrival.state.espionage!.targets![targetId].repair?.claimedBattleIds.includes(report.id));
@@ -325,6 +329,78 @@ test('recall before attack arrival returns without combat or report', () => {
   assert.equal(afterArrivalTime.state.combat.reports.length, state.combat.reports.length);
   assert.equal(afterArrivalTime.state.flights.records[0]?.phase, 'completed');
   assert.equal(afterArrivalTime.state.flights.records[0]?.completionReason, 'recalled');
+});
+
+test('attack sends civilian and service hulls, preserves them as survivors, and uses their cargo', () => {
+  const base = emptyTarget(createInitialSaveState('test', 1_000), Object.keys(createInitialSaveState('test', 1_000).espionage!.targets!)[0]);
+  const targetId = Object.keys(base.espionage!.targets!)[0];
+  const originId = base.currentPlanetId;
+  const origin = base.planets[originId];
+  const selectedShips = {
+    'spy-probe': 1,
+    transporter: 1,
+    'mega-transporter': 1,
+    colonizer: 1,
+    recycler: 1,
+  } as Partial<Record<ShipId, number>>;
+  const prepared = {
+    ...base,
+    planets: {
+      ...base.planets,
+      [originId]: {
+        ...origin,
+        fleet: {
+          ...origin.fleet,
+          ships: { ...origin.fleet.ships, ...selectedShips },
+        },
+      },
+    },
+  };
+  const sent = dispatchFlight(prepared, attackCommand(prepared, 'attack-civil-service-1', targetId, { selectedShips }), {
+    now: 1_000,
+    mode: 'test',
+    testTimeScale: 15,
+  });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.deepEqual(sent.flight.selectedShips, selectedShips);
+
+  const arrival = reconcileFlights(sent.state, sent.flight.arrivalAt, undefined, { mode: 'test', testTimeScale: 15 });
+  const report = arrival.state.combat.reports.at(-1)!;
+  assert.equal(report.winner, 'attacker');
+  for (const entityId of Object.keys(selectedShips)) {
+    const stack = report.attackerForce.stacks.find((candidate) => candidate.entityId === entityId);
+    assert.equal(stack?.countBefore, 1, entityId);
+    assert.equal(stack?.countAfter, 1, entityId);
+    assert.equal(stack?.destroyed, 0, entityId);
+  }
+  assert.ok((report.resources?.metal ?? 0) > 0, 'surviving transport capacity must carry ordered loot');
+  assert.equal(report.defenderForce.populationBefore, 0);
+});
+
+test('attack reads live hidden owner technology without copying it into spy snapshots', () => {
+  const base = createInitialSaveState('test', 1_000);
+  const targetId = Object.keys(base.espionage!.targets!)[0];
+  const target = base.espionage!.targets![targetId];
+  const ownerProfile = base.espionage!.bot01Profile!;
+  const live = replaceTarget(emptyTarget(base, targetId), targetId, {
+    ...target,
+    ownerProfile: {
+      ...ownerProfile,
+      scienceLevels: { ...ownerProfile.scienceLevels, 7: 10 },
+    },
+  });
+  const sent = dispatchFlight(live, attackCommand(live, 'attack-hidden-tech-1', targetId, { selectedShips: { scout: 1 } }), {
+    now: 1_000,
+    mode: 'test',
+    testTimeScale: 15,
+  });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const arrival = reconcileFlights(sent.state, sent.flight.arrivalAt, undefined, { mode: 'test', testTimeScale: 15 });
+  const report = arrival.state.combat.reports.at(-1)!;
+  assert.deepEqual(report.defenderForce.technologyLevels, technologiesFromScience({ ...ownerProfile.scienceLevels, 7: 10 }));
+  assert.equal('scienceLevels' in report.defender, false);
 });
 
 test('Test Mode Bot 01 starts at the requested resource scale and ticks normally', () => {

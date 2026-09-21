@@ -156,11 +156,68 @@ test('partial HP on last unit carries between rounds', () => {
   assert.equal(round2Attack?.lifeBefore, round1Attack?.lifeAfter);
 });
 
+test('commander life-bonus removal cannot create a phantom destroyed stack', () => {
+  const report = resolve(input({
+    attacker: {
+      participant: attackerParticipant,
+      ships: [{ entityId: 'scout', count: 100 }],
+      commanders: [{ entityId: 'juggernaut', count: 1, level: 40 }],
+      activeCommanderId: 'juggernaut',
+    },
+    defender: {
+      participant: defenderParticipant,
+      ships: [{ entityId: 'death-star', count: 1 }],
+      commanders: [],
+      defenses: [],
+    },
+    maxRounds: 12,
+    seed: 'commander-life-invariant',
+  }));
+
+  for (const side of ['attacker', 'defender'] as const) {
+    let previous = report.initialSnapshot?.[side].stacks ?? [];
+    for (const round of report.rounds) {
+      const current = round[`${side}Snapshot`]?.stacks ?? [];
+      for (const stack of current) {
+        const previousStack = previous.find((candidate) => candidate.entityId === stack.entityId);
+        if (previousStack && stack.countBefore < previousStack.countAfter) {
+          assert.equal(round === report.rounds[0], false, 'round one has no prior life-bonus transition');
+          const previousRound = report.rounds[report.rounds.indexOf(round) - 1];
+          assert.ok(previousRound.events.some((event) => event.targetSide === side
+            && event.targetEntityId === stack.entityId
+            && (event.damage ?? 0) > 0), `${side}.${stack.entityId} lost units without incoming damage`);
+        }
+        if (stack.countAfter < stack.countBefore) {
+          assert.ok(round.events.some((event) => event.targetSide === side
+            && event.targetEntityId === stack.entityId
+            && (event.damage ?? 0) > 0), `${side}.${stack.entityId} lost units without an attack event`);
+        }
+      }
+      previous = current;
+    }
+  }
+});
+
 test('target selection prefers highest threat', () => {
   assert.equal(selectCombatTarget([
     { entityId: 'scout', currentCount: 1 },
     { entityId: 'transporter', currentCount: 2 },
   ])?.entityId, 'scout');
+});
+
+test('target selection protects commanders and civilian/service hulls without hardcoding defense order', () => {
+  assert.equal(selectCombatTarget([
+    { entityId: 'scout', currentCount: 1, threat: 1 },
+    { entityId: 'transporter', currentCount: 1, threat: 100_000 },
+  ], 'threat')?.entityId, 'scout');
+  assert.equal(selectCombatTarget([
+    { entityId: 'scout', currentCount: 1, threat: 1 },
+    { entityId: 'laser-turret', currentCount: 1, threat: 100_000 },
+  ], 'threat')?.entityId, 'laser-turret');
+  assert.equal(selectCombatTarget([
+    { entityId: 'transporter', currentCount: 1, threat: 1 },
+    { entityId: 'hunter', currentCount: 1, threat: 100_000 },
+  ], 'threat')?.entityId, 'transporter');
 });
 
 test('target selection uses population score after equal threat', () => {

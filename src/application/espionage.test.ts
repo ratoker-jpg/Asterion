@@ -349,7 +349,7 @@ test('full spy report handoff preserves owner ship levels in the battle simulato
     resources: { metal: 1, minerals: 1, gas: 1, debris: 0, developmentEnergy: 1 },
     fleet: { battleship: 23, cruiser: 4 },
     fleetLevels: { battleship: 2, cruiser: 4 },
-    commanders: { judge: { level: 1, count: 1 } },
+    commanders: { hunter: { level: 20, count: 1 }, judge: { level: 1, count: 1 } },
     defense: { 'ballistic-turret': 1 },
     population: { total: 100, fleet: 50, defense: 50 },
     firstReport: true,
@@ -359,6 +359,8 @@ test('full spy report handoff preserves owner ship levels in the battle simulato
   assert.equal(scenario.attacker.commanders.find((stack) => stack.entityId === 'hunter')?.level, 20);
   assert.equal(scenario.defender.ships.find((stack) => stack.entityId === 'battleship')?.level, 2);
   assert.equal(scenario.defender.ships.find((stack) => stack.entityId === 'cruiser')?.level, 4);
+  assert.equal(scenario.defender.commanders.find((stack) => stack.entityId === 'hunter')?.count, 1);
+  assert.equal(scenario.defender.activeCommanderId, 'hunter');
   assert.equal(scenario.defender.commanders.find((stack) => stack.entityId === 'judge')?.level, 1);
 });
 

@@ -78,7 +78,8 @@ import type {
   SpyTargetRelation,
   SpyTargetState,
 } from '../domain/espionage/types.ts';
-import { createUniverseSystem, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
+import { resolveSpyOwnerProfile } from '../domain/espionage/owner-profile.ts';
+import { createUniverseSystem } from '../domain/universe/runtime.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPlanet } from '../domain/universe/types.ts';
 import { initializePlanetResourceClock, reconcileTestEspionageTargetResources } from './resource-clock.ts';
 import { resolveSpyTarget, resolveSpyTargetAtCoordinate, type ResolvedSpyTarget } from './espionage-targets.ts';
@@ -483,8 +484,7 @@ function currentEspionageState(state: SaveState): EspionageState {
 }
 
 function targetOwnerProfile(state: SaveState, target: SpyTargetState): SpyOwnerProfile | undefined {
-  return target.ownerProfile
-    ?? (target.ownerId === UNIVERSE_NPC_OWNER_ID ? currentEspionageState(state).bot01Profile : undefined);
+  return resolveSpyOwnerProfile(target, currentEspionageState(state).bot01Profile);
 }
 
 function targetEspionageLevel(state: SaveState, target: SpyTargetState): number {
@@ -867,7 +867,7 @@ export function dispatchFlight(
       return failure(state, 'spy-target-blocked', 'Атака разрешена только против вражеской или нейтральной планеты.');
     }
     if (Object.keys(selectedShips).some((shipId) => !isAttackCombatShip(shipId as ShipId, state.profile.factionId as CombatFactionId))) {
-      return failure(state, 'wrong-ship-composition', 'В атакующий флот входят только боевые корабли.');
+      return failure(state, 'wrong-ship-composition', 'В атакующий флот можно отправить любой корабль, кроме солнечного спутника.');
     }
     const availableCommanders = getAttackCommanderSelection(state, originPlanetId);
     const commandersForAttack = command.selectedCommanders === undefined

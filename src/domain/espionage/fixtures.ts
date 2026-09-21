@@ -115,6 +115,12 @@ function createBotPlanet(index: number, profile: Bot01Profile, now: number): Spy
   for (const [id, count] of Object.entries(defenseComposition)) {
     defense.defenses[id as keyof typeof defense.defenses] = count;
   }
+  // These are unique installations. Clamp the generated fixture before the
+  // population snapshot is calculated so fixture, combat input, and report
+  // cannot disagree about shield counts.
+  for (const id of ['tower-shield', 'planetary-shield'] as const) {
+    defense.defenses[id] = Math.min(1, Math.max(0, defense.defenses[id] ?? 0));
+  }
 
   const commanders: Bot01PlanetState['commanders'] = index === 0
     ? {

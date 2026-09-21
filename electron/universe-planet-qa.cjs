@@ -405,7 +405,8 @@ async function runViewport(width, height) {
       roster: Array.from(document.querySelectorAll('[data-qa-fleet-ship]')).map((row) => row.getAttribute('data-qa-fleet-ship')),
       relation: document.querySelector('[data-qa-target-relation]')?.getAttribute('data-qa-target-relation') || '',
     }))()`);
-    if (attackPrep.mission !== 'attack' || JSON.stringify(attackPrep.rounds) !== JSON.stringify(['5', '8', '12']) || attackPrep.relation !== 'neutral' || attackPrep.roster.includes('transporter') || attackPrep.roster.includes('spy-probe')) {
+    const expectedAttackRoster = ['spy-probe', 'colonizer', 'recycler', 'scout'];
+    if (attackPrep.mission !== 'attack' || JSON.stringify(attackPrep.rounds) !== JSON.stringify(['5', '8', '12']) || attackPrep.relation !== 'neutral' || JSON.stringify(attackPrep.roster) !== JSON.stringify(expectedAttackRoster)) {
       throw new Error(`${label}: attack preparation contract failed ${JSON.stringify(attackPrep)}`);
     }
     await clickPrimary(win, 'universe');

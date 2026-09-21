@@ -55,6 +55,8 @@ export type CombatResolverContext = {
   reportId: string;
   /** Production combat may classify the result; omitted means simulator. */
   missionType?: Exclude<BattleMissionType, 'simulation'>;
+  /** Explicit calibration-only escape hatch for controlled scaling sweeps. */
+  allowPopulationOverflow?: boolean;
 };
 
 type RuntimeBucket = 'stacks' | 'defenses';
@@ -192,6 +194,19 @@ function catalogOrder(entityId: CombatEntityId) {
   return CATALOG_ORDER.get(entityId) ?? Number.MAX_SAFE_INTEGER;
 }
 
+/**
+ * Target tiers keep commanders protected without imposing a permanent
+ * ordinary-ship-versus-defense ordering. The calibrated priority metric still
+ * decides between combat ships and defenses; civilian/service ships follow
+ * that tier and commanders remain last.
+ */
+function targetSelectionTier(entityId: CombatEntityId) {
+  const entity = getCombatEntity(entityId);
+  if (entity.kind === 'commander') return 2;
+  if (entity.kind === 'ship' && entity.category !== 'Боевой корабль') return 1;
+  return 0;
+}
+
 export function selectCombatTarget(
   candidates: readonly TargetSelectionCandidate[],
   priority: CombatTargetPriority = DEFAULT_COMBAT_TARGET_PRIORITY,
@@ -202,6 +217,8 @@ export function selectCombatTarget(
   return [...alive].sort((left, right) => {
     const leftEntity = getCombatEntity(left.entityId);
     const rightEntity = getCombatEntity(right.entityId);
+    const tierDelta = targetSelectionTier(left.entityId) - targetSelectionTier(right.entityId);
+    if (tierDelta !== 0) return tierDelta;
     const leftThreat = left.threat ?? left.currentCount * leftEntity.combat.attack;
     const rightThreat = right.threat ?? right.currentCount * rightEntity.combat.attack;
     const leftPopulation = left.population ?? left.currentCount * leftEntity.population;
@@ -408,7 +425,16 @@ function applyRoundModifiers(
       stack.armorPercent = clamp(stack.baseArmorPercent + special.armor - enemyModifiers.commanderArmorPenalty, 0, 80);
       if (previousLife !== stack.lifePerUnit && previousCount > 0) {
         stack.hpPool = Math.max(0, previousCount * stack.lifePerUnit - previousLostHp);
-        stack.count = runtimeCountFromHp(stack);
+        const recalculatedCount = runtimeCountFromHp(stack);
+        if (recalculatedCount < previousCount) {
+          // Removing a commander/life bonus changes the unit denominator, not
+          // the number of units hit this round. Preserve the damaged stack at
+          // the smallest HP pool that still represents its current count.
+          stack.hpPool = Math.max(stack.hpPool, (previousCount - 1) * stack.lifePerUnit + 1);
+          stack.count = previousCount;
+        } else {
+          stack.count = recalculatedCount;
+        }
       }
     }
   };
@@ -933,6 +959,7 @@ function createInitialSnapshot(
 export function resolveCombat(input: CombatInput, context: CombatResolverContext): BattleReport {
   const validation = validateCombatInput(input, {
     allowEmptyDefender: context.missionType === 'attack',
+    allowPopulationOverflow: context.allowPopulationOverflow,
   });
   if (!validation.ok) throw new CombatInputValidationError(validation.errors);
   const normalized = validation.value;

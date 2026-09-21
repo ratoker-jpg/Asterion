@@ -346,6 +346,8 @@ function validateStackCollection(
 export type CombatValidationOptions = {
   /** Production attacks may resolve an empty planet as an immediate victory. */
   allowEmptyDefender?: boolean;
+  /** Test-only calibration sweeps may intentionally exceed UI population caps. */
+  allowPopulationOverflow?: boolean;
 };
 
 export function validateCombatInput(input: CombatInput, options: CombatValidationOptions = {}): CombatValidationResult {
@@ -460,21 +462,21 @@ export function validateCombatInput(input: CombatInput, options: CombatValidatio
   const defenderFleetPopulation = calculateStacksPopulation([...normalized.defender.ships, ...getSideCommanders(normalized.defender)], normalized.defender.factionId);
   const defenderDefensePopulation = calculateStacksPopulation(normalized.defender.defenses ?? [], normalized.defender.factionId);
 
-  if (attackerPopulation > SIMULATOR_POPULATION_LIMITS.attackerFleet) {
+  if (options.allowPopulationOverflow !== true && attackerPopulation > SIMULATOR_POPULATION_LIMITS.attackerFleet) {
     errors.push({
       code: 'population-overflow',
       path: 'attacker',
       message: `Флот атакующего превышает лимит ${SIMULATOR_POPULATION_LIMITS.attackerFleet.toLocaleString('ru-RU')}.`,
     });
   }
-  if (defenderFleetPopulation > SIMULATOR_POPULATION_LIMITS.defenderFleet) {
+  if (options.allowPopulationOverflow !== true && defenderFleetPopulation > SIMULATOR_POPULATION_LIMITS.defenderFleet) {
     errors.push({
       code: 'population-overflow',
       path: 'defender',
       message: `Флот защитника превышает лимит ${SIMULATOR_POPULATION_LIMITS.defenderFleet.toLocaleString('ru-RU')}.`,
     });
   }
-  if (defenderDefensePopulation > SIMULATOR_POPULATION_LIMITS.defenderDefense) {
+  if (options.allowPopulationOverflow !== true && defenderDefensePopulation > SIMULATOR_POPULATION_LIMITS.defenderDefense) {
     errors.push({
       code: 'population-overflow',
       path: 'defender.defenses',
