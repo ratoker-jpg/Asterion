@@ -3,7 +3,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
 import { getCombatFactionName } from './domain/combat/factions.ts';
+import { COMMANDER_ABILITIES, COMMANDER_IDS, type CommanderId } from './domain/combat/commanders.ts';
 import type { ShipId } from './domain/combat/ids.ts';
+import type { SimulatorMaxRounds } from './domain/combat/simulator.ts';
 import { SOLAR_SATELLITE_ID } from './domain/combat/ids.ts';
 import { getBuildingPresentation } from './domain/buildings/balance-v1.ts';
 import { RUNTIME_STATE_CHANGED_EVENT } from './domain/runtime/mode.ts';
@@ -42,6 +44,7 @@ import {
   type FlightCommandResult,
   type FlightLaunchContext,
 } from './application/flights.ts';
+import { getAttackCommanderSelection, isAttackCombatShip } from './application/attack.ts';
 import type { FlightDestination, FlightRecord, MissionId, TargetRelation } from './domain/flights/types.ts';
 import type { EspionageState, SpyMission } from './domain/espionage/types.ts';
 import { emptyTransportCargo, getCargoFieldMaximum, type TransportCargo, type TransportCargoKey } from './domain/flights/cargo.ts';
@@ -243,6 +246,8 @@ function FleetWorkspace({
 }) {
   const { fleetSection: selectedSection, setFleetSection } = useNavigation();
   const [selectedQuantities, setSelectedQuantities] = useState<Partial<Record<ShipId, number>>>({});
+  const [selectedCommanders, setSelectedCommanders] = useState<Partial<Record<CommanderId, number>>>({});
+  const [attackRounds, setAttackRounds] = useState<SimulatorMaxRounds>(8);
   const [missionId, setMissionId] = useState<MissionId>('transport');
   const [hoveredMissionId, setHoveredMissionId] = useState<MissionId | null>(null);
   const [constructionView, setConstructionView] = useState<ConstructionView>(null);
@@ -302,7 +307,14 @@ function FleetWorkspace({
     ? ownedShipDefinitions.filter((ship) => ship.id === 'colonizer')
     : missionId === 'espionage'
       ? ownedShipDefinitions.filter((ship) => ship.id === 'spy-probe')
+      : missionId === 'attack'
+        ? ownedShipDefinitions.filter((ship) => isAttackCombatShip(ship.id, factionId))
       : ownedShipDefinitions;
+  const attackCommanderAvailability = useMemo(() => {
+    if (missionId !== 'attack') return {} as Partial<Record<CommanderId, number>>;
+    const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
+    return getAttackCommanderSelection(runtimeState, runtimeState.currentPlanetId);
+  }, [flightRecords, fleetSnapshot.fleet, missionId]);
   const selectedShipCount = useMemo(
     () => visibleShipDefinitions.reduce((total, ship) => total + (selectedQuantities[ship.id] ?? 0), 0),
     [selectedQuantities, visibleShipDefinitions],
@@ -310,6 +322,10 @@ function FleetWorkspace({
   const selectedPopulation = useMemo(
     () => visibleShipDefinitions.reduce((total, ship) => total + (selectedQuantities[ship.id] ?? 0) * ship.population, 0),
     [selectedQuantities, visibleShipDefinitions],
+  );
+  const selectedCommanderCount = useMemo(
+    () => Object.values(selectedCommanders).reduce((total, quantity) => total + (quantity ?? 0), 0),
+    [selectedCommanders],
   );
   const selectedMission = missions.find((mission) => mission.id === missionId) ?? missions[0];
   const describedMission = missions.find((mission) => mission.id === hoveredMissionId) ?? selectedMission;
@@ -338,6 +354,8 @@ function FleetWorkspace({
     setMissionId('transport');
     setHoveredMissionId(null);
     setSelectedQuantities({});
+    setSelectedCommanders({});
+    setAttackRounds(8);
     setPreviewOpen(false);
     setPreviewResult(null);
     setPreviewOriginPlanetId(null);
@@ -383,6 +401,11 @@ function FleetWorkspace({
       return;
     }
     setMissionId(launchContext.missionId);
+    const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
+    setSelectedCommanders(launchContext.missionId === 'attack'
+      ? getAttackCommanderSelection(runtimeState, runtimeState.currentPlanetId)
+      : {});
+    setAttackRounds(8);
     setSelectedQuantities(launchContext.missionId === 'colonize'
       ? { colonizer: 1 }
       : launchContext.missionId === 'espionage' ? { 'spy-probe': 1 } : {});
@@ -509,6 +532,8 @@ function FleetWorkspace({
       targetRaceId: launchContext?.targetRaceId,
       targetAlliance: launchContext?.targetAlliance,
       selectedShips: missionId === 'colonize' ? { colonizer: 1 } : missionId === 'espionage' ? { 'spy-probe': 1 } : selectedQuantities,
+      selectedCommanders: missionId === 'attack' ? selectedCommanders : undefined,
+      maxRounds: missionId === 'attack' ? attackRounds : undefined,
       cargo: missionId === 'transport' ? transportCargoDraft : undefined,
       operationId: launchContext?.operationId,
       departedAt: Date.now(),
@@ -596,7 +621,7 @@ function FleetWorkspace({
   const confirmFlightDispatch = () => {
     const requestId = globalThis.crypto?.randomUUID?.() ?? `flight-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const localError = coordinateDraftError(previewTargetDraft);
-    if ((missionId === 'transport' || missionId === 'colonize') && localError) {
+    if ((missionId === 'transport' || missionId === 'colonize' || missionId === 'attack') && localError) {
       setPreviewTargetError(localError);
       setEditingPreviewTarget(true);
       return;
@@ -633,6 +658,17 @@ function FleetWorkspace({
       ? Math.min(1, available)
       : Number.isFinite(raw) ? Math.max(0, Math.min(available, Math.floor(raw))) : 0;
     setSelectedQuantities((current) => ({ ...current, [shipId]: next }));
+  };
+
+  const chooseMission = (nextMissionId: MissionId) => {
+    setMissionId(nextMissionId);
+    if (nextMissionId === 'attack') {
+      const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
+      setSelectedCommanders(getAttackCommanderSelection(runtimeState, runtimeState.currentPlanetId));
+      setAttackRounds(8);
+    } else {
+      setSelectedCommanders({});
+    }
   };
 
   const setAllShipQuantities = (maximum: boolean) => {
@@ -722,6 +758,8 @@ function FleetWorkspace({
   const targetCheckIsDeferred = previewErrorCode === 'target-not-available' || previewErrorCode === 'target-is-origin';
   const canDispatchPreview = missionId === 'espionage'
     ? targetIsLocallyValid && Boolean(previewResult?.ok) && selectedQuantities['spy-probe'] === 1
+    : missionId === 'attack'
+      ? targetIsLocallyValid && (!previewResult || previewResult.ok) && selectedShipCount > 0 && previewTargetRelation !== 'ally' && previewTargetRelation !== 'self'
     : missionId === 'transport'
     ? targetIsLocallyValid && (!previewResult || previewResult.ok || targetCheckIsDeferred)
     : missionId !== 'colonize'
@@ -733,7 +771,7 @@ function FleetWorkspace({
       : `[${previewTargetDraft.galaxy || '—'}:${previewTargetDraft.system || '—'}:${previewTargetDraft.position || '—'}]`;
 
   return (
-    <div className="fleet-workspace-v1" data-qa-flight-launch-context={launchContext?.destination ? flightCoordinateLabel(launchContext.destination.coordinate) : undefined} data-qa-target-relation={previewTargetRelation}>
+    <div className="fleet-workspace-v1" data-qa-flight-launch-context={launchContext?.destination ? flightCoordinateLabel(launchContext.destination.coordinate) : undefined} data-qa-target-relation={previewTargetRelation ?? (!previewOpen ? launchContext?.targetRelation : undefined)}>
       <aside className="fleet-sidebar-v1">
         <div className="fleet-sidebar-title-v1">
           <small>ASTERION // ВОЕННАЯ ЗОНА</small>
@@ -887,7 +925,7 @@ function FleetWorkspace({
               <div className="fleet-mission-picker-v1">
                 <div className="fleet-mission-select-v1">
                   <label htmlFor="fleet-mission">МИССИЯ</label>
-                  <select id="fleet-mission" value={missionId} onChange={(event) => setMissionId(event.target.value as MissionId)}>
+                  <select id="fleet-mission" value={missionId} onChange={(event) => chooseMission(event.target.value as MissionId)}>
                     {missions.map((mission) => <option key={mission.id} value={mission.id}>{mission.label}</option>)}
                   </select>
                 </div>
@@ -904,7 +942,7 @@ function FleetWorkspace({
                       onMouseLeave={() => setHoveredMissionId(null)}
                       onFocus={() => setHoveredMissionId(mission.id)}
                       onBlur={() => setHoveredMissionId(null)}
-                      onClick={() => setMissionId(mission.id)}
+                      onClick={() => chooseMission(mission.id)}
                     >
                       <MissionIcon mission={mission} />
                       <span>{mission.label}</span>
@@ -913,6 +951,33 @@ function FleetWorkspace({
                 </div>
                 <p className="fleet-mission-description-v1"><strong>{describedMission.label}.</strong> {describedMission.description}</p>
               </div>
+
+              {missionId === 'attack' ? <section className="fleet-attack-prep-v1" data-qa-attack-prep>
+                <div className="fleet-attack-rounds-v1">
+                  <div><small>ЛИМИТ РАУНДОВ</small><span>Разрешены только боевые профили 5 / 8 / 12.</span></div>
+                  <select value={attackRounds} onChange={(event) => setAttackRounds(Number(event.target.value) as SimulatorMaxRounds)} data-qa-attack-rounds aria-label="Лимит раундов атаки">
+                    {[5, 8, 12].map((rounds) => <option key={rounds} value={rounds}>{rounds} раундов</option>)}
+                  </select>
+                </div>
+                <div className="fleet-attack-commanders-v1">
+                  <div className="fleet-attack-commanders-head"><div><small>КОМАНДИРЫ</small><span>Свободные командиры резервируются вместе с флотом.</span></div><b>{selectedCommanderCount} выбрано</b></div>
+                  {Object.keys(attackCommanderAvailability).length ? <div className="fleet-attack-commanders-list">
+                    {COMMANDER_IDS.filter((commanderId) => (attackCommanderAvailability[commanderId] ?? 0) > 0).map((commanderId) => {
+                      const commander = COMMANDER_ABILITIES[commanderId];
+                      const checked = (selectedCommanders[commanderId] ?? 0) > 0;
+                      return <label key={commanderId} className={checked ? 'is-selected' : ''}>
+                        <input type="checkbox" checked={checked} onChange={(event) => setSelectedCommanders((current) => {
+                          const next = { ...current };
+                          if (event.target.checked) next[commanderId] = 1;
+                          else delete next[commanderId];
+                          return next;
+                        })} />
+                        <span><strong>{commander.commanderName}</strong><small>в наличии: {attackCommanderAvailability[commanderId] ?? 0}</small></span>
+                      </label>;
+                    })}
+                  </div> : <p className="fleet-attack-commanders-empty">Свободных командиров нет.</p>}
+                </div>
+              </section> : null}
 
               <footer className="fleet-compose-footer-v1">
                 <span>{status}</span>
@@ -1036,7 +1101,7 @@ function FleetWorkspace({
                   </section>
                   <div className="flight-timeline-notes">
                     <p className="flight-timeline-note-info">Газ списывается только за один путь туда. Обратный участок не требует повторной оплаты.</p>
-                    <p className="flight-timeline-note-warning">При отзыве колонизатор возвращается, но газ не возвращается.</p>
+                    <p className="flight-timeline-note-warning">{missionId === 'attack' ? 'До прибытия атаку можно отозвать без боя и боевого отчёта.' : 'При отзыве колонизатор возвращается, но газ не возвращается.'}</p>
                   </div>
                 </> : <p className="flight-timeline-error" data-qa-flight-preview-error>{previewResult && !previewResult.ok ? previewResult.error.message : targetIsLocallyValid ? 'Проверка цели будет выполнена при отправке.' : 'Укажите координаты цели. Проверка доступности выполняется при отправке.'}</p>}
               </section>

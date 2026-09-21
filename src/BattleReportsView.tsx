@@ -281,7 +281,7 @@ function BattleCardSummaryBody({ viewModel, ...actions }: BattleCardBodyProps) {
   );
 }
 
-function BattleCard({
+export function BattleCard({
   viewModel,
   saved,
   onToggleSaved,

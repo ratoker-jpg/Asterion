@@ -9,6 +9,9 @@ import type {
 } from './types.ts';
 import { createDefaultEspionageState } from './runtime.ts';
 import { createBot01Planets, createDefaultBot01Profile } from './fixtures.ts';
+import { migrateFleetState } from '../fleet/runtime.ts';
+import { migrateDefenseState } from '../fleet/production.ts';
+import { migrateRepairWorkshopState } from '../repair/workshop.ts';
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -26,6 +29,21 @@ function numericRecord(value: unknown): Record<string, number> {
   return Object.fromEntries(Object.entries(record(value)).flatMap(([key, candidate]) => (
     typeof candidate === 'number' && Number.isFinite(candidate) ? [[key, Math.max(0, Math.floor(candidate))]] : []
   )));
+}
+
+function migrateTargetResourceClock(value: unknown, now: number) {
+  const source = record(value);
+  const safeNow = nonNegative(now, Date.now());
+  const lastReconciledAt = Math.min(safeNow, nonNegative(source.lastReconciledAt, safeNow));
+  const remainder = record(source.remainder);
+  return {
+    lastReconciledAt,
+    remainder: {
+      metal: Math.min(0.999_999_999, Math.max(0, Number(remainder.metal) || 0)),
+      minerals: Math.min(0.999_999_999, Math.max(0, Number(remainder.minerals) || 0)),
+      gas: Math.min(0.999_999_999, Math.max(0, Number(remainder.gas) || 0)),
+    },
+  };
 }
 
 function list<T>(value: unknown, migrate: (candidate: unknown) => T | null): T[] {
@@ -164,10 +182,17 @@ function migrateNotice(value: unknown): SpyHunterNotice | null {
   };
 }
 
-function migrateSpyTarget(value: unknown): SpyTargetState | null {
+function migrateSpyTarget(value: unknown, now: number): SpyTargetState | null {
   const source = record(value);
   const coordinate = record(source.coordinate);
   if (!text(source.id) || ![coordinate.galaxy, coordinate.system, coordinate.position].every((part) => Number.isInteger(part) && Number(part) >= 1)) return null;
+  const resources = record(source.resources);
+  const commanders = record(source.commanders);
+  const migratedCommanders = Object.fromEntries(Object.entries(commanders).flatMap(([id, candidate]) => {
+    const entry = record(candidate);
+    const count = nonNegative(entry.count);
+    return count > 0 ? [[id, { level: nonNegative(entry.level), count }]] : [];
+  }));
   return {
     ...source,
     id: text(source.id),
@@ -179,6 +204,19 @@ function migrateSpyTarget(value: unknown): SpyTargetState | null {
     // Bot 01's test espionage level is an explicit fixture contract, while
     // injected future owners may provide their own level.
     espionageLevel: nonNegative(source.espionageLevel, 10),
+    resources: {
+      metal: nonNegative(resources.metal),
+      minerals: nonNegative(resources.minerals),
+      gas: nonNegative(resources.gas),
+      debris: nonNegative(resources.debris),
+      developmentEnergy: nonNegative(resources.developmentEnergy),
+    },
+    buildings: numericRecord(source.buildings),
+    fleet: migrateFleetState(source.fleet),
+    defense: migrateDefenseState(source.defense),
+    commanders: migratedCommanders as SpyTargetState['commanders'],
+    repair: migrateRepairWorkshopState(source.repair),
+    resourceClock: migrateTargetResourceClock(source.resourceClock, now),
   } as unknown as SpyTargetState;
 }
 
@@ -194,7 +232,7 @@ function spyTargetMatchesCurrentContract(value: SpyTargetState): boolean {
     && !('shipLevels' in value);
 }
 
-export function migrateEspionageState(value: unknown): EspionageState {
+export function migrateEspionageState(value: unknown, now = Date.now()): EspionageState {
   if (!value || typeof value !== 'object') return createDefaultEspionageState();
   const source = record(value);
   const bot01Profile = migrateBot01Profile(source.bot01Profile);
@@ -203,7 +241,7 @@ export function migrateEspionageState(value: unknown): EspionageState {
   const rawTargets = hasCanonicalTargets ? source.targets : source.bot01Planets;
   const migratedTargets = rawTargets
     ? Object.fromEntries(Object.entries(rawTargets).flatMap(([id, candidate]) => {
-      const migrated = migrateSpyTarget(candidate);
+      const migrated = migrateSpyTarget(candidate, now);
       return migrated ? [[id, migrated]] : [];
     }))
     : undefined;
@@ -211,7 +249,7 @@ export function migrateEspionageState(value: unknown): EspionageState {
   const legacyBotTargetsNeedRepair = !hasCanonicalTargets
     && hasTargets
     && !Object.values(migratedTargets!).every(spyTargetMatchesCurrentContract);
-  const targets = legacyBotTargetsNeedRepair ? createBot01Planets() : migratedTargets;
+  const targets = legacyBotTargetsNeedRepair ? createBot01Planets(now) : migratedTargets;
   const currentBot01Profile = bot01Profile ?? (hasLegacyBotTargets && hasTargets ? createDefaultBot01Profile() : undefined);
   return {
     missions: list(source.missions, migrateMission),

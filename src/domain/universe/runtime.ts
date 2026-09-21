@@ -777,7 +777,7 @@ export function getUniverseActionState(
   currentOwnerId: string,
   relation?: UniverseOwnerRelation,
 ): UniverseActionState {
-  const label = action === 'spy' ? 'Отправить шпионский зонд' : 'Отправить флот';
+  const label = action === 'spy' ? 'Отправить шпионский зонд' : action === 'attack' ? 'Начать атаку' : 'Отправить флот';
   if (node.kind !== 'player' && node.kind !== 'npc') {
     return {
       action,
@@ -802,7 +802,7 @@ export function getUniverseActionState(
       enabled: false,
       status: 'disabled',
       label,
-      reason: 'Это ваша планета.',
+      reason: action === 'attack' ? 'Атака запрещена против своей планеты.' : 'Это ваша планета.',
     };
   }
   if (action === 'fleet' && node.fixture?.id === TEST_MODE_ALLY_PLANET_FIXTURE.marker.id) {
@@ -830,7 +830,7 @@ export function getUniverseActionState(
       enabled: false,
       status: 'disabled',
       label,
-      reason: 'Шпионаж запрещён против союзной планеты.',
+      reason: action === 'attack' ? 'Атака запрещена против союзной планеты.' : 'Шпионаж запрещён против союзной планеты.',
     };
   }
   if (targetRelation === 'self') {
@@ -839,7 +839,7 @@ export function getUniverseActionState(
       enabled: false,
       status: 'disabled',
       label,
-      reason: 'Шпионаж запрещён против своей планеты.',
+      reason: action === 'attack' ? 'Атака запрещена против своей планеты.' : 'Шпионаж запрещён против своей планеты.',
     };
   }
   return {
@@ -847,7 +847,9 @@ export function getUniverseActionState(
     enabled: true,
     status: 'supported',
     label,
-    reason: targetRelation === 'enemy' ? 'Вражеская цель доступна для шпионажа.' : 'Нейтральная цель доступна для шпионажа.',
+    reason: targetRelation === 'enemy'
+      ? action === 'attack' ? 'Вражеская цель доступна для атаки.' : 'Вражеская цель доступна для шпионажа.'
+      : action === 'attack' ? 'Нейтральная цель доступна для атаки.' : 'Нейтральная цель доступна для шпионажа.',
   };
 }
 

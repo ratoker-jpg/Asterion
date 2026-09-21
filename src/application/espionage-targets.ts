@@ -66,3 +66,16 @@ export function resolveSpyTarget(
   );
   return { target, owner, relation };
 }
+
+export function resolveSpyTargetAtCoordinate(
+  state: SaveState,
+  coordinate: SpyTargetState['coordinate'],
+): ResolvedSpyTarget | null {
+  const target = Object.values(getEspionageTargets(state.espionage)).find((candidate) => (
+    (candidate.kind === undefined || candidate.kind === 'player' || candidate.kind === 'npc')
+      && candidate.coordinate.galaxy === coordinate.galaxy
+      && candidate.coordinate.system === coordinate.system
+      && candidate.coordinate.position === coordinate.position
+  ));
+  return target ? resolveSpyTarget(state, target.id, { coordinate }) : null;
+}

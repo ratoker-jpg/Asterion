@@ -351,9 +351,11 @@ async function runViewport(width, height) {
     assertRenderedFactionGeneralPortraits(playerPortraits, ['aegis'], `${label} player universe`);
     const playerSpyAction = player.actions.find((action) => action.action === 'spy');
     const playerFleetAction = player.actions.find((action) => action.action === 'fleet');
-    if (player.kind !== 'player' || player.ownerName !== 'Dendrilion' || !player.avatar.includes('aegis_general') || player.points.length !== 4 || player.planetRows !== 1 || player.actions.length !== 2
+    const playerAttackAction = player.actions.find((action) => action.action === 'attack');
+    if (player.kind !== 'player' || player.ownerName !== 'Dendrilion' || !player.avatar.includes('aegis_general') || player.points.length !== 4 || player.planetRows !== 1 || player.actions.length !== 3
       || !playerSpyAction || !playerSpyAction.disabled || playerSpyAction.status !== 'disabled' || !playerSpyAction.title.includes('Это ваша планета')
-      || !playerFleetAction || playerFleetAction.disabled || playerFleetAction.status !== 'supported' || !playerFleetAction.title.includes('Своя планета принимает транспортировку')) {
+      || !playerFleetAction || playerFleetAction.disabled || playerFleetAction.status !== 'supported' || !playerFleetAction.title.includes('Своя планета принимает транспортировку')
+      || !playerAttackAction || !playerAttackAction.disabled || playerAttackAction.status !== 'disabled' || !playerAttackAction.title.includes('Атака запрещена против своей планеты')) {
       throw new Error(`${label}: player inspector contract failed ${JSON.stringify(player)}`);
     }
     if (!player.text.includes('Астеры') || !player.text.includes('Содружество Гелион') || !player.text.includes('[HLN]')) throw new Error(`${label}: player profile identity contract failed ${JSON.stringify(player)}`);
@@ -381,9 +383,11 @@ async function runViewport(width, height) {
     assertRenderedFactionGeneralPortraits(npcPortraits, ['veyra'], `${label} NPC universe`);
     const npcSpyActions = npc.actions.filter((action) => action.action === 'spy');
     const npcFleetActions = npc.actions.filter((action) => action.action === 'fleet');
-    if (npc.kind !== 'npc' || npc.ownerName !== 'Бот 01' || !npc.ownerId || npc.planetRows !== 7 || npc.actions.length !== 14
+    const npcAttackActions = npc.actions.filter((action) => action.action === 'attack');
+    if (npc.kind !== 'npc' || npc.ownerName !== 'Бот 01' || !npc.ownerId || npc.planetRows !== 7 || npc.actions.length !== 21
       || npcSpyActions.length !== 7 || npcSpyActions.some((action) => action.disabled || action.status !== 'supported' || !action.title.includes('доступна для шпионажа'))
-      || npcFleetActions.length !== 7 || npcFleetActions.some((action) => !action.disabled || action.status !== 'disabled' || !action.title.includes('только на свою или явную союзную планету'))) {
+      || npcFleetActions.length !== 7 || npcFleetActions.some((action) => !action.disabled || action.status !== 'disabled' || !action.title.includes('только на свою или явную союзную планету'))
+      || npcAttackActions.length !== 7 || npcAttackActions.some((action) => action.disabled || action.status !== 'supported' || !action.title.includes('доступна для атаки'))) {
       throw new Error(`${label}: NPC action/list contract failed ${JSON.stringify(npc)}`);
     }
     const systems = npc.rows.map((row) => Number(row.coordinate.slice(1, -1).split(':')[1]));
@@ -392,13 +396,30 @@ async function runViewport(width, height) {
     await dismissInspector(win);
     await checkRestoredFocus(win, npcId);
 
+    await clickObject(win, npcSelector);
+    await clickAt(win, '[data-qa-universe-action="attack"]');
+    await waitFor(win, `document.querySelector('[data-qa-attack-prep]') && document.querySelector('[data-qa-target-relation]')?.getAttribute('data-qa-target-relation') === 'neutral'`);
+    const attackPrep = await win.webContents.executeJavaScript(`(() => ({
+      mission: document.querySelector('#fleet-mission')?.value || '',
+      rounds: Array.from(document.querySelectorAll('[data-qa-attack-rounds] option')).map((option) => option.value),
+      roster: Array.from(document.querySelectorAll('[data-qa-fleet-ship]')).map((row) => row.getAttribute('data-qa-fleet-ship')),
+      relation: document.querySelector('[data-qa-target-relation]')?.getAttribute('data-qa-target-relation') || '',
+    }))()`);
+    if (attackPrep.mission !== 'attack' || JSON.stringify(attackPrep.rounds) !== JSON.stringify(['5', '8', '12']) || attackPrep.relation !== 'neutral' || attackPrep.roster.includes('transporter') || attackPrep.roster.includes('spy-probe')) {
+      throw new Error(`${label}: attack preparation contract failed ${JSON.stringify(attackPrep)}`);
+    }
+    await clickPrimary(win, 'universe');
+    await selectSystem(win, npcSystem);
+
     const allySelector = '[data-qa-universe-object="test-mode-ally-ira-vel-v1"]';
     await findObject(win, allySelector);
     await clickObject(win, allySelector);
     const ally = await inspectorSnapshot(win);
     const allyFleetAction = ally.actions.find((action) => action.action === 'fleet');
+    const allyAttackAction = ally.actions.find((action) => action.action === 'attack');
     if (ally.kind !== 'npc' || ally.ownerName !== 'Ира Вель' || ally.ownerId !== 'member-ira-vel' || ally.planetRows !== 1
-      || !allyFleetAction || allyFleetAction.disabled || allyFleetAction.status !== 'supported') {
+      || !allyFleetAction || allyFleetAction.disabled || allyFleetAction.status !== 'supported'
+      || !allyAttackAction || !allyAttackAction.disabled || allyAttackAction.status !== 'disabled' || !allyAttackAction.title.includes('союзной планеты')) {
       throw new Error(`${label}: explicit ally transport action contract failed ${JSON.stringify(ally)}`);
     }
     await clickAt(win, '[data-qa-universe-action="fleet"]');
@@ -416,9 +437,11 @@ async function runViewport(width, height) {
       const reopened = await inspectorSnapshot(win);
       const reopenedSpyActions = reopened.actions.filter((action) => action.action === 'spy');
       const reopenedFleetActions = reopened.actions.filter((action) => action.action === 'fleet');
-      if (reopened.ownerId !== npc.ownerId || reopened.ownerName !== 'Бот 01' || JSON.stringify(reopened.rows) !== JSON.stringify(npc.rows) || reopened.actions.length !== 14
+      const reopenedAttackActions = reopened.actions.filter((action) => action.action === 'attack');
+      if (reopened.ownerId !== npc.ownerId || reopened.ownerName !== 'Бот 01' || JSON.stringify(reopened.rows) !== JSON.stringify(npc.rows) || reopened.actions.length !== 21
         || reopenedSpyActions.length !== 7 || reopenedSpyActions.some((action) => action.disabled || action.status !== 'supported' || !action.title.includes('доступна для шпионажа'))
-        || reopenedFleetActions.length !== 7 || reopenedFleetActions.some((action) => !action.disabled || action.status !== 'disabled' || !action.title.includes('только на свою или явную союзную планету'))) {
+        || reopenedFleetActions.length !== 7 || reopenedFleetActions.some((action) => !action.disabled || action.status !== 'disabled' || !action.title.includes('только на свою или явную союзную планету'))
+        || reopenedAttackActions.length !== 7 || reopenedAttackActions.some((action) => action.disabled || action.status !== 'supported' || !action.title.includes('доступна для атаки'))) {
         throw new Error(`${label}: visit did not reopen the same seven holdings ${JSON.stringify(reopened)}`);
       }
       const selectedCoordinate = await win.webContents.executeJavaScript(`document.querySelector('.universe-inspector-header span')?.textContent`);

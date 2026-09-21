@@ -379,6 +379,10 @@ test('spy and fleet actions follow the owner relation contract', () => {
   assert.equal(getUniverseActionState('fleet', homeworld, 'player-current').reason, 'Своя планета принимает транспортировку.');
   assert.equal(getUniverseActionState('spy', foreign, 'player-current', 'neutral').status, 'supported');
   assert.equal(getUniverseActionState('spy', foreign, 'player-current', 'neutral').enabled, true);
+  assert.equal(getUniverseActionState('attack', foreign, 'player-current', 'neutral').enabled, true);
+  assert.equal(getUniverseActionState('attack', foreign, 'player-current', 'enemy').reason, 'Вражеская цель доступна для атаки.');
+  assert.equal(getUniverseActionState('attack', ally, 'player-current', 'ally').enabled, false);
+  assert.equal(getUniverseActionState('attack', homeworld, 'player-current', 'self').enabled, false);
   assert.equal(getUniverseActionState('fleet', foreign, 'player-current').enabled, false);
   assert.equal(getUniverseActionState('fleet', ally, 'player-current').status, 'supported');
   assert.equal(getUniverseActionState('fleet', ally, 'player-current').enabled, true);

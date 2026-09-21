@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { BattleReportDetailBody } from './BattleReportsView';
+import { BattleCard, BattleReportModal } from './BattleReportsView';
 import { EmblemGlyph } from './CommandView';
 import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
 import type { BattleReport } from './domain/combat/report.ts';
+import { createBattleReportViewModel } from './domain/combat/battle-report-view-model.ts';
 import type { CommandState } from './domain/command/types.ts';
 import { selectCurrentAlliance } from './domain/command/selectors.ts';
 import type { OperationsState } from './domain/operations/types.ts';
@@ -218,7 +219,8 @@ function SpyDossier({ item, report, onOpenUniverseTarget }: {
   );
 }
 
-function BattleDossier({ item, report }: { item: ReportItem; report: BattleReport }) {
+function BattleDossier({ item, report, saved, onToggleSaved, onOpen }: { item: ReportItem; report: BattleReport; saved: boolean; onToggleSaved: () => void; onOpen: () => void }) {
+  const viewModel = createBattleReportViewModel(report);
   return (
     <div className="reports-dossier reports-dossier--battle">
       <div className="reports-dossier-heading">
@@ -226,7 +228,7 @@ function BattleDossier({ item, report }: { item: ReportItem; report: BattleRepor
         <div><small>{item.typeLabel}</small><h2>{item.title}</h2><p>{item.preview}</p></div>
         <div className="reports-dossier-heading__status"><StatusBadge item={item} /><time>{formatDate(item.timestamp)}</time></div>
       </div>
-      <BattleReportDetailBody report={report} />
+      <BattleCard viewModel={viewModel} saved={saved} onToggleSaved={onToggleSaved} onOpen={onOpen} />
     </div>
   );
 }
@@ -318,6 +320,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [openBattleReportId, setOpenBattleReportId] = useState<string | null>(null);
 
   const items = useMemo(() => buildReportsFeed(battleReports, operations, command, espionage), [battleReports, operations, command, espionage]);
   const counts = useMemo(() => getReportCategoryCounts(items, state), [items, state]);
@@ -331,6 +334,8 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
   const selectedItem = visibleItems.find((item) => item.id === selectedId) ?? null;
   const selectedBattle = findBattleReport(battleReports, selectedItem);
   const selectedBattleSaved = selectedItem?.battleReportId ? savedBattleReportIds.includes(selectedItem.battleReportId) : false;
+  const openBattleReport = openBattleReportId ? battleReports.find((report) => report.id === openBattleReportId) ?? null : null;
+  const openBattleViewModel = openBattleReport ? createBattleReportViewModel(openBattleReport) : null;
 
   useEffect(() => {
     setPage(1);
@@ -423,12 +428,13 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
 
         <section className="reports-preview">
           <header className="reports-preview-head"><div><small>ДОСЬЕ СООБЩЕНИЯ</small><h2>ПРОСМОТР СООБЩЕНИЯ</h2></div>{activeCategory ? <div className="reports-preview-actions"><button type="button" aria-label={selectedBattleSaved ? 'Убрать бой из сохранённых' : 'Сохранить бой'} aria-pressed={selectedBattleSaved} disabled={!selectedItem?.battleReportId} className={selectedBattleSaved ? 'active' : ''} onClick={() => selectedItem?.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)}><ActionGlyph kind="save" /></button><span /><button type="button" aria-label="Предыдущее сообщение" disabled={selectedIndex <= 0} onClick={() => navigateSelected(-1)}><ActionGlyph kind="prev" /></button><button type="button" aria-label="Следующее сообщение" disabled={selectedIndex < 0 || selectedIndex >= visibleItems.length - 1} onClick={() => navigateSelected(1)}><ActionGlyph kind="next" /></button></div> : null}</header>
-          <div className="reports-preview-scroll">{activeCategory ? selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} /> : selectedItem.spyReport ? <SpyDossier item={selectedItem} report={selectedItem.spyReport} onOpenUniverseTarget={onOpenUniverseTarget} /> : <GenericDossier item={selectedItem} />) : <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} /> : <EmptyFolder folder={activeFolderMeta} />}</div>
+          <div className="reports-preview-scroll">{activeCategory ? selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} saved={selectedBattleSaved} onToggleSaved={() => selectedItem.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)} onOpen={() => selectedBattle && setOpenBattleReportId(selectedBattle.id)} /> : selectedItem.spyReport ? <SpyDossier item={selectedItem} report={selectedItem.spyReport} onOpenUniverseTarget={onOpenUniverseTarget} /> : <GenericDossier item={selectedItem} />) : <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} /> : <EmptyFolder folder={activeFolderMeta} />}</div>
           {activeCategory && selectedItem?.action?.kind === 'open_fleets' ? <footer className="reports-preview-footer"><span>Выбери состав флота для совместной операции.</span><button type="button" onClick={onOpenFleets}>{selectedItem.action.label}</button></footer> : activeCategory && selectedItem?.source === 'espionage' && (selectedItem.action || selectedItem.secondaryAction) ? <footer className="reports-preview-footer"><span>{selectedItem.secondaryAction ? 'Связанный шпионский зонд ещё находится на орбите.' : 'Действия по полному снимку цели.'}</span><div className="reports-preview-footer-actions">
             {selectedItem.action?.kind === 'simulate_battle' && selectedItem.spyReport ? <button type="button" onClick={() => onSimulateBattle(selectedItem.spyReport!)}>{selectedItem.action.label}</button> : null}
             {selectedItem.secondaryAction?.kind === 'recall_spy' && selectedItem.secondaryAction.missionId ? <button type="button" className="restore" onClick={() => onRecallSpy(selectedItem.secondaryAction!.missionId!)}>{selectedItem.secondaryAction.label}</button> : null}
           </div></footer> : activeCategory && selectedItem?.battleReportId ? <footer className="reports-preview-footer"><span>{selectedBattleSaved ? 'Бой находится в сохранённых.' : 'Этот бой можно сохранить и открыть позже во Флоты → Битвы.'}</span><button type="button" className={selectedBattleSaved ? 'restore' : ''} onClick={() => onToggleBattleSaved(selectedItem.battleReportId!, !selectedBattleSaved)}>{selectedBattleSaved ? 'УБРАТЬ ИЗ СОХРАНЁННЫХ' : 'СОХРАНИТЬ БОЙ'}</button></footer> : null}
         </section>
+        {openBattleReport && openBattleViewModel ? <BattleReportModal report={openBattleReport} viewModel={openBattleViewModel} saved={savedBattleReportIds.includes(openBattleReport.id)} onToggleSaved={() => onToggleBattleSaved(openBattleReport.id, !savedBattleReportIds.includes(openBattleReport.id))} onClose={() => setOpenBattleReportId(null)} /> : null}
       </section>}
     </main>
   );

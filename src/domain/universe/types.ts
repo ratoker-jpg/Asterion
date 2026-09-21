@@ -150,7 +150,7 @@ export type UniverseAssetCatalog = {
   starArts: readonly string[];
 };
 
-export type UniverseAction = 'spy' | 'fleet';
+export type UniverseAction = 'spy' | 'fleet' | 'attack';
 
 export type UniverseActionState = {
   action: UniverseAction;

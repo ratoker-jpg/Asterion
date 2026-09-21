@@ -142,7 +142,7 @@ import {
 import { createSimulatorScenarioFromSpyReport, requestSimulatorHandoff } from './application/simulator-handoff.ts';
 import type { SpyReportSnapshot } from './domain/espionage/types.ts';
 import { getEspionageTargets } from './domain/espionage/runtime.ts';
-import type { UniverseCoordinate, UniverseOwnerProfile } from './domain/universe/types.ts';
+import type { UniverseCoordinate, UniverseObjectKind, UniverseOwnerProfile } from './domain/universe/types.ts';
 import { enqueueApplicationStateUpdate } from './application/state.ts';
 import { getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
@@ -1015,13 +1015,13 @@ export function App() {
     }, 40);
   };
 
-  const openSpyLaunch = (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile }) => {
+  const openSpyLaunch = (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile; targetKind: 'player' | 'npc' }) => {
     const targetRaceId = target.owner.raceId === 'synod' || target.owner.raceId === 'veyra' ? target.owner.raceId : 'aegis';
     const result = dispatchFlight(stateRef.current, {
       requestId: `spy-universe-${target.planetId}-${Date.now()}`,
       missionId: 'espionage',
       originPlanetId: stateRef.current.currentPlanetId,
-      targetKind: 'npc',
+      targetKind: target.targetKind,
       targetRelation: target.relation,
       targetPlanetName: target.planetName,
       targetOwnerId: target.owner.id,
@@ -1042,6 +1042,29 @@ export function App() {
       setNotice(result.error.message, 'error');
     }
     window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
+  };
+
+  const openAttackLaunch = (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile; targetKind: 'player' | 'npc' }) => {
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    setNotice(`Атакующая цель выбрана: ${target.planetName} [${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}].`);
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, {
+        detail: {
+          missionId: 'attack',
+          targetRelation: target.relation,
+          targetKind: target.targetKind as UniverseObjectKind,
+          targetPlanetName: target.planetName,
+          targetOwnerId: target.owner.id,
+          targetOwnerName: target.owner.displayName,
+          targetRaceId: target.owner.raceId === 'synod' || target.owner.raceId === 'veyra' ? target.owner.raceId : 'aegis',
+          targetAlliance: target.owner.alliance ?? null,
+          destination: { kind: 'planet', planetId: target.planetId, coordinate: target.coordinate },
+        },
+      }));
+    }, 40);
   };
 
   const openUniverseTarget = (target: UniverseFocusTarget) => {
@@ -1339,6 +1362,7 @@ export function App() {
               onColonize={openColonizationLaunch}
               onTransport={openTransportLaunch}
               onSpy={openSpyLaunch}
+              onAttack={openAttackLaunch}
               focusTarget={universeFocusTarget}
               onFocusHandled={() => setUniverseFocusTarget(null)}
             />

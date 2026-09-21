@@ -377,6 +377,24 @@
 }
 .fleet-mission-description-v1 strong { color: #dffaff; font-weight: 700; }
 
+.fleet-attack-prep-v1 { display: grid; gap: 12px; margin-top: 14px; padding: 12px 14px; border: 1px solid rgba(214, 116, 116, .28); background: rgba(94, 32, 40, .13); }
+.fleet-attack-rounds-v1, .fleet-attack-commanders-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.fleet-attack-rounds-v1 > div, .fleet-attack-commanders-head > div { display: grid; gap: 4px; }
+.fleet-attack-prep-v1 small { color: #d99191; font-size: 9px; letter-spacing: .12em; }
+.fleet-attack-prep-v1 span, .fleet-attack-commanders-head span { color: #9cb2bb; font-size: 10px; line-height: 1.35; }
+.fleet-attack-rounds-v1 select { min-width: 120px; padding: 7px 9px; border: 1px solid rgba(224, 127, 127, .48); border-radius: 5px; background: #17171f; color: #ffe4e4; font: inherit; }
+.fleet-attack-rounds-v1 select:focus-visible, .fleet-attack-commanders-v1 input:focus-visible { outline: 2px solid #ec8c8c; outline-offset: 2px; }
+.fleet-attack-commanders-v1 { display: grid; gap: 8px; }
+.fleet-attack-commanders-head b { color: #ffd2a0; font-size: 10px; white-space: nowrap; }
+.fleet-attack-commanders-list { display: flex; flex-wrap: wrap; gap: 7px; }
+.fleet-attack-commanders-list label { display: inline-flex; align-items: center; gap: 7px; min-width: 130px; padding: 7px 8px; border: 1px solid rgba(137, 168, 178, .2); border-radius: 5px; background: rgba(7, 21, 29, .5); cursor: pointer; }
+.fleet-attack-commanders-list label.is-selected { border-color: rgba(237, 139, 139, .72); background: rgba(129, 47, 54, .28); }
+.fleet-attack-commanders-list input { accent-color: #e88686; }
+.fleet-attack-commanders-list label span { display: grid; gap: 2px; }
+.fleet-attack-commanders-list label strong { color: #e9f4f5; font-size: 10px; font-weight: 600; }
+.fleet-attack-commanders-list label small { color: #8ea9b1; font-size: 8px; }
+.fleet-attack-commanders-empty { margin: 0; color: #b98585; font-size: 10px; }
+
 .fleet-compose-footer-v1 {
   align-self: end;
   display: flex;

@@ -1,6 +1,7 @@
 import {
   getBuildingResourceIncomePerHour,
   getStorageCapacities,
+  type BuildingRole,
 } from '../domain/buildings/resource-zone.ts';
 import type { ProductionResource } from '../domain/buildings/balance-v1.ts';
 import {
@@ -16,6 +17,9 @@ import {
   type ResourceClockEntry,
   type SaveState,
 } from './contracts.ts';
+import { createDefaultEspionageState, getEspionageTargets } from '../domain/espionage/runtime.ts';
+import type { EspionageState, SpyTargetState } from '../domain/espionage/types.ts';
+import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 
 const RESOURCE_KEYS = ['metal', 'minerals', 'gas'] as const satisfies readonly ProductionResource[];
 const CAPPED_RESOURCE_KEYS = ['metal', 'minerals', 'gas'] as const;
@@ -32,6 +36,12 @@ export type ResourceReconcileResult = {
   changed: boolean;
   state: SaveState;
   credit: ResourceCreditResult;
+};
+
+export type TestTargetResourceReconcileContext = {
+  now: number;
+  mode: RuntimeMode;
+  testTimeScale: TestTimeScale;
 };
 
 function finiteNonNegative(value: unknown, fallback = 0): number {
@@ -206,4 +216,98 @@ export function reconcileResourceIncome(
   );
   const changed = !resourcesEqual(state, next, context.planetId) || !clockWasPersisted || !clocksEqual(clock, nextClock);
   return { changed, state: changed ? next : state, credit };
+}
+
+function targetClock(target: SpyTargetState, now: number) {
+  const safeNow = finiteNonNegative(now, Date.now());
+  const stored = target.resourceClock;
+  const lastReconciledAt = Math.min(safeNow, finiteNonNegative(stored?.lastReconciledAt, safeNow));
+  return {
+    lastReconciledAt,
+    remainder: {
+      metal: Math.min(0.999_999_999, finiteNonNegative(stored?.remainder.metal)),
+      minerals: Math.min(0.999_999_999, finiteNonNegative(stored?.remainder.minerals)),
+      gas: Math.min(0.999_999_999, finiteNonNegative(stored?.remainder.gas)),
+    },
+  };
+}
+
+function targetBuildings(target: SpyTargetState): Partial<Record<BuildingRole, number>> {
+  const source = target.buildings ?? {};
+  return {
+    ...(source as Partial<Record<BuildingRole, number>>),
+    // These aliases keep old Bot 01 saves ticking while new fixtures use the
+    // canonical resource-building roles.
+    'metal-production-1': source['metal-production-1'] ?? source['metal-mine'] ?? 0,
+    'mineral-production-1': source['mineral-production-1'] ?? source['mineral-mine'] ?? 0,
+    'gas-production-1': source['gas-production-1'] ?? source['gas-extractor'] ?? 0,
+  };
+}
+
+function updateTargetRegistry(state: SaveState, targets: Record<string, SpyTargetState>): SaveState {
+  const current = state.espionage ?? createDefaultEspionageState();
+  const nextEspionage: EspionageState = {
+    ...current,
+    targets,
+    ...(current.bot01Planets ? { bot01Planets: targets } : {}),
+  };
+  return { ...state, espionage: nextEspionage };
+}
+
+/**
+ * Settles the Test Mode Bot 01 economy on the same runtime clock as flights.
+ * Target storage is intentionally uncapped: the fixture starts near 10M and
+ * its purpose is to exercise attack loot, not the player's warehouse rules.
+ */
+export function reconcileTestEspionageTargetResources(
+  state: SaveState,
+  context: TestTargetResourceReconcileContext,
+): SaveState {
+  if (context.mode !== 'test') return state;
+  const currentEspionage = state.espionage;
+  if (!currentEspionage) return state;
+  const targets = getEspionageTargets(currentEspionage);
+  const profile = currentEspionage.bot01Profile;
+  let changed = false;
+  const nextTargets: Record<string, SpyTargetState> = { ...targets };
+  const now = finiteNonNegative(context.now, Date.now());
+
+  for (const [id, target] of Object.entries(targets)) {
+    if (target.ownerId !== UNIVERSE_NPC_OWNER_ID) continue;
+    const clock = targetClock(target, now);
+    if (now < clock.lastReconciledAt) {
+      if (target.resourceClock) continue;
+      nextTargets[id] = { ...target, resourceClock: clock };
+      changed = true;
+      continue;
+    }
+    const elapsedHours = (now - clock.lastReconciledAt) / HOUR_MS;
+    const baseIncome = getBuildingResourceIncomePerHour(
+      targetBuildings(target),
+      profile?.scienceLevels ?? target.ownerProfile?.scienceLevels,
+    );
+    const hourly = getEffectiveResourceIncomePerHour(baseIncome, context.mode, context.testTimeScale);
+    const remainder = { ...clock.remainder };
+    const resources = { ...target.resources };
+    for (const key of RESOURCE_KEYS) {
+      const raw = hourly[key] * elapsedHours + clock.remainder[key];
+      const whole = Number.isFinite(raw) ? Math.floor(Math.max(0, raw)) : 0;
+      resources[key] = finiteNonNegative(resources[key]) + whole;
+      remainder[key] = Number.isFinite(raw) ? Math.max(0, raw - whole) : 0;
+    }
+    const nextTarget: SpyTargetState = {
+      ...target,
+      resources,
+      resourceClock: { lastReconciledAt: now, remainder },
+    };
+    const nextClock = nextTarget.resourceClock!;
+    if (nextClock.lastReconciledAt !== target.resourceClock?.lastReconciledAt
+      || RESOURCE_KEYS.some((key) => nextTarget.resources[key] !== target.resources[key])
+      || RESOURCE_KEYS.some((key) => nextClock.remainder[key] !== target.resourceClock?.remainder[key])) {
+      nextTargets[id] = nextTarget;
+      changed = true;
+    }
+  }
+
+  return changed ? updateTargetRegistry(state, nextTargets) : state;
 }

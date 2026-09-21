@@ -6,6 +6,7 @@ import type { OwnedFleetState } from '../fleet/runtime.ts';
 import type { TargetRelation } from '../flights/types.ts';
 import type { ScienceLevels } from '../buildings/resource-zone.ts';
 import type { UniverseCoordinate, UniverseOwnerAlliance } from '../universe/types.ts';
+import type { RepairWorkshopState } from '../repair/workshop.ts';
 
 export type SpyMissionStatus = 'transit' | 'orbiting' | 'returning' | 'returned' | 'destroyed';
 export type SpyReportQuality = 'basic' | 'detailed' | 'full';
@@ -75,6 +76,13 @@ export type SpyTargetState = {
   ownerProfile?: SpyOwnerProfile;
   /** Legacy per-planet experiment; migrated away in favor of ownerProfile. */
   shipLevels?: Partial<Record<ShipId, number>>;
+  /** Test-mode target repair pool; production saves never materialize Bot 01. */
+  repair?: RepairWorkshopState;
+  /** Independent target economy clock, persisted with the authoritative target. */
+  resourceClock?: {
+    lastReconciledAt: number;
+    remainder: { metal: number; minerals: number; gas: number };
+  };
 };
 
 /** Backward-compatible name for old Test Mode saves and tests. */
