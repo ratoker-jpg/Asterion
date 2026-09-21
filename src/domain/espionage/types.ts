@@ -42,14 +42,17 @@ export type SpyCommanderSnapshot = {
   count: number;
 };
 
-/** Bot 01's shared profile. Ship upgrades and science belong to the owner, not a planet. */
-export type Bot01Profile = {
+/** Owner-wide spy profile. Ship upgrades and science belong to the owner, not a planet. */
+export type SpyOwnerProfile = {
   scienceLevels: ScienceLevels;
   shipLevels: Partial<Record<ShipId, number>>;
   commanderLevels: Partial<Record<CommanderId, number>>;
 };
 
-export type Bot01PlanetState = {
+/** Backward-compatible name for the Test Mode Bot 01 profile. */
+export type Bot01Profile = SpyOwnerProfile;
+
+export type SpyTargetState = {
   id: string;
   name: string;
   coordinate: UniverseCoordinate;
@@ -57,7 +60,9 @@ export type Bot01PlanetState = {
   ownerName: string;
   raceId: CombatFactionId;
   alliance: UniverseOwnerAlliance | null;
-  espionageLevel: 10;
+  /** Only player and NPC planets can be espionage targets. */
+  kind?: 'player' | 'npc';
+  espionageLevel: number;
   resources: SpyResourcesSnapshot;
   buildings: Record<string, number>;
   fleet: OwnedFleetState;
@@ -66,9 +71,16 @@ export type Bot01PlanetState = {
   population: SpyPlanetPopulation;
   hunterLevel: number;
   debris: number;
-  /** Seeded spaceport-style hull levels (upgradable ships only, 0..10). */
+  /** Optional owner profile for injected non-Bot targets. */
+  ownerProfile?: SpyOwnerProfile;
+  /** Legacy per-planet experiment; migrated away in favor of ownerProfile. */
   shipLevels?: Partial<Record<ShipId, number>>;
 };
+
+/** Backward-compatible name for old Test Mode saves and tests. */
+export type Bot01PlanetState = SpyTargetState;
+
+export type SpyMissionRelation = TargetRelation;
 
 export type SpyReportSnapshot = {
   id: string;
@@ -119,7 +131,7 @@ export type SpyMission = {
   targetOwnerName: string;
   targetRaceId: CombatFactionId;
   targetAlliance: UniverseOwnerAlliance | null;
-  targetRelation: SpyTargetRelation;
+  targetRelation: SpyMissionRelation;
   targetCoordinate: UniverseCoordinate;
   spyLevel: number;
   targetEspionageLevel: number;
@@ -138,7 +150,9 @@ export type EspionageState = {
   missions: SpyMission[];
   reports: SpyReportSnapshot[];
   hunterNotices: SpyHunterNotice[];
-  /** Test-only Bot 01 state. Production saves intentionally keep this empty. */
+  /** Authoritative registry of resolvable planet owners. Test Mode injects Bot 01 here. */
+  targets?: Record<string, SpyTargetState>;
+  /** Legacy Test Mode alias. New runtime code must resolve through `targets`. */
   bot01Planets?: Record<string, Bot01PlanetState>;
   /** Test-only owner-wide Bot 01 upgrades and technologies. */
   bot01Profile?: Bot01Profile;

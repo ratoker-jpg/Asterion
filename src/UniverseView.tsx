@@ -84,6 +84,7 @@ import type {
   UniverseCoordinate,
 } from './domain/universe/types.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
+import type { SpyTargetState } from './domain/espionage/types.ts';
 
 const planetArts = [
   planet01, planet02, planet03, planet04, planet05, planet06, planet07, planet08, planet09, planet10, planet11, planet12,
@@ -103,6 +104,7 @@ type UniverseViewProps = {
   rating: RatingPrototypeState;
   command: CommandState;
   playerPlanets: readonly UniversePersistedPlayerPlanet[];
+  spyTargets: readonly SpyTargetState[];
   mode: RuntimeMode;
   onColonize: (coordinate: UniverseCoordinate) => void;
   onTransport: (target: { planetId: string; coordinate: UniverseCoordinate; relation: TargetRelation }) => void;
@@ -223,6 +225,7 @@ function OwnerInspector({
   planets,
   currentOwnerId,
   currentAlliance,
+  diplomacy,
   onAction,
   onVisit,
 }: {
@@ -231,6 +234,7 @@ function OwnerInspector({
   planets: UniversePlanetNode[];
   currentOwnerId: string;
   currentAlliance: UniverseOwnerAlliance | null | undefined;
+  diplomacy: CommandState['diplomacy'];
   onAction: (action: UniverseAction, node: UniversePlanetNode) => void;
   onVisit: (node: UniversePlanetNode) => void;
 }) {
@@ -281,8 +285,8 @@ function OwnerInspector({
                 <small>Система {String(planet.coordinate.system).padStart(2, '0')} <span>{formatUniverseCoordinate(planet.coordinate)} ↗</span></small>
               </button>
               <div className="universe-planet-row-actions">
-                <UniverseActionButton action="spy" node={planet} currentOwnerId={currentOwnerId} relation={getUniverseOwnerRelation(planet, currentOwnerId, currentAlliance, owner)} onAction={onAction} />
-                <UniverseActionButton action="fleet" node={planet} currentOwnerId={currentOwnerId} relation={getUniverseOwnerRelation(planet, currentOwnerId, currentAlliance, owner)} onAction={onAction} />
+                <UniverseActionButton action="spy" node={planet} currentOwnerId={currentOwnerId} relation={getUniverseOwnerRelation(planet, currentOwnerId, currentAlliance, owner, diplomacy)} onAction={onAction} />
+                <UniverseActionButton action="fleet" node={planet} currentOwnerId={currentOwnerId} relation={getUniverseOwnerRelation(planet, currentOwnerId, currentAlliance, owner, diplomacy)} onAction={onAction} />
               </div>
             </li>
           ))}
@@ -363,7 +367,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, occupiedNodes, onSelect }
   </button>;
 }
 
-export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, rating, command, playerPlanets, mode, onColonize, onTransport, onSpy, focusTarget, onFocusHandled }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, rating, command, playerPlanets, spyTargets, mode, onColonize, onTransport, onSpy, focusTarget, onFocusHandled }: UniverseViewProps) {
   const [system, setSystem] = useState(1);
   const [focusEmpty, setFocusEmpty] = useState(false);
   const [showSlotLabels, setShowSlotLabels] = useState(true);
@@ -397,8 +401,20 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
       next.set(npc.id, npc);
       next.set(TEST_MODE_ALLY_PLANET_FIXTURE.owner.id, normalizeUniverseOwnerProfile(TEST_MODE_ALLY_PLANET_FIXTURE.owner));
     }
+    for (const target of spyTargets) {
+      const previous = next.get(target.ownerId);
+      next.set(target.ownerId, normalizeUniverseOwnerProfile({
+        ...(previous ?? {}),
+        id: target.ownerId,
+        displayName: target.ownerName,
+        raceId: target.raceId,
+        alliance: target.alliance,
+        points: previous?.points,
+        planetIds: [...new Set([...(previous?.planetIds ?? []), target.id])],
+      }));
+    }
     return next;
-  }, [mode, owner]);
+  }, [mode, owner, spyTargets]);
   const galaxyData = useMemo(() => createUniverseMap({
     galaxy: GALAXY,
     currentOwnerId: owner.id,
@@ -495,7 +511,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
 
   const handleAction = (action: UniverseAction, node: UniversePlanetNode) => {
     const targetOwner = owners.get(node.ownerId ?? '');
-    const relation = getUniverseOwnerRelation(node, owner.id, owner.alliance, targetOwner);
+    const relation = getUniverseOwnerRelation(node, owner.id, owner.alliance, targetOwner, command.diplomacy);
     const actionState = getUniverseActionState(action, node, owner.id, relation);
     if (action === 'fleet' && actionState.enabled) {
       onTransport({
@@ -564,7 +580,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
           const coordinate = formatUniverseCoordinate(node.coordinate);
           const caption = getUniverseNodeCaption(node, profile.displayName, owners.get(node.ownerId ?? '')?.displayName);
           const relation = node.kind === 'player' || node.kind === 'npc'
-            ? getUniverseOwnerRelation(node, owner.id, owner.alliance, owners.get(node.ownerId ?? ''))
+            ? getUniverseOwnerRelation(node, owner.id, owner.alliance, owners.get(node.ownerId ?? ''), command.diplomacy)
             : null;
           const ariaLabel = `${caption} · ${getUniverseObjectKindLabel(node.kind)} · ${coordinate}`;
           if (node.kind === 'empty') {
@@ -622,7 +638,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
             <button ref={closeButtonRef} type="button" className="universe-inspector-close" data-asterion-close aria-label="Закрыть инспектор" title="Закрыть инспектор" onClick={() => setSelectedNodeId(null)}>×</button>
           </header>
           <div className="universe-inspector-body">
-            {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} planets={ownerPlanets} currentOwnerId={owner.id} currentAlliance={owner.alliance} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} underlyingNode={selectedUnderlyingNode} nowMs={nowMs} onColonize={onColonize} />}
+            {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} planets={ownerPlanets} currentOwnerId={owner.id} currentAlliance={owner.alliance} diplomacy={command.diplomacy} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} underlyingNode={selectedUnderlyingNode} nowMs={nowMs} onColonize={onColonize} />}
           </div>
         </aside>
         </div>, document.body) : null}

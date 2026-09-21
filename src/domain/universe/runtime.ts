@@ -21,6 +21,7 @@ import { getPositionCoefficientPercent, getSunEfficiencyPercent } from '../energ
 import type { RuntimeMode } from '../runtime/mode.ts';
 import { DEFAULT_ALLIANCE_MEMBERS, DEFAULT_ALLIANCE_PROFILE } from '../command/catalog.ts';
 import { CURRENT_COMMAND_ALLIANCE_ID } from '../command/selectors.ts';
+import type { DiplomaticRelation } from '../command/types.ts';
 import { CURRENT_PLAYER_FACTION_ID } from '../profile/repository.ts';
 
 export const GALAXY = 1;
@@ -322,12 +323,19 @@ export function getUniverseOwnerRelation(
   currentOwnerId: string,
   currentAlliance?: UniverseOwnerAlliance | null,
   targetOwner?: UniverseOwnerProfile,
+  diplomacy?: readonly Pick<DiplomaticRelation, 'id' | 'tag' | 'status'>[],
 ): UniverseOwnerRelation {
   if (node.isHomeworld || node.ownerId === currentOwnerId) return 'self';
 
   const targetAlliance = targetOwner?.alliance;
   if (!currentAlliance || !targetAlliance) return 'neutral';
-  return currentAlliance.id === targetAlliance.id || currentAlliance.tag === targetAlliance.tag ? 'ally' : 'enemy';
+  if (currentAlliance.id === targetAlliance.id || currentAlliance.tag.toUpperCase() === targetAlliance.tag.toUpperCase()) return 'ally';
+
+  const diplomaticRelation = diplomacy?.find((relation) => relation.id === targetAlliance.id
+    || relation.tag.toUpperCase() === targetAlliance.tag.toUpperCase());
+  return diplomaticRelation?.status === 'war' || diplomaticRelation?.status === 'hostile'
+    ? 'enemy'
+    : 'neutral';
 }
 
 export function getUniverseNodeCaption(node: UniversePlanetNode, currentPlayerName: string, ownerDisplayName = 'Владелец планеты') {

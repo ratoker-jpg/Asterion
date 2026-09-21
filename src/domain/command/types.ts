@@ -8,7 +8,7 @@ export type ResourceType = 'metal' | 'minerals' | 'gas' | 'energy';
 export type RequestPriority = 'standard' | 'high' | 'critical';
 export type ResourceRequestState = 'open' | 'reviewing';
 
-export type RelationStatus = 'ally' | 'trade_pact' | 'neutral' | 'tense' | 'hostile';
+export type RelationStatus = 'ally' | 'trade_pact' | 'neutral' | 'tense' | 'hostile' | 'war';
 
 export type JointOperationKind = 'sun_raid' | 'assault' | 'defense' | 'logistics';
 export type JointOperationState = 'preparing' | 'mustering' | 'active' | 'awaiting';

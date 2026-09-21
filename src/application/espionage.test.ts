@@ -7,14 +7,18 @@ import {
   recallFlight,
   requestSpyReport,
 } from './flights.ts';
-import { activeSpyMissionForTarget } from '../domain/espionage/runtime.ts';
+import { activeSpyMissionForTarget, getEspionageTargets } from '../domain/espionage/runtime.ts';
 import { migrateEspionageState } from '../domain/espionage/repository.ts';
 import { EXCLUDED_SHIP_UPGRADE_IDS } from '../domain/buildings/spaceport-upgrades.ts';
 import { createSimulatorScenarioFromSpyReport } from './simulator-handoff.ts';
-import type { SpyReportSnapshot } from '../domain/espionage/types.ts';
+import { resolveSpyTarget } from './espionage-targets.ts';
+import { calculateOneWayDurationMs } from '../domain/flights/speed.ts';
+import { scaleRuntimeDuration } from '../domain/runtime/mode.ts';
+import type { SpyReportSnapshot, SpyTargetState } from '../domain/espionage/types.ts';
+import type { UniverseOwnerAlliance } from '../domain/universe/types.ts';
 
 function spyCommand(state: ReturnType<typeof createInitialSaveState>, requestId: string, targetId: string) {
-  const target = state.espionage!.bot01Planets![targetId];
+  const target = getEspionageTargets(state.espionage)[targetId];
   return {
     requestId,
     missionId: 'espionage' as const,
@@ -30,6 +34,53 @@ function spyCommand(state: ReturnType<typeof createInitialSaveState>, requestId:
     selectedShips: { 'spy-probe': 1 },
     departedAt: 1_000,
   };
+}
+
+function otherAlliance(): UniverseOwnerAlliance {
+  return {
+    id: 'alliance-other',
+    name: 'Другой союз',
+    tag: 'OTH',
+    emblem: { glyph: 'orbit', accent: 'violet' },
+    glyph: 'orbit',
+  };
+}
+
+function withOtherAllianceStatus(
+  state: ReturnType<typeof createInitialSaveState>,
+  targetId: string,
+  status: 'neutral' | 'ally' | 'war',
+) {
+  const targets = getEspionageTargets(state.espionage);
+  const target = targets[targetId];
+  if (!target) throw new Error(`Missing target ${targetId}`);
+  const alliance = status === 'ally'
+    ? {
+      id: 'alliance-current',
+      name: state.command.alliance.name,
+      tag: state.command.alliance.tag,
+      emblem: { ...state.command.alliance.emblem },
+      glyph: state.command.alliance.emblem.glyph,
+    }
+    : otherAlliance();
+  const diplomacy = state.command.diplomacy.map((relation, index) => index === 0
+    ? { ...relation, id: 'relation-other', allianceName: alliance.name, tag: alliance.tag, status }
+    : relation);
+  return {
+    ...state,
+    command: { ...state.command, diplomacy },
+    espionage: {
+      ...state.espionage!,
+      targets: { ...targets, [targetId]: { ...target, alliance } },
+    },
+  };
+}
+
+function withTargets(
+  state: ReturnType<typeof createInitialSaveState>,
+  targets: Record<string, SpyTargetState>,
+) {
+  return { ...state, espionage: { ...state.espionage!, targets } };
 }
 
 test('same target stays blocked through transit and returning, then unlocks after actual return', () => {
@@ -309,6 +360,111 @@ test('full spy report handoff preserves owner ship levels in the battle simulato
   assert.equal(scenario.defender.ships.find((stack) => stack.entityId === 'battleship')?.level, 2);
   assert.equal(scenario.defender.ships.find((stack) => stack.entityId === 'cruiser')?.level, 4);
   assert.equal(scenario.defender.commanders.find((stack) => stack.entityId === 'judge')?.level, 1);
+});
+
+test('the authoritative spy resolver derives self, ally, neutral and war enemy relations', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const source = Object.values(getEspionageTargets(initial.espionage))[1];
+  assert.ok(source);
+  const currentAlliance: UniverseOwnerAlliance = {
+    id: 'alliance-current',
+    name: initial.command.alliance.name,
+    tag: initial.command.alliance.tag,
+    emblem: { ...initial.command.alliance.emblem },
+    glyph: initial.command.alliance.emblem.glyph,
+  };
+  const targets = {
+    self: { ...source, id: 'spy-self', ownerId: initial.profile.playerId, ownerName: initial.profile.displayName, alliance: null },
+    ally: { ...source, id: 'spy-ally', ownerId: 'owner-ally', ownerName: 'Союзник', alliance: currentAlliance },
+    neutral: { ...source, id: 'spy-neutral', ownerId: 'owner-neutral', ownerName: 'Нейтральный', alliance: null },
+    other: { ...source, id: 'spy-other', ownerId: 'owner-other', ownerName: 'Другой союз', alliance: otherAlliance() },
+  } satisfies Record<string, SpyTargetState>;
+  const state = withTargets(initial, targets);
+
+  assert.equal(resolveSpyTarget(state, 'self')?.relation, 'self');
+  assert.equal(resolveSpyTarget(state, 'ally')?.relation, 'ally');
+  assert.equal(resolveSpyTarget(state, 'neutral')?.relation, 'neutral');
+  assert.equal(resolveSpyTarget(state, 'other')?.relation, 'neutral');
+  const atWar = withOtherAllianceStatus(state, 'other', 'war');
+  assert.equal(resolveSpyTarget(atWar, 'other')?.relation, 'enemy');
+});
+
+test('spy probe duration uses the common speed, distance and Test Mode scale calculation', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const targetId = Object.keys(getEspionageTargets(initial.espionage))[1];
+  const result = dispatchFlight(initial, spyCommand(initial, 'spy-flight-time', targetId), { now: 1_000, mode: 'test', testTimeScale: 15 });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  const expectedUnscaled = calculateOneWayDurationMs(result.flight.originCoordinate, result.flight.destinationCoordinate, result.flight.effectiveSpeed);
+  assert.equal(result.flight.oneWayDurationMs, scaleRuntimeDuration(expectedUnscaled, 'test', 15));
+  assert.notEqual(result.flight.oneWayDurationMs, 3_000);
+});
+
+test('neutral to ally during outbound transit starts an irreversible automatic return', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const targetId = Object.keys(getEspionageTargets(initial.espionage))[1];
+  const sent = dispatchFlight(initial, spyCommand(initial, 'spy-diplomacy-transit', targetId), { now: 1_000, mode: 'test', testTimeScale: 15 });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const allyState = withOtherAllianceStatus(sent.state, targetId, 'ally');
+  const returned = reconcileFlights(allyState, sent.flight.arrivalAt - 1, () => 99);
+  assert.equal(returned.state.espionage!.missions[0].status, 'returning');
+  assert.equal(returned.state.flights.records[0].phase, 'returning');
+  assert.equal(returned.state.espionage!.reports.length, 0);
+
+  const neutralAgain = withOtherAllianceStatus(returned.state, targetId, 'neutral');
+  const stillReturning = reconcileFlights(neutralAgain, returned.state.flights.records[0].returnAt! - 1, () => 99);
+  assert.equal(stillReturning.state.espionage!.missions[0].status, 'returning');
+  const completed = reconcileFlights(stillReturning.state, returned.state.flights.records[0].returnAt!, () => 99);
+  assert.equal(completed.state.espionage!.missions[0].status, 'returned');
+  const sentAgain = dispatchFlight(completed.state, spyCommand(completed.state, 'spy-diplomacy-transit-again', targetId), { now: returned.state.flights.records[0].returnAt! + 1, mode: 'test', testTimeScale: 15 });
+  assert.equal(sentAgain.ok, true);
+});
+
+test('neutral to ally after arrival starts return and blocks reports and resends while preserving old reports', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const targetId = Object.keys(getEspionageTargets(initial.espionage))[1];
+  const sent = dispatchFlight(initial, spyCommand(initial, 'spy-diplomacy-orbit', targetId), { now: 1_000, mode: 'test', testTimeScale: 15 });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const arrived = reconcileFlights(sent.state, sent.flight.arrivalAt, () => 99);
+  assert.equal(arrived.state.espionage!.missions[0].status, 'orbiting');
+  assert.equal(arrived.state.espionage!.reports.length, 1);
+  const allyState = withOtherAllianceStatus(arrived.state, targetId, 'ally');
+  const report = requestSpyReport(allyState, arrived.state.espionage!.missions[0].id, { now: sent.flight.arrivalAt + 5_000, rng: () => 99 });
+  assert.equal(report.ok, false);
+  assert.equal(report.error.code, 'spy-target-blocked');
+  assert.equal(report.state.espionage!.missions[0].status, 'returning');
+  assert.equal(report.state.espionage!.reports.length, 1);
+  const blockedSend = dispatchFlight(report.state, spyCommand(report.state, 'spy-diplomacy-orbit-again', targetId), { now: sent.flight.arrivalAt + 5_001, mode: 'test', testTimeScale: 15 });
+  assert.equal(blockedSend.ok, false);
+  assert.equal(blockedSend.error.code, 'spy-target-blocked');
+  const returned = reconcileFlights(report.state, report.state.flights.records[0].returnAt!, () => 99);
+  assert.equal(returned.state.espionage!.missions[0].status, 'returned');
+});
+
+test('production accepts an injected future owner target without importing the Bot 01 fixture', () => {
+  const production = createInitialSaveState('production', 1_000);
+  assert.equal(Object.keys(getEspionageTargets(production.espionage)).length, 0);
+  const fixture = Object.values(getEspionageTargets(createInitialSaveState('test', 1_000).espionage))[1];
+  assert.ok(fixture);
+  const target = { ...fixture, id: 'future-owner-planet', ownerId: 'future-owner', ownerName: 'Будущий владелец', alliance: null };
+  const injected = withTargets(production, { [target.id]: target });
+  const sent = dispatchFlight(injected, spyCommand(injected, 'spy-production-injected-target', target.id), { now: 1_000, mode: 'production' });
+  assert.equal(sent.ok, true);
+  assert.equal(Object.values(getEspionageTargets(sent.state.espionage)).some((item) => item.ownerId === 'npc-bot-01'), false);
+});
+
+test('the same target resolver and flight mechanic accept Aegis, Synod and Veyra owners', () => {
+  for (const raceId of ['aegis', 'synod', 'veyra'] as const) {
+    const production = createInitialSaveState('production', 1_000);
+    const fixture = Object.values(getEspionageTargets(createInitialSaveState('test', 1_000).espionage))[1];
+    const target = { ...fixture, id: `race-target-${raceId}`, ownerId: `owner-${raceId}`, ownerName: `${raceId} owner`, raceId, alliance: null };
+    const state = withTargets(production, { [target.id]: target });
+    const sent = dispatchFlight(state, spyCommand(state, `spy-race-${raceId}`, target.id), { now: 1_000, mode: 'production' });
+    assert.equal(sent.ok, true, `dispatch should work for ${raceId}`);
+    assert.equal(resolveSpyTarget(state, target.id)?.relation, 'neutral');
+  }
 });
 
 test('old-contract bot planets are regenerated while historical reports stay immutable', () => {

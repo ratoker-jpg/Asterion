@@ -114,7 +114,7 @@ import type {
 } from '../domain/flights/types.ts';
 import { normalizePersistedTransportCargo } from '../domain/flights/cargo.ts';
 import type { UniverseObjectKind } from '../domain/universe/types.ts';
-import { TEST_MODE_ALLY_PLANET_FIXTURE } from '../domain/universe/runtime.ts';
+import { TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import { migrateEspionageState } from '../domain/espionage/repository.ts';
 import { createDefaultEspionageState } from '../domain/espionage/runtime.ts';
 import { createDefaultTestEspionageState } from '../domain/espionage/fixtures.ts';
@@ -848,7 +848,8 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
     const alliedPlanets = migrateAlliedPlanets(parsed.alliedPlanets, mode, timestamp, science.levels);
     const migratedEspionage = migrateEspionageState(parsed.espionage);
     const defaultTestEspionage = createDefaultTestEspionageState();
-    const savedBotPlanets = Object.values(migratedEspionage.bot01Planets ?? {});
+    const savedTargets = Object.values(migratedEspionage.targets ?? {});
+    const savedBotPlanets = savedTargets.filter((planet) => planet.ownerId === UNIVERSE_NPC_OWNER_ID);
     const legacyBotFixtures = savedBotPlanets.some((planet) => {
       const population = planet.population as unknown as Record<string, unknown> | undefined;
       return !population || population.total === undefined || population.civilian !== undefined;
@@ -856,15 +857,22 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
     const hasCurrentBotProfile = Boolean(migratedEspionage.bot01Profile)
       && savedBotPlanets.length > 0
       && !legacyBotFixtures;
+    const testTargets = defaultTestEspionage.targets ?? defaultTestEspionage.bot01Planets ?? {};
     const espionage = mode === 'test'
       ? (hasCurrentBotProfile
         ? migratedEspionage
         : {
           ...migratedEspionage,
           bot01Profile: defaultTestEspionage.bot01Profile,
-          bot01Planets: defaultTestEspionage.bot01Planets,
+          targets: { ...(migratedEspionage.targets ?? {}), ...testTargets },
+          bot01Planets: testTargets,
         })
-      : { ...migratedEspionage, bot01Planets: undefined, bot01Profile: undefined };
+      : {
+        ...migratedEspionage,
+        targets: Object.fromEntries(Object.entries(migratedEspionage.targets ?? {}).filter(([, target]) => target.ownerId !== UNIVERSE_NPC_OWNER_ID)),
+        bot01Planets: undefined,
+        bot01Profile: undefined,
+      };
 
     return {
       schemaVersion: SAVE_SCHEMA_VERSION,
@@ -906,7 +914,15 @@ export function createPersistenceFacade(options: PersistenceOptions = {}) {
       try {
         const persistedState = mode === 'test' || !state.espionage
           ? state
-          : { ...state, espionage: { ...state.espionage, bot01Planets: undefined, bot01Profile: undefined } };
+          : {
+            ...state,
+            espionage: {
+              ...state.espionage,
+              targets: Object.fromEntries(Object.entries(state.espionage.targets ?? {}).filter(([, target]) => target.ownerId !== UNIVERSE_NPC_OWNER_ID)),
+              bot01Planets: undefined,
+              bot01Profile: undefined,
+            },
+          };
         storage.setItem(saveKey, JSON.stringify(persistedState));
         return { ok: true };
       } catch (error) {

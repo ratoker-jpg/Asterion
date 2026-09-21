@@ -5,6 +5,7 @@ import type {
   SpyHunterNotice,
   SpyMission,
   SpyReportSnapshot,
+  SpyTargetState,
 } from './types.ts';
 import { createDefaultEspionageState } from './runtime.ts';
 import { createBot01Planets, createDefaultBot01Profile } from './fixtures.ts';
@@ -39,7 +40,7 @@ function migrateMission(value: unknown): SpyMission | null {
   const status = source.status as SpyMission['status'];
   if (!['transit', 'orbiting', 'returning', 'returned', 'destroyed'].includes(String(status))) return null;
   const targetRelation = source.targetRelation;
-  if (targetRelation !== 'enemy' && targetRelation !== 'neutral') return null;
+  if (targetRelation !== 'self' && targetRelation !== 'ally' && targetRelation !== 'enemy' && targetRelation !== 'neutral') return null;
   const coordinate = record(source.targetCoordinate);
   if (![coordinate.galaxy, coordinate.system, coordinate.position].every((part) => Number.isInteger(part) && Number(part) >= 1)) return null;
   const id = text(source.id);
@@ -163,7 +164,7 @@ function migrateNotice(value: unknown): SpyHunterNotice | null {
   };
 }
 
-function migrateBotPlanet(value: unknown): Bot01PlanetState | null {
+function migrateSpyTarget(value: unknown): SpyTargetState | null {
   const source = record(value);
   const coordinate = record(source.coordinate);
   if (!text(source.id) || ![coordinate.galaxy, coordinate.system, coordinate.position].every((part) => Number.isInteger(part) && Number(part) >= 1)) return null;
@@ -171,14 +172,18 @@ function migrateBotPlanet(value: unknown): Bot01PlanetState | null {
     ...source,
     id: text(source.id),
     coordinate: { galaxy: Number(coordinate.galaxy), system: Number(coordinate.system), position: Number(coordinate.position) },
-    // Bot 01's test espionage level is an explicit fixture contract, not a
-    // value that can drift with a saved building or fleet snapshot.
-    espionageLevel: 10,
-  } as unknown as Bot01PlanetState;
+    ownerId: text(source.ownerId, 'unknown-owner'),
+    ownerName: text(source.ownerName, 'Неизвестный владелец'),
+    raceId: source.raceId === 'synod' || source.raceId === 'veyra' ? source.raceId : 'aegis',
+    alliance: source.alliance && typeof source.alliance === 'object' ? source.alliance as SpyTargetState['alliance'] : null,
+    // Bot 01's test espionage level is an explicit fixture contract, while
+    // injected future owners may provide their own level.
+    espionageLevel: nonNegative(source.espionageLevel, 10),
+  } as unknown as SpyTargetState;
 }
 
-function bot01PlanetMatchesCurrentContract(value: Bot01PlanetState): boolean {
-  const population = value.population as Bot01PlanetState['population'] & { civilian?: number };
+function spyTargetMatchesCurrentContract(value: SpyTargetState): boolean {
+  const population = value.population as SpyTargetState['population'] & { civilian?: number };
   return Number.isFinite(population.total)
     && Number.isFinite(population.fleet)
     && Number.isFinite(population.defense)
@@ -193,22 +198,27 @@ export function migrateEspionageState(value: unknown): EspionageState {
   if (!value || typeof value !== 'object') return createDefaultEspionageState();
   const source = record(value);
   const bot01Profile = migrateBot01Profile(source.bot01Profile);
-  const bot01Planets = source.bot01Planets && typeof source.bot01Planets === 'object' && !Array.isArray(source.bot01Planets)
-    ? Object.fromEntries(Object.entries(source.bot01Planets).flatMap(([id, candidate]) => {
-      const migrated = migrateBotPlanet(candidate);
+  const hasCanonicalTargets = Boolean(source.targets && typeof source.targets === 'object' && !Array.isArray(source.targets));
+  const hasLegacyBotTargets = Boolean(source.bot01Planets && typeof source.bot01Planets === 'object' && !Array.isArray(source.bot01Planets));
+  const rawTargets = hasCanonicalTargets ? source.targets : source.bot01Planets;
+  const migratedTargets = rawTargets
+    ? Object.fromEntries(Object.entries(rawTargets).flatMap(([id, candidate]) => {
+      const migrated = migrateSpyTarget(candidate);
       return migrated ? [[id, migrated]] : [];
     }))
     : undefined;
-  const hasBot01Planets = Boolean(bot01Planets && Object.keys(bot01Planets).length);
-  const currentBot01Planets = hasBot01Planets && Object.values(bot01Planets!).every(bot01PlanetMatchesCurrentContract)
-    ? bot01Planets
-    : hasBot01Planets ? createBot01Planets() : undefined;
-  const currentBot01Profile = bot01Profile ?? (hasBot01Planets ? createDefaultBot01Profile() : undefined);
+  const hasTargets = Boolean(migratedTargets && Object.keys(migratedTargets).length);
+  const legacyBotTargetsNeedRepair = !hasCanonicalTargets
+    && hasTargets
+    && !Object.values(migratedTargets!).every(spyTargetMatchesCurrentContract);
+  const targets = legacyBotTargetsNeedRepair ? createBot01Planets() : migratedTargets;
+  const currentBot01Profile = bot01Profile ?? (hasLegacyBotTargets && hasTargets ? createDefaultBot01Profile() : undefined);
   return {
     missions: list(source.missions, migrateMission),
     reports: list(source.reports, migrateReport),
     hunterNotices: list(source.hunterNotices, migrateNotice),
-    ...(currentBot01Planets ? { bot01Planets: currentBot01Planets } : {}),
+    ...(targets ? { targets } : {}),
+    ...(hasLegacyBotTargets && targets ? { bot01Planets: targets as Record<string, Bot01PlanetState> } : {}),
     ...(currentBot01Profile ? { bot01Profile: currentBot01Profile } : {}),
   };
 }

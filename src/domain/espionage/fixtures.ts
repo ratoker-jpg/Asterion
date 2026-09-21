@@ -8,7 +8,7 @@ import { BOT_01_PLANET_FIXTURES, UNIVERSE_NPC_OWNER_ID } from '../universe/runti
 import { getFactionDefenseCatalog, getFactionShipCatalog } from '../combat/faction-catalog.ts';
 import type { ShipId } from '../combat/ids.ts';
 import { createSeededEspionageRng } from './runtime.ts';
-import type { Bot01PlanetState, Bot01Profile, EspionageState } from './types.ts';
+import type { Bot01PlanetState, Bot01Profile, EspionageState, SpyTargetState } from './types.ts';
 
 const BOT_OWNER_NAME = 'Бот 01';
 const BOT_FACTION = 'veyra' as const;
@@ -86,7 +86,7 @@ function composePopulationUnits(units: readonly PopulationUnit[], target: number
   return composition;
 }
 
-function createBotPlanet(index: number, profile: Bot01Profile): Bot01PlanetState {
+function createBotPlanet(index: number, profile: Bot01Profile): SpyTargetState {
   const fixture = BOT_01_PLANET_FIXTURES[index];
   const rng = createSeededEspionageRng(`bot01:planet:${index}:v1`);
 
@@ -134,6 +134,7 @@ function createBotPlanet(index: number, profile: Bot01Profile): Bot01PlanetState
     ownerName: BOT_OWNER_NAME,
     raceId: BOT_FACTION,
     alliance: null,
+    kind: 'npc',
     espionageLevel: 10,
     resources: {
       metal: 2_000 + index * 475,
@@ -174,11 +175,14 @@ export function createBot01Planets(): Record<string, Bot01PlanetState> {
 }
 
 export function createDefaultTestEspionageState(): EspionageState {
+  const targets = createBot01Planets();
   return {
     missions: [],
     reports: [],
     hunterNotices: [],
     bot01Profile: createDefaultBot01Profile(),
-    bot01Planets: createBot01Planets(),
+    targets,
+    // Keep the alias in Test Mode while old saved fixtures and tests migrate.
+    bot01Planets: targets,
   };
 }

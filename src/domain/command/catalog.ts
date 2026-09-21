@@ -109,9 +109,9 @@ export const DEFAULT_DIPLOMACY: readonly DiplomaticRelation[] = [
     history: ['Зафиксировано сближение патрулей', 'Дипломатический канал остаётся открытым'],
   },
   {
-    id: 'relation-void-hand', allianceName: 'Рука Пустоты', tag: 'VHD', status: 'hostile',
+    id: 'relation-void-hand', allianceName: 'Рука Пустоты', tag: 'VHD', status: 'war',
     note: 'Операции союза регулярно пересекаются с интересами Содружества.',
-    meaning: 'Враждебный статус — только foundation-метаданные, без отдельной войны в этом PR.',
+    meaning: 'Военное состояние блокирует нейтральный режим и делает цели вражескими.',
     history: ['Отозван протокол безопасного прохода', 'Контакты переведены в режим повышенного контроля'],
   },
 ];

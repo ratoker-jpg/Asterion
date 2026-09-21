@@ -87,7 +87,9 @@ test('owner color relation follows ownership and alliance status instead of bot 
   assert.equal(getUniverseOwnerRelation(homeworld, 'player-current', currentAlliance, undefined), 'self');
   assert.equal(getUniverseOwnerRelation(botPlanet, 'player-current', currentAlliance, bot), 'neutral');
   assert.equal(getUniverseOwnerRelation(botPlanet, 'player-current', currentAlliance, { ...bot, alliance: currentAlliance }), 'ally');
-  assert.equal(getUniverseOwnerRelation(botPlanet, 'player-current', currentAlliance, { ...bot, alliance: alliance('alliance-b', 'B') }), 'enemy');
+  const otherAlliance = { ...bot, alliance: alliance('alliance-b', 'B') };
+  assert.equal(getUniverseOwnerRelation(botPlanet, 'player-current', currentAlliance, otherAlliance, [{ id: 'relation-b', tag: 'B', status: 'neutral' }]), 'neutral');
+  assert.equal(getUniverseOwnerRelation(botPlanet, 'player-current', currentAlliance, otherAlliance, [{ id: 'relation-b', tag: 'B', status: 'war' }]), 'enemy');
 });
 
 test('dynamic objects are scheduled independently and never duplicate within a system', () => {

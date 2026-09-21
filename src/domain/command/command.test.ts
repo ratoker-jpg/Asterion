@@ -82,7 +82,7 @@ test('malformed command data does not break migration', () => {
     alliance: { name: '', tag: null, emblem: { glyph: 'broken', accent: 'broken' } },
     members: 'broken',
     resourceRequests: [{ id: 'request-nora-gas', amount: -400, state: 'done' }],
-    diplomacy: [{ id: 'relation-aurora', status: 'war' }],
+    diplomacy: [{ id: 'relation-aurora', status: 'broken' }],
     jointOperations: [{ id: 'joint-sun-raid', participants: -8, joinedByPlayer: 'yes' }],
   });
 

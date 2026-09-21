@@ -1,4 +1,4 @@
-import type { EspionageState, SpyMission, SpyReportQuality } from './types.ts';
+import type { EspionageState, SpyMission, SpyReportQuality, SpyTargetState } from './types.ts';
 
 export const SPY_REPORT_COOLDOWN_MS = 5_000;
 export const SPY_HUNTER_RATE_PER_LEVEL_PERCENT = 1.75;
@@ -11,6 +11,14 @@ export function createDefaultEspionageState(): EspionageState {
 
 export function getEspionageState(state: { espionage?: EspionageState }): EspionageState {
   return state.espionage ?? createDefaultEspionageState();
+}
+
+/**
+ * Canonical target registry for espionage. `bot01Planets` is a compatibility
+ * alias for old Test Mode saves only; runtime callers must use this resolver.
+ */
+export function getEspionageTargets(espionage?: EspionageState): Record<string, SpyTargetState> {
+  return espionage?.targets ?? espionage?.bot01Planets ?? {};
 }
 
 export function normalizeRngRoll(value: number): number {

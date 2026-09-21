@@ -141,6 +141,7 @@ import {
 } from './application/flights.ts';
 import { createSimulatorScenarioFromSpyReport, requestSimulatorHandoff } from './application/simulator-handoff.ts';
 import type { SpyReportSnapshot } from './domain/espionage/types.ts';
+import { getEspionageTargets } from './domain/espionage/runtime.ts';
 import type { UniverseCoordinate, UniverseOwnerProfile } from './domain/universe/types.ts';
 import { enqueueApplicationStateUpdate } from './application/state.ts';
 import { getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
@@ -395,7 +396,13 @@ export function App() {
         stateRef.current = result.state;
         setState(result.state);
         setNotice(result.notice);
-      } else setNotice(result.error.message, 'error');
+      } else {
+        if (result.state !== stateRef.current) {
+          stateRef.current = result.state;
+          setState(result.state);
+        }
+        setNotice(result.error.message, 'error');
+      }
       window.dispatchEvent(new CustomEvent(SPY_REPORT_RESULT_EVENT, { detail: result }));
     };
     const onSpyReportAllRequest = (event: Event) => {
@@ -405,7 +412,13 @@ export function App() {
         stateRef.current = result.state;
         setState(result.state);
         setNotice(result.notice);
-      } else setNotice(result.error.message, 'error');
+      } else {
+        if (result.state !== stateRef.current) {
+          stateRef.current = result.state;
+          setState(result.state);
+        }
+        setNotice(result.error.message, 'error');
+      }
       window.dispatchEvent(new CustomEvent(SPY_REPORT_RESULT_EVENT, { detail: result }));
     };
     window.addEventListener(FLIGHT_DISPATCH_REQUEST_EVENT, onDispatchRequest);
@@ -1321,6 +1334,7 @@ export function App() {
               rating={state.rating}
               command={state.command}
               playerPlanets={universePlayerPlanets}
+              spyTargets={Object.values(getEspionageTargets(state.espionage))}
               mode={RUNTIME_MODE}
               onColonize={openColonizationLaunch}
               onTransport={openTransportLaunch}
