@@ -1311,7 +1311,9 @@ export function reconcileFlights(state: SaveState, now: number, rng?: () => numb
         completedAt: refreshed.returnAt,
         completionReason: returnedFlight.missionId === 'transport'
           ? returnedFlight.completionReason ?? 'recalled'
-          : returnedFlight.completionReason === 'target-occupied' ? 'target-occupied' : 'recalled',
+          : returnedFlight.completionReason === 'target-unavailable'
+            ? 'target-unavailable'
+            : returnedFlight.completionReason === 'target-occupied' ? 'target-occupied' : 'recalled',
       };
       next = completeFlight(next, returnedFlight, completed);
       if (spyMission && spyMission.status === 'returning') {
@@ -1333,7 +1335,9 @@ export function reconcileFlights(state: SaveState, now: number, rng?: () => numb
               ? 'Транспорт вернулся после доставки.'
               : 'Транспорт вернулся после отзыва рейса.'
           : completed.missionId === 'espionage'
-            ? 'Шпионский зонд вернулся на исходную планету.'
+            ? completed.completionReason === 'target-unavailable'
+              ? 'Шпионский зонд вернулся: цель стала союзной и недоступна для шпионажа.'
+              : 'Шпионский зонд вернулся на исходную планету.'
             : completed.completionReason === 'target-occupied' ? 'Колонизатор вернулся: координата уже занята.' : 'Колонизатор вернулся после отзыва рейса.',
       });
     }

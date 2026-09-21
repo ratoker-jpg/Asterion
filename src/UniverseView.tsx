@@ -80,6 +80,7 @@ import type {
   UniverseOwnerPoints,
   UniverseOwnerProfile,
   UniversePersistedPlayerPlanet,
+  UniverseRegisteredPlanet,
   UniversePlanetNode,
   UniverseCoordinate,
 } from './domain/universe/types.ts';
@@ -425,7 +426,14 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
     nowMs,
     galaxyCount: 1,
     playerPlanets,
-  }), [mode, nowMs, ownedPlanetArt, ownedPlanetName, owner.id, playerPlanets]);
+    registeredPlanets: spyTargets.map<UniverseRegisteredPlanet>((target) => ({
+      id: target.id,
+      coordinate: target.coordinate,
+      name: target.name,
+      kind: target.kind ?? 'npc',
+      ownerId: target.ownerId,
+    })),
+  }), [mode, nowMs, ownedPlanetArt, ownedPlanetName, owner.id, playerPlanets, spyTargets]);
   const systemData = galaxyData.systems[system - 1];
   const asteroidAttachmentNodes = useMemo(() => [...systemData.positions, ...systemData.asteroids], [systemData]);
   const nodesById = useMemo(() => new Map(galaxyData.systems.flatMap((item) => [...item.positions, ...item.asteroids]).map((node) => [node.id, node])), [galaxyData]);

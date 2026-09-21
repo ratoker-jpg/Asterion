@@ -92,6 +92,48 @@ test('owner color relation follows ownership and alliance status instead of bot 
   assert.equal(getUniverseOwnerRelation(botPlanet, 'player-current', currentAlliance, otherAlliance, [{ id: 'relation-b', tag: 'B', status: 'war' }]), 'enemy');
 });
 
+test('war is an explicit enemy status for a different alliance', () => {
+  const node = createUniverseSystem({ system: 2 }).positions.find((item) => item.kind === 'uninhabited')!;
+  const currentAlliance: UniverseOwnerAlliance = {
+    id: 'alliance-current',
+    name: 'Current',
+    tag: 'CUR',
+    emblem: { glyph: 'orbit', accent: 'cyan' },
+    glyph: 'orbit',
+  };
+  const targetOwner = {
+    ...createUniverseNpcOwnerProfile(),
+    alliance: {
+      id: 'alliance-other',
+      name: 'Other',
+      tag: 'OTH',
+      emblem: { glyph: 'orbit' as const, accent: 'violet' as const },
+      glyph: 'orbit' as const,
+    },
+  };
+
+  assert.equal(getUniverseOwnerRelation(node, 'player-current', currentAlliance, targetOwner, [{ id: 'war-with-other', tag: 'OTH', status: 'war' }]), 'enemy');
+});
+
+test('registered production targets become selectable map nodes without adding fixtures', () => {
+  const registered = {
+    id: 'production-future-target',
+    coordinate: { galaxy: 1, system: 40, position: 24 },
+    name: 'Будущая цель',
+    kind: 'npc' as const,
+    ownerId: 'future-owner',
+  };
+  const map = createUniverseMap({ mode: 'production', registeredPlanets: [registered] });
+  const nodes = map.systems.flatMap((system) => system.positions);
+  const node = nodes.find((item) => item.id === registered.id);
+
+  assert.ok(node);
+  assert.equal(node?.kind, 'npc');
+  assert.equal(node?.ownerId, registered.ownerId);
+  assert.equal(node?.name, registered.name);
+  assert.equal(nodes.filter((item) => item.kind === 'npc').length, 1);
+});
+
 test('dynamic objects are scheduled independently and never duplicate within a system', () => {
   const nowMs = Date.UTC(2026, 8, 8, 12);
   const map = createUniverseMap({ nowMs });

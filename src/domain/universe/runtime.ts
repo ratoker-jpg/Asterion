@@ -11,6 +11,7 @@ import type {
   UniverseFixtureDescriptor,
   UniverseFixtureMarker,
   UniversePersistedPlayerPlanet,
+  UniverseRegisteredPlanet,
   UniversePlanetNode,
   UniversePoint,
   UniversePirateState,
@@ -372,10 +373,17 @@ export type CreateUniverseSystemOptions = {
   nowMs?: number;
   galaxyCount?: number;
   playerPlanets?: readonly UniversePersistedPlayerPlanet[];
+  registeredPlanets?: readonly UniverseRegisteredPlanet[];
 };
 
 function persistedPlanetFor(options: CreateUniverseSystemOptions, galaxy: number, system: number, slot: number) {
   return options.playerPlanets?.find((planet) => planet.coordinate.galaxy === galaxy
+    && planet.coordinate.system === system
+    && planet.coordinate.position === slot);
+}
+
+function registeredPlanetFor(options: CreateUniverseSystemOptions, galaxy: number, system: number, slot: number) {
+  return options.registeredPlanets?.find((planet) => planet.coordinate.galaxy === galaxy
     && planet.coordinate.system === system
     && planet.coordinate.position === slot);
 }
@@ -404,20 +412,21 @@ function createPositionNode(
   assets: UniverseAssetCatalog,
 ): UniversePlanetNode {
   const persisted = persistedPlanetFor(options, galaxy, system, slot);
+  const registered = persisted ? undefined : registeredPlanetFor(options, galaxy, system, slot);
   const fixture = persisted ? undefined : fixtureFor(system, slot, options.mode);
   const coordinate = { galaxy, system, position: slot };
-  const kind = persisted ? 'player' : fixture?.kind ?? generatedKind();
-  const ownerId = persisted?.ownerId ?? fixture?.ownerId;
-  const isHomeworld = persisted?.isHomeworld ?? (kind === 'player' && system === 1 && slot === 1);
+  const kind = persisted ? 'player' : registered?.kind ?? fixture?.kind ?? generatedKind();
+  const ownerId = persisted?.ownerId ?? registered?.ownerId ?? fixture?.ownerId;
+  const isHomeworld = persisted?.isHomeworld ?? registered?.isHomeworld ?? (kind === 'player' && system === 1 && slot === 1);
   const name = persisted?.name?.trim() || (isHomeworld
     ? options.currentPlanetName?.trim() || 'Helion 01'
-    : fixture?.name ?? `Планета ${String(system).padStart(2, '0')}-${String(slot).padStart(2, '0')}`);
-  const art = persisted?.art?.trim() || (isHomeworld
+    : (registered?.name?.trim() || fixture?.name || `Планета ${String(system).padStart(2, '0')}-${String(slot).padStart(2, '0')}`));
+  const art = persisted?.art?.trim() || registered?.art?.trim() || (isHomeworld
     ? options.currentPlanetArt?.trim() || pickAsset(assets.planetArts, slot, 'planet-home')
     : pickAsset(assets.planetArts, fixture?.artIndex ?? system * 5 + slot, 'planet-default'));
 
   return {
-    id: persisted?.id ?? fixture?.id ?? `universe-${galaxy}-${system}-${slot}`,
+    id: persisted?.id ?? registered?.id ?? fixture?.id ?? `universe-${galaxy}-${system}-${slot}`,
     coordinate,
     kind,
     name,
@@ -426,7 +435,7 @@ function createPositionNode(
     isHomeworld,
     statusLabel: KIND_LABELS[kind],
     description: KIND_DESCRIPTIONS[kind],
-    known: fixture?.known ?? true,
+    known: registered?.known ?? fixture?.known ?? true,
     ...(fixture?.fixture ? { fixture: fixture.fixture } : {}),
     positionCoefficientPercent: getPositionCoefficientPercent(slot),
   };
@@ -441,12 +450,16 @@ function createUniverseSystemBase(options: CreateUniverseSystemOptions, assets: 
   const persistedSlots = (options.playerPlanets ?? [])
     .filter((planet) => planet.coordinate.galaxy === galaxy && planet.coordinate.system === system)
     .map((planet) => planet.coordinate.position);
+  const registeredSlots = (options.registeredPlanets ?? [])
+    .filter((planet) => planet.coordinate.galaxy === galaxy && planet.coordinate.system === system)
+    .map((planet) => planet.coordinate.position);
   const planetCount = 8 + ((galaxy + system) % 7);
+  const fixedSlots = [...new Set([...fixtureSlots, ...persistedSlots, ...registeredSlots])];
   const remainingSlots = shuffle(
-    Array.from({ length: POSITION_COUNT }, (_, index) => index + 1).filter((slot) => !fixtureSlots.includes(slot)),
+    Array.from({ length: POSITION_COUNT }, (_, index) => index + 1).filter((slot) => !fixedSlots.includes(slot)),
     random,
   );
-  const occupiedSlots = new Set([...fixtureSlots, ...persistedSlots, ...remainingSlots.slice(0, Math.max(0, planetCount - fixtureSlots.length - persistedSlots.length))]);
+  const occupiedSlots = new Set([...fixedSlots, ...remainingSlots.slice(0, Math.max(0, planetCount - fixedSlots.length))]);
   const positions = Array.from({ length: POSITION_COUNT }, (_, index) => index + 1).map((slot) => occupiedSlots.has(slot)
     ? createPositionNode(galaxy, system, slot, options, assets)
     : {

@@ -180,6 +180,12 @@ test('diplomacy fixtures are valid and unique', () => {
   assert.ok(relations.every((relation) => relation.history.length > 0 && relation.meaning.length > 0));
 });
 
+test('Рука Пустоты starts hostile until an explicit war decision is recorded', () => {
+  const relation = createDefaultCommandState().diplomacy.find((item) => item.id === 'relation-void-hand');
+
+  assert.equal(relation?.status, 'hostile');
+});
+
 test('persisting command preserves unrelated save fields', () => {
   const storage = new MemoryStorage();
   storage.setItem(SAVE_KEY, JSON.stringify({

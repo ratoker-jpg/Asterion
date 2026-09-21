@@ -410,6 +410,7 @@ test('neutral to ally during outbound transit starts an irreversible automatic r
   const returned = reconcileFlights(allyState, sent.flight.arrivalAt - 1, () => 99);
   assert.equal(returned.state.espionage!.missions[0].status, 'returning');
   assert.equal(returned.state.flights.records[0].phase, 'returning');
+  assert.equal(returned.state.flights.records[0].completionReason, 'target-unavailable');
   assert.equal(returned.state.espionage!.reports.length, 0);
 
   const neutralAgain = withOtherAllianceStatus(returned.state, targetId, 'neutral');
@@ -417,6 +418,8 @@ test('neutral to ally during outbound transit starts an irreversible automatic r
   assert.equal(stillReturning.state.espionage!.missions[0].status, 'returning');
   const completed = reconcileFlights(stillReturning.state, returned.state.flights.records[0].returnAt!, () => 99);
   assert.equal(completed.state.espionage!.missions[0].status, 'returned');
+  assert.equal(completed.state.flights.records[0].completionReason, 'target-unavailable');
+  assert.match(completed.events.at(-1)?.notice ?? '', /цель стала союзной/i);
   const sentAgain = dispatchFlight(completed.state, spyCommand(completed.state, 'spy-diplomacy-transit-again', targetId), { now: returned.state.flights.records[0].returnAt! + 1, mode: 'test', testTimeScale: 15 });
   assert.equal(sentAgain.ok, true);
 });
@@ -435,12 +438,15 @@ test('neutral to ally after arrival starts return and blocks reports and resends
   assert.equal(report.ok, false);
   assert.equal(report.error.code, 'spy-target-blocked');
   assert.equal(report.state.espionage!.missions[0].status, 'returning');
+  assert.equal(report.state.flights.records[0].completionReason, 'target-unavailable');
   assert.equal(report.state.espionage!.reports.length, 1);
   const blockedSend = dispatchFlight(report.state, spyCommand(report.state, 'spy-diplomacy-orbit-again', targetId), { now: sent.flight.arrivalAt + 5_001, mode: 'test', testTimeScale: 15 });
   assert.equal(blockedSend.ok, false);
   assert.equal(blockedSend.error.code, 'spy-target-blocked');
   const returned = reconcileFlights(report.state, report.state.flights.records[0].returnAt!, () => 99);
   assert.equal(returned.state.espionage!.missions[0].status, 'returned');
+  assert.equal(returned.state.flights.records[0].completionReason, 'target-unavailable');
+  assert.match(returned.events.at(-1)?.notice ?? '', /цель стала союзной/i);
 });
 
 test('production accepts an injected future owner target without importing the Bot 01 fixture', () => {

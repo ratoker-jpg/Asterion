@@ -81,6 +81,18 @@ export type UniversePersistedPlayerPlanet = {
   ownerId?: string;
 };
 
+/** A planet supplied by an authoritative runtime registry, such as espionage targets. */
+export type UniverseRegisteredPlanet = {
+  id: string;
+  coordinate: UniverseCoordinate;
+  name: string;
+  kind: Extract<UniverseObjectKind, 'player' | 'npc'>;
+  ownerId: string;
+  art?: string;
+  isHomeworld?: boolean;
+  known?: boolean;
+};
+
 export type UniverseSystem = {
   galaxy: number;
   system: number;
