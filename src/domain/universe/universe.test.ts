@@ -134,6 +134,28 @@ test('registered production targets become selectable map nodes without adding f
   assert.equal(nodes.filter((item) => item.kind === 'npc').length, 1);
 });
 
+test('registered Test Mode targets override coordinate fixtures and block fleet actions', () => {
+  for (const relation of ['neutral', 'enemy'] as const) {
+    const registered = {
+      id: `test-mode-${relation}-target`,
+      coordinate: { galaxy: 1, system: 1, position: 2 },
+      name: `Чужая ${relation} цель`,
+      kind: 'npc' as const,
+      ownerId: `foreign-${relation}-owner`,
+    };
+    const system = createUniverseSystem({
+      mode: 'test',
+      system: 1,
+      registeredPlanets: [registered],
+    });
+    const node = system.positions.find((item) => item.id === registered.id);
+
+    assert.ok(node);
+    assert.equal(node?.fixture, undefined);
+    assert.equal(getUniverseActionState('fleet', node!, 'player-current', relation).enabled, false);
+  }
+});
+
 test('dynamic objects are scheduled independently and never duplicate within a system', () => {
   const nowMs = Date.UTC(2026, 8, 8, 12);
   const map = createUniverseMap({ nowMs });

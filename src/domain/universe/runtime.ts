@@ -413,7 +413,9 @@ function createPositionNode(
 ): UniversePlanetNode {
   const persisted = persistedPlanetFor(options, galaxy, system, slot);
   const registered = persisted ? undefined : registeredPlanetFor(options, galaxy, system, slot);
-  const fixture = persisted ? undefined : fixtureFor(system, slot, options.mode);
+  const fixture = persisted || registered
+    ? undefined
+    : fixtureFor(system, slot, options.mode);
   const coordinate = { galaxy, system, position: slot };
   const kind = persisted ? 'player' : registered?.kind ?? fixture?.kind ?? generatedKind();
   const ownerId = persisted?.ownerId ?? registered?.ownerId ?? fixture?.ownerId;
