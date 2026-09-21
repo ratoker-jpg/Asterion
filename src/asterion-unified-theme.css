@@ -2021,3 +2021,76 @@ body .resource-building-action-confirm.spy-operations-modal .fleet-spy-row-actio
     justify-content:flex-start;
   }
 }
+
+/* Useful runtime events are transient toasts, not a permanent header banner.
+   The toast is portalled to body so reports and flight dialogs cannot cover it. */
+body .shell-notice.shell-notice-live{
+  position:fixed !important;
+  z-index:10002 !important;
+  left:clamp(16px, 2.4vw, 36px) !important;
+  right:auto !important;
+  bottom:clamp(16px, 2.8vh, 30px) !important;
+  top:auto !important;
+  transform:none !important;
+  box-sizing:border-box !important;
+  width:min(430px, calc(100vw - 32px)) !important;
+  min-height:50px !important;
+  height:auto !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:space-between !important;
+  gap:14px !important;
+  margin:0 !important;
+  padding:12px 12px 12px 16px !important;
+  overflow:visible !important;
+  clip:auto !important;
+  clip-path:none !important;
+  pointer-events:auto !important;
+  border:1px solid rgba(65, 221, 242, .7) !important;
+  border-radius:var(--ut-r-card) !important;
+  background:linear-gradient(135deg, rgba(4, 71, 88, .98), rgba(3, 25, 38, .99)) !important;
+  box-shadow:0 14px 34px rgba(0, 0, 0, .5), 0 0 24px rgba(41, 205, 239, .2), inset 0 1px 0 rgba(190, 249, 255, .12) !important;
+  color:#e8fcff !important;
+  font-size:12px !important;
+  font-weight:700 !important;
+  line-height:1.35 !important;
+  letter-spacing:.01em !important;
+  text-align:left !important;
+  animation:asterion-runtime-toast-in .2s cubic-bezier(.2,.8,.25,1) both !important;
+}
+body .shell-notice.shell-notice-live > span{
+  display:block !important;
+  min-width:0 !important;
+  flex:1 1 auto !important;
+  color:inherit !important;
+  font-size:inherit !important;
+  line-height:inherit !important;
+  text-align:left !important;
+}
+body .shell-notice__close{
+  width:28px !important;
+  height:28px !important;
+  min-width:28px !important;
+  min-height:28px !important;
+  display:grid !important;
+  place-items:center !important;
+  padding:0 !important;
+  border:1px solid rgba(246,101,101,.72) !important;
+  border-radius:var(--ut-r-btn) !important;
+  background:rgba(75,27,25,.54) !important;
+  color:#ffb4a0 !important;
+  font:700 18px/1 inherit !important;
+  cursor:pointer !important;
+}
+body .shell-notice__close:hover,
+body .shell-notice__close:focus-visible{
+  border-color:#ff8f84 !important;
+  background:rgba(157,36,42,.52) !important;
+  color:#fff5f3 !important;
+  outline:2px solid rgba(255,125,114,.8) !important;
+  outline-offset:2px;
+}
+@keyframes asterion-runtime-toast-in{
+  from{ opacity:0; transform:translateY(16px); }
+  to{ opacity:1; transform:translateY(0); }
+}

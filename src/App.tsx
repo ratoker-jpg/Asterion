@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { flushSync } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
@@ -212,6 +212,26 @@ type PlanetDefinition = {
 
 const RUNTIME_MODE: RuntimeMode = ACTIVE_RUNTIME_MODE;
 
+const SUPPRESSED_NOTICE_PATTERNS = [
+  /центр сообщений и боевых журналов загружен/iu,
+  /экран «[^»]+» пока в разработке/iu,
+  /галактика 1 загружена/iu,
+  /^галактика \d+ · солнечная система \d+\.$/iu,
+  /доступные PvE-сценарии загружены/iu,
+  /союзный контур загружен/iu,
+  /открыт существующий раздел/iu,
+  /внутренний модуль открыт/iu,
+  /сцена открыта для/iu,
+  /обзор планеты/iu,
+  /открыта координата/iu,
+  /открыт из центра сообщений/iu,
+];
+
+function isMeaningfulNotice(message: string): boolean {
+  const normalized = message.trim();
+  return Boolean(normalized) && !SUPPRESSED_NOTICE_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
 const zoneMeta: Record<Zone, { title: string; subtitle: string; accent: string }> = {
   resource: { title: 'РЕСУРСНАЯ ЗОНА', subtitle: 'Добыча и энергия', accent: '#38c8ff' },
   industry: { title: 'ПРОМЫШЛЕННАЯ ЗОНА', subtitle: 'Производство', accent: '#f0ad38' },
@@ -249,7 +269,13 @@ export function App() {
   stateRef.current = state;
   const [now, setNow] = useState(Date.now());
   const [testTimeScale, setTestTimeScale] = useState<TestTimeScale>(() => resolveTestTimeScale());
-  const [notice, setNotice] = useState('Система готова. Локальное сохранение активно.');
+  const [notice, setNoticeState] = useState<{ id: number; message: string } | null>(null);
+  const noticeId = useRef(0);
+  const setNotice = (message: string) => {
+    if (!isMeaningfulNotice(message)) return;
+    noticeId.current += 1;
+    setNoticeState({ id: noticeId.current, message: message.trim() });
+  };
   const [planetMenuOpen, setPlanetMenuOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(true);
   const [editingPlanetId, setEditingPlanetId] = useState<PlanetId | null>(null);
@@ -257,6 +283,14 @@ export function App() {
   const [selectedBuildingRole, setSelectedBuildingRole] = useState<BuildingRole | null>(null);
   const [buildingInterior, setBuildingInterior] = useState<BuildingInteriorContext | null>(null);
   const [universeFocusTarget, setUniverseFocusTarget] = useState<UniverseFocusTarget | null>(null);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => {
+      setNoticeState((current) => current?.id === notice.id ? null : current);
+    }, 3_000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   const navigateTo = (nextRoute: AppRoute) => {
     navigate(nextRoute);
@@ -331,7 +365,7 @@ export function App() {
       if (result.ok) {
         stateRef.current = result.state;
         setState(result.state);
-        setNotice(`Проверьте системные сообщения. ${result.notice}`);
+        setNotice(result.notice);
       } else setNotice(result.error.message);
       window.dispatchEvent(new CustomEvent(SPY_REPORT_RESULT_EVENT, { detail: result }));
     };
@@ -341,7 +375,7 @@ export function App() {
       if (result.ok) {
         stateRef.current = result.state;
         setState(result.state);
-        setNotice(`Проверьте системные сообщения. ${result.notice}`);
+        setNotice(result.notice);
       } else setNotice(result.error.message);
       window.dispatchEvent(new CustomEvent(SPY_REPORT_RESULT_EVENT, { detail: result }));
     };
@@ -1407,9 +1441,13 @@ export function App() {
           )}
         </section>
 
-        <div className="shell-notice shell-notice-live" data-qa-runtime-mode={RUNTIME_MODE} data-qa-runtime-notice role="status" aria-live="polite">
-          <span>{notice}</span>
-        </div>
+        {notice ? createPortal(
+          <div className="shell-notice shell-notice-live" data-qa-runtime-mode={RUNTIME_MODE} data-qa-runtime-notice role="status" aria-live="polite">
+            <span>{notice.message}</span>
+            <button type="button" className="shell-notice__close" aria-label="Закрыть уведомление" title="Закрыть уведомление" onClick={() => setNoticeState(null)}>×</button>
+          </div>,
+          document.body,
+        ) : null}
 
         {editingPlanet && editingPlanetState ? (
           <div className="skin-picker-backdrop" onMouseDown={closePlanetEditor}>

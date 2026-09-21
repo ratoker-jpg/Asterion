@@ -209,7 +209,7 @@ export function spyReportToReportItem(report: SpyReportSnapshot, espionage?: Esp
       { label: 'Владелец', value: report.targetOwnerName },
       { label: 'Отношение', value: report.targetRelation === 'enemy' ? 'Враг' : 'Нейтральный' },
       { label: 'Качество', value: spyQualityLabel(report) },
-      ...(report.quality === 'full' && report.population ? [{ label: 'Население', value: `${report.population.total} · корабли ${report.population.fleet} · оборона ${report.population.defense}` }] : []),
+      ...(report.quality === 'full' && report.population ? [{ label: 'Население и состав', value: `${report.population.total} · корабли ${report.population.fleet} · оборона ${report.population.defense}` }] : []),
     ],
     spyReport: report,
     action: report.quality === 'full' && spyReportHasCombatIntel(report) ? { kind: 'simulate_battle', label: 'МОДЕЛИРОВАТЬ СРАЖЕНИЕ' } : undefined,

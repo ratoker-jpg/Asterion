@@ -1087,7 +1087,7 @@ function FleetWorkspace({
                 <h3 id="spy-operations-title">ШПИОНСКИЕ ОТЧЁТЫ</h3>
                 <p>Активные зонды и управление готовыми снимками цели.</p>
               </div>
-              <button type="button" className="spy-operations-modal__close" aria-label="Закрыть шпионские отчёты" onClick={() => setSpyOperationsOpen(false)}>×</button>
+              <button type="button" data-asterion-close className="spy-operations-modal__close" aria-label="Закрыть шпионские отчёты" title="Закрыть шпионские отчёты" onClick={() => setSpyOperationsOpen(false)}>×</button>
             </header>
             <div className="spy-operations-table-shell" role="table" aria-label="Активные шпионские зонды">
               <div className="spy-operations-row spy-operations-row--head" role="row">

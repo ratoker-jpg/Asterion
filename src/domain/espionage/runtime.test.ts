@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { hunterDetects, resolveSpyReportQuality } from './runtime.ts';
-import { createBot01Planets } from './fixtures.ts';
+import { createBot01Planets, createDefaultBot01Profile } from './fixtures.ts';
 
 test('spy report quality uses an integer 0..99 with lower-inclusive upper-exclusive intervals', () => {
   assert.equal(resolveSpyReportQuality(0, 0), 'full');
@@ -38,17 +38,21 @@ test('Hunter level 20 means a 35% detection interval', () => {
   assert.equal(hunterDetects(20, 99), false);
 });
 
-test('Bot 01 fixture keeps espionage level 10 and every planet has 5k+ civilian population', () => {
+test('Bot 01 fixture keeps owner-wide upgrades and a consistent 5k..25,112 orbital population', () => {
   const planets = Object.values(createBot01Planets());
+  const profile = createDefaultBot01Profile();
   assert.equal(planets.length, 7);
   const main = planets[0];
   assert.equal(main.espionageLevel, 10);
   assert.equal(main.hunterLevel, 20);
   assert.equal(main.commanders.hunter?.count, 1);
   assert.equal(main.commanders.judge?.count, 1);
-  assert.equal(main.population.civilian >= 5_000, true);
-  assert.equal(main.population.fleet >= 5_000 && main.population.fleet <= 5_100, true);
-  assert.equal(main.population.defense >= 4_900 && main.population.defense <= 5_100, true);
-  assert.equal(planets.every((planet) => planet.population.civilian >= 5_000), true);
+  assert.equal(profile.scienceLevels[5], 10);
+  assert.equal(profile.shipLevels.scout, 6);
+  assert.equal(profile.shipLevels.defender, 7);
+  assert.equal(profile.commanderLevels.hunter, 20);
+  assert.equal(profile.commanderLevels.judge, 1);
+  assert.equal(planets.every((planet) => planet.population.total === planet.population.fleet + planet.population.defense), true);
+  assert.equal(planets.every((planet) => planet.population.total >= 5_000 && planet.population.total <= 25_112), true);
   assert.equal(planets.slice(1).every((planet) => planet.hunterLevel === 0), true);
 });

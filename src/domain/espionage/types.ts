@@ -4,6 +4,7 @@ import type { CombatFactionId } from '../combat/factions.ts';
 import type { OwnedDefenseState } from '../fleet/production.ts';
 import type { OwnedFleetState } from '../fleet/runtime.ts';
 import type { TargetRelation } from '../flights/types.ts';
+import type { ScienceLevels } from '../buildings/resource-zone.ts';
 import type { UniverseCoordinate, UniverseOwnerAlliance } from '../universe/types.ts';
 
 export type SpyMissionStatus = 'transit' | 'orbiting' | 'returning' | 'returned' | 'destroyed';
@@ -11,17 +12,19 @@ export type SpyReportQuality = 'basic' | 'detailed' | 'full';
 export type SpyTargetRelation = Extract<TargetRelation, 'enemy' | 'neutral'>;
 
 export type SpyPlanetPopulation = {
-  civilian: number;
+  /** Total population represented by all orbital ships and defense structures. */
+  total: number;
   fleet: number;
   defense: number;
 };
 
 export type SpyReportPopulation = {
-  /** Civilian population on the target planet; ships and defense are reported separately. */
-  civilian: number;
+  /** Total population represented by all orbital ships and defense structures. */
   total: number;
   fleet: number;
   defense: number;
+  /** Kept only so reports from the previous snapshot schema remain readable. */
+  civilian?: number;
 };
 
 export type SpyResourcesSnapshot = {
@@ -35,6 +38,13 @@ export type SpyResourcesSnapshot = {
 export type SpyCommanderSnapshot = {
   level: number;
   count: number;
+};
+
+/** Bot 01's shared profile. Ship upgrades and science belong to the owner, not a planet. */
+export type Bot01Profile = {
+  scienceLevels: ScienceLevels;
+  shipLevels: Partial<Record<ShipId, number>>;
+  commanderLevels: Partial<Record<CommanderId, number>>;
 };
 
 export type Bot01PlanetState = {
@@ -78,6 +88,8 @@ export type SpyReportSnapshot = {
   fleet?: Partial<Record<ShipId, number>>;
   commanders?: Partial<Record<CommanderId, SpyCommanderSnapshot>>;
   population?: SpyReportPopulation;
+  /** Captured upgrade level for each ship shown in a full report. */
+  fleetLevels?: Partial<Record<ShipId, number>>;
   firstReport: boolean;
 };
 
@@ -124,4 +136,6 @@ export type EspionageState = {
   hunterNotices: SpyHunterNotice[];
   /** Test-only Bot 01 state. Production saves intentionally keep this empty. */
   bot01Planets?: Record<string, Bot01PlanetState>;
+  /** Test-only owner-wide Bot 01 upgrades and technologies. */
+  bot01Profile?: Bot01Profile;
 };

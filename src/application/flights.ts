@@ -1,7 +1,8 @@
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
-import { createEmptyDefenseState } from '../domain/fleet/production.ts';
+import { calculateDefensePopulation, createEmptyDefenseState } from '../domain/fleet/production.ts';
 import {
+  calculateFleetPopulation,
   createEmptyFleetState,
   removeSolarSatellitesFromFleet,
   resolveSavedFleetState,
@@ -65,6 +66,7 @@ import {
 } from '../domain/espionage/runtime.ts';
 import type {
   Bot01PlanetState,
+  Bot01Profile,
   EspionageState,
   SpyHunterNotice,
   SpyMission,
@@ -429,6 +431,10 @@ function currentEspionageState(state: SaveState): EspionageState {
   return state.espionage ?? createDefaultEspionageState();
 }
 
+function bot01EspionageLevel(state: SaveState, target: Bot01PlanetState): number {
+  return Math.max(0, Math.floor(currentEspionageState(state).bot01Profile?.scienceLevels[5] ?? target.espionageLevel));
+}
+
 function withEspionageState(state: SaveState, espionage: EspionageState): SaveState {
   return { ...state, espionage };
 }
@@ -485,12 +491,29 @@ function authoritativeSpyTargetRelation(state: SaveState, target: Bot01PlanetSta
 function createSpyReport(
   mission: SpyMission,
   target: Bot01PlanetState,
+  bot01Profile: Bot01Profile | undefined,
   createdAt: number,
   roll: number,
   firstReport: boolean,
   spyLevel: number,
 ): SpyReportSnapshot {
-  const delta = spyLevel - target.espionageLevel;
+  const targetFleetPopulation = calculateFleetPopulation(target.fleet, target.raceId);
+  const targetDefensePopulation = calculateDefensePopulation(target.defense, target.raceId);
+  const targetCommanders = Object.fromEntries(
+    Object.entries(target.commanders).map(([id, commander]) => [
+      id,
+      commander
+        ? { ...commander, level: bot01Profile?.commanderLevels[id as keyof Bot01Profile['commanderLevels']] ?? commander.level }
+        : commander,
+    ]),
+  ) as SpyReportSnapshot['commanders'];
+  const targetFleetLevels = Object.fromEntries(
+    Object.entries(target.fleet.ships)
+      .filter(([, count]) => Number(count) > 0)
+      .map(([id]) => [id, bot01Profile?.shipLevels[id as keyof Bot01Profile['shipLevels']] ?? 0]),
+  ) as SpyReportSnapshot['fleetLevels'];
+  const targetEspionage = bot01Profile?.scienceLevels[5] ?? target.espionageLevel;
+  const delta = spyLevel - targetEspionage;
   const quality = resolveSpyReportQuality(delta, roll);
   return {
     id: `spy-report-${mission.id}-${mission.reportIds.length + 1}`,
@@ -505,7 +528,7 @@ function createSpyReport(
     targetRelation: mission.targetRelation,
     targetCoordinate: { ...target.coordinate },
     spyLevel,
-    targetEspionageLevel: target.espionageLevel,
+    targetEspionageLevel: targetEspionage,
     delta,
     roll,
     quality,
@@ -517,12 +540,12 @@ function createSpyReport(
     ...(quality === 'full'
       ? {
         fleet: { ...target.fleet.ships },
-        commanders: Object.fromEntries(Object.entries(target.commanders).map(([id, commander]) => [id, commander ? { ...commander } : commander])),
+        fleetLevels: targetFleetLevels,
+        commanders: targetCommanders,
         population: {
-          civilian: target.population.civilian,
-          total: target.population.civilian,
-          fleet: target.population.fleet,
-          defense: target.population.defense,
+          total: targetFleetPopulation + targetDefensePopulation,
+          fleet: targetFleetPopulation,
+          defense: targetDefensePopulation,
         },
       }
       : {}),
@@ -582,7 +605,8 @@ function resolveSpyAtTarget(
   }
 
   const currentSpyLevel = Math.max(0, Math.floor(state.science.levels[5] ?? 0));
-  const report = createSpyReport(mission, target, now, randomRoll(rng), firstReport, currentSpyLevel);
+  const bot01Profile = currentEspionageState(state).bot01Profile;
+  const report = createSpyReport(mission, target, bot01Profile, now, randomRoll(rng), firstReport, currentSpyLevel);
   const nextMission: SpyMission = {
     ...mission,
     spyLevel: currentSpyLevel,
@@ -823,7 +847,7 @@ export function dispatchFlight(
       targetRelation: command.targetRelation as 'enemy' | 'neutral',
       targetCoordinate: { ...target.coordinate },
       spyLevel: Math.max(0, Math.floor(state.science.levels[5] ?? 0)),
-      targetEspionageLevel: target.espionageLevel,
+      targetEspionageLevel: bot01EspionageLevel(state, target),
       status: 'transit',
       sentAt: flight.departedAt,
       arrivalAt: flight.arrivalAt,

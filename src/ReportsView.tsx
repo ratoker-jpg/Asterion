@@ -175,6 +175,21 @@ function sourcePlanetLabel(id: string) {
   return id === 'helion-01' ? 'Helion 01' : 'Планета-источник';
 }
 
+function commanderTooltip(id: CommanderId, level: number) {
+  const definition = COMMANDER_ABILITIES[id];
+  const rateMatch = definition.ratePerLevel.match(/([+−-]?\s*\d+(?:[,.]\d+)?)%/u);
+  const coefficient = rateMatch
+    ? Number(rateMatch[1].replaceAll('−', '-').replaceAll(',', '.').replaceAll(' ', ''))
+    : null;
+  const total = coefficient == null ? null : coefficient * level;
+  const formattedTotal = total == null
+    ? null
+    : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 3 }).format(Math.abs(total));
+  const sign = total == null || total === 0 ? '' : total > 0 ? '+' : '−';
+  const effectLabel = id === 'hunter' ? 'Шанс обнаружить шпионские зонды' : definition.description;
+  return `${definition.ability}. ${effectLabel} ${formattedTotal == null ? definition.ratePerLevel : `${sign}${formattedTotal}% с учётом уровня ${level} (${definition.ratePerLevel})`}`;
+}
+
 function SpyDossier({ item, report, onOpenUniverseTarget }: {
   item: ReportItem;
   report: SpyReportSnapshot;
@@ -189,7 +204,7 @@ function SpyDossier({ item, report, onOpenUniverseTarget }: {
     { kind: 'minerals' as const, label: 'Минералы', value: report.resources.minerals },
     { kind: 'gas' as const, label: 'Газ', value: report.resources.gas },
     { kind: 'debris' as const, label: 'Обломки', value: report.resources.debris },
-    { kind: 'energy' as const, label: 'Энергия развития', value: report.resources.developmentEnergy },
+    { kind: 'energy' as const, label: 'Энергия', value: report.resources.developmentEnergy },
   ];
   return (
     <div className="reports-dossier reports-dossier--spy" data-qa-spy-report={report.id}>
@@ -199,7 +214,7 @@ function SpyDossier({ item, report, onOpenUniverseTarget }: {
         <div className="reports-dossier-heading__status"><StatusBadge item={item} /><time>{formatDate(item.timestamp)}</time></div>
       </div>
       <section className="spy-report-card spy-report-card--summary"><header><strong>СВОДКА ЦЕЛИ</strong><span>{factionName}</span></header><dl className="spy-report-summary-grid">
-        <div><dt>Планета</dt><dd><strong>{report.targetPlanetName}</strong><button type="button" className="spy-report-link" onClick={() => onOpenUniverseTarget({ coordinate: report.targetCoordinate, planetId: report.targetPlanetId })}>{reportCoordinate(report.targetCoordinate)}</button></dd></div>
+        <div><dt>Планета</dt><dd><strong>{report.targetPlanetName}</strong><button type="button" className="spy-report-link" onClick={() => onOpenUniverseTarget({ coordinate: report.targetCoordinate })}>{reportCoordinate(report.targetCoordinate)}</button></dd></div>
         <div><dt>Источник</dt><dd>{sourcePlanetLabel(report.sourcePlanetId)}</dd></div>
         <div><dt>Владелец</dt><dd><button type="button" className="spy-report-link" onClick={() => onOpenUniverseTarget({ coordinate: report.targetCoordinate, planetId: report.targetPlanetId, ownerId: report.targetOwnerId })}>{report.targetOwnerName}</button></dd></div>
         <div><dt>Отношение</dt><dd>{report.targetRelation === 'enemy' ? 'Враг' : 'Нейтральный'}</dd></div>
@@ -207,12 +222,12 @@ function SpyDossier({ item, report, onOpenUniverseTarget }: {
       <section className="spy-report-card"><header><strong>РЕСУРСЫ</strong><span>Снимок на момент передачи</span></header><div className="spy-report-resource-grid">
         {resources.map((resource) => <div className={`spy-report-resource spy-report-resource--${resource.kind}`} key={resource.kind}><ResourceIcon kind={resource.kind} className="spy-report-resource__icon" /><span>{resource.label}</span><strong>{numberFormat.format(resource.value)}</strong></div>)}
       </div></section>
-      {report.population ? <section className="spy-report-card spy-report-card--population"><header><strong>НАСЕЛЕНИЕ И СОСТАВ</strong><span>Население планеты отдельно от орбитальных сил</span></header><div className="spy-report-population"><div><span>Население планеты</span><strong>{numberFormat.format(report.population.civilian)}</strong></div><div><span>Корабли</span><strong>{numberFormat.format(report.population.fleet)}</strong></div><div><span>Оборона</span><strong>{numberFormat.format(report.population.defense)}</strong></div></div></section> : null}
-      {report.quality !== 'basic' ? <section className="spy-report-card"><header><strong>ОБОРОНА</strong><span>{factionName}</span></header>{defense.length ? <div className="spy-report-entity-grid">{defense.map(([id, count]) => { const entity = getFactionCombatEntity(report.targetRaceId, id as CombatEntityId); return <article className="spy-report-entity" key={id}><img src={entity.art} alt="" /><div><strong>{entity.name}</strong><span>{entity.role}</span></div><b>{numberFormat.format(Number(count))}</b></article>; })}</div> : <p className="spy-report-empty">Оборона не найдена.</p>}</section> : null}
+      {report.population ? <section className="spy-report-card spy-report-card--population"><header><strong>НАСЕЛЕНИЕ И СОСТАВ</strong><span>Всего: корабли и оборона планеты</span></header><div className="spy-report-population"><div><span>Население планеты</span><strong>{numberFormat.format(report.population.total)}</strong></div><div><span>Корабли</span><strong>{numberFormat.format(report.population.fleet)}</strong></div><div><span>Оборона</span><strong>{numberFormat.format(report.population.defense)}</strong></div></div></section> : null}
       {report.quality === 'full' ? <>
-        <section className="spy-report-card"><header><strong>КОРАБЛИ</strong><span>Боевой и транспортный состав</span></header>{fleet.length ? <div className="spy-report-entity-grid">{fleet.map(([id, count]) => { const entity = getFactionCombatEntity(report.targetRaceId, id as CombatEntityId); return <article className="spy-report-entity" key={id}><img src={entity.art} alt="" /><div><strong>{entity.name}</strong><span>{entity.role}</span></div><b>{numberFormat.format(Number(count))}</b></article>; })}</div> : <p className="spy-report-empty">Корабли не найдены.</p>}</section>
-        <section className="spy-report-card"><header><strong>КОМАНДИРЫ</strong><span>Выявленные командирские корабли</span></header>{commanders.length ? <div className="spy-report-entity-grid">{commanders.map(([id, value]) => { const entity = getFactionCombatEntity(report.targetRaceId, id as CombatEntityId); const commanderName = COMMANDER_ABILITIES[id as CommanderId]?.commanderName ?? entity.name; return <article className="spy-report-entity" key={id}><img src={entity.art} alt="" /><div><strong>{commanderName}</strong><span>Уровень {value?.level ?? 0}</span></div><b>{numberFormat.format(value?.count ?? 0)}</b></article>; })}</div> : <p className="spy-report-empty">Командиры не найдены.</p>}</section>
+        <section className="spy-report-card"><header><strong>КОРАБЛИ</strong><span>Боевой и транспортный состав</span></header>{fleet.length ? <div className="spy-report-entity-grid">{fleet.map(([id, count]) => { const entity = getFactionCombatEntity(report.targetRaceId, id as CombatEntityId); const level = report.fleetLevels?.[id as keyof NonNullable<SpyReportSnapshot['fleetLevels']>]; return <article className="spy-report-entity" key={id}><img src={entity.art} alt="" /><div><strong>{entity.name}</strong><span>{entity.role}{level === undefined ? '' : ` · Уровень ${level}`}</span></div><b>{numberFormat.format(Number(count))}</b></article>; })}</div> : <p className="spy-report-empty">Корабли не найдены.</p>}</section>
+        <section className="spy-report-card"><header><strong>КОМАНДИРЫ</strong><span>Выявленные командирские корабли</span></header>{commanders.length ? <div className="spy-report-entity-grid">{commanders.map(([id, value]) => { const entity = getFactionCombatEntity(report.targetRaceId, id as CombatEntityId); const commanderId = id as CommanderId; const commanderName = COMMANDER_ABILITIES[commanderId]?.commanderName ?? entity.name; const level = value?.level ?? 0; const tooltip = commanderTooltip(commanderId, level); return <article className="spy-report-entity spy-report-entity--commander" key={id} tabIndex={0} title={tooltip} aria-label={`${commanderName}, уровень ${level}. ${tooltip}`}><img src={entity.art} alt="" /><div><strong>{commanderName}</strong><span>Уровень {level}</span></div><b>{numberFormat.format(value?.count ?? 0)}</b><span className="spy-report-entity__tooltip" role="tooltip">{tooltip}</span></article>; })}</div> : <p className="spy-report-empty">Командиры не найдены.</p>}</section>
       </> : null}
+      {report.quality !== 'basic' ? <section className="spy-report-card"><header><strong>ОБОРОНА</strong><span>{factionName}</span></header>{defense.length ? <div className="spy-report-entity-grid">{defense.map(([id, count]) => { const entity = getFactionCombatEntity(report.targetRaceId, id as CombatEntityId); return <article className="spy-report-entity" key={id}><img src={entity.art} alt="" /><div><strong>{entity.name}</strong><span>{entity.role}</span></div><b>{numberFormat.format(Number(count))}</b></article>; })}</div> : <p className="spy-report-empty">Оборона не найдена.</p>}</section> : null}
       <section className="reports-generic-body"><small>СВОДКА</small><p>{item.body}</p></section>
     </div>
   );

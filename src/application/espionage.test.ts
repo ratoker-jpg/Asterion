@@ -95,9 +95,11 @@ test('full report is an immutable permitted snapshot and later reconcile keeps t
   assert.equal(report.resources.developmentEnergy > 0, true);
   assert.equal('buildings' in report, false);
   assert.equal(Boolean(report.fleet), true);
+  assert.equal(report.fleetLevels?.scout, state.espionage?.bot01Profile?.shipLevels.scout);
+  assert.equal(report.fleetLevels?.destroyer, state.espionage?.bot01Profile?.shipLevels.destroyer);
   assert.equal(Boolean(report.defense), true);
   assert.equal(Boolean(report.population), true);
-  assert.equal(report.population?.total, report.population?.civilian);
+  assert.equal(report.population?.total, (report.population?.fleet ?? 0) + (report.population?.defense ?? 0));
   assert.equal(report.population?.total && report.population.total >= 5_000, true);
   assert.equal(arrived.state.espionage!.missions[0].status, 'orbiting');
 

@@ -1,5 +1,6 @@
 import type {
   Bot01PlanetState,
+  Bot01Profile,
   EspionageState,
   SpyHunterNotice,
   SpyMission,
@@ -17,6 +18,12 @@ function text(value: unknown, fallback = ''): string {
 
 function nonNegative(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : fallback;
+}
+
+function numericRecord(value: unknown): Record<string, number> {
+  return Object.fromEntries(Object.entries(record(value)).flatMap(([key, candidate]) => (
+    typeof candidate === 'number' && Number.isFinite(candidate) ? [[key, Math.max(0, Math.floor(candidate))]] : []
+  )));
 }
 
 function list<T>(value: unknown, migrate: (candidate: unknown) => T | null): T[] {
@@ -109,22 +116,33 @@ function migrateReport(value: unknown): SpyReportSnapshot | null {
   }
   if (quality === 'full') {
     base.fleet = record(source.fleet) as SpyReportSnapshot['fleet'];
+    if (source.fleetLevels && typeof source.fleetLevels === 'object' && !Array.isArray(source.fleetLevels)) {
+      base.fleetLevels = numericRecord(source.fleetLevels) as SpyReportSnapshot['fleetLevels'];
+    }
     base.commanders = record(source.commanders) as SpyReportSnapshot['commanders'];
     const fleetPopulation = nonNegative(population.fleet);
     const defensePopulation = nonNegative(population.defense);
-    // Reports written before the population split stored a combined total.
-    // Recover the civilian value when possible so old saves do not keep showing
-    // ships and defenses as part of the planet's population.
-    const legacyTotal = nonNegative(population.total);
-    const civilianPopulation = nonNegative(population.civilian, Math.max(0, legacyTotal - fleetPopulation - defensePopulation));
+    // Preserve the stored total for historical reports. New reports write the
+    // owner-wide orbital composition total; old snapshots are never rewritten.
+    const storedTotal = nonNegative(population.total, fleetPopulation + defensePopulation);
     base.population = {
-      civilian: civilianPopulation,
-      total: civilianPopulation,
+      total: storedTotal,
       fleet: fleetPopulation,
       defense: defensePopulation,
+      ...(Number.isFinite(population.civilian) ? { civilian: nonNegative(population.civilian) } : {}),
     };
   }
   return base;
+}
+
+function migrateBot01Profile(value: unknown): Bot01Profile | null {
+  const source = record(value);
+  if (!Object.keys(source).length) return null;
+  return {
+    scienceLevels: numericRecord(source.scienceLevels) as Bot01Profile['scienceLevels'],
+    shipLevels: numericRecord(source.shipLevels) as Bot01Profile['shipLevels'],
+    commanderLevels: numericRecord(source.commanderLevels) as Bot01Profile['commanderLevels'],
+  };
 }
 
 function migrateNotice(value: unknown): SpyHunterNotice | null {
@@ -161,6 +179,7 @@ function migrateBotPlanet(value: unknown): Bot01PlanetState | null {
 export function migrateEspionageState(value: unknown): EspionageState {
   if (!value || typeof value !== 'object') return createDefaultEspionageState();
   const source = record(value);
+  const bot01Profile = migrateBot01Profile(source.bot01Profile);
   const bot01Planets = source.bot01Planets && typeof source.bot01Planets === 'object' && !Array.isArray(source.bot01Planets)
     ? Object.fromEntries(Object.entries(source.bot01Planets).flatMap(([id, candidate]) => {
       const migrated = migrateBotPlanet(candidate);
@@ -172,5 +191,6 @@ export function migrateEspionageState(value: unknown): EspionageState {
     reports: list(source.reports, migrateReport),
     hunterNotices: list(source.hunterNotices, migrateNotice),
     ...(bot01Planets && Object.keys(bot01Planets).length ? { bot01Planets } : {}),
+    ...(bot01Profile ? { bot01Profile } : {}),
   };
 }

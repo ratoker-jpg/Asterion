@@ -847,11 +847,24 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       : 'helion-01';
     const alliedPlanets = migrateAlliedPlanets(parsed.alliedPlanets, mode, timestamp, science.levels);
     const migratedEspionage = migrateEspionageState(parsed.espionage);
+    const defaultTestEspionage = createDefaultTestEspionageState();
+    const savedBotPlanets = Object.values(migratedEspionage.bot01Planets ?? {});
+    const legacyBotFixtures = savedBotPlanets.some((planet) => {
+      const population = planet.population as unknown as Record<string, unknown> | undefined;
+      return !population || population.total === undefined || population.civilian !== undefined;
+    });
+    const hasCurrentBotProfile = Boolean(migratedEspionage.bot01Profile)
+      && savedBotPlanets.length > 0
+      && !legacyBotFixtures;
     const espionage = mode === 'test'
-      ? (Object.keys(migratedEspionage.bot01Planets ?? {}).length
+      ? (hasCurrentBotProfile
         ? migratedEspionage
-        : { ...migratedEspionage, bot01Planets: createDefaultTestEspionageState().bot01Planets })
-      : { ...migratedEspionage, bot01Planets: undefined };
+        : {
+          ...migratedEspionage,
+          bot01Profile: defaultTestEspionage.bot01Profile,
+          bot01Planets: defaultTestEspionage.bot01Planets,
+        })
+      : { ...migratedEspionage, bot01Planets: undefined, bot01Profile: undefined };
 
     return {
       schemaVersion: SAVE_SCHEMA_VERSION,
@@ -893,7 +906,7 @@ export function createPersistenceFacade(options: PersistenceOptions = {}) {
       try {
         const persistedState = mode === 'test' || !state.espionage
           ? state
-          : { ...state, espionage: { ...state.espionage, bot01Planets: undefined } };
+          : { ...state, espionage: { ...state.espionage, bot01Planets: undefined, bot01Profile: undefined } };
         storage.setItem(saveKey, JSON.stringify(persistedState));
         return { ok: true };
       } catch (error) {
