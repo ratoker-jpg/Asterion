@@ -4,7 +4,7 @@ import { createInitialSaveState, createPersistenceFacade } from './persistence.t
 import { dispatchFlight, recallFlight, reconcileFlights } from './flights.ts';
 import { getPlanetResources, replacePlanetResources } from './contracts.ts';
 import { selectCurrentAlliance } from '../domain/command/selectors.ts';
-import { calculateAttackDebris, calculateAttackLoot, technologiesFromScience } from './attack.ts';
+import { calculateAttackDebris, calculateAttackLoot, resolveAttackAtTarget, technologiesFromScience } from './attack.ts';
 import { getFactionCombatEntity } from '../domain/combat/faction-catalog.ts';
 import type { BattleReport } from '../domain/combat/report.ts';
 import type { FlightDestination } from '../domain/flights/types.ts';
@@ -152,6 +152,56 @@ test('attack resolves one live combat, records debris/repair, and credits loot o
   const returnedAgain = reconcileFlights(returned.state, arrival.state.flights.records[0].returnAt! + 1, undefined, { mode: 'test', testTimeScale: 15 });
   assert.equal(returnedAgain.changed, false);
   assert.equal(returnedAgain.state.combat.reports.length, returned.state.combat.reports.length);
+});
+
+test('successful Planetolom siege removes the authoritative target and replays the historical report after target disappearance', () => {
+  const base = createInitialSaveState('test', 1_000);
+  const targetId = Object.keys(base.espionage!.targets!)[0];
+  const originId = base.currentPlanetId;
+  const origin = base.planets[originId];
+  const prepared = {
+    ...base,
+    planets: {
+      ...base.planets,
+      [originId]: {
+        ...origin,
+        fleet: { ...origin.fleet, ships: { ...origin.fleet.ships, 'death-star': 1 } },
+        spaceportUpgrades: {
+          ...origin.spaceportUpgrades,
+          shipLevels: { ...origin.spaceportUpgrades.shipLevels, 'death-star': 10 },
+        },
+      },
+    },
+  };
+  const siegeReady = emptyTarget(prepared, targetId);
+
+  let resolved: ReturnType<typeof reconcileFlights> | null = null;
+  for (let index = 0; index < 200; index += 1) {
+    const requestId = `attack-planetolom-${index}`;
+    const sent = dispatchFlight(siegeReady, attackCommand(siegeReady, requestId, targetId, {
+      selectedShips: { 'death-star': 1 },
+    }), { now: 1_000, mode: 'test', testTimeScale: 15 });
+    assert.equal(sent.ok, true);
+    if (!sent.ok) continue;
+    const arrival = reconcileFlights(sent.state, sent.flight.arrivalAt, undefined, { mode: 'test', testTimeScale: 15 });
+    if (arrival.state.flights.records[0]?.attackResolution?.planetDestroyed) {
+      resolved = arrival;
+      break;
+    }
+  }
+  assert.ok(resolved, 'a deterministic request id should eventually hit the destruction roll');
+  const arrival = resolved!;
+  const report = arrival.state.combat.reports.at(-1)!;
+  const flight = arrival.state.flights.records[0]!;
+  assert.equal(report.siege?.planetDestroyed, true);
+  assert.equal(arrival.state.espionage!.targets![targetId], undefined);
+  assert.equal(arrival.state.espionage!.bot01Planets![targetId], undefined);
+  assert.equal(flight.phase, 'returning');
+
+  const replay = resolveAttackAtTarget(arrival.state, flight, flight.arrivedAt ?? 1_000);
+  assert.ok(replay);
+  assert.equal(replay?.report.id, report.id);
+  assert.deepEqual(replay?.resolution, flight.attackResolution);
 });
 
 test('attack arrival re-checks diplomacy and returns without combat after a target becomes allied', () => {

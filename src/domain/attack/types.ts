@@ -28,5 +28,7 @@ export type AttackResolution = {
   resolvedAt: number;
   debris: number;
   loot: AttackLoot;
+  /** True when the post-combat siege removed the target from the registry. */
+  planetDestroyed?: boolean;
   lootCreditedAt?: number;
 };

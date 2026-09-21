@@ -4,6 +4,7 @@ import { getFactionCombatEntity, getFactionDefenseCatalog, getFactionShipCatalog
 import { SOLAR_SATELLITE_ID, type CombatEntityId, type DefenseId, type ShipId } from '../domain/combat/ids.ts';
 import { DEFAULT_COMBAT_PRIORITY as DEFAULT_PRIORITY } from '../domain/combat/priority.ts';
 import { resolveCombat } from '../domain/combat/resolver.ts';
+import { resolvePlanetSiege } from '../domain/combat/planet-siege.ts';
 import type { BattleReport } from '../domain/combat/report.ts';
 import { COMBAT_TECHNOLOGIES, normalizeCombatTechnologies, type CombatTechnologyLevels } from '../domain/combat/technologies.ts';
 import type { CombatInput, CombatStackInput, SimulatorMaxRounds } from '../domain/combat/simulator.ts';
@@ -240,6 +241,30 @@ function withTargetState(state: SaveState, target: SpyTargetState): SaveState {
   };
 }
 
+function removeTargetState(state: SaveState, targetId: string, now: number): SaveState {
+  const espionage = state.espionage;
+  if (!espionage) return state;
+  const targets = { ...getEspionageTargets(espionage) };
+  delete targets[targetId];
+  return {
+    ...state,
+    espionage: {
+      ...espionage,
+      targets,
+      ...(espionage.bot01Planets ? { bot01Planets: targets } : {}),
+      missions: espionage.missions.map((mission) => mission.targetPlanetId === targetId
+        && mission.status !== 'returned'
+        && mission.status !== 'destroyed'
+        ? { ...mission, status: 'destroyed', destroyedAt: now }
+        : mission),
+    },
+  };
+}
+
+function lastCombatEventSequence(report: BattleReport) {
+  return report.rounds.reduce((last, round) => round.events.reduce((roundLast, event) => Math.max(roundLast, event.sequence), last), 0);
+}
+
 function addReport(state: SaveState, report: BattleReport): SaveState {
   return state.combat.reports.some((candidate) => candidate.id === report.id)
     ? state
@@ -326,8 +351,6 @@ export type AttackResolutionResult = {
 /** Resolves a live target exactly once and applies both sides atomically. */
 export function resolveAttackAtTarget(state: SaveState, flight: FlightRecord, now: number): AttackResolutionResult | null {
   if (!flight.attackSnapshot || flight.missionId !== 'attack') return null;
-  const target = resolveTargetForFlight(state, flight);
-  if (!target) return null;
   const reportId = `${ATTACK_REPORT_PREFIX}${flight.id}`;
   const existing = state.combat.reports.find((candidate) => candidate.id === reportId);
   if (existing) {
@@ -336,9 +359,12 @@ export function resolveAttackAtTarget(state: SaveState, flight: FlightRecord, no
       resolvedAt: safeCount(now),
       debris: safeCount(existing.debris),
       loot: reportLoot(existing),
+      planetDestroyed: existing.siege?.planetDestroyed === true,
     };
     return { state, report: existing, resolution };
   }
+  const target = resolveTargetForFlight(state, flight);
+  if (!target) return null;
 
   const input = createAttackInput(state, flight, target);
   if (input.attacker.ships.length === 0) return null;
@@ -365,14 +391,29 @@ export function resolveAttackAtTarget(state: SaveState, flight: FlightRecord, no
     debris: addDebris(targetAfterLosses.resources.debris, debris),
   };
   const { debris: _legacyDebris, ...targetWithoutLegacyDebris } = targetAfterLosses;
-  const updatedTarget: SpyTargetState = {
+  const targetWithLoot: SpyTargetState = {
     ...targetWithoutLegacyDebris,
     resources: nextResources,
   };
-  next = withTargetState(next, updatedTarget);
-  next = addReport(next, report);
-  const resolution: AttackResolution = { reportId, resolvedAt: safeCount(now), debris, loot };
-  return { state: next, report, resolution };
+  const ownerPlanetCount = Object.values(getEspionageTargets(next.espionage))
+    .filter((candidate) => candidate.ownerId === target.ownerId)
+    .length;
+  const siege = resolvePlanetSiege(report, targetWithLoot, {
+    seed: input.seed ?? `attack:${flight.id}`,
+    reportId,
+    attackerFleetId: flight.id,
+    attackerFactionId: input.attacker.factionId!,
+    defenderFactionId: input.defender.factionId!,
+    targetOwnerPlanetCount: ownerPlanetCount,
+    eventSequence: lastCombatEventSequence(report),
+  });
+  const reportWithSiege: BattleReport = { ...report, siege: siege.report };
+  next = siege.planetDestroyed
+    ? removeTargetState(next, target.id, now)
+    : withTargetState(next, siege.target);
+  next = addReport(next, reportWithSiege);
+  const resolution: AttackResolution = { reportId, resolvedAt: safeCount(now), debris, loot, planetDestroyed: siege.planetDestroyed };
+  return { state: next, report: reportWithSiege, resolution };
 }
 
 export type AttackLootCreditResult = {

@@ -164,6 +164,7 @@ const MATCHUP_MULTIPLIERS: Readonly<Record<CombatOrdinaryClass, Readonly<Record<
 };
 
 function levelCoefficient(entity: ReturnType<typeof getCombatEntity>) {
+  if (entity.id === 'death-star') return COMBAT_SHIP_LEVEL_COEFFICIENTS['death-star'];
   return entity.ordinaryClass ? COMBAT_SHIP_LEVEL_COEFFICIENTS[entity.ordinaryClass] : 0;
 }
 

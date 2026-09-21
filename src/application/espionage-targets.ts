@@ -18,13 +18,13 @@ export type ResolvedSpyTarget = {
   relation: UniverseOwnerRelation;
 };
 
-export function createSpyTargetOwnerProfile(target: SpyTargetState): UniverseOwnerProfile {
+export function createSpyTargetOwnerProfile(target: SpyTargetState, planetIds: readonly string[] = [target.id]): UniverseOwnerProfile {
   return {
     id: target.ownerId,
     displayName: target.ownerName,
     raceId: target.raceId,
     alliance: target.alliance,
-    planetIds: [target.id],
+    planetIds: [...planetIds],
   };
 }
 
@@ -55,7 +55,11 @@ export function resolveSpyTarget(
       || target.coordinate.system !== expected.coordinate.system
       || target.coordinate.position !== expected.coordinate.position)) return null;
 
-  const owner = createSpyTargetOwnerProfile(target);
+  const ownerPlanetIds = Object.values(getEspionageTargets(state.espionage))
+    .filter((candidate) => candidate.ownerId === target.ownerId)
+    .map((candidate) => candidate.id)
+    .sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
+  const owner = createSpyTargetOwnerProfile(target, ownerPlanetIds.length ? ownerPlanetIds : [target.id]);
   const currentAlliance = selectCurrentAlliance(state.command);
   const relation = getUniverseOwnerRelation(
     targetNode(target, state.profile.playerId),

@@ -10,6 +10,7 @@ export const COMBAT_SHIP_LEVEL_COEFFICIENTS = Object.freeze({
   battleship: 0.08,
   destroyer: 0.11,
   bomber: 0.10,
+  'death-star': 0.15,
 } as const);
 
 export const SIMULATOR_POPULATION_LIMITS = Object.freeze({

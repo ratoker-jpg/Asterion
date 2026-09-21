@@ -32,6 +32,7 @@ import {
   type BattleParticipantViewModel,
   type BattleReportViewModel,
   type BattleRoundViewModel,
+  type BattleSiegeViewModel,
   type BattleSideViewModel,
   type BattleStackViewModel,
   type BattleTechnologyViewModel,
@@ -68,6 +69,19 @@ function formatResourcePoints(value: number) {
 
 function formatKnownNumber(value: number | null | undefined) {
   return value == null ? '—' : formatNumber(value);
+}
+
+function formatBps(value: number) {
+  return `${(value / 100).toFixed(2)}%`;
+}
+
+function siegeReasonLabel(reason: string | null) {
+  return {
+    NO_SURVIVING_PLANET_DESTROYER: 'нет уцелевшего Планетолома',
+    BATTLE_RESULT_INELIGIBLE: 'исход боя не даёт права на осаду',
+    LAST_COLONY_PROTECTED: 'последняя колония защищена',
+    ZERO_FINAL_CHANCE: 'итоговый шанс равен нулю',
+  }[reason ?? ''] ?? 'не выполнено';
 }
 
 function formatBattleDate(timestamp: string, withYear = true) {
@@ -248,6 +262,29 @@ function CardOrbitDebris({ viewModel }: { viewModel: BattleReportViewModel }) {
   );
 }
 
+function CardSiegeSummary({ siege }: { siege: BattleSiegeViewModel }) {
+  const demolitionResult = siege.demolition.blockedReason
+    ? siegeReasonLabel(siege.demolition.blockedReason)
+    : `снесено уровней: ${formatNumber(siege.demolition.destroyedBuildingLevels)}`;
+  const destructionResult = siege.planetDestroyed
+    ? 'ПЛАНЕТА УНИЧТОЖЕНА'
+    : siege.destruction.blockedReason
+      ? siegeReasonLabel(siege.destruction.blockedReason)
+      : 'планета сохранена';
+  return (
+    <section className="battle-card-siege-v1" data-qa-siege-summary>
+      <header><small>ОСАДНЫЕ ЭФФЕКТЫ</small><strong>ПЛАНЕТОЛОМ</strong></header>
+      <div className="battle-card-siege-grid-v1">
+        <span><small>СНОС ЗДАНИЙ · ШАНС</small><b>{formatBps(Math.min(10_000, siege.demolition.baseChanceBps + siege.demolition.annihilatorBonusBps))}</b></span>
+        <span><small>ОЧКИ · СЫРЫЕ → ПОСЛЕ ОБОРОНЫ</small><b>{formatNumber(siege.demolition.rawPoints)} → {formatNumber(siege.demolition.finalPoints)}</b></span>
+        <span><small>ЗДАНИЯ / УРОВНИ</small><b>{formatNumber(siege.demolition.destroyedBuildingLevels)} / {formatNumber(siege.demolition.selectedBuildingCount)}</b></span>
+        <span><small>УНИЧТОЖЕНИЕ ПЛАНЕТЫ · ШАНС</small><b>{formatBps(siege.destruction.finalChanceBps)}</b></span>
+      </div>
+      <p><strong>{demolitionResult}</strong><span>{destructionResult}</span></p>
+    </section>
+  );
+}
+
 function CardActions({ viewModel, saved, onToggleSaved, onOpen, className = '' }: {
   viewModel: BattleReportViewModel;
   saved: boolean;
@@ -293,6 +330,7 @@ function BattleCardSummaryBody({ viewModel, ...actions }: BattleCardBodyProps) {
       </div>
       <CardRewards viewModel={viewModel} />
       <CardOrbitDebris viewModel={viewModel} />
+      {viewModel.siege ? <CardSiegeSummary siege={viewModel.siege} /> : null}
       <CardActions viewModel={viewModel} {...actions} />
     </div>
   );
@@ -956,6 +994,73 @@ function BattleOutcome({ viewModel }: { viewModel: BattleReportViewModel }) {
   );
 }
 
+function SiegeDestroyerList({ label, destroyers }: { label: string; destroyers: BattleSiegeViewModel['attackerDestroyers'] }) {
+  return (
+    <div className="battle-siege-contribution-v1">
+      <header><small>{label}</small><strong>ПРОФИЛИ ПЛАНЕТОЛОМОВ</strong></header>
+      {destroyers.length ? destroyers.map((destroyer, index) => (
+        <div className="battle-siege-contribution-row-v1" key={`${destroyer.factionId ?? 'unknown'}-${index}`}>
+          <span><b>{destroyer.factionId ?? BATTLE_MISSING_DATA}</b><em>уровень {formatNumber(destroyer.level)} · выжило {formatNumber(destroyer.survivors)}</em></span>
+          <span><small>ОЧКИ / ШАНС</small><strong>{formatNumber(destroyer.scaledDemolitionPoints)} / {formatBps(destroyer.scaledDestructionChanceBps)}</strong></span>
+          <span><small>АТАКА / ЖИЗНЬ · БАЗА</small><strong>{formatNumber(destroyer.baseAttack)} / {formatNumber(destroyer.baseLife)}</strong></span>
+        </div>
+      )) : <p className="battle-siege-empty-v1">Планетоломы не зафиксированы.</p>}
+    </div>
+  );
+}
+
+function BattleSiegeDetail({ viewModel }: { viewModel: BattleReportViewModel }) {
+  const siege = viewModel.siege;
+  if (!siege) return null;
+  const demolition = siege.demolition;
+  const destruction = siege.destruction;
+  return (
+    <section className="battle-section-v1 battle-siege-detail-v1" data-qa-siege-detail>
+      <header className="battle-section-head-v1"><div><small>ПОСЛЕ БОЯ</small><h3>ОСАДА ПЛАНЕТЫ</h3></div><span>{siege.targetCoordinate ?? BATTLE_MISSING_DATA}</span></header>
+      <div className="battle-siege-contributions-v1">
+        <SiegeDestroyerList label="АТАКУЮЩИЙ" destroyers={siege.attackerDestroyers} />
+        <SiegeDestroyerList label="ЗАЩИТНИК" destroyers={siege.defenderDestroyers} />
+      </div>
+      <div className="battle-siege-ledger-v1">
+        <article>
+          <header><small>ДЕМОЛИЦИЯ</small><strong>РАЗРУШЕНИЕ ЗДАНИЙ</strong></header>
+          <div className="battle-siege-metrics-v1">
+            <span><small>СЫРЫЕ ОЧКИ</small><b>{formatNumber(demolition.rawPoints)}</b></span>
+            <span><small>СНИЖЕНО ОБОРОНОЙ</small><b>−{formatNumber(demolition.defenseReductionPoints)}</b></span>
+            <span><small>ИТОГОВЫЕ ОЧКИ</small><b>{formatNumber(demolition.finalPoints)}</b></span>
+            <span><small>ШАНС / ANNIHILATOR</small><b>{formatBps(demolition.baseChanceBps)} / +{formatBps(demolition.annihilatorBonusBps)}</b></span>
+          </div>
+          <div className="battle-siege-table-v1">
+            <div className="battle-siege-table-head-v1"><span>ЗДАНИЕ</span><span>УРОВЕНЬ</span><span>ШАНС / БРОСОК</span><span>РЕЗУЛЬТАТ</span></div>
+            {demolition.rolls.length ? demolition.rolls.map((roll) => (
+              <div className="battle-siege-table-row-v1" key={roll.buildingId}>
+                <strong>{roll.buildingName}</strong>
+                <span>{formatNumber(roll.beforeLevel)} → {formatNumber(roll.afterLevel)}</span>
+                <span>{formatBps(roll.chanceBps)} / {(roll.roll * 100).toFixed(2)}%</span>
+                <b className={roll.success ? 'success' : 'fail'}>{roll.success ? 'СНЕСЕНО' : 'СОХРАНЕНО'}</b>
+              </div>
+            )) : <p className="battle-siege-empty-v1">Броски по зданиям не проводились.</p>}
+          </div>
+          <p className="battle-siege-status-v1">{demolition.blockedReason ? siegeReasonLabel(demolition.blockedReason) : `Выбрано зданий: ${formatNumber(demolition.selectedBuildingCount)} · затронуто уровней: ${formatNumber(demolition.destroyedBuildingLevels)}.`}</p>
+        </article>
+        <article>
+          <header><small>РАЗРУШЕНИЕ ПЛАНЕТЫ</small><strong>{siege.planetDestroyed ? 'ПЛАНЕТА УНИЧТОЖЕНА' : 'ПЛАНЕТА СОХРАНЕНА'}</strong></header>
+          <div className="battle-siege-metrics-v1">
+            <span><small>СЫРОЙ ШАНС</small><b>{formatBps(destruction.rawChanceBps)}</b></span>
+            <span><small>СНИЖЕНО ОБОРОНОЙ</small><b>−{formatBps(destruction.defenseReductionBps)}</b></span>
+            <span><small>СНИЖЕНО ПЛАНЕТОЛОМАМИ</small><b>−{formatBps(destruction.defenderDestroyerReductionBps)}</b></span>
+            <span><small>POLIAS</small><b>−{formatBps(destruction.poliasReductionBps)}</b></span>
+            <span><small>ИТОГОВЫЙ ШАНС</small><b>{formatBps(destruction.finalChanceBps)}</b></span>
+            <span><small>БРОСОК</small><b>{destruction.roll == null ? '—' : `${(destruction.roll * 100).toFixed(2)}%`}</b></span>
+          </div>
+          <p className="battle-siege-status-v1">{destruction.blockedReason ? siegeReasonLabel(destruction.blockedReason) : destruction.success ? 'Бросок успешен: цель удалена из авторитетного реестра.' : 'Бросок не достиг итогового шанса: цель сохранена.'}</p>
+          <p className="battle-siege-orbit-note-v1">Обычные обломки боя остаются на орбите и не превращаются в дополнительную награду за уничтожение планеты.</p>
+        </article>
+      </div>
+    </section>
+  );
+}
+
 export function BattleReportDetailBody({
   report,
   viewModel: providedViewModel,
@@ -969,6 +1074,7 @@ export function BattleReportDetailBody({
   return (
     <>
       <BattleOutcome viewModel={viewModel} />
+      <BattleSiegeDetail viewModel={viewModel} />
       <PopulationPanel viewModel={viewModel} />
       <CommanderSnapshot viewModel={viewModel} />
       <BattleVisualReport viewModel={viewModel} scrollRef={scrollRef} />

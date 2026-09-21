@@ -4,7 +4,7 @@ import type { CombatFactionId } from '../combat/factions.ts';
 import type { OwnedDefenseState } from '../fleet/production.ts';
 import type { OwnedFleetState } from '../fleet/runtime.ts';
 import type { TargetRelation } from '../flights/types.ts';
-import type { ScienceLevels } from '../buildings/resource-zone.ts';
+import type { BuildingQueueItem, ScienceLevels } from '../buildings/resource-zone.ts';
 import type { UniverseCoordinate, UniverseOwnerAlliance } from '../universe/types.ts';
 import type { RepairWorkshopState } from '../repair/workshop.ts';
 
@@ -82,6 +82,10 @@ export type SpyTargetState = {
   shipLevels?: Partial<Record<ShipId, number>>;
   /** Test-mode target repair pool; production saves never materialize Bot 01. */
   repair?: RepairWorkshopState;
+  /** Optional authoritative queue for injected targets; demolition cancels affected entries without refund. */
+  buildingQueue?: BuildingQueueItem[];
+  /** Migration-safe escape hatch for future endgame buildings absent from the current catalog. */
+  endgameLockedBuildings?: string[];
   /** Independent target economy clock, persisted with the authoritative target. */
   resourceClock?: {
     lastReconciledAt: number;

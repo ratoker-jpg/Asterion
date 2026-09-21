@@ -13,6 +13,7 @@ import { createBot01Planets, createDefaultBot01Profile } from './fixtures.ts';
 import { migrateFleetState } from '../fleet/runtime.ts';
 import { migrateDefenseState } from '../fleet/production.ts';
 import { migrateRepairWorkshopState } from '../repair/workshop.ts';
+import { createDefaultBuildingLevels, migrateBuildingQueue } from '../buildings/resource-zone.ts';
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -206,10 +207,19 @@ function migrateSpyTarget(value: unknown, now: number): SpyTargetState | null {
     ?? (Object.keys(record(source.shipLevels)).length
       ? migrateSpyOwnerProfile({ shipLevels: source.shipLevels })
       : undefined);
+  const buildingLevels = numericRecord(source.buildings);
+  const buildingQueue = Array.isArray(source.buildingQueue)
+    ? migrateBuildingQueue(source.buildingQueue, text(source.id), { ...createDefaultBuildingLevels(), ...buildingLevels })
+    : undefined;
+  const endgameLockedBuildings = Array.isArray(source.endgameLockedBuildings)
+    ? source.endgameLockedBuildings.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : undefined;
   const {
     debris: _legacyDebris,
     ownerProfile: _legacyOwnerProfile,
     shipLevels: _legacyShipLevels,
+    buildingQueue: _legacyBuildingQueue,
+    endgameLockedBuildings: _legacyEndgameLockedBuildings,
     ...sourceWithoutLegacyProfile
   } = source;
   return {
@@ -230,12 +240,14 @@ function migrateSpyTarget(value: unknown, now: number): SpyTargetState | null {
       debris: canonicalDebris,
       developmentEnergy: nonNegative(resources.developmentEnergy),
     },
-    buildings: numericRecord(source.buildings),
+    buildings: buildingLevels,
     fleet: migrateFleetState(source.fleet),
     defense: migrateDefenseState(source.defense),
     commanders: migratedCommanders as SpyTargetState['commanders'],
     ...(ownerProfile ? { ownerProfile } : {}),
     repair: migrateRepairWorkshopState(source.repair),
+    ...(buildingQueue ? { buildingQueue } : {}),
+    ...(endgameLockedBuildings ? { endgameLockedBuildings } : {}),
     resourceClock: migrateTargetResourceClock(source.resourceClock, now),
   } as unknown as SpyTargetState;
 }

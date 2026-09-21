@@ -1369,29 +1369,29 @@ export function reconcileFlights(
         continue;
       }
       if (current.missionId === 'attack') {
-        const resolved = current.destinationPlanetId
-          ? resolveSpyTarget(next, current.destinationPlanetId, { coordinate: current.destinationCoordinate })
-          : null;
-        if (!resolved || (resolved.relation !== 'enemy' && resolved.relation !== 'neutral')) {
-          const returnStartedAt = current.phase === 'arrived' ? Math.max(now, arrivalAt) : now;
-          const returningState = beginDomainFlightReturn(next.flights, current.id, returnStartedAt, 'target-unavailable');
-          const returning = returningState.records.find((flight) => flight.id === current.id)!;
-          const withArrival: FlightRecord = {
-            ...returning,
-            arrivedAt: arrivalAt,
-            completionReason: 'target-unavailable',
-          };
-          next = { ...next, flights: updateFlight(returningState, withArrival) };
-          changed = true;
-          events.push({
-            flight: withArrival,
-            status: 'target-unavailable',
-            notice: 'Атака отменена: цель стала союзной или больше не существует. Боевой отчёт не создан.',
-          });
-          continue;
-        }
-
         if (!current.attackResolution) {
+          const resolved = current.destinationPlanetId
+            ? resolveSpyTarget(next, current.destinationPlanetId, { coordinate: current.destinationCoordinate })
+            : null;
+          if (!resolved || (resolved.relation !== 'enemy' && resolved.relation !== 'neutral')) {
+            const returnStartedAt = current.phase === 'arrived' ? Math.max(now, arrivalAt) : now;
+            const returningState = beginDomainFlightReturn(next.flights, current.id, returnStartedAt, 'target-unavailable');
+            const returning = returningState.records.find((flight) => flight.id === current.id)!;
+            const withArrival: FlightRecord = {
+              ...returning,
+              arrivedAt: arrivalAt,
+              completionReason: 'target-unavailable',
+            };
+            next = { ...next, flights: updateFlight(returningState, withArrival) };
+            changed = true;
+            events.push({
+              flight: withArrival,
+              status: 'target-unavailable',
+              notice: 'Атака отменена: цель стала союзной или больше не существует. Боевой отчёт не создан.',
+            });
+            continue;
+          }
+
           const resolvedAttack = resolveAttackAtTarget(next, current, arrivalAt);
           if (!resolvedAttack) {
             const returnStartedAt = current.phase === 'arrived' ? Math.max(now, arrivalAt) : now;
