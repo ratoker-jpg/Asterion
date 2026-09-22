@@ -1,4 +1,5 @@
 import { ASTERION_SAVE_KEY } from '../combat/priority.ts';
+import { getRuntimeSaveKey, type RuntimeMode } from '../runtime/mode.ts';
 import type { ReportCategory, ReportItem, ReportsState } from './types.ts';
 
 const REPORT_METADATA_LIMIT = 500;
@@ -99,11 +100,11 @@ export function deleteSelectedReports(
   };
 }
 
-export function readReportsState(storage?: StorageLike): ReportsState {
+export function readReportsState(storage?: StorageLike, mode?: RuntimeMode): ReportsState {
   const target = resolveStorage(storage);
   if (!target) return createDefaultReportsState();
   try {
-    const raw = target.getItem(ASTERION_SAVE_KEY);
+    const raw = target.getItem(mode === undefined ? ASTERION_SAVE_KEY : getRuntimeSaveKey(mode));
     if (!raw) return createDefaultReportsState();
     const parsed = JSON.parse(raw) as SaveEnvelope;
     return migrateReportsState(parsed.reports);
@@ -116,14 +117,15 @@ export type PersistReportsResult =
   | { ok: true; value: ReportsState }
   | { ok: false; value: ReportsState; error: string };
 
-export function persistReportsState(value: ReportsState, storage?: StorageLike): PersistReportsResult {
+export function persistReportsState(value: ReportsState, storage?: StorageLike, mode?: RuntimeMode): PersistReportsResult {
   const normalized = migrateReportsState(value);
   const target = resolveStorage(storage);
   if (!target) return { ok: false, value: normalized, error: 'Локальное сохранение недоступно.' };
   try {
-    const raw = target.getItem(ASTERION_SAVE_KEY);
+    const saveKey = mode === undefined ? ASTERION_SAVE_KEY : getRuntimeSaveKey(mode);
+    const raw = target.getItem(saveKey);
     const envelope = raw ? JSON.parse(raw) as SaveEnvelope : {};
-    target.setItem(ASTERION_SAVE_KEY, JSON.stringify({ ...envelope, reports: normalized }));
+    target.setItem(saveKey, JSON.stringify({ ...envelope, reports: normalized }));
     return { ok: true, value: normalized };
   } catch (error) {
     return {

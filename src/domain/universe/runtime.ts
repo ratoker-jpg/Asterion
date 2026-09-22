@@ -388,16 +388,36 @@ function registeredPlanetFor(options: CreateUniverseSystemOptions, galaxy: numbe
     && planet.coordinate.position === slot);
 }
 
-function fixtureFor(system: number, slot: number, mode: RuntimeMode = 'test') {
+function botFixtureFor(system: number, slot: number, mode: RuntimeMode = 'test') {
   const npc = mode === 'test'
     ? NPC_PLANET_FIXTURES.find((planet) => planet.system === system && planet.position === slot)
     : undefined;
-  if (npc) return { ...npc, kind: 'npc' as const, ownerId: NPC_OWNER_ID, known: true };
+  return npc ? { ...npc, kind: 'npc' as const, ownerId: NPC_OWNER_ID, known: true } : undefined;
+}
+
+function fixtureFor(system: number, slot: number, mode: RuntimeMode = 'test', registeredPlanets?: readonly UniverseRegisteredPlanet[]) {
+  const npc = botFixtureFor(system, slot, mode);
+  // When an authoritative runtime registry is supplied, its presence is the
+  // source of truth for Bot 01 planets. This prevents a destroyed target from
+  // being recreated by the static Test Mode atlas on the next render/reload.
+  if (npc && (registeredPlanets === undefined || registeredPlanets.some((planet) => planet.id === npc.id))) return npc;
   if (system === 1) {
     const fixture = SYSTEM_ONE_FIXTURES[slot];
     return fixture?.mode && fixture.mode !== mode ? undefined : fixture;
   }
   return undefined;
+}
+
+function isSuppressedBotFixture(options: CreateUniverseSystemOptions, galaxy: number, system: number, slot: number) {
+  if (options.mode !== 'test' || options.registeredPlanets === undefined) return false;
+  const npc = botFixtureFor(system, slot, options.mode);
+  if (!npc) return false;
+  return !options.playerPlanets?.some((planet) => planet.coordinate.galaxy === galaxy
+    && planet.coordinate.system === system
+    && planet.coordinate.position === slot)
+    && !options.registeredPlanets.some((planet) => planet.coordinate.galaxy === galaxy
+      && planet.coordinate.system === system
+      && planet.coordinate.position === slot);
 }
 
 function generatedKind(): UniversePlanetNode['kind'] {
@@ -413,10 +433,23 @@ function createPositionNode(
 ): UniversePlanetNode {
   const persisted = persistedPlanetFor(options, galaxy, system, slot);
   const registered = persisted ? undefined : registeredPlanetFor(options, galaxy, system, slot);
+  const coordinate = { galaxy, system, position: slot };
+  if (isSuppressedBotFixture(options, galaxy, system, slot) && !persisted && !registered) {
+    return {
+      id: `universe-empty-${galaxy}-${system}-${slot}`,
+      coordinate,
+      kind: 'empty',
+      name: 'Свободная позиция',
+      art: '',
+      statusLabel: KIND_LABELS.empty,
+      description: KIND_DESCRIPTIONS.empty,
+      known: true,
+      positionCoefficientPercent: getPositionCoefficientPercent(slot),
+    };
+  }
   const fixture = persisted || registered
     ? undefined
-    : fixtureFor(system, slot, options.mode);
-  const coordinate = { galaxy, system, position: slot };
+    : fixtureFor(system, slot, options.mode, options.registeredPlanets);
   const kind = persisted ? 'player' : registered?.kind ?? fixture?.kind ?? generatedKind();
   const ownerId = persisted?.ownerId ?? registered?.ownerId ?? fixture?.ownerId;
   const isHomeworld = persisted?.isHomeworld ?? registered?.isHomeworld ?? (kind === 'player' && system === 1 && slot === 1);
@@ -426,6 +459,7 @@ function createPositionNode(
   const art = persisted?.art?.trim() || registered?.art?.trim() || (isHomeworld
     ? options.currentPlanetArt?.trim() || pickAsset(assets.planetArts, slot, 'planet-home')
     : pickAsset(assets.planetArts, fixture?.artIndex ?? system * 5 + slot, 'planet-default'));
+  const fixtureMarker = fixture && 'fixture' in fixture ? fixture.fixture : undefined;
 
   return {
     id: persisted?.id ?? registered?.id ?? fixture?.id ?? `universe-${galaxy}-${system}-${slot}`,
@@ -438,7 +472,7 @@ function createPositionNode(
     statusLabel: KIND_LABELS[kind],
     description: KIND_DESCRIPTIONS[kind],
     known: registered?.known ?? fixture?.known ?? true,
-    ...(fixture?.fixture ? { fixture: fixture.fixture } : {}),
+    ...(fixtureMarker ? { fixture: fixtureMarker } : {}),
     positionCoefficientPercent: getPositionCoefficientPercent(slot),
   };
 }
@@ -448,7 +482,7 @@ function createUniverseSystemBase(options: CreateUniverseSystemOptions, assets: 
   const system = Math.min(SYSTEM_COUNT, Math.max(1, Math.floor(options.system)));
   const random = mulberry32(10_000 + galaxy * 977 + system * 1_003);
   const fixtureSlots = Array.from({ length: POSITION_COUNT }, (_, index) => index + 1)
-    .filter((slot) => fixtureFor(system, slot, options.mode));
+    .filter((slot) => fixtureFor(system, slot, options.mode, options.registeredPlanets) || isSuppressedBotFixture(options, galaxy, system, slot));
   const persistedSlots = (options.playerPlanets ?? [])
     .filter((planet) => planet.coordinate.galaxy === galaxy && planet.coordinate.system === system)
     .map((planet) => planet.coordinate.position);
@@ -777,7 +811,7 @@ export function getUniverseActionState(
   currentOwnerId: string,
   relation?: UniverseOwnerRelation,
 ): UniverseActionState {
-  const label = action === 'spy' ? 'Отправить шпионский зонд' : 'Отправить флот';
+  const label = action === 'spy' ? 'Отправить шпионский зонд' : action === 'attack' ? 'Начать атаку' : 'Отправить флот';
   if (node.kind !== 'player' && node.kind !== 'npc') {
     return {
       action,
@@ -802,7 +836,7 @@ export function getUniverseActionState(
       enabled: false,
       status: 'disabled',
       label,
-      reason: 'Это ваша планета.',
+      reason: action === 'attack' ? 'Атака запрещена против своей планеты.' : 'Это ваша планета.',
     };
   }
   if (action === 'fleet' && node.fixture?.id === TEST_MODE_ALLY_PLANET_FIXTURE.marker.id) {
@@ -830,7 +864,7 @@ export function getUniverseActionState(
       enabled: false,
       status: 'disabled',
       label,
-      reason: 'Шпионаж запрещён против союзной планеты.',
+      reason: action === 'attack' ? 'Атака запрещена против союзной планеты.' : 'Шпионаж запрещён против союзной планеты.',
     };
   }
   if (targetRelation === 'self') {
@@ -839,7 +873,7 @@ export function getUniverseActionState(
       enabled: false,
       status: 'disabled',
       label,
-      reason: 'Шпионаж запрещён против своей планеты.',
+      reason: action === 'attack' ? 'Атака запрещена против своей планеты.' : 'Шпионаж запрещён против своей планеты.',
     };
   }
   return {
@@ -847,17 +881,27 @@ export function getUniverseActionState(
     enabled: true,
     status: 'supported',
     label,
-    reason: targetRelation === 'enemy' ? 'Вражеская цель доступна для шпионажа.' : 'Нейтральная цель доступна для шпионажа.',
+    reason: targetRelation === 'enemy'
+      ? action === 'attack' ? 'Вражеская цель доступна для атаки.' : 'Вражеская цель доступна для шпионажа.'
+      : action === 'attack' ? 'Нейтральная цель доступна для атаки.' : 'Нейтральная цель доступна для шпионажа.',
   };
 }
 
-export function createUniverseNpcOwnerProfile(points?: UniverseOwnerPoints): UniverseOwnerProfile {
+export function createUniverseNpcOwnerProfile(
+  points?: UniverseOwnerPoints,
+  registeredPlanetIds?: readonly string[],
+): UniverseOwnerProfile {
   return normalizeUniverseOwnerProfile({
     id: NPC_OWNER_ID,
     displayName: 'Бот 01',
     raceId: 'veyra',
     ...(points ? { points } : {}),
-    planetIds: NPC_PLANET_FIXTURES.map((planet) => planet.id),
+    // The fixture list is only the default for callers that do not have a
+    // runtime registry. UniverseView supplies the authoritative IDs after
+    // reload so destroyed targets cannot reappear in the owner inspector.
+    planetIds: registeredPlanetIds
+      ? [...registeredPlanetIds]
+      : NPC_PLANET_FIXTURES.map((planet) => planet.id),
   });
 }
 

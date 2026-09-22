@@ -101,6 +101,7 @@ import type { EnergyLedger } from '../domain/energy/runtime.ts';
 import type { PlanetQueueRecord, PlanetResources, PlanetStateRecord, ResourceClock, ResourceClockEntry, SaveState, PlanetRuntime } from './contracts.ts';
 import type { AlliedPlanetState } from './contracts.ts';
 import { SHIP_IDS } from '../domain/combat/ids.ts';
+import { COMMANDER_IDS } from '../domain/combat/commanders.ts';
 import { isFlightCoordinate } from '../domain/flights/distance.ts';
 import type {
   FlightCompletionReason,
@@ -216,6 +217,12 @@ function numberOr(value: unknown, fallback: number): number {
 
 function optionalNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
 }
 
 function nonNegativeNumberOr(value: unknown, fallback: number): number {
@@ -447,6 +454,14 @@ function isPersistedFlightRecord(value: unknown): value is FlightRecord {
       || !isNonNegativeInteger(quantity)
       || quantity <= 0) return false;
   }
+  if (item.selectedCommanders !== undefined) {
+    if (!item.selectedCommanders || typeof item.selectedCommanders !== 'object' || Array.isArray(item.selectedCommanders)) return false;
+    for (const [commanderId, quantity] of Object.entries(item.selectedCommanders)) {
+      if (!COMMANDER_IDS.includes(commanderId as (typeof COMMANDER_IDS)[number])
+        || !isNonNegativeInteger(quantity)
+        || quantity <= 0) return false;
+    }
+  }
   if (item.missionId === 'espionage') {
     if (!isNonEmptyPersistedString(item.spyMissionId)
       || destinationRecord.kind !== 'planet'
@@ -455,6 +470,32 @@ function isPersistedFlightRecord(value: unknown): value is FlightRecord {
       || shipEntries.length !== 1
       || shipEntries[0][0] !== 'spy-probe'
       || shipEntries[0][1] !== 1) return false;
+  }
+  if (item.missionId === 'attack') {
+    if (destinationRecord.kind !== 'planet'
+      || !isNonEmptyPersistedString(item.destinationPlanetId)
+      || item.destinationPlanetId !== destinationRecord.planetId
+      || (item.targetRelation !== 'enemy' && item.targetRelation !== 'neutral')) return false;
+    const snapshot = item.attackSnapshot;
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return false;
+    const attackSnapshot = snapshot as Record<string, unknown>;
+    if (attackSnapshot.version !== 1
+      || ![5, 8, 12].includes(attackSnapshot.maxRounds as number)
+      || !['aegis', 'synod', 'veyra'].includes(String(attackSnapshot.attackerFactionId))
+      || !Array.isArray(attackSnapshot.attackerPriority)) return false;
+    if (item.attackResolution !== undefined) {
+      const resolution = item.attackResolution;
+      if (!resolution || typeof resolution !== 'object' || Array.isArray(resolution)) return false;
+      const attackResolution = resolution as Record<string, unknown>;
+      const loot = attackResolution.loot;
+      if (!isNonEmptyPersistedString(attackResolution.reportId)
+        || !isFinitePersistedNumber(attackResolution.resolvedAt)
+        || !isNonNegativeInteger(attackResolution.debris)
+        || !loot || typeof loot !== 'object' || Array.isArray(loot)) return false;
+      const lootRecord = loot as Record<string, unknown>;
+      if (!['metal', 'minerals', 'gas', 'debris'].every((key) => isNonNegativeInteger(lootRecord[key]))) return false;
+      if (attackResolution.lootCreditedAt !== undefined && !isFinitePersistedNumber(attackResolution.lootCreditedAt)) return false;
+    }
   }
 
   const phase = item.phase as FlightPhase;
@@ -629,7 +670,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     science,
     resourceClock: createResourceClock(now, ['helion-01']),
     flights: createDefaultFlightState(),
-    espionage: mode === 'test' ? createDefaultTestEspionageState() : createDefaultEspionageState(),
+    espionage: mode === 'test' ? createDefaultTestEspionageState(now) : createDefaultEspionageState(),
     alliedPlanets: mode === 'test'
       ? { [TEST_MODE_ALLY_PLANET_FIXTURE.planet.id]: createDefaultAlliedPlanetState(mode, now, science.levels) }
       : {},
@@ -846,8 +887,14 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       ? parsed.currentPlanetId.trim()
       : 'helion-01';
     const alliedPlanets = migrateAlliedPlanets(parsed.alliedPlanets, mode, timestamp, science.levels);
-    const migratedEspionage = migrateEspionageState(parsed.espionage);
-    const defaultTestEspionage = createDefaultTestEspionageState();
+    const rawEspionage = objectRecord(parsed.espionage);
+    // A canonical `targets` object is authoritative even when it is empty.
+    // Inspect the persisted envelope before migration because migration also
+    // exposes legacy `bot01Planets` through the canonical `targets` field.
+    const hasCanonicalTargetRegistry = Boolean(objectRecord(rawEspionage?.targets));
+    const hasLegacyBotRegistry = Boolean(objectRecord(rawEspionage?.bot01Planets));
+    const migratedEspionage = migrateEspionageState(parsed.espionage, timestamp);
+    const defaultTestEspionage = createDefaultTestEspionageState(timestamp);
     const savedTargets = Object.values(migratedEspionage.targets ?? {});
     const savedBotPlanets = savedTargets.filter((planet) => planet.ownerId === UNIVERSE_NPC_OWNER_ID);
     const legacyBotFixtures = savedBotPlanets.some((planet) => {
@@ -855,11 +902,18 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       return !population || population.total === undefined || population.civilian !== undefined;
     });
     const hasCurrentBotProfile = Boolean(migratedEspionage.bot01Profile)
-      && savedBotPlanets.length > 0
       && !legacyBotFixtures;
     const testTargets = defaultTestEspionage.targets ?? defaultTestEspionage.bot01Planets ?? {};
     const espionage = mode === 'test'
-      ? (hasCurrentBotProfile
+      ? (hasCanonicalTargetRegistry
+        ? {
+          ...migratedEspionage,
+          targets: migratedEspionage.targets ?? {},
+          // Keep the old alias synchronized without allowing it to resurrect
+          // targets that were removed from the canonical registry.
+          bot01Planets: (migratedEspionage.targets ?? {}) as NonNullable<typeof migratedEspionage.bot01Planets>,
+        }
+        : (hasCurrentBotProfile && hasLegacyBotRegistry)
         ? migratedEspionage
         : {
           ...migratedEspionage,

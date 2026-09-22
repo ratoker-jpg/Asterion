@@ -4,11 +4,17 @@ import type {
   EspionageState,
   SpyHunterNotice,
   SpyMission,
+  SpyOwnerProfile,
   SpyReportSnapshot,
   SpyTargetState,
+  OrbitalDebrisRecord,
 } from './types.ts';
 import { createDefaultEspionageState } from './runtime.ts';
 import { createBot01Planets, createDefaultBot01Profile } from './fixtures.ts';
+import { migrateFleetState } from '../fleet/runtime.ts';
+import { migrateDefenseState } from '../fleet/production.ts';
+import { migrateRepairWorkshopState } from '../repair/workshop.ts';
+import { createDefaultBuildingLevels, migrateBuildingQueue } from '../buildings/resource-zone.ts';
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -28,6 +34,21 @@ function numericRecord(value: unknown): Record<string, number> {
   )));
 }
 
+function migrateTargetResourceClock(value: unknown, now: number) {
+  const source = record(value);
+  const safeNow = nonNegative(now, Date.now());
+  const lastReconciledAt = Math.min(safeNow, nonNegative(source.lastReconciledAt, safeNow));
+  const remainder = record(source.remainder);
+  return {
+    lastReconciledAt,
+    remainder: {
+      metal: Math.min(0.999_999_999, Math.max(0, Number(remainder.metal) || 0)),
+      minerals: Math.min(0.999_999_999, Math.max(0, Number(remainder.minerals) || 0)),
+      gas: Math.min(0.999_999_999, Math.max(0, Number(remainder.gas) || 0)),
+    },
+  };
+}
+
 function list<T>(value: unknown, migrate: (candidate: unknown) => T | null): T[] {
   return Array.isArray(value) ? value.flatMap((candidate) => {
     const migrated = migrate(candidate);
@@ -38,7 +59,7 @@ function list<T>(value: unknown, migrate: (candidate: unknown) => T | null): T[]
 function migrateMission(value: unknown): SpyMission | null {
   const source = record(value);
   const status = source.status as SpyMission['status'];
-  if (!['transit', 'orbiting', 'returning', 'returned', 'destroyed'].includes(String(status))) return null;
+  if (!['transit', 'orbiting', 'returning', 'returned', 'destroyed', 'target-destroyed'].includes(String(status))) return null;
   const targetRelation = source.targetRelation;
   if (targetRelation !== 'self' && targetRelation !== 'ally' && targetRelation !== 'enemy' && targetRelation !== 'neutral') return null;
   const coordinate = record(source.targetCoordinate);
@@ -70,6 +91,7 @@ function migrateMission(value: unknown): SpyMission | null {
     ...(Number.isFinite(source.nextReportAt) ? { nextReportAt: Number(source.nextReportAt) } : {}),
     ...(Number.isFinite(source.returnedAt) ? { returnedAt: Number(source.returnedAt) } : {}),
     ...(Number.isFinite(source.destroyedAt) ? { destroyedAt: Number(source.destroyedAt) } : {}),
+    ...(Number.isFinite(source.targetDestroyedAt) ? { targetDestroyedAt: Number(source.targetDestroyedAt) } : {}),
     reportIds: Array.isArray(source.reportIds) ? source.reportIds.filter((item): item is string => typeof item === 'string') : [],
   };
 }
@@ -140,10 +162,16 @@ function migrateReport(value: unknown): SpyReportSnapshot | null {
 function migrateBot01Profile(value: unknown): Bot01Profile | null {
   const source = record(value);
   if (!Object.keys(source).length) return null;
+  return migrateSpyOwnerProfile(source) as Bot01Profile;
+}
+
+function migrateSpyOwnerProfile(value: unknown): SpyOwnerProfile | undefined {
+  const source = record(value);
+  if (!Object.keys(source).length) return undefined;
   return {
-    scienceLevels: numericRecord(source.scienceLevels) as Bot01Profile['scienceLevels'],
-    shipLevels: numericRecord(source.shipLevels) as Bot01Profile['shipLevels'],
-    commanderLevels: numericRecord(source.commanderLevels) as Bot01Profile['commanderLevels'],
+    scienceLevels: numericRecord(source.scienceLevels) as SpyOwnerProfile['scienceLevels'],
+    shipLevels: numericRecord(source.shipLevels) as SpyOwnerProfile['shipLevels'],
+    commanderLevels: numericRecord(source.commanderLevels) as SpyOwnerProfile['commanderLevels'],
   };
 }
 
@@ -164,12 +192,40 @@ function migrateNotice(value: unknown): SpyHunterNotice | null {
   };
 }
 
-function migrateSpyTarget(value: unknown): SpyTargetState | null {
+function migrateSpyTarget(value: unknown, now: number): SpyTargetState | null {
   const source = record(value);
   const coordinate = record(source.coordinate);
   if (!text(source.id) || ![coordinate.galaxy, coordinate.system, coordinate.position].every((part) => Number.isInteger(part) && Number(part) >= 1)) return null;
+  const resources = record(source.resources);
+  const legacyDebris = nonNegative(source.debris);
+  const canonicalDebris = nonNegative(resources.debris, legacyDebris);
+  const commanders = record(source.commanders);
+  const migratedCommanders = Object.fromEntries(Object.entries(commanders).flatMap(([id, candidate]) => {
+    const entry = record(candidate);
+    const count = Math.min(1, nonNegative(entry.count));
+    return count > 0 ? [[id, { level: nonNegative(entry.level), count }]] : [];
+  }));
+  const ownerProfile = migrateSpyOwnerProfile(source.ownerProfile)
+    ?? (Object.keys(record(source.shipLevels)).length
+      ? migrateSpyOwnerProfile({ shipLevels: source.shipLevels })
+      : undefined);
+  const buildingLevels = numericRecord(source.buildings);
+  const buildingQueue = Array.isArray(source.buildingQueue)
+    ? migrateBuildingQueue(source.buildingQueue, text(source.id), { ...createDefaultBuildingLevels(), ...buildingLevels })
+    : undefined;
+  const endgameLockedBuildings = Array.isArray(source.endgameLockedBuildings)
+    ? source.endgameLockedBuildings.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : undefined;
+  const {
+    debris: _legacyDebris,
+    ownerProfile: _legacyOwnerProfile,
+    shipLevels: _legacyShipLevels,
+    buildingQueue: _legacyBuildingQueue,
+    endgameLockedBuildings: _legacyEndgameLockedBuildings,
+    ...sourceWithoutLegacyProfile
+  } = source;
   return {
-    ...source,
+    ...sourceWithoutLegacyProfile,
     id: text(source.id),
     coordinate: { galaxy: Number(coordinate.galaxy), system: Number(coordinate.system), position: Number(coordinate.position) },
     ownerId: text(source.ownerId, 'unknown-owner'),
@@ -179,7 +235,43 @@ function migrateSpyTarget(value: unknown): SpyTargetState | null {
     // Bot 01's test espionage level is an explicit fixture contract, while
     // injected future owners may provide their own level.
     espionageLevel: nonNegative(source.espionageLevel, 10),
+    resources: {
+      metal: nonNegative(resources.metal),
+      minerals: nonNegative(resources.minerals),
+      gas: nonNegative(resources.gas),
+      debris: canonicalDebris,
+      developmentEnergy: nonNegative(resources.developmentEnergy),
+    },
+    buildings: buildingLevels,
+    fleet: migrateFleetState(source.fleet),
+    defense: migrateDefenseState(source.defense),
+    commanders: migratedCommanders as SpyTargetState['commanders'],
+    ...(ownerProfile ? { ownerProfile } : {}),
+    repair: migrateRepairWorkshopState(source.repair),
+    ...(buildingQueue ? { buildingQueue } : {}),
+    ...(endgameLockedBuildings ? { endgameLockedBuildings } : {}),
+    resourceClock: migrateTargetResourceClock(source.resourceClock, now),
   } as unknown as SpyTargetState;
+}
+
+function migrateOrbitalDebris(value: unknown): OrbitalDebrisRecord | null {
+  const source = record(value);
+  const coordinate = record(source.targetCoordinate ?? source.coordinate);
+  const id = text(source.id);
+  const targetPlanetId = text(source.targetPlanetId);
+  const debris = nonNegative(source.debris, nonNegative(source.amount));
+  if (!id || !targetPlanetId || debris <= 0
+    || ![coordinate.galaxy, coordinate.system, coordinate.position].every((part) => Number.isInteger(part) && Number(part) >= 1)) return null;
+  return {
+    id,
+    targetPlanetId,
+    targetPlanetName: text(source.targetPlanetName, 'Неизвестная планета'),
+    targetOwnerId: text(source.targetOwnerId, 'unknown-owner'),
+    targetCoordinate: { galaxy: Number(coordinate.galaxy), system: Number(coordinate.system), position: Number(coordinate.position) },
+    debris,
+    createdAt: nonNegative(source.createdAt),
+    ...(text(source.reportId) ? { reportId: text(source.reportId) } : {}),
+  };
 }
 
 function spyTargetMatchesCurrentContract(value: SpyTargetState): boolean {
@@ -194,7 +286,7 @@ function spyTargetMatchesCurrentContract(value: SpyTargetState): boolean {
     && !('shipLevels' in value);
 }
 
-export function migrateEspionageState(value: unknown): EspionageState {
+export function migrateEspionageState(value: unknown, now = Date.now()): EspionageState {
   if (!value || typeof value !== 'object') return createDefaultEspionageState();
   const source = record(value);
   const bot01Profile = migrateBot01Profile(source.bot01Profile);
@@ -203,7 +295,7 @@ export function migrateEspionageState(value: unknown): EspionageState {
   const rawTargets = hasCanonicalTargets ? source.targets : source.bot01Planets;
   const migratedTargets = rawTargets
     ? Object.fromEntries(Object.entries(rawTargets).flatMap(([id, candidate]) => {
-      const migrated = migrateSpyTarget(candidate);
+      const migrated = migrateSpyTarget(candidate, now);
       return migrated ? [[id, migrated]] : [];
     }))
     : undefined;
@@ -211,12 +303,17 @@ export function migrateEspionageState(value: unknown): EspionageState {
   const legacyBotTargetsNeedRepair = !hasCanonicalTargets
     && hasTargets
     && !Object.values(migratedTargets!).every(spyTargetMatchesCurrentContract);
-  const targets = legacyBotTargetsNeedRepair ? createBot01Planets() : migratedTargets;
+  const targets = legacyBotTargetsNeedRepair ? createBot01Planets(now) : migratedTargets;
   const currentBot01Profile = bot01Profile ?? (hasLegacyBotTargets && hasTargets ? createDefaultBot01Profile() : undefined);
+  const orbitalDebris = Object.fromEntries(Object.entries(record(source.orbitalDebris)).flatMap(([key, candidate]) => {
+    const migrated = migrateOrbitalDebris(candidate);
+    return migrated ? [[key, migrated]] : [];
+  }));
   return {
     missions: list(source.missions, migrateMission),
     reports: list(source.reports, migrateReport),
     hunterNotices: list(source.hunterNotices, migrateNotice),
+    orbitalDebris,
     ...(targets ? { targets } : {}),
     ...(hasLegacyBotTargets && targets ? { bot01Planets: targets as Record<string, Bot01PlanetState> } : {}),
     ...(currentBot01Profile ? { bot01Profile: currentBot01Profile } : {}),

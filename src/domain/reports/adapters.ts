@@ -1,6 +1,7 @@
 import {
   ASTERION_LOCAL_PLAYER_ID,
   getBattleResultForPlayer,
+  isAsterionLocalPlayerId,
   type BattleReport,
   type BattleSide,
 } from '../combat/report.ts';
@@ -36,8 +37,8 @@ const EMPTY_COUNTS = (): ReportCategoryCounts => ({
 });
 
 function localSide(report: BattleReport): BattleSide | null {
-  if (report.attacker.playerId === ASTERION_LOCAL_PLAYER_ID) return 'attacker';
-  if (report.defender.playerId === ASTERION_LOCAL_PLAYER_ID) return 'defender';
+  if (isAsterionLocalPlayerId(report.attacker.playerId)) return 'attacker';
+  if (isAsterionLocalPlayerId(report.defender.playerId)) return 'defender';
   return null;
 }
 
@@ -51,6 +52,14 @@ function battleStatus(report: BattleReport) {
   const side = localSide(report);
   const result = getBattleResultForPlayer(report, ASTERION_LOCAL_PLAYER_ID);
   if (side) {
+    if (report.missionType === 'attack' && side === 'attacker') {
+      if (result === 'victory') return { label: 'ПОБЕДА ПРИ АТАКЕ', tone: 'success' as const };
+      if (result === 'defeat') return { label: 'ПОРАЖЕНИЕ ПРИ АТАКЕ', tone: 'danger' as const };
+    }
+    if (report.missionType === 'attack' && side === 'defender') {
+      if (result === 'victory') return { label: 'ПОБЕДА ПРИ ОБОРОНЕ', tone: 'success' as const };
+      if (result === 'defeat') return { label: 'ПОРАЖЕНИЕ ПРИ ОБОРОНЕ', tone: 'danger' as const };
+    }
     if (result === 'victory') return { label: 'ПОБЕДА', tone: 'success' as const };
     if (result === 'defeat') return { label: 'ПОРАЖЕНИЕ', tone: 'danger' as const };
     return { label: 'НИЧЬЯ', tone: 'warning' as const };

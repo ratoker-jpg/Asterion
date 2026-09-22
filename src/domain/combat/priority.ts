@@ -1,5 +1,5 @@
 import { COMMANDER_IDS, isCommanderId, type CommanderId } from './commanders.ts';
-import { getRuntimeSaveKey } from '../runtime/mode.ts';
+import { getRuntimeSaveKey, type RuntimeMode } from '../runtime/mode.ts';
 
 export const ASTERION_SAVE_KEY = getRuntimeSaveKey();
 export const COMBAT_SAVE_SCHEMA_VERSION = 6;
@@ -117,12 +117,12 @@ function resolveStorage(storage?: StorageLike): StorageLike | null {
   return window.localStorage;
 }
 
-export function readCombatPriority(storage?: StorageLike): CombatPriorityState {
+export function readCombatPriority(storage?: StorageLike, mode?: RuntimeMode): CombatPriorityState {
   const target = resolveStorage(storage);
   if (!target) return createDefaultCombatPriority();
 
   try {
-    const raw = target.getItem(ASTERION_SAVE_KEY);
+    const raw = target.getItem(mode === undefined ? ASTERION_SAVE_KEY : getRuntimeSaveKey(mode));
     if (!raw) return createDefaultCombatPriority();
     const parsed = JSON.parse(raw) as SaveEnvelope;
     return migrateCombatPriority(parsed.combatPriority);
@@ -138,13 +138,15 @@ export type PersistCombatPriorityResult =
 export function persistCombatPriority(
   value: CombatPriorityState,
   storage?: StorageLike,
+  mode?: RuntimeMode,
 ): PersistCombatPriorityResult {
   const normalized = migrateCombatPriority(value);
   const target = resolveStorage(storage);
   if (!target) return { ok: false, value: normalized, error: 'Локальное сохранение недоступно.' };
 
   try {
-    const raw = target.getItem(ASTERION_SAVE_KEY);
+    const saveKey = mode === undefined ? ASTERION_SAVE_KEY : getRuntimeSaveKey(mode);
+    const raw = target.getItem(saveKey);
     let parsed: SaveEnvelope = {};
     if (raw) parsed = JSON.parse(raw) as SaveEnvelope;
 
@@ -153,7 +155,7 @@ export function persistCombatPriority(
       schemaVersion: COMBAT_SAVE_SCHEMA_VERSION,
       combatPriority: normalized,
     };
-    target.setItem(ASTERION_SAVE_KEY, JSON.stringify(nextSave));
+    target.setItem(saveKey, JSON.stringify(nextSave));
 
     if (typeof window !== 'undefined' && target === window.localStorage) {
       window.dispatchEvent(new CustomEvent<CombatPriorityState>(COMBAT_PRIORITY_CHANGED_EVENT, { detail: normalized }));

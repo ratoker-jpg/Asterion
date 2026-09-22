@@ -38,6 +38,7 @@ import {
   getUniverseOwnerRelation,
   getUniverseSlotPoint,
   getUniverseTimedObjectSchedule,
+  BOT_01_PLANET_FIXTURES,
   resolveUniverseAsteroidCollisions,
   resolveUniverseFixtures,
   TEST_MODE_ALLY_PLANET_FIXTURE,
@@ -154,6 +155,35 @@ test('registered Test Mode targets override coordinate fixtures and block fleet 
     assert.equal(node?.fixture, undefined);
     assert.equal(getUniverseActionState('fleet', node!, 'player-current', relation).enabled, false);
   }
+});
+
+test('authoritative Test Mode targets do not recreate a destroyed Bot 01 planet', () => {
+  const registeredPlanets = BOT_01_PLANET_FIXTURES.map((fixture) => ({
+    id: fixture.id,
+    coordinate: { galaxy: GALAXY, system: fixture.system, position: fixture.position },
+    name: fixture.name,
+    kind: 'npc' as const,
+    ownerId: UNIVERSE_NPC_OWNER_ID,
+  }));
+  const destroyed = registeredPlanets[0];
+  const map = createUniverseMap({
+    mode: 'test',
+    registeredPlanets: registeredPlanets.filter((planet) => planet.id !== destroyed.id),
+  });
+  const nodes = map.systems.flatMap((system) => system.positions);
+
+  assert.equal(nodes.some((node) => node.id === destroyed.id), false);
+  assert.equal(nodes.filter((node) => node.kind === 'npc' && node.ownerId === UNIVERSE_NPC_OWNER_ID).length, registeredPlanets.length - 1);
+  assert.equal(nodes.find((node) => node.coordinate.galaxy === destroyed.coordinate.galaxy
+    && node.coordinate.system === destroyed.coordinate.system
+    && node.coordinate.position === destroyed.coordinate.position)?.kind, 'empty');
+});
+
+test('Bot 01 owner profile uses the authoritative runtime registry when supplied', () => {
+  const profile = createUniverseNpcOwnerProfile(undefined, ['bot-01-alive']);
+
+  assert.deepEqual(profile.planetIds, ['bot-01-alive']);
+  assert.equal(profile.planetIds.includes(BOT_01_PLANET_FIXTURES[0].id), false);
 });
 
 test('dynamic objects are scheduled independently and never duplicate within a system', () => {
@@ -379,6 +409,10 @@ test('spy and fleet actions follow the owner relation contract', () => {
   assert.equal(getUniverseActionState('fleet', homeworld, 'player-current').reason, 'Своя планета принимает транспортировку.');
   assert.equal(getUniverseActionState('spy', foreign, 'player-current', 'neutral').status, 'supported');
   assert.equal(getUniverseActionState('spy', foreign, 'player-current', 'neutral').enabled, true);
+  assert.equal(getUniverseActionState('attack', foreign, 'player-current', 'neutral').enabled, true);
+  assert.equal(getUniverseActionState('attack', foreign, 'player-current', 'enemy').reason, 'Вражеская цель доступна для атаки.');
+  assert.equal(getUniverseActionState('attack', ally, 'player-current', 'ally').enabled, false);
+  assert.equal(getUniverseActionState('attack', homeworld, 'player-current', 'self').enabled, false);
   assert.equal(getUniverseActionState('fleet', foreign, 'player-current').enabled, false);
   assert.equal(getUniverseActionState('fleet', ally, 'player-current').status, 'supported');
   assert.equal(getUniverseActionState('fleet', ally, 'player-current').enabled, true);

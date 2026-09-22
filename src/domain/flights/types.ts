@@ -1,6 +1,8 @@
 import type { ShipId } from '../combat/ids.ts';
+import type { CommanderId } from '../combat/commanders.ts';
 import type { UniverseCoordinate, UniverseObjectKind } from '../universe/types.ts';
 import type { TransportCargo } from './cargo.ts';
+import type { AttackLaunchSnapshot, AttackResolution } from '../attack/types.ts';
 
 export type MissionId =
   | 'transport'
@@ -48,11 +50,20 @@ export type FlightRecord = {
   /** Target snapshot retained so arrival validation is not based on UI state. */
   targetKind?: UniverseObjectKind;
   destinationPlanetId?: string;
+  /** Human-readable target identity for the active-flight table. */
+  targetPlanetName?: string;
+  targetOwnerName?: string;
   /** Destination identity/relation are dispatch-time snapshots, not live authorization. */
   destinationOwnerId?: string;
   targetRelation?: TargetRelation;
   destinationCoordinate: UniverseCoordinate;
   selectedShips: Partial<Record<ShipId, number>>;
+  /** Attack-only commander selection, persisted with the flight reservation. */
+  selectedCommanders?: Partial<Record<CommanderId, number>>;
+  /** Attack-only dispatch snapshot used by the live arrival resolver. */
+  attackSnapshot?: AttackLaunchSnapshot;
+  /** Attack-only materialized result used to make reconcile replay-safe. */
+  attackResolution?: AttackResolution;
   populationReserved: number;
   routeDistance: number;
   effectiveSpeed: number;

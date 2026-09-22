@@ -61,6 +61,7 @@ import {
   GALAXY,
   MAX_PLANETS_PER_OWNER,
   SYSTEM_COUNT,
+  UNIVERSE_NPC_OWNER_ID,
   createUniverseNpcOwnerProfile,
   TEST_MODE_ALLY_PLANET_FIXTURE,
   createUniverseMap,
@@ -109,7 +110,8 @@ type UniverseViewProps = {
   mode: RuntimeMode;
   onColonize: (coordinate: UniverseCoordinate) => void;
   onTransport: (target: { planetId: string; coordinate: UniverseCoordinate; relation: TargetRelation }) => void;
-  onSpy: (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile }) => void;
+  onSpy: (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile; targetKind: 'player' | 'npc' }) => void;
+  onAttack: (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile; targetKind: 'player' | 'npc' }) => void;
   focusTarget?: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string; mode?: 'inspect' | 'highlight' } | null;
   onFocusHandled?: () => void;
 };
@@ -186,6 +188,10 @@ function FleetIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2.5 4.1 12.3-4.1-2.5-4.1 2.5L12 2.5Z" /><path d="M8.5 12H4l3.4-3.4M15.5 12H20l-3.4-3.4M12 7v8" /></svg>;
 }
 
+function AttackIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 19 5.4-5.4M13.6 10.4 19 5" /><path d="m14.5 4.5 5 0 0 5M4.5 14.5l0 5 5 0" /><circle cx="12" cy="12" r="2.3" /></svg>;
+}
+
 function UniverseActionButton({
   action,
   node,
@@ -200,8 +206,8 @@ function UniverseActionButton({
   onAction: (action: UniverseAction, node: UniversePlanetNode) => void;
 }) {
   const state = getUniverseActionState(action, node, currentOwnerId, relation);
-  const Icon = action === 'spy' ? EyeIcon : FleetIcon;
-  const label = action === 'spy' ? 'Отправить шпионский зонд' : 'Отправить флот';
+  const Icon = action === 'spy' ? EyeIcon : action === 'attack' ? AttackIcon : FleetIcon;
+  const label = action === 'spy' ? 'Отправить шпионский зонд' : action === 'attack' ? 'Начать атаку' : 'Отправить флот';
   const title = `${label}: ${state.reason}`;
 
   return (
@@ -288,11 +294,12 @@ function OwnerInspector({
               <div className="universe-planet-row-actions">
                 <UniverseActionButton action="spy" node={planet} currentOwnerId={currentOwnerId} relation={getUniverseOwnerRelation(planet, currentOwnerId, currentAlliance, owner, diplomacy)} onAction={onAction} />
                 <UniverseActionButton action="fleet" node={planet} currentOwnerId={currentOwnerId} relation={getUniverseOwnerRelation(planet, currentOwnerId, currentAlliance, owner, diplomacy)} onAction={onAction} />
+                <UniverseActionButton action="attack" node={planet} currentOwnerId={currentOwnerId} relation={getUniverseOwnerRelation(planet, currentOwnerId, currentAlliance, owner, diplomacy)} onAction={onAction} />
               </div>
             </li>
           ))}
         </ul>
-        <p className="universe-data-note">Нажмите на планету, чтобы перейти к её системе. Свои и союзные миры принимают транспорт, вражеские и нейтральные доступны для шпионажа.</p>
+        <p className="universe-data-note">Нажмите на планету, чтобы перейти к её системе. Свои и союзные миры принимают транспорт, вражеские и нейтральные доступны для шпионажа и атаки.</p>
       </section>
     </div>
   );
@@ -368,7 +375,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, occupiedNodes, onSelect }
   </button>;
 }
 
-export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, rating, command, playerPlanets, spyTargets, mode, onColonize, onTransport, onSpy, focusTarget, onFocusHandled }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, rating, command, playerPlanets, spyTargets, mode, onColonize, onTransport, onSpy, onAttack, focusTarget, onFocusHandled }: UniverseViewProps) {
   const [system, setSystem] = useState(1);
   const [focusEmpty, setFocusEmpty] = useState(false);
   const [showSlotLabels, setShowSlotLabels] = useState(true);
@@ -398,7 +405,10 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
   const owners = useMemo(() => {
     const next = new Map<string, UniverseOwnerProfile>([[owner.id, owner]]);
     if (mode === 'test') {
-      const npc = createUniverseNpcOwnerProfile(owner.points);
+      const registeredBotPlanetIds = spyTargets
+        .filter((target) => target.ownerId === UNIVERSE_NPC_OWNER_ID)
+        .map((target) => target.id);
+      const npc = createUniverseNpcOwnerProfile(owner.points, registeredBotPlanetIds);
       next.set(npc.id, npc);
       next.set(TEST_MODE_ALLY_PLANET_FIXTURE.owner.id, normalizeUniverseOwnerProfile(TEST_MODE_ALLY_PLANET_FIXTURE.owner));
     }
@@ -529,8 +539,10 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
       });
       return;
     }
-    if (action === 'spy' && actionState.enabled && targetOwner && (relation === 'enemy' || relation === 'neutral')) {
-      onSpy({ planetId: node.id, planetName: node.name, coordinate: node.coordinate, relation, owner: targetOwner });
+    if ((action === 'spy' || action === 'attack') && actionState.enabled && targetOwner && (relation === 'enemy' || relation === 'neutral')) {
+      const target = { planetId: node.id, planetName: node.name, coordinate: node.coordinate, relation, owner: targetOwner, targetKind: node.kind as 'player' | 'npc' };
+      if (action === 'attack') onAttack(target);
+      else onSpy(target);
       return;
     }
     onNotice(`${actionState.label}: ${actionState.reason} Цель ${formatUniverseCoordinate(node.coordinate)}.`);

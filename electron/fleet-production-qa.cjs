@@ -75,19 +75,29 @@ async function readSave(win) {
 }
 
 async function seedProductionSave(win, mutator) {
-  const ok = await win.webContents.executeJavaScript(`(() => {
-    const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
-    const planet = save?.planets?.['helion-01'];
-    if (!save || !planet) return false;
-    (${mutator.toString()})(save, planet);
-    localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
-    return true;
+  const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+  const result = await win.webContents.executeJavaScript(`(() => {
+    try {
+      const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
+      const planet = save?.planets?.['helion-01'];
+      if (!save || !planet) return { ok: false, error: 'missing test save or homeworld' };
+      (${mutator.toString()})(save, planet);
+      localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
+      window.setTimeout(() => window.location.reload(), 0);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: String(error?.stack || error) };
+    }
   })()`);
-  if (!ok) throw new Error('Could not seed fleet production save');
-  await reload(win);
+  if (!result?.ok) throw new Error(`Could not seed fleet production save: ${result?.error || 'unknown error'}`);
+  await done;
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await waitFor(win, `localStorage.getItem(${JSON.stringify(TEST_KEY)})`);
+  await settle(win);
 }
 
 async function setStoredSourceGas(win, gas) {
+  const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   const ok = await win.webContents.executeJavaScript(`(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
     const planet = save?.planets?.['helion-01'];
@@ -95,10 +105,14 @@ async function setStoredSourceGas(win, gas) {
     save.gas = ${JSON.stringify(gas)};
     planet.resources = { ...planet.resources, gas: ${JSON.stringify(gas)} };
     localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
+    window.setTimeout(() => window.location.reload(), 0);
     return true;
   })()`);
   if (!ok) throw new Error('Could not set stored source gas');
-  await reload(win);
+  await done;
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await waitFor(win, `localStorage.getItem(${JSON.stringify(TEST_KEY)})`);
+  await settle(win);
 }
 
 async function chooseFreeColonizationTarget(win) {
@@ -469,6 +483,209 @@ async function runFlightRuntimeCycle(win, label) {
   return { recalledPhase: 'returning', successfulPhase: 'completed', colonyId, persisted: true };
 }
 
+async function seedPlanetSwitchSave(win) {
+  await seedProductionSave(win, (save, sourcePlanet) => {
+    const homeworld = JSON.parse(JSON.stringify(sourcePlanet));
+    const colony = JSON.parse(JSON.stringify(sourcePlanet));
+    const zeroFleet = (planet, scoutCount) => ({
+      ...planet.fleet,
+      ships: Object.fromEntries(Object.keys(planet.fleet.ships || {}).map((id) => [id, id === 'scout' ? scoutCount : 0])),
+      commanders: Object.fromEntries(Object.keys(planet.fleet.commanders || {}).map((id) => [id, 0])),
+    });
+    const zeroDefense = (planet) => ({
+      ...planet.defense,
+      defenses: Object.fromEntries(Object.keys(planet.defense.defenses || {}).map((id) => [id, 0])),
+    });
+    const emptyFleetProduction = { shipQueue: [], defenseQueue: [], commanderQueue: [] };
+
+    homeworld.id = 'helion-01';
+    homeworld.name = 'Helion 01';
+    homeworld.universeGalaxy = 1;
+    homeworld.universeSystem = 1;
+    homeworld.universePosition = 1;
+    homeworld.buildings = { ...homeworld.buildings, shipyard: 15, hangar: 20, 'advanced-factory': 10 };
+    homeworld.fleet = zeroFleet(homeworld, 4);
+    homeworld.defense = zeroDefense(homeworld);
+    homeworld.fleetProduction = emptyFleetProduction;
+    homeworld.spaceportUpgrades = { ...homeworld.spaceportUpgrades, shipLevels: {}, shipQueue: [], commanderQueue: [] };
+    homeworld.resources = { metal: 25_000_000, minerals: 25_000_000, gas: 25_000_000 };
+
+    colony.id = 'qa-colony-01';
+    colony.name = 'Колония QA';
+    colony.universeGalaxy = 1;
+    colony.universeSystem = 1;
+    colony.universePosition = 2;
+    colony.buildings = { ...colony.buildings, shipyard: 4, hangar: 4, 'advanced-factory': 0 };
+    colony.fleet = zeroFleet(colony, 1);
+    colony.defense = zeroDefense(colony);
+    colony.fleetProduction = emptyFleetProduction;
+    colony.spaceportUpgrades = { ...colony.spaceportUpgrades, shipLevels: {}, shipQueue: [], commanderQueue: [] };
+    colony.resources = { metal: 777_000, minerals: 888_000, gas: 999_000 };
+
+    const now = Date.now();
+    const clockEntry = { lastReconciledAt: now, remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
+    save.planets = { 'helion-01': homeworld, 'qa-colony-01': colony };
+    save.currentPlanetId = 'helion-01';
+    save.metal = homeworld.resources.metal;
+    save.minerals = homeworld.resources.minerals;
+    save.gas = homeworld.resources.gas;
+    save.queues = { 'helion-01': [], 'qa-colony-01': [] };
+    save.science = {
+      ...save.science,
+      levels: { ...save.science.levels, 4: 1, 14: 13, 15: 0, 23: 10 },
+      queue: [],
+    };
+    save.resourceClock = { ...save.resourceClock, ...clockEntry, byPlanet: { 'helion-01': clockEntry, 'qa-colony-01': clockEntry } };
+    save.flights = { records: [], requestIndex: {} };
+    save.espionage = { missions: [], reports: [], hunterNotices: [], orbitalDebris: {} };
+  });
+}
+
+async function selectPlanet(win, planetId) {
+  await click(win, '[data-qa-current-planet]');
+  await waitFor(win, `document.querySelector('[data-qa-planet-option="${planetId}"]')`);
+  await click(win, `[data-qa-planet-option="${planetId}"]`);
+  await waitFor(win, `document.querySelector('[data-qa-current-planet]')?.getAttribute('data-planet-id') === ${JSON.stringify(planetId)}`);
+  await settle(win);
+}
+
+async function runPlanetSwitchRegression(win, label) {
+  await seedPlanetSwitchSave(win);
+  await click(win, '[data-qa-test-speed="1"]');
+  await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×1')`);
+  await click(win, '[data-qa-route="fleets"]');
+  await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
+  await setFleetShipQuantity(win, 'scout', 2);
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-open]') && !document.querySelector('[data-qa-flight-preview-open]').disabled`);
+  await click(win, '[data-qa-flight-preview-open]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
+  const homeDraft = {
+    planetId: await win.webContents.executeJavaScript(`document.querySelector('[data-qa-current-planet]').getAttribute('data-planet-id')`),
+    yard: await win.webContents.executeJavaScript(`document.querySelector('.fleet-yard-level-v1').textContent.trim()`),
+    selected: await win.webContents.executeJavaScript(`document.querySelector('[data-qa-fleet-ship="scout"] input').value`),
+    previewOpen: await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-flight-preview-backdrop]'))`),
+  };
+  if (homeDraft.planetId !== 'helion-01' || !homeDraft.yard.includes('15') || homeDraft.selected !== '2' || !homeDraft.previewOpen) {
+    throw new Error(`${label}: Homeworld preview fixture failed ${JSON.stringify(homeDraft)}`);
+  }
+
+  await selectPlanet(win, 'qa-colony-01');
+  await waitFor(win, `!document.querySelector('[data-qa-flight-preview-backdrop]')`);
+  await waitFor(win, `document.querySelector('.fleet-yard-level-v1')?.textContent?.includes('4')`);
+  const colonyDraft = await win.webContents.executeJavaScript(`(() => ({
+    planetId: document.querySelector('[data-qa-current-planet]')?.getAttribute('data-planet-id') || '',
+    name: document.querySelector('.fleet-yard-card-v1 small')?.textContent?.trim() || '',
+    yard: document.querySelector('.fleet-yard-level-v1')?.textContent?.trim() || '',
+    selected: document.querySelector('[data-qa-fleet-ship="scout"] input')?.value || '',
+    previewOpen: Boolean(document.querySelector('[data-qa-flight-preview-backdrop]')),
+    previewMetrics: Boolean(document.querySelector('[data-qa-flight-preview]')),
+  }))()`);
+  if (colonyDraft.planetId !== 'qa-colony-01' || !colonyDraft.name.includes('Колония QA') || !colonyDraft.yard.includes('4') || colonyDraft.selected !== '0' || colonyDraft.previewOpen || colonyDraft.previewMetrics) {
+    throw new Error(`${label}: colony retained stale Homeworld draft ${JSON.stringify(colonyDraft)}`);
+  }
+
+  await click(win, '[data-qa-fleet-section="ships"]');
+  await waitFor(win, `document.querySelector('[data-qa-construction-mode="ships"]')`);
+  await setQuantity(win, 'scout', 1);
+  await click(win, '[data-qa-fleet-production-item="scout"] .shipyard-build-button-v1');
+  await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.planets?.['qa-colony-01']?.fleetProduction?.shipQueue?.length === 1`);
+  const colonyQueue = await readSave(win);
+  if (colonyQueue.planets['helion-01'].fleetProduction.shipQueue.length !== 0 || colonyQueue.planets['qa-colony-01'].fleetProduction.shipQueue.length !== 1) {
+    throw new Error(`${label}: colony production crossed planet boundary ${JSON.stringify(colonyQueue.planets)}`);
+  }
+
+  await selectPlanet(win, 'helion-01');
+  await waitFor(win, `document.querySelector('.fleet-yard-level-v1')?.textContent?.includes('15')`);
+  const homeAfterSwitch = await readSave(win);
+  const homeView = await win.webContents.executeJavaScript(`(() => ({
+    selected: document.querySelector('[data-qa-fleet-ship="scout"] input')?.value || '',
+    previewOpen: Boolean(document.querySelector('[data-qa-flight-preview-backdrop]')),
+    yard: document.querySelector('.fleet-yard-level-v1')?.textContent?.trim() || '',
+  }))()`);
+  if (homeView.selected !== '0' || homeView.previewOpen || !homeView.yard.includes('15') || homeAfterSwitch.planets['helion-01'].fleetProduction.shipQueue.length !== 0 || homeAfterSwitch.planets['qa-colony-01'].fleetProduction.shipQueue.length !== 1) {
+    throw new Error(`${label}: Homeworld received colony state after switching back ${JSON.stringify({ homeView, queues: { home: homeAfterSwitch.planets['helion-01'].fleetProduction.shipQueue.length, colony: homeAfterSwitch.planets['qa-colony-01'].fleetProduction.shipQueue.length } })}`);
+  }
+
+  await reload(win);
+  await click(win, '[data-qa-route="fleets"]');
+  await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
+  const reloaded = await readSave(win);
+  if (reloaded.currentPlanetId !== 'helion-01' || reloaded.planets['helion-01'].fleetProduction.shipQueue.length !== 0 || reloaded.planets['qa-colony-01'].fleetProduction.shipQueue.length !== 1) {
+    throw new Error(`${label}: planet queues did not persist after reload ${JSON.stringify({ currentPlanetId: reloaded.currentPlanetId, queues: reloaded.planets })}`);
+  }
+  return { homeDraft, colonyDraft, homeView, queueLengths: { home: reloaded.planets['helion-01'].fleetProduction.shipQueue.length, colony: reloaded.planets['qa-colony-01'].fleetProduction.shipQueue.length } };
+}
+
+async function runPlanetoLomTrace(win, label) {
+  await seedProductionSave(win, (save, planet) => {
+    save.currentPlanetId = 'helion-01';
+    planet.buildings = { ...planet.buildings, shipyard: 15, hangar: 20, 'advanced-factory': 10 };
+    planet.resources = { metal: 25_000_000, minerals: 25_000_000, gas: 25_000_000 };
+    planet.fleetProduction = { shipQueue: [], defenseQueue: [], commanderQueue: [] };
+    if (save.planets['qa-colony-01']) save.planets['qa-colony-01'].fleetProduction = { shipQueue: [], defenseQueue: [], commanderQueue: [] };
+    save.metal = planet.resources.metal;
+    save.minerals = planet.resources.minerals;
+    save.gas = planet.resources.gas;
+    const scienceNow = Date.now();
+    save.science = {
+      ...save.science,
+      levels: { ...save.science.levels, 4: 1, 14: 13, 15: 0, 23: 10 },
+      queue: [{
+        id: 'qa-parallel-universes-completion',
+        scienceId: 15,
+        fromLevel: 0,
+        toLevel: 1,
+        startedAt: scienceNow,
+        finishAt: scienceNow + 1_500,
+        durationMs: 1_500,
+        cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+      }],
+    };
+  });
+  await click(win, '[data-qa-test-speed="1"]');
+  await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×1')`);
+  await click(win, '[data-qa-route="fleets"]');
+  await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
+  await click(win, '[data-qa-fleet-section="ships"]');
+  await waitFor(win, `document.querySelector('[data-qa-construction-mode="ships"]')`);
+  const blocked = await win.webContents.executeJavaScript(`(() => {
+    const row = document.querySelector('[data-qa-fleet-production-item="death-star"]');
+    return {
+      status: row?.getAttribute('data-qa-production-requirements') || '',
+      reason: row?.getAttribute('data-qa-production-requirement-reason') || '',
+      hasBuildButton: Boolean(row?.querySelector('.shipyard-build-button-v1')),
+    };
+  })()`);
+  if (blocked.status !== 'unmet' || !blocked.reason.includes('Параллельные вселенные уровня 1') || blocked.hasBuildButton) {
+    throw new Error(`${label}: Planeto-lom was not science-blocked in UI ${JSON.stringify(blocked)}`);
+  }
+
+  await waitFor(win, `document.querySelector('[data-qa-fleet-production-item="death-star"]')?.getAttribute('data-qa-production-requirements') === 'met'`);
+  const unlocked = await win.webContents.executeJavaScript(`(() => ({
+    status: document.querySelector('[data-qa-fleet-production-item="death-star"]')?.getAttribute('data-qa-production-requirements') || '',
+    hasBuildButton: Boolean(document.querySelector('[data-qa-fleet-production-item="death-star"] .shipyard-build-button-v1')),
+  }))()`);
+  if (unlocked.status !== 'met' || !unlocked.hasBuildButton) throw new Error(`${label}: Planeto-lom did not unlock without reload ${JSON.stringify(unlocked)}`);
+
+  await setQuantity(win, 'death-star', 1);
+  const before = await readSave(win);
+  await click(win, '[data-qa-fleet-production-item="death-star"] .shipyard-build-button-v1');
+  await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.planets?.['helion-01']?.fleetProduction?.shipQueue?.length === 1`);
+  await sleep(1_100);
+  const afterTick = await readSave(win);
+  const order = afterTick.planets['helion-01'].fleetProduction.shipQueue[0];
+  if (!order || order.completedQuantity !== 0 || afterTick.planets['helion-01'].resources.metal >= before.planets['helion-01'].resources.metal || afterTick.planets['qa-colony-01']?.fleetProduction?.shipQueue?.length > 0) {
+    throw new Error(`${label}: Planeto-lom queue/resource trace crossed state or completed unexpectedly ${JSON.stringify({ order, before: before.planets['helion-01']?.resources, after: afterTick.planets['helion-01']?.resources })}`);
+  }
+  await reload(win);
+  const reloaded = await readSave(win);
+  const persistedOrder = reloaded.planets['helion-01'].fleetProduction.shipQueue[0];
+  if (!persistedOrder || persistedOrder.completedQuantity !== 0 || reloaded.planets['qa-colony-01']?.fleetProduction?.shipQueue?.length > 0) {
+    throw new Error(`${label}: Planeto-lom queue was lost or duplicated after reload ${JSON.stringify(reloaded.planets)}`);
+  }
+  return { blocked, unlocked, queueId: persistedOrder.id, completedQuantity: persistedOrder.completedQuantity };
+}
+
 async function capture(win, directory, name) {
   if (skipScreenshots) return;
   fs.mkdirSync(directory, { recursive: true });
@@ -498,6 +715,7 @@ async function runViewport(width, height) {
     await seedProductionSave(win, (_save, planetState) => {
       planetState.buildings.shipyard = 1;
       planetState.buildings['advanced-factory'] = 0;
+      _save.science.levels[4] = 1;
     });
 
     await click(win, '[data-qa-route="fleets"]');
@@ -693,6 +911,8 @@ async function runViewport(width, height) {
 
     const transportCycle = await runTransportUiCycle(win, label, directory);
     const flightCycle = await runFlightRuntimeCycle(win, label);
+    const planetSwitch = await runPlanetSwitchRegression(win, label);
+    const planetoLom = await runPlanetoLomTrace(win, label);
 
     await seedProductionSave(win, (save, planetState) => {
       const seedNow = Date.now();
@@ -734,7 +954,7 @@ async function runViewport(width, height) {
     })()`);
     if (layout.horizontalOverflow || !layout.longPage || layout.orderCount !== 8 || layout.queueOverflowY !== 'visible' || layout.queueMaxHeight !== 'none' || layout.queueScrollHeight < layout.queueClientHeight) throw new Error(`${label}: fleet production layout overflow/long-page contract failed ${JSON.stringify(layout)}`);
     await capture(win, directory, 'fleet-production');
-    return { viewport: label, layout, missionSlots, transportCycle, flightCycle, screenshotsSkipped: skipScreenshots };
+    return { viewport: label, layout, missionSlots, transportCycle, flightCycle, planetSwitch, planetoLom, screenshotsSkipped: skipScreenshots };
   } finally {
     if (!win.isDestroyed()) await win.close();
   }

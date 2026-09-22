@@ -6,6 +6,8 @@ import { calculateEffectiveFleetSpeed, calculateOneWayDurationMs } from './speed
 import { normalizeTransportCargo } from './cargo.ts';
 import type { TransportCargo } from './cargo.ts';
 import type { TargetRelation } from './types.ts';
+import type { CommanderId } from '../combat/commanders.ts';
+import type { AttackLaunchSnapshot, AttackResolution } from '../attack/types.ts';
 import type { FlightCompletionReason, FlightDestination, FlightRecord, FlightScienceLevels, FlightState, MissionId } from './types.ts';
 
 export type DispatchFlightInput = {
@@ -15,6 +17,9 @@ export type DispatchFlightInput = {
   originCoordinate: FlightRecord['originCoordinate'];
   destination: FlightDestination;
   selectedShips: Partial<Record<ShipId, number>>;
+  selectedCommanders?: Partial<Record<CommanderId, number>>;
+  attackSnapshot?: AttackLaunchSnapshot;
+  attackResolution?: AttackResolution;
   populationReserved?: number;
   departedAt: number;
   factionId: CombatFactionId;
@@ -24,6 +29,8 @@ export type DispatchFlightInput = {
   targetKind?: FlightRecord['targetKind'];
   /** Resolved target snapshot for a coordinate-addressed transport. */
   destinationPlanetId?: string;
+  targetPlanetName?: string;
+  targetOwnerName?: string;
   destinationOwnerId?: string;
   targetRelation?: TargetRelation;
   cargo?: TransportCargo;
@@ -68,10 +75,15 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
         : { kind: 'operation', operationId: input.destination.operationId, coordinate: { ...input.destination.coordinate } },
     destinationPlanetId,
     targetKind: input.targetKind,
+    ...(input.targetPlanetName ? { targetPlanetName: input.targetPlanetName } : {}),
+    ...(input.targetOwnerName ? { targetOwnerName: input.targetOwnerName } : {}),
     destinationOwnerId: input.destinationOwnerId,
     targetRelation: input.targetRelation,
     destinationCoordinate: { ...input.destination.coordinate },
     selectedShips: { ...input.selectedShips },
+    ...(input.selectedCommanders ? { selectedCommanders: { ...input.selectedCommanders } } : {}),
+    ...(input.attackSnapshot ? { attackSnapshot: input.attackSnapshot } : {}),
+    ...(input.attackResolution ? { attackResolution: input.attackResolution } : {}),
     populationReserved: Math.max(0, Math.floor(input.populationReserved ?? 0)),
     routeDistance,
     effectiveSpeed,

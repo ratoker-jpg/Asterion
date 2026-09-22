@@ -10,6 +10,7 @@ import {
 import { createBot01Planets, createDefaultBot01Profile } from './fixtures.ts';
 import { calculateFleetPopulation } from '../fleet/runtime.ts';
 import { calculateDefensePopulation } from '../fleet/production.ts';
+import { migrateEspionageState } from './repository.ts';
 
 test('spy report quality uses an integer 0..99 with lower-inclusive upper-exclusive intervals', () => {
   assert.equal(resolveSpyReportQuality(0, 0), 'full');
@@ -65,6 +66,8 @@ test('Bot 01 fixture keeps espionage level 10 and seeded converging population',
     assert.equal(planet.population.fleet, calculateFleetPopulation(planet.fleet, planet.raceId));
     assert.equal(planet.population.defense, calculateDefensePopulation(planet.defense, planet.raceId));
     assert.equal(planet.fleet.ships['spy-probe'], 0);
+    assert.ok((planet.defense.defenses['tower-shield'] ?? 0) <= 1);
+    assert.ok((planet.defense.defenses['planetary-shield'] ?? 0) <= 1);
   }
   assert.equal(planets.slice(1).every((planet) => planet.hunterLevel === 0), true);
 });
@@ -90,6 +93,52 @@ test('Bot 01 hull levels cover every upgradable ship with seeded 0..10 values', 
   assert.equal(profile.shipLevels['mega-transporter'], 6);
   assert.equal(profile.shipLevels.cruiser, 4);
   assert.equal(profile.shipLevels.battleship, 2);
+});
+
+test('target debris migrates from the legacy mirror into resources.debris exactly once', () => {
+  const migrated = migrateEspionageState({
+    targets: {
+      legacy: {
+        id: 'legacy',
+        coordinate: { galaxy: 1, system: 1, position: 2 },
+        resources: { metal: 10, minerals: 20, gas: 30, developmentEnergy: 0 },
+        debris: 77,
+      },
+    },
+  }, 1_000);
+  const target = migrated.targets?.legacy;
+  assert.ok(target);
+  assert.equal(target.resources.debris, 77);
+  assert.equal(target.debris, undefined);
+});
+
+test('generic target migrations promote legacy ship levels into one owner profile', () => {
+  const migrated = migrateEspionageState({
+    targets: {
+      player: {
+        id: 'player-planet',
+        coordinate: { galaxy: 1, system: 2, position: 3 },
+        ownerId: 'player-owner',
+        ownerName: 'Player',
+        raceId: 'aegis',
+        alliance: null,
+        espionageLevel: 4,
+        resources: { metal: 1, minerals: 1, gas: 1, debris: 0, developmentEnergy: 0 },
+        buildings: {},
+        fleet: { ships: { scout: 2 }, commanders: {} },
+        defense: { defenses: {} },
+        commanders: {},
+        population: { total: 4, fleet: 4, defense: 0 },
+        hunterLevel: 0,
+        shipLevels: { scout: 4 },
+      },
+    },
+  }, 1_000);
+  const target = migrated.targets?.player;
+  assert.ok(target);
+  assert.equal(target.shipLevels, undefined);
+  assert.equal(target.ownerProfile?.shipLevels.scout, 4);
+  assert.equal(migrated.bot01Profile, undefined);
 });
 
 test('seeded espionage rng replays the same stream for the same seed and stays within [0, 1)', () => {

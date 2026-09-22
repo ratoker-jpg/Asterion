@@ -16,11 +16,13 @@ import { readFleetBuildBudget, type FleetBuildBudget } from './application/fleet
 import { FLEET_PRODUCTION_START_REQUEST_EVENT } from './application/fleet-production.ts';
 import { FleetConstructionHeader } from './FleetConstructionHeader';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
+import { evaluateProductionRequirements } from './domain/fleet/requirements.ts';
 
 
 export type ConstructionCatalogMode = 'defense' | 'commander';
 
 type CatalogItem = {
+  catalog: CatalogEntity;
   id: string;
   name: string;
   role: string;
@@ -61,6 +63,7 @@ type ResourceKind = 'metal' | 'minerals' | 'gas' | 'population';
 function toCatalogItem(entity: CatalogEntity): CatalogItem {
   if (!entity.tactical) throw new Error(`Tactical traits missing for ${entity.id}`);
   return {
+    catalog: entity,
     id: entity.id,
     name: entity.name,
     role: entity.role,
@@ -175,6 +178,7 @@ function CatalogCard({
   item,
   quantity,
   budget,
+  planetId,
   shipyardLevel,
   advancedFactoryLevel,
   mode,
@@ -184,14 +188,28 @@ function CatalogCard({
   item: CatalogItem;
   quantity: number;
   budget: ShipyardBudget;
+  planetId?: string;
   shipyardLevel: number;
   advancedFactoryLevel: number;
   mode: ConstructionCatalogMode;
   onQuantity: (item: CatalogItem, quantity: number) => void;
   onBuild: (item: CatalogItem, quantity: number) => void;
 }) {
-  const unlocked = item.requiredShipyardLevel <= shipyardLevel;
-  const max = unlocked ? calculateMax(item, budget, mode) : 0;
+  const evaluated = evaluateProductionRequirements(item.catalog, {
+    planetId,
+    scienceLevels: budget.scienceLevels,
+    shipyardLevel,
+    hangarLevel: budget.hangarLevel,
+    advancedFactoryLevel,
+    fleet: budget.fleet,
+    defense: budget.defense,
+    queues: budget.fleetProduction,
+    wallet: { metal: budget.metal, minerals: budget.minerals, gas: budget.gas },
+    factionId: budget.factionId,
+    mode: ACTIVE_RUNTIME_MODE,
+  });
+  const available = evaluated.met;
+  const max = available ? calculateMax(item, budget, mode) : 0;
   const unavailableLabel = mode === 'defense' ? 'КОМПЛЕКС НЕДОСТУПЕН' : 'КОРПУС НЕДОСТУПЕН';
   const effectiveTimeMs = calculateFleetProductionDurationMs(mode === 'defense' ? 'defense' : 'commanders', item.id, {
     factionId: budget.factionId,
@@ -203,7 +221,7 @@ function CatalogCard({
   });
 
   return (
-    <article className={`shipyard-card-v1 ${unlocked ? '' : 'locked'}`} data-qa-fleet-production-item={item.id}>
+    <article className={`shipyard-card-v1 ${available ? '' : 'locked'}`} data-qa-fleet-production-item={item.id} data-qa-production-requirements={available ? 'met' : 'unmet'} data-qa-production-requirement-reason={evaluated.reason ?? undefined}>
       <header className={`shipyard-card-title-v1 ${mode === 'commander' ? 'commander' : ''}`}>
         <div className={`shipyard-owned-v1 ${item.owned > 0 ? 'has-ships' : ''} ${mode === 'commander' ? 'has-commander-level' : ''}`}>
           {mode === 'commander' ? <div className="shipyard-owned-count-v1">
@@ -248,7 +266,7 @@ function CatalogCard({
             </div>
           </div>
 
-          {unlocked ? (
+          {available ? (
             <div className="shipyard-build-v1">
               <div className="shipyard-count-v1">
                 <input
@@ -273,6 +291,7 @@ function CatalogCard({
                 <div><small>{unavailableLabel}</small><strong>Требования для постройки</strong></div>
               </div>
               <div className="shipyard-requirements-list-v1">
+                {evaluated.reason ? <strong data-qa-production-requirement-error>{evaluated.reason}</strong> : null}
                 {item.requirements.map((requirement) => <span key={requirement}>{requirement}</span>)}
               </div>
             </div>
@@ -287,11 +306,13 @@ export function ConstructionCatalogView({
   mode,
   planetName,
   coords,
+  planetId,
   budget: providedBudget,
 }: {
   mode: ConstructionCatalogMode;
   planetName: string;
   coords: string;
+  planetId?: string;
   budget?: FleetBuildBudget;
 }) {
   const savedBudget = useMemo(readFleetBuildBudget, []);
@@ -330,7 +351,7 @@ export function ConstructionCatalogView({
   useEffect(() => {
     setQuantities({});
     window.scrollTo(0, 0);
-  }, [mode]);
+  }, [mode, planetId]);
 
   const setQuantity = (item: CatalogItem, raw: number) => {
     const max = calculateMax(item, budget, mode);
@@ -376,10 +397,11 @@ export function ConstructionCatalogView({
         {items.map((item) => (
           <CatalogCard
             key={item.id}
-            item={item}
-            quantity={quantities[item.id] ?? 0}
-            budget={budget}
-            shipyardLevel={budget.shipyardLevel}
+              item={item}
+              quantity={quantities[item.id] ?? 0}
+              budget={budget}
+              planetId={planetId}
+              shipyardLevel={budget.shipyardLevel}
             advancedFactoryLevel={budget.advancedFactoryLevel}
             mode={mode}
             onQuantity={setQuantity}

@@ -6,7 +6,7 @@ export const SPY_HUNTER_RATE_PER_LEVEL_PERCENT = 1.75;
 export type EspionageRollKind = 'hunter' | 'report';
 
 export function createDefaultEspionageState(): EspionageState {
-  return { missions: [], reports: [], hunterNotices: [] };
+  return { missions: [], reports: [], hunterNotices: [], orbitalDebris: {} };
 }
 
 export function getEspionageState(state: { espionage?: EspionageState }): EspionageState {

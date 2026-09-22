@@ -57,6 +57,7 @@ import { syncPlayerProfileWithAlliance } from './domain/profile/repository.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import {
   ACTIVE_RUNTIME_MODE,
+  dispatchRuntimeReset,
   resolveTestTimeScale,
   TEST_TIME_SCALE_OPTIONS,
   type TestTimeScale,
@@ -142,7 +143,7 @@ import {
 import { createSimulatorScenarioFromSpyReport, requestSimulatorHandoff } from './application/simulator-handoff.ts';
 import type { SpyReportSnapshot } from './domain/espionage/types.ts';
 import { getEspionageTargets } from './domain/espionage/runtime.ts';
-import type { UniverseCoordinate, UniverseOwnerProfile } from './domain/universe/types.ts';
+import type { UniverseCoordinate, UniverseObjectKind, UniverseOwnerProfile } from './domain/universe/types.ts';
 import { enqueueApplicationStateUpdate } from './application/state.ts';
 import { getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
@@ -299,7 +300,9 @@ export function App() {
     if (SILENT_NOTICE_PATTERNS.some((pattern) => pattern.test(text))) return;
     noticeSeq.current += 1;
     const id = noticeSeq.current;
-    setToasts((current) => [...current, { id, text, tone }].slice(-TOAST_STACK_LIMIT));
+    setToasts((current) => current.some((toast) => toast.text === text)
+      ? current
+      : [...current, { id, text, tone }].slice(-TOAST_STACK_LIMIT));
     window.setTimeout(() => {
       setToasts((current) => current.filter((toast) => toast.id !== id));
     }, TOAST_AUTO_CLOSE_MS);
@@ -564,19 +567,23 @@ export function App() {
           .join(', ');
         setNotice(`Наука: исследование завершено — ${names}.`, 'success');
       } else if (event.kind === 'building') {
-        setNotice(`${result.state.planets[result.state.currentPlanetId].name}: ${getBuildingDefinition(event.assetRole, result.state.profile.factionId).name} завершено.`, 'success');
+        const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
+        setNotice(`${planet.name}: ${getBuildingDefinition(event.assetRole, result.state.profile.factionId).name} завершено.`, 'success');
       } else if (event.kind === 'recycling') {
-        setNotice('Результат переработки автоматически зачислен', 'success');
+        const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
+        setNotice(`${planet.name}: результат переработки автоматически зачислен`, 'success');
       } else if (event.kind === 'spaceport') {
         const names = event.tasks
           .map((task) => getSpaceportUpgradeEntity(task.track, task.shipId, result.state.profile.factionId)?.name ?? task.shipId)
           .join(', ');
-        setNotice(`Космодром: улучшение завершено — ${names}.`, 'success');
+        const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
+        setNotice(`${planet.name}: космодром — улучшение завершено — ${names}.`, 'success');
       } else if (event.kind === 'fleet-production') {
         const names = event.completed
           .map((item) => getFleetProductionEntity(item.queueKind, item.itemId, result.state.profile.factionId)?.name ?? item.itemId)
           .join(', ');
-        setNotice(`Верфь: производство завершено — ${names}.`, 'success');
+        const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
+        setNotice(`${planet.name}: верфь — производство завершено — ${names}.`, 'success');
       } else if (event.kind === 'flight') {
         event.events.forEach((flightEvent) => setNotice(
           flightEvent.status === 'spy-report' || flightEvent.status === 'spy-detected'
@@ -942,8 +949,13 @@ export function App() {
   };
 
   const reset = () => {
+    dispatchRuntimeReset(RUNTIME_MODE, window);
     persistence.clear();
     const nextState = createInitialSaveState(RUNTIME_MODE);
+    // Publish the canonical replacement synchronously. React's effect will
+    // persist it again, but a reload between the click and that effect must
+    // never observe the old payload or an empty key.
+    persistence.write(nextState);
     stateRef.current = nextState;
     setState(nextState);
     setPlanetMenuOpen(false);
@@ -953,6 +965,7 @@ export function App() {
     setPlanetViewMode('overview');
     setSelectedBuildingRole(null);
     setBuildingInterior(null);
+    setToasts([]);
     setNotice(RUNTIME_MODE === 'test' ? 'Тестовое сохранение сброшено.' : 'Сохранение прототипа сброшено.');
   };
 
@@ -1015,13 +1028,13 @@ export function App() {
     }, 40);
   };
 
-  const openSpyLaunch = (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile }) => {
+  const openSpyLaunch = (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile; targetKind: 'player' | 'npc' }) => {
     const targetRaceId = target.owner.raceId === 'synod' || target.owner.raceId === 'veyra' ? target.owner.raceId : 'aegis';
     const result = dispatchFlight(stateRef.current, {
       requestId: `spy-universe-${target.planetId}-${Date.now()}`,
       missionId: 'espionage',
       originPlanetId: stateRef.current.currentPlanetId,
-      targetKind: 'npc',
+      targetKind: target.targetKind,
       targetRelation: target.relation,
       targetPlanetName: target.planetName,
       targetOwnerId: target.owner.id,
@@ -1042,6 +1055,29 @@ export function App() {
       setNotice(result.error.message, 'error');
     }
     window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
+  };
+
+  const openAttackLaunch = (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile; targetKind: 'player' | 'npc' }) => {
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    setNotice(`Атакующая цель выбрана: ${target.planetName} [${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}].`);
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, {
+        detail: {
+          missionId: 'attack',
+          targetRelation: target.relation,
+          targetKind: target.targetKind as UniverseObjectKind,
+          targetPlanetName: target.planetName,
+          targetOwnerId: target.owner.id,
+          targetOwnerName: target.owner.displayName,
+          targetRaceId: target.owner.raceId === 'synod' || target.owner.raceId === 'veyra' ? target.owner.raceId : 'aegis',
+          targetAlliance: target.owner.alliance ?? null,
+          destination: { kind: 'planet', planetId: target.planetId, coordinate: target.coordinate },
+        },
+      }));
+    }, 40);
   };
 
   const openUniverseTarget = (target: UniverseFocusTarget) => {
@@ -1339,6 +1375,7 @@ export function App() {
               onColonize={openColonizationLaunch}
               onTransport={openTransportLaunch}
               onSpy={openSpyLaunch}
+              onAttack={openAttackLaunch}
               focusTarget={universeFocusTarget}
               onFocusHandled={() => setUniverseFocusTarget(null)}
             />

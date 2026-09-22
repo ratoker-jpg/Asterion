@@ -534,6 +534,42 @@ test('Test Mode seeds one persisted ally and Production keeps the fixture bounda
   assert.deepEqual(productionState.alliedPlanets, {});
 });
 
+test('a destroyed authoritative Test Mode target leaves its coordinate colonizable', () => {
+  const base = createInitialSaveState('test', 1_000);
+  const target = Object.values(base.espionage!.targets!)[0]!;
+  const remainingTargets = Object.fromEntries(
+    Object.entries(base.espionage!.targets!).filter(([targetId]) => targetId !== target.id),
+  );
+  const destroyedTargetState = {
+    ...base,
+    espionage: {
+      ...base.espionage!,
+      targets: remainingTargets,
+      bot01Planets: remainingTargets,
+    },
+  };
+  const result = dispatchFlight(destroyedTargetState, {
+    requestId: 'colonize-destroyed-target-coordinate',
+    missionId: 'colonize',
+    originPlanetId: 'helion-01',
+    destination: { kind: 'coordinate', coordinate: target.coordinate },
+    targetKind: 'empty',
+    selectedShips: { colonizer: 1 },
+    departedAt: 1_000,
+  }, { now: 1_000, mode: 'test', testTimeScale: 15 });
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.flight.destinationCoordinate, target.coordinate);
+
+  const arrival = reconcileFlights(result.state, result.flight.arrivalAt, undefined, {
+    mode: 'test',
+    testTimeScale: 15,
+  });
+  assert.equal(arrival.events[0]?.status, 'colonized');
+  assert.ok(arrival.state.planets[createPlanetIdForCoordinate(target.coordinate)]);
+});
+
 test('transport dispatches an atomic cargo snapshot to the Test Mode ally and returns empty', () => {
   const initial = createInitialSaveState('test', 1_000);
   const destination = {

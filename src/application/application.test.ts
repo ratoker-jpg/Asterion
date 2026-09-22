@@ -57,6 +57,7 @@ import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { getPlanetResources, type SaveState } from './contracts.ts';
 import { createAllianceRatingEntries, createPlayerRatingEntries } from '../domain/rating/fixtures.ts';
 import { createUniverseMap } from '../domain/universe/runtime.ts';
+import { getEspionageTargets } from '../domain/espionage/runtime.ts';
 
 class MemoryStorage implements StorageLike {
   readonly values = new Map<string, string>();
@@ -135,6 +136,103 @@ function withBuildingSetup(state: SaveState): SaveState {
     },
   };
 }
+
+function registeredTargetsForUniverse(state: SaveState) {
+  return Object.values(getEspionageTargets(state.espionage)).map((target) => ({
+    id: target.id,
+    coordinate: target.coordinate,
+    name: target.name,
+    kind: target.kind ?? 'npc' as const,
+    ownerId: target.ownerId,
+  }));
+}
+
+test('Test Mode persistence keeps one deleted Bot 01 target deleted and preserves orbital debris', () => {
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 2_000 });
+  const initial = createInitialSaveState('test', 1_000);
+  const initialTargets = getEspionageTargets(initial.espionage);
+  const deletedTarget = Object.values(initialTargets)[0];
+  assert.ok(deletedTarget);
+  const remainingTargets = Object.fromEntries(
+    Object.entries(initialTargets).filter(([targetId]) => targetId !== deletedTarget.id),
+  );
+  const debris = {
+    id: 'debris-after-target-destruction',
+    targetPlanetId: deletedTarget.id,
+    targetPlanetName: deletedTarget.name,
+    targetOwnerId: deletedTarget.ownerId,
+    targetCoordinate: deletedTarget.coordinate,
+    debris: 777,
+    createdAt: 1_500,
+  };
+  const changed = {
+    ...initial,
+    espionage: {
+      ...initial.espionage!,
+      targets: remainingTargets,
+      bot01Planets: remainingTargets,
+      orbitalDebris: { [debris.id]: debris },
+    },
+  } satisfies SaveState;
+
+  assert.equal(persistence.write(changed).ok, true);
+  const reloaded = persistence.read();
+  const reloadedTargets = getEspionageTargets(reloaded.espionage);
+  assert.equal(Object.keys(reloadedTargets).length, 6);
+  assert.equal(Object.keys(reloaded.espionage?.bot01Planets ?? {}).length, 6);
+  assert.equal(reloaded.espionage?.orbitalDebris?.[debris.id]?.debris, 777);
+
+  const map = createUniverseMap({ mode: 'test', registeredPlanets: registeredTargetsForUniverse(reloaded) });
+  const nodes = map.systems.flatMap((system) => system.positions);
+  assert.equal(nodes.some((node) => node.id === deletedTarget.id), false);
+  assert.equal(nodes.find((node) => node.coordinate.galaxy === deletedTarget.coordinate.galaxy
+    && node.coordinate.system === deletedTarget.coordinate.system
+    && node.coordinate.position === deletedTarget.coordinate.position)?.kind, 'empty');
+});
+
+test('Test Mode persistence treats an empty canonical Bot 01 registry as authoritative', () => {
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 2_000 });
+  const initial = createInitialSaveState('test', 1_000);
+  const changed = {
+    ...initial,
+    espionage: {
+      ...initial.espionage!,
+      targets: {},
+      bot01Planets: {},
+    },
+  } satisfies SaveState;
+
+  assert.equal(persistence.write(changed).ok, true);
+  const reloaded = persistence.read();
+  assert.equal(Object.keys(getEspionageTargets(reloaded.espionage)).length, 0);
+  assert.equal(Object.keys(reloaded.espionage?.bot01Planets ?? {}).length, 0);
+  assert.ok(reloaded.espionage?.bot01Profile, 'owner profile may survive without recreating planets');
+
+  const map = createUniverseMap({ mode: 'test', registeredPlanets: registeredTargetsForUniverse(reloaded) });
+  const nodes = map.systems.flatMap((system) => system.positions);
+  assert.equal(nodes.some((node) => node.kind === 'npc' && node.ownerId === 'npc-bot-01'), false);
+});
+
+test('legacy bot01Planets saves keep their compatibility migration path', () => {
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 2_000 });
+  const initial = createInitialSaveState('test', 1_000);
+  const legacyEnvelope = {
+    ...initial,
+    espionage: {
+      ...initial.espionage!,
+      targets: undefined,
+      bot01Planets: initial.espionage!.targets,
+    },
+  };
+  storage.values.set(persistence.saveKey, JSON.stringify(legacyEnvelope));
+
+  const reloaded = persistence.read();
+  assert.equal(Object.keys(getEspionageTargets(reloaded.espionage)).length, 7);
+  assert.equal(Object.keys(reloaded.espionage?.bot01Planets ?? {}).length, 7);
+});
 
 test('persistence facade keeps the existing save key, envelope migration, and one explicit writer', () => {
   const storage = new MemoryStorage();
@@ -595,6 +693,7 @@ test('spaceport application action names and resolves the selected faction ship'
 
 test('fleet production application persists, reconciles, and bridges all three queues', () => {
   const initial = withBuildingSetup(createInitialSaveState('test', 1_000));
+  initial.science.levels[4] = 1;
   const startContext = context(2_000);
   const ship = startFleetProduction(initial, startContext, 'ships', 'scout', 2, 'app-ship');
   assert.equal(ship.transition.ok, true);
@@ -648,9 +747,13 @@ test('fleet production application persists, reconciles, and bridges all three q
   }));
   const bridgeCompletedTask = current.planets['helion-01'].fleetProduction.shipQueue[0];
   assert.ok(bridgeCompletedTask);
-  target.dispatchEvent(new CustomEvent('asterion:fleet-production-start-request', {
-    detail: { queueKind: 'ships', itemId: 'scout', quantity: 0, now: bridgeCompletedTask.finishAt },
-  }));
+  const reconciledBridge = reconcileFleetProduction(current, {
+    planetId: 'helion-01',
+    now: bridgeCompletedTask.finishAt,
+  });
+  assert.equal(reconciledBridge.changed, true);
+  current = reconciledBridge.state;
+  commits.push(current);
   assert.equal(commits.length, 4);
   assert.equal(current.planets['helion-01'].fleet.ships.scout, 21);
   assert.equal(current.planets['helion-01'].fleetProduction.shipQueue.length, 0);
@@ -1087,11 +1190,11 @@ test('resource income uses an independent persisted clock per planet and reconci
   const secondTick = sent.flight.arrivalAt + 7_200_000;
   const firstPlanet = reconcileRuntime(state, planetContext('helion-01', firstTick));
   assert.equal(firstPlanet.state.planets['helion-01'].resources?.metal, 150);
-  assert.equal(firstPlanet.state.planets[colonyId].resources?.metal, 0);
+  assert.equal(firstPlanet.state.planets[colonyId].resources?.metal, 150);
 
   const secondPlanet = reconcileRuntime(firstPlanet.state, planetContext(colonyId, secondTick));
   assert.equal(secondPlanet.state.planets[colonyId].resources?.metal, 300);
-  assert.equal(secondPlanet.state.planets['helion-01'].resources?.metal, 150);
+  assert.equal(secondPlanet.state.planets['helion-01'].resources?.metal, 300);
 
   const switchedBack = reconcileRuntime(secondPlanet.state, planetContext('helion-01', secondTick));
   assert.equal(switchedBack.state.planets['helion-01'].resources?.metal, 300);

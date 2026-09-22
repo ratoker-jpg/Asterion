@@ -15,6 +15,7 @@ test('view model exposes losses, rewards, and every saved round snapshot', () =>
   assert.equal(viewModel.defender.losses.defenses, 51);
   assert.equal(viewModel.experience, 84);
   assert.equal(viewModel.debris, 291_027);
+  assert.equal(viewModel.debrisOnOrbit, 291_027);
   assert.deepEqual(viewModel.resources.map((resource) => resource.kind), ['metal', 'minerals', 'gas']);
   assert.deepEqual(viewModel.attacker.modifiers.map((modifier) => modifier.label), ['Построение', 'Командирский snapshot']);
 });
@@ -133,4 +134,32 @@ test('view model resolves faction presentation and falls back safely for unknown
   assert.equal(missingStack?.assetSource, 'fallback');
   assert.equal(missingStack?.tooltip.attack, null);
   assert.equal(malformedViewModel.rounds[0]?.analysis.length, 1);
+});
+
+test('view model reads siege fields while legacy reports remain siege-free', () => {
+  const legacy = createBattleReportViewModel(DEMO_BATTLE_REPORTS[0]);
+  assert.equal(legacy.siege, null);
+  const viewModel = createBattleReportViewModel({
+    ...DEMO_BATTLE_REPORTS[0],
+    siege: {
+      version: 1,
+      targetPlanetId: 'planet-siege',
+      targetCoordinate: '1:2:3',
+      attackerDestroyers: [{ factionId: 'aegis', entityId: 'death-star', survivors: 1, level: 10, scaledDemolitionPoints: 100, scaledDestructionChanceBps: 300, baseAttack: 700_000, baseLife: 2_100_000 }],
+      defenderDestroyers: [],
+      demolition: {
+        status: 'resolved', rawPoints: 100, defenseReductionPoints: 0, finalPoints: 100, baseChanceBps: 2_000,
+        annihilatorBonusBps: 0, eligibleBuildingCount: 1, selectedBuildingCount: 1, destroyedBuildingLevels: 1,
+        rolls: [{ buildingId: 'construction', buildingName: 'Сборочный узел', beforeLevel: 2, afterLevel: 1, chanceBps: 2_000, roll: 0.1, success: true, canceledQueueItems: 1 }],
+      },
+      destruction: {
+        status: 'blocked', blockedReason: 'LAST_COLONY_PROTECTED', rawChanceBps: 300, defenseReductionBps: 0,
+        defenderDestroyerReductionBps: 0, poliasReductionBps: 0, finalChanceBps: 300, success: false, ownerPlanetCount: 1,
+      },
+      planetDestroyed: false,
+    },
+  });
+  assert.equal(viewModel.siege?.targetCoordinate, '1:2:3');
+  assert.equal(viewModel.siege?.demolition.rolls[0]?.success, true);
+  assert.equal(viewModel.siege?.destruction.blockedReason, 'LAST_COLONY_PROTECTED');
 });

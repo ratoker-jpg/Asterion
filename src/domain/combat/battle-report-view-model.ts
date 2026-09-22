@@ -10,7 +10,16 @@ import { calculateBattlePoints, type BattlePointResult } from './battle-points.t
 import { getFactionDefenseCatalog, getFactionShipCatalog } from './faction-catalog.ts';
 import { getCombatFactionId, type CombatFactionId } from './factions.ts';
 import type { CombatEntityId } from './ids.ts';
-import { calculatePopulationLoss, type BattleMissionType, type BattleSide, type BattleWinner, type CombatActionType, type CombatProvenance, type RngProvenance } from './report.ts';
+import {
+  calculatePopulationLoss,
+  type BattleMissionType,
+  type BattleSide,
+  type BattleSiegeBlockedReason,
+  type BattleWinner,
+  type CombatActionType,
+  type CombatProvenance,
+  type RngProvenance,
+} from './report.ts';
 import { COMBAT_TECHNOLOGIES, getCombatTechnologyDefinition, normalizeCombatTechnologies, type CombatTechnologyId } from './technologies.ts';
 
 export const BATTLE_MISSING_DATA = 'Нет данных' as const;
@@ -201,6 +210,60 @@ export type BattleResourceViewModel = {
   value: number;
 };
 
+export type BattleSiegeDestroyerViewModel = {
+  factionId: string | null;
+  survivors: number;
+  level: number;
+  scaledDemolitionPoints: number;
+  scaledDestructionChanceBps: number;
+  baseAttack: number;
+  baseLife: number;
+};
+
+export type BattleSiegeBuildingRollViewModel = {
+  buildingId: string;
+  buildingName: string;
+  beforeLevel: number;
+  afterLevel: number;
+  chanceBps: number;
+  roll: number;
+  success: boolean;
+  canceledQueueItems: number;
+};
+
+export type BattleSiegeViewModel = {
+  targetPlanetId: string | null;
+  targetCoordinate: string | null;
+  attackerDestroyers: BattleSiegeDestroyerViewModel[];
+  defenderDestroyers: BattleSiegeDestroyerViewModel[];
+  demolition: {
+    status: 'resolved' | 'blocked';
+    blockedReason: BattleSiegeBlockedReason | null;
+    rawPoints: number;
+    defenseReductionPoints: number;
+    finalPoints: number;
+    baseChanceBps: number;
+    annihilatorBonusBps: number;
+    eligibleBuildingCount: number;
+    selectedBuildingCount: number;
+    destroyedBuildingLevels: number;
+    rolls: BattleSiegeBuildingRollViewModel[];
+  };
+  destruction: {
+    status: 'destroyed' | 'not-destroyed' | 'blocked';
+    blockedReason: BattleSiegeBlockedReason | null;
+    rawChanceBps: number;
+    defenseReductionBps: number;
+    defenderDestroyerReductionBps: number;
+    poliasReductionBps: number;
+    finalChanceBps: number;
+    roll: number | null;
+    success: boolean;
+    ownerPlanetCount: number;
+  };
+  planetDestroyed: boolean;
+};
+
 export type BattleReportViewModel = {
   id: string;
   timestamp: string;
@@ -221,7 +284,10 @@ export type BattleReportViewModel = {
   rounds: BattleRoundViewModel[];
   experience: number | null;
   debris: number | null;
+  /** Debris remains in target orbit; `debris` is retained as a compatibility alias. */
+  debrisOnOrbit: number | null;
   resources: BattleResourceViewModel[];
+  siege: BattleSiegeViewModel | null;
   battlePoints: BattlePointResult;
   timestampAvailable: boolean;
 };
@@ -739,6 +805,90 @@ function readUnknowns(value: unknown) {
   return asArray(value).filter((item): item is string => typeof item === 'string' && Boolean(item.trim())).map((item) => item.trim());
 }
 
+function readSiegeBlockedReason(value: unknown): BattleSiegeBlockedReason | null {
+  return value === 'NO_SURVIVING_PLANET_DESTROYER'
+    || value === 'BATTLE_RESULT_INELIGIBLE'
+    || value === 'LAST_COLONY_PROTECTED'
+    || value === 'ZERO_FINAL_CHANCE'
+    ? value
+    : null;
+}
+
+function readSiegeDestroyers(value: unknown): BattleSiegeDestroyerViewModel[] {
+  return asArray(value).map((item) => {
+    const record = asRecord(item);
+    return {
+      factionId: readString(record.factionId),
+      survivors: readCount(record.survivors) ?? 0,
+      level: readCount(record.level) ?? 0,
+      scaledDemolitionPoints: readCount(record.scaledDemolitionPoints) ?? 0,
+      scaledDestructionChanceBps: readCount(record.scaledDestructionChanceBps) ?? 0,
+      baseAttack: readCount(record.baseAttack) ?? 0,
+      baseLife: readCount(record.baseLife) ?? 0,
+    };
+  });
+}
+
+function readSiegeBuildingRolls(value: unknown): BattleSiegeBuildingRollViewModel[] {
+  return asArray(value).map((item) => {
+    const record = asRecord(item);
+    return {
+      buildingId: readString(record.buildingId) ?? BATTLE_MISSING_DATA,
+      buildingName: readString(record.buildingName) ?? readString(record.buildingId) ?? BATTLE_MISSING_DATA,
+      beforeLevel: readCount(record.beforeLevel) ?? 0,
+      afterLevel: readCount(record.afterLevel) ?? 0,
+      chanceBps: readCount(record.chanceBps) ?? 0,
+      roll: readNumber(record.roll) ?? 0,
+      success: record.success === true,
+      canceledQueueItems: readCount(record.canceledQueueItems) ?? 0,
+    };
+  });
+}
+
+function readSiege(value: unknown): BattleSiegeViewModel | null {
+  const record = asRecord(value);
+  if (!Object.keys(record).length || (!record.demolition && !record.destruction)) return null;
+  const demolition = asRecord(record.demolition);
+  const destruction = asRecord(record.destruction);
+  const planetDestroyed = record.planetDestroyed === true;
+  const demolitionStatus = demolition.status === 'blocked' ? 'blocked' : 'resolved';
+  const destructionStatus = destruction.status === 'destroyed' || destruction.status === 'blocked' || destruction.status === 'not-destroyed'
+    ? destruction.status
+    : (planetDestroyed ? 'destroyed' : 'not-destroyed');
+  return {
+    targetPlanetId: readString(record.targetPlanetId),
+    targetCoordinate: readString(record.targetCoordinate),
+    attackerDestroyers: readSiegeDestroyers(record.attackerDestroyers),
+    defenderDestroyers: readSiegeDestroyers(record.defenderDestroyers),
+    demolition: {
+      status: demolitionStatus,
+      blockedReason: readSiegeBlockedReason(demolition.blockedReason),
+      rawPoints: readCount(demolition.rawPoints) ?? 0,
+      defenseReductionPoints: readCount(demolition.defenseReductionPoints) ?? 0,
+      finalPoints: readCount(demolition.finalPoints) ?? 0,
+      baseChanceBps: readCount(demolition.baseChanceBps) ?? 0,
+      annihilatorBonusBps: readCount(demolition.annihilatorBonusBps) ?? 0,
+      eligibleBuildingCount: readCount(demolition.eligibleBuildingCount) ?? 0,
+      selectedBuildingCount: readCount(demolition.selectedBuildingCount) ?? 0,
+      destroyedBuildingLevels: readCount(demolition.destroyedBuildingLevels) ?? 0,
+      rolls: readSiegeBuildingRolls(demolition.rolls),
+    },
+    destruction: {
+      status: destructionStatus,
+      blockedReason: readSiegeBlockedReason(destruction.blockedReason),
+      rawChanceBps: readCount(destruction.rawChanceBps) ?? 0,
+      defenseReductionBps: readCount(destruction.defenseReductionBps) ?? 0,
+      defenderDestroyerReductionBps: readCount(destruction.defenderDestroyerReductionBps) ?? 0,
+      poliasReductionBps: readCount(destruction.poliasReductionBps) ?? 0,
+      finalChanceBps: readCount(destruction.finalChanceBps) ?? 0,
+      roll: readNumber(destruction.roll),
+      success: destruction.success === true,
+      ownerPlanetCount: readCount(destruction.ownerPlanetCount) ?? 0,
+    },
+    planetDestroyed,
+  };
+}
+
 export function createBattleReportViewModel(input: unknown): BattleReportViewModel {
   const record = asRecord(input);
   const metadata = asRecord(record.metadata);
@@ -765,6 +915,8 @@ export function createBattleReportViewModel(input: unknown): BattleReportViewMod
     ? metadata.technologyMode
     : null;
   const targetPriorityRecord = asRecord(metadata.targetPriority);
+  const debrisOnOrbit = readNumber(record.debris);
+  const siege = readSiege(record.siege);
 
   return {
     id: readString(record.id) ?? 'invalid-battle-report',
@@ -790,8 +942,10 @@ export function createBattleReportViewModel(input: unknown): BattleReportViewMod
     roundCount: readCount(record.roundCount) ?? rounds.length,
     rounds,
     experience: readNumber(record.experience),
-    debris: readNumber(record.debris),
+    debris: debrisOnOrbit,
+    debrisOnOrbit,
     resources: readResources(record.resources),
+    siege,
     battlePoints: calculateBattlePoints(
       winner,
       attackerViewModel.stacks,

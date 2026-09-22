@@ -2,12 +2,13 @@ import type { CommanderId } from './commanders.ts';
 import type { CombatEntityId, DefenseId, ShipId } from './ids.ts';
 import type { CombatTechnologyId, CombatTechnologyLevels } from './technologies.ts';
 import type { CombatTargetPriority } from './config.ts';
+import type { CombatFactionId } from './factions.ts';
 
 export const ASTERION_LOCAL_PLAYER_ID = 'player-aster';
 /** The profile fixture uses this id; keep the legacy combat id compatible. */
 export const ASTERION_PROFILE_PLAYER_ID = 'player-current';
 
-export function isAsterionLocalPlayerId(playerId: string | undefined): boolean {
+export function isAsterionLocalPlayerId(playerId: string | null | undefined): boolean {
   return playerId === ASTERION_LOCAL_PLAYER_ID || playerId === ASTERION_PROFILE_PLAYER_ID;
 }
 
@@ -204,6 +205,73 @@ export type BattleRepairEligibility = {
   note?: string;
 };
 
+export type BattleSiegeBlockedReason =
+  | 'NO_SURVIVING_PLANET_DESTROYER'
+  | 'BATTLE_RESULT_INELIGIBLE'
+  | 'LAST_COLONY_PROTECTED'
+  | 'ZERO_FINAL_CHANCE';
+
+export type BattleSiegeDestroyerContribution = {
+  factionId: CombatFactionId;
+  entityId: 'death-star';
+  survivors: number;
+  level: number;
+  scaledDemolitionPoints: number;
+  scaledDestructionChanceBps: number;
+  baseAttack: number;
+  baseLife: number;
+};
+
+export type BattleSiegeBuildingRoll = {
+  buildingId: string;
+  buildingName: string;
+  beforeLevel: number;
+  afterLevel: number;
+  chanceBps: number;
+  roll: number;
+  success: boolean;
+  canceledQueueItems: number;
+};
+
+export type BattleSiegeDemolition = {
+  status: 'resolved' | 'blocked';
+  blockedReason?: BattleSiegeBlockedReason;
+  rawPoints: number;
+  defenseReductionPoints: number;
+  finalPoints: number;
+  baseChanceBps: number;
+  annihilatorBonusBps: number;
+  eligibleBuildingCount: number;
+  selectedBuildingCount: number;
+  destroyedBuildingLevels: number;
+  rolls: BattleSiegeBuildingRoll[];
+};
+
+export type BattleSiegeDestruction = {
+  status: 'destroyed' | 'not-destroyed' | 'blocked';
+  blockedReason?: BattleSiegeBlockedReason;
+  rawChanceBps: number;
+  defenseReductionBps: number;
+  defenderDestroyerReductionBps: number;
+  poliasReductionBps: number;
+  finalChanceBps: number;
+  roll?: number;
+  success: boolean;
+  ownerPlanetCount: number;
+};
+
+/** Deterministic post-combat planet-siege ledger. Absent on legacy reports. */
+export type BattleSiegeReport = {
+  version: 1;
+  targetPlanetId: string;
+  targetCoordinate: string;
+  attackerDestroyers: BattleSiegeDestroyerContribution[];
+  defenderDestroyers: BattleSiegeDestroyerContribution[];
+  demolition: BattleSiegeDemolition;
+  destruction: BattleSiegeDestruction;
+  planetDestroyed: boolean;
+};
+
 export type BattleReportMetadata = {
   source: 'demo-fixture' | 'combat-resolver' | 'imported';
   note?: string;
@@ -238,6 +306,7 @@ export type BattleReport = {
   resources?: BattleResourceOutcome;
   metadata?: BattleReportMetadata;
   repairEligibility?: BattleRepairEligibility;
+  siege?: BattleSiegeReport;
 };
 
 export function normalizeBattleReport(value: unknown): BattleReport | null {
@@ -359,9 +428,12 @@ export function filterBattleReports(
 export function getBattleResultForPlayer(report: BattleReport, playerId?: string) {
   if (report.winner === 'draw') return 'draw' as const;
   if (!playerId) return report.winner;
-  const playerSide = report.attacker.playerId === playerId
+  const matchesPlayer = (candidate: string | undefined) => isAsterionLocalPlayerId(playerId)
+    ? isAsterionLocalPlayerId(candidate)
+    : candidate === playerId;
+  const playerSide = matchesPlayer(report.attacker.playerId)
     ? 'attacker'
-    : report.defender.playerId === playerId
+    : matchesPlayer(report.defender.playerId)
       ? 'defender'
       : undefined;
   if (!playerSide) return report.winner;
