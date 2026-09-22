@@ -8,7 +8,7 @@ import type { BuildingQueueItem, ScienceLevels } from '../buildings/resource-zon
 import type { UniverseCoordinate, UniverseOwnerAlliance } from '../universe/types.ts';
 import type { RepairWorkshopState } from '../repair/workshop.ts';
 
-export type SpyMissionStatus = 'transit' | 'orbiting' | 'returning' | 'returned' | 'destroyed';
+export type SpyMissionStatus = 'transit' | 'orbiting' | 'returning' | 'returned' | 'destroyed' | 'target-destroyed';
 export type SpyReportQuality = 'basic' | 'detailed' | 'full';
 export type SpyTargetRelation = Extract<TargetRelation, 'enemy' | 'neutral'>;
 
@@ -136,6 +136,18 @@ export type SpyHunterNotice = {
   hunterLevel: number;
 };
 
+/** Debris survives target runtime deletion and remains addressable by orbit. */
+export type OrbitalDebrisRecord = {
+  id: string;
+  targetPlanetId: string;
+  targetPlanetName: string;
+  targetOwnerId: string;
+  targetCoordinate: UniverseCoordinate;
+  debris: number;
+  createdAt: number;
+  reportId?: string;
+};
+
 export type SpyMission = {
   id: string;
   flightId: string;
@@ -159,6 +171,8 @@ export type SpyMission = {
   nextReportAt?: number;
   returnedAt?: number;
   destroyedAt?: number;
+  /** Retained after the physical probe returns so the terminal cause is auditable. */
+  targetDestroyedAt?: number;
   reportIds: string[];
 };
 
@@ -166,6 +180,8 @@ export type EspionageState = {
   missions: SpyMission[];
   reports: SpyReportSnapshot[];
   hunterNotices: SpyHunterNotice[];
+  /** Separate orbital ledger; it is not deleted with a destroyed target runtime. */
+  orbitalDebris?: Record<string, OrbitalDebrisRecord>;
   /** Authoritative registry of resolvable planet owners. Test Mode injects Bot 01 here. */
   targets?: Record<string, SpyTargetState>;
   /** Legacy Test Mode alias. New runtime code must resolve through `targets`. */

@@ -191,6 +191,7 @@ export function createDefaultTestEspionageState(now = Date.now()): EspionageStat
     missions: [],
     reports: [],
     hunterNotices: [],
+    orbitalDebris: {},
     bot01Profile: createDefaultBot01Profile(),
     targets,
     // Keep the alias in Test Mode while old saved fixtures and tests migrate.

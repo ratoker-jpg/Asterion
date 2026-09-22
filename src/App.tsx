@@ -57,6 +57,7 @@ import { syncPlayerProfileWithAlliance } from './domain/profile/repository.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import {
   ACTIVE_RUNTIME_MODE,
+  dispatchRuntimeReset,
   resolveTestTimeScale,
   TEST_TIME_SCALE_OPTIONS,
   type TestTimeScale,
@@ -299,7 +300,9 @@ export function App() {
     if (SILENT_NOTICE_PATTERNS.some((pattern) => pattern.test(text))) return;
     noticeSeq.current += 1;
     const id = noticeSeq.current;
-    setToasts((current) => [...current, { id, text, tone }].slice(-TOAST_STACK_LIMIT));
+    setToasts((current) => current.some((toast) => toast.text === text)
+      ? current
+      : [...current, { id, text, tone }].slice(-TOAST_STACK_LIMIT));
     window.setTimeout(() => {
       setToasts((current) => current.filter((toast) => toast.id !== id));
     }, TOAST_AUTO_CLOSE_MS);
@@ -564,19 +567,23 @@ export function App() {
           .join(', ');
         setNotice(`Наука: исследование завершено — ${names}.`, 'success');
       } else if (event.kind === 'building') {
-        setNotice(`${result.state.planets[result.state.currentPlanetId].name}: ${getBuildingDefinition(event.assetRole, result.state.profile.factionId).name} завершено.`, 'success');
+        const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
+        setNotice(`${planet.name}: ${getBuildingDefinition(event.assetRole, result.state.profile.factionId).name} завершено.`, 'success');
       } else if (event.kind === 'recycling') {
-        setNotice('Результат переработки автоматически зачислен', 'success');
+        const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
+        setNotice(`${planet.name}: результат переработки автоматически зачислен`, 'success');
       } else if (event.kind === 'spaceport') {
         const names = event.tasks
           .map((task) => getSpaceportUpgradeEntity(task.track, task.shipId, result.state.profile.factionId)?.name ?? task.shipId)
           .join(', ');
-        setNotice(`Космодром: улучшение завершено — ${names}.`, 'success');
+        const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
+        setNotice(`${planet.name}: космодром — улучшение завершено — ${names}.`, 'success');
       } else if (event.kind === 'fleet-production') {
         const names = event.completed
           .map((item) => getFleetProductionEntity(item.queueKind, item.itemId, result.state.profile.factionId)?.name ?? item.itemId)
           .join(', ');
-        setNotice(`Верфь: производство завершено — ${names}.`, 'success');
+        const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
+        setNotice(`${planet.name}: верфь — производство завершено — ${names}.`, 'success');
       } else if (event.kind === 'flight') {
         event.events.forEach((flightEvent) => setNotice(
           flightEvent.status === 'spy-report' || flightEvent.status === 'spy-detected'
@@ -942,8 +949,13 @@ export function App() {
   };
 
   const reset = () => {
+    dispatchRuntimeReset(RUNTIME_MODE, window);
     persistence.clear();
     const nextState = createInitialSaveState(RUNTIME_MODE);
+    // Publish the canonical replacement synchronously. React's effect will
+    // persist it again, but a reload between the click and that effect must
+    // never observe the old payload or an empty key.
+    persistence.write(nextState);
     stateRef.current = nextState;
     setState(nextState);
     setPlanetMenuOpen(false);
@@ -953,6 +965,7 @@ export function App() {
     setPlanetViewMode('overview');
     setSelectedBuildingRole(null);
     setBuildingInterior(null);
+    setToasts([]);
     setNotice(RUNTIME_MODE === 'test' ? 'Тестовое сохранение сброшено.' : 'Сохранение прототипа сброшено.');
   };
 

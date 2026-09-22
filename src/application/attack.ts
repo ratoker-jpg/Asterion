@@ -241,6 +241,34 @@ function withTargetState(state: SaveState, target: SpyTargetState): SaveState {
   };
 }
 
+function preserveOrbitalDebris(
+  state: SaveState,
+  target: SpyTargetState,
+  debris: number,
+  reportId: string,
+  now: number,
+): SaveState {
+  if (debris <= 0 || !state.espionage) return state;
+  const previous = state.espionage.orbitalDebris?.[target.id];
+  const record = {
+    id: previous?.id ?? `orbital-debris-${target.id}`,
+    targetPlanetId: target.id,
+    targetPlanetName: target.name,
+    targetOwnerId: target.ownerId,
+    targetCoordinate: { ...target.coordinate },
+    debris: Math.max(previous?.debris ?? 0, safeCount(debris)),
+    createdAt: previous?.createdAt ?? safeCount(now),
+    reportId: previous?.reportId ?? reportId,
+  };
+  return {
+    ...state,
+    espionage: {
+      ...state.espionage,
+      orbitalDebris: { ...(state.espionage.orbitalDebris ?? {}), [target.id]: record },
+    },
+  };
+}
+
 function removeTargetState(state: SaveState, targetId: string, now: number): SaveState {
   const espionage = state.espionage;
   if (!espionage) return state;
@@ -255,7 +283,8 @@ function removeTargetState(state: SaveState, targetId: string, now: number): Sav
       missions: espionage.missions.map((mission) => mission.targetPlanetId === targetId
         && mission.status !== 'returned'
         && mission.status !== 'destroyed'
-        ? { ...mission, status: 'destroyed', destroyedAt: now }
+        && mission.status !== 'target-destroyed'
+        ? { ...mission, status: 'target-destroyed', destroyedAt: now, targetDestroyedAt: now, nextReportAt: undefined }
         : mission),
     },
   };
@@ -409,7 +438,11 @@ export function resolveAttackAtTarget(state: SaveState, flight: FlightRecord, no
   });
   const reportWithSiege: BattleReport = { ...report, siege: siege.report };
   next = siege.planetDestroyed
-    ? removeTargetState(next, target.id, now)
+    ? removeTargetState(
+      preserveOrbitalDebris(next, target, targetWithLoot.resources.debris, reportId, now),
+      target.id,
+      now,
+    )
     : withTargetState(next, siege.target);
   next = addReport(next, reportWithSiege);
   const resolution: AttackResolution = { reportId, resolvedAt: safeCount(now), debris, loot, planetDestroyed: siege.planetDestroyed };

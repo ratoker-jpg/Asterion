@@ -50,6 +50,7 @@ function productionContext(
   const planet = getPlanetState(state, context.planetId);
   const migratedFleet = removeSolarSatellitesFromFleet(planet.fleet);
   return {
+    planetId: context.planetId,
     state: planet.fleetProduction,
     fleet: planet.fleet,
     defense: planet.defense,
@@ -60,6 +61,7 @@ function productionContext(
     hangarLevel: planet.buildings.hangar,
     shipyardLevel: planet.buildings.shipyard,
     advancedFactoryLevel: planet.buildings['advanced-factory'],
+    scienceLevels: state.science.levels,
     mode: context.mode,
     testTimeScale: context.testTimeScale,
     now,

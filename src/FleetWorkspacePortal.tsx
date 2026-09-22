@@ -8,7 +8,7 @@ import type { ShipId } from './domain/combat/ids.ts';
 import type { SimulatorMaxRounds } from './domain/combat/simulator.ts';
 import { SOLAR_SATELLITE_ID } from './domain/combat/ids.ts';
 import { getBuildingPresentation } from './domain/buildings/balance-v1.ts';
-import { RUNTIME_STATE_CHANGED_EVENT } from './domain/runtime/mode.ts';
+import { RUNTIME_RESET_EVENT, RUNTIME_STATE_CHANGED_EVENT } from './domain/runtime/mode.ts';
 import {
   getFleetSummaryForSnapshot,
   readFleetBuildBudget,
@@ -224,6 +224,7 @@ function spyStatusLabel(mission: SpyMission, flight: FlightRecord, now: number) 
 }
 
 function FleetWorkspace({
+  planetId,
   planetName,
   coords,
   openConstruction,
@@ -234,6 +235,7 @@ function FleetWorkspace({
   espionageState,
   entityLevels,
 }: {
+  planetId: string;
   planetName: string;
   coords: string;
   openConstruction: boolean;
@@ -263,7 +265,7 @@ function FleetWorkspace({
   const [transportCargoDraft, setTransportCargoDraft] = useState<TransportCargo>(emptyTransportCargo);
   const [pendingRecall, setPendingRecall] = useState<FlightRecord | null>(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
-  const [fleetSnapshot, setFleetSnapshot] = useState<FleetSnapshot>(readApplicationFleetSnapshot);
+  const [fleetSnapshot, setFleetSnapshot] = useState<FleetSnapshot>(() => readApplicationFleetSnapshot({}, planetId));
   const [fleetBudget, setFleetBudget] = useState<FleetBuildBudget>(initialFleetBudget);
   const [pendingSatelliteDismantle, setPendingSatelliteDismantle] = useState<number | null>(null);
   const [simulatorHandoff, setSimulatorHandoff] = useState<SimulatorScenario | null>(() => consumeSimulatorHandoff());
@@ -313,8 +315,8 @@ function FleetWorkspace({
   const attackCommanderAvailability = useMemo(() => {
     if (missionId !== 'attack') return {} as Partial<Record<CommanderId, number>>;
     const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
-    return getAttackCommanderSelection(runtimeState, runtimeState.currentPlanetId);
-  }, [flightRecords, fleetSnapshot.fleet, missionId]);
+    return getAttackCommanderSelection(runtimeState, planetId);
+  }, [flightRecords, fleetSnapshot.fleet, missionId, planetId]);
   const selectedShipCount = useMemo(
     () => visibleShipDefinitions.reduce((total, ship) => total + (selectedQuantities[ship.id] ?? 0), 0),
     [selectedQuantities, visibleShipDefinitions],
@@ -380,6 +382,11 @@ function FleetWorkspace({
     setPreviewTargetDraft({ galaxy: '', system: '', position: '' });
     setPreviewTargetError(null);
     setTransportCargoDraft(emptyTransportCargo());
+    setPendingRecall(null);
+    setPendingSatelliteDismantle(null);
+    setSimulatorHandoff(null);
+    setSpyOperationsOpen(false);
+    setSelectedSpyMissionIds(new Set());
   };
 
   const clearLaunchContext = () => {
@@ -418,7 +425,7 @@ function FleetWorkspace({
     setMissionId(launchContext.missionId);
     const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
     setSelectedCommanders(launchContext.missionId === 'attack'
-      ? getAttackCommanderSelection(runtimeState, runtimeState.currentPlanetId)
+      ? getAttackCommanderSelection(runtimeState, planetId)
       : {});
     setAttackRounds(8);
     setSelectedQuantities(launchContext.missionId === 'colonize'
@@ -431,7 +438,13 @@ function FleetWorkspace({
     setPreviewTargetDraft(launchContext.destination ? flightCoordinateDraft(launchContext.destination.coordinate) : { galaxy: '', system: '', position: '' });
     setPreviewTargetError(null);
     setStatus(launchContext.destination ? `Цель: ${flightCoordinateLabel(launchContext.destination.coordinate)}.` : 'Выберите корабли и координаты цели.');
-  }, [launchContext]);
+  }, [launchContext, planetId]);
+
+  useEffect(() => {
+    resetFlightWorkspace();
+    setFleetSnapshot(readApplicationFleetSnapshot({}, planetId));
+    setFleetBudget(readFleetBuildBudget({}, planetId));
+  }, [planetId]);
 
   useEffect(() => {
     const onCommandResult = (event: Event) => {
@@ -472,8 +485,8 @@ function FleetWorkspace({
 
   useEffect(() => {
     const refresh = () => {
-      setFleetSnapshot(readApplicationFleetSnapshot());
-      setFleetBudget(readFleetBuildBudget());
+      setFleetSnapshot(readApplicationFleetSnapshot({}, planetId));
+      setFleetBudget(readFleetBuildBudget({}, planetId));
     };
     window.addEventListener(RUNTIME_STATE_CHANGED_EVENT, refresh);
     window.addEventListener('storage', refresh);
@@ -481,7 +494,7 @@ function FleetWorkspace({
       window.removeEventListener(RUNTIME_STATE_CHANGED_EVENT, refresh);
       window.removeEventListener('storage', refresh);
     };
-  }, []);
+  }, [planetId]);
 
   useEffect(() => {
     if (!openConstruction) return;
@@ -824,9 +837,9 @@ function FleetWorkspace({
 
       <main className={mainClassName}>
         {constructionView === 'ships' ? (
-          <ShipyardView planetName={planetName} coords={coords} budget={fleetBudget} />
+          <ShipyardView planetId={planetId} planetName={planetName} coords={coords} budget={fleetBudget} />
         ) : constructionView === 'defense' || constructionView === 'commander' ? (
-          <ConstructionCatalogView mode={constructionView} planetName={planetName} coords={coords} budget={fleetBudget} />
+          <ConstructionCatalogView planetId={planetId} mode={constructionView} planetName={planetName} coords={coords} budget={fleetBudget} />
         ) : selectedSection === 'combat-priority' ? (
           <FleetCombatPriorityView planetName={planetName} coords={coords} entityLevels={entityLevels} onBack={openFleetRoot} />
         ) : selectedSection === 'battles' ? (
@@ -1256,6 +1269,8 @@ function readCurrentPlanet() {
 export function FleetWorkspacePortal() {
   const { route } = useNavigation();
   const [target, setTarget] = useState<Element | null>(null);
+  const [planetId, setPlanetId] = useState('helion-01');
+  const [resetNonce, setResetNonce] = useState(0);
   const [planet, setPlanet] = useState({ name: 'Helion 01', coords: '[1:1:1]' });
   const [constructionRequested, setConstructionRequested] = useState(false);
   const [fleetBudget, setFleetBudget] = useState<FleetBuildBudget>(readFleetBuildBudget);
@@ -1271,8 +1286,9 @@ export function FleetWorkspacePortal() {
     const syncPlanet = () => {
       const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
       setTarget(document.querySelector('.workspace'));
+      setPlanetId(runtimeState.currentPlanetId);
       setPlanet(readCurrentPlanet());
-      setFleetBudget(readFleetBuildBudget());
+      setFleetBudget(readFleetBuildBudget({}, runtimeState.currentPlanetId));
       setFlightRecords(runtimeState.flights.records);
       setEspionageState(runtimeState.espionage ?? { missions: [], reports: [], hunterNotices: [] });
       setEntityLevels(runtimeState.planets[runtimeState.currentPlanetId]?.spaceportUpgrades?.shipLevels ?? {});
@@ -1280,6 +1296,14 @@ export function FleetWorkspacePortal() {
 
     const onLaunchContext = (event: Event) => setLaunchContext((event as CustomEvent<FlightLaunchContext>).detail);
     const onLaunchContextClear = () => setLaunchContext(null);
+    const onRuntimeReset = () => {
+      setLaunchContext(null);
+      setConstructionRequested(false);
+      setResetNonce((current) => current + 1);
+      // App invalidates mounted consumers before replacing the save. Read the
+      // canonical replacement on the next task, after persistence.write().
+      window.setTimeout(syncPlanet, 0);
+    };
     const onCommandResult = (event: Event) => {
       const result = (event as CustomEvent<FlightCommandResult>).detail;
       if (result.ok) {
@@ -1295,12 +1319,14 @@ export function FleetWorkspacePortal() {
     window.addEventListener(FLIGHT_LAUNCH_CONTEXT_CLEAR_EVENT, onLaunchContextClear);
     window.addEventListener(FLIGHT_COMMAND_RESULT_EVENT, onCommandResult);
     window.addEventListener(RUNTIME_STATE_CHANGED_EVENT, syncPlanet);
+    window.addEventListener(RUNTIME_RESET_EVENT, onRuntimeReset);
     window.addEventListener('storage', syncPlanet);
     return () => {
       window.removeEventListener(FLIGHT_LAUNCH_CONTEXT_EVENT, onLaunchContext);
       window.removeEventListener(FLIGHT_LAUNCH_CONTEXT_CLEAR_EVENT, onLaunchContextClear);
       window.removeEventListener(FLIGHT_COMMAND_RESULT_EVENT, onCommandResult);
       window.removeEventListener(RUNTIME_STATE_CHANGED_EVENT, syncPlanet);
+      window.removeEventListener(RUNTIME_RESET_EVENT, onRuntimeReset);
       window.removeEventListener('storage', syncPlanet);
     };
   }, [route]);
@@ -1314,6 +1340,8 @@ export function FleetWorkspacePortal() {
   if (route !== 'fleets' || !target) return null;
   return createPortal(
       <FleetWorkspace
+      key={`${planetId}:${resetNonce}`}
+      planetId={planetId}
       planetName={planet.name}
       coords={planet.coords}
       openConstruction={constructionRequested}

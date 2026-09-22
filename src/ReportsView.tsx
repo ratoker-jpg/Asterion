@@ -26,7 +26,7 @@ import type { ReportCategory, ReportFilter, ReportItem, ReportsState } from './d
 import type { PlayerProfileState } from './domain/profile/types.ts';
 import { selectPlayerProfileMetrics } from './domain/profile/selectors.ts';
 import type { RatingPrototypeState } from './domain/rating/fixtures.ts';
-import type { RuntimeMode } from './domain/runtime/mode.ts';
+import { RUNTIME_RESET_EVENT, type RuntimeMode } from './domain/runtime/mode.ts';
 import type { SpyReportSnapshot } from './domain/espionage/types.ts';
 import { COMMANDER_ABILITIES, formatCommanderAbilityEffect, type CommanderId } from './domain/combat/commanders.ts';
 import { getFactionCombatEntity } from './domain/combat/faction-catalog.ts';
@@ -359,6 +359,19 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
       return next.size === current.size ? current : next;
     });
   }, [folderItems]);
+  useEffect(() => {
+    const onRuntimeReset = () => {
+      setActiveFolder('profile');
+      setFilter('all');
+      setSearch('');
+      setPage(1);
+      setSelectedId('');
+      setSelectedIds(new Set());
+      setOpenBattleReportId(null);
+    };
+    window.addEventListener(RUNTIME_RESET_EVENT, onRuntimeReset);
+    return () => window.removeEventListener(RUNTIME_RESET_EVENT, onRuntimeReset);
+  }, []);
 
   const openFolder = (folder: MessageFolderId) => {
     setActiveFolder(folder);

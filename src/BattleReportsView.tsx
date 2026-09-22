@@ -38,7 +38,7 @@ import {
   type BattleTechnologyViewModel,
 } from './domain/combat/battle-report-view-model.ts';
 import { getFactionGeneralAsset } from './domain/profile/faction-assets.ts';
-import { ACTIVE_RUNTIME_MODE } from './domain/runtime/mode.ts';
+import { ACTIVE_RUNTIME_MODE, RUNTIME_RESET_EVENT } from './domain/runtime/mode.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
 import criticalHitArt from '../assets/source/New assets/technologies/technology.shared.critical-hit.png';
@@ -1187,8 +1187,18 @@ export function BattleReportsView({ planetName, coords, onBack }: { planetName: 
 
   useEffect(() => {
     const sync = () => setHistory(readBattleHistory(undefined, ACTIVE_RUNTIME_MODE));
+    const onRuntimeReset = () => {
+      setOpenReportId(null);
+      setMode('recent');
+      setSaveNotice({ kind: 'saved', message: '✓ Автосохранение активно' });
+      window.setTimeout(sync, 0);
+    };
     window.addEventListener(BATTLE_HISTORY_CHANGED_EVENT, sync);
-    return () => window.removeEventListener(BATTLE_HISTORY_CHANGED_EVENT, sync);
+    window.addEventListener(RUNTIME_RESET_EVENT, onRuntimeReset);
+    return () => {
+      window.removeEventListener(BATTLE_HISTORY_CHANGED_EVENT, sync);
+      window.removeEventListener(RUNTIME_RESET_EVENT, onRuntimeReset);
+    };
   }, []);
 
   const viewModels = useMemo(

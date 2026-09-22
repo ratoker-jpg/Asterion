@@ -19,6 +19,8 @@ import {
   calculateFleetPopulation,
   type OwnedFleetState,
 } from './runtime.ts';
+import type { ScienceLevels } from '../science/runtime.ts';
+import { evaluateProductionRequirements } from './requirements.ts';
 
 export type FleetProductionQueueKind = 'ships' | 'defense' | 'commanders';
 
@@ -62,6 +64,7 @@ export type FleetProductionDurationContext = {
 };
 
 export type FleetProductionContext = FleetProductionDurationContext & {
+  planetId?: string;
   state: FleetProductionState;
   fleet: OwnedFleetState;
   defense: OwnedDefenseState;
@@ -70,6 +73,7 @@ export type FleetProductionContext = FleetProductionDurationContext & {
   wallet: FleetProductionWallet;
   capacities?: ResourceCapacitiesInput;
   hangarLevel: number;
+  scienceLevels: ScienceLevels;
   now: number;
 };
 
@@ -396,6 +400,22 @@ function noEnqueue(
   };
 }
 
+function noEnqueueBeforeSettlement(
+  context: FleetProductionContext,
+  reason: string,
+): FleetProductionTransition {
+  return {
+    ok: false,
+    state: context.state,
+    fleet: context.fleet,
+    defense: context.defense,
+    wallet: emptyWalletLike(context.wallet),
+    order: null,
+    completed: [],
+    reason,
+  };
+}
+
 export function enqueueFleetProduction(
   context: FleetProductionContext,
   queueKind: FleetProductionQueueKind,
@@ -403,18 +423,31 @@ export function enqueueFleetProduction(
   quantity: number,
   orderId: string,
 ): FleetProductionTransition {
+  const entity = entityFor(queueKind, itemId, context.factionId);
+  if (!entity) return noEnqueueBeforeSettlement(context, 'Эта единица недоступна для производства.');
+
+  const safeQuantity = safePositiveInteger(quantity);
+  if (safeQuantity <= 0) return noEnqueueBeforeSettlement(context, 'Количество должно быть положительным.');
+  const requirements = evaluateProductionRequirements(entity, {
+    scienceLevels: context.scienceLevels,
+    shipyardLevel: context.shipyardLevel,
+    planetId: context.planetId,
+    hangarLevel: context.hangarLevel,
+    advancedFactoryLevel: context.advancedFactoryLevel,
+    fleet: context.fleet,
+    defense: context.defense,
+    queues: context.state,
+    wallet: context.wallet,
+    capacities: context.capacities,
+    factionId: context.factionId,
+    mode: context.mode,
+  });
+  if (!requirements.met) return noEnqueueBeforeSettlement(context, requirements.reason ?? 'Требования для производства не выполнены.');
+
   const settled = reconcileFleetProductionState(context.state, context.fleet, context.defense, context.factionId, context.now);
   const workingState = settled.state;
   const workingFleet = settled.fleet;
   const workingDefense = settled.defense;
-  const entity = entityFor(queueKind, itemId, context.factionId);
-  if (!entity) return noEnqueue(context, settled, 'Эта единица недоступна для производства.');
-
-  const safeQuantity = safePositiveInteger(quantity);
-  if (safeQuantity <= 0) return noEnqueue(context, settled, 'Количество должно быть положительным.');
-  if (context.shipyardLevel < entity.construction.requiredShipyardLevel) {
-    return noEnqueue(context, settled, `Требуется верфь уровня ${entity.construction.requiredShipyardLevel}.`);
-  }
 
   const queue = queueFor(workingState, queueKind);
   const currentOwned = ownedQuantity(workingFleet, workingDefense, queueKind, itemId);

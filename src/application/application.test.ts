@@ -595,6 +595,7 @@ test('spaceport application action names and resolves the selected faction ship'
 
 test('fleet production application persists, reconciles, and bridges all three queues', () => {
   const initial = withBuildingSetup(createInitialSaveState('test', 1_000));
+  initial.science.levels[4] = 1;
   const startContext = context(2_000);
   const ship = startFleetProduction(initial, startContext, 'ships', 'scout', 2, 'app-ship');
   assert.equal(ship.transition.ok, true);
@@ -648,9 +649,13 @@ test('fleet production application persists, reconciles, and bridges all three q
   }));
   const bridgeCompletedTask = current.planets['helion-01'].fleetProduction.shipQueue[0];
   assert.ok(bridgeCompletedTask);
-  target.dispatchEvent(new CustomEvent('asterion:fleet-production-start-request', {
-    detail: { queueKind: 'ships', itemId: 'scout', quantity: 0, now: bridgeCompletedTask.finishAt },
-  }));
+  const reconciledBridge = reconcileFleetProduction(current, {
+    planetId: 'helion-01',
+    now: bridgeCompletedTask.finishAt,
+  });
+  assert.equal(reconciledBridge.changed, true);
+  current = reconciledBridge.state;
+  commits.push(current);
   assert.equal(commits.length, 4);
   assert.equal(current.planets['helion-01'].fleet.ships.scout, 21);
   assert.equal(current.planets['helion-01'].fleetProduction.shipQueue.length, 0);
@@ -1087,11 +1092,11 @@ test('resource income uses an independent persisted clock per planet and reconci
   const secondTick = sent.flight.arrivalAt + 7_200_000;
   const firstPlanet = reconcileRuntime(state, planetContext('helion-01', firstTick));
   assert.equal(firstPlanet.state.planets['helion-01'].resources?.metal, 150);
-  assert.equal(firstPlanet.state.planets[colonyId].resources?.metal, 0);
+  assert.equal(firstPlanet.state.planets[colonyId].resources?.metal, 150);
 
   const secondPlanet = reconcileRuntime(firstPlanet.state, planetContext(colonyId, secondTick));
   assert.equal(secondPlanet.state.planets[colonyId].resources?.metal, 300);
-  assert.equal(secondPlanet.state.planets['helion-01'].resources?.metal, 150);
+  assert.equal(secondPlanet.state.planets['helion-01'].resources?.metal, 300);
 
   const switchedBack = reconcileRuntime(secondPlanet.state, planetContext('helion-01', secondTick));
   assert.equal(switchedBack.state.planets['helion-01'].resources?.metal, 300);

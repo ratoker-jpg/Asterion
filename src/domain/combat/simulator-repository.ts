@@ -2,7 +2,7 @@ import { COMBAT_ENTITY_BY_ID, getCombatEntity } from './catalog.ts';
 import { isCommanderId, type CommanderId } from './commanders.ts';
 import { normalizeCombatFactionId } from './factions.ts';
 import type { CombatEntityId } from './ids.ts';
-import { ASTERION_SAVE_KEY, COMBAT_SAVE_SCHEMA_VERSION } from './priority.ts';
+import { COMBAT_SAVE_SCHEMA_VERSION } from './priority.ts';
 import {
   createEmptySimulatorScenario,
   SIMULATOR_MAX_ROUNDS,
@@ -23,6 +23,9 @@ import {
 } from './technologies.ts';
 import { migrateScienceState } from '../science/runtime.ts';
 import type { CombatEntityKind } from './types.ts';
+import { getRuntimeSaveKey, type RuntimeMode } from '../runtime/mode.ts';
+
+const LEGACY_SAVE_KEY = getRuntimeSaveKey();
 
 export const SIMULATOR_STATE_CHANGED_EVENT = 'asterion:combat-simulator-changed';
 
@@ -207,11 +210,11 @@ export function migrateSimulatorState(value: unknown): SimulatorState {
   };
 }
 
-export function readSimulatorState(storage?: StorageLike): SimulatorState {
+export function readSimulatorState(storage?: StorageLike, mode?: RuntimeMode): SimulatorState {
   const target = resolveStorage(storage);
   if (!target) return createDefaultSimulatorState();
   try {
-    const raw = target.getItem(ASTERION_SAVE_KEY);
+    const raw = target.getItem(mode === undefined ? LEGACY_SAVE_KEY : getRuntimeSaveKey(mode));
     if (!raw) return createDefaultSimulatorState();
     const envelope = JSON.parse(raw) as SaveEnvelope;
     return migrateSimulatorState(envelope.combatSimulator);
@@ -220,11 +223,11 @@ export function readSimulatorState(storage?: StorageLike): SimulatorState {
   }
 }
 
-export function readSavedCombatTechnologies(storage?: StorageLike): CombatTechnologyLevels {
+export function readSavedCombatTechnologies(storage?: StorageLike, mode?: RuntimeMode): CombatTechnologyLevels {
   const target = resolveStorage(storage);
   if (!target) return createDefaultCombatTechnologies();
   try {
-    const raw = target.getItem(ASTERION_SAVE_KEY);
+    const raw = target.getItem(mode === undefined ? LEGACY_SAVE_KEY : getRuntimeSaveKey(mode));
     if (!raw) return createDefaultCombatTechnologies();
     const envelope = JSON.parse(raw) as SaveEnvelope & { science?: unknown };
     const science = migrateScienceState(envelope.science);
@@ -236,16 +239,16 @@ export function readSavedCombatTechnologies(storage?: StorageLike): CombatTechno
   }
 }
 
-export function readSavedCombatTechnologyProfiles(storage?: StorageLike): {
+export function readSavedCombatTechnologyProfiles(storage?: StorageLike, mode?: RuntimeMode): {
   attacker: CombatTechnologyLevels;
   defender: CombatTechnologyLevels;
 } {
-  const fallback = readSavedCombatTechnologies(storage);
+  const fallback = readSavedCombatTechnologies(storage, mode);
   const target = resolveStorage(storage);
   if (!target) return { attacker: fallback, defender: { ...fallback } };
 
   try {
-    const raw = target.getItem(ASTERION_SAVE_KEY);
+    const raw = target.getItem(mode === undefined ? LEGACY_SAVE_KEY : getRuntimeSaveKey(mode));
     if (!raw) return { attacker: fallback, defender: { ...fallback } };
     const envelope = JSON.parse(raw) as SaveEnvelope;
     const simulator = migrateSimulatorState(envelope.combatSimulator);
@@ -263,20 +266,21 @@ export type PersistSimulatorStateResult =
   | { ok: true; value: SimulatorState }
   | { ok: false; value: SimulatorState; error: string };
 
-export function persistSimulatorState(value: SimulatorState, storage?: StorageLike): PersistSimulatorStateResult {
+export function persistSimulatorState(value: SimulatorState, storage?: StorageLike, mode?: RuntimeMode): PersistSimulatorStateResult {
   const normalized = migrateSimulatorState(value);
   const target = resolveStorage(storage);
   if (!target) return { ok: false, value: normalized, error: 'Локальное сохранение недоступно.' };
 
   try {
-    const raw = target.getItem(ASTERION_SAVE_KEY);
+    const saveKey = mode === undefined ? LEGACY_SAVE_KEY : getRuntimeSaveKey(mode);
+    const raw = target.getItem(saveKey);
     const envelope = raw ? JSON.parse(raw) as SaveEnvelope : {};
     const nextEnvelope: SaveEnvelope = {
       ...envelope,
       schemaVersion: COMBAT_SAVE_SCHEMA_VERSION,
       combatSimulator: normalized,
     };
-    target.setItem(ASTERION_SAVE_KEY, JSON.stringify(nextEnvelope));
+    target.setItem(saveKey, JSON.stringify(nextEnvelope));
 
     if (typeof window !== 'undefined' && target === window.localStorage) {
       window.dispatchEvent(new CustomEvent<SimulatorState>(SIMULATOR_STATE_CHANGED_EVENT, { detail: normalized }));

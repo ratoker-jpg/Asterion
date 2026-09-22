@@ -11,6 +11,7 @@ import {
   type CombatPriorityState,
 } from './domain/combat/priority.ts';
 import { readHeaderGeometry } from './ui/header/geometry.ts';
+import { ACTIVE_RUNTIME_MODE } from './domain/runtime/mode.ts';
 import './fleet-combat-priority.css';
 import './fleet-combat-priority-scroll.css';
 
@@ -149,7 +150,7 @@ export function FleetCombatPriorityView({
   entityLevels?: Record<string, number>;
   onBack: () => void;
 }) {
-  const [priority, setPriority] = useState<CombatPriorityState>(() => readCombatPriority());
+  const [priority, setPriority] = useState<CombatPriorityState>(() => readCombatPriority(undefined, ACTIVE_RUNTIME_MODE));
   const [dragState, setDragState] = useState<DragState>(null);
   const [saveState, setSaveState] = useState<SaveState>({ kind: 'saved', message: '✓ Сохранено' });
 
@@ -220,7 +221,7 @@ export function FleetCombatPriorityView({
 
   const reorder = (side: PrioritySide, nextOrder: CommanderId[]) => {
     const nextPriority = { ...priority, [side]: nextOrder };
-    const result = persistCombatPriority(nextPriority);
+    const result = persistCombatPriority(nextPriority, undefined, ACTIVE_RUNTIME_MODE);
     setPriority(result.value);
     setSaveState(result.ok
       ? { kind: 'saved', message: '✓ Сохранено' }

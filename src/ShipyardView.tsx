@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
 import { getCombatFactionName, type CombatFactionId } from './domain/combat/factions.ts';
 import type { ShipId } from './domain/combat/ids.ts';
+import type { CatalogEntity } from './domain/combat/catalog.ts';
 import {
   formatClockDurationMs,
   getBuildingPresentation,
@@ -15,8 +16,10 @@ import { FLEET_PRODUCTION_START_REQUEST_EVENT } from './application/fleet-produc
 import { readFleetBuildBudget, type FleetBuildBudget } from './application/fleet.ts';
 import { FleetConstructionHeader } from './FleetConstructionHeader';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
+import { evaluateProductionRequirements } from './domain/fleet/requirements.ts';
 
 type ShipDefinition = {
+  catalog: CatalogEntity;
   id: ShipId;
   name: string;
   role: string;
@@ -50,6 +53,7 @@ type ResourceKind = 'metal' | 'minerals' | 'gas' | 'population';
 
 function getShipDefinitions(factionId: CombatFactionId): ShipDefinition[] {
   return getFactionShipCatalog(factionId).map((entity) => ({
+    catalog: entity,
     id: entity.id,
     name: entity.name,
     role: entity.role,
@@ -132,8 +136,10 @@ function ShipCard({
   ship,
   quantity,
   budget,
+  planetId,
   shipyardLevel,
   advancedFactoryLevel,
+  scienceLevels,
   shipCombatStats,
   onQuantity,
   onBuild,
@@ -141,13 +147,28 @@ function ShipCard({
   ship: ShipDefinition;
   quantity: number;
   budget: ShipyardBudget;
+  planetId?: string;
   shipyardLevel: number;
   advancedFactoryLevel: number;
+  scienceLevels: ShipyardBudget['scienceLevels'];
   shipCombatStats: Record<ShipId, ShipCombatStats>;
   onQuantity: (ship: ShipDefinition, quantity: number) => void;
   onBuild: (ship: ShipDefinition, quantity: number) => void;
 }) {
-  const unlocked = ship.requiredShipyardLevel <= shipyardLevel;
+  const requirements = evaluateProductionRequirements(ship.catalog, {
+    planetId,
+    scienceLevels,
+    shipyardLevel,
+    hangarLevel: budget.hangarLevel,
+    advancedFactoryLevel,
+    fleet: budget.fleet,
+    defense: budget.defense,
+    queues: budget.fleetProduction,
+    wallet: { metal: budget.metal, minerals: budget.minerals, gas: budget.gas },
+    factionId: budget.factionId,
+    mode: ACTIVE_RUNTIME_MODE,
+  });
+  const unlocked = requirements.met;
   const max = unlocked ? calculateMax(ship, budget) : 0;
   const stats = shipCombatStats[ship.id];
   const effectiveTimeMs = calculateFleetProductionDurationMs('ships', ship.id, {
@@ -160,7 +181,7 @@ function ShipCard({
   const shipLevel = Math.min(10, Math.max(0, Math.floor(budget.spaceportUpgrades.shipLevels[ship.id] ?? 0)));
 
   return (
-    <article className={`shipyard-card-v1 ${unlocked ? '' : 'locked'}`} data-qa-fleet-production-item={ship.id}>
+    <article className={`shipyard-card-v1 ${unlocked ? '' : 'locked'}`} data-qa-fleet-production-item={ship.id} data-qa-production-requirements={unlocked ? 'met' : 'unmet'} data-qa-production-requirement-reason={requirements.reason ?? undefined}>
       <header className="shipyard-card-title-v1">
         <div className={`shipyard-owned-v1 ${ship.owned > 0 ? 'has-ships' : ''}`}>
           <small>В СТРОЮ</small>
@@ -230,6 +251,7 @@ function ShipCard({
                 <div><small>КОРПУС НЕДОСТУПЕН</small><strong>Требования для постройки</strong></div>
               </div>
               <div className="shipyard-requirements-list-v1">
+                {requirements.reason ? <strong data-qa-production-requirement-error>{requirements.reason}</strong> : null}
                 {ship.requirements.map((requirement) => <span key={requirement}>{requirement}</span>)}
               </div>
             </div>
@@ -240,7 +262,7 @@ function ShipCard({
   );
 }
 
-export function ShipyardView({ planetName, coords, budget: providedBudget }: { planetName: string; coords: string; budget?: FleetBuildBudget }) {
+export function ShipyardView({ planetName, coords, planetId, budget: providedBudget }: { planetName: string; coords: string; planetId?: string; budget?: FleetBuildBudget }) {
   const savedBudget = useMemo(readFleetBuildBudget, []);
   const budget = providedBudget ?? savedBudget;
   const factionName = getCombatFactionName(budget.factionId);
@@ -271,6 +293,10 @@ export function ShipyardView({ planetName, coords, budget: providedBudget }: { p
       window.scrollTo(0, 0);
     };
   }, []);
+
+  useEffect(() => {
+    setQuantities({});
+  }, [planetId]);
 
   const setQuantity = (ship: ShipDefinition, raw: number) => {
     const max = calculateMax(ship, { ...budget, population: fleetSummary.population, populationMax: fleetSummary.capacity });
@@ -312,8 +338,10 @@ export function ShipyardView({ planetName, coords, budget: providedBudget }: { p
             ship={ship}
             quantity={quantities[ship.id] ?? 0}
             budget={budget}
+            planetId={planetId}
             shipyardLevel={budget.shipyardLevel}
             advancedFactoryLevel={budget.advancedFactoryLevel}
+            scienceLevels={budget.scienceLevels}
             shipCombatStats={shipCombatStats}
             onQuantity={setQuantity}
             onBuild={prepareBuild}

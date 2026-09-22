@@ -7,6 +7,7 @@ import type {
   SpyOwnerProfile,
   SpyReportSnapshot,
   SpyTargetState,
+  OrbitalDebrisRecord,
 } from './types.ts';
 import { createDefaultEspionageState } from './runtime.ts';
 import { createBot01Planets, createDefaultBot01Profile } from './fixtures.ts';
@@ -58,7 +59,7 @@ function list<T>(value: unknown, migrate: (candidate: unknown) => T | null): T[]
 function migrateMission(value: unknown): SpyMission | null {
   const source = record(value);
   const status = source.status as SpyMission['status'];
-  if (!['transit', 'orbiting', 'returning', 'returned', 'destroyed'].includes(String(status))) return null;
+  if (!['transit', 'orbiting', 'returning', 'returned', 'destroyed', 'target-destroyed'].includes(String(status))) return null;
   const targetRelation = source.targetRelation;
   if (targetRelation !== 'self' && targetRelation !== 'ally' && targetRelation !== 'enemy' && targetRelation !== 'neutral') return null;
   const coordinate = record(source.targetCoordinate);
@@ -90,6 +91,7 @@ function migrateMission(value: unknown): SpyMission | null {
     ...(Number.isFinite(source.nextReportAt) ? { nextReportAt: Number(source.nextReportAt) } : {}),
     ...(Number.isFinite(source.returnedAt) ? { returnedAt: Number(source.returnedAt) } : {}),
     ...(Number.isFinite(source.destroyedAt) ? { destroyedAt: Number(source.destroyedAt) } : {}),
+    ...(Number.isFinite(source.targetDestroyedAt) ? { targetDestroyedAt: Number(source.targetDestroyedAt) } : {}),
     reportIds: Array.isArray(source.reportIds) ? source.reportIds.filter((item): item is string => typeof item === 'string') : [],
   };
 }
@@ -252,6 +254,26 @@ function migrateSpyTarget(value: unknown, now: number): SpyTargetState | null {
   } as unknown as SpyTargetState;
 }
 
+function migrateOrbitalDebris(value: unknown): OrbitalDebrisRecord | null {
+  const source = record(value);
+  const coordinate = record(source.targetCoordinate ?? source.coordinate);
+  const id = text(source.id);
+  const targetPlanetId = text(source.targetPlanetId);
+  const debris = nonNegative(source.debris, nonNegative(source.amount));
+  if (!id || !targetPlanetId || debris <= 0
+    || ![coordinate.galaxy, coordinate.system, coordinate.position].every((part) => Number.isInteger(part) && Number(part) >= 1)) return null;
+  return {
+    id,
+    targetPlanetId,
+    targetPlanetName: text(source.targetPlanetName, 'Неизвестная планета'),
+    targetOwnerId: text(source.targetOwnerId, 'unknown-owner'),
+    targetCoordinate: { galaxy: Number(coordinate.galaxy), system: Number(coordinate.system), position: Number(coordinate.position) },
+    debris,
+    createdAt: nonNegative(source.createdAt),
+    ...(text(source.reportId) ? { reportId: text(source.reportId) } : {}),
+  };
+}
+
 function spyTargetMatchesCurrentContract(value: SpyTargetState): boolean {
   const population = value.population as SpyTargetState['population'] & { civilian?: number };
   return Number.isFinite(population.total)
@@ -283,10 +305,15 @@ export function migrateEspionageState(value: unknown, now = Date.now()): Espiona
     && !Object.values(migratedTargets!).every(spyTargetMatchesCurrentContract);
   const targets = legacyBotTargetsNeedRepair ? createBot01Planets(now) : migratedTargets;
   const currentBot01Profile = bot01Profile ?? (hasLegacyBotTargets && hasTargets ? createDefaultBot01Profile() : undefined);
+  const orbitalDebris = Object.fromEntries(Object.entries(record(source.orbitalDebris)).flatMap(([key, candidate]) => {
+    const migrated = migrateOrbitalDebris(candidate);
+    return migrated ? [[key, migrated]] : [];
+  }));
   return {
     missions: list(source.missions, migrateMission),
     reports: list(source.reports, migrateReport),
     hunterNotices: list(source.hunterNotices, migrateNotice),
+    orbitalDebris,
     ...(targets ? { targets } : {}),
     ...(hasLegacyBotTargets && targets ? { bot01Planets: targets as Record<string, Bot01PlanetState> } : {}),
     ...(currentBot01Profile ? { bot01Profile: currentBot01Profile } : {}),

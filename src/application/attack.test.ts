@@ -173,7 +173,13 @@ test('successful Planetolom siege removes the authoritative target and replays t
       },
     },
   };
-  const siegeReady = emptyTarget(prepared, targetId);
+  const siegeReady = replaceTarget(emptyTarget(prepared, targetId), targetId, {
+    ...emptyTarget(prepared, targetId).espionage!.targets![targetId],
+    resources: {
+      ...emptyTarget(prepared, targetId).espionage!.targets![targetId].resources,
+      debris: 321,
+    },
+  });
 
   let resolved: ReturnType<typeof reconcileFlights> | null = null;
   for (let index = 0; index < 200; index += 1) {
@@ -196,6 +202,13 @@ test('successful Planetolom siege removes the authoritative target and replays t
   assert.equal(report.siege?.planetDestroyed, true);
   assert.equal(arrival.state.espionage!.targets![targetId], undefined);
   assert.equal(arrival.state.espionage!.bot01Planets![targetId], undefined);
+  assert.equal(arrival.state.espionage!.orbitalDebris?.[targetId]?.debris, 321);
+  assert.equal(arrival.state.espionage!.orbitalDebris?.[targetId]?.targetPlanetId, targetId);
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 10_000 });
+  assert.equal(persistence.write(arrival.state).ok, true);
+  const reloaded = persistence.read();
+  assert.equal(reloaded.espionage!.orbitalDebris?.[targetId]?.debris, 321);
   assert.equal(flight.phase, 'returning');
 
   const replay = resolveAttackAtTarget(arrival.state, flight, flight.arrivedAt ?? 1_000);

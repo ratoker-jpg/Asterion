@@ -18,10 +18,10 @@ import { reconcileFlights, type FlightReconcileEvent } from './flights.ts';
 
 export type RuntimeReconcileEvent =
   | { kind: 'science'; scienceIds: ScienceId[] }
-  | { kind: 'building'; assetRole: BuildingRole }
-  | { kind: 'recycling'; jobIds: string[] }
-  | { kind: 'spaceport'; tasks: Array<{ track: SpaceportUpgradeTrack; shipId: string }> }
-  | { kind: 'fleet-production'; completed: FleetProductionCompletion[] }
+  | { kind: 'building'; planetId: string; assetRole: BuildingRole }
+  | { kind: 'recycling'; planetId: string; jobIds: string[] }
+  | { kind: 'spaceport'; planetId: string; tasks: Array<{ track: SpaceportUpgradeTrack; shipId: string }> }
+  | { kind: 'fleet-production'; planetId: string; completed: FleetProductionCompletion[] }
   | { kind: 'flight'; events: FlightReconcileEvent[] };
 
 export type RuntimeReconcileResult = {
@@ -42,13 +42,18 @@ export function reconcileRuntime(
 ): RuntimeReconcileResult {
   let next = state;
   const events: RuntimeReconcileEvent[] = [];
+  const planetIds = Object.keys(next.planets).sort();
+  let selectedCredit: ResourceCreditResult | null = null;
 
-  // Close the interval using the pre-transition buildings and capacities. Any
-  // completion at this exact timestamp affects the next interval.
-  const resources = reconcileResourceIncome(next, context);
-  if (resources.changed) next = resources.state;
+  // Close every owned planet's interval using its own buildings and clock.
+  // Any completion at this exact timestamp affects the next interval.
+  for (const planetId of planetIds) {
+    const resources = reconcileResourceIncome(next, { ...context, planetId });
+    if (planetId === context.planetId || selectedCredit === null) selectedCredit = resources.credit;
+    if (resources.changed) next = resources.state;
+  }
 
-  const science = reconcileScience(next, context);
+  const science = reconcileScience(next, { ...context, planetId: context.planetId });
   if (science.changed) {
     next = science.state;
     if (science.completedScienceIds.length > 0) {
@@ -56,36 +61,39 @@ export function reconcileRuntime(
     }
   }
 
-  const building = completeBuilding(next, context);
-  if (building.changed && building.completedRole) {
-    next = building.state;
-    events.push({ kind: 'building', assetRole: building.completedRole });
-  }
-
-  const recycling = reconcileRecycling(next, context);
-  if (recycling.state !== next) {
-    next = recycling.state;
-    if (recycling.autoCollectedJobIds.length > 0) {
-      events.push({ kind: 'recycling', jobIds: recycling.autoCollectedJobIds });
+  for (const planetId of planetIds) {
+    const planetContext = { ...context, planetId };
+    const building = completeBuilding(next, planetContext);
+    if (building.changed && building.completedRole) {
+      next = building.state;
+      events.push({ kind: 'building', planetId, assetRole: building.completedRole });
     }
-  }
 
-  const trade = reconcileTrade(next, context);
-  if (trade.state !== next) next = trade.state;
-
-  const spaceport = reconcileSpaceport(next, context);
-  if (spaceport.state !== next) {
-    next = spaceport.state;
-    if (spaceport.completed.length > 0) {
-      events.push({ kind: 'spaceport', tasks: spaceport.completed });
+    const recycling = reconcileRecycling(next, planetContext);
+    if (recycling.state !== next) {
+      next = recycling.state;
+      if (recycling.autoCollectedJobIds.length > 0) {
+        events.push({ kind: 'recycling', planetId, jobIds: recycling.autoCollectedJobIds });
+      }
     }
-  }
 
-  const fleetProduction = reconcileFleetProduction(next, context);
-  if (fleetProduction.changed) {
-    next = fleetProduction.state;
-    if (fleetProduction.completed.length > 0) {
-      events.push({ kind: 'fleet-production', completed: fleetProduction.completed });
+    const trade = reconcileTrade(next, planetContext);
+    if (trade.state !== next) next = trade.state;
+
+    const spaceport = reconcileSpaceport(next, planetContext);
+    if (spaceport.state !== next) {
+      next = spaceport.state;
+      if (spaceport.completed.length > 0) {
+        events.push({ kind: 'spaceport', planetId, tasks: spaceport.completed });
+      }
+    }
+
+    const fleetProduction = reconcileFleetProduction(next, { planetId, now: context.now });
+    if (fleetProduction.changed) {
+      next = fleetProduction.state;
+      if (fleetProduction.completed.length > 0) {
+        events.push({ kind: 'fleet-production', planetId, completed: fleetProduction.completed });
+      }
     }
   }
 
@@ -101,5 +109,14 @@ export function reconcileRuntime(
     if (flights.events.length > 0) events.push({ kind: 'flight', events: flights.events });
   }
 
-  return { changed: next !== state, state: next, events, credit: resources.credit };
+  return {
+    changed: next !== state,
+    state: next,
+    events,
+    credit: selectedCredit ?? {
+      wallet: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+      accepted: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+      burned: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+    },
+  };
 }

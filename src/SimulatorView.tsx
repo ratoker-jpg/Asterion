@@ -14,6 +14,7 @@ import { createDefaultCombatPriority } from './domain/combat/priority.ts';
 import { calculateCombatStackPreview, resolveCombat, type CombatStackPreview } from './domain/combat/resolver.ts';
 import {
   deleteSimulatorPreset,
+  createDefaultSimulatorState,
   persistSimulatorState,
   readSavedCombatTechnologyProfiles,
   readSimulatorState,
@@ -21,6 +22,7 @@ import {
   withLastScenario,
   type SimulatorState,
 } from './domain/combat/simulator-repository.ts';
+import { ACTIVE_RUNTIME_MODE, RUNTIME_RESET_EVENT } from './domain/runtime/mode.ts';
 import {
   COMBAT_ENTITY_LEVEL_LIMITS,
   SIMULATOR_POPULATION_LIMITS,
@@ -545,11 +547,11 @@ function RaceSelector({ id, label, value, onChange }: { id: string; label: strin
 }
 
 export function SimulatorView({ planetName, coords, onBack, initialScenario }: { planetName: string; coords: string; onBack: () => void; initialScenario?: SimulatorScenario | null }) {
-  const initialPersistence = useMemo(() => readSimulatorState(), []);
+  const initialPersistence = useMemo(() => readSimulatorState(undefined, ACTIVE_RUNTIME_MODE), []);
   const [scenario, setScenario] = useState<SimulatorScenario>(() => {
     if (initialScenario) return initialScenario;
     if (initialPersistence.lastScenario) return initialPersistence.lastScenario;
-    const savedTechnologyProfiles = readSavedCombatTechnologyProfiles();
+    const savedTechnologyProfiles = readSavedCombatTechnologyProfiles(undefined, ACTIVE_RUNTIME_MODE);
     const empty = createEmptySimulatorScenario();
     return {
       ...empty,
@@ -563,6 +565,7 @@ export function SimulatorView({ planetName, coords, onBack, initialScenario }: {
   const [selectedPresetId, setSelectedPresetId] = useState('');
   const [result, setResult] = useState<BattleReport | null>(null);
   const [notice, setNotice] = useState('Готов к расчёту.');
+  const resetRevision = useRef(0);
   const closeResult = useCallback(() => {
     setResult(null);
     setNotice('Расчёт закрыт.');
@@ -596,9 +599,27 @@ export function SimulatorView({ planetName, coords, onBack, initialScenario }: {
   };
 
   useEffect(() => {
+    const onRuntimeReset = () => {
+      resetRevision.current += 1;
+      // Reset is dispatched before App replaces the envelope. Do not read the
+      // old simulator payload from storage during that invalidation window.
+      const next = createDefaultSimulatorState();
+      setSimulatorState(next);
+      setScenario(next.lastScenario ?? createEmptySimulatorScenario());
+      setResult(null);
+      setSelectedPresetId('');
+      setNotice('Симулятор сброшен.');
+    };
+    window.addEventListener(RUNTIME_RESET_EVENT, onRuntimeReset);
+    return () => window.removeEventListener(RUNTIME_RESET_EVENT, onRuntimeReset);
+  }, []);
+
+  useEffect(() => {
+    const revision = resetRevision.current;
     const timer = window.setTimeout(() => {
-      const next = withLastScenario(readSimulatorState(), scenario);
-      const persisted = persistSimulatorState(next);
+      if (revision !== resetRevision.current) return;
+      const next = withLastScenario(readSimulatorState(undefined, ACTIVE_RUNTIME_MODE), scenario);
+      const persisted = persistSimulatorState(next, undefined, ACTIVE_RUNTIME_MODE);
       if (persisted.ok) setSimulatorState(persisted.value);
     }, 140);
     return () => window.clearTimeout(timer);
@@ -687,8 +708,8 @@ export function SimulatorView({ planetName, coords, onBack, initialScenario }: {
   const savePreset = () => {
     const name = presetName.trim() || `Сценарий ${simulatorState.presets.length + 1}`;
     const preset = { id: nextIdentity('preset'), name, createdAt: new Date().toISOString(), input: scenario };
-    const next = upsertSimulatorPreset(readSimulatorState(), preset);
-    const persisted = persistSimulatorState(next);
+    const next = upsertSimulatorPreset(readSimulatorState(undefined, ACTIVE_RUNTIME_MODE), preset);
+    const persisted = persistSimulatorState(next, undefined, ACTIVE_RUNTIME_MODE);
     if (persisted.ok) {
       setSimulatorState(persisted.value);
       setSelectedPresetId(preset.id);
@@ -707,8 +728,8 @@ export function SimulatorView({ planetName, coords, onBack, initialScenario }: {
   const deletePreset = () => {
     if (!selectedPresetId) return;
     const preset = simulatorState.presets.find((item) => item.id === selectedPresetId);
-    const next = deleteSimulatorPreset(readSimulatorState(), selectedPresetId);
-    const persisted = persistSimulatorState(next);
+    const next = deleteSimulatorPreset(readSimulatorState(undefined, ACTIVE_RUNTIME_MODE), selectedPresetId);
+    const persisted = persistSimulatorState(next, undefined, ACTIVE_RUNTIME_MODE);
     if (persisted.ok) {
       setSimulatorState(persisted.value);
       setSelectedPresetId('');

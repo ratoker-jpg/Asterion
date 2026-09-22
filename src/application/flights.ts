@@ -1204,6 +1204,46 @@ function beginSpyTargetReturn(
   return { state: next, flight: returningFlight, mission: returningMission };
 }
 
+/**
+ * A target can disappear while a spy is still outbound or already orbiting.
+ * Keep this transition separate from the diplomacy path: the mission is a
+ * terminal target-destroyed event, while the physical probe still returns.
+ */
+function beginSpyDestroyedTargetReturn(
+  state: SaveState,
+  flight: FlightRecord,
+  mission: SpyMission,
+  now: number,
+): { state: SaveState; flight: FlightRecord; mission: SpyMission } | null {
+  if (mission.status !== 'target-destroyed') return null;
+  const flights = currentFlightState(state);
+  let returningState: FlightState;
+  if (flight.phase === 'outbound' && now < flight.arrivalAt) {
+    returningState = recallDomainFlight(flights, flight.id, now);
+  } else if (flight.phase === 'outbound' || flight.phase === 'arrived') {
+    returningState = beginDomainFlightReturn(flights, flight.id, now, 'spy-destroyed');
+  } else if (flight.phase === 'returning') {
+    returningState = updateFlight(flights, { ...flight, completionReason: 'spy-destroyed' });
+  } else {
+    return null;
+  }
+  const returningRecord = returningState.records.find((item) => item.id === flight.id);
+  if (!returningRecord || returningRecord.phase !== 'returning') return null;
+  const returningFlight: FlightRecord = {
+    ...returningRecord,
+    arrivedAt: flight.arrivedAt ?? flight.arrivalAt,
+    completionReason: 'spy-destroyed',
+  };
+  const returningMission: SpyMission = {
+    ...mission,
+    status: 'returning',
+    nextReportAt: undefined,
+  };
+  let next = { ...state, flights: updateFlight(returningState, returningFlight) };
+  next = withEspionageState(next, updateSpyMission(currentEspionageState(next), returningMission));
+  return { state: next, flight: returningFlight, mission: returningMission };
+}
+
 export type FlightReconcileOptions = {
   mode?: RuntimeMode;
   testTimeScale?: TestTimeScale;
@@ -1250,7 +1290,20 @@ export function reconcileFlights(
     const current = next.flights.records.find((flight) => flight.id === original.id) ?? original;
     if (current.missionId === 'espionage') {
       const mission = spyMissionForFlight(next, current);
-      if (mission && mission.status !== 'returning' && mission.status !== 'returned' && mission.status !== 'destroyed') {
+      if (mission?.status === 'target-destroyed') {
+        const returning = beginSpyDestroyedTargetReturn(next, current, mission, now);
+        if (returning) {
+          next = returning.state;
+          changed = true;
+          events.push({
+            flight: returning.flight,
+            status: 'target-unavailable',
+            notice: 'Шпионский зонд возвращается: цель уничтожена до завершения миссии.',
+          });
+          continue;
+        }
+      }
+      if (mission && mission.status !== 'returning' && mission.status !== 'returned' && mission.status !== 'destroyed' && mission.status !== 'target-destroyed') {
         const resolved = resolveSpyTarget(next, mission.targetPlanetId, {
           coordinate: mission.targetCoordinate,
         });
@@ -1298,15 +1351,30 @@ export function reconcileFlights(
           events.push({ flight: failed, status: 'arrived', notice: 'Шпионская миссия завершена: снимок миссии не найден.' });
           continue;
         }
+        if (mission.status === 'target-destroyed') {
+          const returning = beginSpyDestroyedTargetReturn(next, current, mission, now);
+          if (returning) {
+            next = returning.state;
+            changed = true;
+            events.push({
+              flight: returning.flight,
+              status: 'target-unavailable',
+              notice: 'Шпионский зонд возвращается: цель уничтожена до прибытия.',
+            });
+          }
+          continue;
+        }
         if (mission.status === 'transit') {
           const resolved = resolveSpyAtTarget(next, current, mission, now, rng, true);
           if (!resolved) {
-            const failedMission: SpyMission = { ...mission, status: 'destroyed', destroyedAt: now };
-            const failedFlight: FlightRecord = { ...current, phase: 'completed', arrivedAt: arrivalAt, completedAt: now, completionReason: 'mission-failed' };
-            next = removeSpyProbeFromOrigin(next, mission);
-            next = withEspionageState(completeFlight(next, current, failedFlight), updateSpyMission(currentEspionageState(next), failedMission));
-            changed = true;
-            events.push({ flight: failedFlight, status: 'target-unavailable', notice: 'Шпионская миссия завершена: цель больше недоступна.' });
+            const destroyedMission: SpyMission = { ...mission, status: 'target-destroyed', destroyedAt: now, targetDestroyedAt: now, nextReportAt: undefined };
+            next = withEspionageState(next, updateSpyMission(currentEspionageState(next), destroyedMission));
+            const returning = beginSpyDestroyedTargetReturn(next, current, destroyedMission, now);
+            if (returning) {
+              next = returning.state;
+              changed = true;
+              events.push({ flight: returning.flight, status: 'target-unavailable', notice: 'Шпионский зонд возвращается: цель больше недоступна.' });
+            }
             continue;
           }
           next = resolved.state;
@@ -1530,6 +1598,8 @@ export function reconcileFlights(
             ? 'target-unavailable'
             : returnedFlight.completionReason === 'target-occupied'
               ? 'target-occupied'
+              : returnedFlight.completionReason === 'spy-destroyed'
+                ? 'spy-destroyed'
               : returnedFlight.missionId === 'attack'
                 ? returnedFlight.completionReason ?? 'normal-return'
                 : 'recalled',
@@ -1556,6 +1626,8 @@ export function reconcileFlights(
           : completed.missionId === 'espionage'
             ? completed.completionReason === 'target-unavailable'
               ? 'Шпионский зонд вернулся: цель стала союзной и недоступна для шпионажа.'
+              : completed.completionReason === 'spy-destroyed'
+                ? 'Шпионский зонд вернулся: цель была уничтожена до завершения миссии.'
               : 'Шпионский зонд вернулся на исходную планету.'
             : completed.missionId === 'attack'
               ? completed.completionReason === 'target-unavailable'

@@ -21,6 +21,7 @@ import { createPersistenceFacade, type PersistenceOptions } from './persistence.
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 import { createDefaultSpaceportUpgradeState, type SpaceportUpgradeState } from '../domain/buildings/spaceport-upgrades.ts';
+import type { ScienceLevels } from '../domain/science/runtime.ts';
 
 export type FleetSnapshot = {
   factionId: CombatFactionId;
@@ -55,6 +56,7 @@ export type FleetBuildBudget = {
   summary: FleetSummary;
   defenseSummary: ReturnType<typeof getDefensePopulationSummary>;
   solarSatellites: number;
+  scienceLevels: ScienceLevels;
 };
 
 function safeLevel(value: unknown, fallback: number): number {
@@ -151,9 +153,9 @@ export function getOutgoingFleetSummaryForState(state: SaveState, planetId: Plan
   return getOutgoingFleetSummaryForSnapshot(getFleetSnapshot(state, planetId));
 }
 
-export function readFleetSnapshot(options: PersistenceOptions = {}): FleetSnapshot {
+export function readFleetSnapshot(options: PersistenceOptions = {}, planetId?: PlanetId): FleetSnapshot {
   const state = createPersistenceFacade(options).read();
-  return getFleetSnapshot(state);
+  return getFleetSnapshot(state, planetId ?? state.currentPlanetId);
 }
 
 export function getFleetBuildBudget(state: SaveState, planetId: PlanetId = state.currentPlanetId): FleetBuildBudget {
@@ -183,12 +185,13 @@ export function getFleetBuildBudget(state: SaveState, planetId: PlanetId = state
     summary,
     defenseSummary,
     solarSatellites: snapshot.solarSatellites,
+    scienceLevels: state.science.levels,
   };
 }
 
-export function readFleetBuildBudget(options: PersistenceOptions = {}): FleetBuildBudget {
+export function readFleetBuildBudget(options: PersistenceOptions = {}, planetId?: PlanetId): FleetBuildBudget {
   const state = createPersistenceFacade(options).read();
-  return getFleetBuildBudget(state);
+  return getFleetBuildBudget(state, planetId ?? state.currentPlanetId);
 }
 
 export function createDefaultFleetSnapshot(): FleetSnapshot {

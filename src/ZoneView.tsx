@@ -33,6 +33,7 @@ import {
 } from './domain/energy/runtime.ts';
 import type { PlanetEnergyCoordinates } from './application/energy.ts';
 import { getProductionBotBonusPercent, type BotAssignment, type ProductionResourceIncome } from './domain/buildings/production-bots.ts';
+import { RUNTIME_RESET_EVENT } from './domain/runtime/mode.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 
 export const ZONE_VIEW_META: Readonly<Record<BuildingZone, {
@@ -284,6 +285,15 @@ export function ZoneView({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onSelectedRoleChange, pendingAction, selectedRole]);
+
+  useEffect(() => {
+    const onRuntimeReset = () => {
+      setPendingAction(null);
+      onSelectedRoleChange(null);
+    };
+    window.addEventListener(RUNTIME_RESET_EVENT, onRuntimeReset);
+    return () => window.removeEventListener(RUNTIME_RESET_EVENT, onRuntimeReset);
+  }, [onSelectedRoleChange]);
 
   useEffect(() => {
     if (!pendingAction) return;
