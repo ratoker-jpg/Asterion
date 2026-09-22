@@ -38,6 +38,7 @@ import {
   getUniverseOwnerRelation,
   getUniverseSlotPoint,
   getUniverseTimedObjectSchedule,
+  BOT_01_PLANET_FIXTURES,
   resolveUniverseAsteroidCollisions,
   resolveUniverseFixtures,
   TEST_MODE_ALLY_PLANET_FIXTURE,
@@ -154,6 +155,28 @@ test('registered Test Mode targets override coordinate fixtures and block fleet 
     assert.equal(node?.fixture, undefined);
     assert.equal(getUniverseActionState('fleet', node!, 'player-current', relation).enabled, false);
   }
+});
+
+test('authoritative Test Mode targets do not recreate a destroyed Bot 01 planet', () => {
+  const registeredPlanets = BOT_01_PLANET_FIXTURES.map((fixture) => ({
+    id: fixture.id,
+    coordinate: { galaxy: GALAXY, system: fixture.system, position: fixture.position },
+    name: fixture.name,
+    kind: 'npc' as const,
+    ownerId: UNIVERSE_NPC_OWNER_ID,
+  }));
+  const destroyed = registeredPlanets[0];
+  const map = createUniverseMap({
+    mode: 'test',
+    registeredPlanets: registeredPlanets.filter((planet) => planet.id !== destroyed.id),
+  });
+  const nodes = map.systems.flatMap((system) => system.positions);
+
+  assert.equal(nodes.some((node) => node.id === destroyed.id), false);
+  assert.equal(nodes.filter((node) => node.kind === 'npc' && node.ownerId === UNIVERSE_NPC_OWNER_ID).length, registeredPlanets.length - 1);
+  assert.equal(nodes.find((node) => node.coordinate.galaxy === destroyed.coordinate.galaxy
+    && node.coordinate.system === destroyed.coordinate.system
+    && node.coordinate.position === destroyed.coordinate.position)?.kind, 'empty');
 });
 
 test('dynamic objects are scheduled independently and never duplicate within a system', () => {
