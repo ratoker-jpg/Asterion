@@ -219,6 +219,12 @@ function optionalNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function objectRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
 function nonNegativeNumberOr(value: unknown, fallback: number): number {
   const resolved = numberOr(value, fallback);
   return Math.max(0, resolved);
@@ -881,6 +887,12 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       ? parsed.currentPlanetId.trim()
       : 'helion-01';
     const alliedPlanets = migrateAlliedPlanets(parsed.alliedPlanets, mode, timestamp, science.levels);
+    const rawEspionage = objectRecord(parsed.espionage);
+    // A canonical `targets` object is authoritative even when it is empty.
+    // Inspect the persisted envelope before migration because migration also
+    // exposes legacy `bot01Planets` through the canonical `targets` field.
+    const hasCanonicalTargetRegistry = Boolean(objectRecord(rawEspionage?.targets));
+    const hasLegacyBotRegistry = Boolean(objectRecord(rawEspionage?.bot01Planets));
     const migratedEspionage = migrateEspionageState(parsed.espionage, timestamp);
     const defaultTestEspionage = createDefaultTestEspionageState(timestamp);
     const savedTargets = Object.values(migratedEspionage.targets ?? {});
@@ -890,11 +902,18 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       return !population || population.total === undefined || population.civilian !== undefined;
     });
     const hasCurrentBotProfile = Boolean(migratedEspionage.bot01Profile)
-      && savedBotPlanets.length > 0
       && !legacyBotFixtures;
     const testTargets = defaultTestEspionage.targets ?? defaultTestEspionage.bot01Planets ?? {};
     const espionage = mode === 'test'
-      ? (hasCurrentBotProfile
+      ? (hasCanonicalTargetRegistry
+        ? {
+          ...migratedEspionage,
+          targets: migratedEspionage.targets ?? {},
+          // Keep the old alias synchronized without allowing it to resurrect
+          // targets that were removed from the canonical registry.
+          bot01Planets: (migratedEspionage.targets ?? {}) as NonNullable<typeof migratedEspionage.bot01Planets>,
+        }
+        : (hasCurrentBotProfile && hasLegacyBotRegistry)
         ? migratedEspionage
         : {
           ...migratedEspionage,

@@ -887,13 +887,21 @@ export function getUniverseActionState(
   };
 }
 
-export function createUniverseNpcOwnerProfile(points?: UniverseOwnerPoints): UniverseOwnerProfile {
+export function createUniverseNpcOwnerProfile(
+  points?: UniverseOwnerPoints,
+  registeredPlanetIds?: readonly string[],
+): UniverseOwnerProfile {
   return normalizeUniverseOwnerProfile({
     id: NPC_OWNER_ID,
     displayName: 'Бот 01',
     raceId: 'veyra',
     ...(points ? { points } : {}),
-    planetIds: NPC_PLANET_FIXTURES.map((planet) => planet.id),
+    // The fixture list is only the default for callers that do not have a
+    // runtime registry. UniverseView supplies the authoritative IDs after
+    // reload so destroyed targets cannot reappear in the owner inspector.
+    planetIds: registeredPlanetIds
+      ? [...registeredPlanetIds]
+      : NPC_PLANET_FIXTURES.map((planet) => planet.id),
   });
 }
 

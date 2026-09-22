@@ -61,6 +61,7 @@ import {
   GALAXY,
   MAX_PLANETS_PER_OWNER,
   SYSTEM_COUNT,
+  UNIVERSE_NPC_OWNER_ID,
   createUniverseNpcOwnerProfile,
   TEST_MODE_ALLY_PLANET_FIXTURE,
   createUniverseMap,
@@ -404,7 +405,10 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
   const owners = useMemo(() => {
     const next = new Map<string, UniverseOwnerProfile>([[owner.id, owner]]);
     if (mode === 'test') {
-      const npc = createUniverseNpcOwnerProfile(owner.points);
+      const registeredBotPlanetIds = spyTargets
+        .filter((target) => target.ownerId === UNIVERSE_NPC_OWNER_ID)
+        .map((target) => target.id);
+      const npc = createUniverseNpcOwnerProfile(owner.points, registeredBotPlanetIds);
       next.set(npc.id, npc);
       next.set(TEST_MODE_ALLY_PLANET_FIXTURE.owner.id, normalizeUniverseOwnerProfile(TEST_MODE_ALLY_PLANET_FIXTURE.owner));
     }

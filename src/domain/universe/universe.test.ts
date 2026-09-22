@@ -179,6 +179,13 @@ test('authoritative Test Mode targets do not recreate a destroyed Bot 01 planet'
     && node.coordinate.position === destroyed.coordinate.position)?.kind, 'empty');
 });
 
+test('Bot 01 owner profile uses the authoritative runtime registry when supplied', () => {
+  const profile = createUniverseNpcOwnerProfile(undefined, ['bot-01-alive']);
+
+  assert.deepEqual(profile.planetIds, ['bot-01-alive']);
+  assert.equal(profile.planetIds.includes(BOT_01_PLANET_FIXTURES[0].id), false);
+});
+
 test('dynamic objects are scheduled independently and never duplicate within a system', () => {
   const nowMs = Date.UTC(2026, 8, 8, 12);
   const map = createUniverseMap({ nowMs });
