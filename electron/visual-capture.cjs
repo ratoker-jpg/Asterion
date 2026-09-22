@@ -82,8 +82,29 @@ async function reload(win) {
 }
 
 async function resetTestSave(win) {
-  await win.webContents.session.clearStorageData({ storages: ['localstorage'] });
-  await reload(win);
+  // Clear and navigate in the same renderer task. Clearing the session from
+  // the main process and reloading in a later task leaves a small window in
+  // which the mounted App can persist its previous SaveState back to storage.
+  const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+  await win.webContents.executeJavaScript(`(() => {
+    localStorage.clear();
+    window.location.reload();
+    return true;
+  })()`).catch(() => undefined);
+  await done;
+  await waitFor(win, `(() => {
+    try {
+      const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
+      return Boolean(save)
+        && save.currentPlanetId === 'helion-01'
+        && Object.keys(save.planets || {}).length === 1
+        && Array.isArray(save.queues?.['helion-01'])
+        && save.queues['helion-01'].length === 0;
+    } catch {
+      return false;
+    }
+  })()`);
+  await settle(win);
 }
 
 async function activateScreen(win, route, label, expectedClass) {
@@ -160,7 +181,23 @@ async function enqueueResourceBuilding(win, role) {
     button.click();
     return true;
   })()`);
-  if(!clicked) throw new Error(`Build button did not activate for ${role}`);
+  if(!clicked) {
+    const diagnostics = await win.webContents.executeJavaScript(`(() => {
+      const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+      const dialog = document.querySelector('.resource-building-dialog');
+      const button = dialog?.querySelector('[data-qa-build-button]');
+      const queue = save.queues?.['helion-01'];
+      return {
+        status: dialog?.querySelector('[data-qa-build-status]')?.getAttribute('data-qa-build-status') ?? '',
+        disabled: Boolean(button?.disabled),
+        queue: Array.isArray(queue) ? queue.map((item) => item.assetRole) : null,
+        metal: save.metal ?? null,
+        energy: save.planets?.['helion-01']?.energy ?? null,
+        basicEnergyLevel: save.planets?.['helion-01']?.buildings?.['basic-energy'] ?? null,
+      };
+    })()`);
+    throw new Error(`Build button did not activate for ${role}: ${JSON.stringify(diagnostics)}`);
+  }
   await waitFor(win, `!document.querySelector('.resource-building-dialog')`);
   await settle(win);
 }
