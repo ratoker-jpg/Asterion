@@ -62,6 +62,7 @@ import {
   canRequestSpyReport,
   createDefaultEspionageState,
   createSeededEspionageRng,
+  getEspionageTargets,
   espionageRollSeed,
   hunterDetects,
   normalizeRngRoll,
@@ -80,7 +81,7 @@ import type {
 } from '../domain/espionage/types.ts';
 import { resolveSpyOwnerProfile } from '../domain/espionage/owner-profile.ts';
 import { createUniverseSystem } from '../domain/universe/runtime.ts';
-import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPlanet } from '../domain/universe/types.ts';
+import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPlanet, UniverseRegisteredPlanet } from '../domain/universe/types.ts';
 import { initializePlanetResourceClock, reconcileTestEspionageTargetResources } from './resource-clock.ts';
 import { resolveSpyTarget, resolveSpyTargetAtCoordinate, type ResolvedSpyTarget } from './espionage-targets.ts';
 import {
@@ -418,6 +419,16 @@ export function getAvailableFleetForPlanet(state: SaveState, planetId: PlanetId)
   return { ships, commanders };
 }
 
+function registeredUniverseTargets(state: SaveState): UniverseRegisteredPlanet[] {
+  return Object.values(getEspionageTargets(state.espionage)).map((target) => ({
+    id: target.id,
+    coordinate: { ...target.coordinate },
+    name: target.name,
+    kind: target.kind ?? 'npc',
+    ownerId: target.ownerId,
+  }));
+}
+
 function failure(state: SaveState, code: FlightErrorCode, message: string): FlightCommandFailure {
   return { ok: false, state, error: { code, message } };
 }
@@ -436,6 +447,7 @@ function targetOccupied(
     nowMs,
     galaxyCount: 1,
     playerPlanets: persistedPlayerPlanets(state),
+    registeredPlanets: registeredUniverseTargets(state),
   });
   const underlyingNode = system.positions.find((node) => coordinatesEqual(node.coordinate, coordinate));
   // Asteroids are a visual overlay. Only the underlying coordinate object can
