@@ -10,6 +10,7 @@ import {
   resolveSavedFleetState,
   type OwnedFleetState,
 } from '../domain/fleet/runtime.ts';
+import { calculatePlanetCapacity, calculatePlanetPopulation } from '../domain/fleet/overpopulation.ts';
 import { createDefaultFleetProductionState } from '../domain/fleet/production.ts';
 import {
   createDefaultBuildingLevels,
@@ -20,6 +21,7 @@ import { createDefaultSpaceportUpgradeState, EXCLUDED_SHIP_UPGRADE_IDS } from '.
 import { createDefaultTradeState } from '../domain/buildings/trade.ts';
 import { createDefaultRepairWorkshopState } from '../domain/repair/workshop.ts';
 import { initializePlanetEnergy } from './energy.ts';
+import { isPlanetBlocked } from './overpopulation.ts';
 import {
   getPlanetResources,
   replacePlanetResources,
@@ -136,6 +138,8 @@ export type FlightErrorCode =
   | 'spy-mission-not-found'
   | 'invalid-round-limit'
   | 'insufficient-commanders'
+  | 'capacity-exceeded'
+  | 'target-overpopulated'
   | 'invalid-command';
 
 export type FlightError = {
@@ -203,7 +207,7 @@ export type SpyReportCommandResult = SpyReportCommandSuccess | SpyReportCommandF
 
 export type FlightReconcileEvent = {
   flight: FlightRecord;
-  status: 'arrived' | 'returned' | 'target-occupied' | 'target-unavailable' | 'delivered' | 'colonized' | 'spy-report' | 'spy-detected';
+  status: 'arrived' | 'returned' | 'target-occupied' | 'target-unavailable' | 'delivered' | 'deployed' | 'colonized' | 'spy-report' | 'spy-detected';
   notice: string;
 };
 
@@ -311,14 +315,17 @@ export function resolveTransportTarget(
   };
 }
 
-function normalizeSelectedShips(selectedShips: Partial<Record<ShipId, number>>): Partial<Record<ShipId, number>> | null {
+function normalizeSelectedShips(
+  selectedShips: Partial<Record<ShipId, number>>,
+  allowEmpty = false,
+): Partial<Record<ShipId, number>> | null {
   const normalized: Partial<Record<ShipId, number>> = {};
   for (const [rawShipId, rawQuantity] of Object.entries(selectedShips)) {
     if (!SHIP_IDS.includes(rawShipId as ShipId)) return null;
     if (!Number.isFinite(rawQuantity) || !Number.isInteger(rawQuantity) || (rawQuantity ?? 0) < 0) return null;
     if ((rawQuantity ?? 0) > 0) normalized[rawShipId as ShipId] = rawQuantity as number;
   }
-  return Object.keys(normalized).length > 0 ? normalized : null;
+  return Object.keys(normalized).length > 0 || allowEmpty ? normalized : null;
 }
 
 function normalizeSelectedCommanders(
@@ -331,6 +338,40 @@ function normalizeSelectedCommanders(
     if ((rawQuantity ?? 0) > 0) normalized[rawCommanderId as CommanderId] = rawQuantity as number;
   }
   return normalized;
+}
+
+function resolveDeploymentTarget(
+  state: SaveState,
+  originPlanetId: PlanetId,
+  destination?: FlightDestination,
+): ResolvedTransportTarget | null {
+  if (!destination || destination.kind !== 'planet' || destination.planetId === originPlanetId) return null;
+  const target = resolveTransportTarget(state, destination);
+  if (target.relation !== 'self' || !target.runtime || !state.planets[target.planetId]) return null;
+  return target;
+}
+
+function populationForDeployment(
+  selectedShips: Partial<Record<ShipId, number>>,
+  selectedCommanders: Partial<Record<CommanderId, number>>,
+  factionId: CombatFactionId,
+): number {
+  const empty = createEmptyFleetState();
+  return calculateFleetPopulation({
+    ships: { ...empty.ships, ...selectedShips },
+    commanders: { ...empty.commanders, ...selectedCommanders },
+  }, factionId);
+}
+
+function commanderLevelsForDeployment(
+  planet: PlanetRuntime,
+  selectedCommanders: Partial<Record<CommanderId, number>>,
+): Partial<Record<CommanderId, number>> {
+  return Object.fromEntries(
+    Object.entries(selectedCommanders)
+      .filter(([, quantity]) => Number.isFinite(quantity) && (quantity ?? 0) > 0)
+      .map(([commanderId]) => [commanderId, Math.max(0, Math.floor(planet.spaceportUpgrades.shipLevels[commanderId] ?? 0))]),
+  ) as Partial<Record<CommanderId, number>>;
 }
 
 export type TransportCargoSummary = {
@@ -783,13 +824,16 @@ export function dispatchFlight(
     if (existing) return { ok: true, state, flight: existing, created: false, notice: noticeForDispatch(existing) };
   }
   if (!requestId) return failure(state, 'invalid-command', 'Для отправки требуется requestId/commandId.');
-  if (command.missionId !== 'colonize' && command.missionId !== 'transport' && command.missionId !== 'espionage' && command.missionId !== 'attack') {
+  if (command.missionId !== 'colonize' && command.missionId !== 'transport' && command.missionId !== 'espionage' && command.missionId !== 'attack' && command.missionId !== 'deployment') {
     return failure(state, 'mission-not-supported', 'Эта миссия пока не подключена к flight runtime.');
   }
   const departedAt = Number.isFinite(command.departedAt) ? command.departedAt! : (runtimeOptions.now ?? Date.now());
   const originPlanetId = command.originPlanetId ?? state.currentPlanetId;
   const originPlanet = state.planets[originPlanetId];
   if (!originPlanet) return failure(state, 'invalid-command', 'Исходная планета не найдена.');
+  if (command.missionId === 'deployment' && originPlanetId !== state.currentPlanetId) {
+    return failure(state, 'invalid-command', 'Источником дислокации должна быть выбранная планета.');
+  }
   if (command.missionId === 'espionage' && command.destination?.kind === 'planet') {
     const existingMission = activeSpyMissionForTarget(
       currentEspionageState(state).missions,
@@ -803,8 +847,11 @@ export function dispatchFlight(
       return failure(state, 'spy-target-blocked', `Зонд уже выполняет миссию у ${targetName}. Дождитесь возвращения или уничтожения.`);
     }
   }
-  const selectedShips = normalizeSelectedShips(command.selectedShips);
+  const selectedShips = normalizeSelectedShips(command.selectedShips, command.missionId === 'deployment');
   if (!selectedShips) return failure(state, 'wrong-ship-composition', 'Выберите хотя бы один доступный корабль.');
+  if (command.missionId === 'deployment' && Object.keys(selectedShips).some((shipId) => shipId === 'solar-satellite')) {
+    return failure(state, 'wrong-ship-composition', 'Солнечные спутники нельзя отправлять в составе дислокации.');
+  }
   const availableFleet = getAvailableFleetForPlanet(state, originPlanetId);
   const reservedShips = getReservedShipsForPlanet(state, originPlanetId);
   for (const [shipId, quantity] of Object.entries(selectedShips) as [ShipId, number][]) {
@@ -824,6 +871,10 @@ export function dispatchFlight(
   let attackSnapshot: ReturnType<typeof createAttackLaunchSnapshot> | undefined;
   let attackCommanders: Partial<Record<CommanderId, number>> | undefined;
   let attackDestination: FlightDestination | undefined;
+  let deploymentTarget: ResolvedTransportTarget | undefined;
+  let deploymentCommanders: Partial<Record<CommanderId, number>> | undefined;
+  let deploymentCommanderLevels: Partial<Record<CommanderId, number>> | undefined;
+  let deploymentPopulation = 0;
 
   if (command.missionId === 'espionage') {
     if (!command.destination || command.destination.kind !== 'planet' || !isFlightCoordinate(command.destination.coordinate)) {
@@ -897,6 +948,46 @@ export function dispatchFlight(
     attackDestination = { kind: 'planet', planetId: attackTarget.target.id, coordinate: { ...attackTarget.target.coordinate } };
   }
 
+  if (command.missionId === 'deployment') {
+    deploymentTarget = resolveDeploymentTarget(state, originPlanetId, command.destination) ?? undefined;
+    if (!deploymentTarget) {
+      return failure(state, command.destination?.kind === 'planet' && command.destination.planetId === originPlanetId
+        ? 'target-is-origin'
+        : 'target-not-available', 'Дислокация возможна только на другую вашу планету.');
+    }
+    if (command.targetRelation !== undefined && command.targetRelation !== 'self') {
+      return failure(state, 'target-not-available', 'Дислокация возможна только на другую вашу планету.');
+    }
+    const targetPlanet = deploymentTarget.runtime;
+    if (!targetPlanet) return failure(state, 'target-not-available', 'Целевая планета больше не доступна.');
+    if (isPlanetBlocked(state, deploymentTarget.planetId)) {
+      return failure(state, 'target-overpopulated', `Дислокация на планету ${targetPlanet.name} временно заблокирована из-за перенаселения.`);
+    }
+    if (Object.keys(selectedShips).some((shipId) => shipId === 'solar-satellite')) {
+      return failure(state, 'wrong-ship-composition', 'Солнечные спутники нельзя отправлять в составе дислокации.');
+    }
+    const availableCommanders = getAvailableFleetForPlanet(state, originPlanetId).commanders;
+    deploymentCommanders = selectedCommanders ?? {};
+    for (const commanderId of COMMANDER_IDS) {
+      const requested = deploymentCommanders[commanderId] ?? 0;
+      if (requested > (availableCommanders[commanderId] ?? 0)) {
+        return failure(state, 'insufficient-commanders', 'Выбранный командир уже зарезервирован или недоступен.');
+      }
+    }
+    if (Object.keys(selectedShips).length === 0 && Object.keys(deploymentCommanders).length === 0) {
+      return failure(state, 'wrong-ship-composition', 'Выберите корабли или командиров для дислокации.');
+    }
+    deploymentPopulation = populationForDeployment(selectedShips, deploymentCommanders, state.profile.factionId as CombatFactionId);
+    const targetFleet = removeSolarSatellitesFromFleet(resolveSavedFleetState(targetPlanet.fleet, state.profile.factionId));
+    const targetSatellites = Math.max(0, Math.floor(targetPlanet.solarSatellites ?? targetFleet.count));
+    const targetPopulation = calculatePlanetPopulation(targetFleet.fleet, targetSatellites, state.profile.factionId as CombatFactionId);
+    const targetCapacity = calculatePlanetCapacity(targetPlanet.buildings.hangar);
+    if (deploymentPopulation > Math.max(0, targetCapacity - targetPopulation)) {
+      return failure(state, 'capacity-exceeded', `На планете ${targetPlanet.name} недостаточно свободной вместимости.`);
+    }
+    deploymentCommanderLevels = commanderLevelsForDeployment(originPlanet, deploymentCommanders);
+  }
+
   if (command.missionId === 'colonize') {
     if (!command.destination || command.destination.kind !== 'coordinate') return failure(state, 'target-not-colonizable', 'Колонизация допускает только свободную координату.');
     if (!isFlightCoordinate(command.destination.coordinate)) return failure(state, 'invalid-coordinate', 'Координата цели некорректна.');
@@ -933,10 +1024,14 @@ export function dispatchFlight(
     missionId: command.missionId,
     originPlanetId,
     originCoordinate: coordinateOfPlanet(originPlanet),
-    destination: command.missionId === 'attack' && attackDestination ? attackDestination : command.destination!,
+    destination: command.missionId === 'attack' && attackDestination
+      ? attackDestination
+      : command.missionId === 'deployment' && deploymentTarget
+        ? { kind: 'planet', planetId: deploymentTarget.planetId, coordinate: { ...deploymentTarget.coordinate } }
+        : command.destination!,
     targetKind: command.missionId === 'attack' ? attackTarget?.target.kind : command.targetKind,
     selectedShips,
-    populationReserved: command.missionId === 'colonize' ? 12 : 0,
+    populationReserved: command.missionId === 'colonize' ? 12 : deploymentPopulation,
     departedAt,
     factionId: state.profile.factionId as CombatFactionId,
     science,
@@ -965,6 +1060,14 @@ export function dispatchFlight(
       targetRelation: attackTarget?.relation,
       selectedCommanders: attackCommanders,
       attackSnapshot,
+    } : {}),
+    ...(command.missionId === 'deployment' && deploymentTarget ? {
+      destinationPlanetId: deploymentTarget.planetId,
+      targetPlanetName: deploymentTarget.runtime?.name,
+      destinationOwnerId: state.profile.playerId,
+      targetRelation: 'self' as const,
+      selectedCommanders: deploymentCommanders,
+      selectedCommanderLevels: deploymentCommanderLevels,
     } : {}),
   });
   const flight = scaledRecord(domainResult.flight, runtimeOptions);
@@ -1171,6 +1274,105 @@ function beginTransportReturn(
 
 function completeFlight(state: SaveState, flight: FlightRecord, completed: FlightRecord): SaveState {
   return { ...state, flights: updateFlight(currentFlightState(state), completed) };
+}
+
+function beginDeploymentReturn(state: SaveState, flight: FlightRecord, now: number): FlightRecord {
+  const returningState = beginDomainFlightReturn(currentFlightState(state), flight.id, now, 'target-unavailable');
+  const returning = returningState.records.find((item) => item.id === flight.id) ?? flight;
+  return {
+    ...returning,
+    arrivedAt: flight.arrivedAt ?? flight.arrivalAt,
+    completionReason: 'target-unavailable',
+  };
+}
+
+function applyDeploymentArrival(
+  state: SaveState,
+  flight: FlightRecord,
+  now: number,
+): { state: SaveState; flight: FlightRecord; transferred: boolean } {
+  if (flight.destination.kind !== 'planet'
+    || flight.targetRelation !== 'self'
+    || !flight.destinationPlanetId
+    || flight.destinationPlanetId !== flight.destination.planetId) {
+    const returning = beginDeploymentReturn(state, flight, now);
+    return { state: { ...state, flights: updateFlight(currentFlightState(state), returning) }, flight: returning, transferred: false };
+  }
+
+  const origin = state.planets[flight.originPlanetId];
+  const target = state.planets[flight.destinationPlanetId];
+  if (!origin || !target || flight.destinationPlanetId === flight.originPlanetId
+    || !coordinatesEqual(coordinateOfPlanet(target), flight.destination.coordinate)) {
+    const returning = beginDeploymentReturn(state, flight, now);
+    return { state: { ...state, flights: updateFlight(currentFlightState(state), returning) }, flight: returning, transferred: false };
+  }
+
+  const originFleet = removeSolarSatellitesFromFleet(resolveSavedFleetState(origin.fleet, state.profile.factionId));
+  const targetFleet = removeSolarSatellitesFromFleet(resolveSavedFleetState(target.fleet, state.profile.factionId));
+  const selectedShips = flight.selectedShips;
+  const selectedCommanders = flight.selectedCommanders ?? {};
+  if (Object.keys(selectedShips).some((shipId) => shipId === 'solar-satellite')) {
+    const returning = beginDeploymentReturn(state, flight, now);
+    return { state: { ...state, flights: updateFlight(currentFlightState(state), returning) }, flight: returning, transferred: false };
+  }
+  for (const [shipId, quantity] of Object.entries(selectedShips) as [ShipId, number][]) {
+    if (!Number.isFinite(quantity) || quantity <= 0 || (originFleet.fleet.ships[shipId] ?? 0) < quantity) {
+      const returning = beginDeploymentReturn(state, flight, now);
+      return { state: { ...state, flights: updateFlight(currentFlightState(state), returning) }, flight: returning, transferred: false };
+    }
+  }
+  for (const [commanderId, quantity] of Object.entries(selectedCommanders) as [CommanderId, number][]) {
+    if (!COMMANDER_IDS.includes(commanderId) || !Number.isFinite(quantity) || quantity <= 0 || (originFleet.fleet.commanders[commanderId] ?? 0) < quantity) {
+      const returning = beginDeploymentReturn(state, flight, now);
+      return { state: { ...state, flights: updateFlight(currentFlightState(state), returning) }, flight: returning, transferred: false };
+    }
+  }
+
+  const targetSatellites = Math.max(0, Math.floor(target.solarSatellites ?? targetFleet.count));
+  const nextOriginFleet = {
+    ships: { ...originFleet.fleet.ships },
+    commanders: { ...originFleet.fleet.commanders },
+  };
+  for (const [shipId, quantity] of Object.entries(selectedShips) as [ShipId, number][]) {
+    nextOriginFleet.ships[shipId] = Math.max(0, (nextOriginFleet.ships[shipId] ?? 0) - quantity);
+  }
+  for (const [commanderId, quantity] of Object.entries(selectedCommanders) as [CommanderId, number][]) {
+    nextOriginFleet.commanders[commanderId] = Math.max(0, (nextOriginFleet.commanders[commanderId] ?? 0) - quantity);
+  }
+  const nextTargetFleet = {
+    ships: { ...targetFleet.fleet.ships },
+    commanders: { ...targetFleet.fleet.commanders },
+  };
+  for (const [shipId, quantity] of Object.entries(selectedShips) as [ShipId, number][]) {
+    nextTargetFleet.ships[shipId] = (nextTargetFleet.ships[shipId] ?? 0) + quantity;
+  }
+  for (const [commanderId, quantity] of Object.entries(selectedCommanders) as [CommanderId, number][]) {
+    nextTargetFleet.commanders[commanderId] = (nextTargetFleet.commanders[commanderId] ?? 0) + quantity;
+  }
+  const nextTargetLevels = { ...target.spaceportUpgrades.shipLevels };
+  for (const commanderId of COMMANDER_IDS) {
+    if ((selectedCommanders[commanderId] ?? 0) <= 0) continue;
+    nextTargetLevels[commanderId] = Math.max(
+      nextTargetLevels[commanderId] ?? 0,
+      flight.selectedCommanderLevels?.[commanderId] ?? 0,
+    );
+  }
+  const completed: FlightRecord = {
+    ...flight,
+    phase: 'completed',
+    arrivedAt: flight.arrivedAt ?? flight.arrivalAt,
+    completedAt: now,
+    completionReason: 'deployed',
+  };
+  let next = replacePlanetState(state, flight.originPlanetId, { ...origin, fleet: nextOriginFleet });
+  next = replacePlanetState(next, flight.destinationPlanetId, {
+    ...target,
+    fleet: nextTargetFleet,
+    solarSatellites: targetSatellites,
+    spaceportUpgrades: { ...target.spaceportUpgrades, shipLevels: nextTargetLevels },
+  });
+  next = { ...next, flights: updateFlight(currentFlightState(next), completed) };
+  return { state: next, flight: completed, transferred: true };
 }
 
 function spyMissionForFlight(state: SaveState, flight: FlightRecord): SpyMission | undefined {
@@ -1395,6 +1597,19 @@ export function reconcileFlights(
           continue;
         }
         if (mission.status === 'orbiting') continue;
+      }
+      if (current.missionId === 'deployment') {
+        const deployment = applyDeploymentArrival(next, current, now);
+        next = deployment.state;
+        changed = true;
+        events.push({
+          flight: deployment.flight,
+          status: deployment.transferred ? 'deployed' : 'target-unavailable',
+          notice: deployment.transferred
+            ? 'Дислокация завершена: флот и командиры переведены на целевую планету.'
+            : 'Целевая планета недоступна или больше не вмещает флот; рейс возвращается без перевода.',
+        });
+        continue;
       }
       if (current.missionId === 'transport') {
         const target = transportArrivalTarget(next, current);
@@ -1641,10 +1856,14 @@ export function reconcileFlights(
               : completed.completionReason === 'spy-destroyed'
                 ? 'Шпионский зонд вернулся: цель была уничтожена до завершения миссии.'
               : 'Шпионский зонд вернулся на исходную планету.'
-            : completed.missionId === 'attack'
+          : completed.missionId === 'attack'
               ? completed.completionReason === 'target-unavailable'
                 ? 'Атакующий флот вернулся без боя: цель недоступна.'
                 : 'Атакующий флот вернулся на исходную планету.'
+              : completed.missionId === 'deployment'
+                ? completed.completionReason === 'target-unavailable'
+                  ? 'Рейс дислокации вернулся: целевая планета недоступна.'
+                  : 'Рейс дислокации вернулся на исходную планету.'
               : completed.completionReason === 'target-occupied' ? 'Колонизатор вернулся: координата уже занята.' : 'Колонизатор вернулся после отзыва рейса.',
       });
     }
@@ -1759,4 +1978,14 @@ export function getFlightById(state: SaveState, flightId: string): FlightRecord 
 
 export function getActiveFlightRecords(state: SaveState): FlightRecord[] {
   return activeFlights(state);
+}
+
+/** Population reserved by outbound deployment flights; it is UI-only pending load. */
+export function getPendingInboundPopulation(state: SaveState, planetId: PlanetId): number {
+  return activeFlights(state)
+    .filter((flight) => flight.missionId === 'deployment'
+      && flight.phase === 'outbound'
+      && flight.destination.kind === 'planet'
+      && flight.destination.planetId === planetId)
+    .reduce((total, flight) => total + Math.max(0, Math.floor(flight.populationReserved)), 0);
 }

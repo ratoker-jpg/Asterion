@@ -25,6 +25,7 @@ export type FlightCompletionReason =
   | 'target-occupied'
   | 'target-unavailable'
   | 'arrived'
+  | 'deployed'
   | 'spy-destroyed'
   | 'mission-failed';
 
@@ -60,6 +61,8 @@ export type FlightRecord = {
   selectedShips: Partial<Record<ShipId, number>>;
   /** Attack-only commander selection, persisted with the flight reservation. */
   selectedCommanders?: Partial<Record<CommanderId, number>>;
+  /** Deployment snapshot keeps commander identity/ability levels stable in flight. */
+  selectedCommanderLevels?: Partial<Record<CommanderId, number>>;
   /** Attack-only dispatch snapshot used by the live arrival resolver. */
   attackSnapshot?: AttackLaunchSnapshot;
   /** Attack-only materialized result used to make reconcile replay-safe. */

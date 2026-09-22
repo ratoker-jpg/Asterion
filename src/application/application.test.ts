@@ -3,6 +3,7 @@ import test from 'node:test';
 import { getSpaceportUpgradeCatalog, previewSpaceportUpgrade } from '../domain/buildings/spaceport-upgrades.ts';
 import { SCIENCE_CATALOG } from '../domain/science/catalog.ts';
 import {
+  SCIENCE_CANCEL_REQUEST_EVENT,
   SCIENCE_RUNTIME_CHANGED_EVENT,
   SCIENCE_START_REQUEST_EVENT,
 } from '../domain/science/runtime.ts';
@@ -15,6 +16,7 @@ import {
   applyProductionBots,
   cancelBuilding,
   collectRecycling,
+  cancelSpaceportUpgrade,
   destroyBuilding,
   executeTradeAction,
   previewBuilding,
@@ -28,7 +30,9 @@ import {
   getFleetSummaryForState,
   readFleetBuildBudget,
 } from './fleet.ts';
+import { createEmptyFleetState } from '../domain/fleet/runtime.ts';
 import { bindScienceEventBridge, cancelScience, startScience } from './science.ts';
+import { repairUnits, removeRepairUnits } from './repair.ts';
 import {
   bindFleetProductionEventBridge,
   cancelFleetProduction,
@@ -54,7 +58,9 @@ import {
   type StorageLike,
 } from './persistence.ts';
 import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
+import { getBuildingMaxLevel } from '../domain/buildings/balance-v1.ts';
 import { getPlanetResources, type SaveState } from './contracts.ts';
+import { getPlanetOverpopulationSummary, reconcilePlanetOverpopulation } from './overpopulation.ts';
 import { createAllianceRatingEntries, createPlayerRatingEntries } from '../domain/rating/fixtures.ts';
 import { createUniverseMap } from '../domain/universe/runtime.ts';
 import { getEspionageTargets } from '../domain/espionage/runtime.ts';
@@ -186,9 +192,10 @@ test('Test Mode persistence keeps one deleted Bot 01 target deleted and preserve
   const map = createUniverseMap({ mode: 'test', registeredPlanets: registeredTargetsForUniverse(reloaded) });
   const nodes = map.systems.flatMap((system) => system.positions);
   assert.equal(nodes.some((node) => node.id === deletedTarget.id), false);
-  assert.equal(nodes.find((node) => node.coordinate.galaxy === deletedTarget.coordinate.galaxy
+  const coordinateOccupant = nodes.find((node) => node.coordinate.galaxy === deletedTarget.coordinate.galaxy
     && node.coordinate.system === deletedTarget.coordinate.system
-    && node.coordinate.position === deletedTarget.coordinate.position)?.kind, 'empty');
+    && node.coordinate.position === deletedTarget.coordinate.position);
+  assert.notEqual(coordinateOccupant?.id, deletedTarget.id);
 });
 
 test('Test Mode persistence treats an empty canonical Bot 01 registry as authoritative', () => {
@@ -1228,4 +1235,364 @@ test('resource credit stops at dynamic capacity and does not bank time spent ful
   assert.equal(sameTimestamp.state.metal, spent.metal);
   const nextInterval = reconcileRuntime(sameTimestamp.state, context(7_200_000, 'production'));
   assert.equal(nextInterval.state.metal, capacities.metal);
+});
+
+test('active overpopulation survives persistence without legacy roster normalization', () => {
+  const storage = new MemoryStorage();
+  const initial = withBuildingSetup(createInitialSaveState('test', 1_000));
+  const queued = startFleetProduction(initial, context(1_000), 'ships', 'scout', 1, 'overpop-paused-queue');
+  assert.equal(queued.transition.ok, true);
+  const homeworld = queued.state.planets['helion-01'];
+  const damaged = {
+    ...queued.state,
+    planets: {
+      ...queued.state.planets,
+      'helion-01': {
+        ...homeworld,
+        buildings: { ...homeworld.buildings, hangar: 0 },
+        fleet: {
+          ...homeworld.fleet,
+          ships: { ...homeworld.fleet.ships, destroyer: 1_000 },
+        },
+      },
+    },
+  };
+  const active = reconcilePlanetOverpopulation(damaged, 'helion-01', 1_000).state;
+  assert.equal(active.planets['helion-01'].overpopulation?.blocked, true);
+  assert.equal(active.planets['helion-01'].fleet.ships.destroyer, 1_000);
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 1_000 });
+  assert.equal(persistence.write(active).ok, true);
+  const reloaded = persistence.read();
+  assert.equal(reloaded.planets['helion-01'].overpopulation?.blocked, true);
+  assert.equal(reloaded.planets['helion-01'].fleet.ships.destroyer, 1_000);
+  assert.equal(reloaded.planets['helion-01'].fleetProduction.shipQueue[0]?.itemId, 'scout');
+  assert.equal(getFleetSummaryForState(reloaded).population > getFleetSummaryForState(reloaded).capacity, true);
+});
+
+test('overpopulation emits one persisted final system report with attrition-only ship counts', () => {
+  const storage = new MemoryStorage();
+  const initial = createInitialSaveState('production', 0);
+  const homeworld = initial.planets['helion-01'];
+  const fleet = createEmptyFleetState();
+  fleet.ships.scout = 1_000;
+  const overpopulated = {
+    ...initial,
+    planets: {
+      ...initial.planets,
+      'helion-01': {
+        ...homeworld,
+        buildings: { ...homeworld.buildings, hangar: 0 },
+        fleet,
+        solarSatellites: 0,
+      },
+    },
+  } satisfies SaveState;
+  const before = getPlanetOverpopulationSummary(overpopulated, 'helion-01');
+  const start = reconcilePlanetOverpopulation(overpopulated, 'helion-01', 0);
+  assert.equal(start.summary.blocked, true);
+  assert.equal(start.state.reports.overpopulationReports?.length ?? 0, 0);
+  assert.equal(start.state.planets['helion-01'].overpopulation?.initialPopulation, before.actualPopulation);
+  assert.equal(start.state.planets['helion-01'].overpopulation?.initialCapacity, before.capacity);
+
+  const halfwayAt = 5 * 60 * 1_000;
+  const halfway = reconcilePlanetOverpopulation(start.state, 'helion-01', halfwayAt);
+  assert.equal(halfway.summary.blocked, true);
+  assert.ok((halfway.state.planets['helion-01'].overpopulation?.removedShips?.[0]?.count ?? 0) > 0);
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => halfwayAt });
+  assert.equal(persistence.write(halfway.state).ok, true);
+  const reloaded = persistence.read();
+  const reloadedEpisode = reloaded.planets['helion-01'].overpopulation;
+  assert.deepEqual(reloadedEpisode?.removedShips, halfway.state.planets['helion-01'].overpopulation?.removedShips);
+  assert.equal(reloadedEpisode?.initialPopulation, before.actualPopulation);
+  assert.equal(reloadedEpisode?.initialCapacity, before.capacity);
+
+  const delivered = reloaded.planets['helion-01'];
+  const withDelivery = {
+    ...reloaded,
+    planets: {
+      ...reloaded.planets,
+      'helion-01': {
+        ...delivered,
+        fleet: {
+          ...delivered.fleet,
+          ships: { ...delivered.fleet.ships, scout: delivered.fleet.ships.scout + 100 },
+        },
+      },
+    },
+  } satisfies SaveState;
+  const afterDelivery = reconcilePlanetOverpopulation(withDelivery, 'helion-01', halfwayAt);
+  const afterCombat = afterDelivery.state.planets['helion-01'];
+  const combatLoss = 25;
+  const afterCombatState = {
+    ...afterDelivery.state,
+    planets: {
+      ...afterDelivery.state.planets,
+      'helion-01': {
+        ...afterCombat,
+        fleet: {
+          ...afterCombat.fleet,
+          ships: { ...afterCombat.fleet.ships, scout: afterCombat.fleet.ships.scout - combatLoss },
+        },
+      },
+    },
+  } satisfies SaveState;
+  const afterCombatReconcile = reconcilePlanetOverpopulation(afterCombatState, 'helion-01', 6 * 60 * 1_000);
+  assert.equal(afterCombatReconcile.summary.blocked, true);
+
+  const unlocked = reconcilePlanetOverpopulation(afterCombatReconcile.state, 'helion-01', 10 * 60 * 1_000);
+  assert.equal(unlocked.resolved, true);
+  assert.equal(unlocked.summary.blocked, false);
+  const reports = unlocked.state.reports.overpopulationReports ?? [];
+  assert.equal(reports.length, 1);
+  const report = reports[0];
+  assert.ok(report);
+  assert.equal(report.populationBefore, before.actualPopulation);
+  assert.equal(report.populationAfter, unlocked.summary.actualPopulation);
+  assert.equal(report.capacity, before.capacity);
+  assert.equal(report.planetName, homeworld.name);
+  assert.deepEqual(report.removedShips, [{
+    shipId: 'scout',
+    count: 1_000 + 100 - combatLoss - unlocked.state.planets['helion-01'].fleet.ships.scout,
+  }]);
+
+  const repeatedUnlock = reconcilePlanetOverpopulation(unlocked.state, 'helion-01', 10 * 60 * 1_000);
+  assert.equal(repeatedUnlock.state.reports.overpopulationReports?.length, 1);
+  assert.equal(repeatedUnlock.state.reports.overpopulationReports?.[0]?.id, report.id);
+  assert.equal(persistence.write(unlocked.state).ok, true);
+  assert.deepEqual(persistence.read().reports.overpopulationReports, reports);
+});
+
+test('resolving a blocked planet shifts the queued science task and its global queue tail', () => {
+  const initial = createInitialSaveState('test', 0);
+  const blocked = {
+    ...initial,
+    science: {
+      ...initial.science,
+      queue: [
+        {
+          id: 'blocked-planet-science',
+          scienceId: SCIENCE_CATALOG[0].id,
+          planetId: 'helion-01',
+          fromLevel: 0,
+          toLevel: 1,
+          startedAt: 0,
+          finishAt: 60_000,
+          durationMs: 60_000,
+          cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+        },
+        {
+          id: 'other-planet-science',
+          scienceId: SCIENCE_CATALOG[1].id,
+          planetId: 'another-colony',
+          fromLevel: 0,
+          toLevel: 1,
+          startedAt: 60_000,
+          finishAt: 120_000,
+          durationMs: 60_000,
+          cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+        },
+      ],
+    },
+    planets: {
+      ...initial.planets,
+      'helion-01': {
+        ...initial.planets['helion-01'],
+        overpopulation: {
+          episodeStartedAt: 30_000,
+          initialExcess: 1,
+          scheduledBurnPool: 1,
+          burnedPopulation: 0,
+          lastReconciledAt: 30_000,
+          blocked: true,
+        },
+      },
+    },
+  };
+
+  const resolved = reconcilePlanetOverpopulation(blocked, 'helion-01', 90_000);
+  assert.equal(resolved.resolved, true);
+  assert.equal(resolved.state.science.queue[0]?.finishAt, 120_000);
+  assert.equal(resolved.state.science.queue[1]?.finishAt, 180_000);
+});
+
+test('a blocked planet pauses resource settlement and leaves a no-eligible episode persisted', () => {
+  const initial = createInitialSaveState('production', 0);
+  const homeworld = initial.planets['helion-01'];
+  const noEligibleFleet = {
+    ...homeworld.fleet,
+    ships: { ...homeworld.fleet.ships, scout: 0, transporter: 0, recycler: 0, colonizer: 0, 'spy-probe': 0 },
+    commanders: { ...homeworld.fleet.commanders, corsair: 20 },
+  };
+  const blocked = reconcilePlanetOverpopulation({
+    ...initial,
+    planets: {
+      ...initial.planets,
+      'helion-01': { ...homeworld, fleet: noEligibleFleet, solarSatellites: 200 },
+    },
+  }, 'helion-01', 0).state;
+  const beforeClock = blocked.resourceClock.byPlanet?.['helion-01']?.lastReconciledAt ?? blocked.resourceClock.lastReconciledAt;
+  const reconciled = reconcileRuntime(blocked, context(60 * 60 * 1_000, 'production'));
+  assert.equal(reconciled.state.planets['helion-01'].overpopulation?.blocked, true);
+  assert.equal(reconciled.state.planets['helion-01'].overpopulation?.lastResolutionReason, 'no-eligible-units');
+  assert.equal(reconciled.state.resourceClock.byPlanet?.['helion-01']?.lastReconciledAt ?? reconciled.state.resourceClock.lastReconciledAt, beforeClock);
+});
+
+test('blocked planet rejects local commands before overdue queues can reconcile', () => {
+  const setup = withBuildingSetup(createInitialSaveState('test', 0));
+  const setupPlanet = setup.planets['helion-01'];
+  const initial = {
+    ...setup,
+    planets: {
+      ...setup.planets,
+      'helion-01': {
+        ...setupPlanet,
+        buildings: { ...setupPlanet.buildings, hangar: getBuildingMaxLevel('hangar') },
+      },
+    },
+  } satisfies SaveState;
+  assert.equal(getPlanetOverpopulationSummary(initial, 'helion-01').blocked, false);
+  const building = startBuilding(initial, context(0), 'trade-center');
+  assert.equal(building.ok, true);
+  const fleet = startFleetProduction(building.state, context(0), 'ships', 'scout', 1, 'blocked-fleet-queue');
+  assert.equal(fleet.transition.ok, true);
+  const spaceport = startSpaceportUpgrade(fleet.state, context(0), 'ships', 'scout', 'blocked-spaceport-queue');
+  assert.equal(spaceport.ok, true);
+  const researchReady = {
+    ...spaceport.state,
+    science: {
+      ...spaceport.state.science,
+      levels: { ...spaceport.state.science.levels, 1: 0 },
+    },
+  };
+  const science = startScience(researchReady, context(0), 1, 'blocked-science-queue');
+  assert.equal(science.transition.ok, true);
+
+  const queuedPlanet = science.state.planets['helion-01'];
+  const overdue = {
+    ...science.state,
+    queues: {
+      ...science.state.queues,
+      'helion-01': (science.state.queues['helion-01'] ?? []).map((task) => ({ ...task, finishAt: 1 })),
+    },
+    science: {
+      ...science.state.science,
+      queue: science.state.science.queue.map((task) => ({ ...task, finishAt: 1 })),
+    },
+    planets: {
+      ...science.state.planets,
+      'helion-01': {
+        ...queuedPlanet,
+        buildings: { ...queuedPlanet.buildings, hangar: 0 },
+        fleet: { ...queuedPlanet.fleet, ships: { ...queuedPlanet.fleet.ships, destroyer: 1_000 } },
+        solarSatellites: 3,
+        fleetProduction: {
+          ...queuedPlanet.fleetProduction,
+          shipQueue: queuedPlanet.fleetProduction.shipQueue.map((task) => ({ ...task, finishAt: 1 })),
+        },
+        spaceportUpgrades: {
+          ...queuedPlanet.spaceportUpgrades,
+          shipQueue: queuedPlanet.spaceportUpgrades.shipQueue.map((task) => ({ ...task, finishAt: 1 })),
+          commanderQueue: queuedPlanet.spaceportUpgrades.commanderQueue.map((task) => ({ ...task, finishAt: 1 })),
+        },
+      },
+    },
+  } satisfies SaveState;
+  const blocked = reconcilePlanetOverpopulation(overdue, 'helion-01', 0).state;
+  const now = 1_000_000;
+  const blockedContext = { ...context(now), rng: () => 0 };
+
+  const canceledBuilding = cancelBuilding(blocked, blockedContext, blocked.queues['helion-01'][0].id);
+  assert.equal(canceledBuilding.ok, false);
+  assert.equal(canceledBuilding.state, blocked);
+  const destroyRolls: number[] = [];
+  const destroyed = destroyBuilding(blocked, blockedContext, 'trade-center', () => {
+    destroyRolls.push(1);
+    return 0;
+  });
+  assert.equal(destroyed.ok, false);
+  assert.equal(destroyed.state, blocked);
+  assert.deepEqual(destroyRolls, []);
+  assert.equal(applyProductionBots(blocked, blockedContext, { metal: 0, minerals: 0, gas: 0 }), blocked);
+
+  const fleetTask = blocked.planets['helion-01'].fleetProduction.shipQueue[0];
+  assert.ok(fleetTask);
+  const canceledFleet = cancelFleetProduction(blocked, blockedContext, fleetTask.id);
+  assert.equal(canceledFleet.transition.ok, false);
+  assert.equal(canceledFleet.state, blocked);
+  const dismantled = dismantleSolarSatellites(blocked, { planetId: 'helion-01' }, 1);
+  assert.equal(dismantled.ok, false);
+  assert.equal(dismantled.state, blocked);
+
+  const spaceportTask = blocked.planets['helion-01'].spaceportUpgrades.shipQueue[0];
+  assert.ok(spaceportTask);
+  const canceledSpaceport = cancelSpaceportUpgrade(blocked, blockedContext, spaceportTask.id);
+  assert.equal(canceledSpaceport.ok, false);
+  assert.equal(canceledSpaceport.state, blocked);
+  const scienceTask = blocked.science.queue[0];
+  assert.ok(scienceTask);
+  const canceledScience = cancelScience(blocked, { ...blockedContext, blockedPlanetIds: new Set() }, scienceTask.id);
+  assert.equal(canceledScience.transition.ok, false);
+  assert.equal(canceledScience.state, blocked);
+  const unblockedPlanet = {
+    ...blocked.planets['helion-01'],
+    fleet: createEmptyFleetState(),
+    buildings: { ...blocked.planets['helion-01'].buildings, hangar: getBuildingMaxLevel('hangar') },
+    overpopulation: undefined,
+  };
+  const stateWithUnblockedPlanet = {
+    ...blocked,
+    planets: { ...blocked.planets, 'unblocked-colony': unblockedPlanet },
+  } satisfies SaveState;
+  const canceledFromOtherPlanet = cancelScience(stateWithUnblockedPlanet, {
+    ...blockedContext,
+    planetId: 'unblocked-colony',
+    blockedPlanetIds: new Set(),
+  }, scienceTask.id);
+  assert.equal(canceledFromOtherPlanet.transition.ok, false);
+  assert.equal(canceledFromOtherPlanet.state, stateWithUnblockedPlanet);
+
+  const repaired = repairUnits(blocked, 'helion-01', 'ship', 'scout', 1, 'resources');
+  assert.equal(repaired.transition.ok, false);
+  assert.equal(repaired.state, blocked);
+  const removedFromRepair = removeRepairUnits(blocked, 'helion-01', 'ship', 'scout', 1);
+  assert.equal(removedFromRepair.transition.ok, false);
+  assert.equal(removedFromRepair.state, blocked);
+
+  assert.equal(blocked.queues['helion-01'][0]?.finishAt, 1);
+  assert.equal(blocked.science.queue[0]?.finishAt, 1);
+  assert.equal(blocked.planets['helion-01'].fleetProduction.shipQueue[0]?.finishAt, 1);
+  assert.equal(blocked.planets['helion-01'].spaceportUpgrades.shipQueue[0]?.finishAt, 1);
+
+  let current = blocked;
+  const fleetCommits: SaveState[] = [];
+  const fleetTarget = new EventTarget();
+  const unbindFleet = bindFleetProductionEventBridge({
+    target: fleetTarget,
+    getState: () => current,
+    getContext: (eventNow) => ({ ...context(eventNow), rng: () => 0 }),
+    commit: (next) => { current = next; fleetCommits.push(next); },
+    onNotice: () => undefined,
+  });
+  fleetTarget.dispatchEvent(new CustomEvent('asterion:fleet-production-cancel-request', {
+    detail: { orderId: fleetTask.id, now },
+  }));
+  assert.deepEqual(fleetCommits, []);
+  assert.equal(current, blocked);
+  unbindFleet();
+
+  const scienceCommits: SaveState[] = [];
+  const scienceTarget = new EventTarget();
+  const unbindScience = bindScienceEventBridge({
+    target: scienceTarget,
+    getState: () => current,
+    getContext: (eventNow) => ({ ...context(eventNow), blockedPlanetIds: new Set() }),
+    commit: (next) => { current = next; scienceCommits.push(next); },
+    onNotice: () => undefined,
+  });
+  scienceTarget.dispatchEvent(new CustomEvent(SCIENCE_CANCEL_REQUEST_EVENT, {
+    detail: { taskId: scienceTask.id, now },
+  }));
+  assert.deepEqual(scienceCommits, []);
+  assert.equal(current, blocked);
+  unbindScience();
 });

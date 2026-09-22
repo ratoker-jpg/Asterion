@@ -20,6 +20,7 @@ import {
 import type { BuildingApplicationContext } from './buildings.ts';
 import { removeSolarSatellitesFromFleet } from '../domain/fleet/runtime.ts';
 import { transitionPlanetEnergySources } from './energy.ts';
+import { isPlanetBlocked } from './overpopulation.ts';
 
 export const FLEET_PRODUCTION_START_REQUEST_EVENT = 'asterion:fleet-production-start-request';
 export const FLEET_PRODUCTION_CANCEL_REQUEST_EVENT = 'asterion:fleet-production-cancel-request';
@@ -127,6 +128,20 @@ export function startFleetProduction(
   quantity: number,
   orderId = defaultOrderId(queueKind, itemId, context.now),
 ): FleetProductionActionResult {
+  if (isPlanetBlocked(state, context.planetId)) {
+    const planet = getPlanetState(state, context.planetId);
+    const blockedTransition = {
+      ok: false,
+      state: planet.fleetProduction,
+      fleet: planet.fleet,
+      defense: planet.defense,
+      wallet: getPlanetResources(state, context.planetId),
+      order: null,
+      completed: [],
+      reason: 'Планета заблокирована из-за перенаселения.',
+    } as FleetProductionTransition;
+    return { transition: blockedTransition, state };
+  }
   const planet = getPlanetState(state, context.planetId);
   const commanderLevel = planet.spaceportUpgrades.shipLevels[itemId] ?? 0;
   const transition = enqueueFleetProduction({
@@ -146,6 +161,22 @@ export function cancelFleetProduction(
   context: BuildingApplicationContext,
   orderId: string,
 ): FleetProductionActionResult {
+  if (isPlanetBlocked(state, context.planetId)) {
+    const current = productionContext(state, context, context.now);
+    const transition: FleetProductionCancellationTransition = {
+      ok: false,
+      state: current.state,
+      fleet: current.fleet,
+      defense: current.defense,
+      wallet: current.wallet,
+      canceled: null,
+      completed: [],
+      refund: null,
+      refundPercent: null,
+      reason: 'Планета заблокирована из-за перенаселения.',
+    };
+    return { transition, state };
+  }
   const transition = cancelFleetProductionDomain(
     productionContext(state, context, context.now),
     orderId,
@@ -177,6 +208,7 @@ export function reconcileFleetProduction(
   state: SaveState,
   context: Pick<BuildingApplicationContext, 'planetId' | 'now'>,
 ): FleetProductionReconcileResult {
+  if (isPlanetBlocked(state, context.planetId)) return { changed: false, state, completed: [] };
   const planet = getPlanetState(state, context.planetId);
   const transition = reconcileFleetProductionState(
     planet.fleetProduction,
@@ -223,6 +255,9 @@ export function dismantleSolarSatellites(
   context: Pick<BuildingApplicationContext, 'planetId'>,
   count?: number,
 ): SolarSatelliteDismantleResult {
+  if (isPlanetBlocked(state, context.planetId)) {
+    return { ok: false, state, removed: 0, reason: 'Планета заблокирована из-за перенаселения.' };
+  }
   const planet = getPlanetState(state, context.planetId);
   const migratedFleet = removeSolarSatellitesFromFleet(planet.fleet);
   const currentCount = Math.max(0, Math.floor(planet.solarSatellites ?? migratedFleet.count));
@@ -282,9 +317,10 @@ export function bindFleetProductionEventBridge(options: FleetProductionEventBrid
     const request = (event as CustomEvent<FleetProductionCancelRequest>).detail;
     if (!request?.orderId) return;
     const now = typeof request.now === 'number' && Number.isFinite(request.now) ? request.now : Date.now();
-    const result = cancelFleetProduction(options.getState(), { ...options.getContext(now), now }, request.orderId);
+    const currentState = options.getState();
+    const result = cancelFleetProduction(currentState, { ...options.getContext(now), now }, request.orderId);
     const transition = result.transition as FleetProductionCancellationTransition;
-    options.commit(result.state);
+    if (result.state !== currentState) options.commit(result.state);
     options.onNotice(transition.ok
       ? transition.refundPercent == null
         ? 'Заказ отменён. Сохранённая стоимость отсутствует, возврат не начислен.'

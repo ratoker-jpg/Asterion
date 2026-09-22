@@ -1,6 +1,7 @@
 import {
   annotateBattleReportRepair,
   claimDefensiveBattleRepair,
+  evaluateRepairAvailability,
   getRepairEntity,
   removeFromRepairPool,
   repairForResources,
@@ -21,6 +22,7 @@ import type { PlanetId, SaveState } from './contracts.ts';
 import { getPlanetResources, getPlanetState, replacePlanetResources, replacePlanetState } from './contracts.ts';
 import { transitionPlanetEnergySources } from './energy.ts';
 import { SAVE_SCHEMA_VERSION } from './persistence.ts';
+import { isPlanetBlocked } from './overpopulation.ts';
 
 export const REPAIR_REQUEST_EVENT = 'asterion:repair-request';
 export const REPAIR_NOTICE_CHANGED_EVENT = 'asterion:repair-notice-changed';
@@ -68,6 +70,35 @@ export type RepairActionResult = {
   state: SaveState;
   transition: RepairTransition;
 };
+
+function blockedRepairAction(
+  state: SaveState,
+  planetId: PlanetId,
+  category: RepairCategory,
+  entityId: string,
+  quantity: number,
+): RepairActionResult {
+  const context = getRepairWorkshopSnapshot(state, planetId);
+  const availability = evaluateRepairAvailability(context, category, entityId, quantity);
+  return {
+    state,
+    transition: {
+      ok: false,
+      repair: context.repair,
+      fleet: context.fleet,
+      defense: context.defense,
+      wallet: context.wallet,
+      category,
+      entityId,
+      quantity: availability.quantity,
+      cost: availability.cost,
+      tokenCost: availability.tokenCost,
+      capacity: availability.capacity,
+      code: null,
+      reason: 'Планета заблокирована из-за перенаселения.',
+    },
+  };
+}
 
 function stateFromRepairTransition(
   state: SaveState,
@@ -120,6 +151,7 @@ export function repairUnits(
   quantity: number,
   method: RepairPaymentMethod,
 ): RepairActionResult {
+  if (isPlanetBlocked(state, planetId)) return blockedRepairAction(state, planetId, category, entityId, quantity);
   const context = getRepairWorkshopSnapshot(state, planetId);
   const transition = method === 'resources'
     ? repairForResources(context, category, entityId, quantity)
@@ -137,6 +169,7 @@ export function removeRepairUnits(
   entityId: string,
   quantity: number,
 ): RepairActionResult {
+  if (isPlanetBlocked(state, planetId)) return blockedRepairAction(state, planetId, category, entityId, quantity);
   const context = getRepairWorkshopSnapshot(state, planetId);
   const transition = removeFromRepairPool(context, category, entityId, quantity);
   return {

@@ -220,7 +220,8 @@ export function calculateFleetCapacity(hangarLevel: number): number {
 
 export function getFleetSummary(fleet: OwnedFleetState, hangarLevel: number, factionId: CombatFactionId = 'aegis') {
   const capacity = calculateFleetCapacity(hangarLevel);
-  const normalizedFleet = normalizeFleetStateForCapacity(fleet, hangarLevel, factionId);
-  const population = calculateFleetPopulation(normalizedFleet, factionId);
+  // Capacity violations are a live gameplay state handled by the
+  // overpopulation reconciler. Do not normalize them away in read selectors.
+  const population = calculateFleetPopulation(fleet, factionId);
   return { population, capacity, available: Math.max(0, capacity - population) };
 }

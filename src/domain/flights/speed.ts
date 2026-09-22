@@ -1,5 +1,7 @@
 import { getFactionShipCatalog } from '../combat/faction-catalog.ts';
+import { COMMANDER_COMBAT_CATALOG } from '../combat/catalog.ts';
 import type { CombatFactionId } from '../combat/factions.ts';
+import type { CommanderId } from '../combat/commanders.ts';
 import type { ShipId } from '../combat/ids.ts';
 import type { UniverseCoordinate } from '../universe/types.ts';
 import { getFlightRouteDeltas } from './distance.ts';
@@ -25,6 +27,7 @@ export function calculateEffectiveFleetSpeed(
   factionId: CombatFactionId,
   selectedShips: Partial<Record<ShipId, number>>,
   science: FlightScienceLevels = {},
+  selectedCommanders: Partial<Record<CommanderId, number>> = {},
 ): number {
   const catalog = new Map(getFactionShipCatalog(factionId).map((ship) => [ship.id, ship]));
   const speeds: number[] = [];
@@ -33,6 +36,13 @@ export function calculateEffectiveFleetSpeed(
     const ship = catalog.get(id);
     if (!ship?.ship) throw new Error(`Unknown ship: ${id}`);
     speeds.push(calculateEffectiveShipSpeed(ship.ship.speed, science));
+  }
+  const commanders = new Map(COMMANDER_COMBAT_CATALOG.map((commander) => [commander.id, commander]));
+  for (const [id, quantity] of Object.entries(selectedCommanders) as [CommanderId, number][]) {
+    if (!Number.isInteger(quantity) || quantity <= 0) continue;
+    const commander = commanders.get(id);
+    if (!commander?.ship) throw new Error(`Unknown commander: ${id}`);
+    speeds.push(calculateEffectiveShipSpeed(commander.ship.speed, science));
   }
   if (speeds.length === 0) throw new Error('A flight needs at least one ship.');
   return Math.min(...speeds);

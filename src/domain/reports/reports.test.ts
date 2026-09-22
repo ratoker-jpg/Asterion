@@ -11,9 +11,12 @@ import { createDefaultOperationsState, revealOperation } from '../operations/rep
 import {
   battleReportToReportItem,
   buildReportsFeed,
+  createOverpopulationEpisodeReportId,
   filterReportItems,
   getReportCategoryCounts,
   operationIntelToReportItem,
+  overpopulationEpisodeReportToReportItem,
+  upsertOverpopulationEpisodeReport,
 } from './adapters.ts';
 import { NON_COMBAT_REPORT_FIXTURES } from './catalog.ts';
 import {
@@ -31,10 +34,20 @@ class MemoryStorage {
   private values = new Map<string, string>();
   getItem(key: string) { return this.values.get(key) ?? null; }
   setItem(key: string, value: string) { this.values.set(key, value); }
+  removeItem(key: string) { this.values.delete(key); }
 }
 
 function commandWithoutJointOperations() {
   return { ...createDefaultCommandState(), jointOperations: [] };
+}
+
+let persistenceModule: typeof import('../../application/persistence.ts') | undefined;
+async function loadPersistence() {
+  if (persistenceModule) return persistenceModule;
+  const { register } = await import('node:module');
+  register(new URL('../combat/test-asset-loader.mjs', import.meta.url), import.meta.url);
+  persistenceModule = await import('../../application/persistence.ts');
+  return persistenceModule;
 }
 
 test('Reports does not fabricate non-combat runtime history', () => {
@@ -59,6 +72,136 @@ test('Доклады uses BattleReport and excludes simulator and Arena output',
   assert.equal(battleItems.length, 1);
   assert.equal(battleItems[0].battleReportId, base.id);
   assert.equal(battleItems[0].source, 'combat');
+});
+
+test('overpopulation final report uses one stable episode id and projects summary plus ordinary ship losses', () => {
+  const initial = createDefaultReportsState();
+  const report = {
+    planetId: 'colony-07',
+    planetName: 'Новая Аркадия',
+    factionId: 'synod' as const,
+    populationBefore: 35_000,
+    populationAfter: 25_000,
+    capacity: 25_000,
+    episodeStartedAt: 1_000,
+    episodeEndedAt: 601_000,
+    removedShips: [{ shipId: 'scout' as const, count: 5 }, { shipId: 'cruiser' as const, count: 2 }],
+  };
+  const once = upsertOverpopulationEpisodeReport(initial, report);
+  const twice = upsertOverpopulationEpisodeReport(once, { ...report, removedShips: [{ shipId: 'scout', count: 6 }] });
+
+  assert.equal(createOverpopulationEpisodeReportId(report.planetId, report.episodeStartedAt), once.overpopulationReports?.[0].id);
+  assert.equal(twice.overpopulationReports?.length, 1);
+  assert.deepEqual(twice.overpopulationReports?.[0].removedShips, [{ shipId: 'scout', count: 6 }]);
+
+  const item = overpopulationEpisodeReportToReportItem(once.overpopulationReports![0]);
+  assert.equal(item.category, 'system');
+  assert.equal(item.source, 'overpopulation');
+  assert.equal(item.id, once.overpopulationReports![0].id);
+  assert.equal(item.statusLabel, 'ПЛАНЕТА РАЗБЛОКИРОВАНА');
+  assert.match(item.body, /Планета Новая Аркадия разблокирована/);
+  assert.deepEqual(item.details.slice(0, 6).map(({ label }) => label), [
+    'Планета', 'Население до эпизода', 'Население после эпизода', 'Вместимость', 'Начало эпизода', 'Разблокировка',
+  ]);
+  assert.equal(item.details.at(-1)?.value, '7');
+  assert.equal(buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, once.overpopulationReports).some((entry) => entry.id === item.id), true);
+});
+
+test('overpopulation episode report survives save hydration with read/hidden metadata compatibility', async () => {
+  const { createInitialSaveState, createPersistenceFacade } = await loadPersistence();
+  const storage = new MemoryStorage();
+  const initial = createInitialSaveState('production', 50_000);
+  const reports = upsertOverpopulationEpisodeReport(initial.reports, {
+    planetId: 'colony-02',
+    planetName: 'Станция Тихая',
+    factionId: 'veyra',
+    populationBefore: 12_000,
+    populationAfter: 10_000,
+    capacity: 10_000,
+    episodeStartedAt: 10_000,
+    episodeEndedAt: 610_000,
+    removedShips: [{ shipId: 'destroyer', count: 3 }],
+  });
+  const episodeId = reports.overpopulationReports![0].id;
+  const state = { ...initial, reports: { ...reports, readIds: [episodeId], hiddenIds: [] } };
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => 700_000 });
+
+  assert.deepEqual(persistence.write(state), { ok: true });
+  const persistedEnvelope = JSON.parse(storage.getItem(persistence.saveKey)!) as {
+    planets: Record<string, Record<string, unknown>>;
+  };
+  persistedEnvelope.planets['helion-01'].overpopulation = {
+    episodeStartedAt: 10_000,
+    initialExcess: 2_000,
+    scheduledBurnPool: 500,
+    burnedPopulation: 0,
+    lastReconciledAt: 50_000,
+    blocked: true,
+    initialPopulation: 12_000,
+    initialCapacity: 10_000,
+    removedShips: [
+      { shipId: 'scout', count: 3 },
+      { shipId: 'destroyer', count: 2 },
+      { shipId: 'solar-satellite', count: 4 },
+      { shipId: 'corsair', count: 1 },
+      { shipId: 'unknown', count: 9 },
+    ],
+  };
+  storage.setItem(persistence.saveKey, JSON.stringify(persistedEnvelope));
+  const hydrated = persistence.read();
+  assert.deepEqual(hydrated.reports.overpopulationReports, reports.overpopulationReports);
+  assert.deepEqual(hydrated.reports.readIds, [episodeId]);
+  assert.equal(hydrated.planets['helion-01'].overpopulation?.initialPopulation, 12_000);
+  assert.equal(hydrated.planets['helion-01'].overpopulation?.initialCapacity, 10_000);
+  assert.deepEqual(hydrated.planets['helion-01'].overpopulation?.removedShips, [
+    { shipId: 'scout', count: 3 }, { shipId: 'destroyer', count: 2 },
+  ]);
+  assert.deepEqual(buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, hydrated.reports.overpopulationReports).map(({ id }) => id), [episodeId]);
+  assert.deepEqual(persistence.write(hydrated), { ok: true });
+  assert.deepEqual(persistence.read().planets['helion-01'].overpopulation?.removedShips, [
+    { shipId: 'scout', count: 3 }, { shipId: 'destroyer', count: 2 },
+  ]);
+});
+
+test('save hydration accepts empty ordinary fleet only for deployment with a valid commander', async () => {
+  const { createInitialSaveState, createPersistenceFacade } = await loadPersistence();
+  const storage = new MemoryStorage();
+  const initial = createInitialSaveState('production', 1_000);
+  const baseFlight = {
+    id: 'flight:commander-only',
+    requestId: 'request:commander-only',
+    missionId: 'deployment',
+    originPlanetId: 'helion-01',
+    originCoordinate: { galaxy: 1, system: 1, position: 1 },
+    destination: { kind: 'planet', planetId: 'helion-01', coordinate: { galaxy: 1, system: 1, position: 2 } },
+    destinationPlanetId: 'helion-01',
+    targetRelation: 'self',
+    destinationCoordinate: { galaxy: 1, system: 1, position: 2 },
+    selectedShips: {},
+    selectedCommanders: { corsair: 1 },
+    selectedCommanderLevels: { corsair: 0 },
+    populationReserved: 10,
+    routeDistance: 1,
+    effectiveSpeed: 33_000,
+    oneWayDurationMs: 180_000,
+    departedAt: 1_000,
+    arrivalAt: 181_000,
+    gasCost: 1,
+    phase: 'outbound',
+  };
+  storage.setItem('asterion.vertical-slice.v1', JSON.stringify({
+    ...initial,
+    flights: { records: [
+      baseFlight,
+      { ...baseFlight, id: 'flight:invalid-mission', requestId: 'request:invalid-mission', missionId: 'attack', selectedCommanders: undefined, selectedCommanderLevels: undefined },
+      { ...baseFlight, id: 'flight:invalid-deployment', requestId: 'request:invalid-deployment', selectedCommanders: undefined, selectedCommanderLevels: undefined },
+    ], requestIndex: {} },
+  }));
+  const hydrated = createPersistenceFacade({ mode: 'production', storage, now: () => 1_100 }).read();
+
+  assert.deepEqual(hydrated.flights.records.map(({ id }) => id), ['flight:commander-only']);
+  assert.deepEqual(hydrated.flights.records[0].selectedShips, {});
+  assert.deepEqual(hydrated.flights.records[0].selectedCommanders, { corsair: 1 });
 });
 
 test('local player aliases produce attack-specific report labels and results', () => {

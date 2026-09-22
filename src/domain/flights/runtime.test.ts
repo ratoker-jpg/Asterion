@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { beginFlightReturn, createFlightState, dispatchFlight, reconcileFlightState, recallFlight } from './runtime.ts';
+import { calculateFlightFuel } from './fuel.ts';
 
 const dispatch = (requestId = 'request-1') => dispatchFlight(createFlightState(), {
   requestId,
@@ -28,6 +29,57 @@ test('dispatch snapshots calculations and is idempotent by persisted request ID'
   assert.equal(second.state.records.length, 1);
   assert.equal(first.flight.destinationCoordinate.system, 2);
   assert.ok(first.flight.gasCost > 0);
+});
+
+test('deployment can dispatch a commander-only fleet using catalog speed, science, duration and fuel', () => {
+  const { flight } = dispatchFlight(createFlightState(), {
+    requestId: 'commander-only-deployment',
+    missionId: 'deployment',
+    originPlanetId: 'helion-01',
+    originCoordinate: { galaxy: 1, system: 1, position: 1 },
+    destination: { kind: 'coordinate', coordinate: { galaxy: 2, system: 1, position: 1 } },
+    selectedShips: {},
+    selectedCommanders: { corsair: 1 },
+    departedAt: 1_000,
+    factionId: 'aegis',
+    science: { 4: 1, 2: 7 },
+  });
+
+  const expectedSpeed = 33_000 * 1.1;
+  assert.equal(flight.effectiveSpeed, expectedSpeed);
+  assert.equal(flight.oneWayDurationMs, 310_158);
+  assert.equal(flight.gasCost, calculateFlightFuel('aegis', {}, flight.routeDistance, { 2: 7 }, { corsair: 1 }));
+  assert.deepEqual(flight.selectedCommanders, { corsair: 1 });
+});
+
+test('commander speed and fuel only affect flights when commanders are selected', () => {
+  const baseline = dispatchFlight(createFlightState(), {
+    requestId: 'commander-baseline',
+    missionId: 'deployment',
+    originPlanetId: 'helion-01',
+    originCoordinate: { galaxy: 1, system: 1, position: 1 },
+    destination: { kind: 'coordinate', coordinate: { galaxy: 2, system: 1, position: 1 } },
+    selectedShips: { scout: 1 },
+    departedAt: 1_000,
+    factionId: 'aegis',
+  }).flight;
+  const withCommander = dispatchFlight(createFlightState(), {
+    requestId: 'commander-mixed',
+    missionId: 'deployment',
+    originPlanetId: 'helion-01',
+    originCoordinate: { galaxy: 1, system: 1, position: 1 },
+    destination: { kind: 'coordinate', coordinate: { galaxy: 2, system: 1, position: 1 } },
+    selectedShips: { scout: 1 },
+    selectedCommanders: { corsair: 1 },
+    departedAt: 1_000,
+    factionId: 'aegis',
+  }).flight;
+
+  assert.equal(baseline.effectiveSpeed, 28_000);
+  assert.equal(withCommander.effectiveSpeed, 28_000);
+  assert.equal(withCommander.oneWayDurationMs, baseline.oneWayDurationMs);
+  assert.equal(baseline.gasCost, calculateFlightFuel('aegis', { scout: 1 }, baseline.routeDistance));
+  assert.equal(withCommander.gasCost, calculateFlightFuel('aegis', { scout: 1 }, withCommander.routeDistance, {}, { corsair: 1 }));
 });
 
 test('transport snapshots normalized cargo and the resolved destination identity without changing flight formulas', () => {

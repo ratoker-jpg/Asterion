@@ -277,6 +277,35 @@ test('science cancellation cascades dependent successors and refunds each saved 
   assert.deepEqual(repeated.wallet, canceled.wallet);
 });
 
+test('science cancellation refuses a cascade that would mutate a blocked planet', () => {
+  const state = createDefaultScienceState();
+  state.queue = [
+    {
+      id: 'open-planet-research', scienceId: 1, planetId: 'open-planet',
+      fromLevel: 0, toLevel: 1, startedAt: 0, finishAt: 100, durationMs: 100,
+      cost: { metal: 100, minerals: 50, gas: 20, energy: 0 },
+    },
+    {
+      id: 'blocked-planet-research', scienceId: 1, planetId: 'blocked-planet',
+      fromLevel: 1, toLevel: 2, startedAt: 100, finishAt: 200, durationMs: 100,
+      cost: { metal: 200, minerals: 100, gas: 40, energy: 0 },
+    },
+  ];
+  const current = {
+    ...context(state, 20, 0),
+    planetId: 'open-planet',
+    blockedPlanetIds: new Set(['blocked-planet']),
+    rng: () => 0,
+  };
+  const canceled = cancelScienceResearch(current, 'open-planet-research');
+
+  assert.equal(canceled.ok, false);
+  assert.equal(canceled.reason, 'Исследование или его зависимые задачи принадлежат заблокированной планете.');
+  assert.deepEqual(canceled.state.queue, state.queue);
+  assert.deepEqual(canceled.wallet, current.wallet);
+  assert.deepEqual(canceled.canceledTasks, []);
+});
+
 test('science cancellation reconciles completed work before refusing a refund', () => {
   const started = start(context(createDefaultScienceState(), 1, 10_000), 1, 'complete-before-cancel');
   const canceled = cancelScienceResearch({ ...context(started.state, 1, started.task!.finishAt), wallet: started.wallet, rng: () => 0 }, 'complete-before-cancel');

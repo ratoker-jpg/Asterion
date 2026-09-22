@@ -747,6 +747,7 @@ type FleetProductionMigrationOptions = {
   defense?: OwnedDefenseState;
   hangarLevel?: number;
   solarSatellites?: number;
+  enforceCapacity?: boolean;
 };
 
 type FleetProductionMigrationCapacity = {
@@ -766,7 +767,8 @@ function migrateQueue(
   const result: FleetProductionOrder[] = [];
   const ownedFleet = options.fleet ?? { ships: emptyRecord(SHIP_IDS), commanders: emptyRecord(COMMANDER_IDS) };
   const ownedDefense = options.defense ?? createEmptyDefenseState();
-  const enforceCapacity = options.hangarLevel != null || options.fleet != null || options.defense != null || options.factionId != null;
+  const enforceCapacity = options.enforceCapacity
+    ?? (options.hangarLevel != null || options.fleet != null || options.defense != null || options.factionId != null);
   const seenLimitedIds = new Set<string>();
 
   for (const raw of source) {

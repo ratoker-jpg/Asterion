@@ -310,6 +310,7 @@
 .asterion-header__resource-population-breakdown>span{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .asterion-header__resource-population-breakdown small{color:#85aeb9;font-size:9px;letter-spacing:.5px;line-height:1.2}
 .asterion-header__resource-population-breakdown b{color:#e9fbff;font-size:10px;font-variant-numeric:tabular-nums;line-height:1.2;white-space:nowrap}
+.asterion-header__resource-pending-inbound{color:#67f3a4!important;font-size:.82em!important;font-variant-numeric:tabular-nums;white-space:nowrap}
 .asterion-header__resource:hover .asterion-header__resource-tooltip,
 .asterion-header__resource:focus .asterion-header__resource-tooltip,
 .asterion-header__resource:focus-visible .asterion-header__resource-tooltip{opacity:1;transform:translate(-50%,0)}

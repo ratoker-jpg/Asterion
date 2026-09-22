@@ -128,3 +128,4 @@
 .planet-page-v4 .planet-stage-v3 .zone-hotspot--resource{left:42px;top:140px}
 .planet-page-v4 .planet-stage-v3 .zone-hotspot--industry{right:2px;top:268px}
 .planet-page-v4 .planet-stage-v3 .zone-hotspot--military{left:50px;bottom:94px}
+.planet-overpopulation-banner-v3{position:absolute;z-index:25;left:50%;top:98px;transform:translateX(-50%);display:grid;gap:4px;min-width:280px;padding:10px 14px;border:1px solid rgba(255,137,102,.65);border-radius:8px;background:rgba(45,17,27,.86);box-shadow:0 0 18px rgba(255,87,72,.18);text-align:center;color:#ffd7c9}.planet-overpopulation-banner-v3 strong{font-size:11px;letter-spacing:1.5px;color:#ff9b82}.planet-overpopulation-banner-v3 span{font-size:12px;font-variant-numeric:tabular-nums}.planet-overpopulation-banner-v3 small{font-size:10px;color:#efb6a8}
