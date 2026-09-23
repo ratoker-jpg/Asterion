@@ -448,6 +448,7 @@ async function verifyResourceZoneFlow(win, directory) {
   await win.webContents.executeJavaScript(`(() => {
     const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
     save.metal=0;
+    save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
   })()`);
   await reload(win);
