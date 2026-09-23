@@ -1362,6 +1362,64 @@ test('overpopulation emits one persisted final system report with attrition-only
   assert.deepEqual(persistence.read().reports.overpopulationReports, reports);
 });
 
+function createScienceOverpopulationQueueFixture(
+  firstEpisodeStartedAt: number,
+  secondEpisodeStartedAt: number,
+): SaveState {
+  const initial = createInitialSaveState('test', 0);
+  const homeworld = initial.planets['helion-01'];
+  const blockedEpisode = (episodeStartedAt: number) => ({
+    episodeStartedAt,
+    initialExcess: 1,
+    scheduledBurnPool: 1,
+    burnedPopulation: 0,
+    lastReconciledAt: episodeStartedAt,
+    blocked: true,
+  });
+
+  return {
+    ...initial,
+    science: {
+      ...initial.science,
+      queue: [
+        {
+          id: 'blocked-planet-science',
+          scienceId: SCIENCE_CATALOG[0].id,
+          planetId: 'helion-01',
+          fromLevel: 0,
+          toLevel: 1,
+          startedAt: 0,
+          finishAt: 5_000,
+          durationMs: 5_000,
+          cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+        },
+        {
+          id: 'other-planet-science',
+          scienceId: SCIENCE_CATALOG[1].id,
+          planetId: 'another-colony',
+          fromLevel: 0,
+          toLevel: 1,
+          startedAt: 5_000,
+          finishAt: 10_000,
+          durationMs: 5_000,
+          cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+        },
+      ],
+    },
+    planets: {
+      ...initial.planets,
+      'helion-01': {
+        ...homeworld,
+        overpopulation: blockedEpisode(firstEpisodeStartedAt),
+      },
+      'another-colony': {
+        ...homeworld,
+        overpopulation: blockedEpisode(secondEpisodeStartedAt),
+      },
+    },
+  };
+}
+
 test('resolving a blocked planet shifts the queued science task and its global queue tail', () => {
   const initial = createInitialSaveState('test', 0);
   const blocked = {
@@ -1413,6 +1471,60 @@ test('resolving a blocked planet shifts the queued science task and its global q
   assert.equal(resolved.resolved, true);
   assert.equal(resolved.state.science.queue[0]?.finishAt, 120_000);
   assert.equal(resolved.state.science.queue[1]?.finishAt, 180_000);
+});
+
+test('overlapping overpopulation locks shift a global science queue only once', () => {
+  const fixture = createScienceOverpopulationQueueFixture(0, 8_000);
+  const secondUnlocked = reconcilePlanetOverpopulation(fixture, 'another-colony', 9_000);
+  assert.equal(secondUnlocked.resolved, true);
+  const firstUnlocked = reconcilePlanetOverpopulation(secondUnlocked.state, 'helion-01', 10_000);
+  assert.equal(firstUnlocked.resolved, true);
+
+  const [first, second] = firstUnlocked.state.science.queue;
+  assert.ok(first && second);
+  assert.equal(first?.startedAt, 10_000);
+  assert.equal(first?.finishAt, 15_000);
+  assert.equal(second?.startedAt, 15_000);
+  assert.equal(second?.finishAt, 20_000);
+  assert.equal(first.finishAt - first.startedAt, first.durationMs);
+  assert.equal(second.finishAt - second.startedAt, second.durationMs);
+  assert.ok(first.finishAt <= second.startedAt, 'science queue must remain FIFO');
+});
+
+test('non-overlapping overpopulation locks add a later science pause exactly once', () => {
+  const fixture = createScienceOverpopulationQueueFixture(0, 16_000);
+  const firstUnlocked = reconcilePlanetOverpopulation(fixture, 'helion-01', 10_000);
+  assert.equal(firstUnlocked.resolved, true);
+  const secondUnlocked = reconcilePlanetOverpopulation(firstUnlocked.state, 'another-colony', 18_000);
+  assert.equal(secondUnlocked.resolved, true);
+
+  const [first, second] = secondUnlocked.state.science.queue;
+  assert.ok(first && second);
+  assert.equal(first?.startedAt, 10_000);
+  assert.equal(first?.finishAt, 15_000);
+  assert.equal(second?.startedAt, 17_000);
+  assert.equal(second?.finishAt, 22_000);
+  assert.equal(first.finishAt - first.startedAt, first.durationMs);
+  assert.equal(second.finishAt - second.startedAt, second.durationMs);
+  assert.ok(first.finishAt <= second.startedAt, 'science queue must remain FIFO');
+});
+
+test('an overdue blocked science head still pauses the shared queue only once', () => {
+  const fixture = createScienceOverpopulationQueueFixture(8_000, 8_000);
+  const secondUnlocked = reconcilePlanetOverpopulation(fixture, 'another-colony', 9_000);
+  assert.equal(secondUnlocked.resolved, true);
+  const firstUnlocked = reconcilePlanetOverpopulation(secondUnlocked.state, 'helion-01', 10_000);
+  assert.equal(firstUnlocked.resolved, true);
+
+  const [first, second] = firstUnlocked.state.science.queue;
+  assert.ok(first && second);
+  assert.equal(first?.startedAt, 2_000);
+  assert.equal(first?.finishAt, 7_000);
+  assert.equal(second?.startedAt, 7_000);
+  assert.equal(second?.finishAt, 12_000);
+  assert.equal(first.finishAt - first.startedAt, first.durationMs);
+  assert.equal(second.finishAt - second.startedAt, second.durationMs);
+  assert.ok(first.finishAt <= second.startedAt, 'science queue must remain FIFO');
 });
 
 test('a blocked planet pauses resource settlement and leaves a no-eligible episode persisted', () => {

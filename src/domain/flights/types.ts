@@ -27,6 +27,7 @@ export type FlightCompletionReason =
   | 'arrived'
   | 'deployed'
   | 'spy-destroyed'
+  | 'origin-destroyed'
   | 'mission-failed';
 
 export type TargetRelation = 'self' | 'ally' | 'enemy' | 'neutral';

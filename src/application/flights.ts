@@ -207,7 +207,7 @@ export type SpyReportCommandResult = SpyReportCommandSuccess | SpyReportCommandF
 
 export type FlightReconcileEvent = {
   flight: FlightRecord;
-  status: 'arrived' | 'returned' | 'target-occupied' | 'target-unavailable' | 'delivered' | 'deployed' | 'colonized' | 'spy-report' | 'spy-detected';
+  status: 'arrived' | 'returned' | 'target-occupied' | 'target-unavailable' | 'delivered' | 'deployed' | 'colonized' | 'destroyed' | 'spy-report' | 'spy-detected';
   notice: string;
 };
 
@@ -1502,6 +1502,24 @@ export function reconcileFlights(
 
   for (const original of reconciliationOrder) {
     const current = next.flights.records.find((flight) => flight.id === original.id) ?? original;
+    if (current.missionId === 'deployment'
+      && (current.phase === 'outbound' || current.phase === 'returning' || current.phase === 'arrived')
+      && !next.planets[current.originPlanetId]) {
+      const destroyed: FlightRecord = {
+        ...current,
+        phase: 'failed',
+        completionReason: 'origin-destroyed',
+        completedAt: now,
+      };
+      next = { ...next, flights: updateFlight(currentFlightState(next), destroyed) };
+      changed = true;
+      events.push({
+        flight: destroyed,
+        status: 'destroyed',
+        notice: 'Дислокация уничтожена: исходная планета потеряна, весь состав рейса уничтожен.',
+      });
+      continue;
+    }
     if (current.missionId === 'espionage') {
       const mission = spyMissionForFlight(next, current);
       if (mission?.status === 'target-destroyed') {

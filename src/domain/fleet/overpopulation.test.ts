@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   OVERPOPULATION_WINDOW_MS,
   calculatePlanetPopulation,
+  getOverpopulationEligibleUnits,
   reconcileOverpopulation,
 } from './overpopulation.ts';
 import { createEmptyFleetState } from './runtime.ts';
@@ -75,6 +76,77 @@ test('a planet with only satellites or commanders remains blocked with an explic
   assert.equal(result.state?.lastResolutionReason, 'no-eligible-units');
   assert.equal(result.fleet.commanders.corsair, 20);
   assert.equal(result.fleet.ships['solar-satellite'], 0);
+});
+
+test('protected ordinary ships count toward full population while unprotected ships burn in population order', () => {
+  const fleet = createEmptyFleetState();
+  fleet.ships['spy-probe'] = 60;
+  fleet.ships.transporter = 100;
+  fleet.ships.scout = 5;
+  fleet.commanders.corsair = 2;
+  const protectedShipCounts = { 'spy-probe': 50 };
+
+  assert.equal(
+    getOverpopulationEligibleUnits(fleet, 'aegis', protectedShipCounts).filter((unit) => unit.id === 'spy-probe').length,
+    10,
+  );
+
+  // The final argument is the requested optional protectedShipCounts domain contract.
+  const started = reconcileOverpopulation(fleet, 3, 1, 'aegis', 0, undefined, protectedShipCounts);
+  assert.equal(started.actualPopulation, 193);
+  assert.equal(started.excess, 73);
+  assert.equal(started.state?.initialPopulation, 193);
+  assert.equal(started.state?.initialExcess, 73);
+  assert.equal(started.fleet.ships['spy-probe'], 60);
+
+  const burned = reconcileOverpopulation(
+    started.fleet,
+    3,
+    1,
+    'aegis',
+    OVERPOPULATION_WINDOW_MS,
+    started.state,
+    protectedShipCounts,
+  );
+
+  assert.deepEqual(burned.removedShipCounts, [
+    { shipId: 'spy-probe', count: 10 },
+    { shipId: 'transporter', count: 63 },
+  ]);
+  assert.equal(burned.fleet.ships['spy-probe'], 50);
+  assert.equal(burned.fleet.ships.transporter, 37);
+  assert.equal(burned.fleet.ships.scout, 5);
+  assert.equal(burned.fleet.commanders.corsair, 2);
+  assert.equal(burned.actualPopulation, 120);
+  assert.equal(burned.blocked, false);
+});
+
+test('overpopulation leaves only protected ordinary ships intact and keeps the episode blocked', () => {
+  const fleet = createEmptyFleetState();
+  fleet.ships.scout = 30;
+  fleet.commanders.corsair = 2;
+  const protectedShipCounts = { scout: 30 };
+
+  const result = reconcileOverpopulation(
+    fleet,
+    3,
+    0,
+    'aegis',
+    OVERPOPULATION_WINDOW_MS,
+    undefined,
+    protectedShipCounts,
+  );
+
+  assert.equal(result.actualPopulation, 83);
+  assert.equal(result.excess, 33);
+  assert.equal(result.blocked, true);
+  assert.equal(result.state?.blocked, true);
+  assert.equal(result.state?.lastResolutionReason, 'no-eligible-units');
+  assert.deepEqual(result.removed, []);
+  assert.deepEqual(result.removedShipCounts, []);
+  assert.equal(result.fleet.ships.scout, 30);
+  assert.equal(result.fleet.ships['solar-satellite'], 0);
+  assert.equal(result.fleet.commanders.corsair, 2);
 });
 
 test('priority attrition sorts by unit population, then ship id and instance slot', () => {

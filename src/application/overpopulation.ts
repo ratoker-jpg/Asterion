@@ -3,11 +3,13 @@ import {
   calculatePlanetPopulation,
   isPlanetOverpopulated,
   reconcileOverpopulation,
+  type OverpopulationProtectedShipCounts,
   type OverpopulationShipLoss,
   type OverpopulationState,
 } from '../domain/fleet/overpopulation.ts';
 import { upsertOverpopulationEpisodeReport } from '../domain/reports/adapters.ts';
 import { removeSolarSatellitesFromFleet } from '../domain/fleet/runtime.ts';
+import { SHIP_IDS, type ShipId } from '../domain/combat/ids.ts';
 import type { PlanetId, PlanetRuntime, SaveState } from './contracts.ts';
 
 export type PlanetOverpopulationSummary = {
@@ -33,6 +35,8 @@ const TIMER_KEYS = new Set([
   'endsAt',
 ]);
 
+const DEPLOYMENT_RESERVATION_PHASES = new Set(['outbound', 'returning', 'arrived']);
+
 function safeInteger(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.floor(value) : fallback;
 }
@@ -43,6 +47,28 @@ function planetCapacity(planet: PlanetRuntime): number {
 
 function satelliteCount(planet: PlanetRuntime, migratedCount: number): number {
   return Math.max(0, safeInteger(planet.solarSatellites, migratedCount));
+}
+
+function getReservedDeploymentShipsForPlanet(
+  state: SaveState,
+  planetId: PlanetId,
+): OverpopulationProtectedShipCounts {
+  const reserved: OverpopulationProtectedShipCounts = {};
+  for (const flight of state.flights.records) {
+    if (flight.missionId !== 'deployment'
+      || flight.originPlanetId !== planetId
+      || !DEPLOYMENT_RESERVATION_PHASES.has(flight.phase)) continue;
+    for (const [rawShipId, quantity] of Object.entries(flight.selectedShips)) {
+      if (!SHIP_IDS.includes(rawShipId as ShipId)
+        || rawShipId === 'solar-satellite'
+        || !Number.isFinite(quantity)
+        || quantity <= 0) continue;
+      const shipId = rawShipId as ShipId;
+      const count = Math.floor(quantity);
+      if (count > 0) reserved[shipId] = (reserved[shipId] ?? 0) + count;
+    }
+  }
+  return reserved;
 }
 
 function withOverpopulationState(planet: PlanetRuntime, state: OverpopulationState | undefined): PlanetRuntime {
@@ -124,7 +150,14 @@ function shiftPlanetOwnedTimers(
   if (!planet || delta <= 0) return state;
   const firstBlockedScienceTaskIndex = state.science.queue.findIndex((task) => task.planetId === planetId);
   const firstBlockedScienceTask = state.science.queue[firstBlockedScienceTaskIndex];
-  const sciencePauseDelta = firstBlockedScienceTask
+  const queueAlreadyStoppedByEarlierBlockedTask = firstBlockedScienceTaskIndex > 0
+    && state.science.queue.slice(0, firstBlockedScienceTaskIndex).some((task) => {
+      if (!task.planetId || task.startedAt > now) return false;
+      const earlierEpisode = state.planets[task.planetId]?.overpopulation;
+      return Boolean(earlierEpisode?.blocked
+        && earlierEpisode.episodeStartedAt < now);
+    });
+  const sciencePauseDelta = firstBlockedScienceTask && !queueAlreadyStoppedByEarlierBlockedTask
     ? Math.max(0, Math.floor(now - Math.max(episodeStartedAt, firstBlockedScienceTask.startedAt)))
     : 0;
   let next = {
@@ -203,6 +236,7 @@ export function reconcilePlanetOverpopulation(
     state.profile.factionId,
     now,
     planet.overpopulation,
+    getReservedDeploymentShipsForPlanet(state, planetId),
   );
   const hadEpisode = Boolean(planet.overpopulation?.blocked);
   const resolved = hadEpisode && !result.state;

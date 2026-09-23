@@ -386,6 +386,7 @@ const PERSISTED_FLIGHT_COMPLETION_REASONS = new Set<FlightCompletionReason>([
   'arrived',
   'deployed',
   'spy-destroyed',
+  'origin-destroyed',
   'mission-failed',
 ]);
 const PERSISTED_FLIGHT_DESTINATION_KINDS = new Set<FlightDestination['kind']>([
