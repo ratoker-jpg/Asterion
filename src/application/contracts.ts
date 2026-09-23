@@ -25,6 +25,7 @@ import type { EnergyLedger, EnergySourceSnapshot } from '../domain/energy/runtim
 import type { FlightState } from '../domain/flights/types.ts';
 import type { EspionageState } from '../domain/espionage/types.ts';
 import type { UniverseOwnerAlliance } from '../domain/universe/types.ts';
+import type { OverpopulationState } from '../domain/fleet/overpopulation.ts';
 
 /** Planet ids are stable save keys; the legacy homeworld remains `helion-01`. */
 export type PlanetId = string;
@@ -53,6 +54,8 @@ export type PlanetRuntime = {
   energyExpenseAttribution?: Partial<Record<string, number>>;
   /** Orbital presence is separate from the outgoing fleet roster. */
   solarSatellites?: number;
+  /** Persisted linear overpopulation episode; absent means the planet is not blocked. */
+  overpopulation?: OverpopulationState;
   universeGalaxy?: number;
   universeSystem?: number;
   universePosition?: number;

@@ -184,6 +184,67 @@ async function runViewport(win, width, height) {
   await reload(win);
   await clickPrimary(win, 'reports');
 
+  const episodeStartedAt = Date.now() - 10 * 60_000;
+  const overpopulationReport = {
+    id: `overpopulation:qa-colony:${episodeStartedAt}`,
+    planetId: 'qa-colony',
+    planetName: 'Колония QA',
+    factionId: 'aegis',
+    populationBefore: 35_000,
+    populationAfter: 25_000,
+    capacity: 25_000,
+    episodeStartedAt,
+    episodeEndedAt: Date.now(),
+    removedShips: [{ shipId: 'scout', count: 12 }, { shipId: 'destroyer', count: 3 }],
+  };
+  const seededReport = await win.webContents.executeJavaScript(`(() => {
+    try {
+      const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+      save.reports = { ...(save.reports || {}), overpopulationReports: [${JSON.stringify(overpopulationReport)}] };
+      localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+      return true;
+    } catch { return false; }
+  })()`);
+  if (!seededReport) throw new Error(`Unable to seed overpopulation report at ${label}`);
+  await reload(win);
+  await clickPrimary(win, 'reports');
+  await clickFolder(win, 'system');
+  const reportSelector = `[data-report-item-id="${overpopulationReport.id}"] .reports-list-open`;
+  await waitFor(win, `document.querySelector(${JSON.stringify(reportSelector)})`);
+  const openedReport = await win.webContents.executeJavaScript(`(() => {
+    const button = document.querySelector(${JSON.stringify(reportSelector)});
+    if (!button) return false;
+    button.click();
+    return true;
+  })()`);
+  if (!openedReport) throw new Error(`Overpopulation report row could not be opened at ${label}`);
+  await waitFor(win, `document.querySelector('[data-qa-overpopulation-report="${overpopulationReport.id}"]')`);
+  await waitFor(win, `Array.from(document.querySelectorAll('[data-qa-overpopulation-loss] img')).length === 2 && Array.from(document.querySelectorAll('[data-qa-overpopulation-loss] img')).every((image) => image.complete && image.naturalWidth > 0)`);
+  const overpopulationDossier = await win.webContents.executeJavaScript(`(() => {
+    const dossier = document.querySelector('[data-qa-overpopulation-report="${overpopulationReport.id}"]');
+    const rawText = dossier?.textContent ?? '';
+    const text = rawText.replace(/\\s+/g, '');
+    return {
+      visible: Boolean(dossier),
+      unlocked: rawText.toLowerCase().includes('планета разблокирована'),
+      planet: text.includes('КолонияQA'),
+      populationBefore: text.includes('35000'),
+      populationAfter: text.includes('25000'),
+      lossCount: text.includes('15ед.'),
+      losses: Array.from(dossier?.querySelectorAll('[data-qa-overpopulation-loss]') ?? []).map((node) => ({
+        id: node.getAttribute('data-qa-overpopulation-loss'),
+        count: node.querySelector('b')?.textContent?.trim() ?? '',
+        imageLoaded: Boolean(node.querySelector('img')?.complete && node.querySelector('img')?.naturalWidth > 0),
+      })),
+    };
+  })()`);
+  if (!overpopulationDossier.visible || !overpopulationDossier.unlocked || !overpopulationDossier.planet || !overpopulationDossier.populationBefore || !overpopulationDossier.populationAfter || !overpopulationDossier.lossCount || overpopulationDossier.losses.length !== 2 || overpopulationDossier.losses.some((loss) => !loss.imageLoaded)) {
+    throw new Error(`Overpopulation report dossier contract failed at ${label}: ${JSON.stringify(overpopulationDossier)}`);
+  }
+  await capture(win, directory, 'overpopulation-dossier');
+  await clickPrimary(win, 'universe', `document.querySelector('[data-qa-universe]')`);
+  await clickPrimary(win, 'reports');
+
   const profile = await profileSnapshot(win);
   if (!profile.visible || profile.name !== 'Dendrilion' || !profile.avatar.includes('aegis_general') || profile.alliance !== 'Содружество Гелион' || profile.allianceTag !== 'HLN') throw new Error(`Profile contract failed at ${label}: ${JSON.stringify(profile)}`);
   const profilePortraits = await inspectRenderedFactionGeneralPortraits(win, '[data-qa-profile] [data-qa-faction-general]');
@@ -278,7 +339,7 @@ async function runViewport(win, width, height) {
   })()`);
   if (!persisted || !reloaded.reports?.hiddenIds?.includes(`battle:${canonicalBattleId}`)) throw new Error(`Tombstone reload failed at ${label}: ${JSON.stringify({ persisted, reports: reloaded.reports })}`);
 
-  return { viewport: label, profile, initialRating, updatedProfile, updatedRating, reloadedProfile, reloadedRating, metricFocus, allianceBefore, canonicalBattleId, horizontalOverflow: profile.horizontalOverflow || profile.bodyHorizontalOverflow, persistedTombstone: true };
+  return { viewport: label, profile, overpopulationDossier, initialRating, updatedProfile, updatedRating, reloadedProfile, reloadedRating, metricFocus, allianceBefore, canonicalBattleId, horizontalOverflow: profile.horizontalOverflow || profile.bodyHorizontalOverflow, persistedTombstone: true };
 }
 
 app.whenReady().then(async () => {
@@ -290,7 +351,7 @@ app.whenReady().then(async () => {
     const results = [];
     for (const [width, height] of VIEWPORTS) results.push(await runViewport(win, width, height));
     fs.writeFileSync(path.join(OUTPUT, 'results.json'), JSON.stringify({ results }, null, 2));
-    console.log('Reports/profile QA passed: profile/rating alliance sync, command update, conflicting legacy profile isolation, reload persistence, exact seven-folder menu, deletion tombstones and canonical battle preservation at both viewports.');
+    console.log('Reports/profile QA passed: overpopulation unlock dossier and ship art, profile/rating alliance sync, command update, reload persistence, deletion tombstones and canonical battle preservation at both viewports.');
     win.destroy();
     app.exit(0);
   } catch (error) {

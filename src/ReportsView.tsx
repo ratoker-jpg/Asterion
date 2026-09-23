@@ -95,6 +95,12 @@ function formatTime(timestamp?: string) {
   return new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(new Date(timestamp));
 }
 
+function withOverpopulationReports(next: ReportsState, previous: ReportsState): ReportsState {
+  return previous.overpopulationReports === undefined
+    ? next
+    : { ...next, overpopulationReports: previous.overpopulationReports };
+}
+
 function ReportGlyph({ kind }: { kind: ReportCategory }) {
   const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.55, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
   if (kind === 'system') return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="M3 16s5-8 13-8 13 8 13 8-5 8-13 8S3 16 3 16Z" /><circle {...common} cx="16" cy="16" r="4" /><path {...common} d="M16 3v3M16 26v3M3 16h3M26 16h3" /></svg>;
@@ -164,6 +170,40 @@ function GenericDossier({ item }: { item: ReportItem }) {
       </section>
       <section className="reports-generic-details"><header>ДЕТАЛИ</header><dl>{item.details.map((detail) => <div key={`${detail.label}-${detail.value}`}><dt>{detail.label}</dt><dd>{detail.value}</dd></div>)}</dl></section>
       <section className="reports-generic-body"><small>СВОДКА</small><p>{item.body}</p></section>
+    </div>
+  );
+}
+
+function OverpopulationDossier({ item }: { item: ReportItem }) {
+  const report = item.overpopulationReport;
+  if (!report) return <GenericDossier item={item} />;
+  return (
+    <div className="reports-dossier reports-dossier--overpopulation" data-qa-overpopulation-report={report.id}>
+      <div className="reports-dossier-heading">
+        <div className="reports-dossier-heading__icon"><ReportGlyph kind="system" /></div>
+        <div><small>{item.typeLabel}</small><h2>{item.title}</h2><p>{item.preview}</p></div>
+        <div className="reports-dossier-heading__status"><StatusBadge item={item} /><time>{formatDate(item.timestamp)}</time></div>
+      </div>
+      <section className="spy-report-card overpopulation-report-summary">
+        <header><strong>ИТОГ ЭПИЗОДА</strong><span>{getCombatFactionName(report.factionId)}</span></header>
+        <dl className="spy-report-summary-grid">
+          <div><dt>Планета</dt><dd><strong>{report.planetName}</strong></dd></div>
+          <div><dt>Население до эпизода</dt><dd>{numberFormat.format(report.populationBefore)}</dd></div>
+          <div><dt>Население после эпизода</dt><dd>{numberFormat.format(report.populationAfter)}</dd></div>
+          <div><dt>Вместимость</dt><dd>{numberFormat.format(report.capacity)}</dd></div>
+          <div><dt>Начало эпизода</dt><dd><time>{formatDate(new Date(report.episodeStartedAt).toISOString())}</time></dd></div>
+          <div><dt>Разблокировка</dt><dd><time>{formatDate(new Date(report.episodeEndedAt).toISOString())}</time></dd></div>
+        </dl>
+      </section>
+      <section className="spy-report-card overpopulation-report-losses">
+        <header><strong>УНИЧТОЖЕННЫЕ ОБЫЧНЫЕ КОРАБЛИ</strong><span>{numberFormat.format(report.removedShips.reduce((sum, loss) => sum + loss.count, 0))} ед.</span></header>
+        {report.removedShips.length ? <div className="spy-report-entity-grid">
+          {report.removedShips.map(({ shipId, count }) => {
+            const entity = getFactionCombatEntity(report.factionId, shipId as CombatEntityId);
+            return <article className="spy-report-entity" key={shipId} data-qa-overpopulation-loss={shipId}><img src={entity.art} alt="" /><div><strong>{entity.name}</strong><span>{shipId}</span></div><b>{numberFormat.format(count)}</b></article>;
+          })}
+        </div> : <p className="spy-report-empty">Потери обычных кораблей не зафиксированы.</p>}
+      </section>
     </div>
   );
 }
@@ -322,7 +362,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [openBattleReportId, setOpenBattleReportId] = useState<string | null>(null);
 
-  const items = useMemo(() => buildReportsFeed(battleReports, operations, command, espionage), [battleReports, operations, command, espionage]);
+  const items = useMemo(() => buildReportsFeed(battleReports, operations, command, espionage, state.overpopulationReports), [battleReports, operations, command, espionage, state.overpopulationReports]);
   const counts = useMemo(() => getReportCategoryCounts(items, state), [items, state]);
   const unreadCounts = useMemo(() => getReportUnreadCounts(items, state), [items, state]);
   const activeFolderMeta = MESSAGE_FOLDERS.find((folder) => folder.id === activeFolder) ?? MESSAGE_FOLDERS[0];
@@ -383,7 +423,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
     setSelectedId(item.id);
     const index = visibleItems.findIndex((candidate) => candidate.id === item.id);
     if (index >= 0) setPage(Math.floor(index / PAGE_SIZE) + 1);
-    if (!state.readIds.includes(item.id)) onStateChange(markReportRead(state, item.id));
+    if (!state.readIds.includes(item.id)) onStateChange(withOverpopulationReports(markReportRead(state, item.id), state));
   };
 
   const navigateSelected = (direction: -1 | 1) => {
@@ -397,13 +437,13 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
   const toggleSelected = (id: string, checked: boolean) => setSelectedIds((current) => { const next = new Set(current); if (checked) next.add(id); else next.delete(id); return next; });
   const deleteAll = () => {
     if (!activeCategory || !window.confirm('Вы уверены, что хотите удалить все сообщения в этом разделе?')) return;
-    onStateChange(deleteAllReports(state, items, activeCategory));
+    onStateChange(withOverpopulationReports(deleteAllReports(state, items, activeCategory), state));
     setSelectedIds(new Set());
     setSelectedId('');
   };
   const deleteSelected = () => {
     if (!activeCategory || !window.confirm('Вы уверены, что хотите удалить выбранные сообщения в этом разделе?')) return;
-    onStateChange(deleteSelectedReports(state, items, activeCategory, [...selectedIds]));
+    onStateChange(withOverpopulationReports(deleteSelectedReports(state, items, activeCategory, [...selectedIds]), state));
     setSelectedIds(new Set());
     setSelectedId('');
   };
@@ -424,7 +464,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
             return <button key={folder.id} type="button" data-message-folder={folder.id} className={activeFolder === folder.id ? 'active' : ''} onClick={() => openFolder(folder.id)} aria-current={activeFolder === folder.id ? 'page' : undefined}><span><ReportGlyph kind={folder.glyph} /></span><strong>{folder.label}</strong>{folder.count ? <b>{unread}/{total}</b> : <b className="reports-folder-action-label">+</b>}{unread > 0 ? <i className="reports-category-unread" title={`${unread} непрочитанных`} /> : null}</button>;
           })}
         </nav>
-        <button className="reports-mark-all" type="button" disabled={!markableItems.some((item) => !state.readIds.includes(item.id))} onClick={() => onStateChange(markAllReportsRead(state, markableItems.map((item) => item.id)))}><span>✓</span> ОТМЕТИТЬ ВСЕ ПРОЧИТАННЫМИ</button>
+        <button className="reports-mark-all" type="button" disabled={!markableItems.some((item) => !state.readIds.includes(item.id))} onClick={() => onStateChange(withOverpopulationReports(markAllReportsRead(state, markableItems.map((item) => item.id)), state))}><span>✓</span> ОТМЕТИТЬ ВСЕ ПРОЧИТАННЫМИ</button>
         <div className="reports-ai-note"><small>ЦЕНТР СООБЩЕНИЙ</small><strong>БЕЗ ФАЛЬШИВЫХ СОБЫТИЙ</strong><span>Боевые доклады читаются из журнала боёв. Остальные каналы наполняются только из существующих игровых контуров.</span></div>
       </aside>
 
@@ -441,7 +481,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
 
         <section className="reports-preview">
           <header className="reports-preview-head"><div><small>ДОСЬЕ СООБЩЕНИЯ</small><h2>ПРОСМОТР СООБЩЕНИЯ</h2></div>{activeCategory ? <div className="reports-preview-actions"><button type="button" aria-label={selectedBattleSaved ? 'Убрать бой из сохранённых' : 'Сохранить бой'} aria-pressed={selectedBattleSaved} disabled={!selectedItem?.battleReportId} className={selectedBattleSaved ? 'active' : ''} onClick={() => selectedItem?.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)}><ActionGlyph kind="save" /></button><span /><button type="button" aria-label="Предыдущее сообщение" disabled={selectedIndex <= 0} onClick={() => navigateSelected(-1)}><ActionGlyph kind="prev" /></button><button type="button" aria-label="Следующее сообщение" disabled={selectedIndex < 0 || selectedIndex >= visibleItems.length - 1} onClick={() => navigateSelected(1)}><ActionGlyph kind="next" /></button></div> : null}</header>
-          <div className="reports-preview-scroll">{activeCategory ? selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} saved={selectedBattleSaved} onToggleSaved={() => selectedItem.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)} onOpen={() => selectedBattle && setOpenBattleReportId(selectedBattle.id)} /> : selectedItem.spyReport ? <SpyDossier item={selectedItem} report={selectedItem.spyReport} onOpenUniverseTarget={onOpenUniverseTarget} /> : <GenericDossier item={selectedItem} />) : <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} /> : <EmptyFolder folder={activeFolderMeta} />}</div>
+          <div className="reports-preview-scroll">{activeCategory ? selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} saved={selectedBattleSaved} onToggleSaved={() => selectedItem.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)} onOpen={() => selectedBattle && setOpenBattleReportId(selectedBattle.id)} /> : selectedItem.overpopulationReport ? <OverpopulationDossier item={selectedItem} /> : selectedItem.spyReport ? <SpyDossier item={selectedItem} report={selectedItem.spyReport} onOpenUniverseTarget={onOpenUniverseTarget} /> : <GenericDossier item={selectedItem} />) : <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} /> : <EmptyFolder folder={activeFolderMeta} />}</div>
           {activeCategory && selectedItem?.action?.kind === 'open_fleets' ? <footer className="reports-preview-footer"><span>Выбери состав флота для совместной операции.</span><button type="button" onClick={onOpenFleets}>{selectedItem.action.label}</button></footer> : activeCategory && selectedItem?.source === 'espionage' && (selectedItem.action || selectedItem.secondaryAction) ? <footer className="reports-preview-footer"><span>{selectedItem.secondaryAction ? 'Связанный шпионский зонд ещё находится на орбите.' : 'Действия по полному снимку цели.'}</span><div className="reports-preview-footer-actions">
             {selectedItem.action?.kind === 'simulate_battle' && selectedItem.spyReport ? <button type="button" onClick={() => onSimulateBattle(selectedItem.spyReport!)}>{selectedItem.action.label}</button> : null}
             {selectedItem.secondaryAction?.kind === 'recall_spy' && selectedItem.secondaryAction.missionId ? <button type="button" className="restore" onClick={() => onRecallSpy(selectedItem.secondaryAction!.missionId!)}>{selectedItem.secondaryAction.label}</button> : null}

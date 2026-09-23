@@ -13,8 +13,10 @@ import type {
   ReportQuery,
   ReportsState,
   ReportUnreadCounts,
+  OverpopulationEpisodeReport,
 } from './types.ts';
 import type { EspionageState, SpyHunterNotice, SpyReportSnapshot } from '../espionage/types.ts';
+import { getCombatFactionName } from '../combat/factions.ts';
 
 const CATEGORY_TYPE_LABEL: Record<ReportItem['category'], string> = {
   system: 'Система',
@@ -251,11 +253,70 @@ export function spyHunterNoticeToReportItem(notice: SpyHunterNotice): ReportItem
   };
 }
 
+export function createOverpopulationEpisodeReportId(planetId: string, episodeStartedAt: number): string {
+  return `overpopulation:${encodeURIComponent(planetId.trim())}:${Math.floor(episodeStartedAt)}`;
+}
+
+/** Adds or replaces the final report for an episode without producing duplicates. */
+export function upsertOverpopulationEpisodeReport(
+  state: ReportsState,
+  report: Omit<OverpopulationEpisodeReport, 'id'> & { id?: string },
+): ReportsState {
+  const id = createOverpopulationEpisodeReportId(report.planetId, report.episodeStartedAt);
+  const normalized: OverpopulationEpisodeReport = {
+    ...report,
+    id,
+    planetId: report.planetId.trim(),
+    planetName: report.planetName.trim(),
+    removedShips: report.removedShips
+      .filter((loss) => Number.isFinite(loss.count) && loss.count > 0)
+      .map((loss) => ({ ...loss, count: Math.floor(loss.count) }))
+      .filter((loss) => loss.count > 0),
+  };
+  const reports = state.overpopulationReports ?? [];
+  const existingIndex = reports.findIndex((item) => item.id === id);
+  const nextReports = existingIndex < 0
+    ? [...reports, normalized]
+    : reports.map((item, index) => index === existingIndex ? normalized : item);
+  return { ...state, overpopulationReports: nextReports };
+}
+
+export function overpopulationEpisodeReportToReportItem(report: OverpopulationEpisodeReport): ReportItem {
+  const removedCount = report.removedShips.reduce((total, loss) => total + loss.count, 0);
+  const timestamp = new Date(report.episodeEndedAt).toISOString();
+  return {
+    id: report.id,
+    source: 'overpopulation',
+    category: 'system',
+    typeLabel: 'Итог перенаселения',
+    title: `Планета разблокирована: ${report.planetName}`,
+    preview: `${removedCount} кораблей уничтожено · население ${report.populationBefore} → ${report.populationAfter} · вместимость ${report.capacity}`,
+    body: `Планета ${report.planetName} разблокирована. Эпизод перенаселения завершён; итоговое население и уничтоженные обычные корабли перечислены в отчёте.`,
+    timestamp,
+    statusLabel: 'ПЛАНЕТА РАЗБЛОКИРОВАНА',
+    statusTone: 'warning',
+    participantNames: [],
+    planetNames: [report.planetName],
+    coordinates: [],
+    details: [
+      { label: 'Планета', value: report.planetName },
+      { label: 'Население до эпизода', value: String(report.populationBefore) },
+      { label: 'Население после эпизода', value: String(report.populationAfter) },
+      { label: 'Вместимость', value: String(report.capacity) },
+      { label: 'Начало эпизода', value: new Date(report.episodeStartedAt).toISOString() },
+      { label: 'Разблокировка', value: timestamp },
+      { label: 'Уничтожено обычных кораблей', value: String(removedCount) },
+    ],
+    overpopulationReport: report,
+  };
+}
+
 export function buildReportsFeed(
   battleReports: readonly BattleReport[],
   operations: OperationsState,
   command: CommandState,
   espionage?: EspionageState,
+  overpopulationReports: readonly OverpopulationEpisodeReport[] = [],
 ): ReportItem[] {
   const operationByBattleId = new Map(
     operations.items
@@ -279,8 +340,9 @@ export function buildReportsFeed(
     ...(espionage?.reports ?? []).map((report) => spyReportToReportItem(report, espionage)),
     ...(espionage?.hunterNotices ?? []).map(spyHunterNoticeToReportItem),
   ];
+  const overpopulationItems = overpopulationReports.map(overpopulationEpisodeReportToReportItem);
 
-  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems].sort((a, b) => {
+  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems].sort((a, b) => {
     if (a.timestamp && b.timestamp) return Date.parse(b.timestamp) - Date.parse(a.timestamp);
     if (!a.timestamp && b.timestamp) return -1;
     if (a.timestamp && !b.timestamp) return 1;

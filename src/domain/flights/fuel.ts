@@ -1,5 +1,7 @@
 import { getFactionShipCatalog } from '../combat/faction-catalog.ts';
+import { COMMANDER_COMBAT_CATALOG } from '../combat/catalog.ts';
 import type { CombatFactionId } from '../combat/factions.ts';
+import type { CommanderId } from '../combat/commanders.ts';
 import type { ShipId } from '../combat/ids.ts';
 import type { FlightScienceLevels } from './types.ts';
 
@@ -8,7 +10,11 @@ function chemistryLevel(science: FlightScienceLevels): number {
   return Number.isFinite(value) ? Math.min(15, Math.max(0, Math.floor(value ?? 0))) : 0;
 }
 
-export function calculateBaseFlightFuel(factionId: CombatFactionId, selectedShips: Partial<Record<ShipId, number>>): number {
+export function calculateBaseFlightFuel(
+  factionId: CombatFactionId,
+  selectedShips: Partial<Record<ShipId, number>>,
+  selectedCommanders: Partial<Record<CommanderId, number>> = {},
+): number {
   const catalog = new Map(getFactionShipCatalog(factionId).map((ship) => [ship.id, ship]));
   let fuel = 0;
   for (const [id, quantity] of Object.entries(selectedShips) as [ShipId, number][]) {
@@ -16,6 +22,13 @@ export function calculateBaseFlightFuel(factionId: CombatFactionId, selectedShip
     const ship = catalog.get(id);
     if (!ship?.ship) throw new Error(`Unknown ship: ${id}`);
     fuel += quantity * ship.ship.fuel;
+  }
+  const commanders = new Map(COMMANDER_COMBAT_CATALOG.map((commander) => [commander.id, commander]));
+  for (const [id, quantity] of Object.entries(selectedCommanders) as [CommanderId, number][]) {
+    if (!Number.isInteger(quantity) || quantity <= 0) continue;
+    const commander = commanders.get(id);
+    if (!commander?.ship) throw new Error(`Unknown commander: ${id}`);
+    fuel += quantity * commander.ship.fuel;
   }
   return fuel;
 }
@@ -25,8 +38,9 @@ export function calculateFlightFuel(
   selectedShips: Partial<Record<ShipId, number>>,
   routeDistance: number,
   science: FlightScienceLevels = {},
+  selectedCommanders: Partial<Record<CommanderId, number>> = {},
 ): number {
   if (!Number.isFinite(routeDistance) || routeDistance < 0) throw new Error('Route distance must be non-negative.');
   const factor = Math.max(0.25, 1 - 0.05 * chemistryLevel(science));
-  return Math.max(1, Math.ceil(calculateBaseFlightFuel(factionId, selectedShips) * routeDistance / 12_000 * factor));
+  return Math.max(1, Math.ceil(calculateBaseFlightFuel(factionId, selectedShips, selectedCommanders) * routeDistance / 12_000 * factor));
 }

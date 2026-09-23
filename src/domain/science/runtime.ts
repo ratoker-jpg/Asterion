@@ -36,6 +36,8 @@ export type ScienceLevels = Partial<Record<ScienceId, number>>;
 export type ScienceQueueTask = {
   id: string;
   scienceId: ScienceId;
+  /** Planet whose laboratory owns this task; legacy tasks are migrated. */
+  planetId?: string;
   fromLevel: number;
   toLevel: number;
   startedAt: number;
@@ -88,6 +90,9 @@ export type SciencePreview = {
 export type ScienceRuntimeContext = {
   state: ScienceState;
   wallet: ScienceWallet;
+  planetId?: string;
+  blockedPlanetIds?: ReadonlySet<string>;
+  blockedPlanetStartedAt?: ReadonlyMap<string, number>;
   capacities?: ResourceCapacitiesInput;
   laboratoryLevel: number;
   now: number;
@@ -98,6 +103,7 @@ export type ScienceRuntimeContext = {
 
 export type ScienceMigrationOptions = {
   laboratoryLevel?: number;
+  legacyPlanetId?: string;
   mode?: RuntimeMode;
   testTimeScale?: number;
   schemaVersion?: number;
@@ -138,6 +144,7 @@ export type ScienceRuntimeSnapshot = {
   now: number;
   mode: RuntimeMode;
   testTimeScale?: number;
+  blockedPlanetStartedAt?: ReadonlyMap<string, number>;
 };
 
 export type ScienceStartRequest = {
@@ -395,6 +402,7 @@ export function startScienceResearch(
   const task: ScienceQueueTask = {
     id: taskId,
     scienceId,
+    ...(context.planetId ? { planetId: context.planetId } : {}),
     fromLevel: preview.projectedLevel,
     toLevel: preview.nextLevel,
     startedAt,
@@ -502,7 +510,12 @@ export function cancelScienceResearch(
   context: ScienceRuntimeContext,
   taskId: string,
 ): ScienceCancellationTransition {
-  const reconciled = reconcileScienceState(context.state, context.now);
+  const reconciled = reconcileScienceState(
+    context.state,
+    context.now,
+    context.blockedPlanetIds,
+    context.blockedPlanetStartedAt,
+  );
   const queue = ensureUniqueScienceTaskIds(reconciled.state.queue);
   const reconciledState = queue.some((task, index) => task.id !== reconciled.state.queue[index]?.id)
     ? { ...reconciled.state, queue }
@@ -518,6 +531,19 @@ export function cancelScienceResearch(
 
   const { remaining, cascaded } = removeDependentScienceTasks(queue, queueIndex, reconciledState.levels);
   const canceledTasks = [task, ...cascaded.filter((candidate) => candidate.id !== task.id)];
+  if (canceledTasks.some((candidate) => candidate.planetId && context.blockedPlanetIds?.has(candidate.planetId))) {
+    return {
+      ok: false,
+      state: reconciledState,
+      wallet: context.wallet,
+      canceled: null,
+      canceledTasks: [],
+      refund: null,
+      refundPercent: null,
+      refundPercents: [],
+      reason: 'Исследование или его зависимые задачи принадлежат заблокированной планете.',
+    };
+  }
   const refundPercents: number[] = [];
   const refund = canceledTasks.reduce((total, canceledTask) => {
     if (canceledTask.refundEligible === false || !hasCompleteScienceCost(canceledTask.cost)) return total;
@@ -545,7 +571,12 @@ export function cancelScienceResearch(
   };
 }
 
-export function reconcileScienceState(state: ScienceState, now: number): ScienceReconciliation {
+export function reconcileScienceState(
+  state: ScienceState,
+  now: number,
+  blockedPlanetIds?: ReadonlySet<string>,
+  blockedPlanetStartedAt?: ReadonlyMap<string, number>,
+): ScienceReconciliation {
   let queue = [...state.queue];
   const levels = { ...state.levels };
   const completed: ScienceQueueTask[] = [];
@@ -554,6 +585,12 @@ export function reconcileScienceState(state: ScienceState, now: number): Science
 
   while (queue.length > 0 && queue[0].finishAt <= now) {
     const task = queue[0];
+    const blockedAt = task.planetId ? blockedPlanetStartedAt?.get(task.planetId) : undefined;
+    // A saved overdue head may have finished before its planet was locked.
+    const finishedBeforeBlock = blockedAt !== undefined
+      && Number.isFinite(blockedAt)
+      && task.finishAt <= blockedAt;
+    if (task.planetId && blockedPlanetIds?.has(task.planetId) && !finishedBeforeBlock) break;
     queue = queue.slice(1);
     changed = true;
     const science = findScience(task.scienceId);
@@ -574,6 +611,21 @@ export function reconcileScienceState(state: ScienceState, now: number): Science
   }
 
   return { changed, state: { levels, queue }, completed, discarded };
+}
+
+/** Returns when an active overpopulation lock pauses the shared science queue. */
+export function getScienceQueuePauseAt(
+  queue: readonly ScienceQueueTask[],
+  blockedPlanetStartedAt?: ReadonlyMap<string, number>,
+): number | undefined {
+  if (!blockedPlanetStartedAt) return undefined;
+  for (const task of queue) {
+    if (!task.planetId) continue;
+    const blockedAt = blockedPlanetStartedAt.get(task.planetId);
+    if (blockedAt === undefined || !Number.isFinite(blockedAt) || task.finishAt <= blockedAt) continue;
+    return Math.max(blockedAt, task.startedAt);
+  }
+  return undefined;
 }
 
 function migrateQueue(value: unknown, levels: ScienceLevels, options: ScienceMigrationOptions): ScienceQueueTask[] {
@@ -660,9 +712,13 @@ function migrateQueue(value: unknown, levels: ScienceLevels, options: ScienceMig
     let suffix = 1;
     while (result.some((task) => task.id === id)) id = `${requestedId}-duplicate-${suffix++}`;
 
+    const migratedPlanetId = typeof raw.planetId === 'string' && raw.planetId.trim()
+      ? raw.planetId.trim()
+      : options.legacyPlanetId;
     result.push({
       id,
       scienceId,
+      ...(migratedPlanetId ? { planetId: migratedPlanetId } : {}),
       fromLevel,
       toLevel: fromLevel + 1,
       startedAt,
@@ -691,6 +747,7 @@ export function createScienceRuntimeSnapshot(
   now: number,
   mode: RuntimeMode = 'production',
   testTimeScale?: number,
+  blockedPlanetStartedAt?: ReadonlyMap<string, number>,
 ): ScienceRuntimeSnapshot {
   return {
     science,
@@ -699,6 +756,9 @@ export function createScienceRuntimeSnapshot(
     now,
     mode,
     testTimeScale,
+    ...(blockedPlanetStartedAt && blockedPlanetStartedAt.size > 0
+      ? { blockedPlanetStartedAt: new Map(blockedPlanetStartedAt) }
+      : {}),
   };
 }
 // Storage-backed snapshots are assembled by src/application/science.ts.

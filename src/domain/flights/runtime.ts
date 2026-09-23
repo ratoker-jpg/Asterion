@@ -18,6 +18,7 @@ export type DispatchFlightInput = {
   destination: FlightDestination;
   selectedShips: Partial<Record<ShipId, number>>;
   selectedCommanders?: Partial<Record<CommanderId, number>>;
+  selectedCommanderLevels?: Partial<Record<CommanderId, number>>;
   attackSnapshot?: AttackLaunchSnapshot;
   attackResolution?: AttackResolution;
   populationReserved?: number;
@@ -53,7 +54,8 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
   assertFlightCoordinate(input.destination.coordinate);
   if (!Number.isFinite(input.departedAt)) throw new Error('Departure time must be finite.');
   const routeDistance = calculateRouteDistance(input.originCoordinate, input.destination.coordinate);
-  const effectiveSpeed = calculateEffectiveFleetSpeed(input.factionId, input.selectedShips, input.science);
+  const selectedCommanders = input.selectedCommanders ?? {};
+  const effectiveSpeed = calculateEffectiveFleetSpeed(input.factionId, input.selectedShips, input.science, selectedCommanders);
   const oneWayDurationMs = calculateOneWayDurationMs(input.originCoordinate, input.destination.coordinate, effectiveSpeed);
   const destinationPlanetId = input.destination.kind === 'planet' ? input.destination.planetId : input.destinationPlanetId;
   if (input.missionId === 'transport' && input.cargo === undefined) {
@@ -82,6 +84,7 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
     destinationCoordinate: { ...input.destination.coordinate },
     selectedShips: { ...input.selectedShips },
     ...(input.selectedCommanders ? { selectedCommanders: { ...input.selectedCommanders } } : {}),
+    ...(input.selectedCommanderLevels ? { selectedCommanderLevels: { ...input.selectedCommanderLevels } } : {}),
     ...(input.attackSnapshot ? { attackSnapshot: input.attackSnapshot } : {}),
     ...(input.attackResolution ? { attackResolution: input.attackResolution } : {}),
     populationReserved: Math.max(0, Math.floor(input.populationReserved ?? 0)),
@@ -90,7 +93,7 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
     oneWayDurationMs,
     departedAt: input.departedAt,
     arrivalAt: input.departedAt + oneWayDurationMs,
-    gasCost: calculateFlightFuel(input.factionId, input.selectedShips, routeDistance, input.science),
+    gasCost: calculateFlightFuel(input.factionId, input.selectedShips, routeDistance, input.science, selectedCommanders),
     cargo,
     cargoState: cargo ? 'loaded' : undefined,
     overflowWarning: cargo ? Boolean(input.overflowWarning) : undefined,

@@ -120,6 +120,8 @@ import {
 import { bindCombatResolutionEventBridge } from './application/combat.ts';
 import { getFleetProductionEntity } from './domain/fleet/production.ts';
 import { getFleetBuildBudget, getFleetSummaryForState, getOutgoingFleetSummaryForState, getPlanetPopulationForState } from './application/fleet.ts';
+import { getPendingInboundPopulation } from './application/flights.ts';
+import { getPlanetOverpopulationSummary } from './application/overpopulation.ts';
 import { energySummaryForPlanet, getPlanetEnergyCoordinates } from './application/energy.ts';
 import { getEffectiveResourceIncomePerHour } from './application/resource-clock.ts';
 import { publishApplicationRuntimeSnapshot } from './application/runtime.ts';
@@ -629,6 +631,11 @@ export function App() {
     [state],
   );
   const headerPopulationSummary = isDefenseFleetView ? defenseSummary : fleetSummary;
+  const pendingInboundPopulation = isDefenseFleetView ? 0 : getPendingInboundPopulation(state, currentPlanet.id);
+  const currentOverpopulation = useMemo(
+    () => getPlanetOverpopulationSummary(state, currentPlanet.id),
+    [state, currentPlanet.id],
+  );
   const currentSkin = useMemo(
     () => planetSkins.find((skin) => skin.id === currentPlanetState.skin) ?? planetSkins[0],
     [currentPlanetState.skin],
@@ -681,9 +688,9 @@ export function App() {
     [currentPlanetState.buildings],
   );
   const reportsUnreadCount = useMemo(() => {
-    const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage);
+    const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports);
     return Object.values(getReportUnreadCounts(items, state.reports)).reduce((total, count) => total + count, 0);
-  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports]);
+  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports]);
   const buildingInteriorTarget = buildingInterior
     ? getBuildingInteriorTarget(buildingInterior.buildingRole)
     : null;
@@ -1297,6 +1304,7 @@ export function App() {
                   capacity: defenseSummary.capacity,
                 },
                 satellites: isDefenseFleetView ? undefined : Math.max(0, Math.floor(currentPlanetState.solarSatellites ?? 0)),
+                pendingInbound: pendingInboundPopulation,
               },
             },
           ]}
@@ -1480,6 +1488,15 @@ export function App() {
                   <h1>{currentPlanetName.toUpperCase()}</h1>
                   <p>{currentPlanet.coords} • РОДНОЙ МИР АСТЕРОВ</p>
                 </div>
+                {currentOverpopulation.blocked ? <section className="planet-overpopulation-banner-v3" data-qa-overpopulation-banner role="status">
+                  <strong>ПЛАНЕТА ПЕРЕНАСЕЛЕНА</strong>
+                  <span>{currentOverpopulation.actualPopulation} / {currentOverpopulation.capacity} · избыток {currentOverpopulation.excess}</span>
+                  <small>{currentOverpopulation.episode?.lastResolutionReason === 'no-eligible-units'
+                    ? 'Нет кораблей, подходящих для сгорания; планета остаётся заблокированной.'
+                    : currentOverpopulation.episode
+                      ? `Линейное сжигание флота: ${Math.round(currentOverpopulation.burnProgress * 100)}% за 10 минут.`
+                      : 'Запущено линейное сжигание флота на 10 минут.'}</small>
+                </section> : null}
                 <div className="planet-stage-v3">
                   <div className="planet-atmosphere" />
                   <img className="planet-image-v3" src={currentSkin.art} alt={currentPlanetName} draggable={false} />

@@ -44,6 +44,7 @@ import {
 } from '../domain/buildings/spaceport-upgrades.ts';
 import {
   executeTrade,
+  getTradeRefillInfo,
   reconcileTradeState,
   type TradeExecution,
   type TradeRequest,
@@ -64,6 +65,7 @@ import {
   getPlanetEnergyLedger,
   settlePlanetEnergyWallet,
 } from './energy.ts';
+import { isPlanetBlocked } from './overpopulation.ts';
 
 export type BuildingApplicationContext = {
   planetId: PlanetId;
@@ -146,6 +148,10 @@ export function previewBuilding(
   context: BuildingApplicationContext,
   assetRole: BuildingRole,
 ): BuildingPreviewResult {
+  if (isPlanetBlocked(state, context.planetId)) {
+    const availability = evaluateBuildingBuild(economyFor(state, context), assetRole);
+    return { state, availability: { ...availability, canBuild: false, reason: 'Планета заблокирована из-за перенаселения.' } };
+  }
   return {
     state,
     availability: evaluateBuildingBuild(economyFor(state, context), assetRole),
@@ -157,6 +163,7 @@ export function startBuilding(
   context: BuildingApplicationContext,
   assetRole: BuildingRole,
 ): BuildingActionResult {
+  if (isPlanetBlocked(state, context.planetId)) return { ok: false, state, reason: 'Планета заблокирована из-за перенаселения.' };
   const economy = economyFor(state, context);
   const availability = evaluateBuildingBuild(economy, assetRole);
   if (!availability.canBuild || availability.timeMs == null) {
@@ -179,6 +186,9 @@ export function cancelBuilding(
   context: BuildingApplicationContext,
   queueId: string,
 ): BuildingActionResult & { canceledRole: BuildingRole | null; cascadedCount: number } {
+  if (isPlanetBlocked(state, context.planetId)) {
+    return { ok: false, state, reason: 'Планета заблокирована из-за перенаселения.', canceledRole: null, cascadedCount: 0 };
+  }
   const transition = cancelBuildingProject(economyFor(state, context), queueId, context.now);
   if (!transition.ok) {
     return { ok: false, state, reason: transition.reason, canceledRole: null, cascadedCount: 0 };
@@ -198,6 +208,9 @@ export function destroyBuilding(
   assetRole: BuildingRole,
   rng: () => number = Math.random,
 ): BuildingActionResult & { refundPercent: number | null } {
+  if (isPlanetBlocked(state, context.planetId)) {
+    return { ok: false, state, reason: 'Планета заблокирована из-за перенаселения.', refundPercent: null };
+  }
   const planet = getPlanetState(state, context.planetId);
   if (assetRole === 'hangar') {
     const currentLevel = Math.max(0, Math.floor(planet.buildings.hangar ?? 0));
@@ -256,6 +269,7 @@ export function completeBuilding(
   state: SaveState,
   context: BuildingApplicationContext,
 ): BuildingCompletionResult {
+  if (isPlanetBlocked(state, context.planetId)) return { ok: true, state, reason: null, changed: false, completedRole: null };
   const transition = completeBuildingProject(economyFor(state, context), context.now);
   if (!transition.completedRole) return { ok: true, state, reason: null, changed: false, completedRole: null };
   return {
@@ -272,6 +286,7 @@ export function applyProductionBots(
   context: BuildingApplicationContext,
   assignment: BotAssignment,
 ): SaveState {
+  if (isPlanetBlocked(state, context.planetId)) return state;
   const planet = getPlanetState(state, context.planetId);
   return replacePlanetState(
     { ...state, schemaVersion: SAVE_SCHEMA_VERSION },
@@ -287,6 +302,7 @@ export function startRecycling(
   allocation: ResourceAllocationPercent,
   jobId: string,
 ): BuildingActionResult {
+  if (isPlanetBlocked(state, context.planetId)) return { ok: false, state, reason: 'Планета заблокирована из-за перенаселения.' };
   const planet = getPlanetState(state, context.planetId);
   const transition = startRecyclingJob(
     planet.recycling,
@@ -312,6 +328,7 @@ export function collectRecycling(
   context: BuildingApplicationContext,
   jobId: string,
 ): BuildingActionResult & { output: { metal: number; minerals: number; gas: number } | null; credit: ResourceCreditResult | null } {
+  if (isPlanetBlocked(state, context.planetId)) return { ok: false, state, reason: 'Планета заблокирована из-за перенаселения.', output: null, credit: null };
   const planet = getPlanetState(state, context.planetId);
   const transition = collectRecyclingJob(planet.recycling, jobId, context.now);
   if (!transition.ok || !transition.output) {
@@ -339,6 +356,7 @@ export function reconcileRecycling(
   state: SaveState,
   context: BuildingApplicationContext,
 ): BuildingActionResult & { autoCollectedJobIds: string[]; credit: ResourceCreditResult | null } {
+  if (isPlanetBlocked(state, context.planetId)) return { ok: true, state, reason: null, autoCollectedJobIds: [], credit: null };
   const planet = getPlanetState(state, context.planetId);
   const transition = advanceRecyclingState(planet.recycling, context.now);
   if (!transition.changed) return { ok: true, state, reason: null, autoCollectedJobIds: [], credit: null };
@@ -363,6 +381,26 @@ export function executeTradeAction(
   ratingPoints: number,
   request: TradeRequest,
 ): { state: SaveState; execution: TradeExecution } {
+  if (isPlanetBlocked(state, context.planetId)) {
+    const blockedPlanet = getPlanetState(state, context.planetId);
+    const wallet = {
+      ...getPlanetResources(state, context.planetId),
+      debris: blockedPlanet.recycling.availableDebris,
+    };
+    return {
+      state,
+      execution: {
+        ok: false,
+        canTrade: false,
+        reason: 'Планета заблокирована из-за перенаселения.',
+        amountLimit: 0,
+        received: 0,
+        refill: getTradeRefillInfo(blockedPlanet.trade, blockedPlanet.buildings['trade-center'], context.now),
+        refillAt: null,
+        state: { wallet, trade: blockedPlanet.trade },
+      },
+    };
+  }
   const planet = getPlanetState(state, context.planetId);
   const execution = executeTrade(
     {
@@ -394,6 +432,7 @@ export function reconcileTrade(
   state: SaveState,
   context: BuildingApplicationContext,
 ): BuildingActionResult {
+  if (isPlanetBlocked(state, context.planetId)) return { ok: true, state, reason: null };
   const planet = getPlanetState(state, context.planetId);
   const transition = reconcileTradeState(planet.trade, planet.buildings['trade-center'], context.now);
   if (!transition.changed) return { ok: true, state, reason: null };
@@ -414,6 +453,7 @@ export function startSpaceportUpgrade(
   shipId: string,
   taskId: string,
 ): BuildingActionResult & { entityName: string } {
+  if (isPlanetBlocked(state, context.planetId)) return { ok: false, state, reason: 'Планета заблокирована из-за перенаселения.', entityName: shipId };
   const planet = getPlanetState(state, context.planetId);
   const transition = enqueueSpaceportUpgrade({
     state: planet.spaceportUpgrades,
@@ -443,6 +483,20 @@ export function cancelSpaceportUpgrade(
   taskId: string,
 ): BuildingActionResult & { transition: SpaceportCancellationTransition } {
   const planet = getPlanetState(state, context.planetId);
+  if (isPlanetBlocked(state, context.planetId)) {
+    const transition: SpaceportCancellationTransition = {
+      ok: false,
+      state: planet.spaceportUpgrades,
+      wallet: getPlanetResources(state, context.planetId),
+      canceled: null,
+      canceledTasks: [],
+      refund: null,
+      refundPercent: null,
+      refundPercents: [],
+      reason: 'Планета заблокирована из-за перенаселения.',
+    };
+    return { ok: false, state, reason: transition.reason, transition };
+  }
   const transition = cancelSpaceportUpgradeDomain({
     state: planet.spaceportUpgrades,
     wallet: getPlanetResources(state, context.planetId),
@@ -468,6 +522,7 @@ export function reconcileSpaceport(
   state: SaveState,
   context: BuildingApplicationContext,
 ): BuildingActionResult & { completed: Array<{ track: SpaceportUpgradeTrack; shipId: string }> } {
+  if (isPlanetBlocked(state, context.planetId)) return { ok: true, state, reason: null, completed: [] };
   const planet = getPlanetState(state, context.planetId);
   const transition = reconcileSpaceportUpgradeState(planet.spaceportUpgrades, context.now);
   if (!transition.changed) return { ok: true, state, reason: null, completed: [] };

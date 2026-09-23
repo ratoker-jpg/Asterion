@@ -1,7 +1,6 @@
 import {
   createCanonicalStartingFleet,
   createEmptyFleetState,
-  normalizeFleetStateForCapacity,
   removeSolarSatellitesFromFleet,
   resolveSavedFleetState,
   type OwnedFleetState,
@@ -16,7 +15,7 @@ import {
 } from '../domain/fleet/production.ts';
 import type { PlanetId, SaveState } from './contracts.ts';
 import { getPlanetResources } from './contracts.ts';
-import { getAvailableFleetForPlanet, getReservedShipsForPlanet } from './flights.ts';
+import { getAvailableFleetForPlanet, getReservedCommandersForPlanet, getReservedShipsForPlanet } from './flights.ts';
 import { createPersistenceFacade, type PersistenceOptions } from './persistence.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
@@ -69,7 +68,11 @@ function fleetWithReservations(fleet: OwnedFleetState, reserved: OwnedFleetState
       id,
       (fleet.ships[id as ShipId] ?? 0) + (reserved.ships[id as ShipId] ?? 0),
     ])) as OwnedFleetState['ships'],
-    commanders: { ...fleet.commanders },
+    commanders: Object.fromEntries(Object.keys(fleet.commanders).map((id) => [
+      id,
+      (fleet.commanders[id as keyof OwnedFleetState['commanders']] ?? 0)
+        + (reserved.commanders[id as keyof OwnedFleetState['commanders']] ?? 0),
+    ])) as OwnedFleetState['commanders'],
   };
 }
 
@@ -79,20 +82,15 @@ export function getFleetSnapshot(state: SaveState, planetId: PlanetId = state.cu
   const migratedFleet = removeSolarSatellitesFromFleet(
     resolveSavedFleetState(planet?.fleet, state.profile.factionId),
   );
-  const normalizedFleet = normalizeFleetStateForCapacity(
-    migratedFleet.fleet,
-    hangarLevel,
-    state.profile.factionId,
-  );
-  const fleet = normalizeFleetStateForCapacity(
-    getAvailableFleetForPlanet(state, planetId),
-    hangarLevel,
-    state.profile.factionId,
-  );
+  // Live overpopulation is an authoritative gameplay state. Keep the raw
+  // roster visible so the burn resolver, UI, and persistence all observe the
+  // same excess instead of silently normalizing it away.
+  const fleet = getAvailableFleetForPlanet(state, planetId);
   const reservedShips = getReservedShipsForPlanet(state, planetId);
+  const reservedCommanders = getReservedCommandersForPlanet(state, planetId);
   const reservedFleet: OwnedFleetState = {
-    ships: Object.fromEntries(Object.keys(normalizedFleet.ships).map((id) => [id, reservedShips[id as ShipId] ?? 0])) as OwnedFleetState['ships'],
-    commanders: { ...normalizedFleet.commanders },
+    ships: Object.fromEntries(Object.keys(migratedFleet.fleet.ships).map((id) => [id, reservedShips[id as ShipId] ?? 0])) as OwnedFleetState['ships'],
+    commanders: Object.fromEntries(Object.keys(migratedFleet.fleet.commanders).map((id) => [id, reservedCommanders[id as keyof OwnedFleetState['commanders']] ?? 0])) as OwnedFleetState['commanders'],
   };
   return {
     factionId: state.profile.factionId,

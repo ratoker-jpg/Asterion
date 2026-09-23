@@ -25,7 +25,11 @@ import {
 } from '../domain/rating/fixtures.ts';
 import {
   buildReportsFeed,
+  createOverpopulationEpisodeReportId,
 } from '../domain/reports/adapters.ts';
+import type { OverpopulationEpisodeReport, OrdinaryShipId } from '../domain/reports/types.ts';
+import { normalizeCombatFactionId } from '../domain/combat/factions.ts';
+import { SHIP_IDS } from '../domain/combat/ids.ts';
 import {
   createDefaultReportsState,
   migrateReportsState,
@@ -65,6 +69,7 @@ import {
   migrateFleetProductionState,
   reconcileFleetProductionState,
 } from '../domain/fleet/production.ts';
+import type { OverpopulationState } from '../domain/fleet/overpopulation.ts';
 import {
   createCanonicalStartingBuildingLevels,
   createDefaultBuildingLevels,
@@ -100,7 +105,6 @@ import { initializePlanetEnergy, syncPlanetEnergySources } from './energy.ts';
 import type { EnergyLedger } from '../domain/energy/runtime.ts';
 import type { PlanetQueueRecord, PlanetResources, PlanetStateRecord, ResourceClock, ResourceClockEntry, SaveState, PlanetRuntime } from './contracts.ts';
 import type { AlliedPlanetState } from './contracts.ts';
-import { SHIP_IDS } from '../domain/combat/ids.ts';
 import { COMMANDER_IDS } from '../domain/combat/commanders.ts';
 import { isFlightCoordinate } from '../domain/flights/distance.ts';
 import type {
@@ -154,6 +158,7 @@ type StoredPlanetRuntime = {
   energySources?: unknown;
   energyExpenseAttribution?: unknown;
   solarSatellites?: unknown;
+  overpopulation?: unknown;
   universeSystem?: unknown;
   universeGalaxy?: unknown;
   universePosition?: unknown;
@@ -223,6 +228,44 @@ function objectRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : undefined;
+}
+
+function migrateOverpopulationEpisodeReports(value: unknown): OverpopulationEpisodeReport[] {
+  if (!Array.isArray(value)) return [];
+  const ordinaryShipIds = new Set<string>(SHIP_IDS.filter((id) => id !== 'solar-satellite'));
+  const reports: OverpopulationEpisodeReport[] = [];
+  for (const candidate of value) {
+    const source = objectRecord(candidate);
+    if (!source || typeof source.planetId !== 'string' || !source.planetId.trim()
+      || typeof source.planetName !== 'string' || !source.planetName.trim()) continue;
+    const numbers = [source.populationBefore, source.populationAfter, source.capacity, source.episodeStartedAt, source.episodeEndedAt];
+    if (!numbers.every((number) => typeof number === 'number' && Number.isFinite(number) && number >= 0)) continue;
+    if ((source.episodeEndedAt as number) < (source.episodeStartedAt as number)) continue;
+    const planetId = source.planetId.trim().slice(0, 160);
+    const episodeStartedAt = Math.floor(source.episodeStartedAt as number);
+    const removedShips = Array.isArray(source.removedShips)
+      ? source.removedShips.flatMap((loss) => {
+        const record = objectRecord(loss);
+        if (!record || typeof record.shipId !== 'string' || !ordinaryShipIds.has(record.shipId)
+          || typeof record.count !== 'number' || !Number.isFinite(record.count) || record.count <= 0) return [];
+        return [{ shipId: record.shipId as OrdinaryShipId, count: Math.floor(record.count) }].filter((item) => item.count > 0);
+      })
+      : [];
+    reports.push({
+      id: createOverpopulationEpisodeReportId(planetId, episodeStartedAt),
+      planetId,
+      planetName: source.planetName.trim().slice(0, 160),
+      factionId: normalizeCombatFactionId(source.factionId),
+      populationBefore: Math.floor(source.populationBefore as number),
+      populationAfter: Math.floor(source.populationAfter as number),
+      capacity: Math.floor(source.capacity as number),
+      episodeStartedAt,
+      episodeEndedAt: Math.floor(source.episodeEndedAt as number),
+      removedShips,
+    });
+  }
+  const byId = new Map(reports.map((report) => [report.id, report]));
+  return [...byId.values()].slice(-500);
 }
 
 function nonNegativeNumberOr(value: unknown, fallback: number): number {
@@ -341,7 +384,9 @@ const PERSISTED_FLIGHT_COMPLETION_REASONS = new Set<FlightCompletionReason>([
   'target-occupied',
   'target-unavailable',
   'arrived',
+  'deployed',
   'spy-destroyed',
+  'origin-destroyed',
   'mission-failed',
 ]);
 const PERSISTED_FLIGHT_DESTINATION_KINDS = new Set<FlightDestination['kind']>([
@@ -372,6 +417,61 @@ function isNonNegativeInteger(value: unknown): value is number {
 
 function isNonEmptyPersistedString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+type PersistedOverpopulationState = OverpopulationState & {
+  initialPopulation?: number;
+  initialCapacity?: number;
+  removedShips?: Array<{ shipId: OrdinaryShipId; count: number }>;
+};
+
+function migrateOverpopulationState(value: unknown, now: number): PersistedOverpopulationState | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const source = value as Record<string, unknown>;
+  if (source.blocked !== true) return undefined;
+  const numberField = (key: string, fallback = 0) => {
+    const candidate = source[key];
+    return isFinitePersistedNumber(candidate) ? Math.max(0, Math.floor(candidate)) : fallback;
+  };
+  const episodeStartedAt = numberField('episodeStartedAt', Math.max(0, Math.floor(now)));
+  const initialPopulation = isFinitePersistedNumber(source.initialPopulation)
+    ? Math.max(0, Math.floor(source.initialPopulation))
+    : undefined;
+  const initialCapacity = isFinitePersistedNumber(source.initialCapacity)
+    ? Math.max(0, Math.floor(source.initialCapacity))
+    : undefined;
+  const ordinaryShipIds = new Set<string>(SHIP_IDS.filter((id) => id !== 'solar-satellite'));
+  const removedShipCounts = new Map<OrdinaryShipId, number>();
+  if (Array.isArray(source.removedShips)) {
+    source.removedShips.forEach((candidate) => {
+      const loss = objectRecord(candidate);
+      if (!loss || typeof loss.shipId !== 'string' || !ordinaryShipIds.has(loss.shipId)
+        || !isFinitePersistedNumber(loss.count) || loss.count <= 0) return;
+      const count = Math.floor(loss.count);
+      if (count > 0) {
+        const shipId = loss.shipId as OrdinaryShipId;
+        removedShipCounts.set(shipId, (removedShipCounts.get(shipId) ?? 0) + count);
+      }
+    });
+  }
+  const removedShips = removedShipCounts.size > 0
+    ? [...removedShipCounts].map(([shipId, count]) => ({ shipId, count }))
+    : undefined;
+  const reason = source.lastResolutionReason === 'resolved' || source.lastResolutionReason === 'no-eligible-units'
+    ? source.lastResolutionReason
+    : undefined;
+  return {
+    episodeStartedAt,
+    initialExcess: numberField('initialExcess'),
+    scheduledBurnPool: numberField('scheduledBurnPool'),
+    burnedPopulation: numberField('burnedPopulation'),
+    lastReconciledAt: numberField('lastReconciledAt', episodeStartedAt),
+    blocked: true,
+    ...(initialPopulation !== undefined ? { initialPopulation } : {}),
+    ...(initialCapacity !== undefined ? { initialCapacity } : {}),
+    ...(removedShips ? { removedShips } : {}),
+    ...(reason ? { lastResolutionReason: reason } : {}),
+  };
 }
 
 function coordinatesMatch(left: unknown, right: unknown): boolean {
@@ -448,7 +548,6 @@ function isPersistedFlightRecord(value: unknown): value is FlightRecord {
   const selectedShips = item.selectedShips;
   if (!selectedShips || typeof selectedShips !== 'object' || Array.isArray(selectedShips)) return false;
   const shipEntries = Object.entries(selectedShips);
-  if (shipEntries.length === 0) return false;
   for (const [shipId, quantity] of shipEntries) {
     if (!SHIP_IDS.includes(shipId as (typeof SHIP_IDS)[number])
       || !isNonNegativeInteger(quantity)
@@ -461,6 +560,30 @@ function isPersistedFlightRecord(value: unknown): value is FlightRecord {
         || !isNonNegativeInteger(quantity)
         || quantity <= 0) return false;
     }
+  }
+  if (shipEntries.length === 0) {
+    const selectedCommanders = item.selectedCommanders as Record<string, unknown> | undefined;
+    const hasValidCommanderOnlyDeployment = item.missionId === 'deployment'
+      && Object.values(selectedCommanders ?? {}).some((quantity) => isNonNegativeInteger(quantity) && quantity > 0);
+    if (!hasValidCommanderOnlyDeployment) return false;
+  }
+  if (item.selectedCommanderLevels !== undefined) {
+    if (!item.selectedCommanderLevels || typeof item.selectedCommanderLevels !== 'object' || Array.isArray(item.selectedCommanderLevels)) return false;
+    for (const [commanderId, level] of Object.entries(item.selectedCommanderLevels)) {
+      if (!COMMANDER_IDS.includes(commanderId as (typeof COMMANDER_IDS)[number])
+        || !isNonNegativeInteger(level)) return false;
+    }
+  }
+  if (item.missionId === 'deployment') {
+    if (destinationRecord.kind !== 'planet'
+      || !isNonEmptyPersistedString(item.destinationPlanetId)
+      || item.destinationPlanetId !== destinationRecord.planetId
+      || item.targetRelation !== 'self'
+      || shipEntries.some(([shipId]) => shipId === 'solar-satellite')) return false;
+    const selectedCommanders = item.selectedCommanders as Record<string, unknown> | undefined;
+    const commanderLevels = item.selectedCommanderLevels as Record<string, unknown> | undefined;
+    if (Object.entries(selectedCommanders ?? {}).some(([commanderId, quantity]) =>
+      Number(quantity) > 0 && !isNonNegativeInteger(commanderLevels?.[commanderId]))) return false;
   }
   if (item.missionId === 'espionage') {
     if (!isNonEmptyPersistedString(item.spyMissionId)
@@ -696,14 +819,20 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
 
     const parsed = JSON.parse(raw) as StoredSave;
     const savedHomeworld = parsed.planets?.['helion-01'];
+    const savedHomeworldOverpopulation = migrateOverpopulationState(savedHomeworld?.overpopulation, timestamp);
     const legacySolarStations = numberOr(savedHomeworld?.solarStations, numberOr(parsed.solarStations, 0));
     const buildings = migrateBuildingLevels(savedHomeworld?.buildings, legacySolarStations);
-    const spaceportUpgrades = reconcileSpaceportUpgradeState(
-      migrateSpaceportUpgradeState(savedHomeworld?.spaceportUpgrades),
-      timestamp,
-    ).state;
+    const migratedSpaceportUpgrades = migrateSpaceportUpgradeState(savedHomeworld?.spaceportUpgrades);
+    const spaceportUpgrades = savedHomeworldOverpopulation
+      ? migratedSpaceportUpgrades
+      : reconcileSpaceportUpgradeState(migratedSpaceportUpgrades, timestamp).state;
     const science = migrateScienceState(parsed.science, {
       laboratoryLevel: buildings.research,
+      legacyPlanetId: typeof parsed.currentPlanetId === 'string'
+        && parsed.currentPlanetId.trim()
+        && parsed.planets?.[parsed.currentPlanetId.trim()]
+        ? parsed.currentPlanetId.trim()
+        : 'helion-01',
       mode,
       testTimeScale,
       schemaVersion: numberOr(parsed.schemaVersion, 0),
@@ -715,7 +844,10 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       syncPlayerProfileWithFaction(migratePlayerProfileState(parsed.profile), CURRENT_PLAYER_FACTION_ID),
       command.alliance,
     );
-    const reportIds = buildReportsFeed(combat.reports, operations, command).map((item) => item.id);
+    const overpopulationReports = migrateOverpopulationEpisodeReports(
+      objectRecord(parsed.reports)?.overpopulationReports,
+    );
+    const reportIds = buildReportsFeed(combat.reports, operations, command, undefined, overpopulationReports).map((item) => item.id);
     const migratedSavedFleet = removeSolarSatellitesFromFleet(
       resolveSavedFleetState(savedHomeworld?.fleet, profile.factionId),
     );
@@ -723,11 +855,13 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       0,
       Math.floor(numberOr(savedHomeworld?.solarSatellites, migratedSavedFleet.count)),
     );
-    const savedFleet = normalizeFleetStateForCapacity(
-      migratedSavedFleet.fleet,
-      buildings.hangar,
-      profile.factionId,
-    );
+    const savedFleet = savedHomeworldOverpopulation
+      ? migratedSavedFleet.fleet
+      : normalizeFleetStateForCapacity(
+        migratedSavedFleet.fleet,
+        buildings.hangar,
+        profile.factionId,
+      );
     const savedDefense = migrateDefenseState(savedHomeworld?.defense);
     const migratedFleetProduction = migrateFleetProductionState(savedHomeworld?.fleetProduction, {
       factionId: profile.factionId,
@@ -735,14 +869,17 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       defense: savedDefense,
       hangarLevel: buildings.hangar,
       solarSatellites: persistedSatelliteCount,
+      enforceCapacity: !savedHomeworldOverpopulation,
     });
-    const reconciledFleetProduction = reconcileFleetProductionState(
-      migratedFleetProduction,
-      savedFleet,
-      savedDefense,
-      profile.factionId,
-      timestamp,
-    );
+    const reconciledFleetProduction = savedHomeworldOverpopulation
+      ? { changed: false, state: migratedFleetProduction, fleet: savedFleet, defense: savedDefense, completed: [] }
+      : reconcileFleetProductionState(
+        migratedFleetProduction,
+        savedFleet,
+        savedDefense,
+        profile.factionId,
+        timestamp,
+      );
     const completedSatellites = reconciledFleetProduction.completed
       .filter((item) => item.itemId === 'solar-satellite')
       .reduce((total, item) => total + Math.max(0, Math.floor(item.quantity)), 0);
@@ -771,7 +908,9 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
         : typeof parsed.planetSkin === 'string' && KNOWN_PLANET_SKINS.has(parsed.planetSkin)
           ? parsed.planetSkin
           : initialState.planets['helion-01'].skin,
-      fleet: normalizeFleetStateForCapacity(reconciledFleetProduction.fleet, buildings.hangar, profile.factionId),
+      fleet: savedHomeworldOverpopulation
+        ? reconciledFleetProduction.fleet
+        : normalizeFleetStateForCapacity(reconciledFleetProduction.fleet, buildings.hangar, profile.factionId),
       defense: reconciledFleetProduction.defense,
       fleetProduction: reconciledFleetProduction.state,
       repair: mode === 'test' && savedHomeworld?.repair === undefined
@@ -791,6 +930,7 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
         ? savedHomeworld.energyExpenseAttribution as Partial<Record<string, number>>
         : undefined,
       solarSatellites: savedSatelliteCount,
+      ...(savedHomeworldOverpopulation ? { overpopulation: savedHomeworldOverpopulation } : {}),
       universeGalaxy: numberOr(savedHomeworld?.universeGalaxy, 1),
       universeSystem: numberOr(savedHomeworld?.universeSystem, 1),
       universePosition: numberOr(savedHomeworld?.universePosition, 1),
@@ -820,23 +960,36 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       const migratedPlanetFleet = removeSolarSatellitesFromFleet(
         resolveSavedFleetState(raw.fleet, profile.factionId),
       );
+      const planetOverpopulation = migrateOverpopulationState(raw.overpopulation, timestamp);
       const planetSatelliteCount = Math.max(
         0,
         Math.floor(numberOr(raw.solarSatellites, migratedPlanetFleet.count)),
       );
-      const planetFleet = normalizeFleetStateForCapacity(
-        migratedPlanetFleet.fleet,
-        planetBuildings.hangar,
-        profile.factionId,
-      );
+      const planetFleet = planetOverpopulation
+        ? migratedPlanetFleet.fleet
+        : normalizeFleetStateForCapacity(
+          migratedPlanetFleet.fleet,
+          planetBuildings.hangar,
+          profile.factionId,
+        );
       const planetDefense = migrateDefenseState(raw.defense);
-      const planetProduction = migrateFleetProductionState(raw.fleetProduction, {
+      const migratedPlanetProduction = migrateFleetProductionState(raw.fleetProduction, {
         factionId: profile.factionId,
         fleet: planetFleet,
         defense: planetDefense,
         hangarLevel: planetBuildings.hangar,
         solarSatellites: planetSatelliteCount,
+        enforceCapacity: !planetOverpopulation,
       });
+      const planetProduction = planetOverpopulation
+        ? migratedPlanetProduction
+        : reconcileFleetProductionState(
+          migratedPlanetProduction,
+          planetFleet,
+          planetDefense,
+          profile.factionId,
+          timestamp,
+        ).state;
       const planetBase: PlanetRuntime = {
         name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 28) : `Колония ${planetId}`,
         skin: typeof raw.skin === 'string' && KNOWN_PLANET_SKINS.has(raw.skin) ? raw.skin : 'colonized',
@@ -854,6 +1007,7 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
           ? raw.energyExpenseAttribution as Partial<Record<string, number>>
           : undefined,
         solarSatellites: planetSatelliteCount,
+        ...(planetOverpopulation ? { overpopulation: planetOverpopulation } : {}),
         universeGalaxy: numberOr(raw.universeGalaxy, 1),
         universeSystem: numberOr(raw.universeSystem, 1),
         universePosition: numberOr(raw.universePosition, 1),
@@ -866,7 +1020,9 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
           { mode, fixture: resolveRecyclingFixture(mode) },
         ),
         trade: migrateTradeState(raw.trade, planetBuildings['trade-center'], timestamp),
-        spaceportUpgrades: reconcileSpaceportUpgradeState(migrateSpaceportUpgradeState(raw.spaceportUpgrades), timestamp).state,
+        spaceportUpgrades: planetOverpopulation
+          ? migrateSpaceportUpgradeState(raw.spaceportUpgrades)
+          : reconcileSpaceportUpgradeState(migrateSpaceportUpgradeState(raw.spaceportUpgrades), timestamp).state,
         stability: numberOr(raw.stability, 100),
         resources: normalizePlanetResources(raw.resources, { metal: 500, minerals: 500, gas: 500 }, getStorageCapacities(planetBuildings)),
       };
@@ -943,7 +1099,10 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       operations,
       command,
       profile,
-      reports: migrateReportsState(parsed.reports, reportIds),
+      reports: {
+        ...migrateReportsState(parsed.reports, reportIds),
+        ...(overpopulationReports.length > 0 ? { overpopulationReports } : {}),
+      },
       science,
       resourceClock: migrateResourceClock(parsed.resourceClock, timestamp, Object.keys(planets)),
       flights: migrateFlightState(parsed.flights),

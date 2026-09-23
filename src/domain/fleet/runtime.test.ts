@@ -62,7 +62,7 @@ test('legacy save without fleet gets the canonical roster while an explicit empt
   assert.equal(explicitEmpty.commanders.corsair, 0);
 });
 
-test('population guard rejects additions over hangar capacity and damaged rosters are normalized deterministically', () => {
+test('population guard rejects additions over hangar capacity while live summaries preserve damaged overpopulation', () => {
   const empty = migrateFleetState({ ships: {}, commanders: {} });
   const accepted = addFleetUnits(empty, 'ship', 'scout', 60, 1);
   assert.equal(accepted.ok, true);
@@ -76,7 +76,7 @@ test('population guard rejects additions over hangar capacity and damaged roster
   const damaged = migrateFleetState({ ships: { destroyer: 1_000 }, commanders: {} });
   const normalized = normalizeFleetStateForCapacity(damaged, 20);
   assert.equal(calculateFleetPopulation(normalized), 25_110);
-  assert.equal(getFleetSummary(damaged, 20).population, 25_110);
+  assert.equal(getFleetSummary(damaged, 20).population, 30_000);
 });
 
 test('solar satellites stay outside the ordinary fleet roster and cannot be added as fleet units', () => {

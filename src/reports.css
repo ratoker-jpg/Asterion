@@ -1785,6 +1785,13 @@
 .spy-entity-tooltip b { color: #8ff0b9; font-size: 9.5px; font-variant-numeric: tabular-nums; }
 .spy-entity-tooltip small { color: #6f93a0; font-size: 8px; line-height: 1.35; }
 .spy-report-empty { margin: 0; padding: 16px 14px 18px; color: #abcbd1; font-size: 11px; }
+.reports-dossier--overpopulation { gap: 12px; }
+.reports-dossier--overpopulation .reports-dossier-heading { margin-bottom: 2px; }
+.reports-dossier--overpopulation .reports-dossier-heading p { font-size: 9px; line-height: 1.45; }
+.overpopulation-report-summary .spy-report-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.overpopulation-report-summary .spy-report-summary-grid > div { grid-template-columns: minmax(120px, .8fr) minmax(0, 1fr); }
+.overpopulation-report-losses .spy-report-entity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.overpopulation-report-losses .spy-report-entity img { filter: drop-shadow(0 0 7px rgba(73, 214, 242, .22)); }
 .reports-dossier--spy .reports-generic-body { border: 1px solid rgba(61, 188, 216, .2); border-radius: 12px; background: rgba(2, 20, 30, .78); }
 .reports-dossier--spy .reports-generic-body p { font-size: 10px; line-height: 1.55; }
 
@@ -1884,6 +1891,10 @@
 }
 
 .reports-view--folder .reports-dossier--spy {
+  padding: 0 2px 8px;
+}
+
+.reports-view--folder .reports-dossier--overpopulation {
   padding: 0 2px 8px;
 }
 

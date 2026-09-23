@@ -864,6 +864,10 @@ async function runViewport(width, height) {
     await capture(win, directory, 'commanders-empty');
     await click(win, '[data-qa-fleet-production-item="corsair"] button[aria-label^="Информация:"]');
     await waitFor(win, `document.querySelector('.ship-info-modal-v1')`);
+    const commanderDossierText = await win.webContents.executeJavaScript(`document.querySelector('.ship-info-modal-v1')?.textContent?.replace(/\\s+/g, '') ?? ''`);
+    if (!commanderDossierText.includes('Скорость') || !commanderDossierText.includes('33000')) {
+      throw new Error(`${label}: commander dossier does not show speed 33,000: ${commanderDossierText}`);
+    }
     await capture(win, directory, 'commanders-dossier');
     await click(win, '.ship-info-close-v1');
     await waitFor(win, `!document.querySelector('.ship-info-modal-v1')`);

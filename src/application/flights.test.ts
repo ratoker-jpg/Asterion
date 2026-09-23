@@ -7,14 +7,18 @@ import {
   dispatchFlight,
   getAvailableFleetForPlanet,
   getReservedShipsForPlanet,
+  getPendingInboundPopulation,
   getTransportCargoSummary,
   previewFlight,
   reconcileFlights,
   recallFlight,
 } from './flights.ts';
 import { startBuilding } from './buildings.ts';
-import { getPlanetResources, replaceAlliedPlanetState, replacePlanetResources } from './contracts.ts';
+import { reconcileRuntime } from './reconcile.ts';
+import { getPlanetResources, replaceAlliedPlanetState, replacePlanetResources, type SaveState } from './contracts.ts';
+import { reconcilePlanetOverpopulation } from './overpopulation.ts';
 import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
+import { createEmptyFleetState } from '../domain/fleet/runtime.ts';
 import {
   ASTEROID_SCHEDULE_EPOCH_MS,
   createUniverseSystem,
@@ -786,4 +790,805 @@ test('transport cargo and ally state survive the existing persistence facade wit
   const repeated = reconcileFlights(reloadedArrived, sent.flight.arrivalAt + 1);
   assert.equal(repeated.changed, false);
   assert.equal(Object.keys(repeated.state.alliedPlanets ?? {}).length, 1);
+});
+
+function stateWithDeploymentTarget(now = 1_000): { state: SaveState; targetId: string; targetCoordinate: { galaxy: number; system: number; position: number } } {
+  const initial = createInitialSaveState('production', now);
+  const targetCoordinate = { galaxy: 1, system: 2, position: 1 };
+  const colonizer = dispatchFlight(initial, {
+    requestId: 'deployment-fixture-colonizer',
+    missionId: 'colonize',
+    originPlanetId: 'helion-01',
+    destination: { kind: 'coordinate', coordinate: targetCoordinate },
+    targetKind: 'empty',
+    selectedShips: { colonizer: 1 },
+    departedAt: now,
+  }, now);
+  assert.equal(colonizer.ok, true);
+  if (!colonizer.ok) throw new Error('fixture colonizer dispatch failed');
+  const colonized = reconcileFlights(colonizer.state, colonizer.flight.arrivalAt).state;
+  const targetId = createPlanetIdForCoordinate(targetCoordinate);
+  const source = colonized.planets['helion-01'];
+  return {
+    state: {
+      ...colonized,
+      planets: {
+        ...colonized.planets,
+        'helion-01': {
+          ...source,
+          fleet: {
+            ...source.fleet,
+            ships: { ...source.fleet.ships, scout: 42 },
+            commanders: { ...source.fleet.commanders, corsair: 1 },
+          },
+          spaceportUpgrades: {
+            ...source.spaceportUpgrades,
+            shipLevels: { ...source.spaceportUpgrades.shipLevels, corsair: 7 },
+          },
+        },
+      },
+    },
+    targetId,
+    targetCoordinate,
+  };
+}
+
+test('deployment uses an owned planet target, preserves source until arrival, and transfers commander levels once', () => {
+  const fixture = stateWithDeploymentTarget();
+  const before = fixture.state.planets['helion-01'];
+  const sent = dispatchFlight(fixture.state, {
+    requestId: 'deployment-1',
+    missionId: 'deployment',
+    originPlanetId: 'helion-01',
+    destination: { kind: 'planet', planetId: fixture.targetId, coordinate: fixture.targetCoordinate },
+    targetRelation: 'self',
+    selectedShips: { scout: 2 },
+    selectedCommanders: { corsair: 1 },
+    departedAt: 20_000,
+  }, 20_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.equal(sent.flight.populationReserved, 14);
+  assert.equal(fixture.state.planets['helion-01'].fleet.ships.scout, before.fleet.ships.scout);
+  assert.equal(fixture.state.planets[fixture.targetId].fleet.ships.scout, 0);
+  assert.equal(getPendingInboundPopulation(sent.state, fixture.targetId), 14);
+
+  const arrived = reconcileFlights(sent.state, sent.flight.arrivalAt);
+  assert.equal(arrived.events[0]?.status, 'deployed');
+  assert.equal(arrived.state.flights.records[1]?.completionReason, 'deployed');
+  assert.equal(arrived.state.planets['helion-01'].fleet.ships.scout, before.fleet.ships.scout - 2);
+  assert.equal(arrived.state.planets[fixture.targetId].fleet.ships.scout, 2);
+  assert.equal(arrived.state.planets[fixture.targetId].fleet.commanders.corsair, 1);
+  assert.equal(arrived.state.planets[fixture.targetId].spaceportUpgrades.shipLevels.corsair, 7);
+  const repeated = reconcileFlights(arrived.state, sent.flight.arrivalAt + 100_000);
+  assert.equal(repeated.changed, false);
+  assert.equal(repeated.state.planets[fixture.targetId].fleet.ships.scout, 2);
+});
+
+test('deployment flight and pending population survive reload and resolve once', () => {
+  const fixture = stateWithDeploymentTarget();
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+    removeItem: (key: string) => { values.delete(key); },
+  };
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => 1_000 });
+  assert.equal(persistence.write(fixture.state).ok, true);
+  const sent = dispatchFlight(persistence.read(), {
+    requestId: 'deployment-reload',
+    missionId: 'deployment',
+    originPlanetId: 'helion-01',
+    destination: { kind: 'planet', planetId: fixture.targetId, coordinate: fixture.targetCoordinate },
+    targetRelation: 'self',
+    selectedShips: { scout: 2 },
+    selectedCommanders: { corsair: 1 },
+    departedAt: 20_000,
+  }, 20_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.equal(persistence.write(sent.state).ok, true);
+
+  const reloaded = persistence.read();
+  const restoredFlight = reloaded.flights.records.find((flight) => flight.id === sent.flight.id);
+  assert.equal(restoredFlight?.selectedCommanderLevels?.corsair, sent.flight.selectedCommanderLevels?.corsair);
+  assert.equal(getPendingInboundPopulation(reloaded, fixture.targetId), sent.flight.populationReserved);
+  const arrived = reconcileFlights(reloaded, sent.flight.arrivalAt);
+  assert.equal(arrived.events[0]?.status, 'deployed');
+  assert.equal(persistence.write(arrived.state).ok, true);
+
+  const reloadedArrival = persistence.read();
+  assert.equal(getPendingInboundPopulation(reloadedArrival, fixture.targetId), 0);
+  assert.equal(reloadedArrival.planets[fixture.targetId].fleet.ships.scout, 2);
+  assert.equal(reloadedArrival.planets[fixture.targetId].fleet.commanders.corsair, 1);
+  assert.equal(reconcileFlights(reloadedArrival, sent.flight.arrivalAt + 1).changed, false);
+});
+
+test('overpopulation burns unreserved deployment ships first and the reserved manifest arrives once', () => {
+  const fixture = stateWithDeploymentTarget();
+  const source = fixture.state.planets['helion-01'];
+  const sourceFleet = createEmptyFleetState();
+  sourceFleet.ships.scout = 3;
+  sourceFleet.ships.battleship = 4;
+  sourceFleet.commanders.corsair = 1;
+  const state = {
+    ...fixture.state,
+    planets: {
+      ...fixture.state.planets,
+      'helion-01': {
+        ...source,
+        buildings: { ...source.buildings, hangar: 0 },
+        fleet: sourceFleet,
+      },
+    },
+  };
+  const departedAt = 20_000;
+  const sent = dispatchFlight(state, {
+    requestId: 'deployment-overpopulation-reserved',
+    missionId: 'deployment',
+    originPlanetId: 'helion-01',
+    destination: { kind: 'planet', planetId: fixture.targetId, coordinate: fixture.targetCoordinate },
+    targetRelation: 'self',
+    selectedShips: { scout: 2 },
+    selectedCommanders: { corsair: 1 },
+    departedAt,
+  }, departedAt);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+
+  const episodeStarted = reconcilePlanetOverpopulation(sent.state, 'helion-01', departedAt);
+  assert.equal(episodeStarted.summary.blocked, true);
+  const burned = reconcilePlanetOverpopulation(
+    episodeStarted.state,
+    'helion-01',
+    sent.flight.arrivalAt - 1,
+  );
+  assert.equal(burned.summary.blocked, true);
+  assert.equal(burned.state.planets['helion-01'].fleet.ships.scout, 2);
+  assert.equal(burned.state.planets['helion-01'].fleet.ships.battleship, 3);
+  assert.equal(burned.state.planets['helion-01'].fleet.commanders.corsair, 1);
+  assert.deepEqual(burned.state.planets['helion-01'].overpopulation?.removedShips, [
+    { shipId: 'scout', count: 1 },
+    { shipId: 'battleship', count: 1 },
+  ]);
+
+  const arrived = reconcileFlights(burned.state, sent.flight.arrivalAt);
+  assert.equal(arrived.events.length, 1);
+  assert.equal(arrived.events[0]?.status, 'deployed');
+  assert.equal(arrived.state.flights.records.find((flight) => flight.id === sent.flight.id)?.completionReason, 'deployed');
+  assert.equal(arrived.state.planets['helion-01'].fleet.ships.scout, 0);
+  assert.equal(arrived.state.planets['helion-01'].fleet.ships.battleship, 3);
+  assert.equal(arrived.state.planets['helion-01'].fleet.commanders.corsair, 0);
+  assert.equal(arrived.state.planets[fixture.targetId].fleet.ships.scout, 2);
+  assert.equal(arrived.state.planets[fixture.targetId].fleet.commanders.corsair, 1);
+
+  const replayed = reconcileFlights(arrived.state, sent.flight.arrivalAt + 1);
+  assert.equal(replayed.changed, false);
+  assert.equal(replayed.events.length, 0);
+  assert.equal(replayed.state.planets[fixture.targetId].fleet.ships.scout, 2);
+  assert.equal(replayed.state.planets[fixture.targetId].fleet.commanders.corsair, 1);
+});
+
+test('overpopulation leaves an episode blocked when every eligible ship is reserved by a deployment', () => {
+  const fixture = stateWithDeploymentTarget();
+  const source = fixture.state.planets['helion-01'];
+  const sourceFleet = createEmptyFleetState();
+  sourceFleet.ships.scout = 2;
+  sourceFleet.commanders.corsair = 1;
+  const state = {
+    ...fixture.state,
+    planets: {
+      ...fixture.state.planets,
+      'helion-01': {
+        ...source,
+        buildings: { ...source.buildings, hangar: 0 },
+        solarSatellites: 100,
+        fleet: sourceFleet,
+      },
+    },
+  };
+  const departedAt = 30_000;
+  const sent = dispatchFlight(state, {
+    requestId: 'deployment-overpopulation-all-reserved',
+    missionId: 'deployment',
+    originPlanetId: 'helion-01',
+    destination: { kind: 'planet', planetId: fixture.targetId, coordinate: fixture.targetCoordinate },
+    targetRelation: 'self',
+    selectedShips: { scout: 2 },
+    departedAt,
+  }, departedAt);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+
+  const episodeStarted = reconcilePlanetOverpopulation(sent.state, 'helion-01', departedAt);
+  const stillBlocked = reconcilePlanetOverpopulation(
+    episodeStarted.state,
+    'helion-01',
+    sent.flight.arrivalAt - 1,
+  );
+  assert.equal(stillBlocked.summary.blocked, true);
+  assert.equal(stillBlocked.state.planets['helion-01'].fleet.ships.scout, 2);
+  assert.equal(stillBlocked.state.planets['helion-01'].fleet.commanders.corsair, 1);
+  assert.equal(stillBlocked.state.planets['helion-01'].overpopulation?.blocked, true);
+
+  const arrived = reconcileFlights(stillBlocked.state, sent.flight.arrivalAt);
+  assert.equal(arrived.events[0]?.status, 'deployed');
+  assert.equal(arrived.state.planets[fixture.targetId].fleet.ships.scout, 2);
+  assert.equal(arrived.state.planets['helion-01'].fleet.ships.scout, 0);
+});
+
+test('deployment reservation survives reload during attrition and the complete manifest transfers once', () => {
+  const fixture = stateWithDeploymentTarget();
+  const source = fixture.state.planets['helion-01'];
+  const sourceFleet = createEmptyFleetState();
+  sourceFleet.ships.scout = 3;
+  sourceFleet.ships.battleship = 4;
+  sourceFleet.commanders.corsair = 1;
+  const state: SaveState = {
+    ...fixture.state,
+    planets: {
+      ...fixture.state.planets,
+      'helion-01': {
+        ...source,
+        buildings: { ...source.buildings, hangar: 0 },
+        solarSatellites: 100,
+        fleet: sourceFleet,
+      },
+    },
+  };
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+    removeItem: (key: string) => { values.delete(key); },
+  };
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => 1_000 });
+  const departedAt = 50_000;
+  const sent = dispatchFlight(state, {
+    requestId: 'deployment-overpopulation-reload',
+    missionId: 'deployment',
+    originPlanetId: 'helion-01',
+    destination: { kind: 'planet', planetId: fixture.targetId, coordinate: fixture.targetCoordinate },
+    targetRelation: 'self',
+    selectedShips: { scout: 2 },
+    departedAt,
+  }, departedAt);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.equal(persistence.write(sent.state).ok, true);
+
+  const reloadedOutbound = persistence.read();
+  assert.equal(reloadedOutbound.flights.records.find((flight) => flight.id === sent.flight.id)?.phase, 'outbound');
+  assert.equal(getReservedShipsForPlanet(reloadedOutbound, 'helion-01').scout, 2);
+
+  const episodeStarted = reconcilePlanetOverpopulation(reloadedOutbound, 'helion-01', departedAt);
+  const attrition = reconcilePlanetOverpopulation(
+    episodeStarted.state,
+    'helion-01',
+    sent.flight.arrivalAt - 1,
+  );
+  assert.equal(attrition.summary.blocked, true);
+  assert.ok(attrition.state.planets['helion-01'].fleet.ships.scout >= 2);
+  assert.ok(
+    attrition.state.planets['helion-01'].fleet.ships.battleship
+      < reloadedOutbound.planets['helion-01'].fleet.ships.battleship,
+    'unreserved ordinary ships should burn during the persisted flight',
+  );
+  assert.ok((attrition.state.planets['helion-01'].overpopulation?.removedShips?.length ?? 0) > 0);
+  assert.equal(getReservedShipsForPlanet(attrition.state, 'helion-01').scout, 2);
+  const sourceScoutsBeforeArrival = attrition.state.planets['helion-01'].fleet.ships.scout;
+  assert.equal(persistence.write(attrition.state).ok, true);
+
+  const reloadedAfterAttrition = persistence.read();
+  assert.equal(getReservedShipsForPlanet(reloadedAfterAttrition, 'helion-01').scout, 2);
+  const arrived = reconcileFlights(reloadedAfterAttrition, sent.flight.arrivalAt);
+  assert.equal(arrived.events.length, 1);
+  assert.equal(arrived.events[0]?.status, 'deployed');
+  assert.equal(arrived.state.flights.records.find((flight) => flight.id === sent.flight.id)?.completionReason, 'deployed');
+  assert.equal(arrived.state.planets['helion-01'].fleet.ships.scout, sourceScoutsBeforeArrival - 2);
+  assert.equal(arrived.state.planets[fixture.targetId].fleet.ships.scout, 2);
+  assert.equal(getReservedShipsForPlanet(arrived.state, 'helion-01').scout ?? 0, 0);
+  assert.equal(persistence.write(arrived.state).ok, true);
+
+  const reloadedArrival = persistence.read();
+  const replayed = reconcileFlights(reloadedArrival, sent.flight.arrivalAt + 1);
+  assert.equal(replayed.changed, false);
+  assert.equal(replayed.events.length, 0);
+  assert.equal(replayed.state.planets[fixture.targetId].fleet.ships.scout, 2);
+});
+
+test('returning deployment remains reserved during attrition and releases the reservation on completion', () => {
+  const fixture = stateWithDeploymentTarget();
+  const source = fixture.state.planets['helion-01'];
+  const sourceFleet = createEmptyFleetState();
+  sourceFleet.ships.scout = 3;
+  sourceFleet.ships.battleship = 4;
+  sourceFleet.commanders.corsair = 1;
+  const state: SaveState = {
+    ...fixture.state,
+    planets: {
+      ...fixture.state.planets,
+      'helion-01': {
+        ...source,
+        buildings: { ...source.buildings, hangar: 0 },
+        fleet: sourceFleet,
+      },
+    },
+  };
+  const departedAt = 60_000;
+  const sent = dispatchFlight(state, {
+    requestId: 'deployment-overpopulation-returning',
+    missionId: 'deployment',
+    originPlanetId: 'helion-01',
+    destination: { kind: 'planet', planetId: fixture.targetId, coordinate: fixture.targetCoordinate },
+    targetRelation: 'self',
+    selectedShips: { scout: 2 },
+    selectedCommanders: { corsair: 1 },
+    departedAt,
+  }, departedAt);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const episodeStarted = reconcilePlanetOverpopulation(sent.state, 'helion-01', departedAt);
+  const recalled = recallFlight(
+    episodeStarted.state,
+    sent.flight.id,
+    departedAt + Math.floor(sent.flight.oneWayDurationMs / 2),
+  );
+  assert.equal(recalled.ok, true);
+  if (!recalled.ok) return;
+  assert.equal(recalled.flight.phase, 'returning');
+  assert.equal(getReservedShipsForPlanet(recalled.state, 'helion-01').scout, 2);
+
+  const attrition = reconcilePlanetOverpopulation(
+    recalled.state,
+    'helion-01',
+    recalled.flight.returnAt! - 1,
+  );
+  assert.equal(attrition.summary.blocked, true);
+  assert.equal(
+    attrition.state.planets['helion-01'].fleet.ships.scout,
+    2,
+    JSON.stringify({ ships: attrition.state.planets['helion-01'].fleet.ships, removed: attrition.state.planets['helion-01'].overpopulation?.removedShips }),
+  );
+  assert.equal(attrition.state.planets['helion-01'].fleet.ships.battleship, 3);
+  assert.equal(attrition.state.planets['helion-01'].fleet.commanders.corsair, 1);
+  assert.equal(getReservedShipsForPlanet(attrition.state, 'helion-01').scout, 2);
+  assert.deepEqual(attrition.state.planets['helion-01'].overpopulation?.removedShips, [
+    { shipId: 'scout', count: 1 },
+    { shipId: 'battleship', count: 1 },
+  ]);
+
+  const completed = reconcileFlights(attrition.state, recalled.flight.returnAt!);
+  assert.equal(completed.events.length, 1);
+  assert.equal(completed.state.flights.records.find((flight) => flight.id === sent.flight.id)?.phase, 'completed');
+  assert.equal(completed.state.flights.records.find((flight) => flight.id === sent.flight.id)?.completionReason, 'recalled');
+  assert.equal(completed.state.planets['helion-01'].fleet.ships.scout, 2);
+  assert.equal(completed.state.planets['helion-01'].fleet.commanders.corsair, 1);
+  assert.equal(completed.state.planets[fixture.targetId].fleet.ships.scout, 0);
+  assert.equal(getReservedShipsForPlanet(completed.state, 'helion-01').scout ?? 0, 0);
+});
+
+test('parallel deployment reservations are aggregated for attrition and released as flights complete or fail', () => {
+  const fixture = stateWithDeploymentTarget();
+  const source = fixture.state.planets['helion-01'];
+  const sourceFleet = createEmptyFleetState();
+  sourceFleet.ships.scout = 5;
+  sourceFleet.ships.battleship = 4;
+  sourceFleet.commanders.corsair = 1;
+  const state: SaveState = {
+    ...fixture.state,
+    planets: {
+      ...fixture.state.planets,
+      'helion-01': {
+        ...source,
+        buildings: { ...source.buildings, hangar: 0 },
+        fleet: sourceFleet,
+      },
+    },
+  };
+  const departedAt = 70_000;
+  const first = dispatchFlight(state, {
+    requestId: 'deployment-parallel-reserve-first',
+    missionId: 'deployment',
+    originPlanetId: 'helion-01',
+    destination: { kind: 'planet', planetId: fixture.targetId, coordinate: fixture.targetCoordinate },
+    targetRelation: 'self',
+    selectedShips: { scout: 2 },
+    selectedCommanders: { corsair: 1 },
+    departedAt,
+  }, departedAt);
+  assert.equal(first.ok, true);
+  if (!first.ok) return;
+  const second = dispatchFlight(first.state, {
+    requestId: 'deployment-parallel-reserve-second',
+    missionId: 'deployment',
+    originPlanetId: 'helion-01',
+    destination: { kind: 'planet', planetId: fixture.targetId, coordinate: fixture.targetCoordinate },
+    targetRelation: 'self',
+    selectedShips: { scout: 2 },
+    departedAt: departedAt + 1,
+  }, departedAt + 1);
+  assert.equal(second.ok, true);
+  if (!second.ok) return;
+  assert.equal(getReservedShipsForPlanet(second.state, 'helion-01').scout, 4);
+  assert.equal(second.state.planets['helion-01'].fleet.commanders.corsair, 1);
+
+  const episodeStarted = reconcilePlanetOverpopulation(second.state, 'helion-01', departedAt + 1);
+  const attrition = reconcilePlanetOverpopulation(
+    episodeStarted.state,
+    'helion-01',
+    first.flight.arrivalAt - 1,
+  );
+  assert.equal(attrition.summary.blocked, true);
+  assert.equal(attrition.state.planets['helion-01'].fleet.ships.scout, 4);
+  assert.equal(attrition.state.planets['helion-01'].fleet.commanders.corsair, 1);
+  assert.equal(getReservedShipsForPlanet(attrition.state, 'helion-01').scout, 4);
+  assert.deepEqual(attrition.state.planets['helion-01'].overpopulation?.removedShips, [
+    { shipId: 'scout', count: 1 },
+    { shipId: 'battleship', count: 1 },
+  ]);
+
+  const firstArrival = reconcileFlights(attrition.state, first.flight.arrivalAt);
+  assert.equal(firstArrival.state.flights.records.find((flight) => flight.id === first.flight.id)?.phase, 'completed');
+  assert.equal(firstArrival.state.flights.records.find((flight) => flight.id === second.flight.id)?.phase, 'outbound');
+  assert.equal(firstArrival.state.planets['helion-01'].fleet.ships.scout, 2);
+  assert.equal(firstArrival.state.planets['helion-01'].fleet.commanders.corsair, 0);
+  assert.equal(firstArrival.state.planets[fixture.targetId].fleet.ships.scout, 2);
+  assert.equal(firstArrival.state.planets[fixture.targetId].fleet.commanders.corsair, 1);
+  assert.equal(getReservedShipsForPlanet(firstArrival.state, 'helion-01').scout, 2);
+
+  const remainingPlanets = Object.fromEntries(
+    Object.entries(firstArrival.state.planets).filter(([planetId]) => planetId !== 'helion-01'),
+  ) as SaveState['planets'];
+  const lost = reconcileFlights(
+    { ...firstArrival.state, planets: remainingPlanets },
+    second.flight.arrivalAt - 1,
+  );
+  assert.equal(lost.events.length, 1);
+  assert.equal(lost.events[0]?.status, 'destroyed');
+  assert.equal(lost.state.flights.records.find((flight) => flight.id === second.flight.id)?.phase, 'failed');
+  assert.equal(lost.state.flights.records.find((flight) => flight.id === second.flight.id)?.completionReason, 'origin-destroyed');
+  assert.equal(getReservedShipsForPlanet(lost.state, 'helion-01').scout ?? 0, 0);
+  assert.equal(lost.state.planets[fixture.targetId].fleet.ships.scout, 2);
+  assert.equal(lost.state.planets[fixture.targetId].fleet.commanders.corsair, 1);
+});
+
+test('destroying a deployment origin destroys ships and commander once and remains terminal after reload', () => {
+  const fixture = stateWithDeploymentTarget();
+  const sourcePlanetId = fixture.targetId;
+  const source = fixture.state.planets[sourcePlanetId];
+  const stateWithDeploymentFleet: SaveState = {
+    ...fixture.state,
+    currentPlanetId: sourcePlanetId,
+    planets: {
+      ...fixture.state.planets,
+      [sourcePlanetId]: {
+        ...source,
+        fleet: {
+          ...source.fleet,
+          ships: { ...source.fleet.ships, scout: 2 },
+          commanders: { ...source.fleet.commanders, corsair: 1 },
+        },
+      },
+    },
+  };
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+    removeItem: (key: string) => { values.delete(key); },
+  };
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => 1_000 });
+  assert.equal(persistence.write(stateWithDeploymentFleet).ok, true);
+  const sent = dispatchFlight(persistence.read(), {
+    requestId: 'deployment-origin-destroyed',
+    missionId: 'deployment',
+    originPlanetId: sourcePlanetId,
+    destination: { kind: 'planet', planetId: 'helion-01', coordinate: origin },
+    targetRelation: 'self',
+    selectedShips: { scout: 2 },
+    selectedCommanders: { corsair: 1 },
+    departedAt: 40_000,
+  }, 40_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.equal(persistence.write(sent.state).ok, true);
+
+  const outbound = persistence.read();
+  const remainingPlanets = Object.fromEntries(
+    Object.entries(outbound.planets).filter(([planetId]) => planetId !== sourcePlanetId),
+  ) as SaveState['planets'];
+  const withoutOrigin = { ...outbound, planets: remainingPlanets };
+  const destroyed = reconcileFlights(withoutOrigin, sent.flight.departedAt + 1);
+  assert.equal(destroyed.events.length, 1);
+  assert.equal(destroyed.events[0]?.status, 'destroyed');
+  const terminalFlight = destroyed.state.flights.records.find((flight) => flight.id === sent.flight.id);
+  assert.equal(terminalFlight?.phase, 'failed');
+  assert.equal(terminalFlight?.completionReason, 'origin-destroyed');
+  assert.equal(terminalFlight?.selectedShips.scout, 2);
+  assert.equal(terminalFlight?.selectedCommanders?.corsair, 1);
+  assert.equal(destroyed.state.planets['helion-01'].fleet.ships.scout, 42);
+  assert.equal(destroyed.state.planets['helion-01'].fleet.commanders.corsair, 1);
+  assert.equal(getReservedShipsForPlanet(destroyed.state, sourcePlanetId).scout ?? 0, 0);
+
+  assert.equal(persistence.write(destroyed.state).ok, true);
+  const reloaded = persistence.read();
+  const restoredFlight = reloaded.flights.records.find((flight) => flight.id === sent.flight.id);
+  assert.equal(reloaded.planets[sourcePlanetId], undefined);
+  assert.equal(restoredFlight?.phase, 'failed');
+  assert.equal(restoredFlight?.completionReason, 'origin-destroyed');
+  assert.equal(getReservedShipsForPlanet(reloaded, sourcePlanetId).scout ?? 0, 0);
+  const replayed = reconcileFlights(reloaded, sent.flight.arrivalAt + sent.flight.oneWayDurationMs);
+  assert.equal(replayed.changed, false);
+  assert.equal(replayed.events.length, 0);
+  assert.equal(replayed.state.planets['helion-01'].fleet.ships.scout, 42);
+  assert.equal(replayed.state.planets['helion-01'].fleet.commanders.corsair, 1);
+});
+
+test('a deployment whose origin is destroyed while returning is terminally destroyed', () => {
+  const fixture = stateWithDeploymentTarget();
+  const sourcePlanetId = fixture.targetId;
+  const source = fixture.state.planets[sourcePlanetId];
+  const withFleet: SaveState = {
+    ...fixture.state,
+    currentPlanetId: sourcePlanetId,
+    planets: {
+      ...fixture.state.planets,
+      [sourcePlanetId]: {
+        ...source,
+        fleet: { ...source.fleet, ships: { ...source.fleet.ships, scout: 2 } },
+      },
+    },
+  };
+  const sent = dispatchFlight(withFleet, {
+    requestId: 'deployment-origin-destroyed-returning',
+    missionId: 'deployment',
+    originPlanetId: sourcePlanetId,
+    destination: { kind: 'planet', planetId: 'helion-01', coordinate: origin },
+    targetRelation: 'self',
+    selectedShips: { scout: 1 },
+    departedAt: 40_000,
+  }, 40_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const recalled = recallFlight(sent.state, sent.flight.id, sent.flight.departedAt + 1_000);
+  assert.equal(recalled.ok, true);
+  if (!recalled.ok) return;
+  const returningFlight = recalled.state.flights.records.find((flight) => flight.id === sent.flight.id);
+  assert.equal(returningFlight?.phase, 'returning');
+  const planets = Object.fromEntries(
+    Object.entries(recalled.state.planets).filter(([planetId]) => planetId !== sourcePlanetId),
+  ) as SaveState['planets'];
+
+  const result = reconcileFlights({ ...recalled.state, planets }, returningFlight?.returnAt ?? sent.flight.arrivalAt);
+  assert.equal(result.events.length, 1);
+  assert.equal(result.events[0]?.status, 'destroyed');
+  assert.equal(result.state.flights.records.find((flight) => flight.id === sent.flight.id)?.completionReason, 'origin-destroyed');
+  assert.equal(result.state.planets['helion-01'].fleet.ships.scout, 42);
+  assert.equal(getReservedShipsForPlanet(result.state, sourcePlanetId).scout ?? 0, 0);
+});
+
+test('deployment recall before arrival returns without transferring source units', () => {
+  const fixture = stateWithDeploymentTarget();
+  const sent = dispatchFlight(fixture.state, {
+    requestId: 'deployment-recall',
+    missionId: 'deployment',
+    originPlanetId: 'helion-01',
+    destination: { kind: 'planet', planetId: fixture.targetId, coordinate: fixture.targetCoordinate },
+    targetRelation: 'self',
+    selectedShips: { scout: 1 },
+    departedAt: 20_000,
+  }, 20_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const recalled = recallFlight(sent.state, sent.flight.id, sent.flight.departedAt + 1_000);
+  assert.equal(recalled.ok, true);
+  if (!recalled.ok) return;
+  const completed = reconcileFlights(recalled.state, recalled.flight.returnAt!);
+  assert.equal(completed.state.planets['helion-01'].fleet.ships.scout, fixture.state.planets['helion-01'].fleet.ships.scout);
+  assert.equal(completed.state.planets[fixture.targetId].fleet.ships.scout, 0);
+  assert.equal(completed.state.flights.records[1]?.completionReason, 'recalled');
+});
+
+test('deployment must dispatch from the currently selected planet', () => {
+  const fixture = stateWithDeploymentTarget();
+  const rejected = dispatchFlight(fixture.state, {
+    requestId: 'deployment-wrong-source',
+    missionId: 'deployment',
+    originPlanetId: fixture.targetId,
+    destination: {
+      kind: 'planet',
+      planetId: 'helion-01',
+      coordinate: { galaxy: 1, system: 1, position: 1 },
+    },
+    targetRelation: 'self',
+    selectedShips: { scout: 1 },
+    departedAt: 20_000,
+  }, 20_000);
+  assert.equal(rejected.ok, false);
+  if (!rejected.ok) assert.equal(rejected.error.code, 'invalid-command');
+});
+
+test('parallel deployment dispatches ignore pending inbound and valid arrivals may create overpopulation', () => {
+  const fixture = stateWithDeploymentTarget();
+  const target = fixture.state.planets[fixture.targetId];
+  const limited = {
+    ...fixture.state,
+    planets: {
+      ...fixture.state.planets,
+      [fixture.targetId]: { ...target, buildings: { ...target.buildings, hangar: 0 } },
+    },
+  };
+  const first = dispatchFlight(limited, {
+    requestId: 'deployment-capacity-1',
+    missionId: 'deployment',
+    originPlanetId: 'helion-01',
+    destination: { kind: 'planet', planetId: fixture.targetId, coordinate: fixture.targetCoordinate },
+    targetRelation: 'self',
+    selectedShips: { scout: 20 },
+    departedAt: 20_000,
+  }, 20_000);
+  assert.equal(first.ok, true);
+  if (!first.ok) return;
+  const second = dispatchFlight(first.state, {
+    requestId: 'deployment-capacity-2',
+    missionId: 'deployment',
+    originPlanetId: 'helion-01',
+    destination: { kind: 'planet', planetId: fixture.targetId, coordinate: fixture.targetCoordinate },
+    targetRelation: 'self',
+    selectedShips: { scout: 20 },
+    departedAt: 20_000,
+  }, 20_000);
+  assert.equal(second.ok, true);
+  if (!second.ok) return;
+  const firstArrival = reconcileFlights(second.state, first.flight.arrivalAt);
+  assert.equal(firstArrival.state.planets[fixture.targetId].fleet.ships.scout, 40);
+  assert.equal(firstArrival.state.flights.records.find((flight) => flight.id === second.flight.id)?.phase, 'completed');
+  assert.equal(firstArrival.state.flights.records.find((flight) => flight.id === second.flight.id)?.completionReason, 'deployed');
+  const overpopulated = reconcilePlanetOverpopulation(firstArrival.state, fixture.targetId, first.flight.arrivalAt);
+  assert.equal(overpopulated.state.planets[fixture.targetId].overpopulation?.blocked, true);
+  const secondArrival = reconcileFlights(firstArrival.state, second.flight.arrivalAt + 1);
+  assert.equal(secondArrival.state.planets[fixture.targetId].fleet.ships.scout, 40);
+  assert.equal(secondArrival.changed, false);
+});
+
+test('a deployment arrival checkpoint blocks the target for the rest of the reconcile interval', () => {
+  const fixture = stateWithDeploymentTarget();
+  const target = fixture.state.planets[fixture.targetId];
+  const limited = {
+    ...fixture.state,
+    planets: {
+      ...fixture.state.planets,
+      [fixture.targetId]: { ...target, buildings: { ...target.buildings, hangar: 0 } },
+    },
+  };
+  const departedAt = 2_000_000;
+  const first = dispatchFlight(limited, {
+    requestId: 'deployment-checkpoint-1',
+    missionId: 'deployment',
+    originPlanetId: 'helion-01',
+    destination: { kind: 'planet', planetId: fixture.targetId, coordinate: fixture.targetCoordinate },
+    targetRelation: 'self',
+    selectedShips: { scout: 20 },
+    departedAt,
+  }, departedAt);
+  assert.equal(first.ok, true);
+  if (!first.ok) return;
+  const second = dispatchFlight(first.state, {
+    requestId: 'deployment-checkpoint-2',
+    missionId: 'deployment',
+    originPlanetId: 'helion-01',
+    destination: { kind: 'planet', planetId: fixture.targetId, coordinate: fixture.targetCoordinate },
+    targetRelation: 'self',
+    selectedShips: { scout: 20 },
+    departedAt,
+  }, departedAt);
+  assert.equal(second.ok, true);
+  if (!second.ok) return;
+
+  const arrivalAt = first.flight.arrivalAt;
+  const productionStartAt = arrivalAt - 5 * 60_000;
+  const targetClock = second.state.resourceClock.byPlanet?.[fixture.targetId]
+    ?? { lastReconciledAt: second.state.resourceClock.lastReconciledAt, remainder: second.state.resourceClock.remainder };
+  const startState = {
+    ...second.state,
+    resourceClock: {
+      ...second.state.resourceClock,
+      byPlanet: {
+        ...second.state.resourceClock.byPlanet,
+        [fixture.targetId]: { ...targetClock, lastReconciledAt: productionStartAt },
+      },
+    },
+  };
+  const atArrival = reconcileRuntime(startState, {
+    planetId: 'helion-01',
+    now: arrivalAt,
+    mode: 'production',
+    testTimeScale: 10,
+  });
+  assert.equal(atArrival.state.planets[fixture.targetId].overpopulation?.blocked, true);
+  assert.equal(atArrival.events.some((event) => event.kind === 'flight'
+    && event.events.some((flightEvent) => flightEvent.flight.id === first.flight.id && flightEvent.status === 'deployed')), true);
+  assert.equal(atArrival.state.flights.records.find((flight) => flight.id === first.flight.id)?.arrivedAt, arrivalAt);
+  const endAt = arrivalAt + 5 * 60_000;
+  const afterArrival = reconcileRuntime(atArrival.state, {
+    planetId: 'helion-01',
+    now: endAt,
+    mode: 'production',
+    testTimeScale: 10,
+  });
+  const combined = reconcileRuntime(startState, {
+    planetId: 'helion-01',
+    now: endAt,
+    mode: 'production',
+    testTimeScale: 10,
+  });
+  assert.equal(afterArrival.state.planets[fixture.targetId].overpopulation?.blocked, true);
+  assert.deepEqual(
+    getPlanetResources(afterArrival.state, fixture.targetId),
+    getPlanetResources(atArrival.state, fixture.targetId),
+  );
+  assert.deepEqual(
+    getPlanetResources(combined.state, fixture.targetId),
+    getPlanetResources(afterArrival.state, fixture.targetId),
+  );
+});
+
+test('a deployment return created during reconciliation precedes later planet work', () => {
+  const fixture = stateWithDeploymentTarget();
+  const departedAt = 2_000_000;
+  const sent = dispatchFlight(fixture.state, {
+    requestId: 'deployment-due-return-checkpoint',
+    missionId: 'deployment',
+    originPlanetId: 'helion-01',
+    destination: { kind: 'planet', planetId: fixture.targetId, coordinate: fixture.targetCoordinate },
+    targetRelation: 'self',
+    selectedShips: { scout: 1 },
+    departedAt,
+  }, departedAt);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+
+  const planets = { ...sent.state.planets };
+  delete planets[fixture.targetId];
+  const returnAt = sent.flight.arrivalAt + sent.flight.oneWayDurationMs;
+  const buildingFinishAt = returnAt + 60_000;
+  const queuedBuilding = {
+    kind: 'building' as const,
+    id: 'deployment-return-checkpoint-building',
+    assetRole: 'shipyard' as const,
+    planetId: 'helion-01',
+    enqueuedAt: sent.flight.arrivalAt,
+    startedAt: sent.flight.arrivalAt,
+    finishAt: buildingFinishAt,
+    targetLevel: 1,
+    durationMs: buildingFinishAt - sent.flight.arrivalAt,
+  };
+  const startState: SaveState = {
+    ...sent.state,
+    planets,
+    queues: { ...sent.state.queues, 'helion-01': [queuedBuilding] },
+  };
+  const context = {
+    planetId: 'helion-01',
+    now: buildingFinishAt + 1,
+    mode: 'production' as const,
+    testTimeScale: 10 as const,
+  };
+
+  const reconciled = reconcileRuntime(startState, context);
+  const returnedEventIndex = reconciled.events.findIndex((event) => event.kind === 'flight'
+    && event.events.some((flightEvent) => flightEvent.flight.id === sent.flight.id && flightEvent.status === 'returned'));
+  const buildingEventIndex = reconciled.events.findIndex((event) => event.kind === 'building'
+    && event.planetId === 'helion-01' && event.assetRole === 'shipyard');
+
+  assert.notEqual(returnedEventIndex, -1);
+  assert.notEqual(buildingEventIndex, -1);
+  assert.ok(returnedEventIndex < buildingEventIndex);
+  assert.equal(reconciled.state.flights.records.find((flight) => flight.id === sent.flight.id)?.completedAt, returnAt);
+  assert.equal(reconciled.state.planets['helion-01'].buildings.shipyard, startState.planets['helion-01'].buildings.shipyard + 1);
+
+  const repeated = reconcileRuntime(reconciled.state, context);
+  assert.equal(repeated.changed, false);
+  assert.deepEqual(repeated.events, []);
 });

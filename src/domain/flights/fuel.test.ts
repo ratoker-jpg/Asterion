@@ -7,6 +7,8 @@ test('reads faction catalog fuel coefficients instead of duplicating them', () =
   assert.equal(calculateBaseFlightFuel('aegis', { colonizer: 1 }), 1_500);
   assert.equal(calculateBaseFlightFuel('synod', { 'mega-transporter': 2 }), 100);
   assert.equal(calculateBaseFlightFuel('veyra', { scout: 1, destroyer: 1 }), 612);
+  assert.equal(calculateBaseFlightFuel('aegis', {}, { corsair: 1 }), 300);
+  assert.equal(calculateBaseFlightFuel('aegis', { scout: 1 }, { corsair: 2 }), 625);
 });
 
 test('applies capped chemistry and rounds gas upward with a floor of one', () => {
@@ -15,4 +17,6 @@ test('applies capped chemistry and rounds gas upward with a floor of one', () =>
   assert.equal(calculateFlightFuel('aegis', { colonizer: 1 }, 1_035, { 2: 7 }), 85);
   assert.equal(calculateFlightFuel('aegis', { colonizer: 1 }, 1_425, { 2: 7 }), 116);
   assert.equal(calculateFlightFuel('aegis', { 'spy-probe': 1 }, 1, { 2: 99 }), 1);
+  assert.equal(calculateFlightFuel('aegis', {}, 12_000, {}, { corsair: 1 }), 300);
+  assert.equal(calculateFlightFuel('aegis', {}, 12_000, { 2: 7 }, { corsair: 1 }), 195);
 });

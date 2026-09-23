@@ -20,6 +20,7 @@ import {
 import { createDefaultEspionageState, getEspionageTargets } from '../domain/espionage/runtime.ts';
 import type { EspionageState, SpyTargetState } from '../domain/espionage/types.ts';
 import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
+import { isPlanetBlocked } from './overpopulation.ts';
 
 const RESOURCE_KEYS = ['metal', 'minerals', 'gas'] as const satisfies readonly ProductionResource[];
 const CAPPED_RESOURCE_KEYS = ['metal', 'minerals', 'gas'] as const;
@@ -158,6 +159,14 @@ export function reconcileResourceIncome(
   if (!planet) {
     const resources = getPlanetResources(state, context.planetId);
     return { changed: false, state, credit: { wallet: { ...resources, energy: 0 }, accepted: { metal: 0, minerals: 0, gas: 0, energy: 0 }, burned: { metal: 0, minerals: 0, gas: 0, energy: 0 } } };
+  }
+  if (isPlanetBlocked(state, context.planetId)) {
+    const wallet = getPlanetResources(state, context.planetId);
+    return {
+      changed: false,
+      state,
+      credit: { wallet: { ...wallet, energy: planet.energy }, accepted: { metal: 0, minerals: 0, gas: 0, energy: 0 }, burned: { metal: 0, minerals: 0, gas: 0, energy: 0 } },
+    };
   }
 
   const storedClock = state.resourceClock.byPlanet?.[context.planetId];
@@ -308,6 +317,5 @@ export function reconcileTestEspionageTargetResources(
       changed = true;
     }
   }
-
   return changed ? updateTargetRegistry(state, nextTargets) : state;
 }

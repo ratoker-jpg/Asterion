@@ -155,6 +155,9 @@ function CatalogStatsTooltip({ item }: { item: CatalogItem }) {
         <div><small>Специализация</small><strong>{stats.specialization}</strong></div>
         <div><small>Дистанция</small><strong>{stats.range}</strong></div>
         <div><small>Приоритет</small><strong>{stats.priority}</strong></div>
+        {item.catalog.ship?.speed != null ? (
+          <div><small>Скорость</small><strong>{formatNumber(item.catalog.ship.speed)}</strong></div>
+        ) : null}
         {item.commanderAbility ? (
           <div className="shipyard-tooltip-level-v1" data-qa-commander-dossier-level={item.id}>
             <small>Уровень командира</small>

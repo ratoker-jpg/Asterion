@@ -37,9 +37,17 @@ import {
   settlePlanetEnergyWallet,
   transitionPlanetEnergySources,
 } from './energy.ts';
+import {
+  calculatePlanetCapacity,
+  calculatePlanetPopulation,
+  isPlanetOverpopulated,
+} from '../domain/fleet/overpopulation.ts';
+import { isPlanetBlocked } from './overpopulation.ts';
 
 export type ScienceApplicationContext = {
   planetId: PlanetId;
+  blockedPlanetIds?: ReadonlySet<PlanetId>;
+  blockedPlanetStartedAt?: ReadonlyMap<PlanetId, number>;
   mode: RuntimeMode;
   testTimeScale: TestTimeScale;
   now: number;
@@ -95,9 +103,28 @@ export function startScience(
   taskId = (context.createTaskId ?? defaultScienceTaskId)(scienceId, context.now),
 ): ScienceActionResult {
   const planet = getPlanetState(state, context.planetId);
+  const blocked = planet.overpopulation?.blocked === true
+    || isPlanetOverpopulated(
+      calculatePlanetPopulation(planet.fleet, planet.solarSatellites ?? 0, state.profile.factionId),
+      calculatePlanetCapacity(planet.buildings.hangar ?? 0),
+    );
+  if (blocked) {
+    return {
+      transition: {
+        ok: false,
+        state: state.science,
+        wallet: walletFor(state, context.planetId),
+        task: null,
+        reason: 'Исследования на перенаселённой планете заблокированы.',
+      },
+      state,
+    };
+  }
   const transition = startScienceResearch({
     state: state.science,
     wallet: walletFor(state, context.planetId),
+    planetId: context.planetId,
+    blockedPlanetIds: context.blockedPlanetIds,
     capacities: getStorageCapacities(planet.buildings),
     laboratoryLevel: planet.buildings.research,
     now: context.now,
@@ -117,10 +144,40 @@ export function cancelScience(
   context: ScienceApplicationContext,
   taskId: string,
 ): ScienceActionResult {
+  const blockedPlanetIds = new Set(context.blockedPlanetIds ?? []);
+  const blockedPlanetStartedAt = new Map<PlanetId, number>();
+  for (const planetId of Object.keys(state.planets)) {
+    const planet = state.planets[planetId];
+    if (isPlanetBlocked(state, planetId)) blockedPlanetIds.add(planetId);
+    if (planet?.overpopulation?.blocked) {
+      blockedPlanetStartedAt.set(planetId, planet.overpopulation.episodeStartedAt);
+    }
+  }
+  const requestedTask = state.science.queue.find((task) => task.id === taskId);
+  if (isPlanetBlocked(state, context.planetId)
+    || (requestedTask?.planetId && blockedPlanetIds.has(requestedTask.planetId))) {
+    return {
+      transition: {
+        ok: false,
+        state: state.science,
+        wallet: walletFor(state, context.planetId),
+        canceled: null,
+        canceledTasks: [],
+        refund: null,
+        refundPercent: null,
+        refundPercents: [],
+        reason: 'Планета заблокирована из-за перенаселения.',
+      },
+      state,
+    };
+  }
   const planet = getPlanetState(state, context.planetId);
   const transition = cancelScienceResearch({
     state: state.science,
     wallet: walletFor(state, context.planetId),
+    planetId: context.planetId,
+    blockedPlanetIds,
+    blockedPlanetStartedAt,
     capacities: getStorageCapacities(planet.buildings),
     laboratoryLevel: planet.buildings.research,
     now: context.now,
@@ -130,7 +187,9 @@ export function cancelScience(
   }, taskId);
   return {
     transition,
-    state: stateFromScienceTransition(state, context.planetId, transition.state, transition.wallet),
+    state: transition.ok
+      ? stateFromScienceTransition(state, context.planetId, transition.state, transition.wallet)
+      : state,
   };
 }
 
@@ -142,9 +201,14 @@ export type ScienceReconcileResult = {
 
 export function reconcileScience(
   state: SaveState,
-  context: Pick<ScienceApplicationContext, 'planetId' | 'now'>,
+  context: Pick<ScienceApplicationContext, 'planetId' | 'now' | 'blockedPlanetIds' | 'blockedPlanetStartedAt'>,
 ): ScienceReconcileResult {
-  const transition = reconcileScienceState(state.science, context.now);
+  const transition = reconcileScienceState(
+    state.science,
+    context.now,
+    context.blockedPlanetIds,
+    context.blockedPlanetStartedAt,
+  );
   if (!transition.changed) {
     return { changed: false, state, completedScienceIds: [] };
   }
@@ -167,6 +231,12 @@ export function createScienceSnapshot(
   context: ScienceApplicationContext,
 ): ScienceRuntimeSnapshot {
   const planet = getPlanetState(state, context.planetId);
+  const blockedPlanetStartedAt = new Map<string, number>();
+  for (const [planetId, candidate] of Object.entries(state.planets)) {
+    if (candidate.overpopulation?.blocked) {
+      blockedPlanetStartedAt.set(planetId, candidate.overpopulation.episodeStartedAt);
+    }
+  }
   return createScienceRuntimeSnapshot(
     state.science,
     walletFor(state, context.planetId),
@@ -174,6 +244,7 @@ export function createScienceSnapshot(
     context.now,
     context.mode,
     context.testTimeScale,
+    blockedPlanetStartedAt,
   );
 }
 
@@ -246,12 +317,13 @@ export function bindScienceEventBridge(options: ScienceEventBridgeOptions): () =
     const request = (event as CustomEvent<{ taskId?: string; now?: number }>).detail;
     if (!request?.taskId) return;
     const now = typeof request.now === 'number' && Number.isFinite(request.now) ? request.now : Date.now();
-    const result = cancelScience(options.getState(), {
+    const currentState = options.getState();
+    const result = cancelScience(currentState, {
       ...options.getContext(now),
       now,
     }, request.taskId);
     const transition = result.transition as ScienceCancellationTransition;
-    options.commit(result.state);
+    if (result.state !== currentState) options.commit(result.state);
     const cascadedCount = Math.max(0, transition.canceledTasks.length - 1);
     const unreimbursedCount = transition.ok
       ? Math.max(0, transition.canceledTasks.length - transition.refundPercents.length)
