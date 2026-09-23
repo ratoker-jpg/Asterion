@@ -516,11 +516,26 @@ function isPersistedFlightRecord(value: unknown): value is FlightRecord {
   if (item.destinationOwnerId !== undefined && !isNonEmptyPersistedString(item.destinationOwnerId)) return false;
   if (item.targetRelation !== undefined && !PERSISTED_TARGET_RELATIONS.has(item.targetRelation as TargetRelation)) return false;
   if (item.cargoState !== undefined && !PERSISTED_CARGO_STATES.has(item.cargoState as TransportCargoState)) return false;
+  const selectedShips = item.selectedShips;
+  if (!selectedShips || typeof selectedShips !== 'object' || Array.isArray(selectedShips)) return false;
+  const shipEntries = Object.entries(selectedShips);
   if (item.missionId === 'transport') {
     const cargo = normalizePersistedTransportCargo(item.cargo);
     if (!cargo) return false;
     if (item.targetRelation === undefined || item.destinationPlanetId === undefined) return false;
     if (item.cargoState === undefined) return false;
+  }
+  if (item.missionId === 'recycle') {
+    const cargo = normalizePersistedTransportCargo(item.cargo);
+    if (!cargo
+      || !isNonNegativeInteger(item.recycleCapacity)
+      || item.recycleCapacity <= 0
+      || item.cargoState === undefined
+      || item.targetKind === undefined
+      || !['player', 'npc', 'uninhabited', 'unique', 'pirate', 'anomaly', 'empty'].includes(String(item.targetKind))
+      || shipEntries.length === 0
+      || shipEntries.some(([shipId]) => shipId !== 'recycler')
+      || Object.values((item.selectedCommanders ?? {}) as Record<string, unknown>).some((quantity) => Number(quantity) > 0)) return false;
   }
   if (item.targetKind !== undefined && !PERSISTED_UNIVERSE_OBJECT_KINDS.has(item.targetKind as UniverseObjectKind)) return false;
   if (item.completionReason !== undefined
@@ -545,9 +560,6 @@ function isPersistedFlightRecord(value: unknown): value is FlightRecord {
       || item.operationId !== destinationRecord.operationId) return false;
   }
 
-  const selectedShips = item.selectedShips;
-  if (!selectedShips || typeof selectedShips !== 'object' || Array.isArray(selectedShips)) return false;
-  const shipEntries = Object.entries(selectedShips);
   for (const [shipId, quantity] of shipEntries) {
     if (!SHIP_IDS.includes(shipId as (typeof SHIP_IDS)[number])
       || !isNonNegativeInteger(quantity)
@@ -631,7 +643,7 @@ function isPersistedFlightRecord(value: unknown): value is FlightRecord {
 function normalizePersistedFlightRecord(value: unknown): unknown {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
   const source = value as Record<string, unknown>;
-  if (source.missionId !== 'transport') return value;
+  if (source.missionId !== 'transport' && source.missionId !== 'recycle') return value;
   const cargo = normalizePersistedTransportCargo(source.cargo);
   if (!cargo) return value;
   return { ...source, cargo };

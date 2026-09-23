@@ -144,7 +144,8 @@ import {
 } from './application/flights.ts';
 import { createSimulatorScenarioFromSpyReport, requestSimulatorHandoff } from './application/simulator-handoff.ts';
 import type { SpyReportSnapshot } from './domain/espionage/types.ts';
-import { getEspionageTargets } from './domain/espionage/runtime.ts';
+import { getEspionageTargets, getEspionageState } from './domain/espionage/runtime.ts';
+import { getOrbitalDebrisByCoordinate } from './domain/espionage/orbital-debris.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniverseOwnerProfile } from './domain/universe/types.ts';
 import { enqueueApplicationStateUpdate } from './application/state.ts';
 import { getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
@@ -1379,6 +1380,7 @@ export function App() {
               command={state.command}
               playerPlanets={universePlayerPlanets}
               spyTargets={Object.values(getEspionageTargets(state.espionage))}
+              orbitalDebrisByCoordinate={getOrbitalDebrisByCoordinate(getEspionageState(state))}
               mode={RUNTIME_MODE}
               onColonize={openColonizationLaunch}
               onTransport={openTransportLaunch}

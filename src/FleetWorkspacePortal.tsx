@@ -320,6 +320,8 @@ function FleetWorkspace({
       ? ownedShipDefinitions.filter((ship) => ship.id === 'spy-probe')
       : missionId === 'attack'
         ? ownedShipDefinitions.filter((ship) => isAttackCombatShip(ship.id, factionId))
+        : missionId === 'recycle'
+          ? ownedShipDefinitions.filter((ship) => ship.id === 'recycler')
       : ownedShipDefinitions;
   const commanderAvailability = useMemo(() => {
     if (missionId !== 'attack' && missionId !== 'deployment') return {} as Partial<Record<CommanderId, number>>;
@@ -567,13 +569,21 @@ function FleetWorkspace({
       originPlanetId: draft?.originPlanetId ?? previewOriginPlanetId ?? runtimeState.currentPlanetId,
       destination,
       targetRelation: draft?.targetRelation === null ? undefined : draft?.targetRelation ?? previewTargetRelation,
-      targetKind: missionId === 'colonize' ? launchContext?.targetKind ?? 'empty' : launchContext?.targetKind,
+      targetKind: missionId === 'colonize'
+        ? launchContext?.targetKind ?? 'empty'
+        : missionId === 'recycle' ? undefined : launchContext?.targetKind,
       targetPlanetName: launchContext?.targetPlanetName,
       targetOwnerId: launchContext?.targetOwnerId,
       targetOwnerName: launchContext?.targetOwnerName,
       targetRaceId: launchContext?.targetRaceId,
       targetAlliance: launchContext?.targetAlliance,
-      selectedShips: missionId === 'colonize' ? { colonizer: 1 } : missionId === 'espionage' ? { 'spy-probe': 1 } : selectedQuantities,
+      selectedShips: missionId === 'colonize'
+        ? { colonizer: 1 }
+        : missionId === 'espionage'
+          ? { 'spy-probe': 1 }
+          : missionId === 'recycle'
+            ? { recycler: selectedQuantities.recycler ?? 0 }
+            : selectedQuantities,
       selectedCommanders: missionId === 'attack' || missionId === 'deployment' ? selectedCommanders : undefined,
       maxRounds: missionId === 'attack' ? attackRounds : undefined,
       cargo: missionId === 'transport' ? transportCargoDraft : undefined,
@@ -705,6 +715,7 @@ function FleetWorkspace({
   };
 
   const setShipQuantity = (shipId: ShipId, raw: number) => {
+    if (shipId === SOLAR_SATELLITE_ID) return;
     if (missionId === 'colonize' && shipId !== 'colonizer') return;
     const available = fleetSnapshot.fleet.ships[shipId] ?? 0;
     const next = missionId === 'colonize' || missionId === 'espionage'
@@ -715,6 +726,10 @@ function FleetWorkspace({
 
   const chooseMission = (nextMissionId: MissionId) => {
     setMissionId(nextMissionId);
+    if (nextMissionId === 'recycle') {
+      setPreviewResult(null);
+      setPreviewTargetError(null);
+    }
     if (nextMissionId === 'attack') {
       const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
       setSelectedCommanders(getAttackCommanderSelection(runtimeState, runtimeState.currentPlanetId));
@@ -824,6 +839,8 @@ function FleetWorkspace({
   const targetCheckIsDeferred = previewErrorCode === 'target-not-available' || previewErrorCode === 'target-is-origin';
   const canDispatchPreview = missionId === 'espionage'
     ? targetIsLocallyValid && Boolean(previewResult?.ok) && selectedQuantities['spy-probe'] === 1
+    : missionId === 'recycle'
+      ? targetIsLocallyValid && previewResult?.ok === true && previewResult.flight.missionId === 'recycle' && (selectedQuantities.recycler ?? 0) > 0
     : missionId === 'attack'
       ? targetIsLocallyValid && (!previewResult || previewResult.ok) && selectedShipCount > 0 && previewTargetRelation !== 'ally' && previewTargetRelation !== 'self'
     : missionId === 'transport'
@@ -1140,7 +1157,7 @@ function FleetWorkspace({
                       <label><span>ПОЗ.</span><input name="flight-preview-target-position" inputMode="numeric" value={previewTargetDraft.position} onInput={(event) => changePreviewTargetField('position', event.currentTarget.value)} onChange={(event) => changePreviewTargetField('position', event.currentTarget.value)} aria-label="Позиция цели" /></label>
                     </div> : !isReadOnlyTarget && missionId !== 'deployment' ? <strong>{previewTargetLabel}</strong> : isReadOnlySpyTarget ? <strong>{launchContext?.targetPlanetName ?? previewTargetLabel}</strong> : null}
                     <div className={`flight-timeline-target-status ${previewTargetError ? 'is-invalid' : 'is-valid'}`} data-qa-flight-target-status>
-                      <span data-qa-target-relation={previewTargetRelation}>{previewTargetError ?? (missionId === 'deployment' && !previewTargetDestination ? 'Выберите свою планету' : previewTargetRelation === 'ally' ? 'Союзная планета' : previewTargetRelation === 'self' ? 'Своя планета' : previewResult?.ok ? 'Цель подтверждена' : 'Координаты будут проверены при отправке')}</span>
+                      <span data-qa-target-relation={previewTargetRelation}>{previewTargetError ?? (missionId === 'deployment' && !previewTargetDestination ? 'Выберите свою планету' : missionId === 'recycle' && previewResult && !previewResult.ok ? previewResult.error.message : previewTargetRelation === 'ally' ? 'Союзная планета' : previewTargetRelation === 'self' ? 'Своя планета' : previewResult?.ok ? 'Цель подтверждена' : 'Координаты будут проверены при отправке')}</span>
                       {!isReadOnlyTarget && missionId !== 'deployment' ? <button type="button" className="flight-timeline-edit" onClick={() => setEditingPreviewTarget((value) => !value)}>{editingPreviewTarget ? 'ГОТОВО' : 'ИЗМЕНИТЬ'}</button> : null}
                     </div>
                   </div>
@@ -1178,7 +1195,7 @@ function FleetWorkspace({
                       <small>ПРИБЫТИЕ</small>
                       <strong>через {flightCountdown(previewResult.flight.arrivalAt, clockNow)}</strong>
                       <span>{flightArrivalLabel(previewResult.flight.arrivalAt)} МСК</span>
-                      <em>проверка цели и создание планеты</em>
+                      <em>{missionId === 'recycle' ? 'сбор обломков с орбиты' : 'проверка цели и создание планеты'}</em>
                     </div>
                     <div className="flight-timeline-eta-card is-return">
                       <small>ВОЗВРАТ ПРИ ОТЗЫВЕ</small>
@@ -1189,7 +1206,11 @@ function FleetWorkspace({
                   </section>
                   <div className="flight-timeline-notes">
                     <p className="flight-timeline-note-info">Газ списывается только за один путь туда. Обратный участок не требует повторной оплаты.</p>
-                    <p className="flight-timeline-note-warning">{missionId === 'attack' ? 'До прибытия атаку можно отозвать без боя и боевого отчёта.' : 'При отзыве колонизатор возвращается, но газ не возвращается.'}</p>
+                    <p className="flight-timeline-note-warning">{missionId === 'attack'
+                      ? 'До прибытия атаку можно отозвать без боя и боевого отчёта.'
+                      : missionId === 'recycle'
+                        ? 'При отзыве до прибытия переработчик вернётся без обломков.'
+                        : 'При отзыве колонизатор возвращается, но газ не возвращается.'}</p>
                   </div>
                 </> : <p className="flight-timeline-error" data-qa-flight-preview-error>{previewResult && !previewResult.ok ? previewResult.error.message : targetIsLocallyValid ? 'Проверка цели будет выполнена при отправке.' : 'Укажите координаты цели. Проверка доступности выполняется при отправке.'}</p>}
               </section>

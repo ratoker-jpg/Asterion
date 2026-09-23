@@ -116,6 +116,39 @@ test('transport cannot create an ambiguous persisted flight without cargo', () =
   }), /require a cargo snapshot/);
 });
 
+test('recycle snapshots capacity and an initially empty cargo manifest', () => {
+  const { flight } = dispatchFlight(createFlightState(), {
+    requestId: 'recycle-capacity-snapshot',
+    missionId: 'recycle',
+    originPlanetId: 'helion-01',
+    originCoordinate: { galaxy: 1, system: 1, position: 1 },
+    destination: { kind: 'coordinate', coordinate: { galaxy: 1, system: 2, position: 1 } },
+    selectedShips: { recycler: 2 },
+    cargo: { metal: 0, minerals: 0, gas: 0, debris: 0 },
+    recycleCapacity: 24_000,
+    departedAt: 1_000,
+    factionId: 'aegis',
+  });
+
+  assert.equal(flight.recycleCapacity, 24_000);
+  assert.deepEqual(flight.cargo, { metal: 0, minerals: 0, gas: 0, debris: 0 });
+  assert.equal(flight.cargoState, 'loaded');
+});
+
+test('recycle cannot create a flight without a positive capacity snapshot', () => {
+  assert.throws(() => dispatchFlight(createFlightState(), {
+    requestId: 'recycle-missing-capacity',
+    missionId: 'recycle',
+    originPlanetId: 'helion-01',
+    originCoordinate: { galaxy: 1, system: 1, position: 1 },
+    destination: { kind: 'coordinate', coordinate: { galaxy: 1, system: 2, position: 1 } },
+    selectedShips: { recycler: 1 },
+    cargo: { metal: 0, minerals: 0, gas: 0, debris: 0 },
+    departedAt: 1_000,
+    factionId: 'aegis',
+  }), /require a positive capacity snapshot/);
+});
+
 test('recall uses elapsed outbound time, does not change gas, and completes once', () => {
   const { state, flight } = dispatch();
   const recalled = recallFlight(state, flight.id, flight.departedAt + 37_000);

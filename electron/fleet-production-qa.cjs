@@ -74,14 +74,14 @@ async function readSave(win) {
   return win.webContents.executeJavaScript(`JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null')`);
 }
 
-async function seedProductionSave(win, mutator) {
+async function seedProductionSave(win, mutator, args = []) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   const result = await win.webContents.executeJavaScript(`(() => {
     try {
       const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
       const planet = save?.planets?.['helion-01'];
       if (!save || !planet) return { ok: false, error: 'missing test save or homeworld' };
-      (${mutator.toString()})(save, planet);
+      (${mutator.toString()})(save, planet, ...${JSON.stringify(args)});
       localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
       window.setTimeout(() => window.location.reload(), 0);
       return { ok: true };
@@ -160,6 +160,19 @@ async function setFlightCoordinate(win, field, value) {
   })()`);
   if (!result) throw new Error(`Could not set flight coordinate ${field}`);
   await settle(win);
+}
+
+async function setUniverseSystem(win, system) {
+  const result = await win.webContents.executeJavaScript(`(() => {
+    const select = document.querySelector('[aria-label="Солнечная система"]');
+    if (!select) return false;
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+    setter?.call(select, ${JSON.stringify(String(system))});
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return select.value === ${JSON.stringify(String(system))};
+  })()`);
+  if (!result) throw new Error(`Could not select universe system ${system}`);
+  await waitFor(win, `document.querySelector('[data-qa-universe-system="${system}"]')`);
 }
 
 async function selectTransportTarget(win, targetId) {
@@ -481,6 +494,149 @@ async function runFlightRuntimeCycle(win, label) {
     throw new Error(`${label}: successful arrival was not durable after reload ${JSON.stringify({ colonyId, persistedColonyId, persistedColonized, persistedNoActiveRow })}`);
   }
   return { recalledPhase: 'returning', successfulPhase: 'completed', colonyId, persisted: true };
+}
+
+async function runRecycleUiCycle(win, label) {
+  await click(win, '[data-qa-test-speed="1"]');
+  await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×1')`);
+  await click(win, '[data-qa-route="universe"]');
+  await waitFor(win, `document.querySelector('[data-qa-universe]')`);
+  await setUniverseSystem(win, 1);
+  const emptyTargets = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-universe-kind="empty"]')).map((node) => ({
+    id: node.getAttribute('data-qa-universe-object') || '',
+    coordinate: (node.getAttribute('data-qa-universe-object') || '').replace(/^universe-empty-/, '').split('-').map(Number),
+  })).filter((node) => node.coordinate.length === 3 && node.coordinate.every(Number.isInteger))`);
+  if (emptyTargets.length < 1) throw new Error(`${label}: recycle fixture needs an empty coordinate for the validation check`);
+  const target = { id: 'qa-recycle-target', coordinate: [1, 1, 3] };
+  const alternate = emptyTargets.find((item) => item.coordinate.join(':') !== target.coordinate.join(':'));
+  if (!alternate) throw new Error(`${label}: recycle fixture needs a second coordinate for the validation check`);
+
+  await click(win, '[data-qa-route="fleets"]');
+  await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
+  await seedProductionSave(win, (save, planetState, targetCoordinate) => {
+    const coordinate = { galaxy: targetCoordinate[0], system: targetCoordinate[1], position: targetCoordinate[2] };
+    const recycleTarget = JSON.parse(JSON.stringify(planetState));
+    recycleTarget.id = 'qa-recycle-target';
+    recycleTarget.name = 'QA Recycle Target';
+    recycleTarget.universeGalaxy = targetCoordinate[0];
+    recycleTarget.universeSystem = targetCoordinate[1];
+    recycleTarget.universePosition = targetCoordinate[2];
+    recycleTarget.resources = { metal: 999_999_999, minerals: 999_999_999, gas: 999_999_999, debris: 0 };
+    planetState.fleet.ships = { ...planetState.fleet.ships, recycler: 1, scout: 2, colonizer: 1 };
+    planetState.buildings = { ...planetState.buildings, 'gas-production-1': 0, 'gas-production-2': 0 };
+    planetState.productionBots = { ...planetState.productionBots, gas: 0 };
+    planetState.resources = { ...planetState.resources, gas: 189_000_000 };
+    planetState.recycling = { ...planetState.recycling, availableDebris: 0 };
+    save.gas = 189_000_000;
+    save.currentPlanetId = 'helion-01';
+    save.planets = { 'helion-01': planetState, 'qa-recycle-target': recycleTarget };
+    save.queues = { 'helion-01': [], 'qa-recycle-target': [] };
+    save.flights = { records: [], requestIndex: {} };
+    save.espionage = {
+      ...(save.espionage || {}),
+      missions: [],
+      reports: [],
+      hunterNotices: [],
+      orbitalDebris: {
+        'qa-recycle-debris-target': {
+          id: 'qa-recycle-debris-target',
+          targetPlanetId: 'qa-recycle-debris-target',
+          targetPlanetName: 'QA debris field',
+          targetOwnerId: 'npc-bot-01',
+          targetCoordinate: coordinate,
+          debris: 90_000,
+          createdAt: Date.now(),
+        },
+      },
+    };
+  }, [target.coordinate]);
+
+  await click(win, '[data-qa-test-speed="1"]');
+  await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×1')`);
+  await click(win, '[data-qa-route="universe"]');
+  await setUniverseSystem(win, 1);
+  await waitFor(win, `document.querySelector('[data-qa-universe-object="${target.id}"][data-qa-universe-kind="player"]')`);
+  const debrisLabel = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-universe-object="${target.id}"]')?.getAttribute('aria-label') || ''`);
+  if (!debrisLabel.includes('Обломки на орбите')) throw new Error(`${label}: seeded orbital debris is not shown on the target ${debrisLabel}`);
+  await click(win, `[data-qa-universe-object="${target.id}"]`);
+  await waitFor(win, `document.querySelector('[data-qa-universe-inspector]')`);
+  await click(win, '[data-qa-universe-action="fleet"]');
+  await waitFor(win, `document.querySelector('.fleet-workspace-v1[data-qa-flight-launch-context]')`);
+
+  await click(win, '[aria-label="Переработка"]');
+  const selection = await win.webContents.executeJavaScript(`(() => ({
+    mission: document.querySelector('#fleet-mission')?.value || '',
+    ships: Array.from(document.querySelectorAll('[data-qa-fleet-roster] [data-qa-fleet-ship]')).map((node) => node.getAttribute('data-qa-fleet-ship')),
+    previewDisabled: Boolean(document.querySelector('[data-qa-flight-preview-open]')?.disabled),
+    commanderControls: Boolean(document.querySelector('[data-qa-deployment-commanders], .fleet-attack-prep-v1')),
+  }))()`);
+  if (selection.mission !== 'recycle' || JSON.stringify(selection.ships) !== JSON.stringify(['recycler']) || !selection.previewDisabled || selection.commanderControls) {
+    throw new Error(`${label}: recycle selection contract failed ${JSON.stringify(selection)}`);
+  }
+
+  await setFleetShipQuantity(win, 'recycler', 1);
+  await click(win, '[data-qa-flight-preview-open]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
+  await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
+  await waitFor(win, `document.querySelector('[data-qa-flight-target-inputs]')`);
+  await setFlightCoordinate(win, 'galaxy', alternate.coordinate[0]);
+  await setFlightCoordinate(win, 'system', alternate.coordinate[1]);
+  await setFlightCoordinate(win, 'position', alternate.coordinate[2]);
+  await click(win, '[data-qa-flight-preview-open]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-target-status].is-invalid')`);
+  const rejectedTarget = await win.webContents.executeJavaScript(`({
+    sendDisabled: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled),
+    message: document.querySelector('[data-qa-flight-target-status]')?.textContent?.trim() || '',
+  })`);
+  if (!rejectedTarget.sendDisabled || !/обломк/i.test(rejectedTarget.message)) {
+    throw new Error(`${label}: recycle preview bypassed target validation ${JSON.stringify(rejectedTarget)}`);
+  }
+
+  await setFlightCoordinate(win, 'galaxy', target.coordinate[0]);
+  await setFlightCoordinate(win, 'system', target.coordinate[1]);
+  await setFlightCoordinate(win, 'position', target.coordinate[2]);
+  await click(win, '[data-qa-flight-preview-open]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview]') && !document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled`);
+  await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
+  const preview = await win.webContents.executeJavaScript(`({
+    sendDisabled: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled),
+    mission: document.querySelector('#fleet-mission')?.value || '',
+    target: document.querySelector('[data-qa-flight-target-step]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+    arrivalTask: document.querySelector('[data-qa-flight-eta] .is-arrival em')?.textContent?.trim() || '',
+    recallNote: document.querySelector('.flight-timeline-note-warning')?.textContent?.trim() || '',
+  })`);
+  if (preview.sendDisabled || preview.mission !== 'recycle' || !preview.target.includes(`[${target.coordinate.join(':')}]`)
+    || !preview.arrivalTask.includes('сбор обломков') || !preview.recallNote.includes('переработчик') || /колонизатор/i.test(preview.recallNote)) {
+    throw new Error(`${label}: validated recycle preview is not ready to send ${JSON.stringify(preview)}`);
+  }
+  await click(win, '[data-qa-test-speed="500"]');
+  await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×500')`);
+  await click(win, '[data-qa-flight-dispatch-confirm]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-row]')`);
+  await waitFor(win, `(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}');
+    const flight = save.flights?.records?.find((item) => item.missionId === 'recycle');
+    return flight?.cargoState === 'returned' && flight?.phase === 'completed';
+  })()`, 30_000);
+  const completed = await readSave(win);
+  const flight = completed.flights?.records?.find((item) => item.missionId === 'recycle');
+  const collected = Math.min(90_000, flight?.recycleCapacity ?? 0);
+  const remaining = completed.espionage?.orbitalDebris?.['qa-recycle-debris-target']?.debris ?? 0;
+  const returned = completed.planets?.['helion-01']?.recycling?.availableDebris ?? 0;
+  if (!flight || flight.targetKind !== 'player' || JSON.stringify(flight.selectedShips) !== JSON.stringify({ recycler: 1 })
+    || flight.cargo?.debris !== collected || remaining !== 90_000 - collected || returned !== collected) {
+    throw new Error(`${label}: recycle manifest/collection result failed ${JSON.stringify({ flight, collected, remaining, returned })}`);
+  }
+  await reload(win);
+  const reloaded = await readSave(win);
+  const persistedFlight = reloaded.flights?.records?.find((item) => item.missionId === 'recycle');
+  if (reloaded.flights?.records?.filter((item) => item.missionId === 'recycle').length !== 1
+    || reloaded.planets?.['helion-01']?.recycling?.availableDebris !== collected
+    || persistedFlight?.cargo?.debris !== collected
+    || (reloaded.espionage?.orbitalDebris?.['qa-recycle-debris-target']?.debris ?? 0) !== 90_000 - collected) {
+    throw new Error(`${label}: recycle cargo was collected more than once after reload ${JSON.stringify({ persistedFlight, reloaded })}`);
+  }
+  return { target: target.coordinate, manifest: flight.selectedShips, capacity: flight.recycleCapacity, collected, remaining, returned, persistedOnce: true };
 }
 
 async function seedPlanetSwitchSave(win) {
@@ -915,6 +1071,7 @@ async function runViewport(width, height) {
 
     const transportCycle = await runTransportUiCycle(win, label, directory);
     const flightCycle = await runFlightRuntimeCycle(win, label);
+    const recycleCycle = await runRecycleUiCycle(win, label);
     const planetSwitch = await runPlanetSwitchRegression(win, label);
     const planetoLom = await runPlanetoLomTrace(win, label);
 
@@ -958,7 +1115,7 @@ async function runViewport(width, height) {
     })()`);
     if (layout.horizontalOverflow || !layout.longPage || layout.orderCount !== 8 || layout.queueOverflowY !== 'visible' || layout.queueMaxHeight !== 'none' || layout.queueScrollHeight < layout.queueClientHeight) throw new Error(`${label}: fleet production layout overflow/long-page contract failed ${JSON.stringify(layout)}`);
     await capture(win, directory, 'fleet-production');
-    return { viewport: label, layout, missionSlots, transportCycle, flightCycle, planetSwitch, planetoLom, screenshotsSkipped: skipScreenshots };
+    return { viewport: label, layout, missionSlots, transportCycle, flightCycle, recycleCycle, planetSwitch, planetoLom, screenshotsSkipped: skipScreenshots };
   } finally {
     if (!win.isDestroyed()) await win.close();
   }
