@@ -102,6 +102,30 @@ async function buildCurrent(win, role) {
   await waitFor(win, `!document.querySelector('[data-qa-building-dialog]')`);
 }
 
+async function holdBuildingQueueForQa(win) {
+  const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+  const held = await win.webContents.executeJavaScript(`(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+    const queue = save.queues?.['helion-01'];
+    if (!Array.isArray(queue) || queue.length < 2) return false;
+    const duration = 5 * 60 * 1000;
+    let finishAt = Date.now() + duration;
+    queue.forEach((item, index) => {
+      item.startedAt = index === 0 ? Date.now() : finishAt;
+      item.finishAt = item.startedAt + duration;
+      finishAt = item.finishAt;
+    });
+    localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    window.location.reload();
+    return true;
+  })()`).catch(() => false);
+  if (!held) throw new Error('Could not hold the building queue for cancellation QA');
+  await done;
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win);
+}
+
 async function confirm(win) {
   await waitFor(win, `document.querySelector('[data-qa-action-confirm]')`);
   const text = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-action-confirm]')?.textContent?.replace(/\\s+/g, ' ').trim() ?? ''`);
@@ -167,6 +191,7 @@ async function verifyQueueCancellation(win, directory) {
   await buildCurrent(win, 'metal-production-1');
   await activateZone(win, 'industry');
   await buildCurrent(win, 'construction');
+  await holdBuildingQueueForQa(win);
   await activateZone(win, 'military');
   await buildCurrent(win, 'shipyard');
 
