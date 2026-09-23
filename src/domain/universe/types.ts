@@ -41,6 +41,22 @@ export type UniverseAsteroidState = {
   gasYield: number;
 };
 
+/** Persisted authoritative position/timing for one asteroid instance. */
+export type UniverseAsteroidRuntimeState = UniverseAsteroidState & {
+  coordinate: UniverseCoordinate;
+};
+
+/**
+ * Cursor and active instances for deterministic asteroid event replay.
+ * `nextSpawnIndex` points at the first spawn event not included in the cursor.
+ */
+export type UniverseAsteroidSimulationState = {
+  version: 1;
+  processedThroughAt: number;
+  nextSpawnIndex: number;
+  asteroids: UniverseAsteroidRuntimeState[];
+};
+
 export type UniverseTimedObjectState = {
   cycleIndex: number;
   expiresAt: number;

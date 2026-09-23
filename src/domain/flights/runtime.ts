@@ -19,6 +19,7 @@ export type DispatchFlightInput = {
   selectedShips: Partial<Record<ShipId, number>>;
   selectedCommanders?: Partial<Record<CommanderId, number>>;
   selectedCommanderLevels?: Partial<Record<CommanderId, number>>;
+  recycleCapacity?: number;
   attackSnapshot?: AttackLaunchSnapshot;
   attackResolution?: AttackResolution;
   populationReserved?: number;
@@ -61,7 +62,15 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
   if (input.missionId === 'transport' && input.cargo === undefined) {
     throw new Error('Transport flights require a cargo snapshot.');
   }
-  const cargo = input.missionId === 'transport' ? normalizeTransportCargo(input.cargo) : undefined;
+  if (input.missionId === 'recycle' && input.cargo === undefined) {
+    throw new Error('Recycle flights require an empty cargo snapshot.');
+  }
+  if (input.missionId === 'recycle' && (!Number.isSafeInteger(input.recycleCapacity) || (input.recycleCapacity ?? 0) <= 0)) {
+    throw new Error('Recycle flights require a positive capacity snapshot.');
+  }
+  const cargo = input.missionId === 'transport' || input.missionId === 'recycle'
+    ? normalizeTransportCargo(input.cargo)
+    : undefined;
   return {
     id: `flight-${input.requestId}`,
     requestId: input.requestId,
@@ -85,6 +94,7 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
     selectedShips: { ...input.selectedShips },
     ...(input.selectedCommanders ? { selectedCommanders: { ...input.selectedCommanders } } : {}),
     ...(input.selectedCommanderLevels ? { selectedCommanderLevels: { ...input.selectedCommanderLevels } } : {}),
+    ...(input.missionId === 'recycle' ? { recycleCapacity: input.recycleCapacity } : {}),
     ...(input.attackSnapshot ? { attackSnapshot: input.attackSnapshot } : {}),
     ...(input.attackResolution ? { attackResolution: input.attackResolution } : {}),
     populationReserved: Math.max(0, Math.floor(input.populationReserved ?? 0)),

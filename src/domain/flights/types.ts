@@ -64,6 +64,8 @@ export type FlightRecord = {
   selectedCommanders?: Partial<Record<CommanderId, number>>;
   /** Deployment snapshot keeps commander identity/ability levels stable in flight. */
   selectedCommanderLevels?: Partial<Record<CommanderId, number>>;
+  /** Recycle mission capacity is fixed at dispatch and survives catalog changes. */
+  recycleCapacity?: number;
   /** Attack-only dispatch snapshot used by the live arrival resolver. */
   attackSnapshot?: AttackLaunchSnapshot;
   /** Attack-only materialized result used to make reconcile replay-safe. */

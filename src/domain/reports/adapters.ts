@@ -14,6 +14,7 @@ import type {
   ReportsState,
   ReportUnreadCounts,
   OverpopulationEpisodeReport,
+  RecyclerArrivalReport,
 } from './types.ts';
 import type { EspionageState, SpyHunterNotice, SpyReportSnapshot } from '../espionage/types.ts';
 import { getCombatFactionName } from '../combat/factions.ts';
@@ -311,12 +312,70 @@ export function overpopulationEpisodeReportToReportItem(report: OverpopulationEp
   };
 }
 
+export function createRecyclerArrivalReportId(flightId: string): RecyclerArrivalReport['id'] {
+  return `recycler-arrival:${flightId}`;
+}
+
+/** Upserts by deterministic flight identity so reconciliation replay cannot add duplicates. */
+export function upsertRecyclerArrivalReport(
+  state: ReportsState,
+  report: Omit<RecyclerArrivalReport, 'id'> | RecyclerArrivalReport,
+): ReportsState {
+  const normalized: RecyclerArrivalReport = {
+    ...report,
+    id: createRecyclerArrivalReportId(report.flightId),
+    coordinate: { ...report.coordinate },
+  };
+  const reports = (state.recyclerArrivalReports ?? []).filter((item) => item.flightId !== report.flightId);
+  reports.push(normalized);
+  return { ...state, recyclerArrivalReports: reports };
+}
+
+/** Metadata helpers normalize ReportsState, so preserve its independently persisted report records. */
+export function preservePersistentReportCollections(next: ReportsState, previous: ReportsState): ReportsState {
+  return {
+    ...next,
+    ...(previous.overpopulationReports === undefined ? {} : { overpopulationReports: previous.overpopulationReports }),
+    ...(previous.recyclerArrivalReports === undefined ? {} : { recyclerArrivalReports: previous.recyclerArrivalReports }),
+  };
+}
+
+export function recyclerArrivalReportToReportItem(report: RecyclerArrivalReport): ReportItem {
+  const coordinate = `[${report.coordinate.galaxy}:${report.coordinate.system}:${report.coordinate.position}]`;
+  const collected = String(report.collectedDebris);
+  const remaining = String(report.remainingOrbitalDebris);
+  const summary = report.collectedDebris === 0
+    ? 'На орбите обломков не найдено.'
+    : `Собрано обломков: ${collected}.`;
+  return {
+    id: createRecyclerArrivalReportId(report.flightId),
+    source: 'recycling',
+    category: 'system',
+    typeLabel: 'Отчёт переработчика',
+    title: `Переработчик прибыл к координатам ${coordinate}`,
+    preview: `${coordinate} · собрано ${collected} · осталось на орбите ${remaining}.`,
+    body: `${summary} На орбите осталось свободных обломков: ${remaining}.`,
+    timestamp: new Date(report.arrivedAtMs).toISOString(),
+    statusLabel: 'ПРИБЫТИЕ ЗАВЕРШЕНО',
+    statusTone: 'info',
+    participantNames: [],
+    planetNames: [],
+    coordinates: [coordinate],
+    details: [
+      { label: 'Координаты прибытия', value: coordinate },
+      { label: 'Собрано обломков', value: collected },
+      { label: 'Осталось свободных обломков на орбите', value: remaining },
+    ],
+  };
+}
+
 export function buildReportsFeed(
   battleReports: readonly BattleReport[],
   operations: OperationsState,
   command: CommandState,
   espionage?: EspionageState,
   overpopulationReports: readonly OverpopulationEpisodeReport[] = [],
+  recyclerArrivalReports: readonly RecyclerArrivalReport[] = [],
 ): ReportItem[] {
   const operationByBattleId = new Map(
     operations.items
@@ -341,8 +400,9 @@ export function buildReportsFeed(
     ...(espionage?.hunterNotices ?? []).map(spyHunterNoticeToReportItem),
   ];
   const overpopulationItems = overpopulationReports.map(overpopulationEpisodeReportToReportItem);
+  const recyclerItems = recyclerArrivalReports.map(recyclerArrivalReportToReportItem);
 
-  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems].sort((a, b) => {
+  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems, ...recyclerItems].sort((a, b) => {
     if (a.timestamp && b.timestamp) return Date.parse(b.timestamp) - Date.parse(a.timestamp);
     if (!a.timestamp && b.timestamp) return -1;
     if (a.timestamp && !b.timestamp) return 1;

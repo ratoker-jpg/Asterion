@@ -144,7 +144,8 @@ import {
 } from './application/flights.ts';
 import { createSimulatorScenarioFromSpyReport, requestSimulatorHandoff } from './application/simulator-handoff.ts';
 import type { SpyReportSnapshot } from './domain/espionage/types.ts';
-import { getEspionageTargets } from './domain/espionage/runtime.ts';
+import { getEspionageTargets, getEspionageState } from './domain/espionage/runtime.ts';
+import { getOrbitalDebrisByCoordinate } from './domain/espionage/orbital-debris.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniverseOwnerProfile } from './domain/universe/types.ts';
 import { enqueueApplicationStateUpdate } from './application/state.ts';
 import { getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
@@ -345,6 +346,23 @@ export function App() {
         detail: {
           missionId: 'colonize',
           targetKind: 'empty',
+          destination: { kind: 'coordinate', coordinate },
+        },
+      }));
+    }, 40);
+  };
+
+  const openAsteroidRecycleLaunch = (coordinate: UniverseCoordinate) => {
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    setNotice(`Координаты астероида выбраны для переработки: [${coordinate.galaxy}:${coordinate.system}:${coordinate.position}].`);
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, {
+        detail: {
+          missionId: 'recycle',
+          targetKind: 'asteroid',
           destination: { kind: 'coordinate', coordinate },
         },
       }));
@@ -688,9 +706,9 @@ export function App() {
     [currentPlanetState.buildings],
   );
   const reportsUnreadCount = useMemo(() => {
-    const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports);
+    const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports);
     return Object.values(getReportUnreadCounts(items, state.reports)).reduce((total, count) => total + count, 0);
-  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports]);
+  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports]);
   const buildingInteriorTarget = buildingInterior
     ? getBuildingInteriorTarget(buildingInterior.buildingRole)
     : null;
@@ -1379,8 +1397,12 @@ export function App() {
               command={state.command}
               playerPlanets={universePlayerPlanets}
               spyTargets={Object.values(getEspionageTargets(state.espionage))}
+              orbitalDebrisByCoordinate={getOrbitalDebrisByCoordinate(getEspionageState(state))}
+              asteroidDebrisPresenceBySpawnIndex={Object.fromEntries(Object.entries(state.asteroidDebrisBySpawnIndex ?? {}).map(([spawnIndex, amount]) => [spawnIndex, amount > 0]))}
+              asteroidStates={state.asteroidSimulation?.asteroids}
               mode={RUNTIME_MODE}
               onColonize={openColonizationLaunch}
+              onRecycle={openAsteroidRecycleLaunch}
               onTransport={openTransportLaunch}
               onSpy={openSpyLaunch}
               onAttack={openAttackLaunch}
