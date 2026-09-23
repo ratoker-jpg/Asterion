@@ -322,12 +322,13 @@ function migrateAsteroidSimulation(value: unknown, now: number): UniverseAsteroi
   };
 }
 
-function migrateAsteroidDebris(value: unknown): Record<string, number> {
+function migrateAsteroidDebris(value: unknown, activeSpawnIndices: ReadonlySet<number>): Record<string, number> {
   const source = objectRecord(value);
   if (!source) return {};
   return Object.fromEntries(Object.entries(source).flatMap(([spawnIndex, amount]) => {
     if (!/^\d+$/.test(spawnIndex) || !Number.isSafeInteger(Number(spawnIndex))
-      || typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount < 0) return [];
+      || typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount < 0
+      || !activeSpawnIndices.has(Number(spawnIndex))) return [];
     return [[String(Number(spawnIndex)), amount]];
   }));
 }
@@ -1189,6 +1190,9 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
         bot01Profile: undefined,
       };
 
+    const asteroidSimulation = migrateAsteroidSimulation(parsed.asteroidSimulation, timestamp);
+    const activeAsteroidSpawnIndices = new Set(asteroidSimulation.asteroids.map((asteroid) => asteroid.spawnIndex));
+
     return {
       schemaVersion: SAVE_SCHEMA_VERSION,
       metal: homeworldResources.metal,
@@ -1212,8 +1216,8 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       science,
       resourceClock: migrateResourceClock(parsed.resourceClock, timestamp, Object.keys(planets)),
       flights: migrateFlightState(parsed.flights),
-      asteroidSimulation: migrateAsteroidSimulation(parsed.asteroidSimulation, timestamp),
-      asteroidDebrisBySpawnIndex: migrateAsteroidDebris(parsed.asteroidDebrisBySpawnIndex),
+      asteroidSimulation,
+      asteroidDebrisBySpawnIndex: migrateAsteroidDebris(parsed.asteroidDebrisBySpawnIndex, activeAsteroidSpawnIndices),
       espionage,
       alliedPlanets,
     };

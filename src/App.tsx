@@ -706,9 +706,9 @@ export function App() {
     [currentPlanetState.buildings],
   );
   const reportsUnreadCount = useMemo(() => {
-    const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports);
+    const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports);
     return Object.values(getReportUnreadCounts(items, state.reports)).reduce((total, count) => total + count, 0);
-  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports]);
+  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports]);
   const buildingInteriorTarget = buildingInterior
     ? getBuildingInteriorTarget(buildingInterior.buildingRole)
     : null;

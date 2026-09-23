@@ -10,6 +10,7 @@ import {
   getPendingInboundPopulation,
   getTransportCargoSummary,
   previewFlight,
+  resolveRecycleTargetKindAtCoordinate,
   reconcileFlights,
   recallFlight,
 } from './flights.ts';
@@ -781,6 +782,51 @@ test('recycle accepts only an active persisted asteroid overlay and snapshots th
   const invalid = dispatchFlight(wrongCoordinate, recycleCommand('recycle-asteroid-wrong-coordinate', empty.coordinate, 'asteroid'), 1_000);
   assert.equal(invalid.ok, false);
   if (!invalid.ok) assert.equal(invalid.error.code, 'target-not-available');
+});
+
+test('recycler target edits resolve the current map kind, preview and dispatch the same allowed target, and reject unavailable coordinates', () => {
+  const initial = withRecyclers(createInitialSaveState('production', 1_000), 1);
+  const emptyTargets = createUniverseSystem({ mode: 'production', galaxy: 1, system: 1, nowMs: 1_000 })
+    .positions.filter((node) => node.kind === 'empty');
+  assert.ok(emptyTargets.length >= 3);
+  const asteroidCoordinate = emptyTargets[0]!.coordinate;
+  const editedTarget = emptyTargets[1]!;
+  const unavailableTarget = emptyTargets[2]!;
+  const state = withAsteroidOverlay(
+    withOrbitalDebris(initial, editedTarget.coordinate, 100, 'edited-recycler-target'),
+    asteroidCoordinate,
+  );
+
+  assert.equal(resolveRecycleTargetKindAtCoordinate(state, asteroidCoordinate, 1_000, 'production'), 'asteroid');
+  const editedTargetKind = resolveRecycleTargetKindAtCoordinate(state, editedTarget.coordinate, 1_000, 'production');
+  assert.equal(editedTargetKind, 'empty');
+  const command = recycleCommand('recycle-edited-target-preview', editedTarget.coordinate, editedTargetKind!);
+  const preview = previewFlight(state, command, { now: 1_000, mode: 'production' });
+  assert.equal(preview.ok, true);
+  if (!preview.ok) return;
+  assert.deepEqual(preview.flight.destination.coordinate, editedTarget.coordinate);
+  assert.equal(preview.flight.targetKind, 'empty');
+
+  const sent = dispatchFlight(state, {
+    ...command,
+    requestId: 'recycle-edited-target-send',
+    destination: preview.flight.destination,
+    targetKind: command.targetKind,
+    selectedShips: preview.flight.selectedShips,
+  }, { now: 1_000, mode: 'production' });
+  assert.equal(sent.ok, true);
+  if (sent.ok) {
+    assert.deepEqual(sent.flight.destination.coordinate, preview.flight.destination.coordinate);
+    assert.equal(sent.flight.targetKind, preview.flight.targetKind);
+  }
+
+  const unavailableKind = resolveRecycleTargetKindAtCoordinate(state, unavailableTarget.coordinate, 1_000, 'production');
+  const rejected = previewFlight(state, recycleCommand('recycle-edited-target-unavailable', unavailableTarget.coordinate, unavailableKind!), {
+    now: 1_000,
+    mode: 'production',
+  });
+  assert.equal(rejected.ok, false);
+  if (!rejected.ok) assert.equal(rejected.error.code, 'target-not-available');
 });
 
 test('recycle arrival collects only free orbital debris and reports zero without touching hidden asteroid cargo', () => {
@@ -2058,6 +2104,50 @@ test('reconcileRuntime processes asteroid capture before a recycler arrival at t
   assert.equal(report?.arrivedAtMs, 4_000);
   assert.equal(report?.collectedDebris, 0);
   assert.equal(reconciled.state.asteroidDebrisBySpawnIndex?.[String(spawnIndex)], freeDebris);
+});
+
+test('reconcileRuntime removes an exiting asteroid and its accumulated and final-coordinate debris', () => {
+  const boundary = { galaxy: 1, system: 40, position: 24 };
+  const spawnIndex = 46;
+  const initial = {
+    ...withScheduledAsteroid(
+      withOrbitalDebris(createInitialSaveState('test', 1_000), boundary, 250, 'debris-at-exit-boundary'),
+      boundary,
+      3_000,
+      spawnIndex,
+    ),
+    asteroidDebrisBySpawnIndex: { [String(spawnIndex)]: 700 },
+  };
+
+  const reconciled = reconcileRuntime(initial, {
+    planetId: 'helion-01', now: 3_000, mode: 'test', testTimeScale: 10,
+  });
+  assert.equal(reconciled.state.asteroidSimulation?.asteroids.some((asteroid) => asteroid.spawnIndex === spawnIndex), false);
+  assert.equal(reconciled.state.asteroidDebrisBySpawnIndex?.[String(spawnIndex)], undefined);
+  assert.equal(getOrbitalDebrisAtCoordinate(reconciled.state.espionage!, boundary), 0);
+
+  const stored = new Map<string, string>();
+  const persistence = createPersistenceFacade({
+    mode: 'test',
+    storage: {
+      getItem: (key) => stored.get(key) ?? null,
+      setItem: (key, value) => { stored.set(key, value); },
+      removeItem: (key) => { stored.delete(key); },
+    },
+    now: () => 3_000,
+  });
+  assert.equal(persistence.write(reconciled.state).ok, true);
+  const reloaded = persistence.read();
+  assert.equal(reloaded.asteroidSimulation?.asteroids.some((asteroid) => asteroid.spawnIndex === spawnIndex), false);
+  assert.equal(reloaded.asteroidDebrisBySpawnIndex?.[String(spawnIndex)], undefined);
+  assert.equal(getOrbitalDebrisAtCoordinate(reloaded.espionage!, boundary), 0);
+
+  const replay = reconcileRuntime(reloaded, {
+    planetId: 'helion-01', now: 3_000, mode: 'test', testTimeScale: 10,
+  });
+  assert.equal(replay.changed, false);
+  assert.equal(replay.state.asteroidDebrisBySpawnIndex?.[String(spawnIndex)], undefined);
+  assert.equal(getOrbitalDebrisAtCoordinate(replay.state.espionage!, boundary), 0);
 });
 
 test('reconcileRuntime catches up multiple asteroid moves equivalently and does not replay them', () => {

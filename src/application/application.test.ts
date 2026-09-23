@@ -153,7 +153,7 @@ test('asteroid simulation, hidden cargo, and recycler history round-trip through
       nextSpawnIndex: 43,
       asteroids: [asteroid],
     },
-    asteroidDebrisBySpawnIndex: { '42': 777 },
+    asteroidDebrisBySpawnIndex: { '42': 777, '41': 999 },
     reports: { ...initial.reports, recyclerArrivalReports: [report] },
   };
 

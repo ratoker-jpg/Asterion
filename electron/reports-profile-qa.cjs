@@ -184,6 +184,8 @@ async function runViewport(win, width, height) {
   await reload(win);
   await clickPrimary(win, 'reports');
 
+  const initialUnreadBadge = await win.webContents.executeJavaScript(`Number(document.querySelector('[data-qa-navigation="primary"] [data-qa-route="reports"] .asterion-header__nav-badge')?.textContent?.trim() ?? 0)`);
+  if (!Number.isFinite(initialUnreadBadge)) throw new Error(`Initial unread badge is invalid at ${label}: ${initialUnreadBadge}`);
   const episodeStartedAt = Date.now() - 10 * 60_000;
   const overpopulationReport = {
     id: `overpopulation:qa-colony:${episodeStartedAt}`,
@@ -264,6 +266,9 @@ async function runViewport(win, width, height) {
   for (const [index, report] of recyclerArrivalReports.entries()) {
     const selector = `[data-report-item-id="${report.id}"] .reports-list-open`;
     await waitFor(win, `document.querySelector(${JSON.stringify(selector)})`);
+    const unreadBefore = String(initialUnreadBadge + 2 - index);
+    const currentBadge = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-navigation="primary"] [data-qa-route="reports"] .asterion-header__nav-badge')?.textContent?.trim() ?? ''`);
+    if (currentBadge !== unreadBefore) throw new Error(`Recycler unread badge before reading ${report.id} at ${label}: expected ${unreadBefore}, got ${currentBadge || 'none'}`);
     const opened = await win.webContents.executeJavaScript(`(() => {
       const button = document.querySelector(${JSON.stringify(selector)});
       if (!button) return false;
@@ -271,6 +276,12 @@ async function runViewport(win, width, height) {
       return true;
     })()`);
     if (!opened) throw new Error(`Recycler arrival report row could not be opened at ${label}: ${report.id}`);
+    const expectedUnread = String(initialUnreadBadge + 1 - index);
+    if (expectedUnread === '0') {
+      await waitFor(win, `!document.querySelector('[data-qa-navigation="primary"] [data-qa-route="reports"] .asterion-header__nav-badge')`);
+    } else {
+      await waitFor(win, `document.querySelector('[data-qa-navigation="primary"] [data-qa-route="reports"] .asterion-header__nav-badge')?.textContent?.trim() === ${JSON.stringify(expectedUnread)}`);
+    }
     await waitFor(win, `document.querySelector('.reports-dossier--generic')?.textContent?.includes(${JSON.stringify(`[${report.coordinate.galaxy}:${report.coordinate.system}:${report.coordinate.position}]`)})`);
     const dossier = await win.webContents.executeJavaScript(`(() => {
       const node = document.querySelector('.reports-dossier--generic');

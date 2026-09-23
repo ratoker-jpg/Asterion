@@ -15,6 +15,7 @@ import {
   createOverpopulationEpisodeReportId,
   filterReportItems,
   getReportCategoryCounts,
+  getReportUnreadCounts,
   operationIntelToReportItem,
   overpopulationEpisodeReportToReportItem,
   preservePersistentReportCollections,
@@ -191,6 +192,23 @@ test('report metadata read/hide transitions preserve recycler arrival records', 
   assert.deepEqual(read.recyclerArrivalReports, [report]);
   assert.deepEqual(hidden.recyclerArrivalReports, [report]);
   assert.equal(hidden.hiddenIds.includes(report.id), true);
+});
+
+test('unread recycler arrival reports contribute to the aggregate unread count and decrement when read', () => {
+  const report = {
+    id: 'recycler-arrival:flight:qa-unread-count',
+    flightId: 'flight:qa-unread-count',
+    coordinate: { galaxy: 1, system: 4, position: 6 },
+    arrivedAtMs: 900_000,
+    collectedDebris: 25,
+    remainingOrbitalDebris: 5,
+  } as const;
+  const feed = buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, [], [report]);
+  const countUnread = (state: ReturnType<typeof createDefaultReportsState>) =>
+    Object.values(getReportUnreadCounts(feed, state)).reduce((total, count) => total + count, 0);
+
+  assert.equal(countUnread(createDefaultReportsState()), 1);
+  assert.equal(countUnread(markReportRead(createDefaultReportsState(), report.id)), 0);
 });
 
 test('overpopulation episode report survives save hydration with read/hidden metadata compatibility', async () => {

@@ -147,19 +147,29 @@ export function reconcileRuntime(
     for (const transition of advanced.transitions) {
       const espionage = getEspionageState(next);
       const freeDebris = getOrbitalDebrisAtCoordinate(espionage, transition.fromCoordinate);
-      if (freeDebris <= 0) continue;
-      const captured = collectOrbitalDebrisAtCoordinate(espionage, transition.fromCoordinate, freeDebris);
-      if (captured.collected <= 0) continue;
       const key = String(transition.spawnIndex);
-      const previousCargo = Math.max(0, Math.floor(next.asteroidDebrisBySpawnIndex?.[key] ?? 0));
-      next = {
-        ...next,
-        espionage: captured.espionage,
-        asteroidDebrisBySpawnIndex: {
-          ...(next.asteroidDebrisBySpawnIndex ?? {}),
-          [key]: Math.min(Number.MAX_SAFE_INTEGER, previousCargo + captured.collected),
-        },
-      };
+      if (freeDebris > 0) {
+        const captured = collectOrbitalDebrisAtCoordinate(espionage, transition.fromCoordinate, freeDebris);
+        if (captured.collected > 0) {
+          const previousCargo = Math.max(0, Math.floor(next.asteroidDebrisBySpawnIndex?.[key] ?? 0));
+          next = {
+            ...next,
+            espionage: captured.espionage,
+            asteroidDebrisBySpawnIndex: {
+              ...(next.asteroidDebrisBySpawnIndex ?? {}),
+              [key]: Math.min(Number.MAX_SAFE_INTEGER, previousCargo + captured.collected),
+            },
+          };
+        }
+      }
+
+      // The final boundary transition still vacates its last coordinate and
+      // captures free debris there, then the asteroid and all its cargo leave.
+      if (!advanced.state.asteroids.some((asteroid) => asteroid.spawnIndex === transition.spawnIndex)) {
+        const cargo = { ...(next.asteroidDebrisBySpawnIndex ?? {}) };
+        delete cargo[key];
+        next = { ...next, asteroidDebrisBySpawnIndex: cargo };
+      }
     }
   };
 

@@ -43,6 +43,7 @@ import {
   getTransportCargoSummary,
   getAvailableFleetForPlanet,
   resolveTransportTarget,
+  resolveRecycleTargetKindAtCoordinate,
   previewFlight,
   type DispatchFlightCommand,
   type FlightCommandResult,
@@ -50,6 +51,7 @@ import {
 } from './application/flights.ts';
 import { getAttackCommanderSelection, isAttackCombatShip } from './application/attack.ts';
 import type { FlightDestination, FlightRecord, MissionId, TargetRelation } from './domain/flights/types.ts';
+import type { UniverseObjectKind } from './domain/universe/types.ts';
 import type { EspionageState, SpyMission } from './domain/espionage/types.ts';
 import { emptyTransportCargo, getCargoFieldMaximum, type TransportCargo, type TransportCargoKey } from './domain/flights/cargo.ts';
 import { getOverflowWarning } from './domain/flights/cargo.ts';
@@ -268,6 +270,7 @@ function FleetWorkspace({
   const [previewOriginPlanetId, setPreviewOriginPlanetId] = useState<string | null>(null);
   const [previewDestination, setPreviewDestination] = useState<FlightDestination | null>(null);
   const [previewTargetRelation, setPreviewTargetRelation] = useState<TargetRelation | undefined>(undefined);
+  const [previewSubmittedTargetKind, setPreviewSubmittedTargetKind] = useState<UniverseObjectKind | null>(null);
   const [editingPreviewTarget, setEditingPreviewTarget] = useState(false);
   const [previewTargetDraft, setPreviewTargetDraft] = useState<FlightCoordinateDraft>({ galaxy: '', system: '', position: '' });
   const [previewTargetError, setPreviewTargetError] = useState<string | null>(null);
@@ -394,6 +397,7 @@ function FleetWorkspace({
     setPreviewOriginPlanetId(null);
     setPreviewDestination(null);
     setPreviewTargetRelation(undefined);
+    setPreviewSubmittedTargetKind(null);
     setEditingPreviewTarget(false);
     setPreviewTargetDraft({ galaxy: '', system: '', position: '' });
     setPreviewTargetError(null);
@@ -413,6 +417,7 @@ function FleetWorkspace({
   const closeFlightPreview = () => {
     setPreviewOpen(false);
     setPreviewResult(null);
+    setPreviewSubmittedTargetKind(null);
     setPreviewTargetError(null);
   };
 
@@ -450,6 +455,7 @@ function FleetWorkspace({
     setPreviewOriginPlanetId(null);
     setPreviewDestination(null);
     setPreviewTargetRelation(launchContext.targetRelation);
+    setPreviewSubmittedTargetKind(null);
     setEditingPreviewTarget(false);
     setPreviewTargetDraft(launchContext.destination ? flightCoordinateDraft(launchContext.destination.coordinate) : { galaxy: '', system: '', position: '' });
     setPreviewTargetError(null);
@@ -560,18 +566,23 @@ function FleetWorkspace({
     }));
   };
 
-  const createFlightCommand = (requestId: string, draft?: { originPlanetId?: string; destination?: FlightDestination; targetRelation?: TargetRelation | null }): DispatchFlightCommand | null => {
-    const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
+  const createFlightCommand = (requestId: string, draft?: { originPlanetId?: string; destination?: FlightDestination; targetRelation?: TargetRelation | null; targetKind?: UniverseObjectKind | null }, runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read()): DispatchFlightCommand | null => {
     const destination = draft?.destination ?? previewDestination ?? launchContext?.destination;
+    const departedAt = Date.now();
+    const targetKind = draft?.targetKind !== undefined
+      ? draft.targetKind ?? undefined
+      : missionId === 'recycle' && destination?.kind === 'coordinate'
+        ? resolveRecycleTargetKindAtCoordinate(runtimeState, destination.coordinate, departedAt, ACTIVE_RUNTIME_MODE)
+        : missionId === 'colonize'
+          ? launchContext?.targetKind ?? 'empty'
+          : launchContext?.targetKind;
     return {
       requestId,
       missionId,
       originPlanetId: draft?.originPlanetId ?? previewOriginPlanetId ?? runtimeState.currentPlanetId,
       destination,
       targetRelation: draft?.targetRelation === null ? undefined : draft?.targetRelation ?? previewTargetRelation,
-      targetKind: missionId === 'colonize'
-        ? launchContext?.targetKind ?? 'empty'
-        : launchContext?.targetKind,
+      targetKind,
       targetPlanetName: launchContext?.targetPlanetName,
       targetOwnerId: launchContext?.targetOwnerId,
       targetOwnerName: launchContext?.targetOwnerName,
@@ -588,7 +599,7 @@ function FleetWorkspace({
       maxRounds: missionId === 'attack' ? attackRounds : undefined,
       cargo: missionId === 'transport' ? transportCargoDraft : undefined,
       operationId: launchContext?.operationId,
-      departedAt: Date.now(),
+      departedAt,
     };
   };
 
@@ -597,7 +608,7 @@ function FleetWorkspace({
     const originPlanetId = runtimeState.currentPlanetId;
     const destination = previewDestination ?? launchContext?.destination;
     const targetRelation = previewTargetRelation ?? launchContext?.targetRelation;
-    const command = destination ? createFlightCommand(`preview-${Date.now()}`, { originPlanetId, destination, targetRelation }) : null;
+    const command = destination ? createFlightCommand(`preview-${Date.now()}`, { originPlanetId, destination, targetRelation }, runtimeState) : null;
     setPreviewOriginPlanetId(originPlanetId);
     setPreviewDestination(destination ?? null);
     setPreviewTargetRelation(targetRelation);
@@ -607,22 +618,50 @@ function FleetWorkspace({
       const result = previewFlight(runtimeState, command, { mode: ACTIVE_RUNTIME_MODE, testTimeScale: resolveTestTimeScale() });
       setPreviewTargetError(targetErrorFromFlightResult(result));
       setPreviewResult(result);
+      setPreviewSubmittedTargetKind(command.targetKind ?? null);
     } else {
       setPreviewTargetError(null);
       setPreviewResult(null);
+      setPreviewSubmittedTargetKind(null);
     }
     setPreviewOpen(true);
   };
 
   const refreshFlightPreview = (originPlanetId: string, destination: FlightDestination, targetRelation?: TargetRelation | null) => {
-    const command = createFlightCommand(`preview-${Date.now()}`, { originPlanetId, destination, targetRelation });
+    const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
+    const command = createFlightCommand(`preview-${Date.now()}`, { originPlanetId, destination, targetRelation }, runtimeState);
     if (!command) return;
-    const result = previewFlight(createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read(), command, {
+    const result = previewFlight(runtimeState, command, {
       mode: ACTIVE_RUNTIME_MODE,
       testTimeScale: resolveTestTimeScale(),
     });
     setPreviewTargetError(targetErrorFromFlightResult(result));
     setPreviewResult(result);
+    setPreviewSubmittedTargetKind(command.targetKind ?? null);
+  };
+
+  const togglePreviewTargetEditing = () => {
+    if (!editingPreviewTarget) {
+      setEditingPreviewTarget(true);
+      return;
+    }
+    setEditingPreviewTarget(false);
+    if (missionId !== 'recycle') return;
+
+    const draftError = coordinateDraftError(previewTargetDraft);
+    if (draftError) {
+      setPreviewResult(null);
+      setPreviewSubmittedTargetKind(null);
+      setPreviewTargetError(draftError);
+      return;
+    }
+    const destination: FlightDestination = { kind: 'coordinate', coordinate: coordinateFromDraft(previewTargetDraft) };
+    const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
+    const originPlanetId = previewOriginPlanetId ?? runtimeState.currentPlanetId;
+    setPreviewOriginPlanetId(originPlanetId);
+    setPreviewDestination(destination);
+    setPreviewTargetRelation(undefined);
+    refreshFlightPreview(originPlanetId, destination);
   };
 
   const changePreviewTargetField = (field: keyof FlightCoordinateDraft, value: string) => {
@@ -633,11 +672,13 @@ function FleetWorkspace({
     if (draftError) {
       setPreviewDestination(null);
       setPreviewResult(null);
+      setPreviewSubmittedTargetKind(null);
       setPreviewTargetError(draftError);
       return;
     }
     setPreviewDestination({ kind: 'coordinate', coordinate: coordinateFromDraft(nextDraft) });
     setPreviewResult(null);
+    setPreviewSubmittedTargetKind(null);
     setPreviewTargetError(null);
   };
 
@@ -676,6 +717,9 @@ function FleetWorkspace({
 
   const confirmFlightDispatch = () => {
     const requestId = globalThis.crypto?.randomUUID?.() ?? `flight-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    if (missionId === 'recycle'
+      && (!previewResult?.ok || previewResult.flight.missionId !== 'recycle' || previewSubmittedTargetKind === null
+        || previewResult.flight.selectedShips.recycler !== (selectedQuantities.recycler ?? 0))) return;
     if (missionId === 'deployment' && previewDestination?.kind === 'planet') {
       const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
       if (getPlanetOverpopulationSummary(runtimeState, previewDestination.planetId).blocked) {
@@ -684,12 +728,19 @@ function FleetWorkspace({
       }
     }
     const localError = coordinateDraftError(previewTargetDraft);
-    if ((missionId === 'transport' || missionId === 'colonize' || missionId === 'attack') && localError) {
+    if ((missionId === 'transport' || missionId === 'colonize' || missionId === 'attack' || missionId === 'recycle') && localError) {
       setPreviewTargetError(localError);
       setEditingPreviewTarget(true);
       return;
     }
-    const command = createFlightCommand(requestId, previewDestination || missionId === 'deployment' ? undefined : { destination: { kind: 'coordinate', coordinate: coordinateFromDraft(previewTargetDraft) } });
+    const command = missionId === 'recycle' && previewResult?.ok
+      ? createFlightCommand(requestId, {
+        originPlanetId: previewResult.flight.originPlanetId,
+        destination: previewResult.flight.destination,
+        targetRelation: previewResult.flight.targetRelation ?? null,
+        targetKind: previewSubmittedTargetKind,
+      })
+      : createFlightCommand(requestId, previewDestination || missionId === 'deployment' ? undefined : { destination: { kind: 'coordinate', coordinate: coordinateFromDraft(previewTargetDraft) } });
     if (!command) return;
     window.dispatchEvent(new CustomEvent(FLIGHT_DISPATCH_REQUEST_EVENT, { detail: command }));
   };
@@ -721,6 +772,10 @@ function FleetWorkspace({
     const next = missionId === 'colonize' || missionId === 'espionage'
       ? Math.min(1, available)
       : Number.isFinite(raw) ? Math.max(0, Math.min(available, Math.floor(raw))) : 0;
+    if (missionId === 'recycle') {
+      setPreviewResult(null);
+      setPreviewSubmittedTargetKind(null);
+    }
     setSelectedQuantities((current) => ({ ...current, [shipId]: next }));
   };
 
@@ -728,6 +783,7 @@ function FleetWorkspace({
     setMissionId(nextMissionId);
     if (nextMissionId === 'recycle') {
       setPreviewResult(null);
+      setPreviewSubmittedTargetKind(null);
       setPreviewTargetError(null);
     }
     if (nextMissionId === 'attack') {
@@ -740,6 +796,10 @@ function FleetWorkspace({
   };
 
   const setAllShipQuantities = (maximum: boolean) => {
+    if (missionId === 'recycle') {
+      setPreviewResult(null);
+      setPreviewSubmittedTargetKind(null);
+    }
     setSelectedQuantities(Object.fromEntries(
       visibleShipDefinitions.map((ship) => [ship.id, maximum ? (missionId === 'colonize' || missionId === 'espionage' ? 1 : fleetSnapshot.fleet.ships[ship.id] ?? 0) : 0]),
     ) as Partial<Record<ShipId, number>>);
@@ -840,7 +900,10 @@ function FleetWorkspace({
   const canDispatchPreview = missionId === 'espionage'
     ? targetIsLocallyValid && Boolean(previewResult?.ok) && selectedQuantities['spy-probe'] === 1
     : missionId === 'recycle'
-      ? targetIsLocallyValid && previewResult?.ok === true && previewResult.flight.missionId === 'recycle' && (selectedQuantities.recycler ?? 0) > 0
+      ? targetIsLocallyValid && previewResult?.ok === true && previewResult.flight.missionId === 'recycle'
+        && previewSubmittedTargetKind !== null
+        && previewResult.flight.selectedShips.recycler === (selectedQuantities.recycler ?? 0)
+        && (selectedQuantities.recycler ?? 0) > 0
     : missionId === 'attack'
       ? targetIsLocallyValid && (!previewResult || previewResult.ok) && selectedShipCount > 0 && previewTargetRelation !== 'ally' && previewTargetRelation !== 'self'
     : missionId === 'transport'
@@ -1158,7 +1221,7 @@ function FleetWorkspace({
                     </div> : !isReadOnlyTarget && missionId !== 'deployment' ? <strong>{previewTargetLabel}</strong> : isReadOnlySpyTarget ? <strong>{launchContext?.targetPlanetName ?? previewTargetLabel}</strong> : null}
                     <div className={`flight-timeline-target-status ${previewTargetError ? 'is-invalid' : 'is-valid'}`} data-qa-flight-target-status>
                       <span data-qa-target-relation={previewTargetRelation}>{previewTargetError ?? (missionId === 'deployment' && !previewTargetDestination ? 'Выберите свою планету' : missionId === 'recycle' && previewResult && !previewResult.ok ? previewResult.error.message : previewTargetRelation === 'ally' ? 'Союзная планета' : previewTargetRelation === 'self' ? 'Своя планета' : previewResult?.ok ? 'Цель подтверждена' : 'Координаты будут проверены при отправке')}</span>
-                      {!isReadOnlyTarget && missionId !== 'deployment' ? <button type="button" className="flight-timeline-edit" onClick={() => setEditingPreviewTarget((value) => !value)}>{editingPreviewTarget ? 'ГОТОВО' : 'ИЗМЕНИТЬ'}</button> : null}
+                      {!isReadOnlyTarget && missionId !== 'deployment' ? <button type="button" className="flight-timeline-edit" onClick={togglePreviewTargetEditing}>{editingPreviewTarget ? missionId === 'recycle' ? 'ПРОВЕРИТЬ' : 'ГОТОВО' : 'ИЗМЕНИТЬ'}</button> : null}
                     </div>
                   </div>
                 </li>

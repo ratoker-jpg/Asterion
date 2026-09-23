@@ -636,10 +636,31 @@ async function runRecycleUiCycle(win, label) {
     || (reloaded.espionage?.orbitalDebris?.['qa-recycle-debris-target']?.debris ?? 0) !== 90_000 - collected) {
     throw new Error(`${label}: recycle cargo was collected more than once after reload ${JSON.stringify({ persistedFlight, reloaded })}`);
   }
-  return { target: target.coordinate, manifest: flight.selectedShips, capacity: flight.recycleCapacity, collected, remaining, returned, persistedOnce: true };
+  return { target: target.coordinate, alternate: alternate.coordinate, manifest: flight.selectedShips, capacity: flight.recycleCapacity, collected, remaining, returned, persistedOnce: true };
 }
 
-async function runAsteroidOverlayRecycleLaunch(win, label) {
+async function runAsteroidOverlayRecycleLaunch(win, label, invalidCoordinate) {
+  const editTargetCoordinate = [1, 1, 3];
+  await seedProductionSave(win, (save) => {
+    const coordinate = { galaxy: 1, system: 1, position: 3 };
+    if (!save.planets?.['qa-recycle-target']) throw new Error('missing seeded recycler edit target');
+    save.espionage = {
+      ...(save.espionage || {}),
+      orbitalDebris: {
+        ...(save.espionage?.orbitalDebris || {}),
+        'qa-recycle-edit-debris': {
+          id: 'qa-recycle-edit-debris',
+          targetPlanetId: 'qa-recycle-target',
+          targetPlanetName: 'QA edited recycler target',
+          targetOwnerId: 'npc-bot-01',
+          targetCoordinate: coordinate,
+          debris: 5000,
+          createdAt: Date.now(),
+        },
+      },
+    };
+  });
+
   await click(win, '[data-qa-route="universe"]');
   await waitFor(win, `document.querySelector('[data-qa-universe]')`);
   let asteroid = null;
@@ -680,6 +701,37 @@ async function runAsteroidOverlayRecycleLaunch(win, label) {
   if (!previewTarget.includes(`[${asteroid.coordinate.join(':')}]`)) {
     throw new Error(`${label}: asteroid inspector destination was not retained in recycler preview ${JSON.stringify({ previewTarget, asteroid })}`);
   }
+
+  await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
+  await waitFor(win, `document.querySelector('[data-qa-flight-target-inputs]')`);
+  await setFlightCoordinate(win, 'galaxy', invalidCoordinate[0]);
+  await setFlightCoordinate(win, 'system', invalidCoordinate[1]);
+  await setFlightCoordinate(win, 'position', invalidCoordinate[2]);
+  await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
+  await waitFor(win, `document.querySelector('[data-qa-flight-target-status].is-invalid')`);
+  const rejectedTarget = await win.webContents.executeJavaScript(`({
+    sendDisabled: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled),
+    message: document.querySelector('[data-qa-flight-target-status]')?.textContent?.trim() || '',
+  })`);
+  if (!rejectedTarget.sendDisabled || !/обломк/i.test(rejectedTarget.message)) {
+    throw new Error(`${label}: editing an asteroid recycler target to an unavailable coordinate was not rejected ${JSON.stringify(rejectedTarget)}`);
+  }
+
+  await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
+  await setFlightCoordinate(win, 'galaxy', editTargetCoordinate[0]);
+  await setFlightCoordinate(win, 'system', editTargetCoordinate[1]);
+  await setFlightCoordinate(win, 'position', editTargetCoordinate[2]);
+  await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview]') && !document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled`);
+  const editedPreview = await win.webContents.executeJavaScript(`({
+    sendDisabled: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled),
+    target: document.querySelector('[data-qa-flight-target-step]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+    status: document.querySelector('[data-qa-flight-target-status]')?.textContent?.trim() || '',
+  })`);
+  if (editedPreview.sendDisabled || !editedPreview.target.includes(`[${editTargetCoordinate.join(':')}]`) || !editedPreview.status.includes('Цель подтверждена')) {
+    throw new Error(`${label}: edited asteroid recycler target did not receive a fresh successful preview ${JSON.stringify(editedPreview)}`);
+  }
+
   await click(win, '[data-qa-test-speed="500"]');
   await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×500')`);
   await click(win, '[data-qa-flight-dispatch-confirm]');
@@ -691,19 +743,19 @@ async function runAsteroidOverlayRecycleLaunch(win, label) {
   const saved = await readSave(win);
   const flight = [...(saved.flights?.records ?? [])].reverse().find((item) => item.missionId === 'recycle');
   const report = saved.reports?.recyclerArrivalReports?.find((item) => item.flightId === flight?.id);
-  if (!flight || flight.destinationCoordinate.galaxy !== asteroid.coordinate[0]
-    || flight.destinationCoordinate.system !== asteroid.coordinate[1]
-    || flight.destinationCoordinate.position !== asteroid.coordinate[2]
-    || flight.cargo?.debris !== 0 || !report || report.collectedDebris !== 0) {
-    throw new Error(`${label}: recycler could not launch/resolve at an empty coordinate with an active asteroid ${JSON.stringify({ flight, report, asteroid })}`);
+  if (!flight || flight.destinationCoordinate.galaxy !== editTargetCoordinate[0]
+    || flight.destinationCoordinate.system !== editTargetCoordinate[1]
+    || flight.destinationCoordinate.position !== editTargetCoordinate[2]
+    || flight.targetKind !== 'player' || !(flight.cargo?.debris > 0) || !report || report.collectedDebris !== flight.cargo.debris) {
+    throw new Error(`${label}: edited asteroid-origin recycler flight did not dispatch to the reviewed map target ${JSON.stringify({ flight, report, asteroid, editedPreview })}`);
   }
   await reload(win);
   const reloaded = await readSave(win);
   const reportsAfterReload = reloaded.reports?.recyclerArrivalReports?.filter((item) => item.flightId === flight.id) ?? [];
-  if (reportsAfterReload.length !== 1 || reportsAfterReload[0].collectedDebris !== 0) {
-    throw new Error(`${label}: asteroid-overlay zero-result report did not persist exactly once ${JSON.stringify(reportsAfterReload)}`);
+  if (reportsAfterReload.length !== 1 || reportsAfterReload[0].collectedDebris !== flight.cargo.debris) {
+    throw new Error(`${label}: edited asteroid-origin recycler report did not persist exactly once ${JSON.stringify(reportsAfterReload)}`);
   }
-  return { coordinate: asteroid.coordinate, targetKind: flight.targetKind, collected: report.collectedDebris, reportCountAfterReload: reportsAfterReload.length };
+  return { asteroidCoordinate: asteroid.coordinate, editedCoordinate: editTargetCoordinate, targetKind: flight.targetKind, collected: report.collectedDebris, rejectedCoordinate: invalidCoordinate, reportCountAfterReload: reportsAfterReload.length };
 }
 
 async function seedPlanetSwitchSave(win) {
@@ -1139,7 +1191,7 @@ async function runViewport(width, height) {
     const transportCycle = await runTransportUiCycle(win, label, directory);
     const flightCycle = await runFlightRuntimeCycle(win, label);
     const recycleCycle = await runRecycleUiCycle(win, label);
-    const asteroidOverlayRecycle = await runAsteroidOverlayRecycleLaunch(win, label);
+    const asteroidOverlayRecycle = await runAsteroidOverlayRecycleLaunch(win, label, recycleCycle.alternate);
     const planetSwitch = await runPlanetSwitchRegression(win, label);
     const planetoLom = await runPlanetoLomTrace(win, label);
 

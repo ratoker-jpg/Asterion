@@ -515,6 +515,21 @@ const RECYCLABLE_TARGET_KINDS = new Set<UniverseObjectKind>([
   'player', 'npc', 'uninhabited', 'unique', 'pirate', 'anomaly', 'empty',
 ]);
 
+/** Resolve the current map target for a recycler coordinate, including an active asteroid overlay. */
+export function resolveRecycleTargetKindAtCoordinate(
+  state: SaveState,
+  coordinate: UniverseCoordinate,
+  nowMs: number,
+  mode: RuntimeMode = Object.keys(state.alliedPlanets ?? {}).length > 0 ? 'test' : 'production',
+): UniverseObjectKind | undefined {
+  const actualTarget = universeNodeAtCoordinate(state, coordinate, nowMs, mode);
+  if (!actualTarget) return undefined;
+
+  const activeAsteroidOverlay = (state.asteroidSimulation?.asteroids ?? []).some((asteroid) =>
+    coordinatesEqual(asteroid.coordinate, coordinate));
+  return activeAsteroidOverlay && actualTarget.kind === 'empty' ? 'asteroid' : actualTarget.kind;
+}
+
 function isRecyclerShip(shipId: ShipId, factionId: CombatFactionId): boolean {
   const entity = getFactionShipCatalog(factionId).find((candidate) => candidate.id === shipId);
   return Boolean(entity?.role.toLocaleLowerCase().includes('переработчик'));
