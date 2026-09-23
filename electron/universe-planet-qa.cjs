@@ -651,7 +651,12 @@ async function runViewport(width, height) {
     const freeAsteroid = await inspectorSnapshot(win);
     checkCopy(freeAsteroid);
     await checkModal(win);
-    if (freeAsteroid.kind !== 'asteroid' || freeAsteroid.underlyingKind !== 'empty' || !freeAsteroid.text.includes('СКРЫТ ДО ПЕРЕРАБОТКИ') || !freeAsteroid.text.includes('Следующее перемещение через') || !freeAsteroid.specialActions.some((action) => action.action === 'colonize' && !action.disabled) || !freeAsteroid.specialActions.some((action) => action.action === 'asteroid-recycler' && !action.disabled)) throw new Error(`${label}: free asteroid inspector contract failed ${JSON.stringify(freeAsteroid)}`);
+    if (freeAsteroid.kind !== 'asteroid' || freeAsteroid.underlyingKind !== 'empty' || !freeAsteroid.text.includes('СКРЫТ ДО ПЕРЕРАБОТКИ') || !freeAsteroid.text.includes('Следующее перемещение через')
+      || !freeAsteroid.specialActions.some((action) => action.action === 'colonize' && !action.disabled)
+      || freeAsteroid.specialActions.filter((action) => action.action === 'asteroid-recycler' && !action.disabled).length !== 1
+      || freeAsteroid.specialActions.some((action) => action.action === 'gas-extraction')) {
+      throw new Error(`${label}: free asteroid inspector must show one combined recycler action ${JSON.stringify(freeAsteroid)}`);
+    }
     await capture(win, directory, 'asteroid-inspector');
     await clickAt(win, '[data-qa-universe-special-action="colonize"]');
     await waitFor(win, `document.querySelector('.fleet-workspace-v1[data-qa-flight-launch-context]')`);
@@ -760,7 +765,11 @@ async function runViewport(width, height) {
     const occupiedAsteroid = await inspectorSnapshot(win);
     checkCopy(occupiedAsteroid);
     await checkModal(win);
-    if (occupiedAsteroid.kind !== 'asteroid' || occupiedAsteroid.underlyingKind === 'empty' || occupiedAsteroid.specialActions.some((action) => action.action === 'colonize') || !occupiedAsteroid.specialActions.some((action) => action.action === 'asteroid-recycler' && !action.disabled)) throw new Error(`${label}: occupied asteroid inspector contract failed ${JSON.stringify(occupiedAsteroid)}`);
+    if (occupiedAsteroid.kind !== 'asteroid' || occupiedAsteroid.underlyingKind === 'empty' || occupiedAsteroid.specialActions.some((action) => action.action === 'colonize')
+      || occupiedAsteroid.specialActions.filter((action) => action.action === 'asteroid-recycler' && !action.disabled).length !== 1
+      || occupiedAsteroid.specialActions.some((action) => action.action === 'gas-extraction')) {
+      throw new Error(`${label}: occupied asteroid inspector must show one combined recycler action ${JSON.stringify(occupiedAsteroid)}`);
+    }
     await dismissInspector(win);
 
     await selectSystem(win, debrisFixtures.asteroid.system);

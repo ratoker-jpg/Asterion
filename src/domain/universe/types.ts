@@ -39,11 +39,24 @@ export type UniverseAsteroidState = {
   nextMoveAt: number;
   nextCoordinate?: UniverseCoordinate;
   gasYield: number;
+  /** Stable hourly replenishment rate; optional for migration from older saves. */
+  gasRatePerHour?: number;
+  /** Last time the reserve was advanced; optional for migration from older saves. */
+  gasUpdatedAt?: number;
+  /** Fractional gas numerator carried between updates, modulo one hour in ms. */
+  gasRemainder?: number;
 };
 
 /** Persisted authoritative position/timing for one asteroid instance. */
 export type UniverseAsteroidRuntimeState = UniverseAsteroidState & {
   coordinate: UniverseCoordinate;
+};
+
+/** Runtime-normalized asteroid state after gas fields have been initialized. */
+export type InitializedUniverseAsteroidRuntimeState = UniverseAsteroidRuntimeState & {
+  gasRatePerHour: number;
+  gasUpdatedAt: number;
+  gasRemainder: number;
 };
 
 /**

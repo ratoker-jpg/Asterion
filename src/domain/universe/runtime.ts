@@ -3,6 +3,7 @@ import type {
   UniverseActionState,
   UniverseAssetCatalog,
   UniverseAsteroidRuntimeState,
+  InitializedUniverseAsteroidRuntimeState,
   UniverseCoordinate,
   UniverseMap,
   UniverseOwnerAlliance,
@@ -18,6 +19,7 @@ import type {
   UniverseSystem,
   UniverseTimedObjectState,
 } from './types.ts';
+import { initializeAsteroidGasState } from './asteroid-gas.ts';
 import { getPositionCoefficientPercent, getSunEfficiencyPercent } from '../energy/runtime.ts';
 import type { RuntimeMode } from '../runtime/mode.ts';
 import { DEFAULT_ALLIANCE_MEMBERS, DEFAULT_ALLIANCE_PROFILE } from '../command/catalog.ts';
@@ -531,7 +533,7 @@ export function getUniverseAsteroidDwellMs(spawnIndex: number, movementIndex: nu
   return randomInt(random, ASTEROID_MIN_DWELL_MS, ASTEROID_MAX_DWELL_MS);
 }
 
-export function getUniverseAsteroidState(spawnIndex: number, nowMs: number, galaxyCount = 1): UniverseAsteroidRuntimeState | null {
+export function getUniverseAsteroidState(spawnIndex: number, nowMs: number, galaxyCount = 1): InitializedUniverseAsteroidRuntimeState | null {
   const safeNow = normalizeNow(nowMs);
   if (!Number.isInteger(spawnIndex) || spawnIndex < 0) return null;
   const spawnedAt = ASTEROID_SCHEDULE_EPOCH_MS + spawnIndex * ASTEROID_SPAWN_INTERVAL_MS;
@@ -552,7 +554,7 @@ export function getUniverseAsteroidState(spawnIndex: number, nowMs: number, gala
   const nextCoordinate = advanceUniverseAsteroidCoordinate(coordinate, 1, galaxyCount) ?? undefined;
   const gasRandom = seededRandom(0x6A5, spawnIndex);
   const gasYield = randomInt(gasRandom, ASTEROID_GAS_MIN, ASTEROID_GAS_MAX);
-  return {
+  return initializeAsteroidGasState({
     spawnIndex,
     spawnedAt,
     movementIndex,
@@ -561,7 +563,7 @@ export function getUniverseAsteroidState(spawnIndex: number, nowMs: number, gala
     nextCoordinate,
     gasYield,
     coordinate,
-  };
+  }, safeNow);
 }
 
 function advanceAsteroidAfterCollision(state: UniverseAsteroidRuntimeState, nowMs: number, galaxyCount: number): UniverseAsteroidRuntimeState | null {

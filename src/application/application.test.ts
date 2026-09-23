@@ -67,6 +67,7 @@ import {
 } from './overpopulation.ts';
 import { createAllianceRatingEntries, createPlayerRatingEntries } from '../domain/rating/fixtures.ts';
 import { createUniverseMap } from '../domain/universe/runtime.ts';
+import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
 import { getEspionageTargets } from '../domain/espionage/runtime.ts';
 
 class MemoryStorage implements StorageLike {
@@ -135,6 +136,9 @@ test('asteroid simulation, hidden cargo, and recycler history round-trip through
     nextMoveAt: now + 40_000,
     nextCoordinate: { galaxy: 1, system: 12, position: 8 },
     gasYield: 900,
+    gasRatePerHour: 2_500,
+    gasUpdatedAt: now - 10_000,
+    gasRemainder: 1_250_000,
     coordinate: { galaxy: 1, system: 12, position: 7 },
   };
   const report = {
@@ -167,6 +171,48 @@ test('asteroid simulation, hidden cargo, and recycler history round-trip through
   assert.equal(reloaded.reports.recyclerArrivalReports?.filter((item) => item.flightId === report.flightId).length, 1);
 });
 
+test('schema 18 asteroid migration preserves timeline and scrap while starting gas accrual at load time', () => {
+  const storage = new MemoryStorage();
+  const loadAt = 1_800_000_100_000;
+  const initial = createInitialSaveState('test', loadAt - 100_000);
+  const legacyAsteroid = {
+    spawnIndex: 42,
+    spawnedAt: loadAt - 60_000,
+    movementIndex: 3,
+    previousMoveAt: loadAt - 20_000,
+    nextMoveAt: loadAt + 40_000,
+    nextCoordinate: { galaxy: 1, system: 12, position: 8 },
+    gasYield: 900,
+    coordinate: { galaxy: 1, system: 12, position: 7 },
+  };
+  const legacyPayload = {
+    ...initial,
+    schemaVersion: 18,
+    asteroidSimulation: {
+      version: 1,
+      processedThroughAt: loadAt - 10_000,
+      nextSpawnIndex: 43,
+      asteroids: [legacyAsteroid],
+    },
+    asteroidDebrisBySpawnIndex: { '42': 777 },
+  };
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => loadAt });
+  storage.values.set(persistence.saveKey, JSON.stringify(legacyPayload));
+
+  const migrated = persistence.read();
+  const asteroid = migrated.asteroidSimulation?.asteroids[0];
+  assert.ok(asteroid);
+  const { gasRatePerHour: _rate, gasUpdatedAt: _updatedAt, gasRemainder: _remainder, ...preserved } = asteroid;
+  assert.deepEqual(preserved, legacyAsteroid);
+  assert.equal(asteroid.gasUpdatedAt, loadAt);
+  assert.equal(asteroid.gasRemainder, 0);
+  assert.ok(asteroid.gasRatePerHour === 2_500 || asteroid.gasRatePerHour === 10_000 || asteroid.gasRatePerHour === 25_000);
+  assert.equal(advanceAsteroidGasAt(asteroid, loadAt).gasYield, legacyAsteroid.gasYield);
+  assert.equal(migrated.asteroidSimulation?.processedThroughAt, loadAt - 10_000);
+  assert.equal(migrated.asteroidSimulation?.nextSpawnIndex, 43);
+  assert.deepEqual(migrated.asteroidDebrisBySpawnIndex, { '42': 777 });
+});
+
 test('legacy persistence seeds asteroid baseline at load time and retains recycler arrival history', () => {
   const storage = new MemoryStorage();
   const loadAt = 1_800_000_000_000;
@@ -189,10 +235,32 @@ test('legacy persistence seeds asteroid baseline at load time and retains recycl
 
   const reloaded = persistence.read();
   const expectedBaseline = createInitialSaveState('test', loadAt).asteroidSimulation;
-  assert.deepEqual(reloaded.asteroidSimulation, expectedBaseline);
+  const persistedBaseline = reloaded.asteroidSimulation;
+  assert.ok(expectedBaseline && persistedBaseline);
+  assert.deepEqual(
+    persistedBaseline.asteroids.map(({ gasUpdatedAt: _gasUpdatedAt, gasRemainder: _gasRemainder, ...asteroid }) => asteroid),
+    expectedBaseline.asteroids.map(({ gasUpdatedAt: _gasUpdatedAt, gasRemainder: _gasRemainder, ...asteroid }) => asteroid),
+  );
+  assert.ok(persistedBaseline.asteroids.every((asteroid) => asteroid.gasUpdatedAt === loadAt && asteroid.gasRemainder === 0));
   assert.deepEqual(reloaded.asteroidDebrisBySpawnIndex, {});
   assert.deepEqual(reloaded.reports.recyclerArrivalReports, [report]);
   assert.equal(reloaded.reports.recyclerArrivalReports?.filter((item) => item.flightId === report.flightId).length, 1);
+});
+
+test('unsupported asteroid simulation migration baseline does not accrue gas before load time', () => {
+  const storage = new MemoryStorage();
+  const loadAt = 1_800_000_050_000;
+  const initial = createInitialSaveState('production', loadAt - 1_000);
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => loadAt });
+  storage.values.set(persistence.saveKey, JSON.stringify({
+    ...initial,
+    schemaVersion: 18,
+    asteroidSimulation: { ...initial.asteroidSimulation, version: 2 },
+  }));
+
+  const migrated = persistence.read();
+  assert.ok(migrated.asteroidSimulation?.asteroids.length);
+  assert.ok(migrated.asteroidSimulation.asteroids.every((asteroid) => asteroid.gasUpdatedAt === loadAt && asteroid.gasRemainder === 0));
 });
 
 function withBuildingSetup(state: SaveState): SaveState {
@@ -443,6 +511,88 @@ test('persistence drops incomplete flight records and rebuilds only a validated 
   assert.equal(retried.created, false);
   assert.equal(retried.flight.id, sent.flight.id);
   assert.equal(getPlanetResources(retried.state, 'helion-01').gas, gasAfterReload);
+});
+
+test('gas flights and extraction reports hydrate with validated snapshots and report metadata', () => {
+  const storage = new MemoryStorage();
+  const now = 1_800_000_200_000;
+  const initial = createInitialSaveState('production', now);
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => now });
+  const coordinate = { galaxy: 1, system: 12, position: 7 };
+  const reportId = 'gas-extraction-arrival:gas-flight-persisted';
+  const gasFlight = {
+    id: 'gas-flight-persisted',
+    requestId: 'gas-flight-persisted-request',
+    missionId: 'gas',
+    originPlanetId: 'helion-01',
+    originCoordinate: { galaxy: 1, system: 1, position: 1 },
+    destination: { kind: 'coordinate', coordinate },
+    targetKind: 'asteroid',
+    destinationCoordinate: coordinate,
+    selectedShips: { recycler: 2 },
+    gasCapacity: 40_000,
+    populationReserved: 2,
+    routeDistance: 1,
+    effectiveSpeed: 1,
+    oneWayDurationMs: 60_000,
+    departedAt: now,
+    arrivalAt: now + 60_000,
+    gasCost: 0,
+    cargo: { metal: 0, minerals: 0, gas: 1_250, debris: 250, unexpected: 999 },
+    cargoState: 'loaded',
+    phase: 'outbound',
+  };
+  const invalidCapacity = { ...gasFlight, id: 'gas-flight-invalid-capacity', requestId: 'gas-invalid-capacity', gasCapacity: 0 };
+  const invalidShips = { ...gasFlight, id: 'gas-flight-invalid-ships', requestId: 'gas-invalid-ships', selectedShips: { recycler: 1, scout: 1 } };
+  const invalidCargo = { ...gasFlight, id: 'gas-flight-invalid-cargo', requestId: 'gas-invalid-cargo', cargoState: undefined };
+  const firstReport = {
+    id: 'untrusted-gas-report-id',
+    flightId: 'gas-flight-persisted',
+    coordinate,
+    arrivalAt: now + 60_000,
+    outcome: 'found',
+    gasCollected: 1_250,
+    scrapCollected: 250,
+  };
+  const duplicateReport = { ...firstReport, gasCollected: 2_500 };
+  storage.values.set(persistence.saveKey, JSON.stringify({
+    ...initial,
+    flights: {
+      records: [gasFlight, invalidCapacity, invalidShips, invalidCargo],
+      requestIndex: { forged: 'gas-flight-invalid-capacity' },
+    },
+    reports: {
+      ...initial.reports,
+      readIds: [reportId],
+      hiddenIds: [reportId],
+      gasExtractionArrivalReports: [firstReport, duplicateReport],
+    },
+  }));
+
+  const reloaded = persistence.read();
+  assert.deepEqual(reloaded.flights.records.map((flight) => flight.id), ['gas-flight-persisted']);
+  assert.equal(reloaded.flights.requestIndex['gas-flight-persisted-request'], 'gas-flight-persisted');
+  assert.equal(reloaded.flights.requestIndex.forged, undefined);
+  assert.deepEqual(reloaded.flights.records[0].cargo, { metal: 0, minerals: 0, gas: 1_250, debris: 250 });
+  assert.deepEqual(reloaded.reports.gasExtractionArrivalReports, [{
+    id: reportId,
+    flightId: 'gas-flight-persisted',
+    coordinate,
+    arrivalAt: now + 60_000,
+    outcome: 'found',
+    gasCollected: 2_500,
+    scrapCollected: 250,
+  }]);
+  assert.deepEqual(reloaded.reports.readIds, [reportId]);
+  assert.deepEqual(reloaded.reports.hiddenIds, [reportId]);
+
+  assert.equal(persistence.write(reloaded).ok, true);
+  const roundTripped = persistence.read();
+  assert.equal(roundTripped.flights.records[0].id, 'gas-flight-persisted');
+  assert.deepEqual(roundTripped.flights.records[0].cargo, { metal: 0, minerals: 0, gas: 1_250, debris: 250 });
+  assert.deepEqual(roundTripped.reports.gasExtractionArrivalReports, reloaded.reports.gasExtractionArrivalReports);
+  assert.deepEqual(roundTripped.reports.readIds, [reportId]);
+  assert.deepEqual(roundTripped.reports.hiddenIds, [reportId]);
 });
 
 test('legacy resource clock migrates to every saved planet without sharing a mutable clock', () => {

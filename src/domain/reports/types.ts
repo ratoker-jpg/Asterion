@@ -34,6 +34,17 @@ export type RecyclerArrivalReport = {
   remainingOrbitalDebris: number;
 };
 
+/** Persisted result of one gas-extraction mission arrival. */
+export type GasExtractionArrivalReport = {
+  id: `gas-extraction-arrival:${string}`;
+  flightId: string;
+  coordinate: { galaxy: number; system: number; position: number };
+  arrivalAt: number;
+  outcome: 'found' | 'missed';
+  gasCollected: number;
+  scrapCollected: number;
+};
+
 export type ReportCategory =
   | 'system'
   | 'battle'
@@ -45,7 +56,7 @@ export type ReportCategory =
 
 export type ReportFilter = 'all' | 'unread' | 'saved';
 export type ReportStatusTone = 'success' | 'danger' | 'warning' | 'info' | 'neutral';
-export type ReportSource = 'combat' | 'operations' | 'command' | 'espionage' | 'overpopulation' | 'recycling';
+export type ReportSource = 'combat' | 'operations' | 'command' | 'espionage' | 'overpopulation' | 'recycling' | 'gas-extraction';
 
 export type ReportDetail = {
   label: string;
@@ -90,6 +101,8 @@ export type ReportsState = {
   overpopulationReports?: OverpopulationEpisodeReport[];
   /** Optional for backwards compatibility with existing save envelopes. */
   recyclerArrivalReports?: RecyclerArrivalReport[];
+  /** Optional for backwards compatibility with existing save envelopes. */
+  gasExtractionArrivalReports?: GasExtractionArrivalReport[];
 };
 
 export type ReportsCategoryKey = ReportCategory;

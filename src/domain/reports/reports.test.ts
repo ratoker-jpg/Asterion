@@ -11,15 +11,18 @@ import { createDefaultOperationsState, revealOperation } from '../operations/rep
 import {
   battleReportToReportItem,
   buildReportsFeed,
+  createGasExtractionArrivalReportId,
   createRecyclerArrivalReportId,
   createOverpopulationEpisodeReportId,
   filterReportItems,
+  gasExtractionArrivalReportToReportItem,
   getReportCategoryCounts,
   getReportUnreadCounts,
   operationIntelToReportItem,
   overpopulationEpisodeReportToReportItem,
   preservePersistentReportCollections,
   recyclerArrivalReportToReportItem,
+  upsertGasExtractionArrivalReport,
   upsertRecyclerArrivalReport,
   upsertOverpopulationEpisodeReport,
 } from './adapters.ts';
@@ -34,6 +37,7 @@ import {
   persistReportsState,
   readReportsState,
 } from './repository.ts';
+import type { GasExtractionArrivalReport } from './types.ts';
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -173,6 +177,77 @@ test('zero-debris recycler arrival still produces a System report with explicit 
   assert.equal(item.category, 'system');
   assert.match(item.body, /На орбите обломков не найдено/);
   assert.equal(feed.filter((entry) => entry.id === report.id).length, 1);
+});
+
+test('gas extraction arrivals have a distinct stable report schema and show complete found/missed results', () => {
+  const found = {
+    flightId: 'flight:qa-gas-found',
+    coordinate: { galaxy: 3, system: 22, position: 6 },
+    arrivalAt: 321_000,
+    outcome: 'found' as const,
+    gasCollected: 450,
+    scrapCollected: 0,
+  };
+  const missed: GasExtractionArrivalReport = {
+    id: createGasExtractionArrivalReportId('flight:qa-gas-missed'),
+    flightId: 'flight:qa-gas-missed',
+    coordinate: { galaxy: 3, system: 22, position: 7 },
+    arrivalAt: 654_000,
+    outcome: 'missed' as const,
+    gasCollected: 0,
+    scrapCollected: 0,
+  };
+  const first = upsertGasExtractionArrivalReport(createDefaultReportsState(), found);
+  const repeated = upsertGasExtractionArrivalReport(first, found);
+  const foundStored = repeated.gasExtractionArrivalReports![0];
+  const foundItem = gasExtractionArrivalReportToReportItem(foundStored);
+  const missedItem = gasExtractionArrivalReportToReportItem({ ...missed, id: createGasExtractionArrivalReportId(missed.flightId) });
+  const foundText = `${foundItem.title} ${foundItem.preview} ${foundItem.body} ${foundItem.details.map(({ label, value }) => `${label} ${value}`).join(' ')}`;
+  const missedText = `${missedItem.title} ${missedItem.preview} ${missedItem.body} ${missedItem.details.map(({ label, value }) => `${label} ${value}`).join(' ')}`;
+
+  assert.equal(createGasExtractionArrivalReportId(found.flightId), 'gas-extraction-arrival:flight:qa-gas-found');
+  assert.equal(repeated.gasExtractionArrivalReports?.length, 1);
+  assert.equal(foundStored.id, 'gas-extraction-arrival:flight:qa-gas-found');
+  assert.equal(foundItem.source, 'gas-extraction');
+  assert.equal(foundItem.category, 'system');
+  assert.equal(foundItem.timestamp, new Date(found.arrivalAt).toISOString());
+  assert.equal(foundItem.title, 'Астероид найден');
+  assert.deepEqual(foundItem.coordinates, ['[3:22:6]']);
+  assert.match(foundText, /\[3:22:6\]/);
+  assert.match(foundText, /Собрано газа: 450/);
+  assert.match(foundText, /Собрано обломков: 0/);
+  assert.equal(missedItem.title, 'Астероид не найден по координатам [3:22:7]');
+  assert.match(missedText, /\[3:22:7\]/);
+  assert.match(missedText, /Собрано газа: 0/);
+  assert.match(missedText, /Собрано обломков: 0/);
+  assert.doesNotMatch(`${foundText} ${missedText}`, /запас|резерв|rate|rating|рейтин/i);
+  assert.equal(buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, [], [], repeated.gasExtractionArrivalReports).some((entry) => entry.id === foundStored.id), true);
+  assert.equal(buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, [], [], [missed]).some((entry) => entry.id === missedItem.id), true);
+});
+
+test('gas extraction reports flow through unread counts and keep persistent records across read/hide metadata changes', () => {
+  const report: GasExtractionArrivalReport = {
+    id: 'gas-extraction-arrival:flight:qa-gas-metadata',
+    flightId: 'flight:qa-gas-metadata',
+    coordinate: { galaxy: 1, system: 9, position: 4 },
+    arrivalAt: 987_000,
+    outcome: 'missed' as const,
+    gasCollected: 0,
+    scrapCollected: 0,
+  };
+  const previous = { ...createDefaultReportsState(), gasExtractionArrivalReports: [report] };
+  const item = gasExtractionArrivalReportToReportItem(report);
+  const feed = buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, [], [], [report]);
+  const read = preservePersistentReportCollections(markReportRead(previous, report.id), previous);
+  const hidden = preservePersistentReportCollections(deleteSelectedReports(previous, [item], 'system', [report.id]), previous);
+  const countUnread = (state: ReturnType<typeof createDefaultReportsState>) =>
+    Object.values(getReportUnreadCounts(feed, state)).reduce((total, count) => total + count, 0);
+
+  assert.deepEqual(read.gasExtractionArrivalReports, [report]);
+  assert.deepEqual(hidden.gasExtractionArrivalReports, [report]);
+  assert.equal(hidden.hiddenIds.includes(report.id), true);
+  assert.equal(countUnread(createDefaultReportsState()), 1);
+  assert.equal(countUnread(markReportRead(createDefaultReportsState(), report.id)), 0);
 });
 
 test('report metadata read/hide transitions preserve recycler arrival records', () => {

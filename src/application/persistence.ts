@@ -25,9 +25,10 @@ import {
 } from '../domain/rating/fixtures.ts';
 import {
   buildReportsFeed,
+  createGasExtractionArrivalReportId,
   createOverpopulationEpisodeReportId,
 } from '../domain/reports/adapters.ts';
-import type { OverpopulationEpisodeReport, OrdinaryShipId, RecyclerArrivalReport } from '../domain/reports/types.ts';
+import type { GasExtractionArrivalReport, OverpopulationEpisodeReport, OrdinaryShipId, RecyclerArrivalReport } from '../domain/reports/types.ts';
 import { normalizeCombatFactionId } from '../domain/combat/factions.ts';
 import { SHIP_IDS } from '../domain/combat/ids.ts';
 import {
@@ -121,6 +122,7 @@ import { normalizePersistedTransportCargo } from '../domain/flights/cargo.ts';
 import type { UniverseObjectKind } from '../domain/universe/types.ts';
 import type { UniverseAsteroidSimulationState, UniverseAsteroidRuntimeState, UniverseCoordinate } from '../domain/universe/types.ts';
 import { createUniverseAsteroidSimulationState } from '../domain/universe/asteroid-simulation.ts';
+import { initializeAsteroidGasState } from '../domain/universe/asteroid-gas.ts';
 import { POSITION_COUNT, SYSTEM_COUNT, TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import { migrateEspionageState } from '../domain/espionage/repository.ts';
 import { createDefaultEspionageState } from '../domain/espionage/runtime.ts';
@@ -272,6 +274,32 @@ function migrateOverpopulationEpisodeReports(value: unknown): OverpopulationEpis
   return [...byId.values()].slice(-500);
 }
 
+function migrateGasExtractionArrivalReports(value: unknown): GasExtractionArrivalReport[] {
+  if (!Array.isArray(value)) return [];
+  const byFlightId = new Map<string, GasExtractionArrivalReport>();
+  for (const candidate of value) {
+    const source = objectRecord(candidate);
+    const coordinate = persistedCoordinate(source?.coordinate);
+    const flightId = typeof source?.flightId === 'string' ? source.flightId.trim() : '';
+    if (!source || !flightId || flightId.length > 160 || !coordinate
+      || typeof source.arrivalAt !== 'number' || !Number.isSafeInteger(source.arrivalAt) || source.arrivalAt < 0
+      || (source.outcome !== 'found' && source.outcome !== 'missed')
+      || typeof source.gasCollected !== 'number' || !Number.isSafeInteger(source.gasCollected) || source.gasCollected < 0
+      || typeof source.scrapCollected !== 'number' || !Number.isSafeInteger(source.scrapCollected) || source.scrapCollected < 0
+      || (source.outcome === 'missed' && (source.gasCollected !== 0 || source.scrapCollected !== 0))) continue;
+    byFlightId.set(flightId, {
+      id: createGasExtractionArrivalReportId(flightId),
+      flightId,
+      coordinate,
+      arrivalAt: source.arrivalAt,
+      outcome: source.outcome,
+      gasCollected: source.gasCollected,
+      scrapCollected: source.scrapCollected,
+    });
+  }
+  return [...byFlightId.values()].slice(-500);
+}
+
 function persistedCoordinate(value: unknown): UniverseCoordinate | undefined {
   const source = objectRecord(value);
   if (!source) return undefined;
@@ -281,13 +309,28 @@ function persistedCoordinate(value: unknown): UniverseCoordinate | undefined {
   return { galaxy: galaxy as number, system: system as number, position: position as number };
 }
 
+function createAsteroidSimulationMigrationBaseline(now: number): UniverseAsteroidSimulationState {
+  const timestamp = Number.isSafeInteger(now) && now >= 0 ? now : Date.now();
+  const baseline = createUniverseAsteroidSimulationState(timestamp);
+  return {
+    ...baseline,
+    asteroids: baseline.asteroids.map((asteroid) => initializeAsteroidGasState({
+      ...asteroid,
+      // Projected legacy asteroids have no pre-feature gas history. Start the
+      // new accrual clock at migration time rather than at their spawn time.
+      gasUpdatedAt: timestamp,
+      gasRemainder: 0,
+    }, timestamp)),
+  };
+}
+
 function migrateAsteroidSimulation(value: unknown, now: number): UniverseAsteroidSimulationState {
   const source = objectRecord(value);
   if (!source || source.version !== 1
     || typeof source.processedThroughAt !== 'number' || !Number.isSafeInteger(source.processedThroughAt) || source.processedThroughAt < 0
     || typeof source.nextSpawnIndex !== 'number' || !Number.isSafeInteger(source.nextSpawnIndex) || source.nextSpawnIndex < 0
     || !Array.isArray(source.asteroids)) {
-    return createUniverseAsteroidSimulationState(now);
+    return createAsteroidSimulationMigrationBaseline(now);
   }
   const seenSpawnIndices = new Set<number>();
   const asteroids: UniverseAsteroidRuntimeState[] = source.asteroids.flatMap((candidate) => {
@@ -303,7 +346,7 @@ function migrateAsteroidSimulation(value: unknown, now: number): UniverseAsteroi
     const nextCoordinate = asteroid.nextCoordinate === undefined ? undefined : persistedCoordinate(asteroid.nextCoordinate);
     if (asteroid.nextCoordinate !== undefined && !nextCoordinate) return [];
     seenSpawnIndices.add(asteroid.spawnIndex);
-    return [{
+    return [initializeAsteroidGasState({
       spawnIndex: asteroid.spawnIndex,
       spawnedAt: asteroid.spawnedAt as number,
       movementIndex: asteroid.movementIndex as number,
@@ -312,7 +355,10 @@ function migrateAsteroidSimulation(value: unknown, now: number): UniverseAsteroi
       ...(nextCoordinate ? { nextCoordinate } : {}),
       gasYield: asteroid.gasYield as number,
       coordinate,
-    }];
+      ...(typeof asteroid.gasRatePerHour === 'number' ? { gasRatePerHour: asteroid.gasRatePerHour } : {}),
+      ...(typeof asteroid.gasUpdatedAt === 'number' ? { gasUpdatedAt: asteroid.gasUpdatedAt } : {}),
+      ...(typeof asteroid.gasRemainder === 'number' ? { gasRemainder: asteroid.gasRemainder } : {}),
+    }, now)];
   });
   return {
     version: 1,
@@ -626,6 +672,17 @@ function isPersistedFlightRecord(value: unknown): value is FlightRecord {
       || shipEntries.some(([shipId]) => shipId !== 'recycler')
       || Object.values((item.selectedCommanders ?? {}) as Record<string, unknown>).some((quantity) => Number(quantity) > 0)) return false;
   }
+  if (item.missionId === 'gas') {
+    const cargo = normalizePersistedTransportCargo(item.cargo);
+    if (!cargo
+      || !isNonNegativeInteger(item.gasCapacity)
+      || item.gasCapacity <= 0
+      || item.cargoState === undefined
+      || item.targetKind !== 'asteroid'
+      || shipEntries.length === 0
+      || shipEntries.some(([shipId]) => shipId !== 'recycler')
+      || Object.keys((item.selectedCommanders ?? {}) as Record<string, unknown>).length > 0) return false;
+  }
   if (item.targetKind !== undefined && !PERSISTED_UNIVERSE_OBJECT_KINDS.has(item.targetKind as UniverseObjectKind)) return false;
   if (item.completionReason !== undefined
     && !PERSISTED_FLIGHT_COMPLETION_REASONS.has(item.completionReason as FlightCompletionReason)) return false;
@@ -638,6 +695,7 @@ function isPersistedFlightRecord(value: unknown): value is FlightRecord {
   const destinationRecord = destination as Record<string, unknown>;
   if (!PERSISTED_FLIGHT_DESTINATION_KINDS.has(destinationRecord.kind as FlightDestination['kind'])
     || !coordinatesMatch(destinationRecord.coordinate, item.destinationCoordinate)) return false;
+  if (item.missionId === 'gas' && destinationRecord.kind !== 'coordinate') return false;
   if (destinationRecord.kind === 'planet') {
     if (!isNonEmptyPersistedString(destinationRecord.planetId)
       || item.destinationPlanetId !== destinationRecord.planetId) return false;
@@ -732,7 +790,7 @@ function isPersistedFlightRecord(value: unknown): value is FlightRecord {
 function normalizePersistedFlightRecord(value: unknown): unknown {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
   const source = value as Record<string, unknown>;
-  if (source.missionId !== 'transport' && source.missionId !== 'recycle') return value;
+  if (source.missionId !== 'transport' && source.missionId !== 'recycle' && source.missionId !== 'gas') return value;
   const cargo = normalizePersistedTransportCargo(source.cargo);
   if (!cargo) return value;
   return { ...source, cargo };
@@ -953,7 +1011,18 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
     const recyclerArrivalReports = migrateRecyclerArrivalReports(
       objectRecord(parsed.reports)?.recyclerArrivalReports,
     );
-    const reportIds = buildReportsFeed(combat.reports, operations, command, undefined, overpopulationReports, recyclerArrivalReports).map((item) => item.id);
+    const gasExtractionArrivalReports = migrateGasExtractionArrivalReports(
+      objectRecord(parsed.reports)?.gasExtractionArrivalReports,
+    );
+    const reportIds = buildReportsFeed(
+      combat.reports,
+      operations,
+      command,
+      undefined,
+      overpopulationReports,
+      recyclerArrivalReports,
+      gasExtractionArrivalReports,
+    ).map((item) => item.id);
     const migratedSavedFleet = removeSolarSatellitesFromFleet(
       resolveSavedFleetState(savedHomeworld?.fleet, profile.factionId),
     );
@@ -1212,6 +1281,7 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
         ...migrateReportsState(parsed.reports, reportIds),
         ...(overpopulationReports.length > 0 ? { overpopulationReports } : {}),
         ...(recyclerArrivalReports.length > 0 ? { recyclerArrivalReports } : {}),
+        ...(gasExtractionArrivalReports.length > 0 ? { gasExtractionArrivalReports } : {}),
       },
       science,
       resourceClock: migrateResourceClock(parsed.resourceClock, timestamp, Object.keys(planets)),

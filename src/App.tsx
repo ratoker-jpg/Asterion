@@ -352,18 +352,19 @@ export function App() {
     }, 40);
   };
 
-  const openAsteroidRecycleLaunch = (coordinate: UniverseCoordinate) => {
+  const openAsteroidRecyclerLaunch = (target: { spawnIndex: number; coordinate: UniverseCoordinate }) => {
     clearBuildingInterior();
     navigateTo('fleets');
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
-    setNotice(`Координаты астероида выбраны для переработки: [${coordinate.galaxy}:${coordinate.system}:${coordinate.position}].`);
+    setNotice(`Астероид выбран для переработки: сначала сбор газа, затем обломков — [${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}].`);
     window.setTimeout(() => {
       window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, {
         detail: {
-          missionId: 'recycle',
+          missionId: 'gas',
           targetKind: 'asteroid',
-          destination: { kind: 'coordinate', coordinate },
+          targetAsteroidSpawnIndex: target.spawnIndex,
+          destination: { kind: 'coordinate', coordinate: target.coordinate },
         },
       }));
     }, 40);
@@ -706,9 +707,9 @@ export function App() {
     [currentPlanetState.buildings],
   );
   const reportsUnreadCount = useMemo(() => {
-    const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports);
+    const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports);
     return Object.values(getReportUnreadCounts(items, state.reports)).reduce((total, count) => total + count, 0);
-  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports]);
+  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports]);
   const buildingInteriorTarget = buildingInterior
     ? getBuildingInteriorTarget(buildingInterior.buildingRole)
     : null;
@@ -1402,7 +1403,7 @@ export function App() {
               asteroidStates={state.asteroidSimulation?.asteroids}
               mode={RUNTIME_MODE}
               onColonize={openColonizationLaunch}
-              onRecycle={openAsteroidRecycleLaunch}
+              onAsteroidRecycler={openAsteroidRecyclerLaunch}
               onTransport={openTransportLaunch}
               onSpy={openSpyLaunch}
               onAttack={openAttackLaunch}

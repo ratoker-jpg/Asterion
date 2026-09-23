@@ -60,6 +60,7 @@ import { getStorageCapacities } from './domain/buildings/resource-zone.ts';
 import { FLIGHT_POSITION_COUNT, FLIGHT_SYSTEM_COUNT, isFlightCoordinate } from './domain/flights/distance.ts';
 import { ACTIVE_RUNTIME_MODE, resolveTestTimeScale } from './domain/runtime/mode.ts';
 import { createPersistenceFacade } from './application/persistence.ts';
+import { advanceUniverseAsteroidSimulationAt } from './domain/universe/asteroid-simulation.ts';
 import {
   FLEET_CONSTRUCTION_NAVIGATION,
   FLEET_MANAGEMENT_NAVIGATION,
@@ -81,6 +82,8 @@ type MissionDefinition = {
 };
 
 type ConstructionView = 'ships' | ConstructionCatalogMode | null;
+
+type FleetLaunchContext = FlightLaunchContext & { targetAsteroidSpawnIndex?: number };
 
 import missionTransportIcon from '../assets/source/mission-icons-v1/01_transport.png';
 import missionEspionageIcon from '../assets/source/mission-icons-v1/02_espionage.png';
@@ -252,7 +255,7 @@ function FleetWorkspace({
   openConstruction: boolean;
   onConstructionOpened: () => void;
   fleetBudget: FleetBuildBudget;
-  launchContext: FlightLaunchContext | null;
+  launchContext: FleetLaunchContext | null;
   flightRecords: FlightRecord[];
   espionageState: EspionageState;
   entityLevels: Record<string, number>;
@@ -323,7 +326,7 @@ function FleetWorkspace({
       ? ownedShipDefinitions.filter((ship) => ship.id === 'spy-probe')
       : missionId === 'attack'
         ? ownedShipDefinitions.filter((ship) => isAttackCombatShip(ship.id, factionId))
-        : missionId === 'recycle'
+        : missionId === 'recycle' || missionId === 'gas'
           ? ownedShipDefinitions.filter((ship) => ship.id === 'recycler')
       : ownedShipDefinitions;
   const commanderAvailability = useMemo(() => {
@@ -848,6 +851,27 @@ function FleetWorkspace({
   const previewSource = previewSourceId ? previewRuntimeState?.planets[previewSourceId] : null;
   const previewCoordinate = previewDestination?.coordinate ?? launchContext?.destination?.coordinate ?? null;
   const previewFlightRecord = previewResult?.ok ? previewResult.flight : null;
+  const arrivalAsteroidPreview = useMemo(() => {
+    if (missionId !== 'gas' || !previewFlightRecord || !previewCoordinate) return null;
+    const simulation = previewRuntimeState?.asteroidSimulation;
+    if (!simulation) return { asteroidCoordinate: null, targetCoordinate: previewCoordinate, hit: false, unavailable: true };
+
+    const arrivalSimulation = advanceUniverseAsteroidSimulationAt(simulation, previewFlightRecord.arrivalAt, 1).state;
+    const followedAsteroid = launchContext?.targetAsteroidSpawnIndex === undefined
+      ? arrivalSimulation.asteroids.find((asteroid) => asteroid.coordinate.galaxy === previewCoordinate.galaxy
+        && asteroid.coordinate.system === previewCoordinate.system
+        && asteroid.coordinate.position === previewCoordinate.position)
+      : arrivalSimulation.asteroids.find((asteroid) => asteroid.spawnIndex === launchContext.targetAsteroidSpawnIndex);
+    return {
+      asteroidCoordinate: followedAsteroid?.coordinate ?? null,
+      targetCoordinate: previewCoordinate,
+      hit: Boolean(followedAsteroid
+        && followedAsteroid.coordinate.galaxy === previewCoordinate.galaxy
+        && followedAsteroid.coordinate.system === previewCoordinate.system
+        && followedAsteroid.coordinate.position === previewCoordinate.position),
+      unavailable: false,
+    };
+  }, [launchContext?.targetAsteroidSpawnIndex, missionId, previewCoordinate, previewFlightRecord, previewRuntimeState?.asteroidSimulation]);
   const transportSummary = previewRuntimeState && previewSourceId
     ? getTransportCargoSummary(previewRuntimeState, previewSourceId, selectedQuantities, transportCargoDraft, previewDestination ?? undefined)
     : null;
@@ -1258,7 +1282,7 @@ function FleetWorkspace({
                       <small>ПРИБЫТИЕ</small>
                       <strong>через {flightCountdown(previewResult.flight.arrivalAt, clockNow)}</strong>
                       <span>{flightArrivalLabel(previewResult.flight.arrivalAt)} МСК</span>
-                      <em>{missionId === 'recycle' ? 'сбор обломков с орбиты' : 'проверка цели и создание планеты'}</em>
+                      <em>{missionId === 'recycle' ? 'сбор обломков с орбиты' : missionId === 'gas' ? 'проверка позиции астероида' : 'проверка цели и создание планеты'}</em>
                     </div>
                     <div className="flight-timeline-eta-card is-return">
                       <small>ВОЗВРАТ ПРИ ОТЗЫВЕ</small>
@@ -1267,13 +1291,29 @@ function FleetWorkspace({
                       <em>оценка, если отозвать рейс сейчас</em>
                     </div>
                   </section>
+                  {arrivalAsteroidPreview ? <section className="flight-timeline-eta" data-qa-gas-asteroid-preview aria-label="Положение астероида при прибытии">
+                    <div className="flight-timeline-eta-card is-arrival">
+                      <small>АСТЕРОИД ПРИ ПРИБЫТИИ</small>
+                      <strong data-qa-gas-asteroid-hit={arrivalAsteroidPreview.unavailable ? 'unavailable' : arrivalAsteroidPreview.hit ? 'hit' : 'miss'}>
+                        {arrivalAsteroidPreview.unavailable
+                          ? 'Положение недоступно'
+                          : arrivalAsteroidPreview.hit ? 'Астероид будет в точке назначения' : 'Астероида в точке назначения не будет'}
+                      </strong>
+                      <span>Цель рейса: {flightCoordinateLabel(arrivalAsteroidPreview.targetCoordinate)}</span>
+                      <em>{arrivalAsteroidPreview.asteroidCoordinate
+                        ? `Положение при прибытии: ${flightCoordinateLabel(arrivalAsteroidPreview.asteroidCoordinate)}`
+                        : 'Астероид не найден в рассчитанный момент'}</em>
+                    </div>
+                  </section> : null}
                   <div className="flight-timeline-notes">
                     <p className="flight-timeline-note-info">Газ списывается только за один путь туда. Обратный участок не требует повторной оплаты.</p>
                     <p className="flight-timeline-note-warning">{missionId === 'attack'
                       ? 'До прибытия атаку можно отозвать без боя и боевого отчёта.'
                       : missionId === 'recycle'
                         ? 'При отзыве до прибытия переработчик вернётся без обломков.'
-                        : 'При отзыве колонизатор возвращается, но газ не возвращается.'}</p>
+                        : missionId === 'gas'
+                          ? 'Координата назначения не меняется; астероид может переместиться до прибытия.'
+                          : 'При отзыве колонизатор возвращается, но газ не возвращается.'}</p>
                   </div>
                 </> : <p className="flight-timeline-error" data-qa-flight-preview-error>{previewResult && !previewResult.ok ? previewResult.error.message : targetIsLocallyValid ? 'Проверка цели будет выполнена при отправке.' : 'Укажите координаты цели. Проверка доступности выполняется при отправке.'}</p>}
               </section>
@@ -1408,7 +1448,7 @@ export function FleetWorkspacePortal() {
   const [planet, setPlanet] = useState({ name: 'Helion 01', coords: '[1:1:1]' });
   const [constructionRequested, setConstructionRequested] = useState(false);
   const [fleetBudget, setFleetBudget] = useState<FleetBuildBudget>(readFleetBuildBudget);
-  const [launchContext, setLaunchContext] = useState<FlightLaunchContext | null>(null);
+  const [launchContext, setLaunchContext] = useState<FleetLaunchContext | null>(null);
   const [flightRecords, setFlightRecords] = useState<FlightRecord[]>(() => createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read().flights.records);
   const [espionageState, setEspionageState] = useState<EspionageState>(() => createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read().espionage ?? { missions: [], reports: [], hunterNotices: [] });
   const [entityLevels, setEntityLevels] = useState<Record<string, number>>(() => {
@@ -1428,7 +1468,7 @@ export function FleetWorkspacePortal() {
       setEntityLevels(runtimeState.planets[runtimeState.currentPlanetId]?.spaceportUpgrades?.shipLevels ?? {});
     };
 
-    const onLaunchContext = (event: Event) => setLaunchContext((event as CustomEvent<FlightLaunchContext>).detail);
+    const onLaunchContext = (event: Event) => setLaunchContext((event as CustomEvent<FleetLaunchContext>).detail);
     const onLaunchContextClear = () => setLaunchContext(null);
     const onRuntimeReset = () => {
       setLaunchContext(null);

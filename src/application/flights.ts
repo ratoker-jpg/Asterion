@@ -86,7 +86,8 @@ import { resolveSpyOwnerProfile } from '../domain/espionage/owner-profile.ts';
 import { collectOrbitalDebrisAtCoordinate, getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 import { createUniverseSystem } from '../domain/universe/runtime.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPlanet, UniverseRegisteredPlanet } from '../domain/universe/types.ts';
-import { upsertRecyclerArrivalReport } from '../domain/reports/adapters.ts';
+import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
+import { upsertGasExtractionArrivalReport, upsertRecyclerArrivalReport } from '../domain/reports/adapters.ts';
 import { initializePlanetResourceClock, reconcileTestEspionageTargetResources } from './resource-clock.ts';
 import { resolveSpyTarget, resolveSpyTargetAtCoordinate, type ResolvedSpyTarget } from './espionage-targets.ts';
 import {
@@ -111,6 +112,7 @@ export const SPY_REPORT_RESULT_EVENT = 'asterion:spy-report-result';
 export type FlightLaunchContext = {
   missionId: MissionId;
   destination?: FlightDestination;
+  targetAsteroidSpawnIndex?: number;
   targetRelation?: TargetRelation;
   targetKind?: UniverseObjectKind;
   operationId?: string;
@@ -860,7 +862,7 @@ export function dispatchFlight(
     if (existing) return { ok: true, state, flight: existing, created: false, notice: noticeForDispatch(existing) };
   }
   if (!requestId) return failure(state, 'invalid-command', 'Для отправки требуется requestId/commandId.');
-  if (command.missionId !== 'colonize' && command.missionId !== 'transport' && command.missionId !== 'espionage' && command.missionId !== 'attack' && command.missionId !== 'deployment' && command.missionId !== 'recycle') {
+  if (command.missionId !== 'colonize' && command.missionId !== 'transport' && command.missionId !== 'espionage' && command.missionId !== 'attack' && command.missionId !== 'deployment' && command.missionId !== 'recycle' && command.missionId !== 'gas') {
     return failure(state, 'mission-not-supported', 'Эта миссия пока не подключена к flight runtime.');
   }
   const departedAt = Number.isFinite(command.departedAt) ? command.departedAt! : (runtimeOptions.now ?? Date.now());
@@ -905,6 +907,7 @@ export function dispatchFlight(
   if (selectedCommanders === null) return failure(state, 'invalid-command', 'Состав командиров некорректен.');
   let recycleCapacity: number | undefined;
   let recycleTargetKind: UniverseObjectKind | undefined;
+  let gasCapacity: number | undefined;
   if (command.missionId === 'recycle') {
     if (Object.keys(selectedCommanders).length > 0) {
       return failure(state, 'wrong-ship-composition', 'Для переработки обломков нужны только корабли-переработчики.');
@@ -943,6 +946,26 @@ export function dispatchFlight(
     );
     recycleCapacity = getFleetCargoCapacity(selectedShips, cargoCatalog);
     if (recycleCapacity <= 0) {
+      return failure(state, 'wrong-ship-composition', 'У выбранных переработчиков нет грузоподъёмности.');
+    }
+  }
+  if (command.missionId === 'gas') {
+    if (Object.keys(selectedCommanders).length > 0) {
+      return failure(state, 'wrong-ship-composition', 'Для добычи газа нужны только корабли-переработчики.');
+    }
+    if (Object.keys(selectedShips).length === 0
+      || Object.keys(selectedShips).some((shipId) => !isRecyclerShip(shipId as ShipId, state.profile.factionId as CombatFactionId))) {
+      return failure(state, 'wrong-ship-composition', 'Для добычи газа нужны только корабли-переработчики.');
+    }
+    if (!command.destination || command.destination.kind !== 'coordinate' || !isFlightCoordinate(command.destination.coordinate)) {
+      return failure(state, 'invalid-coordinate', 'Для добычи газа укажите корректные координаты астероида.');
+    }
+    const cargoCatalog = Object.fromEntries(
+      getFactionShipCatalog(state.profile.factionId as CombatFactionId)
+        .map((entity) => [entity.id, { cargo: entity.ship?.cargo ?? 0 }]),
+    );
+    gasCapacity = getFleetCargoCapacity(selectedShips, cargoCatalog);
+    if (gasCapacity <= 0) {
       return failure(state, 'wrong-ship-composition', 'У выбранных переработчиков нет грузоподъёмности.');
     }
   }
@@ -1110,7 +1133,8 @@ export function dispatchFlight(
         : command.destination!,
     targetKind: command.missionId === 'attack'
       ? attackTarget?.target.kind
-      : command.missionId === 'recycle' ? recycleTargetKind : command.targetKind,
+      : command.missionId === 'recycle' ? recycleTargetKind
+        : command.missionId === 'gas' ? 'asteroid' : command.targetKind,
     selectedShips,
     populationReserved: command.missionId === 'colonize' ? 12 : deploymentPopulation,
     departedAt,
@@ -1129,6 +1153,10 @@ export function dispatchFlight(
     ...(command.missionId === 'recycle' ? {
       cargo: emptyTransportCargo(),
       recycleCapacity,
+    } : {}),
+    ...(command.missionId === 'gas' ? {
+      cargo: emptyTransportCargo(),
+      gasCapacity,
     } : {}),
     ...(command.missionId === 'espionage' ? {
       destinationPlanetId: command.destination!.kind === 'planet' ? command.destination!.planetId : undefined,
@@ -1818,6 +1846,82 @@ export function reconcileFlights(
         changed = true;
         continue;
       }
+      if (current.missionId === 'gas') {
+        if (current.cargoState !== 'delivered' && current.cargoState !== 'returned') {
+          const simulation = next.asteroidSimulation;
+          const asteroidIndex = simulation?.asteroids.findIndex((asteroid) =>
+            coordinatesEqual(asteroid.coordinate, current.destinationCoordinate)) ?? -1;
+          const found = asteroidIndex >= 0 && simulation !== undefined;
+          let gasCollected = 0;
+          let scrapCollected = 0;
+
+          if (found && simulation) {
+            const asteroid = advanceAsteroidGasAt(simulation.asteroids[asteroidIndex], arrivalAt);
+            const capacity = Number.isSafeInteger(current.gasCapacity) && (current.gasCapacity ?? 0) > 0
+              ? current.gasCapacity!
+              : 0;
+            const availableGas = Math.max(0, Math.floor(asteroid.gasYield));
+            gasCollected = Math.min(Math.floor(availableGas / 2), capacity);
+            const spawnKey = String(asteroid.spawnIndex);
+            const storedScrap = next.asteroidDebrisBySpawnIndex?.[spawnKey] ?? 0;
+            const carriedScrap = Number.isFinite(storedScrap) && storedScrap > 0 ? Math.floor(storedScrap) : 0;
+            scrapCollected = Math.min(carriedScrap, Math.max(0, capacity - gasCollected));
+            const remainingGas = availableGas - gasCollected;
+            const remainingScrap = carriedScrap - scrapCollected;
+            const depleted = remainingGas < 1_000;
+            const asteroids = depleted
+              ? simulation.asteroids.filter((_, index) => index !== asteroidIndex)
+              : simulation.asteroids.map((item, index) => index === asteroidIndex
+                ? { ...asteroid, gasYield: remainingGas }
+                : item);
+            next = { ...next, asteroidSimulation: { ...simulation, asteroids } };
+
+            const asteroidDebrisBySpawnIndex = { ...(next.asteroidDebrisBySpawnIndex ?? {}) };
+            if (depleted || remainingScrap <= 0) delete asteroidDebrisBySpawnIndex[spawnKey];
+            else asteroidDebrisBySpawnIndex[spawnKey] = remainingScrap;
+            next = { ...next, asteroidDebrisBySpawnIndex };
+          }
+
+          const cargo: TransportCargo = {
+            ...normalizeTransportCargo(current.cargo),
+            gas: gasCollected,
+            debris: scrapCollected,
+          };
+          const reports = upsertGasExtractionArrivalReport(next.reports, {
+            flightId: current.id,
+            coordinate: current.destinationCoordinate,
+            arrivalAt,
+            outcome: found ? 'found' : 'missed',
+            gasCollected,
+            scrapCollected,
+          });
+          next = { ...next, reports };
+          const delivered: FlightRecord = {
+            ...current,
+            cargo,
+            cargoState: 'delivered',
+            arrivedAt: arrivalAt,
+            deliveredAt: now,
+            cargoResolvedAt: now,
+          };
+          const returning = beginTransportReturn(next, delivered, now, 'normal-return');
+          next = { ...next, flights: updateFlight(next.flights, returning) };
+          changed = true;
+          events.push({
+            flight: returning,
+            status: 'delivered',
+            notice: found
+              ? `Астероид найден: собрано газа ${gasCollected}, обломков ${scrapCollected}. Переработчики возвращаются.`
+              : `Астероид не найден по координатам [${current.destinationCoordinate.galaxy}:${current.destinationCoordinate.system}:${current.destinationCoordinate.position}]. Газ 0, обломки 0. Переработчики возвращаются.`,
+          });
+          continue;
+        }
+
+        const returning = beginTransportReturn(next, current, now, 'normal-return');
+        next = { ...next, flights: updateFlight(next.flights, returning) };
+        changed = true;
+        continue;
+      }
       if (current.missionId === 'attack') {
         if (!current.attackResolution) {
           const resolved = current.destinationPlanetId
@@ -1959,7 +2063,7 @@ export function reconcileFlights(
     const refreshed = next.flights.records.find((flight) => flight.id === original.id) ?? original;
     if (refreshed.phase === 'returning' && refreshed.returnAt !== undefined && now >= refreshed.returnAt) {
       let returnedFlight = refreshed;
-      if (refreshed.missionId === 'transport' || refreshed.missionId === 'recycle') {
+      if (refreshed.missionId === 'transport' || refreshed.missionId === 'recycle' || refreshed.missionId === 'gas') {
         const returned = returnTransportCargo(next, refreshed, refreshed.returnAt);
         next = returned.state;
         returnedFlight = returned.flight;
@@ -1974,7 +2078,7 @@ export function reconcileFlights(
         ...returnedFlight,
         phase: 'completed',
         completedAt: refreshed.returnAt,
-        completionReason: returnedFlight.missionId === 'transport' || returnedFlight.missionId === 'recycle'
+        completionReason: returnedFlight.missionId === 'transport' || returnedFlight.missionId === 'recycle' || returnedFlight.missionId === 'gas'
           ? returnedFlight.completionReason ?? 'recalled'
           : returnedFlight.completionReason === 'target-unavailable'
             ? 'target-unavailable'
@@ -1999,9 +2103,9 @@ export function reconcileFlights(
       events.push({
         flight: completed,
         status: 'returned',
-        notice: completed.missionId === 'transport' || completed.missionId === 'recycle'
+        notice: completed.missionId === 'transport' || completed.missionId === 'recycle' || completed.missionId === 'gas'
           ? completed.completionReason === 'target-unavailable'
-            ? completed.missionId === 'recycle'
+            ? completed.missionId === 'recycle' || completed.missionId === 'gas'
               ? 'Переработчик вернулся: исходная планета недоступна, обломки потеряны.'
               : 'Транспорт вернулся: цель недоступна, груз потерян.'
             : completed.completionReason === 'normal-return'
@@ -2009,9 +2113,13 @@ export function reconcileFlights(
                 ? next.planets[completed.originPlanetId]
                   ? `Переработчик вернулся с обломками: ${completed.cargo?.debris ?? 0}.`
                   : 'Переработчик завершил возврат без исходной планеты; обломки потеряны.'
-                : 'Транспорт вернулся после доставки.'
-              : completed.missionId === 'recycle'
-                ? 'Переработчик вернулся после отзыва рейса.'
+                : completed.missionId === 'gas'
+                  ? next.planets[completed.originPlanetId]
+                    ? `Переработчики вернулись: собрано газа ${completed.cargo?.gas ?? 0}, обломков ${completed.cargo?.debris ?? 0}.`
+                    : 'Переработчики завершили возврат без исходной планеты; груз потерян.'
+                  : 'Транспорт вернулся после доставки.'
+              : completed.missionId === 'recycle' || completed.missionId === 'gas'
+                ? 'Переработчики вернулись после отзыва рейса.'
                 : 'Транспорт вернулся после отзыва рейса.'
           : completed.missionId === 'espionage'
             ? completed.completionReason === 'target-unavailable'
