@@ -244,6 +244,7 @@ async function assertTooltip(win, label, selector) {
 }
 
 async function setRefillQueueForOfflineStep(win, offsets) {
+  const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   const ok = await win.webContents.executeJavaScript(`(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
     const planet = save.planets?.['helion-01'];
@@ -251,10 +252,14 @@ async function setRefillQueueForOfflineStep(win, offsets) {
     const base = Date.now();
     planet.trade.refillAtQueue = ${JSON.stringify(offsets)}.map((offset) => base + offset);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    window.location.reload();
     return true;
-  })()`);
+  })()`).catch(() => false);
   if (!ok) throw new Error('Could not rewrite trade refill queue');
-  await reload(win);
+  await done;
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win);
   await activateIndustry(win);
   await openTradeCenter(win);
 }
