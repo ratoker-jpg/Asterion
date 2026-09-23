@@ -24,6 +24,16 @@ export type OverpopulationEpisodeReport = {
   removedShips: OverpopulationShipLoss[];
 };
 
+/** Persisted summary of one recycler mission arrival. */
+export type RecyclerArrivalReport = {
+  id: `recycler-arrival:${string}`;
+  flightId: string;
+  coordinate: { galaxy: number; system: number; position: number };
+  arrivedAtMs: number;
+  collectedDebris: number;
+  remainingOrbitalDebris: number;
+};
+
 export type ReportCategory =
   | 'system'
   | 'battle'
@@ -35,7 +45,7 @@ export type ReportCategory =
 
 export type ReportFilter = 'all' | 'unread' | 'saved';
 export type ReportStatusTone = 'success' | 'danger' | 'warning' | 'info' | 'neutral';
-export type ReportSource = 'combat' | 'operations' | 'command' | 'espionage' | 'overpopulation';
+export type ReportSource = 'combat' | 'operations' | 'command' | 'espionage' | 'overpopulation' | 'recycling';
 
 export type ReportDetail = {
   label: string;
@@ -78,6 +88,8 @@ export type ReportsState = {
   hiddenIds: string[];
   /** Optional for backwards compatibility with existing save envelopes. */
   overpopulationReports?: OverpopulationEpisodeReport[];
+  /** Optional for backwards compatibility with existing save envelopes. */
+  recyclerArrivalReports?: RecyclerArrivalReport[];
 };
 
 export type ReportsCategoryKey = ReportCategory;

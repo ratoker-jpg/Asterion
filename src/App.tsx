@@ -352,6 +352,23 @@ export function App() {
     }, 40);
   };
 
+  const openAsteroidRecycleLaunch = (coordinate: UniverseCoordinate) => {
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    setNotice(`Координаты астероида выбраны для переработки: [${coordinate.galaxy}:${coordinate.system}:${coordinate.position}].`);
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, {
+        detail: {
+          missionId: 'recycle',
+          targetKind: 'asteroid',
+          destination: { kind: 'coordinate', coordinate },
+        },
+      }));
+    }, 40);
+  };
+
   useEffect(() => {
     if (RUNTIME_MODE !== 'test') return;
     persistence.writeTestTimeScale(testTimeScale);
@@ -1381,8 +1398,11 @@ export function App() {
               playerPlanets={universePlayerPlanets}
               spyTargets={Object.values(getEspionageTargets(state.espionage))}
               orbitalDebrisByCoordinate={getOrbitalDebrisByCoordinate(getEspionageState(state))}
+              asteroidDebrisPresenceBySpawnIndex={Object.fromEntries(Object.entries(state.asteroidDebrisBySpawnIndex ?? {}).map(([spawnIndex, amount]) => [spawnIndex, amount > 0]))}
+              asteroidStates={state.asteroidSimulation?.asteroids}
               mode={RUNTIME_MODE}
               onColonize={openColonizationLaunch}
+              onRecycle={openAsteroidRecycleLaunch}
               onTransport={openTransportLaunch}
               onSpy={openSpyLaunch}
               onAttack={openAttackLaunch}

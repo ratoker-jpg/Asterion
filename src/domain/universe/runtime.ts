@@ -2,7 +2,7 @@ import type {
   UniverseAction,
   UniverseActionState,
   UniverseAssetCatalog,
-  UniverseAsteroidState,
+  UniverseAsteroidRuntimeState,
   UniverseCoordinate,
   UniverseMap,
   UniverseOwnerAlliance,
@@ -372,6 +372,8 @@ export type CreateUniverseSystemOptions = {
   assets?: Partial<UniverseAssetCatalog>;
   nowMs?: number;
   galaxyCount?: number;
+  /** When supplied, use persisted positions rather than a wall-clock projection. */
+  asteroidStates?: readonly UniverseAsteroidRuntimeState[];
   playerPlanets?: readonly UniversePersistedPlayerPlanet[];
   registeredPlanets?: readonly UniverseRegisteredPlanet[];
 };
@@ -529,8 +531,6 @@ export function getUniverseAsteroidDwellMs(spawnIndex: number, movementIndex: nu
   return randomInt(random, ASTEROID_MIN_DWELL_MS, ASTEROID_MAX_DWELL_MS);
 }
 
-type UniverseAsteroidRuntimeState = UniverseAsteroidState & { coordinate: UniverseCoordinate };
-
 export function getUniverseAsteroidState(spawnIndex: number, nowMs: number, galaxyCount = 1): UniverseAsteroidRuntimeState | null {
   const safeNow = normalizeNow(nowMs);
   if (!Number.isInteger(spawnIndex) || spawnIndex < 0) return null;
@@ -625,19 +625,34 @@ function createAsteroidNode(state: UniverseAsteroidRuntimeState, assets: Univers
   };
 }
 
-function createActiveAsteroidsBySystem(galaxy: number, nowMs: number, galaxyCount: number, assets: UniverseAssetCatalog) {
+function createActiveAsteroidsBySystem(
+  galaxy: number,
+  nowMs: number,
+  galaxyCount: number,
+  assets: UniverseAssetCatalog,
+  persistedStates?: readonly UniverseAsteroidRuntimeState[],
+) {
   const grouped = Array.from({ length: SYSTEM_COUNT }, () => [] as UniversePlanetNode[]);
-  const states: UniverseAsteroidRuntimeState[] = [];
-  const currentSpawnIndex = asteroidSpawnIndexAt(nowMs);
-  if (currentSpawnIndex < 0) return grouped;
-  const maxRouteMs = galaxyCount * SYSTEM_COUNT * POSITION_COUNT * ASTEROID_MAX_DWELL_MS;
-  const firstSpawnIndex = Math.max(0, currentSpawnIndex - Math.ceil(maxRouteMs / ASTEROID_SPAWN_INTERVAL_MS) - 1);
-  for (let spawnIndex = firstSpawnIndex; spawnIndex <= currentSpawnIndex; spawnIndex += 1) {
-    const state = getUniverseAsteroidState(spawnIndex, nowMs, galaxyCount);
-    if (state) states.push(state);
+  let states: UniverseAsteroidRuntimeState[];
+  if (persistedStates) {
+    states = persistedStates.map((state) => ({
+      ...state,
+      coordinate: { ...state.coordinate },
+      nextCoordinate: state.nextCoordinate ? { ...state.nextCoordinate } : undefined,
+    }));
+  } else {
+    states = [];
+    const currentSpawnIndex = asteroidSpawnIndexAt(nowMs);
+    if (currentSpawnIndex < 0) return grouped;
+    const maxRouteMs = galaxyCount * SYSTEM_COUNT * POSITION_COUNT * ASTEROID_MAX_DWELL_MS;
+    const firstSpawnIndex = Math.max(0, currentSpawnIndex - Math.ceil(maxRouteMs / ASTEROID_SPAWN_INTERVAL_MS) - 1);
+    for (let spawnIndex = firstSpawnIndex; spawnIndex <= currentSpawnIndex; spawnIndex += 1) {
+      const state = getUniverseAsteroidState(spawnIndex, nowMs, galaxyCount);
+      if (state) states.push(state);
+    }
+    states = resolveUniverseAsteroidCollisions(states, nowMs, galaxyCount);
   }
-  const resolvedStates = resolveUniverseAsteroidCollisions(states, nowMs, galaxyCount);
-  for (const state of resolvedStates) {
+  for (const state of states) {
     if (state.coordinate.galaxy === galaxy) grouped[state.coordinate.system - 1].push(createAsteroidNode(state, assets));
   }
   return grouped;
@@ -778,7 +793,9 @@ export function createUniverseSystem(options: CreateUniverseSystemOptions): Univ
   const assets = mergeAssets(options.assets);
   const nowMs = normalizeNow(options.nowMs);
   const galaxyCount = Math.max(1, Math.floor(options.galaxyCount ?? 1));
-  const asteroidNodes = createActiveAsteroidsBySystem(Math.max(1, Math.floor(options.galaxy ?? GALAXY)), nowMs, galaxyCount, assets);
+  const asteroidNodes = createActiveAsteroidsBySystem(
+    Math.max(1, Math.floor(options.galaxy ?? GALAXY)), nowMs, galaxyCount, assets, options.asteroidStates,
+  );
   let system = createUniverseSystemBase(options, assets);
   system = injectTimedObject(system, 'pirate', nowMs, assets);
   system = injectTimedObject(system, 'unique', nowMs, assets);
@@ -794,7 +811,7 @@ export function createUniverseMap(options: Omit<CreateUniverseSystemOptions, 'sy
   const nowMs = normalizeNow(options.nowMs);
   const galaxyCount = Math.max(1, Math.floor(options.galaxyCount ?? 1));
   const assets = mergeAssets(options.assets);
-  const asteroidNodes = createActiveAsteroidsBySystem(galaxy, nowMs, galaxyCount, assets);
+  const asteroidNodes = createActiveAsteroidsBySystem(galaxy, nowMs, galaxyCount, assets, options.asteroidStates);
   const systems = Array.from({ length: SYSTEM_COUNT }, (_, index) => {
     let system = createUniverseSystemBase({ ...options, galaxy, system: index + 1 }, assets);
     system = injectTimedObject(system, 'pirate', nowMs, assets);

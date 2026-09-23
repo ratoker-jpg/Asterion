@@ -118,6 +118,83 @@ test('production and test persistence seeds stay isolated at every fixture bound
   assert.equal(createAllianceRatingEntries(null, 'test').length, 42);
 });
 
+test('asteroid simulation, hidden cargo, and recycler history round-trip through persistence', () => {
+  const storage = new MemoryStorage();
+  const now = 1_800_000_000_000;
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => now });
+  const initial = createInitialSaveState('test', now);
+
+  assert.ok(initial.asteroidSimulation);
+  assert.deepEqual(initial.asteroidDebrisBySpawnIndex, {});
+
+  const asteroid = {
+    spawnIndex: 42,
+    spawnedAt: now - 60_000,
+    movementIndex: 3,
+    previousMoveAt: now - 20_000,
+    nextMoveAt: now + 40_000,
+    nextCoordinate: { galaxy: 1, system: 12, position: 8 },
+    gasYield: 900,
+    coordinate: { galaxy: 1, system: 12, position: 7 },
+  };
+  const report = {
+    id: 'recycler-arrival:flight-roundtrip',
+    flightId: 'flight-roundtrip',
+    coordinate: { galaxy: 1, system: 12, position: 7 },
+    arrivedAtMs: now - 5_000,
+    collectedDebris: 120,
+    remainingOrbitalDebris: 30,
+  } as const;
+  const changed: SaveState = {
+    ...initial,
+    asteroidSimulation: {
+      version: 1,
+      processedThroughAt: now - 10_000,
+      nextSpawnIndex: 43,
+      asteroids: [asteroid],
+    },
+    asteroidDebrisBySpawnIndex: { '42': 777 },
+    reports: { ...initial.reports, recyclerArrivalReports: [report] },
+  };
+
+  assert.equal(persistence.write(changed).ok, true);
+  const reloaded = persistence.read();
+  assert.equal(reloaded.asteroidSimulation?.processedThroughAt, now - 10_000);
+  assert.deepEqual(reloaded.asteroidSimulation?.asteroids, [asteroid]);
+  assert.equal(reloaded.asteroidSimulation?.nextSpawnIndex, 43);
+  assert.deepEqual(reloaded.asteroidDebrisBySpawnIndex, { '42': 777 });
+  assert.deepEqual(reloaded.reports.recyclerArrivalReports, [report]);
+  assert.equal(reloaded.reports.recyclerArrivalReports?.filter((item) => item.flightId === report.flightId).length, 1);
+});
+
+test('legacy persistence seeds asteroid baseline at load time and retains recycler arrival history', () => {
+  const storage = new MemoryStorage();
+  const loadAt = 1_800_000_000_000;
+  const initial = createInitialSaveState('test', 1_000);
+  const report = {
+    id: 'recycler-arrival:legacy-flight',
+    flightId: 'legacy-flight',
+    coordinate: { galaxy: 1, system: 3, position: 4 },
+    arrivedAtMs: 2_000,
+    collectedDebris: 0,
+    remainingOrbitalDebris: 0,
+  } as const;
+  const legacyPayload = {
+    ...initial,
+    asteroidSimulation: undefined,
+    reports: { ...initial.reports, recyclerArrivalReports: [report] },
+  };
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => loadAt });
+  storage.values.set(persistence.saveKey, JSON.stringify(legacyPayload));
+
+  const reloaded = persistence.read();
+  const expectedBaseline = createInitialSaveState('test', loadAt).asteroidSimulation;
+  assert.deepEqual(reloaded.asteroidSimulation, expectedBaseline);
+  assert.deepEqual(reloaded.asteroidDebrisBySpawnIndex, {});
+  assert.deepEqual(reloaded.reports.recyclerArrivalReports, [report]);
+  assert.equal(reloaded.reports.recyclerArrivalReports?.filter((item) => item.flightId === report.flightId).length, 1);
+});
+
 function withBuildingSetup(state: SaveState): SaveState {
   return {
     ...state,

@@ -197,10 +197,28 @@ async function runViewport(win, width, height) {
     episodeEndedAt: Date.now(),
     removedShips: [{ shipId: 'scout', count: 12 }, { shipId: 'destroyer', count: 3 }],
   };
+  const recyclerArrivalReports = [
+    {
+      id: 'recycler-arrival:qa-nonzero-flight',
+      flightId: 'qa-nonzero-flight',
+      coordinate: { galaxy: 2, system: 14, position: 7 },
+      arrivedAtMs: Date.now() - 60_000,
+      collectedDebris: 800,
+      remainingOrbitalDebris: 200,
+    },
+    {
+      id: 'recycler-arrival:qa-zero-flight',
+      flightId: 'qa-zero-flight',
+      coordinate: { galaxy: 1, system: 1, position: 3 },
+      arrivedAtMs: Date.now() - 30_000,
+      collectedDebris: 0,
+      remainingOrbitalDebris: 0,
+    },
+  ];
   const seededReport = await win.webContents.executeJavaScript(`(() => {
     try {
       const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
-      save.reports = { ...(save.reports || {}), overpopulationReports: [${JSON.stringify(overpopulationReport)}] };
+      save.reports = { ...(save.reports || {}), overpopulationReports: [${JSON.stringify(overpopulationReport)}], recyclerArrivalReports: [${JSON.stringify(recyclerArrivalReports[0])}, ${JSON.stringify(recyclerArrivalReports[1])}] };
       localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
       return true;
     } catch { return false; }
@@ -242,6 +260,45 @@ async function runViewport(win, width, height) {
     throw new Error(`Overpopulation report dossier contract failed at ${label}: ${JSON.stringify(overpopulationDossier)}`);
   }
   await capture(win, directory, 'overpopulation-dossier');
+
+  for (const [index, report] of recyclerArrivalReports.entries()) {
+    const selector = `[data-report-item-id="${report.id}"] .reports-list-open`;
+    await waitFor(win, `document.querySelector(${JSON.stringify(selector)})`);
+    const opened = await win.webContents.executeJavaScript(`(() => {
+      const button = document.querySelector(${JSON.stringify(selector)});
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    if (!opened) throw new Error(`Recycler arrival report row could not be opened at ${label}: ${report.id}`);
+    await waitFor(win, `document.querySelector('.reports-dossier--generic')?.textContent?.includes(${JSON.stringify(`[${report.coordinate.galaxy}:${report.coordinate.system}:${report.coordinate.position}]`)})`);
+    const dossier = await win.webContents.executeJavaScript(`(() => {
+      const node = document.querySelector('.reports-dossier--generic');
+      const text = node?.textContent?.replace(/\\s+/g, ' ') ?? '';
+      return {
+        visible: Boolean(node),
+        coordinate: text.includes(${JSON.stringify(`[${report.coordinate.galaxy}:${report.coordinate.system}:${report.coordinate.position}]`)}),
+        collected: text.includes(${JSON.stringify(String(report.collectedDebris))}),
+        remaining: text.includes(${JSON.stringify(String(report.remainingOrbitalDebris))}),
+        zeroMessage: text.includes('На орбите обломков не найдено'),
+        revealsCargo: /газ|груз|запас газа/i.test(text),
+      };
+    })()`);
+    if (!dossier.visible || !dossier.coordinate || !dossier.collected || !dossier.remaining
+      || (report.collectedDebris === 0 && !dossier.zeroMessage) || dossier.revealsCargo) {
+      throw new Error(`Recycler arrival dossier contract failed at ${label}: ${JSON.stringify({ report, dossier })}`);
+    }
+    await capture(win, directory, index === 0 ? 'recycler-arrival-nonzero' : 'recycler-arrival-zero');
+  }
+
+  await reload(win);
+  await clickPrimary(win, 'reports');
+  await clickFolder(win, 'system');
+  for (const report of recyclerArrivalReports) {
+    const selector = `[data-report-item-id="${report.id}"]`;
+    const persistedCount = await win.webContents.executeJavaScript(`document.querySelectorAll(${JSON.stringify(selector)}).length`);
+    if (persistedCount !== 1) throw new Error(`Recycler arrival report reload count failed at ${label}: ${report.id} count=${persistedCount}`);
+  }
   await clickPrimary(win, 'universe', `document.querySelector('[data-qa-universe]')`);
   await clickPrimary(win, 'reports');
 

@@ -27,7 +27,7 @@ import {
   buildReportsFeed,
   createOverpopulationEpisodeReportId,
 } from '../domain/reports/adapters.ts';
-import type { OverpopulationEpisodeReport, OrdinaryShipId } from '../domain/reports/types.ts';
+import type { OverpopulationEpisodeReport, OrdinaryShipId, RecyclerArrivalReport } from '../domain/reports/types.ts';
 import { normalizeCombatFactionId } from '../domain/combat/factions.ts';
 import { SHIP_IDS } from '../domain/combat/ids.ts';
 import {
@@ -119,7 +119,9 @@ import type {
 } from '../domain/flights/types.ts';
 import { normalizePersistedTransportCargo } from '../domain/flights/cargo.ts';
 import type { UniverseObjectKind } from '../domain/universe/types.ts';
-import { TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
+import type { UniverseAsteroidSimulationState, UniverseAsteroidRuntimeState, UniverseCoordinate } from '../domain/universe/types.ts';
+import { createUniverseAsteroidSimulationState } from '../domain/universe/asteroid-simulation.ts';
+import { POSITION_COUNT, SYSTEM_COUNT, TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import { migrateEspionageState } from '../domain/espionage/repository.ts';
 import { createDefaultEspionageState } from '../domain/espionage/runtime.ts';
 import { createDefaultTestEspionageState } from '../domain/espionage/fixtures.ts';
@@ -192,6 +194,8 @@ type StoredSave = {
   operations?: unknown;
   command?: unknown;
   reports?: unknown;
+  asteroidSimulation?: unknown;
+  asteroidDebrisBySpawnIndex?: unknown;
   science?: unknown;
   resourceClock?: unknown;
   currentPlanetId?: unknown;
@@ -266,6 +270,90 @@ function migrateOverpopulationEpisodeReports(value: unknown): OverpopulationEpis
   }
   const byId = new Map(reports.map((report) => [report.id, report]));
   return [...byId.values()].slice(-500);
+}
+
+function persistedCoordinate(value: unknown): UniverseCoordinate | undefined {
+  const source = objectRecord(value);
+  if (!source) return undefined;
+  const { galaxy, system, position } = source;
+  if (![galaxy, system, position].every((item) => typeof item === 'number' && Number.isSafeInteger(item) && item >= 1)
+    || (system as number) > SYSTEM_COUNT || (position as number) > POSITION_COUNT) return undefined;
+  return { galaxy: galaxy as number, system: system as number, position: position as number };
+}
+
+function migrateAsteroidSimulation(value: unknown, now: number): UniverseAsteroidSimulationState {
+  const source = objectRecord(value);
+  if (!source || source.version !== 1
+    || typeof source.processedThroughAt !== 'number' || !Number.isSafeInteger(source.processedThroughAt) || source.processedThroughAt < 0
+    || typeof source.nextSpawnIndex !== 'number' || !Number.isSafeInteger(source.nextSpawnIndex) || source.nextSpawnIndex < 0
+    || !Array.isArray(source.asteroids)) {
+    return createUniverseAsteroidSimulationState(now);
+  }
+  const seenSpawnIndices = new Set<number>();
+  const asteroids: UniverseAsteroidRuntimeState[] = source.asteroids.flatMap((candidate) => {
+    const asteroid = objectRecord(candidate);
+    if (!asteroid || typeof asteroid.spawnIndex !== 'number' || !Number.isSafeInteger(asteroid.spawnIndex) || asteroid.spawnIndex < 0
+      || asteroid.spawnIndex >= (source.nextSpawnIndex as number)
+      || seenSpawnIndices.has(asteroid.spawnIndex)) return [];
+    const coordinate = persistedCoordinate(asteroid.coordinate);
+    const counters = [asteroid.spawnedAt, asteroid.movementIndex, asteroid.previousMoveAt, asteroid.nextMoveAt, asteroid.gasYield];
+    if (!coordinate || !counters.every((item) => typeof item === 'number' && Number.isSafeInteger(item) && item >= 0)
+      || (asteroid.movementIndex as number) < 0
+      || (asteroid.nextMoveAt as number) < (asteroid.previousMoveAt as number)) return [];
+    const nextCoordinate = asteroid.nextCoordinate === undefined ? undefined : persistedCoordinate(asteroid.nextCoordinate);
+    if (asteroid.nextCoordinate !== undefined && !nextCoordinate) return [];
+    seenSpawnIndices.add(asteroid.spawnIndex);
+    return [{
+      spawnIndex: asteroid.spawnIndex,
+      spawnedAt: asteroid.spawnedAt as number,
+      movementIndex: asteroid.movementIndex as number,
+      previousMoveAt: asteroid.previousMoveAt as number,
+      nextMoveAt: asteroid.nextMoveAt as number,
+      ...(nextCoordinate ? { nextCoordinate } : {}),
+      gasYield: asteroid.gasYield as number,
+      coordinate,
+    }];
+  });
+  return {
+    version: 1,
+    processedThroughAt: source.processedThroughAt,
+    nextSpawnIndex: source.nextSpawnIndex,
+    asteroids,
+  };
+}
+
+function migrateAsteroidDebris(value: unknown): Record<string, number> {
+  const source = objectRecord(value);
+  if (!source) return {};
+  return Object.fromEntries(Object.entries(source).flatMap(([spawnIndex, amount]) => {
+    if (!/^\d+$/.test(spawnIndex) || !Number.isSafeInteger(Number(spawnIndex))
+      || typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount < 0) return [];
+    return [[String(Number(spawnIndex)), amount]];
+  }));
+}
+
+function migrateRecyclerArrivalReports(value: unknown): RecyclerArrivalReport[] {
+  if (!Array.isArray(value)) return [];
+  const byFlightId = new Map<string, RecyclerArrivalReport>();
+  for (const candidate of value) {
+    const source = objectRecord(candidate);
+    const coordinate = persistedCoordinate(source?.coordinate);
+    if (!source || typeof source.flightId !== 'string' || !source.flightId.trim()
+      || source.flightId.length > 160 || !coordinate
+      || typeof source.arrivedAtMs !== 'number' || !Number.isSafeInteger(source.arrivedAtMs) || source.arrivedAtMs < 0
+      || typeof source.collectedDebris !== 'number' || !Number.isSafeInteger(source.collectedDebris) || source.collectedDebris < 0
+      || typeof source.remainingOrbitalDebris !== 'number' || !Number.isSafeInteger(source.remainingOrbitalDebris) || source.remainingOrbitalDebris < 0) continue;
+    const flightId = source.flightId.trim();
+    byFlightId.set(flightId, {
+      id: `recycler-arrival:${flightId}`,
+      flightId,
+      coordinate,
+      arrivedAtMs: source.arrivedAtMs,
+      collectedDebris: source.collectedDebris,
+      remainingOrbitalDebris: source.remainingOrbitalDebris,
+    });
+  }
+  return [...byFlightId.values()];
 }
 
 function nonNegativeNumberOr(value: unknown, fallback: number): number {
@@ -805,6 +893,8 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     science,
     resourceClock: createResourceClock(now, ['helion-01']),
     flights: createDefaultFlightState(),
+    asteroidSimulation: createUniverseAsteroidSimulationState(now),
+    asteroidDebrisBySpawnIndex: {},
     espionage: mode === 'test' ? createDefaultTestEspionageState(now) : createDefaultEspionageState(),
     alliedPlanets: mode === 'test'
       ? { [TEST_MODE_ALLY_PLANET_FIXTURE.planet.id]: createDefaultAlliedPlanetState(mode, now, science.levels) }
@@ -859,7 +949,10 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
     const overpopulationReports = migrateOverpopulationEpisodeReports(
       objectRecord(parsed.reports)?.overpopulationReports,
     );
-    const reportIds = buildReportsFeed(combat.reports, operations, command, undefined, overpopulationReports).map((item) => item.id);
+    const recyclerArrivalReports = migrateRecyclerArrivalReports(
+      objectRecord(parsed.reports)?.recyclerArrivalReports,
+    );
+    const reportIds = buildReportsFeed(combat.reports, operations, command, undefined, overpopulationReports, recyclerArrivalReports).map((item) => item.id);
     const migratedSavedFleet = removeSolarSatellitesFromFleet(
       resolveSavedFleetState(savedHomeworld?.fleet, profile.factionId),
     );
@@ -1114,10 +1207,13 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       reports: {
         ...migrateReportsState(parsed.reports, reportIds),
         ...(overpopulationReports.length > 0 ? { overpopulationReports } : {}),
+        ...(recyclerArrivalReports.length > 0 ? { recyclerArrivalReports } : {}),
       },
       science,
       resourceClock: migrateResourceClock(parsed.resourceClock, timestamp, Object.keys(planets)),
       flights: migrateFlightState(parsed.flights),
+      asteroidSimulation: migrateAsteroidSimulation(parsed.asteroidSimulation, timestamp),
+      asteroidDebrisBySpawnIndex: migrateAsteroidDebris(parsed.asteroidDebrisBySpawnIndex),
       espionage,
       alliedPlanets,
     };

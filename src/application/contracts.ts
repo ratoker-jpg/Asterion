@@ -24,6 +24,7 @@ import type { RepairWorkshopState } from '../domain/repair/workshop.ts';
 import type { EnergyLedger, EnergySourceSnapshot } from '../domain/energy/runtime.ts';
 import type { FlightState } from '../domain/flights/types.ts';
 import type { EspionageState } from '../domain/espionage/types.ts';
+import type { UniverseAsteroidSimulationState } from '../domain/universe/types.ts';
 import type { UniverseOwnerAlliance } from '../domain/universe/types.ts';
 import type { OverpopulationState } from '../domain/fleet/overpopulation.ts';
 
@@ -129,6 +130,10 @@ export type SaveState = {
   science: ScienceState;
   resourceClock: ResourceClock;
   flights: FlightState;
+  /** Authoritative asteroid timeline. Missing only while hydrating legacy saves/fixtures. */
+  asteroidSimulation?: UniverseAsteroidSimulationState;
+  /** Hidden asteroid cargo by stable spawn index; never part of free orbital debris. */
+  asteroidDebrisBySpawnIndex?: Record<string, number>;
   /** Fresh saves materialize this state; optional keeps legacy test fixtures source-compatible. */
   espionage?: EspionageState;
   /** Optional for backwards compatibility; fresh states always materialize it. */

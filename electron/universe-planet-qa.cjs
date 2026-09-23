@@ -11,7 +11,7 @@ app.commandLine.appendSwitch('disable-gpu');
 app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
-const OUTPUT = path.join(ROOT, 'artifacts', 'universe-planet-qa');
+const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'artifacts', 'universe-planet-qa');
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 // Freeze the renderer clock so the scheduled asteroid fixture is stable and
@@ -69,11 +69,12 @@ async function clickAt(win, selector, backdrop = false, settleAfter = true, pres
     const scrollY = window.scrollY;
     element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     const rect = element.getBoundingClientRect();
-    const x = ${backdrop} ? rect.left + 3 : rect.left + rect.width / 2;
-    const y = ${backdrop} ? rect.top + 3 : rect.top + rect.height / 2;
-    const hit = document.elementFromPoint(x, y);
-    if (${backdrop} ? hit !== element : !element.contains(hit)) throw new Error('Click target occluded: ' + ${JSON.stringify(selector)});
-    return { x, y, scrollY };
+    const points = ${backdrop}
+      ? [{ x: rect.left + 3, y: rect.top + 3 }]
+      : [[.5, .5], [.25, .25], [.75, .25], [.25, .75], [.75, .75]].map(([px, py]) => ({ x: rect.left + rect.width * px, y: rect.top + rect.height * py }));
+    const point = points.find(({ x, y }) => { const hit = document.elementFromPoint(x, y); return ${backdrop} ? hit === element : element.contains(hit); });
+    if (!point) throw new Error('Click target occluded: ' + ${JSON.stringify(selector)});
+    return { ...point, scrollY };
   })()`);
   if (!point) throw new Error(`Click target missing: ${selector}`);
   const { x, y } = point;
@@ -175,6 +176,19 @@ async function mapSnapshot(win) {
           tooltip: marker.querySelector('[role="tooltip"]')?.textContent?.trim() || '',
         };
       }),
+      capturedDebrisMarkers: Array.from(document.querySelectorAll('.universe-asteroid-debris-marker')).map((marker) => {
+        const button = marker.closest('[data-qa-universe-object]');
+        const tooltip = marker.querySelector('[role="tooltip"]');
+        return {
+          id: button?.getAttribute('data-qa-universe-object') || '',
+          spawnIndex: button?.getAttribute('data-qa-universe-asteroid-spawn-index') || '',
+          coordinatePosition: button?.getAttribute('data-qa-universe-asteroid-position') || '',
+          ariaLabel: button?.getAttribute('aria-label') || '',
+          describedByText: button?.querySelector('[role="tooltip"]')?.textContent?.trim() || tooltip?.textContent?.trim() || '',
+          tooltip: tooltip?.textContent?.trim() || '',
+          html: button?.outerHTML || '',
+        };
+      }),
       coordinateLineCount: document.querySelectorAll('.system-planet small, .empty-slot small').length,
       animated,
       rects: rects(),
@@ -202,7 +216,33 @@ async function seedOrbitalDebrisMarkers(win) {
   })()`);
   if (!dead) throw new Error('Could not find a stable empty coordinate for the dead debris fixture.');
 
-  return win.webContents.executeJavaScript(`(() => {
+  let asteroid = null;
+  for (let system = 1; system <= 40 && !asteroid; system += 1) {
+    if (system !== 1) await selectSystem(win, system);
+    asteroid = await win.webContents.executeJavaScript(`(() => {
+      const candidates = [...document.querySelectorAll('[data-qa-universe-kind="asteroid"]')];
+      for (const node of candidates) {
+        const next = node.getAttribute('data-qa-universe-asteroid-next-coordinate') || '';
+        const match = next.match(/\\[(\\d+):(\\d+):(\\d+)\\]/);
+        if (!match) continue;
+        const nextMoveAt = Number(node.getAttribute('data-qa-universe-asteroid-next-move'));
+        const spawnIndex = node.getAttribute('data-qa-universe-asteroid-spawn-index') || '';
+        if (spawnIndex && Number.isFinite(nextMoveAt)) return {
+          id: node.getAttribute('data-qa-universe-object') || '',
+          spawnIndex,
+          system: Number(document.querySelector('[data-qa-universe]')?.getAttribute('data-qa-universe-system')),
+          nextSystem: Number(match[2]),
+          fromPosition: Number(node.getAttribute('data-qa-universe-asteroid-position')),
+          toPosition: Number(match[3]),
+          nextMoveAt,
+        };
+      }
+      return null;
+    })()`);
+  }
+  if (!asteroid) throw new Error('Could not find an asteroid with a scheduled next position.');
+
+  const fixtures = await win.webContents.executeJavaScript(`(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
     const espionage = save.espionage || {};
     const targets = espionage.targets || espionage.bot01Planets || {};
@@ -222,6 +262,8 @@ async function seedOrbitalDebrisMarkers(win) {
       createdAt: ${QA_UNIVERSE_NOW},
     };
     save.espionage = espionage;
+    save.asteroidDebrisBySpawnIndex = save.asteroidDebrisBySpawnIndex || {};
+    save.asteroidDebrisBySpawnIndex[${JSON.stringify(asteroid.spawnIndex)}] = 876543;
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     return {
       liveTargetId: live.id,
@@ -230,6 +272,7 @@ async function seedOrbitalDebrisMarkers(win) {
       deadCoordinate,
     };
   })()`);
+  return { ...fixtures, asteroid };
 }
 
 async function debrisMarkerSnapshot(win, selector) {
@@ -608,7 +651,7 @@ async function runViewport(width, height) {
     const freeAsteroid = await inspectorSnapshot(win);
     checkCopy(freeAsteroid);
     await checkModal(win);
-    if (freeAsteroid.kind !== 'asteroid' || freeAsteroid.underlyingKind !== 'empty' || !freeAsteroid.text.includes('СКРЫТ ДО ПЕРЕРАБОТКИ') || !freeAsteroid.text.includes('Следующее перемещение через') || !freeAsteroid.specialActions.some((action) => action.action === 'colonize' && !action.disabled) || !freeAsteroid.specialActions.some((action) => action.action === 'asteroid-recycler' && action.disabled)) throw new Error(`${label}: free asteroid inspector contract failed ${JSON.stringify(freeAsteroid)}`);
+    if (freeAsteroid.kind !== 'asteroid' || freeAsteroid.underlyingKind !== 'empty' || !freeAsteroid.text.includes('СКРЫТ ДО ПЕРЕРАБОТКИ') || !freeAsteroid.text.includes('Следующее перемещение через') || !freeAsteroid.specialActions.some((action) => action.action === 'colonize' && !action.disabled) || !freeAsteroid.specialActions.some((action) => action.action === 'asteroid-recycler' && !action.disabled)) throw new Error(`${label}: free asteroid inspector contract failed ${JSON.stringify(freeAsteroid)}`);
     await capture(win, directory, 'asteroid-inspector');
     await clickAt(win, '[data-qa-universe-special-action="colonize"]');
     await waitFor(win, `document.querySelector('.fleet-workspace-v1[data-qa-flight-launch-context]')`);
@@ -717,8 +760,62 @@ async function runViewport(width, height) {
     const occupiedAsteroid = await inspectorSnapshot(win);
     checkCopy(occupiedAsteroid);
     await checkModal(win);
-    if (occupiedAsteroid.kind !== 'asteroid' || occupiedAsteroid.underlyingKind === 'empty' || occupiedAsteroid.specialActions.some((action) => action.action === 'colonize') || !occupiedAsteroid.specialActions.some((action) => action.action === 'asteroid-recycler' && action.disabled)) throw new Error(`${label}: occupied asteroid inspector contract failed ${JSON.stringify(occupiedAsteroid)}`);
+    if (occupiedAsteroid.kind !== 'asteroid' || occupiedAsteroid.underlyingKind === 'empty' || occupiedAsteroid.specialActions.some((action) => action.action === 'colonize') || !occupiedAsteroid.specialActions.some((action) => action.action === 'asteroid-recycler' && !action.disabled)) throw new Error(`${label}: occupied asteroid inspector contract failed ${JSON.stringify(occupiedAsteroid)}`);
     await dismissInspector(win);
+
+    await selectSystem(win, debrisFixtures.asteroid.system);
+    const capturedSelector = `[data-qa-universe-object="${debrisFixtures.asteroid.id}"]`;
+    const capturedBefore = await win.webContents.executeJavaScript(`(() => {
+      const node = document.querySelector(${JSON.stringify(capturedSelector)});
+      const marker = node?.querySelector('.universe-asteroid-debris-marker');
+      const tooltip = marker?.querySelector('[role="tooltip"]');
+      return { present: Boolean(node && marker), spawnIndex: node?.getAttribute('data-qa-universe-asteroid-spawn-index') || '',
+        position: Number(node?.getAttribute('data-qa-universe-asteroid-position')), ariaLabel: node?.getAttribute('aria-label') || '',
+        title: node?.getAttribute('title') || '', describedBy: node?.getAttribute('aria-describedby') || '',
+        tooltipId: tooltip?.id || '', tooltip: tooltip?.textContent?.trim() || '', html: node?.outerHTML || '' };
+    })()`);
+    if (!capturedBefore.present || capturedBefore.spawnIndex !== debrisFixtures.asteroid.spawnIndex || capturedBefore.position !== debrisFixtures.asteroid.fromPosition
+      || capturedBefore.ariaLabel.includes('876543') || capturedBefore.title.includes('876543') || capturedBefore.tooltip !== 'На астероиде есть обломки'
+      || !capturedBefore.describedBy.split(/\s+/).includes(capturedBefore.tooltipId) || capturedBefore.html.includes('876543')
+      || !capturedBefore.html.includes('universe-asteroid-debris-marker') || capturedBefore.html.includes('class="universe-debris-marker"')) {
+      throw new Error(`${label}: captured debris must render as a separate nonnumeric marker on its asteroid ${JSON.stringify({ capturedBefore, fixture: debrisFixtures.asteroid })}`);
+    }
+    await clickObject(win, capturedSelector);
+    const capturedInspector = await inspectorSnapshot(win);
+    const capturedInspectorRow = await win.webContents.executeJavaScript(`(() => { const row = document.querySelector('[data-qa-universe-inspector] [data-qa-universe-asteroid-debris="present"]'); return { label: row?.querySelector('dt')?.textContent?.trim() || '', value: row?.querySelector('dd')?.textContent?.trim() || '' }; })()`);
+    if (capturedInspector.kind !== 'asteroid' || capturedInspectorRow.label !== 'Обломки на астероиде' || capturedInspectorRow.value !== 'есть' || capturedInspector.text.includes('876543')) {
+      throw new Error(`${label}: asteroid card must expose only the binary presence row ${JSON.stringify({ capturedInspector, capturedInspectorRow })}`);
+    }
+    await dismissInspector(win);
+    let absentAsteroid = await win.webContents.executeJavaScript(`(() => [...document.querySelectorAll('[data-qa-universe-kind="asteroid"]')].find((node) => node.getAttribute('data-qa-universe-object') !== ${JSON.stringify(debrisFixtures.asteroid.id)})?.getAttribute('data-qa-universe-object') || '')()`);
+    if (!absentAsteroid) {
+      await selectSystem(win, 1);
+      absentAsteroid = await win.webContents.executeJavaScript(`(() => [...document.querySelectorAll('[data-qa-universe-kind="asteroid"]')].find((node) => node.getAttribute('data-qa-universe-object') !== ${JSON.stringify(debrisFixtures.asteroid.id)})?.getAttribute('data-qa-universe-object') || '')()`);
+    }
+    if (!absentAsteroid) throw new Error(`${label}: no unladen asteroid was available for the binary inspector check`);
+    await clickObject(win, `[data-qa-universe-object="${absentAsteroid}"]`);
+    const emptyCargoInspector = await inspectorSnapshot(win);
+    const emptyCargoRow = await win.webContents.executeJavaScript(`(() => { const row = document.querySelector('[data-qa-universe-inspector] [data-qa-universe-asteroid-debris="absent"]'); return { label: row?.querySelector('dt')?.textContent?.trim() || '', value: row?.querySelector('dd')?.textContent?.trim() || '' }; })()`);
+    if (emptyCargoInspector.kind !== 'asteroid' || emptyCargoRow.label !== 'Обломки на астероиде' || emptyCargoRow.value !== 'нет') throw new Error(`${label}: empty asteroid card must report no debris ${JSON.stringify({ emptyCargoInspector, emptyCargoRow })}`);
+
+    await win.webContents.executeJavaScript(`void (Date.now = () => ${debrisFixtures.asteroid.nextMoveAt + 1});`);
+    await sleep(1_200);
+    await selectSystem(win, debrisFixtures.asteroid.nextSystem);
+    await waitFor(win, `(() => { const node = document.querySelector(${JSON.stringify(capturedSelector)}); return Number(node?.getAttribute('data-qa-universe-asteroid-position')) === ${debrisFixtures.asteroid.toPosition} && Boolean(node?.querySelector('.universe-asteroid-debris-marker')); })()`);
+    const capturedAfter = await win.webContents.executeJavaScript(`(() => {
+      const node = document.querySelector(${JSON.stringify(capturedSelector)});
+      const marker = node?.querySelector('.universe-asteroid-debris-marker');
+      const tooltip = marker?.querySelector('[role="tooltip"]');
+      return { position: Number(node?.getAttribute('data-qa-universe-asteroid-position')), tooltip: tooltip?.textContent?.trim() || '',
+        ariaLabel: node?.getAttribute('aria-label') || '', title: node?.getAttribute('title') || '', html: node?.outerHTML || '' };
+    })()`);
+    if (capturedAfter.position !== debrisFixtures.asteroid.toPosition || capturedAfter.tooltip !== 'На астероиде есть обломки'
+      || capturedAfter.ariaLabel.includes('876543') || capturedAfter.title.includes('876543') || capturedAfter.html.includes('876543')) {
+      throw new Error(`${label}: captured debris marker did not follow the asteroid with presence-only labels ${JSON.stringify({ capturedAfter, fixture: debrisFixtures.asteroid })}`);
+    }
+    await selectSystem(win, debrisFixtures.deadCoordinate.system);
+    const stationaryDebrisAfter = await debrisMarkerSnapshot(win, `[data-qa-universe-kind="empty"][aria-label*="[${debrisFixtures.deadCoordinate.galaxy}:${debrisFixtures.deadCoordinate.system}:${debrisFixtures.deadCoordinate.position}]"]`);
+    if (stationaryDebrisAfter.amount !== '34567') throw new Error(`${label}: free orbital debris did not remain at its fixed coordinate ${JSON.stringify(stationaryDebrisAfter)}`);
 
     const pirateSystem = await findObject(win, '[data-qa-universe-kind="pirate"]');
     await clickObject(win, '[data-qa-universe-kind="pirate"]');

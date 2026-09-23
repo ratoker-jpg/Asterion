@@ -571,7 +571,7 @@ function FleetWorkspace({
       targetRelation: draft?.targetRelation === null ? undefined : draft?.targetRelation ?? previewTargetRelation,
       targetKind: missionId === 'colonize'
         ? launchContext?.targetKind ?? 'empty'
-        : missionId === 'recycle' ? undefined : launchContext?.targetKind,
+        : launchContext?.targetKind,
       targetPlanetName: launchContext?.targetPlanetName,
       targetOwnerId: launchContext?.targetOwnerId,
       targetOwnerName: launchContext?.targetOwnerName,

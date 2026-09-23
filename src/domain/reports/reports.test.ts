@@ -11,11 +11,15 @@ import { createDefaultOperationsState, revealOperation } from '../operations/rep
 import {
   battleReportToReportItem,
   buildReportsFeed,
+  createRecyclerArrivalReportId,
   createOverpopulationEpisodeReportId,
   filterReportItems,
   getReportCategoryCounts,
   operationIntelToReportItem,
   overpopulationEpisodeReportToReportItem,
+  preservePersistentReportCollections,
+  recyclerArrivalReportToReportItem,
+  upsertRecyclerArrivalReport,
   upsertOverpopulationEpisodeReport,
 } from './adapters.ts';
 import { NON_COMBAT_REPORT_FIXTURES } from './catalog.ts';
@@ -105,6 +109,88 @@ test('overpopulation final report uses one stable episode id and projects summar
   ]);
   assert.equal(item.details.at(-1)?.value, '7');
   assert.equal(buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, once.overpopulationReports).some((entry) => entry.id === item.id), true);
+});
+
+test('recycler arrival report projects coordinates and debris totals into System with a stable id', () => {
+  const report = {
+    flightId: 'flight:qa-recycler-1',
+    coordinate: { galaxy: 2, system: 14, position: 7 },
+    arrivedAtMs: 123_000,
+    collectedDebris: 800,
+    remainingOrbitalDebris: 200,
+  };
+  const first = upsertRecyclerArrivalReport(createDefaultReportsState(), report);
+  const repeated = upsertRecyclerArrivalReport(first, report);
+  const stored = repeated.recyclerArrivalReports![0];
+  const item = recyclerArrivalReportToReportItem(stored);
+
+  assert.equal(createRecyclerArrivalReportId(report.flightId), 'recycler-arrival:flight:qa-recycler-1');
+  assert.equal(repeated.recyclerArrivalReports?.length, 1);
+  assert.equal(stored.id, 'recycler-arrival:flight:qa-recycler-1');
+  assert.equal(item.id, stored.id);
+  assert.equal(item.source, 'recycling');
+  assert.equal(item.category, 'system');
+  assert.equal(item.timestamp, new Date(report.arrivedAtMs).toISOString());
+  assert.deepEqual(item.coordinates, ['[2:14:7]']);
+  assert.deepEqual(item.details, [
+    { label: 'Координаты прибытия', value: '[2:14:7]' },
+    { label: 'Собрано обломков', value: '800' },
+    { label: 'Осталось свободных обломков на орбите', value: '200' },
+  ]);
+  assert.equal(buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, [], repeated.recyclerArrivalReports).some((entry) => entry.id === stored.id), true);
+  assert.doesNotMatch(`${item.title} ${item.preview} ${item.body} ${item.details.map(({ label, value }) => `${label} ${value}`).join(' ')}`, /газа|газ|груз|астероид/i);
+});
+
+test('recycler arrival upserts retain the full arrival history and replace a repeated flight', () => {
+  const reports = Array.from({ length: 501 }, (_, index) => ({
+    flightId: `flight:${index}`,
+    coordinate: { galaxy: 1, system: 1, position: 1 },
+    arrivedAtMs: index,
+    collectedDebris: index,
+    remainingOrbitalDebris: 0,
+  }));
+  const history = reports.reduce((state, report) => upsertRecyclerArrivalReport(state, report), createDefaultReportsState());
+  const repeated = upsertRecyclerArrivalReport(history, { ...reports[0], collectedDebris: 99 });
+
+  assert.equal(repeated.recyclerArrivalReports?.length, 501);
+  assert.equal(repeated.recyclerArrivalReports?.filter(({ flightId }) => flightId === reports[0].flightId).length, 1);
+  assert.equal(repeated.recyclerArrivalReports?.find(({ flightId }) => flightId === reports[0].flightId)?.collectedDebris, 99);
+});
+
+test('zero-debris recycler arrival still produces a System report with explicit empty-result copy', () => {
+  const report = {
+    id: 'recycler-arrival:flight:qa-zero',
+    flightId: 'flight:qa-zero',
+    coordinate: { galaxy: 1, system: 1, position: 3 },
+    arrivedAtMs: 456_000,
+    collectedDebris: 0,
+    remainingOrbitalDebris: 0,
+  } as const;
+  const item = recyclerArrivalReportToReportItem(report);
+  const feed = buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, [], [report]);
+
+  assert.equal(item.category, 'system');
+  assert.match(item.body, /На орбите обломков не найдено/);
+  assert.equal(feed.filter((entry) => entry.id === report.id).length, 1);
+});
+
+test('report metadata read/hide transitions preserve recycler arrival records', () => {
+  const report = {
+    id: 'recycler-arrival:flight:qa-retention',
+    flightId: 'flight:qa-retention',
+    coordinate: { galaxy: 1, system: 8, position: 9 },
+    arrivedAtMs: 789_000,
+    collectedDebris: 12,
+    remainingOrbitalDebris: 0,
+  } as const;
+  const previous = { ...createDefaultReportsState(), recyclerArrivalReports: [report] };
+  const item = recyclerArrivalReportToReportItem(report);
+  const read = preservePersistentReportCollections(markReportRead(previous, report.id), previous);
+  const hidden = preservePersistentReportCollections(deleteSelectedReports(previous, [item], 'system', [report.id]), previous);
+
+  assert.deepEqual(read.recyclerArrivalReports, [report]);
+  assert.deepEqual(hidden.recyclerArrivalReports, [report]);
+  assert.equal(hidden.hiddenIds.includes(report.id), true);
 });
 
 test('overpopulation episode report survives save hydration with read/hidden metadata compatibility', async () => {

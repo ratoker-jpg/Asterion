@@ -83,13 +83,13 @@ async function seedProductionSave(win, mutator, args = []) {
       if (!save || !planet) return { ok: false, error: 'missing test save or homeworld' };
       (${mutator.toString()})(save, planet, ...${JSON.stringify(args)});
       localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
-      window.setTimeout(() => window.location.reload(), 0);
       return { ok: true };
     } catch (error) {
       return { ok: false, error: String(error?.stack || error) };
     }
   })()`);
   if (!result?.ok) throw new Error(`Could not seed fleet production save: ${result?.error || 'unknown error'}`);
+  win.webContents.reload();
   await done;
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await waitFor(win, `localStorage.getItem(${JSON.stringify(TEST_KEY)})`);
@@ -105,10 +105,10 @@ async function setStoredSourceGas(win, gas) {
     save.gas = ${JSON.stringify(gas)};
     planet.resources = { ...planet.resources, gas: ${JSON.stringify(gas)} };
     localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
-    window.setTimeout(() => window.location.reload(), 0);
     return true;
   })()`);
   if (!ok) throw new Error('Could not set stored source gas');
+  win.webContents.reload();
   await done;
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await waitFor(win, `localStorage.getItem(${JSON.stringify(TEST_KEY)})`);
@@ -639,6 +639,73 @@ async function runRecycleUiCycle(win, label) {
   return { target: target.coordinate, manifest: flight.selectedShips, capacity: flight.recycleCapacity, collected, remaining, returned, persistedOnce: true };
 }
 
+async function runAsteroidOverlayRecycleLaunch(win, label) {
+  await click(win, '[data-qa-route="universe"]');
+  await waitFor(win, `document.querySelector('[data-qa-universe]')`);
+  let asteroid = null;
+  for (let system = 1; system <= 40 && !asteroid; system += 1) {
+    await setUniverseSystem(win, system);
+    asteroid = await win.webContents.executeJavaScript(`(() => {
+      for (const node of document.querySelectorAll('[data-qa-universe-kind="asteroid"]')) {
+        if (node.getAttribute('data-qa-universe-underlying-kind') !== 'empty') continue;
+        const match = node.getAttribute('aria-label')?.match(/\\[(\\d+):(\\d+):(\\d+)\\]/);
+        const nextMoveAt = Number(node.getAttribute('data-qa-universe-asteroid-next-move'));
+        if (match && Number.isFinite(nextMoveAt)) return {
+          id: node.getAttribute('data-qa-universe-object') || '',
+          coordinate: match.slice(1).map(Number),
+          nextMoveAt,
+        };
+      }
+      return null;
+    })()`);
+  }
+  if (!asteroid) throw new Error(`${label}: no active asteroid overlay on an empty coordinate was available for recycler dispatch`);
+
+  await click(win, `[data-qa-universe-object="${asteroid.id}"]`);
+  await waitFor(win, `document.querySelector('[data-qa-universe-inspector]')`);
+  await click(win, '[data-qa-universe-special-action="asteroid-recycler"]');
+  await waitFor(win, `document.querySelector('.fleet-workspace-v1[data-qa-flight-launch-context]')`);
+  const launch = await win.webContents.executeJavaScript(`(() => ({
+    mission: document.querySelector('#fleet-mission')?.value || '',
+    sendDisabled: Boolean(document.querySelector('[data-qa-flight-preview-open]')?.disabled),
+  }))()`);
+  if (launch.mission !== 'recycle') {
+    throw new Error(`${label}: asteroid inspector did not seed a recycler mission at its active coordinate ${JSON.stringify({ launch, asteroid })}`);
+  }
+
+  await setFleetShipQuantity(win, 'recycler', 1);
+  await click(win, '[data-qa-flight-preview-open]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview]') && !document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled`);
+  const previewTarget = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-flight-target-step]')?.textContent?.replace(/\\s+/g, ' ').trim() || ''`);
+  if (!previewTarget.includes(`[${asteroid.coordinate.join(':')}]`)) {
+    throw new Error(`${label}: asteroid inspector destination was not retained in recycler preview ${JSON.stringify({ previewTarget, asteroid })}`);
+  }
+  await click(win, '[data-qa-test-speed="500"]');
+  await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×500')`);
+  await click(win, '[data-qa-flight-dispatch-confirm]');
+  await waitFor(win, `(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}');
+    const flight = [...(save.flights?.records || [])].reverse().find((item) => item.missionId === 'recycle');
+    return flight?.cargoState === 'returned' && flight?.phase === 'completed';
+  })()`, 30_000);
+  const saved = await readSave(win);
+  const flight = [...(saved.flights?.records ?? [])].reverse().find((item) => item.missionId === 'recycle');
+  const report = saved.reports?.recyclerArrivalReports?.find((item) => item.flightId === flight?.id);
+  if (!flight || flight.destinationCoordinate.galaxy !== asteroid.coordinate[0]
+    || flight.destinationCoordinate.system !== asteroid.coordinate[1]
+    || flight.destinationCoordinate.position !== asteroid.coordinate[2]
+    || flight.cargo?.debris !== 0 || !report || report.collectedDebris !== 0) {
+    throw new Error(`${label}: recycler could not launch/resolve at an empty coordinate with an active asteroid ${JSON.stringify({ flight, report, asteroid })}`);
+  }
+  await reload(win);
+  const reloaded = await readSave(win);
+  const reportsAfterReload = reloaded.reports?.recyclerArrivalReports?.filter((item) => item.flightId === flight.id) ?? [];
+  if (reportsAfterReload.length !== 1 || reportsAfterReload[0].collectedDebris !== 0) {
+    throw new Error(`${label}: asteroid-overlay zero-result report did not persist exactly once ${JSON.stringify(reportsAfterReload)}`);
+  }
+  return { coordinate: asteroid.coordinate, targetKind: flight.targetKind, collected: report.collectedDebris, reportCountAfterReload: reportsAfterReload.length };
+}
+
 async function seedPlanetSwitchSave(win) {
   await seedProductionSave(win, (save, sourcePlanet) => {
     const homeworld = JSON.parse(JSON.stringify(sourcePlanet));
@@ -1072,6 +1139,7 @@ async function runViewport(width, height) {
     const transportCycle = await runTransportUiCycle(win, label, directory);
     const flightCycle = await runFlightRuntimeCycle(win, label);
     const recycleCycle = await runRecycleUiCycle(win, label);
+    const asteroidOverlayRecycle = await runAsteroidOverlayRecycleLaunch(win, label);
     const planetSwitch = await runPlanetSwitchRegression(win, label);
     const planetoLom = await runPlanetoLomTrace(win, label);
 
@@ -1115,7 +1183,7 @@ async function runViewport(width, height) {
     })()`);
     if (layout.horizontalOverflow || !layout.longPage || layout.orderCount !== 8 || layout.queueOverflowY !== 'visible' || layout.queueMaxHeight !== 'none' || layout.queueScrollHeight < layout.queueClientHeight) throw new Error(`${label}: fleet production layout overflow/long-page contract failed ${JSON.stringify(layout)}`);
     await capture(win, directory, 'fleet-production');
-    return { viewport: label, layout, missionSlots, transportCycle, flightCycle, recycleCycle, planetSwitch, planetoLom, screenshotsSkipped: skipScreenshots };
+    return { viewport: label, layout, missionSlots, transportCycle, flightCycle, recycleCycle, asteroidOverlayRecycle, planetSwitch, planetoLom, screenshotsSkipped: skipScreenshots };
   } finally {
     if (!win.isDestroyed()) await win.close();
   }

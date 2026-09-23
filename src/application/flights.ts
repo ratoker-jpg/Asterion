@@ -86,6 +86,7 @@ import { resolveSpyOwnerProfile } from '../domain/espionage/owner-profile.ts';
 import { collectOrbitalDebrisAtCoordinate, getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 import { createUniverseSystem } from '../domain/universe/runtime.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPlanet, UniverseRegisteredPlanet } from '../domain/universe/types.ts';
+import { upsertRecyclerArrivalReport } from '../domain/reports/adapters.ts';
 import { initializePlanetResourceClock, reconcileTestEspionageTargetResources } from './resource-clock.ts';
 import { resolveSpyTarget, resolveSpyTargetAtCoordinate, type ResolvedSpyTarget } from './espionage-targets.ts';
 import {
@@ -906,12 +907,19 @@ export function dispatchFlight(
       departedAt,
       runtimeOptions.mode ?? (Object.keys(state.alliedPlanets ?? {}).length > 0 ? 'test' : 'production'),
     );
-    if (!actualTarget || (command.targetKind !== undefined && actualTarget.kind !== command.targetKind)
-      || !RECYCLABLE_TARGET_KINDS.has(actualTarget.kind)) {
+    const asteroidOverlayIsActive = command.targetKind === 'asteroid'
+      && (state.asteroidSimulation?.asteroids ?? []).some((asteroid) =>
+        coordinatesEqual(asteroid.coordinate, command.destination!.coordinate));
+    const submittedKindMatchesUnderlying = command.targetKind === 'asteroid'
+      ? asteroidOverlayIsActive
+      : command.targetKind === undefined || actualTarget?.kind === command.targetKind;
+    if (!actualTarget || !submittedKindMatchesUnderlying || !RECYCLABLE_TARGET_KINDS.has(actualTarget.kind)) {
       return failure(state, 'target-not-available', 'Тип цели больше не совпадает с картой вселенной.');
     }
     recycleTargetKind = actualTarget.kind;
-    if (actualTarget.kind === 'empty' && getOrbitalDebrisAtCoordinate(currentEspionageState(state), command.destination.coordinate) <= 0) {
+    if (actualTarget.kind === 'empty'
+      && !asteroidOverlayIsActive
+      && getOrbitalDebrisAtCoordinate(currentEspionageState(state), command.destination.coordinate) <= 0) {
       return failure(state, 'target-not-available', 'На свободной координате нет обломков для переработки.');
     }
     const cargoCatalog = Object.fromEntries(
@@ -1752,7 +1760,21 @@ export function reconcileFlights(
             current.destinationCoordinate,
             current.recycleCapacity ?? 0,
           );
+          const remainingOrbitalDebris = getOrbitalDebrisAtCoordinate(
+            collectedDebris.espionage,
+            current.destinationCoordinate,
+          );
           next = withEspionageState(next, collectedDebris.espionage);
+          next = {
+            ...next,
+            reports: upsertRecyclerArrivalReport(next.reports, {
+              flightId: current.id,
+              coordinate: current.destinationCoordinate,
+              arrivedAtMs: arrivalAt,
+              collectedDebris: collectedDebris.collected,
+              remainingOrbitalDebris,
+            }),
+          };
           const cargo: TransportCargo = {
             ...normalizeTransportCargo(current.cargo),
             debris: collectedDebris.collected,

@@ -50,6 +50,9 @@
 .workspace--universe .universe-view-v3 .system-asteroid{width:52px;height:50px;z-index:7;transform:translate(calc(-50% + var(--asteroid-offset-x,0px)),calc(-50% + var(--asteroid-offset-y,0px)))}
 .workspace--universe .universe-view-v3 .system-asteroid img{width:43px;height:38px}
 .workspace--universe .universe-view-v3 .system-asteroid span{font-size:8px;letter-spacing:.5px;color:#8fa1ad}
+.workspace--universe .universe-view-v3 .system-asteroid .universe-asteroid-debris-marker{position:absolute;z-index:12;top:0;right:-1px;box-sizing:border-box;display:grid;place-items:center;width:15px;height:15px;padding:0;border:1px solid rgba(240,100,110,.68);border-radius:50%;background:#23131bdc;color:#ff727c;font-size:8px;font-weight:800;line-height:1;pointer-events:none}
+.workspace--universe .universe-view-v3 .system-asteroid .universe-asteroid-debris-tooltip{top:calc(100% + 5px);right:0;width:max-content;max-width:190px;font-size:10px;letter-spacing:normal;color:#ffe5e7}
+.workspace--universe .universe-view-v3 .system-asteroid:hover .universe-debris-tooltip,.workspace--universe .universe-view-v3 .system-asteroid:focus .universe-debris-tooltip{opacity:1;visibility:visible;transform:translateY(0)}
 .universe-map-legend{position:absolute;top:27px;right:28px;display:flex;gap:14px;font-size:12px;color:#94aebb}
 .universe-map-legend span::before{content:'';display:inline-block;width:6px;height:6px;background:#82929c;border-radius:50%;margin-right:7px}
 .universe-map-legend .legend-self::before{background:#55d6ff}.universe-map-legend .legend-ally::before{background:#63d48b}.universe-map-legend .legend-enemy::before{background:#f0646e}.universe-map-legend .legend-neutral::before{background:#718896}.universe-map-legend .legend-wild::before{background:#718896}.universe-map-legend .legend-unique::before{background:#e7c66c}.universe-map-legend .legend-pirate::before{background:#f39a57}.universe-map-legend .legend-anomaly::before{background:#af8bff}

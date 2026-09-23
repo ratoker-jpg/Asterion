@@ -15,6 +15,7 @@ import {
   getReportCategoryCounts,
   getReportUnreadCounts,
   getVisibleReportItems,
+  preservePersistentReportCollections,
 } from './domain/reports/adapters.ts';
 import {
   deleteAllReports,
@@ -96,9 +97,7 @@ function formatTime(timestamp?: string) {
 }
 
 function withOverpopulationReports(next: ReportsState, previous: ReportsState): ReportsState {
-  return previous.overpopulationReports === undefined
-    ? next
-    : { ...next, overpopulationReports: previous.overpopulationReports };
+  return preservePersistentReportCollections(next, previous);
 }
 
 function ReportGlyph({ kind }: { kind: ReportCategory }) {
@@ -362,7 +361,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [openBattleReportId, setOpenBattleReportId] = useState<string | null>(null);
 
-  const items = useMemo(() => buildReportsFeed(battleReports, operations, command, espionage, state.overpopulationReports), [battleReports, operations, command, espionage, state.overpopulationReports]);
+  const items = useMemo(() => buildReportsFeed(battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports), [battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports]);
   const counts = useMemo(() => getReportCategoryCounts(items, state), [items, state]);
   const unreadCounts = useMemo(() => getReportUnreadCounts(items, state), [items, state]);
   const activeFolderMeta = MESSAGE_FOLDERS.find((folder) => folder.id === activeFolder) ?? MESSAGE_FOLDERS[0];

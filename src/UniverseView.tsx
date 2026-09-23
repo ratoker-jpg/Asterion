@@ -84,6 +84,7 @@ import type {
   UniverseRegisteredPlanet,
   UniversePlanetNode,
   UniverseCoordinate,
+  UniverseAsteroidRuntimeState,
 } from './domain/universe/types.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
 import type { SpyTargetState } from './domain/espionage/types.ts';
@@ -108,8 +109,11 @@ type UniverseViewProps = {
   playerPlanets: readonly UniversePersistedPlayerPlanet[];
   spyTargets: readonly SpyTargetState[];
   orbitalDebrisByCoordinate: readonly { coordinate: UniverseCoordinate; debris: number }[];
+  asteroidDebrisPresenceBySpawnIndex?: Readonly<Record<string, boolean>>;
+  asteroidStates?: readonly UniverseAsteroidRuntimeState[];
   mode: RuntimeMode;
   onColonize: (coordinate: UniverseCoordinate) => void;
+  onRecycle: (coordinate: UniverseCoordinate) => void;
   onTransport: (target: { planetId: string; coordinate: UniverseCoordinate; relation: TargetRelation }) => void;
   onSpy: (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile; targetKind: 'player' | 'npc' }) => void;
   onAttack: (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile; targetKind: 'player' | 'npc' }) => void;
@@ -306,7 +310,7 @@ function OwnerInspector({
   );
 }
 
-function SpecialInspector({ node, underlyingNode, nowMs, onColonize }: { node: UniversePlanetNode; underlyingNode?: UniversePlanetNode; nowMs: number; onColonize: (coordinate: UniverseCoordinate) => void }) {
+function SpecialInspector({ node, underlyingNode, nowMs, asteroidHasDebris, onColonize, onRecycle }: { node: UniversePlanetNode; underlyingNode?: UniversePlanetNode; nowMs: number; asteroidHasDebris: boolean; onColonize: (coordinate: UniverseCoordinate) => void; onRecycle: (coordinate: UniverseCoordinate) => void }) {
   const isEmpty = node.kind === 'empty';
   const isPirate = node.kind === 'pirate';
   const isAnomaly = node.kind === 'anomaly';
@@ -332,6 +336,7 @@ function SpecialInspector({ node, underlyingNode, nowMs, onColonize }: { node: U
         <div><dt>{isAsteroid ? 'ОРБИТА' : 'КООРДИНАТЫ'}</dt><dd>{isAsteroid ? `Кольцо ${Math.ceil(node.coordinate.position / 6)} · позиция ${node.coordinate.position} / 24` : formatUniverseCoordinate(node.coordinate)}</dd></div>
         <div><dt>СТАТУС</dt><dd data-qa-universe-special-status>{status}</dd></div>
         {isAsteroid ? <div><dt>ЗАПАС ГАЗА</dt><dd data-qa-universe-asteroid-gas="hidden">СКРЫТ ДО ПЕРЕРАБОТКИ</dd></div> : null}
+        {isAsteroid ? <div data-qa-universe-asteroid-debris={asteroidHasDebris ? 'present' : 'absent'}><dt>Обломки на астероиде</dt><dd>{asteroidHasDebris ? 'есть' : 'нет'}</dd></div> : null}
       </dl>
 
       <p className="universe-special-description">{node.description}</p>
@@ -339,7 +344,7 @@ function SpecialInspector({ node, underlyingNode, nowMs, onColonize }: { node: U
       {canColonize ? (
         <button type="button" className="universe-enabled-operation" title="Открыть подготовку колонизации" data-qa-universe-special-action="colonize" data-qa-universe-target-coordinate={formatUniverseCoordinate(node.coordinate)} onClick={() => onColonize(node.coordinate)}>КОЛОНИЗИРОВАТЬ</button>
       ) : isAsteroid ? (
-        <button type="button" className="universe-disabled-operation" disabled title="Миссия добычи газа пока недоступна" data-qa-universe-special-action="asteroid-recycler">ОТПРАВИТЬ ПЕРЕРАБОТЧИКА · НЕ ПОДКЛЮЧЕНО</button>
+        <button type="button" className="universe-enabled-operation" title="Выбрать координаты астероида для переработки свободных обломков" data-qa-universe-special-action="asteroid-recycler" data-qa-universe-target-coordinate={formatUniverseCoordinate(node.coordinate)} onClick={() => onRecycle(node.coordinate)}>ОТПРАВИТЬ ПЕРЕРАБОТЧИКА</button>
       ) : isPirate ? (
         <button type="button" className="universe-disabled-operation" disabled title="Разведка пока недоступна" data-qa-universe-special-action="pirate">РАЗВЕДАТЬ · СКОРО</button>
       ) : isAnomaly ? (
@@ -347,14 +352,14 @@ function SpecialInspector({ node, underlyingNode, nowMs, onColonize }: { node: U
       ) : (
         <button type="button" className="universe-disabled-operation" disabled data-qa-universe-special-action="disabled">{node.kind === 'uninhabited' ? 'КОЛОНИЗАЦИЯ' : 'ИССЛЕДОВАНИЕ'} · СКОРО</button>
       )}
-      {canColonize && isAsteroid ? <button type="button" className="universe-disabled-operation" disabled title="Миссия добычи газа пока недоступна" data-qa-universe-special-action="asteroid-recycler">ОТПРАВИТЬ ПЕРЕРАБОТЧИКА · НЕ ПОДКЛЮЧЕНО</button> : null}
+      {canColonize && isAsteroid ? <button type="button" className="universe-enabled-operation" title="Выбрать координаты астероида для переработки свободных обломков" data-qa-universe-special-action="asteroid-recycler" data-qa-universe-target-coordinate={formatUniverseCoordinate(node.coordinate)} onClick={() => onRecycle(node.coordinate)}>ОТПРАВИТЬ ПЕРЕРАБОТЧИКА</button> : null}
     </div>
   );
 }
 
 // The clock belongs to the map, not to a render or a selected object. Toggling
 // the layer and visiting another system must not restart orbital motion.
-function MovingAsteroid({ node, underlyingKind, nowMs, occupiedNodes, onSelect }: { node: UniversePlanetNode; underlyingKind?: UniversePlanetNode['kind']; nowMs: number; occupiedNodes: readonly UniversePlanetNode[]; onSelect: (node: UniversePlanetNode) => void }) {
+function MovingAsteroid({ node, underlyingKind, nowMs, hasDebris, occupiedNodes, onSelect }: { node: UniversePlanetNode; underlyingKind?: UniversePlanetNode['kind']; nowMs: number; hasDebris: boolean; occupiedNodes: readonly UniversePlanetNode[]; onSelect: (node: UniversePlanetNode) => void }) {
   const ref = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const point = getUniverseAsteroidPoint(node, nowMs, occupiedNodes);
@@ -367,16 +372,20 @@ function MovingAsteroid({ node, underlyingKind, nowMs, occupiedNodes, onSelect }
   const nextCoordinate = node.asteroid?.nextCoordinate ? formatUniverseCoordinate(node.asteroid.nextCoordinate) : 'маршрут завершён';
   return <button ref={ref} type="button" className="system-asteroid" style={toStyle(point)}
     title={`${node.name} · ${formatUniverseCoordinate(node.coordinate)} · далее ${nextCoordinate}`} aria-label={`${node.name} · ${formatUniverseCoordinate(node.coordinate)}`}
+    aria-describedby={hasDebris ? `universe-asteroid-debris-tooltip-${node.asteroid?.spawnIndex}` : undefined}
     data-qa-universe-asteroid-position={node.coordinate.position}
+    data-qa-universe-asteroid-spawn-index={node.asteroid?.spawnIndex ?? ''}
     data-qa-universe-asteroid-next-move={node.asteroid?.nextMoveAt ?? ''}
     data-qa-universe-asteroid-next-coordinate={nextCoordinate}
     data-qa-universe-asteroid-gas="hidden"
+    data-qa-universe-asteroid-debris={hasDebris ? 'present' : 'absent'}
     data-qa-universe-object={node.id} data-qa-universe-kind="asteroid" data-qa-universe-underlying-kind={underlyingKind ?? ''} onClick={() => onSelect(node)}>
     <img src={node.art} alt="" draggable={false} /><span>АСТЕРОИД · {node.coordinate.position}</span>
+    {hasDebris ? <span className="universe-asteroid-debris-marker"><span className="universe-debris-marker__badge" role="img" aria-label="Обломки на астероиде: есть">R</span><span className="universe-debris-tooltip universe-asteroid-debris-tooltip" id={`universe-asteroid-debris-tooltip-${node.asteroid?.spawnIndex}`} role="tooltip">На астероиде есть обломки</span></span> : null}
   </button>;
 }
 
-export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, rating, command, playerPlanets, spyTargets, orbitalDebrisByCoordinate, mode, onColonize, onTransport, onSpy, onAttack, focusTarget, onFocusHandled }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, rating, command, playerPlanets, spyTargets, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, mode, onColonize, onRecycle, onTransport, onSpy, onAttack, focusTarget, onFocusHandled }: UniverseViewProps) {
   const [system, setSystem] = useState(1);
   const [focusEmpty, setFocusEmpty] = useState(false);
   const [showSlotLabels, setShowSlotLabels] = useState(true);
@@ -436,6 +445,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
     mode,
     nowMs,
     galaxyCount: 1,
+    asteroidStates,
     playerPlanets,
     registeredPlanets: spyTargets.map<UniverseRegisteredPlanet>((target) => ({
       id: target.id,
@@ -444,7 +454,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
       kind: target.kind ?? 'npc',
       ownerId: target.ownerId,
     })),
-  }), [mode, nowMs, ownedPlanetArt, ownedPlanetName, owner.id, playerPlanets, spyTargets]);
+  }), [asteroidStates, mode, nowMs, ownedPlanetArt, ownedPlanetName, owner.id, playerPlanets, spyTargets]);
   const systemData = galaxyData.systems[system - 1];
   const orbitalDebrisByKey = useMemo(() => new Map(
     orbitalDebrisByCoordinate.map(({ coordinate, debris }): [string, number] => [
@@ -653,7 +663,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
           );
         })}
 
-        {showAsteroids ? systemData.asteroids.map((asteroid) => <MovingAsteroid key={asteroid.id} node={asteroid} underlyingKind={systemData.positions.find((node) => node.coordinate.position === asteroid.coordinate.position)?.kind} nowMs={nowMs} occupiedNodes={asteroidAttachmentNodes} onSelect={selectNode} />) : null}
+        {showAsteroids ? systemData.asteroids.map((asteroid) => <MovingAsteroid key={asteroid.id} node={asteroid} underlyingKind={systemData.positions.find((node) => node.coordinate.position === asteroid.coordinate.position)?.kind} nowMs={nowMs} hasDebris={Boolean(asteroid.asteroid && asteroidDebrisPresenceBySpawnIndex?.[String(asteroid.asteroid.spawnIndex)])} occupiedNodes={asteroidAttachmentNodes} onSelect={selectNode} />) : null}
         <div className="universe-map-hint">Выберите мир, чтобы открыть сведения <span>Астероиды стоят 15–30 мин и переходят к следующей позиции</span></div>
       </div>
 
@@ -671,7 +681,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
             <button ref={closeButtonRef} type="button" className="universe-inspector-close" data-asterion-close aria-label="Закрыть инспектор" title="Закрыть инспектор" onClick={() => setSelectedNodeId(null)}>×</button>
           </header>
           <div className="universe-inspector-body">
-            {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} planets={ownerPlanets} currentOwnerId={owner.id} currentAlliance={owner.alliance} diplomacy={command.diplomacy} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} underlyingNode={selectedUnderlyingNode} nowMs={nowMs} onColonize={onColonize} />}
+            {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} planets={ownerPlanets} currentOwnerId={owner.id} currentAlliance={owner.alliance} diplomacy={command.diplomacy} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} underlyingNode={selectedUnderlyingNode} nowMs={nowMs} asteroidHasDebris={Boolean(selectedNode.kind === 'asteroid' && selectedNode.asteroid && asteroidDebrisPresenceBySpawnIndex?.[String(selectedNode.asteroid.spawnIndex)])} onColonize={onColonize} onRecycle={onRecycle} />}
           </div>
         </aside>
         </div>, document.body) : null}

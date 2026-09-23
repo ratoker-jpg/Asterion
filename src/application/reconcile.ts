@@ -19,6 +19,9 @@ import {
   reconcileAllPlanetOverpopulation,
 } from './overpopulation.ts';
 import type { PlanetId } from './contracts.ts';
+import { getEspionageState } from '../domain/espionage/runtime.ts';
+import { collectOrbitalDebrisAtCoordinate, getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
+import { advanceUniverseAsteroidSimulationAt, getNextUniverseAsteroidTransitionAt } from '../domain/universe/asteroid-simulation.ts';
 
 export type RuntimeReconcileEvent =
   | { kind: 'science'; scienceIds: ScienceId[] }
@@ -136,6 +139,30 @@ export function reconcileRuntime(
     return earliest;
   };
 
+  const applyAsteroidTransitionsAt = (at: number) => {
+    const simulation = next.asteroidSimulation;
+    if (!simulation) return;
+    const advanced = advanceUniverseAsteroidSimulationAt(simulation, at, 1);
+    next = { ...next, asteroidSimulation: advanced.state };
+    for (const transition of advanced.transitions) {
+      const espionage = getEspionageState(next);
+      const freeDebris = getOrbitalDebrisAtCoordinate(espionage, transition.fromCoordinate);
+      if (freeDebris <= 0) continue;
+      const captured = collectOrbitalDebrisAtCoordinate(espionage, transition.fromCoordinate, freeDebris);
+      if (captured.collected <= 0) continue;
+      const key = String(transition.spawnIndex);
+      const previousCargo = Math.max(0, Math.floor(next.asteroidDebrisBySpawnIndex?.[key] ?? 0));
+      next = {
+        ...next,
+        espionage: captured.espionage,
+        asteroidDebrisBySpawnIndex: {
+          ...(next.asteroidDebrisBySpawnIndex ?? {}),
+          [key]: Math.min(Number.MAX_SAFE_INTEGER, previousCargo + captured.collected),
+        },
+      };
+    }
+  };
+
   const processFlightsAt = (at: number) => {
     // No rng fallback here: espionage rolls derive their own deterministic
     // seeded streams when context.rng is not provided.
@@ -152,18 +179,35 @@ export function reconcileRuntime(
 
   let processedThrough = Number.NEGATIVE_INFINITY;
   while (true) {
-    const checkpoint = nextDueFlightCheckpoint(processedThrough);
+    const flightCheckpoint = nextDueFlightCheckpoint(processedThrough);
+    const nextAsteroidCheckpoint = next.asteroidSimulation
+      ? getNextUniverseAsteroidTransitionAt(next.asteroidSimulation, context.now)
+      : null;
+    const asteroidCheckpoint = nextAsteroidCheckpoint ?? undefined;
+    const checkpoint = flightCheckpoint === undefined
+      ? asteroidCheckpoint
+      : asteroidCheckpoint === undefined
+        ? flightCheckpoint
+        : Math.min(flightCheckpoint, asteroidCheckpoint);
     if (checkpoint === undefined) break;
+    const asteroidIsDue = asteroidCheckpoint === checkpoint;
+    const flightIsDue = flightCheckpoint === checkpoint;
     // Advancing the cursor before processing prevents a due-but-unmodified
     // record at this timestamp from creating a zero-progress loop. Flights
     // created by this checkpoint can still contribute a later return time.
     processedThrough = checkpoint;
-    const overpopulation = reconcileAllPlanetOverpopulation(next, checkpoint);
-    next = overpopulation.state;
-    const beforeWork = overpopulation.blockedPlanetIds;
-    reconcilePlanetWork(checkpoint, beforeWork);
-    processFlightsAt(checkpoint);
-    next = reconcileAllPlanetOverpopulation(next, checkpoint).state;
+    // At an exact millisecond tie, the asteroid vacates/captures its old orbit
+    // first; flight arrivals and battles then observe the post-transition
+    // free-orbit state. Flight ties retain reconcileFlights' stable ID order.
+    if (asteroidIsDue) applyAsteroidTransitionsAt(checkpoint);
+    if (flightIsDue) {
+      const overpopulation = reconcileAllPlanetOverpopulation(next, checkpoint);
+      next = overpopulation.state;
+      const beforeWork = overpopulation.blockedPlanetIds;
+      reconcilePlanetWork(checkpoint, beforeWork);
+      processFlightsAt(checkpoint);
+      next = reconcileAllPlanetOverpopulation(next, checkpoint).state;
+    }
   }
 
   const finalOverpopulation = reconcileAllPlanetOverpopulation(next, context.now);
