@@ -146,12 +146,16 @@ function getScienceQueuePause(
   episodeStartedAt: number,
   now: number,
 ): { firstTaskIndex: number; delta: number } {
-  const firstTaskIndex = queue.findIndex((task) => task.planetId === planetId);
+  const safeEpisodeStartedAt = safeInteger(episodeStartedAt);
+  // Work due by the lock boundary has already completed and must not be paused.
+  const firstTaskIndex = queue.findIndex((task) => (
+    task.planetId === planetId && task.finishAt > safeEpisodeStartedAt
+  ));
   const task = queue[firstTaskIndex];
   if (!task) return { firstTaskIndex, delta: 0 };
 
   const reconciledAt = safeInteger(now);
-  const pauseStart = Math.max(safeInteger(episodeStartedAt), safeInteger(task.startedAt));
+  const pauseStart = Math.max(safeEpisodeStartedAt, safeInteger(task.startedAt));
   if (pauseStart >= reconciledAt) return { firstTaskIndex, delta: 0 };
 
   let earliestEarlierBlockStart = Number.POSITIVE_INFINITY;
@@ -165,6 +169,9 @@ function getScienceQueuePause(
       safeInteger(earlierEpisode.episodeStartedAt),
       safeInteger(earlierTask.startedAt),
     );
+    // A task that was already due before its planet became blocked could not
+    // have held the global queue during this episode.
+    if (earlierTask.finishAt <= earlierBlockStart) continue;
     if (earlierBlockStart < reconciledAt) {
       earliestEarlierBlockStart = Math.min(earliestEarlierBlockStart, earlierBlockStart);
     }

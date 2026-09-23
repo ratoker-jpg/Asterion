@@ -47,6 +47,7 @@ import { isPlanetBlocked } from './overpopulation.ts';
 export type ScienceApplicationContext = {
   planetId: PlanetId;
   blockedPlanetIds?: ReadonlySet<PlanetId>;
+  blockedPlanetStartedAt?: ReadonlyMap<PlanetId, number>;
   mode: RuntimeMode;
   testTimeScale: TestTimeScale;
   now: number;
@@ -144,8 +145,13 @@ export function cancelScience(
   taskId: string,
 ): ScienceActionResult {
   const blockedPlanetIds = new Set(context.blockedPlanetIds ?? []);
+  const blockedPlanetStartedAt = new Map<PlanetId, number>();
   for (const planetId of Object.keys(state.planets)) {
+    const planet = state.planets[planetId];
     if (isPlanetBlocked(state, planetId)) blockedPlanetIds.add(planetId);
+    if (planet?.overpopulation?.blocked) {
+      blockedPlanetStartedAt.set(planetId, planet.overpopulation.episodeStartedAt);
+    }
   }
   const requestedTask = state.science.queue.find((task) => task.id === taskId);
   if (isPlanetBlocked(state, context.planetId)
@@ -171,6 +177,7 @@ export function cancelScience(
     wallet: walletFor(state, context.planetId),
     planetId: context.planetId,
     blockedPlanetIds,
+    blockedPlanetStartedAt,
     capacities: getStorageCapacities(planet.buildings),
     laboratoryLevel: planet.buildings.research,
     now: context.now,
@@ -194,9 +201,14 @@ export type ScienceReconcileResult = {
 
 export function reconcileScience(
   state: SaveState,
-  context: Pick<ScienceApplicationContext, 'planetId' | 'now' | 'blockedPlanetIds'>,
+  context: Pick<ScienceApplicationContext, 'planetId' | 'now' | 'blockedPlanetIds' | 'blockedPlanetStartedAt'>,
 ): ScienceReconcileResult {
-  const transition = reconcileScienceState(state.science, context.now, context.blockedPlanetIds);
+  const transition = reconcileScienceState(
+    state.science,
+    context.now,
+    context.blockedPlanetIds,
+    context.blockedPlanetStartedAt,
+  );
   if (!transition.changed) {
     return { changed: false, state, completedScienceIds: [] };
   }
@@ -219,6 +231,12 @@ export function createScienceSnapshot(
   context: ScienceApplicationContext,
 ): ScienceRuntimeSnapshot {
   const planet = getPlanetState(state, context.planetId);
+  const blockedPlanetStartedAt = new Map<string, number>();
+  for (const [planetId, candidate] of Object.entries(state.planets)) {
+    if (candidate.overpopulation?.blocked) {
+      blockedPlanetStartedAt.set(planetId, candidate.overpopulation.episodeStartedAt);
+    }
+  }
   return createScienceRuntimeSnapshot(
     state.science,
     walletFor(state, context.planetId),
@@ -226,6 +244,7 @@ export function createScienceSnapshot(
     context.now,
     context.mode,
     context.testTimeScale,
+    blockedPlanetStartedAt,
   );
 }
 

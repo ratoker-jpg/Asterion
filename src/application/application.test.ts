@@ -31,7 +31,7 @@ import {
   readFleetBuildBudget,
 } from './fleet.ts';
 import { createEmptyFleetState } from '../domain/fleet/runtime.ts';
-import { bindScienceEventBridge, cancelScience, startScience } from './science.ts';
+import { bindScienceEventBridge, cancelScience, createScienceSnapshot, startScience } from './science.ts';
 import { repairUnits, removeRepairUnits } from './repair.ts';
 import {
   bindFleetProductionEventBridge,
@@ -1515,7 +1515,7 @@ test('non-overlapping overpopulation locks add a later science pause exactly onc
   assert.ok(first.finishAt <= second.startedAt, 'science queue must remain FIFO');
 });
 
-test('an overdue blocked science head still pauses the shared queue only once', () => {
+test('science completed before a planet lock is not shifted, while unfinished queue work keeps its pause', () => {
   const fixture = createScienceOverpopulationQueueFixture(8_000, 8_000);
   const secondUnlocked = reconcilePlanetOverpopulation(fixture, 'another-colony', 9_000);
   assert.equal(secondUnlocked.resolved, true);
@@ -1524,13 +1524,176 @@ test('an overdue blocked science head still pauses the shared queue only once', 
 
   const [first, second] = firstUnlocked.state.science.queue;
   assert.ok(first && second);
-  assert.equal(first?.startedAt, 2_000);
-  assert.equal(first?.finishAt, 7_000);
-  assert.equal(second?.startedAt, 7_000);
-  assert.equal(second?.finishAt, 12_000);
+  assert.equal(first?.startedAt, 0);
+  assert.equal(first?.finishAt, 5_000);
+  assert.equal(second?.startedAt, 6_000);
+  assert.equal(second?.finishAt, 11_000);
   assert.equal(first.finishAt - first.startedAt, first.durationMs);
   assert.equal(second.finishAt - second.startedAt, second.durationMs);
   assert.ok(first.finishAt <= second.startedAt, 'science queue must remain FIFO');
+});
+
+test('runtime completes science due before an overpopulation lock and resumes the unfinished queue tail once', () => {
+  const initial = createInitialSaveState('test', 0);
+  const homeworld = initial.planets['helion-01'];
+  const baseSolarSatellites = homeworld.solarSatellites ?? 0;
+  const scienceId = SCIENCE_CATALOG[0].id;
+  const queued = {
+    ...initial,
+    science: {
+      ...initial.science,
+      queue: [
+        {
+          id: 'completed-before-lock',
+          scienceId,
+          planetId: 'helion-01',
+          fromLevel: 0,
+          toLevel: 1,
+          startedAt: 0,
+          finishAt: 5_000,
+          durationMs: 5_000,
+          cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+        },
+        {
+          id: 'unfinished-at-lock',
+          scienceId,
+          planetId: 'helion-01',
+          fromLevel: 1,
+          toLevel: 2,
+          startedAt: 5_000,
+          finishAt: 12_000,
+          durationMs: 7_000,
+          cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+        },
+      ],
+    },
+    planets: {
+      ...initial.planets,
+      'helion-01': { ...homeworld, solarSatellites: baseSolarSatellites + 200 },
+    },
+  } satisfies SaveState;
+
+  const newlyDetected = reconcileRuntime(queued, context(10_000));
+  assert.equal(newlyDetected.state.planets['helion-01'].overpopulation?.episodeStartedAt, 10_000);
+  assert.deepEqual(newlyDetected.events.filter((event) => event.kind === 'science'), [{ kind: 'science', scienceIds: [scienceId] }]);
+  assert.equal(newlyDetected.state.science.levels[scienceId], 1);
+  assert.deepEqual(newlyDetected.state.science.queue.map((task) => task.id), ['unfinished-at-lock']);
+  assert.equal(newlyDetected.state.science.queue[0]?.finishAt, 12_000);
+
+  const blockedAtEight = reconcilePlanetOverpopulation(queued, 'helion-01', 8_000).state;
+  assert.equal(blockedAtEight.planets['helion-01'].overpopulation?.episodeStartedAt, 8_000);
+  const blockedSnapshot = createScienceSnapshot(blockedAtEight, context(10_000));
+  assert.equal(blockedSnapshot.blockedPlanetStartedAt?.get('helion-01'), 8_000);
+
+  const atTen = reconcileRuntime(blockedAtEight, context(10_000));
+  assert.deepEqual(atTen.events.filter((event) => event.kind === 'science'), [{ kind: 'science', scienceIds: [scienceId] }]);
+  assert.equal(atTen.state.science.levels[scienceId], 1);
+  assert.deepEqual(atTen.state.science.queue.map((task) => task.id), ['unfinished-at-lock']);
+  assert.equal(atTen.state.science.queue[0]?.finishAt, 12_000);
+  assert.equal(atTen.state.planets['helion-01'].overpopulation?.blocked, true);
+
+  const repeated = reconcileRuntime(atTen.state, context(10_000));
+  assert.deepEqual(repeated.events, []);
+  assert.equal(repeated.state.science.levels[scienceId], 1);
+  assert.deepEqual(repeated.state.science.queue.map((task) => task.id), ['unfinished-at-lock']);
+
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 10_000 });
+  assert.deepEqual(persistence.write(atTen.state), { ok: true });
+  const reloaded = persistence.read();
+  const afterReload = reconcileRuntime(reloaded, context(10_000));
+  assert.deepEqual(afterReload.events, []);
+  assert.equal(afterReload.state.science.levels[scienceId], 1);
+  assert.deepEqual(afterReload.state.science.queue.map((task) => task.id), ['unfinished-at-lock']);
+
+  const planetAfterReload = afterReload.state.planets['helion-01'];
+  const unlockedInput = {
+    ...afterReload.state,
+    planets: {
+      ...afterReload.state.planets,
+      'helion-01': { ...planetAfterReload, solarSatellites: baseSolarSatellites },
+    },
+  } satisfies SaveState;
+  const unlocked = reconcileRuntime(unlockedInput, context(20_000));
+  const resumedTask = unlocked.state.science.queue[0];
+  assert.ok(resumedTask);
+  assert.equal(resumedTask?.startedAt, 17_000);
+  assert.equal(resumedTask?.finishAt, 24_000);
+  assert.equal(resumedTask?.finishAt - 20_000, 4_000, 'only the remaining time at lock start should remain after unlock');
+  assert.equal(resumedTask?.durationMs, 7_000);
+  assert.equal(unlocked.state.science.levels[scienceId], 1);
+
+  const beforeFinish = reconcileRuntime(unlocked.state, context(23_999));
+  assert.deepEqual(beforeFinish.events, []);
+  assert.equal(beforeFinish.state.science.queue[0]?.id, 'unfinished-at-lock');
+  assert.equal(beforeFinish.state.science.levels[scienceId], 1);
+  const finished = reconcileRuntime(beforeFinish.state, context(24_000));
+  assert.deepEqual(finished.events.filter((event) => event.kind === 'science'), [{ kind: 'science', scienceIds: [scienceId] }]);
+  assert.equal(finished.state.science.levels[scienceId], 2);
+  assert.equal(finished.state.science.queue.length, 0);
+
+  assert.deepEqual(persistence.write(finished.state), { ok: true });
+  const afterCompletionReload = reconcileRuntime(persistence.read(), context(24_000));
+  assert.deepEqual(afterCompletionReload.events, []);
+  assert.equal(afterCompletionReload.state.science.levels[scienceId], 2);
+  assert.equal(afterCompletionReload.state.science.queue.length, 0);
+});
+
+test('science cancellation reconciles a head completed before another planet was locked', () => {
+  const initial = createInitialSaveState('test', 0);
+  const homeworld = initial.planets['helion-01'];
+  const baseSolarSatellites = homeworld.solarSatellites ?? 0;
+  const overpopulated = reconcilePlanetOverpopulation({
+    ...initial,
+    planets: {
+      ...initial.planets,
+      'helion-01': { ...homeworld, solarSatellites: baseSolarSatellites + 200 },
+    },
+  }, 'helion-01', 8_000).state;
+  const colony = {
+    ...overpopulated.planets['helion-01'],
+    fleet: createEmptyFleetState(),
+    solarSatellites: baseSolarSatellites,
+    buildings: {
+      ...overpopulated.planets['helion-01'].buildings,
+      hangar: getBuildingMaxLevel('hangar'),
+    },
+    overpopulation: undefined,
+  };
+  const scienceId = SCIENCE_CATALOG[0].id;
+  const queued = {
+    ...overpopulated,
+    science: {
+      ...overpopulated.science,
+      queue: [
+        {
+          id: 'completed-before-lock', scienceId, planetId: 'helion-01',
+          fromLevel: 0, toLevel: 1, startedAt: 0, finishAt: 5_000,
+          durationMs: 5_000, cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+        },
+        {
+          id: 'cancel-from-unlocked-colony', scienceId, planetId: 'another-colony',
+          fromLevel: 1, toLevel: 2, startedAt: 5_000, finishAt: 12_000,
+          durationMs: 7_000, cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+        },
+      ],
+    },
+    planets: {
+      ...overpopulated.planets,
+      'another-colony': colony,
+    },
+  } satisfies SaveState;
+
+  const canceled = cancelScience(queued, {
+    ...context(10_000),
+    planetId: 'another-colony',
+  }, 'cancel-from-unlocked-colony');
+
+  assert.ok(canceled.transition.ok);
+  if (!('canceled' in canceled.transition)) throw new Error('Expected a science cancellation transition.');
+  assert.equal(canceled.transition.canceled?.id, 'cancel-from-unlocked-colony');
+  assert.equal(canceled.state.science.levels[scienceId], 1);
+  assert.equal(canceled.state.science.queue.length, 0);
 });
 
 test('overpopulation queue pause is independent of planet ID iteration order', () => {
@@ -1548,8 +1711,8 @@ test('overpopulation queue pause is independent of planet ID iteration order', (
     assert.ok(first && second);
     assert.equal(first.planetId, firstPlanetId);
     assert.equal(second.planetId, secondPlanetId);
-    assert.equal(first.startedAt, 2_000);
-    assert.equal(first.finishAt, 7_000);
+    assert.equal(first.startedAt, 0);
+    assert.equal(first.finishAt, 5_000);
     assert.equal(second.startedAt, 10_000);
     assert.equal(second.finishAt, 15_000);
     assert.equal(first.finishAt - first.startedAt, first.durationMs);

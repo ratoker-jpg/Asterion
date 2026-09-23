@@ -7,7 +7,8 @@ app.commandLine.appendSwitch('disable-gpu');
 app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
-const OUTPUT = path.join(ROOT, 'artifacts-pass1', 'science-qa');
+const BUILD_DIR = process.env.ASTERION_SCIENCE_QA_DIST || path.join(ROOT, 'dist');
+const OUTPUT = process.env.ASTERION_SCIENCE_QA_OUTPUT || path.join(ROOT, 'artifacts-pass1', 'science-qa');
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const TEST_TIME_SCALE_KEY = 'asterion.test-time-scale.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
@@ -76,6 +77,20 @@ async function seed(win, science) {
     if (!save || !planet?.buildings || !save.science?.levels) return false;
     planet.buildings.research = ${science.researchLevel ?? 1};
     planet.buildings.construction = 1;
+    planet.solarSatellites = ${science.solarSatellites ?? 0};
+    const overpopulation = ${JSON.stringify(science.overpopulation ?? null)};
+    if (overpopulation) planet.overpopulation = overpopulation;
+    else delete planet.overpopulation;
+    const scienceQueue = ${JSON.stringify(science.queue)};
+    if (${science.pauseScienceQueue === true}) {
+      planet.buildings.hangar = 1;
+      const pauseStartedAt = Date.now();
+      planet.overpopulation.episodeStartedAt = pauseStartedAt;
+      planet.overpopulation.lastReconciledAt = pauseStartedAt;
+      scienceQueue[0].startedAt = pauseStartedAt - 300_000;
+      scienceQueue[0].finishAt = pauseStartedAt + 300_000;
+      scienceQueue[0].durationMs = 600_000;
+    }
     save.metal = 1_000_000;
     save.minerals = 1_000_000;
     save.gas = 1_000_000;
@@ -83,7 +98,7 @@ async function seed(win, science) {
     save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     Object.assign(save.science.levels, ${JSON.stringify(science.levels ?? {})});
     save.science.levels[1] = ${science.level};
-    save.science.queue = ${JSON.stringify(science.queue)};
+    save.science.queue = scienceQueue;
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 10);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
@@ -128,9 +143,15 @@ async function readScreen(win) {
       horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth + 2 || document.body.scrollWidth > window.innerWidth + 2,
       scienceQueueLength: save.science?.queue?.length ?? -1,
       scienceLevel: save.science?.levels?.[1] ?? -1,
+      runtimeNow: Date.now(),
+      homeworldOverpopulation: save.planets?.['helion-01']?.overpopulation ?? null,
+      homeworldSolarSatellites: save.planets?.['helion-01']?.solarSatellites ?? null,
       queueIds: (save.science?.queue ?? []).map((task) => task.id),
-      queueTasks: (save.science?.queue ?? []).map((task) => ({ id: task.id, startedAt: task.startedAt, finishAt: task.finishAt, durationMs: task.durationMs, cost: task.cost })),
+      queueTasks: (save.science?.queue ?? []).map((task) => ({ id: task.id, planetId: task.planetId, startedAt: task.startedAt, finishAt: task.finishAt, durationMs: task.durationMs, cost: task.cost })),
       queueDurations: [...document.querySelectorAll('[data-qa-science-queue-task] [data-qa-science-duration-ms]')].map((element) => Number(element.getAttribute('data-qa-science-duration-ms') ?? 0)),
+      queueRemaining: [...document.querySelectorAll('[data-qa-science-remaining]')].map((element) => element.textContent?.trim() ?? ''),
+      queuePaused: [...document.querySelectorAll('[data-qa-science-queue-task]')].map((element) => element.getAttribute('data-qa-science-paused') === 'true'),
+      queueProgressPercent: [...document.querySelectorAll('[data-qa-science-queue-task]')].map((element) => Number(element.getAttribute('data-qa-science-progress-percent') ?? 0)),
       wallet: { metal: save.metal, minerals: save.minerals, gas: save.gas, energy: save.planets?.['helion-01']?.energy },
       documentScroll: document.documentElement.scrollHeight > window.innerHeight + 2,
       nestedVerticalScroll: ['.science-sidebar-v2', '.science-main-v2', '.science-catalog-v2'].some((selector) => [...document.querySelectorAll(selector)].some((element) => {
@@ -206,7 +227,7 @@ async function runViewport(width, height) {
   win.webContents.on('console-message', (_event, _level, message) => {
     if (/error/i.test(message)) console.warn(`[${label}] renderer: ${message}`);
   });
-  await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: '?mode=test' });
+  await win.loadFile(path.join(BUILD_DIR, 'index.html'), { search: '?mode=test' });
   stage('loaded');
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
 
@@ -344,6 +365,39 @@ async function runViewport(width, height) {
   const offlineReload = await readScreen(win);
   if (offlineReload.scienceQueueLength !== 0 || offlineReload.scienceLevel !== 1 || offlineReload.queue !== '0/3') throw new Error(`${label}: offline completion was not exact-once after reload ${JSON.stringify(offlineReload)}`);
   stage('offline completion');
+
+  const pausedTask = [{
+    id: 'paused-by-overpopulation',
+    scienceId: 1,
+    planetId: 'helion-01',
+    fromLevel: 0,
+    toLevel: 1,
+    startedAt: 0,
+    finishAt: 1,
+    durationMs: 600_000,
+    cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+  }];
+  await seed(win, {
+    level: 0,
+    solarSatellites: 200,
+    overpopulation: {
+      episodeStartedAt: 0,
+      initialExcess: 200,
+      scheduledBurnPool: 200,
+      burnedPopulation: 0,
+      lastReconciledAt: 0,
+      blocked: true,
+    },
+    pauseScienceQueue: true,
+    queue: pausedTask,
+  });
+  await openScience(win);
+  const paused = await readScreen(win);
+  if (paused.queue !== '1/3' || paused.queueRemaining[0] !== '00:05:00' || paused.queuePaused[0] !== true || paused.queueProgressPercent[0] < 49 || paused.queueProgressPercent[0] > 51) {
+    throw new Error(`${label}: overpopulation pause did not freeze remaining time and progress ${JSON.stringify(paused)}`);
+  }
+  await capture(win, directory, 'science-overpopulation-paused', '[data-qa-science-queue]');
+  stage('overpopulation pause');
 
   await seed(win, { level: 0, queue: [] });
   await openScience(win);

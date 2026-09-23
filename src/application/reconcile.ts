@@ -65,10 +65,16 @@ export function reconcileRuntime(
       if (resources.changed) next = resources.state;
     }
 
+    const blockedPlanetStartedAt = new Map<PlanetId, number>();
+    for (const planetId of blockedPlanetIds) {
+      const episode = next.planets[planetId]?.overpopulation;
+      if (episode?.blocked) blockedPlanetStartedAt.set(planetId, episode.episodeStartedAt);
+    }
     const science = reconcileScience(next, {
       planetId: context.planetId,
       now: at,
       blockedPlanetIds,
+      blockedPlanetStartedAt,
     });
     if (science.changed) {
       next = science.state;

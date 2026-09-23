@@ -10,6 +10,7 @@ import {
   calculateScienceDurationMs,
   cancelScienceResearch,
   createDefaultScienceState,
+  getScienceQueuePauseAt,
   getSciencePrototypeMaxLevel,
   migrateScienceState,
   migrateScienceLevels,
@@ -32,6 +33,18 @@ function context(state: ScienceState = createDefaultScienceState(), laboratoryLe
 function start(contextValue: ScienceRuntimeContext, scienceId: Parameters<typeof startScienceResearch>[1], id: string) {
   return startScienceResearch(contextValue, scienceId, id);
 }
+
+test('science queue display pause starts at the first unfinished locked task and freezes its tail', () => {
+  const scienceId = SCIENCE_CATALOG[0].id;
+  const queue = [
+    { id: 'already-due', scienceId, planetId: 'helion-01', fromLevel: 0, toLevel: 1, startedAt: 0, finishAt: 5_000, durationMs: 5_000, cost: { metal: 0, minerals: 0, gas: 0, energy: 0 } },
+    { id: 'paused-head', scienceId, planetId: 'helion-01', fromLevel: 1, toLevel: 2, startedAt: 5_000, finishAt: 10_000, durationMs: 5_000, cost: { metal: 0, minerals: 0, gas: 0, energy: 0 } },
+    { id: 'queue-tail', scienceId, planetId: 'another-colony', fromLevel: 2, toLevel: 3, startedAt: 10_000, finishAt: 15_000, durationMs: 5_000, cost: { metal: 0, minerals: 0, gas: 0, energy: 0 } },
+  ];
+
+  assert.equal(getScienceQueuePauseAt(queue, new Map([['helion-01', 8_000]])), 8_000);
+  assert.equal(getScienceQueuePauseAt(queue, new Map([['another-colony', 16_000]])), undefined);
+});
 
 test('catalog contains the 22 source-backed sciences and does not invent science 16', () => {
   assert.equal(SCIENCE_CATALOG.length, 22);
