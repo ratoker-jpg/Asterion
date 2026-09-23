@@ -139,27 +139,102 @@ function shiftResourceClock(state: SaveState, planetId: PlanetId, delta: number)
   };
 }
 
+function getScienceQueuePause(
+  queue: SaveState['science']['queue'],
+  planets: SaveState['planets'],
+  planetId: PlanetId,
+  episodeStartedAt: number,
+  now: number,
+): { firstTaskIndex: number; delta: number } {
+  const firstTaskIndex = queue.findIndex((task) => task.planetId === planetId);
+  const task = queue[firstTaskIndex];
+  if (!task) return { firstTaskIndex, delta: 0 };
+
+  const reconciledAt = safeInteger(now);
+  const pauseStart = Math.max(safeInteger(episodeStartedAt), safeInteger(task.startedAt));
+  if (pauseStart >= reconciledAt) return { firstTaskIndex, delta: 0 };
+
+  let earliestEarlierBlockStart = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < firstTaskIndex; index += 1) {
+    const earlierTask = queue[index];
+    if (!earlierTask?.planetId || earlierTask.startedAt > reconciledAt) continue;
+    const earlierEpisode = planets[earlierTask.planetId]?.overpopulation;
+    if (!earlierEpisode?.blocked) continue;
+
+    const earlierBlockStart = Math.max(
+      safeInteger(earlierEpisode.episodeStartedAt),
+      safeInteger(earlierTask.startedAt),
+    );
+    if (earlierBlockStart < reconciledAt) {
+      earliestEarlierBlockStart = Math.min(earliestEarlierBlockStart, earlierBlockStart);
+    }
+  }
+
+  // Every episode being reconciled here is active through `now`. A prior
+  // queue task therefore covers the suffix of this pause beginning at its
+  // own effective block time. Keep only the uncovered prefix; treating any
+  // earlier blocked task as covering the entire interval loses real pauses
+  // that began before that task itself became blocked.
+  const uncoveredUntil = Math.min(reconciledAt, earliestEarlierBlockStart);
+  return {
+    firstTaskIndex,
+    delta: Math.max(0, Math.floor(uncoveredUntil - pauseStart)),
+  };
+}
+
+function applyResolvedScienceQueuePauses(
+  initialState: SaveState,
+  nextState: SaveState,
+  resolvedEpisodes: readonly { planetId: PlanetId; episodeStartedAt: number }[],
+  now: number,
+): SaveState {
+  const pauses = resolvedEpisodes
+    .map((episode) => ({
+      ...getScienceQueuePause(
+        initialState.science.queue,
+        initialState.planets,
+        episode.planetId,
+        episode.episodeStartedAt,
+        now,
+      ),
+    }))
+    .filter((pause) => pause.firstTaskIndex >= 0 && pause.delta > 0);
+  if (pauses.length === 0) return nextState;
+
+  return {
+    ...nextState,
+    science: {
+      ...nextState.science,
+      queue: initialState.science.queue.map((task, index) => {
+        const delta = pauses.reduce((total, pause) => (
+          index >= pause.firstTaskIndex ? total + pause.delta : total
+        ), 0);
+        return delta > 0
+          ? { ...task, startedAt: task.startedAt + delta, finishAt: task.finishAt + delta }
+          : task;
+      }),
+    },
+  };
+}
+
 function shiftPlanetOwnedTimers(
   state: SaveState,
   planetId: PlanetId,
   delta: number,
   episodeStartedAt: number,
   now: number,
+  scienceQueuePauseDelta?: number,
 ): SaveState {
   const planet = state.planets[planetId];
   if (!planet || delta <= 0) return state;
-  const firstBlockedScienceTaskIndex = state.science.queue.findIndex((task) => task.planetId === planetId);
-  const firstBlockedScienceTask = state.science.queue[firstBlockedScienceTaskIndex];
-  const queueAlreadyStoppedByEarlierBlockedTask = firstBlockedScienceTaskIndex > 0
-    && state.science.queue.slice(0, firstBlockedScienceTaskIndex).some((task) => {
-      if (!task.planetId || task.startedAt > now) return false;
-      const earlierEpisode = state.planets[task.planetId]?.overpopulation;
-      return Boolean(earlierEpisode?.blocked
-        && earlierEpisode.episodeStartedAt < now);
-    });
-  const sciencePauseDelta = firstBlockedScienceTask && !queueAlreadyStoppedByEarlierBlockedTask
-    ? Math.max(0, Math.floor(now - Math.max(episodeStartedAt, firstBlockedScienceTask.startedAt)))
-    : 0;
+  const sciencePause = getScienceQueuePause(
+    state.science.queue,
+    state.planets,
+    planetId,
+    episodeStartedAt,
+    now,
+  );
+  const sciencePauseDelta = scienceQueuePauseDelta ?? sciencePause.delta;
   let next = {
     ...state,
     planets: { ...state.planets, [planetId]: shiftPlanetTimers(planet, delta) },
@@ -169,7 +244,7 @@ function shiftPlanetOwnedTimers(
     },
     science: {
       ...state.science,
-      queue: state.science.queue.map((task, index) => sciencePauseDelta > 0 && index >= firstBlockedScienceTaskIndex
+      queue: state.science.queue.map((task, index) => sciencePauseDelta > 0 && index >= sciencePause.firstTaskIndex
         ? {
           ...task,
           startedAt: task.startedAt + sciencePauseDelta,
@@ -222,6 +297,7 @@ export function reconcilePlanetOverpopulation(
   state: SaveState,
   planetId: PlanetId,
   now: number,
+  options: { deferScienceQueueShift?: boolean } = {},
 ): OverpopulationReconcileResult {
   const planet = state.planets[planetId];
   if (!planet) {
@@ -252,7 +328,14 @@ export function reconcilePlanetOverpopulation(
     const episode = planet.overpopulation;
     const episodeStartedAt = episode?.episodeStartedAt ?? now;
     const delta = Math.max(0, Math.floor(now - episodeStartedAt));
-    next = shiftPlanetOwnedTimers(next, planetId, delta, episodeStartedAt, now);
+    next = shiftPlanetOwnedTimers(
+      next,
+      planetId,
+      delta,
+      episodeStartedAt,
+      now,
+      options.deferScienceQueueShift ? 0 : undefined,
+    );
     // The shifted timer pass must not resurrect the resolved episode.
     const shiftedPlanet = next.planets[planetId];
     if (shiftedPlanet?.overpopulation) {
@@ -289,14 +372,23 @@ export function reconcileAllPlanetOverpopulation(
   let next = state;
   let changed = false;
   const resolvedPlanetIds: PlanetId[] = [];
+  const resolvedEpisodes: { planetId: PlanetId; episodeStartedAt: number }[] = [];
   for (const planetId of Object.keys(state.planets).sort()) {
-    const result = reconcilePlanetOverpopulation(next, planetId, now);
+    const result = reconcilePlanetOverpopulation(next, planetId, now, { deferScienceQueueShift: true });
     if (result.changed) {
       next = result.state;
       changed = true;
     }
-    if (result.resolved) resolvedPlanetIds.push(planetId);
+    if (result.resolved) {
+      resolvedPlanetIds.push(planetId);
+      const episodeStartedAt = state.planets[planetId]?.overpopulation?.episodeStartedAt;
+      resolvedEpisodes.push({
+        planetId,
+        episodeStartedAt: safeInteger(episodeStartedAt, now),
+      });
+    }
   }
+  next = applyResolvedScienceQueuePauses(state, next, resolvedEpisodes, now);
   const blockedPlanetIds = new Set<PlanetId>();
   for (const planetId of Object.keys(next.planets)) {
     if (isPlanetBlocked(next, planetId)) blockedPlanetIds.add(planetId);

@@ -60,7 +60,11 @@ import {
 import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { getBuildingMaxLevel } from '../domain/buildings/balance-v1.ts';
 import { getPlanetResources, type SaveState } from './contracts.ts';
-import { getPlanetOverpopulationSummary, reconcilePlanetOverpopulation } from './overpopulation.ts';
+import {
+  getPlanetOverpopulationSummary,
+  reconcileAllPlanetOverpopulation,
+  reconcilePlanetOverpopulation,
+} from './overpopulation.ts';
 import { createAllianceRatingEntries, createPlayerRatingEntries } from '../domain/rating/fixtures.ts';
 import { createUniverseMap } from '../domain/universe/runtime.ts';
 import { getEspionageTargets } from '../domain/espionage/runtime.ts';
@@ -1365,6 +1369,8 @@ test('overpopulation emits one persisted final system report with attrition-only
 function createScienceOverpopulationQueueFixture(
   firstEpisodeStartedAt: number,
   secondEpisodeStartedAt: number,
+  firstPlanetId = 'helion-01',
+  secondPlanetId = 'another-colony',
 ): SaveState {
   const initial = createInitialSaveState('test', 0);
   const homeworld = initial.planets['helion-01'];
@@ -1385,7 +1391,7 @@ function createScienceOverpopulationQueueFixture(
         {
           id: 'blocked-planet-science',
           scienceId: SCIENCE_CATALOG[0].id,
-          planetId: 'helion-01',
+          planetId: firstPlanetId,
           fromLevel: 0,
           toLevel: 1,
           startedAt: 0,
@@ -1396,7 +1402,7 @@ function createScienceOverpopulationQueueFixture(
         {
           id: 'other-planet-science',
           scienceId: SCIENCE_CATALOG[1].id,
-          planetId: 'another-colony',
+          planetId: secondPlanetId,
           fromLevel: 0,
           toLevel: 1,
           startedAt: 5_000,
@@ -1408,11 +1414,11 @@ function createScienceOverpopulationQueueFixture(
     },
     planets: {
       ...initial.planets,
-      'helion-01': {
+      [firstPlanetId]: {
         ...homeworld,
         overpopulation: blockedEpisode(firstEpisodeStartedAt),
       },
-      'another-colony': {
+      [secondPlanetId]: {
         ...homeworld,
         overpopulation: blockedEpisode(secondEpisodeStartedAt),
       },
@@ -1525,6 +1531,36 @@ test('an overdue blocked science head still pauses the shared queue only once', 
   assert.equal(first.finishAt - first.startedAt, first.durationMs);
   assert.equal(second.finishAt - second.startedAt, second.durationMs);
   assert.ok(first.finishAt <= second.startedAt, 'science queue must remain FIFO');
+});
+
+test('overpopulation queue pause is independent of planet ID iteration order', () => {
+  const reconcileWithPlanetIds = (firstPlanetId: string, secondPlanetId: string) => {
+    const fixture = createScienceOverpopulationQueueFixture(
+      8_000,
+      0,
+      firstPlanetId,
+      secondPlanetId,
+    );
+    const resolved = reconcileAllPlanetOverpopulation(fixture, 10_000);
+    assert.deepEqual(new Set(resolved.resolvedPlanetIds), new Set([firstPlanetId, secondPlanetId]));
+
+    const [first, second] = resolved.state.science.queue;
+    assert.ok(first && second);
+    assert.equal(first.planetId, firstPlanetId);
+    assert.equal(second.planetId, secondPlanetId);
+    assert.equal(first.startedAt, 2_000);
+    assert.equal(first.finishAt, 7_000);
+    assert.equal(second.startedAt, 10_000);
+    assert.equal(second.finishAt, 15_000);
+    assert.equal(first.finishAt - first.startedAt, first.durationMs);
+    assert.equal(second.finishAt - second.startedAt, second.durationMs);
+    assert.ok(first.finishAt <= second.startedAt, 'science queue must remain FIFO');
+    return resolved.state.science.queue.map(({ startedAt, finishAt }) => ({ startedAt, finishAt }));
+  };
+
+  const q1BeforeQ0 = reconcileWithPlanetIds('zeta-colony', 'alpha-colony');
+  const q0BeforeQ1 = reconcileWithPlanetIds('alpha-colony', 'zeta-colony');
+  assert.deepEqual(q1BeforeQ0, q0BeforeQ1);
 });
 
 test('a blocked planet pauses resource settlement and leaves a no-eligible episode persisted', () => {
