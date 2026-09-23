@@ -58,6 +58,11 @@ async function seed(win) {
     save.metal = 100000;
     save.minerals = 100000;
     save.gas = 100000;
+    planet.productionBots = { metal: 0, minerals: 0, gas: 0 };
+    save.resourceClock = {
+      lastReconciledAt: Date.now(),
+      remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+    };
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 8);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     return true;
