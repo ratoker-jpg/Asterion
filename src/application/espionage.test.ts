@@ -131,6 +131,7 @@ test('destroyed spy target returns the probe once without a new report', () => {
   const origin = initial.planets[originId];
   const prepared = emptyTarget({
     ...initial,
+    shipUpgradeLevels: { ...initial.shipUpgradeLevels, 'death-star': 10 },
     planets: {
       ...initial.planets,
       [originId]: {
@@ -443,6 +444,7 @@ test('full spy report handoff preserves owner ship levels in the battle simulato
   const planet = initial.planets[planetId];
   const state = {
     ...initial,
+    shipUpgradeLevels: { ...initial.shipUpgradeLevels, scout: 4, hunter: 20 },
     planets: {
       ...initial.planets,
       [planetId]: {

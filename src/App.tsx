@@ -132,10 +132,12 @@ import {
   FLIGHT_EDIT_TARGET_REQUEST_EVENT,
   FLIGHT_LAUNCH_CONTEXT_EVENT,
   FLIGHT_RECALL_REQUEST_EVENT,
+  BOT01_INCOMING_SCENARIO_REQUEST_EVENT,
   SPY_REPORT_ALL_REQUEST_EVENT,
   SPY_REPORT_REQUEST_EVENT,
   SPY_REPORT_RESULT_EVENT,
   dispatchFlight,
+  startBot01IncomingScenario,
   requestAllSpyReports,
   requestSpyReport,
   recallFlight,
@@ -148,7 +150,8 @@ import { getEspionageTargets, getEspionageState } from './domain/espionage/runti
 import { getOrbitalDebrisByCoordinate } from './domain/espionage/orbital-debris.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniverseOwnerProfile } from './domain/universe/types.ts';
 import { enqueueApplicationStateUpdate } from './application/state.ts';
-import { getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
+import { getOwnerShipUpgradeLevels, getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
+import { selectOwnedPlanet } from './application/owned-planets.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
@@ -407,6 +410,22 @@ export function App() {
       }
       window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
     };
+    const onBot01ScenarioRequest = (event: Event) => {
+      const detail = (event as CustomEvent<{ now?: number }>).detail;
+      const result = startBot01IncomingScenario(stateRef.current, {
+        now: detail.now ?? Date.now(),
+        mode: RUNTIME_MODE,
+        testTimeScale,
+      });
+      if (result.ok) {
+        stateRef.current = result.state;
+        setState(result.state);
+        setNotice(result.notice);
+      } else {
+        setNotice(result.error.message, 'error');
+      }
+      window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
+    };
     const onEditTargetRequest = () => {
       clearBuildingInterior();
       navigateTo('universe');
@@ -446,12 +465,14 @@ export function App() {
     };
     window.addEventListener(FLIGHT_DISPATCH_REQUEST_EVENT, onDispatchRequest);
     window.addEventListener(FLIGHT_RECALL_REQUEST_EVENT, onRecallRequest);
+    window.addEventListener(BOT01_INCOMING_SCENARIO_REQUEST_EVENT, onBot01ScenarioRequest);
     window.addEventListener(FLIGHT_EDIT_TARGET_REQUEST_EVENT, onEditTargetRequest);
     window.addEventListener(SPY_REPORT_REQUEST_EVENT, onSpyReportRequest);
     window.addEventListener(SPY_REPORT_ALL_REQUEST_EVENT, onSpyReportAllRequest);
     return () => {
       window.removeEventListener(FLIGHT_DISPATCH_REQUEST_EVENT, onDispatchRequest);
       window.removeEventListener(FLIGHT_RECALL_REQUEST_EVENT, onRecallRequest);
+      window.removeEventListener(BOT01_INCOMING_SCENARIO_REQUEST_EVENT, onBot01ScenarioRequest);
       window.removeEventListener(FLIGHT_EDIT_TARGET_REQUEST_EVENT, onEditTargetRequest);
       window.removeEventListener(SPY_REPORT_REQUEST_EVENT, onSpyReportRequest);
       window.removeEventListener(SPY_REPORT_ALL_REQUEST_EVENT, onSpyReportAllRequest);
@@ -738,7 +759,7 @@ export function App() {
     const nextPlanet = state.planets[planetId];
     if (!nextPlanet) return;
     clearBuildingInterior();
-    setState((current) => ({ ...current, currentPlanetId: planetId }));
+    setState((current) => selectOwnedPlanet(current, planetId));
     setPlanetMenuOpen(false);
     setPlanetViewMode('overview');
     setNotice(`${nextPlanet.name} ${ownedPlanets.find((planet) => planet.id === planetId)?.coords ?? currentPlanet.coords} выбрана как текущая планета.`);
@@ -747,7 +768,7 @@ export function App() {
   const openPlanetEditor = (planetId: PlanetId) => {
     if (!state.planets[planetId]) return;
     clearBuildingInterior();
-    setState((current) => ({ ...current, currentPlanetId: planetId }));
+    setState((current) => selectOwnedPlanet(current, planetId));
     navigateTo('planet');
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
@@ -1188,7 +1209,7 @@ export function App() {
     setBuildingInterior(null);
     setState((current) => current.currentPlanetId === context.planetId
       ? current
-      : { ...current, currentPlanetId: context.planetId });
+      : selectOwnedPlanet(current, context.planetId));
     navigateTo('planet');
     setPlanetViewMode(context.zone);
     setSelectedBuildingRole(context.buildingRole);
@@ -1374,7 +1395,7 @@ export function App() {
               recycling={currentPlanetState.recycling}
               trade={currentPlanetState.trade}
               tradeWallet={tradeWallet}
-              spaceportUpgrades={currentPlanetState.spaceportUpgrades}
+              spaceportUpgrades={{ ...currentPlanetState.spaceportUpgrades, shipLevels: getOwnerShipUpgradeLevels(state) }}
               spaceportWallet={spaceportWallet}
               resourceRatingPoints={state.rating.resourcePoints}
               now={now}

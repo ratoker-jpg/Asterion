@@ -55,6 +55,7 @@ import { SAVE_SCHEMA_VERSION } from './persistence.ts';
 import {
   getPlanetState,
   getPlanetResources,
+  getOwnerShipUpgradeLevels,
   replacePlanetResources,
   replacePlanetState,
   type PlanetId,
@@ -455,8 +456,16 @@ export function startSpaceportUpgrade(
 ): BuildingActionResult & { entityName: string } {
   if (isPlanetBlocked(state, context.planetId)) return { ok: false, state, reason: 'Планета заблокирована из-за перенаселения.', entityName: shipId };
   const planet = getPlanetState(state, context.planetId);
+  const queuedElsewhere = Object.entries(state.planets).some(([planetId, candidate]) => (
+    planetId !== context.planetId
+    && [...candidate.spaceportUpgrades.shipQueue, ...candidate.spaceportUpgrades.commanderQueue]
+      .some((task) => task.shipId === shipId)
+  ));
+  if (queuedElsewhere) {
+    return { ok: false, state, reason: 'Это улучшение уже ожидает завершения на другой планете.', entityName: shipId };
+  }
   const transition = enqueueSpaceportUpgrade({
-    state: planet.spaceportUpgrades,
+    state: { ...planet.spaceportUpgrades, shipLevels: getOwnerShipUpgradeLevels(state) },
     wallet: getPlanetResources(state, context.planetId),
     buildings: planet.buildings,
     scienceLevels: state.science.levels,
@@ -471,7 +480,10 @@ export function startSpaceportUpgrade(
   const withWallet = replacePlanetResources({ ...state, schemaVersion: SAVE_SCHEMA_VERSION }, context.planetId, transition.wallet);
   return {
     ok: true,
-    state: replacePlanetState(withWallet, context.planetId, { ...planet, spaceportUpgrades: transition.state }),
+    state: replacePlanetState(withWallet, context.planetId, {
+      ...planet,
+      spaceportUpgrades: { ...transition.state, shipLevels: {} },
+    }),
     reason: null,
     entityName,
   };
@@ -498,7 +510,7 @@ export function cancelSpaceportUpgrade(
     return { ok: false, state, reason: transition.reason, transition };
   }
   const transition = cancelSpaceportUpgradeDomain({
-    state: planet.spaceportUpgrades,
+    state: { ...planet.spaceportUpgrades, shipLevels: getOwnerShipUpgradeLevels(state) },
     wallet: getPlanetResources(state, context.planetId),
     buildings: planet.buildings,
     scienceLevels: state.science.levels,
@@ -509,7 +521,10 @@ export function cancelSpaceportUpgrade(
     testTimeScale: context.testTimeScale,
   }, taskId, context.now, context.rng);
   const withWallet = replacePlanetResources({ ...state, schemaVersion: SAVE_SCHEMA_VERSION }, context.planetId, transition.wallet);
-  const nextState = replacePlanetState(withWallet, context.planetId, { ...planet, spaceportUpgrades: transition.state });
+  const nextState = replacePlanetState(withWallet, context.planetId, {
+    ...planet,
+    spaceportUpgrades: { ...transition.state, shipLevels: {} },
+  });
   return {
     ok: transition.ok,
     state: transition.ok || nextState !== state ? nextState : state,
@@ -524,13 +539,20 @@ export function reconcileSpaceport(
 ): BuildingActionResult & { completed: Array<{ track: SpaceportUpgradeTrack; shipId: string }> } {
   if (isPlanetBlocked(state, context.planetId)) return { ok: true, state, reason: null, completed: [] };
   const planet = getPlanetState(state, context.planetId);
-  const transition = reconcileSpaceportUpgradeState(planet.spaceportUpgrades, context.now);
+  const transition = reconcileSpaceportUpgradeState({
+    ...planet.spaceportUpgrades,
+    shipLevels: getOwnerShipUpgradeLevels(state),
+  }, context.now);
   if (!transition.changed) return { ok: true, state, reason: null, completed: [] };
+  const shipUpgradeLevels = getOwnerShipUpgradeLevels(state);
+  for (const task of transition.completed) {
+    shipUpgradeLevels[task.shipId] = Math.max(shipUpgradeLevels[task.shipId] ?? 0, task.toLevel);
+  }
   return {
     ok: true,
-    state: replacePlanetState({ ...state, schemaVersion: SAVE_SCHEMA_VERSION }, context.planetId, {
+    state: replacePlanetState({ ...state, schemaVersion: SAVE_SCHEMA_VERSION, shipUpgradeLevels }, context.planetId, {
       ...planet,
-      spaceportUpgrades: transition.state,
+      spaceportUpgrades: { ...transition.state, shipLevels: {} },
     }),
     reason: null,
     completed: transition.completed,

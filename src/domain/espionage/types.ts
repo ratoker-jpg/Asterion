@@ -53,6 +53,15 @@ export type SpyOwnerProfile = {
 /** Backward-compatible name for the Test Mode Bot 01 profile. */
 export type Bot01Profile = SpyOwnerProfile;
 
+/** One explicit, persisted Test Mode demonstration; absence means not started. */
+export type Bot01IncomingScenario = {
+  version: 1;
+  status: 'in-flight' | 'resolved' | 'failed';
+  flightId: string;
+  targetPlanetId: string;
+  startedAt: number;
+};
+
 export type SpyTargetState = {
   id: string;
   name: string;
@@ -188,4 +197,6 @@ export type EspionageState = {
   bot01Planets?: Record<string, Bot01PlanetState>;
   /** Test-only owner-wide Bot 01 upgrades and technologies. */
   bot01Profile?: Bot01Profile;
+  /** The demonstration is only launched by an explicit Test Mode action. */
+  bot01IncomingScenario?: Bot01IncomingScenario;
 };

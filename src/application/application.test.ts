@@ -59,7 +59,8 @@ import {
 } from './persistence.ts';
 import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { getBuildingMaxLevel } from '../domain/buildings/balance-v1.ts';
-import { getPlanetResources, type SaveState } from './contracts.ts';
+import { getOwnerShipUpgradeLevel, getPlanetResources, type SaveState } from './contracts.ts';
+import { createColonyPlanetRuntime, destroyOwnedPlanet } from './owned-planets.ts';
 import {
   getPlanetOverpopulationSummary,
   reconcileAllPlanetOverpopulation,
@@ -388,6 +389,103 @@ test('legacy bot01Planets saves keep their compatibility migration path', () => 
   const reloaded = persistence.read();
   assert.equal(Object.keys(getEspionageTargets(reloaded.espionage)).length, 7);
   assert.equal(Object.keys(reloaded.espionage?.bot01Planets ?? {}).length, 7);
+});
+
+test('legacy planet upgrade levels migrate to owner-wide maxima without counting queued work', () => {
+  const storage = new MemoryStorage();
+  const loadAt = 2_000;
+  const initial = createInitialSaveState('test', 1_000);
+  const queuedCruiserUpgrade = {
+    id: 'legacy-queued-cruiser-upgrade',
+    track: 'ships' as const,
+    shipId: 'cruiser',
+    fromLevel: 3,
+    toLevel: 4,
+    startedAt: 1_500,
+    finishAt: 10_000,
+    spaceportLevelAtStart: 1,
+    effectiveDurationMs: 8_500,
+    cost: { metal: 1, minerals: 1, gas: 0 },
+    costSource: 'faction-factory-upgrades' as const,
+    refundEligible: true,
+  };
+  const helion = initial.planets['helion-01'];
+  const colony = createColonyPlanetRuntime(initial, { galaxy: 1, system: 2, position: 1 });
+  const oldPlanets = {
+    'helion-01': {
+      ...helion,
+      spaceportUpgrades: {
+        ...helion.spaceportUpgrades,
+        shipLevels: { scout: 3, corsair: 7 },
+        shipQueue: [queuedCruiserUpgrade],
+      },
+    },
+    'planet-1-2-1': {
+      ...colony,
+      spaceportUpgrades: {
+        ...colony.spaceportUpgrades,
+        shipLevels: { scout: 8, corsair: 4 },
+      },
+    },
+  };
+  const { shipUpgradeLevels: _legacyOwnerLevels, ...legacyState } = initial;
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => loadAt });
+  storage.values.set(persistence.saveKey, JSON.stringify({
+    ...legacyState,
+    schemaVersion: 20,
+    planets: oldPlanets,
+    queues: { ...initial.queues, 'planet-1-2-1': [] },
+  }));
+
+  const migrated = persistence.read();
+  assert.equal(migrated.schemaVersion, 21);
+  assert.equal(migrated.shipUpgradeLevels?.scout, 8);
+  assert.equal(migrated.shipUpgradeLevels?.corsair, 7);
+  assert.equal(getOwnerShipUpgradeLevel(migrated, 'cruiser'), 0);
+  assert.equal(migrated.planets['helion-01'].spaceportUpgrades.shipQueue.length, 1);
+  for (const planet of Object.values(migrated.planets)) {
+    assert.deepEqual(planet.spaceportUpgrades.shipLevels, {});
+  }
+});
+
+test('destroying Helion keeps the surviving planet and global progress through reload', () => {
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 2_000 });
+  const initial = persistence.read();
+  const survivorId = 'a-survivor';
+  const survivor = createColonyPlanetRuntime(initial, { galaxy: 1, system: 2, position: 1 });
+  const twoWorlds: SaveState = {
+    ...initial,
+    currentPlanetId: 'helion-01',
+    shipUpgradeLevels: { scout: 8, corsair: 6 },
+    planets: { ...initial.planets, [survivorId]: survivor },
+    queues: { ...initial.queues, [survivorId]: [] },
+  };
+  const protectedLastWorld = destroyOwnedPlanet(initial, 'helion-01', 2_000);
+  assert.equal(protectedLastWorld.destroyed, false);
+  assert.equal(protectedLastWorld.reason, 'last-planet-protected');
+  assert.equal(protectedLastWorld.state, initial);
+
+  const destroyed = destroyOwnedPlanet(twoWorlds, 'helion-01', 2_000);
+  assert.equal(destroyed.destroyed, true);
+  assert.equal(destroyed.state.planets['helion-01'], undefined);
+  assert.equal(destroyed.state.queues['helion-01'], undefined);
+  assert.equal(destroyed.state.resourceClock.byPlanet?.['helion-01'], undefined);
+  assert.equal(destroyed.state.currentPlanetId, survivorId);
+  assert.deepEqual(destroyed.state.planets[survivorId].resources, survivor.resources);
+  assert.deepEqual(getPlanetResources(destroyed.state), survivor.resources);
+  assert.deepEqual(destroyed.state.science, twoWorlds.science);
+  assert.deepEqual(destroyed.state.shipUpgradeLevels, twoWorlds.shipUpgradeLevels);
+  assert.equal(persistence.write(destroyed.state).ok, true);
+
+  const reloaded = persistence.read();
+  assert.equal(reloaded.planets['helion-01'], undefined);
+  assert.deepEqual(Object.keys(reloaded.planets), [survivorId]);
+  assert.equal(reloaded.currentPlanetId, survivorId);
+  assert.deepEqual(reloaded.science, twoWorlds.science);
+  assert.equal(getOwnerShipUpgradeLevel(reloaded, 'scout'), 8);
+  assert.equal(getOwnerShipUpgradeLevel(reloaded, 'corsair'), 6);
+  assert.deepEqual(getPlanetResources(reloaded), survivor.resources);
 });
 
 test('persistence facade keeps the existing save key, envelope migration, and one explicit writer', () => {
@@ -1115,7 +1213,7 @@ test('science application uses one clock, reconciles idempotently, and event bri
   assert.deepEqual(repeated.events, []);
 
   const target = new EventTarget();
-  let current = initial;
+  let current: SaveState = initial;
   const commits: SaveState[] = [];
   const unbind = bindScienceEventBridge({
     target,
@@ -1258,7 +1356,7 @@ test('application result reflects a failed transition after a queued functional 
   };
   const stateRef = { current: initial };
   const queuedUpdates: Array<(current: SaveState) => SaveState> = [];
-  let committed = initial;
+  let committed: SaveState = initial;
   const setState = (update: (current: SaveState) => SaveState) => {
     queuedUpdates.push(update);
   };

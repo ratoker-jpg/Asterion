@@ -11,6 +11,7 @@ import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { SAVE_SCHEMA_VERSION } from './persistence.ts';
 import {
   getPlanetState,
+  getOwnerShipUpgradeLevel,
   getPlanetResources,
   replacePlanetResources,
   replacePlanetState,
@@ -143,7 +144,7 @@ export function startFleetProduction(
     return { transition: blockedTransition, state };
   }
   const planet = getPlanetState(state, context.planetId);
-  const commanderLevel = planet.spaceportUpgrades.shipLevels[itemId] ?? 0;
+  const commanderLevel = getOwnerShipUpgradeLevel(state, itemId);
   const transition = enqueueFleetProduction({
     ...productionContext(state, context, context.now),
     commanderLevel,
