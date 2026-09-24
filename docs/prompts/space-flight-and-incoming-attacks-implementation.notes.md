@@ -13,10 +13,12 @@
 - Feature worktree: `D:\Desktop\Asterion\worktrees\space-flight-implementation`
 - Branch: `codex/space-flight-implementation-20260924`
 - Base: `origin/main` at `c2a12171f8e0478d333893e48afbefd3d85185f6`
+- Implementation commit: `4b333b0` (`Add Space Flight and Bot 01 incoming attacks`), pushed to `origin`.
+- Draft PR: [#78](https://github.com/ratoker-jpg/Asterion/pull/78). It remains open and in Draft state; it was not marked ready or merged.
 - The original checkout at `D:\Desktop\Asterion\repo` remains untouched.
 - `npm run build` passed. All 18 domain/application test scripts passed; the flight suite reports 97/97 and the application suite 44/44.
 - `npm run test:space-flight-ui` passed at 1920×1080 and 1280×720, including commander-only dispatch, 100 gas fee, satellite/defense preservation, targetless row rendering, Test Mode ×15 persistence after reload, and Bot 01 incoming-row persistence.
 - Previously completed UI checks also passed: fleet, universe, battle reports, and Test Mode at their required viewports.
 - `npm run dist:win` passed. Final installer: `artifacts-feature-space-flight/release-final/Asterion Setup 0.1.0.exe`. The earlier `release/` installer was preserved.
 - `git diff --check` passed; Git emitted only its line-ending conversion notices.
-- Independent final review found no new defects. Commit, push, and Draft PR are pending. Never mark the PR ready or merge it.
+- Independent final review found no new defects. To resume, continue from the feature branch and address any PR feedback; do not mark the PR ready or merge it without an explicit request.
