@@ -569,7 +569,7 @@ function FleetWorkspace({
     }));
   };
 
-  const createFlightCommand = (requestId: string, draft?: { originPlanetId?: string; destination?: FlightDestination; targetRelation?: TargetRelation | null; targetKind?: UniverseObjectKind | null }, runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read()): DispatchFlightCommand | null => {
+  const createFlightCommand = (requestId: string, draft?: { originPlanetId?: string; destination?: FlightDestination; targetRelation?: TargetRelation | null; targetKind?: UniverseObjectKind | null; departedAt?: number }, runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read()): DispatchFlightCommand | null => {
     const destination = draft?.destination ?? previewDestination ?? launchContext?.destination;
     const departedAt = Date.now();
     const targetKind = draft?.targetKind !== undefined
@@ -595,14 +595,14 @@ function FleetWorkspace({
         ? { colonizer: 1 }
         : missionId === 'espionage'
           ? { 'spy-probe': 1 }
-          : missionId === 'recycle'
+          : missionId === 'recycle' || missionId === 'gas'
             ? { recycler: selectedQuantities.recycler ?? 0 }
             : selectedQuantities,
       selectedCommanders: missionId === 'attack' || missionId === 'deployment' ? selectedCommanders : undefined,
       maxRounds: missionId === 'attack' ? attackRounds : undefined,
       cargo: missionId === 'transport' ? transportCargoDraft : undefined,
       operationId: launchContext?.operationId,
-      departedAt,
+      departedAt: draft?.departedAt ?? departedAt,
     };
   };
 
@@ -649,7 +649,7 @@ function FleetWorkspace({
       return;
     }
     setEditingPreviewTarget(false);
-    if (missionId !== 'recycle') return;
+    if (missionId !== 'recycle' && missionId !== 'gas') return;
 
     const draftError = coordinateDraftError(previewTargetDraft);
     if (draftError) {
@@ -720,9 +720,15 @@ function FleetWorkspace({
 
   const confirmFlightDispatch = () => {
     const requestId = globalThis.crypto?.randomUUID?.() ?? `flight-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const gasPreviewFlight = missionId === 'gas' && previewResult?.ok && previewResult.flight.missionId === 'gas'
+      ? previewResult.flight
+      : null;
     if (missionId === 'recycle'
       && (!previewResult?.ok || previewResult.flight.missionId !== 'recycle' || previewSubmittedTargetKind === null
         || previewResult.flight.selectedShips.recycler !== (selectedQuantities.recycler ?? 0))) return;
+    if (missionId === 'gas'
+      && (!gasPreviewFlight || gasPreviewFlight.selectedShips.recycler !== (selectedQuantities.recycler ?? 0)
+        || (selectedQuantities.recycler ?? 0) <= 0)) return;
     if (missionId === 'deployment' && previewDestination?.kind === 'planet') {
       const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
       if (getPlanetOverpopulationSummary(runtimeState, previewDestination.planetId).blocked) {
@@ -731,12 +737,20 @@ function FleetWorkspace({
       }
     }
     const localError = coordinateDraftError(previewTargetDraft);
-    if ((missionId === 'transport' || missionId === 'colonize' || missionId === 'attack' || missionId === 'recycle') && localError) {
+    if ((missionId === 'transport' || missionId === 'colonize' || missionId === 'attack' || missionId === 'recycle' || missionId === 'gas') && localError) {
       setPreviewTargetError(localError);
       setEditingPreviewTarget(true);
       return;
     }
-    const command = missionId === 'recycle' && previewResult?.ok
+    const command = missionId === 'gas' && gasPreviewFlight
+      ? createFlightCommand(requestId, {
+        originPlanetId: gasPreviewFlight.originPlanetId,
+        destination: gasPreviewFlight.destination,
+        targetRelation: gasPreviewFlight.targetRelation ?? null,
+        targetKind: gasPreviewFlight.targetKind ?? 'asteroid',
+        departedAt: gasPreviewFlight.departedAt,
+      })
+      : missionId === 'recycle' && previewResult?.ok
       ? createFlightCommand(requestId, {
         originPlanetId: previewResult.flight.originPlanetId,
         destination: previewResult.flight.destination,
@@ -775,7 +789,7 @@ function FleetWorkspace({
     const next = missionId === 'colonize' || missionId === 'espionage'
       ? Math.min(1, available)
       : Number.isFinite(raw) ? Math.max(0, Math.min(available, Math.floor(raw))) : 0;
-    if (missionId === 'recycle') {
+    if (missionId === 'recycle' || missionId === 'gas') {
       setPreviewResult(null);
       setPreviewSubmittedTargetKind(null);
     }
@@ -784,7 +798,7 @@ function FleetWorkspace({
 
   const chooseMission = (nextMissionId: MissionId) => {
     setMissionId(nextMissionId);
-    if (nextMissionId === 'recycle') {
+    if (missionId === 'gas' || nextMissionId === 'gas' || nextMissionId === 'recycle') {
       setPreviewResult(null);
       setPreviewSubmittedTargetKind(null);
       setPreviewTargetError(null);
@@ -799,7 +813,7 @@ function FleetWorkspace({
   };
 
   const setAllShipQuantities = (maximum: boolean) => {
-    if (missionId === 'recycle') {
+    if (missionId === 'recycle' || missionId === 'gas') {
       setPreviewResult(null);
       setPreviewSubmittedTargetKind(null);
     }
@@ -928,7 +942,11 @@ function FleetWorkspace({
         && previewSubmittedTargetKind !== null
         && previewResult.flight.selectedShips.recycler === (selectedQuantities.recycler ?? 0)
         && (selectedQuantities.recycler ?? 0) > 0
-    : missionId === 'attack'
+      : missionId === 'gas'
+        ? targetIsLocallyValid && previewResult?.ok === true && previewResult.flight.missionId === 'gas'
+          && previewResult.flight.selectedShips.recycler === (selectedQuantities.recycler ?? 0)
+          && (selectedQuantities.recycler ?? 0) > 0
+      : missionId === 'attack'
       ? targetIsLocallyValid && (!previewResult || previewResult.ok) && selectedShipCount > 0 && previewTargetRelation !== 'ally' && previewTargetRelation !== 'self'
     : missionId === 'transport'
     ? targetIsLocallyValid && (!previewResult || previewResult.ok || targetCheckIsDeferred)
@@ -1267,7 +1285,7 @@ function FleetWorkspace({
                   <span>{missionId === 'transport' ? 'ПРОВЕРКА ЦЕЛИ ПРИ ОТПРАВКЕ' : 'ПРОВЕРКА ЦЕЛИ ПРИ ОТПРАВКЕ'}</span>
                 </div>
                 {previewResult?.ok ? <>
-                  <div className="flight-timeline-metrics" data-qa-flight-preview>
+                  <div className="flight-timeline-metrics" data-qa-flight-preview data-qa-flight-preview-departed-at={previewResult.flight.departedAt} data-qa-flight-preview-arrival-at={previewResult.flight.arrivalAt}>
                     <div><small>РАССТОЯНИЕ</small><strong>{flightNumberLabel(previewResult.flight.routeDistance)} ед.</strong></div>
                     <div><small>ЭФФ. СКОРОСТЬ</small><strong>{flightNumberLabel(previewResult.flight.effectiveSpeed)}</strong></div>
                     <div><small>ТУДА</small><strong>{flightDurationLabel(previewResult.flight.oneWayDurationMs)}</strong></div>
