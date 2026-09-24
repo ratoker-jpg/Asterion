@@ -361,7 +361,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [openBattleReportId, setOpenBattleReportId] = useState<string | null>(null);
 
-  const items = useMemo(() => buildReportsFeed(battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports), [battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports]);
+  const items = useMemo(() => buildReportsFeed(battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports), [battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports]);
   const counts = useMemo(() => getReportCategoryCounts(items, state), [items, state]);
   const unreadCounts = useMemo(() => getReportUnreadCounts(items, state), [items, state]);
   const activeFolderMeta = MESSAGE_FOLDERS.find((folder) => folder.id === activeFolder) ?? MESSAGE_FOLDERS[0];

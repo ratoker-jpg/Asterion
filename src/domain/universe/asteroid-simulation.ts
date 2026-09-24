@@ -15,12 +15,21 @@ import {
   resolveUniverseAsteroidCollisions,
   universeCoordinateKey,
 } from './runtime.ts';
+import { initializeAsteroidGasState } from './asteroid-gas.ts';
 
 export type UniverseAsteroidTransition = {
   spawnIndex: number;
   atMs: number;
   fromCoordinate: UniverseCoordinate;
 };
+
+export function findUniverseAsteroidAtCoordinate(
+  asteroids: readonly UniverseAsteroidRuntimeState[],
+  coordinate: UniverseCoordinate,
+): UniverseAsteroidRuntimeState | undefined {
+  const targetKey = universeCoordinateKey(coordinate);
+  return asteroids.find((asteroid) => universeCoordinateKey(asteroid.coordinate) === targetKey);
+}
 
 function safeNow(nowMs: number) {
   return Number.isFinite(nowMs) ? Math.trunc(nowMs) : Date.now();
@@ -32,7 +41,7 @@ function asteroidSpawnAt(spawnIndex: number) {
 
 function createSpawnState(spawnIndex: number, atMs: number, galaxyCount: number): UniverseAsteroidRuntimeState | null {
   const state = getUniverseAsteroidState(spawnIndex, atMs, galaxyCount);
-  return state?.previousMoveAt === atMs ? state : null;
+  return state?.previousMoveAt === atMs ? initializeAsteroidGasState(state, atMs) : null;
 }
 
 /**

@@ -17,6 +17,7 @@ import {
   createUniverseAsteroidSimulationState,
   getNextUniverseAsteroidTransitionAt,
 } from './asteroid-simulation.ts';
+import { ASTEROID_GAS_RATES_PER_HOUR } from './asteroid-gas.ts';
 
 const coordinate = (position: number): UniverseCoordinate => ({ galaxy: 1, system: 1, position });
 
@@ -58,6 +59,18 @@ test('baseline snapshots the deterministic projection and advances the spawn cur
   assert.equal(baseline.nextSpawnIndex, 3);
   assert.deepEqual(baseline.asteroids, resolveUniverseAsteroidCollisions(projected, nowMs, 1));
   assert.equal(getNextUniverseAsteroidTransitionAt(baseline, nowMs), null);
+});
+
+test('a chronological asteroid spawn initializes its gas clock at the spawn timestamp', () => {
+  const startAt = ASTEROID_SCHEDULE_EPOCH_MS - 1;
+  const start = createUniverseAsteroidSimulationState(startAt, 1);
+  const spawned = advanceUniverseAsteroidSimulationAt(start, ASTEROID_SCHEDULE_EPOCH_MS, 1).state;
+  const asteroid = spawned.asteroids.find((item) => item.spawnIndex === 0);
+
+  assert.ok(asteroid);
+  assert.ok(ASTEROID_GAS_RATES_PER_HOUR.some((rate) => rate === asteroid.gasRatePerHour));
+  assert.equal(asteroid.gasUpdatedAt, ASTEROID_SCHEDULE_EPOCH_MS);
+  assert.equal(asteroid.gasRemainder, 0);
 });
 
 test('a multi-event advance matches chronological single-event advances', () => {

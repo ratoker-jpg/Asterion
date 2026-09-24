@@ -78,9 +78,11 @@ export type FlightRecord = {
   arrivalAt: number;
   returnAt?: number;
   gasCost: number;
-  /** Present for transport; absent remains valid for legacy colonization records. */
+  /** Cargo snapshot for transport, recycle, and gas extraction flights. */
   cargo?: TransportCargo;
   cargoState?: TransportCargoState;
+  /** Gas extraction capacity is fixed at dispatch and survives catalog changes. */
+  gasCapacity?: number;
   overflowWarning?: boolean;
   deliveredAt?: number;
   cargoResolvedAt?: number;

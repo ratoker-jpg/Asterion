@@ -113,7 +113,7 @@ type UniverseViewProps = {
   asteroidStates?: readonly UniverseAsteroidRuntimeState[];
   mode: RuntimeMode;
   onColonize: (coordinate: UniverseCoordinate) => void;
-  onRecycle: (coordinate: UniverseCoordinate) => void;
+  onAsteroidRecycler: (target: { spawnIndex: number; coordinate: UniverseCoordinate }) => void;
   onTransport: (target: { planetId: string; coordinate: UniverseCoordinate; relation: TargetRelation }) => void;
   onSpy: (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile; targetKind: 'player' | 'npc' }) => void;
   onAttack: (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile; targetKind: 'player' | 'npc' }) => void;
@@ -310,7 +310,7 @@ function OwnerInspector({
   );
 }
 
-function SpecialInspector({ node, underlyingNode, nowMs, asteroidHasDebris, onColonize, onRecycle }: { node: UniversePlanetNode; underlyingNode?: UniversePlanetNode; nowMs: number; asteroidHasDebris: boolean; onColonize: (coordinate: UniverseCoordinate) => void; onRecycle: (coordinate: UniverseCoordinate) => void }) {
+function SpecialInspector({ node, underlyingNode, nowMs, asteroidHasDebris, onColonize, onAsteroidRecycler }: { node: UniversePlanetNode; underlyingNode?: UniversePlanetNode; nowMs: number; asteroidHasDebris: boolean; onColonize: (coordinate: UniverseCoordinate) => void; onAsteroidRecycler: (target: { spawnIndex: number; coordinate: UniverseCoordinate }) => void }) {
   const isEmpty = node.kind === 'empty';
   const isPirate = node.kind === 'pirate';
   const isAnomaly = node.kind === 'anomaly';
@@ -341,18 +341,18 @@ function SpecialInspector({ node, underlyingNode, nowMs, asteroidHasDebris, onCo
 
       <p className="universe-special-description">{node.description}</p>
 
-      {canColonize ? (
-        <button type="button" className="universe-enabled-operation" title="Открыть подготовку колонизации" data-qa-universe-special-action="colonize" data-qa-universe-target-coordinate={formatUniverseCoordinate(node.coordinate)} onClick={() => onColonize(node.coordinate)}>КОЛОНИЗИРОВАТЬ</button>
-      ) : isAsteroid ? (
-        <button type="button" className="universe-enabled-operation" title="Выбрать координаты астероида для переработки свободных обломков" data-qa-universe-special-action="asteroid-recycler" data-qa-universe-target-coordinate={formatUniverseCoordinate(node.coordinate)} onClick={() => onRecycle(node.coordinate)}>ОТПРАВИТЬ ПЕРЕРАБОТЧИКА</button>
-      ) : isPirate ? (
-        <button type="button" className="universe-disabled-operation" disabled title="Разведка пока недоступна" data-qa-universe-special-action="pirate">РАЗВЕДАТЬ · СКОРО</button>
-      ) : isAnomaly ? (
-        <button type="button" className="universe-disabled-operation" disabled title="Исследование пока недоступно" data-qa-universe-special-action="anomaly">ИССЛЕДОВАТЬ · СКОРО</button>
-      ) : (
-        <button type="button" className="universe-disabled-operation" disabled data-qa-universe-special-action="disabled">{node.kind === 'uninhabited' ? 'КОЛОНИЗАЦИЯ' : 'ИССЛЕДОВАНИЕ'} · СКОРО</button>
-      )}
-      {canColonize && isAsteroid ? <button type="button" className="universe-enabled-operation" title="Выбрать координаты астероида для переработки свободных обломков" data-qa-universe-special-action="asteroid-recycler" data-qa-universe-target-coordinate={formatUniverseCoordinate(node.coordinate)} onClick={() => onRecycle(node.coordinate)}>ОТПРАВИТЬ ПЕРЕРАБОТЧИКА</button> : null}
+      <div className="universe-special-actions">
+        {canColonize ? (
+          <button type="button" className="universe-enabled-operation" title="Открыть подготовку колонизации" data-qa-universe-special-action="colonize" data-qa-universe-target-coordinate={formatUniverseCoordinate(node.coordinate)} onClick={() => onColonize(node.coordinate)}>КОЛОНИЗИРОВАТЬ</button>
+        ) : isAsteroid ? null : isPirate ? (
+          <button type="button" className="universe-disabled-operation" disabled title="Разведка пока недоступна" data-qa-universe-special-action="pirate">РАЗВЕДАТЬ · СКОРО</button>
+        ) : isAnomaly ? (
+          <button type="button" className="universe-disabled-operation" disabled title="Исследование пока недоступно" data-qa-universe-special-action="anomaly">ИССЛЕДОВАТЬ · СКОРО</button>
+        ) : (
+          <button type="button" className="universe-disabled-operation" disabled data-qa-universe-special-action="disabled">{node.kind === 'uninhabited' ? 'КОЛОНИЗАЦИЯ' : 'ИССЛЕДОВАНИЕ'} · СКОРО</button>
+        )}
+        {isAsteroid && node.asteroid ? <button type="button" className="universe-enabled-operation" title="Отправить переработчика: сначала собрать газ, затем обломки" data-qa-universe-special-action="asteroid-recycler" data-qa-universe-target-coordinate={formatUniverseCoordinate(node.coordinate)} data-qa-universe-asteroid-spawn-index={node.asteroid.spawnIndex} onClick={() => onAsteroidRecycler({ spawnIndex: node.asteroid!.spawnIndex, coordinate: node.coordinate })}>ОТПРАВИТЬ ПЕРЕРАБОТЧИКА</button> : null}
+      </div>
     </div>
   );
 }
@@ -385,7 +385,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, hasDebris, occupiedNodes,
   </button>;
 }
 
-export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, rating, command, playerPlanets, spyTargets, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, mode, onColonize, onRecycle, onTransport, onSpy, onAttack, focusTarget, onFocusHandled }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, rating, command, playerPlanets, spyTargets, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, mode, onColonize, onAsteroidRecycler, onTransport, onSpy, onAttack, focusTarget, onFocusHandled }: UniverseViewProps) {
   const [system, setSystem] = useState(1);
   const [focusEmpty, setFocusEmpty] = useState(false);
   const [showSlotLabels, setShowSlotLabels] = useState(true);
@@ -681,7 +681,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
             <button ref={closeButtonRef} type="button" className="universe-inspector-close" data-asterion-close aria-label="Закрыть инспектор" title="Закрыть инспектор" onClick={() => setSelectedNodeId(null)}>×</button>
           </header>
           <div className="universe-inspector-body">
-            {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} planets={ownerPlanets} currentOwnerId={owner.id} currentAlliance={owner.alliance} diplomacy={command.diplomacy} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} underlyingNode={selectedUnderlyingNode} nowMs={nowMs} asteroidHasDebris={Boolean(selectedNode.kind === 'asteroid' && selectedNode.asteroid && asteroidDebrisPresenceBySpawnIndex?.[String(selectedNode.asteroid.spawnIndex)])} onColonize={onColonize} onRecycle={onRecycle} />}
+          {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} planets={ownerPlanets} currentOwnerId={owner.id} currentAlliance={owner.alliance} diplomacy={command.diplomacy} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} underlyingNode={selectedUnderlyingNode} nowMs={nowMs} asteroidHasDebris={Boolean(selectedNode.kind === 'asteroid' && selectedNode.asteroid && asteroidDebrisPresenceBySpawnIndex?.[String(selectedNode.asteroid.spawnIndex)])} onColonize={onColonize} onAsteroidRecycler={onAsteroidRecycler} />}
           </div>
         </aside>
         </div>, document.body) : null}

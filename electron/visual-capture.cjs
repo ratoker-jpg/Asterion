@@ -14,6 +14,8 @@ const VIEWPORTS = [[1920,1080],[1600,900],[1280,720],[2560,1440]];
 const RESOURCE_QA_VIEWPORTS = new Set(['1920x1080','1600x900','1280x720']);
 const TEST_QUEUE_METAL = 450_099_689;
 const TEST_QUEUE_ENERGY = 999_999_963;
+const TEST_QUEUE_START_METAL = TEST_QUEUE_METAL + 113 + 168 + 30;
+const TEST_QUEUE_START_ENERGY = TEST_QUEUE_ENERGY + 10 + 26;
 const TEST_COMPLETED_ENERGY = 1_000_000_014;
 const SCREENS = [
   ['settings','Настройки','settings-view-v2'],
@@ -448,6 +450,7 @@ async function verifyResourceZoneFlow(win, directory) {
   await win.webContents.executeJavaScript(`(() => {
     const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
     save.metal=0;
+    save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
   })()`);
   await reload(win);
@@ -464,13 +467,25 @@ async function verifyResourceZoneFlow(win, directory) {
   await capture(win,directory,'resource-zone-insufficient');
 
   await resetTestSave(win);
-  await win.webContents.executeJavaScript(`(() => {
+  const queueFixtureReady = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+  const queueFixtureSeeded = await win.webContents.executeJavaScript(`(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+    const planet = save.planets?.['helion-01'];
+    if (!planet) return false;
+    save.metal = ${TEST_QUEUE_START_METAL};
+    save.minerals = 100_000_000;
+    planet.energy = ${TEST_QUEUE_START_ENERGY};
     save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
-  })()`);
-  await reload(win);
+    window.location.reload();
+    return true;
+  })()`).catch(() => false);
+  if (!queueFixtureSeeded) throw new Error('Could not seed the resource queue QA fixture');
+  await queueFixtureReady;
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win);
   await activateResourceZone(win);
 
   for(const [index, role] of ['basic-energy','gas-production-1','hangar'].entries()) {

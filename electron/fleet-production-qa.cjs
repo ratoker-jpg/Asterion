@@ -74,6 +74,56 @@ async function readSave(win) {
   return win.webContents.executeJavaScript(`JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null')`);
 }
 
+async function setRendererNow(win, now) {
+  const result = await win.webContents.executeJavaScript(`(() => {
+    if (!window.__qaOriginalDateNow) window.__qaOriginalDateNow = Date.now.bind(Date);
+    window.__qaMockNow = ${Number(now)};
+    Date.now = () => window.__qaMockNow;
+    return Date.now();
+  })()`);
+  if (result !== Number(now)) throw new Error(`Could not set renderer clock to ${now}`);
+}
+
+async function restoreRendererNow(win) {
+  await win.webContents.executeJavaScript(`(() => {
+    if (window.__qaOriginalDateNow) Date.now = window.__qaOriginalDateNow;
+    delete window.__qaMockNow;
+    delete window.__qaOriginalDateNow;
+  })()`);
+}
+
+async function readGasCandidate(win) {
+  return win.webContents.executeJavaScript(`(() => {
+    const flight = document.querySelector('[data-qa-flight-preview]');
+    return {
+      now: Date.now(),
+      departedAt: Number(flight?.getAttribute('data-qa-flight-preview-departed-at')),
+      arrivalAt: Number(flight?.getAttribute('data-qa-flight-preview-arrival-at')),
+      speed: Number(flight?.getAttribute('data-qa-flight-preview-speed')),
+      duration: Number(flight?.getAttribute('data-qa-flight-preview-duration')),
+      hit: document.querySelector('[data-qa-gas-asteroid-hit]')?.getAttribute('data-qa-gas-asteroid-hit') || '',
+      sendDisabled: document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled ?? true,
+      reconfirm: Boolean(document.querySelector('[data-qa-gas-preview-reconfirmation]')),
+      eta: document.querySelector('[data-qa-flight-eta]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      forecast: document.querySelector('[data-qa-gas-asteroid-preview]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+    };
+  })()`);
+}
+
+async function openGasPreviewAt(win, coordinate) {
+  await click(win, '[data-qa-route="fleets"]');
+  await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
+  await setFleetMission(win, 'gas');
+  await setFleetShipQuantity(win, 'recycler', 1);
+  await click(win, '[data-qa-flight-preview-open]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop] [data-qa-flight-target-inputs]')`);
+  await setFlightCoordinate(win, 'galaxy', coordinate.galaxy);
+  await setFlightCoordinate(win, 'system', coordinate.system);
+  await setFlightCoordinate(win, 'position', coordinate.position);
+  await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview]') && document.querySelector('[data-qa-gas-asteroid-preview]')`);
+}
+
 async function seedProductionSave(win, mutator, args = []) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   const result = await win.webContents.executeJavaScript(`(() => {
@@ -104,6 +154,18 @@ async function setStoredSourceGas(win, gas) {
     if (!save || !planet) return false;
     save.gas = ${JSON.stringify(gas)};
     planet.resources = { ...planet.resources, gas: ${JSON.stringify(gas)} };
+    const previousClock = save.resourceClock || {};
+    const previousHomeworldClock = previousClock.byPlanet?.['helion-01'] || previousClock;
+    const homeworldClock = {
+      ...previousHomeworldClock,
+      lastReconciledAt: Date.now(),
+      remainder: { ...(previousHomeworldClock.remainder || {}), gas: 0 },
+    };
+    save.resourceClock = {
+      ...previousClock,
+      ...homeworldClock,
+      byPlanet: { ...(previousClock.byPlanet || {}), 'helion-01': homeworldClock },
+    };
     localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
     return true;
   })()`);
@@ -145,6 +207,19 @@ async function setFleetShipQuantity(win, shipId, quantity) {
     return input.value === ${JSON.stringify(String(quantity))};
   })()`);
   if (!result) throw new Error(`Could not select fleet ship ${shipId}`);
+  await settle(win);
+}
+
+async function setFleetMission(win, missionId) {
+  const result = await win.webContents.executeJavaScript(`(() => {
+    const select = document.querySelector('#fleet-mission');
+    if (!select) return false;
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+    setter?.call(select, ${JSON.stringify(missionId)});
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return select.value === ${JSON.stringify(missionId)};
+  })()`);
+  if (!result) throw new Error(`Could not choose fleet mission ${missionId}`);
   await settle(win);
 }
 
@@ -301,6 +376,7 @@ async function runTransportUiCycle(win, label, directory) {
   await click(win, '[data-qa-flight-preview-open]');
   await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
   await selectTransportTarget(win, 'qa-own-target');
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-error]')?.textContent?.includes('Недостаточно газа')`);
   const insufficientGas = await win.webContents.executeJavaScript(`(() => ({
     sendDisabled: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled),
     error: document.querySelector('[data-qa-flight-preview-error]')?.textContent?.trim() || document.querySelector('[data-qa-flight-target-status]')?.textContent?.trim() || '',
@@ -639,28 +715,7 @@ async function runRecycleUiCycle(win, label) {
   return { target: target.coordinate, alternate: alternate.coordinate, manifest: flight.selectedShips, capacity: flight.recycleCapacity, collected, remaining, returned, persistedOnce: true };
 }
 
-async function runAsteroidOverlayRecycleLaunch(win, label, invalidCoordinate) {
-  const editTargetCoordinate = [1, 1, 3];
-  await seedProductionSave(win, (save) => {
-    const coordinate = { galaxy: 1, system: 1, position: 3 };
-    if (!save.planets?.['qa-recycle-target']) throw new Error('missing seeded recycler edit target');
-    save.espionage = {
-      ...(save.espionage || {}),
-      orbitalDebris: {
-        ...(save.espionage?.orbitalDebris || {}),
-        'qa-recycle-edit-debris': {
-          id: 'qa-recycle-edit-debris',
-          targetPlanetId: 'qa-recycle-target',
-          targetPlanetName: 'QA edited recycler target',
-          targetOwnerId: 'npc-bot-01',
-          targetCoordinate: coordinate,
-          debris: 5000,
-          createdAt: Date.now(),
-        },
-      },
-    };
-  });
-
+async function runAsteroidRecyclerLaunch(win, label, directory) {
   await click(win, '[data-qa-route="universe"]');
   await waitFor(win, `document.querySelector('[data-qa-universe]')`);
   let asteroid = null;
@@ -674,6 +729,7 @@ async function runAsteroidOverlayRecycleLaunch(win, label, invalidCoordinate) {
         if (match && Number.isFinite(nextMoveAt)) return {
           id: node.getAttribute('data-qa-universe-object') || '',
           coordinate: match.slice(1).map(Number),
+          spawnIndex: Number(node.getAttribute('data-qa-universe-asteroid-spawn-index')),
           nextMoveAt,
         };
       }
@@ -684,78 +740,390 @@ async function runAsteroidOverlayRecycleLaunch(win, label, invalidCoordinate) {
 
   await click(win, `[data-qa-universe-object="${asteroid.id}"]`);
   await waitFor(win, `document.querySelector('[data-qa-universe-inspector]')`);
-  await click(win, '[data-qa-universe-special-action="asteroid-recycler"]');
-  await waitFor(win, `document.querySelector('.fleet-workspace-v1[data-qa-flight-launch-context]')`);
-  const launch = await win.webContents.executeJavaScript(`(() => ({
-    mission: document.querySelector('#fleet-mission')?.value || '',
-    sendDisabled: Boolean(document.querySelector('[data-qa-flight-preview-open]')?.disabled),
-  }))()`);
-  if (launch.mission !== 'recycle') {
-    throw new Error(`${label}: asteroid inspector did not seed a recycler mission at its active coordinate ${JSON.stringify({ launch, asteroid })}`);
+  const asteroidActions = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-universe-special-action]')).map((node) => ({
+    action: node.getAttribute('data-qa-universe-special-action') || '',
+    label: node.textContent?.replace(/\\s+/g, ' ').trim() || '',
+    title: node.getAttribute('title') || '',
+    coordinate: node.getAttribute('data-qa-universe-target-coordinate') || '',
+    spawnIndex: Number(node.getAttribute('data-qa-universe-asteroid-spawn-index')),
+  }))`);
+  const recyclerActions = asteroidActions.filter((action) => action.action === 'asteroid-recycler');
+  if (recyclerActions.length !== 1 || asteroidActions.some((action) => action.action === 'gas-extraction')
+    || recyclerActions[0].label !== 'ОТПРАВИТЬ ПЕРЕРАБОТЧИКА'
+    || !recyclerActions[0].title.includes('сначала собрать газ, затем обломки')
+    || recyclerActions[0].coordinate !== `[${asteroid.coordinate.join(':')}]`
+    || recyclerActions[0].spawnIndex !== asteroid.spawnIndex) {
+    throw new Error(`${label}: asteroid inspector must expose one combined recycler action ${JSON.stringify({ asteroidActions, asteroid })}`);
   }
-
+  await click(win, '[data-qa-universe-special-action="asteroid-recycler"]');
+  await waitFor(win, `document.querySelector('.fleet-workspace-v1[data-qa-flight-launch-context]') && document.querySelector('#fleet-mission')?.value === 'gas'`);
+  const gasLaunch = await win.webContents.executeJavaScript(`({
+    mission: document.querySelector('#fleet-mission')?.value || '',
+    coordinate: document.querySelector('.fleet-workspace-v1')?.getAttribute('data-qa-flight-launch-context') || '',
+    roster: Array.from(document.querySelectorAll('[data-qa-fleet-roster] [data-qa-fleet-ship]')).map((node) => node.getAttribute('data-qa-fleet-ship')),
+  })`);
+  if (gasLaunch.mission !== 'gas' || gasLaunch.coordinate !== `[${asteroid.coordinate.join(':')}]` || JSON.stringify(gasLaunch.roster) !== JSON.stringify(['recycler'])) {
+    throw new Error(`${label}: combined asteroid recycler action did not open a recycler-only fixed-coordinate gas-and-scrap mission ${JSON.stringify({ gasLaunch, asteroid })}`);
+  }
   await setFleetShipQuantity(win, 'recycler', 1);
   await click(win, '[data-qa-flight-preview-open]');
-  await waitFor(win, `document.querySelector('[data-qa-flight-preview]') && !document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled`);
-  const previewTarget = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-flight-target-step]')?.textContent?.replace(/\\s+/g, ' ').trim() || ''`);
-  if (!previewTarget.includes(`[${asteroid.coordinate.join(':')}]`)) {
-    throw new Error(`${label}: asteroid inspector destination was not retained in recycler preview ${JSON.stringify({ previewTarget, asteroid })}`);
+  await waitFor(win, `document.querySelector('[data-qa-gas-asteroid-preview]')`);
+  const gasPreview = await win.webContents.executeJavaScript(`(() => {
+    const preview = document.querySelector('[data-qa-gas-asteroid-preview]');
+    const status = preview?.querySelector('[data-qa-gas-asteroid-hit]')?.getAttribute('data-qa-gas-asteroid-hit') || '';
+    const target = document.querySelector('[data-qa-flight-target-step]')?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+    const text = preview?.textContent?.replace(/\\s+/g, ' ') || '';
+    return { visible: Boolean(preview), status, target, text, leaksHiddenStock: /СКРЫТ|скорость пополнения|текущий запас/i.test(text) };
+  })()`);
+  if (!gasPreview.visible || !['hit', 'miss'].includes(gasPreview.status)
+    || !gasPreview.target.includes(`[${asteroid.coordinate.join(':')}]`) || gasPreview.leaksHiddenStock) {
+    throw new Error(`${label}: gas arrival preview did not show the forecast while keeping gas stock hidden ${JSON.stringify({ gasPreview, asteroid })}`);
+  }
+  await capture(win, directory, 'gas-extraction-preview');
+  await click(win, '[data-qa-flight-preview-cancel]');
+  await waitFor(win, `!document.querySelector('[data-qa-flight-preview-backdrop]')`);
+  return { asteroidCoordinate: asteroid.coordinate, mission: gasLaunch.mission, gasPreview: { status: gasPreview.status }, actionCount: recyclerActions.length };
+}
+
+async function runGasUiRegressions(win, label, directory) {
+  const movementDelayMs = 20_000;
+  await seedProductionSave(win, (save, planet, delay) => {
+    const now = Date.now();
+    const simulation = save.asteroidSimulation;
+    if (!simulation?.asteroids?.length) throw new Error('test save has no active asteroid simulation');
+    save.flights = { records: [], requestIndex: {} };
+    planet.fleet.ships = { ...planet.fleet.ships, scout: 2, recycler: 2 };
+    save.asteroidSimulation = {
+      ...simulation,
+      processedThroughAt: now,
+      asteroids: simulation.asteroids.map((asteroid) => ({ ...asteroid, nextMoveAt: now + delay })),
+    };
+  }, [movementDelayMs]);
+
+  const initialSave = await readSave(win);
+  const asteroid = initialSave.asteroidSimulation?.asteroids?.[0];
+  if (!asteroid) throw new Error(`${label}: gas UI regression fixture has no asteroid`);
+  const startingCoordinate = { ...asteroid.coordinate };
+  const movementAt = asteroid.nextMoveAt;
+
+  await click(win, '[data-qa-route="fleets"]');
+  await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
+  await setFleetMission(win, 'transport');
+  await setFleetShipQuantity(win, 'scout', 1);
+  const priorMissionSelection = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-fleet-ship="scout"] input')?.value || ''`);
+  if (priorMissionSelection !== '1') throw new Error(`${label}: did not select a scout before switching to gas`);
+  await setFleetMission(win, 'gas');
+  await setFleetShipQuantity(win, 'recycler', 1);
+  const roster = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-fleet-roster] [data-qa-fleet-ship]')).map((node) => node.getAttribute('data-qa-fleet-ship'))`);
+  if (JSON.stringify(roster) !== JSON.stringify(['recycler'])) {
+    throw new Error(`${label}: gas mission roster exposed a non-recycler after mission switch ${JSON.stringify(roster)}`);
+  }
+
+  await click(win, '[data-qa-flight-preview-open]');
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop] [data-qa-flight-target-inputs]')`);
+  await setFlightCoordinate(win, 'galaxy', startingCoordinate.galaxy);
+  await setFlightCoordinate(win, 'system', startingCoordinate.system);
+  await setFlightCoordinate(win, 'position', startingCoordinate.position);
+  await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview]') && document.querySelector('[data-qa-gas-asteroid-preview]')`);
+  const initialPreview = await win.webContents.executeJavaScript(`(() => ({
+    departedAt: Number(document.querySelector('[data-qa-flight-preview]')?.getAttribute('data-qa-flight-preview-departed-at')),
+    arrivalAt: Number(document.querySelector('[data-qa-flight-preview]')?.getAttribute('data-qa-flight-preview-arrival-at')),
+    target: document.querySelector('[data-qa-flight-target-step]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+  }))()`);
+
+  await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
+  await waitFor(win, `document.querySelector('[data-qa-flight-target-inputs]')`);
+  await setFlightCoordinate(win, 'galaxy', 999);
+  await setFlightCoordinate(win, 'system', 40);
+  await setFlightCoordinate(win, 'position', 24);
+  await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview]')?.getAttribute('data-qa-flight-preview-arrival-at') !== ${JSON.stringify(String(initialPreview.arrivalAt))}`);
+  const editedPreview = await win.webContents.executeJavaScript(`(() => ({
+    departedAt: Number(document.querySelector('[data-qa-flight-preview]')?.getAttribute('data-qa-flight-preview-departed-at')),
+    arrivalAt: Number(document.querySelector('[data-qa-flight-preview]')?.getAttribute('data-qa-flight-preview-arrival-at')),
+    target: document.querySelector('[data-qa-flight-target-step]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+    status: document.querySelector('[data-qa-gas-asteroid-hit]')?.getAttribute('data-qa-gas-asteroid-hit') || '',
+    sendDisabled: document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled ?? true,
+    text: document.querySelector('[data-qa-gas-asteroid-preview]')?.textContent?.replace(/\\s+/g, ' ') || '',
+  }))()`);
+  if (editedPreview.arrivalAt === initialPreview.arrivalAt
+    || !editedPreview.target.includes('[999:40:24]')
+    || editedPreview.status !== 'miss'
+    || editedPreview.sendDisabled
+    || /СКРЫТ|скорость пополнения|текущий запас/i.test(editedPreview.text)) {
+    throw new Error(`${label}: gas coordinate edit did not refresh ETA/forecast or a valid miss was blocked ${JSON.stringify({ initialPreview, editedPreview })}`);
+  }
+  await capture(win, directory, 'gas-coordinate-edited-preview');
+
+  await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
+  await waitFor(win, `document.querySelector('[data-qa-flight-target-inputs]')`);
+  await setFlightCoordinate(win, 'system', 0);
+  await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
+  const invalidTarget = await win.webContents.executeJavaScript(`({
+    invalid: document.querySelector('[data-qa-flight-target-status]')?.classList.contains('is-invalid') ?? false,
+    sendDisabled: document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled ?? false,
+  })`);
+  if (!invalidTarget.invalid || !invalidTarget.sendDisabled) {
+    throw new Error(`${label}: invalid gas coordinates did not block dispatch ${JSON.stringify(invalidTarget)}`);
   }
 
   await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
   await waitFor(win, `document.querySelector('[data-qa-flight-target-inputs]')`);
-  await setFlightCoordinate(win, 'galaxy', invalidCoordinate[0]);
-  await setFlightCoordinate(win, 'system', invalidCoordinate[1]);
-  await setFlightCoordinate(win, 'position', invalidCoordinate[2]);
+  await setFlightCoordinate(win, 'system', 40);
   await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
-  await waitFor(win, `document.querySelector('[data-qa-flight-target-status].is-invalid')`);
-  const rejectedTarget = await win.webContents.executeJavaScript(`({
-    sendDisabled: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled),
-    message: document.querySelector('[data-qa-flight-target-status]')?.textContent?.trim() || '',
+  await waitFor(win, `document.querySelector('[data-qa-gas-asteroid-hit][data-qa-gas-asteroid-hit="miss"]')`);
+  await setFleetShipQuantity(win, 'recycler', 0);
+  const noRecycler = await win.webContents.executeJavaScript(`({
+    selected: document.querySelector('[data-qa-fleet-ship="recycler"] input')?.value || '',
+    sendDisabled: document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled ?? false,
   })`);
-  if (!rejectedTarget.sendDisabled || !/обломк/i.test(rejectedTarget.message)) {
-    throw new Error(`${label}: editing an asteroid recycler target to an unavailable coordinate was not rejected ${JSON.stringify(rejectedTarget)}`);
+  if (noRecycler.selected !== '0' || !noRecycler.sendDisabled) {
+    throw new Error(`${label}: gas dispatch stayed enabled without a recycler ${JSON.stringify(noRecycler)}`);
   }
 
+  await setFleetShipQuantity(win, 'recycler', 1);
   await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
-  await setFlightCoordinate(win, 'galaxy', editTargetCoordinate[0]);
-  await setFlightCoordinate(win, 'system', editTargetCoordinate[1]);
-  await setFlightCoordinate(win, 'position', editTargetCoordinate[2]);
+  await waitFor(win, `document.querySelector('[data-qa-flight-target-inputs]')`);
   await click(win, '[data-qa-flight-target-step] .flight-timeline-edit');
-  await waitFor(win, `document.querySelector('[data-qa-flight-preview]') && !document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled`);
-  const editedPreview = await win.webContents.executeJavaScript(`({
-    sendDisabled: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled),
-    target: document.querySelector('[data-qa-flight-target-step]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
-    status: document.querySelector('[data-qa-flight-target-status]')?.textContent?.trim() || '',
-  })`);
-  if (editedPreview.sendDisabled || !editedPreview.target.includes(`[${editTargetCoordinate.join(':')}]`) || !editedPreview.status.includes('Цель подтверждена')) {
-    throw new Error(`${label}: edited asteroid recycler target did not receive a fresh successful preview ${JSON.stringify(editedPreview)}`);
+  await waitFor(win, `document.querySelector('[data-qa-gas-asteroid-hit][data-qa-gas-asteroid-hit="miss"]')`);
+  const readyCandidate = await win.webContents.executeJavaScript(`(() => ({
+    departedAt: Number(document.querySelector('[data-qa-flight-preview]')?.getAttribute('data-qa-flight-preview-departed-at')),
+    arrivalAt: Number(document.querySelector('[data-qa-flight-preview]')?.getAttribute('data-qa-flight-preview-arrival-at')),
+    status: document.querySelector('[data-qa-gas-asteroid-hit]')?.getAttribute('data-qa-gas-asteroid-hit') || '',
+    sendDisabled: document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled ?? true,
+  }))()`);
+  if (readyCandidate.status !== 'miss' || readyCandidate.sendDisabled || readyCandidate.departedAt >= movementAt || readyCandidate.arrivalAt <= movementAt) {
+    throw new Error(`${label}: gas miss candidate was not valid across the scheduled movement boundary ${JSON.stringify({ readyCandidate, movementAt })}`);
   }
 
-  await click(win, '[data-qa-test-speed="500"]');
-  await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×500')`);
-  await click(win, '[data-qa-flight-dispatch-confirm]');
   await waitFor(win, `(() => {
-    const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}');
-    const flight = [...(save.flights?.records || [])].reverse().find((item) => item.missionId === 'recycle');
-    return flight?.cargoState === 'returned' && flight?.phase === 'completed';
-  })()`, 30_000);
-  const saved = await readSave(win);
-  const flight = [...(saved.flights?.records ?? [])].reverse().find((item) => item.missionId === 'recycle');
-  const report = saved.reports?.recyclerArrivalReports?.find((item) => item.flightId === flight?.id);
-  if (!flight || flight.destinationCoordinate.galaxy !== editTargetCoordinate[0]
-    || flight.destinationCoordinate.system !== editTargetCoordinate[1]
-    || flight.destinationCoordinate.position !== editTargetCoordinate[2]
-    || flight.targetKind !== 'player' || !(flight.cargo?.debris > 0) || !report || report.collectedDebris !== flight.cargo.debris) {
-    throw new Error(`${label}: edited asteroid-origin recycler flight did not dispatch to the reviewed map target ${JSON.stringify({ flight, report, asteroid, editedPreview })}`);
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
+    const simulation = save?.asteroidSimulation;
+    const moved = simulation?.asteroids?.find((item) => item.spawnIndex === ${asteroid.spawnIndex});
+    return Number(simulation?.processedThroughAt || 0) >= ${movementAt} && (!moved || moved.coordinate.galaxy !== ${startingCoordinate.galaxy} || moved.coordinate.system !== ${startingCoordinate.system} || moved.coordinate.position !== ${startingCoordinate.position});
+  })()`, movementDelayMs + 10_000);
+  const afterBoundary = await readSave(win);
+  const movedAsteroid = afterBoundary.asteroidSimulation?.asteroids?.find((item) => item.spawnIndex === asteroid.spawnIndex);
+  if (afterBoundary.asteroidSimulation?.processedThroughAt < movementAt
+    || (movedAsteroid && JSON.stringify(movedAsteroid.coordinate) === JSON.stringify(startingCoordinate))) {
+    throw new Error(`${label}: QA did not cross the asteroid movement boundary ${JSON.stringify({ movementAt, movedAsteroid, processedThroughAt: afterBoundary.asteroidSimulation?.processedThroughAt })}`);
   }
-  await reload(win);
-  const reloaded = await readSave(win);
-  const reportsAfterReload = reloaded.reports?.recyclerArrivalReports?.filter((item) => item.flightId === flight.id) ?? [];
-  if (reportsAfterReload.length !== 1 || reportsAfterReload[0].collectedDebris !== flight.cargo.debris) {
-    throw new Error(`${label}: edited asteroid-origin recycler report did not persist exactly once ${JSON.stringify(reportsAfterReload)}`);
+
+  const forecastBeforeSend = await readGasCandidate(win);
+  if (forecastBeforeSend.departedAt !== readyCandidate.departedAt
+    || forecastBeforeSend.arrivalAt !== readyCandidate.arrivalAt
+    || forecastBeforeSend.hit !== 'miss'
+    || forecastBeforeSend.sendDisabled) {
+    throw new Error(`${label}: gas candidate changed before the movement-boundary confirmation ${JSON.stringify({ readyCandidate, forecastBeforeSend })}`);
   }
-  return { asteroidCoordinate: asteroid.coordinate, editedCoordinate: editTargetCoordinate, targetKind: flight.targetKind, collected: report.collectedDebris, rejectedCoordinate: invalidCoordinate, reportCountAfterReload: reportsAfterReload.length };
+  await click(win, '[data-qa-flight-dispatch-confirm]');
+  await waitFor(win, `document.querySelector('[data-qa-gas-preview-reconfirmation]')`);
+  const refreshedForecast = await readGasCandidate(win);
+  const noDispatchAfterRefresh = await readSave(win);
+  if (!refreshedForecast.reconfirm
+    || refreshedForecast.departedAt <= forecastBeforeSend.departedAt
+    || refreshedForecast.arrivalAt <= refreshedForecast.departedAt
+    || refreshedForecast.hit !== 'miss'
+    || refreshedForecast.sendDisabled
+    || noDispatchAfterRefresh.flights.records.some((flight) => flight.missionId === 'gas')) {
+    throw new Error(`${label}: stale movement-boundary forecast was sent or not refreshed for confirmation ${JSON.stringify({ forecastBeforeSend, refreshedForecast, flights: noDispatchAfterRefresh.flights.records })}`);
+  }
+  await capture(win, directory, 'gas-movement-boundary-reconfirmation');
+  await setRendererNow(win, refreshedForecast.departedAt);
+  await click(win, '[data-qa-flight-dispatch-confirm]');
+  await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.flights?.records?.some((flight) => flight.missionId === 'gas' && flight.destinationCoordinate?.galaxy === 999 && flight.destinationCoordinate?.system === 40 && flight.destinationCoordinate?.position === 24)`);
+  const dispatchedSave = await readSave(win);
+  const dispatched = dispatchedSave.flights.records.find((flight) => flight.missionId === 'gas' && flight.destinationCoordinate?.galaxy === 999 && flight.destinationCoordinate?.system === 40 && flight.destinationCoordinate?.position === 24);
+  if (!dispatched
+    || dispatched.departedAt !== refreshedForecast.departedAt
+    || dispatched.arrivalAt !== refreshedForecast.arrivalAt
+    || dispatched.phase !== 'outbound'
+    || JSON.stringify(dispatched.selectedShips) !== JSON.stringify({ recycler: 1 })) {
+    throw new Error(`${label}: dispatched gas flight diverged from the reconfirmed candidate or included stale ships ${JSON.stringify({ refreshedForecast, dispatched })}`);
+  }
+  await restoreRendererNow(win);
+  return {
+    priorMissionSelection,
+    switchedRoster: roster,
+    initialPreview,
+    editedPreview: { arrivalAt: editedPreview.arrivalAt, target: editedPreview.target, status: editedPreview.status },
+    invalidTarget,
+    noRecycler,
+    movementAt,
+    forecastBeforeSend,
+    refreshedForecast,
+    dispatched: { departedAt: dispatched.departedAt, arrivalAt: dispatched.arrivalAt, selectedShips: dispatched.selectedShips },
+  };
+}
+
+async function seedGasFreshnessSave(win, settings = {}) {
+  await seedProductionSave(win, (save, planet, options) => {
+    const now = Date.now();
+    const simulation = save.asteroidSimulation;
+    if (!simulation?.asteroids?.length) throw new Error('test save has no active asteroid simulation');
+    save.flights = { records: [], requestIndex: {} };
+    planet.fleet.ships = { ...planet.fleet.ships, scout: 2, recycler: 2 };
+    save.asteroidSimulation = {
+      ...simulation,
+      processedThroughAt: now,
+      asteroids: simulation.asteroids.map((asteroid) => ({ ...asteroid, nextMoveAt: now + options.movementDelayMs })),
+    };
+    save.science = { ...save.science, queue: [] };
+    if (options.speedResearchFinishInMs != null) {
+      save.science = {
+        ...save.science,
+        levels: { ...save.science.levels, 4: 0 },
+        queue: [{
+          id: 'qa-gas-flight-speed-research',
+          scienceId: 4,
+          planetId: 'helion-01',
+          fromLevel: 0,
+          toLevel: 1,
+          startedAt: now,
+          finishAt: now + options.speedResearchFinishInMs,
+          durationMs: options.speedResearchFinishInMs,
+          cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+        }],
+      };
+    }
+  }, [settings]);
+}
+
+async function runGasFreshnessRegressions(win, label, directory) {
+  const results = {};
+  const movementDelayMs = 10 * 60_000;
+
+  await seedGasFreshnessSave(win, { movementDelayMs });
+  let save = await readSave(win);
+  let asteroid = save.asteroidSimulation?.asteroids?.[0];
+  if (!asteroid) throw new Error(`${label}: gas freshness fixture has no asteroid`);
+  await openGasPreviewAt(win, asteroid.coordinate);
+  const beforeExpiry = await readGasCandidate(win);
+  if (beforeExpiry.sendDisabled || beforeExpiry.arrivalAt <= beforeExpiry.departedAt) {
+    throw new Error(`${label}: initial gas candidate was not dispatchable ${JSON.stringify(beforeExpiry)}`);
+  }
+
+  const elapsedPastArrival = beforeExpiry.arrivalAt + 1;
+  await setRendererNow(win, elapsedPastArrival);
+  await click(win, '[data-qa-flight-dispatch-confirm]');
+  await waitFor(win, `document.querySelector('[data-qa-gas-preview-reconfirmation]')`);
+  const refreshedAfterExpiry = await readGasCandidate(win);
+  save = await readSave(win);
+  if (!refreshedAfterExpiry.reconfirm
+    || refreshedAfterExpiry.departedAt !== elapsedPastArrival
+    || refreshedAfterExpiry.arrivalAt <= elapsedPastArrival
+    || save.flights.records.some((flight) => flight.missionId === 'gas')) {
+    throw new Error(`${label}: expired preview was not refreshed before dispatch ${JSON.stringify({ beforeExpiry, refreshedAfterExpiry, flights: save.flights.records })}`);
+  }
+  await capture(win, directory, 'gas-expired-preview-refreshed');
+  await click(win, '[data-qa-flight-dispatch-confirm]');
+  save = await readSave(win);
+  const afterExpiryDispatch = save.flights.records.find((flight) => flight.missionId === 'gas');
+  if (!afterExpiryDispatch
+    || afterExpiryDispatch.departedAt !== refreshedAfterExpiry.departedAt
+    || afterExpiryDispatch.arrivalAt !== refreshedAfterExpiry.arrivalAt
+    || afterExpiryDispatch.arrivalAt <= elapsedPastArrival
+    || afterExpiryDispatch.phase !== 'outbound') {
+    throw new Error(`${label}: confirming refreshed gas candidate did not create a future outbound flight ${JSON.stringify({ refreshedAfterExpiry, afterExpiryDispatch })}`);
+  }
+  await restoreRendererNow(win);
+  results.expiredPreview = {
+    oldArrivalAt: beforeExpiry.arrivalAt,
+    refreshedDepartureAt: refreshedAfterExpiry.departedAt,
+    savedArrivalAt: afterExpiryDispatch.arrivalAt,
+    phase: afterExpiryDispatch.phase,
+  };
+
+  await seedGasFreshnessSave(win, { movementDelayMs });
+  save = await readSave(win);
+  asteroid = save.asteroidSimulation?.asteroids?.[0];
+  if (!asteroid) throw new Error(`${label}: asteroid movement fixture has no asteroid`);
+  const movementAt = asteroid.nextMoveAt;
+  await openGasPreviewAt(win, asteroid.coordinate);
+  const beforeMovement = await readGasCandidate(win);
+  if (beforeMovement.arrivalAt >= movementAt) {
+    throw new Error(`${label}: movement fixture did not place the first arrival before asteroid movement ${JSON.stringify({ beforeMovement, movementAt })}`);
+  }
+  const simulatedAfterMovementAt = movementAt + 1;
+  await setRendererNow(win, simulatedAfterMovementAt);
+  await click(win, '[data-qa-flight-dispatch-confirm]');
+  await waitFor(win, `document.querySelector('[data-qa-gas-preview-reconfirmation]')`);
+  const refreshedAfterMovement = await readGasCandidate(win);
+  save = await readSave(win);
+  if (!refreshedAfterMovement.reconfirm
+    || refreshedAfterMovement.departedAt !== simulatedAfterMovementAt
+    || refreshedAfterMovement.arrivalAt <= simulatedAfterMovementAt
+    || refreshedAfterMovement.hit === beforeMovement.hit
+    || save.flights.records.some((flight) => flight.missionId === 'gas')) {
+    throw new Error(`${label}: asteroid movement did not refresh the shown forecast and require reconfirmation ${JSON.stringify({ beforeMovement, refreshedAfterMovement, movementAt, flights: save.flights.records })}`);
+  }
+  await capture(win, directory, 'gas-asteroid-movement-preview-refreshed');
+  await click(win, '[data-qa-flight-dispatch-confirm]');
+  save = await readSave(win);
+  const afterMovementDispatch = save.flights.records.find((flight) => flight.missionId === 'gas');
+  if (!afterMovementDispatch
+    || afterMovementDispatch.departedAt !== refreshedAfterMovement.departedAt
+    || afterMovementDispatch.arrivalAt !== refreshedAfterMovement.arrivalAt
+    || afterMovementDispatch.effectiveSpeed !== refreshedAfterMovement.speed
+    || afterMovementDispatch.oneWayDurationMs !== refreshedAfterMovement.duration
+    || afterMovementDispatch.phase !== 'outbound') {
+    throw new Error(`${label}: saved gas flight differs from the refreshed movement candidate ${JSON.stringify({ refreshedAfterMovement, afterMovementDispatch })}`);
+  }
+  await restoreRendererNow(win);
+  results.asteroidMovement = {
+    oldForecast: beforeMovement.hit,
+    refreshedForecast: refreshedAfterMovement.hit,
+    refreshedEta: refreshedAfterMovement.eta,
+    savedDepartureAt: afterMovementDispatch.departedAt,
+    savedArrivalAt: afterMovementDispatch.arrivalAt,
+  };
+
+  await seedGasFreshnessSave(win, { movementDelayMs, speedResearchFinishInMs: 60 * 60_000 });
+  save = await readSave(win);
+  asteroid = save.asteroidSimulation?.asteroids?.[0];
+  const researchFinishAt = save.science.queue.find((task) => task.id === 'qa-gas-flight-speed-research')?.finishAt;
+  if (!asteroid || !researchFinishAt || save.science.levels?.[4] !== 0) {
+    throw new Error(`${label}: speed-science fixture was not seeded before completion`);
+  }
+  await openGasPreviewAt(win, asteroid.coordinate);
+  const beforeResearch = await readGasCandidate(win);
+  if (beforeResearch.now >= researchFinishAt) {
+    throw new Error(`${label}: initial candidate was captured after speed research had completed ${JSON.stringify({ beforeResearch, researchFinishAt })}`);
+  }
+  await setRendererNow(win, researchFinishAt + 1);
+  await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.science?.levels?.[4] === 1`);
+  await click(win, '[data-qa-flight-dispatch-confirm]');
+  await waitFor(win, `document.querySelector('[data-qa-gas-preview-reconfirmation]')`);
+  const refreshedAfterResearch = await readGasCandidate(win);
+  save = await readSave(win);
+  if (!refreshedAfterResearch.reconfirm
+    || refreshedAfterResearch.speed <= beforeResearch.speed
+    || refreshedAfterResearch.duration >= beforeResearch.duration
+    || save.flights.records.some((flight) => flight.missionId === 'gas')) {
+    throw new Error(`${label}: completed fleet-speed research was sent with a stale ETA instead of refreshing ${JSON.stringify({ beforeResearch, refreshedAfterResearch, flights: save.flights.records })}`);
+  }
+  await capture(win, directory, 'gas-speed-research-preview-refreshed');
+  await click(win, '[data-qa-flight-dispatch-confirm]');
+  save = await readSave(win);
+  const afterResearchDispatch = save.flights.records.find((flight) => flight.missionId === 'gas');
+  if (!afterResearchDispatch
+    || afterResearchDispatch.departedAt !== refreshedAfterResearch.departedAt
+    || afterResearchDispatch.arrivalAt !== refreshedAfterResearch.arrivalAt
+    || afterResearchDispatch.effectiveSpeed !== refreshedAfterResearch.speed
+    || afterResearchDispatch.oneWayDurationMs !== refreshedAfterResearch.duration
+    || afterResearchDispatch.phase !== 'outbound') {
+    throw new Error(`${label}: saved gas flight ETA differs from the speed-research candidate shown for confirmation ${JSON.stringify({ refreshedAfterResearch, afterResearchDispatch })}`);
+  }
+  await restoreRendererNow(win);
+  results.speedResearch = {
+    beforeSpeed: beforeResearch.speed,
+    confirmedSpeed: refreshedAfterResearch.speed,
+    beforeDuration: beforeResearch.duration,
+    confirmedDuration: refreshedAfterResearch.duration,
+    savedArrivalAt: afterResearchDispatch.arrivalAt,
+  };
+  return results;
 }
 
 async function seedPlanetSwitchSave(win) {
@@ -1191,7 +1559,9 @@ async function runViewport(width, height) {
     const transportCycle = await runTransportUiCycle(win, label, directory);
     const flightCycle = await runFlightRuntimeCycle(win, label);
     const recycleCycle = await runRecycleUiCycle(win, label);
-    const asteroidOverlayRecycle = await runAsteroidOverlayRecycleLaunch(win, label, recycleCycle.alternate);
+    const asteroidRecyclerLaunch = await runAsteroidRecyclerLaunch(win, label, directory);
+    const gasUiRegressions = await runGasUiRegressions(win, label, directory);
+    const gasFreshnessRegressions = await runGasFreshnessRegressions(win, label, directory);
     const planetSwitch = await runPlanetSwitchRegression(win, label);
     const planetoLom = await runPlanetoLomTrace(win, label);
 
@@ -1235,7 +1605,7 @@ async function runViewport(width, height) {
     })()`);
     if (layout.horizontalOverflow || !layout.longPage || layout.orderCount !== 8 || layout.queueOverflowY !== 'visible' || layout.queueMaxHeight !== 'none' || layout.queueScrollHeight < layout.queueClientHeight) throw new Error(`${label}: fleet production layout overflow/long-page contract failed ${JSON.stringify(layout)}`);
     await capture(win, directory, 'fleet-production');
-    return { viewport: label, layout, missionSlots, transportCycle, flightCycle, recycleCycle, asteroidOverlayRecycle, planetSwitch, planetoLom, screenshotsSkipped: skipScreenshots };
+    return { viewport: label, layout, missionSlots, transportCycle, flightCycle, recycleCycle, asteroidRecyclerLaunch, gasUiRegressions, gasFreshnessRegressions, planetSwitch, planetoLom, screenshotsSkipped: skipScreenshots };
   } finally {
     if (!win.isDestroyed()) await win.close();
   }

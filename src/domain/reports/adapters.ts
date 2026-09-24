@@ -15,6 +15,7 @@ import type {
   ReportUnreadCounts,
   OverpopulationEpisodeReport,
   RecyclerArrivalReport,
+  GasExtractionArrivalReport,
 } from './types.ts';
 import type { EspionageState, SpyHunterNotice, SpyReportSnapshot } from '../espionage/types.ts';
 import { getCombatFactionName } from '../combat/factions.ts';
@@ -337,6 +338,7 @@ export function preservePersistentReportCollections(next: ReportsState, previous
     ...next,
     ...(previous.overpopulationReports === undefined ? {} : { overpopulationReports: previous.overpopulationReports }),
     ...(previous.recyclerArrivalReports === undefined ? {} : { recyclerArrivalReports: previous.recyclerArrivalReports }),
+    ...(previous.gasExtractionArrivalReports === undefined ? {} : { gasExtractionArrivalReports: previous.gasExtractionArrivalReports }),
   };
 }
 
@@ -369,6 +371,54 @@ export function recyclerArrivalReportToReportItem(report: RecyclerArrivalReport)
   };
 }
 
+export function createGasExtractionArrivalReportId(flightId: string): GasExtractionArrivalReport['id'] {
+  return `gas-extraction-arrival:${flightId}`;
+}
+
+/** Upserts by flight identity so arrival reconciliation replay cannot add duplicates. */
+export function upsertGasExtractionArrivalReport(
+  state: ReportsState,
+  report: Omit<GasExtractionArrivalReport, 'id'> | GasExtractionArrivalReport,
+): ReportsState {
+  const normalized: GasExtractionArrivalReport = {
+    ...report,
+    id: createGasExtractionArrivalReportId(report.flightId),
+    coordinate: { ...report.coordinate },
+  };
+  const reports = (state.gasExtractionArrivalReports ?? []).filter((item) => item.flightId !== report.flightId);
+  reports.push(normalized);
+  return { ...state, gasExtractionArrivalReports: reports };
+}
+
+export function gasExtractionArrivalReportToReportItem(report: GasExtractionArrivalReport): ReportItem {
+  const coordinate = `[${report.coordinate.galaxy}:${report.coordinate.system}:${report.coordinate.position}]`;
+  const title = report.outcome === 'found'
+    ? 'Астероид найден'
+    : `Астероид не найден по координатам ${coordinate}`;
+  const gas = String(report.gasCollected);
+  const scrap = String(report.scrapCollected);
+  return {
+    id: createGasExtractionArrivalReportId(report.flightId),
+    source: 'gas-extraction',
+    category: 'system',
+    typeLabel: 'Отчёт добычи газа',
+    title,
+    preview: `${coordinate} · собрано газа ${gas} · собрано обломков ${scrap}.`,
+    body: `${title}. Координаты: ${coordinate}. Собрано газа: ${gas}. Собрано обломков: ${scrap}.`,
+    timestamp: new Date(report.arrivalAt).toISOString(),
+    statusLabel: report.outcome === 'found' ? 'АСТЕРОИД НАЙДЕН' : 'АСТЕРОИД НЕ НАЙДЕН',
+    statusTone: report.outcome === 'found' ? 'success' : 'warning',
+    participantNames: [],
+    planetNames: [],
+    coordinates: [coordinate],
+    details: [
+      { label: 'Координаты прибытия', value: coordinate },
+      { label: 'Собрано газа', value: gas },
+      { label: 'Собрано обломков', value: scrap },
+    ],
+  };
+}
+
 export function buildReportsFeed(
   battleReports: readonly BattleReport[],
   operations: OperationsState,
@@ -376,6 +426,7 @@ export function buildReportsFeed(
   espionage?: EspionageState,
   overpopulationReports: readonly OverpopulationEpisodeReport[] = [],
   recyclerArrivalReports: readonly RecyclerArrivalReport[] = [],
+  gasExtractionArrivalReports: readonly GasExtractionArrivalReport[] = [],
 ): ReportItem[] {
   const operationByBattleId = new Map(
     operations.items
@@ -401,8 +452,9 @@ export function buildReportsFeed(
   ];
   const overpopulationItems = overpopulationReports.map(overpopulationEpisodeReportToReportItem);
   const recyclerItems = recyclerArrivalReports.map(recyclerArrivalReportToReportItem);
+  const gasExtractionItems = gasExtractionArrivalReports.map(gasExtractionArrivalReportToReportItem);
 
-  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems, ...recyclerItems].sort((a, b) => {
+  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems, ...recyclerItems, ...gasExtractionItems].sort((a, b) => {
     if (a.timestamp && b.timestamp) return Date.parse(b.timestamp) - Date.parse(a.timestamp);
     if (!a.timestamp && b.timestamp) return -1;
     if (a.timestamp && !b.timestamp) return 1;

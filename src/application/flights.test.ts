@@ -22,7 +22,12 @@ import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { createEmptyFleetState } from '../domain/fleet/runtime.ts';
 import { getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
-import type { UniverseCoordinate, UniverseObjectKind } from '../domain/universe/types.ts';
+import type {
+  UniverseAsteroidRuntimeState,
+  UniverseAsteroidSimulationState,
+  UniverseCoordinate,
+  UniverseObjectKind,
+} from '../domain/universe/types.ts';
 import {
   ASTEROID_SCHEDULE_EPOCH_MS,
   advanceUniverseAsteroidCoordinate,
@@ -31,6 +36,8 @@ import {
   getUniverseAsteroidState,
   getUniverseTimedObjectSchedule,
 } from '../domain/universe/runtime.ts';
+import { advanceUniverseAsteroidSimulationAt, findUniverseAsteroidAtCoordinate } from '../domain/universe/asteroid-simulation.ts';
+import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
 
 const origin = { galaxy: 1, system: 1, position: 1 };
 
@@ -58,6 +65,21 @@ function recycleCommand(
     originPlanetId: 'helion-01',
     destination: { kind: 'coordinate' as const, coordinate },
     targetKind,
+    selectedShips,
+    departedAt: 1_000,
+  };
+}
+
+function gasCommand(
+  requestId: string,
+  coordinate: UniverseCoordinate,
+  selectedShips: Partial<Record<ShipId, number>> = { recycler: 1 },
+) {
+  return {
+    requestId,
+    missionId: 'gas' as const,
+    originPlanetId: 'helion-01',
+    destination: { kind: 'coordinate' as const, coordinate },
     selectedShips,
     departedAt: 1_000,
   };
@@ -141,8 +163,64 @@ function withScheduledAsteroid(
   };
 }
 
+function withGasAsteroid(
+  state: SaveState,
+  coordinate: UniverseCoordinate,
+  options: {
+    spawnIndex?: number;
+    gasYield?: number;
+    gasRatePerHour?: number;
+    gasUpdatedAt?: number;
+    gasRemainder?: number;
+    nextMoveAt?: number;
+  } = {},
+): SaveState {
+  const spawnIndex = options.spawnIndex ?? 42;
+  const priorSimulation = state.asteroidSimulation;
+  return {
+    ...state,
+    asteroidSimulation: {
+      version: 1,
+      processedThroughAt: priorSimulation?.processedThroughAt ?? 1_000,
+      nextSpawnIndex: priorSimulation?.nextSpawnIndex ?? 10_000,
+      ...priorSimulation,
+      asteroids: [{
+        spawnIndex,
+        spawnedAt: 1_000,
+        movementIndex: 0,
+        previousMoveAt: 1_000,
+        nextMoveAt: options.nextMoveAt ?? 60_000,
+        gasYield: options.gasYield ?? 100_000,
+        gasRatePerHour: options.gasRatePerHour ?? 2_500,
+        gasUpdatedAt: options.gasUpdatedAt ?? 1_000,
+        gasRemainder: options.gasRemainder ?? 0,
+        coordinate: { ...coordinate },
+      }],
+    },
+  };
+}
+
 function withRecyclerArrivalAt(state: SaveState, requestId: string, coordinate: UniverseCoordinate, arrivalAt: number) {
   const sent = dispatchFlight(state, recycleCommand(requestId, coordinate, 'asteroid'), 1_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return null;
+  return {
+    ...sent,
+    state: {
+      ...sent.state,
+      flights: {
+        ...sent.state.flights,
+        records: sent.state.flights.records.map((flight) => flight.id === sent.flight.id
+          ? { ...flight, arrivalAt }
+          : flight),
+      },
+    },
+    flight: { ...sent.flight, arrivalAt },
+  };
+}
+
+function withGasArrivalAt(state: SaveState, requestId: string, coordinate: UniverseCoordinate, arrivalAt: number) {
+  const sent = dispatchFlight(state, gasCommand(requestId, coordinate), 1_000);
   assert.equal(sent.ok, true);
   if (!sent.ok) return null;
   return {
@@ -835,7 +913,11 @@ test('recycle arrival collects only free orbital debris and reports zero without
   const capacity = getTransportCargoSummary(twoRecyclers, 'helion-01', { recycler: 1 }, {}, { kind: 'coordinate', coordinate: empty.coordinate }).capacity.total;
   const freeDebris = capacity;
   const spawnIndex = 77;
-  const initial = withAsteroidOverlay(withOrbitalDebris(twoRecyclers, empty.coordinate, freeDebris), empty.coordinate, spawnIndex);
+  const initial = withGasAsteroid(
+    withOrbitalDebris(twoRecyclers, empty.coordinate, freeDebris),
+    empty.coordinate,
+    { spawnIndex, gasYield: 9_999, gasUpdatedAt: 1_000 },
+  );
   const state = { ...initial, asteroidDebrisBySpawnIndex: { [spawnIndex]: 9_999 } };
   const first = dispatchFlight(state, recycleCommand('recycle-free-debris-only', empty.coordinate, 'asteroid'), 1_000);
   assert.equal(first.ok, true);
@@ -850,6 +932,7 @@ test('recycle arrival collects only free orbital debris and reports zero without
   assert.equal(firstReport?.remainingOrbitalDebris, 0);
   assert.equal(firstArrival.state.espionage?.orbitalDebris?.['lost-debris-target'], undefined);
   assert.equal(firstArrival.state.asteroidDebrisBySpawnIndex?.[spawnIndex], 9_999);
+  assert.equal(firstArrival.state.asteroidSimulation?.asteroids.find((asteroid) => asteroid.spawnIndex === spawnIndex)?.gasYield, 9_999);
 
   const second = dispatchFlight(firstArrival.state, recycleCommand('recycle-zero-arrival', empty.coordinate, 'asteroid'), first.flight.arrivalAt);
   assert.equal(second.ok, true);
@@ -863,6 +946,424 @@ test('recycle arrival collects only free orbital debris and reports zero without
   assert.equal(repeated.changed, false);
   assert.equal(repeated.state.reports.recyclerArrivalReports?.filter((report) => report.flightId === second.flight.id).length, 1);
   assert.equal(repeated.state.asteroidDebrisBySpawnIndex?.[spawnIndex], 9_999);
+  assert.equal(repeated.state.asteroidSimulation?.asteroids.find((asteroid) => asteroid.spawnIndex === spawnIndex)?.gasYield, 9_999);
+});
+
+test('gas dispatch accepts recycler-only fleets and snapshots its target coordinates and cargo capacity', () => {
+  const empty = emptyUniverseCoordinate();
+  const initial = withGasAsteroid(withRecyclers(createInitialSaveState('production', 1_000), 4), empty.coordinate);
+  const expectedCapacity = getTransportCargoSummary(
+    initial,
+    'helion-01',
+    { recycler: 1 },
+    {},
+    { kind: 'coordinate', coordinate: empty.coordinate },
+  ).capacity.total;
+  assert.equal(expectedCapacity, 40_000);
+
+  const invalidCommands = [
+    gasCommand('gas-no-recycler', empty.coordinate, { scout: 1 }),
+    gasCommand('gas-mixed-fleet', empty.coordinate, { recycler: 1, scout: 1 }),
+    gasCommand('gas-satellite', empty.coordinate, { recycler: 1, 'solar-satellite': 1 }),
+    { ...gasCommand('gas-commander', empty.coordinate), selectedCommanders: { corsair: 1 } },
+  ];
+  for (const command of invalidCommands) {
+    const rejected = dispatchFlight(initial, command, 1_000);
+    assert.equal(rejected.ok, false);
+    assert.equal(rejected.state, initial);
+    assert.equal(rejected.state.flights.records.length, 0);
+    assert.equal(getPlanetResources(rejected.state).gas, getPlanetResources(initial).gas);
+    assert.equal(rejected.state.planets['helion-01'].fleet.ships.recycler, 4);
+  }
+
+  const sent = dispatchFlight(initial, gasCommand('gas-coordinate-snapshot', empty.coordinate), 1_000);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.equal(sent.flight.missionId, 'gas');
+  assert.deepEqual(sent.flight.destination, { kind: 'coordinate', coordinate: empty.coordinate });
+  assert.deepEqual(sent.flight.destinationCoordinate, empty.coordinate);
+  assert.equal(sent.flight.gasCapacity, expectedCapacity);
+  assert.deepEqual(sent.flight.cargo, { metal: 0, minerals: 0, gas: 0, debris: 0 });
+
+  const storage = new Map<string, string>();
+  const persistence = createPersistenceFacade({
+    mode: 'production',
+    storage: {
+      getItem: (key) => storage.get(key) ?? null,
+      setItem: (key, value) => { storage.set(key, value); },
+      removeItem: (key) => { storage.delete(key); },
+    },
+    now: () => 1_000,
+  });
+  assert.equal(persistence.write(sent.state).ok, true);
+  const restored = persistence.read().flights.records.find((flight) => flight.id === sent.flight.id)!;
+  assert.equal(restored.missionId, 'gas');
+  assert.deepEqual(restored.destinationCoordinate, empty.coordinate);
+  assert.equal(restored.gasCapacity, expectedCapacity);
+});
+
+test('gas miss preview remains valid when its exact flight candidate is dispatched after an asteroid moves', () => {
+  const target = emptyUniverseCoordinate().coordinate;
+  const departedAt = 1_000;
+  const movementAt = departedAt + 1;
+  const initial = withGasAsteroid(
+    withRecyclers(createInitialSaveState('production', departedAt), 1),
+    target,
+    { spawnIndex: 87, gasYield: 100_000, gasUpdatedAt: departedAt, nextMoveAt: movementAt },
+  );
+  const candidate = gasCommand('gas-preview-candidate-after-movement', target);
+  const preview = previewFlight(initial, candidate, { now: departedAt, mode: 'production' });
+  assert.equal(preview.ok, true);
+  if (!preview.ok) return;
+
+  assert.ok(preview.flight.arrivalAt > movementAt);
+  const forecastSimulation = advanceUniverseAsteroidSimulationAt(
+    initial.asteroidSimulation!,
+    preview.flight.arrivalAt,
+    1,
+  ).state;
+  const forecastHit = forecastSimulation.asteroids.some((asteroid) =>
+    asteroid.coordinate.galaxy === target.galaxy
+      && asteroid.coordinate.system === target.system
+      && asteroid.coordinate.position === target.position);
+  assert.equal(forecastHit, false);
+
+  const afterMovement = reconcileRuntime(initial, {
+    planetId: 'helion-01', now: movementAt + 1, mode: 'production', testTimeScale: 10,
+  });
+  assert.notDeepEqual(afterMovement.state.asteroidSimulation?.asteroids[0]?.coordinate, target);
+
+  const sent = dispatchFlight(afterMovement.state, candidate, { now: movementAt + 1, mode: 'production' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.equal(sent.flight.departedAt, preview.flight.departedAt);
+  assert.equal(sent.flight.arrivalAt, preview.flight.arrivalAt);
+  assert.deepEqual(sent.flight.destinationCoordinate, preview.flight.destinationCoordinate);
+
+  const arrival = reconcileRuntime(sent.state, {
+    planetId: 'helion-01', now: preview.flight.arrivalAt, mode: 'production', testTimeScale: 10,
+  });
+  const report = arrival.state.reports.gasExtractionArrivalReports?.find((entry) => entry.flightId === sent.flight.id);
+  const arrivedFlight = arrival.state.flights.records.find((entry) => entry.id === sent.flight.id)!;
+  assert.equal(report?.outcome, forecastHit ? 'found' : 'missed');
+  assert.equal(report?.gasCollected, 0);
+  assert.equal(report?.scrapCollected, 0);
+  assert.equal(arrivedFlight.cargo?.gas, 0);
+  assert.equal(arrivedFlight.cargo?.debris, 0);
+});
+
+test('gas forecast and arrival resolve the asteroid occupying the destination coordinate, not the originally selected asteroid', () => {
+  const target = emptyUniverseCoordinate().coordinate;
+  const departedAt = 1_000;
+  const command = gasCommand('gas-coordinate-occupant-at-arrival', target);
+  const base = withRecyclers(createInitialSaveState('production', departedAt), 1);
+  const initialPreview = previewFlight(base, command, { now: departedAt, mode: 'production' });
+  assert.equal(initialPreview.ok, true);
+  if (!initialPreview.ok) return;
+
+  const alternateSystemCoordinate = { ...target, system: target.system === 1 ? 2 : 1 };
+  const selectedNextCoordinate = {
+    ...target,
+    position: target.position === 1 ? 2 : target.position - 1,
+  };
+  const selectedAsteroid: UniverseAsteroidRuntimeState = {
+    spawnIndex: 87,
+    spawnedAt: departedAt,
+    movementIndex: 0,
+    previousMoveAt: departedAt,
+    nextMoveAt: initialPreview.flight.arrivalAt,
+    nextCoordinate: selectedNextCoordinate,
+    gasYield: 1_000,
+    gasRatePerHour: 2_500,
+    gasUpdatedAt: departedAt,
+    gasRemainder: 0,
+    coordinate: target,
+  };
+  const replacementAsteroid: UniverseAsteroidRuntimeState = {
+    ...selectedAsteroid,
+    spawnIndex: 88,
+    nextCoordinate: target,
+    gasYield: 150_000,
+    coordinate: alternateSystemCoordinate,
+  };
+  const simulation: UniverseAsteroidSimulationState = {
+    version: 1,
+    processedThroughAt: departedAt,
+    nextSpawnIndex: 10_000,
+    asteroids: [selectedAsteroid, replacementAsteroid],
+  };
+  const initial: SaveState = { ...base, asteroidSimulation: simulation };
+  const preview = previewFlight(initial, command, { now: departedAt, mode: 'production' });
+  assert.equal(preview.ok, true);
+  if (!preview.ok) return;
+
+  const forecastSimulation = advanceUniverseAsteroidSimulationAt(simulation, preview.flight.arrivalAt, 1).state;
+  const forecastAsteroid = findUniverseAsteroidAtCoordinate(forecastSimulation.asteroids, target);
+  assert.equal(forecastSimulation.asteroids.find((asteroid) => asteroid.spawnIndex === selectedAsteroid.spawnIndex)?.coordinate.position,
+    selectedNextCoordinate.position);
+  assert.equal(forecastAsteroid?.spawnIndex, replacementAsteroid.spawnIndex);
+
+  const sent = dispatchFlight(initial, command, { now: departedAt, mode: 'production' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.equal(sent.flight.arrivalAt, preview.flight.arrivalAt);
+
+  const arrived = reconcileRuntime(sent.state, {
+    planetId: 'helion-01',
+    now: sent.flight.arrivalAt,
+    mode: 'production',
+    testTimeScale: 10,
+  });
+  const report = arrived.state.reports.gasExtractionArrivalReports?.find((entry) => entry.flightId === sent.flight.id);
+  const arrivedFlight = arrived.state.flights.records.find((flight) => flight.id === sent.flight.id)!;
+  const expectedGas = Math.min(
+    Math.floor(advanceAsteroidGasAt(forecastAsteroid!, sent.flight.arrivalAt).gasYield / 2),
+    sent.flight.gasCapacity ?? 0,
+  );
+  assert.equal(report?.outcome, 'found');
+  assert.equal(report?.gasCollected, expectedGas);
+  assert.equal(arrivedFlight.cargo?.gas, expectedGas);
+  assert.notEqual(
+    expectedGas,
+    Math.min(
+      Math.floor(advanceAsteroidGasAt(forecastSimulation.asteroids.find((asteroid) => asteroid.spawnIndex === selectedAsteroid.spawnIndex)!, sent.flight.arrivalAt).gasYield / 2),
+      sent.flight.gasCapacity ?? 0,
+    ),
+  );
+});
+
+test('gas arrival gives gas priority and shares recycler capacity only with asteroid-carried scrap', () => {
+  const empty = emptyUniverseCoordinate();
+  const capacity = 40_000;
+  const cases = [
+    { requestId: 'gas-priority-capacity', spawnIndex: 78, gasYield: 100_000, carriedScrap: 20_000, gas: 40_000, scrap: 0 },
+    { requestId: 'gas-priority-shared', spawnIndex: 79, gasYield: 50_000, carriedScrap: 30_000, gas: 25_000, scrap: 15_000 },
+  ];
+
+  for (const scenario of cases) {
+    const initial = {
+      ...withGasAsteroid(
+        withOrbitalDebris(withRecyclers(createInitialSaveState('production', 1_000), 1), empty.coordinate, 777),
+        empty.coordinate,
+        { spawnIndex: scenario.spawnIndex, gasYield: scenario.gasYield, gasUpdatedAt: 3_000 },
+      ),
+      asteroidDebrisBySpawnIndex: { [String(scenario.spawnIndex)]: scenario.carriedScrap },
+    };
+    const sent = withGasArrivalAt(initial, scenario.requestId, empty.coordinate, 3_000);
+    assert.ok(sent);
+    if (!sent) return;
+
+    const arrived = reconcileRuntime(sent.state, {
+      planetId: 'helion-01', now: 3_000, mode: 'production', testTimeScale: 10,
+    });
+    const flight = arrived.state.flights.records.find((record) => record.id === sent.flight.id)!;
+    const report = arrived.state.reports.gasExtractionArrivalReports?.find((entry) => entry.flightId === sent.flight.id);
+    assert.equal(flight.cargo?.gas, scenario.gas);
+    assert.equal(flight.cargo?.debris, scenario.scrap);
+    assert.equal(flight.cargo!.gas + flight.cargo!.debris, capacity);
+    assert.equal(arrived.state.asteroidSimulation?.asteroids.find((asteroid) => asteroid.spawnIndex === scenario.spawnIndex)?.gasYield, scenario.gasYield - scenario.gas);
+    assert.equal(arrived.state.asteroidDebrisBySpawnIndex?.[String(scenario.spawnIndex)], scenario.carriedScrap - scenario.scrap);
+    assert.equal(getOrbitalDebrisAtCoordinate(arrived.state.espionage!, empty.coordinate), 777);
+    assert.equal(report?.outcome, 'found');
+    assert.equal(report?.gasCollected, scenario.gas);
+    assert.equal(report?.scrapCollected, scenario.scrap);
+  }
+});
+
+test('gas arrival resolves a hit, a moved-away miss with explicit zero cargo, and an asteroid moved into its target', () => {
+  const target = emptyUniverseCoordinate().coordinate;
+  const arrivalAt = 3_000;
+
+  const stationary = withGasArrivalAt(
+    withGasAsteroid(withRecyclers(createInitialSaveState('production', 1_000), 1), target, {
+      spawnIndex: 80, gasYield: 20_000, gasUpdatedAt: arrivalAt, nextMoveAt: arrivalAt + 1,
+    }),
+    'gas-exact-hit', target, arrivalAt,
+  );
+  assert.ok(stationary);
+  if (!stationary) return;
+  const hit = reconcileRuntime(stationary.state, {
+    planetId: 'helion-01', now: arrivalAt, mode: 'production', testTimeScale: 10,
+  });
+  const hitFlight = hit.state.flights.records.find((flight) => flight.id === stationary.flight.id)!;
+  assert.equal(hitFlight.cargo?.gas, 10_000);
+  assert.equal(hit.state.reports.gasExtractionArrivalReports?.find((report) => report.flightId === hitFlight.id)?.outcome, 'found');
+
+  const movedAway = withGasArrivalAt(
+    withGasAsteroid(withRecyclers(createInitialSaveState('production', 1_000), 1), target, {
+      spawnIndex: 81, gasYield: 20_000, gasUpdatedAt: arrivalAt, nextMoveAt: arrivalAt - 1,
+    }),
+    'gas-exact-miss', target, arrivalAt,
+  );
+  assert.ok(movedAway);
+  if (!movedAway) return;
+  const miss = reconcileRuntime(movedAway.state, {
+    planetId: 'helion-01', now: arrivalAt, mode: 'production', testTimeScale: 10,
+  });
+  const missFlight = miss.state.flights.records.find((flight) => flight.id === movedAway.flight.id)!;
+  const missReport = miss.state.reports.gasExtractionArrivalReports?.find((report) => report.flightId === missFlight.id);
+  assert.equal(missFlight.cargo?.gas, 0);
+  assert.equal(missFlight.cargo?.debris, 0);
+  assert.equal(missReport?.outcome, 'missed');
+  assert.equal(missReport?.gasCollected, 0);
+  assert.equal(missReport?.scrapCollected, 0);
+  assert.equal(missFlight.phase, 'returning');
+
+  const startingCoordinate = emptyUniverseCoordinate(1, 2).coordinate;
+  const arrivedCoordinate = advanceUniverseAsteroidCoordinate(startingCoordinate, 1, 1)!;
+  const movedIntoTarget = withGasArrivalAt(
+    withGasAsteroid(withRecyclers(createInitialSaveState('production', 1_000), 1), startingCoordinate, {
+      spawnIndex: 82, gasYield: 20_000, gasUpdatedAt: arrivalAt, nextMoveAt: arrivalAt - 1,
+    }),
+    'gas-moved-into-target', arrivedCoordinate, arrivalAt,
+  );
+  assert.ok(movedIntoTarget);
+  if (!movedIntoTarget) return;
+  const movedHit = reconcileRuntime(movedIntoTarget.state, {
+    planetId: 'helion-01', now: arrivalAt, mode: 'production', testTimeScale: 10,
+  });
+  const movedHitFlight = movedHit.state.flights.records.find((flight) => flight.id === movedIntoTarget.flight.id)!;
+  assert.equal(movedHit.state.asteroidSimulation?.asteroids.find((asteroid) => asteroid.spawnIndex === 82)?.coordinate.position, arrivedCoordinate.position);
+  assert.equal(movedHitFlight.cargo?.gas, 10_000);
+  assert.equal(movedHit.state.reports.gasExtractionArrivalReports?.find((report) => report.flightId === movedHitFlight.id)?.outcome, 'found');
+});
+
+test('asteroid movement wins an exact-millisecond tie with gas arrival', () => {
+  const empty = emptyUniverseCoordinate();
+  const arrivalAt = 3_000;
+  const sent = withGasArrivalAt(
+    withGasAsteroid(withRecyclers(createInitialSaveState('production', 1_000), 1), empty.coordinate, {
+      spawnIndex: 83, gasYield: 50_000, gasUpdatedAt: arrivalAt, nextMoveAt: arrivalAt,
+    }),
+    'gas-movement-tie', empty.coordinate, arrivalAt,
+  );
+  assert.ok(sent);
+  if (!sent) return;
+
+  const reconciled = reconcileRuntime(sent.state, {
+    planetId: 'helion-01', now: arrivalAt, mode: 'production', testTimeScale: 10,
+  });
+  const flight = reconciled.state.flights.records.find((record) => record.id === sent.flight.id)!;
+  const report = reconciled.state.reports.gasExtractionArrivalReports?.find((entry) => entry.flightId === flight.id);
+  assert.equal(reconciled.state.asteroidSimulation?.asteroids.find((asteroid) => asteroid.spawnIndex === 83)?.coordinate.position,
+    advanceUniverseAsteroidCoordinate(empty.coordinate, 1, 1)?.position);
+  assert.equal(flight.cargo?.gas, 0);
+  assert.equal(flight.cargo?.debris, 0);
+  assert.equal(report?.outcome, 'missed');
+  assert.equal(report?.gasCollected, 0);
+  assert.equal(report?.scrapCollected, 0);
+});
+
+test('gas depletion keeps exactly 1,000 reserve and removes an asteroid with 999 plus its carried scrap', () => {
+  const empty = emptyUniverseCoordinate();
+  const cases = [
+    { requestId: 'gas-keeps-one-thousand', spawnIndex: 84, gasYield: 2_000, remainingGas: 1_000, remains: true },
+    { requestId: 'gas-removes-nine-ninety-nine', spawnIndex: 85, gasYield: 1_998, remainingGas: 999, remains: false },
+  ];
+
+  for (const scenario of cases) {
+    const initial = {
+      ...withGasAsteroid(withRecyclers(createInitialSaveState('production', 1_000), 1), empty.coordinate, {
+        spawnIndex: scenario.spawnIndex, gasYield: scenario.gasYield, gasUpdatedAt: 3_000,
+      }),
+      asteroidDebrisBySpawnIndex: { [String(scenario.spawnIndex)]: 50_000 },
+    };
+    const sent = withGasArrivalAt(initial, scenario.requestId, empty.coordinate, 3_000);
+    assert.ok(sent);
+    if (!sent) return;
+    const arrived = reconcileRuntime(sent.state, {
+      planetId: 'helion-01', now: 3_000, mode: 'production', testTimeScale: 10,
+    });
+    const flight = arrived.state.flights.records.find((record) => record.id === sent.flight.id)!;
+    const asteroid = arrived.state.asteroidSimulation?.asteroids.find((item) => item.spawnIndex === scenario.spawnIndex);
+    assert.equal(flight.cargo?.gas, Math.floor(scenario.gasYield / 2));
+    assert.equal(flight.cargo?.debris, 40_000 - Math.floor(scenario.gasYield / 2));
+    assert.equal(asteroid?.gasYield, scenario.remains ? scenario.remainingGas : undefined);
+    assert.equal(Boolean(asteroid), scenario.remains);
+    if (scenario.remains) {
+      assert.equal(arrived.state.asteroidDebrisBySpawnIndex?.[String(scenario.spawnIndex)], 11_000);
+    } else {
+      assert.equal(arrived.state.asteroidDebrisBySpawnIndex?.[String(scenario.spawnIndex)], undefined);
+    }
+  }
+});
+
+test('simultaneous gas arrivals use stable flight order and replay without harvesting twice', () => {
+  const empty = emptyUniverseCoordinate();
+  const initial = withGasAsteroid(withRecyclers(createInitialSaveState('production', 1_000), 2), empty.coordinate, {
+    spawnIndex: 86, gasYield: 100_000, gasUpdatedAt: 3_000,
+  });
+  const firstDispatch = withGasArrivalAt(initial, 'gas-z', empty.coordinate, 3_000);
+  assert.ok(firstDispatch);
+  if (!firstDispatch) return;
+  const secondDispatch = withGasArrivalAt(firstDispatch.state, 'gas-a', empty.coordinate, 3_000);
+  assert.ok(secondDispatch);
+  if (!secondDispatch) return;
+  const reordered = {
+    ...secondDispatch.state,
+    flights: { ...secondDispatch.state.flights, records: [...secondDispatch.state.flights.records].reverse() },
+  };
+
+  const arrived = reconcileRuntime(reordered, {
+    planetId: 'helion-01', now: 3_000, mode: 'production', testTimeScale: 10,
+  });
+  const byRequest = Object.fromEntries(arrived.state.flights.records.map((flight) => [flight.requestId, flight]));
+  assert.equal(byRequest['gas-a']?.cargo?.gas, 40_000);
+  assert.equal(byRequest['gas-z']?.cargo?.gas, 30_000);
+  assert.equal(arrived.state.asteroidSimulation?.asteroids.find((asteroid) => asteroid.spawnIndex === 86)?.gasYield, 30_000);
+  assert.deepEqual(
+    arrived.state.reports.gasExtractionArrivalReports?.map((report) => [report.flightId, report.gasCollected]),
+    [[byRequest['gas-a']?.id, 40_000], [byRequest['gas-z']?.id, 30_000]],
+  );
+
+  const replay = reconcileRuntime(arrived.state, {
+    planetId: 'helion-01', now: 3_000, mode: 'production', testTimeScale: 10,
+  });
+  assert.equal(replay.changed, false);
+  assert.equal(replay.state.asteroidSimulation?.asteroids.find((asteroid) => asteroid.spawnIndex === 86)?.gasYield, 30_000);
+  assert.equal(replay.state.reports.gasExtractionArrivalReports?.length, 2);
+});
+
+test('gas cargo is credited to the origin exactly once after a reload', () => {
+  const empty = emptyUniverseCoordinate();
+  const initial = {
+    ...withGasAsteroid(withRecyclers(createInitialSaveState('production', 1_000), 1), empty.coordinate, {
+      spawnIndex: 87, gasYield: 20_000, gasUpdatedAt: 3_000,
+    }),
+    asteroidDebrisBySpawnIndex: { '87': 2_000 },
+  };
+  const sent = withGasArrivalAt(initial, 'gas-cargo-return', empty.coordinate, 3_000);
+  assert.ok(sent);
+  if (!sent) return;
+  const arrival = reconcileRuntime(sent.state, {
+    planetId: 'helion-01', now: 3_000, mode: 'production', testTimeScale: 10,
+  });
+  const returning = arrival.state.flights.records.find((flight) => flight.id === sent.flight.id)!;
+  assert.equal(returning.cargo?.gas, 10_000);
+  assert.equal(returning.cargo?.debris, 2_000);
+  assert.equal(returning.cargoState, 'delivered');
+
+  const gasBeforeReturn = getPlanetResources(arrival.state).gas;
+  const storage = new Map<string, string>();
+  const persistence = createPersistenceFacade({
+    mode: 'production',
+    storage: {
+      getItem: (key) => storage.get(key) ?? null,
+      setItem: (key, value) => { storage.set(key, value); },
+      removeItem: (key) => { storage.delete(key); },
+    },
+    now: () => returning.returnAt!,
+  });
+  assert.equal(persistence.write(arrival.state).ok, true);
+  const returned = reconcileFlights(persistence.read(), returning.returnAt!);
+  assert.equal(getPlanetResources(returned.state).gas, gasBeforeReturn + 10_000);
+  assert.equal(returned.state.planets['helion-01'].recycling.availableDebris, 2_000);
+  assert.equal(persistence.write(returned.state).ok, true);
+
+  const replay = reconcileFlights(persistence.read(), returning.returnAt! + 1);
+  assert.equal(replay.changed, false);
+  assert.equal(getPlanetResources(replay.state).gas, gasBeforeReturn + 10_000);
+  assert.equal(replay.state.planets['helion-01'].recycling.availableDebris, 2_000);
 });
 
 test('recycle follows return policy if the origin disappears after collection', () => {
@@ -2109,13 +2610,20 @@ test('reconcileRuntime processes asteroid capture before a recycler arrival at t
 test('reconcileRuntime removes an exiting asteroid and its accumulated and final-coordinate debris', () => {
   const boundary = { galaxy: 1, system: 40, position: 24 };
   const spawnIndex = 46;
+  const scheduled = withScheduledAsteroid(
+    withOrbitalDebris(createInitialSaveState('test', 1_000), boundary, 250, 'debris-at-exit-boundary'),
+    boundary,
+    3_000,
+    spawnIndex,
+  );
   const initial = {
-    ...withScheduledAsteroid(
-      withOrbitalDebris(createInitialSaveState('test', 1_000), boundary, 250, 'debris-at-exit-boundary'),
-      boundary,
-      3_000,
-      spawnIndex,
-    ),
+    ...scheduled,
+    asteroidSimulation: {
+      ...scheduled.asteroidSimulation!,
+      asteroids: scheduled.asteroidSimulation!.asteroids.map((asteroid) => asteroid.spawnIndex === spawnIndex
+        ? { ...asteroid, gasYield: 5_000, gasRatePerHour: 2_500, gasUpdatedAt: 1_000, gasRemainder: 0 }
+        : asteroid),
+    },
     asteroidDebrisBySpawnIndex: { [String(spawnIndex)]: 700 },
   };
 

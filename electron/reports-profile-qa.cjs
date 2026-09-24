@@ -217,10 +217,19 @@ async function runViewport(win, width, height) {
       remainingOrbitalDebris: 0,
     },
   ];
+  const gasExtractionArrivalReport = {
+    id: 'gas-extraction-arrival:qa-gas-flight',
+    flightId: 'qa-gas-flight',
+    coordinate: { galaxy: 2, system: 19, position: 5 },
+    arrivalAt: Date.now() - 15_000,
+    outcome: 'missed',
+    gasCollected: 0,
+    scrapCollected: 0,
+  };
   const seededReport = await win.webContents.executeJavaScript(`(() => {
     try {
       const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
-      save.reports = { ...(save.reports || {}), overpopulationReports: [${JSON.stringify(overpopulationReport)}], recyclerArrivalReports: [${JSON.stringify(recyclerArrivalReports[0])}, ${JSON.stringify(recyclerArrivalReports[1])}] };
+      save.reports = { ...(save.reports || {}), overpopulationReports: [${JSON.stringify(overpopulationReport)}], recyclerArrivalReports: [${JSON.stringify(recyclerArrivalReports[0])}, ${JSON.stringify(recyclerArrivalReports[1])}], gasExtractionArrivalReports: [${JSON.stringify(gasExtractionArrivalReport)}] };
       localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
       return true;
     } catch { return false; }
@@ -266,7 +275,7 @@ async function runViewport(win, width, height) {
   for (const [index, report] of recyclerArrivalReports.entries()) {
     const selector = `[data-report-item-id="${report.id}"] .reports-list-open`;
     await waitFor(win, `document.querySelector(${JSON.stringify(selector)})`);
-    const unreadBefore = String(initialUnreadBadge + 2 - index);
+    const unreadBefore = String(initialUnreadBadge + 3 - index);
     const currentBadge = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-navigation="primary"] [data-qa-route="reports"] .asterion-header__nav-badge')?.textContent?.trim() ?? ''`);
     if (currentBadge !== unreadBefore) throw new Error(`Recycler unread badge before reading ${report.id} at ${label}: expected ${unreadBefore}, got ${currentBadge || 'none'}`);
     const opened = await win.webContents.executeJavaScript(`(() => {
@@ -276,7 +285,7 @@ async function runViewport(win, width, height) {
       return true;
     })()`);
     if (!opened) throw new Error(`Recycler arrival report row could not be opened at ${label}: ${report.id}`);
-    const expectedUnread = String(initialUnreadBadge + 1 - index);
+    const expectedUnread = String(initialUnreadBadge + 2 - index);
     if (expectedUnread === '0') {
       await waitFor(win, `!document.querySelector('[data-qa-navigation="primary"] [data-qa-route="reports"] .asterion-header__nav-badge')`);
     } else {
@@ -310,6 +319,30 @@ async function runViewport(win, width, height) {
     const persistedCount = await win.webContents.executeJavaScript(`document.querySelectorAll(${JSON.stringify(selector)}).length`);
     if (persistedCount !== 1) throw new Error(`Recycler arrival report reload count failed at ${label}: ${report.id} count=${persistedCount}`);
   }
+  const gasReportSelector = `[data-report-item-id="${gasExtractionArrivalReport.id}"] .reports-list-open`;
+  await waitFor(win, `document.querySelector(${JSON.stringify(gasReportSelector)})`);
+  const gasUnreadBefore = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-navigation="primary"] [data-qa-route="reports"] .asterion-header__nav-badge')?.textContent?.trim() ?? ''`);
+  if (gasUnreadBefore !== String(initialUnreadBadge + 1)) throw new Error(`Gas extraction unread badge before reading at ${label}: expected ${initialUnreadBadge + 1}, got ${gasUnreadBefore || 'none'}`);
+  await win.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(gasReportSelector)})?.click()`);
+  await waitFor(win, `document.querySelector(${JSON.stringify(gasReportSelector)})?.getAttribute('aria-current') === 'true' && document.querySelector('.reports-dossier--generic')?.textContent?.includes('Астероид не найден по координатам [2:19:5]')`);
+  const gasDossier = await win.webContents.executeJavaScript(`(() => {
+    const node = document.querySelector('.reports-dossier--generic');
+    const text = node?.textContent?.replace(/\\s+/g, ' ') ?? '';
+    return {
+      visible: Boolean(node),
+      title: text.includes('Астероид не найден по координатам [2:19:5]'),
+      zeroGas: /Собрано газа:?\\s*0/.test(text),
+      zeroScrap: /Собрано обломков:?\\s*0/.test(text),
+      leaksHiddenState: /скорость пополнения|текущий запас|резерв газа|25\\s?000|10\\s?000|2\\s?500/i.test(text),
+    };
+  })()`);
+  if (!gasDossier.visible || !gasDossier.title || !gasDossier.zeroGas || !gasDossier.zeroScrap || gasDossier.leaksHiddenState) {
+    throw new Error(`Gas extraction report dossier contract failed at ${label}: ${JSON.stringify(gasDossier)}`);
+  }
+  const gasUnreadAfter = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-navigation="primary"] [data-qa-route="reports"] .asterion-header__nav-badge')?.textContent?.trim() ?? ''`);
+  if (gasUnreadAfter !== String(initialUnreadBadge)) throw new Error(`Gas extraction report did not clear its unread count at ${label}: expected ${initialUnreadBadge}, got ${gasUnreadAfter || 'none'}`);
+  await win.webContents.executeJavaScript(`new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
+  await capture(win, directory, 'gas-extraction-arrival');
   await clickPrimary(win, 'universe', `document.querySelector('[data-qa-universe]')`);
   await clickPrimary(win, 'reports');
 
