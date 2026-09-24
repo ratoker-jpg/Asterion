@@ -60,7 +60,7 @@ import { getStorageCapacities } from './domain/buildings/resource-zone.ts';
 import { FLIGHT_POSITION_COUNT, FLIGHT_SYSTEM_COUNT, isFlightCoordinate } from './domain/flights/distance.ts';
 import { ACTIVE_RUNTIME_MODE, resolveTestTimeScale } from './domain/runtime/mode.ts';
 import { createPersistenceFacade } from './application/persistence.ts';
-import { advanceUniverseAsteroidSimulationAt } from './domain/universe/asteroid-simulation.ts';
+import { advanceUniverseAsteroidSimulationAt, findUniverseAsteroidAtCoordinate } from './domain/universe/asteroid-simulation.ts';
 import {
   FLEET_CONSTRUCTION_NAVIGATION,
   FLEET_MANAGEMENT_NAVIGATION,
@@ -91,7 +91,7 @@ type MissionDefinition = {
 
 type ConstructionView = 'ships' | ConstructionCatalogMode | null;
 
-type FleetLaunchContext = FlightLaunchContext & { targetAsteroidSpawnIndex?: number };
+type FleetLaunchContext = FlightLaunchContext;
 
 import missionTransportIcon from '../assets/source/mission-icons-v1/01_transport.png';
 import missionEspionageIcon from '../assets/source/mission-icons-v1/02_espionage.png';
@@ -248,18 +248,15 @@ function gasAsteroidPreviewAtArrival(
   simulation: UniverseAsteroidSimulationState | undefined,
   targetCoordinate: UniverseCoordinate,
   arrivalAt: number,
-  targetAsteroidSpawnIndex?: number,
 ): GasAsteroidArrivalPreview {
   if (!simulation) return { asteroidCoordinate: null, targetCoordinate, hit: false, unavailable: true };
 
   const arrivalSimulation = advanceUniverseAsteroidSimulationAt(simulation, arrivalAt, 1).state;
-  const followedAsteroid = targetAsteroidSpawnIndex === undefined
-    ? arrivalSimulation.asteroids.find((asteroid) => sameUniverseCoordinate(asteroid.coordinate, targetCoordinate))
-    : arrivalSimulation.asteroids.find((asteroid) => asteroid.spawnIndex === targetAsteroidSpawnIndex);
+  const asteroidAtCoordinate = findUniverseAsteroidAtCoordinate(arrivalSimulation.asteroids, targetCoordinate);
   return {
-    asteroidCoordinate: followedAsteroid?.coordinate ?? null,
+    asteroidCoordinate: asteroidAtCoordinate?.coordinate ?? null,
     targetCoordinate,
-    hit: Boolean(followedAsteroid && sameUniverseCoordinate(followedAsteroid.coordinate, targetCoordinate)),
+    hit: Boolean(asteroidAtCoordinate),
     unavailable: false,
   };
 }
@@ -852,7 +849,6 @@ function FleetWorkspace({
         runtimeState.asteroidSimulation,
         destination.coordinate,
         currentCandidate.flight.arrivalAt,
-        launchContext?.targetAsteroidSpawnIndex,
       );
       const candidateExpired = gasPreviewFlight.arrivalAt <= departedAt
         || departedAt - gasPreviewFlight.departedAt > GAS_PREVIEW_FRESHNESS_WINDOW_MS;
@@ -997,9 +993,8 @@ function FleetWorkspace({
       previewRuntimeState?.asteroidSimulation,
       previewCoordinate,
       previewFlightRecord.arrivalAt,
-      launchContext?.targetAsteroidSpawnIndex,
     );
-  }, [launchContext?.targetAsteroidSpawnIndex, missionId, previewCoordinate, previewFlightRecord, previewRuntimeState?.asteroidSimulation]);
+  }, [missionId, previewCoordinate, previewFlightRecord, previewRuntimeState?.asteroidSimulation]);
   const transportSummary = previewRuntimeState && previewSourceId
     ? getTransportCargoSummary(previewRuntimeState, previewSourceId, selectedQuantities, transportCargoDraft, previewDestination ?? undefined)
     : null;

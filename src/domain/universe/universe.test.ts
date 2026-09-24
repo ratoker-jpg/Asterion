@@ -168,6 +168,7 @@ test('authoritative Test Mode targets do not recreate a destroyed Bot 01 planet'
   const destroyed = registeredPlanets[0];
   const map = createUniverseMap({
     mode: 'test',
+    nowMs: 0,
     registeredPlanets: registeredPlanets.filter((planet) => planet.id !== destroyed.id),
   });
   const nodes = map.systems.flatMap((system) => system.positions);

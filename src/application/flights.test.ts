@@ -22,7 +22,12 @@ import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { createEmptyFleetState } from '../domain/fleet/runtime.ts';
 import { getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
-import type { UniverseCoordinate, UniverseObjectKind } from '../domain/universe/types.ts';
+import type {
+  UniverseAsteroidRuntimeState,
+  UniverseAsteroidSimulationState,
+  UniverseCoordinate,
+  UniverseObjectKind,
+} from '../domain/universe/types.ts';
 import {
   ASTEROID_SCHEDULE_EPOCH_MS,
   advanceUniverseAsteroidCoordinate,
@@ -31,7 +36,8 @@ import {
   getUniverseAsteroidState,
   getUniverseTimedObjectSchedule,
 } from '../domain/universe/runtime.ts';
-import { advanceUniverseAsteroidSimulationAt } from '../domain/universe/asteroid-simulation.ts';
+import { advanceUniverseAsteroidSimulationAt, findUniverseAsteroidAtCoordinate } from '../domain/universe/asteroid-simulation.ts';
+import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
 
 const origin = { galaxy: 1, system: 1, position: 1 };
 
@@ -1044,6 +1050,86 @@ test('gas miss preview remains valid when its exact flight candidate is dispatch
   assert.equal(report?.scrapCollected, 0);
   assert.equal(arrivedFlight.cargo?.gas, 0);
   assert.equal(arrivedFlight.cargo?.debris, 0);
+});
+
+test('gas forecast and arrival resolve the asteroid occupying the destination coordinate, not the originally selected asteroid', () => {
+  const target = emptyUniverseCoordinate().coordinate;
+  const departedAt = 1_000;
+  const command = gasCommand('gas-coordinate-occupant-at-arrival', target);
+  const base = withRecyclers(createInitialSaveState('production', departedAt), 1);
+  const initialPreview = previewFlight(base, command, { now: departedAt, mode: 'production' });
+  assert.equal(initialPreview.ok, true);
+  if (!initialPreview.ok) return;
+
+  const alternateSystemCoordinate = { ...target, system: target.system === 1 ? 2 : 1 };
+  const selectedNextCoordinate = {
+    ...target,
+    position: target.position === 1 ? 2 : target.position - 1,
+  };
+  const selectedAsteroid: UniverseAsteroidRuntimeState = {
+    spawnIndex: 87,
+    spawnedAt: departedAt,
+    movementIndex: 0,
+    previousMoveAt: departedAt,
+    nextMoveAt: initialPreview.flight.arrivalAt,
+    nextCoordinate: selectedNextCoordinate,
+    gasYield: 1_000,
+    gasRatePerHour: 2_500,
+    gasUpdatedAt: departedAt,
+    gasRemainder: 0,
+    coordinate: target,
+  };
+  const replacementAsteroid: UniverseAsteroidRuntimeState = {
+    ...selectedAsteroid,
+    spawnIndex: 88,
+    nextCoordinate: target,
+    gasYield: 150_000,
+    coordinate: alternateSystemCoordinate,
+  };
+  const simulation: UniverseAsteroidSimulationState = {
+    version: 1,
+    processedThroughAt: departedAt,
+    nextSpawnIndex: 10_000,
+    asteroids: [selectedAsteroid, replacementAsteroid],
+  };
+  const initial: SaveState = { ...base, asteroidSimulation: simulation };
+  const preview = previewFlight(initial, command, { now: departedAt, mode: 'production' });
+  assert.equal(preview.ok, true);
+  if (!preview.ok) return;
+
+  const forecastSimulation = advanceUniverseAsteroidSimulationAt(simulation, preview.flight.arrivalAt, 1).state;
+  const forecastAsteroid = findUniverseAsteroidAtCoordinate(forecastSimulation.asteroids, target);
+  assert.equal(forecastSimulation.asteroids.find((asteroid) => asteroid.spawnIndex === selectedAsteroid.spawnIndex)?.coordinate.position,
+    selectedNextCoordinate.position);
+  assert.equal(forecastAsteroid?.spawnIndex, replacementAsteroid.spawnIndex);
+
+  const sent = dispatchFlight(initial, command, { now: departedAt, mode: 'production' });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.equal(sent.flight.arrivalAt, preview.flight.arrivalAt);
+
+  const arrived = reconcileRuntime(sent.state, {
+    planetId: 'helion-01',
+    now: sent.flight.arrivalAt,
+    mode: 'production',
+    testTimeScale: 10,
+  });
+  const report = arrived.state.reports.gasExtractionArrivalReports?.find((entry) => entry.flightId === sent.flight.id);
+  const arrivedFlight = arrived.state.flights.records.find((flight) => flight.id === sent.flight.id)!;
+  const expectedGas = Math.min(
+    Math.floor(advanceAsteroidGasAt(forecastAsteroid!, sent.flight.arrivalAt).gasYield / 2),
+    sent.flight.gasCapacity ?? 0,
+  );
+  assert.equal(report?.outcome, 'found');
+  assert.equal(report?.gasCollected, expectedGas);
+  assert.equal(arrivedFlight.cargo?.gas, expectedGas);
+  assert.notEqual(
+    expectedGas,
+    Math.min(
+      Math.floor(advanceAsteroidGasAt(forecastSimulation.asteroids.find((asteroid) => asteroid.spawnIndex === selectedAsteroid.spawnIndex)!, sent.flight.arrivalAt).gasYield / 2),
+      sent.flight.gasCapacity ?? 0,
+    ),
+  );
 });
 
 test('gas arrival gives gas priority and shares recycler capacity only with asteroid-carried scrap', () => {

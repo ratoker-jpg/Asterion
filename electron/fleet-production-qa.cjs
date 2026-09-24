@@ -154,6 +154,18 @@ async function setStoredSourceGas(win, gas) {
     if (!save || !planet) return false;
     save.gas = ${JSON.stringify(gas)};
     planet.resources = { ...planet.resources, gas: ${JSON.stringify(gas)} };
+    const previousClock = save.resourceClock || {};
+    const previousHomeworldClock = previousClock.byPlanet?.['helion-01'] || previousClock;
+    const homeworldClock = {
+      ...previousHomeworldClock,
+      lastReconciledAt: Date.now(),
+      remainder: { ...(previousHomeworldClock.remainder || {}), gas: 0 },
+    };
+    save.resourceClock = {
+      ...previousClock,
+      ...homeworldClock,
+      byPlanet: { ...(previousClock.byPlanet || {}), 'helion-01': homeworldClock },
+    };
     localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
     return true;
   })()`);
@@ -364,6 +376,7 @@ async function runTransportUiCycle(win, label, directory) {
   await click(win, '[data-qa-flight-preview-open]');
   await waitFor(win, `document.querySelector('[data-qa-flight-preview-backdrop]')`);
   await selectTransportTarget(win, 'qa-own-target');
+  await waitFor(win, `document.querySelector('[data-qa-flight-preview-error]')?.textContent?.includes('Недостаточно газа')`);
   const insufficientGas = await win.webContents.executeJavaScript(`(() => ({
     sendDisabled: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled),
     error: document.querySelector('[data-qa-flight-preview-error]')?.textContent?.trim() || document.querySelector('[data-qa-flight-target-status]')?.textContent?.trim() || '',
@@ -1066,15 +1079,20 @@ async function runGasFreshnessRegressions(win, label, directory) {
     savedArrivalAt: afterMovementDispatch.arrivalAt,
   };
 
-  await seedGasFreshnessSave(win, { movementDelayMs, speedResearchFinishInMs: 1_500 });
+  await seedGasFreshnessSave(win, { movementDelayMs, speedResearchFinishInMs: 60 * 60_000 });
   save = await readSave(win);
   asteroid = save.asteroidSimulation?.asteroids?.[0];
   const researchFinishAt = save.science.queue.find((task) => task.id === 'qa-gas-flight-speed-research')?.finishAt;
-  if (!asteroid || !researchFinishAt) throw new Error(`${label}: speed-science fixture was not seeded`);
+  if (!asteroid || !researchFinishAt || save.science.levels?.[4] !== 0) {
+    throw new Error(`${label}: speed-science fixture was not seeded before completion`);
+  }
   await openGasPreviewAt(win, asteroid.coordinate);
   const beforeResearch = await readGasCandidate(win);
+  if (beforeResearch.now >= researchFinishAt) {
+    throw new Error(`${label}: initial candidate was captured after speed research had completed ${JSON.stringify({ beforeResearch, researchFinishAt })}`);
+  }
   await setRendererNow(win, researchFinishAt + 1);
-  await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.science?.levels?.[4] === 1`, 4_000);
+  await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.science?.levels?.[4] === 1`);
   await click(win, '[data-qa-flight-dispatch-confirm]');
   await waitFor(win, `document.querySelector('[data-qa-gas-preview-reconfirmation]')`);
   const refreshedAfterResearch = await readGasCandidate(win);

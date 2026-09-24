@@ -86,6 +86,7 @@ import { resolveSpyOwnerProfile } from '../domain/espionage/owner-profile.ts';
 import { collectOrbitalDebrisAtCoordinate, getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 import { createUniverseSystem } from '../domain/universe/runtime.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPlanet, UniverseRegisteredPlanet } from '../domain/universe/types.ts';
+import { findUniverseAsteroidAtCoordinate } from '../domain/universe/asteroid-simulation.ts';
 import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
 import { upsertGasExtractionArrivalReport, upsertRecyclerArrivalReport } from '../domain/reports/adapters.ts';
 import { initializePlanetResourceClock, reconcileTestEspionageTargetResources } from './resource-clock.ts';
@@ -112,7 +113,6 @@ export const SPY_REPORT_RESULT_EVENT = 'asterion:spy-report-result';
 export type FlightLaunchContext = {
   missionId: MissionId;
   destination?: FlightDestination;
-  targetAsteroidSpawnIndex?: number;
   targetRelation?: TargetRelation;
   targetKind?: UniverseObjectKind;
   operationId?: string;
@@ -1849,8 +1849,12 @@ export function reconcileFlights(
       if (current.missionId === 'gas') {
         if (current.cargoState !== 'delivered' && current.cargoState !== 'returned') {
           const simulation = next.asteroidSimulation;
-          const asteroidIndex = simulation?.asteroids.findIndex((asteroid) =>
-            coordinatesEqual(asteroid.coordinate, current.destinationCoordinate)) ?? -1;
+          const asteroidAtCoordinate = simulation
+            ? findUniverseAsteroidAtCoordinate(simulation.asteroids, current.destinationCoordinate)
+            : undefined;
+          const asteroidIndex = simulation && asteroidAtCoordinate
+            ? simulation.asteroids.indexOf(asteroidAtCoordinate)
+            : -1;
           const found = asteroidIndex >= 0 && simulation !== undefined;
           let gasCollected = 0;
           let scrapCollected = 0;

@@ -23,6 +23,14 @@ export type UniverseAsteroidTransition = {
   fromCoordinate: UniverseCoordinate;
 };
 
+export function findUniverseAsteroidAtCoordinate(
+  asteroids: readonly UniverseAsteroidRuntimeState[],
+  coordinate: UniverseCoordinate,
+): UniverseAsteroidRuntimeState | undefined {
+  const targetKey = universeCoordinateKey(coordinate);
+  return asteroids.find((asteroid) => universeCoordinateKey(asteroid.coordinate) === targetKey);
+}
+
 function safeNow(nowMs: number) {
   return Number.isFinite(nowMs) ? Math.trunc(nowMs) : Date.now();
 }

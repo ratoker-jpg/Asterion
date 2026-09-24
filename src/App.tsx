@@ -363,7 +363,6 @@ export function App() {
         detail: {
           missionId: 'gas',
           targetKind: 'asteroid',
-          targetAsteroidSpawnIndex: target.spawnIndex,
           destination: { kind: 'coordinate', coordinate: target.coordinate },
         },
       }));
