@@ -51,7 +51,7 @@ import {
 } from './application/flights.ts';
 import { getAttackCommanderSelection, isAttackCombatShip } from './application/attack.ts';
 import type { FlightDestination, FlightRecord, MissionId, TargetRelation } from './domain/flights/types.ts';
-import type { UniverseObjectKind } from './domain/universe/types.ts';
+import type { UniverseAsteroidSimulationState, UniverseCoordinate, UniverseObjectKind } from './domain/universe/types.ts';
 import type { EspionageState, SpyMission } from './domain/espionage/types.ts';
 import { emptyTransportCargo, getCargoFieldMaximum, type TransportCargo, type TransportCargoKey } from './domain/flights/cargo.ts';
 import { getOverflowWarning } from './domain/flights/cargo.ts';
@@ -73,6 +73,14 @@ import './building-card.css';
 import './fleet-workspace.css';
 
 const FLEET_ROOT_STATUS = 'Выберите корабли и миссию. Для колонизации сначала выберите свободную координату во Вселенной.';
+const GAS_PREVIEW_FRESHNESS_WINDOW_MS = 10_000;
+
+type GasAsteroidArrivalPreview = {
+  asteroidCoordinate: UniverseCoordinate | null;
+  targetCoordinate: UniverseCoordinate;
+  hit: boolean;
+  unavailable: boolean;
+};
 
 type MissionDefinition = {
   id: MissionId;
@@ -230,6 +238,68 @@ function flightArrivalLabel(timestamp: number) {
   });
 }
 
+function sameUniverseCoordinate(left: UniverseCoordinate | null | undefined, right: UniverseCoordinate | null | undefined) {
+  return left?.galaxy === right?.galaxy
+    && left?.system === right?.system
+    && left?.position === right?.position;
+}
+
+function gasAsteroidPreviewAtArrival(
+  simulation: UniverseAsteroidSimulationState | undefined,
+  targetCoordinate: UniverseCoordinate,
+  arrivalAt: number,
+  targetAsteroidSpawnIndex?: number,
+): GasAsteroidArrivalPreview {
+  if (!simulation) return { asteroidCoordinate: null, targetCoordinate, hit: false, unavailable: true };
+
+  const arrivalSimulation = advanceUniverseAsteroidSimulationAt(simulation, arrivalAt, 1).state;
+  const followedAsteroid = targetAsteroidSpawnIndex === undefined
+    ? arrivalSimulation.asteroids.find((asteroid) => sameUniverseCoordinate(asteroid.coordinate, targetCoordinate))
+    : arrivalSimulation.asteroids.find((asteroid) => asteroid.spawnIndex === targetAsteroidSpawnIndex);
+  return {
+    asteroidCoordinate: followedAsteroid?.coordinate ?? null,
+    targetCoordinate,
+    hit: Boolean(followedAsteroid && sameUniverseCoordinate(followedAsteroid.coordinate, targetCoordinate)),
+    unavailable: false,
+  };
+}
+
+function sameGasAsteroidForecast(
+  left: GasAsteroidArrivalPreview | null,
+  right: GasAsteroidArrivalPreview | null,
+) {
+  return Boolean(left && right
+    && left.hit === right.hit
+    && left.unavailable === right.unavailable
+    && sameUniverseCoordinate(left.targetCoordinate, right.targetCoordinate)
+    && sameUniverseCoordinate(left.asteroidCoordinate, right.asteroidCoordinate));
+}
+
+function sameGasFlightCandidate(
+  left: FlightRecord | null,
+  right: FlightRecord | null,
+  leftForecast: GasAsteroidArrivalPreview | null,
+  rightForecast: GasAsteroidArrivalPreview | null,
+) {
+  if (!left || !right || left.missionId !== 'gas' || right.missionId !== 'gas') return false;
+  const leftShips = Object.entries(left.selectedShips).sort(([a], [b]) => a.localeCompare(b));
+  const rightShips = Object.entries(right.selectedShips).sort(([a], [b]) => a.localeCompare(b));
+  return left.originPlanetId === right.originPlanetId
+    && sameUniverseCoordinate(left.originCoordinate, right.originCoordinate)
+    && sameUniverseCoordinate(left.destinationCoordinate, right.destinationCoordinate)
+    && JSON.stringify(leftShips) === JSON.stringify(rightShips)
+    && left.targetKind === right.targetKind
+    && left.targetRelation === right.targetRelation
+    && left.operationId === right.operationId
+    && left.routeDistance === right.routeDistance
+    && left.effectiveSpeed === right.effectiveSpeed
+    && left.oneWayDurationMs === right.oneWayDurationMs
+    && left.gasCost === right.gasCost
+    && left.gasCapacity === right.gasCapacity
+    && flightArrivalLabel(left.arrivalAt) === flightArrivalLabel(right.arrivalAt)
+    && sameGasAsteroidForecast(leftForecast, rightForecast);
+}
+
 function spyStatusLabel(mission: SpyMission, flight: FlightRecord, now: number) {
   if (mission.status === 'transit') return `В ПУТИ · ${flightCountdown(flight.arrivalAt, now)}`;
   if (mission.status === 'returning') return `ВОЗВРАЩЕНИЕ · ${flightCountdown(flight.returnAt, now)}`;
@@ -274,6 +344,7 @@ function FleetWorkspace({
   const [previewDestination, setPreviewDestination] = useState<FlightDestination | null>(null);
   const [previewTargetRelation, setPreviewTargetRelation] = useState<TargetRelation | undefined>(undefined);
   const [previewSubmittedTargetKind, setPreviewSubmittedTargetKind] = useState<UniverseObjectKind | null>(null);
+  const [gasPreviewNeedsReconfirmation, setGasPreviewNeedsReconfirmation] = useState(false);
   const [editingPreviewTarget, setEditingPreviewTarget] = useState(false);
   const [previewTargetDraft, setPreviewTargetDraft] = useState<FlightCoordinateDraft>({ galaxy: '', system: '', position: '' });
   const [previewTargetError, setPreviewTargetError] = useState<string | null>(null);
@@ -401,6 +472,7 @@ function FleetWorkspace({
     setPreviewDestination(null);
     setPreviewTargetRelation(undefined);
     setPreviewSubmittedTargetKind(null);
+    setGasPreviewNeedsReconfirmation(false);
     setEditingPreviewTarget(false);
     setPreviewTargetDraft({ galaxy: '', system: '', position: '' });
     setPreviewTargetError(null);
@@ -422,6 +494,7 @@ function FleetWorkspace({
     setPreviewResult(null);
     setPreviewSubmittedTargetKind(null);
     setPreviewTargetError(null);
+    setGasPreviewNeedsReconfirmation(false);
   };
 
   useEffect(() => {
@@ -571,7 +644,7 @@ function FleetWorkspace({
 
   const createFlightCommand = (requestId: string, draft?: { originPlanetId?: string; destination?: FlightDestination; targetRelation?: TargetRelation | null; targetKind?: UniverseObjectKind | null; departedAt?: number }, runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read()): DispatchFlightCommand | null => {
     const destination = draft?.destination ?? previewDestination ?? launchContext?.destination;
-    const departedAt = Date.now();
+    const departedAt = draft?.departedAt ?? Date.now();
     const targetKind = draft?.targetKind !== undefined
       ? draft.targetKind ?? undefined
       : missionId === 'recycle' && destination?.kind === 'coordinate'
@@ -615,6 +688,7 @@ function FleetWorkspace({
     setPreviewOriginPlanetId(originPlanetId);
     setPreviewDestination(destination ?? null);
     setPreviewTargetRelation(targetRelation);
+    setGasPreviewNeedsReconfirmation(false);
     setEditingPreviewTarget(destination ? (previewDestination ? editingPreviewTarget : false) : true);
     setPreviewTargetDraft(destination && !previewDestination ? flightCoordinateDraft(destination.coordinate) : previewTargetDraft);
     if (command) {
@@ -641,6 +715,7 @@ function FleetWorkspace({
     setPreviewTargetError(targetErrorFromFlightResult(result));
     setPreviewResult(result);
     setPreviewSubmittedTargetKind(command.targetKind ?? null);
+    setGasPreviewNeedsReconfirmation(false);
   };
 
   const togglePreviewTargetEditing = () => {
@@ -656,6 +731,7 @@ function FleetWorkspace({
       setPreviewResult(null);
       setPreviewSubmittedTargetKind(null);
       setPreviewTargetError(draftError);
+      setGasPreviewNeedsReconfirmation(false);
       return;
     }
     const destination: FlightDestination = { kind: 'coordinate', coordinate: coordinateFromDraft(previewTargetDraft) };
@@ -677,12 +753,14 @@ function FleetWorkspace({
       setPreviewResult(null);
       setPreviewSubmittedTargetKind(null);
       setPreviewTargetError(draftError);
+      setGasPreviewNeedsReconfirmation(false);
       return;
     }
     setPreviewDestination({ kind: 'coordinate', coordinate: coordinateFromDraft(nextDraft) });
     setPreviewResult(null);
     setPreviewSubmittedTargetKind(null);
     setPreviewTargetError(null);
+    setGasPreviewNeedsReconfirmation(false);
   };
 
   const selectTransportTarget = (targetId: string) => {
@@ -742,15 +820,60 @@ function FleetWorkspace({
       setEditingPreviewTarget(true);
       return;
     }
-    const command = missionId === 'gas' && gasPreviewFlight
-      ? createFlightCommand(requestId, {
-        originPlanetId: gasPreviewFlight.originPlanetId,
-        destination: gasPreviewFlight.destination,
+    if (missionId === 'gas') {
+      if (!gasPreviewFlight || gasPreviewFlight.selectedShips.recycler !== (selectedQuantities.recycler ?? 0)
+        || (selectedQuantities.recycler ?? 0) <= 0) return;
+
+      const departedAt = Date.now();
+      const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
+      const destination = previewDestination ?? launchContext?.destination;
+      if (!destination || destination.kind !== 'coordinate') return;
+      const command = createFlightCommand(requestId, {
+        originPlanetId: previewOriginPlanetId ?? runtimeState.currentPlanetId,
+        destination,
         targetRelation: gasPreviewFlight.targetRelation ?? null,
-        targetKind: gasPreviewFlight.targetKind ?? 'asteroid',
-        departedAt: gasPreviewFlight.departedAt,
-      })
-      : missionId === 'recycle' && previewResult?.ok
+        targetKind: 'asteroid',
+        departedAt,
+      }, runtimeState);
+      if (!command) return;
+
+      const currentCandidate = previewFlight(runtimeState, command, {
+        mode: ACTIVE_RUNTIME_MODE,
+        testTimeScale: resolveTestTimeScale(),
+      });
+      if (!currentCandidate.ok) {
+        setPreviewResult(currentCandidate);
+        setPreviewTargetError(targetErrorFromFlightResult(currentCandidate));
+        setGasPreviewNeedsReconfirmation(false);
+        return;
+      }
+
+      const currentAsteroidForecast = gasAsteroidPreviewAtArrival(
+        runtimeState.asteroidSimulation,
+        destination.coordinate,
+        currentCandidate.flight.arrivalAt,
+        launchContext?.targetAsteroidSpawnIndex,
+      );
+      const candidateExpired = gasPreviewFlight.arrivalAt <= departedAt
+        || departedAt - gasPreviewFlight.departedAt > GAS_PREVIEW_FRESHNESS_WINDOW_MS;
+      if (candidateExpired || !sameGasFlightCandidate(
+        gasPreviewFlight,
+        currentCandidate.flight,
+        arrivalAsteroidPreview,
+        currentAsteroidForecast,
+      )) {
+        setPreviewResult(currentCandidate);
+        setPreviewTargetError(null);
+        setPreviewSubmittedTargetKind('asteroid');
+        setGasPreviewNeedsReconfirmation(true);
+        return;
+      }
+
+      setGasPreviewNeedsReconfirmation(false);
+      window.dispatchEvent(new CustomEvent(FLIGHT_DISPATCH_REQUEST_EVENT, { detail: command }));
+      return;
+    }
+    const command = missionId === 'recycle' && previewResult?.ok
       ? createFlightCommand(requestId, {
         originPlanetId: previewResult.flight.originPlanetId,
         destination: previewResult.flight.destination,
@@ -792,6 +915,7 @@ function FleetWorkspace({
     if (missionId === 'recycle' || missionId === 'gas') {
       setPreviewResult(null);
       setPreviewSubmittedTargetKind(null);
+      setGasPreviewNeedsReconfirmation(false);
     }
     setSelectedQuantities((current) => ({ ...current, [shipId]: next }));
   };
@@ -802,6 +926,7 @@ function FleetWorkspace({
       setPreviewResult(null);
       setPreviewSubmittedTargetKind(null);
       setPreviewTargetError(null);
+      setGasPreviewNeedsReconfirmation(false);
     }
     if (nextMissionId === 'attack') {
       const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
@@ -816,6 +941,7 @@ function FleetWorkspace({
     if (missionId === 'recycle' || missionId === 'gas') {
       setPreviewResult(null);
       setPreviewSubmittedTargetKind(null);
+      setGasPreviewNeedsReconfirmation(false);
     }
     setSelectedQuantities(Object.fromEntries(
       visibleShipDefinitions.map((ship) => [ship.id, maximum ? (missionId === 'colonize' || missionId === 'espionage' ? 1 : fleetSnapshot.fleet.ships[ship.id] ?? 0) : 0]),
@@ -867,24 +993,12 @@ function FleetWorkspace({
   const previewFlightRecord = previewResult?.ok ? previewResult.flight : null;
   const arrivalAsteroidPreview = useMemo(() => {
     if (missionId !== 'gas' || !previewFlightRecord || !previewCoordinate) return null;
-    const simulation = previewRuntimeState?.asteroidSimulation;
-    if (!simulation) return { asteroidCoordinate: null, targetCoordinate: previewCoordinate, hit: false, unavailable: true };
-
-    const arrivalSimulation = advanceUniverseAsteroidSimulationAt(simulation, previewFlightRecord.arrivalAt, 1).state;
-    const followedAsteroid = launchContext?.targetAsteroidSpawnIndex === undefined
-      ? arrivalSimulation.asteroids.find((asteroid) => asteroid.coordinate.galaxy === previewCoordinate.galaxy
-        && asteroid.coordinate.system === previewCoordinate.system
-        && asteroid.coordinate.position === previewCoordinate.position)
-      : arrivalSimulation.asteroids.find((asteroid) => asteroid.spawnIndex === launchContext.targetAsteroidSpawnIndex);
-    return {
-      asteroidCoordinate: followedAsteroid?.coordinate ?? null,
-      targetCoordinate: previewCoordinate,
-      hit: Boolean(followedAsteroid
-        && followedAsteroid.coordinate.galaxy === previewCoordinate.galaxy
-        && followedAsteroid.coordinate.system === previewCoordinate.system
-        && followedAsteroid.coordinate.position === previewCoordinate.position),
-      unavailable: false,
-    };
+    return gasAsteroidPreviewAtArrival(
+      previewRuntimeState?.asteroidSimulation,
+      previewCoordinate,
+      previewFlightRecord.arrivalAt,
+      launchContext?.targetAsteroidSpawnIndex,
+    );
   }, [launchContext?.targetAsteroidSpawnIndex, missionId, previewCoordinate, previewFlightRecord, previewRuntimeState?.asteroidSimulation]);
   const transportSummary = previewRuntimeState && previewSourceId
     ? getTransportCargoSummary(previewRuntimeState, previewSourceId, selectedQuantities, transportCargoDraft, previewDestination ?? undefined)
@@ -1284,8 +1398,9 @@ function FleetWorkspace({
                   <small>ПАРАМЕТРЫ ПЕРЕЛЁТА</small>
                   <span>{missionId === 'transport' ? 'ПРОВЕРКА ЦЕЛИ ПРИ ОТПРАВКЕ' : 'ПРОВЕРКА ЦЕЛИ ПРИ ОТПРАВКЕ'}</span>
                 </div>
+                {missionId === 'gas' && gasPreviewNeedsReconfirmation ? <div className="flight-timeline-notes"><p role="status" className="flight-timeline-note-warning" data-qa-gas-preview-reconfirmation>Прогноз обновлён. Проверьте ETA и положение астероида, затем подтвердите отправку ещё раз.</p></div> : null}
                 {previewResult?.ok ? <>
-                  <div className="flight-timeline-metrics" data-qa-flight-preview data-qa-flight-preview-departed-at={previewResult.flight.departedAt} data-qa-flight-preview-arrival-at={previewResult.flight.arrivalAt}>
+                  <div className="flight-timeline-metrics" data-qa-flight-preview data-qa-flight-preview-departed-at={previewResult.flight.departedAt} data-qa-flight-preview-arrival-at={previewResult.flight.arrivalAt} data-qa-flight-preview-speed={previewResult.flight.effectiveSpeed} data-qa-flight-preview-duration={previewResult.flight.oneWayDurationMs}>
                     <div><small>РАССТОЯНИЕ</small><strong>{flightNumberLabel(previewResult.flight.routeDistance)} ед.</strong></div>
                     <div><small>ЭФФ. СКОРОСТЬ</small><strong>{flightNumberLabel(previewResult.flight.effectiveSpeed)}</strong></div>
                     <div><small>ТУДА</small><strong>{flightDurationLabel(previewResult.flight.oneWayDurationMs)}</strong></div>
@@ -1298,7 +1413,7 @@ function FleetWorkspace({
                   <section className="flight-timeline-eta" data-qa-flight-eta aria-label="Расписание рейса">
                     <div className="flight-timeline-eta-card is-arrival">
                       <small>ПРИБЫТИЕ</small>
-                      <strong>через {flightCountdown(previewResult.flight.arrivalAt, clockNow)}</strong>
+                      <strong>через {missionId === 'gas' ? flightDurationLabel(previewResult.flight.oneWayDurationMs) : flightCountdown(previewResult.flight.arrivalAt, clockNow)}</strong>
                       <span>{flightArrivalLabel(previewResult.flight.arrivalAt)} МСК</span>
                       <em>{missionId === 'recycle' ? 'сбор обломков с орбиты' : missionId === 'gas' ? 'проверка позиции астероида' : 'проверка цели и создание планеты'}</em>
                     </div>
