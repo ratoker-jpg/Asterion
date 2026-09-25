@@ -683,7 +683,8 @@ export function App() {
   );
   const universePlayerPlanets = useMemo(() => ownedPlanets.map((planet) => {
     const runtimePlanet = state.planets[planet.id];
-    const art = planetSkins.find((skin) => skin.id === runtimePlanet.skin)?.art ?? planetSkins[0].art;
+    const skin = planetSkins.find((candidate) => candidate.id === runtimePlanet.skin) ?? planetSkins[0];
+    const art = 'mapArt' in skin ? skin.mapArt : skin.art;
     return {
       id: planet.id,
       coordinate: {
@@ -1413,7 +1414,7 @@ export function App() {
           ) : activeRoute === 'universe' ? (
             <UniverseView
               onNotice={setNotice}
-              ownedPlanetArt={currentSkin.art}
+              ownedPlanetArt={'mapArt' in currentSkin ? currentSkin.mapArt : currentSkin.art}
               ownedPlanetName={currentPlanetName}
               profile={state.profile}
               rating={state.rating}

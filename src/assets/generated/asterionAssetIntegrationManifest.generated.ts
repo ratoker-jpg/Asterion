@@ -20,47 +20,56 @@ export const asterionAssetIntegrationAssets = {
     {
       "id": "skin-asterion-01",
       "label": "Облик A-01",
-      "art": "./assets/generated/asterion/universe/planet-variants/orbital-forge.webp"
+      "art": "./assets/generated/asterion/universe/planet-skins/skin-asterion-01.webp",
+      "mapArt": "./assets/generated/asterion/universe/planet-previews/skin-asterion-01.webp"
     },
     {
       "id": "skin-asterion-02",
       "label": "Облик A-02",
-      "art": "./assets/generated/asterion/universe/planet-skins/skin-asterion-02.webp"
+      "art": "./assets/generated/asterion/universe/planet-skins/skin-asterion-02.webp",
+      "mapArt": "./assets/generated/asterion/universe/planet-previews/skin-asterion-02.webp"
     },
     {
       "id": "skin-asterion-03",
       "label": "Облик A-03",
-      "art": "./assets/generated/asterion/universe/planet-skins/skin-asterion-03.webp"
+      "art": "./assets/generated/asterion/universe/planet-skins/skin-asterion-03.webp",
+      "mapArt": "./assets/generated/asterion/universe/planet-previews/skin-asterion-03.webp"
     },
     {
       "id": "skin-asterion-04",
       "label": "Облик A-04",
-      "art": "./assets/generated/asterion/universe/planet-skins/skin-asterion-04.webp"
+      "art": "./assets/generated/asterion/universe/planet-skins/skin-asterion-04.webp",
+      "mapArt": "./assets/generated/asterion/universe/planet-previews/skin-asterion-04.webp"
     },
     {
       "id": "skin-asterion-05",
       "label": "Облик A-05",
-      "art": "./assets/generated/asterion/universe/planet-skins/skin-asterion-05.webp"
+      "art": "./assets/generated/asterion/universe/planet-skins/skin-asterion-05.webp",
+      "mapArt": "./assets/generated/asterion/universe/planet-previews/skin-asterion-05.webp"
     },
     {
       "id": "skin-asterion-06",
       "label": "Облик A-06",
-      "art": "./assets/generated/asterion/universe/planet-skins/skin-asterion-06.webp"
+      "art": "./assets/generated/asterion/universe/planet-skins/skin-asterion-06.webp",
+      "mapArt": "./assets/generated/asterion/universe/planet-previews/skin-asterion-06.webp"
     },
     {
       "id": "skin-asterion-07",
       "label": "Облик A-07",
-      "art": "./assets/generated/asterion/universe/planet-skins/skin-asterion-07.webp"
+      "art": "./assets/generated/asterion/universe/planet-skins/skin-asterion-07.webp",
+      "mapArt": "./assets/generated/asterion/universe/planet-previews/skin-asterion-07.webp"
     },
     {
       "id": "skin-asterion-08",
       "label": "Облик A-08",
-      "art": "./assets/generated/asterion/universe/planet-skins/skin-asterion-08.webp"
+      "art": "./assets/generated/asterion/universe/planet-skins/skin-asterion-08.webp",
+      "mapArt": "./assets/generated/asterion/universe/planet-previews/skin-asterion-08.webp"
     },
     {
       "id": "skin-asterion-09",
       "label": "Облик A-09",
-      "art": "./assets/generated/asterion/universe/planet-skins/skin-asterion-09.webp"
+      "art": "./assets/generated/asterion/universe/planet-skins/skin-asterion-09.webp",
+      "mapArt": "./assets/generated/asterion/universe/planet-previews/skin-asterion-09.webp"
     }
   ],
   "piratePlanetArts": [

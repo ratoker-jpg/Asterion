@@ -579,8 +579,20 @@ async function runViewport(width, height) {
     const ordinaryFull = await win.webContents.executeJavaScript(`(() => { const row = document.querySelector('[data-qa-spaceport-card="scout"]'); return { disabled: Boolean(row?.querySelector('[data-qa-spaceport-upgrade]')?.disabled), positions: Array.from(row?.querySelectorAll('[data-qa-spaceport-queued-position]') ?? []).map((node) => node.getAttribute('data-qa-spaceport-queued-position')) }; })()`);
     if (!ordinaryFull.disabled || JSON.stringify(ordinaryFull.positions) !== JSON.stringify(['1', '2', '3'])) throw new Error(`${label}: ordinary Spaceport queue contract failed ${JSON.stringify(ordinaryFull)}`);
     await click(win, '[data-qa-spaceport-tab="commanders"]');
-    for (let index = 0; index < 2; index += 1) await click(win, '[data-qa-spaceport-upgrade="corsair"]');
-    await waitFor(win, `document.querySelector('[data-qa-spaceport-queue-count]')?.getAttribute('data-qa-spaceport-queue-count') === '2/3'`);
+    await waitFor(win, `document.querySelector('[data-qa-spaceport-upgrades][data-qa-spaceport-track="commanders"]')`);
+    for (let index = 0; index < 2; index += 1) {
+      await click(win, '[data-qa-spaceport-upgrade="corsair"]');
+      const expectedLength = index + 1;
+      const queueStateExpression = `(() => { try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}'); const queues = save?.planets?.['helion-01']?.spaceportUpgrades; return queues?.shipQueue?.length === 3 && queues?.commanderQueue?.length === ${expectedLength}; } catch { return false; } })()`;
+      const commanderCountExpression = `document.querySelector('[data-qa-spaceport-upgrades][data-qa-spaceport-track="commanders"] [data-qa-spaceport-queue-count]')?.getAttribute('data-qa-spaceport-queue-count') === '${expectedLength}/3'`;
+      try {
+        await waitFor(win, queueStateExpression);
+        await waitFor(win, commanderCountExpression);
+      } catch (error) {
+        const diagnostic = await win.webContents.executeJavaScript(`(() => { try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}'); const queues = save?.planets?.['helion-01']?.spaceportUpgrades; const root = document.querySelector('[data-qa-spaceport-upgrades]'); return { track: root?.getAttribute('data-qa-spaceport-track') || '', displayedCount: root?.querySelector('[data-qa-spaceport-queue-count]')?.getAttribute('data-qa-spaceport-queue-count') || '', shipQueueLength: queues?.shipQueue?.length ?? -1, commanderQueueLength: queues?.commanderQueue?.length ?? -1 }; } catch (cause) { return { diagnosticError: String(cause) }; } })()`);
+        throw new Error(`${label}: Commander Spaceport queue did not reach ${expectedLength}/3: ${JSON.stringify(diagnostic)} (${error.message})`);
+      }
+    }
     await capture(win, directory, 'test-spaceport-both-queues');
 
     const afterQueues = await readEnvelope(win, TEST_KEY);

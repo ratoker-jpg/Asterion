@@ -37,6 +37,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -47,7 +48,8 @@
         "hasAlpha": true,
         "sha256": "98f6b1db34cd4322348086f8f171db46374d5842debc15af15b3174e48010159"
       },
-      "runtimeUrl": "./assets/generated/asterion/ui/report-icons/system.webp"
+      "runtimeUrl": "./assets/generated/asterion/ui/report-icons/system.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "reportIcons",
@@ -68,6 +70,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -78,7 +81,8 @@
         "hasAlpha": true,
         "sha256": "f0d0cc55435c0dd564383fffe55f0c325dd6cd0af4645d3e0b754444ec8a7544"
       },
-      "runtimeUrl": "./assets/generated/asterion/ui/report-icons/reports.webp"
+      "runtimeUrl": "./assets/generated/asterion/ui/report-icons/reports.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "reportIcons",
@@ -99,6 +103,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -109,7 +114,8 @@
         "hasAlpha": true,
         "sha256": "166b20b600bee414649951ac84f770507818c4cfa010a7f8832f5874cdb4e266"
       },
-      "runtimeUrl": "./assets/generated/asterion/ui/report-icons/command-reports.webp"
+      "runtimeUrl": "./assets/generated/asterion/ui/report-icons/command-reports.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "reportIcons",
@@ -130,6 +136,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -140,7 +147,8 @@
         "hasAlpha": true,
         "sha256": "27107bfd9e6d29174bb4cd52eb0950649f2c6201cad8b1a89517af8277100c48"
       },
-      "runtimeUrl": "./assets/generated/asterion/ui/report-icons/arena.webp"
+      "runtimeUrl": "./assets/generated/asterion/ui/report-icons/arena.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "reportIcons",
@@ -161,6 +169,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -171,7 +180,8 @@
         "hasAlpha": true,
         "sha256": "2f79b03f551cf0164f4d4eea3ef1c357c229d8d579acd6cc81d62bcbd785f9f1"
       },
-      "runtimeUrl": "./assets/generated/asterion/ui/report-icons/flights.webp"
+      "runtimeUrl": "./assets/generated/asterion/ui/report-icons/flights.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "reportIcons",
@@ -192,6 +202,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -202,7 +213,8 @@
         "hasAlpha": true,
         "sha256": "380e718d32577870dd479bde38c1e1fc8213b3cadfc5c6e336b60fef6859be02"
       },
-      "runtimeUrl": "./assets/generated/asterion/ui/report-icons/alliances.webp"
+      "runtimeUrl": "./assets/generated/asterion/ui/report-icons/alliances.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "reportIcons",
@@ -223,6 +235,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -233,7 +246,8 @@
         "hasAlpha": true,
         "sha256": "da9a34e5b8b96f3b67deab0a67f08da7d9090071987d63f9db7362f80b8da1f8"
       },
-      "runtimeUrl": "./assets/generated/asterion/ui/report-icons/achievements.webp"
+      "runtimeUrl": "./assets/generated/asterion/ui/report-icons/achievements.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "reportIcons",
@@ -254,6 +268,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -264,7 +279,8 @@
         "hasAlpha": true,
         "sha256": "89336c0b8e4c180634878391167de6d203e4c358d6ca1e2cb785143d6af0764c"
       },
-      "runtimeUrl": "./assets/generated/asterion/ui/report-icons/profile.webp"
+      "runtimeUrl": "./assets/generated/asterion/ui/report-icons/profile.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "scoreIcons",
@@ -285,6 +301,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -295,7 +312,8 @@
         "hasAlpha": true,
         "sha256": "809726b09c5af1c7fafdb4edd24e168bae206bed546bd4942ff10dbe85b84199"
       },
-      "runtimeUrl": "./assets/generated/asterion/ui/score-icons/resource-crystal.webp"
+      "runtimeUrl": "./assets/generated/asterion/ui/score-icons/resource-crystal.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "scoreIcons",
@@ -316,6 +334,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -326,7 +345,8 @@
         "hasAlpha": true,
         "sha256": "abc7e0d89110c47425868971ecc55b4f2010ff9f422ae5c2c814b9021eee9bfb"
       },
-      "runtimeUrl": "./assets/generated/asterion/ui/score-icons/battle.webp"
+      "runtimeUrl": "./assets/generated/asterion/ui/score-icons/battle.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "scoreIcons",
@@ -347,6 +367,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -357,7 +378,8 @@
         "hasAlpha": true,
         "sha256": "aff9e15190f7976e356cc5eb8124424a94da848c05313c81b3292f1b6b587a3f"
       },
-      "runtimeUrl": "./assets/generated/asterion/ui/score-icons/overall-star.webp"
+      "runtimeUrl": "./assets/generated/asterion/ui/score-icons/overall-star.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "scoreIcons",
@@ -378,6 +400,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -388,7 +411,8 @@
         "hasAlpha": true,
         "sha256": "1c0e0fddb30ca83c0237f16a932db63ad9ba326c3ccc9ea7e8b54b4a4b841bdc"
       },
-      "runtimeUrl": "./assets/generated/asterion/ui/score-icons/achievement-trophy.webp"
+      "runtimeUrl": "./assets/generated/asterion/ui/score-icons/achievement-trophy.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "generalPortraits",
@@ -401,6 +425,7 @@
       "disposition": "reuse-existing",
       "family": "runtime-other",
       "runtime": null,
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": "a2d1f807672aff9f4a182f304aba3f0818d683c3a34ece1150fc0930917b04c8",
       "source": {
@@ -411,7 +436,8 @@
         "hasAlpha": true,
         "sha256": "a2d1f807672aff9f4a182f304aba3f0818d683c3a34ece1150fc0930917b04c8"
       },
-      "runtimeUrl": null
+      "runtimeUrl": null,
+      "mapPreviewUrl": null
     },
     {
       "group": "generalPortraits",
@@ -424,6 +450,7 @@
       "disposition": "reuse-existing",
       "family": "runtime-other",
       "runtime": null,
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": "5f447349c4a9610d616e5ae22147040c0bbc672f379f7504454415191a79911e",
       "source": {
@@ -434,7 +461,8 @@
         "hasAlpha": true,
         "sha256": "5f447349c4a9610d616e5ae22147040c0bbc672f379f7504454415191a79911e"
       },
-      "runtimeUrl": null
+      "runtimeUrl": null,
+      "mapPreviewUrl": null
     },
     {
       "group": "generalPortraits",
@@ -447,6 +475,7 @@
       "disposition": "reuse-existing",
       "family": "runtime-other",
       "runtime": null,
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": "94f1061b2b78f707638f322b79ca8d7c722bf114db8425fbcf8a2c3acac024ac",
       "source": {
@@ -457,7 +486,8 @@
         "hasAlpha": true,
         "sha256": "94f1061b2b78f707638f322b79ca8d7c722bf114db8425fbcf8a2c3acac024ac"
       },
-      "runtimeUrl": null
+      "runtimeUrl": null,
+      "mapPreviewUrl": null
     },
     {
       "group": "piratePortrait",
@@ -470,6 +500,7 @@
       "disposition": "source-only",
       "family": "runtime-other",
       "runtime": null,
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -480,7 +511,8 @@
         "hasAlpha": true,
         "sha256": "3af6ca6d213d634016a7ac71570076619114910f080e11b3d104c99147fbc3dc"
       },
-      "runtimeUrl": null
+      "runtimeUrl": null,
+      "mapPreviewUrl": null
     },
     {
       "group": "pirateShips",
@@ -493,6 +525,7 @@
       "disposition": "source-only",
       "family": "ship",
       "runtime": null,
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -503,7 +536,8 @@
         "hasAlpha": true,
         "sha256": "becacf1240a5bfc733c48870a34f46760fd6c6a4571233557864f9e32098a0f2"
       },
-      "runtimeUrl": null
+      "runtimeUrl": null,
+      "mapPreviewUrl": null
     },
     {
       "group": "pirateShips",
@@ -516,6 +550,7 @@
       "disposition": "source-only",
       "family": "ship",
       "runtime": null,
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -526,7 +561,8 @@
         "hasAlpha": true,
         "sha256": "85c2ba758f2c9d20aab361d03e38183ff1cefa02d3892ff6f480d0ac810f781b"
       },
-      "runtimeUrl": null
+      "runtimeUrl": null,
+      "mapPreviewUrl": null
     },
     {
       "group": "pirateShips",
@@ -539,6 +575,7 @@
       "disposition": "source-only",
       "family": "ship",
       "runtime": null,
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -549,7 +586,8 @@
         "hasAlpha": true,
         "sha256": "c78eef974741c5deb6db2b97c9d3eec3baf34adf27ad64987acd2ec435f4ca63"
       },
-      "runtimeUrl": null
+      "runtimeUrl": null,
+      "mapPreviewUrl": null
     },
     {
       "group": "pirateShips",
@@ -562,6 +600,7 @@
       "disposition": "source-only",
       "family": "ship",
       "runtime": null,
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -572,7 +611,8 @@
         "hasAlpha": true,
         "sha256": "01461c4abd0a5f097d2e50bd1ffeff7d7a8f96ed4a06d970aa1922c5e7ea5ee4"
       },
-      "runtimeUrl": null
+      "runtimeUrl": null,
+      "mapPreviewUrl": null
     },
     {
       "group": "pirateShips",
@@ -585,6 +625,7 @@
       "disposition": "source-only",
       "family": "ship",
       "runtime": null,
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -595,7 +636,8 @@
         "hasAlpha": true,
         "sha256": "a00075242964cab1900d9b900b30291ec2b180ab5fb1f3a43c9763ea47cb9a88"
       },
-      "runtimeUrl": null
+      "runtimeUrl": null,
+      "mapPreviewUrl": null
     },
     {
       "group": "pirateShips",
@@ -608,6 +650,7 @@
       "disposition": "source-only",
       "family": "ship",
       "runtime": null,
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -618,7 +661,8 @@
         "hasAlpha": true,
         "sha256": "9f5ab367f51c6daf4a4b216de98229a22308e2a8f27cbdca814d12cda858a44a"
       },
-      "runtimeUrl": null
+      "runtimeUrl": null,
+      "mapPreviewUrl": null
     },
     {
       "group": "pirateShips",
@@ -631,6 +675,7 @@
       "disposition": "source-only",
       "family": "ship",
       "runtime": null,
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -641,7 +686,8 @@
         "hasAlpha": true,
         "sha256": "0a4c675d059f86dd3df8e0f354c0edecd7cd0c0e166a3504d3f851b424d798ef"
       },
-      "runtimeUrl": null
+      "runtimeUrl": null,
+      "mapPreviewUrl": null
     },
     {
       "group": "regularPlanetSkins",
@@ -654,9 +700,18 @@
       "disposition": "runtime",
       "family": "universe-planet",
       "runtime": {
-        "outputPath": "public/assets/generated/asterion/universe/planet-variants/orbital-forge.webp",
-        "width": 256,
-        "height": 256,
+        "outputPath": "public/assets/generated/asterion/universe/planet-skins/skin-asterion-01.webp",
+        "width": 1024,
+        "height": 1024,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true
+      },
+      "mapPreview": {
+        "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-01.webp",
+        "width": 128,
+        "height": 128,
         "format": "webp",
         "quality": 90,
         "fit": "contain",
@@ -672,7 +727,8 @@
         "hasAlpha": true,
         "sha256": "1f9cf7e4ffdd63478e0c40e7cd0e7dfe5417c7537ed40c76ed8e12407fbaf3e7"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/planet-variants/orbital-forge.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/planet-skins/skin-asterion-01.webp",
+      "mapPreviewUrl": "./assets/generated/asterion/universe/planet-previews/skin-asterion-01.webp"
     },
     {
       "group": "regularPlanetSkins",
@@ -686,8 +742,17 @@
       "family": "universe-planet",
       "runtime": {
         "outputPath": "public/assets/generated/asterion/universe/planet-skins/skin-asterion-02.webp",
-        "width": 256,
-        "height": 256,
+        "width": 1024,
+        "height": 1024,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true
+      },
+      "mapPreview": {
+        "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-02.webp",
+        "width": 128,
+        "height": 128,
         "format": "webp",
         "quality": 90,
         "fit": "contain",
@@ -703,7 +768,8 @@
         "hasAlpha": true,
         "sha256": "fa74094521d71ffe29040c2e16c693d6c302e6e252eec05285848f5a74c3eb54"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/planet-skins/skin-asterion-02.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/planet-skins/skin-asterion-02.webp",
+      "mapPreviewUrl": "./assets/generated/asterion/universe/planet-previews/skin-asterion-02.webp"
     },
     {
       "group": "regularPlanetSkins",
@@ -717,8 +783,17 @@
       "family": "universe-planet",
       "runtime": {
         "outputPath": "public/assets/generated/asterion/universe/planet-skins/skin-asterion-03.webp",
-        "width": 256,
-        "height": 256,
+        "width": 1024,
+        "height": 1024,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true
+      },
+      "mapPreview": {
+        "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-03.webp",
+        "width": 128,
+        "height": 128,
         "format": "webp",
         "quality": 90,
         "fit": "contain",
@@ -734,7 +809,8 @@
         "hasAlpha": true,
         "sha256": "f9cb29be6049f4c046afbe0b0612e6a757e5b52ea51b709c714af22de5a63e4d"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/planet-skins/skin-asterion-03.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/planet-skins/skin-asterion-03.webp",
+      "mapPreviewUrl": "./assets/generated/asterion/universe/planet-previews/skin-asterion-03.webp"
     },
     {
       "group": "regularPlanetSkins",
@@ -748,8 +824,17 @@
       "family": "universe-planet",
       "runtime": {
         "outputPath": "public/assets/generated/asterion/universe/planet-skins/skin-asterion-04.webp",
-        "width": 256,
-        "height": 256,
+        "width": 1024,
+        "height": 1024,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true
+      },
+      "mapPreview": {
+        "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-04.webp",
+        "width": 128,
+        "height": 128,
         "format": "webp",
         "quality": 90,
         "fit": "contain",
@@ -765,7 +850,8 @@
         "hasAlpha": true,
         "sha256": "43584d32dbad6408f023bdad42fdc3791f1f9a5893fd32b459264cfa869ec5e7"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/planet-skins/skin-asterion-04.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/planet-skins/skin-asterion-04.webp",
+      "mapPreviewUrl": "./assets/generated/asterion/universe/planet-previews/skin-asterion-04.webp"
     },
     {
       "group": "regularPlanetSkins",
@@ -779,8 +865,17 @@
       "family": "universe-planet",
       "runtime": {
         "outputPath": "public/assets/generated/asterion/universe/planet-skins/skin-asterion-05.webp",
-        "width": 256,
-        "height": 256,
+        "width": 1024,
+        "height": 1024,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true
+      },
+      "mapPreview": {
+        "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-05.webp",
+        "width": 128,
+        "height": 128,
         "format": "webp",
         "quality": 90,
         "fit": "contain",
@@ -796,7 +891,8 @@
         "hasAlpha": true,
         "sha256": "673de5186d4113c4415d59a21fb61a864c8b06161fdf6f8668fcd3e129efd962"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/planet-skins/skin-asterion-05.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/planet-skins/skin-asterion-05.webp",
+      "mapPreviewUrl": "./assets/generated/asterion/universe/planet-previews/skin-asterion-05.webp"
     },
     {
       "group": "regularPlanetSkins",
@@ -810,8 +906,17 @@
       "family": "universe-planet",
       "runtime": {
         "outputPath": "public/assets/generated/asterion/universe/planet-skins/skin-asterion-06.webp",
-        "width": 256,
-        "height": 256,
+        "width": 1024,
+        "height": 1024,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true
+      },
+      "mapPreview": {
+        "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-06.webp",
+        "width": 128,
+        "height": 128,
         "format": "webp",
         "quality": 90,
         "fit": "contain",
@@ -827,7 +932,8 @@
         "hasAlpha": true,
         "sha256": "82be8748809deb4511d8d1d65fbc92f1d8da44437c478a06374bb49212334246"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/planet-skins/skin-asterion-06.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/planet-skins/skin-asterion-06.webp",
+      "mapPreviewUrl": "./assets/generated/asterion/universe/planet-previews/skin-asterion-06.webp"
     },
     {
       "group": "regularPlanetSkins",
@@ -841,8 +947,17 @@
       "family": "universe-planet",
       "runtime": {
         "outputPath": "public/assets/generated/asterion/universe/planet-skins/skin-asterion-07.webp",
-        "width": 256,
-        "height": 256,
+        "width": 1024,
+        "height": 1024,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true
+      },
+      "mapPreview": {
+        "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-07.webp",
+        "width": 128,
+        "height": 128,
         "format": "webp",
         "quality": 90,
         "fit": "contain",
@@ -858,7 +973,8 @@
         "hasAlpha": true,
         "sha256": "240f7a11e25c377ceec9c6cf78eae62fb7864aaebc8dddfe44186f25d7c6489f"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/planet-skins/skin-asterion-07.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/planet-skins/skin-asterion-07.webp",
+      "mapPreviewUrl": "./assets/generated/asterion/universe/planet-previews/skin-asterion-07.webp"
     },
     {
       "group": "regularPlanetSkins",
@@ -872,8 +988,17 @@
       "family": "universe-planet",
       "runtime": {
         "outputPath": "public/assets/generated/asterion/universe/planet-skins/skin-asterion-08.webp",
-        "width": 256,
-        "height": 256,
+        "width": 1024,
+        "height": 1024,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true
+      },
+      "mapPreview": {
+        "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-08.webp",
+        "width": 128,
+        "height": 128,
         "format": "webp",
         "quality": 90,
         "fit": "contain",
@@ -889,7 +1014,8 @@
         "hasAlpha": true,
         "sha256": "aec8aa56f427d2131776abed92b138a42dd5837b263de6fb4ab14c2b08d90dd1"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/planet-skins/skin-asterion-08.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/planet-skins/skin-asterion-08.webp",
+      "mapPreviewUrl": "./assets/generated/asterion/universe/planet-previews/skin-asterion-08.webp"
     },
     {
       "group": "regularPlanetSkins",
@@ -903,8 +1029,17 @@
       "family": "universe-planet",
       "runtime": {
         "outputPath": "public/assets/generated/asterion/universe/planet-skins/skin-asterion-09.webp",
-        "width": 256,
-        "height": 256,
+        "width": 1024,
+        "height": 1024,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true
+      },
+      "mapPreview": {
+        "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-09.webp",
+        "width": 128,
+        "height": 128,
         "format": "webp",
         "quality": 90,
         "fit": "contain",
@@ -920,7 +1055,8 @@
         "hasAlpha": true,
         "sha256": "6eeda38ec442b4b1787fa8ec8a7896b5bc3359130d1bb72fb22198ab209745d9"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/planet-skins/skin-asterion-09.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/planet-skins/skin-asterion-09.webp",
+      "mapPreviewUrl": "./assets/generated/asterion/universe/planet-previews/skin-asterion-09.webp"
     },
     {
       "group": "piratePlanetArts",
@@ -941,6 +1077,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -951,7 +1088,8 @@
         "hasAlpha": true,
         "sha256": "ec10c2dee497ab449c9311a493bb18e72f6ff3191bc7b6a733a5ff7fbaa524c4"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/pirate-planets/pirate-planet-01.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/pirate-planets/pirate-planet-01.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "piratePlanetArts",
@@ -972,6 +1110,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -982,7 +1121,8 @@
         "hasAlpha": true,
         "sha256": "dff122365aa0acc963b9367c04abdb25b98915bad27dfeb04bbb9139e958ac6a"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/pirate-planets/pirate-planet-02.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/pirate-planets/pirate-planet-02.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "piratePlanetArts",
@@ -1003,6 +1143,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1013,7 +1154,8 @@
         "hasAlpha": true,
         "sha256": "9d93947df46505d9dfdecabb6969987fe9093b229b1fa3c4a64d4ba04a3f15b3"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/pirate-planets/pirate-planet-03.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/pirate-planets/pirate-planet-03.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "piratePlanetArts",
@@ -1034,6 +1176,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1044,7 +1187,8 @@
         "hasAlpha": true,
         "sha256": "0c76584145a7a087d6035f63c2047853bb949f4347067ba51b5e0b3485aab8f5"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/pirate-planets/pirate-planet-04.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/pirate-planets/pirate-planet-04.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "piratePlanetArts",
@@ -1065,6 +1209,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1075,7 +1220,8 @@
         "hasAlpha": true,
         "sha256": "2b435f34441bfb6ffda749cc3653a7434fc7fd89d1acfb1a2a0d4bb28521e367"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/pirate-planets/pirate-planet-05.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/pirate-planets/pirate-planet-05.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "piratePlanetArts",
@@ -1096,6 +1242,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1106,7 +1253,8 @@
         "hasAlpha": true,
         "sha256": "6c4534f846683ad7e170632cb8a324f401521919b786723a811783f35761752a"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/pirate-planets/pirate-planet-06.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/pirate-planets/pirate-planet-06.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "piratePlanetArts",
@@ -1127,6 +1275,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": "orbital-forge",
       "expectedSha256": null,
       "source": {
@@ -1137,7 +1286,8 @@
         "hasAlpha": true,
         "sha256": "1f9cf7e4ffdd63478e0c40e7cd0e7dfe5417c7537ed40c76ed8e12407fbaf3e7"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/planet-variants/orbital-forge.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/planet-variants/orbital-forge.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "piratePlanetArts",
@@ -1158,6 +1308,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1168,7 +1319,8 @@
         "hasAlpha": true,
         "sha256": "06c91990376a777e6b53e41e0a874f4d82f5fa41c4054ba07c688c45b6f45ae5"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/pirate-planets/pirate-planet-08.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/pirate-planets/pirate-planet-08.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "piratePlanetArts",
@@ -1189,6 +1341,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1199,7 +1352,8 @@
         "hasAlpha": true,
         "sha256": "d7904a7c0ef4eea1427db0ebbfdaea6a627d03d1359eb6cc69243a4d1fde6108"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/pirate-planets/pirate-planet-09.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/pirate-planets/pirate-planet-09.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "piratePlanetArts",
@@ -1220,6 +1374,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1230,7 +1385,8 @@
         "hasAlpha": true,
         "sha256": "be5a9e04c35ed51d578ffe3a1a82db280a1399945ec5f5c70c7873f911f438f5"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/pirate-planets/pirate-planet-10.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/pirate-planets/pirate-planet-10.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "uniquePlanetArts",
@@ -1251,6 +1407,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1261,7 +1418,8 @@
         "hasAlpha": true,
         "sha256": "92c4d98b1aea00ae55818b864e40c1a63bf1de65b88df8ffcf903c658e0bcd74"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-01.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-01.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "uniquePlanetArts",
@@ -1282,6 +1440,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1292,7 +1451,8 @@
         "hasAlpha": true,
         "sha256": "a110d13d9dc536da5848bc655df82408f4f2887b90a82c09ee1165cfc4dc3cf6"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-02.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-02.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "uniquePlanetArts",
@@ -1313,6 +1473,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1323,7 +1484,8 @@
         "hasAlpha": true,
         "sha256": "5e6fe0b23beadc08781c6211c1979e4aa5bfe9864123bb0ec07d9883f4be789c"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-03.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-03.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "uniquePlanetArts",
@@ -1344,6 +1506,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1354,7 +1517,8 @@
         "hasAlpha": true,
         "sha256": "9db3754c6b933049997a8864a1fe2b543aa0bc972f80291b02acb8da70b5b7a1"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-04.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-04.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "uniquePlanetArts",
@@ -1375,6 +1539,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1385,7 +1550,8 @@
         "hasAlpha": true,
         "sha256": "7c30e423927827a24d6dead2182f2372bd90b16888cad7d54dfaf0d6433ad142"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-05.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-05.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "uniquePlanetArts",
@@ -1406,6 +1572,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1416,7 +1583,8 @@
         "hasAlpha": true,
         "sha256": "3f065581e81f46c8c5809245fe8e153d89700b2282923283768c25dc2038390d"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-06.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-06.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "uniquePlanetArts",
@@ -1437,6 +1605,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1447,7 +1616,8 @@
         "hasAlpha": true,
         "sha256": "bbc34eb2ac8ecd69d2fa322465327f09bf544c120dc4b0e73b119076cce3d33c"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-07.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-07.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "uniquePlanetArts",
@@ -1468,6 +1638,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1478,7 +1649,8 @@
         "hasAlpha": true,
         "sha256": "f748e6099dfefccdf441653218128c43e87b4003d2be2d2c514ced7b2ae12082"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-08.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-08.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "uniquePlanetArts",
@@ -1499,6 +1671,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1509,7 +1682,8 @@
         "hasAlpha": true,
         "sha256": "c11f5612a99818b6bbfc732ebd40355da9ee7c5aef7d82219ad6acf645e073ff"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-09.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-09.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "uniquePlanetArts",
@@ -1530,6 +1704,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1540,7 +1715,8 @@
         "hasAlpha": true,
         "sha256": "07db5301705c560b1eb8b7205411e266623be3cd0b0b1baa6aab5d8ed5e9368e"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-10.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-10.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "uniquePlanetArts",
@@ -1561,6 +1737,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1571,7 +1748,8 @@
         "hasAlpha": true,
         "sha256": "ae45ec26e3b426dc377177a1156b6ca62175b8d26031ce0a75a9303c79feb513"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-11.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-11.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "uniquePlanetArts",
@@ -1592,6 +1770,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1602,7 +1781,8 @@
         "hasAlpha": true,
         "sha256": "03e58911f9483c6ff2f1cedd4a8b9a573458c458bd404a15f4a031909b4c2ad9"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-12.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-12.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "uniquePlanetArts",
@@ -1623,6 +1803,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1633,7 +1814,8 @@
         "hasAlpha": true,
         "sha256": "c810981be3ada3513fe808f4acc5c15a6886962f90e93916816e08ee941c1429"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-13.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-13.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "uniquePlanetArts",
@@ -1654,6 +1836,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1664,7 +1847,8 @@
         "hasAlpha": true,
         "sha256": "07e47a5a5bb019e441a6d76403a10ba0f3dc69da0cda3f7fde22b03ee043bca1"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-14.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-14.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "uniquePlanetArts",
@@ -1685,6 +1869,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1695,7 +1880,8 @@
         "hasAlpha": true,
         "sha256": "fc2001c8a7452bf74e88a2ec59c62e03e2b05c9ba7c737f6e7e1b257f332629b"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-15.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-15.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "uniquePlanetArts",
@@ -1716,6 +1902,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1726,7 +1913,8 @@
         "hasAlpha": true,
         "sha256": "cacd7fa10d02b252b2a363e097ad2c814aa0566da361f2a1223bf8c25a31a249"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-16.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/unique-objects/unique-variant-16.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "anomalyArts",
@@ -1747,6 +1935,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1757,7 +1946,8 @@
         "hasAlpha": true,
         "sha256": "d9e10245dd303b159505e1401e74b843a9ea8920f2dfa3763785a82b06256c82"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/anomalies/anomaly-01.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/anomalies/anomaly-01.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "anomalyArts",
@@ -1778,6 +1968,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1788,7 +1979,8 @@
         "hasAlpha": true,
         "sha256": "e47e415507ece924bf7d4a5a8ce097b0a306b266620908a1c2320323da52518c"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/anomalies/anomaly-02.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/anomalies/anomaly-02.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "anomalyArts",
@@ -1809,6 +2001,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1819,7 +2012,8 @@
         "hasAlpha": true,
         "sha256": "4ab762700bfb3fa4f0d2a79b0d0a1fa0361cc2abd30e8770701bf13cc0e3d83a"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/anomalies/anomaly-03.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/anomalies/anomaly-03.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "anomalyArts",
@@ -1840,6 +2034,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1850,7 +2045,8 @@
         "hasAlpha": true,
         "sha256": "bed2e4dd941e269548d12f0cdfa95f65809657d75a205b8c4565848f41fc462a"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/anomalies/anomaly-04.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/anomalies/anomaly-04.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "anomalyArts",
@@ -1871,6 +2067,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1881,7 +2078,8 @@
         "hasAlpha": true,
         "sha256": "d3b8de0b9723ac26b63727ec23b2a5cf16c187d0a1f91308970157081808274a"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/anomalies/anomaly-05.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/anomalies/anomaly-05.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "anomalyArts",
@@ -1902,6 +2100,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1912,7 +2111,8 @@
         "hasAlpha": true,
         "sha256": "81fc398958ee58ba06da78937ee37f9a3e9504b229592e6056c606c3bed7d27b"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/anomalies/anomaly-06.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/anomalies/anomaly-06.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "anomalyArts",
@@ -1933,6 +2133,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1943,7 +2144,8 @@
         "hasAlpha": true,
         "sha256": "7ea49dd8ecff967f01c42bed2f4b11c3fbcaf4e47a543e94ab961291f105d944"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/anomalies/anomaly-07.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/anomalies/anomaly-07.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "anomalyArts",
@@ -1964,6 +2166,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -1974,7 +2177,8 @@
         "hasAlpha": true,
         "sha256": "f03c99508e614c9e4fc7ee34bbb1bbc5e2b88dd94649122329cc28f695762061"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/anomalies/anomaly-08.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/anomalies/anomaly-08.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "anomalyArts",
@@ -1995,6 +2199,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -2005,7 +2210,8 @@
         "hasAlpha": true,
         "sha256": "e877dec11cc9a24ef126463066aeb562e2cc76891d10c6caf468c6232a602712"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/anomalies/anomaly-09.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/anomalies/anomaly-09.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "anomalyArts",
@@ -2026,6 +2232,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -2036,7 +2243,8 @@
         "hasAlpha": true,
         "sha256": "0839ac1871a7dedcbe21b41647f21a5bdb9ef14922bb0a573591585c8a248342"
       },
-      "runtimeUrl": "./assets/generated/asterion/universe/anomalies/anomaly-10.webp"
+      "runtimeUrl": "./assets/generated/asterion/universe/anomalies/anomaly-10.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "battleFactionIcons",
@@ -2057,6 +2265,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -2067,7 +2276,8 @@
         "hasAlpha": false,
         "sha256": "2103aa0fda6184c4073cb71b8c1a53fd51640c7c9838d33372077a23c7c65e86"
       },
-      "runtimeUrl": "./assets/generated/asterion/factions/battle-icons/aegis.webp"
+      "runtimeUrl": "./assets/generated/asterion/factions/battle-icons/aegis.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "battleFactionIcons",
@@ -2088,6 +2298,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -2098,7 +2309,8 @@
         "hasAlpha": false,
         "sha256": "124f8a5af83de7424bae13a43036b4e918cf5a6c60f2fd95c74b56d6eb750493"
       },
-      "runtimeUrl": "./assets/generated/asterion/factions/battle-icons/synod.webp"
+      "runtimeUrl": "./assets/generated/asterion/factions/battle-icons/synod.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "battleFactionIcons",
@@ -2119,6 +2331,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -2129,7 +2342,8 @@
         "hasAlpha": false,
         "sha256": "adad4efdd881654626663520e9df3c8bc970c3d4428bebae8dda8386cacb1e3f"
       },
-      "runtimeUrl": "./assets/generated/asterion/factions/battle-icons/veyra.webp"
+      "runtimeUrl": "./assets/generated/asterion/factions/battle-icons/veyra.webp",
+      "mapPreviewUrl": null
     },
     {
       "group": "battleFactionIcons",
@@ -2150,6 +2364,7 @@
         "fit": "contain",
         "withoutEnlargement": true
       },
+      "mapPreview": null,
       "duplicateGroup": null,
       "expectedSha256": null,
       "source": {
@@ -2160,7 +2375,8 @@
         "hasAlpha": false,
         "sha256": "d737d7cc3c1da16afca90f8ab88052d265ae75358d68cd65e5f67b2dccf7dba1"
       },
-      "runtimeUrl": "./assets/generated/asterion/factions/battle-icons/pirates.webp"
+      "runtimeUrl": "./assets/generated/asterion/factions/battle-icons/pirates.webp",
+      "mapPreviewUrl": null
     }
   ]
 }

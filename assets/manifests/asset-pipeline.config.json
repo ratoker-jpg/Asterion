@@ -149,8 +149,8 @@
   "spaceMapQaRoot": "docs/assets/qa/universe",
   "spaceMapQaContactSheetCount": 18,
   "spaceMapBudgets": {
-    "sourceFiles": 98,
-    "runtimeTextures": 108,
+    "sourceFiles": 107,
+    "runtimeTextures": 117,
     "transferBytes": 16777216,
     "decodedBytes": 29458432,
     "universeViewDecodedBytes": 8388608,
@@ -175,6 +175,6 @@
     "scope": "asterion-asset-integration-2026-09-25",
     "copiedSourceCount": 69,
     "reusedSourceCount": 3,
-    "runtimeTextureCount": 60
+    "runtimeTextureCount": 70
   }
 }

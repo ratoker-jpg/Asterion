@@ -6,9 +6,9 @@
     "intakeCount": 72,
     "copiedSourceCount": 69,
     "reusedSourceCount": 3,
-    "runtimeTextureCount": 60,
-    "transferBytes": 1256306,
-    "decodedBytes": 9191424,
+    "runtimeTextureCount": 70,
+    "transferBytes": 4794656,
+    "decodedBytes": 45432832,
     "sourceCounts": {
       "reportIcons": 8,
       "scoreIcons": 4,
@@ -29,8 +29,8 @@
     "singleRuntimeTexturePixels": 4194304,
     "spaceMapTransferBytes": 16777216,
     "spaceMapDecodedBytes": 29458432,
-    "spaceMapSourceFiles": 98,
-    "spaceMapRuntimeTextures": 108
+    "spaceMapSourceFiles": 107,
+    "spaceMapRuntimeTextures": 117
   },
   "entries": [
     {
@@ -57,7 +57,8 @@
         "withoutEnlargement": true,
         "bytes": 5174,
         "sha256": "211427f44c0fecf0bbb993b734ab04e17e952eb302ac5f2368afd36177a458da"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "ui.report.battle",
@@ -83,7 +84,8 @@
         "withoutEnlargement": true,
         "bytes": 2658,
         "sha256": "37b0488626f081b368fe8a5a052e1de52088c0a096258e4853826f3cac142828"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "ui.report.command",
@@ -109,7 +111,8 @@
         "withoutEnlargement": true,
         "bytes": 3740,
         "sha256": "b35ff0fb2da81347501d305002de0254badead4babf5741a5f501fe66a51e8bd"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "ui.report.arena",
@@ -135,7 +138,8 @@
         "withoutEnlargement": true,
         "bytes": 6530,
         "sha256": "d1b06e0137fdd0c1deae8cedb56971d198bb10b8311cd02a4747eb0d67a819e8"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "ui.report.flights",
@@ -161,7 +165,8 @@
         "withoutEnlargement": true,
         "bytes": 4918,
         "sha256": "185175bad9ea9749f205a72d80e67697cfb11289aa255379e7a21f587db68497"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "ui.report.alliances",
@@ -187,7 +192,8 @@
         "withoutEnlargement": true,
         "bytes": 3874,
         "sha256": "d6b24b07601b5ae7909fd3116370f0fc95ccffc76635061193a1396f40a245a6"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "ui.report.achievements",
@@ -213,7 +219,8 @@
         "withoutEnlargement": true,
         "bytes": 4906,
         "sha256": "abd72097cbbd12f6310f6adc8fab7c65a82d5ca7c226b1cb2d457f7fba7e03f3"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "ui.report.profile",
@@ -239,7 +246,8 @@
         "withoutEnlargement": true,
         "bytes": 3662,
         "sha256": "73bddd6bb07e1cd969ba189a8a2f78dc6f449bbf45c2d74525df26dda235d0a4"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "ui.score.resourcePoints",
@@ -265,7 +273,8 @@
         "withoutEnlargement": true,
         "bytes": 6310,
         "sha256": "5249b35e674a878631ae8a68780dd8dde5be9c77ef3ed1fd2a4fd1418655b4fe"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "ui.score.battlePoints",
@@ -291,7 +300,8 @@
         "withoutEnlargement": true,
         "bytes": 7446,
         "sha256": "1d95e74883378747a555af6c3a8d87aee4cbc4b9ae5e8410c30cab7cc0730d29"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "ui.score.totalPoints",
@@ -317,7 +327,8 @@
         "withoutEnlargement": true,
         "bytes": 6510,
         "sha256": "c328ea8484e031952963ae468852d66b7ff52f358aceea13523b7413c765b547"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "ui.score.achievementPoints",
@@ -343,7 +354,8 @@
         "withoutEnlargement": true,
         "bytes": 7108,
         "sha256": "a24f9885fdbdad4ee13c88c723b6e9c275bb78b363466e5507ed41095312a9b8"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "faction.general.aegis",
@@ -359,7 +371,8 @@
         "hasAlpha": true,
         "sha256": "a2d1f807672aff9f4a182f304aba3f0818d683c3a34ece1150fc0930917b04c8"
       },
-      "runtime": null
+      "runtime": null,
+      "mapPreview": null
     },
     {
       "semanticId": "faction.general.synod",
@@ -375,7 +388,8 @@
         "hasAlpha": true,
         "sha256": "5f447349c4a9610d616e5ae22147040c0bbc672f379f7504454415191a79911e"
       },
-      "runtime": null
+      "runtime": null,
+      "mapPreview": null
     },
     {
       "semanticId": "faction.general.veyra",
@@ -391,7 +405,8 @@
         "hasAlpha": true,
         "sha256": "94f1061b2b78f707638f322b79ca8d7c722bf114db8425fbcf8a2c3acac024ac"
       },
-      "runtime": null
+      "runtime": null,
+      "mapPreview": null
     },
     {
       "semanticId": "pirate.character.warlord",
@@ -407,7 +422,8 @@
         "hasAlpha": true,
         "sha256": "3af6ca6d213d634016a7ac71570076619114910f080e11b3d104c99147fbc3dc"
       },
-      "runtime": null
+      "runtime": null,
+      "mapPreview": null
     },
     {
       "semanticId": "pirate.ship.ashfang",
@@ -423,7 +439,8 @@
         "hasAlpha": true,
         "sha256": "becacf1240a5bfc733c48870a34f46760fd6c6a4571233557864f9e32098a0f2"
       },
-      "runtime": null
+      "runtime": null,
+      "mapPreview": null
     },
     {
       "semanticId": "pirate.ship.black_harrow",
@@ -439,7 +456,8 @@
         "hasAlpha": true,
         "sha256": "85c2ba758f2c9d20aab361d03e38183ff1cefa02d3892ff6f480d0ac810f781b"
       },
-      "runtime": null
+      "runtime": null,
+      "mapPreview": null
     },
     {
       "semanticId": "pirate.ship.chainjack",
@@ -455,7 +473,8 @@
         "hasAlpha": true,
         "sha256": "c78eef974741c5deb6db2b97c9d3eec3baf34adf27ad64987acd2ec435f4ca63"
       },
-      "runtime": null
+      "runtime": null,
+      "mapPreview": null
     },
     {
       "semanticId": "pirate.ship.crown_eater",
@@ -471,7 +490,8 @@
         "hasAlpha": true,
         "sha256": "01461c4abd0a5f097d2e50bd1ffeff7d7a8f96ed4a06d970aa1922c5e7ea5ee4"
       },
-      "runtime": null
+      "runtime": null,
+      "mapPreview": null
     },
     {
       "semanticId": "pirate.ship.gutterstar",
@@ -487,7 +507,8 @@
         "hasAlpha": true,
         "sha256": "a00075242964cab1900d9b900b30291ec2b180ab5fb1f3a43c9763ea47cb9a88"
       },
-      "runtime": null
+      "runtime": null,
+      "mapPreview": null
     },
     {
       "semanticId": "pirate.ship.red_wraith",
@@ -503,7 +524,8 @@
         "hasAlpha": true,
         "sha256": "9f5ab367f51c6daf4a4b216de98229a22308e2a8f27cbdca814d12cda858a44a"
       },
-      "runtime": null
+      "runtime": null,
+      "mapPreview": null
     },
     {
       "semanticId": "pirate.ship.void_butcher",
@@ -519,7 +541,8 @@
         "hasAlpha": true,
         "sha256": "0a4c675d059f86dd3df8e0f354c0edecd7cd0c0e166a3504d3f851b424d798ef"
       },
-      "runtime": null
+      "runtime": null,
+      "mapPreview": null
     },
     {
       "semanticId": "planet.skin.asterion-01",
@@ -536,15 +559,26 @@
         "sha256": "1f9cf7e4ffdd63478e0c40e7cd0e7dfe5417c7537ed40c76ed8e12407fbaf3e7"
       },
       "runtime": {
-        "outputPath": "public/assets/generated/asterion/universe/planet-variants/orbital-forge.webp",
-        "width": 256,
-        "height": 256,
+        "outputPath": "public/assets/generated/asterion/universe/planet-skins/skin-asterion-01.webp",
+        "width": 1024,
+        "height": 1024,
         "format": "webp",
         "quality": 90,
         "fit": "contain",
         "withoutEnlargement": true,
-        "bytes": 30276,
-        "sha256": "2855aa7ce997c63bf4284aa6a9434db19b097e7d76fc9a75ebc9b73d3937450d"
+        "bytes": 381406,
+        "sha256": "e662ac17942c9f2c5f159670664c58db969056b9721ceb9fea0873ca65b62c8b"
+      },
+      "mapPreview": {
+        "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-01.webp",
+        "width": 128,
+        "height": 128,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 9808,
+        "sha256": "937759e7bb7210b1362563a964b0db88ef5337687caa9ee186fb6b481340e341"
       }
     },
     {
@@ -563,14 +597,25 @@
       },
       "runtime": {
         "outputPath": "public/assets/generated/asterion/universe/planet-skins/skin-asterion-02.webp",
-        "width": 256,
-        "height": 256,
+        "width": 1024,
+        "height": 1024,
         "format": "webp",
         "quality": 90,
         "fit": "contain",
         "withoutEnlargement": true,
-        "bytes": 31330,
-        "sha256": "4cb2566be15df8f5dffa6370b723e8655ef6432a44f4bbe1358c4254addac985"
+        "bytes": 370178,
+        "sha256": "08e3c522306baac40b3807ae658d7267dd7cea3185f6499fef2176540046b8ff"
+      },
+      "mapPreview": {
+        "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-02.webp",
+        "width": 128,
+        "height": 128,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 10392,
+        "sha256": "40ab04f35b7948ed585ff55e0bc2d5acbbff97d330d21c4c83ad217e6e767cbf"
       }
     },
     {
@@ -589,14 +634,25 @@
       },
       "runtime": {
         "outputPath": "public/assets/generated/asterion/universe/planet-skins/skin-asterion-03.webp",
-        "width": 256,
-        "height": 256,
+        "width": 1024,
+        "height": 1024,
         "format": "webp",
         "quality": 90,
         "fit": "contain",
         "withoutEnlargement": true,
-        "bytes": 34780,
-        "sha256": "f61cd3c465b6dfb59e81b32989f553d52a24891c3e70e04ff060c5b4b7c7afe4"
+        "bytes": 458708,
+        "sha256": "2618a67a0d1729355de9b1f10edf7a79e7a94f1a1e3db924ccedfe686b2b6c9a"
+      },
+      "mapPreview": {
+        "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-03.webp",
+        "width": 128,
+        "height": 128,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 10792,
+        "sha256": "a7554e05055aa1db7c1818587a3a90337ead552d059fec40267a374a0c958348"
       }
     },
     {
@@ -615,14 +671,25 @@
       },
       "runtime": {
         "outputPath": "public/assets/generated/asterion/universe/planet-skins/skin-asterion-04.webp",
-        "width": 256,
-        "height": 256,
+        "width": 1024,
+        "height": 1024,
         "format": "webp",
         "quality": 90,
         "fit": "contain",
         "withoutEnlargement": true,
-        "bytes": 35306,
-        "sha256": "c8491929b1f04e6ec7924436a780b84deeb89a18393f83accb9eb1342871eae0"
+        "bytes": 437652,
+        "sha256": "d59eae4955f5b48e8634e3ec695416707b2b48c30e403c493d010cf92e2e5e9d"
+      },
+      "mapPreview": {
+        "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-04.webp",
+        "width": 128,
+        "height": 128,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 11136,
+        "sha256": "7e3993507cb6cb0a825b830b33197fcedaf8f259e60b87f82afbfd7719d8ef96"
       }
     },
     {
@@ -641,14 +708,25 @@
       },
       "runtime": {
         "outputPath": "public/assets/generated/asterion/universe/planet-skins/skin-asterion-05.webp",
-        "width": 256,
-        "height": 256,
+        "width": 1024,
+        "height": 1024,
         "format": "webp",
         "quality": 90,
         "fit": "contain",
         "withoutEnlargement": true,
-        "bytes": 37678,
-        "sha256": "ca4052ee65aa64175a343046cabea588f5a79ca2a5d8ca43b81aaf8d8bd71620"
+        "bytes": 476122,
+        "sha256": "cc776b89d55efe81fe550a3df1e1eb36c06d5a0fcd46287eecb687fa090045b9"
+      },
+      "mapPreview": {
+        "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-05.webp",
+        "width": 128,
+        "height": 128,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 12034,
+        "sha256": "a93525530f8eb959b3de9912084161266852d79fa2d6dbed2b60faffc49dbf03"
       }
     },
     {
@@ -667,14 +745,25 @@
       },
       "runtime": {
         "outputPath": "public/assets/generated/asterion/universe/planet-skins/skin-asterion-06.webp",
-        "width": 256,
-        "height": 256,
+        "width": 1024,
+        "height": 1024,
         "format": "webp",
         "quality": 90,
         "fit": "contain",
         "withoutEnlargement": true,
-        "bytes": 27242,
-        "sha256": "f4b4d2f550d72f41ca4a5060b6c637e50bc2e9053e0a98a60c75a184ccde4c8d"
+        "bytes": 332524,
+        "sha256": "db9794fee4f586883ccc99554f90b0ae6c5ec7e8450acdc771ce103d724e4252"
+      },
+      "mapPreview": {
+        "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-06.webp",
+        "width": 128,
+        "height": 128,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 9308,
+        "sha256": "2efb4affd10bc7dac2df63996e6d1c70ede457fc7522aeca9f69be3d5e910485"
       }
     },
     {
@@ -693,14 +782,25 @@
       },
       "runtime": {
         "outputPath": "public/assets/generated/asterion/universe/planet-skins/skin-asterion-07.webp",
-        "width": 256,
-        "height": 256,
+        "width": 1024,
+        "height": 1024,
         "format": "webp",
         "quality": 90,
         "fit": "contain",
         "withoutEnlargement": true,
-        "bytes": 33806,
-        "sha256": "7f9df2fc609b12688fa64e91c97fb03dac8881dda417a31b8d477efe61d8a8d0"
+        "bytes": 424394,
+        "sha256": "e19afb852af5319372008517f7a57635ef0ff3ed0bce666bddec2f3887e9fa77"
+      },
+      "mapPreview": {
+        "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-07.webp",
+        "width": 128,
+        "height": 128,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 11240,
+        "sha256": "904a3176e81763c575315b3ee665727a6ac38998911df6833605a2c8ea4f3301"
       }
     },
     {
@@ -719,14 +819,25 @@
       },
       "runtime": {
         "outputPath": "public/assets/generated/asterion/universe/planet-skins/skin-asterion-08.webp",
-        "width": 256,
-        "height": 256,
+        "width": 1024,
+        "height": 1024,
         "format": "webp",
         "quality": 90,
         "fit": "contain",
         "withoutEnlargement": true,
-        "bytes": 31908,
-        "sha256": "18826f6948f3697f991e4e5984212983e944b389ddb193c32f577546acda15ad"
+        "bytes": 398212,
+        "sha256": "447f777f54871b1dbbda52d6863a6d45f60dcfca3e0e04c8985876b2580f3fd6"
+      },
+      "mapPreview": {
+        "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-08.webp",
+        "width": 128,
+        "height": 128,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 10526,
+        "sha256": "34fb325b9e5a9a261720f08b0f13b88860c06e1a01333de0605ea9954742bfab"
       }
     },
     {
@@ -745,14 +856,25 @@
       },
       "runtime": {
         "outputPath": "public/assets/generated/asterion/universe/planet-skins/skin-asterion-09.webp",
-        "width": 256,
-        "height": 256,
+        "width": 1024,
+        "height": 1024,
         "format": "webp",
         "quality": 90,
         "fit": "contain",
         "withoutEnlargement": true,
-        "bytes": 33804,
-        "sha256": "bedbaa6bcdc511218315ee5ecc5468f8f7411a479b8b27cf5ef0539f844df579"
+        "bytes": 428660,
+        "sha256": "d56f6287bb58e55a8222d68b5735de110c6b7a948dc6e5bbac80568cac1f7138"
+      },
+      "mapPreview": {
+        "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-09.webp",
+        "width": 128,
+        "height": 128,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 11112,
+        "sha256": "af99e2e698b2950e75d497ac792b5b92d4643d5f4be8b8fc4f9edcbfb5dd7ac5"
       }
     },
     {
@@ -779,7 +901,8 @@
         "withoutEnlargement": true,
         "bytes": 36612,
         "sha256": "71d4313653ecfe72f4cee240128fd8294b5320ea684db3c71841d88c937fef66"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.pirate-planet.variant-02",
@@ -805,7 +928,8 @@
         "withoutEnlargement": true,
         "bytes": 36494,
         "sha256": "9f3e2ece58609c90fe87ce772e6047314e001d140c81fcf7da0df6f4f53b2683"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.pirate-planet.variant-03",
@@ -831,7 +955,8 @@
         "withoutEnlargement": true,
         "bytes": 34132,
         "sha256": "b3c04a3a0dc87d452eae5eedc36c33b6aee8f7e58601172c23102d44e7257204"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.pirate-planet.variant-04",
@@ -857,7 +982,8 @@
         "withoutEnlargement": true,
         "bytes": 39462,
         "sha256": "ddce2290b957da7fd1e531afc81624141fdf42801c2e9094235fa0b6878613ee"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.pirate-planet.variant-05",
@@ -883,7 +1009,8 @@
         "withoutEnlargement": true,
         "bytes": 35390,
         "sha256": "db8ea6f5c8cae71c6ac40758a54a7651f0dae666bcbc5a368dfb432d1487af66"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.pirate-planet.variant-06",
@@ -909,7 +1036,8 @@
         "withoutEnlargement": true,
         "bytes": 35322,
         "sha256": "dd32976e6d0e594400c2398943c8b8486ca3c6de22ee7f407c4ff11e1bc6492d"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.pirate-planet.variant-07",
@@ -935,7 +1063,8 @@
         "withoutEnlargement": true,
         "bytes": 30276,
         "sha256": "2855aa7ce997c63bf4284aa6a9434db19b097e7d76fc9a75ebc9b73d3937450d"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.pirate-planet.variant-08",
@@ -961,7 +1090,8 @@
         "withoutEnlargement": true,
         "bytes": 44034,
         "sha256": "27b31dd08333ee3552588b52dcd2b109d0b4df323f980a64dfaaab6df2680100"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.pirate-planet.variant-09",
@@ -987,7 +1117,8 @@
         "withoutEnlargement": true,
         "bytes": 38746,
         "sha256": "badb3af3e546e5a4d3c0c992273691be7b4cbaf4bd53766401754233dc4fe537"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.pirate-planet.variant-10",
@@ -1013,7 +1144,8 @@
         "withoutEnlargement": true,
         "bytes": 34226,
         "sha256": "56f3e43329861abbbdc27e149ee50c9ebde1eda97d76bd5b98c620cd2800b499"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.unique.variant-01",
@@ -1039,7 +1171,8 @@
         "withoutEnlargement": true,
         "bytes": 25734,
         "sha256": "5b372238b60314c1565150302679b4c4efe395e48897a42f1ec0ed45fa3a9693"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.unique.variant-02",
@@ -1065,7 +1198,8 @@
         "withoutEnlargement": true,
         "bytes": 28466,
         "sha256": "4545f68c14fa7a6f3997d9d89afcb4fb196a6f74ae973907d2da61ac3cecdac8"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.unique.variant-03",
@@ -1091,7 +1225,8 @@
         "withoutEnlargement": true,
         "bytes": 22812,
         "sha256": "caccfdb6cc7981092d338a3cf90d825c3a552367620f5bf049db8ef917cf989e"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.unique.variant-04",
@@ -1117,7 +1252,8 @@
         "withoutEnlargement": true,
         "bytes": 18960,
         "sha256": "acb73e5907d7e0f53da80bc15a4376a528912d946f31a52617834c2b0daf8c54"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.unique.variant-05",
@@ -1143,7 +1279,8 @@
         "withoutEnlargement": true,
         "bytes": 26838,
         "sha256": "b314e416ae232f0c6cd8c4a91644fbc03a0a8d65d565db216a6c974613b43053"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.unique.variant-06",
@@ -1169,7 +1306,8 @@
         "withoutEnlargement": true,
         "bytes": 23306,
         "sha256": "98900dd477b5807ad153a3cfb8afe00c413d2575cd7312a916deeaecc46d81c3"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.unique.variant-07",
@@ -1195,7 +1333,8 @@
         "withoutEnlargement": true,
         "bytes": 25484,
         "sha256": "3e07a99f00a77f331dbc9cef096200f9ed6d7b066ff3889c417d77ce0d9acc03"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.unique.variant-08",
@@ -1221,7 +1360,8 @@
         "withoutEnlargement": true,
         "bytes": 26612,
         "sha256": "be4818a6c85c0be010bfeff513c79d592e926e726f7086525c649e516a03fc01"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.unique.variant-09",
@@ -1247,7 +1387,8 @@
         "withoutEnlargement": true,
         "bytes": 26820,
         "sha256": "ce053e11a4d2ec3977b5f239938254b4de60ab69f19514bcab67cda9415809b6"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.unique.variant-10",
@@ -1273,7 +1414,8 @@
         "withoutEnlargement": true,
         "bytes": 25542,
         "sha256": "1e96124c821ed29bf5db6fe004ef6451cc05562d60653de8d2d79b59c046cfda"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.unique.variant-11",
@@ -1299,7 +1441,8 @@
         "withoutEnlargement": true,
         "bytes": 24332,
         "sha256": "5494073b3efcc85cfbbce508fc6e9bd420b2d278fa06b3372e1e419be0bb805e"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.unique.variant-12",
@@ -1325,7 +1468,8 @@
         "withoutEnlargement": true,
         "bytes": 25466,
         "sha256": "cf2f05a85672096e60711dec1ae66bec05cca4f981728141c75a715975e0c946"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.unique.variant-13",
@@ -1351,7 +1495,8 @@
         "withoutEnlargement": true,
         "bytes": 24840,
         "sha256": "59ef132f35f4e15d2f08739151475841fb09e7dcc410aeec823dc9280b7b3c58"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.unique.variant-14",
@@ -1377,7 +1522,8 @@
         "withoutEnlargement": true,
         "bytes": 17392,
         "sha256": "4eea981a6633143f9978dfa3b8b84381392ebf498a1b91de2437079b7a551d97"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.unique.variant-15",
@@ -1403,7 +1549,8 @@
         "withoutEnlargement": true,
         "bytes": 19164,
         "sha256": "a5e6e0732538c7c7bb1ceb8642089c2c3ee56eb120af5be8a65e667b6dc5c0ec"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.unique.variant-16",
@@ -1429,7 +1576,8 @@
         "withoutEnlargement": true,
         "bytes": 19846,
         "sha256": "b814064cc199fb7089ddfe5f45e22f18a96494493381f4f4a6a186b6a5ea0c4d"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.anomaly.asterion-01",
@@ -1455,7 +1603,8 @@
         "withoutEnlargement": true,
         "bytes": 14896,
         "sha256": "55117cf4586e5470a6bd6fb90352c27593fa45d606f49309fdf6848f03cc1dc2"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.anomaly.asterion-02",
@@ -1481,7 +1630,8 @@
         "withoutEnlargement": true,
         "bytes": 11936,
         "sha256": "fe7b9af70e43e7f78f918d7cba25597e557536456c82109b04e8b2c5486c4a96"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.anomaly.asterion-03",
@@ -1507,7 +1657,8 @@
         "withoutEnlargement": true,
         "bytes": 12000,
         "sha256": "a8f90d77668aeb07085e98bfd83e2da20391fc188f415e2134de0d82733468a5"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.anomaly.asterion-04",
@@ -1533,7 +1684,8 @@
         "withoutEnlargement": true,
         "bytes": 17706,
         "sha256": "1151ef0619e70dd3ba87e655c9ba76de66c33394bb107eca884bbb91a78beea1"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.anomaly.asterion-05",
@@ -1559,7 +1711,8 @@
         "withoutEnlargement": true,
         "bytes": 13318,
         "sha256": "03b81d175ade09997fb34de85793ebea9ef2ec19feda89483656e22f4dcc5120"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.anomaly.asterion-06",
@@ -1585,7 +1738,8 @@
         "withoutEnlargement": true,
         "bytes": 14658,
         "sha256": "aff65e2c546207c162b15089dbf240ab3858c7883358619b2c9311c93e1eb972"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.anomaly.asterion-07",
@@ -1611,7 +1765,8 @@
         "withoutEnlargement": true,
         "bytes": 18160,
         "sha256": "a95d870eb8defca413f2bc28288be20489471be8229cba5146d3ab884f914292"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.anomaly.asterion-08",
@@ -1637,7 +1792,8 @@
         "withoutEnlargement": true,
         "bytes": 13058,
         "sha256": "5c6da7c2a10ea4ad4a80cf001b9d4616bcaefbff79cdd82fbc18b126f029a4df"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.anomaly.asterion-09",
@@ -1663,7 +1819,8 @@
         "withoutEnlargement": true,
         "bytes": 18592,
         "sha256": "2d6315a730325a711b18d47cc8169ab10a12003431648556e674a8b60acadd7b"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "universe.anomaly.asterion-10",
@@ -1689,7 +1846,8 @@
         "withoutEnlargement": true,
         "bytes": 14496,
         "sha256": "8f5bd4b833d2df1566994601c243e637a75c34b661fb9981e148a433d8903fb7"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "ui.battle-faction.aegis",
@@ -1715,7 +1873,8 @@
         "withoutEnlargement": true,
         "bytes": 7638,
         "sha256": "ffb1aa3a7d541ef790947ac9b3316a2ebc63f6f02fa19d7cced9170320b5ab5f"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "ui.battle-faction.synod",
@@ -1741,7 +1900,8 @@
         "withoutEnlargement": true,
         "bytes": 9242,
         "sha256": "8ae55a5d5052d1c7270f35cf917bd682f4b7cbc4f54a2c02efa40ea0e2831eca"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "ui.battle-faction.veyra",
@@ -1767,7 +1927,8 @@
         "withoutEnlargement": true,
         "bytes": 7080,
         "sha256": "2746ed7b8dadadb6543318858f3629e7f46ba26d96444abef2cb05b3b0d23bd6"
-      }
+      },
+      "mapPreview": null
     },
     {
       "semanticId": "ui.battle-faction.pirates",
@@ -1793,7 +1954,8 @@
         "withoutEnlargement": true,
         "bytes": 8528,
         "sha256": "37c25fb39dd8ac52a89c73da9fec779b75075733d8f16f15cc455ff531e71e4a"
-      }
+      },
+      "mapPreview": null
     }
   ]
 }

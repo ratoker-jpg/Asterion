@@ -47,6 +47,15 @@ function defineGroup({ group, semanticPrefix, sourceDirectory, archiveDirectory,
         fit: 'contain',
         withoutEnlargement: true,
       } : null,
+      mapPreview: item.mapPreviewFile ? {
+        outputPath: path.posix.normalize(`public/assets/generated/asterion/universe/planet-previews/${item.mapPreviewFile}`),
+        width: 128,
+        height: 128,
+        format: 'webp',
+        quality: 90,
+        fit: 'contain',
+        withoutEnlargement: true,
+      } : null,
       duplicateGroup: item.duplicateGroup ?? null,
       expectedSha256: item.expectedSha256 ?? null,
     };
@@ -116,17 +125,17 @@ const definitions = [
     group: 'regularPlanetSkins', semanticPrefix: 'planet.skin',
     sourceDirectory: 'assets/source/planets/skins', archiveDirectory: '04_planets/regular',
     family: 'universe-planet',
-    runtime: { directory: 'asterion/universe/planet-skins', width: 256, height: 256, quality: 90 },
+    runtime: { directory: 'asterion/universe/planet-skins', width: 1024, height: 1024, quality: 90 },
     items: [
-      { key: 'skin-asterion-01', id: 'asterion-01', label: 'Облик A-01', file: 'skin-asterion-01.png', archiveFile: 'a_detailed_sci_fi_concept_art_scene_a_single_larg_3_batch_3.png', outputFile: '../planet-variants/orbital-forge.webp', duplicateGroup: 'orbital-forge' },
-      { key: 'skin-asterion-02', id: 'asterion-02', label: 'Облик A-02', file: 'skin-asterion-02.png', archiveFile: 'a_dramatic_high_detail_sci_fi_space_planet_concep_4_batch_4.png', outputFile: 'skin-asterion-02.webp' },
-      { key: 'skin-asterion-03', id: 'asterion-03', label: 'Облик A-03', file: 'skin-asterion-03.png', archiveFile: 'a_high_detail_sci_fi_fantasy_concept_art_render_of_5_batch_5.png', outputFile: 'skin-asterion-03.webp' },
-      { key: 'skin-asterion-04', id: 'asterion-04', label: 'Облик A-04', file: 'skin-asterion-04.png', archiveFile: 'bioluminescent_giant_trees_world.png', outputFile: 'skin-asterion-04.webp' },
-      { key: 'skin-asterion-05', id: 'asterion-05', label: 'Облик A-05', file: 'skin-asterion-05.png', archiveFile: 'crystal_depths_world.png', outputFile: 'skin-asterion-05.webp' },
-      { key: 'skin-asterion-06', id: 'asterion-06', label: 'Облик A-06', file: 'skin-asterion-06.png', archiveFile: 'desert_canyons_world.png', outputFile: 'skin-asterion-06.webp' },
-      { key: 'skin-asterion-07', id: 'asterion-07', label: 'Облик A-07', file: 'skin-asterion-07.png', archiveFile: 'earthlike_blue_world.png', outputFile: 'skin-asterion-07.webp' },
-      { key: 'skin-asterion-08', id: 'asterion-08', label: 'Облик A-08', file: 'skin-asterion-08.png', archiveFile: 'ice_cloud_mountains_world.png', outputFile: 'skin-asterion-08.webp' },
-      { key: 'skin-asterion-09', id: 'asterion-09', label: 'Облик A-09', file: 'skin-asterion-09.png', archiveFile: 'ice_fire_world.png', outputFile: 'skin-asterion-09.webp' },
+      { key: 'skin-asterion-01', id: 'asterion-01', label: 'Облик A-01', file: 'skin-asterion-01.png', archiveFile: 'a_detailed_sci_fi_concept_art_scene_a_single_larg_3_batch_3.png', outputFile: 'skin-asterion-01.webp', mapPreviewFile: 'skin-asterion-01.webp', duplicateGroup: 'orbital-forge' },
+      { key: 'skin-asterion-02', id: 'asterion-02', label: 'Облик A-02', file: 'skin-asterion-02.png', archiveFile: 'a_dramatic_high_detail_sci_fi_space_planet_concep_4_batch_4.png', outputFile: 'skin-asterion-02.webp', mapPreviewFile: 'skin-asterion-02.webp' },
+      { key: 'skin-asterion-03', id: 'asterion-03', label: 'Облик A-03', file: 'skin-asterion-03.png', archiveFile: 'a_high_detail_sci_fi_fantasy_concept_art_render_of_5_batch_5.png', outputFile: 'skin-asterion-03.webp', mapPreviewFile: 'skin-asterion-03.webp' },
+      { key: 'skin-asterion-04', id: 'asterion-04', label: 'Облик A-04', file: 'skin-asterion-04.png', archiveFile: 'bioluminescent_giant_trees_world.png', outputFile: 'skin-asterion-04.webp', mapPreviewFile: 'skin-asterion-04.webp' },
+      { key: 'skin-asterion-05', id: 'asterion-05', label: 'Облик A-05', file: 'skin-asterion-05.png', archiveFile: 'crystal_depths_world.png', outputFile: 'skin-asterion-05.webp', mapPreviewFile: 'skin-asterion-05.webp' },
+      { key: 'skin-asterion-06', id: 'asterion-06', label: 'Облик A-06', file: 'skin-asterion-06.png', archiveFile: 'desert_canyons_world.png', outputFile: 'skin-asterion-06.webp', mapPreviewFile: 'skin-asterion-06.webp' },
+      { key: 'skin-asterion-07', id: 'asterion-07', label: 'Облик A-07', file: 'skin-asterion-07.png', archiveFile: 'earthlike_blue_world.png', outputFile: 'skin-asterion-07.webp', mapPreviewFile: 'skin-asterion-07.webp' },
+      { key: 'skin-asterion-08', id: 'asterion-08', label: 'Облик A-08', file: 'skin-asterion-08.png', archiveFile: 'ice_cloud_mountains_world.png', outputFile: 'skin-asterion-08.webp', mapPreviewFile: 'skin-asterion-08.webp' },
+      { key: 'skin-asterion-09', id: 'asterion-09', label: 'Облик A-09', file: 'skin-asterion-09.png', archiveFile: 'ice_fire_world.png', outputFile: 'skin-asterion-09.webp', mapPreviewFile: 'skin-asterion-09.webp' },
     ],
   }),
   ...defineGroup({
@@ -209,6 +218,17 @@ const expectedCounts = {
   battleFactionIcons: 4,
 };
 
+function runtimeOutputs(entry) {
+  return [
+    ...(entry.runtime ? [{ entry, runtime: entry.runtime, semanticId: entry.semanticId }] : []),
+    ...(entry.mapPreview ? [{ entry, runtime: entry.mapPreview, semanticId: `${entry.semanticId}.map-preview` }] : []),
+  ];
+}
+
+function runtimeOutputsFor(entries) {
+  return entries.flatMap(runtimeOutputs);
+}
+
 function absolute(relativePath) {
   const full = path.resolve(root, relativePath);
   if (full !== root && !full.startsWith(`${root}${path.sep}`)) throw new Error(`Path escapes repository root: ${relativePath}`);
@@ -277,12 +297,13 @@ function sourceAuditRecord(entry, info) {
   };
 }
 
-function runtimeAuditRecord(entry, info, metadata) {
+function runtimeAuditRecord(output, info, metadata) {
+  const { entry, runtime, semanticId } = output;
   return {
-    path: entry.runtime.outputPath,
+    path: runtime.outputPath,
     classification: 'generated-runtime',
     family: entry.family,
-    semanticId: entry.semanticId,
+    semanticId,
     extension: '.webp', format: 'webp',
     width: metadata.width, height: metadata.height,
     channels: metadata.channels ?? 4, hasAlpha: Boolean(metadata.hasAlpha),
@@ -292,10 +313,10 @@ function runtimeAuditRecord(entry, info, metadata) {
   };
 }
 
-function asRuntimePlan(entry) {
-  const { runtime } = entry;
+function asRuntimePlan(output) {
+  const { entry, runtime, semanticId } = output;
   return {
-    semanticId: entry.semanticId,
+    semanticId,
     family: entry.family,
     sourcePath: entry.sourcePath,
     outputPath: runtime.outputPath,
@@ -335,18 +356,18 @@ function tsLiteral(value) {
 
 function renderTypeScript(entries) {
   const byGroup = (group) => entries.filter((entry) => entry.group === group && entry.runtime);
-  const url = (entry) => `./${entry.runtime.outputPath.slice('public/'.length)}`;
-  const object = (group) => Object.fromEntries(byGroup(group).map((entry) => [entry.key, url(entry)]));
-  const skins = byGroup('regularPlanetSkins').map((entry) => ({ id: entry.key, label: entry.label, art: url(entry) }));
+  const url = (runtime) => `./${runtime.outputPath.slice('public/'.length)}`;
+  const object = (group) => Object.fromEntries(byGroup(group).map((entry) => [entry.key, url(entry.runtime)]));
+  const skins = byGroup('regularPlanetSkins').map((entry) => ({ id: entry.key, label: entry.label, art: url(entry.runtime), mapArt: url(entry.mapPreview) }));
   const lines = [
     '// Generated by tools/asterion-asset-integration.mjs. Do not edit by hand.',
     `export const asterionAssetIntegrationAssets = ${tsLiteral({
       reportIcons: object('reportIcons'),
       scoreIcons: object('scoreIcons'),
       regularPlanetSkins: skins,
-      piratePlanetArts: byGroup('piratePlanetArts').map(url),
-      uniquePlanetArts: byGroup('uniquePlanetArts').map(url),
-      anomalyArts: byGroup('anomalyArts').map(url),
+      piratePlanetArts: byGroup('piratePlanetArts').map((entry) => url(entry.runtime)),
+      uniquePlanetArts: byGroup('uniquePlanetArts').map((entry) => url(entry.runtime)),
+      anomalyArts: byGroup('anomalyArts').map((entry) => url(entry.runtime)),
       battleFactionIcons: object('battleFactionIcons'),
     })} as const;`,
     '',
@@ -362,7 +383,8 @@ async function upsertSpaceMapBindings(bindings, entries, sourceInfos) {
   const oldPaths = new Set(obsoleteSources);
   const anomalyEntries = entries.filter((candidate) => candidate.group === 'anomalyArts');
   const taskAnomalySources = new Set(anomalyEntries.map((entry) => entry.sourcePath));
-  bindings.entries = bindings.entries.filter((entry) => !oldPaths.has(entry.sourcePath) && !taskAnomalySources.has(entry.sourcePath));
+  const skinPreviewSources = new Set(entries.filter((entry) => entry.mapPreview).map((entry) => entry.sourcePath));
+  bindings.entries = bindings.entries.filter((entry) => !oldPaths.has(entry.sourcePath) && !taskAnomalySources.has(entry.sourcePath) && !skinPreviewSources.has(entry.sourcePath));
   for (const entry of anomalyEntries) {
     const info = sourceInfos.get(entry.sourcePath);
     bindings.entries.push({
@@ -377,6 +399,23 @@ async function upsertSpaceMapBindings(bindings, entries, sourceInfos) {
       viewGroup: 'universe',
       width: entry.runtime.width,
       height: entry.runtime.height,
+    });
+  }
+  for (const entry of entries.filter((candidate) => candidate.mapPreview)) {
+    const info = sourceInfos.get(entry.sourcePath);
+    const semanticId = `${entry.semanticId}.map-preview`;
+    bindings.entries.push({
+      sourceSemanticId: entry.semanticId,
+      sourcePath: entry.sourcePath,
+      sourceSha256: info.sha256,
+      sourceBytes: info.bytes,
+      runtimeSemanticId: semanticId,
+      outputPath: entry.mapPreview.outputPath,
+      textureKey: `space.${semanticId}`,
+      family: 'universe-planet',
+      viewGroup: 'universe',
+      width: entry.mapPreview.width,
+      height: entry.mapPreview.height,
     });
   }
   bindings.sourceFileCount = new Set(bindings.entries.map((entry) => entry.sourcePath)).size;
@@ -397,7 +436,7 @@ async function countSourcePngs(directory) {
 function addOrReplaceTaskAudit(audit, entries, sourceInfos, runtimeRecords) {
   const taskPaths = new Set([
     ...entries.filter((entry) => entry.disposition !== 'reuse-existing').map((entry) => entry.sourcePath),
-    ...entries.filter((entry) => entry.runtime).map((entry) => entry.runtime.outputPath),
+    ...runtimeOutputsFor(entries).map((output) => output.runtime.outputPath),
     ...obsoleteSources,
     ...obsoleteOutputs,
   ]);
@@ -412,11 +451,12 @@ function addOrReplaceTaskAudit(audit, entries, sourceInfos, runtimeRecords) {
 
 function updateProcessingPlan(plan, entries) {
   const oldPaths = oldAnomalyOutputSet();
-  const taskOutputs = new Set(entries.filter((entry) => entry.runtime).map((entry) => entry.runtime.outputPath));
+  const outputs = runtimeOutputsFor(entries);
+  const taskOutputs = new Set(outputs.map((output) => output.runtime.outputPath));
   plan.entries = plan.entries.filter((entry) => !oldPaths.has(entry.outputPath) && !taskOutputs.has(entry.outputPath));
   const uniqueByPath = new Map();
-  for (const entry of entries.filter((candidate) => candidate.runtime)) {
-    if (!uniqueByPath.has(entry.runtime.outputPath)) uniqueByPath.set(entry.runtime.outputPath, asRuntimePlan(entry));
+  for (const output of outputs) {
+    if (!uniqueByPath.has(output.runtime.outputPath)) uniqueByPath.set(output.runtime.outputPath, asRuntimePlan(output));
   }
   plan.entries.push(...uniqueByPath.values());
   return plan;
@@ -469,19 +509,23 @@ async function writeAuditReport(manifest, sourceInfos, runtimeRecords, config, s
       spaceMapSourceFiles: spaceMap.sourceFileCount,
       spaceMapRuntimeTextures: spaceMap.runtimeTextureCount,
     },
-    entries: manifest.entries.map((entry) => ({
+    entries: manifest.entries.map((entry) => {
+      const runtimeRecord = (runtime) => runtime ? {
+        ...runtime,
+        bytes: runtimeRecords.find((record) => record.path === runtime.outputPath)?.bytes,
+        sha256: runtimeRecords.find((record) => record.path === runtime.outputPath)?.sha256,
+      } : null;
+      return ({
       semanticId: entry.semanticId,
       group: entry.group,
       archiveFile: entry.archiveFile,
       disposition: entry.disposition,
       sourcePath: entry.sourcePath,
       source: sourceInfos.has(entry.sourcePath) ? sourceInfos.get(entry.sourcePath) : null,
-      runtime: entry.runtime ? {
-        ...entry.runtime,
-        bytes: runtimeRecords.find((record) => record.path === entry.runtime.outputPath)?.bytes,
-        sha256: runtimeRecords.find((record) => record.path === entry.runtime.outputPath)?.sha256,
-      } : null,
-    })),
+      runtime: runtimeRecord(entry.runtime),
+      mapPreview: runtimeRecord(entry.mapPreview),
+    });
+    }),
   };
   await writeJson(taskAuditPath, taskAudit);
 }
@@ -556,17 +600,19 @@ async function verifyRuntimeFiles(manifest, auditAssets) {
     if (entry.expectedSha256 && entry.expectedSha256 !== current.sha256) throw new Error(`Reusable source SHA-256 differs from pinned provenance: ${entry.sourcePath}`);
     const sourceAudit = auditByPath.get(entry.sourcePath);
     if (sourceAudit && sourceAudit.sha256 !== current.sha256) throw new Error(`Source SHA-256 differs from global asset audit: ${entry.sourcePath}`);
-    if (!entry.runtime) continue;
-    const previous = expected.get(entry.runtime.outputPath);
-    if (previous && previous.sha256 !== current.sha256) throw new Error(`Shared runtime path points to different sources: ${entry.runtime.outputPath}`);
-    expected.set(entry.runtime.outputPath, current);
-    const file = absolute(entry.runtime.outputPath);
-    const data = await fs.readFile(file);
-    const outputAudit = auditByPath.get(entry.runtime.outputPath);
-    if (outputAudit && outputAudit.sha256 !== createHash('sha256').update(data).digest('hex')) throw new Error(`Runtime output SHA-256 differs from asset audit: ${entry.runtime.outputPath}`);
-    const metadata = await sharp(data).metadata();
-    if (metadata.format !== 'webp') throw new Error(`Runtime output is not WebP: ${entry.runtime.outputPath}`);
-    if (!metadata.width || !metadata.height || metadata.width > entry.runtime.width || metadata.height > entry.runtime.height) throw new Error(`Runtime dimensions exceed target: ${entry.runtime.outputPath}`);
+    for (const output of runtimeOutputs(entry)) {
+      const { runtime } = output;
+      const previous = expected.get(runtime.outputPath);
+      if (previous && previous.sha256 !== current.sha256) throw new Error(`Shared runtime path points to different sources: ${runtime.outputPath}`);
+      expected.set(runtime.outputPath, current);
+      const file = absolute(runtime.outputPath);
+      const data = await fs.readFile(file);
+      const outputAudit = auditByPath.get(runtime.outputPath);
+      if (outputAudit && outputAudit.sha256 !== createHash('sha256').update(data).digest('hex')) throw new Error(`Runtime output SHA-256 differs from asset audit: ${runtime.outputPath}`);
+      const metadata = await sharp(data).metadata();
+      if (metadata.format !== 'webp') throw new Error(`Runtime output is not WebP: ${runtime.outputPath}`);
+      if (!metadata.width || !metadata.height || metadata.width > runtime.width || metadata.height > runtime.height) throw new Error(`Runtime dimensions exceed target: ${runtime.outputPath}`);
+    }
   }
   const actualFiles = [];
   async function visit(directory) {
@@ -591,7 +637,9 @@ async function generate() {
   const previousByOutput = new Map();
   const previousBySource = new Map();
   for (const entry of previousManifest?.entries ?? []) {
-    if (entry.runtime && !previousByOutput.has(entry.runtime.outputPath)) previousByOutput.set(entry.runtime.outputPath, entry);
+    for (const output of runtimeOutputs(entry)) {
+      if (!previousByOutput.has(output.runtime.outputPath)) previousByOutput.set(output.runtime.outputPath, { entry, runtime: output.runtime });
+    }
     if (!previousBySource.has(entry.sourcePath)) previousBySource.set(entry.sourcePath, entry);
   }
   const previousAuditByPath = new Map((previousAssetAudit?.assets ?? []).map((entry) => [entry.path, entry]));
@@ -605,48 +653,50 @@ async function generate() {
   }
   const actualCopyCount = entries.filter((entry) => entry.disposition !== 'reuse-existing').length;
   const outputs = new Map();
-  for (const entry of entries.filter((candidate) => candidate.runtime)) {
-    const previous = outputs.get(entry.runtime.outputPath);
+  for (const output of runtimeOutputsFor(entries)) {
+    const { entry, runtime } = output;
+    const previous = outputs.get(runtime.outputPath);
     const info = sourceInfos.get(entry.sourcePath);
-    if (previous && previous.info.sha256 !== info.sha256) throw new Error(`Output collision between ${previous.entry.sourcePath} (${previous.info.sha256}) and ${entry.sourcePath} (${info.sha256}): ${entry.runtime.outputPath}`);
-    if (!previous) outputs.set(entry.runtime.outputPath, { entry, info });
+    if (previous && previous.info.sha256 !== info.sha256) throw new Error(`Output collision between ${previous.entry.sourcePath} (${previous.info.sha256}) and ${entry.sourcePath} (${info.sha256}): ${runtime.outputPath}`);
+    if (!previous) outputs.set(runtime.outputPath, { ...output, info });
   }
 
-  for (const { entry } of outputs.values()) {
-    const outputPath = absolute(entry.runtime.outputPath);
+  for (const output of outputs.values()) {
+    const { entry, runtime } = output;
+    const outputPath = absolute(runtime.outputPath);
     const source = absolute(entry.sourcePath);
-    const previous = previousByOutput.get(entry.runtime.outputPath);
+    const previous = previousByOutput.get(runtime.outputPath);
     const currentInfo = sourceInfos.get(entry.sourcePath);
-    const reusable = previous?.source?.sha256 === currentInfo.sha256
-      && JSON.stringify(previous.runtime) === JSON.stringify(entry.runtime)
+    const reusable = previous?.entry.source?.sha256 === currentInfo.sha256
+      && JSON.stringify(previous.runtime) === JSON.stringify(runtime)
       && await fs.readFile(outputPath).then(async (bytes) => {
         const metadata = await sharp(bytes).metadata();
-        const priorAudit = previousAuditByPath.get(entry.runtime.outputPath);
+        const priorAudit = previousAuditByPath.get(runtime.outputPath);
         const outputSha256 = createHash('sha256').update(bytes).digest('hex');
         return metadata.format === 'webp'
           && Boolean(metadata.width && metadata.height)
-          && metadata.width <= entry.runtime.width
-          && metadata.height <= entry.runtime.height
+          && metadata.width <= runtime.width
+          && metadata.height <= runtime.height
           && priorAudit?.sha256 === outputSha256;
       }).catch(() => false);
     if (reusable) continue;
     await fs.mkdir(path.dirname(outputPath), { recursive: true });
     await sharp(source, { failOn: 'error' })
-      .resize(entry.runtime.width, entry.runtime.height, {
-        fit: entry.runtime.fit,
-        withoutEnlargement: entry.runtime.withoutEnlargement,
+      .resize(runtime.width, runtime.height, {
+        fit: runtime.fit,
+        withoutEnlargement: runtime.withoutEnlargement,
         background: { r: 0, g: 0, b: 0, alpha: 0 },
       })
-      .webp({ quality: entry.runtime.quality, alphaQuality: 100, effort: 6 })
+      .webp({ quality: runtime.quality, alphaQuality: 100, effort: 6 })
       .toFile(outputPath);
   }
 
   const outputMetas = new Map();
   const runtimeRecords = [];
-  for (const [outputPath, { entry }] of outputs) {
+  for (const [outputPath, output] of outputs) {
     const bytes = await fs.readFile(absolute(outputPath));
     const metadata = await sharp(bytes).metadata();
-    const record = runtimeAuditRecord(entry, bytes, metadata);
+    const record = runtimeAuditRecord(output, bytes, metadata);
     runtimeRecords.push(record);
     outputMetas.set(outputPath, metadata);
   }
@@ -656,6 +706,7 @@ async function generate() {
     ...entry,
     source: sourceInfos.get(entry.sourcePath),
     runtimeUrl: entry.runtime ? `./${entry.runtime.outputPath.slice('public/'.length)}` : null,
+    mapPreviewUrl: entry.mapPreview ? `./${entry.mapPreview.outputPath.slice('public/'.length)}` : null,
   }));
   const manifest = taskSourceManifest(manifestEntries);
   const config = await readJson('assets/manifests/asset-pipeline.config.json');
@@ -708,7 +759,7 @@ async function audit() {
   await verifyRuntimeFiles(manifest, sourceAudit.assets);
   const budgetSummary = await verifyBudgets(config, sourceAudit, bindings);
   const taskRuntime = sourceAudit.assets.filter((entry) => entry.path.startsWith(`${runtimeRoot}/`));
-  const expectedOutputPaths = new Set(manifest.entries.filter((entry) => entry.runtime).map((entry) => entry.runtime.outputPath));
+  const expectedOutputPaths = new Set(runtimeOutputsFor(manifest.entries).map((output) => output.runtime.outputPath));
   if (taskRuntime.length !== expectedOutputPaths.size) throw new Error(`Task audit has ${taskRuntime.length} runtime entries but manifest has ${expectedOutputPaths.size} outputs.`);
   const planPaths = new Set(processingPlan.entries.map((entry) => entry.outputPath));
   for (const outputPath of expectedOutputPaths) if (!planPaths.has(outputPath)) throw new Error(`Processing plan omits ${outputPath}`);

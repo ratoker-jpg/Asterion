@@ -949,9 +949,9 @@ async function runViewport(width, height) {
     await waitFor(win, `Array.from(document.querySelectorAll('.skin-picker-grid [data-qa-planet-skin^="skin-asterion-"] img')).every((image) => image.complete && image.naturalWidth > 0)`);
     const picker = await win.webContents.executeJavaScript(`(() => ({
       total: document.querySelectorAll('.skin-picker-grid [data-qa-planet-skin]').length,
-      newSkins: Array.from(document.querySelectorAll('.skin-picker-grid [data-qa-planet-skin^="skin-asterion-"]')).map((button) => ({ id: button.getAttribute('data-qa-planet-skin'), label: button.querySelector('span')?.textContent?.trim() || '', src: button.querySelector('img')?.getAttribute('src') || '', loaded: Boolean(button.querySelector('img')?.complete && button.querySelector('img')?.naturalWidth > 0) })),
+      newSkins: Array.from(document.querySelectorAll('.skin-picker-grid [data-qa-planet-skin^="skin-asterion-"]')).map((button) => ({ id: button.getAttribute('data-qa-planet-skin'), label: button.querySelector('span')?.textContent?.trim() || '', src: button.querySelector('img')?.getAttribute('src') || '', loaded: Boolean(button.querySelector('img')?.complete && button.querySelector('img')?.naturalWidth > 0), naturalWidth: button.querySelector('img')?.naturalWidth || 0, naturalHeight: button.querySelector('img')?.naturalHeight || 0 })),
     }))()`);
-    if (picker.total !== 30 || picker.newSkins.length !== 9 || picker.newSkins.some((skin, index) => skin.id !== `skin-asterion-${String(index + 1).padStart(2, '0')}` || !skin.label || !skin.loaded || !skin.src.endsWith('.webp'))) {
+    if (picker.total !== 30 || picker.newSkins.length !== 9 || picker.newSkins.some((skin, index) => skin.id !== `skin-asterion-${String(index + 1).padStart(2, '0')}` || !skin.label || !skin.loaded || skin.naturalWidth !== 1024 || skin.naturalHeight !== 1024 || !skin.src.endsWith('.webp'))) {
       throw new Error(`${label}: new planet skins are missing from the picker ${JSON.stringify(picker)}`);
     }
     const selectedSkinId = 'skin-asterion-09';
@@ -964,9 +964,13 @@ async function runViewport(width, height) {
     await reload(win);
     await win.webContents.executeJavaScript(`document.querySelector('[data-qa-navigation="primary"] [data-qa-route="planet"]')?.click()`);
     await waitFor(win, `document.querySelector('[data-qa-planet-skin-art]')?.complete && document.querySelector('[data-qa-planet-skin-art]')?.naturalWidth > 0`);
-    const persistedSkin = await win.webContents.executeJavaScript(`(() => ({ saved: JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').planets?.['helion-01']?.skin || '', src: document.querySelector('[data-qa-planet-skin-art]')?.getAttribute('src') || '' }))()`);
-    if (persistedSkin.saved !== selectedSkinId || !persistedSkin.src.endsWith('/skin-asterion-09.webp')) throw new Error(`${label}: selected skin did not survive reload ${JSON.stringify(persistedSkin)}`);
+    const persistedSkin = await win.webContents.executeJavaScript(`(() => { const image = document.querySelector('[data-qa-planet-skin-art]'); const rect = image?.getBoundingClientRect(); return { saved: JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').planets?.['helion-01']?.skin || '', src: image?.getAttribute('src') || '', naturalWidth: image?.naturalWidth || 0, naturalHeight: image?.naturalHeight || 0, displayWidth: rect?.width || 0, displayHeight: rect?.height || 0 }; })()`);
+    if (persistedSkin.saved !== selectedSkinId || !persistedSkin.src.endsWith('/skin-asterion-09.webp') || persistedSkin.naturalWidth !== 1024 || persistedSkin.naturalHeight !== 1024 || persistedSkin.displayWidth <= 0 || persistedSkin.displayHeight <= 0 || persistedSkin.displayWidth > 520 || persistedSkin.displayHeight > 520) throw new Error(`${label}: selected high-resolution skin did not survive reload or has unexpected display size ${JSON.stringify(persistedSkin)}`);
     await capture(win, directory, 'planet-skin-persisted');
+    await clickPrimary(win, 'universe');
+    await waitFor(win, `(() => { const image = document.querySelector('[data-qa-universe-object="player-planet-helion-01"] img'); return image?.complete && image.naturalWidth === 128 && image.naturalHeight === 128; })()`);
+    const mapSkinPreview = await win.webContents.executeJavaScript(`(() => { const image = document.querySelector('[data-qa-universe-object="player-planet-helion-01"] img'); return { src: image?.getAttribute('src') || '', naturalWidth: image?.naturalWidth || 0, naturalHeight: image?.naturalHeight || 0 }; })()`);
+    if (!mapSkinPreview.src.endsWith('/planet-previews/skin-asterion-09.webp') || mapSkinPreview.naturalWidth !== 128 || mapSkinPreview.naturalHeight !== 128) throw new Error(`${label}: Universe did not use the audited 128px skin preview ${JSON.stringify(mapSkinPreview)}`);
 
     const screenshots = skipScreenshots ? [] : fs.readdirSync(directory).filter((name) => name.endsWith('.png')).sort();
     return {
@@ -981,7 +985,7 @@ async function runViewport(width, height) {
         live: { coordinate: debrisFixtures.liveCoordinate, amount: liveMarker.amount, interaction: liveDebrisInteraction },
         cleared: true,
       },
-      planetSkin: { pickerCount: picker.total, selected: selectedSkinId, persisted: persistedSkin.saved === selectedSkinId, runtimeArt: persistedSkin.src },
+      planetSkin: { pickerCount: picker.total, selected: selectedSkinId, persisted: persistedSkin.saved === selectedSkinId, runtimeArt: persistedSkin.src, naturalResolution: [persistedSkin.naturalWidth, persistedSkin.naturalHeight], displaySize: [persistedSkin.displayWidth, persistedSkin.displayHeight], mapPreview: mapSkinPreview },
       asteroidsHoldPosition,
       timedObjectSystems: { pirate: pirateSystem, anomaly: anomalySystem, unique: uniqueSystem },
       pirateAnimation,
