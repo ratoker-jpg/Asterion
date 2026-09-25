@@ -996,6 +996,11 @@ test('recycling, trade, and spaceport actions remain thin domain-backed transiti
   }, context(job.finishAt + 1), 855_880, { source: 'debris', target: 'metal', amount: 100 });
   assert.equal(trade.execution.ok, true);
   assert.equal(trade.state.metal, collected.state.metal);
+  assert.deepEqual(trade.state.planets['helion-01'].resources, {
+    metal: trade.state.metal,
+    minerals: trade.state.minerals,
+    gas: trade.state.gas,
+  });
   assert.equal(trade.execution.credit?.accepted.metal, 0);
   assert.equal(trade.execution.credit?.burned.metal, 60);
 
@@ -1014,6 +1019,11 @@ test('recycling, trade, and spaceport actions remain thin domain-backed transiti
   const upgrade = startSpaceportUpgrade(spaceportState, spaceportContext, 'ships', candidate.id, 'spaceport-1');
   assert.equal(upgrade.ok, true);
   assert.equal(upgrade.state.planets['helion-01'].spaceportUpgrades.shipQueue.length, 1);
+  assert.deepEqual(upgrade.state.planets['helion-01'].resources, {
+    metal: upgrade.state.metal,
+    minerals: upgrade.state.minerals,
+    gas: upgrade.state.gas,
+  });
 });
 
 test('manual and automatic recycling credits persist on the current planet wallet', () => {

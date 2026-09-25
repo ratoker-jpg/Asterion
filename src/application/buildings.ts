@@ -426,13 +426,17 @@ export function executeTradeAction(
     context.now,
   );
   if (!execution.ok) return { state, execution };
-  const withWallet = replacePlanetResources({ ...state, schemaVersion: SAVE_SCHEMA_VERSION }, context.planetId, execution.state.wallet);
+  const withTrade = replacePlanetState({ ...state, schemaVersion: SAVE_SCHEMA_VERSION }, context.planetId, {
+    ...planet,
+    trade: execution.state.trade,
+    recycling: { ...planet.recycling, availableDebris: execution.state.wallet.debris },
+  });
   return {
     execution,
-    state: replacePlanetState(withWallet, context.planetId, {
-      ...planet,
-      trade: execution.state.trade,
-      recycling: { ...planet.recycling, availableDebris: execution.state.wallet.debris },
+    state: replacePlanetResources(withTrade, context.planetId, {
+      metal: execution.state.wallet.metal,
+      minerals: execution.state.wallet.minerals,
+      gas: execution.state.wallet.gas,
     }),
   };
 }
@@ -485,13 +489,13 @@ export function startSpaceportUpgrade(
   }, track, shipId, context.now, taskId);
   if (!transition.ok) return { ok: false, state, reason: transition.reason, entityName: shipId };
   const entityName = getSpaceportUpgradeEntity(track, shipId, state.profile.factionId)?.name ?? shipId;
-  const withWallet = replacePlanetResources({ ...state, schemaVersion: SAVE_SCHEMA_VERSION }, context.planetId, transition.wallet);
+  const withUpgrade = replacePlanetState({ ...state, schemaVersion: SAVE_SCHEMA_VERSION }, context.planetId, {
+    ...planet,
+    spaceportUpgrades: { ...transition.state, shipLevels: {} },
+  });
   return {
     ok: true,
-    state: replacePlanetState(withWallet, context.planetId, {
-      ...planet,
-      spaceportUpgrades: { ...transition.state, shipLevels: {} },
-    }),
+    state: replacePlanetResources(withUpgrade, context.planetId, transition.wallet),
     reason: null,
     entityName,
   };
@@ -528,11 +532,11 @@ export function cancelSpaceportUpgrade(
     mode: context.mode,
     testTimeScale: context.testTimeScale,
   }, taskId, context.now, context.rng);
-  const withWallet = replacePlanetResources({ ...state, schemaVersion: SAVE_SCHEMA_VERSION }, context.planetId, transition.wallet);
-  const nextState = replacePlanetState(withWallet, context.planetId, {
+  const withUpgrade = replacePlanetState({ ...state, schemaVersion: SAVE_SCHEMA_VERSION }, context.planetId, {
     ...planet,
     spaceportUpgrades: { ...transition.state, shipLevels: {} },
   });
+  const nextState = replacePlanetResources(withUpgrade, context.planetId, transition.wallet);
   return {
     ok: transition.ok,
     state: transition.ok || nextState !== state ? nextState : state,
