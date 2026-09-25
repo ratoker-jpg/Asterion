@@ -84,26 +84,10 @@ async function reload(win) {
 }
 
 async function rendererMutationAndReload(win, source, label) {
-  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  const execution = win.webContents.executeJavaScript(source)
-    .then((value) => ({ value }))
-    .catch((error) => ({ error: String(error?.stack || error) }));
-  const first = await Promise.race([
-    execution.then((result) => ({ result })),
-    loaded.then(() => ({ loaded: true })),
-  ]);
-  if (first.result?.value === false) throw new Error(`${label}: renderer mutation was rejected`);
-  if (!first.loaded) {
-    const reloaded = await Promise.race([
-      loaded.then(() => true),
-      sleep(10_000).then(() => false),
-    ]);
-    if (!reloaded) throw new Error(`${label}: renderer mutation did not reload the page: ${JSON.stringify(first.result)}`);
-  }
-  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
-  await win.webContents.executeJavaScript('document.fonts?.ready');
-  await settle(win);
-  return first.result;
+  const applied = await win.webContents.executeJavaScript(source);
+  if (applied === false) throw new Error(`${label}: renderer mutation was rejected`);
+  await reload(win);
+  return applied;
 }
 
 async function resetTestSave(win) {
@@ -241,7 +225,6 @@ async function holdActiveResourceQueue(win) {
         finishAt = item.finishAt;
       });
       localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-      window.location.reload();
       return true;
     } catch {
       return false;
@@ -478,7 +461,6 @@ async function verifyResourceZoneFlow(win, directory) {
     planet.resources={...(planet.resources||{}),metal:0};
     save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
-    window.location.reload();
     return true;
   })()`, 'Could not seed insufficient-resource wallet fixture');
   const reloadedInsufficientFixture = await win.webContents.executeJavaScript(`(() => {
@@ -510,7 +492,6 @@ async function verifyResourceZoneFlow(win, directory) {
     save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
-    window.location.reload();
     return true;
   })()`, 'Could not seed the resource queue QA fixture');
   const queueFixtureWallet = await win.webContents.executeJavaScript(`(() => {
@@ -566,7 +547,6 @@ async function verifyResourceZoneFlow(win, directory) {
     q[2].startedAt=q[1].finishAt;
     q[2].finishAt=q[2].startedAt+45000;
     localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
-    window.location.reload();
     return true;
   })()`, 'Could not prepare the building completion transition fixture');
   const completionExpression = `(() => { try { const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}'); const q=save.queues?.['helion-01']; return Array.isArray(q)&&q.length===2&&q[0]?.assetRole==='gas-production-1'&&save.planets?.['helion-01']?.buildings?.['basic-energy']===2&&save.planets?.['helion-01']?.energy===${TEST_COMPLETED_ENERGY}; } catch { return false; } })()`;
