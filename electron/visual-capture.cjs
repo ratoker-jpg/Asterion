@@ -499,25 +499,27 @@ async function verifyResourceZoneFlow(win, directory) {
   await capture(win,directory,'resource-zone-insufficient');
 
   await resetTestSave(win);
-  const queueFixtureReady = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  const queueFixtureSeeded = await win.webContents.executeJavaScript(`(() => {
+  await rendererMutationAndReload(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
     const planet = save.planets?.['helion-01'];
     if (!planet) return false;
     save.metal = ${TEST_QUEUE_START_METAL};
     save.minerals = 100_000_000;
+    planet.resources = { ...(planet.resources || {}), metal: ${TEST_QUEUE_START_METAL}, minerals: 100_000_000 };
     planet.energy = ${TEST_QUEUE_START_ENERGY};
     save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
     window.location.reload();
     return true;
-  })()`).catch(() => false);
-  if (!queueFixtureSeeded) throw new Error('Could not seed the resource queue QA fixture');
-  await queueFixtureReady;
-  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
-  await win.webContents.executeJavaScript('document.fonts?.ready');
-  await settle(win);
+  })()`, 'Could not seed the resource queue QA fixture');
+  const queueFixtureWallet = await win.webContents.executeJavaScript(`(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+    return { rootMetal: save.metal, planetMetal: save.planets?.['helion-01']?.resources?.metal };
+  })()`);
+  if (queueFixtureWallet.rootMetal !== TEST_QUEUE_START_METAL || queueFixtureWallet.planetMetal !== TEST_QUEUE_START_METAL) {
+    throw new Error(`Resource queue canonical wallet did not survive fixture reload: ${JSON.stringify(queueFixtureWallet)}`);
+  }
   await activateResourceZone(win);
 
   for(const [index, role] of ['basic-energy','gas-production-1','hangar'].entries()) {
