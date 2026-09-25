@@ -455,6 +455,16 @@ function rescheduleScienceQueue(queue: readonly ScienceQueueTask[], canceledWasA
   });
 }
 
+/** Drops unfinished research owned by a destroyed planet without refund or dependency cascade. */
+export function discardScienceTasksForPlanet(state: ScienceState, planetId: string, now: number): ScienceState {
+  const queue = state.queue.filter((task) => task.planetId !== planetId);
+  if (queue.length === state.queue.length) return state;
+  return {
+    ...state,
+    queue: rescheduleScienceQueue(queue, state.queue[0]?.planetId === planetId, Math.max(0, Math.floor(now))),
+  };
+}
+
 function removeDependentScienceTasks(
   queue: readonly ScienceQueueTask[],
   canceledIndex: number,

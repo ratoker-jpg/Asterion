@@ -66,6 +66,7 @@ import {
   hunterDetects,
   normalizeRngRoll,
   resolveSpyReportQuality,
+  syncSpyTargetCommanderCounts,
   SPY_REPORT_COOLDOWN_MS,
 } from '../domain/espionage/runtime.ts';
 import type { EspionageRollKind } from '../domain/espionage/runtime.ts';
@@ -979,16 +980,15 @@ export function startBot01IncomingScenario(
     for (const [commanderId, quantity] of Object.entries(selectedCommanders) as [CommanderId, number][]) {
       fleet.commanders[commanderId] = Math.max(0, (fleet.commanders[commanderId] ?? 0) - quantity);
     }
-    const sourceAfter: SpyTargetState = {
+    const sourceAfter: SpyTargetState = syncSpyTargetCommanderCounts({
       ...source,
-      fleet,
       resources: { ...source.resources, gas: Math.max(0, source.resources.gas - flight.gasCost) },
       population: {
         total: calculateFleetPopulation(fleet, source.raceId) + calculateDefensePopulation(source.defense, source.raceId),
         fleet: calculateFleetPopulation(fleet, source.raceId),
         defense: calculateDefensePopulation(source.defense, source.raceId),
       },
-    };
+    }, fleet, nextEspionage.bot01Profile);
     const targets = { ...getEspionageTargets(nextEspionage), [source.id]: sourceAfter };
     nextEspionage = {
       ...nextEspionage,

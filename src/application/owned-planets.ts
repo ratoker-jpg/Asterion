@@ -6,6 +6,7 @@ import { createDefaultSpaceportUpgradeState } from '../domain/buildings/spacepor
 import { createDefaultTradeState } from '../domain/buildings/trade.ts';
 import { createDefaultRepairWorkshopState } from '../domain/repair/workshop.ts';
 import { addDebris } from '../domain/flights/cargo.ts';
+import { discardScienceTasksForPlanet } from '../domain/science/runtime.ts';
 import type { UniverseCoordinate } from '../domain/universe/types.ts';
 import { initializePlanetEnergy } from './energy.ts';
 import {
@@ -143,6 +144,7 @@ export function destroyOwnedPlanet(state: SaveState, planetId: PlanetId, now: nu
       currentPlanetId,
       planets,
       queues,
+      science: discardScienceTasksForPlanet(state.science, planetId, now),
       flights,
       resourceClock: { ...state.resourceClock, ...currentClock, byPlanet: byPlanetClock },
       metal: currentWallet.metal,

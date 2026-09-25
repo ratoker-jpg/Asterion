@@ -8,7 +8,7 @@ import { resolvePlanetSiege } from '../domain/combat/planet-siege.ts';
 import type { BattleReport } from '../domain/combat/report.ts';
 import { COMBAT_TECHNOLOGIES, normalizeCombatTechnologies, type CombatTechnologyLevels } from '../domain/combat/technologies.ts';
 import type { CombatInput, CombatStackInput, SimulatorMaxRounds } from '../domain/combat/simulator.ts';
-import { getEspionageTargets } from '../domain/espionage/runtime.ts';
+import { getEspionageTargets, syncSpyTargetCommanderCounts } from '../domain/espionage/runtime.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 import { resolveSpyOwnerProfile } from '../domain/espionage/owner-profile.ts';
 import { calculateDefensePopulation } from '../domain/fleet/production.ts';
@@ -730,9 +730,8 @@ export function creditBot01AttackReturn(state: SaveState, flight: FlightRecord, 
   }
 
   const loot = flight.attackResolution?.loot;
-  const nextSource: SpyTargetState = {
+  const nextSource: SpyTargetState = syncSpyTargetCommanderCounts({
     ...source,
-    fleet,
     population: {
       total: calculateFleetPopulation(fleet, source.raceId) + calculateDefensePopulation(source.defense, source.raceId),
       fleet: calculateFleetPopulation(fleet, source.raceId),
@@ -744,7 +743,7 @@ export function creditBot01AttackReturn(state: SaveState, flight: FlightRecord, 
       minerals: safeCount(source.resources.minerals + loot.minerals),
       gas: safeCount(source.resources.gas + loot.gas),
     } } : {}),
-  };
+  }, fleet, espionage?.bot01Profile);
   const targets = { ...getEspionageTargets(espionage!), [source.id]: nextSource };
   return {
     state: {

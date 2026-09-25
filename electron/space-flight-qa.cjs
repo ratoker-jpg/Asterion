@@ -45,6 +45,19 @@ async function readSave(win) {
   return win.webContents.executeJavaScript(`JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null')`);
 }
 
+function countdownSeconds(value) {
+  const match = /^(\d+):(\d{2})$/.exec(value);
+  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+}
+
+function assertArrivalCountdown(label, displayed, savedArrivalAt) {
+  const displayedSeconds = countdownSeconds(displayed.text);
+  const expectedSeconds = Math.max(0, Math.ceil((savedArrivalAt - displayed.observedAt) / 1_000));
+  if (displayed.arrivalAt !== savedArrivalAt || displayedSeconds === null || Math.abs(displayedSeconds - expectedSeconds) > 1) {
+    throw new Error(`${label}: displayed arrival countdown does not match the persisted flight time ${JSON.stringify({ displayed, savedArrivalAt, expectedSeconds })}`);
+  }
+}
+
 async function seedCommanderOnlySave(win) {
   const result = await win.webContents.executeJavaScript(`(() => {
     try {
@@ -181,6 +194,11 @@ async function runViewport(width, height) {
       return {
         targetless: Boolean(document.querySelector('[data-qa-space-flight-targetless]')),
         durationMs: Number(document.querySelector('[data-qa-flight-preview]')?.getAttribute('data-qa-flight-preview-duration')),
+        arrivalAt: Number(document.querySelector('[data-qa-flight-preview]')?.getAttribute('data-qa-flight-preview-arrival-at')),
+        displayedArrival: document.querySelector('[data-qa-flight-eta] .is-arrival span')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        formattedArrival: new Date(Number(document.querySelector('[data-qa-flight-preview]')?.getAttribute('data-qa-flight-preview-arrival-at'))).toLocaleString('ru-RU', {
+          day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/Moscow',
+        }),
         configuredDurationMinutes: Number(document.querySelector('[data-qa-space-flight-duration] input')?.value),
         oneWayDuration: metric('ТУДА'),
         returnDuration: metric('ОБРАТНО'),
@@ -193,7 +211,8 @@ async function runViewport(width, height) {
     })()`);
     if (!preview.targetless || preview.configuredDurationMinutes !== 7 || preview.durationMs !== 28_000
       || preview.oneWayDuration !== '00:28' || preview.returnDuration !== '00:28' || preview.roundTripDuration !== '00:56'
-      || preview.gas !== '100' || preview.sendDisabled) {
+      || preview.gas !== '100' || preview.sendDisabled
+      || preview.displayedArrival !== `${preview.formattedArrival} МСК`) {
       throw new Error(`${label}: Space Flight preview contract failed ${JSON.stringify(preview)}`);
     }
     await capture(win, directory, 'space-flight-preview');
@@ -214,6 +233,7 @@ async function runViewport(width, height) {
     if (flights.length !== 1 || !flight || Object.keys(selectedShips).length !== 0
       || Object.keys(selectedCommanders).length !== 1 || flight.gasCost !== 100
       || flight.oneWayDurationMs !== 28_000 || flight.arrivalAt - flight.departedAt !== 28_000 || flight.returnAt !== undefined
+      || Math.abs(flight.arrivalAt - preview.arrivalAt) > 5_000
       || (gasDelta < 90 || gasDelta > 110)
       || afterPlanet.solarSatellites !== 2
       || JSON.stringify(afterPlanet.defense) !== beforeDefense
@@ -221,6 +241,15 @@ async function runViewport(width, height) {
       throw new Error(`${label}: persisted commander-only Space Flight is invalid ${JSON.stringify({ flights, selectedShips, selectedCommanders, gasDelta, satellites: afterPlanet.solarSatellites, defenseUnchanged: JSON.stringify(afterPlanet.defense) === beforeDefense })}`);
     }
     await waitFor(win, `document.querySelector('[data-qa-flight-row]')`);
+    const displayedArrival = await win.webContents.executeJavaScript(`(() => {
+      const arrival = document.querySelector('[data-qa-flight-row="${flight.id}"] [data-qa-flight-arrival]');
+      return {
+        text: arrival?.textContent?.trim() || '',
+        arrivalAt: Number(arrival?.getAttribute('data-qa-flight-arrival-at')),
+        observedAt: Date.now(),
+      };
+    })()`);
+    assertArrivalCountdown(label, displayedArrival, flight.arrivalAt);
     const targetCell = await win.webContents.executeJavaScript(`(() => {
       const row = document.querySelector('[data-qa-flight-row="${flight.id}"]');
       const target = row?.querySelector('[data-qa-flight-target]');
@@ -243,6 +272,15 @@ async function runViewport(width, height) {
     if (flights.length !== 1 || flights[0].oneWayDurationMs !== 28_000 || flights[0].arrivalAt - flights[0].departedAt !== 28_000) {
       throw new Error(`${label}: accelerated Space Flight was lost or changed after reload ${JSON.stringify(flights)}`);
     }
+    const reloadedArrival = await win.webContents.executeJavaScript(`(() => {
+      const arrival = document.querySelector('[data-qa-flight-row="${flight.id}"] [data-qa-flight-arrival]');
+      return {
+        text: arrival?.textContent?.trim() || '',
+        arrivalAt: Number(arrival?.getAttribute('data-qa-flight-arrival-at')),
+        observedAt: Date.now(),
+      };
+    })()`);
+    assertArrivalCountdown(`${label} after reload`, reloadedArrival, flights[0].arrivalAt);
     const reloadedTargetCell = await win.webContents.executeJavaScript(`(() => {
       const target = document.querySelector('[data-qa-flight-row="${flight.id}"] [data-qa-flight-target]');
       return {

@@ -6,6 +6,7 @@ import {
   SCIENCE_CANCEL_REQUEST_EVENT,
   SCIENCE_RUNTIME_CHANGED_EVENT,
   SCIENCE_START_REQUEST_EVENT,
+  reconcileScienceState,
 } from '../domain/science/runtime.ts';
 import {
   ACTIVE_RUNTIME_MODE,
@@ -455,13 +456,68 @@ test('destroying Helion keeps the surviving planet and global progress through r
   const initial = persistence.read();
   const survivorId = 'a-survivor';
   const survivor = createColonyPlanetRuntime(initial, { galaxy: 1, system: 2, position: 1 });
+  const helionResearch = {
+    id: 'helion-research-active',
+    scienceId: SCIENCE_CATALOG[3].id,
+    planetId: 'helion-01',
+    fromLevel: 1,
+    toLevel: 2,
+    startedAt: 1_000,
+    finishAt: 6_000,
+    durationMs: 5_000,
+    cost: { metal: 100, minerals: 200, gas: 300, energy: 400 },
+    refundEligible: true,
+  };
+  const survivorResearch = {
+    id: 'survivor-research',
+    scienceId: SCIENCE_CATALOG[4].id,
+    planetId: survivorId,
+    fromLevel: 0,
+    toLevel: 1,
+    startedAt: 6_000,
+    finishAt: 9_000,
+    durationMs: 3_000,
+    cost: { metal: 50, minerals: 75, gas: 25, energy: 10 },
+    refundEligible: true,
+  };
+  const helionResearchTail = {
+    id: 'helion-research-tail',
+    scienceId: SCIENCE_CATALOG[3].id,
+    planetId: 'helion-01',
+    fromLevel: 2,
+    toLevel: 3,
+    startedAt: 9_000,
+    finishAt: 13_000,
+    durationMs: 4_000,
+    cost: { metal: 250, minerals: 150, gas: 90, energy: 500 },
+    refundEligible: true,
+  };
   const twoWorlds: SaveState = {
     ...initial,
     currentPlanetId: 'helion-01',
     shipUpgradeLevels: { scout: 8, corsair: 6 },
+    science: {
+      ...initial.science,
+      levels: { ...initial.science.levels, [SCIENCE_CATALOG[3].id]: 1 },
+      queue: [helionResearch, survivorResearch, helionResearchTail],
+    },
     planets: { ...initial.planets, [survivorId]: survivor },
     queues: { ...initial.queues, [survivorId]: [] },
   };
+  const initialUniverse = createUniverseMap({
+    mode: 'test',
+    playerPlanets: Object.entries(twoWorlds.planets).map(([id, planet]) => ({
+      id,
+      coordinate: {
+        galaxy: planet.universeGalaxy ?? 1,
+        system: planet.universeSystem ?? 1,
+        position: planet.universePosition ?? 1,
+      },
+      name: planet.name,
+      isHomeworld: id === 'helion-01',
+    })),
+  });
+  assert.equal(initialUniverse.systems[0].positions.find((node) => node.coordinate.position === 1)?.id, 'helion-01');
   const protectedLastWorld = destroyOwnedPlanet(initial, 'helion-01', 2_000);
   assert.equal(protectedLastWorld.destroyed, false);
   assert.equal(protectedLastWorld.reason, 'last-planet-protected');
@@ -475,7 +531,13 @@ test('destroying Helion keeps the surviving planet and global progress through r
   assert.equal(destroyed.state.currentPlanetId, survivorId);
   assert.deepEqual(destroyed.state.planets[survivorId].resources, survivor.resources);
   assert.deepEqual(getPlanetResources(destroyed.state), survivor.resources);
-  assert.deepEqual(destroyed.state.science, twoWorlds.science);
+  assert.deepEqual(destroyed.state.science.levels, twoWorlds.science.levels);
+  assert.deepEqual(destroyed.state.science.queue, [{
+    ...survivorResearch,
+    startedAt: 2_000,
+    finishAt: 5_000,
+  }]);
+  assert.deepEqual(destroyed.state.planets[survivorId].resources, survivor.resources, 'destroyed research is removed without refunding its cost');
   assert.deepEqual(destroyed.state.shipUpgradeLevels, twoWorlds.shipUpgradeLevels);
   assert.equal(persistence.write(destroyed.state).ok, true);
 
@@ -483,10 +545,56 @@ test('destroying Helion keeps the surviving planet and global progress through r
   assert.equal(reloaded.planets['helion-01'], undefined);
   assert.deepEqual(Object.keys(reloaded.planets), [survivorId]);
   assert.equal(reloaded.currentPlanetId, survivorId);
-  assert.deepEqual(reloaded.science, twoWorlds.science);
+  assert.deepEqual(reloaded.science.queue, [{
+    ...survivorResearch,
+    startedAt: 2_000,
+    finishAt: 5_000,
+  }]);
+  const remainingResearch = reconcileScienceState(reloaded.science, 5_000);
+  assert.deepEqual(remainingResearch.completed.map((task) => task.id), ['survivor-research']);
+  assert.equal(remainingResearch.state.queue.length, 0);
   assert.equal(getOwnerShipUpgradeLevel(reloaded, 'scout'), 8);
   assert.equal(getOwnerShipUpgradeLevel(reloaded, 'corsair'), 6);
   assert.deepEqual(getPlanetResources(reloaded), survivor.resources);
+
+  const universeAfterReload = createUniverseMap({
+    mode: 'test',
+    playerPlanets: Object.entries(reloaded.planets).map(([id, planet]) => ({
+      id,
+      coordinate: {
+        galaxy: planet.universeGalaxy ?? 1,
+        system: planet.universeSystem ?? 1,
+        position: planet.universePosition ?? 1,
+      },
+      name: planet.name,
+      isHomeworld: id === 'helion-01',
+    })),
+  });
+  const freeHelionCoordinate = universeAfterReload.systems[0].positions.find((node) => node.coordinate.position === 1);
+  assert.equal(freeHelionCoordinate?.kind, 'empty');
+  assert.equal(freeHelionCoordinate?.id, 'universe-empty-1-1-1');
+
+  const colonizationOrigin = reloaded.planets[survivorId];
+  const withColonizer: SaveState = {
+    ...reloaded,
+    planets: {
+      ...reloaded.planets,
+      [survivorId]: {
+        ...colonizationOrigin,
+        fleet: { ...colonizationOrigin.fleet, ships: { ...colonizationOrigin.fleet.ships, colonizer: 1 } },
+      },
+    },
+  };
+  const colonization = dispatchFlight(withColonizer, {
+    requestId: 'colonize-destroyed-helion-coordinate',
+    missionId: 'colonize',
+    originPlanetId: survivorId,
+    destination: { kind: 'coordinate', coordinate: { galaxy: 1, system: 1, position: 1 } },
+    targetKind: 'empty',
+    selectedShips: { colonizer: 1 },
+    departedAt: 2_001,
+  }, { now: 2_001, mode: 'test' });
+  assert.equal(colonization.ok, true, 'the destroyed Helion coordinate remains available for colonization');
 });
 
 test('persistence facade keeps the existing save key, envelope migration, and one explicit writer', () => {

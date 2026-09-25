@@ -18,6 +18,7 @@ import { startBuilding } from './buildings.ts';
 import { reconcileRuntime } from './reconcile.ts';
 import { getOwnerShipUpgradeLevel, getPlanetResources, replaceAlliedPlanetState, replacePlanetResources, replacePlanetState, type SaveState } from './contracts.ts';
 import { reconcilePlanetOverpopulation } from './overpopulation.ts';
+import { destroyOwnedPlanet } from './owned-planets.ts';
 import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { createEmptyFleetState } from '../domain/fleet/runtime.ts';
 import type { CommanderId } from '../domain/combat/commanders.ts';
@@ -2100,6 +2101,52 @@ test('overpopulation burns unreserved deployment ships first and the reserved ma
   assert.equal(replayed.events.length, 0);
   assert.equal(replayed.state.planets[fixture.targetId].fleet.ships.scout, 2);
   assert.equal(replayed.state.planets[fixture.targetId].fleet.commanders.corsair, 1);
+});
+
+test('Space Flight ships survive origin overpopulation and are lost permanently if the origin is destroyed', () => {
+  const fixture = stateWithDeploymentTarget();
+  const source = fixture.state.planets['helion-01'];
+  const sourceFleet = createEmptyFleetState();
+  sourceFleet.ships.scout = 3;
+  sourceFleet.ships.battleship = 4;
+  sourceFleet.commanders.corsair = 1;
+  const state: SaveState = {
+    ...fixture.state,
+    planets: {
+      ...fixture.state.planets,
+      'helion-01': {
+        ...source,
+        buildings: { ...source.buildings, hangar: 0 },
+        fleet: sourceFleet,
+      },
+    },
+  };
+  const departedAt = 45_000;
+  const sent = dispatchFlight(state, spaceFlightCommand('space-flight-overpopulation-reserved', {
+    ships: { scout: 2 },
+    minutes: 5,
+    departedAt,
+  }), { now: departedAt, mode: 'test', testTimeScale: 1 });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.equal(getReservedShipsForPlanet(sent.state, 'helion-01').scout, 2);
+
+  const episodeStarted = reconcilePlanetOverpopulation(sent.state, 'helion-01', departedAt);
+  const attrition = reconcilePlanetOverpopulation(episodeStarted.state, 'helion-01', sent.flight.arrivalAt - 1);
+  assert.equal(attrition.state.planets['helion-01'].fleet.ships.scout, 2);
+  assert.ok(attrition.state.planets['helion-01'].fleet.ships.battleship < sourceFleet.ships.battleship);
+  assert.equal(getReservedShipsForPlanet(attrition.state, 'helion-01').scout, 2);
+
+  const destroyed = destroyOwnedPlanet(attrition.state, 'helion-01', sent.flight.arrivalAt - 1);
+  assert.equal(destroyed.destroyed, true);
+  assert.equal(destroyed.state.planets['helion-01'], undefined);
+  const burnedFlight = destroyed.state.flights.records.find((flight) => flight.id === sent.flight.id);
+  assert.equal(burnedFlight?.phase, 'failed');
+  assert.equal(burnedFlight?.completionReason, 'origin-destroyed');
+  const afterReturnTime = reconcileFlights(destroyed.state, sent.flight.arrivalAt + sent.flight.oneWayDurationMs);
+  assert.equal(afterReturnTime.state.flights.records.find((flight) => flight.id === sent.flight.id)?.phase, 'failed');
+  assert.equal(afterReturnTime.events.some((event) => event.flight.id === sent.flight.id && event.status === 'returned'), false);
+  assert.equal(afterReturnTime.state.planets[fixture.targetId].fleet.ships.scout, 0);
 });
 
 test('overpopulation leaves an episode blocked when every eligible ship is reserved by a deployment', () => {

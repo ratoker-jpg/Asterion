@@ -54,6 +54,10 @@ jobs:
         run: npm run test:building-actions-ui
       - name: Reports Electron QA
         run: npm run test:reports-ui
+      - name: Space Flight Electron QA
+        env:
+          ASTERION_SKIP_SCREENSHOTS: '1'
+        run: npm run test:space-flight-ui
       - name: Battle reports Electron QA
         env:
           ASTERION_SKIP_SCREENSHOTS: '1'
