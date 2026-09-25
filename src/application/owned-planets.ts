@@ -6,6 +6,8 @@ import { createDefaultSpaceportUpgradeState } from '../domain/buildings/spacepor
 import { createDefaultTradeState } from '../domain/buildings/trade.ts';
 import { createDefaultRepairWorkshopState } from '../domain/repair/workshop.ts';
 import { addDebris } from '../domain/flights/cargo.ts';
+import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
+import { creditResources } from '../domain/resources/credit.ts';
 import { discardScienceTasksForPlanet } from '../domain/science/runtime.ts';
 import type { UniverseCoordinate } from '../domain/universe/types.ts';
 import { initializePlanetEnergy } from './energy.ts';
@@ -99,7 +101,12 @@ export function preserveOwnedPlanetOrbitalDebris(
 }
 
 /** Atomically removes all local state and burns Space Flights launched from the destroyed planet. */
-export function destroyOwnedPlanet(state: SaveState, planetId: PlanetId, now: number): DestroyOwnedPlanetResult {
+export function destroyOwnedPlanet(
+  state: SaveState,
+  planetId: PlanetId,
+  now: number,
+  rng: () => number = Math.random,
+): DestroyOwnedPlanetResult {
   if (!state.planets[planetId]) return { state, destroyed: false, reason: 'planet-not-found' };
   const planetIds = Object.keys(state.planets);
   if (planetIds.length <= 1) return { state, destroyed: false, reason: 'last-planet-protected' };
@@ -114,7 +121,17 @@ export function destroyOwnedPlanet(state: SaveState, planetId: PlanetId, now: nu
     ? Object.keys(planets).sort()[0]
     : state.currentPlanetId;
   const currentPlanet = planets[currentPlanetId];
-  const currentWallet = currentPlanet.resources ?? { metal: 0, minerals: 0, gas: 0 };
+  let currentWallet = currentPlanet.resources ?? { metal: 0, minerals: 0, gas: 0 };
+  const scienceDestruction = discardScienceTasksForPlanet(state.science, planetId, now, rng);
+  if (currentPlanet && scienceDestruction.refundPercents.length > 0) {
+    const credit = creditResources(
+      { ...currentWallet, energy: 0 },
+      getStorageCapacities(currentPlanet.buildings),
+      scienceDestruction.refund,
+    );
+    currentWallet = { metal: credit.wallet.metal, minerals: credit.wallet.minerals, gas: credit.wallet.gas };
+    planets[currentPlanetId] = { ...currentPlanet, resources: currentWallet };
+  }
   const currentClock = byPlanetClock[currentPlanetId] ?? {
     lastReconciledAt: Math.max(0, Math.floor(now)),
     remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 },
@@ -144,7 +161,7 @@ export function destroyOwnedPlanet(state: SaveState, planetId: PlanetId, now: nu
       currentPlanetId,
       planets,
       queues,
-      science: discardScienceTasksForPlanet(state.science, planetId, now),
+      science: scienceDestruction.state,
       flights,
       resourceClock: { ...state.resourceClock, ...currentClock, byPlanet: byPlanetClock },
       metal: currentWallet.metal,

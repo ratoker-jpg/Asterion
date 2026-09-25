@@ -597,6 +597,85 @@ test('destroying Helion keeps the surviving planet and global progress through r
   assert.equal(colonization.ok, true, 'the destroyed Helion coordinate remains available for colonization');
 });
 
+test('destroying a research planet drops invalid successor levels and reschedules the surviving queue', () => {
+  const initial = createInitialSaveState('test', 0);
+  const survivorId = 'a-survivor';
+  const survivor = {
+    ...createColonyPlanetRuntime(initial, { galaxy: 1, system: 2, position: 1 }),
+    resources: { metal: 400, minerals: 300, gas: 200 },
+  };
+  const scienceId = SCIENCE_CATALOG[3].id;
+  const survivorScienceId = SCIENCE_CATALOG[4].id;
+  const destroyedResearch = {
+    id: 'destroyed-research-1-to-2',
+    scienceId,
+    planetId: 'helion-01',
+    fromLevel: 1,
+    toLevel: 2,
+    startedAt: 1_000,
+    finishAt: 6_000,
+    durationMs: 5_000,
+    cost: { metal: 300, minerals: 400, gas: 500, energy: 600 },
+    refundEligible: true,
+  };
+  const invalidSuccessor = {
+    id: 'survivor-research-2-to-3',
+    scienceId,
+    planetId: survivorId,
+    fromLevel: 2,
+    toLevel: 3,
+    startedAt: 6_000,
+    finishAt: 10_000,
+    durationMs: 4_000,
+    cost: { metal: 100, minerals: 200, gas: 300, energy: 400 },
+    refundEligible: true,
+  };
+  const independentSurvivorResearch = {
+    id: 'survivor-independent-research',
+    scienceId: survivorScienceId,
+    planetId: survivorId,
+    fromLevel: 0,
+    toLevel: 1,
+    startedAt: 10_000,
+    finishAt: 13_000,
+    durationMs: 3_000,
+    cost: { metal: 50, minerals: 75, gas: 25, energy: 10 },
+    refundEligible: true,
+  };
+  const twoWorlds: SaveState = {
+    ...initial,
+    currentPlanetId: 'helion-01',
+    science: {
+      ...initial.science,
+      levels: { ...initial.science.levels, [scienceId]: 1 },
+      queue: [destroyedResearch, invalidSuccessor, independentSurvivorResearch],
+    },
+    planets: { ...initial.planets, [survivorId]: survivor },
+    queues: { ...initial.queues, [survivorId]: [] },
+  };
+
+  const destroyed = destroyOwnedPlanet(twoWorlds, 'helion-01', 2_000, () => 0);
+  assert.equal(destroyed.destroyed, true);
+  assert.equal(destroyed.state.science.levels[scienceId], 1);
+  assert.deepEqual(destroyed.state.science.queue.map((task) => task.id), ['survivor-independent-research']);
+  assert.deepEqual(destroyed.state.science.queue[0], {
+    ...independentSurvivorResearch,
+    startedAt: 2_000,
+    finishAt: 5_000,
+  });
+  assert.deepEqual(destroyed.state.planets[survivorId].resources, {
+    metal: 460,
+    minerals: 420,
+    gas: 380,
+  }, 'the invalid surviving task uses the ordinary 60% refund; destroyed-planet research is not refunded');
+
+  const completed = reconcileScienceState(destroyed.state.science, 5_000);
+  assert.deepEqual(completed.completed.map((task) => task.id), ['survivor-independent-research']);
+  assert.equal(completed.state.levels[scienceId], 1, 'the technology must not jump from level 1 directly to level 3');
+  assert.equal(completed.state.levels[survivorScienceId], 1);
+  assert.deepEqual(completed.state.queue, []);
+});
+
 test('persistence facade keeps the existing save key, envelope migration, and one explicit writer', () => {
   const storage = new MemoryStorage();
   const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 1_000, testTimeScale: 10 });

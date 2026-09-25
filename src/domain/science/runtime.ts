@@ -137,6 +137,13 @@ export type ScienceCancellationTransition = {
   credit?: ResourceCreditResult;
 };
 
+export type SciencePlanetDestructionTransition = {
+  state: ScienceState;
+  invalidatedSurvivorTasks: ScienceQueueTask[];
+  refund: ScienceResourceCost;
+  refundPercents: number[];
+};
+
 export type ScienceRuntimeSnapshot = {
   science: ScienceState;
   wallet: ScienceWallet;
@@ -441,6 +448,23 @@ function refundScienceCost(cost: ScienceResourceCost, refundPercent: number): Sc
   } as ScienceResourceCost;
 }
 
+function refundScienceTasks(
+  tasks: readonly ScienceQueueTask[],
+  rng?: () => number,
+): { refund: ScienceResourceCost; refundPercents: number[] } {
+  const refundPercents: number[] = [];
+  const refund = tasks.reduce((total, task) => {
+    if (task.refundEligible === false || !hasCompleteScienceCost(task.cost)) return total;
+    const refundPercent = selectScienceCancelRefundPercent(rng);
+    refundPercents.push(refundPercent);
+    const itemRefund = refundScienceCost(task.cost, refundPercent);
+    return Object.fromEntries(
+      RESOURCE_KEYS.map((key) => [key, total[key] + itemRefund[key]]),
+    ) as ScienceResourceCost;
+  }, { metal: 0, minerals: 0, gas: 0, energy: 0 } as ScienceResourceCost);
+  return { refund, refundPercents };
+}
+
 function rescheduleScienceQueue(queue: readonly ScienceQueueTask[], canceledWasActive: boolean, now: number): ScienceQueueTask[] {
   const remaining = [...queue];
   if (remaining.length === 0) return remaining;
@@ -455,13 +479,62 @@ function rescheduleScienceQueue(queue: readonly ScienceQueueTask[], canceledWasA
   });
 }
 
-/** Drops unfinished research owned by a destroyed planet without refund or dependency cascade. */
-export function discardScienceTasksForPlanet(state: ScienceState, planetId: string, now: number): ScienceState {
-  const queue = state.queue.filter((task) => task.planetId !== planetId);
-  if (queue.length === state.queue.length) return state;
+function removeInvalidScienceTransitions(
+  queue: readonly ScienceQueueTask[],
+  levels: ScienceLevels,
+): { remaining: ScienceQueueTask[]; invalidated: ScienceQueueTask[] } {
+  const projectedLevels = { ...levels };
+  const remaining: ScienceQueueTask[] = [];
+  const invalidated: ScienceQueueTask[] = [];
+
+  for (const task of queue) {
+    const science = findScience(task.scienceId);
+    const maxLevel = science ? getScienceMaxLevel(science) : 0;
+    const projectedLevel = safeLevel(projectedLevels[task.scienceId], maxLevel);
+    if (!science
+      || task.fromLevel !== projectedLevel
+      || task.toLevel !== projectedLevel + 1
+      || task.toLevel > maxLevel) {
+      invalidated.push(task);
+      continue;
+    }
+
+    remaining.push(task);
+    projectedLevels[task.scienceId] = task.toLevel;
+  }
+
+  return { remaining, invalidated };
+}
+
+/** Drops destroyed-planet research without refund and removes invalid successor levels with the usual refund. */
+export function discardScienceTasksForPlanet(
+  state: ScienceState,
+  planetId: string,
+  now: number,
+  rng: () => number = Math.random,
+): SciencePlanetDestructionTransition {
+  const destroyedTasks = state.queue.filter((task) => task.planetId === planetId);
+  const remainingAfterDestruction = state.queue.filter((task) => task.planetId !== planetId);
+  const { remaining, invalidated } = removeInvalidScienceTransitions(remainingAfterDestruction, state.levels);
+  if (destroyedTasks.length === 0 && invalidated.length === 0) {
+    return {
+      state,
+      invalidatedSurvivorTasks: [],
+      refund: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+      refundPercents: [],
+    };
+  }
+
+  const removedTaskIds = new Set([...destroyedTasks, ...invalidated].map((task) => task.id));
+  const activeTaskWasRemoved = state.queue[0] ? removedTaskIds.has(state.queue[0].id) : false;
+  const refund = refundScienceTasks(invalidated, rng);
   return {
-    ...state,
-    queue: rescheduleScienceQueue(queue, state.queue[0]?.planetId === planetId, Math.max(0, Math.floor(now))),
+    state: {
+      ...state,
+      queue: rescheduleScienceQueue(remaining, activeTaskWasRemoved, Math.max(0, Math.floor(now))),
+    },
+    invalidatedSurvivorTasks: invalidated,
+    ...refund,
   };
 }
 
@@ -554,16 +627,7 @@ export function cancelScienceResearch(
       reason: 'Исследование или его зависимые задачи принадлежат заблокированной планете.',
     };
   }
-  const refundPercents: number[] = [];
-  const refund = canceledTasks.reduce((total, canceledTask) => {
-    if (canceledTask.refundEligible === false || !hasCompleteScienceCost(canceledTask.cost)) return total;
-    const refundPercent = selectScienceCancelRefundPercent(context.rng);
-    refundPercents.push(refundPercent);
-    const itemRefund = refundScienceCost(canceledTask.cost, refundPercent);
-    return Object.fromEntries(
-      RESOURCE_KEYS.map((key) => [key, total[key] + itemRefund[key]]),
-    ) as ScienceResourceCost;
-  }, { metal: 0, minerals: 0, gas: 0, energy: 0 } as ScienceResourceCost);
+  const { refund, refundPercents } = refundScienceTasks(canceledTasks, context.rng);
   const unlimitedCapacities = { metal: Number.MAX_SAFE_INTEGER, minerals: Number.MAX_SAFE_INTEGER, gas: Number.MAX_SAFE_INTEGER };
   const credit = creditResources(context.wallet, context.capacities ?? unlimitedCapacities, refund);
   const wallet = credit.wallet;
