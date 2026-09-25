@@ -20,6 +20,7 @@ import {
   destroyBuilding,
   executeTradeAction,
   previewBuilding,
+  reconcileRecycling,
   startBuilding,
   startRecycling,
   startSpaceportUpgrade,
@@ -1013,6 +1014,52 @@ test('recycling, trade, and spaceport actions remain thin domain-backed transiti
   const upgrade = startSpaceportUpgrade(spaceportState, spaceportContext, 'ships', candidate.id, 'spaceport-1');
   assert.equal(upgrade.ok, true);
   assert.equal(upgrade.state.planets['helion-01'].spaceportUpgrades.shipQueue.length, 1);
+});
+
+test('manual and automatic recycling credits persist on the current planet wallet', () => {
+  const initial = withBuildingSetup(createInitialSaveState('test'));
+  const startAt = 20_000;
+  const assertWalletsMatchCredit = (state: SaveState, wallet: { metal: number; minerals: number; gas: number }) => {
+    const planetResources = state.planets['helion-01'].resources;
+    assert.ok(planetResources);
+    assert.deepEqual(
+      {
+        metal: planetResources.metal,
+        minerals: planetResources.minerals,
+        gas: planetResources.gas,
+      },
+      { metal: wallet.metal, minerals: wallet.minerals, gas: wallet.gas },
+    );
+    assert.deepEqual(
+      { metal: state.metal, minerals: state.minerals, gas: state.gas },
+      { metal: wallet.metal, minerals: wallet.minerals, gas: wallet.gas },
+    );
+  };
+
+  const manualStart = startRecycling(initial, context(startAt), 100, { metal: 40, minerals: 40, gas: 20 }, 'recycle-manual');
+  assert.equal(manualStart.ok, true);
+  const manualJob = manualStart.state.planets['helion-01'].recycling.jobs[0];
+  assert.ok(manualJob);
+  const manual = collectRecycling(manualStart.state, context(manualJob.finishAt), manualJob.id);
+  assert.equal(manual.ok, true);
+  assert.ok(manual.credit);
+  assertWalletsMatchCredit(manual.state, manual.credit.wallet);
+
+  const manualStorage = new MemoryStorage();
+  const manualPersistence = createPersistenceFacade({ mode: 'test', storage: manualStorage, now: () => manualJob.finishAt });
+  assert.equal(manualPersistence.write(manual.state).ok, true);
+  const manuallyPersisted = manualPersistence.read();
+  assertWalletsMatchCredit(manuallyPersisted, manual.credit.wallet);
+
+  const autoStart = startRecycling(initial, context(startAt), 100, { metal: 40, minerals: 40, gas: 20 }, 'recycle-auto');
+  assert.equal(autoStart.ok, true);
+  const autoJob = autoStart.state.planets['helion-01'].recycling.jobs[0];
+  assert.ok(autoJob);
+  const auto = reconcileRecycling(autoStart.state, context(autoJob.finishAt + 24 * 60 * 60 * 1000 + 1));
+  assert.equal(auto.ok, true);
+  assert.deepEqual(auto.autoCollectedJobIds, [autoJob.id]);
+  assert.ok(auto.credit);
+  assertWalletsMatchCredit(auto.state, auto.credit.wallet);
 });
 
 test('spaceport application action names and resolves the selected faction ship', () => {

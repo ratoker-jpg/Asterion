@@ -7,7 +7,7 @@ app.commandLine.appendSwitch('disable-gpu');
 app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
-const OUTPUT = path.join(ROOT, 'visual-qa');
+const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'visual-qa');
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const TEST_TIME_SCALE_KEY = 'asterion.test-time-scale.v1';
 const EXPECTED_METAL_AFTER_COLLECT = 20_980;
@@ -35,6 +35,28 @@ async function reload(win) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   win.webContents.reload();
   await done;
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win);
+}
+
+async function rendererMutationAndReload(win, source, label) {
+  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+  const execution = win.webContents.executeJavaScript(source)
+    .then((value) => ({ value }))
+    .catch((error) => ({ error: String(error?.stack || error) }));
+  const first = await Promise.race([
+    execution.then((result) => ({ result })),
+    loaded.then(() => ({ loaded: true })),
+  ]);
+  if (first.result?.value === false) throw new Error(`${label}: renderer mutation was rejected`);
+  if (!first.loaded) {
+    const reloaded = await Promise.race([
+      loaded.then(() => true),
+      sleep(10_000).then(() => false),
+    ]);
+    if (!reloaded) throw new Error(`${label}: renderer mutation did not reload the page: ${JSON.stringify(first.result)}`);
+  }
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);
@@ -91,7 +113,7 @@ async function capture(win, directory, name) {
 }
 
 async function seedPlanet(win) {
-  const ok = await win.webContents.executeJavaScript(`(() => {
+  await rendererMutationAndReload(win, `(() => {
     const raw = localStorage.getItem(${JSON.stringify(SAVE_KEY)});
     const save = raw ? JSON.parse(raw) : null;
     const planet = save?.planets?.['helion-01'];
@@ -99,6 +121,7 @@ async function seedPlanet(win) {
     planet.buildings.recycling = 3;
     planet.buildings.shipyard = Math.max(5, Number(planet.buildings.shipyard) || 0);
     planet.recycling = { availableDebris: 100000, jobs: [] };
+    planet.resources = { ...(planet.resources || {}), metal: 15_880, minerals: 12_712, gas: 6_421 };
     save.metal = 15_880;
     save.minerals = 12_712;
     save.gas = 6_421;
@@ -106,10 +129,9 @@ async function seedPlanet(win) {
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 6);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
+    window.location.reload();
     return true;
-  })()`);
-  if (!ok) throw new Error('Could not seed recycling planet');
-  await reload(win);
+  })()`, 'Could not seed recycling planet');
 }
 
 async function activateIndustry(win) {
@@ -172,6 +194,7 @@ async function readSave(win) {
       metal: save.metal,
       minerals: save.minerals,
       gas: save.gas,
+      planetResources: save.planets?.['helion-01']?.resources,
       queue: save.queues?.['helion-01'] ?? [],
       recycling: save.planets?.['helion-01']?.recycling,
       recyclingLevel: save.planets?.['helion-01']?.buildings?.recycling,
@@ -180,7 +203,7 @@ async function readSave(win) {
 }
 
 async function makeReady(win, jobIndex = 0) {
-  const ok = await win.webContents.executeJavaScript(`(() => {
+  await rendererMutationAndReload(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
     const job = save.planets?.['helion-01']?.recycling?.jobs?.[${jobIndex}];
     if (!job) return false;
@@ -190,16 +213,15 @@ async function makeReady(win, jobIndex = 0) {
     job.collectExpiresAt = null;
     job.status = 'processing';
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    window.location.reload();
     return true;
-  })()`);
-  if (!ok) throw new Error('Could not move recycling job to ready state');
-  await reload(win);
+  })()`, 'Could not move recycling job to ready state');
   await activateIndustry(win);
   await openCenter(win);
 }
 
 async function makeExpiredForAutoCollect(win, jobIndex = 0) {
-  const ok = await win.webContents.executeJavaScript(`(() => {
+  await rendererMutationAndReload(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
     const job = save.planets?.['helion-01']?.recycling?.jobs?.[${jobIndex}];
     if (!job) return false;
@@ -210,10 +232,9 @@ async function makeExpiredForAutoCollect(win, jobIndex = 0) {
     job.collectExpiresAt = job.finishAt + storage;
     job.status = 'ready';
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    window.location.reload();
     return true;
-  })()`);
-  if (!ok) throw new Error('Could not move recycling job beyond auto-collect boundary');
-  await reload(win);
+  })()`, 'Could not move recycling job beyond auto-collect boundary');
 }
 
 async function measure(win) {
@@ -338,11 +359,18 @@ async function startConfiguredJob(win, debrisAmount, metal, minerals, gas) {
 }
 
 async function verifyFlow(win, directory, label) {
-  await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);
-  await reload(win);
+  await rendererMutationAndReload(win, `(() => {
+    localStorage.removeItem(${JSON.stringify(SAVE_KEY)});
+    window.location.reload();
+    return true;
+  })()`, `${label}: clear save`);
   await seedPlanet(win);
   const seeded = await readSave(win);
   if (Number(seeded.schemaVersion) < 6 || Number(seeded.recyclingLevel) !== 3) throw new Error(`${label}: seed migration mismatch ${JSON.stringify(seeded)}`);
+  if (Number(seeded.metal) !== 15_880 || Number(seeded.minerals) !== 12_712 || Number(seeded.gas) !== 6_421
+    || Number(seeded.planetResources?.metal) !== 15_880 || Number(seeded.planetResources?.minerals) !== 12_712 || Number(seeded.planetResources?.gas) !== 6_421) {
+    throw new Error(`${label}: seeded canonical wallet mismatch ${JSON.stringify(seeded)}`);
+  }
   const queueBefore = JSON.stringify(seeded.queue);
 
   await activateIndustry(win);
@@ -393,6 +421,7 @@ async function verifyFlow(win, directory, label) {
   await capture(win, directory, 'recycling-processing-list');
 
   await makeReady(win, 0);
+  await waitFor(win, `document.querySelector('[data-qa-recycling-job="${firstJobId}"][data-qa-recycling-status="ready"]')`);
   screen = await readScreen(win);
   const readyRows = screen?.jobRows.filter((job) => job.status === 'ready') ?? [];
   const processingRows = screen?.jobRows.filter((job) => job.status === 'processing') ?? [];

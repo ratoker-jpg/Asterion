@@ -343,10 +343,14 @@ export function collectRecycling(
     getStorageCapacities(planet.buildings),
     transition.output,
   );
-  const withWallet = replacePlanetResources({ ...state, schemaVersion: SAVE_SCHEMA_VERSION }, context.planetId, credit.wallet);
+  const withRecycling = replacePlanetState(
+    { ...state, schemaVersion: SAVE_SCHEMA_VERSION },
+    context.planetId,
+    { ...planet, recycling: transition.state },
+  );
   return {
     ok: true,
-    state: replacePlanetState(withWallet, context.planetId, { ...planet, recycling: transition.state }),
+    state: replacePlanetResources(withRecycling, context.planetId, credit.wallet),
     reason: null,
     output: transition.output,
     credit,
@@ -366,10 +370,14 @@ export function reconcileRecycling(
     getStorageCapacities(planet.buildings),
     transition.autoCollectedOutput,
   );
-  const withWallet = replacePlanetResources({ ...state, schemaVersion: SAVE_SCHEMA_VERSION }, context.planetId, credit.wallet);
+  const withRecycling = replacePlanetState(
+    { ...state, schemaVersion: SAVE_SCHEMA_VERSION },
+    context.planetId,
+    { ...planet, recycling: transition.state },
+  );
   return {
     ok: true,
-    state: replacePlanetState(withWallet, context.planetId, { ...planet, recycling: transition.state }),
+    state: replacePlanetResources(withRecycling, context.planetId, credit.wallet),
     reason: null,
     autoCollectedJobIds: transition.autoCollectedJobIds,
     credit,
