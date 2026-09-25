@@ -83,6 +83,29 @@ async function reload(win) {
   await settle(win);
 }
 
+async function rendererMutationAndReload(win, source, label) {
+  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+  const execution = win.webContents.executeJavaScript(source)
+    .then((value) => ({ value }))
+    .catch((error) => ({ error: String(error?.stack || error) }));
+  const first = await Promise.race([
+    execution.then((result) => ({ result })),
+    loaded.then(() => ({ loaded: true })),
+  ]);
+  if (first.result?.value === false) throw new Error(`${label}: renderer mutation was rejected`);
+  if (!first.loaded) {
+    const reloaded = await Promise.race([
+      loaded.then(() => true),
+      sleep(10_000).then(() => false),
+    ]);
+    if (!reloaded) throw new Error(`${label}: renderer mutation did not reload the page: ${JSON.stringify(first.result)}`);
+  }
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win);
+  return first.result;
+}
+
 async function resetTestSave(win) {
   // Clear and navigate in the same renderer task. Clearing the session from
   // the main process and reloading in a later task leaves a small window in
@@ -205,7 +228,7 @@ async function enqueueResourceBuilding(win, role) {
 }
 
 async function holdActiveResourceQueue(win) {
-  const held = await win.webContents.executeJavaScript(`(() => {
+  await rendererMutationAndReload(win, `(() => {
     try {
       const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
       const queue = save.queues?.['helion-01'];
@@ -218,12 +241,12 @@ async function holdActiveResourceQueue(win) {
         finishAt = item.finishAt;
       });
       localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+      window.location.reload();
       return true;
     } catch {
       return false;
     }
-  })()`);
-  if (!held) throw new Error('Could not hold the active resource queue item for QA');
+  })()`, 'Could not hold the active resource queue item for QA');
 }
 
 async function metrics(win, screen) {
@@ -508,7 +531,6 @@ async function verifyResourceZoneFlow(win, directory) {
       // QA-only setup: keep the first item active while the three-slot contract
       // is checked. Production queue timing and reconciliation stay untouched.
       await holdActiveResourceQueue(win);
-      await reload(win);
       await activateResourceZone(win);
     }
   }
@@ -535,9 +557,10 @@ async function verifyResourceZoneFlow(win, directory) {
   if(fullDialog.status!=='queue-full' || !fullDialog.disabled || !fullDialog.text.includes('Очередь заполнена')) throw new Error(`Queue-full dialog failed: ${JSON.stringify(fullDialog)}`);
   await closeResourceBuilding(win);
 
-  await win.webContents.executeJavaScript(`(() => {
+  await rendererMutationAndReload(win, `(() => {
     const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
     const q=save.queues['helion-01'];
+    if(!Array.isArray(q) || q.length!==3) return false;
     const now=Date.now();
     q[0].startedAt=now-50000;
     q[0].finishAt=now-10;
@@ -546,9 +569,26 @@ async function verifyResourceZoneFlow(win, directory) {
     q[2].startedAt=q[1].finishAt;
     q[2].finishAt=q[2].startedAt+45000;
     localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
-  })()`);
-  await reload(win);
-  await waitFor(win, `(() => { try { const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}'); const q=save.queues?.['helion-01']; return Array.isArray(q)&&q.length===2&&q[0]?.assetRole==='gas-production-1'&&save.planets?.['helion-01']?.buildings?.['basic-energy']===2&&save.planets?.['helion-01']?.energy===${TEST_COMPLETED_ENERGY}; } catch { return false; } })()`,8000);
+    window.location.reload();
+    return true;
+  })()`, 'Could not prepare the building completion transition fixture');
+  const completionExpression = `(() => { try { const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}'); const q=save.queues?.['helion-01']; return Array.isArray(q)&&q.length===2&&q[0]?.assetRole==='gas-production-1'&&save.planets?.['helion-01']?.buildings?.['basic-energy']===2&&save.planets?.['helion-01']?.energy===${TEST_COMPLETED_ENERGY}; } catch { return false; } })()`;
+  try {
+    await waitFor(win, completionExpression, 8000);
+  } catch (error) {
+    const actual = await win.webContents.executeJavaScript(`(() => {
+      const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
+      const queue=save.queues?.['helion-01']||[];
+      return {
+        queue:queue.map(({assetRole,startedAt,finishAt,durationMs})=>({assetRole,startedAt,finishAt,durationMs})),
+        buildings:save.planets?.['helion-01']?.buildings,
+        energy:save.planets?.['helion-01']?.energy,
+        testTimeScale:localStorage.getItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}),
+        now:Date.now(),
+      };
+    })()`);
+    throw new Error(`Building completion transition timed out: ${String(error)}; actual=${JSON.stringify(actual)}`);
+  }
   await activateResourceZone(win);
   await waitFor(win, `document.querySelector('[data-qa-queue-slot="1"]')?.getAttribute('data-qa-queue-role')==='gas-production-1'`);
   const fifo=await win.webContents.executeJavaScript(`(() => {
