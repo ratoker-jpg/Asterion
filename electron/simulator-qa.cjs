@@ -75,6 +75,21 @@ async function readSave(win) {
   })()`);
 }
 
+async function simulatorPresetDiagnostics(win) {
+  return win.webContents.executeJavaScript(`(() => {
+    let save = {};
+    try { save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}'); } catch (error) { return { storageError: String(error) }; }
+    return {
+      presets: (save.combatSimulator?.presets || []).map(({ id, name }) => ({ id, name })),
+      inputName: document.querySelector('#sim-preset-name')?.value || '',
+      selectedPresetId: document.querySelector('#sim-preset-select')?.value || '',
+      options: Array.from(document.querySelectorAll('#sim-preset-select option')).map((option) => ({ value: option.value, text: option.textContent?.trim() || '' })),
+      saveButton: document.querySelector('.sim-presets-v1 > div:first-child button')?.textContent?.trim() || '',
+      notice: document.querySelector('.sim-notice-v1')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+    };
+  })()`);
+}
+
 async function capture(win, directory, name) {
   const image = await win.webContents.capturePage();
   fs.writeFileSync(path.join(directory, `${name}.png`), image.toPNG());
@@ -167,6 +182,8 @@ async function runViewport(win, width, height) {
   await settle(win);
   await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)}); localStorage.removeItem('asterion.preferences.v2');`);
   await reload(win);
+  const resetPresets = (await readSave(win)).combatSimulator?.presets || [];
+  if (resetPresets.length !== 0) throw new Error(`${label}: simulator QA storage reset did not clear presets ${JSON.stringify(await simulatorPresetDiagnostics(win))}`);
   await openSimulator(win);
 
   const initial = await snapshot(win);
@@ -227,9 +244,24 @@ async function runViewport(win, width, height) {
   await click(win, '.sim-copy-tech-v1');
   await waitFor(win, `document.querySelector('.sim-side-v1:last-child .sim-tech-row-v1:first-child input')?.value === '15'`);
 
-  await setField(win, '#sim-preset-name', `QA ${label}`);
+  const expectedPresetName = `QA ${label}`;
+  await setField(win, '#sim-preset-name', expectedPresetName);
+  if ((await simulatorPresetDiagnostics(win)).inputName !== expectedPresetName) {
+    throw new Error(`${label}: preset name input was not configured ${JSON.stringify(await simulatorPresetDiagnostics(win))}`);
+  }
   await click(win, '.sim-presets-v1 > div:first-child button');
-  await waitFor(win, `(() => { try { return JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}')?.combatSimulator?.presets?.length === 1; } catch { return false; } })()`);
+  const savedPresetExpression = `(() => { try { return JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}')?.combatSimulator?.presets?.some((preset) => preset.name === ${JSON.stringify(expectedPresetName)}) === true; } catch { return false; } })()`;
+  try {
+    await waitFor(win, savedPresetExpression);
+    await waitFor(win, `Array.from(document.querySelectorAll('#sim-preset-select option')).some((option) => option.textContent?.trim() === ${JSON.stringify(expectedPresetName)})`);
+  } catch (error) {
+    throw new Error(`${label}: preset save did not reach storage and selector: ${String(error)}; state=${JSON.stringify(await simulatorPresetDiagnostics(win))}`);
+  }
+  const savedPresetState = await simulatorPresetDiagnostics(win);
+  if (savedPresetState.presets.length !== 1 || savedPresetState.presets[0]?.name !== expectedPresetName
+    || savedPresetState.selectedPresetId !== savedPresetState.presets[0]?.id) {
+    throw new Error(`${label}: saved preset state did not match the current scenario ${JSON.stringify(savedPresetState)}`);
+  }
   await click(win, '.sim-run-v1');
   await waitFor(win, `document.querySelector('[role="dialog"][data-qa-battle-report-modal][data-qa-battle-report-source="simulation"]')`);
   await waitFor(win, `document.querySelector('.battle-round-analysis-v1')`);
