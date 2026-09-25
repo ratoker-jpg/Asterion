@@ -299,13 +299,29 @@ app.whenReady().then(async () => {
   let win;
   try {
     fs.mkdirSync(OUTPUT, { recursive: true });
-    win = new BrowserWindow({ width: 1920, height: 1080, useContentSize: true, show: false, backgroundColor: '#02050a', webPreferences: { offscreen: true, contextIsolation: true, nodeIntegration: false, sandbox: true, partition: 'qa-combat-simulator' } });
-    await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: '?mode=test' });
     const results = [];
-    for (const [width, height] of VIEWPORTS) results.push(await runViewport(win, width, height));
+    for (const [width, height] of VIEWPORTS) {
+      win = new BrowserWindow({
+        width,
+        height,
+        useContentSize: true,
+        show: false,
+        backgroundColor: '#02050a',
+        webPreferences: {
+          offscreen: true,
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true,
+          partition: `qa-combat-simulator-${width}x${height}`,
+        },
+      });
+      await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: '?mode=test' });
+      results.push(await runViewport(win, width, height));
+      win.destroy();
+      win = undefined;
+    }
     fs.writeFileSync(path.join(OUTPUT, 'results.json'), JSON.stringify({ results }, null, 2));
     console.log(JSON.stringify({ results }, null, 2));
-    win.destroy();
     app.exit(0);
   } catch (error) {
     console.error(error.stack || error);
