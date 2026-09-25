@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { EmblemGlyph } from './CommandView';
+import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 import { createAllianceRatingEntries, createPlayerRatingEntries } from './domain/rating/fixtures.ts';
 import { selectCurrentAlliance } from './domain/command/selectors.ts';
 import type { CommandState } from './domain/command/types.ts';
@@ -200,10 +201,10 @@ function PlayerTable({
     <div className="rating-table-v2 rating-table-v2--players" role="table" aria-label="Рейтинг игроков">
       <div className="rating-row-v2 rating-head-v2" role="row">
         <span>МЕСТО</span><span>ИГРОК</span><span>АЛЬЯНС</span>
-        <ScoreHead label="ДОСТИЖ." scoreKey="achievementPoints" selected={sortKey === 'achievementPoints'} direction={direction} onSort={onSort} />
-        <ScoreHead label="ОБЩИЕ" scoreKey="totalPoints" selected={sortKey === 'totalPoints'} direction={direction} onSort={onSort} />
-        <ScoreHead label="РЕСУРС." scoreKey="resourcePoints" selected={sortKey === 'resourcePoints'} direction={direction} onSort={onSort} />
-        <ScoreHead label="БОЕВЫЕ" scoreKey="battlePoints" selected={sortKey === 'battlePoints'} direction={direction} onSort={onSort} />
+        <ScoreHead label="ДОСТИЖ." iconPath={asterionAssetIntegrationAssets.scoreIcons.achievementPoints} scoreKey="achievementPoints" selected={sortKey === 'achievementPoints'} direction={direction} onSort={onSort} />
+        <ScoreHead label="ОБЩИЕ" iconPath={asterionAssetIntegrationAssets.scoreIcons.totalPoints} scoreKey="totalPoints" selected={sortKey === 'totalPoints'} direction={direction} onSort={onSort} />
+        <ScoreHead label="РЕСУРС." iconPath={asterionAssetIntegrationAssets.scoreIcons.resourcePoints} scoreKey="resourcePoints" selected={sortKey === 'resourcePoints'} direction={direction} onSort={onSort} />
+        <ScoreHead label="БОЕВЫЕ" iconPath={asterionAssetIntegrationAssets.scoreIcons.battlePoints} scoreKey="battlePoints" selected={sortKey === 'battlePoints'} direction={direction} onSort={onSort} />
       </div>
       {entries.map((entry) => (
         <PlayerRow key={entry.id} entry={entry} selectedId={selectedId} onSelect={onSelect} />
@@ -303,18 +304,20 @@ function AllianceTable({
 
 function ScoreHead<K extends string>({
   label,
+  iconPath,
   scoreKey,
   selected,
   direction,
   onSort,
 }: {
   label: string;
+  iconPath?: string;
   scoreKey: K;
   selected: boolean;
   direction: SortDirection;
   onSort: (key: K) => void;
 }) {
-  return <button type="button" className={`utility-control score-head-v2 ${selected ? 'selected' : ''}`} onClick={() => onSort(scoreKey)}>{label}<b>{selected ? (direction === 'desc' ? '▼' : '▲') : '◇'}</b></button>;
+  return <button type="button" className={`utility-control score-head-v2 ${selected ? 'selected' : ''}`} onClick={() => onSort(scoreKey)}><span>{label}</span>{iconPath ? <img className="score-head-v2__icon" src={iconPath} alt="" aria-hidden="true" draggable={false} /> : null}<b>{selected ? (direction === 'desc' ? '▼' : '▲') : '◇'}</b></button>;
 }
 
 function Value({ value }: { value: number }) {

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { BattleCard, BattleReportModal } from './BattleReportsView';
 import { EmblemGlyph } from './CommandView';
 import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
+import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 import type { BattleReport } from './domain/combat/report.ts';
 import { createBattleReportViewModel } from './domain/combat/battle-report-view-model.ts';
 import type { CommandState } from './domain/command/types.ts';
@@ -26,6 +27,7 @@ import {
 import type { ReportCategory, ReportFilter, ReportItem, ReportsState } from './domain/reports/types.ts';
 import type { PlayerProfileState } from './domain/profile/types.ts';
 import { selectPlayerProfileMetrics } from './domain/profile/selectors.ts';
+import type { PlayerProfileMetricKey } from './domain/profile/selectors.ts';
 import type { RatingPrototypeState } from './domain/rating/fixtures.ts';
 import { RUNTIME_RESET_EVENT, type RuntimeMode } from './domain/runtime/mode.ts';
 import type { SpyReportSnapshot } from './domain/espionage/types.ts';
@@ -101,18 +103,15 @@ function withOverpopulationReports(next: ReportsState, previous: ReportsState): 
 }
 
 function ReportGlyph({ kind }: { kind: ReportCategory }) {
-  const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.55, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
-  if (kind === 'system') return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="M3 16s5-8 13-8 13 8 13 8-5 8-13 8S3 16 3 16Z" /><circle {...common} cx="16" cy="16" r="4" /><path {...common} d="M16 3v3M16 26v3M3 16h3M26 16h3" /></svg>;
-  if (kind === 'battle') return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="m7 5 18 22M25 5 7 27M8 7l5 5m11-5-5 5M6 25l4-1-2-2M26 25l-4-1 2-2" /></svg>;
-  if (kind === 'command') return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="M16 4 27 9v7c0 7-4.7 10.8-11 13-6.3-2.2-11-6-11-13V9l11-5Z" /><path {...common} d="m11 17 4-4 6 6" /></svg>;
-  if (kind === 'arena') return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="M10 5h12v6c0 6-2 9-6 11-4-2-6-5-6-11V5Z" /><path {...common} d="M10 8H5v3c0 4 2 6 6 6M22 8h5v3c0 4-2 6-6 6M16 22v5M11 28h10" /></svg>;
-  if (kind === 'flights') return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="m17 4 6 8-5 3-2 13-3-8-7-2 8-5 3-9Z" /><path {...common} d="m10 22-4 4m6-2-2 4" /></svg>;
-  if (kind === 'alliances') return <svg viewBox="0 0 32 32" aria-hidden="true"><circle {...common} cx="10" cy="12" r="4" /><circle {...common} cx="22" cy="12" r="4" /><path {...common} d="M3 27c1-6 3-9 7-9s6 3 7 9M15 27c1-6 3-9 7-9 3.5 0 5.7 2.5 7 7M13 13h6" /></svg>;
-  return <svg viewBox="0 0 32 32" aria-hidden="true"><path {...common} d="m16 4 3.5 7.1 7.8 1.1-5.7 5.5 1.3 7.8-6.9-3.7-6.9 3.7 1.3-7.8-5.7-5.5 7.8-1.1L16 4Z" /></svg>;
+  const iconKey: Record<ReportCategory, keyof typeof asterionAssetIntegrationAssets.reportIcons> = {
+    system: 'system', battle: 'battle', command: 'command', arena: 'arena',
+    flights: 'flights', alliances: 'alliances', achievements: 'achievements',
+  };
+  return <img className="reports-glyph-image" src={asterionAssetIntegrationAssets.reportIcons[iconKey[kind]]} alt="" aria-hidden="true" draggable={false} />;
 }
 
 function ProfileGlyph() {
-  return <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="10" r="5" fill="none" stroke="currentColor" strokeWidth="1.55" /><path d="M6 28c.8-6.2 4.2-9.3 10-9.3S25.2 21.8 26 28" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" /></svg>;
+  return <img className="reports-glyph-image" src={asterionAssetIntegrationAssets.reportIcons.profile} alt="" aria-hidden="true" draggable={false} />;
 }
 
 function SearchGlyph() {
@@ -294,11 +293,8 @@ function ProfileAvatar({ displayName, factionId }: { displayName: string; factio
   );
 }
 
-function MetricGlyph({ metric }: { metric: string }) {
-  if (metric === 'resourcePoints') return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 5v8l-8 5-8-5V8l8-5Z" fill="none" stroke="currentColor" strokeWidth="1.4" /><path d="m7 10 5 3 5-3M12 13v5" fill="none" stroke="currentColor" strokeWidth="1.4" /></svg>;
-  if (metric === 'battlePoints') return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 4 14 16M19 4 5 20M7 6l4 4m6-4-4 4M5 18l3-1-1-2m12 3-3-1 1-2" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>;
-  if (metric === 'totalPoints') return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" fill="none" stroke="currentColor" strokeWidth="1.4" /><path d="m8 12 2.5 2.5L16 9" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>;
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.6 5.3 5.9.8-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.8L12 3Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>;
+function MetricGlyph({ metric }: { metric: PlayerProfileMetricKey }) {
+  return <img className="reports-score-glyph" src={asterionAssetIntegrationAssets.scoreIcons[metric]} alt="" aria-hidden="true" draggable={false} />;
 }
 
 function PlayerProfile({ profile, rating, command, mode, onOpenCommand }: { profile: PlayerProfileState; rating: RatingPrototypeState; command: CommandState; mode: RuntimeMode; onOpenCommand: () => void }) {

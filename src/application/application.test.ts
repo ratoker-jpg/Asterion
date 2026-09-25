@@ -738,6 +738,23 @@ test('persistence facade keeps the existing save key, envelope migration, and on
   assert.deepEqual(new Set(Object.values(production.planets['helion-01'].repair.defenses)), new Set([0]));
 });
 
+test('persistence keeps newly integrated regular planet skin IDs through reload', () => {
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 1_000, testTimeScale: 10 });
+  const state = persistence.read();
+  state.planets['helion-01'].skin = 'skin-asterion-09';
+  assert.equal(persistence.write(state).ok, true);
+  assert.equal(persistence.read().planets['helion-01'].skin, 'skin-asterion-09');
+
+  storage.values.set(persistence.saveKey, JSON.stringify({
+    schemaVersion: 1,
+    metal: 450_100_000,
+    planetSkin: 'skin-asterion-01',
+    queue: [],
+  }));
+  assert.equal(persistence.read().planets['helion-01'].skin, 'skin-asterion-01');
+});
+
 test('persistence drops incomplete flight records and rebuilds only a validated request index', () => {
   const storage = new MemoryStorage();
   const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => 1_000 });

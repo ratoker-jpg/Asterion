@@ -353,11 +353,18 @@ async function inspectorSnapshot(win) {
       disabled: Boolean(node.disabled),
       title: node.getAttribute('title') || '',
     }));
+    const specialImage = document.querySelector('[data-qa-universe-special] img');
     return {
       kind: inspector?.getAttribute('data-qa-inspector-kind') || '',
       text: inspector?.textContent?.replace(/\\s+/g, ' ').trim() || '',
       ownerName: document.querySelector('[data-qa-universe-owner-name]')?.textContent?.trim() || '',
       avatar: document.querySelector('[data-qa-universe-avatar] img')?.getAttribute('src') || '',
+      specialArt: {
+        src: specialImage?.getAttribute('src') || '',
+        loaded: Boolean(specialImage?.complete && specialImage.naturalWidth > 0),
+        width: specialImage?.naturalWidth || 0,
+        height: specialImage?.naturalHeight || 0,
+      },
       points,
       planetRows: document.querySelectorAll('[data-qa-universe-planet-row]').length,
       ownerId: document.querySelector('[data-qa-universe-owner]')?.getAttribute('data-qa-universe-owner'),
@@ -831,7 +838,8 @@ async function runViewport(width, height) {
     const pirate = await inspectorSnapshot(win);
     checkCopy(pirate);
     await checkModal(win);
-    if (pirate.kind !== 'pirate' || !pirate.text.includes('Пиратский объект') || !pirate.text.includes('исчезнет через') || !pirate.specialActionDisabled) throw new Error(`${label}: pirate inspector contract failed ${JSON.stringify(pirate)}`);
+    if (pirate.kind !== 'pirate' || !pirate.text.includes('Пиратский объект') || !pirate.text.includes('исчезнет через') || !pirate.specialActionDisabled
+      || !pirate.specialArt.loaded || !pirate.specialArt.src.includes('/asterion/universe/pirate-planets/')) throw new Error(`${label}: pirate inspector contract failed ${JSON.stringify(pirate)}`);
     await capture(win, directory, 'pirate-inspector');
     await dismissInspector(win);
     await selectSystem(win, pirateSystem);
@@ -868,7 +876,8 @@ async function runViewport(width, height) {
         const snapshot = await inspectorSnapshot(win);
         checkCopy(snapshot);
         await checkModal(win);
-        if (snapshot.kind !== 'anomaly' || !snapshot.text.includes('Аномалия') || !snapshot.text.includes('исчезнет через') || !snapshot.specialActionDisabled) throw new Error(`${label}: anomaly inspector contract failed ${JSON.stringify(snapshot)}`);
+        if (snapshot.kind !== 'anomaly' || !snapshot.text.includes('Аномалия') || !snapshot.text.includes('исчезнет через') || !snapshot.specialActionDisabled
+          || !snapshot.specialArt.loaded || !snapshot.specialArt.src.includes('/asterion/universe/anomalies/')) throw new Error(`${label}: anomaly inspector contract failed ${JSON.stringify(snapshot)}`);
         await capture(win, directory, 'anomaly-inspector');
         await dismissInspector(win);
         return snapshot;
@@ -883,7 +892,8 @@ async function runViewport(width, height) {
       const special = await inspectorSnapshot(win);
       checkCopy(special);
       await checkModal(win);
-      if (special.kind !== kind || !special.text.includes('Владелец отсутствует') || !special.specialActionDisabled) throw new Error(`${label}: ${kind} inspector contract failed ${JSON.stringify(special)}`);
+      if (special.kind !== kind || !special.text.includes('Владелец отсутствует') || !special.specialActionDisabled
+        || (kind === 'unique' && (!special.specialArt.loaded || !special.specialArt.src.includes('/asterion/universe/unique-objects/')))) throw new Error(`${label}: ${kind} inspector contract failed ${JSON.stringify(special)}`);
       await capture(win, directory, `${kind}-inspector`);
       await dismissInspector(win);
     }
@@ -926,6 +936,38 @@ async function runViewport(width, height) {
     }
     await capture(win, directory, 'debris-markers-zero');
 
+    await win.webContents.executeJavaScript(`document.querySelector('[data-qa-navigation="primary"] [data-qa-route="planet"]')?.click()`);
+    await waitFor(win, `document.querySelector('.owned-planet-edit-v4')`);
+    const openSkinPicker = await win.webContents.executeJavaScript(`(() => {
+      const row = [...document.querySelectorAll('.owned-planet-row-v4')].find((item) => item.textContent?.includes('Helion 01'));
+      const button = row?.querySelector('.owned-planet-edit-v4');
+      button?.click();
+      return Boolean(button);
+    })()`);
+    if (!openSkinPicker) throw new Error(`${label}: could not open the homeworld skin picker`);
+    await waitFor(win, `document.querySelectorAll('.skin-picker-grid [data-qa-planet-skin^="skin-asterion-"]').length === 9`);
+    await waitFor(win, `Array.from(document.querySelectorAll('.skin-picker-grid [data-qa-planet-skin^="skin-asterion-"] img')).every((image) => image.complete && image.naturalWidth > 0)`);
+    const picker = await win.webContents.executeJavaScript(`(() => ({
+      total: document.querySelectorAll('.skin-picker-grid [data-qa-planet-skin]').length,
+      newSkins: Array.from(document.querySelectorAll('.skin-picker-grid [data-qa-planet-skin^="skin-asterion-"]')).map((button) => ({ id: button.getAttribute('data-qa-planet-skin'), label: button.querySelector('span')?.textContent?.trim() || '', src: button.querySelector('img')?.getAttribute('src') || '', loaded: Boolean(button.querySelector('img')?.complete && button.querySelector('img')?.naturalWidth > 0) })),
+    }))()`);
+    if (picker.total !== 30 || picker.newSkins.length !== 9 || picker.newSkins.some((skin, index) => skin.id !== `skin-asterion-${String(index + 1).padStart(2, '0')}` || !skin.label || !skin.loaded || !skin.src.endsWith('.webp'))) {
+      throw new Error(`${label}: new planet skins are missing from the picker ${JSON.stringify(picker)}`);
+    }
+    const selectedSkinId = 'skin-asterion-09';
+    await win.webContents.executeJavaScript(`document.querySelector('[data-qa-planet-skin="${selectedSkinId}"]')?.click()`);
+    await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').planets?.['helion-01']?.skin === ${JSON.stringify(selectedSkinId)}`);
+    const selectedSkin = await win.webContents.executeJavaScript(`(() => ({ src: document.querySelector('[data-qa-planet-skin-art]')?.getAttribute('src') || '', loaded: Boolean(document.querySelector('[data-qa-planet-skin-art]')?.complete && document.querySelector('[data-qa-planet-skin-art]')?.naturalWidth > 0) }))()`);
+    if (!selectedSkin.loaded || !selectedSkin.src.endsWith('/skin-asterion-09.webp')) throw new Error(`${label}: selected planet art did not update ${JSON.stringify(selectedSkin)}`);
+    await win.webContents.executeJavaScript(`document.querySelector('.planet-editor-modal-v5 [data-asterion-close]')?.click()`);
+    await waitFor(win, `!document.querySelector('.planet-editor-modal-v5')`);
+    await reload(win);
+    await win.webContents.executeJavaScript(`document.querySelector('[data-qa-navigation="primary"] [data-qa-route="planet"]')?.click()`);
+    await waitFor(win, `document.querySelector('[data-qa-planet-skin-art]')?.complete && document.querySelector('[data-qa-planet-skin-art]')?.naturalWidth > 0`);
+    const persistedSkin = await win.webContents.executeJavaScript(`(() => ({ saved: JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').planets?.['helion-01']?.skin || '', src: document.querySelector('[data-qa-planet-skin-art]')?.getAttribute('src') || '' }))()`);
+    if (persistedSkin.saved !== selectedSkinId || !persistedSkin.src.endsWith('/skin-asterion-09.webp')) throw new Error(`${label}: selected skin did not survive reload ${JSON.stringify(persistedSkin)}`);
+    await capture(win, directory, 'planet-skin-persisted');
+
     const screenshots = skipScreenshots ? [] : fs.readdirSync(directory).filter((name) => name.endsWith('.png')).sort();
     return {
       viewport: label,
@@ -939,6 +981,7 @@ async function runViewport(width, height) {
         live: { coordinate: debrisFixtures.liveCoordinate, amount: liveMarker.amount, interaction: liveDebrisInteraction },
         cleared: true,
       },
+      planetSkin: { pickerCount: picker.total, selected: selectedSkinId, persisted: persistedSkin.saved === selectedSkinId, runtimeArt: persistedSkin.src },
       asteroidsHoldPosition,
       timedObjectSystems: { pirate: pirateSystem, anomaly: anomalySystem, unique: uniqueSystem },
       pirateAnimation,

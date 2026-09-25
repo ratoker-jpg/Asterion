@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom';
 import { EmblemGlyph } from './CommandView';
 import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
+import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 import asteroid01 from '../assets/source/universe-navigation/asteroids/asteroid.variant-01.png';
 import asteroid02 from '../assets/source/universe-navigation/asteroids/asteroid.variant-02.png';
 import asteroid03 from '../assets/source/universe-navigation/asteroids/asteroid.variant-03.png';
@@ -10,8 +11,6 @@ import asteroid05 from '../assets/source/universe-navigation/asteroids/asteroid.
 import asteroid06 from '../assets/source/universe-navigation/asteroids/asteroid.variant-06.png';
 import asteroid07 from '../assets/source/universe-navigation/asteroids/asteroid.variant-07.png';
 import asteroid08 from '../assets/source/universe-navigation/asteroids/asteroid.variant-08.png';
-import anomaly01 from '../assets/source/universe-navigation/stellar-remnants/stellar-remnant.variant-01.png';
-import anomaly02 from '../assets/source/universe-navigation/stellar-remnants/stellar-remnant.variant-02.png';
 import pirate01 from '../assets/source/planets/pirate/pirate-planet-01-graveyard.png';
 import pirate02 from '../assets/source/planets/pirate/pirate-planet-02-corsair-ocean.png';
 import pirate03 from '../assets/source/planets/pirate/pirate-planet-03-treasure-vault.png';
@@ -95,9 +94,12 @@ const planetArts = [
 ];
 const starArts = [star01, star02, star03, star04, star05, star06];
 const asteroidArts = [asteroid01, asteroid02, asteroid03, asteroid04, asteroid05, asteroid06, asteroid07, asteroid08];
-const pirateArts = [pirateSkull, pirate01, pirate02, pirate03];
-const anomalyArts = [anomaly01, anomaly02];
-const assets: UniverseAssetCatalog = { planetArts, starArts, asteroidArts, pirateArts, anomalyArts, uniqueArts: [uniqueIslands, uniqueVortex, uniqueCrystal] };
+const pirateArts = [pirateSkull, pirate01, pirate02, pirate03, ...asterionAssetIntegrationAssets.piratePlanetArts];
+const anomalyArts = [...asterionAssetIntegrationAssets.anomalyArts];
+const assets: UniverseAssetCatalog = {
+  planetArts, starArts, asteroidArts, pirateArts, anomalyArts,
+  uniqueArts: [uniqueIslands, uniqueVortex, uniqueCrystal, ...asterionAssetIntegrationAssets.uniquePlanetArts],
+};
 
 type UniverseViewProps = {
   onNotice: (message: string) => void;

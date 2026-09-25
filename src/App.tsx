@@ -177,6 +177,7 @@ import generated027 from '../assets/source/planets/skins/planet-027.png';
 import generated028 from '../assets/source/planets/skins/planet-028.png';
 import generated030 from '../assets/source/planets/skins/planet-030.png';
 import generated032 from '../assets/source/planets/skins/planet-032.png';
+import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 
 const planetSkins = [
   { id: 'colonized', label: 'Колония', art: planetColonized },
@@ -200,6 +201,7 @@ const planetSkins = [
   { id: 'skin-028', label: 'Облик 028', art: generated028 },
   { id: 'skin-030', label: 'Облик 030', art: generated030 },
   { id: 'skin-032', label: 'Облик 032', art: generated032 },
+  ...asterionAssetIntegrationAssets.regularPlanetSkins,
 ] as const;
 
 type Zone = BuildingZone;
@@ -1542,7 +1544,7 @@ export function App() {
                 </section> : null}
                 <div className="planet-stage-v3">
                   <div className="planet-atmosphere" />
-                  <img className="planet-image-v3" src={currentSkin.art} alt={currentPlanetName} draggable={false} />
+                  <img className="planet-image-v3" data-qa-planet-skin-art src={currentSkin.art} alt={currentPlanetName} draggable={false} />
                   {(['resource', 'industry', 'military'] as Zone[]).map((item) => (
                     <button
                       key={item}
@@ -1632,7 +1634,7 @@ export function App() {
               <div className="planet-editor-skins-title-v5"><strong>ОБЛИК ПЛАНЕТЫ</strong><small>Можно менять независимо от названия</small></div>
               <div className="skin-picker-grid">
                 {planetSkins.map((skin) => (
-                  <button key={skin.id} type="button" className={editingPlanetState.skin === skin.id ? 'active' : ''} onClick={() => chooseSkin(skin)}>
+                  <button key={skin.id} type="button" data-qa-planet-skin={skin.id} className={editingPlanetState.skin === skin.id ? 'active' : ''} onClick={() => chooseSkin(skin)}>
                     <img src={skin.art} alt="" /><span>{skin.label}</span><small>{editingPlanetState.skin === skin.id ? 'АКТИВИРОВАНА' : 'ИСПОЛЬЗОВАТЬ'}</small>
                   </button>
                 ))}
