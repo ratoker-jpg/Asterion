@@ -7,7 +7,7 @@ app.commandLine.appendSwitch('disable-gpu');
 app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
-const OUTPUT = path.join(ROOT, 'visual-qa');
+const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'visual-qa');
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const TEST_TIME_SCALE_KEY = 'asterion.test-time-scale.v1';
 const VIEWPORTS = [[1920,1080],[1600,900],[1280,720],[2560,1440]];
@@ -81,6 +81,56 @@ async function reload(win) {
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);
+}
+
+async function rendererMutationAndReload(win, source, label) {
+  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+  const execution = win.webContents.executeJavaScript(source)
+    .then((value) => ({ value }))
+    .catch((error) => ({ error: String(error?.stack || error) }));
+  const first = await Promise.race([
+    execution.then((result) => ({ result })),
+    loaded.then(() => ({ loaded: true })),
+  ]);
+  if (first.result?.value === false) throw new Error(`${label}: renderer mutation was rejected`);
+  if (!first.loaded) {
+    const reloaded = await Promise.race([
+      loaded.then(() => true),
+      sleep(10_000).then(() => false),
+    ]);
+    if (!reloaded) throw new Error(`${label}: renderer mutation did not reload the page: ${JSON.stringify(first.result)}`);
+  }
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win);
+  return first.result;
+}
+
+async function advanceRendererClockTo(win, timestamp) {
+  const advancedTo = await win.webContents.executeJavaScript(`(() => {
+    const key = '__asterionVisualQaClock';
+    if (window[key]) throw new Error('Visual QA clock is already installed');
+    const realNow = Date.now.bind(Date);
+    const clock = { realNow, offset: Math.max(0, ${timestamp} - realNow()) };
+    window[key] = clock;
+    Date.now = () => clock.realNow() + clock.offset;
+    return Date.now();
+  })()`);
+  if (!Number.isFinite(advancedTo) || advancedTo < timestamp) {
+    throw new Error(`Could not advance visual QA clock to ${timestamp}: ${advancedTo}`);
+  }
+  return advancedTo;
+}
+
+async function restoreRendererClock(win) {
+  await win.webContents.executeJavaScript(`(() => {
+    const key = '__asterionVisualQaClock';
+    const clock = window[key];
+    if (!clock) return false;
+    Date.now = clock.realNow;
+    delete window[key];
+    return true;
+  })()`);
 }
 
 async function resetTestSave(win) {
@@ -202,28 +252,6 @@ async function enqueueResourceBuilding(win, role) {
   }
   await waitFor(win, `!document.querySelector('.resource-building-dialog')`);
   await settle(win);
-}
-
-async function holdActiveResourceQueue(win) {
-  const held = await win.webContents.executeJavaScript(`(() => {
-    try {
-      const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
-      const queue = save.queues?.['helion-01'];
-      if (!Array.isArray(queue) || !queue[0]) return false;
-      const duration = 5 * 60 * 1000;
-      let finishAt = Date.now() + duration;
-      queue.forEach((item, index) => {
-        item.startedAt = index === 0 ? Date.now() : finishAt;
-        item.finishAt = item.startedAt + duration;
-        finishAt = item.finishAt;
-      });
-      localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-      return true;
-    } catch {
-      return false;
-    }
-  })()`);
-  if (!held) throw new Error('Could not hold the active resource queue item for QA');
 }
 
 async function metrics(win, screen) {
@@ -447,13 +475,22 @@ async function verifyResourceZoneFlow(win, directory) {
     await closeResourceBuilding(win);
   }
 
-  await win.webContents.executeJavaScript(`(() => {
+  await rendererMutationAndReload(win, `(() => {
     const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
+    const planet=save.planets?.['helion-01'];
+    if(!planet) return false;
     save.metal=0;
+    planet.resources={...(planet.resources||{}),metal:0};
     save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
+    window.location.reload();
+    return true;
+  })()`, 'Could not seed insufficient-resource wallet fixture');
+  const reloadedInsufficientFixture = await win.webContents.executeJavaScript(`(() => {
+    const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
+    return { rootMetal: save.metal, planetMetal: save.planets?.['helion-01']?.resources?.metal };
   })()`);
-  await reload(win);
+  if(reloadedInsufficientFixture.rootMetal!==0 || reloadedInsufficientFixture.planetMetal!==0) throw new Error(`Insufficient-resource canonical wallet did not survive reload: ${JSON.stringify(reloadedInsufficientFixture)}`);
   await activateResourceZone(win);
   await openResourceBuilding(win,'metal-production-1');
   await waitFor(win, `document.querySelector('[data-qa-build-status]')`);
@@ -467,36 +504,31 @@ async function verifyResourceZoneFlow(win, directory) {
   await capture(win,directory,'resource-zone-insufficient');
 
   await resetTestSave(win);
-  const queueFixtureReady = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  const queueFixtureSeeded = await win.webContents.executeJavaScript(`(() => {
+  await rendererMutationAndReload(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
     const planet = save.planets?.['helion-01'];
     if (!planet) return false;
     save.metal = ${TEST_QUEUE_START_METAL};
     save.minerals = 100_000_000;
+    planet.resources = { ...(planet.resources || {}), metal: ${TEST_QUEUE_START_METAL}, minerals: 100_000_000 };
     planet.energy = ${TEST_QUEUE_START_ENERGY};
     save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
     window.location.reload();
     return true;
-  })()`).catch(() => false);
-  if (!queueFixtureSeeded) throw new Error('Could not seed the resource queue QA fixture');
-  await queueFixtureReady;
-  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
-  await win.webContents.executeJavaScript('document.fonts?.ready');
-  await settle(win);
+  })()`, 'Could not seed the resource queue QA fixture');
+  const queueFixtureWallet = await win.webContents.executeJavaScript(`(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+    return { rootMetal: save.metal, planetMetal: save.planets?.['helion-01']?.resources?.metal };
+  })()`);
+  if (queueFixtureWallet.rootMetal !== TEST_QUEUE_START_METAL || queueFixtureWallet.planetMetal !== TEST_QUEUE_START_METAL) {
+    throw new Error(`Resource queue canonical wallet did not survive fixture reload: ${JSON.stringify(queueFixtureWallet)}`);
+  }
   await activateResourceZone(win);
 
-  for(const [index, role] of ['basic-energy','gas-production-1','hangar'].entries()) {
+  for(const role of ['basic-energy','gas-production-1','hangar']) {
     await enqueueResourceBuilding(win,role);
-    if(index===0){
-      // QA-only setup: keep the first item active while the three-slot contract
-      // is checked. Production queue timing and reconciliation stay untouched.
-      await holdActiveResourceQueue(win);
-      await reload(win);
-      await activateResourceZone(win);
-    }
   }
   await waitFor(win, `(() => { try { const q=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}').queues?.['helion-01']; return Array.isArray(q)&&q.length===3; } catch { return false; } })()`);
   await waitFor(win, `document.querySelectorAll('[data-qa-queue-role]').length===3 && document.querySelector('[data-qa-queue-full]')`);
@@ -521,20 +553,30 @@ async function verifyResourceZoneFlow(win, directory) {
   if(fullDialog.status!=='queue-full' || !fullDialog.disabled || !fullDialog.text.includes('Очередь заполнена')) throw new Error(`Queue-full dialog failed: ${JSON.stringify(fullDialog)}`);
   await closeResourceBuilding(win);
 
-  await win.webContents.executeJavaScript(`(() => {
+  const firstFinishAt = await win.webContents.executeJavaScript(`(() => {
     const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
-    const q=save.queues['helion-01'];
-    const now=Date.now();
-    q[0].startedAt=now-50000;
-    q[0].finishAt=now-10;
-    q[1].startedAt=q[0].finishAt;
-    q[1].finishAt=q[1].startedAt+45000;
-    q[2].startedAt=q[1].finishAt;
-    q[2].finishAt=q[2].startedAt+45000;
-    localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
+    const queue=save.queues?.['helion-01'];
+    return Array.isArray(queue)&&queue.length===3 ? queue[0]?.finishAt : null;
   })()`);
-  await reload(win);
-  await waitFor(win, `(() => { try { const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}'); const q=save.queues?.['helion-01']; return Array.isArray(q)&&q.length===2&&q[0]?.assetRole==='gas-production-1'&&save.planets?.['helion-01']?.buildings?.['basic-energy']===2&&save.planets?.['helion-01']?.energy===${TEST_COMPLETED_ENERGY}; } catch { return false; } })()`,8000);
+  if (!Number.isFinite(firstFinishAt)) throw new Error(`Could not read the active building completion time: ${firstFinishAt}`);
+  const completionExpression = `(() => { try { const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}'); const q=save.queues?.['helion-01']; return Array.isArray(q)&&q.length===2&&q[0]?.assetRole==='gas-production-1'&&save.planets?.['helion-01']?.buildings?.['basic-energy']===2&&save.planets?.['helion-01']?.energy===${TEST_COMPLETED_ENERGY}; } catch { return false; } })()`;
+  await advanceRendererClockTo(win, firstFinishAt + 1);
+  try {
+    await waitFor(win, completionExpression, 8000);
+  } catch (error) {
+    const actual = await win.webContents.executeJavaScript(`(() => {
+      const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
+      const queue=save.queues?.['helion-01']||[];
+      return {
+        queue:queue.map(({assetRole,startedAt,finishAt,durationMs})=>({assetRole,startedAt,finishAt,durationMs})),
+        buildings:save.planets?.['helion-01']?.buildings,
+        energy:save.planets?.['helion-01']?.energy,
+        testTimeScale:localStorage.getItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}),
+        now:Date.now(),
+      };
+    })()`);
+    throw new Error(`Building completion transition timed out: ${String(error)}; actual=${JSON.stringify(actual)}`);
+  }
   await activateResourceZone(win);
   await waitFor(win, `document.querySelector('[data-qa-queue-slot="1"]')?.getAttribute('data-qa-queue-role')==='gas-production-1'`);
   const fifo=await win.webContents.executeJavaScript(`(() => {
@@ -545,6 +587,7 @@ async function verifyResourceZoneFlow(win, directory) {
   if(JSON.stringify(fifo.queue)!==JSON.stringify(['gas-production-1','hangar']) || fifo.activeRole!=='gas-production-1' || fifo.level!==2 || fifo.energy!==TEST_COMPLETED_ENERGY || !fifo.activeText.includes('Осталось')) throw new Error(`FIFO transition failed: ${JSON.stringify(fifo)}`);
   await capture(win,directory,'resource-zone-fifo-next');
 
+  await restoreRendererClock(win);
   await reload(win);
   await activateResourceZone(win);
   const persisted=await win.webContents.executeJavaScript(`(() => {

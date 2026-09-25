@@ -31,6 +31,28 @@ async function reload(win) {
   await settle(win);
 }
 
+async function rendererMutationAndReload(win, source, label) {
+  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+  const execution = win.webContents.executeJavaScript(source)
+    .then((value) => ({ value }))
+    .catch((error) => ({ error: String(error?.stack || error) }));
+  const first = await Promise.race([
+    execution.then((result) => ({ result })),
+    loaded.then(() => ({ loaded: true })),
+  ]);
+  if (first.result?.value === false) throw new Error(`${label}: renderer mutation was rejected`);
+  if (!first.loaded) {
+    const reloaded = await Promise.race([
+      loaded.then(() => true),
+      sleep(10_000).then(() => false),
+    ]);
+    if (!reloaded) throw new Error(`${label}: renderer mutation did not reload the page: ${JSON.stringify(first.result)}`);
+  }
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win);
+}
+
 async function click(win, selector) {
   const clicked = await win.webContents.executeJavaScript(`(() => {
     const element = document.querySelector(${JSON.stringify(selector)});
@@ -43,9 +65,12 @@ async function click(win, selector) {
 }
 
 async function seed(win) {
-  await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);
-  await reload(win);
-  const ok = await win.webContents.executeJavaScript(`(() => {
+  await rendererMutationAndReload(win, `(() => {
+    localStorage.removeItem(${JSON.stringify(SAVE_KEY)});
+    window.location.reload();
+    return true;
+  })()`, 'Could not reset Spaceport integration state');
+  await rendererMutationAndReload(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
     const planet = save?.planets?.['helion-01'];
     if (!planet?.buildings) return false;
@@ -55,6 +80,7 @@ async function seed(win) {
     save.science = save.science || { levels: {}, queue: [] };
     save.science.levels = save.science.levels || {};
     save.science.levels[3] = 2;
+    planet.resources = { ...(planet.resources || {}), metal: 100000, minerals: 100000, gas: 100000 };
     save.metal = 100000;
     save.minerals = 100000;
     save.gas = 100000;
@@ -65,10 +91,9 @@ async function seed(win) {
     };
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 8);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    window.location.reload();
     return true;
-  })()`);
-  if (!ok) throw new Error('Could not seed Spaceport integration state');
-  await reload(win);
+  })()`, 'Could not seed Spaceport integration state');
 }
 
 async function openSpaceport(win, track = 'ships') {
@@ -94,7 +119,8 @@ async function readSave(win) {
       metal: save.metal,
       minerals: save.minerals,
       gas: save.gas,
-      levels: planet?.spaceportUpgrades?.shipLevels ?? {},
+      planetResources: planet?.resources,
+      levels: save.shipUpgradeLevels ?? planet?.spaceportUpgrades?.shipLevels ?? {},
       shipQueue: planet?.spaceportUpgrades?.shipQueue ?? [],
       commanderQueue: planet?.spaceportUpgrades?.commanderQueue ?? [],
     };
@@ -143,7 +169,7 @@ async function assertRepeatedRow(win, shipId, maxLevel, label) {
 }
 
 async function forceOfflineCompletion(win) {
-  const ok = await win.webContents.executeJavaScript(`(() => {
+  await rendererMutationAndReload(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
     const state = save.planets?.['helion-01']?.spaceportUpgrades;
     if (!state) return false;
@@ -157,24 +183,23 @@ async function forceOfflineCompletion(win) {
       });
     }
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    window.location.reload();
     return true;
-  })()`);
-  if (!ok) throw new Error('Could not force offline completion');
+  })()`, 'Could not force offline completion');
 }
 
 async function seedMaxLevels(win) {
-  const ok = await win.webContents.executeJavaScript(`(() => {
+  await rendererMutationAndReload(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
     const state = save.planets?.['helion-01']?.spaceportUpgrades;
     if (!state) return false;
     state.shipQueue = [];
     state.commanderQueue = [];
-    state.shipLevels.transporter = 10;
-    state.shipLevels.corsair = 40;
+    save.shipUpgradeLevels = { ...(save.shipUpgradeLevels || {}), transporter: 10, corsair: 40 };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    window.location.reload();
     return true;
-  })()`);
-  if (!ok) throw new Error('Could not seed max levels');
+  })()`, 'Could not seed max levels');
 }
 
 async function assertMaxRow(win, shipId, expectedMax, label) {
@@ -341,6 +366,11 @@ async function invokeRapidUpgradeHandler(win, shipId, attempts = 4) {
 
 async function verify(win) {
   await seed(win);
+  const seeded = await readSave(win);
+  if (seeded.metal !== 100000 || seeded.minerals !== 100000 || seeded.gas !== 100000
+    || seeded.planetResources?.metal !== 100000 || seeded.planetResources?.minerals !== 100000 || seeded.planetResources?.gas !== 100000) {
+    throw new Error(`seeded canonical wallet mismatch ${JSON.stringify(seeded)}`);
+  }
   await openSpaceport(win, 'ships');
 
   const excludedVisible = await win.webContents.executeJavaScript(`['solar-satellite','spy-probe','colonizer','recycler'].filter((id) => document.querySelector('[data-qa-spaceport-card="' + id + '"]'))`);
@@ -352,7 +382,8 @@ async function verify(win) {
   }
   let saved = await readSave(win);
   assertChain(saved.shipQueue, 'transporter', 'ordinary ship UI enqueue');
-  if (saved.metal !== 93000 || saved.minerals !== 100000 || saved.gas !== 100000) throw new Error(`ordinary ship resource deduction mismatch ${JSON.stringify(saved)}`);
+  if (saved.metal !== 93000 || saved.minerals !== 100000 || saved.gas !== 100000
+    || saved.planetResources?.metal !== 93000 || saved.planetResources?.minerals !== 100000 || saved.planetResources?.gas !== 100000) throw new Error(`ordinary ship resource deduction mismatch ${JSON.stringify(saved)}`);
   await assertRepeatedRow(win, 'transporter', 10, 'ordinary ship row');
 
   await click(win, '[data-qa-spaceport-tab="commanders"]');
@@ -374,6 +405,7 @@ async function verify(win) {
   if (saved.metal !== beforeRapidCorsair.metal - commanderCost.metal
       || saved.minerals !== beforeRapidCorsair.minerals - commanderCost.minerals
       || saved.gas !== beforeRapidCorsair.gas - commanderCost.gas
+      || saved.planetResources?.metal !== saved.metal || saved.planetResources?.minerals !== saved.minerals || saved.planetResources?.gas !== saved.gas
       || saved.commanderQueue.some((task) => task.cost.gas !== 0 || task.refundEligible !== true)) {
     throw new Error(`Corsair rapid enqueue charged resources or snapshots incorrectly ${JSON.stringify({ beforeRapidCorsair, saved, commanderCost })}`);
   }
@@ -395,7 +427,7 @@ async function verify(win) {
   await assertRepeatedRow(win, 'corsair', 40, 'Corsair rapid row');
 
   await forceOfflineCompletion(win);
-  await reopenSpaceport(win, 'ships');
+  await openSpaceport(win, 'ships');
   saved = await readSave(win);
   if (saved.levels.transporter !== 3 || saved.levels.corsair !== 3 || saved.shipQueue.length || saved.commanderQueue.length) {
     throw new Error(`offline completion mismatch ${JSON.stringify(saved)}`);
@@ -424,7 +456,8 @@ async function verify(win) {
   await click(win, '[data-qa-spaceport-cancel-yes]');
   await waitFor(win, 'document.querySelector("[data-qa-spaceport-queue-count]")?.getAttribute("data-qa-spaceport-queue-count") === "0/3"');
   const afterCancellation = await readSave(win);
-  if (afterCancellation.shipQueue.length !== 0 || afterCancellation.levels.transporter !== 3 || afterCancellation.metal <= beforeCancellation.metal) {
+  if (afterCancellation.shipQueue.length !== 0 || afterCancellation.levels.transporter !== 3 || afterCancellation.metal <= beforeCancellation.metal
+    || afterCancellation.planetResources?.metal !== afterCancellation.metal || afterCancellation.planetResources?.minerals !== afterCancellation.minerals || afterCancellation.planetResources?.gas !== afterCancellation.gas) {
     throw new Error(`Spaceport cancellation state mismatch ${JSON.stringify({ beforeCancellation, afterCancellation })}`);
   }
   const cancellationNotice = await win.webContents.executeJavaScript('document.querySelector(".shell-notice span")?.textContent?.replace(/\\s+/g, " ").trim() ?? ""');
@@ -435,7 +468,7 @@ async function verify(win) {
   await assertRequirementBadges(win);
 
   await seedMaxLevels(win);
-  await reopenSpaceport(win, 'ships');
+  await openSpaceport(win, 'ships');
   await assertMaxRow(win, 'transporter', 10, 'ordinary max');
   await click(win, '[data-qa-spaceport-tab="commanders"]');
   await assertMaxRow(win, 'corsair', 40, 'commander max');

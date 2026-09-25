@@ -13,6 +13,7 @@ import type { FlightCompletionReason, FlightDestination, FlightRecord, FlightSci
 export type DispatchFlightInput = {
   requestId: string;
   missionId: MissionId;
+  ownerSide?: FlightRecord['ownerSide'];
   originPlanetId: string;
   originCoordinate: FlightRecord['originCoordinate'];
   destination: FlightDestination;
@@ -38,7 +39,13 @@ export type DispatchFlightInput = {
   targetRelation?: TargetRelation;
   cargo?: TransportCargo;
   overflowWarning?: boolean;
+  /** Explicit one-way duration for destinationless Space Flight. */
+  durationMs?: number;
 };
+
+export const MIN_SPACE_FLIGHT_DURATION_MS = 5 * 60_000;
+export const MAX_SPACE_FLIGHT_DURATION_MS = 11 * 60 * 60_000 + 59 * 60_000;
+export const SPACE_FLIGHT_DURATION_STEP_MS = 60_000;
 
 export function createFlightState(): FlightState {
   return { records: [], requestIndex: {} };
@@ -55,13 +62,30 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
   assertFlightCoordinate(input.originCoordinate);
   assertFlightCoordinate(input.destination.coordinate);
   if (!Number.isFinite(input.departedAt)) throw new Error('Departure time must be finite.');
-  const routeDistance = calculateRouteDistance(input.originCoordinate, input.destination.coordinate);
   const selectedCommanders = input.selectedCommanders ?? {};
-  const effectiveSpeed = calculateEffectiveFleetSpeed(input.factionId, input.selectedShips, input.science, selectedCommanders);
-  const oneWayDurationMs = calculateOneWayDurationMs(input.originCoordinate, input.destination.coordinate, effectiveSpeed);
+  const isSpaceFlight = input.missionId === 'space-flight';
+  const requestedDuration = input.durationMs;
+  if (isSpaceFlight && (input.destination.kind !== 'space'
+    || !Number.isSafeInteger(requestedDuration)
+    || requestedDuration! < MIN_SPACE_FLIGHT_DURATION_MS
+    || requestedDuration! > MAX_SPACE_FLIGHT_DURATION_MS
+    || requestedDuration! % SPACE_FLIGHT_DURATION_STEP_MS !== 0)) {
+    throw new Error('Space Flight duration must be between 5 minutes and 11 hours 59 minutes in one-minute steps.');
+  }
+  if (!isSpaceFlight && input.destination.kind === 'space') {
+    throw new Error('Only Space Flight may use a destinationless route.');
+  }
+  const routeDistance = isSpaceFlight ? 0 : calculateRouteDistance(input.originCoordinate, input.destination.coordinate);
+  const effectiveSpeed = isSpaceFlight ? 0 : calculateEffectiveFleetSpeed(input.factionId, input.selectedShips, input.science, selectedCommanders);
+  const oneWayDurationMs = isSpaceFlight
+    ? requestedDuration!
+    : calculateOneWayDurationMs(input.originCoordinate, input.destination.coordinate, effectiveSpeed);
   const destinationPlanetId = input.destination.kind === 'planet' ? input.destination.planetId : input.destinationPlanetId;
   if (input.missionId === 'transport' && input.cargo === undefined) {
     throw new Error('Transport flights require a cargo snapshot.');
+  }
+  if (isSpaceFlight && input.cargo === undefined) {
+    throw new Error('Space Flights require a cargo snapshot.');
   }
   if (input.missionId === 'recycle' && input.cargo === undefined) {
     throw new Error('Recycle flights require an empty cargo snapshot.');
@@ -75,12 +99,13 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
   if (input.missionId === 'gas' && (!Number.isSafeInteger(input.gasCapacity) || (input.gasCapacity ?? 0) <= 0)) {
     throw new Error('Gas extraction flights require a positive capacity snapshot.');
   }
-  const cargo = input.missionId === 'transport' || input.missionId === 'recycle' || input.missionId === 'gas'
+  const cargo = input.missionId === 'transport' || input.missionId === 'space-flight' || input.missionId === 'recycle' || input.missionId === 'gas'
     ? normalizeTransportCargo(input.cargo)
     : undefined;
   return {
     id: `flight-${input.requestId}`,
     requestId: input.requestId,
+    ...(input.ownerSide ? { ownerSide: input.ownerSide } : {}),
     missionId: input.missionId,
     operationId: input.operationId ?? (input.destination.kind === 'operation' ? input.destination.operationId : undefined),
     spyMissionId: input.spyMissionId,
@@ -90,7 +115,9 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
       ? { kind: 'coordinate', coordinate: { ...input.destination.coordinate } }
       : input.destination.kind === 'planet'
         ? { kind: 'planet', planetId: input.destination.planetId, coordinate: { ...input.destination.coordinate } }
-        : { kind: 'operation', operationId: input.destination.operationId, coordinate: { ...input.destination.coordinate } },
+        : input.destination.kind === 'operation'
+          ? { kind: 'operation', operationId: input.destination.operationId, coordinate: { ...input.destination.coordinate } }
+          : { kind: 'space', coordinate: { ...input.originCoordinate } },
     destinationPlanetId,
     targetKind: input.targetKind,
     ...(input.targetPlanetName ? { targetPlanetName: input.targetPlanetName } : {}),
@@ -111,7 +138,7 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
     oneWayDurationMs,
     departedAt: input.departedAt,
     arrivalAt: input.departedAt + oneWayDurationMs,
-    gasCost: calculateFlightFuel(input.factionId, input.selectedShips, routeDistance, input.science, selectedCommanders),
+    gasCost: isSpaceFlight ? 100 : calculateFlightFuel(input.factionId, input.selectedShips, routeDistance, input.science, selectedCommanders),
     cargo,
     cargoState: cargo ? 'loaded' : undefined,
     overflowWarning: cargo ? Boolean(input.overflowWarning) : undefined,

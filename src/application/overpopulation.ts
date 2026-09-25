@@ -35,7 +35,7 @@ const TIMER_KEYS = new Set([
   'endsAt',
 ]);
 
-const DEPLOYMENT_RESERVATION_PHASES = new Set(['outbound', 'returning', 'arrived']);
+const FLIGHT_RESERVATION_PHASES = new Set(['outbound', 'returning', 'arrived']);
 
 function safeInteger(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.floor(value) : fallback;
@@ -49,15 +49,15 @@ function satelliteCount(planet: PlanetRuntime, migratedCount: number): number {
   return Math.max(0, safeInteger(planet.solarSatellites, migratedCount));
 }
 
-function getReservedDeploymentShipsForPlanet(
+function getReservedFlightShipsForPlanet(
   state: SaveState,
   planetId: PlanetId,
 ): OverpopulationProtectedShipCounts {
   const reserved: OverpopulationProtectedShipCounts = {};
   for (const flight of state.flights.records) {
-    if (flight.missionId !== 'deployment'
+    if ((flight.missionId !== 'deployment' && flight.missionId !== 'space-flight')
       || flight.originPlanetId !== planetId
-      || !DEPLOYMENT_RESERVATION_PHASES.has(flight.phase)) continue;
+      || !FLIGHT_RESERVATION_PHASES.has(flight.phase)) continue;
     for (const [rawShipId, quantity] of Object.entries(flight.selectedShips)) {
       if (!SHIP_IDS.includes(rawShipId as ShipId)
         || rawShipId === 'solar-satellite'
@@ -319,7 +319,7 @@ export function reconcilePlanetOverpopulation(
     state.profile.factionId,
     now,
     planet.overpopulation,
-    getReservedDeploymentShipsForPlanet(state, planetId),
+    getReservedFlightShipsForPlanet(state, planetId),
   );
   const hadEpisode = Boolean(planet.overpopulation?.blocked);
   const resolved = hadEpisode && !result.state;

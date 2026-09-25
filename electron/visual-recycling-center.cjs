@@ -7,13 +7,14 @@ app.commandLine.appendSwitch('disable-gpu');
 app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
-const OUTPUT = path.join(ROOT, 'visual-qa');
+const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'visual-qa');
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const TEST_TIME_SCALE_KEY = 'asterion.test-time-scale.v1';
-const EXPECTED_METAL_AFTER_COLLECT = 20_980;
-const EXPECTED_MINERALS_AFTER_COLLECT = 16_112;
+const EXPECTED_METAL_AFTER_COLLECT = 19_280;
+const EXPECTED_MINERALS_AFTER_COLLECT = 12_712;
 const EXPECTED_GAS_AFTER_COLLECT = 6_421;
 const EXPECTED_GAS_AFTER_AUTO_COLLECT = 11_521;
+const EXPECTED_METAL_AFTER_AUTO_COLLECT = 19_280;
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -38,6 +39,43 @@ async function reload(win) {
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);
+}
+
+async function rendererMutationAndReload(win, source, label) {
+  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+  const execution = win.webContents.executeJavaScript(source)
+    .then((value) => ({ value }))
+    .catch((error) => ({ error: String(error?.stack || error) }));
+  const first = await Promise.race([
+    execution.then((result) => ({ result })),
+    loaded.then(() => ({ loaded: true })),
+  ]);
+  if (first.result?.value === false) throw new Error(`${label}: renderer mutation was rejected`);
+  if (!first.loaded) {
+    const reloaded = await Promise.race([
+      loaded.then(() => true),
+      sleep(10_000).then(() => false),
+    ]);
+    if (!reloaded) throw new Error(`${label}: renderer mutation did not reload the page: ${JSON.stringify(first.result)}`);
+  }
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win);
+}
+
+async function advanceRendererClockTo(win, timestamp) {
+  const advancedTo = await win.webContents.executeJavaScript(`(() => {
+    const key = '__asterionVisualQaClock';
+    const clock = window[key] ?? { realNow: Date.now.bind(Date), offset: 0 };
+    clock.offset = Math.max(0, ${timestamp} - clock.realNow());
+    window[key] = clock;
+    Date.now = () => clock.realNow() + clock.offset;
+    return Date.now();
+  })()`);
+  if (!Number.isFinite(advancedTo) || advancedTo < timestamp) {
+    throw new Error(`Could not advance visual QA clock to ${timestamp}: ${advancedTo}`);
+  }
+  return advancedTo;
 }
 
 async function click(win, selector) {
@@ -91,14 +129,18 @@ async function capture(win, directory, name) {
 }
 
 async function seedPlanet(win) {
-  const ok = await win.webContents.executeJavaScript(`(() => {
+  await rendererMutationAndReload(win, `(() => {
     const raw = localStorage.getItem(${JSON.stringify(SAVE_KEY)});
     const save = raw ? JSON.parse(raw) : null;
     const planet = save?.planets?.['helion-01'];
     if (!planet?.buildings) return false;
     planet.buildings.recycling = 3;
     planet.buildings.shipyard = Math.max(5, Number(planet.buildings.shipyard) || 0);
+    for (const role of ['metal-production-1', 'metal-production-2', 'metal-production-3', 'mineral-production-1', 'mineral-production-2', 'gas-production-1', 'gas-production-2']) {
+      planet.buildings[role] = 0;
+    }
     planet.recycling = { availableDebris: 100000, jobs: [] };
+    planet.resources = { ...(planet.resources || {}), metal: 15_880, minerals: 12_712, gas: 6_421 };
     save.metal = 15_880;
     save.minerals = 12_712;
     save.gas = 6_421;
@@ -106,10 +148,9 @@ async function seedPlanet(win) {
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 6);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
+    window.location.reload();
     return true;
-  })()`);
-  if (!ok) throw new Error('Could not seed recycling planet');
-  await reload(win);
+  })()`, 'Could not seed recycling planet');
 }
 
 async function activateIndustry(win) {
@@ -172,6 +213,7 @@ async function readSave(win) {
       metal: save.metal,
       minerals: save.minerals,
       gas: save.gas,
+      planetResources: save.planets?.['helion-01']?.resources,
       queue: save.queues?.['helion-01'] ?? [],
       recycling: save.planets?.['helion-01']?.recycling,
       recyclingLevel: save.planets?.['helion-01']?.buildings?.recycling,
@@ -180,40 +222,23 @@ async function readSave(win) {
 }
 
 async function makeReady(win, jobIndex = 0) {
-  const ok = await win.webContents.executeJavaScript(`(() => {
-    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
-    const job = save.planets?.['helion-01']?.recycling?.jobs?.[${jobIndex}];
-    if (!job) return false;
-    const duration = Math.max(1000, Math.ceil((job.debrisAmount / 18 * 1000) / 1000) * 1000);
-    job.startedAt = Date.now() - duration - 2000;
-    job.finishAt = job.startedAt + duration;
-    job.collectExpiresAt = null;
-    job.status = 'processing';
-    localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-    return true;
-  })()`);
-  if (!ok) throw new Error('Could not move recycling job to ready state');
-  await reload(win);
+  const job = (await readSave(win)).recycling?.jobs?.[jobIndex];
+  if (!job) throw new Error(`Could not find recycling job ${jobIndex}`);
+  await advanceRendererClockTo(win, job.finishAt + 1);
+  await waitFor(win, `document.querySelector('[data-qa-recycling-job="${job.id}"][data-qa-recycling-status="ready"]')`);
   await activateIndustry(win);
   await openCenter(win);
 }
 
-async function makeExpiredForAutoCollect(win, jobIndex = 0) {
-  const ok = await win.webContents.executeJavaScript(`(() => {
+async function makeExpiredForAutoCollect(win) {
+  const jobs = (await readSave(win)).recycling?.jobs ?? [];
+  if (jobs.length === 0) throw new Error('Could not find a recycling job for auto-collect');
+  const nextAutoCollectAt = Math.min(...jobs.map((job) => job.finishAt + 24 * 60 * 60 * 1000));
+  await advanceRendererClockTo(win, nextAutoCollectAt + 1);
+  await waitFor(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
-    const job = save.planets?.['helion-01']?.recycling?.jobs?.[${jobIndex}];
-    if (!job) return false;
-    const duration = Math.max(1000, Math.ceil((job.debrisAmount / 18 * 1000) / 1000) * 1000);
-    const storage = 24 * 60 * 60 * 1000;
-    job.startedAt = Date.now() - duration - storage - 2000;
-    job.finishAt = job.startedAt + duration;
-    job.collectExpiresAt = job.finishAt + storage;
-    job.status = 'ready';
-    localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-    return true;
+    return save.planets?.['helion-01']?.recycling?.jobs?.length === 1 && Number(save.gas) === ${EXPECTED_GAS_AFTER_AUTO_COLLECT};
   })()`);
-  if (!ok) throw new Error('Could not move recycling job beyond auto-collect boundary');
-  await reload(win);
 }
 
 async function measure(win) {
@@ -338,11 +363,18 @@ async function startConfiguredJob(win, debrisAmount, metal, minerals, gas) {
 }
 
 async function verifyFlow(win, directory, label) {
-  await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);
-  await reload(win);
+  await rendererMutationAndReload(win, `(() => {
+    localStorage.removeItem(${JSON.stringify(SAVE_KEY)});
+    window.location.reload();
+    return true;
+  })()`, `${label}: clear save`);
   await seedPlanet(win);
   const seeded = await readSave(win);
   if (Number(seeded.schemaVersion) < 6 || Number(seeded.recyclingLevel) !== 3) throw new Error(`${label}: seed migration mismatch ${JSON.stringify(seeded)}`);
+  if (Number(seeded.metal) !== 15_880 || Number(seeded.minerals) !== 12_712 || Number(seeded.gas) !== 6_421
+    || Number(seeded.planetResources?.metal) !== 15_880 || Number(seeded.planetResources?.minerals) !== 12_712 || Number(seeded.planetResources?.gas) !== 6_421) {
+    throw new Error(`${label}: seeded canonical wallet mismatch ${JSON.stringify(seeded)}`);
+  }
   const queueBefore = JSON.stringify(seeded.queue);
 
   await activateIndustry(win);
@@ -373,7 +405,6 @@ async function verifyFlow(win, directory, label) {
   if (screen.jobRows[0]?.allocation !== '60% металл · 40% минералы · 0% газ') throw new Error(`${label}: allocation text must show all resources ${JSON.stringify(screen)}`);
   if (!screen.jobRows[0]?.output.includes('М 5') || !screen.jobRows[0]?.output.includes('Мин 3') || !screen.jobRows[0]?.output.includes('Газ 0')) throw new Error(`${label}: output text must show all resources ${JSON.stringify(screen)}`);
   if (!screen.jobRows[0]?.timer.startsWith('Осталось:')) throw new Error(`${label}: processing timer label mismatch ${JSON.stringify(screen)}`);
-  const firstJobId = screen.jobRows[0].id;
   const afterFirstStart = await readSave(win);
   if (JSON.stringify(afterFirstStart.queue) !== queueBefore) throw new Error(`${label}: building FIFO changed during recycling`);
   if (afterFirstStart.recycling?.jobs?.length !== 1) throw new Error(`${label}: recycling job not persisted`);
@@ -384,6 +415,8 @@ async function verifyFlow(win, directory, label) {
   await waitFor(win, `document.querySelectorAll('[data-qa-recycling-job]').length === 3`);
   screen = await readScreen(win);
   if (screen?.freeDebris !== 80000 || screen.jobs !== 3 || screen.jobRows.some((job) => job.status !== 'processing')) throw new Error(`${label}: multi-processing state mismatch ${JSON.stringify(screen)}`);
+  const shortestJobId = screen.jobRows[2]?.id;
+  if (!shortestJobId) throw new Error(`${label}: shortest processing job not found ${JSON.stringify(screen)}`);
 
   await setNumberInput(win, '[data-qa-recycling-debris-input]', 1000);
   screen = await readScreen(win);
@@ -392,7 +425,8 @@ async function verifyFlow(win, directory, label) {
   await verifyGlobalScroll(win, label);
   await capture(win, directory, 'recycling-processing-list');
 
-  await makeReady(win, 0);
+  await makeReady(win, 2);
+  await waitFor(win, `document.querySelector('[data-qa-recycling-job="${shortestJobId}"][data-qa-recycling-status="ready"]')`);
   screen = await readScreen(win);
   const readyRows = screen?.jobRows.filter((job) => job.status === 'ready') ?? [];
   const processingRows = screen?.jobRows.filter((job) => job.status === 'processing') ?? [];
@@ -403,29 +437,25 @@ async function verifyFlow(win, directory, label) {
   assertGeometry(await measure(win), label, 3);
   await capture(win, directory, 'recycling-ready-processing-list');
 
-  const collectSelector = `[data-qa-recycling-collect="${firstJobId}"]`;
+  const collectSelector = `[data-qa-recycling-collect="${shortestJobId}"]`;
   await click(win, collectSelector);
-  await waitFor(win, `!document.querySelector('[data-qa-recycling-job="${firstJobId}"]')`);
+  await waitFor(win, `!document.querySelector('[data-qa-recycling-job="${shortestJobId}"]')`);
   await waitFor(win, `document.querySelector('[data-qa-recycling-toast]')?.textContent?.includes('Ресурсы получены')`);
   const collected = await readSave(win);
   if (collected.recycling?.jobs?.length !== 2) throw new Error(`${label}: collected job not removed exactly once`);
   if (Number(collected.metal) !== EXPECTED_METAL_AFTER_COLLECT || Number(collected.minerals) !== EXPECTED_MINERALS_AFTER_COLLECT || Number(collected.gas) !== EXPECTED_GAS_AFTER_COLLECT) throw new Error(`${label}: wallet output mismatch ${JSON.stringify(collected)}`);
   if (JSON.stringify(collected.queue) !== queueBefore) throw new Error(`${label}: building FIFO changed after collect`);
 
-  await makeExpiredForAutoCollect(win, 0);
-  await waitFor(win, `(() => {
-    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
-    return save.planets?.['helion-01']?.recycling?.jobs?.length === 1 && Number(save.gas) === ${EXPECTED_GAS_AFTER_AUTO_COLLECT};
-  })()`);
+  await makeExpiredForAutoCollect(win);
   const autoCollected = await readSave(win);
   if (autoCollected.recycling?.jobs?.length !== 1) throw new Error(`${label}: auto-collected job was not removed ${JSON.stringify(autoCollected)}`);
-  if (Number(autoCollected.metal) !== EXPECTED_METAL_AFTER_COLLECT || Number(autoCollected.minerals) !== EXPECTED_MINERALS_AFTER_COLLECT || Number(autoCollected.gas) !== EXPECTED_GAS_AFTER_AUTO_COLLECT) throw new Error(`${label}: 24h auto-collect did not atomically credit wallet ${JSON.stringify(autoCollected)}`);
+  if (Number(autoCollected.metal) !== EXPECTED_METAL_AFTER_AUTO_COLLECT || Number(autoCollected.minerals) !== EXPECTED_MINERALS_AFTER_COLLECT || Number(autoCollected.gas) !== EXPECTED_GAS_AFTER_AUTO_COLLECT) throw new Error(`${label}: 24h auto-collect did not atomically credit wallet ${JSON.stringify(autoCollected)}`);
   if (JSON.stringify(autoCollected.queue) !== queueBefore) throw new Error(`${label}: building FIFO changed after auto-collect`);
 
   await reload(win);
   await settle(win);
   const afterRepeatReload = await readSave(win);
-  if (Number(afterRepeatReload.metal) !== EXPECTED_METAL_AFTER_COLLECT || Number(afterRepeatReload.minerals) !== EXPECTED_MINERALS_AFTER_COLLECT || Number(afterRepeatReload.gas) !== EXPECTED_GAS_AFTER_AUTO_COLLECT) throw new Error(`${label}: auto-collect paid twice after reload ${JSON.stringify(afterRepeatReload)}`);
+  if (Number(afterRepeatReload.metal) !== EXPECTED_METAL_AFTER_AUTO_COLLECT || Number(afterRepeatReload.minerals) !== EXPECTED_MINERALS_AFTER_COLLECT || Number(afterRepeatReload.gas) !== EXPECTED_GAS_AFTER_AUTO_COLLECT) throw new Error(`${label}: auto-collect paid twice after reload ${JSON.stringify(afterRepeatReload)}`);
   if (afterRepeatReload.recycling?.jobs?.length !== 1) throw new Error(`${label}: auto-collect state changed on repeated reload ${JSON.stringify(afterRepeatReload)}`);
 
   await activateIndustry(win);

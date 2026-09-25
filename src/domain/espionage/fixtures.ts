@@ -26,6 +26,7 @@ const BOT01_SHIP_LEVEL_OVERRIDES: Partial<Record<ShipId, number>> = {
   'mega-transporter': 6,
   cruiser: 4,
   battleship: 2,
+  'death-star': 10,
 };
 
 export function createDefaultBot01Profile(): Bot01Profile {

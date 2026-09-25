@@ -2,7 +2,7 @@ import type { CombatFactionId } from '../domain/combat/factions.ts';
 import { COMMANDER_IDS, type CommanderId } from '../domain/combat/commanders.ts';
 import type { SimulatorMaxRounds } from '../domain/combat/simulator.ts';
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
-import { calculateDefensePopulation, createEmptyDefenseState } from '../domain/fleet/production.ts';
+import { calculateDefensePopulation } from '../domain/fleet/production.ts';
 import {
   calculateFleetPopulation,
   createEmptyFleetState,
@@ -11,19 +11,12 @@ import {
   type OwnedFleetState,
 } from '../domain/fleet/runtime.ts';
 import { calculatePlanetCapacity, calculatePlanetPopulation } from '../domain/fleet/overpopulation.ts';
-import { createDefaultFleetProductionState } from '../domain/fleet/production.ts';
-import {
-  createDefaultBuildingLevels,
-  getStorageCapacities,
-} from '../domain/buildings/resource-zone.ts';
-import { createEmptyBotAssignment } from '../domain/buildings/production-bots.ts';
-import { createDefaultSpaceportUpgradeState, EXCLUDED_SHIP_UPGRADE_IDS } from '../domain/buildings/spaceport-upgrades.ts';
-import { createDefaultTradeState } from '../domain/buildings/trade.ts';
-import { createDefaultRepairWorkshopState } from '../domain/repair/workshop.ts';
-import { initializePlanetEnergy } from './energy.ts';
+import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
+import { EXCLUDED_SHIP_UPGRADE_IDS } from '../domain/buildings/spaceport-upgrades.ts';
 import { isPlanetBlocked } from './overpopulation.ts';
 import {
   getPlanetResources,
+  getOwnerShipUpgradeLevel,
   replacePlanetResources,
   replacePlanetState,
   replaceAlliedPlanetState,
@@ -38,6 +31,9 @@ import {
   dispatchFlight as dispatchDomainFlight,
   getFlightByRequestId,
   recallFlight as recallDomainFlight,
+  MAX_SPACE_FLIGHT_DURATION_MS,
+  MIN_SPACE_FLIGHT_DURATION_MS,
+  SPACE_FLIGHT_DURATION_STEP_MS,
 } from '../domain/flights/runtime.ts';
 import { isFlightCoordinate } from '../domain/flights/distance.ts';
 import {
@@ -51,7 +47,7 @@ import {
   normalizeTransportCargo,
   type TransportCargo,
 } from '../domain/flights/cargo.ts';
-import { SHIP_IDS, type ShipId } from '../domain/combat/ids.ts';
+import { SHIP_IDS, SOLAR_SATELLITE_ID, type ShipId } from '../domain/combat/ids.ts';
 import { scaleRuntimeDuration, type RuntimeMode, type TestTimeScale } from '../domain/runtime/mode.ts';
 import type {
   FlightDestination,
@@ -70,6 +66,7 @@ import {
   hunterDetects,
   normalizeRngRoll,
   resolveSpyReportQuality,
+  syncSpyTargetCommanderCounts,
   SPY_REPORT_COOLDOWN_MS,
 } from '../domain/espionage/runtime.ts';
 import type { EspionageRollKind } from '../domain/espionage/runtime.ts';
@@ -84,19 +81,23 @@ import type {
 } from '../domain/espionage/types.ts';
 import { resolveSpyOwnerProfile } from '../domain/espionage/owner-profile.ts';
 import { collectOrbitalDebrisAtCoordinate, getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
-import { createUniverseSystem } from '../domain/universe/runtime.ts';
+import { createUniverseSystem, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import type { UniverseCoordinate, UniverseObjectKind, UniversePersistedPlayerPlanet, UniverseRegisteredPlanet } from '../domain/universe/types.ts';
 import { findUniverseAsteroidAtCoordinate } from '../domain/universe/asteroid-simulation.ts';
 import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
 import { upsertGasExtractionArrivalReport, upsertRecyclerArrivalReport } from '../domain/reports/adapters.ts';
 import { initializePlanetResourceClock, reconcileTestEspionageTargetResources } from './resource-clock.ts';
+import { createColonyPlanetRuntime, destroyOwnedPlanet } from './owned-planets.ts';
 import { resolveSpyTarget, resolveSpyTargetAtCoordinate, type ResolvedSpyTarget } from './espionage-targets.ts';
 import {
   createAttackLaunchSnapshot,
+  createBot01IncomingAttackSnapshot,
+  creditBot01AttackReturn,
   creditAttackLoot,
   getAttackCommanderSelection,
   isAttackCombatShip,
   normalizeAttackRounds,
+  resolveBot01IncomingAttack,
   resolveAttackAtTarget,
 } from './attack.ts';
 
@@ -106,6 +107,7 @@ export const FLIGHT_EDIT_TARGET_REQUEST_EVENT = 'asterion:flight-edit-target-req
 export const FLIGHT_DISPATCH_REQUEST_EVENT = 'asterion:flight-dispatch-request';
 export const FLIGHT_RECALL_REQUEST_EVENT = 'asterion:flight-recall-request';
 export const FLIGHT_COMMAND_RESULT_EVENT = 'asterion:flight-command-result';
+export const BOT01_INCOMING_SCENARIO_REQUEST_EVENT = 'asterion:bot01-incoming-scenario-request';
 export const SPY_REPORT_REQUEST_EVENT = 'asterion:spy-report-request';
 export const SPY_REPORT_ALL_REQUEST_EVENT = 'asterion:spy-report-all-request';
 export const SPY_REPORT_RESULT_EVENT = 'asterion:spy-report-result';
@@ -171,6 +173,7 @@ export type DispatchFlightCommand = {
   selectedCommanders?: Partial<Record<CommanderId, number>>;
   maxRounds?: SimulatorMaxRounds;
   departedAt?: number;
+  oneWayDurationMinutes?: number;
 };
 
 export type FlightRuntimeOptions = {
@@ -212,7 +215,7 @@ export type SpyReportCommandResult = SpyReportCommandSuccess | SpyReportCommandF
 
 export type FlightReconcileEvent = {
   flight: FlightRecord;
-  status: 'arrived' | 'returned' | 'target-occupied' | 'target-unavailable' | 'delivered' | 'deployed' | 'colonized' | 'destroyed' | 'spy-report' | 'spy-detected';
+  status: 'arrived' | 'returned' | 'target-occupied' | 'target-unavailable' | 'delivered' | 'deployed' | 'colonized' | 'destroyed' | 'incoming-attack' | 'spy-report' | 'spy-detected';
   notice: string;
 };
 
@@ -369,13 +372,13 @@ function populationForDeployment(
 }
 
 function commanderLevelsForDeployment(
-  planet: PlanetRuntime,
+  state: SaveState,
   selectedCommanders: Partial<Record<CommanderId, number>>,
 ): Partial<Record<CommanderId, number>> {
   return Object.fromEntries(
     Object.entries(selectedCommanders)
       .filter(([, quantity]) => Number.isFinite(quantity) && (quantity ?? 0) > 0)
-      .map(([commanderId]) => [commanderId, Math.max(0, Math.floor(planet.spaceportUpgrades.shipLevels[commanderId] ?? 0))]),
+    .map(([commanderId]) => [commanderId, getOwnerShipUpgradeLevel(state, commanderId)]),
   ) as Partial<Record<CommanderId, number>>;
 }
 
@@ -391,6 +394,7 @@ export function getTransportCargoSummary(
   selectedShips: Partial<Record<ShipId, number>>,
   requestedCargo: unknown,
   destination?: FlightDestination,
+  reservedGas = 0,
 ): TransportCargoSummary {
   const origin = state.planets[originPlanetId];
   const factionId = state.profile.factionId as CombatFactionId;
@@ -399,8 +403,11 @@ export function getTransportCargoSummary(
   );
   const capacityTotal = getFleetCargoCapacity(selectedShips, cargoCatalog);
   const sourceResources = origin?.resources ?? getPlanetResources(state, originPlanetId);
+  const availableResources = reservedGas > 0
+    ? { ...sourceResources, gas: Math.max(0, sourceResources.gas - Math.floor(reservedGas)) }
+    : sourceResources;
   const sourceDebris = origin?.recycling.availableDebris ?? 0;
-  const cargo = clampCargoToSourceAndCapacity(requestedCargo, sourceResources, sourceDebris, capacityTotal);
+  const cargo = clampCargoToSourceAndCapacity(requestedCargo, availableResources, sourceDebris, capacityTotal);
   // A coordinate draft may use the persisted own/ally match only to derive
   // the overflow warning. This lookup does not surface ownership or
   // occupancy errors; dispatchFlight remains the authoritative Send check.
@@ -424,6 +431,7 @@ export function getReservedShipsForPlanet(
 ): Partial<Record<ShipId, number>> {
   const reserved: Partial<Record<ShipId, number>> = {};
   for (const flight of activeFlights(state)) {
+    if (flight.ownerSide === 'bot01') continue;
     if (flight.originPlanetId !== planetId) continue;
     for (const [shipId, quantity] of Object.entries(flight.selectedShips) as [ShipId, number][]) {
       if (!Number.isFinite(quantity) || quantity <= 0) continue;
@@ -439,6 +447,7 @@ export function getReservedCommandersForPlanet(
 ): Partial<Record<CommanderId, number>> {
   const reserved: Partial<Record<CommanderId, number>> = {};
   for (const flight of activeFlights(state)) {
+    if (flight.ownerSide === 'bot01') continue;
     if (flight.originPlanetId !== planetId) continue;
     for (const [commanderId, quantity] of Object.entries(flight.selectedCommanders ?? {}) as [CommanderId, number][]) {
       if (!COMMANDER_IDS.includes(commanderId) || !Number.isFinite(quantity) || quantity <= 0) continue;
@@ -822,27 +831,189 @@ export function createPlanetIdForCoordinate(coordinate: UniverseCoordinate): Pla
 }
 
 function createColonyPlanet(state: SaveState, coordinate: UniverseCoordinate): PlanetRuntime {
-  const emptyRecycling = { availableDebris: 0, jobs: [] };
-  const base: PlanetRuntime = {
-    name: `Колония ${coordinate.system}-${coordinate.position}`,
-    skin: 'colonized',
-    fleet: createEmptyFleetState(),
-    defense: createEmptyDefenseState(),
-    fleetProduction: createDefaultFleetProductionState(),
-    repair: createDefaultRepairWorkshopState(),
-    energy: 0,
-    universeGalaxy: coordinate.galaxy,
-    universeSystem: coordinate.system,
-    universePosition: coordinate.position,
-    buildings: createDefaultBuildingLevels(),
-    productionBots: createEmptyBotAssignment(),
-    recycling: emptyRecycling,
-    trade: createDefaultTradeState(),
-    spaceportUpgrades: createDefaultSpaceportUpgradeState(),
-    stability: 100,
-    resources: { metal: 500, minerals: 500, gas: 500 },
+  return createColonyPlanetRuntime(state, coordinate);
+}
+
+export function startBot01IncomingScenario(
+  state: SaveState,
+  options: FlightRuntimeOptions = {},
+): FlightCommandResult {
+  if ((options.mode ?? 'production') !== 'test') {
+    return failure(state, 'invalid-command', 'Входящая демонстрационная атака доступна только в Test Mode.');
+  }
+  const now = options.now ?? Date.now();
+  const espionage = state.espionage;
+  if (!espionage?.bot01Profile) return failure(state, 'target-not-available', 'Профиль Bot 01 недоступен в этом сохранении.');
+  const existingScenario = espionage.bot01IncomingScenario;
+  if (existingScenario) {
+    const existingFlight = currentFlightState(state).records.find((flight) => flight.id === existingScenario.flightId);
+    if (existingFlight) {
+      const statusNotice = existingScenario.status === 'in-flight'
+        ? 'Сценарий уже запущен: рейс Bot 01 находится в пути.'
+        : 'Сценарий атаки Bot 01 уже завершён.';
+      return { ok: true, state, flight: existingFlight, created: false, notice: statusNotice };
+    }
+    return failure(state, 'invalid-command', 'Сценарий Bot 01 уже использован; повторный запуск отключён.');
+  }
+  const existingBotFlight = currentFlightState(state).records.find((flight) => flight.ownerSide === 'bot01'
+    && flight.missionId === 'attack'
+    && flight.requestId.startsWith('bot01-incoming-v1-'));
+  if (existingBotFlight) {
+    const status = existingBotFlight.attackResolution
+      ? 'resolved'
+      : existingBotFlight.phase === 'outbound' || existingBotFlight.phase === 'arrived' || existingBotFlight.phase === 'returning'
+        ? 'in-flight'
+        : 'failed';
+    const recoveredEspionage: EspionageState = {
+      ...espionage,
+      bot01IncomingScenario: {
+        version: 1,
+        status,
+        flightId: existingBotFlight.id,
+        targetPlanetId: existingBotFlight.destinationPlanetId ?? '',
+        startedAt: existingBotFlight.departedAt,
+      },
+    };
+    return {
+      ok: true,
+      state: { ...state, espionage: recoveredEspionage },
+      flight: existingBotFlight,
+      created: false,
+      notice: status === 'in-flight' ? 'Сценарий уже запущен: рейс Bot 01 находится в пути.' : 'Сценарий атаки Bot 01 уже завершён.',
+    };
+  }
+
+  const targetRegistry = getEspionageTargets(espionage);
+  const source = Object.values(targetRegistry)
+    .filter((target) => target.ownerId === UNIVERSE_NPC_OWNER_ID && (target.fleet.ships['death-star'] ?? 0) > 0)
+    .sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0)[0];
+  if (!source) return failure(state, 'target-not-available', 'У Bot 01 нет доступного планетолома для демонстрации.');
+  const ownedIds = Object.keys(state.planets).sort();
+  if (ownedIds.length === 0) return failure(state, 'target-not-available', 'Для тестового сценария нужна принадлежащая игроку планета.');
+
+  let working = state;
+  let targetPlanetId: string;
+  if (ownedIds.length < 2) {
+    let coordinate: UniverseCoordinate | undefined;
+    for (let galaxy = 1; galaxy <= 2 && !coordinate; galaxy += 1) {
+      for (let system = 1; system <= 40 && !coordinate; system += 1) {
+        for (let position = 1; position <= 24; position += 1) {
+          const candidate = { galaxy, system, position };
+          if (!targetOccupied(working, candidate, now, undefined, 'test')) {
+            coordinate = candidate;
+            break;
+          }
+        }
+      }
+    }
+    if (!coordinate) return failure(state, 'target-not-available', 'Не удалось найти свободную координату для второй тестовой планеты.');
+    targetPlanetId = makePlanetId(coordinate);
+    if (working.planets[targetPlanetId]) return failure(state, 'target-not-available', 'Координата второй тестовой планеты уже занята.');
+    const createdTestWorld = createColonyPlanet(working, coordinate);
+    const testWorld = {
+      ...createdTestWorld,
+      name: 'Мир проверки Bot 01',
+      // One defender makes the shared combat and debris report visible while
+      // the fixed Test Mode seed still lets the Planetolom destroy this world.
+      fleet: {
+        ...createdTestWorld.fleet,
+        ships: { ...createdTestWorld.fleet.ships, scout: 1 },
+      },
+    };
+    working = {
+      ...working,
+      planets: { ...working.planets, [targetPlanetId]: testWorld },
+      queues: { ...working.queues, [targetPlanetId]: [] },
+    };
+    working = initializePlanetResourceClock(working, targetPlanetId, now);
+  } else {
+    targetPlanetId = ownedIds[1];
+  }
+
+  const target = working.planets[targetPlanetId];
+  if (!target) return failure(state, 'target-not-available', 'Целевая планета для атаки недоступна.');
+  const targetCoordinate = coordinateOfPlanet(target);
+  const selectedShips = Object.fromEntries(Object.entries(source.fleet.ships).filter(([shipId, quantity]) => (
+    shipId !== SOLAR_SATELLITE_ID && shipId !== 'spy-probe' && Number.isInteger(quantity) && (quantity ?? 0) > 0
+  ))) as Partial<Record<ShipId, number>>;
+  const selectedCommanders = Object.fromEntries(COMMANDER_IDS.filter((commanderId) => (
+    Number.isInteger(source.fleet.commanders[commanderId]) && (source.fleet.commanders[commanderId] ?? 0) > 0
+  )).map((commanderId) => [commanderId, source.fleet.commanders[commanderId]])) as Partial<Record<CommanderId, number>>;
+  const attackSnapshot = createBot01IncomingAttackSnapshot(source, espionage.bot01Profile);
+  // This fixed suffix selects the versioned, deterministic Test Mode siege seed.
+  const requestId = `bot01-incoming-v1-${targetPlanetId}-seed-5`;
+  const domainResult = dispatchDomainFlight(currentFlightState(working), {
+    requestId,
+    missionId: 'attack',
+    ownerSide: 'bot01',
+    originPlanetId: source.id,
+    originCoordinate: source.coordinate,
+    destination: { kind: 'planet', planetId: targetPlanetId, coordinate: targetCoordinate },
+    destinationPlanetId: targetPlanetId,
+    destinationOwnerId: working.profile.playerId,
+    targetRelation: 'self',
+    targetKind: 'player',
+    targetPlanetName: target.name,
+    targetOwnerName: working.profile.displayName,
+    selectedShips,
+    selectedCommanders,
+    selectedCommanderLevels: Object.fromEntries(COMMANDER_IDS.map((commanderId) => [commanderId, espionage.bot01Profile!.commanderLevels[commanderId] ?? 0])),
+    attackSnapshot,
+    departedAt: now,
+    factionId: source.raceId,
+    science: Object.fromEntries(([2, 4, 8, 9, 14] as const).map((scienceId) => [scienceId, espionage.bot01Profile!.scienceLevels[scienceId] ?? 0])) as import('../domain/flights/types.ts').FlightScienceLevels,
+  });
+  const flight = scaledRecord(domainResult.flight, options);
+  if (domainResult.created && source.resources.gas < flight.gasCost) {
+    return failure(state, 'insufficient-gas', 'У Bot 01 недостаточно газа для исходящей атаки.');
+  }
+  let next = { ...working, flights: domainResult.created ? updateFlight(domainResult.state, flight) : domainResult.state };
+  let nextEspionage = next.espionage!;
+  if (domainResult.created) {
+    const fleet: OwnedFleetState = {
+      ships: { ...source.fleet.ships },
+      commanders: { ...source.fleet.commanders },
+    };
+    for (const [shipId, quantity] of Object.entries(selectedShips) as [ShipId, number][]) {
+      fleet.ships[shipId] = Math.max(0, (fleet.ships[shipId] ?? 0) - quantity);
+    }
+    for (const [commanderId, quantity] of Object.entries(selectedCommanders) as [CommanderId, number][]) {
+      fleet.commanders[commanderId] = Math.max(0, (fleet.commanders[commanderId] ?? 0) - quantity);
+    }
+    const sourceAfter: SpyTargetState = syncSpyTargetCommanderCounts({
+      ...source,
+      resources: { ...source.resources, gas: Math.max(0, source.resources.gas - flight.gasCost) },
+      population: {
+        total: calculateFleetPopulation(fleet, source.raceId) + calculateDefensePopulation(source.defense, source.raceId),
+        fleet: calculateFleetPopulation(fleet, source.raceId),
+        defense: calculateDefensePopulation(source.defense, source.raceId),
+      },
+    }, fleet, nextEspionage.bot01Profile);
+    const targets = { ...getEspionageTargets(nextEspionage), [source.id]: sourceAfter };
+    nextEspionage = {
+      ...nextEspionage,
+      targets,
+      ...(nextEspionage.bot01Planets ? { bot01Planets: targets } : {}),
+    };
+  }
+  nextEspionage = {
+    ...nextEspionage,
+    bot01IncomingScenario: {
+      version: 1,
+      status: 'in-flight',
+      flightId: flight.id,
+      targetPlanetId,
+      startedAt: now,
+    },
   };
-  return initializePlanetEnergy(base, state.science.levels);
+  next = { ...next, espionage: nextEspionage };
+  return {
+    ok: true,
+    state: next,
+    flight,
+    created: domainResult.created,
+    notice: `Bot 01 отправил флот к ${target.name} [${targetCoordinate.galaxy}:${targetCoordinate.system}:${targetCoordinate.position}].`,
+  };
 }
 
 function noticeForDispatch(flight: FlightRecord): string {
@@ -862,7 +1033,7 @@ export function dispatchFlight(
     if (existing) return { ok: true, state, flight: existing, created: false, notice: noticeForDispatch(existing) };
   }
   if (!requestId) return failure(state, 'invalid-command', 'Для отправки требуется requestId/commandId.');
-  if (command.missionId !== 'colonize' && command.missionId !== 'transport' && command.missionId !== 'espionage' && command.missionId !== 'attack' && command.missionId !== 'deployment' && command.missionId !== 'recycle' && command.missionId !== 'gas') {
+  if (command.missionId !== 'colonize' && command.missionId !== 'transport' && command.missionId !== 'espionage' && command.missionId !== 'attack' && command.missionId !== 'deployment' && command.missionId !== 'recycle' && command.missionId !== 'gas' && command.missionId !== 'space-flight') {
     return failure(state, 'mission-not-supported', 'Эта миссия пока не подключена к flight runtime.');
   }
   const departedAt = Number.isFinite(command.departedAt) ? command.departedAt! : (runtimeOptions.now ?? Date.now());
@@ -885,10 +1056,10 @@ export function dispatchFlight(
       return failure(state, 'spy-target-blocked', `Зонд уже выполняет миссию у ${targetName}. Дождитесь возвращения или уничтожения.`);
     }
   }
-  const selectedShips = normalizeSelectedShips(command.selectedShips, command.missionId === 'deployment');
+  const selectedShips = normalizeSelectedShips(command.selectedShips, command.missionId === 'deployment' || command.missionId === 'space-flight');
   if (!selectedShips) return failure(state, 'wrong-ship-composition', 'Выберите хотя бы один доступный корабль.');
-  if (command.missionId === 'deployment' && Object.keys(selectedShips).some((shipId) => shipId === 'solar-satellite')) {
-    return failure(state, 'wrong-ship-composition', 'Солнечные спутники нельзя отправлять в составе дислокации.');
+  if ((command.missionId === 'deployment' || command.missionId === 'space-flight') && Object.keys(selectedShips).some((shipId) => shipId === 'solar-satellite')) {
+    return failure(state, 'wrong-ship-composition', 'Солнечные спутники нельзя отправлять в составе флота.');
   }
   const availableFleet = getAvailableFleetForPlanet(state, originPlanetId);
   const reservedShips = getReservedShipsForPlanet(state, originPlanetId);
@@ -905,6 +1076,53 @@ export function dispatchFlight(
 
   const selectedCommanders = normalizeSelectedCommanders(command.selectedCommanders);
   if (selectedCommanders === null) return failure(state, 'invalid-command', 'Состав командиров некорректен.');
+  let spaceFlightCargo: TransportCargo | undefined;
+  let spaceFlightDurationMs: number | undefined;
+  let spaceFlightCommanderLevels: Partial<Record<CommanderId, number>> | undefined;
+  if (command.missionId === 'space-flight') {
+    const selectedShipCount = Object.values(selectedShips).reduce((total, count) => total + (count ?? 0), 0);
+    const selectedCommanderCount = Object.values(selectedCommanders).reduce((total, count) => total + (count ?? 0), 0);
+    if (selectedShipCount + selectedCommanderCount <= 0) {
+      return failure(state, 'wrong-ship-composition', 'Выберите корабли или командирские корабли для космического рейса.');
+    }
+    const availableCommanders = getAvailableFleetForPlanet(state, originPlanetId).commanders;
+    for (const commanderId of COMMANDER_IDS) {
+      if ((selectedCommanders[commanderId] ?? 0) > (availableCommanders[commanderId] ?? 0)) {
+        return failure(state, 'insufficient-commanders', 'Выбранный командир уже зарезервирован или недоступен.');
+      }
+    }
+    const durationMinutes = command.oneWayDurationMinutes;
+    spaceFlightDurationMs = Number.isSafeInteger(durationMinutes) ? durationMinutes! * 60_000 : Number.NaN;
+    if (!Number.isSafeInteger(spaceFlightDurationMs)
+      || spaceFlightDurationMs < MIN_SPACE_FLIGHT_DURATION_MS
+      || spaceFlightDurationMs > MAX_SPACE_FLIGHT_DURATION_MS
+      || spaceFlightDurationMs % SPACE_FLIGHT_DURATION_STEP_MS !== 0) {
+      return failure(state, 'invalid-command', 'Укажите длительность одного участка от 5 минут до 11 часов 59 минут с шагом 1 минута.');
+    }
+    const cargoCatalog = Object.fromEntries(
+      getFactionShipCatalog(state.profile.factionId as CombatFactionId)
+        .map((entity) => [entity.id, { cargo: entity.ship?.cargo ?? 0 }]),
+    );
+    const cargoCapacity = getFleetCargoCapacity(selectedShips, cargoCatalog);
+    spaceFlightCargo = normalizeTransportCargo(command.cargo);
+    if (getCargoUsed(spaceFlightCargo) > cargoCapacity) {
+      return failure(state, 'insufficient-cargo-capacity', 'Груз превышает вместимость выбранного флота.');
+    }
+    const sourceResources = getPlanetResources(state, originPlanetId);
+    const sourceDebris = originPlanet.recycling.availableDebris;
+    if (spaceFlightCargo.metal > sourceResources.metal
+      || spaceFlightCargo.minerals > sourceResources.minerals
+      || spaceFlightCargo.gas > sourceResources.gas
+      || spaceFlightCargo.debris > sourceDebris) {
+      return failure(state, 'invalid-cargo', 'Груз превышает доступные запасы исходной планеты.');
+    }
+    if (sourceResources.gas < spaceFlightCargo.gas + 100) {
+      return failure(state, 'insufficient-gas', 'Недостаточно газа для платы за космический рейс и выбранного груза.');
+    }
+    spaceFlightCommanderLevels = Object.fromEntries(COMMANDER_IDS
+      .filter((commanderId) => (selectedCommanders[commanderId] ?? 0) > 0)
+      .map((commanderId) => [commanderId, getOwnerShipUpgradeLevel(state, commanderId)]));
+  }
   let recycleCapacity: number | undefined;
   let recycleTargetKind: UniverseObjectKind | undefined;
   let gasCapacity: number | undefined;
@@ -1087,7 +1305,7 @@ export function dispatchFlight(
     if (deploymentPopulation > Math.max(0, targetCapacity - targetPopulation)) {
       return failure(state, 'capacity-exceeded', `На планете ${targetPlanet.name} недостаточно свободной вместимости.`);
     }
-    deploymentCommanderLevels = commanderLevelsForDeployment(originPlanet, deploymentCommanders);
+    deploymentCommanderLevels = commanderLevelsForDeployment(state, deploymentCommanders);
   }
 
   if (command.missionId === 'colonize') {
@@ -1130,17 +1348,31 @@ export function dispatchFlight(
       ? attackDestination
       : command.missionId === 'deployment' && deploymentTarget
         ? { kind: 'planet', planetId: deploymentTarget.planetId, coordinate: { ...deploymentTarget.coordinate } }
-        : command.destination!,
+        : command.missionId === 'space-flight'
+          ? { kind: 'space', coordinate: coordinateOfPlanet(originPlanet) }
+          : command.destination!,
     targetKind: command.missionId === 'attack'
       ? attackTarget?.target.kind
       : command.missionId === 'recycle' ? recycleTargetKind
         : command.missionId === 'gas' ? 'asteroid' : command.targetKind,
     selectedShips,
+    selectedCommanders: command.missionId === 'space-flight'
+      ? selectedCommanders
+      : command.missionId === 'attack' ? attackCommanders
+        : command.missionId === 'deployment' ? deploymentCommanders
+          : undefined,
+    selectedCommanderLevels: command.missionId === 'space-flight'
+      ? spaceFlightCommanderLevels
+      : command.missionId === 'deployment' ? deploymentCommanderLevels : undefined,
     populationReserved: command.missionId === 'colonize' ? 12 : deploymentPopulation,
     departedAt,
     factionId: state.profile.factionId as CombatFactionId,
     science,
     operationId: command.operationId,
+    ...(command.missionId === 'space-flight' ? {
+      durationMs: spaceFlightDurationMs,
+      cargo: spaceFlightCargo,
+    } : {}),
     ...(command.missionId === 'espionage' ? { spyMissionId: `spy-${requestId}` } : {}),
     ...(transportTarget ? {
       destinationPlanetId: transportTarget.planetId,
@@ -1210,6 +1442,24 @@ export function dispatchFlight(
     };
     nextState = replacePlanetResources(nextState, originPlanetId, nextResources);
   }
+  if (command.missionId === 'space-flight' && spaceFlightCargo) {
+    const currentResources = getPlanetResources(nextState, originPlanetId);
+    nextState = replacePlanetResources(nextState, originPlanetId, {
+      metal: currentResources.metal - spaceFlightCargo.metal,
+      minerals: currentResources.minerals - spaceFlightCargo.minerals,
+      gas: currentResources.gas - spaceFlightCargo.gas,
+    });
+    const currentOrigin = nextState.planets[originPlanetId];
+    if (currentOrigin) {
+      nextState = replacePlanetState(nextState, originPlanetId, {
+        ...currentOrigin,
+        recycling: {
+          ...currentOrigin.recycling,
+          availableDebris: Math.max(0, currentOrigin.recycling.availableDebris - spaceFlightCargo.debris),
+        },
+      });
+    }
+  }
   if (command.missionId === 'espionage' && domainResult.created) {
     const targetPlanetId = command.destination!.kind === 'planet' ? command.destination!.planetId : '';
     const resolvedTarget = resolveSpyTarget(nextState, targetPlanetId, {
@@ -1268,6 +1518,7 @@ export function recallFlight(
   const flights = currentFlightState(state);
   const flight = flights.records.find((item) => item.id === flightId);
   if (!flight) return failure(state, 'flight-not-recallable', 'Отозвать можно только исходящий рейс.');
+  if (flight.ownerSide === 'bot01') return failure(state, 'flight-not-recallable', 'Нельзя отозвать флот Bot 01.');
   const spyMission = flight.missionId === 'espionage' ? spyMissionForFlight(state, flight) : undefined;
   if (flight.missionId === 'espionage' && flight.phase === 'arrived' && spyMission?.status === 'orbiting') {
     const returnedState = beginDomainFlightReturn(flights, flightId, now, 'recalled');
@@ -1464,14 +1715,6 @@ function applyDeploymentArrival(
   for (const [commanderId, quantity] of Object.entries(selectedCommanders) as [CommanderId, number][]) {
     nextTargetFleet.commanders[commanderId] = (nextTargetFleet.commanders[commanderId] ?? 0) + quantity;
   }
-  const nextTargetLevels = { ...target.spaceportUpgrades.shipLevels };
-  for (const commanderId of COMMANDER_IDS) {
-    if ((selectedCommanders[commanderId] ?? 0) <= 0) continue;
-    nextTargetLevels[commanderId] = Math.max(
-      nextTargetLevels[commanderId] ?? 0,
-      flight.selectedCommanderLevels?.[commanderId] ?? 0,
-    );
-  }
   const completed: FlightRecord = {
     ...flight,
     phase: 'completed',
@@ -1484,7 +1727,6 @@ function applyDeploymentArrival(
     ...target,
     fleet: nextTargetFleet,
     solarSatellites: targetSatellites,
-    spaceportUpgrades: { ...target.spaceportUpgrades, shipLevels: nextTargetLevels },
   });
   next = { ...next, flights: updateFlight(currentFlightState(next), completed) };
   return { state: next, flight: completed, transferred: true };
@@ -1603,21 +1845,64 @@ export function reconcileFlights(
   const events: FlightReconcileEvent[] = [];
   let changed = targetResourcesChanged;
 
-  // Arrival effects are a shared resource transition. The persisted record
-  // order is dispatch order, so never let it decide which attack reaches the
-  // target first. Use the materialized arrival timestamp and a bytewise id
-  // tie-break so the result is identical after reloads and across runtimes.
-  const reconciliationOrder = [...next.flights.records].sort((left, right) => {
-    const arrivalDelta = left.arrivalAt - right.arrivalAt;
-    if (arrivalDelta !== 0) return arrivalDelta;
+  // Flight arrivals and returns share mutable state. Order the next due event
+  // from the current records each time: an arrival can schedule a return that
+  // must run before a later arrival in this same catch-up pass.
+  const scheduledFlightEventAt = (flight: FlightRecord) => flight.phase === 'returning'
+    ? flight.returnAt ?? Number.POSITIVE_INFINITY
+    : flight.arrivalAt;
+  const isIncomingBotArrival = (flight: FlightRecord) => flight.ownerSide === 'bot01'
+    && flight.missionId === 'attack'
+    && (flight.phase === 'outbound' || flight.phase === 'arrived');
+  const compareFlightEvents = (left: FlightRecord, right: FlightRecord) => {
+    const leftMissingOrigin = (left.missionId === 'deployment' || left.missionId === 'space-flight')
+      && ACTIVE_FLIGHT_PHASES.has(left.phase)
+      && !next.planets[left.originPlanetId];
+    const rightMissingOrigin = (right.missionId === 'deployment' || right.missionId === 'space-flight')
+      && ACTIVE_FLIGHT_PHASES.has(right.phase)
+      && !next.planets[right.originPlanetId];
+    const leftAt = leftMissingOrigin ? Number.NEGATIVE_INFINITY : scheduledFlightEventAt(left);
+    const rightAt = rightMissingOrigin ? Number.NEGATIVE_INFINITY : scheduledFlightEventAt(right);
+    const eventDelta = leftAt - rightAt;
+    if (eventDelta !== 0) return eventDelta;
+    // If Bot 01 destroys a world on the exact millisecond a Space Flight
+    // returns, destruction wins and burns that return before cargo is credited.
+    const priorityDelta = Number(!isIncomingBotArrival(left)) - Number(!isIncomingBotArrival(right));
+    if (priorityDelta !== 0) return priorityDelta;
     if (left.id < right.id) return -1;
     if (left.id > right.id) return 1;
     return 0;
-  });
+  };
+  const processedFlightEvents = new Set<string>();
+  const flightEventKey = (flight: FlightRecord) => {
+    const spyStatus = flight.missionId === 'espionage' ? spyMissionForFlight(next, flight)?.status ?? 'missing' : '';
+    return `${flight.id}\u0000${flight.phase}\u0000${scheduledFlightEventAt(flight)}\u0000${spyStatus}`;
+  };
 
-  for (const original of reconciliationOrder) {
-    const current = next.flights.records.find((flight) => flight.id === original.id) ?? original;
-    if (current.missionId === 'deployment'
+  while (true) {
+    const original = next.flights.records
+      .filter((flight) => ACTIVE_FLIGHT_PHASES.has(flight.phase))
+      .filter((flight) => {
+        const eventKey = flightEventKey(flight);
+        if (processedFlightEvents.has(eventKey)) return false;
+        const hasMissingOrigin = (flight.missionId === 'deployment' || flight.missionId === 'space-flight')
+          && !next.planets[flight.originPlanetId];
+        const spyMission = flight.missionId === 'espionage' ? spyMissionForFlight(next, flight) : undefined;
+        const needsSpyRevalidation = Boolean(
+          spyMission
+          && (flight.phase === 'outbound' || flight.phase === 'arrived')
+          && spyMission.status !== 'returning'
+          && spyMission.status !== 'returned'
+          && spyMission.status !== 'destroyed',
+        );
+        return hasMissingOrigin || needsSpyRevalidation || scheduledFlightEventAt(flight) <= now;
+      })
+      .sort(compareFlightEvents)[0];
+    if (!original) break;
+    processedFlightEvents.add(flightEventKey(original));
+    const current = next.flights.records.find((flight) => flight.id === original.id);
+    if (!current) continue;
+    if ((current.missionId === 'deployment' || current.missionId === 'space-flight')
       && (current.phase === 'outbound' || current.phase === 'returning' || current.phase === 'arrived')
       && !next.planets[current.originPlanetId]) {
       const destroyed: FlightRecord = {
@@ -1625,13 +1910,16 @@ export function reconcileFlights(
         phase: 'failed',
         completionReason: 'origin-destroyed',
         completedAt: now,
+        ...(current.missionId === 'space-flight' ? { cargoState: 'voided' as const, cargoResolvedAt: now } : {}),
       };
       next = { ...next, flights: updateFlight(currentFlightState(next), destroyed) };
       changed = true;
       events.push({
         flight: destroyed,
         status: 'destroyed',
-        notice: 'Дислокация уничтожена: исходная планета потеряна, весь состав рейса уничтожен.',
+        notice: current.missionId === 'space-flight'
+          ? 'Космический рейс потерян: исходная планета уничтожена, корабли и груз сгорели.'
+          : 'Дислокация уничтожена: исходная планета потеряна, весь состав рейса уничтожен.',
       });
       continue;
     }
@@ -1689,6 +1977,91 @@ export function reconcileFlights(
     const arrivalCheckAt = current.arrivedAt ?? current.arrivalAt;
     const arrivalReady = current.phase === 'arrived' || (current.phase === 'outbound' && now >= current.arrivalAt);
     if (arrivalReady) {
+      if (current.missionId === 'space-flight') {
+        const returning: FlightRecord = {
+          ...current,
+          phase: 'returning',
+          arrivedAt: arrivalAt,
+          returnAt: arrivalAt + current.oneWayDurationMs,
+          completionReason: 'normal-return',
+        };
+        next = { ...next, flights: updateFlight(currentFlightState(next), returning) };
+        changed = true;
+        events.push({
+          flight: returning,
+          status: 'arrived',
+          notice: 'Космический рейс достиг рубежа и возвращается на исходную планету.',
+        });
+        continue;
+      }
+      if (current.ownerSide === 'bot01' && current.missionId === 'attack') {
+        const affectedSpaceFlightIds = new Set(next.flights.records
+          .filter((flight) => flight.missionId === 'space-flight'
+            && flight.originPlanetId === current.destinationPlanetId
+            && ACTIVE_FLIGHT_PHASES.has(flight.phase))
+          .map((flight) => flight.id));
+        const resolvedAttack = resolveBot01IncomingAttack(next, current, arrivalAt);
+        if (!resolvedAttack) {
+          const failedReturn: FlightRecord = {
+            ...current,
+            phase: 'returning',
+            arrivedAt: arrivalAt,
+            returnAt: arrivalAt + current.oneWayDurationMs,
+            completionReason: 'target-unavailable',
+          };
+          next = { ...next, flights: updateFlight(currentFlightState(next), failedReturn) };
+          if (next.espionage?.bot01IncomingScenario?.flightId === current.id) {
+            next = {
+              ...next,
+              espionage: {
+                ...next.espionage,
+                bot01IncomingScenario: { ...next.espionage.bot01IncomingScenario, status: 'failed' },
+              },
+            };
+          }
+          changed = true;
+          events.push({
+            flight: failedReturn,
+            status: 'target-unavailable',
+            notice: 'Атака Bot 01 не состоялась: цель или источник больше недоступны. Флот возвращается.',
+          });
+          continue;
+        }
+        const returning: FlightRecord = {
+          ...current,
+          phase: 'returning',
+          attackResolution: resolvedAttack.resolution,
+          arrivedAt: arrivalAt,
+          returnAt: arrivalAt + current.oneWayDurationMs,
+          completionReason: 'normal-return',
+        };
+        next = { ...resolvedAttack.state, flights: updateFlight(currentFlightState(resolvedAttack.state), returning) };
+        if (next.espionage?.bot01IncomingScenario?.flightId === current.id) {
+          next = {
+            ...next,
+            espionage: {
+              ...next.espionage,
+              bot01IncomingScenario: { ...next.espionage.bot01IncomingScenario, status: 'resolved' },
+            },
+          };
+        }
+        changed = true;
+        events.push({
+          flight: returning,
+          status: 'incoming-attack',
+          notice: `Бой с Bot 01 завершён: ${resolvedAttack.report.winner === 'attacker' ? 'поражение защитника' : resolvedAttack.report.winner === 'defender' ? 'атака отражена' : 'ничья'}${resolvedAttack.resolution.planetDestroyed ? ' · планета уничтожена' : ''}. Создан боевой отчёт; выживший флот возвращается.`,
+        });
+        for (const flightId of affectedSpaceFlightIds) {
+          const burned = next.flights.records.find((flight) => flight.id === flightId);
+          if (burned?.phase !== 'failed' || burned.completionReason !== 'origin-destroyed') continue;
+          events.push({
+            flight: burned,
+            status: 'destroyed',
+            notice: `Космический рейс потерян: ${burned.originPlanetId} уничтожена, корабли и груз сгорели.`,
+          });
+        }
+        continue;
+      }
       if (current.missionId === 'espionage') {
         const mission = spyMissionForFlight(next, current);
         if (!mission) {
@@ -2067,13 +2440,15 @@ export function reconcileFlights(
     const refreshed = next.flights.records.find((flight) => flight.id === original.id) ?? original;
     if (refreshed.phase === 'returning' && refreshed.returnAt !== undefined && now >= refreshed.returnAt) {
       let returnedFlight = refreshed;
-      if (refreshed.missionId === 'transport' || refreshed.missionId === 'recycle' || refreshed.missionId === 'gas') {
+      if (refreshed.missionId === 'transport' || refreshed.missionId === 'recycle' || refreshed.missionId === 'gas' || refreshed.missionId === 'space-flight') {
         const returned = returnTransportCargo(next, refreshed, refreshed.returnAt);
         next = returned.state;
         returnedFlight = returned.flight;
       }
       if (refreshed.missionId === 'attack') {
-        const returned = creditAttackLoot(next, refreshed, refreshed.returnAt);
+        const returned = refreshed.ownerSide === 'bot01'
+          ? creditBot01AttackReturn(next, refreshed, refreshed.returnAt)
+          : creditAttackLoot(next, refreshed, refreshed.returnAt);
         next = returned.state;
         returnedFlight = returned.flight;
       }
@@ -2090,6 +2465,8 @@ export function reconcileFlights(
               ? 'target-occupied'
               : returnedFlight.completionReason === 'spy-destroyed'
                 ? 'spy-destroyed'
+              : returnedFlight.missionId === 'space-flight'
+                ? returnedFlight.completionReason === 'recalled' ? 'recalled' : 'normal-return'
               : returnedFlight.missionId === 'attack'
                 ? returnedFlight.completionReason ?? 'normal-return'
                 : 'recalled',
@@ -2107,7 +2484,13 @@ export function reconcileFlights(
       events.push({
         flight: completed,
         status: 'returned',
-        notice: completed.missionId === 'transport' || completed.missionId === 'recycle' || completed.missionId === 'gas'
+        notice: completed.missionId === 'space-flight'
+          ? completed.completionReason === 'recalled'
+            ? 'Космический рейс вернулся после отзыва; корабли и груз зачислены.'
+            : 'Космический рейс завершён: корабли и груз вернулись на исходную планету.'
+          : completed.ownerSide === 'bot01'
+            ? 'Флот Bot 01 вернулся к источнику; выжившие корабли и захваченные ресурсы зачислены.'
+        : completed.missionId === 'transport' || completed.missionId === 'recycle' || completed.missionId === 'gas'
           ? completed.completionReason === 'target-unavailable'
             ? completed.missionId === 'recycle' || completed.missionId === 'gas'
               ? 'Переработчик вернулся: исходная планета недоступна, обломки потеряны.'

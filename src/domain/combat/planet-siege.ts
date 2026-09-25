@@ -12,7 +12,17 @@ import type {
   BattleSiegeDestruction,
   BattleSiegeReport,
 } from './report.ts';
-import type { SpyTargetState } from '../espionage/types.ts';
+import type { BuildingQueueItem } from '../buildings/resource-zone.ts';
+
+/** Shared siege inputs; owned worlds and espionage snapshots keep distinct runtimes. */
+export type PlanetSiegeTarget = {
+  id: string;
+  name: string;
+  coordinate: { galaxy: number; system: number; position: number };
+  buildings: Record<string, number>;
+  buildingQueue?: BuildingQueueItem[];
+  endgameLockedBuildings?: string[];
+};
 
 export type PlanetSiegeProfile = {
   demolitionPointsAtLevel10: number;
@@ -55,7 +65,7 @@ export type PlanetSiegeContext = {
 };
 
 export type PlanetSiegeResult = {
-  target: SpyTargetState;
+  target: PlanetSiegeTarget;
   report: BattleSiegeReport;
   planetDestroyed: boolean;
 };
@@ -86,11 +96,11 @@ export function getPlanetSiegeDemolitionThreshold(finalPoints: number): PlanetSi
   )) ?? PLANET_SIEGE_DEMOLITION_THRESHOLDS[0];
 }
 
-function coordinateKey(target: SpyTargetState) {
+function coordinateKey(target: Pick<PlanetSiegeTarget, 'coordinate'>) {
   return `${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}`;
 }
 
-function randomSeed(context: PlanetSiegeContext, target: SpyTargetState, domain: string, subject = '') {
+function randomSeed(context: PlanetSiegeContext, target: PlanetSiegeTarget, domain: string, subject = '') {
   return [
     context.seed,
     context.reportId,
@@ -150,7 +160,7 @@ function activeCommanderLevel(force: BattleForceSnapshot, commanderId: string) {
     ?? force.stacks.find((stack) => stack.entityId === commanderId)?.level);
 }
 
-function eligibleBuildings(target: SpyTargetState) {
+function eligibleBuildings(target: PlanetSiegeTarget) {
   const locked = new Set(target.endgameLockedBuildings ?? []);
   return Object.entries(target.buildings)
     .filter(([buildingId, value]) => safeInteger(value) > 0 && !locked.has(buildingId))
@@ -159,7 +169,7 @@ function eligibleBuildings(target: SpyTargetState) {
 }
 
 function selectBuildings(
-  target: SpyTargetState,
+  target: PlanetSiegeTarget,
   eligible: readonly string[],
   selectedCount: number | 'all',
   context: PlanetSiegeContext,
@@ -205,7 +215,7 @@ function blockedDemolition(
 
 function resolveDemolition(
   report: BattleReport,
-  target: SpyTargetState,
+  target: PlanetSiegeTarget,
   attackerDestroyers: readonly BattleSiegeDestroyerContribution[],
   context: PlanetSiegeContext,
   defensePopulation: number,
@@ -273,7 +283,7 @@ function resolveDemolition(
   };
 }
 
-function applyDemolition(target: SpyTargetState, demolition: BattleSiegeDemolition) {
+function applyDemolition<T extends PlanetSiegeTarget>(target: T, demolition: BattleSiegeDemolition): T {
   const successful = demolition.rolls.filter((roll) => roll.success);
   if (successful.length === 0) return target;
   const buildings = { ...target.buildings };
@@ -286,12 +296,12 @@ function applyDemolition(target: SpyTargetState, demolition: BattleSiegeDemoliti
     ...target,
     buildings,
     ...(buildingQueue ? { buildingQueue } : {}),
-  };
+  } as T;
 }
 
 function resolveDestruction(
   report: BattleReport,
-  target: SpyTargetState,
+  target: PlanetSiegeTarget,
   attackerDestroyers: readonly BattleSiegeDestroyerContribution[],
   defenderDestroyers: readonly BattleSiegeDestroyerContribution[],
   context: PlanetSiegeContext,
@@ -332,11 +342,11 @@ function resolveDestruction(
   };
 }
 
-export function resolvePlanetSiege(
+export function resolvePlanetSiege<T extends PlanetSiegeTarget>(
   report: BattleReport,
-  target: SpyTargetState,
+  target: T,
   context: PlanetSiegeContext,
-): PlanetSiegeResult {
+): PlanetSiegeResult & { target: T } {
   const attackerDestroyers = forceDeathStars(report.attackerForce, context.attackerFactionId);
   const defenderDestroyers = forceDeathStars(report.defenderForce, context.defenderFactionId);
   const defensePopulation = defensePopulationAfter(report, context.defenderFactionId);

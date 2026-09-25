@@ -8,17 +8,21 @@ import { resolvePlanetSiege } from '../domain/combat/planet-siege.ts';
 import type { BattleReport } from '../domain/combat/report.ts';
 import { COMBAT_TECHNOLOGIES, normalizeCombatTechnologies, type CombatTechnologyLevels } from '../domain/combat/technologies.ts';
 import type { CombatInput, CombatStackInput, SimulatorMaxRounds } from '../domain/combat/simulator.ts';
-import { getEspionageTargets } from '../domain/espionage/runtime.ts';
+import { getEspionageTargets, syncSpyTargetCommanderCounts } from '../domain/espionage/runtime.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
 import { resolveSpyOwnerProfile } from '../domain/espionage/owner-profile.ts';
 import { calculateDefensePopulation } from '../domain/fleet/production.ts';
-import { calculateFleetPopulation, removeSolarSatellitesFromFleet, type OwnedFleetState } from '../domain/fleet/runtime.ts';
+import { calculateFleetPopulation, removeSolarSatellitesFromFleet, resolveSavedFleetState, type OwnedFleetState } from '../domain/fleet/runtime.ts';
+import { migrateProductionBotAssignment } from '../domain/buildings/production-bots.ts';
 import { addDebris, getCappedDelivery, getFleetCargoCapacity, type TransportCargo } from '../domain/flights/cargo.ts';
-import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
+import { getStorageCapacities, isBuildingRole } from '../domain/buildings/resource-zone.ts';
 import { createDefaultRepairWorkshopState, claimDefensiveBattleRepair, annotateBattleReportRepair } from '../domain/repair/workshop.ts';
 import type { FlightRecord } from '../domain/flights/types.ts';
-import type { SaveState } from './contracts.ts';
+import { getOwnerShipUpgradeLevel, getOwnerShipUpgradeLevels, type PlanetRuntime, type SaveState } from './contracts.ts';
 import { getPlanetResources, replacePlanetResources, replacePlanetState } from './contracts.ts';
+import { destroyOwnedPlanet, preserveOwnedPlanetOrbitalDebris } from './owned-planets.ts';
+import { energySourceChangeForBuilding, transitionPlanetEnergySources } from './energy.ts';
+import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import { resolveSpyTarget } from './espionage-targets.ts';
 import type { AttackLaunchSnapshot, AttackLoot, AttackResolution } from '../domain/attack/types.ts';
 
@@ -53,8 +57,8 @@ export function technologiesFromScience(levels: Partial<Record<number, number>> 
 }
 
 function commanderLevelsFromPlanet(state: SaveState, planetId: string, selected: Partial<Record<CommanderId, number>>) {
-  const levels = state.planets[planetId]?.spaceportUpgrades.shipLevels ?? {};
-  return Object.fromEntries(Object.keys(selected).map((id) => [id, safeLevel(levels[id])])) as Partial<Record<CommanderId, number>>;
+  void planetId;
+  return Object.fromEntries(Object.keys(selected).map((id) => [id, getOwnerShipUpgradeLevel(state, id)])) as Partial<Record<CommanderId, number>>;
 }
 
 export function normalizeAttackRounds(value: unknown): SimulatorMaxRounds {
@@ -67,9 +71,8 @@ export function createAttackLaunchSnapshot(
   maxRounds: SimulatorMaxRounds,
   selectedCommanders: Partial<Record<CommanderId, number>>,
 ): AttackLaunchSnapshot {
-  const planet = state.planets[originPlanetId];
   const shipLevels = Object.fromEntries(
-    Object.entries(planet?.spaceportUpgrades.shipLevels ?? {}).map(([id, level]) => [id, safeLevel(level)]),
+    Object.entries(getOwnerShipUpgradeLevels(state)).map(([id, level]) => [id, safeLevel(level)]),
   ) as Partial<Record<ShipId, number>>;
   const selectedCommanderIds = COMMANDER_IDS.filter((id) => safeCount(selectedCommanders[id]) > 0);
   return {
@@ -120,11 +123,15 @@ function targetCommanderStacks(state: SaveState, target: SpyTargetState, priorit
 }
 
 function targetDefenseStacks(target: SpyTargetState): CombatStackInput[] {
-  return Object.entries(target.defense.defenses).flatMap(([rawId, rawCount]) => {
+  return defenseStacks(target.raceId, target.defense.defenses);
+}
+
+function defenseStacks(factionId: CombatFactionId, defenses: Record<string, number>): CombatStackInput[] {
+  return Object.entries(defenses).flatMap(([rawId, rawCount]) => {
     const id = rawId as DefenseId;
     const count = safeCount(rawCount);
     const isSingleCopyShield = id === 'tower-shield' || id === 'planetary-shield';
-    return count > 0 && getFactionDefenseCatalog(target.raceId).some((entity) => entity.id === id)
+    return count > 0 && getFactionDefenseCatalog(factionId).some((entity) => entity.id === id)
       ? [{ entityId: id as CombatEntityId, count: isSingleCopyShield ? 1 : count, level: 0 }]
       : [];
   });
@@ -449,6 +456,218 @@ export function resolveAttackAtTarget(state: SaveState, flight: FlightRecord, no
   return { state: next, report: reportWithSiege, resolution };
 }
 
+/** Captures Bot 01's existing profile for the single persisted incoming test attack. */
+export function createBot01IncomingAttackSnapshot(
+  source: SpyTargetState,
+  profile: { scienceLevels: Partial<Record<number, number>>; shipLevels: Partial<Record<ShipId, number>>; commanderLevels: Partial<Record<CommanderId, number>> },
+): AttackLaunchSnapshot {
+  return {
+    version: 1,
+    maxRounds: 8,
+    attackerFactionId: source.raceId,
+    attackerTechnologies: technologiesFromScience(profile.scienceLevels),
+    attackerShipLevels: Object.fromEntries(Object.entries(profile.shipLevels).map(([id, level]) => [id, safeLevel(level)])),
+    attackerCommanderLevels: Object.fromEntries(Object.entries(profile.commanderLevels).map(([id, level]) => [id, safeLevel(level)])),
+    attackerPriority: [...DEFAULT_PRIORITY.attack],
+  };
+}
+
+function availableOwnedFleetForCombat(state: SaveState, planetId: string, planet: PlanetRuntime): OwnedFleetState {
+  const available = removeSolarSatellitesFromFleet(resolveSavedFleetState(planet.fleet, state.profile.factionId)).fleet;
+  const ships = { ...available.ships };
+  const commanders = { ...available.commanders };
+  for (const flight of state.flights.records) {
+    if ((flight.ownerSide === 'bot01')
+      || flight.originPlanetId !== planetId
+      || !['outbound', 'returning', 'arrived'].includes(flight.phase)) continue;
+    for (const [shipId, quantity] of Object.entries(flight.selectedShips) as [ShipId, number][]) {
+      ships[shipId] = Math.max(0, safeCount(ships[shipId]) - safeCount(quantity));
+    }
+    for (const [commanderId, quantity] of Object.entries(flight.selectedCommanders ?? {}) as [CommanderId, number][]) {
+      commanders[commanderId] = Math.max(0, safeCount(commanders[commanderId]) - safeCount(quantity));
+    }
+  }
+  return { ships, commanders };
+}
+
+function createBot01IncomingAttackInput(
+  state: SaveState,
+  flight: FlightRecord,
+  source: SpyTargetState,
+  target: PlanetRuntime,
+): CombatInput {
+  const snapshot = flight.attackSnapshot!;
+  const defenderPriority = [...DEFAULT_PRIORITY.defense];
+  const defenderFleet = availableOwnedFleetForCombat(state, flight.destinationPlanetId!, target);
+  const defenderCommanderLevels = Object.fromEntries(COMMANDER_IDS.map((id) => [id, getOwnerShipUpgradeLevel(state, id)])) as Partial<Record<CommanderId, number>>;
+  const defenderShips = shipStacks(state.profile.factionId as CombatFactionId, defenderFleet.ships, getOwnerShipUpgradeLevels(state) as Partial<Record<ShipId, number>>);
+  const defenderCommanders = selectedCommanderStacks(defenderFleet.commanders, defenderCommanderLevels, defenderPriority);
+  const attackerShips = shipStacks(snapshot.attackerFactionId, flight.selectedShips, snapshot.attackerShipLevels);
+  const attackerCommanders = selectedCommanderStacks(flight.selectedCommanders, snapshot.attackerCommanderLevels, snapshot.attackerPriority);
+  const coordinate = {
+    galaxy: target.universeGalaxy ?? 1,
+    system: target.universeSystem ?? 1,
+    position: target.universePosition ?? 1,
+  };
+  const targetCoordinates = coordinateLabel(coordinate);
+  const attackerCoordinates = coordinateLabel(flight.originCoordinate);
+  return {
+    scenarioId: flight.id,
+    timestamp: new Date(flight.arrivalAt).toISOString(),
+    attacker: {
+      participant: {
+        playerId: source.ownerId,
+        playerName: source.ownerName,
+        planetName: source.name,
+        coordinates: attackerCoordinates,
+        race: getCombatFactionName(snapshot.attackerFactionId),
+        side: 'attacker',
+      },
+      factionId: snapshot.attackerFactionId,
+      ships: attackerShips,
+      commanders: attackerCommanders,
+      commander: attackerCommanders[0] ?? null,
+      activeCommanderId: snapshot.attackerPriority.find((id) => attackerCommanders.some((stack) => stack.entityId === id)) ?? null,
+    },
+    defender: {
+      participant: {
+        playerId: state.profile.playerId,
+        playerName: state.profile.displayName,
+        planetName: target.name,
+        coordinates: targetCoordinates,
+        race: getCombatFactionName(state.profile.factionId as CombatFactionId),
+        side: 'defender',
+      },
+      factionId: state.profile.factionId as CombatFactionId,
+      ships: defenderShips,
+      commanders: defenderCommanders,
+      commander: defenderCommanders[0] ?? null,
+      activeCommanderId: defenderPriority.find((id) => defenderCommanders.some((stack) => stack.entityId === id)) ?? null,
+      defenses: defenseStacks(state.profile.factionId as CombatFactionId, target.defense.defenses),
+    },
+    maxRounds: normalizeAttackRounds(snapshot.maxRounds),
+    attackerPriority: [...snapshot.attackerPriority],
+    defenderPriority,
+    attackerTechnologies: snapshot.attackerTechnologies,
+    defenderTechnologies: technologiesFromScience(state.science.levels),
+    technologyMode: 'independent',
+    executionMode: 'production',
+    seed: `bot01-incoming:${flight.id}`,
+    profileId: 'asterion-attack-v1',
+  };
+}
+
+/** Resolves the Bot 01 demonstration against an actual owned PlanetRuntime. */
+export function resolveBot01IncomingAttack(state: SaveState, flight: FlightRecord, now: number): AttackResolutionResult | null {
+  if (flight.ownerSide !== 'bot01' || flight.missionId !== 'attack' || !flight.attackSnapshot || !flight.destinationPlanetId) return null;
+  const reportId = `battle-bot01-incoming-${flight.id}`;
+  const existing = state.combat.reports.find((candidate) => candidate.id === reportId);
+  if (existing) {
+    const resolution: AttackResolution = flight.attackResolution ?? {
+      reportId,
+      resolvedAt: safeCount(existing.timestamp ? Date.parse(existing.timestamp) : now),
+      debris: safeCount(existing.debris),
+      loot: reportLoot(existing),
+      planetDestroyed: existing.siege?.planetDestroyed === true,
+    };
+    return { state, report: existing, resolution };
+  }
+  const espionage = state.espionage;
+  const source = espionage ? getEspionageTargets(espionage)[flight.originPlanetId] : undefined;
+  const target = state.planets[flight.destinationPlanetId];
+  if (!source || source.ownerId !== UNIVERSE_NPC_OWNER_ID || !target) return null;
+
+  const input = createBot01IncomingAttackInput(state, flight, source, target);
+  if (input.attacker.ships.length === 0) return null;
+  const rawReport = resolveCombat(input, { reportId, missionType: 'attack' });
+  const debris = calculateAttackDebris(rawReport, input.attacker.factionId!, input.defender.factionId!);
+  const targetResources = getPlanetResources(state, flight.destinationPlanetId);
+  const loot = calculateAttackLoot(rawReport, targetResources, input.attacker.factionId!);
+  const reportWithOutcome: BattleReport = {
+    ...rawReport,
+    debris,
+    resources: { metal: loot.metal, minerals: loot.minerals, gas: loot.gas },
+  };
+  const repair = claimDefensiveBattleRepair(target.repair ?? createDefaultRepairWorkshopState(), reportWithOutcome, { allowAttackDefender: true });
+  const report = annotateBattleReportRepair(reportWithOutcome, repair);
+  const defenses = { defenses: { ...target.defense.defenses } };
+  for (const stack of report.defenderForce.defenses ?? []) {
+    const id = stack.entityId as DefenseId;
+    defenses.defenses[id] = Math.max(0, safeCount(defenses.defenses[id]) - safeCount(stack.destroyed));
+  }
+  const targetAfterLosses = {
+    ...target,
+    fleet: applyDestroyedToFleet(target.fleet, report.defenderForce, state.profile.factionId as CombatFactionId),
+    defense: defenses,
+    repair: repair.state,
+  };
+  const resourcesAfterLoot = {
+    metal: Math.max(0, targetResources.metal - loot.metal),
+    minerals: Math.max(0, targetResources.minerals - loot.minerals),
+    gas: Math.max(0, targetResources.gas - loot.gas),
+  };
+  const siegeTarget = {
+    id: flight.destinationPlanetId,
+    name: target.name,
+    coordinate: { galaxy: target.universeGalaxy ?? 1, system: target.universeSystem ?? 1, position: target.universePosition ?? 1 },
+    buildings: target.buildings,
+    buildingQueue: state.queues[flight.destinationPlanetId] ?? [],
+  };
+  const siege = resolvePlanetSiege(report, siegeTarget, {
+    seed: input.seed ?? `bot01-incoming:${flight.id}`,
+    reportId,
+    attackerFleetId: flight.id,
+    attackerFactionId: input.attacker.factionId!,
+    defenderFactionId: input.defender.factionId!,
+    targetOwnerPlanetCount: Object.keys(state.planets).length,
+    eventSequence: lastCombatEventSequence(report),
+  });
+  const reportWithSiege: BattleReport = { ...report, siege: siege.report };
+  let next = replacePlanetResources(state, flight.destinationPlanetId, resourcesAfterLoot);
+  const demolishedBuildings = siege.report.demolition.rolls.filter((roll) => roll.success);
+  const energySourceChanges: NonNullable<NonNullable<Parameters<typeof transitionPlanetEnergySources>[4]>['sourceChanges']> = {};
+  for (const roll of demolishedBuildings) {
+    if (!isBuildingRole(roll.buildingId)) continue;
+    const sourceChange = energySourceChangeForBuilding(roll.buildingId);
+    if (sourceChange) Object.assign(energySourceChanges, sourceChange);
+  }
+  let planetAfterSiege: PlanetRuntime = {
+    ...targetAfterLosses,
+    buildings: siege.target.buildings,
+    resources: resourcesAfterLoot,
+  };
+  if (!siege.planetDestroyed && demolishedBuildings.length > 0) {
+    planetAfterSiege = transitionPlanetEnergySources(
+      target,
+      planetAfterSiege,
+      state.science.levels,
+      state.science.levels,
+      { sourceChanges: Object.keys(energySourceChanges).length > 0 ? energySourceChanges : undefined },
+    );
+    if (demolishedBuildings.some((roll) => roll.buildingId === 'construction' || roll.buildingId === 'advanced-factory')) {
+      planetAfterSiege = {
+        ...planetAfterSiege,
+        productionBots: migrateProductionBotAssignment(target.productionBots, siege.target.buildings),
+      };
+    }
+  }
+  next = replacePlanetState(next, flight.destinationPlanetId, {
+    ...planetAfterSiege,
+  });
+  next = {
+    ...next,
+    queues: { ...next.queues, [flight.destinationPlanetId]: siege.target.buildingQueue ?? [] },
+  };
+  next = preserveOwnedPlanetOrbitalDebris(next, flight.destinationPlanetId, debris, reportId, now);
+  if (siege.planetDestroyed) {
+    const destroyed = destroyOwnedPlanet(next, flight.destinationPlanetId, now);
+    if (destroyed.destroyed) next = destroyed.state;
+  }
+  next = addReport(next, reportWithSiege);
+  const resolution: AttackResolution = { reportId, resolvedAt: safeCount(now), debris, loot, planetDestroyed: siege.planetDestroyed };
+  return { state: next, report: reportWithSiege, resolution };
+}
+
 export type AttackLootCreditResult = {
   state: SaveState;
   flight: FlightRecord;
@@ -468,6 +687,75 @@ export function creditAttackLoot(state: SaveState, flight: FlightRecord, now: nu
     attackResolution: { ...resolution, lootCreditedAt: now },
   };
   return { state: nextState, flight: nextFlight };
+}
+
+/** Returns a Bot 01 attack fleet to its NPC source once when the persisted flight completes. */
+export function creditBot01AttackReturn(state: SaveState, flight: FlightRecord, now: number): AttackLootCreditResult {
+  if (flight.ownerSide !== 'bot01' || flight.missionId !== 'attack' || flight.bot01ReturnCreditedAt !== undefined) {
+    return { state, flight };
+  }
+  const espionage = state.espionage;
+  const source = espionage ? getEspionageTargets(espionage)[flight.originPlanetId] : undefined;
+  const completedFlight: FlightRecord = { ...flight, bot01ReturnCreditedAt: now };
+  if (!source) return { state, flight: completedFlight };
+
+  const reportId = flight.attackResolution?.reportId;
+  const report = reportId ? state.combat.reports.find((candidate) => candidate.id === reportId) : undefined;
+  const fleet: OwnedFleetState = {
+    ships: { ...source.fleet.ships },
+    commanders: { ...source.fleet.commanders },
+  };
+  if (report) {
+    for (const stack of report.attackerForce.stacks ?? []) {
+      const survivors = safeCount(stack.countAfter);
+      if (survivors <= 0) continue;
+      const entity = getFactionCombatEntity(source.raceId, stack.entityId);
+      if (entity.kind === 'ship' && entity.id !== SOLAR_SATELLITE_ID) {
+        const id = entity.id as ShipId;
+        fleet.ships[id] = safeCount(fleet.ships[id]) + survivors;
+      } else if (entity.kind === 'commander') {
+        const id = entity.id as CommanderId;
+        fleet.commanders[id] = safeCount(fleet.commanders[id]) + survivors;
+      }
+    }
+  } else {
+    for (const [rawId, quantity] of Object.entries(flight.selectedShips)) {
+      const id = rawId as ShipId;
+      fleet.ships[id] = safeCount(fleet.ships[id]) + safeCount(quantity);
+    }
+    for (const [rawId, quantity] of Object.entries(flight.selectedCommanders ?? {})) {
+      const id = rawId as CommanderId;
+      fleet.commanders[id] = safeCount(fleet.commanders[id]) + safeCount(quantity);
+    }
+  }
+
+  const loot = flight.attackResolution?.loot;
+  const nextSource: SpyTargetState = syncSpyTargetCommanderCounts({
+    ...source,
+    population: {
+      total: calculateFleetPopulation(fleet, source.raceId) + calculateDefensePopulation(source.defense, source.raceId),
+      fleet: calculateFleetPopulation(fleet, source.raceId),
+      defense: calculateDefensePopulation(source.defense, source.raceId),
+    },
+    ...(loot ? { resources: {
+      ...source.resources,
+      metal: safeCount(source.resources.metal + loot.metal),
+      minerals: safeCount(source.resources.minerals + loot.minerals),
+      gas: safeCount(source.resources.gas + loot.gas),
+    } } : {}),
+  }, fleet, espionage?.bot01Profile);
+  const targets = { ...getEspionageTargets(espionage!), [source.id]: nextSource };
+  return {
+    state: {
+      ...state,
+      espionage: {
+        ...espionage!,
+        targets,
+        ...(espionage!.bot01Planets ? { bot01Planets: targets } : {}),
+      },
+    },
+    flight: completedFlight,
+  };
 }
 
 export function isAttackCombatShip(shipId: ShipId, factionId: CombatFactionId): boolean {

@@ -157,9 +157,15 @@ async function seedTestRuntime(win, changes = {}) {
       planet.spaceportUpgrades = ${JSON.stringify(changes.spaceport)};
     }
     if (${changes.resourceClock ? 'true' : 'false'}) save.resourceClock = ${JSON.stringify(changes.resourceClock)};
-    save.metal = ${changes.metal ?? 1_000_000};
-    save.minerals = ${changes.minerals ?? 1_000_000};
-    save.gas = ${changes.gas ?? 1_000_000};
+    const resourceWallet = {
+      metal: ${changes.metal ?? 1_000_000},
+      minerals: ${changes.minerals ?? 1_000_000},
+      gas: ${changes.gas ?? 1_000_000},
+    };
+    planet.resources = { ...(planet.resources || {}), ...resourceWallet };
+    save.metal = resourceWallet.metal;
+    save.minerals = resourceWallet.minerals;
+    save.gas = resourceWallet.gas;
     planet.energy = ${changes.energy ?? 1_000_000};
     localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
     return true;
@@ -592,7 +598,7 @@ async function runViewport(width, height) {
     const offlineOnce = await readEnvelope(win, TEST_KEY);
     await reload(win, 'test');
     const offlineTwice = await readEnvelope(win, TEST_KEY);
-    if (offlineOnce.planets['helion-01'].spaceportUpgrades.shipLevels.scout !== 1 || offlineTwice.planets['helion-01'].spaceportUpgrades.shipLevels.scout !== 1) throw new Error(`${label}: Spaceport offline completion was not exact-once`);
+    if (offlineOnce.shipUpgradeLevels.scout !== 1 || offlineTwice.shipUpgradeLevels.scout !== 1) throw new Error(`${label}: Spaceport offline completion was not exact-once`);
 
     const maxSpaceport = { shipLevels: { scout: 10, corsair: 40 }, shipQueue: [], commanderQueue: [] };
     await seedTestRuntime(win, { buildings: { construction: 1, research: 1, spaceport: 1, shipyard: 1 }, scienceLevels: { 4: 1 }, spaceport: maxSpaceport });
@@ -614,7 +620,7 @@ async function runViewport(width, height) {
     if (JSON.stringify(fleetRoot.fleetRoster) !== JSON.stringify(expectedFleetRoster)) throw new Error(`${label}: current fleet roster UI mismatch ${JSON.stringify(fleetRoot.fleetRoster)}`);
     if (fleetRoot.fleetBaseCardTag === 'BUTTON') throw new Error(`${label}: fleet base card must be informational, not a button`);
     if (fleetRoot.fleetRosterOverflow || fleetRoot.fleetRosterOverflowY !== 'visible') throw new Error(`${label}: fleet roster still owns an internal scrollbar ${JSON.stringify(fleetRoot)}`);
-    const expectedFleetFlightActions = ['ШПИОНСКИЕ ОТЧЁТЫ'];
+    const expectedFleetFlightActions = ['ШПИОНСКИЕ ОТЧЁТЫ', 'ЗАПУСТИТЬ АТАКУ BOT 01'];
     if (JSON.stringify(fleetRoot.fleetFlightActions.map((action) => action.text)) !== JSON.stringify(expectedFleetFlightActions) || fleetRoot.fleetFlightActions.some((action) => action.bottom > fleetRoot.fleetFlightPanelBottom + 2 || action.bottom <= action.top)) {
       throw new Error(`${label}: fleet flight action buttons are clipped or missing ${JSON.stringify(fleetRoot)}`);
     }

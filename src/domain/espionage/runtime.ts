@@ -1,4 +1,7 @@
 import type { EspionageState, SpyMission, SpyReportQuality, SpyTargetState } from './types.ts';
+import { COMMANDER_IDS } from '../combat/commanders.ts';
+import type { OwnedFleetState } from '../fleet/runtime.ts';
+import type { SpyOwnerProfile } from './types.ts';
 
 export const SPY_REPORT_COOLDOWN_MS = 5_000;
 export const SPY_HUNTER_RATE_PER_LEVEL_PERCENT = 1.75;
@@ -19,6 +22,28 @@ export function getEspionageState(state: { espionage?: EspionageState }): Espion
  */
 export function getEspionageTargets(espionage?: EspionageState): Record<string, SpyTargetState> {
   return espionage?.targets ?? espionage?.bot01Planets ?? {};
+}
+
+/** Keeps the report-facing commander snapshot aligned with a target's live fleet. */
+export function syncSpyTargetCommanderCounts(
+  target: SpyTargetState,
+  fleet: OwnedFleetState,
+  ownerProfile?: SpyOwnerProfile,
+): SpyTargetState {
+  const commanders: SpyTargetState['commanders'] = {};
+  for (const commanderId of COMMANDER_IDS) {
+    const rawCount = fleet.commanders[commanderId] ?? 0;
+    if (!Number.isFinite(rawCount)) continue;
+    const count = Math.max(0, Math.floor(rawCount));
+    if (count <= 0) continue;
+    commanders[commanderId] = {
+      level: ownerProfile?.commanderLevels[commanderId]
+        ?? target.commanders[commanderId]?.level
+        ?? 0,
+      count,
+    };
+  }
+  return { ...target, fleet, commanders };
 }
 
 export function normalizeRngRoll(value: number): number {

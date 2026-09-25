@@ -424,6 +424,13 @@ function isSuppressedBotFixture(options: CreateUniverseSystemOptions, galaxy: nu
       && planet.coordinate.position === slot);
 }
 
+function isSuppressedHelionFixture(options: CreateUniverseSystemOptions, galaxy: number, system: number, slot: number) {
+  if (options.playerPlanets === undefined || galaxy !== GALAXY || system !== 1 || slot !== 1) return false;
+  return !options.playerPlanets.some((planet) => planet.coordinate.galaxy === galaxy
+    && planet.coordinate.system === system
+    && planet.coordinate.position === slot);
+}
+
 function generatedKind(): UniversePlanetNode['kind'] {
   return 'uninhabited';
 }
@@ -438,7 +445,8 @@ function createPositionNode(
   const persisted = persistedPlanetFor(options, galaxy, system, slot);
   const registered = persisted ? undefined : registeredPlanetFor(options, galaxy, system, slot);
   const coordinate = { galaxy, system, position: slot };
-  if (isSuppressedBotFixture(options, galaxy, system, slot) && !persisted && !registered) {
+  if ((isSuppressedBotFixture(options, galaxy, system, slot)
+    || isSuppressedHelionFixture(options, galaxy, system, slot)) && !persisted && !registered) {
     return {
       id: `universe-empty-${galaxy}-${system}-${slot}`,
       coordinate,
@@ -486,7 +494,9 @@ function createUniverseSystemBase(options: CreateUniverseSystemOptions, assets: 
   const system = Math.min(SYSTEM_COUNT, Math.max(1, Math.floor(options.system)));
   const random = mulberry32(10_000 + galaxy * 977 + system * 1_003);
   const fixtureSlots = Array.from({ length: POSITION_COUNT }, (_, index) => index + 1)
-    .filter((slot) => fixtureFor(system, slot, options.mode, options.registeredPlanets) || isSuppressedBotFixture(options, galaxy, system, slot));
+    .filter((slot) => fixtureFor(system, slot, options.mode, options.registeredPlanets)
+      || isSuppressedBotFixture(options, galaxy, system, slot)
+      || isSuppressedHelionFixture(options, galaxy, system, slot));
   const persistedSlots = (options.playerPlanets ?? [])
     .filter((planet) => planet.coordinate.galaxy === galaxy && planet.coordinate.system === system)
     .map((planet) => planet.coordinate.position);

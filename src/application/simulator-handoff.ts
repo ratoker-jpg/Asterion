@@ -1,6 +1,6 @@
 import { createDefaultCombatTechnologies, COMBAT_TECHNOLOGIES, normalizeCombatTechnologies } from '../domain/combat/technologies.ts';
 import { createEmptySimulatorScenario, type CombatStackInput, type SimulatorScenario } from '../domain/combat/simulator.ts';
-import type { SaveState } from './contracts.ts';
+import { getOwnerShipUpgradeLevels, type SaveState } from './contracts.ts';
 import type { SpyReportSnapshot } from '../domain/espionage/types.ts';
 import type { CombatEntityId } from '../domain/combat/ids.ts';
 
@@ -51,7 +51,7 @@ export function createSimulatorScenarioFromSpyReport(state: SaveState, report: S
   const currentPlanet = state.planets[state.currentPlanetId];
   const attackerShips = currentPlanet?.fleet.ships ?? {};
   const attackerCommanders = currentPlanet?.fleet.commanders ?? {};
-  const attackerLevels = currentPlanet?.spaceportUpgrades.shipLevels ?? {};
+  const attackerLevels = getOwnerShipUpgradeLevels(state);
   const attackerTech = technologiesFromScience(state);
   const defenderTech = state.espionage?.bot01Profile
     ? technologiesFromLevels(state.espionage.bot01Profile.scienceLevels)

@@ -14,7 +14,7 @@ import {
   type OwnedDefenseState,
 } from '../domain/fleet/production.ts';
 import type { PlanetId, SaveState } from './contracts.ts';
-import { getPlanetResources } from './contracts.ts';
+import { getOwnerShipUpgradeLevels, getPlanetResources } from './contracts.ts';
 import { getAvailableFleetForPlanet, getReservedCommandersForPlanet, getReservedShipsForPlanet } from './flights.ts';
 import { createPersistenceFacade, type PersistenceOptions } from './persistence.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
@@ -97,7 +97,10 @@ export function getFleetSnapshot(state: SaveState, planetId: PlanetId = state.cu
     fleet,
     defense: planet?.defense ?? createEmptyDefenseState(),
     fleetProduction: planet?.fleetProduction ?? createDefaultFleetProductionState(),
-    spaceportUpgrades: planet?.spaceportUpgrades ?? createDefaultSpaceportUpgradeState(),
+    spaceportUpgrades: {
+      ...(planet?.spaceportUpgrades ?? createDefaultSpaceportUpgradeState()),
+      shipLevels: getOwnerShipUpgradeLevels(state),
+    },
     hangarLevel,
     shipyardLevel: safeLevel(planet?.buildings.shipyard, 0),
     advancedFactoryLevel: safeLevel(planet?.buildings['advanced-factory'], 0),

@@ -7,7 +7,7 @@ app.commandLine.appendSwitch('disable-gpu');
 app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
-const OUTPUT = path.join(ROOT, 'visual-qa', 'building-actions-run');
+const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'visual-qa', 'building-actions-run');
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -102,28 +102,60 @@ async function buildCurrent(win, role) {
   await waitFor(win, `!document.querySelector('[data-qa-building-dialog]')`);
 }
 
-async function holdBuildingQueueForQa(win) {
-  const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  const held = await win.webContents.executeJavaScript(`(() => {
+async function waitForBuildingQueue(win, expectedRoles) {
+  const expected = JSON.stringify(expectedRoles);
+  const expression = `(() => {
+    try {
+      const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+      const queue = save.queues?.['helion-01'];
+      return Array.isArray(queue) && JSON.stringify(queue.map((item) => item.assetRole)) === ${JSON.stringify(expected)};
+    } catch { return false; }
+  })()`;
+  await waitFor(win, expression);
+  return win.webContents.executeJavaScript(`(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
-    const queue = save.queues?.['helion-01'];
-    if (!Array.isArray(queue) || queue.length < 2) return false;
-    const duration = 5 * 60 * 1000;
-    let finishAt = Date.now() + duration;
-    queue.forEach((item, index) => {
-      item.startedAt = index === 0 ? Date.now() : finishAt;
-      item.finishAt = item.startedAt + duration;
-      finishAt = item.finishAt;
-    });
-    localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
-    window.location.reload();
-    return true;
-  })()`).catch(() => false);
-  if (!held) throw new Error('Could not hold the building queue for cancellation QA');
+    return (save.queues?.['helion-01'] || []).map(({ assetRole, targetLevel, startedAt, finishAt }) => ({ assetRole, targetLevel, startedAt, finishAt }));
+  })()`);
+}
+
+async function holdBuildingQueueForQa(win, expectedRoles) {
+  const held = await win.webContents.executeJavaScript(`(() => {
+    try {
+      const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+      const queue = save.queues?.['helion-01'];
+      const expectedRoles = ${JSON.stringify(expectedRoles)};
+      const actualRoles = Array.isArray(queue) ? queue.map((item) => item.assetRole) : null;
+      if (!Array.isArray(queue) || JSON.stringify(actualRoles) !== JSON.stringify(expectedRoles)) {
+        return { ok: false, reason: 'queue does not match expected roles', actualRoles, expectedRoles };
+      }
+      const duration = 5 * 60 * 1000;
+      let finishAt = Date.now() + duration;
+      queue.forEach((item, index) => {
+        item.startedAt = index === 0 ? Date.now() : finishAt;
+        item.finishAt = item.startedAt + duration;
+        finishAt = item.finishAt;
+      });
+      localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+      return { ok: true, roles: actualRoles, finishAt: queue.at(-1)?.finishAt ?? null };
+    } catch (error) {
+      return { ok: false, reason: String(error?.stack || error) };
+    }
+  })()`);
+  if (!held?.ok) throw new Error(`Could not hold the building queue for cancellation QA: ${JSON.stringify(held)}`);
+  const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+  win.webContents.reload();
   await done;
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);
+  const reloadedQueue = await win.webContents.executeJavaScript(`(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+    return (save.queues?.['helion-01'] || []).map(({ assetRole, startedAt, finishAt }) => ({ assetRole, startedAt, finishAt }));
+  })()`);
+  if (JSON.stringify(reloadedQueue.map((item) => item.assetRole)) !== JSON.stringify(expectedRoles)
+    || reloadedQueue.some((item) => item.finishAt <= Date.now())) {
+    throw new Error(`Building queue hold did not persist across reload: ${JSON.stringify({ expectedRoles, held, reloadedQueue })}`);
+  }
 }
 
 async function confirm(win) {
@@ -189,11 +221,15 @@ async function verifyQueueCancellation(win, directory) {
   await seed(win, { 'metal-production-1': 20, construction: 1, shipyard: 1 });
   await activateZone(win, 'resource');
   await buildCurrent(win, 'metal-production-1');
+  await waitForBuildingQueue(win, ['metal-production-1']);
+  await holdBuildingQueueForQa(win, ['metal-production-1']);
   await activateZone(win, 'industry');
   await buildCurrent(win, 'construction');
-  await holdBuildingQueueForQa(win);
+  await waitForBuildingQueue(win, ['metal-production-1', 'construction']);
+  await holdBuildingQueueForQa(win, ['metal-production-1', 'construction']);
   await activateZone(win, 'military');
   await buildCurrent(win, 'shipyard');
+  await waitForBuildingQueue(win, ['metal-production-1', 'construction', 'shipyard']);
 
   const initial = await win.webContents.executeJavaScript(`(() => ({
     cancelButtons: document.querySelectorAll('[data-qa-queue-cancel]').length,

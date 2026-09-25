@@ -1,4 +1,5 @@
 import type {
+  Bot01IncomingScenario,
   Bot01PlanetState,
   Bot01Profile,
   EspionageState,
@@ -165,6 +166,26 @@ function migrateBot01Profile(value: unknown): Bot01Profile | null {
   return migrateSpyOwnerProfile(source) as Bot01Profile;
 }
 
+function migrateBot01IncomingScenario(value: unknown): Bot01IncomingScenario | undefined {
+  const source = record(value);
+  const flightId = text(source.flightId);
+  const targetPlanetId = text(source.targetPlanetId);
+  if (source.version !== 1
+    || !['in-flight', 'resolved', 'failed'].includes(String(source.status))
+    || !flightId
+    || !targetPlanetId
+    || typeof source.startedAt !== 'number'
+    || !Number.isFinite(source.startedAt)
+    || source.startedAt < 0) return undefined;
+  return {
+    version: 1,
+    status: source.status as Bot01IncomingScenario['status'],
+    flightId,
+    targetPlanetId,
+    startedAt: Math.floor(source.startedAt),
+  };
+}
+
 function migrateSpyOwnerProfile(value: unknown): SpyOwnerProfile | undefined {
   const source = record(value);
   if (!Object.keys(source).length) return undefined;
@@ -290,6 +311,7 @@ export function migrateEspionageState(value: unknown, now = Date.now()): Espiona
   if (!value || typeof value !== 'object') return createDefaultEspionageState();
   const source = record(value);
   const bot01Profile = migrateBot01Profile(source.bot01Profile);
+  const bot01IncomingScenario = migrateBot01IncomingScenario(source.bot01IncomingScenario);
   const hasCanonicalTargets = Boolean(source.targets && typeof source.targets === 'object' && !Array.isArray(source.targets));
   const hasLegacyBotTargets = Boolean(source.bot01Planets && typeof source.bot01Planets === 'object' && !Array.isArray(source.bot01Planets));
   const rawTargets = hasCanonicalTargets ? source.targets : source.bot01Planets;
@@ -317,5 +339,6 @@ export function migrateEspionageState(value: unknown, now = Date.now()): Espiona
     ...(targets ? { targets } : {}),
     ...(hasLegacyBotTargets && targets ? { bot01Planets: targets as Record<string, Bot01PlanetState> } : {}),
     ...(currentBot01Profile ? { bot01Profile: currentBot01Profile } : {}),
+    ...(bot01IncomingScenario ? { bot01IncomingScenario } : {}),
   };
 }

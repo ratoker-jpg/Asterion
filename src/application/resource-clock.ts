@@ -119,7 +119,7 @@ function withPlanetClock(state: SaveState, planetId: SaveState['currentPlanetId'
     ...(state.resourceClock?.byPlanet ?? {}),
     [planetId]: clock,
   };
-  const legacyAlias = planetId === 'helion-01'
+  const legacyAlias = planetId === state.currentPlanetId
     ? clock
     : {
       lastReconciledAt: state.resourceClock.lastReconciledAt,

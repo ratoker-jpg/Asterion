@@ -16,10 +16,12 @@ import {
 } from './flights.ts';
 import { startBuilding } from './buildings.ts';
 import { reconcileRuntime } from './reconcile.ts';
-import { getPlanetResources, replaceAlliedPlanetState, replacePlanetResources, replacePlanetState, type SaveState } from './contracts.ts';
+import { getOwnerShipUpgradeLevel, getPlanetResources, replaceAlliedPlanetState, replacePlanetResources, replacePlanetState, type SaveState } from './contracts.ts';
 import { reconcilePlanetOverpopulation } from './overpopulation.ts';
+import { destroyOwnedPlanet } from './owned-planets.ts';
 import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { createEmptyFleetState } from '../domain/fleet/runtime.ts';
+import type { CommanderId } from '../domain/combat/commanders.ts';
 import { getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 import type {
@@ -91,6 +93,45 @@ function withRecyclers(state: SaveState, count: number): SaveState {
     ...planet,
     fleet: { ...planet.fleet, ships: { ...planet.fleet.ships, recycler: count } },
   });
+}
+
+function withSpaceFlightFleet(
+  state: SaveState,
+  ships: Partial<Record<ShipId, number>> = {},
+  commanders: Partial<Record<CommanderId, number>> = {},
+): SaveState {
+  const planet = state.planets['helion-01'];
+  const emptyFleet = createEmptyFleetState();
+  return replacePlanetState(state, 'helion-01', {
+    ...planet,
+    fleet: {
+      ...emptyFleet,
+      ships: { ...emptyFleet.ships, ...ships },
+      commanders: { ...emptyFleet.commanders, ...commanders },
+    },
+  });
+}
+
+function spaceFlightCommand(
+  requestId: string,
+  options: {
+    ships?: Partial<Record<ShipId, number>>;
+    commanders?: Partial<Record<CommanderId, number>>;
+    minutes?: number;
+    cargo?: { metal: number; minerals: number; gas: number; debris: number };
+    departedAt?: number;
+  } = {},
+) {
+  return {
+    requestId,
+    missionId: 'space-flight' as const,
+    originPlanetId: 'helion-01',
+    selectedShips: options.ships ?? {},
+    selectedCommanders: options.commanders ?? {},
+    oneWayDurationMinutes: options.minutes ?? 5,
+    cargo: options.cargo ?? { metal: 0, minerals: 0, gas: 0, debris: 0 },
+    departedAt: options.departedAt ?? 1_000,
+  };
 }
 
 function withOrbitalDebris(state: SaveState, coordinate: UniverseCoordinate, debris: number, targetId = 'lost-debris-target'): SaveState {
@@ -1737,6 +1778,7 @@ function stateWithDeploymentTarget(now = 1_000): { state: SaveState; targetId: s
   return {
     state: {
       ...colonized,
+      shipUpgradeLevels: { ...(colonized.shipUpgradeLevels ?? {}), corsair: 7 },
       planets: {
         ...colonized.planets,
         'helion-01': {
@@ -1746,10 +1788,7 @@ function stateWithDeploymentTarget(now = 1_000): { state: SaveState; targetId: s
             ships: { ...source.fleet.ships, scout: 42 },
             commanders: { ...source.fleet.commanders, corsair: 1 },
           },
-          spaceportUpgrades: {
-            ...source.spaceportUpgrades,
-            shipLevels: { ...source.spaceportUpgrades.shipLevels, corsair: 7 },
-          },
+          spaceportUpgrades: { ...source.spaceportUpgrades, shipLevels: {} },
         },
       },
     },
@@ -1757,6 +1796,175 @@ function stateWithDeploymentTarget(now = 1_000): { state: SaveState; targetId: s
     targetCoordinate,
   };
 }
+
+test('Space Flight accepts commander-only fleets, enforces duration and gas rules, and excludes satellites', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const commanderOnly = withSpaceFlightFleet(initial, {}, { corsair: 1 });
+  const minimum = dispatchFlight(commanderOnly, spaceFlightCommand('space-minimum', {
+    commanders: { corsair: 1 },
+    minutes: 5,
+  }), { now: 1_000, mode: 'test', testTimeScale: 1 });
+  assert.equal(minimum.ok, true);
+  if (!minimum.ok) return;
+  assert.equal(minimum.flight.oneWayDurationMs, 5 * 60_000);
+  assert.equal(minimum.flight.routeDistance, 0);
+  assert.equal(minimum.flight.effectiveSpeed, 0);
+  assert.equal(minimum.flight.gasCost, 100);
+  assert.equal(minimum.state.planets['helion-01'].resources!.gas, commanderOnly.planets['helion-01'].resources!.gas - 100);
+  assert.equal(getAvailableFleetForPlanet(minimum.state, 'helion-01').commanders.corsair, 0);
+  const duplicateCommander = dispatchFlight(minimum.state, spaceFlightCommand('space-minimum-duplicate', {
+    commanders: { corsair: 1 },
+  }), { now: 1_001, mode: 'test', testTimeScale: 1 });
+  assert.equal(duplicateCommander.ok, false);
+
+  const maximum = dispatchFlight(withSpaceFlightFleet(initial, { scout: 1 }), spaceFlightCommand('space-maximum', {
+    ships: { scout: 1 },
+    minutes: 11 * 60 + 59,
+  }), { now: 1_000, mode: 'test', testTimeScale: 1 });
+  assert.equal(maximum.ok, true);
+  if (maximum.ok) assert.equal(maximum.flight.oneWayDurationMs, (11 * 60 + 59) * 60_000);
+
+  for (const [requestId, options] of [
+    ['space-too-short', { ships: { scout: 1 }, minutes: 4 }],
+    ['space-wrong-step', { ships: { scout: 1 }, minutes: 5.5 }],
+    ['space-too-long', { ships: { scout: 1 }, minutes: 12 * 60 }],
+    ['space-empty', { minutes: 5 }],
+  ] as const) {
+    const invalid = dispatchFlight(withSpaceFlightFleet(initial, { scout: 1 }), spaceFlightCommand(requestId, options), {
+      now: 1_000,
+      mode: 'test',
+      testTimeScale: 1,
+    });
+    assert.equal(invalid.ok, false, requestId);
+  }
+
+  const satellite = dispatchFlight(withSpaceFlightFleet(initial, { 'solar-satellite': 1 }), spaceFlightCommand('space-satellite', {
+    ships: { 'solar-satellite': 1 },
+  }), { now: 1_000, mode: 'test', testTimeScale: 1 });
+  assert.equal(satellite.ok, false);
+
+  const lowGas = replacePlanetResources(withSpaceFlightFleet(initial, { scout: 1 }), 'helion-01', {
+    ...getPlanetResources(initial, 'helion-01'),
+    gas: 99,
+  });
+  const noGas = dispatchFlight(lowGas, spaceFlightCommand('space-no-gas', { ships: { scout: 1 } }), {
+    now: 1_000,
+    mode: 'test',
+    testTimeScale: 1,
+  });
+  assert.equal(noGas.ok, false);
+  if (!noGas.ok) assert.equal(noGas.error.code, 'insufficient-gas');
+});
+
+test('Test Mode keeps a scaled Space Flight across reload, even after the speed setting changes', () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+    removeItem: (key: string) => { values.delete(key); },
+  };
+  const fastPersistence = createPersistenceFacade({ mode: 'test', storage, now: () => 1_000, testTimeScale: 15 });
+  const initial = withSpaceFlightFleet(fastPersistence.read(), {}, { hunter: 1 });
+  const sent = dispatchFlight(initial, spaceFlightCommand('space-accelerated-reload', {
+    commanders: { hunter: 1 },
+    minutes: 5,
+  }), { now: 1_000, mode: 'test', testTimeScale: 15 });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.equal(sent.flight.oneWayDurationMs, 20_000);
+  assert.equal(fastPersistence.write(sent.state).ok, true);
+
+  const slowerPersistence = createPersistenceFacade({ mode: 'test', storage, now: () => 1_001, testTimeScale: 1 });
+  const reloaded = slowerPersistence.read();
+  const persisted = reloaded.flights.records.filter((flight) => flight.missionId === 'space-flight');
+  assert.equal(persisted.length, 1);
+  assert.ok(persisted[0]);
+  if (!persisted[0]) return;
+  assert.equal(persisted[0].oneWayDurationMs, 20_000);
+  assert.equal(persisted[0].selectedCommanders?.hunter, 1);
+  assert.equal(getAvailableFleetForPlanet(reloaded, 'helion-01').commanders.hunter, 0);
+});
+
+test('Space Flight returns cargo after its full round trip and catches up once after reload', () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+    removeItem: (key: string) => { values.delete(key); },
+  };
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 1_000 });
+  const initial = withSpaceFlightFleet(persistence.read(), { transporter: 1 }, { corsair: 1 });
+  const startingResources = getPlanetResources(initial, 'helion-01');
+  const startingDebris = initial.planets['helion-01'].recycling.availableDebris;
+  const cargo = { metal: 70, minerals: 40, gas: 25, debris: 90 };
+  const sent = dispatchFlight(initial, spaceFlightCommand('space-cargo-round-trip', {
+    ships: { transporter: 1 },
+    commanders: { corsair: 1 },
+    minutes: 5,
+    cargo,
+  }), { now: 1_000, mode: 'test', testTimeScale: 1 });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.equal(sent.flight.gasCost, 100);
+  assert.equal(sent.flight.cargoState, 'loaded');
+  assert.deepEqual(getPlanetResources(sent.state, 'helion-01'), {
+    metal: startingResources.metal - cargo.metal,
+    minerals: startingResources.minerals - cargo.minerals,
+    gas: startingResources.gas - cargo.gas - 100,
+  });
+  assert.equal(sent.state.planets['helion-01'].recycling.availableDebris, startingDebris - cargo.debris);
+  assert.equal(getAvailableFleetForPlanet(sent.state, 'helion-01').ships.transporter, 0);
+  assert.equal(getAvailableFleetForPlanet(sent.state, 'helion-01').commanders.corsair, 0);
+  const duplicateHull = dispatchFlight(sent.state, spaceFlightCommand('space-transporter-already-reserved', {
+    ships: { transporter: 1 },
+  }), { now: 1_001, mode: 'test', testTimeScale: 1 });
+  assert.equal(duplicateHull.ok, false);
+  assert.equal(persistence.write(sent.state).ok, true);
+
+  const reloaded = persistence.read();
+  const restored = reloaded.flights.records.find((flight) => flight.requestId === sent.flight.requestId);
+  assert.ok(restored);
+  if (!restored) return;
+  const returnAt = restored.arrivalAt + restored.oneWayDurationMs;
+  const caughtUp = reconcileFlights(reloaded, returnAt);
+  const completed = caughtUp.state.flights.records.find((flight) => flight.id === restored.id);
+  assert.equal(completed?.phase, 'completed');
+  assert.equal(completed?.completionReason, 'normal-return');
+  assert.equal(completed?.cargoState, 'returned');
+  assert.equal(completed?.returnAt, returnAt);
+  assert.deepEqual(getPlanetResources(caughtUp.state, 'helion-01'), {
+    metal: startingResources.metal,
+    minerals: startingResources.minerals,
+    gas: startingResources.gas - 100,
+  });
+  assert.equal(caughtUp.state.planets['helion-01'].recycling.availableDebris, startingDebris);
+  assert.deepEqual(caughtUp.events.map((event) => event.status), ['arrived', 'returned']);
+  assert.equal(persistence.write(caughtUp.state).ok, true);
+  const replay = reconcileFlights(persistence.read(), returnAt + 1);
+  assert.equal(replay.changed, false);
+  assert.deepEqual(getPlanetResources(replay.state, 'helion-01'), getPlanetResources(caughtUp.state, 'helion-01'));
+});
+
+test('Space Flight recalled after three minutes returns in three minutes and keeps the launch fee', () => {
+  const initial = withSpaceFlightFleet(createInitialSaveState('test', 1_000), {}, { corsair: 1 });
+  const startingGas = getPlanetResources(initial, 'helion-01').gas;
+  const sent = dispatchFlight(initial, spaceFlightCommand('space-recall-three-minutes', {
+    commanders: { corsair: 1 },
+    minutes: 10,
+  }), { now: 1_000, mode: 'test', testTimeScale: 1 });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  const recalledAt = sent.flight.departedAt + 3 * 60_000;
+  const recalled = recallFlight(sent.state, sent.flight.id, recalledAt);
+  assert.equal(recalled.ok, true);
+  if (!recalled.ok) return;
+  assert.equal(recalled.flight.returnAt, recalledAt + 3 * 60_000);
+  assert.equal(getPlanetResources(recalled.state, 'helion-01').gas, startingGas - 100);
+  const completed = reconcileFlights(recalled.state, recalled.flight.returnAt!);
+  assert.equal(completed.state.flights.records[0].phase, 'completed');
+  assert.equal(getAvailableFleetForPlanet(completed.state, 'helion-01').commanders.corsair, 1);
+  assert.equal(getPlanetResources(completed.state, 'helion-01').gas, startingGas - 100);
+});
 
 test('deployment uses an owned planet target, preserves source until arrival, and transfers commander levels once', () => {
   const fixture = stateWithDeploymentTarget();
@@ -1784,7 +1992,8 @@ test('deployment uses an owned planet target, preserves source until arrival, an
   assert.equal(arrived.state.planets['helion-01'].fleet.ships.scout, before.fleet.ships.scout - 2);
   assert.equal(arrived.state.planets[fixture.targetId].fleet.ships.scout, 2);
   assert.equal(arrived.state.planets[fixture.targetId].fleet.commanders.corsair, 1);
-  assert.equal(arrived.state.planets[fixture.targetId].spaceportUpgrades.shipLevels.corsair, 7);
+  assert.equal(getOwnerShipUpgradeLevel(arrived.state, 'corsair'), 7);
+  assert.deepEqual(arrived.state.planets[fixture.targetId].spaceportUpgrades.shipLevels, {});
   const repeated = reconcileFlights(arrived.state, sent.flight.arrivalAt + 100_000);
   assert.equal(repeated.changed, false);
   assert.equal(repeated.state.planets[fixture.targetId].fleet.ships.scout, 2);
@@ -1892,6 +2101,52 @@ test('overpopulation burns unreserved deployment ships first and the reserved ma
   assert.equal(replayed.events.length, 0);
   assert.equal(replayed.state.planets[fixture.targetId].fleet.ships.scout, 2);
   assert.equal(replayed.state.planets[fixture.targetId].fleet.commanders.corsair, 1);
+});
+
+test('Space Flight ships survive origin overpopulation and are lost permanently if the origin is destroyed', () => {
+  const fixture = stateWithDeploymentTarget();
+  const source = fixture.state.planets['helion-01'];
+  const sourceFleet = createEmptyFleetState();
+  sourceFleet.ships.scout = 3;
+  sourceFleet.ships.battleship = 4;
+  sourceFleet.commanders.corsair = 1;
+  const state: SaveState = {
+    ...fixture.state,
+    planets: {
+      ...fixture.state.planets,
+      'helion-01': {
+        ...source,
+        buildings: { ...source.buildings, hangar: 0 },
+        fleet: sourceFleet,
+      },
+    },
+  };
+  const departedAt = 45_000;
+  const sent = dispatchFlight(state, spaceFlightCommand('space-flight-overpopulation-reserved', {
+    ships: { scout: 2 },
+    minutes: 5,
+    departedAt,
+  }), { now: departedAt, mode: 'test', testTimeScale: 1 });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.equal(getReservedShipsForPlanet(sent.state, 'helion-01').scout, 2);
+
+  const episodeStarted = reconcilePlanetOverpopulation(sent.state, 'helion-01', departedAt);
+  const attrition = reconcilePlanetOverpopulation(episodeStarted.state, 'helion-01', sent.flight.arrivalAt - 1);
+  assert.equal(attrition.state.planets['helion-01'].fleet.ships.scout, 2);
+  assert.ok(attrition.state.planets['helion-01'].fleet.ships.battleship < sourceFleet.ships.battleship);
+  assert.equal(getReservedShipsForPlanet(attrition.state, 'helion-01').scout, 2);
+
+  const destroyed = destroyOwnedPlanet(attrition.state, 'helion-01', sent.flight.arrivalAt - 1);
+  assert.equal(destroyed.destroyed, true);
+  assert.equal(destroyed.state.planets['helion-01'], undefined);
+  const burnedFlight = destroyed.state.flights.records.find((flight) => flight.id === sent.flight.id);
+  assert.equal(burnedFlight?.phase, 'failed');
+  assert.equal(burnedFlight?.completionReason, 'origin-destroyed');
+  const afterReturnTime = reconcileFlights(destroyed.state, sent.flight.arrivalAt + sent.flight.oneWayDurationMs);
+  assert.equal(afterReturnTime.state.flights.records.find((flight) => flight.id === sent.flight.id)?.phase, 'failed');
+  assert.equal(afterReturnTime.events.some((event) => event.flight.id === sent.flight.id && event.status === 'returned'), false);
+  assert.equal(afterReturnTime.state.planets[fixture.targetId].fleet.ships.scout, 0);
 });
 
 test('overpopulation leaves an episode blocked when every eligible ship is reserved by a deployment', () => {
