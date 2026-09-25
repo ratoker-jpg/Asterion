@@ -470,7 +470,7 @@ async function verifyResourceZoneFlow(win, directory) {
     await closeResourceBuilding(win);
   }
 
-  await win.webContents.executeJavaScript(`(() => {
+  await rendererMutationAndReload(win, `(() => {
     const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
     const planet=save.planets?.['helion-01'];
     if(!planet) return false;
@@ -478,19 +478,14 @@ async function verifyResourceZoneFlow(win, directory) {
     planet.resources={...(planet.resources||{}),metal:0};
     save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
+    window.location.reload();
     return true;
-  })()`);
-  const insufficientFixture = await win.webContents.executeJavaScript(`(() => {
-    const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
-    return { rootMetal: save.metal, planetMetal: save.planets?.['helion-01']?.resources?.metal };
-  })()`);
-  if(insufficientFixture.rootMetal!==0 || insufficientFixture.planetMetal!==0) throw new Error(`Insufficient-resource fixture did not seed canonical wallet: ${JSON.stringify(insufficientFixture)}`);
-  await reload(win);
+  })()`, 'Could not seed insufficient-resource wallet fixture');
   const reloadedInsufficientFixture = await win.webContents.executeJavaScript(`(() => {
     const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
     return { rootMetal: save.metal, planetMetal: save.planets?.['helion-01']?.resources?.metal };
   })()`);
-  if(reloadedInsufficientFixture.planetMetal!==0) throw new Error(`Insufficient-resource wallet changed during reload: ${JSON.stringify(reloadedInsufficientFixture)}`);
+  if(reloadedInsufficientFixture.rootMetal!==0 || reloadedInsufficientFixture.planetMetal!==0) throw new Error(`Insufficient-resource canonical wallet did not survive reload: ${JSON.stringify(reloadedInsufficientFixture)}`);
   await activateResourceZone(win);
   await openResourceBuilding(win,'metal-production-1');
   await waitFor(win, `document.querySelector('[data-qa-build-status]')`);
