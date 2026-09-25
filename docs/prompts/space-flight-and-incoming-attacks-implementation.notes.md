@@ -22,3 +22,11 @@
 - `npm run dist:win` passed. Final installer: `artifacts-feature-space-flight/release-final/Asterion Setup 0.1.0.exe`. The earlier `release/` installer was preserved.
 - `git diff --check` passed; Git emitted only its line-ending conversion notices.
 - Independent final review found no new defects. To resume, continue from the feature branch and address any PR feedback; do not mark the PR ready or merge it without an explicit request.
+
+## PR #78 audit follow-up
+
+- Bot 01 incoming siege now reconciles production-bot assignments after factory demolition and energy ledgers after energy-building demolition on surviving planets. Regression coverage includes both factory roles and both last-level energy sources, comparing the energy result with the ordinary building-destruction transition.
+- Reports Electron QA no longer seeds `savedReportIds` by directly mutating `localStorage`. It saves the canonical report through the Reports UI, checks persistence immediately after reload, then deletes that exact report and confirms both the report history and saved ID remain intact. The previous CI error was in this QA sequence; GitHub logs showed the direct storage seed and the empty ID array but could not identify the precise write that lost it.
+- Space Flight Electron QA now sets 7 minutes and asserts the 00:28 one-way and 00:56 round-trip preview, along with 28,000 ms in the stored flight and after reload.
+- Follow-up validation: `npm run test:attack` 18/18, `test:application` 44/44, `test:buildings` 119/119, `test:energy` 10/10, `test:flights` 97/97, `npm run build`, Reports Electron QA, and Space Flight Electron QA passed. Outputs were written to new directories under `artifacts-feature-space-flight/`.
+- GitHub full CI for the audit-fix commit is pending; keep this PR open in Draft and do not merge or mark it Ready.

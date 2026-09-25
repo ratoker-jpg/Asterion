@@ -168,25 +168,32 @@ async function runViewport(width, height) {
       || formation.viewport.width !== width || formation.viewport.height !== height) {
       throw new Error(`${label}: commander-only formation failed ${JSON.stringify(formation)}`);
     }
-    await setDuration(win, 5);
+    await setDuration(win, 7);
     await capture(win, directory, 'commander-only-formation');
 
     await click(win, '[data-qa-flight-preview-open]');
     await waitFor(win, `document.querySelector('[data-qa-flight-preview]') && !document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled`);
     const preview = await win.webContents.executeJavaScript(`(() => {
       const metrics = Array.from(document.querySelectorAll('[data-qa-flight-preview] > div'));
+      const metric = (label) => metrics.find((item) => item.querySelector('small')?.textContent?.trim() === label)?.querySelector('strong')?.textContent?.trim() || '';
       const gas = metrics.find((metric) => metric.querySelector('small')?.textContent?.trim() === 'ГАЗ')?.querySelector('strong')?.textContent?.trim() || '';
       const eta = document.querySelector('[data-qa-flight-eta]')?.textContent?.replace(/\\s+/g, ' ').trim() || '';
       return {
         targetless: Boolean(document.querySelector('[data-qa-space-flight-targetless]')),
         durationMs: Number(document.querySelector('[data-qa-flight-preview]')?.getAttribute('data-qa-flight-preview-duration')),
+        configuredDurationMinutes: Number(document.querySelector('[data-qa-space-flight-duration] input')?.value),
+        oneWayDuration: metric('ТУДА'),
+        returnDuration: metric('ОБРАТНО'),
+        roundTripDuration: metric('ПОЛНЫЙ ЦИКЛ'),
         gas,
         eta,
         cargoCapacity: document.querySelector('[data-qa-flight-cargo]')?.getAttribute('data-qa-cargo-capacity') || '',
         sendDisabled: Boolean(document.querySelector('[data-qa-flight-dispatch-confirm]')?.disabled),
       };
     })()`);
-    if (!preview.targetless || preview.durationMs !== 20_000 || preview.gas !== '100' || preview.sendDisabled) {
+    if (!preview.targetless || preview.configuredDurationMinutes !== 7 || preview.durationMs !== 28_000
+      || preview.oneWayDuration !== '00:28' || preview.returnDuration !== '00:28' || preview.roundTripDuration !== '00:56'
+      || preview.gas !== '100' || preview.sendDisabled) {
       throw new Error(`${label}: Space Flight preview contract failed ${JSON.stringify(preview)}`);
     }
     await capture(win, directory, 'space-flight-preview');
@@ -206,7 +213,7 @@ async function runViewport(width, height) {
     const gasDelta = beforeGas - afterPlanet.resources.gas;
     if (flights.length !== 1 || !flight || Object.keys(selectedShips).length !== 0
       || Object.keys(selectedCommanders).length !== 1 || flight.gasCost !== 100
-      || flight.oneWayDurationMs !== 20_000 || flight.returnAt !== undefined
+      || flight.oneWayDurationMs !== 28_000 || flight.arrivalAt - flight.departedAt !== 28_000 || flight.returnAt !== undefined
       || (gasDelta < 90 || gasDelta > 110)
       || afterPlanet.solarSatellites !== 2
       || JSON.stringify(afterPlanet.defense) !== beforeDefense
@@ -233,7 +240,7 @@ async function runViewport(width, height) {
     await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
     save = await readSave(win);
     flights = save.flights.records.filter((item) => item.missionId === 'space-flight');
-    if (flights.length !== 1 || flights[0].oneWayDurationMs !== 20_000) {
+    if (flights.length !== 1 || flights[0].oneWayDurationMs !== 28_000 || flights[0].arrivalAt - flights[0].departedAt !== 28_000) {
       throw new Error(`${label}: accelerated Space Flight was lost or changed after reload ${JSON.stringify(flights)}`);
     }
     const reloadedTargetCell = await win.webContents.executeJavaScript(`(() => {
@@ -285,7 +292,7 @@ async function runViewport(width, height) {
     }
     await capture(win, directory, 'bot01-incoming-attack-reloaded');
 
-    return { viewport: label, commander: expectedCommander, durationMs: flight.oneWayDurationMs, gasCost: flight.gasCost, gasDelta, selectedShips, selectedCommanders, satellitesAfterDispatch: afterPlanet.solarSatellites, defensePreserved: JSON.stringify(afterPlanet.defense) === beforeDefense, targetCell, incomingRow, persistedAfterReload: true, screenshots: fs.readdirSync(directory).filter((name) => name.endsWith('.png')).sort() };
+    return { viewport: label, commander: expectedCommander, configuredDurationMinutes: preview.configuredDurationMinutes, previewOneWayDuration: preview.oneWayDuration, previewRoundTripDuration: preview.roundTripDuration, durationMs: flight.oneWayDurationMs, savedArrivalDurationMs: flight.arrivalAt - flight.departedAt, gasCost: flight.gasCost, gasDelta, selectedShips, selectedCommanders, satellitesAfterDispatch: afterPlanet.solarSatellites, defensePreserved: JSON.stringify(afterPlanet.defense) === beforeDefense, targetCell, incomingRow, persistedAfterReload: true, screenshots: fs.readdirSync(directory).filter((name) => name.endsWith('.png')).sort() };
   } finally {
     if (win.webContents.debugger.isAttached()) win.webContents.debugger.detach();
     win.destroy();

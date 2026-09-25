@@ -4,12 +4,17 @@ import { createInitialSaveState, createPersistenceFacade } from './persistence.t
 import { dispatchFlight, recallFlight, reconcileFlights, startBot01IncomingScenario } from './flights.ts';
 import { getPlanetResources, replacePlanetResources, replacePlanetState } from './contracts.ts';
 import { selectOwnedPlanet } from './owned-planets.ts';
+import { destroyBuilding } from './buildings.ts';
+import { getPlanetEnergyLedger, getPlanetEnergySources, withPlanetEnergyLedger } from './energy.ts';
+import { createEnergyLedger } from '../domain/energy/runtime.ts';
+import { createDefaultBuildingLevels } from '../domain/buildings/resource-zone.ts';
+import { getAvailableProductionBots, getProductionBotBonusPercent } from '../domain/buildings/production-bots.ts';
 import { getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 import { selectCurrentAlliance } from '../domain/command/selectors.ts';
-import { calculateAttackDebris, calculateAttackLoot, resolveAttackAtTarget, technologiesFromScience } from './attack.ts';
+import { calculateAttackDebris, calculateAttackLoot, resolveAttackAtTarget, resolveBot01IncomingAttack, technologiesFromScience } from './attack.ts';
 import { getFactionCombatEntity } from '../domain/combat/faction-catalog.ts';
 import type { BattleReport } from '../domain/combat/report.ts';
-import type { FlightDestination } from '../domain/flights/types.ts';
+import type { FlightDestination, FlightRecord } from '../domain/flights/types.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 
 class MemoryStorage {
@@ -106,6 +111,22 @@ function enemyTargetState(state: ReturnType<typeof createInitialSaveState>, targ
 function sumDestroyed(report: BattleReport, side: 'attacker' | 'defender') {
   const force = side === 'attacker' ? report.attackerForce : report.defenderForce;
   return [...(force.stacks ?? []), ...(force.defenses ?? [])].reduce((total, stack) => total + (stack.destroyed ?? 0), 0);
+}
+
+function resolveSurvivingBot01Demolition(
+  state: ReturnType<typeof createInitialSaveState>,
+  flight: FlightRecord,
+  buildingId: string,
+) {
+  for (let attempt = 0; attempt < 128; attempt += 1) {
+    const result = resolveBot01IncomingAttack(state, {
+      ...flight,
+      id: `${flight.id}-qa-${buildingId}-${attempt}`,
+    }, 1_000 + attempt);
+    const demolished = result?.report.siege?.demolition.rolls.some((roll) => roll.buildingId === buildingId && roll.success);
+    if (result?.report.winner === 'attacker' && demolished && !result.resolution.planetDestroyed) return result;
+  }
+  throw new Error(`Unable to resolve a surviving Bot 01 demolition of ${buildingId}`);
 }
 
 test('attack resolves one live combat, records debris/repair, and credits loot only on return', () => {
@@ -693,4 +714,63 @@ test('an incoming Bot attack burns a Space Flight whose owned origin is still ou
   assert.equal(burned?.cargoState, 'voided');
   assert.equal(burned?.cargoResolvedAt, botArrivalAt);
   assert.ok(incoming.events.some((event) => event.flight.id === burned?.id && event.status === 'destroyed'));
+});
+
+test('surviving Bot 01 sieges reconcile factory bots and the last energy source', () => {
+  const base = createInitialSaveState('test', 1_000);
+  const launched = startBot01IncomingScenario(base, { now: 1_000, mode: 'test', testTimeScale: 1 });
+  assert.equal(launched.ok, true);
+  if (!launched.ok) return;
+  const targetId = launched.flight.destinationPlanetId!;
+  const originalTarget = launched.state.planets[targetId];
+
+  for (const factory of [
+    { role: 'construction' as const, level: 2, expectedRemainingBots: 1 },
+    { role: 'advanced-factory' as const, level: 1, expectedRemainingBots: 0 },
+  ]) {
+    const target = {
+      ...originalTarget,
+      buildings: { ...createDefaultBuildingLevels(), [factory.role]: factory.level },
+      productionBots: { metal: 2, minerals: 0, gas: 0 },
+    };
+    const state = { ...launched.state, planets: { ...launched.state.planets, [targetId]: target } };
+    const result = resolveSurvivingBot01Demolition(state, launched.flight, factory.role);
+    const actual = result.state.planets[targetId];
+    assert.equal(result.report.winner, 'attacker');
+    assert.equal(result.report.siege?.planetDestroyed, false);
+    assert.equal(actual.buildings[factory.role], factory.level - 1);
+    assert.equal(getAvailableProductionBots(actual.buildings), factory.expectedRemainingBots);
+    assert.equal(actual.productionBots.metal, factory.expectedRemainingBots);
+    assert.equal(getProductionBotBonusPercent(actual.productionBots, 'metal'), factory.expectedRemainingBots * 6);
+  }
+
+  for (const buildingId of ['basic-energy', 'advanced-energy'] as const) {
+    const energyTarget = {
+      ...originalTarget,
+      solarSatellites: 0,
+      buildings: { ...createDefaultBuildingLevels(), [buildingId]: 1 },
+    };
+    const energySources = getPlanetEnergySources(energyTarget, launched.state.science.levels);
+    const consumedSourceTarget = withPlanetEnergyLedger(energyTarget, createEnergyLedger(energySources, 0));
+    const energyState = { ...launched.state, planets: { ...launched.state.planets, [targetId]: consumedSourceTarget } };
+    const ordinaryDestruction = destroyBuilding(energyState, {
+      planetId: targetId,
+      now: 1_000,
+      mode: 'test',
+      testTimeScale: 1,
+    }, buildingId, () => 0);
+    assert.equal(ordinaryDestruction.ok, true);
+
+    const energyResult = resolveSurvivingBot01Demolition(energyState, launched.flight, buildingId);
+    const actualEnergy = getPlanetEnergyLedger(energyResult.state.planets[targetId], energyState.science.levels);
+    const ordinaryEnergy = getPlanetEnergyLedger(ordinaryDestruction.state.planets[targetId], energyState.science.levels);
+    assert.equal(energyResult.report.siege?.planetDestroyed, false);
+    assert.equal(energyResult.state.planets[targetId].buildings[buildingId], 0);
+    assert.equal(actualEnergy.sources.length, 0);
+    assert.equal(actualEnergy.availableEnergy, ordinaryEnergy.availableEnergy);
+    assert.equal(actualEnergy.producedEnergy, ordinaryEnergy.producedEnergy);
+    assert.equal(actualEnergy.consumedEnergy, ordinaryEnergy.consumedEnergy);
+    assert.equal(actualEnergy.debtCause, 'source-removal');
+    assert.equal(actualEnergy.debtCause, ordinaryEnergy.debtCause);
+  }
 });

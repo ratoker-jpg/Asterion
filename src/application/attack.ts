@@ -13,13 +13,15 @@ import type { SpyTargetState } from '../domain/espionage/types.ts';
 import { resolveSpyOwnerProfile } from '../domain/espionage/owner-profile.ts';
 import { calculateDefensePopulation } from '../domain/fleet/production.ts';
 import { calculateFleetPopulation, removeSolarSatellitesFromFleet, resolveSavedFleetState, type OwnedFleetState } from '../domain/fleet/runtime.ts';
+import { migrateProductionBotAssignment } from '../domain/buildings/production-bots.ts';
 import { addDebris, getCappedDelivery, getFleetCargoCapacity, type TransportCargo } from '../domain/flights/cargo.ts';
-import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
+import { getStorageCapacities, isBuildingRole } from '../domain/buildings/resource-zone.ts';
 import { createDefaultRepairWorkshopState, claimDefensiveBattleRepair, annotateBattleReportRepair } from '../domain/repair/workshop.ts';
 import type { FlightRecord } from '../domain/flights/types.ts';
 import { getOwnerShipUpgradeLevel, getOwnerShipUpgradeLevels, type PlanetRuntime, type SaveState } from './contracts.ts';
 import { getPlanetResources, replacePlanetResources, replacePlanetState } from './contracts.ts';
 import { destroyOwnedPlanet, preserveOwnedPlanetOrbitalDebris } from './owned-planets.ts';
+import { energySourceChangeForBuilding, transitionPlanetEnergySources } from './energy.ts';
 import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import { resolveSpyTarget } from './espionage-targets.ts';
 import type { AttackLaunchSnapshot, AttackLoot, AttackResolution } from '../domain/attack/types.ts';
@@ -622,10 +624,35 @@ export function resolveBot01IncomingAttack(state: SaveState, flight: FlightRecor
   });
   const reportWithSiege: BattleReport = { ...report, siege: siege.report };
   let next = replacePlanetResources(state, flight.destinationPlanetId, resourcesAfterLoot);
-  next = replacePlanetState(next, flight.destinationPlanetId, {
+  const demolishedBuildings = siege.report.demolition.rolls.filter((roll) => roll.success);
+  const energySourceChanges: NonNullable<NonNullable<Parameters<typeof transitionPlanetEnergySources>[4]>['sourceChanges']> = {};
+  for (const roll of demolishedBuildings) {
+    if (!isBuildingRole(roll.buildingId)) continue;
+    const sourceChange = energySourceChangeForBuilding(roll.buildingId);
+    if (sourceChange) Object.assign(energySourceChanges, sourceChange);
+  }
+  let planetAfterSiege: PlanetRuntime = {
     ...targetAfterLosses,
     buildings: siege.target.buildings,
     resources: resourcesAfterLoot,
+  };
+  if (!siege.planetDestroyed && demolishedBuildings.length > 0) {
+    planetAfterSiege = transitionPlanetEnergySources(
+      target,
+      planetAfterSiege,
+      state.science.levels,
+      state.science.levels,
+      { sourceChanges: Object.keys(energySourceChanges).length > 0 ? energySourceChanges : undefined },
+    );
+    if (demolishedBuildings.some((roll) => roll.buildingId === 'construction' || roll.buildingId === 'advanced-factory')) {
+      planetAfterSiege = {
+        ...planetAfterSiege,
+        productionBots: migrateProductionBotAssignment(target.productionBots, siege.target.buildings),
+      };
+    }
+  }
+  next = replacePlanetState(next, flight.destinationPlanetId, {
+    ...planetAfterSiege,
   });
   next = {
     ...next,

@@ -417,16 +417,42 @@ async function runViewport(win, width, height) {
   if (!Array.isArray(battleBefore.combat?.reports) || battleBefore.combat.reports.length < 1) throw new Error(`Canonical battle fixture missing at ${label}`);
   const canonicalBattleId = battleBefore.combat.reports.find((report) => report.missionType !== 'simulation' && report.missionType !== 'arena')?.id;
   if (!canonicalBattleId) throw new Error(`Visible canonical battle fixture missing at ${label}`);
-  const savedBattleIds = [...new Set([...(battleBefore.combat.savedReportIds || []), canonicalBattleId])];
-  await win.webContents.executeJavaScript(`(() => { const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}'); save.combat.savedReportIds = ${JSON.stringify(savedBattleIds)}; localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save)); })()`);
+  await clickFolder(win, 'battle');
+  const canonicalItemSelector = `[data-report-item-id=${JSON.stringify(`battle:${canonicalBattleId}`)}]`;
+  await waitFor(win, `document.querySelector(${JSON.stringify(`${canonicalItemSelector} .reports-list-open`)})`);
+  await win.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(`${canonicalItemSelector} .reports-list-open`)})?.click()`);
+  await waitFor(win, `document.querySelector('.reports-preview-footer button')?.textContent?.includes('СОХРАНИТЬ БОЙ')`);
+  const saveBattleClicked = await win.webContents.executeJavaScript(`(() => {
+    const button = document.querySelector('.reports-preview-footer button');
+    if (!button || !button.textContent?.includes('СОХРАНИТЬ БОЙ')) return false;
+    button.click();
+    return true;
+  })()`);
+  if (!saveBattleClicked) throw new Error(`Canonical battle save action missing at ${label}`);
+  const savedBattleExpression = `JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').combat?.savedReportIds?.includes(${JSON.stringify(canonicalBattleId)}) === true`;
+  await waitFor(win, savedBattleExpression);
+  await waitFor(win, `document.querySelector('.reports-preview-footer button')?.textContent?.includes('УБРАТЬ ИЗ СОХРАНЁННЫХ')`);
+  const afterBattleSave = await savedState(win);
+  if (!afterBattleSave.combat?.savedReportIds?.includes(canonicalBattleId)) throw new Error(`Canonical battle was not saved through Reports at ${label}: ${JSON.stringify(afterBattleSave.combat)}`);
+
   await reload(win);
+  const afterBattleSaveReload = await savedState(win);
+  if (!afterBattleSaveReload.combat?.savedReportIds?.includes(canonicalBattleId)) throw new Error(`Canonical battle save did not persist across reload at ${label}: ${JSON.stringify(afterBattleSaveReload.combat)}`);
   await clickPrimary(win, 'reports');
   await clickFolder(win, 'battle');
-  await waitFor(win, `document.querySelector('[data-qa-message-list] .reports-list-item')`);
-  await win.webContents.executeJavaScript(`window.confirm = () => true; document.querySelector('[data-qa-message-list] input[type="checkbox"]')?.click(); document.querySelector('[data-qa-delete-selected]')?.click();`);
+  await waitFor(win, `document.querySelector(${JSON.stringify(`${canonicalItemSelector} .reports-favorite-dot`)})`);
+  const deletedCanonicalBattle = await win.webContents.executeJavaScript(`(() => {
+    window.confirm = () => true;
+    const item = document.querySelector(${JSON.stringify(canonicalItemSelector)});
+    if (!item?.querySelector('input[type="checkbox"]')) return false;
+    item.querySelector('input[type="checkbox"]').click();
+    document.querySelector('[data-qa-delete-selected]')?.click();
+    return true;
+  })()`);
+  if (!deletedCanonicalBattle) throw new Error(`Canonical battle row could not be selected at ${label}`);
   await waitFor(win, `document.querySelector('[data-qa-delete-selected]')?.disabled === true`);
   const afterBattleDelete = await savedState(win);
-  if (afterBattleDelete.combat?.reports?.length !== battleBefore.combat.reports.length || !afterBattleDelete.combat.savedReportIds.includes(canonicalBattleId) || !afterBattleDelete.reports.hiddenIds.includes(`battle:${canonicalBattleId}`)) throw new Error(`Canonical battle preservation failed at ${label}: ${JSON.stringify({ before: battleBefore.combat, after: afterBattleDelete.combat, reports: afterBattleDelete.reports })}`);
+  if (afterBattleDelete.combat?.reports?.length !== battleBefore.combat.reports.length || !afterBattleDelete.combat.savedReportIds.includes(canonicalBattleId) || !afterBattleDelete.reports.hiddenIds.includes(`battle:${canonicalBattleId}`)) throw new Error(`Canonical battle preservation failed at ${label}: ${JSON.stringify({ before: battleBefore.combat, afterSave: afterBattleSaveReload.combat, after: afterBattleDelete.combat, reports: afterBattleDelete.reports })}`);
   await capture(win, directory, 'battle-after-delete');
 
   await reload(win);
