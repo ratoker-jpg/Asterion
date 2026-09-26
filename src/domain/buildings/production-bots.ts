@@ -132,6 +132,6 @@ export function getProductionBotIncomePerHour(
 ): ProductionResourceIncome {
   return Object.fromEntries(BOT_RESOURCES.map((resource) => {
     const bonusPercent = getProductionBotBonusPercent(appliedAssignment, resource);
-    return [resource, baseIncome[resource] * (1 + bonusPercent / 100)];
+    return [resource, baseIncome[resource] * (100 + bonusPercent) / 100];
   })) as ProductionResourceIncome;
 }

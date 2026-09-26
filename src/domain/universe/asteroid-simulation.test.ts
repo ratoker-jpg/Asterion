@@ -17,7 +17,7 @@ import {
   createUniverseAsteroidSimulationState,
   getNextUniverseAsteroidTransitionAt,
 } from './asteroid-simulation.ts';
-import { ASTEROID_GAS_RATES_PER_HOUR } from './asteroid-gas.ts';
+import { ASTEROID_GAS_RATES_PER_HOUR, getAsteroidGasRatePerHour } from './asteroid-gas.ts';
 
 const coordinate = (position: number): UniverseCoordinate => ({ galaxy: 1, system: 1, position });
 
@@ -69,6 +69,7 @@ test('a chronological asteroid spawn initializes its gas clock at the spawn time
 
   assert.ok(asteroid);
   assert.ok(ASTEROID_GAS_RATES_PER_HOUR.some((rate) => rate === asteroid.gasRatePerHour));
+  assert.equal(asteroid.gasRatePerHour, getAsteroidGasRatePerHour(asteroid.spawnIndex));
   assert.equal(asteroid.gasUpdatedAt, ASTEROID_SCHEDULE_EPOCH_MS);
   assert.equal(asteroid.gasRemainder, 0);
 });

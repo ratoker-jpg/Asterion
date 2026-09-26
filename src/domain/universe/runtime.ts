@@ -19,7 +19,7 @@ import type {
   UniverseSystem,
   UniverseTimedObjectState,
 } from './types.ts';
-import { initializeAsteroidGasState } from './asteroid-gas.ts';
+import { ASTEROID_GAS_CAP, initializeAsteroidGasState } from './asteroid-gas.ts';
 import { getPositionCoefficientPercent, getSunEfficiencyPercent } from '../energy/runtime.ts';
 import type { RuntimeMode } from '../runtime/mode.ts';
 import { DEFAULT_ALLIANCE_MEMBERS, DEFAULT_ALLIANCE_PROFILE } from '../command/catalog.ts';
@@ -36,7 +36,7 @@ export const ASTEROID_SPAWN_INTERVAL_MS = 60 * 60 * 1_000;
 export const ASTEROID_MIN_DWELL_MS = 15 * 60 * 1_000;
 export const ASTEROID_MAX_DWELL_MS = 30 * 60 * 1_000;
 export const ASTEROID_GAS_MIN = 1_000;
-export const ASTEROID_GAS_MAX = 200_000;
+export const ASTEROID_GAS_MAX = ASTEROID_GAS_CAP;
 export const ASTEROID_TRANSIT_MS = 4_000;
 export const ASTEROID_SCHEDULE_EPOCH_MS = Date.UTC(2026, 0, 1);
 

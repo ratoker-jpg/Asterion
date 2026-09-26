@@ -44,6 +44,7 @@ import {
   TEST_MODE_ALLY_PLANET_FIXTURE,
   UNIVERSE_NPC_OWNER_ID,
 } from './runtime.ts';
+import { ASTEROID_GAS_CAP } from './asteroid-gas.ts';
 import type { UniverseOwnerAlliance, UniversePlanetNode } from './types.ts';
 
 test('planet coordinates remain unchanged while asteroid clock advances', () => {
@@ -330,6 +331,9 @@ test('asteroid state stays on a coordinate for 15–30 minutes and keeps gas hid
   const spawnIndex = 0;
   const state = getUniverseAsteroidState(spawnIndex, ASTEROID_SCHEDULE_EPOCH_MS + 1);
   assert.ok(state);
+  assert.equal(ASTEROID_GAS_MIN, 1_000);
+  assert.equal(ASTEROID_GAS_MAX, 2_000_000);
+  assert.equal(ASTEROID_GAS_MAX, ASTEROID_GAS_CAP);
   const dwell = state.nextMoveAt - state.previousMoveAt;
   assert.ok(dwell >= ASTEROID_MIN_DWELL_MS && dwell <= ASTEROID_MAX_DWELL_MS);
   assert.ok(state.gasYield >= ASTEROID_GAS_MIN && state.gasYield <= ASTEROID_GAS_MAX);

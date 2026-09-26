@@ -3,9 +3,9 @@ import type {
   UniverseAsteroidRuntimeState,
 } from './types.ts';
 
-export const ASTEROID_GAS_CAP = 200_000;
+export const ASTEROID_GAS_CAP = 2_000_000;
 export const ASTEROID_GAS_HOUR_MS = 60 * 60 * 1_000;
-export const ASTEROID_GAS_RATES_PER_HOUR = [2_500, 10_000, 25_000] as const;
+export const ASTEROID_GAS_RATES_PER_HOUR = [25_000, 100_000, 250_000] as const;
 
 const GAS_RATE_SEED = 0x6A52;
 const UINT32_RANGE = 0x1_0000_0000;

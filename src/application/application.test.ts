@@ -139,7 +139,7 @@ test('asteroid simulation, hidden cargo, and recycler history round-trip through
     nextMoveAt: now + 40_000,
     nextCoordinate: { galaxy: 1, system: 12, position: 8 },
     gasYield: 900,
-    gasRatePerHour: 2_500,
+    gasRatePerHour: 25_000,
     gasUpdatedAt: now - 10_000,
     gasRemainder: 1_250_000,
     coordinate: { galaxy: 1, system: 12, position: 7 },
@@ -209,11 +209,57 @@ test('schema 18 asteroid migration preserves timeline and scrap while starting g
   assert.deepEqual(preserved, legacyAsteroid);
   assert.equal(asteroid.gasUpdatedAt, loadAt);
   assert.equal(asteroid.gasRemainder, 0);
-  assert.ok(asteroid.gasRatePerHour === 2_500 || asteroid.gasRatePerHour === 10_000 || asteroid.gasRatePerHour === 25_000);
+  assert.ok(asteroid.gasRatePerHour === 25_000 || asteroid.gasRatePerHour === 100_000 || asteroid.gasRatePerHour === 250_000);
   assert.equal(advanceAsteroidGasAt(asteroid, loadAt).gasYield, legacyAsteroid.gasYield);
   assert.equal(migrated.asteroidSimulation?.processedThroughAt, loadAt - 10_000);
   assert.equal(migrated.asteroidSimulation?.nextSpawnIndex, 43);
   assert.deepEqual(migrated.asteroidDebrisBySpawnIndex, { '42': 777 });
+});
+
+test('schema 21 asteroid gas rates migrate once while preserving stock and gas clock progress', () => {
+  const storage = new MemoryStorage();
+  const loadAt = 1_800_000_200_000;
+  const initial = createInitialSaveState('production', loadAt - 100_000);
+  const legacyRates = [2_500, 10_000, 25_000] as const;
+  const legacyAsteroids = legacyRates.map((gasRatePerHour, index) => ({
+    spawnIndex: 42 + index,
+    spawnedAt: loadAt - 60_000,
+    movementIndex: 0,
+    previousMoveAt: loadAt - 20_000,
+    nextMoveAt: loadAt + 40_000,
+    gasYield: 80_000 + index * 1_000,
+    gasRatePerHour,
+    gasUpdatedAt: loadAt - 10_000 - index,
+    gasRemainder: 1_234_567 + index,
+    coordinate: { galaxy: 1, system: 12, position: 7 + index },
+  }));
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => loadAt });
+  storage.values.set(persistence.saveKey, JSON.stringify({
+    ...initial,
+    schemaVersion: 21,
+    asteroidSimulation: {
+      version: 1,
+      processedThroughAt: loadAt - 10_000,
+      nextSpawnIndex: 45,
+      asteroids: legacyAsteroids,
+    },
+  }));
+
+  const migrated = persistence.read();
+  const firstReadAsteroids = migrated.asteroidSimulation?.asteroids ?? [];
+  assert.equal(migrated.schemaVersion, 22);
+  assert.deepEqual(firstReadAsteroids.map((asteroid) => asteroid.gasRatePerHour), [25_000, 100_000, 250_000]);
+  for (const [index, asteroid] of firstReadAsteroids.entries()) {
+    assert.equal(asteroid.gasYield, legacyAsteroids[index]?.gasYield);
+    assert.equal(asteroid.gasUpdatedAt, legacyAsteroids[index]?.gasUpdatedAt);
+    assert.equal(asteroid.gasRemainder, legacyAsteroids[index]?.gasRemainder);
+    assert.equal(advanceAsteroidGasAt(asteroid, asteroid.gasUpdatedAt).gasYield, asteroid.gasYield);
+  }
+
+  assert.equal(persistence.write(migrated).ok, true);
+  const reloaded = persistence.read();
+  assert.deepEqual(reloaded.asteroidSimulation?.asteroids, firstReadAsteroids);
+  assert.equal(reloaded.schemaVersion, 22);
 });
 
 test('legacy persistence seeds asteroid baseline at load time and retains recycler arrival history', () => {
@@ -440,7 +486,7 @@ test('legacy planet upgrade levels migrate to owner-wide maxima without counting
   }));
 
   const migrated = persistence.read();
-  assert.equal(migrated.schemaVersion, 21);
+  assert.equal(migrated.schemaVersion, 22);
   assert.equal(migrated.shipUpgradeLevels?.scout, 8);
   assert.equal(migrated.shipUpgradeLevels?.corsair, 7);
   assert.equal(getOwnerShipUpgradeLevel(migrated, 'cruiser'), 0);
@@ -1683,9 +1729,9 @@ test('resource clock accrues canonical income once, scales only Test Mode, and p
   } satisfies SaveState;
 
   const production = reconcileRuntime(state, context(3_600_000, 'production'));
-  assert.equal(production.state.metal, 150);
-  assert.equal(production.state.minerals, 150);
-  assert.equal(production.state.gas, 100);
+  assert.equal(production.state.metal, 1_500);
+  assert.equal(production.state.minerals, 1_500);
+  assert.equal(production.state.gas, 1_000);
   assert.equal(production.state.planets['helion-01'].energy, 0);
   assert.equal(production.state.resourceClock.lastReconciledAt, 3_600_000);
   assert.equal(reconcileRuntime(production.state, context(3_600_000, 'production')).changed, false);
@@ -1786,16 +1832,16 @@ test('resource income uses an independent persisted clock per planet and reconci
   const firstTick = sent.flight.arrivalAt + 3_600_000;
   const secondTick = sent.flight.arrivalAt + 7_200_000;
   const firstPlanet = reconcileRuntime(state, planetContext('helion-01', firstTick));
-  assert.equal(firstPlanet.state.planets['helion-01'].resources?.metal, 150);
-  assert.equal(firstPlanet.state.planets[colonyId].resources?.metal, 150);
+  assert.equal(firstPlanet.state.planets['helion-01'].resources?.metal, 1_500);
+  assert.equal(firstPlanet.state.planets[colonyId].resources?.metal, 1_500);
 
   const secondPlanet = reconcileRuntime(firstPlanet.state, planetContext(colonyId, secondTick));
-  assert.equal(secondPlanet.state.planets[colonyId].resources?.metal, 300);
-  assert.equal(secondPlanet.state.planets['helion-01'].resources?.metal, 300);
+  assert.equal(secondPlanet.state.planets[colonyId].resources?.metal, 3_000);
+  assert.equal(secondPlanet.state.planets['helion-01'].resources?.metal, 3_000);
 
   const switchedBack = reconcileRuntime(secondPlanet.state, planetContext('helion-01', secondTick));
-  assert.equal(switchedBack.state.planets['helion-01'].resources?.metal, 300);
-  assert.equal(switchedBack.state.planets[colonyId].resources?.metal, 300);
+  assert.equal(switchedBack.state.planets['helion-01'].resources?.metal, 3_000);
+  assert.equal(switchedBack.state.planets[colonyId].resources?.metal, 3_000);
 
   const repeated = reconcileRuntime(switchedBack.state, planetContext(colonyId, secondTick));
   assert.equal(repeated.changed, false);
@@ -1818,7 +1864,7 @@ test('resource credit stops at dynamic capacity and does not bank time spent ful
   const full = reconcileRuntime(state, context(3_600_000, 'production'));
   assert.equal(full.state.metal, capacities.metal);
   assert.equal(full.state.resourceClock.remainder.metal, 0);
-  assert.equal(full.credit.burned.metal, 145);
+  assert.equal(full.credit.burned.metal, 1_495);
 
   const spent = { ...full.state, metal: capacities.metal - 100 };
   const sameTimestamp = reconcileRuntime(spent, context(3_600_000, 'production'));

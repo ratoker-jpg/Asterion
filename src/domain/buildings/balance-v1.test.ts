@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   BUILDING_ROLES,
   PLANET_BASE_STORAGE_CAPACITY,
+  STANDARD_RESOURCE_PRODUCTION_MULTIPLIER,
   getBuildingBalanceRow,
   getBuildingConstructionCost,
   getBuildingEffect,
@@ -24,6 +25,7 @@ import {
   getStorageCapacities,
   getScienceIncomeBonusPercent,
 } from './balance-v1.ts';
+import { getProductionBotIncomePerHour } from './production-bots.ts';
 
 test('Balance v1 exposes a complete sequential table for every role', () => {
   assert.equal(BUILDING_ROLES.length, 21);
@@ -43,13 +45,14 @@ test('Balance v1 exposes a complete sequential table for every role', () => {
 });
 
 test('resource and energy income selectors use the current building level', () => {
+  assert.equal(STANDARD_RESOURCE_PRODUCTION_MULTIPLIER, 10);
   assert.deepEqual(getBuildingResourceIncomePerHour({
     'metal-production-1': 1,
     'mineral-production-1': 1,
     'gas-production-1': 1,
-  }), { metal: 150, minerals: 150, gas: 100 });
+  }), { metal: 1_500, minerals: 1_500, gas: 1_000 });
   assert.equal(getBuildingEnergyIncomePerHour({ 'basic-energy': 1, 'advanced-energy': 1 }), 160);
-  assert.deepEqual(getBuildingResourceIncomePerHour({ 'metal-production-1': 999 }), { metal: 74_860, minerals: 0, gas: 0 });
+  assert.deepEqual(getBuildingResourceIncomePerHour({ 'metal-production-1': 999 }), { metal: 748_600, minerals: 0, gas: 0 });
 });
 
 test('mathematics and physics apply capped five-percent income bonuses to building effects', () => {
@@ -58,10 +61,35 @@ test('mathematics and physics apply capped five-percent income bonuses to buildi
   assert.equal(getScienceIncomeBonusPercent({ 1: 999 }, 1), 50);
   const metalEffect = getBuildingEffectWithScience('metal-production-1', 1, { 3: 1 });
   const energyEffect = getBuildingEffectWithScience('basic-energy', 1, { 1: 1 });
-  assert.equal(metalEffect.kind === 'resource-income' ? metalEffect.amountPerHour : null, 158);
+  assert.equal(metalEffect.kind === 'resource-income' ? metalEffect.amountPerHour : null, 1_575);
   assert.equal(energyEffect.kind === 'energy-income' ? energyEffect.amountPerHour : null, 63);
-  assert.deepEqual(getBuildingResourceIncomePerHour({ 'metal-production-1': 1 }, { 3: 10 }), { metal: 225, minerals: 0, gas: 0 });
+  assert.deepEqual(getBuildingResourceIncomePerHour({ 'metal-production-1': 1 }, { 3: 10 }), { metal: 2_250, minerals: 0, gas: 0 });
   assert.equal(getBuildingEnergyIncomePerHour({ 'basic-energy': 1 }, { 1: 10 }), 90);
+});
+
+test('tenfold building effects, science, and production bots produce the standard economy goldens', () => {
+  const buildings = {
+    'metal-production-1': 30,
+    'metal-production-2': 30,
+    'metal-production-3': 30,
+    'mineral-production-1': 30,
+    'mineral-production-2': 30,
+    'gas-production-1': 30,
+    'gas-production-2': 30,
+  } as const;
+  const mathematicsLevel10 = { 3: 10 };
+  const incomeAfterScience = getBuildingResourceIncomePerHour(buildings, mathematicsLevel10);
+  const incomeAfterBots = getProductionBotIncomePerHour(incomeAfterScience, {
+    metal: 10,
+    minerals: 10,
+    gas: 10,
+  });
+
+  assert.deepEqual(incomeAfterBots, {
+    metal: 5_389_920,
+    minerals: 3_368_700,
+    gas: 2_096_220,
+  });
 });
 
 test('Improved Construction discounts economic building resources by one percent per level and leaves energy separate', () => {
@@ -72,13 +100,25 @@ test('Improved Construction discounts economic building resources by one percent
 
 test('published production rows and final transition rows are fully represented', () => {
   const productionRates = [
-    ['metal-production-1', [150, 210, 290, 410, 580, 810, 1130, 1580, 2210, 3100, 3870, 4840, 6050, 7570, 9460, 11820, 14780, 18470, 23090, 28860, 31750, 34920, 38420, 42260, 46480, 51130, 56250, 61870, 68060, 74860]],
-    ['mineral-production-1', [150, 210, 290, 410, 580, 810, 1130, 1580, 2210, 3100, 3870, 4840, 6050, 7570, 9460, 11820, 14780, 18470, 23090, 28860, 31750, 34920, 38420, 42260, 46480, 51130, 56250, 61870, 68060, 74860]],
-    ['gas-production-1', [100, 140, 200, 270, 380, 540, 750, 1050, 1480, 2070, 2580, 3230, 4040, 5040, 6310, 7880, 9850, 12310, 15390, 19240, 21170, 23280, 25610, 28170, 30990, 34090, 37500, 41250, 45370, 49910]],
+    {
+      roles: ['metal-production-1', 'metal-production-2', 'metal-production-3'],
+      baseline: [150, 210, 290, 410, 580, 810, 1130, 1580, 2210, 3100, 3870, 4840, 6050, 7570, 9460, 11820, 14780, 18470, 23090, 28860, 31750, 34920, 38420, 42260, 46480, 51130, 56250, 61870, 68060, 74860],
+    },
+    {
+      roles: ['mineral-production-1', 'mineral-production-2'],
+      baseline: [150, 210, 290, 410, 580, 810, 1130, 1580, 2210, 3100, 3870, 4840, 6050, 7570, 9460, 11820, 14780, 18470, 23090, 28860, 31750, 34920, 38420, 42260, 46480, 51130, 56250, 61870, 68060, 74860],
+    },
+    {
+      roles: ['gas-production-1', 'gas-production-2'],
+      baseline: [100, 140, 200, 270, 380, 540, 750, 1050, 1480, 2070, 2580, 3230, 4040, 5040, 6310, 7880, 9850, 12310, 15390, 19240, 21170, 23280, 25610, 28170, 30990, 34090, 37500, 41250, 45370, 49910],
+    },
   ] as const;
-  for (const [role, expected] of productionRates) {
-    const actual = expected.map((_, index) => getBuildingEffect(role, index + 1));
-    assert.deepEqual(actual.map((effect) => effect.kind === 'resource-income' ? effect.amountPerHour : null), expected, role);
+  for (const { roles, baseline } of productionRates) {
+    const expected = baseline.map((rate) => rate * STANDARD_RESOURCE_PRODUCTION_MULTIPLIER);
+    for (const role of roles) {
+      const actual = expected.map((_, index) => getBuildingEffect(role, index + 1));
+      assert.deepEqual(actual.map((effect) => effect.kind === 'resource-income' ? effect.amountPerHour : null), expected, role);
+    }
   }
 
   const shipyardFinal = getBuildingBalanceRow('shipyard', 15);
@@ -87,6 +127,11 @@ test('published production rows and final transition rows are fully represented'
   const metalFinal = getBuildingBalanceRow('metal-production-1', 30);
   assert.deepEqual(metalFinal?.cost, { metal: 3_068_017, minerals: 1_278_340, gas: 0, energy: 374 });
   assert.equal(metalFinal?.rawTimeMs, 58 * 60 * 1000 + 26 * 1000);
+  const energyFinal = getBuildingBalanceRow('basic-energy', 30);
+  assert.deepEqual(energyFinal?.cost, { metal: 9_587_553, minerals: 3_835_021, gas: 0, energy: 0 });
+  assert.equal(energyFinal?.rawTimeMs, 9_438_000);
+  const energyEffect = getBuildingEffect('basic-energy', 30);
+  assert.equal(energyEffect.kind === 'energy-income' ? energyEffect.amountPerHour : null, 25_570);
 });
 
 test('rebalanced base construction times cover every active building role', () => {

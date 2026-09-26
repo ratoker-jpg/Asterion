@@ -49,6 +49,7 @@ import {
 } from '../domain/science/runtime.ts';
 import {
   ACTIVE_RUNTIME_MODE,
+  ASTEROID_GAS_RATE_MIGRATION_SCHEMA_VERSION,
   getRuntimeSaveKey,
   resolveTestTimeScale,
   RUNTIME_SAVE_SCHEMA_VERSION,
@@ -328,7 +329,17 @@ function createAsteroidSimulationMigrationBaseline(now: number): UniverseAsteroi
   };
 }
 
-function migrateAsteroidSimulation(value: unknown, now: number): UniverseAsteroidSimulationState {
+const LEGACY_ASTEROID_GAS_RATE_MIGRATIONS: Readonly<Record<number, number>> = {
+  2_500: 25_000,
+  10_000: 100_000,
+  25_000: 250_000,
+};
+
+function migrateAsteroidSimulation(
+  value: unknown,
+  now: number,
+  migrateLegacyGasRates: boolean,
+): UniverseAsteroidSimulationState {
   const source = objectRecord(value);
   if (!source || source.version !== 1
     || typeof source.processedThroughAt !== 'number' || !Number.isSafeInteger(source.processedThroughAt) || source.processedThroughAt < 0
@@ -359,7 +370,13 @@ function migrateAsteroidSimulation(value: unknown, now: number): UniverseAsteroi
       ...(nextCoordinate ? { nextCoordinate } : {}),
       gasYield: asteroid.gasYield as number,
       coordinate,
-      ...(typeof asteroid.gasRatePerHour === 'number' ? { gasRatePerHour: asteroid.gasRatePerHour } : {}),
+      ...(typeof asteroid.gasRatePerHour === 'number'
+        ? {
+          gasRatePerHour: migrateLegacyGasRates
+            ? LEGACY_ASTEROID_GAS_RATE_MIGRATIONS[asteroid.gasRatePerHour] ?? asteroid.gasRatePerHour
+            : asteroid.gasRatePerHour,
+        }
+        : {}),
       ...(typeof asteroid.gasUpdatedAt === 'number' ? { gasUpdatedAt: asteroid.gasUpdatedAt } : {}),
       ...(typeof asteroid.gasRemainder === 'number' ? { gasRemainder: asteroid.gasRemainder } : {}),
     }, now)];
@@ -1329,7 +1346,11 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
         bot01IncomingScenario: undefined,
       };
 
-    const asteroidSimulation = migrateAsteroidSimulation(parsed.asteroidSimulation, timestamp);
+    const asteroidSimulation = migrateAsteroidSimulation(
+      parsed.asteroidSimulation,
+      timestamp,
+      numberOr(parsed.schemaVersion, 0) < ASTEROID_GAS_RATE_MIGRATION_SCHEMA_VERSION,
+    );
     const activeAsteroidSpawnIndices = new Set(asteroidSimulation.asteroids.map((asteroid) => asteroid.spawnIndex));
     const ownerUpgradeLevels = migrateSpaceportUpgradeState({ shipLevels: parsed.shipUpgradeLevels }).shipLevels;
     for (const planet of Object.values(planets)) {
