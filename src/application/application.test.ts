@@ -262,6 +262,68 @@ test('schema 21 asteroid gas rates migrate once while preserving stock and gas c
   assert.equal(reloaded.schemaVersion, 22);
 });
 
+test('schema 21 selected-colony wallet does not replace Helion during migration or round-trip', () => {
+  const storage = new MemoryStorage();
+  const loadAt = 1_800_000_250_000;
+  const initial = createInitialSaveState('test', loadAt);
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => loadAt });
+  const colonyId = 'planet-1-2-1';
+  const helionResources = { metal: 1_111, minerals: 2_222, gas: 3_333 };
+  const colonyResources = { metal: 4_444, minerals: 5_555, gas: 6_666 };
+  const colony = {
+    ...createColonyPlanetRuntime(initial, { galaxy: 1, system: 2, position: 1 }),
+    resources: colonyResources,
+  };
+
+  storage.values.set(persistence.saveKey, JSON.stringify({
+    ...initial,
+    schemaVersion: 21,
+    currentPlanetId: colonyId,
+    metal: colonyResources.metal,
+    minerals: colonyResources.minerals,
+    gas: colonyResources.gas,
+    planets: {
+      ...initial.planets,
+      'helion-01': { ...initial.planets['helion-01'], resources: helionResources },
+      [colonyId]: colony,
+    },
+    queues: { ...initial.queues, [colonyId]: [] },
+  }));
+
+  const assertWallets = (state: SaveState) => {
+    assert.equal(state.currentPlanetId, colonyId);
+    assert.deepEqual(state.planets['helion-01'].resources, helionResources);
+    assert.deepEqual(state.planets[colonyId].resources, colonyResources);
+    assert.deepEqual(getPlanetResources(state), colonyResources);
+  };
+
+  const migrated = persistence.read();
+  assertWallets(migrated);
+  assert.equal(persistence.write(migrated).ok, true);
+  assertWallets(persistence.read());
+});
+
+test('pre-15 saves without planet wallets migrate the legacy root wallet to Helion', () => {
+  const storage = new MemoryStorage();
+  const loadAt = 1_800_000_260_000;
+  const initial = createInitialSaveState('production', loadAt);
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => loadAt });
+  const legacyResources = { metal: 7_111, minerals: 8_222, gas: 9_333 };
+  const { resources: _resources, ...legacyHelion } = initial.planets['helion-01'];
+
+  storage.values.set(persistence.saveKey, JSON.stringify({
+    ...initial,
+    schemaVersion: 14,
+    metal: legacyResources.metal,
+    minerals: legacyResources.minerals,
+    gas: legacyResources.gas,
+    planets: { 'helion-01': legacyHelion },
+  }));
+
+  const migrated = persistence.read();
+  assert.deepEqual(migrated.planets['helion-01'].resources, legacyResources);
+});
+
 test('legacy persistence seeds asteroid baseline at load time and retains recycler arrival history', () => {
   const storage = new MemoryStorage();
   const loadAt = 1_800_000_000_000;

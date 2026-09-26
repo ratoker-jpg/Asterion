@@ -136,6 +136,9 @@ export const SAVE_SCHEMA_VERSION = Math.max(
   RUNTIME_SAVE_SCHEMA_VERSION,
 );
 
+/** Schema 21 made the root wallet an alias for the currently selected planet. */
+const CURRENT_PLANET_ROOT_WALLET_SCHEMA_VERSION = 21;
+
 export const DEFAULT_PLANET_NAME = 'Helion 01';
 export const TEST_MODE_RESOURCE_AMOUNT = 999_999_999;
 
@@ -1156,11 +1159,23 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       gas: normalizeStoredResource(parsed.gas, initialState.gas, homeworldStorageCapacities.gas),
     } : { metal: 500, minerals: 500, gas: 500 };
     const hasRootHomeworldWallet = parsed.metal !== undefined || parsed.minerals !== undefined || parsed.gas !== undefined;
-    const legacyWalletIsAuthoritative = primaryPlanetId === 'helion-01'
-      && (numberOr(parsed.schemaVersion, 0) < SAVE_SCHEMA_VERSION || savedHomeworld?.resources === undefined);
+    const hasPersistedPlanetWallet = persistedPlanetEntries.some(([, candidate]) => {
+      const resources = (candidate as StoredPlanetRuntime).resources;
+      return Boolean(resources && typeof resources === 'object' && !Array.isArray(resources));
+    });
+    const legacyWalletCanSeedHomeworld = primaryPlanetId === 'helion-01'
+      && numberOr(parsed.schemaVersion, 0) < CURRENT_PLANET_ROOT_WALLET_SCHEMA_VERSION
+      && !hasPersistedPlanetWallet
+      && savedHomeworld?.resources === undefined
+      && hasRootHomeworldWallet;
+    const initialHomeworldResources = initialState.planets['helion-01'].resources ?? {
+      metal: initialState.metal,
+      minerals: initialState.minerals,
+      gas: initialState.gas,
+    };
     const homeworldResources = normalizePlanetResources(
-      legacyWalletIsAuthoritative && hasRootHomeworldWallet ? legacyHomeworldResources : savedHomeworld?.resources,
-      legacyHomeworldResources,
+      legacyWalletCanSeedHomeworld ? legacyHomeworldResources : savedHomeworld?.resources,
+      legacyWalletCanSeedHomeworld ? legacyHomeworldResources : initialHomeworldResources,
       homeworldStorageCapacities,
     );
     const homeworldBase: PlanetRuntime = {
