@@ -149,6 +149,10 @@ async function profileSnapshot(win) {
   return win.webContents.executeJavaScript(`(() => {
     const root = document.documentElement;
     const profile = document.querySelector('[data-qa-profile]');
+    const rect = (node) => {
+      const value = node?.getBoundingClientRect();
+      return value ? { left: value.left, top: value.top, right: value.right, bottom: value.bottom, width: value.width, height: value.height } : null;
+    };
     const metricValues = Array.from(document.querySelectorAll('[data-qa-profile-metric]')).map((item) => item.textContent?.replace(/\\s+/g, ' ').trim() ?? '');
     return {
       visible: Boolean(profile),
@@ -159,6 +163,63 @@ async function profileSnapshot(win) {
       metricValues,
       folderIds: Array.from(document.querySelectorAll('[data-message-folder]')).map((item) => item.getAttribute('data-message-folder') || ''),
       folderLabels: Array.from(document.querySelectorAll('[data-message-folder] strong')).map((item) => item.textContent?.trim() || ''),
+      folderIcons: Array.from(document.querySelectorAll('.reports-message-nav .reports-glyph-image')).map((image) => ({
+        src: image.getAttribute('src') || '',
+        loaded: Boolean(image.complete && image.naturalWidth > 0),
+        decorative: image.alt === '' && image.getAttribute('aria-hidden') === 'true',
+      })),
+      folderGeometry: Array.from(document.querySelectorAll('.reports-message-nav [data-message-folder]')).map((button) => {
+        const image = button.querySelector('.reports-glyph-image');
+        const imageStyle = image ? getComputedStyle(image) : null;
+        return {
+          button: rect(button),
+          iconSlot: rect(image?.parentElement),
+          icon: rect(image),
+          label: rect(button.querySelector('strong')),
+          count: rect(button.querySelector('b')),
+          cssWidth: imageStyle?.width ?? '',
+          cssHeight: imageStyle?.height ?? '',
+          objectFit: imageStyle?.objectFit ?? '',
+        };
+      }),
+      profileIcon: (() => {
+        const image = document.querySelector('.reports-profile-nav .reports-glyph-image');
+        const button = document.querySelector('.reports-profile-nav');
+        const imageStyle = image ? getComputedStyle(image) : null;
+        return {
+          src: image?.getAttribute('src') || '',
+          loaded: Boolean(image?.complete && image.naturalWidth > 0),
+          decorative: Boolean(image && image.alt === '' && image.getAttribute('aria-hidden') === 'true'),
+          cssWidth: imageStyle?.width ?? '',
+          cssHeight: imageStyle?.height ?? '',
+          label: button?.querySelector('strong')?.textContent?.trim() ?? '',
+          accessibleLabel: button?.getAttribute('aria-label') ?? '',
+        };
+      })(),
+      scoreIcons: Array.from(profile?.querySelectorAll('.reports-score-glyph') || []).map((image) => ({
+        src: image.getAttribute('src') || '',
+        loaded: Boolean(image.complete && image.naturalWidth > 0),
+        decorative: image.alt === '' && image.getAttribute('aria-hidden') === 'true',
+        cssWidth: getComputedStyle(image).width,
+        cssHeight: getComputedStyle(image).height,
+      })),
+      metricGeometry: Array.from(profile?.querySelectorAll('[data-qa-profile-metric]') || []).map((item) => {
+        const wrapper = item.querySelector('.reports-profile-metric__glyph');
+        const image = wrapper?.querySelector('.reports-score-glyph, svg');
+        return {
+          card: rect(item),
+          cardBorderWidth: getComputedStyle(item).borderTopWidth,
+          wrapper: rect(wrapper),
+          wrapperBorderWidth: wrapper ? getComputedStyle(wrapper).borderTopWidth : '',
+          wrapperTransform: wrapper ? getComputedStyle(wrapper).transform : '',
+          image: rect(image),
+          imageCssWidth: image ? getComputedStyle(image).width : '',
+          imageCssHeight: image ? getComputedStyle(image).height : '',
+          labelFontSize: getComputedStyle(item.querySelector('small')).fontSize,
+          valueFontSize: getComputedStyle(item.querySelector('strong')).fontSize,
+          imageTransform: image ? getComputedStyle(image).transform : '',
+        };
+      }),
       focusableMetrics: document.querySelectorAll('[data-qa-profile-metric][tabindex="0"]').length,
       viewport: { innerWidth: window.innerWidth, innerHeight: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
       stageRect: (() => { const rect = document.querySelector('.stage')?.getBoundingClientRect(); return rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null; })(),
@@ -351,13 +412,39 @@ async function runViewport(win, width, height) {
   const profilePortraits = await inspectRenderedFactionGeneralPortraits(win, '[data-qa-profile] [data-qa-faction-general]');
   assertRenderedFactionGeneralPortraits(profilePortraits, ['aegis'], `${label} profile`);
   if (JSON.stringify(profile.folderIds) !== JSON.stringify(EXPECTED_FOLDER_IDS) || JSON.stringify(profile.folderLabels) !== JSON.stringify(EXPECTED_FOLDER_LABELS)) throw new Error(`Reports folder contract failed at ${label}: ${JSON.stringify(profile)}`);
+  const expectedReportIconSuffixes = ['/system.webp', '/reports.webp', '/command-reports.webp', '/arena.webp', '/flights.webp', '/alliances.webp', '/achievements.webp'];
+  const expectedScoreIconSuffixes = ['/resource-crystal.webp', '/battle.webp', '/overall-star.webp', '/achievement-trophy.webp'];
+  if (profile.folderIcons.length !== expectedReportIconSuffixes.length
+    || profile.folderIcons.some((icon, index) => !icon.loaded || !icon.decorative || !icon.src.endsWith(expectedReportIconSuffixes[index]))
+    || !profile.profileIcon.loaded || !profile.profileIcon.decorative || !profile.profileIcon.src.endsWith('/profile.webp')
+    || profile.profileIcon.cssWidth !== '30px' || profile.profileIcon.cssHeight !== '30px'
+    || profile.profileIcon.label !== 'Профиль' || profile.profileIcon.accessibleLabel !== 'Открыть профиль'
+    || profile.scoreIcons.length !== expectedScoreIconSuffixes.length
+    || profile.scoreIcons.some((icon, index) => !icon.loaded || !icon.decorative || !icon.src.endsWith(expectedScoreIconSuffixes[index]) || icon.cssWidth !== '46px' || icon.cssHeight !== '46px')) {
+    throw new Error(`Reports/profile asset contract failed at ${label}: ${JSON.stringify({ folderIcons: profile.folderIcons, profileIcon: profile.profileIcon, scoreIcons: profile.scoreIcons })}`);
+  }
   if (profile.metricValues.length !== 4 || profile.focusableMetrics !== 4 || profile.horizontalOverflow || profile.bodyHorizontalOverflow) throw new Error(`Profile geometry/metrics contract failed at ${label}: ${JSON.stringify(profile)}`);
+  const overlaps = (first, second) => Boolean(first && second && first.left < second.right - 0.25 && first.right > second.left + 0.25 && first.top < second.bottom - 0.25 && first.bottom > second.top + 0.25);
+  const contains = (outer, inner) => Boolean(outer && inner && inner.left >= outer.left - 0.5 && inner.top >= outer.top - 0.5 && inner.right <= outer.right + 0.5 && inner.bottom <= outer.bottom + 0.5);
+  if (profile.folderGeometry.length !== EXPECTED_FOLDER_IDS.length
+    || profile.folderGeometry.some((row) => !row.icon || row.icon.width <= 0 || row.icon.width > 30.5 || row.icon.height <= 0 || row.icon.height > 30.5 || row.cssWidth !== '30px' || row.cssHeight !== '30px' || row.objectFit !== 'contain' || !contains(row.iconSlot, row.icon) || overlaps(row.icon, row.label) || overlaps(row.label, row.count))
+    || profile.folderGeometry.some((row, index, rows) => index > 0 && rows[index - 1].button.bottom > row.button.top + 0.5)) {
+    throw new Error(`Reports folder icon sizing/overlap contract failed at ${label}: ${JSON.stringify(profile.folderGeometry)}`);
+  }
+  if (profile.metricGeometry.length !== 4
+    || profile.metricGeometry.some((metric) => Number.parseFloat(metric.cardBorderWidth) <= 0 || Number.parseFloat(metric.wrapperBorderWidth) !== 0 || metric.wrapperTransform !== 'none' || metric.imageTransform !== 'none' || metric.imageCssWidth !== '46px' || metric.imageCssHeight !== '46px' || metric.labelFontSize !== '18px' || metric.valueFontSize !== '16px' || !contains(metric.wrapper, metric.image))) {
+    throw new Error(`Profile score icon frame/transform contract failed at ${label}: ${JSON.stringify(profile.metricGeometry)}`);
+  }
   await win.webContents.executeJavaScript(`document.querySelector('[data-qa-profile-metric="resourcePoints"]')?.focus()`);
   const metricFocus = await win.webContents.executeJavaScript(`document.activeElement?.getAttribute('data-qa-profile-metric') || ''`);
   if (metricFocus !== 'resourcePoints') throw new Error(`Profile metric keyboard focus failed at ${label}: ${metricFocus}`);
   await capture(win, directory, 'profile');
 
   await clickUtility(win, 'rating');
+  await waitFor(win, `document.querySelectorAll('.rating-table-v2--players .score-head-v2__icon').length === 4 && Array.from(document.querySelectorAll('.rating-table-v2--players .score-head-v2__icon')).every((image) => image.complete && image.naturalWidth > 0)`);
+  const ratingScoreIcons = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('.rating-table-v2--players .score-head-v2__icon')).map((image) => ({ src: image.getAttribute('src') || '', loaded: Boolean(image.complete && image.naturalWidth > 0), decorative: image.alt === '' && image.getAttribute('aria-hidden') === 'true' }))`);
+  if (ratingScoreIcons.some((icon, index) => !icon.loaded || !icon.decorative || !icon.src.endsWith(expectedScoreIconSuffixes[[3, 2, 0, 1][index]]))) throw new Error(`Rating score asset contract failed at ${label}: ${JSON.stringify(ratingScoreIcons)}`);
+  await capture(win, directory, 'rating-score-icons');
   await showCurrentAllianceRating(win);
   const initialRating = await ratingAllianceSnapshot(win);
   if (!initialRating.visible || initialRating.name !== 'Содружество Гелион' || initialRating.tag !== '[HLN]' || !initialRating.emblem.includes('starforge')) throw new Error(`Initial alliance rating contract failed at ${label}: ${JSON.stringify(initialRating)}`);

@@ -149,8 +149,8 @@
   "spaceMapQaRoot": "docs/assets/qa/universe",
   "spaceMapQaContactSheetCount": 18,
   "spaceMapBudgets": {
-    "sourceFiles": 90,
-    "runtimeTextures": 102,
+    "sourceFiles": 107,
+    "runtimeTextures": 117,
     "transferBytes": 16777216,
     "decodedBytes": 29458432,
     "universeViewDecodedBytes": 8388608,
@@ -165,5 +165,16 @@
       "solar-system": 20971520
     }
   },
-  "spaceMapRuntimeTypeScriptManifestPath": "src/assets/generated/spaceMapAssetManifest.generated.ts"
+  "spaceMapRuntimeTypeScriptManifestPath": "src/assets/generated/spaceMapAssetManifest.generated.ts",
+  "taskIntegration": {
+    "manifestPath": "assets/manifests/asterion-asset-integration.manifest.json",
+    "auditPath": "assets/manifests/asterion-asset-integration.audit.json",
+    "scriptPath": "tools/asterion-asset-integration.mjs",
+    "runtimeRoot": "public/assets/generated/asterion",
+    "runtimeTypeScriptManifestPath": "src/assets/generated/asterionAssetIntegrationManifest.generated.ts",
+    "scope": "asterion-asset-integration-2026-09-25",
+    "copiedSourceCount": 69,
+    "reusedSourceCount": 3,
+    "runtimeTextureCount": 70
+  }
 }

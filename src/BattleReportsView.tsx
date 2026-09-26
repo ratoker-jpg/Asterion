@@ -41,6 +41,8 @@ import { getFactionGeneralAsset } from './domain/profile/faction-assets.ts';
 import { ACTIVE_RUNTIME_MODE, RUNTIME_RESET_EVENT } from './domain/runtime/mode.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
+import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
+import { battleFactionArtIdFor } from './ui/battle-report-faction-art.ts';
 import criticalHitArt from '../assets/source/New assets/technologies/technology.shared.critical-hit.png';
 import heavyArmorArt from '../assets/source/New assets/technologies/technology.shared.heavy-armor.png';
 import ionScienceArt from '../assets/source/New assets/technologies/technology.shared.ion-science.png';
@@ -473,13 +475,15 @@ function TechnologyBonusTable({ side }: { side: BattleSideViewModel }) {
 
 function BattleHeaderSide({ side }: { side: BattleSideViewModel }) {
   const avatar = getFactionGeneralAsset(side.factionId);
+  const battleFactionArtId = battleFactionArtIdFor(side.participant.race, side.factionId);
+  const battleIcon = asterionAssetIntegrationAssets.battleFactionIcons[battleFactionArtId];
   const participantMeta = [side.participant.coordinates, side.participant.race].filter(Boolean).join(' · ') || 'Идентификатор не зафиксирован';
   return (
     <article className={`battle-header-side-v1 ${side.participant.side}`} data-qa-battle-header-side={side.participant.side}>
       <header className="battle-header-side-head-v1">
         <div className="battle-side-identity-v1">
           <span className="battle-side-avatar-v1" data-qa-battle-side-avatar aria-hidden="true">
-            {avatar ? <FactionGeneralPortrait factionId={side.factionId} /> : <b>{battleSideInitials(side)}</b>}
+            {battleIcon ? <img className="battle-faction-icon" src={battleIcon} alt="" data-qa-battle-faction-icon={battleFactionArtId} draggable={false} /> : avatar ? <FactionGeneralPortrait factionId={side.factionId} /> : <b>{battleSideInitials(side)}</b>}
           </span>
           <div className="battle-side-copy-v1">
             <small>{sideTitle(side)}</small>

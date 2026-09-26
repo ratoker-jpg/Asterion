@@ -16,6 +16,8 @@ jobs:
           node-version: 24
       - name: Install dependencies
         run: npm install
+      - name: Asterion asset audit
+        run: npm run assets:asterion:audit
       - name: Resource building domain tests
         run: npm run test:buildings
       - name: Combat domain tests

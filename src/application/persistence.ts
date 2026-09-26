@@ -142,6 +142,8 @@ const KNOWN_PLANET_SKINS = new Set([
   'colonized', 'terran', 'oceanic', 'desert', 'ice', 'volcanic', 'toxic', 'barren', 'gas',
   'skin-002', 'skin-003', 'skin-005', 'skin-011', 'skin-012', 'skin-015', 'skin-016',
   'skin-026', 'skin-027', 'skin-028', 'skin-030', 'skin-032',
+  'skin-asterion-01', 'skin-asterion-02', 'skin-asterion-03', 'skin-asterion-04', 'skin-asterion-05',
+  'skin-asterion-06', 'skin-asterion-07', 'skin-asterion-08', 'skin-asterion-09',
 ]);
 
 export type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
