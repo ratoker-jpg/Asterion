@@ -453,11 +453,12 @@ async function runViewport(width, height) {
   });
 
   try {
-    const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-    await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: '?mode=test' });
-    await loaded;
-    await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+    await win.loadURL('about:blank');
     win.webContents.debugger.attach('1.3');
+    await win.webContents.debugger.sendCommand('Page.enable');
+    await win.webContents.debugger.sendCommand('Page.addScriptToEvaluateOnNewDocument', {
+      source: `Date.now = () => ${QA_UNIVERSE_NOW};`,
+    });
     await win.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', {
       width,
       height,
@@ -466,10 +467,28 @@ async function runViewport(width, height) {
       screenWidth: width,
       screenHeight: height,
     });
+    const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+    await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: '?mode=test' });
+    await loaded;
+    await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
     await settle(win);
     await waitFor(win, `localStorage.getItem(${JSON.stringify(SAVE_KEY)})`);
-    await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)}); localStorage.removeItem('asterion.preferences.v2');`);
-    await reload(win);
+    // Each viewport has a fresh Electron partition, and the pre-document
+    // clock injection ensures persistence creates its asteroid baseline at
+    // the same deterministic epoch used by the movement assertions.
+    const asteroidBaseline = await win.webContents.executeJavaScript(`(() => {
+      const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+      const simulation = save.asteroidSimulation || {};
+      return {
+        processedThroughAt: simulation.processedThroughAt,
+        nextSpawnIndex: simulation.nextSpawnIndex,
+        spawnIndices: (simulation.asteroids || []).map((asteroid) => asteroid.spawnIndex),
+      };
+    })()`);
+    if (asteroidBaseline.processedThroughAt !== QA_UNIVERSE_NOW || asteroidBaseline.nextSpawnIndex !== 3
+      || JSON.stringify(asteroidBaseline.spawnIndices) !== '[0,1,2]') {
+      throw new Error(`${label}: app did not persist the fixed-clock asteroid baseline ${JSON.stringify(asteroidBaseline)}`);
+    }
     await win.webContents.executeJavaScript(`void (Date.now = () => ${QA_UNIVERSE_NOW});`);
     await clickPrimary(win, 'universe');
     const debrisFixtures = await seedOrbitalDebrisMarkers(win);
