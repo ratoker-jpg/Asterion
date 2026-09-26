@@ -184,12 +184,24 @@ async function profileSnapshot(win) {
       }),
       profileIcon: (() => {
         const image = document.querySelector('.reports-profile-nav .reports-glyph-image');
-        return { src: image?.getAttribute('src') || '', loaded: Boolean(image?.complete && image.naturalWidth > 0), decorative: Boolean(image && image.alt === '' && image.getAttribute('aria-hidden') === 'true') };
+        const button = document.querySelector('.reports-profile-nav');
+        const imageStyle = image ? getComputedStyle(image) : null;
+        return {
+          src: image?.getAttribute('src') || '',
+          loaded: Boolean(image?.complete && image.naturalWidth > 0),
+          decorative: Boolean(image && image.alt === '' && image.getAttribute('aria-hidden') === 'true'),
+          cssWidth: imageStyle?.width ?? '',
+          cssHeight: imageStyle?.height ?? '',
+          label: button?.querySelector('strong')?.textContent?.trim() ?? '',
+          accessibleLabel: button?.getAttribute('aria-label') ?? '',
+        };
       })(),
       scoreIcons: Array.from(profile?.querySelectorAll('.reports-score-glyph') || []).map((image) => ({
         src: image.getAttribute('src') || '',
         loaded: Boolean(image.complete && image.naturalWidth > 0),
         decorative: image.alt === '' && image.getAttribute('aria-hidden') === 'true',
+        cssWidth: getComputedStyle(image).width,
+        cssHeight: getComputedStyle(image).height,
       })),
       metricGeometry: Array.from(profile?.querySelectorAll('[data-qa-profile-metric]') || []).map((item) => {
         const wrapper = item.querySelector('.reports-profile-metric__glyph');
@@ -201,6 +213,10 @@ async function profileSnapshot(win) {
           wrapperBorderWidth: wrapper ? getComputedStyle(wrapper).borderTopWidth : '',
           wrapperTransform: wrapper ? getComputedStyle(wrapper).transform : '',
           image: rect(image),
+          imageCssWidth: image ? getComputedStyle(image).width : '',
+          imageCssHeight: image ? getComputedStyle(image).height : '',
+          labelFontSize: getComputedStyle(item.querySelector('small')).fontSize,
+          valueFontSize: getComputedStyle(item.querySelector('strong')).fontSize,
           imageTransform: image ? getComputedStyle(image).transform : '',
         };
       }),
@@ -401,20 +417,22 @@ async function runViewport(win, width, height) {
   if (profile.folderIcons.length !== expectedReportIconSuffixes.length
     || profile.folderIcons.some((icon, index) => !icon.loaded || !icon.decorative || !icon.src.endsWith(expectedReportIconSuffixes[index]))
     || !profile.profileIcon.loaded || !profile.profileIcon.decorative || !profile.profileIcon.src.endsWith('/profile.webp')
+    || profile.profileIcon.cssWidth !== '30px' || profile.profileIcon.cssHeight !== '30px'
+    || profile.profileIcon.label !== 'Профиль' || profile.profileIcon.accessibleLabel !== 'Открыть профиль'
     || profile.scoreIcons.length !== expectedScoreIconSuffixes.length
-    || profile.scoreIcons.some((icon, index) => !icon.loaded || !icon.decorative || !icon.src.endsWith(expectedScoreIconSuffixes[index]))) {
+    || profile.scoreIcons.some((icon, index) => !icon.loaded || !icon.decorative || !icon.src.endsWith(expectedScoreIconSuffixes[index]) || icon.cssWidth !== '46px' || icon.cssHeight !== '46px')) {
     throw new Error(`Reports/profile asset contract failed at ${label}: ${JSON.stringify({ folderIcons: profile.folderIcons, profileIcon: profile.profileIcon, scoreIcons: profile.scoreIcons })}`);
   }
   if (profile.metricValues.length !== 4 || profile.focusableMetrics !== 4 || profile.horizontalOverflow || profile.bodyHorizontalOverflow) throw new Error(`Profile geometry/metrics contract failed at ${label}: ${JSON.stringify(profile)}`);
   const overlaps = (first, second) => Boolean(first && second && first.left < second.right - 0.25 && first.right > second.left + 0.25 && first.top < second.bottom - 0.25 && first.bottom > second.top + 0.25);
   const contains = (outer, inner) => Boolean(outer && inner && inner.left >= outer.left - 0.5 && inner.top >= outer.top - 0.5 && inner.right <= outer.right + 0.5 && inner.bottom <= outer.bottom + 0.5);
   if (profile.folderGeometry.length !== EXPECTED_FOLDER_IDS.length
-    || profile.folderGeometry.some((row) => !row.icon || row.icon.width <= 0 || row.icon.width > 21.5 || row.icon.height <= 0 || row.icon.height > 21.5 || row.cssWidth !== '18px' || row.cssHeight !== '18px' || row.objectFit !== 'contain' || !contains(row.iconSlot, row.icon) || overlaps(row.icon, row.label) || overlaps(row.label, row.count))
+    || profile.folderGeometry.some((row) => !row.icon || row.icon.width <= 0 || row.icon.width > 30.5 || row.icon.height <= 0 || row.icon.height > 30.5 || row.cssWidth !== '30px' || row.cssHeight !== '30px' || row.objectFit !== 'contain' || !contains(row.iconSlot, row.icon) || overlaps(row.icon, row.label) || overlaps(row.label, row.count))
     || profile.folderGeometry.some((row, index, rows) => index > 0 && rows[index - 1].button.bottom > row.button.top + 0.5)) {
     throw new Error(`Reports folder icon sizing/overlap contract failed at ${label}: ${JSON.stringify(profile.folderGeometry)}`);
   }
   if (profile.metricGeometry.length !== 4
-    || profile.metricGeometry.some((metric) => Number.parseFloat(metric.cardBorderWidth) <= 0 || Number.parseFloat(metric.wrapperBorderWidth) !== 0 || metric.wrapperTransform !== 'none' || metric.imageTransform !== 'none' || !contains(metric.wrapper, metric.image))) {
+    || profile.metricGeometry.some((metric) => Number.parseFloat(metric.cardBorderWidth) <= 0 || Number.parseFloat(metric.wrapperBorderWidth) !== 0 || metric.wrapperTransform !== 'none' || metric.imageTransform !== 'none' || metric.imageCssWidth !== '46px' || metric.imageCssHeight !== '46px' || metric.labelFontSize !== '18px' || metric.valueFontSize !== '16px' || !contains(metric.wrapper, metric.image))) {
     throw new Error(`Profile score icon frame/transform contract failed at ${label}: ${JSON.stringify(profile.metricGeometry)}`);
   }
   await win.webContents.executeJavaScript(`document.querySelector('[data-qa-profile-metric="resourcePoints"]')?.focus()`);

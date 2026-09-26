@@ -20,6 +20,12 @@ const QA_UNIVERSE_NOW = Date.UTC(2026, 0, 1, 2, 0, 0);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const skipScreenshots = process.env.ASTERION_SKIP_SCREENSHOTS === '1';
 
+function hasBundledImageAsset(src, prefixes) {
+  const path = String(src).split(/[?#]/, 1)[0];
+  const filename = path.slice(path.lastIndexOf('/') + 1).toLowerCase();
+  return /\.(?:png|webp)$/i.test(filename) && prefixes.some((prefix) => filename.startsWith(prefix));
+}
+
 async function waitFor(win, expression, timeoutMs = 10_000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
@@ -839,7 +845,7 @@ async function runViewport(width, height) {
     checkCopy(pirate);
     await checkModal(win);
     if (pirate.kind !== 'pirate' || !pirate.text.includes('Пиратский объект') || !pirate.text.includes('исчезнет через') || !pirate.specialActionDisabled
-      || !pirate.specialArt.loaded || !pirate.specialArt.src.includes('/asterion/universe/pirate-planets/')) throw new Error(`${label}: pirate inspector contract failed ${JSON.stringify(pirate)}`);
+      || !pirate.specialArt.loaded || !hasBundledImageAsset(pirate.specialArt.src, ['pirate-planet-', 'planet-020-', 'orbital-forge-'])) throw new Error(`${label}: pirate inspector contract failed ${JSON.stringify(pirate)}`);
     await capture(win, directory, 'pirate-inspector');
     await dismissInspector(win);
     await selectSystem(win, pirateSystem);
@@ -877,7 +883,7 @@ async function runViewport(width, height) {
         checkCopy(snapshot);
         await checkModal(win);
         if (snapshot.kind !== 'anomaly' || !snapshot.text.includes('Аномалия') || !snapshot.text.includes('исчезнет через') || !snapshot.specialActionDisabled
-          || !snapshot.specialArt.loaded || !snapshot.specialArt.src.includes('/asterion/universe/anomalies/')) throw new Error(`${label}: anomaly inspector contract failed ${JSON.stringify(snapshot)}`);
+          || !snapshot.specialArt.loaded || !hasBundledImageAsset(snapshot.specialArt.src, ['anomaly-'])) throw new Error(`${label}: anomaly inspector contract failed ${JSON.stringify(snapshot)}`);
         await capture(win, directory, 'anomaly-inspector');
         await dismissInspector(win);
         return snapshot;
@@ -893,7 +899,7 @@ async function runViewport(width, height) {
       checkCopy(special);
       await checkModal(win);
       if (special.kind !== kind || !special.text.includes('Владелец отсутствует') || !special.specialActionDisabled
-        || (kind === 'unique' && (!special.specialArt.loaded || !special.specialArt.src.includes('/asterion/universe/unique-objects/')))) throw new Error(`${label}: ${kind} inspector contract failed ${JSON.stringify(special)}`);
+        || (kind === 'unique' && (!special.specialArt.loaded || !hasBundledImageAsset(special.specialArt.src, ['unique-variant-', 'planet-010-', 'planet-013-', 'planet-021-'])))) throw new Error(`${label}: ${kind} inspector contract failed ${JSON.stringify(special)}`);
       await capture(win, directory, `${kind}-inspector`);
       await dismissInspector(win);
     }

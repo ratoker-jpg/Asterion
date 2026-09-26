@@ -451,7 +451,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
     <main className={`reports-view ${activeFolder === 'profile' ? 'reports-view--profile' : 'reports-view--folder'}`} aria-label="Центр сообщений Asterion">
       <aside className="reports-categories">
         <header><h1>ОТЧЁТЫ</h1><span><i /> КАНАЛЫ ОТЧЁТОВ</span></header>
-        <button type="button" className={`reports-profile-nav ${activeFolder === 'profile' ? 'active' : ''}`} onClick={() => openFolder('profile')} data-message-profile aria-label="Открыть профиль игрока"><span><ProfileGlyph /></span><strong>Профиль игрока</strong><b>ОБЗОР</b></button>
+        <button type="button" className={`reports-profile-nav ${activeFolder === 'profile' ? 'active' : ''}`} onClick={() => openFolder('profile')} data-message-profile aria-label="Открыть профиль"><span><ProfileGlyph /></span><strong>Профиль</strong><b>ОБЗОР</b></button>
         <nav className="reports-message-nav" aria-label="Папки сообщений">
           {MESSAGE_FOLDERS.map((folder) => {
             const unread = folder.category ? unreadCounts[folder.category] : 0;
