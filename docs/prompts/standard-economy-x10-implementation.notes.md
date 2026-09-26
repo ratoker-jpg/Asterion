@@ -22,5 +22,7 @@
 - Worktree: `D:\Desktop\Asterion\worktrees\standard-economy-x10`.
 - Branch: `codex/standard-economy-x10`, based on `main` commit `48b09bee1c93c3ecb431b4b7524e385d5b51a1f5`.
 - Local checkpoint commit: `1ff453aab393b145fc5236025bf993de60dc1d21`.
-- Remaining: review the complete diff, commit the continuation changes, push the branch, open a Draft PR targeting `main`, attach it to the task, and wait for CI. Do not merge the PR or mark it Ready.
+- Draft PR: https://github.com/ratoker-jpg/Asterion/pull/81, targeting `main`; attached to the Codex task.
+- GitHub Actions CI run 700 and Pages preview run 814 both completed successfully on commit `baa9fc738dd62ec9685cb16492de33b213e26a05`.
+- The PR remains Draft and unmerged. Do not mark it Ready or merge it.
 - Generated local QA captures under `visual-qa/`, `artifacts-pass1/fleet-production-qa/`, and `artifacts/universe-planet-qa/` are not intended for the PR.
