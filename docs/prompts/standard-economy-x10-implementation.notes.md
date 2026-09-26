@@ -1,18 +1,26 @@
 # Standard Economy ×10 implementation notes
 
-## Deviations
+## Deviations and implementation notes
 
-- At the inspected current-main snapshot, `graphify-out/graph.json` was absent. Graphify navigation could not use a saved graph, so targeted repository searches were used to locate the relevant mechanics, tests, and documentation.
-- This run is paused at the user's request before all required acceptance checks and delivery steps are complete.
+- No `graphify-out/graph.json` was present in this checkout. Following the Graphify navigation workflow, repository navigation used focused searches over the relevant production, persistence, and QA files.
+- The browser QA fixtures now disable passive production where a test needs an exact wallet value. This prevents the new ×10 economy from changing seeded balances between reload and assertion; gameplay production remains unchanged.
+- Large-income visual assertions set Test Mode to ×1 and wait for the HUD tooltip transition before checking the rendered `/ч` value.
 
 ## Verification snapshot
 
-- Passed: `npm run test:buildings` (121 tests), `npm run test:universe` (36 tests), `npm run test:application` (48 tests), `npm run test:flights` (98 tests), `npm run test:runtime` (3 tests), `npm run build`, `npm run assets:asterion:audit`, and `git diff --check`.
-- Passed: `npm run test:building-actions-ui` exited successfully and produced viewport captures under `visual-qa/building-actions-run/1280x720` and `visual-qa/building-actions-run/1920x1080`.
-- Build emitted the existing Vite warning that some minified chunks exceed 500 kB; build completed successfully.
-- Still pending: `test:universe-ui`, `test:fleet-ui`, `qa:visual` (including the large-income checks at 1280×720 and 1920×1080), `dist:win`, full PR CI, final diff review, push, and Draft PR creation.
+- Passed before the checkpoint: `npm run test:buildings` (121 tests), `npm run test:universe` (36 tests), `npm run test:application` (48 tests), `npm run test:flights` (98 tests), `npm run test:runtime` (3 tests), `npm run build`, `npm run assets:asterion:audit`, and `git diff --check`.
+- Passed: `npm run test:building-actions-ui`; viewport captures are in `visual-qa/building-actions-run/1280x720` and `visual-qa/building-actions-run/1920x1080`.
+- Passed: `npm run test:universe-ui` at 1280×720 and 1920×1080.
+- Passed: `npm run test:fleet-ui` at 1280×720 and 1920×1080 with screenshots skipped; functional and layout assertions ran.
+- Passed: `npm run qa:visual`; the resource-zone large-income, HUD-tooltip, and level-30 preview checks ran at 1280×720, 1600×900, and 1920×1080. The broader chain also covered industry, interiors, production bots, recycling, trade, and spaceport upgrade UI.
+- Passed: `npm run dist:win` (exit code 0), including Vite production build and Windows NSIS packaging.
+- Production builds continue to emit the existing Vite warning for chunks larger than 500 kB. `dist:win` also reports missing package description/author and uses Electron's default icon; packaging succeeded.
+- `git diff --check` passed after the continuation edits.
 
-## How the run ended
+## Delivery state
 
-- Work is checkpointed locally on branch `codex/standard-economy-x10` in `D:\Desktop\Asterion\worktrees\standard-economy-x10`, based on `main` commit `48b09bee1c93c3ecb431b4b7524e385d5b51a1f5`.
-- No PR has been opened or pushed. Resume with the remaining checks above, update this note, review the full diff, then create the requested Draft PR targeting `main` and wait for CI.
+- Worktree: `D:\Desktop\Asterion\worktrees\standard-economy-x10`.
+- Branch: `codex/standard-economy-x10`, based on `main` commit `48b09bee1c93c3ecb431b4b7524e385d5b51a1f5`.
+- Local checkpoint commit: `1ff453aab393b145fc5236025bf993de60dc1d21`.
+- Remaining: review the complete diff, commit the continuation changes, push the branch, open a Draft PR targeting `main`, attach it to the task, and wait for CI. Do not merge the PR or mark it Ready.
+- Generated local QA captures under `visual-qa/`, `artifacts-pass1/fleet-production-qa/`, and `artifacts/universe-planet-qa/` are not intended for the PR.

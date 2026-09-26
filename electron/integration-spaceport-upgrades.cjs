@@ -76,6 +76,11 @@ async function seed(win) {
     if (!planet?.buildings) return false;
     planet.buildings.spaceport = 1;
     planet.buildings.shipyard = 20;
+    planet.buildings = { ...planet.buildings,
+      'metal-production-1': 0, 'metal-production-2': 0, 'metal-production-3': 0,
+      'mineral-production-1': 0, 'mineral-production-2': 0,
+      'gas-production-1': 0, 'gas-production-2': 0,
+    };
     planet.spaceportUpgrades = { shipLevels: {}, shipQueue: [], commanderQueue: [] };
     save.science = save.science || { levels: {}, queue: [] };
     save.science.levels = save.science.levels || {};
@@ -86,7 +91,7 @@ async function seed(win) {
     save.gas = 100000;
     planet.productionBots = { metal: 0, minerals: 0, gas: 0 };
     save.resourceClock = {
-      lastReconciledAt: Date.now(),
+      lastReconciledAt: Date.now() + 60_000,
       remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 },
     };
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 8);

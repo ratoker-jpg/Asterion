@@ -257,8 +257,15 @@ async function verifyLargeResourceValues(win, directory, label) {
   }
 
   await capture(win, directory, 'resource-zone-large-income');
-  await win.webContents.executeJavaScript("document.querySelector('.asterion-header__resource--metal')?.focus()");
-  await sleep(180);
+  const tooltipPoint=await win.webContents.executeJavaScript(`(() => {
+    const chip=document.querySelector('[data-qa-resource-chip="metal"]');
+    if(!chip)return null;
+    const rect=chip.getBoundingClientRect();
+    return {x:rect.left+rect.width/2,y:rect.top+rect.height/2};
+  })()`);
+  if(!tooltipPoint) throw new Error(`${label}: metal resource chip not found for tooltip check`);
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseMoved',x:tooltipPoint.x,y:tooltipPoint.y});
+  await waitFor(win,`getComputedStyle(document.querySelector('[data-qa-resource-tooltip="metal"]')).opacity==='1'`);
   const tooltip = await win.webContents.executeJavaScript(`(() => {
     const chip=document.querySelector('[data-qa-resource-chip="metal"]');
     const node=chip?.querySelector('[data-qa-resource-tooltip="metal"]');
@@ -271,7 +278,7 @@ async function verifyLargeResourceValues(win, directory, label) {
     throw new Error(`${label}: large-income HUD tooltip is clipped or missing its full /ч value: ${JSON.stringify(tooltip)}`);
   }
   await capture(win, directory, 'resource-zone-large-income-tooltip');
-  await win.webContents.executeJavaScript("document.querySelector('.asterion-header__resource--metal')?.blur()");
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseMoved',x:1,y:1});
   await sleep(180);
   await openResourceBuilding(win, 'metal-production-1');
   const preview = await win.webContents.executeJavaScript(`(() => {
@@ -466,8 +473,16 @@ async function verifyCommandScrollStability(win, directory, label) {
   if(reset.longPage) throw new Error(`${label}/command: long-page state leaked after leaving Command: ${JSON.stringify(reset)}`);
 }
 
-async function verifyResourceZoneFlow(win, directory) {
+async function verifyResourceZoneFlow(win, directory, label) {
   await resetTestSave(win);
+  const normalSpeedSelected = await win.webContents.executeJavaScript(`(() => {
+    const button=document.querySelector('[data-qa-test-speed="1"]');
+    if(!button)return false;
+    button.click();
+    return true;
+  })()`);
+  if(!normalSpeedSelected) throw new Error(`${label}: normal test speed button not found`);
+  await waitFor(win,`document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×1')`);
 
   await activateMainScreen(win,'planet','.planet-page-v3 .scene-title h1');
   const hotspotOpened = await win.webContents.executeJavaScript(`(() => {
@@ -583,7 +598,13 @@ async function verifyResourceZoneFlow(win, directory) {
     if(!planet) return false;
     save.metal=0;
     planet.resources={...(planet.resources||{}),metal:0};
-    save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
+    planet.buildings={...(planet.buildings||{}),
+      'metal-production-1':0,'metal-production-2':0,'metal-production-3':0,
+      'mineral-production-1':0,'mineral-production-2':0,
+      'gas-production-1':0,'gas-production-2':0,
+    };
+    planet.productionBots={metal:0,minerals:0,gas:0};
+    save.resourceClock = { lastReconciledAt: Date.now() + 60_000, remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
     window.location.reload();
     return true;
@@ -776,7 +797,7 @@ app.whenReady().then(async()=>{
         await capture(win,directory,'planet-page-title-130');
       }
       if(RESOURCE_QA_VIEWPORTS.has(label)){
-        results.push(await verifyResourceZoneFlow(win,directory));
+        results.push(await verifyResourceZoneFlow(win,directory,label));
       }
       fs.writeFileSync(path.join(directory,'metrics.json'),JSON.stringify(results,null,2));
     }
