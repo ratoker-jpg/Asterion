@@ -212,6 +212,10 @@ const definitions = [
   }),
 ];
 
+const pirateShipSourcePaths = new Set(
+  definitions.filter((entry) => entry.group === 'pirateShips').map((entry) => entry.sourcePath),
+);
+
 const expectedCounts = {
   reportIcons: 8, scoreIcons: 4, generalPortraits: 3, piratePortrait: 1, pirateShips: 7,
   regularPlanetSkins: 9, piratePlanetArts: 10, uniquePlanetArts: 16, anomalyArts: 10,
@@ -629,7 +633,7 @@ async function verifyRuntimeFiles(manifest, auditAssets) {
   if (JSON.stringify(expectedPaths) !== JSON.stringify(actualPaths)) throw new Error(`Task runtime file set differs. Expected ${expectedPaths.length}, found ${actualPaths.length}.`);
 }
 
-async function generate() {
+async function generate({ allowedSourceHashChanges = new Set() } = {}) {
   const entries = definitions;
   assertCounts(entries);
   const previousManifest = await readJson(taskManifestPath).catch(() => null);
@@ -644,12 +648,21 @@ async function generate() {
   }
   const previousAuditByPath = new Map((previousAssetAudit?.assets ?? []).map((entry) => [entry.path, entry]));
   const sourceInfos = new Map();
+  const rebasedSourcePaths = new Set();
   for (const entry of entries) {
     const info = await fileInfo(entry);
     if (entry.expectedSha256 && info.sha256 !== entry.expectedSha256) throw new Error(`Reused source checksum changed: ${entry.sourcePath}`);
     const previousSource = previousBySource.get(entry.sourcePath);
-    if (previousSource?.source?.sha256 && previousSource.source.sha256 !== info.sha256) throw new Error(`Source SHA-256 changed since the last generated manifest: ${entry.sourcePath}`);
+    if (previousSource?.source?.sha256 && previousSource.source.sha256 !== info.sha256) {
+      if (!allowedSourceHashChanges.has(entry.sourcePath)) throw new Error(`Source SHA-256 changed since the last generated manifest: ${entry.sourcePath}`);
+      rebasedSourcePaths.add(entry.sourcePath);
+    }
     sourceInfos.set(entry.sourcePath, info);
+  }
+  for (const sourcePath of allowedSourceHashChanges) {
+    if (!pirateShipSourcePaths.has(sourcePath) || !previousBySource.has(sourcePath)) {
+      throw new Error(`Only previously manifested pirate ship sources can be rebaselined: ${sourcePath}`);
+    }
   }
   const actualCopyCount = entries.filter((entry) => entry.disposition !== 'reuse-existing').length;
   const outputs = new Map();
@@ -743,7 +756,7 @@ async function generate() {
   await scanForObsoleteReferences();
   const budgets = await verifyBudgets(config, updatedAudit, spaceMap);
   await verifyRuntimeFiles(manifest, updatedAudit.assets);
-  return { copied: manifest.copiedSourceCount, reused: manifest.reusedSourceCount, intake: manifest.intakeCount, runtime: runtimeRecords.length, budgets };
+  return { copied: manifest.copiedSourceCount, reused: manifest.reusedSourceCount, intake: manifest.intakeCount, runtime: runtimeRecords.length, rebasedSources: [...rebasedSourcePaths].sort(), budgets };
 }
 
 async function audit() {
@@ -768,8 +781,12 @@ async function audit() {
 
 const command = process.argv[2] ?? 'generate';
 try {
-  const result = command === 'generate' ? await generate() : command === 'audit' ? await audit() : null;
-  if (!result) throw new Error(`Unknown command: ${command}. Use generate or audit.`);
+  const result = command === 'generate'
+    ? await generate()
+    : command === 'rebaseline-pirate-ships'
+      ? await generate({ allowedSourceHashChanges: pirateShipSourcePaths })
+      : command === 'audit' ? await audit() : null;
+  if (!result) throw new Error(`Unknown command: ${command}. Use generate, rebaseline-pirate-ships, or audit.`);
   console.log(JSON.stringify({ command, ...result }, null, 2));
 } catch (error) {
   console.error(`[asterion-asset-integration] ${error instanceof Error ? error.message : String(error)}`);

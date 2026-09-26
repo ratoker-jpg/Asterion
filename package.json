@@ -8,6 +8,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "assets:asterion:generate": "node tools/asterion-asset-integration.mjs generate",
+    "assets:asterion:rebaseline-pirate-ships": "node tools/asterion-asset-integration.mjs rebaseline-pirate-ships",
     "assets:asterion:audit": "node tools/asterion-asset-integration.mjs audit",
     "test:buildings": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/buildings/balance-v1.test.ts src/domain/buildings/resource-zone.test.ts src/domain/buildings/production-bots.test.ts src/domain/buildings/production-bot-building-limits.test.ts src/domain/buildings/recycling.test.ts src/domain/buildings/recycling-building-limits.test.ts src/domain/buildings/trade.test.ts src/domain/buildings/spaceport-building-limits.test.ts src/domain/buildings/spaceport-upgrades.test.ts src/building-interior-navigation.test.ts",
     "test:application": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/application/application.test.ts",

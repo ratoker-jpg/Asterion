@@ -432,12 +432,12 @@
       "disposition": "source-only",
       "sourcePath": "assets/source/ships/pirates/ashfang.png",
       "source": {
-        "bytes": 1853221,
-        "width": 1254,
-        "height": 1254,
+        "bytes": 3237532,
+        "width": 1536,
+        "height": 1024,
         "channels": 4,
         "hasAlpha": true,
-        "sha256": "becacf1240a5bfc733c48870a34f46760fd6c6a4571233557864f9e32098a0f2"
+        "sha256": "c47ef172755969e330d8d6d06979a071fc19c51973c0f06f60595bffd906c784"
       },
       "runtime": null,
       "mapPreview": null
@@ -449,12 +449,12 @@
       "disposition": "source-only",
       "sourcePath": "assets/source/ships/pirates/black_harrow.png",
       "source": {
-        "bytes": 1886361,
-        "width": 1254,
-        "height": 1254,
+        "bytes": 3218573,
+        "width": 1536,
+        "height": 1024,
         "channels": 4,
         "hasAlpha": true,
-        "sha256": "85c2ba758f2c9d20aab361d03e38183ff1cefa02d3892ff6f480d0ac810f781b"
+        "sha256": "87549ca99279b2da2c21bbf3035603895a82ddb24cb28e5b55deb825faedcf95"
       },
       "runtime": null,
       "mapPreview": null
@@ -466,12 +466,12 @@
       "disposition": "source-only",
       "sourcePath": "assets/source/ships/pirates/chainjack.png",
       "source": {
-        "bytes": 1940137,
-        "width": 1254,
-        "height": 1254,
+        "bytes": 3349872,
+        "width": 1536,
+        "height": 1024,
         "channels": 4,
         "hasAlpha": true,
-        "sha256": "c78eef974741c5deb6db2b97c9d3eec3baf34adf27ad64987acd2ec435f4ca63"
+        "sha256": "4b4a9b0c6819f85295cc7b6da23354b9794f881408f6c3e0442c5cc6bf93348a"
       },
       "runtime": null,
       "mapPreview": null
@@ -483,12 +483,12 @@
       "disposition": "source-only",
       "sourcePath": "assets/source/ships/pirates/crown_eater.png",
       "source": {
-        "bytes": 1991678,
-        "width": 1254,
-        "height": 1254,
+        "bytes": 3100586,
+        "width": 1536,
+        "height": 1024,
         "channels": 4,
         "hasAlpha": true,
-        "sha256": "01461c4abd0a5f097d2e50bd1ffeff7d7a8f96ed4a06d970aa1922c5e7ea5ee4"
+        "sha256": "e5045c12fb4e620941fe70433b3c6a91d14e3ff8f94f5afcd051f6f81837f65c"
       },
       "runtime": null,
       "mapPreview": null
@@ -500,12 +500,12 @@
       "disposition": "source-only",
       "sourcePath": "assets/source/ships/pirates/gutterstar.png",
       "source": {
-        "bytes": 1380233,
-        "width": 1254,
-        "height": 1254,
+        "bytes": 2185975,
+        "width": 1536,
+        "height": 1024,
         "channels": 4,
         "hasAlpha": true,
-        "sha256": "a00075242964cab1900d9b900b30291ec2b180ab5fb1f3a43c9763ea47cb9a88"
+        "sha256": "73d17d909133a1517d01174fe1266267fbdd3da2aea290663767933acf2cde5d"
       },
       "runtime": null,
       "mapPreview": null
@@ -517,12 +517,12 @@
       "disposition": "source-only",
       "sourcePath": "assets/source/ships/pirates/red_wraith.png",
       "source": {
-        "bytes": 1566174,
-        "width": 1254,
-        "height": 1254,
+        "bytes": 2403288,
+        "width": 1536,
+        "height": 1024,
         "channels": 4,
         "hasAlpha": true,
-        "sha256": "9f5ab367f51c6daf4a4b216de98229a22308e2a8f27cbdca814d12cda858a44a"
+        "sha256": "facf2635000ce1cb3fc8605133019708d6080c783c7724b20d0662a81330cbf3"
       },
       "runtime": null,
       "mapPreview": null
@@ -534,12 +534,12 @@
       "disposition": "source-only",
       "sourcePath": "assets/source/ships/pirates/void_butcher.png",
       "source": {
-        "bytes": 1545951,
-        "width": 1254,
-        "height": 1254,
+        "bytes": 2266442,
+        "width": 1536,
+        "height": 1024,
         "channels": 4,
         "hasAlpha": true,
-        "sha256": "0a4c675d059f86dd3df8e0f354c0edecd7cd0c0e166a3504d3f851b424d798ef"
+        "sha256": "503c9fd284f193870f71df74d83fc4f1f01794c97dc9aaa0e70aa9ebc99731bb"
       },
       "runtime": null,
       "mapPreview": null

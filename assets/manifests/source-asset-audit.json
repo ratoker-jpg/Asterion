@@ -16342,15 +16342,15 @@
       "semanticId": "pirate.ship.ashfang",
       "extension": ".png",
       "format": "png",
-      "width": 1254,
-      "height": 1254,
+      "width": 1536,
+      "height": 1024,
       "channels": 4,
       "hasAlpha": true,
       "alphaBounds": null,
       "inspectionError": null,
-      "bytes": 1853221,
-      "decodedBytes": 6290064,
-      "sha256": "becacf1240a5bfc733c48870a34f46760fd6c6a4571233557864f9e32098a0f2"
+      "bytes": 3237532,
+      "decodedBytes": 6291456,
+      "sha256": "c47ef172755969e330d8d6d06979a071fc19c51973c0f06f60595bffd906c784"
     },
     {
       "path": "assets/source/ships/pirates/black_harrow.png",
@@ -16359,15 +16359,15 @@
       "semanticId": "pirate.ship.black_harrow",
       "extension": ".png",
       "format": "png",
-      "width": 1254,
-      "height": 1254,
+      "width": 1536,
+      "height": 1024,
       "channels": 4,
       "hasAlpha": true,
       "alphaBounds": null,
       "inspectionError": null,
-      "bytes": 1886361,
-      "decodedBytes": 6290064,
-      "sha256": "85c2ba758f2c9d20aab361d03e38183ff1cefa02d3892ff6f480d0ac810f781b"
+      "bytes": 3218573,
+      "decodedBytes": 6291456,
+      "sha256": "87549ca99279b2da2c21bbf3035603895a82ddb24cb28e5b55deb825faedcf95"
     },
     {
       "path": "assets/source/ships/pirates/chainjack.png",
@@ -16376,15 +16376,15 @@
       "semanticId": "pirate.ship.chainjack",
       "extension": ".png",
       "format": "png",
-      "width": 1254,
-      "height": 1254,
+      "width": 1536,
+      "height": 1024,
       "channels": 4,
       "hasAlpha": true,
       "alphaBounds": null,
       "inspectionError": null,
-      "bytes": 1940137,
-      "decodedBytes": 6290064,
-      "sha256": "c78eef974741c5deb6db2b97c9d3eec3baf34adf27ad64987acd2ec435f4ca63"
+      "bytes": 3349872,
+      "decodedBytes": 6291456,
+      "sha256": "4b4a9b0c6819f85295cc7b6da23354b9794f881408f6c3e0442c5cc6bf93348a"
     },
     {
       "path": "assets/source/ships/pirates/crown_eater.png",
@@ -16393,15 +16393,15 @@
       "semanticId": "pirate.ship.crown_eater",
       "extension": ".png",
       "format": "png",
-      "width": 1254,
-      "height": 1254,
+      "width": 1536,
+      "height": 1024,
       "channels": 4,
       "hasAlpha": true,
       "alphaBounds": null,
       "inspectionError": null,
-      "bytes": 1991678,
-      "decodedBytes": 6290064,
-      "sha256": "01461c4abd0a5f097d2e50bd1ffeff7d7a8f96ed4a06d970aa1922c5e7ea5ee4"
+      "bytes": 3100586,
+      "decodedBytes": 6291456,
+      "sha256": "e5045c12fb4e620941fe70433b3c6a91d14e3ff8f94f5afcd051f6f81837f65c"
     },
     {
       "path": "assets/source/ships/pirates/gutterstar.png",
@@ -16410,15 +16410,15 @@
       "semanticId": "pirate.ship.gutterstar",
       "extension": ".png",
       "format": "png",
-      "width": 1254,
-      "height": 1254,
+      "width": 1536,
+      "height": 1024,
       "channels": 4,
       "hasAlpha": true,
       "alphaBounds": null,
       "inspectionError": null,
-      "bytes": 1380233,
-      "decodedBytes": 6290064,
-      "sha256": "a00075242964cab1900d9b900b30291ec2b180ab5fb1f3a43c9763ea47cb9a88"
+      "bytes": 2185975,
+      "decodedBytes": 6291456,
+      "sha256": "73d17d909133a1517d01174fe1266267fbdd3da2aea290663767933acf2cde5d"
     },
     {
       "path": "assets/source/ships/pirates/red_wraith.png",
@@ -16427,15 +16427,15 @@
       "semanticId": "pirate.ship.red_wraith",
       "extension": ".png",
       "format": "png",
-      "width": 1254,
-      "height": 1254,
+      "width": 1536,
+      "height": 1024,
       "channels": 4,
       "hasAlpha": true,
       "alphaBounds": null,
       "inspectionError": null,
-      "bytes": 1566174,
-      "decodedBytes": 6290064,
-      "sha256": "9f5ab367f51c6daf4a4b216de98229a22308e2a8f27cbdca814d12cda858a44a"
+      "bytes": 2403288,
+      "decodedBytes": 6291456,
+      "sha256": "facf2635000ce1cb3fc8605133019708d6080c783c7724b20d0662a81330cbf3"
     },
     {
       "path": "assets/source/ships/pirates/void_butcher.png",
@@ -16444,15 +16444,15 @@
       "semanticId": "pirate.ship.void_butcher",
       "extension": ".png",
       "format": "png",
-      "width": 1254,
-      "height": 1254,
+      "width": 1536,
+      "height": 1024,
       "channels": 4,
       "hasAlpha": true,
       "alphaBounds": null,
       "inspectionError": null,
-      "bytes": 1545951,
-      "decodedBytes": 6290064,
-      "sha256": "0a4c675d059f86dd3df8e0f354c0edecd7cd0c0e166a3504d3f851b424d798ef"
+      "bytes": 2266442,
+      "decodedBytes": 6291456,
+      "sha256": "503c9fd284f193870f71df74d83fc4f1f01794c97dc9aaa0e70aa9ebc99731bb"
     },
     {
       "path": "assets/source/planets/skins/skin-asterion-01.png",
@@ -18480,8 +18480,8 @@
   ],
   "summary": {
     "totalFiles": 880,
-    "totalBytes": 805138846,
-    "totalDecodedBytes": 2554943768,
+    "totalBytes": 812737359,
+    "totalDecodedBytes": 2554953512,
     "byClassification": {
       "source": 403,
       "source-intake": 98,
