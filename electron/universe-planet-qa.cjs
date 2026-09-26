@@ -469,6 +469,12 @@ async function runViewport(width, height) {
     await settle(win);
     await waitFor(win, `localStorage.getItem(${JSON.stringify(SAVE_KEY)})`);
     await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)}); localStorage.removeItem('asterion.preferences.v2');`);
+    // Apply the deterministic clock before the next document hydrates. Setting
+    // Date.now after reload let persistence create asteroid state using the
+    // machine's real date, then tested it against this fixed QA date.
+    await win.webContents.debugger.sendCommand('Page.addScriptToEvaluateOnNewDocument', {
+      source: `Date.now = () => ${QA_UNIVERSE_NOW};`,
+    });
     await reload(win);
     await win.webContents.executeJavaScript(`void (Date.now = () => ${QA_UNIVERSE_NOW});`);
     await clickPrimary(win, 'universe');
