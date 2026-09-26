@@ -27,7 +27,7 @@
     "test:energy": "node --experimental-strip-types --test src/domain/energy/runtime.test.ts",
     "test:fleet": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/fleet/runtime.test.ts src/domain/fleet/production.test.ts src/domain/fleet/overpopulation.test.ts",
     "test:science": "node --experimental-strip-types --test src/domain/science/science.test.ts",
-    "test:universe": "node --experimental-strip-types --test src/domain/universe/universe.test.ts src/assets/asterion-asset-integration.test.ts",
+    "test:universe": "node --experimental-strip-types --test src/domain/universe/universe.test.ts src/domain/universe/asteroid-gas.test.ts src/domain/universe/asteroid-simulation.test.ts src/assets/asterion-asset-integration.test.ts",
     "test:science-ui": "electron electron/visual-science.cjs",
     "test:energy-ui": "electron electron/energy-qa.cjs",
     "test:header-ui": "electron electron/header-qa.cjs",

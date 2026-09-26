@@ -126,20 +126,21 @@ async function openGasPreviewAt(win, coordinate) {
 
 async function seedProductionSave(win, mutator, args = []) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  const result = await win.webContents.executeJavaScript(`(() => {
+  const result = await win.webContents.executeJavaScript(`(async () => {
     try {
+      await new Promise((resolve) => setTimeout(resolve, 50));
       const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
       const planet = save?.planets?.['helion-01'];
       if (!save || !planet) return { ok: false, error: 'missing test save or homeworld' };
       (${mutator.toString()})(save, planet, ...${JSON.stringify(args)});
       localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
+      window.location.reload();
       return { ok: true };
     } catch (error) {
       return { ok: false, error: String(error?.stack || error) };
     }
   })()`);
   if (!result?.ok) throw new Error(`Could not seed fleet production save: ${result?.error || 'unknown error'}`);
-  win.webContents.reload();
   await done;
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await waitFor(win, `localStorage.getItem(${JSON.stringify(TEST_KEY)})`);
@@ -148,7 +149,8 @@ async function seedProductionSave(win, mutator, args = []) {
 
 async function setStoredSourceGas(win, gas) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  const ok = await win.webContents.executeJavaScript(`(() => {
+  const ok = await win.webContents.executeJavaScript(`(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
     const planet = save?.planets?.['helion-01'];
     if (!save || !planet) return false;
@@ -167,10 +169,10 @@ async function setStoredSourceGas(win, gas) {
       byPlanet: { ...(previousClock.byPlanet || {}), 'helion-01': homeworldClock },
     };
     localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
+    window.location.reload();
     return true;
   })()`);
   if (!ok) throw new Error('Could not set stored source gas');
-  win.webContents.reload();
   await done;
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await waitFor(win, `localStorage.getItem(${JSON.stringify(TEST_KEY)})`);
@@ -961,13 +963,14 @@ async function seedGasFreshnessSave(win, settings = {}) {
   await seedProductionSave(win, (save, planet, options) => {
     const now = Date.now();
     const simulation = save.asteroidSimulation;
-    if (!simulation?.asteroids?.length) throw new Error('test save has no active asteroid simulation');
+    const asteroid = simulation?.asteroids?.[0];
+    if (!asteroid) throw new Error('test save has no active asteroid simulation');
     save.flights = { records: [], requestIndex: {} };
     planet.fleet.ships = { ...planet.fleet.ships, scout: 2, recycler: 2 };
     save.asteroidSimulation = {
       ...simulation,
       processedThroughAt: now,
-      asteroids: simulation.asteroids.map((asteroid) => ({ ...asteroid, nextMoveAt: now + options.movementDelayMs })),
+      asteroids: [{ ...asteroid, nextMoveAt: now + options.movementDelayMs }],
     };
     save.science = { ...save.science, queue: [] };
     if (options.speedResearchFinishInMs != null) {
@@ -1348,7 +1351,7 @@ async function capture(win, directory, name) {
 async function runViewport(width, height) {
   const label = `${width}x${height}`;
   const directory = path.join(OUTPUT, label);
-  const win = new BrowserWindow({ width, height, show: false, webPreferences: { sandbox: false } });
+  const win = new BrowserWindow({ width, height, show: false, webPreferences: { sandbox: false, partition: `fleet-production-qa-${width}x${height}` } });
   try {
     await loadTestMode(win);
     await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(TEST_KEY)})`);

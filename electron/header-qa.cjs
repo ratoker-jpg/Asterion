@@ -183,56 +183,75 @@ async function assertRepresentativeRatios(win, file, label) {
   const original = await win.webContents.executeJavaScript(`localStorage.getItem(${JSON.stringify(TEST_SAVE_KEY)})`);
   const parsed = original ? JSON.parse(original) : {};
   const originalHomeworld = parsed.planets?.['helion-01'] ?? {};
-  const originalBuildings = originalHomeworld.buildings ?? {};
-  const baseline = {
+  const requestedPlanetId = typeof parsed.currentPlanetId === 'string' ? parsed.currentPlanetId.trim() : '';
+  const selectedPlanetId = requestedPlanetId && parsed.planets?.[requestedPlanetId] ? requestedPlanetId : 'helion-01';
+  const prepareRatioTestPlanet = (planet) => ({
+    ...planet,
+    buildings: {
+      ...(planet.buildings ?? {}),
+      'metal-production-1': 0,
+      'metal-production-2': 0,
+      'metal-production-3': 0,
+      'mineral-production-1': 0,
+      'mineral-production-2': 0,
+      'gas-production-1': 0,
+      'gas-production-2': 0,
+      'basic-energy': 0,
+      'advanced-energy': 0,
+      'metal-storage': 20,
+      'mineral-storage': 20,
+      'gas-storage': 20,
+    },
+    productionBots: { metal: 0, minerals: 0, gas: 0 },
+  });
+  const baselinePlanets = {
+    ...parsed.planets,
+    'helion-01': prepareRatioTestPlanet(originalHomeworld),
+  };
+  baselinePlanets[selectedPlanetId] = prepareRatioTestPlanet(baselinePlanets[selectedPlanetId] ?? originalHomeworld);
+  const setCurrentPlanetWallet = (state, resources) => {
+    const selectedPlanet = state.planets?.[selectedPlanetId] ?? originalHomeworld;
+    return {
+      ...state,
+      metal: resources.metal,
+      minerals: resources.minerals,
+      gas: resources.gas,
+      planets: {
+        ...state.planets,
+        [selectedPlanetId]: {
+          ...selectedPlanet,
+          resources: { ...selectedPlanet.resources, ...resources },
+        },
+      },
+    };
+  };
+  const baseline = setCurrentPlanetWallet({
     ...parsed,
     schemaVersion: 12,
-    metal: 0,
-    minerals: 0,
-    gas: 0,
-    planets: {
-      ...parsed.planets,
-      'helion-01': {
-        ...originalHomeworld,
-        buildings: {
-          ...originalBuildings,
-          'metal-production-1': 0,
-          'metal-production-2': 0,
-          'metal-production-3': 0,
-          'mineral-production-1': 0,
-          'mineral-production-2': 0,
-          'gas-production-1': 0,
-          'gas-production-2': 0,
-          'basic-energy': 0,
-          'advanced-energy': 0,
-          'metal-storage': 20,
-          'mineral-storage': 20,
-          'gas-storage': 20,
-        },
-        productionBots: { metal: 0, minerals: 0, gas: 0 },
-      },
-    },
+    currentPlanetId: selectedPlanetId,
+    planets: baselinePlanets,
     resourceClock: {
       lastReconciledAt: Date.now(),
       remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 },
     },
-  };
+  }, { metal: 0, minerals: 0, gas: 0 });
 
   try {
     const reducedMotion = await win.webContents.executeJavaScript(`window.matchMedia('(prefers-reduced-motion: reduce)').matches`);
     await win.webContents.executeJavaScript(`localStorage.setItem(${JSON.stringify(TEST_SAVE_KEY)}, ${JSON.stringify(JSON.stringify(baseline))})`);
     await loadMode(win, file, '?mode=test');
     for (const ratio of REPRESENTATIVE_RATIOS) {
-      const seeded = {
+      const seeded = setCurrentPlanetWallet({
         ...baseline,
-        metal: Math.floor(TEST_RESOURCE_CAPACITIES.metal * ratio / 100),
-        minerals: Math.floor(TEST_RESOURCE_CAPACITIES.minerals * ratio / 100),
-        gas: Math.floor(TEST_RESOURCE_CAPACITIES.gas * ratio / 100),
         resourceClock: {
           lastReconciledAt: Date.now(),
           remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 },
         },
-      };
+      }, {
+        metal: Math.floor(TEST_RESOURCE_CAPACITIES.metal * ratio / 100),
+        minerals: Math.floor(TEST_RESOURCE_CAPACITIES.minerals * ratio / 100),
+        gas: Math.floor(TEST_RESOURCE_CAPACITIES.gas * ratio / 100),
+      });
       await win.webContents.executeJavaScript(`localStorage.setItem(${JSON.stringify(TEST_SAVE_KEY)}, ${JSON.stringify(JSON.stringify(seeded))})`);
       await win.reload();
       await waitFor(win, `document.querySelector('[data-qa-header]')`);

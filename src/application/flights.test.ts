@@ -232,7 +232,7 @@ function withGasAsteroid(
         previousMoveAt: 1_000,
         nextMoveAt: options.nextMoveAt ?? 60_000,
         gasYield: options.gasYield ?? 100_000,
-        gasRatePerHour: options.gasRatePerHour ?? 2_500,
+        gasRatePerHour: options.gasRatePerHour ?? 25_000,
         gasUpdatedAt: options.gasUpdatedAt ?? 1_000,
         gasRemainder: options.gasRemainder ?? 0,
         coordinate: { ...coordinate },
@@ -1115,7 +1115,7 @@ test('gas forecast and arrival resolve the asteroid occupying the destination co
     nextMoveAt: initialPreview.flight.arrivalAt,
     nextCoordinate: selectedNextCoordinate,
     gasYield: 1_000,
-    gasRatePerHour: 2_500,
+    gasRatePerHour: 25_000,
     gasUpdatedAt: departedAt,
     gasRemainder: 0,
     coordinate: target,
@@ -2876,7 +2876,7 @@ test('reconcileRuntime removes an exiting asteroid and its accumulated and final
     asteroidSimulation: {
       ...scheduled.asteroidSimulation!,
       asteroids: scheduled.asteroidSimulation!.asteroids.map((asteroid) => asteroid.spawnIndex === spawnIndex
-        ? { ...asteroid, gasYield: 5_000, gasRatePerHour: 2_500, gasUpdatedAt: 1_000, gasRemainder: 0 }
+        ? { ...asteroid, gasYield: 5_000, gasRatePerHour: 25_000, gasUpdatedAt: 1_000, gasRemainder: 0 }
         : asteroid),
     },
     asteroidDebrisBySpawnIndex: { [String(spawnIndex)]: 700 },

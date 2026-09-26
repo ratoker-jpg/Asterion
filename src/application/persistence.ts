@@ -49,6 +49,7 @@ import {
 } from '../domain/science/runtime.ts';
 import {
   ACTIVE_RUNTIME_MODE,
+  ASTEROID_GAS_RATE_MIGRATION_SCHEMA_VERSION,
   getRuntimeSaveKey,
   resolveTestTimeScale,
   RUNTIME_SAVE_SCHEMA_VERSION,
@@ -134,6 +135,9 @@ export const SAVE_SCHEMA_VERSION = Math.max(
   SCIENCE_SAVE_SCHEMA_VERSION,
   RUNTIME_SAVE_SCHEMA_VERSION,
 );
+
+/** Schema 21 made the root wallet an alias for the currently selected planet. */
+const CURRENT_PLANET_ROOT_WALLET_SCHEMA_VERSION = 21;
 
 export const DEFAULT_PLANET_NAME = 'Helion 01';
 export const TEST_MODE_RESOURCE_AMOUNT = 999_999_999;
@@ -328,7 +332,17 @@ function createAsteroidSimulationMigrationBaseline(now: number): UniverseAsteroi
   };
 }
 
-function migrateAsteroidSimulation(value: unknown, now: number): UniverseAsteroidSimulationState {
+const LEGACY_ASTEROID_GAS_RATE_MIGRATIONS: Readonly<Record<number, number>> = {
+  2_500: 25_000,
+  10_000: 100_000,
+  25_000: 250_000,
+};
+
+function migrateAsteroidSimulation(
+  value: unknown,
+  now: number,
+  migrateLegacyGasRates: boolean,
+): UniverseAsteroidSimulationState {
   const source = objectRecord(value);
   if (!source || source.version !== 1
     || typeof source.processedThroughAt !== 'number' || !Number.isSafeInteger(source.processedThroughAt) || source.processedThroughAt < 0
@@ -359,7 +373,13 @@ function migrateAsteroidSimulation(value: unknown, now: number): UniverseAsteroi
       ...(nextCoordinate ? { nextCoordinate } : {}),
       gasYield: asteroid.gasYield as number,
       coordinate,
-      ...(typeof asteroid.gasRatePerHour === 'number' ? { gasRatePerHour: asteroid.gasRatePerHour } : {}),
+      ...(typeof asteroid.gasRatePerHour === 'number'
+        ? {
+          gasRatePerHour: migrateLegacyGasRates
+            ? LEGACY_ASTEROID_GAS_RATE_MIGRATIONS[asteroid.gasRatePerHour] ?? asteroid.gasRatePerHour
+            : asteroid.gasRatePerHour,
+        }
+        : {}),
       ...(typeof asteroid.gasUpdatedAt === 'number' ? { gasUpdatedAt: asteroid.gasUpdatedAt } : {}),
       ...(typeof asteroid.gasRemainder === 'number' ? { gasRemainder: asteroid.gasRemainder } : {}),
     }, now)];
@@ -1139,11 +1159,23 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       gas: normalizeStoredResource(parsed.gas, initialState.gas, homeworldStorageCapacities.gas),
     } : { metal: 500, minerals: 500, gas: 500 };
     const hasRootHomeworldWallet = parsed.metal !== undefined || parsed.minerals !== undefined || parsed.gas !== undefined;
-    const legacyWalletIsAuthoritative = primaryPlanetId === 'helion-01'
-      && (numberOr(parsed.schemaVersion, 0) < SAVE_SCHEMA_VERSION || savedHomeworld?.resources === undefined);
+    const hasPersistedPlanetWallet = persistedPlanetEntries.some(([, candidate]) => {
+      const resources = (candidate as StoredPlanetRuntime).resources;
+      return Boolean(resources && typeof resources === 'object' && !Array.isArray(resources));
+    });
+    const legacyWalletCanSeedHomeworld = primaryPlanetId === 'helion-01'
+      && numberOr(parsed.schemaVersion, 0) < CURRENT_PLANET_ROOT_WALLET_SCHEMA_VERSION
+      && !hasPersistedPlanetWallet
+      && savedHomeworld?.resources === undefined
+      && hasRootHomeworldWallet;
+    const initialHomeworldResources = initialState.planets['helion-01'].resources ?? {
+      metal: initialState.metal,
+      minerals: initialState.minerals,
+      gas: initialState.gas,
+    };
     const homeworldResources = normalizePlanetResources(
-      legacyWalletIsAuthoritative && hasRootHomeworldWallet ? legacyHomeworldResources : savedHomeworld?.resources,
-      legacyHomeworldResources,
+      legacyWalletCanSeedHomeworld ? legacyHomeworldResources : savedHomeworld?.resources,
+      legacyWalletCanSeedHomeworld ? legacyHomeworldResources : initialHomeworldResources,
       homeworldStorageCapacities,
     );
     const homeworldBase: PlanetRuntime = {
@@ -1329,7 +1361,11 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
         bot01IncomingScenario: undefined,
       };
 
-    const asteroidSimulation = migrateAsteroidSimulation(parsed.asteroidSimulation, timestamp);
+    const asteroidSimulation = migrateAsteroidSimulation(
+      parsed.asteroidSimulation,
+      timestamp,
+      numberOr(parsed.schemaVersion, 0) < ASTEROID_GAS_RATE_MIGRATION_SCHEMA_VERSION,
+    );
     const activeAsteroidSpawnIndices = new Set(asteroidSimulation.asteroids.map((asteroid) => asteroid.spawnIndex));
     const ownerUpgradeLevels = migrateSpaceportUpgradeState({ shipLevels: parsed.shipUpgradeLevels }).shipLevels;
     for (const planet of Object.values(planets)) {

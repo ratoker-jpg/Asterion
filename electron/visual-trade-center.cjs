@@ -112,6 +112,12 @@ async function seedTradeCenter(win) {
     const planet = save?.planets?.['helion-01'];
     if (!planet?.buildings || !planet?.recycling) return false;
     planet.buildings['trade-center'] = 1;
+    planet.buildings = { ...planet.buildings,
+      'metal-production-1': 0, 'metal-production-2': 0, 'metal-production-3': 0,
+      'mineral-production-1': 0, 'mineral-production-2': 0,
+      'gas-production-1': 0, 'gas-production-2': 0,
+    };
+    planet.productionBots = { metal: 0, minerals: 0, gas: 0 };
     planet.trade = { refillAtQueue: [] };
     planet.recycling.availableDebris = 100000;
     planet.resources = { ...(planet.resources || {}), metal: 15_880, minerals: 12_712, gas: 6_421 };
@@ -119,7 +125,7 @@ async function seedTradeCenter(win) {
     save.metal = 15880;
     save.minerals = 12712;
     save.gas = 6421;
-    save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
+    save.resourceClock = { lastReconciledAt: Date.now() + 60_000, remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 7);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');

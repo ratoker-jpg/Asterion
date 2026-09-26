@@ -258,9 +258,6 @@
 }
 .resource-zone-income-row strong{
   min-width:0;
-  max-width:138px;
-  overflow:hidden;
-  text-overflow:ellipsis;
   white-space:nowrap;
   justify-self:end;
   font-size:17px;
@@ -512,7 +509,7 @@
 .resource-building-effect-card.next{border-color:rgba(240,182,78,.38);background:rgba(49,35,17,.34)}
 .resource-building-effect-card small{display:block;font-size:8px;letter-spacing:.8px;color:#6da1ad}
 .resource-building-effect-card.next small{color:#d1a75d}
-.resource-building-effect-card strong{display:block;margin-top:6px;font-size:12px;line-height:1.35;color:#e2faff}
+.resource-building-effect-card strong{display:block;min-width:0;margin-top:6px;font-size:12px;line-height:1.35;color:#e2faff;overflow-wrap:anywhere}
 .resource-building-effect-card>span{display:block;margin-top:6px;font-size:8px;line-height:1.35;color:#789da8}
 .resource-building-effect-card.next>span{color:#b89a61}
 .resource-building-effect-card.next>em{display:block;margin-top:7px;color:#ffd17a;font-size:9px;font-style:normal;font-weight:800;letter-spacing:.05em}

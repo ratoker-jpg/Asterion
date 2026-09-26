@@ -17,6 +17,8 @@ const TEST_QUEUE_ENERGY = 999_999_963;
 const TEST_QUEUE_START_METAL = TEST_QUEUE_METAL + 113 + 168 + 30;
 const TEST_QUEUE_START_ENERGY = TEST_QUEUE_ENERGY + 10 + 26;
 const TEST_COMPLETED_ENERGY = 1_000_000_014;
+const LARGE_RESOURCE_INCOME = { metal: 5_226_720, minerals: 3_368_700, gas: 2_096_220 };
+const MAX_METAL_MINE_PREVIEW = 1_796_640;
 const SCREENS = [
   ['settings','Настройки','settings-view-v2'],
   ['rating','Рейтинг','rating-view-v2'],
@@ -213,6 +215,93 @@ async function openResourceBuilding(win, role) {
   await settle(win);
 }
 
+function digitsOnly(value) {
+  return String(value).replace(/\D/g, '');
+}
+
+async function verifyLargeResourceValues(win, directory, label) {
+  const income = await win.webContents.executeJavaScript(`(() => {
+    const resources=['metal','minerals','gas'];
+    const read=(selector)=>Array.from(document.querySelectorAll(selector)).map((element)=>({
+      text:element.textContent?.replace(/\\s+/g,' ').trim()??'',
+      rect:(()=>{const r=element.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};})(),
+      clientWidth:element.clientWidth,
+      scrollWidth:element.scrollWidth,
+      overflow:getComputedStyle(element).textOverflow,
+    }));
+    const rows=Object.fromEntries(resources.map((resource)=>{
+      const row=document.querySelector('[data-resource-income="'+resource+'"]');
+      const amount=row?.querySelector('strong');
+      return [resource,amount?{...read('[data-resource-income="'+resource+'"] strong')[0],label:row.querySelector('.resource-zone-income-name')?.textContent?.trim()??''}:null];
+    }));
+    const rowGeometry=Object.fromEntries(resources.map((resource)=>{
+      const row=document.querySelector('[data-resource-income="'+resource+'"]');
+      const children=Array.from(row?.children??[]).map((element)=>{const r=element.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};});
+      return [resource,{row:(()=>{const r=row?.getBoundingClientRect();return r?{left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height}:null;})(),children}];
+    }));
+    return {rows,rowGeometry,viewport:{width:innerWidth,height:innerHeight}};
+  })()`);
+  const incomeLabels = { metal:'Металл', minerals:'Минералы', gas:'Газ' };
+  for (const [resource, expected] of Object.entries(LARGE_RESOURCE_INCOME)) {
+    const row = income.rows[resource];
+    if (!row || row.label !== incomeLabels[resource] || digitsOnly(row.text) !== String(expected) || row.text.includes('…') || row.text.includes('...')) {
+      throw new Error(`${label}: ${resource} total income is not fully displayed: ${JSON.stringify({ row, expected })}`);
+    }
+    const geometry = income.rowGeometry[resource];
+    if (!geometry?.row || geometry.children.length !== 3
+      || geometry.row.top < 0 || geometry.row.bottom > income.viewport.height
+      || geometry.children.some((child) => child.left < geometry.row.left - 1 || child.right > geometry.row.right + 1)
+      || geometry.children.some((child, index) => index > 0 && geometry.children[index - 1].right > child.left + 1)) {
+      throw new Error(`${label}: ${resource} income label/value columns overlap or escape their row: ${JSON.stringify(geometry)}`);
+    }
+  }
+
+  await capture(win, directory, 'resource-zone-large-income');
+  const tooltipPoint=await win.webContents.executeJavaScript(`(() => {
+    const chip=document.querySelector('[data-qa-resource-chip="metal"]');
+    if(!chip)return null;
+    const rect=chip.getBoundingClientRect();
+    return {x:rect.left+rect.width/2,y:rect.top+rect.height/2};
+  })()`);
+  if(!tooltipPoint) throw new Error(`${label}: metal resource chip not found for tooltip check`);
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseMoved',x:tooltipPoint.x,y:tooltipPoint.y});
+  await waitFor(win,`getComputedStyle(document.querySelector('[data-qa-resource-tooltip="metal"]')).opacity==='1'`);
+  const tooltip = await win.webContents.executeJavaScript(`(() => {
+    const chip=document.querySelector('[data-qa-resource-chip="metal"]');
+    const node=chip?.querySelector('[data-qa-resource-tooltip="metal"]');
+    const r=node?.getBoundingClientRect();
+    return {text:node?.textContent?.replace(/\\s+/g,' ').trim()??'',opacity:node?getComputedStyle(node).opacity:'0',rect:r?{left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height}:null,viewport:{width:innerWidth,height:innerHeight},scrollWidth:node?.scrollWidth??0,clientWidth:node?.clientWidth??0};
+  })()`);
+  if (!tooltip.text.includes('МЕТАЛЛ') || !tooltip.text.includes('Добыча: +5 226 720/ч')
+    || tooltip.opacity !== '1' || !tooltip.rect || tooltip.rect.left < 0 || tooltip.rect.right > tooltip.viewport.width
+    || tooltip.scrollWidth > tooltip.clientWidth + 1) {
+    throw new Error(`${label}: large-income HUD tooltip is clipped or missing its full /ч value: ${JSON.stringify(tooltip)}`);
+  }
+  await capture(win, directory, 'resource-zone-large-income-tooltip');
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseMoved',x:1,y:1});
+  await sleep(180);
+  await openResourceBuilding(win, 'metal-production-1');
+  const preview = await win.webContents.executeJavaScript(`(() => {
+    const dialog=document.querySelector('[data-qa-building-dialog="metal-production-1"]');
+    const current=dialog?.querySelector('[data-qa-building-effect-current]');
+    const next=dialog?.querySelector('[data-qa-building-effect-next]');
+    const amount=next?.querySelector('strong');
+    const cards=[current,next].map((element)=>{const r=element?.getBoundingClientRect();return r?{left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height}:null;});
+    const rect=dialog?.getBoundingClientRect();
+    return {current:current?.textContent?.replace(/\\s+/g,' ').trim()??'',next:next?.textContent?.replace(/\\s+/g,' ').trim()??'',amount:amount?.textContent?.replace(/\\s+/g,' ').trim()??'',amountWidth:amount?.clientWidth??0,amountScrollWidth:amount?.scrollWidth??0,cards,dialog:rect?{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,width:rect.width,height:rect.height}:null,viewport:{width:innerWidth,height:innerHeight}};
+  })()`);
+  if (!preview.current.includes('ТЕКУЩИЙ УРОВЕНЬ · 29') || !preview.next.includes('СЛЕДУЮЩИЙ УРОВЕНЬ · 30')
+    || !preview.next.includes('Добыча металла: +1 796 640/ч') || digitsOnly(preview.amount) !== String(MAX_METAL_MINE_PREVIEW)
+    || preview.amountScrollWidth > preview.amountWidth + 1 || !preview.dialog
+    || preview.cards.some((card) => !card || card.left < preview.dialog.left - 1 || card.right > preview.dialog.right + 1 || card.top < preview.dialog.top - 1 || card.bottom > preview.dialog.bottom + 1)
+    || preview.cards[0].right > preview.cards[1].left + 1) {
+    throw new Error(`${label}: max-level mining preview or neighboring effect card is clipped: ${JSON.stringify(preview)}`);
+  }
+  await capture(win, directory, 'resource-zone-max-level-income-preview');
+  await closeResourceBuilding(win);
+  return { viewport:label, income:income.rows, tooltip, preview, captures:['resource-zone-large-income.png','resource-zone-large-income-tooltip.png','resource-zone-max-level-income-preview.png'] };
+}
+
 async function closeResourceBuilding(win) {
   const clicked = await win.webContents.executeJavaScript(`(() => {
     const button=document.querySelector('.resource-building-dialog-close');
@@ -384,8 +473,16 @@ async function verifyCommandScrollStability(win, directory, label) {
   if(reset.longPage) throw new Error(`${label}/command: long-page state leaked after leaving Command: ${JSON.stringify(reset)}`);
 }
 
-async function verifyResourceZoneFlow(win, directory) {
+async function verifyResourceZoneFlow(win, directory, label) {
   await resetTestSave(win);
+  const normalSpeedSelected = await win.webContents.executeJavaScript(`(() => {
+    const button=document.querySelector('[data-qa-test-speed="1"]');
+    if(!button)return false;
+    button.click();
+    return true;
+  })()`);
+  if(!normalSpeedSelected) throw new Error(`${label}: normal test speed button not found`);
+  await waitFor(win,`document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×1')`);
 
   await activateMainScreen(win,'planet','.planet-page-v3 .scene-title h1');
   const hotspotOpened = await win.webContents.executeJavaScript(`(() => {
@@ -478,10 +575,36 @@ async function verifyResourceZoneFlow(win, directory) {
   await rendererMutationAndReload(win, `(() => {
     const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
     const planet=save.planets?.['helion-01'];
+    if(!planet)return false;
+    planet.buildings={...(planet.buildings||{}),
+      'metal-production-1':29,'metal-production-2':30,'metal-production-3':30,
+      'mineral-production-1':30,'mineral-production-2':30,
+      'gas-production-1':30,'gas-production-2':30,
+      construction:20,'advanced-factory':5,
+    };
+    planet.productionBots={metal:10,minerals:10,gas:10};
+    save.science={...(save.science||{}),levels:{...(save.science?.levels||{}),1:10,3:10}};
+    save.resourceClock={lastReconciledAt:Date.now(),remainder:{metal:0,minerals:0,gas:0,energy:0}};
+    localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
+    window.location.reload();
+    return true;
+  })()`, 'Could not seed maximum mining-income and final-level preview fixture');
+  await activateResourceZone(win);
+  const largeIncomeVisual=await verifyLargeResourceValues(win,directory,label);
+
+  await rendererMutationAndReload(win, `(() => {
+    const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
+    const planet=save.planets?.['helion-01'];
     if(!planet) return false;
     save.metal=0;
     planet.resources={...(planet.resources||{}),metal:0};
-    save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
+    planet.buildings={...(planet.buildings||{}),
+      'metal-production-1':0,'metal-production-2':0,'metal-production-3':0,
+      'mineral-production-1':0,'mineral-production-2':0,
+      'gas-production-1':0,'gas-production-2':0,
+    };
+    planet.productionBots={metal:0,minerals:0,gas:0};
+    save.resourceClock = { lastReconciledAt: Date.now() + 60_000, remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
     window.location.reload();
     return true;
@@ -605,12 +728,13 @@ async function verifyResourceZoneFlow(win, directory) {
     roles:visibleRoles,
     selector,
     dialogs:dialogSnapshots,
+    largeIncomeVisual,
     insufficient,
     queued,
     fifo,
     persisted,
   };
-  console.log(`Resource zone QA passed: terrain, canonical names, requirements, three-slot FIFO queue, completion transition and reload persistence.`);
+  console.log(`Resource zone QA passed: terrain, canonical names, large ×10 income and final-level preview visibility, requirements, three-slot FIFO queue, completion transition and reload persistence.`);
 
   await resetTestSave(win);
   return result;
@@ -673,7 +797,7 @@ app.whenReady().then(async()=>{
         await capture(win,directory,'planet-page-title-130');
       }
       if(RESOURCE_QA_VIEWPORTS.has(label)){
-        results.push(await verifyResourceZoneFlow(win,directory));
+        results.push(await verifyResourceZoneFlow(win,directory,label));
       }
       fs.writeFileSync(path.join(directory,'metrics.json'),JSON.stringify(results,null,2));
     }

@@ -2,8 +2,9 @@ export type RuntimeMode = 'production' | 'test';
 
 export const PRODUCTION_SAVE_KEY = 'asterion.vertical-slice.v1';
 export const TEST_SAVE_KEY = 'asterion.vertical-slice.test.v1';
-/** Schema 21 persists Space Flight and the one-time incoming Bot 01 scenario. */
-export const RUNTIME_SAVE_SCHEMA_VERSION = 21;
+/** Save-schema boundary that migrates the legacy asteroid gas rate table once. */
+export const ASTEROID_GAS_RATE_MIGRATION_SCHEMA_VERSION = 22;
+export const RUNTIME_SAVE_SCHEMA_VERSION = ASTEROID_GAS_RATE_MIGRATION_SCHEMA_VERSION;
 
 // Test Mode is deliberately accelerated at the runtime boundary. Production
 // never reads any test speed setting.

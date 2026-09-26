@@ -291,6 +291,8 @@
   left:50%;
   top:calc(100% + 10px);
   width:198px;
+  box-sizing:border-box;
+  max-width:calc(100vw - 16px);
   padding:11px 12px;
   display:grid;
   gap:5px;
@@ -305,6 +307,7 @@
   pointer-events:none;
   transition:opacity .14s ease,transform .14s ease;
 }
+.asterion-header__resource-tooltip>span{min-width:0;overflow-wrap:anywhere}
 .asterion-header__resource-tooltip strong{margin:0;color:#e9fbff;font-size:12px}
 .asterion-header__resource-population-breakdown{display:grid;gap:3px;margin-top:2px;padding-top:5px;border-top:1px solid rgba(67,211,242,.2)}
 .asterion-header__resource-population-breakdown>span{display:flex;align-items:center;justify-content:space-between;gap:10px}
