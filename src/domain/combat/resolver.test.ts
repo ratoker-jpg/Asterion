@@ -539,8 +539,10 @@ test('when both Asterion Reanimators proc, both repairs follow both sides’ com
       ? index
       : last
   ), -1);
-  const repairIndexes = simultaneousRepairs.events.flatMap((event, index) => event.commanderAbilityId === 'reanimator' ? [index] : []);
+  const repairEvents = simultaneousRepairs.events.filter((event) => event.commanderAbilityId === 'reanimator');
+  const repairIndexes = repairEvents.map((_, index) => simultaneousRepairs.events.findIndex((event) => event === repairEvents[index]));
   assert.equal(repairIndexes.length, 2);
+  assert.deepEqual(repairEvents.map((event) => event.actorSide), ['attacker', 'defender']);
   assert.ok(repairIndexes.every((index) => index > lastCombatActionIndex));
   assert.ok(repairIndexes[0] < repairIndexes[1], 'Asterion retains its attacker-then-defender repair RNG order');
 });
