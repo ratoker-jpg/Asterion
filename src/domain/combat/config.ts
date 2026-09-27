@@ -1,7 +1,7 @@
 import { SPACEPORT_UPGRADE_MAX_LEVEL_BY_TRACK } from '../buildings/spaceport-upgrades.ts';
 
 export const COMBAT_PROFILE_ID = 'asterion-simulator-v1' as const;
-export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v3' as const;
+export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v4' as const;
 
 export const COMBAT_SHIP_LEVEL_COEFFICIENTS = Object.freeze({
   scout: 0.05,
@@ -60,9 +60,27 @@ export const COMBAT_RULE_PROVENANCE = Object.freeze({
   },
   resolutionOrder: {
     status: 'confirmed',
-    source: 'Asterion implementation decision',
+    source: 'Nemexia saved reports: attacker phase precedes defender phase',
     confidence: 'high',
-    note: 'Sequential attacker-then-defender resolution with retargeting.',
+    note: 'Reports establish the displayed attacker-before-defender phase order and that all 6,052 extracted within-round target switches occur after the prior target is destroyed. They do not establish Nemexia cross-round target-lock behavior or its within-side ordering/RNG rule.',
+  },
+  targetLock: {
+    status: 'confirmed',
+    source: 'User-directed Asterion policy',
+    confidence: 'high',
+    note: 'Asterion retains a selected live target across rounds until it is destroyed. The archive supports same-round target persistence until destruction but does not independently establish Nemexia cross-round behavior.',
+  },
+  withinSideOrder: {
+    status: 'not-calibrated',
+    source: 'Nemexia repeated reports; no saved Nemexia seed or RNG implementation',
+    confidence: 'low',
+    note: 'All 19 valid identical-profile repeats have distinct first-round actor sequences. Asterion keeps its current fixed ordering; the Nemexia ordering mechanism is unknown.',
+  },
+  repairTiming: {
+    status: 'confirmed',
+    source: 'Nemexia saved reports: 648 structured repair events across 273 valid reports',
+    confidence: 'high',
+    note: 'Every displayed repair follows that round’s last combat action. Asterion resolves its existing Reanimator effect after both action phases. The archive does not establish Reanimator as the only repair source, its formula, or which side repairs first; when both Asterion Reanimators proc, Asterion keeps attacker-then-defender RNG order.',
   },
   damageFormula: {
     status: 'inferred',
@@ -78,9 +96,9 @@ export const COMBAT_RULE_PROVENANCE = Object.freeze({
   },
   targetSelection: {
     status: 'not-calibrated',
-    source: 'Existing Asterion target-selection heuristic',
+    source: '6,052 Nemexia target transitions; existing Asterion heuristic retained',
     confidence: 'low',
-    note: 'Угроза → население → порядок каталога и явные fallback-профили доступны для диагностики, но не объявляются доказанным правилом Nemexia.',
+    note: 'В Nemexia цель с минимальной численностью выбрана в 3,214/6,052 переходах; в контролируемом target_priority planned first target выбран только в 6/52. Это не задаёт детерминированного универсального selector; seed Nemexia отсутствует. Угроза → население → каталог — действующая эвристика Asterion, не правило Nemexia.',
   },
   entityLevelEffects: {
     status: 'inferred',

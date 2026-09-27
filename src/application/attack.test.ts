@@ -501,7 +501,7 @@ test('Test Mode Bot 01 starts at the requested resource scale and ticks normally
   assert.equal(updated.resourceClock?.lastReconciledAt, 1_000 + 60 * 60 * 1000);
 });
 
-test('Bot 01 Test Mode destroys a real owned world, burns an exact-tie Space Flight, and persists once', () => {
+test('Bot 01 Test Mode preserves an exact-tie Space Flight when the seeded siege roll fails', () => {
   const values = new Map<string, string>();
   const storage = {
     getItem: (key: string) => values.get(key) ?? null,
@@ -578,29 +578,29 @@ test('Bot 01 Test Mode destroys a real owned world, burns an exact-tie Space Fli
   const attackReport = incoming.state.combat.reports.find((report) => report.id === `battle-bot01-incoming-${botFlight.id}`);
   assert.ok(attackReport);
   assert.equal(attackReport?.winner, 'attacker');
-  assert.equal(attackReport?.siege?.planetDestroyed, true);
+  assert.equal(attackReport?.siege?.planetDestroyed, false);
   assert.equal(attackReport?.defenderForce.stacks.some((stack) => stack.entityId === 'transporter'), false);
   assert.ok((attackReport?.debris ?? 0) > 0);
   assert.equal(getOrbitalDebrisAtCoordinate(incoming.state.espionage!, botFlight.destinationCoordinate), attackReport?.debris);
-  assert.equal(incoming.state.planets[targetId], undefined);
-  assert.deepEqual(Object.keys(incoming.state.planets), ['helion-01']);
-  assert.equal(incoming.state.currentPlanetId, 'helion-01');
+  assert.ok(incoming.state.planets[targetId]);
+  assert.deepEqual(Object.keys(incoming.state.planets), ['helion-01', targetId]);
+  assert.equal(incoming.state.currentPlanetId, targetId);
   assert.equal(incoming.state.shipUpgradeLevels?.transporter, 4);
   assert.equal(incoming.state.shipUpgradeLevels?.corsair, 6);
-  assert.equal(incoming.state.flights.records.find((flight) => flight.id === spaceFlight.flight.id)?.phase, 'failed');
-  const burnedFlight = incoming.state.flights.records.find((flight) => flight.id === spaceFlight.flight.id);
-  assert.equal(burnedFlight?.completionReason, 'origin-destroyed');
-  assert.equal(burnedFlight?.cargoState, 'voided');
-  assert.equal(burnedFlight?.cargoResolvedAt, tieAt);
-  assert.deepEqual(incoming.events.map((event) => event.status), ['arrived', 'incoming-attack', 'destroyed']);
+  assert.equal(incoming.state.flights.records.find((flight) => flight.id === spaceFlight.flight.id)?.phase, 'completed');
+  const returnedSpaceFlight = incoming.state.flights.records.find((flight) => flight.id === spaceFlight.flight.id);
+  assert.equal(returnedSpaceFlight?.cargoState, 'returned');
+  assert.equal(returnedSpaceFlight?.completedAt, tieAt);
+  assert.equal(returnedSpaceFlight?.cargoResolvedAt, tieAt);
+  assert.deepEqual(incoming.events.map((event) => event.status), ['arrived', 'incoming-attack', 'returned']);
   assert.equal(incoming.state.espionage?.bot01IncomingScenario?.status, 'resolved');
   assert.equal(incoming.state.combat.reports.filter((report) => report.id === attackReport?.id).length, 1);
 
   assert.equal(persistence.write(incoming.state).ok, true);
   const afterReload = persistence.read();
-  assert.deepEqual(Object.keys(afterReload.planets), ['helion-01']);
+  assert.deepEqual(Object.keys(afterReload.planets), ['helion-01', targetId]);
   assert.equal(afterReload.planets['helion-01'].name, initial.planets['helion-01'].name);
-  assert.equal(afterReload.flights.records.find((flight) => flight.id === spaceFlight.flight.id)?.cargoState, 'voided');
+  assert.equal(afterReload.flights.records.find((flight) => flight.id === spaceFlight.flight.id)?.cargoState, 'returned');
   assert.equal(afterReload.combat.reports.filter((report) => report.id === attackReport?.id).length, 1);
   const retry = startBot01IncomingScenario(afterReload, { now: tieAt + 1, mode: 'test', testTimeScale: 1 });
   assert.equal(retry.ok, true);
@@ -666,7 +666,7 @@ test('late reconciliation returns a Space Flight before a Bot attack arriving on
   assert.ok(reconciled.events.some((event) => event.status === 'incoming-attack'));
 });
 
-test('an incoming Bot attack burns a Space Flight whose owned origin is still outbound', () => {
+test('an incoming Bot attack does not cancel an outbound Space Flight when the seeded siege roll fails', () => {
   const initial = createInitialSaveState('test', 1_000);
   const launched = startBot01IncomingScenario(initial, { now: 1_000, mode: 'test', testTimeScale: 1 });
   assert.equal(launched.ok, true);
@@ -706,14 +706,13 @@ test('an incoming Bot attack burns a Space Flight whose owned origin is still ou
   };
   const incoming = reconcileFlights(scheduled, botArrivalAt, undefined, { mode: 'test', testTimeScale: 1 });
   const report = incoming.state.combat.reports.find((candidate) => candidate.id === `battle-bot01-incoming-${botFlight.id}`);
-  assert.equal(report?.siege?.planetDestroyed, true);
-  assert.equal(incoming.state.planets[targetId], undefined);
-  const burned = incoming.state.flights.records.find((flight) => flight.id === spaceFlight.flight.id);
-  assert.equal(burned?.phase, 'failed');
-  assert.equal(burned?.completionReason, 'origin-destroyed');
-  assert.equal(burned?.cargoState, 'voided');
-  assert.equal(burned?.cargoResolvedAt, botArrivalAt);
-  assert.ok(incoming.events.some((event) => event.flight.id === burned?.id && event.status === 'destroyed'));
+  assert.equal(report?.siege?.planetDestroyed, false);
+  assert.ok(incoming.state.planets[targetId]);
+  const outbound = incoming.state.flights.records.find((flight) => flight.id === spaceFlight.flight.id);
+  assert.equal(outbound?.phase, 'outbound');
+  assert.equal(outbound?.cargoState, 'loaded');
+  assert.equal(outbound?.cargoResolvedAt, undefined);
+  assert.equal(incoming.events.some((event) => event.flight.id === outbound?.id && event.status === 'destroyed'), false);
 });
 
 test('surviving Bot 01 sieges reconcile factory bots and the last energy source', () => {

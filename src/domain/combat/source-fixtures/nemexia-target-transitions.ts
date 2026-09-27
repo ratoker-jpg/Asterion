@@ -1,0 +1,38 @@
+export const NEMEXIA_TARGET_TRANSITION_AUDIT = {
+  sourceCsv: 'docs/evidence/nemexia-target-transitions.csv',
+  totalTransitions: 6052,
+  analysisVerifiedTransitions: 5886,
+  validOlderTransitions: 166,
+  previousTargetAliveAtSwitch: 0,
+  example: {
+    transitionId: 2041,
+    archiveFile: 'D:/Desktop/Nemexia/simulation-battles/battles-2026-09-16.jsonl',
+    archiveLine: 193,
+    runId: 'a5449dc74a9b',
+    caseId: 'recon240-priority-2-4-r1',
+    reportFile: 'D:/Desktop/Nemexia/simulation-battles/reports/a5449dc74a9b/0193_recon240-priority-2-4-r1/page.html',
+    round: 1,
+    actor: { class: 'Interceptor', count: 5000, side: 'attacker' },
+    previousTarget: { class: 'Scout', aliveAtSwitch: 0, destroyedAtReportLine: 820 },
+    nextTarget: { class: 'Bomber', countBeforeAction: 189, actionReportLine: 822 },
+  },
+  crossRoundCounterexample: {
+    archiveFile: 'D:/Desktop/Nemexia/simulation-battles/battles-2026-09-15.jsonl',
+    archiveLine: 304,
+    runId: '3203f5167424',
+    caseId: 'science150-7-r1-control',
+    reportFile: 'D:/Desktop/Nemexia/simulation-battles/reports/3203f5167424/0001_science150-7-r1-control/page.html',
+    round4DestroyerAction: { line: 1147, actorCount: 33, target: 'BomberBot', targetCountBefore: 29, destroyed: 11, targetCountAfter: 18 },
+    round5Start: { line: 1154, previousTargetCount: 18 },
+    round5AttacksBeforeRetarget: [
+      { line: 1210, targetCountBefore: 18, destroyed: 13, targetCountAfter: 5 },
+      { line: 1212, targetCountBefore: 5, destroyed: 5, targetCountAfter: 0 },
+    ],
+    round5DestroyerAction: { line: 1220, actorCount: 16, target: 'Bot Shield' },
+  },
+  selectorObservations: {
+    liveRosterFirstTarget: { selected: 2437, total: 6052 },
+    minimumCountTarget: { selected: 3214, total: 6052, uniformBaseline: 2476.988095238084 },
+    plannedFirstTarget: { selected: 6, total: 52 },
+  },
+} as const;

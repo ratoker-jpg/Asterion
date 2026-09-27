@@ -10,6 +10,10 @@ import {
 } from './battle-repository.ts';
 import { COMMANDER_IDS, type CommanderId } from './commanders.ts';
 import { resolveCombat, calculateEffectiveDamage, selectCombatTarget } from './resolver.ts';
+import { NEMEXIA_COMBAT_ROUND_PARITY_FIXTURE } from './source-fixtures/combat-round-a5449dc74a9b.ts';
+import { NEMEXIA_COUNTERFIRE_FIXTURES } from './source-fixtures/nemexia-counterfire.ts';
+import { NEMEXIA_REPAIR_TIMING_FIXTURES } from './source-fixtures/nemexia-repair-timing.ts';
+import { NEMEXIA_TARGET_TRANSITION_AUDIT } from './source-fixtures/nemexia-target-transitions.ts';
 import {
   createDefaultSimulatorState,
   deleteSimulatorPreset,
@@ -156,6 +160,73 @@ test('partial HP on last unit carries between rounds', () => {
   assert.equal(round2Attack?.lifeBefore, round1Attack?.lifeAfter);
 });
 
+test('a partially damaged living stack fires with its round-start count and carries losses forward', () => {
+  const evidence = NEMEXIA_COMBAT_ROUND_PARITY_FIXTURE;
+  const defenderStartCount = evidence.observed.firstDisplayedVolley.targetCountBefore;
+  const value = input({
+    attacker: {
+      participant: attackerParticipant,
+      ships: [{ entityId: 'destroyer', count: 100 }],
+      commanders: [],
+    },
+    defender: {
+      participant: defenderParticipant,
+      ships: [{ entityId: 'battleship', count: defenderStartCount }],
+      commanders: [],
+      defenses: [],
+    },
+    maxRounds: 5,
+    seed: 'nemexia-round-start-parity',
+  });
+  const report = resolve(value, 'nemexia-round-start-parity');
+  assert.deepEqual(report, resolve(value, 'nemexia-round-start-parity'));
+
+  const round1 = report.rounds[0];
+  const round1AttackerAttack = round1.events.find((event) => event.actorSide === 'attacker' && event.actionType === 'attack');
+  const round1DefenderAttack = round1.events.find((event) => event.actorSide === 'defender' && event.actionType === 'attack');
+  const defenderRound1Snapshot = round1.defenderSnapshot?.stacks.find((stack) => stack.entityId === 'battleship');
+
+  assert.ok(round1AttackerAttack);
+  assert.ok(round1DefenderAttack);
+  assert.ok(defenderRound1Snapshot);
+  assert.equal(defenderRound1Snapshot.countBefore, defenderStartCount);
+  assert.ok(defenderRound1Snapshot.countAfter > 0);
+  assert.ok(defenderRound1Snapshot.countAfter < defenderRound1Snapshot.countBefore);
+  assert.equal(round1DefenderAttack.actorCount, defenderStartCount);
+  assert.equal(
+    round1DefenderAttack.baseAttack,
+    Math.floor(defenderStartCount * (round1DefenderAttack.attackPerUnit ?? 0)),
+  );
+  assert.ok(round1AttackerAttack.sequence < round1DefenderAttack.sequence);
+
+  const round2 = report.rounds[1];
+  assert.ok(round2);
+  const defenderRound2Snapshot = round2.defenderSnapshot?.stacks.find((stack) => stack.entityId === 'battleship');
+  const round2DefenderAttack = round2.events.find((event) => event.actorSide === 'defender' && event.actionType === 'attack');
+  assert.ok(defenderRound2Snapshot);
+  assert.ok(round2DefenderAttack);
+  assert.equal(defenderRound2Snapshot.countBefore, defenderRound1Snapshot.countAfter);
+  assert.equal(round2DefenderAttack.actorCount, defenderRound2Snapshot.countBefore);
+
+  assert.equal(evidence.observed.firstDisplayedVolley.destroyedCount, 142);
+  assert.deepEqual(evidence.observed.defenderActions.map((action) => action.targetClass), ['Cruiser', 'Bomber']);
+  assert.equal(evidence.observed.nextRoundAction.actorCount, 135);
+  assert.equal(evidence.observed.partialLossResponses.length, 6);
+  assert.ok(evidence.observed.partialLossResponses.every((observation) =>
+    observation.countOnResponse === observation.countBefore
+      && observation.countAfterVolley === observation.countBefore - observation.destroyedByVolley));
+});
+
+test('archive fixtures retain full-destruction responses across ships, commanders, and defense', () => {
+  const evidence = NEMEXIA_COUNTERFIRE_FIXTURES;
+  assert.equal(evidence.completeShipDestruction[0].destroyedCount, evidence.completeShipDestruction[0].responseCount);
+  assert.equal(evidence.completeShipDestruction[1].destroyedCount, evidence.completeShipDestruction[1].responseCount);
+  assert.equal(evidence.completeCommanderDestruction.destroyedCount, evidence.completeCommanderDestruction.responseCount);
+  assert.ok(evidence.completeDefenseDestruction.every((entry) => entry.destroyedCount === entry.responseCount));
+  assert.equal(evidence.partialShipLosses.observations.length, 6);
+  assert.equal(evidence.partialShipLosses.multipleBattleshipActions.length, 2);
+});
+
 test('commander life-bonus removal cannot create a phantom destroyed stack', () => {
   const report = resolve(input({
     attacker: {
@@ -246,15 +317,64 @@ test('target selection remains deterministic at lexical fallback boundary', () =
   assert.deepEqual(first, second);
 });
 
-test('sequential resolution stops the defender after attacker destroys it', () => {
+test('destroyed defender ships counterfire at round-start strength and stay destroyed in snapshots', () => {
   const report = resolve(input({
     attacker: { participant: attackerParticipant, ships: [{ entityId: 'death-star', count: 1 }], commanders: [] },
-    defender: { participant: defenderParticipant, ships: [{ entityId: 'scout', count: 1 }], commanders: [], defenses: [] },
+    defender: {
+      participant: defenderParticipant,
+      ships: [{ entityId: 'scout', count: 1 }, { entityId: 'cruiser', count: 1 }],
+      commanders: [],
+      defenses: [],
+    },
     maxRounds: 5,
+    attackerTargetPriority: 'catalog',
+    seed: 'destroyed-defender-counterfire',
   }));
-  assert.equal(report.rounds[0].events.length, 1);
-  assert.equal(report.rounds[0].events[0].actorSide, 'attacker');
+  const firstRound = report.rounds[0];
+  const scoutAttack = firstRound.events.find((event) => event.actorSide === 'defender'
+    && event.actorEntityId === 'scout'
+    && event.actionType === 'attack');
+  const scoutSnapshot = firstRound.defenderSnapshot?.stacks.find((stack) => stack.entityId === 'scout');
+  assert.ok(scoutAttack);
+  assert.equal(scoutAttack.actorCount, 1);
+  assert.equal(scoutAttack.targetEntityId, 'death-star');
+  assert.equal(scoutSnapshot?.countBefore, 1);
+  assert.equal(scoutSnapshot?.countAfter, 0);
+  assert.ok(firstRound.events.find((event) => event.actorSide === 'attacker')!.sequence < scoutAttack.sequence);
+
+  const round2 = report.rounds[1];
+  assert.ok(round2);
+  assert.equal(round2.defenderSnapshot?.stacks.find((stack) => stack.entityId === 'scout')?.countBefore, 0);
+  assert.equal(round2.events.some((event) => event.actorSide === 'defender'
+    && event.actorEntityId === 'scout'
+    && event.actionType === 'attack'), false);
   assert.equal(report.winner, 'attacker');
+});
+
+test('destroyed defender commanders and defense structures also retain their documented response', () => {
+  const commanderReport = resolve(input({
+    attacker: { participant: attackerParticipant, ships: [{ entityId: 'death-star', count: 1 }], commanders: [] },
+    defender: { participant: defenderParticipant, ships: [], commanders: [{ entityId: 'hunter', count: 1 }], defenses: [] },
+    maxRounds: 5,
+    seed: 'destroyed-defender-commander-counterfire',
+  }));
+  const commanderAttack = commanderReport.rounds[0].events.find((event) => event.actorSide === 'defender'
+    && event.actorEntityId === 'hunter'
+    && event.actionType === 'attack');
+  assert.equal(commanderAttack?.actorCount, 1);
+  assert.equal(commanderReport.rounds[0].defenderSnapshot?.stacks.find((stack) => stack.entityId === 'hunter')?.countAfter, 0);
+
+  const defenseReport = resolve(input({
+    attacker: { participant: attackerParticipant, ships: [{ entityId: 'death-star', count: 1 }], commanders: [] },
+    defender: { participant: defenderParticipant, ships: [], commanders: [], defenses: [{ entityId: 'ballistic-turret', count: 1 }] },
+    maxRounds: 5,
+    seed: 'destroyed-defender-defense-counterfire',
+  }));
+  const defenseAttack = defenseReport.rounds[0].events.find((event) => event.actorSide === 'defender'
+    && event.actorEntityId === 'ballistic-turret'
+    && event.actionType === 'attack');
+  assert.equal(defenseAttack?.actorCount, 1);
+  assert.equal(defenseReport.rounds[0].defenderSnapshot?.defenses?.find((stack) => stack.entityId === 'ballistic-turret')?.countAfter, 0);
 });
 
 test('sequential resolution retargets after a target is destroyed in same round', () => {
@@ -280,8 +400,156 @@ test('sequential resolution retargets after a target is destroyed in same round'
   assert.equal(report.rounds[0].defenderSnapshot?.stacks.find((stack) => stack.entityId === 'defender')?.countAfter, 0);
 });
 
+test('full Nemexia transition audit supports changing target only after destruction', () => {
+  const audit = NEMEXIA_TARGET_TRANSITION_AUDIT;
+  assert.equal(audit.totalTransitions, audit.analysisVerifiedTransitions + audit.validOlderTransitions);
+  assert.equal(audit.totalTransitions, 6052);
+  assert.equal(audit.previousTargetAliveAtSwitch, 0);
+  assert.equal(audit.example.previousTarget.aliveAtSwitch, 0);
+  assert.equal(audit.example.previousTarget.destroyedAtReportLine, audit.example.nextTarget.actionReportLine - 2);
+  const boundary = audit.crossRoundCounterexample;
+  assert.equal(boundary.round4DestroyerAction.targetCountBefore - boundary.round4DestroyerAction.destroyed, boundary.round4DestroyerAction.targetCountAfter);
+  assert.equal(boundary.round5Start.previousTargetCount, boundary.round5AttacksBeforeRetarget[0].targetCountBefore);
+  assert.equal(boundary.round5AttacksBeforeRetarget[0].targetCountAfter, boundary.round5AttacksBeforeRetarget[1].targetCountBefore);
+  assert.equal(boundary.round5AttacksBeforeRetarget[1].targetCountAfter, 0);
+  assert.ok(boundary.round5AttacksBeforeRetarget[1].line < boundary.round5DestroyerAction.line);
+  assert.equal(audit.selectorObservations.plannedFirstTarget.selected, 6);
+  assert.ok(audit.selectorObservations.minimumCountTarget.selected > audit.selectorObservations.minimumCountTarget.uniformBaseline);
+});
+
+test('a stack stays on its selected target across rounds until that target is destroyed', () => {
+  const report = resolve(input({
+    attacker: { participant: attackerParticipant, ships: [{ entityId: 'bomber', count: 1 }], commanders: [] },
+    defender: {
+      participant: defenderParticipant,
+      ships: [{ entityId: 'scout', count: 8 }, { entityId: 'cruiser', count: 1 }],
+      commanders: [],
+      defenses: [],
+    },
+    maxRounds: 5,
+    attackerTargetPriority: 'threat',
+    seed: 'target-lock-until-destroyed',
+  }));
+
+  const scoutAfterRound1 = report.rounds[0].defenderSnapshot?.stacks.find((stack) => stack.entityId === 'scout');
+  assert.ok(scoutAfterRound1);
+  assert.ok(scoutAfterRound1.countAfter > 0);
+  const round1BomberAttack = report.rounds[0]?.events.find((event) => event.actorSide === 'attacker'
+    && event.actorEntityId === 'bomber'
+    && event.actionType === 'attack');
+  assert.equal(round1BomberAttack?.targetEntityId, 'scout');
+  const freshTarget = selectCombatTarget([
+    { entityId: 'scout', currentCount: scoutAfterRound1.countAfter },
+    { entityId: 'cruiser', currentCount: 1 },
+  ], 'threat');
+  assert.equal(freshTarget?.entityId, 'cruiser');
+
+  const round2BomberAttack = report.rounds[1]?.events.find((event) => event.actorSide === 'attacker'
+    && event.actorEntityId === 'bomber'
+    && event.actionType === 'attack');
+  assert.equal(round2BomberAttack?.targetEntityId, 'scout');
+});
+
+test('Reanimator repairs after both action phases and the saved archive places repairs at round end', () => {
+  const fixture = NEMEXIA_REPAIR_TIMING_FIXTURES;
+  for (const archived of [fixture.attackerReanimator, fixture.repairWithBothSidesSelectingReanimator]) {
+    assert.ok(archived.observations.repairActions.every((repair) => repair.reportLine > archived.observations.finalDefenderActionReportLine));
+    assert.ok(archived.observations.repairActions.every((repair) => repair.reportLine < archived.observations.nextRoundHeadingReportLine));
+  }
+  assert.ok(fixture.repairWithBothSidesSelectingReanimator.observations.nextRoundRestoredStackActionReportLine
+    > fixture.repairWithBothSidesSelectingReanimator.observations.nextRoundHeadingReportLine);
+  assert.equal(fixture.repairWithoutReanimator.observations.plannedReanimatorCount, 0);
+
+  const priority = createDefaultCombatPriority();
+  let report: ReturnType<typeof resolve> | undefined;
+  for (let seedIndex = 0; seedIndex < 128 && !report; seedIndex += 1) {
+    const candidate = resolve(input({
+      attacker: {
+        participant: attackerParticipant,
+        ships: [{ entityId: 'scout', count: 250 }],
+        commander: { entityId: 'reanimator', count: 1, level: 40 },
+        activeCommanderId: 'reanimator',
+      },
+      defender: { participant: defenderParticipant, ships: [{ entityId: 'scout', count: 250 }], commanders: [], defenses: [] },
+      attackerPriority: ['reanimator', ...priority.attack.filter((id) => id !== 'reanimator')],
+      maxRounds: 5,
+      seed: `reanimator-round-end-${seedIndex}`,
+    }), `reanimator-round-end-${seedIndex}`);
+    const found = candidate.rounds.some((round) => {
+      const repairIndex = round.events.findIndex((event) => event.commanderAbilityId === 'reanimator');
+      if (repairIndex < 0) return false;
+      const lastDefenderActionIndex = round.events.reduce((last, event, index) => (
+        event.actorSide === 'defender'
+          && (event.actionType === 'attack' || (event.actionType === 'ability' && event.commanderAbilityId !== 'reanimator'))
+          ? index
+          : last
+      ), -1);
+      return lastDefenderActionIndex >= 0 && repairIndex > lastDefenderActionIndex;
+    });
+    if (found) report = candidate;
+  }
+
+  assert.ok(report, 'expected a deterministic seed in the bounded sweep to produce a Reanimator repair after defender actions');
+  for (const round of report.rounds) {
+    const repairIndex = round.events.findIndex((event) => event.commanderAbilityId === 'reanimator');
+    if (repairIndex < 0) continue;
+    const lastActionIndex = round.events.reduce((last, event, index) => (
+      event.actionType === 'attack' || (event.actionType === 'ability' && event.commanderAbilityId !== 'reanimator')
+        ? index
+        : last
+      ), -1);
+    assert.ok(repairIndex > lastActionIndex, 'repair event should follow both sides’ round actions');
+  }
+});
+
+test('when both Asterion Reanimators proc, both repairs follow both sides’ combat actions', () => {
+  const priority = createDefaultCombatPriority();
+  const reanimatorPriority = (ids: CommanderId[]): CommanderId[] => ['reanimator', ...ids.filter((id) => id !== 'reanimator')];
+  let simultaneousRepairs: ReturnType<typeof resolve>['rounds'][number] | undefined;
+  for (let seedIndex = 0; seedIndex < 512 && !simultaneousRepairs; seedIndex += 1) {
+    const candidate = resolve(input({
+      attacker: {
+        participant: attackerParticipant,
+        ships: [{ entityId: 'scout', count: 2_500 }],
+        commander: { entityId: 'reanimator', count: 1, level: 40 },
+        activeCommanderId: 'reanimator',
+      },
+      defender: {
+        participant: defenderParticipant,
+        ships: [{ entityId: 'scout', count: 2_500 }],
+        commander: { entityId: 'reanimator', count: 1, level: 40 },
+        activeCommanderId: 'reanimator',
+        defenses: [],
+      },
+      attackerPriority: reanimatorPriority(priority.attack),
+      defenderPriority: reanimatorPriority(priority.defense),
+      maxRounds: 8,
+      seed: `both-reanimators-round-end-${seedIndex}`,
+    }), `both-reanimators-round-end-${seedIndex}`);
+    simultaneousRepairs = candidate.rounds.find((round) => {
+      const repairEvents = round.events.filter((event) => event.commanderAbilityId === 'reanimator');
+      return repairEvents.some((event) => event.actorSide === 'attacker')
+        && repairEvents.some((event) => event.actorSide === 'defender');
+    });
+  }
+
+  assert.ok(simultaneousRepairs, 'expected a bounded seeded sweep to find a round where both repair rolls succeed');
+  const lastCombatActionIndex = simultaneousRepairs.events.reduce((last, event, index) => (
+    event.actionType === 'attack' || (event.actionType === 'ability' && event.commanderAbilityId !== 'reanimator')
+      ? index
+      : last
+  ), -1);
+  const repairIndexes = simultaneousRepairs.events.flatMap((event, index) => event.commanderAbilityId === 'reanimator' ? [index] : []);
+  assert.equal(repairIndexes.length, 2);
+  assert.ok(repairIndexes.every((index) => index > lastCombatActionIndex));
+  assert.ok(repairIndexes[0] < repairIndexes[1], 'Asterion retains its attacker-then-defender repair RNG order');
+});
+
 test('attacker victory is detected', () => {
-  assert.equal(resolve(input()).winner, 'attacker');
+  assert.equal(resolve(input({
+    attacker: { participant: attackerParticipant, ships: [{ entityId: 'cruiser', count: 1 }], commanders: [] },
+    defender: { participant: defenderParticipant, ships: [{ entityId: 'spy-probe', count: 2 }], commanders: [], defenses: [] },
+  })).winner, 'attacker');
 });
 
 test('defender victory is detected', () => {
@@ -312,7 +580,10 @@ test('living sides at max round limit produce draw and never exceed limit', () =
 });
 
 test('population before and after uses canonical catalog population and survivors', () => {
-  const report = resolve(input());
+  const report = resolve(input({
+    attacker: { participant: attackerParticipant, ships: [{ entityId: 'scout', count: 1 }], commanders: [] },
+    defender: { participant: defenderParticipant, ships: [{ entityId: 'spy-probe', count: 2 }], commanders: [], defenses: [] },
+  }));
   assert.equal(report.attackerForce.populationBefore, 2);
   assert.equal(report.attackerForce.populationAfter, 2);
   assert.equal(report.defenderForce.populationBefore, 2);
@@ -371,10 +642,10 @@ test('generated report uses existing BattleReport contract without fake optional
   const report = resolve(input());
   assert.equal(report.missionType, 'simulation');
   assert.equal(report.schemaVersion, 3);
-  assert.equal(report.engineVersion, 'asterion-combat-engine-v3');
+  assert.equal(report.engineVersion, 'asterion-combat-engine-v4');
   assert.ok(report.initialSnapshot);
   assert.equal(report.metadata?.source, 'combat-resolver');
-  assert.match(report.metadata?.note ?? '', /asterion-combat-engine-v3/);
+  assert.match(report.metadata?.note ?? '', /asterion-combat-engine-v4/);
   assert.equal(report.experience, undefined);
   assert.equal(report.debris, undefined);
   assert.equal(report.resources, undefined);

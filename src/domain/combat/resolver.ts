@@ -733,13 +733,14 @@ function appendSpecialBonusEvents(
 function createAttackEvent(
   sequence: number,
   actor: RuntimeStack,
+  actorCount: number,
   target: RuntimeStack,
   rng: CombatRng,
   criticalBonus: number,
 ): CombatEvent {
   const countBeforeEvent = target.count;
   const hpBefore = target.hpPool;
-  const baseAttack = Math.max(0, Math.floor(actor.count * actor.attackPerUnit));
+  const baseAttack = Math.max(0, Math.floor(actorCount * actor.attackPerUnit));
   const matchup = matchupFor(actor, target);
   const reportedBonus = matchup.multiplier === 1
     ? 0
@@ -762,12 +763,12 @@ function createAttackEvent(
     targetSide: target.side,
     targetEntityId: target.entityId,
     actionType: 'attack',
-    actorCount: actor.count,
+    actorCount,
     targetCount: countBeforeEvent,
     attackValue: baseAttack,
     baseAttack,
     attackPerUnit: actor.attackPerUnit,
-    totalAttack: actor.count * actor.attackPerUnit,
+    totalAttack: actorCount * actor.attackPerUnit,
     lifePerUnit: target.lifePerUnit,
     hpPool: hpBefore,
     rawDamage,
@@ -791,7 +792,7 @@ function createAttackEvent(
     provenance: DAMAGE_PROVENANCE,
     note: actualDamage === 0
       ? 'Залп не нанёс урон: цель уже уничтожена.'
-      : `${matchup.multiplier === 1 ? 'Нейтральный модификатор пары' : `Модификатор пары ×${matchup.multiplier.toFixed(2)}`}; урон после брони ${target.armorPercent}%.${criticalMultiplier > 1 ? ' Критический залп ×2.' : ''} Следующая живая цель выбирается заново.`,
+      : `${matchup.multiplier === 1 ? 'Нейтральный модификатор пары' : `Модификатор пары ×${matchup.multiplier.toFixed(2)}`}; урон после брони ${target.armorPercent}%.${criticalMultiplier > 1 ? ' Критический залп ×2.' : ''} Стек сохраняет цель, пока она жива; новая цель выбирается после её уничтожения.`,
   };
 }
 
@@ -830,6 +831,26 @@ function createNoAttackEvent(sequence: number, actor: RuntimeStack): CombatEvent
     provenance: { status: 'not-calibrated', source: 'Asterion combat catalog', confidence: 'medium' },
     note: 'Действие не выполнено: у сущности нет подтверждённой атаки в этом профиле.',
   };
+}
+
+function usesDocumentedDefenderRoundStartCount(actor: RuntimeStack, roundStartCount: number) {
+  if (actor.side !== 'defender' || roundStartCount <= 0) return false;
+  if (actor.kind === 'ship' && actor.ordinaryClass !== undefined) return true;
+
+  // The archive confirms destroyed-before-response turns for commander and
+  // defense actors. It does not establish round-start strength after partial
+  // losses for either category, so those keep Asterion's live-count behavior.
+  return actor.count === 0 && (actor.kind === 'commander' || actor.kind === 'defense');
+}
+
+function hasDocumentedDefenderCounterfire(
+  defender: readonly RuntimeStack[],
+  roundStartCounts: ReadonlyMap<CombatEntityId, number>,
+) {
+  return defender.some((actor) => usesDocumentedDefenderRoundStartCount(
+    actor,
+    roundStartCounts.get(actor.entityId) ?? 0,
+  ));
 }
 
 function commanderAtSide(stacks: readonly RuntimeStack[], id: CommanderId | null, expectedId: CommanderId) {
@@ -873,6 +894,9 @@ function resolveSideActions(
   activeCommanderId: CommanderId | null,
   opposingCommanderId: CommanderId | null,
   rng: CombatRng,
+  roundStartCounts: ReadonlyMap<CombatEntityId, number>,
+  lockedTargets: Map<CombatEntityId, CombatEntityId>,
+  allowDocumentedDefenderCounterfire: boolean,
   paralyzedActorsNext: Set<CombatEntityId>,
   paralyzedTargetsNext: Set<CombatEntityId>,
 ) {
@@ -884,7 +908,10 @@ function resolveSideActions(
   const phantomEffect = opposingPhantom ? getCommanderCombatEffect('phantom') : null;
 
   for (const actor of sortRuntime(actorStacks)) {
-    if (actor.count <= 0) {
+    const roundStartCount = roundStartCounts.get(actor.entityId) ?? actor.count;
+    const usesRoundStartCount = allowDocumentedDefenderCounterfire
+      && usesDocumentedDefenderRoundStartCount(actor, roundStartCount);
+    if (actor.count <= 0 && !usesRoundStartCount) {
       events.push(createSkippedActionEvent(sequence.value++, actor));
       continue;
     }
@@ -906,22 +933,31 @@ function resolveSideActions(
       events.push(createNoAttackEvent(sequence.value++, actor));
       continue;
     }
-    const target = selectCombatTarget(targetStacks.map((stack) => ({
-      entityId: stack.entityId,
-      currentCount: stack.count,
-      threat: stack.count * stack.attackPerUnit,
-      population: stack.count * stack.populationPerUnit,
-    })), targetPriority);
-    if (!target) {
-      events.push(createNoTargetEvent(sequence.value++, actor));
-      continue;
+    let targetRuntime = targetStacks.find((stack) => stack.entityId === lockedTargets.get(actor.entityId));
+    if (!targetRuntime || targetRuntime.count <= 0) {
+      lockedTargets.delete(actor.entityId);
+      const target = selectCombatTarget(targetStacks.map((stack) => ({
+        entityId: stack.entityId,
+        currentCount: stack.count,
+        threat: stack.count * stack.attackPerUnit,
+        population: stack.count * stack.populationPerUnit,
+      })), targetPriority);
+      targetRuntime = target
+        ? targetStacks.find((stack) => stack.entityId === target.entityId)
+        : undefined;
+      if (targetRuntime && targetRuntime.count > 0) lockedTargets.set(actor.entityId, targetRuntime.entityId);
     }
-    const targetRuntime = targetStacks.find((stack) => stack.entityId === target.entityId);
     if (!targetRuntime) {
       events.push(createNoTargetEvent(sequence.value++, actor));
       continue;
     }
-    events.push(createAttackEvent(sequence.value++, actor, targetRuntime, rng, criticalBonus));
+    // Nemexia's saved reports show defender ships, including fully destroyed
+    // stacks, responding at their round-start count. Destroyed-before-turn
+    // commander/defense responses are separately observed; their partial-loss
+    // count behavior remains uncalibrated.
+    const actorCount = usesRoundStartCount ? roundStartCount : actor.count;
+    events.push(createAttackEvent(sequence.value++, actor, actorCount, targetRuntime, rng, criticalBonus));
+    if (targetRuntime.count <= 0) lockedTargets.delete(actor.entityId);
     const scorpion = commanderAtSide(actorStacks, activeCommanderId, 'scorpion');
     if (scorpion) {
       const effect = getCommanderCombatEffect('scorpion');
@@ -1006,6 +1042,8 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
   let eventSequence = 1;
   const paralyzedAttackerNext = new Set<CombatEntityId>();
   const paralyzedDefenderNext = new Set<CombatEntityId>();
+  const attackerTargetLocks = new Map<CombatEntityId, CombatEntityId>();
+  const defenderTargetLocks = new Map<CombatEntityId, CombatEntityId>();
   let lastModifiers = initialModifiers;
 
   for (let roundIndex = 1; roundIndex <= normalized.maxRounds && !winner; roundIndex += 1) {
@@ -1029,12 +1067,17 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
       activeAttackerCommander,
       activeDefenderCommander,
       rng,
+      attackerStartCounts,
+      attackerTargetLocks,
+      false,
       paralyzedAttackerNext,
       paralyzedDefenderNext,
     );
-    resolveReanimator(attacker, activeAttackerCommander, events, sequence, rng);
     winner = determineWinner(attacker, defender);
-    if (!winner) {
+    const defenderCounterfireIsPossible = sideAliveCount(attacker) > 0
+      && hasDocumentedDefenderCounterfire(defender, defenderStartCounts);
+    const defenderPhaseResolved = !winner || (winner === 'attacker' && defenderCounterfireIsPossible);
+    if (defenderPhaseResolved) {
       resolveSideActions(
         defender,
         attacker,
@@ -1044,11 +1087,19 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
         activeDefenderCommander,
         activeAttackerCommander,
         rng,
+        defenderStartCounts,
+        defenderTargetLocks,
+        true,
         paralyzedDefenderNext,
         paralyzedAttackerNext,
       );
-      resolveReanimator(defender, activeDefenderCommander, events, sequence, rng);
     }
+    // Saved Nemexia reports place repair entries after both sides' action
+    // sequences. Keep the existing Asterion success/target rules, but resolve
+    // the effect at round end so a repaired stack cannot act before the
+    // opponent's response in this round.
+    resolveReanimator(attacker, activeAttackerCommander, events, sequence, rng);
+    if (defenderPhaseResolved) resolveReanimator(defender, activeDefenderCommander, events, sequence, rng);
     winner = determineWinner(attacker, defender);
     eventSequence = sequence.value;
 

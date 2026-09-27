@@ -17,7 +17,7 @@ export type BattleWinner = BattleSide | 'draw';
 export type BattleMissionType = 'attack' | 'raid' | 'defense' | 'arena' | 'simulation';
 export type CombatActionType = 'attack' | 'ability' | 'shield' | 'status' | 'destroyed' | 'special-bonus';
 export const BATTLE_REPORT_SCHEMA_VERSION = 3;
-export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v3';
+export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v4';
 
 export type RngProvenance = {
   mode: 'seeded' | 'recorded-sequence' | 'non-replayable';
