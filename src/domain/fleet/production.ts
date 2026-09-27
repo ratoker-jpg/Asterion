@@ -428,23 +428,23 @@ export function enqueueFleetProduction(
 
   const safeQuantity = safePositiveInteger(quantity);
   if (safeQuantity <= 0) return noEnqueueBeforeSettlement(context, 'Количество должно быть положительным.');
+  const settled = reconcileFleetProductionState(context.state, context.fleet, context.defense, context.factionId, context.now);
   const requirements = evaluateProductionRequirements(entity, {
     scienceLevels: context.scienceLevels,
     shipyardLevel: context.shipyardLevel,
     planetId: context.planetId,
     hangarLevel: context.hangarLevel,
     advancedFactoryLevel: context.advancedFactoryLevel,
-    fleet: context.fleet,
-    defense: context.defense,
-    queues: context.state,
+    fleet: settled.fleet,
+    defense: settled.defense,
+    queues: settled.state,
     wallet: context.wallet,
     capacities: context.capacities,
     factionId: context.factionId,
     mode: context.mode,
   });
-  if (!requirements.met) return noEnqueueBeforeSettlement(context, requirements.reason ?? 'Требования для производства не выполнены.');
+  if (!requirements.met) return noEnqueue(context, settled, requirements.reason ?? 'Требования для производства не выполнены.');
 
-  const settled = reconcileFleetProductionState(context.state, context.fleet, context.defense, context.factionId, context.now);
   const workingState = settled.state;
   const workingFleet = settled.fleet;
   const workingDefense = settled.defense;

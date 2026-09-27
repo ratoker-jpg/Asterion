@@ -3,6 +3,9 @@ import type { ScienceLevels } from '../science/runtime.ts';
 import type { ScienceId } from '../science/types.ts';
 import type { CatalogEntity } from '../combat/catalog.ts';
 import type { CombatFactionId } from '../combat/factions.ts';
+import { getFactionShipCatalog } from '../combat/faction-catalog.ts';
+import { FACTION_SHIP_MECHANICS } from '../combat/faction-ship-data.ts';
+import type { ShipId } from '../combat/ids.ts';
 import type { RuntimeMode } from '../runtime/mode.ts';
 
 export type ProductionRequirementContext = {
@@ -26,12 +29,15 @@ export type ProductionRequirementContext = {
 };
 
 export type ProductionRequirementState = {
-  kind: 'shipyard' | 'science' | 'unresolved';
+  kind: 'shipyard' | 'science' | 'ship-quantity' | 'unresolved';
   label: string;
   source: string;
   requiredLevel: number | null;
   currentLevel: number | null;
   scienceId?: ScienceId;
+  shipId?: ShipId;
+  requiredQuantity?: number;
+  currentQuantity?: number;
   met: boolean;
 };
 
@@ -65,15 +71,83 @@ function parseLevelRequirement(source: string): { label: string; level: number }
   return Number.isFinite(level) && level >= 0 ? { label: match[1].trim(), level } : null;
 }
 
+function parseShipQuantityRequirement(source: string): { label: string; quantity: number } | null {
+  const match = source.match(/^(.+) · количество (\d+)$/u);
+  if (!match) return null;
+  const label = match[1];
+  const quantity = Number(match[2]);
+  if (!label || label !== label.trim() || !Number.isSafeInteger(quantity)) return null;
+  return { label, quantity };
+}
+
+function normalizeShipName(value: string): string {
+  return value.trim().toLocaleLowerCase('ru-RU').replaceAll('ё', 'е').replace(/\s+/g, ' ');
+}
+
+function unresolvedRequirement(source: string, label: string): ProductionRequirementState {
+  return {
+    kind: 'unresolved',
+    label,
+    source,
+    requiredLevel: null,
+    currentLevel: null,
+    met: false,
+  };
+}
+
+function shipQuantityRequirementState(
+  source: string,
+  parsed: { label: string; quantity: number },
+  context: ProductionRequirementContext,
+): ProductionRequirementState {
+  const factionId = context.factionId;
+  const ships = context.fleet?.ships;
+  if (!factionId || !ships || typeof ships !== 'object' || Array.isArray(ships)) {
+    return unresolvedRequirement(source, parsed.label);
+  }
+
+  const normalizedLabel = normalizeShipName(parsed.label);
+  const matches = getFactionShipCatalog(factionId).filter((ship) => {
+    const sourceName = FACTION_SHIP_MECHANICS[factionId][ship.id as ShipId]?.sourceName;
+    return normalizeShipName(ship.name) === normalizedLabel
+      || (sourceName !== undefined && normalizeShipName(sourceName) === normalizedLabel);
+  });
+  const uniqueMatches = [...new Map(matches.map((ship) => [ship.id, ship])).values()];
+  if (uniqueMatches.length !== 1) return unresolvedRequirement(source, parsed.label);
+
+  const ship = uniqueMatches[0];
+  const owned = ships[ship.id] ?? 0;
+  const currentQuantity = typeof owned === 'number' && Number.isFinite(owned)
+    ? Math.max(0, Math.floor(owned))
+    : 0;
+  return {
+    kind: 'ship-quantity',
+    label: parsed.label,
+    source,
+    requiredLevel: null,
+    currentLevel: null,
+    shipId: ship.id as ShipId,
+    requiredQuantity: parsed.quantity,
+    currentQuantity,
+    met: currentQuantity >= parsed.quantity,
+  };
+}
+
 function scienceRequirementStates(
   entity: CatalogEntity,
-  scienceLevels: ScienceLevels,
+  context: ProductionRequirementContext,
 ): ProductionRequirementState[] {
+  const scienceLevels = context.scienceLevels;
   const explicit = entity.construction.scienceRequirements ?? [];
   const explicitById = new Map(explicit.map((requirement) => [requirement.scienceId, requirement.level]));
   const states: ProductionRequirementState[] = [];
 
   for (const source of entity.construction.requirements) {
+    const quantityRequirement = parseShipQuantityRequirement(source);
+    if (quantityRequirement) {
+      states.push(shipQuantityRequirementState(source, quantityRequirement, context));
+      continue;
+    }
     const parsed = parseLevelRequirement(source);
     if (!parsed || normalizeLabel(parsed.label) === normalizeLabel('Верфь')) continue;
     const mapped = scienceByLabel.get(normalizeLabel(parsed.label));
@@ -123,6 +197,9 @@ function scienceRequirementStates(
 function reasonFor(requirement: ProductionRequirementState): string {
   if (requirement.kind === 'science') return `Требуется ${requirement.label} уровня ${requirement.requiredLevel}.`;
   if (requirement.kind === 'shipyard') return `Требуется верфь уровня ${requirement.requiredLevel}.`;
+  if (requirement.kind === 'ship-quantity') {
+    return `Требуется корабль «${requirement.label}» в количестве ${requirement.requiredQuantity} (сейчас ${requirement.currentQuantity}).`;
+  }
   return `Требование каталога не поддержано: ${requirement.source}.`;
 }
 
@@ -145,7 +222,7 @@ export function evaluateProductionRequirements(
     currentLevel: Math.max(0, Math.floor(context.shipyardLevel)),
     met: context.shipyardLevel >= entity.construction.requiredShipyardLevel,
   };
-  const requirements = [shipyard, ...scienceRequirementStates(entity, context.scienceLevels)];
+  const requirements = [shipyard, ...scienceRequirementStates(entity, context)];
   const missing = requirements.filter((requirement) => !requirement.met);
   return {
     met: missing.length === 0,

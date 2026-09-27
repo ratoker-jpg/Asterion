@@ -104,7 +104,7 @@ test('view model derives round population from saved counts for older reports', 
       defenderBefore: firstRound?.defenderSnapshot?.fleetPopulationBefore,
       defenderAfter: firstRound?.defenderSnapshot?.fleetPopulationAfter,
     },
-    { attackerBefore: 284, attackerAfter: 284, defenderBefore: 140, defenderAfter: 132 },
+    { attackerBefore: 284, attackerAfter: 284, defenderBefore: 170, defenderAfter: 158 },
   );
 });
 

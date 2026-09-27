@@ -66,41 +66,48 @@ type PresentationOverride = {
   art: string;
 };
 
-const SPECIAL_BONUS_SOURCE = 'ASTERION_FULL_BATTLE_IMPLEMENTATION_PROMPT.md §4.3.2';
+function specialBonusSource(factionId: CombatFactionId, shipId: ShipId): string {
+  const sourceFile = FACTION_SHIP_MECHANICS[factionId][shipId].sourceFile;
+  return `Nemexia Auto v2 ${sourceFile} .specialAbilitiesBox .specialAbilityTooltipContent`;
+}
 
 const FACTION_SPECIAL_BONUSES: Readonly<Record<CombatFactionId, Partial<Record<ShipId, CombatSpecialBonus>>>> = {
   aegis: {
     defender: {
       kind: 'life', rate: 0.0005, cap: 0.3, capStatus: 'known', scope: 'asterion', status: 'confirmed',
-      source: SPECIAL_BONUS_SOURCE, note: 'Защитник усиливает жизнь других живых боевых стеков; собственный донор бонус не получает.',
+      source: specialBonusSource('aegis', 'defender'), note: 'Поддерживаемая часть способности: 0.05% жизни за корабль, предел 30%; резолвер не менялся.',
     },
     battleship: {
-      kind: 'armor', rate: 0.00038, capStatus: 'unknown', scope: 'asterion', status: 'inferred',
-      source: SPECIAL_BONUS_SOURCE, note: 'Боевой корабль усиливает броню других живых боевых стеков; cap не выделен в evidence.',
+      kind: 'armor', rate: 0.00038, cap: 0.3, capStatus: 'known', scope: 'asterion', status: 'confirmed',
+      source: specialBonusSource('aegis', 'battleship'),
+      note: 'Источник подтверждает 0.038% брони за корабль и предел 30%; способ применения остаётся текущим Asterion.',
     },
   },
   synod: {
     defender: {
       kind: 'life', rate: 0.00075, cap: 0.3, capStatus: 'known', scope: 'asterion', status: 'confirmed',
-      source: SPECIAL_BONUS_SOURCE, note: 'Бот Щит усиливает жизнь других живых боевых стеков; собственный донор бонус не получает.',
+      source: specialBonusSource('synod', 'defender'), note: 'Поддерживаемая часть способности: 0.075% жизни за корабль, предел 30%; резолвер не менялся.',
     },
     battleship: {
-      kind: 'armor', rate: 0.00025, cap: 0.3, capStatus: 'known', scope: 'asterion', status: 'confirmed',
-      source: SPECIAL_BONUS_SOURCE, note: 'Звездная Армада усиливает броню других живых боевых стеков; собственный донор бонус не получает.',
+      kind: 'armor', rate: 0.00028, cap: 0.3, capStatus: 'known', scope: 'asterion', status: 'confirmed',
+      source: specialBonusSource('synod', 'battleship'),
+      note: 'Источник подтверждает 0.028% брони за корабль и предел 30%; способ применения остаётся текущим Asterion.',
     },
     destroyer: {
       kind: 'attack', rate: 0.0009, cap: 0.8, capStatus: 'known', scope: 'asterion', status: 'confirmed',
-      source: SPECIAL_BONUS_SOURCE, note: 'Голиаф усиливает атаку других живых боевых стеков; собственный донор бонус не получает.',
+      source: specialBonusSource('synod', 'destroyer'), note: 'Поддерживаемая часть способности: 0.09% атаки за корабль, предел 80%; отдельная вероятность хранится в source metadata.',
     },
   },
   veyra: {
-    cruiser: {
-      kind: 'life', rate: 0.0005, cap: 0.3, capStatus: 'known', scope: 'asterion', status: 'inferred',
-      source: SPECIAL_BONUS_SOURCE, note: 'Абсорбатор усиливает жизнь других живых боевых стеков; коэффициент inferred по capped baseline.',
+    defender: {
+      kind: 'life', rate: 0.0003, cap: 0.3, capStatus: 'known', scope: 'asterion', status: 'confirmed',
+      source: specialBonusSource('veyra', 'defender'),
+      note: 'Источник подтверждает 0.03% жизни за корабль и предел 30%; способ применения остаётся текущим Asterion.',
     },
     battleship: {
-      kind: 'armor', rate: 0.00018, capStatus: 'unknown', scope: 'asterion', status: 'inferred',
-      source: SPECIAL_BONUS_SOURCE, note: 'Призрак усиливает броню других живых боевых стеков; cap не выделен в evidence.',
+      kind: 'armor', rate: 0.00018, cap: 0.3, capStatus: 'known', scope: 'asterion', status: 'confirmed',
+      source: specialBonusSource('veyra', 'battleship'),
+      note: 'Источник подтверждает 0.018% брони за корабль и предел 30%; способ применения остаётся текущим Asterion.',
     },
   },
 };

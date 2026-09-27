@@ -1,0 +1,885 @@
+{
+  "repository": "ratoker-jpg/Nemexia_auto_v2",
+  "revision": "87afb017749e2aa227ec29ea7825726387b4d4cf",
+  "sourceDirectory": "saved_pages/312313/Боевые корабли по 1 кораблю командирские корабли, равны для всех рас",
+  "sourcePageType": "commander_ship",
+  "sourceStatus": "PRIMARY_HTML",
+  "sourceSlotMap": {
+    "selector": "saved-from URL comment: information.php?type=commander_ship&id=<n>",
+    "crossCheck": "battle_catalog.py COMMANDER_SLOTS (name-to-slot order only; HTML remains primary)",
+    "records": [
+      {
+        "sourceSlotId": 1,
+        "sourcePageId": 1,
+        "sourceFile": "saved_pages/312313/Боевые корабли по 1 кораблю командирские корабли, равны для всех рас/page_2026-07-22_20-21-35.html",
+        "sourceStatus": "OBSERVED",
+        "sourceName": "Аннигилятор",
+        "sourceLevel": 0,
+        "sourceImage": "./page_2026-07-22_20-21-35_files/commanderShip_1.png",
+        "abilityTooltip": {
+          "selector": ".itemDescription (inner HTML; full source ability description)",
+          "rawHtml": "Ночной кошмар всех строителей, во вселенной известен как Анигилятор, увеличивает показатель Детонации на 0.5% за уровень.",
+          "text": "Ночной кошмар всех строителей, во вселенной известен как Анигилятор, увеличивает показатель Детонации на 0.5% за уровень.",
+          "status": "OBSERVED"
+        },
+        "hull": {
+          "population": 10,
+          "cost": {
+            "metal": 4500,
+            "minerals": 4500,
+            "gas": 0
+          },
+          "attack": 2000,
+          "life": 20000,
+          "weaponType": "Лазер",
+          "armorType": "Средняя Броня",
+          "armorStrength": 6,
+          "cargo": 1000,
+          "speed": 33000,
+          "fuel": 300
+        },
+        "fieldStatus": {
+          "population": "OBSERVED",
+          "attack": "OBSERVED",
+          "life": "OBSERVED",
+          "weaponType": "OBSERVED",
+          "armorType": "OBSERVED",
+          "armorStrength": "OBSERVED",
+          "cargo": "OBSERVED",
+          "speed": "OBSERVED",
+          "fuel": "OBSERVED",
+          "cost": {
+            "metal": "OBSERVED",
+            "minerals": "OBSERVED",
+            "gas": "OBSERVED"
+          }
+        },
+        "sourceTime": "00:06:00",
+        "requirements": [
+          {
+            "sourceText": "Адмирал<br />Уровень: 35",
+            "valueKind": "level",
+            "targetName": "Адмирал",
+            "value": 35,
+            "valueStatus": "OBSERVED"
+          }
+        ],
+        "asterion": {
+          "commanderId": "annihilator",
+          "name": "Аннигилятор",
+          "artAsset": "assets/source/New assets/comander_ship/commander-ship.annihilator.png",
+          "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
+        },
+        "unresolved": []
+      },
+      {
+        "sourceSlotId": 2,
+        "sourcePageId": 2,
+        "sourceFile": "saved_pages/312313/Боевые корабли по 1 кораблю командирские корабли, равны для всех рас/page_2026-07-22_20-20-35.html",
+        "sourceStatus": "OBSERVED",
+        "sourceName": "Корсар",
+        "sourceLevel": 0,
+        "sourceImage": "./page_2026-07-22_20-20-35_files/commanderShip_2.png",
+        "abilityTooltip": {
+          "selector": ".itemDescription (inner HTML; full source ability description)",
+          "rawHtml": "Все вновь вспомнят кто такой Веселый Роджер! \"Корсар\" имеет возможность совершать пиратские вылеты и увеличивает процент украденых ресурсов на  1.25% за уровень.",
+          "text": "Все вновь вспомнят кто такой Веселый Роджер! \"Корсар\" имеет возможность совершать пиратские вылеты и увеличивает процент украденых ресурсов на  1.25% за уровень.",
+          "status": "OBSERVED"
+        },
+        "hull": {
+          "population": 10,
+          "cost": {
+            "metal": 2500,
+            "minerals": 2500,
+            "gas": 0
+          },
+          "attack": 2000,
+          "life": 20000,
+          "weaponType": "Лазер",
+          "armorType": "Средняя Броня",
+          "armorStrength": 6,
+          "cargo": 1000,
+          "speed": 33000,
+          "fuel": 300
+        },
+        "fieldStatus": {
+          "population": "OBSERVED",
+          "attack": "OBSERVED",
+          "life": "OBSERVED",
+          "weaponType": "OBSERVED",
+          "armorType": "OBSERVED",
+          "armorStrength": "OBSERVED",
+          "cargo": "OBSERVED",
+          "speed": "OBSERVED",
+          "fuel": "OBSERVED",
+          "cost": {
+            "metal": "OBSERVED",
+            "minerals": "OBSERVED",
+            "gas": "OBSERVED"
+          }
+        },
+        "sourceTime": "00:03:20",
+        "requirements": [
+          {
+            "sourceText": "Адмирал<br />Уровень: 2",
+            "valueKind": "level",
+            "targetName": "Адмирал",
+            "value": 2,
+            "valueStatus": "OBSERVED"
+          }
+        ],
+        "asterion": {
+          "commanderId": "corsair",
+          "name": "Корсар",
+          "artAsset": "assets/source/New assets/comander_ship/commander-ship.corsair.png",
+          "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
+        },
+        "unresolved": []
+      },
+      {
+        "sourceSlotId": 3,
+        "sourcePageId": 3,
+        "sourceFile": "saved_pages/312313/Боевые корабли по 1 кораблю командирские корабли, равны для всех рас/page_2026-07-22_20-21-42.html",
+        "sourceStatus": "OBSERVED",
+        "sourceName": "Реаниматор",
+        "sourceLevel": 0,
+        "sourceImage": "./page_2026-07-22_20-21-42_files/commanderShip_3.png",
+        "abilityTooltip": {
+          "selector": ".itemDescription (inner HTML; full source ability description)",
+          "rawHtml": "Цель Реаниматора - обнаружение среди разрушенных кораблей те, которые могут быть восстановлены прямо на поле боя. Этот корабль может восстановить до 15�ораблей во время каждого хода. С каждым уровнем шанс увеличивается на 0.4%.",
+          "text": "Цель Реаниматора - обнаружение среди разрушенных кораблей те, которые могут быть восстановлены прямо на поле боя. Этот корабль может восстановить до 15�ораблей во время каждого хода. С каждым уровнем шанс увеличивается на 0.4%.",
+          "status": "DAMAGED_SOURCE_TEXT"
+        },
+        "hull": {
+          "population": 10,
+          "cost": {
+            "metal": 3500,
+            "minerals": 3500,
+            "gas": 0
+          },
+          "attack": 2000,
+          "life": 20000,
+          "weaponType": "Лазер",
+          "armorType": "Средняя Броня",
+          "armorStrength": 6,
+          "cargo": 1000,
+          "speed": 33000,
+          "fuel": 300
+        },
+        "fieldStatus": {
+          "population": "OBSERVED",
+          "attack": "OBSERVED",
+          "life": "OBSERVED",
+          "weaponType": "OBSERVED",
+          "armorType": "OBSERVED",
+          "armorStrength": "OBSERVED",
+          "cargo": "OBSERVED",
+          "speed": "OBSERVED",
+          "fuel": "OBSERVED",
+          "cost": {
+            "metal": "OBSERVED",
+            "minerals": "OBSERVED",
+            "gas": "OBSERVED"
+          }
+        },
+        "sourceTime": "00:04:40",
+        "requirements": [
+          {
+            "sourceText": "Адмирал<br />Уровень: 15",
+            "valueKind": "level",
+            "targetName": "Адмирал",
+            "value": 15,
+            "valueStatus": "OBSERVED"
+          }
+        ],
+        "asterion": {
+          "commanderId": "reanimator",
+          "name": "Реаниматор",
+          "artAsset": "assets/source/New assets/comander_ship/commander-ship.reanimator.png",
+          "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
+        },
+        "unresolved": [
+          "Source tooltip contains literal U+FFFD; preserve it verbatim and do not reconstruct missing text."
+        ]
+      },
+      {
+        "sourceSlotId": 4,
+        "sourcePageId": 4,
+        "sourceFile": "saved_pages/312313/Боевые корабли по 1 кораблю командирские корабли, равны для всех рас/page_2026-07-22_20-21-14.html",
+        "sourceStatus": "OBSERVED",
+        "sourceName": "Вайпер",
+        "sourceLevel": 0,
+        "sourceImage": "./page_2026-07-22_20-21-14_files/commanderShip_4.png",
+        "abilityTooltip": {
+          "selector": ".itemDescription (inner HTML; full source ability description)",
+          "rawHtml": "\"Вайпер\" специализируется на одной простой вещи - поиск и наведение флота на  уязвимые точки на кораблях противника. Каждый уровень увеличивает шанс нанести критический урон на  0.075%.",
+          "text": "\"Вайпер\" специализируется на одной простой вещи - поиск и наведение флота на  уязвимые точки на кораблях противника. Каждый уровень увеличивает шанс нанести критический урон на  0.075%.",
+          "status": "OBSERVED"
+        },
+        "hull": {
+          "population": 10,
+          "cost": {
+            "metal": 3500,
+            "minerals": 3500,
+            "gas": 0
+          },
+          "attack": 2000,
+          "life": 20000,
+          "weaponType": "Лазер",
+          "armorType": "Средняя Броня",
+          "armorStrength": 6,
+          "cargo": 1000,
+          "speed": 33000,
+          "fuel": 300
+        },
+        "fieldStatus": {
+          "population": "OBSERVED",
+          "attack": "OBSERVED",
+          "life": "OBSERVED",
+          "weaponType": "OBSERVED",
+          "armorType": "OBSERVED",
+          "armorStrength": "OBSERVED",
+          "cargo": "OBSERVED",
+          "speed": "OBSERVED",
+          "fuel": "OBSERVED",
+          "cost": {
+            "metal": "OBSERVED",
+            "minerals": "OBSERVED",
+            "gas": "OBSERVED"
+          }
+        },
+        "sourceTime": "00:04:40",
+        "requirements": [
+          {
+            "sourceText": "Адмирал<br />Уровень: 20",
+            "valueKind": "level",
+            "targetName": "Адмирал",
+            "value": 20,
+            "valueStatus": "OBSERVED"
+          }
+        ],
+        "asterion": {
+          "commanderId": "viper",
+          "name": "Вайпер",
+          "artAsset": "assets/source/New assets/comander_ship/commander-ship.viper.png",
+          "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
+        },
+        "unresolved": []
+      },
+      {
+        "sourceSlotId": 5,
+        "sourcePageId": 5,
+        "sourceFile": "saved_pages/312313/Боевые корабли по 1 кораблю командирские корабли, равны для всех рас/page_2026-07-22_20-21-28.html",
+        "sourceStatus": "OBSERVED",
+        "sourceName": "Скорпион",
+        "sourceLevel": 0,
+        "sourceImage": "./page_2026-07-22_20-21-28_files/commanderShip_5.png",
+        "abilityTooltip": {
+          "selector": ".itemDescription (inner HTML; full source ability description)",
+          "rawHtml": "Скорпион обладает возможностью инфицировать системы противника новым видом компьютерного вируса моментально парализовывающего все орудия противника на текущий ход.<br>Шанс на успешное проникновения увеличивается на 0.1% с каждым уровнем.",
+          "text": "Скорпион обладает возможностью инфицировать системы противника новым видом компьютерного вируса моментально парализовывающего все орудия противника на текущий ход.\nШанс на успешное проникновения увеличивается на 0.1% с каждым уровнем.",
+          "status": "OBSERVED"
+        },
+        "hull": {
+          "population": 10,
+          "cost": {
+            "metal": 4000,
+            "minerals": 4000,
+            "gas": 0
+          },
+          "attack": 2000,
+          "life": 20000,
+          "weaponType": "Лазер",
+          "armorType": "Средняя Броня",
+          "armorStrength": 6,
+          "cargo": 1000,
+          "speed": 33000,
+          "fuel": 300
+        },
+        "fieldStatus": {
+          "population": "OBSERVED",
+          "attack": "OBSERVED",
+          "life": "OBSERVED",
+          "weaponType": "OBSERVED",
+          "armorType": "OBSERVED",
+          "armorStrength": "OBSERVED",
+          "cargo": "OBSERVED",
+          "speed": "OBSERVED",
+          "fuel": "OBSERVED",
+          "cost": {
+            "metal": "OBSERVED",
+            "minerals": "OBSERVED",
+            "gas": "OBSERVED"
+          }
+        },
+        "sourceTime": "00:05:20",
+        "requirements": [
+          {
+            "sourceText": "Адмирал<br />Уровень: 20",
+            "valueKind": "level",
+            "targetName": "Адмирал",
+            "value": 20,
+            "valueStatus": "OBSERVED"
+          }
+        ],
+        "asterion": {
+          "commanderId": "scorpion",
+          "name": "Скорпион",
+          "artAsset": "assets/source/New assets/comander_ship/commander-ship.scorpion.png",
+          "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
+        },
+        "unresolved": []
+      },
+      {
+        "sourceSlotId": 6,
+        "sourcePageId": 6,
+        "sourceFile": "saved_pages/312313/Боевые корабли по 1 кораблю командирские корабли, равны для всех рас/page_2026-07-22_20-21-20.html",
+        "sourceStatus": "OBSERVED",
+        "sourceName": "Фантом",
+        "sourceLevel": 0,
+        "sourceImage": "./page_2026-07-22_20-21-20_files/commanderShip_6.png",
+        "abilityTooltip": {
+          "selector": ".itemDescription (inner HTML; full source ability description)",
+          "rawHtml": "Когда речь заходит о компьютерных вирусах, нельзя не вспомнить высокотехнологичный \"Фантом\". Проникая внутрь системы управления вражеского флота он имеет возможность отослать противника назад, предотвращая битву. Каждый уровень дает 0.75% к шансу на успешный взлом системы.",
+          "text": "Когда речь заходит о компьютерных вирусах, нельзя не вспомнить высокотехнологичный \"Фантом\". Проникая внутрь системы управления вражеского флота он имеет возможность отослать противника назад, предотвращая битву. Каждый уровень дает 0.75% к шансу на успешный взлом системы.",
+          "status": "OBSERVED"
+        },
+        "hull": {
+          "population": 10,
+          "cost": {
+            "metal": 4000,
+            "minerals": 4000,
+            "gas": 0
+          },
+          "attack": 2000,
+          "life": 20000,
+          "weaponType": "Лазер",
+          "armorType": "Средняя Броня",
+          "armorStrength": 6,
+          "cargo": 1000,
+          "speed": 33000,
+          "fuel": 300
+        },
+        "fieldStatus": {
+          "population": "OBSERVED",
+          "attack": "OBSERVED",
+          "life": "OBSERVED",
+          "weaponType": "OBSERVED",
+          "armorType": "OBSERVED",
+          "armorStrength": "OBSERVED",
+          "cargo": "OBSERVED",
+          "speed": "OBSERVED",
+          "fuel": "OBSERVED",
+          "cost": {
+            "metal": "OBSERVED",
+            "minerals": "OBSERVED",
+            "gas": "OBSERVED"
+          }
+        },
+        "sourceTime": "00:05:20",
+        "requirements": [
+          {
+            "sourceText": "Адмирал<br />Уровень: 25",
+            "valueKind": "level",
+            "targetName": "Адмирал",
+            "value": 25,
+            "valueStatus": "OBSERVED"
+          }
+        ],
+        "asterion": {
+          "commanderId": "phantom",
+          "name": "Фантом",
+          "artAsset": "assets/source/New assets/comander_ship/commander-ship.phantom.png",
+          "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
+        },
+        "unresolved": []
+      },
+      {
+        "sourceSlotId": 7,
+        "sourcePageId": 7,
+        "sourceFile": "saved_pages/312313/Боевые корабли по 1 кораблю командирские корабли, равны для всех рас/page_2026-07-22_20-20-42.html",
+        "sourceStatus": "OBSERVED",
+        "sourceName": "Охотник",
+        "sourceLevel": 0,
+        "sourceImage": "./page_2026-07-22_20-20-42_files/commanderShip_7.png",
+        "abilityTooltip": {
+          "selector": ".itemDescription (inner HTML; full source ability description)",
+          "rawHtml": "Благодаря современным технологиям \"Охотник\" способен обнаружить вражеские шпионские зонды как только они входят в атмосферу вашей планеты, не давая им шанса получить какую-либо информацию.<br>Шанс на обнаружение увеличивается на 1.75% за каждый уровень.",
+          "text": "Благодаря современным технологиям \"Охотник\" способен обнаружить вражеские шпионские зонды как только они входят в атмосферу вашей планеты, не давая им шанса получить какую-либо информацию.\nШанс на обнаружение увеличивается на 1.75% за каждый уровень.",
+          "status": "OBSERVED"
+        },
+        "hull": {
+          "population": 10,
+          "cost": {
+            "metal": 2000,
+            "minerals": 2000,
+            "gas": 0
+          },
+          "attack": 2000,
+          "life": 20000,
+          "weaponType": "Лазер",
+          "armorType": "Средняя Броня",
+          "armorStrength": 6,
+          "cargo": 1000,
+          "speed": 33000,
+          "fuel": 300
+        },
+        "fieldStatus": {
+          "population": "OBSERVED",
+          "attack": "OBSERVED",
+          "life": "OBSERVED",
+          "weaponType": "OBSERVED",
+          "armorType": "OBSERVED",
+          "armorStrength": "OBSERVED",
+          "cargo": "OBSERVED",
+          "speed": "OBSERVED",
+          "fuel": "OBSERVED",
+          "cost": {
+            "metal": "OBSERVED",
+            "minerals": "OBSERVED",
+            "gas": "OBSERVED"
+          }
+        },
+        "sourceTime": "00:02:40",
+        "requirements": [
+          {
+            "sourceText": "Адмирал<br />Уровень: 2",
+            "valueKind": "level",
+            "targetName": "Адмирал",
+            "value": 2,
+            "valueStatus": "OBSERVED"
+          }
+        ],
+        "asterion": {
+          "commanderId": "hunter",
+          "name": "Охотник",
+          "artAsset": "assets/source/New assets/comander_ship/commander-ship.hunter.png",
+          "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
+        },
+        "unresolved": []
+      },
+      {
+        "sourceSlotId": 8,
+        "sourcePageId": 8,
+        "sourceFile": "saved_pages/312313/Боевые корабли по 1 кораблю командирские корабли, равны для всех рас/page_2026-07-22_20-21-06.html",
+        "sourceStatus": "OBSERVED",
+        "sourceName": "Тайфун",
+        "sourceLevel": 0,
+        "sourceImage": "./page_2026-07-22_20-21-06_files/commanderShip_8.png",
+        "abilityTooltip": {
+          "selector": ".itemDescription (inner HTML; full source ability description)",
+          "rawHtml": "Благодаря своим аэродинамическим свойствам и инновационным двигателям Тайфун способен увеличить скорость ваших кораблей на 0.1% за уровень.",
+          "text": "Благодаря своим аэродинамическим свойствам и инновационным двигателям Тайфун способен увеличить скорость ваших кораблей на 0.1% за уровень.",
+          "status": "OBSERVED"
+        },
+        "hull": {
+          "population": 10,
+          "cost": {
+            "metal": 2500,
+            "minerals": 2500,
+            "gas": 0
+          },
+          "attack": 2000,
+          "life": 20000,
+          "weaponType": "Лазер",
+          "armorType": "Средняя Броня",
+          "armorStrength": 6,
+          "cargo": 1000,
+          "speed": 33000,
+          "fuel": 300
+        },
+        "fieldStatus": {
+          "population": "OBSERVED",
+          "attack": "OBSERVED",
+          "life": "OBSERVED",
+          "weaponType": "OBSERVED",
+          "armorType": "OBSERVED",
+          "armorStrength": "OBSERVED",
+          "cargo": "OBSERVED",
+          "speed": "OBSERVED",
+          "fuel": "OBSERVED",
+          "cost": {
+            "metal": "OBSERVED",
+            "minerals": "OBSERVED",
+            "gas": "OBSERVED"
+          }
+        },
+        "sourceTime": "00:03:20",
+        "requirements": [
+          {
+            "sourceText": "Адмирал<br />Уровень: 10",
+            "valueKind": "level",
+            "targetName": "Адмирал",
+            "value": 10,
+            "valueStatus": "OBSERVED"
+          }
+        ],
+        "asterion": {
+          "commanderId": "typhoon",
+          "name": "Тайфун",
+          "artAsset": "assets/source/New assets/comander_ship/commander-ship.typhoon.png",
+          "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
+        },
+        "unresolved": []
+      },
+      {
+        "sourceSlotId": 9,
+        "sourcePageId": 9,
+        "sourceFile": "saved_pages/312313/Боевые корабли по 1 кораблю командирские корабли, равны для всех рас/page_2026-07-22_20-20-50.html",
+        "sourceStatus": "OBSERVED",
+        "sourceName": "Палач",
+        "sourceLevel": 0,
+        "sourceImage": "./page_2026-07-22_20-20-50_files/commanderShip_9.png",
+        "abilityTooltip": {
+          "selector": ".itemDescription (inner HTML; full source ability description)",
+          "rawHtml": "Иногда название говорит само за себя, специализируется \"Палач\" на одной простой вещи – трансформация боевого флота противника в обломки за минимальный отрезок времени, добавляя 0.15% бонуса за каждый уровень к атаке вашему флоту.",
+          "text": "Иногда название говорит само за себя, специализируется \"Палач\" на одной простой вещи – трансформация боевого флота противника в обломки за минимальный отрезок времени, добавляя 0.15% бонуса за каждый уровень к атаке вашему флоту.",
+          "status": "OBSERVED"
+        },
+        "hull": {
+          "population": 10,
+          "cost": {
+            "metal": 4000,
+            "minerals": 4000,
+            "gas": 0
+          },
+          "attack": 2000,
+          "life": 20000,
+          "weaponType": "Лазер",
+          "armorType": "Средняя Броня",
+          "armorStrength": 6,
+          "cargo": 1000,
+          "speed": 33000,
+          "fuel": 300
+        },
+        "fieldStatus": {
+          "population": "OBSERVED",
+          "attack": "OBSERVED",
+          "life": "OBSERVED",
+          "weaponType": "OBSERVED",
+          "armorType": "OBSERVED",
+          "armorStrength": "OBSERVED",
+          "cargo": "OBSERVED",
+          "speed": "OBSERVED",
+          "fuel": "OBSERVED",
+          "cost": {
+            "metal": "OBSERVED",
+            "minerals": "OBSERVED",
+            "gas": "OBSERVED"
+          }
+        },
+        "sourceTime": "00:05:20",
+        "requirements": [
+          {
+            "sourceText": "Адмирал<br />Уровень: 5",
+            "valueKind": "level",
+            "targetName": "Адмирал",
+            "value": 5,
+            "valueStatus": "OBSERVED"
+          }
+        ],
+        "asterion": {
+          "commanderId": "executioner",
+          "name": "Палач",
+          "artAsset": "assets/source/New assets/comander_ship/commander-ship.executioner.png",
+          "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
+        },
+        "unresolved": []
+      },
+      {
+        "sourceSlotId": 10,
+        "sourcePageId": 10,
+        "sourceFile": "saved_pages/312313/Боевые корабли по 1 кораблю командирские корабли, равны для всех рас/page_2026-07-22_20-20-57.html",
+        "sourceStatus": "OBSERVED",
+        "sourceName": "Джаггернаут",
+        "sourceLevel": 0,
+        "sourceImage": "./page_2026-07-22_20-20-57_files/commanderShip_10.png",
+        "abilityTooltip": {
+          "selector": ".itemDescription (inner HTML; full source ability description)",
+          "rawHtml": "Выживут только сильнейшие! Пока этот многотонный эсминец стоит во главе вашего флота, каждый корабль получает бонус к жизненным очкам в размере 0.15% за уровень.",
+          "text": "Выживут только сильнейшие! Пока этот многотонный эсминец стоит во главе вашего флота, каждый корабль получает бонус к жизненным очкам в размере 0.15% за уровень.",
+          "status": "OBSERVED"
+        },
+        "hull": {
+          "population": 10,
+          "cost": {
+            "metal": 4000,
+            "minerals": 4000,
+            "gas": 0
+          },
+          "attack": 2000,
+          "life": 20000,
+          "weaponType": "Лазер",
+          "armorType": "Средняя Броня",
+          "armorStrength": 6,
+          "cargo": 1000,
+          "speed": 33000,
+          "fuel": 300
+        },
+        "fieldStatus": {
+          "population": "OBSERVED",
+          "attack": "OBSERVED",
+          "life": "OBSERVED",
+          "weaponType": "OBSERVED",
+          "armorType": "OBSERVED",
+          "armorStrength": "OBSERVED",
+          "cargo": "OBSERVED",
+          "speed": "OBSERVED",
+          "fuel": "OBSERVED",
+          "cost": {
+            "metal": "OBSERVED",
+            "minerals": "OBSERVED",
+            "gas": "OBSERVED"
+          }
+        },
+        "sourceTime": "00:05:20",
+        "requirements": [
+          {
+            "sourceText": "Адмирал<br />Уровень: 5",
+            "valueKind": "level",
+            "targetName": "Адмирал",
+            "value": 5,
+            "valueStatus": "OBSERVED"
+          }
+        ],
+        "asterion": {
+          "commanderId": "juggernaut",
+          "name": "Джаггернаут",
+          "artAsset": "assets/source/New assets/comander_ship/commander-ship.juggernaut.png",
+          "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
+        },
+        "unresolved": []
+      },
+      {
+        "sourceSlotId": 11,
+        "sourcePageId": 11,
+        "sourceFile": "saved_pages/312313/Боевые корабли по 1 кораблю командирские корабли, равны для всех рас/page_2026-07-22_20-21-49.html",
+        "sourceStatus": "OBSERVED",
+        "sourceName": "Арго",
+        "sourceLevel": 0,
+        "sourceImage": "./page_2026-07-22_20-21-49_files/commanderShip_11.png",
+        "abilityTooltip": {
+          "selector": ".itemDescription (inner HTML; full source ability description)",
+          "rawHtml": "Арго умеет обнаруживать останки Отступников для дальнейшего их изучения, что повышает количество очков усовершенствования в боях с Отспутниками, дополнительно начисляя 1% на каждом уровне.<br><br>Это также дает особую особенность грузоподъемности ваших кораблей с технологией 3D-армирования, чтобы больше украсть ресурсы., так что каждый уровень будет добавлять 1% к грузоподъемности ваших кораблей.",
+          "text": "Арго умеет обнаруживать останки Отступников для дальнейшего их изучения, что повышает количество очков усовершенствования в боях с Отспутниками, дополнительно начисляя 1% на каждом уровне.\n\nЭто также дает особую особенность грузоподъемности ваших кораблей с технологией 3D-армирования, чтобы больше украсть ресурсы., так что каждый уровень будет добавлять 1% к грузоподъемности ваших кораблей.",
+          "status": "OBSERVED"
+        },
+        "hull": {
+          "population": 10,
+          "cost": {
+            "metal": 2500,
+            "minerals": 2500,
+            "gas": 0
+          },
+          "attack": 2000,
+          "life": 20000,
+          "weaponType": "Лазер",
+          "armorType": "Средняя Броня",
+          "armorStrength": 6,
+          "cargo": 1000,
+          "speed": 33000,
+          "fuel": 300
+        },
+        "fieldStatus": {
+          "population": "OBSERVED",
+          "attack": "OBSERVED",
+          "life": "OBSERVED",
+          "weaponType": "OBSERVED",
+          "armorType": "OBSERVED",
+          "armorStrength": "OBSERVED",
+          "cargo": "OBSERVED",
+          "speed": "OBSERVED",
+          "fuel": "OBSERVED",
+          "cost": {
+            "metal": "OBSERVED",
+            "minerals": "OBSERVED",
+            "gas": "OBSERVED"
+          }
+        },
+        "sourceTime": "00:03:20",
+        "requirements": [
+          {
+            "sourceText": "Чертежный комплект<br />Необходим: Арго",
+            "valueKind": "UNKNOWN",
+            "targetName": "Чертежный комплект",
+            "value": null,
+            "valueStatus": "UNKNOWN"
+          }
+        ],
+        "asterion": {
+          "commanderId": "argo",
+          "name": "Арго",
+          "artAsset": "assets/source/New assets/comander_ship/commander-ship.argo.png",
+          "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
+        },
+        "unresolved": [
+          "Requirement has no numeric level or <big> quantity: Чертежный комплект<br />Необходим: Арго"
+        ]
+      },
+      {
+        "sourceSlotId": 12,
+        "sourcePageId": 12,
+        "sourceFile": "saved_pages/312313/Боевые корабли по 1 кораблю командирские корабли, равны для всех рас/page_2026-07-22_20-21-57.html",
+        "sourceStatus": "OBSERVED",
+        "sourceName": "Судья",
+        "sourceLevel": 0,
+        "sourceImage": "./page_2026-07-22_20-21-57_files/commanderShip_12.png",
+        "abilityTooltip": {
+          "selector": ".itemDescription (inner HTML; full source ability description)",
+          "rawHtml": "\"Выкованный в аду\", этот таинственный знак расположен на корпусе корабля. Он внушает тем, кто встает на пути этого корабля, что поражение их неизбежно. Важно то, что с помощью этого специального знака, корабль мистически вмешивается в системы обороны противника, уменьшая броню всех враждебных единиц на 0.15% на каждом уровне.",
+          "text": "\"Выкованный в аду\", этот таинственный знак расположен на корпусе корабля. Он внушает тем, кто встает на пути этого корабля, что поражение их неизбежно. Важно то, что с помощью этого специального знака, корабль мистически вмешивается в системы обороны противника, уменьшая броню всех враждебных единиц на 0.15% на каждом уровне.",
+          "status": "OBSERVED"
+        },
+        "hull": {
+          "population": 10,
+          "cost": {
+            "metal": 4500,
+            "minerals": 4500,
+            "gas": 0
+          },
+          "attack": 2000,
+          "life": 20000,
+          "weaponType": "Лазер",
+          "armorType": "Средняя Броня",
+          "armorStrength": 6,
+          "cargo": 1000,
+          "speed": 33000,
+          "fuel": 300
+        },
+        "fieldStatus": {
+          "population": "OBSERVED",
+          "attack": "OBSERVED",
+          "life": "OBSERVED",
+          "weaponType": "OBSERVED",
+          "armorType": "OBSERVED",
+          "armorStrength": "OBSERVED",
+          "cargo": "OBSERVED",
+          "speed": "OBSERVED",
+          "fuel": "OBSERVED",
+          "cost": {
+            "metal": "OBSERVED",
+            "minerals": "OBSERVED",
+            "gas": "OBSERVED"
+          }
+        },
+        "sourceTime": "00:06:00",
+        "requirements": [
+          {
+            "sourceText": "Чертежный комплект<br />Необходим: Судья",
+            "valueKind": "UNKNOWN",
+            "targetName": "Чертежный комплект",
+            "value": null,
+            "valueStatus": "UNKNOWN"
+          }
+        ],
+        "asterion": {
+          "commanderId": "judge",
+          "name": "Судья",
+          "artAsset": "assets/source/New assets/comander_ship/commander-ship.judge.png",
+          "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
+        },
+        "unresolved": [
+          "Requirement has no numeric level or <big> quantity: Чертежный комплект<br />Необходим: Судья"
+        ]
+      },
+      {
+        "sourceSlotId": 13,
+        "sourcePageId": 13,
+        "sourceFile": "saved_pages/312313/Боевые корабли по 1 кораблю командирские корабли, равны для всех рас/page_2026-07-22_20-22-08.html",
+        "sourceStatus": "OBSERVED",
+        "sourceName": "Polias",
+        "sourceLevel": 0,
+        "sourceImage": "./page_2026-07-22_20-22-08_files/commanderShip_13.png",
+        "abilityTooltip": {
+          "selector": ".itemDescription (inner HTML; full source ability description)",
+          "rawHtml": "Этот командирский корабль сделан из холодного титана с защитным плазменным покрытием, уменьшающим вероятность разрушения вашей планеты. Имейте в виду, что это пассивное умение, которое доступно в течение всего боя, даже если ваш командирский корабль будет уничтожен до окончания боя. Вероятность уничтожения планеты снижается на 0.25% за уровень корабля.",
+          "text": "Этот командирский корабль сделан из холодного титана с защитным плазменным покрытием, уменьшающим вероятность разрушения вашей планеты. Имейте в виду, что это пассивное умение, которое доступно в течение всего боя, даже если ваш командирский корабль будет уничтожен до окончания боя. Вероятность уничтожения планеты снижается на 0.25% за уровень корабля.",
+          "status": "OBSERVED"
+        },
+        "hull": {
+          "population": 500,
+          "cost": {
+            "metal": 6000,
+            "minerals": 6000,
+            "gas": 0
+          },
+          "attack": 2000,
+          "life": 20000,
+          "weaponType": "Лазер",
+          "armorType": "Средняя Броня",
+          "armorStrength": 6,
+          "cargo": 1000,
+          "speed": 33000,
+          "fuel": 300
+        },
+        "fieldStatus": {
+          "population": "OBSERVED",
+          "attack": "OBSERVED",
+          "life": "OBSERVED",
+          "weaponType": "OBSERVED",
+          "armorType": "OBSERVED",
+          "armorStrength": "OBSERVED",
+          "cargo": "OBSERVED",
+          "speed": "OBSERVED",
+          "fuel": "OBSERVED",
+          "cost": {
+            "metal": "OBSERVED",
+            "minerals": "OBSERVED",
+            "gas": "OBSERVED"
+          }
+        },
+        "sourceTime": "00:08:00",
+        "requirements": [
+          {
+            "sourceText": "Адмирал<br />Уровень: 28",
+            "valueKind": "level",
+            "targetName": "Адмирал",
+            "value": 28,
+            "valueStatus": "OBSERVED"
+          }
+        ],
+        "asterion": {
+          "commanderId": "polias",
+          "name": "Полиас",
+          "artAsset": "assets/source/New assets/comander_ship/commander-ship.polias.png",
+          "factsSource": "src/domain/combat/catalog.ts COMMANDER_COMBAT_CATALOG; commander ID/name contract: src/domain/combat/commanders.ts"
+        },
+        "unresolved": []
+      }
+    ]
+  },
+  "selectors": {
+    "sourceName": ".itemName",
+    "sourcePageId": "HTML saved-from URL comment: information.php?type=commander_ship&id=<n>",
+    "sourceLevel": ".currentLevel",
+    "sourceImage": ".imageHolder img[src] (exact src attribute)",
+    "abilityTooltip": ".itemDescription (inner HTML; full source ability description)",
+    "population": ".statsBox li.pop",
+    "cost.metal": ".costBox li.resMetal",
+    "cost.minerals": ".costBox li.resCrystal",
+    "cost.gas": ".costBox li.resGas",
+    "attack": ".statsBox li.attack",
+    "life": ".statsBox li.life",
+    "weaponType": ".statsBox li.weaponTypeName",
+    "armorType": ".statsBox li.armourTypeName (text before percentage)",
+    "armorStrength": ".statsBox li.armourTypeName (percentage in parentheses)",
+    "cargo": ".statsBox li.cargo",
+    "speed": ".statsBox li.speed",
+    "fuel": ".statsBox li.gasConsumption",
+    "sourceTime": ".statsBox li.contructionTime",
+    "requirements": ".requirementsBox dd[onmouseover] (Tip(...) argument, preserving embedded HTML)"
+  },
+  "statusVocabulary": {
+    "OBSERVED": "Value is present and read directly from the pinned saved HTML or current Asterion code fact listed.",
+    "N/A": "Source element is absent from the page; this is distinct from numeric zero.",
+    "UNKNOWN": "Source page does not provide enough data to classify the value; no inference applied.",
+    "DAMAGED_SOURCE_TEXT": "Primary source contains a literal replacement character; raw text is preserved and not repaired."
+  },
+  "notes": [
+    "Commander pages are a shared class, not one commander per faction.",
+    "The source page ID is read from its saved-from URL comment and is also the image suffix commanderShip_<id>.png.",
+    "Asterion asset mapping records the imported asset path by matching the current catalog import to its commander ID; it does not claim pixel identity with the saved source icon.",
+    "Argo and Judge requirement tooltip names identify a blueprint set and commander but state no numeric value; valueKind/value remain UNKNOWN/null.",
+    "Reanimator description includes U+FFFD in the pinned HTML between “15” and “ораблей”; the fixture preserves the replacement character instead of guessing the missing character."
+  ]
+}

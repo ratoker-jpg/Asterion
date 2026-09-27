@@ -1,0 +1,659 @@
+{
+  "repository": "ratoker-jpg/Nemexia_auto_v2",
+  "revision": "87afb017749e2aa227ec29ea7825726387b4d4cf",
+  "selectors": {
+    "sourceName": ".itemName",
+    "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/<captured HTML filename>",
+    "sourcePageId": "a.switchLanguage[href*=\"information.php?type=ship&id=\"] (URL query parameter id)",
+    "sourceLevel": ".currentLevel",
+    "sourceDescription": ".itemDescription (visible text, whitespace-normalized)",
+    "sourceImage": ".imageHolder img[src] (exact src attribute; N/A when absent)",
+    "sourceRole": ".itemSubType",
+    "asterionDisplayName": "src/domain/combat/faction-catalog.ts VEYRA_SHIPS override name",
+    "asterionRole": "src/domain/combat/faction-catalog.ts VEYRA_SHIPS override role",
+    "population": ".statsBox li.pop",
+    "cost.metal": ".costBox li.resMetal",
+    "cost.minerals": ".costBox li.resCrystal",
+    "cost.gas": ".costBox li.resGas",
+    "attack": ".statsBox li.attack",
+    "life": ".statsBox li.life",
+    "weaponType": ".statsBox li.weaponTypeName",
+    "armorType": ".statsBox li.armourTypeName (type text before percentage)",
+    "armorStrength": ".statsBox li.armourTypeName (percentage in parentheses)",
+    "cargo": ".statsBox li.cargo (null only if absent)",
+    "speed": ".statsBox li.speed (null only if absent)",
+    "fuel": ".statsBox li.gasConsumption (null only if absent)",
+    "sourceTime": ".statsBox li.contructionTime",
+    "requirements.sourceText": ".requirementsBox dd[onmouseover] Tip(...) tooltip HTML argument",
+    "requirements.valueKind": ".requirementsBox dd[onmouseover] Tip(...) (Уровень: N => level; Количество: N => quantity)",
+    "requirements.targetName": ".requirementsBox dd[onmouseover] Tip(...) first line",
+    "requirements.value": ".requirementsBox dd[onmouseover] Tip(...) level or quantity integer",
+    "slotId": "User-confirmed canonical slots; battle_catalog.py TIER_CRUISER/TIER_DEFENDER corroborates Nemesis=cruiser, Absorber=defender"
+  },
+  "records": [
+    {
+      "factionId": "veyra",
+      "slotId": "solar-satellite",
+      "sourceName": "Органический спутник",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-19-25.html",
+      "sourcePageId": 13,
+      "sourceLevel": 0,
+      "sourceDescription": "Органический спутник - Ваш вторичный источник энергии. Покрытый огромным количеством солнечных ячеек, ему по силам даже заменить Ваш Солнечный абсорбер. К сожалению Спутники помещены на высокую орбиту и при нападении они - первый объект, который подвергается атаке врага. Количество получаемой с них энергии зависит от того, как близко Ваша планета к солнцу. Спутники не могут быть перемещены на орбиту другой планеты, потому что у них нет своих собственных двигателей.",
+      "sourceImage": "./page_2026-07-22_20-19-25_files/ship_13.png",
+      "sourceRole": "Обслуживающий корабль",
+      "asterionDisplayName": "Симбионт",
+      "asterionRole": "Орбитальный организм Роя",
+      "population": 1,
+      "cost": {
+        "metal": 500,
+        "minerals": 2000,
+        "gas": 500
+      },
+      "attack": 1,
+      "life": 2200,
+      "weaponType": "Лазер",
+      "armorType": "Тяжелая Броня",
+      "armorStrength": 9,
+      "cargo": null,
+      "speed": null,
+      "fuel": null,
+      "sourceTime": "00:02:30",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 1",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "factionId": "veyra",
+      "slotId": "spy-probe",
+      "sourceName": "Нокс разум",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-19-17.html",
+      "sourcePageId": 12,
+      "sourceLevel": 0,
+      "sourceDescription": "Маленькое беспилотное судно создано для обследования вражеских планет. Судно достаточно простое, есть только комнаты для шпионского оборудования и сильного ионного двигателя, способного к маленьким гиперкосмическим скачкам, приводящим к невероятной скорости. Корпус построен из специального металлического сплава.Это судно является основным для Ноксов, и оно используется для построения более сложных кораблей.",
+      "sourceImage": "./page_2026-07-22_20-19-17_files/ship_12.png",
+      "sourceRole": "Гражданский корабль",
+      "asterionDisplayName": "Глаз",
+      "asterionRole": "Разведывательный организм Роя",
+      "population": 1,
+      "cost": {
+        "metal": 0,
+        "minerals": 1000,
+        "gas": 0
+      },
+      "attack": 1,
+      "life": 1,
+      "weaponType": "Лазер",
+      "armorType": "Легкая Броня",
+      "armorStrength": 3,
+      "cargo": 1,
+      "speed": 200000000,
+      "fuel": 1,
+      "sourceTime": "00:01:00",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 3",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 3
+        },
+        {
+          "sourceText": "Топливные элементы<br />Уровень: 3",
+          "valueKind": "level",
+          "targetName": "Топливные элементы",
+          "value": 3
+        },
+        {
+          "sourceText": "Шпионаж<br />Уровень: 2",
+          "valueKind": "level",
+          "targetName": "Шпионаж",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "factionId": "veyra",
+      "slotId": "transporter",
+      "sourceName": "Транспортировщик",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-17-15.html",
+      "sourcePageId": 1,
+      "sourceLevel": 0,
+      "sourceDescription": "Они - первичные средства транспортировки, которые помогут Вам в начале Вашего пути к космическому доминированию. К сожалению это судно все еще не безупречно. У него хрупкий корпус и нет щитов, устаревшая модель реактивных двигателей - причина низкой скорости, малый объем трюмов. Нехватка вооружения делает его уязвимым. Такое судно лучше отправлять вместе с кораблем военного класса.",
+      "sourceImage": "./page_2026-07-22_20-17-15_files/ship_1.png",
+      "sourceRole": "Гражданский корабль",
+      "asterionDisplayName": "Носильщик",
+      "asterionRole": "Транспортный организм Роя",
+      "population": 2,
+      "cost": {
+        "metal": 4800,
+        "minerals": 2800,
+        "gas": 0
+      },
+      "attack": 10,
+      "life": 4000,
+      "weaponType": "Лазер",
+      "armorType": "Легкая Броня",
+      "armorStrength": 3,
+      "cargo": 15000,
+      "speed": 21000,
+      "fuel": 12,
+      "sourceTime": "00:20:00",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 2",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 2
+        },
+        {
+          "sourceText": "Математика<br />Уровень: 3",
+          "valueKind": "level",
+          "targetName": "Математика",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "factionId": "veyra",
+      "slotId": "mega-transporter",
+      "sourceName": "Мегатранспортировщик",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-17-22.html",
+      "sourcePageId": 2,
+      "sourceLevel": 0,
+      "sourceDescription": "Мегатранспортировщик - вторичные средства транспортировки. У них больший объем трюмов, таким образом они могут транспортировать больше ресурсов. Они медленнее чем простой Транспортировщик, но перевозят больше груза за туже цену. Вы можете использовать Мегатранспортировщик для доставки грузов, а также, при атаках на Ваших врагов.",
+      "sourceImage": "./page_2026-07-22_20-17-22_files/ship_2.png",
+      "sourceRole": "Гражданский корабль",
+      "asterionDisplayName": "Тяжеловоз",
+      "asterionRole": "Тяжёлый транспортный организм Роя",
+      "population": 4,
+      "cost": {
+        "metal": 8500,
+        "minerals": 6700,
+        "gas": 0
+      },
+      "attack": 10,
+      "life": 10400,
+      "weaponType": "Ион",
+      "armorType": "Средняя Броня",
+      "armorStrength": 6,
+      "cargo": 30000,
+      "speed": 16000,
+      "fuel": 45,
+      "sourceTime": "00:26:40",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 5",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 5
+        },
+        {
+          "sourceText": "Математика<br />Уровень: 4",
+          "valueKind": "level",
+          "targetName": "Математика",
+          "value": 4
+        },
+        {
+          "sourceText": "Физика<br />Уровень: 1",
+          "valueKind": "level",
+          "targetName": "Физика",
+          "value": 1
+        },
+        {
+          "sourceText": "Транспортировщик<br />Количество: 1",
+          "valueKind": "quantity",
+          "targetName": "Транспортировщик",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "factionId": "veyra",
+      "slotId": "colonizer",
+      "sourceName": "Поселенец",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-19-03.html",
+      "sourcePageId": 10,
+      "sourceLevel": 0,
+      "sourceDescription": "Это огромное колониальное судно, транспортирующее всё необходимое оборудование и персонал для постройки полностью функционирующей колонии. Оно может транспортировать небольшое количество ресурсов. После приземления на отобранной планете большой корпус судна используется как командный центр. Из-за его огромной структуры и далеких от безупречности двигателей оно исключительно медленное. Колонизатор оборудован малым количеством вооружения и имеет большой транспортный потенциал.",
+      "sourceImage": "./page_2026-07-22_20-19-03_files/ship_10.png",
+      "sourceRole": "Гражданский корабль",
+      "asterionDisplayName": "Зародыш",
+      "asterionRole": "Колонизационный организм Роя",
+      "population": 12,
+      "cost": {
+        "metal": 12500,
+        "minerals": 25000,
+        "gas": 10600
+      },
+      "attack": 600,
+      "life": 2400,
+      "weaponType": "Лазер",
+      "armorType": "Средняя Броня",
+      "armorStrength": 6,
+      "cargo": 7500,
+      "speed": 5000,
+      "fuel": 1500,
+      "sourceTime": "00:58:00",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 4",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 4
+        },
+        {
+          "sourceText": "Топливные элементы<br />Уровень: 3",
+          "valueKind": "level",
+          "targetName": "Топливные элементы",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "factionId": "veyra",
+      "slotId": "recycler",
+      "sourceName": "Трутень Переработчик",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-19-09.html",
+      "sourcePageId": 11,
+      "sourceLevel": 0,
+      "sourceDescription": "Фактически это судно состоит из огромной системы переработки и огромного склада. После сражений остаются фрагменты от разрушенных судов, которые собирает Переработчик и преобразует в чистые ресурсы. К сожалению судно не в состоянии нести мощные двигатели, из-за недостатка места для систем переработки и складов. Все суда получают равную премию от исследований  скорости, мощности и структуры.",
+      "sourceImage": "./page_2026-07-22_20-19-09_files/ship_11.png",
+      "sourceRole": "Гражданский корабль",
+      "asterionDisplayName": "Падальщик",
+      "asterionRole": "Переработчик Роя",
+      "population": 5,
+      "cost": {
+        "metal": 10500,
+        "minerals": 5300,
+        "gas": 1800
+      },
+      "attack": 50,
+      "life": 2200,
+      "weaponType": "Лазер",
+      "armorType": "Средняя Броня",
+      "armorStrength": 6,
+      "cargo": 40000,
+      "speed": 7000,
+      "fuel": 120,
+      "sourceTime": "00:41:40",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 4",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 4
+        },
+        {
+          "sourceText": "Топливные элементы<br />Уровень: 6",
+          "valueKind": "level",
+          "targetName": "Топливные элементы",
+          "value": 6
+        },
+        {
+          "sourceText": "Броня кораблей<br />Уровень: 2",
+          "valueKind": "level",
+          "targetName": "Броня кораблей",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "factionId": "veyra",
+      "slotId": "scout",
+      "sourceName": "Нокс Дарт",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-17-29.html",
+      "sourcePageId": 3,
+      "sourceLevel": 0,
+      "sourceDescription": "Небольшое разведывательное судно. Из-за маленького веса реактивные двигатели позволяет ему передвигаться с большей скоростью. Однако, слабое оружие, нехватка хороших щитов и слабозащищённый корпус делают его неподходящим для больших сражений. Его главная цель - защитить недавно колонизированные планеты и сражаться со слабыми оборонными системами на колониях врага.",
+      "sourceImage": "./page_2026-07-22_20-17-29_files/ship_3.png",
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Жало",
+      "asterionRole": "Лёгкий боевой организм Роя",
+      "population": 1,
+      "cost": {
+        "metal": 1200,
+        "minerals": 800,
+        "gas": 0
+      },
+      "attack": 400,
+      "life": 1200,
+      "weaponType": "Лазер",
+      "armorType": "Легкая Броня",
+      "armorStrength": 3,
+      "cargo": 60,
+      "speed": 24000,
+      "fuel": 12,
+      "sourceTime": "00:10:00",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 1",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 1
+        },
+        {
+          "sourceText": "Астрономия<br />Уровень: 1",
+          "valueKind": "level",
+          "targetName": "Астрономия",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "factionId": "veyra",
+      "slotId": "cruiser",
+      "sourceName": "Немезис",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-18-01.html",
+      "sourcePageId": 4,
+      "sourceLevel": 0,
+      "sourceDescription": "Результатом гонки вооружений стало создание этого боевого хищника. Благодаря модернизированным импульсным двигателям корабль обрёл невообразимую маневренность и скорость. Немезис окружен защитным полём и вооружен последним поколением ионных орудий. Несмотря на отсутствие взрывной волны орудия обладают мощной пробивной способностью, что делает большие группы Немезисов смертельно опасными, даже против кораблей более высокого класса. Всё это делает Немезис одним из лучших кораблей на поле боя.",
+      "sourceImage": "./page_2026-07-22_20-18-01_files/ship_4.png",
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Стрекоза",
+      "asterionRole": "Боевой организм Роя",
+      "population": 2,
+      "cost": {
+        "metal": 2900,
+        "minerals": 2400,
+        "gas": 0
+      },
+      "attack": 880,
+      "life": 2600,
+      "weaponType": "Ион",
+      "armorType": "Легкая Броня",
+      "armorStrength": 3,
+      "cargo": 275,
+      "speed": 30000,
+      "fuel": 105,
+      "sourceTime": "00:07:20",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 3",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 3
+        },
+        {
+          "sourceText": "Астрономия<br />Уровень: 6",
+          "valueKind": "level",
+          "targetName": "Астрономия",
+          "value": 6
+        },
+        {
+          "sourceText": "Нокс Дарт<br />Количество: 1",
+          "valueKind": "quantity",
+          "targetName": "Нокс Дарт",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "factionId": "veyra",
+      "slotId": "defender",
+      "sourceName": "Абсорбатор",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-17-43.html",
+      "sourcePageId": 5,
+      "sourceLevel": 0,
+      "sourceDescription": "Этот корабль очень полезен для защиты других судов от нападений. У него достаточно прочности для того, чтобы взять удар на себя, но слабое вооружение. Вы можете использовать его в различных комбинациях с другими судами, таким образом они будут более эффективны на поле битвы. Будьте осторожны, эти суда могут быть хорошей целью для Вашего врага, если они хорошо не защищены.",
+      "sourceImage": "./page_2026-07-22_20-17-43_files/ship_5.png",
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Панцирник",
+      "asterionRole": "Защитный организм Роя",
+      "population": 3,
+      "cost": {
+        "metal": 2700,
+        "minerals": 8000,
+        "gas": 0
+      },
+      "attack": 1380,
+      "life": 4100,
+      "weaponType": "Лазер",
+      "armorType": "Легкая Броня",
+      "armorStrength": 3,
+      "cargo": 750,
+      "speed": 12000,
+      "fuel": 150,
+      "sourceTime": "00:17:30",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 4",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 4
+        },
+        {
+          "sourceText": "Топливные элементы<br />Уровень: 3",
+          "valueKind": "level",
+          "targetName": "Топливные элементы",
+          "value": 3
+        },
+        {
+          "sourceText": "Броня кораблей<br />Уровень: 6",
+          "valueKind": "level",
+          "targetName": "Броня кораблей",
+          "value": 6
+        },
+        {
+          "sourceText": "Нокс Дарт<br />Количество: 2",
+          "valueKind": "quantity",
+          "targetName": "Нокс Дарт",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "factionId": "veyra",
+      "slotId": "battleship",
+      "sourceName": "Призрак",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-18-10.html",
+      "sourcePageId": 6,
+      "sourceLevel": 0,
+      "sourceDescription": "Вы нуждаетесь в судне с крепким корпусом, которое не подведет Вас в бою? Призрак - судно для Вас. Оно вооружено последними оборонными лазерами, фотонными торпедами и ионным оружием. Основное вооружение - сильное плазменное оружие, которое может разрушить меньшие суда с одного единственного выстрела. Он оборудован толстой титановой броней и удивительно стойкими щитами, делая его реальной угрозой на поле битвы и трудной целью для вражеских судов. Но несмотря на все эти положительные аспекты есть один недостаток - крайне большой вес. Импульсные двигатели не достаточно сильны для Призрака, и именно поэтому на него установлены четыре ультраскоростных двигателя. Они обеспечивают судну хорошую скорость и маневренность.",
+      "sourceImage": "./page_2026-07-22_20-18-10_files/ship_6.png",
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Скарабей",
+      "asterionRole": "Тяжёлый боевой организм Роя",
+      "population": 10,
+      "cost": {
+        "metal": 32900,
+        "minerals": 14100,
+        "gas": 0
+      },
+      "attack": 6000,
+      "life": 18000,
+      "weaponType": "Ион",
+      "armorType": "Средняя Броня",
+      "armorStrength": 6,
+      "cargo": 750,
+      "speed": 16000,
+      "fuel": 500,
+      "sourceTime": "00:36:40",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 5",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 5
+        },
+        {
+          "sourceText": "Реактивные двигатели<br />Уровень: 3",
+          "valueKind": "level",
+          "targetName": "Реактивные двигатели",
+          "value": 3
+        },
+        {
+          "sourceText": "Нокс Дарт<br />Количество: 3",
+          "valueKind": "quantity",
+          "targetName": "Нокс Дарт",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "factionId": "veyra",
+      "slotId": "destroyer",
+      "sourceName": "Шмель",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-18-17.html",
+      "sourcePageId": 7,
+      "sourceLevel": 0,
+      "sourceDescription": "Боевой корабль высшего класса. Шмель создан, чтобы господствовать над любым другим судном на поле битвы. Оборудованный последними развитыми военными технологиями империи - большой арсенал протонных торпед, множество лазеров и ионных орудий, но сердце его огневой мощи - двойное плазменное орудие. Он - гарантия для разрушения каждого судна низшего класса. Защита состоит из многослойной титановой брони и двух уровней плазменных щитов. Однако у него есть и недостаток – крайне большой вес. В тестировании только ультраскоростные двигатели показали необходимые результаты. Шесть двигателей обеспечивают передвижение судна. Но этого мало для достаточной скорости и маневренности.",
+      "sourceImage": "./page_2026-07-22_20-18-17_files/ship_7.png",
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Шмель",
+      "asterionRole": "Тяжёлый штурмовой организм Роя",
+      "population": 17,
+      "cost": {
+        "metal": 53200,
+        "minerals": 47900,
+        "gas": 5300
+      },
+      "attack": 11050,
+      "life": 33200,
+      "weaponType": "Плазма",
+      "armorType": "Тяжелая Броня",
+      "armorStrength": 9,
+      "cargo": 1000,
+      "speed": 10000,
+      "fuel": 600,
+      "sourceTime": "00:45:20",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 6",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 6
+        },
+        {
+          "sourceText": "Плазменная наука<br />Уровень: 1",
+          "valueKind": "level",
+          "targetName": "Плазменная наука",
+          "value": 1
+        },
+        {
+          "sourceText": "Немезис<br />Количество: 1",
+          "valueKind": "quantity",
+          "targetName": "Немезис",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "factionId": "veyra",
+      "slotId": "bomber",
+      "sourceName": "Бомбардировщик",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-18-24.html",
+      "sourcePageId": 8,
+      "sourceLevel": 0,
+      "sourceDescription": "Развитие более совершенных оборонных систем на планетах привело к разработке специальных кораблей для уничтожения этих систем. Бомбардировщик очень эффективен против этих оборонных систем, оборудованных мощными плазменными торпедами. Но есть проблема - большой корпус делает его легкой мишенью. Именно поэтому, проектируя его, размер тщательно вычислен. Как следствие: нехватка толстой брони и частично распределенные щиты. Из-за нехватки свободного места используется измененный импульсный двигатель, это к сожалению не предоставляет достаточной скорости при большом потреблении газа.",
+      "sourceImage": "./page_2026-07-22_20-18-24_files/ship_8.png",
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Спороносец",
+      "asterionRole": "Осадный организм Роя",
+      "population": 21,
+      "cost": {
+        "metal": 42000,
+        "minerals": 52500,
+        "gas": 10500
+      },
+      "attack": 12600,
+      "life": 37800,
+      "weaponType": "Лазер",
+      "armorType": "Средняя Броня",
+      "armorStrength": 6,
+      "cargo": 400,
+      "speed": 16000,
+      "fuel": 600,
+      "sourceTime": "00:52:30",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 7",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 7
+        },
+        {
+          "sourceText": "Реактивные двигатели<br />Уровень: 3",
+          "valueKind": "level",
+          "targetName": "Реактивные двигатели",
+          "value": 3
+        },
+        {
+          "sourceText": "Лазерная наука<br />Уровень: 10",
+          "valueKind": "level",
+          "targetName": "Лазерная наука",
+          "value": 10
+        },
+        {
+          "sourceText": "Немезис<br />Количество: 1",
+          "valueKind": "quantity",
+          "targetName": "Немезис",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "factionId": "veyra",
+      "slotId": "death-star",
+      "sourceName": "Нокс Царица",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-18-32.html",
+      "sourcePageId": 9,
+      "sourceLevel": 0,
+      "sourceDescription": "Нокс Царица - наиболее мощное оружие. Размером с маленькую луну она несет исключительно сильное гравитационное оружие и способна к разрушению целых планет. Огромный размер критически снижает скорость этого типа судов. У неё огромная структура и невероятная транспортная способность.",
+      "sourceImage": "./page_2026-07-22_20-18-32_files/ship_9.png",
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Пожиратель",
+      "asterionRole": "Сверхтяжёлый организм Роя",
+      "population": 320,
+      "cost": {
+        "metal": 1064000,
+        "minerals": 851200,
+        "gas": 212800
+      },
+      "attack": 320000,
+      "life": 960000,
+      "weaponType": "Ион",
+      "armorType": "Тяжелая Броня",
+      "armorStrength": 9,
+      "cargo": 300000,
+      "speed": 200,
+      "fuel": 30000,
+      "sourceTime": "80:00:00",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 14",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 14
+        },
+        {
+          "sourceText": "Гиперпространство<br />Уровень: 13",
+          "valueKind": "level",
+          "targetName": "Гиперпространство",
+          "value": 13
+        },
+        {
+          "sourceText": "Параллельные вселенные<br />Уровень: 1",
+          "valueKind": "level",
+          "targetName": "Параллельные вселенные",
+          "value": 1
+        },
+        {
+          "sourceText": "Тяжелая Броня<br />Уровень: 10",
+          "valueKind": "level",
+          "targetName": "Тяжелая Броня",
+          "value": 10
+        },
+        {
+          "sourceText": "Нокс разум<br />Количество: 20",
+          "valueKind": "quantity",
+          "targetName": "Нокс разум",
+          "value": 20
+        }
+      ]
+    }
+  ]
+}
