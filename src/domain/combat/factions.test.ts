@@ -229,8 +229,10 @@ test('canonical source registry resolves all 39 ships without a faction fallback
   assert.equal(FACTION_SHIP_MECHANICS.aegis.transporter.combat.attack, FACTION_SHIP_MECHANICS.veyra.transporter.combat.attack);
   assert.notDeepEqual(FACTION_SHIP_MECHANICS.aegis.transporter, FACTION_SHIP_MECHANICS.veyra.transporter);
   assert.notDeepEqual(FACTION_SHIP_MECHANICS.synod['death-star'], FACTION_SHIP_MECHANICS.veyra['death-star']);
-  assert.equal(FACTION_SHIP_MECHANICS.veyra.cruiser.sourceName, 'Абсорбатор');
-  assert.equal(FACTION_SHIP_MECHANICS.veyra.defender.sourceName, 'Немезис');
+  assert.equal(FACTION_SHIP_MECHANICS.veyra.cruiser.sourceName, 'Немезис');
+  assert.equal(FACTION_SHIP_MECHANICS.veyra.defender.sourceName, 'Абсорбатор');
+  assert.equal(getFactionShipCatalog('veyra').find((ship) => ship.id === 'cruiser')?.name, 'Стрекоза');
+  assert.equal(getFactionShipCatalog('veyra').find((ship) => ship.id === 'defender')?.name, 'Панцирник');
 
   const destroyerControls = {
     aegis: { time: '00:01:36', population: 30, attack: 19_500, cost: { metal: 93_900, minerals: 84_500, gas: 9_400 }, requirements: ['Верфь · уровень 9', 'Реактивные двигатели · уровень 6', 'Гиперпространство · уровень 5'] },

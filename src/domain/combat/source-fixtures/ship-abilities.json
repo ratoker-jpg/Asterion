@@ -1,0 +1,1302 @@
+{
+  "fixtureId": "asterion-ordinary-ship-abilities-v1",
+  "source": {
+    "repository": "Nemexia_auto_v2_remote",
+    "revision": "87afb017749e2aa227ec29ea7825726387b4d4cf",
+    "repositoryPath": "D:/Desktop/Nemexia/Nemexia_auto_v2_remote",
+    "primarySourceRoot": "saved_pages/312313/Корабли",
+    "authority": "Primary saved ship-page HTML only; no battle_catalog.py or battle_engine.py facts are used.",
+    "textCapture": "HTML div.specialAbilityTooltipContent rendered as normalized visible text, preserving tooltip line breaks.",
+    "selectorTemplate": ".specialAbilitiesBox > ul > li.{abilityClass} > div.specialAbilityTooltipContent",
+    "selectorClassMap": {
+      "ignoreArmor": ".specialAbilitiesBox > ul > li.ignoreArmor > div.specialAbilityTooltipContent",
+      "devastate": ".specialAbilitiesBox > ul > li.devastate > div.specialAbilityTooltipContent",
+      "bonusLife": ".specialAbilitiesBox > ul > li.bonusLife > div.specialAbilityTooltipContent",
+      "armorBoost": ".specialAbilitiesBox > ul > li.armorBoost > div.specialAbilityTooltipContent",
+      "revival": ".specialAbilitiesBox > ul > li.revival > div.specialAbilityTooltipContent",
+      "artillery": ".specialAbilitiesBox > ul > li.artillery > div.specialAbilityTooltipContent",
+      "detonation": ".specialAbilitiesBox > ul > li.detonation > div.specialAbilityTooltipContent",
+      "planetDestroy": ".specialAbilitiesBox > ul > li.planetDestroy > div.specialAbilityTooltipContent",
+      "megaPower": ".specialAbilitiesBox > ul > li.megaPower > div.specialAbilityTooltipContent",
+      "freezing": ".specialAbilitiesBox > ul > li.freezing > div.specialAbilityTooltipContent"
+    }
+  },
+  "interpretationNotes": [
+    "Each source tooltip list item is stored as a distinct ability, including both distinct tooltips on each capital ship.",
+    "Source percentages remain sourceValue strings and are never converted into probabilities or fractions.",
+    "The three Detonation tooltips visibly say «Максимальное количество очков: 1001%»; the numeric meaning is explicitly UNKNOWN and source wording is retained.",
+    "catalogSupport describes source-component coverage by the existing Asterion passive catalog schema only. It makes no claim about whether Asterion runtime matches source battle mechanics.",
+    "Canonical Veyra slots in this fixture follow source identities: cruiser=Немезис, defender=Абсорбатор."
+  ],
+  "ships": [
+    {
+      "factionId": "aegis",
+      "slotId": "scout",
+      "sourceName": "Скаут",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-31-18.html",
+      "abilities": [
+        {
+          "abilityClass": "ignoreArmor",
+          "abilityName": "Игнорирование брони",
+          "selector": ".specialAbilitiesBox > ul > li.ignoreArmor > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Игнорирование брони",
+            "Применяется к дружественной группе кораблей, позволяет возможность нанести врагам урон сквозь броню.",
+            "Шанс за корабль: 0.035%",
+            "Максимальный шанс: 70%"
+          ],
+          "visibleTooltipText": "Игнорирование брони\nПрименяется к дружественной группе кораблей, позволяет возможность нанести врагам урон сквозь броню.\nШанс за корабль: 0.035%\nМаксимальный шанс: 70%",
+          "sourceMetrics": [
+            {
+              "type": "perShipChance",
+              "sourceLabel": "Шанс за корабль",
+              "sourceValue": "0.035%",
+              "interpretation": "source-label",
+              "valuePercent": "0.035",
+              "unit": "percent"
+            },
+            {
+              "type": "chanceCap",
+              "sourceLabel": "Максимальный шанс",
+              "sourceValue": "70%",
+              "interpretation": "source-label",
+              "valuePercent": "70",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "not-represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": null,
+            "sourceMetricTypesRepresented": [],
+            "sourceMetricTypesNotRepresented": [
+              "perShipChance",
+              "chanceCap"
+            ],
+            "limitations": [
+              "This records catalog schema coverage only; it is not a runtime defect classification."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "factionId": "aegis",
+      "slotId": "cruiser",
+      "sourceName": "Крейсер",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-31-27.html",
+      "abilities": [
+        {
+          "abilityClass": "devastate",
+          "abilityName": "Сокрушение",
+          "selector": ".specialAbilitiesBox > ul > li.devastate > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Сокрушение",
+            "Применяется к дружественной группе кораблей, увеличивает их атаку с 2 до 2.5 раза (не работает вместе с Критическим Ударом).",
+            "Шанс за корабль: 0.05%",
+            "Максимальный шанс: 50%"
+          ],
+          "visibleTooltipText": "Сокрушение\nПрименяется к дружественной группе кораблей, увеличивает их атаку с 2 до 2.5 раза (не работает вместе с Критическим Ударом).\nШанс за корабль: 0.05%\nМаксимальный шанс: 50%",
+          "sourceMetrics": [
+            {
+              "type": "perShipChance",
+              "sourceLabel": "Шанс за корабль",
+              "sourceValue": "0.05%",
+              "interpretation": "source-label",
+              "valuePercent": "0.05",
+              "unit": "percent"
+            },
+            {
+              "type": "chanceCap",
+              "sourceLabel": "Максимальный шанс",
+              "sourceValue": "50%",
+              "interpretation": "source-label",
+              "valuePercent": "50",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "not-represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": null,
+            "sourceMetricTypesRepresented": [],
+            "sourceMetricTypesNotRepresented": [
+              "perShipChance",
+              "chanceCap"
+            ],
+            "limitations": [
+              "This records catalog schema coverage only; it is not a runtime defect classification."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "factionId": "aegis",
+      "slotId": "defender",
+      "sourceName": "Защитник",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-31-36.html",
+      "abilities": [
+        {
+          "abilityClass": "bonusLife",
+          "abilityName": "Бонусные жизни",
+          "selector": ".specialAbilitiesBox > ul > li.bonusLife > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Бонусные жизни",
+            "Применяется ко всем дружественным группам судов, предоставляя бонус к количеству жизней.",
+            "Бонус за корабль: 0.05%",
+            "Максимальный бонус: 30%"
+          ],
+          "visibleTooltipText": "Бонусные жизни\nПрименяется ко всем дружественным группам судов, предоставляя бонус к количеству жизней.\nБонус за корабль: 0.05%\nМаксимальный бонус: 30%",
+          "sourceMetrics": [
+            {
+              "type": "perShipBonus",
+              "sourceLabel": "Бонус за корабль",
+              "sourceValue": "0.05%",
+              "interpretation": "source-label",
+              "valuePercent": "0.05",
+              "unit": "percent"
+            },
+            {
+              "type": "bonusCap",
+              "sourceLabel": "Максимальный бонус",
+              "sourceValue": "30%",
+              "interpretation": "source-label",
+              "valuePercent": "30",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": {
+              "kind": "life",
+              "rate": 0.0005,
+              "cap": 0.3
+            },
+            "sourceMetricTypesRepresented": [
+              "perShipBonus",
+              "bonusCap"
+            ],
+            "sourceMetricTypesNotRepresented": [],
+            "limitations": [
+              "Target group and other exact tooltip semantics remain in source text; the passive schema does not encode them."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "factionId": "aegis",
+      "slotId": "battleship",
+      "sourceName": "Боевой корабль",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-31-43.html",
+      "abilities": [
+        {
+          "abilityClass": "armorBoost",
+          "abilityName": "Улучшенная броня",
+          "selector": ".specialAbilitiesBox > ul > li.armorBoost > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Улучшенная броня",
+            "Применяется ко всем дружественным группам судов, предоставляя бонус к броне.",
+            "Бонус за корабль: 0.038%",
+            "Максимальный бонус: 30%"
+          ],
+          "visibleTooltipText": "Улучшенная броня\nПрименяется ко всем дружественным группам судов, предоставляя бонус к броне.\nБонус за корабль: 0.038%\nМаксимальный бонус: 30%",
+          "sourceMetrics": [
+            {
+              "type": "perShipBonus",
+              "sourceLabel": "Бонус за корабль",
+              "sourceValue": "0.038%",
+              "interpretation": "source-label",
+              "valuePercent": "0.038",
+              "unit": "percent"
+            },
+            {
+              "type": "bonusCap",
+              "sourceLabel": "Максимальный бонус",
+              "sourceValue": "30%",
+              "interpretation": "source-label",
+              "valuePercent": "30",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": {
+              "kind": "armor",
+              "rate": 0.00038,
+              "cap": 0.3
+            },
+            "sourceMetricTypesRepresented": [
+              "perShipBonus",
+              "bonusCap"
+            ],
+            "sourceMetricTypesNotRepresented": [],
+            "limitations": [
+              "Target group and other exact tooltip semantics remain in source text; the passive schema does not encode them."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "factionId": "aegis",
+      "slotId": "destroyer",
+      "sourceName": "Разрушитель",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-31-55.html",
+      "abilities": [
+        {
+          "abilityClass": "revival",
+          "abilityName": "Возрождение",
+          "selector": ".specialAbilitiesBox > ul > li.revival > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Возрождение",
+            "Шанс возродить часть потерянных дружественных кораблей во время раунд сражения.",
+            "Бонус за корабль: 0.08%",
+            "Максимальный бонус: 40%",
+            "Шанс за корабль: 0.14%",
+            "Максимальный шанс: 70%"
+          ],
+          "visibleTooltipText": "Возрождение\nШанс возродить часть потерянных дружественных кораблей во время раунд сражения.\nБонус за корабль: 0.08%\nМаксимальный бонус: 40%\nШанс за корабль: 0.14%\nМаксимальный шанс: 70%",
+          "sourceMetrics": [
+            {
+              "type": "perShipBonus",
+              "sourceLabel": "Бонус за корабль",
+              "sourceValue": "0.08%",
+              "interpretation": "source-label",
+              "valuePercent": "0.08",
+              "unit": "percent"
+            },
+            {
+              "type": "bonusCap",
+              "sourceLabel": "Максимальный бонус",
+              "sourceValue": "40%",
+              "interpretation": "source-label",
+              "valuePercent": "40",
+              "unit": "percent"
+            },
+            {
+              "type": "perShipChance",
+              "sourceLabel": "Шанс за корабль",
+              "sourceValue": "0.14%",
+              "interpretation": "source-label",
+              "valuePercent": "0.14",
+              "unit": "percent"
+            },
+            {
+              "type": "chanceCap",
+              "sourceLabel": "Максимальный шанс",
+              "sourceValue": "70%",
+              "interpretation": "source-label",
+              "valuePercent": "70",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "not-represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": null,
+            "sourceMetricTypesRepresented": [],
+            "sourceMetricTypesNotRepresented": [
+              "perShipBonus",
+              "bonusCap",
+              "perShipChance",
+              "chanceCap"
+            ],
+            "limitations": [
+              "This records catalog schema coverage only; it is not a runtime defect classification."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "factionId": "aegis",
+      "slotId": "bomber",
+      "sourceName": "Бомбардировщик",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-32-03.html",
+      "abilities": [
+        {
+          "abilityClass": "artillery",
+          "abilityName": "Артиллерия",
+          "selector": ".specialAbilitiesBox > ul > li.artillery > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Артиллерия",
+            "Применяется ко всем дружественным группам судов, предоставляя 50% к атаке против обороны",
+            "Шанс за корабль: 0.1%",
+            "Максимальный шанс: 70%"
+          ],
+          "visibleTooltipText": "Артиллерия\nПрименяется ко всем дружественным группам судов, предоставляя 50% к атаке против обороны\nШанс за корабль: 0.1%\nМаксимальный шанс: 70%",
+          "sourceMetrics": [
+            {
+              "type": "perShipChance",
+              "sourceLabel": "Шанс за корабль",
+              "sourceValue": "0.1%",
+              "interpretation": "source-label",
+              "valuePercent": "0.1",
+              "unit": "percent"
+            },
+            {
+              "type": "chanceCap",
+              "sourceLabel": "Максимальный шанс",
+              "sourceValue": "70%",
+              "interpretation": "source-label",
+              "valuePercent": "70",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "not-represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": null,
+            "sourceMetricTypesRepresented": [],
+            "sourceMetricTypesNotRepresented": [
+              "perShipChance",
+              "chanceCap"
+            ],
+            "limitations": [
+              "This records catalog schema coverage only; it is not a runtime defect classification."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "factionId": "aegis",
+      "slotId": "death-star",
+      "sourceName": "Звезда смерти",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-32-12.html",
+      "abilities": [
+        {
+          "abilityClass": "detonation",
+          "abilityName": "Детонация",
+          "selector": ".specialAbilitiesBox > ul > li.detonation > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Детонация",
+            "Шанс уничтожения уровень зданий на вражеской планете. Зависит от уровня модернизации юнитов.",
+            "Очков за корабль: 45%",
+            "Максимальное количество очков: 1001%"
+          ],
+          "visibleTooltipText": "Детонация\nШанс уничтожения уровень зданий на вражеской планете. Зависит от уровня модернизации юнитов.\nОчков за корабль: 45%\nМаксимальное количество очков: 1001%",
+          "sourceMetrics": [
+            {
+              "type": "pointsPerShip",
+              "sourceLabel": "Очков за корабль",
+              "sourceValue": "45%",
+              "interpretation": "UNKNOWN",
+              "valuePercent": "45",
+              "unit": "percent"
+            },
+            {
+              "type": "maximumPoints",
+              "sourceLabel": "Максимальное количество очков",
+              "sourceValue": "1001%",
+              "interpretation": "UNKNOWN",
+              "valuePercent": "1001",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "not-represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": null,
+            "sourceMetricTypesRepresented": [],
+            "sourceMetricTypesNotRepresented": [
+              "pointsPerShip",
+              "maximumPoints"
+            ],
+            "limitations": [
+              "This records catalog schema coverage only; it is not a runtime defect classification."
+            ]
+          }
+        },
+        {
+          "abilityClass": "planetDestroy",
+          "abilityName": "Уничтожение планеты",
+          "selector": ".specialAbilitiesBox > ul > li.planetDestroy > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Уничтожение планеты",
+            "Шанс уничтожения вражеской планеты. Результат зависит от уровня модернизации юнитов.",
+            "Шанс за корабль: 3%",
+            "Максимальный шанс: 30%"
+          ],
+          "visibleTooltipText": "Уничтожение планеты\nШанс уничтожения вражеской планеты. Результат зависит от уровня модернизации юнитов.\nШанс за корабль: 3%\nМаксимальный шанс: 30%",
+          "sourceMetrics": [
+            {
+              "type": "perShipChance",
+              "sourceLabel": "Шанс за корабль",
+              "sourceValue": "3%",
+              "interpretation": "source-label",
+              "valuePercent": "3",
+              "unit": "percent"
+            },
+            {
+              "type": "chanceCap",
+              "sourceLabel": "Максимальный шанс",
+              "sourceValue": "30%",
+              "interpretation": "source-label",
+              "valuePercent": "30",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "not-represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": null,
+            "sourceMetricTypesRepresented": [],
+            "sourceMetricTypesNotRepresented": [
+              "perShipChance",
+              "chanceCap"
+            ],
+            "limitations": [
+              "This records catalog schema coverage only; it is not a runtime defect classification."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "factionId": "synod",
+      "slotId": "scout",
+      "sourceName": "Истребитель",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-38-00.html",
+      "abilities": [
+        {
+          "abilityClass": "ignoreArmor",
+          "abilityName": "Игнорирование брони",
+          "selector": ".specialAbilitiesBox > ul > li.ignoreArmor > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Игнорирование брони",
+            "Применяется к дружественной группе кораблей, позволяет возможность нанести врагам урон сквозь броню.",
+            "Шанс за корабль: 0.035%",
+            "Максимальный шанс: 70%"
+          ],
+          "visibleTooltipText": "Игнорирование брони\nПрименяется к дружественной группе кораблей, позволяет возможность нанести врагам урон сквозь броню.\nШанс за корабль: 0.035%\nМаксимальный шанс: 70%",
+          "sourceMetrics": [
+            {
+              "type": "perShipChance",
+              "sourceLabel": "Шанс за корабль",
+              "sourceValue": "0.035%",
+              "interpretation": "source-label",
+              "valuePercent": "0.035",
+              "unit": "percent"
+            },
+            {
+              "type": "chanceCap",
+              "sourceLabel": "Максимальный шанс",
+              "sourceValue": "70%",
+              "interpretation": "source-label",
+              "valuePercent": "70",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "not-represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": null,
+            "sourceMetricTypesRepresented": [],
+            "sourceMetricTypesNotRepresented": [
+              "perShipChance",
+              "chanceCap"
+            ],
+            "limitations": [
+              "This records catalog schema coverage only; it is not a runtime defect classification."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "factionId": "synod",
+      "slotId": "cruiser",
+      "sourceName": "Перехватчик",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-38-08.html",
+      "abilities": [
+        {
+          "abilityClass": "devastate",
+          "abilityName": "Сокрушение",
+          "selector": ".specialAbilitiesBox > ul > li.devastate > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Сокрушение",
+            "Применяется к дружественной группе кораблей, увеличивает их атаку с 2 до 2.5 раза (не работает вместе с Критическим Ударом).",
+            "Шанс за корабль: 0.036%",
+            "Максимальный шанс: 50%"
+          ],
+          "visibleTooltipText": "Сокрушение\nПрименяется к дружественной группе кораблей, увеличивает их атаку с 2 до 2.5 раза (не работает вместе с Критическим Ударом).\nШанс за корабль: 0.036%\nМаксимальный шанс: 50%",
+          "sourceMetrics": [
+            {
+              "type": "perShipChance",
+              "sourceLabel": "Шанс за корабль",
+              "sourceValue": "0.036%",
+              "interpretation": "source-label",
+              "valuePercent": "0.036",
+              "unit": "percent"
+            },
+            {
+              "type": "chanceCap",
+              "sourceLabel": "Максимальный шанс",
+              "sourceValue": "50%",
+              "interpretation": "source-label",
+              "valuePercent": "50",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "not-represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": null,
+            "sourceMetricTypesRepresented": [],
+            "sourceMetricTypesNotRepresented": [
+              "perShipChance",
+              "chanceCap"
+            ],
+            "limitations": [
+              "This records catalog schema coverage only; it is not a runtime defect classification."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "factionId": "synod",
+      "slotId": "defender",
+      "sourceName": "Бот Щит",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-38-20.html",
+      "abilities": [
+        {
+          "abilityClass": "bonusLife",
+          "abilityName": "Бонусные жизни",
+          "selector": ".specialAbilitiesBox > ul > li.bonusLife > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Бонусные жизни",
+            "Применяется ко всем дружественным группам судов, предоставляя бонус к количеству жизней.",
+            "Бонус за корабль: 0.075%",
+            "Максимальный бонус: 30%"
+          ],
+          "visibleTooltipText": "Бонусные жизни\nПрименяется ко всем дружественным группам судов, предоставляя бонус к количеству жизней.\nБонус за корабль: 0.075%\nМаксимальный бонус: 30%",
+          "sourceMetrics": [
+            {
+              "type": "perShipBonus",
+              "sourceLabel": "Бонус за корабль",
+              "sourceValue": "0.075%",
+              "interpretation": "source-label",
+              "valuePercent": "0.075",
+              "unit": "percent"
+            },
+            {
+              "type": "bonusCap",
+              "sourceLabel": "Максимальный бонус",
+              "sourceValue": "30%",
+              "interpretation": "source-label",
+              "valuePercent": "30",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": {
+              "kind": "life",
+              "rate": 0.00075,
+              "cap": 0.3
+            },
+            "sourceMetricTypesRepresented": [
+              "perShipBonus",
+              "bonusCap"
+            ],
+            "sourceMetricTypesNotRepresented": [],
+            "limitations": [
+              "Target group and other exact tooltip semantics remain in source text; the passive schema does not encode them."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "factionId": "synod",
+      "slotId": "battleship",
+      "sourceName": "Звездная Армада",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-38-27.html",
+      "abilities": [
+        {
+          "abilityClass": "armorBoost",
+          "abilityName": "Улучшенная броня",
+          "selector": ".specialAbilitiesBox > ul > li.armorBoost > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Улучшенная броня",
+            "Применяется ко всем дружественным группам судов, предоставляя бонус к броне.",
+            "Бонус за корабль: 0.028%",
+            "Максимальный бонус: 30%"
+          ],
+          "visibleTooltipText": "Улучшенная броня\nПрименяется ко всем дружественным группам судов, предоставляя бонус к броне.\nБонус за корабль: 0.028%\nМаксимальный бонус: 30%",
+          "sourceMetrics": [
+            {
+              "type": "perShipBonus",
+              "sourceLabel": "Бонус за корабль",
+              "sourceValue": "0.028%",
+              "interpretation": "source-label",
+              "valuePercent": "0.028",
+              "unit": "percent"
+            },
+            {
+              "type": "bonusCap",
+              "sourceLabel": "Максимальный бонус",
+              "sourceValue": "30%",
+              "interpretation": "source-label",
+              "valuePercent": "30",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": {
+              "kind": "armor",
+              "rate": 0.00028,
+              "cap": 0.3
+            },
+            "sourceMetricTypesRepresented": [
+              "perShipBonus",
+              "bonusCap"
+            ],
+            "sourceMetricTypesNotRepresented": [],
+            "limitations": [
+              "Target group and other exact tooltip semantics remain in source text; the passive schema does not encode them."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "factionId": "synod",
+      "slotId": "destroyer",
+      "sourceName": "Голиаф",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-38-35.html",
+      "abilities": [
+        {
+          "abilityClass": "megaPower",
+          "abilityName": "Мега сила",
+          "selector": ".specialAbilitiesBox > ul > li.megaPower > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Мега сила",
+            "Применяется к дружественной группе кораблей, увеличивая их силу атаки.",
+            "Бонус за корабль: 0.09%",
+            "Максимальный бонус: 80%",
+            "Шанс за корабль: 0.08%",
+            "Максимальный шанс: 70%"
+          ],
+          "visibleTooltipText": "Мега сила\nПрименяется к дружественной группе кораблей, увеличивая их силу атаки.\nБонус за корабль: 0.09%\nМаксимальный бонус: 80%\nШанс за корабль: 0.08%\nМаксимальный шанс: 70%",
+          "sourceMetrics": [
+            {
+              "type": "perShipBonus",
+              "sourceLabel": "Бонус за корабль",
+              "sourceValue": "0.09%",
+              "interpretation": "source-label",
+              "valuePercent": "0.09",
+              "unit": "percent"
+            },
+            {
+              "type": "bonusCap",
+              "sourceLabel": "Максимальный бонус",
+              "sourceValue": "80%",
+              "interpretation": "source-label",
+              "valuePercent": "80",
+              "unit": "percent"
+            },
+            {
+              "type": "perShipChance",
+              "sourceLabel": "Шанс за корабль",
+              "sourceValue": "0.08%",
+              "interpretation": "source-label",
+              "valuePercent": "0.08",
+              "unit": "percent"
+            },
+            {
+              "type": "chanceCap",
+              "sourceLabel": "Максимальный шанс",
+              "sourceValue": "70%",
+              "interpretation": "source-label",
+              "valuePercent": "70",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "partially-represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": {
+              "kind": "attack",
+              "rate": 0.0009,
+              "cap": 0.8
+            },
+            "sourceMetricTypesRepresented": [
+              "perShipBonus",
+              "bonusCap"
+            ],
+            "sourceMetricTypesNotRepresented": [
+              "perShipChance",
+              "chanceCap"
+            ],
+            "limitations": [
+              "Target group and other exact tooltip semantics remain in source text; the passive schema does not encode them."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "factionId": "synod",
+      "slotId": "bomber",
+      "sourceName": "БомберБот",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-38-44.html",
+      "abilities": [
+        {
+          "abilityClass": "artillery",
+          "abilityName": "Артиллерия",
+          "selector": ".specialAbilitiesBox > ul > li.artillery > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Артиллерия",
+            "Применяется ко всем дружественным группам судов, предоставляя 50% к атаке против обороны",
+            "Шанс за корабль: 0.09%",
+            "Максимальный шанс: 70%"
+          ],
+          "visibleTooltipText": "Артиллерия\nПрименяется ко всем дружественным группам судов, предоставляя 50% к атаке против обороны\nШанс за корабль: 0.09%\nМаксимальный шанс: 70%",
+          "sourceMetrics": [
+            {
+              "type": "perShipChance",
+              "sourceLabel": "Шанс за корабль",
+              "sourceValue": "0.09%",
+              "interpretation": "source-label",
+              "valuePercent": "0.09",
+              "unit": "percent"
+            },
+            {
+              "type": "chanceCap",
+              "sourceLabel": "Максимальный шанс",
+              "sourceValue": "70%",
+              "interpretation": "source-label",
+              "valuePercent": "70",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "not-represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": null,
+            "sourceMetricTypesRepresented": [],
+            "sourceMetricTypesNotRepresented": [
+              "perShipChance",
+              "chanceCap"
+            ],
+            "limitations": [
+              "This records catalog schema coverage only; it is not a runtime defect classification."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "factionId": "synod",
+      "slotId": "death-star",
+      "sourceName": "Титан",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-38-54.html",
+      "abilities": [
+        {
+          "abilityClass": "detonation",
+          "abilityName": "Детонация",
+          "selector": ".specialAbilitiesBox > ul > li.detonation > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Детонация",
+            "Шанс уничтожения уровень зданий на вражеской планете. Зависит от уровня модернизации юнитов.",
+            "Очков за корабль: 90%",
+            "Максимальное количество очков: 1001%"
+          ],
+          "visibleTooltipText": "Детонация\nШанс уничтожения уровень зданий на вражеской планете. Зависит от уровня модернизации юнитов.\nОчков за корабль: 90%\nМаксимальное количество очков: 1001%",
+          "sourceMetrics": [
+            {
+              "type": "pointsPerShip",
+              "sourceLabel": "Очков за корабль",
+              "sourceValue": "90%",
+              "interpretation": "UNKNOWN",
+              "valuePercent": "90",
+              "unit": "percent"
+            },
+            {
+              "type": "maximumPoints",
+              "sourceLabel": "Максимальное количество очков",
+              "sourceValue": "1001%",
+              "interpretation": "UNKNOWN",
+              "valuePercent": "1001",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "not-represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": null,
+            "sourceMetricTypesRepresented": [],
+            "sourceMetricTypesNotRepresented": [
+              "pointsPerShip",
+              "maximumPoints"
+            ],
+            "limitations": [
+              "This records catalog schema coverage only; it is not a runtime defect classification."
+            ]
+          }
+        },
+        {
+          "abilityClass": "planetDestroy",
+          "abilityName": "Уничтожение планеты",
+          "selector": ".specialAbilitiesBox > ul > li.planetDestroy > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Уничтожение планеты",
+            "Шанс уничтожения вражеской планеты. Результат зависит от уровня модернизации юнитов.",
+            "Шанс за корабль: 2.5%",
+            "Максимальный шанс: 30%"
+          ],
+          "visibleTooltipText": "Уничтожение планеты\nШанс уничтожения вражеской планеты. Результат зависит от уровня модернизации юнитов.\nШанс за корабль: 2.5%\nМаксимальный шанс: 30%",
+          "sourceMetrics": [
+            {
+              "type": "perShipChance",
+              "sourceLabel": "Шанс за корабль",
+              "sourceValue": "2.5%",
+              "interpretation": "source-label",
+              "valuePercent": "2.5",
+              "unit": "percent"
+            },
+            {
+              "type": "chanceCap",
+              "sourceLabel": "Максимальный шанс",
+              "sourceValue": "30%",
+              "interpretation": "source-label",
+              "valuePercent": "30",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "not-represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": null,
+            "sourceMetricTypesRepresented": [],
+            "sourceMetricTypesNotRepresented": [
+              "perShipChance",
+              "chanceCap"
+            ],
+            "limitations": [
+              "This records catalog schema coverage only; it is not a runtime defect classification."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "factionId": "veyra",
+      "slotId": "scout",
+      "sourceName": "Нокс Дарт",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-17-29.html",
+      "abilities": [
+        {
+          "abilityClass": "ignoreArmor",
+          "abilityName": "Игнорирование брони",
+          "selector": ".specialAbilitiesBox > ul > li.ignoreArmor > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Игнорирование брони",
+            "Применяется к дружественной группе кораблей, позволяет возможность нанести врагам урон сквозь броню.",
+            "Шанс за корабль: 0.035%",
+            "Максимальный шанс: 70%"
+          ],
+          "visibleTooltipText": "Игнорирование брони\nПрименяется к дружественной группе кораблей, позволяет возможность нанести врагам урон сквозь броню.\nШанс за корабль: 0.035%\nМаксимальный шанс: 70%",
+          "sourceMetrics": [
+            {
+              "type": "perShipChance",
+              "sourceLabel": "Шанс за корабль",
+              "sourceValue": "0.035%",
+              "interpretation": "source-label",
+              "valuePercent": "0.035",
+              "unit": "percent"
+            },
+            {
+              "type": "chanceCap",
+              "sourceLabel": "Максимальный шанс",
+              "sourceValue": "70%",
+              "interpretation": "source-label",
+              "valuePercent": "70",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "not-represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": null,
+            "sourceMetricTypesRepresented": [],
+            "sourceMetricTypesNotRepresented": [
+              "perShipChance",
+              "chanceCap"
+            ],
+            "limitations": [
+              "This records catalog schema coverage only; it is not a runtime defect classification."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "factionId": "veyra",
+      "slotId": "cruiser",
+      "sourceName": "Немезис",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-18-01.html",
+      "abilities": [
+        {
+          "abilityClass": "devastate",
+          "abilityName": "Сокрушение",
+          "selector": ".specialAbilitiesBox > ul > li.devastate > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Сокрушение",
+            "Применяется к дружественной группе кораблей, увеличивает их атаку с 2 до 2.5 раза (не работает вместе с Критическим Ударом).",
+            "Шанс за корабль: 0.015%",
+            "Максимальный шанс: 50%"
+          ],
+          "visibleTooltipText": "Сокрушение\nПрименяется к дружественной группе кораблей, увеличивает их атаку с 2 до 2.5 раза (не работает вместе с Критическим Ударом).\nШанс за корабль: 0.015%\nМаксимальный шанс: 50%",
+          "sourceMetrics": [
+            {
+              "type": "perShipChance",
+              "sourceLabel": "Шанс за корабль",
+              "sourceValue": "0.015%",
+              "interpretation": "source-label",
+              "valuePercent": "0.015",
+              "unit": "percent"
+            },
+            {
+              "type": "chanceCap",
+              "sourceLabel": "Максимальный шанс",
+              "sourceValue": "50%",
+              "interpretation": "source-label",
+              "valuePercent": "50",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "not-represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": null,
+            "sourceMetricTypesRepresented": [],
+            "sourceMetricTypesNotRepresented": [
+              "perShipChance",
+              "chanceCap"
+            ],
+            "limitations": [
+              "This records catalog schema coverage only; it is not a runtime defect classification."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "factionId": "veyra",
+      "slotId": "defender",
+      "sourceName": "Абсорбатор",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-17-43.html",
+      "abilities": [
+        {
+          "abilityClass": "bonusLife",
+          "abilityName": "Бонусные жизни",
+          "selector": ".specialAbilitiesBox > ul > li.bonusLife > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Бонусные жизни",
+            "Применяется ко всем дружественным группам судов, предоставляя бонус к количеству жизней.",
+            "Бонус за корабль: 0.03%",
+            "Максимальный бонус: 30%"
+          ],
+          "visibleTooltipText": "Бонусные жизни\nПрименяется ко всем дружественным группам судов, предоставляя бонус к количеству жизней.\nБонус за корабль: 0.03%\nМаксимальный бонус: 30%",
+          "sourceMetrics": [
+            {
+              "type": "perShipBonus",
+              "sourceLabel": "Бонус за корабль",
+              "sourceValue": "0.03%",
+              "interpretation": "source-label",
+              "valuePercent": "0.03",
+              "unit": "percent"
+            },
+            {
+              "type": "bonusCap",
+              "sourceLabel": "Максимальный бонус",
+              "sourceValue": "30%",
+              "interpretation": "source-label",
+              "valuePercent": "30",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": {
+              "kind": "life",
+              "rate": 0.0003,
+              "cap": 0.3
+            },
+            "sourceMetricTypesRepresented": [
+              "perShipBonus",
+              "bonusCap"
+            ],
+            "sourceMetricTypesNotRepresented": [],
+            "limitations": [
+              "Target group and other exact tooltip semantics remain in source text; the passive schema does not encode them."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "factionId": "veyra",
+      "slotId": "battleship",
+      "sourceName": "Призрак",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-18-10.html",
+      "abilities": [
+        {
+          "abilityClass": "armorBoost",
+          "abilityName": "Улучшенная броня",
+          "selector": ".specialAbilitiesBox > ul > li.armorBoost > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Улучшенная броня",
+            "Применяется ко всем дружественным группам судов, предоставляя бонус к броне.",
+            "Бонус за корабль: 0.018%",
+            "Максимальный бонус: 30%"
+          ],
+          "visibleTooltipText": "Улучшенная броня\nПрименяется ко всем дружественным группам судов, предоставляя бонус к броне.\nБонус за корабль: 0.018%\nМаксимальный бонус: 30%",
+          "sourceMetrics": [
+            {
+              "type": "perShipBonus",
+              "sourceLabel": "Бонус за корабль",
+              "sourceValue": "0.018%",
+              "interpretation": "source-label",
+              "valuePercent": "0.018",
+              "unit": "percent"
+            },
+            {
+              "type": "bonusCap",
+              "sourceLabel": "Максимальный бонус",
+              "sourceValue": "30%",
+              "interpretation": "source-label",
+              "valuePercent": "30",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": {
+              "kind": "armor",
+              "rate": 0.00018,
+              "cap": 0.3
+            },
+            "sourceMetricTypesRepresented": [
+              "perShipBonus",
+              "bonusCap"
+            ],
+            "sourceMetricTypesNotRepresented": [],
+            "limitations": [
+              "Target group and other exact tooltip semantics remain in source text; the passive schema does not encode them."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "factionId": "veyra",
+      "slotId": "destroyer",
+      "sourceName": "Шмель",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-18-17.html",
+      "abilities": [
+        {
+          "abilityClass": "freezing",
+          "abilityName": "Заморажение",
+          "selector": ".specialAbilitiesBox > ul > li.freezing > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Заморажение",
+            "Применяется на вражеской группе судов, сводя их атаку к нулю.",
+            "Шанс за корабль: 0.04%",
+            "Максимальный шанс: 20%"
+          ],
+          "visibleTooltipText": "Заморажение\nПрименяется на вражеской группе судов, сводя их атаку к нулю.\nШанс за корабль: 0.04%\nМаксимальный шанс: 20%",
+          "sourceMetrics": [
+            {
+              "type": "perShipChance",
+              "sourceLabel": "Шанс за корабль",
+              "sourceValue": "0.04%",
+              "interpretation": "source-label",
+              "valuePercent": "0.04",
+              "unit": "percent"
+            },
+            {
+              "type": "chanceCap",
+              "sourceLabel": "Максимальный шанс",
+              "sourceValue": "20%",
+              "interpretation": "source-label",
+              "valuePercent": "20",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "not-represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": null,
+            "sourceMetricTypesRepresented": [],
+            "sourceMetricTypesNotRepresented": [
+              "perShipChance",
+              "chanceCap"
+            ],
+            "limitations": [
+              "This records catalog schema coverage only; it is not a runtime defect classification."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "factionId": "veyra",
+      "slotId": "bomber",
+      "sourceName": "Бомбардировщик",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-18-24.html",
+      "abilities": [
+        {
+          "abilityClass": "artillery",
+          "abilityName": "Артиллерия",
+          "selector": ".specialAbilitiesBox > ul > li.artillery > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Артиллерия",
+            "Применяется ко всем дружественным группам судов, предоставляя 50% к атаке против обороны",
+            "Шанс за корабль: 0.09%",
+            "Максимальный шанс: 70%"
+          ],
+          "visibleTooltipText": "Артиллерия\nПрименяется ко всем дружественным группам судов, предоставляя 50% к атаке против обороны\nШанс за корабль: 0.09%\nМаксимальный шанс: 70%",
+          "sourceMetrics": [
+            {
+              "type": "perShipChance",
+              "sourceLabel": "Шанс за корабль",
+              "sourceValue": "0.09%",
+              "interpretation": "source-label",
+              "valuePercent": "0.09",
+              "unit": "percent"
+            },
+            {
+              "type": "chanceCap",
+              "sourceLabel": "Максимальный шанс",
+              "sourceValue": "70%",
+              "interpretation": "source-label",
+              "valuePercent": "70",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "not-represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": null,
+            "sourceMetricTypesRepresented": [],
+            "sourceMetricTypesNotRepresented": [
+              "perShipChance",
+              "chanceCap"
+            ],
+            "limitations": [
+              "This records catalog schema coverage only; it is not a runtime defect classification."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "factionId": "veyra",
+      "slotId": "death-star",
+      "sourceName": "Нокс Царица",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-18-32.html",
+      "abilities": [
+        {
+          "abilityClass": "detonation",
+          "abilityName": "Детонация",
+          "selector": ".specialAbilitiesBox > ul > li.detonation > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Детонация",
+            "Шанс уничтожения уровень зданий на вражеской планете. Зависит от уровня модернизации юнитов.",
+            "Очков за корабль: 55%",
+            "Максимальное количество очков: 1001%"
+          ],
+          "visibleTooltipText": "Детонация\nШанс уничтожения уровень зданий на вражеской планете. Зависит от уровня модернизации юнитов.\nОчков за корабль: 55%\nМаксимальное количество очков: 1001%",
+          "sourceMetrics": [
+            {
+              "type": "pointsPerShip",
+              "sourceLabel": "Очков за корабль",
+              "sourceValue": "55%",
+              "interpretation": "UNKNOWN",
+              "valuePercent": "55",
+              "unit": "percent"
+            },
+            {
+              "type": "maximumPoints",
+              "sourceLabel": "Максимальное количество очков",
+              "sourceValue": "1001%",
+              "interpretation": "UNKNOWN",
+              "valuePercent": "1001",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "not-represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": null,
+            "sourceMetricTypesRepresented": [],
+            "sourceMetricTypesNotRepresented": [
+              "pointsPerShip",
+              "maximumPoints"
+            ],
+            "limitations": [
+              "This records catalog schema coverage only; it is not a runtime defect classification."
+            ]
+          }
+        },
+        {
+          "abilityClass": "planetDestroy",
+          "abilityName": "Уничтожение планеты",
+          "selector": ".specialAbilitiesBox > ul > li.planetDestroy > div.specialAbilityTooltipContent",
+          "visibleTooltipLines": [
+            "Уничтожение планеты",
+            "Шанс уничтожения вражеской планеты. Результат зависит от уровня модернизации юнитов.",
+            "Шанс за корабль: 1.5%",
+            "Максимальный шанс: 30%"
+          ],
+          "visibleTooltipText": "Уничтожение планеты\nШанс уничтожения вражеской планеты. Результат зависит от уровня модернизации юнитов.\nШанс за корабль: 1.5%\nМаксимальный шанс: 30%",
+          "sourceMetrics": [
+            {
+              "type": "perShipChance",
+              "sourceLabel": "Шанс за корабль",
+              "sourceValue": "1.5%",
+              "interpretation": "source-label",
+              "valuePercent": "1.5",
+              "unit": "percent"
+            },
+            {
+              "type": "chanceCap",
+              "sourceLabel": "Максимальный шанс",
+              "sourceValue": "30%",
+              "interpretation": "source-label",
+              "valuePercent": "30",
+              "unit": "percent"
+            }
+          ],
+          "catalogSupport": {
+            "status": "not-represented",
+            "schema": "Asterion CombatSpecialBonus (attack/life/armor rate and cap)",
+            "existingRecord": null,
+            "sourceMetricTypesRepresented": [],
+            "sourceMetricTypesNotRepresented": [
+              "perShipChance",
+              "chanceCap"
+            ],
+            "limitations": [
+              "This records catalog schema coverage only; it is not a runtime defect classification."
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

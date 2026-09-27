@@ -1,0 +1,622 @@
+{
+  "repository": "ratoker-jpg/Nemexia_auto_v2",
+  "revision": "87afb017749e2aa227ec29ea7825726387b4d4cf",
+  "selectors": {
+    "sourceName": ".itemName",
+    "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/<captured HTML filename>",
+    "sourcePageId": "a.switchLanguage[href*=\"information.php?type=ship&id=\"] (URL query parameter id)",
+    "sourceLevel": ".currentLevel",
+    "sourceDescription": ".itemDescription",
+    "sourceImage": ".imageHolder img[src] (exact src attribute)",
+    "population": ".statsBox li.pop",
+    "cost.metal": ".costBox li.resMetal",
+    "cost.minerals": ".costBox li.resCrystal",
+    "cost.gas": ".costBox li.resGas",
+    "attack": ".statsBox li.attack",
+    "life": ".statsBox li.life",
+    "weaponType": ".statsBox li.weaponTypeName",
+    "armorType": ".statsBox li.armourTypeName (type text before percentage)",
+    "armorStrength": ".statsBox li.armourTypeName (percentage in parentheses)",
+    "cargo": ".statsBox li.cargo (null only if absent)",
+    "speed": ".statsBox li.speed (null only if absent)",
+    "fuel": ".statsBox li.gasConsumption (null only if absent)",
+    "sourceTime": ".statsBox li.contructionTime",
+    "requirements.sourceText": ".requirementsBox dd[onmouseover] Tip(...) tooltip HTML argument",
+    "requirements.valueKind": ".requirementsBox dd[onmouseover] Tip(...) tooltip (Уровень: N => level; otherwise numeric <big> => quantity)",
+    "requirements.targetName": ".requirementsBox dd[onmouseover] Tip(...) first line",
+    "requirements.value": ".requirementsBox dd[onmouseover] Tip(...) level number or <big> text for quantity",
+    "sourceRole": ".itemSubType",
+    "asterionDisplayName": "src/domain/combat/catalog.ts SHIP_COMBAT_CATALOG entry name (Aegis inherits base catalog at faction-catalog.ts:162)",
+    "asterionRole": "src/domain/combat/catalog.ts SHIP_COMBAT_CATALOG entry role (Aegis inherits base catalog at faction-catalog.ts:162)"
+  },
+  "records": [
+    {
+      "factionId": "aegis",
+      "slotId": "solar-satellite",
+      "sourceName": "Солнечный спутник",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-32-43.html",
+      "sourcePageId": 13,
+      "sourceLevel": 0,
+      "sourceDescription": "Солнечный спутник - Ваш вторичный источник энергии. Покрытый огромным количеством солнечных ячеек. К сожалению Спутники помещены на высокую орбиту и при нападении они - первый объект, который подвергается атаке врага. Количество получаемой с них энергии зависит от того, как близко Ваша планета к солнцу. Спутники не могут быть перемещены на орбиту другой планеты, потому что у них нет своих собственных двигателей.",
+      "sourceImage": "./page_2026-07-22_20-32-43_files/ship_13.png",
+      "population": 1,
+      "cost": {
+        "metal": 500,
+        "minerals": 2000,
+        "gas": 500
+      },
+      "attack": 1,
+      "life": 2200,
+      "weaponType": "Лазер",
+      "armorType": "Средняя Броня",
+      "armorStrength": 6,
+      "cargo": null,
+      "speed": null,
+      "fuel": null,
+      "sourceTime": "00:02:30",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 1",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 1
+        }
+      ],
+      "sourceRole": "Обслуживающий корабль",
+      "asterionDisplayName": "Спутник",
+      "asterionRole": "Солнечный спутник"
+    },
+    {
+      "factionId": "aegis",
+      "slotId": "spy-probe",
+      "sourceName": "Шпионский зонд",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-32-35.html",
+      "sourcePageId": 12,
+      "sourceLevel": 0,
+      "sourceDescription": "Маленькое беспилотное судно создано для обследования вражеских планет. Судно достаточно простое, есть только комнаты для шпионского оборудования и сильного ионного двигателя, способного к маленьким гиперкосмическим скачкам, приводящим к невероятной скорости. Корпус построен из специального минерального сплава.",
+      "sourceImage": "./page_2026-07-22_20-32-35_files/ship_12.png",
+      "population": 1,
+      "cost": {
+        "metal": 0,
+        "minerals": 1000,
+        "gas": 0
+      },
+      "attack": 1,
+      "life": 1,
+      "weaponType": "Лазер",
+      "armorType": "Легкая Броня",
+      "armorStrength": 3,
+      "cargo": 1,
+      "speed": 200000000,
+      "fuel": 1,
+      "sourceTime": "00:01:00",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 3",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 3
+        },
+        {
+          "sourceText": "Топливные элементы<br />Уровень: 3",
+          "valueKind": "level",
+          "targetName": "Топливные элементы",
+          "value": 3
+        },
+        {
+          "sourceText": "Шпионаж<br />Уровень: 2",
+          "valueKind": "level",
+          "targetName": "Шпионаж",
+          "value": 2
+        }
+      ],
+      "sourceRole": "Гражданский корабль",
+      "asterionDisplayName": "Зонд",
+      "asterionRole": "Шпионский зонд"
+    },
+    {
+      "factionId": "aegis",
+      "slotId": "transporter",
+      "sourceName": "Транспортировщик",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-31-04.html",
+      "sourcePageId": 1,
+      "sourceLevel": 0,
+      "sourceDescription": "Они - первичные средства транспортировки, которые помогут Вам в начале Вашего пути к космическому доминированию. К сожалению это судно все еще не безупречно. У него хрупкий корпус и нет щитов, устаревшая модель реактивных двигателей - причина низкой скорости, малый объем трюмов. Нехватка вооружения делает его уязвимым. Такое судно лучше отправлять вместе с кораблем военного класса.",
+      "sourceImage": "./page_2026-07-22_20-31-04_files/ship_1.png",
+      "population": 1,
+      "cost": {
+        "metal": 2400,
+        "minerals": 1400,
+        "gas": 0
+      },
+      "attack": 10,
+      "life": 2000,
+      "weaponType": "Лазер",
+      "armorType": "Легкая Броня",
+      "armorStrength": 3,
+      "cargo": 5000,
+      "speed": 24000,
+      "fuel": 12,
+      "sourceTime": "00:10:00",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 2",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 2
+        },
+        {
+          "sourceText": "Математика<br />Уровень: 2",
+          "valueKind": "level",
+          "targetName": "Математика",
+          "value": 2
+        }
+      ],
+      "sourceRole": "Гражданский корабль",
+      "asterionDisplayName": "Транспорт",
+      "asterionRole": "Транспортировщик"
+    },
+    {
+      "factionId": "aegis",
+      "slotId": "mega-transporter",
+      "sourceName": "Мегатранспортировщик",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-31-11.html",
+      "sourcePageId": 2,
+      "sourceLevel": 0,
+      "sourceDescription": "Мегатранспортировщики - вторичные средства транспортировки. У них больший объем трюмов, таким образом они могут транспортировать больше ресурсов. Они медленнее, чем простой транспортировщик, но перевозят больше груза за туже цену. Вы можете использовать Мегатранспортировщик для транспортировки грузов, а также, при атаках на Ваших врагов.",
+      "sourceImage": "./page_2026-07-22_20-31-11_files/ship_2.png",
+      "population": 3,
+      "cost": {
+        "metal": 6400,
+        "minerals": 5000,
+        "gas": 0
+      },
+      "attack": 10,
+      "life": 7800,
+      "weaponType": "Лазер",
+      "armorType": "Средняя Броня",
+      "armorStrength": 6,
+      "cargo": 20000,
+      "speed": 19000,
+      "fuel": 45,
+      "sourceTime": "00:20:00",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 4",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 4
+        },
+        {
+          "sourceText": "Астрономия<br />Уровень: 6",
+          "valueKind": "level",
+          "targetName": "Астрономия",
+          "value": 6
+        }
+      ],
+      "sourceRole": "Гражданский корабль",
+      "asterionDisplayName": "Мегатранспорт",
+      "asterionRole": "Мегатранспортировщик"
+    },
+    {
+      "factionId": "aegis",
+      "slotId": "colonizer",
+      "sourceName": "Колонизатор",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-32-20.html",
+      "sourcePageId": 10,
+      "sourceLevel": 0,
+      "sourceDescription": "Это огромное колониальное судно, транспортирующее всё необходимое оборудование и персонал для постройки полностью функционирующей колонии. Оно может транспортировать небольшое количество ресурсов. После приземления на отобранной планете большой корпус судна используется как командный центр. Из-за его огромной структуры и далеких от безупречности двигателей оно исключительно медленное. Колонизатор оборудован малым количеством вооружения и имеет большой транспортный потенциал.",
+      "sourceImage": "./page_2026-07-22_20-32-20_files/ship_10.png",
+      "population": 12,
+      "cost": {
+        "metal": 12500,
+        "minerals": 25000,
+        "gas": 10600
+      },
+      "attack": 600,
+      "life": 2400,
+      "weaponType": "Лазер",
+      "armorType": "Тяжелая Броня",
+      "armorStrength": 9,
+      "cargo": 7500,
+      "speed": 5000,
+      "fuel": 1500,
+      "sourceTime": "00:58:00",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 4",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 4
+        },
+        {
+          "sourceText": "Топливные элементы<br />Уровень: 3",
+          "valueKind": "level",
+          "targetName": "Топливные элементы",
+          "value": 3
+        }
+      ],
+      "sourceRole": "Гражданский корабль",
+      "asterionDisplayName": "Колонизатор",
+      "asterionRole": "Колониальный корабль"
+    },
+    {
+      "factionId": "aegis",
+      "slotId": "recycler",
+      "sourceName": "Переработчик",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-32-28.html",
+      "sourcePageId": 11,
+      "sourceLevel": 0,
+      "sourceDescription": "Фактически это судно состоит из огромной системы переработки и огромного склада. После сражений остаются фрагменты от разрушенных судов, которые собирает Переработчик и преобразует в чистые ресурсы. К сожалению судно не в состоянии нести мощные двигатели, из-за недостатка места для систем переработки и складов. Все суда получают равную премию от исследований  скорости, мощности и структуры.",
+      "sourceImage": "./page_2026-07-22_20-32-28_files/ship_11.png",
+      "population": 5,
+      "cost": {
+        "metal": 10500,
+        "minerals": 5300,
+        "gas": 1800
+      },
+      "attack": 50,
+      "life": 2200,
+      "weaponType": "Лазер",
+      "armorType": "Средняя Броня",
+      "armorStrength": 6,
+      "cargo": 40000,
+      "speed": 7000,
+      "fuel": 120,
+      "sourceTime": "00:41:40",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 4",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 4
+        },
+        {
+          "sourceText": "Топливные элементы<br />Уровень: 6",
+          "valueKind": "level",
+          "targetName": "Топливные элементы",
+          "value": 6
+        },
+        {
+          "sourceText": "Броня кораблей<br />Уровень: 2",
+          "valueKind": "level",
+          "targetName": "Броня кораблей",
+          "value": 2
+        }
+      ],
+      "sourceRole": "Гражданский корабль",
+      "asterionDisplayName": "Переработчик",
+      "asterionRole": "Переработчик обломков"
+    },
+    {
+      "factionId": "aegis",
+      "slotId": "scout",
+      "sourceName": "Скаут",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-31-18.html",
+      "sourcePageId": 3,
+      "sourceLevel": 0,
+      "sourceDescription": "Небольшое разведывательное судно. Из-за маленького веса реактивные двигатели позволяет ему передвигаться с большей скоростью. Однако, слабое оружие, нехватка хороших щитов и слабозащищённый корпус делают его неподходящим для больших сражений. Его главная цель - защитить недавно колонизированные планеты и сражаться со слабыми оборонными системами на колониях врага.",
+      "sourceImage": "./page_2026-07-22_20-31-18_files/ship_3.png",
+      "population": 2,
+      "cost": {
+        "metal": 2400,
+        "minerals": 1600,
+        "gas": 0
+      },
+      "attack": 800,
+      "life": 2400,
+      "weaponType": "Лазер",
+      "armorType": "Легкая Броня",
+      "armorStrength": 3,
+      "cargo": 250,
+      "speed": 28000,
+      "fuel": 25,
+      "sourceTime": "00:20:00",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 1",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 1
+        },
+        {
+          "sourceText": "Астрономия<br />Уровень: 1",
+          "valueKind": "level",
+          "targetName": "Астрономия",
+          "value": 1
+        }
+      ],
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Скаут",
+      "asterionRole": "Лёгкий боевой разведчик"
+    },
+    {
+      "factionId": "aegis",
+      "slotId": "cruiser",
+      "sourceName": "Крейсер",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-31-27.html",
+      "sourcePageId": 4,
+      "sourceLevel": 0,
+      "sourceDescription": "Гонка за развитием лучшего оружия привела к производству этого боевого хищника. Используя исключительно модернизированные импульсные двигатели, он способен достичь высокой скорости и маневренности. У Крейсера есть окружающее его энергетическое поле, которое является причиной довольно большого размера и он вооружен последней моделью гаус орудий. Обладая большой проникающей силой, группа Крейсеров становится смертельно опасной даже против судов более высокого класса. Все эти качества делают его одним из доминирующих судов на поле битвы.",
+      "sourceImage": "./page_2026-07-22_20-31-27_files/ship_4.png",
+      "population": 7,
+      "cost": {
+        "metal": 10200,
+        "minerals": 8400,
+        "gas": 0
+      },
+      "attack": 3080,
+      "life": 9200,
+      "weaponType": "Ион",
+      "armorType": "Легкая Броня",
+      "armorStrength": 3,
+      "cargo": 800,
+      "speed": 32000,
+      "fuel": 315,
+      "sourceTime": "00:25:40",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 3",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 3
+        },
+        {
+          "sourceText": "Броня кораблей<br />Уровень: 2",
+          "valueKind": "level",
+          "targetName": "Броня кораблей",
+          "value": 2
+        },
+        {
+          "sourceText": "Топливные элементы<br />Уровень: 2",
+          "valueKind": "level",
+          "targetName": "Топливные элементы",
+          "value": 2
+        }
+      ],
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Крейсер",
+      "asterionRole": "Крейсер"
+    },
+    {
+      "factionId": "aegis",
+      "slotId": "defender",
+      "sourceName": "Защитник",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-31-36.html",
+      "sourcePageId": 5,
+      "sourceLevel": 0,
+      "sourceDescription": "Этот корабль очень полезен для защиты других судов от нападений. У него достаточно прочности для того, чтобы взять удар на себя, но слабое вооружение. Вы можете использовать его в различных комбинациях с другими судами, таким образом они будут более эффективны на поле битвы. Будьте осторожны, эти суда могут быть хорошей целью для Вашего врага, если они хорошо не защищены.",
+      "sourceImage": "./page_2026-07-22_20-31-36_files/ship_5.png",
+      "population": 6,
+      "cost": {
+        "metal": 5300,
+        "minerals": 15900,
+        "gas": 0
+      },
+      "attack": 2760,
+      "life": 8300,
+      "weaponType": "Лазер",
+      "armorType": "Легкая Броня",
+      "armorStrength": 3,
+      "cargo": 1500,
+      "speed": 20000,
+      "fuel": 280,
+      "sourceTime": "00:35:00",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 5",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 5
+        },
+        {
+          "sourceText": "Ионная наука<br />Уровень: 2",
+          "valueKind": "level",
+          "targetName": "Ионная наука",
+          "value": 2
+        },
+        {
+          "sourceText": "Топливные элементы<br />Уровень: 4",
+          "valueKind": "level",
+          "targetName": "Топливные элементы",
+          "value": 4
+        }
+      ],
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Защитник",
+      "asterionRole": "Защитный корабль"
+    },
+    {
+      "factionId": "aegis",
+      "slotId": "battleship",
+      "sourceName": "Боевой корабль",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-31-43.html",
+      "sourcePageId": 6,
+      "sourceLevel": 0,
+      "sourceDescription": "Вы нуждаетесь в судне с существенной структурой, которое не подведет Вас в бою? Боевой крейсер - судно для Вас. Оно вооружено последними оборонными лазерами, фотонными торпедами и ионным оружием. Основное вооружение - сильное плазменное оружие, которое может разрушить меньшие суда с одного единственного выстрела. Он оборудован толстой титановой броней и удивительно стойкими щитами, делая его реальной угрозой на поле битвы и трудной целью для вражеских судов. Но несмотря на все эти хорошие аспекты есть один недостаток - крайне большой вес. Импульсные двигатели не достаточно сильны для этого крейсера, и именно поэтому на него установлены четыре ультраскоростных двигателя. Они обеспечивают судну хорошую скорость и маневренность.",
+      "sourceImage": "./page_2026-07-22_20-31-43_files/ship_6.png",
+      "population": 15,
+      "cost": {
+        "metal": 49400,
+        "minerals": 21200,
+        "gas": 0
+      },
+      "attack": 9000,
+      "life": 27000,
+      "weaponType": "Ион",
+      "armorType": "Средняя Броня",
+      "armorStrength": 6,
+      "cargo": 1500,
+      "speed": 20000,
+      "fuel": 480,
+      "sourceTime": "00:55:00",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 7",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 7
+        },
+        {
+          "sourceText": "Реактивные двигатели<br />Уровень: 4",
+          "valueKind": "level",
+          "targetName": "Реактивные двигатели",
+          "value": 4
+        }
+      ],
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Линкор",
+      "asterionRole": "Линкор"
+    },
+    {
+      "factionId": "aegis",
+      "slotId": "destroyer",
+      "sourceName": "Разрушитель",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-31-55.html",
+      "sourcePageId": 7,
+      "sourceLevel": 0,
+      "sourceDescription": "Высший класс боевого корабля. Разрушитель произведен, чтобы господствовать над любым другим судном на поле битвы. Оборудованный последними развитыми военными технологиями империи - большой арсенал протонных торпед, много лазеров и ионных орудий, но сердце его огневой мощи - свое двойное плазменное оружие. Он - гарантия для разрушения каждого судна низшего класса. Защита состоит из многослойной титановой брони и двух уровней плазменных щитов. Здесь прибывает известная проблема – крайне большой вес. В тестировании только ультраскоростные двигатели показали необходимые результаты. Шесть двигателей обеспечивают передвижение судна. Но этого мало для достаточной скорости и маневренности.",
+      "sourceImage": "./page_2026-07-22_20-31-55_files/ship_7.png",
+      "population": 30,
+      "cost": {
+        "metal": 93900,
+        "minerals": 84500,
+        "gas": 9400
+      },
+      "attack": 19500,
+      "life": 58500,
+      "weaponType": "Плазма",
+      "armorType": "Тяжелая Броня",
+      "armorStrength": 9,
+      "cargo": 2000,
+      "speed": 13000,
+      "fuel": 900,
+      "sourceTime": "01:20:00",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 9",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 9
+        },
+        {
+          "sourceText": "Реактивные двигатели<br />Уровень: 6",
+          "valueKind": "level",
+          "targetName": "Реактивные двигатели",
+          "value": 6
+        },
+        {
+          "sourceText": "Гиперпространство<br />Уровень: 5",
+          "valueKind": "level",
+          "targetName": "Гиперпространство",
+          "value": 5
+        }
+      ],
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Разрушитель",
+      "asterionRole": "Тяжёлый эсминец"
+    },
+    {
+      "factionId": "aegis",
+      "slotId": "bomber",
+      "sourceName": "Бомбардировщик",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-32-03.html",
+      "sourcePageId": 8,
+      "sourceLevel": 0,
+      "sourceDescription": "Развитие более совершенных оборонных систем на планетах привело к разработке специальных кораблей для уничтожения этих систем. Бомбардировщик очень эффективен против этих оборонных систем, оборудованных мощными плазменными торпедами. Но есть проблема - большой корпус делает его легкой мишенью. Именно поэтому, проектируя его, размер тщательно вычислен. Как следствие: нехватка толстой брони и частично распределенные щиты. Из-за нехватки свободного места используется измененный импульсный двигатель, это к сожалению не предоставляет достаточной скорости при большом потреблении газа.",
+      "sourceImage": "./page_2026-07-22_20-32-03_files/ship_8.png",
+      "population": 22,
+      "cost": {
+        "metal": 44000,
+        "minerals": 55000,
+        "gas": 11000
+      },
+      "attack": 13200,
+      "life": 39600,
+      "weaponType": "Лазер",
+      "armorType": "Средняя Броня",
+      "armorStrength": 6,
+      "cargo": 500,
+      "speed": 20000,
+      "fuel": 800,
+      "sourceTime": "00:55:00",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 8",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 8
+        },
+        {
+          "sourceText": "Лазерная наука<br />Уровень: 8",
+          "valueKind": "level",
+          "targetName": "Лазерная наука",
+          "value": 8
+        },
+        {
+          "sourceText": "Плазменная наука<br />Уровень: 5",
+          "valueKind": "level",
+          "targetName": "Плазменная наука",
+          "value": 5
+        }
+      ],
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Бомбардировщик",
+      "asterionRole": "Бомбардировщик"
+    },
+    {
+      "factionId": "aegis",
+      "slotId": "death-star",
+      "sourceName": "Звезда смерти",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-32-12.html",
+      "sourcePageId": 9,
+      "sourceLevel": 0,
+      "sourceDescription": "Звезда Смерти - наиболее мощное оружие. Размером с маленькую луну, она несет исключительно сильное гравитационное оружие и способна к разрушению целых планет. Огромный размер критически снижает скорость этого типа судов. У неё огромная структура и невероятная транспортная способность.",
+      "sourceImage": "./page_2026-07-22_20-32-12_files/ship_9.png",
+      "population": 700,
+      "cost": {
+        "metal": 2327500,
+        "minerals": 1862000,
+        "gas": 465500
+      },
+      "attack": 700000,
+      "life": 2100000,
+      "weaponType": "Ион",
+      "armorType": "Тяжелая Броня",
+      "armorStrength": 9,
+      "cargo": 1000000,
+      "speed": 200,
+      "fuel": 60000,
+      "sourceTime": "175:00:00",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 14",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 14
+        },
+        {
+          "sourceText": "Гиперпространство<br />Уровень: 13",
+          "valueKind": "level",
+          "targetName": "Гиперпространство",
+          "value": 13
+        },
+        {
+          "sourceText": "Параллельные вселенные<br />Уровень: 1",
+          "valueKind": "level",
+          "targetName": "Параллельные вселенные",
+          "value": 1
+        },
+        {
+          "sourceText": "Тяжелая Броня<br />Уровень: 10",
+          "valueKind": "level",
+          "targetName": "Тяжелая Броня",
+          "value": 10
+        }
+      ],
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Планетолом",
+      "asterionRole": "Сверхтяжёлый корабль"
+    }
+  ]
+}
