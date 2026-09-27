@@ -1467,6 +1467,69 @@ test('fleet production application persists, reconciles, and bridges all three q
   assert.equal(canceled.transition.ok, false);
 });
 
+test('ship requirements see completions due on the selected planet before timer reconciliation', () => {
+  const base = withBuildingSetup(createInitialSaveState('test', 0));
+  const colonyId = 'planet-1-2-1';
+  const localFleet = createEmptyFleetState();
+  localFleet.ships.scout = 1;
+  const localPlanet = {
+    ...base.planets['helion-01'],
+    fleet: localFleet,
+    buildings: { ...base.planets['helion-01'].buildings, hangar: 1_000, shipyard: 99 },
+    resources: { metal: 1_000_000_000, minerals: 1_000_000_000, gas: 1_000_000_000 },
+  };
+  const remoteFleet = createEmptyFleetState();
+  remoteFleet.ships.cruiser = 1;
+  const remotePlanet = {
+    ...createColonyPlanetRuntime(base, { galaxy: 1, system: 2, position: 1 }),
+    fleet: remoteFleet,
+  };
+  const state: SaveState = {
+    ...base,
+    profile: { ...base.profile, factionId: 'veyra' },
+    planets: { ...base.planets, 'helion-01': localPlanet, [colonyId]: remotePlanet },
+  };
+
+  const remoteOnly = startFleetProduction(state, context(1_000), 'ships', 'destroyer', 1, 'remote-prerequisite-only');
+  assert.equal(remoteOnly.transition.ok, false);
+  assert.match(remoteOnly.transition.reason ?? '', /Требуется корабль/);
+  assert.equal(remoteOnly.state.planets['helion-01'].fleet.ships.cruiser ?? 0, 0);
+  assert.equal(remoteOnly.state.planets[colonyId].fleet.ships.cruiser, 1);
+
+  const queuedPrerequisite = startFleetProduction(state, context(2_000), 'ships', 'cruiser', 1, 'queued-prerequisite');
+  assert.equal(queuedPrerequisite.transition.ok, true);
+  const order = queuedPrerequisite.state.planets['helion-01'].fleetProduction.shipQueue[0];
+  assert.ok(order);
+  assert.equal(queuedPrerequisite.state.planets['helion-01'].fleet.ships.cruiser ?? 0, 0);
+
+  const beforeFinish = startFleetProduction(
+    queuedPrerequisite.state,
+    context(order.finishAt - 1),
+    'ships',
+    'destroyer',
+    1,
+    'dependent-before-finish',
+  );
+  assert.equal(beforeFinish.transition.ok, false);
+  assert.match(beforeFinish.transition.reason ?? '', /Требуется корабль/);
+  assert.equal(beforeFinish.state.planets['helion-01'].fleet.ships.cruiser ?? 0, 0);
+
+  // No periodic runtime/queue reconciliation runs after finishAt; this new order
+  // request itself must settle the due prerequisite before checking requirements.
+  const afterFinish = startFleetProduction(
+    queuedPrerequisite.state,
+    context(order.finishAt + 1),
+    'ships',
+    'destroyer',
+    1,
+    'dependent-after-finish',
+  );
+  assert.equal(afterFinish.transition.ok, true);
+  assert.equal(afterFinish.state.planets['helion-01'].fleet.ships.cruiser, 1);
+  assert.equal(afterFinish.state.planets[colonyId].fleet.ships.cruiser, 1);
+  assert.equal(afterFinish.state.planets['helion-01'].fleetProduction.shipQueue.some(({ itemId }) => itemId === 'destroyer'), true);
+});
+
 test('satellite production creates orbital presence and dismantling removes only its unused contribution', () => {
   const initial = withBuildingSetup(createInitialSaveState('test', 0));
   const before = getPlanetEnergyLedger(initial.planets['helion-01'], initial.science.levels);

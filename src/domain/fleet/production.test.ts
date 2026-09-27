@@ -466,6 +466,57 @@ test('quantity requirements resolve selected-faction source and display names wi
   assert.equal(unknownShipEvaluation.requirements.find((requirement) => requirement.source === 'Неизвестный корабль · количество 1')?.kind, 'unresolved');
 });
 
+test('enqueue settles a finished prerequisite before checking ship quantity requirements', () => {
+  const initial = context({
+    factionId: 'veyra',
+    shipyardLevel: 99,
+    hangarLevel: 100_000,
+    fleet: fleetWithShips({ scout: 1 }),
+    now: 1_000,
+  });
+  const prerequisite = enqueueFleetProduction(initial, 'ships', 'cruiser', 1, 'finished-prerequisite');
+  assert.equal(prerequisite.ok, true);
+  const order = prerequisite.order;
+  assert.ok(order);
+  assert.equal(prerequisite.fleet.ships.cruiser ?? 0, 0);
+
+  const queued = after(initial, prerequisite);
+  const beforeFinish = enqueueFleetProduction(
+    { ...queued, now: order.finishAt - 1 },
+    'ships',
+    'destroyer',
+    1,
+    'dependent-before-finish',
+  );
+  assert.equal(beforeFinish.ok, false);
+  assert.match(beforeFinish.reason ?? '', /Требуется корабль/);
+  assert.equal(beforeFinish.fleet.ships.cruiser ?? 0, 0);
+  assert.equal(beforeFinish.completed.length, 0);
+
+  const finishedButUnaffordable = enqueueFleetProduction(
+    { ...queued, now: order.finishAt, wallet: { metal: 0, minerals: 0, gas: 0 } },
+    'ships',
+    'destroyer',
+    1,
+    'dependent-unaffordable-at-finish',
+  );
+  assert.equal(finishedButUnaffordable.ok, false);
+  assert.equal(finishedButUnaffordable.fleet.ships.cruiser, 1);
+  assert.equal(finishedButUnaffordable.completed.some((item) => item.itemId === 'cruiser'), true);
+
+  const afterFinish = enqueueFleetProduction(
+    { ...queued, now: order.finishAt + 1 },
+    'ships',
+    'destroyer',
+    1,
+    'dependent-after-finish',
+  );
+  assert.equal(afterFinish.ok, true);
+  assert.equal(afterFinish.fleet.ships.cruiser, 1);
+  assert.equal(afterFinish.completed.some((item) => item.itemId === 'cruiser'), true);
+  assert.equal(afterFinish.order?.itemId, 'destroyer');
+});
+
 test('queued ships do not satisfy ship quantity production requirements', () => {
   const base = context({ factionId: 'veyra', shipyardLevel: 99, hangarLevel: 100_000 });
   const queuedSpyProbes = enqueueFleetProduction(base, 'ships', 'spy-probe', 20, 'queued-spy-probes');
