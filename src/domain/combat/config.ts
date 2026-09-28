@@ -1,7 +1,7 @@
 import { SPACEPORT_UPGRADE_MAX_LEVEL_BY_TRACK } from '../buildings/spaceport-upgrades.ts';
 
 export const COMBAT_PROFILE_ID = 'asterion-simulator-v1' as const;
-export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v6' as const;
+export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v7' as const;
 
 export const COMBAT_SHIP_LEVEL_COEFFICIENTS = Object.freeze({
   scout: 0.05,
@@ -110,7 +110,7 @@ export const COMBAT_RULE_PROVENANCE = Object.freeze({
     status: 'not-calibrated',
     source: 'Nemexia Auto v2 saved ship pages; 6,052 Nemexia target transitions',
     confidence: 'low',
-    note: 'Для кораблей применяются сохранённые приоритетные классы Nemexia; архив подтверждает доступный приоритетный класс в 75/75 проверенных первых выборов Aegis. После его отсутствия остаётся selector Asterion угроза → население → каталог: полный Nemexia fallback selector не установлен, seed Nemexia отсутствует. Это не заявление о доказанном паритете выбора целей.',
+    note: 'Первый выбор, смешанные цели и неподтверждённые классы сохраняют selector Asterion; первичный класс по страницам кораблей отдельно подтверждён в 75/75 первых выборах Aegis. Только после уничтожения обычного корабля-цели, если действующий корабль и все оставшиеся живые цели относятся к шести обычным боевым классам, применяется наблюдавшийся Nemexia порядок primary-класс → bomber → destroyer → battleship → defender → cruiser → scout. В stage-2 корпусе правило совпало с 5,700/5,700 подходящих обычных переходов и 52/52 controlled-переходов, но разделение не является полностью независимым holdout. Первичный selector, оборона, командиры, Death Star и tie-break остаются неустановленными; seed Nemexia отсутствует, поэтому полного target-selector parity не заявляем.',
   },
   destroyedTargetFollowUp: {
     status: 'inferred',

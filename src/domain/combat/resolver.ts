@@ -181,11 +181,7 @@ const MATCHUP_MULTIPLIERS: Readonly<Record<CombatMatchupClass, Readonly<Record<C
   'death-star': { scout: 1.00, cruiser: 1.70, defender: 0.70, battleship: 1.00, destroyer: 1.00, bomber: 1.00, 'death-star': 1.70 },
 };
 
-/**
- * Primary ship-target classes transcribed from Nemexia Auto v2's saved ship
- * pages and battle_catalog.py. These preferences do not define the fallback
- * selector, which remains an explicit Asterion policy while uncalibrated.
- */
+/** Primary target classes transcribed from Nemexia Auto v2's saved ship pages. */
 const NEMEXIA_PRIMARY_TARGET_CLASS: Readonly<Record<CombatMatchupClass, CombatMatchupClass>> = {
   scout: 'defender',
   cruiser: 'scout',
@@ -195,6 +191,14 @@ const NEMEXIA_PRIMARY_TARGET_CLASS: Readonly<Record<CombatMatchupClass, CombatMa
   bomber: 'destroyer',
   'death-star': 'death-star',
 };
+
+/**
+ * Nemexia's observed ordinary-ship retarget order after a target is destroyed.
+ * This is intentionally not used for initial selection or mixed target sets.
+ */
+const NEMEXIA_ORDINARY_RETARGET_FALLBACK: readonly CombatOrdinaryClass[] = [
+  'bomber', 'destroyer', 'battleship', 'defender', 'cruiser', 'scout',
+];
 
 function matchupClassForEntity(entityId: CombatEntityId): CombatMatchupClass | undefined {
   if (entityId === 'death-star') return 'death-star';
@@ -293,6 +297,45 @@ function selectShipTarget(
   return preferredCandidates.length > 0
     ? selectCombatTarget(preferredCandidates, fallbackPriority)
     : selectCombatTarget(candidates, fallbackPriority);
+}
+
+function selectNemexiaOrdinaryRetargetTarget(
+  actor: RuntimeStack,
+  previousTarget: RuntimeStack | undefined,
+  candidates: readonly TargetSelectionCandidate[],
+  targetStacks: readonly RuntimeStack[],
+  fallbackPriority: CombatTargetPriority,
+): TargetSelectionCandidate | null {
+  if (actor.kind !== 'ship' || !actor.ordinaryClass
+      || !previousTarget || previousTarget.count > 0
+      || previousTarget.bucket !== 'stacks' || previousTarget.kind !== 'ship' || !previousTarget.ordinaryClass) {
+    return null;
+  }
+
+  const liveCandidates = candidates.filter((candidate) => candidate.currentCount > 0);
+  if (liveCandidates.length === 0) return null;
+
+  const stacksById = new Map(targetStacks.map((stack) => [stack.entityId, stack] as const));
+  const liveStacks = liveCandidates.map((candidate) => stacksById.get(candidate.entityId));
+  if (liveStacks.some((stack) => !stack || stack.count <= 0
+      || stack.bucket !== 'stacks' || stack.kind !== 'ship' || !stack.ordinaryClass)) {
+    return null;
+  }
+
+  const classForCandidate = (candidate: TargetSelectionCandidate) => (
+    stacksById.get(candidate.entityId)?.ordinaryClass
+  );
+  const preferredClass = NEMEXIA_PRIMARY_TARGET_CLASS[actor.ordinaryClass];
+  const preferredCandidates = liveCandidates.filter((candidate) => classForCandidate(candidate) === preferredClass);
+  if (preferredCandidates.length > 0) {
+    return selectCombatTarget(preferredCandidates, fallbackPriority);
+  }
+
+  for (const targetClass of NEMEXIA_ORDINARY_RETARGET_FALLBACK) {
+    const classCandidates = liveCandidates.filter((candidate) => classForCandidate(candidate) === targetClass);
+    if (classCandidates.length > 0) return selectCombatTarget(classCandidates, fallbackPriority);
+  }
+  return null;
 }
 
 function runtimeFromInput(
@@ -1066,6 +1109,7 @@ function resolveSideActions(
   rng: CombatRng,
   roundStartCounts: ReadonlyMap<CombatEntityId, number>,
   lockedTargets: Map<CombatEntityId, CombatEntityId>,
+  destroyedTargetsSinceLock: Map<CombatEntityId, CombatEntityId>,
   allowDocumentedDefenderCounterfire: boolean,
   paralyzedActorsNext: Set<CombatEntityId>,
   paralyzedTargetsNext: Set<CombatEntityId>,
@@ -1122,13 +1166,26 @@ function resolveSideActions(
     for (let volleyIndex = 0; volleyIndex < volleyLimit; volleyIndex += 1) {
       let targetRuntime = targetStacks.find((stack) => stack.entityId === lockedTargets.get(actor.entityId));
       if (!targetRuntime || targetRuntime.count <= 0) {
+        const previousTargetId = lockedTargets.get(actor.entityId);
+        if (previousTargetId) destroyedTargetsSinceLock.set(actor.entityId, previousTargetId);
         lockedTargets.delete(actor.entityId);
-        const target = selectShipTarget(actor, targetStacks.map((stack) => ({
+        const previousTargetIdAfterUnlock = destroyedTargetsSinceLock.get(actor.entityId);
+        const previousTargetAfterUnlock = previousTargetIdAfterUnlock
+          ? targetStacks.find((stack) => stack.entityId === previousTargetIdAfterUnlock)
+          : undefined;
+        const shouldUseNemexiaRetarget = Boolean(previousTargetIdAfterUnlock
+          && (!previousTargetAfterUnlock || previousTargetAfterUnlock.count <= 0));
+        destroyedTargetsSinceLock.delete(actor.entityId);
+        const candidates = targetStacks.map((stack) => ({
           entityId: stack.entityId,
           currentCount: stack.count,
           threat: stack.count * stack.attackPerUnit,
           population: stack.count * stack.populationPerUnit,
-        })), targetPriority);
+        }));
+        const target = (shouldUseNemexiaRetarget
+          ? selectNemexiaOrdinaryRetargetTarget(actor, previousTargetAfterUnlock, candidates, targetStacks, targetPriority)
+          : null)
+          ?? selectShipTarget(actor, candidates, targetPriority);
         targetRuntime = target
           ? targetStacks.find((stack) => stack.entityId === target.entityId)
           : undefined;
@@ -1147,6 +1204,7 @@ function resolveSideActions(
         break;
       }
 
+      destroyedTargetsSinceLock.set(actor.entityId, targetRuntime.entityId);
       lockedTargets.delete(actor.entityId);
       if (targetStacks.every((stack) => stack.count <= 0)) break;
     }
@@ -1277,6 +1335,8 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
   const paralyzedDefenderSourcesNext = new Map<CombatEntityId, CombatDisablingAbility>();
   const attackerTargetLocks = new Map<CombatEntityId, CombatEntityId>();
   const defenderTargetLocks = new Map<CombatEntityId, CombatEntityId>();
+  const attackerDestroyedTargetsSinceLock = new Map<CombatEntityId, CombatEntityId>();
+  const defenderDestroyedTargetsSinceLock = new Map<CombatEntityId, CombatEntityId>();
   let lastModifiers = initialModifiers;
 
   for (let roundIndex = 1; roundIndex <= normalized.maxRounds && !winner; roundIndex += 1) {
@@ -1303,6 +1363,7 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
       rng,
       attackerStartCounts,
       attackerTargetLocks,
+      attackerDestroyedTargetsSinceLock,
       false,
       paralyzedAttackerNext,
       paralyzedDefenderNext,
@@ -1326,6 +1387,7 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
         rng,
         defenderStartCounts,
         defenderTargetLocks,
+        defenderDestroyedTargetsSinceLock,
         true,
         paralyzedDefenderNext,
         paralyzedAttackerNext,

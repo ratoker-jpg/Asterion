@@ -4,6 +4,8 @@
 
 **Audit only. Production combat code was not changed by this stage.**
 
+**Follow-up status (2026-09-28):** a later, deliberately narrow change in PR #83 implements the observed primary-class/fallback hierarchy only after an ordinary ship target is destroyed and only while the acting stack and every remaining live target are ordinary combat ships. Initial selection, mixed targets, defense, commanders, Death Star, service ships, and same-class ties remain on Asterion policy. The implementation is not a claim of complete Nemexia target-selector parity; the holdout caveat below still applies.
+
 This report extends `docs/evidence/nemexia-target-priority-audit.md` and focuses on recovering an interpretable Nemexia-like retarget rule rather than fitting another opaque score.
 
 ## Executive conclusion

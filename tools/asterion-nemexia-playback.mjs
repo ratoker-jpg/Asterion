@@ -319,7 +319,7 @@ async function main() {
     engineVersion,
     purpose: 'Structural resolver playback over saved Nemexia compositions; Nemexia seed is absent, so winner totals are diagnostics rather than per-fight parity targets.',
     inputSource: 'effective_form for actual race, technology, defense counts and requested round limit; planned_case ship names, counts, levels and commanders cross-checked against JSONL roster mirrors; campaign grouping fields retained as metadata only.',
-    harnessBoundary: 'Target-priority/comparison/factor metadata is not mapped as a Nemexia game rule. Asterion uses its own default target selector. No points, rewards, stats or balance values are compared or changed.',
+    harnessBoundary: 'Target-priority/comparison/factor metadata is not mapped as a Nemexia game rule. The production resolver applies the narrow observed ordinary-ship retarget hierarchy only after an ordinary ship target is destroyed and all remaining live candidates are ordinary combat ships; initial, mixed, defense, commander, Death Star and tie-break behavior otherwise remains Asterion policy. Nemexia seed is absent, so winner totals are diagnostics, not per-fight parity targets. No points, rewards, stats or balance values are compared or changed.',
     correctionToPreviousPlayback: 'The previous 4,053-trial sweep omitted 12 support-order profiles. All 12 have combat hulls on both sides plus one additional support hull on the attacker; they are included here. The old “service-only” label was inaccurate, and the previous runner/filter was not persisted.',
     seedScheme: 'nemexia-archive-playback:v5:<run_id>:<case_id>:trial-<1-based trial>; deterministic unique explicit seeds saved per trial for replay.',
     archiveRows: 0,

@@ -3,6 +3,8 @@
 Date: 2026-09-28  
 Scope: target selection / retargeting only. Damage, repair, action order, RNG implementation and other combat mechanics are outside this audit except where they constrain interpretation of target selection.
 
+> Historical stage-1 recommendation: this analysis predates the stage-2 categorical retarget audit and the subsequent narrow implementation in PR #83. The recommendation below to retain the Asterion selector remains valid for initial selection and unverified/mixed target sets, but it is superseded for ordinary-ship retargeting after an ordinary ship is destroyed when only ordinary combat ships remain. See `nemexia-target-priority-stage2.md` and the current `COMBAT_RULE_PROVENANCE.targetSelection` note for exact scope and limitations.
+
 ## Executive summary
 
 **Recommendation: retain the current Asterion production selector as an explicitly `not-calibrated` approximation; do not replace it with a newly inferred Nemexia rule from this corpus.**

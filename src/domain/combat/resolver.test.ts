@@ -495,6 +495,95 @@ test('sequential resolution retargets after a target is destroyed in same round'
   assert.equal(report.rounds[0].defenderSnapshot?.stacks.find((stack) => stack.entityId === 'defender')?.countAfter, 0);
 });
 
+test('Nemexia ordinary retarget uses the observed class fallback, but not for initial selection', () => {
+  const report = resolve(input({
+    attacker: {
+      participant: attackerParticipant,
+      factionId: 'aegis',
+      ships: [{ entityId: 'destroyer', count: 1 }],
+      commanders: [],
+    },
+    defender: {
+      participant: defenderParticipant,
+      factionId: 'veyra',
+      ships: [
+        { entityId: 'scout', count: 1 },
+        { entityId: 'bomber', count: 1 },
+        { entityId: 'destroyer', count: 100 },
+      ],
+      commanders: [],
+      defenses: [],
+    },
+    maxRounds: 5,
+    attackerTargetPriority: 'catalog',
+    seed: 'nemexia-ordinary-retarget-fallback',
+  }));
+  const attacks = report.rounds[0]?.events.filter((event) => event.actorSide === 'attacker'
+    && event.actorEntityId === 'destroyer'
+    && event.actionType === 'attack') ?? [];
+  assert.equal(attacks[0]?.targetEntityId, 'scout', 'the pre-existing initial selector remains in force');
+  assert.equal(attacks[1]?.targetEntityId, 'bomber', 'Nemexia ranks Bomber before Destroyer on retarget');
+});
+
+test('ordinary retarget fallback is not inferred after a defense target is destroyed', () => {
+  const report = resolve(input({
+    attacker: {
+      participant: attackerParticipant,
+      factionId: 'aegis',
+      ships: [{ entityId: 'scout', count: 17_500 }],
+      commanders: [],
+    },
+    defender: {
+      participant: defenderParticipant,
+      factionId: 'veyra',
+      ships: [
+        { entityId: 'cruiser', count: 100 },
+        { entityId: 'destroyer', count: 1 },
+      ],
+      commanders: [],
+      defenses: [{ entityId: 'laser-turret', count: 3_000 }],
+    },
+    maxRounds: 5,
+    attackerTargetPriority: 'threat',
+    seed: 'nemexia-defense-to-ordinary-target-not-calibrated',
+  }));
+  const attacks = report.rounds[0]?.events.filter((event) => event.actorSide === 'attacker'
+    && event.actorEntityId === 'scout'
+    && event.actionType === 'attack') ?? [];
+  assert.equal(attacks[0]?.targetEntityId, 'laser-turret');
+  assert.equal(attacks[1]?.targetEntityId, 'cruiser', 'unverified defense-to-ship transitions keep the existing selector');
+});
+
+test('ordinary retarget falls back to the existing selector when defenses remain in the candidate set', () => {
+  const report = resolve(input({
+    attacker: {
+      participant: attackerParticipant,
+      factionId: 'aegis',
+      ships: [{ entityId: 'destroyer', count: 1 }],
+      commanders: [],
+    },
+    defender: {
+      participant: defenderParticipant,
+      factionId: 'veyra',
+      ships: [
+        { entityId: 'scout', count: 1 },
+        { entityId: 'cruiser', count: 1 },
+        { entityId: 'defender', count: 1 },
+      ],
+      commanders: [],
+      defenses: [{ entityId: 'laser-turret', count: 1 }],
+    },
+    maxRounds: 5,
+    attackerTargetPriority: 'catalog',
+    seed: 'nemexia-retarget-mixed-defense-set',
+  }));
+  const attacks = report.rounds[0]?.events.filter((event) => event.actorSide === 'attacker'
+    && event.actorEntityId === 'destroyer'
+    && event.actionType === 'attack') ?? [];
+  assert.equal(attacks[0]?.targetEntityId, 'scout');
+  assert.equal(attacks[1]?.targetEntityId, 'cruiser', 'mixed ship/defense sets keep Asterion selection policy');
+});
+
 test('Nemexia ship-page primary target classes override the generic Asterion fallback', () => {
   const targetPairs = [
     ['scout', 'defender'],
@@ -902,10 +991,10 @@ test('generated report uses existing BattleReport contract without fake optional
   const report = resolve(input());
   assert.equal(report.missionType, 'simulation');
   assert.equal(report.schemaVersion, 3);
-  assert.equal(report.engineVersion, 'asterion-combat-engine-v6');
+  assert.equal(report.engineVersion, 'asterion-combat-engine-v7');
   assert.ok(report.initialSnapshot);
   assert.equal(report.metadata?.source, 'combat-resolver');
-  assert.match(report.metadata?.note ?? '', /asterion-combat-engine-v6/);
+  assert.match(report.metadata?.note ?? '', /asterion-combat-engine-v7/);
   assert.equal(report.experience, undefined);
   assert.equal(report.debris, undefined);
   assert.equal(report.resources, undefined);
