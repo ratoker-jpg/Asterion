@@ -17,7 +17,7 @@ export type BattleWinner = BattleSide | 'draw';
 export type BattleMissionType = 'attack' | 'raid' | 'defense' | 'arena' | 'simulation';
 export type CombatActionType = 'attack' | 'ability' | 'shield' | 'status' | 'destroyed' | 'special-bonus';
 export const BATTLE_REPORT_SCHEMA_VERSION = 3;
-export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v4';
+export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v5';
 
 export type RngProvenance = {
   mode: 'seeded' | 'recorded-sequence' | 'non-replayable';
@@ -130,6 +130,7 @@ export type CombatEvent = {
   criticalMultiplier?: number;
   abilityChance?: number;
   abilityDraw?: number;
+  abilityBonus?: number;
   effectiveDamage?: number;
   mitigation?: number;
   weaponType?: string;
@@ -139,6 +140,7 @@ export type CombatEvent = {
   repairedCount?: number;
   repairLimit?: number;
   commanderAbilityId?: CommanderId;
+  shipAbilityId?: 'destroyer-revival';
   specialBonusKind?: 'attack' | 'life' | 'armor';
   specialBonusRate?: number;
   specialBonusCap?: number;

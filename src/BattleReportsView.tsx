@@ -605,13 +605,15 @@ function EventCard({ event }: { event: BattleEventViewModel }) {
         {event.destroyedCount != null ? <span><small>УНИЧТОЖЕНО</small><b>{formatNumber(event.destroyedCount)}</b></span> : null}
         {event.criticalChance != null ? <span><small>КРИТИЧЕСКИЙ УДАР</small><b>{formatNumber(event.criticalChance * 100)}%{event.criticalMultiplier && event.criticalMultiplier > 1 ? ' · ×2' : ''}</b></span> : null}
         {event.abilityChance != null ? <span><small>СРАБАТЫВАНИЕ СПОСОБНОСТИ</small><b>{formatNumber(event.abilityChance * 100)}%</b></span> : null}
-        {event.repairedCount != null ? <span><small>ВОССТАНОВЛЕНО</small><b>{formatNumber(event.repairedCount)} / {formatNumber(event.repairLimit)}</b></span> : null}
+        {event.abilityBonus != null ? <span><small>ДОЛЯ ВОССТАНОВЛЕНИЯ</small><b>{formatNumber(event.abilityBonus * 100)}%</b></span> : null}
+        {event.repairedCount != null ? <span><small>ВОССТАНОВЛЕНО</small><b>{formatNumber(event.repairedCount)}{event.repairLimit != null ? ` / ${formatNumber(event.repairLimit)}` : ''}</b></span> : null}
         {event.specialBonusAmount != null ? <span><small>БОНУС НАЧАЛА РАУНДА</small><b>{formatNumber(event.specialBonusAmount * 100)}{event.specialBonusKind === 'armor' ? ' п.п.' : '%'}</b></span> : null}
         <OptionalMetric label="ЩИТ" before={event.shieldBefore} after={event.shieldAfter} />
         <OptionalMetric label="БРОНЯ" before={event.armorBefore} after={event.armorAfter} />
         <OptionalMetric label="ЖИЗНЬ" before={event.lifeBefore} after={event.lifeAfter} />
       </div>
       {event.commanderAbility ? <div className="battle-event-ability-v1">◆ {event.commanderAbility}</div> : null}
+      {event.shipAbility ? <div className="battle-event-ability-v1">◆ {event.shipAbility}</div> : null}
       {eventNote ? <p>{eventNote}</p> : null}
     </article>
   );

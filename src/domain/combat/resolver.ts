@@ -136,6 +136,19 @@ export function createSeededCombatRng(seed: string): CombatRng {
   };
 }
 
+let generatedCombatSeedSequence = 0;
+
+/** Gives each new unseeded battle a replayable, report-persisted seed. */
+export function createUniqueCombatSeed() {
+  generatedCombatSeedSequence += 1;
+  const randomUuid = globalThis.crypto?.randomUUID?.();
+  if (randomUuid) return `asterion-battle:${randomUuid}`;
+
+  // The counter guarantees uniqueness within this runtime; timestamp and
+  // random entropy reduce collision risk across runtime restarts.
+  return `asterion-battle:${Date.now().toString(36)}:${generatedCombatSeedSequence.toString(36)}:${Math.random().toString(36).slice(2)}`;
+}
+
 export function createNonReplayableCombatRng(): CombatRng {
   let drawCount = 0;
   return {
@@ -147,7 +160,7 @@ export function createNonReplayableCombatRng(): CombatRng {
       mode: 'non-replayable',
       algorithmVersion: 'system-random-v1',
       drawCount,
-      note: 'Seed не задан. В текущем baseline случайные механики не активны.',
+      note: 'Seed не задан. Новые бои resolver автоматически переводит на сохранённый воспроизводимый seed; это provenance для legacy-путей.',
     }),
   };
 }
@@ -295,6 +308,31 @@ function sortRuntime(stacks: readonly RuntimeStack[]) {
 
 function sideAliveCount(stacks: readonly RuntimeStack[]) {
   return stacks.reduce((total, stack) => total + stack.count, 0);
+}
+
+function createBattleActionOrder(stacks: readonly RuntimeStack[], rng: CombatRng) {
+  const order = sortRuntime(stacks);
+  const ordinarySlots: number[] = [];
+  const ordinaryShips: RuntimeStack[] = [];
+  order.forEach((stack, index) => {
+    if (stack.kind !== 'ship' || stack.ordinaryClass === undefined) return;
+    ordinarySlots.push(index);
+    ordinaryShips.push(stack);
+  });
+
+  // The 19 controlled Nemexia repeats show variable ordinary ship order
+  // between battles and stable relative order between rounds. Its shuffle/RNG
+  // details are absent, so this is a seeded Asterion approximation. Commander,
+  // defense, and non-ordinary ship slots retain catalog order.
+  for (let index = ordinaryShips.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(rng.next() * (index + 1));
+    [ordinaryShips[index], ordinaryShips[swapIndex]] = [ordinaryShips[swapIndex]!, ordinaryShips[index]!];
+  }
+
+  ordinarySlots.forEach((slot, index) => {
+    order[slot] = ordinaryShips[index]!;
+  });
+  return order;
 }
 
 function sidePopulation(stacks: readonly RuntimeStack[]) {
@@ -885,8 +923,73 @@ function resolveReanimator(
   });
 }
 
+const DESTROYER_REVIVAL_CHANCE_PER_SHIP = 0.0014;
+const DESTROYER_REVIVAL_MAX_CHANCE = 0.7;
+const DESTROYER_REVIVAL_BONUS_PER_SHIP = 0.0008;
+const DESTROYER_REVIVAL_MAX_SHARE = 0.4;
+
+function resolveDestroyerRevival(
+  stacks: readonly RuntimeStack[],
+  factionId: CombatFactionId,
+  events: CombatEvent[],
+  sequence: { value: number },
+  rng: CombatRng,
+) {
+  if (factionId !== 'aegis') return;
+  const destroyerCount = stacks.find((stack) => stack.entityId === 'destroyer')?.count ?? 0;
+  if (destroyerCount <= 0) return;
+
+  const chance = Math.min(DESTROYER_REVIVAL_MAX_CHANCE, destroyerCount * DESTROYER_REVIVAL_CHANCE_PER_SHIP);
+  const revivedShare = Math.min(DESTROYER_REVIVAL_MAX_SHARE, destroyerCount * DESTROYER_REVIVAL_BONUS_PER_SHIP);
+  for (const target of sortRuntime(stacks)) {
+    if (target.kind !== 'ship' || target.entityId === 'destroyer') continue;
+    const destroyedThisRound = events.reduce((total, event) => (
+      event.actionType === 'attack'
+        && event.targetSide === target.side
+        && event.targetEntityId === target.entityId
+        ? total + (event.destroyedCount ?? 0)
+        : total
+    ), 0);
+    if (destroyedThisRound <= 0) continue;
+
+    const draw = rng.next();
+    if (draw >= chance) continue;
+    const repairedCount = Math.min(destroyedThisRound, Math.floor(destroyedThisRound * revivedShare + 0.5));
+    if (repairedCount <= 0) continue;
+
+    const lifeBefore = target.hpPool;
+    target.count += repairedCount;
+    target.hpPool += repairedCount * target.lifePerUnit;
+    events.push({
+      sequence: sequence.value++,
+      actorSide: target.side,
+      actorEntityId: 'destroyer',
+      targetSide: target.side,
+      targetEntityId: target.entityId,
+      actionType: 'ability',
+      actorCount: destroyerCount,
+      targetCount: target.count - repairedCount,
+      shipAbilityId: 'destroyer-revival',
+      abilityChance: chance,
+      abilityDraw: draw,
+      abilityBonus: revivedShare,
+      repairedCount,
+      lifeBefore,
+      lifeAfter: target.hpPool,
+      provenance: {
+        status: 'inferred',
+        source: 'Nemexia help: Ships skills / Revival; archive audit of 641 non-Reanimator repair entries',
+        confidence: 'medium',
+        note: 'The chance and amount coefficients match the official source and archive. Asterion approximates chance as one seeded opportunity per target ship stack with losses in this round; exact Nemexia RNG granularity is undocumented.',
+      },
+      note: `Destroyer Revival (Aegis/Confederation): восстановлено ${repairedCount} кораблей из ${destroyedThisRound} потерь этого раунда; функционирующих Destroyers после действий — ${destroyerCount}, шанс ${(chance * 100).toFixed(3)}%, доля потерь ${(revivedShare * 100).toFixed(3)}%.`,
+    });
+  }
+}
+
 function resolveSideActions(
   actorStacks: readonly RuntimeStack[],
+  actionOrder: readonly RuntimeStack[],
   targetStacks: readonly RuntimeStack[],
   events: CombatEvent[],
   sequence: { value: number },
@@ -907,7 +1010,7 @@ function resolveSideActions(
   const opposingPhantom = commanderAtSide(targetStacks, opposingCommanderId, 'phantom');
   const phantomEffect = opposingPhantom ? getCommanderCombatEffect('phantom') : null;
 
-  for (const actor of sortRuntime(actorStacks)) {
+  for (const actor of actionOrder) {
     const roundStartCount = roundStartCounts.get(actor.entityId) ?? actor.count;
     const usesRoundStartCount = allowDocumentedDefenderCounterfire
       && usesDocumentedDefenderRoundStartCount(actor, roundStartCount);
@@ -1008,7 +1111,8 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
   const attackerTechnologies = requestedAttackerTechnologies;
   const defenderTechnologies = technologyMode === 'shared' ? requestedAttackerTechnologies : requestedDefenderTechnologies;
   const executionMode: CombatExecutionMode = normalized.executionMode === 'production' ? 'production' : 'calibration';
-  const rng = normalized.seed ? createSeededCombatRng(normalized.seed) : createNonReplayableCombatRng();
+  const seed = normalized.seed?.trim() || createUniqueCombatSeed();
+  const rng = createSeededCombatRng(seed);
   const attackerFactionId = normalized.attacker.factionId ?? getCombatFactionId(normalized.attacker.participant.race);
   const defenderFactionId = normalized.defender.factionId ?? getCombatFactionId(normalized.defender.participant.race);
 
@@ -1021,6 +1125,8 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
     ...runtimeFromInput('defender', 'stacks', getSideCommanders(normalized.defender), defenderTechnologies, executionMode, defenderFactionId),
     ...runtimeFromInput('defender', 'defenses', normalized.defender.defenses ?? [], defenderTechnologies, executionMode, defenderFactionId),
   ];
+  const attackerActionOrder = createBattleActionOrder(attacker, rng);
+  const defenderActionOrder = createBattleActionOrder(defender, rng);
 
   const attackerCommanderIds = getSideCommanders(normalized.attacker)
     .filter((stack) => stack.count > 0)
@@ -1060,6 +1166,7 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
 
     resolveSideActions(
       attacker,
+      attackerActionOrder,
       defender,
       events,
       sequence,
@@ -1080,6 +1187,7 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
     if (defenderPhaseResolved) {
       resolveSideActions(
         defender,
+        defenderActionOrder,
         attacker,
         events,
         sequence,
@@ -1094,10 +1202,12 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
         paralyzedAttackerNext,
       );
     }
-    // Saved Nemexia reports place repair entries after both sides' action
-    // sequences. Keep the existing Asterion success/target rules, but resolve
-    // the effect at round end so a repaired stack cannot act before the
-    // opponent's response in this round.
+    // Revival and Reanimator both resolve after the two combat action phases.
+    // The archive supports Revival's Destroyer-based chance/amount and a
+    // per-target-stack chance approximation; Nemexia's exact RNG ordering is
+    // unavailable, so Asterion uses stable attacker-then-defender processing.
+    resolveDestroyerRevival(attacker, attackerFactionId, events, sequence, rng);
+    if (defenderPhaseResolved) resolveDestroyerRevival(defender, defenderFactionId, events, sequence, rng);
     resolveReanimator(attacker, activeAttackerCommander, events, sequence, rng);
     if (defenderPhaseResolved) resolveReanimator(defender, activeDefenderCommander, events, sequence, rng);
     winner = determineWinner(attacker, defender);

@@ -1,7 +1,7 @@
 import { SPACEPORT_UPGRADE_MAX_LEVEL_BY_TRACK } from '../buildings/spaceport-upgrades.ts';
 
 export const COMBAT_PROFILE_ID = 'asterion-simulator-v1' as const;
-export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v4' as const;
+export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v5' as const;
 
 export const COMBAT_SHIP_LEVEL_COEFFICIENTS = Object.freeze({
   scout: 0.05,
@@ -74,13 +74,19 @@ export const COMBAT_RULE_PROVENANCE = Object.freeze({
     status: 'not-calibrated',
     source: 'Nemexia repeated reports; no saved Nemexia seed or RNG implementation',
     confidence: 'low',
-    note: 'All 19 valid identical-profile repeats have distinct first-round actor sequences. Asterion keeps its current fixed ordering; the Nemexia ordering mechanism is unknown.',
+    note: 'All 19 valid identical-profile repeats have distinct first-round actor sequences, with stable relative ordinary-stack order across rounds. Asterion uses a battle-seeded shuffle of ordinary ship stacks once at battle start as an approximation; commanders, defenses, and non-ordinary ships keep catalog order. Nemexia’s exact RNG/shuffle remains unknown.',
   },
   repairTiming: {
     status: 'confirmed',
     source: 'Nemexia saved reports: 648 structured repair events across 273 valid reports',
     confidence: 'high',
-    note: 'Every displayed repair follows that round’s last combat action. Asterion resolves its existing Reanimator effect after both action phases. The archive does not establish Reanimator as the only repair source, its formula, or which side repairs first; when both Asterion Reanimators proc, Asterion keeps attacker-then-defender RNG order.',
+    note: 'Every displayed repair follows that round’s last combat action. Asterion resolves both commander Reanimator and Destroyer Revival only after the combat phases; the two effects remain separately labeled in report events. When both Asterion Reanimators proc, Asterion keeps attacker-then-defender RNG order.',
+  },
+  destroyerRevival: {
+    status: 'inferred',
+    source: 'Official Nemexia Ships skills / Revival help and 641 archive repair entries',
+    confidence: 'medium',
+    note: 'Aegis/Confederation only. Use min(0.14% × functioning after-round Destroyers, 70%) chance and min(0.08% × Destroyers, 40%) of same-round losses per non-Destroyer target stack; round half-up. 641/641 archived repair amounts match. 641/7,643 per-target opportunities closely fit the chance, while one roll per side-round predicts 152.08 versus 525 observed rounds with repairs. Exact Nemexia RNG granularity is not explicit; Goliath and Hornet are excluded.',
   },
   damageFormula: {
     status: 'inferred',

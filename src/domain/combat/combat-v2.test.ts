@@ -226,10 +226,19 @@ test('seeded RNG is deterministic and its provenance is serializable', () => {
   assert.equal(report.metadata?.rngProvenance?.seed, 'battle-seed');
 });
 
-test('runs without a seed are explicitly non-replayable', () => {
+test('unseeded battles receive unique saved seeds that can replay the same report', () => {
   const report = resolveCombat(input(), { reportId: 'unseeded-report' });
-  assert.equal(report.metadata?.rngProvenance?.mode, 'non-replayable');
-  assert.equal(report.metadata?.rngProvenance?.seed, undefined);
+  const secondReport = resolveCombat(input(), { reportId: 'second-unseeded-report' });
+  const seed = report.metadata?.rngProvenance?.seed;
+
+  assert.equal(report.metadata?.rngProvenance?.mode, 'seeded');
+  assert.equal(typeof seed, 'string');
+  assert.ok(seed);
+  assert.equal(secondReport.metadata?.rngProvenance?.mode, 'seeded');
+  assert.notEqual(secondReport.metadata?.rngProvenance?.seed, seed);
+
+  const replay = resolveCombat(input({ seed }), { reportId: 'unseeded-report' });
+  assert.deepEqual(replay, report);
 });
 
 test('report event sequences are unique and monotonic across rounds', () => {
@@ -350,7 +359,7 @@ test('golden victory, defeat, and draw fixtures preserve provenance and structur
   Object.entries(COMBAT_GOLDEN_FIXTURES).forEach(([fixtureName, report]) => {
     assert.equal(report.winner, expectedWinners[fixtureName as keyof typeof expectedWinners]);
     assert.equal(report.schemaVersion, 3);
-    assert.equal(report.engineVersion, 'asterion-combat-engine-v4');
+    assert.equal(report.engineVersion, 'asterion-combat-engine-v5');
     assert.ok(report.initialSnapshot);
     assert.equal(report.rounds.some((round) => round.index === 0), false);
     assert.equal(report.metadata?.rngProvenance?.mode, 'seeded');

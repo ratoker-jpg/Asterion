@@ -83,8 +83,61 @@ function stripCommanderSelection(report: ReturnType<typeof resolve>) {
 }
 
 test('resolver is deterministic for fixed input and report identity', () => {
-  const value = input();
+  const value = input({ seed: 'fixed-resolver-determinism' });
   assert.deepEqual(resolve(value, 'fixed-report'), resolve(value, 'fixed-report'));
+});
+
+test('battle-seeded ordinary ship order is shuffled once, stays stable across rounds, and leaves commanders and defense in place', () => {
+  const ordinaryIds = ['scout', 'cruiser', 'defender', 'battleship', 'destroyer', 'bomber'] as const;
+  const valueFor = (seed: string): CombatInput => input({
+    attacker: {
+      participant: attackerParticipant,
+      ships: ordinaryIds.map((entityId) => ({ entityId, count: 1_000 })),
+      commanders: [{ entityId: 'corsair', count: 1 }],
+    },
+    defender: {
+      participant: defenderParticipant,
+      ships: ordinaryIds.map((entityId) => ({ entityId, count: 1_000 })),
+      commanders: [{ entityId: 'corsair', count: 1 }],
+      defenses: [{ entityId: 'laser-turret', count: 1_000 }],
+    },
+    maxRounds: 5,
+    seed,
+  });
+  const actionOrder = (report: ReturnType<typeof resolveCombat>, side: 'attacker' | 'defender', roundIndex = 0) => (
+    report.rounds[roundIndex]?.events
+      .filter((event) => event.actorSide === side && event.actionType !== 'special-bonus')
+      .map((event) => event.actorEntityId)
+      .filter((entityId, index, all) => all.indexOf(entityId) === index) ?? []
+  );
+  const first = resolveCombat(valueFor('ordinary-order-a'), { reportId: 'ordinary-order-a', allowPopulationOverflow: true });
+  const replay = resolveCombat(valueFor('ordinary-order-a'), { reportId: 'ordinary-order-a', allowPopulationOverflow: true });
+  assert.deepEqual(replay, first);
+  assert.ok(first.rounds.length > 1, 'fixture must preserve enough stacks to inspect multiple rounds');
+
+  const firstAttackerOrder = actionOrder(first, 'attacker');
+  const firstDefenderOrder = actionOrder(first, 'defender');
+  const attackerOrdinaryOrder = firstAttackerOrder.filter((entityId) => ordinaryIds.includes(entityId as typeof ordinaryIds[number]));
+  const defenderOrdinaryOrder = firstDefenderOrder.filter((entityId) => ordinaryIds.includes(entityId as typeof ordinaryIds[number]));
+  assert.equal(new Set(attackerOrdinaryOrder).size, ordinaryIds.length);
+  assert.equal(new Set(defenderOrdinaryOrder).size, ordinaryIds.length);
+  assert.ok(firstAttackerOrder.indexOf('corsair') > Math.max(...ordinaryIds.map((id) => firstAttackerOrder.indexOf(id))));
+  assert.ok(firstDefenderOrder.indexOf('corsair') > Math.max(...ordinaryIds.map((id) => firstDefenderOrder.indexOf(id))));
+  assert.ok(firstDefenderOrder.indexOf('laser-turret') > firstDefenderOrder.indexOf('corsair'));
+
+  for (let roundIndex = 1; roundIndex < first.rounds.length; roundIndex += 1) {
+    for (const side of ['attacker', 'defender'] as const) {
+      const current = actionOrder(first, side, roundIndex);
+      const previous = actionOrder(first, side, roundIndex - 1);
+      assert.deepEqual(current, previous.filter((entityId) => current.includes(entityId)));
+    }
+  }
+
+  const otherOrders = Array.from({ length: 8 }, (_, index) => {
+    const report = resolveCombat(valueFor(`ordinary-order-${index + 1}`), { reportId: `ordinary-order-${index + 1}`, allowPopulationOverflow: true });
+    return actionOrder(report, 'attacker').filter((entityId) => ordinaryIds.includes(entityId as typeof ordinaryIds[number]));
+  });
+  assert.ok(new Set(otherOrders.map((order) => order.join(','))).size > 1, 'different battle seeds should vary the approximation order');
 });
 
 test('validation rejects unknown id', () => {
@@ -644,10 +697,10 @@ test('generated report uses existing BattleReport contract without fake optional
   const report = resolve(input());
   assert.equal(report.missionType, 'simulation');
   assert.equal(report.schemaVersion, 3);
-  assert.equal(report.engineVersion, 'asterion-combat-engine-v4');
+  assert.equal(report.engineVersion, 'asterion-combat-engine-v5');
   assert.ok(report.initialSnapshot);
   assert.equal(report.metadata?.source, 'combat-resolver');
-  assert.match(report.metadata?.note ?? '', /asterion-combat-engine-v4/);
+  assert.match(report.metadata?.note ?? '', /asterion-combat-engine-v5/);
   assert.equal(report.experience, undefined);
   assert.equal(report.debris, undefined);
   assert.equal(report.resources, undefined);

@@ -13,12 +13,16 @@
   Taken: 11,674 attack rows in 5,622 multi-action actor-stack groups are recorded; planned inputs have one stack per class, but trigger/cadence/formula remain unestablished. Existing Asterion action count is preserved. No points, rewards, ship stats, or balance values changed.
 
 - Plan said: keep Asterion's existing Reanimator call timing because ability events were initially unaudited.
-  Code required: inspect every valid structured repair event, including cases with Reanimator and negative controls without it.
-  Taken: all 648 repair entries across 273 valid reports follow the last combat action in their displayed round. The existing Asterion Reanimator effect is now resolved after both action phases, without changing chance, cap, or target selection. Repairs also appear in reports without Reanimator, so the other repair source remains unknown. The archive does not establish which side resolves a simultaneous successful repair first; Asterion keeps attacker-before-defender RNG order as its local policy.
+  Code required: inspect all 648 structured repair entries, including entries with Reanimator and negative controls without it, then compare races and post-round Destroyer counts.
+  Taken: seven entries in four reports are commander Reanimator; all remaining 641 entries are ordinary Destroyer Revival on Aegis/Confederation, and all match the official chance/amount formula using Destroyers functioning after the round. No entry revives a Destroyer. Asterion implements the separate Revival ability only for Aegis, and Reanimator remains a separate commander ability. The per-target-stack seeded chance is the best-supported approximation; the exact Nemexia RNG granularity is undocumented.
 
 - Plan said: target-order variability and exact within-side ordering had not been audited.
   Code required: compare clean identical-profile controls without treating a missing seed or manifest priority as source rules.
-  Taken: 19 valid repeats show 19 distinct first-round sequences. Asterion fixed ordering remains as-is; the exact Nemexia ordering mechanism is explicitly listed as a decision point.
+  Taken: 19 valid repeats show 19 distinct first-round ordinary-ship sequences, while 192 adjacent-round comparisons preserve relative order. Each Asterion battle now seeded-shuffles ordinary ship stacks once, then uses that order throughout the fight; commanders, defenses, and non-ordinary ships are not mixed into the shuffle because the controls contain no evidence for them. Exact Nemexia shuffle/RNG remains unknown.
+
+- Plan said: unseeded resolver runs were non-replayable.
+  Code required: make a new seed available to every new battle and preserve it in the report.
+  Taken: each resolver battle without a supplied seed gets a generated seed; reports carry seeded RNG provenance, and identical inputs with the same saved seed replay identically. Existing player/Bot 01 flight seed sources remain unchanged.
 
 - Plan said: preserve the non-combat siege/destruction formula while changing round resolution.
   Code required: rerun Bot 01 arrival integration after the additional defender action event changes report sequencing.
@@ -26,17 +30,17 @@
 
 ## Validation
 
-- npm run test:combat — 145 passed after adding target-lock, archived repair timing, and dual-Reanimator end-of-round assertions.
+- npm run test:combat — 148 passed after adding seeded ordinary-order and Destroyer Revival coverage.
 - npm run test:attack — 16 passed, 2 failures; clean base commit 35574967298a8a55b170e2b9c64d4b3b018de9af has the same two loot assertions failing at attack.test.ts:281 and :307. Bot 01 integration expectations affected by the new seeded combat event now pass.
 - npm run test:application — 52 passed.
 - npm run test:flights — 98 passed.
 - Remaining domain scripts passed: buildings 121, espionage 29, repair 24, operations 13, command 17, reports 28, settings 6, rating 8, runtime 3, resources 6, energy 10, fleet 33, science 33, universe 36.
 - Electron simulator QA passed at 1920×1080 and 1280×720; battle-report QA passed at those sizes and its additional mobile viewport. The simulator QA first collided with Electron's binary install when both UI checks ran concurrently, then passed when rerun serially.
-- npm run build — passed after final resolver changes; Vite reports the existing large-chunk advisory.
+- npm run build — passed after the resolver and report changes; Vite emitted only its existing large-chunk advisory.
 - npm run dist:win — passed after moving Reanimator to round end; electron-builder reports the existing missing package description/author and default icon advisories.
 - git diff --check — passed.
-- Full archive playback — 4,053 Asterion runs from 1,351 supported clean inputs × 3 seeds; 12 service-only compositions skipped; 0 input-validation failures; 0 phase-order failures over 30,979 checks; 0 defender-start-count failures over 115,347 checks; 10,590 destroyed-defender responses. This playback used the final round-end Reanimator timing.
+- Full archive playback — passed after seeded ordering and Destroyer Revival changes: 1,363 clean source cases × 3 Asterion seeds = 4,089 battles; all 12 previously omitted support-order cases included; 0 input validation failures; 24,402 phase-order checks and 93,990 defender-start-count checks passed; 10,604 destroyed-defender responses observed. Asterion outcomes (1,661 attacker wins / 2,085 defender wins / 343 draws) are descriptive only because Nemexia seed is absent.
 
 ## How the run ended
 
-Confirmed round mechanics are implemented in the shared resolver, documented with row-level evidence and archive-derived fixtures, and checked against full clean-input Asterion playback. Remaining limits, the repair-source gap, and the within-side ordering question are listed in docs/evidence/nemexia-combat-archive-analysis.md and in the Draft PR. The two remaining test:attack failures are confirmed on the clean base commit and concern existing loot assertions. No merge or Ready transition is authorized.
+Confirmed round mechanics are implemented in the shared resolver, documented with row-level evidence and archive-derived fixtures. Remaining limits include exact next-target choice, additional-action cadence, cross-round target persistence in Nemexia, the exact shuffle algorithm and eligible non-ordinary actors, plus Revival's exact RNG granularity. The two test:attack failures were confirmed on the clean base commit and concern existing loot assertions. Full archive playback and build are complete. Changes are recorded on branch `codex/combat-parity-prompt` and Draft PR [#83](https://github.com/ratoker-jpg/Asterion/pull/83); it remains a draft and no merge or Ready transition is authorized.
