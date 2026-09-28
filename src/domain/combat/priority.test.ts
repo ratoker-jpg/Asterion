@@ -122,3 +122,49 @@ test('priority persists in the existing save envelope and survives reload', () =
   assert.equal(saved.schemaVersion, COMBAT_SAVE_SCHEMA_VERSION);
   assert.deepEqual(saved.combatPriority, priority);
 });
+
+// TEMPORARY audit probe. Reverted after collecting corpus schema from CI.
+const { readFileSync } = await import('node:fs');
+const probeCsv = readFileSync('docs/evidence/nemexia-target-priority-corpus/target-transitions.csv', 'utf8');
+function parseProbeCsvLine(line: string) {
+  const cells: string[] = [];
+  let cell = '';
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const ch = line[index]!;
+    if (quoted && ch === '"' && line[index + 1] === '"') { cell += '"'; index += 1; }
+    else if (ch === '"') quoted = !quoted;
+    else if (ch === ',' && !quoted) { cells.push(cell); cell = ''; }
+    else cell += ch;
+  }
+  cells.push(cell);
+  return cells;
+}
+const probeLines = probeCsv.split(/\r?\n/).filter(Boolean);
+const probeHeaders = parseProbeCsvLine(probeLines[0] ?? '');
+const probeRows = probeLines.slice(1, 9).map((line) => {
+  const cells = parseProbeCsvLine(line);
+  return Object.fromEntries(probeHeaders.map((header, index) => [header, cells[index] ?? '']));
+});
+console.log('TARGET_PRIORITY_PROBE_START');
+console.log(JSON.stringify({
+  headers: probeHeaders,
+  samples: probeRows.map((row) => ({
+    transition_id: row.transition_id,
+    run_id: row.run_id,
+    case_id: row.case_id,
+    actor_class: row.actor_class,
+    current_target: row.current_target,
+    alive_targets_at_switch_json: JSON.parse(row.alive_targets_at_switch_json || '[]'),
+    round_target_order_snapshot_json: JSON.parse(row.round_target_order_snapshot_json || '[]'),
+    priority_order_plan_json: JSON.parse(row.priority_order_plan_json || '[]'),
+    attacker_race: row.attacker_race,
+    defender_race: row.defender_race,
+    actor_faction: row.actor_faction,
+    experiment_block: row.experiment_block,
+    analysis_verified: row.analysis_verified,
+    capture_status: row.capture_status,
+  })),
+}, null, 2));
+console.log('TARGET_PRIORITY_PROBE_END');
+process.exit(1);
