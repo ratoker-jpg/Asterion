@@ -913,8 +913,8 @@ export function startBot01IncomingScenario(
     const testWorld = {
       ...createdTestWorld,
       name: 'Мир проверки Bot 01',
-      // One defender makes the shared combat and debris report visible while
-      // the fixed Test Mode seed still lets the Planetolom destroy this world.
+      // One defender ensures the incoming attack produces a combat report;
+      // the fixed Test Mode seed covers a surviving-world outcome.
       fleet: {
         ...createdTestWorld.fleet,
         ships: { ...createdTestWorld.fleet.ships, scout: 1 },

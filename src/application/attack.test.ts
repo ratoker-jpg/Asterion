@@ -715,6 +715,103 @@ test('an incoming Bot attack does not cancel an outbound Space Flight when the s
   assert.equal(incoming.events.some((event) => event.flight.id === outbound?.id && event.status === 'destroyed'), false);
 });
 
+test('Bot 01 can destroy an owned planet, persist its battle report, and burn flights from that origin', () => {
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 1_000 });
+  const initial = persistence.read();
+  const launched = startBot01IncomingScenario(initial, { now: 1_000, mode: 'test', testTimeScale: 1 });
+  assert.equal(launched.ok, true);
+  if (!launched.ok) return;
+
+  const survivingWorldId = launched.flight.destinationPlanetId!;
+  const playerPlanetId = 'helion-01';
+  const playerPlanet = launched.state.planets[playerPlanetId];
+  assert.ok(playerPlanet);
+  const playerCoordinate = {
+    galaxy: playerPlanet.universeGalaxy ?? 1,
+    system: playerPlanet.universeSystem ?? 1,
+    position: playerPlanet.universePosition ?? 1,
+  };
+  const withTransporter = replacePlanetState(launched.state, playerPlanetId, {
+    ...playerPlanet,
+    fleet: { ...playerPlanet.fleet, ships: { ...playerPlanet.fleet.ships, transporter: 1 } },
+  });
+  const stateAtPlayerPlanet = selectOwnedPlanet(withTransporter, playerPlanetId);
+  const spaceFlight = dispatchFlight(stateAtPlayerPlanet, {
+    requestId: 'space-flight-from-bot-destroyed-planet',
+    missionId: 'space-flight',
+    originPlanetId: playerPlanetId,
+    selectedShips: { transporter: 1 },
+    selectedCommanders: {},
+    oneWayDurationMinutes: 5,
+    cargo: { metal: 25, minerals: 10, gas: 5, debris: 0 },
+    departedAt: 1_000,
+  }, { now: 1_000, mode: 'test', testTimeScale: 1 });
+  assert.equal(spaceFlight.ok, true);
+  if (!spaceFlight.ok) return;
+
+  // This flight ID selects a deterministic test seed whose incoming Bot 01
+  // attack wins the combat and the planet siege against the real Helion planet.
+  const botFlightId = 'bot01-success-seed-13';
+  const botArrivalAt = spaceFlight.flight.departedAt + 4 * 60_000;
+  const botFlight: FlightRecord = {
+    ...launched.flight,
+    id: botFlightId,
+    requestId: botFlightId,
+    destination: { kind: 'planet', planetId: playerPlanetId, coordinate: playerCoordinate },
+    destinationPlanetId: playerPlanetId,
+    destinationCoordinate: playerCoordinate,
+    targetPlanetName: playerPlanet.name,
+    arrivalAt: botArrivalAt,
+    oneWayDurationMs: botArrivalAt - launched.flight.departedAt,
+  };
+  const scenario = spaceFlight.state.espionage?.bot01IncomingScenario;
+  assert.ok(scenario);
+  if (!scenario) return;
+  const scheduled = {
+    ...spaceFlight.state,
+    flights: {
+      ...spaceFlight.state.flights,
+      records: spaceFlight.state.flights.records.map((flight) => flight.id === launched.flight.id ? botFlight : flight),
+    },
+    espionage: {
+      ...spaceFlight.state.espionage!,
+      bot01IncomingScenario: { ...scenario, flightId: botFlightId, targetPlanetId: playerPlanetId },
+    },
+  };
+  assert.equal(persistence.write(scheduled).ok, true);
+
+  const incoming = reconcileFlights(persistence.read(), botArrivalAt, undefined, { mode: 'test', testTimeScale: 1 });
+  const reportId = `battle-bot01-incoming-${botFlightId}`;
+  const report = incoming.state.combat.reports.find((candidate) => candidate.id === reportId);
+  const returningBotFlight = incoming.state.flights.records.find((flight) => flight.id === botFlightId);
+  const destroyedOriginFlight = incoming.state.flights.records.find((flight) => flight.id === spaceFlight.flight.id);
+  assert.equal(report?.winner, 'attacker');
+  assert.equal(report?.siege?.planetDestroyed, true);
+  assert.equal(incoming.state.planets[playerPlanetId], undefined);
+  assert.ok(incoming.state.planets[survivingWorldId]);
+  assert.equal(incoming.state.currentPlanetId, survivingWorldId);
+  assert.equal(returningBotFlight?.phase, 'returning');
+  assert.equal(returningBotFlight?.attackResolution?.planetDestroyed, true);
+  assert.equal(destroyedOriginFlight?.phase, 'failed');
+  assert.equal(destroyedOriginFlight?.completionReason, 'origin-destroyed');
+  assert.equal(destroyedOriginFlight?.cargoState, 'voided');
+  assert.equal(destroyedOriginFlight?.cargoResolvedAt, botArrivalAt);
+  assert.equal(incoming.events.some((event) => event.flight.id === spaceFlight.flight.id && event.status === 'destroyed'), true);
+  assert.equal(incoming.state.combat.reports.filter((candidate) => candidate.id === reportId).length, 1);
+
+  assert.equal(persistence.write(incoming.state).ok, true);
+  const reloaded = persistence.read();
+  assert.equal(reloaded.planets[playerPlanetId], undefined);
+  assert.ok(reloaded.planets[survivingWorldId]);
+  assert.equal(reloaded.combat.reports.filter((candidate) => candidate.id === reportId).length, 1);
+  assert.equal(reloaded.flights.records.find((flight) => flight.id === spaceFlight.flight.id)?.cargoState, 'voided');
+  assert.equal(reloaded.flights.records.find((flight) => flight.id === spaceFlight.flight.id)?.completionReason, 'origin-destroyed');
+  const replay = reconcileFlights(reloaded, botArrivalAt + 1, undefined, { mode: 'test', testTimeScale: 1 });
+  assert.equal(replay.state.combat.reports.filter((candidate) => candidate.id === reportId).length, 1);
+  assert.equal(replay.state.planets[playerPlanetId], undefined);
+});
+
 test('surviving Bot 01 sieges reconcile factory bots and the last energy source', () => {
   const base = createInitialSaveState('test', 1_000);
   const launched = startBot01IncomingScenario(base, { now: 1_000, mode: 'test', testTimeScale: 1 });
