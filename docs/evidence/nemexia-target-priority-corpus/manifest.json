@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "sourceFileNames": [
+    "battles-2026-09-15.jsonl",
+    "battles-2026-09-16.jsonl"
+  ],
+  "battleFiles": [
+    {
+      "name": "battles-2026-09-15.jsonl",
+      "counts": {
+        "rows": 453,
+        "withError": 94,
+        "analysisVerified": 150,
+        "cleanRows": 359,
+        "cleanVerifiedRows": 150,
+        "cleanOlderRows": 209,
+        "cleanReplayReadyRows": 359
+      },
+      "bytes": 19466463,
+      "sha256": "7d5e531f733fc7e3edfe5fa165dfdf8ac21f6e23786812135329114319599868"
+    },
+    {
+      "name": "battles-2026-09-16.jsonl",
+      "counts": {
+        "rows": 1019,
+        "withError": 15,
+        "analysisVerified": 1006,
+        "cleanRows": 1004,
+        "cleanVerifiedRows": 1004,
+        "cleanOlderRows": 0,
+        "cleanReplayReadyRows": 1004
+      },
+      "bytes": 62019143,
+      "sha256": "24b72fcb989fb24550680e8589f7d8a5da59acd4f0a1eeebaa927405acf43b0c"
+    }
+  ],
+  "targetTransitions": {
+    "rows": 6052,
+    "verifiedSourceJoins": 6052,
+    "bytes": 6353807,
+    "sha256": "46c85eeb8a16d123e9edcc0024b613fc2fee33657af77afd33b06daaebc1f018"
+  },
+  "exclusions": [
+    "campaign-events JSONL, campaign manifests, HTML, MHTML, and screenshots are not copied by this script.",
+    "The transition export omits local absolute paths, report URLs, and HTML line references; source locators use JSONL basenames and line numbers."
+  ]
+}
