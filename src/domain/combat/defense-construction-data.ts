@@ -16,9 +16,10 @@ export type FactionDefenseConstructionBalance = Readonly<{
  *
  * Combat characteristics come from the 27 saved Nemexia Auto v2 defense pages
  * (nine defense types per faction), including weapon type, armor class, and
- * armor strength. The Veyra Ion-Plasma Turret uses its later observed effective
- * combat values from calibration180 case r3-d2-n100: the saved July page says
- * 27,300/327,600, but the September battle report shows 20,300/247,600.
+ * armor strength. Two Ion-Plasma rows use newer in-game values: the current
+ * Synod tooltip supplied on 2026-09-28 shows 42,000/524,000 (the saved July
+ * page says 52,000/624,000), while the Veyra calibration180 r3-d2-n100 report
+ * shows 20,300/247,600 instead of the saved page's 27,300/327,600.
  *
  * Base construction times come only from
  * ASTERION_BALANCE_V1_TIME_REBALANCED/оборона/{Астеры,Илары,Рой}/00_TIME_REBALANCED.md,
@@ -46,7 +47,7 @@ export const FACTION_DEFENSE_CONSTRUCTION_BALANCE: Readonly<
     'plasma-turret': { population: 20, cost: { metal: 71_500, minerals: 38_500, gas: 0 }, time: '00:00:53', combat: { attack: 4_000, life: 66_000, weaponType: 'Плазма', armorType: 'Средняя Броня', armorStrength: 6 } },
     'laser-ion-battery': { population: 26, cost: { metal: 109_200, minerals: 46_800, gas: 0 }, time: '00:01:27', combat: { attack: 10_920, life: 196_600, weaponType: 'Лазер / Ион', armorType: 'Средняя Броня', armorStrength: 6 } },
     'plasma-laser-battery': { population: 42, cost: { metal: 63_000, minerals: 147_000, gas: 0 }, time: '00:02:33', combat: { attack: 23_100, life: 346_500, weaponType: 'Лазер / Плазма', armorType: 'Средняя Броня', armorStrength: 6 } },
-    'ion-plasma-battery': { population: 80, cost: { metal: 96_000, minerals: 160_000, gas: 64_000 }, time: '00:08:24', combat: { attack: 52_000, life: 624_000, weaponType: 'Ион / Плазма', armorType: 'Тяжёлая Броня', armorStrength: 9 } },
+    'ion-plasma-battery': { population: 80, cost: { metal: 96_000, minerals: 160_000, gas: 64_000 }, time: '00:08:24', combat: { attack: 42_000, life: 524_000, weaponType: 'Ион / Плазма', armorType: 'Тяжёлая Броня', armorStrength: 9 } },
     'tower-shield': { population: 12, cost: { metal: 96_000, minerals: 96_000, gas: 0 }, time: '00:04:29', combat: { attack: 1, life: 600_000, weaponType: 'Лазер', armorType: 'Лёгкая Броня', armorStrength: 3 } },
     'planetary-shield': { population: 44, cost: { metal: 352_000, minerals: 352_000, gas: 0 }, time: '00:22:35', combat: { attack: 1, life: 2_640_000, weaponType: 'Лазер', armorType: 'Средняя Броня', armorStrength: 6 } },
   },

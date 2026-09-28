@@ -20,12 +20,12 @@
     "draw": 814
   },
   "checks": {
-    "rounds": 25780,
-    "attackPhaseOrderCases": 25747,
+    "rounds": 25789,
+    "attackPhaseOrderCases": 25756,
     "attackPhaseOrderFailures": 0,
     "defenderStartCountChecks": 102540,
     "defenderStartCountFailures": 0,
-    "destroyedDefenderResponses": 12432
+    "destroyedDefenderResponses": 12435
   },
   "compositionDiagnostics": {
     "noAttackerCombatActor": [],
@@ -8205,8 +8205,8 @@
         "defender": 6,
         "draw": 6
       },
-      "rounds": 123,
-      "meanRounds": 10.25
+      "rounds": 132,
+      "meanRounds": 11
     },
     "43ab63a38378||defence_doses||defence-r2-d2-canonical": {
       "runId": "43ab63a38378",
@@ -52001,7 +52001,7 @@
       "trial": 1,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r2-d2-n10:trial-1",
       "winner": "defender",
-      "rounds": 11
+      "rounds": 12
     },
     {
       "runId": "43ab63a38378",
@@ -52012,7 +52012,7 @@
       "trial": 2,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r2-d2-n10:trial-2",
       "winner": "defender",
-      "rounds": 11
+      "rounds": 12
     },
     {
       "runId": "43ab63a38378",
@@ -52023,7 +52023,7 @@
       "trial": 3,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r2-d2-n10:trial-3",
       "winner": "defender",
-      "rounds": 11
+      "rounds": 12
     },
     {
       "runId": "43ab63a38378",
@@ -52034,7 +52034,7 @@
       "trial": 1,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r2-d2-n100:trial-1",
       "winner": "defender",
-      "rounds": 6
+      "rounds": 8
     },
     {
       "runId": "43ab63a38378",
@@ -52045,7 +52045,7 @@
       "trial": 2,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r2-d2-n100:trial-2",
       "winner": "defender",
-      "rounds": 6
+      "rounds": 8
     },
     {
       "runId": "43ab63a38378",
@@ -52056,7 +52056,7 @@
       "trial": 3,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r2-d2-n100:trial-3",
       "winner": "defender",
-      "rounds": 6
+      "rounds": 8
     },
     {
       "runId": "43ab63a38378",

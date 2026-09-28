@@ -271,7 +271,7 @@ test('faction defense catalogs use independent source combat stats, costs, popul
   assert.equal(getFactionDefenseCatalog('veyra').find((entity) => entity.id === 'ballistic-turret')?.cost.metal, 2_300);
 });
 
-test('faction defense combat catalog matches saved Nemexia stats plus the later battle-observed Veyra override', () => {
+test('faction defense combat catalog matches saved Nemexia stats plus later in-game Ion-Plasma observations', () => {
   const expected: Record<(typeof COMBAT_FACTIONS)[number]['id'], Record<(typeof DEFENSE_IDS)[number], readonly [number, number, string, string, number]>> = {
     aegis: {
       'ballistic-turret': [140, 1_500, 'Лазер', 'Лёгкая Броня', 3],
@@ -291,7 +291,8 @@ test('faction defense combat catalog matches saved Nemexia stats plus the later 
       'plasma-turret': [4_000, 66_000, 'Плазма', 'Средняя Броня', 6],
       'laser-ion-battery': [10_920, 196_600, 'Лазер / Ион', 'Средняя Броня', 6],
       'plasma-laser-battery': [23_100, 346_500, 'Лазер / Плазма', 'Средняя Броня', 6],
-      'ion-plasma-battery': [52_000, 624_000, 'Ион / Плазма', 'Тяжёлая Броня', 9],
+      // Current in-game tooltip (2026-09-28) supersedes the older July help page.
+      'ion-plasma-battery': [42_000, 524_000, 'Ион / Плазма', 'Тяжёлая Броня', 9],
       'tower-shield': [1, 600_000, 'Лазер', 'Лёгкая Броня', 3],
       'planetary-shield': [1, 2_640_000, 'Лазер', 'Средняя Броня', 6],
     },
