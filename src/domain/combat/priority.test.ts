@@ -123,10 +123,10 @@ test('priority persists in the existing save envelope and survives reload', () =
   assert.deepEqual(saved.combatPriority, priority);
 });
 
-test('TEMP stage-2 target priority audit', async () => {
-  const { runStage2TargetPriorityAudit } = await import('../../../tools/audit-nemexia-target-priority-stage2.mjs');
-  console.log('STAGE2_TARGET_PRIORITY_AUDIT_START');
-  console.log(JSON.stringify(runStage2TargetPriorityAudit(), null, 2));
-  console.log('STAGE2_TARGET_PRIORITY_AUDIT_END');
+test('TEMP target-class ranking audit', async () => {
+  const { runTargetPriorityRankingAudit } = await import('../../../tools/audit-nemexia-target-priority-ranking.mjs');
+  console.log('TARGET_CLASS_RANKING_AUDIT_START');
+  console.log(JSON.stringify(runTargetPriorityRankingAudit(), null, 2));
+  console.log('TARGET_CLASS_RANKING_AUDIT_END');
   assert.fail('intentional temporary audit hook');
 });
