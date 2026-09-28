@@ -251,7 +251,7 @@ test('canonical source registry resolves all 39 ships without a faction fallback
   }
 });
 
-test('faction defense catalogs use independent source costs, populations, and 1.4% base times', () => {
+test('faction defense catalogs use independent source combat stats, costs, populations, and 1.4% base times', () => {
   for (const faction of COMBAT_FACTIONS) {
     const catalog = getFactionDefenseCatalog(faction.id);
     assert.equal(catalog.length, DEFENSE_IDS.length);
@@ -262,12 +262,63 @@ test('faction defense catalogs use independent source costs, populations, and 1.
       assert.deepEqual(entity.cost, expected.cost, `${faction.id}/${defenseId} cost`);
       assert.equal(entity.population, expected.population, `${faction.id}/${defenseId} population`);
       assert.equal(entity.construction.time, expected.time, `${faction.id}/${defenseId} base time`);
+      assert.deepEqual(entity.combat, expected.combat, `${faction.id}/${defenseId} combat stats`);
     }
   }
 
   assert.equal(getFactionDefenseCatalog('aegis').find((entity) => entity.id === 'tower-shield')?.population, 12);
   assert.equal(getFactionDefenseCatalog('synod').find((entity) => entity.id === 'ion-plasma-battery')?.cost.gas, 64_000);
   assert.equal(getFactionDefenseCatalog('veyra').find((entity) => entity.id === 'ballistic-turret')?.cost.metal, 2_300);
+});
+
+test('faction defense combat catalog matches saved Nemexia stats plus the later battle-observed Veyra override', () => {
+  const expected: Record<(typeof COMBAT_FACTIONS)[number]['id'], Record<(typeof DEFENSE_IDS)[number], readonly [number, number, string, string, number]>> = {
+    aegis: {
+      'ballistic-turret': [140, 1_500, 'Лазер', 'Лёгкая Броня', 3],
+      'laser-turret': [180, 2_400, 'Лазер', 'Средняя Броня', 6],
+      'ion-turret': [840, 12_600, 'Ион', 'Тяжёлая Броня', 9],
+      'plasma-turret': [3_800, 62_700, 'Плазма', 'Средняя Броня', 6],
+      'laser-ion-battery': [8_820, 128_800, 'Лазер / Ион', 'Средняя Броня', 6],
+      'plasma-laser-battery': [24_200, 263_000, 'Лазер / Плазма', 'Тяжёлая Броня', 9],
+      'ion-plasma-battery': [34_250, 407_000, 'Ион / Плазма', 'Средняя Броня', 6],
+      'tower-shield': [1, 600_000, 'Лазер', 'Лёгкая Броня', 3],
+      'planetary-shield': [1, 2_640_000, 'Лазер', 'Средняя Броня', 6],
+    },
+    synod: {
+      'ballistic-turret': [210, 2_200, 'Лазер', 'Лёгкая Броня', 3],
+      'laser-turret': [240, 3_200, 'Лазер', 'Лёгкая Броня', 3],
+      'ion-turret': [900, 13_500, 'Ион', 'Тяжёлая Броня', 9],
+      'plasma-turret': [4_000, 66_000, 'Плазма', 'Средняя Броня', 6],
+      'laser-ion-battery': [10_920, 196_600, 'Лазер / Ион', 'Средняя Броня', 6],
+      'plasma-laser-battery': [23_100, 346_500, 'Лазер / Плазма', 'Средняя Броня', 6],
+      'ion-plasma-battery': [52_000, 624_000, 'Ион / Плазма', 'Тяжёлая Броня', 9],
+      'tower-shield': [1, 600_000, 'Лазер', 'Лёгкая Броня', 3],
+      'planetary-shield': [1, 2_640_000, 'Лазер', 'Средняя Броня', 6],
+    },
+    veyra: {
+      'ballistic-turret': [70, 700, 'Лазер', 'Лёгкая Броня', 3],
+      'laser-turret': [120, 1_600, 'Лазер', 'Лёгкая Броня', 3],
+      'ion-turret': [240, 3_600, 'Ион', 'Тяжёлая Броня', 9],
+      'plasma-turret': [1_400, 23_100, 'Плазма', 'Тяжёлая Броня', 9],
+      'laser-ion-battery': [4_620, 83_200, 'Лазер / Ион', 'Лёгкая Броня', 3],
+      'plasma-laser-battery': [9_900, 148_500, 'Лазер / Плазма', 'Средняя Броня', 6],
+      // calibration180 r3-d2-n100 reports the effective in-battle values;
+      // these supersede the older July help-page values for parity playback.
+      'ion-plasma-battery': [20_300, 247_600, 'Ион / Плазма', 'Тяжёлая Броня', 9],
+      'tower-shield': [1, 600_000, 'Лазер', 'Лёгкая Броня', 3],
+      'planetary-shield': [1, 2_640_000, 'Лазер', 'Средняя Броня', 6],
+    },
+  };
+
+  for (const faction of COMBAT_FACTIONS) {
+    const catalog = getFactionDefenseCatalog(faction.id);
+    for (const defenseId of DEFENSE_IDS) {
+      const entity = catalog.find((item) => item.id === defenseId);
+      const [attack, life, weaponType, armorType, armorStrength] = expected[faction.id][defenseId];
+      assert.ok(entity, `${faction.id}/${defenseId} is present`);
+      assert.deepEqual(entity.combat, { attack, life, weaponType, armorType, armorStrength }, `${faction.id}/${defenseId}`);
+    }
+  }
 });
 
 test('legacy simulator scenario migrates to Asters versus Asters with zero technologies', () => {

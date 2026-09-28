@@ -15,17 +15,17 @@
   "validationFailures": [],
   "missingNames": {},
   "outcomes": {
-    "attacker": 1609,
-    "defender": 1666,
+    "attacker": 1600,
+    "defender": 1675,
     "draw": 814
   },
   "checks": {
-    "rounds": 25765,
-    "attackPhaseOrderCases": 25732,
+    "rounds": 25780,
+    "attackPhaseOrderCases": 25747,
     "attackPhaseOrderFailures": 0,
-    "defenderStartCountChecks": 102531,
+    "defenderStartCountChecks": 102540,
     "defenderStartCountFailures": 0,
-    "destroyedDefenderResponses": 12444
+    "destroyedDefenderResponses": 12432
   },
   "compositionDiagnostics": {
     "noAttackerCombatActor": [],
@@ -8145,12 +8145,12 @@
       "sourceCases": 4,
       "trials": 12,
       "outcomes": {
-        "attacker": 6,
-        "defender": 0,
-        "draw": 6
+        "attacker": 0,
+        "defender": 3,
+        "draw": 9
       },
-      "rounds": 123,
-      "meanRounds": 10.25
+      "rounds": 132,
+      "meanRounds": 11
     },
     "43ab63a38378||defence_doses||defence-r1-d2-canonical": {
       "runId": "43ab63a38378",
@@ -8173,9 +8173,9 @@
       "sourceCases": 4,
       "trials": 12,
       "outcomes": {
-        "attacker": 0,
+        "attacker": 3,
         "defender": 0,
-        "draw": 12
+        "draw": 9
       },
       "rounds": 144,
       "meanRounds": 12
@@ -8201,12 +8201,12 @@
       "sourceCases": 4,
       "trials": 12,
       "outcomes": {
-        "attacker": 6,
-        "defender": 0,
+        "attacker": 0,
+        "defender": 6,
         "draw": 6
       },
-      "rounds": 120,
-      "meanRounds": 10
+      "rounds": 123,
+      "meanRounds": 10.25
     },
     "43ab63a38378||defence_doses||defence-r2-d2-canonical": {
       "runId": "43ab63a38378",
@@ -8261,8 +8261,8 @@
         "defender": 3,
         "draw": 9
       },
-      "rounds": 135,
-      "meanRounds": 11.25
+      "rounds": 138,
+      "meanRounds": 11.5
     },
     "43ab63a38378||defence_doses||defence-r3-d2-canonical": {
       "runId": "43ab63a38378",
@@ -51670,7 +51670,7 @@
       "replicate": 10,
       "trial": 1,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r1-d2-n10:trial-1",
-      "winner": "attacker",
+      "winner": "draw",
       "rounds": 12
     },
     {
@@ -51681,7 +51681,7 @@
       "replicate": 10,
       "trial": 2,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r1-d2-n10:trial-2",
-      "winner": "attacker",
+      "winner": "draw",
       "rounds": 12
     },
     {
@@ -51692,7 +51692,7 @@
       "replicate": 10,
       "trial": 3,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r1-d2-n10:trial-3",
-      "winner": "attacker",
+      "winner": "draw",
       "rounds": 12
     },
     {
@@ -51703,8 +51703,8 @@
       "replicate": 100,
       "trial": 1,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r1-d2-n100:trial-1",
-      "winner": "attacker",
-      "rounds": 5
+      "winner": "defender",
+      "rounds": 8
     },
     {
       "runId": "43ab63a38378",
@@ -51714,8 +51714,8 @@
       "replicate": 100,
       "trial": 2,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r1-d2-n100:trial-2",
-      "winner": "attacker",
-      "rounds": 5
+      "winner": "defender",
+      "rounds": 8
     },
     {
       "runId": "43ab63a38378",
@@ -51725,8 +51725,8 @@
       "replicate": 100,
       "trial": 3,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r1-d2-n100:trial-3",
-      "winner": "attacker",
-      "rounds": 5
+      "winner": "defender",
+      "rounds": 8
     },
     {
       "runId": "43ab63a38378",
@@ -51868,7 +51868,7 @@
       "replicate": 100,
       "trial": 1,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r2-d1-n100:trial-1",
-      "winner": "draw",
+      "winner": "attacker",
       "rounds": 12
     },
     {
@@ -51879,7 +51879,7 @@
       "replicate": 100,
       "trial": 2,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r2-d1-n100:trial-2",
-      "winner": "draw",
+      "winner": "attacker",
       "rounds": 12
     },
     {
@@ -51890,7 +51890,7 @@
       "replicate": 100,
       "trial": 3,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r2-d1-n100:trial-3",
-      "winner": "draw",
+      "winner": "attacker",
       "rounds": 12
     },
     {
@@ -52000,7 +52000,7 @@
       "replicate": 10,
       "trial": 1,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r2-d2-n10:trial-1",
-      "winner": "attacker",
+      "winner": "defender",
       "rounds": 11
     },
     {
@@ -52011,7 +52011,7 @@
       "replicate": 10,
       "trial": 2,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r2-d2-n10:trial-2",
-      "winner": "attacker",
+      "winner": "defender",
       "rounds": 11
     },
     {
@@ -52022,7 +52022,7 @@
       "replicate": 10,
       "trial": 3,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r2-d2-n10:trial-3",
-      "winner": "attacker",
+      "winner": "defender",
       "rounds": 11
     },
     {
@@ -52033,8 +52033,8 @@
       "replicate": 100,
       "trial": 1,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r2-d2-n100:trial-1",
-      "winner": "attacker",
-      "rounds": 5
+      "winner": "defender",
+      "rounds": 6
     },
     {
       "runId": "43ab63a38378",
@@ -52044,8 +52044,8 @@
       "replicate": 100,
       "trial": 2,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r2-d2-n100:trial-2",
-      "winner": "attacker",
-      "rounds": 5
+      "winner": "defender",
+      "rounds": 6
     },
     {
       "runId": "43ab63a38378",
@@ -52055,8 +52055,8 @@
       "replicate": 100,
       "trial": 3,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r2-d2-n100:trial-3",
-      "winner": "attacker",
-      "rounds": 5
+      "winner": "defender",
+      "rounds": 6
     },
     {
       "runId": "43ab63a38378",
@@ -52364,7 +52364,7 @@
       "trial": 1,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r3-d2-n100:trial-1",
       "winner": "defender",
-      "rounds": 9
+      "rounds": 10
     },
     {
       "runId": "43ab63a38378",
@@ -52375,7 +52375,7 @@
       "trial": 2,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r3-d2-n100:trial-2",
       "winner": "defender",
-      "rounds": 9
+      "rounds": 10
     },
     {
       "runId": "43ab63a38378",
@@ -52386,7 +52386,7 @@
       "trial": 3,
       "seed": "nemexia-archive-playback:v5:43ab63a38378:calibration180-defence-r3-d2-n100:trial-3",
       "winner": "defender",
-      "rounds": 9
+      "rounds": 10
     },
     {
       "runId": "43ab63a38378",

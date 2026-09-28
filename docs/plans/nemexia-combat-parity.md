@@ -2,7 +2,7 @@
 
 ## Objective
 
-Implement report-confirmed Nemexia round behavior in Asterion's shared combat resolver and validate it on the full saved-input archive. This is a mechanics task: do not tune win-rate or change points, rewards, loot, ship statistics, or balance coefficients.
+Implement report-confirmed Nemexia round behavior and source-backed combat catalog data in Asterion's shared combat system, then validate against the full saved-input archive. Do not tune win-rate or change points, rewards, loot, ship statistics, or balance coefficients; source-backed defense-stat corrections are in scope.
 
 ## Evidence contract
 
@@ -21,6 +21,7 @@ The source of truth is docs/evidence/nemexia-combat-archive-analysis.md plus the
 | 7. Within-side action order | The 19 valid identical-profile repeats have 19 different first-round ordinary ship sequences. Across 192 adjacent-round comparisons with at least two common actors, no ordinary-stack relative-order inversion occurred. The supplied 15k Aegis-vs-Veyra report interleaves Death Star with ordinary combat ships. Shuffle all combat-ship stack slots once at battle start with the battle seed; keep that order across rounds. Keep commanders, defense, and non-combat support hulls in their existing slots/order. This seeded shuffle is an Asterion approximation, not Nemexia’s recovered RNG algorithm. | Implemented in shared resolver |
 | 8. Seed provenance | Preserve explicit flight/raid seeds. Generate and record a unique seed whenever a new resolver battle omits one; the saved report seed must reproduce the same report with the same input and engine version. | Implemented in shared resolver |
 | 9. Validation and review | Run the full domain suite, requested integration checks, simulator and battle-report Electron QA at the scripted 1920×1080 / 1280×720 viewports, Windows packaging, full archive Asterion playback, diff audit, and independent read-only review. Create only a Draft PR; do not merge or mark Ready. | Complete |
+| 10. Defense catalog parity | Apply the 27 saved faction defense combat profiles to the runtime catalog; use the later battle-observed Veyra Ion-Plasma values (20,300/247,600/9%) instead of the older help-page row. Add a golden assertion for all 27 rows and replay all clean archive cases. | Implemented locally; focused tests/build/playback pass; broader CI and review pending |
 
 ## Checks
 
@@ -33,11 +34,11 @@ Required commands:
 - npm run build
 - git diff --check
 
-Archive playback uses clean recorded Nemexia forms and three independent Asterion seeds per source case. The follow-up sweep replayed all 1,363 clean cases three times (4,089 battles), with zero skipped cases and zero input-validation failures. Across 25,732 rounds with both sides acting, phase order passed every check; all 102,531 defender round-start count checks passed; Asterion recorded 12,444 destroyed-defender responses. Outcomes (1,609 attacker wins, 1,666 defender wins, 814 draws) are descriptive diagnostics only, not Nemexia parity targets. Asterion catalog differences and absent Nemexia seeds mean no single random winner is expected to match.
+Archive playback after the defense catalog correction used three independent Asterion seeds per source case: all 1,363 clean cases ran (4,089 battles), with zero skips and zero input-validation failures. Across 25,780 rounds, all 25,747 attacker→defender order checks and 102,540 defender round-start count checks passed; there were 12,432 destroyed-defender response events. Outcomes were A1,600 / D1,675 / X814. The 1,363 Nemexia source reports were A562 / D739 / X62. Asterion's excess draws remain large and global outcome-distribution distance did not improve from the immediately prior playback. The defense-doses and n100 slices move locally toward defender wins, but this phase does not establish overall parity. Nemexia seeds are absent, and exact first-target/proc cadence remain unresolved.
 
 ## Scope guard
 
-Do not edit score/reward, loot, fleet, technology, or ship-stat coefficients. Do not promote an inferred weighted target selector, multi-action cadence, or exact within-side shuffle to confirmed Nemexia rules. Preserve all user-owned work outside this isolated worktree.
+Do not edit score/reward, loot, fleet, technology, ship-stat coefficients, or outcome-balancing coefficients. Source-backed defense-stat corrections are allowed. Do not promote an inferred target selector, ability-proc cadence, multi-action cadence, or exact within-side shuffle to confirmed Nemexia rules. Preserve all user-owned work outside this isolated worktree.
 
 ## Follow-up: 15,000-population Aegis vs Veyra control profile (2026-09-28)
 
