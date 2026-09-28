@@ -14,19 +14,21 @@ jobs:
           sparse-checkout: |
             docs/evidence/nemexia-target-priority-corpus
             tools/audit-nemexia-primary-fallback.mjs
+            tools/audit-nemexia-target-priority-scope.mjs
             src/domain/combat
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Run primary-plus-fallback audit
+      - name: Run target-priority diagnostics
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path audit-output | Out-Null
           node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs tools/audit-nemexia-primary-fallback.mjs | Out-File -FilePath audit-output/primary-fallback.json -Encoding utf8
+          node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs tools/audit-nemexia-target-priority-scope.mjs | Out-File -FilePath audit-output/scope.json -Encoding utf8
       - name: Upload audit artifact
         uses: actions/upload-artifact@v6
         with:
-          name: Target-Priority-Primary-Fallback
-          path: audit-output/primary-fallback.json
+          name: Target-Priority-Audit-Stage2
+          path: audit-output/*.json
           if-no-files-found: error
           retention-days: 1
