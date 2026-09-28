@@ -125,7 +125,58 @@ test('priority persists in the existing save envelope and survives reload', () =
 
 // TEMPORARY audit execution hook. Reverted after metrics are collected from CI.
 const { runTargetPriorityAudit } = await import('../../../tools/audit-nemexia-target-priority.mjs');
+const { createHash } = await import('node:crypto');
+const { readFileSync } = await import('node:fs');
 console.log('TARGET_PRIORITY_AUDIT_START');
 console.log(JSON.stringify(runTargetPriorityAudit(), null, 2));
 console.log('TARGET_PRIORITY_AUDIT_END');
+
+function parseAuditCsvLine(line: string) {
+  const cells: string[] = [];
+  let cell = '';
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const ch = line[index]!;
+    if (quoted && ch === '"' && line[index + 1] === '"') { cell += '"'; index += 1; }
+    else if (ch === '"') quoted = !quoted;
+    else if (ch === ',' && !quoted) { cells.push(cell); cell = ''; }
+    else cell += ch;
+  }
+  cells.push(cell);
+  return cells;
+}
+const auditLines = readFileSync('docs/evidence/nemexia-target-priority-corpus/target-transitions.csv', 'utf8').replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean);
+const auditHeaders = parseAuditCsvLine(auditLines[0] ?? '');
+const auditRows = auditLines.slice(1).map((line) => {
+  const cells = parseAuditCsvLine(line);
+  const row = Object.fromEntries(auditHeaders.map((header, index) => [header, cells[index] ?? '']));
+  const reportKey = `${row.archive_part}:${row.source_line}`;
+  const groupKey = `${row.experiment_block}|${row.comparison_key || reportKey}`;
+  const bucket = Number.parseInt(createHash('sha256').update(groupKey).digest('hex').slice(0, 8), 16) % 100;
+  return { ...row, reportKey, groupKey, holdout: bucket >= 70 };
+});
+const auditDiscoveryReports = new Set(auditRows.filter((row) => row.experiment_block !== 'target_priority' && !row.holdout).map((row) => row.reportKey));
+const auditHoldoutRows = auditRows.filter((row) => row.experiment_block !== 'target_priority' && row.holdout);
+const auditHoldoutReports = new Set(auditHoldoutRows.map((row) => row.reportKey));
+const reportOverlap = [...auditDiscoveryReports].filter((key) => auditHoldoutReports.has(key));
+const uniformExpectedAccuracy = auditHoldoutRows.reduce((sum, row) => sum + 1 / JSON.parse(row.alive_targets_at_switch_json || '[]').length, 0) / auditHoldoutRows.length;
+const controlledRows = auditRows.filter((row) => row.experiment_block === 'target_priority');
+let firstLegalEligible = 0;
+let firstLegalHit = 0;
+for (const row of controlledRows) {
+  const candidates = JSON.parse(row.alive_targets_at_switch_json || '[]') as Array<{ name: string }>;
+  const names = new Set(candidates.map((candidate) => candidate.name));
+  const plan = JSON.parse(row.priority_order_plan_json || '[]') as string[];
+  const firstLegal = plan.find((name) => names.has(name));
+  if (!firstLegal) continue;
+  firstLegalEligible += 1;
+  if (firstLegal === row.current_target) firstLegalHit += 1;
+}
+console.log('TARGET_PRIORITY_AUDIT_DIAGNOSTICS');
+console.log(JSON.stringify({
+  reportOverlapCount: reportOverlap.length,
+  reportOverlapExamples: reportOverlap.slice(0, 10),
+  uniformExpectedAccuracy,
+  controlledPlannedFirstLegal: { hit: firstLegalHit, eligible: firstLegalEligible, accuracy: firstLegalEligible ? firstLegalHit / firstLegalEligible : null },
+}, null, 2));
 process.exit(1);
