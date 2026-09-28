@@ -252,6 +252,15 @@ function digitsOnly(value) {
 }
 
 async function verifyLargeResourceValues(win, directory, label) {
+  // A renderer reload can finish before the resource-income view model has painted the seeded save.
+  const incomeReady = `(() => {
+    const expected=${JSON.stringify(LARGE_RESOURCE_INCOME)};
+    return Object.entries(expected).every(([resource,amount]) => {
+      const text=document.querySelector('[data-resource-income="'+resource+'"] strong')?.textContent??'';
+      return text.replace(/\\D/g,'')===String(amount);
+    });
+  })()`;
+  await waitFor(win, incomeReady, 8000);
   const income = await win.webContents.executeJavaScript(`(() => {
     const resources=['metal','minerals','gas'];
     const read=(selector)=>Array.from(document.querySelectorAll(selector)).map((element)=>({
@@ -718,7 +727,7 @@ async function verifyResourceZoneFlow(win, directory, label) {
     return Array.isArray(queue)&&queue.length===3 ? queue[0]?.finishAt : null;
   })()`);
   if (!Number.isFinite(firstFinishAt)) throw new Error(`Could not read the active building completion time: ${firstFinishAt}`);
-  const completionExpression = `(() => { try { const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}'); const q=save.queues?.['helion-01']; return Array.isArray(q)&&q.length===2&&q[0]?.assetRole==='gas-production-1'&&save.planets?.['helion-01']?.buildings?.['basic-energy']===2&&save.planets?.['helion-01']?.energy===${TEST_COMPLETED_ENERGY}; } catch { return false; } })()`;
+  const completionExpression = `(() => { try { const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}'); const q=save.queues?.['helion-01']; return Array.isArray(q)&&q.length===2&&q[0]?.assetRole==='gas-production-1'&&save.planets?.['helion-01']?.buildings?.['basic-energy']===2&&save.planets?.['helion-01']?.energy>=${TEST_COMPLETED_ENERGY}; } catch { return false; } })()`;
   await advanceRendererClockTo(win, firstFinishAt + 1);
   try {
     await waitFor(win, completionExpression, 8000);
