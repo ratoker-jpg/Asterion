@@ -12,25 +12,20 @@ jobs:
         with:
           filter: blob:none
           sparse-checkout: |
-            docs/evidence/nemexia-target-priority-corpus
-            tools/audit-nemexia-target-priority-scope.mjs
-            src/domain/combat
-            assets/source/New assets
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - name: Run full non-core scope diagnostics
+            docs/evidence/nemexia-target-priority-corpus/target-transitions.csv
+      - name: Capture commander-pair transitions
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path audit-output | Out-Null
-          $source = Get-Content tools/audit-nemexia-target-priority-scope.mjs -Raw
-          $source = $source.Replace('if (examples.length < 30) {', 'if (true) {')
-          Set-Content -Path tools/audit-nemexia-target-priority-scope-all.mjs -Value $source -Encoding utf8
-          node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs tools/audit-nemexia-target-priority-scope-all.mjs | Out-File -FilePath audit-output/scope-all.json -Encoding utf8
+          $ids = @('22','24','57','59','2145','5865','5880')
+          Import-Csv docs/evidence/nemexia-target-priority-corpus/target-transitions.csv |
+            Where-Object { $ids -contains $_.transition_id } |
+            ConvertTo-Json -Depth 20 |
+            Out-File -FilePath audit-output/commander-pairs.json -Encoding utf8
       - name: Upload audit artifact
         uses: actions/upload-artifact@v6
         with:
-          name: Target-Priority-Noncore-Rows
-          path: audit-output/scope-all.json
+          name: Target-Priority-Commander-Pairs
+          path: audit-output/commander-pairs.json
           if-no-files-found: error
           retention-days: 1
