@@ -752,7 +752,7 @@ test('Bot 01 can destroy an owned planet, persist its battle report, and burn fl
 
   // This flight ID selects a deterministic test seed whose incoming Bot 01
   // attack wins the combat and the planet siege against the real Helion planet.
-  const botFlightId = 'bot01-success-seed-13';
+  const botFlightId = 'bot01-success-seed-15';
   const botArrivalAt = spaceFlight.flight.departedAt + 4 * 60_000;
   const botFlight: FlightRecord = {
     ...launched.flight,

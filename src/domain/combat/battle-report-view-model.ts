@@ -106,7 +106,7 @@ export type BattleEventViewModel = {
   repairLimit: number | null;
   commanderAbilityId: CommanderId | null;
   commanderAbility: string | null;
-  shipAbilityId: 'destroyer-revival' | null;
+  shipAbilityId: 'destroyer-revival' | 'shmel-freezing' | null;
   shipAbility: string | null;
   specialBonusKind: 'attack' | 'life' | 'armor' | null;
   specialBonusRate: number | null;
@@ -616,7 +616,9 @@ function readEvent(value: unknown, index: number, attackerFactionId: CombatFacti
   const target = readStack({ entityId: targetEntityId ?? `unknown-target-${index}`, countAfter: readCount(record.targetCount) }, index, targetFactionId, targetKind);
   const commanderAbilityId = readString(record.commanderAbilityId);
   const safeCommanderAbilityId = commanderAbilityId && isCommanderId(commanderAbilityId) ? commanderAbilityId : null;
-  const shipAbilityId = record.shipAbilityId === 'destroyer-revival' ? record.shipAbilityId : null;
+  const shipAbilityId = record.shipAbilityId === 'destroyer-revival' || record.shipAbilityId === 'shmel-freezing'
+    ? record.shipAbilityId
+    : null;
 
   return {
     sequence: readCount(record.sequence) ?? index + 1,
@@ -655,7 +657,11 @@ function readEvent(value: unknown, index: number, attackerFactionId: CombatFacti
     commanderAbilityId: safeCommanderAbilityId,
     commanderAbility: safeCommanderAbilityId ? COMMANDER_ABILITIES[safeCommanderAbilityId].ability : null,
     shipAbilityId,
-    shipAbility: shipAbilityId === 'destroyer-revival' ? 'Восстановление разрушителей (Destroyer Revival)' : null,
+    shipAbility: shipAbilityId === 'destroyer-revival'
+      ? 'Восстановление разрушителей (Destroyer Revival)'
+      : shipAbilityId === 'shmel-freezing'
+        ? 'Замораживание Шмелём'
+        : null,
     specialBonusKind: record.specialBonusKind === 'attack' || record.specialBonusKind === 'life' || record.specialBonusKind === 'armor'
       ? record.specialBonusKind
       : null,

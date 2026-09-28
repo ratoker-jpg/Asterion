@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { COMBAT_GOLDEN_FIXTURES } from './combat-golden-fixtures.ts';
 import { createDefaultCombatPriority } from './priority.ts';
-import { normalizeBattleReport } from './report.ts';
+import { COMBAT_ENGINE_VERSION, normalizeBattleReport } from './report.ts';
 import { createSeededCombatRng, resolveCombat, selectCombatTarget } from './resolver.ts';
 import { PLANET_HANGAR_CAPACITY } from './config.ts';
 import {
@@ -359,7 +359,7 @@ test('golden victory, defeat, and draw fixtures preserve provenance and structur
   Object.entries(COMBAT_GOLDEN_FIXTURES).forEach(([fixtureName, report]) => {
     assert.equal(report.winner, expectedWinners[fixtureName as keyof typeof expectedWinners]);
     assert.equal(report.schemaVersion, 3);
-    assert.equal(report.engineVersion, 'asterion-combat-engine-v5');
+    assert.equal(report.engineVersion, COMBAT_ENGINE_VERSION);
     assert.ok(report.initialSnapshot);
     assert.equal(report.rounds.some((round) => round.index === 0), false);
     assert.equal(report.metadata?.rngProvenance?.mode, 'seeded');

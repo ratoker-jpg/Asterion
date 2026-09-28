@@ -9,6 +9,7 @@ import { COMMANDER_ABILITIES, COMMANDER_IDS } from '../src/domain/combat/command
 import { SIMULATOR_MAX_ROUNDS } from '../src/domain/combat/config.ts';
 import { getFactionDefenseCatalog, getFactionShipCatalog } from '../src/domain/combat/faction-catalog.ts';
 import { createDefaultCombatPriority } from '../src/domain/combat/priority.ts';
+import { COMBAT_ENGINE_VERSION } from '../src/domain/combat/report.ts';
 import { resolveCombat } from '../src/domain/combat/resolver.ts';
 import { COMBAT_TECHNOLOGIES, createDefaultCombatTechnologies } from '../src/domain/combat/technologies.ts';
 
@@ -17,10 +18,11 @@ const raceFaction = new Map([[1, 'aegis'], [2, 'synod'], [3, 'veyra']]);
 const sourceShipNames = new Map();
 const legacyShipSlots = new Map();
 const ordinaryShipIds = new Set(COMBAT_CATALOG.filter((entity) => entity.kind === 'ship' && entity.ordinaryClass).map((entity) => entity.id));
+const roundStartCounterfireShipIds = new Set([...ordinaryShipIds, 'death-star']);
 const supportedCombatActorIds = new Set(COMBAT_CATALOG.filter((entity) => entity.combat.attack > 0
   && (entity.kind !== 'ship' || entity.category === 'Боевой корабль')).map((entity) => entity.id));
 const supportHullIds = new Set(COMBAT_CATALOG.filter((entity) => entity.kind === 'ship' && entity.category !== 'Боевой корабль').map((entity) => entity.id));
-const engineVersion = 'asterion-combat-engine-v5';
+const engineVersion = COMBAT_ENGINE_VERSION;
 // Effective Nemexia defense form slots differ from Asterion's catalog order;
 // the source population control is checked against the mapped race catalog.
 const defenseFormSlotToCatalogIndex = [0, 1, null, 2, 3, 7, 8, 4, 5, 6];
@@ -264,7 +266,7 @@ function collectRoundChecks(report, checks) {
 
     const defenderStarts = new Map((round.defenderSnapshot?.stacks ?? []).map((stack) => [stack.entityId, stack.countBefore]));
     for (const event of defenderAttacks) {
-      if (!ordinaryShipIds.has(event.actorEntityId)) continue;
+      if (!roundStartCounterfireShipIds.has(event.actorEntityId)) continue;
       checks.defenderStartCountChecks += 1;
       if ((defenderStarts.get(event.actorEntityId) ?? 0) !== event.actorCount) checks.defenderStartCountFailures += 1;
     }

@@ -60,10 +60,13 @@ export type CombatResolverContext = {
 };
 
 type RuntimeBucket = 'stacks' | 'defenses';
+type CombatMatchupClass = CombatOrdinaryClass | 'death-star';
+type CombatDisablingAbility = CommanderId | 'shmel-freezing';
 
 type RuntimeStack = {
   side: BattleSide;
   bucket: RuntimeBucket;
+  factionId: CombatFactionId;
   kind: CombatEntityKind;
   entityId: CombatEntityId;
   level: number;
@@ -81,6 +84,7 @@ type RuntimeStack = {
   weaponType: string;
   armorType: string;
   ordinaryClass?: CombatOrdinaryClass;
+  matchupClass?: CombatMatchupClass;
   specialBonus?: CombatSpecialBonus;
 };
 
@@ -167,14 +171,35 @@ export function createNonReplayableCombatRng(): CombatRng {
 
 const CATALOG_ORDER = new Map<CombatEntityId, number>(COMBAT_CATALOG.map((entity, index) => [entity.id, index]));
 
-const MATCHUP_MULTIPLIERS: Readonly<Record<CombatOrdinaryClass, Readonly<Record<CombatOrdinaryClass, number>>>> = {
-  scout: { scout: 0.70, cruiser: 1.00, defender: 1.70, battleship: 1.70, destroyer: 1.00, bomber: 1.00 },
-  cruiser: { scout: 1.70, cruiser: 0.70, defender: 1.70, battleship: 0.70, destroyer: 1.00, bomber: 1.00 },
-  defender: { scout: 0.70, cruiser: 1.00, defender: 0.70, battleship: 1.00, destroyer: 1.00, bomber: 1.70 },
-  battleship: { scout: 1.00, cruiser: 1.70, defender: 1.70, battleship: 0.70, destroyer: 0.70, bomber: 1.00 },
-  destroyer: { scout: 1.00, cruiser: 1.00, defender: 1.00, battleship: 1.70, destroyer: 0.70, bomber: 0.70 },
-  bomber: { scout: 1.00, cruiser: 0.70, defender: 1.00, battleship: 1.00, destroyer: 1.70, bomber: 0.70 },
+const MATCHUP_MULTIPLIERS: Readonly<Record<CombatMatchupClass, Readonly<Record<CombatMatchupClass, number>>>> = {
+  scout: { scout: 0.70, cruiser: 1.00, defender: 1.70, battleship: 1.70, destroyer: 1.00, bomber: 1.00, 'death-star': 0.70 },
+  cruiser: { scout: 1.70, cruiser: 0.70, defender: 1.70, battleship: 0.70, destroyer: 1.00, bomber: 1.00, 'death-star': 1.00 },
+  defender: { scout: 0.70, cruiser: 1.00, defender: 0.70, battleship: 1.00, destroyer: 1.00, bomber: 1.70, 'death-star': 1.70 },
+  battleship: { scout: 1.00, cruiser: 1.70, defender: 1.70, battleship: 0.70, destroyer: 0.70, bomber: 1.00, 'death-star': 1.00 },
+  destroyer: { scout: 1.00, cruiser: 1.00, defender: 1.00, battleship: 1.70, destroyer: 0.70, bomber: 0.70, 'death-star': 1.70 },
+  bomber: { scout: 1.00, cruiser: 0.70, defender: 1.00, battleship: 1.00, destroyer: 1.70, bomber: 0.70, 'death-star': 1.70 },
+  'death-star': { scout: 1.00, cruiser: 1.70, defender: 0.70, battleship: 1.00, destroyer: 1.00, bomber: 1.00, 'death-star': 1.70 },
 };
+
+/**
+ * Primary ship-target classes transcribed from Nemexia Auto v2's saved ship
+ * pages and battle_catalog.py. These preferences do not define the fallback
+ * selector, which remains an explicit Asterion policy while uncalibrated.
+ */
+const NEMEXIA_PRIMARY_TARGET_CLASS: Readonly<Record<CombatMatchupClass, CombatMatchupClass>> = {
+  scout: 'defender',
+  cruiser: 'scout',
+  defender: 'bomber',
+  battleship: 'cruiser',
+  destroyer: 'battleship',
+  bomber: 'destroyer',
+  'death-star': 'death-star',
+};
+
+function matchupClassForEntity(entityId: CombatEntityId): CombatMatchupClass | undefined {
+  if (entityId === 'death-star') return 'death-star';
+  return getCombatEntity(entityId).ordinaryClass;
+}
 
 function levelCoefficient(entity: ReturnType<typeof getCombatEntity>) {
   if (entity.id === 'death-star') return COMBAT_SHIP_LEVEL_COEFFICIENTS['death-star'];
@@ -182,8 +207,8 @@ function levelCoefficient(entity: ReturnType<typeof getCombatEntity>) {
 }
 
 function matchupFor(actor: RuntimeStack, target: RuntimeStack) {
-  const actorClass = actor.ordinaryClass;
-  const targetClass = target.ordinaryClass;
+  const actorClass = actor.matchupClass;
+  const targetClass = target.matchupClass;
   if (actorClass && targetClass) {
     return { multiplier: MATCHUP_MULTIPLIERS[actorClass][targetClass], status: 'inferred' as const };
   }
@@ -253,6 +278,23 @@ export function selectCombatTarget(
   })[0] ?? null;
 }
 
+function selectShipTarget(
+  actor: RuntimeStack,
+  candidates: readonly TargetSelectionCandidate[],
+  fallbackPriority: CombatTargetPriority,
+): TargetSelectionCandidate | null {
+  if (actor.kind !== 'ship' || !actor.matchupClass) {
+    return selectCombatTarget(candidates, fallbackPriority);
+  }
+
+  const preferredClass = NEMEXIA_PRIMARY_TARGET_CLASS[actor.matchupClass];
+  const preferredCandidates = candidates.filter((candidate) => candidate.currentCount > 0
+    && matchupClassForEntity(candidate.entityId) === preferredClass);
+  return preferredCandidates.length > 0
+    ? selectCombatTarget(preferredCandidates, fallbackPriority)
+    : selectCombatTarget(candidates, fallbackPriority);
+}
+
 function runtimeFromInput(
   side: BattleSide,
   bucket: RuntimeBucket,
@@ -273,6 +315,7 @@ function runtimeFromInput(
     return {
       side,
       bucket,
+      factionId,
       kind: entity.kind,
       entityId: stack.entityId,
       level,
@@ -290,6 +333,7 @@ function runtimeFromInput(
       weaponType: entity.combat.weaponType,
       armorType: entity.combat.armorType,
       ...(entity.ordinaryClass ? { ordinaryClass: entity.ordinaryClass } : {}),
+      ...(matchupClassForEntity(stack.entityId) ? { matchupClass: matchupClassForEntity(stack.entityId) } : {}),
       ...(entity.specialBonus ? { specialBonus: entity.specialBonus } : {}),
     };
   });
@@ -312,25 +356,26 @@ function sideAliveCount(stacks: readonly RuntimeStack[]) {
 
 function createBattleActionOrder(stacks: readonly RuntimeStack[], rng: CombatRng) {
   const order = sortRuntime(stacks);
-  const ordinarySlots: number[] = [];
-  const ordinaryShips: RuntimeStack[] = [];
+  const combatShipSlots: number[] = [];
+  const combatShips: RuntimeStack[] = [];
   order.forEach((stack, index) => {
-    if (stack.kind !== 'ship' || stack.ordinaryClass === undefined) return;
-    ordinarySlots.push(index);
-    ordinaryShips.push(stack);
+    if (stack.kind !== 'ship' || stack.matchupClass === undefined) return;
+    combatShipSlots.push(index);
+    combatShips.push(stack);
   });
 
-  // The 19 controlled Nemexia repeats show variable ordinary ship order
-  // between battles and stable relative order between rounds. Its shuffle/RNG
-  // details are absent, so this is a seeded Asterion approximation. Commander,
-  // defense, and non-ordinary ship slots retain catalog order.
-  for (let index = ordinaryShips.length - 1; index > 0; index -= 1) {
+  // The controlled repeats show variable ordinary ship order between battles,
+  // while the supplied 15k report interleaves the Death Star with ordinary
+  // combat ships. Nemexia's shuffle/RNG details remain unknown, so this is a
+  // seeded Asterion approximation over all combat-ship slots. Commanders,
+  // defenses, and non-combat support hulls retain catalog order.
+  for (let index = combatShips.length - 1; index > 0; index -= 1) {
     const swapIndex = Math.floor(rng.next() * (index + 1));
-    [ordinaryShips[index], ordinaryShips[swapIndex]] = [ordinaryShips[swapIndex]!, ordinaryShips[index]!];
+    [combatShips[index], combatShips[swapIndex]] = [combatShips[swapIndex]!, combatShips[index]!];
   }
 
-  ordinarySlots.forEach((slot, index) => {
-    order[slot] = ordinaryShips[index]!;
+  combatShipSlots.forEach((slot, index) => {
+    order[slot] = combatShips[index]!;
   });
   return order;
 }
@@ -678,7 +723,9 @@ function createRoundSummary(
     if (event.actionType === 'ability') procs += 1;
     repairs += event.repairedCount ?? 0;
     if (event.criticalMultiplier && event.criticalMultiplier > 1) criticalHits += 1;
-    if (event.commanderAbilityId === 'scorpion') paralyzes += event.actionType === 'ability' ? 1 : 0;
+    if (event.commanderAbilityId === 'scorpion' || event.shipAbilityId === 'shmel-freezing') {
+      paralyzes += event.actionType === 'ability' ? 1 : 0;
+    }
     if (event.commanderAbilityId === 'phantom') cancelledAttacks += event.actionType === 'ability' ? 1 : 0;
   });
 
@@ -775,10 +822,12 @@ function createAttackEvent(
   target: RuntimeStack,
   rng: CombatRng,
   criticalBonus: number,
+  volleyScale = 1,
+  volleyIndex = 0,
 ): CombatEvent {
   const countBeforeEvent = target.count;
   const hpBefore = target.hpPool;
-  const baseAttack = Math.max(0, Math.floor(actorCount * actor.attackPerUnit));
+  const baseAttack = Math.max(0, Math.floor(actorCount * actor.attackPerUnit * volleyScale));
   const matchup = matchupFor(actor, target);
   const reportedBonus = matchup.multiplier === 1
     ? 0
@@ -805,8 +854,8 @@ function createAttackEvent(
     targetCount: countBeforeEvent,
     attackValue: baseAttack,
     baseAttack,
-    attackPerUnit: actor.attackPerUnit,
-    totalAttack: actorCount * actor.attackPerUnit,
+    attackPerUnit: actor.attackPerUnit * volleyScale,
+    totalAttack: baseAttack,
     lifePerUnit: target.lifePerUnit,
     hpPool: hpBefore,
     rawDamage,
@@ -830,7 +879,7 @@ function createAttackEvent(
     provenance: DAMAGE_PROVENANCE,
     note: actualDamage === 0
       ? 'Залп не нанёс урон: цель уже уничтожена.'
-      : `${matchup.multiplier === 1 ? 'Нейтральный модификатор пары' : `Модификатор пары ×${matchup.multiplier.toFixed(2)}`}; урон после брони ${target.armorPercent}%.${criticalMultiplier > 1 ? ' Критический залп ×2.' : ''} Стек сохраняет цель, пока она жива; новая цель выбирается после её уничтожения.`,
+      : `${matchup.multiplier === 1 ? 'Нейтральный модификатор пары' : `Модификатор пары ×${matchup.multiplier.toFixed(2)}`}; урон после брони ${target.armorPercent}%.${criticalMultiplier > 1 ? ' Критический залп ×2.' : ''}${volleyIndex > 0 ? ` Повторный залп №${volleyIndex + 1}: мощность ×${volleyScale.toFixed(2)}.` : ''} Стек сохраняет цель, пока она жива; новая цель выбирается после её уничтожения.`,
   };
 }
 
@@ -846,7 +895,13 @@ function createNoTargetEvent(sequence: number, actor: RuntimeStack): CombatEvent
   };
 }
 
-function createSkippedActionEvent(sequence: number, actor: RuntimeStack, note = 'Залп пропущен: стек уничтожен до своей очереди и не совершает действие.', commanderId?: CommanderId): CombatEvent {
+function createSkippedActionEvent(
+  sequence: number,
+  actor: RuntimeStack,
+  note = 'Залп пропущен: стек уничтожен до своей очереди и не совершает действие.',
+  commanderId?: CommanderId,
+  shipAbilityId?: CombatEvent['shipAbilityId'],
+): CombatEvent {
   return {
     sequence,
     actorSide: actor.side,
@@ -854,9 +909,19 @@ function createSkippedActionEvent(sequence: number, actor: RuntimeStack, note = 
     actionType: 'status',
     actorCount: actor.count,
     ...(commanderId ? { commanderAbilityId: commanderId } : {}),
+    ...(shipAbilityId ? { shipAbilityId } : {}),
     provenance: { status: 'structural', source: 'Asterion sequential resolver', confidence: 'high' },
     note,
   };
+}
+
+const SHMEL_FREEZING_CHANCE_PER_SHIP = 0.0004;
+const SHMEL_FREEZING_MAX_CHANCE = 0.2;
+
+function shmelFreezingChance(actor: RuntimeStack, actorCount: number) {
+  return actor.factionId === 'veyra' && actor.entityId === 'destroyer'
+    ? Math.min(SHMEL_FREEZING_MAX_CHANCE, SHMEL_FREEZING_CHANCE_PER_SHIP * actorCount)
+    : 0;
 }
 
 function createNoAttackEvent(sequence: number, actor: RuntimeStack): CombatEvent {
@@ -873,11 +938,13 @@ function createNoAttackEvent(sequence: number, actor: RuntimeStack): CombatEvent
 
 function usesDocumentedDefenderRoundStartCount(actor: RuntimeStack, roundStartCount: number) {
   if (actor.side !== 'defender' || roundStartCount <= 0) return false;
-  if (actor.kind === 'ship' && actor.ordinaryClass !== undefined) return true;
+  if (actor.kind === 'ship' && actor.matchupClass !== undefined) return true;
 
   // The archive confirms destroyed-before-response turns for commander and
   // defense actors. It does not establish round-start strength after partial
   // losses for either category, so those keep Asterion's live-count behavior.
+  // Death-star is included above: the supplied exact profile shows Nox Queen
+  // answering at its 30-unit round-start count after losing 13 during attacker fire.
   return actor.count === 0 && (actor.kind === 'commander' || actor.kind === 'defense');
 }
 
@@ -1002,6 +1069,8 @@ function resolveSideActions(
   allowDocumentedDefenderCounterfire: boolean,
   paralyzedActorsNext: Set<CombatEntityId>,
   paralyzedTargetsNext: Set<CombatEntityId>,
+  paralyzedActorSourcesNext: Map<CombatEntityId, CombatDisablingAbility>,
+  paralyzedTargetSourcesNext: Map<CombatEntityId, CombatDisablingAbility>,
 ) {
   const criticalEffect = getCommanderCombatEffect(activeCommanderId);
   const criticalBonus = criticalEffect?.kind === 'critical'
@@ -1020,7 +1089,13 @@ function resolveSideActions(
     }
     if (paralyzedActorsNext.has(actor.entityId)) {
       paralyzedActorsNext.delete(actor.entityId);
-      events.push(createSkippedActionEvent(sequence.value++, actor, 'Атака пропущена: командир Скорпион парализовал ближайшее действие.', 'scorpion'));
+      const disablingAbility = paralyzedActorSourcesNext.get(actor.entityId);
+      paralyzedActorSourcesNext.delete(actor.entityId);
+      if (disablingAbility === 'shmel-freezing') {
+        events.push(createSkippedActionEvent(sequence.value++, actor, 'Атака пропущена: стек заморожен способностью Шмеля.', undefined, 'shmel-freezing'));
+      } else {
+        events.push(createSkippedActionEvent(sequence.value++, actor, 'Атака пропущена: командир Скорпион парализовал ближайшее действие.', 'scorpion'));
+      }
       continue;
     }
     if (phantomEffect && opposingPhantom) {
@@ -1036,39 +1111,89 @@ function resolveSideActions(
       events.push(createNoAttackEvent(sequence.value++, actor));
       continue;
     }
-    let targetRuntime = targetStacks.find((stack) => stack.entityId === lockedTargets.get(actor.entityId));
-    if (!targetRuntime || targetRuntime.count <= 0) {
-      lockedTargets.delete(actor.entityId);
-      const target = selectCombatTarget(targetStacks.map((stack) => ({
-        entityId: stack.entityId,
-        currentCount: stack.count,
-        threat: stack.count * stack.attackPerUnit,
-        population: stack.count * stack.populationPerUnit,
-      })), targetPriority);
-      targetRuntime = target
-        ? targetStacks.find((stack) => stack.entityId === target.entityId)
-        : undefined;
-      if (targetRuntime && targetRuntime.count > 0) lockedTargets.set(actor.entityId, targetRuntime.entityId);
-    }
-    if (!targetRuntime) {
-      events.push(createNoTargetEvent(sequence.value++, actor));
-      continue;
-    }
     // Nemexia's saved reports show defender ships, including fully destroyed
     // stacks, responding at their round-start count. Destroyed-before-turn
     // commander/defense responses are separately observed; their partial-loss
     // count behavior remains uncalibrated.
     const actorCount = usesRoundStartCount ? roundStartCount : actor.count;
-    events.push(createAttackEvent(sequence.value++, actor, actorCount, targetRuntime, rng, criticalBonus));
-    if (targetRuntime.count <= 0) lockedTargets.delete(actor.entityId);
+    let hasAttacked = false;
+    let lastLivingTarget: RuntimeStack | undefined;
+    const volleyLimit = actor.kind === 'ship' && actor.matchupClass ? 5 : 1;
+    for (let volleyIndex = 0; volleyIndex < volleyLimit; volleyIndex += 1) {
+      let targetRuntime = targetStacks.find((stack) => stack.entityId === lockedTargets.get(actor.entityId));
+      if (!targetRuntime || targetRuntime.count <= 0) {
+        lockedTargets.delete(actor.entityId);
+        const target = selectShipTarget(actor, targetStacks.map((stack) => ({
+          entityId: stack.entityId,
+          currentCount: stack.count,
+          threat: stack.count * stack.attackPerUnit,
+          population: stack.count * stack.populationPerUnit,
+        })), targetPriority);
+        targetRuntime = target
+          ? targetStacks.find((stack) => stack.entityId === target.entityId)
+          : undefined;
+        if (targetRuntime && targetRuntime.count > 0) lockedTargets.set(actor.entityId, targetRuntime.entityId);
+      }
+      if (!targetRuntime) {
+        if (!hasAttacked) events.push(createNoTargetEvent(sequence.value++, actor));
+        break;
+      }
+
+      const volleyScale = 1 - volleyIndex * 0.2;
+      events.push(createAttackEvent(sequence.value++, actor, actorCount, targetRuntime, rng, criticalBonus, volleyScale, volleyIndex));
+      hasAttacked = true;
+      if (targetRuntime.count > 0) {
+        lastLivingTarget = targetRuntime;
+        break;
+      }
+
+      lockedTargets.delete(actor.entityId);
+      if (targetStacks.every((stack) => stack.count <= 0)) break;
+    }
     const scorpion = commanderAtSide(actorStacks, activeCommanderId, 'scorpion');
     if (scorpion) {
       const effect = getCommanderCombatEffect('scorpion');
       const chance = effect ? effect.ratePerLevel * scorpion.level : 0;
       const draw = rng.next();
-      if (targetRuntime.count > 0 && draw < chance) {
-        paralyzedTargetsNext.add(targetRuntime.entityId);
-        events.push(createAbilityEvent(sequence.value++, scorpion, 'scorpion', chance, draw, targetRuntime, 'Цель пропустит ближайшую атаку в своей фазе.'));
+      if (lastLivingTarget && draw < chance) {
+        paralyzedTargetsNext.add(lastLivingTarget.entityId);
+        paralyzedTargetSourcesNext.set(lastLivingTarget.entityId, 'scorpion');
+        events.push(createAbilityEvent(sequence.value++, scorpion, 'scorpion', chance, draw, lastLivingTarget, 'Цель пропустит ближайшую атаку в своей фазе.'));
+      }
+    }
+
+    const freezingChance = shmelFreezingChance(actor, actorCount);
+    const freezingCandidates = targetStacks.filter((stack) => stack.kind === 'ship'
+      && stack.matchupClass !== undefined
+      && stack.count > 0
+      && !paralyzedTargetsNext.has(stack.entityId));
+    if (freezingChance > 0 && freezingCandidates.length > 0) {
+      const draw = rng.next();
+      if (draw < freezingChance) {
+        const targetIndex = Math.floor(rng.next() * freezingCandidates.length);
+        const target = freezingCandidates[targetIndex]!;
+        paralyzedTargetsNext.add(target.entityId);
+        paralyzedTargetSourcesNext.set(target.entityId, 'shmel-freezing');
+        events.push({
+          sequence: sequence.value++,
+          actorSide: actor.side,
+          actorEntityId: actor.entityId,
+          targetSide: target.side,
+          targetEntityId: target.entityId,
+          actionType: 'ability',
+          actorCount,
+          targetCount: target.count,
+          shipAbilityId: 'shmel-freezing',
+          abilityChance: freezingChance,
+          abilityDraw: draw,
+          provenance: {
+            status: 'inferred',
+            source: 'Nemexia saved ship ability tooltip and supplied detailed battle report',
+            confidence: 'medium',
+            note: 'Tooltip: 0.04% chance per Shmel, capped at 20%. The report shows a frozen stack skipping its next action; exact target-selection and RNG procedures are not documented.',
+          },
+          note: `Замораживание: ${target.entityId} пропустит ближайшую атаку; шанс ${(freezingChance * 100).toFixed(3)}%.`,
+        });
       }
     }
   }
@@ -1148,6 +1273,8 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
   let eventSequence = 1;
   const paralyzedAttackerNext = new Set<CombatEntityId>();
   const paralyzedDefenderNext = new Set<CombatEntityId>();
+  const paralyzedAttackerSourcesNext = new Map<CombatEntityId, CombatDisablingAbility>();
+  const paralyzedDefenderSourcesNext = new Map<CombatEntityId, CombatDisablingAbility>();
   const attackerTargetLocks = new Map<CombatEntityId, CombatEntityId>();
   const defenderTargetLocks = new Map<CombatEntityId, CombatEntityId>();
   let lastModifiers = initialModifiers;
@@ -1179,6 +1306,8 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
       false,
       paralyzedAttackerNext,
       paralyzedDefenderNext,
+      paralyzedAttackerSourcesNext,
+      paralyzedDefenderSourcesNext,
     );
     winner = determineWinner(attacker, defender);
     const defenderCounterfireIsPossible = sideAliveCount(attacker) > 0
@@ -1200,6 +1329,8 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
         true,
         paralyzedDefenderNext,
         paralyzedAttackerNext,
+        paralyzedDefenderSourcesNext,
+        paralyzedAttackerSourcesNext,
       );
     }
     // Revival and Reanimator both resolve after the two combat action phases.

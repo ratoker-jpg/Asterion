@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { DEMO_BATTLE_REPORTS } from './battle-fixtures.ts';
+import { createBattleReportViewModel } from './battle-report-view-model.ts';
 import {
   addBattleReportSaved,
   createDefaultBattleHistory,
@@ -74,6 +75,42 @@ function resolve(value: CombatInput, reportId = 'report-test') {
   return resolveCombat(value, { reportId });
 }
 
+function nemexiaFifteenThousandProfile(seed: string): CombatInput {
+  const attackerShips = [
+    ['cruiser', 100], ['defender', 100], ['battleship', 100],
+    ['destroyer', 100], ['bomber', 100], ['death-star', 10],
+  ] as const;
+  const defenderShips = [
+    ['scout', 100], ['cruiser', 100], ['defender', 100], ['battleship', 100],
+    ['destroyer', 100], ['bomber', 100], ['death-star', 30],
+  ] as const;
+  return input({
+    attacker: {
+      participant: attackerParticipant,
+      factionId: 'aegis',
+      ships: attackerShips.map(([entityId, count]) => ({ entityId, count, level: 0 })),
+      commanders: [],
+      activeCommanderId: null,
+    },
+    defender: {
+      participant: defenderParticipant,
+      factionId: 'veyra',
+      ships: defenderShips.map(([entityId, count]) => ({ entityId, count, level: 0 })),
+      commanders: [],
+      activeCommanderId: null,
+      defenses: [],
+    },
+    maxRounds: 8,
+    attackerTechnologies: createDefaultCombatTechnologies(),
+    defenderTechnologies: createDefaultCombatTechnologies(),
+    technologyMode: 'independent',
+    executionMode: 'calibration',
+    attackerTargetPriority: 'threat',
+    defenderTargetPriority: 'threat',
+    seed,
+  });
+}
+
 function stripCommanderSelection(report: ReturnType<typeof resolve>) {
   return {
     ...report,
@@ -87,17 +124,17 @@ test('resolver is deterministic for fixed input and report identity', () => {
   assert.deepEqual(resolve(value, 'fixed-report'), resolve(value, 'fixed-report'));
 });
 
-test('battle-seeded ordinary ship order is shuffled once, stays stable across rounds, and leaves commanders and defense in place', () => {
-  const ordinaryIds = ['scout', 'cruiser', 'defender', 'battleship', 'destroyer', 'bomber'] as const;
+test('battle-seeded combat ship order including death-star is shuffled once, stays stable across rounds, and leaves commanders and defense in place', () => {
+  const combatShipIds = ['scout', 'cruiser', 'defender', 'battleship', 'destroyer', 'bomber', 'death-star'] as const;
   const valueFor = (seed: string): CombatInput => input({
     attacker: {
       participant: attackerParticipant,
-      ships: ordinaryIds.map((entityId) => ({ entityId, count: 1_000 })),
+      ships: combatShipIds.map((entityId) => ({ entityId, count: 1_000 })),
       commanders: [{ entityId: 'corsair', count: 1 }],
     },
     defender: {
       participant: defenderParticipant,
-      ships: ordinaryIds.map((entityId) => ({ entityId, count: 1_000 })),
+      ships: combatShipIds.map((entityId) => ({ entityId, count: 1_000 })),
       commanders: [{ entityId: 'corsair', count: 1 }],
       defenses: [{ entityId: 'laser-turret', count: 1_000 }],
     },
@@ -117,12 +154,12 @@ test('battle-seeded ordinary ship order is shuffled once, stays stable across ro
 
   const firstAttackerOrder = actionOrder(first, 'attacker');
   const firstDefenderOrder = actionOrder(first, 'defender');
-  const attackerOrdinaryOrder = firstAttackerOrder.filter((entityId) => ordinaryIds.includes(entityId as typeof ordinaryIds[number]));
-  const defenderOrdinaryOrder = firstDefenderOrder.filter((entityId) => ordinaryIds.includes(entityId as typeof ordinaryIds[number]));
-  assert.equal(new Set(attackerOrdinaryOrder).size, ordinaryIds.length);
-  assert.equal(new Set(defenderOrdinaryOrder).size, ordinaryIds.length);
-  assert.ok(firstAttackerOrder.indexOf('corsair') > Math.max(...ordinaryIds.map((id) => firstAttackerOrder.indexOf(id))));
-  assert.ok(firstDefenderOrder.indexOf('corsair') > Math.max(...ordinaryIds.map((id) => firstDefenderOrder.indexOf(id))));
+  const attackerCombatOrder = firstAttackerOrder.filter((entityId) => combatShipIds.includes(entityId as typeof combatShipIds[number]));
+  const defenderCombatOrder = firstDefenderOrder.filter((entityId) => combatShipIds.includes(entityId as typeof combatShipIds[number]));
+  assert.equal(new Set(attackerCombatOrder).size, combatShipIds.length);
+  assert.equal(new Set(defenderCombatOrder).size, combatShipIds.length);
+  assert.ok(firstAttackerOrder.indexOf('corsair') > Math.max(...combatShipIds.map((id) => firstAttackerOrder.indexOf(id))));
+  assert.ok(firstDefenderOrder.indexOf('corsair') > Math.max(...combatShipIds.map((id) => firstDefenderOrder.indexOf(id))));
   assert.ok(firstDefenderOrder.indexOf('laser-turret') > firstDefenderOrder.indexOf('corsair'));
 
   for (let roundIndex = 1; roundIndex < first.rounds.length; roundIndex += 1) {
@@ -135,9 +172,9 @@ test('battle-seeded ordinary ship order is shuffled once, stays stable across ro
 
   const otherOrders = Array.from({ length: 8 }, (_, index) => {
     const report = resolveCombat(valueFor(`ordinary-order-${index + 1}`), { reportId: `ordinary-order-${index + 1}`, allowPopulationOverflow: true });
-    return actionOrder(report, 'attacker').filter((entityId) => ordinaryIds.includes(entityId as typeof ordinaryIds[number]));
+    return actionOrder(report, 'attacker').filter((entityId) => combatShipIds.includes(entityId as typeof combatShipIds[number]));
   });
-  assert.ok(new Set(otherOrders.map((order) => order.join(','))).size > 1, 'different battle seeds should vary the approximation order');
+  assert.ok(new Set(otherOrders.map((order) => order.join(','))).size > 1, 'different battle seeds should vary combat ship order');
 });
 
 test('validation rejects unknown id', () => {
@@ -372,10 +409,16 @@ test('target selection remains deterministic at lexical fallback boundary', () =
 
 test('destroyed defender ships counterfire at round-start strength and stay destroyed in snapshots', () => {
   const report = resolve(input({
-    attacker: { participant: attackerParticipant, ships: [{ entityId: 'death-star', count: 1 }], commanders: [] },
+    attacker: {
+      participant: attackerParticipant,
+      factionId: 'aegis',
+      ships: [{ entityId: 'scout', count: 100 }, { entityId: 'cruiser', count: 1 }],
+      commanders: [],
+    },
     defender: {
       participant: defenderParticipant,
-      ships: [{ entityId: 'scout', count: 1 }, { entityId: 'cruiser', count: 1 }],
+      factionId: 'veyra',
+      ships: [{ entityId: 'scout', count: 1 }, { entityId: 'defender', count: 100 }],
       commanders: [],
       defenses: [],
     },
@@ -390,7 +433,7 @@ test('destroyed defender ships counterfire at round-start strength and stay dest
   const scoutSnapshot = firstRound.defenderSnapshot?.stacks.find((stack) => stack.entityId === 'scout');
   assert.ok(scoutAttack);
   assert.equal(scoutAttack.actorCount, 1);
-  assert.equal(scoutAttack.targetEntityId, 'death-star');
+  assert.equal(scoutAttack.targetEntityId, 'scout');
   assert.equal(scoutSnapshot?.countBefore, 1);
   assert.equal(scoutSnapshot?.countAfter, 0);
   assert.ok(firstRound.events.find((event) => event.actorSide === 'attacker')!.sequence < scoutAttack.sequence);
@@ -401,7 +444,6 @@ test('destroyed defender ships counterfire at round-start strength and stay dest
   assert.equal(round2.events.some((event) => event.actorSide === 'defender'
     && event.actorEntityId === 'scout'
     && event.actionType === 'attack'), false);
-  assert.equal(report.winner, 'attacker');
 });
 
 test('destroyed defender commanders and defense structures also retain their documented response', () => {
@@ -451,6 +493,169 @@ test('sequential resolution retargets after a target is destroyed in same round'
   assert.equal(attackerEvents[1].targetEntityId, 'defender');
   assert.ok((attackerEvents[1].damage ?? 0) > 0);
   assert.equal(report.rounds[0].defenderSnapshot?.stacks.find((stack) => stack.entityId === 'defender')?.countAfter, 0);
+});
+
+test('Nemexia ship-page primary target classes override the generic Asterion fallback', () => {
+  const targetPairs = [
+    ['scout', 'defender'],
+    ['cruiser', 'scout'],
+    ['defender', 'bomber'],
+    ['battleship', 'cruiser'],
+    ['destroyer', 'battleship'],
+    ['bomber', 'destroyer'],
+    ['death-star', 'death-star'],
+  ] as const;
+
+  targetPairs.forEach(([actorEntityId, preferredTargetId]) => {
+    const decoyTargetId = preferredTargetId === 'death-star' ? 'bomber' : 'death-star';
+    const decoyCount = decoyTargetId === 'death-star' ? 30 : 100;
+    const report = resolve(input({
+      attacker: {
+        participant: attackerParticipant,
+        factionId: 'aegis',
+        ships: [{ entityId: actorEntityId, count: 1 }],
+        commanders: [],
+      },
+      defender: {
+        participant: defenderParticipant,
+        factionId: 'veyra',
+        ships: [
+          { entityId: preferredTargetId, count: 1 },
+          { entityId: decoyTargetId, count: decoyCount },
+        ],
+        commanders: [],
+        defenses: [],
+      },
+      attackerTargetPriority: 'threat',
+      seed: `nemexia-primary-target-${actorEntityId}`,
+    }));
+    const firstShot = report.rounds[0]?.events.find((event) => event.actorSide === 'attacker'
+      && event.actorEntityId === actorEntityId
+      && event.actionType === 'attack');
+    assert.equal(firstShot?.targetEntityId, preferredTargetId, `${actorEntityId} should prefer ${preferredTargetId}`);
+  });
+});
+
+test('ship stack fires a reduced follow-up volley only after destroying its target', () => {
+  const report = resolve(input({
+    attacker: {
+      participant: attackerParticipant,
+      factionId: 'aegis',
+      ships: [{ entityId: 'cruiser', count: 100 }],
+      commanders: [],
+    },
+    defender: {
+      participant: defenderParticipant,
+      factionId: 'veyra',
+      ships: [{ entityId: 'scout', count: 100 }, { entityId: 'death-star', count: 1 }],
+      commanders: [],
+      defenses: [],
+    },
+    attackerTargetPriority: 'threat',
+    seed: 'nemexia-reduced-follow-up-volley',
+  }));
+  const cruiserVolleys = report.rounds[0]?.events.filter((event) => event.actorSide === 'attacker'
+    && event.actorEntityId === 'cruiser'
+    && event.actionType === 'attack') ?? [];
+  assert.deepEqual(cruiserVolleys.map((event) => [event.targetEntityId, event.baseAttack, event.matchupMultiplier]), [
+    ['scout', 308_000, 1.7],
+    ['death-star', 246_400, 1],
+  ]);
+  assert.match(cruiserVolleys[1]?.note ?? '', /Повторный залп №2: мощность ×0\.80/);
+});
+
+test('death-star matchups include the Nemexia bonus and penalty classes', () => {
+  const dstarAgainstDstar = resolve(nemexiaFifteenThousandProfile('nemexia-dstar-vs-dstar'))
+    .rounds[0]?.events.find((event) => event.actorSide === 'attacker'
+      && event.actorEntityId === 'death-star'
+      && event.targetEntityId === 'death-star'
+      && event.actionType === 'attack');
+  assert.equal(dstarAgainstDstar?.matchupMultiplier, 1.7);
+
+  const queenAgainstDefender = resolve(input({
+    attacker: {
+      participant: attackerParticipant,
+      factionId: 'veyra',
+      ships: [{ entityId: 'death-star', count: 1 }],
+      commanders: [],
+    },
+    defender: {
+      participant: defenderParticipant,
+      factionId: 'aegis',
+      ships: [{ entityId: 'defender', count: 100 }],
+      commanders: [],
+      defenses: [],
+    },
+    seed: 'nemexia-dstar-vs-defender',
+  })).rounds[0]?.events.find((event) => event.actorSide === 'attacker'
+    && event.actorEntityId === 'death-star'
+    && event.targetEntityId === 'defender'
+    && event.actionType === 'attack');
+  assert.equal(queenAgainstDefender?.matchupMultiplier, 0.7);
+});
+
+test('the 15,000-population control replay matches Nemexia round one and records its round-two residual', () => {
+  const report = resolve(nemexiaFifteenThousandProfile('nemexia-15k-control'));
+  const firstRound = report.rounds[0];
+  assert.ok(firstRound);
+  assert.deepEqual(firstRound.attackerSnapshot?.stacks.map((stack) => [stack.entityId, stack.countAfter]), [
+    ['cruiser', 2], ['defender', 93], ['battleship', 38], ['destroyer', 70], ['bomber', 95], ['death-star', 4],
+  ], 'this seeded replay matches the supplied Nemexia report’s round-one attacker survivors');
+  assert.deepEqual(firstRound.defenderSnapshot?.stacks.map((stack) => [stack.entityId, stack.countAfter]), [
+    ['scout', 0], ['cruiser', 0], ['defender', 100], ['battleship', 0], ['destroyer', 42], ['bomber', 89], ['death-star', 17],
+  ], 'this seeded replay matches the supplied Nemexia report’s round-one defender survivors');
+
+  const attackerShots = report.rounds[0]?.events.filter((event) => event.actorSide === 'attacker'
+    && event.actionType === 'attack') ?? [];
+  const expectedTargets = new Map([
+    ['cruiser', 'scout'],
+    ['defender', 'bomber'],
+    ['battleship', 'cruiser'],
+    ['destroyer', 'battleship'],
+    ['bomber', 'destroyer'],
+    ['death-star', 'death-star'],
+  ]);
+  expectedTargets.forEach((targetId, actorId) => {
+    assert.equal(attackerShots.find((event) => event.actorEntityId === actorId)?.targetEntityId, targetId);
+  });
+
+  const queenFirstShot = report.rounds[0]?.events.find((event) => event.actorSide === 'defender'
+    && event.actorEntityId === 'death-star'
+    && event.actionType === 'attack');
+  assert.equal(queenFirstShot?.targetEntityId, 'death-star');
+  assert.equal(queenFirstShot?.actorCount, 30, 'the Veyra Death Star answers using its round-opening count');
+  assert.ok((report.rounds[0]?.defenderSnapshot?.stacks.find((stack) => stack.entityId === 'death-star')?.countAfter ?? 30) < 30);
+  assert.equal(queenFirstShot?.matchupMultiplier, 1.7);
+  assert.equal(report.winner, 'defender', 'the supplied Nemexia reference also ends in a defender victory');
+  assert.equal(report.roundCount, 2, 'the fixed Asterion replay and supplied Nemexia report both end in round two');
+  assert.equal(report.attackerForce.populationAfter, 0);
+  assert.equal(report.defenderForce.populationAfter, 4_519, 'record this seed’s stochastic survivor result against Nemexia’s 5,873');
+  assert.deepEqual(report.defenderForce.stacks.filter((stack) => stack.countAfter > 0).map((stack) => [stack.entityId, stack.countAfter]), [
+    ['defender', 100], ['bomber', 79], ['death-star', 8],
+  ]);
+  assert.deepEqual(report, resolve(nemexiaFifteenThousandProfile('nemexia-15k-control')));
+});
+
+test('Shmel freezing records its proc and skips the selected combat stack next round', () => {
+  const report = resolve(nemexiaFifteenThousandProfile('control-32'));
+  const proc = report.rounds[0]?.events.find((event) => event.shipAbilityId === 'shmel-freezing'
+    && event.actionType === 'ability');
+  assert.equal(proc?.actorEntityId, 'destroyer');
+  assert.equal(proc?.targetEntityId, 'bomber');
+  assert.equal(proc?.abilityChance, 0.04, '100 Shmels give 0.04% × 100 = 4% chance');
+  assert.equal(report.rounds[0]?.summary?.paralyzes, 1);
+
+  const frozenAction = report.rounds[1]?.events.find((event) => event.actorSide === 'attacker'
+    && event.actorEntityId === 'bomber'
+    && event.shipAbilityId === 'shmel-freezing');
+  assert.equal(frozenAction?.actionType, 'status');
+  assert.match(frozenAction?.note ?? '', /заморожен способностью Шмеля/);
+  assert.equal(report.rounds[1]?.events.some((event) => event.actorSide === 'attacker'
+    && event.actorEntityId === 'bomber'
+    && event.actionType === 'attack'), false);
+  const displayedProc = createBattleReportViewModel(report).rounds[0]?.events.find((event) => event.shipAbilityId === 'shmel-freezing');
+  assert.equal(displayedProc?.shipAbility, 'Замораживание Шмелём');
+  assert.deepEqual(report, resolve(nemexiaFifteenThousandProfile('control-32')));
 });
 
 test('full Nemexia transition audit supports changing target only after destruction', () => {
@@ -697,10 +902,10 @@ test('generated report uses existing BattleReport contract without fake optional
   const report = resolve(input());
   assert.equal(report.missionType, 'simulation');
   assert.equal(report.schemaVersion, 3);
-  assert.equal(report.engineVersion, 'asterion-combat-engine-v5');
+  assert.equal(report.engineVersion, 'asterion-combat-engine-v6');
   assert.ok(report.initialSnapshot);
   assert.equal(report.metadata?.source, 'combat-resolver');
-  assert.match(report.metadata?.note ?? '', /asterion-combat-engine-v5/);
+  assert.match(report.metadata?.note ?? '', /asterion-combat-engine-v6/);
   assert.equal(report.experience, undefined);
   assert.equal(report.debris, undefined);
   assert.equal(report.resources, undefined);

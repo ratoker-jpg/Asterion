@@ -1,7 +1,7 @@
 import { SPACEPORT_UPGRADE_MAX_LEVEL_BY_TRACK } from '../buildings/spaceport-upgrades.ts';
 
 export const COMBAT_PROFILE_ID = 'asterion-simulator-v1' as const;
-export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v5' as const;
+export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v6' as const;
 
 export const COMBAT_SHIP_LEVEL_COEFFICIENTS = Object.freeze({
   scout: 0.05,
@@ -72,9 +72,9 @@ export const COMBAT_RULE_PROVENANCE = Object.freeze({
   },
   withinSideOrder: {
     status: 'not-calibrated',
-    source: 'Nemexia repeated reports; no saved Nemexia seed or RNG implementation',
+    source: 'Nemexia repeated reports and supplied 15,000-population Aegis-vs-Veyra report; no saved Nemexia seed or RNG implementation',
     confidence: 'low',
-    note: 'All 19 valid identical-profile repeats have distinct first-round actor sequences, with stable relative ordinary-stack order across rounds. Asterion uses a battle-seeded shuffle of ordinary ship stacks once at battle start as an approximation; commanders, defenses, and non-ordinary ships keep catalog order. Nemexia’s exact RNG/shuffle remains unknown.',
+    note: 'All 19 valid identical-profile repeats have distinct first-round ordinary-ship sequences, with stable relative ordinary-stack order across rounds. The supplied control report interleaves Death Star among ordinary combat ships. Asterion therefore seed-shuffles all combat ship stacks once at battle start as an approximation; commanders, defenses, and non-combat support ships keep catalog order. Nemexia’s exact RNG/shuffle remains unknown.',
   },
   repairTiming: {
     status: 'confirmed',
@@ -87,6 +87,12 @@ export const COMBAT_RULE_PROVENANCE = Object.freeze({
     source: 'Official Nemexia Ships skills / Revival help and 641 archive repair entries',
     confidence: 'medium',
     note: 'Aegis/Confederation only. Use min(0.14% × functioning after-round Destroyers, 70%) chance and min(0.08% × Destroyers, 40%) of same-round losses per non-Destroyer target stack; round half-up. 641/641 archived repair amounts match. 641/7,643 per-target opportunities closely fit the chance, while one roll per side-round predicts 152.08 versus 525 observed rounds with repairs. Exact Nemexia RNG granularity is not explicit; Goliath and Hornet are excluded.',
+  },
+  shmelFreezing: {
+    status: 'inferred',
+    source: 'Nemexia Auto v2 saved Shmel ability tooltip and supplied detailed battle report',
+    confidence: 'medium',
+    note: 'Veyra Destroyer (Shmel) has 0.04% freezing chance per ship, capped at 20%. A successful seeded roll freezes one random living enemy combat-ship stack until its next action; exact target selection and RNG timing are approximations because the source does not specify them.',
   },
   damageFormula: {
     status: 'inferred',
@@ -102,9 +108,21 @@ export const COMBAT_RULE_PROVENANCE = Object.freeze({
   },
   targetSelection: {
     status: 'not-calibrated',
-    source: '6,052 Nemexia target transitions; existing Asterion heuristic retained',
+    source: 'Nemexia Auto v2 saved ship pages; 6,052 Nemexia target transitions',
     confidence: 'low',
-    note: 'В Nemexia цель с минимальной численностью выбрана в 3,214/6,052 переходах; в контролируемом target_priority planned first target выбран только в 6/52. Это не задаёт детерминированного универсального selector; seed Nemexia отсутствует. Угроза → население → каталог — действующая эвристика Asterion, не правило Nemexia.',
+    note: 'Для кораблей применяются сохранённые приоритетные классы Nemexia; архив подтверждает доступный приоритетный класс в 75/75 проверенных первых выборов Aegis. После его отсутствия остаётся selector Asterion угроза → население → каталог: полный Nemexia fallback selector не установлен, seed Nemexia отсутствует. Это не заявление о доказанном паритете выбора целей.',
+  },
+  destroyedTargetFollowUp: {
+    status: 'inferred',
+    source: '5,622 same-stack multi-action groups in Nemexia archive; detailed user-supplied zero-tech 15,000 profile',
+    confidence: 'medium',
+    note: 'Для корабельного стека после уничтожения каждой цели выполняется следующий залп с мощностью 100%, 80%, 60%, 40%, 20%; после попадания по живой цели серия прекращается. Линейное падение подтверждено подробным профилем, но точная универсальная причина/формула не восстановлена. Командиры и оборона не получают дополнительные залпы.',
+  },
+  deathStarMatchups: {
+    status: 'inferred',
+    source: 'Nemexia Auto v2 saved ship pages and user-supplied detailed battle report',
+    confidence: 'medium',
+    note: 'Планетолом/Звезда смерти включён в ту же матрицу +70% / −30%: против Death Star ×1.7, Cruiser ×1.7, Defender ×0.7; все остальные сочетания нейтральны, согласно сохранённым таблицам.',
   },
   entityLevelEffects: {
     status: 'inferred',
