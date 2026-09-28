@@ -67,7 +67,7 @@ function readCsv() {
 
 function readReports() {
   const byLocator = new Map();
-  const counts = { rows: 0, errors: 0, clean: 0, verifiedClean: 0, olderClean: 0, detailedClean: 0 };
+  const counts = { rows: 0, errors: 0, clean: 0, verifiedClean: 0, olderClean: 0, nonEmptyAnalysisText: 0 };
   for (const file of BATTLE_FILES) {
     const lines = readFileSync(`${ROOT}/${file}`, 'utf8').split(/\r?\n/).filter(Boolean);
     lines.forEach((line, index) => {
@@ -79,7 +79,7 @@ function readReports() {
         counts.clean += 1;
         if (row.analysis_verified === true) counts.verifiedClean += 1;
         else counts.olderClean += 1;
-        if (typeof row.analysis_text === 'string' && row.analysis_text.trim()) counts.detailedClean += 1;
+        if (typeof row.analysis_text === 'string' && row.analysis_text.trim()) counts.nonEmptyAnalysisText += 1;
       }
       byLocator.set(`${file}:${index + 1}`, {
         run_id: row.run_id,
@@ -352,6 +352,13 @@ export function runTargetPriorityAudit() {
   const discovery = nonControlled.filter((row) => !isHoldout(row));
   const holdout = nonControlled.filter(isHoldout);
   const controlled = usable.filter((row) => row.experiment_block === 'target_priority');
+  const discoveryReportKeys = new Set(discovery.map((row) => row.reportKey));
+  const holdoutReportKeys = new Set(holdout.map((row) => row.reportKey));
+  const discoveryGroupKeys = new Set(discovery.map((row) => row.groupKey));
+  const holdoutGroupKeys = new Set(holdout.map((row) => row.groupKey));
+  const reportOverlap = [...discoveryReportKeys].filter((key) => holdoutReportKeys.has(key));
+  const groupOverlap = [...discoveryGroupKeys].filter((key) => holdoutGroupKeys.has(key));
+  const uniformRandomExpectedTop1 = holdout.reduce((sum, row) => sum + 1 / row.candidates.length, 0) / holdout.length;
 
   const countFeature = (candidate) => Math.log(Math.max(1, Number(candidate.count)));
   const orderFeature = (candidate) => Number(candidate.order ?? 0);
@@ -435,11 +442,14 @@ export function runTargetPriorityAudit() {
     countPlusOrderSoftmax: modelMetrics(controlled, countOrderProb, countOrderTop),
     populationSoftmax: modelMetrics(mappedControlled, populationProb, populationTop),
     currentAsterionStatic: deterministicMetrics(mappedControlled, currentAsterionIndex),
-    plannedFirst: deterministicMetrics(controlled, (row) => {
+    plannedFirstLegal: deterministicMetrics(controlled, (row) => {
       if (!row.priorityPlan.length) return null;
-      const wanted = normalizeName(row.priorityPlan[0]);
-      const index = row.candidates.findIndex((candidate) => normalizeName(candidate.name) === wanted);
-      return index >= 0 ? index : null;
+      const candidateByName = new Map(row.candidates.map((candidate, index) => [normalizeName(candidate.name), index]));
+      for (const plannedName of row.priorityPlan) {
+        const index = candidateByName.get(normalizeName(plannedName));
+        if (index !== undefined) return index;
+      }
+      return null;
     }),
   };
 
@@ -468,6 +478,7 @@ export function runTargetPriorityAudit() {
     const start = Math.max(0, chosenAt - 180);
     return {
       ...example,
+      sourceJoinMatches: Boolean(report && report.run_id === example.run_id && report.case_id === example.case_id && !report.hasError),
       analysisHasActor: text.includes(example.actor),
       analysisHasChosen: chosenAt >= 0,
       excerpt: chosenAt >= 0 ? text.slice(start, chosenAt + example.chosen.length + 220).replace(/\s+/g, ' ') : '',
@@ -494,11 +505,12 @@ export function runTargetPriorityAudit() {
       discoveryTransitions: discovery.length,
       holdoutTransitions: holdout.length,
       controlledTransitions: controlled.length,
-      discoveryReports: new Set(discovery.map((row) => row.reportKey)).size,
-      holdoutReports: new Set(holdout.map((row) => row.reportKey)).size,
-      discoveryGroups: new Set(discovery.map((row) => row.groupKey)).size,
-      holdoutGroups: new Set(holdout.map((row) => row.groupKey)).size,
-      groupOverlap: [...new Set(discovery.map((row) => row.groupKey))].filter((key) => new Set(holdout.map((row) => row.groupKey)).has(key)).length,
+      discoveryReports: discoveryReportKeys.size,
+      holdoutReports: holdoutReportKeys.size,
+      discoveryGroups: discoveryGroupKeys.size,
+      holdoutGroups: holdoutGroupKeys.size,
+      reportOverlap: reportOverlap.length,
+      groupOverlap: groupOverlap.length,
     },
     validation: {
       reportCounts,
@@ -512,6 +524,7 @@ export function runTargetPriorityAudit() {
       previousTargetStillLive,
       mappedHoldout: mappedHoldout.length,
       mappedControlled: mappedControlled.length,
+      uniformRandomExpectedTop1,
       unmappedTop30: [...unmapped.entries()].sort((a, b) => b[1] - a[1]).slice(0, 30),
     },
     fittedOnDiscovery: {
