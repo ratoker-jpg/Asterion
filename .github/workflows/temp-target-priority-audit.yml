@@ -9,6 +9,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            docs/evidence/nemexia-target-priority-corpus
+            tools/audit-nemexia-primary-fallback.mjs
+            src/domain/combat
       - uses: actions/setup-node@v4
         with:
           node-version: 24
