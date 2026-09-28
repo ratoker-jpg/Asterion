@@ -1,0 +1,26 @@
+name: TEMP Target Priority Audit
+
+on:
+  pull_request:
+
+jobs:
+  audit:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run primary-plus-fallback audit
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path audit-output | Out-Null
+          node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs tools/audit-nemexia-primary-fallback.mjs | Out-File -FilePath audit-output/primary-fallback.json -Encoding utf8
+      - name: Upload audit artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: Target-Priority-Primary-Fallback
+          path: audit-output/primary-fallback.json
+          if-no-files-found: error
+          retention-days: 1
