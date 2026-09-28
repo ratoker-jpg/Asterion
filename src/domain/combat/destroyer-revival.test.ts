@@ -76,7 +76,7 @@ test('Aegis Destroyer Revival matches archived current-round loss amount and run
   assert.equal(revival.repairedCount, Math.min(targetLosses, Math.floor(targetLosses * (revival.abilityBonus ?? 0) + 0.5)));
   assert.equal(revival.provenance?.status, 'inferred', 'the exact Nemexia RNG roll granularity remains undocumented');
   assert.equal(revival.commanderAbilityId, undefined, 'ship Revival remains separate from commander Reanimator');
-  const viewModelEvent = createBattleReportViewModel(report).rounds.find((round) => round.roundNumber === revivalRound.roundNumber)?.events
+  const viewModelEvent = createBattleReportViewModel(report).rounds.find((round) => round.events.some((event) => event.sequence === revival.sequence))?.events
     .find((event) => event.sequence === revival.sequence);
   assert.equal(viewModelEvent?.shipAbilityId, 'destroyer-revival');
   assert.equal(viewModelEvent?.shipAbility, 'Восстановление разрушителей (Destroyer Revival)');
