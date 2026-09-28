@@ -16,6 +16,7 @@ jobs:
             tools/audit-nemexia-primary-fallback.mjs
             tools/audit-nemexia-target-priority-scope.mjs
             src/domain/combat
+            assets/source/New assets
       - uses: actions/setup-node@v4
         with:
           node-version: 24
