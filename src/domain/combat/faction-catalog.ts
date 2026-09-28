@@ -155,6 +155,7 @@ function applyDefenseMechanicalData(
       ...entity,
       population: data.population,
       cost: data.cost,
+      combat: data.combat,
       construction: {
         ...entity.construction,
         time: data.time,

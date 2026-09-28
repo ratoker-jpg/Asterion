@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { COMBAT_GOLDEN_FIXTURES } from './combat-golden-fixtures.ts';
 import { createDefaultCombatPriority } from './priority.ts';
-import { normalizeBattleReport } from './report.ts';
+import { COMBAT_ENGINE_VERSION, normalizeBattleReport } from './report.ts';
 import { createSeededCombatRng, resolveCombat, selectCombatTarget } from './resolver.ts';
 import { PLANET_HANGAR_CAPACITY } from './config.ts';
 import {
@@ -226,10 +226,19 @@ test('seeded RNG is deterministic and its provenance is serializable', () => {
   assert.equal(report.metadata?.rngProvenance?.seed, 'battle-seed');
 });
 
-test('runs without a seed are explicitly non-replayable', () => {
+test('unseeded battles receive unique saved seeds that can replay the same report', () => {
   const report = resolveCombat(input(), { reportId: 'unseeded-report' });
-  assert.equal(report.metadata?.rngProvenance?.mode, 'non-replayable');
-  assert.equal(report.metadata?.rngProvenance?.seed, undefined);
+  const secondReport = resolveCombat(input(), { reportId: 'second-unseeded-report' });
+  const seed = report.metadata?.rngProvenance?.seed;
+
+  assert.equal(report.metadata?.rngProvenance?.mode, 'seeded');
+  assert.equal(typeof seed, 'string');
+  assert.ok(seed);
+  assert.equal(secondReport.metadata?.rngProvenance?.mode, 'seeded');
+  assert.notEqual(secondReport.metadata?.rngProvenance?.seed, seed);
+
+  const replay = resolveCombat(input({ seed }), { reportId: 'unseeded-report' });
+  assert.deepEqual(replay, report);
 });
 
 test('report event sequences are unique and monotonic across rounds', () => {
@@ -322,7 +331,7 @@ test('legacy scenarios retain multiple commander types without a global migratio
   assert.equal(checked.ok, true);
 });
 
-test('destroyed stacks emit a skipped-volley status and never attack', () => {
+test('destroyed defender ships still emit their round-start counterfire', () => {
   const report = resolveCombat(input({
     attacker: { participant: attackerParticipant, ships: [{ entityId: 'death-star', count: 1 }], commanders: [] },
     defender: {
@@ -333,10 +342,11 @@ test('destroyed stacks emit a skipped-volley status and never attack', () => {
     },
     attackerTargetPriority: 'catalog',
   }), { reportId: 'skipped-volley' });
-  const skipped = report.rounds[0]?.events.find((event) => event.actorSide === 'defender' && event.actorEntityId === 'scout');
-  assert.equal(skipped?.actionType, 'status');
-  assert.match(skipped?.note ?? '', /пропущен/);
-  assert.equal(report.rounds.flatMap((round) => round.events).some((event) => event.actorSide === 'defender' && event.actorEntityId === 'scout' && event.actionType === 'attack'), false);
+  const counterfire = report.rounds[0]?.events.find((event) => event.actorSide === 'defender'
+    && event.actorEntityId === 'scout'
+    && event.actionType === 'attack');
+  assert.equal(counterfire?.actorCount, 1);
+  assert.equal(report.rounds[0]?.defenderSnapshot?.stacks.find((stack) => stack.entityId === 'scout')?.countAfter, 0);
 });
 
 test('golden victory, defeat, and draw fixtures preserve provenance and structural invariants', () => {
@@ -349,7 +359,7 @@ test('golden victory, defeat, and draw fixtures preserve provenance and structur
   Object.entries(COMBAT_GOLDEN_FIXTURES).forEach(([fixtureName, report]) => {
     assert.equal(report.winner, expectedWinners[fixtureName as keyof typeof expectedWinners]);
     assert.equal(report.schemaVersion, 3);
-    assert.equal(report.engineVersion, 'asterion-combat-engine-v3');
+    assert.equal(report.engineVersion, COMBAT_ENGINE_VERSION);
     assert.ok(report.initialSnapshot);
     assert.equal(report.rounds.some((round) => round.index === 0), false);
     assert.equal(report.metadata?.rngProvenance?.mode, 'seeded');

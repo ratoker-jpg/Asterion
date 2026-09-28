@@ -95,6 +95,7 @@ export type BattleEventViewModel = {
   criticalMultiplier: number | null;
   abilityChance: number | null;
   abilityDraw: number | null;
+  abilityBonus: number | null;
   effectiveDamage: number | null;
   mitigation: number | null;
   weaponType: string | null;
@@ -105,6 +106,8 @@ export type BattleEventViewModel = {
   repairLimit: number | null;
   commanderAbilityId: CommanderId | null;
   commanderAbility: string | null;
+  shipAbilityId: 'destroyer-revival' | 'shmel-freezing' | null;
+  shipAbility: string | null;
   specialBonusKind: 'attack' | 'life' | 'armor' | null;
   specialBonusRate: number | null;
   specialBonusCap: number | null;
@@ -613,6 +616,9 @@ function readEvent(value: unknown, index: number, attackerFactionId: CombatFacti
   const target = readStack({ entityId: targetEntityId ?? `unknown-target-${index}`, countAfter: readCount(record.targetCount) }, index, targetFactionId, targetKind);
   const commanderAbilityId = readString(record.commanderAbilityId);
   const safeCommanderAbilityId = commanderAbilityId && isCommanderId(commanderAbilityId) ? commanderAbilityId : null;
+  const shipAbilityId = record.shipAbilityId === 'destroyer-revival' || record.shipAbilityId === 'shmel-freezing'
+    ? record.shipAbilityId
+    : null;
 
   return {
     sequence: readCount(record.sequence) ?? index + 1,
@@ -639,6 +645,7 @@ function readEvent(value: unknown, index: number, attackerFactionId: CombatFacti
     criticalMultiplier: readNumber(record.criticalMultiplier),
     abilityChance: readNumber(record.abilityChance),
     abilityDraw: readNumber(record.abilityDraw),
+    abilityBonus: readNumber(record.abilityBonus),
     effectiveDamage: readNumber(record.effectiveDamage),
     mitigation: readNumber(record.mitigation),
     weaponType: readString(record.weaponType),
@@ -649,6 +656,12 @@ function readEvent(value: unknown, index: number, attackerFactionId: CombatFacti
     repairLimit: readCount(record.repairLimit),
     commanderAbilityId: safeCommanderAbilityId,
     commanderAbility: safeCommanderAbilityId ? COMMANDER_ABILITIES[safeCommanderAbilityId].ability : null,
+    shipAbilityId,
+    shipAbility: shipAbilityId === 'destroyer-revival'
+      ? 'Восстановление разрушителей (Destroyer Revival)'
+      : shipAbilityId === 'shmel-freezing'
+        ? 'Замораживание Шмелём'
+        : null,
     specialBonusKind: record.specialBonusKind === 'attack' || record.specialBonusKind === 'life' || record.specialBonusKind === 'armor'
       ? record.specialBonusKind
       : null,
