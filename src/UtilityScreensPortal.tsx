@@ -101,6 +101,7 @@ export function UtilityScreensPortal() {
             mode={runtimeState.mode}
             command={runtimeState.command}
             currentPlayerScore={runtimeState.ownerScores[runtimeState.currentPlayerId]}
+            currentPlayerId={runtimeState.currentPlayerId}
           />
         ) : null
       ) : (

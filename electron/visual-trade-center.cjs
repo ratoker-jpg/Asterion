@@ -12,6 +12,7 @@ const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const TEST_TIME_SCALE_KEY = 'asterion.test-time-scale.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const REFILL_MS = 15 * 60 * 1000;
+const CANONICAL_RESOURCE_POINTS = 20_712;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitFor(win, expression, timeoutMs = 7000) {
@@ -121,7 +122,6 @@ async function seedTradeCenter(win) {
     planet.trade = { refillAtQueue: [] };
     planet.recycling.availableDebris = 100000;
     planet.resources = { ...(planet.resources || {}), metal: 15_880, minerals: 12_712, gas: 6_421 };
-    save.rating = { resourcePoints: 855880 };
     save.metal = 15880;
     save.minerals = 12712;
     save.gas = 6421;
@@ -194,7 +194,6 @@ async function readSave(win) {
       debris: planet?.recycling?.availableDebris,
       trade: planet?.trade,
       tradeLevel: planet?.buildings?.['trade-center'],
-      rating: save.rating?.resourcePoints,
       buildingQueue: save.queues?.['helion-01'] ?? [],
       recyclingJobs: planet?.recycling?.jobs ?? [],
     };
@@ -313,7 +312,7 @@ async function verifyFlow(win, directory, label) {
   })()`, `${label}: clear save`);
   await seedTradeCenter(win);
   const seeded = await readSave(win);
-  if (Number(seeded.schemaVersion) < 7 || seeded.tradeLevel !== 1 || seeded.rating !== 855880) throw new Error(`${label}: seeded envelope mismatch ${JSON.stringify(seeded)}`);
+  if (Number(seeded.schemaVersion) < 7 || seeded.tradeLevel !== 1) throw new Error(`${label}: seeded envelope mismatch ${JSON.stringify(seeded)}`);
   if (Number(seeded.metal) !== 15_880 || Number(seeded.minerals) !== 12_712 || Number(seeded.gas) !== 6_421
     || Number(seeded.planetResources?.metal) !== 15_880 || Number(seeded.planetResources?.minerals) !== 12_712 || Number(seeded.planetResources?.gas) !== 6_421) {
     throw new Error(`${label}: seeded canonical wallet mismatch ${JSON.stringify(seeded)}`);
@@ -324,7 +323,7 @@ async function verifyFlow(win, directory, label) {
   await activateIndustry(win);
   await openTradeCenter(win);
   let screen = await readScreen(win);
-  if (!screen || screen.level !== 1 || screen.limit !== 8558800 || screen.rating !== 855880 || screen.slots !== '3/3' || !screen.allAvailable) throw new Error(`${label}: initial Trade Center state mismatch ${JSON.stringify(screen)}`);
+  if (!screen || screen.level !== 1 || screen.limit !== CANONICAL_RESOURCE_POINTS * 10 || screen.rating !== CANONICAL_RESOURCE_POINTS || screen.slots !== '3/3' || !screen.allAvailable) throw new Error(`${label}: initial Trade Center state mismatch ${JSON.stringify(screen)}`);
   if (screen.source !== 'metal' || screen.target !== 'minerals' || !screen.metalTargetDisabled || screen.debrisTargetExists || screen.rate !== '1 : 1') throw new Error(`${label}: initial pair/target rules mismatch ${JSON.stringify(screen)}`);
   assertGeometry(await measure(win), label);
   await capture(win, directory, 'trade-standard');
@@ -416,7 +415,7 @@ async function verifyFlow(win, directory, label) {
     finalWallet: { metal: afterOffline.metal, minerals: afterOffline.minerals, gas: afterOffline.gas, debris: afterOffline.debris },
     verified: [
       'level-one-entry-and-back-escape',
-      'rating-855880-drives-limit-8558800',
+      'canonical-resource-score-20712-drives-limit-207120',
       'source-target-selection-and-disabled-same-resource',
       'no-debris-target',
       'hover-tooltip-visible-and-not-clipped',

@@ -20,6 +20,7 @@ import { calculateBattlePoints } from '../domain/combat/battle-points.ts';
 import { getCombatFactionId } from '../domain/combat/factions.ts';
 import { isAsterionLocalPlayerId, type BattleReport } from '../domain/combat/report.ts';
 import { recordBattleScoreAward, selectOwnerScores } from '../domain/rating/scoring.ts';
+import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import type { FlightDestination, FlightRecord } from '../domain/flights/types.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 
@@ -178,6 +179,8 @@ function resolveSurvivingBot01Demolition(
 
 test('attack resolves one live combat, records debris/repair, and credits loot only on return', () => {
   const state = createInitialSaveState('test', 1_000);
+  const playerId = state.profile.playerId;
+  const startingResourcePoints = selectOwnerScores(state)[playerId]!.resourcePoints;
   const targetId = Object.keys(state.espionage!.targets!)[0];
   const sent = dispatchFlight(state, attackCommand(state, 'attack-acceptance-1', targetId), {
     now: 1_000,
@@ -186,6 +189,7 @@ test('attack resolves one live combat, records debris/repair, and credits loot o
   });
   assert.equal(sent.ok, true);
   if (!sent.ok) return;
+  assert.equal(selectOwnerScores(sent.state)[playerId]?.resourcePoints, startingResourcePoints);
 
   const arrival = reconcileFlights(sent.state, sent.flight.arrivalAt, undefined, {
     mode: 'test',
@@ -194,6 +198,9 @@ test('attack resolves one live combat, records debris/repair, and credits loot o
   assert.equal(arrival.events[0]?.status, 'arrived');
   assert.equal(arrival.state.combat.reports.length, state.combat.reports.length + 1);
   const report = arrival.state.combat.reports.at(-1)!;
+  assert.ok(report.attackerForce.stacks.some((stack) => stack.countAfter < stack.countBefore), 'the seeded attack must include ship losses');
+  const afterLossesResourcePoints = selectOwnerScores(arrival.state)[playerId]!.resourcePoints;
+  assert.ok(afterLossesResourcePoints < startingResourcePoints, 'attacker losses reduce the resource score');
   assert.equal(report.missionType, 'attack');
   assert.equal(report.id, `battle-attack-${sent.flight.id}`);
   const awards = arrival.state.rating.battleAwardsByReportId[report.id];
@@ -224,6 +231,7 @@ test('attack resolves one live combat, records debris/repair, and credits loot o
     testTimeScale: 15,
   });
   assert.equal(returned.state.flights.records[0]?.phase, 'completed');
+  assert.equal(selectOwnerScores(returned.state)[playerId]?.resourcePoints, afterLossesResourcePoints);
   assert.equal(returned.state.flights.records[0]?.attackResolution?.lootCreditedAt, arrival.state.flights.records[0].returnAt);
   const returnedAgain = reconcileFlights(returned.state, arrival.state.flights.records[0].returnAt! + 1, undefined, { mode: 'test', testTimeScale: 15 });
   assert.equal(returnedAgain.changed, false);
@@ -566,12 +574,15 @@ test('Bot 01 Test Mode preserves an exact-tie Space Flight when the seeded siege
   assert.deepEqual(Object.keys(initial.planets), ['helion-01']);
   assert.equal(initial.espionage?.bot01IncomingScenario, undefined);
   assert.equal(initial.flights.records.some((flight) => flight.ownerSide === 'bot01'), false);
+  const initialBotPoints = selectOwnerScores(initial)[UNIVERSE_NPC_OWNER_ID]!.resourcePoints;
+  assert.equal(initialBotPoints, 1_000_000);
   const productionAttempt = startBot01IncomingScenario(initial, { now: 1_000, mode: 'production' });
   assert.equal(productionAttempt.ok, false);
 
   const launched = startBot01IncomingScenario(initial, { now: 1_000, mode: 'test', testTimeScale: 1 });
   assert.equal(launched.ok, true);
   if (!launched.ok) return;
+  assert.equal(selectOwnerScores(launched.state)[UNIVERSE_NPC_OWNER_ID]?.resourcePoints, initialBotPoints);
   assert.equal(launched.created, true);
   assert.equal(Object.keys(launched.state.planets).length, 2);
   const targetId = launched.flight.destinationPlanetId!;
@@ -671,6 +682,10 @@ test('Bot 01 Test Mode preserves an exact-tie Space Flight when the seeded siege
   const returnedRecord = returnedBot.state.flights.records.find((flight) => flight.id === botFlight.id);
   assert.equal(returnedRecord?.phase, 'completed');
   assert.equal(returnedRecord?.bot01ReturnCreditedAt, botReturnAt);
+  assert.equal(
+    selectOwnerScores(returnedBot.state)[UNIVERSE_NPC_OWNER_ID]?.resourcePoints,
+    selectOwnerScores(incoming.state)[UNIVERSE_NPC_OWNER_ID]?.resourcePoints,
+  );
   assert.equal(persistence.write(returnedBot.state).ok, true);
   const replayedReturn = reconcileFlights(persistence.read(), botReturnAt + 1, undefined, { mode: 'test', testTimeScale: 1 });
   assert.equal(replayedReturn.changed, false);

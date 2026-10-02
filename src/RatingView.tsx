@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { EmblemGlyph } from './CommandView';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
-import { createAllianceRatingEntries, createPlayerRatingEntries } from './domain/rating/fixtures.ts';
+import { CURRENT_PLAYER_ID, createAllianceRatingEntries, createPlayerRatingEntries } from './domain/rating/fixtures.ts';
 import { selectCurrentAlliance } from './domain/command/selectors.ts';
 import type { CommandState } from './domain/command/types.ts';
 import type { RuntimeMode } from './domain/runtime/mode.ts';
@@ -29,10 +29,12 @@ export function RatingView({
   mode: runtimeMode = 'test',
   command,
   currentPlayerScore,
+  currentPlayerId = CURRENT_PLAYER_ID,
 }: {
   mode?: RuntimeMode;
   command: CommandState;
   currentPlayerScore?: OwnerScore;
+  currentPlayerId?: string;
 }) {
   const [mode, setMode] = useState<RatingMode>('players');
   const [query, setQuery] = useState('');
@@ -43,7 +45,7 @@ export function RatingView({
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const currentAlliance = useMemo(() => selectCurrentAlliance(command), [command]);
-  const players = useMemo(() => createPlayerRatingEntries(currentPlayerScore, runtimeMode), [currentPlayerScore, runtimeMode]);
+  const players = useMemo(() => createPlayerRatingEntries(currentPlayerScore, runtimeMode, currentPlayerId), [currentPlayerScore, currentPlayerId, runtimeMode]);
   const alliances = useMemo(() => createAllianceRatingEntries(currentAlliance, runtimeMode), [currentAlliance, runtimeMode]);
   const currentPlayer = useMemo(() => players.find((entry) => entry.isCurrentPlayer) ?? null, [players]);
 

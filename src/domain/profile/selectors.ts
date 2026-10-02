@@ -21,7 +21,7 @@ export function selectPlayerRatingEntry(
   mode: RuntimeMode = 'test',
 ): PlayerRatingEntry | null {
   if (!score) return null;
-  return createPlayerRatingEntries(score, mode).find((entry) => entry.id === playerId) ?? null;
+  return createPlayerRatingEntries(score, mode, score.ownerId).find((entry) => entry.id === playerId) ?? null;
 }
 
 export function selectPlayerProfileMetrics(

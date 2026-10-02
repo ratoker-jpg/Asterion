@@ -70,6 +70,7 @@ import {
 } from './overpopulation.ts';
 import { createAllianceRatingEntries, createPlayerRatingEntries } from '../domain/rating/fixtures.ts';
 import { calculateResourceScore, selectOwnerScores } from '../domain/rating/scoring.ts';
+import { selectPlayerProfileMetrics, selectPlayerRatingEntry } from '../domain/profile/selectors.ts';
 import { createUniverseMap, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
 import { getEspionageTargets } from '../domain/espionage/runtime.ts';
@@ -143,6 +144,30 @@ test('legacy fake rating migration resets battle accumulation and preserves camp
   assert.deepEqual(migrated.combat.reports.map((report) => report.id), initial.combat.reports.map((report) => report.id));
   assert.deepEqual(Object.keys(migrated.espionage?.targets ?? {}), Object.keys(initial.espionage?.targets ?? {}));
   assert.equal(selectOwnerScores(migrated)[migrated.profile.playerId]?.battlePoints, 0);
+});
+
+test('persisted custom player ID is used by the profile and current rating row', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 1_000 });
+  const saved = {
+    ...initial,
+    profile: { ...initial.profile, playerId: 'player-custom' },
+  };
+
+  assert.equal(persistence.write(saved).ok, true);
+  const restored = persistence.read();
+  const score = selectOwnerScores(restored)['player-custom'];
+  assert.equal(restored.profile.playerId, 'player-custom');
+  assert.ok(score);
+  assert.equal(selectOwnerScores(restored)['player-current'], undefined);
+
+  const profileEntry = selectPlayerRatingEntry(score, restored.profile.playerId);
+  const ratingEntry = createPlayerRatingEntries(score, 'test', restored.profile.playerId).find((entry) => entry.isCurrentPlayer);
+  const metrics = selectPlayerProfileMetrics(restored.profile, score);
+  assert.equal(profileEntry?.id, 'player-custom');
+  assert.equal(ratingEntry?.id, 'player-custom');
+  assert.deepEqual(metrics.map((metric) => metric.value), [score.resourcePoints, score.battlePoints, score.totalPoints, 0]);
 });
 
 test('Test Mode scores the player and Bot 001 from their separate asset pools and counts global upgrades once', () => {

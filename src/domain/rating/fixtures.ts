@@ -55,6 +55,7 @@ export function migrateRatingPrototypeState(value: unknown): RatingPrototypeStat
 export function createPlayerRatingEntries(
   currentPlayerScore: number | { resourcePoints: number; battlePoints: number } = 0,
   mode: RuntimeMode = 'test',
+  currentPlayerId = CURRENT_PLAYER_ID,
 ): PlayerRatingEntry[] {
   const currentResourcePoints = typeof currentPlayerScore === 'number' ? currentPlayerScore : currentPlayerScore.resourcePoints;
   const currentBattlePoints = typeof currentPlayerScore === 'number' ? 0 : currentPlayerScore.battlePoints;
@@ -62,7 +63,7 @@ export function createPlayerRatingEntries(
   const safeCurrentBattlePoints = Math.max(0, Math.floor(Number.isFinite(currentBattlePoints) ? currentBattlePoints : 0));
   if (mode === 'production') {
     return [{
-      id: CURRENT_PLAYER_ID,
+      id: currentPlayerId,
       rank: 1,
       name: CURRENT_PLAYER_DISPLAY_NAME,
       race: 'aster',
@@ -82,7 +83,7 @@ export function createPlayerRatingEntries(
     const isCurrentPlayer = standing === 37;
     const resourcePoints = isCurrentPlayer ? safeCurrentResourcePoints : fixtureResourcePoints;
     return {
-      id: isCurrentPlayer ? CURRENT_PLAYER_ID : `player-${String(standing).padStart(3, '0')}`,
+      id: isCurrentPlayer ? currentPlayerId : `player-${String(standing).padStart(3, '0')}`,
       rank: standing,
       name: isCurrentPlayer ? CURRENT_PLAYER_DISPLAY_NAME : `${CALLSIGNS[index % CALLSIGNS.length]}-${String(standing).padStart(2, '0')}`,
       race: (['aster', 'cyber', 'xeno'] as const)[index % 3],

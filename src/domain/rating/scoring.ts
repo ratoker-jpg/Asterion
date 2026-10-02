@@ -239,6 +239,10 @@ function flightShipCounts(state: SaveState, factionId: FactionId, ownerId: strin
   const counts: Record<string, number> = {};
   const reports = new Map(state.combat.reports.map((report) => [report.id, report]));
   for (const flight of state.flights.records) {
+    // Player dispatch reserves ships but keeps them in the source planet's
+    // saved fleet until the mission applies its result. Bot 001 removes its
+    // ships at launch, so only its in-flight fleet needs a separate score.
+    if (flight.ownerSide !== 'bot01') continue;
     if (flight.phase !== 'outbound' && flight.phase !== 'returning' && flight.phase !== 'arrived') continue;
     const flightOwnerId = flight.ownerSide === 'bot01' ? UNIVERSE_NPC_OWNER_ID : state.profile.playerId;
     if (flightOwnerId !== ownerId) continue;
