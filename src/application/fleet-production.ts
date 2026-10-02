@@ -22,6 +22,7 @@ import type { BuildingApplicationContext } from './buildings.ts';
 import { removeSolarSatellitesFromFleet } from '../domain/fleet/runtime.ts';
 import { transitionPlanetEnergySources } from './energy.ts';
 import { isPlanetBlocked } from './overpopulation.ts';
+import { addUnrecoveredResourceCost } from '../domain/rating/scoring.ts';
 
 export const FLEET_PRODUCTION_START_REQUEST_EVENT = 'asterion:fleet-production-start-request';
 export const FLEET_PRODUCTION_CANCEL_REQUEST_EVENT = 'asterion:fleet-production-cancel-request';
@@ -184,11 +185,26 @@ export function cancelFleetProduction(
     context.rng,
   );
   const planet = getPlanetState(state, context.planetId);
+  let nextState = transition.ok || transition.state !== planet.fleetProduction || transition.fleet !== planet.fleet || transition.defense !== planet.defense
+    ? stateFromTransition(state, context, transition)
+    : state;
+  if (transition.ok && transition.canceled) {
+    const order = transition.canceled;
+    const quantity = Math.max(1, Math.floor(order.quantity));
+    const remaining = Math.max(0, Math.floor(order.quantity) - Math.floor(order.completedQuantity));
+    const paidPendingCost = {
+      metal: Math.floor(order.cost.metal * remaining / quantity),
+      minerals: Math.floor(order.cost.minerals * remaining / quantity),
+      gas: Math.floor(order.cost.gas * remaining / quantity),
+    };
+    nextState = {
+      ...nextState,
+      rating: addUnrecoveredResourceCost(nextState.rating, nextState.profile.playerId, paidPendingCost, transition.refund),
+    };
+  }
   return {
     transition,
-    state: transition.ok || transition.state !== planet.fleetProduction || transition.fleet !== planet.fleet || transition.defense !== planet.defense
-      ? stateFromTransition(state, context, transition)
-      : state,
+    state: nextState,
   };
 }
 

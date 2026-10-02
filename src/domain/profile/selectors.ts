@@ -1,9 +1,8 @@
 import {
   CURRENT_PLAYER_ID,
   createPlayerRatingEntries,
-  type RatingPrototypeState,
 } from '../rating/fixtures.ts';
-import type { PlayerRatingEntry } from '../rating/types.ts';
+import type { OwnerScore, PlayerRatingEntry } from '../rating/types.ts';
 import type { RuntimeMode } from '../runtime/mode.ts';
 import type { PlayerProfileState } from './types.ts';
 
@@ -17,19 +16,20 @@ export type PlayerProfileMetric = {
 };
 
 export function selectPlayerRatingEntry(
-  rating: RatingPrototypeState,
+  score: OwnerScore | null | undefined,
   playerId = CURRENT_PLAYER_ID,
   mode: RuntimeMode = 'test',
 ): PlayerRatingEntry | null {
-  return createPlayerRatingEntries(rating.resourcePoints, mode).find((entry) => entry.id === playerId) ?? null;
+  if (!score) return null;
+  return createPlayerRatingEntries(score, mode).find((entry) => entry.id === playerId) ?? null;
 }
 
 export function selectPlayerProfileMetrics(
   profile: PlayerProfileState,
-  rating: RatingPrototypeState,
+  score: OwnerScore | null | undefined,
   mode: RuntimeMode = 'test',
 ): PlayerProfileMetric[] {
-  const entry = selectPlayerRatingEntry(rating, profile.playerId, mode);
+  const entry = selectPlayerRatingEntry(score, profile.playerId, mode);
   return [
     { key: 'resourcePoints', label: 'Ресурсные очки', description: 'Очки развития ресурсной экономики игрока.', value: entry?.resourcePoints ?? null },
     { key: 'battlePoints', label: 'Боевые очки', description: 'Очки боевого рейтинга игрока.', value: entry?.battlePoints ?? null },

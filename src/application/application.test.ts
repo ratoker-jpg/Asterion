@@ -59,7 +59,7 @@ import {
   createPersistenceFacade,
   type StorageLike,
 } from './persistence.ts';
-import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
+import { BUILDING_ROLES, getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { getBuildingMaxLevel } from '../domain/buildings/balance-v1.ts';
 import { getOwnerShipUpgradeLevel, getPlanetResources, type SaveState } from './contracts.ts';
 import { createColonyPlanetRuntime, destroyOwnedPlanet } from './owned-planets.ts';
@@ -69,9 +69,11 @@ import {
   reconcilePlanetOverpopulation,
 } from './overpopulation.ts';
 import { createAllianceRatingEntries, createPlayerRatingEntries } from '../domain/rating/fixtures.ts';
-import { createUniverseMap } from '../domain/universe/runtime.ts';
+import { calculateResourceScore, selectOwnerScores } from '../domain/rating/scoring.ts';
+import { createUniverseMap, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
 import { getEspionageTargets } from '../domain/espionage/runtime.ts';
+import { createBot01Planets } from '../domain/espionage/fixtures.ts';
 
 class MemoryStorage implements StorageLike {
   readonly values = new Map<string, string>();
@@ -108,7 +110,7 @@ test('production and test persistence seeds stay isolated at every fixture bound
   assert.equal(production.operations.items.length, 0);
   assert.equal(production.combat.reports.length, 0);
   assert.equal(createUniverseMap({ mode: 'production' }).systems.flatMap((system) => system.positions).filter((node) => node.kind === 'npc').length, 0);
-  assert.equal(createPlayerRatingEntries(production.rating.resourcePoints, 'production').length, 1);
+  assert.equal(createPlayerRatingEntries(0, 'production').length, 1);
   assert.equal(createAllianceRatingEntries(null, 'production').length, 0);
 
   assert.equal(testMode.command.alliance.name, 'Содружество Гелион');
@@ -118,8 +120,90 @@ test('production and test persistence seeds stay isolated at every fixture bound
   assert.ok(testMode.combat.reports.length > 0);
   assert.equal(createUniverseMap({ mode: 'test' }).systems.flatMap((system) => system.positions).filter((node) => node.kind === 'npc').length, 8);
   assert.equal(Object.keys(testMode.alliedPlanets ?? {}).length, 1);
-  assert.equal(createPlayerRatingEntries(testMode.rating.resourcePoints, 'test').length, 84);
+  assert.equal(createPlayerRatingEntries(0, 'test').length, 84);
   assert.equal(createAllianceRatingEntries(null, 'test').length, 42);
+});
+
+test('legacy fake rating migration resets battle accumulation and preserves campaign state', () => {
+  const now = 1_000;
+  const initial = createInitialSaveState('test', now);
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => now });
+  storage.values.set(persistence.saveKey, JSON.stringify({ ...initial, rating: { resourcePoints: 855_880 } }));
+
+  const migrated = persistence.read();
+  assert.deepEqual(migrated.rating, { battleAwardsByReportId: {}, unrecoveredCostsByOwnerId: {} });
+  assert.equal(migrated.metal, initial.metal);
+  assert.equal(migrated.minerals, initial.minerals);
+  assert.equal(migrated.gas, initial.gas);
+  assert.deepEqual(Object.keys(migrated.planets), Object.keys(initial.planets));
+  assert.deepEqual(migrated.planets['helion-01']?.fleet, initial.planets['helion-01']?.fleet);
+  assert.deepEqual(migrated.planets['helion-01']?.buildings, initial.planets['helion-01']?.buildings);
+  assert.deepEqual(migrated.science.levels, initial.science.levels);
+  assert.deepEqual(migrated.combat.reports.map((report) => report.id), initial.combat.reports.map((report) => report.id));
+  assert.deepEqual(Object.keys(migrated.espionage?.targets ?? {}), Object.keys(initial.espionage?.targets ?? {}));
+  assert.equal(selectOwnerScores(migrated)[migrated.profile.playerId]?.battlePoints, 0);
+});
+
+test('Test Mode scores the player and Bot 001 from their separate asset pools and counts global upgrades once', () => {
+  const state = createInitialSaveState('test', 1_000);
+  const scores = selectOwnerScores(state);
+  const player = scores[state.profile.playerId];
+  const bot = scores[UNIVERSE_NPC_OWNER_ID];
+  assert.deepEqual(player && [player.resourcePoints, player.battlePoints, player.totalPoints, player.achievementPoints], [20_703, 0, 20_703, 0]);
+  assert.deepEqual(bot && [bot.resourcePoints, bot.battlePoints, bot.totalPoints, bot.achievementPoints], [1_000_000, 0, 1_000_000, 0]);
+
+  const targets = Object.values(state.espionage?.targets ?? {}).filter((target) => target.ownerId === UNIVERSE_NPC_OWNER_ID);
+  const profile = state.espionage?.bot01Profile;
+  assert.equal(targets.length, 7);
+  assert.ok(profile);
+  assert.equal(profile.shipLevels['death-star'], 3);
+  const factionId = targets[0]!.raceId;
+  const botPlanets = targets.map((target) => ({
+    factionId: target.raceId,
+    buildings: target.buildings as Partial<Record<(typeof BUILDING_ROLES)[number], number>>,
+    fleet: target.fleet,
+    defense: target.defense,
+    buildingQueue: target.buildingQueue,
+  }));
+  const botLocal = calculateResourceScore({ factionId, planets: botPlanets });
+  const botGlobal = calculateResourceScore({
+    factionId,
+    planets: [],
+    scienceLevels: profile.scienceLevels,
+    shipUpgradeLevels: profile.shipLevels,
+  });
+  const botCombined = calculateResourceScore({
+    factionId,
+    planets: botPlanets,
+    scienceLevels: profile.scienceLevels,
+    shipUpgradeLevels: profile.shipLevels,
+  });
+  assert.equal(botLocal.resourceTotal, 969_228_885);
+  assert.equal(botGlobal.resourceTotal, 30_770_625);
+  assert.equal(botCombined.resourceTotal, botLocal.resourceTotal + botGlobal.resourceTotal);
+  assert.equal(botCombined.resourceTotal, 999_999_510);
+  assert.equal(botCombined.resourcePoints, bot?.resourcePoints);
+
+  const playerPlanets = Object.entries(state.planets).map(([planetId, planet]) => ({
+    factionId: state.profile.factionId,
+    buildings: planet.buildings,
+    fleet: planet.fleet,
+    defense: planet.defense,
+    solarSatellites: planet.solarSatellites,
+    buildingQueue: state.queues[planetId],
+    fleetProduction: planet.fleetProduction,
+    spaceportUpgrades: planet.spaceportUpgrades,
+  }));
+  const playerScore = calculateResourceScore({
+    factionId: state.profile.factionId,
+    planets: playerPlanets,
+    scienceLevels: state.science.levels,
+    shipUpgradeLevels: state.shipUpgradeLevels,
+    queuedScience: state.science.queue,
+  });
+  assert.equal(playerScore.resourceTotal, 20_703_450);
+  assert.equal(playerScore.resourcePoints, player?.resourcePoints);
 });
 
 test('asteroid simulation, hidden cargo, and recycler history round-trip through persistence', () => {
@@ -486,12 +570,14 @@ test('legacy bot01Planets saves keep their compatibility migration path', () => 
   const storage = new MemoryStorage();
   const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 2_000 });
   const initial = createInitialSaveState('test', 1_000);
+  const legacyBotTargets = createBot01Planets(1_000);
   const legacyEnvelope = {
     ...initial,
     espionage: {
       ...initial.espionage!,
       targets: undefined,
-      bot01Planets: initial.espionage!.targets,
+      bot01Profile: undefined,
+      bot01Planets: legacyBotTargets,
     },
   };
   storage.values.set(persistence.saveKey, JSON.stringify(legacyEnvelope));
@@ -499,6 +585,19 @@ test('legacy bot01Planets saves keep their compatibility migration path', () => 
   const reloaded = persistence.read();
   assert.equal(Object.keys(getEspionageTargets(reloaded.espionage)).length, 7);
   assert.equal(Object.keys(reloaded.espionage?.bot01Planets ?? {}).length, 7);
+  const aggregateFleetCounts = (targets: Record<string, { fleet: { ships: Record<string, number> } }>) => {
+    const counts: Record<string, number> = {};
+    for (const target of Object.values(targets)) {
+      for (const [shipId, count] of Object.entries(target.fleet.ships)) {
+        if (count > 0) counts[shipId] = (counts[shipId] ?? 0) + count;
+      }
+    }
+    return counts;
+  };
+  assert.deepEqual(aggregateFleetCounts(getEspionageTargets(reloaded.espionage)), aggregateFleetCounts(legacyBotTargets));
+  for (const [planetId, legacyPlanet] of Object.entries(legacyBotTargets)) {
+    assert.deepEqual(getEspionageTargets(reloaded.espionage)[planetId]?.defense, legacyPlanet.defense);
+  }
 });
 
 test('legacy planet upgrade levels migrate to owner-wide maxima without counting queued work', () => {
@@ -1137,6 +1236,14 @@ test('building application owns start, queue cancellation, completion, destroy, 
   const canceled = cancelBuilding(started.state, { ...buildingContext, now: 10_001 }, started.state.queues['helion-01'][0].id);
   assert.equal(canceled.ok, true);
   assert.equal(canceled.state.queues['helion-01'].length, 0);
+  const canceledBuilding = started.state.queues['helion-01'][0]!;
+  const walletBeforeCancel = getPlanetResources(started.state);
+  const walletAfterCancel = getPlanetResources(canceled.state);
+  assert.deepEqual(canceled.state.rating.unrecoveredCostsByOwnerId[canceled.state.profile.playerId], {
+    metal: Math.max(0, (canceledBuilding.cost?.metal ?? 0) - (walletAfterCancel.metal - walletBeforeCancel.metal)),
+    minerals: Math.max(0, (canceledBuilding.cost?.minerals ?? 0) - (walletAfterCancel.minerals - walletBeforeCancel.minerals)),
+    gas: Math.max(0, (canceledBuilding.cost?.gas ?? 0) - (walletAfterCancel.gas - walletBeforeCancel.gas)),
+  });
 
   const rebuilt = startBuilding(initial, buildingContext, 'trade-center');
   assert.equal(rebuilt.ok, true);
@@ -1393,7 +1500,16 @@ test('spaceport application action names and resolves the selected faction ship'
 
   assert.equal(result.ok, true);
   assert.equal(result.entityName, 'Транспортный дрон');
-  assert.equal(result.state.planets['helion-01'].spaceportUpgrades.shipQueue[0]?.shipId, 'transporter');
+  const task = result.state.planets['helion-01'].spaceportUpgrades.shipQueue[0];
+  assert.equal(task?.shipId, 'transporter');
+  assert.ok(task);
+  const canceled = cancelSpaceportUpgrade(result.state, { ...context(25_001), rng: () => 0 }, task.id);
+  assert.equal(canceled.ok, true);
+  assert.deepEqual(canceled.state.rating.unrecoveredCostsByOwnerId[canceled.state.profile.playerId], {
+    metal: task.cost.metal - (canceled.transition.refund?.metal ?? 0),
+    minerals: task.cost.minerals - (canceled.transition.refund?.minerals ?? 0),
+    gas: task.cost.gas - (canceled.transition.refund?.gas ?? 0),
+  });
 });
 
 test('fleet production application persists, reconciles, and bridges all three queues', () => {
@@ -1617,6 +1733,12 @@ test('satellite batches complete one unit at a time, keep the first unit through
     assert.equal(canceled.state.planets['helion-01'].fleetProduction.shipQueue.length, 0, factionId);
     assert.equal(canceled.state.planets['helion-01'].fleet.ships['solar-satellite'], 0, factionId);
     assert.equal(canceled.state.metal, first.state.metal + Math.floor(task.cost.metal / 2 * 0.6), factionId);
+    const canceledRefund = 'refund' in canceled.transition ? canceled.transition.refund : null;
+    assert.deepEqual(canceled.state.rating.unrecoveredCostsByOwnerId[canceled.state.profile.playerId], {
+      metal: Math.floor(task.cost.metal / 2) - (canceledRefund?.metal ?? 0),
+      minerals: Math.floor(task.cost.minerals / 2) - (canceledRefund?.minerals ?? 0),
+      gas: Math.floor(task.cost.gas / 2) - (canceledRefund?.gas ?? 0),
+    }, factionId);
   }
 });
 
@@ -1665,6 +1787,17 @@ test('science application uses one clock, reconciles idempotently, and event bri
   const canceled = cancelScience(current, { ...context(40_002), rng: () => 0 }, current.science.queue[0].id);
   assert.equal(canceled.transition.ok, true);
   assert.equal(getPlanetEnergyLedger(canceled.state.planets['helion-01'], canceled.state.science.levels).availableEnergy, energyBeforeScienceCancel);
+  assert.ok('canceledTasks' in canceled.transition);
+  const paidScienceCost = canceled.transition.canceledTasks.reduce((total, task) => ({
+    metal: total.metal + task.cost.metal,
+    minerals: total.minerals + task.cost.minerals,
+    gas: total.gas + task.cost.gas,
+  }), { metal: 0, minerals: 0, gas: 0 });
+  assert.deepEqual(canceled.state.rating.unrecoveredCostsByOwnerId[canceled.state.profile.playerId], {
+    metal: Math.max(0, paidScienceCost.metal - (canceled.transition.refund?.metal ?? 0)),
+    minerals: Math.max(0, paidScienceCost.minerals - (canceled.transition.refund?.minerals ?? 0)),
+    gas: Math.max(0, paidScienceCost.gas - (canceled.transition.refund?.gas ?? 0)),
+  });
   unbind();
 });
 

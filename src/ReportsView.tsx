@@ -28,7 +28,7 @@ import type { ReportCategory, ReportFilter, ReportItem, ReportsState } from './d
 import type { PlayerProfileState } from './domain/profile/types.ts';
 import { selectPlayerProfileMetrics } from './domain/profile/selectors.ts';
 import type { PlayerProfileMetricKey } from './domain/profile/selectors.ts';
-import type { RatingPrototypeState } from './domain/rating/fixtures.ts';
+import type { OwnerScore } from './domain/rating/types.ts';
 import { RUNTIME_RESET_EVENT, type RuntimeMode } from './domain/runtime/mode.ts';
 import type { SpyReportSnapshot } from './domain/espionage/types.ts';
 import { COMMANDER_ABILITIES, formatCommanderAbilityEffect, type CommanderId } from './domain/combat/commanders.ts';
@@ -297,8 +297,8 @@ function MetricGlyph({ metric }: { metric: PlayerProfileMetricKey }) {
   return <img className="reports-score-glyph" src={asterionAssetIntegrationAssets.scoreIcons[metric]} alt="" aria-hidden="true" draggable={false} />;
 }
 
-function PlayerProfile({ profile, rating, command, mode, onOpenCommand }: { profile: PlayerProfileState; rating: RatingPrototypeState; command: CommandState; mode: RuntimeMode; onOpenCommand: () => void }) {
-  const metrics = selectPlayerProfileMetrics(profile, rating, mode);
+function PlayerProfile({ profile, score, command, mode, onOpenCommand }: { profile: PlayerProfileState; score: OwnerScore | null; command: CommandState; mode: RuntimeMode; onOpenCommand: () => void }) {
+  const metrics = selectPlayerProfileMetrics(profile, score, mode);
   const alliance = selectCurrentAlliance(command);
   return (
     <section className="reports-profile-view" data-qa-profile aria-labelledby="reports-profile-title">
@@ -316,7 +316,7 @@ function PlayerProfile({ profile, rating, command, mode, onOpenCommand }: { prof
         </section>
       </div>
       {profile.protectionMode ? <div className="reports-profile-protection"><i /> ЗАЩИТНЫЙ РЕЖИМ АКТИВЕН</div> : null}
-      {mode === 'test' ? <p className="reports-fixture-note">Профильная идентичность и четыре очка — тестовые данные, сохранённые в общем состоянии. Формулы рейтинга остаются в существующем доменном провайдере.</p> : null}
+      {mode === 'test' ? <p className="reports-fixture-note">Профильная идентичность тестовая; очки рассчитаны по текущим активам владельца, достижения не начисляются.</p> : null}
     </section>
   );
 }
@@ -331,14 +331,14 @@ function FolderActions({ folder, items, selectedIds, onSelectAll, onDeleteAll, o
   );
 }
 
-export function ReportsView({ battleReports, savedBattleReportIds, operations, command, espionage, profile, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget }: {
+export function ReportsView({ battleReports, savedBattleReportIds, operations, command, espionage, profile, score, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget }: {
   battleReports: readonly BattleReport[];
   savedBattleReportIds: readonly string[];
   operations: OperationsState;
   command: CommandState;
   espionage?: import('./domain/espionage/types.ts').EspionageState;
   profile: PlayerProfileState;
-  rating: RatingPrototypeState;
+  score: OwnerScore | null;
   mode: RuntimeMode;
   state: ReportsState;
   onStateChange: (next: ReportsState) => void;
@@ -463,7 +463,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
         <div className="reports-ai-note"><small>ЦЕНТР СООБЩЕНИЙ</small><strong>БЕЗ ФАЛЬШИВЫХ СОБЫТИЙ</strong><span>Боевые доклады читаются из журнала боёв. Остальные каналы наполняются только из существующих игровых контуров.</span></div>
       </aside>
 
-      {activeFolder === 'profile' ? <PlayerProfile profile={profile} rating={rating} command={command} mode={mode} onOpenCommand={onOpenCommand} /> : <section className="reports-folder-workspace" data-qa-folder-view={activeFolder}>
+      {activeFolder === 'profile' ? <PlayerProfile profile={profile} score={score} command={command} mode={mode} onOpenCommand={onOpenCommand} /> : <section className="reports-folder-workspace" data-qa-folder-view={activeFolder}>
         <section className="reports-feed" data-qa-message-folder-view={activeFolder}>
           <header className="reports-feed-head"><div><small>РАЗДЕЛ СООБЩЕНИЙ</small><h2>{activeFolderMeta.label.toUpperCase()}</h2></div>{activeCategory ? <div className="reports-feed-head-tools"><span className="reports-folder-count">{counts[activeCategory]} СООБЩЕНИЙ</span><select value={filter} onChange={(event) => setFilter(event.target.value as ReportFilter)} aria-label="Фильтр сообщений">{availableFilters.map((key) => <option key={key} value={key}>{FILTER_LABELS[key]}</option>)}</select></div> : null}</header>
           {activeCategory ? <FolderActions folder={activeFolderMeta} items={folderItems} selectedIds={selectedIds} onSelectAll={selectAll} onDeleteAll={deleteAll} onDeleteSelected={deleteSelected} /> : null}

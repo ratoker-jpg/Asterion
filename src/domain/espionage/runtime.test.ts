@@ -7,8 +7,8 @@ import {
   normalizeRngRoll,
   resolveSpyReportQuality,
 } from './runtime.ts';
-import { createBot01Planets, createDefaultBot01Profile } from './fixtures.ts';
-import { calculateFleetPopulation } from '../fleet/runtime.ts';
+import { createBot01Planets, createDefaultBot01Profile, createDefaultTestEspionageState } from './fixtures.ts';
+import { calculateFleetPopulation, createEmptyFleetState } from '../fleet/runtime.ts';
 import { calculateDefensePopulation } from '../fleet/production.ts';
 import { migrateEspionageState } from './repository.ts';
 
@@ -93,6 +93,87 @@ test('Bot 01 hull levels cover every upgradable ship with seeded 0..10 values', 
   assert.equal(profile.shipLevels['mega-transporter'], 6);
   assert.equal(profile.shipLevels.cruiser, 4);
   assert.equal(profile.shipLevels.battleship, 2);
+  assert.equal(profile.shipLevels['death-star'], 10);
+});
+
+test('Test Mode Bot 01 fixture keeps one attack Death Star, clears defense, and preserves other seeded assets', () => {
+  const seeded = createBot01Planets(1_000);
+  const testState = createDefaultTestEspionageState(1_000);
+  const targets = testState.targets ?? {};
+  const expectedSeededFleetCounts = {
+    transporter: 4_835,
+    'mega-transporter': 2_732,
+    colonizer: 119,
+    recycler: 992,
+    scout: 3_548,
+    cruiser: 1_763,
+    defender: 1_728,
+    battleship: 282,
+    destroyer: 78,
+    bomber: 265,
+    'death-star': 16,
+  };
+  const seededFleetCounts: Record<string, number> = {};
+  for (const planet of Object.values(seeded)) {
+    for (const [shipId, count] of Object.entries(planet.fleet.ships)) {
+      if (count > 0) seededFleetCounts[shipId] = (seededFleetCounts[shipId] ?? 0) + count;
+    }
+  }
+  assert.deepEqual(seededFleetCounts, expectedSeededFleetCounts);
+  assert.equal(Object.keys(targets).length, 7);
+  const testFleetCounts: Record<string, number> = {};
+  for (const [planetId, planet] of Object.entries(targets)) {
+    const original = seeded[planetId];
+    assert.ok(original);
+    assert.deepEqual(planet.resources, original.resources);
+    assert.deepEqual(planet.buildings, original.buildings);
+    assert.ok(Object.values(original.defense.defenses).some((count) => count > 0));
+    assert.deepEqual(planet.defense.defenses, Object.fromEntries(Object.keys(original.defense.defenses).map((id) => [id, 0])));
+    assert.deepEqual(planet.fleet.commanders, Object.fromEntries(Object.keys(original.fleet.commanders).map((id) => [id, 0])));
+    assert.deepEqual(planet.commanders, {});
+    assert.equal(planet.population.fleet, calculateFleetPopulation(planet.fleet, planet.raceId));
+    assert.equal(planet.population.defense, calculateDefensePopulation(planet.defense, planet.raceId));
+    assert.equal(planet.population.defense, 0);
+    assert.equal(planet.population.total, planet.population.fleet + planet.population.defense);
+    const expectedFleet = createEmptyFleetState();
+    expectedFleet.ships.destroyer = 1_295;
+    if (planetId === 'npc-bot-01-prime') {
+      expectedFleet.ships.battleship = 1;
+      expectedFleet.ships.cruiser = 1;
+      expectedFleet.ships.transporter = 2;
+      expectedFleet.ships.scout = 4;
+    }
+    if (planetId === 'npc-bot-01-planet-4') expectedFleet.ships['death-star'] = 1;
+    const expectedFleetPopulation = calculateFleetPopulation(expectedFleet, planet.raceId);
+    assert.equal(planet.population.fleet, expectedFleetPopulation);
+    assert.equal(planet.population.fleet, planetId === 'npc-bot-01-prime' ? 22_035 : planetId === 'npc-bot-01-planet-4' ? 22_335 : 22_015);
+    assert.ok(planet.population.total <= 25_112);
+    for (const [shipId, count] of Object.entries(planet.fleet.ships)) {
+      if (count > 0) testFleetCounts[shipId] = (testFleetCounts[shipId] ?? 0) + count;
+    }
+  }
+  assert.deepEqual(testFleetCounts, {
+    scout: 4,
+    transporter: 2,
+    cruiser: 1,
+    battleship: 1,
+    destroyer: 9_065,
+    'death-star': 1,
+  });
+  assert.equal(targets['npc-bot-01-prime']?.fleet.ships.destroyer, 1_295);
+  assert.equal(targets['npc-bot-01-prime']?.fleet.ships.battleship, 1);
+  assert.equal(targets['npc-bot-01-prime']?.fleet.ships.cruiser, 1);
+  assert.equal(targets['npc-bot-01-prime']?.fleet.ships.transporter, 2);
+  assert.equal(targets['npc-bot-01-prime']?.fleet.ships.scout, 4);
+  assert.equal(targets['npc-bot-01-planet-4']?.fleet.ships['death-star'], 1);
+  assert.equal(Object.values(targets).filter((planet) => planet.fleet.ships['death-star'] > 0).length, 1);
+  const seededProfile = createDefaultBot01Profile();
+  assert.deepEqual(testState.bot01Profile?.shipLevels, { ...seededProfile.shipLevels, 'death-star': 3 });
+  assert.equal(testState.bot01Profile?.shipLevels['death-star'], 3);
+  const migrationDefaults = createDefaultTestEspionageState(1_000, { botFleet: 'seeded' });
+  assert.deepEqual(migrationDefaults.bot01Profile?.shipLevels, seededProfile.shipLevels);
+  assert.equal(migrationDefaults.bot01Profile?.shipLevels['death-star'], 10);
+  assert.deepEqual(testState.bot01Profile?.scienceLevels, createDefaultBot01Profile().scienceLevels);
 });
 
 test('target debris migrates from the legacy mirror into resources.debris exactly once', () => {

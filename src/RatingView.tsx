@@ -16,6 +16,7 @@ import {
 import type {
   AllianceRatingEntry,
   AllianceScoreKey,
+  OwnerScore,
   PlayerRatingEntry,
   PlayerScoreKey,
   RatingMode,
@@ -27,11 +28,11 @@ const PAGE_SIZE = 12;
 export function RatingView({
   mode: runtimeMode = 'test',
   command,
-  currentPlayerResourcePoints,
+  currentPlayerScore,
 }: {
   mode?: RuntimeMode;
   command: CommandState;
-  currentPlayerResourcePoints?: number;
+  currentPlayerScore?: OwnerScore;
 }) {
   const [mode, setMode] = useState<RatingMode>('players');
   const [query, setQuery] = useState('');
@@ -42,7 +43,7 @@ export function RatingView({
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const currentAlliance = useMemo(() => selectCurrentAlliance(command), [command]);
-  const players = useMemo(() => createPlayerRatingEntries(currentPlayerResourcePoints, runtimeMode), [currentPlayerResourcePoints, runtimeMode]);
+  const players = useMemo(() => createPlayerRatingEntries(currentPlayerScore, runtimeMode), [currentPlayerScore, runtimeMode]);
   const alliances = useMemo(() => createAllianceRatingEntries(currentAlliance, runtimeMode), [currentAlliance, runtimeMode]);
   const currentPlayer = useMemo(() => players.find((entry) => entry.isCurrentPlayer) ?? null, [players]);
 

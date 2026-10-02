@@ -25,6 +25,7 @@ import { energySourceChangeForBuilding, transitionPlanetEnergySources } from './
 import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import { resolveSpyTarget } from './espionage-targets.ts';
 import type { AttackLaunchSnapshot, AttackLoot, AttackResolution } from '../domain/attack/types.ts';
+import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 
 const ATTACK_MAX_ROUNDS: readonly SimulatorMaxRounds[] = [5, 8, 12];
 const ATTACK_REPORT_PREFIX = 'battle-attack-';
@@ -302,9 +303,12 @@ function lastCombatEventSequence(report: BattleReport) {
 }
 
 function addReport(state: SaveState, report: BattleReport): SaveState {
-  return state.combat.reports.some((candidate) => candidate.id === report.id)
-    ? state
-    : { ...state, combat: { ...state.combat, reports: [...state.combat.reports, report] } };
+  if (state.combat.reports.some((candidate) => candidate.id === report.id)) return state;
+  return {
+    ...state,
+    combat: { ...state.combat, reports: [...state.combat.reports, report] },
+    rating: recordBattleScoreAward(state.rating, report, state.profile.playerId),
+  };
 }
 
 function reportLoot(report: BattleReport): AttackLoot {

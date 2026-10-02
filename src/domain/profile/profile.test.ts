@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { CURRENT_PLAYER_DISPLAY_NAME, createDefaultRatingPrototypeState, createPlayerRatingEntries } from '../rating/fixtures.ts';
+import { CURRENT_PLAYER_DISPLAY_NAME, createPlayerRatingEntries } from '../rating/fixtures.ts';
+import type { OwnerScore } from '../rating/types.ts';
 import {
   createDefaultPlayerProfileState,
   CURRENT_PLAYER_FACTION_ID,
@@ -86,13 +87,19 @@ test('profile faction sync repairs the legacy fixture to the current Aegis playe
 });
 
 test('profile metrics come from the rating selector and stay in sync with the current rating row', () => {
-  const rating = createDefaultRatingPrototypeState();
   const profile = createDefaultPlayerProfileState();
-  const entry = selectPlayerRatingEntry(rating, profile.playerId);
-  const metrics = selectPlayerProfileMetrics(profile, rating);
-  const current = createPlayerRatingEntries(rating.resourcePoints).find((candidate) => candidate.isCurrentPlayer);
+  const score: OwnerScore = {
+    ownerId: profile.playerId,
+    resourcePoints: 0,
+    battlePoints: 0,
+    totalPoints: 0,
+    achievementPoints: 0,
+  };
+  const entry = selectPlayerRatingEntry(score, profile.playerId);
+  const metrics = selectPlayerProfileMetrics(profile, score);
+  const current = createPlayerRatingEntries(score).find((candidate) => candidate.isCurrentPlayer);
 
   assert.equal(entry?.name, CURRENT_PLAYER_DISPLAY_NAME);
   assert.equal(entry?.id, current?.id);
-  assert.deepEqual(metrics.map((metric) => metric.value), [855_880, 469_240, 1_325_120, 72_332]);
+  assert.deepEqual(metrics.map((metric) => metric.value), [0, 0, 0, 0]);
 });

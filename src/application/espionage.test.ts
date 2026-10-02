@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
+import { createBot01Planets } from '../domain/espionage/fixtures.ts';
 import {
   dispatchFlight,
   reconcileFlights,
@@ -265,11 +266,16 @@ test('automatic arrival report can be intercepted by Hunter and destroys the pro
 
 test('full report is an immutable permitted snapshot and later reconcile keeps the probe orbiting', () => {
   let state = createInitialSaveState('test', 1_000);
+  const targetId = Object.keys(state.espionage!.bot01Planets!)[1];
+  const targets = {
+    ...getEspionageTargets(state.espionage),
+    [targetId]: createBot01Planets(1_000)[targetId]!,
+  };
   state = {
     ...state,
+    espionage: { ...state.espionage!, targets, bot01Planets: targets },
     science: { ...state.science, levels: { ...state.science.levels, 5: 10 } },
   };
-  const targetId = Object.keys(state.espionage!.bot01Planets!)[1];
   const dispatched = dispatchFlight(state, spyCommand(state, 'spy-full', targetId), { now: 1_000, mode: 'test', testTimeScale: 15 });
   assert.equal(dispatched.ok, true);
   if (!dispatched.ok) return;
@@ -299,7 +305,7 @@ test('full report is an immutable permitted snapshot and later reconcile keeps t
 test('Bot 01 spy reports track commander counts during dispatch and after return casualties', () => {
   let initial = createInitialSaveState('test', 1_000);
   const originalTargets = getEspionageTargets(initial.espionage);
-  const commanderTemplate = Object.values(originalTargets).find((candidate) => candidate.commanders.hunter && candidate.commanders.judge);
+  const commanderTemplate = Object.values(createBot01Planets(1_000)).find((candidate) => candidate.commanders.hunter && candidate.commanders.judge);
   const botSource = Object.values(originalTargets)
     .filter((candidate) => (candidate.fleet.ships['death-star'] ?? 0) > 0)
     .sort((left, right) => left.id.localeCompare(right.id))[0];
@@ -517,23 +523,24 @@ test('seeded report rolls differ between distinct missions to the same target', 
 });
 
 test('full report carries a 0..10 level for every combat hull even when the planet state predates shipLevels', () => {
-  const initial = createInitialSaveState('test', 1_000);
-  const targetId = Object.keys(initial.espionage!.bot01Planets!)[1];
+  const base = createInitialSaveState('test', 1_000);
+  const targetId = Object.keys(base.espionage!.bot01Planets!)[1];
+  const targets = {
+    ...getEspionageTargets(base.espionage),
+    [targetId]: createBot01Planets(1_000)[targetId]!,
+  };
+  const initial = { ...base, espionage: { ...base.espionage!, targets, bot01Planets: targets } };
   // Science level 10 keeps delta at 0 so a roll of 0 resolves to a full dossier.
   const boosted = {
     ...initial,
     science: { ...initial.science, levels: { ...initial.science.levels, 5: 10 } },
   } as typeof initial;
   // Simulate an old save: the planet snapshot has no ship levels at all.
+  const agedTarget = { ...boosted.espionage!.targets![targetId]!, shipLevels: undefined };
+  const agedTargets = { ...boosted.espionage!.targets!, [targetId]: agedTarget };
   const aged = {
     ...boosted,
-    espionage: {
-      ...boosted.espionage!,
-      bot01Planets: {
-        ...boosted.espionage!.bot01Planets!,
-        [targetId]: { ...boosted.espionage!.bot01Planets![targetId], shipLevels: undefined },
-      },
-    },
+    espionage: { ...boosted.espionage!, targets: agedTargets, bot01Planets: agedTargets },
   } as typeof initial;
   const dispatched = dispatchFlight(aged, spyCommand(aged, 'spy-levels', targetId), { now: 1_000, mode: 'test', testTimeScale: 15 });
   assert.equal(dispatched.ok, true);

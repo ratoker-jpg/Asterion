@@ -52,9 +52,8 @@ import star06 from '../assets/source/universe-navigation/system-stars/system-sta
 import { selectCurrentAlliance } from './domain/command/selectors.ts';
 import type { CommandState } from './domain/command/types.ts';
 import { playerFactionLabel } from './domain/profile/repository.ts';
-import { selectPlayerProfileMetrics } from './domain/profile/selectors.ts';
 import type { PlayerProfileState } from './domain/profile/types.ts';
-import type { RatingPrototypeState } from './domain/rating/fixtures.ts';
+import type { OwnerScore } from './domain/rating/types.ts';
 import type { RuntimeMode } from './domain/runtime/mode.ts';
 import {
   GALAXY,
@@ -106,7 +105,7 @@ type UniverseViewProps = {
   ownedPlanetArt: string;
   ownedPlanetName: string;
   profile: PlayerProfileState;
-  rating: RatingPrototypeState;
+  ownerScores: Readonly<Record<string, OwnerScore>>;
   command: CommandState;
   playerPlanets: readonly UniversePersistedPlayerPlanet[];
   spyTargets: readonly SpyTargetState[];
@@ -132,17 +131,12 @@ const POINT_LABELS: ReadonlyArray<{ key: keyof UniverseOwnerPoints; label: strin
 
 const numberFormat = new Intl.NumberFormat('ru-RU');
 
-function pointValue(metrics: ReturnType<typeof selectPlayerProfileMetrics>, key: string) {
-  return metrics.find((metric) => metric.key === key)?.value ?? 0;
-}
-
-function currentOwnerPoints(profile: PlayerProfileState, rating: RatingPrototypeState, mode: RuntimeMode): UniverseOwnerPoints {
-  const metrics = selectPlayerProfileMetrics(profile, rating, mode);
+function ownerPoints(score: OwnerScore | undefined): UniverseOwnerPoints {
   return {
-    resource: pointValue(metrics, 'resourcePoints'),
-    battle: pointValue(metrics, 'battlePoints'),
-    total: pointValue(metrics, 'totalPoints'),
-    achievements: pointValue(metrics, 'achievementPoints'),
+    resource: score?.resourcePoints ?? 0,
+    battle: score?.battlePoints ?? 0,
+    total: score?.totalPoints ?? 0,
+    achievements: score?.achievementPoints ?? 0,
   };
 }
 
@@ -387,7 +381,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, hasDebris, occupiedNodes,
   </button>;
 }
 
-export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, rating, command, playerPlanets, spyTargets, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, mode, onColonize, onAsteroidRecycler, onTransport, onSpy, onAttack, focusTarget, onFocusHandled }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, ownerScores, command, playerPlanets, spyTargets, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, mode, onColonize, onAsteroidRecycler, onTransport, onSpy, onAttack, focusTarget, onFocusHandled }: UniverseViewProps) {
   const [system, setSystem] = useState(1);
   const [focusEmpty, setFocusEmpty] = useState(false);
   const [showSlotLabels, setShowSlotLabels] = useState(true);
@@ -411,16 +405,16 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
     displayName: profile.displayName,
     raceId: profile.factionId,
     alliance,
-    points: currentOwnerPoints(profile, rating, mode),
+    points: ownerPoints(ownerScores[profile.playerId]),
     planetIds: playerPlanets.map((planet) => planet.id),
-  }), [alliance, mode, playerPlanets, profile, rating]);
+  }), [alliance, ownerScores, playerPlanets, profile]);
   const owners = useMemo(() => {
     const next = new Map<string, UniverseOwnerProfile>([[owner.id, owner]]);
     if (mode === 'test') {
       const registeredBotPlanetIds = spyTargets
         .filter((target) => target.ownerId === UNIVERSE_NPC_OWNER_ID)
         .map((target) => target.id);
-      const npc = createUniverseNpcOwnerProfile(owner.points, registeredBotPlanetIds);
+      const npc = createUniverseNpcOwnerProfile(ownerPoints(ownerScores[UNIVERSE_NPC_OWNER_ID]), registeredBotPlanetIds);
       next.set(npc.id, npc);
       next.set(TEST_MODE_ALLY_PLANET_FIXTURE.owner.id, normalizeUniverseOwnerProfile(TEST_MODE_ALLY_PLANET_FIXTURE.owner));
     }
@@ -432,7 +426,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
         displayName: target.ownerName,
         raceId: target.raceId,
         alliance: target.alliance,
-        points: previous?.points,
+        points: ownerScores[target.ownerId] ? ownerPoints(ownerScores[target.ownerId]) : previous?.points,
         planetIds: [...new Set([...(previous?.planetIds ?? []), target.id])],
       }));
     }

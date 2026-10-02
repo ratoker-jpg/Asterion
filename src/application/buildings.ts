@@ -67,6 +67,7 @@ import {
   settlePlanetEnergyWallet,
 } from './energy.ts';
 import { isPlanetBlocked } from './overpopulation.ts';
+import { addUnrecoveredResourceCost } from '../domain/rating/scoring.ts';
 
 export type BuildingApplicationContext = {
   planetId: PlanetId;
@@ -194,9 +195,18 @@ export function cancelBuilding(
   if (!transition.ok) {
     return { ok: false, state, reason: transition.reason, canceledRole: null, cascadedCount: 0 };
   }
+  const paidCost = transition.canceledItems.reduce((total, item) => ({
+    metal: total.metal + (item.cost?.metal ?? 0),
+    minerals: total.minerals + (item.cost?.minerals ?? 0),
+    gas: total.gas + (item.cost?.gas ?? 0),
+  }), { metal: 0, minerals: 0, gas: 0 });
+  const nextState = stateFromEconomy(state, context, transition.state);
   return {
     ok: true,
-    state: stateFromEconomy(state, context, transition.state),
+    state: {
+      ...nextState,
+      rating: addUnrecoveredResourceCost(nextState.rating, nextState.profile.playerId, paidCost, transition.refund),
+    },
     reason: null,
     canceledRole: transition.canceled?.assetRole ?? null,
     cascadedCount: Math.max(0, transition.canceledItems.length - 1),
@@ -537,9 +547,16 @@ export function cancelSpaceportUpgrade(
     spaceportUpgrades: { ...transition.state, shipLevels: {} },
   });
   const nextState = replacePlanetResources(withUpgrade, context.planetId, transition.wallet);
+  const paidCost = transition.canceledTasks.reduce((total, task) => ({
+    metal: total.metal + (task.cost?.metal ?? 0),
+    minerals: total.minerals + (task.cost?.minerals ?? 0),
+    gas: total.gas + (task.cost?.gas ?? 0),
+  }), { metal: 0, minerals: 0, gas: 0 });
   return {
     ok: transition.ok,
-    state: transition.ok || nextState !== state ? nextState : state,
+    state: transition.ok
+      ? { ...nextState, rating: addUnrecoveredResourceCost(nextState.rating, nextState.profile.playerId, paidCost, transition.refund) }
+      : nextState !== state ? nextState : state,
     reason: transition.reason,
     transition,
   };

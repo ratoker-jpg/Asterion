@@ -89,6 +89,7 @@ import {
   PLAYER_FACTION_LABELS,
 } from './domain/profile/repository.ts';
 import type { PlayerFactionId } from './domain/profile/types.ts';
+import { selectOwnerScores } from './domain/rating/scoring.ts';
 import {
   createInitialSaveState,
   createPersistenceFacade,
@@ -873,7 +874,7 @@ export function App() {
         now: tradedAt,
         mode: RUNTIME_MODE,
         testTimeScale,
-      }, current.rating.resourcePoints, request);
+      }, selectOwnerScores(current)[current.profile.playerId]?.resourcePoints ?? 0, request);
       return { state: transition.state, result: transition.execution };
     }, flushSync);
     if (!result.ok) {
@@ -1400,7 +1401,7 @@ export function App() {
               tradeWallet={tradeWallet}
               spaceportUpgrades={{ ...currentPlanetState.spaceportUpgrades, shipLevels: getOwnerShipUpgradeLevels(state) }}
               spaceportWallet={spaceportWallet}
-              resourceRatingPoints={state.rating.resourcePoints}
+              resourceRatingPoints={selectOwnerScores(state)[state.profile.playerId]?.resourcePoints ?? 0}
               now={now}
               testTimeScale={testTimeScale}
               onProductionBotsApply={applyProductionBots}
@@ -1417,7 +1418,7 @@ export function App() {
               ownedPlanetArt={'mapArt' in currentSkin ? currentSkin.mapArt : currentSkin.art}
               ownedPlanetName={currentPlanetName}
               profile={state.profile}
-              rating={state.rating}
+              ownerScores={selectOwnerScores(state)}
               command={state.command}
               playerPlanets={universePlayerPlanets}
               spyTargets={Object.values(getEspionageTargets(state.espionage))}
@@ -1458,7 +1459,7 @@ export function App() {
               command={state.command}
               espionage={state.espionage}
               profile={state.profile}
-              rating={state.rating}
+              score={selectOwnerScores(state)[state.profile.playerId] ?? null}
               mode={RUNTIME_MODE}
               state={state.reports}
               onStateChange={(reports) => setState((current) => ({ ...current, reports }))}

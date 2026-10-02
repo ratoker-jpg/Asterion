@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
+import { createBot01Planets } from '../domain/espionage/fixtures.ts';
+import { calculateFleetPopulation, createEmptyFleetState } from '../domain/fleet/runtime.ts';
+import { calculateDefensePopulation } from '../domain/fleet/production.ts';
 import { dispatchFlight, recallFlight, reconcileFlights, startBot01IncomingScenario } from './flights.ts';
 import { getPlanetResources, replacePlanetResources, replacePlanetState } from './contracts.ts';
 import { selectOwnedPlanet } from './owned-planets.ts';
@@ -13,7 +16,10 @@ import { getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris
 import { selectCurrentAlliance } from '../domain/command/selectors.ts';
 import { calculateAttackDebris, calculateAttackLoot, resolveAttackAtTarget, resolveBot01IncomingAttack, technologiesFromScience } from './attack.ts';
 import { getFactionCombatEntity } from '../domain/combat/faction-catalog.ts';
-import type { BattleReport } from '../domain/combat/report.ts';
+import { calculateBattlePoints } from '../domain/combat/battle-points.ts';
+import { getCombatFactionId } from '../domain/combat/factions.ts';
+import { isAsterionLocalPlayerId, type BattleReport } from '../domain/combat/report.ts';
+import { recordBattleScoreAward, selectOwnerScores } from '../domain/rating/scoring.ts';
 import type { FlightDestination, FlightRecord } from '../domain/flights/types.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 
@@ -113,6 +119,47 @@ function sumDestroyed(report: BattleReport, side: 'attacker' | 'defender') {
   return [...(force.stacks ?? []), ...(force.defenses ?? [])].reduce((total, stack) => total + (stack.destroyed ?? 0), 0);
 }
 
+function withBot01DeathStarUpgrade(state: ReturnType<typeof createInitialSaveState>, level: number) {
+  const espionage = state.espionage;
+  if (!espionage?.bot01Profile) throw new Error('Test Mode Bot 01 profile is required.');
+  return {
+    ...state,
+    espionage: {
+      ...espionage,
+      bot01Profile: {
+        ...espionage.bot01Profile,
+        shipLevels: { ...espionage.bot01Profile.shipLevels, 'death-star': level },
+      },
+    },
+  };
+}
+
+function expectedBattleAwards(report: BattleReport, playerOwnerId: string) {
+  const toStacks = (stacks: readonly { entityId: string; countBefore: number; countAfter: number }[] | undefined) => (stacks ?? []).map((stack) => ({
+    entityId: stack.entityId,
+    countBefore: stack.countBefore,
+    countAfter: stack.countAfter,
+  }));
+  const base = calculateBattlePoints(
+    report.winner,
+    toStacks(report.attackerForce.stacks),
+    toStacks(report.defenderForce.stacks),
+    toStacks(report.attackerForce.defenses),
+    toStacks(report.defenderForce.defenses),
+    getCombatFactionId(report.attacker.race),
+    getCombatFactionId(report.defender.race),
+  );
+  const ownerId = (playerId: string | undefined) => playerId && isAsterionLocalPlayerId(playerId)
+    ? playerOwnerId
+    : playerId;
+  const awards: Record<string, number> = {};
+  const attackerId = ownerId(report.attacker.playerId);
+  const defenderId = ownerId(report.defender.playerId);
+  if (attackerId) awards[attackerId] = (awards[attackerId] ?? 0) + base.attacker * (report.winner === 'attacker' ? 2 : 1);
+  if (defenderId) awards[defenderId] = (awards[defenderId] ?? 0) + base.defender * (report.winner === 'defender' ? 2 : 1);
+  return awards;
+}
+
 function resolveSurvivingBot01Demolition(
   state: ReturnType<typeof createInitialSaveState>,
   flight: FlightRecord,
@@ -149,6 +196,11 @@ test('attack resolves one live combat, records debris/repair, and credits loot o
   const report = arrival.state.combat.reports.at(-1)!;
   assert.equal(report.missionType, 'attack');
   assert.equal(report.id, `battle-attack-${sent.flight.id}`);
+  const awards = arrival.state.rating.battleAwardsByReportId[report.id];
+  assert.ok(awards);
+  assert.deepEqual(awards, expectedBattleAwards(report, state.profile.playerId));
+  assert.equal(selectOwnerScores(arrival.state)[state.profile.playerId]?.battlePoints, awards[state.profile.playerId]);
+  assert.strictEqual(recordBattleScoreAward(arrival.state.rating, report, state.profile.playerId), arrival.state.rating);
   assert.equal(report.defenderForce.populationBefore, sent.state.espionage!.targets![targetId].population.total);
   assert.ok((report.defenderForce.defenses ?? []).every((stack) => (
     (stack.entityId === 'tower-shield' || stack.entityId === 'planetary-shield') ? stack.countBefore <= 1 : true
@@ -165,6 +217,7 @@ test('attack resolves one live combat, records debris/repair, and credits loot o
   const replay = reconcileFlights(arrival.state, sent.flight.arrivalAt, undefined, { mode: 'test', testTimeScale: 15 });
   assert.equal(replay.changed, false);
   assert.equal(replay.state.combat.reports.length, arrival.state.combat.reports.length);
+  assert.deepEqual(replay.state.rating.battleAwardsByReportId, arrival.state.rating.battleAwardsByReportId);
 
   const returned = reconcileFlights(arrival.state, arrival.state.flights.records[0].returnAt!, undefined, {
     mode: 'test',
@@ -577,6 +630,11 @@ test('Bot 01 Test Mode preserves an exact-tie Space Flight when the seeded siege
   const incoming = reconcileFlights(persistence.read(), tieAt, undefined, { mode: 'test', testTimeScale: 1 });
   const attackReport = incoming.state.combat.reports.find((report) => report.id === `battle-bot01-incoming-${botFlight.id}`);
   assert.ok(attackReport);
+  const incomingAwards = incoming.state.rating.battleAwardsByReportId[attackReport!.id];
+  assert.ok(incomingAwards);
+  assert.deepEqual(incomingAwards, expectedBattleAwards(attackReport!, initial.profile.playerId));
+  assert.equal(incomingAwards[initial.profile.playerId], expectedBattleAwards(attackReport!, initial.profile.playerId)[initial.profile.playerId]);
+  assert.strictEqual(recordBattleScoreAward(incoming.state.rating, attackReport!, initial.profile.playerId), incoming.state.rating);
   assert.equal(attackReport?.winner, 'attacker');
   assert.equal(attackReport?.siege?.planetDestroyed, false);
   assert.equal(attackReport?.defenderForce.stacks.some((stack) => stack.entityId === 'transporter'), false);
@@ -718,7 +776,13 @@ test('an incoming Bot attack does not cancel an outbound Space Flight when the s
 test('Bot 01 can destroy an owned planet, persist its battle report, and burn flights from that origin', () => {
   const storage = new MemoryStorage();
   const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 1_000 });
-  const initial = persistence.read();
+  const base = withBot01DeathStarUpgrade(persistence.read(), 10);
+  const sourceId = 'npc-bot-01-planet-4';
+  const targets = {
+    ...base.espionage!.targets,
+    [sourceId]: createBot01Planets(1_000)[sourceId]!,
+  };
+  const initial = { ...base, espionage: { ...base.espionage!, targets, bot01Planets: targets } };
   const launched = startBot01IncomingScenario(initial, { now: 1_000, mode: 'test', testTimeScale: 1 });
   assert.equal(launched.ok, true);
   if (!launched.ok) return;
@@ -813,7 +877,27 @@ test('Bot 01 can destroy an owned planet, persist its battle report, and burn fl
 });
 
 test('surviving Bot 01 sieges reconcile factory bots and the last energy source', () => {
-  const base = createInitialSaveState('test', 1_000);
+  const initial = withBot01DeathStarUpgrade(createInitialSaveState('test', 1_000), 10);
+  const sourceId = 'npc-bot-01-planet-4';
+  const source = initial.espionage!.targets![sourceId]!;
+  const fleet = createEmptyFleetState();
+  fleet.ships['death-star'] = 1;
+  const fleetPopulation = calculateFleetPopulation(fleet, source.raceId);
+  const defensePopulation = calculateDefensePopulation(source.defense, source.raceId);
+  const sourceWithScenarioFleet = {
+    ...source,
+    fleet,
+    population: {
+      total: fleetPopulation + defensePopulation,
+      fleet: fleetPopulation,
+      defense: defensePopulation,
+    },
+  };
+  const targets = { ...initial.espionage!.targets, [sourceId]: sourceWithScenarioFleet };
+  const base = {
+    ...initial,
+    espionage: { ...initial.espionage!, targets, bot01Planets: targets },
+  };
   const launched = startBot01IncomingScenario(base, { now: 1_000, mode: 'test', testTimeScale: 1 });
   assert.equal(launched.ok, true);
   if (!launched.ok) return;
