@@ -6,6 +6,14 @@ export type PlayerScoreKey = 'achievementPoints' | 'totalPoints' | 'resourcePoin
 export type AllianceScoreKey = 'alliancePoints' | 'totalPoints';
 export type SortDirection = 'desc' | 'asc';
 
+export type OwnerScore = {
+  ownerId: string;
+  resourcePoints: number;
+  battlePoints: number;
+  totalPoints: number;
+  achievementPoints: 0;
+};
+
 export type PlayerRatingEntry = {
   id: string;
   rank: number;

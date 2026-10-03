@@ -21,7 +21,7 @@
     "test:command": "node --experimental-strip-types --test src/domain/command/command.test.ts src/domain/command/selectors.test.ts",
     "test:reports": "node --experimental-strip-types --test src/domain/reports/reports.test.ts",
     "test:settings": "node --experimental-strip-types --test src/domain/settings/settings.test.ts",
-    "test:rating": "node --experimental-strip-types --test src/domain/rating/rating.test.ts",
+    "test:rating": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/rating/rating.test.ts src/domain/rating/scoring.test.ts",
     "test:runtime": "node --experimental-strip-types --test src/domain/runtime/mode.test.ts",
     "test:resources": "node --experimental-strip-types --test src/domain/resources/credit.test.ts",
     "test:energy": "node --experimental-strip-types --test src/domain/energy/runtime.test.ts",

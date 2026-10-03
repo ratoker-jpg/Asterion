@@ -1326,7 +1326,7 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
     const hasCanonicalTargetRegistry = Boolean(objectRecord(rawEspionage?.targets));
     const hasLegacyBotRegistry = Boolean(objectRecord(rawEspionage?.bot01Planets));
     const migratedEspionage = migrateEspionageState(parsed.espionage, timestamp);
-    const defaultTestEspionage = createDefaultTestEspionageState(timestamp);
+    const defaultTestEspionage = createDefaultTestEspionageState(timestamp, { botFleet: 'seeded' });
     const savedTargets = Object.values(migratedEspionage.targets ?? {});
     const savedBotPlanets = savedTargets.filter((planet) => planet.ownerId === UNIVERSE_NPC_OWNER_ID);
     const legacyBotFixtures = savedBotPlanets.some((planet) => {

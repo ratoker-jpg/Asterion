@@ -20,6 +20,17 @@ test('view model exposes losses, rewards, and every saved round snapshot', () =>
   assert.deepEqual(viewModel.attacker.modifiers.map((modifier) => modifier.label), ['Построение', 'Командирский snapshot']);
 });
 
+test('battle report view model exposes persisted awards and leaves legacy reports unawarded', () => {
+  const legacy = createBattleReportViewModel(DEMO_BATTLE_REPORTS[0]);
+  const awarded = createBattleReportViewModel(DEMO_BATTLE_REPORTS[0], {
+    awardedBattlePoints: { attacker: 84, defender: 19 },
+  });
+
+  assert.equal(legacy.awardedBattlePoints, null);
+  assert.deepEqual(awarded.awardedBattlePoints, { attacker: 84, defender: 19 });
+  assert.notEqual(awarded.awardedBattlePoints.attacker, awarded.battlePoints.attacker);
+});
+
 test('view model derives stack losses from persisted counts when destroyed is missing', () => {
   const viewModel = createBattleReportViewModel({
     id: 'missing-destroyed',

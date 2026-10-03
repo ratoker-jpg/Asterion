@@ -17,6 +17,13 @@ const BOT_FACTION = 'veyra' as const;
 /** Planet population stays stable between save resets but looks random. */
 const POPULATION_MIN = 5_000;
 const POPULATION_MAX = 25_112;
+const TEST_MODE_BOT_DESTROYERS_PER_PLANET = 1_295;
+const TEST_MODE_BOT_PRIME_SUPPORT_FLEET = {
+  battleship: 1,
+  cruiser: 1,
+  transporter: 2,
+  scout: 4,
+} as const;
 
 // These values are owner-wide. The names match the Veyra catalogue shown in
 // the report and simulator: Носильщик 5, Тяжеловоз 6, Стрекоза 4, Скарабей 2.
@@ -47,6 +54,14 @@ export function createDefaultBot01Profile(): Bot01Profile {
     COMMANDER_IDS.map((id) => [id, id === 'hunter' ? 20 : id === 'judge' ? 1 : 0]),
   ) as Partial<Record<CommanderId, number>>;
   return { scienceLevels, shipLevels, commanderLevels };
+}
+
+function createFreshTestModeBot01Profile(): Bot01Profile {
+  const profile = createDefaultBot01Profile();
+  return {
+    ...profile,
+    shipLevels: { ...profile.shipLevels, 'death-star': 3 },
+  };
 }
 
 type PopulationUnit = { id: string; population: number };
@@ -186,14 +201,50 @@ export function createBot01Planets(now = Date.now()): Record<string, Bot01Planet
   }));
 }
 
-export function createDefaultTestEspionageState(now = Date.now()): EspionageState {
-  const targets = createBot01Planets(now);
+function createReducedTestModeBot01Planets(now: number): Record<string, Bot01PlanetState> {
+  const seededPlanets = createBot01Planets(now);
+  return Object.fromEntries(Object.values(seededPlanets).map((planet) => {
+    const ships = Object.fromEntries(Object.keys(planet.fleet.ships).map((shipId) => [shipId, 0])) as typeof planet.fleet.ships;
+    ships.destroyer = TEST_MODE_BOT_DESTROYERS_PER_PLANET;
+    if (planet.id === 'npc-bot-01-prime') {
+      ships.battleship = TEST_MODE_BOT_PRIME_SUPPORT_FLEET.battleship;
+      ships.cruiser = TEST_MODE_BOT_PRIME_SUPPORT_FLEET.cruiser;
+      ships.transporter = TEST_MODE_BOT_PRIME_SUPPORT_FLEET.transporter;
+      ships.scout = TEST_MODE_BOT_PRIME_SUPPORT_FLEET.scout;
+    }
+    if (planet.id === 'npc-bot-01-planet-4') ships['death-star'] = 1;
+    const commanders = Object.fromEntries(Object.keys(planet.fleet.commanders).map((commanderId) => [commanderId, 0])) as typeof planet.fleet.commanders;
+    const fleet = { ...planet.fleet, ships, commanders };
+    const defense = createEmptyDefenseState();
+    const fleetPopulation = calculateFleetPopulation(fleet, planet.raceId);
+    const defensePopulation = calculateDefensePopulation(defense, planet.raceId);
+    return [planet.id, {
+      ...planet,
+      fleet,
+      defense,
+      commanders: {},
+      population: {
+        total: fleetPopulation + defensePopulation,
+        fleet: fleetPopulation,
+        defense: defensePopulation,
+      },
+    }];
+  }));
+}
+
+export function createDefaultTestEspionageState(
+  now = Date.now(),
+  options: { botFleet?: 'reduced' | 'seeded' } = {},
+): EspionageState {
+  const targets = options.botFleet === 'seeded' ? createBot01Planets(now) : createReducedTestModeBot01Planets(now);
   return {
     missions: [],
     reports: [],
     hunterNotices: [],
     orbitalDebris: {},
-    bot01Profile: createDefaultBot01Profile(),
+    bot01Profile: options.botFleet === 'seeded'
+      ? createDefaultBot01Profile()
+      : createFreshTestModeBot01Profile(),
     targets,
     // Keep the alias in Test Mode while old saved fixtures and tests migrate.
     bot01Planets: targets,

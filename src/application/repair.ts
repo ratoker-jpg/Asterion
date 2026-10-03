@@ -23,6 +23,7 @@ import { getPlanetResources, getPlanetState, replacePlanetResources, replacePlan
 import { transitionPlanetEnergySources } from './energy.ts';
 import { SAVE_SCHEMA_VERSION } from './persistence.ts';
 import { isPlanetBlocked } from './overpopulation.ts';
+import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 
 export const REPAIR_REQUEST_EVENT = 'asterion:repair-request';
 export const REPAIR_NOTICE_CHANGED_EVENT = 'asterion:repair-notice-changed';
@@ -374,12 +375,17 @@ export function applyBattleResult(
       ? state.combat.reports
       : state.combat.reports.map((candidate, index) => index === reportIndex ? nextReport : candidate);
   const reportsChanged = nextReports !== state.combat.reports;
-  if (!claim.changed && !reportsChanged && !defenderLosses.changed) return { state, report: nextReport, changed: false };
+  const rating = reportIndex < 0
+    ? recordBattleScoreAward(state.rating, nextReport, state.profile.playerId)
+    : state.rating;
+  const ratingChanged = rating !== state.rating;
+  if (!claim.changed && !reportsChanged && !defenderLosses.changed && !ratingChanged) return { state, report: nextReport, changed: false };
 
   const nextState = replacePlanetState({
     ...state,
     schemaVersion: SAVE_SCHEMA_VERSION,
     combat: reportsChanged ? { ...state.combat, reports: nextReports } : state.combat,
+    rating,
   }, planetId, {
     ...defenderLosses.planet,
     repair: claim.state,

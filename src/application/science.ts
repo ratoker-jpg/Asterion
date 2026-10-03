@@ -43,6 +43,7 @@ import {
   isPlanetOverpopulated,
 } from '../domain/fleet/overpopulation.ts';
 import { isPlanetBlocked } from './overpopulation.ts';
+import { addUnrecoveredResourceCost } from '../domain/rating/scoring.ts';
 
 export type ScienceApplicationContext = {
   planetId: PlanetId;
@@ -185,11 +186,19 @@ export function cancelScience(
     testTimeScale: context.testTimeScale,
     rng: context.rng,
   }, taskId);
+  const nextState = transition.ok
+    ? stateFromScienceTransition(state, context.planetId, transition.state, transition.wallet)
+    : state;
+  const paidCost = transition.canceledTasks.reduce((total, task) => ({
+    metal: total.metal + task.cost.metal,
+    minerals: total.minerals + task.cost.minerals,
+    gas: total.gas + task.cost.gas,
+  }), { metal: 0, minerals: 0, gas: 0 });
   return {
     transition,
     state: transition.ok
-      ? stateFromScienceTransition(state, context.planetId, transition.state, transition.wallet)
-      : state,
+      ? { ...nextState, rating: addUnrecoveredResourceCost(nextState.rating, nextState.profile.playerId, paidCost, transition.refund) }
+      : nextState,
   };
 }
 
