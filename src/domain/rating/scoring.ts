@@ -6,6 +6,7 @@ import { COMMANDER_COMBAT_CATALOG } from '../combat/catalog.ts';
 import type { ResourceCost } from '../combat/types.ts';
 import { getBuildingBalanceRow, BUILDING_ROLES, type BuildingRole, type BuildingQueueItem } from '../buildings/resource-zone.ts';
 import { getFactionSpaceportUpgradeBalance } from '../buildings/spaceport-upgrade-balance-v1.ts';
+import { getCommanderSpaceportUpgradeBalance } from '../buildings/commander-upgrade-balance-v1.ts';
 import type { SpaceportUpgradeState } from '../buildings/spaceport-upgrades.ts';
 import { SCIENCE_CATALOG } from '../science/catalog.ts';
 import { calculateScienceCost } from '../science/runtime.ts';
@@ -87,11 +88,14 @@ function scienceLevelValue(scienceId: ScienceId, value: unknown): number {
   return total;
 }
 
-function shipUpgradeLevelValue(factionId: CombatFactionId, shipId: string, value: unknown): number {
+function spaceportUpgradeLevelValue(factionId: CombatFactionId, shipId: string, value: unknown): number {
   const level = safeCount(value);
+  const isCommander = COMMANDER_COMBAT_CATALOG.some((entity) => entity.id === shipId);
   let total = 0;
   for (let fromLevel = 0; fromLevel < level; fromLevel += 1) {
-    const balance = getFactionSpaceportUpgradeBalance(factionId, shipId, fromLevel);
+    const balance = isCommander
+      ? getCommanderSpaceportUpgradeBalance(shipId as CommanderId, fromLevel)
+      : getFactionSpaceportUpgradeBalance(factionId, shipId, fromLevel);
     if (balance) total += resourceValue(balance.cost);
   }
   return total;
@@ -132,7 +136,7 @@ export function calculateResourceScore(input: ResourceScoreInput): { resourcePoi
       // Legacy per-planet levels are included only as a fallback; current saves
       // move these to the owner-wide map and clear the planet copies.
       if (input.shipUpgradeLevels?.[shipId] === undefined) {
-        resourceTotal += shipUpgradeLevelValue(factionId, shipId, level);
+        resourceTotal += spaceportUpgradeLevelValue(factionId, shipId, level);
       }
     }
     for (const task of planet.spaceportUpgrades?.shipQueue ?? []) resourceTotal += resourceValue(task.cost);
@@ -141,7 +145,7 @@ export function calculateResourceScore(input: ResourceScoreInput): { resourcePoi
 
   for (const science of SCIENCE_CATALOG) resourceTotal += scienceLevelValue(science.id, input.scienceLevels?.[science.id]);
   for (const [shipId, level] of Object.entries(input.shipUpgradeLevels ?? {})) {
-    resourceTotal += shipUpgradeLevelValue(input.factionId, shipId, level);
+    resourceTotal += spaceportUpgradeLevelValue(input.factionId, shipId, level);
   }
   for (const task of input.queuedScience ?? []) resourceTotal += resourceValue(task.cost);
   for (const entity of getFactionShipCatalog(input.factionId)) {
@@ -364,7 +368,7 @@ export function selectOwnerScores(state: SaveState): Record<string, OwnerScore> 
     const profile = target.ownerId === UNIVERSE_NPC_OWNER_ID ? state.espionage?.bot01Profile : target.ownerProfile;
     if (profile) {
       owner.scienceLevels = profile.scienceLevels;
-      owner.shipUpgradeLevels = { ...profile.shipLevels };
+      owner.shipUpgradeLevels = { ...profile.shipLevels, ...profile.commanderLevels };
     }
     owners.set(target.ownerId, owner);
   }

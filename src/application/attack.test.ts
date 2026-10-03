@@ -619,8 +619,8 @@ test('Bot 01 Test Mode preserves an exact-tie Space Flight when the seeded siege
   assert.equal(initial.espionage?.bot01IncomingScenario, undefined);
   assert.equal(initial.flights.records.some((flight) => flight.ownerSide === 'bot01'), false);
   const initialBotPoints = selectOwnerScores(initial)[UNIVERSE_NPC_OWNER_ID]!.resourcePoints;
-  assert.equal(selectOwnerScores(loaded)[UNIVERSE_NPC_OWNER_ID]!.resourcePoints, 1_000_000);
-  assert.equal(initialBotPoints, 1_000_005);
+  assert.equal(selectOwnerScores(loaded)[UNIVERSE_NPC_OWNER_ID]!.resourcePoints, 1_003_344);
+  assert.equal(initialBotPoints, 1_003_349);
   const productionAttempt = startBot01IncomingScenario(initial, { now: 1_000, mode: 'production' });
   assert.equal(productionAttempt.ok, false);
 

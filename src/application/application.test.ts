@@ -22,6 +22,7 @@ import {
   executeTradeAction,
   previewBuilding,
   reconcileRecycling,
+  reconcileSpaceport,
   startBuilding,
   startRecycling,
   startSpaceportUpgrade,
@@ -176,7 +177,7 @@ test('Test Mode scores the player and Bot 001 from their separate asset pools an
   const player = scores[state.profile.playerId];
   const bot = scores[UNIVERSE_NPC_OWNER_ID];
   assert.deepEqual(player && [player.resourcePoints, player.battlePoints, player.totalPoints, player.achievementPoints], [20_703, 0, 20_703, 0]);
-  assert.deepEqual(bot && [bot.resourcePoints, bot.battlePoints, bot.totalPoints, bot.achievementPoints], [1_000_000, 0, 1_000_000, 0]);
+  assert.deepEqual(bot && [bot.resourcePoints, bot.battlePoints, bot.totalPoints, bot.achievementPoints], [1_003_344, 0, 1_003_344, 0]);
 
   const targets = Object.values(state.espionage?.targets ?? {}).filter((target) => target.ownerId === UNIVERSE_NPC_OWNER_ID);
   const profile = state.espionage?.bot01Profile;
@@ -192,22 +193,29 @@ test('Test Mode scores the player and Bot 001 from their separate asset pools an
     buildingQueue: target.buildingQueue,
   }));
   const botLocal = calculateResourceScore({ factionId, planets: botPlanets });
-  const botGlobal = calculateResourceScore({
+  const botShipUpgrades = calculateResourceScore({
     factionId,
     planets: [],
     scienceLevels: profile.scienceLevels,
     shipUpgradeLevels: profile.shipLevels,
   });
+  const botCommanderUpgrades = calculateResourceScore({
+    factionId,
+    planets: [],
+    shipUpgradeLevels: profile.commanderLevels,
+  });
   const botCombined = calculateResourceScore({
     factionId,
     planets: botPlanets,
     scienceLevels: profile.scienceLevels,
-    shipUpgradeLevels: profile.shipLevels,
+    shipUpgradeLevels: { ...profile.shipLevels, ...profile.commanderLevels },
   });
   assert.equal(botLocal.resourceTotal, 969_228_885);
-  assert.equal(botGlobal.resourceTotal, 30_770_625);
-  assert.equal(botCombined.resourceTotal, botLocal.resourceTotal + botGlobal.resourceTotal);
-  assert.equal(botCombined.resourceTotal, 999_999_510);
+  assert.equal(botShipUpgrades.resourceTotal, 30_770_625);
+  assert.equal(profile.commanderLevels.hunter, 20);
+  assert.equal(profile.commanderLevels.judge, 1);
+  assert.ok(botCommanderUpgrades.resourceTotal > 0);
+  assert.equal(botCombined.resourceTotal, botLocal.resourceTotal + botShipUpgrades.resourceTotal + botCommanderUpgrades.resourceTotal);
   assert.equal(botCombined.resourcePoints, bot?.resourcePoints);
 
   const playerPlanets = Object.entries(state.planets).map(([planetId, planet]) => ({
@@ -229,6 +237,52 @@ test('Test Mode scores the player and Bot 001 from their separate asset pools an
   });
   assert.equal(playerScore.resourceTotal, 20_703_450);
   assert.equal(playerScore.resourcePoints, player?.resourcePoints);
+});
+
+test('player resource score stays constant when a commander upgrade moves from queue to completed level', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const planetId = 'helion-01';
+  const planet = initial.planets[planetId]!;
+  const prepared: SaveState = {
+    ...initial,
+    metal: 1_000_000_000,
+    minerals: 1_000_000_000,
+    gas: 1_000_000_000,
+    science: {
+      ...initial.science,
+      levels: Object.fromEntries(SCIENCE_CATALOG.map((science) => [science.id, science.maxLevel])) as typeof initial.science.levels,
+    },
+    planets: {
+      ...initial.planets,
+      [planetId]: {
+        ...planet,
+        buildings: { ...planet.buildings, shipyard: 40, spaceport: 40 },
+        resources: { metal: 1_000_000_000, minerals: 1_000_000_000, gas: 1_000_000_000 },
+      },
+    },
+  };
+  const started = startSpaceportUpgrade(prepared, context(1_000), 'commanders', 'corsair', 'player-corsair-upgrade');
+  assert.equal(started.ok, true);
+  const task = started.state.planets[planetId]!.spaceportUpgrades.commanderQueue[0];
+  assert.ok(task);
+  const scoreWhileQueued = selectOwnerScores(started.state)[started.state.profile.playerId]!.resourcePoints;
+
+  const completed = reconcileSpaceport(started.state, context(task.finishAt));
+  assert.equal(completed.ok, true);
+  assert.equal(completed.completed.length, 1);
+  assert.equal(completed.completed[0]?.track, 'commanders');
+  assert.equal(completed.state.shipUpgradeLevels?.corsair, task.toLevel);
+  assert.equal(completed.state.planets[planetId]!.spaceportUpgrades.commanderQueue.length, 0);
+  const scoreAfterCompletion = selectOwnerScores(completed.state)[completed.state.profile.playerId]!.resourcePoints;
+  assert.equal(scoreAfterCompletion, scoreWhileQueued);
+
+  const reconciledAgain = reconcileSpaceport(completed.state, context(task.finishAt));
+  assert.equal(reconciledAgain.completed.length, 0);
+  assert.equal(
+    selectOwnerScores(reconciledAgain.state)[completed.state.profile.playerId]!.resourcePoints,
+    scoreAfterCompletion,
+    'reconciling an already-applied commander level cannot count the upgrade twice',
+  );
 });
 
 test('asteroid simulation, hidden cargo, and recycler history round-trip through persistence', () => {

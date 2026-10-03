@@ -4,6 +4,11 @@ import { createCanonicalStartingFleet, createEmptyFleetState } from '../fleet/ru
 import { createDefaultFleetProductionState, createEmptyDefenseState, reconcileFleetProductionState, type FleetProductionState } from '../fleet/production.ts';
 import { COMMANDER_COMBAT_CATALOG } from '../combat/catalog.ts';
 import type { OwnedFleetState } from '../fleet/runtime.ts';
+import { getCommanderSpaceportUpgradeBalance } from '../buildings/commander-upgrade-balance-v1.ts';
+import { createDefaultSpaceportUpgradeState, enqueueSpaceportUpgrade, reconcileSpaceportUpgradeState } from '../buildings/spaceport-upgrades.ts';
+import { createDefaultBuildingLevels } from '../buildings/resource-zone.ts';
+import { SCIENCE_CATALOG } from '../science/catalog.ts';
+import { createDefaultBot01Profile } from '../espionage/fixtures.ts';
 import { calculateBattlePoints } from '../combat/battle-points.ts';
 import { DEMO_BATTLE_REPORTS } from '../combat/battle-fixtures.ts';
 import { getCombatFactionId } from '../combat/factions.ts';
@@ -82,6 +87,70 @@ test('owned commanders and their saved production order retain the same value th
   assert.equal(completed.fleet.commanders.corsair, 2);
   assert.equal(completed.state.commanderQueue.length, 0);
   assert.equal(completedScore, queuedScore);
+});
+
+test('completed commander upgrade levels use the commander balance table across every transition', () => {
+  const expected = [0, 1, 2].reduce((total, fromLevel) => {
+    const balance = getCommanderSpaceportUpgradeBalance('corsair', fromLevel);
+    assert.ok(balance);
+    return total + resourceValueForCommanderCost(balance.cost);
+  }, 0);
+  const commanderScore = calculateResourceScore({
+    factionId: 'aegis',
+    planets: [],
+    shipUpgradeLevels: { corsair: 3 },
+  });
+  assert.equal(commanderScore.resourceTotal, expected);
+
+  const ordinary = calculateResourceScore({
+    factionId: 'aegis',
+    planets: [],
+    shipUpgradeLevels: { scout: 1 },
+  });
+  assert.ok(ordinary.resourceTotal > 0, 'ordinary ship levels continue to use the faction upgrade balance');
+});
+
+test('Bot 001 saved commander upgrade level has the same value before and after its queued transition completes', () => {
+  const botProfile = createDefaultBot01Profile();
+  const startingLevel = botProfile.commanderLevels.hunter ?? 0;
+  assert.equal(startingLevel, 20);
+  const context = {
+    state: { ...createDefaultSpaceportUpgradeState(), shipLevels: { ...createDefaultSpaceportUpgradeState().shipLevels, hunter: startingLevel } },
+    wallet: { metal: 1_000_000_000, minerals: 1_000_000_000, gas: 1_000_000_000 },
+    buildings: { ...createDefaultBuildingLevels(), shipyard: 40 },
+    scienceLevels: Object.fromEntries(SCIENCE_CATALOG.map((science) => [science.id, science.maxLevel])),
+    spaceportLevel: 40,
+    factionId: 'veyra' as const,
+    mode: 'test' as const,
+    testTimeScale: 1 as const,
+  };
+  const queued = enqueueSpaceportUpgrade(context, 'commanders', 'hunter', 1_000, 'bot-hunter-21');
+  assert.equal(queued.ok, true, queued.reason ?? 'Bot 001 commander upgrade should be queueable for the transition regression');
+  assert.ok(queued.task);
+  const input = (upgrades: ReturnType<typeof createDefaultSpaceportUpgradeState>, level: number) => ({
+    factionId: 'veyra' as const,
+    planets: [{
+      factionId: 'veyra' as const,
+      buildings: {},
+      fleet: createEmptyFleetState(),
+      defense: createEmptyDefenseState(),
+      spaceportUpgrades: upgrades,
+    }],
+    shipUpgradeLevels: { hunter: level },
+  });
+  const beforeCompletion = calculateResourceScore(input(queued.state, startingLevel));
+  const completed = reconcileSpaceportUpgradeState(queued.state, queued.task!.finishAt);
+  const afterCompletion = calculateResourceScore(input(completed.state, startingLevel + 1));
+
+  assert.equal(completed.completed.length, 1);
+  assert.equal(completed.state.commanderQueue.length, 0);
+  assert.deepEqual(afterCompletion, beforeCompletion);
+  assert.deepEqual(reconcileSpaceportUpgradeState(completed.state, queued.task!.finishAt), {
+    changed: false,
+    state: completed.state,
+    completed: [],
+  });
+  assert.deepEqual(calculateResourceScore(input(completed.state, startingLevel + 1)), beforeCompletion);
 });
 
 test('canceled queue ledger retains only the unrecovered M/M/G investment', () => {
@@ -203,7 +272,11 @@ test('defender victory doubles only the defender award; defeat remains base and 
 });
 
 function resourceValueForCommander(commander: (typeof COMMANDER_COMBAT_CATALOG)[number]) {
-  return commander.cost.metal + commander.cost.minerals + commander.cost.gas;
+  return resourceValueForCommanderCost(commander.cost);
+}
+
+function resourceValueForCommanderCost(cost: { metal: number; minerals: number; gas: number }) {
+  return cost.metal + cost.minerals + cost.gas;
 }
 
 test('simulator reports do not award persistent battle score', () => {
