@@ -23,6 +23,7 @@ import { recordBattleScoreAward, selectOwnerScores } from '../domain/rating/scor
 import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import type { FlightDestination, FlightRecord } from '../domain/flights/types.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
+import type { CommanderId } from '../domain/combat/commanders.ts';
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -34,6 +35,7 @@ class MemoryStorage {
 type AttackCommandOptions = {
   targetRelation?: 'enemy' | 'neutral';
   selectedShips?: Partial<Record<ShipId, number>>;
+  selectedCommanders?: Partial<Record<CommanderId, number>>;
   departedAt?: number;
   maxRounds?: 5 | 8 | 12;
 };
@@ -54,7 +56,7 @@ function attackCommand(
     targetRelation: options.targetRelation ?? 'neutral',
     targetOwnerId: target.ownerId,
     selectedShips: options.selectedShips ?? { scout: 10 },
-    selectedCommanders: {},
+    selectedCommanders: options.selectedCommanders ?? {},
     maxRounds: options.maxRounds ?? 5,
     departedAt: options.departedAt ?? 1_000,
   };
@@ -236,6 +238,43 @@ test('attack resolves one live combat, records debris/repair, and credits loot o
   const returnedAgain = reconcileFlights(returned.state, arrival.state.flights.records[0].returnAt! + 1, undefined, { mode: 'test', testTimeScale: 15 });
   assert.equal(returnedAgain.changed, false);
   assert.equal(returnedAgain.state.combat.reports.length, returned.state.combat.reports.length);
+});
+
+test('player commander score stays single-counted in flight and follows actual battle losses', () => {
+  const base = createInitialSaveState('test', 1_000);
+  const playerId = base.profile.playerId;
+  const home = base.planets[base.currentPlanetId]!;
+  const withCommander = replacePlanetState(base, base.currentPlanetId, {
+    ...home,
+    fleet: { ...home.fleet, commanders: { ...home.fleet.commanders, corsair: 1 } },
+  });
+  const targetId = Object.keys(withCommander.espionage!.targets!)[0]!;
+  const beforeDispatch = selectOwnerScores(withCommander)[playerId]!.resourcePoints;
+  const sent = dispatchFlight(withCommander, attackCommand(withCommander, 'commander-score-flight', targetId, {
+    selectedShips: { scout: 1 },
+    selectedCommanders: { corsair: 1 },
+  }), { now: 1_000, mode: 'test', testTimeScale: 1 });
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+
+  assert.equal(sent.state.planets[base.currentPlanetId]?.fleet.commanders.corsair, 1);
+  assert.equal(selectOwnerScores(sent.state)[playerId]?.resourcePoints, beforeDispatch);
+  const arrival = reconcileFlights(sent.state, sent.flight.arrivalAt, undefined, { mode: 'test', testTimeScale: 1 });
+  const report = arrival.state.combat.reports.find((candidate) => candidate.id === `battle-attack-${sent.flight.id}`);
+  assert.ok(report);
+  const corsairSurvivors = report!.attackerForce.stacks.find((stack) => stack.entityId === 'corsair')?.countAfter ?? 0;
+  assert.equal(corsairSurvivors, 0, 'the seeded Bot battle destroys the dispatched commander');
+  const noCommanderFleet = arrival.state.planets[base.currentPlanetId]!.fleet;
+  const noCommanderState = replacePlanetState(arrival.state, base.currentPlanetId, {
+    ...arrival.state.planets[base.currentPlanetId]!,
+    fleet: { ...noCommanderFleet, commanders: { ...noCommanderFleet.commanders, corsair: 0 } },
+  });
+  assert.equal(
+    selectOwnerScores(arrival.state)[playerId]?.resourcePoints,
+    selectOwnerScores(noCommanderState)[playerId]?.resourcePoints + corsairSurvivors * 5,
+  );
+  const returned = reconcileFlights(arrival.state, arrival.state.flights.records.find((flight) => flight.id === sent.flight.id)!.returnAt!, undefined, { mode: 'test', testTimeScale: 1 });
+  assert.equal(selectOwnerScores(returned.state)[playerId]?.resourcePoints, selectOwnerScores(arrival.state)[playerId]?.resourcePoints);
 });
 
 test('successful Planetolom siege removes the authoritative target and replays the historical report after target disappearance', () => {
@@ -570,12 +609,18 @@ test('Bot 01 Test Mode preserves an exact-tie Space Flight when the seeded siege
     removeItem: (key: string) => { values.delete(key); },
   };
   const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 1_000 });
-  const initial = persistence.read();
+  const loaded = persistence.read();
+  const botSource = loaded.espionage!.targets!['npc-bot-01-planet-4']!;
+  const initial = replaceTarget(loaded, botSource.id, {
+    ...botSource,
+    fleet: { ...botSource.fleet, commanders: { ...botSource.fleet.commanders, corsair: 1 } },
+  });
   assert.deepEqual(Object.keys(initial.planets), ['helion-01']);
   assert.equal(initial.espionage?.bot01IncomingScenario, undefined);
   assert.equal(initial.flights.records.some((flight) => flight.ownerSide === 'bot01'), false);
   const initialBotPoints = selectOwnerScores(initial)[UNIVERSE_NPC_OWNER_ID]!.resourcePoints;
-  assert.equal(initialBotPoints, 1_000_000);
+  assert.equal(selectOwnerScores(loaded)[UNIVERSE_NPC_OWNER_ID]!.resourcePoints, 1_000_000);
+  assert.equal(initialBotPoints, 1_000_005);
   const productionAttempt = startBot01IncomingScenario(initial, { now: 1_000, mode: 'production' });
   assert.equal(productionAttempt.ok, false);
 
@@ -583,6 +628,8 @@ test('Bot 01 Test Mode preserves an exact-tie Space Flight when the seeded siege
   assert.equal(launched.ok, true);
   if (!launched.ok) return;
   assert.equal(selectOwnerScores(launched.state)[UNIVERSE_NPC_OWNER_ID]?.resourcePoints, initialBotPoints);
+  assert.equal(launched.flight.selectedCommanders?.corsair, 1);
+  assert.equal(launched.state.espionage?.targets?.[launched.flight.originPlanetId]?.fleet.commanders.corsair, 0);
   assert.equal(launched.created, true);
   assert.equal(Object.keys(launched.state.planets).length, 2);
   const targetId = launched.flight.destinationPlanetId!;
@@ -641,6 +688,11 @@ test('Bot 01 Test Mode preserves an exact-tie Space Flight when the seeded siege
   const incoming = reconcileFlights(persistence.read(), tieAt, undefined, { mode: 'test', testTimeScale: 1 });
   const attackReport = incoming.state.combat.reports.find((report) => report.id === `battle-bot01-incoming-${botFlight.id}`);
   assert.ok(attackReport);
+  const corsairAfterBattle = attackReport!.attackerForce.stacks.find((stack) => stack.entityId === 'corsair')?.countAfter ?? 0;
+  assert.equal(
+    selectOwnerScores(incoming.state)[UNIVERSE_NPC_OWNER_ID]?.resourcePoints,
+    initialBotPoints - (1 - corsairAfterBattle) * 5,
+  );
   const incomingAwards = incoming.state.rating.battleAwardsByReportId[attackReport!.id];
   assert.ok(incomingAwards);
   assert.deepEqual(incomingAwards, expectedBattleAwards(attackReport!, initial.profile.playerId));

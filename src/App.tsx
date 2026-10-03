@@ -1460,6 +1460,7 @@ export function App() {
               espionage={state.espionage}
               profile={state.profile}
               score={selectOwnerScores(state)[state.profile.playerId] ?? null}
+              rating={state.rating}
               mode={RUNTIME_MODE}
               state={state.reports}
               onStateChange={(reports) => setState((current) => ({ ...current, reports }))}

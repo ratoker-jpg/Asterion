@@ -29,6 +29,8 @@ import type { PlayerProfileState } from './domain/profile/types.ts';
 import { selectPlayerProfileMetrics } from './domain/profile/selectors.ts';
 import type { PlayerProfileMetricKey } from './domain/profile/selectors.ts';
 import type { OwnerScore } from './domain/rating/types.ts';
+import type { RatingPrototypeState } from './domain/rating/fixtures.ts';
+import { selectRecordedBattlePointAwards } from './domain/rating/scoring.ts';
 import { RUNTIME_RESET_EVENT, type RuntimeMode } from './domain/runtime/mode.ts';
 import type { SpyReportSnapshot } from './domain/espionage/types.ts';
 import { COMMANDER_ABILITIES, formatCommanderAbilityEffect, type CommanderId } from './domain/combat/commanders.ts';
@@ -257,8 +259,10 @@ function SpyDossier({ item, report, onOpenUniverseTarget }: {
   );
 }
 
-function BattleDossier({ item, report, saved, onToggleSaved, onOpen }: { item: ReportItem; report: BattleReport; saved: boolean; onToggleSaved: () => void; onOpen: () => void }) {
-  const viewModel = createBattleReportViewModel(report);
+function BattleDossier({ item, report, saved, rating, playerOwnerId, onToggleSaved, onOpen }: { item: ReportItem; report: BattleReport; saved: boolean; rating: RatingPrototypeState; playerOwnerId: string; onToggleSaved: () => void; onOpen: () => void }) {
+  const viewModel = createBattleReportViewModel(report, {
+    awardedBattlePoints: selectRecordedBattlePointAwards(rating, report, playerOwnerId),
+  });
   return (
     <div className="reports-dossier reports-dossier--battle">
       <div className="reports-dossier-heading">
@@ -331,7 +335,7 @@ function FolderActions({ folder, items, selectedIds, onSelectAll, onDeleteAll, o
   );
 }
 
-export function ReportsView({ battleReports, savedBattleReportIds, operations, command, espionage, profile, score, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget }: {
+export function ReportsView({ battleReports, savedBattleReportIds, operations, command, espionage, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget }: {
   battleReports: readonly BattleReport[];
   savedBattleReportIds: readonly string[];
   operations: OperationsState;
@@ -339,6 +343,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
   espionage?: import('./domain/espionage/types.ts').EspionageState;
   profile: PlayerProfileState;
   score: OwnerScore | null;
+  rating: RatingPrototypeState;
   mode: RuntimeMode;
   state: ReportsState;
   onStateChange: (next: ReportsState) => void;
@@ -370,7 +375,9 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
   const selectedBattle = findBattleReport(battleReports, selectedItem);
   const selectedBattleSaved = selectedItem?.battleReportId ? savedBattleReportIds.includes(selectedItem.battleReportId) : false;
   const openBattleReport = openBattleReportId ? battleReports.find((report) => report.id === openBattleReportId) ?? null : null;
-  const openBattleViewModel = openBattleReport ? createBattleReportViewModel(openBattleReport) : null;
+  const openBattleViewModel = openBattleReport ? createBattleReportViewModel(openBattleReport, {
+    awardedBattlePoints: selectRecordedBattlePointAwards(rating, openBattleReport, profile.playerId),
+  }) : null;
 
   useEffect(() => {
     setPage(1);
@@ -476,7 +483,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
 
         <section className="reports-preview">
           <header className="reports-preview-head"><div><small>ДОСЬЕ СООБЩЕНИЯ</small><h2>ПРОСМОТР СООБЩЕНИЯ</h2></div>{activeCategory ? <div className="reports-preview-actions"><button type="button" aria-label={selectedBattleSaved ? 'Убрать бой из сохранённых' : 'Сохранить бой'} aria-pressed={selectedBattleSaved} disabled={!selectedItem?.battleReportId} className={selectedBattleSaved ? 'active' : ''} onClick={() => selectedItem?.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)}><ActionGlyph kind="save" /></button><span /><button type="button" aria-label="Предыдущее сообщение" disabled={selectedIndex <= 0} onClick={() => navigateSelected(-1)}><ActionGlyph kind="prev" /></button><button type="button" aria-label="Следующее сообщение" disabled={selectedIndex < 0 || selectedIndex >= visibleItems.length - 1} onClick={() => navigateSelected(1)}><ActionGlyph kind="next" /></button></div> : null}</header>
-          <div className="reports-preview-scroll">{activeCategory ? selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} saved={selectedBattleSaved} onToggleSaved={() => selectedItem.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)} onOpen={() => selectedBattle && setOpenBattleReportId(selectedBattle.id)} /> : selectedItem.overpopulationReport ? <OverpopulationDossier item={selectedItem} /> : selectedItem.spyReport ? <SpyDossier item={selectedItem} report={selectedItem.spyReport} onOpenUniverseTarget={onOpenUniverseTarget} /> : <GenericDossier item={selectedItem} />) : <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} /> : <EmptyFolder folder={activeFolderMeta} />}</div>
+          <div className="reports-preview-scroll">{activeCategory ? selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} saved={selectedBattleSaved} rating={rating} playerOwnerId={profile.playerId} onToggleSaved={() => selectedItem.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)} onOpen={() => selectedBattle && setOpenBattleReportId(selectedBattle.id)} /> : selectedItem.overpopulationReport ? <OverpopulationDossier item={selectedItem} /> : selectedItem.spyReport ? <SpyDossier item={selectedItem} report={selectedItem.spyReport} onOpenUniverseTarget={onOpenUniverseTarget} /> : <GenericDossier item={selectedItem} />) : <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} /> : <EmptyFolder folder={activeFolderMeta} />}</div>
           {activeCategory && selectedItem?.action?.kind === 'open_fleets' ? <footer className="reports-preview-footer"><span>Выбери состав флота для совместной операции.</span><button type="button" onClick={onOpenFleets}>{selectedItem.action.label}</button></footer> : activeCategory && selectedItem?.source === 'espionage' && (selectedItem.action || selectedItem.secondaryAction) ? <footer className="reports-preview-footer"><span>{selectedItem.secondaryAction ? 'Связанный шпионский зонд ещё находится на орбите.' : 'Действия по полному снимку цели.'}</span><div className="reports-preview-footer-actions">
             {selectedItem.action?.kind === 'simulate_battle' && selectedItem.spyReport ? <button type="button" onClick={() => onSimulateBattle(selectedItem.spyReport!)}>{selectedItem.action.label}</button> : null}
             {selectedItem.secondaryAction?.kind === 'recall_spy' && selectedItem.secondaryAction.missionId ? <button type="button" className="restore" onClick={() => onRecallSpy(selectedItem.secondaryAction!.missionId!)}>{selectedItem.secondaryAction.label}</button> : null}

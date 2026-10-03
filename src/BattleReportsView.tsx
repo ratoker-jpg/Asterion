@@ -38,7 +38,9 @@ import {
   type BattleTechnologyViewModel,
 } from './domain/combat/battle-report-view-model.ts';
 import { getFactionGeneralAsset } from './domain/profile/faction-assets.ts';
-import { ACTIVE_RUNTIME_MODE, RUNTIME_RESET_EVENT } from './domain/runtime/mode.ts';
+import { createPersistenceFacade } from './application/persistence.ts';
+import { selectRecordedBattlePointAwards } from './domain/rating/scoring.ts';
+import { ACTIVE_RUNTIME_MODE, RUNTIME_RESET_EVENT, RUNTIME_STATE_CHANGED_EVENT } from './domain/runtime/mode.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
@@ -191,8 +193,8 @@ function battleCardSideMeta(side: BattleSideViewModel) {
 
 function battleCardPoints(viewModel: BattleReportViewModel, side: BattleSideViewModel) {
   return side.participant.side === 'attacker'
-    ? viewModel.battlePoints.attacker
-    : viewModel.battlePoints.defender;
+    ? viewModel.awardedBattlePoints?.attacker ?? null
+    : viewModel.awardedBattlePoints?.defender ?? null;
 }
 
 function battleCardResourcePointsLost(viewModel: BattleReportViewModel, side: BattleSideViewModel) {
@@ -229,9 +231,10 @@ function LossSummary({ side, className = '' }: { side: BattleSideViewModel; clas
 }
 
 function CardPoints({ viewModel, side, className = '' }: { viewModel: BattleReportViewModel; side: BattleSideViewModel; className?: string }) {
+  const awardedPoints = battleCardPoints(viewModel, side);
   return (
-    <div className={`battle-card-points-v1 ${className}`}>
-      <span><small>ПОЛУЧЕНО БОЕВЫХ ОЧКОВ</small><b>+{formatNumber(battleCardPoints(viewModel, side))}</b></span>
+    <div className={`battle-card-points-v1 ${className}`} data-qa-battle-award-state={awardedPoints == null ? 'missing' : 'recorded'}>
+      <span><small>{awardedPoints == null ? 'НЕТ ЗАПИСИ О НАЧИСЛЕНИИ' : 'ПОЛУЧЕНО БОЕВЫХ ОЧКОВ'}</small><b>{awardedPoints == null ? 'Не зафиксировано' : `+${formatNumber(awardedPoints)}`}</b></span>
       <span><small>РЕСУРСНЫЕ ОЧКИ · ПОТЕРЯНО</small><b>−{formatResourcePoints(battleCardResourcePointsLost(viewModel, side))}</b></span>
     </div>
   );
@@ -938,14 +941,14 @@ function OutcomePointsPanel({
   className = '',
 }: {
   sideLabel: string;
-  points: number;
+  points: number | null;
   resourcePointsLost: number;
   winner: boolean;
   className?: string;
 }) {
   return (
-    <div className={`battle-outcome-points-panel-v1 ${winner ? 'winner' : ''} ${className}`} data-qa-battle-points>
-      <div><small>{sideLabel} · ПОЛУЧЕНО БОЕВЫХ ОЧКОВ</small><strong>{formatNumber(points)}</strong></div>
+    <div className={`battle-outcome-points-panel-v1 ${winner ? 'winner' : ''} ${className}`} data-qa-battle-points data-qa-battle-award-state={points == null ? 'missing' : 'recorded'}>
+      <div><small>{sideLabel} · {points == null ? 'НЕТ ЗАПИСИ О НАЧИСЛЕНИИ' : 'ПОЛУЧЕНО БОЕВЫХ ОЧКОВ'}</small><strong>{points == null ? 'Не зафиксировано' : formatNumber(points)}</strong></div>
       <div><small>РЕСУРСНЫЕ ОЧКИ · ПОТЕРЯНО</small><b>−{formatResourcePoints(resourcePointsLost)}</b><span>очков</span></div>
     </div>
   );
@@ -968,8 +971,8 @@ function OutcomeRewardStrip({ viewModel, className = '' }: { viewModel: BattleRe
 
 function BattleOutcomeSummary({ viewModel, result, winnerName }: { viewModel: BattleReportViewModel; result: ReturnType<typeof resultLabel>; winnerName: string | null }) {
   const sides = [
-    { side: viewModel.attacker, label: 'АТАКУЮЩИЙ', points: viewModel.battlePoints.attacker, resourcePointsLost: viewModel.battlePoints.attackerResourcePointsLost },
-    { side: viewModel.defender, label: 'ЗАЩИТНИК', points: viewModel.battlePoints.defender, resourcePointsLost: viewModel.battlePoints.defenderResourcePointsLost },
+    { side: viewModel.attacker, label: 'АТАКУЮЩИЙ', points: viewModel.awardedBattlePoints?.attacker ?? null, resourcePointsLost: viewModel.battlePoints.attackerResourcePointsLost },
+    { side: viewModel.defender, label: 'ЗАЩИТНИК', points: viewModel.awardedBattlePoints?.defender ?? null, resourcePointsLost: viewModel.battlePoints.defenderResourcePointsLost },
   ];
   return (
     <div className="battle-outcome-duel-v1">
@@ -1186,13 +1189,17 @@ export function BattleReportModal({
 
 export function BattleReportsView({ planetName, coords, onBack }: { planetName: string; coords: string; onBack: () => void }) {
   const [history, setHistory] = useState<BattleHistoryState>(() => readBattleHistory(undefined, ACTIVE_RUNTIME_MODE));
+  const [saveState, setSaveState] = useState(() => createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read());
   const [mode, setMode] = useState<BattleListMode>('recent');
   const [openReportId, setOpenReportId] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<SaveNotice>({ kind: 'saved', message: '✓ Автосохранение активно' });
   const closeReport = useCallback(() => setOpenReportId(null), []);
 
   useEffect(() => {
-    const sync = () => setHistory(readBattleHistory(undefined, ACTIVE_RUNTIME_MODE));
+    const sync = () => {
+      setHistory(readBattleHistory(undefined, ACTIVE_RUNTIME_MODE));
+      setSaveState(createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read());
+    };
     const onRuntimeReset = () => {
       setOpenReportId(null);
       setMode('recent');
@@ -1200,16 +1207,20 @@ export function BattleReportsView({ planetName, coords, onBack }: { planetName: 
       window.setTimeout(sync, 0);
     };
     window.addEventListener(BATTLE_HISTORY_CHANGED_EVENT, sync);
+    window.addEventListener(RUNTIME_STATE_CHANGED_EVENT, sync);
     window.addEventListener(RUNTIME_RESET_EVENT, onRuntimeReset);
     return () => {
       window.removeEventListener(BATTLE_HISTORY_CHANGED_EVENT, sync);
+      window.removeEventListener(RUNTIME_STATE_CHANGED_EVENT, sync);
       window.removeEventListener(RUNTIME_RESET_EVENT, onRuntimeReset);
     };
   }, []);
 
   const viewModels = useMemo(
-    () => new Map(history.reports.map((report) => [report.id, createBattleReportViewModel(report)])),
-    [history.reports],
+    () => new Map(history.reports.map((report) => [report.id, createBattleReportViewModel(report, {
+      awardedBattlePoints: selectRecordedBattlePointAwards(saveState.rating, report, saveState.profile.playerId),
+    })])),
+    [history.reports, saveState],
   );
   const visibleReports = useMemo(
     () => filterBattleReports(history.reports, history.savedReportIds, mode)

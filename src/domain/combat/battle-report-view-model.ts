@@ -292,8 +292,12 @@ export type BattleReportViewModel = {
   resources: BattleResourceViewModel[];
   siege: BattleSiegeViewModel | null;
   battlePoints: BattlePointResult;
+  /** Present only when the save contains a persisted award entry for this report. */
+  awardedBattlePoints: { attacker: number | null; defender: number | null } | null;
   timestampAvailable: boolean;
 };
+
+export type RecordedBattlePointAwards = { attacker: number | null; defender: number | null } | null;
 
 type RecordValue = Record<string, unknown>;
 
@@ -902,7 +906,10 @@ function readSiege(value: unknown): BattleSiegeViewModel | null {
   };
 }
 
-export function createBattleReportViewModel(input: unknown): BattleReportViewModel {
+export function createBattleReportViewModel(
+  input: unknown,
+  options: { awardedBattlePoints?: RecordedBattlePointAwards } = {},
+): BattleReportViewModel {
   const record = asRecord(input);
   const metadata = asRecord(record.metadata);
   const attacker = readParticipant(record.attacker, 'attacker');
@@ -968,6 +975,7 @@ export function createBattleReportViewModel(input: unknown): BattleReportViewMod
       attackerFactionId,
       defenderFactionId,
     ),
+    awardedBattlePoints: options.awardedBattlePoints ?? null,
     timestampAvailable: readString(record.timestamp) != null,
   };
 }

@@ -1,6 +1,8 @@
 import type { CombatFactionId } from '../combat/factions.ts';
 import { getFactionDefenseCatalog, getFactionShipCatalog } from '../combat/faction-catalog.ts';
 import type { DefenseId, ShipId } from '../combat/ids.ts';
+import type { CommanderId } from '../combat/commanders.ts';
+import { COMMANDER_COMBAT_CATALOG } from '../combat/catalog.ts';
 import type { ResourceCost } from '../combat/types.ts';
 import { getBuildingBalanceRow, BUILDING_ROLES, type BuildingRole, type BuildingQueueItem } from '../buildings/resource-zone.ts';
 import { getFactionSpaceportUpgradeBalance } from '../buildings/spaceport-upgrade-balance-v1.ts';
@@ -23,7 +25,7 @@ export type ScoreResourceCost = Pick<ResourceCost, 'metal' | 'minerals' | 'gas'>
 export type ResourceScorePlanet = {
   factionId: CombatFactionId;
   buildings: Partial<Record<BuildingRole, number>>;
-  fleet: { ships: Partial<Record<ShipId, number>> };
+  fleet: { ships: Partial<Record<ShipId, number>>; commanders?: Partial<Record<CommanderId, number>> };
   defense: { defenses: Partial<Record<DefenseId, number>> };
   solarSatellites?: number;
   buildingQueue?: readonly BuildingQueueItem[];
@@ -38,6 +40,7 @@ export type ResourceScoreInput = {
   shipUpgradeLevels?: Readonly<Record<string, number>>;
   queuedScience?: readonly { cost: ScienceResourceCost }[];
   inFlightShips?: Readonly<Record<string, number>>;
+  inFlightCommanders?: Readonly<Record<string, number>>;
   unrecoveredCosts?: Partial<ScoreResourceCost>;
 };
 
@@ -113,6 +116,9 @@ export function calculateResourceScore(input: ResourceScoreInput): { resourcePoi
       const satelliteCount = entity.id === 'solar-satellite' ? safeCount(planet.solarSatellites) : 0;
       resourceTotal += countCost(Math.max(ownedCount, satelliteCount), entity.cost);
     }
+    for (const entity of COMMANDER_COMBAT_CATALOG) {
+      resourceTotal += countCost(planet.fleet.commanders?.[entity.id as CommanderId], entity.cost);
+    }
     for (const entity of getFactionDefenseCatalog(factionId)) {
       resourceTotal += countCost(planet.defense.defenses[entity.id as DefenseId], entity.cost);
     }
@@ -121,6 +127,7 @@ export function calculateResourceScore(input: ResourceScoreInput): { resourcePoi
     const production = planet.fleetProduction;
     for (const order of production?.shipQueue ?? []) resourceTotal += pendingProductionCost(order);
     for (const order of production?.defenseQueue ?? []) resourceTotal += pendingProductionCost(order);
+    for (const order of production?.commanderQueue ?? []) resourceTotal += pendingProductionCost(order);
     for (const [shipId, level] of Object.entries(planet.spaceportUpgrades?.shipLevels ?? {})) {
       // Legacy per-planet levels are included only as a fallback; current saves
       // move these to the owner-wide map and clear the planet copies.
@@ -129,6 +136,7 @@ export function calculateResourceScore(input: ResourceScoreInput): { resourcePoi
       }
     }
     for (const task of planet.spaceportUpgrades?.shipQueue ?? []) resourceTotal += resourceValue(task.cost);
+    for (const task of planet.spaceportUpgrades?.commanderQueue ?? []) resourceTotal += resourceValue(task.cost);
   }
 
   for (const science of SCIENCE_CATALOG) resourceTotal += scienceLevelValue(science.id, input.scienceLevels?.[science.id]);
@@ -138,6 +146,9 @@ export function calculateResourceScore(input: ResourceScoreInput): { resourcePoi
   for (const task of input.queuedScience ?? []) resourceTotal += resourceValue(task.cost);
   for (const entity of getFactionShipCatalog(input.factionId)) {
     resourceTotal += countCost(input.inFlightShips?.[entity.id], entity.cost);
+  }
+  for (const entity of COMMANDER_COMBAT_CATALOG) {
+    resourceTotal += countCost(input.inFlightCommanders?.[entity.id], entity.cost);
   }
 
   return { resourcePoints: Math.max(0, Math.round(resourceTotal / 1_000)), resourceTotal };
@@ -170,9 +181,39 @@ function reportBattlePoints(report: BattleReport) {
     getCombatFactionId(report.attacker.race),
     getCombatFactionId(report.defender.race),
   );
+  return calculateAwardedBattlePoints(report.winner, base);
+}
+
+export function calculateAwardedBattlePoints(
+  winner: BattleReport['winner'],
+  points: Pick<ReturnType<typeof calculateBattlePoints>, 'attacker' | 'defender'>,
+) {
   return {
-    attacker: base.attacker * (report.winner === 'attacker' ? 2 : 1),
-    defender: base.defender * (report.winner === 'defender' ? 2 : 1),
+    attacker: points.attacker * (winner === 'attacker' ? 2 : 1),
+    defender: points.defender * (winner === 'defender' ? 2 : 1),
+  };
+}
+
+export function selectRecordedBattlePointAwards(
+  rating: RatingPrototypeState,
+  report: BattleReport,
+  playerOwnerId: string,
+): { attacker: number | null; defender: number | null } | null {
+  const awards = rating.battleAwardsByReportId[report.id];
+  if (!awards) return null;
+  const ownerId = (value: string | undefined) => {
+    if (!value) return null;
+    return isAsterionLocalPlayerId(value) ? playerOwnerId : value;
+  };
+  const attackerId = ownerId(report.attacker.playerId);
+  const defenderId = ownerId(report.defender.playerId);
+  const recordedAward = (participantId: string | null) => participantId
+    && Object.prototype.hasOwnProperty.call(awards, participantId)
+    ? safeOwnedCount(awards[participantId])
+    : null;
+  return {
+    attacker: recordedAward(attackerId),
+    defender: recordedAward(defenderId),
   };
 }
 
@@ -257,6 +298,26 @@ function flightShipCounts(state: SaveState, factionId: FactionId, ownerId: strin
   return counts;
 }
 
+function flightCommanderCounts(state: SaveState, ownerId: string) {
+  const counts: Record<string, number> = {};
+  const reports = new Map(state.combat.reports.map((report) => [report.id, report]));
+  for (const flight of state.flights.records) {
+    if (flight.ownerSide !== 'bot01') continue;
+    if (flight.phase !== 'outbound' && flight.phase !== 'returning' && flight.phase !== 'arrived') continue;
+    if (ownerId !== UNIVERSE_NPC_OWNER_ID) continue;
+    const report = flight.attackResolution ? reports.get(flight.attackResolution.reportId) : undefined;
+    const commanderCounts = report
+      ? Object.fromEntries(report.attackerForce.stacks
+        .filter((stack) => COMMANDER_COMBAT_CATALOG.some((entity) => entity.id === stack.entityId))
+        .map((stack) => [stack.entityId, stack.countAfter]))
+      : flight.selectedCommanders ?? {};
+    for (const entity of COMMANDER_COMBAT_CATALOG) {
+      counts[entity.id] = (counts[entity.id] ?? 0) + safeOwnedCount(commanderCounts[entity.id as CommanderId]);
+    }
+  }
+  return counts;
+}
+
 /** Calculates one authoritative score per owner represented in the save. */
 export function selectOwnerScores(state: SaveState): Record<string, OwnerScore> {
   const owners = new Map<string, OwnerRegistration>();
@@ -322,6 +383,7 @@ export function selectOwnerScores(state: SaveState): Record<string, OwnerScore> 
       shipUpgradeLevels: owner.shipUpgradeLevels,
       queuedScience: owner.queuedScience,
       inFlightShips: flightShipCounts(state, owner.factionId, ownerId),
+      inFlightCommanders: flightCommanderCounts(state, ownerId),
       unrecoveredCosts: state.rating.unrecoveredCostsByOwnerId[ownerId],
     });
     const ownerBattlePoints = battlePoints[ownerId] ?? 0;
