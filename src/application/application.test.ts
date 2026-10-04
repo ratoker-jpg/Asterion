@@ -792,6 +792,7 @@ test('destroying Helion keeps the surviving planet and global progress through r
   };
   const initialUniverse = createUniverseMap({
     mode: 'test',
+    nowMs: 2_000,
     playerPlanets: Object.entries(twoWorlds.planets).map(([id, planet]) => ({
       id,
       coordinate: {
@@ -845,6 +846,7 @@ test('destroying Helion keeps the surviving planet and global progress through r
 
   const universeAfterReload = createUniverseMap({
     mode: 'test',
+    nowMs: 2_000,
     playerPlanets: Object.entries(reloaded.planets).map(([id, planet]) => ({
       id,
       coordinate: {

@@ -1,5 +1,5 @@
 import type { CommanderId } from './commanders.ts';
-import type { CombatEntityId, DefenseId, ShipId } from './ids.ts';
+import type { CombatEntityId, CombatStackEntityId, DefenseId, ShipId } from './ids.ts';
 import type { CombatTechnologyId, CombatTechnologyLevels } from './technologies.ts';
 import type { CombatTargetPriority } from './config.ts';
 import type { CombatFactionId } from './factions.ts';
@@ -14,7 +14,7 @@ export function isAsterionLocalPlayerId(playerId: string | null | undefined): bo
 
 export type BattleSide = 'attacker' | 'defender';
 export type BattleWinner = BattleSide | 'draw';
-export type BattleMissionType = 'attack' | 'raid' | 'defense' | 'arena' | 'simulation';
+export type BattleMissionType = 'attack' | 'raid' | 'defense' | 'arena' | 'simulation' | 'pirate-elimination' | 'pirate-raid';
 export type CombatActionType = 'attack' | 'ability' | 'shield' | 'status' | 'destroyed' | 'special-bonus';
 export const BATTLE_REPORT_SCHEMA_VERSION = 3;
 export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v7';
@@ -69,7 +69,7 @@ export type BattleParticipant = {
 };
 
 export type BattleStackSnapshot = {
-  entityId: CombatEntityId;
+  entityId: CombatStackEntityId;
   countBefore: number;
   countAfter: number;
   destroyed: number;
@@ -109,9 +109,9 @@ type LifeTransition =
 export type CombatEvent = {
   sequence: number;
   actorSide: BattleSide;
-  actorEntityId: CombatEntityId;
+  actorEntityId: CombatStackEntityId;
   targetSide?: BattleSide;
-  targetEntityId?: CombatEntityId;
+  targetEntityId?: CombatStackEntityId;
   actionType: CombatActionType;
   actorCount?: number;
   targetCount?: number;
@@ -127,6 +127,7 @@ export type CombatEvent = {
   reportedBonus?: number;
   matchupStatus?: 'inferred' | 'not-calibrated';
   criticalChance?: number;
+  criticalDraw?: number;
   criticalMultiplier?: number;
   abilityChance?: number;
   abilityDraw?: number;
@@ -140,7 +141,7 @@ export type CombatEvent = {
   repairedCount?: number;
   repairLimit?: number;
   commanderAbilityId?: CommanderId;
-  shipAbilityId?: 'destroyer-revival' | 'shmel-freezing';
+  shipAbilityId?: 'destroyer-revival' | 'shmel-freezing' | 'pirate-armor-piercing' | 'pirate-devastate' | 'pirate-artillery';
   specialBonusKind?: 'attack' | 'life' | 'armor';
   specialBonusRate?: number;
   specialBonusCap?: number;
@@ -215,7 +216,7 @@ export type BattleSiegeBlockedReason =
 
 export type BattleSiegeDestroyerContribution = {
   factionId: CombatFactionId;
-  entityId: 'death-star';
+  entityId: 'death-star' | 'pirate-planet-breaker';
   survivors: number;
   level: number;
   scaledDemolitionPoints: number;

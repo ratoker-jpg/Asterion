@@ -401,6 +401,75 @@ test('timed object schedules use the confirmed lifetime, quiet period, and chanc
   }
 });
 
+test('a defeated pirate contact stays hidden and resumes the seeded cycle after the existing quiet interval', () => {
+  const active = Array.from({ length: 100 }, (_, cycleIndex) => ({
+    cycleIndex,
+    schedule: getUniverseTimedObjectSchedule('pirate', 1, 2, cycleIndex),
+  })).find(({ schedule }) => schedule.present);
+  assert.ok(active);
+  if (!active) return;
+
+  const { cycleIndex, schedule } = active;
+  const defeatedAt = schedule.startAt + 15 * 60_000;
+  const override = {
+    defeatedCycleIndex: cycleIndex,
+    defeatedAt,
+    nextCycleIndex: cycleIndex + 1,
+    nextStartAt: defeatedAt + PIRATE_QUIET_MS,
+    nextSpawnChance: 0.9,
+  } as const;
+  const beforeDefeat = createUniverseSystem({ system: 2, nowMs: defeatedAt - 1 }).positions.find((node) => node.kind === 'pirate');
+  assert.equal(beforeDefeat?.pirate?.cycleIndex, cycleIndex);
+
+  const afterDefeat = createUniverseSystem({
+    system: 2,
+    nowMs: defeatedAt,
+    pirateScheduleOverride: override,
+  }).positions.find((node) => node.kind === 'pirate');
+  assert.equal(afterDefeat, undefined);
+
+  const resumed = getUniverseTimedObjectSchedule('pirate', 1, 2, cycleIndex + 1, override);
+  assert.equal(resumed.startAt, override.nextStartAt);
+  const atNextCycle = createUniverseSystem({
+    system: 2,
+    nowMs: resumed.startAt + 1,
+    pirateScheduleOverride: override,
+  }).positions.find((node) => node.kind === 'pirate');
+  assert.equal(Boolean(atNextCycle), resumed.present);
+  assert.equal(atNextCycle?.pirate?.cycleIndex, resumed.present ? cycleIndex + 1 : undefined);
+});
+
+test('an active pirate contact keeps its saved coordinate when other system positions become occupied', () => {
+  const schedule = Array.from({ length: 100 }, (_, cycleIndex) => getUniverseTimedObjectSchedule('pirate', 1, 3, cycleIndex))
+    .find((candidate) => candidate.present);
+  assert.ok(schedule);
+  if (!schedule) return;
+
+  const nowMs = schedule.startAt + 1_000;
+  const firstContact = createUniverseSystem({ system: 3, nowMs }).positions.find((node) => node.kind === 'pirate');
+  assert.ok(firstContact);
+  if (!firstContact?.pirate) return;
+  const newlyOccupiedPosition = firstContact.coordinate.position === 1 ? 2 : 1;
+  const registeredPlanets = [{
+    id: 'new-colony',
+    coordinate: { galaxy: 1, system: 3, position: newlyOccupiedPosition },
+    name: 'Новая колония',
+    kind: 'player' as const,
+    ownerId: 'player-current',
+  }];
+  const changedMap = createUniverseSystem({
+    system: 3,
+    nowMs,
+    registeredPlanets,
+    pirateContactCoordinate: {
+      cycleIndex: firstContact.pirate.cycleIndex,
+      coordinate: firstContact.coordinate,
+    },
+  });
+  const pinnedContact = changedMap.positions.find((node) => node.kind === 'pirate');
+  assert.deepEqual(pinnedContact?.coordinate, firstContact.coordinate);
+});
+
 test('spy and fleet actions follow the owner relation contract', () => {
   const system = createUniverseSystem({ system: 1, currentOwnerId: 'player-current' });
   const homeworld = system.positions.find((node) => node.isHomeworld)!;

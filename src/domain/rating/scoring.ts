@@ -229,6 +229,8 @@ export function recordBattleScoreAward(
 ): RatingPrototypeState {
   if (rating.battleAwardsByReportId[report.id]
     || report.missionType === 'simulation'
+    || report.missionType === 'pirate-elimination'
+    || report.missionType === 'pirate-raid'
     || report.metadata?.source === 'demo-fixture'
     || !report.id) return rating;
 

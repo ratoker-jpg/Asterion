@@ -80,6 +80,20 @@ export type UniverseTimedObjectState = {
 
 export type UniversePirateState = UniverseTimedObjectState;
 
+export type UniversePirateContactCoordinate = Readonly<{
+  cycleIndex: number;
+  coordinate: UniverseCoordinate;
+}>;
+
+/** Persisted continuation after an active pirate contact is defeated early. */
+export type UniversePirateScheduleOverride = Readonly<{
+  defeatedCycleIndex: number;
+  defeatedAt: number;
+  nextCycleIndex: number;
+  nextStartAt: number;
+  nextSpawnChance: number;
+}>;
+
 export type UniversePlanetNode = {
   id: string;
   coordinate: UniverseCoordinate;

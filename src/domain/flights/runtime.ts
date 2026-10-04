@@ -8,7 +8,8 @@ import type { TransportCargo } from './cargo.ts';
 import type { TargetRelation } from './types.ts';
 import type { CommanderId } from '../combat/commanders.ts';
 import type { AttackLaunchSnapshot, AttackResolution } from '../attack/types.ts';
-import type { FlightCompletionReason, FlightDestination, FlightRecord, FlightScienceLevels, FlightState, MissionId } from './types.ts';
+import { PIRATE_CATALOG_BY_ID } from '../pirates/catalog.ts';
+import type { FlightCompletionReason, FlightDestination, FlightRecord, FlightScienceLevels, FlightState, MissionId, PirateFlightSnapshot } from './types.ts';
 
 export type DispatchFlightInput = {
   requestId: string;
@@ -24,6 +25,7 @@ export type DispatchFlightInput = {
   gasCapacity?: number;
   attackSnapshot?: AttackLaunchSnapshot;
   attackResolution?: AttackResolution;
+  pirateSnapshot?: PirateFlightSnapshot;
   populationReserved?: number;
   departedAt: number;
   factionId: CombatFactionId;
@@ -46,6 +48,7 @@ export type DispatchFlightInput = {
 export const MIN_SPACE_FLIGHT_DURATION_MS = 5 * 60_000;
 export const MAX_SPACE_FLIGHT_DURATION_MS = 11 * 60 * 60_000 + 59 * 60_000;
 export const SPACE_FLIGHT_DURATION_STEP_MS = 60_000;
+export const PIRATE_RECON_ONE_WAY_DURATION_MS = 10_000;
 
 export function createFlightState(): FlightState {
   return { records: [], requestIndex: {} };
@@ -64,6 +67,24 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
   if (!Number.isFinite(input.departedAt)) throw new Error('Departure time must be finite.');
   const selectedCommanders = input.selectedCommanders ?? {};
   const isSpaceFlight = input.missionId === 'space-flight';
+  const isIncomingPirateRaid = input.missionId === 'pirate-raid';
+  const isPirateRecon = input.missionId === 'pirate-recon';
+  if (isIncomingPirateRaid && (input.ownerSide !== 'pirates'
+    || input.pirateSnapshot?.kind !== 'raid'
+    || input.destination.kind !== 'planet'
+    || Object.values(input.selectedShips).some((count) => Number.isFinite(count) && count! > 0))) {
+    throw new Error('Pirate raid flights require an immutable pirate raid snapshot and a planet destination.');
+  }
+  if (((input.missionId === 'pirate-elimination' || input.missionId === 'pirate-recon') && input.ownerSide !== 'player')
+    || (input.missionId === 'pirate-elimination' && input.pirateSnapshot?.kind !== 'elimination')
+    || (input.missionId === 'pirate-recon' && input.pirateSnapshot?.kind !== 'recon')) {
+    throw new Error('Pirate operation flights require a matching immutable pirate snapshot.');
+  }
+  if (isPirateRecon && (input.ownerSide !== 'player'
+    || input.selectedShips['spy-probe'] !== 1
+    || Object.entries(input.selectedShips).some(([id, count]) => id !== 'spy-probe' && (count ?? 0) > 0))) {
+    throw new Error('Pirate reconnaissance requires exactly one player spy probe.');
+  }
   const requestedDuration = input.durationMs;
   if (isSpaceFlight && (input.destination.kind !== 'space'
     || !Number.isSafeInteger(requestedDuration)
@@ -76,9 +97,19 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
     throw new Error('Only Space Flight may use a destinationless route.');
   }
   const routeDistance = isSpaceFlight ? 0 : calculateRouteDistance(input.originCoordinate, input.destination.coordinate);
-  const effectiveSpeed = isSpaceFlight ? 0 : calculateEffectiveFleetSpeed(input.factionId, input.selectedShips, input.science, selectedCommanders);
+  const pirateSpeeds = isIncomingPirateRaid && input.pirateSnapshot?.kind === 'raid'
+    ? Object.entries(input.pirateSnapshot.shipComposition)
+      .filter(([, count]) => Number.isSafeInteger(count) && (count ?? 0) > 0)
+      .map(([id]) => PIRATE_CATALOG_BY_ID[id as keyof typeof PIRATE_CATALOG_BY_ID]?.flightSpeed)
+      .filter((speed): speed is number => Number.isFinite(speed) && speed > 0)
+    : [];
+  if (isIncomingPirateRaid && pirateSpeeds.length === 0) throw new Error('Pirate raid snapshot has no legal ship composition.');
+  const effectiveSpeed = isSpaceFlight ? 0 : isIncomingPirateRaid
+    ? Math.min(...pirateSpeeds)
+    : calculateEffectiveFleetSpeed(input.factionId, input.selectedShips, input.science, selectedCommanders);
   const oneWayDurationMs = isSpaceFlight
     ? requestedDuration!
+    : isPirateRecon ? PIRATE_RECON_ONE_WAY_DURATION_MS
     : calculateOneWayDurationMs(input.originCoordinate, input.destination.coordinate, effectiveSpeed);
   const destinationPlanetId = input.destination.kind === 'planet' ? input.destination.planetId : input.destinationPlanetId;
   if (input.missionId === 'transport' && input.cargo === undefined) {
@@ -132,13 +163,14 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
     ...(input.missionId === 'gas' ? { gasCapacity: input.gasCapacity } : {}),
     ...(input.attackSnapshot ? { attackSnapshot: input.attackSnapshot } : {}),
     ...(input.attackResolution ? { attackResolution: input.attackResolution } : {}),
+    ...(input.pirateSnapshot ? { pirateSnapshot: input.pirateSnapshot } : {}),
     populationReserved: Math.max(0, Math.floor(input.populationReserved ?? 0)),
     routeDistance,
     effectiveSpeed,
     oneWayDurationMs,
     departedAt: input.departedAt,
     arrivalAt: input.departedAt + oneWayDurationMs,
-    gasCost: isSpaceFlight ? 100 : calculateFlightFuel(input.factionId, input.selectedShips, routeDistance, input.science, selectedCommanders),
+    gasCost: isSpaceFlight ? 100 : isIncomingPirateRaid ? 0 : calculateFlightFuel(input.factionId, input.selectedShips, routeDistance, input.science, selectedCommanders),
     cargo,
     cargoState: cargo ? 'loaded' : undefined,
     overflowWarning: cargo ? Boolean(input.overflowWarning) : undefined,

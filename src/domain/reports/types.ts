@@ -56,7 +56,7 @@ export type ReportCategory =
 
 export type ReportFilter = 'all' | 'unread' | 'saved';
 export type ReportStatusTone = 'success' | 'danger' | 'warning' | 'info' | 'neutral';
-export type ReportSource = 'combat' | 'operations' | 'command' | 'espionage' | 'overpopulation' | 'recycling' | 'gas-extraction';
+export type ReportSource = 'combat' | 'operations' | 'command' | 'espionage' | 'overpopulation' | 'recycling' | 'gas-extraction' | 'pirate-operations';
 
 export type ReportDetail = {
   label: string;

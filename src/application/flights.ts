@@ -1,6 +1,6 @@
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import { COMMANDER_IDS, type CommanderId } from '../domain/combat/commanders.ts';
-import type { SimulatorMaxRounds } from '../domain/combat/simulator.ts';
+import { calculateStacksPopulation, type CombatStackInput, type SimulatorMaxRounds } from '../domain/combat/simulator.ts';
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import { calculateDefensePopulation } from '../domain/fleet/production.ts';
 import {
@@ -47,13 +47,14 @@ import {
   normalizeTransportCargo,
   type TransportCargo,
 } from '../domain/flights/cargo.ts';
-import { SHIP_IDS, SOLAR_SATELLITE_ID, type ShipId } from '../domain/combat/ids.ts';
+import { SHIP_IDS, SOLAR_SATELLITE_ID, type CombatStackEntityId, type ShipId } from '../domain/combat/ids.ts';
 import { scaleRuntimeDuration, type RuntimeMode, type TestTimeScale } from '../domain/runtime/mode.ts';
 import type {
   FlightDestination,
   FlightRecord,
   FlightState,
   MissionId,
+  PirateFlightSnapshot,
   TargetRelation,
 } from '../domain/flights/types.ts';
 import {
@@ -97,9 +98,23 @@ import {
   getAttackCommanderSelection,
   isAttackCombatShip,
   normalizeAttackRounds,
+  resolvePirateEliminationAtContact,
+  resolvePirateRaidAtTarget,
   resolveBot01IncomingAttack,
   resolveAttackAtTarget,
 } from './attack.ts';
+import { calculatePirateEliminationPopulationBudget } from '../domain/pirates/profile.ts';
+import {
+  attachPirateReconFlightId,
+  beginPirateRecon,
+  getPirateContactCycle,
+  markPirateContactDefeated,
+  materializePirateOwnerProfile,
+  pirateReconOutcome,
+  resolvePirateReconAtArrival,
+  savePirateContactMissingNotice,
+} from './pirate-operations.ts';
+import { PIRATE_RECON_ONE_WAY_DURATION_MS } from '../domain/flights/runtime.ts';
 
 export const FLIGHT_LAUNCH_CONTEXT_EVENT = 'asterion:flight-launch-context';
 export const FLIGHT_LAUNCH_CONTEXT_CLEAR_EVENT = 'asterion:flight-launch-context-clear';
@@ -123,6 +138,7 @@ export type FlightLaunchContext = {
   targetOwnerName?: string;
   targetRaceId?: 'aegis' | 'synod' | 'veyra';
   targetAlliance?: import('../domain/universe/types.ts').UniverseOwnerAlliance | null;
+  pirateContactCycleKey?: string;
 };
 
 export type FlightErrorCode =
@@ -174,6 +190,7 @@ export type DispatchFlightCommand = {
   maxRounds?: SimulatorMaxRounds;
   departedAt?: number;
   oneWayDurationMinutes?: number;
+  pirateContactCycleKey?: string;
 };
 
 export type FlightRuntimeOptions = {
@@ -1027,13 +1044,14 @@ export function dispatchFlight(
 ): FlightCommandResult {
   const runtimeOptions: FlightRuntimeOptions = typeof options === 'number' ? { now: options } : options;
   const requestId = requestIdFor(command);
-  const flights = currentFlightState(state);
+  let stateForDispatch = state;
+  let flights = currentFlightState(state);
   if (requestId) {
     const existing = getFlightByRequestId(flights, requestId);
     if (existing) return { ok: true, state, flight: existing, created: false, notice: noticeForDispatch(existing) };
   }
   if (!requestId) return failure(state, 'invalid-command', 'Для отправки требуется requestId/commandId.');
-  if (command.missionId !== 'colonize' && command.missionId !== 'transport' && command.missionId !== 'espionage' && command.missionId !== 'attack' && command.missionId !== 'deployment' && command.missionId !== 'recycle' && command.missionId !== 'gas' && command.missionId !== 'space-flight') {
+  if (command.missionId !== 'colonize' && command.missionId !== 'transport' && command.missionId !== 'espionage' && command.missionId !== 'attack' && command.missionId !== 'deployment' && command.missionId !== 'recycle' && command.missionId !== 'gas' && command.missionId !== 'space-flight' && command.missionId !== 'pirate-elimination' && command.missionId !== 'pirate-recon') {
     return failure(state, 'mission-not-supported', 'Эта миссия пока не подключена к flight runtime.');
   }
   const departedAt = Number.isFinite(command.departedAt) ? command.departedAt! : (runtimeOptions.now ?? Date.now());
@@ -1191,6 +1209,7 @@ export function dispatchFlight(
   let attackSnapshot: ReturnType<typeof createAttackLaunchSnapshot> | undefined;
   let attackCommanders: Partial<Record<CommanderId, number>> | undefined;
   let attackDestination: FlightDestination | undefined;
+  let pirateSnapshot: PirateFlightSnapshot | undefined;
   let deploymentTarget: ResolvedTransportTarget | undefined;
   let deploymentCommanders: Partial<Record<CommanderId, number>> | undefined;
   let deploymentCommanderLevels: Partial<Record<CommanderId, number>> | undefined;
@@ -1268,6 +1287,95 @@ export function dispatchFlight(
     attackDestination = { kind: 'planet', planetId: attackTarget.target.id, coordinate: { ...attackTarget.target.coordinate } };
   }
 
+  if (command.missionId === 'pirate-elimination') {
+    const cycleKey = command.pirateContactCycleKey;
+    const cycle = cycleKey ? getPirateContactCycle(state, cycleKey) : undefined;
+    if (!cycleKey || !cycle || cycle.defeatedAt !== undefined || departedAt < cycle.startedAt || departedAt >= cycle.expiresAt) {
+      return failure(state, 'target-not-available', 'Пиратский контакт уже исчез.');
+    }
+    if (!command.destination || command.destination.kind !== 'coordinate'
+      || !isFlightCoordinate(command.destination.coordinate)
+      || !coordinatesEqual(command.destination.coordinate, cycle.coordinate)) {
+      return failure(state, 'target-not-available', 'Координаты не совпадают с выбранным циклом пиратского контакта.');
+    }
+    if (command.maxRounds !== undefined && ![5, 8, 12].includes(command.maxRounds)) {
+      return failure(state, 'invalid-round-limit', 'Число раундов атаки: только 5, 8 или 12.');
+    }
+    if (Object.keys(selectedShips).some((shipId) => !isAttackCombatShip(shipId as ShipId, state.profile.factionId as CombatFactionId))) {
+      return failure(state, 'wrong-ship-composition', 'В пиратский флот можно отправить любой боевой корабль, кроме солнечного спутника.');
+    }
+    const profileResult = materializePirateOwnerProfile(state, cycleKey, state.profile.playerId);
+    const profile = profileResult.profile;
+    if (!profile) return failure(state, 'target-not-available', 'Не удалось зафиксировать профиль пиратского контакта.');
+    stateForDispatch = profileResult.state;
+    flights = currentFlightState(stateForDispatch);
+    const availableCommanders = getAttackCommanderSelection(state, originPlanetId);
+    const commandersForAttack = command.selectedCommanders === undefined
+      ? availableCommanders
+      : (selectedCommanders ?? {});
+    for (const commanderId of COMMANDER_IDS) {
+      if ((commandersForAttack[commanderId] ?? 0) > (availableCommanders[commanderId] ?? 0)) {
+        return failure(state, 'insufficient-commanders', 'Выбранный командир уже зарезервирован или недоступен.');
+      }
+    }
+    const combatStacks: CombatStackInput[] = [
+      ...Object.entries(selectedShips).flatMap(([id, count]) => count > 0 ? [{ entityId: id as CombatStackEntityId, count }] : []),
+      ...COMMANDER_IDS.flatMap((id) => {
+        const count = commandersForAttack[id] ?? 0;
+        return count > 0 ? [{ entityId: id as CombatStackEntityId, count }] : [];
+      }),
+    ];
+    const sentCombatPopulation = calculateStacksPopulation(combatStacks, state.profile.factionId as CombatFactionId);
+    if (sentCombatPopulation <= 0) return failure(state, 'wrong-ship-composition', 'В выбранном флоте нет боевого населения.');
+    const budget = calculatePirateEliminationPopulationBudget(sentCombatPopulation, profile.shares);
+    const rounds = normalizeAttackRounds(command.maxRounds);
+    attackCommanders = commandersForAttack;
+    attackSnapshot = createAttackLaunchSnapshot(state, originPlanetId, rounds, commandersForAttack);
+    attackDestination = { kind: 'coordinate', coordinate: { ...cycle.coordinate } };
+    pirateSnapshot = {
+      kind: 'elimination',
+      contactCycleKey: cycleKey,
+      ownerId: state.profile.playerId,
+      profile,
+      sentCombatPopulation,
+      targetPopulation: budget.targetPopulation,
+      actualPopulation: budget.actualPopulation,
+      shipComposition: budget.ships,
+    };
+  }
+
+  if (command.missionId === 'pirate-recon') {
+    const cycleKey = command.pirateContactCycleKey;
+    const cycle = cycleKey ? getPirateContactCycle(state, cycleKey) : undefined;
+    if (!cycleKey || !cycle || cycle.defeatedAt !== undefined || departedAt < cycle.startedAt || departedAt >= cycle.expiresAt) {
+      return failure(state, 'target-not-available', 'Пиратский контакт уже исчез.');
+    }
+    if (!command.destination || command.destination.kind !== 'coordinate'
+      || !isFlightCoordinate(command.destination.coordinate)
+      || !coordinatesEqual(command.destination.coordinate, cycle.coordinate)) {
+      return failure(state, 'target-not-available', 'Координаты не совпадают с выбранным циклом пиратского контакта.');
+    }
+    if (!selectedSpyProbeOnly(selectedShips)) {
+      return failure(state, 'wrong-ship-composition', 'Для разведки пиратского контакта нужен ровно один шпионский зонд.');
+    }
+    const profileResult = materializePirateOwnerProfile(state, cycleKey, state.profile.playerId);
+    if (!profileResult.profile) return failure(state, 'target-not-available', 'Не удалось зафиксировать профиль пиратского контакта.');
+    const started = beginPirateRecon(profileResult.state, cycleKey, state.profile.playerId, requestId, departedAt);
+    if (started.error) return failure(state, 'spy-target-blocked', started.error);
+    const outcome = pirateReconOutcome(state.profile.playerId, cycle);
+    pirateSnapshot = {
+      kind: 'recon',
+      contactCycleKey: cycleKey,
+      ownerId: state.profile.playerId,
+      roll: outcome.roll,
+      fullReport: outcome.fullReport,
+      dispatchedAt: departedAt,
+      ...(outcome.fullReport ? { profile: profileResult.profile } : {}),
+    };
+    stateForDispatch = started.state;
+    flights = currentFlightState(stateForDispatch);
+  }
+
   if (command.missionId === 'deployment') {
     deploymentTarget = resolveDeploymentTarget(state, originPlanetId, command.destination) ?? undefined;
     if (!deploymentTarget) {
@@ -1342,9 +1450,10 @@ export function dispatchFlight(
   const domainResult = dispatchDomainFlight(flights, {
     requestId,
     missionId: command.missionId,
+    ownerSide: command.missionId === 'pirate-elimination' || command.missionId === 'pirate-recon' ? 'player' : undefined,
     originPlanetId,
     originCoordinate: coordinateOfPlanet(originPlanet),
-    destination: command.missionId === 'attack' && attackDestination
+    destination: (command.missionId === 'attack' || command.missionId === 'pirate-elimination') && attackDestination
       ? attackDestination
       : command.missionId === 'deployment' && deploymentTarget
         ? { kind: 'planet', planetId: deploymentTarget.planetId, coordinate: { ...deploymentTarget.coordinate } }
@@ -1353,6 +1462,7 @@ export function dispatchFlight(
           : command.destination!,
     targetKind: command.missionId === 'attack'
       ? attackTarget?.target.kind
+      : command.missionId === 'pirate-elimination' || command.missionId === 'pirate-recon' ? 'pirate'
       : command.missionId === 'recycle' ? recycleTargetKind
         : command.missionId === 'gas' ? 'asteroid' : command.targetKind,
     selectedShips,
@@ -1373,6 +1483,8 @@ export function dispatchFlight(
       durationMs: spaceFlightDurationMs,
       cargo: spaceFlightCargo,
     } : {}),
+    ...(command.missionId === 'pirate-recon' ? { durationMs: PIRATE_RECON_ONE_WAY_DURATION_MS } : {}),
+    ...(command.missionId === 'pirate-recon' || command.missionId === 'pirate-elimination' ? { pirateSnapshot } : {}),
     ...(command.missionId === 'espionage' ? { spyMissionId: `spy-${requestId}` } : {}),
     ...(transportTarget ? {
       destinationPlanetId: transportTarget.planetId,
@@ -1406,6 +1518,12 @@ export function dispatchFlight(
       selectedCommanders: attackCommanders,
       attackSnapshot,
     } : {}),
+    ...(command.missionId === 'pirate-elimination' ? {
+      attackSnapshot,
+      pirateSnapshot,
+      destinationPlanetId: undefined,
+      destinationOwnerId: undefined,
+    } : {}),
     ...(command.missionId === 'deployment' && deploymentTarget ? {
       destinationPlanetId: deploymentTarget.planetId,
       targetPlanetName: deploymentTarget.runtime?.name,
@@ -1416,11 +1534,11 @@ export function dispatchFlight(
     } : {}),
   });
   const flight = scaledRecord(domainResult.flight, runtimeOptions);
-  const gas = getPlanetResources(state, originPlanetId);
+  const gas = getPlanetResources(stateForDispatch, originPlanetId);
   if (gas.gas < flight.gasCost) return failure(state, 'insufficient-gas', 'Недостаточно газа для исходящего участка.');
 
   const nextFlights = domainResult.created ? updateFlight(domainResult.state, flight) : domainResult.state;
-  let nextState = replacePlanetResources({ ...state, flights: nextFlights }, originPlanetId, {
+  let nextState = replacePlanetResources({ ...stateForDispatch, flights: nextFlights }, originPlanetId, {
     ...gas,
     gas: gas.gas - flight.gasCost,
   });
@@ -1459,6 +1577,9 @@ export function dispatchFlight(
         },
       });
     }
+  }
+  if (command.missionId === 'pirate-recon' && domainResult.created && pirateSnapshot?.kind === 'recon') {
+    nextState = attachPirateReconFlightId(nextState, pirateSnapshot.contactCycleKey, pirateSnapshot.ownerId, flight.id);
   }
   if (command.missionId === 'espionage' && domainResult.created) {
     const targetPlanetId = command.destination!.kind === 'planet' ? command.destination!.planetId : '';
@@ -1994,6 +2115,88 @@ export function reconcileFlights(
         });
         continue;
       }
+      if (current.missionId === 'pirate-recon') {
+        const returning: FlightRecord = {
+          ...current,
+          phase: 'returning',
+          arrivedAt: arrivalAt,
+          returnAt: Math.max(now, arrivalAt) + current.oneWayDurationMs,
+          completionReason: 'normal-return',
+        };
+        next = { ...next, flights: updateFlight(currentFlightState(next), returning) };
+        changed = true;
+        events.push({ flight: returning, status: 'arrived', notice: 'Пиратский контакт просканирован; зонд возвращается с результатом.' });
+        continue;
+      }
+      if (current.missionId === 'pirate-elimination') {
+        const snapshot = current.pirateSnapshot;
+        const cycle = snapshot?.kind === 'elimination'
+          ? getPirateContactCycle(next, snapshot.contactCycleKey)
+          : undefined;
+        const cycleAlive = Boolean(cycle && cycle.defeatedAt === undefined && arrivalAt >= cycle.startedAt && arrivalAt < cycle.expiresAt);
+        if (!cycleAlive) {
+          next = savePirateContactMissingNotice(next, current.id, arrivalAt);
+          const returningState = beginDomainFlightReturn(updateFlight(currentFlightState(next), current), current.id, Math.max(now, arrivalAt), 'target-unavailable');
+          const returning = returningState.records.find((flight) => flight.id === current.id)!;
+          const withArrival = { ...returning, arrivedAt: arrivalAt, completionReason: 'target-unavailable' as const };
+          next = { ...next, flights: updateFlight(returningState, withArrival) };
+          changed = true;
+          events.push({ flight: withArrival, status: 'target-unavailable', notice: 'По указанным координатам планеты пиратов не обнаружено' });
+          continue;
+        }
+        const resolved = resolvePirateEliminationAtContact(next, current, arrivalAt);
+        if (!resolved) {
+          const returningState = beginDomainFlightReturn(updateFlight(currentFlightState(next), current), current.id, Math.max(now, arrivalAt), 'target-unavailable');
+          const returning = returningState.records.find((flight) => flight.id === current.id)!;
+          const withArrival = { ...returning, arrivedAt: arrivalAt, completionReason: 'target-unavailable' as const };
+          next = { ...next, flights: updateFlight(returningState, withArrival) };
+          changed = true;
+          events.push({ flight: withArrival, status: 'target-unavailable', notice: 'Пиратский бой не состоялся: снимок состава недоступен. Флот возвращается.' });
+          continue;
+        }
+        let resolvedState = resolved.state;
+        if (resolved.report.winner === 'attacker' && snapshot?.kind === 'elimination') {
+          resolvedState = markPirateContactDefeated(resolvedState, snapshot.contactCycleKey, arrivalAt);
+        }
+        const returningState = beginDomainFlightReturn(updateFlight(currentFlightState(resolvedState), current), current.id, Math.max(now, arrivalAt), 'normal-return');
+        const returning = returningState.records.find((flight) => flight.id === current.id)!;
+        const withOutcome: FlightRecord = {
+          ...returning,
+          attackResolution: resolved.resolution,
+          arrivedAt: arrivalAt,
+          completionReason: 'normal-return',
+        };
+        next = { ...resolvedState, flights: updateFlight(returningState, withOutcome) };
+        changed = true;
+        events.push({
+          flight: withOutcome,
+          status: 'arrived',
+          notice: `Бой с пиратами завершён: ${resolved.report.winner === 'attacker' ? 'победа' : resolved.report.winner === 'defender' ? 'поражение' : 'ничья'} · обломки ${resolved.resolution.debris}. Флот возвращается.`,
+        });
+        continue;
+      }
+      if (current.missionId === 'pirate-raid') {
+        const resolved = resolvePirateRaidAtTarget(next, current, arrivalAt);
+        const completed: FlightRecord = {
+          ...current,
+          phase: resolved ? 'completed' : 'failed',
+          arrivedAt: arrivalAt,
+          completedAt: arrivalAt,
+          completionReason: 'pirate-raid-resolved',
+          ...(resolved ? { attackResolution: resolved.resolution } : {}),
+        };
+        const resolvedState = resolved?.state ?? next;
+        next = { ...resolvedState, flights: updateFlight(currentFlightState(resolvedState), completed) };
+        changed = true;
+        events.push({
+          flight: completed,
+          status: 'incoming-attack',
+          notice: resolved
+            ? `Пиратский рейд разрешён: ${resolved.report.winner === 'attacker' ? 'оборона прорвана' : resolved.report.winner === 'defender' ? 'рейд отражён' : 'ничья'}${resolved.resolution.planetDestroyed ? ' · планета уничтожена' : ''}. Создан боевой отчёт.`
+            : 'Пиратский рейд отменён: цель исчезла до прибытия.',
+        });
+        continue;
+      }
       if (current.ownerSide === 'bot01' && current.missionId === 'attack') {
         const affectedSpaceFlightIds = new Set(next.flights.records
           .filter((flight) => flight.missionId === 'space-flight'
@@ -2452,6 +2655,9 @@ export function reconcileFlights(
         next = returned.state;
         returnedFlight = returned.flight;
       }
+      if (refreshed.missionId === 'pirate-recon') {
+        next = resolvePirateReconAtArrival(next, refreshed.id, refreshed.returnAt);
+      }
       const spyMission = refreshed.missionId === 'espionage' ? spyMissionForFlight(next, refreshed) : undefined;
       const completed: FlightRecord = {
         ...returnedFlight,
@@ -2468,6 +2674,8 @@ export function reconcileFlights(
               : returnedFlight.missionId === 'space-flight'
                 ? returnedFlight.completionReason === 'recalled' ? 'recalled' : 'normal-return'
               : returnedFlight.missionId === 'attack'
+                ? returnedFlight.completionReason ?? 'normal-return'
+              : returnedFlight.missionId === 'pirate-elimination' || returnedFlight.missionId === 'pirate-recon'
                 ? returnedFlight.completionReason ?? 'normal-return'
                 : 'recalled',
       };
@@ -2518,6 +2726,10 @@ export function reconcileFlights(
               ? completed.completionReason === 'target-unavailable'
                 ? 'Атакующий флот вернулся без боя: цель недоступна.'
                 : 'Атакующий флот вернулся на исходную планету.'
+          : completed.missionId === 'pirate-elimination'
+            ? 'Пиратский флот вернулся на исходную планету.'
+          : completed.missionId === 'pirate-recon'
+            ? 'Разведывательный зонд вернулся; отчёт доступен в разделе «Отчёты».'
               : completed.missionId === 'deployment'
                 ? completed.completionReason === 'target-unavailable'
                   ? 'Рейс дислокации вернулся: целевая планета недоступна.'

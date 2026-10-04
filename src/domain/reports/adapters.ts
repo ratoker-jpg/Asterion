@@ -19,6 +19,10 @@ import type {
 } from './types.ts';
 import type { EspionageState, SpyHunterNotice, SpyReportSnapshot } from '../espionage/types.ts';
 import { getCombatFactionName } from '../combat/factions.ts';
+import type { PirateFlightNoticeSnapshot, PirateReconReportSnapshot } from '../pirates/state.ts';
+import { isPirateShipId } from '../combat/side-entity.ts';
+import { PIRATE_CATALOG_BY_ID } from '../pirates/catalog.ts';
+import { COMBAT_TECHNOLOGIES } from '../combat/technologies.ts';
 
 const CATEGORY_TYPE_LABEL: Record<ReportItem['category'], string> = {
   system: 'Система',
@@ -419,6 +423,69 @@ export function gasExtractionArrivalReportToReportItem(report: GasExtractionArri
   };
 }
 
+export function pirateReconReportToReportItem(report: PirateReconReportSnapshot): ReportItem {
+  const technologies = report.fullReport && report.profile
+    ? COMBAT_TECHNOLOGIES
+      .filter((technology) => (report.profile!.technologies[technology.id] ?? 0) > 0)
+      .map((technology) => `${technology.name} ${report.profile!.technologies[technology.id]}`)
+    : [];
+  const unitRows = report.fullReport && report.profile
+    ? Object.entries(report.profile.shares)
+      .filter(([id, percentage]) => isPirateShipId(id) && percentage > 0)
+      .map(([id, percentage]) => `${PIRATE_CATALOG_BY_ID[id as keyof typeof PIRATE_CATALOG_BY_ID].name}: ${percentage}%`)
+    : [];
+  const title = report.fullReport ? 'Разведка пиратов: полный отчёт' : 'Разведка пиратов: контакт не раскрыт';
+  const details = report.fullReport
+    ? [
+      ...unitRows.map((unit) => ({ label: 'Состав', value: unit })),
+      { label: 'Уровень кораблей', value: String(report.profile!.shipLevel) },
+      ...technologies.map((technology) => ({ label: 'Технология', value: technology })),
+    ]
+    : [{ label: 'Результат', value: 'Полный отчёт не получен. Состав, уровни и технологии неизвестны.' }];
+  const body = report.fullReport
+    ? `Пиратский контакт исследован. Состав: ${unitRows.join('; ')}. Уровень кораблей: ${report.profile!.shipLevel}. Технологии: ${technologies.length ? technologies.join('; ') : 'не обнаружены'}.`
+    : 'Полный отчёт не получен. Состав, уровни и технологии неизвестны.';
+  return {
+    id: report.id,
+    source: 'pirate-operations',
+    category: 'flights',
+    typeLabel: 'Разведка пиратского контакта',
+    title,
+    preview: report.fullReport ? `${unitRows.join(' · ')} · уровень ${report.profile?.shipLevel ?? 0}.` : 'Контакт не раскрыл состав пиратского флота.',
+    body,
+    timestamp: new Date(report.createdAt).toISOString(),
+    statusLabel: report.fullReport ? 'ОТЧЁТ ПОЛУЧЕН' : 'ОТЧЁТ НЕ ПОЛУЧЕН',
+    statusTone: report.fullReport ? 'success' : 'warning',
+    participantNames: ['Пираты'],
+    planetNames: [],
+    coordinates: [],
+    details,
+  };
+}
+
+export function pirateFlightNoticeToReportItem(notice: PirateFlightNoticeSnapshot): ReportItem {
+  const coordinate = `[${notice.coordinate.galaxy}:${notice.coordinate.system}:${notice.coordinate.position}]`;
+  return {
+    id: notice.id,
+    source: 'pirate-operations',
+    category: 'flights',
+    typeLabel: 'Отчёт об операции против пиратов',
+    title: notice.message,
+    preview: `${coordinate} · контакт исчез до прибытия флота.`,
+    body: `${notice.message}. Рейс вернулся без боя. Координаты: ${coordinate}.`,
+    timestamp: new Date(notice.createdAt).toISOString(),
+    statusLabel: 'ЦЕЛЬ НЕ НАЙДЕНА',
+    statusTone: 'warning',
+    participantNames: ['Пираты'],
+    planetNames: [],
+    coordinates: [coordinate],
+    details: [
+      { label: 'Результат', value: notice.message },
+      { label: 'Координаты', value: coordinate },
+    ],
+  };
+}
+
 export function buildReportsFeed(
   battleReports: readonly BattleReport[],
   operations: OperationsState,
@@ -427,6 +494,8 @@ export function buildReportsFeed(
   overpopulationReports: readonly OverpopulationEpisodeReport[] = [],
   recyclerArrivalReports: readonly RecyclerArrivalReport[] = [],
   gasExtractionArrivalReports: readonly GasExtractionArrivalReport[] = [],
+  pirateReconReports: readonly PirateReconReportSnapshot[] = [],
+  pirateFlightNotices: readonly PirateFlightNoticeSnapshot[] = [],
 ): ReportItem[] {
   const operationByBattleId = new Map(
     operations.items
@@ -453,8 +522,12 @@ export function buildReportsFeed(
   const overpopulationItems = overpopulationReports.map(overpopulationEpisodeReportToReportItem);
   const recyclerItems = recyclerArrivalReports.map(recyclerArrivalReportToReportItem);
   const gasExtractionItems = gasExtractionArrivalReports.map(gasExtractionArrivalReportToReportItem);
+  const pirateOperationItems = [
+    ...pirateReconReports.map(pirateReconReportToReportItem),
+    ...pirateFlightNotices.map(pirateFlightNoticeToReportItem),
+  ];
 
-  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems, ...recyclerItems, ...gasExtractionItems].sort((a, b) => {
+  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems, ...recyclerItems, ...gasExtractionItems, ...pirateOperationItems].sort((a, b) => {
     if (a.timestamp && b.timestamp) return Date.parse(b.timestamp) - Date.parse(a.timestamp);
     if (!a.timestamp && b.timestamp) return -1;
     if (a.timestamp && !b.timestamp) return 1;

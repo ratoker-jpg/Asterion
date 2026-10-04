@@ -16,10 +16,33 @@ import './operations.css';
 
 type OperationsViewProps = {
   state: OperationsState;
+  pirateContacts: readonly PirateContactViewModel[];
   onAccept: (operationId: OperationId) => void;
   onCancel: (operationId: OperationId) => void;
   onReveal: (operationId: OperationId) => void;
   onOpenFleets: () => void;
+  onAnalyze: (cycleKey: string) => void;
+  onPirateAttack: (contact: PirateContactViewModel) => void;
+};
+
+export type PirateReconUnitViewModel = {
+  id: string;
+  name: string;
+  percentage: number;
+  level: number;
+  technologies: readonly { name: string; level: number }[];
+};
+
+export type PirateContactViewModel = {
+  cycleKey: string;
+  coordinate: { galaxy: number; system: number };
+  startedAt: number;
+  expiresAt: number;
+  ownerCheckAt: number;
+  ownerRoll: { checkedAt: number; success: boolean; targetPlanetId?: string | null } | null;
+  reconCooldownUntil: number | null;
+  reconInFlight: boolean;
+  reconReport: { fullReport: boolean; profile?: { units: readonly PirateReconUnitViewModel[] } } | null;
 };
 
 type OperationsTab = Extract<OperationState, 'available' | 'active' | 'completed'>;
@@ -58,6 +81,109 @@ function formatLocationClass(location: OperationLocation) {
   if (location.kind === 'system') return 'Системный контакт';
   if (location.kind === 'coordinates') return 'Координатный контакт';
   return location.label;
+}
+
+function pirateCountdown(targetAt: number, now: number) {
+  const seconds = Math.max(0, Math.ceil((targetAt - now) / 1000));
+  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+function pirateCoordinate(contact: PirateContactViewModel) {
+  return `[${contact.coordinate.galaxy}:${contact.coordinate.system}]`;
+}
+
+function PirateReconSummary({ report }: { report: NonNullable<PirateContactViewModel['reconReport']> }) {
+  if (!report.fullReport) {
+    return <p className="operations-pirate-recon-result-v2 is-failed">Сигнатуру не удалось классифицировать. Результат анализа сохранён.</p>;
+  }
+
+  const units = report.profile?.units ?? [];
+  return (
+    <div className="operations-pirate-recon-result-v2" data-qa-pirate-recon-report="full">
+      <small>СОХРАНЁННЫЙ ПРОФИЛЬ · СОСТАВ ПО ПРОЦЕНТАМ</small>
+      {units.length ? (
+        <div className="operations-pirate-profile-v2">
+          {units.map((unit) => (
+            <div key={unit.id}>
+              <strong>{unit.name}</strong>
+              <span>{number.format(unit.percentage)}% · уровень {unit.level}</span>
+              {unit.technologies.map((technology) => <small key={`${unit.id}-${technology.name}`}>{technology.name} · ур. {technology.level}</small>)}
+            </div>
+          ))}
+        </div>
+      ) : <p>Данные профиля пока недоступны.</p>}
+      <p>Точное количество кораблей и внутренние тиры скрыты.</p>
+    </div>
+  );
+}
+
+function PirateContactCard({ contact, now, onAnalyze, onPirateAttack }: {
+  contact: PirateContactViewModel;
+  now: number;
+  onAnalyze: (cycleKey: string) => void;
+  onPirateAttack: (contact: PirateContactViewModel) => void;
+}) {
+  const expired = contact.expiresAt <= now;
+  const cooldownActive = (contact.reconCooldownUntil ?? 0) > now;
+  const analyzeDisabled = expired || contact.reconInFlight || cooldownActive;
+  const roll = contact.ownerRoll;
+
+  return (
+    <article className={`operations-pirate-contact-v2${expired ? ' is-expired' : ''}`} data-qa-pirate-contact={contact.cycleKey}>
+      <header className="operations-pirate-contact-head-v2">
+        <div>
+          <small>ПИРАТСКИЙ КОНТАКТ · ЦИКЛ</small>
+          <h2>{pirateCoordinate(contact)}</h2>
+        </div>
+        <span className="operations-pirate-signal-v2" aria-hidden="true">СИГНАЛ</span>
+      </header>
+
+      <div className="operations-pirate-status-grid-v2">
+        <div>
+          <small>ПРОВЕРКА НАЛЁТА</small>
+          {roll ? <strong>{roll.success ? 'НАЛЁТ СФОРМИРОВАН' : 'СИСТЕМА ВНЕ ОПАСНОСТИ'}</strong> : <strong>{expired ? 'КОНТАКТ ИСЧЁЗ' : `ЧЕРЕЗ ${pirateCountdown(contact.ownerCheckAt, now)}`}</strong>}
+          {roll ? <span>{roll.success && roll.targetPlanetId ? 'Цель рейда зафиксирована · ' : 'Результат сохранён · '}{new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(roll.checkedAt)}</span> : <span>Контакт активен до {pirateCountdown(contact.expiresAt, now)}</span>}
+        </div>
+        <div>
+          <small>РАЗВЕДКА</small>
+          <strong>{contact.reconInFlight ? 'ЗОНД В ПУТИ' : contact.reconReport?.fullReport ? 'ПРОФИЛЬ СОХРАНЁН' : contact.reconReport ? 'ОТЧЁТ СОХРАНЁН' : cooldownActive ? `ПОВТОР ЧЕРЕЗ ${pirateCountdown(contact.reconCooldownUntil!, now)}` : 'АНАЛИЗ ДОСТУПЕН'}</strong>
+          <span>{contact.reconReport ? (contact.reconReport.fullReport ? 'Последний результат доступен ниже.' : 'Неудачная попытка записана.') : 'Одноразовая разведка текущего цикла.'}</span>
+        </div>
+      </div>
+
+      {contact.reconReport ? <PirateReconSummary report={contact.reconReport} /> : null}
+
+      <footer className="operations-pirate-actions-v2">
+        <button type="button" className="operations-primary-v2" disabled={analyzeDisabled} onClick={() => onAnalyze(contact.cycleKey)} aria-label={`Анализировать пиратский контакт ${pirateCoordinate(contact)}`}>
+          {expired ? 'КОНТАКТ ИСЧЁЗ' : contact.reconInFlight ? 'ЗОНД В ПУТИ' : cooldownActive ? 'АНАЛИЗ НЕДОСТУПЕН' : 'АНАЛИЗИРОВАТЬ'}
+        </button>
+        <button type="button" className="operations-secondary-v2 operations-pirate-attack-v2" disabled={expired} onClick={() => onPirateAttack(contact)} aria-label={`Атаковать пиратский контакт ${pirateCoordinate(contact)}`}>
+          {expired ? 'КОНТАКТ ИСЧЁЗ' : 'АТАКОВАТЬ'}
+        </button>
+      </footer>
+    </article>
+  );
+}
+
+function PirateContactsSection({ contacts, now, onAnalyze, onPirateAttack }: {
+  contacts: readonly PirateContactViewModel[];
+  now: number;
+  onAnalyze: (cycleKey: string) => void;
+  onPirateAttack: (contact: PirateContactViewModel) => void;
+}) {
+  return (
+    <section className="operations-pirates-v2" aria-labelledby="operations-pirates-title" data-qa-pirate-contacts>
+      <header className="operations-pirates-heading-v2">
+        <div><small>УГРОЗЫ СИСТЕМЫ</small><h2 id="operations-pirates-title">ПИРАТСКИЕ КОНТАКТЫ</h2></div>
+        <span>{contacts.length} АКТИВНЫХ</span>
+      </header>
+      {contacts.length ? (
+        <div className="operations-pirate-list-v2">
+          {contacts.map((contact) => <PirateContactCard key={contact.cycleKey} contact={contact} now={now} onAnalyze={onAnalyze} onPirateAttack={onPirateAttack} />)}
+        </div>
+      ) : <p className="operations-pirates-empty-v2">Активных пиратских контактов нет.</p>}
+    </section>
+  );
 }
 
 function threatText(operation: OperationInstance) {
@@ -311,9 +437,16 @@ function OperationDossier({ operation, onAccept, onCancel, onReveal, onOpenFleet
   );
 }
 
-export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets }: OperationsViewProps) {
+export function OperationsView({ state, pirateContacts, onAccept, onCancel, onReveal, onOpenFleets, onAnalyze, onPirateAttack }: OperationsViewProps) {
   const [tab, setTab] = useState<OperationsTab>('available');
   const [selectedId, setSelectedId] = useState<OperationId | null>(() => state.items.find((item) => item.state === 'available')?.id ?? null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (pirateContacts.length === 0) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [pirateContacts.length]);
 
   const visibleItems = useMemo(() => state.items.filter((item) => item.state === tab), [state.items, tab]);
   const selected = state.items.find((item) => item.id === selectedId && item.state === tab) ?? null;
@@ -359,6 +492,8 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
 
         <div className="operations-slots-v2"><small>КОНТАКТЫ</small><strong>{state.items.filter((item) => item.state !== 'completed').length}</strong><span>/ 4</span></div>
       </header>
+
+      <PirateContactsSection contacts={pirateContacts} now={now} onAnalyze={onAnalyze} onPirateAttack={onPirateAttack} />
 
       <div className="operations-layout-v2">
         <section className="operations-feed-v2" aria-label={TAB_LABELS[tab]}>

@@ -8,6 +8,7 @@ import type {
   OwnedDefenseState,
 } from '../domain/fleet/production.ts';
 import type { OperationsState } from '../domain/operations/types.ts';
+import type { PirateOperationsState } from '../domain/pirates/state.ts';
 import type { PlayerProfileState } from '../domain/profile/types.ts';
 import type { RatingPrototypeState } from '../domain/rating/fixtures.ts';
 import type { ReportsState } from '../domain/reports/types.ts';
@@ -123,6 +124,8 @@ export type SaveState = {
   combat: BattleHistoryState;
   combatSimulator: SimulatorState;
   operations: OperationsState;
+  /** Global timed-contact ledger; optional only for legacy source-compatible fixtures. */
+  pirateOperations?: PirateOperationsState;
   command: CommandState;
   reports: ReportsState;
   science: ScienceState;

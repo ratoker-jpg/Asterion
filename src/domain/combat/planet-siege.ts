@@ -1,5 +1,6 @@
 import { getBuildingPresentation, isBuildingRole } from '../buildings/resource-zone.ts';
 import { getFactionCombatEntity } from './faction-catalog.ts';
+import { PIRATE_CATALOG_BY_ID } from '../pirates/catalog.ts';
 import type { CombatFactionId } from './factions.ts';
 import { createSeededCombatRng } from './resolver.ts';
 import type {
@@ -61,6 +62,8 @@ export type PlanetSiegeContext = {
   attackerFactionId: CombatFactionId;
   defenderFactionId: CombatFactionId;
   targetOwnerPlanetCount: number;
+  /** Required for the strict pirate breaker score gate; absent means unavailable. */
+  targetOwnerTotalPoints?: number;
   eventSequence?: number;
 };
 
@@ -134,6 +137,31 @@ function forceDeathStars(force: BattleForceSnapshot, factionId: CombatFactionId)
     });
 }
 
+function forcePirateBreakers(report: BattleReport, context: PlanetSiegeContext): BattleSiegeDestroyerContribution[] {
+  if (report.missionType !== 'pirate-raid'
+      || report.attacker.race !== 'pirates'
+      || !(typeof context.targetOwnerTotalPoints === 'number' && context.targetOwnerTotalPoints > 3_000_000)
+      || !(report.defenderForce.populationBefore < 2_000)) return [];
+  const entity = PIRATE_CATALOG_BY_ID['pirate-planet-breaker'];
+  return report.attackerForce.stacks
+    .filter((stack) => stack.entityId === 'pirate-planet-breaker')
+    .slice(0, 1)
+    .map((stack) => {
+      const level = clampLevel(stack.level);
+      return {
+        factionId: context.attackerFactionId,
+        entityId: 'pirate-planet-breaker' as const,
+        survivors: safeInteger(stack.countAfter),
+        level,
+        // Neutral demolition baseline is the median of the three playable Death Star profiles.
+        scaledDemolitionPoints: scaledPlanetSiegeValue(90, level),
+        scaledDestructionChanceBps: scaledPlanetSiegeValue(entity.ability.kind === 'planet-breaker' ? entity.ability.destructionChanceAtLevel10Bps : 0, level),
+        baseAttack: safeInteger(entity.combat.attack),
+        baseLife: safeInteger(entity.combat.life),
+      };
+    });
+}
+
 function contributionCount(contributions: readonly BattleSiegeDestroyerContribution[]) {
   return contributions.reduce((total, contribution) => total + contribution.survivors, 0);
 }
@@ -149,7 +177,7 @@ function defensePopulationAfter(report: BattleReport, factionId: CombatFactionId
   const recorded = report.defenderForce.defensePopulationAfter;
   if (typeof recorded === 'number' && Number.isFinite(recorded)) return Math.max(0, Math.floor(recorded));
   return (report.defenderForce.defenses ?? []).reduce((total, stack) => {
-    const entity = getFactionCombatEntity(factionId, stack.entityId);
+    const entity = getFactionCombatEntity(factionId, stack.entityId as import('./ids.ts').CombatEntityId);
     return total + safeInteger(stack.countAfter) * safeInteger(entity.population);
   }, 0);
 }
@@ -347,7 +375,9 @@ export function resolvePlanetSiege<T extends PlanetSiegeTarget>(
   target: T,
   context: PlanetSiegeContext,
 ): PlanetSiegeResult & { target: T } {
-  const attackerDestroyers = forceDeathStars(report.attackerForce, context.attackerFactionId);
+  const attackerDestroyers = report.missionType === 'pirate-raid'
+    ? forcePirateBreakers(report, context)
+    : forceDeathStars(report.attackerForce, context.attackerFactionId);
   const defenderDestroyers = forceDeathStars(report.defenderForce, context.defenderFactionId);
   const defensePopulation = defensePopulationAfter(report, context.defenderFactionId);
   const demolition = resolveDemolition(report, target, attackerDestroyers, context, defensePopulation);

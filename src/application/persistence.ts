@@ -20,6 +20,12 @@ import {
   migrateOperationsState,
 } from '../domain/operations/repository.ts';
 import {
+  createDefaultPirateOperationsState,
+  migratePirateOperationsState,
+  normalizePirateProfileSnapshot,
+} from '../domain/pirates/state.ts';
+import { PIRATE_CATALOG_BY_ID, PIRATE_SHIP_IDS } from '../domain/pirates/catalog.ts';
+import {
   createDefaultRatingPrototypeState,
   migrateRatingPrototypeState,
 } from '../domain/rating/fixtures.ts';
@@ -30,7 +36,9 @@ import {
 } from '../domain/reports/adapters.ts';
 import type { GasExtractionArrivalReport, OverpopulationEpisodeReport, OrdinaryShipId, RecyclerArrivalReport } from '../domain/reports/types.ts';
 import { normalizeCombatFactionId } from '../domain/combat/factions.ts';
-import { SHIP_IDS } from '../domain/combat/ids.ts';
+import type { CombatFactionId } from '../domain/combat/factions.ts';
+import { DEFENSE_IDS, SHIP_IDS } from '../domain/combat/ids.ts';
+import { COMBAT_TECHNOLOGY_IDS } from '../domain/combat/technologies.ts';
 import {
   createDefaultReportsState,
   migrateReportsState,
@@ -60,12 +68,14 @@ import {
 } from '../domain/runtime/mode.ts';
 import {
   createCanonicalStartingFleet,
+  calculateFleetPopulation,
   createEmptyFleetState,
   normalizeFleetStateForCapacity,
   removeSolarSatellitesFromFleet,
   resolveSavedFleetState,
 } from '../domain/fleet/runtime.ts';
 import {
+  calculateDefensePopulation,
   createDefaultFleetProductionState,
   createEmptyDefenseState,
   migrateDefenseState,
@@ -74,13 +84,16 @@ import {
 } from '../domain/fleet/production.ts';
 import type { OverpopulationState } from '../domain/fleet/overpopulation.ts';
 import {
+  BUILDING_QUEUE_CAPACITY,
   createCanonicalStartingBuildingLevels,
   createDefaultBuildingLevels,
   getStorageCapacities,
+  isBuildingRole,
   migrateBuildingLevels,
   migrateBuildingQueue,
   type BuildingQueueItem,
 } from '../domain/buildings/resource-zone.ts';
+import { getBuildingMaxLevel } from '../domain/buildings/balance-v1.ts';
 import {
   createEmptyBotAssignment,
   migrateProductionBotAssignment,
@@ -129,6 +142,7 @@ import { POSITION_COUNT, SYSTEM_COUNT, TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_N
 import { migrateEspionageState } from '../domain/espionage/repository.ts';
 import { createDefaultEspionageState } from '../domain/espionage/runtime.ts';
 import { createDefaultTestEspionageState } from '../domain/espionage/fixtures.ts';
+import { calculatePirateActivityRatio, pirateRaidPopulationMultiplier } from '../domain/pirates/contact-rules.ts';
 
 export const SAVE_SCHEMA_VERSION = Math.max(
   COMBAT_SAVE_SCHEMA_VERSION,
@@ -201,6 +215,7 @@ type StoredSave = {
   combat?: unknown;
   combatSimulator?: unknown;
   operations?: unknown;
+  pirateOperations?: unknown;
   command?: unknown;
   reports?: unknown;
   asteroidSimulation?: unknown;
@@ -527,6 +542,9 @@ const PERSISTED_FLIGHT_MISSIONS = new Set<MissionId>([
   'gas',
   'sun-support',
   'space-flight',
+  'pirate-elimination',
+  'pirate-raid',
+  'pirate-recon',
 ]);
 const PERSISTED_FLIGHT_PHASES = new Set<FlightPhase>([
   'outbound',
@@ -547,6 +565,7 @@ const PERSISTED_FLIGHT_COMPLETION_REASONS = new Set<FlightCompletionReason>([
   'spy-destroyed',
   'origin-destroyed',
   'mission-failed',
+  'pirate-raid-resolved',
 ]);
 const PERSISTED_FLIGHT_DESTINATION_KINDS = new Set<FlightDestination['kind']>([
   'coordinate',
@@ -641,6 +660,149 @@ function coordinatesMatch(left: unknown, right: unknown): boolean {
     && left.position === right.position;
 }
 
+function isPersistedCountRecord(value: unknown, allowedIds: readonly string[]): value is Record<string, number> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return Object.entries(value).every(([id, count]) => allowedIds.includes(id) && isNonNegativeInteger(count));
+}
+
+function isPersistedPirateComposition(value: unknown, allowBreaker: boolean): value is Record<string, number> {
+  const allowed = allowBreaker ? PIRATE_SHIP_IDS : PIRATE_SHIP_IDS.filter((id) => id !== 'pirate-planet-breaker');
+  return isPersistedCountRecord(value, allowed)
+    && Object.entries(value).every(([, count]) => count > 0);
+}
+
+function isPersistedPirateTargetBuildingQueue(value: unknown, targetPlanetId: string): boolean {
+  if (!Array.isArray(value) || value.length > BUILDING_QUEUE_CAPACITY) return false;
+  const ids = new Set<string>();
+  return value.every((raw) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+    const item = raw as Record<string, unknown>;
+    if (item.kind !== 'building'
+      || !isNonEmptyPersistedString(item.id)
+      || ids.has(item.id)
+      || item.planetId !== targetPlanetId
+      || !isBuildingRole(item.assetRole)
+      || !isNonNegativeInteger(item.enqueuedAt)
+      || !isNonNegativeInteger(item.startedAt)
+      || !isNonNegativeInteger(item.finishAt)
+      || item.finishAt < item.startedAt
+      || !isNonNegativeInteger(item.durationMs) || item.durationMs < 1
+      || !isNonNegativeInteger(item.targetLevel) || item.targetLevel < 1
+      || item.targetLevel > getBuildingMaxLevel(item.assetRole)) return false;
+    if (item.cost !== undefined
+      && (!item.cost || typeof item.cost !== 'object' || Array.isArray(item.cost)
+        || !isPersistedCountRecord(item.cost, ['metal', 'minerals', 'gas', 'energy']))) return false;
+    ids.add(item.id);
+    return true;
+  });
+}
+
+function isPersistedPirateFlightSnapshot(value: unknown, missionId: MissionId, item: Record<string, unknown>): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const snapshot = value as Record<string, unknown>;
+  const profile = normalizePirateProfileSnapshot(snapshot.profile);
+  if (!isNonEmptyPersistedString(snapshot.contactCycleKey) || !isNonEmptyPersistedString(snapshot.ownerId)
+    || (profile && (profile.ownerId !== snapshot.ownerId || profile.contactCycleKey !== snapshot.contactCycleKey))) return false;
+
+  if (missionId === 'pirate-elimination') {
+    if (!profile || snapshot.kind !== 'elimination'
+      || item.ownerSide !== 'player'
+      || item.targetKind !== 'pirate'
+      || !isNonNegativeInteger(snapshot.sentCombatPopulation) || snapshot.sentCombatPopulation <= 0
+      || !isNonNegativeInteger(snapshot.targetPopulation) || snapshot.targetPopulation !== Math.round(snapshot.sentCombatPopulation * 0.9)
+      || !isNonNegativeInteger(snapshot.actualPopulation)
+      || !isPersistedPirateComposition(snapshot.shipComposition, false)
+      || (item.destination as Record<string, unknown>)?.kind !== 'coordinate') return false;
+    const ships = snapshot.shipComposition as Record<string, number>;
+    const actual = Object.entries(ships).reduce((total, [id, count]) => total + PIRATE_CATALOG_BY_ID[id as keyof typeof PIRATE_CATALOG_BY_ID].population * count, 0);
+    return actual === snapshot.actualPopulation && actual > 0;
+  }
+
+  if (missionId === 'pirate-recon') {
+    if (snapshot.kind !== 'recon'
+      || item.ownerSide !== 'player'
+      || item.targetKind !== 'pirate'
+      || !isNonNegativeInteger(snapshot.roll) || snapshot.roll > 99
+      || typeof snapshot.fullReport !== 'boolean' || snapshot.fullReport !== (snapshot.roll < 70)
+      || !isNonNegativeInteger(snapshot.dispatchedAt) || snapshot.dispatchedAt !== item.departedAt
+      || (snapshot.fullReport ? !profile : false)
+      || (!snapshot.fullReport && snapshot.profile !== undefined)
+      || (item.destination as Record<string, unknown>)?.kind !== 'coordinate') return false;
+    const selected = item.selectedShips as Record<string, unknown>;
+    return Object.keys(selected).length === 1 && selected['spy-probe'] === 1;
+  }
+
+  if (missionId === 'pirate-raid') {
+    if (!profile || snapshot.kind !== 'raid'
+      || item.ownerSide !== 'pirates'
+      || !isNonEmptyPersistedString(snapshot.targetPlanetId)
+      || snapshot.targetPlanetId !== item.destinationPlanetId
+      || snapshot.targetOwnerId !== item.destinationOwnerId
+      || snapshot.ownerId !== snapshot.targetOwnerId
+      || !isFinitePersistedNumber(snapshot.roll) || snapshot.roll < 0 || snapshot.roll >= 1
+      || !isNonNegativeInteger(snapshot.checkedAt)
+      || !isNonNegativeInteger(snapshot.targetPopulationAtDispatch)
+      || !isNonNegativeInteger(snapshot.targetPopulationBudget)
+      || !isNonNegativeInteger(snapshot.actualPopulation) || snapshot.actualPopulation <= 0
+      || !isNonEmptyPersistedString(snapshot.seed)
+      || !isPersistedPirateComposition(snapshot.shipComposition, true)
+      || !snapshot.targetSnapshot || typeof snapshot.targetSnapshot !== 'object' || Array.isArray(snapshot.targetSnapshot)
+      || (item.destination as Record<string, unknown>)?.kind !== 'planet') return false;
+    const target = snapshot.targetSnapshot as Record<string, unknown>;
+    if (!isNonEmptyPersistedString(target.name) || !isNonEmptyPersistedString(target.ownerName)
+      || !['aegis', 'synod', 'veyra'].includes(String(target.factionId))
+      || !isPersistedCountRecord(target.ships, SHIP_IDS)
+      || !isPersistedCountRecord(target.defenses, DEFENSE_IDS)
+      || !isPersistedCountRecord(target.commanders, COMMANDER_IDS)
+      || !isPersistedCountRecord(target.shipLevels, SHIP_IDS)
+      || !isPersistedCountRecord(target.commanderLevels, COMMANDER_IDS)
+      || !target.technologies || typeof target.technologies !== 'object' || Array.isArray(target.technologies)
+      || !Object.entries(target.technologies as Record<string, unknown>).every(([id, level]) => COMBAT_TECHNOLOGY_IDS.includes(id as (typeof COMBAT_TECHNOLOGY_IDS)[number]) && isNonNegativeInteger(level))
+      || !target.buildings || typeof target.buildings !== 'object' || Array.isArray(target.buildings)
+      || !Object.values(target.buildings as Record<string, unknown>).every(isNonNegativeInteger)
+      || !isPersistedPirateTargetBuildingQueue(target.buildingQueue, snapshot.targetPlanetId as string)
+      || !isNonNegativeInteger(target.ownerPlanetCount) || target.ownerPlanetCount < 1
+      || !isFinitePersistedNumber(target.ownerTotalPoints) || target.ownerTotalPoints < 0) return false;
+    const composition = snapshot.shipComposition as Record<string, number>;
+    const baseShips = Object.entries(composition).filter(([id]) => id !== 'pirate-planet-breaker');
+    if (baseShips.length !== 1 || profile.shares[baseShips[0]![0] as keyof typeof profile.shares] !== 100) return false;
+    const baseShipId = baseShips[0]![0] as keyof typeof PIRATE_CATALOG_BY_ID;
+    const baseShip = PIRATE_CATALOG_BY_ID[baseShipId];
+    const requestedPopulation = Math.round(snapshot.targetPopulationAtDispatch
+      * pirateRaidPopulationMultiplier(calculatePirateActivityRatio(profile.score.resourcePoints, profile.score.battlePoints)));
+    const lowerCount = Math.floor(requestedPopulation / baseShip.population);
+    const upperCount = lowerCount + (requestedPopulation % baseShip.population === 0 ? 0 : 1);
+    const expectedCount = Math.max(1, requestedPopulation - lowerCount * baseShip.population
+      <= upperCount * baseShip.population - requestedPopulation ? lowerCount : upperCount);
+    if (snapshot.targetPopulationBudget !== requestedPopulation || baseShips[0]![1] !== expectedCount) return false;
+    const targetFactionId = target.factionId as CombatFactionId;
+    const emptyFleet = createEmptyFleetState();
+    const targetFleet = {
+      ...emptyFleet,
+      ships: { ...emptyFleet.ships, ...(target.ships as Partial<typeof emptyFleet.ships>) },
+      commanders: { ...emptyFleet.commanders, ...(target.commanders as Partial<typeof emptyFleet.commanders>) },
+    };
+    const emptyDefense = createEmptyDefenseState();
+    const targetDefense = {
+      defenses: { ...emptyDefense.defenses, ...(target.defenses as Partial<typeof emptyDefense.defenses>) },
+    };
+    const targetPopulation = calculateFleetPopulation(targetFleet, targetFactionId)
+      + calculateDefensePopulation(targetDefense, targetFactionId);
+    if (snapshot.targetPopulationAtDispatch !== targetPopulation) return false;
+    const actual = Object.entries(composition).reduce((total, [id, count]) => total + PIRATE_CATALOG_BY_ID[id as keyof typeof PIRATE_CATALOG_BY_ID].population * count, 0);
+    if (actual !== snapshot.actualPopulation) return false;
+    const breakerCount = composition['pirate-planet-breaker'] ?? 0;
+    return breakerCount <= 1
+      && ((breakerCount === 0 && snapshot.planetBreakerLevel === undefined)
+        || (breakerCount === 1 && isNonNegativeInteger(snapshot.planetBreakerLevel)
+          && snapshot.planetBreakerLevel <= 10
+          && snapshot.planetBreakerLevel === profile.shipLevel
+          && target.ownerTotalPoints > 3_000_000
+          && snapshot.targetPopulationAtDispatch < 2_000));
+  }
+  return false;
+}
+
 function isValidPersistedSpaceFlightDuration(durationMs: number, mode: RuntimeMode): boolean {
   const minimumMs = 5 * 60_000;
   const maximumMs = (11 * 60 + 59) * 60_000;
@@ -689,8 +851,11 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
     || item.gasCost < 0
     || (isSpaceFlight && item.gasCost !== 100)) return false;
 
-  if ((item.ownerSide !== undefined && item.ownerSide !== 'player' && item.ownerSide !== 'bot01')
-    || (item.ownerSide === 'bot01' && item.missionId !== 'attack')) return false;
+  if ((item.ownerSide !== undefined && item.ownerSide !== 'player' && item.ownerSide !== 'bot01' && item.ownerSide !== 'pirates')
+    || (item.ownerSide === 'bot01' && item.missionId !== 'attack')
+    || (item.ownerSide === 'pirates' && item.missionId !== 'pirate-raid')
+    || ((item.missionId === 'pirate-elimination' || item.missionId === 'pirate-recon') && item.ownerSide !== 'player')
+    || (item.missionId === 'pirate-raid' && item.ownerSide !== 'pirates')) return false;
 
   if (item.operationId !== undefined && !isNonEmptyPersistedString(item.operationId)) return false;
   if (item.spyMissionId !== undefined && !isNonEmptyPersistedString(item.spyMissionId)) return false;
@@ -796,7 +961,7 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
       && Object.values(selectedCommanders ?? {}).some((quantity) => isNonNegativeInteger(quantity) && quantity > 0);
     const hasValidCommanderOnlySpaceFlight = isSpaceFlight
       && Object.values(selectedCommanders ?? {}).some((quantity) => isNonNegativeInteger(quantity) && quantity > 0);
-    if (!hasValidCommanderOnlyDeployment && !hasValidCommanderOnlySpaceFlight) return false;
+    if (!hasValidCommanderOnlyDeployment && !hasValidCommanderOnlySpaceFlight && item.missionId !== 'pirate-raid') return false;
   }
   if (item.selectedCommanderLevels !== undefined) {
     if (!item.selectedCommanderLevels || typeof item.selectedCommanderLevels !== 'object' || Array.isArray(item.selectedCommanderLevels)) return false;
@@ -825,13 +990,16 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
       || shipEntries[0][0] !== 'spy-probe'
       || shipEntries[0][1] !== 1) return false;
   }
-  if (item.missionId === 'attack') {
+  if (item.missionId === 'attack' || item.missionId === 'pirate-elimination') {
     const bot01Incoming = item.ownerSide === 'bot01';
-    if (destinationRecord.kind !== 'planet'
-      || !isNonEmptyPersistedString(item.destinationPlanetId)
-      || item.destinationPlanetId !== destinationRecord.planetId
-      || (item.targetRelation !== 'enemy' && item.targetRelation !== 'neutral'
-        && !(bot01Incoming && item.targetRelation === 'self'))
+    const isPirateElimination = item.missionId === 'pirate-elimination';
+    if ((isPirateElimination
+      ? destinationRecord.kind !== 'coordinate' || item.targetKind !== 'pirate'
+      : destinationRecord.kind !== 'planet'
+        || !isNonEmptyPersistedString(item.destinationPlanetId)
+        || item.destinationPlanetId !== destinationRecord.planetId
+        || (item.targetRelation !== 'enemy' && item.targetRelation !== 'neutral'
+          && !(bot01Incoming && item.targetRelation === 'self')))
       || (bot01Incoming && (item.targetKind !== 'player'
         || item.targetRelation !== 'self'
         || !isNonEmptyPersistedString(item.destinationOwnerId)
@@ -858,6 +1026,20 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
       if (!['metal', 'minerals', 'gas', 'debris'].every((key) => isNonNegativeInteger(lootRecord[key]))) return false;
       if (attackResolution.lootCreditedAt !== undefined && !isFinitePersistedNumber(attackResolution.lootCreditedAt)) return false;
     }
+  }
+  if (item.missionId === 'pirate-elimination' || item.missionId === 'pirate-recon' || item.missionId === 'pirate-raid') {
+    if (!isPersistedPirateFlightSnapshot(item.pirateSnapshot, item.missionId as MissionId, item)) return false;
+  } else if (item.pirateSnapshot !== undefined) return false;
+  if (item.missionId === 'pirate-recon') {
+    if (destinationRecord.kind !== 'coordinate' || item.targetKind !== 'pirate'
+      || Object.keys(selectedShips as Record<string, unknown>).length !== 1
+      || (selectedShips as Record<string, unknown>)['spy-probe'] !== 1) return false;
+  }
+  if (item.missionId === 'pirate-raid') {
+    if (destinationRecord.kind !== 'planet'
+      || !isNonEmptyPersistedString(item.destinationPlanetId)
+      || item.targetKind !== 'player' && item.targetKind !== 'npc'
+      || Object.keys(selectedShips as Record<string, unknown>).length > 0) return false;
   }
 
   const phase = item.phase as FlightPhase;
@@ -1030,6 +1212,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     combat: createDefaultBattleHistory(mode),
     combatSimulator: createDefaultSimulatorState(),
     operations: createDefaultOperationsState(mode),
+    pirateOperations: createDefaultPirateOperationsState(now),
     command,
     reports: createDefaultReportsState(),
     science,
@@ -1090,6 +1273,10 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
     });
     const combat = migrateBattleHistory(parsed.combat, mode);
     const operations = migrateOperationsState(parsed.operations, mode);
+    const pirateOperations = migratePirateOperationsState(
+      parsed.pirateOperations,
+      numberOr(objectRecord(parsed.resourceClock)?.lastReconciledAt, timestamp),
+    );
     const command = migrateCommandState(parsed.command, mode);
     const profile = syncPlayerProfileWithAlliance(
       syncPlayerProfileWithFaction(migratePlayerProfileState(parsed.profile), CURRENT_PLAYER_FACTION_ID),
@@ -1112,6 +1299,8 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       overpopulationReports,
       recyclerArrivalReports,
       gasExtractionArrivalReports,
+      pirateOperations.reconReports,
+      pirateOperations.flightNotices,
     ).map((item) => item.id);
     const migratedSavedFleet = removeSolarSatellitesFromFleet(
       resolveSavedFleetState(savedHomeworld?.fleet, profile.factionId),
@@ -1395,6 +1584,7 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       combat,
       combatSimulator: migrateSimulatorState(parsed.combatSimulator),
       operations,
+      pirateOperations,
       command,
       profile,
       reports: {

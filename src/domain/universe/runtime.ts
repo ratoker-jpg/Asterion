@@ -18,6 +18,8 @@ import type {
   UniversePirateState,
   UniverseSystem,
   UniverseTimedObjectState,
+  UniversePirateScheduleOverride,
+  UniversePirateContactCoordinate,
 } from './types.ts';
 import { ASTEROID_GAS_CAP, initializeAsteroidGasState } from './asteroid-gas.ts';
 import { getPositionCoefficientPercent, getSunEfficiencyPercent } from '../energy/runtime.ts';
@@ -376,6 +378,14 @@ export type CreateUniverseSystemOptions = {
   galaxyCount?: number;
   /** When supplied, use persisted positions rather than a wall-clock projection. */
   asteroidStates?: readonly UniverseAsteroidRuntimeState[];
+  /** Persists early pirate defeats while continuing the existing seeded timer. */
+  pirateScheduleOverride?: UniversePirateScheduleOverride;
+  /** Per-system schedule continuations, keyed as `galaxy:system`, for map generation. */
+  pirateScheduleOverrides?: Readonly<Record<string, UniversePirateScheduleOverride>>;
+  /** Pins a generated contact to its persisted coordinate for the same cycle. */
+  pirateContactCoordinate?: UniversePirateContactCoordinate;
+  /** Per-system pinned contact coordinates, keyed as `galaxy:system`, for map generation. */
+  pirateContactCoordinates?: Readonly<Record<string, UniversePirateContactCoordinate>>;
   playerPlanets?: readonly UniversePersistedPlayerPlanet[];
   registeredPlanets?: readonly UniverseRegisteredPlanet[];
 };
@@ -735,17 +745,100 @@ function ensureTimedCycles(kind: TimedObjectKind, galaxy: number, system: number
   return cache.cycles;
 }
 
+function isValidPirateScheduleOverride(value: UniversePirateScheduleOverride | undefined): value is UniversePirateScheduleOverride {
+  return Boolean(value
+    && Number.isSafeInteger(value.defeatedCycleIndex) && value.defeatedCycleIndex >= 0
+    && Number.isFinite(value.defeatedAt)
+    && Number.isSafeInteger(value.nextCycleIndex) && value.nextCycleIndex === value.defeatedCycleIndex + 1
+    && Number.isFinite(value.nextStartAt) && value.nextStartAt >= value.defeatedAt
+    && Number.isFinite(value.nextSpawnChance) && value.nextSpawnChance >= 0 && value.nextSpawnChance <= 1);
+}
+
+function pirateCyclesWithOverride(
+  galaxy: number,
+  system: number,
+  throughMs: number,
+  override?: UniversePirateScheduleOverride,
+): TimedObjectSchedule[] {
+  if (!isValidPirateScheduleOverride(override) || throughMs < override.defeatedAt) {
+    return ensureTimedCycles('pirate', galaxy, system, throughMs);
+  }
+
+  const config = timedObjectConfig('pirate');
+  const base = ensureTimedCycles(
+    'pirate',
+    galaxy,
+    system,
+    config.epoch + (override.defeatedCycleIndex + 1) * (config.maxLifetimeMs + config.quietMs),
+  );
+  const defeated = base[override.defeatedCycleIndex];
+  if (!defeated?.present || override.defeatedAt < defeated.startAt || override.defeatedAt >= defeated.expiresAt) {
+    return ensureTimedCycles('pirate', galaxy, system, throughMs);
+  }
+
+  const cycles = base.slice(0, override.defeatedCycleIndex);
+  cycles.push({
+    ...defeated,
+    expiresAt: override.defeatedAt,
+    respawnAt: override.nextStartAt,
+  });
+
+  let nextStartAt = override.nextStartAt;
+  let nextSpawnChance = override.nextSpawnChance;
+  for (let cycleIndex = override.nextCycleIndex;
+    nextStartAt <= throughMs + config.maxLifetimeMs;
+    cycleIndex += 1) {
+    const random = seededRandom(config.seed, galaxy, system, cycleIndex + 1);
+    const lifetimeMs = randomInt(random, config.minLifetimeMs, config.maxLifetimeMs);
+    const present = random() < nextSpawnChance;
+    const expiresAt = present ? nextStartAt + lifetimeMs : nextStartAt;
+    const respawnAt = (present ? expiresAt : nextStartAt) + config.quietMs;
+    const schedule: TimedObjectSchedule = {
+      cycleIndex,
+      startAt: nextStartAt,
+      expiresAt,
+      respawnAt,
+      lifetimeMs,
+      spawnChance: nextSpawnChance,
+      present,
+    };
+    cycles.push(schedule);
+    nextSpawnChance = present || config.chanceStep === 0
+      ? config.initialChance
+      : Math.min(1, nextSpawnChance + config.chanceStep);
+    nextStartAt = respawnAt;
+  }
+  return cycles;
+}
+
 export type UniverseTimedObjectSchedule = TimedObjectSchedule;
 
-export function getUniverseTimedObjectSchedule(kind: TimedObjectKind, galaxy: number, system: number, cycleIndex: number): UniverseTimedObjectSchedule {
+export function getUniverseTimedObjectSchedule(
+  kind: TimedObjectKind,
+  galaxy: number,
+  system: number,
+  cycleIndex: number,
+  pirateScheduleOverride?: UniversePirateScheduleOverride,
+): UniverseTimedObjectSchedule {
   const config = timedObjectConfig(kind);
   const safeIndex = Math.max(0, Math.floor(cycleIndex));
-  const cycles = ensureTimedCycles(kind, galaxy, system, config.epoch + (safeIndex + 1) * (config.maxLifetimeMs + config.quietMs));
+  const throughMs = config.epoch + (safeIndex + 1) * (config.maxLifetimeMs + config.quietMs);
+  const cycles = kind === 'pirate'
+    ? pirateCyclesWithOverride(galaxy, system, throughMs, pirateScheduleOverride)
+    : ensureTimedCycles(kind, galaxy, system, throughMs);
   return cycles[safeIndex] ?? cycles[0];
 }
 
-function activeTimedObjectSchedule(kind: TimedObjectKind, galaxy: number, system: number, nowMs: number) {
-  const cycles = ensureTimedCycles(kind, galaxy, system, nowMs);
+function activeTimedObjectSchedule(
+  kind: TimedObjectKind,
+  galaxy: number,
+  system: number,
+  nowMs: number,
+  pirateScheduleOverride?: UniversePirateScheduleOverride,
+) {
+  const cycles = kind === 'pirate'
+    ? pirateCyclesWithOverride(galaxy, system, nowMs, pirateScheduleOverride)
+    : ensureTimedCycles(kind, galaxy, system, nowMs);
   for (let index = cycles.length - 1; index >= 0; index -= 1) {
     const cycle = cycles[index];
     if (cycle.startAt > nowMs) continue;
@@ -764,13 +857,27 @@ function timedState(schedule: TimedObjectSchedule): UniverseTimedObjectState {
   };
 }
 
-function injectTimedObject(system: UniverseSystem, kind: TimedObjectKind, nowMs: number, assets: UniverseAssetCatalog): UniverseSystem {
-  const schedule = activeTimedObjectSchedule(kind, system.galaxy, system.system, nowMs);
+function injectTimedObject(
+  system: UniverseSystem,
+  kind: TimedObjectKind,
+  nowMs: number,
+  assets: UniverseAssetCatalog,
+  pirateScheduleOverride?: UniversePirateScheduleOverride,
+  pirateContactCoordinate?: UniversePirateContactCoordinate,
+): UniverseSystem {
+  const schedule = activeTimedObjectSchedule(kind, system.galaxy, system.system, nowMs, pirateScheduleOverride);
   if (!schedule?.present || nowMs >= schedule.expiresAt) return system;
   const emptySlots = system.positions.filter((node) => node.kind === 'empty');
   if (!emptySlots.length) return system;
   const random = seededRandom(timedObjectConfig(kind).seed + 0x55, system.galaxy, system.system, schedule.cycleIndex);
-  const target = emptySlots[Math.floor(random() * emptySlots.length)];
+  const pinnedPosition = kind === 'pirate' && pirateContactCoordinate?.cycleIndex === schedule.cycleIndex
+    ? pirateContactCoordinate.coordinate.position
+    : undefined;
+  const pinnedTarget = pinnedPosition === undefined
+    ? undefined
+    : system.positions.find((node) => node.coordinate.position === pinnedPosition && node.kind === 'empty');
+  if (pinnedPosition !== undefined && !pinnedTarget) return system;
+  const target = pinnedTarget ?? emptySlots[Math.floor(random() * emptySlots.length)];
   const state = timedState(schedule);
   const node: UniversePlanetNode = kind === 'pirate'
     ? {
@@ -809,7 +916,14 @@ export function createUniverseSystem(options: CreateUniverseSystemOptions): Univ
     Math.max(1, Math.floor(options.galaxy ?? GALAXY)), nowMs, galaxyCount, assets, options.asteroidStates,
   );
   let system = createUniverseSystemBase(options, assets);
-  system = injectTimedObject(system, 'pirate', nowMs, assets);
+  system = injectTimedObject(
+    system,
+    'pirate',
+    nowMs,
+    assets,
+    options.pirateScheduleOverride,
+    options.pirateContactCoordinate,
+  );
   system = injectTimedObject(system, 'unique', nowMs, assets);
   system = injectTimedObject(system, 'anomaly', nowMs, assets);
   return {
@@ -826,7 +940,14 @@ export function createUniverseMap(options: Omit<CreateUniverseSystemOptions, 'sy
   const asteroidNodes = createActiveAsteroidsBySystem(galaxy, nowMs, galaxyCount, assets, options.asteroidStates);
   const systems = Array.from({ length: SYSTEM_COUNT }, (_, index) => {
     let system = createUniverseSystemBase({ ...options, galaxy, system: index + 1 }, assets);
-    system = injectTimedObject(system, 'pirate', nowMs, assets);
+    system = injectTimedObject(
+      system,
+      'pirate',
+      nowMs,
+      assets,
+      options.pirateScheduleOverrides?.[`${galaxy}:${index + 1}`],
+      options.pirateContactCoordinates?.[`${galaxy}:${index + 1}`],
+    );
     system = injectTimedObject(system, 'unique', nowMs, assets);
     system = injectTimedObject(system, 'anomaly', nowMs, assets);
     return { ...system, asteroids: asteroidNodes[index] };

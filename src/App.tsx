@@ -3,7 +3,7 @@ import { flushSync, createPortal } from 'react-dom';
 import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
-import { OperationsView } from './OperationsView';
+import { OperationsView, type PirateContactViewModel } from './OperationsView';
 import { CommandView } from './CommandView';
 import { ReportsView } from './ReportsView';
 import { buildReportsFeed, getReportUnreadCounts } from './domain/reports/adapters.ts';
@@ -154,6 +154,8 @@ import { enqueueApplicationStateUpdate } from './application/state.ts';
 import { getOwnerShipUpgradeLevels, getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
 import { selectOwnedPlanet } from './application/owned-planets.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
+import { PIRATE_BASE_SHIPS } from './domain/pirates/catalog.ts';
+import { COMBAT_TECHNOLOGIES } from './domain/combat/technologies.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import planetColonized from '../assets/source/starter/planets/planet_colonized.png';
@@ -731,9 +733,54 @@ export function App() {
     [currentPlanetState.buildings],
   );
   const reportsUnreadCount = useMemo(() => {
-    const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports);
+    const pirateReconReports = state.pirateOperations?.reconReports.filter((report) => report.ownerId === state.profile.playerId);
+    const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, pirateReconReports, state.pirateOperations?.flightNotices.filter((notice) => notice.ownerId === state.profile.playerId));
     return Object.values(getReportUnreadCounts(items, state.reports)).reduce((total, count) => total + count, 0);
-  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports]);
+  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.pirateOperations, state.reports]);
+  const pirateContacts = useMemo<readonly PirateContactViewModel[]>(() => Object.values(state.pirateOperations?.cyclesByKey ?? {})
+    .filter((cycle) => cycle.defeatedAt === undefined && now >= cycle.startedAt && now < cycle.expiresAt)
+    .sort((left, right) => left.coordinate.galaxy - right.coordinate.galaxy
+      || left.coordinate.system - right.coordinate.system
+      || left.cycleIndex - right.cycleIndex)
+    .map((cycle) => {
+      const owner = cycle.ownersById[state.profile.playerId];
+       const reconReport = [...(state.pirateOperations?.reconReports ?? [])]
+         .filter((report) => report.ownerId === state.profile.playerId && report.contactCycleKey === cycle.cycleKey)
+         .sort((left, right) => right.createdAt - left.createdAt)[0];
+       const profile = reconReport?.fullReport ? reconReport.profile : undefined;
+       const reconUnits = profile ? PIRATE_BASE_SHIPS.flatMap((ship) => {
+         const percentage = profile.shares[ship.id] ?? 0;
+         if (percentage <= 0) return [];
+         return [{
+           id: ship.id,
+           name: ship.name,
+           percentage,
+           level: profile.shipLevel,
+           technologies: COMBAT_TECHNOLOGIES.flatMap((technology) => {
+             const level = profile.technologies[technology.id] ?? 0;
+             return level > 0 ? [{ name: technology.name, level }] : [];
+           }),
+         }];
+       }) : undefined;
+       return {
+        cycleKey: cycle.cycleKey,
+        coordinate: { galaxy: cycle.coordinate.galaxy, system: cycle.coordinate.system },
+        startedAt: cycle.startedAt,
+        expiresAt: cycle.expiresAt,
+        ownerCheckAt: cycle.startedAt + 15 * 60_000,
+        ownerRoll: owner?.raidRoll ? {
+          checkedAt: owner.raidRoll.checkedAt,
+          success: owner.raidRoll.success,
+          targetPlanetId: owner.raidRoll.targetPlanetId ?? null,
+        } : null,
+         reconCooldownUntil: owner?.recon?.cooldownUntil ?? null,
+         reconInFlight: Boolean(owner?.recon?.inFlight),
+         reconReport: reconReport ? {
+           fullReport: reconReport.fullReport,
+           ...(reconUnits ? { profile: { units: reconUnits } } : {}),
+         } : null,
+      };
+    }), [state.pirateOperations, state.profile.playerId, now]);
   const buildingInteriorTarget = buildingInterior
     ? getBuildingInteriorTarget(buildingInterior.buildingRole)
     : null;
@@ -1130,6 +1177,57 @@ export function App() {
     }, 40);
   };
 
+  const analyzePirateContact = (cycleKey: string) => {
+    const current = stateRef.current;
+    const cycle = current.pirateOperations?.cyclesByKey[cycleKey];
+    if (!cycle || cycle.defeatedAt !== undefined || Date.now() >= cycle.expiresAt) {
+      setNotice('Пиратский контакт уже исчез.', 'error');
+      return;
+    }
+    const departedAt = Date.now();
+    const result = dispatchFlight(current, {
+      requestId: `pirate-recon:${encodeURIComponent(current.profile.playerId)}:${encodeURIComponent(cycleKey)}:${departedAt}`,
+      missionId: 'pirate-recon',
+      pirateContactCycleKey: cycleKey,
+      originPlanetId: current.currentPlanetId,
+      targetKind: 'pirate',
+      selectedShips: { 'spy-probe': 1 },
+      destination: { kind: 'coordinate', coordinate: cycle.coordinate },
+      departedAt,
+    }, { now: departedAt, mode: RUNTIME_MODE, testTimeScale });
+    if (result.ok) {
+      stateRef.current = result.state;
+      setState(result.state);
+      setNotice('Шпионский зонд отправлен к пиратскому контакту.');
+    } else {
+      setNotice(result.error.message, 'error');
+    }
+    window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
+  };
+
+  const openPirateAttackLaunch = (contact: PirateContactViewModel) => {
+    const cycle = stateRef.current.pirateOperations?.cyclesByKey[contact.cycleKey];
+    if (!cycle || cycle.defeatedAt !== undefined || Date.now() >= cycle.expiresAt) {
+      setNotice('Пиратский контакт уже исчез.', 'error');
+      return;
+    }
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    setNotice(`Пиратская цель выбрана: [${cycle.coordinate.galaxy}:${cycle.coordinate.system}:${cycle.coordinate.position}].`);
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, {
+        detail: {
+          missionId: 'pirate-elimination',
+          pirateContactCycleKey: cycle.cycleKey,
+          targetKind: 'pirate',
+          destination: { kind: 'coordinate', coordinate: cycle.coordinate },
+        },
+      }));
+    }, 40);
+  };
+
   const openUniverseTarget = (target: UniverseFocusTarget) => {
     clearBuildingInterior();
     closePlanetEditor();
@@ -1437,10 +1535,13 @@ export function App() {
           ) : activeRoute === 'operations' ? (
             <OperationsView
               state={state.operations}
+              pirateContacts={pirateContacts}
               onAccept={acceptOperationsOperation}
               onCancel={cancelOperationsOperation}
               onReveal={revealOperationsOperation}
               onOpenFleets={openFleetRootFromOperations}
+              onAnalyze={analyzePirateContact}
+              onPirateAttack={openPirateAttackLaunch}
             />
           ) : activeRoute === 'command' ? (
             <CommandView
@@ -1458,6 +1559,8 @@ export function App() {
               operations={state.operations}
               command={state.command}
               espionage={state.espionage}
+              pirateReconReports={state.pirateOperations?.reconReports.filter((report) => report.ownerId === state.profile.playerId)}
+              pirateFlightNotices={state.pirateOperations?.flightNotices.filter((notice) => notice.ownerId === state.profile.playerId)}
               profile={state.profile}
               score={selectOwnerScores(state)[state.profile.playerId] ?? null}
               rating={state.rating}

@@ -10,7 +10,8 @@ import {
   type CombatTargetPriority,
   type CombatTechnologyMode,
 } from './config.ts';
-import type { CombatEntityId } from './ids.ts';
+import type { CombatEntityId, CombatStackEntityId } from './ids.ts';
+import { getCombatEntityForSide, getCombatEntityForStack, isPirateShipId } from './side-entity.ts';
 import type { CombatEntityKind, CombatOrdinaryClass, CombatSpecialBonus } from './types.ts';
 import {
   BATTLE_REPORT_SCHEMA_VERSION,
@@ -66,9 +67,9 @@ type CombatDisablingAbility = CommanderId | 'shmel-freezing';
 type RuntimeStack = {
   side: BattleSide;
   bucket: RuntimeBucket;
-  factionId: CombatFactionId;
+  factionId?: CombatFactionId;
   kind: CombatEntityKind;
-  entityId: CombatEntityId;
+  entityId: CombatStackEntityId;
   level: number;
   startingCount: number;
   count: number;
@@ -86,10 +87,11 @@ type RuntimeStack = {
   ordinaryClass?: CombatOrdinaryClass;
   matchupClass?: CombatMatchupClass;
   specialBonus?: CombatSpecialBonus;
+  pirateAbility?: import('../pirates/catalog.ts').PirateAbility;
 };
 
 export type TargetSelectionCandidate = {
-  entityId: CombatEntityId;
+  entityId: CombatStackEntityId;
   currentCount: number;
   threat?: number;
   population?: number;
@@ -169,7 +171,10 @@ export function createNonReplayableCombatRng(): CombatRng {
   };
 }
 
-const CATALOG_ORDER = new Map<CombatEntityId, number>(COMBAT_CATALOG.map((entity, index) => [entity.id, index]));
+const CATALOG_ORDER = new Map<CombatStackEntityId, number>([
+  ...COMBAT_CATALOG.map((entity, index) => [entity.id, index] as const),
+  ...['pirate-hound', 'pirate-raider', 'pirate-corsair', 'pirate-executioner', 'pirate-butcher', 'pirate-bruiser', 'pirate-planet-breaker'].map((id, index) => [id as CombatStackEntityId, COMBAT_CATALOG.length + index] as const),
+]);
 
 const MATCHUP_MULTIPLIERS: Readonly<Record<CombatMatchupClass, Readonly<Record<CombatMatchupClass, number>>>> = {
   scout: { scout: 0.70, cruiser: 1.00, defender: 1.70, battleship: 1.70, destroyer: 1.00, bomber: 1.00, 'death-star': 0.70 },
@@ -200,13 +205,13 @@ const NEMEXIA_ORDINARY_RETARGET_FALLBACK: readonly CombatOrdinaryClass[] = [
   'bomber', 'destroyer', 'battleship', 'defender', 'cruiser', 'scout',
 ];
 
-function matchupClassForEntity(entityId: CombatEntityId): CombatMatchupClass | undefined {
-  if (entityId === 'death-star') return 'death-star';
-  return getCombatEntity(entityId).ordinaryClass;
+function matchupClassForEntity(entityId: CombatStackEntityId): CombatMatchupClass | undefined {
+  if (entityId === 'death-star' || entityId === 'pirate-planet-breaker') return 'death-star';
+  return getCombatEntityForStack(entityId).ordinaryClass;
 }
 
-function levelCoefficient(entity: ReturnType<typeof getCombatEntity>) {
-  if (entity.id === 'death-star') return COMBAT_SHIP_LEVEL_COEFFICIENTS['death-star'];
+function levelCoefficient(entity: ReturnType<typeof getCombatEntityForStack>) {
+  if (entity.id === 'death-star' || entity.id === 'pirate-planet-breaker') return COMBAT_SHIP_LEVEL_COEFFICIENTS['death-star'];
   return entity.ordinaryClass ? COMBAT_SHIP_LEVEL_COEFFICIENTS[entity.ordinaryClass] : 0;
 }
 
@@ -233,7 +238,7 @@ export function calculateEffectiveDamage(rawDamage: number, armorStrength: numbe
   return Math.max(1, reduced);
 }
 
-function catalogOrder(entityId: CombatEntityId) {
+function catalogOrder(entityId: CombatStackEntityId) {
   return CATALOG_ORDER.get(entityId) ?? Number.MAX_SAFE_INTEGER;
 }
 
@@ -243,8 +248,8 @@ function catalogOrder(entityId: CombatEntityId) {
  * decides between combat ships and defenses; civilian/service ships follow
  * that tier and commanders remain last.
  */
-function targetSelectionTier(entityId: CombatEntityId) {
-  const entity = getCombatEntity(entityId);
+function targetSelectionTier(entityId: CombatStackEntityId) {
+  const entity = getCombatEntityForStack(entityId);
   if (entity.kind === 'commander') return 2;
   if (entity.kind === 'ship' && entity.category !== 'Боевой корабль') return 1;
   return 0;
@@ -258,8 +263,8 @@ export function selectCombatTarget(
   if (!alive.length) return null;
 
   return [...alive].sort((left, right) => {
-    const leftEntity = getCombatEntity(left.entityId);
-    const rightEntity = getCombatEntity(right.entityId);
+    const leftEntity = getCombatEntityForStack(left.entityId);
+    const rightEntity = getCombatEntityForStack(right.entityId);
     const tierDelta = targetSelectionTier(left.entityId) - targetSelectionTier(right.entityId);
     if (tierDelta !== 0) return tierDelta;
     const leftThreat = left.threat ?? left.currentCount * leftEntity.combat.attack;
@@ -344,10 +349,12 @@ function runtimeFromInput(
   stacks: readonly CombatStackInput[],
   technologies: CombatTechnologyLevels,
   executionMode: CombatExecutionMode,
-  factionId: CombatFactionId,
+  factionId: CombatFactionId | undefined,
+  profile?: import('./side-entity.ts').CombatSideProfile,
 ): RuntimeStack[] {
   return stacks.map((stack) => {
-    const entity = getFactionCombatEntity(factionId, stack.entityId);
+    const entity = getCombatEntityForSide(stack.entityId, factionId, profile);
+    if (!entity) throw new Error(`Unsupported combat entity ${stack.entityId} for ${profile?.kind ?? factionId ?? 'neutral'} side`);
     const level = stack.level ?? 0;
     const coefficient = levelCoefficient(entity);
     const levelAndTechnologyAttack = 1 + coefficient * level + (getTechnologyAttackMultiplier(entity, technologies, executionMode) - 1);
@@ -378,6 +385,7 @@ function runtimeFromInput(
       ...(entity.ordinaryClass ? { ordinaryClass: entity.ordinaryClass } : {}),
       ...(matchupClassForEntity(stack.entityId) ? { matchupClass: matchupClassForEntity(stack.entityId) } : {}),
       ...(entity.specialBonus ? { specialBonus: entity.specialBonus } : {}),
+      ...(entity.pirateAbility ? { pirateAbility: entity.pirateAbility } : {}),
     };
   });
 }
@@ -430,7 +438,7 @@ function sidePopulation(stacks: readonly RuntimeStack[]) {
 function bucketPopulation(
   stacks: readonly RuntimeStack[],
   bucket: RuntimeBucket,
-  counts?: ReadonlyMap<CombatEntityId, number>,
+  counts?: ReadonlyMap<CombatStackEntityId, number>,
 ) {
   return stacks
     .filter((stack) => stack.bucket === bucket)
@@ -446,13 +454,13 @@ type RoundSideModifiers = {
   commanderLifeMultiplier: number;
   commanderArmorPenalty: number;
   criticalBonus: number;
-  specialBonuses: ReadonlyMap<CombatEntityId, { attack: number; life: number; armor: number }>;
+  specialBonuses: ReadonlyMap<CombatStackEntityId, { attack: number; life: number; armor: number }>;
   specialBonusDetails: readonly SpecialBonusDetail[];
   snapshot: Readonly<Record<string, number | string>>;
 };
 
 type SpecialBonusDetail = {
-  entityId: CombatEntityId;
+  entityId: CombatStackEntityId;
   actorSide: BattleSide;
   livingCount: number;
   kind: CombatSpecialBonus['kind'];
@@ -477,7 +485,7 @@ function calculateRoundSideModifiers(stacks: readonly RuntimeStack[], commanderI
   const commanderEffect = getCommanderCombatEffect(commanderId);
   const commanderLevel = commander?.level ?? 0;
   const commanderRate = commanderEffect ? commanderEffect.ratePerLevel * commanderLevel : 0;
-  const specialBonuses = new Map<CombatEntityId, { attack: number; life: number; armor: number }>();
+  const specialBonuses = new Map<CombatStackEntityId, { attack: number; life: number; armor: number }>();
   const specialBonusDetails: SpecialBonusDetail[] = [];
   const snapshot: Record<string, number | string> = {};
 
@@ -608,8 +616,8 @@ export function calculateCombatStackPreview(
 
 function createRoundSnapshot(
   stacks: readonly RuntimeStack[],
-  roundStartCounts: ReadonlyMap<CombatEntityId, number>,
-  roundStartHp: ReadonlyMap<CombatEntityId, number>,
+  roundStartCounts: ReadonlyMap<CombatStackEntityId, number>,
+  roundStartHp: ReadonlyMap<CombatStackEntityId, number>,
   modifiers?: Readonly<Record<string, number | string>>,
 ): CombatRoundSnapshot {
   const build = (bucket: RuntimeBucket): BattleStackSnapshot[] => sortRuntime(stacks)
@@ -875,12 +883,31 @@ function createAttackEvent(
   const reportedBonus = matchup.multiplier === 1
     ? 0
     : Math.sign(matchup.multiplier - 1) * Math.floor(baseAttack * Math.abs(matchup.multiplier - 1));
-  const rawDamageBeforeArmor = Math.max(0, Math.floor(baseAttack * matchup.multiplier));
-  const criticalChance = clamp(actor.criticalChance + criticalBonus, 0, 1);
+  const ability = actor.pirateAbility;
+  let pirateAbilityChance: number | undefined;
+  let pirateAbilityDraw: number | undefined;
+  let pirateAbilityId: CombatEvent['shipAbilityId'];
+  let pirateAttackMultiplier = 1;
+  let ignoreArmor = false;
+  if (ability?.kind === 'ignore-armor') {
+    pirateAbilityChance = Math.min(ability.chanceCap, ability.perShipChance * actorCount);
+    pirateAbilityDraw = rng.next();
+    if (pirateAbilityDraw < pirateAbilityChance) { ignoreArmor = true; pirateAbilityId = 'pirate-armor-piercing'; }
+  } else if (ability?.kind === 'devastate') {
+    pirateAbilityChance = Math.min(ability.chanceCap, ability.perShipChance * actorCount);
+    pirateAbilityDraw = rng.next();
+    if (pirateAbilityDraw < pirateAbilityChance) { pirateAttackMultiplier = ability.attackMultiplier; pirateAbilityId = 'pirate-devastate'; }
+  } else if (ability?.kind === 'artillery' && target.bucket === 'defenses') {
+    pirateAbilityChance = Math.min(ability.chanceCap, ability.perShipChance * actorCount);
+    pirateAbilityDraw = rng.next();
+    if (pirateAbilityDraw < pirateAbilityChance) { pirateAttackMultiplier = ability.attackMultiplierVsDefense; pirateAbilityId = 'pirate-artillery'; }
+  }
+  const rawDamageBeforeArmor = Math.max(0, Math.floor(baseAttack * matchup.multiplier * pirateAttackMultiplier));
+  const criticalChance = pirateAbilityId === 'pirate-devastate' ? 0 : clamp(actor.criticalChance + criticalBonus, 0, 1);
   const criticalDraw = criticalChance > 0 ? rng.next() : undefined;
   const criticalMultiplier = criticalDraw !== undefined && criticalDraw < criticalChance ? 2 : 1;
   const rawDamage = Math.floor(rawDamageBeforeArmor * criticalMultiplier);
-  const effectiveDamage = calculateEffectiveDamage(rawDamage, target.armorPercent);
+  const effectiveDamage = calculateEffectiveDamage(rawDamage, ignoreArmor ? 0 : target.armorPercent);
   const actualDamage = target.hpPool <= 0 ? 0 : Math.min(effectiveDamage, target.hpPool);
   target.hpPool = Math.max(0, target.hpPool - actualDamage);
   target.count = runtimeCountFromHp(target);
@@ -907,7 +934,8 @@ function createAttackEvent(
     reportedBonus,
     matchupStatus: matchup.status,
     criticalChance,
-    ...(criticalDraw !== undefined ? { abilityDraw: criticalDraw } : {}),
+    ...(criticalDraw !== undefined ? (actor.pirateAbility ? { criticalDraw } : { abilityDraw: criticalDraw }) : {}),
+    ...(pirateAbilityChance !== undefined ? { abilityChance: pirateAbilityChance, abilityDraw: pirateAbilityDraw } : {}),
     criticalMultiplier,
     effectiveDamage,
     mitigation: Math.max(0, rawDamage - effectiveDamage),
@@ -915,6 +943,7 @@ function createAttackEvent(
     armorType: target.armorType,
     damage: actualDamage,
     destroyedCount: Math.max(0, countBeforeEvent - countAfterEvent),
+    ...(pirateAbilityId ? { shipAbilityId: pirateAbilityId } : {}),
     lifeBefore: hpBefore,
     lifeAfter: target.hpPool,
     armorBefore: target.armorPercent,
@@ -922,7 +951,7 @@ function createAttackEvent(
     provenance: DAMAGE_PROVENANCE,
     note: actualDamage === 0
       ? 'Залп не нанёс урон: цель уже уничтожена.'
-      : `${matchup.multiplier === 1 ? 'Нейтральный модификатор пары' : `Модификатор пары ×${matchup.multiplier.toFixed(2)}`}; урон после брони ${target.armorPercent}%.${criticalMultiplier > 1 ? ' Критический залп ×2.' : ''}${volleyIndex > 0 ? ` Повторный залп №${volleyIndex + 1}: мощность ×${volleyScale.toFixed(2)}.` : ''} Стек сохраняет цель, пока она жива; новая цель выбирается после её уничтожения.`,
+      : `${matchup.multiplier === 1 ? 'Нейтральный модификатор пары' : `Модификатор пары ×${matchup.multiplier.toFixed(2)}`}; урон после брони ${ignoreArmor ? 0 : target.armorPercent}%.${pirateAbilityId === 'pirate-devastate' ? ' Пиратский Devastate ×1.25; Critical Strike подавлен.' : pirateAbilityId === 'pirate-artillery' ? ' Пиратская артиллерия против обороны ×1.5.' : pirateAbilityId === 'pirate-armor-piercing' ? ' Пиратская атака игнорирует броню.' : ''}${criticalMultiplier > 1 ? ' Критический залп ×2.' : ''}${volleyIndex > 0 ? ` Повторный залп №${volleyIndex + 1}: мощность ×${volleyScale.toFixed(2)}.` : ''} Стек сохраняет цель, пока она жива; новая цель выбирается после её уничтожения.`,
   };
 }
 
@@ -993,7 +1022,7 @@ function usesDocumentedDefenderRoundStartCount(actor: RuntimeStack, roundStartCo
 
 function hasDocumentedDefenderCounterfire(
   defender: readonly RuntimeStack[],
-  roundStartCounts: ReadonlyMap<CombatEntityId, number>,
+  roundStartCounts: ReadonlyMap<CombatStackEntityId, number>,
 ) {
   return defender.some((actor) => usesDocumentedDefenderRoundStartCount(
     actor,
@@ -1107,14 +1136,14 @@ function resolveSideActions(
   activeCommanderId: CommanderId | null,
   opposingCommanderId: CommanderId | null,
   rng: CombatRng,
-  roundStartCounts: ReadonlyMap<CombatEntityId, number>,
-  lockedTargets: Map<CombatEntityId, CombatEntityId>,
-  destroyedTargetsSinceLock: Map<CombatEntityId, CombatEntityId>,
+  roundStartCounts: ReadonlyMap<CombatStackEntityId, number>,
+  lockedTargets: Map<CombatStackEntityId, CombatStackEntityId>,
+  destroyedTargetsSinceLock: Map<CombatStackEntityId, CombatStackEntityId>,
   allowDocumentedDefenderCounterfire: boolean,
-  paralyzedActorsNext: Set<CombatEntityId>,
-  paralyzedTargetsNext: Set<CombatEntityId>,
-  paralyzedActorSourcesNext: Map<CombatEntityId, CombatDisablingAbility>,
-  paralyzedTargetSourcesNext: Map<CombatEntityId, CombatDisablingAbility>,
+  paralyzedActorsNext: Set<CombatStackEntityId>,
+  paralyzedTargetsNext: Set<CombatStackEntityId>,
+  paralyzedActorSourcesNext: Map<CombatStackEntityId, CombatDisablingAbility>,
+  paralyzedTargetSourcesNext: Map<CombatStackEntityId, CombatDisablingAbility>,
 ) {
   const criticalEffect = getCommanderCombatEffect(activeCommanderId);
   const criticalBonus = criticalEffect?.kind === 'critical'
@@ -1281,8 +1310,9 @@ function createInitialSnapshot(
 
 export function resolveCombat(input: CombatInput, context: CombatResolverContext): BattleReport {
   const validation = validateCombatInput(input, {
-    allowEmptyDefender: context.missionType === 'attack',
+    allowEmptyDefender: context.missionType === 'attack' || context.missionType === 'pirate-raid',
     allowPopulationOverflow: context.allowPopulationOverflow,
+    missionType: context.missionType,
   });
   if (!validation.ok) throw new CombatInputValidationError(validation.errors);
   const normalized = validation.value;
@@ -1296,15 +1326,15 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
   const executionMode: CombatExecutionMode = normalized.executionMode === 'production' ? 'production' : 'calibration';
   const seed = normalized.seed?.trim() || createUniqueCombatSeed();
   const rng = createSeededCombatRng(seed);
-  const attackerFactionId = normalized.attacker.factionId ?? getCombatFactionId(normalized.attacker.participant.race);
-  const defenderFactionId = normalized.defender.factionId ?? getCombatFactionId(normalized.defender.participant.race);
+  const attackerFactionId = normalized.attacker.combatProfile?.kind === 'pirate' ? undefined : normalized.attacker.factionId ?? getCombatFactionId(normalized.attacker.participant.race);
+  const defenderFactionId = normalized.defender.combatProfile?.kind === 'pirate' ? undefined : normalized.defender.factionId ?? getCombatFactionId(normalized.defender.participant.race);
 
   const attacker = [
-    ...runtimeFromInput('attacker', 'stacks', normalized.attacker.ships, attackerTechnologies, executionMode, attackerFactionId),
+    ...runtimeFromInput('attacker', 'stacks', normalized.attacker.ships, attackerTechnologies, executionMode, attackerFactionId, normalized.attacker.combatProfile),
     ...runtimeFromInput('attacker', 'stacks', getSideCommanders(normalized.attacker), attackerTechnologies, executionMode, attackerFactionId),
   ];
   const defender = [
-    ...runtimeFromInput('defender', 'stacks', normalized.defender.ships, defenderTechnologies, executionMode, defenderFactionId),
+    ...runtimeFromInput('defender', 'stacks', normalized.defender.ships, defenderTechnologies, executionMode, defenderFactionId, normalized.defender.combatProfile),
     ...runtimeFromInput('defender', 'stacks', getSideCommanders(normalized.defender), defenderTechnologies, executionMode, defenderFactionId),
     ...runtimeFromInput('defender', 'defenses', normalized.defender.defenses ?? [], defenderTechnologies, executionMode, defenderFactionId),
   ];
@@ -1329,14 +1359,14 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
   const rounds: CombatRound[] = [];
   let winner: BattleWinner | null = determineWinner(attacker, defender);
   let eventSequence = 1;
-  const paralyzedAttackerNext = new Set<CombatEntityId>();
-  const paralyzedDefenderNext = new Set<CombatEntityId>();
-  const paralyzedAttackerSourcesNext = new Map<CombatEntityId, CombatDisablingAbility>();
-  const paralyzedDefenderSourcesNext = new Map<CombatEntityId, CombatDisablingAbility>();
-  const attackerTargetLocks = new Map<CombatEntityId, CombatEntityId>();
-  const defenderTargetLocks = new Map<CombatEntityId, CombatEntityId>();
-  const attackerDestroyedTargetsSinceLock = new Map<CombatEntityId, CombatEntityId>();
-  const defenderDestroyedTargetsSinceLock = new Map<CombatEntityId, CombatEntityId>();
+  const paralyzedAttackerNext = new Set<CombatStackEntityId>();
+  const paralyzedDefenderNext = new Set<CombatStackEntityId>();
+  const paralyzedAttackerSourcesNext = new Map<CombatStackEntityId, CombatDisablingAbility>();
+  const paralyzedDefenderSourcesNext = new Map<CombatStackEntityId, CombatDisablingAbility>();
+  const attackerTargetLocks = new Map<CombatStackEntityId, CombatStackEntityId>();
+  const defenderTargetLocks = new Map<CombatStackEntityId, CombatStackEntityId>();
+  const attackerDestroyedTargetsSinceLock = new Map<CombatStackEntityId, CombatStackEntityId>();
+  const defenderDestroyedTargetsSinceLock = new Map<CombatStackEntityId, CombatStackEntityId>();
   let lastModifiers = initialModifiers;
 
   for (let roundIndex = 1; roundIndex <= normalized.maxRounds && !winner; roundIndex += 1) {
@@ -1399,8 +1429,8 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
     // The archive supports Revival's Destroyer-based chance/amount and a
     // per-target-stack chance approximation; Nemexia's exact RNG ordering is
     // unavailable, so Asterion uses stable attacker-then-defender processing.
-    resolveDestroyerRevival(attacker, attackerFactionId, events, sequence, rng);
-    if (defenderPhaseResolved) resolveDestroyerRevival(defender, defenderFactionId, events, sequence, rng);
+    resolveDestroyerRevival(attacker, attackerFactionId ?? 'aegis', events, sequence, rng);
+    if (defenderPhaseResolved) resolveDestroyerRevival(defender, defenderFactionId ?? 'aegis', events, sequence, rng);
     resolveReanimator(attacker, activeAttackerCommander, events, sequence, rng);
     if (defenderPhaseResolved) resolveReanimator(defender, activeDefenderCommander, events, sequence, rng);
     winner = determineWinner(attacker, defender);

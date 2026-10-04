@@ -10,6 +10,7 @@ import { calculateBattlePoints, type BattlePointResult } from './battle-points.t
 import { getFactionDefenseCatalog, getFactionShipCatalog } from './faction-catalog.ts';
 import { getCombatFactionId, type CombatFactionId } from './factions.ts';
 import type { CombatEntityId } from './ids.ts';
+import { getCombatEntityForStack, isPirateShipId } from './side-entity.ts';
 import {
   calculatePopulationLoss,
   type BattleMissionType,
@@ -301,7 +302,7 @@ export type RecordedBattlePointAwards = { attacker: number | null; defender: num
 
 type RecordValue = Record<string, unknown>;
 
-const MISSION_TYPES: readonly BattleMissionType[] = ['attack', 'raid', 'defense', 'arena', 'simulation'];
+const MISSION_TYPES: readonly BattleMissionType[] = ['attack', 'raid', 'defense', 'arena', 'simulation', 'pirate-elimination', 'pirate-raid'];
 const ACTION_TYPES: readonly BattleEventViewModel['actionType'][] = ['attack', 'ability', 'shield', 'status', 'destroyed', 'special-bonus'];
 
 function asRecord(value: unknown): RecordValue {
@@ -359,6 +360,7 @@ function fallbackEntity(kind: BattleEntityKind): CatalogEntity {
 }
 
 function entityKindFromCatalog(factionId: CombatFactionId, entityId: string, fallback: BattleEntityKind = 'unknown') {
+  if (isPirateShipId(entityId)) return 'ship';
   const factionEntity = [
     ...SHIP_COMBAT_CATALOG,
     ...COMMANDER_COMBAT_CATALOG,
@@ -376,6 +378,7 @@ function entityKindFromCatalog(factionId: CombatFactionId, entityId: string, fal
 }
 
 function findEntity(factionId: CombatFactionId, entityId: string, kind: BattleEntityKind) {
+  if (isPirateShipId(entityId)) return getCombatEntityForStack(entityId);
   const factionEntities = kind === 'ship'
     ? getFactionEntities(factionId, 'ship')
     : kind === 'defense'
@@ -922,6 +925,7 @@ export function createBattleReportViewModel(
   const attackerViewModel = readForce(record.attackerForce, attacker, attackerFactionId);
   const defenderViewModel = readForce(record.defenderForce, defender, defenderFactionId);
   const winner = readWinner(record.winner);
+  const piratePve = record.missionType === 'pirate-elimination' || record.missionType === 'pirate-raid';
   const initialRecord = asRecord(record.initialSnapshot);
   const initialAttacker = readSnapshot(initialRecord.attacker, attackerFactionId);
   const initialDefender = readSnapshot(initialRecord.defender, defenderFactionId);
@@ -966,7 +970,12 @@ export function createBattleReportViewModel(
     debrisOnOrbit,
     resources: readResources(record.resources),
     siege,
-    battlePoints: calculateBattlePoints(
+    battlePoints: piratePve ? {
+      attackerResourcePointsLost: 0,
+      defenderResourcePointsLost: 0,
+      attacker: 0,
+      defender: 0,
+    } : calculateBattlePoints(
       winner,
       attackerViewModel.stacks,
       defenderViewModel.stacks,
@@ -975,7 +984,7 @@ export function createBattleReportViewModel(
       attackerFactionId,
       defenderFactionId,
     ),
-    awardedBattlePoints: options.awardedBattlePoints ?? null,
+    awardedBattlePoints: piratePve ? { attacker: 0, defender: 0 } : options.awardedBattlePoints ?? null,
     timestampAvailable: readString(record.timestamp) != null,
   };
 }

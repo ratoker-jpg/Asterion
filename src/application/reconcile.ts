@@ -23,6 +23,7 @@ import { getEspionageState } from '../domain/espionage/runtime.ts';
 import { collectOrbitalDebrisAtCoordinate, getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 import { advanceUniverseAsteroidSimulationAt, getNextUniverseAsteroidTransitionAt } from '../domain/universe/asteroid-simulation.ts';
 import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
+import { dispatchPirateRaidDue, getNextPirateOperationsCheckpoint, reconcilePirateOperationsAt } from './pirate-operations.ts';
 
 export type RuntimeReconcileEvent =
   | { kind: 'science'; scienceIds: ScienceId[] }
@@ -201,37 +202,59 @@ export function reconcileRuntime(
     }
   };
 
+  const processPirateOperationsAt = (at: number) => {
+    const reconciled = reconcilePirateOperationsAt(next, at, context.mode);
+    next = reconciled.state;
+    for (const due of reconciled.raidLaunches) {
+      const dispatched = dispatchPirateRaidDue(next, due);
+      if (dispatched.state !== next) next = dispatched.state;
+      if (dispatched.flight) {
+        events.push({
+          kind: 'flight',
+          events: [{ flight: dispatched.flight, status: 'incoming-attack', notice: `Пираты отправили рейд на планету ${dispatched.flight.targetPlanetName ?? dispatched.flight.destinationPlanetId ?? ''}.` }],
+        });
+      }
+    }
+  };
+
   let processedThrough = Number.NEGATIVE_INFINITY;
+  let pirateProcessedThrough = Math.min(context.now, Math.max(0, Math.floor(
+    next.pirateOperations?.reconciledThrough ?? next.resourceClock.lastReconciledAt,
+  )));
   while (true) {
     const flightCheckpoint = nextDueFlightCheckpoint(processedThrough);
     const nextAsteroidCheckpoint = next.asteroidSimulation
       ? getNextUniverseAsteroidTransitionAt(next.asteroidSimulation, context.now)
       : null;
     const asteroidCheckpoint = nextAsteroidCheckpoint ?? undefined;
-    const checkpoint = flightCheckpoint === undefined
-      ? asteroidCheckpoint
-      : asteroidCheckpoint === undefined
-        ? flightCheckpoint
-        : Math.min(flightCheckpoint, asteroidCheckpoint);
+    const pirateCheckpoint = getNextPirateOperationsCheckpoint(next, pirateProcessedThrough, context.now);
+    const checkpoint = [flightCheckpoint, asteroidCheckpoint, pirateCheckpoint]
+      .filter((value): value is number => value !== undefined)
+      .reduce<number | undefined>((earliest, value) => earliest === undefined || value < earliest ? value : earliest, undefined);
     if (checkpoint === undefined) break;
     const asteroidIsDue = asteroidCheckpoint === checkpoint;
     const flightIsDue = flightCheckpoint === checkpoint;
+    const pirateIsDue = pirateCheckpoint === checkpoint;
     // Advancing the cursor before processing prevents a due-but-unmodified
     // record at this timestamp from creating a zero-progress loop. Flights
     // created by this checkpoint can still contribute a later return time.
     processedThrough = checkpoint;
+    if (pirateIsDue) pirateProcessedThrough = checkpoint;
     // At an exact millisecond tie, the asteroid vacates/captures its old orbit
     // first; flight arrivals and battles then observe the post-transition
     // free-orbit state. Flight ties retain reconcileFlights' stable ID order.
     if (asteroidIsDue) applyAsteroidTransitionsAt(checkpoint);
-    if (flightIsDue) {
+    if (flightIsDue || pirateIsDue) {
       advanceAsteroidGasForSimulationAt(checkpoint);
       const overpopulation = reconcileAllPlanetOverpopulation(next, checkpoint);
       next = overpopulation.state;
       const beforeWork = overpopulation.blockedPlanetIds;
       reconcilePlanetWork(checkpoint, beforeWork);
-      processFlightsAt(checkpoint);
+      if (flightIsDue) processFlightsAt(checkpoint);
       next = reconcileAllPlanetOverpopulation(next, checkpoint).state;
+      // A same-timestamp combat arrival wins a tie with a pirate roll. This
+      // lets a successful elimination invalidate that cycle before a raid can roll.
+      if (pirateIsDue) processPirateOperationsAt(checkpoint);
     }
   }
 

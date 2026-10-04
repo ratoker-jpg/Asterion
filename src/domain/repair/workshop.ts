@@ -16,6 +16,7 @@ import {
 } from '../combat/ids.ts';
 import type { CombatFactionId } from '../combat/factions.ts';
 import type { ResourceCost } from '../combat/types.ts';
+import { isPirateShipId } from '../combat/side-entity.ts';
 import {
   getDefensePopulationSummary,
   getFleetProductionPopulationSummary,
@@ -578,7 +579,8 @@ export function calculateRepairLosses(
 
   const ships: Partial<Record<ShipId, number>> = {};
   const defenses: Partial<Record<DefenseId, number>> = {};
-  const addSnapshot = (entityId: CombatEntityId, destroyed: number) => {
+  const addSnapshot = (entityId: CombatEntityId | import('../combat/ids.ts').CombatStackEntityId, destroyed: number) => {
+    if (isPirateShipId(entityId)) return;
     // Reports can outlive a catalog revision. Unknown snapshots are kept in
     // the report but do not make the application transition throw.
     const entity = COMBAT_ENTITY_BY_ID.get(entityId);
