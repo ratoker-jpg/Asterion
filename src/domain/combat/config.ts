@@ -1,7 +1,7 @@
 import { SPACEPORT_UPGRADE_MAX_LEVEL_BY_TRACK } from '../buildings/spaceport-upgrades.ts';
 
 export const COMBAT_PROFILE_ID = 'asterion-simulator-v1' as const;
-export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v7' as const;
+export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v8' as const;
 
 export const COMBAT_SHIP_LEVEL_COEFFICIENTS = Object.freeze({
   scout: 0.05,

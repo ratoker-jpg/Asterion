@@ -1,4 +1,5 @@
 import { COMMANDER_IDS, type CommanderId } from './commanders.ts';
+import type { PirateShipId } from '../pirates/catalog.ts';
 
 export const SHIP_IDS = [
   'solar-satellite',
@@ -33,6 +34,8 @@ export const DEFENSE_IDS = [
 export type ShipId = (typeof SHIP_IDS)[number];
 export type DefenseId = (typeof DEFENSE_IDS)[number];
 export type CombatEntityId = ShipId | DefenseId | CommanderId;
+/** Combat/report-only unit ids; pirate NPCs are deliberately not playable ShipIds. */
+export type CombatStackEntityId = CombatEntityId | PirateShipId;
 
 export const ALL_COMBAT_ENTITY_IDS: readonly CombatEntityId[] = [
   ...SHIP_IDS,

@@ -58,6 +58,7 @@ export const COMMANDER_ABILITIES: Readonly<Record<CommanderId, CommanderAbilityD
     description: 'Увеличивает возможный процент украденных ресурсов за Пиратский рейд.',
     ratePerLevel: '+1,25% за уровень',
     implementationStatus: 'catalog-only',
+    note: 'В боях с пиратами также увеличивает долю обломков от уничтоженных пиратских кораблей на 0,5 процентного пункта за уровень; Корсар должен участвовать в бою и выжить, но не обязан быть ведущим командиром.',
   },
   reanimator: {
     commanderId: 'reanimator',

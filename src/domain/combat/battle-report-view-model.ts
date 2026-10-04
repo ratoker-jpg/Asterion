@@ -10,6 +10,7 @@ import { calculateBattlePoints, type BattlePointResult } from './battle-points.t
 import { getFactionDefenseCatalog, getFactionShipCatalog } from './faction-catalog.ts';
 import { getCombatFactionId, type CombatFactionId } from './factions.ts';
 import type { CombatEntityId } from './ids.ts';
+import { getCombatEntityForStack, isPirateShipId } from './side-entity.ts';
 import {
   calculatePopulationLoss,
   type BattleMissionType,
@@ -106,7 +107,7 @@ export type BattleEventViewModel = {
   repairLimit: number | null;
   commanderAbilityId: CommanderId | null;
   commanderAbility: string | null;
-  shipAbilityId: 'destroyer-revival' | 'shmel-freezing' | null;
+  shipAbilityId: 'destroyer-revival' | 'shmel-freezing' | 'pirate-armor-piercing' | 'pirate-devastate' | 'pirate-artillery' | 'pirate-double-attack' | null;
   shipAbility: string | null;
   specialBonusKind: 'attack' | 'life' | 'armor' | null;
   specialBonusRate: number | null;
@@ -359,6 +360,7 @@ function fallbackEntity(kind: BattleEntityKind): CatalogEntity {
 }
 
 function entityKindFromCatalog(factionId: CombatFactionId, entityId: string, fallback: BattleEntityKind = 'unknown') {
+  if (isPirateShipId(entityId)) return 'ship';
   const factionEntity = [
     ...SHIP_COMBAT_CATALOG,
     ...COMMANDER_COMBAT_CATALOG,
@@ -376,6 +378,7 @@ function entityKindFromCatalog(factionId: CombatFactionId, entityId: string, fal
 }
 
 function findEntity(factionId: CombatFactionId, entityId: string, kind: BattleEntityKind) {
+  if (isPirateShipId(entityId)) return getCombatEntityForStack(entityId);
   const factionEntities = kind === 'ship'
     ? getFactionEntities(factionId, 'ship')
     : kind === 'defense'
@@ -621,6 +624,8 @@ function readEvent(value: unknown, index: number, attackerFactionId: CombatFacti
   const commanderAbilityId = readString(record.commanderAbilityId);
   const safeCommanderAbilityId = commanderAbilityId && isCommanderId(commanderAbilityId) ? commanderAbilityId : null;
   const shipAbilityId = record.shipAbilityId === 'destroyer-revival' || record.shipAbilityId === 'shmel-freezing'
+    || record.shipAbilityId === 'pirate-armor-piercing' || record.shipAbilityId === 'pirate-devastate'
+    || record.shipAbilityId === 'pirate-artillery' || record.shipAbilityId === 'pirate-double-attack'
     ? record.shipAbilityId
     : null;
 
@@ -665,6 +670,14 @@ function readEvent(value: unknown, index: number, attackerFactionId: CombatFacti
       ? 'Восстановление разрушителей (Destroyer Revival)'
       : shipAbilityId === 'shmel-freezing'
         ? 'Замораживание Шмелём'
+        : shipAbilityId === 'pirate-armor-piercing'
+          ? 'Пиратская атака игнорирует броню'
+          : shipAbilityId === 'pirate-devastate'
+            ? 'Сокрушение пиратов'
+            : shipAbilityId === 'pirate-artillery'
+              ? 'Пиратская артиллерия'
+              : shipAbilityId === 'pirate-double-attack'
+                ? 'Дополнительная атака Потрошителя'
         : null,
     specialBonusKind: record.specialBonusKind === 'attack' || record.specialBonusKind === 'life' || record.specialBonusKind === 'armor'
       ? record.specialBonusKind

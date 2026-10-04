@@ -13,6 +13,7 @@ import type {
   BattleSiegeReport,
 } from './report.ts';
 import type { BuildingQueueItem } from '../buildings/resource-zone.ts';
+import { isPirateShipId } from './side-entity.ts';
 
 /** Shared siege inputs; owned worlds and espionage snapshots keep distinct runtimes. */
 export type PlanetSiegeTarget = {
@@ -149,6 +150,7 @@ function defensePopulationAfter(report: BattleReport, factionId: CombatFactionId
   const recorded = report.defenderForce.defensePopulationAfter;
   if (typeof recorded === 'number' && Number.isFinite(recorded)) return Math.max(0, Math.floor(recorded));
   return (report.defenderForce.defenses ?? []).reduce((total, stack) => {
+    if (isPirateShipId(stack.entityId)) return total;
     const entity = getFactionCombatEntity(factionId, stack.entityId);
     return total + safeInteger(stack.countAfter) * safeInteger(entity.population);
   }, 0);

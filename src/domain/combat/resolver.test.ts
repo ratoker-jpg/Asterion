@@ -991,10 +991,10 @@ test('generated report uses existing BattleReport contract without fake optional
   const report = resolve(input());
   assert.equal(report.missionType, 'simulation');
   assert.equal(report.schemaVersion, 3);
-  assert.equal(report.engineVersion, 'asterion-combat-engine-v7');
+  assert.equal(report.engineVersion, 'asterion-combat-engine-v8');
   assert.ok(report.initialSnapshot);
   assert.equal(report.metadata?.source, 'combat-resolver');
-  assert.match(report.metadata?.note ?? '', /asterion-combat-engine-v7/);
+  assert.match(report.metadata?.note ?? '', /asterion-combat-engine-v8/);
   assert.equal(report.experience, undefined);
   assert.equal(report.debris, undefined);
   assert.equal(report.resources, undefined);

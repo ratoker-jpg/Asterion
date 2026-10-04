@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from 'react';
 
 import { BattleReportModal } from './BattleReportsView';
-import { COMMANDER_COMBAT_CATALOG, getCombatEntity, type CatalogEntity } from './domain/combat/catalog.ts';
+import { COMMANDER_COMBAT_CATALOG, type CatalogEntity } from './domain/combat/catalog.ts';
+import { getCombatEntityForStack } from './domain/combat/side-entity.ts';
 import { COMMANDER_ABILITIES, type CommanderId } from './domain/combat/commanders.ts';
 import { getFactionDefenseCatalog, getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
 import {
@@ -170,7 +171,7 @@ function replaceStackLevel(
 ): SimulatorScenario {
   const current = getStacks(scenario, side, category);
   if (category === 'defenses') return scenario;
-  const entity = getCombatEntity(entityId);
+  const entity = getCombatEntityForStack(entityId);
   const levelMax = COMBAT_ENTITY_LEVEL_LIMITS[entity.kind];
   const next = current.map((stack) => stack.entityId === entityId
     ? { ...stack, level: Math.min(levelMax, Math.max(0, Math.floor(Number.isFinite(level) ? level : 0))) }

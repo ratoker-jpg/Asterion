@@ -17,7 +17,9 @@ import {
   type CombatFactionId,
 } from './factions.ts';
 import { getFactionCombatEntity } from './faction-catalog.ts';
-import type { CombatEntityId } from './ids.ts';
+import type { CombatEntityId, CombatStackEntityId } from './ids.ts';
+import { getCombatEntityForSide, isPirateShipId, type CombatSideProfile } from './side-entity.ts';
+import { pirateTechnologyLevels } from '../pirates/profile.ts';
 import type { CombatPriorityState } from './priority.ts';
 import type { BattleParticipant } from './report.ts';
 import {
@@ -32,7 +34,7 @@ export const SIMULATOR_MAX_ROUNDS = PROFILE_MAX_ROUNDS;
 export type SimulatorMaxRounds = (typeof SIMULATOR_MAX_ROUNDS)[number];
 
 export type CombatStackInput = {
-  entityId: CombatEntityId;
+  entityId: CombatStackEntityId;
   count: number;
   level?: number;
 };
@@ -40,6 +42,8 @@ export type CombatStackInput = {
 export type CombatSideInput = {
   participant: BattleParticipant;
   factionId?: CombatFactionId;
+  /** Explicit opt-in for neutral NPC combat entities. */
+  combatProfile?: CombatSideProfile;
   ships: CombatStackInput[];
   /** Canonical commander field. It is nullable because a side may have none. */
   commander?: CombatStackInput | null;
@@ -183,19 +187,19 @@ function isCombatEntityId(value: unknown): value is CombatEntityId {
   return typeof value === 'string' && COMBAT_ENTITY_BY_ID.has(value as CombatEntityId);
 }
 
-function normalizeStacks(stacks: readonly CombatStackInput[] | undefined) {
+function normalizeStacks(stacks: readonly CombatStackInput[] | undefined, profile?: CombatSideProfile) {
   return (stacks ?? [])
     .filter((stack) => Number.isFinite(stack.count) && Number.isInteger(stack.count) && stack.count > 0)
     .map((stack) => ({
       entityId: stack.entityId,
       count: stack.count,
-      level: normalizeEntityLevel(stack.entityId, stack.level),
+      level: profile?.kind === 'pirate' ? profile.snapshot.shipLevel : normalizeEntityLevel(stack.entityId, stack.level),
     }));
 }
 
-function normalizeEntityLevel(entityId: CombatEntityId, value: unknown) {
-  if (!COMBAT_ENTITY_BY_ID.has(entityId)) return 0;
-  const kind = getCombatEntity(entityId).kind;
+function normalizeEntityLevel(entityId: CombatStackEntityId, value: unknown) {
+  if (isPirateShipId(entityId) || !COMBAT_ENTITY_BY_ID.has(entityId as CombatEntityId)) return 0;
+  const kind = getCombatEntity(entityId as CombatEntityId).kind;
   const max = COMBAT_ENTITY_LEVEL_LIMITS[kind];
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
   return Math.min(max, Math.max(0, Math.floor(value)));
@@ -217,17 +221,17 @@ export function normalizeCombatInput(input: CombatInput): CombatInput {
     ...input,
     attacker: {
       ...input.attacker,
-      factionId: getCombatFactionId(input.attacker.factionId ?? input.attacker.participant.race),
-      ships: normalizeStacks(input.attacker.ships),
+      factionId: input.attacker.combatProfile?.kind === 'pirate' ? undefined : getCombatFactionId(input.attacker.factionId ?? input.attacker.participant.race),
+      ships: normalizeStacks(input.attacker.ships, input.attacker.combatProfile),
       ...normalizeSideCommanders(input.attacker),
-      defenses: normalizeStacks(input.attacker.defenses),
+      defenses: normalizeStacks(input.attacker.defenses, input.attacker.combatProfile),
     },
     defender: {
       ...input.defender,
-      factionId: getCombatFactionId(input.defender.factionId ?? input.defender.participant.race),
-      ships: normalizeStacks(input.defender.ships),
+      factionId: input.defender.combatProfile?.kind === 'pirate' ? undefined : getCombatFactionId(input.defender.factionId ?? input.defender.participant.race),
+      ships: normalizeStacks(input.defender.ships, input.defender.combatProfile),
       ...normalizeSideCommanders(input.defender),
-      defenses: normalizeStacks(input.defender.defenses),
+      defenses: normalizeStacks(input.defender.defenses, input.defender.combatProfile),
     },
     attackerPriority: [...input.attackerPriority],
     defenderPriority: [...input.defenderPriority],
@@ -249,10 +253,11 @@ export function normalizeCombatInput(input: CombatInput): CombatInput {
   };
 }
 
-export function calculateStacksPopulation(stacks: readonly CombatStackInput[], factionId: CombatFactionId = DEFAULT_COMBAT_FACTION_ID) {
+export function calculateStacksPopulation(stacks: readonly CombatStackInput[], factionId: CombatFactionId = DEFAULT_COMBAT_FACTION_ID, profile?: CombatSideProfile) {
   return stacks.reduce((total, stack) => {
-    if (!COMBAT_ENTITY_BY_ID.has(stack.entityId)) return total;
-    return total + stack.count * getFactionCombatEntity(factionId, stack.entityId).population;
+    const entity = getCombatEntityForSide(stack.entityId, factionId, profile);
+    if (!entity) return total;
+    return total + stack.count * entity.population;
   }, 0);
 }
 
@@ -275,6 +280,8 @@ function validateStackCollection(
   expectedKind: CombatEntityKind,
   path: string,
   errors: CombatValidationError[],
+  factionId: CombatFactionId | undefined,
+  profile?: CombatSideProfile,
 ) {
   const seen = new Set<string>();
   (stacks ?? []).forEach((stack, index) => {
@@ -304,7 +311,8 @@ function validateStackCollection(
     }
     seen.add(stack.entityId);
 
-    if (!isCombatEntityId(stack.entityId)) {
+    const entity = getCombatEntityForSide(stack.entityId, factionId, profile);
+    if (!entity) {
       errors.push({
         code: 'unknown-entity',
         path: `${stackPath}.entityId`,
@@ -313,7 +321,6 @@ function validateStackCollection(
       return;
     }
 
-    const entity = getCombatEntity(stack.entityId);
     if (entity.kind !== expectedKind) {
       errors.push({
         code: 'wrong-kind',
@@ -348,6 +355,7 @@ export type CombatValidationOptions = {
   allowEmptyDefender?: boolean;
   /** Test-only calibration sweeps may intentionally exceed UI population caps. */
   allowPopulationOverflow?: boolean;
+  missionType?: string;
 };
 
 export function validateCombatInput(input: CombatInput, options: CombatValidationOptions = {}): CombatValidationResult {
@@ -361,14 +369,26 @@ export function validateCombatInput(input: CombatInput, options: CombatValidatio
     });
   }
 
-  validateStackCollection(input.attacker.ships, 'ship', 'attacker.ships', errors);
+  const attackerFactionId = input.attacker.combatProfile?.kind === 'pirate' ? undefined : getCombatFactionId(input.attacker.factionId ?? input.attacker.participant.race);
+  const defenderFactionId = input.defender.combatProfile?.kind === 'pirate' ? undefined : getCombatFactionId(input.defender.factionId ?? input.defender.participant.race);
+  validateStackCollection(input.attacker.ships, 'ship', 'attacker.ships', errors, attackerFactionId, input.attacker.combatProfile);
   const attackerCommanders = getSideCommanders(input.attacker);
   const defenderCommanders = getSideCommanders(input.defender);
-  validateStackCollection(attackerCommanders, 'commander', 'attacker.commander', errors);
-  validateStackCollection(input.attacker.defenses, 'defense', 'attacker.defenses', errors);
-  validateStackCollection(input.defender.ships, 'ship', 'defender.ships', errors);
-  validateStackCollection(defenderCommanders, 'commander', 'defender.commander', errors);
-  validateStackCollection(input.defender.defenses, 'defense', 'defender.defenses', errors);
+  validateStackCollection(attackerCommanders, 'commander', 'attacker.commander', errors, attackerFactionId, input.attacker.combatProfile);
+  validateStackCollection(input.attacker.defenses, 'defense', 'attacker.defenses', errors, attackerFactionId, input.attacker.combatProfile);
+  validateStackCollection(input.defender.ships, 'ship', 'defender.ships', errors, defenderFactionId, input.defender.combatProfile);
+  validateStackCollection(defenderCommanders, 'commander', 'defender.commander', errors, defenderFactionId, input.defender.combatProfile);
+  validateStackCollection(input.defender.defenses, 'defense', 'defender.defenses', errors, defenderFactionId, input.defender.combatProfile);
+
+  for (const [sideName, side] of [['attacker', input.attacker], ['defender', input.defender]] as const) {
+    if (side.combatProfile?.kind === 'pirate') {
+      const nonShips = [...getSideCommanders(side), ...(side.defenses ?? [])];
+      if (nonShips.length) errors.push({ code: 'wrong-kind', path: `${sideName}.combatProfile`, message: 'Пиратская сторона поддерживает только NPC корабли.' });
+      if (side.participant.race !== 'pirates' || side.factionId !== undefined) errors.push({ code: 'participant-side', path: `${sideName}.participant.race`, message: 'Пиратский combatProfile требует нейтральную расу pirates без игровой factionId.' });
+      if ([...side.ships].some((stack) => !isPirateShipId(stack.entityId))) errors.push({ code: 'wrong-kind', path: `${sideName}.ships`, message: 'Пиратская сторона может содержать только NPC корабли.' });
+    }
+    if (!side.combatProfile && side.ships.some((stack) => isPirateShipId(stack.entityId))) errors.push({ code: 'unknown-entity', path: `${sideName}.ships`, message: 'Пиратский ID требует явного pirate combatProfile.' });
+  }
 
   for (const [side, commanders] of [['attacker', attackerCommanders] as const, ['defender', defenderCommanders] as const]) {
     const activeCommanderId = input[side].activeCommanderId;
@@ -417,8 +437,12 @@ export function validateCombatInput(input: CombatInput, options: CombatValidatio
     }
   }
 
-  const attackerTechnologies = normalizeCombatTechnologies(input.attackerTechnologies);
-  const defenderTechnologies = normalizeCombatTechnologies(input.defenderTechnologies);
+  const attackerTechnologies = input.attacker.combatProfile?.kind === 'pirate'
+    ? pirateTechnologyLevels(input.attacker.combatProfile.snapshot.score.resourcePoints, input.attacker.combatProfile.snapshot.exclusiveTechnologyId)
+    : normalizeCombatTechnologies(input.attackerTechnologies);
+  const defenderTechnologies = input.defender.combatProfile?.kind === 'pirate'
+    ? pirateTechnologyLevels(input.defender.combatProfile.snapshot.score.resourcePoints, input.defender.combatProfile.snapshot.exclusiveTechnologyId)
+    : normalizeCombatTechnologies(input.defenderTechnologies);
   for (const [path, levels] of [['attackerTechnologies', attackerTechnologies], ['defenderTechnologies', defenderTechnologies]] as const) {
     const additional = ['piercingAttack', 'maneuverDefense', 'criticalHit']
       .filter((id) => levels[id as keyof CombatTechnologyLevels] > 0);
@@ -436,6 +460,8 @@ export function validateCombatInput(input: CombatInput, options: CombatValidatio
   }
 
   const normalized = normalizeCombatInput(input);
+  if (normalized.attacker.combatProfile?.kind === 'pirate') normalized.attackerTechnologies = attackerTechnologies;
+  if (normalized.defender.combatProfile?.kind === 'pirate') normalized.defenderTechnologies = defenderTechnologies;
   if (normalized.technologyMode === 'shared') {
     const attackerTech = normalized.attackerTechnologies ?? createDefaultCombatTechnologies();
     const defenderTech = normalized.defenderTechnologies ?? createDefaultCombatTechnologies();
@@ -458,9 +484,9 @@ export function validateCombatInput(input: CombatInput, options: CombatValidatio
     errors.push({ code: 'empty-side', path: 'defender', message: 'Для запуска у защитника должна быть хотя бы одна единица.' });
   }
 
-  const attackerPopulation = calculateStacksPopulation([...normalized.attacker.ships, ...getSideCommanders(normalized.attacker)], normalized.attacker.factionId);
-  const defenderFleetPopulation = calculateStacksPopulation([...normalized.defender.ships, ...getSideCommanders(normalized.defender)], normalized.defender.factionId);
-  const defenderDefensePopulation = calculateStacksPopulation(normalized.defender.defenses ?? [], normalized.defender.factionId);
+  const attackerPopulation = calculateStacksPopulation([...normalized.attacker.ships, ...getSideCommanders(normalized.attacker)], normalized.attacker.factionId, normalized.attacker.combatProfile);
+  const defenderFleetPopulation = calculateStacksPopulation([...normalized.defender.ships, ...getSideCommanders(normalized.defender)], normalized.defender.factionId, normalized.defender.combatProfile);
+  const defenderDefensePopulation = calculateStacksPopulation(normalized.defender.defenses ?? [], normalized.defender.factionId, normalized.defender.combatProfile);
 
   if (options.allowPopulationOverflow !== true && attackerPopulation > SIMULATOR_POPULATION_LIMITS.attackerFleet) {
     errors.push({
