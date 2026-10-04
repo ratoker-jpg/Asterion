@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { PIRATE_BASE_SHIPS, PIRATE_CATALOG } from './catalog.ts';
-import { PIRATE_BALANCE_SCORE_BANDS, PIRATE_PROFILE_SLICES, runPirateCombatBalanceSimulation } from './balance-simulation.ts';
+import { pirateCombatBalanceMarkdown, PIRATE_BALANCE_SCORE_BANDS, PIRATE_PROFILE_SLICES, runPirateCombatBalanceSimulation } from './balance-simulation.ts';
 import { createPirateProfile, expectedPirateTierShares, pirateLevelForResourcePoints, pirateTechnologyLevelForResourcePoints } from './profile.ts';
 
 test('balance harness produces reproducible matchup, profile, and level tables', () => {
@@ -20,6 +20,12 @@ test('balance harness produces reproducible matchup, profile, and level tables',
   assert.equal(first.ripperCalibration.runs, 100);
   assert.equal(first.totalBattles, first.matchupCount * first.runsPerMatchup);
   assert.equal(first.matchups[0]?.pirateStartingPopulationRange[0]! >= 0, true);
+  assert.ok(first.matchups.every((row) => row.attackerStartingPopulationRange[0] <= row.attackerStartingPopulationRange[1]));
+  const markdown = pirateCombatBalanceMarkdown(first);
+  assert.match(markdown, /Primary-matchup seed fields only: faction, score band, attacker tech, formation, and run index\./);
+  assert.ok(markdown.includes('Ripper calibration uses a separate seed schema: `pirate-combat-v2:double-attack:<base-10 zero-padded 4-digit run index>`'));
+  assert.match(markdown, /actual opening player-fleet population across primary matchups ranged from/);
+  assert.match(markdown, /Player start population \(actual range\)/);
 });
 
 test('profile population shares are 20 seeded five-percent slices across pirate classes', () => {

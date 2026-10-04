@@ -1112,6 +1112,13 @@ function createSkippedActionEvent(
 const SHMEL_FREEZING_CHANCE_PER_SHIP = 0.0004;
 const SHMEL_FREEZING_MAX_CHANCE = 0.2;
 
+function isLivingCombatShipAbilityTarget(stack: RuntimeStack) {
+  // Ability target eligibility is independent of matchup classification. In
+  // particular, Pirate Planet Breaker is a combat ship with neutral matchup
+  // damage and must still be eligible for effects such as Shmel freezing.
+  return stack.kind === 'ship' && stack.count > 0 && stack.attackPerUnit > 0;
+}
+
 function shmelFreezingChance(actor: RuntimeStack, actorCount: number) {
   return actor.factionId === 'veyra' && actor.entityId === 'destroyer'
     ? Math.min(SHMEL_FREEZING_MAX_CHANCE, SHMEL_FREEZING_CHANCE_PER_SHIP * actorCount)
@@ -1383,9 +1390,7 @@ function resolveSideActions(
     }
 
     const freezingChance = shmelFreezingChance(actor, actorCount);
-    const freezingCandidates = targetStacks.filter((stack) => stack.kind === 'ship'
-      && stack.matchupClass !== undefined
-      && stack.count > 0
+    const freezingCandidates = targetStacks.filter((stack) => isLivingCombatShipAbilityTarget(stack)
       && !paralyzedTargetsNext.has(stack.entityId));
     if (freezingChance > 0 && freezingCandidates.length > 0) {
       const draw = rng.next();

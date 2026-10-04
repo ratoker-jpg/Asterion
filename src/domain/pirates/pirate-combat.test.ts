@@ -105,6 +105,40 @@ test('Planet Breaker uses death-star target selection but receives no death-star
   assert.equal(firstAttack?.matchupStatus, 'not-calibrated');
 });
 
+test('Shmel can freeze Planet Breaker as the only living ship target without changing its neutral damage', () => {
+  let frozenReport: ReturnType<typeof resolvePair> | undefined;
+  for (let seedIndex = 0; seedIndex < 256 && !frozenReport; seedIndex += 1) {
+    const report = resolvePair({
+      attackerRace: 'veyra',
+      attackerShips: [{ entityId: 'destroyer', count: 100 }],
+      defenderRace: 'pirates',
+      defenderPirate: true,
+      defenderShips: [{ entityId: 'pirate-planet-breaker', count: 30 }],
+      seed: `shmel-freeze-planet-breaker-only-target-${seedIndex}`,
+      maxRounds: 5,
+    });
+    const proc = report.rounds[0]?.events.find((event) => event.actionType === 'ability'
+      && event.shipAbilityId === 'shmel-freezing'
+      && event.targetEntityId === 'pirate-planet-breaker');
+    if (proc) frozenReport = report;
+  }
+
+  assert.ok(frozenReport, 'fixed seed sweep must record freezing against the sole living Planet Breaker');
+  const report = frozenReport!;
+  const livingDefenderShips = report.initialSnapshot!.defender.stacks
+    .filter((stack) => stack.countBefore > 0)
+    .map((stack) => stack.entityId);
+  assert.deepEqual(livingDefenderShips, ['pirate-planet-breaker']);
+  const proc = report.rounds[0]!.events.find((event) => event.actionType === 'ability'
+    && event.shipAbilityId === 'shmel-freezing'
+    && event.targetEntityId === 'pirate-planet-breaker')!;
+  assert.ok((proc.targetCount ?? 0) > 0, 'the selected Planet Breaker must be alive when freezing resolves');
+  const planetBreakerAttack = report.rounds.flatMap((round) => round.events).find((event) =>
+    event.actionType === 'attack' && event.actorEntityId === 'pirate-planet-breaker');
+  assert.ok(planetBreakerAttack, 'Planet Breaker retains its ordinary attack action');
+  assert.equal(planetBreakerAttack.matchupMultiplier, 1, 'ability eligibility must not add a matchup multiplier');
+});
+
 test('Planet Breaker uses Death Star level scaling for attack and life, while keeping neutral damage', () => {
   const profileAtLevel = (level: number) => createPirateProfile({
     ownerId: `planet-breaker-level-${level}`,

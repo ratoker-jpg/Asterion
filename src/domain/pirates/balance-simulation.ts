@@ -22,6 +22,7 @@ export const PIRATE_BALANCE_SEED_CORPUS = Object.freeze({
   prefix: 'pirate-combat-v2',
   runIndexEncoding: 'base-10, zero-padded to 4 digits',
   scenarioEncoding: '[faction, score band, attacker tech band, fleet formation, run index]',
+  ripperCalibrationEncoding: 'double-attack:<base-10 zero-padded 4-digit run index>',
 });
 
 export const PIRATE_BALANCE_SCORE_BANDS = Object.freeze([
@@ -62,6 +63,7 @@ export type PirateBalanceMatchup = Readonly<{
   drawRate95: readonly [number, number];
   attackerSurvivingPopulationMedian: number;
   attackerSurvivingPopulationRange: readonly [number, number];
+  attackerStartingPopulationRange: readonly [number, number];
   pirateSurvivingPopulationMedian: number;
   pirateSurvivingPopulationRange: readonly [number, number];
   pirateStartingPopulationMedian: number;
@@ -135,6 +137,7 @@ type Accumulator = {
   losses: number;
   draws: number;
   rounds: number;
+  playerStartingPopulation: number[];
   playerResidual: number[];
   pirateResidual: number[];
   pirateStartingPopulation: number[];
@@ -263,6 +266,7 @@ function recordBattle(acc: Accumulator, report: BattleReport) {
   else if (report.winner === 'defender') acc.losses += 1;
   else acc.draws += 1;
   acc.rounds += report.roundCount;
+  acc.playerStartingPopulation.push(safeCount(report.attackerForce.populationBefore));
   acc.playerResidual.push(safeCount(report.attackerForce.populationAfter));
   acc.pirateResidual.push(safeCount(report.defenderForce.populationAfter));
 }
@@ -448,7 +452,7 @@ export function runPirateCombatBalanceSimulation(options: Readonly<{ runsPerMatc
       for (const attackerTechnologyLevel of PIRATE_BALANCE_ATTACKER_TECH_BANDS) {
         for (const formation of FORMATIONS) {
           const acc: Accumulator = {
-            wins: 0, losses: 0, draws: 0, rounds: 0, playerResidual: [], pirateResidual: [],
+            wins: 0, losses: 0, draws: 0, rounds: 0, playerStartingPopulation: [], playerResidual: [], pirateResidual: [],
             pirateStartingPopulation: [], piratePopulationRoundingErrors: [], shipCounts: {}, firstSeed: '', lastSeed: '',
           };
           const key = `${faction}/${band.id}/tech-${attackerTechnologyLevel}/${formation}`;
@@ -487,6 +491,7 @@ export function runPirateCombatBalanceSimulation(options: Readonly<{ runsPerMatc
             drawRate: acc.draws / runs, drawRate95: wilson(acc.draws, runs),
             attackerSurvivingPopulationMedian: median(acc.playerResidual),
             attackerSurvivingPopulationRange: range(acc.playerResidual),
+            attackerStartingPopulationRange: range(acc.playerStartingPopulation),
             pirateSurvivingPopulationMedian: median(acc.pirateResidual),
             pirateSurvivingPopulationRange: range(acc.pirateResidual),
             pirateStartingPopulationMedian: median(acc.pirateStartingPopulation),
@@ -521,16 +526,17 @@ function asPercent(value: number) { return `${(value * 100).toFixed(1)}%`; }
 function asInterval(value: readonly [number, number]) { return `${asPercent(value[0])}–${asPercent(value[1])}`; }
 
 export function pirateCombatBalanceMarkdown(result: PirateCombatBalanceSimulation) {
+  const actualPlayerPopulationRange = range(result.matchups.flatMap((row) => row.attackerStartingPopulationRange));
   const lines = [
     '# Pirate combat balance — PR1',
     '',
     `Generated ${result.totalBattles.toLocaleString('en-US')} seeded battles across ${result.matchupCount} matchups; ${result.runsPerMatchup} runs per matchup.`,
-    `Seed corpus: \`${result.seedCorpus.version}\`; each battle seed includes faction, score band, attacker tech, formation, and run index.`,
+    `Seed corpus: \`${result.seedCorpus.version}\`. Primary-matchup seed fields only: faction, score band, attacker tech, formation, and run index. The Ripper calibration uses a separate seed schema: \`${result.seedCorpus.prefix}:${result.seedCorpus.ripperCalibrationEncoding}\` (no matchup fields).`,
     '',
     '## Scope and limits',
     '',
     'This is an internal Asterion calibration. It checks pirate ship statistics, the shared six-class matchup table, population-share profile sampling, and the once-per-round Ripper ability. It does not establish Nemexia parity. It does not simulate contact frequency, travel, incoming raids, planet siege, or planet destruction; those belong to later PRs.',
-    `Each player fleet targets ${PIRATE_BALANCE_POPULATION.toLocaleString('en-US')} combat population. A pirate profile targets 90% of that amount (${Math.round(PIRATE_BALANCE_POPULATION * 0.9).toLocaleString('en-US')}) and rounds to whole ships using the profile population shares. Shares mean population percentages, not percentages of ship count. Every generated profile is built from ${PIRATE_PROFILE_SLICES} seeded population slices of 5% each; each slice first samples a tier using the existing score-based tier weights, then chooses a ship class uniformly at random within that tier. Player and pirate ship levels and pirate technology stay derived from resource points; player technology is independently checked at levels 0, 5, and 10. Main matchups and the separate Potroshitel calibration each allow up to 12 rounds per battle.`,
+    `Each player fleet targets ${PIRATE_BALANCE_POPULATION.toLocaleString('en-US')} combat population; actual opening player-fleet population across primary matchups ranged from ${actualPlayerPopulationRange[0].toLocaleString('en-US')} to ${actualPlayerPopulationRange[1].toLocaleString('en-US')} because ships use whole counts. A pirate profile targets 90% of that amount (${Math.round(PIRATE_BALANCE_POPULATION * 0.9).toLocaleString('en-US')}) and rounds to whole ships using the profile population shares. Shares mean population percentages, not percentages of ship count. Every generated profile is built from ${PIRATE_PROFILE_SLICES} seeded population slices of 5% each; each slice first samples a tier using the existing score-based tier weights, then chooses a ship class uniformly at random within that tier. Player and pirate ship levels and pirate technology stay derived from resource points; player technology is independently checked at levels 0, 5, and 10. Main matchups and the separate Potroshitel calibration each allow up to 12 rounds per battle.`,
     `Independent sample counts: ${result.totalBattles.toLocaleString('en-US')} primary battles (${result.matchupCount} matchups × ${result.runsPerMatchup} seeds each); ${result.ripperCalibration.runs.toLocaleString('en-US')} separate Ripper calibration battles; ${result.levelStats.length} level/technology stat snapshots; ${result.catalogMedians.length * COMBAT_FACTION_IDS.length} source-faction catalog stat snapshots summarized into ${result.catalogMedians.length} pirate medians.`,
     `Across primary matchups, the largest observed absolute error from the 90% pirate population target was ${Math.max(0, ...result.matchups.map((row) => row.piratePopulationRoundingErrorMaximum)).toLocaleString('en-US')} population points. The budget helper rounds each eligible class allocation to whole ships; the observed error is reported instead of claiming a tighter universal bound.`,
     '',
@@ -553,11 +559,11 @@ export function pirateCombatBalanceMarkdown(result: PirateCombatBalanceSimulatio
     '',
     '## Combat outcomes',
     '',
-    '“Mirror” matches the pirate population share for each ship class. “Counter” moves each pirate class share to the faction ship class with the largest existing damage multiplier against it. “Mixed” divides player population equally across the six regular ship classes. The player fleet always targets 10,000 population; the pirate fleet targets 9,000.',
+    '“Mirror” matches the pirate population share for each ship class. “Counter” moves each pirate class share to the faction ship class with the largest existing damage multiplier against it. “Mixed” divides player population equally across the six regular ship classes. Player fleet target is 10,000; actual per-matchup opening population is shown below. Pirate fleet target is 9,000.',
     '',
-    '| Faction | Score (total / resource / battle) | Player tech | Formation | Player/pirate level; pirate tech | Pirate start population (median [range], max target error) | Player win (95% CI) | Draw (95% CI) | Pirate win (95% CI) | Player survivors median [range] / pirate survivors median [range] |',
-    '| --- | --- | ---: | --- | ---: | --- | --- | --- | --- | --- |',
-    ...result.matchups.map((row) => `| ${row.faction} | ${row.scoreBand} (${row.totalPoints.toLocaleString('en-US')} / ${row.resourcePoints.toLocaleString('en-US')} / ${row.battlePoints.toLocaleString('en-US')}) | ${row.attackerTechnologyLevel} | ${row.formation} | ${row.pirateShipLevel}/${row.pirateShipLevel}; ${row.pirateTechnologyLevel} | ${Math.round(row.pirateStartingPopulationMedian).toLocaleString('en-US')} [${row.pirateStartingPopulationRange.map((value) => Math.round(value).toLocaleString('en-US')).join('–')}], ${Math.round(row.piratePopulationRoundingErrorMaximum).toLocaleString('en-US')} | ${asPercent(row.attackerWinRate)} (${asInterval(row.attackerWinRate95)}) | ${asPercent(row.drawRate)} (${asInterval(row.drawRate95)}) | ${asPercent(row.defenderWinRate)} (${asInterval(row.defenderWinRate95)}) | ${Math.round(row.attackerSurvivingPopulationMedian).toLocaleString('en-US')} [${row.attackerSurvivingPopulationRange.map((value) => Math.round(value).toLocaleString('en-US')).join('–')}] / ${Math.round(row.pirateSurvivingPopulationMedian).toLocaleString('en-US')} [${row.pirateSurvivingPopulationRange.map((value) => Math.round(value).toLocaleString('en-US')).join('–')}] |`),
+    '| Faction | Score (total / resource / battle) | Player tech | Formation | Player/pirate level; pirate tech | Player start population (actual range) | Pirate start population (median [range], max target error) | Player win (95% CI) | Draw (95% CI) | Pirate win (95% CI) | Player survivors median [range] / pirate survivors median [range] |',
+    '| --- | --- | ---: | --- | ---: | ---: | --- | --- | --- | --- | --- |',
+    ...result.matchups.map((row) => `| ${row.faction} | ${row.scoreBand} (${row.totalPoints.toLocaleString('en-US')} / ${row.resourcePoints.toLocaleString('en-US')} / ${row.battlePoints.toLocaleString('en-US')}) | ${row.attackerTechnologyLevel} | ${row.formation} | ${row.pirateShipLevel}/${row.pirateShipLevel}; ${row.pirateTechnologyLevel} | ${row.attackerStartingPopulationRange.map((value) => Math.round(value).toLocaleString('en-US')).join('–')} | ${Math.round(row.pirateStartingPopulationMedian).toLocaleString('en-US')} [${row.pirateStartingPopulationRange.map((value) => Math.round(value).toLocaleString('en-US')).join('–')}], ${Math.round(row.piratePopulationRoundingErrorMaximum).toLocaleString('en-US')} | ${asPercent(row.attackerWinRate)} (${asInterval(row.attackerWinRate95)}) | ${asPercent(row.drawRate)} (${asInterval(row.drawRate95)}) | ${asPercent(row.defenderWinRate)} (${asInterval(row.defenderWinRate95)}) | ${Math.round(row.attackerSurvivingPopulationMedian).toLocaleString('en-US')} [${row.attackerSurvivingPopulationRange.map((value) => Math.round(value).toLocaleString('en-US')).join('–')}] / ${Math.round(row.pirateSurvivingPopulationMedian).toLocaleString('en-US')} [${row.pirateSurvivingPopulationRange.map((value) => Math.round(value).toLocaleString('en-US')).join('–')}] |`),
     '',
     '## Potroshitel extra-attack calibration',
     '',
