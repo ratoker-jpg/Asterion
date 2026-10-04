@@ -10,7 +10,7 @@ import {
 import {
   DEFENSE_IDS,
   SHIP_IDS,
-  type CombatEntityId,
+  type CombatStackEntityId,
   type DefenseId,
   type ShipId,
 } from '../combat/ids.ts';
@@ -25,6 +25,7 @@ import {
   type OwnedDefenseState,
 } from '../fleet/production.ts';
 import type { OwnedFleetState } from '../fleet/runtime.ts';
+import { isPirateShipId } from '../combat/side-entity.ts';
 
 export type RepairCategory = 'ship' | 'defense';
 export type RepairPaymentMethod = 'resources' | 'tokens';
@@ -578,9 +579,10 @@ export function calculateRepairLosses(
 
   const ships: Partial<Record<ShipId, number>> = {};
   const defenses: Partial<Record<DefenseId, number>> = {};
-  const addSnapshot = (entityId: CombatEntityId, destroyed: number) => {
+  const addSnapshot = (entityId: CombatStackEntityId, destroyed: number) => {
     // Reports can outlive a catalog revision. Unknown snapshots are kept in
     // the report but do not make the application transition throw.
+    if (isPirateShipId(entityId)) return;
     const entity = COMBAT_ENTITY_BY_ID.get(entityId);
     if (!entity) return;
     const quantity = recoverableFromDestroyed(safeDestroyed(destroyed));

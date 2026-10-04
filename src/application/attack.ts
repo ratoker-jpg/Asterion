@@ -26,6 +26,8 @@ import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import { resolveSpyTarget } from './espionage-targets.ts';
 import type { AttackLaunchSnapshot, AttackLoot, AttackResolution } from '../domain/attack/types.ts';
 import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
+import { isPirateShipId } from '../domain/combat/side-entity.ts';
+import { calculatePirateForceDebris } from '../domain/pirates/debris.ts';
 
 const ATTACK_MAX_ROUNDS: readonly SimulatorMaxRounds[] = [5, 8, 12];
 const ATTACK_REPORT_PREFIX = 'battle-attack-';
@@ -146,6 +148,7 @@ function reportDestroyedDebris(report: BattleReport, side: 'attacker' | 'defende
   const force = side === 'attacker' ? report.attackerForce : report.defenderForce;
   let debris = 0;
   for (const stack of [...(force.stacks ?? []), ...(force.defenses ?? [])]) {
+    if (isPirateShipId(stack.entityId)) continue;
     const entity = getFactionCombatEntity(factionId, stack.entityId);
     // Commanders are combat ships in the same construction catalog. Their
     // destroyed hulls therefore contribute to orbit debris just like regular
@@ -160,12 +163,15 @@ function reportDestroyedDebris(report: BattleReport, side: 'attacker' | 'defende
 
 export function calculateAttackDebris(report: BattleReport, attackerFactionId: CombatFactionId, defenderFactionId: CombatFactionId): number {
   return reportDestroyedDebris(report, 'attacker', attackerFactionId)
-    + reportDestroyedDebris(report, 'defender', defenderFactionId);
+    + reportDestroyedDebris(report, 'defender', defenderFactionId)
+    + calculatePirateForceDebris(report.attackerForce, report.defenderForce)
+    + calculatePirateForceDebris(report.defenderForce, report.attackerForce);
 }
 
 function survivorsCargo(report: BattleReport, factionId: CombatFactionId) {
   const ships: Partial<Record<ShipId, number>> = {};
   for (const stack of report.attackerForce.stacks ?? []) {
+    if (isPirateShipId(stack.entityId)) continue;
     const id = stack.entityId as ShipId;
     const entity = getFactionCombatEntity(factionId, stack.entityId);
     if (entity.kind !== 'ship' || id === SOLAR_SATELLITE_ID) continue;
@@ -199,6 +205,7 @@ function applyDestroyedToFleet(fleet: OwnedFleetState, reportForce: BattleReport
     commanders: { ...fleet.commanders },
   };
   for (const stack of [...(reportForce.stacks ?? []), ...(reportForce.defenses ?? [])]) {
+    if (isPirateShipId(stack.entityId)) continue;
     const entity = getFactionCombatEntity(factionId, stack.entityId);
     const destroyed = safeCount(stack.destroyed);
     if (destroyed <= 0) continue;
@@ -711,6 +718,7 @@ export function creditBot01AttackReturn(state: SaveState, flight: FlightRecord, 
   };
   if (report) {
     for (const stack of report.attackerForce.stacks ?? []) {
+      if (isPirateShipId(stack.entityId)) continue;
       const survivors = safeCount(stack.countAfter);
       if (survivors <= 0) continue;
       const entity = getFactionCombatEntity(source.raceId, stack.entityId);
