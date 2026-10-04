@@ -22,10 +22,12 @@ function resolvePair(input: {
   attackerPirate?: boolean;
   defenderPirate?: boolean;
   seed?: string;
+  pirateProfile?: typeof profile;
+  maxRounds?: CombatInput['maxRounds'];
 }) {
   const side = (race: typeof input.attackerRace, ships: CombatStackInput[], pirate: boolean | undefined, name: string, side: 'attacker' | 'defender') => ({
     participant: { playerId: `${name}-owner`, playerName: name, race, side },
-    ...(pirate ? { combatProfile: { kind: 'pirate' as const, snapshot: profile } } : { factionId: race === 'pirates' ? undefined : race }),
+    ...(pirate ? { combatProfile: { kind: 'pirate' as const, snapshot: input.pirateProfile ?? profile } } : { factionId: race === 'pirates' ? undefined : race }),
     ships,
     commanders: [],
     activeCommanderId: null,
@@ -35,7 +37,7 @@ function resolvePair(input: {
     timestamp: '2026-01-01T00:00:00.000Z',
     attacker: side(input.attackerRace, input.attackerShips, input.attackerPirate, 'Attacker', 'attacker'),
     defender: side(input.defenderRace, input.defenderShips, input.defenderPirate, 'Defender', 'defender'),
-    maxRounds: 5,
+    maxRounds: input.maxRounds ?? 5,
     attackerPriority: [...priority.attack],
     defenderPriority: [...priority.defense],
     seed: input.seed ?? 'pirate-matchup-test-seed',
@@ -101,6 +103,107 @@ test('Planet Breaker uses death-star target selection but receives no death-star
   assert.equal(firstAttack?.targetEntityId, 'pirate-planet-breaker');
   assert.equal(firstAttack?.matchupMultiplier, 1);
   assert.equal(firstAttack?.matchupStatus, 'not-calibrated');
+});
+
+test('Planet Breaker uses Death Star level scaling for attack and life, while keeping neutral damage', () => {
+  const profileAtLevel = (level: number) => createPirateProfile({
+    ownerId: `planet-breaker-level-${level}`,
+    contactCycleKey: 'level-scaling',
+    score: { resourcePoints: level === 10 ? 3_000_000 : 0, battlePoints: 0, totalPoints: level === 10 ? 3_000_000 : 0 },
+  });
+  const level0Profile = profileAtLevel(0);
+  const level10Profile = { ...level0Profile, ownerId: 'planet-breaker-level-10', shipLevel: 10 };
+  const resolveAtLevel = (level: number) => resolvePair({
+    attackerRace: 'pirates',
+    attackerPirate: true,
+    attackerShips: [{ entityId: 'pirate-planet-breaker', count: 1 }],
+    defenderRace: 'synod',
+    defenderShips: [{ entityId: 'scout', count: 100 }],
+    pirateProfile: level === 10 ? level10Profile : level0Profile,
+    seed: `planet-breaker-level-${level}`,
+    maxRounds: 5,
+  });
+
+  const level0 = resolveAtLevel(0);
+  const level10 = resolveAtLevel(10);
+  const snapshotFor = (report: ReturnType<typeof resolveAtLevel>) => report.initialSnapshot!.attacker.stacks
+    .find((stack) => stack.entityId === 'pirate-planet-breaker')!;
+  const base = snapshotFor(level0);
+  const max = snapshotFor(level10);
+  assert.equal(max.level, 10);
+  assert.equal(max.attackPerUnit, Math.floor((base.attackPerUnit ?? 0) * 2.5));
+  assert.equal(max.lifePerUnit, Math.floor((base.lifePerUnit ?? 0) * 2.5));
+  assert.equal(level10.rounds[0]?.events.find((event) => event.actorEntityId === 'pirate-planet-breaker'
+    && event.actionType === 'attack')?.matchupMultiplier, 1);
+});
+
+test('Planet Breaker receives at most five ordinary volleys in a round', () => {
+  const report = resolvePair({
+    attackerRace: 'pirates',
+    attackerPirate: true,
+    attackerShips: [{ entityId: 'pirate-planet-breaker', count: 1 }],
+    defenderRace: 'pirates',
+    defenderPirate: true,
+    defenderShips: [
+      { entityId: 'pirate-hound', count: 1 },
+      { entityId: 'pirate-raider', count: 1 },
+      { entityId: 'pirate-corsair', count: 1 },
+      { entityId: 'pirate-executioner', count: 1 },
+      { entityId: 'pirate-butcher', count: 1 },
+      { entityId: 'pirate-bruiser', count: 1 },
+    ],
+    seed: 'planet-breaker-five-volleys',
+    maxRounds: 5,
+  });
+  const volleys = report.rounds[0]?.events.filter((event) => event.actorEntityId === 'pirate-planet-breaker'
+    && event.actionType === 'attack') ?? [];
+  assert.equal(volleys.length, 5);
+  [615_000, 492_000, 369_000, 246_000, 123_000].forEach((expected, index) => {
+    assert.ok(Math.abs((volleys[index]?.baseAttack ?? 0) - expected) <= 1, `volley ${index + 1} uses the normal descending strength`);
+  });
+  assert.ok(volleys.every((event) => event.matchupMultiplier === 1));
+});
+
+test('a frozen pirate ship skips its ordinary attack but can still receive the Ripper bonus attack that round', () => {
+  const attackerShips: CombatStackInput[] = [
+    { entityId: 'pirate-hound', count: 1_000 },
+    { entityId: 'pirate-butcher', count: 1_000 },
+  ];
+  const defenderShips: CombatStackInput[] = [
+    { entityId: 'destroyer', count: 500 },
+    { entityId: 'defender', count: 1_000 },
+    { entityId: 'battleship', count: 1_000 },
+  ];
+  let matchingRound: ReturnType<typeof resolvePair>['rounds'][number] | undefined;
+  for (let seedIndex = 0; seedIndex < 200 && !matchingRound; seedIndex += 1) {
+    const report = resolvePair({
+      attackerRace: 'pirates',
+      attackerPirate: true,
+      attackerShips,
+      defenderRace: 'veyra',
+      defenderShips,
+      seed: `freeze-ripper-combined-${seedIndex}`,
+    });
+    matchingRound = report.rounds.find((round) => {
+      const frozenEntityIds = new Set(round.events.filter((event) => event.actionType === 'status'
+        && event.shipAbilityId === 'shmel-freezing').map((event) => event.actorEntityId));
+      const bonusTargetIds = new Set(round.events.filter((event) => event.actionType === 'ability'
+        && event.shipAbilityId === 'pirate-double-attack').map((event) => event.targetEntityId));
+      return [...frozenEntityIds].some((entityId) => bonusTargetIds.has(entityId));
+    });
+  }
+  assert.ok(matchingRound, 'fixed seeded search should find a round where a frozen group is selected for the separate bonus attack');
+  const frozen = matchingRound.events.find((event) => event.actionType === 'status' && event.shipAbilityId === 'shmel-freezing')!;
+  const bonus = matchingRound.events.find((event) => event.actionType === 'ability'
+    && event.shipAbilityId === 'pirate-double-attack' && event.targetEntityId === frozen.actorEntityId)!;
+  assert.equal(frozen.actionType, 'status');
+  const ordinaryAttack = matchingRound.events.find((event) => event.actionType === 'attack'
+    && event.actorEntityId === frozen.actorEntityId && event.sequence < bonus.sequence);
+  assert.equal(ordinaryAttack, undefined, 'frozen group must not make its ordinary attack');
+  const bonusAttack = matchingRound.events.find((event) => event.actionType === 'attack'
+    && event.actorEntityId === frozen.actorEntityId
+    && event.sequence > bonus.sequence);
+  assert.ok(bonusAttack, 'the same group can make its separate Potroshitel bonus attack after the freeze skip');
 });
 
 test('Potroshitel grants a single fleet roll per round, scaled by living count and capped at 5%', () => {

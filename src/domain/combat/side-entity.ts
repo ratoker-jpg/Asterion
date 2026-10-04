@@ -19,11 +19,17 @@ export type ResolvedCombatEntity = Pick<CombatEntityDefinition,
 };
 
 function pirateSpecialBonus(ability: PirateAbility): CombatEntityDefinition['specialBonus'] {
+  const provenance = {
+    scope: 'fleet' as const,
+    status: 'inferred' as const,
+    source: 'src/domain/combat/source-fixtures/ship-abilities.json',
+    note: 'Source rates and caps are recorded in the fixture. Asterion applies these bonuses to every living allied pirate ship group, including the donating group; non-ship entities are excluded.',
+  };
   switch (ability.kind) {
     case 'bonus-life':
-      return { kind: 'life', rate: ability.perShipRate, cap: ability.cap, capStatus: 'known', scope: 'fleet', status: 'confirmed' };
+      return { kind: 'life', rate: ability.perShipRate, cap: ability.cap, capStatus: 'known', ...provenance };
     case 'armor-boost':
-      return { kind: 'armor', rate: ability.perShipRate, cap: ability.cap, capStatus: 'known', scope: 'fleet', status: 'confirmed' };
+      return { kind: 'armor', rate: ability.perShipRate, cap: ability.cap, capStatus: 'known', ...provenance };
     default:
       return undefined;
   }

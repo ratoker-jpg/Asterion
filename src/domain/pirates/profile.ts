@@ -1,4 +1,4 @@
-import { PIRATE_BASE_SHIPS, PIRATE_CATALOG_BY_ID, PIRATE_SHIP_IDS, type PirateBaseShipId, type PirateShipId, type PirateTier } from './catalog.ts';
+import { PIRATE_BASE_SHIPS, PIRATE_CATALOG_BY_ID, type PirateBaseShipId, type PirateShipId } from './catalog.ts';
 import { COMBAT_TECHNOLOGY_IDS, type CombatTechnologyId } from '../combat/technologies.ts';
 
 export type PirateTierShares = Readonly<Record<1 | 2 | 3, number>>;
@@ -29,9 +29,14 @@ export type PirateProfile = Readonly<{
   exclusiveTechnologyId: PirateExclusiveTechnologyId;
   technologies: Readonly<Record<CombatTechnologyId, number>>;
   expectedTierShares: PirateTierShares;
+  /** Tier distribution actually sampled across twenty 5%-population slices. */
+  sampledTierShares: PirateTierShares;
+  /** Compatibility summary only: the tier with the largest sampled population share. */
   tier: 1 | 2 | 3;
   shares: PirateShipShares;
 }>;
+
+const PIRATE_PROFILE_POPULATION_SLICES = 20;
 
 export const PIRATE_TIER_SHARE_ANCHORS: readonly Readonly<{ totalPoints: number; shares: PirateTierShares }>[] = Object.freeze([
   Object.freeze({ totalPoints: 1_000, shares: Object.freeze({ 1: 100, 2: 0, 3: 0 }) }),
@@ -129,7 +134,7 @@ function classesInTier(tier: 1 | 2 | 3) {
   return PIRATE_BASE_SHIPS.filter((ship) => ship.tier === tier);
 }
 
-/** Select one mono-class profile from the interpolated tier weights; this keeps every profile at exactly 100%. */
+/** Sample a 100%-population mix in twenty deterministic 5% slices. */
 export function createPirateProfile(input: {
   ownerId: string;
   contactCycleKey: string;
@@ -141,19 +146,35 @@ export function createPirateProfile(input: {
   const exclusiveTechnologyId = PIRATE_EXCLUSIVE_TECHNOLOGIES[
     Math.floor(technologyRandom() * PIRATE_EXCLUSIVE_TECHNOLOGIES.length)
   ]!;
+  const resourcePoints = safePoints(input.score.resourcePoints);
+  const battlePoints = safePoints(input.score.battlePoints);
+  const canonicalTotalPoints = resourcePoints > Number.MAX_VALUE - battlePoints
+    ? Number.MAX_VALUE
+    : resourcePoints + battlePoints;
+  if (safePoints(input.score.totalPoints) !== canonicalTotalPoints) {
+    throw new Error(`Pirate owner totalPoints must equal resourcePoints + battlePoints (${canonicalTotalPoints}).`);
+  }
   const score = Object.freeze({
-    resourcePoints: safePoints(input.score.resourcePoints),
-    battlePoints: safePoints(input.score.battlePoints),
-    totalPoints: safePoints(input.score.totalPoints),
+    resourcePoints,
+    battlePoints,
+    // Achievements are excluded; the validated total is exactly the sum of
+    // the supplied resource and battle point components.
+    totalPoints: canonicalTotalPoints,
   });
   const expectedTierShares = expectedPirateTierShares(score.totalPoints);
-  const tier = sampleTier(expectedTierShares, random);
-  const tierShips = classesInTier(tier);
-  const selected = tierShips[Math.floor(random() * tierShips.length)]!;
-  const shares = Object.freeze({
-    ...Object.fromEntries(PIRATE_BASE_SHIPS.map((ship) => [ship.id, ship.id === selected.id ? 100 : 0])),
-    'pirate-planet-breaker': 0,
-  }) as Readonly<Record<PirateShipId, number>>;
+  const sampledTierShares = { 1: 0, 2: 0, 3: 0 };
+  const mutableShares = Object.fromEntries(PIRATE_BASE_SHIPS.map((ship) => [ship.id, 0])) as Record<PirateBaseShipId, number>;
+  for (let slice = 0; slice < PIRATE_PROFILE_POPULATION_SLICES; slice += 1) {
+    const tier = sampleTier(expectedTierShares, random);
+    sampledTierShares[tier] += 5;
+    const tierShips = classesInTier(tier);
+    const selected = tierShips[Math.floor(random() * tierShips.length)]!;
+    mutableShares[selected.id as PirateBaseShipId] += 5;
+  }
+  const normalizedSampledTierShares = Object.freeze(sampledTierShares) as PirateTierShares;
+  const tier = ([1, 2, 3] as const).reduce((selected, candidate) =>
+    normalizedSampledTierShares[candidate] > normalizedSampledTierShares[selected] ? candidate : selected, 1);
+  const shares = Object.freeze(mutableShares) as PirateShipShares;
   return Object.freeze({
     profileVersion: 1 as const,
     ownerId: input.ownerId,
@@ -165,15 +186,16 @@ export function createPirateProfile(input: {
     exclusiveTechnologyId,
     technologies: pirateTechnologyLevels(score.resourcePoints, exclusiveTechnologyId),
     expectedTierShares,
+    sampledTierShares: normalizedSampledTierShares,
     tier,
     shares,
   });
 }
 
 /**
- * Allocate a fresh elimination garrison at exactly the rounded 90% target,
- * then choose the nearest integer population representable by this mono-class
- * sampled profile. Ties round down to keep the outcome stable and conservative.
+ * Allocate each ship stack from its share of the rounded 90% population target.
+ * Each stack is rounded down/up deterministically, choosing the combination
+ * whose total population is closest to the target.
  */
 export function calculatePirateEliminationPopulationBudget(
   sentCombatPopulation: number,
@@ -182,24 +204,47 @@ export function calculatePirateEliminationPopulationBudget(
   const sent = safePoints(sentCombatPopulation);
   const targetPopulation = Math.round(sent * 0.9);
   const entries = Object.entries(shares).filter(([, share]) => share !== undefined) as [PirateShipId, number][];
-  const selectedEntries = entries.filter(([, share]) => share === 100);
-  const invalidShare = entries.some(([id, share]) => !PIRATE_SHIP_IDS.includes(id) || (share !== 0 && share !== 100));
-  if (invalidShare || selectedEntries.length !== 1 || entries.reduce((sum, [, share]) => sum + share, 0) !== 100) {
-    throw new Error('Pirate population allocation requires one normalized mono-class profile');
+  const invalidShare = entries.some(([id, share]) => !PIRATE_BASE_SHIPS.some((ship) => ship.id === id)
+    || !Number.isFinite(share) || share < 0);
+  const totalShare = entries.reduce((sum, [, share]) => sum + share, 0);
+  if (invalidShare || Math.abs(totalShare - 100) > 1e-9) {
+    throw new Error('Pirate population allocation requires normalized ordinary-ship shares');
   }
-  const [shipId] = selectedEntries[0]!;
-  if (shipId === 'pirate-planet-breaker') throw new Error('Planet breaker is not valid in an elimination garrison');
-  const populationPerShip = PIRATE_CATALOG_BY_ID[shipId].population;
-  const lowerCount = Math.floor(targetPopulation / populationPerShip);
-  const upperCount = lowerCount + (targetPopulation % populationPerShip === 0 ? 0 : 1);
-  const lowerPopulation = lowerCount * populationPerShip;
-  const upperPopulation = upperCount * populationPerShip;
-  const count = targetPopulation - lowerPopulation <= upperPopulation - targetPopulation ? lowerCount : upperCount;
-  const actualPopulation = count * populationPerShip;
+  const activeEntries = entries.filter(([, share]) => share > 0);
+  const options = activeEntries.map(([shipId, share]) => {
+    const populationPerShip = PIRATE_CATALOG_BY_ID[shipId].population;
+    const idealCount = targetPopulation * share / 100 / populationPerShip;
+    const lowerCount = Math.floor(idealCount);
+    return {
+      shipId: shipId as PirateBaseShipId,
+      populationPerShip,
+      lowerCount,
+      upperCount: Math.ceil(idealCount),
+    };
+  });
+  let bestCounts: number[] = [];
+  let bestPopulation = 0;
+  let bestError = Number.POSITIVE_INFINITY;
+  const combinations = 1 << options.length;
+  for (let mask = 0; mask < combinations; mask += 1) {
+    const counts = options.map((option, index) => (mask & (1 << index)) ? option.upperCount : option.lowerCount);
+    const population = counts.reduce((sum, count, index) => sum + count * options[index]!.populationPerShip, 0);
+    const error = Math.abs(population - targetPopulation);
+    // Lower error wins; ties choose fewer people, then the first stable mask.
+    if (error < bestError || (error === bestError && population < bestPopulation)) {
+      bestError = error;
+      bestPopulation = population;
+      bestCounts = counts;
+    }
+  }
+  const ships = Object.fromEntries(options.flatMap((option, index) => {
+    const count = bestCounts[index]!;
+    return count > 0 ? [[option.shipId, count]] : [];
+  })) as Partial<Record<PirateShipId, number>>;
   return Object.freeze({
     targetPopulation,
-    actualPopulation,
-    absoluteError: Math.abs(actualPopulation - targetPopulation),
-    ships: Object.freeze({ [shipId]: count }) as Readonly<Partial<Record<PirateShipId, number>>>,
+    actualPopulation: bestPopulation,
+    absoluteError: bestError,
+    ships: Object.freeze(ships),
   });
 }

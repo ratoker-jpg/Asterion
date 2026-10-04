@@ -40,7 +40,7 @@ import {
   type CombatInput,
   type CombatStackInput,
 } from './simulator.ts';
-import { getCombatFactionId, type CombatFactionId } from './factions.ts';
+import { COMBAT_FACTIONS, getCombatFactionId, isCombatFactionId, type CombatFactionId } from './factions.ts';
 import {
   COMBAT_TECHNOLOGIES,
   getCombatTechnologyDefinition,
@@ -226,7 +226,9 @@ function classForTargetSelection(entityId: CombatStackEntityId): CombatMatchupCl
 }
 
 function levelCoefficient(entity: ReturnType<typeof getCombatEntityForStack>) {
-  if (entity.id === 'death-star') return COMBAT_SHIP_LEVEL_COEFFICIENTS['death-star'];
+  if (entity.id === 'death-star' || entity.id === 'pirate-planet-breaker') {
+    return COMBAT_SHIP_LEVEL_COEFFICIENTS['death-star'];
+  }
   return entity.ordinaryClass ? COMBAT_SHIP_LEVEL_COEFFICIENTS[entity.ordinaryClass] : 0;
 }
 
@@ -533,12 +535,14 @@ function calculateRoundSideModifiers(stacks: readonly RuntimeStack[], commanderI
       ...(donor.specialBonus.note ? { note: donor.specialBonus.note } : {}),
     });
     snapshot[`specialBonus:${donor.entityId}`] = amount;
+    const pirateFleetBonus = donor.pirateAbility?.kind === 'bonus-life' || donor.pirateAbility?.kind === 'armor-boost';
     for (const recipient of stacks) {
       // The source stack is a donor, not a recipient. This matters for the
       // extracted special-unit rules: a Goliath/Defender/Star Armada does not
       // amplify itself, while every other living allied stack receives the
       // frozen round-start contribution.
-      if (recipient.entityId === donor.entityId || recipient.count <= 0) continue;
+      if ((!pirateFleetBonus && recipient.entityId === donor.entityId) || recipient.count <= 0) continue;
+      if (pirateFleetBonus && recipient.kind !== 'ship') continue;
       const current = specialBonuses.get(recipient.entityId) ?? { attack: 0, life: 0, armor: 0 };
       if (donor.specialBonus.kind === 'attack') current.attack += amount;
       if (donor.specialBonus.kind === 'life') current.life += amount;
@@ -884,6 +888,120 @@ function appendSpecialBonusEvents(
   });
 }
 
+type PirateRoundAttackEffect = Readonly<{
+  ignoreArmor: boolean;
+  devastateMultiplier: number;
+  artilleryMultiplierVsDefense: number;
+  artilleryChance?: number;
+  artilleryDraw?: number;
+}>;
+
+function createPirateAbilityEvent(
+  sequence: number,
+  donor: RuntimeStack,
+  abilityId: NonNullable<CombatEvent['shipAbilityId']>,
+  chance: number,
+  draw: number,
+  target?: RuntimeStack,
+  note?: string,
+): CombatEvent {
+  return {
+    sequence,
+    actorSide: donor.side,
+    actorEntityId: donor.entityId,
+    ...(target ? {
+      targetSide: target.side,
+      targetEntityId: target.entityId,
+      targetCount: target.count,
+    } : {}),
+    actionType: 'ability',
+    actorCount: donor.count,
+    shipAbilityId: abilityId,
+    abilityChance: chance,
+    abilityDraw: draw,
+    provenance: {
+      status: 'inferred',
+      source: 'src/domain/combat/source-fixtures/ship-abilities.json',
+      confidence: 'medium',
+      note: 'Asterion approximation: one seeded chance roll per living ability donor per round. For single-group abilities, one living attack-capable pirate ship group is selected uniformly; the source does not specify exact RNG timing or group selection.',
+    },
+    note,
+  };
+}
+
+function resolvePirateRoundAttackAbilities(
+  actorStacks: readonly RuntimeStack[],
+  targetStacks: readonly RuntimeStack[],
+  events: CombatEvent[],
+  sequence: { value: number },
+  rng: CombatRng,
+): ReadonlyMap<CombatStackEntityId, PirateRoundAttackEffect> {
+  const effects = new Map<CombatStackEntityId, PirateRoundAttackEffect>();
+  const eligibleRecipients = actorStacks.filter((stack) => stack.kind === 'ship'
+    && stack.count > 0 && stack.attackPerUnit > 0);
+  if (eligibleRecipients.length === 0 || sideAliveCount(targetStacks) <= 0) return effects;
+
+  const grantTo = (
+    recipient: RuntimeStack,
+    ability: 'pirate-armor-piercing' | 'pirate-devastate' | 'pirate-artillery',
+    multiplier = 1,
+  ) => {
+    const current = effects.get(recipient.entityId) ?? { ignoreArmor: false, devastateMultiplier: 1, artilleryMultiplierVsDefense: 1 };
+    effects.set(recipient.entityId, {
+      ...current,
+      ignoreArmor: current.ignoreArmor || ability === 'pirate-armor-piercing',
+      devastateMultiplier: ability === 'pirate-devastate' ? Math.max(current.devastateMultiplier, multiplier) : current.devastateMultiplier,
+      artilleryMultiplierVsDefense: ability === 'pirate-artillery' ? Math.max(current.artilleryMultiplierVsDefense, multiplier) : current.artilleryMultiplierVsDefense,
+    });
+  };
+
+  for (const donor of actorStacks) {
+    if (donor.count <= 0 || !donor.pirateAbility) continue;
+    const ability = donor.pirateAbility;
+    if (ability.kind === 'ignore-armor' || ability.kind === 'devastate') {
+      const chance = Math.min(ability.chanceCap, ability.perShipChance * donor.count);
+      const draw = rng.next();
+      if (draw >= chance) continue;
+      const recipient = eligibleRecipients[Math.floor(rng.next() * eligibleRecipients.length)]!;
+      const abilityId = ability.kind === 'ignore-armor' ? 'pirate-armor-piercing' : 'pirate-devastate';
+      grantTo(recipient, abilityId, ability.kind === 'devastate' ? ability.attackMultiplier : 1);
+      events.push(createPirateAbilityEvent(
+        sequence.value++,
+        donor,
+        abilityId,
+        chance,
+        draw,
+        recipient,
+        ability.kind === 'ignore-armor'
+          ? `Игнорирование брони усиливает группу ${recipient.entityId} до конца раунда.`
+          : `Сокрушение усиливает атаку группы ${recipient.entityId} в 1,25 раза; критический удар отключён для этой группы в этом раунде.`,
+      ));
+      continue;
+    }
+
+    if (ability.kind === 'artillery' && targetStacks.some((stack) => stack.bucket === 'defenses' && stack.count > 0)) {
+      const chance = Math.min(ability.chanceCap, ability.perShipChance * donor.count);
+      const draw = rng.next();
+      if (draw >= chance) continue;
+      for (const recipient of eligibleRecipients) {
+        grantTo(recipient, 'pirate-artillery', ability.attackMultiplierVsDefense);
+        effects.set(recipient.entityId, { ...effects.get(recipient.entityId)!, artilleryChance: chance, artilleryDraw: draw });
+      }
+      events.push(createPirateAbilityEvent(
+        sequence.value++,
+        donor,
+        'pirate-artillery',
+        chance,
+        draw,
+        undefined,
+        'Артиллерия усиливает атаки всех живых дружественных корабельных групп против оборонительных сооружений в этом раунде.',
+      ));
+    }
+  }
+
+  return effects;
+}
+
 function createAttackEvent(
   sequence: number,
   actor: RuntimeStack,
@@ -893,6 +1011,7 @@ function createAttackEvent(
   criticalBonus: number,
   volleyScale = 1,
   volleyIndex = 0,
+  pirateRoundEffect: PirateRoundAttackEffect = { ignoreArmor: false, devastateMultiplier: 1, artilleryMultiplierVsDefense: 1 },
 ): CombatEvent {
   const countBeforeEvent = target.count;
   const hpBefore = target.hpPool;
@@ -901,31 +1020,14 @@ function createAttackEvent(
   const reportedBonus = matchup.multiplier === 1
     ? 0
     : Math.sign(matchup.multiplier - 1) * Math.floor(baseAttack * Math.abs(matchup.multiplier - 1));
-  const ability = actor.pirateAbility;
-  let pirateAbilityChance: number | undefined;
-  let pirateAbilityDraw: number | undefined;
-  let pirateAbilityId: CombatEvent['shipAbilityId'];
-  let pirateAttackMultiplier = 1;
-  let ignoreArmor = false;
-  if (ability?.kind === 'ignore-armor') {
-    pirateAbilityChance = Math.min(ability.chanceCap, ability.perShipChance * actorCount);
-    pirateAbilityDraw = rng.next();
-    if (pirateAbilityDraw < pirateAbilityChance) { ignoreArmor = true; pirateAbilityId = 'pirate-armor-piercing'; }
-  } else if (ability?.kind === 'devastate') {
-    pirateAbilityChance = Math.min(ability.chanceCap, ability.perShipChance * actorCount);
-    pirateAbilityDraw = rng.next();
-    if (pirateAbilityDraw < pirateAbilityChance) { pirateAttackMultiplier = ability.attackMultiplier; pirateAbilityId = 'pirate-devastate'; }
-  } else if (ability?.kind === 'artillery' && target.bucket === 'defenses') {
-    pirateAbilityChance = Math.min(ability.chanceCap, ability.perShipChance * actorCount);
-    pirateAbilityDraw = rng.next();
-    if (pirateAbilityDraw < pirateAbilityChance) { pirateAttackMultiplier = ability.attackMultiplierVsDefense; pirateAbilityId = 'pirate-artillery'; }
-  }
-  const rawDamageBeforeArmor = Math.max(0, Math.floor(baseAttack * matchup.multiplier * pirateAttackMultiplier));
-  const criticalChance = pirateAbilityId === 'pirate-devastate' ? 0 : clamp(actor.criticalChance + criticalBonus, 0, 1);
+  const artilleryMultiplier = target.bucket === 'defenses' ? pirateRoundEffect.artilleryMultiplierVsDefense : 1;
+  const devastateMultiplier = pirateRoundEffect.devastateMultiplier;
+  const rawDamageBeforeArmor = Math.max(0, Math.floor(baseAttack * matchup.multiplier * devastateMultiplier * artilleryMultiplier));
+  const criticalChance = pirateRoundEffect.devastateMultiplier > 1 ? 0 : clamp(actor.criticalChance + criticalBonus, 0, 1);
   const criticalDraw = criticalChance > 0 ? rng.next() : undefined;
   const criticalMultiplier = criticalDraw !== undefined && criticalDraw < criticalChance ? 2 : 1;
   const rawDamage = Math.floor(rawDamageBeforeArmor * criticalMultiplier);
-  const effectiveDamage = calculateEffectiveDamage(rawDamage, ignoreArmor ? 0 : target.armorPercent);
+  const effectiveDamage = calculateEffectiveDamage(rawDamage, pirateRoundEffect.ignoreArmor ? 0 : target.armorPercent);
   const actualDamage = target.hpPool <= 0 ? 0 : Math.min(effectiveDamage, target.hpPool);
   target.hpPool = Math.max(0, target.hpPool - actualDamage);
   target.count = runtimeCountFromHp(target);
@@ -953,7 +1055,9 @@ function createAttackEvent(
     matchupStatus: matchup.status,
     criticalChance,
     ...(criticalDraw !== undefined ? (actor.pirateAbility ? { criticalDraw } : { abilityDraw: criticalDraw }) : {}),
-    ...(pirateAbilityChance !== undefined ? { abilityChance: pirateAbilityChance, abilityDraw: pirateAbilityDraw } : {}),
+    ...(target.bucket === 'defenses' && pirateRoundEffect.artilleryMultiplierVsDefense > 1
+      ? { abilityChance: pirateRoundEffect.artilleryChance, abilityDraw: pirateRoundEffect.artilleryDraw }
+      : {}),
     criticalMultiplier,
     effectiveDamage,
     mitigation: Math.max(0, rawDamage - effectiveDamage),
@@ -961,7 +1065,7 @@ function createAttackEvent(
     armorType: target.armorType,
     damage: actualDamage,
     destroyedCount: Math.max(0, countBeforeEvent - countAfterEvent),
-    ...(pirateAbilityId ? { shipAbilityId: pirateAbilityId } : {}),
+    ...(pirateRoundEffect.ignoreArmor ? { shipAbilityId: 'pirate-armor-piercing' as const } : pirateRoundEffect.devastateMultiplier > 1 ? { shipAbilityId: 'pirate-devastate' as const } : pirateRoundEffect.artilleryMultiplierVsDefense > 1 && target.bucket === 'defenses' ? { shipAbilityId: 'pirate-artillery' as const } : {}),
     lifeBefore: hpBefore,
     lifeAfter: target.hpPool,
     armorBefore: target.armorPercent,
@@ -969,7 +1073,7 @@ function createAttackEvent(
     provenance: DAMAGE_PROVENANCE,
     note: actualDamage === 0
       ? 'Залп не нанёс урон: цель уже уничтожена.'
-      : `${matchup.multiplier === 1 ? 'Нейтральный модификатор пары' : `Модификатор пары ×${matchup.multiplier.toFixed(2)}`}; урон после брони ${ignoreArmor ? 0 : target.armorPercent}%.${pirateAbilityId === 'pirate-devastate' ? ' Пиратский Devastate ×1.25; Critical Strike подавлен.' : pirateAbilityId === 'pirate-artillery' ? ' Пиратская артиллерия против обороны ×1.5.' : pirateAbilityId === 'pirate-armor-piercing' ? ' Пиратская атака игнорирует броню.' : ''}${criticalMultiplier > 1 ? ' Критический залп ×2.' : ''}${volleyIndex > 0 ? ` Повторный залп №${volleyIndex + 1}: мощность ×${volleyScale.toFixed(2)}.` : ''} Стек сохраняет цель, пока она жива; новая цель выбирается после её уничтожения.`,
+      : `${matchup.multiplier === 1 ? 'Нейтральный модификатор пары' : `Модификатор пары ×${matchup.multiplier.toFixed(2)}`}; урон после брони ${pirateRoundEffect.ignoreArmor ? 0 : target.armorPercent}%.${pirateRoundEffect.devastateMultiplier > 1 ? ` Пиратский Devastate ×${pirateRoundEffect.devastateMultiplier.toFixed(2)}; Critical Strike подавлен.` : ''}${pirateRoundEffect.artilleryMultiplierVsDefense > 1 && target.bucket === 'defenses' ? ` Пиратская артиллерия против обороны ×${pirateRoundEffect.artilleryMultiplierVsDefense.toFixed(2)}.` : ''}${pirateRoundEffect.ignoreArmor ? ' Пиратская атака игнорирует броню.' : ''}${criticalMultiplier > 1 ? ' Критический залп ×2.' : ''}${volleyIndex > 0 ? ` Повторный залп №${volleyIndex + 1}: мощность ×${volleyScale.toFixed(2)}.` : ''} Стек сохраняет цель, пока она жива; новая цель выбирается после её уничтожения.`,
   };
 }
 
@@ -1162,6 +1266,7 @@ function resolveSideActions(
   paralyzedTargetsNext: Set<CombatStackEntityId>,
   paralyzedActorSourcesNext: Map<CombatStackEntityId, CombatDisablingAbility>,
   paralyzedTargetSourcesNext: Map<CombatStackEntityId, CombatDisablingAbility>,
+  pirateRoundAttackEffects: ReadonlyMap<CombatStackEntityId, PirateRoundAttackEffect>,
 ) {
   const criticalEffect = getCommanderCombatEffect(activeCommanderId);
   const criticalBonus = criticalEffect?.kind === 'critical'
@@ -1209,7 +1314,7 @@ function resolveSideActions(
     const actorCount = usesRoundStartCount ? roundStartCount : actor.count;
     let hasAttacked = false;
     let lastLivingTarget: RuntimeStack | undefined;
-    const volleyLimit = actor.kind === 'ship' && actor.matchupClass ? 5 : 1;
+    const volleyLimit = actor.kind === 'ship' && (actor.matchupClass !== undefined || isPiratePlanetBreaker(actor.entityId)) ? 5 : 1;
     for (let volleyIndex = 0; volleyIndex < volleyLimit; volleyIndex += 1) {
       let targetRuntime = targetStacks.find((stack) => stack.entityId === lockedTargets.get(actor.entityId));
       if (!targetRuntime || targetRuntime.count <= 0) {
@@ -1244,7 +1349,17 @@ function resolveSideActions(
       }
 
       const volleyScale = 1 - volleyIndex * 0.2;
-      events.push(createAttackEvent(sequence.value++, actor, actorCount, targetRuntime, rng, criticalBonus, volleyScale, volleyIndex));
+      events.push(createAttackEvent(
+        sequence.value++,
+        actor,
+        actorCount,
+        targetRuntime,
+        rng,
+        criticalBonus,
+        volleyScale,
+        volleyIndex,
+        pirateRoundAttackEffects.get(actor.entityId) ?? { ignoreArmor: false, devastateMultiplier: 1, artilleryMultiplierVsDefense: 1 },
+      ));
       hasAttacked = true;
       if (targetRuntime.count > 0) {
         lastLivingTarget = targetRuntime;
@@ -1315,6 +1430,7 @@ function resolveSideActions(
     criticalBonus,
     lockedTargets,
     destroyedTargetsSinceLock,
+    pirateRoundAttackEffects,
   );
 }
 
@@ -1330,6 +1446,7 @@ function resolvePirateBonusAttack(
   criticalBonus: number,
   lockedTargets: Map<CombatStackEntityId, CombatStackEntityId>,
   destroyedTargetsSinceLock: Map<CombatStackEntityId, CombatStackEntityId>,
+  pirateRoundAttackEffects: ReadonlyMap<CombatStackEntityId, PirateRoundAttackEffect>,
 ) {
   if (sideAliveCount(targetStacks) <= 0) return;
   const rippers = actorStacks.filter((stack) => stack.pirateAbility?.kind === 'double-attack' && stack.count > 0);
@@ -1401,7 +1518,17 @@ function resolvePirateBonusAttack(
     note: `Потрошитель дал ${actor.entityId} одну дополнительную атаку; шанс ${(chance * 100).toFixed(2)}%.`,
   });
 
-  const attack = createAttackEvent(sequence.value++, actor, actor.count, target, rng, criticalBonus);
+  const attack = createAttackEvent(
+    sequence.value++,
+    actor,
+    actor.count,
+    target,
+    rng,
+    criticalBonus,
+    1,
+    0,
+    pirateRoundAttackEffects.get(actor.entityId) ?? { ignoreArmor: false, devastateMultiplier: 1, artilleryMultiplierVsDefense: 1 },
+  );
   events.push({ ...attack, note: `Дополнительная атака Потрошителя. ${attack.note ?? ''}`.trim() });
   if (target.count <= 0) {
     destroyedTargetsSinceLock.set(actor.entityId, target.entityId);
@@ -1503,6 +1630,7 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
 
     appendSpecialBonusEvents(events, sequence, lastModifiers.attacker);
     appendSpecialBonusEvents(events, sequence, lastModifiers.defender);
+    const attackerPirateAttackEffects = resolvePirateRoundAttackAbilities(attacker, defender, events, sequence, rng);
 
     resolveSideActions(
       attacker,
@@ -1522,12 +1650,14 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
       paralyzedDefenderNext,
       paralyzedAttackerSourcesNext,
       paralyzedDefenderSourcesNext,
+      attackerPirateAttackEffects,
     );
     winner = determineWinner(attacker, defender);
     const defenderCounterfireIsPossible = sideAliveCount(attacker) > 0
       && hasDocumentedDefenderCounterfire(defender, defenderStartCounts);
     const defenderPhaseResolved = !winner || (winner === 'attacker' && defenderCounterfireIsPossible);
     if (defenderPhaseResolved) {
+      const defenderPirateAttackEffects = resolvePirateRoundAttackAbilities(defender, attacker, events, sequence, rng);
       resolveSideActions(
         defender,
         defenderActionOrder,
@@ -1546,6 +1676,7 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
         paralyzedAttackerNext,
         paralyzedDefenderSourcesNext,
         paralyzedAttackerSourcesNext,
+        defenderPirateAttackEffects,
       );
     }
     // Revival and Reanimator both resolve after the two combat action phases.
@@ -1575,7 +1706,7 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
     .filter((technology) => technology.effectStatus === 'unknown')
     .map((technology) => `${technology.name}: эффект не калиброван и не активирован.`)
     .concat([
-      'Дополнительные спецэффекты обычных корпусов не калиброваны и не активированы.',
+      'Неподтверждённые специальные способности обычных кораблей не активированы.',
       'Игнорирование брони у оборонных установок не калибровано и не активировано.',
     ]);
 
@@ -1627,12 +1758,41 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
   };
 }
 
+function populationContext(side: CombatInput['attacker'], sideName: string) {
+  if (side.combatProfile?.kind === 'pirate') {
+    return { factionId: undefined, combatProfile: side.combatProfile };
+  }
+
+  const factionValue = side.factionId ?? side.participant.race;
+  const raceAliases: Readonly<Record<string, CombatFactionId>> = {
+    aegis: 'aegis',
+    synod: 'synod',
+    veyra: 'veyra',
+  };
+  const normalizedRace = typeof factionValue === 'string' ? factionValue.trim().toLocaleLowerCase() : '';
+  const factionId = isCombatFactionId(factionValue)
+    ? factionValue
+    : COMBAT_FACTIONS.find((faction) => faction.name === factionValue)?.id ?? raceAliases[normalizedRace];
+  if (!factionId) {
+    throw new Error(`Cannot calculate ${sideName} population for unknown race or faction "${String(factionValue)}".`);
+  }
+  return { factionId, combatProfile: undefined };
+}
+
 export function combatInputPopulation(input: CombatInput) {
-  const attackerFactionId = input.attacker.factionId ?? getCombatFactionId(input.attacker.participant.race);
-  const defenderFactionId = input.defender.factionId ?? getCombatFactionId(input.defender.participant.race);
+  const attackerContext = populationContext(input.attacker, 'attacker');
+  const defenderContext = populationContext(input.defender, 'defender');
   return {
-    attacker: calculateStacksPopulation([...input.attacker.ships, ...getSideCommanders(input.attacker)], attackerFactionId),
-    defenderFleet: calculateStacksPopulation([...input.defender.ships, ...getSideCommanders(input.defender)], defenderFactionId),
-    defenderDefense: calculateStacksPopulation(input.defender.defenses ?? [], defenderFactionId),
+    attacker: calculateStacksPopulation(
+      [...input.attacker.ships, ...getSideCommanders(input.attacker)],
+      attackerContext.factionId,
+      attackerContext.combatProfile,
+    ),
+    defenderFleet: calculateStacksPopulation(
+      [...input.defender.ships, ...getSideCommanders(input.defender)],
+      defenderContext.factionId,
+      defenderContext.combatProfile,
+    ),
+    defenderDefense: calculateStacksPopulation(input.defender.defenses ?? [], defenderContext.factionId, defenderContext.combatProfile),
   };
 }
