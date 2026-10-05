@@ -11,9 +11,11 @@ import { getFactionDefenseCatalog, getFactionShipCatalog } from './faction-catal
 import { getCombatFactionId, type CombatFactionId } from './factions.ts';
 import type { CombatEntityId } from './ids.ts';
 import { getCombatEntityForStack, isPirateShipId } from './side-entity.ts';
+import { calculatePirateResourcePointsLost } from '../pirates/resource-points.ts';
 import {
   BATTLE_MISSION_TYPES,
   calculatePopulationLoss,
+  isPiratePveMissionType,
   type BattleMissionType,
   type BattleSide,
   type BattleSiegeBlockedReason,
@@ -302,6 +304,21 @@ export type BattleReportViewModel = {
 export type RecordedBattlePointAwards = { attacker: number | null; defender: number | null } | null;
 
 type RecordValue = Record<string, unknown>;
+
+export type BattlePointAwardDisplay = Readonly<{
+  state: 'not-awarded' | 'recorded' | 'missing';
+  label: string;
+  points: number | null;
+}>;
+
+export function getBattlePointAwardDisplay(missionType: BattleMissionType, points: number | null): BattlePointAwardDisplay {
+  if (isPiratePveMissionType(missionType)) {
+    return { state: 'not-awarded', label: 'БОЕВЫЕ ОЧКИ НЕ НАЧИСЛЯЮТСЯ', points: null };
+  }
+  return points == null
+    ? { state: 'missing', label: 'НЕТ ЗАПИСИ О НАЧИСЛЕНИИ', points: null }
+    : { state: 'recorded', label: 'ПОЛУЧЕНО БОЕВЫХ ОЧКОВ', points };
+}
 
 const MISSION_TYPES: readonly BattleMissionType[] = BATTLE_MISSION_TYPES;
 const ACTION_TYPES: readonly BattleEventViewModel['actionType'][] = ['attack', 'ability', 'shield', 'status', 'destroyed', 'special-bonus'];
@@ -951,11 +968,28 @@ export function createBattleReportViewModel(
   const targetPriorityRecord = asRecord(metadata.targetPriority);
   const debrisOnOrbit = readNumber(record.debris);
   const siege = readSiege(record.siege);
+  const missionType = readMissionType(record.missionType);
+  const supplementalResourceLoss = isPiratePveMissionType(missionType)
+    ? {
+      attacker: calculatePirateResourcePointsLost(attackerViewModel.stacks),
+      defender: calculatePirateResourcePointsLost(defenderViewModel.stacks),
+    }
+    : undefined;
+  const battlePoints = calculateBattlePoints(
+    winner,
+    attackerViewModel.stacks,
+    defenderViewModel.stacks,
+    attackerViewModel.defenses,
+    defenderViewModel.defenses,
+    attackerFactionId,
+    defenderFactionId,
+    supplementalResourceLoss,
+  );
 
   return {
     id: readString(record.id) ?? 'invalid-battle-report',
     timestamp: readString(record.timestamp) ?? '',
-    missionType: readMissionType(record.missionType),
+    missionType,
     attacker: attackerViewModel,
     defender: defenderViewModel,
     winner,
@@ -980,15 +1014,7 @@ export function createBattleReportViewModel(
     debrisOnOrbit,
     resources: readResources(record.resources),
     siege,
-    battlePoints: calculateBattlePoints(
-      winner,
-      attackerViewModel.stacks,
-      defenderViewModel.stacks,
-      attackerViewModel.defenses,
-      defenderViewModel.defenses,
-      attackerFactionId,
-      defenderFactionId,
-    ),
+    battlePoints,
     awardedBattlePoints: options.awardedBattlePoints ?? null,
     timestampAvailable: readString(record.timestamp) != null,
   };

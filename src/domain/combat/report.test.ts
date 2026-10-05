@@ -206,6 +206,16 @@ test('pirate PvE report types survive migration while unknown mission types are 
     assert.equal(saved?.missionType, missionType);
     assert.equal(pirateSide?.race, 'pirates');
     assert.deepEqual(migrated.savedReportIds, [report.id]);
+    const wrongDirection = {
+      ...report,
+      attacker: { ...report.attacker, race: missionType === 'pirate-raid' ? 'Астеры' : 'pirates' },
+      defender: { ...report.defender, race: missionType === 'pirate-raid' ? 'pirates' : 'Астеры' },
+    };
+    assert.equal(normalizeBattleReport(wrongDirection), null);
+    const unknownPlayerRace = missionType === 'pirate-raid'
+      ? { ...report, defender: { ...report.defender, race: 'unknown-faction' } }
+      : { ...report, attacker: { ...report.attacker, race: 'unknown-faction' } };
+    assert.equal(normalizeBattleReport(unknownPlayerRace), null);
   }
 
   const unknownMission = { ...DEMO_BATTLE_REPORTS[0]!, missionType: 'unknown-mission' };

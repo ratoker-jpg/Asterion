@@ -19,6 +19,15 @@ export type BattlePointResult = {
   defender: number;
 };
 
+export type SupplementalBattleResourceLoss = Readonly<{
+  attacker?: number;
+  defender?: number;
+}>;
+
+function validSupplementalResourceLoss(value: number | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+}
+
 function destroyedCount(stack: BattlePointStack) {
   if (stack.countBefore == null || stack.countAfter == null) return 0;
   return Math.max(0, Math.floor(stack.countBefore) - Math.floor(stack.countAfter));
@@ -86,9 +95,12 @@ export function calculateBattlePoints(
   defenderDefenses: readonly BattlePointStack[] = [],
   attackerFactionId?: CombatFactionId,
   defenderFactionId?: CombatFactionId,
+  supplementalResourceLoss: SupplementalBattleResourceLoss = {},
 ): BattlePointResult {
-  const attackerResourcePointsLost = calculateResourcePointsLost(attackerStacks, attackerDefenses, attackerFactionId);
-  const defenderResourcePointsLost = calculateResourcePointsLost(defenderStacks, defenderDefenses, defenderFactionId);
+  const attackerResourcePointsLost = calculateResourcePointsLost(attackerStacks, attackerDefenses, attackerFactionId)
+    + validSupplementalResourceLoss(supplementalResourceLoss.attacker);
+  const defenderResourcePointsLost = calculateResourcePointsLost(defenderStacks, defenderDefenses, defenderFactionId)
+    + validSupplementalResourceLoss(supplementalResourceLoss.defender);
   const formulaWinner = winner === 'draw'
     ? attackerResourcePointsLost <= defenderResourcePointsLost ? 'attacker' : 'defender'
     : winner;

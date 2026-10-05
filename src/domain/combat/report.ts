@@ -2,7 +2,7 @@ import type { CommanderId } from './commanders.ts';
 import type { CombatEntityId, CombatStackEntityId, DefenseId, ShipId } from './ids.ts';
 import type { CombatTechnologyId, CombatTechnologyLevels } from './technologies.ts';
 import type { CombatTargetPriority } from './config.ts';
-import type { CombatFactionId } from './factions.ts';
+import { COMBAT_FACTIONS, isCombatFactionId, type CombatFactionId } from './factions.ts';
 
 export const ASTERION_LOCAL_PLAYER_ID = 'player-aster';
 /** The profile fixture uses this id; keep the legacy combat id compatible. */
@@ -34,6 +34,17 @@ export function isBattleMissionType(value: unknown): value is BattleMissionType 
 
 export function isPiratePveMissionType(value: BattleMissionType): value is PiratePveMissionType {
   return value === 'pirate-elimination' || value === 'pirate-raid';
+}
+
+export function isValidPiratePveDirection(missionType: PiratePveMissionType, attackerIsPirate: boolean, defenderIsPirate: boolean) {
+  return missionType === 'pirate-raid'
+    ? attackerIsPirate && !defenderIsPirate
+    : !attackerIsPirate && defenderIsPirate;
+}
+
+function isPlayableBattleRace(value: string | undefined) {
+  return typeof value === 'string'
+    && (isCombatFactionId(value) || COMBAT_FACTIONS.some((faction) => faction.name === value));
 }
 
 export type CombatActionType = 'attack' | 'ability' | 'shield' | 'status' | 'destroyed' | 'special-bonus';
@@ -345,6 +356,11 @@ export function normalizeBattleReport(value: unknown): BattleReport | null {
     || !candidate.defender
     || !candidate.attackerForce
     || !candidate.defenderForce) return null;
+  const missionType = candidate.missionType ?? 'simulation';
+  if (isPiratePveMissionType(missionType)
+    && !isValidPiratePveDirection(missionType, candidate.attacker.race === 'pirates', candidate.defender.race === 'pirates')) return null;
+  if (missionType === 'pirate-raid' && !isPlayableBattleRace(candidate.defender.race)) return null;
+  if (missionType === 'pirate-elimination' && !isPlayableBattleRace(candidate.attacker.race)) return null;
 
   let nextRoundIndex = 1;
   let nextSequence = 1;
@@ -389,7 +405,7 @@ export function normalizeBattleReport(value: unknown): BattleReport | null {
 
   return {
     ...candidate as BattleReport,
-    missionType: candidate.missionType ?? 'simulation',
+    missionType,
     schemaVersion: candidate.schemaVersion ?? 1,
     engineVersion: candidate.engineVersion ?? 'legacy-battle-report',
     rounds,

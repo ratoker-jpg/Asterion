@@ -1565,7 +1565,7 @@ function createInitialSnapshot(
 
 export function resolveCombat(input: CombatInput, context: CombatResolverContext): BattleReport {
   const validation = validateCombatInput(input, {
-    allowEmptyDefender: context.missionType === 'attack',
+    allowEmptyDefender: context.missionType === 'attack' || context.missionType === 'pirate-raid',
     allowPopulationOverflow: context.allowPopulationOverflow,
     missionType: context.missionType,
   });
