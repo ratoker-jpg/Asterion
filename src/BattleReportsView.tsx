@@ -136,6 +136,8 @@ function missionLabel(missionType: BattleReportViewModel['missionType']) {
     defense: 'ОБОРОНА',
     arena: 'АРЕНА',
     simulation: 'СИМУЛЯЦИЯ',
+    'pirate-elimination': 'УНИЧТОЖЕНИЕ ПИРАТОВ',
+    'pirate-raid': 'ПИРАТСКИЙ НАЛЁТ',
   }[missionType];
 }
 

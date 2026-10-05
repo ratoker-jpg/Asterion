@@ -12,6 +12,7 @@ import { getCombatFactionId, type CombatFactionId } from './factions.ts';
 import type { CombatEntityId } from './ids.ts';
 import { getCombatEntityForStack, isPirateShipId } from './side-entity.ts';
 import {
+  BATTLE_MISSION_TYPES,
   calculatePopulationLoss,
   type BattleMissionType,
   type BattleSide,
@@ -302,7 +303,7 @@ export type RecordedBattlePointAwards = { attacker: number | null; defender: num
 
 type RecordValue = Record<string, unknown>;
 
-const MISSION_TYPES: readonly BattleMissionType[] = ['attack', 'raid', 'defense', 'arena', 'simulation'];
+const MISSION_TYPES: readonly BattleMissionType[] = BATTLE_MISSION_TYPES;
 const ACTION_TYPES: readonly BattleEventViewModel['actionType'][] = ['attack', 'ability', 'shield', 'status', 'destroyed', 'special-bonus'];
 
 function asRecord(value: unknown): RecordValue {

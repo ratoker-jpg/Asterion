@@ -14,7 +14,28 @@ export function isAsterionLocalPlayerId(playerId: string | null | undefined): bo
 
 export type BattleSide = 'attacker' | 'defender';
 export type BattleWinner = BattleSide | 'draw';
-export type BattleMissionType = 'attack' | 'raid' | 'defense' | 'arena' | 'simulation';
+export const BATTLE_MISSION_TYPES = [
+  'attack',
+  'raid',
+  'defense',
+  'arena',
+  'simulation',
+  'pirate-elimination',
+  'pirate-raid',
+] as const;
+export type BattleMissionType = (typeof BATTLE_MISSION_TYPES)[number];
+export type PiratePveMissionType = Extract<BattleMissionType, 'pirate-elimination' | 'pirate-raid'>;
+
+const BATTLE_MISSION_TYPE_SET: ReadonlySet<string> = new Set(BATTLE_MISSION_TYPES);
+
+export function isBattleMissionType(value: unknown): value is BattleMissionType {
+  return typeof value === 'string' && BATTLE_MISSION_TYPE_SET.has(value);
+}
+
+export function isPiratePveMissionType(value: BattleMissionType): value is PiratePveMissionType {
+  return value === 'pirate-elimination' || value === 'pirate-raid';
+}
+
 export type CombatActionType = 'attack' | 'ability' | 'shield' | 'status' | 'destroyed' | 'special-bonus';
 export const BATTLE_REPORT_SCHEMA_VERSION = 3;
 export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v8';
@@ -317,6 +338,7 @@ export function normalizeBattleReport(value: unknown): BattleReport | null {
   const candidate = value as Partial<BattleReport>;
   if (typeof candidate.id !== 'string'
     || typeof candidate.timestamp !== 'string'
+    || (candidate.missionType != null && !isBattleMissionType(candidate.missionType))
     || typeof candidate.roundCount !== 'number'
     || !Array.isArray(candidate.rounds)
     || !candidate.attacker
@@ -367,6 +389,7 @@ export function normalizeBattleReport(value: unknown): BattleReport | null {
 
   return {
     ...candidate as BattleReport,
+    missionType: candidate.missionType ?? 'simulation',
     schemaVersion: candidate.schemaVersion ?? 1,
     engineVersion: candidate.engineVersion ?? 'legacy-battle-report',
     rounds,

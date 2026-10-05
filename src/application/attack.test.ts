@@ -491,6 +491,7 @@ test('debris formula covers destroyed ships, defenses, and commander ships at on
   const defense = getFactionCombatEntity('aegis', 'laser-turret');
   const commander = getFactionCombatEntity('aegis', 'hunter');
   const report = {
+    missionType: 'attack',
     attackerForce: { stacks: [{ entityId: 'scout', countBefore: 2, countAfter: 0, destroyed: 2 }], defenses: [] },
     defenderForce: { stacks: [{ entityId: 'hunter', countBefore: 1, countAfter: 0, destroyed: 1 }], defenses: [{ entityId: 'laser-turret', countBefore: 3, countAfter: 0, destroyed: 3 }] },
   } as unknown as BattleReport;

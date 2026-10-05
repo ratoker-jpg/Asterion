@@ -1,11 +1,12 @@
 import { PIRATE_CATALOG_BY_ID } from './catalog.ts';
 import { isPirateShipId } from '../combat/side-entity.ts';
-import type { BattleForceSnapshot } from '../combat/report.ts';
+import { isPiratePveMissionType, type BattleForceSnapshot, type BattleMissionType } from '../combat/report.ts';
 
 export const PIRATE_BASE_DEBRIS_SHARE = 0.6;
 export const COMMANDER_CORSAIR_DEBRIS_PER_LEVEL = 0.005;
 export const COMMANDER_CORSAIR_DEBRIS_LEVEL_CAP = 40;
 export const PIRATE_MAX_DEBRIS_SHARE = 0.8;
+export const PIRATE_ORDINARY_DEBRIS_SHARE = 0.3;
 
 export type CommanderCorsairSalvageState = Readonly<{
   participated: boolean;
@@ -38,8 +39,11 @@ function corsairState(force: BattleForceSnapshot): CommanderCorsairSalvageState 
 export function calculatePirateForceDebris(
   force: BattleForceSnapshot,
   opposingForce: BattleForceSnapshot,
+  missionType: BattleMissionType,
 ) {
-  const share = pirateDebrisShare(corsairState(opposingForce));
+  const share = isPiratePveMissionType(missionType)
+    ? pirateDebrisShare(corsairState(opposingForce))
+    : PIRATE_ORDINARY_DEBRIS_SHARE;
   return force.stacks.reduce((total, stack) => {
     if (!isPirateShipId(stack.entityId)) return total;
     const destroyed = safeCount(stack.destroyed);

@@ -31,6 +31,25 @@ test('battle report view model exposes persisted awards and leaves legacy report
   assert.notEqual(awarded.awardedBattlePoints.attacker, awarded.battlePoints.attacker);
 });
 
+test('view model keeps both pirate battle directions and the pirate side', () => {
+  const source = DEMO_BATTLE_REPORTS[0]!;
+  const elimination = createBattleReportViewModel({
+    ...source,
+    missionType: 'pirate-elimination',
+    defender: { ...source.defender, race: 'pirates' },
+  });
+  const raid = createBattleReportViewModel({
+    ...source,
+    missionType: 'pirate-raid',
+    attacker: { ...source.attacker, race: 'pirates' },
+  });
+
+  assert.equal(elimination.missionType, 'pirate-elimination');
+  assert.equal(elimination.defender.participant.race, 'pirates');
+  assert.equal(raid.missionType, 'pirate-raid');
+  assert.equal(raid.attacker.participant.race, 'pirates');
+});
+
 test('view model derives stack losses from persisted counts when destroyed is missing', () => {
   const viewModel = createBattleReportViewModel({
     id: 'missing-destroyed',
