@@ -10,7 +10,8 @@ import {
   type CombatTargetPriority,
   type CombatTechnologyMode,
 } from './config.ts';
-import type { CombatEntityId } from './ids.ts';
+import type { CombatEntityId, CombatStackEntityId } from './ids.ts';
+import { getCombatEntityForSide, getCombatEntityForStack, isPiratePlanetBreaker, isPirateShipId } from './side-entity.ts';
 import type { CombatEntityKind, CombatOrdinaryClass, CombatSpecialBonus } from './types.ts';
 import {
   BATTLE_REPORT_SCHEMA_VERSION,
@@ -39,7 +40,7 @@ import {
   type CombatInput,
   type CombatStackInput,
 } from './simulator.ts';
-import { getCombatFactionId, type CombatFactionId } from './factions.ts';
+import { COMBAT_FACTIONS, getCombatFactionId, isCombatFactionId, type CombatFactionId } from './factions.ts';
 import {
   COMBAT_TECHNOLOGIES,
   getCombatTechnologyDefinition,
@@ -50,20 +51,26 @@ import {
   normalizeCombatTechnologies,
   type CombatTechnologyLevels,
 } from './technologies.ts';
+import { pirateDoubleAttackChance } from '../pirates/catalog.ts';
 
 export type CombatResolverContext = {
   reportId: string;
   /** Production combat may classify the result; omitted means simulator. */
   missionType?: Exclude<BattleMissionType, 'simulation'>;
+  /** Explicit calibration-only escape hatch for controlled scaling sweeps. */
+  allowPopulationOverflow?: boolean;
 };
 
 type RuntimeBucket = 'stacks' | 'defenses';
+export type CombatMatchupClass = CombatOrdinaryClass | 'death-star';
+type CombatDisablingAbility = CommanderId | 'shmel-freezing';
 
 type RuntimeStack = {
   side: BattleSide;
   bucket: RuntimeBucket;
+  factionId?: CombatFactionId;
   kind: CombatEntityKind;
-  entityId: CombatEntityId;
+  entityId: CombatStackEntityId;
   level: number;
   startingCount: number;
   count: number;
@@ -79,11 +86,14 @@ type RuntimeStack = {
   weaponType: string;
   armorType: string;
   ordinaryClass?: CombatOrdinaryClass;
+  matchupClass?: CombatMatchupClass;
+  targetSelectionClass?: CombatMatchupClass;
   specialBonus?: CombatSpecialBonus;
+  pirateAbility?: import('../pirates/catalog.ts').PirateAbility;
 };
 
 export type TargetSelectionCandidate = {
-  entityId: CombatEntityId;
+  entityId: CombatStackEntityId;
   currentCount: number;
   threat?: number;
   population?: number;
@@ -134,6 +144,19 @@ export function createSeededCombatRng(seed: string): CombatRng {
   };
 }
 
+let generatedCombatSeedSequence = 0;
+
+/** Gives each new unseeded battle a replayable, report-persisted seed. */
+export function createUniqueCombatSeed() {
+  generatedCombatSeedSequence += 1;
+  const randomUuid = globalThis.crypto?.randomUUID?.();
+  if (randomUuid) return `asterion-battle:${randomUuid}`;
+
+  // The counter guarantees uniqueness within this runtime; timestamp and
+  // random entropy reduce collision risk across runtime restarts.
+  return `asterion-battle:${Date.now().toString(36)}:${generatedCombatSeedSequence.toString(36)}:${Math.random().toString(36).slice(2)}`;
+}
+
 export function createNonReplayableCombatRng(): CombatRng {
   let drawCount = 0;
   return {
@@ -145,31 +168,75 @@ export function createNonReplayableCombatRng(): CombatRng {
       mode: 'non-replayable',
       algorithmVersion: 'system-random-v1',
       drawCount,
-      note: 'Seed не задан. В текущем baseline случайные механики не активны.',
+      note: 'Seed не задан. Новые бои resolver автоматически переводит на сохранённый воспроизводимый seed; это provenance для legacy-путей.',
     }),
   };
 }
 
-const CATALOG_ORDER = new Map<CombatEntityId, number>(COMBAT_CATALOG.map((entity, index) => [entity.id, index]));
+const CATALOG_ORDER = new Map<CombatStackEntityId, number>([
+  ...COMBAT_CATALOG.map((entity, index) => [entity.id, index] as const),
+  ...['pirate-hound', 'pirate-raider', 'pirate-corsair', 'pirate-executioner', 'pirate-butcher', 'pirate-bruiser', 'pirate-planet-breaker'].map((id, index) => [id as CombatStackEntityId, COMBAT_CATALOG.length + index] as const),
+]);
 
-const MATCHUP_MULTIPLIERS: Readonly<Record<CombatOrdinaryClass, Readonly<Record<CombatOrdinaryClass, number>>>> = {
-  scout: { scout: 0.70, cruiser: 1.00, defender: 1.70, battleship: 1.70, destroyer: 1.00, bomber: 1.00 },
-  cruiser: { scout: 1.70, cruiser: 0.70, defender: 1.70, battleship: 0.70, destroyer: 1.00, bomber: 1.00 },
-  defender: { scout: 0.70, cruiser: 1.00, defender: 0.70, battleship: 1.00, destroyer: 1.00, bomber: 1.70 },
-  battleship: { scout: 1.00, cruiser: 1.70, defender: 1.70, battleship: 0.70, destroyer: 0.70, bomber: 1.00 },
-  destroyer: { scout: 1.00, cruiser: 1.00, defender: 1.00, battleship: 1.70, destroyer: 0.70, bomber: 0.70 },
-  bomber: { scout: 1.00, cruiser: 0.70, defender: 1.00, battleship: 1.00, destroyer: 1.70, bomber: 0.70 },
+const MATCHUP_MULTIPLIERS: Readonly<Record<CombatMatchupClass, Readonly<Record<CombatMatchupClass, number>>>> = {
+  scout: { scout: 0.70, cruiser: 1.00, defender: 1.70, battleship: 1.70, destroyer: 1.00, bomber: 1.00, 'death-star': 0.70 },
+  cruiser: { scout: 1.70, cruiser: 0.70, defender: 1.70, battleship: 0.70, destroyer: 1.00, bomber: 1.00, 'death-star': 1.00 },
+  defender: { scout: 0.70, cruiser: 1.00, defender: 0.70, battleship: 1.00, destroyer: 1.00, bomber: 1.70, 'death-star': 1.70 },
+  battleship: { scout: 1.00, cruiser: 1.70, defender: 1.70, battleship: 0.70, destroyer: 0.70, bomber: 1.00, 'death-star': 1.00 },
+  destroyer: { scout: 1.00, cruiser: 1.00, defender: 1.00, battleship: 1.70, destroyer: 0.70, bomber: 0.70, 'death-star': 1.70 },
+  bomber: { scout: 1.00, cruiser: 0.70, defender: 1.00, battleship: 1.00, destroyer: 1.70, bomber: 0.70, 'death-star': 1.70 },
+  'death-star': { scout: 1.00, cruiser: 1.70, defender: 0.70, battleship: 1.00, destroyer: 1.00, bomber: 1.00, 'death-star': 1.70 },
 };
 
-function levelCoefficient(entity: ReturnType<typeof getCombatEntity>) {
+export function getCombatMatchupMultiplier(attackerClass: CombatMatchupClass, targetClass: CombatMatchupClass) {
+  return MATCHUP_MULTIPLIERS[attackerClass][targetClass];
+}
+
+/** Primary target classes transcribed from Nemexia Auto v2's saved ship pages. */
+const NEMEXIA_PRIMARY_TARGET_CLASS: Readonly<Record<CombatMatchupClass, CombatMatchupClass>> = {
+  scout: 'defender',
+  cruiser: 'scout',
+  defender: 'bomber',
+  battleship: 'cruiser',
+  destroyer: 'battleship',
+  bomber: 'destroyer',
+  'death-star': 'death-star',
+};
+
+/**
+ * Nemexia's observed ordinary-ship retarget order after a target is destroyed.
+ * This is intentionally not used for initial selection or mixed target sets.
+ */
+const NEMEXIA_ORDINARY_RETARGET_FALLBACK: readonly CombatOrdinaryClass[] = [
+  'bomber', 'destroyer', 'battleship', 'defender', 'cruiser', 'scout',
+];
+
+function matchupClassForEntity(entityId: CombatStackEntityId): CombatMatchupClass | undefined {
+  if (entityId === 'death-star') return 'death-star';
+  if (entityId === 'pirate-planet-breaker') return undefined;
+  return getCombatEntityForStack(entityId).ordinaryClass;
+}
+
+function targetSelectionClassForEntity(entityId: CombatStackEntityId): CombatMatchupClass | undefined {
+  return entityId === 'pirate-planet-breaker' ? 'death-star' : undefined;
+}
+
+function classForTargetSelection(entityId: CombatStackEntityId): CombatMatchupClass | undefined {
+  return targetSelectionClassForEntity(entityId) ?? matchupClassForEntity(entityId);
+}
+
+function levelCoefficient(entity: ReturnType<typeof getCombatEntityForStack>) {
+  if (entity.id === 'death-star' || entity.id === 'pirate-planet-breaker') {
+    return COMBAT_SHIP_LEVEL_COEFFICIENTS['death-star'];
+  }
   return entity.ordinaryClass ? COMBAT_SHIP_LEVEL_COEFFICIENTS[entity.ordinaryClass] : 0;
 }
 
 function matchupFor(actor: RuntimeStack, target: RuntimeStack) {
-  const actorClass = actor.ordinaryClass;
-  const targetClass = target.ordinaryClass;
+  const actorClass = actor.matchupClass;
+  const targetClass = target.matchupClass;
   if (actorClass && targetClass) {
-    return { multiplier: MATCHUP_MULTIPLIERS[actorClass][targetClass], status: 'inferred' as const };
+    return { multiplier: getCombatMatchupMultiplier(actorClass, targetClass), status: 'inferred' as const };
   }
   return {
     multiplier: 1,
@@ -188,8 +255,21 @@ export function calculateEffectiveDamage(rawDamage: number, armorStrength: numbe
   return Math.max(1, reduced);
 }
 
-function catalogOrder(entityId: CombatEntityId) {
+function catalogOrder(entityId: CombatStackEntityId) {
   return CATALOG_ORDER.get(entityId) ?? Number.MAX_SAFE_INTEGER;
+}
+
+/**
+ * Target tiers keep commanders protected without imposing a permanent
+ * ordinary-ship-versus-defense ordering. The calibrated priority metric still
+ * decides between combat ships and defenses; civilian/service ships follow
+ * that tier and commanders remain last.
+ */
+function targetSelectionTier(entityId: CombatStackEntityId) {
+  const entity = getCombatEntityForStack(entityId);
+  if (entity.kind === 'commander') return 2;
+  if (entity.kind === 'ship' && entity.category !== 'Боевой корабль') return 1;
+  return 0;
 }
 
 export function selectCombatTarget(
@@ -200,8 +280,10 @@ export function selectCombatTarget(
   if (!alive.length) return null;
 
   return [...alive].sort((left, right) => {
-    const leftEntity = getCombatEntity(left.entityId);
-    const rightEntity = getCombatEntity(right.entityId);
+    const leftEntity = getCombatEntityForStack(left.entityId);
+    const rightEntity = getCombatEntityForStack(right.entityId);
+    const tierDelta = targetSelectionTier(left.entityId) - targetSelectionTier(right.entityId);
+    if (tierDelta !== 0) return tierDelta;
     const leftThreat = left.threat ?? left.currentCount * leftEntity.combat.attack;
     const rightThreat = right.threat ?? right.currentCount * rightEntity.combat.attack;
     const leftPopulation = left.population ?? left.currentCount * leftEntity.population;
@@ -222,16 +304,76 @@ export function selectCombatTarget(
   })[0] ?? null;
 }
 
+function selectShipTarget(
+  actor: RuntimeStack,
+  candidates: readonly TargetSelectionCandidate[],
+  fallbackPriority: CombatTargetPriority,
+): TargetSelectionCandidate | null {
+  const actorClass = actor.targetSelectionClass ?? actor.matchupClass;
+  if (actor.kind !== 'ship' || !actorClass) {
+    return selectCombatTarget(candidates, fallbackPriority);
+  }
+
+  const preferredClass = NEMEXIA_PRIMARY_TARGET_CLASS[actorClass];
+  const preferredCandidates = candidates.filter((candidate) => candidate.currentCount > 0
+    && classForTargetSelection(candidate.entityId) === preferredClass);
+  return preferredCandidates.length > 0
+    ? selectCombatTarget(preferredCandidates, fallbackPriority)
+    : selectCombatTarget(candidates, fallbackPriority);
+}
+
+function selectNemexiaOrdinaryRetargetTarget(
+  actor: RuntimeStack,
+  previousTarget: RuntimeStack | undefined,
+  candidates: readonly TargetSelectionCandidate[],
+  targetStacks: readonly RuntimeStack[],
+  fallbackPriority: CombatTargetPriority,
+): TargetSelectionCandidate | null {
+  const actorClass = actor.targetSelectionClass ?? actor.ordinaryClass;
+  if (actor.kind !== 'ship' || !actorClass
+      || !previousTarget || previousTarget.count > 0
+      || previousTarget.bucket !== 'stacks' || previousTarget.kind !== 'ship' || !(previousTarget.targetSelectionClass ?? previousTarget.ordinaryClass)) {
+    return null;
+  }
+
+  const liveCandidates = candidates.filter((candidate) => candidate.currentCount > 0);
+  if (liveCandidates.length === 0) return null;
+
+  const stacksById = new Map(targetStacks.map((stack) => [stack.entityId, stack] as const));
+  const liveStacks = liveCandidates.map((candidate) => stacksById.get(candidate.entityId));
+  if (liveStacks.some((stack) => !stack || stack.count <= 0
+      || stack.bucket !== 'stacks' || stack.kind !== 'ship' || !(stack.targetSelectionClass ?? stack.ordinaryClass))) {
+    return null;
+  }
+
+  const classForCandidate = (candidate: TargetSelectionCandidate) => (
+    stacksById.get(candidate.entityId)?.targetSelectionClass ?? stacksById.get(candidate.entityId)?.ordinaryClass
+  );
+  const preferredClass = NEMEXIA_PRIMARY_TARGET_CLASS[actorClass];
+  const preferredCandidates = liveCandidates.filter((candidate) => classForCandidate(candidate) === preferredClass);
+  if (preferredCandidates.length > 0) {
+    return selectCombatTarget(preferredCandidates, fallbackPriority);
+  }
+
+  for (const targetClass of NEMEXIA_ORDINARY_RETARGET_FALLBACK) {
+    const classCandidates = liveCandidates.filter((candidate) => classForCandidate(candidate) === targetClass);
+    if (classCandidates.length > 0) return selectCombatTarget(classCandidates, fallbackPriority);
+  }
+  return null;
+}
+
 function runtimeFromInput(
   side: BattleSide,
   bucket: RuntimeBucket,
   stacks: readonly CombatStackInput[],
   technologies: CombatTechnologyLevels,
   executionMode: CombatExecutionMode,
-  factionId: CombatFactionId,
+  factionId: CombatFactionId | undefined,
+  profile?: import('./side-entity.ts').CombatSideProfile,
 ): RuntimeStack[] {
   return stacks.map((stack) => {
-    const entity = getFactionCombatEntity(factionId, stack.entityId);
+    const entity = getCombatEntityForSide(stack.entityId, factionId, profile);
+    if (!entity) throw new Error(`Unsupported combat entity ${stack.entityId} for ${profile?.kind ?? factionId ?? 'neutral'} side`);
     const level = stack.level ?? 0;
     const coefficient = levelCoefficient(entity);
     const levelAndTechnologyAttack = 1 + coefficient * level + (getTechnologyAttackMultiplier(entity, technologies, executionMode) - 1);
@@ -242,6 +384,7 @@ function runtimeFromInput(
     return {
       side,
       bucket,
+      factionId,
       kind: entity.kind,
       entityId: stack.entityId,
       level,
@@ -259,7 +402,10 @@ function runtimeFromInput(
       weaponType: entity.combat.weaponType,
       armorType: entity.combat.armorType,
       ...(entity.ordinaryClass ? { ordinaryClass: entity.ordinaryClass } : {}),
+      ...(matchupClassForEntity(stack.entityId) ? { matchupClass: matchupClassForEntity(stack.entityId) } : {}),
+      ...(targetSelectionClassForEntity(stack.entityId) ? { targetSelectionClass: targetSelectionClassForEntity(stack.entityId) } : {}),
       ...(entity.specialBonus ? { specialBonus: entity.specialBonus } : {}),
+      ...(entity.pirateAbility ? { pirateAbility: entity.pirateAbility } : {}),
     };
   });
 }
@@ -279,6 +425,32 @@ function sideAliveCount(stacks: readonly RuntimeStack[]) {
   return stacks.reduce((total, stack) => total + stack.count, 0);
 }
 
+function createBattleActionOrder(stacks: readonly RuntimeStack[], rng: CombatRng) {
+  const order = sortRuntime(stacks);
+  const combatShipSlots: number[] = [];
+  const combatShips: RuntimeStack[] = [];
+  order.forEach((stack, index) => {
+    if (stack.kind !== 'ship' || (stack.matchupClass === undefined && !isPiratePlanetBreaker(stack.entityId))) return;
+    combatShipSlots.push(index);
+    combatShips.push(stack);
+  });
+
+  // The controlled repeats show variable ordinary ship order between battles,
+  // while the supplied 15k report interleaves the Death Star with ordinary
+  // combat ships. Nemexia's shuffle/RNG details remain unknown, so this is a
+  // seeded Asterion approximation over all combat-ship slots. Commanders,
+  // defenses, and non-combat support hulls retain catalog order.
+  for (let index = combatShips.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(rng.next() * (index + 1));
+    [combatShips[index], combatShips[swapIndex]] = [combatShips[swapIndex]!, combatShips[index]!];
+  }
+
+  combatShipSlots.forEach((slot, index) => {
+    order[slot] = combatShips[index]!;
+  });
+  return order;
+}
+
 function sidePopulation(stacks: readonly RuntimeStack[]) {
   return stacks.reduce((total, stack) => total + stack.count * stack.populationPerUnit, 0);
 }
@@ -286,7 +458,7 @@ function sidePopulation(stacks: readonly RuntimeStack[]) {
 function bucketPopulation(
   stacks: readonly RuntimeStack[],
   bucket: RuntimeBucket,
-  counts?: ReadonlyMap<CombatEntityId, number>,
+  counts?: ReadonlyMap<CombatStackEntityId, number>,
 ) {
   return stacks
     .filter((stack) => stack.bucket === bucket)
@@ -302,13 +474,13 @@ type RoundSideModifiers = {
   commanderLifeMultiplier: number;
   commanderArmorPenalty: number;
   criticalBonus: number;
-  specialBonuses: ReadonlyMap<CombatEntityId, { attack: number; life: number; armor: number }>;
+  specialBonuses: ReadonlyMap<CombatStackEntityId, { attack: number; life: number; armor: number }>;
   specialBonusDetails: readonly SpecialBonusDetail[];
   snapshot: Readonly<Record<string, number | string>>;
 };
 
 type SpecialBonusDetail = {
-  entityId: CombatEntityId;
+  entityId: CombatStackEntityId;
   actorSide: BattleSide;
   livingCount: number;
   kind: CombatSpecialBonus['kind'];
@@ -333,7 +505,7 @@ function calculateRoundSideModifiers(stacks: readonly RuntimeStack[], commanderI
   const commanderEffect = getCommanderCombatEffect(commanderId);
   const commanderLevel = commander?.level ?? 0;
   const commanderRate = commanderEffect ? commanderEffect.ratePerLevel * commanderLevel : 0;
-  const specialBonuses = new Map<CombatEntityId, { attack: number; life: number; armor: number }>();
+  const specialBonuses = new Map<CombatStackEntityId, { attack: number; life: number; armor: number }>();
   const specialBonusDetails: SpecialBonusDetail[] = [];
   const snapshot: Record<string, number | string> = {};
 
@@ -363,12 +535,14 @@ function calculateRoundSideModifiers(stacks: readonly RuntimeStack[], commanderI
       ...(donor.specialBonus.note ? { note: donor.specialBonus.note } : {}),
     });
     snapshot[`specialBonus:${donor.entityId}`] = amount;
+    const pirateFleetBonus = donor.pirateAbility?.kind === 'bonus-life' || donor.pirateAbility?.kind === 'armor-boost';
     for (const recipient of stacks) {
       // The source stack is a donor, not a recipient. This matters for the
       // extracted special-unit rules: a Goliath/Defender/Star Armada does not
       // amplify itself, while every other living allied stack receives the
       // frozen round-start contribution.
-      if (recipient.entityId === donor.entityId || recipient.count <= 0) continue;
+      if ((!pirateFleetBonus && recipient.entityId === donor.entityId) || recipient.count <= 0) continue;
+      if (pirateFleetBonus && recipient.kind !== 'ship') continue;
       const current = specialBonuses.get(recipient.entityId) ?? { attack: 0, life: 0, armor: 0 };
       if (donor.specialBonus.kind === 'attack') current.attack += amount;
       if (donor.specialBonus.kind === 'life') current.life += amount;
@@ -408,7 +582,16 @@ function applyRoundModifiers(
       stack.armorPercent = clamp(stack.baseArmorPercent + special.armor - enemyModifiers.commanderArmorPenalty, 0, 80);
       if (previousLife !== stack.lifePerUnit && previousCount > 0) {
         stack.hpPool = Math.max(0, previousCount * stack.lifePerUnit - previousLostHp);
-        stack.count = runtimeCountFromHp(stack);
+        const recalculatedCount = runtimeCountFromHp(stack);
+        if (recalculatedCount < previousCount) {
+          // Removing a commander/life bonus changes the unit denominator, not
+          // the number of units hit this round. Preserve the damaged stack at
+          // the smallest HP pool that still represents its current count.
+          stack.hpPool = Math.max(stack.hpPool, (previousCount - 1) * stack.lifePerUnit + 1);
+          stack.count = previousCount;
+        } else {
+          stack.count = recalculatedCount;
+        }
       }
     }
   };
@@ -455,8 +638,8 @@ export function calculateCombatStackPreview(
 
 function createRoundSnapshot(
   stacks: readonly RuntimeStack[],
-  roundStartCounts: ReadonlyMap<CombatEntityId, number>,
-  roundStartHp: ReadonlyMap<CombatEntityId, number>,
+  roundStartCounts: ReadonlyMap<CombatStackEntityId, number>,
+  roundStartHp: ReadonlyMap<CombatStackEntityId, number>,
   modifiers?: Readonly<Record<string, number | string>>,
 ): CombatRoundSnapshot {
   const build = (bucket: RuntimeBucket): BattleStackSnapshot[] => sortRuntime(stacks)
@@ -613,7 +796,9 @@ function createRoundSummary(
     if (event.actionType === 'ability') procs += 1;
     repairs += event.repairedCount ?? 0;
     if (event.criticalMultiplier && event.criticalMultiplier > 1) criticalHits += 1;
-    if (event.commanderAbilityId === 'scorpion') paralyzes += event.actionType === 'ability' ? 1 : 0;
+    if (event.commanderAbilityId === 'scorpion' || event.shipAbilityId === 'shmel-freezing') {
+      paralyzes += event.actionType === 'ability' ? 1 : 0;
+    }
     if (event.commanderAbilityId === 'phantom') cancelledAttacks += event.actionType === 'ability' ? 1 : 0;
   });
 
@@ -703,26 +888,146 @@ function appendSpecialBonusEvents(
   });
 }
 
+type PirateRoundAttackEffect = Readonly<{
+  ignoreArmor: boolean;
+  devastateMultiplier: number;
+  artilleryMultiplierVsDefense: number;
+  artilleryChance?: number;
+  artilleryDraw?: number;
+}>;
+
+function createPirateAbilityEvent(
+  sequence: number,
+  donor: RuntimeStack,
+  abilityId: NonNullable<CombatEvent['shipAbilityId']>,
+  chance: number,
+  draw: number,
+  target?: RuntimeStack,
+  note?: string,
+): CombatEvent {
+  return {
+    sequence,
+    actorSide: donor.side,
+    actorEntityId: donor.entityId,
+    ...(target ? {
+      targetSide: target.side,
+      targetEntityId: target.entityId,
+      targetCount: target.count,
+    } : {}),
+    actionType: 'ability',
+    actorCount: donor.count,
+    shipAbilityId: abilityId,
+    abilityChance: chance,
+    abilityDraw: draw,
+    provenance: {
+      status: 'inferred',
+      source: 'src/domain/combat/source-fixtures/ship-abilities.json',
+      confidence: 'medium',
+      note: 'Asterion approximation: one seeded chance roll per living ability donor per round. For single-group abilities, one living attack-capable pirate ship group is selected uniformly; the source does not specify exact RNG timing or group selection.',
+    },
+    note,
+  };
+}
+
+function resolvePirateRoundAttackAbilities(
+  actorStacks: readonly RuntimeStack[],
+  targetStacks: readonly RuntimeStack[],
+  events: CombatEvent[],
+  sequence: { value: number },
+  rng: CombatRng,
+): ReadonlyMap<CombatStackEntityId, PirateRoundAttackEffect> {
+  const effects = new Map<CombatStackEntityId, PirateRoundAttackEffect>();
+  const eligibleRecipients = actorStacks.filter((stack) => stack.kind === 'ship'
+    && stack.count > 0 && stack.attackPerUnit > 0);
+  if (eligibleRecipients.length === 0 || sideAliveCount(targetStacks) <= 0) return effects;
+
+  const grantTo = (
+    recipient: RuntimeStack,
+    ability: 'pirate-armor-piercing' | 'pirate-devastate' | 'pirate-artillery',
+    multiplier = 1,
+  ) => {
+    const current = effects.get(recipient.entityId) ?? { ignoreArmor: false, devastateMultiplier: 1, artilleryMultiplierVsDefense: 1 };
+    effects.set(recipient.entityId, {
+      ...current,
+      ignoreArmor: current.ignoreArmor || ability === 'pirate-armor-piercing',
+      devastateMultiplier: ability === 'pirate-devastate' ? Math.max(current.devastateMultiplier, multiplier) : current.devastateMultiplier,
+      artilleryMultiplierVsDefense: ability === 'pirate-artillery' ? Math.max(current.artilleryMultiplierVsDefense, multiplier) : current.artilleryMultiplierVsDefense,
+    });
+  };
+
+  for (const donor of actorStacks) {
+    if (donor.count <= 0 || !donor.pirateAbility) continue;
+    const ability = donor.pirateAbility;
+    if (ability.kind === 'ignore-armor' || ability.kind === 'devastate') {
+      const chance = Math.min(ability.chanceCap, ability.perShipChance * donor.count);
+      const draw = rng.next();
+      if (draw >= chance) continue;
+      const recipient = eligibleRecipients[Math.floor(rng.next() * eligibleRecipients.length)]!;
+      const abilityId = ability.kind === 'ignore-armor' ? 'pirate-armor-piercing' : 'pirate-devastate';
+      grantTo(recipient, abilityId, ability.kind === 'devastate' ? ability.attackMultiplier : 1);
+      events.push(createPirateAbilityEvent(
+        sequence.value++,
+        donor,
+        abilityId,
+        chance,
+        draw,
+        recipient,
+        ability.kind === 'ignore-armor'
+          ? `Игнорирование брони усиливает группу ${recipient.entityId} до конца раунда.`
+          : `Сокрушение усиливает атаку группы ${recipient.entityId} в 1,25 раза; критический удар отключён для этой группы в этом раунде.`,
+      ));
+      continue;
+    }
+
+    if (ability.kind === 'artillery' && targetStacks.some((stack) => stack.bucket === 'defenses' && stack.count > 0)) {
+      const chance = Math.min(ability.chanceCap, ability.perShipChance * donor.count);
+      const draw = rng.next();
+      if (draw >= chance) continue;
+      for (const recipient of eligibleRecipients) {
+        grantTo(recipient, 'pirate-artillery', ability.attackMultiplierVsDefense);
+        effects.set(recipient.entityId, { ...effects.get(recipient.entityId)!, artilleryChance: chance, artilleryDraw: draw });
+      }
+      events.push(createPirateAbilityEvent(
+        sequence.value++,
+        donor,
+        'pirate-artillery',
+        chance,
+        draw,
+        undefined,
+        'Артиллерия усиливает атаки всех живых дружественных корабельных групп против оборонительных сооружений в этом раунде.',
+      ));
+    }
+  }
+
+  return effects;
+}
+
 function createAttackEvent(
   sequence: number,
   actor: RuntimeStack,
+  actorCount: number,
   target: RuntimeStack,
   rng: CombatRng,
   criticalBonus: number,
+  volleyScale = 1,
+  volleyIndex = 0,
+  pirateRoundEffect: PirateRoundAttackEffect = { ignoreArmor: false, devastateMultiplier: 1, artilleryMultiplierVsDefense: 1 },
 ): CombatEvent {
   const countBeforeEvent = target.count;
   const hpBefore = target.hpPool;
-  const baseAttack = Math.max(0, Math.floor(actor.count * actor.attackPerUnit));
+  const baseAttack = Math.max(0, Math.floor(actorCount * actor.attackPerUnit * volleyScale));
   const matchup = matchupFor(actor, target);
   const reportedBonus = matchup.multiplier === 1
     ? 0
     : Math.sign(matchup.multiplier - 1) * Math.floor(baseAttack * Math.abs(matchup.multiplier - 1));
-  const rawDamageBeforeArmor = Math.max(0, Math.floor(baseAttack * matchup.multiplier));
-  const criticalChance = clamp(actor.criticalChance + criticalBonus, 0, 1);
+  const artilleryMultiplier = target.bucket === 'defenses' ? pirateRoundEffect.artilleryMultiplierVsDefense : 1;
+  const devastateMultiplier = pirateRoundEffect.devastateMultiplier;
+  const rawDamageBeforeArmor = Math.max(0, Math.floor(baseAttack * matchup.multiplier * devastateMultiplier * artilleryMultiplier));
+  const criticalChance = pirateRoundEffect.devastateMultiplier > 1 ? 0 : clamp(actor.criticalChance + criticalBonus, 0, 1);
   const criticalDraw = criticalChance > 0 ? rng.next() : undefined;
   const criticalMultiplier = criticalDraw !== undefined && criticalDraw < criticalChance ? 2 : 1;
   const rawDamage = Math.floor(rawDamageBeforeArmor * criticalMultiplier);
-  const effectiveDamage = calculateEffectiveDamage(rawDamage, target.armorPercent);
+  const effectiveDamage = calculateEffectiveDamage(rawDamage, pirateRoundEffect.ignoreArmor ? 0 : target.armorPercent);
   const actualDamage = target.hpPool <= 0 ? 0 : Math.min(effectiveDamage, target.hpPool);
   target.hpPool = Math.max(0, target.hpPool - actualDamage);
   target.count = runtimeCountFromHp(target);
@@ -735,12 +1040,12 @@ function createAttackEvent(
     targetSide: target.side,
     targetEntityId: target.entityId,
     actionType: 'attack',
-    actorCount: actor.count,
+    actorCount,
     targetCount: countBeforeEvent,
     attackValue: baseAttack,
     baseAttack,
-    attackPerUnit: actor.attackPerUnit,
-    totalAttack: actor.count * actor.attackPerUnit,
+    attackPerUnit: actor.attackPerUnit * volleyScale,
+    totalAttack: baseAttack,
     lifePerUnit: target.lifePerUnit,
     hpPool: hpBefore,
     rawDamage,
@@ -749,7 +1054,10 @@ function createAttackEvent(
     reportedBonus,
     matchupStatus: matchup.status,
     criticalChance,
-    ...(criticalDraw !== undefined ? { abilityDraw: criticalDraw } : {}),
+    ...(criticalDraw !== undefined ? (actor.pirateAbility ? { criticalDraw } : { abilityDraw: criticalDraw }) : {}),
+    ...(target.bucket === 'defenses' && pirateRoundEffect.artilleryMultiplierVsDefense > 1
+      ? { abilityChance: pirateRoundEffect.artilleryChance, abilityDraw: pirateRoundEffect.artilleryDraw }
+      : {}),
     criticalMultiplier,
     effectiveDamage,
     mitigation: Math.max(0, rawDamage - effectiveDamage),
@@ -757,6 +1065,7 @@ function createAttackEvent(
     armorType: target.armorType,
     damage: actualDamage,
     destroyedCount: Math.max(0, countBeforeEvent - countAfterEvent),
+    ...(pirateRoundEffect.ignoreArmor ? { shipAbilityId: 'pirate-armor-piercing' as const } : pirateRoundEffect.devastateMultiplier > 1 ? { shipAbilityId: 'pirate-devastate' as const } : pirateRoundEffect.artilleryMultiplierVsDefense > 1 && target.bucket === 'defenses' ? { shipAbilityId: 'pirate-artillery' as const } : {}),
     lifeBefore: hpBefore,
     lifeAfter: target.hpPool,
     armorBefore: target.armorPercent,
@@ -764,7 +1073,7 @@ function createAttackEvent(
     provenance: DAMAGE_PROVENANCE,
     note: actualDamage === 0
       ? 'Залп не нанёс урон: цель уже уничтожена.'
-      : `${matchup.multiplier === 1 ? 'Нейтральный модификатор пары' : `Модификатор пары ×${matchup.multiplier.toFixed(2)}`}; урон после брони ${target.armorPercent}%.${criticalMultiplier > 1 ? ' Критический залп ×2.' : ''} Следующая живая цель выбирается заново.`,
+      : `${matchup.multiplier === 1 ? 'Нейтральный модификатор пары' : `Модификатор пары ×${matchup.multiplier.toFixed(2)}`}; урон после брони ${pirateRoundEffect.ignoreArmor ? 0 : target.armorPercent}%.${pirateRoundEffect.devastateMultiplier > 1 ? ` Пиратский Devastate ×${pirateRoundEffect.devastateMultiplier.toFixed(2)}; Critical Strike подавлен.` : ''}${pirateRoundEffect.artilleryMultiplierVsDefense > 1 && target.bucket === 'defenses' ? ` Пиратская артиллерия против обороны ×${pirateRoundEffect.artilleryMultiplierVsDefense.toFixed(2)}.` : ''}${pirateRoundEffect.ignoreArmor ? ' Пиратская атака игнорирует броню.' : ''}${criticalMultiplier > 1 ? ' Критический залп ×2.' : ''}${volleyIndex > 0 ? ` Повторный залп №${volleyIndex + 1}: мощность ×${volleyScale.toFixed(2)}.` : ''} Стек сохраняет цель, пока она жива; новая цель выбирается после её уничтожения.`,
   };
 }
 
@@ -780,7 +1089,13 @@ function createNoTargetEvent(sequence: number, actor: RuntimeStack): CombatEvent
   };
 }
 
-function createSkippedActionEvent(sequence: number, actor: RuntimeStack, note = 'Залп пропущен: стек уничтожен до своей очереди и не совершает действие.', commanderId?: CommanderId): CombatEvent {
+function createSkippedActionEvent(
+  sequence: number,
+  actor: RuntimeStack,
+  note = 'Залп пропущен: стек уничтожен до своей очереди и не совершает действие.',
+  commanderId?: CommanderId,
+  shipAbilityId?: CombatEvent['shipAbilityId'],
+): CombatEvent {
   return {
     sequence,
     actorSide: actor.side,
@@ -788,9 +1103,26 @@ function createSkippedActionEvent(sequence: number, actor: RuntimeStack, note = 
     actionType: 'status',
     actorCount: actor.count,
     ...(commanderId ? { commanderAbilityId: commanderId } : {}),
+    ...(shipAbilityId ? { shipAbilityId } : {}),
     provenance: { status: 'structural', source: 'Asterion sequential resolver', confidence: 'high' },
     note,
   };
+}
+
+const SHMEL_FREEZING_CHANCE_PER_SHIP = 0.0004;
+const SHMEL_FREEZING_MAX_CHANCE = 0.2;
+
+function isLivingCombatShipAbilityTarget(stack: RuntimeStack) {
+  // Ability target eligibility is independent of matchup classification. In
+  // particular, Pirate Planet Breaker is a combat ship with neutral matchup
+  // damage and must still be eligible for effects such as Shmel freezing.
+  return stack.kind === 'ship' && stack.count > 0 && stack.attackPerUnit > 0;
+}
+
+function shmelFreezingChance(actor: RuntimeStack, actorCount: number) {
+  return actor.factionId === 'veyra' && actor.entityId === 'destroyer'
+    ? Math.min(SHMEL_FREEZING_MAX_CHANCE, SHMEL_FREEZING_CHANCE_PER_SHIP * actorCount)
+    : 0;
 }
 
 function createNoAttackEvent(sequence: number, actor: RuntimeStack): CombatEvent {
@@ -803,6 +1135,28 @@ function createNoAttackEvent(sequence: number, actor: RuntimeStack): CombatEvent
     provenance: { status: 'not-calibrated', source: 'Asterion combat catalog', confidence: 'medium' },
     note: 'Действие не выполнено: у сущности нет подтверждённой атаки в этом профиле.',
   };
+}
+
+function usesDocumentedDefenderRoundStartCount(actor: RuntimeStack, roundStartCount: number) {
+  if (actor.side !== 'defender' || roundStartCount <= 0) return false;
+  if (actor.kind === 'ship' && actor.matchupClass !== undefined) return true;
+
+  // The archive confirms destroyed-before-response turns for commander and
+  // defense actors. It does not establish round-start strength after partial
+  // losses for either category, so those keep Asterion's live-count behavior.
+  // Death-star is included above: the supplied exact profile shows Nox Queen
+  // answering at its 30-unit round-start count after losing 13 during attacker fire.
+  return actor.count === 0 && (actor.kind === 'commander' || actor.kind === 'defense');
+}
+
+function hasDocumentedDefenderCounterfire(
+  defender: readonly RuntimeStack[],
+  roundStartCounts: ReadonlyMap<CombatStackEntityId, number>,
+) {
+  return defender.some((actor) => usesDocumentedDefenderRoundStartCount(
+    actor,
+    roundStartCounts.get(actor.entityId) ?? 0,
+  ));
 }
 
 function commanderAtSide(stacks: readonly RuntimeStack[], id: CommanderId | null, expectedId: CommanderId) {
@@ -837,8 +1191,73 @@ function resolveReanimator(
   });
 }
 
+const DESTROYER_REVIVAL_CHANCE_PER_SHIP = 0.0014;
+const DESTROYER_REVIVAL_MAX_CHANCE = 0.7;
+const DESTROYER_REVIVAL_BONUS_PER_SHIP = 0.0008;
+const DESTROYER_REVIVAL_MAX_SHARE = 0.4;
+
+function resolveDestroyerRevival(
+  stacks: readonly RuntimeStack[],
+  factionId: CombatFactionId,
+  events: CombatEvent[],
+  sequence: { value: number },
+  rng: CombatRng,
+) {
+  if (factionId !== 'aegis') return;
+  const destroyerCount = stacks.find((stack) => stack.entityId === 'destroyer')?.count ?? 0;
+  if (destroyerCount <= 0) return;
+
+  const chance = Math.min(DESTROYER_REVIVAL_MAX_CHANCE, destroyerCount * DESTROYER_REVIVAL_CHANCE_PER_SHIP);
+  const revivedShare = Math.min(DESTROYER_REVIVAL_MAX_SHARE, destroyerCount * DESTROYER_REVIVAL_BONUS_PER_SHIP);
+  for (const target of sortRuntime(stacks)) {
+    if (target.kind !== 'ship' || target.entityId === 'destroyer') continue;
+    const destroyedThisRound = events.reduce((total, event) => (
+      event.actionType === 'attack'
+        && event.targetSide === target.side
+        && event.targetEntityId === target.entityId
+        ? total + (event.destroyedCount ?? 0)
+        : total
+    ), 0);
+    if (destroyedThisRound <= 0) continue;
+
+    const draw = rng.next();
+    if (draw >= chance) continue;
+    const repairedCount = Math.min(destroyedThisRound, Math.floor(destroyedThisRound * revivedShare + 0.5));
+    if (repairedCount <= 0) continue;
+
+    const lifeBefore = target.hpPool;
+    target.count += repairedCount;
+    target.hpPool += repairedCount * target.lifePerUnit;
+    events.push({
+      sequence: sequence.value++,
+      actorSide: target.side,
+      actorEntityId: 'destroyer',
+      targetSide: target.side,
+      targetEntityId: target.entityId,
+      actionType: 'ability',
+      actorCount: destroyerCount,
+      targetCount: target.count - repairedCount,
+      shipAbilityId: 'destroyer-revival',
+      abilityChance: chance,
+      abilityDraw: draw,
+      abilityBonus: revivedShare,
+      repairedCount,
+      lifeBefore,
+      lifeAfter: target.hpPool,
+      provenance: {
+        status: 'inferred',
+        source: 'Nemexia help: Ships skills / Revival; archive audit of 641 non-Reanimator repair entries',
+        confidence: 'medium',
+        note: 'The chance and amount coefficients match the official source and archive. Asterion approximates chance as one seeded opportunity per target ship stack with losses in this round; exact Nemexia RNG granularity is undocumented.',
+      },
+      note: `Destroyer Revival (Aegis/Confederation): восстановлено ${repairedCount} кораблей из ${destroyedThisRound} потерь этого раунда; функционирующих Destroyers после действий — ${destroyerCount}, шанс ${(chance * 100).toFixed(3)}%, доля потерь ${(revivedShare * 100).toFixed(3)}%.`,
+    });
+  }
+}
+
 function resolveSideActions(
   actorStacks: readonly RuntimeStack[],
+  actionOrder: readonly RuntimeStack[],
   targetStacks: readonly RuntimeStack[],
   events: CombatEvent[],
   sequence: { value: number },
@@ -846,8 +1265,15 @@ function resolveSideActions(
   activeCommanderId: CommanderId | null,
   opposingCommanderId: CommanderId | null,
   rng: CombatRng,
-  paralyzedActorsNext: Set<CombatEntityId>,
-  paralyzedTargetsNext: Set<CombatEntityId>,
+  roundStartCounts: ReadonlyMap<CombatStackEntityId, number>,
+  lockedTargets: Map<CombatStackEntityId, CombatStackEntityId>,
+  destroyedTargetsSinceLock: Map<CombatStackEntityId, CombatStackEntityId>,
+  allowDocumentedDefenderCounterfire: boolean,
+  paralyzedActorsNext: Set<CombatStackEntityId>,
+  paralyzedTargetsNext: Set<CombatStackEntityId>,
+  paralyzedActorSourcesNext: Map<CombatStackEntityId, CombatDisablingAbility>,
+  paralyzedTargetSourcesNext: Map<CombatStackEntityId, CombatDisablingAbility>,
+  pirateRoundAttackEffects: ReadonlyMap<CombatStackEntityId, PirateRoundAttackEffect>,
 ) {
   const criticalEffect = getCommanderCombatEffect(activeCommanderId);
   const criticalBonus = criticalEffect?.kind === 'critical'
@@ -856,14 +1282,23 @@ function resolveSideActions(
   const opposingPhantom = commanderAtSide(targetStacks, opposingCommanderId, 'phantom');
   const phantomEffect = opposingPhantom ? getCommanderCombatEffect('phantom') : null;
 
-  for (const actor of sortRuntime(actorStacks)) {
-    if (actor.count <= 0) {
+  for (const actor of actionOrder) {
+    const roundStartCount = roundStartCounts.get(actor.entityId) ?? actor.count;
+    const usesRoundStartCount = allowDocumentedDefenderCounterfire
+      && usesDocumentedDefenderRoundStartCount(actor, roundStartCount);
+    if (actor.count <= 0 && !usesRoundStartCount) {
       events.push(createSkippedActionEvent(sequence.value++, actor));
       continue;
     }
     if (paralyzedActorsNext.has(actor.entityId)) {
       paralyzedActorsNext.delete(actor.entityId);
-      events.push(createSkippedActionEvent(sequence.value++, actor, 'Атака пропущена: командир Скорпион парализовал ближайшее действие.', 'scorpion'));
+      const disablingAbility = paralyzedActorSourcesNext.get(actor.entityId);
+      paralyzedActorSourcesNext.delete(actor.entityId);
+      if (disablingAbility === 'shmel-freezing') {
+        events.push(createSkippedActionEvent(sequence.value++, actor, 'Атака пропущена: стек заморожен способностью Шмеля.', undefined, 'shmel-freezing'));
+      } else {
+        events.push(createSkippedActionEvent(sequence.value++, actor, 'Атака пропущена: командир Скорпион парализовал ближайшее действие.', 'scorpion'));
+      }
       continue;
     }
     if (phantomEffect && opposingPhantom) {
@@ -879,32 +1314,230 @@ function resolveSideActions(
       events.push(createNoAttackEvent(sequence.value++, actor));
       continue;
     }
-    const target = selectCombatTarget(targetStacks.map((stack) => ({
-      entityId: stack.entityId,
-      currentCount: stack.count,
-      threat: stack.count * stack.attackPerUnit,
-      population: stack.count * stack.populationPerUnit,
-    })), targetPriority);
-    if (!target) {
-      events.push(createNoTargetEvent(sequence.value++, actor));
-      continue;
+    // Nemexia's saved reports show defender ships, including fully destroyed
+    // stacks, responding at their round-start count. Destroyed-before-turn
+    // commander/defense responses are separately observed; their partial-loss
+    // count behavior remains uncalibrated.
+    const actorCount = usesRoundStartCount ? roundStartCount : actor.count;
+    let hasAttacked = false;
+    let lastLivingTarget: RuntimeStack | undefined;
+    const volleyLimit = actor.kind === 'ship' && (actor.matchupClass !== undefined || isPiratePlanetBreaker(actor.entityId)) ? 5 : 1;
+    for (let volleyIndex = 0; volleyIndex < volleyLimit; volleyIndex += 1) {
+      let targetRuntime = targetStacks.find((stack) => stack.entityId === lockedTargets.get(actor.entityId));
+      if (!targetRuntime || targetRuntime.count <= 0) {
+        const previousTargetId = lockedTargets.get(actor.entityId);
+        if (previousTargetId) destroyedTargetsSinceLock.set(actor.entityId, previousTargetId);
+        lockedTargets.delete(actor.entityId);
+        const previousTargetIdAfterUnlock = destroyedTargetsSinceLock.get(actor.entityId);
+        const previousTargetAfterUnlock = previousTargetIdAfterUnlock
+          ? targetStacks.find((stack) => stack.entityId === previousTargetIdAfterUnlock)
+          : undefined;
+        const shouldUseNemexiaRetarget = Boolean(previousTargetIdAfterUnlock
+          && (!previousTargetAfterUnlock || previousTargetAfterUnlock.count <= 0));
+        destroyedTargetsSinceLock.delete(actor.entityId);
+        const candidates = targetStacks.map((stack) => ({
+          entityId: stack.entityId,
+          currentCount: stack.count,
+          threat: stack.count * stack.attackPerUnit,
+          population: stack.count * stack.populationPerUnit,
+        }));
+        const target = (shouldUseNemexiaRetarget
+          ? selectNemexiaOrdinaryRetargetTarget(actor, previousTargetAfterUnlock, candidates, targetStacks, targetPriority)
+          : null)
+          ?? selectShipTarget(actor, candidates, targetPriority);
+        targetRuntime = target
+          ? targetStacks.find((stack) => stack.entityId === target.entityId)
+          : undefined;
+        if (targetRuntime && targetRuntime.count > 0) lockedTargets.set(actor.entityId, targetRuntime.entityId);
+      }
+      if (!targetRuntime) {
+        if (!hasAttacked) events.push(createNoTargetEvent(sequence.value++, actor));
+        break;
+      }
+
+      const volleyScale = 1 - volleyIndex * 0.2;
+      events.push(createAttackEvent(
+        sequence.value++,
+        actor,
+        actorCount,
+        targetRuntime,
+        rng,
+        criticalBonus,
+        volleyScale,
+        volleyIndex,
+        pirateRoundAttackEffects.get(actor.entityId) ?? { ignoreArmor: false, devastateMultiplier: 1, artilleryMultiplierVsDefense: 1 },
+      ));
+      hasAttacked = true;
+      if (targetRuntime.count > 0) {
+        lastLivingTarget = targetRuntime;
+        break;
+      }
+
+      destroyedTargetsSinceLock.set(actor.entityId, targetRuntime.entityId);
+      lockedTargets.delete(actor.entityId);
+      if (targetStacks.every((stack) => stack.count <= 0)) break;
     }
-    const targetRuntime = targetStacks.find((stack) => stack.entityId === target.entityId);
-    if (!targetRuntime) {
-      events.push(createNoTargetEvent(sequence.value++, actor));
-      continue;
-    }
-    events.push(createAttackEvent(sequence.value++, actor, targetRuntime, rng, criticalBonus));
     const scorpion = commanderAtSide(actorStacks, activeCommanderId, 'scorpion');
     if (scorpion) {
       const effect = getCommanderCombatEffect('scorpion');
       const chance = effect ? effect.ratePerLevel * scorpion.level : 0;
       const draw = rng.next();
-      if (targetRuntime.count > 0 && draw < chance) {
-        paralyzedTargetsNext.add(targetRuntime.entityId);
-        events.push(createAbilityEvent(sequence.value++, scorpion, 'scorpion', chance, draw, targetRuntime, 'Цель пропустит ближайшую атаку в своей фазе.'));
+      if (lastLivingTarget && draw < chance) {
+        paralyzedTargetsNext.add(lastLivingTarget.entityId);
+        paralyzedTargetSourcesNext.set(lastLivingTarget.entityId, 'scorpion');
+        events.push(createAbilityEvent(sequence.value++, scorpion, 'scorpion', chance, draw, lastLivingTarget, 'Цель пропустит ближайшую атаку в своей фазе.'));
       }
     }
+
+    const freezingChance = shmelFreezingChance(actor, actorCount);
+    const freezingCandidates = targetStacks.filter((stack) => isLivingCombatShipAbilityTarget(stack)
+      && !paralyzedTargetsNext.has(stack.entityId));
+    if (freezingChance > 0 && freezingCandidates.length > 0) {
+      const draw = rng.next();
+      if (draw < freezingChance) {
+        const targetIndex = Math.floor(rng.next() * freezingCandidates.length);
+        const target = freezingCandidates[targetIndex]!;
+        paralyzedTargetsNext.add(target.entityId);
+        paralyzedTargetSourcesNext.set(target.entityId, 'shmel-freezing');
+        events.push({
+          sequence: sequence.value++,
+          actorSide: actor.side,
+          actorEntityId: actor.entityId,
+          targetSide: target.side,
+          targetEntityId: target.entityId,
+          actionType: 'ability',
+          actorCount,
+          targetCount: target.count,
+          shipAbilityId: 'shmel-freezing',
+          abilityChance: freezingChance,
+          abilityDraw: draw,
+          provenance: {
+            status: 'inferred',
+            source: 'Nemexia saved ship ability tooltip and supplied detailed battle report',
+            confidence: 'medium',
+            note: 'Tooltip: 0.04% chance per Shmel, capped at 20%. The report shows a frozen stack skipping its next action; exact target-selection and RNG procedures are not documented.',
+          },
+          note: `Замораживание: ${target.entityId} пропустит ближайшую атаку; шанс ${(freezingChance * 100).toFixed(3)}%.`,
+        });
+      }
+    }
+  }
+
+  resolvePirateBonusAttack(
+    actorStacks,
+    targetStacks,
+    events,
+    sequence,
+    targetPriority,
+    opposingPhantom,
+    phantomEffect,
+    rng,
+    criticalBonus,
+    lockedTargets,
+    destroyedTargetsSinceLock,
+    pirateRoundAttackEffects,
+  );
+}
+
+function resolvePirateBonusAttack(
+  actorStacks: readonly RuntimeStack[],
+  targetStacks: readonly RuntimeStack[],
+  events: CombatEvent[],
+  sequence: { value: number },
+  targetPriority: CombatTargetPriority,
+  opposingPhantom: RuntimeStack | undefined,
+  phantomEffect: ReturnType<typeof getCommanderCombatEffect>,
+  rng: CombatRng,
+  criticalBonus: number,
+  lockedTargets: Map<CombatStackEntityId, CombatStackEntityId>,
+  destroyedTargetsSinceLock: Map<CombatStackEntityId, CombatStackEntityId>,
+  pirateRoundAttackEffects: ReadonlyMap<CombatStackEntityId, PirateRoundAttackEffect>,
+) {
+  if (sideAliveCount(targetStacks) <= 0) return;
+  const rippers = actorStacks.filter((stack) => stack.pirateAbility?.kind === 'double-attack' && stack.count > 0);
+  const ability = rippers[0]?.pirateAbility;
+  if (!ability || ability.kind !== 'double-attack') return;
+
+  const livingRipperCount = rippers.reduce((total, stack) => total + stack.count, 0);
+  const chance = pirateDoubleAttackChance(livingRipperCount);
+  const draw = rng.next();
+  if (draw >= chance) return;
+
+  const eligibleTypes = sortRuntime(actorStacks).filter((stack) => stack.kind === 'ship' && stack.count > 0);
+  if (eligibleTypes.length === 0) return;
+  const actor = eligibleTypes[Math.floor(rng.next() * eligibleTypes.length)]!;
+  if (actor.attackPerUnit <= 0) return;
+
+  if (phantomEffect?.kind === 'cancel-attack' && opposingPhantom) {
+    const cancelChance = phantomEffect.ratePerLevel * opposingPhantom.level;
+    const cancelDraw = rng.next();
+    if (cancelDraw < cancelChance) {
+      events.push(createAbilityEvent(sequence.value++, opposingPhantom, 'phantom', cancelChance, cancelDraw, actor, 'Дополнительная атака Потрошителя отменена способностью Фантом.'));
+      events.push(createSkippedActionEvent(sequence.value++, actor, 'Дополнительная атака Потрошителя отменена способностью Фантом.', 'phantom'));
+      return;
+    }
+  }
+
+  let target = targetStacks.find((stack) => stack.entityId === lockedTargets.get(actor.entityId));
+  if (!target || target.count <= 0) {
+    const previousTargetId = lockedTargets.get(actor.entityId);
+    if (previousTargetId) destroyedTargetsSinceLock.set(actor.entityId, previousTargetId);
+    lockedTargets.delete(actor.entityId);
+    const previousTargetIdAfterUnlock = destroyedTargetsSinceLock.get(actor.entityId);
+    const previousTarget = previousTargetIdAfterUnlock
+      ? targetStacks.find((stack) => stack.entityId === previousTargetIdAfterUnlock)
+      : undefined;
+    const candidates = targetStacks.map((stack) => ({
+      entityId: stack.entityId,
+      currentCount: stack.count,
+      threat: stack.count * stack.attackPerUnit,
+      population: stack.count * stack.populationPerUnit,
+    }));
+    const selected = (previousTarget?.count === 0
+      ? selectNemexiaOrdinaryRetargetTarget(actor, previousTarget, candidates, targetStacks, targetPriority)
+      : null) ?? selectShipTarget(actor, candidates, targetPriority);
+    target = selected ? targetStacks.find((stack) => stack.entityId === selected.entityId) : undefined;
+    destroyedTargetsSinceLock.delete(actor.entityId);
+  }
+  if (!target || target.count <= 0) return;
+  lockedTargets.set(actor.entityId, target.entityId);
+
+  events.push({
+    sequence: sequence.value++,
+    actorSide: rippers[0]!.side,
+    actorEntityId: rippers[0]!.entityId,
+    targetSide: actor.side,
+    targetEntityId: actor.entityId,
+    actionType: 'ability',
+    actorCount: livingRipperCount,
+    targetCount: actor.count,
+    shipAbilityId: 'pirate-double-attack',
+    abilityChance: chance,
+    abilityDraw: draw,
+    provenance: {
+      status: 'inferred',
+      source: 'Asterion pirate combat balance decision',
+      confidence: 'medium',
+      note: 'Один флотский бросок за раунд; шанс растёт на 0,5 процентного пункта за живого Потрошителя и ограничен 5%. Тип живого пиратского корабля выбирается равновероятно.',
+    },
+    note: `Потрошитель дал ${actor.entityId} одну дополнительную атаку; шанс ${(chance * 100).toFixed(2)}%.`,
+  });
+
+  const attack = createAttackEvent(
+    sequence.value++,
+    actor,
+    actor.count,
+    target,
+    rng,
+    criticalBonus,
+    1,
+    0,
+    pirateRoundAttackEffects.get(actor.entityId) ?? { ignoreArmor: false, devastateMultiplier: 1, artilleryMultiplierVsDefense: 1 },
+  );
+  events.push({ ...attack, note: `Дополнительная атака Потрошителя. ${attack.note ?? ''}`.trim() });
+  if (target.count <= 0) {
+    destroyedTargetsSinceLock.set(actor.entityId, target.entityId);
+    lockedTargets.delete(actor.entityId);
   }
 }
 
@@ -931,7 +1564,11 @@ function createInitialSnapshot(
 }
 
 export function resolveCombat(input: CombatInput, context: CombatResolverContext): BattleReport {
-  const validation = validateCombatInput(input);
+  const validation = validateCombatInput(input, {
+    allowEmptyDefender: context.missionType === 'attack' || context.missionType === 'pirate-raid',
+    allowPopulationOverflow: context.allowPopulationOverflow,
+    missionType: context.missionType,
+  });
   if (!validation.ok) throw new CombatInputValidationError(validation.errors);
   const normalized = validation.value;
   const requestedAttackerTechnologies = normalizeCombatTechnologies(normalized.attackerTechnologies);
@@ -942,19 +1579,22 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
   const attackerTechnologies = requestedAttackerTechnologies;
   const defenderTechnologies = technologyMode === 'shared' ? requestedAttackerTechnologies : requestedDefenderTechnologies;
   const executionMode: CombatExecutionMode = normalized.executionMode === 'production' ? 'production' : 'calibration';
-  const rng = normalized.seed ? createSeededCombatRng(normalized.seed) : createNonReplayableCombatRng();
-  const attackerFactionId = normalized.attacker.factionId ?? getCombatFactionId(normalized.attacker.participant.race);
-  const defenderFactionId = normalized.defender.factionId ?? getCombatFactionId(normalized.defender.participant.race);
+  const seed = normalized.seed?.trim() || createUniqueCombatSeed();
+  const rng = createSeededCombatRng(seed);
+  const attackerFactionId = normalized.attacker.combatProfile?.kind === 'pirate' ? undefined : normalized.attacker.factionId ?? getCombatFactionId(normalized.attacker.participant.race);
+  const defenderFactionId = normalized.defender.combatProfile?.kind === 'pirate' ? undefined : normalized.defender.factionId ?? getCombatFactionId(normalized.defender.participant.race);
 
   const attacker = [
-    ...runtimeFromInput('attacker', 'stacks', normalized.attacker.ships, attackerTechnologies, executionMode, attackerFactionId),
+    ...runtimeFromInput('attacker', 'stacks', normalized.attacker.ships, attackerTechnologies, executionMode, attackerFactionId, normalized.attacker.combatProfile),
     ...runtimeFromInput('attacker', 'stacks', getSideCommanders(normalized.attacker), attackerTechnologies, executionMode, attackerFactionId),
   ];
   const defender = [
-    ...runtimeFromInput('defender', 'stacks', normalized.defender.ships, defenderTechnologies, executionMode, defenderFactionId),
+    ...runtimeFromInput('defender', 'stacks', normalized.defender.ships, defenderTechnologies, executionMode, defenderFactionId, normalized.defender.combatProfile),
     ...runtimeFromInput('defender', 'stacks', getSideCommanders(normalized.defender), defenderTechnologies, executionMode, defenderFactionId),
     ...runtimeFromInput('defender', 'defenses', normalized.defender.defenses ?? [], defenderTechnologies, executionMode, defenderFactionId),
   ];
+  const attackerActionOrder = createBattleActionOrder(attacker, rng);
+  const defenderActionOrder = createBattleActionOrder(defender, rng);
 
   const attackerCommanderIds = getSideCommanders(normalized.attacker)
     .filter((stack) => stack.count > 0)
@@ -974,8 +1614,14 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
   const rounds: CombatRound[] = [];
   let winner: BattleWinner | null = determineWinner(attacker, defender);
   let eventSequence = 1;
-  const paralyzedAttackerNext = new Set<CombatEntityId>();
-  const paralyzedDefenderNext = new Set<CombatEntityId>();
+  const paralyzedAttackerNext = new Set<CombatStackEntityId>();
+  const paralyzedDefenderNext = new Set<CombatStackEntityId>();
+  const paralyzedAttackerSourcesNext = new Map<CombatStackEntityId, CombatDisablingAbility>();
+  const paralyzedDefenderSourcesNext = new Map<CombatStackEntityId, CombatDisablingAbility>();
+  const attackerTargetLocks = new Map<CombatStackEntityId, CombatStackEntityId>();
+  const defenderTargetLocks = new Map<CombatStackEntityId, CombatStackEntityId>();
+  const attackerDestroyedTargetsSinceLock = new Map<CombatStackEntityId, CombatStackEntityId>();
+  const defenderDestroyedTargetsSinceLock = new Map<CombatStackEntityId, CombatStackEntityId>();
   let lastModifiers = initialModifiers;
 
   for (let roundIndex = 1; roundIndex <= normalized.maxRounds && !winner; roundIndex += 1) {
@@ -989,9 +1635,11 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
 
     appendSpecialBonusEvents(events, sequence, lastModifiers.attacker);
     appendSpecialBonusEvents(events, sequence, lastModifiers.defender);
+    const attackerPirateAttackEffects = resolvePirateRoundAttackAbilities(attacker, defender, events, sequence, rng);
 
     resolveSideActions(
       attacker,
+      attackerActionOrder,
       defender,
       events,
       sequence,
@@ -999,14 +1647,25 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
       activeAttackerCommander,
       activeDefenderCommander,
       rng,
+      attackerStartCounts,
+      attackerTargetLocks,
+      attackerDestroyedTargetsSinceLock,
+      false,
       paralyzedAttackerNext,
       paralyzedDefenderNext,
+      paralyzedAttackerSourcesNext,
+      paralyzedDefenderSourcesNext,
+      attackerPirateAttackEffects,
     );
-    resolveReanimator(attacker, activeAttackerCommander, events, sequence, rng);
     winner = determineWinner(attacker, defender);
-    if (!winner) {
+    const defenderCounterfireIsPossible = sideAliveCount(attacker) > 0
+      && hasDocumentedDefenderCounterfire(defender, defenderStartCounts);
+    const defenderPhaseResolved = !winner || (winner === 'attacker' && defenderCounterfireIsPossible);
+    if (defenderPhaseResolved) {
+      const defenderPirateAttackEffects = resolvePirateRoundAttackAbilities(defender, attacker, events, sequence, rng);
       resolveSideActions(
         defender,
+        defenderActionOrder,
         attacker,
         events,
         sequence,
@@ -1014,11 +1673,25 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
         activeDefenderCommander,
         activeAttackerCommander,
         rng,
+        defenderStartCounts,
+        defenderTargetLocks,
+        defenderDestroyedTargetsSinceLock,
+        true,
         paralyzedDefenderNext,
         paralyzedAttackerNext,
+        paralyzedDefenderSourcesNext,
+        paralyzedAttackerSourcesNext,
+        defenderPirateAttackEffects,
       );
-      resolveReanimator(defender, activeDefenderCommander, events, sequence, rng);
     }
+    // Revival and Reanimator both resolve after the two combat action phases.
+    // The archive supports Revival's Destroyer-based chance/amount and a
+    // per-target-stack chance approximation; Nemexia's exact RNG ordering is
+    // unavailable, so Asterion uses stable attacker-then-defender processing.
+    resolveDestroyerRevival(attacker, attackerFactionId ?? 'aegis', events, sequence, rng);
+    if (defenderPhaseResolved) resolveDestroyerRevival(defender, defenderFactionId ?? 'aegis', events, sequence, rng);
+    resolveReanimator(attacker, activeAttackerCommander, events, sequence, rng);
+    if (defenderPhaseResolved) resolveReanimator(defender, activeDefenderCommander, events, sequence, rng);
     winner = determineWinner(attacker, defender);
     eventSequence = sequence.value;
 
@@ -1038,7 +1711,7 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
     .filter((technology) => technology.effectStatus === 'unknown')
     .map((technology) => `${technology.name}: эффект не калиброван и не активирован.`)
     .concat([
-      'Дополнительные спецэффекты обычных корпусов не калиброваны и не активированы.',
+      'Неподтверждённые специальные способности обычных кораблей не активированы.',
       'Игнорирование брони у оборонных установок не калибровано и не активировано.',
     ]);
 
@@ -1090,12 +1763,41 @@ export function resolveCombat(input: CombatInput, context: CombatResolverContext
   };
 }
 
+function populationContext(side: CombatInput['attacker'], sideName: string) {
+  if (side.combatProfile?.kind === 'pirate') {
+    return { factionId: undefined, combatProfile: side.combatProfile };
+  }
+
+  const factionValue = side.factionId ?? side.participant.race;
+  const raceAliases: Readonly<Record<string, CombatFactionId>> = {
+    aegis: 'aegis',
+    synod: 'synod',
+    veyra: 'veyra',
+  };
+  const normalizedRace = typeof factionValue === 'string' ? factionValue.trim().toLocaleLowerCase() : '';
+  const factionId = isCombatFactionId(factionValue)
+    ? factionValue
+    : COMBAT_FACTIONS.find((faction) => faction.name === factionValue)?.id ?? raceAliases[normalizedRace];
+  if (!factionId) {
+    throw new Error(`Cannot calculate ${sideName} population for unknown race or faction "${String(factionValue)}".`);
+  }
+  return { factionId, combatProfile: undefined };
+}
+
 export function combatInputPopulation(input: CombatInput) {
-  const attackerFactionId = input.attacker.factionId ?? getCombatFactionId(input.attacker.participant.race);
-  const defenderFactionId = input.defender.factionId ?? getCombatFactionId(input.defender.participant.race);
+  const attackerContext = populationContext(input.attacker, 'attacker');
+  const defenderContext = populationContext(input.defender, 'defender');
   return {
-    attacker: calculateStacksPopulation([...input.attacker.ships, ...getSideCommanders(input.attacker)], attackerFactionId),
-    defenderFleet: calculateStacksPopulation([...input.defender.ships, ...getSideCommanders(input.defender)], defenderFactionId),
-    defenderDefense: calculateStacksPopulation(input.defender.defenses ?? [], defenderFactionId),
+    attacker: calculateStacksPopulation(
+      [...input.attacker.ships, ...getSideCommanders(input.attacker)],
+      attackerContext.factionId,
+      attackerContext.combatProfile,
+    ),
+    defenderFleet: calculateStacksPopulation(
+      [...input.defender.ships, ...getSideCommanders(input.defender)],
+      defenderContext.factionId,
+      defenderContext.combatProfile,
+    ),
+    defenderDefense: calculateStacksPopulation(input.defender.defenses ?? [], defenderContext.factionId, defenderContext.combatProfile),
   };
 }

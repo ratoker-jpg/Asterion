@@ -1,22 +1,55 @@
 import type { CommanderId } from './commanders.ts';
-import type { CombatEntityId, DefenseId, ShipId } from './ids.ts';
+import type { CombatEntityId, CombatStackEntityId, DefenseId, ShipId } from './ids.ts';
 import type { CombatTechnologyId, CombatTechnologyLevels } from './technologies.ts';
 import type { CombatTargetPriority } from './config.ts';
+import { COMBAT_FACTIONS, isCombatFactionId, type CombatFactionId } from './factions.ts';
 
 export const ASTERION_LOCAL_PLAYER_ID = 'player-aster';
 /** The profile fixture uses this id; keep the legacy combat id compatible. */
 export const ASTERION_PROFILE_PLAYER_ID = 'player-current';
 
-export function isAsterionLocalPlayerId(playerId: string | undefined): boolean {
+export function isAsterionLocalPlayerId(playerId: string | null | undefined): boolean {
   return playerId === ASTERION_LOCAL_PLAYER_ID || playerId === ASTERION_PROFILE_PLAYER_ID;
 }
 
 export type BattleSide = 'attacker' | 'defender';
 export type BattleWinner = BattleSide | 'draw';
-export type BattleMissionType = 'attack' | 'raid' | 'defense' | 'arena' | 'simulation';
+export const BATTLE_MISSION_TYPES = [
+  'attack',
+  'raid',
+  'defense',
+  'arena',
+  'simulation',
+  'pirate-elimination',
+  'pirate-raid',
+] as const;
+export type BattleMissionType = (typeof BATTLE_MISSION_TYPES)[number];
+export type PiratePveMissionType = Extract<BattleMissionType, 'pirate-elimination' | 'pirate-raid'>;
+
+const BATTLE_MISSION_TYPE_SET: ReadonlySet<string> = new Set(BATTLE_MISSION_TYPES);
+
+export function isBattleMissionType(value: unknown): value is BattleMissionType {
+  return typeof value === 'string' && BATTLE_MISSION_TYPE_SET.has(value);
+}
+
+export function isPiratePveMissionType(value: BattleMissionType): value is PiratePveMissionType {
+  return value === 'pirate-elimination' || value === 'pirate-raid';
+}
+
+export function isValidPiratePveDirection(missionType: PiratePveMissionType, attackerIsPirate: boolean, defenderIsPirate: boolean) {
+  return missionType === 'pirate-raid'
+    ? attackerIsPirate && !defenderIsPirate
+    : !attackerIsPirate && defenderIsPirate;
+}
+
+function isPlayableBattleRace(value: string | undefined) {
+  return typeof value === 'string'
+    && (isCombatFactionId(value) || COMBAT_FACTIONS.some((faction) => faction.name === value));
+}
+
 export type CombatActionType = 'attack' | 'ability' | 'shield' | 'status' | 'destroyed' | 'special-bonus';
 export const BATTLE_REPORT_SCHEMA_VERSION = 3;
-export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v3';
+export const COMBAT_ENGINE_VERSION = 'asterion-combat-engine-v8';
 
 export type RngProvenance = {
   mode: 'seeded' | 'recorded-sequence' | 'non-replayable';
@@ -68,7 +101,7 @@ export type BattleParticipant = {
 };
 
 export type BattleStackSnapshot = {
-  entityId: CombatEntityId;
+  entityId: CombatStackEntityId;
   countBefore: number;
   countAfter: number;
   destroyed: number;
@@ -108,9 +141,9 @@ type LifeTransition =
 export type CombatEvent = {
   sequence: number;
   actorSide: BattleSide;
-  actorEntityId: CombatEntityId;
+  actorEntityId: CombatStackEntityId;
   targetSide?: BattleSide;
-  targetEntityId?: CombatEntityId;
+  targetEntityId?: CombatStackEntityId;
   actionType: CombatActionType;
   actorCount?: number;
   targetCount?: number;
@@ -126,9 +159,11 @@ export type CombatEvent = {
   reportedBonus?: number;
   matchupStatus?: 'inferred' | 'not-calibrated';
   criticalChance?: number;
+  criticalDraw?: number;
   criticalMultiplier?: number;
   abilityChance?: number;
   abilityDraw?: number;
+  abilityBonus?: number;
   effectiveDamage?: number;
   mitigation?: number;
   weaponType?: string;
@@ -138,6 +173,7 @@ export type CombatEvent = {
   repairedCount?: number;
   repairLimit?: number;
   commanderAbilityId?: CommanderId;
+  shipAbilityId?: 'destroyer-revival' | 'shmel-freezing' | 'pirate-armor-piercing' | 'pirate-devastate' | 'pirate-artillery' | 'pirate-double-attack';
   specialBonusKind?: 'attack' | 'life' | 'armor';
   specialBonusRate?: number;
   specialBonusCap?: number;
@@ -204,6 +240,73 @@ export type BattleRepairEligibility = {
   note?: string;
 };
 
+export type BattleSiegeBlockedReason =
+  | 'NO_SURVIVING_PLANET_DESTROYER'
+  | 'BATTLE_RESULT_INELIGIBLE'
+  | 'LAST_COLONY_PROTECTED'
+  | 'ZERO_FINAL_CHANCE';
+
+export type BattleSiegeDestroyerContribution = {
+  factionId: CombatFactionId;
+  entityId: 'death-star';
+  survivors: number;
+  level: number;
+  scaledDemolitionPoints: number;
+  scaledDestructionChanceBps: number;
+  baseAttack: number;
+  baseLife: number;
+};
+
+export type BattleSiegeBuildingRoll = {
+  buildingId: string;
+  buildingName: string;
+  beforeLevel: number;
+  afterLevel: number;
+  chanceBps: number;
+  roll: number;
+  success: boolean;
+  canceledQueueItems: number;
+};
+
+export type BattleSiegeDemolition = {
+  status: 'resolved' | 'blocked';
+  blockedReason?: BattleSiegeBlockedReason;
+  rawPoints: number;
+  defenseReductionPoints: number;
+  finalPoints: number;
+  baseChanceBps: number;
+  annihilatorBonusBps: number;
+  eligibleBuildingCount: number;
+  selectedBuildingCount: number;
+  destroyedBuildingLevels: number;
+  rolls: BattleSiegeBuildingRoll[];
+};
+
+export type BattleSiegeDestruction = {
+  status: 'destroyed' | 'not-destroyed' | 'blocked';
+  blockedReason?: BattleSiegeBlockedReason;
+  rawChanceBps: number;
+  defenseReductionBps: number;
+  defenderDestroyerReductionBps: number;
+  poliasReductionBps: number;
+  finalChanceBps: number;
+  roll?: number;
+  success: boolean;
+  ownerPlanetCount: number;
+};
+
+/** Deterministic post-combat planet-siege ledger. Absent on legacy reports. */
+export type BattleSiegeReport = {
+  version: 1;
+  targetPlanetId: string;
+  targetCoordinate: string;
+  attackerDestroyers: BattleSiegeDestroyerContribution[];
+  defenderDestroyers: BattleSiegeDestroyerContribution[];
+  demolition: BattleSiegeDemolition;
+  destruction: BattleSiegeDestruction;
+  planetDestroyed: boolean;
+};
+
 export type BattleReportMetadata = {
   source: 'demo-fixture' | 'combat-resolver' | 'imported';
   note?: string;
@@ -238,6 +341,7 @@ export type BattleReport = {
   resources?: BattleResourceOutcome;
   metadata?: BattleReportMetadata;
   repairEligibility?: BattleRepairEligibility;
+  siege?: BattleSiegeReport;
 };
 
 export function normalizeBattleReport(value: unknown): BattleReport | null {
@@ -245,12 +349,18 @@ export function normalizeBattleReport(value: unknown): BattleReport | null {
   const candidate = value as Partial<BattleReport>;
   if (typeof candidate.id !== 'string'
     || typeof candidate.timestamp !== 'string'
+    || (candidate.missionType != null && !isBattleMissionType(candidate.missionType))
     || typeof candidate.roundCount !== 'number'
     || !Array.isArray(candidate.rounds)
     || !candidate.attacker
     || !candidate.defender
     || !candidate.attackerForce
     || !candidate.defenderForce) return null;
+  const missionType = candidate.missionType ?? 'simulation';
+  if (isPiratePveMissionType(missionType)
+    && !isValidPiratePveDirection(missionType, candidate.attacker.race === 'pirates', candidate.defender.race === 'pirates')) return null;
+  if (missionType === 'pirate-raid' && !isPlayableBattleRace(candidate.defender.race)) return null;
+  if (missionType === 'pirate-elimination' && !isPlayableBattleRace(candidate.attacker.race)) return null;
 
   let nextRoundIndex = 1;
   let nextSequence = 1;
@@ -295,6 +405,7 @@ export function normalizeBattleReport(value: unknown): BattleReport | null {
 
   return {
     ...candidate as BattleReport,
+    missionType,
     schemaVersion: candidate.schemaVersion ?? 1,
     engineVersion: candidate.engineVersion ?? 'legacy-battle-report',
     rounds,
@@ -359,9 +470,12 @@ export function filterBattleReports(
 export function getBattleResultForPlayer(report: BattleReport, playerId?: string) {
   if (report.winner === 'draw') return 'draw' as const;
   if (!playerId) return report.winner;
-  const playerSide = report.attacker.playerId === playerId
+  const matchesPlayer = (candidate: string | undefined) => isAsterionLocalPlayerId(playerId)
+    ? isAsterionLocalPlayerId(candidate)
+    : candidate === playerId;
+  const playerSide = matchesPlayer(report.attacker.playerId)
     ? 'attacker'
-    : report.defender.playerId === playerId
+    : matchesPlayer(report.defender.playerId)
       ? 'defender'
       : undefined;
   if (!playerSide) return report.winner;

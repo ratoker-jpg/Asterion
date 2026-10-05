@@ -19,27 +19,33 @@ import {
   type BattleHistoryState,
 } from './domain/combat/battle-repository.ts';
 import {
-  ASTERION_LOCAL_PLAYER_ID,
   filterBattleReports,
+  isAsterionLocalPlayerId,
   type BattleListMode,
   type BattleReport,
 } from './domain/combat/report.ts';
 import {
   BATTLE_MISSING_DATA,
   createBattleReportViewModel,
+  getBattlePointAwardDisplay,
   type BattleEntityKind,
   type BattleEventViewModel,
   type BattleParticipantViewModel,
   type BattleReportViewModel,
   type BattleRoundViewModel,
+  type BattleSiegeViewModel,
   type BattleSideViewModel,
   type BattleStackViewModel,
   type BattleTechnologyViewModel,
 } from './domain/combat/battle-report-view-model.ts';
 import { getFactionGeneralAsset } from './domain/profile/faction-assets.ts';
-import { ACTIVE_RUNTIME_MODE } from './domain/runtime/mode.ts';
+import { createPersistenceFacade } from './application/persistence.ts';
+import { selectRecordedBattlePointAwards } from './domain/rating/scoring.ts';
+import { ACTIVE_RUNTIME_MODE, RUNTIME_RESET_EVENT, RUNTIME_STATE_CHANGED_EVENT } from './domain/runtime/mode.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
+import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
+import { battleFactionArtIdFor } from './ui/battle-report-faction-art.ts';
 import criticalHitArt from '../assets/source/New assets/technologies/technology.shared.critical-hit.png';
 import heavyArmorArt from '../assets/source/New assets/technologies/technology.shared.heavy-armor.png';
 import ionScienceArt from '../assets/source/New assets/technologies/technology.shared.ion-science.png';
@@ -71,6 +77,19 @@ function formatKnownNumber(value: number | null | undefined) {
   return value == null ? '—' : formatNumber(value);
 }
 
+function formatBps(value: number) {
+  return `${(value / 100).toFixed(2)}%`;
+}
+
+function siegeReasonLabel(reason: string | null) {
+  return {
+    NO_SURVIVING_PLANET_DESTROYER: 'нет уцелевшего Планетолома',
+    BATTLE_RESULT_INELIGIBLE: 'исход боя не даёт права на осаду',
+    LAST_COLONY_PROTECTED: 'последняя колония защищена',
+    ZERO_FINAL_CHANCE: 'итоговый шанс равен нулю',
+  }[reason ?? ''] ?? 'не выполнено';
+}
+
 function formatBattleDate(timestamp: string, withYear = true) {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return BATTLE_MISSING_DATA;
@@ -95,15 +114,18 @@ function resultIcon(tone: BattleResultTone) {
 }
 
 function resultLabel(viewModel: BattleReportViewModel) {
-  const localSide = viewModel.attacker.participant.playerId === ASTERION_LOCAL_PLAYER_ID
+  const localSide = isAsterionLocalPlayerId(viewModel.attacker.participant.playerId)
     ? 'attacker'
-    : viewModel.defender.participant.playerId === ASTERION_LOCAL_PLAYER_ID
+    : isAsterionLocalPlayerId(viewModel.defender.participant.playerId)
       ? 'defender'
       : null;
   if (viewModel.winner === 'draw') return { label: 'НИЧЬЯ', tone: 'draw' } as const;
-  if (localSide) return viewModel.winner === localSide
-    ? { label: 'ПОБЕДА', tone: 'victory' } as const
-    : { label: 'ПОРАЖЕНИЕ', tone: 'defeat' } as const;
+  if (localSide) {
+    const suffix = viewModel.missionType === 'attack' ? (localSide === 'attacker' ? ' ПРИ АТАКЕ' : ' ПРИ ОБОРОНЕ') : '';
+    return viewModel.winner === localSide
+      ? { label: `ПОБЕДА${suffix}`, tone: 'victory' } as const
+      : { label: `ПОРАЖЕНИЕ${suffix}`, tone: 'defeat' } as const;
+  }
   return viewModel.winner === 'attacker'
     ? { label: 'ПОБЕДА АТАКУЮЩЕГО', tone: 'victory' } as const
     : { label: 'ПОБЕДА ЗАЩИТНИКА', tone: 'defeat' } as const;
@@ -116,6 +138,8 @@ function missionLabel(missionType: BattleReportViewModel['missionType']) {
     defense: 'ОБОРОНА',
     arena: 'АРЕНА',
     simulation: 'СИМУЛЯЦИЯ',
+    'pirate-elimination': 'УНИЧТОЖЕНИЕ ПИРАТОВ',
+    'pirate-raid': 'ПИРАТСКИЙ НАЛЁТ',
   }[missionType];
 }
 
@@ -173,8 +197,8 @@ function battleCardSideMeta(side: BattleSideViewModel) {
 
 function battleCardPoints(viewModel: BattleReportViewModel, side: BattleSideViewModel) {
   return side.participant.side === 'attacker'
-    ? viewModel.battlePoints.attacker
-    : viewModel.battlePoints.defender;
+    ? viewModel.awardedBattlePoints?.attacker ?? null
+    : viewModel.awardedBattlePoints?.defender ?? null;
 }
 
 function battleCardResourcePointsLost(viewModel: BattleReportViewModel, side: BattleSideViewModel) {
@@ -211,25 +235,63 @@ function LossSummary({ side, className = '' }: { side: BattleSideViewModel; clas
 }
 
 function CardPoints({ viewModel, side, className = '' }: { viewModel: BattleReportViewModel; side: BattleSideViewModel; className?: string }) {
+  const awardedPoints = battleCardPoints(viewModel, side);
+  const awardDisplay = getBattlePointAwardDisplay(viewModel.missionType, awardedPoints);
   return (
-    <div className={`battle-card-points-v1 ${className}`}>
-      <span><small>ПОЛУЧЕНО БОЕВЫХ ОЧКОВ</small><b>+{formatNumber(battleCardPoints(viewModel, side))}</b></span>
+    <div className={`battle-card-points-v1 ${className}`} data-qa-battle-award-state={awardDisplay.state}>
+      <span><small>{awardDisplay.label}</small><b>{awardDisplay.state === 'not-awarded' ? '—' : awardDisplay.points == null ? 'Не зафиксировано' : `+${formatNumber(awardDisplay.points)}`}</b></span>
       <span><small>РЕСУРСНЫЕ ОЧКИ · ПОТЕРЯНО</small><b>−{formatResourcePoints(battleCardResourcePointsLost(viewModel, side))}</b></span>
     </div>
   );
 }
 
 function CardRewards({ viewModel, className = '' }: { viewModel: BattleReportViewModel; className?: string }) {
-  const hasRewards = viewModel.debris != null || viewModel.resources.length > 0;
+  const hasRewards = viewModel.resources.length > 0;
   if (!hasRewards) return null;
   return (
     <div className={`battle-card-rewards-v1 ${className}`}>
-      <small>НАГРАДЫ И ДОБЫЧА</small>
+      <small>ДОСТАВЛЕННАЯ ДОБЫЧА</small>
       <div>
-        {viewModel.debris != null ? <span className="battle-card-reward-item-v1"><ResourceIcon kind="debris" /><b>{formatNumber(viewModel.debris)}</b><em>обломков</em></span> : null}
         {viewModel.resources.map((resource) => <span className="battle-card-reward-item-v1" key={resource.kind}><ResourceIcon kind={resource.kind} /><b>{formatNumber(resource.value)}</b><em>{resource.label.toLowerCase()}</em></span>)}
       </div>
     </div>
+  );
+}
+
+function CardOrbitDebris({ viewModel }: { viewModel: BattleReportViewModel }) {
+  if (viewModel.debrisOnOrbit == null) return null;
+  return (
+    <div className="battle-card-orbit-debris-v1" data-qa-debris-orbit>
+      <div>
+        <small>ОСТАЛИСЬ НА ОРБИТЕ</small>
+        <strong>ОБЛОМКИ НА ОРБИТЕ</strong>
+        <span>Не доставлены атакующим флотом.</span>
+      </div>
+      <span className="battle-card-reward-item-v1"><ResourceIcon kind="debris" /><b>{formatNumber(viewModel.debrisOnOrbit)}</b><em>обломков</em></span>
+    </div>
+  );
+}
+
+function CardSiegeSummary({ siege }: { siege: BattleSiegeViewModel }) {
+  const demolitionResult = siege.demolition.blockedReason
+    ? siegeReasonLabel(siege.demolition.blockedReason)
+    : `снесено уровней: ${formatNumber(siege.demolition.destroyedBuildingLevels)}`;
+  const destructionResult = siege.planetDestroyed
+    ? 'ПЛАНЕТА УНИЧТОЖЕНА'
+    : siege.destruction.blockedReason
+      ? siegeReasonLabel(siege.destruction.blockedReason)
+      : 'планета сохранена';
+  return (
+    <section className="battle-card-siege-v1" data-qa-siege-summary>
+      <header><small>ОСАДНЫЕ ЭФФЕКТЫ</small><strong>ПЛАНЕТОЛОМ</strong></header>
+      <div className="battle-card-siege-grid-v1">
+        <span><small>СНОС ЗДАНИЙ · ШАНС</small><b>{formatBps(Math.min(10_000, siege.demolition.baseChanceBps + siege.demolition.annihilatorBonusBps))}</b></span>
+        <span><small>ОЧКИ · СЫРЫЕ → ПОСЛЕ ОБОРОНЫ</small><b>{formatNumber(siege.demolition.rawPoints)} → {formatNumber(siege.demolition.finalPoints)}</b></span>
+        <span><small>ЗДАНИЯ / УРОВНИ</small><b>{formatNumber(siege.demolition.destroyedBuildingLevels)} / {formatNumber(siege.demolition.selectedBuildingCount)}</b></span>
+        <span><small>УНИЧТОЖЕНИЕ ПЛАНЕТЫ · ШАНС</small><b>{formatBps(siege.destruction.finalChanceBps)}</b></span>
+      </div>
+      <p><strong>{demolitionResult}</strong><span>{destructionResult}</span></p>
+    </section>
   );
 }
 
@@ -283,12 +345,14 @@ function BattleCardSummaryBody({ viewModel, ...actions }: BattleCardBodyProps) {
         </div>
       </div>
       <CardRewards viewModel={viewModel} />
+      <CardOrbitDebris viewModel={viewModel} />
+      {viewModel.siege ? <CardSiegeSummary siege={viewModel.siege} /> : null}
       <CardActions viewModel={viewModel} {...actions} />
     </div>
   );
 }
 
-function BattleCard({
+export function BattleCard({
   viewModel,
   saved,
   onToggleSaved,
@@ -425,13 +489,15 @@ function TechnologyBonusTable({ side }: { side: BattleSideViewModel }) {
 
 function BattleHeaderSide({ side }: { side: BattleSideViewModel }) {
   const avatar = getFactionGeneralAsset(side.factionId);
+  const battleFactionArtId = battleFactionArtIdFor(side.participant.race, side.factionId);
+  const battleIcon = asterionAssetIntegrationAssets.battleFactionIcons[battleFactionArtId];
   const participantMeta = [side.participant.coordinates, side.participant.race].filter(Boolean).join(' · ') || 'Идентификатор не зафиксирован';
   return (
     <article className={`battle-header-side-v1 ${side.participant.side}`} data-qa-battle-header-side={side.participant.side}>
       <header className="battle-header-side-head-v1">
         <div className="battle-side-identity-v1">
           <span className="battle-side-avatar-v1" data-qa-battle-side-avatar aria-hidden="true">
-            {avatar ? <FactionGeneralPortrait factionId={side.factionId} /> : <b>{battleSideInitials(side)}</b>}
+            {battleIcon ? <img className="battle-faction-icon" src={battleIcon} alt="" data-qa-battle-faction-icon={battleFactionArtId} draggable={false} /> : avatar ? <FactionGeneralPortrait factionId={side.factionId} /> : <b>{battleSideInitials(side)}</b>}
           </span>
           <div className="battle-side-copy-v1">
             <small>{sideTitle(side)}</small>
@@ -553,13 +619,15 @@ function EventCard({ event }: { event: BattleEventViewModel }) {
         {event.destroyedCount != null ? <span><small>УНИЧТОЖЕНО</small><b>{formatNumber(event.destroyedCount)}</b></span> : null}
         {event.criticalChance != null ? <span><small>КРИТИЧЕСКИЙ УДАР</small><b>{formatNumber(event.criticalChance * 100)}%{event.criticalMultiplier && event.criticalMultiplier > 1 ? ' · ×2' : ''}</b></span> : null}
         {event.abilityChance != null ? <span><small>СРАБАТЫВАНИЕ СПОСОБНОСТИ</small><b>{formatNumber(event.abilityChance * 100)}%</b></span> : null}
-        {event.repairedCount != null ? <span><small>ВОССТАНОВЛЕНО</small><b>{formatNumber(event.repairedCount)} / {formatNumber(event.repairLimit)}</b></span> : null}
+        {event.abilityBonus != null ? <span><small>ДОЛЯ ВОССТАНОВЛЕНИЯ</small><b>{formatNumber(event.abilityBonus * 100)}%</b></span> : null}
+        {event.repairedCount != null ? <span><small>ВОССТАНОВЛЕНО</small><b>{formatNumber(event.repairedCount)}{event.repairLimit != null ? ` / ${formatNumber(event.repairLimit)}` : ''}</b></span> : null}
         {event.specialBonusAmount != null ? <span><small>БОНУС НАЧАЛА РАУНДА</small><b>{formatNumber(event.specialBonusAmount * 100)}{event.specialBonusKind === 'armor' ? ' п.п.' : '%'}</b></span> : null}
         <OptionalMetric label="ЩИТ" before={event.shieldBefore} after={event.shieldAfter} />
         <OptionalMetric label="БРОНЯ" before={event.armorBefore} after={event.armorAfter} />
         <OptionalMetric label="ЖИЗНЬ" before={event.lifeBefore} after={event.lifeAfter} />
       </div>
       {event.commanderAbility ? <div className="battle-event-ability-v1">◆ {event.commanderAbility}</div> : null}
+      {event.shipAbility ? <div className="battle-event-ability-v1">◆ {event.shipAbility}</div> : null}
       {eventNote ? <p>{eventNote}</p> : null}
     </article>
   );
@@ -575,9 +643,9 @@ function OperationOutcome({ report }: { report: BattleReport }) {
       <header className="battle-section-head-v1"><div><small>ИТОГ</small><h3>РЕЗУЛЬТАТЫ ОПЕРАЦИИ</h3></div></header>
       <div>
         {report.experience != null ? <span><small>БОЕВОЙ ОПЫТ</small><strong>{formatNumber(report.experience)}</strong></span> : null}
-        {report.debris != null ? <span className="battle-outcome-resource" data-qa-resource-kind="debris"><span className="battle-outcome-resource-icon"><ResourceIcon kind="debris" /></span><small>ОБЛОМКИ</small><strong>{formatNumber(report.debris)}</strong></span> : null}
         {resourceEntries.map(([kind, label, value]) => <span className="battle-outcome-resource" key={label} data-qa-resource-kind={kind}><span className="battle-outcome-resource-icon"><ResourceIcon kind={kind} /></span><small>{label.toUpperCase()}</small><strong>{formatNumber(value!)}</strong></span>)}
       </div>
+      {report.debris != null ? <div className="battle-detail-orbit-debris-v1" data-qa-debris-orbit><span className="battle-outcome-resource-icon"><ResourceIcon kind="debris" /></span><span><small>ОСТАЛИСЬ НА ОРБИТЕ</small><strong>ОБЛОМКИ НА ОРБИТЕ · {formatNumber(report.debris)}</strong><em>Не доставлены атакующим флотом.</em></span></div> : null}
     </section>
   );
 }
@@ -878,34 +946,36 @@ function OutcomeMiniStateTable({ side, className = '' }: { side: BattleSideViewM
 
 function OutcomePointsPanel({
   sideLabel,
+  missionType,
   points,
   resourcePointsLost,
   winner,
   className = '',
 }: {
   sideLabel: string;
-  points: number;
+  missionType: BattleReportViewModel['missionType'];
+  points: number | null;
   resourcePointsLost: number;
   winner: boolean;
   className?: string;
 }) {
+  const awardDisplay = getBattlePointAwardDisplay(missionType, points);
   return (
-    <div className={`battle-outcome-points-panel-v1 ${winner ? 'winner' : ''} ${className}`} data-qa-battle-points>
-      <div><small>{sideLabel} · ПОЛУЧЕНО БОЕВЫХ ОЧКОВ</small><strong>{formatNumber(points)}</strong></div>
+    <div className={`battle-outcome-points-panel-v1 ${winner ? 'winner' : ''} ${className}`} data-qa-battle-points data-qa-battle-award-state={awardDisplay.state}>
+      <div><small>{sideLabel} · {awardDisplay.label}</small><strong>{awardDisplay.state === 'not-awarded' ? '—' : awardDisplay.points == null ? 'Не зафиксировано' : formatNumber(awardDisplay.points)}</strong></div>
       <div><small>РЕСУРСНЫЕ ОЧКИ · ПОТЕРЯНО</small><b>−{formatResourcePoints(resourcePointsLost)}</b><span>очков</span></div>
     </div>
   );
 }
 
 function OutcomeRewardStrip({ viewModel, className = '' }: { viewModel: BattleReportViewModel; className?: string }) {
-  const hasRewards = viewModel.experience != null || viewModel.debris != null || viewModel.resources.length > 0;
+  const hasRewards = viewModel.experience != null || viewModel.resources.length > 0;
   return (
     <section className={`battle-outcome-reward-strip-v1 ${className}`}>
       <header><small>НАГРАДЫ И ДОБЫЧА</small><span>ПОЛУЧЕНО ПОСЛЕ БОЯ</span></header>
       {hasRewards ? (
         <div className="battle-outcome-reward-grid-v1">
           <div><small>БОЕВОЙ ОПЫТ</small><strong>{formatKnownNumber(viewModel.experience)}</strong></div>
-          {viewModel.debris != null ? <div className="battle-outcome-reward-resource-v1" data-qa-resource-kind="debris"><span><ResourceIcon kind="debris" /></span><small>ОБЛОМКИ</small><strong>{formatNumber(viewModel.debris)}</strong></div> : null}
           {viewModel.resources.map((resource) => <div className="battle-outcome-reward-resource-v1" key={resource.kind} data-qa-resource-kind={resource.kind}><span><ResourceIcon kind={resource.kind} /></span><small>{resource.label.toUpperCase()}</small><strong>{formatNumber(resource.value)}</strong></div>)}
         </div>
       ) : <p className="battle-empty-inline-v1">Награды и ресурсы не зафиксированы в этом отчёте.</p>}
@@ -915,8 +985,8 @@ function OutcomeRewardStrip({ viewModel, className = '' }: { viewModel: BattleRe
 
 function BattleOutcomeSummary({ viewModel, result, winnerName }: { viewModel: BattleReportViewModel; result: ReturnType<typeof resultLabel>; winnerName: string | null }) {
   const sides = [
-    { side: viewModel.attacker, label: 'АТАКУЮЩИЙ', points: viewModel.battlePoints.attacker, resourcePointsLost: viewModel.battlePoints.attackerResourcePointsLost },
-    { side: viewModel.defender, label: 'ЗАЩИТНИК', points: viewModel.battlePoints.defender, resourcePointsLost: viewModel.battlePoints.defenderResourcePointsLost },
+    { side: viewModel.attacker, label: 'АТАКУЮЩИЙ', points: viewModel.awardedBattlePoints?.attacker ?? null, resourcePointsLost: viewModel.battlePoints.attackerResourcePointsLost },
+    { side: viewModel.defender, label: 'ЗАЩИТНИК', points: viewModel.awardedBattlePoints?.defender ?? null, resourcePointsLost: viewModel.battlePoints.defenderResourcePointsLost },
   ];
   return (
     <div className="battle-outcome-duel-v1">
@@ -926,11 +996,12 @@ function BattleOutcomeSummary({ viewModel, result, winnerName }: { viewModel: Ba
           <article className={`battle-outcome-duel-side-v1 ${side.participant.side} ${viewModel.winner === side.participant.side ? 'winner' : ''}`} key={side.participant.side}>
             <OutcomeSideHeader side={side} winner={viewModel.winner === side.participant.side} />
             <OutcomeMiniStateTable side={side} />
-            <OutcomePointsPanel sideLabel={label} points={points} resourcePointsLost={resourcePointsLost} winner={viewModel.winner === side.participant.side || (viewModel.winner === 'draw' && points === Math.max(viewModel.battlePoints.attacker, viewModel.battlePoints.defender))} />
+            <OutcomePointsPanel sideLabel={label} missionType={viewModel.missionType} points={points} resourcePointsLost={resourcePointsLost} winner={viewModel.winner === side.participant.side || (viewModel.winner === 'draw' && points === Math.max(viewModel.battlePoints.attacker, viewModel.battlePoints.defender))} />
           </article>
         ))}
       </div>
       <OutcomeRewardStrip viewModel={viewModel} />
+      {viewModel.debrisOnOrbit != null ? <div className="battle-detail-orbit-debris-v1" data-qa-debris-orbit><span className="battle-outcome-resource-icon"><ResourceIcon kind="debris" /></span><span><small>ОСТАЛИСЬ НА ОРБИТЕ</small><strong>ОБЛОМКИ НА ОРБИТЕ · {formatNumber(viewModel.debrisOnOrbit)}</strong><em>Не доставлены атакующим флотом.</em></span></div> : null}
     </div>
   );
 }
@@ -942,6 +1013,73 @@ function BattleOutcome({ viewModel }: { viewModel: BattleReportViewModel }) {
   return (
     <section className="battle-section-v1 battle-outcome-v1" data-qa-battle-outcome>
       <BattleOutcomeSummary viewModel={viewModel} result={result} winnerName={winnerName} />
+    </section>
+  );
+}
+
+function SiegeDestroyerList({ label, destroyers }: { label: string; destroyers: BattleSiegeViewModel['attackerDestroyers'] }) {
+  return (
+    <div className="battle-siege-contribution-v1">
+      <header><small>{label}</small><strong>ПРОФИЛИ ПЛАНЕТОЛОМОВ</strong></header>
+      {destroyers.length ? destroyers.map((destroyer, index) => (
+        <div className="battle-siege-contribution-row-v1" key={`${destroyer.factionId ?? 'unknown'}-${index}`}>
+          <span><b>{destroyer.factionId ?? BATTLE_MISSING_DATA}</b><em>уровень {formatNumber(destroyer.level)} · выжило {formatNumber(destroyer.survivors)}</em></span>
+          <span><small>ОЧКИ / ШАНС</small><strong>{formatNumber(destroyer.scaledDemolitionPoints)} / {formatBps(destroyer.scaledDestructionChanceBps)}</strong></span>
+          <span><small>АТАКА / ЖИЗНЬ · БАЗА</small><strong>{formatNumber(destroyer.baseAttack)} / {formatNumber(destroyer.baseLife)}</strong></span>
+        </div>
+      )) : <p className="battle-siege-empty-v1">Планетоломы не зафиксированы.</p>}
+    </div>
+  );
+}
+
+function BattleSiegeDetail({ viewModel }: { viewModel: BattleReportViewModel }) {
+  const siege = viewModel.siege;
+  if (!siege) return null;
+  const demolition = siege.demolition;
+  const destruction = siege.destruction;
+  return (
+    <section className="battle-section-v1 battle-siege-detail-v1" data-qa-siege-detail>
+      <header className="battle-section-head-v1"><div><small>ПОСЛЕ БОЯ</small><h3>ОСАДА ПЛАНЕТЫ</h3></div><span>{siege.targetCoordinate ?? BATTLE_MISSING_DATA}</span></header>
+      <div className="battle-siege-contributions-v1">
+        <SiegeDestroyerList label="АТАКУЮЩИЙ" destroyers={siege.attackerDestroyers} />
+        <SiegeDestroyerList label="ЗАЩИТНИК" destroyers={siege.defenderDestroyers} />
+      </div>
+      <div className="battle-siege-ledger-v1">
+        <article>
+          <header><small>ДЕМОЛИЦИЯ</small><strong>РАЗРУШЕНИЕ ЗДАНИЙ</strong></header>
+          <div className="battle-siege-metrics-v1">
+            <span><small>СЫРЫЕ ОЧКИ</small><b>{formatNumber(demolition.rawPoints)}</b></span>
+            <span><small>СНИЖЕНО ОБОРОНОЙ</small><b>−{formatNumber(demolition.defenseReductionPoints)}</b></span>
+            <span><small>ИТОГОВЫЕ ОЧКИ</small><b>{formatNumber(demolition.finalPoints)}</b></span>
+            <span><small>ШАНС / ANNIHILATOR</small><b>{formatBps(demolition.baseChanceBps)} / +{formatBps(demolition.annihilatorBonusBps)}</b></span>
+          </div>
+          <div className="battle-siege-table-v1">
+            <div className="battle-siege-table-head-v1"><span>ЗДАНИЕ</span><span>УРОВЕНЬ</span><span>ШАНС / БРОСОК</span><span>РЕЗУЛЬТАТ</span></div>
+            {demolition.rolls.length ? demolition.rolls.map((roll) => (
+              <div className="battle-siege-table-row-v1" key={roll.buildingId}>
+                <strong>{roll.buildingName}</strong>
+                <span>{formatNumber(roll.beforeLevel)} → {formatNumber(roll.afterLevel)}</span>
+                <span>{formatBps(roll.chanceBps)} / {(roll.roll * 100).toFixed(2)}%</span>
+                <b className={roll.success ? 'success' : 'fail'}>{roll.success ? 'СНЕСЕНО' : 'СОХРАНЕНО'}</b>
+              </div>
+            )) : <p className="battle-siege-empty-v1">Броски по зданиям не проводились.</p>}
+          </div>
+          <p className="battle-siege-status-v1">{demolition.blockedReason ? siegeReasonLabel(demolition.blockedReason) : `Выбрано зданий: ${formatNumber(demolition.selectedBuildingCount)} · затронуто уровней: ${formatNumber(demolition.destroyedBuildingLevels)}.`}</p>
+        </article>
+        <article>
+          <header><small>РАЗРУШЕНИЕ ПЛАНЕТЫ</small><strong>{siege.planetDestroyed ? 'ПЛАНЕТА УНИЧТОЖЕНА' : 'ПЛАНЕТА СОХРАНЕНА'}</strong></header>
+          <div className="battle-siege-metrics-v1">
+            <span><small>СЫРОЙ ШАНС</small><b>{formatBps(destruction.rawChanceBps)}</b></span>
+            <span><small>СНИЖЕНО ОБОРОНОЙ</small><b>−{formatBps(destruction.defenseReductionBps)}</b></span>
+            <span><small>СНИЖЕНО ПЛАНЕТОЛОМАМИ</small><b>−{formatBps(destruction.defenderDestroyerReductionBps)}</b></span>
+            <span><small>POLIAS</small><b>−{formatBps(destruction.poliasReductionBps)}</b></span>
+            <span><small>ИТОГОВЫЙ ШАНС</small><b>{formatBps(destruction.finalChanceBps)}</b></span>
+            <span><small>БРОСОК</small><b>{destruction.roll == null ? '—' : `${(destruction.roll * 100).toFixed(2)}%`}</b></span>
+          </div>
+          <p className="battle-siege-status-v1">{destruction.blockedReason ? siegeReasonLabel(destruction.blockedReason) : destruction.success ? 'Бросок успешен: цель удалена из авторитетного реестра.' : 'Бросок не достиг итогового шанса: цель сохранена.'}</p>
+          <p className="battle-siege-orbit-note-v1">Обычные обломки боя остаются на орбите и не превращаются в дополнительную награду за уничтожение планеты.</p>
+        </article>
+      </div>
     </section>
   );
 }
@@ -959,6 +1097,7 @@ export function BattleReportDetailBody({
   return (
     <>
       <BattleOutcome viewModel={viewModel} />
+      <BattleSiegeDetail viewModel={viewModel} />
       <PopulationPanel viewModel={viewModel} />
       <CommanderSnapshot viewModel={viewModel} />
       <BattleVisualReport viewModel={viewModel} scrollRef={scrollRef} />
@@ -1064,20 +1203,38 @@ export function BattleReportModal({
 
 export function BattleReportsView({ planetName, coords, onBack }: { planetName: string; coords: string; onBack: () => void }) {
   const [history, setHistory] = useState<BattleHistoryState>(() => readBattleHistory(undefined, ACTIVE_RUNTIME_MODE));
+  const [saveState, setSaveState] = useState(() => createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read());
   const [mode, setMode] = useState<BattleListMode>('recent');
   const [openReportId, setOpenReportId] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<SaveNotice>({ kind: 'saved', message: '✓ Автосохранение активно' });
   const closeReport = useCallback(() => setOpenReportId(null), []);
 
   useEffect(() => {
-    const sync = () => setHistory(readBattleHistory(undefined, ACTIVE_RUNTIME_MODE));
+    const sync = () => {
+      setHistory(readBattleHistory(undefined, ACTIVE_RUNTIME_MODE));
+      setSaveState(createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read());
+    };
+    const onRuntimeReset = () => {
+      setOpenReportId(null);
+      setMode('recent');
+      setSaveNotice({ kind: 'saved', message: '✓ Автосохранение активно' });
+      window.setTimeout(sync, 0);
+    };
     window.addEventListener(BATTLE_HISTORY_CHANGED_EVENT, sync);
-    return () => window.removeEventListener(BATTLE_HISTORY_CHANGED_EVENT, sync);
+    window.addEventListener(RUNTIME_STATE_CHANGED_EVENT, sync);
+    window.addEventListener(RUNTIME_RESET_EVENT, onRuntimeReset);
+    return () => {
+      window.removeEventListener(BATTLE_HISTORY_CHANGED_EVENT, sync);
+      window.removeEventListener(RUNTIME_STATE_CHANGED_EVENT, sync);
+      window.removeEventListener(RUNTIME_RESET_EVENT, onRuntimeReset);
+    };
   }, []);
 
   const viewModels = useMemo(
-    () => new Map(history.reports.map((report) => [report.id, createBattleReportViewModel(report)])),
-    [history.reports],
+    () => new Map(history.reports.map((report) => [report.id, createBattleReportViewModel(report, {
+      awardedBattlePoints: selectRecordedBattlePointAwards(saveState.rating, report, saveState.profile.playerId),
+    })])),
+    [history.reports, saveState],
   );
   const visibleReports = useMemo(
     () => filterBattleReports(history.reports, history.savedReportIds, mode)

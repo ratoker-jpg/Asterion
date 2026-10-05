@@ -1,5 +1,49 @@
 
 import type { SpyHunterNotice, SpyReportSnapshot } from '../espionage/types.ts';
+import type { CombatFactionId } from '../combat/factions.ts';
+import type { ShipId } from '../combat/ids.ts';
+
+export type OrdinaryShipId = Exclude<ShipId, 'solar-satellite'>;
+
+export type OverpopulationShipLoss = {
+  shipId: OrdinaryShipId;
+  count: number;
+};
+
+/** Final, persisted summary emitted once when a planet's overpopulation episode ends. */
+export type OverpopulationEpisodeReport = {
+  id: string;
+  planetId: string;
+  planetName: string;
+  factionId: CombatFactionId;
+  populationBefore: number;
+  populationAfter: number;
+  capacity: number;
+  episodeStartedAt: number;
+  episodeEndedAt: number;
+  removedShips: OverpopulationShipLoss[];
+};
+
+/** Persisted summary of one recycler mission arrival. */
+export type RecyclerArrivalReport = {
+  id: `recycler-arrival:${string}`;
+  flightId: string;
+  coordinate: { galaxy: number; system: number; position: number };
+  arrivedAtMs: number;
+  collectedDebris: number;
+  remainingOrbitalDebris: number;
+};
+
+/** Persisted result of one gas-extraction mission arrival. */
+export type GasExtractionArrivalReport = {
+  id: `gas-extraction-arrival:${string}`;
+  flightId: string;
+  coordinate: { galaxy: number; system: number; position: number };
+  arrivalAt: number;
+  outcome: 'found' | 'missed';
+  gasCollected: number;
+  scrapCollected: number;
+};
 
 export type ReportCategory =
   | 'system'
@@ -12,7 +56,7 @@ export type ReportCategory =
 
 export type ReportFilter = 'all' | 'unread' | 'saved';
 export type ReportStatusTone = 'success' | 'danger' | 'warning' | 'info' | 'neutral';
-export type ReportSource = 'combat' | 'operations' | 'command' | 'espionage';
+export type ReportSource = 'combat' | 'operations' | 'command' | 'espionage' | 'overpopulation' | 'recycling' | 'gas-extraction';
 
 export type ReportDetail = {
   label: string;
@@ -45,6 +89,7 @@ export type ReportItem = {
   commandOperationId?: string;
   spyReport?: SpyReportSnapshot;
   spyHunterNotice?: SpyHunterNotice;
+  overpopulationReport?: OverpopulationEpisodeReport;
   action?: ReportAction;
   secondaryAction?: ReportAction;
 };
@@ -52,6 +97,12 @@ export type ReportItem = {
 export type ReportsState = {
   readIds: string[];
   hiddenIds: string[];
+  /** Optional for backwards compatibility with existing save envelopes. */
+  overpopulationReports?: OverpopulationEpisodeReport[];
+  /** Optional for backwards compatibility with existing save envelopes. */
+  recyclerArrivalReports?: RecyclerArrivalReport[];
+  /** Optional for backwards compatibility with existing save envelopes. */
+  gasExtractionArrivalReports?: GasExtractionArrivalReport[];
 };
 
 export type ReportsCategoryKey = ReportCategory;

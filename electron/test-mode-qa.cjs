@@ -157,9 +157,15 @@ async function seedTestRuntime(win, changes = {}) {
       planet.spaceportUpgrades = ${JSON.stringify(changes.spaceport)};
     }
     if (${changes.resourceClock ? 'true' : 'false'}) save.resourceClock = ${JSON.stringify(changes.resourceClock)};
-    save.metal = ${changes.metal ?? 1_000_000};
-    save.minerals = ${changes.minerals ?? 1_000_000};
-    save.gas = ${changes.gas ?? 1_000_000};
+    const resourceWallet = {
+      metal: ${changes.metal ?? 1_000_000},
+      minerals: ${changes.minerals ?? 1_000_000},
+      gas: ${changes.gas ?? 1_000_000},
+    };
+    planet.resources = { ...(planet.resources || {}), ...resourceWallet };
+    save.metal = resourceWallet.metal;
+    save.minerals = resourceWallet.minerals;
+    save.gas = resourceWallet.gas;
     planet.energy = ${changes.energy ?? 1_000_000};
     localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
     return true;
@@ -573,8 +579,20 @@ async function runViewport(width, height) {
     const ordinaryFull = await win.webContents.executeJavaScript(`(() => { const row = document.querySelector('[data-qa-spaceport-card="scout"]'); return { disabled: Boolean(row?.querySelector('[data-qa-spaceport-upgrade]')?.disabled), positions: Array.from(row?.querySelectorAll('[data-qa-spaceport-queued-position]') ?? []).map((node) => node.getAttribute('data-qa-spaceport-queued-position')) }; })()`);
     if (!ordinaryFull.disabled || JSON.stringify(ordinaryFull.positions) !== JSON.stringify(['1', '2', '3'])) throw new Error(`${label}: ordinary Spaceport queue contract failed ${JSON.stringify(ordinaryFull)}`);
     await click(win, '[data-qa-spaceport-tab="commanders"]');
-    for (let index = 0; index < 2; index += 1) await click(win, '[data-qa-spaceport-upgrade="corsair"]');
-    await waitFor(win, `document.querySelector('[data-qa-spaceport-queue-count]')?.getAttribute('data-qa-spaceport-queue-count') === '2/3'`);
+    await waitFor(win, `document.querySelector('[data-qa-spaceport-upgrades][data-qa-spaceport-track="commanders"]')`);
+    for (let index = 0; index < 2; index += 1) {
+      await click(win, '[data-qa-spaceport-upgrade="corsair"]');
+      const expectedLength = index + 1;
+      const queueStateExpression = `(() => { try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}'); const queues = save?.planets?.['helion-01']?.spaceportUpgrades; return queues?.shipQueue?.length === 3 && queues?.commanderQueue?.length === ${expectedLength}; } catch { return false; } })()`;
+      const commanderCountExpression = `document.querySelector('[data-qa-spaceport-upgrades][data-qa-spaceport-track="commanders"] [data-qa-spaceport-queue-count]')?.getAttribute('data-qa-spaceport-queue-count') === '${expectedLength}/3'`;
+      try {
+        await waitFor(win, queueStateExpression);
+        await waitFor(win, commanderCountExpression);
+      } catch (error) {
+        const diagnostic = await win.webContents.executeJavaScript(`(() => { try { const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}'); const queues = save?.planets?.['helion-01']?.spaceportUpgrades; const root = document.querySelector('[data-qa-spaceport-upgrades]'); return { track: root?.getAttribute('data-qa-spaceport-track') || '', displayedCount: root?.querySelector('[data-qa-spaceport-queue-count]')?.getAttribute('data-qa-spaceport-queue-count') || '', shipQueueLength: queues?.shipQueue?.length ?? -1, commanderQueueLength: queues?.commanderQueue?.length ?? -1 }; } catch (cause) { return { diagnosticError: String(cause) }; } })()`);
+        throw new Error(`${label}: Commander Spaceport queue did not reach ${expectedLength}/3: ${JSON.stringify(diagnostic)} (${error.message})`);
+      }
+    }
     await capture(win, directory, 'test-spaceport-both-queues');
 
     const afterQueues = await readEnvelope(win, TEST_KEY);
@@ -592,7 +610,7 @@ async function runViewport(width, height) {
     const offlineOnce = await readEnvelope(win, TEST_KEY);
     await reload(win, 'test');
     const offlineTwice = await readEnvelope(win, TEST_KEY);
-    if (offlineOnce.planets['helion-01'].spaceportUpgrades.shipLevels.scout !== 1 || offlineTwice.planets['helion-01'].spaceportUpgrades.shipLevels.scout !== 1) throw new Error(`${label}: Spaceport offline completion was not exact-once`);
+    if (offlineOnce.shipUpgradeLevels.scout !== 1 || offlineTwice.shipUpgradeLevels.scout !== 1) throw new Error(`${label}: Spaceport offline completion was not exact-once`);
 
     const maxSpaceport = { shipLevels: { scout: 10, corsair: 40 }, shipQueue: [], commanderQueue: [] };
     await seedTestRuntime(win, { buildings: { construction: 1, research: 1, spaceport: 1, shipyard: 1 }, scienceLevels: { 4: 1 }, spaceport: maxSpaceport });
@@ -614,7 +632,7 @@ async function runViewport(width, height) {
     if (JSON.stringify(fleetRoot.fleetRoster) !== JSON.stringify(expectedFleetRoster)) throw new Error(`${label}: current fleet roster UI mismatch ${JSON.stringify(fleetRoot.fleetRoster)}`);
     if (fleetRoot.fleetBaseCardTag === 'BUTTON') throw new Error(`${label}: fleet base card must be informational, not a button`);
     if (fleetRoot.fleetRosterOverflow || fleetRoot.fleetRosterOverflowY !== 'visible') throw new Error(`${label}: fleet roster still owns an internal scrollbar ${JSON.stringify(fleetRoot)}`);
-    const expectedFleetFlightActions = ['ШПИОНСКИЕ ОТЧЁТЫ'];
+    const expectedFleetFlightActions = ['ШПИОНСКИЕ ОТЧЁТЫ', 'ЗАПУСТИТЬ АТАКУ BOT 01'];
     if (JSON.stringify(fleetRoot.fleetFlightActions.map((action) => action.text)) !== JSON.stringify(expectedFleetFlightActions) || fleetRoot.fleetFlightActions.some((action) => action.bottom > fleetRoot.fleetFlightPanelBottom + 2 || action.bottom <= action.top)) {
       throw new Error(`${label}: fleet flight action buttons are clipped or missing ${JSON.stringify(fleetRoot)}`);
     }

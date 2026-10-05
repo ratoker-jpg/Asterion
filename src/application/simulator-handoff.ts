@@ -1,6 +1,6 @@
 import { createDefaultCombatTechnologies, COMBAT_TECHNOLOGIES, normalizeCombatTechnologies } from '../domain/combat/technologies.ts';
 import { createEmptySimulatorScenario, type CombatStackInput, type SimulatorScenario } from '../domain/combat/simulator.ts';
-import type { SaveState } from './contracts.ts';
+import { getOwnerShipUpgradeLevels, type SaveState } from './contracts.ts';
 import type { SpyReportSnapshot } from '../domain/espionage/types.ts';
 import type { CombatEntityId } from '../domain/combat/ids.ts';
 
@@ -22,9 +22,14 @@ function stacksFromRecord(
 }
 
 function commandersFromReport(report: SpyReportSnapshot): CombatStackInput[] {
-  return Object.entries(report.commanders ?? {}).flatMap(([entityId, value]) => entityId === 'hunter' || !value || value.count <= 0
+  return Object.entries(report.commanders ?? {}).flatMap(([entityId, value]) => !value || value.count <= 0
     ? []
-    : [{ entityId: entityId as CombatEntityId, count: value.count, level: value.level }]);
+    : [{ entityId: entityId as CombatEntityId, count: 1, level: value.level }]);
+}
+
+function handoffActiveCommander(stacks: readonly CombatStackInput[]): SimulatorScenario['attacker']['activeCommanderId'] {
+  const hunter = stacks.find((stack) => stack.entityId === 'hunter' && stack.count > 0);
+  return (hunter ?? stacks.find((stack) => stack.count > 0))?.entityId as SimulatorScenario['attacker']['activeCommanderId'] ?? null;
 }
 
 function technologiesFromScience(state: SaveState) {
@@ -46,7 +51,7 @@ export function createSimulatorScenarioFromSpyReport(state: SaveState, report: S
   const currentPlanet = state.planets[state.currentPlanetId];
   const attackerShips = currentPlanet?.fleet.ships ?? {};
   const attackerCommanders = currentPlanet?.fleet.commanders ?? {};
-  const attackerLevels = currentPlanet?.spaceportUpgrades.shipLevels ?? {};
+  const attackerLevels = getOwnerShipUpgradeLevels(state);
   const attackerTech = technologiesFromScience(state);
   const defenderTech = state.espionage?.bot01Profile
     ? technologiesFromLevels(state.espionage.bot01Profile.scienceLevels)
@@ -65,7 +70,7 @@ export function createSimulatorScenarioFromSpyReport(state: SaveState, report: S
       ships: stacksFromRecord(attackerShips, [], attackerLevels),
       commanders: attackerCommanderStacks,
       commander: attackerCommanderStacks[0] ?? null,
-      activeCommanderId: (attackerCommanderStacks[0]?.entityId as SimulatorScenario['attacker']['activeCommanderId']) ?? null,
+      activeCommanderId: handoffActiveCommander(attackerCommanderStacks),
     },
     defender: {
       ...scenario.defender,
@@ -73,7 +78,7 @@ export function createSimulatorScenarioFromSpyReport(state: SaveState, report: S
       ships: stacksFromRecord(report.fleet ?? {}, ['spy-probe'], report.fleetLevels ?? {}),
       commanders: defenderCommanderStacks,
       commander: defenderCommanderStacks[0] ?? null,
-      activeCommanderId: (defenderCommanderStacks[0]?.entityId as SimulatorScenario['defender']['activeCommanderId']) ?? null,
+      activeCommanderId: handoffActiveCommander(defenderCommanderStacks),
       defenses: stacksFromRecord(report.defense ?? {}),
     },
   };

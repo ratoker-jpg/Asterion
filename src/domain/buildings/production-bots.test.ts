@@ -100,3 +100,23 @@ test('10 applied bots give exactly +60% metal, +50% minerals and +40% gas', () =
     gas: 140,
   });
 });
+
+test('bot bonuses preserve exact economy golden arithmetic and fractional income', () => {
+  const applied: BotAssignment = { metal: 10, minerals: 10, gas: 10 };
+  assert.deepEqual(getProductionBotIncomePerHour({
+    metal: 3_368_700,
+    minerals: 2_245_800,
+    gas: 1_497_300,
+  }, applied), {
+    metal: 5_389_920,
+    minerals: 3_368_700,
+    gas: 2_096_220,
+  });
+
+  const fractional = getProductionBotIncomePerHour({ metal: 1.25, minerals: 1.25, gas: 1.25 }, {
+    metal: 1,
+    minerals: 1,
+    gas: 1,
+  });
+  assert.deepEqual(fractional, { metal: 1.325, minerals: 1.3125, gas: 1.3 });
+});

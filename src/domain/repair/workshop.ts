@@ -10,7 +10,7 @@ import {
 import {
   DEFENSE_IDS,
   SHIP_IDS,
-  type CombatEntityId,
+  type CombatStackEntityId,
   type DefenseId,
   type ShipId,
 } from '../combat/ids.ts';
@@ -25,6 +25,7 @@ import {
   type OwnedDefenseState,
 } from '../fleet/production.ts';
 import type { OwnedFleetState } from '../fleet/runtime.ts';
+import { isPirateShipId } from '../combat/side-entity.ts';
 
 export type RepairCategory = 'ship' | 'defense';
 export type RepairPaymentMethod = 'resources' | 'tokens';
@@ -550,10 +551,23 @@ function addLoss(
   record[entityId] = (record[entityId] ?? 0) + quantity;
 }
 
-export function calculateRepairLosses(report: BattleReport): RepairBattleLosses {
-  const eligible = report.missionType === 'defense'
+export type RepairBattleLossOptions = {
+  /** Attack arrival may claim the remote defender's repair pool in Test Mode. */
+  allowAttackDefender?: boolean;
+};
+
+export function calculateRepairLosses(
+  report: BattleReport,
+  options: RepairBattleLossOptions = {},
+): RepairBattleLosses {
+  const localDefense = report.missionType === 'defense'
     && isAsterionLocalPlayerId(report.defender.playerId)
     && report.defender.side === 'defender';
+  const attackDefender = options.allowAttackDefender === true
+    && report.missionType === 'attack'
+    && report.defender.side === 'defender'
+    && !isAsterionLocalPlayerId(report.defender.playerId);
+  const eligible = localDefense || attackDefender;
   if (!eligible) {
     return {
       eligible: false,
@@ -565,9 +579,10 @@ export function calculateRepairLosses(report: BattleReport): RepairBattleLosses 
 
   const ships: Partial<Record<ShipId, number>> = {};
   const defenses: Partial<Record<DefenseId, number>> = {};
-  const addSnapshot = (entityId: CombatEntityId, destroyed: number) => {
+  const addSnapshot = (entityId: CombatStackEntityId, destroyed: number) => {
     // Reports can outlive a catalog revision. Unknown snapshots are kept in
     // the report but do not make the application transition throw.
+    if (isPirateShipId(entityId)) return;
     const entity = COMBAT_ENTITY_BY_ID.get(entityId);
     if (!entity) return;
     const quantity = recoverableFromDestroyed(safeDestroyed(destroyed));
@@ -593,8 +608,9 @@ export function calculateRepairLosses(report: BattleReport): RepairBattleLosses 
 export function claimDefensiveBattleRepair(
   repair: RepairWorkshopState,
   report: BattleReport,
+  options: RepairBattleLossOptions = {},
 ): RepairBattleClaimTransition {
-  const losses = calculateRepairLosses(report);
+  const losses = calculateRepairLosses(report, options);
   if (typeof report.id !== 'string' || !report.id.trim()) {
     return { ok: false, changed: false, state: repair, losses, reason: 'Боевой отчёт не содержит идентификатор.' };
   }
@@ -640,7 +656,9 @@ export function annotateBattleReportRepair(
     defenseUnits: claim.losses.defenses,
     note: claim.losses.reason ?? (total > 0
       ? '50% уничтоженных единиц добавлено в ремонтный пул.'
-      : 'В оборонительном бою не было подходящих уничтоженных кораблей или обороны.'),
+      : report.missionType === 'attack'
+        ? 'В атаке не было подходящих уничтоженных кораблей или обороны защитника.'
+        : 'В оборонительном бою не было подходящих уничтоженных кораблей или обороны.'),
   };
   const previous = report.repairEligibility;
   if (

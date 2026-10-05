@@ -4,10 +4,11 @@ import type { CombatFactionId } from '../combat/factions.ts';
 import type { OwnedDefenseState } from '../fleet/production.ts';
 import type { OwnedFleetState } from '../fleet/runtime.ts';
 import type { TargetRelation } from '../flights/types.ts';
-import type { ScienceLevels } from '../buildings/resource-zone.ts';
+import type { BuildingQueueItem, ScienceLevels } from '../buildings/resource-zone.ts';
 import type { UniverseCoordinate, UniverseOwnerAlliance } from '../universe/types.ts';
+import type { RepairWorkshopState } from '../repair/workshop.ts';
 
-export type SpyMissionStatus = 'transit' | 'orbiting' | 'returning' | 'returned' | 'destroyed';
+export type SpyMissionStatus = 'transit' | 'orbiting' | 'returning' | 'returned' | 'destroyed' | 'target-destroyed';
 export type SpyReportQuality = 'basic' | 'detailed' | 'full';
 export type SpyTargetRelation = Extract<TargetRelation, 'enemy' | 'neutral'>;
 
@@ -52,6 +53,15 @@ export type SpyOwnerProfile = {
 /** Backward-compatible name for the Test Mode Bot 01 profile. */
 export type Bot01Profile = SpyOwnerProfile;
 
+/** One explicit, persisted Test Mode demonstration; absence means not started. */
+export type Bot01IncomingScenario = {
+  version: 1;
+  status: 'in-flight' | 'resolved' | 'failed';
+  flightId: string;
+  targetPlanetId: string;
+  startedAt: number;
+};
+
 export type SpyTargetState = {
   id: string;
   name: string;
@@ -70,11 +80,26 @@ export type SpyTargetState = {
   commanders: Partial<Record<CommanderId, SpyCommanderSnapshot>>;
   population: SpyPlanetPopulation;
   hunterLevel: number;
-  debris: number;
+  /**
+   * Legacy mirror accepted only while migrating old saves. The canonical
+   * target-orbit debris ledger is resources.debris.
+   */
+  debris?: number;
   /** Optional owner profile for injected non-Bot targets. */
   ownerProfile?: SpyOwnerProfile;
   /** Legacy per-planet experiment; migrated away in favor of ownerProfile. */
   shipLevels?: Partial<Record<ShipId, number>>;
+  /** Test-mode target repair pool; production saves never materialize Bot 01. */
+  repair?: RepairWorkshopState;
+  /** Optional authoritative queue for injected targets; demolition cancels affected entries without refund. */
+  buildingQueue?: BuildingQueueItem[];
+  /** Migration-safe escape hatch for future endgame buildings absent from the current catalog. */
+  endgameLockedBuildings?: string[];
+  /** Independent target economy clock, persisted with the authoritative target. */
+  resourceClock?: {
+    lastReconciledAt: number;
+    remainder: { metal: number; minerals: number; gas: number };
+  };
 };
 
 /** Backward-compatible name for old Test Mode saves and tests. */
@@ -120,6 +145,18 @@ export type SpyHunterNotice = {
   hunterLevel: number;
 };
 
+/** Debris survives target runtime deletion and remains addressable by orbit. */
+export type OrbitalDebrisRecord = {
+  id: string;
+  targetPlanetId: string;
+  targetPlanetName: string;
+  targetOwnerId: string;
+  targetCoordinate: UniverseCoordinate;
+  debris: number;
+  createdAt: number;
+  reportId?: string;
+};
+
 export type SpyMission = {
   id: string;
   flightId: string;
@@ -143,6 +180,8 @@ export type SpyMission = {
   nextReportAt?: number;
   returnedAt?: number;
   destroyedAt?: number;
+  /** Retained after the physical probe returns so the terminal cause is auditable. */
+  targetDestroyedAt?: number;
   reportIds: string[];
 };
 
@@ -150,10 +189,14 @@ export type EspionageState = {
   missions: SpyMission[];
   reports: SpyReportSnapshot[];
   hunterNotices: SpyHunterNotice[];
+  /** Separate orbital ledger; it is not deleted with a destroyed target runtime. */
+  orbitalDebris?: Record<string, OrbitalDebrisRecord>;
   /** Authoritative registry of resolvable planet owners. Test Mode injects Bot 01 here. */
   targets?: Record<string, SpyTargetState>;
   /** Legacy Test Mode alias. New runtime code must resolve through `targets`. */
   bot01Planets?: Record<string, Bot01PlanetState>;
   /** Test-only owner-wide Bot 01 upgrades and technologies. */
   bot01Profile?: Bot01Profile;
+  /** The demonstration is only launched by an explicit Test Mode action. */
+  bot01IncomingScenario?: Bot01IncomingScenario;
 };

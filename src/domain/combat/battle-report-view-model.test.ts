@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { DEMO_BATTLE_REPORTS } from './battle-fixtures.ts';
-import { BATTLE_MISSING_DATA, createBattleReportViewModel } from './battle-report-view-model.ts';
+import { PIRATE_CATALOG_BY_ID } from '../pirates/catalog.ts';
+import { BATTLE_MISSING_DATA, createBattleReportViewModel, getBattlePointAwardDisplay } from './battle-report-view-model.ts';
 
 test('view model exposes losses, rewards, and every saved round snapshot', () => {
   const viewModel = createBattleReportViewModel(DEMO_BATTLE_REPORTS[0]);
@@ -15,8 +16,73 @@ test('view model exposes losses, rewards, and every saved round snapshot', () =>
   assert.equal(viewModel.defender.losses.defenses, 51);
   assert.equal(viewModel.experience, 84);
   assert.equal(viewModel.debris, 291_027);
+  assert.equal(viewModel.debrisOnOrbit, 291_027);
   assert.deepEqual(viewModel.resources.map((resource) => resource.kind), ['metal', 'minerals', 'gas']);
   assert.deepEqual(viewModel.attacker.modifiers.map((modifier) => modifier.label), ['Построение', 'Командирский snapshot']);
+});
+
+test('battle report view model exposes persisted awards and leaves legacy reports unawarded', () => {
+  const legacy = createBattleReportViewModel(DEMO_BATTLE_REPORTS[0]);
+  const awarded = createBattleReportViewModel(DEMO_BATTLE_REPORTS[0], {
+    awardedBattlePoints: { attacker: 84, defender: 19 },
+  });
+
+  assert.equal(legacy.awardedBattlePoints, null);
+  assert.deepEqual(awarded.awardedBattlePoints, { attacker: 84, defender: 19 });
+  assert.notEqual(awarded.awardedBattlePoints.attacker, awarded.battlePoints.attacker);
+});
+
+test('view model keeps both pirate battle directions and the pirate side', () => {
+  const source = DEMO_BATTLE_REPORTS[0]!;
+  const elimination = createBattleReportViewModel({
+    ...source,
+    missionType: 'pirate-elimination',
+    defender: { ...source.defender, race: 'pirates' },
+  });
+  const raid = createBattleReportViewModel({
+    ...source,
+    missionType: 'pirate-raid',
+    attacker: { ...source.attacker, race: 'pirates' },
+  });
+
+  assert.equal(elimination.missionType, 'pirate-elimination');
+  assert.equal(elimination.defender.participant.race, 'pirates');
+  assert.equal(raid.missionType, 'pirate-raid');
+  assert.equal(raid.attacker.participant.race, 'pirates');
+});
+
+test('pirate fleet losses show catalog resource points and the PvE no-award status', () => {
+  const source = DEMO_BATTLE_REPORTS[0]!;
+  const destroyedPirateFleet = [{ entityId: 'pirate-hound', countBefore: 3, countAfter: 1, destroyed: 2 }];
+  const expectedResourcePoints = 2 * (
+    PIRATE_CATALOG_BY_ID['pirate-hound'].cost.metal
+    + PIRATE_CATALOG_BY_ID['pirate-hound'].cost.minerals
+    + PIRATE_CATALOG_BY_ID['pirate-hound'].cost.gas
+  ) / 1_000;
+  const raid = createBattleReportViewModel({
+    ...source,
+    missionType: 'pirate-raid',
+    attacker: { ...source.attacker, race: 'pirates' },
+    attackerForce: { ...source.attackerForce, stacks: destroyedPirateFleet },
+  });
+  const elimination = createBattleReportViewModel({
+    ...source,
+    missionType: 'pirate-elimination',
+    defender: { ...source.defender, race: 'pirates' },
+    defenderForce: { ...source.defenderForce, stacks: destroyedPirateFleet, defenses: [] },
+  });
+
+  assert.equal(raid.battlePoints.attackerResourcePointsLost, expectedResourcePoints);
+  assert.equal(elimination.battlePoints.defenderResourcePointsLost, expectedResourcePoints);
+  for (const missionType of ['pirate-raid', 'pirate-elimination'] as const) {
+    assert.deepEqual(getBattlePointAwardDisplay(missionType, null), {
+      state: 'not-awarded',
+      label: 'БОЕВЫЕ ОЧКИ НЕ НАЧИСЛЯЮТСЯ',
+      points: null,
+    });
+  }
+  assert.equal(getBattlePointAwardDisplay('attack', null).label, 'НЕТ ЗАПИСИ О НАЧИСЛЕНИИ');
+  assert.equal(getBattlePointAwardDisplay('attack', 0).label, 'ПОЛУЧЕНО БОЕВЫХ ОЧКОВ');
 });
 
 test('view model derives stack losses from persisted counts when destroyed is missing', () => {
@@ -103,7 +169,7 @@ test('view model derives round population from saved counts for older reports', 
       defenderBefore: firstRound?.defenderSnapshot?.fleetPopulationBefore,
       defenderAfter: firstRound?.defenderSnapshot?.fleetPopulationAfter,
     },
-    { attackerBefore: 284, attackerAfter: 284, defenderBefore: 140, defenderAfter: 132 },
+    { attackerBefore: 284, attackerAfter: 284, defenderBefore: 170, defenderAfter: 158 },
   );
 });
 
@@ -133,4 +199,32 @@ test('view model resolves faction presentation and falls back safely for unknown
   assert.equal(missingStack?.assetSource, 'fallback');
   assert.equal(missingStack?.tooltip.attack, null);
   assert.equal(malformedViewModel.rounds[0]?.analysis.length, 1);
+});
+
+test('view model reads siege fields while legacy reports remain siege-free', () => {
+  const legacy = createBattleReportViewModel(DEMO_BATTLE_REPORTS[0]);
+  assert.equal(legacy.siege, null);
+  const viewModel = createBattleReportViewModel({
+    ...DEMO_BATTLE_REPORTS[0],
+    siege: {
+      version: 1,
+      targetPlanetId: 'planet-siege',
+      targetCoordinate: '1:2:3',
+      attackerDestroyers: [{ factionId: 'aegis', entityId: 'death-star', survivors: 1, level: 10, scaledDemolitionPoints: 100, scaledDestructionChanceBps: 300, baseAttack: 700_000, baseLife: 2_100_000 }],
+      defenderDestroyers: [],
+      demolition: {
+        status: 'resolved', rawPoints: 100, defenseReductionPoints: 0, finalPoints: 100, baseChanceBps: 2_000,
+        annihilatorBonusBps: 0, eligibleBuildingCount: 1, selectedBuildingCount: 1, destroyedBuildingLevels: 1,
+        rolls: [{ buildingId: 'construction', buildingName: 'Сборочный узел', beforeLevel: 2, afterLevel: 1, chanceBps: 2_000, roll: 0.1, success: true, canceledQueueItems: 1 }],
+      },
+      destruction: {
+        status: 'blocked', blockedReason: 'LAST_COLONY_PROTECTED', rawChanceBps: 300, defenseReductionBps: 0,
+        defenderDestroyerReductionBps: 0, poliasReductionBps: 0, finalChanceBps: 300, success: false, ownerPlanetCount: 1,
+      },
+      planetDestroyed: false,
+    },
+  });
+  assert.equal(viewModel.siege?.targetCoordinate, '1:2:3');
+  assert.equal(viewModel.siege?.demolition.rolls[0]?.success, true);
+  assert.equal(viewModel.siege?.destruction.blockedReason, 'LAST_COLONY_PROTECTED');
 });

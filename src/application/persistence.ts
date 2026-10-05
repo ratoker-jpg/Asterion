@@ -25,7 +25,12 @@ import {
 } from '../domain/rating/fixtures.ts';
 import {
   buildReportsFeed,
+  createGasExtractionArrivalReportId,
+  createOverpopulationEpisodeReportId,
 } from '../domain/reports/adapters.ts';
+import type { GasExtractionArrivalReport, OverpopulationEpisodeReport, OrdinaryShipId, RecyclerArrivalReport } from '../domain/reports/types.ts';
+import { normalizeCombatFactionId } from '../domain/combat/factions.ts';
+import { SHIP_IDS } from '../domain/combat/ids.ts';
 import {
   createDefaultReportsState,
   migrateReportsState,
@@ -44,9 +49,11 @@ import {
 } from '../domain/science/runtime.ts';
 import {
   ACTIVE_RUNTIME_MODE,
+  ASTEROID_GAS_RATE_MIGRATION_SCHEMA_VERSION,
   getRuntimeSaveKey,
   resolveTestTimeScale,
   RUNTIME_SAVE_SCHEMA_VERSION,
+  TEST_TIME_SCALE_OPTIONS,
   TEST_TIME_SCALE_STORAGE_KEY,
   type RuntimeMode,
   type TestTimeScale,
@@ -65,6 +72,7 @@ import {
   migrateFleetProductionState,
   reconcileFleetProductionState,
 } from '../domain/fleet/production.ts';
+import type { OverpopulationState } from '../domain/fleet/overpopulation.ts';
 import {
   createCanonicalStartingBuildingLevels,
   createDefaultBuildingLevels,
@@ -100,7 +108,7 @@ import { initializePlanetEnergy, syncPlanetEnergySources } from './energy.ts';
 import type { EnergyLedger } from '../domain/energy/runtime.ts';
 import type { PlanetQueueRecord, PlanetResources, PlanetStateRecord, ResourceClock, ResourceClockEntry, SaveState, PlanetRuntime } from './contracts.ts';
 import type { AlliedPlanetState } from './contracts.ts';
-import { SHIP_IDS } from '../domain/combat/ids.ts';
+import { COMMANDER_IDS } from '../domain/combat/commanders.ts';
 import { isFlightCoordinate } from '../domain/flights/distance.ts';
 import type {
   FlightCompletionReason,
@@ -114,7 +122,10 @@ import type {
 } from '../domain/flights/types.ts';
 import { normalizePersistedTransportCargo } from '../domain/flights/cargo.ts';
 import type { UniverseObjectKind } from '../domain/universe/types.ts';
-import { TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
+import type { UniverseAsteroidSimulationState, UniverseAsteroidRuntimeState, UniverseCoordinate } from '../domain/universe/types.ts';
+import { createUniverseAsteroidSimulationState } from '../domain/universe/asteroid-simulation.ts';
+import { initializeAsteroidGasState } from '../domain/universe/asteroid-gas.ts';
+import { POSITION_COUNT, SYSTEM_COUNT, TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import { migrateEspionageState } from '../domain/espionage/repository.ts';
 import { createDefaultEspionageState } from '../domain/espionage/runtime.ts';
 import { createDefaultTestEspionageState } from '../domain/espionage/fixtures.ts';
@@ -125,6 +136,9 @@ export const SAVE_SCHEMA_VERSION = Math.max(
   RUNTIME_SAVE_SCHEMA_VERSION,
 );
 
+/** Schema 21 made the root wallet an alias for the currently selected planet. */
+const CURRENT_PLANET_ROOT_WALLET_SCHEMA_VERSION = 21;
+
 export const DEFAULT_PLANET_NAME = 'Helion 01';
 export const TEST_MODE_RESOURCE_AMOUNT = 999_999_999;
 
@@ -132,6 +146,8 @@ const KNOWN_PLANET_SKINS = new Set([
   'colonized', 'terran', 'oceanic', 'desert', 'ice', 'volcanic', 'toxic', 'barren', 'gas',
   'skin-002', 'skin-003', 'skin-005', 'skin-011', 'skin-012', 'skin-015', 'skin-016',
   'skin-026', 'skin-027', 'skin-028', 'skin-030', 'skin-032',
+  'skin-asterion-01', 'skin-asterion-02', 'skin-asterion-03', 'skin-asterion-04', 'skin-asterion-05',
+  'skin-asterion-06', 'skin-asterion-07', 'skin-asterion-08', 'skin-asterion-09',
 ]);
 
 export type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -153,6 +169,7 @@ type StoredPlanetRuntime = {
   energySources?: unknown;
   energyExpenseAttribution?: unknown;
   solarSatellites?: unknown;
+  overpopulation?: unknown;
   universeSystem?: unknown;
   universeGalaxy?: unknown;
   universePosition?: unknown;
@@ -186,9 +203,12 @@ type StoredSave = {
   operations?: unknown;
   command?: unknown;
   reports?: unknown;
+  asteroidSimulation?: unknown;
+  asteroidDebrisBySpawnIndex?: unknown;
   science?: unknown;
   resourceClock?: unknown;
   currentPlanetId?: unknown;
+  shipUpgradeLevels?: unknown;
   flights?: unknown;
   espionage?: unknown;
   alliedPlanets?: Record<string, unknown>;
@@ -216,6 +236,195 @@ function numberOr(value: unknown, fallback: number): number {
 
 function optionalNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function migrateOverpopulationEpisodeReports(value: unknown): OverpopulationEpisodeReport[] {
+  if (!Array.isArray(value)) return [];
+  const ordinaryShipIds = new Set<string>(SHIP_IDS.filter((id) => id !== 'solar-satellite'));
+  const reports: OverpopulationEpisodeReport[] = [];
+  for (const candidate of value) {
+    const source = objectRecord(candidate);
+    if (!source || typeof source.planetId !== 'string' || !source.planetId.trim()
+      || typeof source.planetName !== 'string' || !source.planetName.trim()) continue;
+    const numbers = [source.populationBefore, source.populationAfter, source.capacity, source.episodeStartedAt, source.episodeEndedAt];
+    if (!numbers.every((number) => typeof number === 'number' && Number.isFinite(number) && number >= 0)) continue;
+    if ((source.episodeEndedAt as number) < (source.episodeStartedAt as number)) continue;
+    const planetId = source.planetId.trim().slice(0, 160);
+    const episodeStartedAt = Math.floor(source.episodeStartedAt as number);
+    const removedShips = Array.isArray(source.removedShips)
+      ? source.removedShips.flatMap((loss) => {
+        const record = objectRecord(loss);
+        if (!record || typeof record.shipId !== 'string' || !ordinaryShipIds.has(record.shipId)
+          || typeof record.count !== 'number' || !Number.isFinite(record.count) || record.count <= 0) return [];
+        return [{ shipId: record.shipId as OrdinaryShipId, count: Math.floor(record.count) }].filter((item) => item.count > 0);
+      })
+      : [];
+    reports.push({
+      id: createOverpopulationEpisodeReportId(planetId, episodeStartedAt),
+      planetId,
+      planetName: source.planetName.trim().slice(0, 160),
+      factionId: normalizeCombatFactionId(source.factionId),
+      populationBefore: Math.floor(source.populationBefore as number),
+      populationAfter: Math.floor(source.populationAfter as number),
+      capacity: Math.floor(source.capacity as number),
+      episodeStartedAt,
+      episodeEndedAt: Math.floor(source.episodeEndedAt as number),
+      removedShips,
+    });
+  }
+  const byId = new Map(reports.map((report) => [report.id, report]));
+  return [...byId.values()].slice(-500);
+}
+
+function migrateGasExtractionArrivalReports(value: unknown): GasExtractionArrivalReport[] {
+  if (!Array.isArray(value)) return [];
+  const byFlightId = new Map<string, GasExtractionArrivalReport>();
+  for (const candidate of value) {
+    const source = objectRecord(candidate);
+    const coordinate = persistedCoordinate(source?.coordinate);
+    const flightId = typeof source?.flightId === 'string' ? source.flightId.trim() : '';
+    if (!source || !flightId || flightId.length > 160 || !coordinate
+      || typeof source.arrivalAt !== 'number' || !Number.isSafeInteger(source.arrivalAt) || source.arrivalAt < 0
+      || (source.outcome !== 'found' && source.outcome !== 'missed')
+      || typeof source.gasCollected !== 'number' || !Number.isSafeInteger(source.gasCollected) || source.gasCollected < 0
+      || typeof source.scrapCollected !== 'number' || !Number.isSafeInteger(source.scrapCollected) || source.scrapCollected < 0
+      || (source.outcome === 'missed' && (source.gasCollected !== 0 || source.scrapCollected !== 0))) continue;
+    byFlightId.set(flightId, {
+      id: createGasExtractionArrivalReportId(flightId),
+      flightId,
+      coordinate,
+      arrivalAt: source.arrivalAt,
+      outcome: source.outcome,
+      gasCollected: source.gasCollected,
+      scrapCollected: source.scrapCollected,
+    });
+  }
+  return [...byFlightId.values()].slice(-500);
+}
+
+function persistedCoordinate(value: unknown): UniverseCoordinate | undefined {
+  const source = objectRecord(value);
+  if (!source) return undefined;
+  const { galaxy, system, position } = source;
+  if (![galaxy, system, position].every((item) => typeof item === 'number' && Number.isSafeInteger(item) && item >= 1)
+    || (system as number) > SYSTEM_COUNT || (position as number) > POSITION_COUNT) return undefined;
+  return { galaxy: galaxy as number, system: system as number, position: position as number };
+}
+
+function createAsteroidSimulationMigrationBaseline(now: number): UniverseAsteroidSimulationState {
+  const timestamp = Number.isSafeInteger(now) && now >= 0 ? now : Date.now();
+  const baseline = createUniverseAsteroidSimulationState(timestamp);
+  return {
+    ...baseline,
+    asteroids: baseline.asteroids.map((asteroid) => initializeAsteroidGasState({
+      ...asteroid,
+      // Projected legacy asteroids have no pre-feature gas history. Start the
+      // new accrual clock at migration time rather than at their spawn time.
+      gasUpdatedAt: timestamp,
+      gasRemainder: 0,
+    }, timestamp)),
+  };
+}
+
+const LEGACY_ASTEROID_GAS_RATE_MIGRATIONS: Readonly<Record<number, number>> = {
+  2_500: 25_000,
+  10_000: 100_000,
+  25_000: 250_000,
+};
+
+function migrateAsteroidSimulation(
+  value: unknown,
+  now: number,
+  migrateLegacyGasRates: boolean,
+): UniverseAsteroidSimulationState {
+  const source = objectRecord(value);
+  if (!source || source.version !== 1
+    || typeof source.processedThroughAt !== 'number' || !Number.isSafeInteger(source.processedThroughAt) || source.processedThroughAt < 0
+    || typeof source.nextSpawnIndex !== 'number' || !Number.isSafeInteger(source.nextSpawnIndex) || source.nextSpawnIndex < 0
+    || !Array.isArray(source.asteroids)) {
+    return createAsteroidSimulationMigrationBaseline(now);
+  }
+  const seenSpawnIndices = new Set<number>();
+  const asteroids: UniverseAsteroidRuntimeState[] = source.asteroids.flatMap((candidate) => {
+    const asteroid = objectRecord(candidate);
+    if (!asteroid || typeof asteroid.spawnIndex !== 'number' || !Number.isSafeInteger(asteroid.spawnIndex) || asteroid.spawnIndex < 0
+      || asteroid.spawnIndex >= (source.nextSpawnIndex as number)
+      || seenSpawnIndices.has(asteroid.spawnIndex)) return [];
+    const coordinate = persistedCoordinate(asteroid.coordinate);
+    const counters = [asteroid.spawnedAt, asteroid.movementIndex, asteroid.previousMoveAt, asteroid.nextMoveAt, asteroid.gasYield];
+    if (!coordinate || !counters.every((item) => typeof item === 'number' && Number.isSafeInteger(item) && item >= 0)
+      || (asteroid.movementIndex as number) < 0
+      || (asteroid.nextMoveAt as number) < (asteroid.previousMoveAt as number)) return [];
+    const nextCoordinate = asteroid.nextCoordinate === undefined ? undefined : persistedCoordinate(asteroid.nextCoordinate);
+    if (asteroid.nextCoordinate !== undefined && !nextCoordinate) return [];
+    seenSpawnIndices.add(asteroid.spawnIndex);
+    return [initializeAsteroidGasState({
+      spawnIndex: asteroid.spawnIndex,
+      spawnedAt: asteroid.spawnedAt as number,
+      movementIndex: asteroid.movementIndex as number,
+      previousMoveAt: asteroid.previousMoveAt as number,
+      nextMoveAt: asteroid.nextMoveAt as number,
+      ...(nextCoordinate ? { nextCoordinate } : {}),
+      gasYield: asteroid.gasYield as number,
+      coordinate,
+      ...(typeof asteroid.gasRatePerHour === 'number'
+        ? {
+          gasRatePerHour: migrateLegacyGasRates
+            ? LEGACY_ASTEROID_GAS_RATE_MIGRATIONS[asteroid.gasRatePerHour] ?? asteroid.gasRatePerHour
+            : asteroid.gasRatePerHour,
+        }
+        : {}),
+      ...(typeof asteroid.gasUpdatedAt === 'number' ? { gasUpdatedAt: asteroid.gasUpdatedAt } : {}),
+      ...(typeof asteroid.gasRemainder === 'number' ? { gasRemainder: asteroid.gasRemainder } : {}),
+    }, now)];
+  });
+  return {
+    version: 1,
+    processedThroughAt: source.processedThroughAt,
+    nextSpawnIndex: source.nextSpawnIndex,
+    asteroids,
+  };
+}
+
+function migrateAsteroidDebris(value: unknown, activeSpawnIndices: ReadonlySet<number>): Record<string, number> {
+  const source = objectRecord(value);
+  if (!source) return {};
+  return Object.fromEntries(Object.entries(source).flatMap(([spawnIndex, amount]) => {
+    if (!/^\d+$/.test(spawnIndex) || !Number.isSafeInteger(Number(spawnIndex))
+      || typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount < 0
+      || !activeSpawnIndices.has(Number(spawnIndex))) return [];
+    return [[String(Number(spawnIndex)), amount]];
+  }));
+}
+
+function migrateRecyclerArrivalReports(value: unknown): RecyclerArrivalReport[] {
+  if (!Array.isArray(value)) return [];
+  const byFlightId = new Map<string, RecyclerArrivalReport>();
+  for (const candidate of value) {
+    const source = objectRecord(candidate);
+    const coordinate = persistedCoordinate(source?.coordinate);
+    if (!source || typeof source.flightId !== 'string' || !source.flightId.trim()
+      || source.flightId.length > 160 || !coordinate
+      || typeof source.arrivedAtMs !== 'number' || !Number.isSafeInteger(source.arrivedAtMs) || source.arrivedAtMs < 0
+      || typeof source.collectedDebris !== 'number' || !Number.isSafeInteger(source.collectedDebris) || source.collectedDebris < 0
+      || typeof source.remainingOrbitalDebris !== 'number' || !Number.isSafeInteger(source.remainingOrbitalDebris) || source.remainingOrbitalDebris < 0) continue;
+    const flightId = source.flightId.trim();
+    byFlightId.set(flightId, {
+      id: `recycler-arrival:${flightId}`,
+      flightId,
+      coordinate,
+      arrivedAtMs: source.arrivedAtMs,
+      collectedDebris: source.collectedDebris,
+      remainingOrbitalDebris: source.remainingOrbitalDebris,
+    });
+  }
+  return [...byFlightId.values()];
 }
 
 function nonNegativeNumberOr(value: unknown, fallback: number): number {
@@ -266,7 +475,7 @@ function migrateResourceClockEntry(value: unknown, now: number, fallback?: Resou
   };
 }
 
-function migrateResourceClock(value: unknown, now: number, planetIds: readonly string[]): ResourceClock {
+function migrateResourceClock(value: unknown, now: number, planetIds: readonly string[], aliasPlanetId = 'helion-01'): ResourceClock {
   const source = value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
@@ -280,8 +489,8 @@ function migrateResourceClock(value: unknown, now: number, planetIds: readonly s
     planetId,
     migrateResourceClockEntry(rawByPlanet[planetId], now, legacy),
   ])) as Record<string, ResourceClockEntry>;
-  const homeworld = byPlanet['helion-01'] ?? legacy;
-  return { ...homeworld, byPlanet };
+  const alias = byPlanet[aliasPlanetId] ?? legacy;
+  return { ...alias, byPlanet };
 }
 
 function normalizeStoredResource(value: unknown, fallback: number, capacity: number): number {
@@ -334,13 +543,16 @@ const PERSISTED_FLIGHT_COMPLETION_REASONS = new Set<FlightCompletionReason>([
   'target-occupied',
   'target-unavailable',
   'arrived',
+  'deployed',
   'spy-destroyed',
+  'origin-destroyed',
   'mission-failed',
 ]);
 const PERSISTED_FLIGHT_DESTINATION_KINDS = new Set<FlightDestination['kind']>([
   'coordinate',
   'planet',
   'operation',
+  'space',
 ]);
 const PERSISTED_UNIVERSE_OBJECT_KINDS = new Set<UniverseObjectKind>([
   'empty',
@@ -367,11 +579,83 @@ function isNonEmptyPersistedString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+type PersistedOverpopulationState = OverpopulationState & {
+  initialPopulation?: number;
+  initialCapacity?: number;
+  removedShips?: Array<{ shipId: OrdinaryShipId; count: number }>;
+};
+
+function migrateOverpopulationState(value: unknown, now: number): PersistedOverpopulationState | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const source = value as Record<string, unknown>;
+  if (source.blocked !== true) return undefined;
+  const numberField = (key: string, fallback = 0) => {
+    const candidate = source[key];
+    return isFinitePersistedNumber(candidate) ? Math.max(0, Math.floor(candidate)) : fallback;
+  };
+  const episodeStartedAt = numberField('episodeStartedAt', Math.max(0, Math.floor(now)));
+  const initialPopulation = isFinitePersistedNumber(source.initialPopulation)
+    ? Math.max(0, Math.floor(source.initialPopulation))
+    : undefined;
+  const initialCapacity = isFinitePersistedNumber(source.initialCapacity)
+    ? Math.max(0, Math.floor(source.initialCapacity))
+    : undefined;
+  const ordinaryShipIds = new Set<string>(SHIP_IDS.filter((id) => id !== 'solar-satellite'));
+  const removedShipCounts = new Map<OrdinaryShipId, number>();
+  if (Array.isArray(source.removedShips)) {
+    source.removedShips.forEach((candidate) => {
+      const loss = objectRecord(candidate);
+      if (!loss || typeof loss.shipId !== 'string' || !ordinaryShipIds.has(loss.shipId)
+        || !isFinitePersistedNumber(loss.count) || loss.count <= 0) return;
+      const count = Math.floor(loss.count);
+      if (count > 0) {
+        const shipId = loss.shipId as OrdinaryShipId;
+        removedShipCounts.set(shipId, (removedShipCounts.get(shipId) ?? 0) + count);
+      }
+    });
+  }
+  const removedShips = removedShipCounts.size > 0
+    ? [...removedShipCounts].map(([shipId, count]) => ({ shipId, count }))
+    : undefined;
+  const reason = source.lastResolutionReason === 'resolved' || source.lastResolutionReason === 'no-eligible-units'
+    ? source.lastResolutionReason
+    : undefined;
+  return {
+    episodeStartedAt,
+    initialExcess: numberField('initialExcess'),
+    scheduledBurnPool: numberField('scheduledBurnPool'),
+    burnedPopulation: numberField('burnedPopulation'),
+    lastReconciledAt: numberField('lastReconciledAt', episodeStartedAt),
+    blocked: true,
+    ...(initialPopulation !== undefined ? { initialPopulation } : {}),
+    ...(initialCapacity !== undefined ? { initialCapacity } : {}),
+    ...(removedShips ? { removedShips } : {}),
+    ...(reason ? { lastResolutionReason: reason } : {}),
+  };
+}
+
 function coordinatesMatch(left: unknown, right: unknown): boolean {
   if (!isFlightCoordinate(left) || !isFlightCoordinate(right)) return false;
   return left.galaxy === right.galaxy
     && left.system === right.system
     && left.position === right.position;
+}
+
+function isValidPersistedSpaceFlightDuration(durationMs: number, mode: RuntimeMode): boolean {
+  const minimumMs = 5 * 60_000;
+  const maximumMs = (11 * 60 + 59) * 60_000;
+  if (mode === 'production') {
+    return durationMs >= minimumMs
+      && durationMs <= maximumMs
+      && durationMs % 60_000 === 0;
+  }
+
+  return TEST_TIME_SCALE_OPTIONS.some((scale) => {
+    const requestedMinutes = Math.round(durationMs * scale / 60_000);
+    return requestedMinutes >= 5
+      && requestedMinutes <= 11 * 60 + 59
+      && Math.round(requestedMinutes * 60_000 / scale) === durationMs;
+  });
 }
 
 /**
@@ -380,9 +664,10 @@ function coordinatesMatch(left: unknown, right: unknown): boolean {
  * boundary so a damaged save cannot reserve ships forever or strand an
  * outbound flight whose timers/coordinates are missing.
  */
-function isPersistedFlightRecord(value: unknown): value is FlightRecord {
+function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is FlightRecord {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
+  const isSpaceFlight = item.missionId === 'space-flight';
   if (!isNonEmptyPersistedString(item.id)
     || !isNonEmptyPersistedString(item.requestId)
     || !isNonEmptyPersistedString(item.originPlanetId)
@@ -392,16 +677,20 @@ function isPersistedFlightRecord(value: unknown): value is FlightRecord {
     || !isFlightCoordinate(item.destinationCoordinate)
     || !isNonNegativeInteger(item.populationReserved)
     || !isFinitePersistedNumber(item.routeDistance)
-    || item.routeDistance <= 0
+    || (isSpaceFlight ? item.routeDistance !== 0 : item.routeDistance <= 0)
     || !isFinitePersistedNumber(item.effectiveSpeed)
-    || item.effectiveSpeed <= 0
+    || (isSpaceFlight ? item.effectiveSpeed !== 0 : item.effectiveSpeed <= 0)
     || !isFinitePersistedNumber(item.oneWayDurationMs)
     || item.oneWayDurationMs <= 0
     || !isFinitePersistedNumber(item.departedAt)
     || !isFinitePersistedNumber(item.arrivalAt)
     || item.arrivalAt <= item.departedAt
     || !isFinitePersistedNumber(item.gasCost)
-    || item.gasCost < 0) return false;
+    || item.gasCost < 0
+    || (isSpaceFlight && item.gasCost !== 100)) return false;
+
+  if ((item.ownerSide !== undefined && item.ownerSide !== 'player' && item.ownerSide !== 'bot01')
+    || (item.ownerSide === 'bot01' && item.missionId !== 'attack')) return false;
 
   if (item.operationId !== undefined && !isNonEmptyPersistedString(item.operationId)) return false;
   if (item.spyMissionId !== undefined && !isNonEmptyPersistedString(item.spyMissionId)) return false;
@@ -409,11 +698,58 @@ function isPersistedFlightRecord(value: unknown): value is FlightRecord {
   if (item.destinationOwnerId !== undefined && !isNonEmptyPersistedString(item.destinationOwnerId)) return false;
   if (item.targetRelation !== undefined && !PERSISTED_TARGET_RELATIONS.has(item.targetRelation as TargetRelation)) return false;
   if (item.cargoState !== undefined && !PERSISTED_CARGO_STATES.has(item.cargoState as TransportCargoState)) return false;
+  if (item.cargoResolvedAt !== undefined && !isFinitePersistedNumber(item.cargoResolvedAt)) return false;
+  if (item.bot01ReturnCreditedAt !== undefined
+    && (!isFinitePersistedNumber(item.bot01ReturnCreditedAt) || item.ownerSide !== 'bot01')) return false;
+  const selectedShips = item.selectedShips;
+  if (!selectedShips || typeof selectedShips !== 'object' || Array.isArray(selectedShips)) return false;
+  const shipEntries = Object.entries(selectedShips);
   if (item.missionId === 'transport') {
     const cargo = normalizePersistedTransportCargo(item.cargo);
     if (!cargo) return false;
     if (item.targetRelation === undefined || item.destinationPlanetId === undefined) return false;
     if (item.cargoState === undefined) return false;
+  }
+  if (item.missionId === 'recycle') {
+    const cargo = normalizePersistedTransportCargo(item.cargo);
+    if (!cargo
+      || !isNonNegativeInteger(item.recycleCapacity)
+      || item.recycleCapacity <= 0
+      || item.cargoState === undefined
+      || item.targetKind === undefined
+      || !['player', 'npc', 'uninhabited', 'unique', 'pirate', 'anomaly', 'empty'].includes(String(item.targetKind))
+      || shipEntries.length === 0
+      || shipEntries.some(([shipId]) => shipId !== 'recycler')
+      || Object.values((item.selectedCommanders ?? {}) as Record<string, unknown>).some((quantity) => Number(quantity) > 0)) return false;
+  }
+  if (item.missionId === 'gas') {
+    const cargo = normalizePersistedTransportCargo(item.cargo);
+    if (!cargo
+      || !isNonNegativeInteger(item.gasCapacity)
+      || item.gasCapacity <= 0
+      || item.cargoState === undefined
+      || item.targetKind !== 'asteroid'
+      || shipEntries.length === 0
+      || shipEntries.some(([shipId]) => shipId !== 'recycler')
+      || Object.keys((item.selectedCommanders ?? {}) as Record<string, unknown>).length > 0) return false;
+  }
+  if (isSpaceFlight) {
+    const cargo = normalizePersistedTransportCargo(item.cargo);
+    const selectedCommanders = item.selectedCommanders as Record<string, unknown> | undefined;
+    const hasCommanders = Object.values(selectedCommanders ?? {}).some((quantity) => isNonNegativeInteger(quantity) && quantity > 0);
+    const hasShips = shipEntries.some(([, quantity]) => isNonNegativeInteger(quantity) && quantity > 0);
+    if (!cargo
+      || item.ownerSide === 'bot01'
+      || !isValidPersistedSpaceFlightDuration(item.oneWayDurationMs, mode)
+      || !coordinatesMatch(item.originCoordinate, item.destinationCoordinate)
+      || item.destinationPlanetId !== undefined
+      || item.targetRelation !== undefined
+      || item.cargoState === undefined
+      || !['loaded', 'returned', 'voided'].includes(String(item.cargoState))
+      || ((item.cargoState === 'returned' || item.cargoState === 'voided') && item.cargoResolvedAt === undefined)
+      || (item.cargoState === 'loaded' && item.cargoResolvedAt !== undefined)
+      || shipEntries.some(([shipId]) => shipId === 'solar-satellite')
+      || (!hasShips && !hasCommanders)) return false;
   }
   if (item.targetKind !== undefined && !PERSISTED_UNIVERSE_OBJECT_KINDS.has(item.targetKind as UniverseObjectKind)) return false;
   if (item.completionReason !== undefined
@@ -427,25 +763,58 @@ function isPersistedFlightRecord(value: unknown): value is FlightRecord {
   const destinationRecord = destination as Record<string, unknown>;
   if (!PERSISTED_FLIGHT_DESTINATION_KINDS.has(destinationRecord.kind as FlightDestination['kind'])
     || !coordinatesMatch(destinationRecord.coordinate, item.destinationCoordinate)) return false;
+  if (isSpaceFlight && destinationRecord.kind !== 'space') return false;
+  if (item.missionId === 'gas' && destinationRecord.kind !== 'coordinate') return false;
   if (destinationRecord.kind === 'planet') {
     if (!isNonEmptyPersistedString(destinationRecord.planetId)
       || item.destinationPlanetId !== destinationRecord.planetId) return false;
   } else if (item.destinationPlanetId !== undefined && item.missionId !== 'transport') {
     return false;
   }
+  if (destinationRecord.kind === 'space' && !isSpaceFlight) return false;
   if (destinationRecord.kind === 'operation') {
     if (!isNonEmptyPersistedString(destinationRecord.operationId)
       || item.operationId !== destinationRecord.operationId) return false;
   }
 
-  const selectedShips = item.selectedShips;
-  if (!selectedShips || typeof selectedShips !== 'object' || Array.isArray(selectedShips)) return false;
-  const shipEntries = Object.entries(selectedShips);
-  if (shipEntries.length === 0) return false;
   for (const [shipId, quantity] of shipEntries) {
     if (!SHIP_IDS.includes(shipId as (typeof SHIP_IDS)[number])
       || !isNonNegativeInteger(quantity)
       || quantity <= 0) return false;
+  }
+  if (item.selectedCommanders !== undefined) {
+    if (!item.selectedCommanders || typeof item.selectedCommanders !== 'object' || Array.isArray(item.selectedCommanders)) return false;
+    for (const [commanderId, quantity] of Object.entries(item.selectedCommanders)) {
+      if (!COMMANDER_IDS.includes(commanderId as (typeof COMMANDER_IDS)[number])
+        || !isNonNegativeInteger(quantity)
+        || quantity <= 0) return false;
+    }
+  }
+  if (shipEntries.length === 0) {
+    const selectedCommanders = item.selectedCommanders as Record<string, unknown> | undefined;
+    const hasValidCommanderOnlyDeployment = item.missionId === 'deployment'
+      && Object.values(selectedCommanders ?? {}).some((quantity) => isNonNegativeInteger(quantity) && quantity > 0);
+    const hasValidCommanderOnlySpaceFlight = isSpaceFlight
+      && Object.values(selectedCommanders ?? {}).some((quantity) => isNonNegativeInteger(quantity) && quantity > 0);
+    if (!hasValidCommanderOnlyDeployment && !hasValidCommanderOnlySpaceFlight) return false;
+  }
+  if (item.selectedCommanderLevels !== undefined) {
+    if (!item.selectedCommanderLevels || typeof item.selectedCommanderLevels !== 'object' || Array.isArray(item.selectedCommanderLevels)) return false;
+    for (const [commanderId, level] of Object.entries(item.selectedCommanderLevels)) {
+      if (!COMMANDER_IDS.includes(commanderId as (typeof COMMANDER_IDS)[number])
+        || !isNonNegativeInteger(level)) return false;
+    }
+  }
+  if (item.missionId === 'deployment') {
+    if (destinationRecord.kind !== 'planet'
+      || !isNonEmptyPersistedString(item.destinationPlanetId)
+      || item.destinationPlanetId !== destinationRecord.planetId
+      || item.targetRelation !== 'self'
+      || shipEntries.some(([shipId]) => shipId === 'solar-satellite')) return false;
+    const selectedCommanders = item.selectedCommanders as Record<string, unknown> | undefined;
+    const commanderLevels = item.selectedCommanderLevels as Record<string, unknown> | undefined;
+    if (Object.entries(selectedCommanders ?? {}).some(([commanderId, quantity]) =>
+      Number(quantity) > 0 && !isNonNegativeInteger(commanderLevels?.[commanderId]))) return false;
   }
   if (item.missionId === 'espionage') {
     if (!isNonEmptyPersistedString(item.spyMissionId)
@@ -455,6 +824,40 @@ function isPersistedFlightRecord(value: unknown): value is FlightRecord {
       || shipEntries.length !== 1
       || shipEntries[0][0] !== 'spy-probe'
       || shipEntries[0][1] !== 1) return false;
+  }
+  if (item.missionId === 'attack') {
+    const bot01Incoming = item.ownerSide === 'bot01';
+    if (destinationRecord.kind !== 'planet'
+      || !isNonEmptyPersistedString(item.destinationPlanetId)
+      || item.destinationPlanetId !== destinationRecord.planetId
+      || (item.targetRelation !== 'enemy' && item.targetRelation !== 'neutral'
+        && !(bot01Incoming && item.targetRelation === 'self'))
+      || (bot01Incoming && (item.targetKind !== 'player'
+        || item.targetRelation !== 'self'
+        || !isNonEmptyPersistedString(item.destinationOwnerId)
+        || !isNonNegativeInteger((selectedShips as Record<string, unknown>)['death-star'])
+        || Number((selectedShips as Record<string, unknown>)['death-star']) <= 0
+        || Object.hasOwn(selectedShips, 'solar-satellite')))) return false;
+    const snapshot = item.attackSnapshot;
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return false;
+    const attackSnapshot = snapshot as Record<string, unknown>;
+    if (attackSnapshot.version !== 1
+      || ![5, 8, 12].includes(attackSnapshot.maxRounds as number)
+      || !['aegis', 'synod', 'veyra'].includes(String(attackSnapshot.attackerFactionId))
+      || !Array.isArray(attackSnapshot.attackerPriority)) return false;
+    if (item.attackResolution !== undefined) {
+      const resolution = item.attackResolution;
+      if (!resolution || typeof resolution !== 'object' || Array.isArray(resolution)) return false;
+      const attackResolution = resolution as Record<string, unknown>;
+      const loot = attackResolution.loot;
+      if (!isNonEmptyPersistedString(attackResolution.reportId)
+        || !isFinitePersistedNumber(attackResolution.resolvedAt)
+        || !isNonNegativeInteger(attackResolution.debris)
+        || !loot || typeof loot !== 'object' || Array.isArray(loot)) return false;
+      const lootRecord = loot as Record<string, unknown>;
+      if (!['metal', 'minerals', 'gas', 'debris'].every((key) => isNonNegativeInteger(lootRecord[key]))) return false;
+      if (attackResolution.lootCreditedAt !== undefined && !isFinitePersistedNumber(attackResolution.lootCreditedAt)) return false;
+    }
   }
 
   const phase = item.phase as FlightPhase;
@@ -467,13 +870,13 @@ function isPersistedFlightRecord(value: unknown): value is FlightRecord {
 function normalizePersistedFlightRecord(value: unknown): unknown {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
   const source = value as Record<string, unknown>;
-  if (source.missionId !== 'transport') return value;
+  if (source.missionId !== 'transport' && source.missionId !== 'recycle' && source.missionId !== 'gas' && source.missionId !== 'space-flight') return value;
   const cargo = normalizePersistedTransportCargo(source.cargo);
   if (!cargo) return value;
   return { ...source, cargo };
 }
 
-function migrateFlightState(value: unknown): FlightState {
+function migrateFlightState(value: unknown, mode: RuntimeMode = 'test'): FlightState {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return createDefaultFlightState();
   const source = value as Record<string, unknown>;
   const records: FlightRecord[] = [];
@@ -482,7 +885,8 @@ function migrateFlightState(value: unknown): FlightState {
   if (Array.isArray(source.records)) {
     for (const rawCandidate of source.records) {
       const candidate = normalizePersistedFlightRecord(rawCandidate);
-      if (!isPersistedFlightRecord(candidate)) continue;
+      if (!isPersistedFlightRecord(candidate, mode)) continue;
+      if (mode === 'production' && candidate.ownerSide === 'bot01') continue;
       if (seenIds.has(candidate.id) || seenRequestIds.has(candidate.requestId)) continue;
       seenIds.add(candidate.id);
       seenRequestIds.add(candidate.requestId);
@@ -590,6 +994,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     minerals: mode === 'test' ? storageCapacities.minerals : 12_712,
     gas: mode === 'test' ? storageCapacities.gas : 6_421,
   };
+  const initialSpaceportUpgrades = createDefaultSpaceportUpgradeState();
   const initialPlanet: PlanetRuntime = {
     name: DEFAULT_PLANET_NAME,
     skin: 'colonized',
@@ -605,7 +1010,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     productionBots: createEmptyBotAssignment(),
     recycling: createDefaultRecyclingState({ mode, fixture: resolveRecyclingFixture(mode) }),
     trade: createDefaultTradeState(),
-    spaceportUpgrades: createDefaultSpaceportUpgradeState(),
+    spaceportUpgrades: { ...initialSpaceportUpgrades, shipLevels: {} },
     repair: mode === 'test' ? createTestRepairWorkshopState() : createDefaultRepairWorkshopState(),
     stability: 100,
     resources: initialResources,
@@ -618,6 +1023,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     currentPlanetId: 'helion-01',
     planets: { 'helion-01': initializePlanetEnergy(initialPlanet, science.levels) },
     queues: { 'helion-01': [] },
+    shipUpgradeLevels: { ...initialSpaceportUpgrades.shipLevels },
     rating: createDefaultRatingPrototypeState(),
     profile: syncPlayerProfileWithAlliance(createDefaultPlayerProfileState(), command.alliance),
     combatPriority: createDefaultCombatPriority(),
@@ -629,7 +1035,9 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     science,
     resourceClock: createResourceClock(now, ['helion-01']),
     flights: createDefaultFlightState(),
-    espionage: mode === 'test' ? createDefaultTestEspionageState() : createDefaultEspionageState(),
+    asteroidSimulation: createUniverseAsteroidSimulationState(now),
+    asteroidDebrisBySpawnIndex: {},
+    espionage: mode === 'test' ? createDefaultTestEspionageState(now) : createDefaultEspionageState(),
     alliedPlanets: mode === 'test'
       ? { [TEST_MODE_ALLY_PLANET_FIXTURE.planet.id]: createDefaultAlliedPlanetState(mode, now, science.levels) }
       : {},
@@ -654,15 +1062,28 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
     if (!raw) return initialState;
 
     const parsed = JSON.parse(raw) as StoredSave;
-    const savedHomeworld = parsed.planets?.['helion-01'];
+    const persistedPlanetEntries = Object.entries(parsed.planets ?? {}).filter(([, candidate]) => (
+      Boolean(candidate) && typeof candidate === 'object' && !Array.isArray(candidate)
+    ));
+    const savedCurrentPlanetId = typeof parsed.currentPlanetId === 'string' ? parsed.currentPlanetId.trim() : '';
+    const primaryPlanetId = parsed.planets?.['helion-01']
+      ? 'helion-01'
+      : persistedPlanetEntries.some(([id]) => id === savedCurrentPlanetId)
+        ? savedCurrentPlanetId
+        : persistedPlanetEntries.map(([id]) => id).sort()[0] ?? 'helion-01';
+    const savedHomeworld = parsed.planets?.[primaryPlanetId];
+    const savedHomeworldOverpopulation = migrateOverpopulationState(savedHomeworld?.overpopulation, timestamp);
     const legacySolarStations = numberOr(savedHomeworld?.solarStations, numberOr(parsed.solarStations, 0));
     const buildings = migrateBuildingLevels(savedHomeworld?.buildings, legacySolarStations);
-    const spaceportUpgrades = reconcileSpaceportUpgradeState(
-      migrateSpaceportUpgradeState(savedHomeworld?.spaceportUpgrades),
-      timestamp,
-    ).state;
+    const migratedSpaceportUpgrades = migrateSpaceportUpgradeState(savedHomeworld?.spaceportUpgrades);
+    const spaceportUpgrades = savedHomeworldOverpopulation
+      ? migratedSpaceportUpgrades
+      : reconcileSpaceportUpgradeState(migratedSpaceportUpgrades, timestamp).state;
     const science = migrateScienceState(parsed.science, {
       laboratoryLevel: buildings.research,
+      legacyPlanetId: savedCurrentPlanetId && parsed.planets?.[savedCurrentPlanetId]
+        ? savedCurrentPlanetId
+        : primaryPlanetId,
       mode,
       testTimeScale,
       schemaVersion: numberOr(parsed.schemaVersion, 0),
@@ -674,7 +1095,24 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       syncPlayerProfileWithFaction(migratePlayerProfileState(parsed.profile), CURRENT_PLAYER_FACTION_ID),
       command.alliance,
     );
-    const reportIds = buildReportsFeed(combat.reports, operations, command).map((item) => item.id);
+    const overpopulationReports = migrateOverpopulationEpisodeReports(
+      objectRecord(parsed.reports)?.overpopulationReports,
+    );
+    const recyclerArrivalReports = migrateRecyclerArrivalReports(
+      objectRecord(parsed.reports)?.recyclerArrivalReports,
+    );
+    const gasExtractionArrivalReports = migrateGasExtractionArrivalReports(
+      objectRecord(parsed.reports)?.gasExtractionArrivalReports,
+    );
+    const reportIds = buildReportsFeed(
+      combat.reports,
+      operations,
+      command,
+      undefined,
+      overpopulationReports,
+      recyclerArrivalReports,
+      gasExtractionArrivalReports,
+    ).map((item) => item.id);
     const migratedSavedFleet = removeSolarSatellitesFromFleet(
       resolveSavedFleetState(savedHomeworld?.fleet, profile.factionId),
     );
@@ -682,11 +1120,13 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       0,
       Math.floor(numberOr(savedHomeworld?.solarSatellites, migratedSavedFleet.count)),
     );
-    const savedFleet = normalizeFleetStateForCapacity(
-      migratedSavedFleet.fleet,
-      buildings.hangar,
-      profile.factionId,
-    );
+    const savedFleet = savedHomeworldOverpopulation
+      ? migratedSavedFleet.fleet
+      : normalizeFleetStateForCapacity(
+        migratedSavedFleet.fleet,
+        buildings.hangar,
+        profile.factionId,
+      );
     const savedDefense = migrateDefenseState(savedHomeworld?.defense);
     const migratedFleetProduction = migrateFleetProductionState(savedHomeworld?.fleetProduction, {
       factionId: profile.factionId,
@@ -694,14 +1134,17 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       defense: savedDefense,
       hangarLevel: buildings.hangar,
       solarSatellites: persistedSatelliteCount,
+      enforceCapacity: !savedHomeworldOverpopulation,
     });
-    const reconciledFleetProduction = reconcileFleetProductionState(
-      migratedFleetProduction,
-      savedFleet,
-      savedDefense,
-      profile.factionId,
-      timestamp,
-    );
+    const reconciledFleetProduction = savedHomeworldOverpopulation
+      ? { changed: false, state: migratedFleetProduction, fleet: savedFleet, defense: savedDefense, completed: [] }
+      : reconcileFleetProductionState(
+        migratedFleetProduction,
+        savedFleet,
+        savedDefense,
+        profile.factionId,
+        timestamp,
+      );
     const completedSatellites = reconciledFleetProduction.completed
       .filter((item) => item.itemId === 'solar-satellite')
       .reduce((total, item) => total + Math.max(0, Math.floor(item.quantity)), 0);
@@ -710,27 +1153,43 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       Math.floor(persistedSatelliteCount + completedSatellites),
     );
     const homeworldStorageCapacities = getStorageCapacities(buildings);
-    const legacyHomeworldResources: PlanetResources = {
+    const legacyHomeworldResources: PlanetResources = primaryPlanetId === 'helion-01' ? {
       metal: normalizeStoredResource(parsed.metal, initialState.metal, homeworldStorageCapacities.metal),
       minerals: normalizeStoredResource(parsed.minerals, initialState.minerals, homeworldStorageCapacities.minerals),
       gas: normalizeStoredResource(parsed.gas, initialState.gas, homeworldStorageCapacities.gas),
-    };
+    } : { metal: 500, minerals: 500, gas: 500 };
     const hasRootHomeworldWallet = parsed.metal !== undefined || parsed.minerals !== undefined || parsed.gas !== undefined;
+    const hasPersistedPlanetWallet = persistedPlanetEntries.some(([, candidate]) => {
+      const resources = (candidate as StoredPlanetRuntime).resources;
+      return Boolean(resources && typeof resources === 'object' && !Array.isArray(resources));
+    });
+    const legacyWalletCanSeedHomeworld = primaryPlanetId === 'helion-01'
+      && numberOr(parsed.schemaVersion, 0) < CURRENT_PLANET_ROOT_WALLET_SCHEMA_VERSION
+      && !hasPersistedPlanetWallet
+      && savedHomeworld?.resources === undefined
+      && hasRootHomeworldWallet;
+    const initialHomeworldResources = initialState.planets['helion-01'].resources ?? {
+      metal: initialState.metal,
+      minerals: initialState.minerals,
+      gas: initialState.gas,
+    };
     const homeworldResources = normalizePlanetResources(
-      hasRootHomeworldWallet ? legacyHomeworldResources : savedHomeworld?.resources,
-      legacyHomeworldResources,
+      legacyWalletCanSeedHomeworld ? legacyHomeworldResources : savedHomeworld?.resources,
+      legacyWalletCanSeedHomeworld ? legacyHomeworldResources : initialHomeworldResources,
       homeworldStorageCapacities,
     );
     const homeworldBase: PlanetRuntime = {
       name: typeof savedHomeworld?.name === 'string' && savedHomeworld.name.trim()
         ? savedHomeworld.name.trim().slice(0, 28)
-        : DEFAULT_PLANET_NAME,
+        : primaryPlanetId === 'helion-01' ? DEFAULT_PLANET_NAME : `Колония ${primaryPlanetId}`,
       skin: typeof savedHomeworld?.skin === 'string' && KNOWN_PLANET_SKINS.has(savedHomeworld.skin)
         ? savedHomeworld.skin
         : typeof parsed.planetSkin === 'string' && KNOWN_PLANET_SKINS.has(parsed.planetSkin)
           ? parsed.planetSkin
           : initialState.planets['helion-01'].skin,
-      fleet: normalizeFleetStateForCapacity(reconciledFleetProduction.fleet, buildings.hangar, profile.factionId),
+      fleet: savedHomeworldOverpopulation
+        ? reconciledFleetProduction.fleet
+        : normalizeFleetStateForCapacity(reconciledFleetProduction.fleet, buildings.hangar, profile.factionId),
       defense: reconciledFleetProduction.defense,
       fleetProduction: reconciledFleetProduction.state,
       repair: mode === 'test' && savedHomeworld?.repair === undefined
@@ -750,6 +1209,7 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
         ? savedHomeworld.energyExpenseAttribution as Partial<Record<string, number>>
         : undefined,
       solarSatellites: savedSatelliteCount,
+      ...(savedHomeworldOverpopulation ? { overpopulation: savedHomeworldOverpopulation } : {}),
       universeGalaxy: numberOr(savedHomeworld?.universeGalaxy, 1),
       universeSystem: numberOr(savedHomeworld?.universeSystem, 1),
       universePosition: numberOr(savedHomeworld?.universePosition, 1),
@@ -767,35 +1227,48 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       resources: homeworldResources,
     };
     const homeworld = syncPlanetEnergySources(homeworldBase, science.levels);
-    const savedQueue = parsed.queues?.['helion-01'] ?? parsed.queue ?? null;
-    const queue = migrateBuildingQueue(savedQueue, 'helion-01', homeworld.buildings, science.levels);
+    const savedQueue = parsed.queues?.[primaryPlanetId] ?? (primaryPlanetId === 'helion-01' ? parsed.queue : null) ?? null;
+    const queue = migrateBuildingQueue(savedQueue, primaryPlanetId, homeworld.buildings, science.levels);
     const storageCapacities = getStorageCapacities(homeworld.buildings);
 
-    const planets: PlanetStateRecord = { 'helion-01': homeworld };
+    const planets: PlanetStateRecord = { [primaryPlanetId]: homeworld };
     for (const [planetId, rawValue] of Object.entries(parsed.planets ?? {})) {
-      if (planetId === 'helion-01' || !rawValue || typeof rawValue !== 'object') continue;
+      if (planetId === primaryPlanetId || !rawValue || typeof rawValue !== 'object') continue;
       const raw = rawValue as StoredPlanetRuntime;
       const planetBuildings = migrateBuildingLevels(raw.buildings);
       const migratedPlanetFleet = removeSolarSatellitesFromFleet(
         resolveSavedFleetState(raw.fleet, profile.factionId),
       );
+      const planetOverpopulation = migrateOverpopulationState(raw.overpopulation, timestamp);
       const planetSatelliteCount = Math.max(
         0,
         Math.floor(numberOr(raw.solarSatellites, migratedPlanetFleet.count)),
       );
-      const planetFleet = normalizeFleetStateForCapacity(
-        migratedPlanetFleet.fleet,
-        planetBuildings.hangar,
-        profile.factionId,
-      );
+      const planetFleet = planetOverpopulation
+        ? migratedPlanetFleet.fleet
+        : normalizeFleetStateForCapacity(
+          migratedPlanetFleet.fleet,
+          planetBuildings.hangar,
+          profile.factionId,
+        );
       const planetDefense = migrateDefenseState(raw.defense);
-      const planetProduction = migrateFleetProductionState(raw.fleetProduction, {
+      const migratedPlanetProduction = migrateFleetProductionState(raw.fleetProduction, {
         factionId: profile.factionId,
         fleet: planetFleet,
         defense: planetDefense,
         hangarLevel: planetBuildings.hangar,
         solarSatellites: planetSatelliteCount,
+        enforceCapacity: !planetOverpopulation,
       });
+      const planetProduction = planetOverpopulation
+        ? migratedPlanetProduction
+        : reconcileFleetProductionState(
+          migratedPlanetProduction,
+          planetFleet,
+          planetDefense,
+          profile.factionId,
+          timestamp,
+        ).state;
       const planetBase: PlanetRuntime = {
         name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 28) : `Колония ${planetId}`,
         skin: typeof raw.skin === 'string' && KNOWN_PLANET_SKINS.has(raw.skin) ? raw.skin : 'colonized',
@@ -813,6 +1286,7 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
           ? raw.energyExpenseAttribution as Partial<Record<string, number>>
           : undefined,
         solarSatellites: planetSatelliteCount,
+        ...(planetOverpopulation ? { overpopulation: planetOverpopulation } : {}),
         universeGalaxy: numberOr(raw.universeGalaxy, 1),
         universeSystem: numberOr(raw.universeSystem, 1),
         universePosition: numberOr(raw.universePosition, 1),
@@ -825,29 +1299,34 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
           { mode, fixture: resolveRecyclingFixture(mode) },
         ),
         trade: migrateTradeState(raw.trade, planetBuildings['trade-center'], timestamp),
-        spaceportUpgrades: reconcileSpaceportUpgradeState(migrateSpaceportUpgradeState(raw.spaceportUpgrades), timestamp).state,
+        spaceportUpgrades: planetOverpopulation
+          ? migrateSpaceportUpgradeState(raw.spaceportUpgrades)
+          : reconcileSpaceportUpgradeState(migrateSpaceportUpgradeState(raw.spaceportUpgrades), timestamp).state,
         stability: numberOr(raw.stability, 100),
         resources: normalizePlanetResources(raw.resources, { metal: 500, minerals: 500, gas: 500 }, getStorageCapacities(planetBuildings)),
       };
       planets[planetId] = syncPlanetEnergySources(planetBase, science.levels);
     }
 
-    const queues: PlanetQueueRecord = { 'helion-01': queue };
+    const queues: PlanetQueueRecord = { [primaryPlanetId]: queue };
     for (const planetId of Object.keys(planets)) {
-      if (planetId === 'helion-01') continue;
+      if (planetId === primaryPlanetId) continue;
       const planet = planets[planetId];
       queues[planetId] = migrateBuildingQueue(parsed.queues?.[planetId], planetId, planet.buildings, science.levels);
     }
 
-    const currentPlanetId = typeof parsed.currentPlanetId === 'string'
-      && parsed.currentPlanetId.trim()
-      && parsed.currentPlanetId.trim() !== 'helion-01'
-      && parsed.planets?.[parsed.currentPlanetId.trim()]
-      ? parsed.currentPlanetId.trim()
-      : 'helion-01';
+    const currentPlanetId = savedCurrentPlanetId && planets[savedCurrentPlanetId]
+      ? savedCurrentPlanetId
+      : primaryPlanetId;
     const alliedPlanets = migrateAlliedPlanets(parsed.alliedPlanets, mode, timestamp, science.levels);
-    const migratedEspionage = migrateEspionageState(parsed.espionage);
-    const defaultTestEspionage = createDefaultTestEspionageState();
+    const rawEspionage = objectRecord(parsed.espionage);
+    // A canonical `targets` object is authoritative even when it is empty.
+    // Inspect the persisted envelope before migration because migration also
+    // exposes legacy `bot01Planets` through the canonical `targets` field.
+    const hasCanonicalTargetRegistry = Boolean(objectRecord(rawEspionage?.targets));
+    const hasLegacyBotRegistry = Boolean(objectRecord(rawEspionage?.bot01Planets));
+    const migratedEspionage = migrateEspionageState(parsed.espionage, timestamp);
+    const defaultTestEspionage = createDefaultTestEspionageState(timestamp, { botFleet: 'seeded' });
     const savedTargets = Object.values(migratedEspionage.targets ?? {});
     const savedBotPlanets = savedTargets.filter((planet) => planet.ownerId === UNIVERSE_NPC_OWNER_ID);
     const legacyBotFixtures = savedBotPlanets.some((planet) => {
@@ -855,11 +1334,18 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       return !population || population.total === undefined || population.civilian !== undefined;
     });
     const hasCurrentBotProfile = Boolean(migratedEspionage.bot01Profile)
-      && savedBotPlanets.length > 0
       && !legacyBotFixtures;
     const testTargets = defaultTestEspionage.targets ?? defaultTestEspionage.bot01Planets ?? {};
     const espionage = mode === 'test'
-      ? (hasCurrentBotProfile
+      ? (hasCanonicalTargetRegistry
+        ? {
+          ...migratedEspionage,
+          targets: migratedEspionage.targets ?? {},
+          // Keep the old alias synchronized without allowing it to resurrect
+          // targets that were removed from the canonical registry.
+          bot01Planets: (migratedEspionage.targets ?? {}) as NonNullable<typeof migratedEspionage.bot01Planets>,
+        }
+        : (hasCurrentBotProfile && hasLegacyBotRegistry)
         ? migratedEspionage
         : {
           ...migratedEspionage,
@@ -872,16 +1358,38 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
         targets: Object.fromEntries(Object.entries(migratedEspionage.targets ?? {}).filter(([, target]) => target.ownerId !== UNIVERSE_NPC_OWNER_ID)),
         bot01Planets: undefined,
         bot01Profile: undefined,
+        bot01IncomingScenario: undefined,
       };
+
+    const asteroidSimulation = migrateAsteroidSimulation(
+      parsed.asteroidSimulation,
+      timestamp,
+      numberOr(parsed.schemaVersion, 0) < ASTEROID_GAS_RATE_MIGRATION_SCHEMA_VERSION,
+    );
+    const activeAsteroidSpawnIndices = new Set(asteroidSimulation.asteroids.map((asteroid) => asteroid.spawnIndex));
+    const ownerUpgradeLevels = migrateSpaceportUpgradeState({ shipLevels: parsed.shipUpgradeLevels }).shipLevels;
+    for (const planet of Object.values(planets)) {
+      for (const [id, level] of Object.entries(planet.spaceportUpgrades.shipLevels)) {
+        ownerUpgradeLevels[id] = Math.max(ownerUpgradeLevels[id] ?? 0, Math.max(0, Math.floor(level)));
+      }
+    }
+    for (const [planetId, planet] of Object.entries(planets)) {
+      planets[planetId] = {
+        ...planet,
+        spaceportUpgrades: { ...planet.spaceportUpgrades, shipLevels: {} },
+      };
+    }
+    const currentWallet = planets[currentPlanetId]?.resources ?? homeworldResources;
 
     return {
       schemaVersion: SAVE_SCHEMA_VERSION,
-      metal: homeworldResources.metal,
-      minerals: homeworldResources.minerals,
-      gas: homeworldResources.gas,
+      metal: currentWallet.metal,
+      minerals: currentWallet.minerals,
+      gas: currentWallet.gas,
       currentPlanetId,
       planets,
       queues,
+      shipUpgradeLevels: ownerUpgradeLevels,
       rating: migrateRatingPrototypeState(parsed.rating),
       combatPriority: migrateCombatPriority(parsed.combatPriority),
       combat,
@@ -889,10 +1397,17 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       operations,
       command,
       profile,
-      reports: migrateReportsState(parsed.reports, reportIds),
+      reports: {
+        ...migrateReportsState(parsed.reports, reportIds),
+        ...(overpopulationReports.length > 0 ? { overpopulationReports } : {}),
+        ...(recyclerArrivalReports.length > 0 ? { recyclerArrivalReports } : {}),
+        ...(gasExtractionArrivalReports.length > 0 ? { gasExtractionArrivalReports } : {}),
+      },
       science,
-      resourceClock: migrateResourceClock(parsed.resourceClock, timestamp, Object.keys(planets)),
-      flights: migrateFlightState(parsed.flights),
+      resourceClock: migrateResourceClock(parsed.resourceClock, timestamp, Object.keys(planets), currentPlanetId),
+      flights: migrateFlightState(parsed.flights, mode),
+      asteroidSimulation,
+      asteroidDebrisBySpawnIndex: migrateAsteroidDebris(parsed.asteroidDebrisBySpawnIndex, activeAsteroidSpawnIndices),
       espionage,
       alliedPlanets,
     };
@@ -921,6 +1436,7 @@ export function createPersistenceFacade(options: PersistenceOptions = {}) {
               targets: Object.fromEntries(Object.entries(state.espionage.targets ?? {}).filter(([, target]) => target.ownerId !== UNIVERSE_NPC_OWNER_ID)),
               bot01Planets: undefined,
               bot01Profile: undefined,
+              bot01IncomingScenario: undefined,
             },
           };
         storage.setItem(saveKey, JSON.stringify(persistedState));

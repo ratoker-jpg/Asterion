@@ -1,0 +1,99 @@
+{
+  "repository": "ratoker-jpg/Nemexia_auto_v2",
+  "revision": "87afb017749e2aa227ec29ea7825726387b4d4cf",
+  "sourceFixture": "commanders.json",
+  "sourceSelector": ".itemDescription (inner HTML; full source ability description)",
+  "projectionPolicy": {
+    "status": "implementationStatus is Asterion implementation state, not a source claim; expected values are frozen here to make the catalog projection explicit.",
+    "normalization": "Ability labels and concise descriptions are editorial Asterion summaries; source evidence snippets and numeric rates remain tied to the pinned tooltip. Effect labels are normalized interpretations, not literal source terminology.",
+    "rates": "Catalog ratePerLevel is the normalized localized rendering of the source percent-per-level evidence."
+  },
+  "records": [
+    {
+      "commanderId": "annihilator",
+      "expectedCatalog": { "commanderName": "Аннигилятор", "ability": "Форсированное разрушение", "description": "Увеличивает шанс уничтожить здание противника.", "ratePerLevel": "+0,5% за уровень", "implementationStatus": "catalog-only" },
+      "sourceEvidence": [{ "text": "увеличивает показатель Детонации на 0.5% за уровень", "normalizedEffect": "building-destruction chance", "ratePerLevel": 0.5 }]
+    },
+    {
+      "commanderId": "corsair",
+      "expectedCatalog": { "commanderName": "Корсар", "ability": "Форсированное пиратство", "description": "Увеличивает возможный процент украденных ресурсов за Пиратский рейд.", "ratePerLevel": "+1,25% за уровень", "implementationStatus": "catalog-only" },
+      "sourceEvidence": [
+        { "text": "имеет возможность совершать пиратские вылеты", "normalizedEffect": "pirate-raid capability", "ratePerLevel": null },
+        { "text": "увеличивает процент украденых ресурсов на  1.25% за уровень", "normalizedEffect": "pirate-raid resource theft", "ratePerLevel": 1.25 }
+      ]
+    },
+    {
+      "commanderId": "reanimator",
+      "expectedCatalog": { "commanderName": "Реаниматор", "ability": "Восстановление", "description": "Даёт шанс восстановить потерянные корабли прямо на поле боя.", "ratePerLevel": "+0,4% за уровень", "implementationStatus": "implemented" },
+      "sourceEvidence": [
+        { "text": "может восстановить до 15�ораблей во время каждого хода", "normalizedEffect": "per-turn restoration cap", "ratePerLevel": null },
+        { "text": "С каждым уровнем шанс увеличивается на 0.4%", "normalizedEffect": "battlefield ship-restoration chance", "ratePerLevel": 0.4 }
+      ]
+    },
+    {
+      "commanderId": "viper",
+      "expectedCatalog": { "commanderName": "Вайпер", "ability": "Критический удар", "description": "Увеличивает вероятность критического удара.", "ratePerLevel": "+0,075% за уровень", "implementationStatus": "implemented" },
+      "sourceEvidence": [{ "text": "увеличивает шанс нанести критический урон на  0.075%", "normalizedEffect": "critical-damage chance", "ratePerLevel": 0.075 }]
+    },
+    {
+      "commanderId": "scorpion",
+      "expectedCatalog": { "commanderName": "Скорпион", "ability": "Парализующий", "description": "Увеличивает шанс парализовать корабли противника.", "ratePerLevel": "+0,1% за уровень", "implementationStatus": "implemented" },
+      "sourceEvidence": [
+        { "text": "моментально парализовывающего все орудия противника на текущий ход", "normalizedEffect": "opponent weapons disabled for current turn", "ratePerLevel": null },
+        { "text": "Шанс на успешное проникновения увеличивается на 0.1% с каждым уровнем", "normalizedEffect": "paralysis-trigger chance", "ratePerLevel": 0.1 }
+      ]
+    },
+    {
+      "commanderId": "phantom",
+      "expectedCatalog": { "commanderName": "Фантом", "ability": "Разрушение", "description": "Даёт шанс отменить атаку противника.", "ratePerLevel": "+0,75% за уровень", "implementationStatus": "implemented" },
+      "sourceEvidence": [
+        { "text": "отослать противника назад, предотвращая битву", "normalizedEffect": "prevented battle / returned opponent", "ratePerLevel": null },
+        { "text": "Каждый уровень дает 0.75% к шансу на успешный взлом системы", "normalizedEffect": "successful-system-intrusion chance", "ratePerLevel": 0.75 }
+      ]
+    },
+    {
+      "commanderId": "hunter",
+      "expectedCatalog": { "commanderName": "Охотник", "ability": "Охота", "description": "Увеличивает шанс обнаружить вражеских шпионов.", "ratePerLevel": "+1,75% за уровень", "implementationStatus": "catalog-only" },
+      "sourceEvidence": [
+        { "text": "обнаружить вражеские шпионские зонды как только они входят в атмосферу вашей планеты", "normalizedEffect": "incoming-spy-probe detection", "ratePerLevel": null },
+        { "text": "Шанс на обнаружение увеличивается на 1.75% за каждый уровень", "normalizedEffect": "spy-probe detection chance", "ratePerLevel": 1.75 }
+      ]
+    },
+    {
+      "commanderId": "typhoon",
+      "expectedCatalog": { "commanderName": "Тайфун", "ability": "Форсаж", "description": "Увеличивает скорость полёта.", "ratePerLevel": "+0,1% за уровень", "implementationStatus": "catalog-only" },
+      "sourceEvidence": [{ "text": "способен увеличить скорость ваших кораблей на 0.1% за уровень", "normalizedEffect": "fleet flight speed", "ratePerLevel": 0.1 }]
+    },
+    {
+      "commanderId": "executioner",
+      "expectedCatalog": { "commanderName": "Палач", "ability": "Форсированная атака", "description": "Увеличивает урон от атаки флота.", "ratePerLevel": "+0,15% за уровень", "implementationStatus": "implemented" },
+      "sourceEvidence": [{ "text": "добавляя 0.15% бонуса за каждый уровень к атаке вашему флоту", "normalizedEffect": "fleet attack bonus", "ratePerLevel": 0.15 }]
+    },
+    {
+      "commanderId": "juggernaut",
+      "expectedCatalog": { "commanderName": "Джаггернаут", "ability": "Повышенные жизни", "description": "Увеличивает жизненные очки кораблей флота.", "ratePerLevel": "+0,15% за уровень", "implementationStatus": "implemented" },
+      "sourceEvidence": [{ "text": "каждый корабль получает бонус к жизненным очкам в размере 0.15% за уровень", "normalizedEffect": "fleet ship life bonus", "ratePerLevel": 0.15 }]
+    },
+    {
+      "commanderId": "argo",
+      "expectedCatalog": { "commanderName": "Арго", "ability": "Инженерное дело Отступников", "description": "Даёт дополнительные очки усовершенствования в боях с Отступниками и увеличивает грузоподъёмность кораблей.", "ratePerLevel": "+1% за уровень", "implementationStatus": "catalog-only" },
+      "sourceEvidence": [
+        { "text": "дополнительно начисляя 1% на каждом уровне", "normalizedEffect": "separate outlaw-battle upgrade-points bonus", "ratePerLevel": 1 },
+        { "text": "каждый уровень будет добавлять 1% к грузоподъемности ваших кораблей", "normalizedEffect": "separate fleet cargo capacity bonus", "ratePerLevel": 1 }
+      ]
+    },
+    {
+      "commanderId": "judge",
+      "expectedCatalog": { "commanderName": "Судья", "ability": "Наказание", "description": "Уменьшает показатель брони всех вражеских юнитов.", "ratePerLevel": "−0,15% брони противника за уровень", "implementationStatus": "implemented" },
+      "sourceEvidence": [{ "text": "уменьшая броню всех враждебных единиц на 0.15% на каждом уровне", "normalizedEffect": "enemy armor reduction", "ratePerLevel": -0.15 }]
+    },
+    {
+      "commanderId": "polias",
+      "expectedCatalog": { "commanderName": "Полиас", "ability": "Patronage", "description": "Снижает вероятность разрушения защищаемой планеты.", "ratePerLevel": "−0,25% вероятности разрушения планеты за уровень", "implementationStatus": "catalog-only" },
+      "sourceEvidence": [
+        { "text": "это пассивное умение, которое доступно в течение всего боя, даже если ваш командирский корабль будет уничтожен до окончания боя", "normalizedEffect": "passive protection persists after commander destruction", "ratePerLevel": null },
+        { "text": "Вероятность уничтожения планеты снижается на 0.25% за уровень корабля", "normalizedEffect": "protected-planet destruction chance reduction", "ratePerLevel": -0.25 }
+      ]
+    }
+  ]
+}

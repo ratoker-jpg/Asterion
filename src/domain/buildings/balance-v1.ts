@@ -41,6 +41,7 @@ export type ResourceCost = Record<ResourceKey, number>;
 export const SCIENCE_ID_PHYSICS: ScienceId = 1;
 export const SCIENCE_ID_MATHEMATICS: ScienceId = 3;
 export const SCIENCE_ID_IMPROVED_CONSTRUCTION: ScienceId = 17;
+export const STANDARD_RESOURCE_PRODUCTION_MULTIPLIER = 10;
 export const SCIENCE_INCOME_BONUS_PER_LEVEL_PERCENT = 5;
 export const SCIENCE_INCOME_MAX_BONUS_PERCENT = 50;
 export const IMPROVED_CONSTRUCTION_COST_REDUCTION_PER_LEVEL_PERCENT = 1;
@@ -121,13 +122,28 @@ function sourceFor(role: BuildingRole, level: number): BalanceRow['source'] {
 function effectFor(role: BuildingRole, level: number, values: number[]): BalanceEffect {
   const value = values[5] ?? 0;
   if (role.startsWith('metal-production')) {
-    return { kind: 'resource-income', resource: 'metal', amountPerHour: value, label: 'Добыча металла' };
+    return {
+      kind: 'resource-income',
+      resource: 'metal',
+      amountPerHour: value * STANDARD_RESOURCE_PRODUCTION_MULTIPLIER,
+      label: 'Добыча металла',
+    };
   }
   if (role.startsWith('mineral-production')) {
-    return { kind: 'resource-income', resource: 'minerals', amountPerHour: value, label: 'Добыча минералов' };
+    return {
+      kind: 'resource-income',
+      resource: 'minerals',
+      amountPerHour: value * STANDARD_RESOURCE_PRODUCTION_MULTIPLIER,
+      label: 'Добыча минералов',
+    };
   }
   if (role.startsWith('gas-production')) {
-    return { kind: 'resource-income', resource: 'gas', amountPerHour: value, label: 'Добыча газа' };
+    return {
+      kind: 'resource-income',
+      resource: 'gas',
+      amountPerHour: value * STANDARD_RESOURCE_PRODUCTION_MULTIPLIER,
+      label: 'Добыча газа',
+    };
   }
   if (role === 'basic-energy' || role === 'advanced-energy') {
     return { kind: 'energy-income', amountPerHour: value, label: 'Энергия' };

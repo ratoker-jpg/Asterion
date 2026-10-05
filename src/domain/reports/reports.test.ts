@@ -4,15 +4,27 @@ import test from 'node:test';
 import { createDefaultBattleHistory, setBattleReportSaved } from '../combat/battle-repository.ts';
 import { DEMO_BATTLE_REPORTS } from '../combat/battle-fixtures.ts';
 import { ASTERION_SAVE_KEY } from '../combat/priority.ts';
+import { getBattleResultForPlayer } from '../combat/report.ts';
 import type { BattleReport } from '../combat/report.ts';
 import { createDefaultCommandState, joinJointOperation } from '../command/repository.ts';
 import { createDefaultOperationsState, revealOperation } from '../operations/repository.ts';
 import {
   battleReportToReportItem,
   buildReportsFeed,
+  createGasExtractionArrivalReportId,
+  createRecyclerArrivalReportId,
+  createOverpopulationEpisodeReportId,
   filterReportItems,
+  gasExtractionArrivalReportToReportItem,
   getReportCategoryCounts,
+  getReportUnreadCounts,
   operationIntelToReportItem,
+  overpopulationEpisodeReportToReportItem,
+  preservePersistentReportCollections,
+  recyclerArrivalReportToReportItem,
+  upsertGasExtractionArrivalReport,
+  upsertRecyclerArrivalReport,
+  upsertOverpopulationEpisodeReport,
 } from './adapters.ts';
 import { NON_COMBAT_REPORT_FIXTURES } from './catalog.ts';
 import {
@@ -25,15 +37,26 @@ import {
   persistReportsState,
   readReportsState,
 } from './repository.ts';
+import type { GasExtractionArrivalReport } from './types.ts';
 
 class MemoryStorage {
   private values = new Map<string, string>();
   getItem(key: string) { return this.values.get(key) ?? null; }
   setItem(key: string, value: string) { this.values.set(key, value); }
+  removeItem(key: string) { this.values.delete(key); }
 }
 
 function commandWithoutJointOperations() {
   return { ...createDefaultCommandState(), jointOperations: [] };
+}
+
+let persistenceModule: typeof import('../../application/persistence.ts') | undefined;
+async function loadPersistence() {
+  if (persistenceModule) return persistenceModule;
+  const { register } = await import('node:module');
+  register(new URL('../combat/test-asset-loader.mjs', import.meta.url), import.meta.url);
+  persistenceModule = await import('../../application/persistence.ts');
+  return persistenceModule;
 }
 
 test('Reports does not fabricate non-combat runtime history', () => {
@@ -58,6 +81,326 @@ test('Доклады uses BattleReport and excludes simulator and Arena output',
   assert.equal(battleItems.length, 1);
   assert.equal(battleItems[0].battleReportId, base.id);
   assert.equal(battleItems[0].source, 'combat');
+});
+
+test('overpopulation final report uses one stable episode id and projects summary plus ordinary ship losses', () => {
+  const initial = createDefaultReportsState();
+  const report = {
+    planetId: 'colony-07',
+    planetName: 'Новая Аркадия',
+    factionId: 'synod' as const,
+    populationBefore: 35_000,
+    populationAfter: 25_000,
+    capacity: 25_000,
+    episodeStartedAt: 1_000,
+    episodeEndedAt: 601_000,
+    removedShips: [{ shipId: 'scout' as const, count: 5 }, { shipId: 'cruiser' as const, count: 2 }],
+  };
+  const once = upsertOverpopulationEpisodeReport(initial, report);
+  const twice = upsertOverpopulationEpisodeReport(once, { ...report, removedShips: [{ shipId: 'scout', count: 6 }] });
+
+  assert.equal(createOverpopulationEpisodeReportId(report.planetId, report.episodeStartedAt), once.overpopulationReports?.[0].id);
+  assert.equal(twice.overpopulationReports?.length, 1);
+  assert.deepEqual(twice.overpopulationReports?.[0].removedShips, [{ shipId: 'scout', count: 6 }]);
+
+  const item = overpopulationEpisodeReportToReportItem(once.overpopulationReports![0]);
+  assert.equal(item.category, 'system');
+  assert.equal(item.source, 'overpopulation');
+  assert.equal(item.id, once.overpopulationReports![0].id);
+  assert.equal(item.statusLabel, 'ПЛАНЕТА РАЗБЛОКИРОВАНА');
+  assert.match(item.body, /Планета Новая Аркадия разблокирована/);
+  assert.deepEqual(item.details.slice(0, 6).map(({ label }) => label), [
+    'Планета', 'Население до эпизода', 'Население после эпизода', 'Вместимость', 'Начало эпизода', 'Разблокировка',
+  ]);
+  assert.equal(item.details.at(-1)?.value, '7');
+  assert.equal(buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, once.overpopulationReports).some((entry) => entry.id === item.id), true);
+});
+
+test('recycler arrival report projects coordinates and debris totals into System with a stable id', () => {
+  const report = {
+    flightId: 'flight:qa-recycler-1',
+    coordinate: { galaxy: 2, system: 14, position: 7 },
+    arrivedAtMs: 123_000,
+    collectedDebris: 800,
+    remainingOrbitalDebris: 200,
+  };
+  const first = upsertRecyclerArrivalReport(createDefaultReportsState(), report);
+  const repeated = upsertRecyclerArrivalReport(first, report);
+  const stored = repeated.recyclerArrivalReports![0];
+  const item = recyclerArrivalReportToReportItem(stored);
+
+  assert.equal(createRecyclerArrivalReportId(report.flightId), 'recycler-arrival:flight:qa-recycler-1');
+  assert.equal(repeated.recyclerArrivalReports?.length, 1);
+  assert.equal(stored.id, 'recycler-arrival:flight:qa-recycler-1');
+  assert.equal(item.id, stored.id);
+  assert.equal(item.source, 'recycling');
+  assert.equal(item.category, 'system');
+  assert.equal(item.timestamp, new Date(report.arrivedAtMs).toISOString());
+  assert.deepEqual(item.coordinates, ['[2:14:7]']);
+  assert.deepEqual(item.details, [
+    { label: 'Координаты прибытия', value: '[2:14:7]' },
+    { label: 'Собрано обломков', value: '800' },
+    { label: 'Осталось свободных обломков на орбите', value: '200' },
+  ]);
+  assert.equal(buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, [], repeated.recyclerArrivalReports).some((entry) => entry.id === stored.id), true);
+  assert.doesNotMatch(`${item.title} ${item.preview} ${item.body} ${item.details.map(({ label, value }) => `${label} ${value}`).join(' ')}`, /газа|газ|груз|астероид/i);
+});
+
+test('recycler arrival upserts retain the full arrival history and replace a repeated flight', () => {
+  const reports = Array.from({ length: 501 }, (_, index) => ({
+    flightId: `flight:${index}`,
+    coordinate: { galaxy: 1, system: 1, position: 1 },
+    arrivedAtMs: index,
+    collectedDebris: index,
+    remainingOrbitalDebris: 0,
+  }));
+  const history = reports.reduce((state, report) => upsertRecyclerArrivalReport(state, report), createDefaultReportsState());
+  const repeated = upsertRecyclerArrivalReport(history, { ...reports[0], collectedDebris: 99 });
+
+  assert.equal(repeated.recyclerArrivalReports?.length, 501);
+  assert.equal(repeated.recyclerArrivalReports?.filter(({ flightId }) => flightId === reports[0].flightId).length, 1);
+  assert.equal(repeated.recyclerArrivalReports?.find(({ flightId }) => flightId === reports[0].flightId)?.collectedDebris, 99);
+});
+
+test('zero-debris recycler arrival still produces a System report with explicit empty-result copy', () => {
+  const report = {
+    id: 'recycler-arrival:flight:qa-zero',
+    flightId: 'flight:qa-zero',
+    coordinate: { galaxy: 1, system: 1, position: 3 },
+    arrivedAtMs: 456_000,
+    collectedDebris: 0,
+    remainingOrbitalDebris: 0,
+  } as const;
+  const item = recyclerArrivalReportToReportItem(report);
+  const feed = buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, [], [report]);
+
+  assert.equal(item.category, 'system');
+  assert.match(item.body, /На орбите обломков не найдено/);
+  assert.equal(feed.filter((entry) => entry.id === report.id).length, 1);
+});
+
+test('gas extraction arrivals have a distinct stable report schema and show complete found/missed results', () => {
+  const found = {
+    flightId: 'flight:qa-gas-found',
+    coordinate: { galaxy: 3, system: 22, position: 6 },
+    arrivalAt: 321_000,
+    outcome: 'found' as const,
+    gasCollected: 450,
+    scrapCollected: 0,
+  };
+  const missed: GasExtractionArrivalReport = {
+    id: createGasExtractionArrivalReportId('flight:qa-gas-missed'),
+    flightId: 'flight:qa-gas-missed',
+    coordinate: { galaxy: 3, system: 22, position: 7 },
+    arrivalAt: 654_000,
+    outcome: 'missed' as const,
+    gasCollected: 0,
+    scrapCollected: 0,
+  };
+  const first = upsertGasExtractionArrivalReport(createDefaultReportsState(), found);
+  const repeated = upsertGasExtractionArrivalReport(first, found);
+  const foundStored = repeated.gasExtractionArrivalReports![0];
+  const foundItem = gasExtractionArrivalReportToReportItem(foundStored);
+  const missedItem = gasExtractionArrivalReportToReportItem({ ...missed, id: createGasExtractionArrivalReportId(missed.flightId) });
+  const foundText = `${foundItem.title} ${foundItem.preview} ${foundItem.body} ${foundItem.details.map(({ label, value }) => `${label} ${value}`).join(' ')}`;
+  const missedText = `${missedItem.title} ${missedItem.preview} ${missedItem.body} ${missedItem.details.map(({ label, value }) => `${label} ${value}`).join(' ')}`;
+
+  assert.equal(createGasExtractionArrivalReportId(found.flightId), 'gas-extraction-arrival:flight:qa-gas-found');
+  assert.equal(repeated.gasExtractionArrivalReports?.length, 1);
+  assert.equal(foundStored.id, 'gas-extraction-arrival:flight:qa-gas-found');
+  assert.equal(foundItem.source, 'gas-extraction');
+  assert.equal(foundItem.category, 'system');
+  assert.equal(foundItem.timestamp, new Date(found.arrivalAt).toISOString());
+  assert.equal(foundItem.title, 'Астероид найден');
+  assert.deepEqual(foundItem.coordinates, ['[3:22:6]']);
+  assert.match(foundText, /\[3:22:6\]/);
+  assert.match(foundText, /Собрано газа: 450/);
+  assert.match(foundText, /Собрано обломков: 0/);
+  assert.equal(missedItem.title, 'Астероид не найден по координатам [3:22:7]');
+  assert.match(missedText, /\[3:22:7\]/);
+  assert.match(missedText, /Собрано газа: 0/);
+  assert.match(missedText, /Собрано обломков: 0/);
+  assert.doesNotMatch(`${foundText} ${missedText}`, /запас|резерв|rate|rating|рейтин/i);
+  assert.equal(buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, [], [], repeated.gasExtractionArrivalReports).some((entry) => entry.id === foundStored.id), true);
+  assert.equal(buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, [], [], [missed]).some((entry) => entry.id === missedItem.id), true);
+});
+
+test('gas extraction reports flow through unread counts and keep persistent records across read/hide metadata changes', () => {
+  const report: GasExtractionArrivalReport = {
+    id: 'gas-extraction-arrival:flight:qa-gas-metadata',
+    flightId: 'flight:qa-gas-metadata',
+    coordinate: { galaxy: 1, system: 9, position: 4 },
+    arrivalAt: 987_000,
+    outcome: 'missed' as const,
+    gasCollected: 0,
+    scrapCollected: 0,
+  };
+  const previous = { ...createDefaultReportsState(), gasExtractionArrivalReports: [report] };
+  const item = gasExtractionArrivalReportToReportItem(report);
+  const feed = buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, [], [], [report]);
+  const read = preservePersistentReportCollections(markReportRead(previous, report.id), previous);
+  const hidden = preservePersistentReportCollections(deleteSelectedReports(previous, [item], 'system', [report.id]), previous);
+  const countUnread = (state: ReturnType<typeof createDefaultReportsState>) =>
+    Object.values(getReportUnreadCounts(feed, state)).reduce((total, count) => total + count, 0);
+
+  assert.deepEqual(read.gasExtractionArrivalReports, [report]);
+  assert.deepEqual(hidden.gasExtractionArrivalReports, [report]);
+  assert.equal(hidden.hiddenIds.includes(report.id), true);
+  assert.equal(countUnread(createDefaultReportsState()), 1);
+  assert.equal(countUnread(markReportRead(createDefaultReportsState(), report.id)), 0);
+});
+
+test('report metadata read/hide transitions preserve recycler arrival records', () => {
+  const report = {
+    id: 'recycler-arrival:flight:qa-retention',
+    flightId: 'flight:qa-retention',
+    coordinate: { galaxy: 1, system: 8, position: 9 },
+    arrivedAtMs: 789_000,
+    collectedDebris: 12,
+    remainingOrbitalDebris: 0,
+  } as const;
+  const previous = { ...createDefaultReportsState(), recyclerArrivalReports: [report] };
+  const item = recyclerArrivalReportToReportItem(report);
+  const read = preservePersistentReportCollections(markReportRead(previous, report.id), previous);
+  const hidden = preservePersistentReportCollections(deleteSelectedReports(previous, [item], 'system', [report.id]), previous);
+
+  assert.deepEqual(read.recyclerArrivalReports, [report]);
+  assert.deepEqual(hidden.recyclerArrivalReports, [report]);
+  assert.equal(hidden.hiddenIds.includes(report.id), true);
+});
+
+test('unread recycler arrival reports contribute to the aggregate unread count and decrement when read', () => {
+  const report = {
+    id: 'recycler-arrival:flight:qa-unread-count',
+    flightId: 'flight:qa-unread-count',
+    coordinate: { galaxy: 1, system: 4, position: 6 },
+    arrivedAtMs: 900_000,
+    collectedDebris: 25,
+    remainingOrbitalDebris: 5,
+  } as const;
+  const feed = buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, [], [report]);
+  const countUnread = (state: ReturnType<typeof createDefaultReportsState>) =>
+    Object.values(getReportUnreadCounts(feed, state)).reduce((total, count) => total + count, 0);
+
+  assert.equal(countUnread(createDefaultReportsState()), 1);
+  assert.equal(countUnread(markReportRead(createDefaultReportsState(), report.id)), 0);
+});
+
+test('overpopulation episode report survives save hydration with read/hidden metadata compatibility', async () => {
+  const { createInitialSaveState, createPersistenceFacade } = await loadPersistence();
+  const storage = new MemoryStorage();
+  const initial = createInitialSaveState('production', 50_000);
+  const reports = upsertOverpopulationEpisodeReport(initial.reports, {
+    planetId: 'colony-02',
+    planetName: 'Станция Тихая',
+    factionId: 'veyra',
+    populationBefore: 12_000,
+    populationAfter: 10_000,
+    capacity: 10_000,
+    episodeStartedAt: 10_000,
+    episodeEndedAt: 610_000,
+    removedShips: [{ shipId: 'destroyer', count: 3 }],
+  });
+  const episodeId = reports.overpopulationReports![0].id;
+  const state = { ...initial, reports: { ...reports, readIds: [episodeId], hiddenIds: [] } };
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => 700_000 });
+
+  assert.deepEqual(persistence.write(state), { ok: true });
+  const persistedEnvelope = JSON.parse(storage.getItem(persistence.saveKey)!) as {
+    planets: Record<string, Record<string, unknown>>;
+  };
+  persistedEnvelope.planets['helion-01'].overpopulation = {
+    episodeStartedAt: 10_000,
+    initialExcess: 2_000,
+    scheduledBurnPool: 500,
+    burnedPopulation: 0,
+    lastReconciledAt: 50_000,
+    blocked: true,
+    initialPopulation: 12_000,
+    initialCapacity: 10_000,
+    removedShips: [
+      { shipId: 'scout', count: 3 },
+      { shipId: 'destroyer', count: 2 },
+      { shipId: 'solar-satellite', count: 4 },
+      { shipId: 'corsair', count: 1 },
+      { shipId: 'unknown', count: 9 },
+    ],
+  };
+  storage.setItem(persistence.saveKey, JSON.stringify(persistedEnvelope));
+  const hydrated = persistence.read();
+  assert.deepEqual(hydrated.reports.overpopulationReports, reports.overpopulationReports);
+  assert.deepEqual(hydrated.reports.readIds, [episodeId]);
+  assert.equal(hydrated.planets['helion-01'].overpopulation?.initialPopulation, 12_000);
+  assert.equal(hydrated.planets['helion-01'].overpopulation?.initialCapacity, 10_000);
+  assert.deepEqual(hydrated.planets['helion-01'].overpopulation?.removedShips, [
+    { shipId: 'scout', count: 3 }, { shipId: 'destroyer', count: 2 },
+  ]);
+  assert.deepEqual(buildReportsFeed([], createDefaultOperationsState(), commandWithoutJointOperations(), undefined, hydrated.reports.overpopulationReports).map(({ id }) => id), [episodeId]);
+  assert.deepEqual(persistence.write(hydrated), { ok: true });
+  assert.deepEqual(persistence.read().planets['helion-01'].overpopulation?.removedShips, [
+    { shipId: 'scout', count: 3 }, { shipId: 'destroyer', count: 2 },
+  ]);
+});
+
+test('save hydration accepts empty ordinary fleet only for deployment with a valid commander', async () => {
+  const { createInitialSaveState, createPersistenceFacade } = await loadPersistence();
+  const storage = new MemoryStorage();
+  const initial = createInitialSaveState('production', 1_000);
+  const baseFlight = {
+    id: 'flight:commander-only',
+    requestId: 'request:commander-only',
+    missionId: 'deployment',
+    originPlanetId: 'helion-01',
+    originCoordinate: { galaxy: 1, system: 1, position: 1 },
+    destination: { kind: 'planet', planetId: 'helion-01', coordinate: { galaxy: 1, system: 1, position: 2 } },
+    destinationPlanetId: 'helion-01',
+    targetRelation: 'self',
+    destinationCoordinate: { galaxy: 1, system: 1, position: 2 },
+    selectedShips: {},
+    selectedCommanders: { corsair: 1 },
+    selectedCommanderLevels: { corsair: 0 },
+    populationReserved: 10,
+    routeDistance: 1,
+    effectiveSpeed: 33_000,
+    oneWayDurationMs: 180_000,
+    departedAt: 1_000,
+    arrivalAt: 181_000,
+    gasCost: 1,
+    phase: 'outbound',
+  };
+  storage.setItem('asterion.vertical-slice.v1', JSON.stringify({
+    ...initial,
+    flights: { records: [
+      baseFlight,
+      { ...baseFlight, id: 'flight:invalid-mission', requestId: 'request:invalid-mission', missionId: 'attack', selectedCommanders: undefined, selectedCommanderLevels: undefined },
+      { ...baseFlight, id: 'flight:invalid-deployment', requestId: 'request:invalid-deployment', selectedCommanders: undefined, selectedCommanderLevels: undefined },
+    ], requestIndex: {} },
+  }));
+  const hydrated = createPersistenceFacade({ mode: 'production', storage, now: () => 1_100 }).read();
+
+  assert.deepEqual(hydrated.flights.records.map(({ id }) => id), ['flight:commander-only']);
+  assert.deepEqual(hydrated.flights.records[0].selectedShips, {});
+  assert.deepEqual(hydrated.flights.records[0].selectedCommanders, { corsair: 1 });
+});
+
+test('local player aliases produce attack-specific report labels and results', () => {
+  const report = {
+    ...DEMO_BATTLE_REPORTS[0],
+    attacker: { ...DEMO_BATTLE_REPORTS[0].attacker, playerId: 'player-current' },
+  };
+  const item = battleReportToReportItem(report);
+  assert.equal(getBattleResultForPlayer(report, 'player-aster'), 'victory');
+  assert.equal(getBattleResultForPlayer(report, 'player-current'), 'victory');
+  assert.equal(item.statusLabel, 'ПОБЕДА ПРИ АТАКЕ');
+  assert.match(item.title, /^Победа при атаке/);
+
+  const defeat = {
+    ...report,
+    winner: 'attacker' as const,
+    attacker: { ...report.attacker, playerId: 'other-attacker' },
+    defender: { ...report.defender, playerId: 'player-aster' },
+  };
+  assert.equal(battleReportToReportItem(defeat).statusLabel, 'ПОРАЖЕНИЕ ПРИ ОБОРОНЕ');
 });
 
 test('operation battle remains canonical BattleReport but receives operation context', () => {

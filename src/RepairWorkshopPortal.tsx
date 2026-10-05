@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { RepairWorkshopView } from './RepairWorkshopView';
 import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
-import { ACTIVE_RUNTIME_MODE, RUNTIME_STATE_CHANGED_EVENT } from './domain/runtime/mode.ts';
+import { ACTIVE_RUNTIME_MODE, RUNTIME_RESET_EVENT, RUNTIME_STATE_CHANGED_EVENT } from './domain/runtime/mode.ts';
 import { createPersistenceFacade } from './application/persistence.ts';
 import { getRepairWorkshopSnapshot } from './application/repair.ts';
 import type { SaveState } from './application/contracts.ts';
@@ -19,6 +19,7 @@ function readCurrentPlanet() {
 export function RepairWorkshopPortal() {
   const { route, fleetSection, setFleetSection } = useNavigation();
   const [target, setTarget] = useState<Element | null>(null);
+  const [resetNonce, setResetNonce] = useState(0);
   const [planet, setPlanet] = useState({ name: 'Helion 01', coords: '[1:1:1]' });
   const persistence = useMemo(() => createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }), []);
   const [state, setState] = useState<SaveState>(() => persistence.read());
@@ -37,12 +38,18 @@ export function RepairWorkshopPortal() {
       setTarget(document.querySelector('.fleet-main-v1'));
       setPlanet(readCurrentPlanet());
     };
+    const onRuntimeReset = () => {
+      setResetNonce((current) => current + 1);
+      window.setTimeout(syncPlanet, 0);
+    };
 
     syncPlanet();
     window.addEventListener(RUNTIME_STATE_CHANGED_EVENT, onRuntimeStateChanged);
+    window.addEventListener(RUNTIME_RESET_EVENT, onRuntimeReset);
     window.addEventListener('storage', syncPlanet);
     return () => {
       window.removeEventListener(RUNTIME_STATE_CHANGED_EVENT, onRuntimeStateChanged);
+      window.removeEventListener(RUNTIME_RESET_EVENT, onRuntimeReset);
       window.removeEventListener('storage', syncPlanet);
     };
   }, [fleetSection, persistence, route]);
@@ -67,6 +74,7 @@ export function RepairWorkshopPortal() {
 
   return createPortal(
     <RepairWorkshopView
+      key={resetNonce}
       planetName={planet.name}
       coords={planet.coords}
       snapshot={snapshot}

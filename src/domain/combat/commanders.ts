@@ -58,6 +58,7 @@ export const COMMANDER_ABILITIES: Readonly<Record<CommanderId, CommanderAbilityD
     description: 'Увеличивает возможный процент украденных ресурсов за Пиратский рейд.',
     ratePerLevel: '+1,25% за уровень',
     implementationStatus: 'catalog-only',
+    note: 'В боях с пиратами также увеличивает долю обломков от уничтоженных пиратских кораблей на 0,5 процентного пункта за уровень; Корсар должен участвовать в бою и выжить, но не обязан быть ведущим командиром.',
   },
   reanimator: {
     commanderId: 'reanimator',
@@ -158,7 +159,7 @@ export const COMMANDER_COMBAT_EFFECTS: Readonly<Partial<Record<CommanderId, Comm
   viper: { kind: 'critical', ratePerLevel: 0.00075, status: 'confirmed', note: '+0.075% шанса критического залпа за уровень.' },
   scorpion: { kind: 'paralyze', ratePerLevel: 0.001, status: 'confirmed', note: '+0.1% шанса парализовать ближайшую атаку цели за уровень.' },
   phantom: { kind: 'cancel-attack', ratePerLevel: 0.0075, status: 'inferred', note: '+0.75% шанса отменить ближайшую атаку цели за уровень.' },
-  reanimator: { kind: 'reanimator', ratePerLevel: 0.004, cap: 15, status: 'inferred', note: '+0.4% шанса восстановить до 15 кораблей в конце своей фазы.' },
+  reanimator: { kind: 'reanimator', ratePerLevel: 0.004, cap: 15, status: 'inferred', note: '+0.4% шанса восстановить до 15 кораблей в конце раунда; формула и источник ремонта не установлены Nemexia-архивом.' },
 };
 
 export function getCommanderCombatEffect(id: CommanderId | null | undefined) {

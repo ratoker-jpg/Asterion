@@ -11,6 +11,7 @@ import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { SAVE_SCHEMA_VERSION } from './persistence.ts';
 import {
   getPlanetState,
+  getOwnerShipUpgradeLevel,
   getPlanetResources,
   replacePlanetResources,
   replacePlanetState,
@@ -20,6 +21,8 @@ import {
 import type { BuildingApplicationContext } from './buildings.ts';
 import { removeSolarSatellitesFromFleet } from '../domain/fleet/runtime.ts';
 import { transitionPlanetEnergySources } from './energy.ts';
+import { isPlanetBlocked } from './overpopulation.ts';
+import { addUnrecoveredResourceCost } from '../domain/rating/scoring.ts';
 
 export const FLEET_PRODUCTION_START_REQUEST_EVENT = 'asterion:fleet-production-start-request';
 export const FLEET_PRODUCTION_CANCEL_REQUEST_EVENT = 'asterion:fleet-production-cancel-request';
@@ -50,6 +53,7 @@ function productionContext(
   const planet = getPlanetState(state, context.planetId);
   const migratedFleet = removeSolarSatellitesFromFleet(planet.fleet);
   return {
+    planetId: context.planetId,
     state: planet.fleetProduction,
     fleet: planet.fleet,
     defense: planet.defense,
@@ -60,6 +64,7 @@ function productionContext(
     hangarLevel: planet.buildings.hangar,
     shipyardLevel: planet.buildings.shipyard,
     advancedFactoryLevel: planet.buildings['advanced-factory'],
+    scienceLevels: state.science.levels,
     mode: context.mode,
     testTimeScale: context.testTimeScale,
     now,
@@ -125,8 +130,22 @@ export function startFleetProduction(
   quantity: number,
   orderId = defaultOrderId(queueKind, itemId, context.now),
 ): FleetProductionActionResult {
+  if (isPlanetBlocked(state, context.planetId)) {
+    const planet = getPlanetState(state, context.planetId);
+    const blockedTransition = {
+      ok: false,
+      state: planet.fleetProduction,
+      fleet: planet.fleet,
+      defense: planet.defense,
+      wallet: getPlanetResources(state, context.planetId),
+      order: null,
+      completed: [],
+      reason: 'Планета заблокирована из-за перенаселения.',
+    } as FleetProductionTransition;
+    return { transition: blockedTransition, state };
+  }
   const planet = getPlanetState(state, context.planetId);
-  const commanderLevel = planet.spaceportUpgrades.shipLevels[itemId] ?? 0;
+  const commanderLevel = getOwnerShipUpgradeLevel(state, itemId);
   const transition = enqueueFleetProduction({
     ...productionContext(state, context, context.now),
     commanderLevel,
@@ -144,17 +163,48 @@ export function cancelFleetProduction(
   context: BuildingApplicationContext,
   orderId: string,
 ): FleetProductionActionResult {
+  if (isPlanetBlocked(state, context.planetId)) {
+    const current = productionContext(state, context, context.now);
+    const transition: FleetProductionCancellationTransition = {
+      ok: false,
+      state: current.state,
+      fleet: current.fleet,
+      defense: current.defense,
+      wallet: current.wallet,
+      canceled: null,
+      completed: [],
+      refund: null,
+      refundPercent: null,
+      reason: 'Планета заблокирована из-за перенаселения.',
+    };
+    return { transition, state };
+  }
   const transition = cancelFleetProductionDomain(
     productionContext(state, context, context.now),
     orderId,
     context.rng,
   );
   const planet = getPlanetState(state, context.planetId);
+  let nextState = transition.ok || transition.state !== planet.fleetProduction || transition.fleet !== planet.fleet || transition.defense !== planet.defense
+    ? stateFromTransition(state, context, transition)
+    : state;
+  if (transition.ok && transition.canceled) {
+    const order = transition.canceled;
+    const quantity = Math.max(1, Math.floor(order.quantity));
+    const remaining = Math.max(0, Math.floor(order.quantity) - Math.floor(order.completedQuantity));
+    const paidPendingCost = {
+      metal: Math.floor(order.cost.metal * remaining / quantity),
+      minerals: Math.floor(order.cost.minerals * remaining / quantity),
+      gas: Math.floor(order.cost.gas * remaining / quantity),
+    };
+    nextState = {
+      ...nextState,
+      rating: addUnrecoveredResourceCost(nextState.rating, nextState.profile.playerId, paidPendingCost, transition.refund),
+    };
+  }
   return {
     transition,
-    state: transition.ok || transition.state !== planet.fleetProduction || transition.fleet !== planet.fleet || transition.defense !== planet.defense
-      ? stateFromTransition(state, context, transition)
-      : state,
+    state: nextState,
   };
 }
 
@@ -175,6 +225,7 @@ export function reconcileFleetProduction(
   state: SaveState,
   context: Pick<BuildingApplicationContext, 'planetId' | 'now'>,
 ): FleetProductionReconcileResult {
+  if (isPlanetBlocked(state, context.planetId)) return { changed: false, state, completed: [] };
   const planet = getPlanetState(state, context.planetId);
   const transition = reconcileFleetProductionState(
     planet.fleetProduction,
@@ -221,6 +272,9 @@ export function dismantleSolarSatellites(
   context: Pick<BuildingApplicationContext, 'planetId'>,
   count?: number,
 ): SolarSatelliteDismantleResult {
+  if (isPlanetBlocked(state, context.planetId)) {
+    return { ok: false, state, removed: 0, reason: 'Планета заблокирована из-за перенаселения.' };
+  }
   const planet = getPlanetState(state, context.planetId);
   const migratedFleet = removeSolarSatellitesFromFleet(planet.fleet);
   const currentCount = Math.max(0, Math.floor(planet.solarSatellites ?? migratedFleet.count));
@@ -280,9 +334,10 @@ export function bindFleetProductionEventBridge(options: FleetProductionEventBrid
     const request = (event as CustomEvent<FleetProductionCancelRequest>).detail;
     if (!request?.orderId) return;
     const now = typeof request.now === 'number' && Number.isFinite(request.now) ? request.now : Date.now();
-    const result = cancelFleetProduction(options.getState(), { ...options.getContext(now), now }, request.orderId);
+    const currentState = options.getState();
+    const result = cancelFleetProduction(currentState, { ...options.getContext(now), now }, request.orderId);
     const transition = result.transition as FleetProductionCancellationTransition;
-    options.commit(result.state);
+    if (result.state !== currentState) options.commit(result.state);
     options.onNotice(transition.ok
       ? transition.refundPercent == null
         ? 'Заказ отменён. Сохранённая стоимость отсутствует, возврат не начислен.'

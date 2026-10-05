@@ -3,8 +3,10 @@ import test from 'node:test';
 import { getSpaceportUpgradeCatalog, previewSpaceportUpgrade } from '../domain/buildings/spaceport-upgrades.ts';
 import { SCIENCE_CATALOG } from '../domain/science/catalog.ts';
 import {
+  SCIENCE_CANCEL_REQUEST_EVENT,
   SCIENCE_RUNTIME_CHANGED_EVENT,
   SCIENCE_START_REQUEST_EVENT,
+  reconcileScienceState,
 } from '../domain/science/runtime.ts';
 import {
   ACTIVE_RUNTIME_MODE,
@@ -15,9 +17,12 @@ import {
   applyProductionBots,
   cancelBuilding,
   collectRecycling,
+  cancelSpaceportUpgrade,
   destroyBuilding,
   executeTradeAction,
   previewBuilding,
+  reconcileRecycling,
+  reconcileSpaceport,
   startBuilding,
   startRecycling,
   startSpaceportUpgrade,
@@ -28,7 +33,9 @@ import {
   getFleetSummaryForState,
   readFleetBuildBudget,
 } from './fleet.ts';
-import { bindScienceEventBridge, cancelScience, startScience } from './science.ts';
+import { createEmptyFleetState } from '../domain/fleet/runtime.ts';
+import { bindScienceEventBridge, cancelScience, createScienceSnapshot, startScience } from './science.ts';
+import { repairUnits, removeRepairUnits } from './repair.ts';
 import {
   bindFleetProductionEventBridge,
   cancelFleetProduction,
@@ -53,10 +60,22 @@ import {
   createPersistenceFacade,
   type StorageLike,
 } from './persistence.ts';
-import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
-import { getPlanetResources, type SaveState } from './contracts.ts';
+import { BUILDING_ROLES, getStorageCapacities } from '../domain/buildings/resource-zone.ts';
+import { getBuildingMaxLevel } from '../domain/buildings/balance-v1.ts';
+import { getOwnerShipUpgradeLevel, getPlanetResources, type SaveState } from './contracts.ts';
+import { createColonyPlanetRuntime, destroyOwnedPlanet } from './owned-planets.ts';
+import {
+  getPlanetOverpopulationSummary,
+  reconcileAllPlanetOverpopulation,
+  reconcilePlanetOverpopulation,
+} from './overpopulation.ts';
 import { createAllianceRatingEntries, createPlayerRatingEntries } from '../domain/rating/fixtures.ts';
-import { createUniverseMap } from '../domain/universe/runtime.ts';
+import { calculateResourceScore, selectOwnerScores } from '../domain/rating/scoring.ts';
+import { selectPlayerProfileMetrics, selectPlayerRatingEntry } from '../domain/profile/selectors.ts';
+import { createUniverseMap, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
+import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
+import { getEspionageTargets } from '../domain/espionage/runtime.ts';
+import { createBot01Planets } from '../domain/espionage/fixtures.ts';
 
 class MemoryStorage implements StorageLike {
   readonly values = new Map<string, string>();
@@ -93,7 +112,7 @@ test('production and test persistence seeds stay isolated at every fixture bound
   assert.equal(production.operations.items.length, 0);
   assert.equal(production.combat.reports.length, 0);
   assert.equal(createUniverseMap({ mode: 'production' }).systems.flatMap((system) => system.positions).filter((node) => node.kind === 'npc').length, 0);
-  assert.equal(createPlayerRatingEntries(production.rating.resourcePoints, 'production').length, 1);
+  assert.equal(createPlayerRatingEntries(0, 'production').length, 1);
   assert.equal(createAllianceRatingEntries(null, 'production').length, 0);
 
   assert.equal(testMode.command.alliance.name, 'Содружество Гелион');
@@ -103,8 +122,419 @@ test('production and test persistence seeds stay isolated at every fixture bound
   assert.ok(testMode.combat.reports.length > 0);
   assert.equal(createUniverseMap({ mode: 'test' }).systems.flatMap((system) => system.positions).filter((node) => node.kind === 'npc').length, 8);
   assert.equal(Object.keys(testMode.alliedPlanets ?? {}).length, 1);
-  assert.equal(createPlayerRatingEntries(testMode.rating.resourcePoints, 'test').length, 84);
+  assert.equal(createPlayerRatingEntries(0, 'test').length, 84);
   assert.equal(createAllianceRatingEntries(null, 'test').length, 42);
+});
+
+test('legacy fake rating migration resets battle accumulation and preserves campaign state', () => {
+  const now = 1_000;
+  const initial = createInitialSaveState('test', now);
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => now });
+  storage.values.set(persistence.saveKey, JSON.stringify({ ...initial, rating: { resourcePoints: 855_880 } }));
+
+  const migrated = persistence.read();
+  assert.deepEqual(migrated.rating, { battleAwardsByReportId: {}, unrecoveredCostsByOwnerId: {} });
+  assert.equal(migrated.metal, initial.metal);
+  assert.equal(migrated.minerals, initial.minerals);
+  assert.equal(migrated.gas, initial.gas);
+  assert.deepEqual(Object.keys(migrated.planets), Object.keys(initial.planets));
+  assert.deepEqual(migrated.planets['helion-01']?.fleet, initial.planets['helion-01']?.fleet);
+  assert.deepEqual(migrated.planets['helion-01']?.buildings, initial.planets['helion-01']?.buildings);
+  assert.deepEqual(migrated.science.levels, initial.science.levels);
+  assert.deepEqual(migrated.combat.reports.map((report) => report.id), initial.combat.reports.map((report) => report.id));
+  assert.deepEqual(Object.keys(migrated.espionage?.targets ?? {}), Object.keys(initial.espionage?.targets ?? {}));
+  assert.equal(selectOwnerScores(migrated)[migrated.profile.playerId]?.battlePoints, 0);
+});
+
+test('persisted custom player ID is used by the profile and current rating row', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 1_000 });
+  const saved = {
+    ...initial,
+    profile: { ...initial.profile, playerId: 'player-custom' },
+  };
+
+  assert.equal(persistence.write(saved).ok, true);
+  const restored = persistence.read();
+  const score = selectOwnerScores(restored)['player-custom'];
+  assert.equal(restored.profile.playerId, 'player-custom');
+  assert.ok(score);
+  assert.equal(selectOwnerScores(restored)['player-current'], undefined);
+
+  const profileEntry = selectPlayerRatingEntry(score, restored.profile.playerId);
+  const ratingEntry = createPlayerRatingEntries(score, 'test', restored.profile.playerId).find((entry) => entry.isCurrentPlayer);
+  const metrics = selectPlayerProfileMetrics(restored.profile, score);
+  assert.equal(profileEntry?.id, 'player-custom');
+  assert.equal(ratingEntry?.id, 'player-custom');
+  assert.deepEqual(metrics.map((metric) => metric.value), [score.resourcePoints, score.battlePoints, score.totalPoints, 0]);
+});
+
+test('Test Mode scores the player and Bot 001 from their separate asset pools and counts global upgrades once', () => {
+  const state = createInitialSaveState('test', 1_000);
+  const scores = selectOwnerScores(state);
+  const player = scores[state.profile.playerId];
+  const bot = scores[UNIVERSE_NPC_OWNER_ID];
+  assert.deepEqual(player && [player.resourcePoints, player.battlePoints, player.totalPoints, player.achievementPoints], [20_703, 0, 20_703, 0]);
+  assert.deepEqual(bot && [bot.resourcePoints, bot.battlePoints, bot.totalPoints, bot.achievementPoints], [1_003_344, 0, 1_003_344, 0]);
+
+  const targets = Object.values(state.espionage?.targets ?? {}).filter((target) => target.ownerId === UNIVERSE_NPC_OWNER_ID);
+  const profile = state.espionage?.bot01Profile;
+  assert.equal(targets.length, 7);
+  assert.ok(profile);
+  assert.equal(profile.shipLevels['death-star'], 3);
+  const factionId = targets[0]!.raceId;
+  const botPlanets = targets.map((target) => ({
+    factionId: target.raceId,
+    buildings: target.buildings as Partial<Record<(typeof BUILDING_ROLES)[number], number>>,
+    fleet: target.fleet,
+    defense: target.defense,
+    buildingQueue: target.buildingQueue,
+  }));
+  const botLocal = calculateResourceScore({ factionId, planets: botPlanets });
+  const botShipUpgrades = calculateResourceScore({
+    factionId,
+    planets: [],
+    scienceLevels: profile.scienceLevels,
+    shipUpgradeLevels: profile.shipLevels,
+  });
+  const botCommanderUpgrades = calculateResourceScore({
+    factionId,
+    planets: [],
+    shipUpgradeLevels: profile.commanderLevels,
+  });
+  const botCombined = calculateResourceScore({
+    factionId,
+    planets: botPlanets,
+    scienceLevels: profile.scienceLevels,
+    shipUpgradeLevels: { ...profile.shipLevels, ...profile.commanderLevels },
+  });
+  assert.equal(botLocal.resourceTotal, 969_228_885);
+  assert.equal(botShipUpgrades.resourceTotal, 30_770_625);
+  assert.equal(profile.commanderLevels.hunter, 20);
+  assert.equal(profile.commanderLevels.judge, 1);
+  assert.ok(botCommanderUpgrades.resourceTotal > 0);
+  assert.equal(botCombined.resourceTotal, botLocal.resourceTotal + botShipUpgrades.resourceTotal + botCommanderUpgrades.resourceTotal);
+  assert.equal(botCombined.resourcePoints, bot?.resourcePoints);
+
+  const playerPlanets = Object.entries(state.planets).map(([planetId, planet]) => ({
+    factionId: state.profile.factionId,
+    buildings: planet.buildings,
+    fleet: planet.fleet,
+    defense: planet.defense,
+    solarSatellites: planet.solarSatellites,
+    buildingQueue: state.queues[planetId],
+    fleetProduction: planet.fleetProduction,
+    spaceportUpgrades: planet.spaceportUpgrades,
+  }));
+  const playerScore = calculateResourceScore({
+    factionId: state.profile.factionId,
+    planets: playerPlanets,
+    scienceLevels: state.science.levels,
+    shipUpgradeLevels: state.shipUpgradeLevels,
+    queuedScience: state.science.queue,
+  });
+  assert.equal(playerScore.resourceTotal, 20_703_450);
+  assert.equal(playerScore.resourcePoints, player?.resourcePoints);
+});
+
+test('player resource score stays constant when a commander upgrade moves from queue to completed level', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const planetId = 'helion-01';
+  const planet = initial.planets[planetId]!;
+  const prepared: SaveState = {
+    ...initial,
+    metal: 1_000_000_000,
+    minerals: 1_000_000_000,
+    gas: 1_000_000_000,
+    science: {
+      ...initial.science,
+      levels: Object.fromEntries(SCIENCE_CATALOG.map((science) => [science.id, science.maxLevel])) as typeof initial.science.levels,
+    },
+    planets: {
+      ...initial.planets,
+      [planetId]: {
+        ...planet,
+        buildings: { ...planet.buildings, shipyard: 40, spaceport: 40 },
+        resources: { metal: 1_000_000_000, minerals: 1_000_000_000, gas: 1_000_000_000 },
+      },
+    },
+  };
+  const started = startSpaceportUpgrade(prepared, context(1_000), 'commanders', 'corsair', 'player-corsair-upgrade');
+  assert.equal(started.ok, true);
+  const task = started.state.planets[planetId]!.spaceportUpgrades.commanderQueue[0];
+  assert.ok(task);
+  const scoreWhileQueued = selectOwnerScores(started.state)[started.state.profile.playerId]!.resourcePoints;
+
+  const completed = reconcileSpaceport(started.state, context(task.finishAt));
+  assert.equal(completed.ok, true);
+  assert.equal(completed.completed.length, 1);
+  assert.equal(completed.completed[0]?.track, 'commanders');
+  assert.equal(completed.state.shipUpgradeLevels?.corsair, task.toLevel);
+  assert.equal(completed.state.planets[planetId]!.spaceportUpgrades.commanderQueue.length, 0);
+  const scoreAfterCompletion = selectOwnerScores(completed.state)[completed.state.profile.playerId]!.resourcePoints;
+  assert.equal(scoreAfterCompletion, scoreWhileQueued);
+
+  const reconciledAgain = reconcileSpaceport(completed.state, context(task.finishAt));
+  assert.equal(reconciledAgain.completed.length, 0);
+  assert.equal(
+    selectOwnerScores(reconciledAgain.state)[completed.state.profile.playerId]!.resourcePoints,
+    scoreAfterCompletion,
+    'reconciling an already-applied commander level cannot count the upgrade twice',
+  );
+});
+
+test('asteroid simulation, hidden cargo, and recycler history round-trip through persistence', () => {
+  const storage = new MemoryStorage();
+  const now = 1_800_000_000_000;
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => now });
+  const initial = createInitialSaveState('test', now);
+
+  assert.ok(initial.asteroidSimulation);
+  assert.deepEqual(initial.asteroidDebrisBySpawnIndex, {});
+
+  const asteroid = {
+    spawnIndex: 42,
+    spawnedAt: now - 60_000,
+    movementIndex: 3,
+    previousMoveAt: now - 20_000,
+    nextMoveAt: now + 40_000,
+    nextCoordinate: { galaxy: 1, system: 12, position: 8 },
+    gasYield: 900,
+    gasRatePerHour: 25_000,
+    gasUpdatedAt: now - 10_000,
+    gasRemainder: 1_250_000,
+    coordinate: { galaxy: 1, system: 12, position: 7 },
+  };
+  const report = {
+    id: 'recycler-arrival:flight-roundtrip',
+    flightId: 'flight-roundtrip',
+    coordinate: { galaxy: 1, system: 12, position: 7 },
+    arrivedAtMs: now - 5_000,
+    collectedDebris: 120,
+    remainingOrbitalDebris: 30,
+  } as const;
+  const changed: SaveState = {
+    ...initial,
+    asteroidSimulation: {
+      version: 1,
+      processedThroughAt: now - 10_000,
+      nextSpawnIndex: 43,
+      asteroids: [asteroid],
+    },
+    asteroidDebrisBySpawnIndex: { '42': 777, '41': 999 },
+    reports: { ...initial.reports, recyclerArrivalReports: [report] },
+  };
+
+  assert.equal(persistence.write(changed).ok, true);
+  const reloaded = persistence.read();
+  assert.equal(reloaded.asteroidSimulation?.processedThroughAt, now - 10_000);
+  assert.deepEqual(reloaded.asteroidSimulation?.asteroids, [asteroid]);
+  assert.equal(reloaded.asteroidSimulation?.nextSpawnIndex, 43);
+  assert.deepEqual(reloaded.asteroidDebrisBySpawnIndex, { '42': 777 });
+  assert.deepEqual(reloaded.reports.recyclerArrivalReports, [report]);
+  assert.equal(reloaded.reports.recyclerArrivalReports?.filter((item) => item.flightId === report.flightId).length, 1);
+});
+
+test('schema 18 asteroid migration preserves timeline and scrap while starting gas accrual at load time', () => {
+  const storage = new MemoryStorage();
+  const loadAt = 1_800_000_100_000;
+  const initial = createInitialSaveState('test', loadAt - 100_000);
+  const legacyAsteroid = {
+    spawnIndex: 42,
+    spawnedAt: loadAt - 60_000,
+    movementIndex: 3,
+    previousMoveAt: loadAt - 20_000,
+    nextMoveAt: loadAt + 40_000,
+    nextCoordinate: { galaxy: 1, system: 12, position: 8 },
+    gasYield: 900,
+    coordinate: { galaxy: 1, system: 12, position: 7 },
+  };
+  const legacyPayload = {
+    ...initial,
+    schemaVersion: 18,
+    asteroidSimulation: {
+      version: 1,
+      processedThroughAt: loadAt - 10_000,
+      nextSpawnIndex: 43,
+      asteroids: [legacyAsteroid],
+    },
+    asteroidDebrisBySpawnIndex: { '42': 777 },
+  };
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => loadAt });
+  storage.values.set(persistence.saveKey, JSON.stringify(legacyPayload));
+
+  const migrated = persistence.read();
+  const asteroid = migrated.asteroidSimulation?.asteroids[0];
+  assert.ok(asteroid);
+  const { gasRatePerHour: _rate, gasUpdatedAt: _updatedAt, gasRemainder: _remainder, ...preserved } = asteroid;
+  assert.deepEqual(preserved, legacyAsteroid);
+  assert.equal(asteroid.gasUpdatedAt, loadAt);
+  assert.equal(asteroid.gasRemainder, 0);
+  assert.ok(asteroid.gasRatePerHour === 25_000 || asteroid.gasRatePerHour === 100_000 || asteroid.gasRatePerHour === 250_000);
+  assert.equal(advanceAsteroidGasAt(asteroid, loadAt).gasYield, legacyAsteroid.gasYield);
+  assert.equal(migrated.asteroidSimulation?.processedThroughAt, loadAt - 10_000);
+  assert.equal(migrated.asteroidSimulation?.nextSpawnIndex, 43);
+  assert.deepEqual(migrated.asteroidDebrisBySpawnIndex, { '42': 777 });
+});
+
+test('schema 21 asteroid gas rates migrate once while preserving stock and gas clock progress', () => {
+  const storage = new MemoryStorage();
+  const loadAt = 1_800_000_200_000;
+  const initial = createInitialSaveState('production', loadAt - 100_000);
+  const legacyRates = [2_500, 10_000, 25_000] as const;
+  const legacyAsteroids = legacyRates.map((gasRatePerHour, index) => ({
+    spawnIndex: 42 + index,
+    spawnedAt: loadAt - 60_000,
+    movementIndex: 0,
+    previousMoveAt: loadAt - 20_000,
+    nextMoveAt: loadAt + 40_000,
+    gasYield: 80_000 + index * 1_000,
+    gasRatePerHour,
+    gasUpdatedAt: loadAt - 10_000 - index,
+    gasRemainder: 1_234_567 + index,
+    coordinate: { galaxy: 1, system: 12, position: 7 + index },
+  }));
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => loadAt });
+  storage.values.set(persistence.saveKey, JSON.stringify({
+    ...initial,
+    schemaVersion: 21,
+    asteroidSimulation: {
+      version: 1,
+      processedThroughAt: loadAt - 10_000,
+      nextSpawnIndex: 45,
+      asteroids: legacyAsteroids,
+    },
+  }));
+
+  const migrated = persistence.read();
+  const firstReadAsteroids = migrated.asteroidSimulation?.asteroids ?? [];
+  assert.equal(migrated.schemaVersion, 22);
+  assert.deepEqual(firstReadAsteroids.map((asteroid) => asteroid.gasRatePerHour), [25_000, 100_000, 250_000]);
+  for (const [index, asteroid] of firstReadAsteroids.entries()) {
+    assert.equal(asteroid.gasYield, legacyAsteroids[index]?.gasYield);
+    assert.equal(asteroid.gasUpdatedAt, legacyAsteroids[index]?.gasUpdatedAt);
+    assert.equal(asteroid.gasRemainder, legacyAsteroids[index]?.gasRemainder);
+    assert.equal(advanceAsteroidGasAt(asteroid, asteroid.gasUpdatedAt).gasYield, asteroid.gasYield);
+  }
+
+  assert.equal(persistence.write(migrated).ok, true);
+  const reloaded = persistence.read();
+  assert.deepEqual(reloaded.asteroidSimulation?.asteroids, firstReadAsteroids);
+  assert.equal(reloaded.schemaVersion, 22);
+});
+
+test('schema 21 selected-colony wallet does not replace Helion during migration or round-trip', () => {
+  const storage = new MemoryStorage();
+  const loadAt = 1_800_000_250_000;
+  const initial = createInitialSaveState('test', loadAt);
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => loadAt });
+  const colonyId = 'planet-1-2-1';
+  const helionResources = { metal: 1_111, minerals: 2_222, gas: 3_333 };
+  const colonyResources = { metal: 4_444, minerals: 5_555, gas: 6_666 };
+  const colony = {
+    ...createColonyPlanetRuntime(initial, { galaxy: 1, system: 2, position: 1 }),
+    resources: colonyResources,
+  };
+
+  storage.values.set(persistence.saveKey, JSON.stringify({
+    ...initial,
+    schemaVersion: 21,
+    currentPlanetId: colonyId,
+    metal: colonyResources.metal,
+    minerals: colonyResources.minerals,
+    gas: colonyResources.gas,
+    planets: {
+      ...initial.planets,
+      'helion-01': { ...initial.planets['helion-01'], resources: helionResources },
+      [colonyId]: colony,
+    },
+    queues: { ...initial.queues, [colonyId]: [] },
+  }));
+
+  const assertWallets = (state: SaveState) => {
+    assert.equal(state.currentPlanetId, colonyId);
+    assert.deepEqual(state.planets['helion-01'].resources, helionResources);
+    assert.deepEqual(state.planets[colonyId].resources, colonyResources);
+    assert.deepEqual(getPlanetResources(state), colonyResources);
+  };
+
+  const migrated = persistence.read();
+  assertWallets(migrated);
+  assert.equal(persistence.write(migrated).ok, true);
+  assertWallets(persistence.read());
+});
+
+test('pre-15 saves without planet wallets migrate the legacy root wallet to Helion', () => {
+  const storage = new MemoryStorage();
+  const loadAt = 1_800_000_260_000;
+  const initial = createInitialSaveState('production', loadAt);
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => loadAt });
+  const legacyResources = { metal: 7_111, minerals: 8_222, gas: 9_333 };
+  const { resources: _resources, ...legacyHelion } = initial.planets['helion-01'];
+
+  storage.values.set(persistence.saveKey, JSON.stringify({
+    ...initial,
+    schemaVersion: 14,
+    metal: legacyResources.metal,
+    minerals: legacyResources.minerals,
+    gas: legacyResources.gas,
+    planets: { 'helion-01': legacyHelion },
+  }));
+
+  const migrated = persistence.read();
+  assert.deepEqual(migrated.planets['helion-01'].resources, legacyResources);
+});
+
+test('legacy persistence seeds asteroid baseline at load time and retains recycler arrival history', () => {
+  const storage = new MemoryStorage();
+  const loadAt = 1_800_000_000_000;
+  const initial = createInitialSaveState('test', 1_000);
+  const report = {
+    id: 'recycler-arrival:legacy-flight',
+    flightId: 'legacy-flight',
+    coordinate: { galaxy: 1, system: 3, position: 4 },
+    arrivedAtMs: 2_000,
+    collectedDebris: 0,
+    remainingOrbitalDebris: 0,
+  } as const;
+  const legacyPayload = {
+    ...initial,
+    asteroidSimulation: undefined,
+    reports: { ...initial.reports, recyclerArrivalReports: [report] },
+  };
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => loadAt });
+  storage.values.set(persistence.saveKey, JSON.stringify(legacyPayload));
+
+  const reloaded = persistence.read();
+  const expectedBaseline = createInitialSaveState('test', loadAt).asteroidSimulation;
+  const persistedBaseline = reloaded.asteroidSimulation;
+  assert.ok(expectedBaseline && persistedBaseline);
+  assert.deepEqual(
+    persistedBaseline.asteroids.map(({ gasUpdatedAt: _gasUpdatedAt, gasRemainder: _gasRemainder, ...asteroid }) => asteroid),
+    expectedBaseline.asteroids.map(({ gasUpdatedAt: _gasUpdatedAt, gasRemainder: _gasRemainder, ...asteroid }) => asteroid),
+  );
+  assert.ok(persistedBaseline.asteroids.every((asteroid) => asteroid.gasUpdatedAt === loadAt && asteroid.gasRemainder === 0));
+  assert.deepEqual(reloaded.asteroidDebrisBySpawnIndex, {});
+  assert.deepEqual(reloaded.reports.recyclerArrivalReports, [report]);
+  assert.equal(reloaded.reports.recyclerArrivalReports?.filter((item) => item.flightId === report.flightId).length, 1);
+});
+
+test('unsupported asteroid simulation migration baseline does not accrue gas before load time', () => {
+  const storage = new MemoryStorage();
+  const loadAt = 1_800_000_050_000;
+  const initial = createInitialSaveState('production', loadAt - 1_000);
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => loadAt });
+  storage.values.set(persistence.saveKey, JSON.stringify({
+    ...initial,
+    schemaVersion: 18,
+    asteroidSimulation: { ...initial.asteroidSimulation, version: 2 },
+  }));
+
+  const migrated = persistence.read();
+  assert.ok(migrated.asteroidSimulation?.asteroids.length);
+  assert.ok(migrated.asteroidSimulation.asteroids.every((asteroid) => asteroid.gasUpdatedAt === loadAt && asteroid.gasRemainder === 0));
 });
 
 function withBuildingSetup(state: SaveState): SaveState {
@@ -135,6 +565,402 @@ function withBuildingSetup(state: SaveState): SaveState {
     },
   };
 }
+
+function registeredTargetsForUniverse(state: SaveState) {
+  return Object.values(getEspionageTargets(state.espionage)).map((target) => ({
+    id: target.id,
+    coordinate: target.coordinate,
+    name: target.name,
+    kind: target.kind ?? 'npc' as const,
+    ownerId: target.ownerId,
+  }));
+}
+
+test('Test Mode persistence keeps one deleted Bot 01 target deleted and preserves orbital debris', () => {
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 2_000 });
+  const initial = createInitialSaveState('test', 1_000);
+  const initialTargets = getEspionageTargets(initial.espionage);
+  const deletedTarget = Object.values(initialTargets)[0];
+  assert.ok(deletedTarget);
+  const remainingTargets = Object.fromEntries(
+    Object.entries(initialTargets).filter(([targetId]) => targetId !== deletedTarget.id),
+  );
+  const debris = {
+    id: 'debris-after-target-destruction',
+    targetPlanetId: deletedTarget.id,
+    targetPlanetName: deletedTarget.name,
+    targetOwnerId: deletedTarget.ownerId,
+    targetCoordinate: deletedTarget.coordinate,
+    debris: 777,
+    createdAt: 1_500,
+  };
+  const changed = {
+    ...initial,
+    espionage: {
+      ...initial.espionage!,
+      targets: remainingTargets,
+      bot01Planets: remainingTargets,
+      orbitalDebris: { [debris.id]: debris },
+    },
+  } satisfies SaveState;
+
+  assert.equal(persistence.write(changed).ok, true);
+  const reloaded = persistence.read();
+  const reloadedTargets = getEspionageTargets(reloaded.espionage);
+  assert.equal(Object.keys(reloadedTargets).length, 6);
+  assert.equal(Object.keys(reloaded.espionage?.bot01Planets ?? {}).length, 6);
+  assert.equal(reloaded.espionage?.orbitalDebris?.[debris.id]?.debris, 777);
+
+  const map = createUniverseMap({ mode: 'test', registeredPlanets: registeredTargetsForUniverse(reloaded) });
+  const nodes = map.systems.flatMap((system) => system.positions);
+  assert.equal(nodes.some((node) => node.id === deletedTarget.id), false);
+  const coordinateOccupant = nodes.find((node) => node.coordinate.galaxy === deletedTarget.coordinate.galaxy
+    && node.coordinate.system === deletedTarget.coordinate.system
+    && node.coordinate.position === deletedTarget.coordinate.position);
+  assert.notEqual(coordinateOccupant?.id, deletedTarget.id);
+});
+
+test('Test Mode persistence treats an empty canonical Bot 01 registry as authoritative', () => {
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 2_000 });
+  const initial = createInitialSaveState('test', 1_000);
+  const changed = {
+    ...initial,
+    espionage: {
+      ...initial.espionage!,
+      targets: {},
+      bot01Planets: {},
+    },
+  } satisfies SaveState;
+
+  assert.equal(persistence.write(changed).ok, true);
+  const reloaded = persistence.read();
+  assert.equal(Object.keys(getEspionageTargets(reloaded.espionage)).length, 0);
+  assert.equal(Object.keys(reloaded.espionage?.bot01Planets ?? {}).length, 0);
+  assert.ok(reloaded.espionage?.bot01Profile, 'owner profile may survive without recreating planets');
+
+  const map = createUniverseMap({ mode: 'test', registeredPlanets: registeredTargetsForUniverse(reloaded) });
+  const nodes = map.systems.flatMap((system) => system.positions);
+  assert.equal(nodes.some((node) => node.kind === 'npc' && node.ownerId === 'npc-bot-01'), false);
+});
+
+test('legacy bot01Planets saves keep their compatibility migration path', () => {
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 2_000 });
+  const initial = createInitialSaveState('test', 1_000);
+  const legacyBotTargets = createBot01Planets(1_000);
+  const legacyEnvelope = {
+    ...initial,
+    espionage: {
+      ...initial.espionage!,
+      targets: undefined,
+      bot01Profile: undefined,
+      bot01Planets: legacyBotTargets,
+    },
+  };
+  storage.values.set(persistence.saveKey, JSON.stringify(legacyEnvelope));
+
+  const reloaded = persistence.read();
+  assert.equal(Object.keys(getEspionageTargets(reloaded.espionage)).length, 7);
+  assert.equal(Object.keys(reloaded.espionage?.bot01Planets ?? {}).length, 7);
+  const aggregateFleetCounts = (targets: Record<string, { fleet: { ships: Record<string, number> } }>) => {
+    const counts: Record<string, number> = {};
+    for (const target of Object.values(targets)) {
+      for (const [shipId, count] of Object.entries(target.fleet.ships)) {
+        if (count > 0) counts[shipId] = (counts[shipId] ?? 0) + count;
+      }
+    }
+    return counts;
+  };
+  assert.deepEqual(aggregateFleetCounts(getEspionageTargets(reloaded.espionage)), aggregateFleetCounts(legacyBotTargets));
+  for (const [planetId, legacyPlanet] of Object.entries(legacyBotTargets)) {
+    assert.deepEqual(getEspionageTargets(reloaded.espionage)[planetId]?.defense, legacyPlanet.defense);
+  }
+});
+
+test('legacy planet upgrade levels migrate to owner-wide maxima without counting queued work', () => {
+  const storage = new MemoryStorage();
+  const loadAt = 2_000;
+  const initial = createInitialSaveState('test', 1_000);
+  const queuedCruiserUpgrade = {
+    id: 'legacy-queued-cruiser-upgrade',
+    track: 'ships' as const,
+    shipId: 'cruiser',
+    fromLevel: 3,
+    toLevel: 4,
+    startedAt: 1_500,
+    finishAt: 10_000,
+    spaceportLevelAtStart: 1,
+    effectiveDurationMs: 8_500,
+    cost: { metal: 1, minerals: 1, gas: 0 },
+    costSource: 'faction-factory-upgrades' as const,
+    refundEligible: true,
+  };
+  const helion = initial.planets['helion-01'];
+  const colony = createColonyPlanetRuntime(initial, { galaxy: 1, system: 2, position: 1 });
+  const oldPlanets = {
+    'helion-01': {
+      ...helion,
+      spaceportUpgrades: {
+        ...helion.spaceportUpgrades,
+        shipLevels: { scout: 3, corsair: 7 },
+        shipQueue: [queuedCruiserUpgrade],
+      },
+    },
+    'planet-1-2-1': {
+      ...colony,
+      spaceportUpgrades: {
+        ...colony.spaceportUpgrades,
+        shipLevels: { scout: 8, corsair: 4 },
+      },
+    },
+  };
+  const { shipUpgradeLevels: _legacyOwnerLevels, ...legacyState } = initial;
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => loadAt });
+  storage.values.set(persistence.saveKey, JSON.stringify({
+    ...legacyState,
+    schemaVersion: 20,
+    planets: oldPlanets,
+    queues: { ...initial.queues, 'planet-1-2-1': [] },
+  }));
+
+  const migrated = persistence.read();
+  assert.equal(migrated.schemaVersion, 22);
+  assert.equal(migrated.shipUpgradeLevels?.scout, 8);
+  assert.equal(migrated.shipUpgradeLevels?.corsair, 7);
+  assert.equal(getOwnerShipUpgradeLevel(migrated, 'cruiser'), 0);
+  assert.equal(migrated.planets['helion-01'].spaceportUpgrades.shipQueue.length, 1);
+  for (const planet of Object.values(migrated.planets)) {
+    assert.deepEqual(planet.spaceportUpgrades.shipLevels, {});
+  }
+});
+
+test('destroying Helion keeps the surviving planet and global progress through reload', () => {
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 2_000 });
+  const initial = persistence.read();
+  const survivorId = 'a-survivor';
+  const survivor = createColonyPlanetRuntime(initial, { galaxy: 1, system: 2, position: 1 });
+  const helionResearch = {
+    id: 'helion-research-active',
+    scienceId: SCIENCE_CATALOG[3].id,
+    planetId: 'helion-01',
+    fromLevel: 1,
+    toLevel: 2,
+    startedAt: 1_000,
+    finishAt: 6_000,
+    durationMs: 5_000,
+    cost: { metal: 100, minerals: 200, gas: 300, energy: 400 },
+    refundEligible: true,
+  };
+  const survivorResearch = {
+    id: 'survivor-research',
+    scienceId: SCIENCE_CATALOG[4].id,
+    planetId: survivorId,
+    fromLevel: 0,
+    toLevel: 1,
+    startedAt: 6_000,
+    finishAt: 9_000,
+    durationMs: 3_000,
+    cost: { metal: 50, minerals: 75, gas: 25, energy: 10 },
+    refundEligible: true,
+  };
+  const helionResearchTail = {
+    id: 'helion-research-tail',
+    scienceId: SCIENCE_CATALOG[3].id,
+    planetId: 'helion-01',
+    fromLevel: 2,
+    toLevel: 3,
+    startedAt: 9_000,
+    finishAt: 13_000,
+    durationMs: 4_000,
+    cost: { metal: 250, minerals: 150, gas: 90, energy: 500 },
+    refundEligible: true,
+  };
+  const twoWorlds: SaveState = {
+    ...initial,
+    currentPlanetId: 'helion-01',
+    shipUpgradeLevels: { scout: 8, corsair: 6 },
+    science: {
+      ...initial.science,
+      levels: { ...initial.science.levels, [SCIENCE_CATALOG[3].id]: 1 },
+      queue: [helionResearch, survivorResearch, helionResearchTail],
+    },
+    planets: { ...initial.planets, [survivorId]: survivor },
+    queues: { ...initial.queues, [survivorId]: [] },
+  };
+  const initialUniverse = createUniverseMap({
+    mode: 'test',
+    playerPlanets: Object.entries(twoWorlds.planets).map(([id, planet]) => ({
+      id,
+      coordinate: {
+        galaxy: planet.universeGalaxy ?? 1,
+        system: planet.universeSystem ?? 1,
+        position: planet.universePosition ?? 1,
+      },
+      name: planet.name,
+      isHomeworld: id === 'helion-01',
+    })),
+  });
+  assert.equal(initialUniverse.systems[0].positions.find((node) => node.coordinate.position === 1)?.id, 'helion-01');
+  const protectedLastWorld = destroyOwnedPlanet(initial, 'helion-01', 2_000);
+  assert.equal(protectedLastWorld.destroyed, false);
+  assert.equal(protectedLastWorld.reason, 'last-planet-protected');
+  assert.equal(protectedLastWorld.state, initial);
+
+  const destroyed = destroyOwnedPlanet(twoWorlds, 'helion-01', 2_000);
+  assert.equal(destroyed.destroyed, true);
+  assert.equal(destroyed.state.planets['helion-01'], undefined);
+  assert.equal(destroyed.state.queues['helion-01'], undefined);
+  assert.equal(destroyed.state.resourceClock.byPlanet?.['helion-01'], undefined);
+  assert.equal(destroyed.state.currentPlanetId, survivorId);
+  assert.deepEqual(destroyed.state.planets[survivorId].resources, survivor.resources);
+  assert.deepEqual(getPlanetResources(destroyed.state), survivor.resources);
+  assert.deepEqual(destroyed.state.science.levels, twoWorlds.science.levels);
+  assert.deepEqual(destroyed.state.science.queue, [{
+    ...survivorResearch,
+    startedAt: 2_000,
+    finishAt: 5_000,
+  }]);
+  assert.deepEqual(destroyed.state.planets[survivorId].resources, survivor.resources, 'destroyed research is removed without refunding its cost');
+  assert.deepEqual(destroyed.state.shipUpgradeLevels, twoWorlds.shipUpgradeLevels);
+  assert.equal(persistence.write(destroyed.state).ok, true);
+
+  const reloaded = persistence.read();
+  assert.equal(reloaded.planets['helion-01'], undefined);
+  assert.deepEqual(Object.keys(reloaded.planets), [survivorId]);
+  assert.equal(reloaded.currentPlanetId, survivorId);
+  assert.deepEqual(reloaded.science.queue, [{
+    ...survivorResearch,
+    startedAt: 2_000,
+    finishAt: 5_000,
+  }]);
+  const remainingResearch = reconcileScienceState(reloaded.science, 5_000);
+  assert.deepEqual(remainingResearch.completed.map((task) => task.id), ['survivor-research']);
+  assert.equal(remainingResearch.state.queue.length, 0);
+  assert.equal(getOwnerShipUpgradeLevel(reloaded, 'scout'), 8);
+  assert.equal(getOwnerShipUpgradeLevel(reloaded, 'corsair'), 6);
+  assert.deepEqual(getPlanetResources(reloaded), survivor.resources);
+
+  const universeAfterReload = createUniverseMap({
+    mode: 'test',
+    playerPlanets: Object.entries(reloaded.planets).map(([id, planet]) => ({
+      id,
+      coordinate: {
+        galaxy: planet.universeGalaxy ?? 1,
+        system: planet.universeSystem ?? 1,
+        position: planet.universePosition ?? 1,
+      },
+      name: planet.name,
+      isHomeworld: id === 'helion-01',
+    })),
+  });
+  const freeHelionCoordinate = universeAfterReload.systems[0].positions.find((node) => node.coordinate.position === 1);
+  assert.equal(freeHelionCoordinate?.kind, 'empty');
+  assert.equal(freeHelionCoordinate?.id, 'universe-empty-1-1-1');
+
+  const colonizationOrigin = reloaded.planets[survivorId];
+  const withColonizer: SaveState = {
+    ...reloaded,
+    planets: {
+      ...reloaded.planets,
+      [survivorId]: {
+        ...colonizationOrigin,
+        fleet: { ...colonizationOrigin.fleet, ships: { ...colonizationOrigin.fleet.ships, colonizer: 1 } },
+      },
+    },
+  };
+  const colonization = dispatchFlight(withColonizer, {
+    requestId: 'colonize-destroyed-helion-coordinate',
+    missionId: 'colonize',
+    originPlanetId: survivorId,
+    destination: { kind: 'coordinate', coordinate: { galaxy: 1, system: 1, position: 1 } },
+    targetKind: 'empty',
+    selectedShips: { colonizer: 1 },
+    departedAt: 2_001,
+  }, { now: 2_001, mode: 'test' });
+  assert.equal(colonization.ok, true, 'the destroyed Helion coordinate remains available for colonization');
+});
+
+test('destroying a research planet drops invalid successor levels and reschedules the surviving queue', () => {
+  const initial = createInitialSaveState('test', 0);
+  const survivorId = 'a-survivor';
+  const survivor = {
+    ...createColonyPlanetRuntime(initial, { galaxy: 1, system: 2, position: 1 }),
+    resources: { metal: 400, minerals: 300, gas: 200 },
+  };
+  const scienceId = SCIENCE_CATALOG[3].id;
+  const survivorScienceId = SCIENCE_CATALOG[4].id;
+  const destroyedResearch = {
+    id: 'destroyed-research-1-to-2',
+    scienceId,
+    planetId: 'helion-01',
+    fromLevel: 1,
+    toLevel: 2,
+    startedAt: 1_000,
+    finishAt: 6_000,
+    durationMs: 5_000,
+    cost: { metal: 300, minerals: 400, gas: 500, energy: 600 },
+    refundEligible: true,
+  };
+  const invalidSuccessor = {
+    id: 'survivor-research-2-to-3',
+    scienceId,
+    planetId: survivorId,
+    fromLevel: 2,
+    toLevel: 3,
+    startedAt: 6_000,
+    finishAt: 10_000,
+    durationMs: 4_000,
+    cost: { metal: 100, minerals: 200, gas: 300, energy: 400 },
+    refundEligible: true,
+  };
+  const independentSurvivorResearch = {
+    id: 'survivor-independent-research',
+    scienceId: survivorScienceId,
+    planetId: survivorId,
+    fromLevel: 0,
+    toLevel: 1,
+    startedAt: 10_000,
+    finishAt: 13_000,
+    durationMs: 3_000,
+    cost: { metal: 50, minerals: 75, gas: 25, energy: 10 },
+    refundEligible: true,
+  };
+  const twoWorlds: SaveState = {
+    ...initial,
+    currentPlanetId: 'helion-01',
+    science: {
+      ...initial.science,
+      levels: { ...initial.science.levels, [scienceId]: 1 },
+      queue: [destroyedResearch, invalidSuccessor, independentSurvivorResearch],
+    },
+    planets: { ...initial.planets, [survivorId]: survivor },
+    queues: { ...initial.queues, [survivorId]: [] },
+  };
+
+  const destroyed = destroyOwnedPlanet(twoWorlds, 'helion-01', 2_000, () => 0);
+  assert.equal(destroyed.destroyed, true);
+  assert.equal(destroyed.state.science.levels[scienceId], 1);
+  assert.deepEqual(destroyed.state.science.queue.map((task) => task.id), ['survivor-independent-research']);
+  assert.deepEqual(destroyed.state.science.queue[0], {
+    ...independentSurvivorResearch,
+    startedAt: 2_000,
+    finishAt: 5_000,
+  });
+  assert.deepEqual(destroyed.state.planets[survivorId].resources, {
+    metal: 460,
+    minerals: 420,
+    gas: 380,
+  }, 'the invalid surviving task uses the ordinary 60% refund; destroyed-planet research is not refunded');
+
+  const completed = reconcileScienceState(destroyed.state.science, 5_000);
+  assert.deepEqual(completed.completed.map((task) => task.id), ['survivor-independent-research']);
+  assert.equal(completed.state.levels[scienceId], 1, 'the technology must not jump from level 1 directly to level 3');
+  assert.equal(completed.state.levels[survivorScienceId], 1);
+  assert.deepEqual(completed.state.queue, []);
+});
 
 test('persistence facade keeps the existing save key, envelope migration, and one explicit writer', () => {
   const storage = new MemoryStorage();
@@ -198,6 +1024,23 @@ test('persistence facade keeps the existing save key, envelope migration, and on
   assert.deepEqual(new Set(Object.values(production.planets['helion-01'].repair.defenses)), new Set([0]));
 });
 
+test('persistence keeps newly integrated regular planet skin IDs through reload', () => {
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 1_000, testTimeScale: 10 });
+  const state = persistence.read();
+  state.planets['helion-01'].skin = 'skin-asterion-09';
+  assert.equal(persistence.write(state).ok, true);
+  assert.equal(persistence.read().planets['helion-01'].skin, 'skin-asterion-09');
+
+  storage.values.set(persistence.saveKey, JSON.stringify({
+    schemaVersion: 1,
+    metal: 450_100_000,
+    planetSkin: 'skin-asterion-01',
+    queue: [],
+  }));
+  assert.equal(persistence.read().planets['helion-01'].skin, 'skin-asterion-01');
+});
+
 test('persistence drops incomplete flight records and rebuilds only a validated request index', () => {
   const storage = new MemoryStorage();
   const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => 1_000 });
@@ -257,6 +1100,88 @@ test('persistence drops incomplete flight records and rebuilds only a validated 
   assert.equal(retried.created, false);
   assert.equal(retried.flight.id, sent.flight.id);
   assert.equal(getPlanetResources(retried.state, 'helion-01').gas, gasAfterReload);
+});
+
+test('gas flights and extraction reports hydrate with validated snapshots and report metadata', () => {
+  const storage = new MemoryStorage();
+  const now = 1_800_000_200_000;
+  const initial = createInitialSaveState('production', now);
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => now });
+  const coordinate = { galaxy: 1, system: 12, position: 7 };
+  const reportId = 'gas-extraction-arrival:gas-flight-persisted';
+  const gasFlight = {
+    id: 'gas-flight-persisted',
+    requestId: 'gas-flight-persisted-request',
+    missionId: 'gas',
+    originPlanetId: 'helion-01',
+    originCoordinate: { galaxy: 1, system: 1, position: 1 },
+    destination: { kind: 'coordinate', coordinate },
+    targetKind: 'asteroid',
+    destinationCoordinate: coordinate,
+    selectedShips: { recycler: 2 },
+    gasCapacity: 40_000,
+    populationReserved: 2,
+    routeDistance: 1,
+    effectiveSpeed: 1,
+    oneWayDurationMs: 60_000,
+    departedAt: now,
+    arrivalAt: now + 60_000,
+    gasCost: 0,
+    cargo: { metal: 0, minerals: 0, gas: 1_250, debris: 250, unexpected: 999 },
+    cargoState: 'loaded',
+    phase: 'outbound',
+  };
+  const invalidCapacity = { ...gasFlight, id: 'gas-flight-invalid-capacity', requestId: 'gas-invalid-capacity', gasCapacity: 0 };
+  const invalidShips = { ...gasFlight, id: 'gas-flight-invalid-ships', requestId: 'gas-invalid-ships', selectedShips: { recycler: 1, scout: 1 } };
+  const invalidCargo = { ...gasFlight, id: 'gas-flight-invalid-cargo', requestId: 'gas-invalid-cargo', cargoState: undefined };
+  const firstReport = {
+    id: 'untrusted-gas-report-id',
+    flightId: 'gas-flight-persisted',
+    coordinate,
+    arrivalAt: now + 60_000,
+    outcome: 'found',
+    gasCollected: 1_250,
+    scrapCollected: 250,
+  };
+  const duplicateReport = { ...firstReport, gasCollected: 2_500 };
+  storage.values.set(persistence.saveKey, JSON.stringify({
+    ...initial,
+    flights: {
+      records: [gasFlight, invalidCapacity, invalidShips, invalidCargo],
+      requestIndex: { forged: 'gas-flight-invalid-capacity' },
+    },
+    reports: {
+      ...initial.reports,
+      readIds: [reportId],
+      hiddenIds: [reportId],
+      gasExtractionArrivalReports: [firstReport, duplicateReport],
+    },
+  }));
+
+  const reloaded = persistence.read();
+  assert.deepEqual(reloaded.flights.records.map((flight) => flight.id), ['gas-flight-persisted']);
+  assert.equal(reloaded.flights.requestIndex['gas-flight-persisted-request'], 'gas-flight-persisted');
+  assert.equal(reloaded.flights.requestIndex.forged, undefined);
+  assert.deepEqual(reloaded.flights.records[0].cargo, { metal: 0, minerals: 0, gas: 1_250, debris: 250 });
+  assert.deepEqual(reloaded.reports.gasExtractionArrivalReports, [{
+    id: reportId,
+    flightId: 'gas-flight-persisted',
+    coordinate,
+    arrivalAt: now + 60_000,
+    outcome: 'found',
+    gasCollected: 2_500,
+    scrapCollected: 250,
+  }]);
+  assert.deepEqual(reloaded.reports.readIds, [reportId]);
+  assert.deepEqual(reloaded.reports.hiddenIds, [reportId]);
+
+  assert.equal(persistence.write(reloaded).ok, true);
+  const roundTripped = persistence.read();
+  assert.equal(roundTripped.flights.records[0].id, 'gas-flight-persisted');
+  assert.deepEqual(roundTripped.flights.records[0].cargo, { metal: 0, minerals: 0, gas: 1_250, debris: 250 });
+  assert.deepEqual(roundTripped.reports.gasExtractionArrivalReports, reloaded.reports.gasExtractionArrivalReports);
+  assert.deepEqual(roundTripped.reports.readIds, [reportId]);
+  assert.deepEqual(roundTripped.reports.hiddenIds, [reportId]);
 });
 
 test('legacy resource clock migrates to every saved planet without sharing a mutable clock', () => {
@@ -390,6 +1315,14 @@ test('building application owns start, queue cancellation, completion, destroy, 
   const canceled = cancelBuilding(started.state, { ...buildingContext, now: 10_001 }, started.state.queues['helion-01'][0].id);
   assert.equal(canceled.ok, true);
   assert.equal(canceled.state.queues['helion-01'].length, 0);
+  const canceledBuilding = started.state.queues['helion-01'][0]!;
+  const walletBeforeCancel = getPlanetResources(started.state);
+  const walletAfterCancel = getPlanetResources(canceled.state);
+  assert.deepEqual(canceled.state.rating.unrecoveredCostsByOwnerId[canceled.state.profile.playerId], {
+    metal: Math.max(0, (canceledBuilding.cost?.metal ?? 0) - (walletAfterCancel.metal - walletBeforeCancel.metal)),
+    minerals: Math.max(0, (canceledBuilding.cost?.minerals ?? 0) - (walletAfterCancel.minerals - walletBeforeCancel.minerals)),
+    gas: Math.max(0, (canceledBuilding.cost?.gas ?? 0) - (walletAfterCancel.gas - walletBeforeCancel.gas)),
+  });
 
   const rebuilt = startBuilding(initial, buildingContext, 'trade-center');
   assert.equal(rebuilt.ok, true);
@@ -561,6 +1494,11 @@ test('recycling, trade, and spaceport actions remain thin domain-backed transiti
   }, context(job.finishAt + 1), 855_880, { source: 'debris', target: 'metal', amount: 100 });
   assert.equal(trade.execution.ok, true);
   assert.equal(trade.state.metal, collected.state.metal);
+  assert.deepEqual(trade.state.planets['helion-01'].resources, {
+    metal: trade.state.metal,
+    minerals: trade.state.minerals,
+    gas: trade.state.gas,
+  });
   assert.equal(trade.execution.credit?.accepted.metal, 0);
   assert.equal(trade.execution.credit?.burned.metal, 60);
 
@@ -579,6 +1517,57 @@ test('recycling, trade, and spaceport actions remain thin domain-backed transiti
   const upgrade = startSpaceportUpgrade(spaceportState, spaceportContext, 'ships', candidate.id, 'spaceport-1');
   assert.equal(upgrade.ok, true);
   assert.equal(upgrade.state.planets['helion-01'].spaceportUpgrades.shipQueue.length, 1);
+  assert.deepEqual(upgrade.state.planets['helion-01'].resources, {
+    metal: upgrade.state.metal,
+    minerals: upgrade.state.minerals,
+    gas: upgrade.state.gas,
+  });
+});
+
+test('manual and automatic recycling credits persist on the current planet wallet', () => {
+  const initial = withBuildingSetup(createInitialSaveState('test'));
+  const startAt = 20_000;
+  const assertWalletsMatchCredit = (state: SaveState, wallet: { metal: number; minerals: number; gas: number }) => {
+    const planetResources = state.planets['helion-01'].resources;
+    assert.ok(planetResources);
+    assert.deepEqual(
+      {
+        metal: planetResources.metal,
+        minerals: planetResources.minerals,
+        gas: planetResources.gas,
+      },
+      { metal: wallet.metal, minerals: wallet.minerals, gas: wallet.gas },
+    );
+    assert.deepEqual(
+      { metal: state.metal, minerals: state.minerals, gas: state.gas },
+      { metal: wallet.metal, minerals: wallet.minerals, gas: wallet.gas },
+    );
+  };
+
+  const manualStart = startRecycling(initial, context(startAt), 100, { metal: 40, minerals: 40, gas: 20 }, 'recycle-manual');
+  assert.equal(manualStart.ok, true);
+  const manualJob = manualStart.state.planets['helion-01'].recycling.jobs[0];
+  assert.ok(manualJob);
+  const manual = collectRecycling(manualStart.state, context(manualJob.finishAt), manualJob.id);
+  assert.equal(manual.ok, true);
+  assert.ok(manual.credit);
+  assertWalletsMatchCredit(manual.state, manual.credit.wallet);
+
+  const manualStorage = new MemoryStorage();
+  const manualPersistence = createPersistenceFacade({ mode: 'test', storage: manualStorage, now: () => manualJob.finishAt });
+  assert.equal(manualPersistence.write(manual.state).ok, true);
+  const manuallyPersisted = manualPersistence.read();
+  assertWalletsMatchCredit(manuallyPersisted, manual.credit.wallet);
+
+  const autoStart = startRecycling(initial, context(startAt), 100, { metal: 40, minerals: 40, gas: 20 }, 'recycle-auto');
+  assert.equal(autoStart.ok, true);
+  const autoJob = autoStart.state.planets['helion-01'].recycling.jobs[0];
+  assert.ok(autoJob);
+  const auto = reconcileRecycling(autoStart.state, context(autoJob.finishAt + 24 * 60 * 60 * 1000 + 1));
+  assert.equal(auto.ok, true);
+  assert.deepEqual(auto.autoCollectedJobIds, [autoJob.id]);
+  assert.ok(auto.credit);
+  assertWalletsMatchCredit(auto.state, auto.credit.wallet);
 });
 
 test('spaceport application action names and resolves the selected faction ship', () => {
@@ -590,11 +1579,21 @@ test('spaceport application action names and resolves the selected faction ship'
 
   assert.equal(result.ok, true);
   assert.equal(result.entityName, 'Транспортный дрон');
-  assert.equal(result.state.planets['helion-01'].spaceportUpgrades.shipQueue[0]?.shipId, 'transporter');
+  const task = result.state.planets['helion-01'].spaceportUpgrades.shipQueue[0];
+  assert.equal(task?.shipId, 'transporter');
+  assert.ok(task);
+  const canceled = cancelSpaceportUpgrade(result.state, { ...context(25_001), rng: () => 0 }, task.id);
+  assert.equal(canceled.ok, true);
+  assert.deepEqual(canceled.state.rating.unrecoveredCostsByOwnerId[canceled.state.profile.playerId], {
+    metal: task.cost.metal - (canceled.transition.refund?.metal ?? 0),
+    minerals: task.cost.minerals - (canceled.transition.refund?.minerals ?? 0),
+    gas: task.cost.gas - (canceled.transition.refund?.gas ?? 0),
+  });
 });
 
 test('fleet production application persists, reconciles, and bridges all three queues', () => {
   const initial = withBuildingSetup(createInitialSaveState('test', 1_000));
+  initial.science.levels[4] = 1;
   const startContext = context(2_000);
   const ship = startFleetProduction(initial, startContext, 'ships', 'scout', 2, 'app-ship');
   assert.equal(ship.transition.ok, true);
@@ -648,15 +1647,82 @@ test('fleet production application persists, reconciles, and bridges all three q
   }));
   const bridgeCompletedTask = current.planets['helion-01'].fleetProduction.shipQueue[0];
   assert.ok(bridgeCompletedTask);
-  target.dispatchEvent(new CustomEvent('asterion:fleet-production-start-request', {
-    detail: { queueKind: 'ships', itemId: 'scout', quantity: 0, now: bridgeCompletedTask.finishAt },
-  }));
+  const reconciledBridge = reconcileFleetProduction(current, {
+    planetId: 'helion-01',
+    now: bridgeCompletedTask.finishAt,
+  });
+  assert.equal(reconciledBridge.changed, true);
+  current = reconciledBridge.state;
+  commits.push(current);
   assert.equal(commits.length, 4);
   assert.equal(current.planets['helion-01'].fleet.ships.scout, 21);
   assert.equal(current.planets['helion-01'].fleetProduction.shipQueue.length, 0);
   unbind();
   const canceled = cancelFleetProduction(current, { ...context(3_002), rng: () => 0 }, 'missing');
   assert.equal(canceled.transition.ok, false);
+});
+
+test('ship requirements see completions due on the selected planet before timer reconciliation', () => {
+  const base = withBuildingSetup(createInitialSaveState('test', 0));
+  const colonyId = 'planet-1-2-1';
+  const localFleet = createEmptyFleetState();
+  localFleet.ships.scout = 1;
+  const localPlanet = {
+    ...base.planets['helion-01'],
+    fleet: localFleet,
+    buildings: { ...base.planets['helion-01'].buildings, hangar: 1_000, shipyard: 99 },
+    resources: { metal: 1_000_000_000, minerals: 1_000_000_000, gas: 1_000_000_000 },
+  };
+  const remoteFleet = createEmptyFleetState();
+  remoteFleet.ships.cruiser = 1;
+  const remotePlanet = {
+    ...createColonyPlanetRuntime(base, { galaxy: 1, system: 2, position: 1 }),
+    fleet: remoteFleet,
+  };
+  const state: SaveState = {
+    ...base,
+    profile: { ...base.profile, factionId: 'veyra' },
+    planets: { ...base.planets, 'helion-01': localPlanet, [colonyId]: remotePlanet },
+  };
+
+  const remoteOnly = startFleetProduction(state, context(1_000), 'ships', 'destroyer', 1, 'remote-prerequisite-only');
+  assert.equal(remoteOnly.transition.ok, false);
+  assert.match(remoteOnly.transition.reason ?? '', /Требуется корабль/);
+  assert.equal(remoteOnly.state.planets['helion-01'].fleet.ships.cruiser ?? 0, 0);
+  assert.equal(remoteOnly.state.planets[colonyId].fleet.ships.cruiser, 1);
+
+  const queuedPrerequisite = startFleetProduction(state, context(2_000), 'ships', 'cruiser', 1, 'queued-prerequisite');
+  assert.equal(queuedPrerequisite.transition.ok, true);
+  const order = queuedPrerequisite.state.planets['helion-01'].fleetProduction.shipQueue[0];
+  assert.ok(order);
+  assert.equal(queuedPrerequisite.state.planets['helion-01'].fleet.ships.cruiser ?? 0, 0);
+
+  const beforeFinish = startFleetProduction(
+    queuedPrerequisite.state,
+    context(order.finishAt - 1),
+    'ships',
+    'destroyer',
+    1,
+    'dependent-before-finish',
+  );
+  assert.equal(beforeFinish.transition.ok, false);
+  assert.match(beforeFinish.transition.reason ?? '', /Требуется корабль/);
+  assert.equal(beforeFinish.state.planets['helion-01'].fleet.ships.cruiser ?? 0, 0);
+
+  // No periodic runtime/queue reconciliation runs after finishAt; this new order
+  // request itself must settle the due prerequisite before checking requirements.
+  const afterFinish = startFleetProduction(
+    queuedPrerequisite.state,
+    context(order.finishAt + 1),
+    'ships',
+    'destroyer',
+    1,
+    'dependent-after-finish',
+  );
+  assert.equal(afterFinish.transition.ok, true);
+  assert.equal(afterFinish.state.planets['helion-01'].fleet.ships.cruiser, 1);
+  assert.equal(afterFinish.state.planets[colonyId].fleet.ships.cruiser, 1);
+  assert.equal(afterFinish.state.planets['helion-01'].fleetProduction.shipQueue.some(({ itemId }) => itemId === 'destroyer'), true);
 });
 
 test('satellite production creates orbital presence and dismantling removes only its unused contribution', () => {
@@ -746,6 +1812,12 @@ test('satellite batches complete one unit at a time, keep the first unit through
     assert.equal(canceled.state.planets['helion-01'].fleetProduction.shipQueue.length, 0, factionId);
     assert.equal(canceled.state.planets['helion-01'].fleet.ships['solar-satellite'], 0, factionId);
     assert.equal(canceled.state.metal, first.state.metal + Math.floor(task.cost.metal / 2 * 0.6), factionId);
+    const canceledRefund = 'refund' in canceled.transition ? canceled.transition.refund : null;
+    assert.deepEqual(canceled.state.rating.unrecoveredCostsByOwnerId[canceled.state.profile.playerId], {
+      metal: Math.floor(task.cost.metal / 2) - (canceledRefund?.metal ?? 0),
+      minerals: Math.floor(task.cost.minerals / 2) - (canceledRefund?.minerals ?? 0),
+      gas: Math.floor(task.cost.gas / 2) - (canceledRefund?.gas ?? 0),
+    }, factionId);
   }
 });
 
@@ -774,7 +1846,7 @@ test('science application uses one clock, reconciles idempotently, and event bri
   assert.deepEqual(repeated.events, []);
 
   const target = new EventTarget();
-  let current = initial;
+  let current: SaveState = initial;
   const commits: SaveState[] = [];
   const unbind = bindScienceEventBridge({
     target,
@@ -794,6 +1866,17 @@ test('science application uses one clock, reconciles idempotently, and event bri
   const canceled = cancelScience(current, { ...context(40_002), rng: () => 0 }, current.science.queue[0].id);
   assert.equal(canceled.transition.ok, true);
   assert.equal(getPlanetEnergyLedger(canceled.state.planets['helion-01'], canceled.state.science.levels).availableEnergy, energyBeforeScienceCancel);
+  assert.ok('canceledTasks' in canceled.transition);
+  const paidScienceCost = canceled.transition.canceledTasks.reduce((total, task) => ({
+    metal: total.metal + task.cost.metal,
+    minerals: total.minerals + task.cost.minerals,
+    gas: total.gas + task.cost.gas,
+  }), { metal: 0, minerals: 0, gas: 0 });
+  assert.deepEqual(canceled.state.rating.unrecoveredCostsByOwnerId[canceled.state.profile.playerId], {
+    metal: Math.max(0, paidScienceCost.metal - (canceled.transition.refund?.metal ?? 0)),
+    minerals: Math.max(0, paidScienceCost.minerals - (canceled.transition.refund?.minerals ?? 0)),
+    gas: Math.max(0, paidScienceCost.gas - (canceled.transition.refund?.gas ?? 0)),
+  });
   unbind();
 });
 
@@ -917,7 +2000,7 @@ test('application result reflects a failed transition after a queued functional 
   };
   const stateRef = { current: initial };
   const queuedUpdates: Array<(current: SaveState) => SaveState> = [];
-  let committed = initial;
+  let committed: SaveState = initial;
   const setState = (update: (current: SaveState) => SaveState) => {
     queuedUpdates.push(update);
   };
@@ -983,9 +2066,9 @@ test('resource clock accrues canonical income once, scales only Test Mode, and p
   } satisfies SaveState;
 
   const production = reconcileRuntime(state, context(3_600_000, 'production'));
-  assert.equal(production.state.metal, 150);
-  assert.equal(production.state.minerals, 150);
-  assert.equal(production.state.gas, 100);
+  assert.equal(production.state.metal, 1_500);
+  assert.equal(production.state.minerals, 1_500);
+  assert.equal(production.state.gas, 1_000);
   assert.equal(production.state.planets['helion-01'].energy, 0);
   assert.equal(production.state.resourceClock.lastReconciledAt, 3_600_000);
   assert.equal(reconcileRuntime(production.state, context(3_600_000, 'production')).changed, false);
@@ -1086,16 +2169,16 @@ test('resource income uses an independent persisted clock per planet and reconci
   const firstTick = sent.flight.arrivalAt + 3_600_000;
   const secondTick = sent.flight.arrivalAt + 7_200_000;
   const firstPlanet = reconcileRuntime(state, planetContext('helion-01', firstTick));
-  assert.equal(firstPlanet.state.planets['helion-01'].resources?.metal, 150);
-  assert.equal(firstPlanet.state.planets[colonyId].resources?.metal, 0);
+  assert.equal(firstPlanet.state.planets['helion-01'].resources?.metal, 1_500);
+  assert.equal(firstPlanet.state.planets[colonyId].resources?.metal, 1_500);
 
   const secondPlanet = reconcileRuntime(firstPlanet.state, planetContext(colonyId, secondTick));
-  assert.equal(secondPlanet.state.planets[colonyId].resources?.metal, 300);
-  assert.equal(secondPlanet.state.planets['helion-01'].resources?.metal, 150);
+  assert.equal(secondPlanet.state.planets[colonyId].resources?.metal, 3_000);
+  assert.equal(secondPlanet.state.planets['helion-01'].resources?.metal, 3_000);
 
   const switchedBack = reconcileRuntime(secondPlanet.state, planetContext('helion-01', secondTick));
-  assert.equal(switchedBack.state.planets['helion-01'].resources?.metal, 300);
-  assert.equal(switchedBack.state.planets[colonyId].resources?.metal, 300);
+  assert.equal(switchedBack.state.planets['helion-01'].resources?.metal, 3_000);
+  assert.equal(switchedBack.state.planets[colonyId].resources?.metal, 3_000);
 
   const repeated = reconcileRuntime(switchedBack.state, planetContext(colonyId, secondTick));
   assert.equal(repeated.changed, false);
@@ -1118,11 +2201,678 @@ test('resource credit stops at dynamic capacity and does not bank time spent ful
   const full = reconcileRuntime(state, context(3_600_000, 'production'));
   assert.equal(full.state.metal, capacities.metal);
   assert.equal(full.state.resourceClock.remainder.metal, 0);
-  assert.equal(full.credit.burned.metal, 145);
+  assert.equal(full.credit.burned.metal, 1_495);
 
   const spent = { ...full.state, metal: capacities.metal - 100 };
   const sameTimestamp = reconcileRuntime(spent, context(3_600_000, 'production'));
   assert.equal(sameTimestamp.state.metal, spent.metal);
   const nextInterval = reconcileRuntime(sameTimestamp.state, context(7_200_000, 'production'));
   assert.equal(nextInterval.state.metal, capacities.metal);
+});
+
+test('active overpopulation survives persistence without legacy roster normalization', () => {
+  const storage = new MemoryStorage();
+  const initial = withBuildingSetup(createInitialSaveState('test', 1_000));
+  const queued = startFleetProduction(initial, context(1_000), 'ships', 'scout', 1, 'overpop-paused-queue');
+  assert.equal(queued.transition.ok, true);
+  const homeworld = queued.state.planets['helion-01'];
+  const damaged = {
+    ...queued.state,
+    planets: {
+      ...queued.state.planets,
+      'helion-01': {
+        ...homeworld,
+        buildings: { ...homeworld.buildings, hangar: 0 },
+        fleet: {
+          ...homeworld.fleet,
+          ships: { ...homeworld.fleet.ships, destroyer: 1_000 },
+        },
+      },
+    },
+  };
+  const active = reconcilePlanetOverpopulation(damaged, 'helion-01', 1_000).state;
+  assert.equal(active.planets['helion-01'].overpopulation?.blocked, true);
+  assert.equal(active.planets['helion-01'].fleet.ships.destroyer, 1_000);
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 1_000 });
+  assert.equal(persistence.write(active).ok, true);
+  const reloaded = persistence.read();
+  assert.equal(reloaded.planets['helion-01'].overpopulation?.blocked, true);
+  assert.equal(reloaded.planets['helion-01'].fleet.ships.destroyer, 1_000);
+  assert.equal(reloaded.planets['helion-01'].fleetProduction.shipQueue[0]?.itemId, 'scout');
+  assert.equal(getFleetSummaryForState(reloaded).population > getFleetSummaryForState(reloaded).capacity, true);
+});
+
+test('overpopulation emits one persisted final system report with attrition-only ship counts', () => {
+  const storage = new MemoryStorage();
+  const initial = createInitialSaveState('production', 0);
+  const homeworld = initial.planets['helion-01'];
+  const fleet = createEmptyFleetState();
+  fleet.ships.scout = 1_000;
+  const overpopulated = {
+    ...initial,
+    planets: {
+      ...initial.planets,
+      'helion-01': {
+        ...homeworld,
+        buildings: { ...homeworld.buildings, hangar: 0 },
+        fleet,
+        solarSatellites: 0,
+      },
+    },
+  } satisfies SaveState;
+  const before = getPlanetOverpopulationSummary(overpopulated, 'helion-01');
+  const start = reconcilePlanetOverpopulation(overpopulated, 'helion-01', 0);
+  assert.equal(start.summary.blocked, true);
+  assert.equal(start.state.reports.overpopulationReports?.length ?? 0, 0);
+  assert.equal(start.state.planets['helion-01'].overpopulation?.initialPopulation, before.actualPopulation);
+  assert.equal(start.state.planets['helion-01'].overpopulation?.initialCapacity, before.capacity);
+
+  const halfwayAt = 5 * 60 * 1_000;
+  const halfway = reconcilePlanetOverpopulation(start.state, 'helion-01', halfwayAt);
+  assert.equal(halfway.summary.blocked, true);
+  assert.ok((halfway.state.planets['helion-01'].overpopulation?.removedShips?.[0]?.count ?? 0) > 0);
+  const persistence = createPersistenceFacade({ mode: 'production', storage, now: () => halfwayAt });
+  assert.equal(persistence.write(halfway.state).ok, true);
+  const reloaded = persistence.read();
+  const reloadedEpisode = reloaded.planets['helion-01'].overpopulation;
+  assert.deepEqual(reloadedEpisode?.removedShips, halfway.state.planets['helion-01'].overpopulation?.removedShips);
+  assert.equal(reloadedEpisode?.initialPopulation, before.actualPopulation);
+  assert.equal(reloadedEpisode?.initialCapacity, before.capacity);
+
+  const delivered = reloaded.planets['helion-01'];
+  const withDelivery = {
+    ...reloaded,
+    planets: {
+      ...reloaded.planets,
+      'helion-01': {
+        ...delivered,
+        fleet: {
+          ...delivered.fleet,
+          ships: { ...delivered.fleet.ships, scout: delivered.fleet.ships.scout + 100 },
+        },
+      },
+    },
+  } satisfies SaveState;
+  const afterDelivery = reconcilePlanetOverpopulation(withDelivery, 'helion-01', halfwayAt);
+  const afterCombat = afterDelivery.state.planets['helion-01'];
+  const combatLoss = 25;
+  const afterCombatState = {
+    ...afterDelivery.state,
+    planets: {
+      ...afterDelivery.state.planets,
+      'helion-01': {
+        ...afterCombat,
+        fleet: {
+          ...afterCombat.fleet,
+          ships: { ...afterCombat.fleet.ships, scout: afterCombat.fleet.ships.scout - combatLoss },
+        },
+      },
+    },
+  } satisfies SaveState;
+  const afterCombatReconcile = reconcilePlanetOverpopulation(afterCombatState, 'helion-01', 6 * 60 * 1_000);
+  assert.equal(afterCombatReconcile.summary.blocked, true);
+
+  const unlocked = reconcilePlanetOverpopulation(afterCombatReconcile.state, 'helion-01', 10 * 60 * 1_000);
+  assert.equal(unlocked.resolved, true);
+  assert.equal(unlocked.summary.blocked, false);
+  const reports = unlocked.state.reports.overpopulationReports ?? [];
+  assert.equal(reports.length, 1);
+  const report = reports[0];
+  assert.ok(report);
+  assert.equal(report.populationBefore, before.actualPopulation);
+  assert.equal(report.populationAfter, unlocked.summary.actualPopulation);
+  assert.equal(report.capacity, before.capacity);
+  assert.equal(report.planetName, homeworld.name);
+  assert.deepEqual(report.removedShips, [{
+    shipId: 'scout',
+    count: 1_000 + 100 - combatLoss - unlocked.state.planets['helion-01'].fleet.ships.scout,
+  }]);
+
+  const repeatedUnlock = reconcilePlanetOverpopulation(unlocked.state, 'helion-01', 10 * 60 * 1_000);
+  assert.equal(repeatedUnlock.state.reports.overpopulationReports?.length, 1);
+  assert.equal(repeatedUnlock.state.reports.overpopulationReports?.[0]?.id, report.id);
+  assert.equal(persistence.write(unlocked.state).ok, true);
+  assert.deepEqual(persistence.read().reports.overpopulationReports, reports);
+});
+
+function createScienceOverpopulationQueueFixture(
+  firstEpisodeStartedAt: number,
+  secondEpisodeStartedAt: number,
+  firstPlanetId = 'helion-01',
+  secondPlanetId = 'another-colony',
+): SaveState {
+  const initial = createInitialSaveState('test', 0);
+  const homeworld = initial.planets['helion-01'];
+  const blockedEpisode = (episodeStartedAt: number) => ({
+    episodeStartedAt,
+    initialExcess: 1,
+    scheduledBurnPool: 1,
+    burnedPopulation: 0,
+    lastReconciledAt: episodeStartedAt,
+    blocked: true,
+  });
+
+  return {
+    ...initial,
+    science: {
+      ...initial.science,
+      queue: [
+        {
+          id: 'blocked-planet-science',
+          scienceId: SCIENCE_CATALOG[0].id,
+          planetId: firstPlanetId,
+          fromLevel: 0,
+          toLevel: 1,
+          startedAt: 0,
+          finishAt: 5_000,
+          durationMs: 5_000,
+          cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+        },
+        {
+          id: 'other-planet-science',
+          scienceId: SCIENCE_CATALOG[1].id,
+          planetId: secondPlanetId,
+          fromLevel: 0,
+          toLevel: 1,
+          startedAt: 5_000,
+          finishAt: 10_000,
+          durationMs: 5_000,
+          cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+        },
+      ],
+    },
+    planets: {
+      ...initial.planets,
+      [firstPlanetId]: {
+        ...homeworld,
+        overpopulation: blockedEpisode(firstEpisodeStartedAt),
+      },
+      [secondPlanetId]: {
+        ...homeworld,
+        overpopulation: blockedEpisode(secondEpisodeStartedAt),
+      },
+    },
+  };
+}
+
+test('resolving a blocked planet shifts the queued science task and its global queue tail', () => {
+  const initial = createInitialSaveState('test', 0);
+  const blocked = {
+    ...initial,
+    science: {
+      ...initial.science,
+      queue: [
+        {
+          id: 'blocked-planet-science',
+          scienceId: SCIENCE_CATALOG[0].id,
+          planetId: 'helion-01',
+          fromLevel: 0,
+          toLevel: 1,
+          startedAt: 0,
+          finishAt: 60_000,
+          durationMs: 60_000,
+          cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+        },
+        {
+          id: 'other-planet-science',
+          scienceId: SCIENCE_CATALOG[1].id,
+          planetId: 'another-colony',
+          fromLevel: 0,
+          toLevel: 1,
+          startedAt: 60_000,
+          finishAt: 120_000,
+          durationMs: 60_000,
+          cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+        },
+      ],
+    },
+    planets: {
+      ...initial.planets,
+      'helion-01': {
+        ...initial.planets['helion-01'],
+        overpopulation: {
+          episodeStartedAt: 30_000,
+          initialExcess: 1,
+          scheduledBurnPool: 1,
+          burnedPopulation: 0,
+          lastReconciledAt: 30_000,
+          blocked: true,
+        },
+      },
+    },
+  };
+
+  const resolved = reconcilePlanetOverpopulation(blocked, 'helion-01', 90_000);
+  assert.equal(resolved.resolved, true);
+  assert.equal(resolved.state.science.queue[0]?.finishAt, 120_000);
+  assert.equal(resolved.state.science.queue[1]?.finishAt, 180_000);
+});
+
+test('overlapping overpopulation locks shift a global science queue only once', () => {
+  const fixture = createScienceOverpopulationQueueFixture(0, 8_000);
+  const secondUnlocked = reconcilePlanetOverpopulation(fixture, 'another-colony', 9_000);
+  assert.equal(secondUnlocked.resolved, true);
+  const firstUnlocked = reconcilePlanetOverpopulation(secondUnlocked.state, 'helion-01', 10_000);
+  assert.equal(firstUnlocked.resolved, true);
+
+  const [first, second] = firstUnlocked.state.science.queue;
+  assert.ok(first && second);
+  assert.equal(first?.startedAt, 10_000);
+  assert.equal(first?.finishAt, 15_000);
+  assert.equal(second?.startedAt, 15_000);
+  assert.equal(second?.finishAt, 20_000);
+  assert.equal(first.finishAt - first.startedAt, first.durationMs);
+  assert.equal(second.finishAt - second.startedAt, second.durationMs);
+  assert.ok(first.finishAt <= second.startedAt, 'science queue must remain FIFO');
+});
+
+test('non-overlapping overpopulation locks add a later science pause exactly once', () => {
+  const fixture = createScienceOverpopulationQueueFixture(0, 16_000);
+  const firstUnlocked = reconcilePlanetOverpopulation(fixture, 'helion-01', 10_000);
+  assert.equal(firstUnlocked.resolved, true);
+  const secondUnlocked = reconcilePlanetOverpopulation(firstUnlocked.state, 'another-colony', 18_000);
+  assert.equal(secondUnlocked.resolved, true);
+
+  const [first, second] = secondUnlocked.state.science.queue;
+  assert.ok(first && second);
+  assert.equal(first?.startedAt, 10_000);
+  assert.equal(first?.finishAt, 15_000);
+  assert.equal(second?.startedAt, 17_000);
+  assert.equal(second?.finishAt, 22_000);
+  assert.equal(first.finishAt - first.startedAt, first.durationMs);
+  assert.equal(second.finishAt - second.startedAt, second.durationMs);
+  assert.ok(first.finishAt <= second.startedAt, 'science queue must remain FIFO');
+});
+
+test('science completed before a planet lock is not shifted, while unfinished queue work keeps its pause', () => {
+  const fixture = createScienceOverpopulationQueueFixture(8_000, 8_000);
+  const secondUnlocked = reconcilePlanetOverpopulation(fixture, 'another-colony', 9_000);
+  assert.equal(secondUnlocked.resolved, true);
+  const firstUnlocked = reconcilePlanetOverpopulation(secondUnlocked.state, 'helion-01', 10_000);
+  assert.equal(firstUnlocked.resolved, true);
+
+  const [first, second] = firstUnlocked.state.science.queue;
+  assert.ok(first && second);
+  assert.equal(first?.startedAt, 0);
+  assert.equal(first?.finishAt, 5_000);
+  assert.equal(second?.startedAt, 6_000);
+  assert.equal(second?.finishAt, 11_000);
+  assert.equal(first.finishAt - first.startedAt, first.durationMs);
+  assert.equal(second.finishAt - second.startedAt, second.durationMs);
+  assert.ok(first.finishAt <= second.startedAt, 'science queue must remain FIFO');
+});
+
+test('runtime completes science due before an overpopulation lock and resumes the unfinished queue tail once', () => {
+  const initial = createInitialSaveState('test', 0);
+  const homeworld = initial.planets['helion-01'];
+  const baseSolarSatellites = homeworld.solarSatellites ?? 0;
+  const scienceId = SCIENCE_CATALOG[0].id;
+  const queued = {
+    ...initial,
+    science: {
+      ...initial.science,
+      queue: [
+        {
+          id: 'completed-before-lock',
+          scienceId,
+          planetId: 'helion-01',
+          fromLevel: 0,
+          toLevel: 1,
+          startedAt: 0,
+          finishAt: 5_000,
+          durationMs: 5_000,
+          cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+        },
+        {
+          id: 'unfinished-at-lock',
+          scienceId,
+          planetId: 'helion-01',
+          fromLevel: 1,
+          toLevel: 2,
+          startedAt: 5_000,
+          finishAt: 12_000,
+          durationMs: 7_000,
+          cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+        },
+      ],
+    },
+    planets: {
+      ...initial.planets,
+      'helion-01': { ...homeworld, solarSatellites: baseSolarSatellites + 200 },
+    },
+  } satisfies SaveState;
+
+  const newlyDetected = reconcileRuntime(queued, context(10_000));
+  assert.equal(newlyDetected.state.planets['helion-01'].overpopulation?.episodeStartedAt, 10_000);
+  assert.deepEqual(newlyDetected.events.filter((event) => event.kind === 'science'), [{ kind: 'science', scienceIds: [scienceId] }]);
+  assert.equal(newlyDetected.state.science.levels[scienceId], 1);
+  assert.deepEqual(newlyDetected.state.science.queue.map((task) => task.id), ['unfinished-at-lock']);
+  assert.equal(newlyDetected.state.science.queue[0]?.finishAt, 12_000);
+
+  const blockedAtEight = reconcilePlanetOverpopulation(queued, 'helion-01', 8_000).state;
+  assert.equal(blockedAtEight.planets['helion-01'].overpopulation?.episodeStartedAt, 8_000);
+  const blockedSnapshot = createScienceSnapshot(blockedAtEight, context(10_000));
+  assert.equal(blockedSnapshot.blockedPlanetStartedAt?.get('helion-01'), 8_000);
+
+  const atTen = reconcileRuntime(blockedAtEight, context(10_000));
+  assert.deepEqual(atTen.events.filter((event) => event.kind === 'science'), [{ kind: 'science', scienceIds: [scienceId] }]);
+  assert.equal(atTen.state.science.levels[scienceId], 1);
+  assert.deepEqual(atTen.state.science.queue.map((task) => task.id), ['unfinished-at-lock']);
+  assert.equal(atTen.state.science.queue[0]?.finishAt, 12_000);
+  assert.equal(atTen.state.planets['helion-01'].overpopulation?.blocked, true);
+
+  const repeated = reconcileRuntime(atTen.state, context(10_000));
+  assert.deepEqual(repeated.events, []);
+  assert.equal(repeated.state.science.levels[scienceId], 1);
+  assert.deepEqual(repeated.state.science.queue.map((task) => task.id), ['unfinished-at-lock']);
+
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 10_000 });
+  assert.deepEqual(persistence.write(atTen.state), { ok: true });
+  const reloaded = persistence.read();
+  const afterReload = reconcileRuntime(reloaded, context(10_000));
+  assert.deepEqual(afterReload.events, []);
+  assert.equal(afterReload.state.science.levels[scienceId], 1);
+  assert.deepEqual(afterReload.state.science.queue.map((task) => task.id), ['unfinished-at-lock']);
+
+  const planetAfterReload = afterReload.state.planets['helion-01'];
+  const unlockedInput = {
+    ...afterReload.state,
+    planets: {
+      ...afterReload.state.planets,
+      'helion-01': { ...planetAfterReload, solarSatellites: baseSolarSatellites },
+    },
+  } satisfies SaveState;
+  const unlocked = reconcileRuntime(unlockedInput, context(20_000));
+  const resumedTask = unlocked.state.science.queue[0];
+  assert.ok(resumedTask);
+  assert.equal(resumedTask?.startedAt, 17_000);
+  assert.equal(resumedTask?.finishAt, 24_000);
+  assert.equal(resumedTask?.finishAt - 20_000, 4_000, 'only the remaining time at lock start should remain after unlock');
+  assert.equal(resumedTask?.durationMs, 7_000);
+  assert.equal(unlocked.state.science.levels[scienceId], 1);
+
+  const beforeFinish = reconcileRuntime(unlocked.state, context(23_999));
+  assert.deepEqual(beforeFinish.events, []);
+  assert.equal(beforeFinish.state.science.queue[0]?.id, 'unfinished-at-lock');
+  assert.equal(beforeFinish.state.science.levels[scienceId], 1);
+  const finished = reconcileRuntime(beforeFinish.state, context(24_000));
+  assert.deepEqual(finished.events.filter((event) => event.kind === 'science'), [{ kind: 'science', scienceIds: [scienceId] }]);
+  assert.equal(finished.state.science.levels[scienceId], 2);
+  assert.equal(finished.state.science.queue.length, 0);
+
+  assert.deepEqual(persistence.write(finished.state), { ok: true });
+  const afterCompletionReload = reconcileRuntime(persistence.read(), context(24_000));
+  assert.deepEqual(afterCompletionReload.events, []);
+  assert.equal(afterCompletionReload.state.science.levels[scienceId], 2);
+  assert.equal(afterCompletionReload.state.science.queue.length, 0);
+});
+
+test('science cancellation reconciles a head completed before another planet was locked', () => {
+  const initial = createInitialSaveState('test', 0);
+  const homeworld = initial.planets['helion-01'];
+  const baseSolarSatellites = homeworld.solarSatellites ?? 0;
+  const overpopulated = reconcilePlanetOverpopulation({
+    ...initial,
+    planets: {
+      ...initial.planets,
+      'helion-01': { ...homeworld, solarSatellites: baseSolarSatellites + 200 },
+    },
+  }, 'helion-01', 8_000).state;
+  const colony = {
+    ...overpopulated.planets['helion-01'],
+    fleet: createEmptyFleetState(),
+    solarSatellites: baseSolarSatellites,
+    buildings: {
+      ...overpopulated.planets['helion-01'].buildings,
+      hangar: getBuildingMaxLevel('hangar'),
+    },
+    overpopulation: undefined,
+  };
+  const scienceId = SCIENCE_CATALOG[0].id;
+  const queued = {
+    ...overpopulated,
+    science: {
+      ...overpopulated.science,
+      queue: [
+        {
+          id: 'completed-before-lock', scienceId, planetId: 'helion-01',
+          fromLevel: 0, toLevel: 1, startedAt: 0, finishAt: 5_000,
+          durationMs: 5_000, cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+        },
+        {
+          id: 'cancel-from-unlocked-colony', scienceId, planetId: 'another-colony',
+          fromLevel: 1, toLevel: 2, startedAt: 5_000, finishAt: 12_000,
+          durationMs: 7_000, cost: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+        },
+      ],
+    },
+    planets: {
+      ...overpopulated.planets,
+      'another-colony': colony,
+    },
+  } satisfies SaveState;
+
+  const canceled = cancelScience(queued, {
+    ...context(10_000),
+    planetId: 'another-colony',
+  }, 'cancel-from-unlocked-colony');
+
+  assert.ok(canceled.transition.ok);
+  if (!('canceled' in canceled.transition)) throw new Error('Expected a science cancellation transition.');
+  assert.equal(canceled.transition.canceled?.id, 'cancel-from-unlocked-colony');
+  assert.equal(canceled.state.science.levels[scienceId], 1);
+  assert.equal(canceled.state.science.queue.length, 0);
+});
+
+test('overpopulation queue pause is independent of planet ID iteration order', () => {
+  const reconcileWithPlanetIds = (firstPlanetId: string, secondPlanetId: string) => {
+    const fixture = createScienceOverpopulationQueueFixture(
+      8_000,
+      0,
+      firstPlanetId,
+      secondPlanetId,
+    );
+    const resolved = reconcileAllPlanetOverpopulation(fixture, 10_000);
+    assert.deepEqual(new Set(resolved.resolvedPlanetIds), new Set([firstPlanetId, secondPlanetId]));
+
+    const [first, second] = resolved.state.science.queue;
+    assert.ok(first && second);
+    assert.equal(first.planetId, firstPlanetId);
+    assert.equal(second.planetId, secondPlanetId);
+    assert.equal(first.startedAt, 0);
+    assert.equal(first.finishAt, 5_000);
+    assert.equal(second.startedAt, 10_000);
+    assert.equal(second.finishAt, 15_000);
+    assert.equal(first.finishAt - first.startedAt, first.durationMs);
+    assert.equal(second.finishAt - second.startedAt, second.durationMs);
+    assert.ok(first.finishAt <= second.startedAt, 'science queue must remain FIFO');
+    return resolved.state.science.queue.map(({ startedAt, finishAt }) => ({ startedAt, finishAt }));
+  };
+
+  const q1BeforeQ0 = reconcileWithPlanetIds('zeta-colony', 'alpha-colony');
+  const q0BeforeQ1 = reconcileWithPlanetIds('alpha-colony', 'zeta-colony');
+  assert.deepEqual(q1BeforeQ0, q0BeforeQ1);
+});
+
+test('a blocked planet pauses resource settlement and leaves a no-eligible episode persisted', () => {
+  const initial = createInitialSaveState('production', 0);
+  const homeworld = initial.planets['helion-01'];
+  const noEligibleFleet = {
+    ...homeworld.fleet,
+    ships: { ...homeworld.fleet.ships, scout: 0, transporter: 0, recycler: 0, colonizer: 0, 'spy-probe': 0 },
+    commanders: { ...homeworld.fleet.commanders, corsair: 20 },
+  };
+  const blocked = reconcilePlanetOverpopulation({
+    ...initial,
+    planets: {
+      ...initial.planets,
+      'helion-01': { ...homeworld, fleet: noEligibleFleet, solarSatellites: 200 },
+    },
+  }, 'helion-01', 0).state;
+  const beforeClock = blocked.resourceClock.byPlanet?.['helion-01']?.lastReconciledAt ?? blocked.resourceClock.lastReconciledAt;
+  const reconciled = reconcileRuntime(blocked, context(60 * 60 * 1_000, 'production'));
+  assert.equal(reconciled.state.planets['helion-01'].overpopulation?.blocked, true);
+  assert.equal(reconciled.state.planets['helion-01'].overpopulation?.lastResolutionReason, 'no-eligible-units');
+  assert.equal(reconciled.state.resourceClock.byPlanet?.['helion-01']?.lastReconciledAt ?? reconciled.state.resourceClock.lastReconciledAt, beforeClock);
+});
+
+test('blocked planet rejects local commands before overdue queues can reconcile', () => {
+  const setup = withBuildingSetup(createInitialSaveState('test', 0));
+  const setupPlanet = setup.planets['helion-01'];
+  const initial = {
+    ...setup,
+    planets: {
+      ...setup.planets,
+      'helion-01': {
+        ...setupPlanet,
+        buildings: { ...setupPlanet.buildings, hangar: getBuildingMaxLevel('hangar') },
+      },
+    },
+  } satisfies SaveState;
+  assert.equal(getPlanetOverpopulationSummary(initial, 'helion-01').blocked, false);
+  const building = startBuilding(initial, context(0), 'trade-center');
+  assert.equal(building.ok, true);
+  const fleet = startFleetProduction(building.state, context(0), 'ships', 'scout', 1, 'blocked-fleet-queue');
+  assert.equal(fleet.transition.ok, true);
+  const spaceport = startSpaceportUpgrade(fleet.state, context(0), 'ships', 'scout', 'blocked-spaceport-queue');
+  assert.equal(spaceport.ok, true);
+  const researchReady = {
+    ...spaceport.state,
+    science: {
+      ...spaceport.state.science,
+      levels: { ...spaceport.state.science.levels, 1: 0 },
+    },
+  };
+  const science = startScience(researchReady, context(0), 1, 'blocked-science-queue');
+  assert.equal(science.transition.ok, true);
+
+  const queuedPlanet = science.state.planets['helion-01'];
+  const overdue = {
+    ...science.state,
+    queues: {
+      ...science.state.queues,
+      'helion-01': (science.state.queues['helion-01'] ?? []).map((task) => ({ ...task, finishAt: 1 })),
+    },
+    science: {
+      ...science.state.science,
+      queue: science.state.science.queue.map((task) => ({ ...task, finishAt: 1 })),
+    },
+    planets: {
+      ...science.state.planets,
+      'helion-01': {
+        ...queuedPlanet,
+        buildings: { ...queuedPlanet.buildings, hangar: 0 },
+        fleet: { ...queuedPlanet.fleet, ships: { ...queuedPlanet.fleet.ships, destroyer: 1_000 } },
+        solarSatellites: 3,
+        fleetProduction: {
+          ...queuedPlanet.fleetProduction,
+          shipQueue: queuedPlanet.fleetProduction.shipQueue.map((task) => ({ ...task, finishAt: 1 })),
+        },
+        spaceportUpgrades: {
+          ...queuedPlanet.spaceportUpgrades,
+          shipQueue: queuedPlanet.spaceportUpgrades.shipQueue.map((task) => ({ ...task, finishAt: 1 })),
+          commanderQueue: queuedPlanet.spaceportUpgrades.commanderQueue.map((task) => ({ ...task, finishAt: 1 })),
+        },
+      },
+    },
+  } satisfies SaveState;
+  const blocked = reconcilePlanetOverpopulation(overdue, 'helion-01', 0).state;
+  const now = 1_000_000;
+  const blockedContext = { ...context(now), rng: () => 0 };
+
+  const canceledBuilding = cancelBuilding(blocked, blockedContext, blocked.queues['helion-01'][0].id);
+  assert.equal(canceledBuilding.ok, false);
+  assert.equal(canceledBuilding.state, blocked);
+  const destroyRolls: number[] = [];
+  const destroyed = destroyBuilding(blocked, blockedContext, 'trade-center', () => {
+    destroyRolls.push(1);
+    return 0;
+  });
+  assert.equal(destroyed.ok, false);
+  assert.equal(destroyed.state, blocked);
+  assert.deepEqual(destroyRolls, []);
+  assert.equal(applyProductionBots(blocked, blockedContext, { metal: 0, minerals: 0, gas: 0 }), blocked);
+
+  const fleetTask = blocked.planets['helion-01'].fleetProduction.shipQueue[0];
+  assert.ok(fleetTask);
+  const canceledFleet = cancelFleetProduction(blocked, blockedContext, fleetTask.id);
+  assert.equal(canceledFleet.transition.ok, false);
+  assert.equal(canceledFleet.state, blocked);
+  const dismantled = dismantleSolarSatellites(blocked, { planetId: 'helion-01' }, 1);
+  assert.equal(dismantled.ok, false);
+  assert.equal(dismantled.state, blocked);
+
+  const spaceportTask = blocked.planets['helion-01'].spaceportUpgrades.shipQueue[0];
+  assert.ok(spaceportTask);
+  const canceledSpaceport = cancelSpaceportUpgrade(blocked, blockedContext, spaceportTask.id);
+  assert.equal(canceledSpaceport.ok, false);
+  assert.equal(canceledSpaceport.state, blocked);
+  const scienceTask = blocked.science.queue[0];
+  assert.ok(scienceTask);
+  const canceledScience = cancelScience(blocked, { ...blockedContext, blockedPlanetIds: new Set() }, scienceTask.id);
+  assert.equal(canceledScience.transition.ok, false);
+  assert.equal(canceledScience.state, blocked);
+  const unblockedPlanet = {
+    ...blocked.planets['helion-01'],
+    fleet: createEmptyFleetState(),
+    buildings: { ...blocked.planets['helion-01'].buildings, hangar: getBuildingMaxLevel('hangar') },
+    overpopulation: undefined,
+  };
+  const stateWithUnblockedPlanet = {
+    ...blocked,
+    planets: { ...blocked.planets, 'unblocked-colony': unblockedPlanet },
+  } satisfies SaveState;
+  const canceledFromOtherPlanet = cancelScience(stateWithUnblockedPlanet, {
+    ...blockedContext,
+    planetId: 'unblocked-colony',
+    blockedPlanetIds: new Set(),
+  }, scienceTask.id);
+  assert.equal(canceledFromOtherPlanet.transition.ok, false);
+  assert.equal(canceledFromOtherPlanet.state, stateWithUnblockedPlanet);
+
+  const repaired = repairUnits(blocked, 'helion-01', 'ship', 'scout', 1, 'resources');
+  assert.equal(repaired.transition.ok, false);
+  assert.equal(repaired.state, blocked);
+  const removedFromRepair = removeRepairUnits(blocked, 'helion-01', 'ship', 'scout', 1);
+  assert.equal(removedFromRepair.transition.ok, false);
+  assert.equal(removedFromRepair.state, blocked);
+
+  assert.equal(blocked.queues['helion-01'][0]?.finishAt, 1);
+  assert.equal(blocked.science.queue[0]?.finishAt, 1);
+  assert.equal(blocked.planets['helion-01'].fleetProduction.shipQueue[0]?.finishAt, 1);
+  assert.equal(blocked.planets['helion-01'].spaceportUpgrades.shipQueue[0]?.finishAt, 1);
+
+  let current = blocked;
+  const fleetCommits: SaveState[] = [];
+  const fleetTarget = new EventTarget();
+  const unbindFleet = bindFleetProductionEventBridge({
+    target: fleetTarget,
+    getState: () => current,
+    getContext: (eventNow) => ({ ...context(eventNow), rng: () => 0 }),
+    commit: (next) => { current = next; fleetCommits.push(next); },
+    onNotice: () => undefined,
+  });
+  fleetTarget.dispatchEvent(new CustomEvent('asterion:fleet-production-cancel-request', {
+    detail: { orderId: fleetTask.id, now },
+  }));
+  assert.deepEqual(fleetCommits, []);
+  assert.equal(current, blocked);
+  unbindFleet();
+
+  const scienceCommits: SaveState[] = [];
+  const scienceTarget = new EventTarget();
+  const unbindScience = bindScienceEventBridge({
+    target: scienceTarget,
+    getState: () => current,
+    getContext: (eventNow) => ({ ...context(eventNow), blockedPlanetIds: new Set() }),
+    commit: (next) => { current = next; scienceCommits.push(next); },
+    onNotice: () => undefined,
+  });
+  scienceTarget.dispatchEvent(new CustomEvent(SCIENCE_CANCEL_REQUEST_EVENT, {
+    detail: { taskId: scienceTask.id, now },
+  }));
+  assert.deepEqual(scienceCommits, []);
+  assert.equal(current, blocked);
+  unbindScience();
 });

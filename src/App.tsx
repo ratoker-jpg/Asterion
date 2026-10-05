@@ -57,6 +57,7 @@ import { syncPlayerProfileWithAlliance } from './domain/profile/repository.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import {
   ACTIVE_RUNTIME_MODE,
+  dispatchRuntimeReset,
   resolveTestTimeScale,
   TEST_TIME_SCALE_OPTIONS,
   type TestTimeScale,
@@ -88,6 +89,7 @@ import {
   PLAYER_FACTION_LABELS,
 } from './domain/profile/repository.ts';
 import type { PlayerFactionId } from './domain/profile/types.ts';
+import { selectOwnerScores } from './domain/rating/scoring.ts';
 import {
   createInitialSaveState,
   createPersistenceFacade,
@@ -119,6 +121,8 @@ import {
 import { bindCombatResolutionEventBridge } from './application/combat.ts';
 import { getFleetProductionEntity } from './domain/fleet/production.ts';
 import { getFleetBuildBudget, getFleetSummaryForState, getOutgoingFleetSummaryForState, getPlanetPopulationForState } from './application/fleet.ts';
+import { getPendingInboundPopulation } from './application/flights.ts';
+import { getPlanetOverpopulationSummary } from './application/overpopulation.ts';
 import { energySummaryForPlanet, getPlanetEnergyCoordinates } from './application/energy.ts';
 import { getEffectiveResourceIncomePerHour } from './application/resource-clock.ts';
 import { publishApplicationRuntimeSnapshot } from './application/runtime.ts';
@@ -129,10 +133,12 @@ import {
   FLIGHT_EDIT_TARGET_REQUEST_EVENT,
   FLIGHT_LAUNCH_CONTEXT_EVENT,
   FLIGHT_RECALL_REQUEST_EVENT,
+  BOT01_INCOMING_SCENARIO_REQUEST_EVENT,
   SPY_REPORT_ALL_REQUEST_EVENT,
   SPY_REPORT_REQUEST_EVENT,
   SPY_REPORT_RESULT_EVENT,
   dispatchFlight,
+  startBot01IncomingScenario,
   requestAllSpyReports,
   requestSpyReport,
   recallFlight,
@@ -141,10 +147,12 @@ import {
 } from './application/flights.ts';
 import { createSimulatorScenarioFromSpyReport, requestSimulatorHandoff } from './application/simulator-handoff.ts';
 import type { SpyReportSnapshot } from './domain/espionage/types.ts';
-import { getEspionageTargets } from './domain/espionage/runtime.ts';
-import type { UniverseCoordinate, UniverseOwnerProfile } from './domain/universe/types.ts';
+import { getEspionageTargets, getEspionageState } from './domain/espionage/runtime.ts';
+import { getOrbitalDebrisByCoordinate } from './domain/espionage/orbital-debris.ts';
+import type { UniverseCoordinate, UniverseObjectKind, UniverseOwnerProfile } from './domain/universe/types.ts';
 import { enqueueApplicationStateUpdate } from './application/state.ts';
-import { getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
+import { getOwnerShipUpgradeLevels, getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
+import { selectOwnedPlanet } from './application/owned-planets.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
@@ -170,6 +178,7 @@ import generated027 from '../assets/source/planets/skins/planet-027.png';
 import generated028 from '../assets/source/planets/skins/planet-028.png';
 import generated030 from '../assets/source/planets/skins/planet-030.png';
 import generated032 from '../assets/source/planets/skins/planet-032.png';
+import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 
 const planetSkins = [
   { id: 'colonized', label: 'Колония', art: planetColonized },
@@ -193,6 +202,7 @@ const planetSkins = [
   { id: 'skin-028', label: 'Облик 028', art: generated028 },
   { id: 'skin-030', label: 'Облик 030', art: generated030 },
   { id: 'skin-032', label: 'Облик 032', art: generated032 },
+  ...asterionAssetIntegrationAssets.regularPlanetSkins,
 ] as const;
 
 type Zone = BuildingZone;
@@ -299,7 +309,9 @@ export function App() {
     if (SILENT_NOTICE_PATTERNS.some((pattern) => pattern.test(text))) return;
     noticeSeq.current += 1;
     const id = noticeSeq.current;
-    setToasts((current) => [...current, { id, text, tone }].slice(-TOAST_STACK_LIMIT));
+    setToasts((current) => current.some((toast) => toast.text === text)
+      ? current
+      : [...current, { id, text, tone }].slice(-TOAST_STACK_LIMIT));
     window.setTimeout(() => {
       setToasts((current) => current.filter((toast) => toast.id !== id));
     }, TOAST_AUTO_CLOSE_MS);
@@ -346,6 +358,23 @@ export function App() {
     }, 40);
   };
 
+  const openAsteroidRecyclerLaunch = (target: { spawnIndex: number; coordinate: UniverseCoordinate }) => {
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    setNotice(`Астероид выбран для переработки: сначала сбор газа, затем обломков — [${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}].`);
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, {
+        detail: {
+          missionId: 'gas',
+          targetKind: 'asteroid',
+          destination: { kind: 'coordinate', coordinate: target.coordinate },
+        },
+      }));
+    }, 40);
+  };
+
   useEffect(() => {
     if (RUNTIME_MODE !== 'test') return;
     persistence.writeTestTimeScale(testTimeScale);
@@ -371,6 +400,22 @@ export function App() {
     const onRecallRequest = (event: Event) => {
       const detail = (event as CustomEvent<{ flightId: string; now?: number }>).detail;
       const result = recallFlight(stateRef.current, detail.flightId, {
+        now: detail.now ?? Date.now(),
+        mode: RUNTIME_MODE,
+        testTimeScale,
+      });
+      if (result.ok) {
+        stateRef.current = result.state;
+        setState(result.state);
+        setNotice(result.notice);
+      } else {
+        setNotice(result.error.message, 'error');
+      }
+      window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
+    };
+    const onBot01ScenarioRequest = (event: Event) => {
+      const detail = (event as CustomEvent<{ now?: number }>).detail;
+      const result = startBot01IncomingScenario(stateRef.current, {
         now: detail.now ?? Date.now(),
         mode: RUNTIME_MODE,
         testTimeScale,
@@ -423,12 +468,14 @@ export function App() {
     };
     window.addEventListener(FLIGHT_DISPATCH_REQUEST_EVENT, onDispatchRequest);
     window.addEventListener(FLIGHT_RECALL_REQUEST_EVENT, onRecallRequest);
+    window.addEventListener(BOT01_INCOMING_SCENARIO_REQUEST_EVENT, onBot01ScenarioRequest);
     window.addEventListener(FLIGHT_EDIT_TARGET_REQUEST_EVENT, onEditTargetRequest);
     window.addEventListener(SPY_REPORT_REQUEST_EVENT, onSpyReportRequest);
     window.addEventListener(SPY_REPORT_ALL_REQUEST_EVENT, onSpyReportAllRequest);
     return () => {
       window.removeEventListener(FLIGHT_DISPATCH_REQUEST_EVENT, onDispatchRequest);
       window.removeEventListener(FLIGHT_RECALL_REQUEST_EVENT, onRecallRequest);
+      window.removeEventListener(BOT01_INCOMING_SCENARIO_REQUEST_EVENT, onBot01ScenarioRequest);
       window.removeEventListener(FLIGHT_EDIT_TARGET_REQUEST_EVENT, onEditTargetRequest);
       window.removeEventListener(SPY_REPORT_REQUEST_EVENT, onSpyReportRequest);
       window.removeEventListener(SPY_REPORT_ALL_REQUEST_EVENT, onSpyReportAllRequest);
@@ -564,19 +611,23 @@ export function App() {
           .join(', ');
         setNotice(`Наука: исследование завершено — ${names}.`, 'success');
       } else if (event.kind === 'building') {
-        setNotice(`${result.state.planets[result.state.currentPlanetId].name}: ${getBuildingDefinition(event.assetRole, result.state.profile.factionId).name} завершено.`, 'success');
+        const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
+        setNotice(`${planet.name}: ${getBuildingDefinition(event.assetRole, result.state.profile.factionId).name} завершено.`, 'success');
       } else if (event.kind === 'recycling') {
-        setNotice('Результат переработки автоматически зачислен', 'success');
+        const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
+        setNotice(`${planet.name}: результат переработки автоматически зачислен`, 'success');
       } else if (event.kind === 'spaceport') {
         const names = event.tasks
           .map((task) => getSpaceportUpgradeEntity(task.track, task.shipId, result.state.profile.factionId)?.name ?? task.shipId)
           .join(', ');
-        setNotice(`Космодром: улучшение завершено — ${names}.`, 'success');
+        const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
+        setNotice(`${planet.name}: космодром — улучшение завершено — ${names}.`, 'success');
       } else if (event.kind === 'fleet-production') {
         const names = event.completed
           .map((item) => getFleetProductionEntity(item.queueKind, item.itemId, result.state.profile.factionId)?.name ?? item.itemId)
           .join(', ');
-        setNotice(`Верфь: производство завершено — ${names}.`, 'success');
+        const planet = result.state.planets[event.planetId] ?? result.state.planets[result.state.currentPlanetId];
+        setNotice(`${planet.name}: верфь — производство завершено — ${names}.`, 'success');
       } else if (event.kind === 'flight') {
         event.events.forEach((flightEvent) => setNotice(
           flightEvent.status === 'spy-report' || flightEvent.status === 'spy-detected'
@@ -622,13 +673,19 @@ export function App() {
     [state],
   );
   const headerPopulationSummary = isDefenseFleetView ? defenseSummary : fleetSummary;
+  const pendingInboundPopulation = isDefenseFleetView ? 0 : getPendingInboundPopulation(state, currentPlanet.id);
+  const currentOverpopulation = useMemo(
+    () => getPlanetOverpopulationSummary(state, currentPlanet.id),
+    [state, currentPlanet.id],
+  );
   const currentSkin = useMemo(
     () => planetSkins.find((skin) => skin.id === currentPlanetState.skin) ?? planetSkins[0],
     [currentPlanetState.skin],
   );
   const universePlayerPlanets = useMemo(() => ownedPlanets.map((planet) => {
     const runtimePlanet = state.planets[planet.id];
-    const art = planetSkins.find((skin) => skin.id === runtimePlanet.skin)?.art ?? planetSkins[0].art;
+    const skin = planetSkins.find((candidate) => candidate.id === runtimePlanet.skin) ?? planetSkins[0];
+    const art = 'mapArt' in skin ? skin.mapArt : skin.art;
     return {
       id: planet.id,
       coordinate: {
@@ -674,9 +731,9 @@ export function App() {
     [currentPlanetState.buildings],
   );
   const reportsUnreadCount = useMemo(() => {
-    const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage);
+    const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports);
     return Object.values(getReportUnreadCounts(items, state.reports)).reduce((total, count) => total + count, 0);
-  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports]);
+  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports]);
   const buildingInteriorTarget = buildingInterior
     ? getBuildingInteriorTarget(buildingInterior.buildingRole)
     : null;
@@ -706,7 +763,7 @@ export function App() {
     const nextPlanet = state.planets[planetId];
     if (!nextPlanet) return;
     clearBuildingInterior();
-    setState((current) => ({ ...current, currentPlanetId: planetId }));
+    setState((current) => selectOwnedPlanet(current, planetId));
     setPlanetMenuOpen(false);
     setPlanetViewMode('overview');
     setNotice(`${nextPlanet.name} ${ownedPlanets.find((planet) => planet.id === planetId)?.coords ?? currentPlanet.coords} выбрана как текущая планета.`);
@@ -715,7 +772,7 @@ export function App() {
   const openPlanetEditor = (planetId: PlanetId) => {
     if (!state.planets[planetId]) return;
     clearBuildingInterior();
-    setState((current) => ({ ...current, currentPlanetId: planetId }));
+    setState((current) => selectOwnedPlanet(current, planetId));
     navigateTo('planet');
     setPlanetViewMode('overview');
     setPlanetMenuOpen(false);
@@ -817,7 +874,7 @@ export function App() {
         now: tradedAt,
         mode: RUNTIME_MODE,
         testTimeScale,
-      }, current.rating.resourcePoints, request);
+      }, selectOwnerScores(current)[current.profile.playerId]?.resourcePoints ?? 0, request);
       return { state: transition.state, result: transition.execution };
     }, flushSync);
     if (!result.ok) {
@@ -942,8 +999,13 @@ export function App() {
   };
 
   const reset = () => {
+    dispatchRuntimeReset(RUNTIME_MODE, window);
     persistence.clear();
     const nextState = createInitialSaveState(RUNTIME_MODE);
+    // Publish the canonical replacement synchronously. React's effect will
+    // persist it again, but a reload between the click and that effect must
+    // never observe the old payload or an empty key.
+    persistence.write(nextState);
     stateRef.current = nextState;
     setState(nextState);
     setPlanetMenuOpen(false);
@@ -953,6 +1015,7 @@ export function App() {
     setPlanetViewMode('overview');
     setSelectedBuildingRole(null);
     setBuildingInterior(null);
+    setToasts([]);
     setNotice(RUNTIME_MODE === 'test' ? 'Тестовое сохранение сброшено.' : 'Сохранение прототипа сброшено.');
   };
 
@@ -1015,13 +1078,13 @@ export function App() {
     }, 40);
   };
 
-  const openSpyLaunch = (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile }) => {
+  const openSpyLaunch = (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile; targetKind: 'player' | 'npc' }) => {
     const targetRaceId = target.owner.raceId === 'synod' || target.owner.raceId === 'veyra' ? target.owner.raceId : 'aegis';
     const result = dispatchFlight(stateRef.current, {
       requestId: `spy-universe-${target.planetId}-${Date.now()}`,
       missionId: 'espionage',
       originPlanetId: stateRef.current.currentPlanetId,
-      targetKind: 'npc',
+      targetKind: target.targetKind,
       targetRelation: target.relation,
       targetPlanetName: target.planetName,
       targetOwnerId: target.owner.id,
@@ -1042,6 +1105,29 @@ export function App() {
       setNotice(result.error.message, 'error');
     }
     window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
+  };
+
+  const openAttackLaunch = (target: { planetId: string; planetName: string; coordinate: UniverseCoordinate; relation: Extract<TargetRelation, 'enemy' | 'neutral'>; owner: UniverseOwnerProfile; targetKind: 'player' | 'npc' }) => {
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    setNotice(`Атакующая цель выбрана: ${target.planetName} [${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}].`);
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, {
+        detail: {
+          missionId: 'attack',
+          targetRelation: target.relation,
+          targetKind: target.targetKind as UniverseObjectKind,
+          targetPlanetName: target.planetName,
+          targetOwnerId: target.owner.id,
+          targetOwnerName: target.owner.displayName,
+          targetRaceId: target.owner.raceId === 'synod' || target.owner.raceId === 'veyra' ? target.owner.raceId : 'aegis',
+          targetAlliance: target.owner.alliance ?? null,
+          destination: { kind: 'planet', planetId: target.planetId, coordinate: target.coordinate },
+        },
+      }));
+    }, 40);
   };
 
   const openUniverseTarget = (target: UniverseFocusTarget) => {
@@ -1127,7 +1213,7 @@ export function App() {
     setBuildingInterior(null);
     setState((current) => current.currentPlanetId === context.planetId
       ? current
-      : { ...current, currentPlanetId: context.planetId });
+      : selectOwnedPlanet(current, context.planetId));
     navigateTo('planet');
     setPlanetViewMode(context.zone);
     setSelectedBuildingRole(context.buildingRole);
@@ -1261,6 +1347,7 @@ export function App() {
                   capacity: defenseSummary.capacity,
                 },
                 satellites: isDefenseFleetView ? undefined : Math.max(0, Math.floor(currentPlanetState.solarSatellites ?? 0)),
+                pendingInbound: pendingInboundPopulation,
               },
             },
           ]}
@@ -1312,9 +1399,9 @@ export function App() {
               recycling={currentPlanetState.recycling}
               trade={currentPlanetState.trade}
               tradeWallet={tradeWallet}
-              spaceportUpgrades={currentPlanetState.spaceportUpgrades}
+              spaceportUpgrades={{ ...currentPlanetState.spaceportUpgrades, shipLevels: getOwnerShipUpgradeLevels(state) }}
               spaceportWallet={spaceportWallet}
-              resourceRatingPoints={state.rating.resourcePoints}
+              resourceRatingPoints={selectOwnerScores(state)[state.profile.playerId]?.resourcePoints ?? 0}
               now={now}
               testTimeScale={testTimeScale}
               onProductionBotsApply={applyProductionBots}
@@ -1328,17 +1415,22 @@ export function App() {
           ) : activeRoute === 'universe' ? (
             <UniverseView
               onNotice={setNotice}
-              ownedPlanetArt={currentSkin.art}
+              ownedPlanetArt={'mapArt' in currentSkin ? currentSkin.mapArt : currentSkin.art}
               ownedPlanetName={currentPlanetName}
               profile={state.profile}
-              rating={state.rating}
+              ownerScores={selectOwnerScores(state)}
               command={state.command}
               playerPlanets={universePlayerPlanets}
               spyTargets={Object.values(getEspionageTargets(state.espionage))}
+              orbitalDebrisByCoordinate={getOrbitalDebrisByCoordinate(getEspionageState(state))}
+              asteroidDebrisPresenceBySpawnIndex={Object.fromEntries(Object.entries(state.asteroidDebrisBySpawnIndex ?? {}).map(([spawnIndex, amount]) => [spawnIndex, amount > 0]))}
+              asteroidStates={state.asteroidSimulation?.asteroids}
               mode={RUNTIME_MODE}
               onColonize={openColonizationLaunch}
+              onAsteroidRecycler={openAsteroidRecyclerLaunch}
               onTransport={openTransportLaunch}
               onSpy={openSpyLaunch}
+              onAttack={openAttackLaunch}
               focusTarget={universeFocusTarget}
               onFocusHandled={() => setUniverseFocusTarget(null)}
             />
@@ -1367,6 +1459,7 @@ export function App() {
               command={state.command}
               espionage={state.espionage}
               profile={state.profile}
+              score={selectOwnerScores(state)[state.profile.playerId] ?? null}
               rating={state.rating}
               mode={RUNTIME_MODE}
               state={state.reports}
@@ -1443,9 +1536,18 @@ export function App() {
                   <h1>{currentPlanetName.toUpperCase()}</h1>
                   <p>{currentPlanet.coords} • РОДНОЙ МИР АСТЕРОВ</p>
                 </div>
+                {currentOverpopulation.blocked ? <section className="planet-overpopulation-banner-v3" data-qa-overpopulation-banner role="status">
+                  <strong>ПЛАНЕТА ПЕРЕНАСЕЛЕНА</strong>
+                  <span>{currentOverpopulation.actualPopulation} / {currentOverpopulation.capacity} · избыток {currentOverpopulation.excess}</span>
+                  <small>{currentOverpopulation.episode?.lastResolutionReason === 'no-eligible-units'
+                    ? 'Нет кораблей, подходящих для сгорания; планета остаётся заблокированной.'
+                    : currentOverpopulation.episode
+                      ? `Линейное сжигание флота: ${Math.round(currentOverpopulation.burnProgress * 100)}% за 10 минут.`
+                      : 'Запущено линейное сжигание флота на 10 минут.'}</small>
+                </section> : null}
                 <div className="planet-stage-v3">
                   <div className="planet-atmosphere" />
-                  <img className="planet-image-v3" src={currentSkin.art} alt={currentPlanetName} draggable={false} />
+                  <img className="planet-image-v3" data-qa-planet-skin-art src={currentSkin.art} alt={currentPlanetName} draggable={false} />
                   {(['resource', 'industry', 'military'] as Zone[]).map((item) => (
                     <button
                       key={item}
@@ -1535,7 +1637,7 @@ export function App() {
               <div className="planet-editor-skins-title-v5"><strong>ОБЛИК ПЛАНЕТЫ</strong><small>Можно менять независимо от названия</small></div>
               <div className="skin-picker-grid">
                 {planetSkins.map((skin) => (
-                  <button key={skin.id} type="button" className={editingPlanetState.skin === skin.id ? 'active' : ''} onClick={() => chooseSkin(skin)}>
+                  <button key={skin.id} type="button" data-qa-planet-skin={skin.id} className={editingPlanetState.skin === skin.id ? 'active' : ''} onClick={() => chooseSkin(skin)}>
                     <img src={skin.art} alt="" /><span>{skin.label}</span><small>{editingPlanetState.skin === skin.id ? 'АКТИВИРОВАНА' : 'ИСПОЛЬЗОВАТЬ'}</small>
                   </button>
                 ))}

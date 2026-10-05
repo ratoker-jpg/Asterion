@@ -10,7 +10,20 @@ import { calculateBattlePoints, type BattlePointResult } from './battle-points.t
 import { getFactionDefenseCatalog, getFactionShipCatalog } from './faction-catalog.ts';
 import { getCombatFactionId, type CombatFactionId } from './factions.ts';
 import type { CombatEntityId } from './ids.ts';
-import { calculatePopulationLoss, type BattleMissionType, type BattleSide, type BattleWinner, type CombatActionType, type CombatProvenance, type RngProvenance } from './report.ts';
+import { getCombatEntityForStack, isPirateShipId } from './side-entity.ts';
+import { calculatePirateResourcePointsLost } from '../pirates/resource-points.ts';
+import {
+  BATTLE_MISSION_TYPES,
+  calculatePopulationLoss,
+  isPiratePveMissionType,
+  type BattleMissionType,
+  type BattleSide,
+  type BattleSiegeBlockedReason,
+  type BattleWinner,
+  type CombatActionType,
+  type CombatProvenance,
+  type RngProvenance,
+} from './report.ts';
 import { COMBAT_TECHNOLOGIES, getCombatTechnologyDefinition, normalizeCombatTechnologies, type CombatTechnologyId } from './technologies.ts';
 
 export const BATTLE_MISSING_DATA = 'Нет данных' as const;
@@ -86,6 +99,7 @@ export type BattleEventViewModel = {
   criticalMultiplier: number | null;
   abilityChance: number | null;
   abilityDraw: number | null;
+  abilityBonus: number | null;
   effectiveDamage: number | null;
   mitigation: number | null;
   weaponType: string | null;
@@ -96,6 +110,8 @@ export type BattleEventViewModel = {
   repairLimit: number | null;
   commanderAbilityId: CommanderId | null;
   commanderAbility: string | null;
+  shipAbilityId: 'destroyer-revival' | 'shmel-freezing' | 'pirate-armor-piercing' | 'pirate-devastate' | 'pirate-artillery' | 'pirate-double-attack' | null;
+  shipAbility: string | null;
   specialBonusKind: 'attack' | 'life' | 'armor' | null;
   specialBonusRate: number | null;
   specialBonusCap: number | null;
@@ -201,6 +217,60 @@ export type BattleResourceViewModel = {
   value: number;
 };
 
+export type BattleSiegeDestroyerViewModel = {
+  factionId: string | null;
+  survivors: number;
+  level: number;
+  scaledDemolitionPoints: number;
+  scaledDestructionChanceBps: number;
+  baseAttack: number;
+  baseLife: number;
+};
+
+export type BattleSiegeBuildingRollViewModel = {
+  buildingId: string;
+  buildingName: string;
+  beforeLevel: number;
+  afterLevel: number;
+  chanceBps: number;
+  roll: number;
+  success: boolean;
+  canceledQueueItems: number;
+};
+
+export type BattleSiegeViewModel = {
+  targetPlanetId: string | null;
+  targetCoordinate: string | null;
+  attackerDestroyers: BattleSiegeDestroyerViewModel[];
+  defenderDestroyers: BattleSiegeDestroyerViewModel[];
+  demolition: {
+    status: 'resolved' | 'blocked';
+    blockedReason: BattleSiegeBlockedReason | null;
+    rawPoints: number;
+    defenseReductionPoints: number;
+    finalPoints: number;
+    baseChanceBps: number;
+    annihilatorBonusBps: number;
+    eligibleBuildingCount: number;
+    selectedBuildingCount: number;
+    destroyedBuildingLevels: number;
+    rolls: BattleSiegeBuildingRollViewModel[];
+  };
+  destruction: {
+    status: 'destroyed' | 'not-destroyed' | 'blocked';
+    blockedReason: BattleSiegeBlockedReason | null;
+    rawChanceBps: number;
+    defenseReductionBps: number;
+    defenderDestroyerReductionBps: number;
+    poliasReductionBps: number;
+    finalChanceBps: number;
+    roll: number | null;
+    success: boolean;
+    ownerPlanetCount: number;
+  };
+  planetDestroyed: boolean;
+};
+
 export type BattleReportViewModel = {
   id: string;
   timestamp: string;
@@ -221,14 +291,36 @@ export type BattleReportViewModel = {
   rounds: BattleRoundViewModel[];
   experience: number | null;
   debris: number | null;
+  /** Debris remains in target orbit; `debris` is retained as a compatibility alias. */
+  debrisOnOrbit: number | null;
   resources: BattleResourceViewModel[];
+  siege: BattleSiegeViewModel | null;
   battlePoints: BattlePointResult;
+  /** Present only when the save contains a persisted award entry for this report. */
+  awardedBattlePoints: { attacker: number | null; defender: number | null } | null;
   timestampAvailable: boolean;
 };
 
+export type RecordedBattlePointAwards = { attacker: number | null; defender: number | null } | null;
+
 type RecordValue = Record<string, unknown>;
 
-const MISSION_TYPES: readonly BattleMissionType[] = ['attack', 'raid', 'defense', 'arena', 'simulation'];
+export type BattlePointAwardDisplay = Readonly<{
+  state: 'not-awarded' | 'recorded' | 'missing';
+  label: string;
+  points: number | null;
+}>;
+
+export function getBattlePointAwardDisplay(missionType: BattleMissionType, points: number | null): BattlePointAwardDisplay {
+  if (isPiratePveMissionType(missionType)) {
+    return { state: 'not-awarded', label: 'БОЕВЫЕ ОЧКИ НЕ НАЧИСЛЯЮТСЯ', points: null };
+  }
+  return points == null
+    ? { state: 'missing', label: 'НЕТ ЗАПИСИ О НАЧИСЛЕНИИ', points: null }
+    : { state: 'recorded', label: 'ПОЛУЧЕНО БОЕВЫХ ОЧКОВ', points };
+}
+
+const MISSION_TYPES: readonly BattleMissionType[] = BATTLE_MISSION_TYPES;
 const ACTION_TYPES: readonly BattleEventViewModel['actionType'][] = ['attack', 'ability', 'shield', 'status', 'destroyed', 'special-bonus'];
 
 function asRecord(value: unknown): RecordValue {
@@ -286,6 +378,7 @@ function fallbackEntity(kind: BattleEntityKind): CatalogEntity {
 }
 
 function entityKindFromCatalog(factionId: CombatFactionId, entityId: string, fallback: BattleEntityKind = 'unknown') {
+  if (isPirateShipId(entityId)) return 'ship';
   const factionEntity = [
     ...SHIP_COMBAT_CATALOG,
     ...COMMANDER_COMBAT_CATALOG,
@@ -303,6 +396,7 @@ function entityKindFromCatalog(factionId: CombatFactionId, entityId: string, fal
 }
 
 function findEntity(factionId: CombatFactionId, entityId: string, kind: BattleEntityKind) {
+  if (isPirateShipId(entityId)) return getCombatEntityForStack(entityId);
   const factionEntities = kind === 'ship'
     ? getFactionEntities(factionId, 'ship')
     : kind === 'defense'
@@ -547,6 +641,11 @@ function readEvent(value: unknown, index: number, attackerFactionId: CombatFacti
   const target = readStack({ entityId: targetEntityId ?? `unknown-target-${index}`, countAfter: readCount(record.targetCount) }, index, targetFactionId, targetKind);
   const commanderAbilityId = readString(record.commanderAbilityId);
   const safeCommanderAbilityId = commanderAbilityId && isCommanderId(commanderAbilityId) ? commanderAbilityId : null;
+  const shipAbilityId = record.shipAbilityId === 'destroyer-revival' || record.shipAbilityId === 'shmel-freezing'
+    || record.shipAbilityId === 'pirate-armor-piercing' || record.shipAbilityId === 'pirate-devastate'
+    || record.shipAbilityId === 'pirate-artillery' || record.shipAbilityId === 'pirate-double-attack'
+    ? record.shipAbilityId
+    : null;
 
   return {
     sequence: readCount(record.sequence) ?? index + 1,
@@ -573,6 +672,7 @@ function readEvent(value: unknown, index: number, attackerFactionId: CombatFacti
     criticalMultiplier: readNumber(record.criticalMultiplier),
     abilityChance: readNumber(record.abilityChance),
     abilityDraw: readNumber(record.abilityDraw),
+    abilityBonus: readNumber(record.abilityBonus),
     effectiveDamage: readNumber(record.effectiveDamage),
     mitigation: readNumber(record.mitigation),
     weaponType: readString(record.weaponType),
@@ -583,6 +683,20 @@ function readEvent(value: unknown, index: number, attackerFactionId: CombatFacti
     repairLimit: readCount(record.repairLimit),
     commanderAbilityId: safeCommanderAbilityId,
     commanderAbility: safeCommanderAbilityId ? COMMANDER_ABILITIES[safeCommanderAbilityId].ability : null,
+    shipAbilityId,
+    shipAbility: shipAbilityId === 'destroyer-revival'
+      ? 'Восстановление разрушителей (Destroyer Revival)'
+      : shipAbilityId === 'shmel-freezing'
+        ? 'Замораживание Шмелём'
+        : shipAbilityId === 'pirate-armor-piercing'
+          ? 'Пиратская атака игнорирует броню'
+          : shipAbilityId === 'pirate-devastate'
+            ? 'Сокрушение пиратов'
+            : shipAbilityId === 'pirate-artillery'
+              ? 'Пиратская артиллерия'
+              : shipAbilityId === 'pirate-double-attack'
+                ? 'Дополнительная атака Потрошителя'
+        : null,
     specialBonusKind: record.specialBonusKind === 'attack' || record.specialBonusKind === 'life' || record.specialBonusKind === 'armor'
       ? record.specialBonusKind
       : null,
@@ -739,7 +853,94 @@ function readUnknowns(value: unknown) {
   return asArray(value).filter((item): item is string => typeof item === 'string' && Boolean(item.trim())).map((item) => item.trim());
 }
 
-export function createBattleReportViewModel(input: unknown): BattleReportViewModel {
+function readSiegeBlockedReason(value: unknown): BattleSiegeBlockedReason | null {
+  return value === 'NO_SURVIVING_PLANET_DESTROYER'
+    || value === 'BATTLE_RESULT_INELIGIBLE'
+    || value === 'LAST_COLONY_PROTECTED'
+    || value === 'ZERO_FINAL_CHANCE'
+    ? value
+    : null;
+}
+
+function readSiegeDestroyers(value: unknown): BattleSiegeDestroyerViewModel[] {
+  return asArray(value).map((item) => {
+    const record = asRecord(item);
+    return {
+      factionId: readString(record.factionId),
+      survivors: readCount(record.survivors) ?? 0,
+      level: readCount(record.level) ?? 0,
+      scaledDemolitionPoints: readCount(record.scaledDemolitionPoints) ?? 0,
+      scaledDestructionChanceBps: readCount(record.scaledDestructionChanceBps) ?? 0,
+      baseAttack: readCount(record.baseAttack) ?? 0,
+      baseLife: readCount(record.baseLife) ?? 0,
+    };
+  });
+}
+
+function readSiegeBuildingRolls(value: unknown): BattleSiegeBuildingRollViewModel[] {
+  return asArray(value).map((item) => {
+    const record = asRecord(item);
+    return {
+      buildingId: readString(record.buildingId) ?? BATTLE_MISSING_DATA,
+      buildingName: readString(record.buildingName) ?? readString(record.buildingId) ?? BATTLE_MISSING_DATA,
+      beforeLevel: readCount(record.beforeLevel) ?? 0,
+      afterLevel: readCount(record.afterLevel) ?? 0,
+      chanceBps: readCount(record.chanceBps) ?? 0,
+      roll: readNumber(record.roll) ?? 0,
+      success: record.success === true,
+      canceledQueueItems: readCount(record.canceledQueueItems) ?? 0,
+    };
+  });
+}
+
+function readSiege(value: unknown): BattleSiegeViewModel | null {
+  const record = asRecord(value);
+  if (!Object.keys(record).length || (!record.demolition && !record.destruction)) return null;
+  const demolition = asRecord(record.demolition);
+  const destruction = asRecord(record.destruction);
+  const planetDestroyed = record.planetDestroyed === true;
+  const demolitionStatus = demolition.status === 'blocked' ? 'blocked' : 'resolved';
+  const destructionStatus = destruction.status === 'destroyed' || destruction.status === 'blocked' || destruction.status === 'not-destroyed'
+    ? destruction.status
+    : (planetDestroyed ? 'destroyed' : 'not-destroyed');
+  return {
+    targetPlanetId: readString(record.targetPlanetId),
+    targetCoordinate: readString(record.targetCoordinate),
+    attackerDestroyers: readSiegeDestroyers(record.attackerDestroyers),
+    defenderDestroyers: readSiegeDestroyers(record.defenderDestroyers),
+    demolition: {
+      status: demolitionStatus,
+      blockedReason: readSiegeBlockedReason(demolition.blockedReason),
+      rawPoints: readCount(demolition.rawPoints) ?? 0,
+      defenseReductionPoints: readCount(demolition.defenseReductionPoints) ?? 0,
+      finalPoints: readCount(demolition.finalPoints) ?? 0,
+      baseChanceBps: readCount(demolition.baseChanceBps) ?? 0,
+      annihilatorBonusBps: readCount(demolition.annihilatorBonusBps) ?? 0,
+      eligibleBuildingCount: readCount(demolition.eligibleBuildingCount) ?? 0,
+      selectedBuildingCount: readCount(demolition.selectedBuildingCount) ?? 0,
+      destroyedBuildingLevels: readCount(demolition.destroyedBuildingLevels) ?? 0,
+      rolls: readSiegeBuildingRolls(demolition.rolls),
+    },
+    destruction: {
+      status: destructionStatus,
+      blockedReason: readSiegeBlockedReason(destruction.blockedReason),
+      rawChanceBps: readCount(destruction.rawChanceBps) ?? 0,
+      defenseReductionBps: readCount(destruction.defenseReductionBps) ?? 0,
+      defenderDestroyerReductionBps: readCount(destruction.defenderDestroyerReductionBps) ?? 0,
+      poliasReductionBps: readCount(destruction.poliasReductionBps) ?? 0,
+      finalChanceBps: readCount(destruction.finalChanceBps) ?? 0,
+      roll: readNumber(destruction.roll),
+      success: destruction.success === true,
+      ownerPlanetCount: readCount(destruction.ownerPlanetCount) ?? 0,
+    },
+    planetDestroyed,
+  };
+}
+
+export function createBattleReportViewModel(
+  input: unknown,
+  options: { awardedBattlePoints?: RecordedBattlePointAwards } = {},
+): BattleReportViewModel {
   const record = asRecord(input);
   const metadata = asRecord(record.metadata);
   const attacker = readParticipant(record.attacker, 'attacker');
@@ -765,11 +966,30 @@ export function createBattleReportViewModel(input: unknown): BattleReportViewMod
     ? metadata.technologyMode
     : null;
   const targetPriorityRecord = asRecord(metadata.targetPriority);
+  const debrisOnOrbit = readNumber(record.debris);
+  const siege = readSiege(record.siege);
+  const missionType = readMissionType(record.missionType);
+  const supplementalResourceLoss = isPiratePveMissionType(missionType)
+    ? {
+      attacker: calculatePirateResourcePointsLost(attackerViewModel.stacks),
+      defender: calculatePirateResourcePointsLost(defenderViewModel.stacks),
+    }
+    : undefined;
+  const battlePoints = calculateBattlePoints(
+    winner,
+    attackerViewModel.stacks,
+    defenderViewModel.stacks,
+    attackerViewModel.defenses,
+    defenderViewModel.defenses,
+    attackerFactionId,
+    defenderFactionId,
+    supplementalResourceLoss,
+  );
 
   return {
     id: readString(record.id) ?? 'invalid-battle-report',
     timestamp: readString(record.timestamp) ?? '',
-    missionType: readMissionType(record.missionType),
+    missionType,
     attacker: attackerViewModel,
     defender: defenderViewModel,
     winner,
@@ -790,17 +1010,12 @@ export function createBattleReportViewModel(input: unknown): BattleReportViewMod
     roundCount: readCount(record.roundCount) ?? rounds.length,
     rounds,
     experience: readNumber(record.experience),
-    debris: readNumber(record.debris),
+    debris: debrisOnOrbit,
+    debrisOnOrbit,
     resources: readResources(record.resources),
-    battlePoints: calculateBattlePoints(
-      winner,
-      attackerViewModel.stacks,
-      defenderViewModel.stacks,
-      attackerViewModel.defenses,
-      defenderViewModel.defenses,
-      attackerFactionId,
-      defenderFactionId,
-    ),
+    siege,
+    battlePoints,
+    awardedBattlePoints: options.awardedBattlePoints ?? null,
     timestampAvailable: readString(record.timestamp) != null,
   };
 }

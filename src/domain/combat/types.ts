@@ -53,10 +53,19 @@ export type CommanderAbilityTraits = {
   ratePerLevel: string;
 };
 
+import type { ScienceId } from '../science/types.ts';
+
+export type ProductionScienceRequirement = {
+  scienceId: ScienceId;
+  level: number;
+};
+
 export type ConstructionDefinition = {
   time: string;
   requiredShipyardLevel: number;
   requirements: readonly string[];
+  /** Typed projection of science gates when the source catalog has one. */
+  scienceRequirements?: readonly ProductionScienceRequirement[];
 };
 
 export type CombatEntityDefinition = {

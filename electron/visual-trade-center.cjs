@@ -7,11 +7,12 @@ app.commandLine.appendSwitch('disable-gpu');
 app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
-const OUTPUT = path.join(ROOT, 'visual-qa');
+const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'visual-qa');
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const TEST_TIME_SCALE_KEY = 'asterion.test-time-scale.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const REFILL_MS = 15 * 60 * 1000;
+const CANONICAL_RESOURCE_POINTS = 20_712;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitFor(win, expression, timeoutMs = 7000) {
@@ -32,6 +33,28 @@ async function reload(win) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   win.webContents.reload();
   await done;
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win);
+}
+
+async function rendererMutationAndReload(win, source, label) {
+  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+  const execution = win.webContents.executeJavaScript(source)
+    .then((value) => ({ value }))
+    .catch((error) => ({ error: String(error?.stack || error) }));
+  const first = await Promise.race([
+    execution.then((result) => ({ result })),
+    loaded.then(() => ({ loaded: true })),
+  ]);
+  if (first.result?.value === false) throw new Error(`${label}: renderer mutation was rejected`);
+  if (!first.loaded) {
+    const reloaded = await Promise.race([
+      loaded.then(() => true),
+      sleep(10_000).then(() => false),
+    ]);
+    if (!reloaded) throw new Error(`${label}: renderer mutation did not reload the page: ${JSON.stringify(first.result)}`);
+  }
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await win.webContents.executeJavaScript('document.fonts?.ready');
   await settle(win);
@@ -85,25 +108,30 @@ async function capture(win, directory, name) {
 }
 
 async function seedTradeCenter(win) {
-  const ok = await win.webContents.executeJavaScript(`(() => {
+  await rendererMutationAndReload(win, `(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
     const planet = save?.planets?.['helion-01'];
     if (!planet?.buildings || !planet?.recycling) return false;
     planet.buildings['trade-center'] = 1;
+    planet.buildings = { ...planet.buildings,
+      'metal-production-1': 0, 'metal-production-2': 0, 'metal-production-3': 0,
+      'mineral-production-1': 0, 'mineral-production-2': 0,
+      'gas-production-1': 0, 'gas-production-2': 0,
+    };
+    planet.productionBots = { metal: 0, minerals: 0, gas: 0 };
     planet.trade = { refillAtQueue: [] };
     planet.recycling.availableDebris = 100000;
-    save.rating = { resourcePoints: 855880 };
+    planet.resources = { ...(planet.resources || {}), metal: 15_880, minerals: 12_712, gas: 6_421 };
     save.metal = 15880;
     save.minerals = 12712;
     save.gas = 6421;
-    save.resourceClock = { lastReconciledAt: Date.now(), remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
+    save.resourceClock = { lastReconciledAt: Date.now() + 60_000, remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     save.schemaVersion = Math.max(Number(save.schemaVersion) || 0, 7);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
     localStorage.setItem(${JSON.stringify(TEST_TIME_SCALE_KEY)}, '1');
+    window.location.reload();
     return true;
-  })()`);
-  if (!ok) throw new Error('Could not seed Trade Center state');
-  await reload(win);
+  })()`, 'Could not seed Trade Center state');
 }
 
 async function activateIndustry(win) {
@@ -162,10 +190,10 @@ async function readSave(win) {
       metal: save.metal,
       minerals: save.minerals,
       gas: save.gas,
+      planetResources: planet?.resources,
       debris: planet?.recycling?.availableDebris,
       trade: planet?.trade,
       tradeLevel: planet?.buildings?.['trade-center'],
-      rating: save.rating?.resourcePoints,
       buildingQueue: save.queues?.['helion-01'] ?? [],
       recyclingJobs: planet?.recycling?.jobs ?? [],
     };
@@ -244,6 +272,7 @@ async function assertTooltip(win, label, selector) {
 }
 
 async function setRefillQueueForOfflineStep(win, offsets) {
+  const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   const ok = await win.webContents.executeJavaScript(`(() => {
     const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
     const planet = save.planets?.['helion-01'];
@@ -251,10 +280,14 @@ async function setRefillQueueForOfflineStep(win, offsets) {
     const base = Date.now();
     planet.trade.refillAtQueue = ${JSON.stringify(offsets)}.map((offset) => base + offset);
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    window.location.reload();
     return true;
-  })()`);
+  })()`).catch(() => false);
   if (!ok) throw new Error('Could not rewrite trade refill queue');
-  await reload(win);
+  await done;
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await settle(win);
   await activateIndustry(win);
   await openTradeCenter(win);
 }
@@ -272,18 +305,25 @@ async function verifyReturn(win) {
 }
 
 async function verifyFlow(win, directory, label) {
-  await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)})`);
-  await reload(win);
+  await rendererMutationAndReload(win, `(() => {
+    localStorage.removeItem(${JSON.stringify(SAVE_KEY)});
+    window.location.reload();
+    return true;
+  })()`, `${label}: clear save`);
   await seedTradeCenter(win);
   const seeded = await readSave(win);
-  if (Number(seeded.schemaVersion) < 7 || seeded.tradeLevel !== 1 || seeded.rating !== 855880) throw new Error(`${label}: seeded envelope mismatch ${JSON.stringify(seeded)}`);
+  if (Number(seeded.schemaVersion) < 7 || seeded.tradeLevel !== 1) throw new Error(`${label}: seeded envelope mismatch ${JSON.stringify(seeded)}`);
+  if (Number(seeded.metal) !== 15_880 || Number(seeded.minerals) !== 12_712 || Number(seeded.gas) !== 6_421
+    || Number(seeded.planetResources?.metal) !== 15_880 || Number(seeded.planetResources?.minerals) !== 12_712 || Number(seeded.planetResources?.gas) !== 6_421) {
+    throw new Error(`${label}: seeded canonical wallet mismatch ${JSON.stringify(seeded)}`);
+  }
   const buildingQueueBefore = JSON.stringify(seeded.buildingQueue);
   const recyclingJobsBefore = JSON.stringify(seeded.recyclingJobs);
 
   await activateIndustry(win);
   await openTradeCenter(win);
   let screen = await readScreen(win);
-  if (!screen || screen.level !== 1 || screen.limit !== 8558800 || screen.rating !== 855880 || screen.slots !== '3/3' || !screen.allAvailable) throw new Error(`${label}: initial Trade Center state mismatch ${JSON.stringify(screen)}`);
+  if (!screen || screen.level !== 1 || screen.limit !== CANONICAL_RESOURCE_POINTS * 10 || screen.rating !== CANONICAL_RESOURCE_POINTS || screen.slots !== '3/3' || !screen.allAvailable) throw new Error(`${label}: initial Trade Center state mismatch ${JSON.stringify(screen)}`);
   if (screen.source !== 'metal' || screen.target !== 'minerals' || !screen.metalTargetDisabled || screen.debrisTargetExists || screen.rate !== '1 : 1') throw new Error(`${label}: initial pair/target rules mismatch ${JSON.stringify(screen)}`);
   assertGeometry(await measure(win), label);
   await capture(win, directory, 'trade-standard');
@@ -307,7 +347,8 @@ async function verifyFlow(win, directory, label) {
   await setInput(win, '[data-qa-trade-amount-slider]', 750);
   if ((await readScreen(win))?.amount !== 750) throw new Error(`${label}: range not synchronized`);
   await click(win, '[data-qa-trade-max]');
-  if ((await readScreen(win))?.amount !== 15880) throw new Error(`${label}: MAX did not use min(balance, trade limit)`);
+  const maxScreen = await readScreen(win);
+  if (maxScreen?.amount !== 15880) throw new Error(`${label}: MAX did not use min(balance, trade limit) ${JSON.stringify(maxScreen)}`);
 
   await setInput(win, '[data-qa-trade-amount-input]', 1000);
   screen = await readScreen(win);
@@ -318,7 +359,8 @@ async function verifyFlow(win, directory, label) {
   screen = await readScreen(win);
   if (screen?.amount !== 0 || screen.source !== 'metal' || screen.target !== 'minerals' || screen.slots !== '2/3' || screen.queueCount !== 1 || screen.queueSegments !== 1) throw new Error(`${label}: first trade UI state mismatch ${JSON.stringify(screen)}`);
   let saved = await readSave(win);
-  if (saved.metal !== 14880 || saved.minerals !== 13712 || saved.gas !== 6421 || saved.debris !== 100000 || saved.trade?.refillAtQueue?.length !== 1) throw new Error(`${label}: first trade wallet/state mismatch ${JSON.stringify(saved)}`);
+  if (saved.metal !== 14880 || saved.minerals !== 13712 || saved.gas !== 6421 || saved.debris !== 100000 || saved.trade?.refillAtQueue?.length !== 1
+    || saved.planetResources?.metal !== 14880 || saved.planetResources?.minerals !== 13712 || saved.planetResources?.gas !== 6421) throw new Error(`${label}: first trade wallet/state mismatch ${JSON.stringify(saved)}`);
   if (JSON.stringify(saved.buildingQueue) !== buildingQueueBefore || JSON.stringify(saved.recyclingJobs) !== recyclingJobsBefore) throw new Error(`${label}: unrelated queues/jobs changed after base trade`);
 
   await click(win, '[data-qa-trade-source="debris"]');
@@ -343,7 +385,8 @@ async function verifyFlow(win, directory, label) {
   screen = await readScreen(win);
   if (screen?.queueCount !== 3 || screen.queueSegments !== 3 || screen.validation !== 'Нет доступных сделок' || !screen.submitDisabled) throw new Error(`${label}: no-slot state mismatch ${JSON.stringify(screen)}`);
   saved = await readSave(win);
-  if (saved.metal !== 15380 || saved.minerals !== 13212 || saved.gas !== 7021 || saved.debris !== 98999) throw new Error(`${label}: third trade wallet mismatch ${JSON.stringify(saved)}`);
+  if (saved.metal !== 15380 || saved.minerals !== 13212 || saved.gas !== 7021 || saved.debris !== 98999
+    || saved.planetResources?.metal !== 15380 || saved.planetResources?.minerals !== 13212 || saved.planetResources?.gas !== 7021) throw new Error(`${label}: third trade wallet mismatch ${JSON.stringify(saved)}`);
   if (saved.trade.refillAtQueue.length !== 3 || saved.trade.refillAtQueue[1] - saved.trade.refillAtQueue[0] !== REFILL_MS || saved.trade.refillAtQueue[2] - saved.trade.refillAtQueue[1] !== REFILL_MS) throw new Error(`${label}: three-slot FIFO refill mismatch ${JSON.stringify(saved.trade)}`);
 
   await reload(win);
@@ -372,7 +415,7 @@ async function verifyFlow(win, directory, label) {
     finalWallet: { metal: afterOffline.metal, minerals: afterOffline.minerals, gas: afterOffline.gas, debris: afterOffline.debris },
     verified: [
       'level-one-entry-and-back-escape',
-      'rating-855880-drives-limit-8558800',
+      'canonical-resource-score-20712-drives-limit-207120',
       'source-target-selection-and-disabled-same-resource',
       'no-debris-target',
       'hover-tooltip-visible-and-not-clipped',

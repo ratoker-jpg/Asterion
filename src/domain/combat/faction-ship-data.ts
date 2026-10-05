@@ -21,6 +21,7 @@ export type FactionShipMechanics = {
   id: ShipId;
   sourceName: string;
   sourceFile: string;
+  sourceTime: string;
   population: number;
   cost: ResourceCost;
   combat: CombatStats;
@@ -48,6 +49,7 @@ function record(
     id,
     sourceName,
     sourceFileName,
+    sourceTime: time,
     population,
     cost,
     combat,
@@ -245,16 +247,16 @@ export const FACTION_SHIP_MECHANICS: Readonly<Record<CombatFactionId, Readonly<R
       { attack: 400, life: 1_200, weaponType: 'Лазер', armorType: 'Легкая Броня', armorStrength: 3 },
       '00:10:00', 1, ['Верфь · уровень 1', 'Астрономия · уровень 1'],
       { cargo: 60, speed: 24_000, fuel: 12 }),
-    record('cruiser', 'page_2026-07-22_20-17-43.html', 'Абсорбатор', 3,
-      { metal: 2_700, minerals: 8_000, gas: 0 },
-      { attack: 1_380, life: 4_100, weaponType: 'Лазер', armorType: 'Легкая Броня', armorStrength: 3 },
-      '00:17:30', 4, ['Верфь · уровень 4', 'Топливные элементы · уровень 3', 'Броня кораблей · уровень 6', 'Нокс Дарт · количество 2'],
-      { cargo: 750, speed: 12_000, fuel: 150 }),
-    record('defender', 'page_2026-07-22_20-18-01.html', 'Немезис', 2,
+    record('cruiser', 'page_2026-07-22_20-18-01.html', 'Немезис', 2,
       { metal: 2_900, minerals: 2_400, gas: 0 },
       { attack: 880, life: 2_600, weaponType: 'Ион', armorType: 'Легкая Броня', armorStrength: 3 },
       '00:07:20', 3, ['Верфь · уровень 3', 'Астрономия · уровень 6', 'Нокс Дарт · количество 1'],
       { cargo: 275, speed: 30_000, fuel: 105 }),
+    record('defender', 'page_2026-07-22_20-17-43.html', 'Абсорбатор', 3,
+      { metal: 2_700, minerals: 8_000, gas: 0 },
+      { attack: 1_380, life: 4_100, weaponType: 'Лазер', armorType: 'Легкая Броня', armorStrength: 3 },
+      '00:17:30', 4, ['Верфь · уровень 4', 'Топливные элементы · уровень 3', 'Броня кораблей · уровень 6', 'Нокс Дарт · количество 2'],
+      { cargo: 750, speed: 12_000, fuel: 150 }),
     record('battleship', 'page_2026-07-22_20-18-10.html', 'Призрак', 10,
       { metal: 32_900, minerals: 14_100, gas: 0 },
       { attack: 6_000, life: 18_000, weaponType: 'Ион', armorType: 'Средняя Броня', armorStrength: 6 },

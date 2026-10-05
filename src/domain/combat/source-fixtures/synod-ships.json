@@ -1,0 +1,622 @@
+{
+  "repository": "ratoker-jpg/Nemexia_auto_v2",
+  "revision": "87afb017749e2aa227ec29ea7825726387b4d4cf",
+  "selectors": {
+    "sourceName": ".itemName",
+    "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/<captured HTML filename>",
+    "sourcePageId": ".language a[href*=\"information.php?type=ship&id=\"] (URL query parameter id)",
+    "sourceLevel": ".currentLevel",
+    "sourceDescription": ".itemDescription",
+    "sourceImage": ".imageHolder img[src] (exact src attribute)",
+    "sourceRole": ".itemSubType",
+    "asterionDisplayName": "src/domain/combat/faction-catalog.ts: SYNOD_SHIPS entry name by slotId",
+    "asterionRole": "src/domain/combat/faction-catalog.ts: SYNOD_SHIPS entry role by slotId",
+    "population": ".statsBox li.pop",
+    "cost.metal": ".costBox li.resMetal",
+    "cost.minerals": ".costBox li.resCrystal",
+    "cost.gas": ".costBox li.resGas",
+    "attack": ".statsBox li.attack",
+    "life": ".statsBox li.life",
+    "weaponType": ".statsBox li.weaponTypeName",
+    "armorType": ".statsBox li.armourTypeName (type text before percentage)",
+    "armorStrength": ".statsBox li.armourTypeName (percentage in parentheses)",
+    "cargo": ".statsBox li.cargo (null only if absent)",
+    "speed": ".statsBox li.speed (null only if absent)",
+    "fuel": ".statsBox li.gasConsumption (null only if absent)",
+    "sourceTime": ".statsBox li.contructionTime",
+    "requirements.sourceText": ".requirementsBox dd[onmouseover] Tip(...) tooltip HTML argument",
+    "requirements.valueKind": ".requirementsBox dd[onmouseover] Tip(...) tooltip (Уровень: N => level; otherwise numeric <big> => quantity)",
+    "requirements.targetName": ".requirementsBox dd[onmouseover] Tip(...) first line",
+    "requirements.value": ".requirementsBox dd[onmouseover] Tip(...) level number or <big> text for quantity"
+  },
+  "records": [
+    {
+      "factionId": "synod",
+      "slotId": "solar-satellite",
+      "sourceName": "Солнечный спутник",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-39-35.html",
+      "sourcePageId": 13,
+      "sourceLevel": 0,
+      "sourceDescription": "Солнечный спутник - Ваш вторичный источник энергии. Покрытый огромным количеством солнечных ячеек. К сожалению Спутники помещены на высокую орбиту и при нападении они - первый объект, который подвергается атаке врага. Количество получаемой с них энергии зависит от того, как близко Ваша планета к солнцу. Спутники не могут быть перемещены на орбиту другой планеты, потому что у них нет своих собственных двигателей.",
+      "sourceImage": "./page_2026-07-22_20-39-35_files/ship_13.png",
+      "sourceRole": "Обслуживающий корабль",
+      "asterionDisplayName": "Энергосфера",
+      "asterionRole": "Орбитальный спутник Иларов",
+      "population": 1,
+      "cost": {
+        "metal": 500,
+        "minerals": 2000,
+        "gas": 500
+      },
+      "attack": 1,
+      "life": 2200,
+      "weaponType": "Лазер",
+      "armorType": "Средняя Броня",
+      "armorStrength": 6,
+      "cargo": null,
+      "speed": null,
+      "fuel": null,
+      "sourceTime": "00:02:30",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 1",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "factionId": "synod",
+      "slotId": "spy-probe",
+      "sourceName": "Шпионский бот",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-39-20.html",
+      "sourcePageId": 12,
+      "sourceLevel": 0,
+      "sourceDescription": "Маленькое беспилотное судно создано для обследования вражеских планет. Судно достаточно простое, есть только комнаты для шпионского оборудования и сильного ионного двигателя, способного к маленьким гиперкосмическим скачкам, приводящим к невероятной скорости. Корпус построен из специального минерального сплава.",
+      "sourceImage": "./page_2026-07-22_20-39-20_files/ship_12.png",
+      "sourceRole": "Гражданский корабль",
+      "asterionDisplayName": "Сканер",
+      "asterionRole": "Разведывательный бот Иларов",
+      "population": 1,
+      "cost": {
+        "metal": 0,
+        "minerals": 1000,
+        "gas": 0
+      },
+      "attack": 1,
+      "life": 1,
+      "weaponType": "Лазер",
+      "armorType": "Средняя Броня",
+      "armorStrength": 6,
+      "cargo": 1,
+      "speed": 200000000,
+      "fuel": 1,
+      "sourceTime": "00:01:00",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 3",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 3
+        },
+        {
+          "sourceText": "Топливные элементы<br />Уровень: 3",
+          "valueKind": "level",
+          "targetName": "Топливные элементы",
+          "value": 3
+        },
+        {
+          "sourceText": "Шпионаж<br />Уровень: 2",
+          "valueKind": "level",
+          "targetName": "Шпионаж",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "factionId": "synod",
+      "slotId": "transporter",
+      "sourceName": "Товарный бот",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-37-45.html",
+      "sourcePageId": 1,
+      "sourceLevel": 0,
+      "sourceDescription": "Они - первичные средства транспортировки, которые помогут Вам в начале Вашего пути к космическому доминированию. К сожалению это судно все еще не безупречно. У него хрупкий корпус и нет щитов, устаревшая модель реактивных двигателей - причина низкой скорости, малый объем трюмов. Нехватка вооружения делает его уязвимым. Такое судно лучше отправлять вместе с кораблем военного класса.",
+      "sourceImage": "./page_2026-07-22_20-37-45_files/ship_1.png",
+      "sourceRole": "Гражданский корабль",
+      "asterionDisplayName": "Транспортный дрон",
+      "asterionRole": "Транспорт Иларов",
+      "population": 1,
+      "cost": {
+        "metal": 2400,
+        "minerals": 1400,
+        "gas": 0
+      },
+      "attack": 10,
+      "life": 2000,
+      "weaponType": "Лазер",
+      "armorType": "Средняя Броня",
+      "armorStrength": 6,
+      "cargo": 5000,
+      "speed": 22000,
+      "fuel": 12,
+      "sourceTime": "00:10:00",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 2",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 2
+        },
+        {
+          "sourceText": "Математика<br />Уровень: 2",
+          "valueKind": "level",
+          "targetName": "Математика",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "factionId": "synod",
+      "slotId": "mega-transporter",
+      "sourceName": "Большой товарный бот",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-37-52.html",
+      "sourcePageId": 2,
+      "sourceLevel": 0,
+      "sourceDescription": "Большие Товарные Боты - вторичные средства транспортировки. У них больший объем трюмов, таким образом они могут транспортировать больше ресурсов. Они медленнее чем простой Товарный Бот, но перевозят больше груза за туже цену. Вы можете использовать Большой Товарный Бот для транспортировки грузов, а также, при атаках на Ваших врагов.",
+      "sourceImage": "./page_2026-07-22_20-37-52_files/ship_2.png",
+      "sourceRole": "Гражданский корабль",
+      "asterionDisplayName": "Транспортный модуль",
+      "asterionRole": "Тяжёлый транспорт Иларов",
+      "population": 7,
+      "cost": {
+        "metal": 14900,
+        "minerals": 11700,
+        "gas": 0
+      },
+      "attack": 20,
+      "life": 18200,
+      "weaponType": "Лазер",
+      "armorType": "Средняя Броня",
+      "armorStrength": 6,
+      "cargo": 50000,
+      "speed": 14000,
+      "fuel": 50,
+      "sourceTime": "00:46:40",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 4",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 4
+        },
+        {
+          "sourceText": "Астрономия<br />Уровень: 6",
+          "valueKind": "level",
+          "targetName": "Астрономия",
+          "value": 6
+        },
+        {
+          "sourceText": "Топливные элементы<br />Уровень: 4",
+          "valueKind": "level",
+          "targetName": "Топливные элементы",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "factionId": "synod",
+      "slotId": "colonizer",
+      "sourceName": "Бот колонизатор",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-39-04.html",
+      "sourcePageId": 10,
+      "sourceLevel": 0,
+      "sourceDescription": "Это огромное колониальное судно, транспортирующее всё необходимое оборудование и персонал для постройки полностью функционирующей колонии. Оно может транспортировать небольшое количество ресурсов. После приземления на отобранной планете большой корпус судна используется как командный центр. Из-за его огромной структуры и далеких от безупречности двигателей оно исключительно медленное. Колонизатор оборудован малым количеством вооружения и имеет большой транспортный потенциал.",
+      "sourceImage": "./page_2026-07-22_20-39-04_files/ship_10.png",
+      "sourceRole": "Гражданский корабль",
+      "asterionDisplayName": "Ковчег",
+      "asterionRole": "Колониальный бот Иларов",
+      "population": 12,
+      "cost": {
+        "metal": 12500,
+        "minerals": 25000,
+        "gas": 10600
+      },
+      "attack": 600,
+      "life": 2400,
+      "weaponType": "Лазер",
+      "armorType": "Тяжелая Броня",
+      "armorStrength": 9,
+      "cargo": 7500,
+      "speed": 5000,
+      "fuel": 1500,
+      "sourceTime": "00:58:00",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 4",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 4
+        },
+        {
+          "sourceText": "Топливные элементы<br />Уровень: 3",
+          "valueKind": "level",
+          "targetName": "Топливные элементы",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "factionId": "synod",
+      "slotId": "recycler",
+      "sourceName": "Переработчик",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-39-12.html",
+      "sourcePageId": 11,
+      "sourceLevel": 0,
+      "sourceDescription": "Фактически это судно состоит из огромной системы переработки и огромного склада. После сражений остаются фрагменты от разрушенных судов, которые собирает Переработчик и преобразует в чистые ресурсы. К сожалению судно не в состоянии нести мощные двигатели, из-за недостатка места для систем переработки и складов. Все суда получают равную премию от исследований  скорости, мощности и структуры.",
+      "sourceImage": "./page_2026-07-22_20-39-12_files/ship_11.png",
+      "sourceRole": "Гражданский корабль",
+      "asterionDisplayName": "Репликатор",
+      "asterionRole": "Переработчик Иларов",
+      "population": 7,
+      "cost": {
+        "metal": 14700,
+        "minerals": 7400,
+        "gas": 2500
+      },
+      "attack": 70,
+      "life": 3100,
+      "weaponType": "Лазер",
+      "armorType": "Легкая Броня",
+      "armorStrength": 3,
+      "cargo": 60000,
+      "speed": 7000,
+      "fuel": 190,
+      "sourceTime": "00:58:20",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 4",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 4
+        },
+        {
+          "sourceText": "Топливные элементы<br />Уровень: 6",
+          "valueKind": "level",
+          "targetName": "Топливные элементы",
+          "value": 6
+        },
+        {
+          "sourceText": "Броня кораблей<br />Уровень: 2",
+          "valueKind": "level",
+          "targetName": "Броня кораблей",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "factionId": "synod",
+      "slotId": "scout",
+      "sourceName": "Истребитель",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-38-00.html",
+      "sourcePageId": 3,
+      "sourceLevel": 0,
+      "sourceDescription": "Небольшое разведывательное судно. Из-за маленького веса реактивные двигатели позволяет ему передвигаться с большей скоростью. Однако, слабое оружие, нехватка хороших щитов и слабозащищённый корпус делают его неподходящим для больших сражений. Его главная цель - защитить недавно колонизированные планеты и сражаться со слабыми оборонными системами на колониях врага.",
+      "sourceImage": "./page_2026-07-22_20-38-00_files/ship_3.png",
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Ланцет",
+      "asterionRole": "Лёгкий боевой корабль Иларов",
+      "population": 2,
+      "cost": {
+        "metal": 2400,
+        "minerals": 1600,
+        "gas": 0
+      },
+      "attack": 800,
+      "life": 2400,
+      "weaponType": "Лазер",
+      "armorType": "Легкая Броня",
+      "armorStrength": 3,
+      "cargo": 160,
+      "speed": 24000,
+      "fuel": 20,
+      "sourceTime": "00:13:20",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 1",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 1
+        },
+        {
+          "sourceText": "Астрономия<br />Уровень: 3",
+          "valueKind": "level",
+          "targetName": "Астрономия",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "factionId": "synod",
+      "slotId": "cruiser",
+      "sourceName": "Перехватчик",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-38-08.html",
+      "sourcePageId": 4,
+      "sourceLevel": 0,
+      "sourceDescription": "Гонка за развитием лучшего оружия привела к производству этого боевого хищника. Используя исключительно модернизированные импульсные двигатели, он способен достичь высокой скорости и маневренности. У Перехватчика есть окружающее его энергетическое поле, которое является причиной довольно большого размера и он вооружен последней моделью гаус орудий. Обладая большой проникающей силой, группа Крейсеров становится смертельно опасной даже против судов более высокого класса. Все эти качества делают его одним из доминирующих судов на поле битвы.",
+      "sourceImage": "./page_2026-07-22_20-38-08_files/ship_4.png",
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Импульс",
+      "asterionRole": "Боевой корабль Иларов",
+      "population": 5,
+      "cost": {
+        "metal": 7300,
+        "minerals": 6000,
+        "gas": 0
+      },
+      "attack": 2200,
+      "life": 6600,
+      "weaponType": "Ион",
+      "armorType": "Легкая Броня",
+      "armorStrength": 3,
+      "cargo": 850,
+      "speed": 30000,
+      "fuel": 300,
+      "sourceTime": "00:18:20",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 3",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 3
+        },
+        {
+          "sourceText": "Броня кораблей<br />Уровень: 1",
+          "valueKind": "level",
+          "targetName": "Броня кораблей",
+          "value": 1
+        },
+        {
+          "sourceText": "Топливные элементы<br />Уровень: 3",
+          "valueKind": "level",
+          "targetName": "Топливные элементы",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "factionId": "synod",
+      "slotId": "defender",
+      "sourceName": "Бот Щит",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-38-20.html",
+      "sourcePageId": 5,
+      "sourceLevel": 0,
+      "sourceDescription": "Этот корабль очень полезен для защиты других судов от нападений. У него достаточно прочности для того, чтобы взять удар на себя, но слабое вооружение. Вы можете использовать его в различных комбинациях с другими судами, таким образом они будут более эффективны на поле битвы. Будьте осторожны, эти суда могут быть хорошей целью для Вашего врага, если они хорошо не защищены.",
+      "sourceImage": "./page_2026-07-22_20-38-20_files/ship_5.png",
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Барьер",
+      "asterionRole": "Защитный корабль Иларов",
+      "population": 7,
+      "cost": {
+        "metal": 6200,
+        "minerals": 18600,
+        "gas": 0
+      },
+      "attack": 3220,
+      "life": 9700,
+      "weaponType": "Лазер",
+      "armorType": "Легкая Броня",
+      "armorStrength": 3,
+      "cargo": 1500,
+      "speed": 18000,
+      "fuel": 300,
+      "sourceTime": "00:40:50",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 5",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 5
+        },
+        {
+          "sourceText": "Ионная наука<br />Уровень: 2",
+          "valueKind": "level",
+          "targetName": "Ионная наука",
+          "value": 2
+        },
+        {
+          "sourceText": "Топливные элементы<br />Уровень: 4",
+          "valueKind": "level",
+          "targetName": "Топливные элементы",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "factionId": "synod",
+      "slotId": "battleship",
+      "sourceName": "Звездная Армада",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-38-27.html",
+      "sourcePageId": 6,
+      "sourceLevel": 0,
+      "sourceDescription": "Вы нуждаетесь в судне с существенной структурой, которое не подведет Вас в бою? Звёздная Армада - судно для Вас. Оно вооружено последними оборонными лазерами, фотонными торпедами и ионным оружием. Основное вооружение - сильное плазменное оружие, которое может разрушить меньшие суда с одного единственного выстрела. Он оборудован толстой титановой броней и удивительно стойкими щитами, делая его реальной угрозой на поле битвы и трудной целью для вражеских судов. Но несмотря на все эти хорошие аспекты есть один недостаток - крайне большой вес. Импульсные двигатели не достаточно сильны для этого крейсера, и именно поэтому на него установлены четыре ультраскоростных двигателя. Они обеспечивают судну хорошую скорость и маневренность.",
+      "sourceImage": "./page_2026-07-22_20-38-27_files/ship_6.png",
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Монолит",
+      "asterionRole": "Тяжёлый корабль Иларов",
+      "population": 13,
+      "cost": {
+        "metal": 42800,
+        "minerals": 18400,
+        "gas": 0
+      },
+      "attack": 7800,
+      "life": 23400,
+      "weaponType": "Ион",
+      "armorType": "Средняя Броня",
+      "armorStrength": 6,
+      "cargo": 1800,
+      "speed": 18000,
+      "fuel": 450,
+      "sourceTime": "00:47:40",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 8",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 8
+        },
+        {
+          "sourceText": "Реактивные двигатели<br />Уровень: 3",
+          "valueKind": "level",
+          "targetName": "Реактивные двигатели",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "factionId": "synod",
+      "slotId": "destroyer",
+      "sourceName": "Голиаф",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-38-35.html",
+      "sourcePageId": 7,
+      "sourceLevel": 0,
+      "sourceDescription": "Высший класс боевого корабля. Голиаф произведен, чтобы господствовать над любым другим судном на поле битвы. Оборудованный последними развитыми военными технологиями империи - большой арсенал протонных торпед, много лазеров и ионных орудий, но сердце его огневой мощи - свое двойное плазменное оружие. Он - гарантия для разрушения каждого судна низшего класса. Защита состоит из многослойной титановой брони и двух уровней плазменных щитов. Здесь прибывает известная проблема – крайне большой вес. В тестировании только ультраскоростные двигатели показали необходимые результаты. Шесть двигателей обеспечивают передвижение судна. Но этого мало для достаточной скорости и маневренности.",
+      "sourceImage": "./page_2026-07-22_20-38-35_files/ship_7.png",
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Голиаф",
+      "asterionRole": "Тяжёлый штурмовой корабль Иларов",
+      "population": 28,
+      "cost": {
+        "metal": 87600,
+        "minerals": 78900,
+        "gas": 8800
+      },
+      "attack": 18200,
+      "life": 54600,
+      "weaponType": "Плазма",
+      "armorType": "Тяжелая Броня",
+      "armorStrength": 9,
+      "cargo": 2200,
+      "speed": 11000,
+      "fuel": 900,
+      "sourceTime": "01:14:40",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 9",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 9
+        },
+        {
+          "sourceText": "Реактивные двигатели<br />Уровень: 6",
+          "valueKind": "level",
+          "targetName": "Реактивные двигатели",
+          "value": 6
+        },
+        {
+          "sourceText": "Гиперпространство<br />Уровень: 5",
+          "valueKind": "level",
+          "targetName": "Гиперпространство",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "factionId": "synod",
+      "slotId": "bomber",
+      "sourceName": "БомберБот",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-38-44.html",
+      "sourcePageId": 8,
+      "sourceLevel": 0,
+      "sourceDescription": "Развитие более совершенных оборонных систем на планетах привело к разработке специальных кораблей для уничтожения этих систем. БомберБот очень эффективен против этих оборонных систем, оборудованных мощными плазменными торпедами. Но есть проблема - большой корпус делает его легкой мишенью. Именно поэтому, проектируя его, размер тщательно вычислен. Как следствие: нехватка толстой брони и частично распределенные щиты. Из-за нехватки свободного места используется измененный импульсный двигатель, это к сожалению не предоставляет достаточной скорости при большом потреблении газа.",
+      "sourceImage": "./page_2026-07-22_20-38-44_files/ship_8.png",
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Пульсар",
+      "asterionRole": "Осадный корабль Иларов",
+      "population": 20,
+      "cost": {
+        "metal": 40000,
+        "minerals": 50000,
+        "gas": 10000
+      },
+      "attack": 12000,
+      "life": 36000,
+      "weaponType": "Лазер",
+      "armorType": "Средняя Броня",
+      "armorStrength": 6,
+      "cargo": 400,
+      "speed": 18000,
+      "fuel": 750,
+      "sourceTime": "00:50:00",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 8",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 8
+        },
+        {
+          "sourceText": "Плазменная наука<br />Уровень: 5",
+          "valueKind": "level",
+          "targetName": "Плазменная наука",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "factionId": "synod",
+      "slotId": "death-star",
+      "sourceName": "Титан",
+      "sourceFile": "saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-38-54.html",
+      "sourcePageId": 9,
+      "sourceLevel": 0,
+      "sourceDescription": "Титан - наиболее мощное оружие. Размером с маленькую луну он несет исключительно сильное гравитационное оружие и способен к разрушению целых планет. Огромный размер критически снижает скорость этого типа судов. У него огромная структура и невероятная транспортная способность.",
+      "sourceImage": "./page_2026-07-22_20-38-54_files/ship_9.png",
+      "sourceRole": "Боевой корабль",
+      "asterionDisplayName": "Разлом",
+      "asterionRole": "Сверхтяжёлый корабль Иларов",
+      "population": 615,
+      "cost": {
+        "metal": 2044900,
+        "minerals": 1635900,
+        "gas": 409000
+      },
+      "attack": 615000,
+      "life": 1845000,
+      "weaponType": "Ион",
+      "armorType": "Тяжелая Броня",
+      "armorStrength": 9,
+      "cargo": 750000,
+      "speed": 200,
+      "fuel": 45000,
+      "sourceTime": "153:45:00",
+      "requirements": [
+        {
+          "sourceText": "Верфь<br />Уровень: 14",
+          "valueKind": "level",
+          "targetName": "Верфь",
+          "value": 14
+        },
+        {
+          "sourceText": "Гиперпространство<br />Уровень: 13",
+          "valueKind": "level",
+          "targetName": "Гиперпространство",
+          "value": 13
+        },
+        {
+          "sourceText": "Параллельные вселенные<br />Уровень: 1",
+          "valueKind": "level",
+          "targetName": "Параллельные вселенные",
+          "value": 1
+        },
+        {
+          "sourceText": "Тяжелая Броня<br />Уровень: 10",
+          "valueKind": "level",
+          "targetName": "Тяжелая Броня",
+          "value": 10
+        }
+      ]
+    }
+  ]
+}

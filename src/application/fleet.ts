@@ -1,7 +1,6 @@
 import {
   createCanonicalStartingFleet,
   createEmptyFleetState,
-  normalizeFleetStateForCapacity,
   removeSolarSatellitesFromFleet,
   resolveSavedFleetState,
   type OwnedFleetState,
@@ -15,12 +14,13 @@ import {
   type OwnedDefenseState,
 } from '../domain/fleet/production.ts';
 import type { PlanetId, SaveState } from './contracts.ts';
-import { getPlanetResources } from './contracts.ts';
-import { getAvailableFleetForPlanet, getReservedShipsForPlanet } from './flights.ts';
+import { getOwnerShipUpgradeLevels, getPlanetResources } from './contracts.ts';
+import { getAvailableFleetForPlanet, getReservedCommandersForPlanet, getReservedShipsForPlanet } from './flights.ts';
 import { createPersistenceFacade, type PersistenceOptions } from './persistence.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 import { createDefaultSpaceportUpgradeState, type SpaceportUpgradeState } from '../domain/buildings/spaceport-upgrades.ts';
+import type { ScienceLevels } from '../domain/science/runtime.ts';
 
 export type FleetSnapshot = {
   factionId: CombatFactionId;
@@ -55,6 +55,7 @@ export type FleetBuildBudget = {
   summary: FleetSummary;
   defenseSummary: ReturnType<typeof getDefensePopulationSummary>;
   solarSatellites: number;
+  scienceLevels: ScienceLevels;
 };
 
 function safeLevel(value: unknown, fallback: number): number {
@@ -67,7 +68,11 @@ function fleetWithReservations(fleet: OwnedFleetState, reserved: OwnedFleetState
       id,
       (fleet.ships[id as ShipId] ?? 0) + (reserved.ships[id as ShipId] ?? 0),
     ])) as OwnedFleetState['ships'],
-    commanders: { ...fleet.commanders },
+    commanders: Object.fromEntries(Object.keys(fleet.commanders).map((id) => [
+      id,
+      (fleet.commanders[id as keyof OwnedFleetState['commanders']] ?? 0)
+        + (reserved.commanders[id as keyof OwnedFleetState['commanders']] ?? 0),
+    ])) as OwnedFleetState['commanders'],
   };
 }
 
@@ -77,27 +82,25 @@ export function getFleetSnapshot(state: SaveState, planetId: PlanetId = state.cu
   const migratedFleet = removeSolarSatellitesFromFleet(
     resolveSavedFleetState(planet?.fleet, state.profile.factionId),
   );
-  const normalizedFleet = normalizeFleetStateForCapacity(
-    migratedFleet.fleet,
-    hangarLevel,
-    state.profile.factionId,
-  );
-  const fleet = normalizeFleetStateForCapacity(
-    getAvailableFleetForPlanet(state, planetId),
-    hangarLevel,
-    state.profile.factionId,
-  );
+  // Live overpopulation is an authoritative gameplay state. Keep the raw
+  // roster visible so the burn resolver, UI, and persistence all observe the
+  // same excess instead of silently normalizing it away.
+  const fleet = getAvailableFleetForPlanet(state, planetId);
   const reservedShips = getReservedShipsForPlanet(state, planetId);
+  const reservedCommanders = getReservedCommandersForPlanet(state, planetId);
   const reservedFleet: OwnedFleetState = {
-    ships: Object.fromEntries(Object.keys(normalizedFleet.ships).map((id) => [id, reservedShips[id as ShipId] ?? 0])) as OwnedFleetState['ships'],
-    commanders: { ...normalizedFleet.commanders },
+    ships: Object.fromEntries(Object.keys(migratedFleet.fleet.ships).map((id) => [id, reservedShips[id as ShipId] ?? 0])) as OwnedFleetState['ships'],
+    commanders: Object.fromEntries(Object.keys(migratedFleet.fleet.commanders).map((id) => [id, reservedCommanders[id as keyof OwnedFleetState['commanders']] ?? 0])) as OwnedFleetState['commanders'],
   };
   return {
     factionId: state.profile.factionId,
     fleet,
     defense: planet?.defense ?? createEmptyDefenseState(),
     fleetProduction: planet?.fleetProduction ?? createDefaultFleetProductionState(),
-    spaceportUpgrades: planet?.spaceportUpgrades ?? createDefaultSpaceportUpgradeState(),
+    spaceportUpgrades: {
+      ...(planet?.spaceportUpgrades ?? createDefaultSpaceportUpgradeState()),
+      shipLevels: getOwnerShipUpgradeLevels(state),
+    },
     hangarLevel,
     shipyardLevel: safeLevel(planet?.buildings.shipyard, 0),
     advancedFactoryLevel: safeLevel(planet?.buildings['advanced-factory'], 0),
@@ -151,9 +154,9 @@ export function getOutgoingFleetSummaryForState(state: SaveState, planetId: Plan
   return getOutgoingFleetSummaryForSnapshot(getFleetSnapshot(state, planetId));
 }
 
-export function readFleetSnapshot(options: PersistenceOptions = {}): FleetSnapshot {
+export function readFleetSnapshot(options: PersistenceOptions = {}, planetId?: PlanetId): FleetSnapshot {
   const state = createPersistenceFacade(options).read();
-  return getFleetSnapshot(state);
+  return getFleetSnapshot(state, planetId ?? state.currentPlanetId);
 }
 
 export function getFleetBuildBudget(state: SaveState, planetId: PlanetId = state.currentPlanetId): FleetBuildBudget {
@@ -183,12 +186,13 @@ export function getFleetBuildBudget(state: SaveState, planetId: PlanetId = state
     summary,
     defenseSummary,
     solarSatellites: snapshot.solarSatellites,
+    scienceLevels: state.science.levels,
   };
 }
 
-export function readFleetBuildBudget(options: PersistenceOptions = {}): FleetBuildBudget {
+export function readFleetBuildBudget(options: PersistenceOptions = {}, planetId?: PlanetId): FleetBuildBudget {
   const state = createPersistenceFacade(options).read();
-  return getFleetBuildBudget(state);
+  return getFleetBuildBudget(state, planetId ?? state.currentPlanetId);
 }
 
 export function createDefaultFleetSnapshot(): FleetSnapshot {

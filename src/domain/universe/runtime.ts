@@ -2,7 +2,8 @@ import type {
   UniverseAction,
   UniverseActionState,
   UniverseAssetCatalog,
-  UniverseAsteroidState,
+  UniverseAsteroidRuntimeState,
+  InitializedUniverseAsteroidRuntimeState,
   UniverseCoordinate,
   UniverseMap,
   UniverseOwnerAlliance,
@@ -18,6 +19,7 @@ import type {
   UniverseSystem,
   UniverseTimedObjectState,
 } from './types.ts';
+import { ASTEROID_GAS_CAP, initializeAsteroidGasState } from './asteroid-gas.ts';
 import { getPositionCoefficientPercent, getSunEfficiencyPercent } from '../energy/runtime.ts';
 import type { RuntimeMode } from '../runtime/mode.ts';
 import { DEFAULT_ALLIANCE_MEMBERS, DEFAULT_ALLIANCE_PROFILE } from '../command/catalog.ts';
@@ -34,7 +36,7 @@ export const ASTEROID_SPAWN_INTERVAL_MS = 60 * 60 * 1_000;
 export const ASTEROID_MIN_DWELL_MS = 15 * 60 * 1_000;
 export const ASTEROID_MAX_DWELL_MS = 30 * 60 * 1_000;
 export const ASTEROID_GAS_MIN = 1_000;
-export const ASTEROID_GAS_MAX = 200_000;
+export const ASTEROID_GAS_MAX = ASTEROID_GAS_CAP;
 export const ASTEROID_TRANSIT_MS = 4_000;
 export const ASTEROID_SCHEDULE_EPOCH_MS = Date.UTC(2026, 0, 1);
 
@@ -372,6 +374,8 @@ export type CreateUniverseSystemOptions = {
   assets?: Partial<UniverseAssetCatalog>;
   nowMs?: number;
   galaxyCount?: number;
+  /** When supplied, use persisted positions rather than a wall-clock projection. */
+  asteroidStates?: readonly UniverseAsteroidRuntimeState[];
   playerPlanets?: readonly UniversePersistedPlayerPlanet[];
   registeredPlanets?: readonly UniverseRegisteredPlanet[];
 };
@@ -388,16 +392,43 @@ function registeredPlanetFor(options: CreateUniverseSystemOptions, galaxy: numbe
     && planet.coordinate.position === slot);
 }
 
-function fixtureFor(system: number, slot: number, mode: RuntimeMode = 'test') {
+function botFixtureFor(system: number, slot: number, mode: RuntimeMode = 'test') {
   const npc = mode === 'test'
     ? NPC_PLANET_FIXTURES.find((planet) => planet.system === system && planet.position === slot)
     : undefined;
-  if (npc) return { ...npc, kind: 'npc' as const, ownerId: NPC_OWNER_ID, known: true };
+  return npc ? { ...npc, kind: 'npc' as const, ownerId: NPC_OWNER_ID, known: true } : undefined;
+}
+
+function fixtureFor(system: number, slot: number, mode: RuntimeMode = 'test', registeredPlanets?: readonly UniverseRegisteredPlanet[]) {
+  const npc = botFixtureFor(system, slot, mode);
+  // When an authoritative runtime registry is supplied, its presence is the
+  // source of truth for Bot 01 planets. This prevents a destroyed target from
+  // being recreated by the static Test Mode atlas on the next render/reload.
+  if (npc && (registeredPlanets === undefined || registeredPlanets.some((planet) => planet.id === npc.id))) return npc;
   if (system === 1) {
     const fixture = SYSTEM_ONE_FIXTURES[slot];
     return fixture?.mode && fixture.mode !== mode ? undefined : fixture;
   }
   return undefined;
+}
+
+function isSuppressedBotFixture(options: CreateUniverseSystemOptions, galaxy: number, system: number, slot: number) {
+  if (options.mode !== 'test' || options.registeredPlanets === undefined) return false;
+  const npc = botFixtureFor(system, slot, options.mode);
+  if (!npc) return false;
+  return !options.playerPlanets?.some((planet) => planet.coordinate.galaxy === galaxy
+    && planet.coordinate.system === system
+    && planet.coordinate.position === slot)
+    && !options.registeredPlanets.some((planet) => planet.coordinate.galaxy === galaxy
+      && planet.coordinate.system === system
+      && planet.coordinate.position === slot);
+}
+
+function isSuppressedHelionFixture(options: CreateUniverseSystemOptions, galaxy: number, system: number, slot: number) {
+  if (options.playerPlanets === undefined || galaxy !== GALAXY || system !== 1 || slot !== 1) return false;
+  return !options.playerPlanets.some((planet) => planet.coordinate.galaxy === galaxy
+    && planet.coordinate.system === system
+    && planet.coordinate.position === slot);
 }
 
 function generatedKind(): UniversePlanetNode['kind'] {
@@ -413,10 +444,24 @@ function createPositionNode(
 ): UniversePlanetNode {
   const persisted = persistedPlanetFor(options, galaxy, system, slot);
   const registered = persisted ? undefined : registeredPlanetFor(options, galaxy, system, slot);
+  const coordinate = { galaxy, system, position: slot };
+  if ((isSuppressedBotFixture(options, galaxy, system, slot)
+    || isSuppressedHelionFixture(options, galaxy, system, slot)) && !persisted && !registered) {
+    return {
+      id: `universe-empty-${galaxy}-${system}-${slot}`,
+      coordinate,
+      kind: 'empty',
+      name: 'Свободная позиция',
+      art: '',
+      statusLabel: KIND_LABELS.empty,
+      description: KIND_DESCRIPTIONS.empty,
+      known: true,
+      positionCoefficientPercent: getPositionCoefficientPercent(slot),
+    };
+  }
   const fixture = persisted || registered
     ? undefined
-    : fixtureFor(system, slot, options.mode);
-  const coordinate = { galaxy, system, position: slot };
+    : fixtureFor(system, slot, options.mode, options.registeredPlanets);
   const kind = persisted ? 'player' : registered?.kind ?? fixture?.kind ?? generatedKind();
   const ownerId = persisted?.ownerId ?? registered?.ownerId ?? fixture?.ownerId;
   const isHomeworld = persisted?.isHomeworld ?? registered?.isHomeworld ?? (kind === 'player' && system === 1 && slot === 1);
@@ -426,6 +471,7 @@ function createPositionNode(
   const art = persisted?.art?.trim() || registered?.art?.trim() || (isHomeworld
     ? options.currentPlanetArt?.trim() || pickAsset(assets.planetArts, slot, 'planet-home')
     : pickAsset(assets.planetArts, fixture?.artIndex ?? system * 5 + slot, 'planet-default'));
+  const fixtureMarker = fixture && 'fixture' in fixture ? fixture.fixture : undefined;
 
   return {
     id: persisted?.id ?? registered?.id ?? fixture?.id ?? `universe-${galaxy}-${system}-${slot}`,
@@ -438,7 +484,7 @@ function createPositionNode(
     statusLabel: KIND_LABELS[kind],
     description: KIND_DESCRIPTIONS[kind],
     known: registered?.known ?? fixture?.known ?? true,
-    ...(fixture?.fixture ? { fixture: fixture.fixture } : {}),
+    ...(fixtureMarker ? { fixture: fixtureMarker } : {}),
     positionCoefficientPercent: getPositionCoefficientPercent(slot),
   };
 }
@@ -448,7 +494,9 @@ function createUniverseSystemBase(options: CreateUniverseSystemOptions, assets: 
   const system = Math.min(SYSTEM_COUNT, Math.max(1, Math.floor(options.system)));
   const random = mulberry32(10_000 + galaxy * 977 + system * 1_003);
   const fixtureSlots = Array.from({ length: POSITION_COUNT }, (_, index) => index + 1)
-    .filter((slot) => fixtureFor(system, slot, options.mode));
+    .filter((slot) => fixtureFor(system, slot, options.mode, options.registeredPlanets)
+      || isSuppressedBotFixture(options, galaxy, system, slot)
+      || isSuppressedHelionFixture(options, galaxy, system, slot));
   const persistedSlots = (options.playerPlanets ?? [])
     .filter((planet) => planet.coordinate.galaxy === galaxy && planet.coordinate.system === system)
     .map((planet) => planet.coordinate.position);
@@ -495,9 +543,7 @@ export function getUniverseAsteroidDwellMs(spawnIndex: number, movementIndex: nu
   return randomInt(random, ASTEROID_MIN_DWELL_MS, ASTEROID_MAX_DWELL_MS);
 }
 
-type UniverseAsteroidRuntimeState = UniverseAsteroidState & { coordinate: UniverseCoordinate };
-
-export function getUniverseAsteroidState(spawnIndex: number, nowMs: number, galaxyCount = 1): UniverseAsteroidRuntimeState | null {
+export function getUniverseAsteroidState(spawnIndex: number, nowMs: number, galaxyCount = 1): InitializedUniverseAsteroidRuntimeState | null {
   const safeNow = normalizeNow(nowMs);
   if (!Number.isInteger(spawnIndex) || spawnIndex < 0) return null;
   const spawnedAt = ASTEROID_SCHEDULE_EPOCH_MS + spawnIndex * ASTEROID_SPAWN_INTERVAL_MS;
@@ -518,7 +564,7 @@ export function getUniverseAsteroidState(spawnIndex: number, nowMs: number, gala
   const nextCoordinate = advanceUniverseAsteroidCoordinate(coordinate, 1, galaxyCount) ?? undefined;
   const gasRandom = seededRandom(0x6A5, spawnIndex);
   const gasYield = randomInt(gasRandom, ASTEROID_GAS_MIN, ASTEROID_GAS_MAX);
-  return {
+  return initializeAsteroidGasState({
     spawnIndex,
     spawnedAt,
     movementIndex,
@@ -527,7 +573,7 @@ export function getUniverseAsteroidState(spawnIndex: number, nowMs: number, gala
     nextCoordinate,
     gasYield,
     coordinate,
-  };
+  }, safeNow);
 }
 
 function advanceAsteroidAfterCollision(state: UniverseAsteroidRuntimeState, nowMs: number, galaxyCount: number): UniverseAsteroidRuntimeState | null {
@@ -591,19 +637,34 @@ function createAsteroidNode(state: UniverseAsteroidRuntimeState, assets: Univers
   };
 }
 
-function createActiveAsteroidsBySystem(galaxy: number, nowMs: number, galaxyCount: number, assets: UniverseAssetCatalog) {
+function createActiveAsteroidsBySystem(
+  galaxy: number,
+  nowMs: number,
+  galaxyCount: number,
+  assets: UniverseAssetCatalog,
+  persistedStates?: readonly UniverseAsteroidRuntimeState[],
+) {
   const grouped = Array.from({ length: SYSTEM_COUNT }, () => [] as UniversePlanetNode[]);
-  const states: UniverseAsteroidRuntimeState[] = [];
-  const currentSpawnIndex = asteroidSpawnIndexAt(nowMs);
-  if (currentSpawnIndex < 0) return grouped;
-  const maxRouteMs = galaxyCount * SYSTEM_COUNT * POSITION_COUNT * ASTEROID_MAX_DWELL_MS;
-  const firstSpawnIndex = Math.max(0, currentSpawnIndex - Math.ceil(maxRouteMs / ASTEROID_SPAWN_INTERVAL_MS) - 1);
-  for (let spawnIndex = firstSpawnIndex; spawnIndex <= currentSpawnIndex; spawnIndex += 1) {
-    const state = getUniverseAsteroidState(spawnIndex, nowMs, galaxyCount);
-    if (state) states.push(state);
+  let states: UniverseAsteroidRuntimeState[];
+  if (persistedStates) {
+    states = persistedStates.map((state) => ({
+      ...state,
+      coordinate: { ...state.coordinate },
+      nextCoordinate: state.nextCoordinate ? { ...state.nextCoordinate } : undefined,
+    }));
+  } else {
+    states = [];
+    const currentSpawnIndex = asteroidSpawnIndexAt(nowMs);
+    if (currentSpawnIndex < 0) return grouped;
+    const maxRouteMs = galaxyCount * SYSTEM_COUNT * POSITION_COUNT * ASTEROID_MAX_DWELL_MS;
+    const firstSpawnIndex = Math.max(0, currentSpawnIndex - Math.ceil(maxRouteMs / ASTEROID_SPAWN_INTERVAL_MS) - 1);
+    for (let spawnIndex = firstSpawnIndex; spawnIndex <= currentSpawnIndex; spawnIndex += 1) {
+      const state = getUniverseAsteroidState(spawnIndex, nowMs, galaxyCount);
+      if (state) states.push(state);
+    }
+    states = resolveUniverseAsteroidCollisions(states, nowMs, galaxyCount);
   }
-  const resolvedStates = resolveUniverseAsteroidCollisions(states, nowMs, galaxyCount);
-  for (const state of resolvedStates) {
+  for (const state of states) {
     if (state.coordinate.galaxy === galaxy) grouped[state.coordinate.system - 1].push(createAsteroidNode(state, assets));
   }
   return grouped;
@@ -744,7 +805,9 @@ export function createUniverseSystem(options: CreateUniverseSystemOptions): Univ
   const assets = mergeAssets(options.assets);
   const nowMs = normalizeNow(options.nowMs);
   const galaxyCount = Math.max(1, Math.floor(options.galaxyCount ?? 1));
-  const asteroidNodes = createActiveAsteroidsBySystem(Math.max(1, Math.floor(options.galaxy ?? GALAXY)), nowMs, galaxyCount, assets);
+  const asteroidNodes = createActiveAsteroidsBySystem(
+    Math.max(1, Math.floor(options.galaxy ?? GALAXY)), nowMs, galaxyCount, assets, options.asteroidStates,
+  );
   let system = createUniverseSystemBase(options, assets);
   system = injectTimedObject(system, 'pirate', nowMs, assets);
   system = injectTimedObject(system, 'unique', nowMs, assets);
@@ -760,7 +823,7 @@ export function createUniverseMap(options: Omit<CreateUniverseSystemOptions, 'sy
   const nowMs = normalizeNow(options.nowMs);
   const galaxyCount = Math.max(1, Math.floor(options.galaxyCount ?? 1));
   const assets = mergeAssets(options.assets);
-  const asteroidNodes = createActiveAsteroidsBySystem(galaxy, nowMs, galaxyCount, assets);
+  const asteroidNodes = createActiveAsteroidsBySystem(galaxy, nowMs, galaxyCount, assets, options.asteroidStates);
   const systems = Array.from({ length: SYSTEM_COUNT }, (_, index) => {
     let system = createUniverseSystemBase({ ...options, galaxy, system: index + 1 }, assets);
     system = injectTimedObject(system, 'pirate', nowMs, assets);
@@ -777,7 +840,7 @@ export function getUniverseActionState(
   currentOwnerId: string,
   relation?: UniverseOwnerRelation,
 ): UniverseActionState {
-  const label = action === 'spy' ? 'Отправить шпионский зонд' : 'Отправить флот';
+  const label = action === 'spy' ? 'Отправить шпионский зонд' : action === 'attack' ? 'Начать атаку' : 'Отправить флот';
   if (node.kind !== 'player' && node.kind !== 'npc') {
     return {
       action,
@@ -802,7 +865,7 @@ export function getUniverseActionState(
       enabled: false,
       status: 'disabled',
       label,
-      reason: 'Это ваша планета.',
+      reason: action === 'attack' ? 'Атака запрещена против своей планеты.' : 'Это ваша планета.',
     };
   }
   if (action === 'fleet' && node.fixture?.id === TEST_MODE_ALLY_PLANET_FIXTURE.marker.id) {
@@ -830,7 +893,7 @@ export function getUniverseActionState(
       enabled: false,
       status: 'disabled',
       label,
-      reason: 'Шпионаж запрещён против союзной планеты.',
+      reason: action === 'attack' ? 'Атака запрещена против союзной планеты.' : 'Шпионаж запрещён против союзной планеты.',
     };
   }
   if (targetRelation === 'self') {
@@ -839,7 +902,7 @@ export function getUniverseActionState(
       enabled: false,
       status: 'disabled',
       label,
-      reason: 'Шпионаж запрещён против своей планеты.',
+      reason: action === 'attack' ? 'Атака запрещена против своей планеты.' : 'Шпионаж запрещён против своей планеты.',
     };
   }
   return {
@@ -847,17 +910,27 @@ export function getUniverseActionState(
     enabled: true,
     status: 'supported',
     label,
-    reason: targetRelation === 'enemy' ? 'Вражеская цель доступна для шпионажа.' : 'Нейтральная цель доступна для шпионажа.',
+    reason: targetRelation === 'enemy'
+      ? action === 'attack' ? 'Вражеская цель доступна для атаки.' : 'Вражеская цель доступна для шпионажа.'
+      : action === 'attack' ? 'Нейтральная цель доступна для атаки.' : 'Нейтральная цель доступна для шпионажа.',
   };
 }
 
-export function createUniverseNpcOwnerProfile(points?: UniverseOwnerPoints): UniverseOwnerProfile {
+export function createUniverseNpcOwnerProfile(
+  points?: UniverseOwnerPoints,
+  registeredPlanetIds?: readonly string[],
+): UniverseOwnerProfile {
   return normalizeUniverseOwnerProfile({
     id: NPC_OWNER_ID,
     displayName: 'Бот 01',
     raceId: 'veyra',
     ...(points ? { points } : {}),
-    planetIds: NPC_PLANET_FIXTURES.map((planet) => planet.id),
+    // The fixture list is only the default for callers that do not have a
+    // runtime registry. UniverseView supplies the authoritative IDs after
+    // reload so destroyed targets cannot reappear in the owner inspector.
+    planetIds: registeredPlanetIds
+      ? [...registeredPlanetIds]
+      : NPC_PLANET_FIXTURES.map((planet) => planet.id),
   });
 }
 

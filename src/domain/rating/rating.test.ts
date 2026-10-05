@@ -3,7 +3,6 @@ import test from 'node:test';
 import {
   CURRENT_PLAYER_ID,
   CURRENT_PLAYER_DISPLAY_NAME,
-  RATING_PROTOTYPE_RESOURCE_POINTS,
   createAllianceRatingEntries,
   createDefaultRatingPrototypeState,
   createPlayerRatingEntries,
@@ -36,16 +35,30 @@ test('player scores are finite non-negative and source relation total = resource
   }
 });
 
-test('current resource rating is one explicit prototype fixture and supports persisted override', () => {
-  assert.equal(RATING_PROTOTYPE_RESOURCE_POINTS, 855_880);
-  assert.deepEqual(createDefaultRatingPrototypeState(), { resourcePoints: 855_880 });
-  assert.deepEqual(migrateRatingPrototypeState(undefined), { resourcePoints: 855_880 });
-  assert.deepEqual(migrateRatingPrototypeState({ resourcePoints: 900_001.9 }), { resourcePoints: 900_001 });
-  assert.deepEqual(migrateRatingPrototypeState({ resourcePoints: -1 }), { resourcePoints: 855_880 });
+test('legacy resource placeholders migrate to empty score ledgers without losing new ledgers', () => {
+  const empty = { battleAwardsByReportId: {}, unrecoveredCostsByOwnerId: {} };
+  assert.deepEqual(createDefaultRatingPrototypeState(), empty);
+  assert.deepEqual(migrateRatingPrototypeState(undefined), empty);
+  assert.deepEqual(migrateRatingPrototypeState({ resourcePoints: 900_001.9 }), empty);
+  assert.deepEqual(migrateRatingPrototypeState({ resourcePoints: -1 }), empty);
+  assert.deepEqual(migrateRatingPrototypeState({
+    resourcePoints: 855_880,
+    battleAwardsByReportId: { battle: { owner: 12.9, invalid: -1 } },
+    unrecoveredCostsByOwnerId: { owner: { metal: 12.9, minerals: -1, gas: 4, energy: 900 } },
+  }), {
+    battleAwardsByReportId: { battle: { owner: 12 } },
+    unrecoveredCostsByOwnerId: { owner: { metal: 12, minerals: 0, gas: 4 } },
+  });
 
   const current = createPlayerRatingEntries(900_001).find((entry) => entry.id === CURRENT_PLAYER_ID);
   assert.equal(current?.resourcePoints, 900_001);
   assert.equal(current?.totalPoints, (current?.battlePoints ?? 0) + 900_001);
+});
+
+test('achievement points remain zero and a new current player score defaults to zero', () => {
+  const rows = createPlayerRatingEntries();
+  assert.equal(rows.find((entry) => entry.id === CURRENT_PLAYER_ID)?.resourcePoints, 0);
+  assert.equal(rows.every((entry) => entry.achievementPoints === 0), true);
 });
 
 test('search is case-insensitive and score sorting works', () => {

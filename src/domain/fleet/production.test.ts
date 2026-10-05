@@ -6,6 +6,7 @@ import {
   createDefaultFleetProductionState,
   createEmptyDefenseState,
   enqueueFleetProduction,
+  getFleetProductionEntity,
   getDefensePopulationSummary,
   getFleetProductionPopulationSummary,
   migrateDefenseState,
@@ -15,9 +16,14 @@ import {
   type FleetProductionContext,
   type FleetProductionTransition,
 } from './production.ts';
+import { evaluateProductionRequirements } from './requirements.ts';
 import { createEmptyFleetState, createCanonicalStartingFleet, migrateFleetState } from './runtime.ts';
+import { createDefaultScienceLevels, type ScienceLevels } from '../science/runtime.ts';
 
 const capacities = { metal: 1_000_000_000, minerals: 1_000_000_000, gas: 1_000_000_000 };
+const unlockedScienceLevels = Object.fromEntries(
+  Object.keys(createDefaultScienceLevels()).map((id) => [id, 99]),
+) as ScienceLevels;
 
 function context(overrides: Partial<FleetProductionContext> = {}): FleetProductionContext {
   return {
@@ -30,11 +36,18 @@ function context(overrides: Partial<FleetProductionContext> = {}): FleetProducti
     hangarLevel: 1,
     shipyardLevel: 1,
     advancedFactoryLevel: 0,
+    scienceLevels: unlockedScienceLevels,
     now: 0,
     mode: 'production',
     testTimeScale: 15,
     ...overrides,
   };
+}
+
+function fleetWithShips(ships: Record<string, number> = {}) {
+  const fleet = createEmptyFleetState();
+  Object.assign(fleet.ships, ships);
+  return fleet;
 }
 
 function after<T extends FleetProductionTransition>(base: FleetProductionContext, transition: T, now = base.now): FleetProductionContext {
@@ -266,9 +279,261 @@ test('fleet and defense capacity are separate pools and limited commanders/shiel
 
   const empty = context({ shipyardLevel: 20 });
   const shield = enqueueFleetProduction(empty, 'defense', 'tower-shield', 1, 'shield-1');
-  assert.equal(shield.ok, true);
-  const duplicateShield = enqueueFleetProduction(after(empty, shield), 'defense', 'tower-shield', 1, 'shield-2');
-  assert.equal(duplicateShield.ok, false);
+  assert.equal(shield.ok, false);
+  assert.match(shield.reason ?? '', /Щитовые системы/);
+  assert.strictEqual(shield.state, empty.state);
+  assert.deepEqual(shield.wallet, empty.wallet);
+});
+
+test('Planeto-lom production requires the catalog science levels and unlocks without reload', () => {
+  const deathStar = getFleetProductionEntity('ships', 'death-star', 'aegis');
+  assert.ok(deathStar);
+  const scienceBeforeParallel = { ...unlockedScienceLevels, 14: 13, 15: 0, 23: 10 } as ScienceLevels;
+  const blockedContext = context({
+    planetId: 'helion-01',
+    shipyardLevel: 15,
+    hangarLevel: 1_000,
+    scienceLevels: scienceBeforeParallel,
+  });
+  const blockedEvaluation = evaluateProductionRequirements(deathStar, blockedContext);
+  assert.equal(blockedEvaluation.met, false);
+  assert.equal(blockedEvaluation.reason, 'Требуется Параллельные вселенные уровня 1.');
+  const beforeState = blockedContext.state;
+  const beforeWallet = blockedContext.wallet;
+  const blocked = enqueueFleetProduction(blockedContext, 'ships', 'death-star', 1, 'death-star-blocked');
+  assert.equal(blocked.ok, false);
+  assert.equal(blocked.reason, blockedEvaluation.reason);
+  assert.strictEqual(blocked.state, beforeState);
+  assert.deepEqual(blocked.wallet, beforeWallet);
+
+  const scienceAfterParallel = { ...scienceBeforeParallel, 15: 1 } as ScienceLevels;
+  const unlockedContext = { ...blockedContext, scienceLevels: scienceAfterParallel };
+  const unlockedEvaluation = evaluateProductionRequirements(deathStar, unlockedContext);
+  assert.equal(unlockedEvaluation.met, true);
+  const accepted = enqueueFleetProduction(unlockedContext, 'ships', 'death-star', 1, 'death-star-unlocked');
+  assert.equal(accepted.ok, true);
+  assert.equal(accepted.state.shipQueue[0]?.itemId, 'death-star');
+});
+
+test('production requirements reject a low-shipyard colony before checking resource side effects', () => {
+  const deathStar = getFleetProductionEntity('ships', 'death-star', 'aegis');
+  assert.ok(deathStar);
+  const colony = context({ planetId: 'planet-1-2-1', shipyardLevel: 4, hangarLevel: 1_000 });
+  const evaluation = evaluateProductionRequirements(deathStar, colony);
+  assert.equal(evaluation.met, false);
+  assert.equal(evaluation.reason, 'Требуется верфь уровня 14.');
+  const blocked = enqueueFleetProduction(colony, 'ships', 'death-star', 1, 'colony-death-star');
+  assert.equal(blocked.ok, false);
+  assert.equal(blocked.reason, evaluation.reason);
+  assert.strictEqual(blocked.state, colony.state);
+  assert.deepEqual(blocked.wallet, colony.wallet);
+});
+
+test('the same typed evaluator gates defense and commander science requirements', () => {
+  const defense = getFleetProductionEntity('defense', 'laser-turret', 'aegis');
+  assert.ok(defense);
+  const defenseContext = context({
+    shipyardLevel: 5,
+    hangarLevel: 1_000,
+    scienceLevels: { ...unlockedScienceLevels, 10: 0 },
+  });
+  const blockedDefense = enqueueFleetProduction(defenseContext, 'defense', 'laser-turret', 1, 'laser-defense-blocked');
+  assert.equal(blockedDefense.ok, false);
+  assert.equal(blockedDefense.reason, 'Требуется Лазерная наука уровня 2.');
+  assert.strictEqual(blockedDefense.state, defenseContext.state);
+  assert.deepEqual(blockedDefense.wallet, defenseContext.wallet);
+
+  const commander = getFleetProductionEntity('commanders', 'hunter', 'aegis');
+  assert.ok(commander);
+  const commanderContext = context({
+    shipyardLevel: 2,
+    hangarLevel: 1_000,
+    scienceLevels: { ...unlockedScienceLevels, 4: 1 },
+  });
+  const blockedCommander = enqueueFleetProduction(commanderContext, 'commanders', 'hunter', 1, 'hunter-blocked');
+  assert.equal(blockedCommander.ok, false);
+  assert.equal(blockedCommander.reason, 'Требуется Астрономия уровня 2.');
+  assert.strictEqual(blockedCommander.state, commanderContext.state);
+  assert.deepEqual(blockedCommander.wallet, commanderContext.wallet);
+});
+
+test('Veyra ship quantity requirements gate production below the owned-count threshold and pass at it', () => {
+  const prerequisites = [
+    { buildId: 'mega-transporter', source: 'Транспортировщик · количество 1', requiredShipId: 'transporter', quantity: 1 },
+    { buildId: 'cruiser', source: 'Нокс Дарт · количество 1', requiredShipId: 'scout', quantity: 1 },
+    { buildId: 'defender', source: 'Нокс Дарт · количество 2', requiredShipId: 'scout', quantity: 2 },
+    { buildId: 'battleship', source: 'Нокс Дарт · количество 3', requiredShipId: 'scout', quantity: 3 },
+    { buildId: 'destroyer', source: 'Немезис · количество 1', requiredShipId: 'cruiser', quantity: 1 },
+    { buildId: 'bomber', source: 'Немезис · количество 1', requiredShipId: 'cruiser', quantity: 1 },
+    { buildId: 'death-star', source: 'Нокс разум · количество 20', requiredShipId: 'spy-probe', quantity: 20 },
+  ] as const;
+
+  for (const prerequisite of prerequisites) {
+    const entity = getFleetProductionEntity('ships', prerequisite.buildId, 'veyra');
+    assert.ok(entity, prerequisite.buildId);
+    assert.ok(entity.construction.requirements.includes(prerequisite.source), prerequisite.buildId);
+
+    const belowContext = context({
+      factionId: 'veyra',
+      shipyardLevel: 99,
+      hangarLevel: 100_000,
+      fleet: fleetWithShips({ [prerequisite.requiredShipId]: prerequisite.quantity - 1 }),
+    });
+    const below = evaluateProductionRequirements(entity, belowContext);
+    const belowQuantity = below.requirements.find((requirement) => requirement.source === prerequisite.source);
+    assert.equal(below.met, false, prerequisite.buildId);
+    assert.ok(belowQuantity, prerequisite.buildId);
+    assert.equal(belowQuantity.kind, 'ship-quantity', prerequisite.buildId);
+    assert.equal(belowQuantity.shipId, prerequisite.requiredShipId, prerequisite.buildId);
+    assert.equal(belowQuantity.requiredQuantity, prerequisite.quantity, prerequisite.buildId);
+    assert.equal(belowQuantity.currentQuantity, prerequisite.quantity - 1, prerequisite.buildId);
+
+    const blocked = enqueueFleetProduction(belowContext, 'ships', prerequisite.buildId, 1, `veyra-${prerequisite.buildId}-below`);
+    assert.equal(blocked.ok, false, prerequisite.buildId);
+    assert.match(blocked.reason ?? '', /Требуется корабль/, prerequisite.buildId);
+
+    const atContext = context({
+      factionId: 'veyra',
+      shipyardLevel: 99,
+      hangarLevel: 100_000,
+      fleet: fleetWithShips({ [prerequisite.requiredShipId]: prerequisite.quantity }),
+    });
+    const at = evaluateProductionRequirements(entity, atContext);
+    const atQuantity = at.requirements.find((requirement) => requirement.source === prerequisite.source);
+    assert.equal(at.met, true, prerequisite.buildId);
+    assert.equal(atQuantity?.kind, 'ship-quantity', prerequisite.buildId);
+    assert.equal(atQuantity?.currentQuantity, prerequisite.quantity, prerequisite.buildId);
+
+    const accepted = enqueueFleetProduction(atContext, 'ships', prerequisite.buildId, 1, `veyra-${prerequisite.buildId}-at`);
+    assert.equal(accepted.ok, true, prerequisite.buildId);
+  }
+});
+
+test('quantity requirements resolve selected-faction source and display names without a generic fallback', () => {
+  const cruiser = getFleetProductionEntity('ships', 'cruiser', 'veyra');
+  assert.ok(cruiser);
+  const veyraContext = context({
+    factionId: 'veyra',
+    shipyardLevel: 99,
+    fleet: fleetWithShips({ scout: 1 }),
+  });
+  const sourceNameEvaluation = evaluateProductionRequirements(cruiser, veyraContext);
+  const sourceNameRequirement = sourceNameEvaluation.requirements.find((requirement) => requirement.source === 'Нокс Дарт · количество 1');
+  assert.equal(sourceNameRequirement?.kind, 'ship-quantity');
+  assert.equal(sourceNameRequirement?.shipId, 'scout');
+  assert.equal(sourceNameEvaluation.met, true);
+
+  const displayNameCruiser = {
+    ...cruiser,
+    construction: {
+      ...cruiser.construction,
+      requirements: cruiser.construction.requirements.map((requirement) => (
+        requirement === 'Нокс Дарт · количество 1' ? 'Жало · количество 1' : requirement
+      )),
+    },
+  };
+  const displayNameEvaluation = evaluateProductionRequirements(displayNameCruiser, veyraContext);
+  const displayNameRequirement = displayNameEvaluation.requirements.find((requirement) => requirement.source === 'Жало · количество 1');
+  assert.equal(displayNameRequirement?.kind, 'ship-quantity');
+  assert.equal(displayNameRequirement?.shipId, 'scout');
+  assert.equal(displayNameEvaluation.met, true);
+
+  const aegisContext = { ...veyraContext, factionId: 'aegis' as const };
+  const aegisEvaluation = evaluateProductionRequirements(cruiser, aegisContext);
+  const unresolvedForAegis = aegisEvaluation.requirements.find((requirement) => requirement.source === 'Нокс Дарт · количество 1');
+  assert.equal(aegisEvaluation.met, false);
+  assert.equal(unresolvedForAegis?.kind, 'unresolved');
+
+  const missingFaction = evaluateProductionRequirements(cruiser, { ...veyraContext, factionId: undefined });
+  assert.equal(missingFaction.met, false);
+  assert.equal(missingFaction.requirements.find((requirement) => requirement.source === 'Нокс Дарт · количество 1')?.kind, 'unresolved');
+
+  const missingInventory = evaluateProductionRequirements(cruiser, { ...veyraContext, fleet: undefined });
+  assert.equal(missingInventory.met, false);
+  assert.equal(missingInventory.requirements.find((requirement) => requirement.source === 'Нокс Дарт · количество 1')?.kind, 'unresolved');
+
+  const unknownShip = {
+    ...cruiser,
+    construction: {
+      ...cruiser.construction,
+      requirements: cruiser.construction.requirements.map((requirement) => (
+        requirement === 'Нокс Дарт · количество 1' ? 'Неизвестный корабль · количество 1' : requirement
+      )),
+    },
+  };
+  const unknownShipEvaluation = evaluateProductionRequirements(unknownShip, veyraContext);
+  assert.equal(unknownShipEvaluation.met, false);
+  assert.equal(unknownShipEvaluation.requirements.find((requirement) => requirement.source === 'Неизвестный корабль · количество 1')?.kind, 'unresolved');
+});
+
+test('enqueue settles a finished prerequisite before checking ship quantity requirements', () => {
+  const initial = context({
+    factionId: 'veyra',
+    shipyardLevel: 99,
+    hangarLevel: 100_000,
+    fleet: fleetWithShips({ scout: 1 }),
+    now: 1_000,
+  });
+  const prerequisite = enqueueFleetProduction(initial, 'ships', 'cruiser', 1, 'finished-prerequisite');
+  assert.equal(prerequisite.ok, true);
+  const order = prerequisite.order;
+  assert.ok(order);
+  assert.equal(prerequisite.fleet.ships.cruiser ?? 0, 0);
+
+  const queued = after(initial, prerequisite);
+  const beforeFinish = enqueueFleetProduction(
+    { ...queued, now: order.finishAt - 1 },
+    'ships',
+    'destroyer',
+    1,
+    'dependent-before-finish',
+  );
+  assert.equal(beforeFinish.ok, false);
+  assert.match(beforeFinish.reason ?? '', /Требуется корабль/);
+  assert.equal(beforeFinish.fleet.ships.cruiser ?? 0, 0);
+  assert.equal(beforeFinish.completed.length, 0);
+
+  const finishedButUnaffordable = enqueueFleetProduction(
+    { ...queued, now: order.finishAt, wallet: { metal: 0, minerals: 0, gas: 0 } },
+    'ships',
+    'destroyer',
+    1,
+    'dependent-unaffordable-at-finish',
+  );
+  assert.equal(finishedButUnaffordable.ok, false);
+  assert.equal(finishedButUnaffordable.fleet.ships.cruiser, 1);
+  assert.equal(finishedButUnaffordable.completed.some((item) => item.itemId === 'cruiser'), true);
+
+  const afterFinish = enqueueFleetProduction(
+    { ...queued, now: order.finishAt + 1 },
+    'ships',
+    'destroyer',
+    1,
+    'dependent-after-finish',
+  );
+  assert.equal(afterFinish.ok, true);
+  assert.equal(afterFinish.fleet.ships.cruiser, 1);
+  assert.equal(afterFinish.completed.some((item) => item.itemId === 'cruiser'), true);
+  assert.equal(afterFinish.order?.itemId, 'destroyer');
+});
+
+test('queued ships do not satisfy ship quantity production requirements', () => {
+  const base = context({ factionId: 'veyra', shipyardLevel: 99, hangarLevel: 100_000 });
+  const queuedSpyProbes = enqueueFleetProduction(base, 'ships', 'spy-probe', 20, 'queued-spy-probes');
+  assert.equal(queuedSpyProbes.ok, true);
+
+  const deathStar = getFleetProductionEntity('ships', 'death-star', 'veyra');
+  assert.ok(deathStar);
+  const queueOnlyContext = { ...base, state: queuedSpyProbes.state, wallet: queuedSpyProbes.wallet };
+  const evaluation = evaluateProductionRequirements(deathStar, queueOnlyContext);
+  const quantityRequirement = evaluation.requirements.find((requirement) => requirement.source === 'Нокс разум · количество 20');
+  assert.equal(evaluation.met, false);
+  assert.equal(quantityRequirement?.kind, 'ship-quantity');
+  assert.equal(quantityRequirement?.currentQuantity, 0);
+
+  const blocked = enqueueFleetProduction(queueOnlyContext, 'ships', 'death-star', 1, 'death-star-queue-only');
+  assert.equal(blocked.ok, false);
+  assert.match(blocked.reason ?? '', /Требуется корабль/);
 });
 
 test('commander duration uses exact level multiplier and applies Test Mode scale once', () => {

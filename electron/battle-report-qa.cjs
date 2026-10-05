@@ -1,19 +1,14 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
-const {
-  assertRenderedFactionGeneralPortraits,
-  inspectRenderedFactionGeneralPortraits,
-} = require('./faction-general-qa.cjs');
-
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
 app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
-const OUTPUT = path.join(ROOT, 'artifacts', 'battle-report-qa');
+const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'artifacts', 'battle-report-qa');
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
-const VIEWPORTS = [[1440, 900], [390, 844]];
+const VIEWPORTS = [[1920, 1080], [1280, 720], [390, 844]];
 const skipScreenshots = process.env.ASTERION_SKIP_SCREENSHOTS === '1';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -138,6 +133,24 @@ async function modalSnapshot(win) {
       hasOverallLosses: Boolean(modal?.querySelector('[data-qa-battle-summary]')),
       hasHeaderTable: Boolean(modal?.querySelector('[data-qa-battle-unit-table]')),
       headerAvatarCount: modal?.querySelectorAll('[data-qa-battle-side-avatar]').length || 0,
+      factionIcons: Array.from(modal?.querySelectorAll('[data-qa-battle-side-avatar]') || []).map((slot) => {
+        const image = slot.querySelector('img.battle-faction-icon');
+        const slotRect = slot.getBoundingClientRect();
+        const imageRect = image?.getBoundingClientRect();
+        return {
+          side: slot.closest('[data-qa-battle-header-side]')?.getAttribute('data-qa-battle-header-side') || '',
+          src: image?.getAttribute('src') || '',
+          factionArtId: image?.getAttribute('data-qa-battle-faction-icon') || '',
+          loaded: Boolean(image?.complete && image.naturalWidth > 0 && image.naturalHeight > 0),
+          naturalWidth: image?.naturalWidth || 0,
+          slotWidth: slotRect.width,
+          slotHeight: slotRect.height,
+          imageWidth: imageRect?.width || 0,
+          imageHeight: imageRect?.height || 0,
+          objectPosition: image ? getComputedStyle(image).objectPosition : '',
+          borderRadius: image ? getComputedStyle(image).borderRadius : '',
+        };
+      }),
       technologyRowCount: technologyRows.length,
       technologyTooltipCount: modal?.querySelectorAll('.battle-tech-tooltip-v1').length || 0,
       technologyTooltipImageCount: modal?.querySelectorAll('.battle-tech-tooltip-row-v1 img').length || 0,
@@ -145,6 +158,8 @@ async function modalSnapshot(win) {
       technologyRowsFocusable: technologyRows.every((row) => row.tabIndex >= 0),
       eventCardCount: modal?.querySelectorAll('[data-qa-battle-event]').length || 0,
       hasBattlePoints: Boolean(modal?.querySelector('[data-qa-battle-points]')),
+      battleAwardStates: Array.from(modal?.querySelectorAll('[data-qa-battle-points]') || []).map((node) => node.getAttribute('data-qa-battle-award-state') || ''),
+      hasNoAwardRecordText: text.includes('НЕТ ЗАПИСИ О НАЧИСЛЕНИИ') && text.includes('Не зафиксировано'),
       commanderTechnicalText: /Commander Id|Commander Level|Commander Ability|Commander Rate|Special Bonus|armor-debuff/i.test(text),
       hasHumanCommanderEffect: Array.from(modal?.querySelectorAll('[data-qa-battle-commanders] em') || []).some((item) => /Снижает|Уменьшает|Увеличивает|Даёт/i.test(item.textContent || '')),
       hasVisualReport: Boolean(modal?.querySelector('[data-qa-battle-visual-report]')),
@@ -157,6 +172,8 @@ async function modalSnapshot(win) {
       roundCount: visualRounds.length,
       hasComposition: Boolean(modal?.querySelector('[data-qa-battle-composition]')),
       hasOutcome: Boolean(modal?.querySelector('[data-qa-battle-outcome]')),
+      orbitDebrisCount: modal?.querySelectorAll('[data-qa-debris-orbit]').length || 0,
+      orbitDebrisText: Array.from(modal?.querySelectorAll('[data-qa-debris-orbit]') || []).map((node) => node.textContent?.trim() || '').join(' '),
       hasOutcomeBeforeAfter: outcomeStateHeader.includes('БЫЛО') && outcomeStateHeader.includes('ОСТАЛОСЬ'),
       outcomeBeforeVisualReport: Boolean(outcome && visualReport && (outcome.compareDocumentPosition(visualReport) & 4)),
       internalScroll: Boolean(scroll && scroll.scrollHeight > scroll.clientHeight),
@@ -599,15 +616,24 @@ async function runViewport(win, width, height) {
   await clickBattleSection(win);
 
   const list = await listSnapshot(win);
-  if (list.cardCount !== 3 || list.collapsedCardCount !== 3 || list.cardLossCount !== 6 || list.openButtonCount !== 3 || list.resultIconCount !== 3 || JSON.stringify(list.resultLabels) !== JSON.stringify(['ПОБЕДА', 'ПОРАЖЕНИЕ', 'НИЧЬЯ']) || list.rootHorizontalOverflow || list.bodyHorizontalOverflow) {
+  if (list.cardCount !== 3 || list.collapsedCardCount !== 3 || list.cardLossCount !== 6 || list.openButtonCount !== 3 || list.resultIconCount !== 3 || JSON.stringify(list.resultLabels) !== JSON.stringify(['ПОБЕДА ПРИ АТАКЕ', 'ПОРАЖЕНИЕ ПРИ АТАКЕ', 'НИЧЬЯ']) || list.rootHorizontalOverflow || list.bodyHorizontalOverflow) {
     throw new Error(`Battle list contract failed at ${label}: ${JSON.stringify(list)}`);
   }
 
   await openBattle(win, 'battle-demo-attacker-victory');
   const modal = await modalSnapshot(win);
-  const battlePortraits = await inspectRenderedFactionGeneralPortraits(win, '[role="dialog"][data-qa-battle-report-modal] [data-qa-battle-side-avatar] [data-qa-faction-general]');
-  assertRenderedFactionGeneralPortraits(battlePortraits, ['aegis', 'veyra'], `${label} battle report`);
-  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.roundCount !== 5 || modal.analysisOpenCount !== 0 || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount < 1 || modal.technologyTooltipCount !== modal.technologyRowCount || modal.technologyTooltipImageCount < modal.technologyRowCount || modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || modal.eventCardCount < 1 || !modal.hasBattlePoints || modal.commanderTechnicalText || !modal.hasHumanCommanderEffect || !modal.hasVisualReport || modal.hasInitialSnapshot || modal.hasProvenance || modal.hasRoundSummary || modal.hasRoundLog || !modal.roundAnalysisValid || modal.hasComposition || !modal.hasOutcome || !modal.hasOutcomeBeforeAfter || !modal.outcomeBeforeVisualReport || !modal.internalScroll || modal.internalHorizontalOverflow || modal.technicalText || !modal.bodyLocked || !modal.stageInert) {
+  const expectedBattleIconSuffixes = ['/aegis.webp', '/veyra.webp'];
+  const expectedBattleFactionArtIds = ['aegis', 'veyra'];
+  if (modal.factionIcons.length !== 2
+    || modal.factionIcons.some((icon) => !icon.loaded || !expectedBattleIconSuffixes.some((suffix) => icon.src.endsWith(suffix))
+      || Math.abs(icon.slotWidth - icon.slotHeight) > 1 || icon.slotWidth > 51
+      || icon.imageWidth <= 0 || icon.imageHeight <= 0 || icon.imageWidth > icon.slotWidth || icon.imageHeight > icon.slotHeight
+      || icon.objectPosition !== '50% 50%' || icon.borderRadius !== '0px')
+    || new Set(modal.factionIcons.map((icon) => icon.side)).size !== 2
+    || expectedBattleFactionArtIds.some((id) => !modal.factionIcons.some((icon) => icon.factionArtId === id))) {
+    throw new Error(`Square battle faction icons failed at ${label}: ${JSON.stringify(modal.factionIcons)}`);
+  }
+  if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.roundCount !== 5 || modal.analysisOpenCount !== 0 || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount < 1 || modal.technologyTooltipCount !== modal.technologyRowCount || modal.technologyTooltipImageCount < modal.technologyRowCount || modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || modal.eventCardCount < 1 || !modal.hasBattlePoints || JSON.stringify(modal.battleAwardStates) !== JSON.stringify(['missing', 'missing']) || !modal.hasNoAwardRecordText || modal.commanderTechnicalText || !modal.hasHumanCommanderEffect || !modal.hasVisualReport || modal.hasInitialSnapshot || modal.hasProvenance || modal.hasRoundSummary || modal.hasRoundLog || !modal.roundAnalysisValid || modal.hasComposition || !modal.hasOutcome || modal.orbitDebrisCount < 1 || !modal.orbitDebrisText.includes('ОБЛОМКИ НА ОРБИТЕ') || !modal.hasOutcomeBeforeAfter || !modal.outcomeBeforeVisualReport || !modal.internalScroll || modal.internalHorizontalOverflow || modal.technicalText || !modal.bodyLocked || !modal.stageInert) {
     throw new Error(`Battle modal contract failed at ${label}: ${JSON.stringify(modal)}`);
   }
   await capture(win, directory, 'battle-report-modal');

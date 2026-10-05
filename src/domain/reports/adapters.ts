@@ -1,6 +1,7 @@
 import {
   ASTERION_LOCAL_PLAYER_ID,
   getBattleResultForPlayer,
+  isAsterionLocalPlayerId,
   type BattleReport,
   type BattleSide,
 } from '../combat/report.ts';
@@ -12,8 +13,12 @@ import type {
   ReportQuery,
   ReportsState,
   ReportUnreadCounts,
+  OverpopulationEpisodeReport,
+  RecyclerArrivalReport,
+  GasExtractionArrivalReport,
 } from './types.ts';
 import type { EspionageState, SpyHunterNotice, SpyReportSnapshot } from '../espionage/types.ts';
+import { getCombatFactionName } from '../combat/factions.ts';
 
 const CATEGORY_TYPE_LABEL: Record<ReportItem['category'], string> = {
   system: 'Система',
@@ -36,8 +41,8 @@ const EMPTY_COUNTS = (): ReportCategoryCounts => ({
 });
 
 function localSide(report: BattleReport): BattleSide | null {
-  if (report.attacker.playerId === ASTERION_LOCAL_PLAYER_ID) return 'attacker';
-  if (report.defender.playerId === ASTERION_LOCAL_PLAYER_ID) return 'defender';
+  if (isAsterionLocalPlayerId(report.attacker.playerId)) return 'attacker';
+  if (isAsterionLocalPlayerId(report.defender.playerId)) return 'defender';
   return null;
 }
 
@@ -51,6 +56,14 @@ function battleStatus(report: BattleReport) {
   const side = localSide(report);
   const result = getBattleResultForPlayer(report, ASTERION_LOCAL_PLAYER_ID);
   if (side) {
+    if (report.missionType === 'attack' && side === 'attacker') {
+      if (result === 'victory') return { label: 'ПОБЕДА ПРИ АТАКЕ', tone: 'success' as const };
+      if (result === 'defeat') return { label: 'ПОРАЖЕНИЕ ПРИ АТАКЕ', tone: 'danger' as const };
+    }
+    if (report.missionType === 'attack' && side === 'defender') {
+      if (result === 'victory') return { label: 'ПОБЕДА ПРИ ОБОРОНЕ', tone: 'success' as const };
+      if (result === 'defeat') return { label: 'ПОРАЖЕНИЕ ПРИ ОБОРОНЕ', tone: 'danger' as const };
+    }
     if (result === 'victory') return { label: 'ПОБЕДА', tone: 'success' as const };
     if (result === 'defeat') return { label: 'ПОРАЖЕНИЕ', tone: 'danger' as const };
     return { label: 'НИЧЬЯ', tone: 'warning' as const };
@@ -242,11 +255,178 @@ export function spyHunterNoticeToReportItem(notice: SpyHunterNotice): ReportItem
   };
 }
 
+export function createOverpopulationEpisodeReportId(planetId: string, episodeStartedAt: number): string {
+  return `overpopulation:${encodeURIComponent(planetId.trim())}:${Math.floor(episodeStartedAt)}`;
+}
+
+/** Adds or replaces the final report for an episode without producing duplicates. */
+export function upsertOverpopulationEpisodeReport(
+  state: ReportsState,
+  report: Omit<OverpopulationEpisodeReport, 'id'> & { id?: string },
+): ReportsState {
+  const id = createOverpopulationEpisodeReportId(report.planetId, report.episodeStartedAt);
+  const normalized: OverpopulationEpisodeReport = {
+    ...report,
+    id,
+    planetId: report.planetId.trim(),
+    planetName: report.planetName.trim(),
+    removedShips: report.removedShips
+      .filter((loss) => Number.isFinite(loss.count) && loss.count > 0)
+      .map((loss) => ({ ...loss, count: Math.floor(loss.count) }))
+      .filter((loss) => loss.count > 0),
+  };
+  const reports = state.overpopulationReports ?? [];
+  const existingIndex = reports.findIndex((item) => item.id === id);
+  const nextReports = existingIndex < 0
+    ? [...reports, normalized]
+    : reports.map((item, index) => index === existingIndex ? normalized : item);
+  return { ...state, overpopulationReports: nextReports };
+}
+
+export function overpopulationEpisodeReportToReportItem(report: OverpopulationEpisodeReport): ReportItem {
+  const removedCount = report.removedShips.reduce((total, loss) => total + loss.count, 0);
+  const timestamp = new Date(report.episodeEndedAt).toISOString();
+  return {
+    id: report.id,
+    source: 'overpopulation',
+    category: 'system',
+    typeLabel: 'Итог перенаселения',
+    title: `Планета разблокирована: ${report.planetName}`,
+    preview: `${removedCount} кораблей уничтожено · население ${report.populationBefore} → ${report.populationAfter} · вместимость ${report.capacity}`,
+    body: `Планета ${report.planetName} разблокирована. Эпизод перенаселения завершён; итоговое население и уничтоженные обычные корабли перечислены в отчёте.`,
+    timestamp,
+    statusLabel: 'ПЛАНЕТА РАЗБЛОКИРОВАНА',
+    statusTone: 'warning',
+    participantNames: [],
+    planetNames: [report.planetName],
+    coordinates: [],
+    details: [
+      { label: 'Планета', value: report.planetName },
+      { label: 'Население до эпизода', value: String(report.populationBefore) },
+      { label: 'Население после эпизода', value: String(report.populationAfter) },
+      { label: 'Вместимость', value: String(report.capacity) },
+      { label: 'Начало эпизода', value: new Date(report.episodeStartedAt).toISOString() },
+      { label: 'Разблокировка', value: timestamp },
+      { label: 'Уничтожено обычных кораблей', value: String(removedCount) },
+    ],
+    overpopulationReport: report,
+  };
+}
+
+export function createRecyclerArrivalReportId(flightId: string): RecyclerArrivalReport['id'] {
+  return `recycler-arrival:${flightId}`;
+}
+
+/** Upserts by deterministic flight identity so reconciliation replay cannot add duplicates. */
+export function upsertRecyclerArrivalReport(
+  state: ReportsState,
+  report: Omit<RecyclerArrivalReport, 'id'> | RecyclerArrivalReport,
+): ReportsState {
+  const normalized: RecyclerArrivalReport = {
+    ...report,
+    id: createRecyclerArrivalReportId(report.flightId),
+    coordinate: { ...report.coordinate },
+  };
+  const reports = (state.recyclerArrivalReports ?? []).filter((item) => item.flightId !== report.flightId);
+  reports.push(normalized);
+  return { ...state, recyclerArrivalReports: reports };
+}
+
+/** Metadata helpers normalize ReportsState, so preserve its independently persisted report records. */
+export function preservePersistentReportCollections(next: ReportsState, previous: ReportsState): ReportsState {
+  return {
+    ...next,
+    ...(previous.overpopulationReports === undefined ? {} : { overpopulationReports: previous.overpopulationReports }),
+    ...(previous.recyclerArrivalReports === undefined ? {} : { recyclerArrivalReports: previous.recyclerArrivalReports }),
+    ...(previous.gasExtractionArrivalReports === undefined ? {} : { gasExtractionArrivalReports: previous.gasExtractionArrivalReports }),
+  };
+}
+
+export function recyclerArrivalReportToReportItem(report: RecyclerArrivalReport): ReportItem {
+  const coordinate = `[${report.coordinate.galaxy}:${report.coordinate.system}:${report.coordinate.position}]`;
+  const collected = String(report.collectedDebris);
+  const remaining = String(report.remainingOrbitalDebris);
+  const summary = report.collectedDebris === 0
+    ? 'На орбите обломков не найдено.'
+    : `Собрано обломков: ${collected}.`;
+  return {
+    id: createRecyclerArrivalReportId(report.flightId),
+    source: 'recycling',
+    category: 'system',
+    typeLabel: 'Отчёт переработчика',
+    title: `Переработчик прибыл к координатам ${coordinate}`,
+    preview: `${coordinate} · собрано ${collected} · осталось на орбите ${remaining}.`,
+    body: `${summary} На орбите осталось свободных обломков: ${remaining}.`,
+    timestamp: new Date(report.arrivedAtMs).toISOString(),
+    statusLabel: 'ПРИБЫТИЕ ЗАВЕРШЕНО',
+    statusTone: 'info',
+    participantNames: [],
+    planetNames: [],
+    coordinates: [coordinate],
+    details: [
+      { label: 'Координаты прибытия', value: coordinate },
+      { label: 'Собрано обломков', value: collected },
+      { label: 'Осталось свободных обломков на орбите', value: remaining },
+    ],
+  };
+}
+
+export function createGasExtractionArrivalReportId(flightId: string): GasExtractionArrivalReport['id'] {
+  return `gas-extraction-arrival:${flightId}`;
+}
+
+/** Upserts by flight identity so arrival reconciliation replay cannot add duplicates. */
+export function upsertGasExtractionArrivalReport(
+  state: ReportsState,
+  report: Omit<GasExtractionArrivalReport, 'id'> | GasExtractionArrivalReport,
+): ReportsState {
+  const normalized: GasExtractionArrivalReport = {
+    ...report,
+    id: createGasExtractionArrivalReportId(report.flightId),
+    coordinate: { ...report.coordinate },
+  };
+  const reports = (state.gasExtractionArrivalReports ?? []).filter((item) => item.flightId !== report.flightId);
+  reports.push(normalized);
+  return { ...state, gasExtractionArrivalReports: reports };
+}
+
+export function gasExtractionArrivalReportToReportItem(report: GasExtractionArrivalReport): ReportItem {
+  const coordinate = `[${report.coordinate.galaxy}:${report.coordinate.system}:${report.coordinate.position}]`;
+  const title = report.outcome === 'found'
+    ? 'Астероид найден'
+    : `Астероид не найден по координатам ${coordinate}`;
+  const gas = String(report.gasCollected);
+  const scrap = String(report.scrapCollected);
+  return {
+    id: createGasExtractionArrivalReportId(report.flightId),
+    source: 'gas-extraction',
+    category: 'system',
+    typeLabel: 'Отчёт добычи газа',
+    title,
+    preview: `${coordinate} · собрано газа ${gas} · собрано обломков ${scrap}.`,
+    body: `${title}. Координаты: ${coordinate}. Собрано газа: ${gas}. Собрано обломков: ${scrap}.`,
+    timestamp: new Date(report.arrivalAt).toISOString(),
+    statusLabel: report.outcome === 'found' ? 'АСТЕРОИД НАЙДЕН' : 'АСТЕРОИД НЕ НАЙДЕН',
+    statusTone: report.outcome === 'found' ? 'success' : 'warning',
+    participantNames: [],
+    planetNames: [],
+    coordinates: [coordinate],
+    details: [
+      { label: 'Координаты прибытия', value: coordinate },
+      { label: 'Собрано газа', value: gas },
+      { label: 'Собрано обломков', value: scrap },
+    ],
+  };
+}
+
 export function buildReportsFeed(
   battleReports: readonly BattleReport[],
   operations: OperationsState,
   command: CommandState,
   espionage?: EspionageState,
+  overpopulationReports: readonly OverpopulationEpisodeReport[] = [],
+  recyclerArrivalReports: readonly RecyclerArrivalReport[] = [],
+  gasExtractionArrivalReports: readonly GasExtractionArrivalReport[] = [],
 ): ReportItem[] {
   const operationByBattleId = new Map(
     operations.items
@@ -270,8 +450,11 @@ export function buildReportsFeed(
     ...(espionage?.reports ?? []).map((report) => spyReportToReportItem(report, espionage)),
     ...(espionage?.hunterNotices ?? []).map(spyHunterNoticeToReportItem),
   ];
+  const overpopulationItems = overpopulationReports.map(overpopulationEpisodeReportToReportItem);
+  const recyclerItems = recyclerArrivalReports.map(recyclerArrivalReportToReportItem);
+  const gasExtractionItems = gasExtractionArrivalReports.map(gasExtractionArrivalReportToReportItem);
 
-  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems].sort((a, b) => {
+  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems, ...recyclerItems, ...gasExtractionItems].sort((a, b) => {
     if (a.timestamp && b.timestamp) return Date.parse(b.timestamp) - Date.parse(a.timestamp);
     if (!a.timestamp && b.timestamp) return -1;
     if (a.timestamp && !b.timestamp) return 1;

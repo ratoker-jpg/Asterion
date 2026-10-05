@@ -63,7 +63,7 @@ export function ResourceChip({ kind, label, value, capacity, showCapacity = fals
         <span className="asterion-header__resource-icon"><HeaderGameIcon kind={kind === 'debris' ? 'energy' : kind} /></span>
         <span className="asterion-header__resource-text">
           <small>{label}</small>
-          <strong>{showCapacity && capacity ? `${formatNumber(value)} / ${formatNumber(capacity)}` : formatNumber(value)}</strong>
+          <strong>{showCapacity && capacity ? `${formatNumber(value)} / ${formatNumber(capacity)}` : formatNumber(value)}{kind === 'population' && populationBreakdown?.pendingInbound ? <span className="asterion-header__resource-pending-inbound" data-qa-pending-inbound-population> +{formatNumber(populationBreakdown.pendingInbound)}</span> : null}</strong>
           {hasFill ? (
             <span
               className={`asterion-header__resource-fill asterion-header__resource-fill--${fillTone}${shouldPulse ? ' is-pulsing' : ''}`}
@@ -89,6 +89,7 @@ export function ResourceChip({ kind, label, value, capacity, showCapacity = fals
             <span data-qa-population-breakdown-item="fleet"><small>Корабли</small><b>{formatNumber(populationBreakdown.fleet.value)} / {formatNumber(populationBreakdown.fleet.capacity)}</b></span>
             <span data-qa-population-breakdown-item="defense"><small>Оборона</small><b>{formatNumber(populationBreakdown.defense.value)} / {formatNumber(populationBreakdown.defense.capacity)}</b></span>
             {populationBreakdown.satellites != null ? <span data-qa-population-breakdown-item="satellites"><small>Спутники</small><b>{formatNumber(populationBreakdown.satellites)} · 1/ед.</b></span> : null}
+            {populationBreakdown.pendingInbound ? <span data-qa-population-breakdown-item="pending-inbound"><small>В пути</small><b className="asterion-header__resource-pending-inbound">+{formatNumber(populationBreakdown.pendingInbound)}</b></span> : null}
           </div>
         ) : null}
         {description ? <span>{description}</span> : null}

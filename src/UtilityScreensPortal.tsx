@@ -100,7 +100,8 @@ export function UtilityScreensPortal() {
           <RatingView
             mode={runtimeState.mode}
             command={runtimeState.command}
-            currentPlayerResourcePoints={runtimeState.rating.resourcePoints}
+            currentPlayerScore={runtimeState.ownerScores[runtimeState.currentPlayerId]}
+            currentPlayerId={runtimeState.currentPlayerId}
           />
         ) : null
       ) : (

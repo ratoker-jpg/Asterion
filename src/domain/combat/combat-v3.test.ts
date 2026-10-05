@@ -252,29 +252,29 @@ test('documented special bonuses are faction data, capped, donor-excluded, and v
     {
       aegisDefender: getFactionCombatEntity('aegis', 'defender').specialBonus,
       synodDefender: getFactionCombatEntity('synod', 'defender').specialBonus,
-      veyraAbsorber: getFactionCombatEntity('veyra', 'cruiser').specialBonus,
+      veyraAbsorber: getFactionCombatEntity('veyra', 'defender').specialBonus,
       synodGoliath: getFactionCombatEntity('synod', 'destroyer').specialBonus,
     },
     {
       aegisDefender: {
         kind: 'life', rate: 0.0005, cap: 0.3, capStatus: 'known', scope: 'asterion', status: 'confirmed',
-        source: 'ASTERION_FULL_BATTLE_IMPLEMENTATION_PROMPT.md §4.3.2',
-        note: 'Защитник усиливает жизнь других живых боевых стеков; собственный донор бонус не получает.',
+        source: 'Nemexia Auto v2 saved_pages/312313/Корабли/Корабли Синяя раса/page_2026-07-22_20-31-36.html .specialAbilitiesBox .specialAbilityTooltipContent',
+        note: 'Поддерживаемая часть способности: 0.05% жизни за корабль, предел 30%; резолвер не менялся.',
       },
       synodDefender: {
         kind: 'life', rate: 0.00075, cap: 0.3, capStatus: 'known', scope: 'asterion', status: 'confirmed',
-        source: 'ASTERION_FULL_BATTLE_IMPLEMENTATION_PROMPT.md §4.3.2',
-        note: 'Бот Щит усиливает жизнь других живых боевых стеков; собственный донор бонус не получает.',
+        source: 'Nemexia Auto v2 saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-38-20.html .specialAbilitiesBox .specialAbilityTooltipContent',
+        note: 'Поддерживаемая часть способности: 0.075% жизни за корабль, предел 30%; резолвер не менялся.',
       },
       veyraAbsorber: {
-        kind: 'life', rate: 0.0005, cap: 0.3, capStatus: 'known', scope: 'asterion', status: 'inferred',
-        source: 'ASTERION_FULL_BATTLE_IMPLEMENTATION_PROMPT.md §4.3.2',
-        note: 'Абсорбатор усиливает жизнь других живых боевых стеков; коэффициент inferred по capped baseline.',
+        kind: 'life', rate: 0.0003, cap: 0.3, capStatus: 'known', scope: 'asterion', status: 'confirmed',
+        source: 'Nemexia Auto v2 saved_pages/312313/Корабли/Корабли Рой Красные/page_2026-07-22_20-17-43.html .specialAbilitiesBox .specialAbilityTooltipContent',
+        note: 'Источник подтверждает 0.03% жизни за корабль и предел 30%; способ применения остаётся текущим Asterion.',
       },
       synodGoliath: {
         kind: 'attack', rate: 0.0009, cap: 0.8, capStatus: 'known', scope: 'asterion', status: 'confirmed',
-        source: 'ASTERION_FULL_BATTLE_IMPLEMENTATION_PROMPT.md §4.3.2',
-        note: 'Голиаф усиливает атаку других живых боевых стеков; собственный донор бонус не получает.',
+        source: 'Nemexia Auto v2 saved_pages/312313/Корабли/Корабли Зеленная раса/page_2026-07-22_20-38-35.html .specialAbilitiesBox .specialAbilityTooltipContent',
+        note: 'Поддерживаемая часть способности: 0.09% атаки за корабль, предел 80%; отдельная вероятность хранится в source metadata.',
       },
     },
   );
@@ -298,4 +298,42 @@ test('documented special bonuses are faction data, capped, donor-excluded, and v
   assert.equal(bonusEvent?.specialBonusLivingCount, 2);
   assert.equal(bonusEvent?.specialBonusAmount, 0.001);
   assert.equal(bonusEvent?.provenance?.status, 'confirmed');
+});
+
+test('catalog coefficient and cap corrections change recipient stats in the combat runtime', () => {
+  const previewRecipientWithDonor = (
+    factionId: 'aegis' | 'synod' | 'veyra',
+    donorEntityId: 'battleship' | 'cruiser' | 'defender',
+    donorCount: number,
+  ) => calculateCombatStackPreview(
+    { entityId: 'scout', count: 1 },
+    factionId,
+    createDefaultCombatTechnologies(),
+    'production',
+    [{ entityId: 'scout', count: 1 }, { entityId: donorEntityId, count: donorCount }],
+  );
+
+  const synodStarArmada = previewRecipientWithDonor('synod', 'battleship', 1_000);
+  assert.ok(Math.abs((synodStarArmada?.armorPercent ?? 0) - 31) < 1e-9);
+  assert.equal(synodStarArmada?.lifePerUnit, 2_400);
+  // The recipient's base armor is 3: prior catalog rate 0.00025 yields 28 total; current 0.00028 yields 31.
+  // The prior result is calculated from the old catalog coefficient, not executed by an old resolver.
+
+  const aegisBattleship = previewRecipientWithDonor('aegis', 'battleship', 1_000);
+  assert.ok(Math.abs((aegisBattleship?.armorPercent ?? 0) - 33) < 1e-9);
+  // The recipient's base armor is 3: prior rate 0.00038 with no cap yields 41 total; the confirmed 0.30 cap now yields 33.
+  // The prior result is calculated from the prior catalog entry, not executed by an old resolver.
+
+  const veyraAbsorber = previewRecipientWithDonor('veyra', 'defender', 600);
+  const veyraNemesis = previewRecipientWithDonor('veyra', 'cruiser', 600);
+  assert.equal(veyraAbsorber?.lifePerUnit, 1_416);
+  assert.equal(veyraNemesis?.lifePerUnit, 1_200);
+  // Veyra scout base life is 1,200. Prior catalog put rate 0.0005 on cruiser: 600 donors reached the 0.30 cap and would yield 1,560 life.
+  // Current defender/Absorber rate 0.0003 yields 1,416; cruiser/Nemesis no longer donates this bonus.
+  // Those prior values are formula calculations from prior catalog data, not old-resolver executions.
+
+  const veyraGhost = previewRecipientWithDonor('veyra', 'battleship', 2_000);
+  assert.ok(Math.abs((veyraGhost?.armorPercent ?? 0) - 33) < 1e-9);
+  // The recipient's base armor is 3: prior Ghost entry had no runtime cap and yields 39 total; confirmed cap limits it to 33.
+  // The prior result is calculated from the prior catalog entry, not executed by an old resolver.
 });

@@ -24,7 +24,9 @@ import type { RepairWorkshopState } from '../domain/repair/workshop.ts';
 import type { EnergyLedger, EnergySourceSnapshot } from '../domain/energy/runtime.ts';
 import type { FlightState } from '../domain/flights/types.ts';
 import type { EspionageState } from '../domain/espionage/types.ts';
+import type { UniverseAsteroidSimulationState } from '../domain/universe/types.ts';
 import type { UniverseOwnerAlliance } from '../domain/universe/types.ts';
+import type { OverpopulationState } from '../domain/fleet/overpopulation.ts';
 
 /** Planet ids are stable save keys; the legacy homeworld remains `helion-01`. */
 export type PlanetId = string;
@@ -53,6 +55,8 @@ export type PlanetRuntime = {
   energyExpenseAttribution?: Partial<Record<string, number>>;
   /** Orbital presence is separate from the outgoing fleet roster. */
   solarSatellites?: number;
+  /** Persisted linear overpopulation episode; absent means the planet is not blocked. */
+  overpopulation?: OverpopulationState;
   universeGalaxy?: number;
   universeSystem?: number;
   universePosition?: number;
@@ -99,13 +103,9 @@ export type ResourceClock = ResourceClockEntry & {
   byPlanet?: Record<PlanetId, ResourceClockEntry>;
 };
 
-export type PlanetStateRecord = Record<PlanetId, PlanetRuntime> & {
-  'helion-01': PlanetRuntime;
-};
+export type PlanetStateRecord = Record<PlanetId, PlanetRuntime>;
 
-export type PlanetQueueRecord = Record<PlanetId, BuildingQueueItem[]> & {
-  'helion-01': BuildingQueueItem[];
-};
+export type PlanetQueueRecord = Record<PlanetId, BuildingQueueItem[]>;
 
 export type SaveState = {
   schemaVersion: number;
@@ -115,6 +115,8 @@ export type SaveState = {
   currentPlanetId: PlanetId;
   planets: PlanetStateRecord;
   queues: PlanetQueueRecord;
+  /** Completed owner-wide ship/commander upgrades. Absent only in legacy fixtures. */
+  shipUpgradeLevels?: Record<string, number>;
   rating: RatingPrototypeState;
   profile: PlayerProfileState;
   combatPriority: CombatPriorityState;
@@ -126,6 +128,10 @@ export type SaveState = {
   science: ScienceState;
   resourceClock: ResourceClock;
   flights: FlightState;
+  /** Authoritative asteroid timeline. Missing only while hydrating legacy saves/fixtures. */
+  asteroidSimulation?: UniverseAsteroidSimulationState;
+  /** Hidden asteroid cargo by stable spawn index; never part of free orbital debris. */
+  asteroidDebrisBySpawnIndex?: Record<string, number>;
   /** Fresh saves materialize this state; optional keeps legacy test fixtures source-compatible. */
   espionage?: EspionageState;
   /** Optional for backwards compatibility; fresh states always materialize it. */
@@ -151,12 +157,32 @@ export function replacePlanetState(
 }
 
 export function getPlanetResources(state: SaveState, planetId: PlanetId = state.currentPlanetId): PlanetResources {
-  // The root wallet remains the authoritative compatibility alias for the
-  // legacy homeworld while colonies use their own persisted wallet.
-  if (planetId === 'helion-01') return { metal: state.metal, minerals: state.minerals, gas: state.gas };
   const planet = state.planets[planetId];
+  // Root resource fields are a compatibility alias for the currently selected
+  // world. Explicit reads of other worlds use their own persisted wallet.
+  if (planetId === state.currentPlanetId) {
+    return { metal: state.metal, minerals: state.minerals, gas: state.gas };
+  }
   if (planet?.resources) return { ...planet.resources };
+  // Legacy root wallets were only persisted for Helion 01.
+  if (planetId === 'helion-01') return { metal: state.metal, minerals: state.minerals, gas: state.gas };
   return { metal: state.metal, minerals: state.minerals, gas: state.gas };
+}
+
+export function getOwnerShipUpgradeLevels(state: SaveState): Record<string, number> {
+  if (state.shipUpgradeLevels !== undefined) return { ...state.shipUpgradeLevels };
+  const levels: Record<string, number> = {};
+  for (const planet of Object.values(state.planets)) {
+    for (const [id, value] of Object.entries(planet.spaceportUpgrades.shipLevels)) {
+      levels[id] = Math.max(levels[id] ?? 0, Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0);
+    }
+  }
+  return levels;
+}
+
+export function getOwnerShipUpgradeLevel(state: SaveState, shipId: string): number {
+  const levels = getOwnerShipUpgradeLevels(state);
+  return Math.max(0, Math.floor(levels[shipId] ?? 0));
 }
 
 export function replacePlanetResources(
@@ -171,9 +197,8 @@ export function replacePlanetResources(
     ...state,
     planets: { ...state.planets, [planetId]: nextPlanet },
   };
-  // Keep the old root wallet as a compatibility alias for the existing UI and
-  // economy while the homeworld remains the active planet.
-  if (planetId !== 'helion-01') return next;
+  // Keep the root wallet as a compatibility alias for whichever planet is current.
+  if (planetId !== next.currentPlanetId) return next;
   return { ...next, metal: resources.metal, minerals: resources.minerals, gas: resources.gas };
 }
 

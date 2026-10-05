@@ -36,6 +36,8 @@ export type ScienceLevels = Partial<Record<ScienceId, number>>;
 export type ScienceQueueTask = {
   id: string;
   scienceId: ScienceId;
+  /** Planet whose laboratory owns this task; legacy tasks are migrated. */
+  planetId?: string;
   fromLevel: number;
   toLevel: number;
   startedAt: number;
@@ -88,6 +90,9 @@ export type SciencePreview = {
 export type ScienceRuntimeContext = {
   state: ScienceState;
   wallet: ScienceWallet;
+  planetId?: string;
+  blockedPlanetIds?: ReadonlySet<string>;
+  blockedPlanetStartedAt?: ReadonlyMap<string, number>;
   capacities?: ResourceCapacitiesInput;
   laboratoryLevel: number;
   now: number;
@@ -98,6 +103,7 @@ export type ScienceRuntimeContext = {
 
 export type ScienceMigrationOptions = {
   laboratoryLevel?: number;
+  legacyPlanetId?: string;
   mode?: RuntimeMode;
   testTimeScale?: number;
   schemaVersion?: number;
@@ -131,6 +137,13 @@ export type ScienceCancellationTransition = {
   credit?: ResourceCreditResult;
 };
 
+export type SciencePlanetDestructionTransition = {
+  state: ScienceState;
+  invalidatedSurvivorTasks: ScienceQueueTask[];
+  refund: ScienceResourceCost;
+  refundPercents: number[];
+};
+
 export type ScienceRuntimeSnapshot = {
   science: ScienceState;
   wallet: ScienceWallet;
@@ -138,6 +151,7 @@ export type ScienceRuntimeSnapshot = {
   now: number;
   mode: RuntimeMode;
   testTimeScale?: number;
+  blockedPlanetStartedAt?: ReadonlyMap<string, number>;
 };
 
 export type ScienceStartRequest = {
@@ -395,6 +409,7 @@ export function startScienceResearch(
   const task: ScienceQueueTask = {
     id: taskId,
     scienceId,
+    ...(context.planetId ? { planetId: context.planetId } : {}),
     fromLevel: preview.projectedLevel,
     toLevel: preview.nextLevel,
     startedAt,
@@ -433,6 +448,23 @@ function refundScienceCost(cost: ScienceResourceCost, refundPercent: number): Sc
   } as ScienceResourceCost;
 }
 
+function refundScienceTasks(
+  tasks: readonly ScienceQueueTask[],
+  rng?: () => number,
+): { refund: ScienceResourceCost; refundPercents: number[] } {
+  const refundPercents: number[] = [];
+  const refund = tasks.reduce((total, task) => {
+    if (task.refundEligible === false || !hasCompleteScienceCost(task.cost)) return total;
+    const refundPercent = selectScienceCancelRefundPercent(rng);
+    refundPercents.push(refundPercent);
+    const itemRefund = refundScienceCost(task.cost, refundPercent);
+    return Object.fromEntries(
+      RESOURCE_KEYS.map((key) => [key, total[key] + itemRefund[key]]),
+    ) as ScienceResourceCost;
+  }, { metal: 0, minerals: 0, gas: 0, energy: 0 } as ScienceResourceCost);
+  return { refund, refundPercents };
+}
+
 function rescheduleScienceQueue(queue: readonly ScienceQueueTask[], canceledWasActive: boolean, now: number): ScienceQueueTask[] {
   const remaining = [...queue];
   if (remaining.length === 0) return remaining;
@@ -445,6 +477,65 @@ function rescheduleScienceQueue(queue: readonly ScienceQueueTask[], canceledWasA
     cursor = finishAt;
     return { ...task, startedAt, finishAt };
   });
+}
+
+function removeInvalidScienceTransitions(
+  queue: readonly ScienceQueueTask[],
+  levels: ScienceLevels,
+): { remaining: ScienceQueueTask[]; invalidated: ScienceQueueTask[] } {
+  const projectedLevels = { ...levels };
+  const remaining: ScienceQueueTask[] = [];
+  const invalidated: ScienceQueueTask[] = [];
+
+  for (const task of queue) {
+    const science = findScience(task.scienceId);
+    const maxLevel = science ? getScienceMaxLevel(science) : 0;
+    const projectedLevel = safeLevel(projectedLevels[task.scienceId], maxLevel);
+    if (!science
+      || task.fromLevel !== projectedLevel
+      || task.toLevel !== projectedLevel + 1
+      || task.toLevel > maxLevel) {
+      invalidated.push(task);
+      continue;
+    }
+
+    remaining.push(task);
+    projectedLevels[task.scienceId] = task.toLevel;
+  }
+
+  return { remaining, invalidated };
+}
+
+/** Drops destroyed-planet research without refund and removes invalid successor levels with the usual refund. */
+export function discardScienceTasksForPlanet(
+  state: ScienceState,
+  planetId: string,
+  now: number,
+  rng: () => number = Math.random,
+): SciencePlanetDestructionTransition {
+  const destroyedTasks = state.queue.filter((task) => task.planetId === planetId);
+  const remainingAfterDestruction = state.queue.filter((task) => task.planetId !== planetId);
+  const { remaining, invalidated } = removeInvalidScienceTransitions(remainingAfterDestruction, state.levels);
+  if (destroyedTasks.length === 0 && invalidated.length === 0) {
+    return {
+      state,
+      invalidatedSurvivorTasks: [],
+      refund: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+      refundPercents: [],
+    };
+  }
+
+  const removedTaskIds = new Set([...destroyedTasks, ...invalidated].map((task) => task.id));
+  const activeTaskWasRemoved = state.queue[0] ? removedTaskIds.has(state.queue[0].id) : false;
+  const refund = refundScienceTasks(invalidated, rng);
+  return {
+    state: {
+      ...state,
+      queue: rescheduleScienceQueue(remaining, activeTaskWasRemoved, Math.max(0, Math.floor(now))),
+    },
+    invalidatedSurvivorTasks: invalidated,
+    ...refund,
+  };
 }
 
 function removeDependentScienceTasks(
@@ -502,7 +593,12 @@ export function cancelScienceResearch(
   context: ScienceRuntimeContext,
   taskId: string,
 ): ScienceCancellationTransition {
-  const reconciled = reconcileScienceState(context.state, context.now);
+  const reconciled = reconcileScienceState(
+    context.state,
+    context.now,
+    context.blockedPlanetIds,
+    context.blockedPlanetStartedAt,
+  );
   const queue = ensureUniqueScienceTaskIds(reconciled.state.queue);
   const reconciledState = queue.some((task, index) => task.id !== reconciled.state.queue[index]?.id)
     ? { ...reconciled.state, queue }
@@ -518,16 +614,20 @@ export function cancelScienceResearch(
 
   const { remaining, cascaded } = removeDependentScienceTasks(queue, queueIndex, reconciledState.levels);
   const canceledTasks = [task, ...cascaded.filter((candidate) => candidate.id !== task.id)];
-  const refundPercents: number[] = [];
-  const refund = canceledTasks.reduce((total, canceledTask) => {
-    if (canceledTask.refundEligible === false || !hasCompleteScienceCost(canceledTask.cost)) return total;
-    const refundPercent = selectScienceCancelRefundPercent(context.rng);
-    refundPercents.push(refundPercent);
-    const itemRefund = refundScienceCost(canceledTask.cost, refundPercent);
-    return Object.fromEntries(
-      RESOURCE_KEYS.map((key) => [key, total[key] + itemRefund[key]]),
-    ) as ScienceResourceCost;
-  }, { metal: 0, minerals: 0, gas: 0, energy: 0 } as ScienceResourceCost);
+  if (canceledTasks.some((candidate) => candidate.planetId && context.blockedPlanetIds?.has(candidate.planetId))) {
+    return {
+      ok: false,
+      state: reconciledState,
+      wallet: context.wallet,
+      canceled: null,
+      canceledTasks: [],
+      refund: null,
+      refundPercent: null,
+      refundPercents: [],
+      reason: 'Исследование или его зависимые задачи принадлежат заблокированной планете.',
+    };
+  }
+  const { refund, refundPercents } = refundScienceTasks(canceledTasks, context.rng);
   const unlimitedCapacities = { metal: Number.MAX_SAFE_INTEGER, minerals: Number.MAX_SAFE_INTEGER, gas: Number.MAX_SAFE_INTEGER };
   const credit = creditResources(context.wallet, context.capacities ?? unlimitedCapacities, refund);
   const wallet = credit.wallet;
@@ -545,7 +645,12 @@ export function cancelScienceResearch(
   };
 }
 
-export function reconcileScienceState(state: ScienceState, now: number): ScienceReconciliation {
+export function reconcileScienceState(
+  state: ScienceState,
+  now: number,
+  blockedPlanetIds?: ReadonlySet<string>,
+  blockedPlanetStartedAt?: ReadonlyMap<string, number>,
+): ScienceReconciliation {
   let queue = [...state.queue];
   const levels = { ...state.levels };
   const completed: ScienceQueueTask[] = [];
@@ -554,6 +659,12 @@ export function reconcileScienceState(state: ScienceState, now: number): Science
 
   while (queue.length > 0 && queue[0].finishAt <= now) {
     const task = queue[0];
+    const blockedAt = task.planetId ? blockedPlanetStartedAt?.get(task.planetId) : undefined;
+    // A saved overdue head may have finished before its planet was locked.
+    const finishedBeforeBlock = blockedAt !== undefined
+      && Number.isFinite(blockedAt)
+      && task.finishAt <= blockedAt;
+    if (task.planetId && blockedPlanetIds?.has(task.planetId) && !finishedBeforeBlock) break;
     queue = queue.slice(1);
     changed = true;
     const science = findScience(task.scienceId);
@@ -574,6 +685,21 @@ export function reconcileScienceState(state: ScienceState, now: number): Science
   }
 
   return { changed, state: { levels, queue }, completed, discarded };
+}
+
+/** Returns when an active overpopulation lock pauses the shared science queue. */
+export function getScienceQueuePauseAt(
+  queue: readonly ScienceQueueTask[],
+  blockedPlanetStartedAt?: ReadonlyMap<string, number>,
+): number | undefined {
+  if (!blockedPlanetStartedAt) return undefined;
+  for (const task of queue) {
+    if (!task.planetId) continue;
+    const blockedAt = blockedPlanetStartedAt.get(task.planetId);
+    if (blockedAt === undefined || !Number.isFinite(blockedAt) || task.finishAt <= blockedAt) continue;
+    return Math.max(blockedAt, task.startedAt);
+  }
+  return undefined;
 }
 
 function migrateQueue(value: unknown, levels: ScienceLevels, options: ScienceMigrationOptions): ScienceQueueTask[] {
@@ -660,9 +786,13 @@ function migrateQueue(value: unknown, levels: ScienceLevels, options: ScienceMig
     let suffix = 1;
     while (result.some((task) => task.id === id)) id = `${requestedId}-duplicate-${suffix++}`;
 
+    const migratedPlanetId = typeof raw.planetId === 'string' && raw.planetId.trim()
+      ? raw.planetId.trim()
+      : options.legacyPlanetId;
     result.push({
       id,
       scienceId,
+      ...(migratedPlanetId ? { planetId: migratedPlanetId } : {}),
       fromLevel,
       toLevel: fromLevel + 1,
       startedAt,
@@ -691,6 +821,7 @@ export function createScienceRuntimeSnapshot(
   now: number,
   mode: RuntimeMode = 'production',
   testTimeScale?: number,
+  blockedPlanetStartedAt?: ReadonlyMap<string, number>,
 ): ScienceRuntimeSnapshot {
   return {
     science,
@@ -699,6 +830,9 @@ export function createScienceRuntimeSnapshot(
     now,
     mode,
     testTimeScale,
+    ...(blockedPlanetStartedAt && blockedPlanetStartedAt.size > 0
+      ? { blockedPlanetStartedAt: new Map(blockedPlanetStartedAt) }
+      : {}),
   };
 }
 // Storage-backed snapshots are assembled by src/application/science.ts.

@@ -39,6 +39,35 @@ export type UniverseAsteroidState = {
   nextMoveAt: number;
   nextCoordinate?: UniverseCoordinate;
   gasYield: number;
+  /** Stable hourly replenishment rate; optional for migration from older saves. */
+  gasRatePerHour?: number;
+  /** Last time the reserve was advanced; optional for migration from older saves. */
+  gasUpdatedAt?: number;
+  /** Fractional gas numerator carried between updates, modulo one hour in ms. */
+  gasRemainder?: number;
+};
+
+/** Persisted authoritative position/timing for one asteroid instance. */
+export type UniverseAsteroidRuntimeState = UniverseAsteroidState & {
+  coordinate: UniverseCoordinate;
+};
+
+/** Runtime-normalized asteroid state after gas fields have been initialized. */
+export type InitializedUniverseAsteroidRuntimeState = UniverseAsteroidRuntimeState & {
+  gasRatePerHour: number;
+  gasUpdatedAt: number;
+  gasRemainder: number;
+};
+
+/**
+ * Cursor and active instances for deterministic asteroid event replay.
+ * `nextSpawnIndex` points at the first spawn event not included in the cursor.
+ */
+export type UniverseAsteroidSimulationState = {
+  version: 1;
+  processedThroughAt: number;
+  nextSpawnIndex: number;
+  asteroids: UniverseAsteroidRuntimeState[];
 };
 
 export type UniverseTimedObjectState = {
@@ -150,7 +179,7 @@ export type UniverseAssetCatalog = {
   starArts: readonly string[];
 };
 
-export type UniverseAction = 'spy' | 'fleet';
+export type UniverseAction = 'spy' | 'fleet' | 'attack';
 
 export type UniverseActionState = {
   action: UniverseAction;

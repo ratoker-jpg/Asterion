@@ -18,6 +18,7 @@ import {
   calculatePopulationLoss,
   createBattleSummary,
   filterBattleReports,
+  normalizeBattleReport,
 } from './report.ts';
 
 class MemoryStorage {
@@ -185,6 +186,48 @@ test('saved simulation reports remain readable in battle history after migration
 
   assert.equal(migrated.reports.some((report) => report.id === simulation.id), true);
   assert.equal(migrated.savedReportIds.includes(simulation.id), true);
+});
+
+test('pirate PvE report types survive migration while unknown mission types are rejected', () => {
+  for (const missionType of ['pirate-elimination', 'pirate-raid'] as const) {
+    const source = DEMO_BATTLE_REPORTS[0]!;
+    const report = {
+      ...source,
+      id: `battle-persist-${missionType}`,
+      missionType,
+      ...(missionType === 'pirate-raid'
+        ? { attacker: { ...source.attacker, race: 'pirates' } }
+        : { defender: { ...source.defender, race: 'pirates' } }),
+    };
+    const migrated = migrateBattleHistory({ reports: [report], savedReportIds: [report.id] }, 'production');
+    const saved = migrated.reports.find((candidate) => candidate.id === report.id);
+    const pirateSide = missionType === 'pirate-raid' ? saved?.attacker : saved?.defender;
+
+    assert.equal(saved?.missionType, missionType);
+    assert.equal(pirateSide?.race, 'pirates');
+    assert.deepEqual(migrated.savedReportIds, [report.id]);
+    const wrongDirection = {
+      ...report,
+      attacker: { ...report.attacker, race: missionType === 'pirate-raid' ? 'Астеры' : 'pirates' },
+      defender: { ...report.defender, race: missionType === 'pirate-raid' ? 'pirates' : 'Астеры' },
+    };
+    assert.equal(normalizeBattleReport(wrongDirection), null);
+    const unknownPlayerRace = missionType === 'pirate-raid'
+      ? { ...report, defender: { ...report.defender, race: 'unknown-faction' } }
+      : { ...report, attacker: { ...report.attacker, race: 'unknown-faction' } };
+    assert.equal(normalizeBattleReport(unknownPlayerRace), null);
+  }
+
+  const unknownMission = { ...DEMO_BATTLE_REPORTS[0]!, missionType: 'unknown-mission' };
+  assert.equal(normalizeBattleReport(unknownMission), null);
+  assert.equal(migrateBattleHistory({ reports: [unknownMission] }, 'production').reports.length, 0);
+});
+
+test('legacy reports without a mission type remain readable as simulations', () => {
+  const { missionType: _missionType, ...legacySource } = DEMO_BATTLE_REPORTS[0]!;
+  const normalized = normalizeBattleReport(legacySource);
+
+  assert.equal(normalized?.missionType, 'simulation');
 });
 
 test('recent and saved list selectors stay independent', () => {

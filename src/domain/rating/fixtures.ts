@@ -8,43 +8,70 @@ const ALLIANCE_TAGS = ['ARC', 'NEX', 'VOID', 'AUR', 'ION', 'HEX', 'SOL', 'DRK'];
 export const CURRENT_PLAYER_ID = 'player-current';
 export const CURRENT_PLAYER_DISPLAY_NAME = 'Dendrilion';
 
-// Prototype fixture until the multiplayer rating backend computes this value from live campaign data.
-export const RATING_PROTOTYPE_RESOURCE_POINTS = 855_880;
-
 export type RatingPrototypeState = {
-  resourcePoints: number;
+  /** One immutable award record per real report ID; legacy reports are not backfilled. */
+  battleAwardsByReportId: Record<string, Record<string, number>>;
+  /** Net M/M/G sunk costs after queue cancellation/refund. */
+  unrecoveredCostsByOwnerId: Record<string, { metal: number; minerals: number; gas: number }>;
 };
 
 export function createDefaultRatingPrototypeState(): RatingPrototypeState {
-  return { resourcePoints: RATING_PROTOTYPE_RESOURCE_POINTS };
+  return { battleAwardsByReportId: {}, unrecoveredCostsByOwnerId: {} };
 }
 
 export function migrateRatingPrototypeState(value: unknown): RatingPrototypeState {
-  const source = value && typeof value === 'object' ? value as { resourcePoints?: unknown } : null;
-  const resourcePoints = source?.resourcePoints;
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const battleAwardsByReportId: RatingPrototypeState['battleAwardsByReportId'] = {};
+  const rawAwards = source.battleAwardsByReportId;
+  if (rawAwards && typeof rawAwards === 'object' && !Array.isArray(rawAwards)) {
+    for (const [reportId, rawOwnerAwards] of Object.entries(rawAwards)) {
+      if (!reportId || !rawOwnerAwards || typeof rawOwnerAwards !== 'object' || Array.isArray(rawOwnerAwards)) continue;
+      battleAwardsByReportId[reportId] = Object.fromEntries(Object.entries(rawOwnerAwards).flatMap(([ownerId, points]) => (
+        ownerId && typeof points === 'number' && Number.isFinite(points) && points >= 0
+          ? [[ownerId, Math.floor(points)]]
+          : []
+      )));
+    }
+  }
+  const unrecoveredCostsByOwnerId: RatingPrototypeState['unrecoveredCostsByOwnerId'] = {};
+  const rawCosts = source.unrecoveredCostsByOwnerId;
+  if (rawCosts && typeof rawCosts === 'object' && !Array.isArray(rawCosts)) {
+    for (const [ownerId, rawCost] of Object.entries(rawCosts)) {
+      if (!ownerId || !rawCost || typeof rawCost !== 'object' || Array.isArray(rawCost)) continue;
+      const cost = rawCost as Record<string, unknown>;
+      unrecoveredCostsByOwnerId[ownerId] = {
+        metal: typeof cost.metal === 'number' && Number.isFinite(cost.metal) ? Math.max(0, Math.floor(cost.metal)) : 0,
+        minerals: typeof cost.minerals === 'number' && Number.isFinite(cost.minerals) ? Math.max(0, Math.floor(cost.minerals)) : 0,
+        gas: typeof cost.gas === 'number' && Number.isFinite(cost.gas) ? Math.max(0, Math.floor(cost.gas)) : 0,
+      };
+    }
+  }
   return {
-    resourcePoints: typeof resourcePoints === 'number' && Number.isFinite(resourcePoints) && resourcePoints >= 0
-      ? Math.floor(resourcePoints)
-      : RATING_PROTOTYPE_RESOURCE_POINTS,
+    battleAwardsByReportId,
+    unrecoveredCostsByOwnerId,
   };
 }
 
 export function createPlayerRatingEntries(
-  currentPlayerResourcePoints = RATING_PROTOTYPE_RESOURCE_POINTS,
+  currentPlayerScore: number | { resourcePoints: number; battlePoints: number } = 0,
   mode: RuntimeMode = 'test',
+  currentPlayerId = CURRENT_PLAYER_ID,
 ): PlayerRatingEntry[] {
-  const safeCurrentResourcePoints = Math.max(0, Math.floor(Number.isFinite(currentPlayerResourcePoints) ? currentPlayerResourcePoints : RATING_PROTOTYPE_RESOURCE_POINTS));
+  const currentResourcePoints = typeof currentPlayerScore === 'number' ? currentPlayerScore : currentPlayerScore.resourcePoints;
+  const currentBattlePoints = typeof currentPlayerScore === 'number' ? 0 : currentPlayerScore.battlePoints;
+  const safeCurrentResourcePoints = Math.max(0, Math.floor(Number.isFinite(currentResourcePoints) ? currentResourcePoints : 0));
+  const safeCurrentBattlePoints = Math.max(0, Math.floor(Number.isFinite(currentBattlePoints) ? currentBattlePoints : 0));
   if (mode === 'production') {
     return [{
-      id: CURRENT_PLAYER_ID,
+      id: currentPlayerId,
       rank: 1,
       name: CURRENT_PLAYER_DISPLAY_NAME,
       race: 'aster',
       allianceTag: null,
       achievementPoints: 0,
       resourcePoints: safeCurrentResourcePoints,
-      battlePoints: 0,
-      totalPoints: safeCurrentResourcePoints,
+      battlePoints: safeCurrentBattlePoints,
+      totalPoints: safeCurrentResourcePoints + safeCurrentBattlePoints,
       isCurrentPlayer: true,
     }];
   }
@@ -56,15 +83,15 @@ export function createPlayerRatingEntries(
     const isCurrentPlayer = standing === 37;
     const resourcePoints = isCurrentPlayer ? safeCurrentResourcePoints : fixtureResourcePoints;
     return {
-      id: isCurrentPlayer ? CURRENT_PLAYER_ID : `player-${String(standing).padStart(3, '0')}`,
+      id: isCurrentPlayer ? currentPlayerId : `player-${String(standing).padStart(3, '0')}`,
       rank: standing,
       name: isCurrentPlayer ? CURRENT_PLAYER_DISPLAY_NAME : `${CALLSIGNS[index % CALLSIGNS.length]}-${String(standing).padStart(2, '0')}`,
       race: (['aster', 'cyber', 'xeno'] as const)[index % 3],
       allianceTag: standing % 7 === 0 ? null : ALLIANCE_TAGS[index % ALLIANCE_TAGS.length],
-      achievementPoints: Math.max(0, 98_000 - index * 713),
+      achievementPoints: 0,
       resourcePoints,
-      battlePoints,
-      totalPoints: resourcePoints + battlePoints,
+      battlePoints: isCurrentPlayer ? safeCurrentBattlePoints : battlePoints,
+      totalPoints: resourcePoints + (isCurrentPlayer ? safeCurrentBattlePoints : battlePoints),
       isCurrentPlayer,
     };
   });

@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createInitialSaveState } from './persistence.ts';
+import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
+import { createBot01Planets } from '../domain/espionage/fixtures.ts';
 import {
   dispatchFlight,
   reconcileFlights,
   recallFlight,
   requestSpyReport,
+  startBot01IncomingScenario,
 } from './flights.ts';
 import { activeSpyMissionForTarget, getEspionageTargets } from '../domain/espionage/runtime.ts';
 import { migrateEspionageState } from '../domain/espionage/repository.ts';
@@ -16,6 +18,13 @@ import { calculateOneWayDurationMs } from '../domain/flights/speed.ts';
 import { scaleRuntimeDuration } from '../domain/runtime/mode.ts';
 import type { SpyReportSnapshot, SpyTargetState } from '../domain/espionage/types.ts';
 import type { UniverseOwnerAlliance } from '../domain/universe/types.ts';
+
+class MemoryStorage {
+  private values = new Map<string, string>();
+  getItem(key: string) { return this.values.get(key) ?? null; }
+  setItem(key: string, value: string) { this.values.set(key, value); }
+  removeItem(key: string) { this.values.delete(key); }
+}
 
 function spyCommand(state: ReturnType<typeof createInitialSaveState>, requestId: string, targetId: string) {
   const target = getEspionageTargets(state.espionage)[targetId];
@@ -83,6 +92,130 @@ function withTargets(
   return { ...state, espionage: { ...state.espionage!, targets } };
 }
 
+function emptyTarget(state: ReturnType<typeof createInitialSaveState>, targetId: string) {
+  const target = getEspionageTargets(state.espionage)[targetId];
+  const ships = Object.fromEntries(Object.keys(target.fleet.ships).map((id) => [id, 0])) as typeof target.fleet.ships;
+  const commanders = Object.fromEntries(Object.keys(target.fleet.commanders).map((id) => [id, 0])) as typeof target.fleet.commanders;
+  const defenses = Object.fromEntries(Object.keys(target.defense.defenses).map((id) => [id, 0])) as typeof target.defense.defenses;
+  return withTargets(state, {
+    ...getEspionageTargets(state.espionage),
+    [targetId]: {
+      ...target,
+      fleet: { ...target.fleet, ships, commanders },
+      defense: { ...target.defense, defenses },
+      commanders: {},
+      hunterLevel: 0,
+      population: { total: 0, fleet: 0, defense: 0 },
+    },
+  });
+}
+
+function planetolomAttackCommand(state: ReturnType<typeof createInitialSaveState>, requestId: string, targetId: string) {
+  const target = getEspionageTargets(state.espionage)[targetId];
+  return {
+    requestId,
+    missionId: 'attack' as const,
+    originPlanetId: state.currentPlanetId,
+    destination: { kind: 'planet' as const, planetId: target.id, coordinate: target.coordinate },
+    targetRelation: 'neutral' as const,
+    targetOwnerId: target.ownerId,
+    selectedShips: { 'death-star': 1 },
+    selectedCommanders: {},
+    maxRounds: 5 as const,
+    departedAt: 1_000,
+  };
+}
+
+test('destroyed spy target returns the probe once without a new report', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const targetId = Object.keys(getEspionageTargets(initial.espionage))[1];
+  const originId = initial.currentPlanetId;
+  const origin = initial.planets[originId];
+  const prepared = emptyTarget({
+    ...initial,
+    shipUpgradeLevels: { ...initial.shipUpgradeLevels, 'death-star': 10 },
+    planets: {
+      ...initial.planets,
+      [originId]: {
+        ...origin,
+        buildings: { ...origin.buildings, hangar: 5_000 },
+        fleet: { ...origin.fleet, ships: { ...origin.fleet.ships, 'death-star': 200, 'spy-probe': 1 } },
+        spaceportUpgrades: {
+          ...origin.spaceportUpgrades,
+          shipLevels: { ...origin.spaceportUpgrades.shipLevels, 'death-star': 10 },
+        },
+      },
+    },
+  }, targetId);
+  const spy = dispatchFlight(prepared, {
+    ...spyCommand(prepared, 'spy-target-destroyed', targetId),
+  }, { now: 1_000, mode: 'test', testTimeScale: 15 });
+  assert.equal(spy.ok, true);
+  if (!spy.ok) return;
+
+  const dispatchedSpyFlight = spy.state.flights.records.find((flight) => flight.missionId === 'espionage');
+  assert.ok(dispatchedSpyFlight);
+  const delayedArrivalAt = 1_000_000;
+  const delayedSpyFlight = {
+    ...dispatchedSpyFlight,
+    oneWayDurationMs: delayedArrivalAt - dispatchedSpyFlight.departedAt,
+    arrivalAt: delayedArrivalAt,
+  };
+  let state: ReturnType<typeof createInitialSaveState> = {
+    ...spy.state,
+    flights: {
+      ...spy.state.flights,
+      records: spy.state.flights.records.map((flight) => flight.id === delayedSpyFlight.id ? delayedSpyFlight : flight),
+    },
+    espionage: {
+      ...spy.state.espionage!,
+      missions: spy.state.espionage!.missions.map((mission) => mission.flightId === delayedSpyFlight.id
+        ? { ...mission, arrivalAt: delayedArrivalAt }
+        : mission),
+    },
+  };
+  let destroyed = false;
+  for (let index = 0; index < 200 && !destroyed; index += 1) {
+    const attack = dispatchFlight(state, planetolomAttackCommand(state, `target-destroyed-attack-${index}`, targetId), {
+      now: 1_000,
+      mode: 'test',
+      testTimeScale: 15,
+    });
+    assert.equal(attack.ok, true);
+    if (!attack.ok) return;
+    const arrival = reconcileFlights(attack.state, attack.flight.arrivalAt, undefined, { mode: 'test', testTimeScale: 15 });
+    state = arrival.state;
+    destroyed = state.flights.records.some((flight) => flight.attackResolution?.planetDestroyed === true);
+  }
+  assert.equal(destroyed, true);
+  const spyFlight = state.flights.records.find((flight) => flight.missionId === 'espionage');
+  const spyMission = state.espionage!.missions.find((mission) => mission.flightId === spyFlight?.id);
+  assert.ok(spyFlight);
+  assert.ok(spyMission);
+  assert.equal(Number.isFinite(spyMission?.targetDestroyedAt), true);
+  assert.equal(spyMission?.status, 'returning');
+  assert.equal(spyFlight?.phase, 'returning');
+  assert.equal(spyFlight?.completionReason, 'spy-destroyed');
+  assert.equal(state.espionage!.reports.length, 0);
+
+  const storage = new MemoryStorage();
+  const persistence = createPersistenceFacade({ mode: 'test', storage, now: () => 10_000 });
+  assert.equal(persistence.write(state).ok, true);
+  const reloaded = persistence.read();
+  const returned = reconcileFlights(reloaded, spyFlight!.returnAt!, undefined, { mode: 'test', testTimeScale: 15 });
+  const returnedFlight = returned.state.flights.records.find((flight) => flight.id === spyFlight!.id);
+  const returnedMission = returned.state.espionage!.missions.find((mission) => mission.id === spyMission!.id);
+  assert.equal(returnedFlight?.phase, 'completed');
+  assert.equal(returnedFlight?.completionReason, 'spy-destroyed');
+  assert.equal(returnedMission?.status, 'returned');
+  assert.equal(returnedMission?.targetDestroyedAt, spyMission?.targetDestroyedAt);
+  assert.equal(returned.state.planets[originId].fleet.ships['spy-probe'], 1);
+  assert.equal(returned.state.espionage!.reports.length, 0);
+  const replay = reconcileFlights(returned.state, spyFlight!.returnAt! + 1, undefined, { mode: 'test', testTimeScale: 15 });
+  assert.equal(replay.changed, false);
+  assert.equal(replay.state.espionage!.reports.length, 0);
+});
+
 test('same target stays blocked through transit and returning, then unlocks after actual return', () => {
   let state = createInitialSaveState('test', 1_000);
   const targetId = Object.keys(state.espionage!.bot01Planets!)[1];
@@ -133,11 +266,16 @@ test('automatic arrival report can be intercepted by Hunter and destroys the pro
 
 test('full report is an immutable permitted snapshot and later reconcile keeps the probe orbiting', () => {
   let state = createInitialSaveState('test', 1_000);
+  const targetId = Object.keys(state.espionage!.bot01Planets!)[1];
+  const targets = {
+    ...getEspionageTargets(state.espionage),
+    [targetId]: createBot01Planets(1_000)[targetId]!,
+  };
   state = {
     ...state,
+    espionage: { ...state.espionage!, targets, bot01Planets: targets },
     science: { ...state.science, levels: { ...state.science.levels, 5: 10 } },
   };
-  const targetId = Object.keys(state.espionage!.bot01Planets!)[1];
   const dispatched = dispatchFlight(state, spyCommand(state, 'spy-full', targetId), { now: 1_000, mode: 'test', testTimeScale: 15 });
   assert.equal(dispatched.ok, true);
   if (!dispatched.ok) return;
@@ -162,6 +300,129 @@ test('full report is an immutable permitted snapshot and later reconcile keeps t
   assert.equal(later.changed, false);
   assert.equal(later.state.flights.records[0].phase, 'arrived');
   assert.equal(later.state.espionage!.missions[0].status, 'orbiting');
+});
+
+test('Bot 01 spy reports track commander counts during dispatch and after return casualties', () => {
+  let initial = createInitialSaveState('test', 1_000);
+  const originalTargets = getEspionageTargets(initial.espionage);
+  const commanderTemplate = Object.values(createBot01Planets(1_000)).find((candidate) => candidate.commanders.hunter && candidate.commanders.judge);
+  const botSource = Object.values(originalTargets)
+    .filter((candidate) => (candidate.fleet.ships['death-star'] ?? 0) > 0)
+    .sort((left, right) => left.id.localeCompare(right.id))[0];
+  assert.ok(commanderTemplate);
+  assert.ok(botSource);
+  const targetId = botSource.id;
+  const target = {
+    ...botSource,
+    hunterLevel: 0,
+    fleet: {
+      ...botSource.fleet,
+      commanders: { ...botSource.fleet.commanders, hunter: 1, judge: 1 },
+    },
+    commanders: {
+      hunter: { ...commanderTemplate.commanders.hunter!, count: 1 },
+      judge: { ...commanderTemplate.commanders.judge!, count: 1 },
+    },
+  };
+  const targets = {
+    ...originalTargets,
+    [targetId]: target,
+  };
+  initial = {
+    ...initial,
+    science: { ...initial.science, levels: { ...initial.science.levels, 5: 10 } },
+    espionage: { ...initial.espionage!, targets, bot01Planets: targets },
+  };
+
+  const launched = startBot01IncomingScenario(initial, { now: 1_000, mode: 'test', testTimeScale: 1 });
+  assert.equal(launched.ok, true);
+  if (!launched.ok) return;
+  const botTargetId = launched.flight.originPlanetId;
+  const botTargetInFlight = getEspionageTargets(launched.state.espionage)[botTargetId];
+  assert.ok(botTargetInFlight);
+  assert.equal(Object.values(botTargetInFlight.fleet.commanders).reduce((sum, count) => sum + count, 0), 0);
+  assert.deepEqual(botTargetInFlight.commanders, {});
+
+  const spy = dispatchFlight(launched.state, spyCommand(launched.state, 'spy-bot01-commanders-in-flight', botTargetId), {
+    now: 1_000,
+    mode: 'test',
+    testTimeScale: 15,
+  });
+  assert.equal(spy.ok, true);
+  if (!spy.ok) return;
+  const botAttackArrivalAt = spy.flight.arrivalAt + spy.flight.oneWayDurationMs * 3 + 10_000;
+  const delayedBotFlight = {
+    ...launched.flight,
+    arrivalAt: botAttackArrivalAt,
+    oneWayDurationMs: botAttackArrivalAt - launched.flight.departedAt,
+  };
+  const scheduled = {
+    ...spy.state,
+    flights: {
+      ...spy.state.flights,
+      records: spy.state.flights.records.map((flight) => flight.id === delayedBotFlight.id ? delayedBotFlight : flight),
+    },
+  };
+  const firstSpyRolls = [99, 0];
+  const spyReportInFlight = reconcileFlights(scheduled, spy.flight.arrivalAt, () => firstSpyRolls.shift() ?? 99);
+  const reportDuringFlight = spyReportInFlight.state.espionage!.reports.at(-1);
+  assert.equal(reportDuringFlight?.quality, 'full');
+  assert.deepEqual(reportDuringFlight?.commanders, {});
+
+  const recalledSpy = recallFlight(spyReportInFlight.state, spy.flight.id, { now: spy.flight.arrivalAt + 1, mode: 'test', testTimeScale: 15 });
+  assert.equal(recalledSpy.ok, true);
+  if (!recalledSpy.ok) return;
+  const returnedSpy = reconcileFlights(recalledSpy.state, recalledSpy.flight.returnAt!);
+  assert.equal(returnedSpy.state.espionage!.missions.find((mission) => mission.flightId === spy.flight.id)?.status, 'returned');
+
+  const attackArrival = reconcileFlights(returnedSpy.state, botAttackArrivalAt, undefined, { mode: 'test', testTimeScale: 1 });
+  const botAttack = attackArrival.state.flights.records.find((flight) => flight.id === delayedBotFlight.id);
+  const botBattle = botAttack?.attackResolution?.reportId
+    ? attackArrival.state.combat.reports.find((report) => report.id === botAttack.attackResolution!.reportId)
+    : undefined;
+  assert.ok(botAttack?.returnAt);
+  assert.ok(botBattle);
+  assert.ok(botBattle?.attackerForce.stacks.some((stack) => stack.entityId === 'hunter'));
+  assert.ok(botBattle?.attackerForce.stacks.some((stack) => stack.entityId === 'judge'));
+
+  const casualtyReport = {
+    ...botBattle!,
+    attackerForce: {
+      ...botBattle!.attackerForce,
+      stacks: botBattle!.attackerForce.stacks.map((stack) => stack.entityId === 'hunter'
+        ? { ...stack, countAfter: 0, destroyed: stack.countBefore }
+        : stack.entityId === 'judge'
+          ? { ...stack, countAfter: 1, destroyed: Math.max(0, stack.countBefore - 1) }
+          : stack),
+    },
+  };
+  const stateWithCasualties = {
+    ...attackArrival.state,
+    combat: {
+      ...attackArrival.state.combat,
+      reports: attackArrival.state.combat.reports.map((report) => report.id === casualtyReport.id ? casualtyReport : report),
+    },
+  };
+  const returnedBot = reconcileFlights(stateWithCasualties, botAttack!.returnAt!, undefined, { mode: 'test', testTimeScale: 1 });
+  const botTargetAfterReturn = getEspionageTargets(returnedBot.state.espionage)[botTargetId];
+  assert.equal(botTargetAfterReturn.fleet.commanders.hunter, 0);
+  assert.equal(botTargetAfterReturn.commanders.hunter, undefined);
+  assert.equal(botTargetAfterReturn.fleet.commanders.judge, 1);
+  assert.equal(botTargetAfterReturn.commanders.judge?.count, 1);
+
+  const secondSpy = dispatchFlight(returnedBot.state, spyCommand(returnedBot.state, 'spy-bot01-commanders-after-return', botTargetId), {
+    now: botAttack!.returnAt! + 1,
+    mode: 'test',
+    testTimeScale: 15,
+  });
+  assert.equal(secondSpy.ok, true);
+  if (!secondSpy.ok) return;
+  const secondSpyRolls = [99, 0];
+  const reportAfterReturn = reconcileFlights(secondSpy.state, secondSpy.flight.arrivalAt, () => secondSpyRolls.shift() ?? 99)
+    .state.espionage!.reports.at(-1);
+  assert.equal(reportAfterReturn?.quality, 'full');
+  assert.equal(reportAfterReturn?.commanders?.hunter?.count ?? 0, 0);
+  assert.equal(reportAfterReturn?.commanders?.judge?.count, 1);
 });
 
 test('spy reports use the current science level after the probe has arrived', () => {
@@ -262,23 +523,24 @@ test('seeded report rolls differ between distinct missions to the same target', 
 });
 
 test('full report carries a 0..10 level for every combat hull even when the planet state predates shipLevels', () => {
-  const initial = createInitialSaveState('test', 1_000);
-  const targetId = Object.keys(initial.espionage!.bot01Planets!)[1];
+  const base = createInitialSaveState('test', 1_000);
+  const targetId = Object.keys(base.espionage!.bot01Planets!)[1];
+  const targets = {
+    ...getEspionageTargets(base.espionage),
+    [targetId]: createBot01Planets(1_000)[targetId]!,
+  };
+  const initial = { ...base, espionage: { ...base.espionage!, targets, bot01Planets: targets } };
   // Science level 10 keeps delta at 0 so a roll of 0 resolves to a full dossier.
   const boosted = {
     ...initial,
     science: { ...initial.science, levels: { ...initial.science.levels, 5: 10 } },
   } as typeof initial;
   // Simulate an old save: the planet snapshot has no ship levels at all.
+  const agedTarget = { ...boosted.espionage!.targets![targetId]!, shipLevels: undefined };
+  const agedTargets = { ...boosted.espionage!.targets!, [targetId]: agedTarget };
   const aged = {
     ...boosted,
-    espionage: {
-      ...boosted.espionage!,
-      bot01Planets: {
-        ...boosted.espionage!.bot01Planets!,
-        [targetId]: { ...boosted.espionage!.bot01Planets![targetId], shipLevels: undefined },
-      },
-    },
+    espionage: { ...boosted.espionage!, targets: agedTargets, bot01Planets: agedTargets },
   } as typeof initial;
   const dispatched = dispatchFlight(aged, spyCommand(aged, 'spy-levels', targetId), { now: 1_000, mode: 'test', testTimeScale: 15 });
   assert.equal(dispatched.ok, true);
@@ -313,6 +575,7 @@ test('full spy report handoff preserves owner ship levels in the battle simulato
   const planet = initial.planets[planetId];
   const state = {
     ...initial,
+    shipUpgradeLevels: { ...initial.shipUpgradeLevels, scout: 4, hunter: 20 },
     planets: {
       ...initial.planets,
       [planetId]: {
@@ -349,7 +612,7 @@ test('full spy report handoff preserves owner ship levels in the battle simulato
     resources: { metal: 1, minerals: 1, gas: 1, debris: 0, developmentEnergy: 1 },
     fleet: { battleship: 23, cruiser: 4 },
     fleetLevels: { battleship: 2, cruiser: 4 },
-    commanders: { judge: { level: 1, count: 1 } },
+    commanders: { hunter: { level: 20, count: 1 }, judge: { level: 1, count: 1 } },
     defense: { 'ballistic-turret': 1 },
     population: { total: 100, fleet: 50, defense: 50 },
     firstReport: true,
@@ -359,6 +622,8 @@ test('full spy report handoff preserves owner ship levels in the battle simulato
   assert.equal(scenario.attacker.commanders.find((stack) => stack.entityId === 'hunter')?.level, 20);
   assert.equal(scenario.defender.ships.find((stack) => stack.entityId === 'battleship')?.level, 2);
   assert.equal(scenario.defender.ships.find((stack) => stack.entityId === 'cruiser')?.level, 4);
+  assert.equal(scenario.defender.commanders.find((stack) => stack.entityId === 'hunter')?.count, 1);
+  assert.equal(scenario.defender.activeCommanderId, 'hunter');
   assert.equal(scenario.defender.commanders.find((stack) => stack.entityId === 'judge')?.level, 1);
 });
 

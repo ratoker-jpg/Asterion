@@ -14,6 +14,7 @@ export type HeaderPopulationBreakdown = {
     capacity: number;
   };
   satellites?: number;
+  pendingInbound?: number;
 };
 
 export type HeaderResourceModel = {

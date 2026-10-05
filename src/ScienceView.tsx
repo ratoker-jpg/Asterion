@@ -37,6 +37,7 @@ import {
   SCIENCE_QUEUE_CAPACITY,
   SCIENCE_RUNTIME_CHANGED_EVENT,
   SCIENCE_START_REQUEST_EVENT,
+  getScienceQueuePauseAt,
   previewScience,
   reconcileScienceState,
   type ScienceId,
@@ -83,8 +84,18 @@ export function ScienceView() {
   const confirmNoRef = useRef<HTMLButtonElement>(null);
   const sciences = useMemo(() => sciencesForSection(section), [section]);
   const heading = SCIENCE_SECTIONS.find((item) => item.id === section)?.label ?? 'Науки';
-  const reconciled = reconcileScienceState(runtime.science, now);
+  const blockedPlanetStartedAt = runtime.blockedPlanetStartedAt;
+  const blockedPlanetIds = blockedPlanetStartedAt ? new Set(blockedPlanetStartedAt.keys()) : undefined;
+  const reconciled = reconcileScienceState(
+    runtime.science,
+    now,
+    blockedPlanetIds,
+    blockedPlanetStartedAt,
+  );
   const scienceState = reconciled.state;
+  const scienceQueuePauseAt = getScienceQueuePauseAt(scienceState.queue, blockedPlanetStartedAt);
+  const scienceQueueNow = scienceQueuePauseAt === undefined ? now : Math.min(now, scienceQueuePauseAt);
+  const scienceQueuePaused = scienceQueuePauseAt !== undefined && now >= scienceQueuePauseAt;
   const effectiveRuntime = { ...runtime, science: scienceState, now };
 
   useEffect(() => {
@@ -188,7 +199,7 @@ export function ScienceView() {
             <small className="utility-secondary" data-qa-science-queue-count>{scienceState.queue.length}/{SCIENCE_QUEUE_CAPACITY}</small>
           </header>
           {scienceState.queue.length > 0 ? scienceState.queue.map((task) => (
-            <ScienceQueueCard key={task.id} task={task} now={now} onCancel={() => setPendingCancellation(task)} />
+            <ScienceQueueCard key={task.id} task={task} now={scienceQueueNow} paused={scienceQueuePaused} onCancel={() => setPendingCancellation(task)} />
           )) : <p className="utility-helper">Очередь свободна.</p>}
         </section>
         <small className="science-captured-note utility-helper" title={SCIENCE_BASE_COSTS_NOTE}>Стоимость: официальные RAW 0 → 1 × 2^уровень; время: Asterion Balance v1 с учётом лаборатории.</small>
@@ -237,13 +248,19 @@ export function ScienceView() {
   );
 }
 
-function ScienceQueueCard({ task, now, onCancel }: { task: ScienceState['queue'][number]; now: number; onCancel: () => void }) {
+function ScienceQueueCard({ task, now, paused, onCancel }: { task: ScienceState['queue'][number]; now: number; paused: boolean; onCancel: () => void }) {
   const science = SCIENCE_CATALOG.find((item) => item.id === task.scienceId);
   if (!science) return null;
   const duration = task.durationMs;
   const progress = Math.min(100, Math.max(0, ((now - task.startedAt) / duration) * 100));
   return (
-    <div className="science-queue-card-v2" data-qa-science-queue-task={science.id} data-qa-science-queue-task-id={task.id}>
+    <div
+      className="science-queue-card-v2"
+      data-qa-science-queue-task={science.id}
+      data-qa-science-queue-task-id={task.id}
+      data-qa-science-paused={paused ? 'true' : 'false'}
+      data-qa-science-progress-percent={progress}
+    >
       <img src={SCIENCE_ARTS[science.artSlug]} alt="" draggable={false} />
       <div>
         <strong className="utility-section-title">{science.name}</strong>

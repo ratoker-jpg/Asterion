@@ -11,7 +11,7 @@ app.commandLine.appendSwitch('disable-gpu');
 app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
-const OUTPUT = path.join(ROOT, 'artifacts', 'universe-planet-qa');
+const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'artifacts', 'universe-planet-qa');
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 // Freeze the renderer clock so the scheduled asteroid fixture is stable and
@@ -19,6 +19,12 @@ const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const QA_UNIVERSE_NOW = Date.UTC(2026, 0, 1, 2, 0, 0);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const skipScreenshots = process.env.ASTERION_SKIP_SCREENSHOTS === '1';
+
+function hasBundledImageAsset(src, prefixes) {
+  const path = String(src).split(/[?#]/, 1)[0];
+  const filename = path.slice(path.lastIndexOf('/') + 1).toLowerCase();
+  return /\.(?:png|webp)$/i.test(filename) && prefixes.some((prefix) => filename.startsWith(prefix));
+}
 
 async function waitFor(win, expression, timeoutMs = 10_000) {
   const started = Date.now();
@@ -69,11 +75,12 @@ async function clickAt(win, selector, backdrop = false, settleAfter = true, pres
     const scrollY = window.scrollY;
     element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     const rect = element.getBoundingClientRect();
-    const x = ${backdrop} ? rect.left + 3 : rect.left + rect.width / 2;
-    const y = ${backdrop} ? rect.top + 3 : rect.top + rect.height / 2;
-    const hit = document.elementFromPoint(x, y);
-    if (${backdrop} ? hit !== element : !element.contains(hit)) throw new Error('Click target occluded: ' + ${JSON.stringify(selector)});
-    return { x, y, scrollY };
+    const points = ${backdrop}
+      ? [{ x: rect.left + 3, y: rect.top + 3 }]
+      : [[.5, .5], [.25, .25], [.75, .25], [.25, .75], [.75, .75]].map(([px, py]) => ({ x: rect.left + rect.width * px, y: rect.top + rect.height * py }));
+    const point = points.find(({ x, y }) => { const hit = document.elementFromPoint(x, y); return ${backdrop} ? hit === element : element.contains(hit); });
+    if (!point) throw new Error('Click target occluded: ' + ${JSON.stringify(selector)});
+    return { ...point, scrollY };
   })()`);
   if (!point) throw new Error(`Click target missing: ${selector}`);
   const { x, y } = point;
@@ -165,6 +172,29 @@ async function mapSnapshot(win) {
       legend: Array.from(document.querySelectorAll('.universe-map-legend span')).map((node) => ({ text: node.textContent?.trim() || '', className: node.className })),
       ownerRelations: Array.from(document.querySelectorAll('[data-qa-universe-kind="player"], [data-qa-universe-kind="npc"]')).map((node) => ({ id: node.getAttribute('data-qa-universe-object'), relation: node.getAttribute('data-qa-universe-relation') || '', className: node.className })),
       mapCaptions: Array.from(document.querySelectorAll('[data-qa-map-caption]')).map((node) => node.textContent?.trim() || ''),
+      debrisMarkers: Array.from(document.querySelectorAll('.universe-debris-marker')).map((marker) => {
+        const button = marker.closest('[data-qa-universe-object]');
+        return {
+          id: button?.getAttribute('data-qa-universe-object') || '',
+          kind: button?.getAttribute('data-qa-universe-kind') || '',
+          ariaLabel: button?.getAttribute('aria-label') || '',
+          amount: (marker.querySelector('[role="tooltip"]')?.textContent || '').replace(/\\D/g, ''),
+          tooltip: marker.querySelector('[role="tooltip"]')?.textContent?.trim() || '',
+        };
+      }),
+      capturedDebrisMarkers: Array.from(document.querySelectorAll('.universe-asteroid-debris-marker')).map((marker) => {
+        const button = marker.closest('[data-qa-universe-object]');
+        const tooltip = marker.querySelector('[role="tooltip"]');
+        return {
+          id: button?.getAttribute('data-qa-universe-object') || '',
+          spawnIndex: button?.getAttribute('data-qa-universe-asteroid-spawn-index') || '',
+          coordinatePosition: button?.getAttribute('data-qa-universe-asteroid-position') || '',
+          ariaLabel: button?.getAttribute('aria-label') || '',
+          describedByText: button?.querySelector('[role="tooltip"]')?.textContent?.trim() || tooltip?.textContent?.trim() || '',
+          tooltip: tooltip?.textContent?.trim() || '',
+          html: button?.outerHTML || '',
+        };
+      }),
       coordinateLineCount: document.querySelectorAll('.system-planet small, .empty-slot small').length,
       animated,
       rects: rects(),
@@ -178,6 +208,127 @@ async function mapSnapshot(win) {
       stageRect: (() => { const rect = document.querySelector('.stage')?.getBoundingClientRect(); return rect ? { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) } : null; })(),
     };
   })()`);
+}
+
+async function seedOrbitalDebrisMarkers(win) {
+  const dead = await win.webContents.executeJavaScript(`(() => {
+    const empty = document.querySelector('[data-qa-universe-kind="empty"]');
+    const coordinate = empty?.getAttribute('aria-label')?.match(/\\[(\\d+):(\\d+):(\\d+)\\]/);
+    return coordinate ? {
+      galaxy: Number(coordinate[1]),
+      system: Number(coordinate[2]),
+      position: Number(coordinate[3]),
+    } : null;
+  })()`);
+  if (!dead) throw new Error('Could not find a stable empty coordinate for the dead debris fixture.');
+
+  let asteroid = null;
+  for (let system = 1; system <= 40 && !asteroid; system += 1) {
+    if (system !== 1) await selectSystem(win, system);
+    asteroid = await win.webContents.executeJavaScript(`(() => {
+      const candidates = [...document.querySelectorAll('[data-qa-universe-kind="asteroid"]')];
+      for (const node of candidates) {
+        const next = node.getAttribute('data-qa-universe-asteroid-next-coordinate') || '';
+        const match = next.match(/\\[(\\d+):(\\d+):(\\d+)\\]/);
+        if (!match) continue;
+        const nextMoveAt = Number(node.getAttribute('data-qa-universe-asteroid-next-move'));
+        const spawnIndex = node.getAttribute('data-qa-universe-asteroid-spawn-index') || '';
+        if (spawnIndex && Number.isFinite(nextMoveAt)) return {
+          id: node.getAttribute('data-qa-universe-object') || '',
+          spawnIndex,
+          system: Number(document.querySelector('[data-qa-universe]')?.getAttribute('data-qa-universe-system')),
+          nextSystem: Number(match[2]),
+          fromPosition: Number(node.getAttribute('data-qa-universe-asteroid-position')),
+          toPosition: Number(match[3]),
+          nextMoveAt,
+        };
+      }
+      return null;
+    })()`);
+  }
+  if (!asteroid) throw new Error('Could not find an asteroid with a scheduled next position.');
+
+  const fixtures = await win.webContents.executeJavaScript(`(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+    const espionage = save.espionage || {};
+    const targets = espionage.targets || espionage.bot01Planets || {};
+    const live = Object.values(targets).find((target) => target?.coordinate && target?.resources);
+    if (!live) return null;
+    live.resources.debris = 23456;
+    const deadCoordinate = ${JSON.stringify(dead)};
+    const deadTargetId = 'qa-dead-orbit-debris';
+    espionage.orbitalDebris = espionage.orbitalDebris || {};
+    espionage.orbitalDebris[deadTargetId] = {
+      id: deadTargetId,
+      targetPlanetId: deadTargetId,
+      targetPlanetName: 'QA destroyed target',
+      targetOwnerId: 'qa-owner',
+      targetCoordinate: deadCoordinate,
+      debris: 34567,
+      createdAt: ${QA_UNIVERSE_NOW},
+    };
+    save.espionage = espionage;
+    save.asteroidDebrisBySpawnIndex = save.asteroidDebrisBySpawnIndex || {};
+    save.asteroidDebrisBySpawnIndex[${JSON.stringify(asteroid.spawnIndex)}] = 876543;
+    localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    return {
+      liveTargetId: live.id,
+      liveCoordinate: live.coordinate,
+      deadTargetId,
+      deadCoordinate,
+    };
+  })()`);
+  return { ...fixtures, asteroid };
+}
+
+async function debrisMarkerSnapshot(win, selector) {
+  return win.webContents.executeJavaScript(`(() => {
+    const button = document.querySelector(${JSON.stringify(selector)});
+    const marker = button?.querySelector('.universe-debris-marker');
+    const tooltip = marker?.querySelector('[role="tooltip"]');
+    const rect = button?.getBoundingClientRect();
+    return {
+      tagName: button?.tagName || '',
+      tabIndex: button?.tabIndex ?? -1,
+      ariaLabel: button?.getAttribute('aria-label') || '',
+      describedBy: button?.getAttribute('aria-describedby') || '',
+      amount: (tooltip?.textContent || '').replace(/\\D/g, ''),
+      tooltipId: tooltip?.id || '',
+      tooltipText: tooltip?.textContent?.trim() || '',
+      tooltipVisibility: tooltip ? getComputedStyle(tooltip).visibility : '',
+      rect: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null,
+      markerRect: marker?.getBoundingClientRect() ? (() => { const markerRect=marker.getBoundingClientRect(); return { x: markerRect.x, y: markerRect.y, width: markerRect.width, height: markerRect.height }; })() : null,
+    };
+  })()`);
+}
+
+async function verifyDebrisMarkerInteraction(win, selector, expectedAmount) {
+  const initial = await debrisMarkerSnapshot(win, selector);
+  if (initial.tagName !== 'BUTTON' || initial.tabIndex < 0 || !initial.ariaLabel.replace(/\D/g, '').includes(expectedAmount)
+    || !initial.describedBy.split(/\s+/).includes(initial.tooltipId) || !initial.tooltipText.replace(/\D/g, '').includes(expectedAmount)
+    || !initial.rect || !initial.markerRect
+    || initial.markerRect.x < initial.rect.x || initial.markerRect.y < initial.rect.y
+    || initial.markerRect.x + initial.markerRect.width > initial.rect.x + initial.rect.width
+    || initial.markerRect.y + initial.markerRect.height > initial.rect.y + initial.rect.height) {
+    throw new Error(`Debris marker accessible-name contract failed: ${JSON.stringify(initial)}`);
+  }
+
+  await win.webContents.debugger.sendCommand('Emulation.setFocusEmulationEnabled', { enabled: true });
+  await win.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(selector)})?.focus()`);
+  const focusState = await win.webContents.executeJavaScript(`(() => { const button=document.querySelector(${JSON.stringify(selector)}); const tooltip=button?.querySelector('[role="tooltip"]'); return { active: document.activeElement === button, focused: button?.matches(':focus') ?? false, visibility: tooltip ? getComputedStyle(tooltip).visibility : '', selectorMatch: button?.matches('.workspace--universe .universe-view-v3 .empty-slot:focus') ?? false }; })()`);
+  if (!focusState.active || focusState.visibility !== 'visible') throw new Error(`Debris tooltip focus state failed: ${JSON.stringify(focusState)}`);
+  const focused = await debrisMarkerSnapshot(win, selector);
+  if (focused.tooltipVisibility !== 'visible') throw new Error(`Debris tooltip did not appear on focus: ${JSON.stringify(focused)}`);
+
+  await win.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(selector)})?.blur()`);
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 0, y: 0 });
+  await waitFor(win, `(() => { const tooltip=document.querySelector(${JSON.stringify(selector)})?.querySelector('[role="tooltip"]'); return tooltip && getComputedStyle(tooltip).visibility === 'hidden'; })()`);
+  const { x, y, width, height } = initial.rect;
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', x: x + width / 2, y: y + height / 2 });
+  await waitFor(win, `(() => { const tooltip=document.querySelector(${JSON.stringify(selector)})?.querySelector('[role="tooltip"]'); return tooltip && getComputedStyle(tooltip).visibility === 'visible'; })()`);
+  const hovered = await debrisMarkerSnapshot(win, selector);
+  if (hovered.tooltipVisibility !== 'visible') throw new Error(`Debris tooltip did not appear on hover: ${JSON.stringify(hovered)}`);
+  return { focused: focused.tooltipVisibility, hovered: hovered.tooltipVisibility, amount: initial.amount };
 }
 
 async function stableObjectRects(win, before) {
@@ -208,11 +359,18 @@ async function inspectorSnapshot(win) {
       disabled: Boolean(node.disabled),
       title: node.getAttribute('title') || '',
     }));
+    const specialImage = document.querySelector('[data-qa-universe-special] img');
     return {
       kind: inspector?.getAttribute('data-qa-inspector-kind') || '',
       text: inspector?.textContent?.replace(/\\s+/g, ' ').trim() || '',
       ownerName: document.querySelector('[data-qa-universe-owner-name]')?.textContent?.trim() || '',
       avatar: document.querySelector('[data-qa-universe-avatar] img')?.getAttribute('src') || '',
+      specialArt: {
+        src: specialImage?.getAttribute('src') || '',
+        loaded: Boolean(specialImage?.complete && specialImage.naturalWidth > 0),
+        width: specialImage?.naturalWidth || 0,
+        height: specialImage?.naturalHeight || 0,
+      },
       points,
       planetRows: document.querySelectorAll('[data-qa-universe-planet-row]').length,
       ownerId: document.querySelector('[data-qa-universe-owner]')?.getAttribute('data-qa-universe-owner'),
@@ -295,11 +453,12 @@ async function runViewport(width, height) {
   });
 
   try {
-    const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-    await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: '?mode=test' });
-    await loaded;
-    await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+    await win.loadURL('about:blank');
     win.webContents.debugger.attach('1.3');
+    await win.webContents.debugger.sendCommand('Page.enable');
+    await win.webContents.debugger.sendCommand('Page.addScriptToEvaluateOnNewDocument', {
+      source: `Date.now = () => ${QA_UNIVERSE_NOW};`,
+    });
     await win.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', {
       width,
       height,
@@ -308,15 +467,41 @@ async function runViewport(width, height) {
       screenWidth: width,
       screenHeight: height,
     });
+    const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+    await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: '?mode=test' });
+    await loaded;
+    await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
     await settle(win);
     await waitFor(win, `localStorage.getItem(${JSON.stringify(SAVE_KEY)})`);
-    await win.webContents.executeJavaScript(`localStorage.removeItem(${JSON.stringify(SAVE_KEY)}); localStorage.removeItem('asterion.preferences.v2');`);
+    // Each viewport has a fresh Electron partition, and the pre-document
+    // clock injection ensures persistence creates its asteroid baseline at
+    // the same deterministic epoch used by the movement assertions.
+    const asteroidBaseline = await win.webContents.executeJavaScript(`(() => {
+      const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+      const simulation = save.asteroidSimulation || {};
+      return {
+        processedThroughAt: simulation.processedThroughAt,
+        nextSpawnIndex: simulation.nextSpawnIndex,
+        spawnIndices: (simulation.asteroids || []).map((asteroid) => asteroid.spawnIndex),
+      };
+    })()`);
+    if (asteroidBaseline.processedThroughAt !== QA_UNIVERSE_NOW || asteroidBaseline.nextSpawnIndex !== 3
+      || JSON.stringify(asteroidBaseline.spawnIndices) !== '[0,1,2]') {
+      throw new Error(`${label}: app did not persist the fixed-clock asteroid baseline ${JSON.stringify(asteroidBaseline)}`);
+    }
+    await win.webContents.executeJavaScript(`void (Date.now = () => ${QA_UNIVERSE_NOW});`);
+    await clickPrimary(win, 'universe');
+    const debrisFixtures = await seedOrbitalDebrisMarkers(win);
+    if (!debrisFixtures) throw new Error(`${label}: could not seed live debris target`);
     await reload(win);
     await win.webContents.executeJavaScript(`void (Date.now = () => ${QA_UNIVERSE_NOW});`);
     await clickPrimary(win, 'universe');
 
     const map = await mapSnapshot(win);
     if (map.system !== '1' || map.systemOptions !== 40 || map.systemOptionTexts.some((text, index) => text !== String(index + 1).padStart(2, '0')) || map.positionCount !== 24 || map.viewport.innerWidth !== width || map.viewport.innerHeight !== height) throw new Error(`${label}: map cardinality/viewport failed ${JSON.stringify(map)}`);
+    if (!map.debrisMarkers.some((marker) => marker.kind === 'empty' && marker.amount.replace(/\D/g, '') === '34567')) {
+      throw new Error(`${label}: map snapshot did not include the dead-target debris marker ${JSON.stringify(map.debrisMarkers)}`);
+    }
     if (!map.objectKinds.includes('empty') || !map.objectKinds.includes('player') || map.asteroidCount < 3) {
       throw new Error(`${label}: object fixture coverage failed ${JSON.stringify(map)}`);
     }
@@ -343,6 +528,23 @@ async function runViewport(width, height) {
     if (!asteroidsHoldPosition) throw new Error(`${label}: asteroid changed its numbered position during a dwell window`);
     await capture(win, directory, 'static-map');
 
+    const deadCoordinateLabel = `[${debrisFixtures.deadCoordinate.galaxy}:${debrisFixtures.deadCoordinate.system}:${debrisFixtures.deadCoordinate.position}]`;
+    const deadSelector = `[data-qa-universe-kind="empty"][aria-label*="${deadCoordinateLabel}"]`;
+    const deadMarker = await debrisMarkerSnapshot(win, deadSelector);
+    if (deadMarker.amount !== '34567' || deadMarker.tagName !== 'BUTTON' || !deadMarker.ariaLabel.replace(/\D/g, '').includes(deadMarker.amount)) {
+      throw new Error(`${label}: dead-target debris was not rendered on its empty coordinate: ${JSON.stringify({ deadCoordinate: debrisFixtures.deadCoordinate, deadMarker })}`);
+    }
+    const deadDebrisInteraction = await verifyDebrisMarkerInteraction(win, deadSelector, deadMarker.amount);
+
+    await selectSystem(win, debrisFixtures.liveCoordinate.system);
+    const liveSelector = `[data-qa-universe-object="${debrisFixtures.liveTargetId}"]`;
+    const liveMarker = await debrisMarkerSnapshot(win, liveSelector);
+    if (liveMarker.amount !== '23456' || !liveMarker.ariaLabel.replace(/\D/g, '').includes(liveMarker.amount)) {
+      throw new Error(`${label}: live-target debris was not rendered on its occupied coordinate: ${JSON.stringify({ liveTargetId: debrisFixtures.liveTargetId, liveCoordinate: debrisFixtures.liveCoordinate, liveMarker })}`);
+    }
+    const liveDebrisInteraction = await verifyDebrisMarkerInteraction(win, liveSelector, liveMarker.amount);
+    await selectSystem(win, 1);
+
     await clickObject(win, '[data-qa-universe-object="player-planet-helion-01"]');
     const player = await inspectorSnapshot(win);
     checkCopy(player);
@@ -351,9 +553,11 @@ async function runViewport(width, height) {
     assertRenderedFactionGeneralPortraits(playerPortraits, ['aegis'], `${label} player universe`);
     const playerSpyAction = player.actions.find((action) => action.action === 'spy');
     const playerFleetAction = player.actions.find((action) => action.action === 'fleet');
-    if (player.kind !== 'player' || player.ownerName !== 'Dendrilion' || !player.avatar.includes('aegis_general') || player.points.length !== 4 || player.planetRows !== 1 || player.actions.length !== 2
+    const playerAttackAction = player.actions.find((action) => action.action === 'attack');
+    if (player.kind !== 'player' || player.ownerName !== 'Dendrilion' || !player.avatar.includes('aegis_general') || player.points.length !== 4 || player.planetRows !== 1 || player.actions.length !== 3
       || !playerSpyAction || !playerSpyAction.disabled || playerSpyAction.status !== 'disabled' || !playerSpyAction.title.includes('Это ваша планета')
-      || !playerFleetAction || playerFleetAction.disabled || playerFleetAction.status !== 'supported' || !playerFleetAction.title.includes('Своя планета принимает транспортировку')) {
+      || !playerFleetAction || playerFleetAction.disabled || playerFleetAction.status !== 'supported' || !playerFleetAction.title.includes('Своя планета принимает транспортировку')
+      || !playerAttackAction || !playerAttackAction.disabled || playerAttackAction.status !== 'disabled' || !playerAttackAction.title.includes('Атака запрещена против своей планеты')) {
       throw new Error(`${label}: player inspector contract failed ${JSON.stringify(player)}`);
     }
     if (!player.text.includes('Астеры') || !player.text.includes('Содружество Гелион') || !player.text.includes('[HLN]')) throw new Error(`${label}: player profile identity contract failed ${JSON.stringify(player)}`);
@@ -381,9 +585,11 @@ async function runViewport(width, height) {
     assertRenderedFactionGeneralPortraits(npcPortraits, ['veyra'], `${label} NPC universe`);
     const npcSpyActions = npc.actions.filter((action) => action.action === 'spy');
     const npcFleetActions = npc.actions.filter((action) => action.action === 'fleet');
-    if (npc.kind !== 'npc' || npc.ownerName !== 'Бот 01' || !npc.ownerId || npc.planetRows !== 7 || npc.actions.length !== 14
+    const npcAttackActions = npc.actions.filter((action) => action.action === 'attack');
+    if (npc.kind !== 'npc' || npc.ownerName !== 'Бот 01' || !npc.ownerId || npc.planetRows !== 7 || npc.actions.length !== 21
       || npcSpyActions.length !== 7 || npcSpyActions.some((action) => action.disabled || action.status !== 'supported' || !action.title.includes('доступна для шпионажа'))
-      || npcFleetActions.length !== 7 || npcFleetActions.some((action) => !action.disabled || action.status !== 'disabled' || !action.title.includes('только на свою или явную союзную планету'))) {
+      || npcFleetActions.length !== 7 || npcFleetActions.some((action) => !action.disabled || action.status !== 'disabled' || !action.title.includes('только на свою или явную союзную планету'))
+      || npcAttackActions.length !== 7 || npcAttackActions.some((action) => action.disabled || action.status !== 'supported' || !action.title.includes('доступна для атаки'))) {
       throw new Error(`${label}: NPC action/list contract failed ${JSON.stringify(npc)}`);
     }
     const systems = npc.rows.map((row) => Number(row.coordinate.slice(1, -1).split(':')[1]));
@@ -392,13 +598,31 @@ async function runViewport(width, height) {
     await dismissInspector(win);
     await checkRestoredFocus(win, npcId);
 
+    await clickObject(win, npcSelector);
+    await clickAt(win, '[data-qa-universe-action="attack"]');
+    await waitFor(win, `document.querySelector('[data-qa-attack-prep]') && document.querySelector('[data-qa-target-relation]')?.getAttribute('data-qa-target-relation') === 'neutral'`);
+    const attackPrep = await win.webContents.executeJavaScript(`(() => ({
+      mission: document.querySelector('#fleet-mission')?.value || '',
+      rounds: Array.from(document.querySelectorAll('[data-qa-attack-rounds] option')).map((option) => option.value),
+      roster: Array.from(document.querySelectorAll('[data-qa-fleet-ship]')).map((row) => row.getAttribute('data-qa-fleet-ship')),
+      relation: document.querySelector('[data-qa-target-relation]')?.getAttribute('data-qa-target-relation') || '',
+    }))()`);
+    const expectedAttackRoster = ['spy-probe', 'colonizer', 'recycler', 'scout'];
+    if (attackPrep.mission !== 'attack' || JSON.stringify(attackPrep.rounds) !== JSON.stringify(['5', '8', '12']) || attackPrep.relation !== 'neutral' || JSON.stringify(attackPrep.roster) !== JSON.stringify(expectedAttackRoster)) {
+      throw new Error(`${label}: attack preparation contract failed ${JSON.stringify(attackPrep)}`);
+    }
+    await clickPrimary(win, 'universe');
+    await selectSystem(win, npcSystem);
+
     const allySelector = '[data-qa-universe-object="test-mode-ally-ira-vel-v1"]';
     await findObject(win, allySelector);
     await clickObject(win, allySelector);
     const ally = await inspectorSnapshot(win);
     const allyFleetAction = ally.actions.find((action) => action.action === 'fleet');
+    const allyAttackAction = ally.actions.find((action) => action.action === 'attack');
     if (ally.kind !== 'npc' || ally.ownerName !== 'Ира Вель' || ally.ownerId !== 'member-ira-vel' || ally.planetRows !== 1
-      || !allyFleetAction || allyFleetAction.disabled || allyFleetAction.status !== 'supported') {
+      || !allyFleetAction || allyFleetAction.disabled || allyFleetAction.status !== 'supported'
+      || !allyAttackAction || !allyAttackAction.disabled || allyAttackAction.status !== 'disabled' || !allyAttackAction.title.includes('союзной планеты')) {
       throw new Error(`${label}: explicit ally transport action contract failed ${JSON.stringify(ally)}`);
     }
     await clickAt(win, '[data-qa-universe-action="fleet"]');
@@ -416,9 +640,11 @@ async function runViewport(width, height) {
       const reopened = await inspectorSnapshot(win);
       const reopenedSpyActions = reopened.actions.filter((action) => action.action === 'spy');
       const reopenedFleetActions = reopened.actions.filter((action) => action.action === 'fleet');
-      if (reopened.ownerId !== npc.ownerId || reopened.ownerName !== 'Бот 01' || JSON.stringify(reopened.rows) !== JSON.stringify(npc.rows) || reopened.actions.length !== 14
+      const reopenedAttackActions = reopened.actions.filter((action) => action.action === 'attack');
+      if (reopened.ownerId !== npc.ownerId || reopened.ownerName !== 'Бот 01' || JSON.stringify(reopened.rows) !== JSON.stringify(npc.rows) || reopened.actions.length !== 21
         || reopenedSpyActions.length !== 7 || reopenedSpyActions.some((action) => action.disabled || action.status !== 'supported' || !action.title.includes('доступна для шпионажа'))
-        || reopenedFleetActions.length !== 7 || reopenedFleetActions.some((action) => !action.disabled || action.status !== 'disabled' || !action.title.includes('только на свою или явную союзную планету'))) {
+        || reopenedFleetActions.length !== 7 || reopenedFleetActions.some((action) => !action.disabled || action.status !== 'disabled' || !action.title.includes('только на свою или явную союзную планету'))
+        || reopenedAttackActions.length !== 7 || reopenedAttackActions.some((action) => action.disabled || action.status !== 'supported' || !action.title.includes('доступна для атаки'))) {
         throw new Error(`${label}: visit did not reopen the same seven holdings ${JSON.stringify(reopened)}`);
       }
       const selectedCoordinate = await win.webContents.executeJavaScript(`document.querySelector('.universe-inspector-header span')?.textContent`);
@@ -457,7 +683,12 @@ async function runViewport(width, height) {
     const freeAsteroid = await inspectorSnapshot(win);
     checkCopy(freeAsteroid);
     await checkModal(win);
-    if (freeAsteroid.kind !== 'asteroid' || freeAsteroid.underlyingKind !== 'empty' || !freeAsteroid.text.includes('СКРЫТ ДО ПЕРЕРАБОТКИ') || !freeAsteroid.text.includes('Следующее перемещение через') || !freeAsteroid.specialActions.some((action) => action.action === 'colonize' && !action.disabled) || !freeAsteroid.specialActions.some((action) => action.action === 'asteroid-recycler' && action.disabled)) throw new Error(`${label}: free asteroid inspector contract failed ${JSON.stringify(freeAsteroid)}`);
+    if (freeAsteroid.kind !== 'asteroid' || freeAsteroid.underlyingKind !== 'empty' || !freeAsteroid.text.includes('СКРЫТ ДО ПЕРЕРАБОТКИ') || !freeAsteroid.text.includes('Следующее перемещение через')
+      || !freeAsteroid.specialActions.some((action) => action.action === 'colonize' && !action.disabled)
+      || freeAsteroid.specialActions.filter((action) => action.action === 'asteroid-recycler' && !action.disabled).length !== 1
+      || freeAsteroid.specialActions.some((action) => action.action === 'gas-extraction')) {
+      throw new Error(`${label}: free asteroid inspector must show one combined recycler action ${JSON.stringify(freeAsteroid)}`);
+    }
     await capture(win, directory, 'asteroid-inspector');
     await clickAt(win, '[data-qa-universe-special-action="colonize"]');
     await waitFor(win, `document.querySelector('.fleet-workspace-v1[data-qa-flight-launch-context]')`);
@@ -566,15 +797,74 @@ async function runViewport(width, height) {
     const occupiedAsteroid = await inspectorSnapshot(win);
     checkCopy(occupiedAsteroid);
     await checkModal(win);
-    if (occupiedAsteroid.kind !== 'asteroid' || occupiedAsteroid.underlyingKind === 'empty' || occupiedAsteroid.specialActions.some((action) => action.action === 'colonize') || !occupiedAsteroid.specialActions.some((action) => action.action === 'asteroid-recycler' && action.disabled)) throw new Error(`${label}: occupied asteroid inspector contract failed ${JSON.stringify(occupiedAsteroid)}`);
+    if (occupiedAsteroid.kind !== 'asteroid' || occupiedAsteroid.underlyingKind === 'empty' || occupiedAsteroid.specialActions.some((action) => action.action === 'colonize')
+      || occupiedAsteroid.specialActions.filter((action) => action.action === 'asteroid-recycler' && !action.disabled).length !== 1
+      || occupiedAsteroid.specialActions.some((action) => action.action === 'gas-extraction')) {
+      throw new Error(`${label}: occupied asteroid inspector must show one combined recycler action ${JSON.stringify(occupiedAsteroid)}`);
+    }
     await dismissInspector(win);
+
+    await selectSystem(win, debrisFixtures.asteroid.system);
+    const capturedSelector = `[data-qa-universe-object="${debrisFixtures.asteroid.id}"]`;
+    const capturedBefore = await win.webContents.executeJavaScript(`(() => {
+      const node = document.querySelector(${JSON.stringify(capturedSelector)});
+      const marker = node?.querySelector('.universe-asteroid-debris-marker');
+      const tooltip = marker?.querySelector('[role="tooltip"]');
+      return { present: Boolean(node && marker), spawnIndex: node?.getAttribute('data-qa-universe-asteroid-spawn-index') || '',
+        position: Number(node?.getAttribute('data-qa-universe-asteroid-position')), ariaLabel: node?.getAttribute('aria-label') || '',
+        title: node?.getAttribute('title') || '', describedBy: node?.getAttribute('aria-describedby') || '',
+        tooltipId: tooltip?.id || '', tooltip: tooltip?.textContent?.trim() || '', html: node?.outerHTML || '' };
+    })()`);
+    if (!capturedBefore.present || capturedBefore.spawnIndex !== debrisFixtures.asteroid.spawnIndex || capturedBefore.position !== debrisFixtures.asteroid.fromPosition
+      || capturedBefore.ariaLabel.includes('876543') || capturedBefore.title.includes('876543') || capturedBefore.tooltip !== 'На астероиде есть обломки'
+      || !capturedBefore.describedBy.split(/\s+/).includes(capturedBefore.tooltipId) || capturedBefore.html.includes('876543')
+      || !capturedBefore.html.includes('universe-asteroid-debris-marker') || capturedBefore.html.includes('class="universe-debris-marker"')) {
+      throw new Error(`${label}: captured debris must render as a separate nonnumeric marker on its asteroid ${JSON.stringify({ capturedBefore, fixture: debrisFixtures.asteroid })}`);
+    }
+    await clickObject(win, capturedSelector);
+    const capturedInspector = await inspectorSnapshot(win);
+    const capturedInspectorRow = await win.webContents.executeJavaScript(`(() => { const row = document.querySelector('[data-qa-universe-inspector] [data-qa-universe-asteroid-debris="present"]'); return { label: row?.querySelector('dt')?.textContent?.trim() || '', value: row?.querySelector('dd')?.textContent?.trim() || '' }; })()`);
+    if (capturedInspector.kind !== 'asteroid' || capturedInspectorRow.label !== 'Обломки на астероиде' || capturedInspectorRow.value !== 'есть' || capturedInspector.text.includes('876543')) {
+      throw new Error(`${label}: asteroid card must expose only the binary presence row ${JSON.stringify({ capturedInspector, capturedInspectorRow })}`);
+    }
+    await dismissInspector(win);
+    let absentAsteroid = await win.webContents.executeJavaScript(`(() => [...document.querySelectorAll('[data-qa-universe-kind="asteroid"]')].find((node) => node.getAttribute('data-qa-universe-object') !== ${JSON.stringify(debrisFixtures.asteroid.id)})?.getAttribute('data-qa-universe-object') || '')()`);
+    if (!absentAsteroid) {
+      await selectSystem(win, 1);
+      absentAsteroid = await win.webContents.executeJavaScript(`(() => [...document.querySelectorAll('[data-qa-universe-kind="asteroid"]')].find((node) => node.getAttribute('data-qa-universe-object') !== ${JSON.stringify(debrisFixtures.asteroid.id)})?.getAttribute('data-qa-universe-object') || '')()`);
+    }
+    if (!absentAsteroid) throw new Error(`${label}: no unladen asteroid was available for the binary inspector check`);
+    await clickObject(win, `[data-qa-universe-object="${absentAsteroid}"]`);
+    const emptyCargoInspector = await inspectorSnapshot(win);
+    const emptyCargoRow = await win.webContents.executeJavaScript(`(() => { const row = document.querySelector('[data-qa-universe-inspector] [data-qa-universe-asteroid-debris="absent"]'); return { label: row?.querySelector('dt')?.textContent?.trim() || '', value: row?.querySelector('dd')?.textContent?.trim() || '' }; })()`);
+    if (emptyCargoInspector.kind !== 'asteroid' || emptyCargoRow.label !== 'Обломки на астероиде' || emptyCargoRow.value !== 'нет') throw new Error(`${label}: empty asteroid card must report no debris ${JSON.stringify({ emptyCargoInspector, emptyCargoRow })}`);
+
+    await win.webContents.executeJavaScript(`void (Date.now = () => ${debrisFixtures.asteroid.nextMoveAt + 1});`);
+    await sleep(1_200);
+    await selectSystem(win, debrisFixtures.asteroid.nextSystem);
+    await waitFor(win, `(() => { const node = document.querySelector(${JSON.stringify(capturedSelector)}); return Number(node?.getAttribute('data-qa-universe-asteroid-position')) === ${debrisFixtures.asteroid.toPosition} && Boolean(node?.querySelector('.universe-asteroid-debris-marker')); })()`);
+    const capturedAfter = await win.webContents.executeJavaScript(`(() => {
+      const node = document.querySelector(${JSON.stringify(capturedSelector)});
+      const marker = node?.querySelector('.universe-asteroid-debris-marker');
+      const tooltip = marker?.querySelector('[role="tooltip"]');
+      return { position: Number(node?.getAttribute('data-qa-universe-asteroid-position')), tooltip: tooltip?.textContent?.trim() || '',
+        ariaLabel: node?.getAttribute('aria-label') || '', title: node?.getAttribute('title') || '', html: node?.outerHTML || '' };
+    })()`);
+    if (capturedAfter.position !== debrisFixtures.asteroid.toPosition || capturedAfter.tooltip !== 'На астероиде есть обломки'
+      || capturedAfter.ariaLabel.includes('876543') || capturedAfter.title.includes('876543') || capturedAfter.html.includes('876543')) {
+      throw new Error(`${label}: captured debris marker did not follow the asteroid with presence-only labels ${JSON.stringify({ capturedAfter, fixture: debrisFixtures.asteroid })}`);
+    }
+    await selectSystem(win, debrisFixtures.deadCoordinate.system);
+    const stationaryDebrisAfter = await debrisMarkerSnapshot(win, `[data-qa-universe-kind="empty"][aria-label*="[${debrisFixtures.deadCoordinate.galaxy}:${debrisFixtures.deadCoordinate.system}:${debrisFixtures.deadCoordinate.position}]"]`);
+    if (stationaryDebrisAfter.amount !== '34567') throw new Error(`${label}: free orbital debris did not remain at its fixed coordinate ${JSON.stringify(stationaryDebrisAfter)}`);
 
     const pirateSystem = await findObject(win, '[data-qa-universe-kind="pirate"]');
     await clickObject(win, '[data-qa-universe-kind="pirate"]');
     const pirate = await inspectorSnapshot(win);
     checkCopy(pirate);
     await checkModal(win);
-    if (pirate.kind !== 'pirate' || !pirate.text.includes('Пиратский объект') || !pirate.text.includes('исчезнет через') || !pirate.specialActionDisabled) throw new Error(`${label}: pirate inspector contract failed ${JSON.stringify(pirate)}`);
+    if (pirate.kind !== 'pirate' || !pirate.text.includes('Пиратский объект') || !pirate.text.includes('исчезнет через') || !pirate.specialActionDisabled
+      || !pirate.specialArt.loaded || !hasBundledImageAsset(pirate.specialArt.src, ['pirate-planet-', 'planet-020-', 'orbital-forge-'])) throw new Error(`${label}: pirate inspector contract failed ${JSON.stringify(pirate)}`);
     await capture(win, directory, 'pirate-inspector');
     await dismissInspector(win);
     await selectSystem(win, pirateSystem);
@@ -611,7 +901,8 @@ async function runViewport(width, height) {
         const snapshot = await inspectorSnapshot(win);
         checkCopy(snapshot);
         await checkModal(win);
-        if (snapshot.kind !== 'anomaly' || !snapshot.text.includes('Аномалия') || !snapshot.text.includes('исчезнет через') || !snapshot.specialActionDisabled) throw new Error(`${label}: anomaly inspector contract failed ${JSON.stringify(snapshot)}`);
+        if (snapshot.kind !== 'anomaly' || !snapshot.text.includes('Аномалия') || !snapshot.text.includes('исчезнет через') || !snapshot.specialActionDisabled
+          || !snapshot.specialArt.loaded || !hasBundledImageAsset(snapshot.specialArt.src, ['anomaly-'])) throw new Error(`${label}: anomaly inspector contract failed ${JSON.stringify(snapshot)}`);
         await capture(win, directory, 'anomaly-inspector');
         await dismissInspector(win);
         return snapshot;
@@ -626,7 +917,8 @@ async function runViewport(width, height) {
       const special = await inspectorSnapshot(win);
       checkCopy(special);
       await checkModal(win);
-      if (special.kind !== kind || !special.text.includes('Владелец отсутствует') || !special.specialActionDisabled) throw new Error(`${label}: ${kind} inspector contract failed ${JSON.stringify(special)}`);
+      if (special.kind !== kind || !special.text.includes('Владелец отсутствует') || !special.specialActionDisabled
+        || (kind === 'unique' && (!special.specialArt.loaded || !hasBundledImageAsset(special.specialArt.src, ['unique-variant-', 'planet-010-', 'planet-013-', 'planet-021-'])))) throw new Error(`${label}: ${kind} inspector contract failed ${JSON.stringify(special)}`);
       await capture(win, directory, `${kind}-inspector`);
       await dismissInspector(win);
     }
@@ -646,6 +938,65 @@ async function runViewport(width, height) {
     await pressKey(win, 'Escape');
     await checkRestoredFocus(win, 'player-planet-helion-01');
 
+    await win.webContents.executeJavaScript(`(() => {
+      const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+      const espionage = save.espionage || {};
+      const targets = espionage.targets || espionage.bot01Planets || {};
+      const live = Object.values(targets).find((target) => target?.id === ${JSON.stringify(debrisFixtures.liveTargetId)});
+      if (live?.resources) live.resources.debris = 0;
+      if (espionage.orbitalDebris) delete espionage.orbitalDebris[${JSON.stringify(debrisFixtures.deadTargetId)}];
+      save.espionage = espionage;
+      localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    })()`);
+    await reload(win);
+    await win.webContents.executeJavaScript(`void (Date.now = () => ${QA_UNIVERSE_NOW});`);
+    await clickPrimary(win, 'universe');
+    await selectSystem(win, debrisFixtures.deadCoordinate.system);
+    if (await win.webContents.executeJavaScript(`Boolean(document.querySelector(${JSON.stringify(deadSelector)})?.querySelector('.universe-debris-marker'))`)) {
+      throw new Error(`${label}: dead-coordinate marker remained after the orbital ledger was cleared`);
+    }
+    await selectSystem(win, debrisFixtures.liveCoordinate.system);
+    if (await win.webContents.executeJavaScript(`Boolean(document.querySelector(${JSON.stringify(liveSelector)})?.querySelector('.universe-debris-marker'))`)) {
+      throw new Error(`${label}: live-coordinate marker remained after its target debris reached zero`);
+    }
+    await capture(win, directory, 'debris-markers-zero');
+
+    await win.webContents.executeJavaScript(`document.querySelector('[data-qa-navigation="primary"] [data-qa-route="planet"]')?.click()`);
+    await waitFor(win, `document.querySelector('.owned-planet-edit-v4')`);
+    const openSkinPicker = await win.webContents.executeJavaScript(`(() => {
+      const row = [...document.querySelectorAll('.owned-planet-row-v4')].find((item) => item.textContent?.includes('Helion 01'));
+      const button = row?.querySelector('.owned-planet-edit-v4');
+      button?.click();
+      return Boolean(button);
+    })()`);
+    if (!openSkinPicker) throw new Error(`${label}: could not open the homeworld skin picker`);
+    await waitFor(win, `document.querySelectorAll('.skin-picker-grid [data-qa-planet-skin^="skin-asterion-"]').length === 9`);
+    await waitFor(win, `Array.from(document.querySelectorAll('.skin-picker-grid [data-qa-planet-skin^="skin-asterion-"] img')).every((image) => image.complete && image.naturalWidth > 0)`);
+    const picker = await win.webContents.executeJavaScript(`(() => ({
+      total: document.querySelectorAll('.skin-picker-grid [data-qa-planet-skin]').length,
+      newSkins: Array.from(document.querySelectorAll('.skin-picker-grid [data-qa-planet-skin^="skin-asterion-"]')).map((button) => ({ id: button.getAttribute('data-qa-planet-skin'), label: button.querySelector('span')?.textContent?.trim() || '', src: button.querySelector('img')?.getAttribute('src') || '', loaded: Boolean(button.querySelector('img')?.complete && button.querySelector('img')?.naturalWidth > 0), naturalWidth: button.querySelector('img')?.naturalWidth || 0, naturalHeight: button.querySelector('img')?.naturalHeight || 0 })),
+    }))()`);
+    if (picker.total !== 30 || picker.newSkins.length !== 9 || picker.newSkins.some((skin, index) => skin.id !== `skin-asterion-${String(index + 1).padStart(2, '0')}` || !skin.label || !skin.loaded || skin.naturalWidth !== 1024 || skin.naturalHeight !== 1024 || !skin.src.endsWith('.webp'))) {
+      throw new Error(`${label}: new planet skins are missing from the picker ${JSON.stringify(picker)}`);
+    }
+    const selectedSkinId = 'skin-asterion-09';
+    await win.webContents.executeJavaScript(`document.querySelector('[data-qa-planet-skin="${selectedSkinId}"]')?.click()`);
+    await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').planets?.['helion-01']?.skin === ${JSON.stringify(selectedSkinId)}`);
+    const selectedSkin = await win.webContents.executeJavaScript(`(() => ({ src: document.querySelector('[data-qa-planet-skin-art]')?.getAttribute('src') || '', loaded: Boolean(document.querySelector('[data-qa-planet-skin-art]')?.complete && document.querySelector('[data-qa-planet-skin-art]')?.naturalWidth > 0) }))()`);
+    if (!selectedSkin.loaded || !selectedSkin.src.endsWith('/skin-asterion-09.webp')) throw new Error(`${label}: selected planet art did not update ${JSON.stringify(selectedSkin)}`);
+    await win.webContents.executeJavaScript(`document.querySelector('.planet-editor-modal-v5 [data-asterion-close]')?.click()`);
+    await waitFor(win, `!document.querySelector('.planet-editor-modal-v5')`);
+    await reload(win);
+    await win.webContents.executeJavaScript(`document.querySelector('[data-qa-navigation="primary"] [data-qa-route="planet"]')?.click()`);
+    await waitFor(win, `document.querySelector('[data-qa-planet-skin-art]')?.complete && document.querySelector('[data-qa-planet-skin-art]')?.naturalWidth > 0`);
+    const persistedSkin = await win.webContents.executeJavaScript(`(() => { const image = document.querySelector('[data-qa-planet-skin-art]'); const rect = image?.getBoundingClientRect(); return { saved: JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').planets?.['helion-01']?.skin || '', src: image?.getAttribute('src') || '', naturalWidth: image?.naturalWidth || 0, naturalHeight: image?.naturalHeight || 0, displayWidth: rect?.width || 0, displayHeight: rect?.height || 0 }; })()`);
+    if (persistedSkin.saved !== selectedSkinId || !persistedSkin.src.endsWith('/skin-asterion-09.webp') || persistedSkin.naturalWidth !== 1024 || persistedSkin.naturalHeight !== 1024 || persistedSkin.displayWidth <= 0 || persistedSkin.displayHeight <= 0 || persistedSkin.displayWidth > 520 || persistedSkin.displayHeight > 520) throw new Error(`${label}: selected high-resolution skin did not survive reload or has unexpected display size ${JSON.stringify(persistedSkin)}`);
+    await capture(win, directory, 'planet-skin-persisted');
+    await clickPrimary(win, 'universe');
+    await waitFor(win, `(() => { const image = document.querySelector('[data-qa-universe-object="player-planet-helion-01"] img'); return image?.complete && image.naturalWidth === 128 && image.naturalHeight === 128; })()`);
+    const mapSkinPreview = await win.webContents.executeJavaScript(`(() => { const image = document.querySelector('[data-qa-universe-object="player-planet-helion-01"] img'); return { src: image?.getAttribute('src') || '', naturalWidth: image?.naturalWidth || 0, naturalHeight: image?.naturalHeight || 0 }; })()`);
+    if (!mapSkinPreview.src.endsWith('/planet-previews/skin-asterion-09.webp') || mapSkinPreview.naturalWidth !== 128 || mapSkinPreview.naturalHeight !== 128) throw new Error(`${label}: Universe did not use the audited 128px skin preview ${JSON.stringify(mapSkinPreview)}`);
+
     const screenshots = skipScreenshots ? [] : fs.readdirSync(directory).filter((name) => name.endsWith('.png')).sort();
     return {
       viewport: label,
@@ -654,6 +1005,12 @@ async function runViewport(width, height) {
       player: { ownerName: player.ownerName, points: player.points, planetRows: player.planetRows },
       npc: { ownerName: npc.ownerName, planetRows: npc.planetRows, rows: npc.rows, fleetActionsDisabled: npcFleetActions.every((action) => action.disabled && action.status === 'disabled') },
       specialInspectors: { empty: empty.kind, asteroid: freeAsteroid.kind, occupiedAsteroid: occupiedAsteroid.kind, pirate: pirate.kind, anomaly: anomaly.kind, uninhabited: 'uninhabited', unique: 'unique' },
+      debrisMarkers: {
+        dead: { coordinate: debrisFixtures.deadCoordinate, amount: deadMarker.amount, interaction: deadDebrisInteraction },
+        live: { coordinate: debrisFixtures.liveCoordinate, amount: liveMarker.amount, interaction: liveDebrisInteraction },
+        cleared: true,
+      },
+      planetSkin: { pickerCount: picker.total, selected: selectedSkinId, persisted: persistedSkin.saved === selectedSkinId, runtimeArt: persistedSkin.src, naturalResolution: [persistedSkin.naturalWidth, persistedSkin.naturalHeight], displaySize: [persistedSkin.displayWidth, persistedSkin.displayHeight], mapPreview: mapSkinPreview },
       asteroidsHoldPosition,
       timedObjectSystems: { pirate: pirateSystem, anomaly: anomalySystem, unique: uniqueSystem },
       pirateAnimation,
