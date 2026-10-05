@@ -291,3 +291,29 @@ test('simulator reports do not award persistent battle score', () => {
 
   assert.strictEqual(recordBattleScoreAward(initial, report, 'player-current'), initial);
 });
+
+test('both pirate PvE mission types award no battle points on wins, losses, or draws', () => {
+  const initial = createDefaultRatingPrototypeState();
+  const source = DEMO_BATTLE_REPORTS[0]!;
+
+  for (const missionType of ['pirate-elimination', 'pirate-raid'] as const) {
+    for (const winner of ['attacker', 'defender', 'draw'] as const) {
+      const report: BattleReport = {
+        ...source,
+        id: `battle-${missionType}-${winner}`,
+        missionType,
+        winner,
+        attacker: missionType === 'pirate-raid'
+          ? { ...source.attacker, playerId: 'pirate-owner', race: 'pirates' }
+          : { ...source.attacker, playerId: 'player-current' },
+        defender: missionType === 'pirate-raid'
+          ? { ...source.defender, playerId: 'player-current' }
+          : { ...source.defender, playerId: 'pirate-owner', race: 'pirates' },
+        metadata: { ...source.metadata, source: 'imported' },
+      };
+
+      assert.strictEqual(recordBattleScoreAward(initial, report, 'player-current'), initial);
+      assert.equal(initial.battleAwardsByReportId[report.id], undefined);
+    }
+  }
+});

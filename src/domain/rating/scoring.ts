@@ -14,7 +14,7 @@ import type { ScienceId, ScienceResourceCost } from '../science/types.ts';
 import type { FleetProductionOrder, FleetProductionState } from '../fleet/production.ts';
 import type { SaveState } from '../../application/contracts.ts';
 import { getOwnerShipUpgradeLevels } from '../../application/contracts.ts';
-import { isAsterionLocalPlayerId, type BattleReport } from '../combat/report.ts';
+import { isAsterionLocalPlayerId, isPiratePveMissionType, type BattleReport } from '../combat/report.ts';
 import { calculateBattlePoints } from '../combat/battle-points.ts';
 import { getCombatFactionId, type CombatFactionId as FactionId } from '../combat/factions.ts';
 import { UNIVERSE_NPC_OWNER_ID } from '../universe/runtime.ts';
@@ -229,6 +229,7 @@ export function recordBattleScoreAward(
 ): RatingPrototypeState {
   if (rating.battleAwardsByReportId[report.id]
     || report.missionType === 'simulation'
+    || isPiratePveMissionType(report.missionType)
     || report.metadata?.source === 'demo-fixture'
     || !report.id) return rating;
 

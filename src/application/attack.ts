@@ -161,11 +161,15 @@ function reportDestroyedDebris(report: BattleReport, side: 'attacker' | 'defende
   return debris;
 }
 
-export function calculateAttackDebris(report: BattleReport, attackerFactionId: CombatFactionId, defenderFactionId: CombatFactionId): number {
+export function calculateAttackDebris(
+  report: BattleReport,
+  attackerFactionId: CombatFactionId,
+  defenderFactionId: CombatFactionId,
+): number {
   return reportDestroyedDebris(report, 'attacker', attackerFactionId)
     + reportDestroyedDebris(report, 'defender', defenderFactionId)
-    + calculatePirateForceDebris(report.attackerForce, report.defenderForce)
-    + calculatePirateForceDebris(report.defenderForce, report.attackerForce);
+    + calculatePirateForceDebris(report.attackerForce, report.defenderForce, report.missionType)
+    + calculatePirateForceDebris(report.defenderForce, report.attackerForce, report.missionType);
 }
 
 function survivorsCargo(report: BattleReport, factionId: CombatFactionId) {

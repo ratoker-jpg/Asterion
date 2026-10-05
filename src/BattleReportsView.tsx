@@ -27,6 +27,7 @@ import {
 import {
   BATTLE_MISSING_DATA,
   createBattleReportViewModel,
+  getBattlePointAwardDisplay,
   type BattleEntityKind,
   type BattleEventViewModel,
   type BattleParticipantViewModel,
@@ -136,6 +137,8 @@ function missionLabel(missionType: BattleReportViewModel['missionType']) {
     defense: 'ОБОРОНА',
     arena: 'АРЕНА',
     simulation: 'СИМУЛЯЦИЯ',
+    'pirate-elimination': 'УНИЧТОЖЕНИЕ ПИРАТОВ',
+    'pirate-raid': 'ПИРАТСКИЙ НАЛЁТ',
   }[missionType];
 }
 
@@ -232,9 +235,10 @@ function LossSummary({ side, className = '' }: { side: BattleSideViewModel; clas
 
 function CardPoints({ viewModel, side, className = '' }: { viewModel: BattleReportViewModel; side: BattleSideViewModel; className?: string }) {
   const awardedPoints = battleCardPoints(viewModel, side);
+  const awardDisplay = getBattlePointAwardDisplay(viewModel.missionType, awardedPoints);
   return (
-    <div className={`battle-card-points-v1 ${className}`} data-qa-battle-award-state={awardedPoints == null ? 'missing' : 'recorded'}>
-      <span><small>{awardedPoints == null ? 'НЕТ ЗАПИСИ О НАЧИСЛЕНИИ' : 'ПОЛУЧЕНО БОЕВЫХ ОЧКОВ'}</small><b>{awardedPoints == null ? 'Не зафиксировано' : `+${formatNumber(awardedPoints)}`}</b></span>
+    <div className={`battle-card-points-v1 ${className}`} data-qa-battle-award-state={awardDisplay.state}>
+      <span><small>{awardDisplay.label}</small><b>{awardDisplay.state === 'not-awarded' ? '—' : awardDisplay.points == null ? 'Не зафиксировано' : `+${formatNumber(awardDisplay.points)}`}</b></span>
       <span><small>РЕСУРСНЫЕ ОЧКИ · ПОТЕРЯНО</small><b>−{formatResourcePoints(battleCardResourcePointsLost(viewModel, side))}</b></span>
     </div>
   );
@@ -935,20 +939,23 @@ function OutcomeMiniStateTable({ side, className = '' }: { side: BattleSideViewM
 
 function OutcomePointsPanel({
   sideLabel,
+  missionType,
   points,
   resourcePointsLost,
   winner,
   className = '',
 }: {
   sideLabel: string;
+  missionType: BattleReportViewModel['missionType'];
   points: number | null;
   resourcePointsLost: number;
   winner: boolean;
   className?: string;
 }) {
+  const awardDisplay = getBattlePointAwardDisplay(missionType, points);
   return (
-    <div className={`battle-outcome-points-panel-v1 ${winner ? 'winner' : ''} ${className}`} data-qa-battle-points data-qa-battle-award-state={points == null ? 'missing' : 'recorded'}>
-      <div><small>{sideLabel} · {points == null ? 'НЕТ ЗАПИСИ О НАЧИСЛЕНИИ' : 'ПОЛУЧЕНО БОЕВЫХ ОЧКОВ'}</small><strong>{points == null ? 'Не зафиксировано' : formatNumber(points)}</strong></div>
+    <div className={`battle-outcome-points-panel-v1 ${winner ? 'winner' : ''} ${className}`} data-qa-battle-points data-qa-battle-award-state={awardDisplay.state}>
+      <div><small>{sideLabel} · {awardDisplay.label}</small><strong>{awardDisplay.state === 'not-awarded' ? '—' : awardDisplay.points == null ? 'Не зафиксировано' : formatNumber(awardDisplay.points)}</strong></div>
       <div><small>РЕСУРСНЫЕ ОЧКИ · ПОТЕРЯНО</small><b>−{formatResourcePoints(resourcePointsLost)}</b><span>очков</span></div>
     </div>
   );
@@ -982,7 +989,7 @@ function BattleOutcomeSummary({ viewModel, result, winnerName }: { viewModel: Ba
           <article className={`battle-outcome-duel-side-v1 ${side.participant.side} ${viewModel.winner === side.participant.side ? 'winner' : ''}`} key={side.participant.side}>
             <OutcomeSideHeader side={side} winner={viewModel.winner === side.participant.side} />
             <OutcomeMiniStateTable side={side} />
-            <OutcomePointsPanel sideLabel={label} points={points} resourcePointsLost={resourcePointsLost} winner={viewModel.winner === side.participant.side || (viewModel.winner === 'draw' && points === Math.max(viewModel.battlePoints.attacker, viewModel.battlePoints.defender))} />
+            <OutcomePointsPanel sideLabel={label} missionType={viewModel.missionType} points={points} resourcePointsLost={resourcePointsLost} winner={viewModel.winner === side.participant.side || (viewModel.winner === 'draw' && points === Math.max(viewModel.battlePoints.attacker, viewModel.battlePoints.defender))} />
           </article>
         ))}
       </div>

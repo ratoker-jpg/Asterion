@@ -11,9 +11,11 @@ import {
   type CombatTechnologyMode,
 } from './config.ts';
 import {
+  COMBAT_FACTIONS,
   DEFAULT_COMBAT_FACTION_ID,
   getCombatFactionId,
   getCombatFactionName,
+  isCombatFactionId,
   type CombatFactionId,
 } from './factions.ts';
 import { getFactionCombatEntity } from './faction-catalog.ts';
@@ -21,7 +23,7 @@ import type { CombatEntityId, CombatStackEntityId } from './ids.ts';
 import { getCombatEntityForSide, isPirateShipId, type CombatSideProfile } from './side-entity.ts';
 import { pirateTechnologyLevels } from '../pirates/profile.ts';
 import type { CombatPriorityState } from './priority.ts';
-import type { BattleParticipant } from './report.ts';
+import { isValidPiratePveDirection, type BattleMissionType, type BattleParticipant } from './report.ts';
 import {
   createDefaultCombatTechnologies,
   normalizeCombatTechnologies,
@@ -123,6 +125,7 @@ export type CombatValidationCode =
   | 'technology-profile-mismatch'
   | 'invalid-target-priority'
   | 'exclusive-technology'
+  | 'invalid-mission-direction'
   | 'invalid-seed';
 
 export type CombatValidationError = {
@@ -355,8 +358,19 @@ export type CombatValidationOptions = {
   allowEmptyDefender?: boolean;
   /** Test-only calibration sweeps may intentionally exceed UI population caps. */
   allowPopulationOverflow?: boolean;
-  missionType?: string;
+  missionType?: Exclude<BattleMissionType, 'simulation'>;
 };
+
+function playableFactionId(value: string | undefined): CombatFactionId | null {
+  if (isCombatFactionId(value)) return value;
+  return COMBAT_FACTIONS.find(({ name }) => name === value)?.id ?? null;
+}
+
+function hasPlayableFaction(side: CombatSideInput) {
+  const participantFactionId = playableFactionId(side.participant.race);
+  return participantFactionId !== null
+    && (side.factionId === undefined || side.factionId === participantFactionId);
+}
 
 export function validateCombatInput(input: CombatInput, options: CombatValidationOptions = {}): CombatValidationResult {
   const errors: CombatValidationError[] = [];
@@ -388,6 +402,30 @@ export function validateCombatInput(input: CombatInput, options: CombatValidatio
       if ([...side.ships].some((stack) => !isPirateShipId(stack.entityId))) errors.push({ code: 'wrong-kind', path: `${sideName}.ships`, message: 'Пиратская сторона может содержать только NPC корабли.' });
     }
     if (!side.combatProfile && side.ships.some((stack) => isPirateShipId(stack.entityId))) errors.push({ code: 'unknown-entity', path: `${sideName}.ships`, message: 'Пиратский ID требует явного pirate combatProfile.' });
+  }
+
+  if (options.missionType === 'pirate-raid' || options.missionType === 'pirate-elimination') {
+    const expectsPirateAttacker = options.missionType === 'pirate-raid';
+    const attackerIsPirate = input.attacker.combatProfile?.kind === 'pirate';
+    const defenderIsPirate = input.defender.combatProfile?.kind === 'pirate';
+    const playerSide = expectsPirateAttacker ? input.defender : input.attacker;
+
+    if (!isValidPiratePveDirection(options.missionType, attackerIsPirate, defenderIsPirate)) {
+      errors.push({
+        code: 'invalid-mission-direction',
+        path: 'missionType',
+        message: options.missionType === 'pirate-raid'
+          ? 'pirate-raid требует пиратов на стороне attacker и игрока на стороне defender.'
+          : 'pirate-elimination требует игрока на стороне attacker и пиратов на стороне defender.',
+      });
+    }
+    if (!hasPlayableFaction(playerSide)) {
+      errors.push({
+        code: 'invalid-mission-direction',
+        path: expectsPirateAttacker ? 'defender.participant.race' : 'attacker.participant.race',
+        message: 'Сторона игрока в пиратском PvE-бою должна иметь одну из трёх игровых фракций.',
+      });
+    }
   }
 
   for (const [side, commanders] of [['attacker', attackerCommanders] as const, ['defender', defenderCommanders] as const]) {

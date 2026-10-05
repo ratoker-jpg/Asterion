@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { DEMO_BATTLE_REPORTS } from './battle-fixtures.ts';
-import { BATTLE_MISSING_DATA, createBattleReportViewModel } from './battle-report-view-model.ts';
+import { PIRATE_CATALOG_BY_ID } from '../pirates/catalog.ts';
+import { BATTLE_MISSING_DATA, createBattleReportViewModel, getBattlePointAwardDisplay } from './battle-report-view-model.ts';
 
 test('view model exposes losses, rewards, and every saved round snapshot', () => {
   const viewModel = createBattleReportViewModel(DEMO_BATTLE_REPORTS[0]);
@@ -29,6 +30,59 @@ test('battle report view model exposes persisted awards and leaves legacy report
   assert.equal(legacy.awardedBattlePoints, null);
   assert.deepEqual(awarded.awardedBattlePoints, { attacker: 84, defender: 19 });
   assert.notEqual(awarded.awardedBattlePoints.attacker, awarded.battlePoints.attacker);
+});
+
+test('view model keeps both pirate battle directions and the pirate side', () => {
+  const source = DEMO_BATTLE_REPORTS[0]!;
+  const elimination = createBattleReportViewModel({
+    ...source,
+    missionType: 'pirate-elimination',
+    defender: { ...source.defender, race: 'pirates' },
+  });
+  const raid = createBattleReportViewModel({
+    ...source,
+    missionType: 'pirate-raid',
+    attacker: { ...source.attacker, race: 'pirates' },
+  });
+
+  assert.equal(elimination.missionType, 'pirate-elimination');
+  assert.equal(elimination.defender.participant.race, 'pirates');
+  assert.equal(raid.missionType, 'pirate-raid');
+  assert.equal(raid.attacker.participant.race, 'pirates');
+});
+
+test('pirate fleet losses show catalog resource points and the PvE no-award status', () => {
+  const source = DEMO_BATTLE_REPORTS[0]!;
+  const destroyedPirateFleet = [{ entityId: 'pirate-hound', countBefore: 3, countAfter: 1, destroyed: 2 }];
+  const expectedResourcePoints = 2 * (
+    PIRATE_CATALOG_BY_ID['pirate-hound'].cost.metal
+    + PIRATE_CATALOG_BY_ID['pirate-hound'].cost.minerals
+    + PIRATE_CATALOG_BY_ID['pirate-hound'].cost.gas
+  ) / 1_000;
+  const raid = createBattleReportViewModel({
+    ...source,
+    missionType: 'pirate-raid',
+    attacker: { ...source.attacker, race: 'pirates' },
+    attackerForce: { ...source.attackerForce, stacks: destroyedPirateFleet },
+  });
+  const elimination = createBattleReportViewModel({
+    ...source,
+    missionType: 'pirate-elimination',
+    defender: { ...source.defender, race: 'pirates' },
+    defenderForce: { ...source.defenderForce, stacks: destroyedPirateFleet, defenses: [] },
+  });
+
+  assert.equal(raid.battlePoints.attackerResourcePointsLost, expectedResourcePoints);
+  assert.equal(elimination.battlePoints.defenderResourcePointsLost, expectedResourcePoints);
+  for (const missionType of ['pirate-raid', 'pirate-elimination'] as const) {
+    assert.deepEqual(getBattlePointAwardDisplay(missionType, null), {
+      state: 'not-awarded',
+      label: 'БОЕВЫЕ ОЧКИ НЕ НАЧИСЛЯЮТСЯ',
+      points: null,
+    });
+  }
+  assert.equal(getBattlePointAwardDisplay('attack', null).label, 'НЕТ ЗАПИСИ О НАЧИСЛЕНИИ');
+  assert.equal(getBattlePointAwardDisplay('attack', 0).label, 'ПОЛУЧЕНО БОЕВЫХ ОЧКОВ');
 });
 
 test('view model derives stack losses from persisted counts when destroyed is missing', () => {
