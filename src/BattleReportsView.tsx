@@ -290,7 +290,7 @@ function CardSiegeSummary({ siege }: { siege: BattleSiegeViewModel }) {
         <span><small>ЗДАНИЯ / УРОВНИ</small><b>{formatNumber(siege.demolition.destroyedBuildingLevels)} / {formatNumber(siege.demolition.selectedBuildingCount)}</b></span>
         <span><small>УНИЧТОЖЕНИЕ ПЛАНЕТЫ · ШАНС</small><b>{formatBps(siege.destruction.finalChanceBps)}</b></span>
       </div>
-      <p><strong>{demolitionResult}</strong><span>{destructionResult}</span></p>
+      <p><strong>{demolitionResult}</strong><span className={siege.planetDestroyed ? 'siege-planet-destroyed' : 'siege-planet-saved'}>{destructionResult}</span></p>
     </section>
   );
 }
