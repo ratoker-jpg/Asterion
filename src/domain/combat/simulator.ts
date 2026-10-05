@@ -361,10 +361,15 @@ export type CombatValidationOptions = {
   missionType?: Exclude<BattleMissionType, 'simulation'>;
 };
 
+function playableFactionId(value: string | undefined): CombatFactionId | null {
+  if (isCombatFactionId(value)) return value;
+  return COMBAT_FACTIONS.find(({ name }) => name === value)?.id ?? null;
+}
+
 function hasPlayableFaction(side: CombatSideInput) {
-  const faction = side.factionId ?? side.participant.race;
-  return side.participant.race !== 'pirates'
-    && (isCombatFactionId(faction) || COMBAT_FACTIONS.some(({ name }) => name === faction));
+  const participantFactionId = playableFactionId(side.participant.race);
+  return participantFactionId !== null
+    && (side.factionId === undefined || side.factionId === participantFactionId);
 }
 
 export function validateCombatInput(input: CombatInput, options: CombatValidationOptions = {}): CombatValidationResult {

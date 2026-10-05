@@ -23,14 +23,18 @@ function resolvePair(input: {
   defenderShips: CombatStackInput[];
   attackerPirate?: boolean;
   defenderPirate?: boolean;
+  attackerFactionId?: CombatInput['attacker']['factionId'];
+  defenderFactionId?: CombatInput['defender']['factionId'];
+  attackerParticipantRace?: string | null;
+  defenderParticipantRace?: string | null;
   seed?: string;
   pirateProfile?: typeof profile;
   maxRounds?: CombatInput['maxRounds'];
   missionType?: Exclude<BattleMissionType, 'simulation'>;
 }) {
-  const side = (race: typeof input.attackerRace, ships: CombatStackInput[], pirate: boolean | undefined, name: string, side: 'attacker' | 'defender') => ({
-    participant: { playerId: `${name}-owner`, playerName: name, race, side },
-    ...(pirate ? { combatProfile: { kind: 'pirate' as const, snapshot: input.pirateProfile ?? profile } } : { factionId: race === 'pirates' ? undefined : race }),
+  const side = (race: typeof input.attackerRace, ships: CombatStackInput[], pirate: boolean | undefined, name: string, side: 'attacker' | 'defender', factionId?: CombatInput['attacker']['factionId'], participantRace?: string | null) => ({
+    participant: { playerId: `${name}-owner`, playerName: name, race: participantRace === null ? undefined : participantRace ?? race, side },
+    ...(pirate ? { combatProfile: { kind: 'pirate' as const, snapshot: input.pirateProfile ?? profile } } : { factionId: factionId ?? (race === 'pirates' ? undefined : race) }),
     ships,
     commanders: [],
     activeCommanderId: null,
@@ -38,8 +42,8 @@ function resolvePair(input: {
   const combat: CombatInput = {
     scenarioId: 'pirate-matchup-test',
     timestamp: '2026-01-01T00:00:00.000Z',
-    attacker: side(input.attackerRace, input.attackerShips, input.attackerPirate, 'Attacker', 'attacker'),
-    defender: side(input.defenderRace, input.defenderShips, input.defenderPirate, 'Defender', 'defender'),
+    attacker: side(input.attackerRace, input.attackerShips, input.attackerPirate, 'Attacker', 'attacker', input.attackerFactionId, input.attackerParticipantRace),
+    defender: side(input.defenderRace, input.defenderShips, input.defenderPirate, 'Defender', 'defender', input.defenderFactionId, input.defenderParticipantRace),
     maxRounds: input.maxRounds ?? 5,
     attackerPriority: [...priority.attack],
     defenderPriority: [...priority.defense],
@@ -69,6 +73,44 @@ test('outgoing pirate elimination and incoming pirate raid both produce typed re
 
     assert.equal(report.missionType, missionType);
     assert.equal(pirateParticipant.race, 'pirates');
+    assert.equal(normalizeBattleReport(report)?.missionType, missionType);
+  }
+});
+
+test('pirate PvE requires player race and factionId to identify the same playable faction', () => {
+  const missionTypes = ['pirate-raid', 'pirate-elimination'] as const;
+  const resolveForPlayerRace = (missionType: typeof missionTypes[number], race: string | null) => {
+    const playerAttacks = missionType === 'pirate-elimination';
+    return resolvePair({
+      attackerRace: playerAttacks ? 'aegis' : 'pirates',
+      attackerPirate: !playerAttacks,
+      attackerShips: playerAttacks ? [{ entityId: 'scout', count: 1 }] : [{ entityId: 'pirate-hound', count: 1 }],
+      ...(playerAttacks ? { attackerFactionId: 'aegis' as const, attackerParticipantRace: race } : {}),
+      defenderRace: playerAttacks ? 'pirates' : 'aegis',
+      defenderPirate: playerAttacks,
+      defenderShips: playerAttacks ? [{ entityId: 'pirate-hound', count: 1 }] : [{ entityId: 'scout', count: 1 }],
+      ...(!playerAttacks ? { defenderFactionId: 'aegis' as const, defenderParticipantRace: race } : {}),
+      missionType,
+      seed: `${missionType}-${race ?? 'missing-race'}`,
+    });
+  };
+
+  for (const missionType of missionTypes) {
+    for (const [race, description] of [[null, 'missing'], ['unknown-faction', 'unknown'], ['synod', 'mismatched']] as const) {
+      assert.throws(
+        () => resolveForPlayerRace(missionType, race),
+        (error) => error instanceof CombatInputValidationError
+          && error.errors.some((validationError) => validationError.code === 'invalid-mission-direction'),
+        `${missionType} rejects ${description} player race with factionId aegis`,
+      );
+    }
+
+    const canonical = resolveForPlayerRace(missionType, 'aegis');
+    assert.equal(normalizeBattleReport(canonical)?.missionType, missionType);
+    const displayedName = resolveForPlayerRace(missionType, 'Астеры');
+    const player = missionType === 'pirate-raid' ? displayedName.defender : displayedName.attacker;
+    assert.equal(player.race, 'Астеры');
+    assert.equal(normalizeBattleReport(displayedName)?.missionType, missionType);
   }
 });
 
