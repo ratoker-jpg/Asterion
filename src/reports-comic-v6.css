@@ -1,0 +1,1098 @@
+/* ============================================================================
+   REPORTS — VARIANT 6 «COMIC OPS» (утверждён пользователем 2026-10-06)
+   Единый комикс-стандарт для всех отчётов: боевые сводки, журнал боя (кроме
+   отрисовки раундов — они не тронуты), шпионское досье, системные сигналы.
+   Стиль: ударные панели, ярлыки-теги, halftone, крупные значения.
+   Все блоки СКРУГЛЁННЫЕ — по конвенции основного репозитория
+   (токены --ut-r-* из asterion-unified-theme.css).
+   Скоуп: .ops6 на корнях .reports-view / .battle-view-v1 / .battle-report-overlay-v1
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- tokens -- */
+.ops6 {
+  --ops6-bg: #12141c;
+  --ops6-panel: #191d29;
+  --ops6-panel-2: #10131c;
+  --ops6-ink: #141414;
+  --ops6-text: #f4f4f2;
+  --ops6-muted: #8b95ad;
+  --ops6-muted-2: #9aa5bd;
+  --ops6-yellow: #ffd23f;
+  --ops6-mint: #7dffa8;
+  --ops6-pink: #ff8f8f;
+  --ops6-pink-tag: #ffb9b0;
+  --ops6-blue-tag: #bde9ff;
+  --ops6-line: #2a3040;
+  --ops6-hit: #3a1420;
+  --ops6-hit-2: #3a2c10;
+  --ops6-bd: 2.5px solid #000;
+  --ops6-bd-2: 2px solid #000;
+  --ops6-shadow: 5px 5px 0 rgba(0, 0, 0, .5);
+  --ops6-shadow-lg: 8px 8px 0 rgba(0, 0, 0, .55);
+  --ops6-r-panel: var(--ut-r-panel, 18px);
+  --ops6-r-card: var(--ut-r-card, 13px);
+  --ops6-r-chip: var(--ut-r-chip, 9px);
+  --ops6-r-btn: var(--ut-r-btn, 10px);
+}
+
+/* -------------------------------------------------------- halftone decor -- */
+.ops6.reports-view::before,
+.ops6.battle-report-overlay-v1::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background-image: radial-gradient(rgba(255, 255, 255, .05) 1.2px, transparent 1.3px);
+  background-size: 14px 14px;
+  z-index: 0;
+}
+
+.ops6.reports-view > *,
+.ops6.battle-report-overlay-v1 > * { position: relative; z-index: 1; }
+
+/* ------------------------------------------------------------ primitives -- */
+/* Ярлык-тег (cap): цветной блок с чёрной обводкой поверх панели */
+.ops6 .spy-report-card > header strong,
+.ops6 .reports-generic-details > header,
+.ops6 .battle-outcome-option-head-v1 > div > small,
+.ops6 .battle-summary-v1 .battle-side-copy-v1 small,
+.ops6 .battle-card-side-title-v1 > small,
+.ops6 .battle-outcome-side-head-v1 > small,
+.ops6 .battle-report-modal-head-v1 > div:first-child > small {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 5px 10px 4px;
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-chip);
+  background: var(--ops6-yellow);
+  color: var(--ops6-ink);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .5);
+}
+
+/* Теги-цвета по роли/статусу */
+.ops6 .battle-card-side-title-v1 > small,
+.ops6 .battle-outcome-side-head-v1 > small { background: var(--ops6-yellow); }
+.ops6 .battle-card-versus-grid-v1 > .battle-card-versus-column-v1 + .battle-card-versus-column-v1 .battle-card-side-title-v1 > small,
+.ops6 .battle-outcome-duel-side-v1.defender .battle-outcome-side-head-v1 > small { background: var(--ops6-pink-tag); }
+
+/* Общие комикс-кнопки */
+.ops6 .reports-preview-footer button,
+.ops6 .battle-open-v1,
+.ops6 .battle-list-back-v1,
+.ops6 .reports-delete-actions button {
+  border: var(--ops6-bd);
+  border-radius: var(--ops6-r-btn);
+  box-shadow: var(--ops6-shadow);
+  font-weight: 900;
+  letter-spacing: .1em;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+}
+
+.ops6 .reports-preview-footer button,
+.ops6 .battle-open-v1 {
+  background: var(--ops6-yellow);
+  color: var(--ops6-ink);
+}
+
+.ops6 .battle-list-back-v1,
+.ops6 .reports-preview-footer button.restore {
+  background: var(--ops6-text);
+  color: var(--ops6-ink);
+}
+
+.ops6 .reports-delete-actions button {
+  min-height: 26px;
+  padding: 0 9px;
+  background: var(--ops6-pink-tag);
+  color: var(--ops6-ink);
+  font-size: 8px;
+}
+
+.ops6 .reports-preview-footer button:hover:not(:disabled),
+.ops6 .reports-preview-footer button:focus-visible,
+.ops6 .battle-open-v1:hover:not(:disabled),
+.ops6 .battle-open-v1:focus-visible,
+.ops6 .battle-list-back-v1:hover,
+.ops6 .battle-list-back-v1:focus-visible,
+.ops6 .reports-delete-actions button:hover,
+.ops6 .reports-delete-actions button:focus-visible {
+  transform: translate(-2px, -2px);
+  box-shadow: 7px 7px 0 rgba(0, 0, 0, .55);
+  filter: brightness(1.04);
+  outline: none;
+}
+
+.ops6 .reports-preview-footer button:active,
+.ops6 .battle-open-v1:active,
+.ops6 .battle-list-back-v1:active,
+.ops6 .reports-delete-actions button:active {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, .5);
+}
+
+.ops6 .reports-preview-footer button:disabled { opacity: .45; cursor: default; }
+
+/* ------------------------------------------------------ лента сообщений -- */
+/* Системные сигналы: строка = категория слева цветным блоком + тело */
+.ops6 .reports-list-item {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-card);
+  background: var(--ops6-panel);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .45);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.ops6 .reports-list-item:hover,
+.ops6 .reports-list-item:focus-within {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 rgba(0, 0, 0, .5);
+}
+
+.ops6 .reports-list-item.active {
+  border-color: #000;
+  background: linear-gradient(90deg, #232a3c, var(--ops6-panel) 55%);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .45), inset 0 0 0 2px var(--ops6-yellow);
+}
+
+.ops6 .reports-list-icon {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-chip);
+  background: var(--ops6-blue-tag);
+  color: var(--ops6-ink);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, .5);
+}
+
+.ops6 .reports-list-icon--battle { background: var(--ops6-yellow); }
+.ops6 .reports-list-icon--system { background: var(--ops6-blue-tag); }
+.ops6 .reports-list-icon--command { background: var(--ops6-mint); }
+.ops6 .reports-list-icon--alliances { background: var(--ops6-pink-tag); }
+.ops6 .reports-list-icon--flights { background: var(--ops6-mint); }
+.ops6 .reports-list-icon--arena { background: var(--ops6-pink); }
+.ops6 .reports-list-icon--achievements { background: #f4f4f2; }
+
+.ops6 .reports-list-copy strong { color: var(--ops6-text); font-size: 11px; font-weight: 900; }
+.ops6 .reports-list-copy small { color: var(--ops6-muted); font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.ops6 .reports-list-copy em { color: var(--ops6-muted-2); font-size: 9px; }
+.ops6 .reports-list-meta time { color: var(--ops6-muted); font-weight: 700; }
+
+.ops6 .reports-unread-dot { animation: ops6-pulse 1.6s ease-in-out infinite; }
+
+/* ------------------------------------------------------- шапка досье ----- */
+.ops6 .reports-dossier-heading__icon {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-chip);
+  background: var(--ops6-yellow);
+  color: var(--ops6-ink);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .5);
+}
+
+.ops6 .reports-dossier-heading h2 { color: #fff; font-size: 17px; font-weight: 900; letter-spacing: .04em; }
+.ops6 .reports-dossier-heading p { color: var(--ops6-muted); font-size: 9px; }
+
+.ops6 .reports-status {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-chip);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, .5);
+  font-size: 9px;
+}
+
+.ops6 .reports-status--success { color: var(--ops6-ink); background: var(--ops6-mint); }
+.ops6 .reports-status--danger { color: var(--ops6-ink); background: var(--ops6-pink); }
+.ops6 .reports-status--warning { color: var(--ops6-ink); background: var(--ops6-yellow); }
+.ops6 .reports-status--info { color: var(--ops6-ink); background: var(--ops6-blue-tag); }
+.ops6 .reports-status--neutral { color: var(--ops6-ink); background: var(--ops6-text); }
+
+/* ----------------------------------------------------- системное досье --- */
+.ops6 .reports-generic-hero {
+  border: var(--ops6-bd);
+  border-radius: var(--ops6-r-panel);
+  background: linear-gradient(160deg, #202636, #171b26);
+  box-shadow: var(--ops6-shadow-lg);
+}
+
+.ops6 .reports-generic-hero > svg {
+  padding: 14px;
+  border: var(--ops6-bd);
+  border-radius: var(--ops6-r-card);
+  background: var(--ops6-yellow);
+  color: var(--ops6-ink);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, .5);
+}
+
+.ops6 .reports-generic-hero > div strong { color: #fff; font-weight: 900; letter-spacing: .06em; }
+.ops6 .reports-generic-hero > div span { color: var(--ops6-muted-2); }
+
+.ops6 .reports-generic-details,
+.ops6 .reports-generic-body {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-card);
+  background: var(--ops6-panel);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, .45);
+}
+
+.ops6 .reports-generic-details > header {
+  margin: -2px -2px 8px;
+  border-bottom: 0;
+  box-shadow: none;
+}
+
+.ops6 .reports-generic-details { padding: 12px; }
+.ops6 .reports-generic-details dl { grid-template-columns: 1fr; }
+.ops6 .reports-generic-details dl div { border-bottom: 2px dashed var(--ops6-line); background: transparent; }
+.ops6 .reports-generic-details dl div:last-child { border-bottom: 0; }
+.ops6 .reports-generic-details dt { color: var(--ops6-muted); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; }
+.ops6 .reports-generic-details dd { color: var(--ops6-text); font-size: 11px; font-weight: 700; }
+
+.ops6 .reports-generic-body > small {
+  color: var(--ops6-yellow);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .14em;
+}
+
+.ops6 .reports-generic-body p { color: var(--ops6-muted-2); font-size: 10px; line-height: 1.6; }
+
+.ops6 .reports-empty-dossier,
+.ops6 .reports-empty-folder {
+  border: 3px dashed var(--ops6-line);
+  border-radius: var(--ops6-r-panel);
+  background: rgba(25, 29, 41, .6);
+}
+
+.ops6 .reports-empty-dossier strong,
+.ops6 .reports-empty-folder strong { color: var(--ops6-text); font-size: 12px; }
+.ops6 .reports-empty-dossier span,
+.ops6 .reports-empty-folder span { color: var(--ops6-muted); font-size: 9px; }
+
+/* ----------------------------------------------------- инструменты ленты - */
+.ops6 .reports-feed-head h2,
+.ops6 .reports-preview-head h2 { color: #fff; font-weight: 900; letter-spacing: .08em; }
+.ops6 .reports-feed-head small,
+.ops6 .reports-preview-head small { color: var(--ops6-yellow); font-weight: 900; letter-spacing: .16em; }
+
+.ops6 .reports-feed-head select {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-input);
+  background: var(--ops6-panel-2);
+  color: var(--ops6-text);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.ops6 .reports-search input {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-input);
+  background: var(--ops6-panel-2);
+  color: var(--ops6-text);
+}
+
+.ops6 .reports-search input::placeholder { color: var(--ops6-muted); }
+.ops6 .reports-search span { color: var(--ops6-muted); }
+
+.ops6 .reports-folder-actions {
+  border: 2px dashed var(--ops6-line);
+  border-radius: var(--ops6-r-card);
+  background: rgba(16, 19, 28, .6);
+}
+
+.ops6 .reports-select-all { color: var(--ops6-muted-2); }
+.ops6 .reports-select-all b { color: var(--ops6-text); }
+
+.ops6 .reports-pagination button {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-chip);
+  background: var(--ops6-panel);
+  color: var(--ops6-text);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .45);
+}
+
+.ops6 .reports-pagination button:hover:not(:disabled) { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 rgba(0, 0, 0, .5); }
+.ops6 .reports-pagination > span { color: var(--ops6-muted); font-size: 10px; }
+.ops6 .reports-pagination > span b { color: var(--ops6-text); font-size: 11px; }
+.ops6 .reports-pagination > span small { color: var(--ops6-muted); font-size: 8px; }
+
+.ops6 .reports-folder-count { color: var(--ops6-yellow); font-size: 9px; }
+.ops6 .reports-preview-actions button {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-chip);
+  background: var(--ops6-panel);
+  color: var(--ops6-muted-2);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, .45);
+}
+
+.ops6 .reports-preview-actions button:hover:not(:disabled),
+.ops6 .reports-preview-actions button:focus-visible:not(:disabled),
+.ops6 .reports-preview-actions button.active { color: var(--ops6-yellow); border-color: #000; outline: none; }
+
+.ops6 .reports-preview-footer { border-top: 2px dashed var(--ops6-line); }
+.ops6 .reports-preview-footer > span { color: var(--ops6-muted); font-size: 9px; }
+
+/* =====================================================
+   ШПИОНСКОЕ ДОСЬЕ — Comic Ops
+   ===================================================== */
+.ops6 .reports-dossier--spy { gap: 16px; }
+
+.ops6 .reports-dossier--spy .reports-dossier-heading {
+  padding: 12px 14px 14px;
+  border: var(--ops6-bd);
+  border-radius: var(--ops6-r-panel);
+  background: linear-gradient(160deg, #202636, #171b26);
+  box-shadow: var(--ops6-shadow-lg);
+}
+
+.ops6 .reports-dossier--spy .reports-dossier-heading h2 { font-size: 24px; letter-spacing: .02em; }
+.ops6 .reports-dossier--spy .reports-dossier-heading p { font-size: 10px; }
+
+.ops6 .spy-report-card {
+  position: relative;
+  overflow: visible;
+  padding: 24px 14px 12px;
+  border: var(--ops6-bd);
+  border-radius: var(--ops6-r-panel);
+  background: var(--ops6-panel);
+  box-shadow: var(--ops6-shadow-lg);
+}
+
+/* ярлык-заголовок секции, наезжающий на верхнюю грань панели */
+.ops6 .spy-report-card > header {
+  position: static;
+  padding: 0 2px 10px;
+  border-bottom: 0;
+  align-items: flex-start;
+}
+
+.ops6 .spy-report-card > header strong {
+  position: absolute;
+  top: -14px;
+  left: 14px;
+  margin: 0;
+}
+
+.ops6 .spy-report-card > header span {
+  margin: 2px 2px 0 auto;
+  color: var(--ops6-muted);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+/* печать «ПОЛНЫЙ СНИМОК» */
+.ops6 .spy-report-seal {
+  position: absolute;
+  top: 6px;
+  right: 16px;
+  z-index: 2;
+  padding: 6px 10px;
+  border: 3px solid var(--ops6-mint);
+  border-radius: var(--ops6-r-chip);
+  background: rgba(125, 255, 168, .08);
+  color: var(--ops6-mint);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1.25;
+  letter-spacing: .1em;
+  text-align: center;
+  text-transform: uppercase;
+  transform: rotate(7deg);
+  animation: ops6-stamp 420ms cubic-bezier(.2, 1.6, .4, 1) both;
+}
+
+.ops6 .spy-report-summary-grid > div {
+  grid-template-columns: 96px minmax(0, 1fr);
+  min-height: 40px;
+  padding: 8px 4px;
+  border-bottom: 2px dashed var(--ops6-line);
+}
+
+.ops6 .spy-report-summary-grid > div:nth-last-child(-n + 2) { border-bottom: 0; }
+.ops6 .spy-report-summary-grid dt { color: var(--ops6-muted); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; }
+.ops6 .spy-report-summary-grid dd { color: var(--ops6-text); font-size: 12px; font-weight: 700; }
+.ops6 .spy-report-summary-grid dd strong { color: #fff; font-weight: 900; }
+
+.ops6 .spy-report-link {
+  border-bottom: 2px dashed var(--ops6-yellow);
+  color: var(--ops6-yellow);
+  font-weight: 900;
+}
+
+.ops6 .spy-report-link:hover,
+.ops6 .spy-report-link:focus-visible { border-bottom-color: #fff; color: #fff; outline: none; }
+
+.ops6 .spy-report-resource {
+  gap: 4px;
+  padding: 9px 11px 8px;
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-card);
+  background: var(--ops6-panel-2);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .45);
+}
+
+.ops6 .spy-report-resource span { color: var(--ops6-muted); font-size: 8px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.ops6 .spy-report-resource strong { color: #fff; font-size: 16px; font-weight: 900; }
+.ops6 .spy-report-resource__icon { width: 16px; height: 16px; }
+
+.ops6 .spy-report-population > div {
+  gap: 3px;
+  padding: 9px 11px 8px;
+  border: var(--ops6-bd-2);
+  border-left: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-card);
+  background: var(--ops6-panel-2);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .45);
+}
+
+.ops6 .spy-report-population > div:first-child { background: var(--ops6-hit-2); }
+.ops6 .spy-report-population > div:first-child span { color: #d9b36a; }
+.ops6 .spy-report-population > div:first-child strong { color: var(--ops6-yellow); }
+.ops6 .spy-report-population span { color: var(--ops6-muted); font-size: 8px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.ops6 .spy-report-population strong { color: #fff; font-size: 17px; font-weight: 900; }
+
+/* строки состава: спрайт · имя+уровень · счётчик */
+.ops6 .spy-report-entity-grid { grid-template-columns: 1fr; gap: 0; padding: 2px 2px 0; }
+
+.ops6 .spy-report-entity {
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  min-height: 50px;
+  padding: 8px 6px;
+  border: 0;
+  border-bottom: 2px dashed var(--ops6-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.ops6 .spy-report-entity-grid .spy-report-entity:last-child { border-bottom: 0; }
+.ops6 .spy-report-entity img { width: 40px; height: 36px; filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .45)); }
+.ops6 .spy-report-entity > div strong { color: #fff; font-size: 12px; font-weight: 900; }
+.ops6 .spy-report-entity > b { color: var(--ops6-yellow); font-size: 16px; font-weight: 900; }
+
+/* чип уровня «УР. N» — только для строк с уровнями */
+.ops6 .spy-report-entity[data-level] > div span {
+  width: fit-content;
+  margin-top: 3px;
+  padding: 3px 7px 2px;
+  border: 2px solid #000;
+  border-radius: 7px;
+  background: var(--ops6-mint);
+  color: var(--ops6-ink);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.ops6 .spy-report-entity[data-level='0'] > div span { background: var(--ops6-muted); color: var(--ops6-ink); }
+.ops6 .spy-report-entity:not([data-level]) > div span { color: var(--ops6-muted); font-size: 9px; }
+
+/* счётчик обороны — розовый, флота — жёлтый (цвет строки задаёт b) */
+.ops6 .spy-report-card--defense .spy-report-entity > b { color: var(--ops6-pink); }
+
+.ops6 .spy-report-empty { color: var(--ops6-muted); font-size: 10px; }
+
+.ops6 .spy-report-entity--inspected:hover,
+.ops6 .spy-report-entity--inspected:focus-within { background: rgba(255, 210, 63, .05); border-color: var(--ops6-line); }
+
+.ops6 .spy-entity-tooltip {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-card);
+  background: var(--ops6-panel-2);
+  box-shadow: var(--ops6-shadow);
+}
+
+.ops6 .spy-entity-tooltip strong { color: var(--ops6-yellow); }
+.ops6 .spy-entity-tooltip > span { color: var(--ops6-text); }
+.ops6 .spy-entity-tooltip b { color: var(--ops6-mint); }
+.ops6 .spy-entity-tooltip small { color: var(--ops6-muted); }
+
+/* всплытие секций досье */
+.ops6 .reports-dossier--spy > section,
+.ops6 .reports-dossier > section,
+.ops6 .reports-dossier--battle .battle-section-v1:not(.battle-visual-report-v1) {
+  animation: ops6-rise 260ms ease both;
+}
+
+.ops6 .reports-dossier--spy > section:nth-child(2),
+.ops6 .reports-dossier > section:nth-child(2) { animation-delay: 40ms; }
+.ops6 .reports-dossier--spy > section:nth-child(3),
+.ops6 .reports-dossier > section:nth-child(3) { animation-delay: 80ms; }
+.ops6 .reports-dossier--spy > section:nth-child(4),
+.ops6 .reports-dossier > section:nth-child(4) { animation-delay: 120ms; }
+.ops6 .reports-dossier--spy > section:nth-child(5),
+.ops6 .reports-dossier > section:nth-child(5) { animation-delay: 160ms; }
+.ops6 .reports-dossier--spy > section:nth-child(6),
+.ops6 .reports-dossier > section:nth-child(6) { animation-delay: 200ms; }
+
+/* ---------------------------------------------------------------- анимации - */
+@keyframes ops6-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: .55; }
+}
+
+@keyframes ops6-rise {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes ops6-pop {
+  0% { transform: scale(.55) rotate(-4deg); opacity: 0; }
+  70% { transform: scale(1.08) rotate(1deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+
+@keyframes ops6-stamp {
+  0% { transform: rotate(7deg) scale(1.7); opacity: 0; }
+  100% { transform: rotate(7deg) scale(1); opacity: 1; }
+}
+
+@keyframes ops6-wiggle {
+  0%, 100% { transform: rotate(0); }
+  30% { transform: rotate(-1.6deg); }
+  65% { transform: rotate(1.4deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops6 *,
+  .ops6 *::before,
+  .ops6 *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+/* =====================================================
+   ФЛОТЫ → БИТВЫ — Comic Ops
+   ===================================================== */
+.ops6.battle-view-v1 .battle-page-head-v1 h2 {
+  color: #fff;
+  font-weight: 900;
+  letter-spacing: .1em;
+}
+
+.ops6.battle-view-v1 .battle-page-head-v1 small { color: var(--ops6-yellow); font-weight: 900; }
+.ops6.battle-view-v1 .battle-page-head-v1 p { color: var(--ops6-muted); }
+
+.ops6 .battle-tabs-v1 {
+  gap: 8px;
+}
+
+.ops6 .battle-tabs-v1 button {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-btn);
+  background: var(--ops6-panel);
+  color: var(--ops6-muted-2);
+  font-weight: 900;
+  letter-spacing: .1em;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .45);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.ops6 .battle-tabs-v1 button b { color: var(--ops6-yellow); }
+.ops6 .battle-tabs-v1 button:hover,
+.ops6 .battle-tabs-v1 button:focus-visible { transform: translate(-1px, -1px); box-shadow: 5px 5px 0 rgba(0, 0, 0, .5); outline: none; }
+
+.ops6 .battle-tabs-v1 button.active {
+  border-color: #000;
+  background: var(--ops6-yellow);
+  color: var(--ops6-ink);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .55);
+}
+
+.ops6 .battle-tabs-v1 button.active b { color: var(--ops6-ink); }
+.ops6 .battle-tabs-v1 button.active { box-shadow: 3px 3px 0 rgba(0, 0, 0, .55); }
+
+/* карточка боя — свёрнутая сводка */
+.ops6 .battle-card-v1 {
+  border: var(--ops6-bd);
+  border-radius: var(--ops6-r-panel);
+  background: var(--ops6-panel);
+  box-shadow: var(--ops6-shadow-lg);
+  transition: transform 130ms ease, box-shadow 130ms ease;
+}
+
+.ops6 .battle-card-v1:hover { transform: translate(-2px, -2px); box-shadow: 10px 10px 0 rgba(0, 0, 0, .55); }
+.ops6 .battle-card-v1[open] { border-color: #000; }
+
+.ops6 .battle-card-summary-v1 { border-radius: var(--ops6-r-panel); }
+.ops6 .battle-card-summary-v1:hover,
+.ops6 .battle-card-summary-v1:focus-visible { background: rgba(255, 210, 63, .05); outline: none; }
+
+.ops6 .battle-result-badge-v1 { font-weight: 900; letter-spacing: .1em; }
+
+.ops6 .battle-result-badge-v1 .battle-result-icon-v1 {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-chip);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, .5);
+  background: currentColor;
+  animation: ops6-pop 360ms cubic-bezier(.2, 1.6, .4, 1) both;
+}
+
+/* «✓/×/=» рисуем цветом чернил на цветной плашке */
+.ops6 .battle-result-badge-v1 .battle-result-icon-v1 { color: inherit; }
+.ops6 .battle-result-badge-v1 .battle-result-icon-v1 { background: var(--ops6-mint); color: var(--ops6-ink); }
+.ops6 .battle-result-badge-v1.victory { color: var(--ops6-mint); }
+.ops6 .battle-result-badge-v1.victory .battle-result-icon-v1 { background: var(--ops6-mint); color: var(--ops6-ink); }
+.ops6 .battle-result-badge-v1.defeat { color: var(--ops6-pink); }
+.ops6 .battle-result-badge-v1.defeat .battle-result-icon-v1 { background: var(--ops6-pink); color: var(--ops6-ink); }
+.ops6 .battle-result-badge-v1.draw { color: var(--ops6-yellow); }
+.ops6 .battle-result-badge-v1.draw .battle-result-icon-v1 { background: var(--ops6-yellow); color: var(--ops6-ink); }
+
+.ops6 .battle-card-summary-route-v1 { color: #fff; font-size: 12px; font-weight: 900; }
+.ops6 .battle-card-summary-route-v1 > span { color: var(--ops6-yellow); font-weight: 900; }
+.ops6 .battle-card-summary-v1 time { color: var(--ops6-muted); font-size: 11px; }
+.ops6 .battle-card-expand-v1 { color: var(--ops6-muted); }
+
+/* развёрнутая сводка: колонки сторон + центральный VS-чип */
+.ops6 .battle-card-versus-grid-v1 {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+/* DOM-порядок: атакующий, защитник, VS — выравниваем в колонки A|VS|B */
+.ops6 .battle-card-versus-column-v1:first-child { order: 1; }
+.ops6 .battle-card-versus-grid-v1 > .battle-card-versus-column-v1 + .battle-card-versus-column-v1 { order: 3; }
+.ops6 .battle-card-versus-center-v1 { order: 2; }
+
+.ops6 .battle-card-versus-column-v1 {
+  position: relative;
+  padding: 12px;
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-card);
+  background: var(--ops6-panel-2);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, .45);
+}
+
+.ops6 .battle-card-versus-column-v1:first-child { border-top: var(--ops6-bd-2); }
+.ops6 .battle-card-versus-column-v1:last-child { border-top: var(--ops6-bd-2); }
+
+/* стрелка между колонками не нужна — вместо неё VS-чип */
+.ops6 .battle-card-versus-arrow-v1 { display: none; }
+
+.ops6 .battle-card-versus-center-v1 {
+  align-self: center;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-width: 130px;
+  padding: 10px 12px;
+}
+
+.ops6 .battle-card-versus-center-v1 > b {
+  font-size: 40px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--ops6-yellow);
+  text-shadow: 3px 3px 0 #000;
+  animation: ops6-pop 420ms cubic-bezier(.2, 1.6, .4, 1) both;
+}
+
+.ops6 .battle-card-versus-center-v1 > strong {
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.ops6 .battle-card-versus-center-v1 > strong.victory { color: var(--ops6-mint); text-shadow: 2px 2px 0 #000; }
+.ops6 .battle-card-versus-center-v1 > strong.defeat { color: var(--ops6-pink); text-shadow: 2px 2px 0 #000; }
+.ops6 .battle-card-versus-center-v1 > strong.draw { color: var(--ops6-yellow); text-shadow: 2px 2px 0 #000; }
+.ops6 .battle-card-versus-center-v1 > small { color: var(--ops6-muted); font-size: 8px; font-weight: 800; letter-spacing: .14em; text-align: center; }
+
+.ops6 .battle-card-versus-arrow-v1 {
+  border: var(--ops6-bd-2);
+  border-radius: 50%;
+  background: var(--ops6-yellow);
+  color: var(--ops6-ink);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, .5);
+}
+
+.ops6 .battle-card-side-title-v1 strong { color: #fff; font-size: 15px; font-weight: 900; }
+.ops6 .battle-card-side-title-v1 span { color: var(--ops6-muted); font-size: 9px; }
+
+.ops6 .battle-card-versus-population-v1 {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-card);
+  background: var(--ops6-hit-2);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .45);
+}
+
+.ops6 .battle-card-versus-population-v1 small { color: #d9b36a; font-weight: 900; }
+.ops6 .battle-card-versus-population-v1 strong { color: var(--ops6-yellow); font-size: 23px; font-weight: 900; }
+.ops6 .battle-card-versus-population-v1 span { color: var(--ops6-muted); font-size: 9px; }
+
+.ops6 .battle-card-versus-secondary-v1 > span {
+  border: 2px solid var(--ops6-line);
+  border-radius: var(--ops6-r-chip);
+  background: rgba(0, 0, 0, .25);
+}
+
+.ops6 .battle-card-versus-secondary-v1 small { color: var(--ops6-muted); font-weight: 800; }
+.ops6 .battle-card-versus-secondary-v1 b { color: #fff; font-size: 12px; font-weight: 900; }
+
+.ops6 .battle-card-losses-v1 { border-top: 2px dashed var(--ops6-line); color: var(--ops6-pink); }
+.ops6 .battle-card-losses-v1 > small { color: var(--ops6-pink); font-weight: 900; }
+.ops6 .battle-card-losses-v1 > div > span { border: 2px solid rgba(255, 143, 143, .4); border-radius: var(--ops6-r-chip); background: var(--ops6-hit); }
+.ops6 .battle-card-losses-v1 > div b { color: var(--ops6-pink); font-size: 12px; font-weight: 900; }
+.ops6 .battle-card-losses-v1 > div em { color: #d98a94; font-size: 8px; }
+
+.ops6 .battle-card-points-v1 > span {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-card);
+  background: var(--ops6-panel-2);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .45);
+}
+
+.ops6 .battle-card-points-v1 > span:first-child { background: var(--ops6-hit-2); }
+.ops6 .battle-card-points-v1 > span:first-child small { color: #d9b36a; font-weight: 900; }
+.ops6 .battle-card-points-v1 > span:first-child b { color: var(--ops6-yellow); font-weight: 900; }
+.ops6 .battle-card-points-v1 > span:last-child small { color: var(--ops6-muted); font-weight: 800; }
+.ops6 .battle-card-points-v1 > span:last-child b { color: var(--ops6-pink); font-weight: 900; }
+
+/* награды — полоса жёлтых/мятных блоков с чернильным текстом */
+.ops6 .battle-card-rewards-v1 {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-card);
+  background: transparent;
+  box-shadow: none;
+}
+
+.ops6 .battle-card-rewards-v1 > small { color: var(--ops6-muted); font-weight: 900; letter-spacing: .14em; }
+
+.ops6 .battle-card-rewards-v1 > div > span {
+  padding: 7px 12px 6px;
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-chip);
+  background: var(--ops6-yellow);
+  color: var(--ops6-ink);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .5);
+  text-align: center;
+  transition: transform 130ms ease;
+}
+
+.ops6 .battle-card-rewards-v1 > div > span:nth-child(2n) { background: var(--ops6-mint); }
+.ops6 .battle-card-rewards-v1 > div > span:hover { animation: ops6-wiggle 420ms ease; }
+.ops6 .battle-card-rewards-v1 > div b { color: var(--ops6-ink); font-size: 13px; font-weight: 900; }
+.ops6 .battle-card-rewards-v1 > div em { color: rgba(20, 20, 20, .72); font-weight: 800; }
+.ops6 .battle-card-reward-item-v1 .asterion-resource-icon { width: 16px; height: 16px; }
+
+.ops6 .battle-card-footer-v1 { color: var(--ops6-muted); }
+.ops6 .battle-card-footer-v1 > span small { color: var(--ops6-muted); font-weight: 900; }
+.ops6 .battle-card-footer-v1 > span b { color: #fff; font-size: 15px; font-weight: 900; }
+
+.ops6 .battle-save-v1 {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-chip);
+  background: var(--ops6-text);
+  color: var(--ops6-ink);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .5);
+}
+
+.ops6 .battle-save-v1.saved { background: var(--ops6-yellow); color: var(--ops6-ink); }
+.ops6 .battle-save-v1:hover,
+.ops6 .battle-save-v1:focus-visible { outline: none; transform: translate(-1px, -1px); box-shadow: 5px 5px 0 rgba(0, 0, 0, .55); }
+
+.ops6 .battle-save-notice-v1 { color: var(--ops6-mint); font-weight: 800; }
+.ops6 .battle-save-notice-v1.error { color: var(--ops6-pink); }
+
+.ops6 .battle-empty-v1 {
+  border: 3px dashed var(--ops6-line);
+  border-radius: var(--ops6-r-panel);
+  background: rgba(25, 29, 41, .6);
+  color: var(--ops6-muted);
+}
+
+.ops6 .battle-empty-v1 strong { color: var(--ops6-text); }
+.ops6 .battle-empty-v1 > span { color: var(--ops6-yellow); }
+
+.ops6 .battle-back-v1 { font-weight: 900; }
+
+/* =====================================================
+   ЖУРНАЛ БОЯ (модалка) — Comic Ops
+   ВАЖНО: секция раундов .battle-visual-report-v1 НЕ стилизуется
+   (пользователь: «как раунды идут — не менять»).
+   ===================================================== */
+.ops6.battle-report-overlay-v1 {
+  background:
+    radial-gradient(rgba(255, 255, 255, .045) 1.2px, transparent 1.3px) 0 0 / 14px 14px,
+    rgba(4, 5, 9, .88);
+}
+
+.ops6 .battle-report-modal-v1 {
+  border: 3px solid #000;
+  border-radius: var(--ops6-r-panel);
+  background: var(--ops6-bg);
+  box-shadow: var(--ops6-shadow-lg), 0 30px 80px rgba(0, 0, 0, .6);
+}
+
+.ops6 .battle-report-modal-head-v1 {
+  border-bottom: 3px solid #000;
+  background: linear-gradient(160deg, #202636, #171b26);
+}
+
+.ops6 .battle-report-modal-head-v1 > div:first-child > small { transform: rotate(-1.2deg); }
+
+.ops6 .battle-report-modal-result-v1 { gap: 12px; }
+
+.ops6 .battle-report-modal-result-icon-v1 {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-chip);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .5);
+  animation: ops6-pop 420ms cubic-bezier(.2, 1.6, .4, 1) both;
+}
+
+.ops6 .battle-report-modal-result-v1.victory { color: var(--ops6-mint); }
+.ops6 .battle-report-modal-result-v1.victory .battle-report-modal-result-icon-v1 { background: var(--ops6-mint); color: var(--ops6-ink); }
+.ops6 .battle-report-modal-result-v1.defeat { color: var(--ops6-pink); }
+.ops6 .battle-report-modal-result-v1.defeat .battle-report-modal-result-icon-v1 { background: var(--ops6-pink); color: var(--ops6-ink); }
+.ops6 .battle-report-modal-result-v1.draw { color: var(--ops6-yellow); }
+.ops6 .battle-report-modal-result-v1.draw .battle-report-modal-result-icon-v1 { background: var(--ops6-yellow); color: var(--ops6-ink); }
+
+.ops6 .battle-report-modal-result-v1 h2 {
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-shadow: 3px 3px 0 rgba(0, 0, 0, .85);
+}
+
+.ops6 .battle-report-modal-head-v1 p { color: var(--ops6-muted-2); font-size: 12px; font-weight: 700; }
+.ops6 .battle-report-modal-head-v1 p time { color: var(--ops6-text); }
+
+/* крестик закрытия остаётся в едином danger-стиле репозитория
+   (body button[data-asterion-close] в asterion-unified-theme.css) */
+
+/* --- ИТОГ ОПЕРАЦИИ (BattleOutcome) --- */
+.ops6 .battle-section-v1:not(.battle-visual-report-v1) {
+  position: relative;
+  padding: 22px 16px 14px;
+  border: var(--ops6-bd);
+  border-radius: var(--ops6-r-panel);
+  background: var(--ops6-panel);
+  box-shadow: var(--ops6-shadow-lg);
+}
+
+.ops6 .battle-summary-v1 {
+  position: relative;
+  padding: 22px 16px 14px;
+  border: var(--ops6-bd);
+  border-radius: var(--ops6-r-panel);
+  background: var(--ops6-panel);
+  box-shadow: var(--ops6-shadow-lg);
+}
+
+/* ярлыки-заголовки секций журнала */
+.ops6 .battle-summary-v1 > header,
+.ops6 .battle-section-v1:not(.battle-visual-report-v1) > .battle-section-head-v1 {
+  position: absolute;
+  top: -14px;
+  left: 14px;
+  z-index: 2;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.ops6 .battle-summary-v1 > header h3,
+.ops6 .battle-section-v1:not(.battle-visual-report-v1) > .battle-section-head-v1 h3 {
+  margin: 4px 0 0;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: .1em;
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, .8);
+}
+
+.ops6 .battle-summary-v1 > header small,
+.ops6 .battle-section-v1:not(.battle-visual-report-v1) > .battle-section-head-v1 small {
+  background: var(--ops6-yellow);
+}
+
+.ops6 .battle-summary-v1 > header > span,
+.ops6 .battle-section-v1:not(.battle-visual-report-v1) > .battle-section-head-v1 > span {
+  color: var(--ops6-muted);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+
+/* дуэль сторон */
+.ops6 .battle-outcome-option-head-v1 { border-bottom: 2px dashed var(--ops6-line); padding-bottom: 12px; }
+.ops6 .battle-outcome-option-head-v1 > span { color: var(--ops6-yellow); font-size: 10px; }
+
+.ops6 .battle-outcome-title-v1 { gap: 12px; }
+.ops6 .battle-outcome-title-v1 > span {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-chip);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .5);
+  animation: ops6-pop 420ms cubic-bezier(.2, 1.6, .4, 1) both;
+}
+
+.ops6 .battle-outcome-title-v1 h3 {
+  font-size: 30px !important;
+  font-weight: 900 !important;
+  text-shadow: 3px 3px 0 rgba(0, 0, 0, .85);
+}
+
+.ops6 .battle-outcome-title-v1.victory { color: var(--ops6-mint); }
+.ops6 .battle-outcome-title-v1.victory > span { background: var(--ops6-mint); color: var(--ops6-ink); }
+.ops6 .battle-outcome-title-v1.defeat { color: var(--ops6-pink); }
+.ops6 .battle-outcome-title-v1.defeat > span { background: var(--ops6-pink); color: var(--ops6-ink); }
+.ops6 .battle-outcome-title-v1.draw { color: var(--ops6-yellow); }
+.ops6 .battle-outcome-title-v1.draw > span { background: var(--ops6-yellow); color: var(--ops6-ink); }
+
+.ops6 .battle-outcome-option-head-v1 p { color: var(--ops6-muted-2); font-size: 12px; }
+
+.ops6 .battle-outcome-duel-grid-v1 { gap: 14px; }
+
+.ops6 .battle-outcome-duel-side-v1 {
+  position: relative;
+  padding: 12px 12px 12px;
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-card);
+  background: var(--ops6-panel-2);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, .45);
+}
+
+.ops6 .battle-outcome-duel-side-v1.attacker { border-top: var(--ops6-bd-2); }
+.ops6 .battle-outcome-duel-side-v1.defender { border-top: var(--ops6-bd-2); }
+.ops6 .battle-outcome-duel-side-v1.winner { box-shadow: 4px 4px 0 rgba(0, 0, 0, .45), inset 0 0 0 2px var(--ops6-mint); }
+
+.ops6 .battle-outcome-side-head-v1 { border-bottom: 2px dashed var(--ops6-line); padding-bottom: 10px; }
+.ops6 .battle-outcome-side-head-v1 strong { color: #fff; font-size: 17px; font-weight: 900; }
+.ops6 .battle-outcome-side-head-v1 span { color: var(--ops6-muted); font-size: 10px; }
+
+.ops6 .battle-outcome-mini-table-v1 { border: 2px solid var(--ops6-line); border-radius: var(--ops6-r-chip); overflow: hidden; }
+.ops6 .battle-outcome-mini-table-head-v1 { background: #0d1017; color: var(--ops6-yellow); font-weight: 900; letter-spacing: .12em; }
+.ops6 .battle-outcome-mini-table-row-v1 { border-top: 2px dashed var(--ops6-line); background: transparent; }
+.ops6 .battle-outcome-mini-table-row-v1:nth-child(odd) { background: rgba(255, 255, 255, .025); }
+.ops6 .battle-outcome-mini-table-row-v1 strong { color: var(--ops6-text); font-size: 12px; font-weight: 800; }
+.ops6 .battle-outcome-mini-table-row-v1 b { color: #fff; font-size: 12px; font-weight: 900; }
+.ops6 .battle-outcome-mini-table-row-v1 b.loss { color: var(--ops6-pink); }
+
+.ops6 .battle-outcome-points-panel-v1 > div {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-card);
+  background: var(--ops6-panel);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .45);
+}
+
+.ops6 .battle-outcome-points-panel-v1 > div:first-child { background: var(--ops6-hit-2); }
+.ops6 .battle-outcome-points-panel-v1 > div:first-child small { color: #d9b36a; font-weight: 900; }
+.ops6 .battle-outcome-points-panel-v1 > div:first-child strong { color: var(--ops6-yellow); font-weight: 900; }
+.ops6 .battle-outcome-points-panel-v1 > div:last-child small { color: var(--ops6-muted); font-weight: 800; }
+.ops6 .battle-outcome-points-panel-v1 > div:last-child b { color: var(--ops6-pink); font-weight: 900; }
+.ops6 .battle-outcome-points-panel-v1 > div:last-child span { color: var(--ops6-muted); }
+.ops6 .battle-outcome-points-panel-v1.winner > div:first-child { box-shadow: 3px 3px 0 rgba(0, 0, 0, .45), inset 0 0 0 2px var(--ops6-mint); }
+
+/* награды журнала — комикс-полоса */
+.ops6 .battle-outcome-reward-strip-v1 {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-card);
+  background: transparent;
+}
+
+.ops6 .battle-outcome-reward-strip-v1 > header { border-bottom: 0; padding-bottom: 4px; }
+.ops6 .battle-outcome-reward-strip-v1 > header small { color: var(--ops6-muted); font-weight: 900; letter-spacing: .14em; }
+.ops6 .battle-outcome-reward-strip-v1 > header span { color: var(--ops6-muted); }
+
+.ops6 .battle-outcome-reward-grid-v1 > div {
+  justify-items: center;
+  gap: 2px;
+  padding: 9px 10px 8px;
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-chip);
+  background: var(--ops6-yellow);
+  color: var(--ops6-ink);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, .5);
+  text-align: center;
+  transition: transform 130ms ease;
+}
+
+.ops6 .battle-outcome-reward-grid-v1 > div:nth-child(2n) { background: var(--ops6-mint); }
+.ops6 .battle-outcome-reward-grid-v1 > div:hover { animation: ops6-wiggle 420ms ease; }
+.ops6 .battle-outcome-reward-grid-v1 > div > small { color: rgba(20, 20, 20, .75); font-size: 8px; font-weight: 900; letter-spacing: .1em; }
+.ops6 .battle-outcome-reward-grid-v1 > div > strong { color: var(--ops6-ink); font-size: 16px; font-weight: 900; }
+
+/* --- СОСТАВЫ СТОРОН (PopulationPanel) --- */
+.ops6 .battle-header-sides-v1 { gap: 12px; }
+
+.ops6 .battle-header-side-v1 {
+  position: relative;
+  padding: 20px 12px 12px;
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-card);
+  background: var(--ops6-panel-2);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, .45);
+}
+
+.ops6 .battle-header-side-v1 .battle-side-copy-v1 small {
+  position: absolute;
+  top: -12px;
+  left: 12px;
+  transform: rotate(-1deg);
+}
+
+.ops6 .battle-header-side-v1.defender .battle-side-copy-v1 small { transform: rotate(1.2deg); }
+
+.ops6 .battle-side-avatar-v1 {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-chip);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .5);
+  overflow: hidden;
+}
+
+.ops6 .battle-side-copy-v1 strong { color: #fff; font-size: 16px; font-weight: 900; }
+.ops6 .battle-side-copy-v1 span { color: var(--ops6-muted); font-size: 10px; }
+.ops6 .battle-header-side-mark-v1 { border: var(--ops6-bd-2); border-radius: var(--ops6-r-chip); background: var(--ops6-yellow); color: var(--ops6-ink); box-shadow: 2px 2px 0 rgba(0, 0, 0, .5); }
+.ops6 .battle-header-side-v1.defender .battle-header-side-mark-v1 { background: var(--ops6-pink-tag); }
+
+.ops6 .battle-unit-table-v1,
+.ops6 .battle-tech-table-v1 {
+  border: 2px solid var(--ops6-line);
+  border-radius: var(--ops6-r-chip);
+  overflow: hidden;
+}
+
+.ops6 .battle-unit-table-head-v1,
+.ops6 .battle-tech-table-head-v1 { background: #0d1017; color: var(--ops6-yellow); font-weight: 900; }
+
+.ops6 .battle-unit-table-row-v1,
+.ops6 .battle-tech-table-row-v1 { border-top: 2px dashed var(--ops6-line); background: transparent; }
+.ops6 .battle-unit-table-row-v1:nth-child(odd),
+.ops6 .battle-tech-table-row-v1:nth-child(odd) { background: rgba(255, 255, 255, .025); }
+.ops6 .battle-unit-table-row-v1 strong { color: var(--ops6-text); font-weight: 800; }
+.ops6 .battle-unit-table-row-v1 b { color: #fff; font-weight: 900; }
+.ops6 .battle-tech-table-row-v1 strong { color: var(--ops6-text); font-weight: 800; }
+.ops6 .battle-tech-table-row-v1 > b { color: var(--ops6-mint); font-weight: 900; }
+.ops6 .battle-tech-table-row-v1 > b.not-calibrated { color: var(--ops6-yellow); }
+
+.ops6 .battle-tech-table-row-v1:hover,
+.ops6 .battle-tech-table-row-v1:focus-visible { background: rgba(255, 210, 63, .06); outline: none; }
+
+.ops6 .battle-tech-tooltip-v1 {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-card);
+  background: var(--ops6-panel-2);
+  box-shadow: var(--ops6-shadow);
+}
+
+/* --- КОМАНДИРЫ --- */
+.ops6 .battle-commanders-v1 article {
+  border: var(--ops6-bd-2);
+  border-radius: var(--ops6-r-card);
+  background: var(--ops6-panel-2);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, .45);
+}
+
+.ops6 .battle-commanders-v1 strong { color: #fff; font-weight: 900; }
+.ops6 .battle-commanders-v1 span { color: var(--ops6-muted); }
+.ops6 .battle-commanders-v1 em { color: var(--ops6-muted-2); }
+
+.ops6 .battle-commander-empty-v1 { border: 3px dashed var(--ops6-line); border-radius: var(--ops6-r-chip); color: var(--ops6-muted); }
+
+/* кнопка возврата под журналом */
+.ops6 .battle-modal-back-v1 { margin-top: 14px; }
+
+/* уведомление о сохранении и пустые значения */
+.ops6 .battle-empty-inline-v1 { color: var(--ops6-muted); }

@@ -53,6 +53,7 @@ import shipArmorArt from '../assets/source/New assets/technologies/technology.sh
 import battlePlanet from '../assets/source/battle-report-v2/battle-planet-transparent-v1.png';
 import battleSpaceBackground from '../assets/source/battle-report-v2/battle-space-background-v1.png';
 import './battle-reports.css';
+import './reports-comic-v6.css';
 
 type SaveNotice = { kind: 'saved' | 'error'; message: string };
 type ScrollRef = { current: HTMLElement | null };
@@ -259,6 +260,7 @@ type BattleCardBodyProps = {
 
 function BattleCardSummaryBody({ viewModel, ...actions }: BattleCardBodyProps) {
   const sides = [viewModel.attacker, viewModel.defender];
+  const result = resultLabel(viewModel);
   return (
     <div className="battle-card-body-v1 battle-card-versus-v1">
       <div className="battle-card-versus-grid-v1">
@@ -274,6 +276,11 @@ function BattleCardSummaryBody({ viewModel, ...actions }: BattleCardBodyProps) {
             {index === 0 ? <span className="battle-card-versus-arrow-v1" aria-hidden="true">→</span> : null}
           </div>
         ))}
+        <div className="battle-card-versus-center-v1" aria-hidden="true">
+          <b>VS</b>
+          <strong className={result.tone}>{result.label}!</strong>
+          <small>{missionLabel(viewModel.missionType)} · {formatNumber(viewModel.roundCount)} РАУНДОВ</small>
+        </div>
       </div>
       <CardRewards viewModel={viewModel} />
       <CardActions viewModel={viewModel} {...actions} />
@@ -1024,7 +1031,7 @@ export function BattleReportModal({
 
   return createPortal(
     <div
-      className="battle-report-overlay-v1"
+      className="battle-report-overlay-v1 ops6"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -1092,7 +1099,7 @@ export function BattleReportsView({ planetName, coords, onBack }: { planetName: 
   };
 
   return (
-    <section className="battle-view-v1 fleet-page-shell-v1">
+    <section className="battle-view-v1 ops6 fleet-page-shell-v1">
       <header className="battle-page-head-v1 fleet-page-head-v1">
         <div><small>УПРАВЛЕНИЕ ФЛОТОМ · {planetName} {coords}</small><h2>БИТВЫ</h2><p>Боевые отчёты флота</p></div>
         <div className="battle-page-actions-v1 fleet-page-actions-v1"><span className={`battle-save-notice-v1 ${saveNotice.kind}`} role="status" aria-live="polite">{saveNotice.message}</span><button type="button" className="battle-back-v1 fleet-page-back-v1" onClick={onBack}>← К ФЛОТАМ</button></div>
