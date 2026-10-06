@@ -713,6 +713,22 @@
   box-shadow: 2px 2px 0 rgba(0, 0, 0, .5);
 }
 
+/* узкий viewport (≤760px): однополосный брейкпоинт battle-reports.css
+   перебивался специфичностью .ops6 выше — восстанавливаем его scoped-правилом.
+   Вертикальный порядок (атакующий → VS → защитник) уже задают order-правила
+   выше (1/2/3), при одной колонке они складываются в столбец.
+   minmax(0, 1fr) вместо 1fr — гарантия от blowout: min-width колонок
+   уже 0 (battle-reports.css), но не полагаемся на наследование. */
+@media (max-width: 760px) {
+  .ops6 .battle-card-versus-grid-v1 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ops6 .battle-card-versus-center-v1 {
+    min-width: 0;
+  }
+}
+
 .ops6 .battle-card-side-title-v1 strong { color: #fff; font-size: 15px; font-weight: 900; }
 .ops6 .battle-card-side-title-v1 span { color: var(--ops6-muted); font-size: 9px; }
 
@@ -863,6 +879,19 @@
 
 .ops6 .battle-report-modal-head-v1 p { color: var(--ops6-muted-2); font-size: 12px; font-weight: 700; }
 .ops6 .battle-report-modal-head-v1 p time { color: var(--ops6-text); }
+
+/* доступность: prefers-reduced-transparency — непрозрачные фоны хрома модалки.
+   Контракт battle-reports.css (#020a12 / #03121d) перебивался специфичностью
+   .ops6 (rgba-оверлей, градиент шапки) — восстанавливаем scoped-правилом,
+   без градиентов и alpha; halftone-слой оверлея тоже alpha-декор — гасим его. */
+@media (prefers-reduced-transparency: reduce) {
+  .ops6.battle-report-overlay-v1 { background: #020a12; }
+  .ops6.battle-report-overlay-v1::before { content: none; }
+
+  .ops6 .battle-report-modal-v1,
+  .ops6 .battle-report-modal-head-v1,
+  .ops6 .battle-report-modal-scroll-v1 { background: #03121d; }
+}
 
 /* крестик закрытия остаётся в едином danger-стиле репозитория
    (body button[data-asterion-close] в asterion-unified-theme.css) */
