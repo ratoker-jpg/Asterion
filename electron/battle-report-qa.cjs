@@ -258,6 +258,13 @@ async function reducedTransparencySnapshot(win) {
       modal: read('.battle-report-modal-v1'),
       head: read('.battle-report-modal-head-v1'),
       scroll: read('.battle-report-modal-scroll-v1'),
+      reduceRules: Array.from(document.styleSheets).flatMap((sheet) => {
+        try {
+          return Array.from(sheet.cssRules)
+            .filter((rule) => rule.media && rule.media.mediaText.includes('prefers-reduced-transparency'))
+            .map((rule) => rule.cssText.slice(0, 700));
+        } catch { return ['unreadable-sheet:' + (sheet.href || 'inline')]; }
+      }),
     };
   })()`);
   await wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] });
