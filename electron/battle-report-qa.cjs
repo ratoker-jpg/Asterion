@@ -186,6 +186,102 @@ async function modalSnapshot(win) {
   })()`);
 }
 
+async function versusLayoutSnapshot(win, reportId) {
+  return win.webContents.executeJavaScript(`(async () => {
+    const card = document.querySelector('[data-qa-battle-card="${reportId}"]');
+    if (!card) return { missingCard: true };
+    card.open = true;
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const grid = card.querySelector('.battle-card-versus-grid-v1');
+    if (!grid) { card.open = false; return { missingGrid: true }; }
+    const center = grid.querySelector('.battle-card-versus-center-v1');
+    const columns = Array.from(grid.querySelectorAll(':scope > .battle-card-versus-column-v1'));
+    const rect = (node) => {
+      if (!node) return null;
+      const r = node.getBoundingClientRect();
+      return { top: Number(r.top.toFixed(2)), left: Number(r.left.toFixed(2)), right: Number(r.right.toFixed(2)), bottom: Number(r.bottom.toFixed(2)), width: Number(r.width.toFixed(2)) };
+    };
+    const result = {
+      tracks: getComputedStyle(grid).gridTemplateColumns.trim().split(/\\s+/),
+      centerMinWidth: center ? getComputedStyle(center).minWidth : '',
+      gridHorizontalOverflow: grid.scrollWidth > grid.clientWidth + 2,
+      attacker: rect(columns[0]),
+      defender: rect(columns[1]),
+      center: rect(center),
+    };
+    card.open = false;
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    return result;
+  })()`);
+}
+
+function assertVersusLayout(versus, width, label) {
+  const singleColumn = width <= 760;
+  const baseOk = Boolean(versus
+    && versus.attacker && versus.defender && versus.center
+    && versus.tracks.length === (singleColumn ? 1 : 3)
+    && !versus.gridHorizontalOverflow);
+  const stackedOk = singleColumn
+    ? versus.centerMinWidth === '0px'
+      && versus.attacker.top + 1 < versus.center.top
+      && versus.center.top + 1 < versus.defender.top
+    : Math.abs(versus.attacker.top - versus.defender.top) <= 2
+      && versus.attacker.left < versus.center.left
+      && versus.center.left < versus.defender.left;
+  if (!baseOk || !stackedOk) {
+    throw new Error(`Battle versus grid layout failed at ${label}: ${JSON.stringify({ ...versus, singleColumn, baseOk, stackedOk })}`);
+  }
+}
+
+async function reducedTransparencySnapshot(win) {
+  const wc = win.webContents;
+  const wasAttached = wc.debugger.isAttached();
+  if (!wasAttached) wc.debugger.attach('1.3');
+  await wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-transparency', value: 'reduce' }] });
+  await sleep(80);
+  const state = await wc.executeJavaScript(`(() => {
+    const read = (selector) => {
+      const node = document.querySelector(selector);
+      if (!node) return null;
+      const style = getComputedStyle(node);
+      return {
+        backgroundColor: style.backgroundColor,
+        backgroundImage: style.backgroundImage,
+        className: (node.className || '').toString(),
+        inOps6: Boolean(node.closest('.ops6')),
+        stylesheets: document.styleSheets.length,
+      };
+    };
+    return {
+      matches: window.matchMedia('(prefers-reduced-transparency: reduce)').matches,
+      overlay: read('.battle-report-overlay-v1'),
+      modal: read('.battle-report-modal-v1'),
+      head: read('.battle-report-modal-head-v1'),
+      scroll: read('.battle-report-modal-scroll-v1'),
+      reduceRules: Array.from(document.styleSheets).flatMap((sheet) => {
+        try {
+          return Array.from(sheet.cssRules)
+            .filter((rule) => rule.media && rule.media.mediaText.includes('prefers-reduced-transparency'))
+            .map((rule) => rule.cssText.slice(0, 700));
+        } catch { return ['unreadable-sheet:' + (sheet.href || 'inline')]; }
+      }),
+    };
+  })()`);
+  await wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] });
+  if (!wasAttached) wc.debugger.detach();
+  return state;
+}
+
+function assertReducedTransparency(state, label) {
+  const overlayOpaque = state.overlay?.backgroundColor === 'rgb(2, 10, 18)' && state.overlay?.backgroundImage === 'none';
+  const modalOpaque = state.modal?.backgroundColor === 'rgb(3, 18, 29)';
+  const headOpaque = state.head?.backgroundColor === 'rgb(3, 18, 29)' && state.head?.backgroundImage === 'none';
+  const scrollOpaque = state.scroll?.backgroundColor === 'rgb(3, 18, 29)';
+  if (!state.matches || !overlayOpaque || !modalOpaque || !headOpaque || !scrollOpaque) {
+    throw new Error(`Reduced transparency contract failed at ${label}: ${JSON.stringify({ state, overlayOpaque, modalOpaque, headOpaque, scrollOpaque })}`);
+  }
+}
+
 async function measureBattleSceneGeometry(win) {
   return win.webContents.executeJavaScript(`(() => {
     const modal = document.querySelector('[role="dialog"][data-qa-battle-report-modal]');
@@ -620,6 +716,9 @@ async function runViewport(win, width, height) {
     throw new Error(`Battle list contract failed at ${label}: ${JSON.stringify(list)}`);
   }
 
+  const versus = await versusLayoutSnapshot(win, 'battle-demo-attacker-victory');
+  assertVersusLayout(versus, width, label);
+
   await openBattle(win, 'battle-demo-attacker-victory');
   const modal = await modalSnapshot(win);
   const expectedBattleIconSuffixes = ['/aegis.webp', '/veyra.webp'];
@@ -636,6 +735,11 @@ async function runViewport(win, width, height) {
   if (!modal.present || modal.ariaModal !== 'true' || !modal.labelledBy || modal.roundCount !== 5 || modal.analysisOpenCount !== 0 || !modal.hasOverallLosses || !modal.hasHeaderTable || modal.headerAvatarCount !== 2 || modal.technologyRowCount < 1 || modal.technologyTooltipCount !== modal.technologyRowCount || modal.technologyTooltipImageCount < modal.technologyRowCount || modal.visibleTechnologyLevel || !modal.technologyRowsFocusable || modal.eventCardCount < 1 || !modal.hasBattlePoints || JSON.stringify(modal.battleAwardStates) !== JSON.stringify(['missing', 'missing']) || !modal.hasNoAwardRecordText || modal.commanderTechnicalText || !modal.hasHumanCommanderEffect || !modal.hasVisualReport || modal.hasInitialSnapshot || modal.hasProvenance || modal.hasRoundSummary || modal.hasRoundLog || !modal.roundAnalysisValid || modal.hasComposition || !modal.hasOutcome || modal.orbitDebrisCount < 1 || !modal.orbitDebrisText.includes('ОБЛОМКИ НА ОРБИТЕ') || !modal.hasOutcomeBeforeAfter || !modal.outcomeBeforeVisualReport || !modal.internalScroll || modal.internalHorizontalOverflow || modal.technicalText || !modal.bodyLocked || !modal.stageInert) {
     throw new Error(`Battle modal contract failed at ${label}: ${JSON.stringify(modal)}`);
   }
+
+  const reduced = await reducedTransparencySnapshot(win);
+  assertReducedTransparency(reduced, label);
+  await settle(win);
+
   await capture(win, directory, 'battle-report-modal');
   await positionBattleScene(win, 1);
   await capture(win, directory, 'battle-report-scene');
@@ -704,7 +808,7 @@ async function runViewport(win, width, height) {
   await win.webContents.executeJavaScript(`document.querySelector('.battle-report-modal-close-v1')?.click()`);
   await waitFor(win, `!document.querySelector('[role="dialog"][data-qa-battle-report-modal]')`);
   const simulator = await exerciseSimulatorModalFlow(win);
-  return { viewport: label, list, modal, analysis, focus, closeState, transition, bottom, simulator };
+  return { viewport: label, list, modal, versus, reduced, analysis, focus, closeState, transition, bottom, simulator };
 }
 
 app.whenReady().then(async () => {
@@ -724,7 +828,7 @@ app.whenReady().then(async () => {
     const results = [];
     for (const [width, height] of VIEWPORTS) results.push(await runViewport(win, width, height));
     fs.writeFileSync(path.join(OUTPUT, 'results.json'), JSON.stringify({ results, screenshotsSkipped: skipScreenshots }, null, 2));
-    console.log('Battle report QA passed: list losses, population ledgers, readable technology rows, inline round analysis, simulator isolation, focus trap, Escape restoration, mobile overflow, rewards and round transitions.');
+    console.log('Battle report QA passed: list losses, population ledgers, readable technology rows, inline round analysis, simulator isolation, focus trap, Escape restoration, mobile overflow, versus grid stacking, reduced transparency, rewards and round transitions.');
     win.destroy();
     app.exit(0);
   } catch (error) {
