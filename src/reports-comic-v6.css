@@ -883,14 +883,17 @@
 /* доступность: prefers-reduced-transparency — непрозрачные фоны хрома модалки.
    Контракт battle-reports.css (#020a12 / #03121d) перебивался специфичностью
    .ops6 (rgba-оверлей, градиент шапки) — восстанавливаем scoped-правилом,
-   без градиентов и alpha; halftone-слой оверлея тоже alpha-декор — гасим его. */
+   без градиентов и alpha; halftone-слой оверлея тоже alpha-декор — гасим его.
+   Специфичность (0,3,0) через скоуп оверлея: модалка/шапка/скролл всегда его
+   потомки, поэтому правила выигрывают у любых (0,2,0)-правил скина независимо
+   от порядка в бандле. */
 @media (prefers-reduced-transparency: reduce) {
   .ops6.battle-report-overlay-v1 { background: #020a12; }
   .ops6.battle-report-overlay-v1::before { content: none; }
 
-  .ops6 .battle-report-modal-v1,
-  .ops6 .battle-report-modal-head-v1,
-  .ops6 .battle-report-modal-scroll-v1 { background: #03121d; }
+  .ops6.battle-report-overlay-v1 .battle-report-modal-v1,
+  .ops6.battle-report-overlay-v1 .battle-report-modal-head-v1,
+  .ops6.battle-report-overlay-v1 .battle-report-modal-scroll-v1 { background: #03121d; }
 }
 
 /* крестик закрытия остаётся в едином danger-стиле репозитория

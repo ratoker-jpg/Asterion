@@ -238,12 +238,19 @@ async function reducedTransparencySnapshot(win) {
   const wasAttached = wc.debugger.isAttached();
   if (!wasAttached) wc.debugger.attach('1.3');
   await wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-transparency', value: 'reduce' }] });
+  await sleep(80);
   const state = await wc.executeJavaScript(`(() => {
     const read = (selector) => {
       const node = document.querySelector(selector);
       if (!node) return null;
       const style = getComputedStyle(node);
-      return { backgroundColor: style.backgroundColor, backgroundImage: style.backgroundImage };
+      return {
+        backgroundColor: style.backgroundColor,
+        backgroundImage: style.backgroundImage,
+        className: (node.className || '').toString(),
+        inOps6: Boolean(node.closest('.ops6')),
+        stylesheets: document.styleSheets.length,
+      };
     };
     return {
       matches: window.matchMedia('(prefers-reduced-transparency: reduce)').matches,
