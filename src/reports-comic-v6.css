@@ -1,5 +1,9 @@
 /* ============================================================================
    REPORTS — VARIANT 6 «COMIC OPS» (утверждён пользователем 2026-10-06)
+   Палитра П3 «ГЛУБИНА» (выбор пользователя 2026-10-06): акцент #2fc4e0,
+   success #45d9a0, fail #ff6b7d — холодная тиловая гамма в базовой
+   палитре игры (--ut-accent #56d9f2). Комикс-язык (обводки, офсет-тени,
+   halftone) не меняется.
    Единый комикс-стандарт для всех отчётов: боевые сводки, журнал боя (кроме
    отрисовки раундов — они не тронуты), шпионское досье, системные сигналы.
    Стиль: ударные панели, ярлыки-теги, halftone, крупные значения.
@@ -10,21 +14,21 @@
 
 /* ---------------------------------------------------------------- tokens -- */
 .ops6 {
-  --ops6-bg: #12141c;
-  --ops6-panel: #191d29;
-  --ops6-panel-2: #10131c;
-  --ops6-ink: #141414;
-  --ops6-text: #f4f4f2;
-  --ops6-muted: #8b95ad;
-  --ops6-muted-2: #9aa5bd;
-  --ops6-yellow: #ffd23f;
-  --ops6-mint: #7dffa8;
-  --ops6-pink: #ff8f8f;
-  --ops6-pink-tag: #ffb9b0;
-  --ops6-blue-tag: #bde9ff;
-  --ops6-line: #2a3040;
-  --ops6-hit: #3a1420;
-  --ops6-hit-2: #3a2c10;
+  --ops6-bg: #0a1216;
+  --ops6-panel: #0e1c22;
+  --ops6-panel-2: #081216;
+  --ops6-ink: #04141a;
+  --ops6-text: #ecf5f7;
+  --ops6-muted: #74949e;
+  --ops6-muted-2: #8aacb6;
+  --ops6-yellow: #2fc4e0;
+  --ops6-mint: #45d9a0;
+  --ops6-pink: #ff6b7d;
+  --ops6-pink-tag: #ff9aa6;
+  --ops6-blue-tag: #7cd8ec;
+  --ops6-line: #17323c;
+  --ops6-hit: #2b1218;
+  --ops6-hit-2: #10303a;
   --ops6-bd: 2.5px solid #000;
   --ops6-bd-2: 2px solid #000;
   --ops6-shadow: 5px 5px 0 rgba(0, 0, 0, .5);
@@ -157,7 +161,7 @@
 
 .ops6 .reports-list-item.active {
   border-color: #000;
-  background: linear-gradient(90deg, #232a3c, var(--ops6-panel) 55%);
+  background: linear-gradient(90deg, #122c36, var(--ops6-panel) 55%);
   box-shadow: 3px 3px 0 rgba(0, 0, 0, .45), inset 0 0 0 2px var(--ops6-yellow);
 }
 
@@ -213,7 +217,7 @@
 .ops6 .reports-generic-hero {
   border: var(--ops6-bd);
   border-radius: var(--ops6-r-panel);
-  background: linear-gradient(160deg, #202636, #171b26);
+  background: linear-gradient(160deg, #112832, #0d1e26);
   box-shadow: var(--ops6-shadow-lg);
 }
 
@@ -263,7 +267,7 @@
 .ops6 .reports-empty-folder {
   border: 3px dashed var(--ops6-line);
   border-radius: var(--ops6-r-panel);
-  background: rgba(25, 29, 41, .6);
+  background: rgba(14, 28, 34, .6);
 }
 
 .ops6 .reports-empty-dossier strong,
@@ -299,7 +303,7 @@
 .ops6 .reports-folder-actions {
   border: 2px dashed var(--ops6-line);
   border-radius: var(--ops6-r-card);
-  background: rgba(16, 19, 28, .6);
+  background: rgba(8, 18, 22, .6);
 }
 
 .ops6 .reports-select-all { color: var(--ops6-muted-2); }
@@ -343,7 +347,7 @@
   padding: 12px 14px 14px;
   border: var(--ops6-bd);
   border-radius: var(--ops6-r-panel);
-  background: linear-gradient(160deg, #202636, #171b26);
+  background: linear-gradient(160deg, #112832, #0d1e26);
   box-shadow: var(--ops6-shadow-lg);
 }
 
@@ -391,7 +395,7 @@
   padding: 6px 10px;
   border: 3px solid var(--ops6-mint);
   border-radius: var(--ops6-r-chip);
-  background: rgba(125, 255, 168, .08);
+  background: rgba(69, 217, 160, .08);
   color: var(--ops6-mint);
   font-size: 11px;
   font-style: normal;
@@ -449,7 +453,7 @@
 }
 
 .ops6 .spy-report-population > div:first-child { background: var(--ops6-hit-2); }
-.ops6 .spy-report-population > div:first-child span { color: #d9b36a; }
+.ops6 .spy-report-population > div:first-child span { color: #5fd0e4; }
 .ops6 .spy-report-population > div:first-child strong { color: var(--ops6-yellow); }
 .ops6 .spy-report-population span { color: var(--ops6-muted); font-size: 8px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .ops6 .spy-report-population strong { color: #fff; font-size: 17px; font-weight: 900; }
@@ -497,7 +501,7 @@
 .ops6 .spy-report-empty { color: var(--ops6-muted); font-size: 10px; }
 
 .ops6 .spy-report-entity--inspected:hover,
-.ops6 .spy-report-entity--inspected:focus-within { background: rgba(255, 210, 63, .05); border-color: var(--ops6-line); }
+.ops6 .spy-report-entity--inspected:focus-within { background: rgba(47, 196, 224, .06); border-color: var(--ops6-line); }
 
 .ops6 .spy-entity-tooltip {
   border: var(--ops6-bd-2);
@@ -618,7 +622,7 @@
 
 .ops6 .battle-card-summary-v1 { border-radius: var(--ops6-r-panel); }
 .ops6 .battle-card-summary-v1:hover,
-.ops6 .battle-card-summary-v1:focus-visible { background: rgba(255, 210, 63, .05); outline: none; }
+.ops6 .battle-card-summary-v1:focus-visible { background: rgba(47, 196, 224, .06); outline: none; }
 
 .ops6 .battle-result-badge-v1 { font-weight: 900; letter-spacing: .1em; }
 
@@ -719,7 +723,7 @@
   box-shadow: 3px 3px 0 rgba(0, 0, 0, .45);
 }
 
-.ops6 .battle-card-versus-population-v1 small { color: #d9b36a; font-weight: 900; }
+.ops6 .battle-card-versus-population-v1 small { color: #5fd0e4; font-weight: 900; }
 .ops6 .battle-card-versus-population-v1 strong { color: var(--ops6-yellow); font-size: 23px; font-weight: 900; }
 .ops6 .battle-card-versus-population-v1 span { color: var(--ops6-muted); font-size: 9px; }
 
@@ -734,9 +738,9 @@
 
 .ops6 .battle-card-losses-v1 { border-top: 2px dashed var(--ops6-line); color: var(--ops6-pink); }
 .ops6 .battle-card-losses-v1 > small { color: var(--ops6-pink); font-weight: 900; }
-.ops6 .battle-card-losses-v1 > div > span { border: 2px solid rgba(255, 143, 143, .4); border-radius: var(--ops6-r-chip); background: var(--ops6-hit); }
+.ops6 .battle-card-losses-v1 > div > span { border: 2px solid rgba(255, 107, 125, .4); border-radius: var(--ops6-r-chip); background: var(--ops6-hit); }
 .ops6 .battle-card-losses-v1 > div b { color: var(--ops6-pink); font-size: 12px; font-weight: 900; }
-.ops6 .battle-card-losses-v1 > div em { color: #d98a94; font-size: 8px; }
+.ops6 .battle-card-losses-v1 > div em { color: #e89aa4; font-size: 8px; }
 
 .ops6 .battle-card-points-v1 > span {
   border: var(--ops6-bd-2);
@@ -746,7 +750,7 @@
 }
 
 .ops6 .battle-card-points-v1 > span:first-child { background: var(--ops6-hit-2); }
-.ops6 .battle-card-points-v1 > span:first-child small { color: #d9b36a; font-weight: 900; }
+.ops6 .battle-card-points-v1 > span:first-child small { color: #5fd0e4; font-weight: 900; }
 .ops6 .battle-card-points-v1 > span:first-child b { color: var(--ops6-yellow); font-weight: 900; }
 .ops6 .battle-card-points-v1 > span:last-child small { color: var(--ops6-muted); font-weight: 800; }
 .ops6 .battle-card-points-v1 > span:last-child b { color: var(--ops6-pink); font-weight: 900; }
@@ -800,7 +804,7 @@
 .ops6 .battle-empty-v1 {
   border: 3px dashed var(--ops6-line);
   border-radius: var(--ops6-r-panel);
-  background: rgba(25, 29, 41, .6);
+  background: rgba(14, 28, 34, .6);
   color: var(--ops6-muted);
 }
 
@@ -829,7 +833,7 @@
 
 .ops6 .battle-report-modal-head-v1 {
   border-bottom: 3px solid #000;
-  background: linear-gradient(160deg, #202636, #171b26);
+  background: linear-gradient(160deg, #112832, #0d1e26);
 }
 
 .ops6 .battle-report-modal-head-v1 > div:first-child > small { transform: rotate(-1.2deg); }
@@ -963,7 +967,7 @@
 .ops6 .battle-outcome-side-head-v1 span { color: var(--ops6-muted); font-size: 10px; }
 
 .ops6 .battle-outcome-mini-table-v1 { border: 2px solid var(--ops6-line); border-radius: var(--ops6-r-chip); overflow: hidden; }
-.ops6 .battle-outcome-mini-table-head-v1 { background: #0d1017; color: var(--ops6-yellow); font-weight: 900; letter-spacing: .12em; }
+.ops6 .battle-outcome-mini-table-head-v1 { background: #070f13; color: var(--ops6-yellow); font-weight: 900; letter-spacing: .12em; }
 .ops6 .battle-outcome-mini-table-row-v1 { border-top: 2px dashed var(--ops6-line); background: transparent; }
 .ops6 .battle-outcome-mini-table-row-v1:nth-child(odd) { background: rgba(255, 255, 255, .025); }
 .ops6 .battle-outcome-mini-table-row-v1 strong { color: var(--ops6-text); font-size: 12px; font-weight: 800; }
@@ -978,7 +982,7 @@
 }
 
 .ops6 .battle-outcome-points-panel-v1 > div:first-child { background: var(--ops6-hit-2); }
-.ops6 .battle-outcome-points-panel-v1 > div:first-child small { color: #d9b36a; font-weight: 900; }
+.ops6 .battle-outcome-points-panel-v1 > div:first-child small { color: #5fd0e4; font-weight: 900; }
 .ops6 .battle-outcome-points-panel-v1 > div:first-child strong { color: var(--ops6-yellow); font-weight: 900; }
 .ops6 .battle-outcome-points-panel-v1 > div:last-child small { color: var(--ops6-muted); font-weight: 800; }
 .ops6 .battle-outcome-points-panel-v1 > div:last-child b { color: var(--ops6-pink); font-weight: 900; }
@@ -1055,7 +1059,7 @@
 }
 
 .ops6 .battle-unit-table-head-v1,
-.ops6 .battle-tech-table-head-v1 { background: #0d1017; color: var(--ops6-yellow); font-weight: 900; }
+.ops6 .battle-tech-table-head-v1 { background: #070f13; color: var(--ops6-yellow); font-weight: 900; }
 
 .ops6 .battle-unit-table-row-v1,
 .ops6 .battle-tech-table-row-v1 { border-top: 2px dashed var(--ops6-line); background: transparent; }
@@ -1068,7 +1072,7 @@
 .ops6 .battle-tech-table-row-v1 > b.not-calibrated { color: var(--ops6-yellow); }
 
 .ops6 .battle-tech-table-row-v1:hover,
-.ops6 .battle-tech-table-row-v1:focus-visible { background: rgba(255, 210, 63, .06); outline: none; }
+.ops6 .battle-tech-table-row-v1:focus-visible { background: rgba(47, 196, 224, .07); outline: none; }
 
 .ops6 .battle-tech-tooltip-v1 {
   border: var(--ops6-bd-2);
@@ -1149,7 +1153,7 @@
 }
 
 .ops6 .battle-card-orbit-debris-v1 small,
-.ops6 .battle-detail-orbit-debris-v1 small { color: #d9b36a; font-weight: 900; letter-spacing: .14em; }
+.ops6 .battle-detail-orbit-debris-v1 small { color: #5fd0e4; font-weight: 900; letter-spacing: .14em; }
 
 .ops6 .battle-card-orbit-debris-v1 strong,
 .ops6 .battle-detail-orbit-debris-v1 strong { color: var(--ops6-yellow); font-weight: 900; }
