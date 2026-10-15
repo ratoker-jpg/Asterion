@@ -646,15 +646,25 @@ async function verifyResourceZoneFlow(win, directory, label) {
     };
     planet.productionBots={metal:0,minerals:0,gas:0};
     save.resourceClock = { lastReconciledAt: Date.now() + 60_000, remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
-    localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
+    const fixture = JSON.stringify(save);
+    // React may persist the previous high-resource state between this task and
+    // navigation. Write the fixture once more at the actual unload boundary,
+    // after any pending old-document effects, before the new App hydrates.
+    window.addEventListener('beforeunload', () => {
+      localStorage.setItem(${JSON.stringify(SAVE_KEY)}, fixture);
+      sessionStorage.setItem('asterion.qa.insufficient-unload', '1');
+    }, { once: true });
+    localStorage.setItem(${JSON.stringify(SAVE_KEY)}, fixture);
     window.location.reload();
     return true;
   })()`, 'Could not seed insufficient-resource wallet fixture');
   const reloadedInsufficientFixture = await win.webContents.executeJavaScript(`(() => {
     const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'{}');
-    return { rootMetal: save.metal, planetMetal: save.planets?.['helion-01']?.resources?.metal };
+    return { rootMetal: save.metal, planetMetal: save.planets?.['helion-01']?.resources?.metal,
+      unloadSeeded: sessionStorage.getItem('asterion.qa.insufficient-unload') === '1' };
   })()`);
-  if(reloadedInsufficientFixture.rootMetal!==0 || reloadedInsufficientFixture.planetMetal!==0) throw new Error(`Insufficient-resource canonical wallet did not survive reload: ${JSON.stringify(reloadedInsufficientFixture)}`);
+  if(reloadedInsufficientFixture.rootMetal!==0 || reloadedInsufficientFixture.planetMetal!==0 || !reloadedInsufficientFixture.unloadSeeded)
+    throw new Error(`Insufficient-resource canonical wallet did not survive reload: ${JSON.stringify(reloadedInsufficientFixture)}`);
   await activateResourceZone(win);
   await openResourceBuilding(win,'metal-production-1');
   await waitFor(win, `document.querySelector('[data-qa-build-status]')`);
