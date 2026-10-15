@@ -261,11 +261,10 @@ function sourcePlanetLabel(id: string) {
   return id === 'helion-01' ? 'Helion 01' : 'Планета-источник';
 }
 
-function SpyDossier({ item, report, onOpenUniverseTarget, onOpenPirateUniverse }: {
+function SpyDossier({ item, report, onOpenUniverseTarget }: {
   item: ReportItem;
   report: SpyReportSnapshot;
   onOpenUniverseTarget: (target: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string }) => void;
-  onOpenPirateUniverse: (coordinate: UniverseCoordinate, contactCycleKey: string) => void;
 }) {
   const fleet = Object.entries(report.fleet ?? {}).filter(([id, count]) => id !== 'spy-probe' && Number(count) > 0);
   const defense = Object.entries(report.defense ?? {}).filter(([, count]) => Number(count) > 0);
@@ -381,7 +380,7 @@ function FolderActions({ folder, items, selectedIds, onSelectAll, onDeleteAll, o
   );
 }
 
-export function ReportsView({ battleReports, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget }: {
+export function ReportsView({ battleReports, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse }: {
   battleReports: readonly BattleReport[];
   savedBattleReportIds: readonly string[];
   operations: OperationsState;
@@ -402,6 +401,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
   onSimulateBattle: (report: SpyReportSnapshot) => void;
   onRecallSpy: (missionId: string) => void;
   onOpenUniverseTarget: (target: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string }) => void;
+  onOpenPirateUniverse: (coordinate: UniverseCoordinate, contactCycleKey: string) => void;
 }) {
   const [activeFolder, setActiveFolder] = useState<MessageFolderId>('profile');
   const [filter, setFilter] = useState<ReportFilter>('all');
