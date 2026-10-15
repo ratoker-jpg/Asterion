@@ -164,6 +164,10 @@ for(const faction of COMBAT_FACTION_IDS){
   }
 }
 const aggregate={count:rows.length,
+  meanPirateAttackBefore:rows.reduce((n,x)=>n+x.old.attack,0)/rows.length,
+  meanPirateAttackAfter:rows.reduce((n,x)=>n+x.approved.attack,0)/rows.length,
+  meanPirateLifeBefore:rows.reduce((n,x)=>n+x.old.life,0)/rows.length,
+  meanPirateLifeAfter:rows.reduce((n,x)=>n+x.approved.life,0)/rows.length,
   winsBefore:rows.filter(x=>x.old.winner==='attacker').length,
   winsAfter:rows.filter(x=>x.approved.winner==='attacker').length,
   meanNet75Before:rows.reduce((n,x)=>n+x.old.conversion[75].net,0)/rows.length,
@@ -193,4 +197,6 @@ await mkdir(OUT,{recursive:true});
 await writeFile(resolve(OUT,'comparison.json'),JSON.stringify({aggregate,rows},null,2));
 await writeFile(resolve(OUT,'comparison.md'),markdown);
 console.log('[pr91-approved-comparison] '+JSON.stringify(aggregate));
+console.log('[pr91-approved-example] '+JSON.stringify(rows.filter(r=>r.faction==='aegis'&&r.resourcePoints===3_000_000&&r.actualPopulation===25_112&&r.destroyerLevel===10)));
+
 console.log('[pr91-approved-comparison] '+OUT);
