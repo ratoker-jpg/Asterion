@@ -50,6 +50,7 @@ test('owner-cycle roll dispatches one persisted real pirate flight, resolves no-
   const flight=launched.flights.records[0]!;
   assert.equal(flight.missionId,'pirate-raid');
   assert.equal(flight.ownerSide,'pirate');
+  assert.equal(flight.pirateRaidSnapshot?.maxRounds,12,'new automatic raids freeze the 12-round ceiling');
   assert.equal(flight.pirateRaidSnapshot?.composition['pirate-planet-breaker' as never],undefined);
   const storage=new MemoryStorage();
   const facade=createPersistenceFacade({mode:'production',storage});
@@ -72,6 +73,13 @@ test('owner-cycle roll dispatches one persisted real pirate flight, resolves no-
   assert.equal(normalizePirateRaidSnapshot({...snapshot,
     composition:{'pirate-planet-breaker':1}}),null);
   assert.equal(normalizePirateRaidSnapshot({...snapshot,contactCycleKey:'fake-cycle'}),null);
+  assert.equal(normalizePirateRaidSnapshot({...snapshot,maxRounds:8}),null,
+    'an invalid injected new maxRounds cannot downgrade the frozen ceiling');
+  const legacy=normalizePirateRaidSnapshot((({maxRounds:_rounds,...rest})=>rest)(snapshot));
+  assert.ok(legacy,'legacy in-flight raid without a stored round ceiling must hydrate');
+  assert.equal(legacy!.maxRounds,undefined);
+  assert.equal(normalizePirateRaidSnapshot(JSON.parse(JSON.stringify(legacy)))?.maxRounds,undefined);
+  assert.equal(normalizePirateRaidSnapshot(JSON.parse(JSON.stringify(snapshot)))?.maxRounds,12);
   const before=JSON.stringify(hydrated.planets['helion-01']!.buildings);
   const queueBefore=JSON.stringify(hydrated.queues['helion-01']);
   const completed=reconcileFlights(hydrated,flight.arrivalAt,undefined,{mode:'production'});
