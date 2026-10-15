@@ -279,14 +279,20 @@ async function runViewport(width, height) {
     await grantTargetSystemColony(win, contact);
     await clickPrimary(win, 'operations', `document.querySelector('.operations-layout-v2')`);
     const operationCheck = await win.webContents.executeJavaScript(`(() => {
-      const cards = [...document.querySelectorAll('[data-qa-pirate-contact]')];
-      const systems = cards.map((card) => Number(/Система\\s+(\\d+)/.exec(card.textContent || '')?.[1]));
+      const cards = [...document.querySelectorAll('[data-qa-pirate-contact]')].filter((card) => card.getAttribute('data-qa-pirate-contact'));
+      const systems = cards.map((card) => Number(/\\[\\d+:(\\d+):\\d+\\]/.exec(card.textContent || '')?.[1]));
+      const art = cards[0]?.querySelector('.operation-feed-pirate-art-v2 img');
+      cards[0]?.click();
+      const objective = document.querySelector('.operations-objective-v2');
+      const radius = objective ? parseFloat(getComputedStyle(objective).borderTopLeftRadius) : 0;
       const scroll = document.querySelector('.operations-feed-scroll-v2');
       const layout = document.querySelector('.operations-layout-v2');
-      return { systems, bounded: Boolean(scroll && layout && layout.getBoundingClientRect().height < 780) };
+      return { systems, artLoaded: Boolean(art?.complete && art.naturalWidth > 0),
+        radius, bounded: Boolean(scroll && layout && layout.getBoundingClientRect().height < 780) };
     })()`);
-    if (!operationCheck.bounded || operationCheck.systems.some((system) => system !== 1 && system !== contact.system)) {
-      throw new Error(`Operations leaked foreign pirate systems or unbounded layout: ${JSON.stringify(operationCheck)}`);
+    if (!operationCheck.systems.length || operationCheck.systems.some((system) => !Number.isInteger(system) || (system !== 1 && system !== contact.system))
+      || !operationCheck.artLoaded || operationCheck.radius < 9 || !operationCheck.bounded) {
+      throw new Error(`Operations leaked foreign systems, missing planet art/rounded objective or unbounded layout: ${JSON.stringify(operationCheck)}`);
     }
     await capture(win, directory, 'operations-owned-pirate-contacts');
     await clickPrimary(win, 'universe', `document.querySelector('[data-qa-universe]')`);
