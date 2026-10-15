@@ -283,7 +283,7 @@ function OperationDossier({ operation, pirateContact, quiet, nowMs, onAccept, on
       : pirateContact?.statusLabel === 'Зонд в пути' ? 'Зонд в пути' : 'Нет разведданных';
 
   return (
-    <aside className={`operations-dossier-v2 operations-dossier-v2--${operation.category}`} data-threat={operation.threat ?? 'unknown'}>
+    <aside className={`operations-dossier-v2 operations-dossier-v2--${operation.category} ${pirate ? 'operations-dossier-v2--pirate' : ''}`} data-threat={operation.threat ?? 'unknown'}>
       <header className="operations-dossier-head-v2">
         <div className="operations-dossier-title-v2">
           <span className="operations-dossier-glyph-v2"><OperationGlyph category={operation.category} /></span>
