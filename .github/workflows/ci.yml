@@ -26,6 +26,8 @@ jobs:
         run: npm run test:pirates
       - name: Pirate operations integration tests
         run: npm run test:pirate-operations
+      - name: PR91 seeded battle and net-economics evidence
+        run: npm run balance:pirates:pr91
       - name: Operations domain tests
         run: npm run test:operations
       - name: Command domain tests
@@ -101,6 +103,8 @@ jobs:
             artifacts-pass1/test-mode-qa/**/*
             artifacts/battle-report-qa/**/*
             artifacts/universe-planet-qa/**/*
+            artifacts/pr91-balance/**/*
+            artifacts/pirate-operations-qa/**/*
           if-no-files-found: warn
           retention-days: 14
       - name: Package Windows app
