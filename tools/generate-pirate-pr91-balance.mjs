@@ -12,7 +12,8 @@ import {pirateDebrisRewardMultiplier} from '../src/domain/pirates/threat.ts';
 import {calculateAttackDebris,calculateAttackLoot} from '../src/application/attack.ts';
 import {calculatePirateForceDebris} from '../src/domain/pirates/debris.ts';
 import {calculateFlightFuel} from '../src/domain/flights/fuel.ts';
-import {getRecyclingOutput,getRecyclingDurationMs} from '../src/domain/buildings/recycling.ts';
+import {startRecyclingJob,collectRecyclingJob} from '../src/domain/buildings/recycling.ts';
+import {collectOrbitalDebrisAtCoordinate,getOrbitalDebrisAtCoordinate} from '../src/domain/espionage/orbital-debris.ts';
 
 const PREFIX='pr91-seeded-v1';
 const H=25112;
@@ -90,17 +91,57 @@ function collectModel(faction,debris,tech){
   const recycler=getFactionShipCatalog(faction).find(x=>x.id==='recycler');
   const perShip=recycler?.ship?.cargo??0;
   if(perShip<=0)throw new Error('Missing recycler cargo');
-  const count=10;
-  const perFlight=count*perShip;
-  const trips=debris>0?Math.ceil(debris/perFlight):0;
+  const count=10,perFlight=count*perShip;
+  // Exercise the actual canonical orbital collection ledger, one cargo-limited
+  // trip at a time. Flight travel and trip availability remain separately
+  // MODELLED using the canonical game fuel function, not executed flights.
+  const coordinate={galaxy:1,system:1,position:14};
+  let espionage={targets:{},orbitalDebris:debris>0?{
+    source:{id:'source',targetPlanetId:'pr91-balance-target',targetPlanetName:'Balance',
+      targetOwnerId:'simulation',targetCoordinate:coordinate,debris,createdAt:1}
+  }:{}};
+  let collected=0,trips=0;
+  while(getOrbitalDebrisAtCoordinate(espionage,coordinate)>0){
+    const pickup=collectOrbitalDebrisAtCoordinate(espionage,coordinate,perFlight);
+    if(pickup.collected<=0)throw new Error('Orbital debris collection made no progress');
+    collected+=pickup.collected;trips++;
+    espionage=pickup.espionage;
+  }
+  if(collected!==debris)throw new Error('Orbital accounting lost debris');
   const selected={recycler:count};
   const collectionGas=trips*calculateFlightFuel(faction,selected,12000,{2:tech});
-  const output75=getRecyclingOutput(debris,75,{metal:50,minerals:50,gas:0});
-  const output120=getRecyclingOutput(debris,120,{metal:50,minerals:50,gas:0});
-  return {debrisCollected:debris,collectionGas,trips,perFlight,
-    output75,output120,
-    recyclingMsTenJobs:getRecyclingDurationMs(Math.ceil(debris/10),10),
-    recyclingMsOneJob:getRecyclingDurationMs(debris,10)};
+  function recycle(level,parallel){
+    let state={availableDebris:collected,jobs:[]};
+    const start=1_000_000;
+    let maxFinish=start;
+    const slice=Math.floor(collected/parallel),remainder=collected%parallel;
+    const ids=[];
+    for(let i=0;i<parallel;i++){
+      const amount=slice+(i<remainder?1:0);
+      if(amount<=0)continue;
+      const id='recycle-'+level+'-'+i;
+      const queued=startRecyclingJob(state,level,amount,{metal:50,minerals:50,gas:0},start,id);
+      if(!queued.canStart)throw new Error('Cannot create real recycling job: '+queued.reason);
+      state=queued.state;
+      maxFinish=Math.max(maxFinish,queued.job.finishAt);
+      ids.push({id,finish:queued.job.finishAt});
+    }
+    if(state.availableDebris!==0)throw new Error('Unreserved debris remained in recycling ledger');
+    const out={metal:0,minerals:0,gas:0};
+    for(const job of ids){
+      const done=collectRecyclingJob(state,job.id,job.finish);
+      if(!done.ok)throw new Error('Real recycling completion failed: '+done.reason);
+      state=done.state;
+      for(const resource of ['metal','minerals','gas'])out[resource]+=done.output[resource];
+    }
+    if(state.jobs.length)throw new Error('Uncollected recycling jobs');
+    return{out,seconds:(maxFinish-start)/1000};
+  }
+  const low=recycle(1,1);
+  const high=recycle(10,10);
+  return{debrisCollected:collected,collectionGas,trips,perFlight,
+    output75:low.out,output120:high.out,recyclingMsTenJobs:high.seconds*1000,
+    recyclingMsOneJob:low.seconds*1000};
 }
 const rows=[];
 for(const faction of COMBAT_FACTION_IDS){
@@ -209,7 +250,7 @@ function table(header,rr,columns){
 }
 let report='# PR91 — measured seeded combat & economic scenarios\n\n';
 report+='Generated from actual resolveCombat outputs. Algorithm '+PREFIX+'. Run '+CASES_PER_COMBINATION+' seeds per faction/score/technology combination.\n\n';
-report+='**Economic boundary:** orbital debris created by real battles; recovered debris, 10-recycler flights, 50/50 metal/mineral recycling are a transparent full-collection transport MODEL, not flight execution. No claim that the whole amount was actually harvested in-game. Units for net = sum of metal+minerals+gas, not currency.\n\n';
+report+='**Evidence boundary:** orbital debris comes from real combat, and collection is executed via the actual orbital-debris ledger and cargo-limited pickup; recycling uses actual domain start/collect transitions (L1 75%, L10 120%). Flight scheduling and available real recycler trips are still modelled with the canonical cargo and fuel rules, NOT persisted spacecraft flights. This is an optimistic full-collection economic upper bound. Units for net = sum of metal+minerals+gas, not currency.\n\n';
 report+='**Net base** = modeled recycled resource total – destroyed player hull costs – actual game flight fuel (route=12000) – modeled recycler fuel. **Net incoming** = modeled recycled total – destroyed player hull/defense costs – resource loot removed – modeled recycler fuel.\n\n';
 report+='## Real battle outcomes and sample EV\n\n';
 report+=table(['Mission','Faction','Score','N','Attacker W','Defender W','Draw','Full base W','Lost cost','Pirate debris','Own debris','Produced debris','Modeled collected','Flight gas','Collector gas','Stolen','Net 75%','Net 120%'],groups,[
