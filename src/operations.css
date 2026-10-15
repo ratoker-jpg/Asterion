@@ -1243,3 +1243,23 @@
 .operations-pirate-coordinate-link:focus-visible { outline: 2px solid #7fe4f6; outline-offset: 3px; }
 .operations-pirate-coordinate-link:disabled { cursor: default; opacity: .6; }
 .operations-pirate-action-reason { display: block; max-width: 100%; }
+
+/* A defeated base is not an available target or a scheduled incoming attack. */
+.operations-pirate-status[data-status-tone="active"] {
+  border-color: rgba(238, 112, 102, .43);
+  color: #f5a298;
+  background: rgba(122, 35, 30, .10);
+}
+.operations-pirate-quiet-list { display: grid; gap: 8px; padding-top: 10px; }
+.operations-pirate-quiet {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid rgba(239, 137, 98, .4);
+  border-radius: 10px;
+  background: rgba(128, 48, 26, .12);
+}
+.operations-pirate-quiet strong { color: #f6a393; font-size: 11px; }
+.operations-pirate-quiet span { color: #f3d1a6; font-size: 11px; }
+.operations-pirate-quiet small { color: #a4a9aa; font-size: 10px; line-height: 1.4; }
