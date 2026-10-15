@@ -354,7 +354,10 @@ function OperationDossier({ operation, pirateContact, quiet, nowMs, onAccept, on
             <span>{pirate ? 'РАЗВЕДКА' : 'РАЗВЕДДАННЫЕ'}</span>
             {pirate ? <b>{pirateContact ? reconLabel : 'Контакт завершён'}</b> : <><IntelPips level={operation.intel} /><b>{operation.intel} / 3</b></>}
           </div>
-          {pirateContact ? <div className="operations-pirate-live-timer" role="timer">До исчезновения: <strong>{pirateRemainingLabel(pirateContact.expiresAt, nowMs)}</strong></div> : quiet ? <QuietPirateProgress nextEligibleAt={quiet.nextEligibleAt} nowMs={nowMs} /> : null}
+          {pirateContact ? <div className="operations-pirate-lifecycle-v2">
+            <div className="operations-pirate-live-timer" role="timer">До исчезновения: <strong>{pirateRemainingLabel(pirateContact.expiresAt, nowMs)}</strong></div>
+            <small>Затем — 15-минутная пауза до нового ролла появления базы.</small>
+          </div> : quiet ? <QuietPirateProgress nextEligibleAt={quiet.nextEligibleAt} nowMs={nowMs} /> : null}
         </div>
       </section>
 
