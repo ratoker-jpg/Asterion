@@ -1423,3 +1423,108 @@
   font-size: 10px;
   line-height: 1.4;
 }
+
+/* PR90 desktop refinement: the same planet art as the selected Universe slot. */
+.operation-feed-card-v2[data-qa-pirate-contact] {
+  grid-template-columns: 82px minmax(0, 1fr) 16px;
+  min-height: 116px;
+}
+.operation-feed-pirate-art-v2 {
+  position: relative;
+  min-width: 0;
+  padding: 8px 5px 6px;
+  overflow: hidden;
+  border-right: 1px solid rgba(238, 101, 94, .21);
+  border-radius: 9px 0 0 9px;
+  background: radial-gradient(circle at 50% 46%, rgba(163, 50, 46, .16), rgba(7, 13, 22, .7) 73%);
+}
+.operation-feed-pirate-art-v2 img {
+  display: block;
+  width: 100%;
+  height: 80px;
+  max-width: 80px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 7px rgba(225, 75, 68, .25));
+}
+.operation-feed-pirate-art-v2 small {
+  position: absolute;
+  bottom: 5px;
+  left: 0;
+  right: 0;
+  padding: 1px;
+  background: rgba(15, 16, 24, .66);
+  color: #db9992;
+  font-size: 8px;
+  text-align: center;
+  letter-spacing: .08em;
+}
+
+/* Accessible without switching to the Completed tab after winning. */
+.operations-quiet-banner-v2 {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+  padding: 12px 17px;
+  border: 1px solid rgba(220, 116, 77, .35);
+  border-radius: 14px;
+  background: linear-gradient(90deg, rgba(82, 35, 27, .34), rgba(9, 24, 30, .97));
+}
+.operations-quiet-banner-intro-v2 {
+  min-width: 210px;
+  display: grid;
+  gap: 6px;
+}
+.operations-quiet-banner-intro-v2 strong {
+  color: #f1b1a0;
+  font-size: 11px;
+  letter-spacing: .07em;
+}
+.operations-quiet-banner-intro-v2 span {
+  color: #aa8c89;
+  font-size: 10px;
+}
+.operations-quiet-banner-v2 .operations-pirate-cooldown {
+  min-width: 300px;
+  flex: 1 1 380px;
+  margin-top: 0;
+}
+
+/* Player-facing objectives and sections must be actual rounded cards, not long ruled rows. */
+.operations-dossier-v2--pirate .operations-objective-v2 {
+  margin: 12px 0;
+  border: 1px solid rgba(231, 97, 90, .36);
+  border-radius: 14px;
+  padding: 13px 15px;
+  background: linear-gradient(105deg, rgba(118, 34, 43, .19), rgba(13, 27, 33, .72));
+  box-shadow: inset 3px 0 0 var(--op-accent);
+}
+.operations-dossier-v2--pirate .operations-dossier-lower-v2 {
+  gap: 12px;
+  border: 0;
+  min-height: 0;
+  margin-bottom: 12px;
+}
+.operations-dossier-v2--pirate .operations-conditions-v2,
+.operations-dossier-v2--pirate .operations-rewards-panel-v2 {
+  min-width: 0;
+  border: 1px solid rgba(229, 95, 89, .19);
+  border-radius: 12px;
+  background: rgba(15, 22, 30, .78);
+  padding: 14px 15px;
+}
+.operations-dossier-v2--pirate .operations-command-v2 {
+  border: 1px solid rgba(233, 100, 92, .25);
+  border-radius: 14px;
+  padding: 13px 14px;
+  background: rgba(13, 23, 31, .76);
+  box-shadow: inset 3px 0 0 rgba(238, 101, 94, .75);
+}
+.operations-dossier-v2--pirate .operations-dossier-glyph-v2 {
+  border-radius: 12px;
+}
+.operations-dossier-v2--pirate .operations-primary-v2,
+.operations-dossier-v2--pirate .operations-secondary-v2 {
+  border-radius: 10px;
+}
