@@ -47,8 +47,8 @@ export type PirateState = Readonly<{
   reconLastDispatchAt: Readonly<Record<string, number>>;
   reconReports: readonly PirateReconReport[];
   /** Owner-wide historical maxima survive downgrades and colony loss. */
-  ownerMaxHangarLevel: Readonly<Record<string, number>>;
-  ownerThreats: Readonly<Record<string, OwnerPirateThreat>>;
+  ownerMaxHangarLevel?: Readonly<Record<string, number>>;
+  ownerThreats?: Readonly<Record<string, OwnerPirateThreat>>;
 }>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
