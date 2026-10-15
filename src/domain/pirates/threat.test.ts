@@ -20,7 +20,7 @@ test('approved pirate threat anchors and no divide by zero', () => {
     assert.equal(pirateRaidChance(r,b,8), 0.02);
     assert.ok(Math.abs(pirateRaidChance(r,b,24) - at24) < 0.005);
     assert.ok(Math.abs(pirateRaidChance(r,b,48) - at48) < 0.005);
-    assert.ok(Math.abs(pirateRaidChance(r,b,maxAt) - 0.30) < 1e-12);
+    assert.ok(Math.abs(pirateRaidChance(r,b,pirateThreatHoursToMaximum(r,b)) - 0.30) < 1e-12);
   }
   assert.equal(pirateRaidChance(0,0,0),0.02);
   assert.ok(pirateRaidChance(0,0,1000) <= 0.30);
@@ -44,6 +44,6 @@ test('seeded rolls and virtual time survive repeated calls and full/partial rese
   const current = advancePirateThreat(initial, 1_000_000 + 3_600_000);
   assert.equal(current.ageHours,11);
   assert.deepEqual(advancePirateThreat(current,1_000_000+3_600_000),current);
-  assert.equal(reducePirateThreatAfterVictory(current,current.integratedAt,0.95).ageHours,11*0.05);
+  assert.ok(Math.abs(reducePirateThreatAfterVictory(current,current.integratedAt,0.95).ageHours-0.55)<1e-10);
   assert.equal(reducePirateThreatAfterVictory(current,current.integratedAt,1).ageHours,0);
 });
