@@ -1,4 +1,4 @@
-import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
+import { getFactionShipCatalog, getFactionDefenseCatalog } from '../domain/combat/faction-catalog.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import { getHangarCapacity } from '../domain/buildings/balance-v1.ts';
 import { calculateFleetPopulation } from '../domain/fleet/runtime.ts';
@@ -42,13 +42,26 @@ function targetsByOwner(state: SaveState): ReadonlyMap<string, ReadonlyMap<strin
     systems.set(key, [...(systems.get(key) ?? []), target]);
   };
   const playerFaction = state.profile.factionId as CombatFactionId;
-  const describe = (faction: CombatFactionId, ships: Record<string, number>): RaidDefenseComposition =>
-    getFactionShipCatalog(faction).flatMap((ship) => {
+  const describe = (
+    faction: CombatFactionId, ships: Record<string, number>, defenses: Record<string, number>,
+  ): RaidDefenseComposition => [
+    ...getFactionShipCatalog(faction).flatMap((ship) => {
       const count = safe(ships[ship.id] ?? 0);
       return count > 0 && ship.ordinaryClass
-        ? [{ ordinaryClass: ship.ordinaryClass, population: count * ship.population }]
+        ? [{ kind: 'ship' as const, ordinaryClass: ship.ordinaryClass,
+          population: count * ship.population, armorStrength: ship.combat.armorStrength }]
         : [];
-    });
+    }),
+    // Defense installations have no ordinary matchup class in production:
+    // against them the resolver uses neutral x1 and the real armor value.
+    ...getFactionDefenseCatalog(faction).flatMap((defense) => {
+      const count = safe(defenses[defense.id] ?? 0);
+      return count > 0
+        ? [{ kind: 'defense' as const, population: count * defense.population,
+          armorStrength: defense.combat.armorStrength }]
+        : [];
+    }),
+  ];
   for (const [id, planet] of Object.entries(state.planets)) {
     add({
       id, ownerId: state.profile.playerId, name: planet.name,
@@ -59,7 +72,7 @@ function targetsByOwner(state: SaveState): ReadonlyMap<string, ReadonlyMap<strin
       population: calculateFleetPopulation(planet.fleet, playerFaction)
         + calculateDefensePopulation(planet.defense, playerFaction),
       hangarLevel: safe(planet.buildings.hangar ?? 0),
-      defensiveClasses: describe(playerFaction, planet.fleet.ships),
+      defensiveClasses: describe(playerFaction, planet.fleet.ships, planet.defense.defenses),
     });
   }
   for (const target of Object.values(getEspionageTargets(state.espionage))) {
@@ -71,7 +84,7 @@ function targetsByOwner(state: SaveState): ReadonlyMap<string, ReadonlyMap<strin
       population: calculateFleetPopulation(target.fleet, target.raceId)
         + calculateDefensePopulation(target.defense, target.raceId),
       hangarLevel: safe(target.buildings.hangar ?? 0),
-      defensiveClasses: describe(target.raceId, target.fleet.ships),
+      defensiveClasses: describe(target.raceId, target.fleet.ships, target.defense.defenses),
     });
   }
   return all;
