@@ -440,20 +440,28 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
     if (!initialSelectedReportId || handledInitialReportId.current === initialSelectedReportId) return;
     handledInitialReportId.current = initialSelectedReportId;
     pendingInitialReportId.current = initialSelectedReportId;
-    setActiveFolder('system');
+    const target = items.find((item) => item.id === initialSelectedReportId
+      || item.pirateReconReport?.id === initialSelectedReportId
+      || item.battleReportId === initialSelectedReportId);
+    // Pirate recon is a System report; completed pirate raids link to Battle reports.
+    const folder = MESSAGE_FOLDERS.find((item) => item.category === (target?.category ?? 'system'));
+    setActiveFolder(folder?.id ?? 'system');
     setFilter('all');
     setSearch('');
-  }, [initialSelectedReportId]);
+  }, [initialSelectedReportId, items]);
   useEffect(() => {
     const requestedId = pendingInitialReportId.current;
-    if (activeFolder !== 'system' || !requestedId) return;
-    const targetIndex = visibleItems.findIndex((item) => item.id === requestedId || item.pirateReconReport?.id === requestedId);
+    if (!requestedId) return;
+    const targetIndex = visibleItems.findIndex((item) => item.id === requestedId
+      || item.pirateReconReport?.id === requestedId
+      || item.battleReportId === requestedId);
     if (targetIndex < 0) return;
     const target = visibleItems[targetIndex]!;
+    if (activeCategory !== target.category) return;
     setPage(Math.floor(targetIndex / PAGE_SIZE) + 1);
     setSelectedId(target.id);
     pendingInitialReportId.current = null;
-  }, [activeFolder, initialSelectedReportId, visibleItems]);
+  }, [activeCategory, initialSelectedReportId, visibleItems]);
   useEffect(() => { if (activeCategory !== 'battle' && filter === 'saved') setFilter('all'); }, [activeCategory, filter]);
   useEffect(() => { setPage((current) => Math.min(current, pageCount)); }, [pageCount]);
   useEffect(() => {
