@@ -2091,3 +2091,20 @@
     overflow: visible;
   }
 }
+
+/* Failure is red in both the message feed and the report, without tinting all warnings. */
+.reports-list-item[data-pirate-recon-outcome="failure"] {
+  border-left: 3px solid var(--reports-red);
+  background: linear-gradient(90deg, rgba(135, 30, 41, .15), transparent 68%);
+}
+.reports-dossier--pirate-recon-failure .reports-dossier-heading {
+  border-left: 3px solid var(--reports-red);
+  padding-left: 12px;
+}
+.reports-dossier--pirate-recon-failure .reports-dossier-heading h2,
+.reports-dossier--pirate-recon-failure .pirate-recon-report-card > header strong {
+  color: var(--reports-red);
+}
+.reports-dossier--pirate-recon-failure .pirate-recon-report-card {
+  border-color: rgba(223, 71, 86, .42);
+}
