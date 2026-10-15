@@ -1,17 +1,44 @@
 import type { SaveState } from './contracts.ts';
-import { getCurrentPirateContact, ensurePirateOwnerProfile } from './pirates.ts';
+import { getCurrentPirateContact, ensurePirateOwnerProfile, type CurrentPirateContact } from './pirates.ts';
 import { previewFlight } from './flights.ts';
 import { canDispatchPirateRecon, pirateReconCooldownKey } from '../domain/pirates/recon.ts';
 import type { PirateContactPresentation, PirateSystemSelection } from '../pirate-ui.ts';
 
-const PIRATE_ATLAS_SYSTEMS = Array.from({ length: 40 }, (_, index) => index + 1);
+/** Only persisted owner planets grant access to pirate raid targets. */
+export function selectOwnedPirateSystems(state: SaveState): PirateSystemSelection[] {
+  const seen = new Set<string>();
+  const result: PirateSystemSelection[] = [];
+  for (const planet of Object.values(state.planets)) {
+    const galaxy = planet.universeGalaxy ?? 1;
+    const system = planet.universeSystem ?? 1;
+    if (!Number.isSafeInteger(galaxy) || galaxy < 1 || !Number.isSafeInteger(system) || system < 1 || system > 40) continue;
+    const key = `${galaxy}:${system}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({ galaxy, system });
+  }
+  return result;
+}
+
+/** Live, deduplicated combat targets; never contains foreign-system pirates. */
+export function selectOwnedPirateTargets(state: SaveState, now: number): CurrentPirateContact[] {
+  return selectOwnedPirateSystems(state).flatMap(({ galaxy, system }) => {
+    const contact = getCurrentPirateContact(state, { galaxy, system, position: 1 }, now);
+    return contact ? [contact] : [];
+  });
+}
+
+/** Operations uses the same eligible systems as Fleet, with recon/action affordances. */
+export function selectOwnedPiratePresentations(state: SaveState, now: number): PirateContactPresentation[] {
+  return selectOwnedPirateSystems(state).flatMap((selection) => selectPirateContacts(state, now, selection));
+}
 
 /** The Operations atlas and Universe inspector project the same world schedule. */
 export function selectPirateContacts(
   state: SaveState,
   now: number,
   selection: PirateSystemSelection,
-  systems: readonly number[] = PIRATE_ATLAS_SYSTEMS,
+  systems: readonly number[] = [selection.system],
 ): PirateContactPresentation[] {
   const ownerId = state.profile.playerId;
   const contacts: PirateContactPresentation[] = [];
