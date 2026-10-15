@@ -13,7 +13,7 @@ import {
 } from './contact.ts';
 
 import { getPirateRaidCheckProgress, PIRATE_RAID_CHECK_INTERVAL_MS } from './contact-schedule.ts';
-import { createPirateProfile, pirateTechnologyLevelForResourcePoints, PIRATE_TECH_LEVEL_THRESHOLDS, PIRATE_EXCLUSIVE_TECHNOLOGIES, pirateTechnologyLevels } from './profile.ts';
+import { createPirateProfile, pirateTechnologyLevelForResourcePoints, PIRATE_TECH_LEVEL_THRESHOLDS, PIRATE_EXCLUSIVE_TECHNOLOGIES, pirateTechnologyLevels, frozenPirateTechnologyLevels } from './profile.ts';
 import { COMBAT_TECHNOLOGIES } from '../combat/technologies.ts';
 import { normalizePirateMissionSnapshot, normalizePirateRaidSnapshot } from './mission.ts';
 
@@ -181,6 +181,9 @@ test('legacy frozen tier technology profiles survive strict validation without s
       &&t.id!==modern.exclusiveTechnologyId?0:legacyTier,
   ]));
   const legacy={...modern,technologies:legacyTechnologies};
+  assert.deepEqual(frozenPirateTechnologyLevels(legacy),legacyTechnologies);
+  assert.deepEqual(frozenPirateTechnologyLevels(modern),modern.technologies);
+  assert.equal(frozenPirateTechnologyLevels({...modern,technologies:{...modern.technologies,shipArmor:1}}),null);
   const contact={version:1,defeatedCycles:{},ownerProfiles:{[input.ownerId]:{[cycleKey]:legacy}}};
   assert.equal(validatePirateContactState(contact).valid,true);
   const restored=migratePirateContactState(JSON.parse(JSON.stringify(contact)));
