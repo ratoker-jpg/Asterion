@@ -154,7 +154,7 @@ import { enqueueApplicationStateUpdate } from './application/state.ts';
 import { getOwnerShipUpgradeLevels, getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
 import { selectOwnedPlanet } from './application/owned-planets.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
-import { materializePirateProfiles, selectPirateContacts } from './application/pirate-presentation.ts';
+import { materializePirateProfiles, selectOwnedPiratePresentations, selectOwnedPirateTargets, selectPirateContacts } from './application/pirate-presentation.ts';
 import type { PirateContactPresentation, PirateSystemSelection } from './pirate-ui.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
@@ -333,7 +333,9 @@ export function App() {
   const [pirateReportId, setPirateReportId] = useState<string | undefined>();
   const pirateContacts = useMemo(() => {
     if (activeRoute !== 'operations' && activeRoute !== 'universe') return [];
-    return selectPirateContacts(state, now, pirateSystem, activeRoute === 'operations' ? undefined : [pirateSystem.system]);
+    return activeRoute === 'operations'
+      ? selectOwnedPiratePresentations(state, now)
+      : selectPirateContacts(state, now, pirateSystem);
   }, [activeRoute, state, now, pirateSystem]);
   const onPirateSystemChange = useCallback((selection: PirateSystemSelection) => {
     setPirateSystem((current) => current.galaxy === selection.galaxy && current.system === selection.system ? current : selection);
@@ -396,6 +398,15 @@ export function App() {
   };
 
   const openPirateAttack = (contact: PirateContactPresentation) => {
+    const eligible = selectOwnedPirateTargets(stateRef.current, Date.now()).some((target) =>
+      target.contactCycleKey === contact.contactCycleKey
+      && target.coordinate.galaxy === contact.coordinate.galaxy
+      && target.coordinate.system === contact.coordinate.system
+      && target.coordinate.position === contact.coordinate.position);
+    if (!eligible) {
+      setNotice('Пиратский рейд доступен только в системах, где есть ваша колония и действующий контакт.', 'error');
+      return;
+    }
     clearBuildingInterior();
     navigateTo('fleets');
     setPlanetViewMode('overview');
