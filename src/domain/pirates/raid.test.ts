@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PIRATE_BASE_SHIPS, PIRATE_CATALOG_BY_ID } from './catalog.ts';
+import { getFactionDefenseCatalog, getFactionShipCatalog } from '../combat/faction-catalog.ts';
+import { calculateEffectiveDamage, getCombatMatchupMultiplier } from '../combat/resolver.ts';
+import type { CombatFactionId } from '../combat/factions.ts';
 import { createPirateProfile } from './profile.ts';
 import { planPirateRaidFleet } from './raid.ts';
 import { pirateSeededDraw, pirateRaidChance, pirateCounterFleetChance } from './threat.ts';
@@ -46,4 +49,35 @@ test('roll chance and counter chance are independent seeded draws',()=>{
   assert.notEqual(pirateSeededDraw(key),pirateSeededDraw(`${key}:counter`));
   assert.equal(pirateRaidChance(1_000_000,0,8),0.02);
   assert.ok(Math.abs(pirateCounterFleetChance(1_000_000,0,0.132)-0.34)<1e-10);
+});
+
+test('counterfleet consumes production defense armor + population in all three races',()=>{
+  const races:readonly CombatFactionId[]=['aegis','synod','veyra'];
+  for(const race of races){
+    const ship=getFactionShipCatalog(race).find(x=>x.id==='battleship')!;
+    const turret=getFactionDefenseCatalog(race).find(x=>x.id==='plasma-turret')!;
+    assert.equal(turret.ordinaryClass,undefined,'production turrets have neutral matchup');
+    const onlyShips=plan({counterFleet:true,defense:[{
+      kind:'ship',ordinaryClass:ship.ordinaryClass!,
+      population:5000,armorStrength:ship.combat.armorStrength,
+    }]});
+    const onlyTurrets=plan({counterFleet:true,defense:[{
+      kind:'defense',population:5000,armorStrength:turret.combat.armorStrength,
+    }]});
+    const mixed=plan({counterFleet:true,defense:[
+      {kind:'ship',ordinaryClass:ship.ordinaryClass!,population:1000,armorStrength:ship.combat.armorStrength},
+      {kind:'defense',population:4000,armorStrength:turret.combat.armorStrength},
+    ]});
+    for(const result of [onlyShips,onlyTurrets,mixed]){
+      assert.ok(result.population>0);
+      assert.ok(result.population<=result.targetPopulation);
+      assert.equal(result.targetPopulation,plan({counterFleet:false}).targetPopulation);
+      assert.equal(result.ships['pirate-planet-breaker' as never],undefined);
+    }
+    const neutral=calculateEffectiveDamage(PIRATE_BASE_SHIPS[0]!.combat.attack,turret.combat.armorStrength);
+    assert.ok(neutral>0);
+    assert.equal(getCombatMatchupMultiplier('scout','battleship'),1.7);
+    assert.ok(Object.values(onlyTurrets.ships).some(n=>n>0));
+    assert.ok(Object.values(mixed.ships).some(n=>n>0));
+  }
 });
