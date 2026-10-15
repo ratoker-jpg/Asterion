@@ -1,6 +1,6 @@
-# PR91 balance evidence — incomplete, no fabricated simulation results
+# PR91 balance evidence — reproducible real battles and explicitly modeled resource returns
 
-> **STATUS: BLOCKED — numerical combat seed study NOT RUN.** This file is an audit checklist, not a claim of completed PR91 combat/economic calibration. No derived win rates, destroyed hull distributions, or net profit may be interpreted as verified.
+> **STATUS: seeded combat DID RUN; complete balance acceptance is still open.** Previous [CI run 38801755663](https://github.com/ratoker-jpg/Asterion/actions/runs/38801755663) executed **324 real production-resolver battles** on the OLD flat-tier pirate technology model, with lost hull value, fuel and modeled recycling. [Download the retained evidence artifact](https://github.com/ratoker-jpg/Asterion/actions/runs/38801755663/artifacts/12005360940). It is historical pre-percentage evidence, **not** proof that the approved 90%/100% per-science technology scale is balanced. New matched-seed before/after simulations and a refreshed 324-case suite are attached to CI on the current PR. Only a passing job's artifact constitutes observed results; do not invent outcome numbers.
 
 ## Deterministic analytical raid-count estimates (NOT simulations)
 
@@ -29,19 +29,20 @@ The numbers estimate launches, **not victories, casualties, resource loss or gua
 
 These omit orbital collection, recycler cargo, flight and transport times. Recycling output efficiency remains 75–120% by existing levels; 10 parallel jobs must be separately scheduled. Job data captured before the rate update is not recomputed.
 
-## Actual seeded calibration — outstanding
+## Actual seeded runs, scripts, and completeness
 
-The project must still run and capture **measured** outcomes for:
-- three player races, low/mid/high scores, technology 0/5/10, 75–90% elimination garrisons;
-- raids at 90–95% defender population with six ordinary classes, normal and production-matrix counter fleets, zero-defense rich targets;
-- defensive planet breakers with score threshold 2,999,999 / 3,000,000 and fixed 10% seeded cycle incidence;
-- realistic legal 25,112-population mixed fleet, 95%-and-exactly-100%-hangar manifests and reward multipliers 1 / 1.25 / 1.5 / 2 / 2.5;
-- actual report winner fractions, defender and attacker damaged/lost hulls, produced orbital pirate+player debris, measured recovered debris, recycled metal/minerals at efficiency 75% and 120%, destroyed-hull replacement costs, flight gas, collection transport and **net**;
-- EV weighted by the measured victory/draw/loss frequencies rather than cherry-picked wins;
-- 10+ cycles per system, simultaneous rolls in three systems, save/load before dispatch, at arrival and returning;
-- 16m/160m debris real recycle transport/cargo throughput and visual QA.
+- **Verified historical results (old technologies):** [CI 38801755663](https://github.com/ratoker-jpg/Asterion/actions/runs/38801755663), **324 combat executions**, 18 combinations of direction/faction/score ×18 observations each (three technology bands × six seeded cases). This code exercise includes real combat winner, destroyed hulls, orbital debris, cargo-limited recycling ledger, replacement costs and the canonical gas fuel formula. Recycler flight scheduling and physical availability of transport assets were modeled, not executed as in-game saved flights; reported `net75/net120` are optimistic full-recovery projections.
+- **Updated approved pirate technology scale:** `npm run balance:pirates:pr91` re-executes the full seed corpus with levels scaled as `Math.round(maxLevel * tier / 10)` for the ten combat sciences. Its outputs are `artifacts/pr91-balance/seeded-results.json` and `seeded-report.md` in the corresponding CI artifact.
+- **Controlled old/new comparison:** `npm run balance:pirates:pr91:approved` (script `tools/generate-pirate-pr91-approved-compare.mjs`) replays paired battles using the **same combat seed and same garrison**, changing **only pirate technology levels**. Dataset dimensions: three races × resource points 3m/3.5m × exact player population 25,090/25,112 × destroyer L0/L10 × 0/2 controlled Planet Breakers × old/approved scales = **96 actual combat resolver calls (48 pairs)**. The garrison is capped to its original approved 75–90% population budget; controlled two-breaker variants replace ordinary hulls rather than adding extra population. Destroyer-centric rosters have only tiny scout filler to hit exact requested population. All fights use 12-round ceilings and no commanders.
+- **Per-pair evidence:** `artifacts/pr91-approved-tech-compare/comparison.json` and `comparison.md` contain attacker/pirate remaining population, rounds, effective pirate attack/life, victory, produced orbital debris, destroyed-hull replacement cost, outbound and recycler fuel, modeled recycled metal/minerals at 75% and 120%, modeled net and old→new deltas.
+- **Limitation:** a paired controlled battle is **not** a measured production win rate, nor does it apply actual 10% special-ship probability. Neither source models every calendar event or storage cap, and nominal full-collection profit is **not** guaranteed spendable resources. Normal/counter raid probabilities must be weighted separately for expected incoming losses; raw paired cases are not weighted EV.
 
-Use deterministic seeds and a script committed to this PR to reproduce the final numbers. Existing `docs/evidence/pirate-combat-balance.md` with old fixed-90% defenders is **not** PR91 evidence. Merge should remain blocked until a real seeded report replaces this placeholder.
+## Still outstanding for final balance sign-off
+
+- Confirm latest CI success and inspect current artifacts for all 96 pairwise combat results and 324 refreshed mixed encounters.
+- Assess cases with high losses and 12-round stalemates without silently retuning combat, raid, salvage or technology coefficients.
+- Verify actual 16m/160m orbital debris collection logistics in persisted flight circuits and mobile narrow-screen layout. Real saved recycling-job operations were covered by the general seeded run, but real fleet travel is still modeled here.
+- Independent code audit of migration, old incoming 8-round raids, old outgoing 5/8 attack snapshots and anti-replay.
 
 ## Risk note
 
