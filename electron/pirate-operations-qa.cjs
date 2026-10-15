@@ -14,7 +14,7 @@ const ROOT = path.join(__dirname, '..');
 const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'artifacts', 'pirate-operations-qa');
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const TEST_TIME_SCALE_KEY = 'asterion.test-time-scale.v1';
-const VIEWPORTS = [[1920, 1080], [390, 844]];
+const VIEWPORTS = [[1920, 1080], [1280, 720], [390, 844]];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitFor(win, expression, timeoutMs = 15_000) {
@@ -160,6 +160,29 @@ async function findActiveContact(win) {
   throw new Error('No active pirate contact with an available recon action and more than three minutes remaining was visible in systems 1–40 of the current galaxy. The QA did not inject or advance the pirate schedule.');
 }
 
+async function grantTargetSystemColony(win, contact) {
+  const result = await win.webContents.executeJavaScript(`(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
+    const origin = save?.planets?.[save.currentPlanetId];
+    if (!origin) return { ok: false, reason: 'missing homeworld' };
+    // Grant only target-system ownership; the origin fleet remains on the homeworld.
+    const targetPosition = Number(${JSON.stringify(contact.coordinate.split(':')[2]?.replace(']', '') || '1')});
+    const colony = structuredClone(origin);
+    colony.name = 'QA pirate access colony';
+    colony.universeGalaxy = 1;
+    colony.universeSystem = ${JSON.stringify(contact.system)};
+    colony.universePosition = targetPosition === 1 ? 2 : 1;
+    for (const id of Object.keys(colony.fleet.ships)) colony.fleet.ships[id] = 0;
+    for (const id of Object.keys(colony.fleet.commanders ?? {})) colony.fleet.commanders[id] = 0;
+    save.planets['qa-pirate-access'] = colony;
+    save.queues['qa-pirate-access'] = [];
+    localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    return { ok: true, system: colony.universeSystem };
+  })()`);
+  if (!result.ok) throw new Error(`Pirate raid QA could not grant target-system colony: ${result.reason}`);
+  await reload(win);
+}
+
 async function reselectContact(win, contact) {
   await selectSystem(win, contact.system);
   const result = await win.webContents.executeJavaScript(`(() => {
@@ -253,6 +276,21 @@ async function runViewport(width, height) {
     await clickPrimary(win, 'universe', `document.querySelector('[data-qa-universe]')`);
     const contact = await findActiveContact(win);
     console.log(`[pirate-operations-qa] viewport ${label} contact ${contact.cycleKey}`);
+    await grantTargetSystemColony(win, contact);
+    await clickPrimary(win, 'operations', `document.querySelector('.operations-layout-v2')`);
+    const operationCheck = await win.webContents.executeJavaScript(`(() => {
+      const cards = [...document.querySelectorAll('[data-qa-pirate-contact]')];
+      const systems = cards.map((card) => Number(/Система\\s+(\\d+)/.exec(card.textContent || '')?.[1]));
+      const scroll = document.querySelector('.operations-feed-scroll-v2');
+      const layout = document.querySelector('.operations-layout-v2');
+      return { systems, bounded: Boolean(scroll && layout && layout.getBoundingClientRect().height < 780) };
+    })()`);
+    if (!operationCheck.bounded || operationCheck.systems.some((system) => system !== 1 && system !== contact.system)) {
+      throw new Error(`Operations leaked foreign pirate systems or unbounded layout: ${JSON.stringify(operationCheck)}`);
+    }
+    await capture(win, directory, 'operations-owned-pirate-contacts');
+    await clickPrimary(win, 'universe', `document.querySelector('[data-qa-universe]')`);
+    await reselectContact(win, contact);
     await capture(win, directory, 'universe-active-pirate-contact');
     const reconClicked = await win.webContents.executeJavaScript(`(() => {
       const button = document.querySelector('[data-qa-universe-special-action="pirate-recon"]');
