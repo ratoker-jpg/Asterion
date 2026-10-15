@@ -1317,3 +1317,9 @@
   .operations-dossier-hero-v2 { grid-template-columns: minmax(0, 1fr); }
   .operations-dossier-v2--pirate .operations-command-actions-v2 { width: 100%; }
 }
+
+/* Real pirate targets use the combat cyan accent without inventing a threat tier. */
+.operation-feed-card-v2[data-qa-pirate-contact],
+.operations-dossier-v2--pirate {
+  --op-accent: #46daf6;
+}
