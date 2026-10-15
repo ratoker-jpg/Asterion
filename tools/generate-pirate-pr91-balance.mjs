@@ -218,7 +218,7 @@ report+=table(['Mission','Faction','Score','N','Attacker W','Defender W','Draw',
  x=>nf(x.meanFlightGas),x=>nf(x.meanCollectionGas),x=>nf(x.meanStolen),x=>nf(x.meanNet75),x=>nf(x.meanNet120)]);
 report+='\n## High-score 25,112-pop expensive hull scenarios (tech 10)\n\n';
 report+=table(['Faction','Seed','Sent','Garrison','Breaker','Outcome','Tier','Own hull cost','Pirate debris','Own debris','Bonus','Modeled recovered','Net 75%','Net 120%'],fixed,[
- x=>x.faction,x=>x.seed,x=>x.sentPopulation,x=>x.piratePopulation,x=>x.specialCount,x=>x.winner,'x'+x.multiplier,
+ x=>x.faction,x=>x.seed,x=>x.sentPopulation,x=>x.piratePopulation,x=>x.specialCount,x=>x.winner,x=>'x'+x.multiplier,
  x=>nf(x.ownLossCost),x=>nf(x.pirateDebris),x=>nf(x.ownDebris),x=>nf(x.extraDebris),x=>nf(x.collectedDebris),
  x=>nf(x.net75),x=>nf(x.net120)]);
 report+='\n## Recoverability and time\n\nReal level-10 throughput = 980 debris/sec/job, 10 jobs = 9,800/sec total; conversion 75–120% according to existing level configuration.\n';
