@@ -842,7 +842,7 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
       || !isNonEmptyPersistedString(item.destinationPlanetId)
       || item.destinationPlanetId !== destinationRecord.planetId
       || item.destinationPlanetId !== raid.targetPlanetId
-      || Object.keys(item.selectedShips).length !== 0
+      || Object.keys(item.selectedShips as Record<string,unknown>).length !== 0
       || Object.keys(item.selectedCommanders ?? {}).length !== 0
       || item.gasCost !== 0
       || item.requestId !== `pirate-raid:${raid.ownerId}:${raid.contactCycleKey}`
@@ -865,7 +865,7 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
       || Object.values((item.selectedCommanders ?? {}) as Record<string, number>).some((count) => count > 0))) return false;
   }
   if (item.missionId === 'pirate-raid' && item.attackResolution !== undefined) {
-    const resolved = item.attackResolution;
+    const resolved = item.attackResolution as Record<string,unknown> | null;
     if (!resolved || typeof resolved !== 'object'
       || !isNonEmptyPersistedString(resolved.reportId)
       || resolved.reportId !== `battle-pirate-raid-${item.id}`
