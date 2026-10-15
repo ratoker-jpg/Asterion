@@ -1090,7 +1090,15 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     science,
     resourceClock: createResourceClock(now, ['helion-01']),
     flights: createDefaultFlightState(),
-    pirate: { ...createDefaultPirateState(), raidProcessedAt: now },
+    pirate: {
+      ...createDefaultPirateState(),raidProcessedAt:now,
+      ownerThreats:{[syncPlayerProfileWithAlliance(createDefaultPlayerProfileState(),command.alliance).playerId]:
+        {version:1,ageHours:0,integratedAt:now}},
+      ownerMaxHangarLevel:{
+        [syncPlayerProfileWithAlliance(createDefaultPlayerProfileState(),command.alliance).playerId]:
+          buildings.hangar,
+      },
+    },
     asteroidSimulation: createUniverseAsteroidSimulationState(now),
     asteroidDebrisBySpawnIndex: {},
     espionage: mode === 'test' ? createDefaultTestEspionageState(now) : createDefaultEspionageState(),
