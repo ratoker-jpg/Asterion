@@ -95,7 +95,7 @@ export function selectPirateContacts(
         : availability.reason === 'in-flight' ? 'Зонд в пути' : availability.reason === 'cooldown' ? 'Ожидание повторной разведки'
           : report?.outcome === 'success' ? 'Разведка готова' : 'Доступен',
       statusTone: 'active', recon: { enabled: availability.allowed && !launchReason, disabledReason: reconReason ?? launchReason },
-      elimination: { enabled: true, disabledReason: null }, latestReportId: report?.id ?? null,
+      elimination: { enabled: true, disabledReason: null }, latestReportId: report?.id ?? null, latestReportOutcome: report?.outcome ?? null,
     });
   }
   return contacts;
