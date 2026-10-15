@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
 import { reconcileFlights } from './flights.ts';
+import { reconcileRuntime } from './reconcile.ts';
+import { scaleRuntimeDuration } from '../domain/runtime/mode.ts';
 import { resolveDuePirateRoll, selectDuePirateRolls } from './pirate-raids.ts';
 import { getCurrentPirateContact } from './pirates.ts';
 import { getUniverseTimedObjectSchedule } from '../domain/universe/runtime.ts';
@@ -69,4 +71,59 @@ test('owner-cycle roll dispatches one persisted real pirate flight, resolves no-
   assert.equal(report!.siege,undefined);
   const replay=reconcileFlights(completed.state,flight.arrivalAt,undefined,{mode:'production'});
   assert.equal(replay.state.combat.reports.length,completed.state.combat.reports.length);
+});
+
+test('Test x500 accelerates only raid delay; threat age remains wall-clock',()=>{
+  assert.equal(scaleRuntimeDuration(900_000,'test',500),1800);
+  assert.equal(scaleRuntimeDuration(900_000,'production',500),900_000);
+  const t=Date.now();
+  const state=createInitialSaveState('test',t);
+  const due=selectDuePirateRolls(state,t,t+1800,'test',500);
+  assert.ok(Array.isArray(due));
+  assert.equal(state.pirate?.ownerThreats?.[state.profile.playerId]?.ageHours,0);
+});
+test('offline 8h/24h/48h multi-system rolls cannot duplicate owner-cycle ledger or battle reports',()=>{
+  const start=Date.now();
+  const baseline=createInitialSaveState('production',start);
+  const home=baseline.planets['helion-01']!;
+  const clock=baseline.resourceClock.byPlanet?.['helion-01']!;
+  const planets={...baseline.planets,
+    'pr91-planet-1b':{...home,name:'Secondary',universeGalaxy:1,universeSystem:1,universePosition:6,
+      fleet:{ships:{...home.fleet.ships},commanders:{...home.fleet.commanders}}},
+    'pr91-planet-2':{...home,name:'Second system',universeGalaxy:1,universeSystem:2,universePosition:6,
+      fleet:{ships:{...home.fleet.ships},commanders:{...home.fleet.commanders}}},
+    'pr91-planet-3':{...home,name:'Third system',universeGalaxy:1,universeSystem:3,universePosition:6,
+      fleet:{ships:{...home.fleet.ships},commanders:{...home.fleet.commanders}}},
+  };
+  const initial={
+    ...baseline,planets,
+    queues:{...baseline.queues,'pr91-planet-1b':[],'pr91-planet-2':[],'pr91-planet-3':[]},
+    resourceClock:{...baseline.resourceClock,byPlanet:{...baseline.resourceClock.byPlanet,
+      'pr91-planet-1b':{...clock},'pr91-planet-2':{...clock},'pr91-planet-3':{...clock}}},
+    pirate:{...baseline.pirate!,raidProcessedAt:start,ownerThreats:{
+      ...baseline.pirate!.ownerThreats,
+      [baseline.profile.playerId]:{version:1 as const,ageHours:10000,integratedAt:start}}},
+  };
+  const context=(now:number)=>({planetId:'helion-01' as const,now,mode:'production' as const,testTimeScale:15 as const});
+  const at8=start+8*3600000,at24=start+24*3600000,at48=start+48*3600000;
+  const after8=reconcileRuntime(initial,context(at8)).state;
+  const after24=reconcileRuntime(after8,context(at24)).state;
+  const staged=reconcileRuntime(after24,context(at48)).state;
+  const offline=reconcileRuntime(initial,context(at48)).state;
+  const stable=(state:typeof staged)=>({
+    rollKeys:Object.keys(state.pirate?.raidRolls??{}).sort(),
+    flights:state.flights.records.map(f=>f.id+':'+f.phase).sort(),
+    reports:state.combat.reports.map(r=>r.id+':'+r.winner).sort(),
+    resources:Object.fromEntries(Object.entries(state.planets).map(([id,p])=>[id,p.resources])),
+  });
+  assert.deepEqual(stable(staged),stable(offline),'catch-up and incremental simulation must agree');
+  const keys=Object.keys(staged.pirate?.raidRolls??{});
+  assert.equal(keys.length,new Set(keys).size);
+  assert.ok(keys.some(k=>k.includes('pirate-cycle')), 'Expected real chronological pirate checks');
+  const uniqueFlights=new Set(staged.flights.records.map(f=>f.id));
+  assert.equal(uniqueFlights.size,staged.flights.records.length);
+  const uniqueReports=new Set(staged.combat.reports.map(r=>r.id));
+  assert.equal(uniqueReports.size,staged.combat.reports.length);
+  assert.deepEqual(stable(reconcileRuntime(staged,context(at48)).state),stable(staged),
+    'same timestamp reconciliation must be idempotent');
 });
