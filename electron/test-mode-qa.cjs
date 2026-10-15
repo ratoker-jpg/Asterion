@@ -484,6 +484,17 @@ async function runViewport(width, height) {
       energy: 999_999_999,
       resourceClock: { lastReconciledAt: Date.now() - 3_600_000, remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } },
     });
+    // New pirate contact scheduling runs in the same mount effect as the
+    // resource clock. Wait for the *real persisted reconciliation* (not a
+    // fake QA credit) before checking its amount; a stalled runtime still
+    // fails within 3 seconds and the original wallet assertions stay intact.
+    await waitFor(win, `(() => {
+      const state=JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)})||'null');
+      return Boolean(state?.planets?.['helion-01']?.resources?.metal>0
+        && state.planets['helion-01'].resources.minerals>0
+        && state.planets['helion-01'].resources.gas>0
+        && state.resourceClock?.lastReconciledAt>Date.now()-30000);
+    })()`,3000);
     const accruedResources = await readQaState(win);
     if (!(accruedResources.testResources.metal > 0) || !(accruedResources.testResources.minerals > 0) || !(accruedResources.testResources.gas > 0) || accruedResources.testResources.energy !== 999_999_999 || !accruedResources.resourceClock || accruedResources.resourceClock.lastReconciledAt <= Date.now() - 3_600_000) {
       throw new Error(`${label}: passive resource accrual did not reconcile one scaled interval ${JSON.stringify(accruedResources)}`);
