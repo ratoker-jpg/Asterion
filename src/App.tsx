@@ -359,7 +359,7 @@ export function App() {
 
   const completedPirateOperations = useMemo(() => {
     if (activeRoute !== 'operations') return [];
-    const reports = new Set(state.combat.reports.map((report) => report.id));
+    const reports = new Map(state.combat.reports.map((report) => [report.id, report]));
     const successfulFlights = new Map(state.flights.records
       .filter((flight) => flight.missionId === 'pirate-elimination'
         && flight.pirateSnapshot && flight.attackResolution?.reportId
@@ -369,7 +369,11 @@ export function App() {
       .sort((left, right) => right.defeatedAt - left.defeatedAt)
       .flatMap((defeat) => {
         const reportId = successfulFlights.get(`${defeat.contactCycleKey}:${defeat.defeatedAt}`);
-        return reportId ? [{ cycleKey: defeat.contactCycleKey, coordinate: defeat.coordinate, reportId, defeatedAt: defeat.defeatedAt }] : [];
+        const report = reportId ? reports.get(reportId) : undefined;
+        return reportId && report ? [{
+          cycleKey: defeat.contactCycleKey, coordinate: defeat.coordinate, reportId, defeatedAt: defeat.defeatedAt,
+          rounds: report.roundCount, debris: report.debris ?? 0,
+        }] : [];
       })
       .slice(0, 50);
   }, [activeRoute, state.pirate?.contact.defeatedCycles, state.flights.records, state.combat.reports]);
