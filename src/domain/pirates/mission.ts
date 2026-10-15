@@ -180,7 +180,7 @@ export function normalizePirateMissionSnapshot(
     expiresAt: Number(value.expiresAt),
     profile: freezeProfile(profile),
     ...(eliminationBudget ? {
-      eliminationBudget: Object.freeze({ ...eliminationBudget, ships: Object.freeze({ ...eliminationBudget.ships }) }) as PiratePopulationBudget,
+      eliminationBudget: Object.freeze({ ...(eliminationBudget as Record<string,unknown>), ships: Object.freeze({ ...((eliminationBudget as Record<string,unknown>).ships as Record<string,number>) }) }) as PiratePopulationBudget,
       sentCombatPopulation: Number(value.sentCombatPopulation),
       historicalHangarCapacity: Number(value.historicalHangarCapacity),
       rewardMultiplier: Number(value.rewardMultiplier),
@@ -268,7 +268,8 @@ export function normalizePirateState(value: unknown): PirateState {
       Object.entries(isRecord(value.ownerMaxHangarLevel) ? value.ownerMaxHangarLevel : {})
         .filter(([id, level]) => id.trim().length > 0 && id.length <= 160
           && !['__proto__','prototype','constructor'].includes(id)
-          && validTimestamp(level) && Number(level) <= 20),
+          && validTimestamp(level) && Number(level) <= 20)
+        .map(([id, level]) => [id,Number(level)]),
     )),
     ownerThreats: Object.freeze(Object.fromEntries(
       Object.entries(isRecord(value.ownerThreats) ? value.ownerThreats : {})
@@ -296,7 +297,13 @@ export function normalizePirateState(value: unknown): PirateState {
               && pair[0].length <= 160 && typeof pair[1] === 'string'
               && isCanonicalPirateContactCycleKey(pair[1]);
           } catch { return false; }
-        }),
+        })
+        .map(([key, roll]) => [key, Object.freeze({
+          checkAt:Number((roll as Record<string,unknown>).checkAt),
+          seed:String((roll as Record<string,unknown>).seed),
+          ...((roll as Record<string,unknown>).flightId !== undefined
+            ? {flightId:String((roll as Record<string,unknown>).flightId)} : {}),
+        })]),
     )),
   });
 }
