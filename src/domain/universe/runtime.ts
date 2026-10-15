@@ -811,25 +811,6 @@ function activeTimedObjectSchedule(
   return null;
 }
 
-/**
- * Read-only pirate scheduler status for Operations. This uses the SAME schedule
- * and defeat records as the Universe map: no artificial 15-minute clock.
- * A roll is a spawn check; it never implies an incoming player attack.
- */
-export function getUniversePirateCycleTiming(
-  galaxy: number, system: number, nowMs: number,
-  defeats: readonly PirateContactDefeatRecord[] = [],
-): { active: boolean; quietStartsAt: number; nextRollAt: number; cycleIndex: number } | null {
-  const current = activeTimedObjectSchedule('pirate', galaxy, system, nowMs, defeats);
-  if (!current) return null;
-  return {
-    active: current.present && nowMs < current.expiresAt,
-    quietStartsAt: current.expiresAt,
-    nextRollAt: current.respawnAt,
-    cycleIndex: current.cycleIndex,
-  };
-}
-
 function timedState(schedule: TimedObjectSchedule): UniverseTimedObjectState {
   return {
     cycleIndex: schedule.cycleIndex,
