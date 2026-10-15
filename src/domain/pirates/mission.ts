@@ -189,6 +189,34 @@ export function normalizePirateMissionSnapshot(
   });
 }
 
+export function normalizePirateRaidSnapshot(value: unknown): PirateRaidSnapshot | null {
+  if (!isRecord(value) || value.version !== 1
+    || typeof value.ownerId !== 'string' || !value.ownerId.trim() || value.ownerId.length > 160
+    || ['__proto__','prototype','constructor'].includes(value.ownerId)
+    || typeof value.contactCycleKey !== 'string' || !isCanonicalPirateContactCycleKey(value.contactCycleKey)
+    || typeof value.targetPlanetId !== 'string' || !value.targetPlanetId.trim() || value.targetPlanetId.length > 160
+    || !validTimestamp(value.checkAt) || typeof value.counterFleet !== 'boolean'
+    || !isRecord(value.composition)) return null;
+  const profileContainer = normalizePirateContactState({
+    version: 1, defeatedCycles: {},
+    ownerProfiles: { [value.ownerId]: { [value.contactCycleKey]: value.profile } },
+  });
+  const profile = profileContainer.ownerProfiles[value.ownerId]?.[value.contactCycleKey];
+  if (!profile) return null;
+  const shipIds = new Set(['pirate-hound','pirate-raider','pirate-corsair',
+    'pirate-executioner','pirate-butcher','pirate-bruiser']);
+  const quantities = Object.entries(value.composition);
+  if (!quantities.length || quantities.some(([id,count]) => !shipIds.has(id)
+    || !Number.isSafeInteger(count) || Number(count) <= 0)) return null;
+  return Object.freeze({
+    version: 1, ownerId: value.ownerId, contactCycleKey: value.contactCycleKey,
+    targetPlanetId: value.targetPlanetId, checkAt: value.checkAt,
+    counterFleet: value.counterFleet,
+    composition: Object.freeze({ ...value.composition }) as PirateRaidSnapshot['composition'],
+    profile: freezeProfile(profile),
+  });
+}
+
 export function isPirateMissionSnapshot(
   value: unknown,
   expectedMissionId?: PirateMissionId,
