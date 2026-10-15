@@ -192,7 +192,7 @@ export function resolveDuePirateRoll(
           destinationCoordinate: {...selected.coordinate}, selectedShips: {},
           pirateRaidSnapshot: {
             version: 1, ownerId: event.ownerId, contactCycleKey:event.contactCycleKey,
-            targetPlanetId:selected.id,checkAt:event.at, counterFleet:counter,
+            targetPlanetId:selected.id,checkAt:event.at, maxRounds:12, counterFleet:counter,
             composition: {...fleet.ships},profile,
           },
           populationReserved:fleet.population,
