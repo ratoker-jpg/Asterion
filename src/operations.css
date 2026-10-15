@@ -1668,3 +1668,52 @@
   min-height: 38px;
   padding-inline: 16px;
 }
+
+/* Pirate attack-check clock belongs to its base, never to a separate page banner. */
+.operation-feed-card-v2[data-qa-pirate-contact] {
+  min-height: 168px;
+}
+.operation-feed-card-v2[data-qa-pirate-contact] .operation-feed-copy-v2 {
+  gap: 7px;
+  padding: 12px 0;
+}
+.operation-feed-raid-check-v2 {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  margin-top: 4px;
+  padding: 9px 10px 8px;
+  border: 1px solid rgba(222, 104, 92, .28);
+  border-radius: 9px;
+  background: rgba(55, 20, 26, .28);
+}
+.operation-feed-raid-check-label-v2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+.operation-feed-raid-check-label-v2 > span {
+  color: #e9a89e;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .035em;
+}
+.operation-feed-raid-check-label-v2 strong {
+  color: #fdd7a6;
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.operation-feed-raid-check-v2 .operations-pirate-cooldown-track {
+  display: block;
+  width: 100%;
+  height: 9px;
+}
+.operation-feed-raid-check-note-v2 {
+  color: #a48d8c;
+  font-size: 9px;
+  line-height: 1.3;
+}
