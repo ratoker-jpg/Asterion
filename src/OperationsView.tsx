@@ -26,6 +26,10 @@ type OperationsViewProps = {
   onReveal: (operationId: OperationId) => void;
   onOpenFleets: () => void;
   pirateContacts?: readonly PirateContactPresentation[];
+  pirateThreatPercent?: number;
+  pirateRaidRolls?: Readonly<Record<string, Readonly<{checkAt:number;seed:string;flightId?:string}>>>;
+  pirateOwnerId?: string;
+  pirateCheckDelayMs?: number;
   completedPirateOperations?: readonly CompletedPirateOperation[];
   onPirateBattleReport?: (reportId: string) => void;
   onPirateAccept?: (contact: PirateContactPresentation) => void;
@@ -38,7 +42,7 @@ type OperationsViewProps = {
 };
 
 type OperationsTab = Extract<OperationState, 'available' | 'active' | 'completed'>;
-type CompletedPirateOperation = { cycleKey: string; coordinate: PirateContactPresentation['coordinate']; reportId: string; defeatedAt: number; rounds: number; debris: number };
+type CompletedPirateOperation = { cycleKey: string; coordinate: PirateContactPresentation['coordinate']; reportId: string; defeatedAt: number; rounds: number; debris: number; reward?: {sentCombatPopulation:number;historicalHangarCapacity:number;multiplier:number;basePirateDebris:number;bonusPirateDebris:number;ownDebris:number;threatReductionFraction:number} };
 type OperationRow = { operation: OperationInstance; contact?: PirateContactPresentation; completed?: CompletedPirateOperation; battleReportId?: string };
 
 const TAB_LABELS: Record<OperationsTab, string> = {
@@ -210,21 +214,21 @@ function TacticalScope({ operation, contact }: { operation: OperationInstance; c
   );
 }
 
-function OperationCard({ operation, selected, onSelect, contact, nowMs }: {
+function OperationCard({ operation, selected, onSelect, contact, nowMs, pirateRaidRoll, pirateCheckDelayMs }: {
   operation: OperationInstance;
   selected: boolean;
   onSelect: () => void;
   contact?: PirateContactPresentation;
   nowMs: number;
+  pirateRaidRoll?: Readonly<{checkAt:number;seed:string;flightId?:string}>;
+  pirateCheckDelayMs?: number;
 }) {
   const intelZero = operation.intel === 0;
   const firstReward = rewardEntries(operation)[0];
   const pirate = isPirateOperationId(operation.id);
   const pirateCycle = pirate ? (contact?.contactCycleKey ?? operation.id.slice('pirate:'.length)).split(':') : [];
   const pirateArt = pirate ? getPiratePlanetArt(Number(pirateCycle[2]), Number(pirateCycle[3])) : null;
-  // Cycle identity freezes the display's 15-minute anchor; this isn't the
-  // procedural base-spawn schedule or a working incoming attack scheduler.
-  const raidCheck = contact ? getPirateRaidCheckProgress(Number(pirateCycle[4]), nowMs) : null;
+  const raidCheck = contact ? getPirateRaidCheckProgress(Number(pirateCycle[4]), nowMs,pirateCheckDelayMs) : null;
 
   return (
     <button
@@ -252,14 +256,15 @@ function OperationCard({ operation, selected, onSelect, contact, nowMs }: {
         </span>
         {raidCheck ? <span className="operation-feed-raid-check-v2" data-qa-raid-check-interval="15m">
           <span className="operation-feed-raid-check-label-v2">
-            <span>ДО ПРОВЕРКИ НАПАДЕНИЯ</span>
-            <strong role="timer">{pirateRemainingLabel(raidCheck.nextAt, nowMs)}</strong>
+            <span>{pirateRaidRoll ? 'ПРОВЕРКА ЗАВЕРШЕНА' : 'ДО ПРОВЕРКИ НАПАДЕНИЯ'}</span>
+            <strong role="timer">{pirateRaidRoll ? (pirateRaidRoll.flightId ? 'РЕЙД ОТПРАВЛЕН' : 'РЕЙДА НЕТ')
+              : raidCheck.remainingMs > 0 ? pirateRemainingLabel(raidCheck.nextAt, nowMs) : 'ПРОВЕРЯЕТСЯ'}</strong>
           </span>
           <span className="operations-pirate-cooldown-track" role="progressbar" aria-label="15-минутный интервал проверки возможного нападения"
             aria-valuemin={0} aria-valuemax={100} aria-valuenow={raidCheck.percent}>
             <span className="operations-pirate-cooldown-mask" style={{ width: `${100 - raidCheck.percent}%` }} />
           </span>
-          <span className="operation-feed-raid-check-note-v2">Автоатаки пока не подключены</span>
+          <span className="operation-feed-raid-check-note-v2">Одна проверка на владельца и цикл, независимо от числа колоний</span>
         </span> : null}
       </span>
       <span className="operation-feed-arrow-v2">›</span>
@@ -338,6 +343,13 @@ function OperationDossier({ operation, pirateContact, battleReportId, completed,
           <div className="operations-completed-report-facts-v2">
             <div><small>ИСХОД</small><strong>ПОБЕДА</strong></div>
             <div><small>РАУНДОВ</small><strong>{completed.rounds}</strong></div>
+            {completed.reward ? <>
+              <div><small>ОТПРАВЛЕНО / АНГАР</small><strong>{number.format(completed.reward.sentCombatPopulation)} / {number.format(completed.reward.historicalHangarCapacity)}</strong></div>
+              <div><small>МНОЖИТЕЛЬ ОБЛОМКОВ</small><strong>×{completed.reward.multiplier}</strong></div>
+              <div><small>ПИРАТСКИЕ ОБЛОМКИ / БОНУС</small><strong>{number.format(completed.reward.basePirateDebris)} / +{number.format(completed.reward.bonusPirateDebris)}</strong></div>
+              <div><small>СВОИ ОБЛОМКИ</small><strong>{number.format(completed.reward.ownDebris)}</strong></div>
+              <div><small>СНИЖЕНИЕ УГРОЗЫ</small><strong>{(completed.reward.threatReductionFraction*100).toFixed(1)}%</strong></div>
+            </> : null}
             <div><small>ОБЛОМКИ НА ОРБИТЕ</small><strong><ResourceIcon kind="debris" /> {number.format(completed.debris)}</strong></div>
             <div><small>ЗАВЕРШЕНО</small><strong>{new Date(completed.defeatedAt).toLocaleString('ru-RU')}</strong></div>
           </div>
@@ -455,7 +467,7 @@ function OperationDossier({ operation, pirateContact, battleReportId, completed,
   );
 }
 
-export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, pirateContacts = [], completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
+export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, pirateContacts = [], pirateThreatPercent = 2, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
   const [tab, setTab] = useState<OperationsTab>('available');
   const [selectedId, setSelectedId] = useState<OperationId | null>(null);
 
@@ -525,6 +537,21 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
         </nav>
         <div className="operations-slots-v2"><small>ПИРАТСКИЕ БАЗЫ</small><strong>{pirateContacts.length}</strong><span>активны</span></div>
       </header>
+      <section className="operations-pirate-threat-v2" aria-label="Пиратская угроза">
+        <div><small>ПИРАТСКАЯ УГРОЗА</small>
+          <strong>{pirateThreatPercent.toLocaleString('ru-RU',{minimumFractionDigits:1,maximumFractionDigits:1})}%</strong>
+        </div>
+        <div className="operations-pirate-threat-body-v2">
+          <div role="progressbar" aria-label="Пиратская угроза от 2% до 30%"
+            aria-valuemin={2} aria-valuemax={30} aria-valuenow={pirateThreatPercent}>
+            <span style={{width:`${Math.max(0,Math.min(100,(pirateThreatPercent-2)/28*100))}%`}}/>
+          </div>
+          <p>Вероятность отправки рейда при проверке одной пиратской базы в одной системе.
+            Каждая система проверяется отдельно — это не шанс победы пиратов или уничтожения планеты.</p>
+          <small>Чем меньше боевых очков относительно ресурсных, тем быстрее растёт угроза.
+            Полная победа над базой снижает её пропорционально отправленному боевому населению.</small>
+        </div>
+      </section>
       <div className="operations-layout-v2">
         <section className="operations-feed-v2" aria-label={TAB_LABELS[tab]}>
           <header><div><small>КАНАЛ // {TAB_LABELS[tab]}</small><strong>{tab === 'available' ? 'ВХОДЯЩИЕ КОНТАКТЫ' : tab === 'active' ? 'ТЕКУЩИЕ ЗАДАЧИ' : 'АРХИВ ОПЕРАЦИЙ'}</strong></div><span>{visibleRows.length}</span></header>
@@ -535,6 +562,8 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
                 operation={row.operation}
                 contact={row.contact}
                 nowMs={nowMs}
+                pirateCheckDelayMs={pirateCheckDelayMs}
+                pirateRaidRoll={row.contact ? pirateRaidRolls[JSON.stringify([pirateOwnerId,row.contact.contactCycleKey])] : undefined}
                 selected={row.operation.id === selectedRow?.operation.id}
                 onSelect={() => setSelectedId(row.operation.id)}
               />)}
