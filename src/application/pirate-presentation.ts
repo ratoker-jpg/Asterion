@@ -3,6 +3,34 @@ import { getCurrentPirateContact, ensurePirateOwnerProfile, type CurrentPirateCo
 import { previewFlight } from './flights.ts';
 import { canDispatchPirateRecon, pirateReconCooldownKey } from '../domain/pirates/recon.ts';
 import type { PirateContactPresentation, PirateSystemSelection } from '../pirate-ui.ts';
+import type { OperationInstance } from '../domain/operations/types.ts';
+
+/** Accepted raid lives in the existing Operations save; the cycle key prevents reuse on respawn. */
+export const pirateOperationId = (cycleKey: string): string => `pirate:${cycleKey}`;
+
+export function isPirateOperationId(id: string): boolean {
+  return id.startsWith('pirate:pirate-cycle-v1:');
+}
+
+/** Existing combat operation presentation backed by real, time-bound pirate world state. */
+export function pirateContactOperation(contact: PirateContactPresentation, state: OperationInstance['state'] = 'available'): OperationInstance {
+  return {
+    id: pirateOperationId(contact.contactCycleKey),
+    archetype: 'pirate_elimination',
+    category: 'combat',
+    title: 'ПИРАТСКАЯ БАЗА',
+    briefing: 'В системе вашей колонии обнаружена действующая пиратская база. Для вылета требуется подготовить боевой флот.',
+    state,
+    threat: null,
+    intel: contact.latestReportId ? 2 : 1,
+    source: 'patrol_scan',
+    location: { kind: 'coordinates', coordinates: `[${contact.coordinate.galaxy}:${contact.coordinate.system}:${contact.coordinate.position}]` },
+    objective: { label: 'Провести пиратский рейд' },
+    modifiers: [],
+    rewardPreview: {},
+  };
+}
+
 
 /** Only persisted owner planets grant access to pirate raid targets. */
 export function selectOwnedPirateSystems(state: SaveState): PirateSystemSelection[] {
