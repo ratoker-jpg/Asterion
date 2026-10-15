@@ -20,6 +20,7 @@
     "test:pirates": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/pirates/*.test.ts",
     "balance:pirates": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs tools/generate-pirate-combat-balance.mjs",
     "balance:pirates:pr91": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs tools/generate-pirate-pr91-balance.mjs",
+    "balance:pirates:pr91:approved": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs tools/generate-pirate-pr91-approved-compare.mjs",
     "test:repair": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/repair/workshop.test.ts src/application/repair.test.ts",
     "test:operations": "node --experimental-strip-types --test src/domain/operations/operations.test.ts",
     "test:command": "node --experimental-strip-types --test src/domain/command/command.test.ts src/domain/command/selectors.test.ts",
