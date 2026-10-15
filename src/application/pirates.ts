@@ -268,6 +268,11 @@ export function dispatchPirateFlight(
     return flightFailure(state, 'target-not-available', 'Пиратский контакт по этому циклу и координатам больше недоступен.');
   }
 
+  if (command.missionId === 'pirate-elimination' && !Object.values(state.planets).some((planet) =>
+    (planet.universeGalaxy ?? 1) === coordinate.galaxy && (planet.universeSystem ?? 1) === coordinate.system)) {
+    return flightFailure(state, 'target-not-available', 'Пиратский рейд доступен только в солнечных системах ваших колоний.');
+  }
+
   const originPlanetId = command.originPlanetId ?? state.currentPlanetId;
   const origin = state.planets[originPlanetId];
   if (!origin) return flightFailure(state, 'invalid-command', 'Исходная колония не найдена.');
