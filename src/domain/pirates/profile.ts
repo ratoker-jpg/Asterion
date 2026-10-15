@@ -1,5 +1,5 @@
 import { PIRATE_BASE_SHIPS, PIRATE_CATALOG_BY_ID, type PirateBaseShipId, type PirateShipId } from './catalog.ts';
-import { COMBAT_TECHNOLOGY_IDS, type CombatTechnologyId } from '../combat/technologies.ts';
+import { COMBAT_TECHNOLOGIES, type CombatTechnologyId } from '../combat/technologies.ts';
 import { pirateSeededDraw } from './threat.ts';
 
 export type PirateTierShares = Readonly<Record<1 | 2 | 3, number>>;
@@ -74,13 +74,17 @@ export function pirateTechnologyLevels(
   resourcePoints: number,
   exclusiveTechnologyId: PirateExclusiveTechnologyId,
 ): Readonly<Record<CombatTechnologyId, number>> {
-  const level = pirateTechnologyLevelForResourcePoints(resourcePoints);
-  return Object.freeze(Object.fromEntries(COMBAT_TECHNOLOGY_IDS.map((id) => [
-    id,
-    PIRATE_EXCLUSIVE_TECHNOLOGIES.includes(id as PirateExclusiveTechnologyId)
-      ? id === exclusiveTechnologyId ? level : 0
-      : level,
-  ])) as Record<CombatTechnologyId, number>);
+  const tier = pirateTechnologyLevelForResourcePoints(resourcePoints);
+  const progress = tier / 10;
+  return Object.freeze(Object.fromEntries(COMBAT_TECHNOLOGIES.map((technology) => {
+    const realLevel = Math.min(technology.maxLevel, Math.max(0,
+      Math.round(technology.maxLevel * progress)));
+    return [
+      technology.id,
+      PIRATE_EXCLUSIVE_TECHNOLOGIES.includes(technology.id as PirateExclusiveTechnologyId)
+        && technology.id !== exclusiveTechnologyId ? 0 : realLevel,
+    ];
+  })) as Record<CombatTechnologyId, number>);
 }
 
 /** Log10 interpolation; values below/above the control points clamp to endpoint distributions. */
