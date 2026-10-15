@@ -20,6 +20,17 @@ import { isFlightCoordinate } from '../flights/distance.ts';
 
 export type PirateMissionId = 'pirate-recon' | 'pirate-elimination';
 
+export type PirateRaidSnapshot = Readonly<{
+  version: 1;
+  ownerId: string;
+  contactCycleKey: string;
+  targetPlanetId: string;
+  checkAt: number;
+  counterFleet: boolean;
+  composition: Readonly<Partial<Record<import('./catalog.ts').PirateBaseShipId, number>>>;
+  profile: PirateProfile;
+}>;
+
 /** Frozen, dispatch-time identity and opponent snapshot for one pirate flight. */
 export type PirateMissionSnapshot = Readonly<{
   version: 1;
@@ -49,6 +60,9 @@ export type PirateState = Readonly<{
   /** Owner-wide historical maxima survive downgrades and colony loss. */
   ownerMaxHangarLevel?: Readonly<Record<string, number>>;
   ownerThreats?: Readonly<Record<string, OwnerPirateThreat>>;
+  /** Persisted checkpoint and one owner-cycle raid decision. */
+  raidProcessedAt?: number;
+  raidRolls?: Readonly<Record<string, Readonly<{ checkAt: number; seed: string; flightId?: string }>>>;
 }>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -84,6 +98,7 @@ export function createDefaultPirateState(): PirateState {
     reconReports: Object.freeze([]),
     ownerMaxHangarLevel: Object.freeze({}),
     ownerThreats: Object.freeze({}),
+    raidRolls: Object.freeze({}),
   });
 }
 
@@ -237,6 +252,23 @@ export function normalizePirateState(value: unknown): PirateState {
         .map(([id, threat]) => [id, Object.freeze({ version: 1 as const,
           ageHours: Number((threat as Record<string, unknown>).ageHours),
           integratedAt: Number((threat as Record<string, unknown>).integratedAt) })]),
+    )),
+    ...(validTimestamp(value.raidProcessedAt) ? { raidProcessedAt: value.raidProcessedAt } : {}),
+    raidRolls: Object.freeze(Object.fromEntries(
+      Object.entries(isRecord(value.raidRolls) ? value.raidRolls : {})
+        .filter(([key, roll]) => {
+          if (!isRecord(roll) || !validTimestamp(roll.checkAt)
+            || typeof roll.seed !== 'string' || roll.seed.length < 1 || roll.seed.length > 500
+            || (roll.flightId !== undefined && (typeof roll.flightId !== 'string'
+              || roll.flightId.length > 500 || !roll.flightId.startsWith('flight-pirate-raid:')))) return false;
+          try {
+            const pair = JSON.parse(key) as unknown;
+            return Array.isArray(pair) && pair.length === 2
+              && typeof pair[0] === 'string' && pair[0].trim().length > 0
+              && pair[0].length <= 160 && typeof pair[1] === 'string'
+              && isCanonicalPirateContactCycleKey(pair[1]);
+          } catch { return false; }
+        }),
     )),
   });
 }
