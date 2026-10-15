@@ -251,8 +251,15 @@ function pirateRemainingLabel(expiresAt: number, nowMs: number) {
   return minutes ? `${minutes} мин ${String(remainder).padStart(2, '0')} с` : `${remainder} с`;
 }
 
-function OperationDossier({ operation, onAccept, onCancel, onReveal, onOpenFleets }: {
+function OperationDossier({ operation, pirateContact, quiet, nowMs, onAccept, onCancel, onReveal, onOpenFleets, onPirateRecon, onPirateAttack, onPirateReport, onPirateUniverse }: {
   operation: OperationInstance | null;
+  pirateContact?: PirateContactPresentation;
+  quiet?: QuietPirateCycle;
+  nowMs: number;
+  onPirateRecon?: (contact: PirateContactPresentation) => void;
+  onPirateAttack?: (contact: PirateContactPresentation) => void;
+  onPirateReport?: (reportId: string) => void;
+  onPirateUniverse?: (contact: PirateContactPresentation) => void;
   onAccept: (id: OperationId) => void;
   onCancel: (id: OperationId) => void;
   onReveal: (id: OperationId) => void;
@@ -268,8 +275,12 @@ function OperationDossier({ operation, onAccept, onCancel, onReveal, onOpenFleet
     );
   }
 
-  const intelZero = operation.intel === 0;
+  const pirate = isPirateOperationId(operation.id);
+  const intelZero = operation.intel === 0 && !pirate;
   const modifierLabels = operation.modifiers.map((modifier) => OPERATION_MODIFIER_LABELS[modifier]);
+  const reconLabel = pirateContact?.latestReportOutcome === 'success' ? 'Разведданные получены'
+    : pirateContact?.latestReportOutcome === 'failure' ? 'Разведка не удалась'
+      : pirateContact?.statusLabel === 'Зонд в пути' ? 'Зонд в пути' : 'Нет разведданных';
 
   return (
     <aside className={`operations-dossier-v2 operations-dossier-v2--${operation.category}`} data-threat={operation.threat ?? 'unknown'}>
@@ -277,29 +288,29 @@ function OperationDossier({ operation, onAccept, onCancel, onReveal, onOpenFleet
         <div className="operations-dossier-title-v2">
           <span className="operations-dossier-glyph-v2"><OperationGlyph category={operation.category} /></span>
           <div>
-            <small>{CATEGORY_LABELS[operation.category]} · {operation.id.toUpperCase()}</small>
+            <small>{pirate ? `БОЕВАЯ ОПЕРАЦИЯ · ${pirateContact ? 'ДЕЙСТВУЮЩАЯ ЦЕЛЬ' : 'АРХИВ КОНТАКТА'}` : `${CATEGORY_LABELS[operation.category]} · ${operation.id.toUpperCase()}`}</small>
             <h2>{operation.title}</h2>
             <p>{intelZero ? formatLocationClass(operation.location) : formatLocation(operation.location)} <i /> {OPERATION_SOURCE_LABELS[operation.source]}</p>
           </div>
         </div>
         <div className="operations-dossier-threat-v2">
-          <small>{operation.category === 'combat' ? 'УРОВЕНЬ УГРОЗЫ' : 'УРОВЕНЬ РИСКА'}</small>
-          <strong>{threatTier(operation)}</strong>
-          <span>{threatText(operation)}</span>
+          <small>{pirate ? 'СТАТУС КОНТАКТА' : operation.category === 'combat' ? 'УРОВЕНЬ УГРОЗЫ' : 'УРОВЕНЬ РИСКА'}</small>
+          <strong>{pirate ? (pirateContact ? '●' : '—') : threatTier(operation)}</strong>
+          <span>{pirate ? (pirateContact ? 'ОБНАРУЖЕН' : quiet ? 'УНИЧТОЖЕН' : 'ИСТЁК') : threatText(operation)}</span>
         </div>
       </header>
 
       <section className="operations-dossier-hero-v2">
-        <TacticalScope operation={operation} />
+        <TacticalScope operation={operation} contact={pirateContact} />
         <div className="operations-briefing-v2">
           <small>ОПЕРАТИВНАЯ СВОДКА</small>
-          <h3>{intelZero ? 'ДАННЫХ НЕДОСТАТОЧНО' : 'КОНТАКТ КЛАССИФИЦИРОВАН'}</h3>
-          <p>{intelZero ? 'Сенсоры фиксируют нестабильный источник неизвестного происхождения. До глубокого сканирования тип объекта, точная угроза и возможная награда скрыты.' : operation.briefing}</p>
+          <h3>{pirate ? pirateContact ? 'ПИРАТСКАЯ БАЗА ОБНАРУЖЕНА' : quiet ? 'ПИРАТСКАЯ БАЗА УНИЧТОЖЕНА' : 'КОНТАКТ ЗАВЕРШЁН' : intelZero ? 'ДАННЫХ НЕДОСТАТОЧНО' : 'КОНТАКТ КЛАССИФИЦИРОВАН'}</h3>
+          <p>{pirate ? pirateContact ? `Действующая база в системе вашей колонии. Координаты: ${pirateCoordinateLabel(pirateContact)}.` : quiet ? 'Пиратская база разгромлена. Начался период до следующего возможного появления контакта.' : 'Цикл закончился или цель исчезла. На прежние координаты рейд не отправляется.' : intelZero ? 'Сенсоры фиксируют нестабильный источник неизвестного происхождения. До глубокого сканирования тип объекта, точная угроза и возможная награда скрыты.' : operation.briefing}</p>
           <div className="operations-intel-line-v2">
-            <span>РАЗВЕДДАННЫЕ</span>
-            <IntelPips level={operation.intel} />
-            <b>{operation.intel} / 3</b>
+            <span>{pirate ? 'РАЗВЕДКА' : 'РАЗВЕДДАННЫЕ'}</span>
+            {pirate ? <b>{pirateContact ? reconLabel : 'Контакт завершён'}</b> : <><IntelPips level={operation.intel} /><b>{operation.intel} / 3</b></>}
           </div>
+          {pirateContact ? <div className="operations-pirate-live-timer" role="timer">До исчезновения: <strong>{pirateRemainingLabel(pirateContact.expiresAt, nowMs)}</strong></div> : quiet ? <div className="operations-pirate-live-timer" role="timer">Следующий цикл возможен через: <strong>{pirateRemainingLabel(quiet.nextEligibleAt, nowMs)}</strong></div> : null}
         </div>
       </section>
 
@@ -317,19 +328,29 @@ function OperationDossier({ operation, onAccept, onCancel, onReveal, onOpenFleet
           </section>
 
           <div className="operations-dossier-lower-v2">
-            <section className="operations-conditions-v2">
-              <small>УСЛОВИЯ КОНТАКТА</small>
-              <div>
-                {modifierLabels.length ? modifierLabels.map((label) => <span key={label}>⚠ {label}</span>) : <span>Без особых условий</span>}
-              </div>
-              <p>Показаны только подтверждённые данные текущего уровня разведки.</p>
-            </section>
-
-            <section className="operations-rewards-panel-v2">
-              <small>НАГРАДА · ПРЕДПРОСМОТР</small>
-              <RewardPreview operation={operation} />
-              <p>Начисление награды появится вместе с реальным выполнением операций.</p>
-            </section>
+            {pirate ? <>
+              <section className="operations-conditions-v2">
+                <small>РАЗВЕДДАННЫЕ</small>
+                <strong>{pirateContact ? reconLabel : 'Цикл завершён'}</strong>
+                <p>{pirateContact?.latestReportOutcome === 'success' ? 'Состав пиратского флота доступен в разведотчёте.' : pirateContact?.latestReportOutcome === 'failure' ? 'Зонд не получил данные о составе флота.' : pirateContact ? 'Отправь разведзонд, чтобы узнать состав противника.' : 'Для этой базы разведка больше не доступна.'}</p>
+              </section>
+              <section className="operations-rewards-panel-v2">
+                <small>ПОТЕНЦИАЛЬНЫЕ ОБЛОМКИ</small>
+                <strong>60% стоимости уничтоженных пиратских кораблей</strong>
+                <p>Корсар: +0,5 п.п. за уровень (макс. 80% общей доли), если участвовал и выжил. Обломки остаются на орбите — их нужно собрать отдельно. Фактическое количество зависит от потерь пиратов.</p>
+              </section>
+            </> : <>
+              <section className="operations-conditions-v2">
+                <small>УСЛОВИЯ КОНТАКТА</small>
+                <div>{modifierLabels.length ? modifierLabels.map((label) => <span key={label}>⚠ {label}</span>) : <span>Без особых условий</span>}</div>
+                <p>Показаны только подтверждённые данные текущего уровня разведки.</p>
+              </section>
+              <section className="operations-rewards-panel-v2">
+                <small>НАГРАДА · ПРЕДПРОСМОТР</small>
+                <RewardPreview operation={operation} />
+                <p>Начисление награды появится вместе с реальным выполнением операций.</p>
+              </section>
+            </>}
           </div>
         </>
       )}
@@ -337,14 +358,25 @@ function OperationDossier({ operation, onAccept, onCancel, onReveal, onOpenFleet
       <footer className="operations-command-v2">
         <div>
           <small>СТАТУС</small>
-          <strong>{operation.state === 'active' ? 'ОПЕРАЦИЯ ПРИНЯТА' : operation.state === 'completed' ? 'ОПЕРАЦИЯ ЗАВЕРШЕНА' : intelZero ? 'ТРЕБУЕТСЯ СКАНИРОВАНИЕ' : 'ГОТОВА К ПРИНЯТИЮ'}</strong>
-          <span>{operation.state === 'active' ? 'Подготовьте флот в разделе «Флоты».' : intelZero ? 'Классифицируйте контакт перед принятием решения.' : 'Принятие фиксирует операцию как активную.'}</span>
+          <strong>{pirate ? operation.state === 'completed' ? quiet ? 'БАЗА УНИЧТОЖЕНА' : 'КОНТАКТ ЗАВЕРШЁН' : operation.state === 'active' ? 'ОПЕРАЦИЯ ПРИНЯТА' : 'ДОСТУПНА К ПРИНЯТИЮ' : operation.state === 'active' ? 'ОПЕРАЦИЯ ПРИНЯТА' : operation.state === 'completed' ? 'ОПЕРАЦИЯ ЗАВЕРШЕНА' : intelZero ? 'ТРЕБУЕТСЯ СКАНИРОВАНИЕ' : 'ГОТОВА К ПРИНЯТИЮ'}</strong>
+          <span>{pirate ? quiet ? 'Пауза перед возможным новым появлением базы — не таймер атаки на игрока.' : operation.state === 'active' ? 'Выбери действие для этого действующего контакта.' : operation.state === 'available' ? 'Прими операцию, чтобы открыть действия.' : 'Прошлый цикл больше не активен.' : operation.state === 'active' ? 'Подготовьте флот в разделе «Флоты».' : intelZero ? 'Классифицируйте контакт перед принятием решения.' : 'Принятие фиксирует операцию как активную.'}</span>
         </div>
         <div className="operations-command-actions-v2">
-          {intelZero ? <button type="button" className="operations-primary-v2" onClick={() => onReveal(operation.id)}>ПРОСКАНИРОВАТЬ</button> : null}
-          {!intelZero && operation.state === 'available' ? <button type="button" className="operations-primary-v2" onClick={() => onAccept(operation.id)}>ПРИНЯТЬ ОПЕРАЦИЮ</button> : null}
-          {operation.state === 'active' ? <button type="button" className="operations-primary-v2" onClick={onOpenFleets}>К ФЛОТАМ</button> : null}
-          {operation.state === 'active' ? <button type="button" className="operations-secondary-v2" onClick={() => onCancel(operation.id)}>ОТМЕНИТЬ</button> : null}
+          {pirate ? pirateContact && operation.state === 'available'
+            ? <button type="button" className="operations-primary-v2" onClick={() => onAccept(operation.id)}>ПРИНЯТЬ ОПЕРАЦИЮ</button>
+            : pirateContact && operation.state === 'active' ? <div className="operations-pirate-actions">
+              <button type="button" className="operations-primary-v2" disabled={!pirateContact.recon.enabled || !onPirateRecon} title={pirateContact.recon.disabledReason ?? ''} onClick={() => onPirateRecon?.(pirateContact)}>РАЗВЕДАТЬ</button>
+              <button type="button" className="operations-secondary-v2" disabled={!pirateContact.elimination.enabled || !onPirateAttack} onClick={() => onPirateAttack?.(pirateContact)}>ПОДГОТОВИТЬ ПИРАТСКИЙ РЕЙД</button>
+              <button type="button" className="operations-secondary-v2" disabled={!pirateContact.latestReportId || !onPirateReport} onClick={() => pirateContact.latestReportId && onPirateReport?.(pirateContact.latestReportId)}>ОТКРЫТЬ РАЗВЕДОТЧЁТ</button>
+              <button type="button" className="operations-secondary-v2" disabled={!onPirateUniverse} onClick={() => onPirateUniverse?.(pirateContact)}>ПОКАЗАТЬ ВО ВСЕЛЕННОЙ</button>
+              <button type="button" className="operations-pirate-cancel" onClick={() => onCancel(operation.id)}>Отменить операцию</button>
+            </div> : null
+          : <>
+            {intelZero ? <button type="button" className="operations-primary-v2" onClick={() => onReveal(operation.id)}>ПРОСКАНИРОВАТЬ</button> : null}
+            {!intelZero && operation.state === 'available' ? <button type="button" className="operations-primary-v2" onClick={() => onAccept(operation.id)}>ПРИНЯТЬ ОПЕРАЦИЮ</button> : null}
+            {operation.state === 'active' ? <button type="button" className="operations-primary-v2" onClick={onOpenFleets}>К ФЛОТАМ</button> : null}
+            {operation.state === 'active' ? <button type="button" className="operations-secondary-v2" onClick={() => onCancel(operation.id)}>ОТМЕНИТЬ</button> : null}
+          </>}
         </div>
       </footer>
     </aside>
