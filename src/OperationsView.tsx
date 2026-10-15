@@ -27,6 +27,9 @@ type OperationsViewProps = {
   onOpenFleets: () => void;
   pirateContacts?: readonly PirateContactPresentation[];
   quietPirateSystems?: readonly QuietPirateCycle[];
+  pirateCycleTimers?: readonly PirateCycleTimer[];
+  completedPirateOperations?: readonly CompletedPirateOperation[];
+  onPirateBattleReport?: (reportId: string) => void;
   onPirateAccept?: (contact: PirateContactPresentation) => void;
   onPirateCancel?: (contact: PirateContactPresentation) => void;
   nowMs?: number;
@@ -38,7 +41,9 @@ type OperationsViewProps = {
 
 type OperationsTab = Extract<OperationState, 'available' | 'active' | 'completed'>;
 type QuietPirateCycle = { galaxy: number; system: number; nextEligibleAt: number; contactCycleKey: string; coordinate: PirateContactPresentation['coordinate'] };
-type OperationRow = { operation: OperationInstance; contact?: PirateContactPresentation; quiet?: QuietPirateCycle };
+type PirateCycleTimer = { galaxy: number; system: number; active: boolean; quietStartsAt: number; nextRollAt: number; cycleIndex: number };
+type CompletedPirateOperation = { cycleKey: string; coordinate: PirateContactPresentation['coordinate']; reportId: string; defeatedAt: number };
+type OperationRow = { operation: OperationInstance; contact?: PirateContactPresentation; quiet?: QuietPirateCycle; battleReportId?: string };
 
 const TAB_LABELS: Record<OperationsTab, string> = {
   available: 'ДОСТУПНЫЕ',
@@ -257,7 +262,7 @@ function EmptyState({ tab }: { tab: OperationsTab }) {
   const copy = tab === 'active'
     ? ['АКТИВНЫХ ОПЕРАЦИЙ НЕТ', 'Примите операцию из списка доступных.']
     : tab === 'completed'
-      ? ['ИСТОРИЯ ПОКА ПУСТА', 'Завершённые операции появятся после подключения выполнения.']
+      ? ['ВЫПОЛНЕННЫХ ОПЕРАЦИЙ НЕТ', 'Здесь появляются только операции с подтверждённым результатом боя.']
       : ['КОНТАКТОВ НЕТ', 'Новых операций сейчас не обнаружено.'];
 
   return <div className="operations-empty-v2"><span>◇</span><strong>{copy[0]}</strong><p>{copy[1]}</p></div>;
@@ -295,11 +300,13 @@ function QuietPirateProgress({ nextEligibleAt, nowMs }: { nextEligibleAt: number
   );
 }
 
-function OperationDossier({ operation, pirateContact, quiet, nowMs, onAccept, onCancel, onReveal, onOpenFleets, onPirateRecon, onPirateAttack, onPirateReport, onPirateUniverse }: {
+function OperationDossier({ operation, pirateContact, quiet, battleReportId, nowMs, onAccept, onCancel, onReveal, onOpenFleets, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: {
   operation: OperationInstance | null;
   pirateContact?: PirateContactPresentation;
   quiet?: QuietPirateCycle;
+  battleReportId?: string;
   nowMs: number;
+  onPirateBattleReport?: (reportId: string) => void;
   onPirateRecon?: (contact: PirateContactPresentation) => void;
   onPirateAttack?: (contact: PirateContactPresentation) => void;
   onPirateReport?: (reportId: string) => void;
@@ -379,12 +386,15 @@ function OperationDossier({ operation, pirateContact, quiet, nowMs, onAccept, on
               <section className="operations-conditions-v2">
                 <small>РАЗВЕДДАННЫЕ</small>
                 <strong>{pirateContact ? reconLabel : 'Цикл завершён'}</strong>
-                <p>{pirateContact?.latestReportOutcome === 'success' ? 'Состав пиратского флота доступен в разведотчёте.' : pirateContact?.latestReportOutcome === 'failure' ? 'Зонд не получил данные о составе флота.' : pirateContact ? 'Отправь разведзонд, чтобы узнать состав противника.' : 'Для этой базы разведка больше не доступна.'}</p>
+                <p>{pirateContact?.latestReportOutcome === 'success' ? 'Состав флота доступен в разведотчёте.' : pirateContact?.latestReportOutcome === 'failure' ? 'Зонд не получил данные.' : pirateContact ? 'Отправь разведзонд, чтобы узнать состав противника.' : 'Разведка завершена.'}</p>
+                {pirateContact?.latestReportId && onPirateReport
+                  ? <button type="button" className="operations-intel-report-button-v2" onClick={() => onPirateReport(pirateContact.latestReportId!)}>ОТКРЫТЬ РАЗВЕДОТЧЁТ <span aria-hidden="true">↗</span></button>
+                  : null}
               </section>
               <section className="operations-rewards-panel-v2">
                 <small>ПОТЕНЦИАЛЬНЫЕ ОБЛОМКИ</small>
                 <div className="operations-pirate-debris-reward"><ResourceIcon kind="debris" label="Обломки" /><strong>От 60% стоимости уничтоженных пиратских кораблей</strong></div>
-                <p>Корсар: +0,5 п.п. за уровень (макс. 80% общей доли), если участвовал и выжил. Обломки остаются на орбите — их нужно собрать отдельно. Фактическое количество зависит от потерь пиратов.</p>
+                <p>Обломки остаются на орбите после боя — для получения отправь переработчиков.</p>
               </section>
             </> : <>
               <section className="operations-conditions-v2">
@@ -409,12 +419,13 @@ function OperationDossier({ operation, pirateContact, quiet, nowMs, onAccept, on
           <span>{pirate ? quiet ? 'Пауза перед возможным новым появлением базы — не таймер атаки на игрока.' : operation.state === 'active' ? 'Выбери действие для этого действующего контакта.' : operation.state === 'available' ? 'Прими операцию, чтобы открыть действия.' : 'Прошлый цикл больше не активен.' : operation.state === 'active' ? 'Подготовьте флот в разделе «Флоты».' : intelZero ? 'Классифицируйте контакт перед принятием решения.' : 'Принятие фиксирует операцию как активную.'}</span>
         </div>
         <div className="operations-command-actions-v2">
+          {pirate && operation.state === 'completed' && battleReportId && onPirateBattleReport ? <button type="button" className="operations-primary-v2" onClick={() => onPirateBattleReport(battleReportId)}>ОТКРЫТЬ БОЕВОЙ ОТЧЁТ</button> : null}
           {pirate ? pirateContact && operation.state === 'available'
             ? <button type="button" className="operations-primary-v2" onClick={() => onAccept(operation.id)}>ПРИНЯТЬ ОПЕРАЦИЮ</button>
             : pirateContact && operation.state === 'active' ? <div className="operations-pirate-actions">
               <button type="button" className="operations-primary-v2" disabled={!pirateContact.recon.enabled || !onPirateRecon} title={pirateContact.recon.disabledReason ?? ''} onClick={() => onPirateRecon?.(pirateContact)}>РАЗВЕДАТЬ</button>
               <button type="button" className="operations-secondary-v2" disabled={!pirateContact.elimination.enabled || !onPirateAttack} onClick={() => onPirateAttack?.(pirateContact)}>ПОДГОТОВИТЬ ПИРАТСКИЙ РЕЙД</button>
-              <button type="button" className="operations-secondary-v2" disabled={!pirateContact.latestReportId || !onPirateReport} onClick={() => pirateContact.latestReportId && onPirateReport?.(pirateContact.latestReportId)}>ОТКРЫТЬ РАЗВЕДОТЧЁТ</button>
+              
               <button type="button" className="operations-secondary-v2" disabled={!onPirateUniverse} onClick={() => onPirateUniverse?.(pirateContact)}>ПОКАЗАТЬ ВО ВСЕЛЕННОЙ</button>
               <button type="button" className="operations-pirate-cancel" onClick={() => onCancel(operation.id)}>Отменить операцию</button>
             </div> : null
@@ -430,7 +441,7 @@ function OperationDossier({ operation, pirateContact, quiet, nowMs, onAccept, on
   );
 }
 
-export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, pirateContacts = [], quietPirateSystems = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateUniverse }: OperationsViewProps) {
+export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, pirateContacts = [], quietPirateSystems = [], pirateCycleTimers = [], completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
   const [tab, setTab] = useState<OperationsTab>('available');
   const [selectedId, setSelectedId] = useState<OperationId | null>(null);
 
@@ -446,34 +457,17 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
       operation: pirateContactOperation(contact, acceptedIds.has(pirateOperationId(contact.contactCycleKey)) ? 'active' : 'available'),
       contact,
     }));
-    const liveIds = new Set(live.map((entry) => entry.operation.id));
-    const quiet: OperationRow[] = quietPirateSystems.filter((cycle) => !liveIds.has(pirateOperationId(cycle.contactCycleKey)))
-      .map((cycle) => ({
-        operation: pirateCycleOperation(cycle.contactCycleKey, cycle.coordinate, 'completed'),
-        quiet: cycle,
-      }));
-    const knownIds = new Set([...live, ...quiet].map((entry) => entry.operation.id));
-    const expired: OperationRow[] = state.items
-      .filter((item) => isPirateOperationId(item.id) && !knownIds.has(item.id))
-      .map((item) => ({
-        operation: {
-          ...item,
-          state: 'completed',
-          title: 'ПИРАТСКАЯ БАЗА',
-          objective: { label: 'Контакт больше не активен' },
-          intel: 1,
-          threat: null,
-          rewardPreview: {},
-        },
-      }));
-    return [...live, ...quiet, ...expired, ...normal];
-  }, [state.items, pirateContacts, quietPirateSystems]);
+    const completed: OperationRow[] = completedPirateOperations.map((entry) => ({
+      operation: pirateCycleOperation(entry.cycleKey, entry.coordinate, 'completed'),
+      battleReportId: entry.reportId,
+    }));
+    return [...live, ...completed, ...normal];
+  }, [state.items, pirateContacts, completedPirateOperations]);
 
   const visibleRows = useMemo(() => operationRows.filter(({ operation }) => operation.state === tab), [operationRows, tab]);
   const selectedRow = visibleRows.find(({ operation }) => operation.id === selectedId) ?? null;
-  // Expose the cooldown while browsing any tab, not only a selected Completed item.
-  const nearestQuiet = quietPirateSystems.reduce<QuietPirateCycle | null>((earliest, cycle) =>
-    !earliest || cycle.nextEligibleAt < earliest.nextEligibleAt ? cycle : earliest, null);
+  // Every owned system has its own authoritative roll timestamp, even when a base lives.
+  const nextCycles = [...pirateCycleTimers].sort((a, b) => a.nextRollAt - b.nextRollAt);
 
   useEffect(() => {
     if (selectedRow) return;
@@ -518,12 +512,25 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
         </nav>
         <div className="operations-slots-v2"><small>ПИРАТСКИЕ БАЗЫ</small><strong>{pirateContacts.length}</strong><span>активны</span></div>
       </header>
-      {nearestQuiet ? <section className="operations-quiet-banner-v2" data-qa-operations-quiet-banner>
+      {nextCycles.length ? <section className="operations-quiet-banner-v2" data-qa-operations-quiet-banner>
         <div className="operations-quiet-banner-intro-v2">
-          <strong>15 МИНУТ · ПАУЗА ПОСЛЕ УНИЧТОЖЕНИЯ</strong>
-          <span>Галактика {nearestQuiet.galaxy} · Система {String(nearestQuiet.system).padStart(2, '0')}{quietPirateSystems.length > 1 ? ` · ещё систем: ${quietPirateSystems.length - 1}` : ''}</span>
+          <strong>СЛЕДУЮЩИЕ ПРОВЕРКИ ПОЯВЛЕНИЯ ПИРАТОВ</strong>
+          <span>Отдельный таймер для каждой системы с колонией · это не таймер нападения</span>
         </div>
-        <QuietPirateProgress nextEligibleAt={nearestQuiet.nextEligibleAt} nowMs={nowMs} />
+        <div className="operations-cycle-timer-list-v2">
+          {nextCycles.map((cycle) => <div key={`${cycle.galaxy}:${cycle.system}`} className="operations-cycle-timer-item-v2" data-qa-pirate-roll-system={`${cycle.galaxy}:${cycle.system}`}>
+            <strong>[{cycle.galaxy}:{String(cycle.system).padStart(2, '0')}]</strong>
+            <div>
+              <span>{cycle.active ? 'База действует · до следующей проверки' : '15-минутная пауза · до проверки появления'}</span>
+              <b role="timer">{pirateRemainingLabel(cycle.nextRollAt, nowMs)}</b>
+              <div className="operations-pirate-cooldown-track" role="progressbar" aria-label={`Ход 15-минутной паузы системы ${cycle.system}`}
+                aria-valuemin={0} aria-valuemax={100}
+                aria-valuenow={cycle.active ? 0 : Math.round(Math.max(0, Math.min(1, (nowMs - cycle.quietStartsAt) / PIRATE_CONTACT_QUIET_MS)) * 100)}>
+                <span className="operations-pirate-cooldown-mask" style={{ width: `${cycle.active ? 100 : 100 - Math.round(Math.max(0, Math.min(1, (nowMs - cycle.quietStartsAt) / PIRATE_CONTACT_QUIET_MS)) * 100)}%` }} />
+              </div>
+            </div>
+          </div>)}
+        </div>
       </section> : null}
       <div className="operations-layout-v2">
         <section className="operations-feed-v2" aria-label={TAB_LABELS[tab]}>
@@ -546,6 +553,7 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
           operation={selectedRow?.operation ?? null}
           pirateContact={selectedRow?.contact}
           quiet={selectedRow?.quiet}
+          battleReportId={selectedRow?.battleReportId}
           nowMs={nowMs}
           onAccept={accept}
           onCancel={cancel}
@@ -554,6 +562,7 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
           onPirateRecon={onPirateRecon}
           onPirateAttack={onPirateAttack}
           onPirateReport={onPirateReport}
+          onPirateBattleReport={onPirateBattleReport}
           onPirateUniverse={onPirateUniverse}
         />
       </div>
