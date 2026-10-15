@@ -155,7 +155,7 @@ import { enqueueApplicationStateUpdate } from './application/state.ts';
 import { getOwnerShipUpgradeLevels, getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
 import { selectOwnedPlanet } from './application/owned-planets.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
-import { materializePirateProfiles, pirateContactOperation, pirateOperationId, selectOwnedPiratePresentations, selectOwnedPirateSystems, selectOwnedPirateTargets, selectPirateContacts } from './application/pirate-presentation.ts';
+import { materializePirateProfiles, pirateContactOperation, pirateOperationId, selectOwnedPiratePresentations, selectOwnedPirateTargets, selectPirateContacts } from './application/pirate-presentation.ts';
 import type { PirateContactPresentation, PirateSystemSelection } from './pirate-ui.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
@@ -338,16 +338,6 @@ export function App() {
       ? selectOwnedPiratePresentations(state, now)
       : selectPirateContacts(state, now, pirateSystem);
   }, [activeRoute, state, now, pirateSystem]);
-  const quietPirateSystems = useMemo(() => {
-    if (activeRoute !== 'operations') return [];
-    const defeated = Object.values(state.pirate?.contact.defeatedCycles ?? {});
-    return selectOwnedPirateSystems(state).flatMap(({ galaxy, system }) => {
-      if (pirateContacts.some((contact) => contact.coordinate.galaxy === galaxy && contact.coordinate.system === system)) return [];
-      const latest = defeated.filter((entry) => entry.galaxy === galaxy && entry.system === system && entry.nextEligibleAt > now)
-        .sort((left, right) => right.nextEligibleAt - left.nextEligibleAt)[0];
-      return latest ? [{ galaxy, system, nextEligibleAt: latest.nextEligibleAt, contactCycleKey: latest.contactCycleKey, coordinate: latest.coordinate }] : [];
-    });
-  }, [activeRoute, state.planets, state.pirate?.contact.defeatedCycles, pirateContacts, now]);
   const completedPirateOperations = useMemo(() => {
     if (activeRoute !== 'operations') return [];
     const reports = new Map(state.combat.reports.map((report) => [report.id, report]));
@@ -1587,7 +1577,6 @@ export function App() {
           ) : activeRoute === 'operations' ? (
             <OperationsView
               pirateContacts={pirateContacts}
-              quietPirateSystems={quietPirateSystems}
               completedPirateOperations={completedPirateOperations}
               onPirateBattleReport={openPirateReport}
               nowMs={now}
