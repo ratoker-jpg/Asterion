@@ -380,8 +380,13 @@ async function verifyViewport(width, height) {
     assertResourceImages('repair workshop', await readResourceImages(win, '.repair-workshop-v1'), ['metal', 'minerals', 'gas', 'population']);
 
     await activateRoute(win, 'operations', '.operations-shell-v2');
-    await waitForResourceImages(win, '.operations-shell-v2');
-    assertResourceImages('operations', await readResourceImages(win, '.operations-shell-v2'), ['metal', 'minerals', 'gas']);
+    // Operations now displays actual pirate debris instead of invented demo resources.
+    // Validate every currently rendered resource asset, without requiring fake rewards.
+    const operationImages = await readResourceImages(win, '.operations-shell-v2');
+    if (!operationImages) throw new Error('operations: missing operation workspace');
+    assertResourceImages('operations', operationImages, [...new Set(operationImages.map((image) => image.kind))]);
+    const pirateFixturesVisible = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('.operation-feed-card-v2 strong')).some((el) => ['ПИРАТСКАЯ ЭСКАДРА', 'РЕЙДЕРСКАЯ ГРУППА'].includes(el.textContent?.trim()))`);
+    if (pirateFixturesVisible) throw new Error('operations: obsolete demo pirate cards are still visible');
 
     await activateRoute(win, 'command', '.command-view');
     await clickText(win, '.command-tabs button', 'ЗАПРОСЫ РЕСУРСОВ');
