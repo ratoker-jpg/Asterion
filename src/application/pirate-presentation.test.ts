@@ -90,17 +90,20 @@ test('stale pirate elimination appears as a persisted no-target flight message w
   const targetColony = createColonyPlanetRuntime(state, { galaxy: contact.coordinate.galaxy,
     system: contact.coordinate.system, position: contact.coordinate.position === 1 ? 2 : 1 });
   const eligibleState = { ...state, planets: { ...state.planets, 'stale-flight-colony': targetColony } };
+  const ownedContact = getCurrentPirateContact(eligibleState, contact.coordinate, now, 'production');
+  assert.ok(ownedContact);
+  assert.equal(ownedContact.contactCycleKey, contact.contactCycleKey);
   const dispatched = dispatchFlight(eligibleState, {
     requestId: 'pirate-no-target-history',
     missionId: 'pirate-elimination',
-    contactCycleKey: contact.contactCycleKey,
+    contactCycleKey: ownedContact.contactCycleKey,
     originPlanetId: 'helion-01',
-    destination: { kind: 'coordinate', coordinate: contact.coordinate },
+    destination: { kind: 'coordinate', coordinate: ownedContact.coordinate },
     targetKind: 'pirate',
     targetRelation: 'neutral',
     selectedShips: { scout: 1 },
   }, { now, mode: 'production' });
-  assert.equal(dispatched.ok, true);
+  assert.equal(dispatched.ok, true, dispatched.ok ? '' : dispatched.error.message);
   if (!dispatched.ok) return;
 
   // Model a saved outbound flight whose arrival is after the pinned contact expired.
