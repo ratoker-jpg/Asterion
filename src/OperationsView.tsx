@@ -213,7 +213,7 @@ function OperationCard({ operation, selected, onSelect, contact, quiet, nowMs }:
       data-qa-pirate-contact={contact?.contactCycleKey ?? quiet?.contactCycleKey}
       onClick={onSelect}
     >
-      <span className="operation-feed-threat-v2"><b>{threatTier(operation)}</b><small>{intelZero ? 'UNKNOWN' : operation.category === 'combat' ? 'THREAT' : 'RISK'}</small></span>
+      <span className="operation-feed-threat-v2"><b>{isPirateOperationId(operation.id) ? (contact ? '●' : '—') : threatTier(operation)}</b><small>{isPirateOperationId(operation.id) ? 'ЦЕЛЬ' : intelZero ? 'UNKNOWN' : operation.category === 'combat' ? 'THREAT' : 'RISK'}</small></span>
       <span className="operation-feed-copy-v2">
         <small>{CATEGORY_LABELS[operation.category]}</small>
         <strong>{operation.title}</strong>
