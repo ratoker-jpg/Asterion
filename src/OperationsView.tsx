@@ -383,45 +383,70 @@ function OperationDossier({ operation, pirateContact, quiet, nowMs, onAccept, on
   );
 }
 
-export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, pirateContacts = [], quietPirateSystems = [], nowMs = Date.now(), onPirateRecon, onPirateAttack, onPirateReport, onPirateUniverse }: OperationsViewProps) {
+export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, pirateContacts = [], quietPirateSystems = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateUniverse }: OperationsViewProps) {
   const [tab, setTab] = useState<OperationsTab>('available');
-  const [selectedId, setSelectedId] = useState<OperationId | null>(() => state.items.find((item) => item.state === 'available')?.id ?? null);
-  const [selectedPirateCycleKey, setSelectedPirateCycleKey] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<OperationId | null>(null);
 
+  const operationRows = useMemo((): OperationRow[] => {
+    // Demo placeholders are not playable pirate targets. Keep them in Test save for
+    // backwards compatibility, but render only authoritative live contacts.
+    const demoIds = new Set(['op-pirate-patrol-01', 'op-pirate-outpost-01']);
+    const normal: OperationRow[] = state.items
+      .filter((item) => !demoIds.has(item.id) && !isPirateOperationId(item.id))
+      .map((operation) => ({ operation }));
+    const acceptedIds = new Set(state.items.filter((item) => isPirateOperationId(item.id) && item.state === 'active').map((item) => item.id));
+    const live: OperationRow[] = pirateContacts.map((contact) => ({
+      operation: pirateContactOperation(contact, acceptedIds.has(pirateOperationId(contact.contactCycleKey)) ? 'active' : 'available'),
+      contact,
+    }));
+    const liveIds = new Set(live.map((entry) => entry.operation.id));
+    const quiet: OperationRow[] = quietPirateSystems.filter((cycle) => !liveIds.has(pirateOperationId(cycle.contactCycleKey)))
+      .map((cycle) => ({
+        operation: pirateCycleOperation(cycle.contactCycleKey, cycle.coordinate, 'completed'),
+        quiet: cycle,
+      }));
+    const knownIds = new Set([...live, ...quiet].map((entry) => entry.operation.id));
+    const expired: OperationRow[] = state.items
+      .filter((item) => isPirateOperationId(item.id) && !knownIds.has(item.id))
+      .map((item) => ({
+        operation: {
+          ...item,
+          state: 'completed',
+          title: 'ПИРАТСКАЯ БАЗА',
+          objective: { label: 'Контакт больше не активен' },
+          intel: 1,
+          threat: null,
+          rewardPreview: {},
+        },
+      }));
+    return [...live, ...quiet, ...expired, ...normal];
+  }, [state.items, pirateContacts, quietPirateSystems]);
 
-  const visibleItems = useMemo(() => state.items.filter((item) => item.state === tab), [state.items, tab]);
-  const visiblePirates = tab === 'available' ? pirateContacts : [];
-  const selected = state.items.find((item) => item.id === selectedId && item.state === tab) ?? null;
-  const selectedPirate = visiblePirates.find((contact) => contact.contactCycleKey === selectedPirateCycleKey) ?? null;
-  const visibleCount = visibleItems.length + visiblePirates.length;
+  const visibleRows = useMemo(() => operationRows.filter(({ operation }) => operation.state === tab), [operationRows, tab]);
+  const selectedRow = visibleRows.find(({ operation }) => operation.id === selectedId) ?? null;
 
   useEffect(() => {
-    if (selectedPirate) return;
-    if (selected) return;
-    setSelectedPirateCycleKey(visiblePirates[0]?.contactCycleKey ?? null);
-  }, [tab, pirateContacts, selected, selectedPirate]);
-
-  useEffect(() => {
-    if (selected || selectedPirate) return;
-    setSelectedId(visibleItems[0]?.id ?? null);
-  }, [selected, selectedPirate, visibleItems]);
+    if (selectedRow) return;
+    setSelectedId(visibleRows[0]?.operation.id ?? null);
+  }, [selectedRow, visibleRows]);
 
   const chooseTab = (next: OperationsTab) => {
     setTab(next);
-    setSelectedPirateCycleKey(null);
-    setSelectedId(state.items.find((item) => item.state === next)?.id ?? null);
+    setSelectedId(null);
   };
 
   const accept = (operationId: OperationId) => {
-    onAccept(operationId);
-    setSelectedPirateCycleKey(null);
+    const row = operationRows.find(({ operation }) => operation.id === operationId);
+    if (row?.contact) onPirateAccept?.(row.contact);
+    else onAccept(operationId);
     setTab('active');
     setSelectedId(operationId);
   };
 
   const cancel = (operationId: OperationId) => {
-    onCancel(operationId);
-    setSelectedPirateCycleKey(null);
+    const row = operationRows.find(({ operation }) => operation.id === operationId);
+    if (row?.contact) onPirateCancel?.(row.contact);
+    else onCancel(operationId);
     setTab('available');
     setSelectedId(operationId);
   };
@@ -432,46 +457,48 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
         <div className="operations-heading-v2">
           <small>ОПЕРАЦИОННЫЙ ЦЕНТР</small>
           <h1>ОПЕРАЦИИ</h1>
-          <p>Временные PvE-контакты, сигналы и разведанные цели.</p>
+          <p>Действующие PvE-цели в системах твоих колоний.</p>
         </div>
-
         <nav className="operations-tabs-v2" role="tablist" aria-label="Состояние операций">
           {(Object.keys(TAB_LABELS) as OperationsTab[]).map((entry) => (
             <button key={entry} type="button" role="tab" aria-selected={tab === entry} className={tab === entry ? 'active' : ''} onClick={() => chooseTab(entry)}>
-              <span>{TAB_LABELS[entry]}</span><b>{state.items.filter((item) => item.state === entry).length + (entry === 'available' ? pirateContacts.length : 0)}</b>
+              <span>{TAB_LABELS[entry]}</span><b>{operationRows.filter(({ operation }) => operation.state === entry).length}</b>
             </button>
           ))}
         </nav>
-
-        <div className="operations-slots-v2"><small>ПИРАТСКИЕ ЦЕЛИ</small><strong>{pirateContacts.length}</strong><span>активны</span></div>
+        <div className="operations-slots-v2"><small>ПИРАТСКИЕ БАЗЫ</small><strong>{pirateContacts.length}</strong><span>активны</span></div>
       </header>
-
       <div className="operations-layout-v2">
         <section className="operations-feed-v2" aria-label={TAB_LABELS[tab]}>
-          <header><div><small>КАНАЛ // {TAB_LABELS[tab]}</small><strong>{tab === 'available' ? 'ВХОДЯЩИЕ КОНТАКТЫ' : tab === 'active' ? 'ТЕКУЩИЕ ЗАДАЧИ' : 'АРХИВ ОПЕРАЦИЙ'}</strong></div><span>{visibleCount}</span></header>
+          <header><div><small>КАНАЛ // {TAB_LABELS[tab]}</small><strong>{tab === 'available' ? 'ВХОДЯЩИЕ КОНТАКТЫ' : tab === 'active' ? 'ТЕКУЩИЕ ЗАДАЧИ' : 'АРХИВ ОПЕРАЦИЙ'}</strong></div><span>{visibleRows.length}</span></header>
           <div className="operations-feed-scroll-v2">
-          {visiblePirates.length ? (
-            <div className="operations-pirate-feed" aria-label="Активные пиратские контакты">
-              <small>АКТИВНЫЕ ПИРАТСКИЕ КОНТАКТЫ · {visiblePirates.length}</small>
-              {visiblePirates.map((contact) => <PirateContactCard key={contact.contactCycleKey} contact={contact} nowMs={nowMs} selected={contact.contactCycleKey === selectedPirateCycleKey} onSelect={() => { setSelectedPirateCycleKey(contact.contactCycleKey); setSelectedId(null); }} />)}
-            </div>
-          ) : null}
-          {tab === 'available' && quietPirateSystems.length ? <div className="operations-pirate-quiet-list" aria-label="Пауза после уничтожения контакта">
-            {quietPirateSystems.map((quiet) => <div className="operations-pirate-quiet" key={`${quiet.galaxy}:${quiet.system}`} role="status">
-              <strong>КОНТАКТ УНИЧТОЖЕН · [{quiet.galaxy}:{quiet.system}]</strong>
-              <span>Следующий цикл возможен не ранее чем через {pirateRemainingLabel(quiet.nextEligibleAt, nowMs)}</span>
-              <small>Это пауза перед возможным появлением новой базы, не таймер нападения.</small>
-            </div>)}
-          </div> : null}
-          {visibleItems.length ? (
-            <div className="operations-feed-list-v2">
-              {visibleItems.map((operation) => <OperationCard key={operation.id} operation={operation} selected={!selectedPirate && operation.id === selected?.id} onSelect={() => { setSelectedPirateCycleKey(null); setSelectedId(operation.id); }} />)}
-            </div>
-          ) : !visiblePirates.length && !(tab === 'available' && quietPirateSystems.length) ? <EmptyState tab={tab} /> : null}
+            {visibleRows.length ? <div className="operations-feed-list-v2">
+              {visibleRows.map((row) => <OperationCard
+                key={row.operation.id}
+                operation={row.operation}
+                contact={row.contact}
+                quiet={row.quiet}
+                nowMs={nowMs}
+                selected={row.operation.id === selectedRow?.operation.id}
+                onSelect={() => setSelectedId(row.operation.id)}
+              />)}
+            </div> : <EmptyState tab={tab} />}
           </div>
         </section>
-
-        {selectedPirate ? <PirateContactDossier contact={selectedPirate} nowMs={nowMs} onRecon={onPirateRecon} onAttack={onPirateAttack} onReport={onPirateReport} onUniverse={onPirateUniverse} /> : <OperationDossier operation={selected} onAccept={accept} onCancel={cancel} onReveal={onReveal} onOpenFleets={onOpenFleets} />}
+        <OperationDossier
+          operation={selectedRow?.operation ?? null}
+          pirateContact={selectedRow?.contact}
+          quiet={selectedRow?.quiet}
+          nowMs={nowMs}
+          onAccept={accept}
+          onCancel={cancel}
+          onReveal={onReveal}
+          onOpenFleets={onOpenFleets}
+          onPirateRecon={onPirateRecon}
+          onPirateAttack={onPirateAttack}
+          onPirateReport={onPirateReport}
+          onPirateUniverse={onPirateUniverse}
+        />
       </div>
     </main>
   );
