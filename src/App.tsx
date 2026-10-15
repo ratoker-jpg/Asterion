@@ -4,7 +4,7 @@ import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
 import { OperationsView } from './OperationsView';
-import { getUniversePirateCycleTiming, rerollTestUniverseLayout } from './domain/universe/runtime.ts';
+import { rerollTestUniverseLayout } from './domain/universe/runtime.ts';
 import { CommandView } from './CommandView';
 import { ReportsView } from './ReportsView';
 import { buildReportsFeed, getReportUnreadCounts } from './domain/reports/adapters.ts';
@@ -348,15 +348,6 @@ export function App() {
       return latest ? [{ galaxy, system, nextEligibleAt: latest.nextEligibleAt, contactCycleKey: latest.contactCycleKey, coordinate: latest.coordinate }] : [];
     });
   }, [activeRoute, state.planets, state.pirate?.contact.defeatedCycles, pirateContacts, now]);
-  const pirateCycleTimers = useMemo(() => {
-    if (activeRoute !== 'operations') return [];
-    const defeats = Object.values(state.pirate?.contact.defeatedCycles ?? {});
-    return selectOwnedPirateSystems(state).flatMap(({ galaxy, system }) => {
-      const timing = getUniversePirateCycleTiming(galaxy, system, now, defeats);
-      return timing ? [{ galaxy, system, ...timing }] : [];
-    });
-  }, [activeRoute, state.planets, state.pirate?.contact.defeatedCycles, now]);
-
   const completedPirateOperations = useMemo(() => {
     if (activeRoute !== 'operations') return [];
     const reports = new Map(state.combat.reports.map((report) => [report.id, report]));
@@ -1597,7 +1588,6 @@ export function App() {
             <OperationsView
               pirateContacts={pirateContacts}
               quietPirateSystems={quietPirateSystems}
-              pirateCycleTimers={pirateCycleTimers}
               completedPirateOperations={completedPirateOperations}
               onPirateBattleReport={openPirateReport}
               nowMs={now}
