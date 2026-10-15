@@ -26,6 +26,8 @@ export type PirateRaidSnapshot = Readonly<{
   contactCycleKey: string;
   targetPlanetId: string;
   checkAt: number;
+  /** New raids freeze 12 rounds; absence is a legacy frozen 8-round raid. */
+  maxRounds?: 12;
   counterFleet: boolean;
   composition: Readonly<Partial<Record<import('./catalog.ts').PirateBaseShipId, number>>>;
   profile: PirateProfile;
@@ -196,6 +198,7 @@ export function normalizePirateRaidSnapshot(value: unknown): PirateRaidSnapshot 
     || typeof value.contactCycleKey !== 'string' || !isCanonicalPirateContactCycleKey(value.contactCycleKey)
     || typeof value.targetPlanetId !== 'string' || !value.targetPlanetId.trim() || value.targetPlanetId.length > 160
     || !validTimestamp(value.checkAt) || typeof value.counterFleet !== 'boolean'
+    || (value.maxRounds !== undefined && value.maxRounds !== 12)
     || !isRecord(value.composition)) return null;
   const profileContainer = normalizePirateContactState({
     version: 1, defeatedCycles: {},
@@ -211,6 +214,7 @@ export function normalizePirateRaidSnapshot(value: unknown): PirateRaidSnapshot 
   return Object.freeze({
     version: 1, ownerId: value.ownerId, contactCycleKey: value.contactCycleKey,
     targetPlanetId: value.targetPlanetId, checkAt: value.checkAt,
+    ...(value.maxRounds === 12 ? { maxRounds: 12 as const } : {}),
     counterFleet: value.counterFleet,
     composition: Object.freeze({ ...value.composition }) as PirateRaidSnapshot['composition'],
     profile: freezeProfile(profile),
