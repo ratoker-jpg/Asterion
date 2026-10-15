@@ -98,6 +98,7 @@ import {
   isAttackCombatShip,
   normalizeAttackRounds,
   resolveBot01IncomingAttack,
+  resolvePirateIncomingRaid,
   resolveAttackAtTarget,
 } from './attack.ts';
 import { dispatchPirateFlight, resolvePirateFlightAtTarget } from './pirates.ts';
@@ -435,7 +436,7 @@ export function getReservedShipsForPlanet(
 ): Partial<Record<ShipId, number>> {
   const reserved: Partial<Record<ShipId, number>> = {};
   for (const flight of activeFlights(state)) {
-    if (flight.ownerSide === 'bot01') continue;
+    if (flight.ownerSide === 'bot01' || flight.ownerSide === 'pirate') continue;
     if (flight.originPlanetId !== planetId) continue;
     for (const [shipId, quantity] of Object.entries(flight.selectedShips) as [ShipId, number][]) {
       if (!Number.isFinite(quantity) || quantity <= 0) continue;
@@ -451,7 +452,7 @@ export function getReservedCommandersForPlanet(
 ): Partial<Record<CommanderId, number>> {
   const reserved: Partial<Record<CommanderId, number>> = {};
   for (const flight of activeFlights(state)) {
-    if (flight.ownerSide === 'bot01') continue;
+    if (flight.ownerSide === 'bot01' || flight.ownerSide === 'pirate') continue;
     if (flight.originPlanetId !== planetId) continue;
     for (const [commanderId, quantity] of Object.entries(flight.selectedCommanders ?? {}) as [CommanderId, number][]) {
       if (!COMMANDER_IDS.includes(commanderId) || !Number.isFinite(quantity) || quantity <= 0) continue;
@@ -1525,7 +1526,8 @@ export function recallFlight(
   const flights = currentFlightState(state);
   const flight = flights.records.find((item) => item.id === flightId);
   if (!flight) return failure(state, 'flight-not-recallable', 'Отозвать можно только исходящий рейс.');
-  if (flight.ownerSide === 'bot01') return failure(state, 'flight-not-recallable', 'Нельзя отозвать флот Bot 01.');
+  if (flight.ownerSide === 'bot01' || flight.ownerSide === 'pirate')
+    return failure(state, 'flight-not-recallable', 'Нельзя отозвать флот NPC.');
   const spyMission = flight.missionId === 'espionage' ? spyMissionForFlight(state, flight) : undefined;
   if (flight.missionId === 'espionage' && flight.phase === 'arrived' && spyMission?.status === 'orbiting') {
     const returnedState = beginDomainFlightReturn(flights, flightId, now, 'recalled');
@@ -2015,6 +2017,28 @@ export function reconcileFlights(
           flight: returning,
           status: 'arrived',
           notice: 'Космический рейс достиг рубежа и возвращается на исходную планету.',
+        });
+        continue;
+      }
+      if (current.ownerSide === 'pirate' && current.missionId === 'pirate-raid') {
+        const resolved = resolvePirateIncomingRaid(next,current,arrivalAt);
+        const returning: FlightRecord = {
+          ...current, phase:'returning',arrivedAt:arrivalAt,
+          ...(resolved ? {attackResolution:resolved.resolution}:{}),
+          returnAt:arrivalAt+current.oneWayDurationMs,
+          completionReason:resolved ? 'normal-return':'target-unavailable',
+        };
+        next={...(resolved?.state ?? next),flights:updateFlight(
+          currentFlightState(resolved?.state ?? next),returning)};
+        changed=true;
+        events.push({
+          flight:returning,
+          status:resolved ? 'incoming-attack' : 'target-unavailable',
+          notice:resolved
+            ? `Пиратский налёт завершён: ${resolved.report.winner==='attacker'
+                ? 'пираты победили' : resolved.report.winner==='defender'
+                  ? 'оборона победила':'ничья'}. Потери и добыча учтены, планета и здания сохранены.`
+            : 'Пираты прибыли к исчезнувшей колонии и возвращаются без боя и добычи.',
         });
         continue;
       }
@@ -2516,6 +2540,8 @@ export function reconcileFlights(
             ? 'Пиратская разведка: зонд вернулся на исходную планету.'
           : completed.missionId === 'pirate-elimination'
             ? completed.completionReason === 'target-unavailable' ? 'По указанным координатам планеты пиратов не обнаружено' : 'Пиратский рейд: выживший флот вернулся на исходную планету.'
+          : completed.ownerSide === 'pirate'
+            ? 'Пиратский флот завершил возвращение; добыча не начисляется другим владельцам.'
           : completed.ownerSide === 'bot01'
             ? 'Флот Bot 01 вернулся к источнику; выжившие корабли и захваченные ресурсы зачислены.'
         : completed.missionId === 'transport' || completed.missionId === 'recycle' || completed.missionId === 'gas'
