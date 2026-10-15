@@ -39,12 +39,16 @@ import { getCombatFactionName } from './domain/combat/factions.ts';
 import type { CombatEntityId, ShipId } from './domain/combat/ids.ts';
 import type { UniverseCoordinate } from './domain/universe/types.ts';
 import type { PirateReconReport } from './domain/pirates/recon-report.ts';
+import { PIRATE_BASE_SHIPS } from './domain/pirates/catalog.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon.tsx';
 import './reports.css';
 import './reports-comic-v6.css';
 
 const PAGE_SIZE = 7;
 const numberFormat = new Intl.NumberFormat('ru-RU');
+// Historical recon reports store canonical pirate ship names, not asset paths.
+// Resolve presentation art from the same catalog used by pirate combat and the ship UI.
+const pirateReconArtByName = new Map(PIRATE_BASE_SHIPS.map(({ name, art }) => [name, art] as const));
 
 type MessageFolderId =
   | 'profile'
@@ -242,7 +246,18 @@ function PirateReconDossier({ item, onOpenPirateUniverse }: {
         <section className="spy-report-card pirate-recon-report-card">
           <header><strong>СОСТАВ ПО НАСЕЛЕНИЮ</strong><span>Проценты состава</span></header>
           <div className="pirate-recon-report-list">
-            {report.intel.ships.map((ship) => <div key={ship.name}><span>{ship.name}</span><strong>{ship.populationPercent}%</strong></div>)}
+            {report.intel.ships.map((ship) => {
+              const art = pirateReconArtByName.get(ship.name);
+              return (
+                <div key={ship.name} className="pirate-recon-ship" data-qa-pirate-recon-ship={ship.name}>
+                  <span className="pirate-recon-ship-identity">
+                    {art ? <img className="pirate-recon-ship-art" src={art} alt={`Пиратский корабль «${ship.name}»`} loading="lazy" /> : null}
+                    <span>{ship.name}</span>
+                  </span>
+                  <strong>{ship.populationPercent}%</strong>
+                </div>
+              );
+            })}
           </div>
         </section>
       </> : <section className="spy-report-card pirate-recon-report-card">
