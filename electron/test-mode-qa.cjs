@@ -171,6 +171,15 @@ async function seedTestRuntime(win, changes = {}) {
     return true;
   })()`);
   if (!ok) throw new Error('Could not seed Test Mode runtime');
+  if (changes.resourceClock) {
+    const seeded = await readEnvelope(win,TEST_KEY);
+    console.log('[qa:pr91:resource-seed]',JSON.stringify({
+      clock:seeded?.resourceClock,
+      planetResources:seeded?.planets?.['helion-01']?.resources,
+      pirateCursor:seeded?.pirate?.raidProcessedAt,
+      hostileFlights:seeded?.flights?.records?.filter(x=>x.ownerSide==='pirate').length,
+    }));
+  }
   await reload(win, 'test');
 }
 
