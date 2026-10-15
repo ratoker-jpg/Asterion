@@ -15,7 +15,7 @@ import type { ResourceIconKind } from './ui/resources/resource-assets.ts';
 import type { PirateContactPresentation } from './pirate-ui.ts';
 import { isPirateOperationId, pirateContactOperation, pirateCycleOperation, pirateOperationId } from './application/pirate-presentation.ts';
 import { getUniverseSlotPoint } from './domain/universe/runtime.ts';
-import { PIRATE_CONTACT_QUIET_MS } from './domain/pirates/contact-schedule.ts';
+import { PIRATE_CONTACT_QUIET_MS, getPirateRaidCheckProgress } from './domain/pirates/contact-schedule.ts';
 import { getPiratePlanetArt } from './pirate-planet-art.ts';
 import './operations.css';
 
@@ -27,7 +27,6 @@ type OperationsViewProps = {
   onOpenFleets: () => void;
   pirateContacts?: readonly PirateContactPresentation[];
   quietPirateSystems?: readonly QuietPirateCycle[];
-  pirateCycleTimers?: readonly PirateCycleTimer[];
   completedPirateOperations?: readonly CompletedPirateOperation[];
   onPirateBattleReport?: (reportId: string) => void;
   onPirateAccept?: (contact: PirateContactPresentation) => void;
@@ -41,7 +40,6 @@ type OperationsViewProps = {
 
 type OperationsTab = Extract<OperationState, 'available' | 'active' | 'completed'>;
 type QuietPirateCycle = { galaxy: number; system: number; nextEligibleAt: number; contactCycleKey: string; coordinate: PirateContactPresentation['coordinate'] };
-type PirateCycleTimer = { galaxy: number; system: number; active: boolean; quietStartsAt: number; nextRollAt: number; cycleIndex: number };
 type CompletedPirateOperation = { cycleKey: string; coordinate: PirateContactPresentation['coordinate']; reportId: string; defeatedAt: number; rounds: number; debris: number };
 type OperationRow = { operation: OperationInstance; contact?: PirateContactPresentation; quiet?: QuietPirateCycle; completed?: CompletedPirateOperation; battleReportId?: string };
 
@@ -227,6 +225,9 @@ function OperationCard({ operation, selected, onSelect, contact, quiet, nowMs }:
   const pirate = isPirateOperationId(operation.id);
   const pirateCycle = pirate ? (contact?.contactCycleKey ?? quiet?.contactCycleKey ?? operation.id.slice('pirate:'.length)).split(':') : [];
   const pirateArt = pirate ? getPiratePlanetArt(Number(pirateCycle[2]), Number(pirateCycle[3])) : null;
+  // Cycle identity freezes the display's 15-minute anchor; this isn't the
+  // procedural base-spawn schedule or a working incoming attack scheduler.
+  const raidCheck = contact ? getPirateRaidCheckProgress(Number(pirateCycle[4]), nowMs) : null;
 
   return (
     <button
@@ -252,6 +253,17 @@ function OperationCard({ operation, selected, onSelect, contact, quiet, nowMs }:
             ? <b className="operations-pirate-debris-label"><ResourceIcon kind="debris" /> ОБЛОМКИ · от 60%</b>
             : <><IntelPips level={operation.intel} />{firstReward ? <b><ResourceIcon kind={firstReward[2]} /> {number.format(firstReward[1])}</b> : <b>НАГРАДА ?</b>}</>}
         </span>
+        {raidCheck ? <span className="operation-feed-raid-check-v2" data-qa-raid-check-interval="15m">
+          <span className="operation-feed-raid-check-label-v2">
+            <span>ДО ПРОВЕРКИ НАПАДЕНИЯ</span>
+            <strong role="timer">{pirateRemainingLabel(raidCheck.nextAt, nowMs)}</strong>
+          </span>
+          <span className="operations-pirate-cooldown-track" role="progressbar" aria-label="15-минутный интервал проверки возможного нападения"
+            aria-valuemin={0} aria-valuemax={100} aria-valuenow={raidCheck.percent}>
+            <span className="operations-pirate-cooldown-mask" style={{ width: `${100 - raidCheck.percent}%` }} />
+          </span>
+          <span className="operation-feed-raid-check-note-v2">Интервал отображается; автоматические налёты ещё не подключены</span>
+        </span> : null}
       </span>
       <span className="operation-feed-arrow-v2">›</span>
     </button>
@@ -467,7 +479,7 @@ function OperationDossier({ operation, pirateContact, quiet, battleReportId, com
   );
 }
 
-export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, pirateContacts = [], quietPirateSystems = [], pirateCycleTimers = [], completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
+export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, pirateContacts = [], quietPirateSystems = [], completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
   const [tab, setTab] = useState<OperationsTab>('available');
   const [selectedId, setSelectedId] = useState<OperationId | null>(null);
 
@@ -493,8 +505,6 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
 
   const visibleRows = useMemo(() => operationRows.filter(({ operation }) => operation.state === tab), [operationRows, tab]);
   const selectedRow = visibleRows.find(({ operation }) => operation.id === selectedId) ?? null;
-  // Every owned system has its own authoritative roll timestamp, even when a base lives.
-  const nextCycles = [...pirateCycleTimers].sort((a, b) => a.nextRollAt - b.nextRollAt);
 
   useEffect(() => {
     if (selectedRow) return;
@@ -539,26 +549,6 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
         </nav>
         <div className="operations-slots-v2"><small>ПИРАТСКИЕ БАЗЫ</small><strong>{pirateContacts.length}</strong><span>активны</span></div>
       </header>
-      {nextCycles.length ? <section className="operations-quiet-banner-v2" data-qa-operations-quiet-banner>
-        <div className="operations-quiet-banner-intro-v2">
-          <strong>СЛЕДУЮЩИЕ ПРОВЕРКИ ПОЯВЛЕНИЯ ПИРАТОВ</strong>
-          <span>Отдельный таймер для каждой системы с колонией · это не таймер нападения</span>
-        </div>
-        <div className="operations-cycle-timer-list-v2">
-          {nextCycles.map((cycle) => <div key={`${cycle.galaxy}:${cycle.system}`} className="operations-cycle-timer-item-v2" data-qa-pirate-roll-system={`${cycle.galaxy}:${cycle.system}`}>
-            <strong>[{cycle.galaxy}:{String(cycle.system).padStart(2, '0')}]</strong>
-            <div>
-              <span>{cycle.active ? 'База действует · до следующей проверки' : '15-минутная пауза · до проверки появления'}</span>
-              <b role="timer">{pirateRemainingLabel(cycle.nextRollAt, nowMs)}</b>
-              <div className="operations-pirate-cooldown-track" role="progressbar" aria-label={`Ход 15-минутной паузы системы ${cycle.system}`}
-                aria-valuemin={0} aria-valuemax={100}
-                aria-valuenow={cycle.active ? 0 : Math.round(Math.max(0, Math.min(1, (nowMs - cycle.quietStartsAt) / PIRATE_CONTACT_QUIET_MS)) * 100)}>
-                <span className="operations-pirate-cooldown-mask" style={{ width: `${cycle.active ? 100 : 100 - Math.round(Math.max(0, Math.min(1, (nowMs - cycle.quietStartsAt) / PIRATE_CONTACT_QUIET_MS)) * 100)}%` }} />
-              </div>
-            </div>
-          </div>)}
-        </div>
-      </section> : null}
       <div className="operations-layout-v2">
         <section className="operations-feed-v2" aria-label={TAB_LABELS[tab]}>
           <header><div><small>КАНАЛ // {TAB_LABELS[tab]}</small><strong>{tab === 'available' ? 'ВХОДЯЩИЕ КОНТАКТЫ' : tab === 'active' ? 'ТЕКУЩИЕ ЗАДАЧИ' : 'АРХИВ ОПЕРАЦИЙ'}</strong></div><span>{visibleRows.length}</span></header>
