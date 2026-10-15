@@ -4,7 +4,7 @@ import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
 import { OperationsView } from './OperationsView';
-import { getUniversePirateCycleTiming } from './domain/universe/runtime.ts';
+import { getUniversePirateCycleTiming, rerollTestUniverseLayout } from './domain/universe/runtime.ts';
 import { CommandView } from './CommandView';
 import { ReportsView } from './ReportsView';
 import { buildReportsFeed, getReportUnreadCounts } from './domain/reports/adapters.ts';
@@ -1119,6 +1119,9 @@ export function App() {
   const reset = () => {
     dispatchRuntimeReset(RUNTIME_MODE, window);
     persistence.clear();
+    // Reroll generated free planets, pirates, anomalies and unique objects.
+    // Production world layouts are never randomized by the reset control.
+    if (RUNTIME_MODE === 'test') rerollTestUniverseLayout();
     const nextState = createInitialSaveState(RUNTIME_MODE);
     // Publish the canonical replacement synchronously. React's effect will
     // persist it again, but a reload between the click and that effect must
@@ -1133,6 +1136,9 @@ export function App() {
     setPlanetViewMode('overview');
     setSelectedBuildingRole(null);
     setBuildingInterior(null);
+    setPirateSystem({ galaxy: 1, system: 1 });
+    setPirateFocusTarget(null);
+    setPirateReportId(undefined);
     setToasts([]);
     setNotice(RUNTIME_MODE === 'test' ? 'Тестовое сохранение сброшено.' : 'Сохранение прототипа сброшено.');
   };
