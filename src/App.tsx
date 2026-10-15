@@ -329,7 +329,7 @@ export function App() {
   const [buildingInterior, setBuildingInterior] = useState<BuildingInteriorContext | null>(null);
   const [universeFocusTarget, setUniverseFocusTarget] = useState<UniverseFocusTarget | null>(null);
   const [pirateSystem, setPirateSystem] = useState<PirateSystemSelection>({ galaxy: 1, system: 1 });
-  const [pirateFocusTarget, setPirateFocusTarget] = useState<PirateContactPresentation | null>(null);
+  const [pirateFocusTarget, setPirateFocusTarget] = useState<Pick<PirateContactPresentation, 'coordinate' | 'contactCycleKey'> | null>(null);
   const [pirateReportId, setPirateReportId] = useState<string | undefined>();
   const pirateContacts = useMemo(() => {
     if (activeRoute !== 'operations' && activeRoute !== 'universe') return [];
@@ -429,6 +429,12 @@ export function App() {
   };
   const openPirateReport = (reportId: string) => { setPirateReportId(reportId); navigateTo('reports'); };
   const focusPirateUniverse = (contact: PirateContactPresentation) => { setPirateFocusTarget(contact); navigateTo('universe'); };
+  const openPirateReconCoordinate = (coordinate: UniverseCoordinate, contactCycleKey: string) => {
+    setUniverseFocusTarget(null);
+    setPirateFocusTarget({ coordinate, contactCycleKey });
+    navigateTo('universe');
+    setNotice(`Вселенная: открыта система ${coordinate.system} по архивной разведке.`);
+  };
 
   useEffect(() => {
     if (RUNTIME_MODE !== 'test') return;
@@ -1545,6 +1551,7 @@ export function App() {
               onSimulateBattle={openSpySimulator}
               onRecallSpy={recallSpyFromReport}
               onOpenUniverseTarget={openUniverseTarget}
+              onOpenPirateUniverse={openPirateReconCoordinate}
             />
           ) : activeRoute === 'planet' && planetViewMode !== 'overview' ? (
             <ZoneView
