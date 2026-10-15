@@ -8,7 +8,7 @@
 - Due checks only after a 15-minute contact delay, or 1.8 seconds in Test ×500 without speeding the global object lifetime. Calendar checkpoint reconciliation generates persisted pirate-owned flights.
 - Raid composition at 90–95% of defenders by population, with a cargo floor *only* for near-empty targets (below max(100, 5% of historical owner hangar capacity)), at most 95% historical capacity for the added floor. 6 ordinary pirate classes; no planet breakers on raids. Counter fleets greedily select the strongest existing class matchup by population budget.
 - Arrival uses shared `resolveCombat`, actual owner fleet and defenses, survivor pirate cargo, up-to-75%-per-resource PvP-compatible loot, orbital debris and reports. Pirate mission deliberately bypasses `resolvePlanetSiege`; raids do not damage buildings or destroy planets. Missing target returns without combat, loot or report.
-- Outbound player elimination snapshots 75–90% seeded pirate garrison and occasionally 1–10 base-defending planet breakers above owner score 3m; original piracy tier shares, levels and technology preserved. Exact launch population / historical hangar basis for 1× / 1.25× / 1.5× / 2× / 2.5× orbit-debris tiers, victory-only, own debris unmultiplied. Successful full victory reduces owner threat age.
+- Outbound player elimination snapshots 85–105% seeded pirate garrison (pre-patch 75–90% frozen flights preserved) and occasionally 1–10 base-defending planet breakers above owner score 3m; original piracy tier shares, levels and technology preserved. Exact launch population / historical hangar basis for 1× / 1.25× / 1.5× / 2× / 2.5× orbit-debris tiers, victory-only, own debris unmultiplied. Successful full victory reduces owner threat age.
 - Recycling debris-per-second at all levels increases ×10; cost, efficiency and concurrency unchanged. Existing jobs retain their recorded completion timestamp.
 - Compact responsive threat panel and recorded one-shot contact check status in Operations, plus base-victory salvage breakdown. Historical owner hangar highs retained on completed building upgrades and downgrades.
 
@@ -19,7 +19,7 @@
 | §3 exact threat / full victory reduction | **Partial** | Pure equations and snapshots implemented. Offline chronology needs additional large-gap and same-timestamp regression. |
 | §4 counter fleet | **Implemented; QA in CI** | Actual built defenses, ship matchups, armor and population; test coverage for ship/tower/mixed across all 3 races. Seeded EV study added. |
 | §5 actual incoming raid | **Partial** | Real persisted flight, player/Bot01 resolution, losses, loot, no-siege path; reload, concurrency and prolonged offline stress require QA. |
-| §6 elimination garrison / salvage | **Partial** | 75–90% frozen launch budget, 1–2.5× pirate debris, orbital reward ledger; economy EV unverified. |
+| §6 elimination garrison / salvage | **Implemented; audit pending** | New 85–105% frozen launch budget; 75–90% legacy budgets retained; rewards 1–2.5× unchanged. Controlled seeded economics measured below. |
 | §7 defensive planet breaker | **Partial** | Seeded 10% special base guard >=3m, up to ten 615-population hulls, no planet breaker on raid. Seed and boundary tests need wider coverage. |
 | §8 recycling x10 | **Implemented in code** | Ten new canonical speeds [70,120,180,250,330,420,520,630,850,980], efficiency unchanged. |
 | §9 operations UI | **Implemented; mobile QA outstanding** | Fleet incoming pirate warning, Russian label/icon, origin/target/ETA, manifest/population, no hostile recall; new 1920/1280 Electron assertions. 390px mobile evidence still pending. |
@@ -52,7 +52,7 @@
 - **Do not infer CI PASS from this report.** Check the current PR-head [GitHub Actions checks](https://github.com/ratoker-jpg/Asterion/pull/91/checks) and any failed-job logs. A local clone/Node execution environment was unavailable in this session; local script execution must be marked **NOT RUN**.
 - New tests: `src/domain/pirates/threat.test.ts`, `src/domain/pirates/raid.test.ts`, `src/application/pirate-raids.integration.test.ts`. New code must pass full CI and the 14 targeted npm scripts in the original task before merge.
 - Desktop 1920/1280 incoming-flight UI assertions passed at CI run 38800154581. **Mobile 390px not verified.** Offline 48h comparison and 10+ cycles added to `src/application/pirate-raids.integration.test.ts`; earlier CI runs passed integration tests; inspect current HEAD CI for final acceptance.
-- New seeded 3-race win/loss/net-EV study is implemented in `tools/generate-pirate-pr91-balance.mjs` and was executed successfully by CI step at run 38801755663 (per GitHub step status). It writes `artifacts/pr91-balance/seeded-results.json` and `seeded-report.md`, and models recycler flight availability using real cargo/fuel rather than a full persisted recycler-flight simulation. The script runs seeded base battles at 75–90%, incoming raids at 90–95%, turret defense, technology 0/5/10, max 25,112 population, and calculates net at 75%/120%. The numbers are measured in the CI artifacts; **do not extrapolate them as universal balance**.
+- Historical (before 85–105% patch) seeded 3-race win/loss/net-EV study is implemented in `tools/generate-pirate-pr91-balance.mjs` and was executed successfully by CI step at run 38801755663 (per GitHub step status). It writes `artifacts/pr91-balance/seeded-results.json` and `seeded-report.md`, and models recycler flight availability using real cargo/fuel rather than a full persisted recycler-flight simulation. The script runs seeded base battles at 75–90%, incoming raids at 90–95%, turret defense, technology 0/5/10, max 25,112 population, and calculates net at 75%/120%. The numbers are measured in the CI artifacts; **do not extrapolate them as universal balance**.
 
 ## Risks requiring independent audit
 
@@ -129,3 +129,50 @@ One randomly selected exclusive science is scaled against its own maximum; the o
 - Real saved recycler flights/transport concurrency and all storage limits are **not** simulated by the net model; recovered debris remains an optimistic assumption.
 - Approval for any further balance changes (threat chance, ships, garrison %, salvage multiplier, resolver combat formula) is not granted. Any rebalance must return to the owner first.
 - **No merge, no Ready for review; independent auditor examines changes and CI before owner decision.**
+
+## Owner-approved pirate-elimination garrison 85–105% — October 16, 2026
+
+**Approved task:** `ASTERION_PR91_PIRATE_GARRISON_85_105_PATCH_PROMPT.md`. No new PR; working branch `codex/pr91-pirate-threat-rewards`, PR #91 remains Draft.
+
+### Scoped production patch and compatibility
+
+- `src/domain/pirates/profile.ts`: **only new seeded outgoing `pirate-elimination`** now computes `0.85+0.20*pirateSeededDraw('pirate-garrison-v2:'+launchSeed)`. The seed stream stays identical to the historical draw to retain a comparable quantile; the coefficient range is 85–105% (105% upper bound excluded by RNG). `targetPopulation=Math.round(sentCombatPopulation*coefficient)`; unchanged seeded floor/ceil composition routine forbids actual population > target, even when target >100% of sent. Unseeded historical fallback remains **fixed 90%**.
+- `src/domain/pirates/mission.ts`: accepts the union of old [0.75,0.90] and new [0.85,1.05] stored coefficient ranges = [0.75,1.05]. Already launched fleets retain their `eliminationBudget.ships` and `coefficient` byte-for-byte after normalization/reload; no mutation or replacement.
+- `src/domain/combat/simulator.ts`: **validation-only** exception for a `pirate-elimination` pirate defender above the generic 35,000 defender-population limit, provided it does **not** exceed `Math.round(attackerCombatPopulation*1.05)`. The general attacker limit and all non-pirate combat population limits remain unchanged. This avoids falsely rejecting approved 105% large-base garrisons. No changes to `resolveCombat` or battle formulas.
+- `src/application/pirates.ts` and `src/domain/pirates/encounter.ts` continue freezing the full population budget **at dispatch** and using it verbatim at arrival. New/old serialized-and-reloaded flight tests assert frozen pirate/player profiles, technology, composition, population coefficient, reward multiplier, report identity, and no second reward/casualty on replay.
+- The spontaneous **incoming pirate raid** fleet remains 90–95%; the existing economy multipliers ×1 / ×1.25 / ×1.5 / ×2 / ×2.5, base 60% pirate salvage, technologies, hulls, abilities, Planet Breaker roll, counterraid threat and construction/recycling coefficients were **not changed**. Additional test diagnostics in Electron do not weaken the UI assertion.
+
+### Measured real battle/optimistic net comparison
+
+CI [run 38820098930](https://github.com/ratoker-jpg/Asterion/actions/runs/38820098930) successfully executed the **new garrison comparison job**, `test:pirates`, `test:pirate-operations`, `test:attack`, `test:flights`, `npm run build` and the original PR91 balance sweep; **the overall run was red** due to an Electron QA timeout waiting for a seeded incoming pirate UI row. The fixture and its reload are instrumented in this follow-up; final HEAD CI must be checked independently.
+
+**Samples:** 768 paired deterministic scenarios ×2 = **1,536 real production combat-resolver executions**. Three races, 3m and 3.5m resource points, exact player populations 25,090/25,112, destroyer upgrades L0/L10, 12-round ceiling, no commanders, near-max player sciences; minimal scout filler only where destroyer population cannot reach the exact total. For each condition, 24 seeds without specials and 8 seeds with two *forced* base-only Planet Breakers (controlled, NOT 10% population-weighted real spawn). Both sides receive the same seed/ship-science profile and the same `u` draw; the **only paired change** is old 75–90 vs new 85–105% pirate fleet size. Grouped figures are conditional sample rates, not a proven server-wide win probability.
+
+| Statistic | Old 75–90% | New 85–105% |
+|---|---:|---:|
+| Player wins / 768 | 543 (70.70%) | 335 (43.62%) |
+| Draws | 35 (4.56%) | 28 (3.65%) |
+| Pirate wins | 190 (24.74%) | 405 (52.73%) |
+| Mean pirate garrison population | 20,685 | 23,817 |
+| Mean own population destroyed | 63.86% | 79.79% |
+| Mean pirate wreckage (base, before extra multiplier) | 54.29m | 52.76m |
+| Mean own wreckage | 28.59m | 35.72m |
+| Mean extra pirate wreckage from multipliers | 52.11m | 37.16m |
+| Full win rewards at ×2 / ×2.5 | 274 / 269 | 170 / 165 |
+| Mean destroyed player-hull cost | 100.33m | 125.35m |
+| Mean estimated full-collection net at 75% recycling | **+0.60m** | **−31.42m** |
+| Mean estimated full-collection net at 120% recycling | **+61.35m** | **+25.12m** |
+
+Units of net are total metal+minerals+gas as resource-equivalent, not currency. The model uses real resolved damaged hull counts, canonical hull costs, canonical attack and recycler fuel, actual damaged-ship debris and 75/120% recycler conversion; it **assumes all orbital wreckage can be collected with as many 10-recycler flights as necessary**, and does not model time, storage, resource availability or persisted transporter trips. Therefore the net is a modeled *optimistic upper bound*, not spendable actual profit. Losses and ties are included in means; the high-ship-forced cases are not weighted by live encounter probabilities.
+
+**By race:** player wins old → new: Aegis 177/256 (69.1%) → 123/256 (48.0%); Synod 169/256 (66.0%) → 82/256 (32.0%); Veyra 197/256 (77.0%) → 130/256 (50.8%). Mean optimistic net at 75%: Aegis +2.51m → −25.00m, Synod −15.20m → −54.31m, Veyra +14.50m → −14.94m. Strong fleet wins remain possible, but regular farming is materially harder.
+
+**Evidence:** `npm run balance:pirates:pr91:garrison`, `tools/generate-pirate-pr91-garrison-compare.mjs`, retained CI artifacts `artifacts/pr91-garrison-85-105/comparison.json` (all pairs, losses, coefficient, multipliers, gas and net) and `comparison.md` (per-faction/tech/breaker tables). The base `npm run balance:pirates:pr91` remains executed and incoming raids are outside this balance change.
+
+### Remaining acceptance gates
+
+1. Green CI and Pages preview on the **final HEAD**, including mandatory Electron pirate-operation UI and Windows installer artifact.
+2. Independent audit of all diff, especially mission snapshot validation, legacy flights and 105% defender exception; owner visually approves UI and decides whether to merge.
+3. Net economy findings are conditional and assume ideal collection; real on-map long-horizon refinery logistics, rare Planet Breaker frequency and mobile 390px QA are not established by the paired study.
+
+**Do not merge or mark Ready. Owner is sole merge approver.**

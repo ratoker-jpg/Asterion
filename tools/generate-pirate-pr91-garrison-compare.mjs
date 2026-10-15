@@ -197,6 +197,11 @@ for(const points of POINTS){
   }
 }
 const mean=(records,project)=>records.reduce((sum,r)=>sum+project(r),0)/records.length;
+const percentile=(values,p)=>{
+  const sorted=[...values].sort((a,b)=>a-b);
+  const index=(sorted.length-1)*p,left=Math.floor(index),right=Math.ceil(index);
+  return sorted[left]+(sorted[right]-sorted[left])*(index-left);
+};
 const summarize=(records)=>{
   const data={count:records.length};
   for(const phase of ['old','new']){
@@ -226,6 +231,9 @@ const summarize=(records)=>{
       reward1:records.filter(x=>x[phase].multiplier===1).length,
       // Loss distribution across all seeds, including draws and failures.
       lostPopulationPercentMin:Math.min(...records.map(x=>x[phase].destroyedPlayerPercent)),
+      lostPopulationPercentP10:percentile(records.map(x=>x[phase].destroyedPlayerPercent),0.10),
+      lostPopulationPercentP50:percentile(records.map(x=>x[phase].destroyedPlayerPercent),0.50),
+      lostPopulationPercentP90:percentile(records.map(x=>x[phase].destroyedPlayerPercent),0.90),
       lostPopulationPercentMax:Math.max(...records.map(x=>x[phase].destroyedPlayerPercent)),
     };
   }

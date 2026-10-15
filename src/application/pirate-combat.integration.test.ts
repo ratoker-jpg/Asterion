@@ -18,7 +18,7 @@ import {
 import { calculateAttackDebris } from './attack.ts';
 import { calculatePirateForceDebris } from '../domain/pirates/debris.ts';
 import { calculatePirateEliminationPopulationBudget } from '../domain/pirates/profile.ts';
-import { isPirateMissionSnapshot } from '../domain/pirates/mission.ts';
+import { isPirateMissionSnapshot, normalizePirateMissionSnapshot } from '../domain/pirates/mission.ts';
 import { PIRATE_BASE_SHIPS, type PirateBaseShipId } from '../domain/pirates/catalog.ts';
 import { getUniverseTimedObjectSchedule } from '../domain/universe/runtime.ts';
 import type { UniverseCoordinate } from '../domain/universe/types.ts';
@@ -457,5 +457,24 @@ test('new and pre-patch stored elimination snapshots survive reload and arrival 
     assert.equal(final.state.combat.reports.filter(r=>r.id===reportId).length,1);
     assert.deepEqual(final.state.espionage?.orbitalDebris,completed.state.espionage?.orbitalDebris);
     assert.deepEqual(final.state.rating,completed.state.rating);
+  }
+});
+
+test('migration validator retains both historical 75–90% and approved 85–105% frozen coefficients',()=>{
+  const manifest={ships:{'death-star':48}} satisfies FleetManifest;
+  const {state,contact,now}=fixture(manifest,{shipUpgrades:{'death-star':10},scienceLevel:15});
+  const launched=dispatchElimination(state,contact,now,'migration-boundaries',manifest);
+  assert.equal(launched.ok,true);
+  if(!launched.ok)return;
+  const snapshot=launched.flight.pirateSnapshot!;
+  assert.ok(snapshot.eliminationBudget);
+  for(const coefficient of [0.75,0.80,0.85,0.9,1,1.05]){
+    const checked={...snapshot,eliminationBudget:{...snapshot.eliminationBudget!,coefficient}};
+    assert.equal(isPirateMissionSnapshot(checked,'pirate-elimination'),true,`accept frozen ${coefficient}`);
+    assert.equal(normalizePirateMissionSnapshot(checked)?.eliminationBudget?.coefficient,coefficient);
+  }
+  for(const coefficient of [0.749999,1.050001,Number.NaN]){
+    const bad={...snapshot,eliminationBudget:{...snapshot.eliminationBudget!,coefficient}};
+    assert.equal(isPirateMissionSnapshot(bad,'pirate-elimination'),false,`reject ${coefficient}`);
   }
 });

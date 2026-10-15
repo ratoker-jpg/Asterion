@@ -47,7 +47,30 @@ The **PR91 approved matched-seed comparison job passed** on commit `06976b26`, b
 | Mean optimistic net at 75% recycling, resource-equivalent | +39,733,750.31 | −9,492,494.79 |
 | Mean optimistic net at 120% recycling, resource-equivalent | +105,533,091.98 | +48,709,057.00 |
 
-All 48 paired seeds share the same faction, population, no-commanders attacking composition, pirate garrison, ship levels, fixed controlled zero/two Planet Breakers, and max 12 rounds. The only before/after change was the NPC technology vector. This supports a significant balance effect **in these scenarios only**. The outcomes are not population-weighted likelihoods for spontaneous pirates and cannot establish an overall encounter expected value. Requested attack/life details, losses, debris, modeled collection, and per-case net are serialized in `artifacts/pr91-approved-tech-compare/comparison.json` and `comparison.md` in the corresponding CI artifact. These are **model upper bounds** given full debris availability. No coefficient adjustment was approved or performed.
+All 48 paired seeds share the same faction, population, no-commanders attacking composition, pirate garrison, ship levels, fixed controlled zero/two Planet Breakers, and max 12 rounds. The only before/after change was the NPC technology vector. This supports a significant balance effect **in these scenarios only**. The outcomes are not population-weighted likelihoods for spontaneous pirates and cannot establish an overall encounter expected value. Requested attack/life details, losses, debris, modeled collection, and per-case net are serialized in `artifacts/pr91-approved-tech-compare/comparison.json` and `comparison.md` in the corresponding CI artifact. These are **model upper bounds** given full debris availability. No garrison coefficient was changed in that *historical technology-only experiment*; the subsequent owner-approved 85–105% garrison patch is documented below.
+
+## Owner-approved 85–105% pirate-elimination garrison — real paired evidence
+
+[CI 38820098930](https://github.com/ratoker-jpg/Asterion/actions/runs/38820098930) **passed** `npm run balance:pirates:pr91:garrison`: **768 matched seed pairs, 1,536 production resolver calls**, before/after only the size of pirate *outgoing elimination base defense*. The full run failed on a separate incoming-pirate UI fixture timeout. The study uses one shared quantile draw `pirate-garrison-v2:seed`, real current pirate technologies for BOTH cohorts, 12 rounds, three races, 3/3.5m resource score, no commanders, 25,090/25,112 player population, destroyer L0/L10. 24 ordinary seeds and eight extra 2-forced-Planet-Breaker seeds per faction/score/population/level cell. The forced special case is not weighted by the 10% game chance.
+
+| Outcome among 768 pairs | Old 75–90% | Approved 85–105% |
+|---|---:|---:|
+| Player wins | 543 (70.70%) | 335 (43.62%) |
+| Draws | 35 (4.56%) | 28 (3.65%) |
+| Pirate wins | 190 (24.74%) | 405 (52.73%) |
+| Mean own population lost | 63.86% | 79.79% |
+| Mean pirate hull debris | 54.29 million | 52.76 million |
+| Mean own hull debris | 28.59 million | 35.72 million |
+| Mean additional pirate debris bonus | 52.11 million | 37.16 million |
+| Mean player lost-hull replacement costs | 100.33 million | 125.35 million |
+| Mean optimistic net at recycler 75% | +0.60 million | −31.42 million |
+| Mean optimistic net at recycler 120% | +61.35 million | +25.12 million |
+
+In the winner-only multiplier ledger, old 274 cases ×2 and 269 cases ×2.5 become 170 ×2 and 165 ×2.5; remaining 225→433 cases receive ×1. This is the unchanged reward rule, not an edited coefficient.
+
+**No invented profit:** the per-seed JSON includes actual winner/draw/loss, round count, fleet loss population distribution, wreckage by owner, multiplier, destroyed player hull value, canonical battle-flight fuel, modeled recycler flight gas and 75/120% conversion. The optimistic economic projection assumes all orbital wreckage is picked up, enough 10-recycler cargo trips and refinery storage/time; that is not a measured playable-wallet profit. It is **not** a population-weighted production likelihood. Low sample counts for the forced two-breaker condition are exploratory. Full individual case data and group means in `artifacts/pr91-garrison-85-105/comparison.json` and `comparison.md` under the CI artifact.
+
+**Compatibility evidence:** real tests in `catalog-profile.test.ts` assert coefficient 0.85–1.05, both below/above 100% for 25,090/25,112 dispatches, deterministic ship populations and fixed 90% unseeded fallback. `pirate-combat.integration.test.ts` runs serialise→load→real arrival battle→report/reward→replay for both pre-patch 0.78 and new budgets. Mission validator takes [0.75,1.05] as the union of old [0.75,0.90] and new [0.85,1.05]. Narrow production validation permits a legitimate pirate-elimination defender above the former 35,000 population limit only within 105% of the actual attacker. Incoming raids remain at 90–95%, other coefficients unchanged.
 
 ## Still outstanding for final balance sign-off
 

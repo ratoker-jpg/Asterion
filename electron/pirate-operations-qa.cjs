@@ -357,7 +357,22 @@ async function runViewport(width, height) {
     if (!incomingFixture?.ok) throw new Error(`Cannot seed hostile fleet presentation: ${JSON.stringify(incomingFixture)}`);
     await reload(win);
     await clickPrimary(win,'fleets',`document.querySelector('.fleet-workspace-v1')`);
-    await waitFor(win,`document.querySelector('[data-qa-flight-pirate-raid]')`);
+    // Keep the strict UI assertion. On a slow CI compositor, distinguish
+    // a dropped persisted fixture from an unrendered row before failing.
+    try {
+      await waitFor(win,`document.querySelector('[data-qa-flight-pirate-raid]')`,25_000);
+    } catch (error) {
+      const save=await readSave(win);
+      const rows=await win.webContents.executeJavaScript(
+        "[...document.querySelectorAll('[data-qa-flight-row]')].map(x=>x.getAttribute('data-qa-flight-row'))");
+      throw new Error('Incoming pirate flight QA: '+JSON.stringify({
+        injectedId:incomingFixture.id,
+        presentInSave:save?.flights?.records?.some(f=>f.id===incomingFixture.id),
+        availableFlights:save?.flights?.records?.map(f=>({id:f.id,missionId:f.missionId,phase:f.phase})),
+        visibleRows:rows,
+        reason:String(error),
+      }));
+    }
     const incomingUi=await win.webContents.executeJavaScript(`(() => {
       const row=document.querySelector('[data-qa-flight-pirate-raid]');
       const art=row?.querySelector('img.fleet-flight-mission-icon');
