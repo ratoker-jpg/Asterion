@@ -424,6 +424,7 @@ export function resolvePirateEliminationAtTarget(state: SaveState, flight: Fligh
   const encounter = resolvePirateEliminationEncounter({
     reportId, timestamp: new Date(now).toISOString(), seed: `pirate:${flight.id}`,
     contactCycleKey: snapshot.contactCycleKey, pirateProfile: snapshot.profile,
+    ...(snapshot.eliminationBudget ? { populationBudget: snapshot.eliminationBudget } : {}),
     pirateCoordinates: coordinateLabel(snapshot.coordinate), piratePlanetName: 'Пираты',
     attacker: {
       playerId: snapshot.ownerId, playerName: state.profile.displayName,
@@ -434,8 +435,30 @@ export function resolvePirateEliminationAtTarget(state: SaveState, flight: Fligh
   if (encounter.kind !== 'resolved') return null;
   // The ordinary entity lookup skips all pirate stacks; pirate hull debris is
   // calculated separately by the existing PvE debris rule (including Corsair).
-  const debris = calculateAttackDebris(encounter.report, launch.attackerFactionId, launch.attackerFactionId);
-  const report: BattleReport = { ...encounter.report, debris, resources: { metal: 0, minerals: 0, gas: 0 } };
+  const baseDebris = calculateAttackDebris(encounter.report, launch.attackerFactionId, launch.attackerFactionId);
+  const basePirateDebris = calculatePirateForceDebris(
+    encounter.report.defenderForce, encounter.report.attackerForce, encounter.report.missionType);
+  const multiplier = encounter.victory && snapshot.eliminationBudget ? (snapshot.rewardMultiplier ?? 1) : 1;
+  // Only pirate hull debris is multiplied, and fractional salvage is floored once.
+  const bonusPirateDebris = Math.max(0, Math.floor(basePirateDebris * multiplier) - basePirateDebris);
+  const debris = addDebris(baseDebris, bonusPirateDebris);
+  const report: BattleReport = {
+    ...encounter.report, debris, resources: { metal: 0, minerals: 0, gas: 0 },
+    pirateReward: {
+      version: 1,
+      sentCombatPopulation: snapshot.sentCombatPopulation ?? encounter.sentCombatPopulation,
+      historicalHangarCapacity: snapshot.historicalHangarCapacity ?? 0,
+      garrisonCoefficient: snapshot.eliminationBudget?.coefficient ?? 0.9,
+      garrisonTargetPopulation: snapshot.eliminationBudget?.targetPopulation ?? encounter.populationBudget.targetPopulation,
+      multiplier,
+      basePirateDebris,
+      bonusPirateDebris,
+      ownDebris: Math.max(0, baseDebris - basePirateDebris),
+      threatReductionFraction: encounter.victory && snapshot.eliminationBudget && snapshot.historicalHangarCapacity
+        ? Math.min(1, (snapshot.sentCombatPopulation ?? 0) / snapshot.historicalHangarCapacity)
+        : 0,
+    },
+  };
   const fleet = applyDestroyedToFleet(removeSolarSatellitesFromFleet(origin.fleet).fleet, report.attackerForce, launch.attackerFactionId);
   let next = replacePlanetState(state, flight.originPlanetId, { ...origin, fleet });
   next = addReport(next, report);
