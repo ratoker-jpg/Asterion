@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { EmblemGlyph } from './CommandView';
 import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
+import { PIRATE_PLANET_ARTS } from './pirate-planet-art.ts';
 import asteroid01 from '../assets/source/universe-navigation/asteroids/asteroid.variant-01.png';
 import asteroid02 from '../assets/source/universe-navigation/asteroids/asteroid.variant-02.png';
 import asteroid03 from '../assets/source/universe-navigation/asteroids/asteroid.variant-03.png';
@@ -11,10 +12,6 @@ import asteroid05 from '../assets/source/universe-navigation/asteroids/asteroid.
 import asteroid06 from '../assets/source/universe-navigation/asteroids/asteroid.variant-06.png';
 import asteroid07 from '../assets/source/universe-navigation/asteroids/asteroid.variant-07.png';
 import asteroid08 from '../assets/source/universe-navigation/asteroids/asteroid.variant-08.png';
-import pirate01 from '../assets/source/planets/pirate/pirate-planet-01-graveyard.png';
-import pirate02 from '../assets/source/planets/pirate/pirate-planet-02-corsair-ocean.png';
-import pirate03 from '../assets/source/planets/pirate/pirate-planet-03-treasure-vault.png';
-import pirateSkull from '../assets/source/planets/pirate/planet-020.png';
 import uniqueIslands from '../assets/source/planets/skins/planet-010.png';
 import uniqueVortex from '../assets/source/planets/skins/planet-013.png';
 import uniqueCrystal from '../assets/source/planets/skins/planet-021.png';
@@ -95,7 +92,7 @@ const planetArts = [
 ];
 const starArts = [star01, star02, star03, star04, star05, star06];
 const asteroidArts = [asteroid01, asteroid02, asteroid03, asteroid04, asteroid05, asteroid06, asteroid07, asteroid08];
-const pirateArts = [pirateSkull, pirate01, pirate02, pirate03, ...asterionAssetIntegrationAssets.piratePlanetArts];
+const pirateArts = PIRATE_PLANET_ARTS;
 const anomalyArts = [...asterionAssetIntegrationAssets.anomalyArts];
 const assets: UniverseAssetCatalog = {
   planetArts, starArts, asteroidArts, pirateArts, anomalyArts,
