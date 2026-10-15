@@ -181,6 +181,16 @@ async function seedTestRuntime(win, changes = {}) {
     }));
   }
   await reload(win, 'test');
+  if (changes.resourceClock && changes.resourceClock.lastReconciledAt < Date.now() - 60_000) {
+    // Wait for actual persisted passive income reconciliation after loading a
+    // backdated clock; the assertions themselves are unchanged. This applies
+    // to both the zero-wallet case and the near-capacity case.
+    await waitFor(win, `(() => {
+      const state=JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)})||'null');
+      return Boolean(state?.resourceClock?.lastReconciledAt>Date.now()-30000
+        && state.resourceClock?.byPlanet?.['helion-01']?.lastReconciledAt>Date.now()-30000);
+    })()`,3000);
+  }
 }
 
 async function openScience(win) {
