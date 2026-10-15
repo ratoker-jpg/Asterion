@@ -12,25 +12,35 @@ export function isPirateOperationId(id: string): boolean {
   return id.startsWith('pirate:pirate-cycle-v1:');
 }
 
-/** Existing combat operation presentation backed by real, time-bound pirate world state. */
-export function pirateContactOperation(contact: PirateContactPresentation, state: OperationInstance['state'] = 'available'): OperationInstance {
+/** One canonical Operations card for current and historical pirate contacts. */
+export function pirateCycleOperation(
+  cycleKey: string,
+  coordinate: Pick<PirateContactPresentation['coordinate'], 'galaxy' | 'system' | 'position'>,
+  state: OperationInstance['state'] = 'available',
+  hasRecon = false,
+): OperationInstance {
   return {
-    id: pirateOperationId(contact.contactCycleKey),
+    id: pirateOperationId(cycleKey),
     archetype: 'pirate_elimination',
     category: 'combat',
     title: 'ПИРАТСКАЯ БАЗА',
     briefing: 'В системе вашей колонии обнаружена действующая пиратская база. Для вылета требуется подготовить боевой флот.',
     state,
     threat: null,
-    intel: contact.latestReportId ? 2 : 1,
+    intel: hasRecon ? 2 : 1,
     source: 'patrol_scan',
-    location: { kind: 'coordinates', coordinates: `[${contact.coordinate.galaxy}:${contact.coordinate.system}:${contact.coordinate.position}]` },
+    location: { kind: 'coordinates', coordinates: `[${coordinate.galaxy}:${coordinate.system}:${coordinate.position}]` },
     objective: { label: 'Провести пиратский рейд' },
     modifiers: [],
     rewardPreview: {},
   };
 }
 
+
+/** Active and accepted operations use the same card type and stable cycle ID. */
+export function pirateContactOperation(contact: PirateContactPresentation, state: OperationInstance['state'] = 'available'): OperationInstance {
+  return pirateCycleOperation(contact.contactCycleKey, contact.coordinate, state, contact.latestReportOutcome === 'success');
+}
 
 /** Only persisted owner planets grant access to pirate raid targets. */
 export function selectOwnedPirateSystems(state: SaveState): PirateSystemSelection[] {
