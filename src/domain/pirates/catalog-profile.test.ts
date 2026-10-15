@@ -13,7 +13,7 @@ import {
   PIRATE_TECH_LEVEL_THRESHOLDS,
   PIRATE_EXCLUSIVE_TECHNOLOGIES,
 } from './profile.ts';
-import { COMBAT_TECHNOLOGY_IDS } from '../combat/technologies.ts';
+import { COMBAT_TECHNOLOGIES, COMBAT_TECHNOLOGY_IDS } from '../combat/technologies.ts';
 
 test('pirate catalog maps the seven local assets to the approved UI names and roles', () => {
   assert.deepEqual(PIRATE_CATALOG.map(({ imageFile, name, role }) => [imageFile, name, role]), [
@@ -156,10 +156,10 @@ test('resource-point and combat-tech thresholds map exactly and emit only resolv
   for (const selected of PIRATE_EXCLUSIVE_TECHNOLOGIES) {
     const techs = pirateTechnologyLevels(6_000_000, selected);
     assert.deepEqual(Object.keys(techs).sort(), [...COMBAT_TECHNOLOGY_IDS].sort());
-    assert.ok(Object.values(techs).every((level) => level === 0 || level === 10));
-    assert.equal(techs[selected], 10);
-    for (const other of PIRATE_EXCLUSIVE_TECHNOLOGIES.filter((id) => id !== selected)) assert.equal(techs[other], 0);
-    for (const compatible of COMBAT_TECHNOLOGY_IDS.filter((id) => !PIRATE_EXCLUSIVE_TECHNOLOGIES.includes(id as typeof selected))) assert.equal(techs[compatible], 10);
+    for (const technology of COMBAT_TECHNOLOGIES) {
+      const active = !PIRATE_EXCLUSIVE_TECHNOLOGIES.includes(technology.id as typeof selected) || technology.id === selected;
+      assert.equal(techs[technology.id], active ? technology.maxLevel : 0, technology.id);
+    }
   }
   const profile = createPirateProfile({ ownerId: 'o', contactCycleKey: 'c', score: { totalPoints: 0, resourcePoints: -1, battlePoints: 0 } });
   assert.equal(profile.shipLevel, 0);
