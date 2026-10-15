@@ -115,10 +115,13 @@ test('raid-check UI period is exactly 15 minutes and independent of base lifetim
   assert.equal(halfway.remainingMs, 450_000);
   assert.equal(halfway.percent, 50);
   const second = getPirateRaidCheckProgress(start, start + 900_000);
-  assert.equal(second.remainingMs, 900_000);
-  assert.equal(second.nextAt, start + 1_800_000);
-  assert.equal(second.percent, 0);
+  assert.equal(second.remainingMs, 0);
+  assert.equal(second.nextAt, start + 900_000);
+  assert.equal(second.percent, 100);
   const later = getPirateRaidCheckProgress(start, start + 4_500_000);
-  assert.equal(later.remainingMs, 900_000);
-  assert.equal(later.percent, 0);
+  assert.equal(later.remainingMs, 0);
+  assert.equal(later.percent, 100);
+  const accelerated = getPirateRaidCheckProgress(start, start + 1_800, 1_800);
+  assert.equal(accelerated.remainingMs, 0);
+  assert.equal(accelerated.percent, 100);
 });
