@@ -10,7 +10,7 @@ export function pirateFlightAbsenceReports(flights: readonly FlightRecord[]): Re
     const label = `[${coordinate.galaxy}:${coordinate.system}:${coordinate.position}]`;
     return {
       id: `pirate-no-target:${flight.id}`, source: 'pirate-mission', category: 'flights',
-      typeLabel: 'УНИЧТОЖЕНИЕ ПИРАТОВ', title: 'Пиратская планета не обнаружена',
+      typeLabel: 'ПИРАТСКИЙ РЕЙД', title: 'Пиратская планета не обнаружена',
       preview: 'По указанным координатам планеты пиратов не обнаружено',
       body: 'По указанным координатам планеты пиратов не обнаружено',
       timestamp: new Date(flight.arrivedAt!).toISOString(), statusLabel: 'ЦЕЛЬ ИСЧЕЗЛА', statusTone: 'neutral',
