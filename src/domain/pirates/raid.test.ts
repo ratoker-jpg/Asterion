@@ -28,7 +28,7 @@ test('pirate fleets freeze seeded 90-95% budgets and exclude planet breakers for
     const actual=Object.entries(result.ships).reduce((sum,[id,count])=>
       sum+(PIRATE_CATALOG_BY_ID[id as keyof typeof PIRATE_CATALOG_BY_ID]?.population??0)*count,0);
     assert.equal(result.population,actual);
-    assert.ok(PIRATE_BASE_SHIPS.every(ship=>Object.keys(result.ships).includes(ship.id)===Boolean(result.ships[ship.id])));
+    assert.ok(PIRATE_BASE_SHIPS.every(ship=>Object.keys(result.ships).includes(ship.id)===Boolean(result.ships[ship.id as keyof typeof result.ships])));
   }
 });
 test('empty rich colony receives a real cargo floor capped to 95% owner historical hangar',()=>{
