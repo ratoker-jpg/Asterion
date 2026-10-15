@@ -180,7 +180,7 @@ test('legacy frozen tier technology profiles survive strict validation without s
     t.id,PIRATE_EXCLUSIVE_TECHNOLOGIES.includes(t.id as typeof modern.exclusiveTechnologyId)
       &&t.id!==modern.exclusiveTechnologyId?0:legacyTier,
   ]));
-  const legacy={...modern,technologies:legacyTechnologies};
+  const legacy={...modern,technologies:legacyTechnologies as typeof modern.technologies};
   assert.deepEqual(frozenPirateTechnologyLevels(legacy),legacyTechnologies);
   assert.deepEqual(frozenPirateTechnologyLevels(modern),modern.technologies);
   assert.equal(frozenPirateTechnologyLevels({...modern,technologies:{...modern.technologies,shipArmor:1}}),null);
