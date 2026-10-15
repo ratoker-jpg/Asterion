@@ -86,14 +86,25 @@ test('owner-cycle roll dispatches one persisted real pirate flight, resolves no-
   assert.equal(replay.state.combat.reports.length,completed.state.combat.reports.length);
 });
 
-test('Test x500 accelerates only raid delay; threat age remains wall-clock',()=>{
+test('Test x500 resolves a real one-shot cycle at 1.8s without speeding threat age',()=>{
   assert.equal(scaleRuntimeDuration(900_000,'test',500),1800);
   assert.equal(scaleRuntimeDuration(900_000,'production',500),900_000);
-  const t=Date.now();
+  const cycle=Array.from({length:50},(_,index)=>
+    getUniverseTimedObjectSchedule('pirate',1,1,index)).find(x=>x.present);
+  assert.ok(cycle);
+  const t=cycle!.startAt;
   const state=createInitialSaveState('test',t);
   const due=selectDuePirateRolls(state,t,t+1800,'test',500);
-  assert.ok(Array.isArray(due));
+  assert.equal(due.filter(x=>x.ownerId===state.profile.playerId&&x.system===1).length,1);
+  const event=due.find(x=>x.ownerId===state.profile.playerId&&x.system===1)!;
+  assert.equal(event.at,t+1800);
+  const resolved=resolveDuePirateRoll(state,event,'test',500);
+  const key=JSON.stringify([event.ownerId,event.contactCycleKey]);
+  assert.ok(resolved.pirate?.raidRolls?.[key]);
+  assert.equal(resolveDuePirateRoll(resolved,event,'test',500),resolved);
   assert.equal(state.pirate?.ownerThreats?.[state.profile.playerId]?.ageHours,0);
+  const age=resolved.pirate?.ownerThreats?.[state.profile.playerId]?.ageHours??0;
+  assert.ok(age<=1800/3600000,'Test x500 must not age threat by 15 virtual minutes');
 });
 test('offline 8h/24h/48h multi-system rolls cannot duplicate owner-cycle ledger or battle reports',()=>{
   const start=Date.now();
