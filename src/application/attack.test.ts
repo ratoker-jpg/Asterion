@@ -394,8 +394,10 @@ test('attacker victory reserves ordered loot until the surviving fleet returns',
   const lootTotal = resolution.loot.metal + resolution.loot.minerals + resolution.loot.gas;
   assert.equal(report.winner, 'attacker');
   assert.ok(lootTotal > 0);
-  assert.ok(resolution.loot.metal <= Math.floor(10_000_000 * 0.75));
-  assert.ok(arrival.state.espionage!.targets![targetId].resources.metal < 10_000_000);
+  const preAttackMetal=initial.espionage!.targets![targetId].resources.metal;
+  assert.ok(resolution.loot.metal <= Math.floor(preAttackMetal * 0.75));
+  assert.equal(arrival.state.espionage!.targets![targetId].resources.metal,
+    preAttackMetal-resolution.loot.metal,'loot must be deducted exactly once from the actual seeded live wallet');
 
   const originBeforeReturn = getPlanetResources(arrival.state, initial.currentPlanetId).metal;
   const returnAt = arrival.state.flights.records[0]?.returnAt;
@@ -423,7 +425,8 @@ test('attack arrival reads live target resources and resolves an empty neutral p
   assert.equal(report.defenderForce.populationBefore, 0);
   assert.equal(report.debris, 0);
   assert.ok((report.resources?.metal ?? 0) > 0);
-  assert.ok((report.resources?.metal ?? 0) < 2_500);
+  assert.ok((report.resources?.metal ?? 0) < 2_500,
+    `live 1,000-metal target expected below 2,500; actual loot=${report.resources?.metal}, originalLive=${live.espionage!.targets![targetId].resources.metal}, targetAfter=${arrival.state.espionage!.targets![targetId]?.resources?.metal}`);
   assert.ok((report.resources?.minerals ?? 0) >= 0);
   assert.ok((report.resources?.gas ?? 0) >= 0);
   assert.equal(arrival.state.espionage!.targets![targetId].resources.debris, live.espionage!.targets![targetId].resources.debris);
