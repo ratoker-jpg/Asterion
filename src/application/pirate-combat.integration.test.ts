@@ -105,14 +105,19 @@ function fixture(manifest: FleetManifest, options: {
       },
     },
   };
+  // A new colony can shift the free slot used by a procedural contact. Resolve
+  // the active contact again after registering ownership; its cycle stays stable.
+  const ownedContact = getCurrentPirateContact(state, contact.coordinate, now, 'test');
+  assert.ok(ownedContact);
+  assert.equal(ownedContact.contactCycleKey, contact.contactCycleKey);
   state = withManifest(state, manifest, options.shipUpgrades);
   state = withCombatScience(state, options.scienceLevel ?? 0);
-  state = withPirateProfile(state, contact.contactCycleKey, options.resourcePoints ?? 0);
+  state = withPirateProfile(state, ownedContact.contactCycleKey, options.resourcePoints ?? 0);
   state = replacePlanetResources(state, ORIGIN_ID, {
     ...state.planets[ORIGIN_ID]!.resources!,
     gas: 1_000_000_000,
   });
-  return { state, contact, now };
+  return { state, contact: ownedContact, now };
 }
 
 function eliminationCommand(
