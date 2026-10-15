@@ -1029,9 +1029,9 @@ test('new attacks default to 12 while explicit legacy 5/8/12 remain frozen',()=>
   assert.equal(normalizeAttackRounds(0),12);
   for(const rounds of [5,8,12] as const) assert.equal(normalizeAttackRounds(rounds),rounds);
   const state=createInitialSaveState('test',1_000);
-  const defaulted=createAttackLaunchSnapshot(state,state.currentPlanetId,{},[],undefined);
+  const defaulted=createAttackLaunchSnapshot(state,state.currentPlanetId,undefined as unknown as 12,{});
   assert.equal(defaulted.maxRounds,12);
-  const explicit=createAttackLaunchSnapshot(state,state.currentPlanetId,{},[],8);
+  const explicit=createAttackLaunchSnapshot(state,state.currentPlanetId,8,{});
   assert.equal(explicit.maxRounds,8);
   const target=Object.values(state.espionage!.targets!)[0]!;
   const npc=state.espionage!.bot01Profile!;
