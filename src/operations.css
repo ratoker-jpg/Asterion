@@ -1318,8 +1318,108 @@
   .operations-dossier-v2--pirate .operations-command-actions-v2 { width: 100%; }
 }
 
-/* Real pirate targets use the combat cyan accent without inventing a threat tier. */
+/* Pirate PvE is red; this overrides generic unknown-threat violet accents. */
 .operation-feed-card-v2[data-qa-pirate-contact],
 .operations-dossier-v2--pirate {
-  --op-accent: #46daf6;
+  --op-accent: #ee655e;
+}
+.operation-feed-card-v2[data-qa-pirate-contact] {
+  border-color: rgba(238, 101, 94, .26);
+  background: linear-gradient(90deg, rgba(143, 37, 39, .18), transparent 64%), rgba(19, 13, 22, .9);
+}
+.operation-feed-card-v2[data-qa-pirate-contact].selected {
+  border-color: rgba(244, 116, 108, .78);
+  background: linear-gradient(90deg, rgba(166, 46, 45, .24), transparent 68%), rgba(23, 15, 22, .94);
+  box-shadow: inset 3px 0 0 var(--op-accent), 0 0 22px rgba(238, 79, 73, .1);
+}
+.operations-dossier-v2--pirate {
+  border-color: rgba(223, 87, 82, .27);
+  background: linear-gradient(180deg, rgba(29, 15, 24, .98), rgba(8, 13, 20, .98));
+}
+.operations-dossier-v2--pirate .operations-dossier-glyph-v2,
+.operations-dossier-v2--pirate .operations-scope-v2 {
+  border-color: rgba(234, 91, 84, .36);
+  background-color: rgba(56, 17, 25, .36);
+}
+.operations-dossier-v2--pirate .operations-dossier-threat-v2 strong,
+.operations-dossier-v2--pirate .operations-dossier-threat-v2 span,
+.operations-dossier-v2--pirate .operations-scope-caption-v2 span,
+.operation-feed-card-v2[data-qa-pirate-contact] .operation-feed-copy-v2 > small {
+  color: #f39289;
+}
+
+/* Consistent rounded objective block instead of an unbounded bottom-border strip. */
+.operations-objective-v2 {
+  border: 1px solid rgba(74, 176, 201, .18);
+  border-radius: 12px;
+  margin: 12px 0;
+  padding: 12px 15px;
+  background: rgba(5, 24, 33, .64);
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--op-accent) 78%, transparent);
+}
+.operations-dossier-v2--pirate .operations-objective-v2 {
+  border-color: rgba(233, 97, 89, .28);
+  background: rgba(86, 23, 30, .12);
+}
+
+.operation-feed-card-v2 .operations-pirate-debris-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #f4b0a8;
+  white-space: nowrap;
+}
+.operations-pirate-debris-label .asterion-resource-icon { width: 20px; height: 20px; }
+.operations-pirate-debris-reward {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0;
+}
+.operations-pirate-debris-reward .asterion-resource-icon { width: 36px; height: 36px; flex: 0 0 36px; }
+.operations-pirate-debris-reward strong { color: #f5ddda; font-size: 13px; line-height: 1.4; }
+
+.operations-pirate-cooldown {
+  width: 100%;
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.operations-pirate-cooldown-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.operations-pirate-cooldown-heading span {
+  color: #d0a49d;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .07em;
+}
+.operations-pirate-cooldown-heading strong {
+  color: #f1c4a8;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.operations-pirate-cooldown-track {
+  height: 11px;
+  overflow: hidden;
+  border: 1px solid rgba(219, 111, 93, .28);
+  border-radius: 999px;
+  background: rgba(18, 23, 26, .9);
+}
+.operations-pirate-cooldown-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #44bf81 0%, #b3bf57 48%, #ef9e54 75%, #e2534b 100%);
+  background-size: 320px 100%;
+  background-position: left center;
+  transition: width .25s linear;
+}
+.operations-pirate-cooldown small {
+  color: #a58f8b;
+  font-size: 10px;
+  line-height: 1.4;
 }
