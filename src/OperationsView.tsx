@@ -279,7 +279,7 @@ function QuietPirateProgress({ nextEligibleAt, nowMs }: { nextEligibleAt: number
       </div>
       <div className="operations-pirate-cooldown-track" role="progressbar"
         aria-label="Прошедшая часть 15-минутной паузы" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
-        <span className="operations-pirate-cooldown-fill" style={{ width: `${percent}%` }} />
+        <span className="operations-pirate-cooldown-mask" style={{ width: `${100 - percent}%` }} />
       </div>
       <small>{remaining === 0 ? 'Пауза закончилась. Следующее появление зависит от игрового расписания.' : `${percent}% паузы прошло · повторное появление не гарантировано`}</small>
     </div>
