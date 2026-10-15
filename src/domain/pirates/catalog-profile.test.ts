@@ -14,6 +14,7 @@ import {
   PIRATE_EXCLUSIVE_TECHNOLOGIES,
 } from './profile.ts';
 import { COMBAT_TECHNOLOGIES, COMBAT_TECHNOLOGY_IDS } from '../combat/technologies.ts';
+import { pirateSeededDraw } from './threat.ts';
 
 test('pirate catalog maps the seven local assets to the approved UI names and roles', () => {
   assert.deepEqual(PIRATE_CATALOG.map(({ imageFile, name, role }) => [imageFile, name, role]), [
@@ -111,7 +112,7 @@ test('profile rejects a total score that contradicts resources plus battle point
   assert.deepEqual(profile.expectedTierShares, expectedPirateTierShares(100_000));
 });
 
-test('elimination budget allocates rounded 90% by mixed population shares and reports rounding error', () => {
+test('unseeded legacy elimination budget keeps rounded fixed 90% and reports rounding error', () => {
   const exact = calculatePirateEliminationPopulationBudget(10_000, { 'pirate-hound': 100 });
   assert.equal(exact.targetPopulation, 9_000);
   assert.equal(exact.actualPopulation, 9_000);
@@ -165,4 +166,37 @@ test('resource-point and combat-tech thresholds map exactly and emit only resolv
   assert.equal(profile.shipLevel, 0);
   assert.ok(PIRATE_EXCLUSIVE_TECHNOLOGIES.includes(profile.exclusiveTechnologyId));
   assert.deepEqual(profile.technologies, createPirateProfile({ ownerId: 'o', contactCycleKey: 'c', score: { totalPoints: 0, resourcePoints: -1, battlePoints: 0 } }).technologies);
+});
+
+test('new seeded pirate elimination garrisons span 85–105%, preserve seeded draws, and can exceed 100% of dispatched population', () => {
+  const mixedShares = { 'pirate-hound': 20, 'pirate-raider': 20, 'pirate-corsair': 20,
+    'pirate-executioner': 20, 'pirate-butcher': 10, 'pirate-bruiser': 10 } as const;
+  const upperAndLower: Record<number, {below: boolean; above: boolean}> = {
+    25_090: {below:false,above:false},
+    25_112: {below:false,above:false},
+  };
+  for(const population of [25_090,25_112] as const){
+    for(let index=0;index<256;index++){
+      const seed=`garrison-85-105:${population}:${index}`;
+      const garrison=calculatePirateEliminationPopulationBudget(population,mixedShares,seed);
+      const repeated=calculatePirateEliminationPopulationBudget(population,mixedShares,seed);
+      assert.deepEqual(garrison,repeated,'same seed must give exact same frozen manifest');
+      assert.ok(garrison.coefficient!>=0.85&&garrison.coefficient!<1.05,'approved seeded coefficient');
+      assert.equal(garrison.targetPopulation,Math.round(population*garrison.coefficient!));
+      assert.ok(garrison.actualPopulation<=garrison.targetPopulation,'no population overflow');
+      const summed=Object.entries(garrison.ships).reduce((n,[id,count])=>
+        n+PIRATE_CATALOG_BY_ID[id as keyof typeof PIRATE_CATALOG_BY_ID].population*count!,0);
+      assert.equal(summed,garrison.actualPopulation,'population must match the actual ship manifest');
+      assert.equal(garrison.absoluteError,garrison.targetPopulation-garrison.actualPopulation);
+      upperAndLower[population]!.above ||= garrison.actualPopulation>population;
+      upperAndLower[population]!.below ||= garrison.actualPopulation<population;
+      const oldDraw=pirateSeededDraw(`pirate-garrison-v2:${seed}`);
+      assert.equal(garrison.coefficient,0.85+0.20*oldDraw,'unchanged quantile stream');
+    }
+    assert.deepEqual(upperAndLower[population],{below:true,above:true},
+      `actual new garrisons must exist both below and above sent population ${population}`);
+  }
+  const legacy=calculatePirateEliminationPopulationBudget(25_112,mixedShares);
+  assert.equal(legacy.coefficient,undefined);
+  assert.equal(legacy.targetPopulation,Math.round(25_112*0.9));
 });

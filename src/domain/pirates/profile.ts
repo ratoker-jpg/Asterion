@@ -218,9 +218,10 @@ export function createPirateProfile(input: {
 }
 
 /**
- * Allocate each ship stack from its share of the rounded 90% population target.
- * Each stack is rounded down/up deterministically, choosing the combination
- * whose total population is closest to the target.
+ * Allocate each ship stack from its share of the deterministic population target.
+ * New seeded elimination missions draw 85–105% of the dispatched combat population;
+ * the unseeded pre-PR91 fallback keeps the historical fixed 90% allocation.
+ * Round ship counts deterministically without exceeding the new target.
  */
 export function calculatePirateEliminationPopulationBudget(
   sentCombatPopulation: number,
@@ -229,7 +230,9 @@ export function calculatePirateEliminationPopulationBudget(
   specialContact?: Readonly<{ ownerId: string; cycleKey: string; totalPoints: number }>,
 ): PiratePopulationBudget {
   const sent = safePoints(sentCombatPopulation);
-  const coefficient = launchSeed === undefined ? 0.9 : 0.75 + 0.15 * pirateSeededDraw(`pirate-garrison-v2:${launchSeed}`);
+  // Keep the historical draw stream so equal launch seeds preserve their random quantile.
+  // Only the seeded elimination population interval changes; persisted flights keep their snapshots.
+  const coefficient = launchSeed === undefined ? 0.9 : 0.85 + 0.20 * pirateSeededDraw(`pirate-garrison-v2:${launchSeed}`);
   const targetPopulation = Math.round(sent * coefficient);
   const qualifiesForSpecial = Boolean(specialContact && specialContact.totalPoints >= 3_000_000
     && pirateSeededDraw(`pirate-special-v1:${specialContact.ownerId}:${specialContact.cycleKey}`) < 0.10);
@@ -265,7 +268,7 @@ export function calculatePirateEliminationPopulationBudget(
   for (let mask = 0; mask < combinations; mask += 1) {
     const counts = options.map((option, index) => (mask & (1 << index)) ? option.upperCount : option.lowerCount);
     const population = counts.reduce((sum, count, index) => sum + count * options[index]!.populationPerShip, 0);
-    // New manifests may not exceed their deterministic 75-90% population budget.
+    // New seeded manifests may not exceed their deterministic 85–105% population budget.
     if (launchSeed !== undefined && population + specialPopulation > targetPopulation) continue;
     const error = Math.abs(population - ordinaryTarget);
     // Lower error wins; ties choose fewer people, then the first stable mask.

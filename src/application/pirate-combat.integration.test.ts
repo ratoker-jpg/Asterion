@@ -294,8 +294,8 @@ test('a defeated commander is removed once, contributes ordinary debris, and doe
   const secondProfile = second.flight.pirateSnapshot!.profile;
   const expectedGarrison = second.flight.pirateSnapshot!.eliminationBudget
     ?? calculatePirateEliminationPopulationBudget(Math.round(secondSentPopulation), secondProfile.shares);
-  assert.ok(expectedGarrison.targetPopulation >= Math.floor(secondSentPopulation * 0.75) - 1);
-  assert.ok(expectedGarrison.targetPopulation <= Math.ceil(secondSentPopulation * 0.9) + 1);
+  assert.ok(expectedGarrison.targetPopulation >= Math.floor(secondSentPopulation * 0.85) - 1);
+  assert.ok(expectedGarrison.targetPopulation <= Math.ceil(secondSentPopulation * 1.05) + 1);
   assert.equal(secondReport.defenderForce.populationBefore, expectedGarrison.actualPopulation);
   assert.deepEqual(
     pirateDefenderStacks(secondReport).map((stack) => [stack.entityId, stack.countBefore]),
@@ -390,4 +390,71 @@ test('offline multi-day catch-up after reload resolves one launch snapshot and c
   assert.deepEqual(replay.state.pirate?.contact.defeatedCycles, completed.state.pirate?.contact.defeatedCycles);
   assert.deepEqual(replay.state.planets[ORIGIN_ID]?.fleet, completed.state.planets[ORIGIN_ID]?.fleet);
   assert.equal(replay.state.flights.records.find((flight) => flight.id === launched.flight.id)?.phase, 'completed');
+});
+
+test('new and pre-patch stored elimination snapshots survive reload and arrival without garrison recalculation or duplicate rewards',()=>{
+  const manifest={ ships:{'death-star':48} } satisfies FleetManifest;
+  const {state,contact,now}=fixture(manifest,{
+    shipUpgrades:{'death-star':10},scienceLevel:15,
+  });
+  for(const cohort of ['new','legacy'] as const){
+    const result=dispatchElimination(state,contact,now,`persist-garrison-${cohort}`,manifest);
+    assert.equal(result.ok,true);
+    if(!result.ok)return;
+    const actualFlight=result.flight;
+    const original=actualFlight.pirateSnapshot!;
+    assert.ok(original.eliminationBudget);
+    let storedBudget=original.eliminationBudget!;
+    if(cohort==='legacy'){
+      const target=Math.round(original.sentCombatPopulation!*0.78);
+      const smaller=calculatePirateEliminationPopulationBudget(
+        Math.max(0,Math.floor(target/0.9)-30),original.profile.shares);
+      assert.ok(smaller.actualPopulation>0&&smaller.actualPopulation<=target);
+      storedBudget=Object.freeze({
+        ...smaller,coefficient:0.78,targetPopulation:target,
+        absoluteError:target-smaller.actualPopulation,
+      });
+    }else{
+      assert.ok(storedBudget.coefficient!>=0.85&&storedBudget.coefficient!<1.05);
+    }
+    const snapshot={...original,eliminationBudget:storedBudget};
+    assert.equal(isPirateMissionSnapshot(snapshot,'pirate-elimination'),true);
+    const flight={...actualFlight,pirateSnapshot:snapshot};
+    const prepared={
+      ...result.state,
+      flights:{...result.state.flights,records:result.state.flights.records.map(f=>f.id===flight.id?flight:f)},
+    };
+    let clock=now;
+    const facade=createPersistenceFacade({mode:'test',storage:memoryStorage(),now:()=>clock});
+    assert.equal(facade.write(prepared).ok,true);
+    clock=flight.arrivalAt;
+    const loaded=facade.read();
+    const persisted=loaded.flights.records.find(f=>f.id===flight.id);
+    assert.ok(persisted,'flight must survive real save/load');
+    assert.deepEqual(persisted.pirateSnapshot!.eliminationBudget,storedBudget,'do not replace frozen garrison');
+    assert.deepEqual(persisted.attackSnapshot,flight.attackSnapshot,'attacker levels and technologies stay frozen');
+    assert.deepEqual(persisted.pirateSnapshot!.profile,original.profile,'NPC profile stays frozen');
+    assert.equal(persisted.pirateSnapshot!.rewardMultiplier,original.rewardMultiplier,'salvage multiplier stays frozen');
+    const arrived=arrive(loaded,clock);
+    const reportId=`battle-pirate-${flight.id}`;
+    const report=arrived.state.combat.reports.find(r=>r.id===reportId);
+    assert.ok(report,'real battle on arrival');
+    assert.equal(report!.defenderForce.populationBefore,storedBudget.actualPopulation);
+    assert.equal(report!.pirateReward?.multiplier,original.rewardMultiplier);
+    assert.equal(arrived.state.combat.reports.filter(r=>r.id===reportId).length,1);
+    assert.equal(facade.write(arrived.state).ok,true);
+    const again=facade.read();
+    const replay=arrive(again,clock);
+    assert.equal(replay.state.combat.reports.filter(r=>r.id===reportId).length,1);
+    assert.deepEqual(replay.state.rating,arrived.state.rating);
+    assert.deepEqual(replay.state.espionage?.orbitalDebris,arrived.state.espionage?.orbitalDebris);
+    const returning=replay.state.flights.records.find(f=>f.id===flight.id);
+    assert.ok(returning?.returnAt);
+    clock=returning!.returnAt!;
+    const completed=arrive(replay.state,clock);
+    const final=arrive(completed.state,clock);
+    assert.equal(final.state.combat.reports.filter(r=>r.id===reportId).length,1);
+    assert.deepEqual(final.state.espionage?.orbitalDebris,completed.state.espionage?.orbitalDebris);
+    assert.deepEqual(final.state.rating,completed.state.rating);
+  }
 });

@@ -158,8 +158,10 @@ export function normalizePirateMissionSnapshot(
       || Object.entries(eliminationBudget.ships).some(([id,count]) =>
         !['pirate-hound','pirate-raider','pirate-corsair','pirate-executioner','pirate-butcher','pirate-bruiser','pirate-planet-breaker'].includes(id)
         || !validTimestamp(count))
+      // Union of persisted pre-patch 75–90% and new seeded 85–105% budgets.
+      // Do not recompute a launched garrison from today's coefficient.
       || !Number.isFinite(eliminationBudget.coefficient) || Number(eliminationBudget.coefficient) < 0.75
-      || Number(eliminationBudget.coefficient) > 0.9
+      || Number(eliminationBudget.coefficient) > 1.05
       || !validTimestamp(value.sentCombatPopulation)
       || !validTimestamp(value.historicalHangarCapacity)
       || ![1,1.25,1.5,2,2.5].includes(value.rewardMultiplier as number)
