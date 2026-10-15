@@ -136,7 +136,7 @@ function TacticalScope({ operation, contact }: { operation: OperationInstance; c
   const markerX = 240 + Math.cos(angle) * 83;
   const markerY = 120 + Math.sin(angle) * 83;
   const unknown = operation.intel === 0;
-  const isCombat = operation.category === 'combat';
+  const isCombat = operation.category === 'combat' && !isPirateOperationId(operation.id);
   const isScience = operation.category === 'science';
   const isDerelict = operation.category === 'exploration';
 
@@ -187,7 +187,7 @@ function TacticalScope({ operation, contact }: { operation: OperationInstance; c
         ) : null}
       </svg>
       <div className="operations-scope-caption-v2">
-        <span>{contact ? `ЦЕЛЬ · ПОЗИЦИЯ ${slot}/24` : unknown ? 'СИГНАТУРА НЕ КЛАССИФИЦИРОВАНА' : isCombat ? 'ТАКТИЧЕСКИЙ КОНТАКТ' : isScience ? 'ПОЛЕ ИСКАЖЕНИЯ' : 'ОБЪЕКТ ОБНАРУЖЕН'}</span>
+        <span>{contact ? `ЦЕЛЬ · ПОЗИЦИЯ ${slot}/24` : isPirateOperationId(operation.id) ? 'ПИРАТСКАЯ БАЗА · ИСТОРИЯ ЦИКЛА' : unknown ? 'СИГНАТУРА НЕ КЛАССИФИЦИРОВАНА' : isCombat ? 'ТАКТИЧЕСКИЙ КОНТАКТ' : isScience ? 'ПОЛЕ ИСКАЖЕНИЯ' : 'ОБЪЕКТ ОБНАРУЖЕН'}</span>
         <small>{contact ? formatLocation(operation.location) : unknown ? 'ОЖИДАНИЕ ГЛУБОКОГО СКАНА' : `INTEL ${operation.intel}/3`}</small>
       </div>
     </div>
