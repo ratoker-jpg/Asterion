@@ -1421,6 +1421,26 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       };
     }
     const currentWallet = planets[currentPlanetId]?.resources ?? homeworldResources;
+    // Legacy migrations cannot reconstruct destroyed hangars. Seed the owner
+    // ledger from every *currently accessible* completed hangar level only.
+    const historicHangar = Math.max(
+      pirate.ownerMaxHangarLevel?.[profile.playerId] ?? 0,
+      ...Object.values(planets).map((planet) =>
+        Number.isSafeInteger(planet.buildings.hangar) ? planet.buildings.hangar : 0),
+    );
+    const migratedPirate = {
+      ...pirate,
+      ownerMaxHangarLevel: {
+        ...pirate.ownerMaxHangarLevel,
+        [profile.playerId]: historicHangar,
+      },
+      ownerThreats: {
+        ...pirate.ownerThreats,
+        [profile.playerId]: pirate.ownerThreats?.[profile.playerId] ?? {
+          version: 1 as const, ageHours: 0, integratedAt: timestamp,
+        },
+      },
+    };
 
     return {
       schemaVersion: SAVE_SCHEMA_VERSION,
@@ -1447,7 +1467,7 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       science,
       resourceClock: migrateResourceClock(parsed.resourceClock, timestamp, Object.keys(planets), currentPlanetId),
       flights: migratedFlights,
-      pirate,
+      pirate: migratedPirate,
       asteroidSimulation,
       asteroidDebrisBySpawnIndex: migrateAsteroidDebris(parsed.asteroidDebrisBySpawnIndex, activeAsteroidSpawnIndices),
       espionage,
