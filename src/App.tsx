@@ -1519,8 +1519,6 @@ export function App() {
               pirateContactState={state.pirate?.contact}
               pirateFocusTarget={pirateFocusTarget}
               onPirateSystemChange={onPirateSystemChange}
-              onPirateAccept={acceptPirateOperation}
-              onPirateCancel={cancelPirateOperation}
               onPirateRecon={launchPirateRecon}
               onPirateAttack={openPirateAttack}
               onPirateReport={openPirateReport}
@@ -1549,6 +1547,8 @@ export function App() {
               pirateContacts={pirateContacts}
               quietPirateSystems={quietPirateSystems}
               nowMs={now}
+              onPirateAccept={acceptPirateOperation}
+              onPirateCancel={cancelPirateOperation}
               onPirateRecon={launchPirateRecon}
               onPirateAttack={openPirateAttack}
               onPirateReport={openPirateReport}
