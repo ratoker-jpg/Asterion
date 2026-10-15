@@ -1812,7 +1812,10 @@
 .pirate-recon-report-card .spy-report-summary-grid > div { grid-template-columns: minmax(100px, .8fr) minmax(0, 1fr); }
 .pirate-recon-report-card .spy-report-summary-grid dd { overflow-wrap: anywhere; }
 .pirate-recon-report-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 14px 14px; }
-.pirate-recon-report-list > div { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid rgba(71, 188, 214, .16); border-radius: 10px; background: rgba(2, 23, 34, .76); color: #d0e9ed; font-size: 11px; }
+.pirate-recon-report-list > div { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 60px; padding: 7px 12px; border: 1px solid rgba(71, 188, 214, .16); border-radius: 10px; background: rgba(2, 23, 34, .76); color: #d0e9ed; font-size: 12px; }
+.pirate-recon-ship-identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.pirate-recon-ship-identity > span { overflow-wrap: anywhere; font-weight: 700; }
+.pirate-recon-ship-art { display: block; width: 48px; height: 44px; flex: 0 0 48px; object-fit: contain; filter: drop-shadow(0 0 7px rgba(227, 92, 81, .24)); }
 .pirate-recon-report-list strong { color: #73e2ee; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .reports-view--folder .pirate-recon-report-card .spy-report-summary-grid dt,
 .reports-view--folder .pirate-recon-report-card .spy-report-summary-grid dd { font-size: 11px; }
