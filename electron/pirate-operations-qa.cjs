@@ -278,11 +278,13 @@ async function runViewport(width, height) {
     console.log(`[pirate-operations-qa] viewport ${label} contact ${contact.cycleKey}`);
     await grantTargetSystemColony(win, contact);
     await clickPrimary(win, 'operations', `document.querySelector('.operations-layout-v2')`);
+    await waitFor(win, `(() => { const art = document.querySelector('[data-qa-pirate-contact] .operation-feed-pirate-art-v2 img'); return Boolean(art?.complete && art.naturalWidth > 0); })()`);
+    await win.webContents.executeJavaScript(`document.querySelector('[data-qa-pirate-contact]')?.click()`);
+    await waitFor(win, `(() => { const block = document.querySelector('.operations-objective-v2'); return Boolean(block && parseFloat(getComputedStyle(block).borderTopLeftRadius) >= 9); })()`);
     const operationCheck = await win.webContents.executeJavaScript(`(() => {
       const cards = [...document.querySelectorAll('[data-qa-pirate-contact]')].filter((card) => card.getAttribute('data-qa-pirate-contact'));
       const systems = cards.map((card) => Number(/\\[\\d+:(\\d+):\\d+\\]/.exec(card.textContent || '')?.[1]));
       const art = cards[0]?.querySelector('.operation-feed-pirate-art-v2 img');
-      cards[0]?.click();
       const objective = document.querySelector('.operations-objective-v2');
       const radius = objective ? parseFloat(getComputedStyle(objective).borderTopLeftRadius) : 0;
       const scroll = document.querySelector('.operations-feed-scroll-v2');
