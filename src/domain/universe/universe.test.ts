@@ -54,6 +54,16 @@ test('planet coordinates remain unchanged while asteroid clock advances', () => 
   assert.deepEqual(Array.from({ length: POSITION_COUNT }, (_, index) => getUniverseSlotPoint(index + 1)), points);
 });
 
+test('slot 18 is upper-right of its sun in both Universe and the Operations sensor', () => {
+  const slot = getUniverseSlotPoint(18);
+  // Universe uses 50%, 52% as the solar center; Operations projects the
+  // same percentages into its SVG, preserving direction and orbital ring.
+  const sensor = { x: 240 + (slot.x - 50) * 4.8, y: 120 + (slot.y - 52) * 2.4 };
+  assert.ok(slot.x > 50 && slot.y < 52, 'slot 18 is upper-right in Universe');
+  assert.ok(sensor.x > 240 && sensor.y < 120, 'slot 18 stays upper-right on the sensor');
+  assert.ok(sensor.x < 480 && sensor.y > 0, 'projected marker remains inside the sensor');
+});
+
 test('galaxy contains 40 systems and each system has exactly 24 positions', () => {
   const map = createUniverseMap();
 
