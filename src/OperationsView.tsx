@@ -14,6 +14,8 @@ import { ResourceIcon } from './ui/resources/ResourceIcon';
 import type { ResourceIconKind } from './ui/resources/resource-assets.ts';
 import type { PirateContactPresentation } from './pirate-ui.ts';
 import { isPirateOperationId, pirateContactOperation, pirateCycleOperation, pirateOperationId } from './application/pirate-presentation.ts';
+import { getUniverseSlotPoint } from './domain/universe/runtime.ts';
+import { PIRATE_CONTACT_QUIET_MS } from './domain/pirates/contact-schedule.ts';
 import './operations.css';
 
 type OperationsViewProps = {
@@ -130,11 +132,12 @@ function RewardPreview({ operation, compact = false }: { operation: OperationIns
 }
 
 function TacticalScope({ operation, contact }: { operation: OperationInstance; contact?: PirateContactPresentation }) {
-  // Diagrammatic orbital-slot projection: coordinates are authoritative, not invented distances.
+  // Project the exact same orbital slot as UniverseView into the sensor SVG.
+  // Both screens share getUniverseSlotPoint; no independent slot-angle formula.
   const slot = contact?.coordinate.position ?? 1;
-  const angle = ((slot - 1) / 24) * Math.PI * 2 - Math.PI / 2;
-  const markerX = 240 + Math.cos(angle) * 83;
-  const markerY = 120 + Math.sin(angle) * 83;
+  const universePoint = getUniverseSlotPoint(slot);
+  const markerX = 240 + (universePoint.x - 50) * 4.8;
+  const markerY = 120 + (universePoint.y - 52) * 2.4;
   const unknown = operation.intel === 0;
   const isCombat = operation.category === 'combat' && !isPirateOperationId(operation.id);
   const isScience = operation.category === 'science';
@@ -144,13 +147,24 @@ function TacticalScope({ operation, contact }: { operation: OperationInstance; c
     <div className={`operations-scope-v2 operations-scope-v2--${operation.category} ${unknown ? 'is-unknown' : ''}`}>
       <svg viewBox="0 0 480 240" aria-hidden="true">
         <path className="scope-grid" d="M20 120h440M240 16v208M84 45l312 150M84 195 396 45" />
-        <circle className="scope-ring ring-outer" cx="240" cy="120" r="92" />
-        <circle className="scope-ring ring-mid" cx="240" cy="120" r="61" />
-        <circle className="scope-ring ring-inner" cx="240" cy="120" r="30" />
+        {contact ? (
+          <>
+            <ellipse className="scope-ring ring-inner" cx="240" cy="120" rx="91.2" ry="52.8" />
+            <ellipse className="scope-ring ring-mid" cx="240" cy="120" rx="134.4" ry="64.8" />
+            <ellipse className="scope-ring ring-outer" cx="240" cy="120" rx="172.8" ry="76.8" />
+            <ellipse className="scope-ring ring-outer" cx="240" cy="120" rx="211.2" ry="88.8" />
+          </>
+        ) : (
+          <>
+            <circle className="scope-ring ring-outer" cx="240" cy="120" r="92" />
+            <circle className="scope-ring ring-mid" cx="240" cy="120" r="61" />
+            <circle className="scope-ring ring-inner" cx="240" cy="120" r="30" />
+          </>
+        )}
         <path className="scope-sweep" d="M240 120 392 76A160 160 0 0 1 400 120Z" />
 
         {contact ? (
-          <g className="scope-hostiles" data-qa-pirate-scope-position={slot}>
+          <g className="scope-hostiles" data-qa-pirate-scope-position={slot} data-qa-pirate-scope-x={markerX.toFixed(2)} data-qa-pirate-scope-y={markerY.toFixed(2)}>
             <circle cx={markerX} cy={markerY} r="7" />
             <circle cx={markerX} cy={markerY} r="17" fill="none" strokeDasharray="3 4" opacity=".7"/>
             <path d={`M${markerX - 12} ${markerY}h24M${markerX} ${markerY - 12}v24`} />
@@ -220,8 +234,9 @@ function OperationCard({ operation, selected, onSelect, contact, quiet, nowMs }:
         <em>{contact ? `Пиратский контакт · осталось ${pirateRemainingLabel(contact.expiresAt, nowMs)}` : quiet ? 'База уничтожена · ожидание нового цикла' : isPirateOperationId(operation.id) ? 'Контакт завершён' : intelZero ? 'Сигнатура требует классификации' : operation.objective.label}</em>
         <span className="operation-feed-meta-v2">
           <i>{isPirateOperationId(operation.id) ? formatLocation(operation.location) : intelZero ? formatLocationClass(operation.location) : formatLocation(operation.location)}</i>
-          <IntelPips level={operation.intel} />
-          {isPirateOperationId(operation.id) ? <b>ОБЛОМКИ 60%+</b> : firstReward ? <b><ResourceIcon kind={firstReward[2]} /> {number.format(firstReward[1])}</b> : <b>НАГРАДА ?</b>}
+          {isPirateOperationId(operation.id)
+            ? <b className="operations-pirate-debris-label"><ResourceIcon kind="debris" /> ОБЛОМКИ · от 60%</b>
+            : <><IntelPips level={operation.intel} />{firstReward ? <b><ResourceIcon kind={firstReward[2]} /> {number.format(firstReward[1])}</b> : <b>НАГРАДА ?</b>}</>}
         </span>
       </span>
       <span className="operation-feed-arrow-v2">›</span>
@@ -249,6 +264,26 @@ function pirateRemainingLabel(expiresAt: number, nowMs: number) {
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
   return minutes ? `${minutes} мин ${String(remainder).padStart(2, '0')} с` : `${remainder} с`;
+}
+
+/** The persisted defeat timestamp determines the start; a full bar means eligibility, not a guaranteed spawn. */
+function QuietPirateProgress({ nextEligibleAt, nowMs }: { nextEligibleAt: number; nowMs: number }) {
+  const elapsedMs = Math.max(0, Math.min(PIRATE_CONTACT_QUIET_MS, nowMs - (nextEligibleAt - PIRATE_CONTACT_QUIET_MS)));
+  const percent = Math.round((elapsedMs / PIRATE_CONTACT_QUIET_MS) * 100);
+  const remaining = Math.max(0, nextEligibleAt - nowMs);
+  return (
+    <div className="operations-pirate-cooldown" role="group" aria-label="Пауза после уничтожения пиратской базы">
+      <div className="operations-pirate-cooldown-heading">
+        <span>ДО СЛЕДУЮЩЕГО ВОЗМОЖНОГО ПОЯВЛЕНИЯ</span>
+        <strong role="timer">{pirateRemainingLabel(nextEligibleAt, nowMs)}</strong>
+      </div>
+      <div className="operations-pirate-cooldown-track" role="progressbar"
+        aria-label="Прошедшая часть 15-минутной паузы" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+        <span className="operations-pirate-cooldown-fill" style={{ width: `${percent}%` }} />
+      </div>
+      <small>{remaining === 0 ? 'Пауза закончилась. Следующее появление зависит от игрового расписания.' : `${percent}% паузы прошло · повторное появление не гарантировано`}</small>
+    </div>
+  );
 }
 
 function OperationDossier({ operation, pirateContact, quiet, nowMs, onAccept, onCancel, onReveal, onOpenFleets, onPirateRecon, onPirateAttack, onPirateReport, onPirateUniverse }: {
@@ -310,7 +345,7 @@ function OperationDossier({ operation, pirateContact, quiet, nowMs, onAccept, on
             <span>{pirate ? 'РАЗВЕДКА' : 'РАЗВЕДДАННЫЕ'}</span>
             {pirate ? <b>{pirateContact ? reconLabel : 'Контакт завершён'}</b> : <><IntelPips level={operation.intel} /><b>{operation.intel} / 3</b></>}
           </div>
-          {pirateContact ? <div className="operations-pirate-live-timer" role="timer">До исчезновения: <strong>{pirateRemainingLabel(pirateContact.expiresAt, nowMs)}</strong></div> : quiet ? <div className="operations-pirate-live-timer" role="timer">Следующий цикл возможен через: <strong>{pirateRemainingLabel(quiet.nextEligibleAt, nowMs)}</strong></div> : null}
+          {pirateContact ? <div className="operations-pirate-live-timer" role="timer">До исчезновения: <strong>{pirateRemainingLabel(pirateContact.expiresAt, nowMs)}</strong></div> : quiet ? <QuietPirateProgress nextEligibleAt={quiet.nextEligibleAt} nowMs={nowMs} /> : null}
         </div>
       </section>
 
@@ -336,7 +371,7 @@ function OperationDossier({ operation, pirateContact, quiet, nowMs, onAccept, on
               </section>
               <section className="operations-rewards-panel-v2">
                 <small>ПОТЕНЦИАЛЬНЫЕ ОБЛОМКИ</small>
-                <strong>60% стоимости уничтоженных пиратских кораблей</strong>
+                <div className="operations-pirate-debris-reward"><ResourceIcon kind="debris" label="Обломки" /><strong>От 60% стоимости уничтоженных пиратских кораблей</strong></div>
                 <p>Корсар: +0,5 п.п. за уровень (макс. 80% общей доли), если участвовал и выжил. Обломки остаются на орбите — их нужно собрать отдельно. Фактическое количество зависит от потерь пиратов.</p>
               </section>
             </> : <>
