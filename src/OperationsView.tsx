@@ -16,6 +16,7 @@ import type { PirateContactPresentation } from './pirate-ui.ts';
 import { isPirateOperationId, pirateContactOperation, pirateCycleOperation, pirateOperationId } from './application/pirate-presentation.ts';
 import { getUniverseSlotPoint } from './domain/universe/runtime.ts';
 import { PIRATE_CONTACT_QUIET_MS } from './domain/pirates/contact-schedule.ts';
+import { getPiratePlanetArt } from './pirate-planet-art.ts';
 import './operations.css';
 
 type OperationsViewProps = {
@@ -218,6 +219,9 @@ function OperationCard({ operation, selected, onSelect, contact, quiet, nowMs }:
 }) {
   const intelZero = operation.intel === 0;
   const firstReward = rewardEntries(operation)[0];
+  const pirate = isPirateOperationId(operation.id);
+  const pirateCycle = pirate ? (contact?.contactCycleKey ?? quiet?.contactCycleKey ?? operation.id.slice('pirate:'.length)).split(':') : [];
+  const pirateArt = pirate ? getPiratePlanetArt(Number(pirateCycle[2]), Number(pirateCycle[3])) : null;
 
   return (
     <button
@@ -227,7 +231,12 @@ function OperationCard({ operation, selected, onSelect, contact, quiet, nowMs }:
       data-qa-pirate-contact={contact?.contactCycleKey ?? quiet?.contactCycleKey}
       onClick={onSelect}
     >
-      <span className="operation-feed-threat-v2"><b>{isPirateOperationId(operation.id) ? (contact ? '●' : '—') : threatTier(operation)}</b><small>{isPirateOperationId(operation.id) ? 'ЦЕЛЬ' : intelZero ? 'UNKNOWN' : operation.category === 'combat' ? 'THREAT' : 'RISK'}</small></span>
+      {pirateArt
+        ? <span className="operation-feed-threat-v2 operation-feed-pirate-art-v2" aria-label="Пиратская планета">
+          <img src={pirateArt} alt="" loading="lazy" draggable={false} />
+          <small>{contact ? 'ПИРАТЫ' : 'АРХИВ'}</small>
+        </span>
+        : <span className="operation-feed-threat-v2"><b>{threatTier(operation)}</b><small>{intelZero ? 'UNKNOWN' : operation.category === 'combat' ? 'THREAT' : 'RISK'}</small></span>}
       <span className="operation-feed-copy-v2">
         <small>{CATEGORY_LABELS[operation.category]}</small>
         <strong>{operation.title}</strong>
@@ -459,6 +468,9 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
 
   const visibleRows = useMemo(() => operationRows.filter(({ operation }) => operation.state === tab), [operationRows, tab]);
   const selectedRow = visibleRows.find(({ operation }) => operation.id === selectedId) ?? null;
+  // Expose the cooldown while browsing any tab, not only a selected Completed item.
+  const nearestQuiet = quietPirateSystems.reduce<QuietPirateCycle | null>((earliest, cycle) =>
+    !earliest || cycle.nextEligibleAt < earliest.nextEligibleAt ? cycle : earliest, null);
 
   useEffect(() => {
     if (selectedRow) return;
@@ -503,6 +515,13 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
         </nav>
         <div className="operations-slots-v2"><small>ПИРАТСКИЕ БАЗЫ</small><strong>{pirateContacts.length}</strong><span>активны</span></div>
       </header>
+      {nearestQuiet ? <section className="operations-quiet-banner-v2" data-qa-operations-quiet-banner>
+        <div className="operations-quiet-banner-intro-v2">
+          <strong>15 МИНУТ · ПАУЗА ПОСЛЕ УНИЧТОЖЕНИЯ</strong>
+          <span>Галактика {nearestQuiet.galaxy} · Система {String(nearestQuiet.system).padStart(2, '0')}{quietPirateSystems.length > 1 ? ` · ещё систем: ${quietPirateSystems.length - 1}` : ''}</span>
+        </div>
+        <QuietPirateProgress nextEligibleAt={nearestQuiet.nextEligibleAt} nowMs={nowMs} />
+      </section> : null}
       <div className="operations-layout-v2">
         <section className="operations-feed-v2" aria-label={TAB_LABELS[tab]}>
           <header><div><small>КАНАЛ // {TAB_LABELS[tab]}</small><strong>{tab === 'available' ? 'ВХОДЯЩИЕ КОНТАКТЫ' : tab === 'active' ? 'ТЕКУЩИЕ ЗАДАЧИ' : 'АРХИВ ОПЕРАЦИЙ'}</strong></div><span>{visibleRows.length}</span></header>
