@@ -37,6 +37,18 @@ These omit orbital collection, recycler cargo, flight and transport times. Recyc
 - **Per-pair evidence:** `artifacts/pr91-approved-tech-compare/comparison.json` and `comparison.md` contain attacker/pirate remaining population, rounds, effective pirate attack/life, victory, produced orbital debris, destroyed-hull replacement cost, outbound and recycler fuel, modeled recycled metal/minerals at 75% and 120%, modeled net and old→new deltas.
 - **Limitation:** a paired controlled battle is **not** a measured production win rate, nor does it apply actual 10% special-ship probability. Neither source models every calendar event or storage cap, and nominal full-collection profit is **not** guaranteed spendable resources. Normal/counter raid probabilities must be weighted separately for expected incoming losses; raw paired cases are not weighted EV.
 
+## Verified matched-seed old vs approved combat — [CI 38816770354](https://github.com/ratoker-jpg/Asterion/actions/runs/38816770354)
+
+The **PR91 approved matched-seed comparison job passed** on commit `06976b26`, before this evidence-file update. The full CI run did **not** pass: an unrelated legacy attack test's hard-coded resource assumption failed and is under correction. Results below come from the completed comparison job, **not** inferred from a successful full workflow.
+
+| Observed statistic | Old flat-tier technology | Approved %-of-max technology |
+|---|---:|---:|
+| Paired scenario wins, 48 each | 45 | 31 |
+| Mean optimistic net at 75% recycling, resource-equivalent | +39,733,750.31 | −9,492,494.79 |
+| Mean optimistic net at 120% recycling, resource-equivalent | +105,533,091.98 | +48,709,057.00 |
+
+All 48 paired seeds share the same faction, population, no-commanders attacking composition, pirate garrison, ship levels, fixed controlled zero/two Planet Breakers, and max 12 rounds. The only before/after change was the NPC technology vector. This supports a significant balance effect **in these scenarios only**. The outcomes are not population-weighted likelihoods for spontaneous pirates and cannot establish an overall encounter expected value. Requested attack/life details, losses, debris, modeled collection, and per-case net are serialized in `artifacts/pr91-approved-tech-compare/comparison.json` and `comparison.md` in the corresponding CI artifact. These are **model upper bounds** given full debris availability. No coefficient adjustment was approved or performed.
+
 ## Still outstanding for final balance sign-off
 
 - Confirm latest CI success and inspect current artifacts for all 96 pairwise combat results and 324 refreshed mixed encounters.
