@@ -42,7 +42,11 @@ export function planPirateRaidFleet(input: Readonly<{
   const normalCargoRatio = candidates.reduce((total, ship) =>
     total + (input.profile.shares[ship.id] ?? 0) / 100 * ship.cargo / ship.population, 0);
   const expectedCargo = normalTarget * normalCargoRatio;
-  const minimum = cargoOptimal && requestedCargo > expectedCargo
+  // Only near-empty targets get the cargo floor. Protected colonies keep
+  // their mandatory 90-95% defender-relative population budget.
+  const nearEmpty = safe(input.defendingPopulation) <
+    Math.max(100, Math.floor(safe(input.historicalHangarCapacity) * 0.05));
+  const minimum = nearEmpty && cargoOptimal && requestedCargo > expectedCargo
     ? Math.min(cap, Math.ceil(requestedCargo / cargoOptimal.cargo) * cargoOptimal.population)
     : 0;
   const targetPopulation = Math.max(normalTarget, minimum);
