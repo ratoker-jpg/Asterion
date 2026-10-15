@@ -800,14 +800,15 @@ export function getPirateContactCyclesBetween(
   afterMs: number,
   throughMs: number,
   defeatedCycles: readonly PirateContactDefeatRecord[] = [],
+  checkDelayMs = 15 * 60_000,
 ): readonly UniverseTimedObjectSchedule[] {
   if (!Number.isSafeInteger(afterMs) || !Number.isSafeInteger(throughMs) || throughMs <= afterMs) return [];
   const base = ensureTimedCycles('pirate', galaxy, system, throughMs
     + defeatedCycles.filter((record) => record.galaxy === galaxy && record.system === system).length * PIRATE_MAX_LIFETIME_MS);
   const corrected = applyPirateContactDefeatsToSchedules(base, galaxy, system, defeatedCycles);
-  return corrected.filter((cycle) => cycle.present && cycle.startAt + 15 * 60_000 > afterMs
-    && cycle.startAt + 15 * 60_000 <= throughMs
-    && cycle.expiresAt > cycle.startAt + 15 * 60_000);
+  return corrected.filter((cycle) => cycle.present && cycle.startAt + checkDelayMs > afterMs
+    && cycle.startAt + checkDelayMs <= throughMs
+    && cycle.expiresAt > cycle.startAt + checkDelayMs);
 }
 
 function activeTimedObjectSchedule(
