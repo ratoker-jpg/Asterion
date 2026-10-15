@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createInitialSaveState } from './persistence.ts';
 import { dispatchFlight, reconcileFlights } from './flights.ts';
-import { selectOwnedPiratePresentations, selectOwnedPirateSystems, selectOwnedPirateTargets, selectPirateContacts } from './pirate-presentation.ts';
+import { isPirateOperationId, pirateContactOperation, pirateCycleOperation, pirateOperationId, selectOwnedPiratePresentations, selectOwnedPirateSystems, selectOwnedPirateTargets, selectPirateContacts } from './pirate-presentation.ts';
 import { getCurrentPirateContact } from './pirates.ts';
 import { createColonyPlanetRuntime, selectOwnedPlanet } from './owned-planets.ts';
 import { getUniverseTimedObjectSchedule } from '../domain/universe/runtime.ts';
@@ -177,4 +177,22 @@ test('a combat raid cannot be dispatched to a foreign system even with a valid c
     assert.equal(sent.error.code, 'target-not-available');
     assert.match(sent.error.message, /системах ваших колоний/);
   }
+});
+
+test('real pirate contact projects to the existing operation without a fabricated payout', () => {
+  const { state, contact, now } = activeContactFixture();
+  const shown = contactPresentation(state, now, contact.coordinate.system);
+  const available = pirateContactOperation(shown);
+  const accepted = pirateContactOperation(shown, 'active');
+  assert.equal(available.id, pirateOperationId(contact.contactCycleKey));
+  assert.equal(isPirateOperationId(available.id), true);
+  assert.equal(available.state, 'available');
+  assert.equal(accepted.state, 'active');
+  assert.equal(accepted.location.kind, 'coordinates');
+  assert.equal(accepted.threat, null);
+  assert.deepEqual(accepted.rewardPreview, {});
+  const defeated = pirateCycleOperation(contact.contactCycleKey, contact.coordinate, 'completed');
+  assert.equal(defeated.id, accepted.id);
+  assert.equal(defeated.state, 'completed');
+  assert.notEqual(pirateOperationId('pirate-cycle-v1:1:2:1:1001'), available.id);
 });
