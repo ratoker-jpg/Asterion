@@ -177,6 +177,31 @@ export type TimedObjectKind = 'pirate' | 'unique' | 'anomaly';
 type TimedObjectSchedule = UniverseTimedObjectState & { startAt: number; present: boolean };
 type TimedScheduleCache = { cycles: TimedObjectSchedule[]; nextStartAt: number; nextSpawnChance: number };
 const timedScheduleCaches = new Map<string, TimedScheduleCache>();
+const TEST_UNIVERSE_LAYOUT_SEED_KEY = 'asterion.test-universe-layout-seed.v1';
+
+/** No browser seed in node tests or production; only local Test Mode gets rerolls. */
+function testUniverseLayoutSeed(): number {
+  if (typeof window === 'undefined' || window.location.search !== '?mode=test') return 0;
+  try {
+    const raw = Number(window.localStorage.getItem(TEST_UNIVERSE_LAYOUT_SEED_KEY));
+    return Number.isSafeInteger(raw) && raw > 0 && raw <= 1_000_000_000 ? raw : 0;
+  } catch { return 0; }
+}
+
+/** Reset is explicit: clear cached future cycles and choose a fresh reproducible layout. */
+export function rerollTestUniverseLayout(): number {
+  if (typeof window === 'undefined' || window.location.search !== '?mode=test') return 0;
+  const next = (testUniverseLayoutSeed() % 1_000_000_000) + 1;
+  window.localStorage.setItem(TEST_UNIVERSE_LAYOUT_SEED_KEY, String(next));
+  timedScheduleCaches.clear();
+  return next;
+}
+
+function layoutSeededRandom(...seeds: number[]) {
+  const seed = testUniverseLayoutSeed();
+  return seed ? seededRandom(...seeds, seed) : seededRandom(...seeds);
+}
+
 
 function mulberry32(seed: number) {
   return () => {
@@ -502,7 +527,8 @@ function createPositionNode(
 function createUniverseSystemBase(options: CreateUniverseSystemOptions, assets: UniverseAssetCatalog): UniverseSystem {
   const galaxy = Math.max(1, Math.floor(options.galaxy ?? GALAXY));
   const system = Math.min(SYSTEM_COUNT, Math.max(1, Math.floor(options.system)));
-  const random = mulberry32(10_000 + galaxy * 977 + system * 1_003);
+  const random = mulberry32(10_000 + galaxy * 977 + system * 1_003
+    + (options.mode === 'test' ? testUniverseLayoutSeed() * 37 : 0));
   const fixtureSlots = Array.from({ length: POSITION_COUNT }, (_, index) => index + 1)
     .filter((slot) => fixtureFor(system, slot, options.mode, options.registeredPlanets)
       || isSuppressedBotFixture(options, galaxy, system, slot)
@@ -711,7 +737,7 @@ function timedObjectConfig(kind: TimedObjectKind) {
 }
 
 function timedCacheKey(kind: TimedObjectKind, galaxy: number, system: number) {
-  return `${kind}:${galaxy}:${system}`;
+  return `${kind}:${galaxy}:${system}:${testUniverseLayoutSeed()}`;
 }
 
 function ensureTimedCycles(kind: TimedObjectKind, galaxy: number, system: number, throughMs: number) {
@@ -719,7 +745,7 @@ function ensureTimedCycles(kind: TimedObjectKind, galaxy: number, system: number
   const key = timedCacheKey(kind, galaxy, system);
   let cache = timedScheduleCaches.get(key);
   if (!cache) {
-    const offsetRandom = seededRandom(config.seed, galaxy, system, 0);
+    const offsetRandom = layoutSeededRandom(config.seed, galaxy, system, 0);
     cache = {
       cycles: [],
       nextStartAt: config.epoch + randomInt(offsetRandom, 0, 60 * 60 * 1_000),
@@ -729,7 +755,7 @@ function ensureTimedCycles(kind: TimedObjectKind, galaxy: number, system: number
   }
   while (cache.nextStartAt <= throughMs + config.maxLifetimeMs) {
     const cycleIndex = cache.cycles.length;
-    const random = seededRandom(config.seed, galaxy, system, cycleIndex + 1);
+    const random = layoutSeededRandom(config.seed, galaxy, system, cycleIndex + 1);
     const lifetimeMs = randomInt(random, config.minLifetimeMs, config.maxLifetimeMs);
     const startAt = cache.nextStartAt;
     const spawnChance = cache.nextSpawnChance;
@@ -825,7 +851,7 @@ function injectTimedObject(
   if (!schedule?.present || nowMs >= schedule.expiresAt) return system;
   const emptySlots = system.positions.filter((node) => node.kind === 'empty');
   if (!emptySlots.length) return system;
-  const random = seededRandom(timedObjectConfig(kind).seed + 0x55, system.galaxy, system.system, schedule.cycleIndex);
+  const random = layoutSeededRandom(timedObjectConfig(kind).seed + 0x55, system.galaxy, system.system, schedule.cycleIndex);
   const target = emptySlots[Math.floor(random() * emptySlots.length)];
   const state = timedState(schedule);
   const node: UniversePlanetNode = kind === 'pirate'
