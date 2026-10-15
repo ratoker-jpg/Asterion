@@ -1,4 +1,6 @@
 import { createPirateProfile, type PirateOwnerScoreSnapshot, type PirateProfile } from './profile.ts';
+import { COMBAT_TECHNOLOGY_IDS } from '../combat/technologies.ts';
+import { PIRATE_EXCLUSIVE_TECHNOLOGIES } from './profile.ts';
 import {
   isCanonicalPirateContactCycleKey,
   isValidPirateContactDefeatRecord,
@@ -75,7 +77,18 @@ function isPirateProfile(value: unknown, ownerId: string, cycleKey: string): val
       contactCycleKey: cycleKey,
       score: value.score as PirateOwnerScoreSnapshot,
     });
-    return canonicalJson(value) === canonicalJson(expected);
+    // Existing dispatched flights and contact profiles carry the original
+    // tier-as-level technology contract. Validate it exactly, but never
+    // silently recalculate a frozen profile when the new % scale is introduced.
+    if (canonicalJson(value) === canonicalJson(expected)) return true;
+    const legacyTier = expected.technologyLevel;
+    const legacyTechnologies = Object.fromEntries(COMBAT_TECHNOLOGY_IDS.map((id) => [
+      id, PIRATE_EXCLUSIVE_TECHNOLOGIES.includes(id as typeof PIRATE_EXCLUSIVE_TECHNOLOGIES[number])
+        && id !== expected.exclusiveTechnologyId ? 0 : legacyTier,
+    ]));
+    return canonicalJson(value) === canonicalJson({
+      ...expected, technologies: legacyTechnologies,
+    });
   } catch {
     return false;
   }
