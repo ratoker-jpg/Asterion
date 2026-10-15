@@ -143,7 +143,7 @@ function ReportListItem({ item, active, read, saved, selected, onOpen, onSelect 
   onSelect: (checked: boolean) => void;
 }) {
   return (
-    <article className={`reports-list-item ${active ? 'active' : ''} ${read ? 'read' : 'unread'} ${selected ? 'selected' : ''}`} data-report-item-id={item.id}>
+    <article className={`reports-list-item ${active ? 'active' : ''} ${read ? 'read' : 'unread'} ${selected ? 'selected' : ''}`} data-report-item-id={item.id} data-pirate-recon-outcome={item.pirateReconReport?.outcome}>
       <label className="reports-list-check">
         <input type="checkbox" checked={selected} onChange={(event) => onSelect(event.target.checked)} aria-label={`Выбрать сообщение: ${item.title}`} />
         <span aria-hidden="true" />
@@ -210,24 +210,27 @@ function OverpopulationDossier({ item }: { item: ReportItem }) {
   );
 }
 
-function PirateReconDossier({ item }: { item: ReportItem }) {
+function PirateReconDossier({ item, onOpenPirateUniverse }: {
+  item: ReportItem;
+  onOpenPirateUniverse: (coordinate: UniverseCoordinate, contactCycleKey: string) => void;
+}) {
   const report = item.pirateReconReport;
   if (!report) return <GenericDossier item={item} />;
   const coordinate = item.coordinates[0] ?? '';
   const formatTimestamp = (timestamp: number) => formatDate(new Date(timestamp).toISOString());
 
   return (
-    <div className="reports-dossier reports-dossier--pirate-recon" data-qa-pirate-recon-report={report.id}>
+    <div className={`reports-dossier reports-dossier--pirate-recon reports-dossier--pirate-recon-${report.outcome}`} data-qa-pirate-recon-report={report.id}>
       <div className="reports-dossier-heading">
         <div className="reports-dossier-heading__icon"><ReportGlyph kind="system" /></div>
-        <div><small>{item.typeLabel}</small><h2>{item.title}</h2><p>{coordinate} · контакт {report.contactCycleKey}</p></div>
+        <div><small>{item.typeLabel}</small><h2>{item.title}</h2><p><button type="button" className="spy-report-link" onClick={() => onOpenPirateUniverse(report.coordinate, report.contactCycleKey)}>{coordinate} ↗</button> · контакт {report.contactCycleKey}</p></div>
         <div className="reports-dossier-heading__status"><StatusBadge item={item} /><time>{formatDate(item.timestamp)}</time></div>
       </div>
       <section className="spy-report-card pirate-recon-report-card">
-        <header><strong>{report.outcome === 'success' ? 'РАЗВЕДДАННЫЕ' : report.outcome === 'failure' ? 'РЕЗУЛЬТАТ РАЗВЕДКИ' : 'РЕЗУЛЬТАТ ПОЛЁТА'}</strong><span>{coordinate}</span></header>
+        <header><strong>{report.outcome === 'success' ? 'РАЗВЕДДАННЫЕ' : report.outcome === 'failure' ? 'РАЗВЕДКА НЕ УДАЛАСЬ' : 'РЕЗУЛЬТАТ ПОЛЁТА'}</strong><span>{coordinate}</span></header>
         <dl className="spy-report-summary-grid">
           <div><dt>Контакт</dt><dd>{report.contactCycleKey}</dd></div>
-          <div><dt>Координаты</dt><dd>{coordinate}</dd></div>
+          <div><dt>Координаты</dt><dd><button type="button" className="spy-report-link" onClick={() => onOpenPirateUniverse(report.coordinate, report.contactCycleKey)}>{coordinate} ↗</button></dd></div>
           <div><dt>Отправление</dt><dd><time>{formatTimestamp(report.dispatchedAt)}</time></dd></div>
           <div><dt>Прибытие</dt><dd><time>{formatTimestamp(report.arrivedAt)}</time></dd></div>
           {report.outcome === 'success' && report.intel ? <>
@@ -258,10 +261,11 @@ function sourcePlanetLabel(id: string) {
   return id === 'helion-01' ? 'Helion 01' : 'Планета-источник';
 }
 
-function SpyDossier({ item, report, onOpenUniverseTarget }: {
+function SpyDossier({ item, report, onOpenUniverseTarget, onOpenPirateUniverse }: {
   item: ReportItem;
   report: SpyReportSnapshot;
   onOpenUniverseTarget: (target: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string }) => void;
+  onOpenPirateUniverse: (coordinate: UniverseCoordinate, contactCycleKey: string) => void;
 }) {
   const fleet = Object.entries(report.fleet ?? {}).filter(([id, count]) => id !== 'spy-probe' && Number(count) > 0);
   const defense = Object.entries(report.defense ?? {}).filter(([, count]) => Number(count) > 0);
@@ -548,7 +552,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
 
         <section className="reports-preview">
           <header className="reports-preview-head"><div><small>ДОСЬЕ СООБЩЕНИЯ</small><h2>ПРОСМОТР СООБЩЕНИЯ</h2></div>{activeCategory ? <div className="reports-preview-actions"><button type="button" aria-label={selectedBattleSaved ? 'Убрать бой из сохранённых' : 'Сохранить бой'} aria-pressed={selectedBattleSaved} disabled={!selectedItem?.battleReportId} className={selectedBattleSaved ? 'active' : ''} onClick={() => selectedItem?.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)}><ActionGlyph kind="save" /></button><span /><button type="button" aria-label="Предыдущее сообщение" disabled={selectedIndex <= 0} onClick={() => navigateSelected(-1)}><ActionGlyph kind="prev" /></button><button type="button" aria-label="Следующее сообщение" disabled={selectedIndex < 0 || selectedIndex >= visibleItems.length - 1} onClick={() => navigateSelected(1)}><ActionGlyph kind="next" /></button></div> : null}</header>
-          <div className="reports-preview-scroll">{activeCategory ? selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} saved={selectedBattleSaved} rating={rating} playerOwnerId={profile.playerId} onToggleSaved={() => selectedItem.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)} onOpen={() => selectedBattle && setOpenBattleReportId(selectedBattle.id)} /> : selectedItem.overpopulationReport ? <OverpopulationDossier item={selectedItem} /> : selectedItem.pirateReconReport ? <PirateReconDossier item={selectedItem} /> : selectedItem.spyReport ? <SpyDossier item={selectedItem} report={selectedItem.spyReport} onOpenUniverseTarget={onOpenUniverseTarget} /> : <GenericDossier item={selectedItem} />) : <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} /> : <EmptyFolder folder={activeFolderMeta} />}</div>
+          <div className="reports-preview-scroll">{activeCategory ? selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} saved={selectedBattleSaved} rating={rating} playerOwnerId={profile.playerId} onToggleSaved={() => selectedItem.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)} onOpen={() => selectedBattle && setOpenBattleReportId(selectedBattle.id)} /> : selectedItem.overpopulationReport ? <OverpopulationDossier item={selectedItem} /> : selectedItem.pirateReconReport ? <PirateReconDossier item={selectedItem} onOpenPirateUniverse={onOpenPirateUniverse} /> : selectedItem.spyReport ? <SpyDossier item={selectedItem} report={selectedItem.spyReport} onOpenUniverseTarget={onOpenUniverseTarget} /> : <GenericDossier item={selectedItem} />) : <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} /> : <EmptyFolder folder={activeFolderMeta} />}</div>
           {activeCategory && selectedItem?.action?.kind === 'open_fleets' ? <footer className="reports-preview-footer"><span>Выбери состав флота для совместной операции.</span><button type="button" onClick={onOpenFleets}>{selectedItem.action.label}</button></footer> : activeCategory && selectedItem?.source === 'espionage' && (selectedItem.action || selectedItem.secondaryAction) ? <footer className="reports-preview-footer"><span>{selectedItem.secondaryAction ? 'Связанный шпионский зонд ещё находится на орбите.' : 'Действия по полному снимку цели.'}</span><div className="reports-preview-footer-actions">
             {selectedItem.action?.kind === 'simulate_battle' && selectedItem.spyReport ? <button type="button" onClick={() => onSimulateBattle(selectedItem.spyReport!)}>{selectedItem.action.label}</button> : null}
             {selectedItem.secondaryAction?.kind === 'recall_spy' && selectedItem.secondaryAction.missionId ? <button type="button" className="restore" onClick={() => onRecallSpy(selectedItem.secondaryAction!.missionId!)}>{selectedItem.secondaryAction.label}</button> : null}
