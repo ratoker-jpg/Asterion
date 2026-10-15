@@ -79,6 +79,7 @@ export function selectPirateContacts(
   systems: readonly number[] = [selection.system],
 ): PirateContactPresentation[] {
   const ownerId = state.profile.playerId;
+  const ownedSystemKeys = new Set(selectOwnedPirateSystems(state).map((item) => `${item.galaxy}:${item.system}`));
   const contacts: PirateContactPresentation[] = [];
   for (const system of systems) {
     const contact = getCurrentPirateContact(state, { galaxy: selection.galaxy, system, position: 1 }, now);
@@ -105,7 +106,9 @@ export function selectPirateContacts(
         : availability.reason === 'in-flight' ? 'Зонд в пути' : availability.reason === 'cooldown' ? 'Ожидание повторной разведки'
           : report?.outcome === 'success' ? 'Разведка готова' : 'Доступен',
       statusTone: 'active', recon: { enabled: availability.allowed && !launchReason, disabledReason: reconReason ?? launchReason },
-      elimination: { enabled: true, disabledReason: null }, latestReportId: report?.id ?? null, latestReportOutcome: report?.outcome ?? null,
+      elimination: { enabled: ownedSystemKeys.has(`${selection.galaxy}:${system}`),
+        disabledReason: ownedSystemKeys.has(`${selection.galaxy}:${system}`) ? null : 'Пиратский рейд доступен только в системах с вашей колонией.' },
+      latestReportId: report?.id ?? null, latestReportOutcome: report?.outcome ?? null,
     });
   }
   return contacts;
