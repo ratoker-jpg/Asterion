@@ -58,6 +58,7 @@ import { enqueueApplicationStateUpdate } from './state.ts';
 import {
   createInitialSaveState,
   createPersistenceFacade,
+  SAVE_SCHEMA_VERSION,
   type StorageLike,
 } from './persistence.ts';
 import { BUILDING_ROLES, getStorageCapacities } from '../domain/buildings/resource-zone.ts';
@@ -410,7 +411,7 @@ test('schema 21 asteroid gas rates migrate once while preserving stock and gas c
 
   const migrated = persistence.read();
   const firstReadAsteroids = migrated.asteroidSimulation?.asteroids ?? [];
-  assert.equal(migrated.schemaVersion, 22);
+  assert.equal(migrated.schemaVersion, SAVE_SCHEMA_VERSION);
   assert.deepEqual(firstReadAsteroids.map((asteroid) => asteroid.gasRatePerHour), [25_000, 100_000, 250_000]);
   for (const [index, asteroid] of firstReadAsteroids.entries()) {
     assert.equal(asteroid.gasYield, legacyAsteroids[index]?.gasYield);
@@ -422,7 +423,7 @@ test('schema 21 asteroid gas rates migrate once while preserving stock and gas c
   assert.equal(persistence.write(migrated).ok, true);
   const reloaded = persistence.read();
   assert.deepEqual(reloaded.asteroidSimulation?.asteroids, firstReadAsteroids);
-  assert.equal(reloaded.schemaVersion, 22);
+  assert.equal(reloaded.schemaVersion, SAVE_SCHEMA_VERSION);
 });
 
 test('schema 21 selected-colony wallet does not replace Helion during migration or round-trip', () => {
@@ -726,7 +727,7 @@ test('legacy planet upgrade levels migrate to owner-wide maxima without counting
   }));
 
   const migrated = persistence.read();
-  assert.equal(migrated.schemaVersion, 22);
+  assert.equal(migrated.schemaVersion, SAVE_SCHEMA_VERSION);
   assert.equal(migrated.shipUpgradeLevels?.scout, 8);
   assert.equal(migrated.shipUpgradeLevels?.corsair, 7);
   assert.equal(getOwnerShipUpgradeLevel(migrated, 'cruiser'), 0);

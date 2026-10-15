@@ -6,6 +6,8 @@ import {
   type BattleSide,
 } from '../combat/report.ts';
 import type { CommandState, JointOperation } from '../command/types.ts';
+import type { FlightRecord } from '../flights/types.ts';
+import { pirateFlightAbsenceReports } from '../pirates/flight-report.ts';
 import type { OperationInstance, OperationsState } from '../operations/types.ts';
 import type {
   ReportCategoryCounts,
@@ -19,6 +21,8 @@ import type {
 } from './types.ts';
 import type { EspionageState, SpyHunterNotice, SpyReportSnapshot } from '../espionage/types.ts';
 import { getCombatFactionName } from '../combat/factions.ts';
+import { pirateReconReportToReportItem } from '../pirates/recon-report.ts';
+import type { PirateReconReport } from '../pirates/recon-report.ts';
 
 const CATEGORY_TYPE_LABEL: Record<ReportItem['category'], string> = {
   system: 'Система',
@@ -427,6 +431,8 @@ export function buildReportsFeed(
   overpopulationReports: readonly OverpopulationEpisodeReport[] = [],
   recyclerArrivalReports: readonly RecyclerArrivalReport[] = [],
   gasExtractionArrivalReports: readonly GasExtractionArrivalReport[] = [],
+  pirateReconReports: readonly PirateReconReport[] = [],
+  pirateFlights: readonly FlightRecord[] = [],
 ): ReportItem[] {
   const operationByBattleId = new Map(
     operations.items
@@ -453,8 +459,9 @@ export function buildReportsFeed(
   const overpopulationItems = overpopulationReports.map(overpopulationEpisodeReportToReportItem);
   const recyclerItems = recyclerArrivalReports.map(recyclerArrivalReportToReportItem);
   const gasExtractionItems = gasExtractionArrivalReports.map(gasExtractionArrivalReportToReportItem);
+  const pirateReconItems = pirateReconReports.map(pirateReconReportToReportItem);
 
-  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems, ...recyclerItems, ...gasExtractionItems].sort((a, b) => {
+  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems, ...recyclerItems, ...gasExtractionItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights)].sort((a, b) => {
     if (a.timestamp && b.timestamp) return Date.parse(b.timestamp) - Date.parse(a.timestamp);
     if (!a.timestamp && b.timestamp) return -1;
     if (a.timestamp && !b.timestamp) return 1;

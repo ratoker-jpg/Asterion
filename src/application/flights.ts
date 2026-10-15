@@ -100,6 +100,7 @@ import {
   resolveBot01IncomingAttack,
   resolveAttackAtTarget,
 } from './attack.ts';
+import { dispatchPirateFlight, resolvePirateFlightAtTarget } from './pirates.ts';
 
 export const FLIGHT_LAUNCH_CONTEXT_EVENT = 'asterion:flight-launch-context';
 export const FLIGHT_LAUNCH_CONTEXT_CLEAR_EVENT = 'asterion:flight-launch-context-clear';
@@ -114,6 +115,8 @@ export const SPY_REPORT_RESULT_EVENT = 'asterion:spy-report-result';
 
 export type FlightLaunchContext = {
   missionId: MissionId;
+  /** Pins pirate navigation to one authoritative contact instance. */
+  contactCycleKey?: string;
   destination?: FlightDestination;
   targetRelation?: TargetRelation;
   targetKind?: UniverseObjectKind;
@@ -158,6 +161,7 @@ export type DispatchFlightCommand = {
   requestId?: string;
   commandId?: string;
   missionId: MissionId;
+  contactCycleKey?: string;
   originPlanetId?: PlanetId;
   destination?: FlightDestination;
   targetRelation?: TargetRelation;
@@ -1033,6 +1037,9 @@ export function dispatchFlight(
     if (existing) return { ok: true, state, flight: existing, created: false, notice: noticeForDispatch(existing) };
   }
   if (!requestId) return failure(state, 'invalid-command', 'Для отправки требуется requestId/commandId.');
+  if (command.missionId === 'pirate-recon' || command.missionId === 'pirate-elimination') {
+    return dispatchPirateFlight(state, command, runtimeOptions);
+  }
   if (command.missionId !== 'colonize' && command.missionId !== 'transport' && command.missionId !== 'espionage' && command.missionId !== 'attack' && command.missionId !== 'deployment' && command.missionId !== 'recycle' && command.missionId !== 'gas' && command.missionId !== 'space-flight') {
     return failure(state, 'mission-not-supported', 'Эта миссия пока не подключена к flight runtime.');
   }
@@ -1855,10 +1862,10 @@ export function reconcileFlights(
     && flight.missionId === 'attack'
     && (flight.phase === 'outbound' || flight.phase === 'arrived');
   const compareFlightEvents = (left: FlightRecord, right: FlightRecord) => {
-    const leftMissingOrigin = (left.missionId === 'deployment' || left.missionId === 'space-flight')
+    const leftMissingOrigin = (left.missionId === 'deployment' || left.missionId === 'space-flight' || left.missionId === 'pirate-recon' || left.missionId === 'pirate-elimination')
       && ACTIVE_FLIGHT_PHASES.has(left.phase)
       && !next.planets[left.originPlanetId];
-    const rightMissingOrigin = (right.missionId === 'deployment' || right.missionId === 'space-flight')
+    const rightMissingOrigin = (right.missionId === 'deployment' || right.missionId === 'space-flight' || right.missionId === 'pirate-recon' || right.missionId === 'pirate-elimination')
       && ACTIVE_FLIGHT_PHASES.has(right.phase)
       && !next.planets[right.originPlanetId];
     const leftAt = leftMissingOrigin ? Number.NEGATIVE_INFINITY : scheduledFlightEventAt(left);
@@ -1885,7 +1892,7 @@ export function reconcileFlights(
       .filter((flight) => {
         const eventKey = flightEventKey(flight);
         if (processedFlightEvents.has(eventKey)) return false;
-        const hasMissingOrigin = (flight.missionId === 'deployment' || flight.missionId === 'space-flight')
+        const hasMissingOrigin = (flight.missionId === 'deployment' || flight.missionId === 'space-flight' || flight.missionId === 'pirate-recon' || flight.missionId === 'pirate-elimination')
           && !next.planets[flight.originPlanetId];
         const spyMission = flight.missionId === 'espionage' ? spyMissionForFlight(next, flight) : undefined;
         const needsSpyRevalidation = Boolean(
@@ -1902,7 +1909,7 @@ export function reconcileFlights(
     processedFlightEvents.add(flightEventKey(original));
     const current = next.flights.records.find((flight) => flight.id === original.id);
     if (!current) continue;
-    if ((current.missionId === 'deployment' || current.missionId === 'space-flight')
+    if ((current.missionId === 'deployment' || current.missionId === 'space-flight' || current.missionId === 'pirate-recon' || current.missionId === 'pirate-elimination')
       && (current.phase === 'outbound' || current.phase === 'returning' || current.phase === 'arrived')
       && !next.planets[current.originPlanetId]) {
       const destroyed: FlightRecord = {
@@ -1919,6 +1926,8 @@ export function reconcileFlights(
         status: 'destroyed',
         notice: current.missionId === 'space-flight'
           ? 'Космический рейс потерян: исходная планета уничтожена, корабли и груз сгорели.'
+          : current.missionId === 'pirate-recon' || current.missionId === 'pirate-elimination'
+            ? 'Пиратская миссия завершена: исходная планета уничтожена, флот потерян.'
           : 'Дислокация уничтожена: исходная планета потеряна, весь состав рейса уничтожен.',
       });
       continue;
@@ -1977,6 +1986,21 @@ export function reconcileFlights(
     const arrivalCheckAt = current.arrivedAt ?? current.arrivalAt;
     const arrivalReady = current.phase === 'arrived' || (current.phase === 'outbound' && now >= current.arrivalAt);
     if (arrivalReady) {
+      if (current.missionId === 'pirate-recon' || current.missionId === 'pirate-elimination') {
+        const resolved = resolvePirateFlightAtTarget(next, current, arrivalAt);
+        next = resolved.state;
+        const materialized = next.flights.records.find((flight) => flight.id === current.id) ?? current;
+        const reason = resolved.status === 'no-target' ? 'target-unavailable' : 'normal-return';
+        // Catch-up uses the logical arrival instant, so an offline return can
+        // finish before the next arrival in this same deterministic event pass.
+        const returningState = beginDomainFlightReturn(updateFlight(next.flights, materialized), current.id, arrivalAt, reason);
+        const returning = returningState.records.find((flight) => flight.id === current.id)!;
+        const withArrival: FlightRecord = { ...returning, arrivedAt: arrivalAt, completionReason: reason };
+        next = { ...next, flights: updateFlight(returningState, withArrival) };
+        changed = true;
+        events.push({ flight: withArrival, status: resolved.status === 'no-target' ? 'target-unavailable' : resolved.status === 'recon-report' ? 'spy-report' : 'arrived', notice: resolved.notice });
+        continue;
+      }
       if (current.missionId === 'space-flight') {
         const returning: FlightRecord = {
           ...current,
@@ -2445,7 +2469,7 @@ export function reconcileFlights(
         next = returned.state;
         returnedFlight = returned.flight;
       }
-      if (refreshed.missionId === 'attack') {
+      if (refreshed.missionId === 'attack' || refreshed.missionId === 'pirate-elimination') {
         const returned = refreshed.ownerSide === 'bot01'
           ? creditBot01AttackReturn(next, refreshed, refreshed.returnAt)
           : creditAttackLoot(next, refreshed, refreshed.returnAt);
@@ -2467,7 +2491,7 @@ export function reconcileFlights(
                 ? 'spy-destroyed'
               : returnedFlight.missionId === 'space-flight'
                 ? returnedFlight.completionReason === 'recalled' ? 'recalled' : 'normal-return'
-              : returnedFlight.missionId === 'attack'
+              : returnedFlight.missionId === 'attack' || returnedFlight.missionId === 'pirate-elimination' || returnedFlight.missionId === 'pirate-recon'
                 ? returnedFlight.completionReason ?? 'normal-return'
                 : 'recalled',
       };
@@ -2488,6 +2512,10 @@ export function reconcileFlights(
           ? completed.completionReason === 'recalled'
             ? 'Космический рейс вернулся после отзыва; корабли и груз зачислены.'
             : 'Космический рейс завершён: корабли и груз вернулись на исходную планету.'
+          : completed.missionId === 'pirate-recon'
+            ? 'Пиратская разведка: зонд вернулся на исходную планету.'
+          : completed.missionId === 'pirate-elimination'
+            ? completed.completionReason === 'target-unavailable' ? 'По указанным координатам планеты пиратов не обнаружено' : 'Пиратский рейд: выживший флот вернулся на исходную планету.'
           : completed.ownerSide === 'bot01'
             ? 'Флот Bot 01 вернулся к источнику; выжившие корабли и захваченные ресурсы зачислены.'
         : completed.missionId === 'transport' || completed.missionId === 'recycle' || completed.missionId === 'gas'

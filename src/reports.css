@@ -1806,6 +1806,20 @@
 .reports-dossier--overpopulation { gap: 12px; }
 .reports-dossier--overpopulation .reports-dossier-heading { margin-bottom: 2px; }
 .reports-dossier--overpopulation .reports-dossier-heading p { font-size: 9px; line-height: 1.45; }
+.reports-dossier--pirate-recon { gap: 12px; }
+.reports-dossier--pirate-recon .reports-dossier-heading { margin-bottom: 2px; }
+.reports-dossier--pirate-recon .reports-dossier-heading p { overflow-wrap: anywhere; font-size: 9px; line-height: 1.45; }
+.pirate-recon-report-card .spy-report-summary-grid > div { grid-template-columns: minmax(100px, .8fr) minmax(0, 1fr); }
+.pirate-recon-report-card .spy-report-summary-grid dd { overflow-wrap: anywhere; }
+.pirate-recon-report-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 14px 14px; }
+.pirate-recon-report-list > div { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 60px; padding: 7px 12px; border: 1px solid rgba(71, 188, 214, .16); border-radius: 10px; background: rgba(2, 23, 34, .76); color: #d0e9ed; font-size: 12px; }
+.pirate-recon-ship-identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.pirate-recon-ship-identity > span { overflow-wrap: anywhere; font-weight: 700; }
+.pirate-recon-ship-art { display: block; width: 48px; height: 44px; flex: 0 0 48px; object-fit: contain; filter: drop-shadow(0 0 7px rgba(227, 92, 81, .24)); }
+.pirate-recon-report-list strong { color: #73e2ee; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.reports-view--folder .pirate-recon-report-card .spy-report-summary-grid dt,
+.reports-view--folder .pirate-recon-report-card .spy-report-summary-grid dd { font-size: 11px; }
+@media (max-width: 900px) { .pirate-recon-report-list { grid-template-columns: 1fr; } }
 .overpopulation-report-summary .spy-report-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .overpopulation-report-summary .spy-report-summary-grid > div { grid-template-columns: minmax(120px, .8fr) minmax(0, 1fr); }
 .overpopulation-report-losses .spy-report-entity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -2079,4 +2093,21 @@
   .reports-view--folder .reports-preview-scroll {
     overflow: visible;
   }
+}
+
+/* Failure is red in both the message feed and the report, without tinting all warnings. */
+.reports-list-item[data-pirate-recon-outcome="failure"] {
+  border-left: 3px solid var(--reports-red);
+  background: linear-gradient(90deg, rgba(135, 30, 41, .15), transparent 68%);
+}
+.reports-dossier--pirate-recon-failure .reports-dossier-heading {
+  border-left: 3px solid var(--reports-red);
+  padding-left: 12px;
+}
+.reports-dossier--pirate-recon-failure .reports-dossier-heading h2,
+.reports-dossier--pirate-recon-failure .pirate-recon-report-card > header strong {
+  color: var(--reports-red);
+}
+.reports-dossier--pirate-recon-failure .pirate-recon-report-card {
+  border-color: rgba(223, 71, 86, .42);
 }

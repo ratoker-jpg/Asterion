@@ -1,10 +1,11 @@
 .workspace--operations {
-  overflow: visible;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .operations-shell-v2 {
   width: 100%;
-  min-height: 100%;
+  min-height: 0;
   height: auto;
   box-sizing: border-box;
   display: flex;
@@ -26,6 +27,8 @@
   gap: 18px;
   padding: 8px 15px 8px 18px;
   box-sizing: border-box;
+  border-radius: 14px;
+  border: 1px solid rgba(68, 210, 240, .26);
   border-top: 1px solid rgba(68, 210, 240, .34);
   border-bottom: 1px solid rgba(68, 210, 240, .22);
   background:
@@ -77,6 +80,7 @@
   justify-content: center;
   gap: 10px;
   padding: 0 13px;
+  border-radius: 10px;
   border: 1px solid rgba(68, 181, 207, .17);
   background: rgba(2, 19, 29, .74);
   color: #648a95;
@@ -120,6 +124,7 @@
   padding: 6px 9px;
   box-sizing: border-box;
   border-left: 1px solid rgba(73, 188, 214, .22);
+  border-radius: 10px;
 }
 
 .operations-slots-v2 small {
@@ -142,10 +147,10 @@
 
 .operations-layout-v2 {
   min-width: 0;
-  min-height: 690px;
+  min-height: 0;
   height: auto;
   display: grid;
-  grid-template-columns: 500px minmax(0, 1fr);
+  grid-template-columns: minmax(310px, 500px) minmax(0, 1fr);
   gap: 11px;
   align-items: stretch;
 }
@@ -153,8 +158,10 @@
 .operations-feed-v2,
 .operations-dossier-v2 {
   min-width: 0;
+  min-height: 0;
   height: auto;
   box-sizing: border-box;
+  border-radius: 14px;
   border: 1px solid rgba(65, 178, 205, .2);
   background: linear-gradient(180deg, rgba(3, 23, 34, .96), rgba(1, 11, 18, .985));
 }
@@ -162,8 +169,21 @@
 .operations-feed-v2 {
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   padding: 12px;
 }
+
+.operations-feed-scroll-v2 {
+  min-height: 0;
+  max-height: max(420px, calc(100vh - 240px));
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(70, 218, 246, .35) transparent;
+}
+
+.operations-dossier-v2 { overflow-y: auto; }
+
 
 .operations-feed-v2 > header {
   min-height: 44px;
@@ -192,6 +212,7 @@
   display: grid;
   place-items: center;
   border: 1px solid rgba(67, 198, 227, .24);
+  border-radius: 10px;
   color: #76dff2;
   font-size: 10px;
 }
@@ -214,6 +235,7 @@
   padding: 0 12px 0 0;
   overflow: hidden;
   border: 1px solid rgba(62, 170, 198, .18);
+  border-radius: 10px;
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--op-accent) 8%, transparent), transparent 48%),
     rgba(3, 24, 34, .78);
@@ -367,7 +389,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  min-height: 690px;
+  min-height: 0;
   padding: 17px 18px 15px;
   overflow: visible;
 }
@@ -478,7 +500,7 @@
 
 .operations-dossier-hero-v2 {
   display: grid;
-  grid-template-columns: minmax(390px, .93fr) minmax(320px, 1.07fr);
+  grid-template-columns: minmax(240px, .93fr) minmax(240px, 1.07fr);
   gap: 21px;
   align-items: center;
   padding: 16px 0;
@@ -786,7 +808,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  margin-top: auto;
+  margin-top: 16px;
   padding: 12px 4px 0 12px;
   border-top: 1px solid rgba(66, 180, 206, .14);
   box-shadow: inset 2px 0 0 color-mix(in srgb, var(--op-accent) 65%, transparent);
@@ -880,6 +902,323 @@
   font-size: 8px;
 }
 
+.operations-pirate-feed {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+}
+
+.operations-pirate-feed > small {
+  color: var(--ut-label);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+
+.operations-pirate-card {
+  min-width: 0;
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--ut-border);
+  border-radius: 10px;
+  background: var(--ut-surface-2);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.operations-pirate-card:hover,
+.operations-pirate-card:focus-visible,
+.operations-pirate-card.selected {
+  border-color: var(--ut-border-strong);
+  outline: none;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--ut-accent) 10%, transparent), var(--ut-surface-2));
+}
+
+.operations-pirate-card:focus-visible {
+  outline: var(--ut-focus);
+  outline-offset: 2px;
+}
+
+.operations-pirate-card:active {
+  background: var(--ut-surface);
+}
+
+.operations-pirate-card__mark {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--ut-amber) 48%, transparent);
+  border-radius: 9px;
+  color: var(--ut-amber);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.operations-pirate-card__mark img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.operations-pirate-card__copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.operations-pirate-card__copy strong {
+  color: inherit;
+  font-size: 11px;
+  letter-spacing: .06em;
+}
+
+.operations-pirate-card__copy small,
+.operations-pirate-card__copy span,
+.operations-pirate-card__time {
+  color: var(--ut-label);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.operations-pirate-card__time {
+  color: var(--ut-amber);
+  text-align: right;
+}
+
+.operations-pirate-dossier {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+  --op-accent: #e5ad65;
+}
+
+.operations-pirate-dossier__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--ut-border);
+}
+
+.operations-pirate-dossier__head > div {
+  min-width: 0;
+}
+
+.operations-pirate-dossier__head small,
+.operations-pirate-facts small {
+  color: var(--ut-label);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+
+.operations-pirate-dossier__head h2 {
+  margin: 8px 0 5px;
+  color: #f4f7f7;
+  font-size: 18px;
+  letter-spacing: .05em;
+}
+
+.operations-pirate-dossier__head p {
+  margin: 0;
+  color: #acc3c7;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.operations-pirate-status {
+  flex: 0 0 auto;
+  max-width: 180px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--ut-positive) 38%, transparent);
+  border-radius: 9px;
+  color: var(--ut-positive);
+  font-size: 11px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.operations-pirate-status[data-status-tone="inactive"] {
+  border-color: var(--ut-border);
+  color: var(--ut-label);
+}
+
+.operations-pirate-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.operations-pirate-facts > div {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--ut-border);
+  border-radius: 10px;
+  background: var(--ut-surface-2);
+}
+
+.operations-pirate-facts strong {
+  color: #e4f6f7;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.operations-pirate-command {
+  min-height: 0;
+  align-items: flex-start;
+  flex-direction: column;
+  margin-top: auto;
+  padding: 14px 0 0;
+}
+
+.operations-pirate-command > div:first-child strong,
+.operations-pirate-command > div:first-child span {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.operations-pirate-actions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+
+.operations-pirate-actions .operations-primary-v2,
+.operations-pirate-actions .operations-secondary-v2 {
+  min-width: 0;
+  min-height: 48px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.operations-pirate-actions .operations-primary-v2:focus-visible,
+.operations-pirate-actions .operations-secondary-v2:focus-visible {
+  outline: var(--ut-focus);
+  outline-offset: 2px;
+}
+
+.operations-pirate-actions .operations-primary-v2:active:not(:disabled),
+.operations-pirate-actions .operations-secondary-v2:active:not(:disabled) {
+  background: var(--ut-surface);
+}
+
+.operations-pirate-actions .operations-primary-v2:disabled,
+.operations-pirate-actions .operations-secondary-v2:disabled {
+  border-color: var(--ut-border);
+  background: var(--ut-surface);
+  box-shadow: none;
+  color: var(--ut-label);
+  cursor: not-allowed;
+}
+
+.operations-pirate-action-reason {
+  min-width: 0;
+  color: var(--ut-label);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .operations-shell-v2 {
+    gap: 12px;
+    padding: 8px 0 16px;
+  }
+
+  .operations-topbar-v2 {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .operations-tabs-v2 {
+    width: 100%;
+    height: auto;
+    flex-wrap: wrap;
+  }
+
+  .operations-tabs-v2 button {
+    min-width: 0;
+    min-height: 42px;
+    flex: 1 1 110px;
+    padding: 7px;
+  }
+
+  .operations-slots-v2 {
+    width: 100%;
+    height: auto;
+    border-left: 0;
+    border-top: 1px solid rgba(73, 188, 214, .22);
+    padding: 8px 2px 0;
+  }
+
+  .operations-layout-v2 {
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .operations-feed-v2 {
+    padding: 10px;
+  }
+
+  .operations-command-v2 {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px 0 0;
+  }
+
+  .operations-command-actions-v2 {
+    flex-wrap: wrap;
+  }
+
+  .operations-command-actions-v2 button {
+    min-height: 44px;
+    flex: 1 1 140px;
+    padding: 8px 10px;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .operations-pirate-card {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .operations-pirate-card__time {
+    grid-column: 2;
+    text-align: left;
+  }
+
+  .operations-pirate-dossier__head {
+    flex-direction: column;
+  }
+
+  .operations-pirate-status {
+    max-width: 100%;
+  }
+
+  .operations-pirate-facts,
+  .operations-pirate-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @keyframes operationsScopeSweep {
   to { transform: rotate(360deg); }
 }
@@ -887,4 +1226,494 @@
 @keyframes operationsSignalPulse {
   0% { opacity: .72; transform: scale(.55); }
   80%, 100% { opacity: 0; transform: scale(1.55); }
+}
+
+/* One clickable coordinate style shared by the pirate dossier actions. */
+.operations-pirate-coordinate-link {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #89ddeb;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.operations-pirate-coordinate-link:hover { color: #e7fcff; }
+.operations-pirate-coordinate-link:focus-visible { outline: 2px solid #7fe4f6; outline-offset: 3px; }
+.operations-pirate-coordinate-link:disabled { cursor: default; opacity: .6; }
+.operations-pirate-action-reason { display: block; max-width: 100%; }
+
+/* A defeated base is not an available target or a scheduled incoming attack. */
+.operations-pirate-status[data-status-tone="active"] {
+  border-color: rgba(238, 112, 102, .43);
+  color: #f5a298;
+  background: rgba(122, 35, 30, .10);
+}
+.operations-pirate-quiet-list { display: grid; gap: 8px; padding-top: 10px; }
+.operations-pirate-quiet {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid rgba(239, 137, 98, .4);
+  border-radius: 10px;
+  background: rgba(128, 48, 26, .12);
+}
+.operations-pirate-quiet strong { color: #f6a393; font-size: 11px; }
+.operations-pirate-quiet span { color: #f3d1a6; font-size: 11px; }
+.operations-pirate-quiet small { color: #a4a9aa; font-size: 10px; line-height: 1.4; }
+
+/* PR90 desktop: content determines height, browser scroll appears only when needed. */
+.operations-dossier-v2--pirate .operations-command-v2 {
+  flex-direction: column;
+  align-items: stretch;
+  min-height: 0;
+  gap: 13px;
+}
+.operations-dossier-v2--pirate .operations-command-actions-v2 {
+  width: 100%;
+}
+.operations-dossier-v2--pirate .operations-pirate-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.operations-pirate-cancel {
+  grid-column: 1 / -1;
+  width: fit-content;
+  padding: 5px 0;
+  color: #7fabb5;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.operations-pirate-cancel:hover,
+.operations-pirate-cancel:focus-visible { color: #dff9ff; }
+.operations-pirate-live-timer {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  padding: 9px 0 0;
+  color: #90b7bf;
+  font-size: 12px;
+}
+.operations-pirate-live-timer strong { color: #ebc28b; font-variant-numeric: tabular-nums; }
+.operations-dossier-v2--pirate .operations-conditions-v2 > strong,
+.operations-dossier-v2--pirate .operations-rewards-panel-v2 > strong {
+  display: block;
+  margin: 10px 0;
+  color: #caedf2;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.operations-dossier-v2--pirate .operations-dossier-threat-v2 strong {
+  font-size: 17px;
+}
+@media (max-width: 1360px) and (min-width: 761px) {
+  .operations-layout-v2 { grid-template-columns: minmax(275px, 340px) minmax(0, 1fr); }
+  .operations-dossier-hero-v2 { grid-template-columns: minmax(0, 1fr); }
+  .operations-dossier-v2--pirate .operations-command-actions-v2 { width: 100%; }
+}
+
+/* Pirate PvE is red; this overrides generic unknown-threat violet accents. */
+.operation-feed-card-v2[data-qa-pirate-contact],
+.operations-dossier-v2--pirate {
+  --op-accent: #ee655e;
+}
+.operation-feed-card-v2[data-qa-pirate-contact] {
+  border-color: rgba(238, 101, 94, .26);
+  background: linear-gradient(90deg, rgba(143, 37, 39, .18), transparent 64%), rgba(19, 13, 22, .9);
+}
+.operation-feed-card-v2[data-qa-pirate-contact].selected {
+  border-color: rgba(244, 116, 108, .78);
+  background: linear-gradient(90deg, rgba(166, 46, 45, .24), transparent 68%), rgba(23, 15, 22, .94);
+  box-shadow: inset 3px 0 0 var(--op-accent), 0 0 22px rgba(238, 79, 73, .1);
+}
+.operations-dossier-v2--pirate {
+  border-color: rgba(223, 87, 82, .27);
+  background: linear-gradient(180deg, rgba(29, 15, 24, .98), rgba(8, 13, 20, .98));
+}
+.operations-dossier-v2--pirate .operations-dossier-glyph-v2,
+.operations-dossier-v2--pirate .operations-scope-v2 {
+  border-color: rgba(234, 91, 84, .36);
+  background-color: rgba(56, 17, 25, .36);
+}
+.operations-dossier-v2--pirate .operations-dossier-threat-v2 strong,
+.operations-dossier-v2--pirate .operations-dossier-threat-v2 span,
+.operations-dossier-v2--pirate .operations-scope-caption-v2 span,
+.operation-feed-card-v2[data-qa-pirate-contact] .operation-feed-copy-v2 > small {
+  color: #f39289;
+}
+
+/* Consistent rounded objective block instead of an unbounded bottom-border strip. */
+.operations-objective-v2 {
+  border: 1px solid rgba(74, 176, 201, .18);
+  border-radius: 12px;
+  margin: 12px 0;
+  padding: 12px 15px;
+  background: rgba(5, 24, 33, .64);
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--op-accent) 78%, transparent);
+}
+.operations-dossier-v2--pirate .operations-objective-v2 {
+  border-color: rgba(233, 97, 89, .28);
+  background: rgba(86, 23, 30, .12);
+}
+
+.operation-feed-card-v2 .operations-pirate-debris-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #f4b0a8;
+  white-space: nowrap;
+}
+.operations-pirate-debris-label .asterion-resource-icon { width: 20px; height: 20px; }
+.operations-pirate-debris-reward {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0;
+}
+.operations-pirate-debris-reward .asterion-resource-icon { width: 36px; height: 36px; flex: 0 0 36px; }
+.operations-pirate-debris-reward strong { color: #f5ddda; font-size: 13px; line-height: 1.4; }
+
+.operations-pirate-cooldown {
+  width: 100%;
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.operations-pirate-cooldown-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.operations-pirate-cooldown-heading span {
+  color: #d0a49d;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .07em;
+}
+.operations-pirate-cooldown-heading strong {
+  color: #f1c4a8;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.operations-pirate-cooldown-track {
+  position: relative;
+  height: 11px;
+  overflow: hidden;
+  border: 1px solid rgba(219, 111, 93, .28);
+  border-radius: 999px;
+  background: linear-gradient(90deg, #44bf81 0%, #b3bf57 48%, #ef9e54 75%, #e2534b 100%);
+}
+.operations-pirate-cooldown-mask {
+  position: absolute;
+  inset: 0 0 0 auto;
+  height: 100%;
+  border-radius: 0 999px 999px 0;
+  background: #172027;
+  transition: width .25s linear;
+}
+.operations-pirate-cooldown small {
+  color: #a58f8b;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* PR90 desktop refinement: the same planet art as the selected Universe slot. */
+.operation-feed-card-v2[data-qa-pirate-contact] {
+  grid-template-columns: 82px minmax(0, 1fr) 16px;
+  min-height: 116px;
+}
+.operation-feed-pirate-art-v2 {
+  position: relative;
+  min-width: 0;
+  padding: 8px 5px 6px;
+  overflow: hidden;
+  border-right: 1px solid rgba(238, 101, 94, .21);
+  border-radius: 9px 0 0 9px;
+  background: radial-gradient(circle at 50% 46%, rgba(163, 50, 46, .16), rgba(7, 13, 22, .7) 73%);
+}
+.operation-feed-pirate-art-v2 img {
+  display: block;
+  width: 100%;
+  height: 80px;
+  max-width: 80px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 7px rgba(225, 75, 68, .25));
+}
+.operation-feed-pirate-art-v2 small {
+  position: absolute;
+  bottom: 5px;
+  left: 0;
+  right: 0;
+  padding: 1px;
+  background: rgba(15, 16, 24, .66);
+  color: #db9992;
+  font-size: 8px;
+  text-align: center;
+  letter-spacing: .08em;
+}
+
+/* Accessible without switching to the Completed tab after winning. */
+.operations-quiet-banner-v2 {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+  padding: 12px 17px;
+  border: 1px solid rgba(220, 116, 77, .35);
+  border-radius: 14px;
+  background: linear-gradient(90deg, rgba(82, 35, 27, .34), rgba(9, 24, 30, .97));
+}
+.operations-quiet-banner-intro-v2 {
+  min-width: 210px;
+  display: grid;
+  gap: 6px;
+}
+.operations-quiet-banner-intro-v2 strong {
+  color: #f1b1a0;
+  font-size: 11px;
+  letter-spacing: .07em;
+}
+.operations-quiet-banner-intro-v2 span {
+  color: #aa8c89;
+  font-size: 10px;
+}
+.operations-quiet-banner-v2 .operations-pirate-cooldown {
+  min-width: 300px;
+  flex: 1 1 380px;
+  margin-top: 0;
+}
+
+/* Player-facing objectives and sections must be actual rounded cards, not long ruled rows. */
+.operations-dossier-v2--pirate .operations-objective-v2 {
+  margin: 12px 0;
+  border: 1px solid rgba(231, 97, 90, .36);
+  border-radius: 14px;
+  padding: 13px 15px;
+  background: linear-gradient(105deg, rgba(118, 34, 43, .19), rgba(13, 27, 33, .72));
+  box-shadow: inset 3px 0 0 var(--op-accent);
+}
+.operations-dossier-v2--pirate .operations-dossier-lower-v2 {
+  gap: 12px;
+  border: 0;
+  min-height: 0;
+  margin-bottom: 12px;
+}
+.operations-dossier-v2--pirate .operations-conditions-v2,
+.operations-dossier-v2--pirate .operations-rewards-panel-v2 {
+  min-width: 0;
+  border: 1px solid rgba(229, 95, 89, .19);
+  border-radius: 12px;
+  background: rgba(15, 22, 30, .78);
+  padding: 14px 15px;
+}
+.operations-dossier-v2--pirate .operations-command-v2 {
+  border: 1px solid rgba(233, 100, 92, .25);
+  border-radius: 14px;
+  padding: 13px 14px;
+  background: rgba(13, 23, 31, .76);
+  box-shadow: inset 3px 0 0 rgba(238, 101, 94, .75);
+}
+.operations-dossier-v2--pirate .operations-dossier-glyph-v2 {
+  border-radius: 12px;
+}
+.operations-dossier-v2--pirate .operations-primary-v2,
+.operations-dossier-v2--pirate .operations-secondary-v2 {
+  border-radius: 10px;
+}
+
+.operations-pirate-lifecycle-v2 small {
+  display: block;
+  margin-top: 5px;
+  color: #a98b88;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* Keep desktop Operations in the shared GlobalPageScrollController flow.
+   No nested page-height clamp: the document scrolls only when its content grows. */
+.workspace.workspace--operations {
+  overflow: visible !important;
+}
+.operations-shell-v2,
+.operations-layout-v2,
+.operations-feed-v2,
+.operations-dossier-v2 {
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+.operations-feed-scroll-v2 {
+  max-height: none;
+  overflow: visible;
+}
+.operations-quiet-banner-v2 {
+  align-items: stretch;
+}
+.operations-cycle-timer-list-v2 {
+  display: grid;
+  flex: 1 1 400px;
+  gap: 10px;
+  min-width: 320px;
+}
+.operations-cycle-timer-item-v2 {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  border: 1px solid rgba(231, 112, 97, .25);
+  border-radius: 10px;
+  padding: 9px 13px;
+  background: rgba(12, 22, 30, .8);
+}
+.operations-cycle-timer-item-v2 > strong {
+  color: #ffc4ad;
+  font-size: 13px;
+}
+.operations-cycle-timer-item-v2 > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 7px 12px;
+  align-items: center;
+}
+.operations-cycle-timer-item-v2 > div > span {
+  color: #b4a6a2;
+  font-size: 11px;
+}
+.operations-cycle-timer-item-v2 > div > b {
+  color: #ffd3a8;
+  font-size: 13px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.operations-cycle-timer-item-v2 .operations-pirate-cooldown-track {
+  grid-column: 1 / -1;
+}
+.operations-intel-report-button-v2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 11px;
+  padding: 8px 12px;
+  border: 1px solid rgba(91, 208, 234, .5);
+  border-radius: 9px;
+  background: rgba(8, 49, 62, .6);
+  color: #a4e8f4;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.operations-intel-report-button-v2:hover { background: rgba(17, 87, 106, .7); }
+.operations-dossier-v2--pirate .operations-rewards-panel-v2 small,
+.operations-dossier-v2--pirate .operations-conditions-v2 small,
+.operations-dossier-v2--pirate .operations-objective-v2 small {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+.operations-dossier-v2--pirate .operations-rewards-panel-v2 p,
+.operations-dossier-v2--pirate .operations-conditions-v2 p {
+  color: #99afb5;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.operations-dossier-v2--pirate .operations-conditions-v2 > strong,
+.operations-dossier-v2--pirate .operations-pirate-debris-reward strong {
+  font-size: 15px;
+}
+.operations-dossier-v2--pirate .operations-pirate-debris-reward .asterion-resource-icon {
+  width: 47px;
+  height: 47px;
+  flex: 0 0 47px;
+}
+.operations-completed-report-body-v2 {
+  display: grid;
+  gap: 16px;
+  padding: 20px 12px;
+}
+.operations-completed-report-body-v2 h3 { margin: 0; font-size: 16px; color: #ffc0b5; }
+.operations-completed-report-body-v2 p { margin: 0; font-size: 12px; color: #aec1c7; }
+.operations-completed-report-facts-v2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.operations-completed-report-facts-v2 > div {
+  display: grid;
+  gap: 9px;
+  padding: 14px;
+  border: 1px solid rgba(229, 99, 91, .27);
+  border-radius: 12px;
+  background: rgba(32, 23, 29, .8);
+}
+.operations-completed-report-facts-v2 small { font-size: 11px; color: #bc9290; }
+.operations-completed-report-facts-v2 strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 15px;
+  color: #fff0eb;
+}
+.operations-completed-report-body-v2 > button {
+  justify-self: start;
+  min-height: 38px;
+  padding-inline: 16px;
+}
+
+/* Pirate attack-check clock belongs to its base, never to a separate page banner. */
+.operation-feed-card-v2[data-qa-pirate-contact] {
+  min-height: 168px;
+}
+.operation-feed-card-v2[data-qa-pirate-contact] .operation-feed-copy-v2 {
+  gap: 7px;
+  padding: 12px 0;
+}
+.operation-feed-raid-check-v2 {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  margin-top: 4px;
+  padding: 9px 10px 8px;
+  border: 1px solid rgba(222, 104, 92, .28);
+  border-radius: 9px;
+  background: rgba(55, 20, 26, .28);
+}
+.operation-feed-raid-check-label-v2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+.operation-feed-raid-check-label-v2 > span {
+  color: #e9a89e;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .035em;
+}
+.operation-feed-raid-check-label-v2 strong {
+  color: #fdd7a6;
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.operation-feed-raid-check-v2 .operations-pirate-cooldown-track {
+  display: block;
+  width: 100%;
+  height: 9px;
+}
+.operation-feed-raid-check-note-v2 {
+  color: #a48d8c;
+  font-size: 10px;
+  line-height: 1.35;
 }

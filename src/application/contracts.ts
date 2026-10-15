@@ -27,6 +27,7 @@ import type { EspionageState } from '../domain/espionage/types.ts';
 import type { UniverseAsteroidSimulationState } from '../domain/universe/types.ts';
 import type { UniverseOwnerAlliance } from '../domain/universe/types.ts';
 import type { OverpopulationState } from '../domain/fleet/overpopulation.ts';
+import type { PirateState } from '../domain/pirates/mission.ts';
 
 /** Planet ids are stable save keys; the legacy homeworld remains `helion-01`. */
 export type PlanetId = string;
@@ -128,6 +129,8 @@ export type SaveState = {
   science: ScienceState;
   resourceClock: ResourceClock;
   flights: FlightState;
+  /** Versioned local pirate ledger; optional only for legacy saves and fixtures. */
+  pirate?: PirateState;
   /** Authoritative asteroid timeline. Missing only while hydrating legacy saves/fixtures. */
   asteroidSimulation?: UniverseAsteroidSimulationState;
   /** Hidden asteroid cargo by stable spawn index; never part of free orbital debris. */

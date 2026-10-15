@@ -23,6 +23,7 @@ export type DispatchFlightInput = {
   recycleCapacity?: number;
   gasCapacity?: number;
   attackSnapshot?: AttackLaunchSnapshot;
+  pirateSnapshot?: FlightRecord['pirateSnapshot'];
   attackResolution?: AttackResolution;
   populationReserved?: number;
   departedAt: number;
@@ -131,6 +132,7 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
     ...(input.missionId === 'recycle' ? { recycleCapacity: input.recycleCapacity } : {}),
     ...(input.missionId === 'gas' ? { gasCapacity: input.gasCapacity } : {}),
     ...(input.attackSnapshot ? { attackSnapshot: input.attackSnapshot } : {}),
+    ...(input.pirateSnapshot ? { pirateSnapshot: input.pirateSnapshot } : {}),
     ...(input.attackResolution ? { attackResolution: input.attackResolution } : {}),
     populationReserved: Math.max(0, Math.floor(input.populationReserved ?? 0)),
     routeDistance,

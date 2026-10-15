@@ -45,7 +45,7 @@ import veyraLaserIonDefenseArt from '../assets/source/New assets/defenses/veyra/
 import veyraPlasmaLaserDefenseArt from '../assets/source/New assets/defenses/veyra/defense.veyra.plasma-laser-turret.png';
 import veyraIonPlasmaDefenseArt from '../assets/source/New assets/defenses/veyra/defense.veyra.ion-plasma-turret.png';
 
-import { COMMANDER_ABILITIES, COMMANDER_IDS } from './domain/combat/commanders.ts';
+import { COMMANDER_IDS, getCommanderPresentedAbility } from './domain/combat/commanders.ts';
 import './ship-info-modal.css';
 
 type ShipInfoKind = 'ship' | 'commander';
@@ -221,7 +221,7 @@ function combatShip(
 
 const commanderInfoByName: Readonly<Record<string, ShipInfoDefinition>> = Object.fromEntries(
   COMMANDER_IDS.map((commanderId) => {
-    const ability = COMMANDER_ABILITIES[commanderId];
+    const ability = getCommanderPresentedAbility(commanderId);
     return [ability.commanderName, {
       kind: 'commander',
       ability: {
@@ -229,7 +229,7 @@ const commanderInfoByName: Readonly<Record<string, ShipInfoDefinition>> = Object
         description: ability.description,
         scaling: ability.ratePerLevel,
         note: ability.note ?? 'Способность хранится в едином typed commander catalog. Математическое применение в бою пока не реализовано.',
-        source: 'NEMEXIA',
+        source: commanderId === 'corsair' ? 'ASTERION' : 'NEMEXIA',
       },
     } satisfies ShipInfoDefinition] as const;
   }),

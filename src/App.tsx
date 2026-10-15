@@ -4,6 +4,7 @@ import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
 import { OperationsView } from './OperationsView';
+import { rerollTestUniverseLayout } from './domain/universe/runtime.ts';
 import { CommandView } from './CommandView';
 import { ReportsView } from './ReportsView';
 import { buildReportsFeed, getReportUnreadCounts } from './domain/reports/adapters.ts';
@@ -154,6 +155,8 @@ import { enqueueApplicationStateUpdate } from './application/state.ts';
 import { getOwnerShipUpgradeLevels, getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
 import { selectOwnedPlanet } from './application/owned-planets.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
+import { materializePirateProfiles, pirateContactOperation, pirateOperationId, selectOwnedPiratePresentations, selectOwnedPirateTargets, selectPirateContacts } from './application/pirate-presentation.ts';
+import type { PirateContactPresentation, PirateSystemSelection } from './pirate-ui.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
 import planetColonized from '../assets/source/starter/planets/planet_colonized.png';
@@ -326,6 +329,63 @@ export function App() {
   const [selectedBuildingRole, setSelectedBuildingRole] = useState<BuildingRole | null>(null);
   const [buildingInterior, setBuildingInterior] = useState<BuildingInteriorContext | null>(null);
   const [universeFocusTarget, setUniverseFocusTarget] = useState<UniverseFocusTarget | null>(null);
+  const [pirateSystem, setPirateSystem] = useState<PirateSystemSelection>({ galaxy: 1, system: 1 });
+  const [pirateFocusTarget, setPirateFocusTarget] = useState<Pick<PirateContactPresentation, 'coordinate' | 'contactCycleKey'> | null>(null);
+  const [pirateReportId, setPirateReportId] = useState<string | undefined>();
+  const pirateContacts = useMemo(() => {
+    if (activeRoute !== 'operations' && activeRoute !== 'universe') return [];
+    return activeRoute === 'operations'
+      ? selectOwnedPiratePresentations(state, now)
+      : selectPirateContacts(state, now, pirateSystem);
+  }, [activeRoute, state, now, pirateSystem]);
+  const completedPirateOperations = useMemo(() => {
+    if (activeRoute !== 'operations') return [];
+    const reports = new Map(state.combat.reports.map((report) => [report.id, report]));
+    const successfulFlights = new Map(state.flights.records
+      .filter((flight) => flight.missionId === 'pirate-elimination'
+        && flight.pirateSnapshot && flight.attackResolution?.reportId
+        && reports.has(flight.attackResolution.reportId))
+      .map((flight) => [`${flight.pirateSnapshot!.contactCycleKey}:${flight.attackResolution!.resolvedAt}`, flight.attackResolution!.reportId]));
+    return Object.values(state.pirate?.contact.defeatedCycles ?? {})
+      .sort((left, right) => right.defeatedAt - left.defeatedAt)
+      .flatMap((defeat) => {
+        const reportId = successfulFlights.get(`${defeat.contactCycleKey}:${defeat.defeatedAt}`);
+        const report = reportId ? reports.get(reportId) : undefined;
+        return reportId && report ? [{
+          cycleKey: defeat.contactCycleKey, coordinate: defeat.coordinate, reportId, defeatedAt: defeat.defeatedAt,
+          rounds: report.roundCount, debris: report.debris ?? 0,
+        }] : [];
+      })
+      .slice(0, 50);
+  }, [activeRoute, state.pirate?.contact.defeatedCycles, state.flights.records, state.combat.reports]);
+
+  // Expired accepted targets are no longer actionable. Drop their saved UI
+  // selections instead of accumulating one entry for every abandoned cycle.
+  useEffect(() => {
+    if (activeRoute !== 'operations') return;
+    const liveIds = new Set(pirateContacts.map((contact) => pirateOperationId(contact.contactCycleKey)));
+    const current = stateRef.current;
+    const nextItems = current.operations.items.filter((item) => !item.id.startsWith('pirate:pirate-cycle-v1:') || liveIds.has(item.id));
+    if (nextItems.length !== current.operations.items.length) {
+      const next = { ...current, operations: { items: nextItems } };
+      stateRef.current = next;
+      setState(next);
+    }
+  }, [activeRoute, pirateContacts, now]);
+
+  const onPirateSystemChange = useCallback((selection: PirateSystemSelection) => {
+    setPirateSystem((current) => current.galaxy === selection.galaxy && current.system === selection.system ? current : selection);
+  }, []);
+  const pirateProfileCycleSignature = pirateContacts.map((contact) => contact.contactCycleKey).join('|');
+  useEffect(() => {
+    const visible = activeRoute === 'operations' || activeRoute === 'universe' ? pirateContacts : [];
+    const next = materializePirateProfiles(stateRef.current, visible);
+    if (next !== stateRef.current) {
+      stateRef.current = next;
+      setState(next);
+    }
+    // Profile snapshots are frozen on observing a new cycle, not on countdown ticks.
+  }, [activeRoute, pirateProfileCycleSignature]);
 
   const activeRouteRef = useRef(activeRoute);
   const navigateTo = (nextRoute: AppRoute) => {
@@ -373,6 +433,45 @@ export function App() {
         },
       }));
     }, 40);
+  };
+
+  const openPirateAttack = (contact: PirateContactPresentation) => {
+    const eligible = selectOwnedPirateTargets(stateRef.current, Date.now()).some((target) =>
+      target.contactCycleKey === contact.contactCycleKey
+      && target.coordinate.galaxy === contact.coordinate.galaxy
+      && target.coordinate.system === contact.coordinate.system
+      && target.coordinate.position === contact.coordinate.position);
+    if (!eligible) {
+      setNotice('Пиратский рейд доступен только в системах, где есть ваша колония и действующий контакт.', 'error');
+      return;
+    }
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    window.setTimeout(() => window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, {
+      detail: { missionId: 'pirate-elimination', contactCycleKey: contact.contactCycleKey,
+        destination: { kind: 'coordinate', coordinate: { ...contact.coordinate } },
+        targetKind: 'pirate', targetRelation: 'neutral', targetPlanetName: 'Пираты' },
+    })), 40);
+  };
+  const launchPirateRecon = (contact: PirateContactPresentation) => {
+    const result = dispatchFlight(stateRef.current, { requestId: `pirate-recon-${crypto.randomUUID()}`,
+      missionId: 'pirate-recon', contactCycleKey: contact.contactCycleKey,
+      originPlanetId: stateRef.current.currentPlanetId,
+      destination: { kind: 'coordinate', coordinate: { ...contact.coordinate } },
+      selectedShips: { 'spy-probe': 1 }, targetKind: 'pirate', targetRelation: 'neutral',
+    }, { now: Date.now(), mode: RUNTIME_MODE, testTimeScale });
+    if (result.ok) { stateRef.current = result.state; setState(result.state); setNotice(result.notice); }
+    else setNotice(result.error.message, 'error');
+  };
+  const openPirateReport = (reportId: string) => { setPirateReportId(reportId); navigateTo('reports'); };
+  const focusPirateUniverse = (contact: PirateContactPresentation) => { setPirateFocusTarget(contact); navigateTo('universe'); };
+  const openPirateReconCoordinate = (coordinate: UniverseCoordinate, contactCycleKey: string) => {
+    setUniverseFocusTarget(null);
+    setPirateFocusTarget({ coordinate, contactCycleKey });
+    navigateTo('universe');
+    setNotice(`Вселенная: открыта система ${coordinate.system} по архивной разведке.`);
   };
 
   useEffect(() => {
@@ -731,9 +830,9 @@ export function App() {
     [currentPlanetState.buildings],
   );
   const reportsUnreadCount = useMemo(() => {
-    const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports);
+    const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.pirate?.reconReports, state.flights.records);
     return Object.values(getReportUnreadCounts(items, state.reports)).reduce((total, count) => total + count, 0);
-  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports]);
+  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports, state.pirate, state.flights]);
   const buildingInteriorTarget = buildingInterior
     ? getBuildingInteriorTarget(buildingInterior.buildingRole)
     : null;
@@ -1001,6 +1100,9 @@ export function App() {
   const reset = () => {
     dispatchRuntimeReset(RUNTIME_MODE, window);
     persistence.clear();
+    // Reroll generated free planets, pirates, anomalies and unique objects.
+    // Production world layouts are never randomized by the reset control.
+    if (RUNTIME_MODE === 'test') rerollTestUniverseLayout();
     const nextState = createInitialSaveState(RUNTIME_MODE);
     // Publish the canonical replacement synchronously. React's effect will
     // persist it again, but a reload between the click and that effect must
@@ -1015,6 +1117,9 @@ export function App() {
     setPlanetViewMode('overview');
     setSelectedBuildingRole(null);
     setBuildingInterior(null);
+    setPirateSystem({ galaxy: 1, system: 1 });
+    setPirateFocusTarget(null);
+    setPirateReportId(undefined);
     setToasts([]);
     setNotice(RUNTIME_MODE === 'test' ? 'Тестовое сохранение сброшено.' : 'Сохранение прототипа сброшено.');
   };
@@ -1022,6 +1127,33 @@ export function App() {
   const acceptOperationsOperation = (operationId: OperationId) => {
     setState((current) => ({ ...current, operations: acceptOperation(current.operations, operationId, RUNTIME_MODE) }));
     setNotice('Операция принята. Подготовьте флот для выполнения.');
+  };
+
+  const acceptPirateOperation = (contact: PirateContactPresentation) => {
+    const current = stateRef.current;
+    const live = selectOwnedPiratePresentations(current, Date.now()).find((item) => item.contactCycleKey === contact.contactCycleKey);
+    if (!live) {
+      setNotice('Пиратский контакт больше не доступен в системах ваших колоний.', 'error');
+      return;
+    }
+    const id = pirateOperationId(live.contactCycleKey);
+    if (current.operations.items.some((item) => item.id === id && item.state === 'active')) return;
+    const next = {
+      ...current,
+      operations: { items: [...current.operations.items.filter((item) => item.id !== id), pirateContactOperation(live, 'active')] },
+    };
+    stateRef.current = next;
+    setState(next);
+    setNotice('Пиратская база добавлена в активные операции.');
+  };
+
+  const cancelPirateOperation = (contact: PirateContactPresentation) => {
+    const current = stateRef.current;
+    const id = pirateOperationId(contact.contactCycleKey);
+    const next = { ...current, operations: { items: current.operations.items.filter((item) => item.id !== id) } };
+    stateRef.current = next;
+    setState(next);
+    setNotice('Пиратская операция возвращена в доступные.');
   };
 
   const cancelOperationsOperation = (operationId: OperationId) => {
@@ -1054,10 +1186,11 @@ export function App() {
   };
 
   const saveCommandSettings = (input: AllianceSettingsInput) => {
-    setState((current) => {
-      const command = updateAllianceSettings(current.command, input, RUNTIME_MODE);
-      return { ...current, command, profile: syncPlayerProfileWithAlliance(current.profile, command.alliance) };
-    });
+    const current = stateRef.current;
+    const command = updateAllianceSettings(current.command, input, RUNTIME_MODE);
+    const nextState = { ...current, command, profile: syncPlayerProfileWithAlliance(current.profile, command.alliance) };
+    stateRef.current = nextState;
+    setState(nextState);
     setNotice('Настройки союза сохранены в локальном прототипе.');
   };
 
@@ -1414,6 +1547,13 @@ export function App() {
             />
           ) : activeRoute === 'universe' ? (
             <UniverseView
+              pirateContacts={pirateContacts}
+              pirateContactState={state.pirate?.contact}
+              pirateFocusTarget={pirateFocusTarget}
+              onPirateSystemChange={onPirateSystemChange}
+              onPirateRecon={launchPirateRecon}
+              onPirateAttack={openPirateAttack}
+              onPirateReport={openPirateReport}
               onNotice={setNotice}
               ownedPlanetArt={'mapArt' in currentSkin ? currentSkin.mapArt : currentSkin.art}
               ownedPlanetName={currentPlanetName}
@@ -1432,10 +1572,20 @@ export function App() {
               onSpy={openSpyLaunch}
               onAttack={openAttackLaunch}
               focusTarget={universeFocusTarget}
-              onFocusHandled={() => setUniverseFocusTarget(null)}
+              onFocusHandled={() => { setUniverseFocusTarget(null); setPirateFocusTarget(null); }}
             />
           ) : activeRoute === 'operations' ? (
             <OperationsView
+              pirateContacts={pirateContacts}
+              completedPirateOperations={completedPirateOperations}
+              onPirateBattleReport={openPirateReport}
+              nowMs={now}
+              onPirateAccept={acceptPirateOperation}
+              onPirateCancel={cancelPirateOperation}
+              onPirateRecon={launchPirateRecon}
+              onPirateAttack={openPirateAttack}
+              onPirateReport={openPirateReport}
+              onPirateUniverse={focusPirateUniverse}
               state={state.operations}
               onAccept={acceptOperationsOperation}
               onCancel={cancelOperationsOperation}
@@ -1453,6 +1603,9 @@ export function App() {
             />
           ) : activeRoute === 'reports' ? (
             <ReportsView
+              pirateReconReports={state.pirate?.reconReports}
+              pirateFlights={state.flights.records}
+              initialSelectedReportId={pirateReportId}
               battleReports={state.combat.reports}
               savedBattleReportIds={state.combat.savedReportIds}
               operations={state.operations}
@@ -1463,13 +1616,18 @@ export function App() {
               rating={state.rating}
               mode={RUNTIME_MODE}
               state={state.reports}
-              onStateChange={(reports) => setState((current) => ({ ...current, reports }))}
+              onStateChange={(reports) => {
+                const nextState = { ...stateRef.current, reports };
+                stateRef.current = nextState;
+                setState(nextState);
+              }}
               onToggleBattleSaved={toggleBattleSavedFromReports}
               onOpenFleets={openFleetRootFromReports}
               onOpenCommand={openCommandFromReports}
               onSimulateBattle={openSpySimulator}
               onRecallSpy={recallSpyFromReport}
               onOpenUniverseTarget={openUniverseTarget}
+              onOpenPirateUniverse={openPirateReconCoordinate}
             />
           ) : activeRoute === 'planet' && planetViewMode !== 'overview' ? (
             <ZoneView

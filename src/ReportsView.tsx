@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { BattleCard, BattleReportModal } from './BattleReportsView';
 import { EmblemGlyph } from './CommandView';
@@ -33,17 +33,22 @@ import type { RatingPrototypeState } from './domain/rating/fixtures.ts';
 import { selectRecordedBattlePointAwards } from './domain/rating/scoring.ts';
 import { RUNTIME_RESET_EVENT, type RuntimeMode } from './domain/runtime/mode.ts';
 import type { SpyReportSnapshot } from './domain/espionage/types.ts';
-import { COMMANDER_ABILITIES, formatCommanderAbilityEffect, type CommanderId } from './domain/combat/commanders.ts';
+import { COMMANDER_ABILITIES, getCommanderPresentedAbility, formatCommanderPresentedEffect, type CommanderId } from './domain/combat/commanders.ts';
 import { getFactionCombatEntity } from './domain/combat/faction-catalog.ts';
 import { getCombatFactionName } from './domain/combat/factions.ts';
 import type { CombatEntityId, ShipId } from './domain/combat/ids.ts';
 import type { UniverseCoordinate } from './domain/universe/types.ts';
+import type { PirateReconReport } from './domain/pirates/recon-report.ts';
+import { PIRATE_BASE_SHIPS } from './domain/pirates/catalog.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon.tsx';
 import './reports.css';
 import './reports-comic-v6.css';
 
 const PAGE_SIZE = 7;
 const numberFormat = new Intl.NumberFormat('ru-RU');
+// Historical recon reports store canonical pirate ship names, not asset paths.
+// Resolve presentation art from the same catalog used by pirate combat and the ship UI.
+const pirateReconArtByName = new Map(PIRATE_BASE_SHIPS.map(({ name, art }) => [name, art] as const));
 
 type MessageFolderId =
   | 'profile'
@@ -142,7 +147,7 @@ function ReportListItem({ item, active, read, saved, selected, onOpen, onSelect 
   onSelect: (checked: boolean) => void;
 }) {
   return (
-    <article className={`reports-list-item ${active ? 'active' : ''} ${read ? 'read' : 'unread'} ${selected ? 'selected' : ''}`} data-report-item-id={item.id}>
+    <article className={`reports-list-item ${active ? 'active' : ''} ${read ? 'read' : 'unread'} ${selected ? 'selected' : ''}`} data-report-item-id={item.id} data-pirate-recon-outcome={item.pirateReconReport?.outcome}>
       <label className="reports-list-check">
         <input type="checkbox" checked={selected} onChange={(event) => onSelect(event.target.checked)} aria-label={`Выбрать сообщение: ${item.title}`} />
         <span aria-hidden="true" />
@@ -209,6 +214,60 @@ function OverpopulationDossier({ item }: { item: ReportItem }) {
   );
 }
 
+function PirateReconDossier({ item, onOpenPirateUniverse }: {
+  item: ReportItem;
+  onOpenPirateUniverse: (coordinate: UniverseCoordinate, contactCycleKey: string) => void;
+}) {
+  const report = item.pirateReconReport;
+  if (!report) return <GenericDossier item={item} />;
+  const coordinate = item.coordinates[0] ?? '';
+  const formatTimestamp = (timestamp: number) => formatDate(new Date(timestamp).toISOString());
+
+  return (
+    <div className={`reports-dossier reports-dossier--pirate-recon reports-dossier--pirate-recon-${report.outcome}`} data-qa-pirate-recon-report={report.id}>
+      <div className="reports-dossier-heading">
+        <div className="reports-dossier-heading__icon"><ReportGlyph kind="system" /></div>
+        <div><small>{item.typeLabel}</small><h2>{item.title}</h2><p><button type="button" className="spy-report-link" onClick={() => onOpenPirateUniverse(report.coordinate, report.contactCycleKey)}>{coordinate} ↗</button> · контакт {report.contactCycleKey}</p></div>
+        <div className="reports-dossier-heading__status"><StatusBadge item={item} /><time>{formatDate(item.timestamp)}</time></div>
+      </div>
+      <section className="spy-report-card pirate-recon-report-card">
+        <header><strong>{report.outcome === 'success' ? 'РАЗВЕДДАННЫЕ' : report.outcome === 'failure' ? 'РАЗВЕДКА НЕ УДАЛАСЬ' : 'РЕЗУЛЬТАТ ПОЛЁТА'}</strong><span>{coordinate}</span></header>
+        <dl className="spy-report-summary-grid">
+          <div><dt>Контакт</dt><dd>{report.contactCycleKey}</dd></div>
+          <div><dt>Координаты</dt><dd><button type="button" className="spy-report-link" onClick={() => onOpenPirateUniverse(report.coordinate, report.contactCycleKey)}>{coordinate} ↗</button></dd></div>
+          <div><dt>Отправление</dt><dd><time>{formatTimestamp(report.dispatchedAt)}</time></dd></div>
+          <div><dt>Прибытие</dt><dd><time>{formatTimestamp(report.arrivedAt)}</time></dd></div>
+          {report.outcome === 'success' && report.intel ? <>
+            <div><dt>Уровень кораблей</dt><dd>{report.intel.shipLevel}</dd></div>
+          </> : null}
+        </dl>
+      </section>
+      {report.outcome === 'success' && report.intel ? <>
+        <section className="spy-report-card pirate-recon-report-card">
+          <header><strong>СОСТАВ ПО НАСЕЛЕНИЮ</strong><span>Проценты состава</span></header>
+          <div className="pirate-recon-report-list">
+            {report.intel.ships.map((ship) => {
+              const art = pirateReconArtByName.get(ship.name);
+              return (
+                <div key={ship.name} className="pirate-recon-ship" data-qa-pirate-recon-ship={ship.name}>
+                  <span className="pirate-recon-ship-identity">
+                    {art ? <img className="pirate-recon-ship-art" src={art} alt={`Пиратский корабль «${ship.name}»`} loading="lazy" /> : null}
+                    <span>{ship.name}</span>
+                  </span>
+                  <strong>{ship.populationPercent}%</strong>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      </> : <section className="spy-report-card pirate-recon-report-card">
+        <header><strong>{report.outcome === 'failure' ? 'СВЕДЕНИЯ НЕ ПОЛУЧЕНЫ' : report.outcome === 'no-target' ? 'ЦЕЛЬ ОТСУТСТВОВАЛА' : 'ДАННЫЕ ОТЧЁТА ОТСУТСТВУЮТ'}</strong></header>
+        <p className="spy-report-empty">{report.outcome === 'success' ? 'В сохранённом успешном отчёте отсутствуют данные разведки.' : item.body}</p>
+      </section>}
+    </div>
+  );
+}
+
 function reportCoordinate(coordinate: UniverseCoordinate) {
   return `[${coordinate.galaxy}:${coordinate.system}:${coordinate.position}]`;
 }
@@ -252,7 +311,7 @@ function SpyDossier({ item, report, onOpenUniverseTarget }: {
       {report.population ? <section className="spy-report-card spy-report-card--population"><header><strong>НАСЕЛЕНИЕ И СОСТАВ</strong><span>Население планеты: экипажи кораблей и гарнизоны обороны</span></header><div className="spy-report-population"><div><span>Население планеты</span><strong>{numberFormat.format(report.population.total)}</strong></div><div><span>Корабли</span><strong>{numberFormat.format(report.population.fleet)}</strong></div><div><span>Оборона</span><strong>{numberFormat.format(report.population.defense)}</strong></div></div></section> : null}
       {report.quality === 'full' ? <>
         <section className="spy-report-card spy-report-card--fleet"><header><strong>КОРАБЛИ</strong><span>Боевой и транспортный состав</span>{report.quality === 'full' ? <i className="spy-report-seal" aria-hidden="true">ПОЛНЫЙ<br />СНИМОК</i> : null}</header>{fleet.length ? <div className="spy-report-entity-grid">{fleet.map(([id, count]) => { const entity = getFactionCombatEntity(report.targetRaceId, id as CombatEntityId); const level = report.fleetLevels?.[id as ShipId]; return <article className="spy-report-entity" key={id} data-level={level !== undefined ? level : undefined}><img src={entity.art} alt="" /><div><strong>{entity.name}</strong><span>{level !== undefined ? `Уровень ${level}` : entity.role}</span></div><b>{numberFormat.format(Number(count))}</b></article>; })}</div> : <p className="spy-report-empty">Корабли не найдены.</p>}</section>
-        <section className="spy-report-card spy-report-card--commanders"><header><strong>КОМАНДИРЫ</strong><span>Выявленные командирские корабли</span></header>{commanders.length ? <div className="spy-report-entity-grid">{commanders.map(([id, value]) => { const entity = getFactionCombatEntity(report.targetRaceId, id as CombatEntityId); const commanderLevel = value?.level ?? 0; const commanderName = COMMANDER_ABILITIES[id as CommanderId]?.commanderName ?? entity.name; const ability = COMMANDER_ABILITIES[id as CommanderId]; return <article className="spy-report-entity spy-report-entity--inspected" key={id} data-level={commanderLevel} tabIndex={0}><img src={entity.art} alt="" /><div><strong>{commanderName}</strong><span>Уровень {commanderLevel}</span></div><b>{numberFormat.format(value?.count ?? 0)}</b>{ability ? <span className="spy-entity-tooltip" role="tooltip"><strong>{ability.ability}</strong><span>{ability.description}</span><b>Эффект: {formatCommanderAbilityEffect(id as CommanderId, commanderLevel)}</b>{ability.note ? <small>{ability.note}</small> : null}</span> : null}</article>; })}</div> : <p className="spy-report-empty">Командиры не найдены.</p>}</section>
+        <section className="spy-report-card spy-report-card--commanders"><header><strong>КОМАНДИРЫ</strong><span>Выявленные командирские корабли</span></header>{commanders.length ? <div className="spy-report-entity-grid">{commanders.map(([id, value]) => { const entity = getFactionCombatEntity(report.targetRaceId, id as CombatEntityId); const commanderLevel = value?.level ?? 0; const commanderName = COMMANDER_ABILITIES[id as CommanderId]?.commanderName ?? entity.name; const ability = COMMANDER_ABILITIES[id as CommanderId] ? getCommanderPresentedAbility(id as CommanderId) : undefined; return <article className="spy-report-entity spy-report-entity--inspected" key={id} data-level={commanderLevel} tabIndex={0}><img src={entity.art} alt="" /><div><strong>{commanderName}</strong><span>Уровень {commanderLevel}</span></div><b>{numberFormat.format(value?.count ?? 0)}</b>{ability ? <span className="spy-entity-tooltip" role="tooltip"><strong>{ability.ability}</strong><span>{ability.description}</span><b>Эффект: {formatCommanderPresentedEffect(id as CommanderId, commanderLevel)}</b>{ability.note ? <small>{ability.note}</small> : null}</span> : null}</article>; })}</div> : <p className="spy-report-empty">Командиры не найдены.</p>}</section>
       </> : null}
       {report.quality !== 'basic' ? <section className="spy-report-card spy-report-card--defense"><header><strong>ОБОРОНА</strong><span>{factionName}</span></header>{defense.length ? <div className="spy-report-entity-grid">{defense.map(([id, count]) => { const entity = getFactionCombatEntity(report.targetRaceId, id as CombatEntityId); return <article className="spy-report-entity" key={id}><img src={entity.art} alt="" /><div><strong>{entity.name}</strong><span>{entity.role}</span></div><b>{numberFormat.format(Number(count))}</b></article>; })}</div> : <p className="spy-report-empty">Оборона не найдена.</p>}</section> : null}
       <section className="reports-generic-body"><small>СВОДКА</small><p>{item.body}</p></section>
@@ -336,12 +395,15 @@ function FolderActions({ folder, items, selectedIds, onSelectAll, onDeleteAll, o
   );
 }
 
-export function ReportsView({ battleReports, savedBattleReportIds, operations, command, espionage, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget }: {
+export function ReportsView({ battleReports, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse }: {
   battleReports: readonly BattleReport[];
   savedBattleReportIds: readonly string[];
   operations: OperationsState;
   command: CommandState;
   espionage?: import('./domain/espionage/types.ts').EspionageState;
+  pirateReconReports?: readonly PirateReconReport[];
+  pirateFlights?: readonly import('./domain/flights/types.ts').FlightRecord[];
+  initialSelectedReportId?: string;
   profile: PlayerProfileState;
   score: OwnerScore | null;
   rating: RatingPrototypeState;
@@ -354,6 +416,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
   onSimulateBattle: (report: SpyReportSnapshot) => void;
   onRecallSpy: (missionId: string) => void;
   onOpenUniverseTarget: (target: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string }) => void;
+  onOpenPirateUniverse: (coordinate: UniverseCoordinate, contactCycleKey: string) => void;
 }) {
   const [activeFolder, setActiveFolder] = useState<MessageFolderId>('profile');
   const [filter, setFilter] = useState<ReportFilter>('all');
@@ -362,8 +425,10 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
   const [selectedId, setSelectedId] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [openBattleReportId, setOpenBattleReportId] = useState<string | null>(null);
+  const pendingInitialReportId = useRef<string | null>(null);
+  const handledInitialReportId = useRef<string | null>(null);
 
-  const items = useMemo(() => buildReportsFeed(battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports), [battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports]);
+  const items = useMemo(() => buildReportsFeed(battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports, pirateReconReports, pirateFlights), [battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports, pirateReconReports, pirateFlights]);
   const counts = useMemo(() => getReportCategoryCounts(items, state), [items, state]);
   const unreadCounts = useMemo(() => getReportUnreadCounts(items, state), [items, state]);
   const activeFolderMeta = MESSAGE_FOLDERS.find((folder) => folder.id === activeFolder) ?? MESSAGE_FOLDERS[0];
@@ -382,10 +447,36 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
 
   useEffect(() => {
     setPage(1);
-    setSelectedId('');
+    if (pendingInitialReportId.current === null) setSelectedId('');
     setSelectedIds(new Set());
     if (activeFolderMeta.category) setFilter('all');
   }, [activeFolder, activeFolderMeta.category]);
+  useEffect(() => {
+    if (!initialSelectedReportId || handledInitialReportId.current === initialSelectedReportId) return;
+    handledInitialReportId.current = initialSelectedReportId;
+    pendingInitialReportId.current = initialSelectedReportId;
+    const target = items.find((item) => item.id === initialSelectedReportId
+      || item.pirateReconReport?.id === initialSelectedReportId
+      || item.battleReportId === initialSelectedReportId);
+    // Pirate recon is a System report; completed pirate raids link to Battle reports.
+    const folder = MESSAGE_FOLDERS.find((item) => item.category === (target?.category ?? 'system'));
+    setActiveFolder(folder?.id ?? 'system');
+    setFilter('all');
+    setSearch('');
+  }, [initialSelectedReportId, items]);
+  useEffect(() => {
+    const requestedId = pendingInitialReportId.current;
+    if (!requestedId) return;
+    const targetIndex = visibleItems.findIndex((item) => item.id === requestedId
+      || item.pirateReconReport?.id === requestedId
+      || item.battleReportId === requestedId);
+    if (targetIndex < 0) return;
+    const target = visibleItems[targetIndex]!;
+    if (activeCategory !== target.category) return;
+    setPage(Math.floor(targetIndex / PAGE_SIZE) + 1);
+    setSelectedId(target.id);
+    pendingInitialReportId.current = null;
+  }, [activeCategory, initialSelectedReportId, visibleItems]);
   useEffect(() => { if (activeCategory !== 'battle' && filter === 'saved') setFilter('all'); }, [activeCategory, filter]);
   useEffect(() => { setPage((current) => Math.min(current, pageCount)); }, [pageCount]);
   useEffect(() => {
@@ -484,7 +575,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
 
         <section className="reports-preview">
           <header className="reports-preview-head"><div><small>ДОСЬЕ СООБЩЕНИЯ</small><h2>ПРОСМОТР СООБЩЕНИЯ</h2></div>{activeCategory ? <div className="reports-preview-actions"><button type="button" aria-label={selectedBattleSaved ? 'Убрать бой из сохранённых' : 'Сохранить бой'} aria-pressed={selectedBattleSaved} disabled={!selectedItem?.battleReportId} className={selectedBattleSaved ? 'active' : ''} onClick={() => selectedItem?.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)}><ActionGlyph kind="save" /></button><span /><button type="button" aria-label="Предыдущее сообщение" disabled={selectedIndex <= 0} onClick={() => navigateSelected(-1)}><ActionGlyph kind="prev" /></button><button type="button" aria-label="Следующее сообщение" disabled={selectedIndex < 0 || selectedIndex >= visibleItems.length - 1} onClick={() => navigateSelected(1)}><ActionGlyph kind="next" /></button></div> : null}</header>
-          <div className="reports-preview-scroll">{activeCategory ? selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} saved={selectedBattleSaved} rating={rating} playerOwnerId={profile.playerId} onToggleSaved={() => selectedItem.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)} onOpen={() => selectedBattle && setOpenBattleReportId(selectedBattle.id)} /> : selectedItem.overpopulationReport ? <OverpopulationDossier item={selectedItem} /> : selectedItem.spyReport ? <SpyDossier item={selectedItem} report={selectedItem.spyReport} onOpenUniverseTarget={onOpenUniverseTarget} /> : <GenericDossier item={selectedItem} />) : <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} /> : <EmptyFolder folder={activeFolderMeta} />}</div>
+          <div className="reports-preview-scroll">{activeCategory ? selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} saved={selectedBattleSaved} rating={rating} playerOwnerId={profile.playerId} onToggleSaved={() => selectedItem.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)} onOpen={() => selectedBattle && setOpenBattleReportId(selectedBattle.id)} /> : selectedItem.overpopulationReport ? <OverpopulationDossier item={selectedItem} /> : selectedItem.pirateReconReport ? <PirateReconDossier item={selectedItem} onOpenPirateUniverse={onOpenPirateUniverse} /> : selectedItem.spyReport ? <SpyDossier item={selectedItem} report={selectedItem.spyReport} onOpenUniverseTarget={onOpenUniverseTarget} /> : <GenericDossier item={selectedItem} />) : <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} /> : <EmptyFolder folder={activeFolderMeta} />}</div>
           {activeCategory && selectedItem?.action?.kind === 'open_fleets' ? <footer className="reports-preview-footer"><span>Выбери состав флота для совместной операции.</span><button type="button" onClick={onOpenFleets}>{selectedItem.action.label}</button></footer> : activeCategory && selectedItem?.source === 'espionage' && (selectedItem.action || selectedItem.secondaryAction) ? <footer className="reports-preview-footer"><span>{selectedItem.secondaryAction ? 'Связанный шпионский зонд ещё находится на орбите.' : 'Действия по полному снимку цели.'}</span><div className="reports-preview-footer-actions">
             {selectedItem.action?.kind === 'simulate_battle' && selectedItem.spyReport ? <button type="button" onClick={() => onSimulateBattle(selectedItem.spyReport!)}>{selectedItem.action.label}</button> : null}
             {selectedItem.secondaryAction?.kind === 'recall_spy' && selectedItem.secondaryAction.missionId ? <button type="button" className="restore" onClick={() => onRecallSpy(selectedItem.secondaryAction!.missionId!)}>{selectedItem.secondaryAction.label}</button> : null}
