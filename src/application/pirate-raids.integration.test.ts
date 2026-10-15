@@ -8,6 +8,7 @@ import { resolveDuePirateRoll, selectDuePirateRolls } from './pirate-raids.ts';
 import { getCurrentPirateContact } from './pirates.ts';
 import { getUniverseTimedObjectSchedule } from '../domain/universe/runtime.ts';
 import { pirateSeededDraw } from '../domain/pirates/threat.ts';
+import { normalizePirateRaidSnapshot } from '../domain/pirates/mission.ts';
 
 class MemoryStorage {
   private data=new Map<string,string>();
@@ -59,6 +60,18 @@ test('owner-cycle roll dispatches one persisted real pirate flight, resolves no-
   const same=resolveDuePirateRoll(hydrated,event!,'production');
   assert.equal(same,same.pirate?.raidRolls?.[JSON.stringify([event!.ownerId,event!.contactCycleKey])]
     ? hydrated:same);
+  // An absent target must not produce an impossible victory, loot or siege.
+  const missingPlanet={...hydrated,planets:Object.fromEntries(
+    Object.entries(hydrated.planets).filter(([id])=>id!==flight.destinationPlanetId))};
+  const unavailable=reconcileFlights(missingPlanet,flight.arrivalAt,undefined,{mode:'production'});
+  assert.equal(unavailable.state.combat.reports.some(x=>x.id===`battle-pirate-raid-${flight.id}`),false);
+  assert.equal(unavailable.state.flights.records.find(x=>x.id===flight.id)?.completionReason,'target-unavailable');
+  assert.equal(unavailable.state.flights.records.find(x=>x.id===flight.id)?.phase,'returning');
+  // Malformed hull manifest or spoofed contact must be rejected on reload.
+  const snapshot=flight.pirateRaidSnapshot!;
+  assert.equal(normalizePirateRaidSnapshot({...snapshot,
+    composition:{'pirate-planet-breaker':1}}),null);
+  assert.equal(normalizePirateRaidSnapshot({...snapshot,contactCycleKey:'fake-cycle'}),null);
   const before=JSON.stringify(hydrated.planets['helion-01']!.buildings);
   const queueBefore=JSON.stringify(hydrated.queues['helion-01']);
   const completed=reconcileFlights(hydrated,flight.arrivalAt,undefined,{mode:'production'});
