@@ -42,8 +42,8 @@ type OperationsViewProps = {
 type OperationsTab = Extract<OperationState, 'available' | 'active' | 'completed'>;
 type QuietPirateCycle = { galaxy: number; system: number; nextEligibleAt: number; contactCycleKey: string; coordinate: PirateContactPresentation['coordinate'] };
 type PirateCycleTimer = { galaxy: number; system: number; active: boolean; quietStartsAt: number; nextRollAt: number; cycleIndex: number };
-type CompletedPirateOperation = { cycleKey: string; coordinate: PirateContactPresentation['coordinate']; reportId: string; defeatedAt: number };
-type OperationRow = { operation: OperationInstance; contact?: PirateContactPresentation; quiet?: QuietPirateCycle; battleReportId?: string };
+type CompletedPirateOperation = { cycleKey: string; coordinate: PirateContactPresentation['coordinate']; reportId: string; defeatedAt: number; rounds: number; debris: number };
+type OperationRow = { operation: OperationInstance; contact?: PirateContactPresentation; quiet?: QuietPirateCycle; completed?: CompletedPirateOperation; battleReportId?: string };
 
 const TAB_LABELS: Record<OperationsTab, string> = {
   available: 'ДОСТУПНЫЕ',
@@ -300,11 +300,12 @@ function QuietPirateProgress({ nextEligibleAt, nowMs }: { nextEligibleAt: number
   );
 }
 
-function OperationDossier({ operation, pirateContact, quiet, battleReportId, nowMs, onAccept, onCancel, onReveal, onOpenFleets, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: {
+function OperationDossier({ operation, pirateContact, quiet, battleReportId, completed, nowMs, onAccept, onCancel, onReveal, onOpenFleets, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: {
   operation: OperationInstance | null;
   pirateContact?: PirateContactPresentation;
   quiet?: QuietPirateCycle;
   battleReportId?: string;
+  completed?: CompletedPirateOperation;
   nowMs: number;
   onPirateBattleReport?: (reportId: string) => void;
   onPirateRecon?: (contact: PirateContactPresentation) => void;
@@ -332,6 +333,31 @@ function OperationDossier({ operation, pirateContact, quiet, battleReportId, now
   const reconLabel = pirateContact?.latestReportOutcome === 'success' ? 'Разведданные получены'
     : pirateContact?.latestReportOutcome === 'failure' ? 'Разведка не удалась'
       : pirateContact?.statusLabel === 'Зонд в пути' ? 'Зонд в пути' : 'Нет разведданных';
+
+  if (pirate && completed) {
+    return (
+      <aside className="operations-dossier-v2 operations-dossier-v2--pirate operations-completed-report-v2" data-threat="unknown">
+        <header className="operations-dossier-head-v2">
+          <div className="operations-dossier-title-v2">
+            <span className="operations-dossier-glyph-v2"><OperationGlyph category="combat" /></span>
+            <div><small>РЕЗУЛЬТАТ БОЕВОЙ ОПЕРАЦИИ</small><h2>ПИРАТСКАЯ БАЗА УНИЧТОЖЕНА</h2>
+              <p>{formatLocation(operation.location)}</p></div>
+          </div>
+        </header>
+        <section className="operations-completed-report-body-v2">
+          <h3>БОЕВОЙ ОТЧЁТ</h3>
+          <p>Победа подтверждена боевым расчётом. Результат сохранён в разделе «Доклады».</p>
+          <div className="operations-completed-report-facts-v2">
+            <div><small>ИСХОД</small><strong>ПОБЕДА</strong></div>
+            <div><small>РАУНДОВ</small><strong>{completed.rounds}</strong></div>
+            <div><small>ОБЛОМКИ НА ОРБИТЕ</small><strong><ResourceIcon kind="debris" /> {number.format(completed.debris)}</strong></div>
+            <div><small>ЗАВЕРШЕНО</small><strong>{new Date(completed.defeatedAt).toLocaleString('ru-RU')}</strong></div>
+          </div>
+          <button type="button" className="operations-primary-v2" onClick={() => onPirateBattleReport?.(completed.reportId)}>ОТКРЫТЬ ПОЛНЫЙ БОЕВОЙ ОТЧЁТ</button>
+        </section>
+      </aside>
+    );
+  }
 
   return (
     <aside className={`operations-dossier-v2 operations-dossier-v2--${operation.category} ${pirate ? 'operations-dossier-v2--pirate' : ''}`} data-threat={operation.threat ?? 'unknown'}>
@@ -460,6 +486,7 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
     const completed: OperationRow[] = completedPirateOperations.map((entry) => ({
       operation: pirateCycleOperation(entry.cycleKey, entry.coordinate, 'completed'),
       battleReportId: entry.reportId,
+      completed: entry,
     }));
     return [...live, ...completed, ...normal];
   }, [state.items, pirateContacts, completedPirateOperations]);
@@ -554,6 +581,7 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
           pirateContact={selectedRow?.contact}
           quiet={selectedRow?.quiet}
           battleReportId={selectedRow?.battleReportId}
+          completed={selectedRow?.completed}
           nowMs={nowMs}
           onAccept={accept}
           onCancel={cancel}
