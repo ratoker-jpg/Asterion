@@ -1,9 +1,9 @@
 import { PIRATE_BASE_SHIPS, type PirateBaseShipId } from './catalog.ts';
 import type { PirateProfile } from './profile.ts';
 import { pirateSeededDraw } from './threat.ts';
-import { getCombatMatchupMultiplier, type CombatMatchupClass } from '../combat/resolver.ts';
+import { calculateEffectiveDamage, getCombatMatchupMultiplier, type CombatMatchupClass } from '../combat/resolver.ts';
 
-export type RaidDefenseComposition = readonly Readonly<{ ordinaryClass: CombatMatchupClass; population: number }>[];
+export type RaidDefenseComposition = readonly Readonly<{ kind?: 'ship' | 'defense'; ordinaryClass?: CombatMatchupClass; population: number; armorStrength?: number }>[];
 export type PirateRaidFleetPlan = Readonly<{
   ships: Readonly<Partial<Record<PirateBaseShipId, number>>>;
   population: number;
@@ -55,14 +55,26 @@ export function planPirateRaidFleet(input: Readonly<{
   let availableCargo = 0;
 
   const defenseTotal = input.defense.reduce((s, entry) => s + safe(entry.population), 0);
+  // Score one attacker population slot by its real production damage against
+  // the actual ship AND defense population. Turrets have NO 6x6 matchup class
+  // in the resolver (neutral x1); their actual armor is still respected.
+  // No invented tower -> ordinary-ship class mapping or new combat coefficient.
   const matchup = (ship: (typeof PIRATE_BASE_SHIPS)[number]) => defenseTotal > 0
-    ? input.defense.reduce((score, entry) => score +
-        safe(entry.population) * getCombatMatchupMultiplier(
-          ship.ordinaryClass as CombatMatchupClass, entry.ordinaryClass,
-        ), 0) / defenseTotal
-    : 1;
-  // Counter fleets use the production combat 6x6 matchup matrix; normal
-  // fleets preserve source profile shares with population-first allocation.
+    ? input.defense.reduce((score, entry) => {
+        const multiplier = entry.kind === 'defense' || !entry.ordinaryClass
+          ? 1
+          : getCombatMatchupMultiplier(
+              ship.ordinaryClass as CombatMatchupClass, entry.ordinaryClass,
+            );
+        const effectiveDamage = calculateEffectiveDamage(
+          Math.floor(ship.combat.attack * multiplier),
+          Number.isFinite(entry.armorStrength) ? Math.max(0, entry.armorStrength ?? 0) : 0,
+        );
+        return score + safe(entry.population) * effectiveDamage / ship.population;
+      }, 0) / defenseTotal
+    : ship.combat.attack / ship.population;
+  // Counter fleets use actual per-population output against the production
+  // 6x6 ship matrix AND actual defense armor. Normal raids keep tier shares.
   const sorted = [...candidates].sort((a, b) => input.counterFleet
     ? matchup(b) - matchup(a) || b.combat.attack / b.population - a.combat.attack / a.population
       || a.id.localeCompare(b.id)
