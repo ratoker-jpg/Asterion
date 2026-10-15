@@ -68,7 +68,7 @@ function commanderLevelsFromPlanet(state: SaveState, planetId: string, selected:
 }
 
 export function normalizeAttackRounds(value: unknown): SimulatorMaxRounds {
-  return ATTACK_MAX_ROUNDS.includes(value as SimulatorMaxRounds) ? value as SimulatorMaxRounds : 8;
+  return ATTACK_MAX_ROUNDS.includes(value as SimulatorMaxRounds) ? value as SimulatorMaxRounds : 12;
 }
 
 export function createAttackLaunchSnapshot(
@@ -556,7 +556,7 @@ export function createBot01IncomingAttackSnapshot(
 ): AttackLaunchSnapshot {
   return {
     version: 1,
-    maxRounds: 8,
+    maxRounds: 12,
     attackerFactionId: source.raceId,
     attackerTechnologies: technologiesFromScience(profile.scienceLevels),
     attackerShipLevels: Object.fromEntries(Object.entries(profile.shipLevels).map(([id, level]) => [id, safeLevel(level)])),
@@ -955,7 +955,8 @@ export function resolvePirateIncomingRaid(state: SaveState, flight: FlightRecord
       activeCommanderId:defenderPriority.find((id)=>defenderCommanders.some((stack)=>stack.entityId===id))??null,
       defenses:defenseStacks(factionId,targetDefense.defenses),
     },
-    maxRounds:8,
+    // Existing in-flight pirates never recorded maxRounds: preserve their 8 rounds.
+    maxRounds:raid.maxRounds ?? 8,
     attackerPriority:[], defenderPriority,
     attackerTechnologies:raid.profile.technologies,
     defenderTechnologies:playerTarget ? technologiesFromScience(state.science.levels)
