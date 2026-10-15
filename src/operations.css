@@ -1528,3 +1528,11 @@
 .operations-dossier-v2--pirate .operations-secondary-v2 {
   border-radius: 10px;
 }
+
+.operations-pirate-lifecycle-v2 small {
+  display: block;
+  margin-top: 5px;
+  color: #a98b88;
+  font-size: 10px;
+  line-height: 1.4;
+}
