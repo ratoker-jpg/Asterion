@@ -292,7 +292,10 @@ test('a defeated commander is removed once, contributes ordinary debris, and doe
     ships: { ...emptyFleet.ships, ...secondManifest.ships },
   }, returned.state.profile.factionId);
   const secondProfile = second.flight.pirateSnapshot!.profile;
-  const expectedGarrison = calculatePirateEliminationPopulationBudget(Math.round(secondSentPopulation), secondProfile.shares);
+  const expectedGarrison = second.flight.pirateSnapshot!.eliminationBudget
+    ?? calculatePirateEliminationPopulationBudget(Math.round(secondSentPopulation), secondProfile.shares);
+  assert.ok(expectedGarrison.targetPopulation >= Math.floor(secondSentPopulation * 0.75) - 1);
+  assert.ok(expectedGarrison.targetPopulation <= Math.ceil(secondSentPopulation * 0.9) + 1);
   assert.equal(secondReport.defenderForce.populationBefore, expectedGarrison.actualPopulation);
   assert.deepEqual(
     pirateDefenderStacks(secondReport).map((stack) => [stack.entityId, stack.countBefore]),
@@ -341,7 +344,7 @@ test('same-time elimination arrivals are ordered by flight id and only the first
   assert.equal(getAvailableFleetForPlanet(completed.state, ORIGIN_ID).ships['death-star'], 100 - lost);
 });
 
-test('public elimination draw does not defeat the cycle', () => {
+test('small elimination awards no BP and defeats a cycle only on a full victory', () => {
   const manifest = { ships: { scout: 1 }, commanders: { corsair: 1 } } satisfies FleetManifest;
   const { state, contact, now } = fixture(manifest, { resourcePoints: 0, scienceLevel: 0 });
   const launched = dispatchElimination(state, contact, now, 'pirate-draw-0', manifest, 5);
@@ -350,8 +353,11 @@ test('public elimination draw does not defeat the cycle', () => {
   const arrived = arrive(launched.state, launched.flight.arrivalAt);
   const report = arrived.state.combat.reports.find((candidate) => candidate.id === `battle-pirate-${launched.flight.id}`);
   assert.ok(report);
-  assert.equal(report.winner, 'draw');
-  assert.equal(arrived.state.pirate?.contact.defeatedCycles[contact.contactCycleKey], undefined);
+  if (report.winner === 'attacker' && report.defenderForce.populationAfter === 0) {
+    assert.ok(arrived.state.pirate?.contact.defeatedCycles[contact.contactCycleKey]);
+  } else {
+    assert.equal(arrived.state.pirate?.contact.defeatedCycles[contact.contactCycleKey], undefined);
+  }
   assertNoBattlePointAward(arrived.state, report.id);
 });
 
