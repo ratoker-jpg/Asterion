@@ -277,7 +277,7 @@ function PirateContactDossier({ contact, nowMs, onRecon, onAttack, onReport, onU
         <div>
           <small>НЕЙТРАЛЬНЫЙ КОНТАКТ · ЦИКЛ {contact.cycleIndex}</small>
           <h2>ПИРАТСКАЯ ПЛАНЕТА</h2>
-          <p>{pirateCoordinateLabel(contact)}</p>
+          <p><button type="button" className="operations-pirate-coordinate-link" onClick={() => onUniverse?.(contact)} disabled={!onUniverse} title="Показать координаты во Вселенной">{pirateCoordinateLabel(contact)} ↗</button></p>
         </div>
         <span className="operations-pirate-status" data-status-tone={contact.statusTone}>{contact.statusLabel}</span>
       </header>
@@ -295,13 +295,11 @@ function PirateContactDossier({ contact, nowMs, onRecon, onAttack, onReport, onU
         </div>
         <div className="operations-command-actions-v2 operations-pirate-actions">
           <button type="button" className="operations-primary-v2" disabled={!reconEnabled} title={reconEnabled ? 'Отправить один разведывательный зонд к этому контакту' : reconReason} onClick={() => onRecon?.(contact)}>РАЗВЕДАТЬ</button>
-          {!reconEnabled && reconReason ? <small className="operations-pirate-action-reason">{reconReason}</small> : null}
-          <button type="button" className="operations-secondary-v2" disabled={!attackEnabled} title={attackEnabled ? 'Открыть подготовку флота для этого контакта' : attackReason} onClick={() => onAttack?.(contact)}>ПОДГОТОВИТЬ АТАКУ</button>
-          {!attackEnabled && attackReason ? <small className="operations-pirate-action-reason">{attackReason}</small> : null}
+          <button type="button" className="operations-secondary-v2" disabled={!attackEnabled} title={attackEnabled ? 'Открыть подготовку пиратского рейда' : attackReason} onClick={() => onAttack?.(contact)}>ПОДГОТОВИТЬ ПИРАТСКИЙ РЕЙД</button>
           <button type="button" className="operations-secondary-v2" disabled={!reportEnabled} title={reportEnabled ? 'Открыть последний разведотчёт этого цикла' : reportReason} onClick={() => contact.latestReportId && onReport?.(contact.latestReportId)}>ОТКРЫТЬ РАЗВЕДОТЧЁТ</button>
-          {!reportEnabled && reportReason ? <small className="operations-pirate-action-reason">{reportReason}</small> : null}
-          <button type="button" className="operations-secondary-v2" disabled={!onUniverse} title={onUniverse ? 'Показать этот контакт на карте Вселенной' : 'Переход временно недоступен'} onClick={() => onUniverse?.(contact)}>ПЕРЕЙТИ ВО ВСЕЛЕННУЮ</button>
+          <button type="button" className="operations-secondary-v2" disabled={!onUniverse} title={onUniverse ? 'Показать этот контакт на карте Вселенной' : 'Переход временно недоступен'} onClick={() => onUniverse?.(contact)}>ПОКАЗАТЬ ВО ВСЕЛЕННОЙ</button>
         </div>
+        {(!reconEnabled && reconReason) || (!attackEnabled && attackReason) ? <small className="operations-pirate-action-reason" role="status">{!reconEnabled ? reconReason : attackReason}</small> : null}
       </footer>
     </aside>
   );
@@ -414,8 +412,10 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   const visibleItems = useMemo(() => state.items.filter((item) => item.state === tab), [state.items, tab]);
+  const visiblePirates = tab === 'available' ? pirateContacts : [];
   const selected = state.items.find((item) => item.id === selectedId && item.state === tab) ?? null;
-  const selectedPirate = pirateContacts.find((contact) => contact.contactCycleKey === selectedPirateCycleKey) ?? null;
+  const selectedPirate = visiblePirates.find((contact) => contact.contactCycleKey === selectedPirateCycleKey) ?? null;
+  const visibleCount = visibleItems.length + visiblePirates.length;
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
@@ -425,8 +425,8 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
   useEffect(() => {
     if (selectedPirate) return;
     if (selected) return;
-    setSelectedPirateCycleKey(pirateContacts[0]?.contactCycleKey ?? null);
-  }, [pirateContacts, selected, selectedPirate]);
+    setSelectedPirateCycleKey(visiblePirates[0]?.contactCycleKey ?? null);
+  }, [tab, pirateContacts, selected, selectedPirate]);
 
   useEffect(() => {
     if (selected || selectedPirate) return;
@@ -465,28 +465,30 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
         <nav className="operations-tabs-v2" role="tablist" aria-label="Состояние операций">
           {(Object.keys(TAB_LABELS) as OperationsTab[]).map((entry) => (
             <button key={entry} type="button" role="tab" aria-selected={tab === entry} className={tab === entry ? 'active' : ''} onClick={() => chooseTab(entry)}>
-              <span>{TAB_LABELS[entry]}</span><b>{state.items.filter((item) => item.state === entry).length}</b>
+              <span>{TAB_LABELS[entry]}</span><b>{state.items.filter((item) => item.state === entry).length + (entry === 'available' ? pirateContacts.length : 0)}</b>
             </button>
           ))}
         </nav>
 
-        <div className="operations-slots-v2"><small>КОНТАКТЫ</small><strong>{state.items.filter((item) => item.state !== 'completed').length}</strong><span>/ 4</span></div>
+        <div className="operations-slots-v2"><small>ПИРАТСКИЕ ЦЕЛИ</small><strong>{pirateContacts.length}</strong><span>активны</span></div>
       </header>
 
       <div className="operations-layout-v2">
         <section className="operations-feed-v2" aria-label={TAB_LABELS[tab]}>
-          <header><div><small>КАНАЛ // {TAB_LABELS[tab]}</small><strong>{tab === 'available' ? 'ВХОДЯЩИЕ КОНТАКТЫ' : tab === 'active' ? 'ТЕКУЩИЕ ЗАДАЧИ' : 'АРХИВ ОПЕРАЦИЙ'}</strong></div><span>{visibleItems.length}</span></header>
-          {pirateContacts.length ? (
+          <header><div><small>КАНАЛ // {TAB_LABELS[tab]}</small><strong>{tab === 'available' ? 'ВХОДЯЩИЕ КОНТАКТЫ' : tab === 'active' ? 'ТЕКУЩИЕ ЗАДАЧИ' : 'АРХИВ ОПЕРАЦИЙ'}</strong></div><span>{visibleCount}</span></header>
+          <div className="operations-feed-scroll-v2">
+          {visiblePirates.length ? (
             <div className="operations-pirate-feed" aria-label="Активные пиратские контакты">
-              <small>АКТИВНЫЕ ПИРАТСКИЕ КОНТАКТЫ · {pirateContacts.length}</small>
-              {pirateContacts.map((contact) => <PirateContactCard key={contact.contactCycleKey} contact={contact} nowMs={nowMs} selected={contact.contactCycleKey === selectedPirateCycleKey} onSelect={() => { setSelectedPirateCycleKey(contact.contactCycleKey); setSelectedId(null); }} />)}
+              <small>АКТИВНЫЕ ПИРАТСКИЕ КОНТАКТЫ · {visiblePirates.length}</small>
+              {visiblePirates.map((contact) => <PirateContactCard key={contact.contactCycleKey} contact={contact} nowMs={nowMs} selected={contact.contactCycleKey === selectedPirateCycleKey} onSelect={() => { setSelectedPirateCycleKey(contact.contactCycleKey); setSelectedId(null); }} />)}
             </div>
           ) : null}
           {visibleItems.length ? (
             <div className="operations-feed-list-v2">
               {visibleItems.map((operation) => <OperationCard key={operation.id} operation={operation} selected={!selectedPirate && operation.id === selected?.id} onSelect={() => { setSelectedPirateCycleKey(null); setSelectedId(operation.id); }} />)}
             </div>
-          ) : !pirateContacts.length ? <EmptyState tab={tab} /> : null}
+          ) : !visiblePirates.length ? <EmptyState tab={tab} /> : null}
+          </div>
         </section>
 
         {selectedPirate ? <PirateContactDossier contact={selectedPirate} nowMs={nowMs} onRecon={onPirateRecon} onAttack={onPirateAttack} onReport={onPirateReport} onUniverse={onPirateUniverse} /> : <OperationDossier operation={selected} onAccept={accept} onCancel={cancel} onReveal={onReveal} onOpenFleets={onOpenFleets} />}
