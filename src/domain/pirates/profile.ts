@@ -1,5 +1,5 @@
 import { PIRATE_BASE_SHIPS, PIRATE_CATALOG_BY_ID, type PirateBaseShipId, type PirateShipId } from './catalog.ts';
-import { COMBAT_TECHNOLOGIES, type CombatTechnologyId } from '../combat/technologies.ts';
+import { COMBAT_TECHNOLOGIES, COMBAT_TECHNOLOGY_IDS, type CombatTechnologyId } from '../combat/technologies.ts';
 import { pirateSeededDraw } from './threat.ts';
 
 export type PirateTierShares = Readonly<Record<1 | 2 | 3, number>>;
@@ -85,6 +85,25 @@ export function pirateTechnologyLevels(
         && technology.id !== exclusiveTechnologyId ? 0 : realLevel,
     ];
   })) as Record<CombatTechnologyId, number>);
+}
+
+/**
+ * Combat inputs must use the exact frozen technology levels from dispatch,
+ * not recompute them from resource points. Validate BOTH canonical generations
+ * without trusting edited client snapshots; no other technology vector passes.
+ */
+export function frozenPirateTechnologyLevels(profile: PirateProfile): Readonly<Record<CombatTechnologyId, number>> | null {
+  if (!profile.technologies || Object.keys(profile.technologies).length !== COMBAT_TECHNOLOGY_IDS.length
+    || !COMBAT_TECHNOLOGY_IDS.every(id => Object.hasOwn(profile.technologies, id))) return null;
+  const approved = pirateTechnologyLevels(profile.score.resourcePoints, profile.exclusiveTechnologyId);
+  const tier = pirateTechnologyLevelForResourcePoints(profile.score.resourcePoints);
+  const oldFlat = Object.fromEntries(COMBAT_TECHNOLOGY_IDS.map(id => [
+    id, PIRATE_EXCLUSIVE_TECHNOLOGIES.includes(id as PirateExclusiveTechnologyId)
+      && id !== profile.exclusiveTechnologyId ? 0 : tier,
+  ])) as Record<CombatTechnologyId, number>;
+  const matches = (expected: Readonly<Record<CombatTechnologyId, number>>) =>
+    COMBAT_TECHNOLOGY_IDS.every(id => profile.technologies[id] === expected[id]);
+  return matches(approved) || matches(oldFlat) ? profile.technologies : null;
 }
 
 /** Log10 interpolation; values below/above the control points clamp to endpoint distributions. */
