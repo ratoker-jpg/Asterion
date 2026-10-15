@@ -2515,7 +2515,7 @@ export function reconcileFlights(
           : completed.missionId === 'pirate-recon'
             ? 'Пиратская разведка: зонд вернулся на исходную планету.'
           : completed.missionId === 'pirate-elimination'
-            ? completed.completionReason === 'target-unavailable' ? 'По указанным координатам планеты пиратов не обнаружено' : 'Уничтожение пиратов: выживший флот вернулся на исходную планету.'
+            ? completed.completionReason === 'target-unavailable' ? 'По указанным координатам планеты пиратов не обнаружено' : 'Пиратский рейд: выживший флот вернулся на исходную планету.'
           : completed.ownerSide === 'bot01'
             ? 'Флот Bot 01 вернулся к источнику; выжившие корабли и захваченные ресурсы зачислены.'
         : completed.missionId === 'transport' || completed.missionId === 'recycle' || completed.missionId === 'gas'
