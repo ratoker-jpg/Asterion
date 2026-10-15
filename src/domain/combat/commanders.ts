@@ -54,11 +54,11 @@ export const COMMANDER_ABILITIES: Readonly<Record<CommanderId, CommanderAbilityD
   corsair: {
     commanderId: 'corsair',
     commanderName: 'Корсар',
-    ability: 'Сбор пиратских обломков',
-    description: 'При участии Корсара и его выживании повышает долю обломков от уничтоженных пиратских кораблей. Не обязан быть ведущим командиром.',
-    ratePerLevel: '+0,5 п.п. обломков за уровень (максимум 80%)',
-    implementationStatus: 'implemented',
-    note: 'Базовая доля обломков — 60%. Исторический бонус +1,25% к краже ресурсов присутствовал только в каталоге и в рейдах не реализован.',
+    ability: 'Форсированное пиратство',
+    description: 'Увеличивает возможный процент украденных ресурсов за Пиратский рейд.',
+    ratePerLevel: '+1,25% за уровень',
+    implementationStatus: 'catalog-only',
+    note: 'В боях с пиратами также увеличивает долю обломков от уничтоженных пиратских кораблей на 0,5 процентного пункта за уровень; Корсар должен участвовать в бою и выжить, но не обязан быть ведущим командиром.',
   },
   reanimator: {
     commanderId: 'reanimator',
@@ -167,6 +167,29 @@ export function getCommanderCombatEffect(id: CommanderId | null | undefined) {
 }
 
 export const COMMANDER_LIST = COMMANDER_IDS.map((id) => COMMANDER_ABILITIES[id]);
+
+/**
+ * UI-only Asterion PvE presentation. The source catalog above remains an
+ * immutable Nemexia parity fixture; no theft resource mechanic is active.
+ */
+export function getCommanderPresentedAbility(id: CommanderId): CommanderAbilityDefinition {
+  if (id !== 'corsair') return COMMANDER_ABILITIES[id];
+  return {
+    ...COMMANDER_ABILITIES.corsair,
+    ability: 'Сбор пиратских обломков',
+    description: 'Увеличивает обломки от уничтоженных пиратских кораблей, если Корсар участвовал в бою и выжил. Не обязан быть ведущим.',
+    ratePerLevel: '+0,5 п.п. за уровень, максимум 80% обломков',
+    implementationStatus: 'implemented',
+    note: 'Базовая доля обломков 60%. Бонус +1,25% к краже ресурсов — исторический каталог, в Asterion пока не реализован.',
+  };
+}
+
+export function formatCommanderPresentedEffect(id: CommanderId, level: number): string {
+  if (id !== 'corsair') return formatCommanderAbilityEffect(id, level);
+  const safeLevel = Math.max(0, Math.floor(Number.isFinite(level) ? level : 0));
+  const bonus = Math.min(20, safeLevel * 0.5);
+  return `+${EFFECT_PERCENT_FORMAT.format(bonus)} п.п. к обломкам · доля ${EFFECT_PERCENT_FORMAT.format(60 + bonus)}%`;
+}
 
 /**
  * Numeric per-level rates (in percent) behind the localized ratePerLevel
