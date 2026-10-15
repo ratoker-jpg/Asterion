@@ -18,6 +18,7 @@ import {
 import { calculateAttackDebris } from './attack.ts';
 import { calculatePirateForceDebris } from '../domain/pirates/debris.ts';
 import { calculatePirateEliminationPopulationBudget } from '../domain/pirates/profile.ts';
+import { isPirateMissionSnapshot } from '../domain/pirates/mission.ts';
 import { PIRATE_BASE_SHIPS, type PirateBaseShipId } from '../domain/pirates/catalog.ts';
 import { getUniverseTimedObjectSchedule } from '../domain/universe/runtime.ts';
 import type { UniverseCoordinate } from '../domain/universe/types.ts';

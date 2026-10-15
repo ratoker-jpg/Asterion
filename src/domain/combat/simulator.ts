@@ -549,7 +549,14 @@ export function validateCombatInput(input: CombatInput, options: CombatValidatio
       message: `Флот атакующего превышает лимит ${SIMULATOR_POPULATION_LIMITS.attackerFleet.toLocaleString('ru-RU')}.`,
     });
   }
-  if (options.allowPopulationOverflow !== true && defenderFleetPopulation > SIMULATOR_POPULATION_LIMITS.defenderFleet) {
+  // Pirate-elimination bases may legitimately field 105% of the launched
+  // player's combat population. Permit only that narrow PvE defender
+  // overflow; keep player and non-pirate fleet limits unchanged.
+  const approvedPirateGarrisonOverflow = options.missionType === 'pirate-elimination'
+    && normalized.defender.combatProfile?.kind === 'pirate'
+    && defenderFleetPopulation <= Math.round(attackerPopulation * 1.05);
+  if (options.allowPopulationOverflow !== true && !approvedPirateGarrisonOverflow
+    && defenderFleetPopulation > SIMULATOR_POPULATION_LIMITS.defenderFleet) {
     errors.push({
       code: 'population-overflow',
       path: 'defender',
