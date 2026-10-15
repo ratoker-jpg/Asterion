@@ -23,6 +23,8 @@ type OperationsViewProps = {
   onReveal: (operationId: OperationId) => void;
   onOpenFleets: () => void;
   pirateContacts?: readonly PirateContactPresentation[];
+  quietPirateSystems?: readonly { galaxy: number; system: number; nextEligibleAt: number }[];
+  nowMs?: number;
   onPirateRecon?: (contact: PirateContactPresentation) => void;
   onPirateAttack?: (contact: PirateContactPresentation) => void;
   onPirateReport?: (reportId: string) => void;
@@ -405,22 +407,17 @@ function OperationDossier({ operation, onAccept, onCancel, onReveal, onOpenFleet
   );
 }
 
-export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, pirateContacts = [], onPirateRecon, onPirateAttack, onPirateReport, onPirateUniverse }: OperationsViewProps) {
+export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, pirateContacts = [], quietPirateSystems = [], nowMs = Date.now(), onPirateRecon, onPirateAttack, onPirateReport, onPirateUniverse }: OperationsViewProps) {
   const [tab, setTab] = useState<OperationsTab>('available');
   const [selectedId, setSelectedId] = useState<OperationId | null>(() => state.items.find((item) => item.state === 'available')?.id ?? null);
   const [selectedPirateCycleKey, setSelectedPirateCycleKey] = useState<string | null>(null);
-  const [nowMs, setNowMs] = useState(() => Date.now());
+
 
   const visibleItems = useMemo(() => state.items.filter((item) => item.state === tab), [state.items, tab]);
   const visiblePirates = tab === 'available' ? pirateContacts : [];
   const selected = state.items.find((item) => item.id === selectedId && item.state === tab) ?? null;
   const selectedPirate = visiblePirates.find((contact) => contact.contactCycleKey === selectedPirateCycleKey) ?? null;
   const visibleCount = visibleItems.length + visiblePirates.length;
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     if (selectedPirate) return;
@@ -483,11 +480,18 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
               {visiblePirates.map((contact) => <PirateContactCard key={contact.contactCycleKey} contact={contact} nowMs={nowMs} selected={contact.contactCycleKey === selectedPirateCycleKey} onSelect={() => { setSelectedPirateCycleKey(contact.contactCycleKey); setSelectedId(null); }} />)}
             </div>
           ) : null}
+          {tab === 'available' && quietPirateSystems.length ? <div className="operations-pirate-quiet-list" aria-label="Пауза после уничтожения контакта">
+            {quietPirateSystems.map((quiet) => <div className="operations-pirate-quiet" key={`${quiet.galaxy}:${quiet.system}`} role="status">
+              <strong>КОНТАКТ УНИЧТОЖЕН · [{quiet.galaxy}:{quiet.system}]</strong>
+              <span>Следующий цикл возможен не ранее чем через {pirateRemainingLabel(quiet.nextEligibleAt, nowMs)}</span>
+              <small>Это пауза перед возможным появлением новой базы, не таймер нападения.</small>
+            </div>)}
+          </div> : null}
           {visibleItems.length ? (
             <div className="operations-feed-list-v2">
               {visibleItems.map((operation) => <OperationCard key={operation.id} operation={operation} selected={!selectedPirate && operation.id === selected?.id} onSelect={() => { setSelectedPirateCycleKey(null); setSelectedId(operation.id); }} />)}
             </div>
-          ) : !visiblePirates.length ? <EmptyState tab={tab} /> : null}
+          ) : !visiblePirates.length && !(tab === 'available' && quietPirateSystems.length) ? <EmptyState tab={tab} /> : null}
           </div>
         </section>
 
