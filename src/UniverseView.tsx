@@ -116,7 +116,7 @@ type UniverseViewProps = {
   asteroidStates?: readonly UniverseAsteroidRuntimeState[];
   pirateContactState?: PirateContactState | null;
   pirateContacts?: readonly PirateContactPresentation[];
-  pirateFocusTarget?: PirateContactPresentation | null;
+  pirateFocusTarget?: Pick<PirateContactPresentation, 'coordinate' | 'contactCycleKey'> | null;
   mode: RuntimeMode;
   onColonize: (coordinate: UniverseCoordinate) => void;
   onAsteroidRecycler: (target: { spawnIndex: number; coordinate: UniverseCoordinate }) => void;
@@ -512,7 +512,10 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
     const target = [...nodesById.values()].find((node) => node.kind === 'pirate'
       && node.pirate?.contactCycleKey === pirateFocusTarget.contactCycleKey);
     if (!target) {
+      // Historical reports navigate to the old system, never focus a new pirate cycle.
+      setSelectedNodeId(null);
       setSystem(pirateFocusTarget.coordinate.system);
+      onFocusHandled?.();
       return;
     }
     lastPirateFocusKeyRef.current = pirateFocusTarget.contactCycleKey;
