@@ -154,7 +154,7 @@ import { enqueueApplicationStateUpdate } from './application/state.ts';
 import { getOwnerShipUpgradeLevels, getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
 import { selectOwnedPlanet } from './application/owned-planets.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
-import { materializePirateProfiles, selectOwnedPiratePresentations, selectOwnedPirateTargets, selectPirateContacts } from './application/pirate-presentation.ts';
+import { materializePirateProfiles, selectOwnedPiratePresentations, selectOwnedPirateSystems, selectOwnedPirateTargets, selectPirateContacts } from './application/pirate-presentation.ts';
 import type { PirateContactPresentation, PirateSystemSelection } from './pirate-ui.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
@@ -337,9 +337,20 @@ export function App() {
       ? selectOwnedPiratePresentations(state, now)
       : selectPirateContacts(state, now, pirateSystem);
   }, [activeRoute, state, now, pirateSystem]);
+  const quietPirateSystems = useMemo(() => {
+    if (activeRoute !== 'operations') return [];
+    const defeated = Object.values(state.pirate?.contact.defeatedCycles ?? {});
+    return selectOwnedPirateSystems(state).flatMap(({ galaxy, system }) => {
+      if (pirateContacts.some((contact) => contact.coordinate.galaxy === galaxy && contact.coordinate.system === system)) return [];
+      const latest = defeated.filter((entry) => entry.galaxy === galaxy && entry.system === system && entry.nextEligibleAt > now)
+        .sort((left, right) => right.nextEligibleAt - left.nextEligibleAt)[0];
+      return latest ? [{ galaxy, system, nextEligibleAt: latest.nextEligibleAt }] : [];
+    });
+  }, [activeRoute, state.planets, state.pirate?.contact.defeatedCycles, pirateContacts, now]);
   const onPirateSystemChange = useCallback((selection: PirateSystemSelection) => {
     setPirateSystem((current) => current.galaxy === selection.galaxy && current.system === selection.system ? current : selection);
   }, []);
+  const pirateProfileCycleSignature = pirateContacts.map((contact) => contact.contactCycleKey).join('|');
   useEffect(() => {
     const visible = activeRoute === 'operations' || activeRoute === 'universe' ? pirateContacts : [];
     const next = materializePirateProfiles(stateRef.current, visible);
@@ -347,7 +358,8 @@ export function App() {
       stateRef.current = next;
       setState(next);
     }
-  }, [activeRoute, pirateContacts, pirateSystem.system]);
+    // Profile snapshots are frozen on observing a new cycle, not on countdown ticks.
+  }, [activeRoute, pirateProfileCycleSignature]);
 
   const activeRouteRef = useRef(activeRoute);
   const navigateTo = (nextRoute: AppRoute) => {
@@ -1506,6 +1518,8 @@ export function App() {
           ) : activeRoute === 'operations' ? (
             <OperationsView
               pirateContacts={pirateContacts}
+              quietPirateSystems={quietPirateSystems}
+              nowMs={now}
               onPirateRecon={launchPirateRecon}
               onPirateAttack={openPirateAttack}
               onPirateReport={openPirateReport}
