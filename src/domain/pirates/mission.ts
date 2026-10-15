@@ -14,7 +14,8 @@ import {
   type PirateReconReport,
 } from './recon-report.ts';
 import { pirateReconCooldownKey, normalizePirateReconMissionSnapshot, type PirateReconMissionSnapshot } from './recon.ts';
-import type { PirateProfile } from './profile.ts';
+import type { PiratePopulationBudget, PirateProfile } from './profile.ts';
+import type { OwnerPirateThreat } from './threat.ts';
 import { isFlightCoordinate } from '../flights/distance.ts';
 
 export type PirateMissionId = 'pirate-recon' | 'pirate-elimination';
@@ -30,6 +31,11 @@ export type PirateMissionSnapshot = Readonly<{
   startAt: number;
   expiresAt: number;
   profile: PirateProfile;
+  /** V2 launch-only data; absent in pre-PR91 elimination flights. */
+  eliminationBudget?: PiratePopulationBudget;
+  sentCombatPopulation?: number;
+  historicalHangarCapacity?: number;
+  rewardMultiplier?: number;
   reconMission?: PirateReconMissionSnapshot;
 }>;
 
@@ -40,6 +46,9 @@ export type PirateState = Readonly<{
   /** Last dispatch time keyed by owner and exact scheduled contact cycle. */
   reconLastDispatchAt: Readonly<Record<string, number>>;
   reconReports: readonly PirateReconReport[];
+  /** Owner-wide historical maxima survive downgrades and colony loss. */
+  ownerMaxHangarLevel: Readonly<Record<string, number>>;
+  ownerThreats: Readonly<Record<string, OwnerPirateThreat>>;
 }>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -73,6 +82,8 @@ export function createDefaultPirateState(): PirateState {
     contact: createDefaultPirateContactState(),
     reconLastDispatchAt: Object.freeze({}),
     reconReports: Object.freeze([]),
+    ownerMaxHangarLevel: Object.freeze({}),
+    ownerThreats: Object.freeze({}),
   });
 }
 
@@ -120,6 +131,24 @@ export function normalizePirateMissionSnapshot(
     return null;
   }
 
+  const eliminationBudget = value.eliminationBudget;
+  if (eliminationBudget !== undefined) {
+    if (value.missionId !== 'pirate-elimination' || !isRecord(eliminationBudget)
+      || !validTimestamp(eliminationBudget.targetPopulation)
+      || !validTimestamp(eliminationBudget.actualPopulation)
+      || !Number.isFinite(eliminationBudget.absoluteError) || Number(eliminationBudget.absoluteError) < 0
+      || !isRecord(eliminationBudget.ships)
+      || Object.entries(eliminationBudget.ships).some(([id,count]) =>
+        !['pirate-hound','pirate-raider','pirate-corsair','pirate-executioner','pirate-butcher','pirate-bruiser','pirate-planet-breaker'].includes(id)
+        || !validTimestamp(count))
+      || !Number.isFinite(eliminationBudget.coefficient) || Number(eliminationBudget.coefficient) < 0.75
+      || Number(eliminationBudget.coefficient) > 0.9
+      || !validTimestamp(value.sentCombatPopulation)
+      || !validTimestamp(value.historicalHangarCapacity)
+      || ![1,1.25,1.5,2,2.5].includes(value.rewardMultiplier as number)
+    ) return null;
+  }
+
   const coordinate = Object.freeze({
     galaxy: Number(value.coordinate.galaxy),
     system: Number(value.coordinate.system),
@@ -135,6 +164,12 @@ export function normalizePirateMissionSnapshot(
     startAt: Number(value.startAt),
     expiresAt: Number(value.expiresAt),
     profile: freezeProfile(profile),
+    ...(eliminationBudget ? {
+      eliminationBudget: Object.freeze({ ...eliminationBudget, ships: Object.freeze({ ...eliminationBudget.ships }) }) as PiratePopulationBudget,
+      sentCombatPopulation: Number(value.sentCombatPopulation),
+      historicalHangarCapacity: Number(value.historicalHangarCapacity),
+      rewardMultiplier: Number(value.rewardMultiplier),
+    } : {}),
     ...(reconMission ? { reconMission } : {}),
   });
 }
@@ -186,5 +221,22 @@ export function normalizePirateState(value: unknown): PirateState {
     contact: normalizePirateContactState(value.contact),
     reconLastDispatchAt: Object.freeze(reconLastDispatchAt),
     reconReports: Object.freeze(reports),
+    ownerMaxHangarLevel: Object.freeze(Object.fromEntries(
+      Object.entries(isRecord(value.ownerMaxHangarLevel) ? value.ownerMaxHangarLevel : {})
+        .filter(([id, level]) => id.trim().length > 0 && id.length <= 160
+          && !['__proto__','prototype','constructor'].includes(id)
+          && validTimestamp(level) && Number(level) <= 20),
+    )),
+    ownerThreats: Object.freeze(Object.fromEntries(
+      Object.entries(isRecord(value.ownerThreats) ? value.ownerThreats : {})
+        .filter(([id, threat]) => id.trim().length > 0 && id.length <= 160
+          && !['__proto__','prototype','constructor'].includes(id)
+          && isRecord(threat) && threat.version === 1
+          && typeof threat.ageHours === 'number' && Number.isFinite(threat.ageHours) && threat.ageHours >= 0
+          && validTimestamp(threat.integratedAt))
+        .map(([id, threat]) => [id, Object.freeze({ version: 1 as const,
+          ageHours: Number((threat as Record<string, unknown>).ageHours),
+          integratedAt: Number((threat as Record<string, unknown>).integratedAt) })]),
+    )),
   });
 }
