@@ -389,7 +389,7 @@ async function verifyFlow(win, directory, label) {
 
   await setNumberInput(win, '[data-qa-recycling-debris-input]', 10000);
   screen = await readScreen(win);
-  if (screen?.debrisInputValue !== 10000 || screen.debrisValue !== 10000 || screen.duration !== '00:09:16') throw new Error(`${label}: manual debris amount or compact duration mismatch ${JSON.stringify(screen)}`);
+  if (screen?.debrisInputValue !== 10000 || screen.debrisValue !== 10000 || screen.duration !== '00:00:56') throw new Error(`${label}: manual debris amount or compact duration mismatch ${JSON.stringify(screen)}`);
   await setRange(win, '[data-qa-recycling-allocation-slider="metal"]', 60);
   await setRange(win, '[data-qa-recycling-allocation-slider="minerals"]', 30);
   screen = await readScreen(win);
