@@ -12,6 +12,8 @@ import {
   validatePirateContactState,
 } from './contact.ts';
 
+import { getPirateRaidCheckProgress, PIRATE_RAID_CHECK_INTERVAL_MS } from './contact-schedule.ts';
+
 const coordinate = { galaxy: 1, system: 2, position: 7 } as const;
 
 test('pirate cycle key includes the authoritative schedule identity', () => {
@@ -101,4 +103,22 @@ test('defeat recording is idempotent and malformed persisted pirate entries migr
   assert.equal(validatePirateContactState(broken).valid, false);
   assert.deepEqual(migratePirateContactState(broken), createDefaultPirateContactState());
   assert.deepEqual(migratePirateContactState(undefined), createDefaultPirateContactState());
+});
+
+test('raid-check UI period is exactly 15 minutes and independent of base lifetime', () => {
+  const start = 100_000;
+  const first = getPirateRaidCheckProgress(start, start);
+  assert.equal(PIRATE_RAID_CHECK_INTERVAL_MS, 900_000);
+  assert.equal(first.remainingMs, 900_000);
+  assert.equal(first.percent, 0);
+  const halfway = getPirateRaidCheckProgress(start, start + 450_000);
+  assert.equal(halfway.remainingMs, 450_000);
+  assert.equal(halfway.percent, 50);
+  const second = getPirateRaidCheckProgress(start, start + 900_000);
+  assert.equal(second.remainingMs, 900_000);
+  assert.equal(second.nextAt, start + 1_800_000);
+  assert.equal(second.percent, 0);
+  const later = getPirateRaidCheckProgress(start, start + 4_500_000);
+  assert.equal(later.remainingMs, 900_000);
+  assert.equal(later.percent, 0);
 });
