@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
 import { COMMANDER_COMBAT_CATALOG } from './domain/combat/catalog.ts';
 import { getCombatFactionName } from './domain/combat/factions.ts';
-import { COMMANDER_ABILITIES, COMMANDER_IDS, type CommanderId } from './domain/combat/commanders.ts';
+import { COMMANDER_IDS, getCommanderPresentedAbility, type CommanderId } from './domain/combat/commanders.ts';
 import type { ShipId } from './domain/combat/ids.ts';
 import type { SimulatorMaxRounds } from './domain/combat/simulator.ts';
 import { SOLAR_SATELLITE_ID } from './domain/combat/ids.ts';
@@ -1412,7 +1412,7 @@ function FleetWorkspace({
                   <div className="fleet-attack-commanders-head"><div><small>КОМАНДИРЫ</small><span>{missionId === 'deployment' ? 'Командиры сохраняют уровень и способность при переводе.' : missionId === 'space-flight' ? 'Можно отправить только командирские корабли; спутники и оборона остаются на планете.' : 'Свободные командиры резервируются вместе с флотом.'}</span></div><b>{selectedCommanderCount} выбрано</b></div>
                   {Object.keys(commanderAvailability).length ? <div className="fleet-attack-commanders-list">
                     {COMMANDER_IDS.filter((commanderId) => (commanderAvailability[commanderId] ?? 0) > 0).map((commanderId) => {
-                      const commander = COMMANDER_ABILITIES[commanderId];
+                      const commander = getCommanderPresentedAbility(commanderId);
                       const checked = (selectedCommanders[commanderId] ?? 0) > 0;
                       return <label key={commanderId} className={checked ? 'is-selected' : ''}>
                         <input type="checkbox" checked={checked} onChange={(event) => setSelectedCommanders((current) => {
