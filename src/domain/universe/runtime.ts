@@ -789,6 +789,27 @@ export function getUniverseTimedObjectSchedule(
   return cycles[safeIndex] ?? cycles[0];
 }
 
+/**
+ * One deterministic schedule projection for all potentially due pirate rolls.
+ * Uses the authoritative defeat-shifted cycle sequence rather than a naive
+ * 60-minute arithmetic recurrence.
+ */
+export function getPirateContactCyclesBetween(
+  galaxy: number,
+  system: number,
+  afterMs: number,
+  throughMs: number,
+  defeatedCycles: readonly PirateContactDefeatRecord[] = [],
+): readonly UniverseTimedObjectSchedule[] {
+  if (!Number.isSafeInteger(afterMs) || !Number.isSafeInteger(throughMs) || throughMs <= afterMs) return [];
+  const base = ensureTimedCycles('pirate', galaxy, system, throughMs
+    + defeatedCycles.filter((record) => record.galaxy === galaxy && record.system === system).length * PIRATE_MAX_LIFETIME_MS);
+  const corrected = applyPirateContactDefeatsToSchedules(base, galaxy, system, defeatedCycles);
+  return corrected.filter((cycle) => cycle.present && cycle.startAt + 15 * 60_000 > afterMs
+    && cycle.startAt + 15 * 60_000 <= throughMs
+    && cycle.expiresAt > cycle.startAt + 15 * 60_000);
+}
+
 function activeTimedObjectSchedule(
   kind: TimedObjectKind,
   galaxy: number,
