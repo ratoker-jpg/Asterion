@@ -90,6 +90,21 @@ function fixture(manifest: FleetManifest, options: {
   let state = createInitialSaveState('test', now);
   const contact = getCurrentPirateContact(state, { galaxy: 1, system: 2, position: 1 }, now, 'test');
   assert.ok(contact, 'fixture time must resolve to the scheduled pirate contact');
+  // Raid eligibility is based on ownership in the target system, not on its origin.
+  state = {
+    ...state,
+    planets: {
+      ...state.planets,
+      'combat-raid-colony': {
+        ...state.planets[ORIGIN_ID]!,
+        name: 'Combat raid access colony',
+        universeGalaxy: contact.coordinate.galaxy,
+        universeSystem: contact.coordinate.system,
+        universePosition: contact.coordinate.position === 1 ? 2 : 1,
+        fleet: createEmptyFleetState(),
+      },
+    },
+  };
   state = withManifest(state, manifest, options.shipUpgrades);
   state = withCombatScience(state, options.scienceLevel ?? 0);
   state = withPirateProfile(state, contact.contactCycleKey, options.resourcePoints ?? 0);
