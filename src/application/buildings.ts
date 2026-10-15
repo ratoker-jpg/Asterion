@@ -61,6 +61,7 @@ import {
   type PlanetId,
   type SaveState,
 } from './contracts.ts';
+import { createDefaultPirateState } from '../domain/pirates/mission.ts';
 import {
   energySourceChangeForBuilding,
   getPlanetEnergyLedger,
@@ -213,6 +214,22 @@ export function cancelBuilding(
   };
 }
 
+function rememberHistoricalHangar(state: SaveState, currentLevel: number): SaveState {
+  const ownerId = state.profile.playerId;
+  const existing = state.pirate?.ownerMaxHangarLevel?.[ownerId] ?? 0;
+  if (currentLevel <= existing) return state;
+  return {
+    ...state,
+    pirate: {
+      ...(state.pirate ?? createDefaultPirateState()),
+      ownerMaxHangarLevel: {
+        ...state.pirate?.ownerMaxHangarLevel,
+        [ownerId]:currentLevel,
+      },
+    },
+  };
+}
+
 export function destroyBuilding(
   state: SaveState,
   context: BuildingApplicationContext,
@@ -259,8 +276,11 @@ export function destroyBuilding(
   const transition = destroyBuildingLevel(economyFor(state, context), assetRole, refundPercent);
   if (!transition.ok) return { ok: false, state, reason: transition.reason, refundPercent: null };
 
+  const remembered = assetRole === 'hangar'
+    ? rememberHistoricalHangar(state, Math.max(0,Math.floor(planet.buildings.hangar ?? 0)))
+    : state;
   const next = stateFromEconomy(
-    state,
+    remembered,
     context,
     transition.state,
     { sourceChanges: energySourceChangeForBuilding(assetRole) },
@@ -283,9 +303,13 @@ export function completeBuilding(
   if (isPlanetBlocked(state, context.planetId)) return { ok: true, state, reason: null, changed: false, completedRole: null };
   const transition = completeBuildingProject(economyFor(state, context), context.now);
   if (!transition.completedRole) return { ok: true, state, reason: null, changed: false, completedRole: null };
+  const completedState = stateFromEconomy(state, context, transition.state);
+  const completedLevel = getPlanetState(completedState,context.planetId).buildings.hangar ?? 0;
   return {
     ok: true,
-    state: stateFromEconomy(state, context, transition.state),
+    state: transition.completedRole === 'hangar'
+      ? rememberHistoricalHangar(completedState,Math.max(0,Math.floor(completedLevel)))
+      : completedState,
     reason: null,
     changed: true,
     completedRole: transition.completedRole,
