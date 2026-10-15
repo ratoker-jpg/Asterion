@@ -262,7 +262,7 @@ function OperationCard({ operation, selected, onSelect, contact, quiet, nowMs }:
             aria-valuemin={0} aria-valuemax={100} aria-valuenow={raidCheck.percent}>
             <span className="operations-pirate-cooldown-mask" style={{ width: `${100 - raidCheck.percent}%` }} />
           </span>
-          <span className="operation-feed-raid-check-note-v2">Интервал отображается; автоматические налёты ещё не подключены</span>
+          <span className="operation-feed-raid-check-note-v2">Автоатаки пока не подключены</span>
         </span> : null}
       </span>
       <span className="operation-feed-arrow-v2">›</span>
