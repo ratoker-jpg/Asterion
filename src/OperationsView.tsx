@@ -424,8 +424,9 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
 
   useEffect(() => {
     if (selectedPirate) return;
+    if (selected) return;
     setSelectedPirateCycleKey(pirateContacts[0]?.contactCycleKey ?? null);
-  }, [pirateContacts, selectedPirate]);
+  }, [pirateContacts, selected, selectedPirate]);
 
   useEffect(() => {
     if (selected || selectedPirate) return;

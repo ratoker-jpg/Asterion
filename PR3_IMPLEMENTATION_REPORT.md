@@ -38,6 +38,10 @@ The next auditor must explicitly open that file; storing it in GitHub does not a
 
 ## Publication
 
-The PR URL, final commit, CI and preview verification will be added after the draft is published. Preview validation must compare `pr/<number>/preview-sha.txt` with the actual PR head and verify that the application loads.
+Draft PR [#90](https://github.com/ratoker-jpg/Asterion/pull/90) targets `main` from `codex/pr3-pirate-operations`. The initial implementation commit was `689b71aa881b0f9e4e0f87c9c9aa91ddf298e96c`.
+
+Pages workflow [#896](https://github.com/ratoker-jpg/Asterion/actions/runs/38726248882) deployed the PR preview successfully. At that head, `https://ratoker-jpg.github.io/Asterion/pr/90/preview-sha.txt` returned the same SHA, and the live app loaded the Operations screen with active pirate contacts and recon/attack actions.
+
+CI workflow [#767](https://github.com/ratoker-jpg/Asterion/actions/runs/38726248919) exposed a regression in Resource Asset Electron QA: auto-selecting a pirate contact hid the existing operation reward preview and its gas icon. The base passed this QA; the fix keeps an existing operation selected by default while leaving pirate contacts selectable. After the fix, the local resource asset QA passed at 1920×1080 and 1280×720, the pirate end-to-end journeys passed at 1920×1080 and 390×844, and the build passed. Updated-head CI and Pages checks run on the follow-up commit and are linked from PR #90.
 
 Delegated implementation and verification work was handled by explicitly selected GPT-6 Luna workers to conserve account usage. The main thread handled integration and release review.

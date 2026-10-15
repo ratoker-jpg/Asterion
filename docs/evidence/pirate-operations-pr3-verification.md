@@ -65,6 +65,7 @@ The user clarified that a successful recon report may reveal **ship composition 
 | `npm run test:battle-reports-ui` | Passed. |
 | `npm run test:space-flight-ui` | Passed at 1920×1080 and 1280×720. |
 | `npm run test:production-test-isolation-ui` | Passed. |
+| `npm run test:resource-assets-ui` (after Operations selection fix) | Passed at 1920×1080 and 1280×720. |
 | `node electron/pirate-operations-qa.cjs` (Electron E2E) | Passed at 1920×1080 and 390×844. Each viewport completed recon and elimination returns; no horizontal overflow, failed requests or load failures. The only console entries were Electron's development CSP warning. Recon dossier showed ship composition and ship level without pirate technologies. |
 | `npm run dist:win` | Passed and produced `release/Asterion Setup 0.1.0.exe` (587,733,391 bytes). Packaging logged the existing large-chunk advisory, missing package description/author, a duplicate `@emnapi/runtime@1.11.3`, and the default Electron icon. |
 | `npm run assets:asterion:audit` | Passed (intake 72, runtime 70). |
@@ -72,6 +73,13 @@ The user clarified that a successful recon report may reveal **ship composition 
 The 390×844 run retained the existing 1920×1080 stage scaled to fit. It had no clipping or horizontal overflow, but the text is small; the user explicitly chose to keep this behavior and document the limitation.
 
 `test:attack` remains 18/20, with the same two resource assertions failing on the baseline commit. The final branch positions were :381 and :426 after test edits; this is recorded as a pre-existing failure, not a PR3 regression.
+
+## GitHub publication checks
+
+- Draft PR: [#90](https://github.com/ratoker-jpg/Asterion/pull/90), initially published at `689b71aa881b0f9e4e0f87c9c9aa91ddf298e96c`.
+- Pages workflow [#896](https://github.com/ratoker-jpg/Asterion/actions/runs/38726248882) passed. The published [preview SHA marker](https://ratoker-jpg.github.io/Asterion/pr/90/preview-sha.txt) matched the initial PR head, and the [live preview](https://ratoker-jpg.github.io/Asterion/pr/90/) loaded the Operations screen with pirate contacts and their recon/attack actions.
+- Initial CI workflow [#767](https://github.com/ratoker-jpg/Asterion/actions/runs/38726248919) passed its domain tests and the first eight Electron QA steps, then failed at `Resource asset Electron QA`; subsequent steps were skipped. The exact failure was `operations: missing resource kind gas`. The base SHA passed the same QA in run [#38712095876](https://github.com/ratoker-jpg/Asterion/actions/runs/38712095876), so this was a PR3 regression.
+- The regression came from auto-selecting the first pirate contact, which replaced the existing operation dossier and removed its gas resource icon. The follow-up keeps an existing operation dossier selected by default; pirate contacts remain selectable. After the fix, `npm run build`, `npm run test:resource-assets-ui`, `npm run test:pirate-operations`, and the two-viewport pirate Electron E2E all passed locally. Updated-head CI and Pages checks run against the follow-up commit.
 
 ## Harness adjustment
 
