@@ -864,7 +864,20 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
       || shipEntries[0][0] !== 'spy-probe' || shipEntries[0][1] !== 1
       || Object.values((item.selectedCommanders ?? {}) as Record<string, number>).some((count) => count > 0))) return false;
   }
-  if (item.missionId === 'attack' || item.missionId === 'pirate-elimination' || item.missionId === 'pirate-raid') {
+  if (item.missionId === 'pirate-raid' && item.attackResolution !== undefined) {
+    const resolved = item.attackResolution;
+    if (!resolved || typeof resolved !== 'object'
+      || !isNonEmptyPersistedString(resolved.reportId)
+      || resolved.reportId !== `battle-pirate-raid-${item.id}`
+      || !isFinitePersistedNumber(resolved.resolvedAt)
+      || !isNonNegativeInteger(resolved.debris)
+      || resolved.planetDestroyed === true
+      || !resolved.loot || typeof resolved.loot !== 'object'
+      || ['metal','minerals','gas','debris'].some((key) =>
+        !isNonNegativeInteger((resolved.loot as Record<string, unknown>)[key])))
+      return false;
+  }
+  if (item.missionId === 'attack' || item.missionId === 'pirate-elimination') {
     const bot01Incoming = item.ownerSide === 'bot01';
     if (item.missionId === 'attack' && (destinationRecord.kind !== 'planet'
       || !isNonEmptyPersistedString(item.destinationPlanetId)
