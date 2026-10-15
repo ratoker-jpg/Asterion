@@ -1536,3 +1536,135 @@
   font-size: 10px;
   line-height: 1.4;
 }
+
+/* Keep desktop Operations in the shared GlobalPageScrollController flow.
+   No nested page-height clamp: the document scrolls only when its content grows. */
+.workspace.workspace--operations {
+  overflow: visible !important;
+}
+.operations-shell-v2,
+.operations-layout-v2,
+.operations-feed-v2,
+.operations-dossier-v2 {
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+.operations-feed-scroll-v2 {
+  max-height: none;
+  overflow: visible;
+}
+.operations-quiet-banner-v2 {
+  align-items: stretch;
+}
+.operations-cycle-timer-list-v2 {
+  display: grid;
+  flex: 1 1 400px;
+  gap: 10px;
+  min-width: 320px;
+}
+.operations-cycle-timer-item-v2 {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  border: 1px solid rgba(231, 112, 97, .25);
+  border-radius: 10px;
+  padding: 9px 13px;
+  background: rgba(12, 22, 30, .8);
+}
+.operations-cycle-timer-item-v2 > strong {
+  color: #ffc4ad;
+  font-size: 13px;
+}
+.operations-cycle-timer-item-v2 > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 7px 12px;
+  align-items: center;
+}
+.operations-cycle-timer-item-v2 > div > span {
+  color: #b4a6a2;
+  font-size: 11px;
+}
+.operations-cycle-timer-item-v2 > div > b {
+  color: #ffd3a8;
+  font-size: 13px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.operations-cycle-timer-item-v2 .operations-pirate-cooldown-track {
+  grid-column: 1 / -1;
+}
+.operations-intel-report-button-v2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 11px;
+  padding: 8px 12px;
+  border: 1px solid rgba(91, 208, 234, .5);
+  border-radius: 9px;
+  background: rgba(8, 49, 62, .6);
+  color: #a4e8f4;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.operations-intel-report-button-v2:hover { background: rgba(17, 87, 106, .7); }
+.operations-dossier-v2--pirate .operations-rewards-panel-v2 small,
+.operations-dossier-v2--pirate .operations-conditions-v2 small,
+.operations-dossier-v2--pirate .operations-objective-v2 small {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+.operations-dossier-v2--pirate .operations-rewards-panel-v2 p,
+.operations-dossier-v2--pirate .operations-conditions-v2 p {
+  color: #99afb5;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.operations-dossier-v2--pirate .operations-conditions-v2 > strong,
+.operations-dossier-v2--pirate .operations-pirate-debris-reward strong {
+  font-size: 15px;
+}
+.operations-dossier-v2--pirate .operations-pirate-debris-reward .asterion-resource-icon {
+  width: 47px;
+  height: 47px;
+  flex: 0 0 47px;
+}
+.operations-completed-report-body-v2 {
+  display: grid;
+  gap: 16px;
+  padding: 20px 12px;
+}
+.operations-completed-report-body-v2 h3 { margin: 0; font-size: 16px; color: #ffc0b5; }
+.operations-completed-report-body-v2 p { margin: 0; font-size: 12px; color: #aec1c7; }
+.operations-completed-report-facts-v2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.operations-completed-report-facts-v2 > div {
+  display: grid;
+  gap: 9px;
+  padding: 14px;
+  border: 1px solid rgba(229, 99, 91, .27);
+  border-radius: 12px;
+  background: rgba(32, 23, 29, .8);
+}
+.operations-completed-report-facts-v2 small { font-size: 11px; color: #bc9290; }
+.operations-completed-report-facts-v2 strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 15px;
+  color: #fff0eb;
+}
+.operations-completed-report-body-v2 > button {
+  justify-self: start;
+  min-height: 38px;
+  padding-inline: 16px;
+}
