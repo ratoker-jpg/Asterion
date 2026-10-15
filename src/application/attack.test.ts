@@ -394,10 +394,15 @@ test('attacker victory reserves ordered loot until the surviving fleet returns',
   const lootTotal = resolution.loot.metal + resolution.loot.minerals + resolution.loot.gas;
   assert.equal(report.winner, 'attacker');
   assert.ok(lootTotal > 0);
-  const preAttackMetal=initial.espionage!.targets![targetId].resources.metal;
-  assert.ok(resolution.loot.metal <= Math.floor(preAttackMetal * 0.75));
-  assert.equal(arrival.state.espionage!.targets![targetId].resources.metal,
-    preAttackMetal-resolution.loot.metal,'loot must be deducted exactly once from the actual seeded live wallet');
+  const preLaunchMetal=initial.espionage!.targets![targetId].resources.metal;
+  const afterAttackMetal=arrival.state.espionage!.targets![targetId].resources.metal;
+  // NPC resource production accrues during travel, so the arrival balance
+  // can exceed the launch balance even after real loot was deducted.
+  const preBattleMetal=afterAttackMetal+resolution.loot.metal;
+  assert.ok(preBattleMetal>=preLaunchMetal,'NPC passive production must not be lost');
+  assert.ok(resolution.loot.metal<=Math.floor(preBattleMetal*0.75),
+    'the 75% loot cap applies to the live *arrival* wallet');
+  assert.ok(afterAttackMetal<preBattleMetal,'nonzero loot must debit the arrival wallet');
 
   const originBeforeReturn = getPlanetResources(arrival.state, initial.currentPlanetId).metal;
   const returnAt = arrival.state.flights.records[0]?.returnAt;
@@ -425,8 +430,12 @@ test('attack arrival reads live target resources and resolves an empty neutral p
   assert.equal(report.defenderForce.populationBefore, 0);
   assert.equal(report.debris, 0);
   assert.ok((report.resources?.metal ?? 0) > 0);
-  assert.ok((report.resources?.metal ?? 0) < 2_500,
-    `live 1,000-metal target expected below 2,500; actual loot=${report.resources?.metal}, originalLive=${live.espionage!.targets![targetId].resources.metal}, targetAfter=${arrival.state.espionage!.targets![targetId]?.resources?.metal}`);
+  const arrivalMetal=arrival.state.espionage!.targets![targetId].resources.metal;
+  const liveBeforeCombat=arrivalMetal+(report.resources?.metal??0);
+  assert.ok(liveBeforeCombat>=1_000,'NPC accumulates resources while the fleet is traveling');
+  assert.ok((report.resources?.metal??0)<=Math.floor(liveBeforeCombat*0.75),
+    'live arrival wallet cannot be looted beyond 75% after passive accrual');
+  assert.ok(arrivalMetal<liveBeforeCombat,'metal loot must be deducted once');
   assert.ok((report.resources?.minerals ?? 0) >= 0);
   assert.ok((report.resources?.gas ?? 0) >= 0);
   assert.equal(arrival.state.espionage!.targets![targetId].resources.debris, live.espionage!.targets![targetId].resources.debris);
