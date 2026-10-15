@@ -357,6 +357,37 @@ export function App() {
     });
   }, [activeRoute, state.planets, state.pirate?.contact.defeatedCycles, now]);
 
+  const completedPirateOperations = useMemo(() => {
+    if (activeRoute !== 'operations') return [];
+    const reports = new Set(state.combat.reports.map((report) => report.id));
+    const successfulFlights = new Map(state.flights.records
+      .filter((flight) => flight.missionId === 'pirate-elimination'
+        && flight.pirateSnapshot && flight.attackResolution?.reportId
+        && reports.has(flight.attackResolution.reportId))
+      .map((flight) => [`${flight.pirateSnapshot!.contactCycleKey}:${flight.attackResolution!.resolvedAt}`, flight.attackResolution!.reportId]));
+    return Object.values(state.pirate?.contact.defeatedCycles ?? {})
+      .sort((left, right) => right.defeatedAt - left.defeatedAt)
+      .flatMap((defeat) => {
+        const reportId = successfulFlights.get(`${defeat.contactCycleKey}:${defeat.defeatedAt}`);
+        return reportId ? [{ cycleKey: defeat.contactCycleKey, coordinate: defeat.coordinate, reportId, defeatedAt: defeat.defeatedAt }] : [];
+      })
+      .slice(0, 50);
+  }, [activeRoute, state.pirate?.contact.defeatedCycles, state.flights.records, state.combat.reports]);
+
+  // Expired accepted targets are no longer actionable. Drop their saved UI
+  // selections instead of accumulating one entry for every abandoned cycle.
+  useEffect(() => {
+    if (activeRoute !== 'operations') return;
+    const liveIds = new Set(pirateContacts.map((contact) => pirateOperationId(contact.contactCycleKey)));
+    const current = stateRef.current;
+    const nextItems = current.operations.items.filter((item) => !item.id.startsWith('pirate:pirate-cycle-v1:') || liveIds.has(item.id));
+    if (nextItems.length !== current.operations.items.length) {
+      const next = { ...current, operations: { items: nextItems } };
+      stateRef.current = next;
+      setState(next);
+    }
+  }, [activeRoute, pirateContacts, now]);
+
   const onPirateSystemChange = useCallback((selection: PirateSystemSelection) => {
     setPirateSystem((current) => current.galaxy === selection.galaxy && current.system === selection.system ? current : selection);
   }, []);
@@ -1557,6 +1588,8 @@ export function App() {
               pirateContacts={pirateContacts}
               quietPirateSystems={quietPirateSystems}
               pirateCycleTimers={pirateCycleTimers}
+              completedPirateOperations={completedPirateOperations}
+              onPirateBattleReport={openPirateReport}
               nowMs={now}
               onPirateAccept={acceptPirateOperation}
               onPirateCancel={cancelPirateOperation}
