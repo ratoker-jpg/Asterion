@@ -14,6 +14,7 @@ import {
   type OperationThreatTier,
 } from './types.ts';
 import { getRuntimeSaveKey, type RuntimeMode } from '../runtime/mode.ts';
+import { isCanonicalPirateContactCycleKey } from '../pirates/contact-schedule.ts';
 
 const LEGACY_SAVE_KEY = getRuntimeSaveKey();
 const OPERATION_STATES: readonly OperationState[] = ['available', 'active', 'completed'];
@@ -130,6 +131,9 @@ function normalizeOperation(value: unknown): OperationInstance | null {
   if (!isRecord(value) || typeof value.id !== 'string' || !value.id.trim() || !isArchetype(value.archetype)) return null;
 
   const id = value.id.trim().slice(0, 80);
+  const realPirateCycle = value.archetype === 'pirate_elimination'
+    && id.startsWith('pirate:')
+    && isCanonicalPirateContactCycleKey(id.slice('pirate:'.length));
   const definition = getOperationDefinition(value.archetype);
   const threat = value.archetype === 'unknown_signal'
     ? value.threat === null ? null : definition.threat
@@ -148,17 +152,18 @@ function normalizeOperation(value: unknown): OperationInstance | null {
     id,
     archetype: value.archetype,
     category: definition.category,
-    title: definition.title,
-    briefing: definition.briefing,
+    title: realPirateCycle ? 'ПИРАТСКАЯ БАЗА' : definition.title,
+    briefing: realPirateCycle ? 'Пиратская база в системе игрока. События связаны с конкретным циклом контакта.' : definition.briefing,
     state: isState(value.state) ? value.state : 'available',
-    threat,
-    threatRange: normalizeThreatRange(value.threatRange, definition.threatRange),
+    threat: realPirateCycle ? null : threat,
+    threatRange: realPirateCycle ? undefined : normalizeThreatRange(value.threatRange, definition.threatRange),
     intel: isIntel(value.intel) ? value.intel : definition.intel,
     source: isSource(value.source) ? value.source : definition.source,
     location: normalizeLocation(value.location, definition.location),
-    objective: { ...definition.objective },
-    modifiers,
-    rewardPreview: normalizeReward(value.rewardPreview, definition.rewardPreview),
+    objective: realPirateCycle ? { label: 'Провести пиратский рейд' } : { ...definition.objective },
+    modifiers: realPirateCycle ? [] : modifiers,
+    // No static metal/minerals/gas payout: actual pirate debris follows combat losses.
+    rewardPreview: realPirateCycle ? {} : normalizeReward(value.rewardPreview, definition.rewardPreview),
     ...(originSignalId ? { originSignalId } : {}),
     ...(battleReportId ? { battleReportId } : {}),
   };
