@@ -85,6 +85,8 @@ jobs:
         env:
           ASTERION_SKIP_SCREENSHOTS: '1'
         run: npm run test:universe-ui
+      - name: Pirate operations end-to-end Electron QA
+        run: npm run test:pirate-operations-ui
       - name: Capture utility and resource-zone visual QA
         run: npm run qa:visual
       - name: Upload visual QA artifact
