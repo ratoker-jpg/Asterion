@@ -129,7 +129,7 @@ import { POSITION_COUNT, SYSTEM_COUNT, TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_N
 import { migrateEspionageState } from '../domain/espionage/repository.ts';
 import { createDefaultEspionageState } from '../domain/espionage/runtime.ts';
 import { createDefaultTestEspionageState } from '../domain/espionage/fixtures.ts';
-import { createDefaultPirateState, normalizePirateState, isPirateMissionSnapshot } from '../domain/pirates/mission.ts';
+import { createDefaultPirateState, normalizePirateState, isPirateMissionSnapshot, normalizePirateRaidSnapshot } from '../domain/pirates/mission.ts';
 import { COMBAT_TECHNOLOGIES } from '../domain/combat/technologies.ts';
 import { getSpaceportUpgradeMaxLevel } from '../domain/buildings/spaceport-upgrades.ts';
 
@@ -525,6 +525,7 @@ function createDefaultFlightState(): FlightState {
 const PERSISTED_FLIGHT_MISSIONS = new Set<MissionId>([
   'pirate-recon',
   'pirate-elimination',
+  'pirate-raid',
   'transport',
   'espionage',
   'attack',
@@ -696,8 +697,10 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
     || item.gasCost < 0
     || (isSpaceFlight && item.gasCost !== 100)) return false;
 
-  if ((item.ownerSide !== undefined && item.ownerSide !== 'player' && item.ownerSide !== 'bot01')
-    || (item.ownerSide === 'bot01' && item.missionId !== 'attack')) return false;
+  if ((item.ownerSide !== undefined && item.ownerSide !== 'player' && item.ownerSide !== 'bot01' && item.ownerSide !== 'pirate')
+    || (item.ownerSide === 'bot01' && item.missionId !== 'attack')
+    || (item.ownerSide === 'pirate' && item.missionId !== 'pirate-raid')
+    || (item.missionId === 'pirate-raid' && item.ownerSide !== 'pirate')) return false;
 
   if (item.operationId !== undefined && !isNonEmptyPersistedString(item.operationId)) return false;
   if (item.spyMissionId !== undefined && !isNonEmptyPersistedString(item.spyMissionId)) return false;
@@ -803,7 +806,7 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
       && Object.values(selectedCommanders ?? {}).some((quantity) => isNonNegativeInteger(quantity) && quantity > 0);
     const hasValidCommanderOnlySpaceFlight = isSpaceFlight
       && Object.values(selectedCommanders ?? {}).some((quantity) => isNonNegativeInteger(quantity) && quantity > 0);
-    if (!hasValidCommanderOnlyDeployment && !hasValidCommanderOnlySpaceFlight) return false;
+    if (!hasValidCommanderOnlyDeployment && !hasValidCommanderOnlySpaceFlight && item.missionId !== 'pirate-raid') return false;
   }
   if (item.selectedCommanderLevels !== undefined) {
     if (!item.selectedCommanderLevels || typeof item.selectedCommanderLevels !== 'object' || Array.isArray(item.selectedCommanderLevels)) return false;
@@ -832,6 +835,22 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
       || shipEntries[0][0] !== 'spy-probe'
       || shipEntries[0][1] !== 1) return false;
   }
+  if (item.missionId === 'pirate-raid') {
+    const raid = normalizePirateRaidSnapshot(item.pirateRaidSnapshot);
+    if (!raid || item.pirateSnapshot !== undefined
+      || destinationRecord.kind !== 'planet' || item.targetRelation !== 'enemy'
+      || !isNonEmptyPersistedString(item.destinationPlanetId)
+      || item.destinationPlanetId !== destinationRecord.planetId
+      || item.destinationPlanetId !== raid.targetPlanetId
+      || Object.keys(item.selectedShips).length !== 0
+      || Object.keys(item.selectedCommanders ?? {}).length !== 0
+      || item.gasCost !== 0
+      || item.requestId !== `pirate-raid:${raid.ownerId}:${raid.contactCycleKey}`
+      || item.id !== `flight-${item.requestId}`
+      || item.departedAt !== raid.checkAt
+      || item.destinationOwnerId !== raid.ownerId
+    ) return false;
+  }
   if (item.missionId === 'pirate-recon' || item.missionId === 'pirate-elimination') {
     if (item.ownerSide === 'bot01' || destinationRecord.kind !== 'coordinate'
       || item.targetKind !== 'pirate' || item.targetRelation !== 'neutral'
@@ -845,7 +864,7 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
       || shipEntries[0][0] !== 'spy-probe' || shipEntries[0][1] !== 1
       || Object.values((item.selectedCommanders ?? {}) as Record<string, number>).some((count) => count > 0))) return false;
   }
-  if (item.missionId === 'attack' || item.missionId === 'pirate-elimination') {
+  if (item.missionId === 'attack' || item.missionId === 'pirate-elimination' || item.missionId === 'pirate-raid') {
     const bot01Incoming = item.ownerSide === 'bot01';
     if (item.missionId === 'attack' && (destinationRecord.kind !== 'planet'
       || !isNonEmptyPersistedString(item.destinationPlanetId)
@@ -1071,7 +1090,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     science,
     resourceClock: createResourceClock(now, ['helion-01']),
     flights: createDefaultFlightState(),
-    pirate: createDefaultPirateState(),
+    pirate: { ...createDefaultPirateState(), raidProcessedAt: now },
     asteroidSimulation: createUniverseAsteroidSimulationState(now),
     asteroidDebrisBySpawnIndex: {},
     espionage: mode === 'test' ? createDefaultTestEspionageState(now) : createDefaultEspionageState(),
@@ -1430,6 +1449,7 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
     );
     const migratedPirate = {
       ...pirate,
+      raidProcessedAt: pirate.raidProcessedAt ?? timestamp,
       ownerMaxHangarLevel: {
         ...pirate.ownerMaxHangarLevel,
         [profile.playerId]: historicHangar,
