@@ -81,7 +81,7 @@ function garrison(profile, requestedPopulation, breakerCount, seed){
   return {budget,actual,ships:Object.entries(counts).filter(([,n])=>n>0).map(([entityId,count])=>
     ({entityId,count,level:profile.shipLevel}))};
 }
-function resolve(faction,player,profile,pirates,seed){
+function runBattle(faction,player,profile,pirates,seed){
   const participant=(side,name,race)=>({playerId:name,playerName:name,race,side});
   return resolveCombat({
     scenarioId:seed,timestamp:'2026-10-16T00:00:00.000Z',
@@ -137,7 +137,7 @@ for(const faction of COMBAT_FACTION_IDS){
           const pirates=garrison(profile,player.actual,breakers,seed);
           const results={};
           for(const [name,technologies] of [['old',old],['approved',profile]]){
-            const report=resolve(faction,player,technologies,pirates,seed);
+            const report=runBattle(faction,player,technologies,pirates,seed);
             if(report.roundCount>12)throw Error('12-round limit violated');
             const force=report.defenderForce;
             const power=force.stacks.reduce((n,x)=>n+(x.attackPerUnit||0)*x.countBefore,0);
