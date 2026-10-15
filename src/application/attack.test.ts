@@ -14,7 +14,7 @@ import { createDefaultBuildingLevels } from '../domain/buildings/resource-zone.t
 import { getAvailableProductionBots, getProductionBotBonusPercent } from '../domain/buildings/production-bots.ts';
 import { getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 import { selectCurrentAlliance } from '../domain/command/selectors.ts';
-import { calculateAttackDebris, calculateAttackLoot, resolveAttackAtTarget, resolveBot01IncomingAttack, technologiesFromScience } from './attack.ts';
+import { calculateAttackDebris, calculateAttackLoot, resolveAttackAtTarget, resolveBot01IncomingAttack, technologiesFromScience, normalizeAttackRounds, createAttackLaunchSnapshot, createBot01IncomingAttackSnapshot } from './attack.ts';
 import { getFactionCombatEntity } from '../domain/combat/faction-catalog.ts';
 import { calculateBattlePoints } from '../domain/combat/battle-points.ts';
 import { getCombatFactionId } from '../domain/combat/factions.ts';
@@ -1021,4 +1021,19 @@ test('surviving Bot 01 sieges reconcile factory bots and the last energy source'
     assert.equal(actualEnergy.debtCause, 'source-removal');
     assert.equal(actualEnergy.debtCause, ordinaryEnergy.debtCause);
   }
+});
+
+test('new attacks default to 12 while explicit legacy 5/8/12 remain frozen',()=>{
+  assert.equal(normalizeAttackRounds(undefined),12);
+  assert.equal(normalizeAttackRounds(null),12);
+  assert.equal(normalizeAttackRounds(0),12);
+  for(const rounds of [5,8,12] as const) assert.equal(normalizeAttackRounds(rounds),rounds);
+  const state=createInitialSaveState('test',1_000);
+  const defaulted=createAttackLaunchSnapshot(state,state.currentPlanetId,{},[],undefined);
+  assert.equal(defaulted.maxRounds,12);
+  const explicit=createAttackLaunchSnapshot(state,state.currentPlanetId,{},[],8);
+  assert.equal(explicit.maxRounds,8);
+  const target=Object.values(state.espionage!.targets!)[0]!;
+  const npc=state.espionage!.bot01Profile!;
+  assert.equal(createBot01IncomingAttackSnapshot(target,npc).maxRounds,12);
 });
