@@ -343,7 +343,7 @@ function FleetWorkspace({
   const { fleetSection: selectedSection, setFleetSection } = useNavigation();
   const [selectedQuantities, setSelectedQuantities] = useState<Partial<Record<ShipId, number>>>({});
   const [selectedCommanders, setSelectedCommanders] = useState<Partial<Record<CommanderId, number>>>({});
-  const [attackRounds, setAttackRounds] = useState<SimulatorMaxRounds>(8);
+  const [attackRounds, setAttackRounds] = useState<SimulatorMaxRounds>(12);
   const [oneWayDurationMinutes, setOneWayDurationMinutes] = useState(5);
   const [missionId, setMissionId] = useState<MissionId>('transport');
   const [hoveredMissionId, setHoveredMissionId] = useState<MissionId | null>(null);
@@ -479,7 +479,7 @@ function FleetWorkspace({
     setHoveredMissionId(null);
     setSelectedQuantities({});
     setSelectedCommanders({});
-    setAttackRounds(8);
+    setAttackRounds(12);
     setOneWayDurationMinutes(5);
     setPreviewOpen(false);
     setPreviewResult(null);
@@ -540,7 +540,7 @@ function FleetWorkspace({
     setSelectedCommanders(launchContext.missionId === 'attack' || launchContext.missionId === 'pirate-elimination'
       ? getAttackCommanderSelection(runtimeState, planetId)
       : {});
-    setAttackRounds(8);
+    setAttackRounds(12);
     setSelectedQuantities(launchContext.missionId === 'colonize'
       ? { colonizer: 1 }
       : launchContext.missionId === 'espionage' ? { 'spy-probe': 1 } : {});
@@ -1032,7 +1032,7 @@ function FleetWorkspace({
     if (nextMissionId === 'attack' || nextMissionId === 'pirate-elimination') {
       const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
       setSelectedCommanders(getAttackCommanderSelection(runtimeState, runtimeState.currentPlanetId));
-      setAttackRounds(8);
+      setAttackRounds(12);
     } else {
       setSelectedCommanders({});
     }
