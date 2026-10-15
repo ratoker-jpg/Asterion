@@ -89,3 +89,43 @@ Audit basis: `ASTERION_PR91_INDEPENDENT_AUDIT_e18d847.md`, HEAD `e18d847`, and [
 - Independent audit §P2 asks whether reconnaissance should show the rare base-only Planet Breaker. **Not changed:** revealing a hidden special threat is a product decision for the owner, not an implicit test fix. Existing reconnaissance chance/cooldown unchanged.
 
 **Merge and Ready for review remain prohibited. Only the owner approves a merge.**
+
+## Owner-approved technology/round patch — October 16, 2026
+
+**Source:** `ASTERION_PR91_APPROVED_TECH_PERCENT_AND_12_ROUNDS.md` (owner-approved attachment). Work is limited to existing branch `codex/pr91-pirate-threat-rewards`; PR #91 stays Draft, with no merge/Ready for review.
+
+### What changed and why
+
+1. `src/domain/pirates/profile.ts`: preserved score tier thresholds and immutable 0–10 `profile.technologyLevel`, but new `profile.technologies[id]` use `Math.round(COMBAT_TECHNOLOGIES[id].maxLevel * tier / 10)`, capped within the source science's `maxLevel`. The three exclusive technologies remain mutually exclusive with only the seeded chosen one active. No hull cost, spawn, damage, fleet-shares, or tech coefficients were edited.
+2. `src/domain/pirates/contact.ts`: frozen owner/cycle profiles from before the formula change are now validated against the exact historical *flat tier* profile in addition to the new canonical percent profile. All other frozen properties must still match deterministic seed and score, so forged snapshots are still rejected. Old mission and raid normalizers retain their original `profile.technologies`.
+3. `src/domain/combat/simulator.ts`: removed score-based recalculation of NPC technology **during combat input validation**; this recalculation was overwriting an old flight's frozen levels and initially made controlled before/after battle simulations identical. Validated snapshots now transfer exactly their existing old/new vector into the established shared resolver. Changed no combat formula or `resolveCombat`. Added `frozenPirateTechnologyLevels` validation to reject tampered technology vectors.
+4. `src/FleetWorkspacePortal.tsx`: three new-mission reset points and initial selector default `8 → 12`; manual selector remains `[5,8,12]`, dispatched selection frozen.
+5. `src/application/attack.ts`: new attack with missing/invalid limit defaults 12; explicit saved 5/8/12 remain unchanged. New Bot01 automatic attack snapshot is 12. Incoming pirate resolver reads frozen `pirateRaidSnapshot.maxRounds ?? 8` so old legacy flights remain at 8 while newly created raids run at max 12. Combat may end before its ceiling.
+6. `src/domain/pirates/mission.ts` / `src/application/pirate-raids.ts`: optional `maxRounds?: 12` on the existing version-1 pirate raid snapshot; new dispatch persists 12; valid legacy absence stays absent through normalization/JSON save/reload, and rejects unsupported injected values. No second flight format.
+7. `src/domain/pirates/catalog-profile.test.ts`, `src/domain/pirates/contact.test.ts`, `src/application/pirate-raids.integration.test.ts`, `src/application/attack.test.ts`: all ten sciences, thresholds and lower boundaries, chosen exclusive direction and 100%-max science, snapshot old/new acceptance and malformed rejection, Test Mode and old 5/8, new incoming 12, canonical resource-cap assertions. Existing unrelated attack tests used a stale fixed-10m/-2.5k wallet expectation despite real NPC passive income during flight; changed those checks to use actual live wallet and 75% cap, leaving the gameplay unchanged.
+8. `tools/generate-pirate-pr91-approved-compare.mjs`, `package.json` and `.github/workflows/ci.yml`: 48 old/new matched-seed pairs (96 resolver executions) on all 3 factions, 3.0m and 3.5m resource points, 25,090 and 25,112 population, destroyer levels 0/10, no commanders, 12 rounds and controlled 0/2 defensive Planet Breakers. Mixed-fleet seed sweep retained. Computed net includes real destroyed hull cost and game fuel, with **modeled full debris collection and recycling** at 75/120%; it must not be advertised as guaranteed profit. CI now also runs `test:attack` and `test:flights` rather than omitting those regressions.
+9. `src/domain/pirates/balance-simulation.ts`: the 0–10 `technologyLevel` reporting column is explicitly labeled **tier T**, not the real science-level value.
+
+### Approved control values
+
+| Resource points | Progress tier T | Science max 10 | Science max 15 | Ship armor max 20 |
+|---:|---:|---:|---:|---:|
+| 800,000 | 7 | 7 | 11 | 14 |
+| 1,500,000 | 8 | 8 | 12 | 16 |
+| 3,000,000 | 9 | 9 | 14 | 18 |
+| 3,500,000 | 9 | 9 | 14 | 18 |
+| 6,000,000 | 10 | 10 | 15 | 20 |
+
+One randomly selected exclusive science is scaled against its own maximum; the other two remain zero. The technology seed and all pirate garrison/population coefficient seeds remain unchanged.
+
+### Verified comparison so far
+
+[Run 38816770354](https://github.com/ratoker-jpg/Asterion/actions/runs/38816770354), patch HEAD `06976b26`: **both** seeded combat steps passed, including 324 mixed real combat executions plus 48 old/new pairs (96 executions). In controlled pairs old tech won 45/48, approved new tech won 31/48. Mean nominal net at 75% recycler conversion changed +39.73m → −9.49m; at 120% changed +105.53m → +48.71m. These are full-salvage upper bounds, **not** production-wide expected profit. This **run failed overall**, due to two legacy attack tests assuming a static NPC wallet; the unrelated test fixture now explicitly allows actual accrual and asserts the 75% cap. Newer CI must independently confirm all paths.
+
+### Remaining risks, limits and final gates
+
+- Full final HEAD CI including Windows package and Electron visual checks must complete and pass; **do not infer green from previous intermediate jobs**. See [PR checks](https://github.com/ratoker-jpg/Asterion/pull/91/checks).
+- Full production balance and actual probability-weighted incoming economic loss are not established by selected matched cases. Rare Planet Breakers were deliberately forced to 0/2 to compare behavior under control; their actual encounter chance was not estimated by this experiment.
+- Real saved recycler flights/transport concurrency and all storage limits are **not** simulated by the net model; recovered debris remains an optimistic assumption.
+- Approval for any further balance changes (threat chance, ships, garrison %, salvage multiplier, resolver combat formula) is not granted. Any rebalance must return to the owner first.
+- **No merge, no Ready for review; independent auditor examines changes and CI before owner decision.**
