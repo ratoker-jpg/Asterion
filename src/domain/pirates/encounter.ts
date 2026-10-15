@@ -219,7 +219,7 @@ export function resolvePirateEliminationEncounter(
   try {
     populationBudget = input.populationBudget
       ?? calculatePirateEliminationPopulationBudget(Math.round(sentCombatPopulation), profile.shares);
-    if (populationBudget.actualPopulation > populationBudget.targetPopulation
+    if (populationBudget.coefficient !== undefined && populationBudget.actualPopulation > populationBudget.targetPopulation
       || Object.entries(populationBudget.ships).some(([shipId, count]) =>
         !PIRATE_CATALOG.some((ship) => ship.id === shipId)
         || !Number.isSafeInteger(count) || count < 0)
@@ -229,7 +229,7 @@ export function resolvePirateEliminationEncounter(
   } catch {
     return Object.freeze({ kind: 'rejected', reason: 'invalid-pirate-profile', sentCombatPopulation });
   }
-  const pirateGarrison = Object.freeze(Object.fromEntries(PIRATE_CATALOG.map((ship) => [
+  const pirateGarrison = Object.freeze(Object.fromEntries(PIRATE_CATALOG.filter((ship) => ship.tier !== 'special' || (populationBudget.ships[ship.id] ?? 0) > 0).map((ship) => [
     ship.id,
     populationBudget.ships[ship.id] ?? 0,
   ])) as Record<PirateShipId, number>);
@@ -252,7 +252,7 @@ export function resolvePirateEliminationEncounter(
     race: getCombatFactionName(snapshot.attackerFactionId),
     side: 'attacker',
   });
-  const allPirateStacks: CombatStackInput[] = PIRATE_CATALOG.map((ship) => ({
+  const allPirateStacks: CombatStackInput[] = PIRATE_CATALOG.filter((ship) => ship.tier !== 'special' || pirateGarrison[ship.id] > 0).map((ship) => ({
     entityId: ship.id,
     count: pirateGarrison[ship.id],
     level: pirateSnapshot.shipLevel,
