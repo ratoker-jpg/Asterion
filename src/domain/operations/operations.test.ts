@@ -160,3 +160,25 @@ test('invalid intel, threat and state normalize safely while duplicate ids are d
   assert.equal(operation.intel, 2);
   assert.equal(operation.rewardPreview.metal, 2100);
 });
+
+test('persisted real pirate operation retains cycle, accepted state and no demo rewards', () => {
+  const template = createDefaultOperationsState().items[0];
+  const cycleId = 'pirate:pirate-cycle-v1:1:1:0:1000';
+  const accepted = {
+    ...template, id: cycleId, state: 'active' as const,
+    location: { kind: 'coordinates' as const, coordinates: '[1:1:18]' },
+    rewardPreview: {},
+  };
+  const migrated = migrateOperationsState({ items: [accepted] }, 'production');
+  assert.equal(migrated.items.length, 1);
+  const item = migrated.items[0];
+  assert.equal(item.id, cycleId);
+  assert.equal(item.state, 'active');
+  assert.equal(item.title, 'ПИРАТСКАЯ БАЗА');
+  assert.equal(item.threat, null);
+  assert.deepEqual(item.rewardPreview, {});
+  assert.deepEqual(item.location, { kind: 'coordinates', coordinates: '[1:1:18]' });
+  assert.equal(migrateOperationsState({ items: migrated.items }, 'production').items[0].id, cycleId);
+  const spoofed = migrateOperationsState({ items: [{ ...accepted, id: 'pirate:wrong-cycle' }] }, 'production');
+  assert.notEqual(spoofed.items[0]?.title, 'ПИРАТСКАЯ БАЗА');
+});
