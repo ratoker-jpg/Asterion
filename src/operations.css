@@ -1717,3 +1717,61 @@
   font-size: 10px;
   line-height: 1.35;
 }
+
+/* PR91: local operation-only threat status; no global header changes. */
+.operations-pirate-threat-v2 {
+  display:flex;
+  align-items:center;
+  gap:20px;
+  padding:12px 18px;
+  border:1px solid rgba(130, 163, 200, .33);
+  border-radius:12px;
+  margin: 0 0 12px;
+  background:rgba(11, 28, 42, .6);
+}
+.operations-pirate-threat-v2 > div:first-child {
+  min-width:155px;
+  display:flex;
+  flex-direction:column;
+  gap:5px;
+}
+.operations-pirate-threat-v2 > div:first-child small {
+  font-size:10px;
+  letter-spacing:1.1px;
+  opacity:.75;
+}
+.operations-pirate-threat-v2 > div:first-child strong {
+  font-variant-numeric:tabular-nums;
+  font-size:27px;
+  line-height:1.1;
+}
+.operations-pirate-threat-body-v2 {
+  flex:1;
+  min-width:0;
+}
+.operations-pirate-threat-body-v2 > div[role="progressbar"] {
+  width:100%;
+  height:7px;
+  border-radius:9px;
+  overflow:hidden;
+  background:rgba(124, 161, 196, .25);
+}
+.operations-pirate-threat-body-v2 > div[role="progressbar"] span {
+  display:block;
+  height:100%;
+  border-radius:9px;
+  background:linear-gradient(90deg,#b87d35,#d95332);
+}
+.operations-pirate-threat-body-v2 p,
+.operations-pirate-threat-body-v2 small {
+  display:block;
+  margin:6px 0 0;
+  font-size:11px;
+  line-height:1.5;
+}
+.operations-pirate-threat-body-v2 small {opacity:.72;}
+@media (max-width:720px) {
+  .operations-pirate-threat-v2 {align-items:stretch;flex-direction:column;gap:8px;padding:10px 12px;}
+  .operations-pirate-threat-v2 > div:first-child {flex-direction:row;align-items:center;justify-content:space-between;}
+  .operations-pirate-threat-v2 > div:first-child strong {font-size:22px;}
+}
