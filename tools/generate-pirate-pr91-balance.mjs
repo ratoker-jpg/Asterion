@@ -148,7 +148,14 @@ for(const faction of COMBAT_FACTION_IDS){
   const ownCatalog=[...getFactionShipCatalog(faction),...getFactionDefenseCatalog(faction)];
   for(const band of SCORE_BANDS)for(const level of [0,5,10])for(let index=0;index<CASES_PER_COMBINATION;index++){
     const profile=techFactorProfile(band,index);
-    const ownFleet=playerFleet(faction,band.population,index);
+    // Span the approved full-hangar bonus boundaries with real fleets:
+    // x1 (<50%), x1.25 (50%), x1.5 (75%), x2 (>=95%), x2.5 (full).
+    // The +16-pop safety margin for the 95% case accounts for integer
+    // per-class formation without changing any game multiplier.
+    const highTierPopulation=[Math.floor(H*.25),Math.ceil(H*.5)+16,
+      Math.ceil(H*.75)+16,Math.ceil(H*.95)+16,H,H][index];
+    const budgetPopulation=band.id==='high'?highTierPopulation:band.population;
+    const ownFleet=playerFleet(faction,budgetPopulation,index);
     const seedBase=PREFIX+':base:'+faction+':'+band.id+':'+level+':'+index;
     const budget=calculatePirateEliminationPopulationBudget(
       ownFleet.population,profile.shares,seedBase,
