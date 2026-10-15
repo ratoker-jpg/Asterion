@@ -28,6 +28,12 @@ jobs:
         run: npm run test:pirate-operations
       - name: PR91 seeded battle and net-economics evidence
         run: npm run balance:pirates:pr91
+      - name: PR91 approved matched-seed 3m-3.5m combat and net comparison
+        run: npm run balance:pirates:pr91:approved
+      - name: Existing attack compatibility suite
+        run: npm run test:attack
+      - name: Existing flight persistence suite
+        run: npm run test:flights
       - name: Operations domain tests
         run: npm run test:operations
       - name: Command domain tests
@@ -104,6 +110,7 @@ jobs:
             artifacts/battle-report-qa/**/*
             artifacts/universe-planet-qa/**/*
             artifacts/pr91-balance/**/*
+            artifacts/pr91-approved-tech-compare/**/*
             artifacts/pirate-operations-qa/**/*
           if-no-files-found: warn
           retention-days: 14
