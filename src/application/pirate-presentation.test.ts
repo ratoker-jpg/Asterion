@@ -87,7 +87,10 @@ test('pirate recon availability previews the selected colony probe and fuel', ()
 
 test('stale pirate elimination appears as a persisted no-target flight message without a battle report', () => {
   const { state, contact, now } = activeContactFixture();
-  const dispatched = dispatchFlight(state, {
+  const targetColony = createColonyPlanetRuntime(state, { galaxy: contact.coordinate.galaxy,
+    system: contact.coordinate.system, position: contact.coordinate.position === 1 ? 2 : 1 });
+  const eligibleState = { ...state, planets: { ...state.planets, 'stale-flight-colony': targetColony } };
+  const dispatched = dispatchFlight(eligibleState, {
     requestId: 'pirate-no-target-history',
     missionId: 'pirate-elimination',
     contactCycleKey: contact.contactCycleKey,
@@ -152,4 +155,23 @@ test('eligible pirate systems derive solely from owned planets, with per-system 
   assert.equal(selectOwnedPiratePresentations(withColony, now).filter((item) => item.contactCycleKey === contact.contactCycleKey).length, 1);
   assert.equal(selectOwnedPirateTargets({ ...withColony, planets: {} }, now).length, 0);
   assert.equal(selectOwnedPirateSystems({ ...withColony, planets: {} }).length, 0);
+});
+
+test('a combat raid cannot be dispatched to a foreign system even with a valid cycle key', () => {
+  const { state, contact, now } = activeContactFixture();
+  const sent = dispatchFlight(state, {
+    requestId: 'pirate-foreign-raid-blocked',
+    missionId: 'pirate-elimination',
+    contactCycleKey: contact.contactCycleKey,
+    originPlanetId: state.currentPlanetId,
+    destination: { kind: 'coordinate', coordinate: contact.coordinate },
+    targetKind: 'pirate',
+    targetRelation: 'neutral',
+    selectedShips: { scout: 1 },
+  }, { now, mode: 'production' });
+  assert.equal(sent.ok, false);
+  if (!sent.ok) {
+    assert.equal(sent.error.code, 'target-not-available');
+    assert.match(sent.error.message, /системах ваших колоний/);
+  }
 });
