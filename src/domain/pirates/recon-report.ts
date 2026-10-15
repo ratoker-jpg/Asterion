@@ -196,7 +196,7 @@ export type PirateReconReportItem = Readonly<{
   body: string;
   timestamp: string;
   statusLabel: string;
-  statusTone: 'success' | 'warning' | 'info';
+  statusTone: 'success' | 'danger' | 'info';
   participantNames: string[];
   planetNames: string[];
   coordinates: string[];
