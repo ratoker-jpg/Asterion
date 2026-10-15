@@ -220,7 +220,7 @@ export function pirateReconReportToReportItem(report: PirateReconReport): Pirate
   }
   const statusLabel = report.outcome === 'success' ? 'РАЗВЕДКА УСПЕШНА'
     : report.outcome === 'failure' ? 'РАЗВЕДКА НЕ УДАЛАСЬ' : 'ЦЕЛЬ НЕ НАЙДЕНА';
-  const statusTone = report.outcome === 'success' ? 'success' : report.outcome === 'failure' ? 'warning' : 'info';
+  const statusTone = report.outcome === 'success' ? 'success' : report.outcome === 'failure' ? 'danger' : 'info';
   const body = report.outcome === 'success' && report.intel
     ? `${title}. Координаты: ${coordinate}. Состав по населению: ${ships.map((ship) => `${ship.name} — ${ship.populationPercent}%`).join(', ')}. Уровень кораблей: ${report.intel.shipLevel}.`
     : report.outcome === 'failure'
