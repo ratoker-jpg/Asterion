@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createInitialSaveState } from './persistence.ts';
 import { dispatchFlight, reconcileFlights } from './flights.ts';
-import { selectPirateContacts } from './pirate-presentation.ts';
+import { selectOwnedPiratePresentations, selectOwnedPirateSystems, selectOwnedPirateTargets, selectPirateContacts } from './pirate-presentation.ts';
 import { getCurrentPirateContact } from './pirates.ts';
 import { createColonyPlanetRuntime, selectOwnedPlanet } from './owned-planets.ts';
 import { getUniverseTimedObjectSchedule } from '../domain/universe/runtime.ts';
@@ -133,4 +133,23 @@ test('stale pirate elimination appears as a persisted no-target flight message w
   assert.equal(noTarget.body, 'По указанным координатам планеты пиратов не обнаружено');
   assert.equal(atReturn.state.combat.reports.length, state.combat.reports.length);
   assert.equal(items.some((item) => item.category === 'battle'), false);
+});
+
+test('eligible pirate systems derive solely from owned planets, with per-system deduplication', () => {
+  const { state, contact, now } = activeContactFixture();
+  const pirateSystem = contact.coordinate.system;
+  const withoutColony = selectOwnedPirateTargets(state, now);
+  assert.ok(withoutColony.every((item) => item.coordinate.system === 1));
+  assert.equal(withoutColony.some((item) => item.contactCycleKey === contact.contactCycleKey), false);
+
+  const colony = createColonyPlanetRuntime(state, { galaxy: 1, system: pirateSystem, position: 1 });
+  const withColony = {
+    ...state,
+    planets: { ...state.planets, 'pirate-colony-a': colony, 'pirate-colony-b': { ...colony, universePosition: 2 } },
+  };
+  assert.equal(selectOwnedPirateSystems(withColony).filter(({ system }) => system === pirateSystem).length, 1);
+  assert.equal(selectOwnedPirateTargets(withColony, now).filter((item) => item.contactCycleKey === contact.contactCycleKey).length, 1);
+  assert.equal(selectOwnedPiratePresentations(withColony, now).filter((item) => item.contactCycleKey === contact.contactCycleKey).length, 1);
+  assert.equal(selectOwnedPirateTargets({ ...withColony, planets: {} }, now).length, 0);
+  assert.equal(selectOwnedPirateSystems({ ...withColony, planets: {} }).length, 0);
 });
