@@ -12,10 +12,8 @@ import {
 import type { BattleParticipant, BattleReport } from '../combat/report.ts';
 import type { AttackLaunchSnapshot } from '../attack/types.ts';
 import {
-  PIRATE_BASE_SHIPS,
   PIRATE_CATALOG,
   type PirateShipId,
-  type PirateBaseShipId,
 } from './catalog.ts';
 import {
   calculatePirateEliminationPopulationBudget,
@@ -221,8 +219,7 @@ export function resolvePirateEliminationEncounter(
   try {
     populationBudget = input.populationBudget
       ?? calculatePirateEliminationPopulationBudget(Math.round(sentCombatPopulation), profile.shares);
-    if (populationBudget.targetPopulation <= 0 || populationBudget.actualPopulation <= 0
-      || populationBudget.actualPopulation > populationBudget.targetPopulation
+    if (populationBudget.actualPopulation > populationBudget.targetPopulation
       || Object.entries(populationBudget.ships).some(([shipId, count]) =>
         !PIRATE_CATALOG.some((ship) => ship.id === shipId)
         || !Number.isSafeInteger(count) || count < 0)
