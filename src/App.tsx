@@ -154,7 +154,7 @@ import { enqueueApplicationStateUpdate } from './application/state.ts';
 import { getOwnerShipUpgradeLevels, getPlanetResources, type PlanetId, type SaveState } from './application/contracts.ts';
 import { selectOwnedPlanet } from './application/owned-planets.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
-import { materializePirateProfiles, selectOwnedPiratePresentations, selectOwnedPirateSystems, selectOwnedPirateTargets, selectPirateContacts } from './application/pirate-presentation.ts';
+import { materializePirateProfiles, pirateContactOperation, pirateOperationId, selectOwnedPiratePresentations, selectOwnedPirateSystems, selectOwnedPirateTargets, selectPirateContacts } from './application/pirate-presentation.ts';
 import type { PirateContactPresentation, PirateSystemSelection } from './pirate-ui.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
@@ -344,7 +344,7 @@ export function App() {
       if (pirateContacts.some((contact) => contact.coordinate.galaxy === galaxy && contact.coordinate.system === system)) return [];
       const latest = defeated.filter((entry) => entry.galaxy === galaxy && entry.system === system && entry.nextEligibleAt > now)
         .sort((left, right) => right.nextEligibleAt - left.nextEligibleAt)[0];
-      return latest ? [{ galaxy, system, nextEligibleAt: latest.nextEligibleAt }] : [];
+      return latest ? [{ galaxy, system, nextEligibleAt: latest.nextEligibleAt, contactCycleKey: latest.contactCycleKey, coordinate: latest.coordinate }] : [];
     });
   }, [activeRoute, state.planets, state.pirate?.contact.defeatedCycles, pirateContacts, now]);
   const onPirateSystemChange = useCallback((selection: PirateSystemSelection) => {
@@ -1097,6 +1097,33 @@ export function App() {
     setNotice('Операция принята. Подготовьте флот для выполнения.');
   };
 
+  const acceptPirateOperation = (contact: PirateContactPresentation) => {
+    const current = stateRef.current;
+    const live = selectOwnedPiratePresentations(current, Date.now()).find((item) => item.contactCycleKey === contact.contactCycleKey);
+    if (!live) {
+      setNotice('Пиратский контакт больше не доступен в системах ваших колоний.', 'error');
+      return;
+    }
+    const id = pirateOperationId(live.contactCycleKey);
+    if (current.operations.items.some((item) => item.id === id && item.state === 'active')) return;
+    const next = {
+      ...current,
+      operations: { items: [...current.operations.items.filter((item) => item.id !== id), pirateContactOperation(live, 'active')] },
+    };
+    stateRef.current = next;
+    setState(next);
+    setNotice('Пиратская база добавлена в активные операции.');
+  };
+
+  const cancelPirateOperation = (contact: PirateContactPresentation) => {
+    const current = stateRef.current;
+    const id = pirateOperationId(contact.contactCycleKey);
+    const next = { ...current, operations: { items: current.operations.items.filter((item) => item.id !== id) } };
+    stateRef.current = next;
+    setState(next);
+    setNotice('Пиратская операция возвращена в доступные.');
+  };
+
   const cancelOperationsOperation = (operationId: OperationId) => {
     setState((current) => ({ ...current, operations: cancelOperation(current.operations, operationId, RUNTIME_MODE) }));
     setNotice('Операция отменена и возвращена в доступные без штрафа.');
@@ -1492,6 +1519,8 @@ export function App() {
               pirateContactState={state.pirate?.contact}
               pirateFocusTarget={pirateFocusTarget}
               onPirateSystemChange={onPirateSystemChange}
+              onPirateAccept={acceptPirateOperation}
+              onPirateCancel={cancelPirateOperation}
               onPirateRecon={launchPirateRecon}
               onPirateAttack={openPirateAttack}
               onPirateReport={openPirateReport}
