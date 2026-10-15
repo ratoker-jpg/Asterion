@@ -28,6 +28,7 @@ import type { AttackLaunchSnapshot, AttackLoot, AttackResolution } from '../doma
 import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 import { isPirateShipId } from '../domain/combat/side-entity.ts';
 import { calculatePirateForceDebris } from '../domain/pirates/debris.ts';
+import { PIRATE_CATALOG_BY_ID } from '../domain/pirates/catalog.ts';
 import { resolvePirateEliminationEncounter } from '../domain/pirates/encounter.ts';
 
 const ATTACK_MAX_ROUNDS: readonly SimulatorMaxRounds[] = [5, 8, 12];
@@ -175,15 +176,22 @@ export function calculateAttackDebris(
 
 function survivorsCargo(report: BattleReport, factionId: CombatFactionId) {
   const ships: Partial<Record<ShipId, number>> = {};
+  let pirateSurvivors = 0;
+  let pirateCargo = 0;
   for (const stack of report.attackerForce.stacks ?? []) {
-    if (isPirateShipId(stack.entityId)) continue;
+    if (isPirateShipId(stack.entityId)) {
+      const survivors = safeCount(stack.countAfter);
+      pirateSurvivors += survivors;
+      pirateCargo += survivors * PIRATE_CATALOG_BY_ID[stack.entityId].cargo;
+      continue;
+    }
     const id = stack.entityId as ShipId;
     const entity = getFactionCombatEntity(factionId, stack.entityId);
     if (entity.kind !== 'ship' || id === SOLAR_SATELLITE_ID) continue;
     if (safeCount(stack.countAfter) > 0) ships[id] = safeCount(stack.countAfter);
   }
   const catalog = Object.fromEntries(getFactionShipCatalog(factionId).map((entity) => [entity.id, { cargo: entity.ship?.cargo ?? 0 }]));
-  return { ships, capacity: getFleetCargoCapacity(ships, catalog) };
+  return { ships, pirateSurvivors, capacity: getFleetCargoCapacity(ships, catalog) + pirateCargo };
 }
 
 export function calculateAttackLoot(
@@ -192,7 +200,7 @@ export function calculateAttackLoot(
   attackerFactionId: CombatFactionId,
 ): AttackLoot {
   const survivors = survivorsCargo(report, attackerFactionId);
-  const survivorCount = Object.values(survivors.ships).reduce((total, count) => total + safeCount(count), 0);
+  const survivorCount = survivors.pirateSurvivors + Object.values(survivors.ships).reduce((total, count) => total + safeCount(count), 0);
   if (report.winner !== 'attacker' || survivorCount <= 0 || survivors.capacity <= 0) return { metal: 0, minerals: 0, gas: 0, debris: 0 };
   let free = survivors.capacity;
   const loot = { metal: 0, minerals: 0, gas: 0, debris: 0 };
