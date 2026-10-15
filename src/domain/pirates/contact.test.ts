@@ -200,7 +200,7 @@ test('legacy frozen tier technology profiles survive strict validation without s
     'tampered legacy technology levels must still be rejected');
   const mission={version:1,missionId:'pirate-elimination',ownerId:input.ownerId,
     contactCycleKey:cycleKey,coordinate:{galaxy:1,system:2,position:7},
-    cycleIndex:9,startAt:900_000,expiresAt:900_000+30*60_000,profile:legacy};
+    cycleIndex:9,startAt:900_000,expiresAt:900_000+60*60_000,profile:legacy};
   assert.deepEqual(normalizePirateMissionSnapshot(mission)?.profile.technologies,legacyTechnologies);
 });
 test('pirate profile keeps seed and fleet shares stable while moving to per-science percent',()=>{
