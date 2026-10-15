@@ -17,6 +17,7 @@ export type PiratePopulationBudget = Readonly<{
   actualPopulation: number;
   absoluteError: number;
   ships: Readonly<Partial<Record<PirateShipId, number>>>;
+  coefficient?: number;
 }>;
 
 export type PirateProfile = Readonly<{
