@@ -78,7 +78,12 @@ export type UniverseTimedObjectState = {
   spawnChance: number;
 };
 
-export type UniversePirateState = UniverseTimedObjectState;
+export type UniversePirateState = UniverseTimedObjectState & {
+  /** Authoritative start time of this schedule cycle. */
+  startAt: number;
+  /** Stable identity for this pirate instance; `id` alone repeats each cycle. */
+  contactCycleKey: string;
+};
 
 export type UniversePlanetNode = {
   id: string;

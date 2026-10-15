@@ -863,7 +863,9 @@ async function runViewport(width, height) {
     const pirate = await inspectorSnapshot(win);
     checkCopy(pirate);
     await checkModal(win);
-    if (pirate.kind !== 'pirate' || !pirate.text.includes('Пиратский объект') || !pirate.text.includes('исчезнет через') || !pirate.specialActionDisabled
+    const pirateReconEnabled = pirate.specialActions.some((action) => action.action === 'pirate-recon' && !action.disabled);
+    const pirateEliminationEnabled = pirate.specialActions.some((action) => action.action === 'pirate-elimination' && !action.disabled);
+    if (pirate.kind !== 'pirate' || !pirate.text.includes('Пиратский объект') || !pirate.text.includes('исчезнет через') || !pirateReconEnabled || !pirateEliminationEnabled
       || !pirate.specialArt.loaded || !hasBundledImageAsset(pirate.specialArt.src, ['pirate-planet-', 'planet-020-', 'orbital-forge-'])) throw new Error(`${label}: pirate inspector contract failed ${JSON.stringify(pirate)}`);
     await capture(win, directory, 'pirate-inspector');
     await dismissInspector(win);

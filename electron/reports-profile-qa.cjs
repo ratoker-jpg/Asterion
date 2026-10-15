@@ -24,7 +24,18 @@ async function waitFor(win, expression, timeoutMs = 8000) {
     if (await win.webContents.executeJavaScript(`Boolean(${expression})`)) return;
     await sleep(60);
   }
-  throw new Error(`Timed out waiting for: ${expression}`);
+  const diagnostic = await win.webContents.executeJavaScript(`(() => {
+    let save = {};
+    try { save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}'); } catch {}
+    return {
+      reportsBadge: document.querySelector('[data-qa-navigation="primary"] [data-qa-route="reports"] .asterion-header__nav-badge')?.textContent?.trim() ?? '',
+      readIds: save.reports?.readIds ?? [],
+      selectedReportId: document.querySelector('[data-report-item-id] .reports-list-open[aria-current="true"]')?.closest('[data-report-item-id]')?.getAttribute('data-report-item-id') ?? '',
+      recyclerArrivalIds: (save.reports?.recyclerArrivalReports ?? []).map((item) => item.id),
+      gasArrivalIds: (save.reports?.gasExtractionArrivalReports ?? []).map((item) => item.id),
+    };
+  })()`);
+  throw new Error(`Timed out waiting for: ${expression}; diagnostics: ${JSON.stringify(diagnostic)}`);
 }
 
 async function settle(win) {

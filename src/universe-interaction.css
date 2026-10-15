@@ -94,6 +94,11 @@
 .universe-enabled-operation{min-height:44px;padding:12px;width:100%;border:1px solid #58d6ff99;background:#58d6ff1c;color:#d7f7ff;border-radius:6px;font-size:11px;letter-spacing:1px;cursor:pointer}
 .universe-special-actions{grid-column:2;display:grid;gap:8px}
 .universe-enabled-operation:hover,.universe-enabled-operation:focus-visible{border-color:#9deaff;background:#58d6ff33;outline:2px solid #58d6ff55;outline-offset:2px}
+.universe-special-actions .universe-enabled-operation:disabled{border-color:#809eb433;background:#789eb009;color:#8e9eaa;cursor:not-allowed;outline:none}
+.universe-special-actions .universe-enabled-operation:disabled:hover{border-color:#809eb433;background:#789eb009;color:#8e9eaa}
+.universe-special-actions .universe-enabled-operation:active:not(:disabled){background:#58d6ff3d}
+.universe-pirate-cycle{min-width:0;color:var(--ut-amber);font-size:11px;line-height:1.4;overflow-wrap:anywhere}
+.universe-pirate-action-reason{min-width:0;color:var(--ut-label);font-size:11px;line-height:1.4;overflow-wrap:anywhere}
 .universe-inspector-special--pirate .universe-special-preview img{animation:universe-pirate-embers 4s ease-in-out infinite}
 @keyframes universe-pirate-signal{0%{opacity:.8;transform:scale(.88)}100%{opacity:0;transform:scale(1.35)}}
 @keyframes universe-pirate-embers{0%,100%{filter:drop-shadow(0 0 7px #fd622044)}50%{filter:drop-shadow(0 0 18px #f95a3680)}}

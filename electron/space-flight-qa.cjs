@@ -66,6 +66,8 @@ async function seedCommanderOnlySave(win) {
       if (!save || !planet) return { ok: false, error: 'test save or current planet is missing' };
       planet.fleet.ships = Object.fromEntries(Object.keys(planet.fleet.ships).map((id) => [id, 0]));
       planet.fleet.commanders = Object.fromEntries(Object.keys(planet.fleet.commanders).map((id) => [id, id === 'hunter' ? 1 : 0]));
+      planet.buildings = { ...(planet.buildings || {}), 'gas-production-1': 0, 'gas-production-2': 0 };
+      planet.productionBots = { ...(planet.productionBots || {}), gas: 0 };
       planet.solarSatellites = 2;
       planet.defense.defenses['ballistic-turret'] = 3;
       planet.resources = { ...planet.resources, gas: 1_000 };

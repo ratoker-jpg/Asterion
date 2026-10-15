@@ -401,6 +401,54 @@ test('timed object schedules use the confirmed lifetime, quiet period, and chanc
   }
 });
 
+test('pirate projection exposes a stable cycle identity and resumes the schedule after a global defeat', () => {
+  const galaxy = 1;
+  const systemNumber = 2;
+  const firstSchedule = Array.from({ length: 100 }, (_, cycleIndex) =>
+    getUniverseTimedObjectSchedule('pirate', galaxy, systemNumber, cycleIndex))
+    .find((schedule) => schedule.present)!;
+  const firstSystem = createUniverseSystem({ galaxy, system: systemNumber, nowMs: firstSchedule.startAt + 1 });
+  const firstContact = firstSystem.positions.find((node) => node.kind === 'pirate')!;
+  assert.equal(firstContact.pirate?.contactCycleKey,
+    `pirate-cycle-v1:${galaxy}:${systemNumber}:${firstSchedule.cycleIndex}:${firstSchedule.startAt}`);
+
+  const defeatedAt = firstSchedule.startAt + 10_000;
+  const defeat = {
+    contactCycleKey: firstContact.pirate!.contactCycleKey,
+    galaxy,
+    system: systemNumber,
+    cycleIndex: firstSchedule.cycleIndex,
+    startAt: firstSchedule.startAt,
+    coordinate: firstContact.coordinate,
+    defeatedAt,
+    nextEligibleAt: defeatedAt + PIRATE_QUIET_MS,
+  };
+  const beforeVictorySystem = createUniverseSystem({
+    galaxy,
+    system: systemNumber,
+    nowMs: defeatedAt - 1,
+    pirateContactDefeats: [defeat],
+  });
+  assert.equal(beforeVictorySystem.positions.find((node) => node.kind === 'pirate')?.pirate?.contactCycleKey,
+    firstContact.pirate?.contactCycleKey);
+  const firstNextCycle = getUniverseTimedObjectSchedule(
+    'pirate', galaxy, systemNumber, firstSchedule.cycleIndex + 1, [defeat],
+  );
+  assert.equal(firstNextCycle.startAt, defeatedAt + PIRATE_QUIET_MS);
+  const nextSchedule = Array.from({ length: 100 }, (_, offset) =>
+    getUniverseTimedObjectSchedule('pirate', galaxy, systemNumber, firstSchedule.cycleIndex + offset + 1, [defeat]))
+    .find((schedule) => schedule.present)!;
+  const nextSystem = createUniverseSystem({
+    galaxy,
+    system: systemNumber,
+    nowMs: nextSchedule.startAt,
+    pirateContactDefeats: [defeat],
+  });
+  const nextContact = nextSystem.positions.find((node) => node.kind === 'pirate')!;
+  assert.equal(nextContact.pirate?.cycleIndex, nextSchedule.cycleIndex);
+  assert.notEqual(nextContact.pirate?.contactCycleKey, firstContact.pirate?.contactCycleKey);
+});
+
 test('spy and fleet actions follow the owner relation contract', () => {
   const system = createUniverseSystem({ system: 1, currentOwnerId: 'player-current' });
   const homeworld = system.positions.find((node) => node.isHomeworld)!;

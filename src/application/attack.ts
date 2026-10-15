@@ -28,6 +28,7 @@ import type { AttackLaunchSnapshot, AttackLoot, AttackResolution } from '../doma
 import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 import { isPirateShipId } from '../domain/combat/side-entity.ts';
 import { calculatePirateForceDebris } from '../domain/pirates/debris.ts';
+import { resolvePirateEliminationEncounter } from '../domain/pirates/encounter.ts';
 
 const ATTACK_MAX_ROUNDS: readonly SimulatorMaxRounds[] = [5, 8, 12];
 const ATTACK_REPORT_PREFIX = 'battle-attack-';
@@ -398,6 +399,51 @@ export type AttackResolutionResult = {
   report: BattleReport;
   resolution: AttackResolution;
 };
+
+/** Reuses attack accounting for a neutral encounter without creating a player target. */
+export function resolvePirateEliminationAtTarget(state: SaveState, flight: FlightRecord, now: number): AttackResolutionResult | null {
+  const snapshot = flight.pirateSnapshot;
+  const launch = flight.attackSnapshot;
+  if (flight.missionId !== 'pirate-elimination' || !snapshot || !launch) return null;
+  const reportId = `battle-pirate-${flight.id}`;
+  const existing = state.combat.reports.find((report) => report.id === reportId);
+  if (existing) return {
+    state, report: existing,
+    resolution: flight.attackResolution ?? { reportId, resolvedAt: now, debris: safeCount(existing.debris), loot: { metal: 0, minerals: 0, gas: 0, debris: 0 } },
+  };
+  const origin = state.planets[flight.originPlanetId];
+  if (!origin) return null;
+  const encounter = resolvePirateEliminationEncounter({
+    reportId, timestamp: new Date(now).toISOString(), seed: `pirate:${flight.id}`,
+    contactCycleKey: snapshot.contactCycleKey, pirateProfile: snapshot.profile,
+    pirateCoordinates: coordinateLabel(snapshot.coordinate), piratePlanetName: 'Пираты',
+    attacker: {
+      playerId: snapshot.ownerId, playerName: state.profile.displayName,
+      planetName: origin.name, coordinates: coordinateLabel(flight.originCoordinate),
+      selectedShips: flight.selectedShips, selectedCommanders: flight.selectedCommanders ?? {}, snapshot: launch,
+    },
+  });
+  if (encounter.kind !== 'resolved') return null;
+  // The ordinary entity lookup skips all pirate stacks; pirate hull debris is
+  // calculated separately by the existing PvE debris rule (including Corsair).
+  const debris = calculateAttackDebris(encounter.report, launch.attackerFactionId, launch.attackerFactionId);
+  const report: BattleReport = { ...encounter.report, debris, resources: { metal: 0, minerals: 0, gas: 0 } };
+  const fleet = applyDestroyedToFleet(removeSolarSatellitesFromFleet(origin.fleet).fleet, report.attackerForce, launch.attackerFactionId);
+  let next = replacePlanetState(state, flight.originPlanetId, { ...origin, fleet });
+  next = addReport(next, report);
+  if (debris > 0 && next.espionage) {
+    const coordinate = snapshot.coordinate;
+    const key = `pirate-debris-${coordinate.galaxy}-${coordinate.system}-${coordinate.position}`;
+    const previous = next.espionage.orbitalDebris?.[key];
+    next = { ...next, espionage: { ...next.espionage, orbitalDebris: {
+      ...next.espionage.orbitalDebris,
+      [key]: { id: `orbital-debris-${key}`, targetPlanetId: key, targetPlanetName: 'Пираты',
+        targetOwnerId: 'pirates', targetCoordinate: { ...coordinate }, debris: addDebris(previous?.debris ?? 0, debris),
+        createdAt: previous?.createdAt ?? now, reportId },
+    } } };
+  }
+  return { state: next, report, resolution: { reportId, resolvedAt: now, debris, loot: { metal: 0, minerals: 0, gas: 0, debris: 0 } } };
+}
 
 /** Resolves a live target exactly once and applies both sides atomically. */
 export function resolveAttackAtTarget(state: SaveState, flight: FlightRecord, now: number): AttackResolutionResult | null {

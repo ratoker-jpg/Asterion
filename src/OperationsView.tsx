@@ -12,6 +12,8 @@ import type {
 } from './domain/operations/types.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 import type { ResourceIconKind } from './ui/resources/resource-assets.ts';
+import type { PirateContactPresentation } from './pirate-ui.ts';
+import pirateEliminationIcon from '../assets/source/mission-icons-v1/10_pirate_elimination.png';
 import './operations.css';
 
 type OperationsViewProps = {
@@ -20,6 +22,11 @@ type OperationsViewProps = {
   onCancel: (operationId: OperationId) => void;
   onReveal: (operationId: OperationId) => void;
   onOpenFleets: () => void;
+  pirateContacts?: readonly PirateContactPresentation[];
+  onPirateRecon?: (contact: PirateContactPresentation) => void;
+  onPirateAttack?: (contact: PirateContactPresentation) => void;
+  onPirateReport?: (reportId: string) => void;
+  onPirateUniverse?: (contact: PirateContactPresentation) => void;
 };
 
 type OperationsTab = Extract<OperationState, 'available' | 'active' | 'completed'>;
@@ -211,6 +218,95 @@ function EmptyState({ tab }: { tab: OperationsTab }) {
   return <div className="operations-empty-v2"><span>◇</span><strong>{copy[0]}</strong><p>{copy[1]}</p></div>;
 }
 
+function pirateCoordinateLabel(contact: PirateContactPresentation) {
+  const { galaxy, system, position } = contact.coordinate;
+  return `Галактика ${galaxy} · Система ${String(system).padStart(2, '0')} · Позиция ${position}`;
+}
+
+function pirateRemainingLabel(expiresAt: number, nowMs: number) {
+  const seconds = Math.max(0, Math.ceil((expiresAt - nowMs) / 1_000));
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return minutes ? `${minutes} мин ${String(remainder).padStart(2, '0')} с` : `${remainder} с`;
+}
+
+function PirateContactCard({ contact, selected, nowMs, onSelect }: {
+  contact: PirateContactPresentation;
+  selected: boolean;
+  nowMs: number;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`operations-pirate-card ${selected ? 'selected' : ''}`}
+      aria-pressed={selected}
+      data-qa-pirate-contact={contact.contactCycleKey}
+      data-qa-pirate-status={contact.statusTone}
+      onClick={onSelect}
+    >
+      <span className="operations-pirate-card__mark" aria-hidden="true"><img src={pirateEliminationIcon} alt="" draggable={false} /></span>
+      <span className="operations-pirate-card__copy">
+        <strong>ПИРАТСКИЙ КОНТАКТ</strong>
+        <small>{pirateCoordinateLabel(contact)}</small>
+        <span>{contact.statusLabel} · Цикл {contact.cycleIndex}</span>
+      </span>
+      <span className="operations-pirate-card__time">{pirateRemainingLabel(contact.expiresAt, nowMs)}</span>
+    </button>
+  );
+}
+
+function PirateContactDossier({ contact, nowMs, onRecon, onAttack, onReport, onUniverse }: {
+  contact: PirateContactPresentation;
+  nowMs: number;
+  onRecon?: (contact: PirateContactPresentation) => void;
+  onAttack?: (contact: PirateContactPresentation) => void;
+  onReport?: (reportId: string) => void;
+  onUniverse?: (contact: PirateContactPresentation) => void;
+}) {
+  const reconEnabled = contact.recon.enabled && Boolean(onRecon);
+  const attackEnabled = contact.elimination.enabled && Boolean(onAttack);
+  const reportEnabled = Boolean(contact.latestReportId && onReport);
+  const reconReason = contact.recon.disabledReason ?? (!onRecon ? 'Действие временно недоступно.' : '');
+  const attackReason = contact.elimination.disabledReason ?? (!onAttack ? 'Действие временно недоступно.' : '');
+  const reportReason = !contact.latestReportId ? 'Разведотчёт ещё не сформирован.' : !onReport ? 'Открытие отчёта временно недоступно.' : '';
+
+  return (
+    <aside className="operations-dossier-v2 operations-pirate-dossier" data-qa-pirate-dossier={contact.contactCycleKey} data-status-tone={contact.statusTone}>
+      <header className="operations-pirate-dossier__head">
+        <div>
+          <small>НЕЙТРАЛЬНЫЙ КОНТАКТ · ЦИКЛ {contact.cycleIndex}</small>
+          <h2>ПИРАТСКАЯ ПЛАНЕТА</h2>
+          <p>{pirateCoordinateLabel(contact)}</p>
+        </div>
+        <span className="operations-pirate-status" data-status-tone={contact.statusTone}>{contact.statusLabel}</span>
+      </header>
+
+      <section className="operations-pirate-facts" aria-label="Сведения о контакте">
+        <div><small>ОСТАЛОСЬ ДО ИСЧЕЗНОВЕНИЯ</small><strong>{pirateRemainingLabel(contact.expiresAt, nowMs)}</strong></div>
+        <div><small>ЦИКЛ КОНТАКТА</small><strong>{contact.cycleIndex}</strong></div>
+      </section>
+
+      <footer className="operations-command-v2 operations-pirate-command">
+        <div>
+          <small>ДЕЙСТВИЯ</small>
+          <strong>СВЯЗАНЫ С ТЕКУЩИМ ЦИКЛОМ</strong>
+          <span>Отчёт и полёты сохраняют ключ этого контакта.</span>
+        </div>
+        <div className="operations-command-actions-v2 operations-pirate-actions">
+          <button type="button" className="operations-primary-v2" disabled={!reconEnabled} title={reconEnabled ? 'Отправить один разведывательный зонд к этому контакту' : reconReason} onClick={() => onRecon?.(contact)}>РАЗВЕДАТЬ</button>
+          {!reconEnabled && reconReason ? <small className="operations-pirate-action-reason">{reconReason}</small> : null}
+          <button type="button" className="operations-secondary-v2" disabled={!attackEnabled} title={attackEnabled ? 'Открыть подготовку флота для этого контакта' : attackReason} onClick={() => onAttack?.(contact)}>ПОДГОТОВИТЬ АТАКУ</button>
+          {!attackEnabled && attackReason ? <small className="operations-pirate-action-reason">{attackReason}</small> : null}
+          <button type="button" className="operations-secondary-v2" disabled={!reportEnabled} title={reportEnabled ? 'Открыть последний разведотчёт этого цикла' : reportReason} onClick={() => contact.latestReportId && onReport?.(contact.latestReportId)}>ОТКРЫТЬ РАЗВЕДОТЧЁТ</button>
+          {!reportEnabled && reportReason ? <small className="operations-pirate-action-reason">{reportReason}</small> : null}
+          <button type="button" className="operations-secondary-v2" disabled={!onUniverse} title={onUniverse ? 'Показать этот контакт на карте Вселенной' : 'Переход временно недоступен'} onClick={() => onUniverse?.(contact)}>ПЕРЕЙТИ ВО ВСЕЛЕННУЮ</button>
+        </div>
+      </footer>
+    </aside>
+  );
+}
+
 function OperationDossier({ operation, onAccept, onCancel, onReveal, onOpenFleets }: {
   operation: OperationInstance | null;
   onAccept: (id: OperationId) => void;
@@ -311,31 +407,47 @@ function OperationDossier({ operation, onAccept, onCancel, onReveal, onOpenFleet
   );
 }
 
-export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets }: OperationsViewProps) {
+export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, pirateContacts = [], onPirateRecon, onPirateAttack, onPirateReport, onPirateUniverse }: OperationsViewProps) {
   const [tab, setTab] = useState<OperationsTab>('available');
   const [selectedId, setSelectedId] = useState<OperationId | null>(() => state.items.find((item) => item.state === 'available')?.id ?? null);
+  const [selectedPirateCycleKey, setSelectedPirateCycleKey] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const visibleItems = useMemo(() => state.items.filter((item) => item.state === tab), [state.items, tab]);
   const selected = state.items.find((item) => item.id === selectedId && item.state === tab) ?? null;
+  const selectedPirate = pirateContacts.find((contact) => contact.contactCycleKey === selectedPirateCycleKey) ?? null;
 
   useEffect(() => {
-    if (selected) return;
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (selectedPirate) return;
+    setSelectedPirateCycleKey(pirateContacts[0]?.contactCycleKey ?? null);
+  }, [pirateContacts, selectedPirate]);
+
+  useEffect(() => {
+    if (selected || selectedPirate) return;
     setSelectedId(visibleItems[0]?.id ?? null);
-  }, [selected, visibleItems]);
+  }, [selected, selectedPirate, visibleItems]);
 
   const chooseTab = (next: OperationsTab) => {
     setTab(next);
+    setSelectedPirateCycleKey(null);
     setSelectedId(state.items.find((item) => item.state === next)?.id ?? null);
   };
 
   const accept = (operationId: OperationId) => {
     onAccept(operationId);
+    setSelectedPirateCycleKey(null);
     setTab('active');
     setSelectedId(operationId);
   };
 
   const cancel = (operationId: OperationId) => {
     onCancel(operationId);
+    setSelectedPirateCycleKey(null);
     setTab('available');
     setSelectedId(operationId);
   };
@@ -363,14 +475,20 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
       <div className="operations-layout-v2">
         <section className="operations-feed-v2" aria-label={TAB_LABELS[tab]}>
           <header><div><small>КАНАЛ // {TAB_LABELS[tab]}</small><strong>{tab === 'available' ? 'ВХОДЯЩИЕ КОНТАКТЫ' : tab === 'active' ? 'ТЕКУЩИЕ ЗАДАЧИ' : 'АРХИВ ОПЕРАЦИЙ'}</strong></div><span>{visibleItems.length}</span></header>
+          {pirateContacts.length ? (
+            <div className="operations-pirate-feed" aria-label="Активные пиратские контакты">
+              <small>АКТИВНЫЕ ПИРАТСКИЕ КОНТАКТЫ · {pirateContacts.length}</small>
+              {pirateContacts.map((contact) => <PirateContactCard key={contact.contactCycleKey} contact={contact} nowMs={nowMs} selected={contact.contactCycleKey === selectedPirateCycleKey} onSelect={() => { setSelectedPirateCycleKey(contact.contactCycleKey); setSelectedId(null); }} />)}
+            </div>
+          ) : null}
           {visibleItems.length ? (
             <div className="operations-feed-list-v2">
-              {visibleItems.map((operation) => <OperationCard key={operation.id} operation={operation} selected={operation.id === selected?.id} onSelect={() => setSelectedId(operation.id)} />)}
+              {visibleItems.map((operation) => <OperationCard key={operation.id} operation={operation} selected={!selectedPirate && operation.id === selected?.id} onSelect={() => { setSelectedPirateCycleKey(null); setSelectedId(operation.id); }} />)}
             </div>
-          ) : <EmptyState tab={tab} />}
+          ) : !pirateContacts.length ? <EmptyState tab={tab} /> : null}
         </section>
 
-        <OperationDossier operation={selected} onAccept={accept} onCancel={cancel} onReveal={onReveal} onOpenFleets={onOpenFleets} />
+        {selectedPirate ? <PirateContactDossier contact={selectedPirate} nowMs={nowMs} onRecon={onPirateRecon} onAttack={onPirateAttack} onReport={onPirateReport} onUniverse={onPirateUniverse} /> : <OperationDossier operation={selected} onAccept={accept} onCancel={cancel} onReveal={onReveal} onOpenFleets={onOpenFleets} />}
       </div>
     </main>
   );

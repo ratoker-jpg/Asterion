@@ -26,6 +26,14 @@ import { DEFAULT_ALLIANCE_MEMBERS, DEFAULT_ALLIANCE_PROFILE } from '../command/c
 import { CURRENT_COMMAND_ALLIANCE_ID } from '../command/selectors.ts';
 import type { DiplomaticRelation } from '../command/types.ts';
 import { CURRENT_PLAYER_FACTION_ID } from '../profile/repository.ts';
+import {
+  applyPirateContactDefeatsToSchedules,
+  createPirateContactCycleKey,
+  PIRATE_CONTACT_MAX_LIFETIME_MS,
+  PIRATE_CONTACT_MIN_LIFETIME_MS,
+  PIRATE_CONTACT_QUIET_MS,
+} from '../pirates/contact-schedule.ts';
+import type { PirateContactDefeatRecord } from '../pirates/contact-schedule.ts';
 
 export const GALAXY = 1;
 export const SYSTEM_COUNT = 40;
@@ -40,9 +48,9 @@ export const ASTEROID_GAS_MAX = ASTEROID_GAS_CAP;
 export const ASTEROID_TRANSIT_MS = 4_000;
 export const ASTEROID_SCHEDULE_EPOCH_MS = Date.UTC(2026, 0, 1);
 
-export const PIRATE_MIN_LIFETIME_MS = 45 * 60 * 1_000;
-export const PIRATE_MAX_LIFETIME_MS = 75 * 60 * 1_000;
-export const PIRATE_QUIET_MS = 15 * 60 * 1_000;
+export const PIRATE_MIN_LIFETIME_MS = PIRATE_CONTACT_MIN_LIFETIME_MS;
+export const PIRATE_MAX_LIFETIME_MS = PIRATE_CONTACT_MAX_LIFETIME_MS;
+export const PIRATE_QUIET_MS = PIRATE_CONTACT_QUIET_MS;
 export const PIRATE_ABSENCE_PROBABILITY = 0.1;
 export const PIRATE_SCHEDULE_EPOCH_MS = Date.UTC(2026, 0, 1);
 
@@ -378,6 +386,8 @@ export type CreateUniverseSystemOptions = {
   asteroidStates?: readonly UniverseAsteroidRuntimeState[];
   playerPlanets?: readonly UniversePersistedPlayerPlanet[];
   registeredPlanets?: readonly UniverseRegisteredPlanet[];
+  /** Global pirate victories for this local save; unrelated timed objects are unchanged. */
+  pirateContactDefeats?: readonly PirateContactDefeatRecord[];
 };
 
 function persistedPlanetFor(options: CreateUniverseSystemOptions, galaxy: number, system: number, slot: number) {
@@ -737,15 +747,36 @@ function ensureTimedCycles(kind: TimedObjectKind, galaxy: number, system: number
 
 export type UniverseTimedObjectSchedule = TimedObjectSchedule;
 
-export function getUniverseTimedObjectSchedule(kind: TimedObjectKind, galaxy: number, system: number, cycleIndex: number): UniverseTimedObjectSchedule {
+export function getUniverseTimedObjectSchedule(
+  kind: TimedObjectKind,
+  galaxy: number,
+  system: number,
+  cycleIndex: number,
+  pirateContactDefeats: readonly PirateContactDefeatRecord[] = [],
+): UniverseTimedObjectSchedule {
   const config = timedObjectConfig(kind);
   const safeIndex = Math.max(0, Math.floor(cycleIndex));
-  const cycles = ensureTimedCycles(kind, galaxy, system, config.epoch + (safeIndex + 1) * (config.maxLifetimeMs + config.quietMs));
+  const baseCycles = ensureTimedCycles(kind, galaxy, system, config.epoch + (safeIndex + 1) * (config.maxLifetimeMs + config.quietMs));
+  const cycles = kind === 'pirate'
+    ? applyPirateContactDefeatsToSchedules(baseCycles, galaxy, system, pirateContactDefeats)
+    : baseCycles;
   return cycles[safeIndex] ?? cycles[0];
 }
 
-function activeTimedObjectSchedule(kind: TimedObjectKind, galaxy: number, system: number, nowMs: number) {
-  const cycles = ensureTimedCycles(kind, galaxy, system, nowMs);
+function activeTimedObjectSchedule(
+  kind: TimedObjectKind,
+  galaxy: number,
+  system: number,
+  nowMs: number,
+  pirateContactDefeats: readonly PirateContactDefeatRecord[] = [],
+) {
+  const defeatCount = kind === 'pirate'
+    ? pirateContactDefeats.filter((record) => record.galaxy === galaxy && record.system === system).length
+    : 0;
+  const baseCycles = ensureTimedCycles(kind, galaxy, system, nowMs + defeatCount * PIRATE_MAX_LIFETIME_MS);
+  const cycles = kind === 'pirate'
+    ? applyPirateContactDefeatsToSchedules(baseCycles, galaxy, system, pirateContactDefeats)
+    : baseCycles;
   for (let index = cycles.length - 1; index >= 0; index -= 1) {
     const cycle = cycles[index];
     if (cycle.startAt > nowMs) continue;
@@ -764,8 +795,14 @@ function timedState(schedule: TimedObjectSchedule): UniverseTimedObjectState {
   };
 }
 
-function injectTimedObject(system: UniverseSystem, kind: TimedObjectKind, nowMs: number, assets: UniverseAssetCatalog): UniverseSystem {
-  const schedule = activeTimedObjectSchedule(kind, system.galaxy, system.system, nowMs);
+function injectTimedObject(
+  system: UniverseSystem,
+  kind: TimedObjectKind,
+  nowMs: number,
+  assets: UniverseAssetCatalog,
+  pirateContactDefeats: readonly PirateContactDefeatRecord[] = [],
+): UniverseSystem {
+  const schedule = activeTimedObjectSchedule(kind, system.galaxy, system.system, nowMs, pirateContactDefeats);
   if (!schedule?.present || nowMs >= schedule.expiresAt) return system;
   const emptySlots = system.positions.filter((node) => node.kind === 'empty');
   if (!emptySlots.length) return system;
@@ -782,7 +819,16 @@ function injectTimedObject(system: UniverseSystem, kind: TimedObjectKind, nowMs:
       statusLabel: KIND_LABELS.pirate,
       description: KIND_DESCRIPTIONS.pirate,
       known: true,
-      pirate: state as UniversePirateState,
+      pirate: {
+        ...state,
+        startAt: schedule.startAt,
+        contactCycleKey: createPirateContactCycleKey({
+          galaxy: system.galaxy,
+          system: system.system,
+          cycleIndex: schedule.cycleIndex,
+          startAt: schedule.startAt,
+        }),
+      } satisfies UniversePirateState,
     }
     : {
       id: `${kind}-${system.galaxy}-${system.system}`,
@@ -809,7 +855,7 @@ export function createUniverseSystem(options: CreateUniverseSystemOptions): Univ
     Math.max(1, Math.floor(options.galaxy ?? GALAXY)), nowMs, galaxyCount, assets, options.asteroidStates,
   );
   let system = createUniverseSystemBase(options, assets);
-  system = injectTimedObject(system, 'pirate', nowMs, assets);
+  system = injectTimedObject(system, 'pirate', nowMs, assets, options.pirateContactDefeats);
   system = injectTimedObject(system, 'unique', nowMs, assets);
   system = injectTimedObject(system, 'anomaly', nowMs, assets);
   return {
@@ -826,7 +872,7 @@ export function createUniverseMap(options: Omit<CreateUniverseSystemOptions, 'sy
   const asteroidNodes = createActiveAsteroidsBySystem(galaxy, nowMs, galaxyCount, assets, options.asteroidStates);
   const systems = Array.from({ length: SYSTEM_COUNT }, (_, index) => {
     let system = createUniverseSystemBase({ ...options, galaxy, system: index + 1 }, assets);
-    system = injectTimedObject(system, 'pirate', nowMs, assets);
+    system = injectTimedObject(system, 'pirate', nowMs, assets, options.pirateContactDefeats);
     system = injectTimedObject(system, 'unique', nowMs, assets);
     system = injectTimedObject(system, 'anomaly', nowMs, assets);
     return { ...system, asteroids: asteroidNodes[index] };

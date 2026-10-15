@@ -103,6 +103,7 @@ import missionRecycleIcon from '../assets/source/mission-icons-v1/06_recycle.png
 import missionGasIcon from '../assets/source/mission-icons-v1/07_gas_harvest.png';
 import missionSunSupportIcon from '../assets/source/mission-icons-v1/08_sun_support.png';
 import missionSpaceFlightIcon from '../assets/source/mission-icons-v1/09_space_flight.png';
+import missionPirateEliminationIcon from '../assets/source/mission-icons-v1/10_pirate_elimination.png';
 
 function queueKindForConstructionView(view: ConstructionView): FleetProductionQueueKind | null {
   if (view === 'ships') return 'ships';
@@ -115,6 +116,7 @@ const missions: MissionDefinition[] = [
   { id: 'transport', label: 'Транспортировка', description: 'Перевозка ресурсов между доступными планетами.', icon: missionTransportIcon },
   { id: 'espionage', label: 'Шпионаж', description: 'Разведка цели и получение шпионского отчёта.', icon: missionEspionageIcon },
   { id: 'attack', label: 'Атака', description: 'Боевой вылет против выбранной цели.', icon: missionAttackIcon },
+  { id: 'pirate-elimination', label: 'Уничтожение пиратов', description: 'Боевой вылет к сохранённому циклу пиратского контакта.', icon: missionPirateEliminationIcon },
   { id: 'deployment', label: 'Дислокация', description: 'Переброска флота только между своими планетами.', icon: missionDeploymentIcon },
   { id: 'colonize', label: 'Колонизация', description: 'Основание новой колонии на свободной планете.', icon: missionColonizeIcon },
   { id: 'recycle', label: 'Переработка', description: 'Сбор и переработка обломков в космосе.', icon: missionRecycleIcon },
@@ -200,7 +202,13 @@ function targetErrorFromFlightResult(result: FlightCommandResult): string | null
 }
 
 function flightMissionLabel(missionId: MissionId) {
+  if (missionId === 'pirate-recon') return 'Разведка пиратов';
   return missions.find((mission) => mission.id === missionId)?.label ?? missionId;
+}
+
+function flightMissionIcon(missionId: MissionId) {
+  if (missionId === 'pirate-recon') return missionEspionageIcon;
+  return missions.find((mission) => mission.id === missionId)?.icon;
 }
 
 function flightCountdown(targetAt: number | undefined, now: number) {
@@ -394,15 +402,17 @@ function FleetWorkspace({
     ? ownedShipDefinitions.filter((ship) => ship.id === 'colonizer')
     : missionId === 'espionage'
       ? ownedShipDefinitions.filter((ship) => ship.id === 'spy-probe')
+      : missionId === 'pirate-elimination'
+        ? ownedShipDefinitions.filter((ship) => getFactionShipCatalog(factionId).find((entity) => entity.id === ship.id)?.category === 'Боевой корабль')
       : missionId === 'attack'
         ? ownedShipDefinitions.filter((ship) => isAttackCombatShip(ship.id, factionId))
         : missionId === 'recycle' || missionId === 'gas'
           ? ownedShipDefinitions.filter((ship) => ship.id === 'recycler')
       : ownedShipDefinitions;
   const commanderAvailability = useMemo(() => {
-    if (missionId !== 'attack' && missionId !== 'deployment' && missionId !== 'space-flight') return {} as Partial<Record<CommanderId, number>>;
+    if (missionId !== 'attack' && missionId !== 'pirate-elimination' && missionId !== 'deployment' && missionId !== 'space-flight') return {} as Partial<Record<CommanderId, number>>;
     const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
-    return missionId === 'attack'
+    return missionId === 'attack' || missionId === 'pirate-elimination'
       ? getAttackCommanderSelection(runtimeState, planetId)
       : getAvailableFleetForPlanet(runtimeState, planetId).commanders;
   }, [flightRecords, fleetSnapshot.fleet, missionId, planetId]);
@@ -521,7 +531,7 @@ function FleetWorkspace({
     }
     setMissionId(launchContext.missionId);
     const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
-    setSelectedCommanders(launchContext.missionId === 'attack'
+    setSelectedCommanders(launchContext.missionId === 'attack' || launchContext.missionId === 'pirate-elimination'
       ? getAttackCommanderSelection(runtimeState, planetId)
       : {});
     setAttackRounds(8);
@@ -666,6 +676,7 @@ function FleetWorkspace({
     return {
       requestId,
       missionId,
+      contactCycleKey: launchContext?.contactCycleKey,
       originPlanetId,
       destination,
       targetRelation: draft?.targetRelation === null ? undefined : draft?.targetRelation ?? previewTargetRelation,
@@ -682,8 +693,8 @@ function FleetWorkspace({
           : missionId === 'recycle' || missionId === 'gas'
             ? { recycler: selectedQuantities.recycler ?? 0 }
             : selectedQuantities,
-      selectedCommanders: missionId === 'attack' || missionId === 'deployment' || missionId === 'space-flight' ? selectedCommanders : undefined,
-      maxRounds: missionId === 'attack' ? attackRounds : undefined,
+      selectedCommanders: missionId === 'attack' || missionId === 'pirate-elimination' || missionId === 'deployment' || missionId === 'space-flight' ? selectedCommanders : undefined,
+      maxRounds: missionId === 'attack' || missionId === 'pirate-elimination' ? attackRounds : undefined,
       cargo: missionId === 'transport' || missionId === 'space-flight' ? transportCargoDraft : undefined,
       operationId: launchContext?.operationId,
       departedAt: draft?.departedAt ?? departedAt,
@@ -853,7 +864,7 @@ function FleetWorkspace({
       }
     }
     const localError = coordinateDraftError(previewTargetDraft);
-    if ((missionId === 'transport' || missionId === 'colonize' || missionId === 'attack' || missionId === 'recycle' || missionId === 'gas') && localError) {
+    if ((missionId === 'transport' || missionId === 'colonize' || missionId === 'attack' || missionId === 'pirate-elimination' || missionId === 'recycle' || missionId === 'gas') && localError) {
       setPreviewTargetError(localError);
       setEditingPreviewTarget(true);
       return;
@@ -965,7 +976,7 @@ function FleetWorkspace({
       setPreviewTargetError(null);
       setGasPreviewNeedsReconfirmation(false);
     }
-    if (nextMissionId === 'attack') {
+    if (nextMissionId === 'attack' || nextMissionId === 'pirate-elimination') {
       const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
       setSelectedCommanders(getAttackCommanderSelection(runtimeState, runtimeState.currentPlanetId));
       setAttackRounds(8);
@@ -1110,7 +1121,7 @@ function FleetWorkspace({
         ? targetIsLocallyValid && previewResult?.ok === true && previewResult.flight.missionId === 'gas'
           && previewResult.flight.selectedShips.recycler === (selectedQuantities.recycler ?? 0)
           && (selectedQuantities.recycler ?? 0) > 0
-      : missionId === 'attack'
+      : missionId === 'attack' || missionId === 'pirate-elimination'
       ? targetIsLocallyValid && (!previewResult || previewResult.ok) && selectedShipCount > 0 && previewTargetRelation !== 'ally' && previewTargetRelation !== 'self'
     : missionId === 'transport'
     ? targetIsLocallyValid && (!previewResult || previewResult.ok || targetCheckIsDeferred)
@@ -1205,7 +1216,7 @@ function FleetWorkspace({
                   <span data-qa-flight-arrival data-qa-flight-arrival-at={flight.arrivalAt}>{flight.phase === 'outbound' ? flightCountdown(flight.arrivalAt, clockNow) : '—'}</span>
                   <span data-qa-flight-status>{statusLabel}</span>
                   <span data-qa-flight-return>{flight.phase === 'returning' ? flightCountdown(flight.returnAt, clockNow) : '—'}</span>
-                  <span><img className="fleet-flight-mission-icon" src={missions.find((mission) => mission.id === flight.missionId)?.icon} alt="" />{flightMissionLabel(flight.missionId)}{isIncomingBotAttack ? <small data-qa-flight-bot01-label> · BOT 01</small> : null}{attackOrder && !isIncomingBotAttack ? <small data-qa-flight-attack-order> · АТАКА #{attackOrder}</small> : null}{liveTransportState.overflowWarning ? <b className="fleet-flight-overflow-warning" aria-label="Часть груза может сгореть: склады цели заполнены" data-qa-flight-overflow-warning>!</b> : null}</span>
+                  <span><img className="fleet-flight-mission-icon" src={flightMissionIcon(flight.missionId)} alt="" />{flightMissionLabel(flight.missionId)}{isIncomingBotAttack ? <small data-qa-flight-bot01-label> · BOT 01</small> : null}{attackOrder && !isIncomingBotAttack ? <small data-qa-flight-attack-order> · АТАКА #{attackOrder}</small> : null}{liveTransportState.overflowWarning ? <b className="fleet-flight-overflow-warning" aria-label="Часть груза может сгореть: склады цели заполнены" data-qa-flight-overflow-warning>!</b> : null}</span>
                   <span>{isIncomingBotAttack ? <span aria-label="Чужой флот нельзя отозвать" data-qa-flight-no-recall>—</span> : <button type="button" data-qa-flight-recall={flight.id} disabled={flight.phase !== 'outbound'} onClick={() => setPendingRecall(flight)}>ОТОЗВАТЬ</button>}</span>
                 </div>;
                 })}
@@ -1323,8 +1334,8 @@ function FleetWorkspace({
                 <p className="fleet-mission-description-v1"><strong>{describedMission.label}.</strong> {describedMission.description}</p>
               </div>
 
-              {missionId === 'attack' || missionId === 'deployment' || missionId === 'space-flight' ? <section className={`fleet-attack-prep-v1${missionId === 'space-flight' ? ' fleet-space-flight-prep-v1' : ''}`} data-qa-attack-prep={missionId === 'attack' ? true : undefined} data-qa-deployment-commanders={missionId === 'deployment' ? true : undefined} data-qa-space-flight-prep={missionId === 'space-flight' ? true : undefined}>
-                {missionId === 'attack' ? <div className="fleet-attack-rounds-v1">
+              {missionId === 'attack' || missionId === 'pirate-elimination' || missionId === 'deployment' || missionId === 'space-flight' ? <section className={`fleet-attack-prep-v1${missionId === 'space-flight' ? ' fleet-space-flight-prep-v1' : ''}`} data-qa-attack-prep={missionId === 'attack' || missionId === 'pirate-elimination' ? true : undefined} data-qa-deployment-commanders={missionId === 'deployment' ? true : undefined} data-qa-space-flight-prep={missionId === 'space-flight' ? true : undefined}>
+                {missionId === 'attack' || missionId === 'pirate-elimination' ? <div className="fleet-attack-rounds-v1">
                   <div><small>ЛИМИТ РАУНДОВ</small><span>Разрешены только боевые профили 5 / 8 / 12.</span></div>
                   <select value={attackRounds} onChange={(event) => setAttackRounds(Number(event.target.value) as SimulatorMaxRounds)} data-qa-attack-rounds aria-label="Лимит раундов атаки">
                     {[5, 8, 12].map((rounds) => <option key={rounds} value={rounds}>{rounds} раундов</option>)}

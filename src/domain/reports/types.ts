@@ -2,6 +2,7 @@
 import type { SpyHunterNotice, SpyReportSnapshot } from '../espionage/types.ts';
 import type { CombatFactionId } from '../combat/factions.ts';
 import type { ShipId } from '../combat/ids.ts';
+import type { PirateReconReport } from '../pirates/recon-report.ts';
 
 export type OrdinaryShipId = Exclude<ShipId, 'solar-satellite'>;
 
@@ -56,7 +57,7 @@ export type ReportCategory =
 
 export type ReportFilter = 'all' | 'unread' | 'saved';
 export type ReportStatusTone = 'success' | 'danger' | 'warning' | 'info' | 'neutral';
-export type ReportSource = 'combat' | 'operations' | 'command' | 'espionage' | 'overpopulation' | 'recycling' | 'gas-extraction';
+export type ReportSource = 'combat' | 'operations' | 'command' | 'espionage' | 'overpopulation' | 'recycling' | 'gas-extraction' | 'pirate-recon' | 'pirate-mission';
 
 export type ReportDetail = {
   label: string;
@@ -90,6 +91,7 @@ export type ReportItem = {
   spyReport?: SpyReportSnapshot;
   spyHunterNotice?: SpyHunterNotice;
   overpopulationReport?: OverpopulationEpisodeReport;
+  pirateReconReport?: PirateReconReport;
   action?: ReportAction;
   secondaryAction?: ReportAction;
 };

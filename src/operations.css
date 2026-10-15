@@ -880,6 +880,322 @@
   font-size: 8px;
 }
 
+.operations-pirate-feed {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+}
+
+.operations-pirate-feed > small {
+  color: var(--ut-label);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+
+.operations-pirate-card {
+  min-width: 0;
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--ut-border);
+  border-radius: 10px;
+  background: var(--ut-surface-2);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.operations-pirate-card:hover,
+.operations-pirate-card:focus-visible,
+.operations-pirate-card.selected {
+  border-color: var(--ut-border-strong);
+  outline: none;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--ut-accent) 10%, transparent), var(--ut-surface-2));
+}
+
+.operations-pirate-card:focus-visible {
+  outline: var(--ut-focus);
+  outline-offset: 2px;
+}
+
+.operations-pirate-card:active {
+  background: var(--ut-surface);
+}
+
+.operations-pirate-card__mark {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--ut-amber) 48%, transparent);
+  border-radius: 9px;
+  color: var(--ut-amber);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.operations-pirate-card__mark img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.operations-pirate-card__copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.operations-pirate-card__copy strong {
+  color: inherit;
+  font-size: 11px;
+  letter-spacing: .06em;
+}
+
+.operations-pirate-card__copy small,
+.operations-pirate-card__copy span,
+.operations-pirate-card__time {
+  color: var(--ut-label);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.operations-pirate-card__time {
+  color: var(--ut-amber);
+  text-align: right;
+}
+
+.operations-pirate-dossier {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+  --op-accent: #e5ad65;
+}
+
+.operations-pirate-dossier__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--ut-border);
+}
+
+.operations-pirate-dossier__head > div {
+  min-width: 0;
+}
+
+.operations-pirate-dossier__head small,
+.operations-pirate-facts small {
+  color: var(--ut-label);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+
+.operations-pirate-dossier__head h2 {
+  margin: 8px 0 5px;
+  color: #f4f7f7;
+  font-size: 18px;
+  letter-spacing: .05em;
+}
+
+.operations-pirate-dossier__head p {
+  margin: 0;
+  color: #acc3c7;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.operations-pirate-status {
+  flex: 0 0 auto;
+  max-width: 180px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--ut-positive) 38%, transparent);
+  border-radius: 9px;
+  color: var(--ut-positive);
+  font-size: 11px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.operations-pirate-status[data-status-tone="inactive"] {
+  border-color: var(--ut-border);
+  color: var(--ut-label);
+}
+
+.operations-pirate-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.operations-pirate-facts > div {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--ut-border);
+  border-radius: 10px;
+  background: var(--ut-surface-2);
+}
+
+.operations-pirate-facts strong {
+  color: #e4f6f7;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.operations-pirate-command {
+  min-height: 0;
+  align-items: flex-start;
+  flex-direction: column;
+  margin-top: auto;
+  padding: 14px 0 0;
+}
+
+.operations-pirate-command > div:first-child strong,
+.operations-pirate-command > div:first-child span {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.operations-pirate-actions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.operations-pirate-actions .operations-primary-v2,
+.operations-pirate-actions .operations-secondary-v2 {
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.operations-pirate-actions .operations-primary-v2:focus-visible,
+.operations-pirate-actions .operations-secondary-v2:focus-visible {
+  outline: var(--ut-focus);
+  outline-offset: 2px;
+}
+
+.operations-pirate-actions .operations-primary-v2:active:not(:disabled),
+.operations-pirate-actions .operations-secondary-v2:active:not(:disabled) {
+  background: var(--ut-surface);
+}
+
+.operations-pirate-actions .operations-primary-v2:disabled,
+.operations-pirate-actions .operations-secondary-v2:disabled {
+  border-color: var(--ut-border);
+  background: var(--ut-surface);
+  box-shadow: none;
+  color: var(--ut-label);
+  cursor: not-allowed;
+}
+
+.operations-pirate-action-reason {
+  min-width: 0;
+  color: var(--ut-label);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .operations-shell-v2 {
+    gap: 12px;
+    padding: 8px 0 16px;
+  }
+
+  .operations-topbar-v2 {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .operations-tabs-v2 {
+    width: 100%;
+    height: auto;
+    flex-wrap: wrap;
+  }
+
+  .operations-tabs-v2 button {
+    min-width: 0;
+    min-height: 42px;
+    flex: 1 1 110px;
+    padding: 7px;
+  }
+
+  .operations-slots-v2 {
+    width: 100%;
+    height: auto;
+    border-left: 0;
+    border-top: 1px solid rgba(73, 188, 214, .22);
+    padding: 8px 2px 0;
+  }
+
+  .operations-layout-v2 {
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .operations-feed-v2 {
+    padding: 10px;
+  }
+
+  .operations-command-v2 {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px 0 0;
+  }
+
+  .operations-command-actions-v2 {
+    flex-wrap: wrap;
+  }
+
+  .operations-command-actions-v2 button {
+    min-height: 44px;
+    flex: 1 1 140px;
+    padding: 8px 10px;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .operations-pirate-card {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .operations-pirate-card__time {
+    grid-column: 2;
+    text-align: left;
+  }
+
+  .operations-pirate-dossier__head {
+    flex-direction: column;
+  }
+
+  .operations-pirate-status {
+    max-width: 100%;
+  }
+
+  .operations-pirate-facts,
+  .operations-pirate-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @keyframes operationsScopeSweep {
   to { transform: rotate(360deg); }
 }

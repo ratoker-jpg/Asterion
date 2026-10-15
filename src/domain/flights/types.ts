@@ -3,11 +3,14 @@ import type { CommanderId } from '../combat/commanders.ts';
 import type { UniverseCoordinate, UniverseObjectKind } from '../universe/types.ts';
 import type { TransportCargo } from './cargo.ts';
 import type { AttackLaunchSnapshot, AttackResolution } from '../attack/types.ts';
+import type { PirateMissionSnapshot } from '../pirates/mission.ts';
 
 export type MissionId =
   | 'transport'
   | 'espionage'
   | 'attack'
+  | 'pirate-recon'
+  | 'pirate-elimination'
   | 'deployment'
   | 'colonize'
   | 'recycle'
@@ -72,6 +75,8 @@ export type FlightRecord = {
   recycleCapacity?: number;
   /** Attack-only dispatch snapshot used by the live arrival resolver. */
   attackSnapshot?: AttackLaunchSnapshot;
+  /** Frozen owner profile and cycle identity for one-shot pirate missions. */
+  pirateSnapshot?: PirateMissionSnapshot;
   /** Attack-only materialized result used to make reconcile replay-safe. */
   attackResolution?: AttackResolution;
   populationReserved: number;
