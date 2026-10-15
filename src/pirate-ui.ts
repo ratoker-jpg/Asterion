@@ -18,6 +18,7 @@ export type PirateContactPresentation = {
     disabledReason: string | null;
   };
   latestReportId: string | null;
+  latestReportOutcome?: 'success' | 'failure' | 'no-target' | null;
 };
 
 export type PirateSystemSelection = Pick<UniverseCoordinate, 'galaxy' | 'system'>;
