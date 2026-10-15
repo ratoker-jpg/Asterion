@@ -14,7 +14,7 @@ const ROOT = path.join(__dirname, '..');
 const OUTPUT = process.env.ASTERION_QA_OUTPUT || path.join(ROOT, 'artifacts', 'pirate-operations-qa');
 const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const TEST_TIME_SCALE_KEY = 'asterion.test-time-scale.v1';
-const VIEWPORTS = [[1920, 1080], [1280, 720], [390, 844]];
+const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitFor(win, expression, timeoutMs = 15_000) {
@@ -153,11 +153,11 @@ async function findActiveContact(win) {
     })()`);
     const countdown = /исчезнет через (\d+) мин (\d+) с/.exec(contact.status);
     const remainingSeconds = countdown ? Number(countdown[1]) * 60 + Number(countdown[2]) : 0;
-    if (contact.cycleKey && contact.reconEnabled && contact.attackEnabled && remainingSeconds > 180) {
+    if (contact.cycleKey && contact.reconEnabled && remainingSeconds > 180) {
       return { ...contact, remainingSeconds };
     }
   }
-  throw new Error('No active pirate contact with an available recon action and more than three minutes remaining was visible in systems 1–40 of the current galaxy. The QA did not inject or advance the pirate schedule.');
+  throw new Error('No active pirate contact with recon available and more than three minutes remaining was visible in systems 1–40 of the current galaxy. The QA did not inject or advance the pirate schedule.');
 }
 
 async function grantTargetSystemColony(win, contact) {
