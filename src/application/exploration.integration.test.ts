@@ -8,6 +8,8 @@ import { getExplorationTarget, explorationTargetStatus, selectExplorationTargets
 import { acceptLiveExploration, cancelLiveExploration } from './exploration-operations.ts';
 import { explorationResourceScore } from './exploration-flight.ts';
 import { explorationMailboxReports } from '../domain/exploration/report-items.ts';
+import { dispatchBot01Exploration } from './exploration-bot01.ts';
+import { getEspionageTargets } from '../domain/espionage/runtime.ts';
 
 const MINUTE = 60_000;
 const baseTime = 1_790_000_000_000;
@@ -304,4 +306,50 @@ test('canonical Attack on occupied field calls real combat, preserves fleet casu
   }
   const replay=reconcileFlights(arrived.state,attack.flight.arrivalAt,undefined,{mode:'test',testTimeScale:15});
   assert.equal(replay.state.combat.reports.filter(report=>report.id==='battle-exploration-'+attack.flight.id).length,1);
+});
+
+
+test('Test Mode Bot 01 occupies through a real finite flight and player Attack writes one combat report', () => {
+  const fixture=prepare();
+  const sourceBefore=getEspionageTargets(fixture.state.espionage);
+  const started=dispatchBot01Exploration(fixture.state,fixture.target,fixture.now,15);
+  assert.equal(started.ok,true,started.notice);
+  if(!started.ok)return;
+  assert.equal(started.flight.ownerSide,'bot01');
+  assert.equal(started.flight.phase,'outbound');
+  assert.ok(started.flight.arrivalAt>fixture.now);
+  const original=sourceBefore[started.flight.originPlanetId]!;
+  const reserved=getEspionageTargets(started.state.espionage)[started.flight.originPlanetId]!;
+  for(const [id,count] of Object.entries(started.flight.selectedShips)){
+    assert.equal(reserved.fleet.ships[id as keyof typeof reserved.fleet.ships],
+      (original.fleet.ships[id as keyof typeof original.fleet.ships]??0)-(count??0),
+      'NPC ships must be reserved from the real existing planet');
+  }
+  const arrived=reconcileFlights(started.state,started.flight.arrivalAt,undefined,{mode:'test',testTimeScale:15});
+  const claimed=arrived.state.exploration!.contacts[fixture.target.id]!.claim;
+  assert.equal(claimed?.flightId,started.flight.id);
+  assert.notEqual(claimed?.ownerId,arrived.state.profile.playerId);
+  const before=arrived.state.planets['helion-01'];
+  let armed=replacePlanetState(arrived.state,'helion-01',{
+    ...before,fleet:{...before.fleet,ships:{...before.fleet.ships,destroyer:160}},
+  });
+  armed=replacePlanetResources(armed,'helion-01',{...getPlanetResources(armed,'helion-01'),gas:1_000_000});
+  const at=started.flight.arrivalAt+1_000;
+  const attack=dispatchFlight(armed,{
+    requestId:'pr92-test-bot01-contest',missionId:'attack',
+    contactCycleKey:fixture.target.id,operationId:fixture.target.id,
+    originPlanetId:'helion-01',destination:{kind:'coordinate',coordinate:fixture.target.coordinate},
+    targetKind:fixture.target.kind,targetRelation:'neutral',
+    selectedShips:{destroyer:160},selectedCommanders:{},departedAt:at,
+  },{now:at,mode:'test',testTimeScale:15});
+  assert.equal(attack.ok,true,attack.ok?'':attack.error.message);
+  if(!attack.ok)return;
+  assert.equal(attack.flight.explorationAttack,true);
+  const resolved=reconcileFlights(attack.state,attack.flight.arrivalAt,undefined,{mode:'test',testTimeScale:15});
+  const report=resolved.state.combat.reports.find(r=>r.id==='battle-exploration-'+attack.flight.id);
+  assert.ok(report,'combat report must be delivered via canonical combat.reports');
+  assert.ok(['attacker','defender','draw'].includes(report!.winner));
+  assert.equal(report!.defender.playerId,claimed!.ownerId);
+  const replay=reconcileFlights(resolved.state,attack.flight.arrivalAt,undefined,{mode:'test',testTimeScale:15});
+  assert.equal(replay.state.combat.reports.filter(r=>r.id===report!.id).length,1);
 });
