@@ -324,8 +324,10 @@ export function reconcileRuntime(
   // and reloads. A later weak expedition must never erase an earlier real peak.
   const currentScore = selectOwnerScores(next)[next.profile.playerId]?.resourcePoints ?? 0;
   const previousLedger = next.exploration ?? createExplorationState();
-  const updatedLedger = {...recordHighestExplorationScore(previousLedger, next.profile.playerId, currentScore),
-    ...(context.mode==='production'?{npcProcessedAt:Math.max(previousLedger.npcProcessedAt??0,context.now)}:{})};
+  const scoredLedger = recordHighestExplorationScore(previousLedger, next.profile.playerId, currentScore);
+  const currentNpcCursor=Math.max(scoredLedger.npcProcessedAt??0,context.now);
+  const updatedLedger = context.mode==='production' && scoredLedger.npcProcessedAt!==currentNpcCursor
+    ? {...scoredLedger,npcProcessedAt:currentNpcCursor}:scoredLedger;
   if (updatedLedger !== previousLedger) next = {...next, exploration: updatedLedger};
   const completedCursor = Math.max(pirateCursor, context.now);
   if (next.pirate?.raidProcessedAt !== completedCursor) {
