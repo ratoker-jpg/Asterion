@@ -93,6 +93,7 @@ import {
 import type { PlayerFactionId } from './domain/profile/types.ts';
 import { selectOwnerScores } from './domain/rating/scoring.ts';
 import { advancePirateThreat, pirateRaidChance } from './domain/pirates/threat.ts';
+import {defaultPirateOwnerAdaptation} from './domain/pirates/adaptive.ts';
 import {
   createInitialSaveState,
   createPersistenceFacade,
@@ -1582,7 +1583,7 @@ export function App() {
               pirateContacts={pirateContacts}
               pirateOwnerId={state.profile.playerId}
               pirateRaidRolls={state.pirate?.raidRolls}
-              pirateAdaptiveDiagnostics={RUNTIME_MODE==='test'?state.pirate?.ownerAdaptations?.[state.profile.playerId]:undefined}
+              pirateAdaptiveDiagnostics={RUNTIME_MODE==='test'?(state.pirate?.ownerAdaptations?.[state.profile.playerId]??defaultPirateOwnerAdaptation()):undefined}
               pirateCheckDelayMs={scaleRuntimeDuration(15*60_000,RUNTIME_MODE,testTimeScale)}
               pirateThreatPercent={100*pirateRaidChance(
                 selectOwnerScores(state)[state.profile.playerId]?.resourcePoints??0,

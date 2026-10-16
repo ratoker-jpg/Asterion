@@ -349,7 +349,7 @@ function OperationDossier({ operation, pirateContact, battleReportId, completed,
             {completed.reward ? <>
               <div><small>ОТПРАВЛЕНО / АНГАР</small><strong>{number.format(completed.reward.sentCombatPopulation)} / {number.format(completed.reward.historicalHangarCapacity)}</strong></div>
               <div><small>МНОЖИТЕЛЬ ОБЛОМКОВ</small><strong>×{completed.reward.multiplier}</strong></div>
-              <div><small>ПИРАТСКИЕ ОБЛОМКИ / БОНУС</small><strong>{number.format(completed.reward.basePirateDebris)} / +{number.format(completed.reward.bonusPirateDebris)}</strong></div>
+              <div><small>ПИРАТСКИЕ ОБЛОМКИ / БОНУС</small><strong>{number.format(completed.reward.basePirateDebris)} / {completed.reward.bonusPirateDebris>=0?'+':'−'}{number.format(Math.abs(completed.reward.bonusPirateDebris))}</strong></div>
               <div><small>СВОИ ОБЛОМКИ</small><strong>{number.format(completed.reward.ownDebris)}</strong></div>
               <div><small>СНИЖЕНИЕ УГРОЗЫ</small><strong>{(completed.reward.threatReductionFraction*100).toFixed(1)}%</strong></div>
             </> : null}

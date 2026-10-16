@@ -467,13 +467,17 @@ test('migration validator retains both historical 75–90% and approved 85–105
   assert.equal(launched.ok,true);
   if(!launched.ok)return;
   const snapshot=launched.flight.pirateSnapshot!;
+  assert.ok(snapshot.adaptiveQ===0);
+  assert.ok(snapshot.adaptiveWeight!==undefined);
+  assert.ok(snapshot.eliminationBudget?.coefficient!==undefined);
+  assert.ok(snapshot.eliminationBudget!.coefficient!>=0.90&&snapshot.eliminationBudget!.coefficient!<0.95);
   assert.ok(snapshot.eliminationBudget);
-  for(const coefficient of [0.75,0.80,0.85,0.9,1,1.05]){
+  for(const coefficient of [0.75,0.80,0.85,0.9,1,1.05,1.10]){
     const checked: typeof snapshot={...snapshot,eliminationBudget:{...snapshot.eliminationBudget!,coefficient}};
     assert.equal(isPirateMissionSnapshot(checked,'pirate-elimination'),true,`accept frozen ${coefficient}`);
     assert.equal(normalizePirateMissionSnapshot(checked)?.eliminationBudget?.coefficient,coefficient);
   }
-  for(const coefficient of [0.749999,1.050001,Number.NaN]){
+  for(const coefficient of [0.749999,1.100001,Number.NaN]){
     const bad: typeof snapshot={...snapshot,eliminationBudget:{...snapshot.eliminationBudget!,coefficient}};
     assert.equal(isPirateMissionSnapshot(bad,'pirate-elimination'),false,`reject ${coefficient}`);
   }
