@@ -34,7 +34,7 @@ export function selectExplorationTargets(
   }
   const nodes = [...systems.values()].flatMap(({ galaxy, system }) => createUniverseSystem({
     mode, galaxy, system, nowMs, playerPlanets, registeredPlanets: targets,
-    pirateContactDefeats: state.pirate?.contact.defeatedCycles,
+    pirateContactDefeats: Object.values(state.pirate?.contact.defeatedCycles ?? {}),
     asteroidStates: state.asteroidSimulation?.asteroids ?? [],
   }).positions.filter(node => explorationNodeId(node) !== null));
   return visibleExplorationContacts(nodes, owned, nowMs, limit);
