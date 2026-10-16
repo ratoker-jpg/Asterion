@@ -1960,7 +1960,7 @@ export function reconcileFlights(
   // must run before a later arrival in this same catch-up pass.
   const scheduledFlightEventAt = (flight: FlightRecord) => flight.phase === 'returning'
     ? flight.returnAt ?? Number.POSITIVE_INFINITY
-    : flight.missionId === 'expedition' && flight.phase === 'arrived'
+    : (flight.missionId === 'expedition' || flight.explorationAttack) && flight.phase === 'arrived'
       ? (() => {
         const contact = explorationContactForFlight(next, flight);
         if (!contact?.claim || contact.claim.flightId !== flight.id) return flight.arrivalAt;
@@ -1972,10 +1972,10 @@ export function reconcileFlights(
     && flight.missionId === 'attack'
     && (flight.phase === 'outbound' || flight.phase === 'arrived');
   const compareFlightEvents = (left: FlightRecord, right: FlightRecord) => {
-    const leftMissingOrigin = (left.missionId === 'deployment' || left.missionId === 'space-flight' || left.missionId === 'pirate-recon' || left.missionId === 'pirate-elimination' || left.missionId === 'expedition')
+    const leftMissingOrigin = (left.missionId === 'deployment' || left.missionId === 'space-flight' || left.missionId === 'pirate-recon' || left.missionId === 'pirate-elimination' || left.missionId === 'expedition' || left.explorationAttack)
       && ACTIVE_FLIGHT_PHASES.has(left.phase)
       && !next.planets[left.originPlanetId];
-    const rightMissingOrigin = (right.missionId === 'deployment' || right.missionId === 'space-flight' || right.missionId === 'pirate-recon' || right.missionId === 'pirate-elimination' || right.missionId === 'expedition')
+    const rightMissingOrigin = (right.missionId === 'deployment' || right.missionId === 'space-flight' || right.missionId === 'pirate-recon' || right.missionId === 'pirate-elimination' || right.missionId === 'expedition' || right.explorationAttack)
       && ACTIVE_FLIGHT_PHASES.has(right.phase)
       && !next.planets[right.originPlanetId];
     const leftAt = leftMissingOrigin ? Number.NEGATIVE_INFINITY : scheduledFlightEventAt(left);
@@ -2002,7 +2002,7 @@ export function reconcileFlights(
       .filter((flight) => {
         const eventKey = flightEventKey(flight);
         if (processedFlightEvents.has(eventKey)) return false;
-        const hasMissingOrigin = (flight.missionId === 'deployment' || flight.missionId === 'space-flight' || flight.missionId === 'pirate-recon' || flight.missionId === 'pirate-elimination' || flight.missionId === 'expedition')
+        const hasMissingOrigin = (flight.missionId === 'deployment' || flight.missionId === 'space-flight' || flight.missionId === 'pirate-recon' || flight.missionId === 'pirate-elimination' || flight.missionId === 'expedition' || flight.explorationAttack)
           && !next.planets[flight.originPlanetId];
         const spyMission = flight.missionId === 'espionage' ? spyMissionForFlight(next, flight) : undefined;
         const needsSpyRevalidation = Boolean(
@@ -2019,7 +2019,7 @@ export function reconcileFlights(
     processedFlightEvents.add(flightEventKey(original));
     const current = next.flights.records.find((flight) => flight.id === original.id);
     if (!current) continue;
-    if ((current.missionId === 'deployment' || current.missionId === 'space-flight' || current.missionId === 'pirate-recon' || current.missionId === 'pirate-elimination' || current.missionId === 'expedition' || current.missionId === 'exploration-recon')
+    if ((current.missionId === 'deployment' || current.missionId === 'space-flight' || current.missionId === 'pirate-recon' || current.missionId === 'pirate-elimination' || current.missionId === 'expedition' || current.missionId === 'exploration-recon' || current.explorationAttack)
       && (current.phase === 'outbound' || current.phase === 'returning' || current.phase === 'arrived')
       && !next.planets[current.originPlanetId]) {
       const destroyed: FlightRecord = {
@@ -2106,7 +2106,7 @@ export function reconcileFlights(
         events.push({ flight: returningFlight, status: 'spy-report', notice: result.notice });
         continue;
       }
-      if (current.missionId === 'expedition') {
+      if (current.missionId === 'expedition' || (current.explorationAttack && current.phase === 'arrived')) {
         if (current.phase === 'outbound') {
           const resolved = resolveExpeditionArrival(next, current, arrivalAt, targetMode);
           next = resolved.state;
@@ -2505,6 +2505,42 @@ export function reconcileFlights(
         continue;
       }
       if (current.missionId === 'attack') {
+        if (current.explorationAttack) {
+          const resolved = resolveExplorationAttackAtTarget(next,current,arrivalAt);
+          if (!resolved) {
+            const returningState = beginDomainFlightReturn(next.flights,current.id,arrivalAt,'target-unavailable');
+            next = {...next,flights:returningState};
+            const rejected = returningState.records.find(item=>item.id === current.id)!;
+            changed = true;
+            events.push({flight:rejected,status:'target-unavailable',notice:'Занятый объект исчез или владелец отозвал флот. Атака отменена без боя.'});
+            continue;
+          }
+          next = resolved.state;
+          const latest = next.flights.records.find(item=>item.id === current.id)!;
+          const winning = resolved.report.winner === 'attacker';
+          if (winning) {
+            const arrived: FlightRecord = {...latest,phase:'arrived',arrivedAt:arrivalAt,
+              completionReason:'arrived',attackResolution:{
+                reportId:resolved.report.id,resolvedAt:arrivalAt,debris:resolved.report.debris,
+                loot:resolved.captured,
+              }};
+            next = {...next,flights:updateFlight(next.flights,arrived)};
+            events.push({flight:arrived,status:'arrived',notice:'Победа в бою за объект. Захвачено 30% накопленного груза в пределах уцелевшего трюма. Добыча продолжается.'});
+          } else {
+            const returned = beginDomainFlightReturn(next.flights,current.id,arrivalAt,'normal-return');
+            const retreat = returned.records.find(item=>item.id === current.id)!;
+            const flight:FlightRecord={...retreat,arrivedAt:arrivalAt,attackResolution:{
+              reportId:resolved.report.id,resolvedAt:arrivalAt,debris:resolved.report.debris,
+              loot:{metal:0,minerals:0,gas:0,debris:0},
+            }};
+            next={...next,flights:updateFlight(returned,flight)};
+            events.push({flight,status:'arrived',notice:resolved.report.winner === 'defender'
+              ? 'Защитник удержал объект, атакующий возвращается с потерями.'
+              : 'Ничья: объект остался у защитника, атакующий возвращается.'});
+          }
+          changed=true;
+          continue;
+        }
         if (!current.attackResolution) {
           const resolved = current.destinationPlanetId
             ? resolveSpyTarget(next, current.destinationPlanetId, { coordinate: current.destinationCoordinate })
@@ -2645,7 +2681,7 @@ export function reconcileFlights(
     const refreshed = next.flights.records.find((flight) => flight.id === original.id) ?? original;
     if (refreshed.phase === 'returning' && refreshed.returnAt !== undefined && now >= refreshed.returnAt) {
       let returnedFlight = refreshed;
-      if (refreshed.missionId === 'expedition') {
+      if (refreshed.missionId === 'expedition' || refreshed.explorationAttack) {
         next = creditExpeditionReturn(next, refreshed, refreshed.returnAt);
       }
       if (refreshed.missionId === 'transport' || refreshed.missionId === 'recycle' || refreshed.missionId === 'gas' || refreshed.missionId === 'space-flight') {
@@ -2653,7 +2689,7 @@ export function reconcileFlights(
         next = returned.state;
         returnedFlight = returned.flight;
       }
-      if (refreshed.missionId === 'attack' || refreshed.missionId === 'pirate-elimination') {
+      if ((refreshed.missionId === 'attack' && !refreshed.explorationAttack) || refreshed.missionId === 'pirate-elimination') {
         const returned = refreshed.ownerSide === 'bot01'
           ? creditBot01AttackReturn(next, refreshed, refreshed.returnAt)
           : creditAttackLoot(next, refreshed, refreshed.returnAt);
