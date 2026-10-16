@@ -11,6 +11,7 @@ import { explorationMailboxReports } from '../domain/exploration/report-items.ts
 import { reconcileExplorationContact } from '../domain/exploration/ledger.ts';
 import { dispatchBot01Exploration } from './exploration-bot01.ts';
 import { getEspionageTargets } from '../domain/espionage/runtime.ts';
+import { getOrbitalDebrisAtCoordinate, collectOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 
 const MINUTE = 60_000;
 const baseTime = 1_790_000_000_000;
@@ -351,6 +352,40 @@ test('Test Mode Bot 01 occupies through a real finite flight and player Attack w
   assert.ok(report,'combat report must be delivered via canonical combat.reports');
   assert.ok(['attacker','defender','draw'].includes(report!.winner));
   assert.equal(report!.defender.playerId,claimed!.ownerId);
+  const orbitalBefore=getOrbitalDebrisAtCoordinate(resolved.state.espionage!,fixture.target.coordinate);
+  assert.equal(orbitalBefore,report!.debris??0,'battle wreckage must exist at the actual field orbit');
+  const collection=collectOrbitalDebrisAtCoordinate(resolved.state.espionage!,fixture.target.coordinate,orbitalBefore);
+  assert.equal(collection.collected,orbitalBefore,'existing recycler consumes stock, not report-only virtual debris');
+  assert.equal(getOrbitalDebrisAtCoordinate(collection.espionage,fixture.target.coordinate),0);
   const replay=reconcileFlights(resolved.state,attack.flight.arrivalAt,undefined,{mode:'test',testTimeScale:15});
   assert.equal(replay.state.combat.reports.filter(r=>r.id===report!.id).length,1);
+  assert.equal(getOrbitalDebrisAtCoordinate(replay.state.espionage!,fixture.target.coordinate),orbitalBefore,
+    'replaying resolution cannot mint duplicate wreckage');
+});
+
+test('Bot 01 ships and finite mined material return to existing source exactly once', () => {
+  const fixture=prepare();
+  const sent=dispatchBot01Exploration(fixture.state,fixture.target,fixture.now,15);
+  assert.equal(sent.ok,true,sent.notice);
+  if(!sent.ok)return;
+  const before=getEspionageTargets(fixture.state.espionage)[sent.flight.originPlanetId]!;
+  const finished=reconcileFlights(sent.state,fixture.target.special!.expiresAt+
+    sent.flight.oneWayDurationMs+MINUTE,undefined,{mode:'test',testTimeScale:15});
+  const after=getEspionageTargets(finished.state.espionage)[sent.flight.originPlanetId]!;
+  const flight=finished.state.flights.records.find(f=>f.id===sent.flight.id)!;
+  assert.equal(flight.phase,'completed');
+  const receipt=finished.state.exploration!.contacts[fixture.target.id]!.events
+    .find(e=>e.id===sent.flight.id+':completed');
+  assert.ok(receipt,'NPC returns a real escrow receipt, not merely a report');
+  for(const [id,count] of Object.entries(sent.flight.selectedShips))
+    assert.equal(after.fleet.ships[id as keyof typeof after.fleet.ships],
+      before.fleet.ships[id as keyof typeof before.fleet.ships]??0,
+      'surviving source fleet must be returned exactly once after mine');
+  for(const key of ['metal','minerals','gas'] as const)
+    assert.equal(after.resources[key],before.resources[key]+(receipt?.creditedCargo?.[key]??0));
+  const repeated=reconcileFlights(finished.state,flight.completedAt!+MINUTE,undefined,{mode:'test',testTimeScale:15});
+  assert.deepEqual(getEspionageTargets(repeated.state.espionage)[sent.flight.originPlanetId]!.resources,after.resources);
+  assert.deepEqual(getEspionageTargets(repeated.state.espionage)[sent.flight.originPlanetId]!.fleet.ships,after.fleet.ships);
+  assert.equal(repeated.state.exploration!.contacts[fixture.target.id]!.events
+    .filter(e=>e.id===sent.flight.id+':completed').length,1);
 });
