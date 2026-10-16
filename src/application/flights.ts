@@ -1421,7 +1421,7 @@ export function dispatchFlight(
           ? { kind: 'space', coordinate: coordinateOfPlanet(originPlanet) }
           : command.destination!,
     targetKind: command.missionId === 'attack'
-      ? attackTarget?.target.kind
+      ? attackTarget?.target.kind ?? explorationAttackNode?.kind
       : command.missionId === 'recycle' ? recycleTargetKind
         : command.missionId === 'gas' ? 'asteroid' : command.targetKind,
     selectedShips,
@@ -1473,7 +1473,7 @@ export function dispatchFlight(
       targetPlanetName: attackTarget?.target.name ?? explorationAttackNode?.name,
       targetOwnerName: attackTarget?.target.ownerName,
       destinationOwnerId: attackTarget?.target.ownerId,
-      targetRelation: attackTarget?.relation,
+      targetRelation: attackTarget?.relation ?? (explorationAttackNode ? 'neutral' : undefined),
       selectedCommanders: attackCommanders,
       attackSnapshot,
     } : {}),
