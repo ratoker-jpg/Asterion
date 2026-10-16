@@ -5,12 +5,14 @@ import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import type { RuntimeMode } from '../domain/runtime/mode.ts';
 import {
   completeExplorationReturn, getOrMaterializeExplorationContact,
-  occupyExplorationContact, createExplorationState, launchExplorationScore,
+  occupyExplorationContact, createExplorationState, launchExplorationScore, recordHighestExplorationScore,
   reconcileExplorationContact, type ExplorationContact,
 } from '../domain/exploration/ledger.ts';
 import { getExplorationTarget } from './exploration.ts';
 import { getPlanetResources, replacePlanetResources, replacePlanetState, type SaveState } from './contracts.ts';
 import { selectOwnerScores } from '../domain/rating/scoring.ts';
+import { getEspionageTargets } from '../domain/espionage/runtime.ts';
+import { explorationCatchup } from '../domain/exploration/model.ts';
 
 /** Shared launch snapshot; no synthetic players added to the median. */
 export function explorationResourceScore(state: SaveState): number {
@@ -19,6 +21,23 @@ export function explorationResourceScore(state: SaveState): number {
   return launchExplorationScore(state.exploration ?? createExplorationState(), ownerId, current);
 }
 
+/** Snapshot only genuine owners with an actual world in the same galaxy.
+ * Owners without a real rated profile do not enter the median. */
+export function realGalaxyExplorationScores(state: SaveState, galaxy: number): number[] {
+  const owners = new Set<string>();
+  if (Object.values(state.planets).some(planet => (planet.universeGalaxy ?? 1) === galaxy)) owners.add(state.profile.playerId);
+  for (const planet of Object.values(state.alliedPlanets ?? {})) {
+    if ((planet.universeGalaxy ?? 1) === galaxy && planet.ownerId) owners.add(planet.ownerId);
+  }
+  for (const target of Object.values(getEspionageTargets(state.espionage))) {
+    if (target.coordinate.galaxy === galaxy && target.ownerId) owners.add(target.ownerId);
+  }
+  const scores = selectOwnerScores(state);
+  return [...owners].map(id => scores[id]?.resourcePoints).filter((score): score is number => typeof score === 'number' && score > 0);
+}
+export function explorationCatchupForGalaxy(state: SaveState, galaxy: number) {
+  return explorationCatchup(explorationResourceScore(state), realGalaxyExplorationScores(state, galaxy));
+}
 export function explorationContactForFlight(state: SaveState, flight: FlightRecord): ExplorationContact | undefined {
   return flight.operationId ? state.exploration?.contacts[flight.operationId] : undefined;
 }
@@ -29,7 +48,8 @@ export function materializeExplorationAtDispatch(
   const node = getExplorationTarget(state, contactId, nowMs, mode);
   if (!node) return state;
   const existing = state.exploration ?? createExplorationState();
-  const { state: updated } = getOrMaterializeExplorationContact(existing, node, explorationResourceScore(state));
+  const scored = recordHighestExplorationScore(existing, state.profile.playerId, selectOwnerScores(state)[state.profile.playerId]?.resourcePoints ?? 0);
+  const { state: updated } = getOrMaterializeExplorationContact(scored, node, explorationResourceScore(state));
   return { ...state, exploration: updated };
 }
 
@@ -74,7 +94,7 @@ export function resolveExpeditionArrival(
     flightId: flight.id, ownerId: state.profile.playerId,
     originPlanetId: flight.originPlanetId, arrivedAt: nowMs,
     capacity, resourcePointsLaunch: flight.explorationLaunchResourcePoints ?? 1000,
-    catchupMultiplier: 1,
+    catchupMultiplier: explorationCatchupForGalaxy(state, node.coordinate.galaxy).multiplier,
   });
   return {
     state: { ...state, exploration: {
