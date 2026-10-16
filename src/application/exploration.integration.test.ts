@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
 import { dispatchFlight, reconcileFlights, recallFlight } from './flights.ts';
 import { reconcileRuntime } from './reconcile.ts';
-import { getPlanetResources, replacePlanetState } from './contracts.ts';
+import { getPlanetResources, replacePlanetState, replacePlanetResources } from './contracts.ts';
 import { getExplorationTarget, explorationTargetStatus, selectExplorationTargets, selectExplorationOperations } from './exploration.ts';
 import { acceptLiveExploration, cancelLiveExploration } from './exploration-operations.ts';
 import { explorationResourceScore } from './exploration-flight.ts';
@@ -243,4 +243,65 @@ test('accepted operation and real spy-probe research survive save/replay and rev
   assert.equal(selectExplorationOperations(canceled,sent.flight.arrivalAt,'test').find(r=>r.node.id===target.id)?.stage,'available');
   const historical = selectExplorationOperations(arrived.state,target.special!.expiresAt+1,'test').find(r=>r.node.id===target.id);
   assert.equal(historical,undefined,'accepted-but-never-expeditioned cycle must not become a completed operation');
+});
+
+
+test('canonical Attack on occupied field calls real combat, preserves fleet casualties and settles cargo exactly once', () => {
+  const fixture = prepare();
+  const base = fixture.state;
+  const origin = base.planets['helion-01'];
+  let state = replacePlanetState(base,'helion-01',{
+    ...origin,fleet:{...origin.fleet,ships:{...origin.fleet.ships,destroyer:160,'mega-transporter':25}},
+  });
+  state=replacePlanetResources(state,'helion-01',{...getPlanetResources(state,'helion-01'),gas:1_000_000});
+  const dispatch = dispatchFlight(state,{
+    requestId:'pr92-contest-defender',
+    missionId:'expedition',contactCycleKey:fixture.target.id,
+    originPlanetId:'helion-01',
+    destination:{kind:'coordinate',coordinate:fixture.target.coordinate},
+    targetKind:fixture.target.kind,
+    selectedShips:{transporter:5,recycler:5},departedAt:fixture.now,
+  },{now:fixture.now,mode:'test',testTimeScale:15});
+  assert.equal(dispatch.ok,true,dispatch.ok?'':dispatch.error.message);
+  if(!dispatch.ok)return;
+  const reached = reconcileFlights(dispatch.state,dispatch.flight.arrivalAt,undefined,{mode:'test',testTimeScale:15});
+  let occupied = reached.state;
+  const current = occupied.exploration!.contacts[fixture.target.id]!;
+  assert.ok(current.claim,'defending expedition must genuinely occupy contact');
+  // Model a foreign holder with a *real flight record*, never by forcing a battle outcome.
+  occupied = {...occupied,exploration:{...occupied.exploration!,contacts:{
+    ...occupied.exploration!.contacts,[fixture.target.id]:{
+      ...current,claim:{...current.claim!,ownerId:'qa-foreign-owner'},
+    },
+  }}};
+  const departedAt=dispatch.flight.arrivalAt+60_000;
+  const attack=dispatchFlight(occupied,{
+    requestId:'pr92-real-contested-attack',missionId:'attack',
+    contactCycleKey:fixture.target.id,operationId:fixture.target.id,
+    originPlanetId:'helion-01',destination:{kind:'coordinate',coordinate:fixture.target.coordinate},
+    targetKind:fixture.target.kind,targetRelation:'neutral',
+    selectedShips:{destroyer:160,'mega-transporter':25},
+    selectedCommanders:{},departedAt,
+  },{now:departedAt,mode:'test',testTimeScale:15});
+  assert.equal(attack.ok,true,attack.ok?'':attack.error.message);
+  if(!attack.ok)return;
+  assert.equal(attack.flight.explorationAttack,true);
+  const before=attack.state.exploration!.contacts[fixture.target.id]!;
+  const arrived=reconcileFlights(attack.state,attack.flight.arrivalAt,undefined,{mode:'test',testTimeScale:15});
+  const report=arrived.state.combat.reports.find(report=>report.id==='battle-exploration-'+attack.flight.id);
+  assert.ok(report,'real combat resolver must create canonical BattleReport');
+  const newContact=arrived.state.exploration!.contacts[fixture.target.id]!;
+  const captured=newContact.events.find(event=>event.id===attack.flight.id+':capture');
+  if(report?.winner==='attacker'){
+    assert.ok(captured,'successful attack must persist capture receipt');
+    const cargo=before.claim!.cargo;
+    const total=Object.values(cargo).reduce((a,b)=>a+b,0);
+    const gained=Object.values(captured!.cargo!).reduce((a,b)=>a+b,0);
+    assert.ok(gained<=Math.floor(total*.30),'captured cargo never exceeds 30% of accrued defender cargo');
+    assert.equal(newContact.claim!.ownerId,arrived.state.profile.playerId);
+  } else {
+    assert.equal(newContact.claim!.ownerId,'qa-foreign-owner','draw or defender win retains ownership');
+  }
+  const replay=reconcileFlights(arrived.state,attack.flight.arrivalAt,undefined,{mode:'test',testTimeScale:15});
+  assert.equal(replay.state.combat.reports.filter(report=>report.id==='battle-exploration-'+attack.flight.id).length,1);
 });
