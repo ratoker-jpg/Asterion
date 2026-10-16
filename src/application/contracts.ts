@@ -1,3 +1,4 @@
+import type { ExplorationState } from '../domain/exploration/ledger.ts';
 import type { BattleHistoryState } from '../domain/combat/battle-repository.ts';
 import type { CombatPriorityState } from '../domain/combat/priority.ts';
 import type { SimulatorState } from '../domain/combat/simulator-repository.ts';
@@ -109,6 +110,8 @@ export type PlanetStateRecord = Record<PlanetId, PlanetRuntime>;
 export type PlanetQueueRecord = Record<PlanetId, BuildingQueueItem[]>;
 
 export type SaveState = {
+  /** PR92 optional migration field. No second save key is used. */
+  exploration?: ExplorationState;
   schemaVersion: number;
   metal: number;
   minerals: number;
