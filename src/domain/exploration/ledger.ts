@@ -230,6 +230,10 @@ export function settleExplorationContest(
   eligibleDefense: boolean,
 ): { contact: ExplorationContact; captured: TransportCargo; destroyed: TransportCargo } {
   if (!contact.claim || at >= contact.expiresAt || at < contact.appearedAt) throw new Error('No contestable live occupancy');
+  if (contact.claim.pendingRecallAt !== undefined
+    && at >= contact.claim.pendingRecallAt + EXPLORATION_RULES.recallPreparationMs) {
+    throw new Error('Fleet has already started returning');
+  }
   const settled = reconcileExplorationContact(contact, at);
   const defender = settled.claim!;
   if (defender.ownerId === attacker.ownerId) throw new Error('Cannot attack own contact');
