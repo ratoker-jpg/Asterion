@@ -65,8 +65,11 @@ export function resolveExplorationAttackAtTarget(state: SaveState, flight: Fligh
   if (!flight.explorationAttack || !flight.attackSnapshot || !flight.operationId) return null;
   const contact = state.exploration?.contacts[flight.operationId];
   const claimant = contact?.claim;
+  const npcSource=(flight.ownerSide==='npc'||flight.ownerSide==='bot01')
+    ? state.espionage?.targets?.[flight.originPlanetId] : undefined;
+  const attackerOwnerId=npcSource?.ownerId??state.profile.playerId;
   if (!contact || !claimant || at >= contact.expiresAt || at < contact.appearedAt
-      || claimant.ownerId === state.profile.playerId
+      || claimant.ownerId === attackerOwnerId
       || claimant.pendingRecallAt !== undefined && at >= claimant.pendingRecallAt + 30_000) return null;
   const defenderFlight = state.flights.records.find(item => item.id === claimant.flightId && item.phase === 'arrived');
   if (!defenderFlight || defenderFlight.missionId !== 'expedition' && !defenderFlight.explorationAttack) return null;
@@ -95,13 +98,13 @@ export function resolveExplorationAttackAtTarget(state: SaveState, flight: Fligh
         .map(([id,n])=>({entityId:id as import('../domain/combat/ids.ts').CombatStackEntityId,
           count:Math.min(1,validCount(n)),
           level:flight.attackSnapshot!.attackerCommanderLevels[id as import('../domain/combat/commanders.ts').CommanderId] ?? 0})),
-      participant: {side:'attacker',playerId:state.profile.playerId,playerName:state.profile.displayName,
+      participant: {side:'attacker',playerId:attackerOwnerId,playerName:npcSource?.ownerName??state.profile.displayName,
         coordinates:'['+[flight.originCoordinate.galaxy,flight.originCoordinate.system,flight.originCoordinate.position].join(':')+']',
         race:getCombatFactionName(attackerFaction)},
       factionId:attackerFaction,ships:attackerStacks,
     },
     defender: {
-      participant: {side:'defender',playerId:claimant.ownerId,playerName:claimant.ownerId === UNIVERSE_NPC_OWNER_ID ? 'Bot 01' : claimant.ownerId,
+      participant: {side:'defender',playerId:claimant.ownerId,playerName:claimant.ownerId === state.profile.playerId ? state.profile.displayName : claimant.ownerId === UNIVERSE_NPC_OWNER_ID ? 'Bot 01' : state.espionage?.targets?.[defenderFlight.originPlanetId]?.ownerName??claimant.ownerId,
         planetName:explorationProfile(contact.kind,contact.variant).name,coordinates:'['+[contact.coordinate.galaxy,contact.coordinate.system,contact.coordinate.position].join(':')+']',
         race:getCombatFactionName(defenderFaction)},
       factionId:defenderFaction,ships:defenderStacks,
@@ -119,7 +122,7 @@ export function resolveExplorationAttackAtTarget(state: SaveState, flight: Fligh
   const eligible = explorationDefenderBonusEligible(attackerValues.population,attackerValues.cost,
     defenderValues.population,defenderValues.cost);
   const arrival: ExplorationArrival = {
-    claimId:flight.id+':claim',flightId:flight.id,ownerId:state.profile.playerId,
+    claimId:flight.id+':claim',flightId:flight.id,ownerId:attackerOwnerId,
     originPlanetId:flight.originPlanetId,arrivedAt:at,
     capacity:attackerCapacity,resourcePointsLaunch:flight.explorationLaunchResourcePoints ?? 1000,
     catchupMultiplier:1,
@@ -129,7 +132,7 @@ export function resolveExplorationAttackAtTarget(state: SaveState, flight: Fligh
   const report: BattleReport = {...raw,
     debris:calculateAttackDebris(raw,attackerFaction,defenderFaction),
     resources:{metal:outcome.captured.metal,minerals:outcome.captured.minerals,gas:outcome.captured.gas}};
-  let next = changeHomeFleet(state,flight,raw.attackerForce);
+  let next = attackerOwnerId === state.profile.playerId ? changeHomeFleet(state,flight,raw.attackerForce) : state;
   if (claimant.ownerId === state.profile.playerId) next = changeHomeFleet(next,defenderFlight,raw.defenderForce);
   let settled = outcome.contact;
   // The displaced owner returns with surviving ships but ZERO escrow cargo:
