@@ -32,7 +32,7 @@ function battle(id: string, ownerId: string, result: 'attacker'|'defender'|'draw
 function fixture(){
   const initial=createInitialSaveState('test',Date.parse(stamp));
   const owner=initial.profile.playerId;
-  const reports=Array.from({length:15},(_,i)=>battle('battle-pirate-flight-'.$i,owner,i===0?'defender':'attacker',i));
+  const reports=Array.from({length:15},(_,i)=>battle('battle-pirate-flight-'+i,owner,i===0?'defender':'attacker',i));
   const sample={
     id:'flight-0',missionId:'pirate-elimination',gasCost:292_000,
     selectedShips:{destroyer:2},selectedCommanders:{corsair:1},
@@ -48,7 +48,7 @@ function fixture(){
       attackerShipLevels:{destroyer:10},attackerCommanderLevels:{corsair:40},attackerPriority:[]},
     attackResolution:{reportId:reports[0]!.id,resolvedAt:Date.parse(stamp),debris:10_000,
       loot:{metal:0,minerals:0,gas:0,debris:0}},
-  } as FlightRecord;
+  } as unknown as FlightRecord;
   return {...initial,combat:{reports:[...reports,battle('npc', 'bot01','defender',16),
       {...battle('incoming',owner,'attacker',20),missionType:'pirate-raid'} as BattleReport],
       savedReportIds:[]},flights:{...initial.flights,records:[sample]}};
