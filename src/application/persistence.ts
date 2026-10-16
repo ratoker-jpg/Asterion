@@ -528,6 +528,7 @@ const PERSISTED_FLIGHT_MISSIONS = new Set<MissionId>([
   'pirate-recon',
   'pirate-elimination',
   'pirate-raid',
+  'expedition',
   'transport',
   'espionage',
   'attack',
@@ -705,6 +706,9 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
     || (item.missionId === 'pirate-raid' && item.ownerSide !== 'pirate')) return false;
 
   if (item.operationId !== undefined && !isNonEmptyPersistedString(item.operationId)) return false;
+  if (item.missionId === 'expedition'
+    && (!isNonEmptyPersistedString(item.operationId) || !/^((unique)|(anomaly)):\\d+:/.test(item.operationId)
+      || !isNonNegativeInteger(item.explorationLaunchResourcePoints))) return false;
   if (item.spyMissionId !== undefined && !isNonEmptyPersistedString(item.spyMissionId)) return false;
   if (item.destinationPlanetId !== undefined && !isNonEmptyPersistedString(item.destinationPlanetId)) return false;
   if (item.destinationOwnerId !== undefined && !isNonEmptyPersistedString(item.destinationOwnerId)) return false;
