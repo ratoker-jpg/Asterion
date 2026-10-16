@@ -1216,10 +1216,12 @@ export function App() {
     const nowMs = Date.now();
     const live = getExplorationTarget(current, node.id, nowMs, RUNTIME_MODE);
     if (!live) { setNotice('Объект исчез. Исследование невозможно.', 'error'); return; }
-    if (!current.exploration?.acceptedContactIds?.includes(node.id)) {
-      setNotice('Сначала примите операцию.', 'error'); return;
-    }
-    const result = dispatchFlight(current, {
+    // From the Universe inspector, accepting the contact and launching the probe is one operation.
+    const acceptedState = current.exploration?.acceptedContactIds?.includes(node.id)
+      ? current
+      : acceptLiveExploration(current, node.id, nowMs, RUNTIME_MODE);
+    if (!acceptedState) { setNotice('Контакт исчез до исследования.', 'error'); return; }
+    const result = dispatchFlight(acceptedState, {
       requestId: 'exploration-recon:' + node.id + ':' + nowMs,
       missionId: 'exploration-recon',
       contactCycleKey: node.id,
@@ -1664,6 +1666,7 @@ export function App() {
               onColonize={openColonizationLaunch}
               onAsteroidRecycler={openAsteroidRecyclerLaunch}
               onExpedition={openExpeditionLaunch}
+              onExplorationRecon={launchExplorationRecon}
               explorationEligibility={Object.fromEntries(selectExplorationTargets(state, now, RUNTIME_MODE).map(node => [node.id, explorationTargetStatus(state, node)]))}
               onTransport={openTransportLaunch}
               onSpy={openSpyLaunch}
