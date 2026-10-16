@@ -376,7 +376,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
       (e.kind === 'returned' || e.kind === 'origin-destroyed') && e.ownerId === exploration.ownerId);
     const battleEvent=[...(exploration.contact?.events ?? [])].reverse()
       .find(event=>/:(capture|contest)$/.test(event.id));
-    const combatReportId=battleEvent ? 'battle-exploration-'+battleEvent.id.replace(/:(capture|contest)$/,'') : null;
+    const combatReportId=battleEvent ? 'battle:battle-exploration-'+battleEvent.id.replace(/:(capture|contest)$/,'') : null;
     const cooldownAt = (exploration.recon?.resolvedAt ?? 0) + 120_000;
     const inCooldown = exploration.recon && cooldownAt > nowMs;
     const awaitingProbe = exploration.reconInFlight?.phase === 'outbound';
