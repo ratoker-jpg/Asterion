@@ -422,13 +422,13 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
             : 'Отправьте один шпионский зонд. Результат станет известен после его прибытия; шанс успешного исследования — 70%.'}</p>
         <div className="exploration-reward-grid">
           <div className="exploration-reward-cell">
-            <small>ВОЗМОЖНЫЕ РЕСУРСЫ</small>
+            <small>РАЗВЕДАННЫЕ ЗАПАСЫ · ОСТАТОК / ИСХОДНОЕ</small>
             {known ? <div className="exploration-resource-chips">
               {resourceRows.map(([key, weight]) =>
                 <span key={key} className="exploration-resource-chip">
                   <ResourceIcon kind={key as ResourceIconKind} />
                   <b>{resourceLabels[key as ResourceIconKind]}</b>
-                  <em>{weight}%</em>
+                  <em>{number.format(exploration.contact?.resourceReserve[key as 'metal' | 'minerals' | 'gas' | 'debris'] ?? 0)} / {number.format(exploration.contact?.initialReserve[key as 'metal' | 'minerals' | 'gas' | 'debris'] ?? 0)} · {weight}%</em>
                 </span>)}
             </div> : <div className="exploration-resource-unknown">
               {(['metal', 'minerals', 'gas', 'debris'] as const).map(kind =>
@@ -437,21 +437,33 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
             </div>}
           </div>
           <div className="exploration-reward-cell">
-            <small>ОПАСНОСТЬ И НАГРАДА</small>
-            {known ? <strong>Риск {profile.risk} из 5</strong> : <strong>Риск неизвестен</strong>}
-            <p>Фактическая добыча зависит от длительности пребывания флота и свободного трюма. Ресурсы начисляются только после возвращения.</p>
+            <small>КАТЕГОРИЯ РИСКА</small>
+            {known ? <>
+              <div className="exploration-risk-meter" aria-label={'Категория риска ' + riskRoman + ' из V'}>
+                {([1,2,3,4,5] as const).map(level => <span className={level <= profile.risk ? 'active' : ''} key={level}>{['I','II','III','IV','V'][level-1]}</span>)}
+              </div>
+              <strong>{riskRoman} / V · {profile.risk < 3 ? 'НИЗКИЙ' : profile.risk < 5 ? 'ПОВЫШЕННЫЙ' : 'ВЫСОКИЙ'}</strong>
+            </> : <strong>Неизвестен до разведки</strong>}
+            <p>Риск — категория будущей конкуренции за объект, а не вероятность потерять корабли. NPC-конкуренция и опасные события в этом PR пока не подключены, поэтому сейчас эта шкала не наносит урон флоту.</p>
           </div>
         </div>
+        {mine && <section className="exploration-mining-status" data-qa-exploration-live-cargo>
+          <div><strong>ТЕКУЩАЯ ДОБЫЧА ВАШЕГО ФЛОТА</strong><span>Трюм: {number.format(Object.values(liveCargo ?? {}).reduce((sum, value) => sum + value, 0))} / {number.format(mine.cargoCapacity)}</span></div>
+          <div className="exploration-lifetime-track"><span style={{width: Math.min(100, (Object.values(liveCargo ?? {}).reduce((sum, value) => sum + value, 0) / Math.max(1, mine.cargoCapacity)) * 100) + '%'}} /></div>
+          <div className="exploration-resource-chips">{(['metal','minerals','gas','debris'] as const).map(key =>
+            <span key={key} className="exploration-resource-chip"><ResourceIcon kind={key} /><b>{resourceLabels[key]}</b><em>{number.format(liveCargo?.[key] ?? 0)}</em></span>)}</div>
+          <small>Обломки добывают только переработчики. Всё добытое попадёт на исходную планету только после возвращения.</small>
+        </section>}
         {exploration.recon ? <small className="exploration-recon-timestamp">Последний разведотчёт: {new Date(exploration.recon.resolvedAt).toLocaleString('ru-RU')}
           {inCooldown ? ' · повтор через ' + Math.ceil((cooldownAt - nowMs) / 1000) + ' с' : ''}</small> : null}
       </section>
       {completed ? <section className="exploration-dossier-result">
         <strong>ИТОГ ОПЕРАЦИИ</strong>
         {lastReturn?.kind === 'returned' ? <>
-          <p>Экспедиция вернулась. Добытые ресурсы были доставлены на планету отправления.</p>
+          <p>{deliveredTotal > 0 ? 'Доставка подтверждена на планету ' + lastReturn.originPlanetId + '. Обломки находятся в запасе переработки, не на обычных складах.' : 'Экспедиция вернулась без добычи. Для сбора обломков нужны переработчики, транспортёры их не добывают.'}</p>
           <div className="exploration-resource-chips">
-            {(['metal','minerals','gas','debris'] as const).filter(key => (lastReturn.cargo?.[key] ?? 0) > 0).map(key =>
-              <span key={key} className="exploration-resource-chip"><ResourceIcon kind={key} /><b>{resourceLabels[key]}</b><em>{number.format(lastReturn.cargo?.[key] ?? 0)}</em></span>)}
+            {(['metal','minerals','gas','debris'] as const).map(key =>
+              <span key={key} className="exploration-resource-chip"><ResourceIcon kind={key} /><b>{resourceLabels[key]}</b><em>{number.format(delivered?.[key] ?? 0)}</em></span>)}
           </div>
           {lastReturn.repairTokens ? <p>Редкие жетоны ремонта: +{lastReturn.repairTokens}</p> : null}
         </> : <p>Время контакта истекло. Подтверждённой доставки ресурсов по этому циклу нет.</p>}
