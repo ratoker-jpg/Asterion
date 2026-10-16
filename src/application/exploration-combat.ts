@@ -27,12 +27,15 @@ function changeHomeFleet(state: SaveState, flight: FlightRecord, force: BattleFo
   const planet = state.planets[flight.originPlanetId];
   if (!planet) return state;
   const next = { ...planet.fleet.ships };
+  const commanders = { ...planet.fleet.commanders };
   for (const stack of force.stacks) {
     const id = stack.entityId as ShipId;
     const n = validCount(stack.destroyed);
     if (n && id in next) next[id] = Math.max(0, validCount(next[id]) - n);
+    else if (n && id in commanders) commanders[id as keyof typeof commanders] =
+      Math.max(0,validCount(commanders[id as keyof typeof commanders])-n);
   }
-  return replacePlanetState(state, flight.originPlanetId, { ...planet, fleet: { ...planet.fleet, ships: next } });
+  return replacePlanetState(state, flight.originPlanetId, { ...planet, fleet: { ...planet.fleet, ships: next, commanders } });
 }
 function stacks(flight: FlightRecord, faction: CombatFactionId, levels: Partial<Record<ShipId,number>> = {}): CombatStackInput[] {
   const valid = new Set(getFactionShipCatalog(faction).map(item => item.id));
@@ -86,6 +89,10 @@ export function resolveExplorationAttackAtTarget(state: SaveState, flight: Fligh
     technologyMode: 'independent',
     executionMode: 'production',
     attacker: {
+      commanders:Object.entries(flight.selectedCommanders ?? {}).filter(([,n])=>validCount(n)>0)
+        .map(([id,n])=>({entityId:id as import('../domain/combat/ids.ts').CombatStackEntityId,
+          count:Math.min(1,validCount(n)),
+          level:flight.attackSnapshot!.attackerCommanderLevels[id as import('../domain/combat/commanders.ts').CommanderId] ?? 0})),
       participant: {side:'attacker',playerId:state.profile.playerId,playerName:state.profile.displayName,
         coordinates:'['+[flight.originCoordinate.galaxy,flight.originCoordinate.system,flight.originCoordinate.position].join(':')+']',
         race:getCombatFactionName(attackerFaction)},
