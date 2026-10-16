@@ -58,6 +58,8 @@ export type FlightRecord = {
   explorationLaunchResourcePoints?: number;
   /** Canonical Attack against a persistent exploration contact, not a planet. */
   explorationAttack?: boolean;
+  /** Owner race at launch; needed for real nonplayer contested fleets. */
+  explorationFactionId?: import('../combat/factions.ts').CombatFactionId;
   /** Links a persisted espionage flight to its higher-level spy mission. */
   spyMissionId?: string;
   originPlanetId: string;
