@@ -14,6 +14,7 @@ import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 import { getOwnerShipUpgradeLevels, replacePlanetState, type SaveState } from './contracts.ts';
 import { technologiesFromScience, calculateAttackDebris } from './attack.ts';
 import { expeditionMiningCapacity, updateExpeditionContact } from './exploration-flight.ts';
+import { addDebris } from '../domain/flights/cargo.ts';
 
 const validCount = (value: number | undefined) => Number.isSafeInteger(value) && (value ?? 0) > 0 ? value! : 0;
 function surviving(ships: FlightRecord['selectedShips'], force: BattleForceSnapshot): FlightRecord['selectedShips'] {
@@ -142,6 +143,29 @@ export function resolveExplorationAttackAtTarget(state: SaveState, flight: Fligh
     }].slice(-100)};
   }
   next = updateExpeditionContact(next,settled);
+  // Canonical persistent coordinate ledger, shared with recycle missions.
+  // Battle reports are metadata; the orbital stock is credited exactly once
+  // because an already resolved battle exits before applying this mutation.
+  const generatedDebris=Math.max(0,Math.floor(report.debris??0));
+  if(generatedDebris>0){
+    const ledgerKey='exploration-debris-'+contact.id;
+    const previous=next.espionage?.orbitalDebris?.[ledgerKey];
+    if(next.espionage) {
+      next={...next,espionage:{...next.espionage,orbitalDebris:{
+        ...(next.espionage.orbitalDebris??{}),
+        [ledgerKey]:{
+          id:previous?.id??'orbital-debris-'+ledgerKey,
+          targetPlanetId:ledgerKey,
+          targetPlanetName:explorationProfile(contact.kind,contact.variant).name,
+          targetOwnerId:'neutral',
+          targetCoordinate:{...contact.coordinate},
+          debris:addDebris(previous?.debris??0,generatedDebris),
+          createdAt:previous?.createdAt??at,
+          reportId:report.id,
+        },
+      }}};
+    }
+  }
   next = {...next,
     combat:{...next.combat,reports:[...next.combat.reports,report]},
     rating:recordBattleScoreAward(next.rating,report,state.profile.playerId),
