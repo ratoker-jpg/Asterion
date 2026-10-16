@@ -29,6 +29,7 @@ type OperationsViewProps = {
   explorationContacts?: readonly ExplorationOperationContact[];
   onExpedition?: (node: UniversePlanetNode) => void;
   onExplorationAttack?: (node: UniversePlanetNode) => void;
+  onBot01Occupy?: (node: UniversePlanetNode) => void;
   onExplorationAccept?: (node: UniversePlanetNode) => void;
   onExplorationCancel?: (contactId: string) => void;
   onExplorationRecon?: (node: UniversePlanetNode) => void;
@@ -322,12 +323,13 @@ function pirateRemainingLabel(expiresAt: number, nowMs: number) {
   return minutes ? `${minutes} мин ${String(remainder).padStart(2, '0')} с` : `${remainder} с`;
 }
 
-function OperationDossier({ operation, pirateContact, exploration, onExpedition, onExplorationAttack, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, battleReportId, completed, nowMs, onAccept, onCancel, onReveal, onOpenFleets, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: {
+function OperationDossier({ operation, pirateContact, exploration, onExpedition, onExplorationAttack, onBot01Occupy, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, battleReportId, completed, nowMs, onAccept, onCancel, onReveal, onOpenFleets, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: {
   operation: OperationInstance | null;
   pirateContact?: PirateContactPresentation;
   exploration?: ExplorationOperationContact;
   onExpedition?: (node: UniversePlanetNode) => void;
   onExplorationAttack?: (node: UniversePlanetNode) => void;
+  onBot01Occupy?: (node: UniversePlanetNode) => void;
   onExplorationAccept?: (node: UniversePlanetNode) => void;
   onExplorationCancel?: (contactId: string) => void;
   onExplorationRecon?: (node: UniversePlanetNode) => void;
@@ -483,7 +485,10 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
             ? 'Экспедиция заблокирована: объект удерживает другой флот.'
             : accepted ? 'Можно исследовать объект зондом или отправить экспедицию.' : 'Сначала примите операцию, чтобы открыть подготовку.'}</span></div>
         <div className="operations-command-actions-v2 exploration-action-buttons">
-          {!completed && !accepted ? <button className="operations-primary-v2" type="button"
+          {!completed && exploration.occupancy === 'free' && onBot01Occupy ? <button
+            type="button" className="operations-secondary-v2" data-qa-bot01-exploration={node.id}
+            onClick={() => onBot01Occupy(node)}>ТЕСТ: BOT 01 · ЗАНЯТЬ ОБЪЕКТ</button> : null}
+                    {!completed && !accepted ? <button className="operations-primary-v2" type="button"
             data-qa-exploration-accept={node.id} onClick={() => onExplorationAccept?.(node)}>ПРИНЯТЬ ОПЕРАЦИЮ</button> : null}
           {!completed && accepted ? <>
             <button type="button" className="operations-primary-v2" data-qa-exploration-recon={node.id}
@@ -811,6 +816,7 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
           exploration={selectedRow?.exploration}
           onExpedition={onExpedition}
           onExplorationAttack={onExplorationAttack}
+          onBot01Occupy={onBot01Occupy}
           onExplorationAccept={(node) => accept('explore:' + node.id)}
           onExplorationCancel={(id) => cancel('explore:' + id)}
           onExplorationRecon={onExplorationRecon}
