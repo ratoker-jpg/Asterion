@@ -7,7 +7,8 @@ import { resolveCombat } from '../domain/combat/resolver.ts';
 import type { CombatInput, CombatStackInput } from '../domain/combat/simulator.ts';
 import type { BattleReport, BattleForceSnapshot } from '../domain/combat/report.ts';
 import type { FlightRecord } from '../domain/flights/types.ts';
-import { emptyExplorationCargo, explorationDefenderBonusEligible } from '../domain/exploration/model.ts';
+import { emptyExplorationCargo, explorationDefenderBonusEligible, explorationProfile } from '../domain/exploration/model.ts';
+import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import { settleExplorationContest, type ExplorationArrival } from '../domain/exploration/ledger.ts';
 import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 import { getOwnerShipUpgradeLevels, replacePlanetState, type SaveState } from './contracts.ts';
@@ -99,8 +100,8 @@ export function resolveExplorationAttackAtTarget(state: SaveState, flight: Fligh
       factionId:attackerFaction,ships:attackerStacks,
     },
     defender: {
-      participant: {side:'defender',playerId:claimant.ownerId,playerName:claimant.ownerId,
-        planetName:'Исследуемый объект',coordinates:'['+[contact.coordinate.galaxy,contact.coordinate.system,contact.coordinate.position].join(':')+']',
+      participant: {side:'defender',playerId:claimant.ownerId,playerName:claimant.ownerId === UNIVERSE_NPC_OWNER_ID ? 'Bot 01' : claimant.ownerId,
+        planetName:explorationProfile(contact.kind,contact.variant).name,coordinates:'['+[contact.coordinate.galaxy,contact.coordinate.system,contact.coordinate.position].join(':')+']',
         race:getCombatFactionName(defenderFaction)},
       factionId:defenderFaction,ships:defenderStacks,
     },
