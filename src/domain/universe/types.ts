@@ -71,6 +71,10 @@ export type UniverseAsteroidSimulationState = {
 };
 
 export type UniverseTimedObjectState = {
+  /** Canonical appearance time: required for cycle-safe exploration contact IDs. */
+  startAt?: number;
+  contactCycleKey?: string;
+  profileVariant?: number;
   cycleIndex: number;
   expiresAt: number;
   respawnAt: number;
