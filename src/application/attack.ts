@@ -1002,12 +1002,13 @@ export function resolvePirateIncomingRaid(state: SaveState, flight: FlightRecord
     });
     next=preserveOwnedPlanetOrbitalDebris(next,flight.destinationPlanetId,debris,reportId,now);
   }else if(npcTarget && next.espionage){
-    const updated={
-      ...npcTarget,
-      fleet:applyDestroyedToFleet(npcTarget.fleet,report.defenderForce,factionId),
-      defense:remainingDefense,repair:repair.state,
-      resources:{...npcTarget.resources,...resourcesAfterLoot,
-        debris:addDebris(npcTarget.resources.debris,debris)},
+    // Reuse the canonical NPC loss accounting: it updates fleet, defenses,
+    // total/fleet/defense population and commander snapshots together.
+    const afterLosses = applyDestroyedToTarget(next, { ...npcTarget, repair: repair.state }, report);
+    const updated = {
+      ...afterLosses,
+      resources: { ...npcTarget.resources, ...resourcesAfterLoot,
+        debris: addDebris(npcTarget.resources.debris, debris) },
     };
     const targets={...getEspionageTargets(next.espionage),[npcTarget.id]:updated};
     next={...next,espionage:{

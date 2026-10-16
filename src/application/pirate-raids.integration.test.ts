@@ -1,11 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
-import { reconcileFlights } from './flights.ts';
+import { dispatchFlight, reconcileFlights } from './flights.ts';
 import { reconcileRuntime } from './reconcile.ts';
 import { scaleRuntimeDuration } from '../domain/runtime/mode.ts';
 import { resolveDuePirateRoll, selectDuePirateRolls } from './pirate-raids.ts';
 import { getCurrentPirateContact } from './pirates.ts';
+import { getEspionageTargets } from '../domain/espionage/runtime.ts';
+import { calculateFleetPopulation } from '../domain/fleet/runtime.ts';
+import { calculateDefensePopulation } from '../domain/fleet/production.ts';
+import { createPirateContactCycleKey } from '../domain/pirates/contact-schedule.ts';
 import { getUniverseTimedObjectSchedule } from '../domain/universe/runtime.ts';
 import { pirateSeededDraw } from '../domain/pirates/threat.ts';
 import { normalizePirateRaidSnapshot } from '../domain/pirates/mission.ts';
@@ -158,4 +162,123 @@ test('offline 8h/24h/48h multi-system rolls cannot duplicate owner-cycle ledger 
   assert.equal(uniqueReports.size,staged.combat.reports.length);
   assert.deepEqual(stable(reconcileRuntime(staged,context(at48)).state),stable(staged),
     'same timestamp reconciliation must be idempotent');
+});
+
+
+test('colonizing an untracked system before its first pirate check yields the same rolls online and offline',()=>{
+  const cycle = Array.from({length:100},(_,index)=>getUniverseTimedObjectSchedule('pirate',1,2,index))
+    .find(schedule=>schedule.present);
+  assert.ok(cycle);
+  const start = cycle!.startAt;
+  const initial = createInitialSaveState('production',start);
+  let launched:ReturnType<typeof dispatchFlight>|undefined;
+  for(let position=1;position<=24;position++){
+    const attempt=dispatchFlight(initial,{
+      requestId:'pr91-colony-raid-calendar',missionId:'colonize',originPlanetId:'helion-01',
+      destination:{kind:'coordinate',coordinate:{galaxy:1,system:2,position}},
+      targetKind:'empty',selectedShips:{colonizer:1},departedAt:start,
+    },start);
+    if(attempt.ok){launched=attempt;break;}
+  }
+  assert.ok(launched?.ok,'A free colonization slot must be available in system 2');
+  if(!launched?.ok)return;
+  const arrivalAt=start+5*60_000;
+  const flight={...launched.flight,arrivalAt,oneWayDurationMs:arrivalAt-start};
+  const seeded={...launched.state,flights:{...launched.state.flights,
+    records:launched.state.flights.records.map(item=>item.id===flight.id?flight:item)}};
+  const checkAt=start+15*60_000;
+  const context=(now:number)=>({planetId:'helion-01' as const,now,mode:'production' as const});
+  const stagedAtColony=reconcileRuntime(seeded,context(arrivalAt)).state;
+  assert.equal(Object.keys(stagedAtColony.planets).length,2);
+  const staged=reconcileRuntime(stagedAtColony,context(checkAt)).state;
+  const offline=reconcileRuntime(seeded,context(checkAt)).state;
+  const key=createPirateContactCycleKey({galaxy:1,system:2,cycleIndex:cycle!.cycleIndex,startAt:start});
+  const rollKey=JSON.stringify([initial.profile.playerId,key]);
+  assert.ok(staged.pirate?.raidRolls?.[rollKey],'Online colonization checks its new system');
+  assert.deepEqual(offline.pirate?.raidRolls?.[rollKey],staged.pirate?.raidRolls?.[rollKey],
+    'Offline colonization must not skip the new system');
+  assert.deepEqual(Object.keys(offline.pirate?.raidRolls??{}).sort(),
+    Object.keys(staged.pirate?.raidRolls??{}).sort());
+  assert.deepEqual(reconcileRuntime(offline,context(checkAt)).state.pirate?.raidRolls,
+    offline.pirate?.raidRolls,'Replaying the same checkpoint cannot generate another roll');
+});
+
+test('NPC pirate raid persists canonical population and commander counts after real fleet losses',()=>{
+  const initial=createInitialSaveState('test',1_000);
+  const npc=Object.values(getEspionageTargets(initial.espionage))
+    .find(target=>target.ownerId!==initial.profile.playerId);
+  assert.ok(npc,'Test Mode must have an NPC owner');
+  if(!npc)return;
+  let verified=false;
+  for(let index=0;index<120 && !verified;index++){
+    const schedule=getUniverseTimedObjectSchedule('pirate',npc.coordinate.galaxy,npc.coordinate.system,index);
+    if(!schedule.present)continue;
+    const key=createPirateContactCycleKey({galaxy:npc.coordinate.galaxy,
+      system:npc.coordinate.system,cycleIndex:schedule.cycleIndex,startAt:schedule.startAt});
+    if(pirateSeededDraw(`pirate-raid-v1:${npc.ownerId}:${key}`)>=0.30)continue;
+    const baseline=createInitialSaveState('test',schedule.startAt);
+    const target=getEspionageTargets(baseline.espionage)[npc.id];
+    if(!target)continue;
+    const weakenedFleet={ships:{scout:1},commanders:{}};
+    const weakened={...target,fleet:weakenedFleet,defense:{defenses:{}},commanders:{},
+      population:{total:calculateFleetPopulation(weakenedFleet,target.raceId),
+        fleet:calculateFleetPopulation(weakenedFleet,target.raceId),defense:0},
+      resources:{...target.resources,metal:500_000,minerals:500_000,gas:500_000}};
+    const targets={...getEspionageTargets(baseline.espionage),[npc.id]:weakened};
+    const seeded={...baseline,espionage:{...baseline.espionage!,targets,bot01Planets:targets},
+      pirate:{...baseline.pirate!,raidProcessedAt:schedule.startAt,
+        ownerThreats:{...baseline.pirate!.ownerThreats,
+          [npc.ownerId]:{version:1 as const,ageHours:10_000,integratedAt:schedule.startAt}},
+        ownerMaxHangarLevel:{...baseline.pirate!.ownerMaxHangarLevel,[npc.ownerId]:10}}};
+    const at=schedule.startAt+15*60_000;
+    const due=selectDuePirateRolls(seeded,schedule.startAt,at,'test',1)
+      .find(item=>item.ownerId===npc.ownerId&&item.contactCycleKey===key);
+    if(!due)continue;
+    const launched=resolveDuePirateRoll(seeded,due,'test',1);
+    const flight=launched.flights.records.find(item=>item.ownerSide==='pirate'
+      && item.destinationPlanetId===npc.id);
+    if(!flight)continue;
+    const completed=reconcileFlights(launched,flight.arrivalAt,undefined,{mode:'test',testTimeScale:1});
+    const report=completed.state.combat.reports.find(item=>item.id===`battle-pirate-raid-${flight.id}`);
+    if(!report || !report.defenderForce.stacks.some(stack=>stack.destroyed>0))continue;
+    const updated=getEspionageTargets(completed.state.espionage)[npc.id]!;
+    assert.equal(updated.population.fleet,calculateFleetPopulation(updated.fleet,updated.raceId));
+    assert.equal(updated.population.defense,calculateDefensePopulation(updated.defense,updated.raceId));
+    assert.equal(updated.population.total,updated.population.fleet+updated.population.defense);
+    for(const [id,count] of Object.entries(updated.fleet.commanders)){
+      assert.equal(updated.commanders[id as keyof typeof updated.commanders]?.count??0,count);
+    }
+    const storage=new MemoryStorage();
+    const facade=createPersistenceFacade({mode:'test',storage});
+    assert.equal(facade.write(completed.state).ok,true);
+    const reloaded=getEspionageTargets(facade.read().espionage)[npc.id]!;
+    assert.deepEqual(reloaded.population,updated.population);
+    assert.deepEqual(reloaded.commanders,updated.commanders);
+    verified=true;
+  }
+  assert.equal(verified,true,'Expected a seeded incoming NPC fight with at least one real loss');
+});
+
+test('seven owned systems retain distinct once-only raid decisions across a short offline catch-up',()=>{
+  const start=Date.now();
+  const state=createInitialSaveState('production',start);
+  const home=state.planets['helion-01']!;
+  const clock=state.resourceClock.byPlanet?.['helion-01']!;
+  const planets={...state.planets};
+  const clocks={...state.resourceClock.byPlanet};
+  const queues={...state.queues};
+  for(let system=2;system<=7;system++){
+    const id=`pr91-load-world-${system}`;
+    planets[id]={...home,name:`Load world ${system}`,universeGalaxy:1,universeSystem:system,
+      universePosition:6};
+    clocks[id]={...clock};queues[id]=[];
+  }
+  const seeded={...state,planets,queues,resourceClock:{...state.resourceClock,byPlanet:clocks}};
+  const end=start+2*3600000;
+  const context={planetId:'helion-01' as const,now:end,mode:'production' as const};
+  const offline=reconcileRuntime(seeded,context).state;
+  const keys=Object.keys(offline.pirate?.raidRolls??{});
+  assert.equal(keys.length,new Set(keys).size);
+  assert.ok(keys.length>0,'Expected at least one pirate check in seven systems');
+  assert.deepEqual(reconcileRuntime(offline,context).state.pirate?.raidRolls,offline.pirate?.raidRolls);
 });
