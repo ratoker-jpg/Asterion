@@ -15,7 +15,7 @@ import { explorationRookieProtected } from '../domain/exploration/model.ts';
 import type { RuntimeMode } from '../domain/runtime/mode.ts';
 import { createBot01IncomingAttackSnapshot } from './attack.ts';
 import { getCappedDelivery, addDebris } from '../domain/flights/cargo.ts';
-import { getStorageCapacities } from '../domain/buildings/storage.ts';
+import { getStorageCapacities } from '../domain/buildings/resource-zone.ts';
 import { completeExplorationReturn } from '../domain/exploration/ledger.ts';
 import { updateExpeditionContact } from './exploration-flight.ts';
 
