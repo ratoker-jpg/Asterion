@@ -2059,8 +2059,15 @@ export function reconcileFlights(
           continue;
         }
         const contact = explorationContactForFlight(next, current);
-        if (contact?.claim?.flightId === current.id
-          && isExplorationRecallReady(contact, arrivalAt > now ? arrivalAt : scheduledFlightEventAt(current))) {
+        if (!contact?.claim || contact.claim.flightId !== current.id) {
+          const returning = beginDomainFlightReturn(next.flights, current.id, Math.min(now, Math.max(current.arrivalAt, scheduledFlightEventAt(current))), 'target-unavailable');
+          next = { ...next, flights: returning };
+          const flight = returning.records.find(item => item.id === current.id)!;
+          changed = true;
+          events.push({ flight, status: 'target-unavailable', notice: 'Экспедиция потеряла право на объект и возвращается без добычи.' });
+          continue;
+        }
+        if (isExplorationRecallReady(contact, scheduledFlightEventAt(current))) {
           const dueAt = Math.min(contact.expiresAt, contact.claim.pendingRecallAt === undefined
             ? Number.POSITIVE_INFINITY : contact.claim.pendingRecallAt + 30_000);
           const released = releaseExplorationClaim(contact, dueAt);
