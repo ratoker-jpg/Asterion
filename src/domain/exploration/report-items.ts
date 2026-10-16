@@ -6,6 +6,12 @@ import type { ExplorationState } from './ledger.ts';
 const number = new Intl.NumberFormat('ru-RU');
 const KINDS = ['metal', 'minerals', 'gas', 'debris'] as const;
 const LABELS = { metal: 'Металл', minerals: 'Минералы', gas: 'Газ', debris: 'Обломки' } as const;
+const FLIGHT_NAMES: Readonly<Record<string,string>> = {
+  transport: 'Транспортировка', attack: 'Атака', deployment: 'Дислокация',
+  colonize: 'Колонизация', recycle: 'Переработка', gas: 'Добыча газа',
+  'space-flight': 'Космический рейс', 'pirate-elimination': 'Пиратский рейд',
+  'pirate-recon': 'Разведка пиратов', 'sun-support': 'Поддержка солнца',
+};
 function coords(c: {galaxy: number; system: number; position: number}) {
   return '[' + c.galaxy + ':' + c.system + ':' + c.position + ']';
 }
@@ -99,14 +105,14 @@ export function explorationMailboxReports(ledger?: ExplorationState, flights: re
         source: 'flights', category: 'flights',
         typeLabel: 'Итог полёта',
         title: success ? 'Рейс завершён' : 'Рейс завершился без результата',
-        preview: flight.missionId + ' · ' + location,
+        preview: (FLIGHT_NAMES[flight.missionId] ?? 'Полёт') + ' · ' + location,
         body: 'Итоговый статус сохранён по фактическому рейсу. Если рейс перевозил груз, точные зачисления могут отличаться из-за лимитов складов. Для экспедиции приведён отдельный подтверждённый отчёт.',
         timestamp: new Date(flight.completedAt ?? flight.returnAt ?? flight.arrivalAt).toISOString(),
         statusLabel: success ? 'ЗАВЕРШЕНО' : 'БЕЗ РЕЗУЛЬТАТА',
         statusTone: success ? 'info' : 'warning',
         participantNames: [], planetNames: [], coordinates: [location],
         details: [
-          { label: 'Миссия', value: flight.missionId },
+          { label: 'Миссия', value: FLIGHT_NAMES[flight.missionId] ?? 'Полёт' },
           { label: 'Планета отправления', value: flight.originPlanetId },
           { label: 'Цель', value: location },
           { label: 'Причина', value: flight.completionReason ?? 'Штатное завершение' },
