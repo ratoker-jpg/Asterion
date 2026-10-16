@@ -436,6 +436,7 @@ export function buildReportsFeed(
   pirateReconReports: readonly PirateReconReport[] = [],
   pirateFlights: readonly FlightRecord[] = [],
   exploration?: ExplorationState,
+  playerOwnerId?: string,
 ): ReportItem[] {
   const operationByBattleId = new Map(
     operations.items
@@ -472,7 +473,7 @@ export function buildReportsFeed(
     typeLabel: 'Прибытие добывающего флота',
   }));
 
-  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems, ...recyclerItems, ...gasExtractionItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights), ...explorationMailboxReports(exploration, pirateFlights), ...arrivalFlightItems].sort((a, b) => {
+  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems, ...recyclerItems, ...gasExtractionItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights), ...explorationMailboxReports(exploration, pirateFlights, playerOwnerId), ...arrivalFlightItems].sort((a, b) => {
     if (a.timestamp && b.timestamp) return Date.parse(b.timestamp) - Date.parse(a.timestamp);
     if (!a.timestamp && b.timestamp) return -1;
     if (a.timestamp && !b.timestamp) return 1;
