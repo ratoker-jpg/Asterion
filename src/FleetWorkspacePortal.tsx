@@ -1615,6 +1615,11 @@ function FleetWorkspace({
                         })}
                       </select>
                       {expeditionTargetOptions.length === 0 ? <small>В радиусе пяти систем от колоний сейчас нет активных объектов.</small> : null}
+                      <small className="fleet-expedition-mining-warning">
+                        Для обломков нужны переработчики. Транспортёры добывают металл, минералы и газ, но не обломки.
+                        Узнать состав и остаток запаса можно по успешному исследованию в «Операциях» → «Система».
+                        После разведки отправка заведомо неэффективного флота блокируется.
+                      </small>
                     </label> : missionId === 'pirate-elimination' ? <label className="flight-timeline-own-target" data-qa-pirate-target-select><span>ВЫБЕРИТЕ ПИРАТОВ</span><select value={currentPirateTarget?.contactCycleKey ?? ''} onChange={(event) => selectPirateTarget(event.target.value)} aria-label="Выберите пиратскую базу"><option value="">Выберите пиратов</option>{pirateTargetOptions.map((target) => <option key={target.contactCycleKey} value={target.contactCycleKey}>{`Пиратская база [${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}]`}</option>)}</select>{pirateTargetOptions.length === 0 ? <small>В солнечных системах ваших планет сейчас нет доступных пиратских контактов.</small> : null}</label> : missionId === 'transport' && isReadOnlyAllyTarget ? <div className="flight-timeline-readonly-target" data-qa-transport-target-readonly>
                       <span>СОЮЗНАЯ ПЛАНЕТА</span>
                       <strong>{previewTargetPlanet?.name ?? 'Союзная планета'} {previewTargetDestination?.kind === 'planet' ? flightCoordinateLabel(previewTargetDestination.coordinate) : ''}</strong>
