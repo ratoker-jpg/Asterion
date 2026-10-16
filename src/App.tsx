@@ -1,3 +1,4 @@
+import { dispatchBot01Exploration } from './application/exploration-bot01.ts';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { flushSync, createPortal } from 'react-dom';
 import './planet-skins.css';
@@ -1265,6 +1266,16 @@ export function App() {
     }, 40);
   };
 
+  const launchBot01Exploration = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
+    if (RUNTIME_MODE !== 'test')return;
+    const at=Date.now();
+    const result=dispatchBot01Exploration(stateRef.current,node,at,testTimeScale);
+    if(!result.ok){setNotice(result.notice,'error');return;}
+    stateRef.current=result.state;
+    setState(result.state);
+    setNotice(result.notice);
+  };
+
   const openExplorationAttackLaunch = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
     const live = getExplorationTarget(stateRef.current,node.id,Date.now(),RUNTIME_MODE);
     const claim = live && stateRef.current.exploration?.contacts[live.id]?.claim;
@@ -1703,6 +1714,7 @@ export function App() {
               explorationContacts={selectExplorationOperations(state, now, RUNTIME_MODE)}
               onExpedition={openExpeditionLaunch}
               onExplorationAttack={openExplorationAttackLaunch}
+              onBot01Occupy={RUNTIME_MODE === 'test' ? launchBot01Exploration : undefined}
               onExplorationAccept={acceptExplorationContact}
               onExplorationCancel={cancelExplorationContact}
               onExplorationRecon={launchExplorationRecon}
