@@ -672,7 +672,7 @@ function FleetWorkspace({
       ? selectOwnedPirateTargets(runtimeState, draft?.departedAt ?? Date.now()) : [];
     const expeditionTargets = missionId === 'expedition'
       ? selectExplorationTargets(runtimeState, draft?.departedAt ?? Date.now(), ACTIVE_RUNTIME_MODE) : [];
-    const requestedExpeditionKey = selectedExplorationTargetKey ??
+    const requestedExpeditionKey = draft?.pirateContactCycleKey ?? selectedExplorationTargetKey ??
       (launchContext?.missionId === 'expedition' ? launchContext.contactCycleKey : undefined);
     const expeditionTarget = expeditionTargets.find(item => item.id === requestedExpeditionKey)
       ?? (!requestedExpeditionKey && expeditionTargets.length === 1 ? expeditionTargets[0] : undefined);
@@ -802,6 +802,25 @@ function FleetWorkspace({
     setGasPreviewNeedsReconfirmation(false);
   };
 
+  const selectExpeditionTarget = (contactId: string) => {
+    const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
+    const target = selectExplorationTargets(runtimeState, Date.now(), ACTIVE_RUNTIME_MODE).find(item => item.id === contactId);
+    setSelectedExplorationTargetKey(target?.id ?? null);
+    setPreviewResult(null);
+    setEditingPreviewTarget(false);
+    if (!target || explorationTargetStatus(runtimeState, target) !== 'free') {
+      setPreviewTargetError('Экспедиция доступна только на свободный объект. Для занятого используйте «Атака».');
+      setPreviewDestination(null);
+      return;
+    }
+    const destination: FlightDestination = { kind: 'coordinate', coordinate: target.coordinate };
+    setPreviewDestination(destination);
+    setPreviewTargetRelation('neutral');
+    setPreviewTargetDraft(flightCoordinateDraft(target.coordinate));
+    setPreviewTargetError(null);
+    refreshFlightPreview(previewOriginPlanetId ?? runtimeState.currentPlanetId, destination, 'neutral', target.id);
+  };
+
   const selectPirateTarget = (cycleKey: string) => {
     const runtimeState = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
     const target = selectOwnedPirateTargets(runtimeState, Date.now()).find((item) => item.contactCycleKey === cycleKey);
@@ -824,7 +843,7 @@ function FleetWorkspace({
   };
 
   const togglePreviewTargetEditing = () => {
-    if (missionId === 'pirate-elimination') return;
+    if (missionId === 'pirate-elimination' || missionId === 'expedition') return;
     if (!editingPreviewTarget) {
       setEditingPreviewTarget(true);
       return;
@@ -994,7 +1013,8 @@ function FleetWorkspace({
       })
       : createFlightCommand(requestId, previewDestination || missionId === 'deployment' ? undefined : { destination: { kind: 'coordinate', coordinate: coordinateFromDraft(previewTargetDraft) } });
     if (!command) {
-      setPreviewTargetError(missionId === 'pirate-elimination' ? 'Пиратский контакт недоступен. Выберите актуальную базу.' : 'Проверьте параметры рейса.');
+      setPreviewTargetError(missionId === 'pirate-elimination' ? 'Пиратский контакт недоступен. Выберите актуальную базу.'
+        : missionId === 'expedition' ? 'Выберите свободный объект экспедиции.' : 'Проверьте параметры рейса.');
       return;
     }
     window.dispatchEvent(new CustomEvent(FLIGHT_DISPATCH_REQUEST_EVENT, { detail: command }));
@@ -1039,6 +1059,7 @@ function FleetWorkspace({
     setMissionId(nextMissionId);
     if (nextMissionId !== missionId) {
       setSelectedPirateTargetKey(null);
+      setSelectedExplorationTargetKey(null);
       setPreviewDestination(null);
       setPreviewTargetRelation(undefined);
       setPreviewTargetDraft({ galaxy: '', system: '', position: '' });
@@ -1131,6 +1152,10 @@ function FleetWorkspace({
     ? { ...sourceResourcesForCargo, gas: Math.max(0, sourceResourcesForCargo.gas - 100) }
     : sourceResourcesForCargo;
   const transportSourceDebris = previewSource?.recycling.availableDebris ?? 0;
+  const expeditionTargetOptions = previewRuntimeState
+    ? selectExplorationTargets(previewRuntimeState, clockNow, ACTIVE_RUNTIME_MODE) : [];
+  const currentExpeditionTarget = expeditionTargetOptions.find(item => item.id === selectedExplorationTargetKey)
+    ?? (!selectedExplorationTargetKey && expeditionTargetOptions.length === 1 ? expeditionTargetOptions[0] : undefined);
   const transportTargetOptions: TransportTargetOption[] = previewRuntimeState
     ? Object.entries(previewRuntimeState.planets)
       .filter(([id]) => id !== previewSourceId)
@@ -1311,7 +1336,7 @@ function FleetWorkspace({
                   <span data-qa-flight-status>{statusLabel}</span>
                   <span data-qa-flight-return>{flight.phase === 'returning' ? flightCountdown(flight.returnAt, clockNow) : '—'}</span>
                   <span><img className="fleet-flight-mission-icon" src={flightMissionIcon(flight.missionId)} alt="" />{flightMissionLabel(flight.missionId)}{isIncomingPirateRaid ? <small data-qa-pirate-raid-force title={pirateComposition || 'Состав неизвестен'}> · УГРОЗА {flightNumberLabel(piratePopulation)} НАС. · {pirateComposition || 'СОСТАВ НЕИЗВЕСТЕН'}</small> : null}{isIncomingBotAttack ? <small data-qa-flight-bot01-label> · BOT 01</small> : null}{attackOrder && !isHostileIncoming ? <small data-qa-flight-attack-order> · АТАКА #{attackOrder}</small> : null}{liveTransportState.overflowWarning ? <b className="fleet-flight-overflow-warning" aria-label="Часть груза может сгореть: склады цели заполнены" data-qa-flight-overflow-warning>!</b> : null}</span>
-                  <span>{isHostileIncoming ? <span aria-label="Чужой флот нельзя отозвать" data-qa-flight-no-recall>—</span> : <button type="button" data-qa-flight-recall={flight.id} disabled={flight.phase !== 'outbound'} onClick={() => setPendingRecall(flight)}>ОТОЗВАТЬ</button>}</span>
+                  <span>{isHostileIncoming ? <span aria-label="Чужой флот нельзя отозвать" data-qa-flight-no-recall>—</span> : <button type="button" data-qa-flight-recall={flight.id} disabled={flight.phase !== 'outbound' && !(flight.missionId === 'expedition' && flight.phase === 'arrived')} onClick={() => setPendingRecall(flight)}>ОТОЗВАТЬ</button>}</span>
                 </div>;
                 })}
               </div>
@@ -1551,8 +1576,8 @@ function FleetWorkspace({
                       <label><span>ПОЗ.</span><input name="flight-preview-target-position" inputMode="numeric" value={previewTargetDraft.position} onInput={(event) => changePreviewTargetField('position', event.currentTarget.value)} onChange={(event) => changePreviewTargetField('position', event.currentTarget.value)} aria-label="Позиция цели" /></label>
                     </div> : !isReadOnlyTarget && missionId !== 'deployment' ? <strong>{previewTargetLabel}</strong> : isReadOnlySpyTarget ? <strong>{launchContext?.targetPlanetName ?? previewTargetLabel}</strong> : null}
                     <div className={`flight-timeline-target-status ${previewTargetError ? 'is-invalid' : 'is-valid'}`} data-qa-flight-target-status>
-                      <span data-qa-target-relation={previewTargetRelation}>{previewTargetError ?? (missionId === 'pirate-elimination' && !currentPirateTarget ? 'Выберите действующий пиратский контакт' : missionId === 'deployment' && !previewTargetDestination ? 'Выберите свою планету' : missionId === 'recycle' && previewResult && !previewResult.ok ? previewResult.error.message : previewTargetRelation === 'ally' ? 'Союзная планета' : previewTargetRelation === 'self' ? 'Своя планета' : previewResult?.ok ? 'Цель подтверждена' : 'Координаты будут проверены при отправке')}</span>
-                      {!isReadOnlyTarget && missionId !== 'deployment' && missionId !== 'pirate-elimination' ? <button type="button" className="flight-timeline-edit" onClick={togglePreviewTargetEditing}>{editingPreviewTarget ? missionId === 'recycle' ? 'ПРОВЕРИТЬ' : 'ГОТОВО' : 'ИЗМЕНИТЬ'}</button> : null}
+                      <span data-qa-target-relation={previewTargetRelation}>{previewTargetError ?? (missionId === 'expedition' && !currentExpeditionTarget ? 'Выберите свободный объект' : missionId === 'pirate-elimination' && !currentPirateTarget ? 'Выберите действующий пиратский контакт' : missionId === 'deployment' && !previewTargetDestination ? 'Выберите свою планету' : missionId === 'recycle' && previewResult && !previewResult.ok ? previewResult.error.message : previewTargetRelation === 'ally' ? 'Союзная планета' : previewTargetRelation === 'self' ? 'Своя планета' : previewResult?.ok ? 'Цель подтверждена' : 'Координаты будут проверены при отправке')}</span>
+                      {!isReadOnlyTarget && missionId !== 'deployment' && missionId !== 'pirate-elimination' && missionId !== 'expedition' ? <button type="button" className="flight-timeline-edit" onClick={togglePreviewTargetEditing}>{editingPreviewTarget ? missionId === 'recycle' ? 'ПРОВЕРИТЬ' : 'ГОТОВО' : 'ИЗМЕНИТЬ'}</button> : null}
                     </div>
                     </>}
                   </div>
