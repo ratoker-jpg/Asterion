@@ -54,6 +54,8 @@ import {
 import { getAttackCommanderSelection, isAttackCombatShip } from './application/attack.ts';
 import { selectOwnedPirateTargets } from './application/pirate-presentation.ts';
 import { selectExplorationTargets, explorationTargetStatus } from './application/exploration.ts';
+import { explorationMiningRates, explorationProfile } from './domain/exploration/model.ts';
+import { reconcileExplorationContact } from './domain/exploration/ledger.ts';
 import type { FlightDestination, FlightRecord, MissionId, TargetRelation } from './domain/flights/types.ts';
 import type { UniverseAsteroidSimulationState, UniverseCoordinate, UniverseObjectKind } from './domain/universe/types.ts';
 import type { EspionageState, SpyMission } from './domain/espionage/types.ts';
@@ -209,12 +211,14 @@ function targetErrorFromFlightResult(result: FlightCommandResult): string | null
 function flightMissionLabel(missionId: MissionId) {
   if (missionId === 'pirate-recon') return 'Разведка пиратов';
   if (missionId === 'pirate-raid') return 'ПИРАТСКИЙ НАЛЁТ';
+  if (missionId === 'exploration-recon') return 'Исследование объекта';
   return missions.find((mission) => mission.id === missionId)?.label ?? missionId;
 }
 
 function flightMissionIcon(missionId: MissionId) {
   if (missionId === 'pirate-recon') return missionEspionageIcon;
   if (missionId === 'pirate-raid') return missionAttackIcon;
+  if (missionId === 'exploration-recon') return missionEspionageIcon;
   return missions.find((mission) => mission.id === missionId)?.icon;
 }
 
@@ -364,6 +368,7 @@ function FleetWorkspace({
   const [previewTargetError, setPreviewTargetError] = useState<string | null>(null);
   const [selectedPirateTargetKey, setSelectedPirateTargetKey] = useState<string | null>(null);
   const [selectedExplorationTargetKey, setSelectedExplorationTargetKey] = useState<string | null>(null);
+  const [selectedExpeditionFlightId, setSelectedExpeditionFlightId] = useState<string | null>(null);
   const [transportCargoDraft, setTransportCargoDraft] = useState<TransportCargo>(emptyTransportCargo);
   const [pendingRecall, setPendingRecall] = useState<FlightRecord | null>(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
@@ -1319,7 +1324,7 @@ function FleetWorkspace({
                     : 0;
                   const liveTransportState = getActiveTransportState(flight);
                   const targetUnavailable = flight.completionReason === 'target-unavailable' || liveTransportState.targetUnavailable;
-                  const statusLabel = targetUnavailable
+                  const statusLabel = flight.missionId === 'expedition' && flight.phase === 'arrived' ? '⛏ ДОБЫВАЕТ РЕСУРСЫ' : targetUnavailable
                     ? 'ЦЕЛЬ НЕДОСТУПНА'
                     : isHostileIncoming && flight.phase === 'outbound'
                       ? '⚠ ВХОДЯЩАЯ АТАКА'
@@ -1335,7 +1340,7 @@ function FleetWorkspace({
                   <span data-qa-flight-arrival data-qa-flight-arrival-at={flight.arrivalAt}>{flight.phase === 'outbound' ? flightCountdown(flight.arrivalAt, clockNow) : '—'}</span>
                   <span data-qa-flight-status>{statusLabel}</span>
                   <span data-qa-flight-return>{flight.phase === 'returning' ? flightCountdown(flight.returnAt, clockNow) : '—'}</span>
-                  <span><img className="fleet-flight-mission-icon" src={flightMissionIcon(flight.missionId)} alt="" />{flightMissionLabel(flight.missionId)}{isIncomingPirateRaid ? <small data-qa-pirate-raid-force title={pirateComposition || 'Состав неизвестен'}> · УГРОЗА {flightNumberLabel(piratePopulation)} НАС. · {pirateComposition || 'СОСТАВ НЕИЗВЕСТЕН'}</small> : null}{isIncomingBotAttack ? <small data-qa-flight-bot01-label> · BOT 01</small> : null}{attackOrder && !isHostileIncoming ? <small data-qa-flight-attack-order> · АТАКА #{attackOrder}</small> : null}{liveTransportState.overflowWarning ? <b className="fleet-flight-overflow-warning" aria-label="Часть груза может сгореть: склады цели заполнены" data-qa-flight-overflow-warning>!</b> : null}</span>
+                  <span><img className="fleet-flight-mission-icon" src={flightMissionIcon(flight.missionId)} alt="" />{flight.missionId === 'expedition' ? <button type="button" className="fleet-expedition-details-trigger" onClick={() => setSelectedExpeditionFlightId(flight.id)} data-qa-expedition-flight-details={flight.id}>ЭКСПЕДИЦИЯ · ПОДРОБНЕЕ ↗</button> : flightMissionLabel(flight.missionId)}{isIncomingPirateRaid ? <small data-qa-pirate-raid-force title={pirateComposition || 'Состав неизвестен'}> · УГРОЗА {flightNumberLabel(piratePopulation)} НАС. · {pirateComposition || 'СОСТАВ НЕИЗВЕСТЕН'}</small> : null}{isIncomingBotAttack ? <small data-qa-flight-bot01-label> · BOT 01</small> : null}{attackOrder && !isHostileIncoming ? <small data-qa-flight-attack-order> · АТАКА #{attackOrder}</small> : null}{liveTransportState.overflowWarning ? <b className="fleet-flight-overflow-warning" aria-label="Часть груза может сгореть: склады цели заполнены" data-qa-flight-overflow-warning>!</b> : null}</span>
                   <span>{isHostileIncoming ? <span aria-label="Чужой флот нельзя отозвать" data-qa-flight-no-recall>—</span> : <button type="button" data-qa-flight-recall={flight.id} disabled={flight.phase !== 'outbound' && !(flight.missionId === 'expedition' && flight.phase === 'arrived')} onClick={() => setPendingRecall(flight)}>ОТОЗВАТЬ</button>}</span>
                 </div>;
                 })}
@@ -1498,6 +1503,46 @@ function FleetWorkspace({
         )}
       </main>
 
+      {selectedExpeditionFlightId && (() => {
+        const flight = flightRecords.find(item => item.id === selectedExpeditionFlightId);
+        if (!flight) return null;
+        const runtime = createPersistenceFacade({ mode: ACTIVE_RUNTIME_MODE }).read();
+        const rawContact = flight.operationId ? runtime.exploration?.contacts[flight.operationId] : undefined;
+        const contact = rawContact ? reconcileExplorationContact(rawContact, clockNow) : undefined;
+        const claim = contact?.claim?.flightId === flight.id ? contact.claim : undefined;
+        const release = contact?.events.find(e => e.id === flight.id + ':release');
+        const profile = contact ? explorationProfile(contact.kind, contact.variant) : null;
+        const capacity = claim?.cargoCapacity ?? 0;
+        const cargo = claim?.cargo ?? release?.cargo ?? { metal: 0, minerals: 0, gas: 0, debris: 0 };
+        const rates = claim && profile
+          ? explorationMiningRates(claim.resourcePointsLaunch, profile, claim.capacity, claim.catchupMultiplier, Boolean(claim.boostedUntilAt && claim.boostedUntilAt > clockNow))
+          : { metal: 0, minerals: 0, gas: 0, debris: 0 };
+        const carried = Object.values(cargo).reduce((sum, v) => sum + v, 0);
+        const labels = { metal: 'Металл', minerals: 'Минералы', gas: 'Газ', debris: 'Обломки' } as const;
+        return createPortal(<div className="resource-building-action-confirm-backdrop" data-qa-expedition-details-backdrop onMouseDown={() => setSelectedExpeditionFlightId(null)}>
+          <section className="resource-building-action-confirm fleet-expedition-details" role="dialog" aria-modal="true" aria-label="Подробности экспедиции" data-qa-expedition-details-dialog onMouseDown={e => e.stopPropagation()}>
+            <header><div><small>АКТИВНЫЙ РЕЙС · ЭКСПЕДИЦИЯ</small><h3>{flight.targetPlanetName ?? profile?.name ?? 'Космический объект'}</h3><span>{flightCoordinateLabel(flight.destinationCoordinate)}</span></div><button type="button" aria-label="Закрыть подробности экспедиции" onClick={() => setSelectedExpeditionFlightId(null)}>×</button></header>
+            <div className="fleet-expedition-status">
+              <span>{flight.phase === 'outbound' ? 'В ПУТИ К ОБЪЕКТУ' : flight.phase === 'arrived' ? 'ДОБЫВАЕТ РЕСУРСЫ' : 'ВОЗВРАЩАЕТСЯ'}</span>
+              <strong>{flight.phase === 'outbound' ? flightCountdown(flight.arrivalAt, clockNow) : flight.phase === 'returning' ? flightCountdown(flight.returnAt, clockNow) : 'НА ОРБИТЕ'}</strong>
+            </div>
+            <div className="fleet-expedition-metrics">
+              <div><small>ВМЕСТИМОСТЬ ТРЮМА</small><strong>{flightNumberLabel(capacity)}</strong></div>
+              <div><small>УЖЕ ДОБЫТО</small><strong>{flightNumberLabel(carried)}</strong></div>
+              <div><small>НА ОБЪЕКТЕ ДО</small><strong>{contact ? new Date(contact.expiresAt).toLocaleTimeString('ru-RU') : '—'}</strong></div>
+            </div>
+            <div className="fleet-expedition-fill"><span style={{width: Math.min(100, carried / Math.max(1, capacity) * 100) + '%'}} /></div>
+            <div className="fleet-expedition-resources">{(['metal','minerals','gas','debris'] as const).map(key =>
+              <div key={key}><ResourceIcon kind={key} /><span><b>{labels[key]}</b><small>Добыто: {flightNumberLabel(cargo[key])}</small></span><strong>{flightNumberLabel(rates[key])} / мин</strong></div>)}</div>
+            <p>{claim?.capacity.recyclers === 0 ? 'В составе нет переработчиков — обломки не добываются. ' : ''}
+              {claim?.capacity.transporters === 0 ? 'В составе нет транспортёров — добыча металла, минералов и газа ограничена. ' : ''}
+              Итоговая добыча зависит от доступных запасов и свободного трюма. Весь груз поступит на планету отправления после возвращения.
+            </p>
+            <div className="fleet-expedition-composition"><strong>ФЛОТ</strong><span>{Object.entries(flight.selectedShips).filter(([,n])=>Boolean(n)).map(([id,n])=>id + ' ×' + flightNumberLabel(n ?? 0)).join(' · ')}</span></div>
+            <button type="button" className="fleet-expedition-close" onClick={() => setSelectedExpeditionFlightId(null)}>ЗАКРЫТЬ</button>
+          </section>
+        </div>,document.body);
+      })()}
       {pendingSatelliteDismantle != null ? createPortal(
         <div
           className="resource-building-action-confirm-backdrop"
