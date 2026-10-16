@@ -707,6 +707,14 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
     || (item.missionId === 'pirate-raid' && item.ownerSide !== 'pirate')) return false;
 
   if (item.operationId !== undefined && !isNonEmptyPersistedString(item.operationId)) return false;
+  if (item.explorationAttack !== undefined && item.explorationAttack !== true) return false;
+  if (item.explorationAttack === true
+    && (item.missionId !== 'attack' || item.ownerSide === 'bot01'
+      || destinationRecord.kind !== 'coordinate'
+      || !isNonEmptyPersistedString(item.operationId)
+      || !/^(unique|anomaly):\\d+:/.test(item.operationId)
+      || !isNonNegativeInteger(item.explorationLaunchResourcePoints)
+      || (item.targetKind !== 'unique' && item.targetKind !== 'anomaly'))) return false;
   if ((item.missionId === 'expedition' || item.missionId === 'exploration-recon')
     && (!isNonEmptyPersistedString(item.operationId) || !/^(unique|anomaly):\d+:/.test(item.operationId)
       || (item.missionId === 'expedition' && !isNonNegativeInteger(item.explorationLaunchResourcePoints)))) return false;
@@ -892,7 +900,7 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
   }
   if (item.missionId === 'attack' || item.missionId === 'pirate-elimination') {
     const bot01Incoming = item.ownerSide === 'bot01';
-    if (item.missionId === 'attack' && (destinationRecord.kind !== 'planet'
+    if (item.missionId === 'attack' && item.explorationAttack !== true && (destinationRecord.kind !== 'planet'
       || !isNonEmptyPersistedString(item.destinationPlanetId)
       || item.destinationPlanetId !== destinationRecord.planetId
       || (item.targetRelation !== 'enemy' && item.targetRelation !== 'neutral'
