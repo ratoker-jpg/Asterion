@@ -11,6 +11,7 @@ import {
   explorationProfile,
   profileVariantForArt,
   explorationSeedRoll,
+  explorationRareWon,
   captureExplorationCargo,
   type ExplorationKind,
   type MiningCapacity,
@@ -38,11 +39,15 @@ export type ExplorationClaim = {
 export type ExplorationEvent = {
   id: string;
   at: number;
-  kind: 'arrived' | 'recalled' | 'expired' | 'defended' | 'captured' | 'draw';
+  kind: 'arrived' | 'recalled' | 'expired' | 'defended' | 'captured' | 'draw' | 'returned' | 'origin-destroyed';
   ownerId: string;
   flightId: string;
   cargo?: TransportCargo;
   lostCargo?: TransportCargo;
+  heldMs?: number;
+  claimId?: string;
+  originPlanetId?: string;
+  repairTokens?: number;
 };
 
 export type ExplorationContact = {
@@ -212,6 +217,7 @@ export function releaseExplorationClaim(contact: ExplorationContact, nowMs: numb
   const event: ExplorationEvent = {
     id: claim.flightId + ':release', at, kind: expired ? 'expired' : 'recalled',
     ownerId: claim.ownerId, flightId: claim.flightId, cargo: { ...claim.cargo },
+    heldMs: claim.heldMs, claimId: claim.claimId, originPlanetId: claim.originPlanetId,
   };
   return { ...settled, claim: undefined, events: [...settled.events, event].slice(-100) };
 }
@@ -270,6 +276,42 @@ export function settleExplorationContest(
     kind: winner === 'draw' ? 'draw' : 'defended', ownerId: defender.ownerId, flightId: defender.flightId, lostCargo };
   return { contact: { ...settled, claim: surviving, events: [...settled.events, event].slice(-100) },
     captured: nothing, destroyed: lostCargo };
+}
+
+/**
+ * Called ONLY once by the canonical returning flight on successful landing.
+ * This is an escrow receipt, NOT a planet-wallet mutation: the application
+ * must credit cargo/tokens in the same SaveState transaction as this event.
+ */
+export function completeExplorationReturn(
+  contact: ExplorationContact,
+  flightId: string,
+  returnedAt: number,
+  originExists: boolean,
+): { contact: ExplorationContact; payout: { originPlanetId: string; cargo: TransportCargo; repairTokens: number } | null } {
+  const id = flightId + ':completed';
+  if (contact.events.some(event => event.id === id)) return { contact, payout: null };
+  const release = contact.events.find(event => event.id === flightId + ':release');
+  if (!release || !release.cargo || !release.claimId || !release.originPlanetId
+    || !Number.isFinite(returnedAt) || returnedAt < release.at) throw new Error('No returned and released expedition');
+  const rareEligible = originExists && (release.heldMs ?? 0) >= 60_000
+    && !contact.rareUsedByOwner.includes(release.ownerId);
+  const tokenWon = rareEligible && explorationRareWon(explorationProfile(contact.kind, contact.variant),
+    release.heldMs!, contact.id, release.ownerId, release.claimId);
+  const event: ExplorationEvent = {
+    id, at: returnedAt, ownerId: release.ownerId, flightId,
+    kind: originExists ? 'returned' : 'origin-destroyed',
+    cargo: originExists ? { ...release.cargo } : emptyExplorationCargo(),
+    originPlanetId: release.originPlanetId, claimId: release.claimId,
+    heldMs: release.heldMs, repairTokens: tokenWon ? 1 : 0,
+  };
+  const rareUsedByOwner = rareEligible
+    ? [...contact.rareUsedByOwner, release.ownerId].slice(-64) : contact.rareUsedByOwner;
+  return {
+    contact: { ...contact, rareUsedByOwner, events: [...contact.events, event].slice(-100) },
+    payout: originExists ? { originPlanetId: release.originPlanetId,
+      cargo: { ...release.cargo }, repairTokens: tokenWon ? 1 : 0 } : null,
+  };
 }
 
 export type ExplorationReconRecord = {
