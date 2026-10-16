@@ -112,6 +112,7 @@ import {
   prepareExplorationRecall, isExplorationRecallReady, releaseExplorationClaim,
 } from '../domain/exploration/ledger.ts';
 import { explorationMiningRates, explorationProfile } from '../domain/exploration/model.ts';
+import { resolveExplorationAttackAtTarget } from './exploration-combat.ts';
 
 export const FLIGHT_LAUNCH_CONTEXT_EVENT = 'asterion:flight-launch-context';
 export const FLIGHT_LAUNCH_CONTEXT_CLEAR_EVENT = 'asterion:flight-launch-context-clear';
@@ -1235,6 +1236,7 @@ export function dispatchFlight(
       return failure(state, 'wrong-ship-composition', 'У выбранных переработчиков нет грузоподъёмности.');
     }
   }
+  let explorationAttackNode: ReturnType<typeof getExplorationTarget> | undefined;
   let attackTarget: ResolvedSpyTarget | undefined;
   let attackSnapshot: ReturnType<typeof createAttackLaunchSnapshot> | undefined;
   let attackCommanders: Partial<Record<CommanderId, number>> | undefined;
@@ -1286,6 +1288,24 @@ export function dispatchFlight(
     if (command.maxRounds !== undefined && ![5, 8, 12].includes(command.maxRounds)) {
       return failure(state, 'invalid-round-limit', 'Число раундов атаки: только 5, 8 или 12.');
     }
+    if (command.contactCycleKey || command.operationId?.startsWith('exploration:')) {
+      const id = command.contactCycleKey ?? command.operationId;
+      const node = id ? getExplorationTarget(state,id,departedAt,runtimeOptions.mode) : undefined;
+      const claim = node ? state.exploration?.contacts[node.id]?.claim : undefined;
+      if (!node || !claim || command.destination.kind !== 'coordinate'
+        || !coordinatesEqual(command.destination.coordinate,node.coordinate)
+        || claim.ownerId === state.profile.playerId || claim.pendingRecallAt !== undefined)
+        return failure(state,'target-not-available','Боевое нападение доступно только на реально занятый чужим флотом объект.');
+      if (Object.keys(selectedShips).some(id => !isAttackCombatShip(id as ShipId,state.profile.factionId as CombatFactionId)))
+        return failure(state,'wrong-ship-composition','Солнечные спутники не участвуют в атаке.');
+      explorationAttackNode = node;
+      const available = getAttackCommanderSelection(state,originPlanetId);
+      attackCommanders = command.selectedCommanders === undefined ? available : selectedCommanders ?? {};
+      if (COMMANDER_IDS.some(id => (attackCommanders![id] ?? 0) > (available[id] ?? 0)))
+        return failure(state,'insufficient-commanders','Выбранные командиры недоступны.');
+      attackSnapshot = createAttackLaunchSnapshot(state,originPlanetId,normalizeAttackRounds(command.maxRounds),attackCommanders);
+      attackDestination = {kind:'coordinate',coordinate:{...node.coordinate}};
+    } else {
     attackTarget = command.destination.kind === 'planet'
       ? resolveSpyTarget(state, command.destination.planetId, {
         ownerId: command.targetOwnerId,
@@ -1314,6 +1334,7 @@ export function dispatchFlight(
     const rounds = normalizeAttackRounds(command.maxRounds);
     attackSnapshot = createAttackLaunchSnapshot(state, originPlanetId, rounds, commandersForAttack);
     attackDestination = { kind: 'planet', planetId: attackTarget.target.id, coordinate: { ...attackTarget.target.coordinate } };
+    }
   }
 
   if (command.missionId === 'deployment') {
@@ -1416,7 +1437,8 @@ export function dispatchFlight(
     departedAt,
     factionId: state.profile.factionId as CombatFactionId,
     science,
-    operationId: command.missionId === 'expedition' || command.missionId === 'exploration-recon' ? (command.contactCycleKey ?? command.operationId) : command.operationId,
+    operationId: command.missionId === 'expedition' || command.missionId === 'exploration-recon' || explorationAttackNode ? (command.contactCycleKey ?? command.operationId) : command.operationId,
+    ...(explorationAttackNode ? {explorationAttack:true,explorationLaunchResourcePoints:explorationResourceScore(state)} : {}),
     ...(command.missionId === 'expedition' ? { targetPlanetName: getExplorationTarget(state, (command.contactCycleKey ?? command.operationId)!, departedAt, runtimeOptions.mode)?.name } : {}),
     ...(command.missionId === 'space-flight' ? {
       durationMs: spaceFlightDurationMs,
@@ -1448,7 +1470,7 @@ export function dispatchFlight(
     } : {}),
     ...(command.missionId === 'attack' ? {
       destinationPlanetId: attackTarget?.target.id,
-      targetPlanetName: attackTarget?.target.name,
+      targetPlanetName: attackTarget?.target.name ?? explorationAttackNode?.name,
       targetOwnerName: attackTarget?.target.ownerName,
       destinationOwnerId: attackTarget?.target.ownerId,
       targetRelation: attackTarget?.relation,
@@ -1468,7 +1490,7 @@ export function dispatchFlight(
   const flight: FlightRecord = command.missionId === 'expedition'
     ? { ...baseFlight, explorationLaunchResourcePoints: explorationResourceScore(state) }
     : baseFlight;
-  if (command.missionId === 'expedition' || command.missionId === 'exploration-recon') {
+  if (command.missionId === 'expedition' || command.missionId === 'exploration-recon' || flight.explorationAttack) {
     const node = getExplorationTarget(state, flight.operationId!, flight.departedAt, runtimeOptions.mode);
     if (!node || flight.arrivalAt >= node.special!.expiresAt) {
       return failure(state, 'target-not-available', 'Флот прибудет после исчезновения объекта. Выберите более близкую цель или быстрые корабли.');
@@ -1534,7 +1556,7 @@ export function dispatchFlight(
       });
     }
   }
-  if ((command.missionId === 'expedition' || command.missionId === 'exploration-recon') && domainResult.created) {
+  if ((command.missionId === 'expedition' || command.missionId === 'exploration-recon' || explorationAttackNode) && domainResult.created) {
     nextState = materializeExplorationAtDispatch(nextState, flight.operationId!, flight.departedAt,
       runtimeOptions.mode ?? (Object.keys(nextState.alliedPlanets ?? {}).length ? 'test' : 'production'));
   }
