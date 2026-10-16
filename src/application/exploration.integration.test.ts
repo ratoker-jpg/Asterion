@@ -389,3 +389,36 @@ test('Bot 01 ships and finite mined material return to existing source exactly o
   assert.equal(repeated.state.exploration!.contacts[fixture.target.id]!.events
     .filter(e=>e.id===sent.flight.id+':completed').length,1);
 });
+
+
+test('real-source production NPC expedition survives strict save migration without turning into a player flight', () => {
+  const fixture=prepare();
+  const launched=dispatchBot01Exploration(fixture.state,fixture.target,fixture.now,15);
+  assert.equal(launched.ok,true,launched.notice);
+  if(!launched.ok)return;
+  const source=getEspionageTargets(launched.state.espionage)[launched.flight.originPlanetId]!;
+  const requestId='npc-exploration:'+fixture.target.id+':'+fixture.now;
+  const npcFlight={...launched.flight,id:'flight-'+requestId,requestId,ownerSide:'npc' as const};
+  const ownerId='real-npc-fixture-owner';
+  const state={...launched.state,
+    espionage:{...launched.state.espionage!,
+      bot01Planets:undefined,bot01Profile:undefined,
+      targets:{[source.id]:{...source,ownerId,ownerName:'NPC Fixture',ownerProfile:fixture.state.espionage?.bot01Profile}},
+    },
+    flights:{...launched.state.flights,records:[npcFlight]},
+  };
+  const store=new Map<string,string>();
+  const facade=createPersistenceFacade({mode:'production',now:()=>fixture.now,storage:{
+    getItem:(k:string)=>store.get(k)??null,
+    setItem:(k:string,v:string)=>{store.set(k,v);},
+    removeItem:(k:string)=>{store.delete(k);},
+  }});
+  assert.equal(facade.write(state).ok,true);
+  const loaded=facade.read();
+  const stored=loaded.flights.records.find(f=>f.id===npcFlight.id);
+  assert.ok(stored,'a legitimate production NPC flight must not be discarded by save validation');
+  assert.equal(stored!.ownerSide,'npc');
+  assert.equal(stored!.explorationFactionId,source.raceId);
+  assert.deepEqual(stored!.selectedShips,npcFlight.selectedShips);
+  assert.equal(getEspionageTargets(loaded.espionage)[source.id]?.ownerId,ownerId);
+});
