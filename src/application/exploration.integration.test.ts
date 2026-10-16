@@ -8,6 +8,7 @@ import { getExplorationTarget, explorationTargetStatus, selectExplorationTargets
 import { acceptLiveExploration, cancelLiveExploration } from './exploration-operations.ts';
 import { explorationResourceScore } from './exploration-flight.ts';
 import { explorationMailboxReports } from '../domain/exploration/report-items.ts';
+import { reconcileExplorationContact } from '../domain/exploration/ledger.ts';
 import { dispatchBot01Exploration } from './exploration-bot01.ts';
 import { getEspionageTargets } from '../domain/espionage/runtime.ts';
 
@@ -296,7 +297,7 @@ test('canonical Attack on occupied field calls real combat, preserves fleet casu
   const captured=newContact.events.find(event=>event.id===attack.flight.id+':capture');
   if(report?.winner==='attacker'){
     assert.ok(captured,'successful attack must persist capture receipt');
-    const cargo=before.claim!.cargo;
+    const cargo=reconcileExplorationContact(before,attack.flight.arrivalAt).claim!.cargo;
     const total=Object.values(cargo).reduce((a,b)=>a+b,0);
     const gained=Object.values(captured!.cargo!).reduce((a,b)=>a+b,0);
     assert.ok(gained<=Math.floor(total*.30),'captured cargo never exceeds 30% of accrued defender cargo');
