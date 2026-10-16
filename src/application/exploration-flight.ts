@@ -55,7 +55,7 @@ export function materializeExplorationAtDispatch(
 
 /** Exact snapshot, no live hangar inventory when the fleet actually arrives. */
 export function expeditionMiningCapacity(state: SaveState, flight: FlightRecord) {
-  const fleet = getFactionShipCatalog(flight.factionId ?? state.profile.factionId);
+  const fleet = getFactionShipCatalog(flight.explorationFactionId ?? state.profile.factionId);
   const catalog = Object.fromEntries(fleet.map(ship => [ship.id, ship]));
   let all = 0, transporters = 0, recyclers = 0;
   for (const [id, count] of Object.entries(flight.selectedShips)) {
