@@ -1685,6 +1685,7 @@ export function App() {
               onExplorationCancel={cancelExplorationContact}
               onExplorationRecon={launchExplorationRecon}
               onExplorationUniverse={(node) => openUniverseTarget({ coordinate: node.coordinate, planetId: node.id })}
+              onExplorationReport={openPirateReport}
               pirateOwnerId={state.profile.playerId}
               pirateRaidRolls={state.pirate?.raidRolls}
               pirateAdaptiveDiagnostics={RUNTIME_MODE==='test'?(state.pirate?.ownerAdaptations?.[state.profile.playerId]??defaultPirateOwnerAdaptation()):undefined}
