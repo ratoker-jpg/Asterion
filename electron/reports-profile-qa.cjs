@@ -344,6 +344,9 @@ async function runViewport(win, width, height) {
   }
   await capture(win, directory, 'overpopulation-dossier');
 
+  // Extraction messages were moved to Flights while retaining their stable IDs.
+  // Keep the overpopulation assertion in System, then verify both arrivals in Flights.
+  await clickFolder(win, 'flights');
   for (const [index, report] of recyclerArrivalReports.entries()) {
     const selector = `[data-report-item-id="${report.id}"] .reports-list-open`;
     await waitFor(win, `document.querySelector(${JSON.stringify(selector)})`);
@@ -385,7 +388,7 @@ async function runViewport(win, width, height) {
 
   await reload(win);
   await clickPrimary(win, 'reports');
-  await clickFolder(win, 'system');
+  await clickFolder(win, 'flights');
   for (const report of recyclerArrivalReports) {
     const selector = `[data-report-item-id="${report.id}"]`;
     const persistedCount = await win.webContents.executeJavaScript(`document.querySelectorAll(${JSON.stringify(selector)}).length`);
