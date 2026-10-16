@@ -1979,10 +1979,10 @@ export function reconcileFlights(
     && flight.missionId === 'attack'
     && (flight.phase === 'outbound' || flight.phase === 'arrived');
   const compareFlightEvents = (left: FlightRecord, right: FlightRecord) => {
-    const leftMissingOrigin = (left.missionId === 'deployment' || left.missionId === 'space-flight' || left.missionId === 'pirate-recon' || left.missionId === 'pirate-elimination' || (left.missionId === 'expedition' && left.ownerSide !== 'bot01' && left.ownerSide !== 'npc') || left.explorationAttack)
+    const leftMissingOrigin = (left.missionId === 'deployment' || left.missionId === 'space-flight' || left.missionId === 'pirate-recon' || left.missionId === 'pirate-elimination' || (left.missionId === 'expedition' && left.ownerSide !== 'bot01' && left.ownerSide !== 'npc') || (left.explorationAttack && left.ownerSide !== 'npc'))
       && ACTIVE_FLIGHT_PHASES.has(left.phase)
       && !next.planets[left.originPlanetId];
-    const rightMissingOrigin = (right.missionId === 'deployment' || right.missionId === 'space-flight' || right.missionId === 'pirate-recon' || right.missionId === 'pirate-elimination' || (right.missionId === 'expedition' && right.ownerSide !== 'bot01' && right.ownerSide !== 'npc') || right.explorationAttack)
+    const rightMissingOrigin = (right.missionId === 'deployment' || right.missionId === 'space-flight' || right.missionId === 'pirate-recon' || right.missionId === 'pirate-elimination' || (right.missionId === 'expedition' && right.ownerSide !== 'bot01' && right.ownerSide !== 'npc') || (right.explorationAttack && right.ownerSide !== 'npc'))
       && ACTIVE_FLIGHT_PHASES.has(right.phase)
       && !next.planets[right.originPlanetId];
     const leftAt = leftMissingOrigin ? Number.NEGATIVE_INFINITY : scheduledFlightEventAt(left);
