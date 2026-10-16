@@ -707,7 +707,7 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
 
   if (item.operationId !== undefined && !isNonEmptyPersistedString(item.operationId)) return false;
   if (item.missionId === 'expedition'
-    && (!isNonEmptyPersistedString(item.operationId) || !/^((unique)|(anomaly)):\\d+:/.test(item.operationId)
+    && (!isNonEmptyPersistedString(item.operationId) || !/^(unique|anomaly):\d+:/.test(item.operationId)
       || !isNonNegativeInteger(item.explorationLaunchResourcePoints))) return false;
   if (item.spyMissionId !== undefined && !isNonEmptyPersistedString(item.spyMissionId)) return false;
   if (item.destinationPlanetId !== undefined && !isNonEmptyPersistedString(item.destinationPlanetId)) return false;
