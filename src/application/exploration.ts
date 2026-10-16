@@ -64,6 +64,7 @@ import type { ExplorationContact, ExplorationReconRecord } from '../domain/explo
 export type ExplorationOperationPresentation = {
   node: UniversePlanetNode;
   occupancy: 'free' | 'self' | 'occupied';
+  ownerId: string;
   stage: 'available' | 'active' | 'completed';
   contact?: ExplorationContact;
   recon?: ExplorationReconRecord;
@@ -80,7 +81,7 @@ export function selectExplorationOperations(state: SaveState, nowMs: number, mod
   const displayed: ExplorationOperationPresentation[] = live.map(node => {
     const occupancy = explorationTargetStatus(state, node);
     return {
-      node, occupancy, contact: stored[node.id], recon: report(node.id),
+      node, occupancy, ownerId: state.profile.playerId, contact: stored[node.id], recon: report(node.id),
       reconInFlight: inFlight(node.id) ? { phase: inFlight(node.id)!.phase as 'outbound' | 'returning',
         arrivalAt: inFlight(node.id)!.arrivalAt, returnAt: inFlight(node.id)!.returnAt } : undefined,
       stage: stored[node.id]?.events.some(event =>
@@ -108,7 +109,7 @@ export function selectExplorationOperations(state: SaveState, nowMs: number, mod
             respawnAt: contact.expiresAt, lifetimeMs: contact.expiresAt - contact.appearedAt, spawnChance: 0,
           },
         },
-        occupancy: 'free' as const, stage: 'completed' as const,
+        ownerId: state.profile.playerId, occupancy: 'free' as const, stage: 'completed' as const,
         contact, recon: report(contact.id),
       };
     }).slice(-60);
