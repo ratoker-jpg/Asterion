@@ -20,12 +20,13 @@ export function selectDueExplorationNpcRolls(
   const nodes=selectExplorationTargets(state,until,mode,25);
   const result:ExplorationNpcRoll[]=[];
   for(const node of nodes){
-    if(!node.special||node.kind!=='unique'&&node.kind!=='anomaly')continue;
+    if(!node.special||node.special.startAt===undefined||node.kind!=='unique'&&node.kind!=='anomaly')continue;
+    const startAt=node.special.startAt;
     if(!sources.some(source=>source.coordinate.galaxy===node.coordinate.galaxy))continue;
-    const lastSlot=Math.floor((Math.min(until,node.special.expiresAt-1)-node.special.startAt)
+    const lastSlot=Math.floor((Math.min(until,node.special.expiresAt-1)-startAt)
       /EXPLORATION_RULES.riskSlotMs);
     for(let slot=1;slot<=lastSlot;slot++){
-      const at=node.special.startAt+slot*EXPLORATION_RULES.riskSlotMs;
+      const at=startAt+slot*EXPLORATION_RULES.riskSlotMs;
       if(at>after&&at<=until&&at<node.special.expiresAt)result.push({at,contactId:node.id,slot});
     }
   }
