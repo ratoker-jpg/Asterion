@@ -49,6 +49,10 @@ export type ExplorationEvent = {
   claimId?: string;
   originPlanetId?: string;
   repairTokens?: number;
+  /** Resource wallet credit after destination storage limits; debris is a separate orbital recycling pool. */
+  creditedCargo?: TransportCargo;
+  /** Resources destroyed on storage-cap overflow (debris never overflows). */
+  burnedCargo?: TransportCargo;
 };
 
 export type ExplorationContact = {
