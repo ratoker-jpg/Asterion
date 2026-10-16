@@ -55,7 +55,7 @@ export function dispatchBot01Exploration(state: SaveState, selected: UniversePla
     destination:{kind:'coordinate',coordinate:{...node.coordinate}},destinationCoordinate:{...node.coordinate},
     targetKind:node.kind,targetRelation:'neutral',targetPlanetName:node.name,
     destinationOwnerId:state.profile.playerId,
-    factionId:source.raceId,selectedShips,populationReserved:0,
+    explorationFactionId:source.raceId,selectedShips,populationReserved:0,
     routeDistance:distance,effectiveSpeed:speed,oneWayDurationMs:duration,
     departedAt:at,arrivalAt:at+duration,gasCost:0,phase:'outbound',
     explorationLaunchResourcePoints:selectOwnerScores(state)[source.ownerId]?.resourcePoints??1000,
