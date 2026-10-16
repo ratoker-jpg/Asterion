@@ -1623,3 +1623,29 @@ html.asterion-long-page:has([data-qa-flight-preview-backdrop]) #root {
 .fleet-expedition-composition span {color:#dceff7;font-size:12px;line-height:1.4;}
 .fleet-expedition-close {cursor:pointer;min-height:38px;width:100%;border:1px solid #208caa;border-radius:7px;background:#0b526e;color:#e9faff;font-size:12px;font-weight:800;}
 @media (max-width:600px){.fleet-expedition-metrics,.fleet-expedition-resources{grid-template-columns:1fr;}}
+
+/* PR92: three Test Mode fleet controls must wrap into actual panel width
+   instead of relying on the old two-button single row. */
+.fleet-flight-actions-v1 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 215px), 1fr));
+  justify-content: stretch;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  gap: 8px;
+  padding: 12px 12px 0;
+}
+.fleet-flight-actions-v1 button {
+  min-width: 0;
+  width: 100%;
+  min-height: 36px;
+  height: auto;
+  padding: 9px 8px;
+  box-sizing: border-box;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+  text-align: center;
+}
