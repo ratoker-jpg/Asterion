@@ -51,7 +51,7 @@ export type FlightRecord = {
   id: string;
   requestId: string;
   /** Older records omit this and are treated as player-owned. */
-  ownerSide?: 'player' | 'bot01' | 'pirate';
+  ownerSide?: 'player' | 'bot01' | 'npc' | 'pirate';
   missionId: MissionId;
   operationId?: string;
   /** Frozen resource-score snapshot at expedition departure. */
