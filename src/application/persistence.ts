@@ -727,12 +727,6 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
     if (item.targetRelation === undefined || item.destinationPlanetId === undefined) return false;
     if (item.cargoState === undefined) return false;
   }
-  if (item.missionId === 'exploration-recon') {
-    if (destinationRecord.kind !== 'coordinate'
-      || (item.targetKind !== 'unique' && item.targetKind !== 'anomaly')
-      || shipEntries.length !== 1 || shipEntries[0][0] !== 'spy-probe' || shipEntries[0][1] !== 1
-      || Object.values(item.selectedCommanders ?? {}).some(value => Number(value) > 0)) return false;
-  }
   if (item.missionId === 'recycle') {
     const cargo = normalizePersistedTransportCargo(item.cargo);
     if (!cargo
@@ -786,6 +780,12 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
   const destinationRecord = destination as Record<string, unknown>;
   if (!PERSISTED_FLIGHT_DESTINATION_KINDS.has(destinationRecord.kind as FlightDestination['kind'])
     || !coordinatesMatch(destinationRecord.coordinate, item.destinationCoordinate)) return false;
+  if (item.missionId === 'exploration-recon') {
+    if (destinationRecord.kind !== 'coordinate'
+      || (item.targetKind !== 'unique' && item.targetKind !== 'anomaly')
+      || shipEntries.length !== 1 || shipEntries[0][0] !== 'spy-probe' || shipEntries[0][1] !== 1
+      || Object.values(item.selectedCommanders ?? {}).some(value => Number(value) > 0)) return false;
+  }
   if (isSpaceFlight && destinationRecord.kind !== 'space') return false;
   if (item.missionId === 'gas' && destinationRecord.kind !== 'coordinate') return false;
   if (destinationRecord.kind === 'planet') {
