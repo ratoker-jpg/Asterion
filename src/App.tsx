@@ -1265,6 +1265,27 @@ export function App() {
     }, 40);
   };
 
+  const openExplorationAttackLaunch = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
+    const live = getExplorationTarget(stateRef.current,node.id,Date.now(),RUNTIME_MODE);
+    const claim = live && stateRef.current.exploration?.contacts[live.id]?.claim;
+    if (!live || !claim || claim.ownerId === stateRef.current.profile.playerId) {
+      setNotice('Для атаки нужен объект, занятый чужим реальным флотом.','error');
+      return;
+    }
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    setNotice('Боевой захват объекта: выберите флот, проверьте маршрут и подтвердите атаку.');
+    window.setTimeout(() => window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT,{
+      detail:{
+        missionId:'attack',contactCycleKey:live.id,operationId:live.id,
+        targetKind:live.kind,targetRelation:'neutral',targetPlanetName:live.name,
+        destination:{kind:'coordinate',coordinate:live.coordinate},
+      },
+    })),40);
+  };
+
   const openFleetRootFromOperations = () => {
     clearBuildingInterior();
     navigateTo('fleets');
@@ -1681,6 +1702,7 @@ export function App() {
               pirateContacts={pirateContacts}
               explorationContacts={selectExplorationOperations(state, now, RUNTIME_MODE)}
               onExpedition={openExpeditionLaunch}
+              onExplorationAttack={openExplorationAttackLaunch}
               onExplorationAccept={acceptExplorationContact}
               onExplorationCancel={cancelExplorationContact}
               onExplorationRecon={launchExplorationRecon}
