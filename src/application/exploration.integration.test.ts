@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
 import { dispatchFlight, reconcileFlights, recallFlight } from './flights.ts';
+import { reconcileRuntime } from './reconcile.ts';
 import { getPlanetResources, replacePlanetState } from './contracts.ts';
 import { getExplorationTarget, explorationTargetStatus, selectExplorationTargets } from './exploration.ts';
 import { explorationResourceScore } from './exploration-flight.ts';
@@ -142,4 +143,31 @@ test('exploration flight and finite contact survive save migration and reloading
   const arrived = reconcileFlights(restored,launch.flight.arrivalAt,undefined,{mode:'test',testTimeScale:15});
   assert.equal(arrived.state.flights.records.find(f=>f.id===launch.flight.id)!.phase,'arrived');
   assert.equal(arrived.state.exploration?.contacts[target.id]?.claim?.flightId,launch.flight.id);
+});
+
+test('global offline runtime schedules expedition expiry before final wall-clock catch-up', () => {
+  const {state,now,target} = prepare();
+  const sent = dispatchFlight(state,{
+    requestId:'expedition-offline',
+    missionId:'expedition',
+    contactCycleKey:target.id,
+    originPlanetId:'helion-01',
+    selectedShips:{transporter:10},
+    destination:{kind:'coordinate',coordinate:target.coordinate},
+    targetKind:target.kind,
+    departedAt:now,
+  },{now,mode:'test',testTimeScale:15});
+  assert.equal(sent.ok,true,sent.ok?'':sent.error.message);
+  if(!sent.ok)return;
+  const one = reconcileRuntime(sent.state,{
+    mode:'test',testTimeScale:15,
+    planetId:'helion-01',
+    now:Math.max(target.special!.expiresAt+sent.flight.oneWayDurationMs+MINUTE,sent.flight.arrivalAt+MINUTE),
+  });
+  const completed = one.state.flights.records.find(f=>f.id===sent.flight.id)!;
+  assert.equal(completed.phase,'completed');
+  const record = one.state.exploration?.contacts[target.id];
+  assert.ok(record);
+  assert.equal(record!.claim,undefined);
+  assert.equal(record!.events.filter(e=>e.id===sent.flight.id+':completed').length,1);
 });
