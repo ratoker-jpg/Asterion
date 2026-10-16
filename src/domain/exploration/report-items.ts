@@ -10,9 +10,9 @@ function coords(c: {galaxy: number; system: number; position: number}) {
   return '[' + c.galaxy + ':' + c.system + ':' + c.position + ']';
 }
 /** Project persisted flight and contact events into the existing real System / Flights mailbox. */
-export function explorationMailboxReports(ledger?: ExplorationState, flights: readonly FlightRecord[] = []): ReportItem[] {
+export function explorationMailboxReports(ledger?: ExplorationState, flights: readonly FlightRecord[] = [], playerOwnerId?: string): ReportItem[] {
   const contacts = ledger?.contacts ?? {};
-  const recon: ReportItem[] = (ledger?.reconReports ?? []).map(record => {
+  const recon: ReportItem[] = (ledger?.reconReports ?? []).filter(record => !playerOwnerId || record.ownerId === playerOwnerId).map(record => {
     const contact = contacts[record.contactId];
     const profile = contact ? explorationProfile(contact.kind, contact.variant) : null;
     const location = contact ? coords(contact.coordinate) : 'Неизвестные координаты';
@@ -50,7 +50,7 @@ export function explorationMailboxReports(ledger?: ExplorationState, flights: re
 
   // Report the actual landing outcome; do not replace a zero-yield flight with a fictional reward.
   const expedition: ReportItem[] = Object.values(contacts).flatMap(contact =>
-    contact.events.filter(event => event.kind === 'returned' || event.kind === 'origin-destroyed').map(event => {
+    contact.events.filter(event => (event.kind === 'returned' || event.kind === 'origin-destroyed') && (!playerOwnerId || event.ownerId === playerOwnerId)).map(event => {
       const profile = explorationProfile(contact.kind, contact.variant);
       const returned = event.kind === 'returned';
       const cargo = event.cargo ?? { metal: 0, minerals: 0, gas: 0, debris: 0 };
