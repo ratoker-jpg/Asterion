@@ -4,7 +4,8 @@ import { createInitialSaveState, createPersistenceFacade } from './persistence.t
 import { dispatchFlight, reconcileFlights, recallFlight } from './flights.ts';
 import { reconcileRuntime } from './reconcile.ts';
 import { getPlanetResources, replacePlanetState } from './contracts.ts';
-import { getExplorationTarget, explorationTargetStatus, selectExplorationTargets } from './exploration.ts';
+import { getExplorationTarget, explorationTargetStatus, selectExplorationTargets, selectExplorationOperations } from './exploration.ts';
+import { acceptLiveExploration, cancelLiveExploration } from './exploration-operations.ts';
 import { explorationResourceScore } from './exploration-flight.ts';
 
 const MINUTE = 60_000;
@@ -15,7 +16,7 @@ function prepare() {
   const planet = state.planets['helion-01'];
   state = replacePlanetState(state, 'helion-01', {
     ...planet,
-    fleet: { ...planet.fleet, ships: { ...planet.fleet.ships, transporter: 10, recycler: 10 } },
+    fleet: { ...planet.fleet, ships: { ...planet.fleet.ships, transporter: 10, recycler: 10, 'spy-probe': 2 } },
   });
   for (let offset = 0; offset < 480; offset++) {
     const now = baseTime + offset * MINUTE;
@@ -170,4 +171,63 @@ test('global offline runtime schedules expedition expiry before final wall-clock
   assert.ok(record);
   assert.equal(record!.claim,undefined);
   assert.equal(record!.events.filter(e=>e.id===sent.flight.id+':completed').length,1);
+});
+
+test('accepted operation and real spy-probe research survive save/replay and reveal profile only on success', () => {
+  const {state,now,target} = prepare();
+  const accepted = acceptLiveExploration(state,target.id,now,'test');
+  assert.ok(accepted);
+  if(!accepted)return;
+  const before = selectExplorationOperations(accepted,now,'test').find(row=>row.node.id===target.id)!;
+  assert.equal(before.stage,'active');
+  assert.equal(before.recon,undefined);
+  const sent = dispatchFlight(accepted,{
+    requestId:'exploration-recon-integration',
+    missionId:'exploration-recon',
+    contactCycleKey:target.id,
+    selectedShips:{'spy-probe':1},
+    originPlanetId:'helion-01',
+    destination:{kind:'coordinate',coordinate:target.coordinate},
+    targetKind:target.kind,
+    departedAt:now,
+  },{now,mode:'test',testTimeScale:15});
+  assert.equal(sent.ok,true,sent.ok?'':sent.error.message);
+  if(!sent.ok)return;
+  assert.equal(sent.flight.selectedShips['spy-probe'],1);
+  assert.equal(sent.state.exploration?.reconReports?.length,0,'no UI-only instant fake result');
+  const blocked = dispatchFlight(sent.state,{
+    requestId:'exploration-recon-second',
+    missionId:'exploration-recon',
+    contactCycleKey:target.id,
+    selectedShips:{'spy-probe':1},
+    originPlanetId:'helion-01',
+    destination:{kind:'coordinate',coordinate:target.coordinate},
+    targetKind:target.kind,
+    departedAt:now,
+  },{now,mode:'test',testTimeScale:15});
+  assert.equal(blocked.ok,false,'concurrent probe to same cycle must be blocked');
+  const arrived = reconcileFlights(sent.state,sent.flight.arrivalAt,undefined,{mode:'test',testTimeScale:15});
+  const report = arrived.state.exploration?.reconReports?.find(r=>r.flightId===sent.flight.id);
+  assert.ok(report,'recon should produce one outcome at physical arrival');
+  assert.equal(typeof report?.success,'boolean');
+  assert.equal(arrived.state.flights.records.find(f=>f.id===sent.flight.id)?.phase,'returning');
+  assert.equal(selectExplorationOperations(arrived.state,sent.flight.arrivalAt,'test').find(r=>r.node.id===target.id)?.recon?.success,report?.success);
+  const repeat = reconcileFlights(arrived.state,sent.flight.arrivalAt,undefined,{mode:'test',testTimeScale:15});
+  assert.equal(repeat.state.exploration?.reconReports?.length,1);
+  const cooldown = dispatchFlight(arrived.state,{
+    requestId:'exploration-recon-cooldown',
+    missionId:'exploration-recon',
+    contactCycleKey:target.id,
+    selectedShips:{'spy-probe':1},
+    originPlanetId:'helion-01',
+    destination:{kind:'coordinate',coordinate:target.coordinate},
+    targetKind:target.kind,
+    departedAt:sent.flight.arrivalAt+1,
+  },{now:sent.flight.arrivalAt+1,mode:'test',testTimeScale:15});
+  assert.equal(cooldown.ok,false);
+  const canceled = cancelLiveExploration(arrived.state,target.id);
+  assert.equal(selectExplorationOperations(canceled,sent.flight.arrivalAt,'test').find(r=>r.node.id===target.id)?.stage,'available');
+  const historical = selectExplorationOperations(arrived.state,target.special!.expiresAt+1,'test').find(r=>r.node.id===target.id);
+  assert.equal(historical?.stage,'completed');
+  assert.ok(historical?.node.art);
 });
