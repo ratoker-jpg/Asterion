@@ -160,7 +160,7 @@ import { getOwnerShipUpgradeLevels, getPlanetResources, type PlanetId, type Save
 import { selectOwnedPlanet } from './application/owned-planets.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
 import { materializePirateProfiles, pirateContactOperation, pirateOperationId, selectOwnedPiratePresentations, selectOwnedPirateTargets, selectPirateContacts } from './application/pirate-presentation.ts';
-import { selectExplorationTargets, getExplorationTarget, explorationTargetStatus } from './application/exploration.ts';
+import { selectExplorationTargets, getExplorationTarget, explorationTargetStatus, selectExplorationOperations } from './application/exploration.ts';
 import { acceptLiveExploration, cancelLiveExploration } from './application/exploration-operations.ts';
 import { explorationArtForCycle } from './exploration-art.ts';
 import { explorationProfile } from './domain/exploration/model.ts';
@@ -1674,7 +1674,7 @@ export function App() {
           ) : activeRoute === 'operations' ? (
             <OperationsView
               pirateContacts={pirateContacts}
-              explorationContacts={selectExplorationTargets(state, now, RUNTIME_MODE).map(node => ({ node, occupancy: explorationTargetStatus(state, node) }))}
+              explorationContacts={selectExplorationOperations(state, now, RUNTIME_MODE)}
               onExpedition={openExpeditionLaunch}
               onExplorationAccept={acceptExplorationContact}
               onExplorationCancel={cancelExplorationContact}
