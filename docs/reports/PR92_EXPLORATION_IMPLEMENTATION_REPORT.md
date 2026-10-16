@@ -47,3 +47,31 @@
 - Added integration test covering accepted/cancelled operations, concurrent spy-probe rejection, report at real arrival, cooldown, replay and archive.
 
 Remaining blockers unchanged: combat-based Attack of occupied exploration contacts, NPC contests, hazards, end-to-end manual browser/device visual review. Never present these as implemented. Current HEAD CI and Pages must be separately verified, no merge.
+
+## Follow-up QuickShot QA (2026-10-16_222858, 12 annotated images)
+
+### Root causes confirmed
+
+1. A fleet of mega-transporters with no recyclers mines **zero debris** by current domain rules: explorationMiningRates returns debrisRate=0 without any recycler. This is neither a random risk roll nor unexplained destruction. Players need to be warned before dispatch and shown exact credited amount in reports.
+2. Exploration Operations previously archived any accepted cycle on expiry even if no expedition had ever been sent. This was a demonstrable false completion. Now Completed is driven by canonical returned expedition receipts only. Expired acceptance without expedition does not become Completed.
+3. The Operations CSS deliberately reset nested scroll to overflow visible with max-height none, causing a long page. Desktop feed now has its own vertical scrolling area while dossier stays usable.
+4. Pirate detail used TacticalScope radar rather than the existing pirate-planet asset. The radar is replaced by the large actual pirate art; normal other contacts keep their previous scope. Left cards share dimensions, legible labels, and larger artwork.
+
+### Changes implemented
+
+- Unified primary art sizes and labels across pirate, anomaly and unique operation cards; removed redundant inner border around unique/anomaly hero image. Exploration icon caption truncation avoided.
+- Detailed dossier adds click-through Universe coordinates, a real remaining-life progress bar, five-step Roman risk indicator, explicit description that future NPC competition and hazards have NOT been wired to the gameplay. It must not be interpreted as an active loss probability.
+- Successful recon now reveals finite contact remaining and initial reserves alongside resource shares. Without successful recon composition and totals remain concealed.
+- Orbiting expedition dossier displays reconciled cargo, cargo capacity, resource breakdown and fill progress. Fleet active row mission `Экспедиция · подробнее` opens an up-to-date flight detail modal with per-resource rates/min, ETA, held cargo and real fleet composition.
+- Successful recon reports are projected into existing **System** mailbox from persisted seeded reconReports; operation has a direct link.
+- Returning expedition creates canonical **Flights** report from real ledger receipt, including creditedCargo and burnedCargo (storage overflow) and where debris actually goes (planet recycling pool). Zero-yield arrivals explicitly say 0, never 'delivered rewards'. Operation also links to this report.
+- All completed ordinary flights yield a basic flight-history report; recycler and gas extraction arrival snapshots are surfaced in Flights in addition to their original System reports. Do not claim precise accepted wallet credits for legacy transport if no separate delivery receipt exists.
+- Dispatch of a fleet with mathematically zero extraction against a known post-recon target now fails before fuel reservation; its warning explains why recyclers are necessary for debris. Before recon the target resource category is deliberately not leaked, and dispatch remains possible at player risk.
+- Integration tests exercise exact escrow creditedCargo, Reports categories, real accepted/recon/return archive semantics, and replay safety.
+
+### Limitations / gates
+
+- No NPC competition, anomalies' hazards or normal Attack against occupied exploration contacts implemented. The risk scale is descriptive only.
+- Generic transport/attack flight report items reflect canonical flight completion and cargo snapshots, NOT invented uncapped final wallet credit. Exact per-resource delivery receipts for all legacy mission families would need separate persistence changes.
+- Final CI and Pages need checking against PR HEAD; prior successful workflows are not guarantees for a newer SHA. No interactive browser screenshot QA was performed.
+- Draft PR #92 only. Do NOT merge or set Ready; final decision belongs to repository owner.
