@@ -270,3 +270,40 @@ test('anomaly risk hazards are bounded material losses and replay/split determin
   for(const key of ['metal','minerals','gas','debris'] as const)
     assert.ok(whole.resourceReserve[key]>=0 && whole.resourceReserve[key]<=contact.initialReserve[key]);
 });
+
+
+test('finite shared world stock is identical for rich and poor first visitors and remains frozen after capture', () => {
+  const node=makeNode('unique');
+  const poor=getOrMaterializeExplorationContact(createExplorationState(),node,1).contact;
+  const rich=getOrMaterializeExplorationContact(createExplorationState(),node,50_000_000).contact;
+  assert.deepEqual(poor.initialReserve,rich.initialReserve);
+  assert.equal(poor.worldScoreAtAppearance,EXPLORATION_RULES.resourcePointsBase);
+  assert.equal(rich.worldScoreAtAppearance,EXPLORATION_RULES.resourcePointsBase);
+  const occupied=occupyExplorationContact(poor,arrival());
+  const taken=settleExplorationContest(occupied,start+2*minute,'attacker',
+    {...arrival(start+2*minute,'other-flight'),ownerId:'other'},5000,
+    {all:5000,transporters:5000,recyclers:0},true).contact;
+  assert.deepEqual(taken.initialReserve,poor.initialReserve);
+  assert.equal(taken.resourceReserve.metal+taken.extractedByType.metal,poor.initialReserve.metal);
+});
+
+test('three deterministic territory outcomes: attacker capture, defender holds and draw never gives bonus', () => {
+  const node=makeNode('unique');
+  const defender=occupyExplorationContact(
+    getOrMaterializeExplorationContact(createExplorationState(),node,100_000).contact,arrival());
+  const attack={...arrival(start+2*minute,'foreign-attack'),ownerId:'foreign'};
+  const capacity={all:5000,transporters:5000,recyclers:0};
+  const win=settleExplorationContest(defender,start+2*minute,'attacker',attack,5000,capacity,true);
+  const hold=settleExplorationContest(defender,start+2*minute,'defender',attack,5000,capacity,true);
+  const draw=settleExplorationContest(defender,start+2*minute,'draw',attack,5000,capacity,true);
+  assert.equal(win.contact.claim?.ownerId,'foreign');
+  assert.equal(hold.contact.claim?.ownerId,'player');
+  assert.equal(draw.contact.claim?.ownerId,'player');
+  assert.equal(hold.contact.claim?.boostedUntilAt,start+4*minute);
+  assert.equal(draw.contact.claim?.boostedUntilAt,undefined);
+  assert.deepEqual(win.contact.initialReserve,hold.contact.initialReserve);
+  assert.equal(win.contact.events.filter(e=>e.kind==='captured').length,1);
+  const captured=Object.values(win.captured).reduce((a,b)=>a+b,0);
+  const enemy=reconcileExplorationContact(defender,start+2*minute).claim!.cargo;
+  assert.equal(captured,Math.min(Math.floor(Object.values(enemy).reduce((a,b)=>a+b,0)*.30),5000));
+});
