@@ -78,7 +78,9 @@ export function selectExplorationOperations(state: SaveState, nowMs: number, mod
     const occupancy = explorationTargetStatus(state, node);
     return {
       node, occupancy, contact: stored[node.id], recon: report(node.id),
-      stage: accepted.has(node.id) || occupancy === 'self' ? 'active' : 'available',
+      stage: stored[node.id]?.events.some(event =>
+        event.ownerId === state.profile.playerId && event.kind === 'returned') ? 'completed'
+        : accepted.has(node.id) || occupancy === 'self' ? 'active' : 'available',
     };
   });
   const historical: ExplorationOperationPresentation[] = Object.values(stored).filter(contact =>
