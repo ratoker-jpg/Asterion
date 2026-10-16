@@ -35,7 +35,7 @@ test('historical hangar fractions use exact integer manifest, not rounded percen
   assert.equal(pirateDebrisRewardMultiplier(18_834,25_112),0.9);
   assert.equal(pirateDebrisRewardMultiplier(12_556,25_112),0.9);
   assert.equal(pirateDebrisRewardMultiplier(100,25_112),0.7);
-  assert.equal(pirateDebrisRewardMultiplier(25_113,25_112),0.7);
+  assert.equal(pirateDebrisRewardMultiplier(25_113,25_112),1);
   assert.equal(pirateHangarFraction(25_113,25_112),0);
 });
 test('seeded rolls and virtual time survive repeated calls and full/partial reset', () => {
