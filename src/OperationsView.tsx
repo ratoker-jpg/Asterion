@@ -21,7 +21,6 @@ import { getPiratePlanetArt } from './pirate-planet-art.ts';
 import { explorationProfile } from './domain/exploration/model.ts';
 import type { ExplorationOperationPresentation } from './application/exploration.ts';
 import type { UniversePlanetNode } from './domain/universe/types.ts';
-import missionExpeditionIcon from '../assets/source/mission-icons-v1/31_expedition.png';
 import './operations.css';
 
 export type ExplorationOperationContact = ExplorationOperationPresentation;
@@ -356,7 +355,6 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
     const occupied = exploration.occupancy !== 'free';
     const completed = exploration.stage === 'completed';
     const accepted = exploration.stage === 'active';
-    const remaining = Math.max(0, (node.special?.expiresAt ?? nowMs) - nowMs);
     const resourceLabels: Record<ResourceIconKind, string> = {
       metal: 'Металл', minerals: 'Минералы', gas: 'Газ', debris: 'Обломки',
       energy: 'Энергия', population: 'Население',
