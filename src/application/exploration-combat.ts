@@ -71,9 +71,9 @@ export function resolveExplorationAttackAtTarget(state: SaveState, flight: Fligh
   const existingReport = state.combat.reports.find(item => item.id === 'battle-exploration-' + flight.id);
   if (existingReport) return { state, report: existingReport, captured: contact.events.find(e=>e.id===flight.id+':capture')?.cargo ?? emptyExplorationCargo() };
   const attackerFaction = flight.attackSnapshot.attackerFactionId;
-  const defenderFaction = defenderFlight.attackSnapshot?.attackerFactionId ?? state.profile.factionId as CombatFactionId;
+  const defenderFaction = defenderFlight.attackSnapshot?.attackerFactionId ?? defenderFlight.explorationFactionId ?? state.profile.factionId as CombatFactionId;
   const attackerStacks = stacks(flight, attackerFaction, flight.attackSnapshot.attackerShipLevels);
-  const defenderStacks = stacks(defenderFlight, defenderFaction);
+  const defenderStacks = stacks(defenderFlight, defenderFaction,defenderFlight.attackSnapshot?.attackerShipLevels);
   if (attackerStacks.length === 0 || defenderStacks.length === 0) return null;
   const input: CombatInput = {
     scenarioId: 'exploration:' + flight.id,
