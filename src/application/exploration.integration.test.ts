@@ -128,7 +128,7 @@ test('exploration flight and finite contact survive save migration and reloading
   assert.equal(launch.ok,true,launch.ok?'':launch.error.message);
   if(!launch.ok)return;
   const store = new Map<string,string>();
-  const facade = createPersistenceFacade({mode:'test',now,storage:{
+  const facade = createPersistenceFacade({mode:'test',now:()=>now,storage:{
     getItem:(key:string)=>store.get(key)??null,
     setItem:(key:string,value:string)=>{store.set(key,value);},
     removeItem:(key:string)=>{store.delete(key);},
