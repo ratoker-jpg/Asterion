@@ -106,11 +106,12 @@ import { getExplorationTarget } from './exploration.ts';
 import { resolveExplorationProbeArrival } from './exploration-operations.ts';
 import {
   accrueExpedition, creditExpeditionReturn, explorationContactForFlight, explorationResourceScore,
-  materializeExplorationAtDispatch, resolveExpeditionArrival, updateExpeditionContact,
+  materializeExplorationAtDispatch, resolveExpeditionArrival, updateExpeditionContact, expeditionMiningCapacity,
 } from './exploration-flight.ts';
 import {
   prepareExplorationRecall, isExplorationRecallReady, releaseExplorationClaim,
 } from '../domain/exploration/ledger.ts';
+import { explorationMiningRates, explorationProfile } from '../domain/exploration/model.ts';
 
 export const FLIGHT_LAUNCH_CONTEXT_EVENT = 'asterion:flight-launch-context';
 export const FLIGHT_LAUNCH_CONTEXT_CLEAR_EVENT = 'asterion:flight-launch-context-clear';
@@ -1471,6 +1472,22 @@ export function dispatchFlight(
     const node = getExplorationTarget(state, flight.operationId!, flight.departedAt, runtimeOptions.mode);
     if (!node || flight.arrivalAt >= node.special!.expiresAt) {
       return failure(state, 'target-not-available', 'Флот прибудет после исчезновения объекта. Выберите более близкую цель или быстрые корабли.');
+    }
+  }
+  // A successfully reconnoitered target has known composition: reject a guaranteed
+  // zero-yield fleet before gas/ship reservation. Do not leak hidden target resources.
+  if (command.missionId === 'expedition') {
+    const node = getExplorationTarget(state, flight.operationId!, flight.departedAt, runtimeOptions.mode);
+    const hasIntel = state.exploration?.reconReports?.some(report =>
+      report.contactId === flight.operationId && report.ownerId === state.profile.playerId && report.success);
+    if (node && hasIntel) {
+      const profile = explorationProfile(node.kind as 'unique'|'anomaly', node.special?.profileVariant ?? 1);
+      const capacity = expeditionMiningCapacity(state, flight);
+      const rates = explorationMiningRates(flight.explorationLaunchResourcePoints ?? 1000, profile, capacity);
+      if (Object.values(rates).every(rate => rate <= 0)) {
+        return failure(state, 'wrong-ship-composition',
+          'Этот флот не способен добывать известные ресурсы объекта. Обломки требуют переработчиков; для металла, минералов и газа нужны транспортёры.');
+      }
     }
   }
   const gas = getPlanetResources(state, originPlanetId);
