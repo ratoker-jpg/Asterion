@@ -6,6 +6,7 @@ import {
   emptyExplorationCargo,
   explorationBaseRate,
   explorationContactId,
+  isExplorationContactId,
   explorationMiningRates,
   explorationNodeId,
   explorationProfile,
@@ -72,10 +73,14 @@ export type ExplorationState = {
   contacts: Record<string, ExplorationContact>;
   highestScoresByOwner: Record<string, number>;
   completed: ExplorationEvent[];
+  /** Player accepted contacts; not a separate localStorage or demo Operations row. */
+  acceptedContactIds?: string[];
+  /** Immutable outcomes of real spy-probe flights, including unsuccessful reconnaissance. */
+  reconReports?: ExplorationReconRecord[];
 };
 
 export function createExplorationState(): ExplorationState {
-  return { version: 1, contacts: {}, highestScoresByOwner: {}, completed: [] };
+  return { version: 1, contacts: {}, highestScoresByOwner: {}, completed: [], acceptedContactIds: [], reconReports: [] };
 }
 
 const RESOURCES = ['metal', 'minerals', 'gas', 'debris'] as const;
@@ -314,6 +319,16 @@ export function completeExplorationReturn(
   };
 }
 
+export function acceptExplorationOperation(state: ExplorationState, contactId: string): ExplorationState {
+  if (!isExplorationContactId(contactId) || state.acceptedContactIds?.includes(contactId)) return state;
+  return { ...state, acceptedContactIds: [...(state.acceptedContactIds ?? []), contactId].slice(-256) };
+}
+
+export function cancelExplorationOperation(state: ExplorationState, contactId: string): ExplorationState {
+  if (!state.acceptedContactIds?.includes(contactId)) return state;
+  return { ...state, acceptedContactIds: state.acceptedContactIds.filter(id => id !== contactId) };
+}
+
 export type ExplorationReconRecord = {
   id: string;
   contactId: string;
@@ -394,6 +409,17 @@ export function migrateExplorationState(value: unknown): ExplorationState {
   for (const [id, score] of Object.entries(source.highestScoresByOwner ?? {}).slice(-256)) {
     if (id && validNumber(score)) highestScoresByOwner[id] = score;
   }
+  const acceptedContactIds = Array.isArray(source.acceptedContactIds)
+    ? source.acceptedContactIds.filter((id): id is string => typeof id === 'string' && isExplorationContactId(id)).slice(-256)
+    : [];
+  const reconReports = Array.isArray(source.reconReports)
+    ? source.reconReports.filter((record): record is ExplorationReconRecord =>
+      Boolean(record && isExplorationContactId(record.contactId)
+        && typeof record.id === 'string' && typeof record.ownerId === 'string'
+        && typeof record.flightId === 'string' && validNumber(record.resolvedAt)
+        && typeof record.success === 'boolean' && record.id === record.flightId + ':recon')).slice(-256)
+    : [];
   return { version: 1, contacts, highestScoresByOwner,
+    acceptedContactIds, reconReports,
     completed: Array.isArray(source.completed) ? source.completed.slice(-200) : [] };
 }
