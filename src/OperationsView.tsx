@@ -18,7 +18,7 @@ import { getUniverseSlotPoint } from './domain/universe/runtime.ts';
 import { getPirateRaidCheckProgress } from './domain/pirates/contact-schedule.ts';
 import { pirateAdaptiveInterval, type PirateOwnerAdaptation } from './domain/pirates/adaptive.ts';
 import { getPiratePlanetArt } from './pirate-planet-art.ts';
-import { explorationProfile, EXPLORATION_RULES } from './domain/exploration/model.ts';
+import { explorationProfile } from './domain/exploration/model.ts';
 import { reconcileExplorationContact } from './domain/exploration/ledger.ts';
 import type { ExplorationOperationPresentation } from './application/exploration.ts';
 import type { UniversePlanetNode } from './domain/universe/types.ts';
