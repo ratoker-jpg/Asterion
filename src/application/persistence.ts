@@ -707,14 +707,6 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
     || (item.missionId === 'pirate-raid' && item.ownerSide !== 'pirate')) return false;
 
   if (item.operationId !== undefined && !isNonEmptyPersistedString(item.operationId)) return false;
-  if (item.explorationAttack !== undefined && item.explorationAttack !== true) return false;
-  if (item.explorationAttack === true
-    && (item.missionId !== 'attack' || item.ownerSide === 'bot01'
-      || destinationRecord.kind !== 'coordinate'
-      || !isNonEmptyPersistedString(item.operationId)
-      || !/^(unique|anomaly):\\d+:/.test(item.operationId)
-      || !isNonNegativeInteger(item.explorationLaunchResourcePoints)
-      || (item.targetKind !== 'unique' && item.targetKind !== 'anomaly'))) return false;
   if ((item.missionId === 'expedition' || item.missionId === 'exploration-recon')
     && (!isNonEmptyPersistedString(item.operationId) || !/^(unique|anomaly):\d+:/.test(item.operationId)
       || (item.missionId === 'expedition' && !isNonNegativeInteger(item.explorationLaunchResourcePoints)))) return false;
@@ -786,6 +778,15 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
   const destination = item.destination;
   if (!destination || typeof destination !== 'object' || Array.isArray(destination)) return false;
   const destinationRecord = destination as Record<string, unknown>;
+  if (item.explorationAttack !== undefined && item.explorationAttack !== true) return false;
+  if (item.explorationAttack === true
+    && (item.missionId !== 'attack' || item.ownerSide === 'bot01'
+      || destinationRecord.kind !== 'coordinate'
+      || !isNonEmptyPersistedString(item.operationId)
+      || !/^(unique|anomaly):\\d+:/.test(item.operationId)
+      || !isNonNegativeInteger(item.explorationLaunchResourcePoints)
+      || (item.targetKind !== 'unique' && item.targetKind !== 'anomaly'))) return false;
+
   if (!PERSISTED_FLIGHT_DESTINATION_KINDS.has(destinationRecord.kind as FlightDestination['kind'])
     || !coordinatesMatch(destinationRecord.coordinate, item.destinationCoordinate)) return false;
   if (item.missionId === 'exploration-recon') {
