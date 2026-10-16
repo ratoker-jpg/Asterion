@@ -395,7 +395,7 @@ function FolderActions({ folder, items, selectedIds, onSelectAll, onDeleteAll, o
   );
 }
 
-export function ReportsView({ battleReports, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse }: {
+export function ReportsView({ battleReports, savedBattleReportIds, operations, command, espionage, pirateReconReports, pirateFlights, exploration, initialSelectedReportId, profile, score, rating, mode, state, onStateChange, onToggleBattleSaved, onOpenFleets, onOpenCommand, onSimulateBattle, onRecallSpy, onOpenUniverseTarget, onOpenPirateUniverse }: {
   battleReports: readonly BattleReport[];
   savedBattleReportIds: readonly string[];
   operations: OperationsState;
@@ -403,6 +403,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
   espionage?: import('./domain/espionage/types.ts').EspionageState;
   pirateReconReports?: readonly PirateReconReport[];
   pirateFlights?: readonly import('./domain/flights/types.ts').FlightRecord[];
+  exploration?: import('./domain/exploration/ledger.ts').ExplorationState;
   initialSelectedReportId?: string;
   profile: PlayerProfileState;
   score: OwnerScore | null;
@@ -428,7 +429,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
   const pendingInitialReportId = useRef<string | null>(null);
   const handledInitialReportId = useRef<string | null>(null);
 
-  const items = useMemo(() => buildReportsFeed(battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports, pirateReconReports, pirateFlights), [battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports, pirateReconReports, pirateFlights]);
+  const items = useMemo(() => buildReportsFeed(battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports, pirateReconReports, pirateFlights, exploration), [battleReports, operations, command, espionage, state.overpopulationReports, state.recyclerArrivalReports, state.gasExtractionArrivalReports, pirateReconReports, pirateFlights, exploration]);
   const counts = useMemo(() => getReportCategoryCounts(items, state), [items, state]);
   const unreadCounts = useMemo(() => getReportUnreadCounts(items, state), [items, state]);
   const activeFolderMeta = MESSAGE_FOLDERS.find((folder) => folder.id === activeFolder) ?? MESSAGE_FOLDERS[0];
