@@ -7,6 +7,8 @@ import {
 } from '../combat/report.ts';
 import type { CommandState, JointOperation } from '../command/types.ts';
 import type { FlightRecord } from '../flights/types.ts';
+import { explorationMailboxReports } from '../exploration/report-items.ts';
+import type { ExplorationState } from '../exploration/ledger.ts';
 import { pirateFlightAbsenceReports } from '../pirates/flight-report.ts';
 import type { OperationInstance, OperationsState } from '../operations/types.ts';
 import type {
@@ -433,6 +435,7 @@ export function buildReportsFeed(
   gasExtractionArrivalReports: readonly GasExtractionArrivalReport[] = [],
   pirateReconReports: readonly PirateReconReport[] = [],
   pirateFlights: readonly FlightRecord[] = [],
+  exploration?: ExplorationState,
 ): ReportItem[] {
   const operationByBattleId = new Map(
     operations.items
@@ -461,7 +464,7 @@ export function buildReportsFeed(
   const gasExtractionItems = gasExtractionArrivalReports.map(gasExtractionArrivalReportToReportItem);
   const pirateReconItems = pirateReconReports.map(pirateReconReportToReportItem);
 
-  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems, ...recyclerItems, ...gasExtractionItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights)].sort((a, b) => {
+  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems, ...recyclerItems, ...gasExtractionItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights), ...explorationMailboxReports(exploration, pirateFlights)].sort((a, b) => {
     if (a.timestamp && b.timestamp) return Date.parse(b.timestamp) - Date.parse(a.timestamp);
     if (!a.timestamp && b.timestamp) return -1;
     if (a.timestamp && !b.timestamp) return 1;
