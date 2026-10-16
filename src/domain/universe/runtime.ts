@@ -904,7 +904,8 @@ function injectTimedObject(
     : (() => {
       const explorationKind = kind as 'unique' | 'anomaly';
       const arts = explorationKind === 'unique' ? assets.uniqueArts : assets.anomalyArts;
-      const artIndex = (system.system + schedule.cycleIndex) % Math.max(1, arts.length);
+      // Gameplay profile must not depend on the caller supplying browser image assets.
+      const artIndex = (system.system + schedule.cycleIndex) % (explorationKind === 'unique' ? 19 : 10);
       const profileVariant = profileVariantForArt(explorationKind, artIndex);
       const profile = explorationProfile(explorationKind, profileVariant);
       const contactCycleKey = explorationContactId({
