@@ -54,7 +54,7 @@
     "qa:visual": "electron electron/visual-capture.cjs && electron electron/visual-industry-requirements.cjs && electron electron/visual-building-interiors.cjs && electron electron/visual-production-bots.cjs && electron electron/visual-recycling-center.cjs && electron electron/visual-trade-center.cjs && npm run test:spaceport-ui && electron electron/visual-spaceport-upgrades.cjs",
     "desktop": "npm run build && electron .",
     "dist:win": "npm run build && electron-builder --win nsis --publish never",
-    "test:exploration": "node --experimental-strip-types --test src/domain/exploration/exploration.test.ts",
+    "test:exploration": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/exploration/exploration.test.ts src/application/exploration.integration.test.ts",
     "balance:exploration:pr92": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs tools/generate-exploration-pr92-balance.mjs"
   },
   "dependencies": {
