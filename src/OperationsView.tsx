@@ -268,11 +268,14 @@ function OperationCard({ operation, selected, onSelect, contact, exploration, no
         <em>{exploration ? exploration.stage === 'completed' ? 'Контакт завершён' : 'До исчезновения: ' + pirateRemainingLabel(exploration.node.special?.expiresAt ?? nowMs, nowMs) : contact ? `Пиратский контакт · осталось ${pirateRemainingLabel(contact.expiresAt, nowMs)}` : isPirateOperationId(operation.id) ? 'База уничтожена' : intelZero ? 'Сигнатура требует классификации' : operation.objective.label}</em>
         <span className="operation-feed-meta-v2">
           <i>{isPirateOperationId(operation.id) ? formatLocation(operation.location) : intelZero ? formatLocationClass(operation.location) : formatLocation(operation.location)}</i>
-          {exploration ? <span className={'exploration-feed-occupancy exploration-feed-occupancy--' + (exploration.stage === 'completed' ? 'ended' : exploration.occupancy)}
+          {exploration ? <>
+              {exploration.recon?.success && <b className="exploration-feed-risk" title="Категория риска объекта; опасные события в текущем PR не активны">РИСК {['I','II','III','IV','V'][(operation.threat ?? 1)-1]} / V</b>}
+              <span className={'exploration-feed-occupancy exploration-feed-occupancy--' + (exploration.stage === 'completed' ? 'ended' : exploration.occupancy)}
               data-qa-exploration-feed-status={exploration.stage === 'completed' ? 'completed' : exploration.occupancy}>
               <span className="exploration-occupancy-indicator" />
               {exploration.stage === 'completed' ? 'ЗАВЕРШЕНО' : exploration.occupancy === 'free' ? 'СВОБОДНО' : exploration.occupancy === 'self' ? 'ВАШ ФЛОТ' : 'ЗАНЯТО'}
-            </span>
+              </span>
+            </>
             : isPirateOperationId(operation.id)
             ? <b className="operations-pirate-debris-label"><ResourceIcon kind="debris" /> ОБЛОМКИ · от 60%</b>
             : <><IntelPips level={operation.intel} />{firstReward ? <b><ResourceIcon kind={firstReward[2]} /> {number.format(firstReward[1])}</b> : <b>НАГРАДА ?</b>}</>}
