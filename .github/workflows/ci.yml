@@ -32,6 +32,8 @@ jobs:
         run: npm run balance:pirates:pr91:approved
       - name: PR91 75-90 vs 85-105 garrison paired combat and net economics
         run: npm run balance:pirates:pr91:garrison
+      - name: PR91 adaptive C seeded combat and optimistic net evidence
+        run: npm run balance:pirates:pr91:adaptive
       - name: Existing attack compatibility suite
         run: npm run test:attack
       - name: Existing flight persistence suite
@@ -114,6 +116,7 @@ jobs:
             artifacts/pr91-balance/**/*
             artifacts/pr91-approved-tech-compare/**/*
             artifacts/pr91-garrison-85-105/**/*
+            artifacts/pr91-adaptive-c/**/*
             artifacts/pirate-operations-qa/**/*
           if-no-files-found: warn
           retention-days: 14
