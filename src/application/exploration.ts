@@ -67,6 +67,7 @@ export type ExplorationOperationPresentation = {
   stage: 'available' | 'active' | 'completed';
   contact?: ExplorationContact;
   recon?: ExplorationReconRecord;
+  reconInFlight?: { phase: 'outbound' | 'returning'; arrivalAt: number; returnAt?: number };
 };
 export function selectExplorationOperations(state: SaveState, nowMs: number, mode: RuntimeMode): ExplorationOperationPresentation[] {
   const live = selectExplorationTargets(state, nowMs, mode);
@@ -74,10 +75,14 @@ export function selectExplorationOperations(state: SaveState, nowMs: number, mod
   const stored = state.exploration?.contacts ?? {};
   const recon = state.exploration?.reconReports ?? [];
   const report = (id: string) => [...recon].reverse().find(item => item.contactId === id && item.ownerId === state.profile.playerId);
+  const inFlight = (id: string) => state.flights.records.find(f => f.missionId === 'exploration-recon'
+    && f.operationId === id && (f.phase === 'outbound' || f.phase === 'returning'));
   const displayed: ExplorationOperationPresentation[] = live.map(node => {
     const occupancy = explorationTargetStatus(state, node);
     return {
       node, occupancy, contact: stored[node.id], recon: report(node.id),
+      reconInFlight: inFlight(node.id) ? { phase: inFlight(node.id)!.phase as 'outbound' | 'returning',
+        arrivalAt: inFlight(node.id)!.arrivalAt, returnAt: inFlight(node.id)!.returnAt } : undefined,
       stage: stored[node.id]?.events.some(event =>
         event.ownerId === state.profile.playerId && event.kind === 'returned') ? 'completed'
         : accepted.has(node.id) || occupancy === 'self' ? 'active' : 'available',
