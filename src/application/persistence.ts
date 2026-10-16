@@ -709,7 +709,7 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
   if (item.operationId !== undefined && !isNonEmptyPersistedString(item.operationId)) return false;
   if (item.ownerSide === 'bot01' && item.missionId === 'expedition' && (
       mode !== 'test' || !String(item.requestId).startsWith('bot01-exploration:')
-      || item.factionId === undefined || item.targetRelation !== 'neutral'
+      || !['aegis','synod','veyra'].includes(String(item.explorationFactionId)) || item.targetRelation !== 'neutral'
       || item.gasCost !== 0)) return false;
   if ((item.missionId === 'expedition' || item.missionId === 'exploration-recon')
     && (!isNonEmptyPersistedString(item.operationId) || !/^(unique|anomaly):\d+:/.test(item.operationId)
