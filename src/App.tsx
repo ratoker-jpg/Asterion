@@ -162,8 +162,6 @@ import type { TargetRelation } from './domain/flights/types.ts';
 import { materializePirateProfiles, pirateContactOperation, pirateOperationId, selectOwnedPiratePresentations, selectOwnedPirateTargets, selectPirateContacts } from './application/pirate-presentation.ts';
 import { selectExplorationTargets, getExplorationTarget, explorationTargetStatus, selectExplorationOperations } from './application/exploration.ts';
 import { acceptLiveExploration, cancelLiveExploration } from './application/exploration-operations.ts';
-import { explorationArtForCycle } from './exploration-art.ts';
-import { explorationProfile } from './domain/exploration/model.ts';
 import type { PirateContactPresentation, PirateSystemSelection } from './pirate-ui.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
