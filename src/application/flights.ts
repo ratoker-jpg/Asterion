@@ -102,6 +102,14 @@ import {
   resolveAttackAtTarget,
 } from './attack.ts';
 import { dispatchPirateFlight, resolvePirateFlightAtTarget } from './pirates.ts';
+import { getExplorationTarget } from './exploration.ts';
+import {
+  accrueExpedition, creditExpeditionReturn, explorationContactForFlight, explorationResourceScore,
+  materializeExplorationAtDispatch, resolveExpeditionArrival, updateExpeditionContact,
+} from './exploration-flight.ts';
+import {
+  prepareExplorationRecall, isExplorationRecallReady, releaseExplorationClaim,
+} from '../domain/exploration/ledger.ts';
 
 export const FLIGHT_LAUNCH_CONTEXT_EVENT = 'asterion:flight-launch-context';
 export const FLIGHT_LAUNCH_CONTEXT_CLEAR_EVENT = 'asterion:flight-launch-context-clear';
@@ -1041,13 +1049,28 @@ export function dispatchFlight(
   if (command.missionId === 'pirate-recon' || command.missionId === 'pirate-elimination') {
     return dispatchPirateFlight(state, command, runtimeOptions);
   }
-  if (command.missionId !== 'colonize' && command.missionId !== 'transport' && command.missionId !== 'espionage' && command.missionId !== 'attack' && command.missionId !== 'deployment' && command.missionId !== 'recycle' && command.missionId !== 'gas' && command.missionId !== 'space-flight') {
+  if (command.missionId !== 'expedition' && command.missionId !== 'colonize' && command.missionId !== 'transport' && command.missionId !== 'espionage' && command.missionId !== 'attack' && command.missionId !== 'deployment' && command.missionId !== 'recycle' && command.missionId !== 'gas' && command.missionId !== 'space-flight') {
     return failure(state, 'mission-not-supported', 'Эта миссия пока не подключена к flight runtime.');
   }
   const departedAt = Number.isFinite(command.departedAt) ? command.departedAt! : (runtimeOptions.now ?? Date.now());
   const originPlanetId = command.originPlanetId ?? state.currentPlanetId;
   const originPlanet = state.planets[originPlanetId];
   if (!originPlanet) return failure(state, 'invalid-command', 'Исходная планета не найдена.');
+  if (command.missionId === 'expedition') {
+    const id = command.contactCycleKey ?? command.operationId;
+    const node = id ? getExplorationTarget(state, id, departedAt, runtimeOptions.mode) : undefined;
+    if (!node || !command.destination || command.destination.kind !== 'coordinate'
+      || !coordinatesEqual(node.coordinate, command.destination.coordinate)
+      || (command.targetKind !== undefined && command.targetKind !== node.kind)) {
+      return failure(state, 'target-not-available', 'Объект экспедиции больше недоступен. Выберите действующий объект в пределах пяти систем.');
+    }
+    const claim = state.exploration?.contacts[id!]?.claim;
+    if (claim) {
+      return failure(state, 'target-occupied', claim.ownerId === state.profile.playerId
+        ? 'Ваш флот уже добывает на этом объекте.'
+        : 'Объект занят другим владельцем. Используйте миссию «Атака».');
+    }
+  }
   if (command.missionId === 'deployment' && originPlanetId !== state.currentPlanetId) {
     return failure(state, 'invalid-command', 'Источником дислокации должна быть выбранная планета.');
   }
@@ -1376,7 +1399,8 @@ export function dispatchFlight(
     departedAt,
     factionId: state.profile.factionId as CombatFactionId,
     science,
-    operationId: command.operationId,
+    operationId: command.missionId === 'expedition' ? (command.contactCycleKey ?? command.operationId) : command.operationId,
+    ...(command.missionId === 'expedition' ? { targetPlanetName: getExplorationTarget(state, (command.contactCycleKey ?? command.operationId)!, departedAt, runtimeOptions.mode)?.name } : {}),
     ...(command.missionId === 'space-flight' ? {
       durationMs: spaceFlightDurationMs,
       cargo: spaceFlightCargo,
@@ -1423,7 +1447,16 @@ export function dispatchFlight(
       selectedCommanderLevels: deploymentCommanderLevels,
     } : {}),
   });
-  const flight = scaledRecord(domainResult.flight, runtimeOptions);
+  const baseFlight = scaledRecord(domainResult.flight, runtimeOptions);
+  const flight: FlightRecord = command.missionId === 'expedition'
+    ? { ...baseFlight, explorationLaunchResourcePoints: explorationResourceScore(state) }
+    : baseFlight;
+  if (command.missionId === 'expedition') {
+    const node = getExplorationTarget(state, flight.operationId!, flight.departedAt, runtimeOptions.mode);
+    if (!node || flight.arrivalAt >= node.special!.expiresAt) {
+      return failure(state, 'target-not-available', 'Флот прибудет после исчезновения объекта. Выберите более близкую цель или быстрые корабли.');
+    }
+  }
   const gas = getPlanetResources(state, originPlanetId);
   if (gas.gas < flight.gasCost) return failure(state, 'insufficient-gas', 'Недостаточно газа для исходящего участка.');
 
@@ -1467,6 +1500,10 @@ export function dispatchFlight(
         },
       });
     }
+  }
+  if (command.missionId === 'expedition' && domainResult.created) {
+    nextState = materializeExplorationAtDispatch(nextState, flight.operationId!, flight.departedAt,
+      runtimeOptions.mode ?? (Object.keys(nextState.alliedPlanets ?? {}).length ? 'test' : 'production'));
   }
   if (command.missionId === 'espionage' && domainResult.created) {
     const targetPlanetId = command.destination!.kind === 'planet' ? command.destination!.planetId : '';
@@ -1540,6 +1577,15 @@ export function recallFlight(
       created: false,
       notice: `Шпионский зонд отозван. Возврат через ${Math.ceil((nextFlight.returnAt! - now) / 1_000)} с.`,
     };
+  }
+  if (flight.missionId === 'expedition' && flight.phase === 'arrived') {
+    const contact = explorationContactForFlight(state, flight);
+    if (!contact?.claim || contact.claim.flightId !== flight.id) return failure(state, 'flight-not-recallable', 'Экспедиция не удерживает объект.');
+    if (contact.claim.pendingRecallAt !== undefined) return failure(state, 'flight-not-recallable', 'Экспедиция уже готовится к возвращению.');
+    if (now >= contact.expiresAt) return failure(state, 'flight-already-arrived', 'Объект уже исчезает, флот возвращается автоматически.');
+    const next = prepareExplorationRecall(contact, state.profile.playerId, now);
+    return { ok: true, created: false, state: updateExpeditionContact(state, next), flight,
+      notice: 'Экспедиция готовится к возвращению 30 секунд. Добыча остановлена; в течение подготовки возможна атака.' };
   }
   if (flight.missionId !== 'espionage' && now >= flight.arrivalAt) {
     return failure(state, 'flight-already-arrived', 'Рейс уже прибыл.');
@@ -1859,15 +1905,22 @@ export function reconcileFlights(
   // must run before a later arrival in this same catch-up pass.
   const scheduledFlightEventAt = (flight: FlightRecord) => flight.phase === 'returning'
     ? flight.returnAt ?? Number.POSITIVE_INFINITY
+    : flight.missionId === 'expedition' && flight.phase === 'arrived'
+      ? (() => {
+        const contact = explorationContactForFlight(next, flight);
+        if (!contact?.claim || contact.claim.flightId !== flight.id) return flight.arrivalAt;
+        return Math.min(contact.expiresAt, contact.claim.pendingRecallAt === undefined
+          ? Number.POSITIVE_INFINITY : contact.claim.pendingRecallAt + 30_000);
+      })()
     : flight.arrivalAt;
   const isIncomingBotArrival = (flight: FlightRecord) => flight.ownerSide === 'bot01'
     && flight.missionId === 'attack'
     && (flight.phase === 'outbound' || flight.phase === 'arrived');
   const compareFlightEvents = (left: FlightRecord, right: FlightRecord) => {
-    const leftMissingOrigin = (left.missionId === 'deployment' || left.missionId === 'space-flight' || left.missionId === 'pirate-recon' || left.missionId === 'pirate-elimination')
+    const leftMissingOrigin = (left.missionId === 'deployment' || left.missionId === 'space-flight' || left.missionId === 'pirate-recon' || left.missionId === 'pirate-elimination' || left.missionId === 'expedition')
       && ACTIVE_FLIGHT_PHASES.has(left.phase)
       && !next.planets[left.originPlanetId];
-    const rightMissingOrigin = (right.missionId === 'deployment' || right.missionId === 'space-flight' || right.missionId === 'pirate-recon' || right.missionId === 'pirate-elimination')
+    const rightMissingOrigin = (right.missionId === 'deployment' || right.missionId === 'space-flight' || right.missionId === 'pirate-recon' || right.missionId === 'pirate-elimination' || right.missionId === 'expedition')
       && ACTIVE_FLIGHT_PHASES.has(right.phase)
       && !next.planets[right.originPlanetId];
     const leftAt = leftMissingOrigin ? Number.NEGATIVE_INFINITY : scheduledFlightEventAt(left);
@@ -1894,7 +1947,7 @@ export function reconcileFlights(
       .filter((flight) => {
         const eventKey = flightEventKey(flight);
         if (processedFlightEvents.has(eventKey)) return false;
-        const hasMissingOrigin = (flight.missionId === 'deployment' || flight.missionId === 'space-flight' || flight.missionId === 'pirate-recon' || flight.missionId === 'pirate-elimination')
+        const hasMissingOrigin = (flight.missionId === 'deployment' || flight.missionId === 'space-flight' || flight.missionId === 'pirate-recon' || flight.missionId === 'pirate-elimination' || flight.missionId === 'expedition')
           && !next.planets[flight.originPlanetId];
         const spyMission = flight.missionId === 'espionage' ? spyMissionForFlight(next, flight) : undefined;
         const needsSpyRevalidation = Boolean(
@@ -1911,7 +1964,7 @@ export function reconcileFlights(
     processedFlightEvents.add(flightEventKey(original));
     const current = next.flights.records.find((flight) => flight.id === original.id);
     if (!current) continue;
-    if ((current.missionId === 'deployment' || current.missionId === 'space-flight' || current.missionId === 'pirate-recon' || current.missionId === 'pirate-elimination')
+    if ((current.missionId === 'deployment' || current.missionId === 'space-flight' || current.missionId === 'pirate-recon' || current.missionId === 'pirate-elimination' || current.missionId === 'expedition')
       && (current.phase === 'outbound' || current.phase === 'returning' || current.phase === 'arrived')
       && !next.planets[current.originPlanetId]) {
       const destroyed: FlightRecord = {
@@ -1988,6 +2041,38 @@ export function reconcileFlights(
     const arrivalCheckAt = current.arrivedAt ?? current.arrivalAt;
     const arrivalReady = current.phase === 'arrived' || (current.phase === 'outbound' && now >= current.arrivalAt);
     if (arrivalReady) {
+      if (current.missionId === 'expedition') {
+        if (current.phase === 'outbound') {
+          const resolved = resolveExpeditionArrival(next, current, arrivalAt, targetMode);
+          next = resolved.state;
+          if (resolved.status !== 'arrived') {
+            const returned = beginDomainFlightReturn(next.flights, current.id, arrivalAt, 'target-unavailable');
+            const flight = returned.records.find(item => item.id === current.id)!;
+            next = { ...next, flights: returned };
+            events.push({ flight, status: 'target-unavailable', notice: resolved.notice });
+          } else {
+            const arrived: FlightRecord = { ...current, phase: 'arrived', arrivedAt: arrivalAt, completionReason: 'arrived' };
+            next = { ...next, flights: updateFlight(next.flights, arrived) };
+            events.push({ flight: arrived, status: 'arrived', notice: resolved.notice });
+          }
+          changed = true;
+          continue;
+        }
+        const contact = explorationContactForFlight(next, current);
+        if (contact?.claim?.flightId === current.id
+          && isExplorationRecallReady(contact, arrivalAt > now ? arrivalAt : scheduledFlightEventAt(current))) {
+          const dueAt = Math.min(contact.expiresAt, contact.claim.pendingRecallAt === undefined
+            ? Number.POSITIVE_INFINITY : contact.claim.pendingRecallAt + 30_000);
+          const released = releaseExplorationClaim(contact, dueAt);
+          next = updateExpeditionContact(next, released);
+          const returning = beginDomainFlightReturn(next.flights, current.id, dueAt, 'normal-return');
+          const flight = returning.records.find(item => item.id === current.id)!;
+          next = { ...next, flights: returning };
+          changed = true;
+          events.push({ flight, status: 'arrived', notice: 'Экспедиция завершила добычу и возвращается с собранными ресурсами.' });
+        }
+        continue;
+      }
       if (current.missionId === 'pirate-recon' || current.missionId === 'pirate-elimination') {
         const resolved = resolvePirateFlightAtTarget(next, current, arrivalAt);
         next = resolved.state;
@@ -2488,6 +2573,9 @@ export function reconcileFlights(
     const refreshed = next.flights.records.find((flight) => flight.id === original.id) ?? original;
     if (refreshed.phase === 'returning' && refreshed.returnAt !== undefined && now >= refreshed.returnAt) {
       let returnedFlight = refreshed;
+      if (refreshed.missionId === 'expedition') {
+        next = creditExpeditionReturn(next, refreshed, refreshed.returnAt);
+      }
       if (refreshed.missionId === 'transport' || refreshed.missionId === 'recycle' || refreshed.missionId === 'gas' || refreshed.missionId === 'space-flight') {
         const returned = returnTransportCargo(next, refreshed, refreshed.returnAt);
         next = returned.state;
@@ -2515,7 +2603,7 @@ export function reconcileFlights(
                 ? 'spy-destroyed'
               : returnedFlight.missionId === 'space-flight'
                 ? returnedFlight.completionReason === 'recalled' ? 'recalled' : 'normal-return'
-              : returnedFlight.missionId === 'attack' || returnedFlight.missionId === 'pirate-elimination' || returnedFlight.missionId === 'pirate-recon'
+              : returnedFlight.missionId === 'attack' || returnedFlight.missionId === 'pirate-elimination' || returnedFlight.missionId === 'pirate-recon' || returnedFlight.missionId === 'expedition'
                 ? returnedFlight.completionReason ?? 'normal-return'
                 : 'recalled',
       };
@@ -2536,6 +2624,8 @@ export function reconcileFlights(
           ? completed.completionReason === 'recalled'
             ? 'Космический рейс вернулся после отзыва; корабли и груз зачислены.'
             : 'Космический рейс завершён: корабли и груз вернулись на исходную планету.'
+          : completed.missionId === 'expedition'
+            ? 'Экспедиция вернулась на исходную планету; собранные ресурсы начислены с учётом вместимости складов.'
           : completed.missionId === 'pirate-recon'
             ? 'Пиратская разведка: зонд вернулся на исходную планету.'
           : completed.missionId === 'pirate-elimination'
