@@ -39,6 +39,8 @@ export function resolveDueExplorationNpcRoll(state:SaveState,roll:ExplorationNpc
   const risk=explorationProfile(node.kind,node.special?.profileVariant??1).risk;
   if(!explorationNpcAttempt(risk,node.id,roll.slot))return state;
   const contact=state.exploration?.contacts[node.id];
+  // Never treat a future occupation in an offline save as a past defender.
+  if(contact?.claim && contact.claim.startedAt>roll.at)return state;
   if(contact?.claim?.ownerId&&contact.claim.ownerId!==state.profile.playerId)return state;
   if(state.flights.records.some(f=>f.operationId===node.id
     && f.ownerSide==='npc'&&(f.phase==='outbound'||f.phase==='arrived')))return state;
