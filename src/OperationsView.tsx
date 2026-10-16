@@ -342,38 +342,127 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
     );
   }
 
+
   if (exploration) {
     const node = exploration.node;
+    const known = exploration.recon?.success === true;
+    const failed = exploration.recon?.success === false;
     const profile = explorationProfile(node.kind as 'unique' | 'anomaly', node.special?.profileVariant ?? 1);
-    const status = exploration.occupancy;
+    const occupied = exploration.occupancy !== 'free';
+    const completed = exploration.stage === 'completed';
+    const accepted = exploration.stage === 'active';
+    const remaining = Math.max(0, (node.special?.expiresAt ?? nowMs) - nowMs);
+    const resourceLabels: Record<ResourceIconKind, string> = {
+      metal: 'Металл', minerals: 'Минералы', gas: 'Газ', debris: 'Обломки',
+      energy: 'Энергия', population: 'Население',
+    };
+    const resourceRows = Object.entries(profile.weights).filter((entry) => (entry[1] ?? 0) > 0);
+    const lastReturn = [...(exploration.contact?.events ?? [])].reverse().find(e =>
+      (e.kind === 'returned' || e.kind === 'origin-destroyed') && e.ownerId);
+    const cooldownAt = (exploration.recon?.resolvedAt ?? 0) + 120_000;
+    const inCooldown = exploration.recon && cooldownAt > nowMs;
     return <aside className="operations-dossier-v2 operations-dossier-v2--exploration" data-qa-exploration-dossier={node.id}>
       <header className="operations-dossier-head-v2">
         <div className="operations-dossier-title-v2">
           <span className="operations-dossier-glyph-v2"><OperationGlyph category="exploration" /></span>
-          <div><small>ИССЛЕДОВАТЕЛЬСКАЯ ОПЕРАЦИЯ</small><h2>{node.name.toUpperCase()}</h2>
-          <p>{formatLocation(operation.location)} · Риск {profile.risk} / 5</p></div>
+          <div>
+            <small>{node.kind === 'anomaly' ? 'НАУЧНАЯ ОПЕРАЦИЯ' : 'ИССЛЕДОВАТЕЛЬСКАЯ ОПЕРАЦИЯ'}</small>
+            <h2>{node.name.toUpperCase()}</h2>
+            <p>{formatLocation(operation.location)}</p>
+          </div>
         </div>
+        <span className={'exploration-state-pill exploration-state-pill--' + (completed ? 'ended' : exploration.occupancy)}
+          data-qa-exploration-status={completed ? 'completed' : exploration.occupancy}>
+          {completed ? 'ЗАВЕРШЕНО' : exploration.occupancy === 'free' ? 'СВОБОДНО' : exploration.occupancy === 'self' ? 'ВАШ ФЛОТ' : 'ЗАНЯТО'}
+        </span>
       </header>
-      <section className="operations-dossier-hero-v2">
-        <img src={missionExpeditionIcon} alt="" style={{ width: 104, height: 104, objectFit: 'contain' }} />
-        <div className="operations-briefing-v2">
+      <section className="exploration-dossier-hero">
+        <div className="exploration-dossier-art"><img src={node.art} alt="" loading="lazy" draggable={false} /></div>
+        <div className="exploration-dossier-intro">
           <small>{node.kind === 'anomaly' ? 'АНОМАЛИЯ' : 'УНИКАЛЬНЫЙ ОБЪЕКТ'}</small>
-          <h3>{status === 'free' ? 'ЦЕЛЬ СВОБОДНА' : status === 'self' ? 'ВАШ ФЛОТ НА ОБЪЕКТЕ' : 'ОБЪЕКТ ЗАНЯТ'}</h3>
-          <p>Исчезнет через {pirateRemainingLabel(node.special?.expiresAt ?? nowMs, nowMs)}. Состав добычи зависит от кораблей и свободного трюма.</p>
-          <p>Профиль добычи: {Object.entries(profile.weights).map(([key, weight]) => key + ' ' + weight + '%').join(' · ')}.</p>
+          <strong>{node.name}</strong>
+          <p>{node.description}</p>
+          <dl>
+            <div><dt>КООРДИНАТЫ</dt><dd>{formatLocation(operation.location)}</dd></div>
+            <div><dt>ДО ИСЧЕЗНОВЕНИЯ</dt><dd>{completed ? 'Объект исчез' : pirateRemainingLabel(node.special?.expiresAt ?? nowMs, nowMs)}</dd></div>
+            <div><dt>СОСТОЯНИЕ</dt><dd>{completed ? 'Цикл завершён' : exploration.occupancy === 'free' ? 'Никем не занят' : exploration.occupancy === 'self' ? 'Ваш флот добывает' : 'Занят чужим флотом'}</dd></div>
+            <div><dt>ОПЕРАЦИЯ</dt><dd>{completed ? 'В архиве' : accepted ? 'Принята' : 'Не принята'}</dd></div>
+          </dl>
         </div>
       </section>
-      <footer className="operations-command-v2">
-        <div><strong>{status === 'free' ? 'ДОСТУПНА ЭКСПЕДИЦИЯ' : status === 'self' ? 'ИДЁТ ДОБЫЧА' : 'ТРЕБУЕТСЯ АТАКА'}</strong>
-        <span>{status === 'occupied' ? 'Отправка экспедиции заблокирована. Захват требует боевой миссии.' : 'Выбери флот, затем подтверди перелёт и расход газа.'}</span></div>
-        <div className="operations-command-actions-v2">
-          {status === 'free' ? <button type="button" className="operations-primary-v2" disabled={!onExpedition} data-qa-operation-expedition={node.id} onClick={() => onExpedition?.(node)}>ПОДГОТОВИТЬ ЭКСПЕДИЦИЮ</button>
-          : status === 'self' ? <button type="button" className="operations-primary-v2" onClick={onOpenFleets}>К ФЛОТАМ · ОТОЗВАТЬ</button>
-          : <button type="button" className="operations-secondary-v2" disabled title="Боевой захват будет подключён через существующий combat resolver">АТАКА · ОЖИДАНИЕ БОЕВОЙ ИНТЕГРАЦИИ</button>}
+      <section className="exploration-dossier-intelligence">
+        <div className="exploration-section-heading">
+          <strong>ИССЛЕДОВАНИЕ ОБЪЕКТА</strong>
+          <span>{known ? 'ДАННЫЕ ПОЛУЧЕНЫ' : failed ? 'ЗОНД НЕ ПОЛУЧИЛ ДАННЫЕ' : 'НЕТ РАЗВЕДДАННЫХ'}</span>
+        </div>
+        <p>{known
+          ? 'Зонд успешно исследовал объект. Ниже показан подтверждённый профиль добычи.'
+          : failed
+            ? 'Попытка исследования оказалась неудачной. Сведения о составе ресурсов пока скрыты.'
+            : 'Отправьте один шпионский зонд. Результат станет известен после его прибытия; шанс успешного исследования — 70%.'}</p>
+        <div className="exploration-reward-grid">
+          <div className="exploration-reward-cell">
+            <small>ВОЗМОЖНЫЕ РЕСУРСЫ</small>
+            {known ? <div className="exploration-resource-chips">
+              {resourceRows.map(([key, weight]) =>
+                <span key={key} className="exploration-resource-chip">
+                  <ResourceIcon kind={key as ResourceIconKind} />
+                  <b>{resourceLabels[key as ResourceIconKind]}</b>
+                  <em>{weight}%</em>
+                </span>)}
+            </div> : <div className="exploration-resource-unknown">
+              {(['metal', 'minerals', 'gas', 'debris'] as const).map(kind =>
+                <ResourceIcon key={kind} kind={kind} />)}
+              <span>Состав скрыт до успешного исследования</span>
+            </div>}
+          </div>
+          <div className="exploration-reward-cell">
+            <small>ОПАСНОСТЬ И НАГРАДА</small>
+            {known ? <strong>Риск {profile.risk} из 5</strong> : <strong>Риск неизвестен</strong>}
+            <p>Фактическая добыча зависит от длительности пребывания флота и свободного трюма. Ресурсы начисляются только после возвращения.</p>
+          </div>
+        </div>
+        {exploration.recon ? <small className="exploration-recon-timestamp">Последний разведотчёт: {new Date(exploration.recon.resolvedAt).toLocaleString('ru-RU')}
+          {inCooldown ? ' · повтор через ' + Math.ceil((cooldownAt - nowMs) / 1000) + ' с' : ''}</small> : null}
+      </section>
+      {completed ? <section className="exploration-dossier-result">
+        <strong>ИТОГ ОПЕРАЦИИ</strong>
+        {lastReturn?.kind === 'returned' ? <>
+          <p>Экспедиция вернулась. Добытые ресурсы были доставлены на планету отправления.</p>
+          <div className="exploration-resource-chips">
+            {(['metal','minerals','gas','debris'] as const).filter(key => (lastReturn.cargo?.[key] ?? 0) > 0).map(key =>
+              <span key={key} className="exploration-resource-chip"><ResourceIcon kind={key} /><b>{resourceLabels[key]}</b><em>{number.format(lastReturn.cargo?.[key] ?? 0)}</em></span>)}
+          </div>
+          {lastReturn.repairTokens ? <p>Редкие жетоны ремонта: +{lastReturn.repairTokens}</p> : null}
+        </> : <p>Время контакта истекло. Подтверждённой доставки ресурсов по этому циклу нет.</p>}
+      </section> : null}
+      <footer className="operations-command-v2 exploration-command-panel">
+        <div><strong>{completed ? 'КОНТАКТ ЗАВЕРШЁН' : accepted ? 'ОПЕРАЦИЯ ПРИНЯТА' : 'ДОСТУПНАЯ ОПЕРАЦИЯ'}</strong>
+          <span>{completed ? 'Это история прошедшего цикла объекта.' : occupied && exploration.occupancy === 'occupied'
+            ? 'Экспедиция заблокирована: объект удерживает другой флот.'
+            : accepted ? 'Можно исследовать объект зондом или отправить экспедицию.' : 'Сначала примите операцию, чтобы открыть подготовку.'}</span></div>
+        <div className="operations-command-actions-v2 exploration-action-buttons">
+          {!completed && !accepted ? <button className="operations-primary-v2" type="button"
+            data-qa-exploration-accept={node.id} onClick={() => onExplorationAccept?.(node)}>ПРИНЯТЬ ОПЕРАЦИЮ</button> : null}
+          {!completed && accepted ? <>
+            <button type="button" className="operations-primary-v2" data-qa-exploration-recon={node.id}
+              disabled={!onExplorationRecon || Boolean(inCooldown)}
+              title={inCooldown ? 'Повторное исследование доступно после паузы' : 'Отправить один шпионский зонд с текущей планеты'}
+              onClick={() => onExplorationRecon?.(node)}>ИССЛЕДОВАТЬ ОБЪЕКТ</button>
+            {exploration.occupancy === 'free'
+              ? <button type="button" className="operations-secondary-v2" disabled={!onExpedition}
+                  data-qa-operation-expedition={node.id} onClick={() => onExpedition?.(node)}>ПОДГОТОВИТЬ ЭКСПЕДИЦИЮ</button>
+              : exploration.occupancy === 'self'
+                ? <button type="button" className="operations-secondary-v2" onClick={onOpenFleets}>К ФЛОТАМ · ОТОЗВАТЬ</button>
+                : <button type="button" className="operations-secondary-v2" disabled title="Боевой захват пока не подключён">ОБЪЕКТ ЗАНЯТ · НУЖНА АТАКА</button>}
+            <button type="button" className="operations-pirate-cancel"
+              onClick={() => onExplorationCancel?.(node.id)}>Отменить операцию</button>
+          </> : null}
         </div>
       </footer>
     </aside>;
   }
+
   const pirate = isPirateOperationId(operation.id);
   const intelZero = operation.intel === 0 && !pirate;
   const modifierLabels = operation.modifiers.map((modifier) => OPERATION_MODIFIER_LABELS[modifier]);
