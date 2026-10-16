@@ -368,6 +368,15 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
     const cooldownAt = (exploration.recon?.resolvedAt ?? 0) + 120_000;
     const inCooldown = exploration.recon && cooldownAt > nowMs;
     const awaitingProbe = exploration.reconInFlight?.phase === 'outbound';
+    const projected = exploration.contact?.claim ? reconcileExplorationContact(exploration.contact, nowMs) : exploration.contact;
+    const mine = projected?.claim;
+    const liveCargo = mine?.cargo;
+    const remainingLife = node.special?.expiresAt && node.special?.startAt
+      ? Math.max(0, Math.min(100, Math.round((node.special.expiresAt - nowMs) / (node.special.expiresAt - node.special.startAt) * 100)))
+      : 0;
+    const riskRoman = ['I','II','III','IV','V'][profile.risk - 1]!;
+    const delivered = lastReturn?.creditedCargo ?? lastReturn?.cargo;
+    const deliveredTotal = delivered ? Object.values(delivered).reduce((sum, value) => sum + value, 0) : 0;
     return <aside className="operations-dossier-v2 operations-dossier-v2--exploration" data-qa-exploration-dossier={node.id}>
       <header className="operations-dossier-head-v2">
         <div className="operations-dossier-title-v2">
@@ -375,7 +384,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
           <div>
             <small>{node.kind === 'anomaly' ? 'НАУЧНАЯ ОПЕРАЦИЯ' : 'ИССЛЕДОВАТЕЛЬСКАЯ ОПЕРАЦИЯ'}</small>
             <h2>{node.name.toUpperCase()}</h2>
-            <p>{formatLocation(operation.location)}</p>
+            <p><button type="button" className="exploration-coordinates-link" onClick={() => onExplorationUniverse?.(node)} title="Открыть во Вселенной">{formatLocation(operation.location)} ↗</button></p>
           </div>
         </div>
         <span className={'exploration-state-pill exploration-state-pill--' + (completed ? 'ended' : exploration.occupancy)}
@@ -390,13 +399,17 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
           <strong>{node.name}</strong>
           <p>{node.description}</p>
           <dl>
-            <div><dt>КООРДИНАТЫ</dt><dd>{formatLocation(operation.location)}</dd></div>
+            <div><dt>КООРДИНАТЫ</dt><dd><button type="button" className="exploration-coordinates-link" onClick={() => onExplorationUniverse?.(node)}>{formatLocation(operation.location)} ↗</button></dd></div>
             <div><dt>ДО ИСЧЕЗНОВЕНИЯ</dt><dd>{completed ? 'Объект исчез' : pirateRemainingLabel(node.special?.expiresAt ?? nowMs, nowMs)}</dd></div>
             <div><dt>СОСТОЯНИЕ</dt><dd>{completed ? 'Цикл завершён' : exploration.occupancy === 'free' ? 'Никем не занят' : exploration.occupancy === 'self' ? 'Ваш флот добывает' : 'Занят чужим флотом'}</dd></div>
             <div><dt>ОПЕРАЦИЯ</dt><dd>{completed ? 'В архиве' : accepted ? 'Принята' : 'Не принята'}</dd></div>
           </dl>
         </div>
       </section>
+      <div className="exploration-lifetime-panel" aria-label="Оставшийся срок существования">
+        <div><small>ДО ИСЧЕЗНОВЕНИЯ</small><strong>{completed ? 'Завершено' : pirateRemainingLabel(node.special?.expiresAt ?? nowMs, nowMs)}</strong></div>
+        <div className="exploration-lifetime-track" role="progressbar" aria-label="Оставшееся время объекта" aria-valuemin={0} aria-valuemax={100} aria-valuenow={remainingLife}><span style={{width: remainingLife + '%'}} /></div>
+      </div>
       <section className="exploration-dossier-intelligence">
         <div className="exploration-section-heading">
           <strong>ИССЛЕДОВАНИЕ ОБЪЕКТА</strong>
