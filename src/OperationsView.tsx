@@ -369,7 +369,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
     };
     const resourceRows = Object.entries(profile.weights).filter((entry) => (entry[1] ?? 0) > 0);
     const lastReturn = [...(exploration.contact?.events ?? [])].reverse().find(e =>
-      (e.kind === 'returned' || e.kind === 'origin-destroyed') && e.ownerId);
+      (e.kind === 'returned' || e.kind === 'origin-destroyed') && e.ownerId === exploration.ownerId);
     const cooldownAt = (exploration.recon?.resolvedAt ?? 0) + 120_000;
     const inCooldown = exploration.recon && cooldownAt > nowMs;
     const awaitingProbe = exploration.reconInFlight?.phase === 'outbound';
