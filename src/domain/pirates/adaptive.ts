@@ -29,7 +29,7 @@ const sum=(cost:Readonly<{metal?:number;minerals?:number;gas?:number}>)=>
 /** Lower/upper ratio only: no guaranteed 55% outcomes or secret forced losses. */
 export function pirateAdaptiveInterval(q:number):Readonly<{min:number;max:number}>{
   const x=clamp(Number.isFinite(q)?q:0,0,1);
-  return Object.freeze({min:0.90+0.15*x,max:0.95+0.15*x});
+  return Object.freeze({min:(90+15*x)/100,max:(95+15*x)/100});
 }
 /** Normalized economic stake (destroyer hull cost per population as fixed race benchmark). */
 export function pirateAdaptiveFleetWeight(
