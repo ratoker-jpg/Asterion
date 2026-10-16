@@ -326,7 +326,10 @@ export function reconcileRuntime(
   const previousLedger = next.exploration ?? createExplorationState();
   const scoredLedger = recordHighestExplorationScore(previousLedger, next.profile.playerId, currentScore);
   const currentNpcCursor=Math.max(scoredLedger.npcProcessedAt??0,context.now);
-  const updatedLedger = context.mode==='production' && scoredLedger.npcProcessedAt!==currentNpcCursor
+  const hasRealNpcSource=Object.values(getEspionageTargets(next.espionage))
+    .some(owner=>owner.ownerId!==next.profile.playerId);
+  const updatedLedger = context.mode==='production' && hasRealNpcSource
+    && scoredLedger.npcProcessedAt!==currentNpcCursor
     ? {...scoredLedger,npcProcessedAt:currentNpcCursor}:scoredLedger;
   if (updatedLedger !== previousLedger) next = {...next, exploration: updatedLedger};
   const completedCursor = Math.max(pirateCursor, context.now);
