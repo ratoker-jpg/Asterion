@@ -254,7 +254,7 @@ function OperationCard({ operation, selected, onSelect, contact, exploration, no
       onClick={onSelect}
     >
       {exploration
-        ? <span className="operation-feed-threat-v2 operation-feed-pirate-art-v2"><img src={missionExpeditionIcon} alt="" /><small>{exploration.occupancy === 'free' ? 'СВОБОДЕН' : 'ЗАНЯТ'}</small></span>
+        ? <span className="operation-feed-threat-v2 operation-feed-pirate-art-v2 exploration-feed-art"><img src={exploration.node.art} alt="" loading="lazy" draggable={false} /><small>{exploration.node.kind === 'anomaly' ? 'АНОМАЛИЯ' : 'ОБЪЕКТ'}</small></span>
         : pirateArt
         ? <span className="operation-feed-threat-v2 operation-feed-pirate-art-v2" aria-label="Пиратская планета">
           <img src={pirateArt} alt="" loading="lazy" draggable={false} />
@@ -262,12 +262,17 @@ function OperationCard({ operation, selected, onSelect, contact, exploration, no
         </span>
         : <span className="operation-feed-threat-v2"><b>{threatTier(operation)}</b><small>{intelZero ? 'UNKNOWN' : operation.category === 'combat' ? 'THREAT' : 'RISK'}</small></span>}
       <span className="operation-feed-copy-v2">
-        <small>{CATEGORY_LABELS[operation.category]}</small>
+        <small>{exploration ? exploration.node.kind === 'anomaly' ? 'АНОМАЛИЯ · ИССЛЕДОВАНИЕ' : 'УНИКАЛЬНЫЙ ОБЪЕКТ · ИССЛЕДОВАНИЕ' : CATEGORY_LABELS[operation.category]}</small>
         <strong>{operation.title}</strong>
-        <em>{contact ? `Пиратский контакт · осталось ${pirateRemainingLabel(contact.expiresAt, nowMs)}` : isPirateOperationId(operation.id) ? 'База уничтожена' : intelZero ? 'Сигнатура требует классификации' : operation.objective.label}</em>
+        <em>{exploration ? exploration.stage === 'completed' ? 'Контакт завершён' : 'До исчезновения: ' + pirateRemainingLabel(exploration.node.special?.expiresAt ?? nowMs, nowMs) : contact ? `Пиратский контакт · осталось ${pirateRemainingLabel(contact.expiresAt, nowMs)}` : isPirateOperationId(operation.id) ? 'База уничтожена' : intelZero ? 'Сигнатура требует классификации' : operation.objective.label}</em>
         <span className="operation-feed-meta-v2">
           <i>{isPirateOperationId(operation.id) ? formatLocation(operation.location) : intelZero ? formatLocationClass(operation.location) : formatLocation(operation.location)}</i>
-          {isPirateOperationId(operation.id)
+          {exploration ? <span className={'exploration-feed-occupancy exploration-feed-occupancy--' + (exploration.stage === 'completed' ? 'ended' : exploration.occupancy)}
+              data-qa-exploration-feed-status={exploration.stage === 'completed' ? 'completed' : exploration.occupancy}>
+              <span className="exploration-occupancy-indicator" />
+              {exploration.stage === 'completed' ? 'ЗАВЕРШЕНО' : exploration.occupancy === 'free' ? 'СВОБОДНО' : exploration.occupancy === 'self' ? 'ВАШ ФЛОТ' : 'ЗАНЯТО'}
+            </span>
+            : isPirateOperationId(operation.id)
             ? <b className="operations-pirate-debris-label"><ResourceIcon kind="debris" /> ОБЛОМКИ · от 60%</b>
             : <><IntelPips level={operation.intel} />{firstReward ? <b><ResourceIcon kind={firstReward[2]} /> {number.format(firstReward[1])}</b> : <b>НАГРАДА ?</b>}</>}
         </span>
