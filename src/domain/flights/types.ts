@@ -3,7 +3,7 @@ import type { CommanderId } from '../combat/commanders.ts';
 import type { UniverseCoordinate, UniverseObjectKind } from '../universe/types.ts';
 import type { TransportCargo } from './cargo.ts';
 import type { AttackLaunchSnapshot, AttackResolution } from '../attack/types.ts';
-import type { PirateMissionSnapshot } from '../pirates/mission.ts';
+import type { PirateMissionSnapshot, PirateRaidSnapshot } from '../pirates/mission.ts';
 
 export type MissionId =
   | 'transport'
@@ -11,6 +11,7 @@ export type MissionId =
   | 'attack'
   | 'pirate-recon'
   | 'pirate-elimination'
+  | 'pirate-raid'
   | 'deployment'
   | 'colonize'
   | 'recycle'
@@ -48,7 +49,7 @@ export type FlightRecord = {
   id: string;
   requestId: string;
   /** Older records omit this and are treated as player-owned. */
-  ownerSide?: 'player' | 'bot01';
+  ownerSide?: 'player' | 'bot01' | 'pirate';
   missionId: MissionId;
   operationId?: string;
   /** Links a persisted espionage flight to its higher-level spy mission. */
@@ -77,6 +78,8 @@ export type FlightRecord = {
   attackSnapshot?: AttackLaunchSnapshot;
   /** Frozen owner profile and cycle identity for one-shot pirate missions. */
   pirateSnapshot?: PirateMissionSnapshot;
+  /** Authoritative inbound NPC payload separate from player ship reservations. */
+  pirateRaidSnapshot?: PirateRaidSnapshot;
   /** Attack-only materialized result used to make reconcile replay-safe. */
   attackResolution?: AttackResolution;
   populationReserved: number;

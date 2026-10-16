@@ -15,11 +15,13 @@ import { reconcileResourceIncome } from './resource-clock.ts';
 import type { ResourceCreditResult } from '../domain/resources/credit.ts';
 import type { FleetProductionCompletion } from '../domain/fleet/production.ts';
 import { reconcileFlights, type FlightReconcileEvent } from './flights.ts';
+import { selectDuePirateRolls, resolveDuePirateRoll } from './pirate-raids.ts';
+import { createDefaultPirateState } from '../domain/pirates/mission.ts';
 import {
   reconcileAllPlanetOverpopulation,
 } from './overpopulation.ts';
 import type { PlanetId } from './contracts.ts';
-import { getEspionageState } from '../domain/espionage/runtime.ts';
+import { getEspionageState, getEspionageTargets } from '../domain/espionage/runtime.ts';
 import { collectOrbitalDebrisAtCoordinate, getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 import { advanceUniverseAsteroidSimulationAt, getNextUniverseAsteroidTransitionAt } from '../domain/universe/asteroid-simulation.ts';
 import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
@@ -30,7 +32,8 @@ export type RuntimeReconcileEvent =
   | { kind: 'recycling'; planetId: string; jobIds: string[] }
   | { kind: 'spaceport'; planetId: string; tasks: Array<{ track: SpaceportUpgradeTrack; shipId: string }> }
   | { kind: 'fleet-production'; planetId: string; completed: FleetProductionCompletion[] }
-  | { kind: 'flight'; events: FlightReconcileEvent[] };
+  | { kind: 'flight'; events: FlightReconcileEvent[] }
+  | { kind: 'pirate-raid-check'; ownerId: string; contactCycleKey: string; flightId?: string };
 
 export type RuntimeReconcileResult = {
   changed: boolean;
@@ -50,12 +53,33 @@ export function reconcileRuntime(
 ): RuntimeReconcileResult {
   let next = state;
   const events: RuntimeReconcileEvent[] = [];
+  const startingPirate = next.pirate ?? createDefaultPirateState();
+  let pirateCursor = startingPirate.raidProcessedAt ?? context.now;
+  if (!Number.isSafeInteger(pirateCursor) || pirateCursor < 0) pirateCursor = context.now;
+  let raidDueEvents = selectDuePirateRolls(next, pirateCursor, context.now, context.mode, context.testTimeScale);
+  let raidIndex = 0;
   let selectedCredit: ResourceCreditResult | null = null;
   const emptyCredit = (): ResourceCreditResult => ({
     wallet: { metal: 0, minerals: 0, gas: 0, energy: 0 },
     accepted: { metal: 0, minerals: 0, gas: 0, energy: 0 },
     burned: { metal: 0, minerals: 0, gas: 0, energy: 0 },
   });
+
+  // The raid calendar is keyed by (owner, system), not by colony. Rebuild its
+  // remaining due events only when that footprint changes during flight arrivals
+  // (e.g. colonization or the destruction of an owner's last planet in a system).
+  const raidSystemFootprint = (value: SaveState): string => {
+    const systems = new Set<string>();
+    for (const planet of Object.values(value.planets)) {
+      systems.add(JSON.stringify([value.profile.playerId, planet.universeGalaxy ?? 1, planet.universeSystem ?? 1]));
+    }
+    for (const target of Object.values(getEspionageTargets(value.espionage))) {
+      if (target.ownerId !== value.profile.playerId) {
+        systems.add(JSON.stringify([target.ownerId, target.coordinate.galaxy, target.coordinate.system]));
+      }
+    }
+    return [...systems].sort().join('|');
+  };
 
   const reconcilePlanetWork = (
     at: number,
@@ -187,9 +211,10 @@ export function reconcileRuntime(
     if (changed) next = { ...next, asteroidSimulation: { ...simulation, asteroids } };
   };
 
-  const processFlightsAt = (at: number) => {
+  const processFlightsAt = (at: number): boolean => {
     // No rng fallback here: espionage rolls derive their own deterministic
     // seeded streams when context.rng is not provided.
+    const beforeSystems = raidSystemFootprint(next);
     const flights = reconcileFlights(next, at, context.rng, {
       mode: context.mode,
       testTimeScale: context.testTimeScale,
@@ -199,23 +224,25 @@ export function reconcileRuntime(
       next = flights.state;
       if (flights.events.length > 0) events.push({ kind: 'flight', events: flights.events });
     }
+    return flights.changed && beforeSystems !== raidSystemFootprint(next);
   };
 
   let processedThrough = Number.NEGATIVE_INFINITY;
   while (true) {
     const flightCheckpoint = nextDueFlightCheckpoint(processedThrough);
+    while (raidIndex < raidDueEvents.length && raidDueEvents[raidIndex]!.at <= processedThrough) raidIndex++;
+    const pirateCheckpoint = raidDueEvents[raidIndex]?.at;
     const nextAsteroidCheckpoint = next.asteroidSimulation
       ? getNextUniverseAsteroidTransitionAt(next.asteroidSimulation, context.now)
       : null;
     const asteroidCheckpoint = nextAsteroidCheckpoint ?? undefined;
-    const checkpoint = flightCheckpoint === undefined
-      ? asteroidCheckpoint
-      : asteroidCheckpoint === undefined
-        ? flightCheckpoint
-        : Math.min(flightCheckpoint, asteroidCheckpoint);
+    const checkpoint = [flightCheckpoint, asteroidCheckpoint, pirateCheckpoint]
+      .filter((point): point is number => point !== undefined)
+      .reduce<number | undefined>((min, point) => min === undefined ? point : Math.min(min,point), undefined);
     if (checkpoint === undefined) break;
     const asteroidIsDue = asteroidCheckpoint === checkpoint;
     const flightIsDue = flightCheckpoint === checkpoint;
+    const pirateIsDue = pirateCheckpoint === checkpoint;
     // Advancing the cursor before processing prevents a due-but-unmodified
     // record at this timestamp from creating a zero-progress loop. Flights
     // created by this checkpoint can still contribute a later return time.
@@ -224,14 +251,33 @@ export function reconcileRuntime(
     // first; flight arrivals and battles then observe the post-transition
     // free-orbit state. Flight ties retain reconcileFlights' stable ID order.
     if (asteroidIsDue) applyAsteroidTransitionsAt(checkpoint);
-    if (flightIsDue) {
+    if (flightIsDue || pirateIsDue) {
       advanceAsteroidGasForSimulationAt(checkpoint);
       const overpopulation = reconcileAllPlanetOverpopulation(next, checkpoint);
       next = overpopulation.state;
-      const beforeWork = overpopulation.blockedPlanetIds;
-      reconcilePlanetWork(checkpoint, beforeWork);
-      processFlightsAt(checkpoint);
+      reconcilePlanetWork(checkpoint, overpopulation.blockedPlanetIds);
+      const defeatedBefore = next.pirate?.contact.defeatedCycles;
+      if (flightIsDue && processFlightsAt(checkpoint)) {
+        // Include checks exactly at this timestamp: arrivals are resolved first,
+        // then newly owned systems participate in the same-time pirate roll.
+        raidDueEvents = selectDuePirateRolls(next, Math.max(pirateCursor, checkpoint - 1),
+          context.now, context.mode, context.testTimeScale);
+        raidIndex = 0;
+      }
       next = reconcileAllPlanetOverpopulation(next, checkpoint).state;
+      if (pirateIsDue || raidDueEvents[raidIndex]?.at === checkpoint) {
+        while (raidIndex < raidDueEvents.length && raidDueEvents[raidIndex]!.at === checkpoint) {
+          const event = raidDueEvents[raidIndex++]!;
+          next = resolveDuePirateRoll(next, event, context.mode, context.testTimeScale);
+          const roll = next.pirate?.raidRolls?.[JSON.stringify([event.ownerId,event.contactCycleKey])];
+          events.push({kind:'pirate-raid-check', ownerId:event.ownerId,
+            contactCycleKey:event.contactCycleKey,...(roll?.flightId?{flightId:roll.flightId}:{})});
+        }
+      }
+      if (next.pirate?.contact.defeatedCycles !== defeatedBefore) {
+        raidDueEvents = selectDuePirateRolls(next, checkpoint, context.now, context.mode, context.testTimeScale);
+        raidIndex = 0;
+      }
     }
   }
 
@@ -239,8 +285,21 @@ export function reconcileRuntime(
   next = finalOverpopulation.state;
   reconcilePlanetWork(context.now, finalOverpopulation.blockedPlanetIds);
   advanceAsteroidGasForSimulationAt(context.now);
-  processFlightsAt(context.now);
+  if (processFlightsAt(context.now)) {
+    // Covers legacy arrived-phase flights processed only by the final sweep.
+    for (const event of selectDuePirateRolls(next, Math.max(pirateCursor, context.now - 1),
+      context.now, context.mode, context.testTimeScale)) {
+      next = resolveDuePirateRoll(next, event, context.mode, context.testTimeScale);
+      const roll = next.pirate?.raidRolls?.[JSON.stringify([event.ownerId, event.contactCycleKey])];
+      events.push({ kind: 'pirate-raid-check', ownerId: event.ownerId,
+        contactCycleKey: event.contactCycleKey, ...(roll?.flightId ? { flightId: roll.flightId } : {}) });
+    }
+  }
   next = reconcileAllPlanetOverpopulation(next, context.now).state;
+  const completedCursor = Math.max(pirateCursor, context.now);
+  if (next.pirate?.raidProcessedAt !== completedCursor) {
+    next = {...next, pirate: {...(next.pirate ?? createDefaultPirateState()),raidProcessedAt:completedCursor}};
+  }
 
   return {
     changed: next !== state,

@@ -28,6 +28,8 @@ import type { AttackLaunchSnapshot, AttackLoot, AttackResolution } from '../doma
 import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 import { isPirateShipId } from '../domain/combat/side-entity.ts';
 import { calculatePirateForceDebris } from '../domain/pirates/debris.ts';
+import { PIRATE_CATALOG_BY_ID } from '../domain/pirates/catalog.ts';
+import { normalizePirateRaidSnapshot } from '../domain/pirates/mission.ts';
 import { resolvePirateEliminationEncounter } from '../domain/pirates/encounter.ts';
 
 const ATTACK_MAX_ROUNDS: readonly SimulatorMaxRounds[] = [5, 8, 12];
@@ -66,7 +68,7 @@ function commanderLevelsFromPlanet(state: SaveState, planetId: string, selected:
 }
 
 export function normalizeAttackRounds(value: unknown): SimulatorMaxRounds {
-  return ATTACK_MAX_ROUNDS.includes(value as SimulatorMaxRounds) ? value as SimulatorMaxRounds : 8;
+  return ATTACK_MAX_ROUNDS.includes(value as SimulatorMaxRounds) ? value as SimulatorMaxRounds : 12;
 }
 
 export function createAttackLaunchSnapshot(
@@ -175,15 +177,22 @@ export function calculateAttackDebris(
 
 function survivorsCargo(report: BattleReport, factionId: CombatFactionId) {
   const ships: Partial<Record<ShipId, number>> = {};
+  let pirateSurvivors = 0;
+  let pirateCargo = 0;
   for (const stack of report.attackerForce.stacks ?? []) {
-    if (isPirateShipId(stack.entityId)) continue;
+    if (isPirateShipId(stack.entityId)) {
+      const survivors = safeCount(stack.countAfter);
+      pirateSurvivors += survivors;
+      pirateCargo += survivors * PIRATE_CATALOG_BY_ID[stack.entityId].cargo;
+      continue;
+    }
     const id = stack.entityId as ShipId;
     const entity = getFactionCombatEntity(factionId, stack.entityId);
     if (entity.kind !== 'ship' || id === SOLAR_SATELLITE_ID) continue;
     if (safeCount(stack.countAfter) > 0) ships[id] = safeCount(stack.countAfter);
   }
   const catalog = Object.fromEntries(getFactionShipCatalog(factionId).map((entity) => [entity.id, { cargo: entity.ship?.cargo ?? 0 }]));
-  return { ships, capacity: getFleetCargoCapacity(ships, catalog) };
+  return { ships, pirateSurvivors, capacity: getFleetCargoCapacity(ships, catalog) + pirateCargo };
 }
 
 export function calculateAttackLoot(
@@ -192,7 +201,7 @@ export function calculateAttackLoot(
   attackerFactionId: CombatFactionId,
 ): AttackLoot {
   const survivors = survivorsCargo(report, attackerFactionId);
-  const survivorCount = Object.values(survivors.ships).reduce((total, count) => total + safeCount(count), 0);
+  const survivorCount = survivors.pirateSurvivors + Object.values(survivors.ships).reduce((total, count) => total + safeCount(count), 0);
   if (report.winner !== 'attacker' || survivorCount <= 0 || survivors.capacity <= 0) return { metal: 0, minerals: 0, gas: 0, debris: 0 };
   let free = survivors.capacity;
   const loot = { metal: 0, minerals: 0, gas: 0, debris: 0 };
@@ -416,6 +425,7 @@ export function resolvePirateEliminationAtTarget(state: SaveState, flight: Fligh
   const encounter = resolvePirateEliminationEncounter({
     reportId, timestamp: new Date(now).toISOString(), seed: `pirate:${flight.id}`,
     contactCycleKey: snapshot.contactCycleKey, pirateProfile: snapshot.profile,
+    ...(snapshot.eliminationBudget ? { populationBudget: snapshot.eliminationBudget } : {}),
     pirateCoordinates: coordinateLabel(snapshot.coordinate), piratePlanetName: 'Пираты',
     attacker: {
       playerId: snapshot.ownerId, playerName: state.profile.displayName,
@@ -426,8 +436,36 @@ export function resolvePirateEliminationAtTarget(state: SaveState, flight: Fligh
   if (encounter.kind !== 'resolved') return null;
   // The ordinary entity lookup skips all pirate stacks; pirate hull debris is
   // calculated separately by the existing PvE debris rule (including Corsair).
-  const debris = calculateAttackDebris(encounter.report, launch.attackerFactionId, launch.attackerFactionId);
-  const report: BattleReport = { ...encounter.report, debris, resources: { metal: 0, minerals: 0, gas: 0 } };
+  const baseDebris = calculateAttackDebris(encounter.report, launch.attackerFactionId, launch.attackerFactionId);
+  const basePirateDebris = calculatePirateForceDebris(
+    encounter.report.defenderForce, encounter.report.attackerForce, encounter.report.missionType);
+  // Modifiers are frozen at launch. Legacy defeats/draws retain x1.
+  const multiplier=encounter.victory&&snapshot.eliminationBudget ? (snapshot.rewardMultiplier??1)
+    : encounter.report.winner==='draw' ? (snapshot.drawMultiplier??1)
+    : (snapshot.defeatMultiplier??1);
+  // addDebris intentionally drops negative amounts; apply the multiplier to
+  // pirate wreckage FIRST, then add the ordinary untouched own-hull salvage.
+  const ownDebris=Math.max(0,baseDebris-basePirateDebris);
+  const adjustedPirateDebris=Math.floor(basePirateDebris*multiplier);
+  const bonusPirateDebris=adjustedPirateDebris-basePirateDebris;
+  const debris=addDebris(ownDebris,adjustedPirateDebris);
+  const report: BattleReport = {
+    ...encounter.report, debris, resources: { metal: 0, minerals: 0, gas: 0 },
+    pirateReward: {
+      version: 1,
+      sentCombatPopulation: snapshot.sentCombatPopulation ?? encounter.sentCombatPopulation,
+      historicalHangarCapacity: snapshot.historicalHangarCapacity ?? 0,
+      garrisonCoefficient: snapshot.eliminationBudget?.coefficient ?? 0.9,
+      garrisonTargetPopulation: snapshot.eliminationBudget?.targetPopulation ?? encounter.populationBudget.targetPopulation,
+      multiplier,
+      basePirateDebris,
+      bonusPirateDebris,
+      ownDebris,
+      threatReductionFraction: encounter.victory && snapshot.eliminationBudget && snapshot.historicalHangarCapacity
+        ? Math.min(1, (snapshot.sentCombatPopulation ?? 0) / snapshot.historicalHangarCapacity)
+        : 0,
+    },
+  };
   const fleet = applyDestroyedToFleet(removeSolarSatellitesFromFleet(origin.fleet).fleet, report.attackerForce, launch.attackerFactionId);
   let next = replacePlanetState(state, flight.originPlanetId, { ...origin, fleet });
   next = addReport(next, report);
@@ -524,7 +562,7 @@ export function createBot01IncomingAttackSnapshot(
 ): AttackLaunchSnapshot {
   return {
     version: 1,
-    maxRounds: 8,
+    maxRounds: 12,
     attackerFactionId: source.raceId,
     attackerTechnologies: technologiesFromScience(profile.scienceLevels),
     attackerShipLevels: Object.fromEntries(Object.entries(profile.shipLevels).map(([id, level]) => [id, safeLevel(level)])),
@@ -842,4 +880,145 @@ export function getAttackCommanderSelection(state: SaveState, planetId: string):
 
 export function createAttackPriority(): CommanderId[] {
   return [...DEFAULT_PRIORITY.attack];
+}
+
+
+/**
+ * Incoming pirate flight: the shared combat engine and actual owned/NPC saves,
+ * never planet siege or construction demolition. Results are ledgered by flight.
+ */
+export function resolvePirateIncomingRaid(state: SaveState, flight: FlightRecord, now: number): AttackResolutionResult | null {
+  if (flight.missionId !== 'pirate-raid' || flight.ownerSide !== 'pirate') return null;
+  const raid = normalizePirateRaidSnapshot(flight.pirateRaidSnapshot);
+  if (!raid || !flight.destinationPlanetId || raid.targetPlanetId !== flight.destinationPlanetId
+    || raid.ownerId !== flight.destinationOwnerId) return null;
+  const reportId = `battle-pirate-raid-${flight.id}`;
+  const existing = state.combat.reports.find((item) => item.id === reportId);
+  if (existing) return {
+    state, report: existing,
+    resolution: flight.attackResolution ?? {
+      reportId, resolvedAt: now, debris: safeCount(existing.debris),
+      loot: reportLoot(existing), planetDestroyed: false,
+    },
+  };
+  const playerTarget = raid.ownerId === state.profile.playerId
+    ? state.planets[flight.destinationPlanetId] : undefined;
+  const npcTarget = !playerTarget
+    ? getEspionageTargets(state.espionage)[flight.destinationPlanetId] : undefined;
+  if (!playerTarget && (!npcTarget || npcTarget.ownerId !== raid.ownerId)) return null;
+  const coordinate = playerTarget
+    ? { galaxy: playerTarget.universeGalaxy ?? 1, system: playerTarget.universeSystem ?? 1,
+      position: playerTarget.universePosition ?? 1 }
+    : npcTarget!.coordinate;
+  if (coordinate.galaxy !== flight.destinationCoordinate.galaxy
+    || coordinate.system !== flight.destinationCoordinate.system
+    || coordinate.position !== flight.destinationCoordinate.position) return null;
+  const factionId = playerTarget ? state.profile.factionId as CombatFactionId : npcTarget!.raceId;
+  const defenderPriority = [...DEFAULT_PRIORITY.defense];
+  const targetFleet = playerTarget
+    ? availableOwnedFleetForCombat(state, flight.destinationPlanetId, playerTarget)
+    : npcTarget!.fleet;
+  const targetDefense = playerTarget ? playerTarget.defense : npcTarget!.defense;
+  const npcProfile = npcTarget ? resolveSpyOwnerProfile(npcTarget, state.espionage?.bot01Profile) : undefined;
+  const defenderShipLevels = playerTarget ? getOwnerShipUpgradeLevels(state) : npcProfile?.shipLevels ?? {};
+  const defenderCommanderLevels = playerTarget
+    ? Object.fromEntries(COMMANDER_IDS.map((id) => [id, getOwnerShipUpgradeLevel(state,id)]))
+    : npcProfile?.commanderLevels ?? {};
+  const defenderShips = shipStacks(factionId, targetFleet.ships, defenderShipLevels as Partial<Record<ShipId,number>>);
+  const defenderCommanders = selectedCommanderStacks(
+    targetFleet.commanders, defenderCommanderLevels as Partial<Record<CommanderId,number>>, defenderPriority);
+  const pirateShips: CombatStackInput[] = Object.entries(raid.composition).map(([entityId,count]) => ({
+    entityId: entityId as import('../domain/pirates/catalog.ts').PirateBaseShipId,
+    count: safeCount(count),
+    level: raid.profile.shipLevel,
+  }));
+  if (!pirateShips.length) return null;
+  const input: CombatInput = {
+    scenarioId: flight.id,
+    timestamp: new Date(flight.arrivalAt).toISOString(),
+    attacker: {
+      participant: {
+        playerId: 'pirates', playerName: 'Пиратский флот',
+        planetName: 'Пиратская база',
+        coordinates: coordinateLabel(flight.originCoordinate),
+        race: 'pirates', side: 'attacker',
+      },
+      combatProfile: {kind:'pirate',snapshot:raid.profile},
+      ships: pirateShips,
+      commanders: [], commander: null, activeCommanderId:null,
+    },
+    defender: {
+      participant: {
+        playerId:raid.ownerId,
+        playerName:playerTarget ? state.profile.displayName : npcTarget!.ownerName,
+        planetName:playerTarget?.name ?? npcTarget!.name,
+        coordinates:coordinateLabel(coordinate),
+        race:getCombatFactionName(factionId),side:'defender',
+      },
+      factionId,
+      ships:defenderShips, commanders:defenderCommanders,
+      commander:defenderCommanders[0]??null,
+      activeCommanderId:defenderPriority.find((id)=>defenderCommanders.some((stack)=>stack.entityId===id))??null,
+      defenses:defenseStacks(factionId,targetDefense.defenses),
+    },
+    // Existing in-flight pirates never recorded maxRounds: preserve their 8 rounds.
+    maxRounds:raid.maxRounds ?? 8,
+    attackerPriority:[], defenderPriority,
+    attackerTechnologies:raid.profile.technologies,
+    defenderTechnologies:playerTarget ? technologiesFromScience(state.science.levels)
+      : technologiesFromScience(npcProfile?.scienceLevels ?? {}),
+    technologyMode:'independent',executionMode:'production',
+    seed:`pirate-raid-combat-v1:${flight.id}`,
+    profileId:'asterion-pirate-raid-v1',
+  };
+  const rawReport = resolveCombat(input,{reportId,missionType:'pirate-raid'});
+  const debris = calculateAttackDebris(rawReport,factionId,factionId);
+  const targetResources = playerTarget
+    ? getPlanetResources(state,flight.destinationPlanetId)
+    : npcTarget!.resources;
+  const loot = calculateAttackLoot(rawReport,targetResources,factionId);
+  const outcome: BattleReport = {
+    ...rawReport, debris, resources:{metal:loot.metal,minerals:loot.minerals,gas:loot.gas},
+  };
+  const currentRepair = playerTarget?.repair ?? npcTarget?.repair ?? createDefaultRepairWorkshopState();
+  const repair = claimDefensiveBattleRepair(currentRepair,outcome,{allowAttackDefender:true});
+  const report = annotateBattleReportRepair(outcome,repair);
+  const remainingDefense = {defenses:{...targetDefense.defenses}};
+  for(const stack of report.defenderForce.defenses??[]){
+    const id=stack.entityId as DefenseId;
+    remainingDefense.defenses[id]=Math.max(0,safeCount(remainingDefense.defenses[id])-safeCount(stack.destroyed));
+  }
+  const resourcesAfterLoot={
+    metal:Math.max(0,safeCount(targetResources.metal)-loot.metal),
+    minerals:Math.max(0,safeCount(targetResources.minerals)-loot.minerals),
+    gas:Math.max(0,safeCount(targetResources.gas)-loot.gas),
+  };
+  let next:SaveState=state;
+  if(playerTarget){
+    next=replacePlanetState(next,flight.destinationPlanetId,{
+      ...playerTarget,
+      fleet:applyDestroyedToFleet(playerTarget.fleet,report.defenderForce,factionId),
+      defense:remainingDefense,repair:repair.state,resources:resourcesAfterLoot,
+    });
+    next=preserveOwnedPlanetOrbitalDebris(next,flight.destinationPlanetId,debris,reportId,now);
+  }else if(npcTarget && next.espionage){
+    // Reuse the canonical NPC loss accounting: it updates fleet, defenses,
+    // total/fleet/defense population and commander snapshots together.
+    const afterLosses = applyDestroyedToTarget(next, { ...npcTarget, repair: repair.state }, report);
+    const updated = {
+      ...afterLosses,
+      resources: { ...npcTarget.resources, ...resourcesAfterLoot,
+        debris: addDebris(npcTarget.resources.debris, debris) },
+    };
+    const targets={...getEspionageTargets(next.espionage),[npcTarget.id]:updated};
+    next={...next,espionage:{
+      ...next.espionage,targets,
+      ...(next.espionage.bot01Planets ? {bot01Planets:targets}:{}),
+    }};
+  }
+  next=addReport(next,report);
+  return {
+    state:next,report,
+    resolution:{reportId,resolvedAt:safeCount(now),debris,loot,planetDestroyed:false},
+  };
 }

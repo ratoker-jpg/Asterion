@@ -21,7 +21,7 @@ import {
 import { getFactionCombatEntity } from './faction-catalog.ts';
 import type { CombatEntityId, CombatStackEntityId } from './ids.ts';
 import { getCombatEntityForSide, isPirateShipId, type CombatSideProfile } from './side-entity.ts';
-import { pirateTechnologyLevels } from '../pirates/profile.ts';
+import { frozenPirateTechnologyLevels } from '../pirates/profile.ts';
 import type { CombatPriorityState } from './priority.ts';
 import { isValidPiratePveDirection, type BattleMissionType, type BattleParticipant } from './report.ts';
 import {
@@ -475,11 +475,27 @@ export function validateCombatInput(input: CombatInput, options: CombatValidatio
     }
   }
 
+  // A dispatched pirate must keep the technology vector frozen in its
+  // snapshot. Recomputing from score would silently upgrade old in-flight
+  // fleets after the approved percentage change, changing past combat results.
+  const frozenAttacker = input.attacker.combatProfile?.kind === 'pirate'
+    ? frozenPirateTechnologyLevels(input.attacker.combatProfile.snapshot) : null;
+  const frozenDefender = input.defender.combatProfile?.kind === 'pirate'
+    ? frozenPirateTechnologyLevels(input.defender.combatProfile.snapshot) : null;
+  for (const [path, side, frozen] of [
+    ['attacker.combatProfile', input.attacker, frozenAttacker],
+    ['defender.combatProfile', input.defender, frozenDefender],
+  ] as const) {
+    if (side.combatProfile?.kind === 'pirate' && !frozen) {
+      errors.push({ code: 'technology-profile-mismatch', path,
+        message: 'Снимок пиратских технологий должен совпадать с утверждённой или старой сохранённой шкалой.' });
+    }
+  }
   const attackerTechnologies = input.attacker.combatProfile?.kind === 'pirate'
-    ? pirateTechnologyLevels(input.attacker.combatProfile.snapshot.score.resourcePoints, input.attacker.combatProfile.snapshot.exclusiveTechnologyId)
+    ? normalizeCombatTechnologies(frozenAttacker)
     : normalizeCombatTechnologies(input.attackerTechnologies);
   const defenderTechnologies = input.defender.combatProfile?.kind === 'pirate'
-    ? pirateTechnologyLevels(input.defender.combatProfile.snapshot.score.resourcePoints, input.defender.combatProfile.snapshot.exclusiveTechnologyId)
+    ? normalizeCombatTechnologies(frozenDefender)
     : normalizeCombatTechnologies(input.defenderTechnologies);
   for (const [path, levels] of [['attackerTechnologies', attackerTechnologies], ['defenderTechnologies', defenderTechnologies]] as const) {
     const additional = ['piercingAttack', 'maneuverDefense', 'criticalHit']
@@ -533,7 +549,14 @@ export function validateCombatInput(input: CombatInput, options: CombatValidatio
       message: `Флот атакующего превышает лимит ${SIMULATOR_POPULATION_LIMITS.attackerFleet.toLocaleString('ru-RU')}.`,
     });
   }
-  if (options.allowPopulationOverflow !== true && defenderFleetPopulation > SIMULATOR_POPULATION_LIMITS.defenderFleet) {
+  // Pirate-elimination bases may legitimately field 110% of the launched
+  // player's combat population. Permit only that narrow PvE defender
+  // overflow; keep player and non-pirate fleet limits unchanged.
+  const approvedPirateGarrisonOverflow = options.missionType === 'pirate-elimination'
+    && normalized.defender.combatProfile?.kind === 'pirate'
+    && defenderFleetPopulation <= Math.round(attackerPopulation * 1.10);
+  if (options.allowPopulationOverflow !== true && !approvedPirateGarrisonOverflow
+    && defenderFleetPopulation > SIMULATOR_POPULATION_LIMITS.defenderFleet) {
     errors.push({
       code: 'population-overflow',
       path: 'defender',

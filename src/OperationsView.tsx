@@ -16,6 +16,7 @@ import type { PirateContactPresentation } from './pirate-ui.ts';
 import { isPirateOperationId, pirateContactOperation, pirateCycleOperation, pirateOperationId } from './application/pirate-presentation.ts';
 import { getUniverseSlotPoint } from './domain/universe/runtime.ts';
 import { getPirateRaidCheckProgress } from './domain/pirates/contact-schedule.ts';
+import { pirateAdaptiveInterval, type PirateOwnerAdaptation } from './domain/pirates/adaptive.ts';
 import { getPiratePlanetArt } from './pirate-planet-art.ts';
 import './operations.css';
 
@@ -26,6 +27,13 @@ type OperationsViewProps = {
   onReveal: (operationId: OperationId) => void;
   onOpenFleets: () => void;
   pirateContacts?: readonly PirateContactPresentation[];
+  pirateThreatPercent?: number;
+  /** Diagnostic only; NEVER pass in production runtime. */
+  pirateAdaptiveDiagnostics?:PirateOwnerAdaptation;
+  onPirateBattleExport?: () => void;
+  pirateRaidRolls?: Readonly<Record<string, Readonly<{checkAt:number;seed:string;flightId?:string}>>>;
+  pirateOwnerId?: string;
+  pirateCheckDelayMs?: number;
   completedPirateOperations?: readonly CompletedPirateOperation[];
   onPirateBattleReport?: (reportId: string) => void;
   onPirateAccept?: (contact: PirateContactPresentation) => void;
@@ -38,7 +46,7 @@ type OperationsViewProps = {
 };
 
 type OperationsTab = Extract<OperationState, 'available' | 'active' | 'completed'>;
-type CompletedPirateOperation = { cycleKey: string; coordinate: PirateContactPresentation['coordinate']; reportId: string; defeatedAt: number; rounds: number; debris: number };
+type CompletedPirateOperation = { cycleKey: string; coordinate: PirateContactPresentation['coordinate']; reportId: string; defeatedAt: number; rounds: number; debris: number; reward?: {sentCombatPopulation:number;historicalHangarCapacity:number;multiplier:number;basePirateDebris:number;bonusPirateDebris:number;ownDebris:number;threatReductionFraction:number} };
 type OperationRow = { operation: OperationInstance; contact?: PirateContactPresentation; completed?: CompletedPirateOperation; battleReportId?: string };
 
 const TAB_LABELS: Record<OperationsTab, string> = {
@@ -210,21 +218,21 @@ function TacticalScope({ operation, contact }: { operation: OperationInstance; c
   );
 }
 
-function OperationCard({ operation, selected, onSelect, contact, nowMs }: {
+function OperationCard({ operation, selected, onSelect, contact, nowMs, pirateRaidRoll, pirateCheckDelayMs }: {
   operation: OperationInstance;
   selected: boolean;
   onSelect: () => void;
   contact?: PirateContactPresentation;
   nowMs: number;
+  pirateRaidRoll?: Readonly<{checkAt:number;seed:string;flightId?:string}>;
+  pirateCheckDelayMs?: number;
 }) {
   const intelZero = operation.intel === 0;
   const firstReward = rewardEntries(operation)[0];
   const pirate = isPirateOperationId(operation.id);
   const pirateCycle = pirate ? (contact?.contactCycleKey ?? operation.id.slice('pirate:'.length)).split(':') : [];
   const pirateArt = pirate ? getPiratePlanetArt(Number(pirateCycle[2]), Number(pirateCycle[3])) : null;
-  // Cycle identity freezes the display's 15-minute anchor; this isn't the
-  // procedural base-spawn schedule or a working incoming attack scheduler.
-  const raidCheck = contact ? getPirateRaidCheckProgress(Number(pirateCycle[4]), nowMs) : null;
+  const raidCheck = contact ? getPirateRaidCheckProgress(Number(pirateCycle[4]), nowMs,pirateCheckDelayMs) : null;
 
   return (
     <button
@@ -252,14 +260,15 @@ function OperationCard({ operation, selected, onSelect, contact, nowMs }: {
         </span>
         {raidCheck ? <span className="operation-feed-raid-check-v2" data-qa-raid-check-interval="15m">
           <span className="operation-feed-raid-check-label-v2">
-            <span>ДО ПРОВЕРКИ НАПАДЕНИЯ</span>
-            <strong role="timer">{pirateRemainingLabel(raidCheck.nextAt, nowMs)}</strong>
+            <span>{pirateRaidRoll ? 'ПРОВЕРКА ЗАВЕРШЕНА' : 'ДО ПРОВЕРКИ НАПАДЕНИЯ'}</span>
+            <strong role="timer">{pirateRaidRoll ? (pirateRaidRoll.flightId ? 'РЕЙД ОТПРАВЛЕН' : 'РЕЙДА НЕТ')
+              : raidCheck.remainingMs > 0 ? pirateRemainingLabel(raidCheck.nextAt, nowMs) : 'ПРОВЕРЯЕТСЯ'}</strong>
           </span>
           <span className="operations-pirate-cooldown-track" role="progressbar" aria-label="15-минутный интервал проверки возможного нападения"
             aria-valuemin={0} aria-valuemax={100} aria-valuenow={raidCheck.percent}>
             <span className="operations-pirate-cooldown-mask" style={{ width: `${100 - raidCheck.percent}%` }} />
           </span>
-          <span className="operation-feed-raid-check-note-v2">Автоатаки пока не подключены</span>
+          <span className="operation-feed-raid-check-note-v2">Одна проверка на владельца и цикл, независимо от числа колоний</span>
         </span> : null}
       </span>
       <span className="operation-feed-arrow-v2">›</span>
@@ -338,6 +347,13 @@ function OperationDossier({ operation, pirateContact, battleReportId, completed,
           <div className="operations-completed-report-facts-v2">
             <div><small>ИСХОД</small><strong>ПОБЕДА</strong></div>
             <div><small>РАУНДОВ</small><strong>{completed.rounds}</strong></div>
+            {completed.reward ? <>
+              <div><small>ОТПРАВЛЕНО / АНГАР</small><strong>{number.format(completed.reward.sentCombatPopulation)} / {number.format(completed.reward.historicalHangarCapacity)}</strong></div>
+              <div><small>МНОЖИТЕЛЬ ОБЛОМКОВ</small><strong>×{completed.reward.multiplier}</strong></div>
+              <div><small>ПИРАТСКИЕ ОБЛОМКИ / БОНУС</small><strong>{number.format(completed.reward.basePirateDebris)} / {completed.reward.bonusPirateDebris>=0?'+':'−'}{number.format(Math.abs(completed.reward.bonusPirateDebris))}</strong></div>
+              <div><small>СВОИ ОБЛОМКИ</small><strong>{number.format(completed.reward.ownDebris)}</strong></div>
+              <div><small>СНИЖЕНИЕ УГРОЗЫ</small><strong>{(completed.reward.threatReductionFraction*100).toFixed(1)}%</strong></div>
+            </> : null}
             <div><small>ОБЛОМКИ НА ОРБИТЕ</small><strong><ResourceIcon kind="debris" /> {number.format(completed.debris)}</strong></div>
             <div><small>ЗАВЕРШЕНО</small><strong>{new Date(completed.defeatedAt).toLocaleString('ru-RU')}</strong></div>
           </div>
@@ -455,7 +471,7 @@ function OperationDossier({ operation, pirateContact, battleReportId, completed,
   );
 }
 
-export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, pirateContacts = [], completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
+export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
   const [tab, setTab] = useState<OperationsTab>('available');
   const [selectedId, setSelectedId] = useState<OperationId | null>(null);
 
@@ -525,6 +541,45 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
         </nav>
         <div className="operations-slots-v2"><small>ПИРАТСКИЕ БАЗЫ</small><strong>{pirateContacts.length}</strong><span>активны</span></div>
       </header>
+      <section className="operations-pirate-threat-v2" aria-label="Пиратская угроза">
+        <div><small>ПИРАТСКАЯ УГРОЗА</small>
+          <strong>{pirateThreatPercent.toLocaleString('ru-RU',{minimumFractionDigits:1,maximumFractionDigits:1})}%</strong>
+        </div>
+        <div className="operations-pirate-threat-body-v2">
+          <div role="progressbar" aria-label="Пиратская угроза от 2% до 30%"
+            aria-valuemin={2} aria-valuemax={30} aria-valuenow={pirateThreatPercent}>
+            <span style={{width:`${Math.max(0,Math.min(100,(pirateThreatPercent-2)/28*100))}%`}}/>
+          </div>
+          <p>Вероятность отправки рейда при проверке одной пиратской базы в одной системе.
+            Каждая система проверяется отдельно — это не шанс победы пиратов или уничтожения планеты.</p>
+          <small>Чем меньше боевых очков относительно ресурсных, тем быстрее растёт угроза.
+            Полная победа над базой снижает её пропорционально отправленному боевому населению.</small>
+        </div>
+      </section>
+      {pirateAdaptiveDiagnostics && (() => {
+        const d=pirateAdaptiveDiagnostics;
+        const band=pirateAdaptiveInterval(d.q);
+        const attempts=d.wins+d.draws+d.losses;
+        const pct=(v:number)=>`${(v*100).toLocaleString('ru-RU',{minimumFractionDigits:1,maximumFractionDigits:1})}%`;
+        return <section className="operations-pirate-adaptive-test-v1" aria-label="Диагностика пиратов Test Mode" data-qa-pirate-adaptive-test>
+          <div className="operations-pirate-adaptive-header-v1">
+            <strong>TEST MODE // СКРЫТАЯ АДАПТАЦИЯ ПИРАТОВ</strong>
+            {onPirateBattleExport && <button type="button" className="operations-pirate-export-button-v1"
+              data-qa-pirate-export onClick={onPirateBattleExport}
+              title="Скачать все бои текущего игрока с пиратскими базами: составы флотов, потери, раунды и коэффициенты">
+              <span aria-hidden="true">↓</span> СКАЧАТЬ ВСЕ БОИ (.JSON)
+            </button>}
+          </div>
+          <div className="operations-pirate-adaptive-metrics-v1">
+            <span>Победы: <b data-qa-pirate-win-rate>{attempts?pct(d.wins/attempts):'—'}</b> ({d.wins}/{attempts})</span>
+            <span>Взвешенный результат: <b data-qa-pirate-weighted-win>{d.weightedBattles>0?pct(d.weightedWins/d.weightedBattles):'—'}</b></span>
+            <span>Адаптивный индекс Q: <b data-qa-pirate-q>{pct(d.q)}</b></span>
+            <span>Гарнизон следующей атаки: <b data-qa-pirate-next-band>{pct(band.min)}–{pct(band.max)}</b> от отправленного населения</span>
+            <span>Последний ролл: <b data-qa-pirate-last-roll>{d.lastRoll ? pct(d.lastRoll.coefficient) : '—'}</b>{d.lastRoll?' от '+d.lastRoll.sentPopulation.toLocaleString('ru-RU')+' населения':''}</span>
+          </div>
+          <small>Индекс влияет только на случайный размер гарнизона. Не назначает исход боя. Дешёвые незначимые бои не меняют его.</small>
+        </section>;
+      })()}
       <div className="operations-layout-v2">
         <section className="operations-feed-v2" aria-label={TAB_LABELS[tab]}>
           <header><div><small>КАНАЛ // {TAB_LABELS[tab]}</small><strong>{tab === 'available' ? 'ВХОДЯЩИЕ КОНТАКТЫ' : tab === 'active' ? 'ТЕКУЩИЕ ЗАДАЧИ' : 'АРХИВ ОПЕРАЦИЙ'}</strong></div><span>{visibleRows.length}</span></header>
@@ -535,6 +590,8 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
                 operation={row.operation}
                 contact={row.contact}
                 nowMs={nowMs}
+                pirateCheckDelayMs={pirateCheckDelayMs}
+                pirateRaidRoll={row.contact ? pirateRaidRolls[JSON.stringify([pirateOwnerId,row.contact.contactCycleKey])] : undefined}
                 selected={row.operation.id === selectedRow?.operation.id}
                 onSelect={() => setSelectedId(row.operation.id)}
               />)}

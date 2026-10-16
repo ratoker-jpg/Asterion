@@ -18,6 +18,7 @@ import {
 import { calculateAttackDebris } from './attack.ts';
 import { calculatePirateForceDebris } from '../domain/pirates/debris.ts';
 import { calculatePirateEliminationPopulationBudget } from '../domain/pirates/profile.ts';
+import { isPirateMissionSnapshot, normalizePirateMissionSnapshot } from '../domain/pirates/mission.ts';
 import { PIRATE_BASE_SHIPS, type PirateBaseShipId } from '../domain/pirates/catalog.ts';
 import { getUniverseTimedObjectSchedule } from '../domain/universe/runtime.ts';
 import type { UniverseCoordinate } from '../domain/universe/types.ts';
@@ -188,6 +189,13 @@ test('public elimination dispatch resolves a full wipe, applies the quiet window
   assert.equal(launched.ok, true);
   if (!launched.ok) return;
   assert.ok(launched.flight.arrivalAt < contact.expiresAt);
+  const adaptiveSnapshot=launched.flight.pirateSnapshot!;
+  assert.equal(adaptiveSnapshot.adaptiveQ,0);
+  assert.ok(adaptiveSnapshot.adaptiveWeight!==undefined);
+  assert.ok(adaptiveSnapshot.eliminationBudget!.coefficient!>=0.90
+    &&adaptiveSnapshot.eliminationBudget!.coefficient!<0.95);
+  assert.equal(adaptiveSnapshot.defeatMultiplier,0.5);
+  assert.equal(adaptiveSnapshot.drawMultiplier,0.75);
   const launchSnapshot = launched.flight.attackSnapshot!;
   const reportId = `battle-pirate-${launched.flight.id}`;
   const changedScience = Object.fromEntries(COMBAT_TECHNOLOGIES.map((technology) => [technology.sourceScienceId, 0]));
@@ -201,6 +209,13 @@ test('public elimination dispatch resolves a full wipe, applies the quiet window
   assert.ok(report, 'arrival must create the canonical combat report');
   assert.equal(report.winner, 'attacker');
   assert.equal(report.defenderForce.populationAfter, 0);
+  const adaptation=arrived.state.pirate?.ownerAdaptations?.[state.profile.playerId];
+  assert.ok(adaptation);
+  if(adaptiveSnapshot.adaptiveWeight!>=0.05){
+    assert.equal(adaptation.wins,1);
+    assert.ok(adaptation.q>0);
+    assert.equal(adaptation.weightedBattles,adaptiveSnapshot.adaptiveWeight);
+  }
   assert.equal(report.attacker.race, 'Астеры');
   assert.equal(report.defender.race, 'pirates');
   assert.deepEqual(report.attackerForce.technologyLevels, launchSnapshot.attackerTechnologies);
@@ -268,9 +283,14 @@ test('a defeated commander is removed once, contributes ordinary debris, and doe
   assertNoBattlePointAward(arrived.state, reportId);
   const corsairEntity = COMMANDER_COMBAT_CATALOG.find((entity) => entity.id === 'corsair')!;
   const corsairOrdinaryDebris = Math.floor(corsairEntity.cost.metal * 0.3) + Math.floor(corsairEntity.cost.minerals * 0.3);
-  const pirateDebris = calculatePirateForceDebris(report.defenderForce, report.attackerForce, report.missionType)
-    + calculatePirateForceDebris(report.attackerForce, report.defenderForce, report.missionType);
-  assert.ok((report.debris ?? 0) - pirateDebris >= corsairOrdinaryDebris);
+  const basePirateDebris = calculatePirateForceDebris(report.defenderForce, report.attackerForce, report.missionType);
+  const expectedMultiplier=report.winner==='draw'?0.75:0.5;
+  assert.equal(report.pirateReward?.multiplier,expectedMultiplier);
+  const ownDebris=calculateAttackDebris(report,launched.flight.attackSnapshot!.attackerFactionId,
+    launched.flight.attackSnapshot!.attackerFactionId)-basePirateDebris;
+  assert.ok(ownDebris>=corsairOrdinaryDebris,'own hull debris remains at standard 30%, even on pirate defeat');
+  assert.equal(report.debris,ownDebris+Math.floor(basePirateDebris*expectedMultiplier),
+    'only pirate wreckage receives x0.5 or x0.75; own wreckage is never penalized');
 
   const returning = arrived.state.flights.records.find((flight) => flight.id === launched.flight.id)!;
   const returned = arrive(arrived.state, returning.returnAt!);
@@ -292,7 +312,10 @@ test('a defeated commander is removed once, contributes ordinary debris, and doe
     ships: { ...emptyFleet.ships, ...secondManifest.ships },
   }, returned.state.profile.factionId);
   const secondProfile = second.flight.pirateSnapshot!.profile;
-  const expectedGarrison = calculatePirateEliminationPopulationBudget(Math.round(secondSentPopulation), secondProfile.shares);
+  const expectedGarrison = second.flight.pirateSnapshot!.eliminationBudget
+    ?? calculatePirateEliminationPopulationBudget(Math.round(secondSentPopulation), secondProfile.shares);
+  assert.ok(expectedGarrison.targetPopulation >= Math.floor(secondSentPopulation * 0.85) - 1);
+  assert.ok(expectedGarrison.targetPopulation <= Math.ceil(secondSentPopulation * 1.05) + 1);
   assert.equal(secondReport.defenderForce.populationBefore, expectedGarrison.actualPopulation);
   assert.deepEqual(
     pirateDefenderStacks(secondReport).map((stack) => [stack.entityId, stack.countBefore]),
@@ -341,7 +364,7 @@ test('same-time elimination arrivals are ordered by flight id and only the first
   assert.equal(getAvailableFleetForPlanet(completed.state, ORIGIN_ID).ships['death-star'], 100 - lost);
 });
 
-test('public elimination draw does not defeat the cycle', () => {
+test('small elimination awards no BP and defeats a cycle only on a full victory', () => {
   const manifest = { ships: { scout: 1 }, commanders: { corsair: 1 } } satisfies FleetManifest;
   const { state, contact, now } = fixture(manifest, { resourcePoints: 0, scienceLevel: 0 });
   const launched = dispatchElimination(state, contact, now, 'pirate-draw-0', manifest, 5);
@@ -350,8 +373,11 @@ test('public elimination draw does not defeat the cycle', () => {
   const arrived = arrive(launched.state, launched.flight.arrivalAt);
   const report = arrived.state.combat.reports.find((candidate) => candidate.id === `battle-pirate-${launched.flight.id}`);
   assert.ok(report);
-  assert.equal(report.winner, 'draw');
-  assert.equal(arrived.state.pirate?.contact.defeatedCycles[contact.contactCycleKey], undefined);
+  if (report.winner === 'attacker' && report.defenderForce.populationAfter === 0) {
+    assert.ok(arrived.state.pirate?.contact.defeatedCycles[contact.contactCycleKey]);
+  } else {
+    assert.equal(arrived.state.pirate?.contact.defeatedCycles[contact.contactCycleKey], undefined);
+  }
   assertNoBattlePointAward(arrived.state, report.id);
 });
 
@@ -382,6 +408,98 @@ test('offline multi-day catch-up after reload resolves one launch snapshot and c
   const replay = arrive(completed.state, clock);
   assert.equal(replay.state.combat.reports.filter((candidate) => candidate.id === reportId).length, 1);
   assert.deepEqual(replay.state.pirate?.contact.defeatedCycles, completed.state.pirate?.contact.defeatedCycles);
+  assert.deepEqual(replay.state.pirate?.ownerAdaptations,completed.state.pirate?.ownerAdaptations,
+    'offline replay must not credit the same victory twice');
   assert.deepEqual(replay.state.planets[ORIGIN_ID]?.fleet, completed.state.planets[ORIGIN_ID]?.fleet);
   assert.equal(replay.state.flights.records.find((flight) => flight.id === launched.flight.id)?.phase, 'completed');
+});
+
+test('new and pre-patch stored elimination snapshots survive reload and arrival without garrison recalculation or duplicate rewards',()=>{
+  const manifest={ ships:{'death-star':48} } satisfies FleetManifest;
+  const {state,contact,now}=fixture(manifest,{
+    shipUpgrades:{'death-star':10},scienceLevel:15,
+  });
+  for(const cohort of ['new','legacy'] as const){
+    const result=dispatchElimination(state,contact,now,`persist-garrison-${cohort}`,manifest);
+    assert.equal(result.ok,true);
+    if(!result.ok)return;
+    const actualFlight=result.flight;
+    const original=actualFlight.pirateSnapshot!;
+    assert.ok(original.eliminationBudget);
+    let storedBudget=original.eliminationBudget!;
+    if(cohort==='legacy'){
+      const target=Math.round(original.sentCombatPopulation!*0.78);
+      const smaller=calculatePirateEliminationPopulationBudget(
+        Math.max(0,Math.floor(target/0.9)-30),original.profile.shares);
+      assert.ok(smaller.actualPopulation>0&&smaller.actualPopulation<=target);
+      storedBudget=Object.freeze({
+        ...smaller,coefficient:0.78,targetPopulation:target,
+        absoluteError:target-smaller.actualPopulation,
+      });
+    }else{
+      assert.ok(storedBudget.coefficient!>=0.85&&storedBudget.coefficient!<1.05);
+    }
+    const snapshot={...original,eliminationBudget:storedBudget};
+    assert.equal(isPirateMissionSnapshot(snapshot,'pirate-elimination'),true);
+    const flight={...actualFlight,pirateSnapshot:snapshot};
+    const prepared={
+      ...result.state,
+      flights:{...result.state.flights,records:result.state.flights.records.map(f=>f.id===flight.id?flight:f)},
+    };
+    let clock=now;
+    const facade=createPersistenceFacade({mode:'test',storage:memoryStorage(),now:()=>clock});
+    assert.equal(facade.write(prepared).ok,true);
+    clock=flight.arrivalAt;
+    const loaded=facade.read();
+    const persisted=loaded.flights.records.find(f=>f.id===flight.id);
+    assert.ok(persisted,'flight must survive real save/load');
+    assert.deepEqual(persisted.pirateSnapshot!.eliminationBudget,storedBudget,'do not replace frozen garrison');
+    assert.deepEqual(persisted.attackSnapshot,flight.attackSnapshot,'attacker levels and technologies stay frozen');
+    assert.deepEqual(persisted.pirateSnapshot!.profile,original.profile,'NPC profile stays frozen');
+    assert.equal(persisted.pirateSnapshot!.rewardMultiplier,original.rewardMultiplier,'salvage multiplier stays frozen');
+    const arrived=arrive(loaded,clock);
+    const reportId=`battle-pirate-${flight.id}`;
+    const report=arrived.state.combat.reports.find(r=>r.id===reportId);
+    assert.ok(report,'real battle on arrival');
+    assert.equal(report!.defenderForce.populationBefore,storedBudget.actualPopulation);
+    assert.equal(report!.pirateReward?.multiplier,original.rewardMultiplier);
+    assert.equal(arrived.state.combat.reports.filter(r=>r.id===reportId).length,1);
+    assert.equal(facade.write(arrived.state).ok,true);
+    const again=facade.read();
+    const replay=arrive(again,clock);
+    assert.equal(replay.state.combat.reports.filter(r=>r.id===reportId).length,1);
+    assert.deepEqual(replay.state.rating,arrived.state.rating);
+    assert.deepEqual(replay.state.espionage?.orbitalDebris,arrived.state.espionage?.orbitalDebris);
+    const returning=replay.state.flights.records.find(f=>f.id===flight.id);
+    assert.ok(returning?.returnAt);
+    clock=returning!.returnAt!;
+    const completed=arrive(replay.state,clock);
+    const final=arrive(completed.state,clock);
+    assert.equal(final.state.combat.reports.filter(r=>r.id===reportId).length,1);
+    assert.deepEqual(final.state.espionage?.orbitalDebris,completed.state.espionage?.orbitalDebris);
+    assert.deepEqual(final.state.rating,completed.state.rating);
+  }
+});
+
+test('migration validator retains both historical 75–90% and approved 85–105% frozen coefficients',()=>{
+  const manifest={ships:{'death-star':48}} satisfies FleetManifest;
+  const {state,contact,now}=fixture(manifest,{shipUpgrades:{'death-star':10},scienceLevel:15});
+  const launched=dispatchElimination(state,contact,now,'migration-boundaries',manifest);
+  assert.equal(launched.ok,true);
+  if(!launched.ok)return;
+  const snapshot=launched.flight.pirateSnapshot!;
+  assert.ok(snapshot.adaptiveQ===0);
+  assert.ok(snapshot.adaptiveWeight!==undefined);
+  assert.ok(snapshot.eliminationBudget?.coefficient!==undefined);
+  assert.ok(snapshot.eliminationBudget!.coefficient!>=0.90&&snapshot.eliminationBudget!.coefficient!<0.95);
+  assert.ok(snapshot.eliminationBudget);
+  for(const coefficient of [0.75,0.80,0.85,0.9,1,1.05,1.10]){
+    const checked: typeof snapshot={...snapshot,eliminationBudget:{...snapshot.eliminationBudget!,coefficient}};
+    assert.equal(isPirateMissionSnapshot(checked,'pirate-elimination'),true,`accept frozen ${coefficient}`);
+    assert.equal(normalizePirateMissionSnapshot(checked)?.eliminationBudget?.coefficient,coefficient);
+  }
+  for(const coefficient of [0.749999,1.100001,Number.NaN]){
+    const bad: typeof snapshot={...snapshot,eliminationBudget:{...snapshot.eliminationBudget!,coefficient}};
+    assert.equal(isPirateMissionSnapshot(bad,'pirate-elimination'),false,`reject ${coefficient}`);
+  }
 });

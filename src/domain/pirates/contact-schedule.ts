@@ -4,27 +4,23 @@ export const PIRATE_CONTACT_MIN_LIFETIME_MS = 45 * 60 * 1_000;
 export const PIRATE_CONTACT_MAX_LIFETIME_MS = 75 * 60 * 1_000;
 export const PIRATE_CONTACT_QUIET_MS = 15 * 60 * 1_000;
 
-/**
- * UI countdown interval requested for a possible incoming raid check.
- * Scheduling actual raids is NOT implemented yet. Do not interpret crossing
- * this boundary as a battle/flight or persist fake combat results.
- */
+/** Exactly one roll, fifteen minutes after a newly spawned contact. */
 export const PIRATE_RAID_CHECK_INTERVAL_MS = 15 * 60 * 1_000;
 
-export function getPirateRaidCheckProgress(cycleStartAt: number, nowMs: number): {
+export function getPirateRaidCheckProgress(cycleStartAt: number, nowMs: number, checkDelayMs = PIRATE_RAID_CHECK_INTERVAL_MS): {
   remainingMs: number;
   percent: number;
   nextAt: number;
 } {
   const start = Number.isFinite(cycleStartAt) ? Math.floor(cycleStartAt) : 0;
   const now = Number.isFinite(nowMs) ? Math.floor(nowMs) : start;
+  const delay = Number.isFinite(checkDelayMs) && checkDelayMs > 0
+    ? Math.floor(checkDelayMs) : PIRATE_RAID_CHECK_INTERVAL_MS;
+  const nextAt = start + delay;
   const elapsed = Math.max(0, now - start);
-  const intervals = Math.floor(elapsed / PIRATE_RAID_CHECK_INTERVAL_MS);
-  const previousAt = start + intervals * PIRATE_RAID_CHECK_INTERVAL_MS;
-  const nextAt = previousAt + PIRATE_RAID_CHECK_INTERVAL_MS;
   return {
     remainingMs: Math.max(0, nextAt - now),
-    percent: Math.max(0, Math.min(100, Math.floor(((now - previousAt) / PIRATE_RAID_CHECK_INTERVAL_MS) * 100))),
+    percent: Math.max(0, Math.min(100, Math.floor(elapsed / delay * 100))),
     nextAt,
   };
 }

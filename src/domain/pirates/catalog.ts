@@ -32,7 +32,7 @@ export type PirateAbility =
   | Readonly<{ kind: 'armor-boost'; perShipRate: number; cap: number }>
   | Readonly<{ kind: 'double-attack'; chancePerShip: number; chanceCap: number; maxAdditionalAttacksPerRound: 1; selection: 'uniform-living-ship-type' }>
   | Readonly<{ kind: 'artillery'; attackMultiplierVsDefense: 1.5; perShipChance: number; chanceCap: number }>
-  | Readonly<{ kind: 'planet-breaker'; detonation: true; destructionChanceAtLevel10Bps: 1_500; incomingRaidOnly: true }>;
+  | Readonly<{ kind: 'planet-breaker'; detonation: false; defenseOnly: true }>;
 
 export type PirateShipDefinition = Readonly<{
   id: PirateShipId;
@@ -46,6 +46,8 @@ export type PirateShipDefinition = Readonly<{
   population: number;
   /** Neutral per-class route speed, using the source-class median. */
   flightSpeed: number;
+  /** Three-faction source-ship median cargo capacity. */
+  cargo: number;
   cost: Readonly<ResourceCost>;
   combat: Readonly<CombatStats>;
   ability: PirateAbility;
@@ -89,6 +91,7 @@ function neutralShip(input: {
     ...input,
     population: median(source.map((entity) => entity.population)),
     flightSpeed: median(source.map((entity) => entity.ship?.speed ?? 0)),
+    cargo: median(source.map((entity) => entity.ship?.cargo ?? 0)),
     cost: Object.freeze({
       metal: median(source.map((entity) => entity.cost.metal)),
       minerals: median(source.map((entity) => entity.cost.minerals)),
@@ -146,7 +149,7 @@ export const PIRATE_CATALOG: readonly PirateShipDefinition[] = Object.freeze([
   neutralShip({
     id: 'pirate-planet-breaker', sourceId: 'death-star', name: 'Погибель', imageFile: 'crown_eater.png', art: crownEaterArt,
     role: 'Planet breaker', ordinaryClass: 'planet-breaker', tier: 'special',
-    ability: Object.freeze({ kind: 'planet-breaker', detonation: true, destructionChanceAtLevel10Bps: 1_500, incomingRaidOnly: true }),
+    ability: Object.freeze({ kind: 'planet-breaker', detonation: false, defenseOnly: true }),
   }),
 ]);
 

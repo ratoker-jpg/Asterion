@@ -14,7 +14,7 @@ import { createDefaultBuildingLevels } from '../domain/buildings/resource-zone.t
 import { getAvailableProductionBots, getProductionBotBonusPercent } from '../domain/buildings/production-bots.ts';
 import { getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 import { selectCurrentAlliance } from '../domain/command/selectors.ts';
-import { calculateAttackDebris, calculateAttackLoot, resolveAttackAtTarget, resolveBot01IncomingAttack, technologiesFromScience } from './attack.ts';
+import { calculateAttackDebris, calculateAttackLoot, resolveAttackAtTarget, resolveBot01IncomingAttack, technologiesFromScience, normalizeAttackRounds, createAttackLaunchSnapshot, createBot01IncomingAttackSnapshot } from './attack.ts';
 import { getFactionCombatEntity } from '../domain/combat/faction-catalog.ts';
 import { calculateBattlePoints } from '../domain/combat/battle-points.ts';
 import { getCombatFactionId } from '../domain/combat/factions.ts';
@@ -394,8 +394,15 @@ test('attacker victory reserves ordered loot until the surviving fleet returns',
   const lootTotal = resolution.loot.metal + resolution.loot.minerals + resolution.loot.gas;
   assert.equal(report.winner, 'attacker');
   assert.ok(lootTotal > 0);
-  assert.ok(resolution.loot.metal <= Math.floor(10_000_000 * 0.75));
-  assert.ok(arrival.state.espionage!.targets![targetId].resources.metal < 10_000_000);
+  const preLaunchMetal=initial.espionage!.targets![targetId].resources.metal;
+  const afterAttackMetal=arrival.state.espionage!.targets![targetId].resources.metal;
+  // NPC resource production accrues during travel, so the arrival balance
+  // can exceed the launch balance even after real loot was deducted.
+  const preBattleMetal=afterAttackMetal+resolution.loot.metal;
+  assert.ok(preBattleMetal>=preLaunchMetal,'NPC passive production must not be lost');
+  assert.ok(resolution.loot.metal<=Math.floor(preBattleMetal*0.75),
+    'the 75% loot cap applies to the live *arrival* wallet');
+  assert.ok(afterAttackMetal<preBattleMetal,'nonzero loot must debit the arrival wallet');
 
   const originBeforeReturn = getPlanetResources(arrival.state, initial.currentPlanetId).metal;
   const returnAt = arrival.state.flights.records[0]?.returnAt;
@@ -423,7 +430,12 @@ test('attack arrival reads live target resources and resolves an empty neutral p
   assert.equal(report.defenderForce.populationBefore, 0);
   assert.equal(report.debris, 0);
   assert.ok((report.resources?.metal ?? 0) > 0);
-  assert.ok((report.resources?.metal ?? 0) < 2_500);
+  const arrivalMetal=arrival.state.espionage!.targets![targetId].resources.metal;
+  const liveBeforeCombat=arrivalMetal+(report.resources?.metal??0);
+  assert.ok(liveBeforeCombat>=1_000,'NPC accumulates resources while the fleet is traveling');
+  assert.ok((report.resources?.metal??0)<=Math.floor(liveBeforeCombat*0.75),
+    'live arrival wallet cannot be looted beyond 75% after passive accrual');
+  assert.ok(arrivalMetal<liveBeforeCombat,'metal loot must be deducted once');
   assert.ok((report.resources?.minerals ?? 0) >= 0);
   assert.ok((report.resources?.gas ?? 0) >= 0);
   assert.equal(arrival.state.espionage!.targets![targetId].resources.debris, live.espionage!.targets![targetId].resources.debris);
@@ -1021,4 +1033,19 @@ test('surviving Bot 01 sieges reconcile factory bots and the last energy source'
     assert.equal(actualEnergy.debtCause, 'source-removal');
     assert.equal(actualEnergy.debtCause, ordinaryEnergy.debtCause);
   }
+});
+
+test('new attacks default to 12 while explicit legacy 5/8/12 remain frozen',()=>{
+  assert.equal(normalizeAttackRounds(undefined),12);
+  assert.equal(normalizeAttackRounds(null),12);
+  assert.equal(normalizeAttackRounds(0),12);
+  for(const rounds of [5,8,12] as const) assert.equal(normalizeAttackRounds(rounds),rounds);
+  const state=createInitialSaveState('test',1_000);
+  const defaulted=createAttackLaunchSnapshot(state,state.currentPlanetId,undefined as unknown as 12,{});
+  assert.equal(defaulted.maxRounds,12);
+  const explicit=createAttackLaunchSnapshot(state,state.currentPlanetId,8,{});
+  assert.equal(explicit.maxRounds,8);
+  const target=Object.values(state.espionage!.targets!)[0]!;
+  const npc=state.espionage!.bot01Profile!;
+  assert.equal(createBot01IncomingAttackSnapshot(target,npc).maxRounds,12);
 });

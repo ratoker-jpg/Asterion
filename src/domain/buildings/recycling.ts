@@ -219,7 +219,14 @@ function migrateRecyclingJob(value: unknown, index: number, now: number, recycli
   const allocationPercent = normalizeRecyclingAllocation(source.allocationPercent);
   const efficiencyPercent = toSafeEfficiency(source.efficiencyPercent);
   const startedAt = toSafeTimestamp(source.startedAt);
-  const finishAt = startedAt + getRecyclingDurationMs(debrisAmount, recyclingLevel);
+  const computedFinishAt = startedAt + getRecyclingDurationMs(debrisAmount, recyclingLevel);
+  // The x10 balance update applies to *new* jobs only. An in-flight job's
+  // already-persisted finishAt is immutable across save/reload; otherwise
+  // migrating a pre-PR91 save silently accelerates work already started.
+  // Malformed timestamps earlier than the start are still re-derived.
+  const savedFinishAt = toSafeTimestamp(source.finishAt, 0);
+  const finishAt = Number.isSafeInteger(savedFinishAt) && savedFinishAt >= startedAt + 1000
+    ? savedFinishAt : computedFinishAt;
   const canonicalExpiresAt = finishAt + RECYCLING_STORAGE_MS;
   const status: RecyclingJob['status'] = now >= finishAt ? 'ready' : 'processing';
   const id = typeof source.id === 'string' && source.id.trim()

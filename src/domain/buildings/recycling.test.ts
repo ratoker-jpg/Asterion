@@ -44,10 +44,10 @@ test('levels 1, 6 and 10 expose canonical efficiency and concurrent slots', () =
 });
 
 test('duration follows Balance v1 debris-per-second throughput and is never zero', () => {
-  assert.equal(getRecyclingDurationMs(1_000_000, 1), 142_858_000);
-  assert.equal(getRecyclingDurationMs(100_000, 1), 14_286_000);
-  assert.equal(getRecyclingDurationMs(10_000, 1), 1_429_000);
-  assert.equal(getRecyclingDurationMs(1_000, 1), 143_000);
+  assert.equal(getRecyclingDurationMs(1_000_000, 1), 14_286_000);
+  assert.equal(getRecyclingDurationMs(100_000, 1), 1_429_000);
+  assert.equal(getRecyclingDurationMs(10_000, 1), 143_000);
+  assert.equal(getRecyclingDurationMs(1_000, 1), 15_000);
   assert.equal(getRecyclingDurationMs(0), 1000);
   assert.equal(getRecyclingDurationMs(1), 1000);
 });
@@ -230,4 +230,25 @@ test('production migration removes only the verified untouched Test Mode debris 
 
   const unmarkedLegacyStock = { availableDebris: 100_000, jobs: [] };
   assert.deepEqual(migrateRecyclingState(unmarkedLegacyStock, 0, 1, PRODUCTION_RECYCLING_CONTEXT), unmarkedLegacyStock);
+});
+
+test('PR91 x10 affects only new recycling jobs; legacy active job keeps saved deadline',()=>{
+  const startedAt=1_000_000;
+  const oldRateFinishAt=startedAt+Math.ceil(100_000/7)*1000;
+  const saved={
+    availableDebris:0,
+    jobs:[{
+      id:'pre-pr91-active',debrisAmount:100_000,
+      allocationPercent:{metal:100,minerals:0,gas:0},efficiencyPercent:75,
+      output:{metal:75_000,minerals:0,gas:0},
+      startedAt,finishAt:oldRateFinishAt,collectExpiresAt:null,status:'processing',
+    }],
+  };
+  const migrated=migrateRecyclingState(saved,1,startedAt+20_000,PRODUCTION_RECYCLING_CONTEXT);
+  assert.equal(migrated.jobs[0]?.finishAt,oldRateFinishAt);
+  assert.equal(migrated.jobs[0]?.status,'processing');
+  assert.equal(migrated.jobs[0]?.output.metal,75_000);
+  const fresh=start(createDefaultRecyclingState(PRODUCTION_RECYCLING_CONTEXT),1,100_000,startedAt,'new');
+  assert.equal(fresh.canStart,false,'production stock cannot be invented for test');
+  assert.equal(getRecyclingDurationMs(100_000,1),1_429_000);
 });

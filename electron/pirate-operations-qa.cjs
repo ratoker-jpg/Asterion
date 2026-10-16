@@ -278,6 +278,23 @@ async function runViewport(width, height) {
     console.log(`[pirate-operations-qa] viewport ${label} contact ${contact.cycleKey}`);
     await grantTargetSystemColony(win, contact);
     await clickPrimary(win, 'operations', `document.querySelector('.operations-layout-v2')`);
+    await waitFor(win,`document.querySelector('[data-qa-pirate-adaptive-test]')`);
+    const adaptiveTest=await win.webContents.executeJavaScript(`(() => ({
+      next:document.querySelector('[data-qa-pirate-next-band]')?.textContent,
+      rate:document.querySelector('[data-qa-pirate-win-rate]')?.textContent,
+      q:document.querySelector('[data-qa-pirate-q]')?.textContent,
+    }))()`);
+    if(!adaptiveTest.next?.includes('90,0%')||!adaptiveTest.next?.includes('95,0%')
+      ||adaptiveTest.rate!=='—'||adaptiveTest.q!=='0,0%')
+      throw new Error('Test Mode must display hidden initial win/adaptation diagnostics: '+JSON.stringify(adaptiveTest));
+
+    const exportButton = await win.webContents.executeJavaScript(`(() => {
+      const button = document.querySelector('[data-qa-pirate-export]');
+      return {exists:Boolean(button),enabled:Boolean(button&&!button.disabled),
+        label:button?.textContent?.trim()};
+    })()`);
+    if(!exportButton.enabled || !exportButton.label?.includes('JSON'))
+      throw new Error('Test Mode full combat export button missing: '+JSON.stringify(exportButton));
     await waitFor(win, `(() => { const art = document.querySelector('[data-qa-pirate-contact] .operation-feed-pirate-art-v2 img'); return Boolean(art?.complete && art.naturalWidth > 0); })()`);
     await win.webContents.executeJavaScript(`document.querySelector('[data-qa-pirate-contact]')?.click()`);
     await waitFor(win, `(() => { const block = document.querySelector('.operations-objective-v2'); return Boolean(block && parseFloat(getComputedStyle(block).borderTopLeftRadius) >= 9); })()`);
@@ -317,6 +334,96 @@ async function runViewport(width, height) {
     await clickPrimary(win, 'fleets', `document.querySelector('.fleet-workspace-v1')`);
     await waitFor(win, `document.querySelector('[data-qa-flight-row="${reconFlight.id}"]')`);
     await capture(win, directory, 'pirate-recon-flight');
+    // Use the real recon contact/profile to create a valid persisted *incoming*
+    // pirate mission fixture. Only the hostile presentation is under test here;
+    // remove it before continuing the rest of the recon/battle E2E scenario.
+    const incomingFixture = await win.webContents.executeJavaScript(`(() => {
+      const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || 'null');
+      const recon = save?.flights?.records?.find(x => x.id === ${JSON.stringify(reconFlight.id)});
+      const planetId = save?.currentPlanetId;
+      const colony = save?.planets?.[planetId];
+      if (!recon?.pirateSnapshot?.profile || !colony) return {ok:false,reason:'missing contact profile or colony'};
+      const ownerId=save.profile.playerId;
+      const contactCycleKey=recon.pirateSnapshot.contactCycleKey;
+      const requestId='pirate-raid:'+ownerId+':'+contactCycleKey;
+      const now=Date.now();
+      const destinationCoordinate={
+        galaxy:colony.universeGalaxy??1,system:colony.universeSystem??1,position:colony.universePosition??1,
+      };
+      const flight={
+        id:'flight-'+requestId,requestId,ownerSide:'pirate',missionId:'pirate-raid',
+        originPlanetId:'pirate-contact-'+contactCycleKey,
+        originCoordinate:recon.pirateSnapshot.coordinate,
+        destination:{kind:'planet',planetId,coordinate:destinationCoordinate},
+        destinationPlanetId:planetId,destinationOwnerId:ownerId,
+        destinationCoordinate,targetKind:'player',targetRelation:'enemy',targetPlanetName:colony.name,
+        selectedShips:{},selectedCommanders:{},
+        populationReserved:2,routeDistance:Math.max(1,recon.routeDistance??1),
+        effectiveSpeed:Math.max(1,recon.effectiveSpeed??20000),
+        oneWayDurationMs:600000,departedAt:now,arrivalAt:now+600000,
+        gasCost:0,phase:'outbound',
+        pirateRaidSnapshot:{version:1,ownerId,contactCycleKey,targetPlanetId:planetId,
+          checkAt:now,counterFleet:false,composition:{'pirate-hound':2},
+          profile:recon.pirateSnapshot.profile},
+      };
+      save.flights.records.push(flight);
+      save.flights.requestIndex[requestId]=flight.id;
+      localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
+      return {ok:true,id:flight.id,requestId};
+    })()`);
+    if (!incomingFixture?.ok) throw new Error(`Cannot seed hostile fleet presentation: ${JSON.stringify(incomingFixture)}`);
+    await reload(win);
+    await clickPrimary(win,'fleets',`document.querySelector('.fleet-workspace-v1')`);
+    // Keep the strict UI assertion. On a slow CI compositor, distinguish
+    // a dropped persisted fixture from an unrendered row before failing.
+    try {
+      await waitFor(win,`document.querySelector('[data-qa-flight-pirate-raid]')`,25_000);
+    } catch (error) {
+      const save=await readSave(win);
+      const rows=await win.webContents.executeJavaScript(
+        "[...document.querySelectorAll('[data-qa-flight-row]')].map(x=>x.getAttribute('data-qa-flight-row'))");
+      throw new Error('Incoming pirate flight QA: '+JSON.stringify({
+        injectedId:incomingFixture.id,
+        presentInSave:save?.flights?.records?.some(f=>f.id===incomingFixture.id),
+        availableFlights:save?.flights?.records?.map(f=>({id:f.id,missionId:f.missionId,phase:f.phase})),
+        visibleRows:rows,
+        reason:String(error),
+      }));
+    }
+    const incomingUi=await win.webContents.executeJavaScript(`(() => {
+      const row=document.querySelector('[data-qa-flight-pirate-raid]');
+      const art=row?.querySelector('img.fleet-flight-mission-icon');
+      return {
+        row:row?.textContent||'',hostile:row?.getAttribute('data-qa-flight-incoming-attack')==='true',
+        source:row?.querySelector('[data-qa-flight-origin]')?.textContent||'',
+        target:row?.querySelector('[data-qa-flight-target]')?.textContent||'',
+        status:row?.querySelector('[data-qa-flight-status]')?.textContent||'',
+        clock:row?.querySelector('[data-qa-flight-arrival]')?.textContent||'',
+        force:row?.querySelector('[data-qa-pirate-raid-force]')?.textContent||'',
+        icon:Boolean(art?.complete&&art.naturalWidth>0),
+        recall:Boolean(row?.querySelector('[data-qa-flight-recall]')),
+        noRecall:Boolean(row?.querySelector('[data-qa-flight-no-recall]')),
+        overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+2,
+      };
+    })()`);
+    if (!incomingUi.hostile || !incomingUi.icon || incomingUi.recall || !incomingUi.noRecall
+      || !incomingUi.row.includes('ПИРАТСКИЙ НАЛЁТ') || !incomingUi.status.includes('ВХОДЯЩАЯ АТАКА')
+      || !incomingUi.source.includes('ПИРАТЫ') || !incomingUi.target.includes('Helion')
+      || !incomingUi.force.includes('Гончий') || incomingUi.clock==='—' || incomingUi.overflow) {
+      throw new Error(`Incoming pirate warning/presentation invalid at ${label}: ${JSON.stringify(incomingUi)}`);
+    }
+    await capture(win,directory,'pirate-incoming-warning');
+    const removedIncoming=await win.webContents.executeJavaScript(`(() => {
+      const save=JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})||'null');
+      if (!save?.flights) return false;
+      save.flights.records=save.flights.records.filter(x=>x.id!==${JSON.stringify(incomingFixture.id)});
+      delete save.flights.requestIndex[${JSON.stringify(incomingFixture.requestId)}];
+      localStorage.setItem(${JSON.stringify(SAVE_KEY)},JSON.stringify(save));
+      return true;
+    })()`);
+    if (!removedIncoming) throw new Error('Could not remove temporary QA incoming flight');
+    await reload(win);
+
     await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').pirate?.reconReports?.some((report) => report.missionId === ${JSON.stringify(reconFlight.pirateSnapshot?.reconMission?.missionId || reconFlight.id)})`, 45_000);
     const reconReport = await win.webContents.executeJavaScript(`(() => {
       const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
@@ -416,6 +523,46 @@ async function runViewport(width, height) {
     const finalState = await readSave(win);
     const finalAttackFlight = finalState.flights.records.find((flight) => flight.id === attackFlight.id);
     const battleReport = finalState.combat.reports.find((report) => report.missionType === 'pirate-elimination');
+    // Validate a real user-initiated download AFTER the pirate battle, not
+    // only the presence of a clickable button in the empty Test Mode fixture.
+    await clickPrimary(win, 'operations', `document.querySelector('[data-qa-pirate-export]')`);
+    const archivePath = path.join(directory, 'downloaded-pirate-battles.json');
+    const archiveSaved = new Promise((resolve, reject) => {
+      win.webContents.session.once('will-download', (_event, item) => {
+        if (!/^asterion-pirate-battles-\d+-.*\.json$/.test(item.getFilename())) {
+          reject(new Error('Invalid pirate archive filename: ' + item.getFilename()));
+          item.cancel();
+          return;
+        }
+        item.setSavePath(archivePath);
+        item.once('done', (_doneEvent, state) => {
+          if (state === 'completed') resolve(true);
+          else reject(new Error('Pirate archive download ended: ' + state));
+        });
+      });
+    });
+    const triggerArchiveDownload = await win.webContents.executeJavaScript(`(() => {
+      const button=document.querySelector('[data-qa-pirate-export]');
+      if(!button || button.disabled)return false;
+      button.click();
+      return true;
+    })()`);
+    if(!triggerArchiveDownload)throw new Error('Export button is not clickable after pirate combat');
+    await Promise.race([archiveSaved,sleep(15_000).then(() => {throw new Error('Pirate JSON download timed out');})]);
+    const archive = JSON.parse(fs.readFileSync(archivePath, 'utf8'));
+    if(archive.format !== 'asterion-pirate-battles-analysis'
+      || archive.runtimeMode !== 'test'
+      || archive.currentState?.exportedBattleCount !== 1
+      || archive.battles?.length !== 1
+      || archive.battles[0]?.reportId !== battleReport.id
+      || archive.battles[0]?.flight?.id !== attackFlight.id
+      || !Array.isArray(archive.battles[0]?.report?.rounds)
+      || !archive.battles[0]?.flight?.pirateSnapshot
+      || archive.battles[0]?.summary?.estimateIsActualWalletProfit !== false)
+      throw new Error('Pirate JSON download lost or falsified battle evidence: '+
+        JSON.stringify({count:archive.battles?.length,report:archive.battles?.[0]?.reportId,
+          flight:archive.battles?.[0]?.flight?.id}));
+
     const result = {
       viewport: label,
       fixture,

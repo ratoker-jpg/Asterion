@@ -110,7 +110,12 @@ test('legacy save without pirate state migrates defaults and preserves resources
 
   const reloaded = facade.read();
   assertMainSentinels(reloaded as ReturnType<typeof withMainSaveSentinels>, legacy as ReturnType<typeof withMainSaveSentinels>);
-  assert.deepEqual(reloaded.pirate, createDefaultPirateState());
+  assert.deepEqual(reloaded.pirate?.contact,createDefaultPirateState().contact);
+  assert.deepEqual(reloaded.pirate?.raidRolls,{});
+  assert.equal(reloaded.pirate?.raidProcessedAt,10_000);
+  assert.equal(reloaded.pirate?.ownerThreats?.[reloaded.profile.playerId]?.ageHours,0);
+  const expectedMax=Math.max(...Object.values(reloaded.planets).map(x=>x.buildings.hangar??0));
+  assert.equal(reloaded.pirate?.ownerMaxHangarLevel?.[reloaded.profile.playerId],expectedMax);
 });
 
 test('malformed pirate ledger and nested system-999 flight snapshot are isolated; dropping flight releases its reservation', () => {

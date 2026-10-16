@@ -342,6 +342,19 @@ export type BattleReport = {
   metadata?: BattleReportMetadata;
   repairEligibility?: BattleRepairEligibility;
   siege?: BattleSiegeReport;
+  /** PR91 pirate-base reward ledger; absent on historic battles. */
+  pirateReward?: {
+    version: 1;
+    sentCombatPopulation: number;
+    historicalHangarCapacity: number;
+    garrisonCoefficient: number;
+    garrisonTargetPopulation: number;
+    multiplier: number;
+    basePirateDebris: number;
+    bonusPirateDebris: number;
+    ownDebris: number;
+    threatReductionFraction: number;
+  };
 };
 
 export function normalizeBattleReport(value: unknown): BattleReport | null {

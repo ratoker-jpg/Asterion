@@ -26,6 +26,18 @@ jobs:
         run: npm run test:pirates
       - name: Pirate operations integration tests
         run: npm run test:pirate-operations
+      - name: PR91 seeded battle and net-economics evidence
+        run: npm run balance:pirates:pr91
+      - name: PR91 approved matched-seed 3m-3.5m combat and net comparison
+        run: npm run balance:pirates:pr91:approved
+      - name: PR91 75-90 vs 85-105 garrison paired combat and net economics
+        run: npm run balance:pirates:pr91:garrison
+      - name: PR91 adaptive C seeded combat and optimistic net evidence
+        run: npm run balance:pirates:pr91:adaptive
+      - name: Existing attack compatibility suite
+        run: npm run test:attack
+      - name: Existing flight persistence suite
+        run: npm run test:flights
       - name: Operations domain tests
         run: npm run test:operations
       - name: Command domain tests
@@ -101,6 +113,11 @@ jobs:
             artifacts-pass1/test-mode-qa/**/*
             artifacts/battle-report-qa/**/*
             artifacts/universe-planet-qa/**/*
+            artifacts/pr91-balance/**/*
+            artifacts/pr91-approved-tech-compare/**/*
+            artifacts/pr91-garrison-85-105/**/*
+            artifacts/pr91-adaptive-c/**/*
+            artifacts/pirate-operations-qa/**/*
           if-no-files-found: warn
           retention-days: 14
       - name: Package Windows app

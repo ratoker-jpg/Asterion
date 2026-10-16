@@ -12,8 +12,8 @@ import {
 import type { BattleParticipant, BattleReport } from '../combat/report.ts';
 import type { AttackLaunchSnapshot } from '../attack/types.ts';
 import {
-  PIRATE_BASE_SHIPS,
-  type PirateBaseShipId,
+  PIRATE_CATALOG,
+  type PirateShipId,
 } from './catalog.ts';
 import {
   calculatePirateEliminationPopulationBudget,
@@ -42,6 +42,8 @@ export type PirateEliminationEncounterInput = Readonly<{
   contactCycleKey: string;
   /** The persisted owner-and-cycle profile selected at dispatch. */
   pirateProfile: PirateProfile | null;
+  /** Dispatch-time immutable population roll; old flight records omit it. */
+  populationBudget?: PiratePopulationBudget;
   attacker: PirateEliminationAttacker;
   piratePlanetName?: string;
   pirateCoordinates?: string;
@@ -65,7 +67,7 @@ export type PirateEliminationEncounterResult =
       /** Immutable input passed through the shared resolver. */
       combatInput: CombatInput;
       pirateProfile: PirateProfile;
-      pirateGarrison: Readonly<Record<PirateBaseShipId, number>>;
+      pirateGarrison: Readonly<Record<PirateShipId, number>>;
       sentCombatPopulation: number;
       populationBudget: PiratePopulationBudget;
       victory: boolean;
@@ -215,16 +217,24 @@ export function resolvePirateEliminationEncounter(
   );
   let populationBudget: PiratePopulationBudget;
   try {
-    populationBudget = calculatePirateEliminationPopulationBudget(Math.round(sentCombatPopulation), profile.shares);
+    populationBudget = input.populationBudget
+      ?? calculatePirateEliminationPopulationBudget(Math.round(sentCombatPopulation), profile.shares);
+    if (populationBudget.coefficient !== undefined && populationBudget.actualPopulation > populationBudget.targetPopulation
+      || Object.entries(populationBudget.ships).some(([shipId, count]) =>
+        !PIRATE_CATALOG.some((ship) => ship.id === shipId)
+        || !Number.isSafeInteger(count) || count < 0)
+      || Object.entries(populationBudget.ships).reduce((sum, [shipId, count]) =>
+        sum + (PIRATE_CATALOG.find((ship) => ship.id === shipId)?.population ?? 0) * count, 0) !== populationBudget.actualPopulation
+    ) throw new Error('Invalid immutable garrison snapshot');
   } catch {
     return Object.freeze({ kind: 'rejected', reason: 'invalid-pirate-profile', sentCombatPopulation });
   }
-  const pirateGarrison = Object.freeze(Object.fromEntries(PIRATE_BASE_SHIPS.map((ship) => [
-    ship.id as PirateBaseShipId,
-    populationBudget.ships[ship.id as PirateBaseShipId] ?? 0,
-  ])) as Record<PirateBaseShipId, number>);
+  const pirateGarrison = Object.freeze(Object.fromEntries(PIRATE_CATALOG.filter((ship) => ship.tier !== 'special' || (populationBudget.ships[ship.id] ?? 0) > 0).map((ship) => [
+    ship.id,
+    populationBudget.ships[ship.id] ?? 0,
+  ])) as Record<PirateShipId, number>);
   if (populationBudget.actualPopulation <= 0
-    || !PIRATE_BASE_SHIPS.some((ship) => pirateGarrison[ship.id as PirateBaseShipId] > 0)) {
+    || !PIRATE_CATALOG.some((ship) => pirateGarrison[ship.id] > 0)) {
     return Object.freeze({
       kind: 'rejected',
       reason: 'zero-garrison-budget',
@@ -242,9 +252,9 @@ export function resolvePirateEliminationEncounter(
     race: getCombatFactionName(snapshot.attackerFactionId),
     side: 'attacker',
   });
-  const allPirateStacks: CombatStackInput[] = PIRATE_BASE_SHIPS.map((ship) => ({
+  const allPirateStacks: CombatStackInput[] = PIRATE_CATALOG.filter((ship) => ship.tier !== 'special' || pirateGarrison[ship.id] > 0).map((ship) => ({
     entityId: ship.id,
-    count: pirateGarrison[ship.id as PirateBaseShipId],
+    count: pirateGarrison[ship.id],
     level: pirateSnapshot.shipLevel,
   }));
   const activeCommanderId = snapshot.attackerPriority.find((id) => attackerCommanders.some((stack) => stack.entityId === id)) ?? null;

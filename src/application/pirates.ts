@@ -17,7 +17,11 @@ import { createFlightState, dispatchFlight as dispatchDomainFlight, getFlightByR
 import { isFlightCoordinate } from '../domain/flights/distance.ts';
 import type { AttackResolution } from '../domain/attack/types.ts';
 import { calculatePirateEliminationPopulationBudget } from '../domain/pirates/profile.ts';
-import { PIRATE_BASE_SHIPS } from '../domain/pirates/catalog.ts';
+import { PIRATE_CATALOG } from '../domain/pirates/catalog.ts';
+import { getHangarCapacity } from '../domain/buildings/balance-v1.ts';
+import { pirateDebrisRewardMultiplier, pirateHangarFraction, reducePirateThreatAfterVictory } from '../domain/pirates/threat.ts';
+import {defaultPirateOwnerAdaptation,pirateAdaptiveFleetWeight,recordPirateAdaptiveOutcome} from '../domain/pirates/adaptive.ts';
+import type { PiratePopulationBudget } from '../domain/pirates/profile.ts';
 import { PIRATE_ELIMINATION_NO_TARGET_MESSAGE } from '../domain/pirates/encounter.ts';
 import {
   getOrCreatePirateOwnerProfile,
@@ -361,9 +365,19 @@ export function dispatchPirateFlight(
   Object.assign(selectedFleet.ships, selectedShips);
   Object.assign(selectedFleet.commanders, selectedCommanders);
   const populationReserved = calculateFleetPopulation(selectedFleet, factionId);
+  const historicalHangarLevel = Math.max(
+    statePirate(ensured.state).ownerMaxHangarLevel?.[ownerId] ?? 0,
+    ...Object.values(ensured.state.planets).map((planet) => Math.max(0, Math.floor(planet.buildings.hangar ?? 0))),
+  );
+  const historicalHangarCapacity = getHangarCapacity(historicalHangarLevel);
+  const ownerAdaptation=statePirate(ensured.state).ownerAdaptations?.[ownerId]??defaultPirateOwnerAdaptation();
+  const adaptiveWeight=pirateAdaptiveFleetWeight(factionId,selectedShips,Math.round(populationReserved),historicalHangarCapacity);
+  let eliminationBudget: PiratePopulationBudget | undefined;
   if (command.missionId === 'pirate-elimination') {
-    const budget = calculatePirateEliminationPopulationBudget(Math.round(populationReserved), profile.shares);
-    if (budget.actualPopulation <= 0) {
+    eliminationBudget = calculatePirateEliminationPopulationBudget(Math.round(populationReserved), profile.shares,
+      `pirate-elimination-v2:${ownerId}:${cycleKey}:${requestId}`,
+      { ownerId, cycleKey, totalPoints: profile.score.totalPoints },ownerAdaptation.q);
+    if (eliminationBudget.actualPopulation <= 0) {
       return flightFailure(ensured.state, 'wrong-ship-composition', 'Выбранный флот слишком мал, чтобы сформировать гарнизон пиратов.');
     }
   }
@@ -386,6 +400,14 @@ export function dispatchPirateFlight(
     startAt: pirateContact.startAt,
     expiresAt: pirateContact.expiresAt,
     profile,
+    ...(eliminationBudget ? {
+      eliminationBudget,
+      sentCombatPopulation: Math.round(populationReserved),
+      historicalHangarCapacity,
+      rewardMultiplier: pirateDebrisRewardMultiplier(Math.round(populationReserved), historicalHangarCapacity),
+      defeatMultiplier:0.5 as const,drawMultiplier:0.75 as const,
+      adaptiveWeight,adaptiveQ:ownerAdaptation.q,
+    } : {}),
     ...(reconMission ? { reconMission } : {}),
   });
   const domainResult = dispatchDomainFlight(flights, {
@@ -422,10 +444,26 @@ export function dispatchPirateFlight(
     requestIndex: domainResult.state.requestIndex,
   };
   let next: SaveState = { ...ensured.state, flights: nextFlightState };
+  const maxPirate = statePirate(next);
+  if (historicalHangarLevel > (maxPirate.ownerMaxHangarLevel?.[ownerId] ?? 0)) {
+    next = withPirateState(next, Object.freeze({
+      ...maxPirate, ownerMaxHangarLevel: Object.freeze({
+        ...maxPirate.ownerMaxHangarLevel, [ownerId]: historicalHangarLevel,
+      }),
+    }));
+  }
   next = replacePlanetResources(next, originPlanetId, {
     ...sourceResources,
     gas: Math.max(0, sourceResources.gas - flight.gasCost),
   });
+  if(eliminationBudget){
+    const pirate=statePirate(next);
+    const last=Object.freeze({flightId:flight.id,coefficient:eliminationBudget.coefficient??0.9,
+      sentPopulation:Math.round(populationReserved),at:departedAt});
+    next=withPirateState(next,Object.freeze({...pirate,ownerAdaptations:Object.freeze({
+      ...pirate.ownerAdaptations,[ownerId]:Object.freeze({...ownerAdaptation,lastRoll:last}),
+    })}));
+  }
   if (reconMission) {
     const pirate = statePirate(next);
     next = withPirateState(next, Object.freeze({
@@ -451,7 +489,7 @@ function withFlightResolution(state: SaveState, flightId: string, resolution: At
 
 function hasFullPirateVictory(report: BattleReport): boolean {
   const remainingPirateShips = report.defenderForce.stacks.filter((stack) =>
-    PIRATE_BASE_SHIPS.some((ship) => ship.id === stack.entityId));
+    PIRATE_CATALOG.some((ship) => ship.id === stack.entityId));
   return report.winner === 'attacker'
     && remainingPirateShips.length > 0
     && report.defenderForce.populationAfter === 0
@@ -509,6 +547,15 @@ export function resolvePirateFlightAtTarget(
   const resolved = resolvePirateEliminationAtTarget(state, flight, arrivalAt);
   if (!resolved) return noTarget();
   let next = withFlightResolution(resolved.state, flight.id, resolved.resolution);
+  if(snapshot.adaptiveWeight!==undefined){
+    const pirate=statePirate(next);
+    const adaptive=pirate.ownerAdaptations?.[snapshot.ownerId]??defaultPirateOwnerAdaptation();
+    const outcome=hasFullPirateVictory(resolved.report)?'win':
+      resolved.report.winner==='draw'?'draw':'loss';
+    const updated=recordPirateAdaptiveOutcome(adaptive,flight.id,snapshot.adaptiveWeight,outcome);
+    if(updated!==adaptive)next=withPirateState(next,Object.freeze({...pirate,
+      ownerAdaptations:Object.freeze({...pirate.ownerAdaptations,[snapshot.ownerId]:updated})}));
+  }
   if (hasFullPirateVictory(resolved.report)) {
     const pirate = statePirate(next);
     const contactState = recordPirateContactDefeat(pirate.contact, {
@@ -520,7 +567,19 @@ export function resolvePirateFlightAtTarget(
       coordinate: snapshot.coordinate,
       defeatedAt: arrivalAt,
     });
-    next = withPirateState(next, Object.freeze({ ...pirate, contact: contactState }));
+    const fraction = pirateHangarFraction(
+      snapshot.sentCombatPopulation ?? 0, snapshot.historicalHangarCapacity ?? 0);
+    const currentThreat = pirate.ownerThreats?.[snapshot.ownerId] ?? {
+      version: 1 as const, ageHours: 0, integratedAt: snapshot.startAt,
+    };
+    const reducedThreat = reducePirateThreatAfterVictory(currentThreat, arrivalAt, fraction);
+    next = withPirateState(next, Object.freeze({
+      ...pirate,
+      contact: contactState,
+      ownerThreats: Object.freeze({
+        ...pirate.ownerThreats, [snapshot.ownerId]: reducedThreat,
+      }),
+    }));
   }
   const resultLabel = resolved.report.winner === 'attacker' ? 'пираты разгромлены'
     : resolved.report.winner === 'defender' ? 'атака отбита' : 'ничья';

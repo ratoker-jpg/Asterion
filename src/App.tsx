@@ -58,6 +58,7 @@ import { syncPlayerProfileWithAlliance } from './domain/profile/repository.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import {
   ACTIVE_RUNTIME_MODE,
+  scaleRuntimeDuration,
   dispatchRuntimeReset,
   resolveTestTimeScale,
   TEST_TIME_SCALE_OPTIONS,
@@ -91,6 +92,9 @@ import {
 } from './domain/profile/repository.ts';
 import type { PlayerFactionId } from './domain/profile/types.ts';
 import { selectOwnerScores } from './domain/rating/scoring.ts';
+import { advancePirateThreat, pirateRaidChance } from './domain/pirates/threat.ts';
+import {defaultPirateOwnerAdaptation} from './domain/pirates/adaptive.ts';
+import { buildPirateBattleAnalysisExport } from './application/pirate-battle-export.ts';
 import {
   createInitialSaveState,
   createPersistenceFacade,
@@ -332,6 +336,26 @@ export function App() {
   const [pirateSystem, setPirateSystem] = useState<PirateSystemSelection>({ galaxy: 1, system: 1 });
   const [pirateFocusTarget, setPirateFocusTarget] = useState<Pick<PirateContactPresentation, 'coordinate' | 'contactCycleKey'> | null>(null);
   const [pirateReportId, setPirateReportId] = useState<string | undefined>();
+  const exportPirateBattleAnalysis = useCallback(() => {
+    if (RUNTIME_MODE !== 'test') return;
+    try {
+      const payload = buildPirateBattleAnalysisExport(stateRef.current);
+      const json = JSON.stringify(payload, null, 2);
+      const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `asterion-pirate-battles-${payload.currentState.exportedBattleCount}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setNotice(`Пиратские бои: выгружено ${payload.currentState.exportedBattleCount} отчётов в JSON.`, 'success');
+    } catch {
+      setNotice('Не удалось подготовить выгрузку пиратских боёв.', 'error');
+    }
+  }, [setNotice]);
+
   const pirateContacts = useMemo(() => {
     if (activeRoute !== 'operations' && activeRoute !== 'universe') return [];
     return activeRoute === 'operations'
@@ -354,6 +378,7 @@ export function App() {
         return reportId && report ? [{
           cycleKey: defeat.contactCycleKey, coordinate: defeat.coordinate, reportId, defeatedAt: defeat.defeatedAt,
           rounds: report.roundCount, debris: report.debris ?? 0,
+          ...(report.pirateReward ? {reward:report.pirateReward}:{}),
         }] : [];
       })
       .slice(0, 50);
@@ -1577,6 +1602,20 @@ export function App() {
           ) : activeRoute === 'operations' ? (
             <OperationsView
               pirateContacts={pirateContacts}
+              pirateOwnerId={state.profile.playerId}
+              pirateRaidRolls={state.pirate?.raidRolls}
+              pirateAdaptiveDiagnostics={RUNTIME_MODE==='test'?(state.pirate?.ownerAdaptations?.[state.profile.playerId]??defaultPirateOwnerAdaptation()):undefined}
+              onPirateBattleExport={RUNTIME_MODE==='test'?exportPirateBattleAnalysis:undefined}
+              pirateCheckDelayMs={scaleRuntimeDuration(15*60_000,RUNTIME_MODE,testTimeScale)}
+              pirateThreatPercent={100*pirateRaidChance(
+                selectOwnerScores(state)[state.profile.playerId]?.resourcePoints??0,
+                selectOwnerScores(state)[state.profile.playerId]?.battlePoints??0,
+                advancePirateThreat(
+                  state.pirate?.ownerThreats?.[state.profile.playerId] ??
+                    {version:1,ageHours:0,integratedAt:state.pirate?.raidProcessedAt??now},
+                  now,
+                ).ageHours,
+              )}
               completedPirateOperations={completedPirateOperations}
               onPirateBattleReport={openPirateReport}
               nowMs={now}

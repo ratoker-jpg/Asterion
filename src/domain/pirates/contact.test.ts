@@ -13,6 +13,9 @@ import {
 } from './contact.ts';
 
 import { getPirateRaidCheckProgress, PIRATE_RAID_CHECK_INTERVAL_MS } from './contact-schedule.ts';
+import { createPirateProfile, pirateTechnologyLevelForResourcePoints, PIRATE_TECH_LEVEL_THRESHOLDS, PIRATE_EXCLUSIVE_TECHNOLOGIES, pirateTechnologyLevels, frozenPirateTechnologyLevels } from './profile.ts';
+import { COMBAT_TECHNOLOGIES } from '../combat/technologies.ts';
+import { normalizePirateMissionSnapshot, normalizePirateRaidSnapshot } from './mission.ts';
 
 const coordinate = { galaxy: 1, system: 2, position: 7 } as const;
 
@@ -115,10 +118,101 @@ test('raid-check UI period is exactly 15 minutes and independent of base lifetim
   assert.equal(halfway.remainingMs, 450_000);
   assert.equal(halfway.percent, 50);
   const second = getPirateRaidCheckProgress(start, start + 900_000);
-  assert.equal(second.remainingMs, 900_000);
-  assert.equal(second.nextAt, start + 1_800_000);
-  assert.equal(second.percent, 0);
+  assert.equal(second.remainingMs, 0);
+  assert.equal(second.nextAt, start + 900_000);
+  assert.equal(second.percent, 100);
   const later = getPirateRaidCheckProgress(start, start + 4_500_000);
-  assert.equal(later.remainingMs, 900_000);
-  assert.equal(later.percent, 0);
+  assert.equal(later.remainingMs, 0);
+  assert.equal(later.percent, 100);
+  const accelerated = getPirateRaidCheckProgress(start, start + 1_800, 1_800);
+  assert.equal(accelerated.remainingMs, 0);
+  assert.equal(accelerated.percent, 100);
+});
+
+test('approved pirate tech is per-science max percentage at every threshold and one point below',()=>{
+  const values=[
+    [800_000,7,7,11,14],
+    [1_500_000,8,8,12,16],
+    [3_000_000,9,9,14,18],
+    [3_500_000,9,9,14,18],
+    [6_000_000,10,10,15,20],
+  ] as const;
+  for(const [points,tier,max10,max15,max20] of values){
+    assert.equal(pirateTechnologyLevelForResourcePoints(points),tier);
+    for(const selected of PIRATE_EXCLUSIVE_TECHNOLOGIES){
+      const scaled=pirateTechnologyLevels(points,selected);
+      for(const tech of COMBAT_TECHNOLOGIES){
+        const expected=Math.round(tech.maxLevel*tier/10);
+        const exclusive=PIRATE_EXCLUSIVE_TECHNOLOGIES.includes(tech.id as typeof selected);
+        assert.equal(scaled[tech.id],exclusive&&tech.id!==selected?0:expected,
+          `${points}/${selected}/${tech.id}`);
+        assert.ok(scaled[tech.id]>=0&&scaled[tech.id]<=tech.maxLevel);
+        if(tech.maxLevel===10&&(!exclusive||tech.id===selected)) assert.equal(scaled[tech.id],max10);
+        if(tech.maxLevel===15&&(!exclusive||tech.id===selected)) assert.equal(scaled[tech.id],max15);
+        if(tech.maxLevel===20&&(!exclusive||tech.id===selected)) assert.equal(scaled[tech.id],max20);
+      }
+    }
+  }
+  for(let tier=0;tier<PIRATE_TECH_LEVEL_THRESHOLDS.length;tier++){
+    const threshold=PIRATE_TECH_LEVEL_THRESHOLDS[tier]!;
+    assert.equal(pirateTechnologyLevelForResourcePoints(threshold),tier);
+    if(tier>0) assert.equal(pirateTechnologyLevelForResourcePoints(threshold-1),tier-1);
+    for(const value of tier>0?[threshold-1,threshold]:[threshold]){
+      const t=pirateTechnologyLevelForResourcePoints(value);
+      const tech=pirateTechnologyLevels(value,'maneuverDefense');
+      for(const definition of COMBAT_TECHNOLOGIES){
+        const expected=Math.round(definition.maxLevel*t/10);
+        assert.equal(tech[definition.id],
+          ['piercingAttack','criticalHit'].includes(definition.id)?0:expected);
+      }
+    }
+  }
+  assert.equal(Math.round(13.5),14);
+  assert.equal(COMBAT_TECHNOLOGIES.length,10);
+});
+test('legacy frozen tier technology profiles survive strict validation without silent upgrades',()=>{
+  const cycleKey=createPirateContactCycleKey({galaxy:1,system:2,cycleIndex:9,startAt:900_000});
+  const input={ownerId:'legacy-owner',contactCycleKey:cycleKey,
+    score:{resourcePoints:3_000_000,battlePoints:0,totalPoints:3_000_000}};
+  const modern=createPirateProfile(input);
+  const legacyTier=modern.technologyLevel;
+  const legacyTechnologies=Object.fromEntries(COMBAT_TECHNOLOGIES.map(t=>[
+    t.id,PIRATE_EXCLUSIVE_TECHNOLOGIES.includes(t.id as typeof modern.exclusiveTechnologyId)
+      &&t.id!==modern.exclusiveTechnologyId?0:legacyTier,
+  ]));
+  const legacy={...modern,technologies:legacyTechnologies as typeof modern.technologies};
+  assert.deepEqual(frozenPirateTechnologyLevels(legacy),legacyTechnologies);
+  assert.deepEqual(frozenPirateTechnologyLevels(modern),modern.technologies);
+  assert.equal(frozenPirateTechnologyLevels({...modern,technologies:{...modern.technologies,shipArmor:1}}),null);
+  const contact={version:1,defeatedCycles:{},ownerProfiles:{[input.ownerId]:{[cycleKey]:legacy}}};
+  assert.equal(validatePirateContactState(contact).valid,true);
+  const restored=migratePirateContactState(JSON.parse(JSON.stringify(contact)));
+  assert.deepEqual(restored.ownerProfiles[input.ownerId]?.[cycleKey]?.technologies,legacyTechnologies);
+  const modernRestored=migratePirateContactState({
+    version:1,defeatedCycles:{},ownerProfiles:{[input.ownerId]:{[cycleKey]:modern}}});
+  assert.deepEqual(modernRestored.ownerProfiles[input.ownerId]?.[cycleKey]?.technologies,modern.technologies);
+  const raid={version:1,ownerId:input.ownerId,contactCycleKey:cycleKey,targetPlanetId:'helion-01',
+    checkAt:900_000,counterFleet:false,composition:{'pirate-hound':1},profile:legacy};
+  const oldRaid=normalizePirateRaidSnapshot(JSON.parse(JSON.stringify(raid)));
+  assert.deepEqual(oldRaid?.profile.technologies,legacyTechnologies);
+  assert.equal(oldRaid?.maxRounds,undefined);
+  const newRaid=normalizePirateRaidSnapshot({...raid,profile:modern,maxRounds:12});
+  assert.equal(newRaid?.maxRounds,12);
+  assert.deepEqual(newRaid?.profile.technologies,modern.technologies);
+  assert.equal(normalizePirateRaidSnapshot({...raid,profile:{...legacy,technologies:{...legacyTechnologies,shipArmor:3}}}),null,
+    'tampered legacy technology levels must still be rejected');
+  const mission={version:1,missionId:'pirate-elimination',ownerId:input.ownerId,
+    contactCycleKey:cycleKey,coordinate:{galaxy:1,system:2,position:7},
+    cycleIndex:9,startAt:900_000,expiresAt:900_000+60*60_000,profile:legacy};
+  assert.deepEqual(normalizePirateMissionSnapshot(mission)?.profile.technologies,legacyTechnologies);
+});
+test('pirate profile keeps seed and fleet shares stable while moving to per-science percent',()=>{
+  const input={ownerId:'seed-check',contactCycleKey:'pirate-cycle-v1:1:2:1:120000',
+    score:{resourcePoints:3_500_000,battlePoints:0,totalPoints:3_500_000}};
+  const p=createPirateProfile(input);
+  assert.deepEqual(p,createPirateProfile(input));
+  assert.equal(p.technologyLevel,9);
+  assert.deepEqual(p.shares,createPirateProfile(input).shares);
+  assert.equal(Object.entries(p.technologies).filter(([key,val])=>
+    PIRATE_EXCLUSIVE_TECHNOLOGIES.includes(key as typeof p.exclusiveTechnologyId)&&val>0).length,1);
 });

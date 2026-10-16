@@ -169,8 +169,8 @@ test('Hangar and recycling selectors use their Balance v1 rows', () => {
   assert.equal(getHangarCapacity(0), 50);
   assert.equal(getHangarCapacity(1), 120);
   assert.equal(getHangarCapacity(20), 25_112);
-  assert.deepEqual(getRecyclingBalance(1), { efficiencyPercent: 75, debrisPerSecond: 7 });
-  assert.deepEqual(getRecyclingBalance(10), { efficiencyPercent: 120, debrisPerSecond: 98 });
+  assert.deepEqual(getRecyclingBalance(1), { efficiencyPercent: 75, debrisPerSecond: 70 });
+  assert.deepEqual(getRecyclingBalance(10), { efficiencyPercent: 120, debrisPerSecond: 980 });
 });
 
 test('factory construction speed follows the official level table', () => {

@@ -789,6 +789,49 @@ export function getUniverseTimedObjectSchedule(
   return cycles[safeIndex] ?? cycles[0];
 }
 
+/**
+ * One deterministic schedule projection for all potentially due pirate rolls.
+ * Uses the authoritative defeat-shifted cycle sequence rather than a naive
+ * 60-minute arithmetic recurrence.
+ */
+export function getPirateContactCyclesBetween(
+  galaxy: number,
+  system: number,
+  afterMs: number,
+  throughMs: number,
+  defeatedCycles: readonly PirateContactDefeatRecord[] = [],
+  checkDelayMs = 15 * 60_000,
+): readonly UniverseTimedObjectSchedule[] {
+  if (!Number.isSafeInteger(afterMs) || !Number.isSafeInteger(throughMs) || throughMs <= afterMs) return [];
+  const relevantDefeats = defeatedCycles.filter((record) => record.galaxy === galaxy && record.system === system);
+  const base = ensureTimedCycles('pirate', galaxy, system, throughMs
+    + relevantDefeats.length * PIRATE_MAX_LIFETIME_MS);
+  // No defeat-shifted cycles in fresh saves: reuse the canonical schedule
+  // directly. Scanning and cloning every cycle since 2026-01-01 on every
+  // render delayed first Test Mode reconciliation past its first UI paint.
+  const corrected = relevantDefeats.length
+    ? applyPirateContactDefeatsToSchedules(base, galaxy, system, relevantDefeats)
+    : base;
+  // Contact starts are strictly increasing, even after defeat shifts.
+  // Binary search avoids O(history) scans when only the latest few minutes
+  // contain a due check; no artificial offline horizon or event count cap.
+  let lo = 0;
+  let hi = corrected.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (corrected[mid]!.startAt + checkDelayMs <= afterMs) lo = mid + 1;
+    else hi = mid;
+  }
+  const due: UniverseTimedObjectSchedule[] = [];
+  for (let index = lo; index < corrected.length; index += 1) {
+    const cycle = corrected[index]!;
+    const at = cycle.startAt + checkDelayMs;
+    if (at > throughMs) break;
+    if (cycle.present && cycle.expiresAt > at) due.push(cycle);
+  }
+  return due;
+}
+
 function activeTimedObjectSchedule(
   kind: TimedObjectKind,
   galaxy: number,

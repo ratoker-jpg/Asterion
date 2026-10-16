@@ -1,5 +1,6 @@
 import { PIRATE_BASE_SHIPS, PIRATE_CATALOG_BY_ID, type PirateBaseShipId, type PirateShipId } from './catalog.ts';
-import { COMBAT_TECHNOLOGY_IDS, type CombatTechnologyId } from '../combat/technologies.ts';
+import { COMBAT_TECHNOLOGIES, COMBAT_TECHNOLOGY_IDS, type CombatTechnologyId } from '../combat/technologies.ts';
+import { pirateSeededDraw } from './threat.ts';
 
 export type PirateTierShares = Readonly<Record<1 | 2 | 3, number>>;
 export type PirateShipShares = Readonly<Partial<Record<PirateShipId, number>>>;
@@ -16,6 +17,7 @@ export type PiratePopulationBudget = Readonly<{
   actualPopulation: number;
   absoluteError: number;
   ships: Readonly<Partial<Record<PirateShipId, number>>>;
+  coefficient?: number;
 }>;
 
 export type PirateProfile = Readonly<{
@@ -72,13 +74,36 @@ export function pirateTechnologyLevels(
   resourcePoints: number,
   exclusiveTechnologyId: PirateExclusiveTechnologyId,
 ): Readonly<Record<CombatTechnologyId, number>> {
-  const level = pirateTechnologyLevelForResourcePoints(resourcePoints);
-  return Object.freeze(Object.fromEntries(COMBAT_TECHNOLOGY_IDS.map((id) => [
-    id,
-    PIRATE_EXCLUSIVE_TECHNOLOGIES.includes(id as PirateExclusiveTechnologyId)
-      ? id === exclusiveTechnologyId ? level : 0
-      : level,
-  ])) as Record<CombatTechnologyId, number>);
+  const tier = pirateTechnologyLevelForResourcePoints(resourcePoints);
+  const progress = tier / 10;
+  return Object.freeze(Object.fromEntries(COMBAT_TECHNOLOGIES.map((technology) => {
+    const realLevel = Math.min(technology.maxLevel, Math.max(0,
+      Math.round(technology.maxLevel * progress)));
+    return [
+      technology.id,
+      PIRATE_EXCLUSIVE_TECHNOLOGIES.includes(technology.id as PirateExclusiveTechnologyId)
+        && technology.id !== exclusiveTechnologyId ? 0 : realLevel,
+    ];
+  })) as Record<CombatTechnologyId, number>);
+}
+
+/**
+ * Combat inputs must use the exact frozen technology levels from dispatch,
+ * not recompute them from resource points. Validate BOTH canonical generations
+ * without trusting edited client snapshots; no other technology vector passes.
+ */
+export function frozenPirateTechnologyLevels(profile: PirateProfile): Readonly<Record<CombatTechnologyId, number>> | null {
+  if (!profile.technologies || Object.keys(profile.technologies).length !== COMBAT_TECHNOLOGY_IDS.length
+    || !COMBAT_TECHNOLOGY_IDS.every(id => Object.hasOwn(profile.technologies, id))) return null;
+  const approved = pirateTechnologyLevels(profile.score.resourcePoints, profile.exclusiveTechnologyId);
+  const tier = pirateTechnologyLevelForResourcePoints(profile.score.resourcePoints);
+  const oldFlat = Object.fromEntries(COMBAT_TECHNOLOGY_IDS.map(id => [
+    id, PIRATE_EXCLUSIVE_TECHNOLOGIES.includes(id as PirateExclusiveTechnologyId)
+      && id !== profile.exclusiveTechnologyId ? 0 : tier,
+  ])) as Record<CombatTechnologyId, number>;
+  const matches = (expected: Readonly<Record<CombatTechnologyId, number>>) =>
+    COMBAT_TECHNOLOGY_IDS.every(id => profile.technologies[id] === expected[id]);
+  return matches(approved) || matches(oldFlat) ? profile.technologies : null;
 }
 
 /** Log10 interpolation; values below/above the control points clamp to endpoint distributions. */
@@ -193,16 +218,34 @@ export function createPirateProfile(input: {
 }
 
 /**
- * Allocate each ship stack from its share of the rounded 90% population target.
- * Each stack is rounded down/up deterministically, choosing the combination
- * whose total population is closest to the target.
+ * Allocate each ship stack from its share of the deterministic population target.
+ * New seeded elimination missions draw 85–105% of the dispatched combat population;
+ * the unseeded pre-PR91 fallback keeps the historical fixed 90% allocation.
+ * Round ship counts deterministically without exceeding the new target.
  */
 export function calculatePirateEliminationPopulationBudget(
   sentCombatPopulation: number,
   shares: Readonly<Partial<Record<PirateShipId, number>>>,
+  launchSeed?: string,
+  specialContact?: Readonly<{ ownerId: string; cycleKey: string; totalPoints: number }>,
+  adaptiveQ?: number,
 ): PiratePopulationBudget {
   const sent = safePoints(sentCombatPopulation);
-  const targetPopulation = Math.round(sent * 0.9);
+  // Keep the historical draw stream so equal launch seeds preserve their random quantile.
+  // Only the seeded elimination population interval changes; persisted flights keep their snapshots.
+  const coefficient=launchSeed===undefined?0.9:
+    adaptiveQ===undefined ? 0.85+0.20*pirateSeededDraw(`pirate-garrison-v2:${launchSeed}`)
+      : 0.90+0.15*Math.max(0,Math.min(1,adaptiveQ))
+        +0.05*pirateSeededDraw(`pirate-garrison-v2:${launchSeed}`);
+  const targetPopulation = Math.round(sent * coefficient);
+  const qualifiesForSpecial = Boolean(specialContact && specialContact.totalPoints >= 3_000_000
+    && pirateSeededDraw(`pirate-special-v1:${specialContact.ownerId}:${specialContact.cycleKey}`) < 0.10);
+  const specialCount = qualifiesForSpecial && specialContact
+    ? Math.min(Math.floor(targetPopulation / PIRATE_CATALOG_BY_ID['pirate-planet-breaker'].population),
+      1 + Math.floor(pirateSeededDraw(`pirate-special-count-v1:${specialContact.ownerId}:${specialContact.cycleKey}`) * 10))
+    : 0;
+  const specialPopulation = specialCount * PIRATE_CATALOG_BY_ID['pirate-planet-breaker'].population;
+  const ordinaryTarget = targetPopulation - specialPopulation;
   const entries = Object.entries(shares).filter(([, share]) => share !== undefined) as [PirateShipId, number][];
   const invalidShare = entries.some(([id, share]) => !PIRATE_BASE_SHIPS.some((ship) => ship.id === id)
     || !Number.isFinite(share) || share < 0);
@@ -213,7 +256,7 @@ export function calculatePirateEliminationPopulationBudget(
   const activeEntries = entries.filter(([, share]) => share > 0);
   const options = activeEntries.map(([shipId, share]) => {
     const populationPerShip = PIRATE_CATALOG_BY_ID[shipId].population;
-    const idealCount = targetPopulation * share / 100 / populationPerShip;
+    const idealCount = ordinaryTarget * share / 100 / populationPerShip;
     const lowerCount = Math.floor(idealCount);
     return {
       shipId: shipId as PirateBaseShipId,
@@ -229,7 +272,9 @@ export function calculatePirateEliminationPopulationBudget(
   for (let mask = 0; mask < combinations; mask += 1) {
     const counts = options.map((option, index) => (mask & (1 << index)) ? option.upperCount : option.lowerCount);
     const population = counts.reduce((sum, count, index) => sum + count * options[index]!.populationPerShip, 0);
-    const error = Math.abs(population - targetPopulation);
+    // New seeded manifests may not exceed their deterministic 85–105% population budget.
+    if (launchSeed !== undefined && population + specialPopulation > targetPopulation) continue;
+    const error = Math.abs(population - ordinaryTarget);
     // Lower error wins; ties choose fewer people, then the first stable mask.
     if (error < bestError || (error === bestError && population < bestPopulation)) {
       bestError = error;
@@ -241,10 +286,12 @@ export function calculatePirateEliminationPopulationBudget(
     const count = bestCounts[index]!;
     return count > 0 ? [[option.shipId, count]] : [];
   })) as Partial<Record<PirateShipId, number>>;
+  if (specialCount > 0) ships['pirate-planet-breaker'] = specialCount;
   return Object.freeze({
     targetPopulation,
-    actualPopulation: bestPopulation,
-    absoluteError: bestError,
+    actualPopulation: bestPopulation + specialPopulation,
+    absoluteError: Math.abs(targetPopulation - bestPopulation - specialPopulation),
     ships: Object.freeze(ships),
+    ...(launchSeed !== undefined ? { coefficient } : {}),
   });
 }
