@@ -7,6 +7,7 @@ import { getPlanetResources, replacePlanetState } from './contracts.ts';
 import { getExplorationTarget, explorationTargetStatus, selectExplorationTargets, selectExplorationOperations } from './exploration.ts';
 import { acceptLiveExploration, cancelLiveExploration } from './exploration-operations.ts';
 import { explorationResourceScore } from './exploration-flight.ts';
+import { explorationMailboxReports } from '../domain/exploration/report-items.ts';
 
 const MINUTE = 60_000;
 const baseTime = 1_790_000_000_000;
@@ -84,6 +85,15 @@ test('one real flight arrives, reserves the contact, recalls from orbit and cred
   const completed = finished.state.flights.records.find(f=>f.id===sent.flight.id)!;
   assert.equal(completed.phase,'completed');
   assert.equal(finished.state.exploration!.contacts[target.id]!.events.filter(e=>e.id===sent.flight.id+':completed').length,1);
+  const receipt = finished.state.exploration!.contacts[target.id]!.events.find(e => e.id === sent.flight.id + ':completed')!;
+  assert.ok(receipt.creditedCargo,'successful landing must save exact wallet credit');
+  assert.equal(receipt.creditedCargo!.debris,cargo.debris,'debris is deposited in the recycling pool');
+  const returnLetter = explorationMailboxReports(finished.state.exploration,finished.state.flights.records)
+    .find(item => item.id === 'exploration-return:' + sent.flight.id);
+  assert.ok(returnLetter);
+  assert.equal(returnLetter!.category,'flights');
+  assert.ok(returnLetter!.details.some(detail => detail.label.includes('Обломки')));
+  assert.equal(selectExplorationOperations(finished.state,returning.returnAt!,'test').find(row=>row.node.id===target.id)?.stage,'completed');
   const after = getPlanetResources(finished.state,'helion-01');
   assert.ok(after.metal >= before.metal);
   assert.ok(after.minerals >= before.minerals);
@@ -210,6 +220,10 @@ test('accepted operation and real spy-probe research survive save/replay and rev
   const report = arrived.state.exploration?.reconReports?.find(r=>r.flightId===sent.flight.id);
   assert.ok(report,'recon should produce one outcome at physical arrival');
   assert.equal(typeof report?.success,'boolean');
+  const reconLetter = explorationMailboxReports(arrived.state.exploration,arrived.state.flights.records)
+    .find(item => item.id === 'exploration-recon:' + sent.flight.id);
+  assert.equal(reconLetter?.category,'system');
+  assert.equal(reconLetter?.statusLabel,report?.success ? 'УСПЕШНО' : 'НЕУДАЧА');
   assert.equal(arrived.state.flights.records.find(f=>f.id===sent.flight.id)?.phase,'returning');
   assert.equal(selectExplorationOperations(arrived.state,sent.flight.arrivalAt,'test').find(r=>r.node.id===target.id)?.recon?.success,report?.success);
   const repeat = reconcileFlights(arrived.state,sent.flight.arrivalAt,undefined,{mode:'test',testTimeScale:15});
