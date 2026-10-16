@@ -10,6 +10,7 @@ export function selectExplorationTargets(
   state: SaveState,
   nowMs: number,
   mode: RuntimeMode = Object.keys(state.alliedPlanets ?? {}).length ? 'test' : 'production',
+  limit = 5,
 ): UniversePlanetNode[] {
   const playerPlanets: UniversePersistedPlayerPlanet[] = Object.entries(state.planets)
     .map(([id, planet]) => ({
@@ -36,7 +37,7 @@ export function selectExplorationTargets(
     pirateContactDefeats: state.pirate?.contact.defeatedCycles,
     asteroidStates: state.asteroidSimulation?.asteroids ?? [],
   }).positions.filter(node => explorationNodeId(node) !== null));
-  return visibleExplorationContacts(nodes, owned, nowMs, 5);
+  return visibleExplorationContacts(nodes, owned, nowMs, limit);
 }
 
 export function getExplorationTarget(
@@ -45,7 +46,7 @@ export function getExplorationTarget(
   nowMs: number,
   mode?: RuntimeMode,
 ): UniversePlanetNode | undefined {
-  return selectExplorationTargets(state, nowMs, mode).find(node => explorationNodeId(node) === id);
+  return selectExplorationTargets(state, nowMs, mode, 500).find(node => explorationNodeId(node) === id);
 }
 
 /** Avoid stale UI state: a target's live claim is authoritative only in the persisted exploration ledger. */
