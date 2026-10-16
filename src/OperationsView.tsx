@@ -18,7 +18,8 @@ import { getUniverseSlotPoint } from './domain/universe/runtime.ts';
 import { getPirateRaidCheckProgress } from './domain/pirates/contact-schedule.ts';
 import { pirateAdaptiveInterval, type PirateOwnerAdaptation } from './domain/pirates/adaptive.ts';
 import { getPiratePlanetArt } from './pirate-planet-art.ts';
-import { explorationProfile } from './domain/exploration/model.ts';
+import { explorationProfile, EXPLORATION_RULES } from './domain/exploration/model.ts';
+import { reconcileExplorationContact } from './domain/exploration/ledger.ts';
 import type { ExplorationOperationPresentation } from './application/exploration.ts';
 import type { UniversePlanetNode } from './domain/universe/types.ts';
 import './operations.css';
@@ -30,6 +31,7 @@ type OperationsViewProps = {
   onExplorationAccept?: (node: UniversePlanetNode) => void;
   onExplorationCancel?: (contactId: string) => void;
   onExplorationRecon?: (node: UniversePlanetNode) => void;
+  onExplorationUniverse?: (node: UniversePlanetNode) => void;
   state: OperationsState;
   onAccept: (operationId: OperationId) => void;
   onCancel: (operationId: OperationId) => void;
@@ -297,7 +299,7 @@ function EmptyState({ tab }: { tab: OperationsTab }) {
   const copy = tab === 'active'
     ? ['АКТИВНЫХ ОПЕРАЦИЙ НЕТ', 'Примите операцию из списка доступных.']
     : tab === 'completed'
-      ? ['ЗАВЕРШЁННЫХ ОПЕРАЦИЙ НЕТ', 'Здесь появятся возвращённые экспедиции, истёкшие принятые контакты и завершённые бои.']
+      ? ['ЗАВЕРШЁННЫХ ОПЕРАЦИЙ НЕТ', 'Здесь появляются операции с реальным результатом: вернувшиеся экспедиции и завершённые бои.']
       : ['КОНТАКТОВ НЕТ', 'Новых операций сейчас не обнаружено.'];
 
   return <div className="operations-empty-v2"><span>◇</span><strong>{copy[0]}</strong><p>{copy[1]}</p></div>;
@@ -315,7 +317,7 @@ function pirateRemainingLabel(expiresAt: number, nowMs: number) {
   return minutes ? `${minutes} мин ${String(remainder).padStart(2, '0')} с` : `${remainder} с`;
 }
 
-function OperationDossier({ operation, pirateContact, exploration, onExpedition, onExplorationAccept, onExplorationCancel, onExplorationRecon, battleReportId, completed, nowMs, onAccept, onCancel, onReveal, onOpenFleets, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: {
+function OperationDossier({ operation, pirateContact, exploration, onExpedition, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, battleReportId, completed, nowMs, onAccept, onCancel, onReveal, onOpenFleets, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: {
   operation: OperationInstance | null;
   pirateContact?: PirateContactPresentation;
   exploration?: ExplorationOperationContact;
@@ -323,6 +325,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
   onExplorationAccept?: (node: UniversePlanetNode) => void;
   onExplorationCancel?: (contactId: string) => void;
   onExplorationRecon?: (node: UniversePlanetNode) => void;
+  onExplorationUniverse?: (node: UniversePlanetNode) => void;
   battleReportId?: string;
   completed?: CompletedPirateOperation;
   nowMs: number;
@@ -525,7 +528,12 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
       </header>
 
       <section className="operations-dossier-hero-v2">
-        <TacticalScope operation={operation} contact={pirateContact} />
+        {pirate ? <div className="operations-hero-object-art" data-qa-pirate-hero-art>
+          <img src={getPiratePlanetArt(...((): [number,number] => {
+            const parts = (pirateContact?.contactCycleKey ?? operation.id.replace(/^pirate:/,'')).split(':');
+            return [Number(parts[2] ?? 1), Number(parts[3] ?? 0)];
+          })())} alt="Пиратская база" loading="lazy" draggable={false} />
+        </div> : <TacticalScope operation={operation} contact={pirateContact} />}
         <div className="operations-briefing-v2">
           <small>ОПЕРАТИВНАЯ СВОДКА</small>
           <h3>{pirate ? pirateContact ? 'ПИРАТСКАЯ БАЗА ОБНАРУЖЕНА' : 'КОНТАКТ ЗАВЕРШЁН' : intelZero ? 'ДАННЫХ НЕДОСТАТОЧНО' : 'КОНТАКТ КЛАССИФИЦИРОВАН'}</h3>
@@ -614,7 +622,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
   );
 }
 
-export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, explorationContacts = [], onExpedition, onExplorationAccept, onExplorationCancel, onExplorationRecon, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
+export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, explorationContacts = [], onExpedition, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
   const [tab, setTab] = useState<OperationsTab>('available');
   const [selectedId, setSelectedId] = useState<OperationId | null>(null);
 
@@ -768,9 +776,10 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
           pirateContact={selectedRow?.contact}
           exploration={selectedRow?.exploration}
           onExpedition={onExpedition}
-          onExplorationAccept={onExplorationAccept}
-          onExplorationCancel={onExplorationCancel}
+          onExplorationAccept={(node) => accept('explore:' + node.id)}
+          onExplorationCancel={(id) => cancel('explore:' + id)}
           onExplorationRecon={onExplorationRecon}
+          onExplorationUniverse={onExplorationUniverse}
           battleReportId={selectedRow?.battleReportId}
           completed={selectedRow?.completed}
           nowMs={nowMs}
