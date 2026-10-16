@@ -463,8 +463,16 @@ export function buildReportsFeed(
   const recyclerItems = recyclerArrivalReports.map(recyclerArrivalReportToReportItem);
   const gasExtractionItems = gasExtractionArrivalReports.map(gasExtractionArrivalReportToReportItem);
   const pirateReconItems = pirateReconReports.map(pirateReconReportToReportItem);
+  // Keep the original event reports in System. The Flights mailbox additionally
+  // tracks their actual arrival and collected amount instead of an empty placeholder.
+  const arrivalFlightItems: ReportItem[] = [...recyclerItems, ...gasExtractionItems].map(item => ({
+    ...item,
+    id: 'flight-arrival:' + item.id,
+    category: 'flights',
+    typeLabel: 'Прибытие добывающего флота',
+  }));
 
-  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems, ...recyclerItems, ...gasExtractionItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights), ...explorationMailboxReports(exploration, pirateFlights)].sort((a, b) => {
+  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems, ...recyclerItems, ...gasExtractionItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights), ...explorationMailboxReports(exploration, pirateFlights), ...arrivalFlightItems].sort((a, b) => {
     if (a.timestamp && b.timestamp) return Date.parse(b.timestamp) - Date.parse(a.timestamp);
     if (!a.timestamp && b.timestamp) return -1;
     if (a.timestamp && !b.timestamp) return 1;
