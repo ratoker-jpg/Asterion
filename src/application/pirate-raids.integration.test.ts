@@ -222,7 +222,11 @@ test('NPC pirate raid persists canonical population and commander counts after r
     if(!target)continue;
     const weakenedFleet=createEmptyFleetState();
     weakenedFleet.ships.scout=1;
-    const weakened={...target,fleet:weakenedFleet,defense:{defenses:{}},commanders:{},
+    const weakDefense={...target.defense,defenses:{...target.defense.defenses}};
+    for(const id of Object.keys(weakDefense.defenses) as Array<keyof typeof weakDefense.defenses>){
+      weakDefense.defenses[id]=0;
+    }
+    const weakened={...target,fleet:weakenedFleet,defense:weakDefense,commanders:{},
       population:{total:calculateFleetPopulation(weakenedFleet,target.raceId),
         fleet:calculateFleetPopulation(weakenedFleet,target.raceId),defense:0},
       resources:{...target.resources,metal:500_000,minerals:500_000,gas:500_000}};
