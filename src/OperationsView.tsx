@@ -32,6 +32,7 @@ type OperationsViewProps = {
   onExplorationCancel?: (contactId: string) => void;
   onExplorationRecon?: (node: UniversePlanetNode) => void;
   onExplorationUniverse?: (node: UniversePlanetNode) => void;
+  onExplorationReport?: (reportId: string) => void;
   state: OperationsState;
   onAccept: (operationId: OperationId) => void;
   onCancel: (operationId: OperationId) => void;
@@ -320,7 +321,7 @@ function pirateRemainingLabel(expiresAt: number, nowMs: number) {
   return minutes ? `${minutes} мин ${String(remainder).padStart(2, '0')} с` : `${remainder} с`;
 }
 
-function OperationDossier({ operation, pirateContact, exploration, onExpedition, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, battleReportId, completed, nowMs, onAccept, onCancel, onReveal, onOpenFleets, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: {
+function OperationDossier({ operation, pirateContact, exploration, onExpedition, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, battleReportId, completed, nowMs, onAccept, onCancel, onReveal, onOpenFleets, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: {
   operation: OperationInstance | null;
   pirateContact?: PirateContactPresentation;
   exploration?: ExplorationOperationContact;
@@ -329,6 +330,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
   onExplorationCancel?: (contactId: string) => void;
   onExplorationRecon?: (node: UniversePlanetNode) => void;
   onExplorationUniverse?: (node: UniversePlanetNode) => void;
+  onExplorationReport?: (reportId: string) => void;
   battleReportId?: string;
   completed?: CompletedPirateOperation;
   nowMs: number;
@@ -457,6 +459,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
             <span key={key} className="exploration-resource-chip"><ResourceIcon kind={key} /><b>{resourceLabels[key]}</b><em>{number.format(liveCargo?.[key] ?? 0)}</em></span>)}</div>
           <small>Обломки добывают только переработчики. Всё добытое попадёт на исходную планету только после возвращения.</small>
         </section>}
+        {exploration.recon && onExplorationReport ? <button type="button" className="operations-intel-report-button-v2" onClick={() => onExplorationReport('exploration-recon:' + exploration.recon!.flightId)}>ОТКРЫТЬ РАЗВЕДОТЧЁТ В «СИСТЕМЕ» ↗</button> : null}
         {exploration.recon ? <small className="exploration-recon-timestamp">Последний разведотчёт: {new Date(exploration.recon.resolvedAt).toLocaleString('ru-RU')}
           {inCooldown ? ' · повтор через ' + Math.ceil((cooldownAt - nowMs) / 1000) + ' с' : ''}</small> : null}
       </section>
@@ -468,6 +471,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
             {(['metal','minerals','gas','debris'] as const).map(key =>
               <span key={key} className="exploration-resource-chip"><ResourceIcon kind={key} /><b>{resourceLabels[key]}</b><em>{number.format(delivered?.[key] ?? 0)}</em></span>)}
           </div>
+          {onExplorationReport ? <button type="button" className="operations-intel-report-button-v2" onClick={() => onExplorationReport('exploration-return:' + lastReturn.flightId)}>ОТЧЁТ О ДОСТАВКЕ В «ПОЛЁТАХ» ↗</button> : null}
           {lastReturn.repairTokens ? <p>Редкие жетоны ремонта: +{lastReturn.repairTokens}</p> : null}
         </> : <p>Время контакта истекло. Подтверждённой доставки ресурсов по этому циклу нет.</p>}
       </section> : null}
@@ -650,7 +654,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
   );
 }
 
-export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, explorationContacts = [], onExpedition, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
+export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, explorationContacts = [], onExpedition, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
   const [tab, setTab] = useState<OperationsTab>('available');
   const [selectedId, setSelectedId] = useState<OperationId | null>(null);
 
@@ -808,6 +812,7 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
           onExplorationCancel={(id) => cancel('explore:' + id)}
           onExplorationRecon={onExplorationRecon}
           onExplorationUniverse={onExplorationUniverse}
+          onExplorationReport={onExplorationReport}
           battleReportId={selectedRow?.battleReportId}
           completed={selectedRow?.completed}
           nowMs={nowMs}
