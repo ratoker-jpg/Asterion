@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createInitialSaveState } from './persistence.ts';
+import { createInitialSaveState, createPersistenceFacade } from './persistence.ts';
 import { dispatchFlight, reconcileFlights, recallFlight } from './flights.ts';
 import { getPlanetResources, replacePlanetState } from './contracts.ts';
 import { getExplorationTarget, explorationTargetStatus, selectExplorationTargets } from './exploration.ts';
@@ -111,4 +111,35 @@ test('stale contact ids and mismatched coordinates cannot dispatch flights or sp
     {now,mode:'test',testTimeScale:15});
   assert.equal(wrong.ok,false);
   assert.equal(getPlanetResources(wrong.state,'helion-01').gas,gas);
+});
+
+test('exploration flight and finite contact survive save migration and reloading', () => {
+  const {state, now, target} = prepare();
+  const launch = dispatchFlight(state, {
+    requestId:'expedition-save-roundtrip',
+    missionId:'expedition',
+    contactCycleKey: target.id,
+    originPlanetId:'helion-01',
+    destination:{kind:'coordinate',coordinate:target.coordinate},
+    targetKind:target.kind,
+    selectedShips:{transporter:10},
+    departedAt:now,
+  }, {now,mode:'test',testTimeScale:15});
+  assert.equal(launch.ok,true,launch.ok?'':launch.error.message);
+  if(!launch.ok)return;
+  const store = new Map<string,string>();
+  const facade = createPersistenceFacade({mode:'test',now,storage:{
+    getItem:(key:string)=>store.get(key)??null,
+    setItem:(key:string,value:string)=>{store.set(key,value);},
+    removeItem:(key:string)=>{store.delete(key);},
+  }});
+  assert.equal(facade.write(launch.state).ok,true);
+  const restored = facade.read();
+  const savedFlight = restored.flights.records.find(f=>f.id===launch.flight.id);
+  assert.ok(savedFlight,'expedition cannot be lost during load');
+  assert.equal(savedFlight!.explorationLaunchResourcePoints,launch.flight.explorationLaunchResourcePoints);
+  assert.equal(restored.exploration?.contacts[target.id]?.id,target.id);
+  const arrived = reconcileFlights(restored,launch.flight.arrivalAt,undefined,{mode:'test',testTimeScale:15});
+  assert.equal(arrived.state.flights.records.find(f=>f.id===launch.flight.id)!.phase,'arrived');
+  assert.equal(arrived.state.exploration?.contacts[target.id]?.claim?.flightId,launch.flight.id);
 });
