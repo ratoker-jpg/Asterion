@@ -34,6 +34,7 @@ import { FLEET_PRODUCTION_DISMANTLE_SATELLITES_REQUEST_EVENT } from './applicati
 import { getPlanetOverpopulationSummary } from './application/overpopulation.ts';
 import {
   BOT01_INCOMING_SCENARIO_REQUEST_EVENT,
+  BOT01_EXPLORATION_SCENARIO_REQUEST_EVENT,
   FLIGHT_COMMAND_RESULT_EVENT,
   FLIGHT_DISPATCH_REQUEST_EVENT,
   FLIGHT_LAUNCH_CONTEXT_CLEAR_EVENT,
@@ -1356,6 +1357,11 @@ function FleetWorkspace({
                   disabled={Boolean(espionageState.bot01IncomingScenario)}
                   onClick={() => window.dispatchEvent(new CustomEvent(BOT01_INCOMING_SCENARIO_REQUEST_EVENT, { detail: { now: Date.now() } }))}
                 >{espionageState.bot01IncomingScenario ? 'СЦЕНАРИЙ BOT 01 УЖЕ ЗАПУЩЕН' : 'ЗАПУСТИТЬ АТАКУ BOT 01'}</button> : null}
+                {ACTIVE_RUNTIME_MODE === 'test' ? <button type="button"
+                  data-qa-bot01-exploration-scenario
+                  onClick={() => window.dispatchEvent(new CustomEvent(BOT01_EXPLORATION_SCENARIO_REQUEST_EVENT,{detail:{now:Date.now()}}))}
+                  title="Выбрать действующий свободный объект и направить туда реальный флот Bot 01"
+                >BOT 01 · ЗАХВАТИТЬ ОБЪЕКТ (ТЕСТ)</button> : null}
               </div>
             </section>
 
