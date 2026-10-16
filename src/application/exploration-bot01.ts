@@ -123,7 +123,16 @@ export function creditNpcExplorationReturn(state:SaveState,flight:FlightRecord,a
   const receipt=completeExplorationReturn(contact,flight.id,at,true);
   let next=updateExpeditionContact(state,receipt.contact);
   if(!receipt.payout)return next;
-  const credited=getCappedDelivery(source.resources,getStorageCapacities(source.buildings),receipt.payout.cargo);
+  const caps=getStorageCapacities(source.buildings);
+  // Some existing NPC fixtures legitimately carry a wallet above their current
+  // constructed storage. An incoming expedition must NOT retroactively burn
+  // those old resources while crediting its own newly delivered cargo.
+  const safeCaps={...caps,
+    metal:Math.max(caps.metal,source.resources.metal),
+    minerals:Math.max(caps.minerals,source.resources.minerals),
+    gas:Math.max(caps.gas,source.resources.gas),
+  };
+  const credited=getCappedDelivery(source.resources,safeCaps,receipt.payout.cargo);
   const creditedCargo={...credited.accepted,debris:receipt.payout.cargo.debris};
   next=updateExpeditionContact(next,{...receipt.contact,events:receipt.contact.events.map(e=>
     e.id===flight.id+':completed'?{...e,creditedCargo,burnedCargo:{...credited.burned,debris:0}}:e)});
