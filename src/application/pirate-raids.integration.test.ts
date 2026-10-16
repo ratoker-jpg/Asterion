@@ -7,7 +7,8 @@ import { scaleRuntimeDuration } from '../domain/runtime/mode.ts';
 import { resolveDuePirateRoll, selectDuePirateRolls } from './pirate-raids.ts';
 import { getCurrentPirateContact } from './pirates.ts';
 import { getEspionageTargets } from '../domain/espionage/runtime.ts';
-import { calculateFleetPopulation } from '../domain/fleet/runtime.ts';
+import { calculateFleetPopulation, createEmptyFleetState } from '../domain/fleet/runtime.ts';
+import type { SpyTargetState } from '../domain/espionage/types.ts';
 import { calculateDefensePopulation } from '../domain/fleet/production.ts';
 import { createPirateContactCycleKey } from '../domain/pirates/contact-schedule.ts';
 import { getUniverseTimedObjectSchedule } from '../domain/universe/runtime.ts';
@@ -187,7 +188,7 @@ test('colonizing an untracked system before its first pirate check yields the sa
   const seeded={...launched.state,flights:{...launched.state.flights,
     records:launched.state.flights.records.map(item=>item.id===flight.id?flight:item)}};
   const checkAt=start+15*60_000;
-  const context=(now:number)=>({planetId:'helion-01' as const,now,mode:'production' as const});
+  const context=(now:number)=>({planetId:'helion-01' as const,now,mode:'production' as const,testTimeScale:1 as const});
   const stagedAtColony=reconcileRuntime(seeded,context(arrivalAt)).state;
   assert.equal(Object.keys(stagedAtColony.planets).length,2);
   const staged=reconcileRuntime(stagedAtColony,context(checkAt)).state;
@@ -219,7 +220,8 @@ test('NPC pirate raid persists canonical population and commander counts after r
     const baseline=createInitialSaveState('test',schedule.startAt);
     const target=getEspionageTargets(baseline.espionage)[npc.id];
     if(!target)continue;
-    const weakenedFleet={ships:{scout:1},commanders:{}};
+    const weakenedFleet=createEmptyFleetState();
+    weakenedFleet.ships.scout=1;
     const weakened={...target,fleet:weakenedFleet,defense:{defenses:{}},commanders:{},
       population:{total:calculateFleetPopulation(weakenedFleet,target.raceId),
         fleet:calculateFleetPopulation(weakenedFleet,target.raceId),defense:0},
@@ -241,17 +243,17 @@ test('NPC pirate raid persists canonical population and commander counts after r
     const completed=reconcileFlights(launched,flight.arrivalAt,undefined,{mode:'test',testTimeScale:1});
     const report=completed.state.combat.reports.find(item=>item.id===`battle-pirate-raid-${flight.id}`);
     if(!report || !report.defenderForce.stacks.some(stack=>stack.destroyed>0))continue;
-    const updated=getEspionageTargets(completed.state.espionage)[npc.id]!;
+    const updated:SpyTargetState=getEspionageTargets(completed.state.espionage)[npc.id]!;
     assert.equal(updated.population.fleet,calculateFleetPopulation(updated.fleet,updated.raceId));
     assert.equal(updated.population.defense,calculateDefensePopulation(updated.defense,updated.raceId));
     assert.equal(updated.population.total,updated.population.fleet+updated.population.defense);
     for(const [id,count] of Object.entries(updated.fleet.commanders)){
-      assert.equal(updated.commanders[id as keyof typeof updated.commanders]?.count??0,count);
+      assert.equal(updated.commanders[id as keyof SpyTargetState['commanders']]?.count??0,count);
     }
     const storage=new MemoryStorage();
     const facade=createPersistenceFacade({mode:'test',storage});
     assert.equal(facade.write(completed.state).ok,true);
-    const reloaded=getEspionageTargets(facade.read().espionage)[npc.id]!;
+    const reloaded:SpyTargetState=getEspionageTargets(facade.read().espionage)[npc.id]!;
     assert.deepEqual(reloaded.population,updated.population);
     assert.deepEqual(reloaded.commanders,updated.commanders);
     verified=true;
@@ -275,7 +277,7 @@ test('seven owned systems retain distinct once-only raid decisions across a shor
   }
   const seeded={...state,planets,queues,resourceClock:{...state.resourceClock,byPlanet:clocks}};
   const end=start+2*3600000;
-  const context={planetId:'helion-01' as const,now:end,mode:'production' as const};
+  const context={planetId:'helion-01' as const,now:end,mode:'production' as const,testTimeScale:1 as const};
   const offline=reconcileRuntime(seeded,context).state;
   const keys=Object.keys(offline.pirate?.raidRolls??{});
   assert.equal(keys.length,new Set(keys).size);
