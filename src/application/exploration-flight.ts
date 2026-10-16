@@ -101,7 +101,7 @@ export function accrueExpedition(state: SaveState, flight: FlightRecord, at: num
 /** Return receipt and wallet transfer are committed in one SaveState transition. */
 export function creditExpeditionReturn(state: SaveState, flight: FlightRecord, nowMs: number): SaveState {
   const contact = explorationContactForFlight(state, flight);
-  if (!contact) return state;
+  if (!contact || !contact.events.some(event => event.id === flight.id + ':release')) return state;
   const origin = state.planets[flight.originPlanetId];
   const receipt = completeExplorationReturn(contact, flight.id, nowMs, Boolean(origin));
   let next = updateExpeditionContact(state, receipt.contact);
