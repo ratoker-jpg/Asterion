@@ -523,6 +523,46 @@ async function runViewport(width, height) {
     const finalState = await readSave(win);
     const finalAttackFlight = finalState.flights.records.find((flight) => flight.id === attackFlight.id);
     const battleReport = finalState.combat.reports.find((report) => report.missionType === 'pirate-elimination');
+    // Validate a real user-initiated download AFTER the pirate battle, not
+    // only the presence of a clickable button in the empty Test Mode fixture.
+    await clickPrimary(win, 'operations', `document.querySelector('[data-qa-pirate-export]')`);
+    const archivePath = path.join(directory, 'downloaded-pirate-battles.json');
+    const archiveSaved = new Promise((resolve, reject) => {
+      win.webContents.session.once('will-download', (_event, item) => {
+        if (!/^asterion-pirate-battles-\d+-.*\.json$/.test(item.getFilename())) {
+          reject(new Error('Invalid pirate archive filename: ' + item.getFilename()));
+          item.cancel();
+          return;
+        }
+        item.setSavePath(archivePath);
+        item.once('done', (_doneEvent, state) => {
+          if (state === 'completed') resolve(true);
+          else reject(new Error('Pirate archive download ended: ' + state));
+        });
+      });
+    });
+    const triggerArchiveDownload = await win.webContents.executeJavaScript(`(() => {
+      const button=document.querySelector('[data-qa-pirate-export]');
+      if(!button || button.disabled)return false;
+      button.click();
+      return true;
+    })()`);
+    if(!triggerArchiveDownload)throw new Error('Export button is not clickable after pirate combat');
+    await Promise.race([archiveSaved,sleep(15_000).then(() => {throw new Error('Pirate JSON download timed out');})]);
+    const archive = JSON.parse(fs.readFileSync(archivePath, 'utf8'));
+    if(archive.format !== 'asterion-pirate-battles-analysis'
+      || archive.runtimeMode !== 'test'
+      || archive.currentState?.exportedBattleCount !== 1
+      || archive.battles?.length !== 1
+      || archive.battles[0]?.reportId !== battleReport.id
+      || archive.battles[0]?.flight?.id !== attackFlight.id
+      || !Array.isArray(archive.battles[0]?.report?.rounds)
+      || !archive.battles[0]?.flight?.pirateSnapshot
+      || archive.battles[0]?.summary?.estimateIsActualWalletProfit !== false)
+      throw new Error('Pirate JSON download lost or falsified battle evidence: '+
+        JSON.stringify({count:archive.battles?.length,report:archive.battles?.[0]?.reportId,
+          flight:archive.battles?.[0]?.flight?.id}));
+
     const result = {
       viewport: label,
       fixture,
