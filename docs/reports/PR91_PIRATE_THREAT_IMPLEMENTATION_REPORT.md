@@ -176,3 +176,36 @@ Units of net are total metal+minerals+gas as resource-equivalent, not currency. 
 3. Net economy findings are conditional and assume ideal collection; real on-map long-horizon refinery logistics, rare Planet Breaker frequency and mobile 390px QA are not established by the paired study.
 
 **Do not merge or mark Ready. Owner is sole merge approver.**
+
+
+## Owner-approved C: hidden adaptive pirate farming, Test Mode diagnostics — 16 October 2026
+
+**Scope:** Follow-up in the existing Draft PR #91, branch `codex/pr91-pirate-threat-rewards`. Never merge or mark Ready without owner approval.
+
+### Product behavior and mathematics
+
+- `src/domain/pirates/adaptive.ts`: a per-owner private continuous adaptive index `Q∈[0,1]`, starting at zero in new/legacy saves. The target of **55% meaningful wins is a feedback reference only**, **not** a forced battle outcome or a guaranteed observed win rate. For each qualifying completed pirate-elimination battle,
+  `Q'=clamp(Q+0.12×W×(S−0.55),0,1)`; `S=1` for a complete pirate base wipe, `0.5` for draw, `0` for loss.
+- Weight `W=clamp(sentPopulation/historicalMaxHangar,0,1)^2 × min(1,launchHullCost/(sentPopulation×destroyerHullCostPerPopulation))`. Hull costs are read from canonical race catalog (metal+minerals+gas); the destroyer is a stable canonical per-race reference. `W<0.05` does **not** change Q or the meaningful-battle counter. This makes intentional losses with 10 scouts ineffective, whereas losing a valuable full-size fleet significantly lowers Q. No 24h reset, no base-count reset, and no linkage between different owners.
+- New `pirate-elimination` dispatches freeze `coefficient=0.90+0.15×Q+0.05×seededDraw`, hence **90–95%** at Q=0 and **105–110%** at Q=1, with a continuous intermediate range. The same stable prior RNG stream and the prior exact ship allocator remain. Special Planet Breaker spawn and technologies untouched. The combat validator permits only actual pirate elimination defenders up to **110% of attacker population**; ordinary player/PvP fleet caps unchanged.
+- The index is recorded **once**, only from an actual new-version elimination combat report, and stored in `PirateState.ownerAdaptations[ownerId]` with a per-flight dedupe ledger, weighted numerator/denominator and most recent realized garrison roll. The index is unchanged at *dispatch*, by fake replay, by recon, and by an insignificant defeat. All new flight coefficients, weighting and reward modifiers are frozen at dispatch and survive save/reload. Pre-C flights retain their older 75–90% or 85–105% frozen garrisons and their prior reward behavior.
+- New victory pirate-wreckage multipliers by sent population relative to the **owner's historical maximum hangar**: **under 50% ×0.7, 50–84.99% ×0.9, 85–94.99% ×1.0, 95–99.99% ×1.3, exactly 100% ×1.5**. New draws use ×0.75, new losses ×0.5, all independent of the winning chance. Only *pirate hull debris* is multiplied; ordinary own destroyed-hull debris remains unchanged, including after defeat. Important bug fixed: `addDebris` sanitizes negative operands, therefore a penalty must first scale pirate debris and only then add the unmodified own debris. Legacy losses/draws lack frozen penalties and remain ×1.
+- `src/OperationsView.tsx`, `src/App.tsx`, `src/operations.css`: an extra **Test Mode-only** read-only diagnostic section shows (a) wins / significant fight count and simple %, (b) economically weighted outcome %, (c) hidden Q as a percentage, (d) the next predicted population ratio range, and (e) the most recently frozen actual rolled coefficient and dispatched population. In production the props are not passed and the widget is absent. No visible "pirate alertness" mechanic in the normal game.
+
+### Evidence and QA
+
+- `src/domain/pirates/adaptive.test.ts`: Q 0→1 across full wins and declines across large losses; no repeat count; 100 intentional scout losses have no influence; deterministic 90–110% roll, 0/0.5/1 boundaries; actor-isolated save migration and forged field rejection.
+- `src/application/pirate-combat.integration.test.ts`: actual new launch snapshot/strength/Q; complete win attribution and persisted replay; actual penalty ×0.5 or ×0.75 with own hull salvage unaffected. Legacy 0.75–1.05 snapshots still accepted and new 1.10 cap accepted.
+- `electron/pirate-operations-qa.cjs`: at 1920×1080 and 1280×720 verifies that initial Test Mode widgets show Q=0% and 90–95% next-garrison band before normal recon/elimination flow. Do not disable or relax UI assertions.
+- `tools/generate-pirate-pr91-adaptive.mjs`, `npm run balance:pirates:pr91:adaptive`: **864 production resolver battles** across 3 races × 2 point scores × 2 population caps × 2 destroyer upgrades × Q=0/0.5/1 × 12 seeded contacts. Real canonical 10% special roll; 120% recycler optimistic net includes destroyed own ship cost, standard travel gas, modeled ten-recycler collection fuel and full salvage. JSON per seed and Markdown group summary live in CI artifacts `artifacts/pr91-adaptive-c/`. **This Q-grid is conditional, not a 50-battle adaptive feedback trajectory** and may show 100% victories even at the hardest band.
+- Full CI and Windows build remain an acceptance gate; see [PR #91 checks](https://github.com/ratoker-jpg/Asterion/pull/91/checks). As of this document modification, no claim of a green final HEAD.
+
+### Explicitly remaining risks
+
+1. **55% cannot be guaranteed.** Against an ideal counter-fleet, 110% pirate population may still lose 100% of the time. The algorithm never cheats the shared combat engine.
+2. The sampled combat economy assumes physically collecting all orbital debris, infinite trips/time/storage, and no PvE opportunity-cost valuation. Actual sustainable farm EV needs repeated in-game player testing; **no further balance coefficient was changed without approval**.
+3. Client-side Test Mode and local saves are inspectable/editable by technically capable players. No genuine server-side secrecy or anti-cheat exists in an offline local game.
+4. Bot 01's independent **incoming** pirate raids are a separate already-existing mechanic. They do not use player-initiated `pirate-elimination` launches, so this iteration does not pretend to adapt Bot 01's raids or guarantee an NPC 55% win rate.
+5. Unresolved prior issue: NPC-vs-pirate battle reports in the player's feed is outside this scoped adaptive balance task. Owner retains sole control of merge.
+
+**Do not merge. PR must remain Draft.**

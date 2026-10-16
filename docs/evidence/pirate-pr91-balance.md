@@ -82,3 +82,24 @@ In the winner-only multiplier ledger, old 274 cases ×2 and 269 cases ×2.5 beco
 ## Risk note
 
 A ×2.5 multiplier applied to 60–80% base pirate salvage can produce salvage with a nominal value 150–200% of destroyed pirate metal+mineral costs **before** recycling, possibly making high-capacity victories inflationary. Net outcomes cannot be concluded without actual hull losses, flight gas and collection expenses. Approved balancing numbers were not silently changed.
+
+
+## C follow-up: reduced pirate salvage and hidden adaptive population (supersedes prior reward estimates)
+
+The earlier ×2.5 prize / fixed 85–105% garrison estimates above are **historical** and must not be treated as measured profitability of the current C balancing rules. The updated owner-approved live rules are:
+
+| Sent vs historical max hangar | New victory multiplier | 120%-recycling gross return with living Corsair L40 (before own losses) |
+|---|---:|---:|
+| under 50% | ×0.7 | 67.2% of killed pirate metal+mineral costs |
+| 50–84.99% | ×0.9 | 86.4% |
+| 85–94.99% | ×1.0 | 96.0% |
+| 95–99.99% | ×1.3 | 124.8% |
+| exactly 100% | ×1.5 | 144.0% |
+| draw, any size | ×0.75 | 72.0% |
+| defeat, any size | ×0.5 | 48.0% |
+
+Corsair L40 grants at most 80% ordinary pirate metal+mineral wreckage, and 120% recycling converts recovered debris into resource-equivalent metal/minerals. **All own hull losses and travel/recycling fuel still must be subtracted.** Old dispatched elimination fights keep the rewards frozen when they left; old 5/8-round fights are not retuned.
+
+Adaptive `Q` is hidden from production UI and updates only after economically significant resolved battle; full-fleet win increases Q by up to 0.054, full-fleet loss lowers it by up to 0.066, with q clipped 0–1. Ten scouts at 25,112 population cap carry negligible weight and cannot be used for practical cooldown abuse. Q=0 gives randomly 90–95%, Q=0.5 gives 97.5–102.5%, Q=1 gives 105–110% of sent population. This **does not** enforce 55% wins; a perfect matchup may still beat every garrison.
+
+**New conditional combat evidence:** `tools/generate-pirate-pr91-adaptive.mjs` executes 864 reproducible real resolver cases under fixed Q=0, 0.5 and 1. It writes `artifacts/pr91-adaptive-c/results.json` and `summary.md` with win/loss/draw counts and *optimistic* net resources under full debris collection. CI artifact is linked from the [current PR checks](https://github.com/ratoker-jpg/Asterion/pull/91/checks). Numerical outcomes should only be taken from the actual successful CI artifact, not extrapolated from the former ×2.5 study or confused with a simulated closed-loop 55% win-rate controller.
