@@ -443,8 +443,12 @@ export function resolvePirateEliminationAtTarget(state: SaveState, flight: Fligh
   const multiplier=encounter.victory&&snapshot.eliminationBudget ? (snapshot.rewardMultiplier??1)
     : encounter.report.winner==='draw' ? (snapshot.drawMultiplier??1)
     : (snapshot.defeatMultiplier??1);
-  const bonusPirateDebris=Math.floor(basePirateDebris*multiplier)-basePirateDebris;
-  const debris=Math.max(0,addDebris(baseDebris,bonusPirateDebris));
+  // addDebris intentionally drops negative amounts; apply the multiplier to
+  // pirate wreckage FIRST, then add the ordinary untouched own-hull salvage.
+  const ownDebris=Math.max(0,baseDebris-basePirateDebris);
+  const adjustedPirateDebris=Math.floor(basePirateDebris*multiplier);
+  const bonusPirateDebris=adjustedPirateDebris-basePirateDebris;
+  const debris=addDebris(ownDebris,adjustedPirateDebris);
   const report: BattleReport = {
     ...encounter.report, debris, resources: { metal: 0, minerals: 0, gas: 0 },
     pirateReward: {
@@ -456,7 +460,7 @@ export function resolvePirateEliminationAtTarget(state: SaveState, flight: Fligh
       multiplier,
       basePirateDebris,
       bonusPirateDebris,
-      ownDebris: Math.max(0, baseDebris - basePirateDebris),
+      ownDebris,
       threatReductionFraction: encounter.victory && snapshot.eliminationBudget && snapshot.historicalHangarCapacity
         ? Math.min(1, (snapshot.sentCombatPopulation ?? 0) / snapshot.historicalHangarCapacity)
         : 0,
