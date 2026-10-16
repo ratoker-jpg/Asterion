@@ -714,7 +714,7 @@ function FleetWorkspace({
     return {
       requestId,
       missionId,
-      contactCycleKey: missionId === 'pirate-elimination' ? pirateTarget!.contactCycleKey : missionId === 'expedition' ? expeditionTarget!.id : undefined,
+      contactCycleKey: missionId === 'pirate-elimination' ? pirateTarget!.contactCycleKey : missionId === 'expedition' ? expeditionTarget!.id : missionId === 'attack' ? launchContext?.contactCycleKey : undefined,
       originPlanetId,
       destination,
       targetRelation: missionId === 'pirate-elimination' ? 'neutral' : draft?.targetRelation === null ? undefined : draft?.targetRelation ?? previewTargetRelation,
