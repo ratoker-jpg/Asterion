@@ -37,3 +37,13 @@
 ## Следующий этап в том же Draft PR
 
 Соединить обычную миссию «Атака» с занятым уникальным объектом/аномалией через существующий combat resolver, а не новый бой. Проверить обе стороны, потери, 30% груз, разовые выплаты, отчёты, NPC-логіку и офлайн повторы. После — разведка, hazard, баланс и визуальная проверка.
+## UI corrections from QuickShot 2026-10-16_215602 (6 screenshots)
+
+- 01/02: operation feed now displays the actual unique/anomaly artwork rather than the generic Expedition icon. There is a distinct free/occupied/own/completed color-coded badge instead of meaningless Intel pips and reward question marks.
+- 03/04: exploration dossier rebuilt with actual full-size art, coordinates, lifetime, occupation, accepted status, Russian-language labels, resource assets and explicit action footer. Resource composition and risk are concealed before successful reconnaissance.
+- 04: accepted operations are persisted under the existing SaveState.exploration.acceptedContactIds and shown in the Active tab. Actual completed returns and expired accepted contact cycles appear in Completed; archive snapshots preserve the exact old cycle, not a newly spawned contact.
+- 05/06: Universe map has colored object status markers, and both anomaly and unique object inspectors offer 'Исследовать зондом' and 'Подготовить экспедицию'. Starting probe reconnaissance from the atlas also accepts the operation.
+- Research: exploration-recon uses a real one-spy-probe flight, existing fuel and fleet reservation, ETA, canonical arrival, seeded 70% success, 120s cooldown and durable reconReports. Profiles appear after success, failure is a real report. The probe flies back.
+- Added integration test covering accepted/cancelled operations, concurrent spy-probe rejection, report at real arrival, cooldown, replay and archive.
+
+Remaining blockers unchanged: combat-based Attack of occupied exploration contacts, NPC contests, hazards, end-to-end manual browser/device visual review. Never present these as implemented. Current HEAD CI and Pages must be separately verified, no merge.
