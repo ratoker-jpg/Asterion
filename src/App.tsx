@@ -1230,7 +1230,11 @@ export function App() {
       selectedShips: { 'spy-probe': 1 },
       departedAt: nowMs,
     }, { now: nowMs, mode: RUNTIME_MODE, testTimeScale });
-    if (!result.ok) { setNotice(result.error.message, 'error'); return; }
+    if (!result.ok) {
+      if (acceptedState !== current) { stateRef.current = acceptedState; setState(acceptedState); }
+      setNotice((acceptedState !== current ? 'Операция принята, но зонд не отправлен: ' : '') + result.error.message, 'error');
+      return;
+    }
     stateRef.current = result.state;
     setState(result.state);
     setNotice('Зонд отправлен. Отчёт о результатах исследования появится после прибытия.');
