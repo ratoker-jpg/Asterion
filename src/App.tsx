@@ -161,6 +161,9 @@ import { selectOwnedPlanet } from './application/owned-planets.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
 import { materializePirateProfiles, pirateContactOperation, pirateOperationId, selectOwnedPiratePresentations, selectOwnedPirateTargets, selectPirateContacts } from './application/pirate-presentation.ts';
 import { selectExplorationTargets, getExplorationTarget, explorationTargetStatus } from './application/exploration.ts';
+import { acceptLiveExploration, cancelLiveExploration } from './application/exploration-operations.ts';
+import { explorationArtForCycle } from './exploration-art.ts';
+import { explorationProfile } from './domain/exploration/model.ts';
 import type { PirateContactPresentation, PirateSystemSelection } from './pirate-ui.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
@@ -1192,6 +1195,48 @@ export function App() {
     setNotice('Сигнал просканирован. Классификация операции обновлена.');
   };
 
+  const acceptExplorationContact = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
+    const current = stateRef.current;
+    const next = acceptLiveExploration(current, node.id, Date.now(), RUNTIME_MODE);
+    if (!next) { setNotice('Контакт уже исчез. Принять операцию нельзя.', 'error'); return; }
+    stateRef.current = next;
+    setState(next);
+    setNotice('Операция принята. Можно отправить разведзонд или экспедицию.');
+  };
+
+  const cancelExplorationContact = (id: string) => {
+    const next = cancelLiveExploration(stateRef.current, id);
+    stateRef.current = next;
+    setState(next);
+    setNotice('Исследовательская операция отменена.');
+  };
+
+  const launchExplorationRecon = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
+    const current = stateRef.current;
+    const nowMs = Date.now();
+    const live = getExplorationTarget(current, node.id, nowMs, RUNTIME_MODE);
+    if (!live) { setNotice('Объект исчез. Исследование невозможно.', 'error'); return; }
+    if (!current.exploration?.acceptedContactIds?.includes(node.id)) {
+      setNotice('Сначала примите операцию.', 'error'); return;
+    }
+    const result = dispatchFlight(current, {
+      requestId: 'exploration-recon:' + node.id + ':' + nowMs,
+      missionId: 'exploration-recon',
+      contactCycleKey: node.id,
+      operationId: node.id,
+      originPlanetId: current.currentPlanetId,
+      destination: { kind: 'coordinate', coordinate: live.coordinate },
+      targetKind: live.kind,
+      selectedShips: { 'spy-probe': 1 },
+      departedAt: nowMs,
+    }, { now: nowMs, mode: RUNTIME_MODE, testTimeScale });
+    if (!result.ok) { setNotice(result.error.message, 'error'); return; }
+    stateRef.current = result.state;
+    setState(result.state);
+    setNotice('Зонд отправлен. Отчёт о результатах исследования появится после прибытия.');
+    window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
+  };
+
   const openExpeditionLaunch = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
     const live = getExplorationTarget(stateRef.current, node.id, Date.now(), RUNTIME_MODE);
     if (!live || explorationTargetStatus(stateRef.current, live) !== 'free') {
@@ -1631,6 +1676,9 @@ export function App() {
               pirateContacts={pirateContacts}
               explorationContacts={selectExplorationTargets(state, now, RUNTIME_MODE).map(node => ({ node, occupancy: explorationTargetStatus(state, node) }))}
               onExpedition={openExpeditionLaunch}
+              onExplorationAccept={acceptExplorationContact}
+              onExplorationCancel={cancelExplorationContact}
+              onExplorationRecon={launchExplorationRecon}
               pirateOwnerId={state.profile.playerId}
               pirateRaidRolls={state.pirate?.raidRolls}
               pirateAdaptiveDiagnostics={RUNTIME_MODE==='test'?(state.pirate?.ownerAdaptations?.[state.profile.playerId]??defaultPirateOwnerAdaptation()):undefined}
