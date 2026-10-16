@@ -364,6 +364,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
       (e.kind === 'returned' || e.kind === 'origin-destroyed') && e.ownerId);
     const cooldownAt = (exploration.recon?.resolvedAt ?? 0) + 120_000;
     const inCooldown = exploration.recon && cooldownAt > nowMs;
+    const awaitingProbe = exploration.reconInFlight?.phase === 'outbound';
     return <aside className="operations-dossier-v2 operations-dossier-v2--exploration" data-qa-exploration-dossier={node.id}>
       <header className="operations-dossier-head-v2">
         <div className="operations-dossier-title-v2">
@@ -396,9 +397,9 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
       <section className="exploration-dossier-intelligence">
         <div className="exploration-section-heading">
           <strong>ИССЛЕДОВАНИЕ ОБЪЕКТА</strong>
-          <span>{known ? 'ДАННЫЕ ПОЛУЧЕНЫ' : failed ? 'ЗОНД НЕ ПОЛУЧИЛ ДАННЫЕ' : 'НЕТ РАЗВЕДДАННЫХ'}</span>
+          <span>{known ? 'ДАННЫЕ ПОЛУЧЕНЫ' : awaitingProbe ? 'ЗОНД В ПУТИ' : failed ? 'ЗОНД НЕ ПОЛУЧИЛ ДАННЫЕ' : 'НЕТ РАЗВЕДДАННЫХ'}</span>
         </div>
-        <p>{known
+        <p>{awaitingProbe ? 'Зонд направляется к объекту. Отчёт появится после прибытия.' : known
           ? 'Зонд успешно исследовал объект. Ниже показан подтверждённый профиль добычи.'
           : failed
             ? 'Попытка исследования оказалась неудачной. Сведения о составе ресурсов пока скрыты.'
@@ -449,9 +450,9 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
             data-qa-exploration-accept={node.id} onClick={() => onExplorationAccept?.(node)}>ПРИНЯТЬ ОПЕРАЦИЮ</button> : null}
           {!completed && accepted ? <>
             <button type="button" className="operations-primary-v2" data-qa-exploration-recon={node.id}
-              disabled={!onExplorationRecon || Boolean(inCooldown)}
+              disabled={!onExplorationRecon || Boolean(inCooldown) || Boolean(exploration.reconInFlight)}
               title={inCooldown ? 'Повторное исследование доступно после паузы' : 'Отправить один шпионский зонд с текущей планеты'}
-              onClick={() => onExplorationRecon?.(node)}>ИССЛЕДОВАТЬ ОБЪЕКТ</button>
+              onClick={() => onExplorationRecon?.(node)}>{exploration.reconInFlight ? 'ЗОНД В ПУТИ / ВОЗВРАЩАЕТСЯ' : 'ИССЛЕДОВАТЬ ОБЪЕКТ'}</button>
             {exploration.occupancy === 'free'
               ? <button type="button" className="operations-secondary-v2" disabled={!onExpedition}
                   data-qa-operation-expedition={node.id} onClick={() => onExpedition?.(node)}>ПОДГОТОВИТЬ ЭКСПЕДИЦИЮ</button>
