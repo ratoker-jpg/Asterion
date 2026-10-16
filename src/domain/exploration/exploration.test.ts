@@ -12,7 +12,7 @@ import {
 import {
   createExplorationState, getOrMaterializeExplorationContact, occupyExplorationContact,
   reconcileExplorationContact, prepareExplorationRecall, isExplorationRecallReady,
-  releaseExplorationClaim, settleExplorationContest, resolveExplorationRecon,
+  releaseExplorationClaim, completeExplorationReturn, settleExplorationContest, resolveExplorationRecon,
   migrateExplorationState, recordHighestExplorationScore, launchExplorationScore,
 } from './ledger.ts';
 
@@ -221,4 +221,33 @@ test('save migration accepts legitimate contact; rejects forged stockpiles and k
   const forged = structuredClone(state);
   forged.contacts[id]!.resourceReserve.metal += 100_000;
   assert.equal(Object.keys(migrateExplorationState(forged).contacts).length, 0);
+});
+
+test('successful return pays once from origin, never on cancelled/missing origin or repeated reload', () => {
+  const baseline = getOrMaterializeExplorationContact(createExplorationState(), makeNode('anomaly'), 100_000).contact;
+  let active = occupyExplorationContact(baseline, arrival());
+  active = prepareExplorationRecall(active, 'player', start + 14 * minute);
+  active = releaseExplorationClaim(active, start + 14 * minute + 30_000);
+  const settled = completeExplorationReturn(active, 'flight-1', start + 18 * minute + 30_000, true);
+  assert.equal(settled.payout?.originPlanetId, 'home');
+  assert.ok(settled.payout!.cargo.gas > 0);
+  assert.equal(settled.contact.events.at(-1)!.kind, 'returned');
+  assert.deepEqual(completeExplorationReturn(settled.contact, 'flight-1', start + 19 * minute, true).payout, null);
+  assert.throws(() => completeExplorationReturn(baseline, 'unknown', start + 19 * minute, true));
+  const destroyedOrigin = completeExplorationReturn(active, 'flight-1', start + 18 * minute + 30_000, false);
+  assert.equal(destroyedOrigin.payout, null);
+  assert.equal(destroyedOrigin.contact.events.at(-1)!.kind, 'origin-destroyed');
+});
+
+test('arrival after object expiry cannot occupy and contest closes exactly after 30 seconds', () => {
+  const contact = getOrMaterializeExplorationContact(createExplorationState(), makeNode('unique'), 100_000).contact;
+  assert.throws(() => occupyExplorationContact(contact, arrival(start + 18 * minute)));
+  let active = occupyExplorationContact(contact, arrival());
+  active = prepareExplorationRecall(active, 'player', start + 3 * minute);
+  const attacker = { ...arrival(start + 3 * minute + 29_000, 'attack-29'), ownerId: 'enemy' };
+  assert.doesNotThrow(() => settleExplorationContest(active, start + 3 * minute + 29_000,
+    'defender', attacker, 0, { all: 5000, transporters: 5000, recyclers: 0 }, false));
+  assert.throws(() => settleExplorationContest(active, start + 3 * minute + 30_000,
+    'defender', { ...attacker, flightId: 'attack-30' }, 0,
+    { all: 5000, transporters: 5000, recyclers: 0 }, false));
 });
