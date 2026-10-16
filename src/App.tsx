@@ -140,6 +140,7 @@ import {
   FLIGHT_LAUNCH_CONTEXT_EVENT,
   FLIGHT_RECALL_REQUEST_EVENT,
   BOT01_INCOMING_SCENARIO_REQUEST_EVENT,
+  BOT01_EXPLORATION_SCENARIO_REQUEST_EVENT,
   SPY_REPORT_ALL_REQUEST_EVENT,
   SPY_REPORT_REQUEST_EVENT,
   SPY_REPORT_RESULT_EVENT,
@@ -556,7 +557,25 @@ export function App() {
       }
       window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
     };
-    const onEditTargetRequest = () => {
+    const onBot01ExplorationScenarioRequest = (event: Event) => {
+      if(RUNTIME_MODE !== 'test') return;
+      const detail=(event as CustomEvent<{now?:number}>).detail;
+      const now=detail?.now ?? Date.now();
+      const candidates=selectExplorationTargets(stateRef.current,now,'test',25);
+      const node=candidates.find(item=>explorationTargetStatus(stateRef.current,item)==='free'
+        && (item.special?.expiresAt ?? 0)-now>180_000);
+      if(!node){
+        setNotice('Нет свободного исследовательского объекта с достаточным временем для перелёта Bot 01.','error');
+        return;
+      }
+      const result=dispatchBot01Exploration(stateRef.current,node,now,testTimeScale);
+      if(!result.ok){setNotice(result.notice,'error');return;}
+      stateRef.current=result.state;
+      setState(result.state);
+      setNotice('Bot 01 вылетел к '+node.name+'. После прибытия открой «Операции», прими объект и нажми «Атаковать».');
+      navigateTo('operations');
+    };
+        const onEditTargetRequest = () => {
       clearBuildingInterior();
       navigateTo('universe');
       setNotice('Выберите новую свободную координату для колонизации.');
@@ -596,6 +615,7 @@ export function App() {
     window.addEventListener(FLIGHT_DISPATCH_REQUEST_EVENT, onDispatchRequest);
     window.addEventListener(FLIGHT_RECALL_REQUEST_EVENT, onRecallRequest);
     window.addEventListener(BOT01_INCOMING_SCENARIO_REQUEST_EVENT, onBot01ScenarioRequest);
+    window.addEventListener(BOT01_EXPLORATION_SCENARIO_REQUEST_EVENT,onBot01ExplorationScenarioRequest);
     window.addEventListener(FLIGHT_EDIT_TARGET_REQUEST_EVENT, onEditTargetRequest);
     window.addEventListener(SPY_REPORT_REQUEST_EVENT, onSpyReportRequest);
     window.addEventListener(SPY_REPORT_ALL_REQUEST_EVENT, onSpyReportAllRequest);
@@ -603,6 +623,7 @@ export function App() {
       window.removeEventListener(FLIGHT_DISPATCH_REQUEST_EVENT, onDispatchRequest);
       window.removeEventListener(FLIGHT_RECALL_REQUEST_EVENT, onRecallRequest);
       window.removeEventListener(BOT01_INCOMING_SCENARIO_REQUEST_EVENT, onBot01ScenarioRequest);
+      window.removeEventListener(BOT01_EXPLORATION_SCENARIO_REQUEST_EVENT,onBot01ExplorationScenarioRequest);
       window.removeEventListener(FLIGHT_EDIT_TARGET_REQUEST_EVENT, onEditTargetRequest);
       window.removeEventListener(SPY_REPORT_REQUEST_EVENT, onSpyReportRequest);
       window.removeEventListener(SPY_REPORT_ALL_REQUEST_EVENT, onSpyReportAllRequest);
