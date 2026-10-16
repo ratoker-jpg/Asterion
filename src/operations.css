@@ -1889,3 +1889,87 @@
   .exploration-action-buttons button { width:100%; }
   .exploration-action-buttons .operations-pirate-cancel { margin-left:0; }
 }
+
+
+/* PR92 QACut 22:28: unify gameplay dossiers and stop operations feed from growing the page. */
+@media (min-width: 851px) {
+  .workspace.workspace--operations .operations-layout-v2 { align-items: start; }
+  .workspace.workspace--operations .operations-feed-v2 { height: min(72vh, 740px); max-height: min(72vh, 740px); overflow: hidden; }
+  .workspace.workspace--operations .operations-feed-scroll-v2 {
+    min-height: 0; flex: 1 1 auto; height: auto; max-height: unset;
+    overflow-y: auto !important; overflow-x: hidden !important;
+    scrollbar-width: thin; overscroll-behavior: contain;
+  }
+}
+.operation-feed-card-v2,
+.operation-feed-card-v2[data-qa-pirate-contact] {
+  min-height: 140px; grid-template-columns: 104px minmax(0, 1fr) 15px;
+  gap: 13px; padding-right: 10px;
+}
+.operation-feed-pirate-art-v2, .operation-feed-pirate-art-v2.exploration-feed-art {
+  display: grid; place-items: center; padding: 7px 3px;
+  border-right: 1px solid rgba(62,170,198,.18);
+  background: radial-gradient(circle,rgba(52,102,139,.19),rgba(5,20,32,.08) 74%);
+}
+.operation-feed-pirate-art-v2 img,
+.operation-feed-pirate-art-v2.exploration-feed-art img {
+  width: 100%; max-width: 100%; height: 118px; object-fit: contain;
+}
+.operation-feed-pirate-art-v2.exploration-feed-art small { display:none; }
+.operation-feed-copy-v2 { padding-top: 15px; padding-bottom: 12px; gap: 6px; min-width: 0; }
+.operation-feed-card-v2 .operation-feed-copy-v2 > small { font-size: 10px; color:#8bc8d9; letter-spacing:.045em; line-height:1.4; white-space:normal; }
+.operation-feed-card-v2 .operation-feed-copy-v2 > strong { font-size:14px; white-space:normal; line-height:1.35; overflow-wrap: anywhere; }
+.operation-feed-card-v2 .operation-feed-copy-v2 > em { font-size:11px; white-space:normal; line-height:1.25; color:#95bac7; }
+.operation-feed-card-v2 .operation-feed-meta-v2 > i { font-size: 10px; }
+.operation-feed-card-v2 .operation-feed-meta-v2 { display: flex; gap:9px; flex-wrap:wrap; align-items:center; }
+.operation-feed-card-v2 .operation-feed-meta-v2 > b { font-size:10px; }
+.operation-feed-card-v2 .operation-feed-pirate-art-v2 small { font-size:9px; white-space:normal; }
+.exploration-feed-risk { color:#eece96 !important; font-size:10px !important; padding:4px 6px; border-radius:5px; border:1px solid rgba(219,165,103,.35); background:rgba(137,89,40,.16); }
+.operations-hero-object-art {
+  border-radius: 8px; min-height: 295px; overflow: hidden;
+  display:flex; align-items:center; justify-content:center;
+  background: radial-gradient(circle, rgba(79,112,145,.15),transparent 70%);
+}
+.operations-hero-object-art img { display:block; width:100%; height: 310px; max-height: 40vh; object-fit:contain; filter:drop-shadow(0 0 19px rgba(67,172,216,.27)); }
+.operations-dossier-v2--exploration .exploration-dossier-hero { grid-template-columns: minmax(0, 49%) minmax(0, 1fr); gap: 18px; }
+.operations-dossier-v2--exploration .exploration-dossier-art {
+  min-height: 300px; border: 0; border-radius:0; overflow:visible;
+  background: radial-gradient(circle, rgba(47,110,166,.12),transparent 73%);
+}
+.operations-dossier-v2--exploration .exploration-dossier-art img {
+  max-width: 100%; max-height: 365px; width:100%; min-height:260px;
+  object-fit:contain; filter:drop-shadow(0 0 19px rgba(45,148,205,.25));
+}
+.operations-dossier-v2--exploration .exploration-dossier-title-v2 small,
+.operations-dossier-v2--exploration .exploration-dossier-intro > small { font-size: 11px; }
+.operations-dossier-v2--exploration .exploration-dossier-title-v2 h2 { font-size: 24px; }
+.operations-dossier-v2--exploration .exploration-dossier-intro > strong { font-size:20px; }
+.operations-dossier-v2--exploration .exploration-dossier-intro > p,
+.operations-dossier-v2--exploration .exploration-dossier-intelligence > p,
+.operations-dossier-v2--exploration .exploration-reward-cell p { font-size: 13px; line-height:1.6; }
+.operations-dossier-v2--exploration .exploration-dossier-intro dt { font-size:10px; }
+.operations-dossier-v2--exploration .exploration-dossier-intro dd { font-size:13px; }
+.exploration-coordinates-link { background:transparent; color:#7be0f5; border:0; cursor:pointer; padding:0; font:inherit; font-weight:750; text-decoration:underline; text-underline-offset:3px; }
+.exploration-coordinates-link:hover,.exploration-coordinates-link:focus-visible { color:#edfcff; outline-color:#48d5f3; }
+.exploration-lifetime-panel { display:grid; gap:9px; background:rgba(5,37,47,.53); border:1px solid rgba(74,192,218,.21); border-radius:9px; padding:12px 15px; }
+.exploration-lifetime-panel > div:first-child { display:flex; justify-content:space-between; align-items:center; gap:15px; }
+.exploration-lifetime-panel small { color:#8cb8c5; font-weight:800; letter-spacing:.07em; font-size:11px; }
+.exploration-lifetime-panel strong { color:#e5f9ff; font-size:14px; font-variant-numeric:tabular-nums; }
+.exploration-lifetime-track { height:9px; width:100%; border-radius:20px; overflow:hidden; background:rgba(67,110,130,.23); box-shadow:inset 0 0 2px #041016; }
+.exploration-lifetime-track > span { display:block; height:100%; background:linear-gradient(90deg,#287f9b,#7be6e7); border-radius:20px; transition:width .25s; }
+.exploration-risk-meter { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:5px; }
+.exploration-risk-meter span { display:grid; place-items:center; min-height:32px; border-radius:6px; border:1px solid rgba(119,154,168,.23); background:rgba(55,74,85,.26); color:#819da8; font-size:13px; font-weight:800; }
+.exploration-risk-meter span.active { border-color:rgba(243,165,95,.5); background:linear-gradient(0deg,rgba(166,84,37,.29),rgba(144,108,51,.14)); color:#ffcf91; text-shadow:0 0 7px rgba(255,181,87,.18); }
+.exploration-mining-status { display:flex; flex-direction:column; gap:10px; padding:12px; border-radius:8px; border:1px solid rgba(62,171,200,.28); background:rgba(16,59,80,.22); }
+.exploration-mining-status > div:first-child { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.exploration-mining-status strong { color:#a6eeff; font-size:12px; }
+.exploration-mining-status span { font-size:11px; }
+.exploration-mining-status > small { font-size:11px; line-height:1.5; color:#acd2df; }
+@media (max-width: 850px) {
+  .operations-dossier-v2--exploration .exploration-dossier-hero { grid-template-columns:1fr; }
+  .operations-dossier-v2--exploration .exploration-dossier-art img { max-height:300px; }
+  .operations-hero-object-art { min-height:200px; }
+  .operations-hero-object-art img { height:260px; }
+  .operation-feed-card-v2, .operation-feed-card-v2[data-qa-pirate-contact] { grid-template-columns:80px minmax(0,1fr) 12px; min-height:115px; }
+  .operation-feed-pirate-art-v2 img,.operation-feed-pirate-art-v2.exploration-feed-art img {height:105px;}
+}
