@@ -77,6 +77,8 @@ export type ExplorationState = {
   contacts: Record<string, ExplorationContact>;
   highestScoresByOwner: Record<string, number>;
   completed: ExplorationEvent[];
+  /** Last processed autonomous NPC opportunity; stable across save/load. */
+  npcProcessedAt?: number;
   /** Player accepted contacts; not a separate localStorage or demo Operations row. */
   acceptedContactIds?: string[];
   /** Immutable outcomes of real spy-probe flights, including unsuccessful reconnaissance. */
@@ -449,6 +451,7 @@ export function migrateExplorationState(value: unknown): ExplorationState {
         && typeof record.success === 'boolean' && record.id === record.flightId + ':recon')).slice(-256)
     : [];
   return { version: 1, contacts, highestScoresByOwner,
+    ...(validNumber(source.npcProcessedAt) ? {npcProcessedAt:source.npcProcessedAt} : {}),
     acceptedContactIds, reconReports,
     completed: Array.isArray(source.completed) ? source.completed.slice(-200) : [] };
 }
