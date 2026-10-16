@@ -374,11 +374,14 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
     const resourceRows = Object.entries(profile.weights).filter((entry) => (entry[1] ?? 0) > 0);
     const lastReturn = [...(exploration.contact?.events ?? [])].reverse().find(e =>
       (e.kind === 'returned' || e.kind === 'origin-destroyed') && e.ownerId === exploration.ownerId);
+    const battleEvent=[...(exploration.contact?.events ?? [])].reverse()
+      .find(event=>/:(capture|contest)$/.test(event.id));
+    const combatReportId=battleEvent ? 'battle-exploration-'+battleEvent.id.replace(/:(capture|contest)$/,'') : null;
     const cooldownAt = (exploration.recon?.resolvedAt ?? 0) + 120_000;
     const inCooldown = exploration.recon && cooldownAt > nowMs;
     const awaitingProbe = exploration.reconInFlight?.phase === 'outbound';
     const projected = exploration.contact?.claim ? reconcileExplorationContact(exploration.contact, nowMs) : exploration.contact;
-    const mine = projected?.claim;
+    const mine = projected?.claim?.ownerId === exploration.ownerId ? projected.claim : undefined;
     const liveCargo = mine?.cargo;
     const remainingLife = node.special?.expiresAt && node.special?.startAt
       ? Math.max(0, Math.min(100, Math.round((node.special.expiresAt - nowMs) / (node.special.expiresAt - node.special.startAt) * 100)))
@@ -463,6 +466,8 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
             <span key={key} className="exploration-resource-chip"><ResourceIcon kind={key} /><b>{resourceLabels[key]}</b><em>{number.format(liveCargo?.[key] ?? 0)}</em></span>)}</div>
           <small>Обломки добывают только переработчики. Всё добытое попадёт на исходную планету только после возвращения.</small>
         </section>}
+        {combatReportId && onExplorationReport ? <button type="button" data-qa-exploration-battle-report={combatReportId} className="operations-intel-report-button-v2"
+          onClick={() => onExplorationReport(combatReportId)}>БОЕВОЙ ДОКЛАД · ОТКРЫТЬ В «СООБЩЕНИЯХ» ↗</button> : null}
         {exploration.recon && onExplorationReport ? <button type="button" className="operations-intel-report-button-v2" onClick={() => onExplorationReport('exploration-recon:' + exploration.recon!.flightId)}>ОТКРЫТЬ РАЗВЕДОТЧЁТ В «СИСТЕМЕ» ↗</button> : null}
         {exploration.recon ? <small className="exploration-recon-timestamp">Последний разведотчёт: {new Date(exploration.recon.resolvedAt).toLocaleString('ru-RU')}
           {inCooldown ? ' · повтор через ' + Math.ceil((cooldownAt - nowMs) / 1000) + ' с' : ''}</small> : null}
