@@ -189,6 +189,7 @@ type StoredPlanetRuntime = {
 };
 
 type StoredSave = {
+  exploration?: unknown;
   pirate?: unknown;
   schemaVersion?: unknown;
   metal?: unknown;
