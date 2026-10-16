@@ -113,7 +113,7 @@ import {
 } from '../domain/exploration/ledger.ts';
 import { explorationMiningRates, explorationProfile } from '../domain/exploration/model.ts';
 import { resolveExplorationAttackAtTarget } from './exploration-combat.ts';
-import { creditBot01ExplorationSurvivors } from './exploration-bot01.ts';
+import { creditBot01ExplorationSurvivors, creditNpcExplorationReturn } from './exploration-bot01.ts';
 
 export const FLIGHT_LAUNCH_CONTEXT_EVENT = 'asterion:flight-launch-context';
 export const FLIGHT_LAUNCH_CONTEXT_CLEAR_EVENT = 'asterion:flight-launch-context-clear';
@@ -449,7 +449,7 @@ export function getReservedShipsForPlanet(
 ): Partial<Record<ShipId, number>> {
   const reserved: Partial<Record<ShipId, number>> = {};
   for (const flight of activeFlights(state)) {
-    if (flight.ownerSide === 'bot01' || flight.ownerSide === 'pirate') continue;
+    if (flight.ownerSide === 'bot01' || flight.ownerSide === 'npc' || flight.ownerSide === 'pirate') continue;
     if (flight.originPlanetId !== planetId) continue;
     for (const [shipId, quantity] of Object.entries(flight.selectedShips) as [ShipId, number][]) {
       if (!Number.isFinite(quantity) || quantity <= 0) continue;
@@ -465,7 +465,7 @@ export function getReservedCommandersForPlanet(
 ): Partial<Record<CommanderId, number>> {
   const reserved: Partial<Record<CommanderId, number>> = {};
   for (const flight of activeFlights(state)) {
-    if (flight.ownerSide === 'bot01' || flight.ownerSide === 'pirate') continue;
+    if (flight.ownerSide === 'bot01' || flight.ownerSide === 'npc' || flight.ownerSide === 'pirate') continue;
     if (flight.originPlanetId !== planetId) continue;
     for (const [commanderId, quantity] of Object.entries(flight.selectedCommanders ?? {}) as [CommanderId, number][]) {
       if (!COMMANDER_IDS.includes(commanderId) || !Number.isFinite(quantity) || quantity <= 0) continue;
@@ -1625,7 +1625,7 @@ export function recallFlight(
   const flights = currentFlightState(state);
   const flight = flights.records.find((item) => item.id === flightId);
   if (!flight) return failure(state, 'flight-not-recallable', 'Отозвать можно только исходящий рейс.');
-  if (flight.ownerSide === 'bot01' || flight.ownerSide === 'pirate')
+  if (flight.ownerSide === 'bot01' || flight.ownerSide === 'npc' || flight.ownerSide === 'pirate')
     return failure(state, 'flight-not-recallable', 'Нельзя отозвать флот NPC.');
   const spyMission = flight.missionId === 'espionage' ? spyMissionForFlight(state, flight) : undefined;
   if (flight.missionId === 'espionage' && flight.phase === 'arrived' && spyMission?.status === 'orbiting') {
@@ -1979,10 +1979,10 @@ export function reconcileFlights(
     && flight.missionId === 'attack'
     && (flight.phase === 'outbound' || flight.phase === 'arrived');
   const compareFlightEvents = (left: FlightRecord, right: FlightRecord) => {
-    const leftMissingOrigin = (left.missionId === 'deployment' || left.missionId === 'space-flight' || left.missionId === 'pirate-recon' || left.missionId === 'pirate-elimination' || (left.missionId === 'expedition' && left.ownerSide !== 'bot01') || left.explorationAttack)
+    const leftMissingOrigin = (left.missionId === 'deployment' || left.missionId === 'space-flight' || left.missionId === 'pirate-recon' || left.missionId === 'pirate-elimination' || (left.missionId === 'expedition' && left.ownerSide !== 'bot01' && left.ownerSide !== 'npc') || left.explorationAttack)
       && ACTIVE_FLIGHT_PHASES.has(left.phase)
       && !next.planets[left.originPlanetId];
-    const rightMissingOrigin = (right.missionId === 'deployment' || right.missionId === 'space-flight' || right.missionId === 'pirate-recon' || right.missionId === 'pirate-elimination' || (right.missionId === 'expedition' && right.ownerSide !== 'bot01') || right.explorationAttack)
+    const rightMissingOrigin = (right.missionId === 'deployment' || right.missionId === 'space-flight' || right.missionId === 'pirate-recon' || right.missionId === 'pirate-elimination' || (right.missionId === 'expedition' && right.ownerSide !== 'bot01' && right.ownerSide !== 'npc') || right.explorationAttack)
       && ACTIVE_FLIGHT_PHASES.has(right.phase)
       && !next.planets[right.originPlanetId];
     const leftAt = leftMissingOrigin ? Number.NEGATIVE_INFINITY : scheduledFlightEventAt(left);
@@ -2009,7 +2009,7 @@ export function reconcileFlights(
       .filter((flight) => {
         const eventKey = flightEventKey(flight);
         if (processedFlightEvents.has(eventKey)) return false;
-        const hasMissingOrigin = (flight.missionId === 'deployment' || flight.missionId === 'space-flight' || flight.missionId === 'pirate-recon' || flight.missionId === 'pirate-elimination' || (flight.missionId === 'expedition' && flight.ownerSide !== 'bot01') || flight.explorationAttack)
+        const hasMissingOrigin = (flight.missionId === 'deployment' || flight.missionId === 'space-flight' || flight.missionId === 'pirate-recon' || flight.missionId === 'pirate-elimination' || (flight.missionId === 'expedition' && flight.ownerSide !== 'bot01' && flight.ownerSide !== 'npc') || (flight.explorationAttack && flight.ownerSide !== 'npc'))
           && !next.planets[flight.originPlanetId];
         const spyMission = flight.missionId === 'espionage' ? spyMissionForFlight(next, flight) : undefined;
         const needsSpyRevalidation = Boolean(
@@ -2026,7 +2026,7 @@ export function reconcileFlights(
     processedFlightEvents.add(flightEventKey(original));
     const current = next.flights.records.find((flight) => flight.id === original.id);
     if (!current) continue;
-    if ((current.missionId === 'deployment' || current.missionId === 'space-flight' || current.missionId === 'pirate-recon' || current.missionId === 'pirate-elimination' || (current.missionId === 'expedition' && current.ownerSide !== 'bot01') || current.missionId === 'exploration-recon' || current.explorationAttack)
+    if ((current.missionId === 'deployment' || current.missionId === 'space-flight' || current.missionId === 'pirate-recon' || current.missionId === 'pirate-elimination' || (current.missionId === 'expedition' && current.ownerSide !== 'bot01' && current.ownerSide !== 'npc') || current.missionId === 'exploration-recon' || (current.explorationAttack && current.ownerSide !== 'npc'))
       && (current.phase === 'outbound' || current.phase === 'returning' || current.phase === 'arrived')
       && !next.planets[current.originPlanetId]) {
       const destroyed: FlightRecord = {
@@ -2688,7 +2688,9 @@ export function reconcileFlights(
     const refreshed = next.flights.records.find((flight) => flight.id === original.id) ?? original;
     if (refreshed.phase === 'returning' && refreshed.returnAt !== undefined && now >= refreshed.returnAt) {
       let returnedFlight = refreshed;
-      if (refreshed.missionId === 'expedition' && refreshed.ownerSide === 'bot01') {
+      if ((refreshed.ownerSide === 'bot01'||refreshed.ownerSide === 'npc')
+        && (refreshed.missionId === 'expedition'||refreshed.explorationAttack)) {
+        next = creditNpcExplorationReturn(next,refreshed,refreshed.returnAt);
         next = creditBot01ExplorationSurvivors(next,refreshed);
       } else if (refreshed.missionId === 'expedition' || refreshed.explorationAttack) {
         next = creditExpeditionReturn(next, refreshed, refreshed.returnAt);
