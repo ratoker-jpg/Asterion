@@ -1314,7 +1314,7 @@ function FleetWorkspace({
                   <span>Флоты, находящиеся в пути, будут отображаться здесь.</span>
                 </div> : activeFlightRecords.map((flight) => {
                   const isIncomingBotAttack = flight.ownerSide === 'bot01' && flight.missionId === 'attack';
-                  const isBot01Explorer = flight.ownerSide === 'bot01' && flight.missionId === 'expedition';
+                  const isBot01Explorer = (flight.ownerSide === 'bot01' || flight.ownerSide === 'npc') && (flight.missionId === 'expedition'||flight.explorationAttack);
                   const isIncomingPirateRaid = flight.ownerSide === 'pirate' && flight.missionId === 'pirate-raid';
                   const isHostileIncoming = isIncomingBotAttack || isIncomingPirateRaid || isBot01Explorer;
                   const pirateComposition = isIncomingPirateRaid ? Object.entries(flight.pirateRaidSnapshot?.composition ?? {})
@@ -1327,7 +1327,7 @@ function FleetWorkspace({
                     : 0;
                   const liveTransportState = getActiveTransportState(flight);
                   const targetUnavailable = flight.completionReason === 'target-unavailable' || liveTransportState.targetUnavailable;
-                  const statusLabel = isBot01Explorer ? (flight.phase === 'outbound' ? 'BOT 01 · К ОБЪЕКТУ' : flight.phase === 'arrived' ? 'ЗАНЯТО BOT 01' : 'BOT 01 · ВОЗВРАЩАЕТСЯ') : (flight.missionId === 'expedition' || flight.explorationAttack) && flight.phase === 'arrived' ? '⛏ ДОБЫВАЕТ РЕСУРСЫ' : targetUnavailable
+                  const statusLabel = isBot01Explorer ? (flight.phase === 'outbound' ? 'NPC · К ОБЪЕКТУ' : flight.phase === 'arrived' ? 'ЗАНЯТО NPC' : 'NPC · ВОЗВРАЩАЕТСЯ') : (flight.missionId === 'expedition' || flight.explorationAttack) && flight.phase === 'arrived' ? '⛏ ДОБЫВАЕТ РЕСУРСЫ' : targetUnavailable
                     ? 'ЦЕЛЬ НЕДОСТУПНА'
                     : isHostileIncoming && flight.phase === 'outbound'
                       ? '⚠ ВХОДЯЩАЯ АТАКА'
@@ -1343,7 +1343,7 @@ function FleetWorkspace({
                   <span data-qa-flight-arrival data-qa-flight-arrival-at={flight.arrivalAt}>{flight.phase === 'outbound' ? flightCountdown(flight.arrivalAt, clockNow) : '—'}</span>
                   <span data-qa-flight-status>{statusLabel}</span>
                   <span data-qa-flight-return>{flight.phase === 'returning' ? flightCountdown(flight.returnAt, clockNow) : '—'}</span>
-                  <span><img className="fleet-flight-mission-icon" src={flightMissionIcon(flight.missionId)} alt="" />{(flight.ownerSide !== 'bot01' && (flight.missionId === 'expedition' || flight.explorationAttack)) ? <button type="button" className="fleet-expedition-details-trigger" onClick={() => setSelectedExpeditionFlightId(flight.id)} data-qa-expedition-flight-details={flight.id}>ЭКСПЕДИЦИЯ · ПОДРОБНЕЕ ↗</button> : flight.explorationAttack ? 'БОЕВОЙ ЗАХВАТ · ЭКСПЕДИЦИЯ' : flightMissionLabel(flight.missionId)}{isIncomingPirateRaid ? <small data-qa-pirate-raid-force title={pirateComposition || 'Состав неизвестен'}> · УГРОЗА {flightNumberLabel(piratePopulation)} НАС. · {pirateComposition || 'СОСТАВ НЕИЗВЕСТЕН'}</small> : null}{isIncomingBotAttack ? <small data-qa-flight-bot01-label> · BOT 01</small> : null}{attackOrder && !isHostileIncoming ? <small data-qa-flight-attack-order> · АТАКА #{attackOrder}</small> : null}{liveTransportState.overflowWarning ? <b className="fleet-flight-overflow-warning" aria-label="Часть груза может сгореть: склады цели заполнены" data-qa-flight-overflow-warning>!</b> : null}</span>
+                  <span><img className="fleet-flight-mission-icon" src={flightMissionIcon(flight.missionId)} alt="" />{(flight.ownerSide !== 'bot01' && flight.ownerSide !== 'npc' && (flight.missionId === 'expedition' || flight.explorationAttack)) ? <button type="button" className="fleet-expedition-details-trigger" onClick={() => setSelectedExpeditionFlightId(flight.id)} data-qa-expedition-flight-details={flight.id}>ЭКСПЕДИЦИЯ · ПОДРОБНЕЕ ↗</button> : flight.explorationAttack ? 'БОЕВОЙ ЗАХВАТ · ЭКСПЕДИЦИЯ' : flightMissionLabel(flight.missionId)}{isIncomingPirateRaid ? <small data-qa-pirate-raid-force title={pirateComposition || 'Состав неизвестен'}> · УГРОЗА {flightNumberLabel(piratePopulation)} НАС. · {pirateComposition || 'СОСТАВ НЕИЗВЕСТЕН'}</small> : null}{isIncomingBotAttack ? <small data-qa-flight-bot01-label> · BOT 01</small> : isBot01Explorer ? <small> · NPC</small> : null}{attackOrder && !isHostileIncoming ? <small data-qa-flight-attack-order> · АТАКА #{attackOrder}</small> : null}{liveTransportState.overflowWarning ? <b className="fleet-flight-overflow-warning" aria-label="Часть груза может сгореть: склады цели заполнены" data-qa-flight-overflow-warning>!</b> : null}</span>
                   <span>{isHostileIncoming ? <span aria-label="Чужой флот нельзя отозвать" data-qa-flight-no-recall>—</span> : <button type="button" data-qa-flight-recall={flight.id} disabled={flight.phase !== 'outbound' && !((flight.missionId === 'expedition' || flight.explorationAttack) && flight.phase === 'arrived')} onClick={() => setPendingRecall(flight)}>ОТОЗВАТЬ</button>}</span>
                 </div>;
                 })}
