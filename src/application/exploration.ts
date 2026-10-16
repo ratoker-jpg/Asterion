@@ -56,3 +56,51 @@ export function explorationTargetStatus(state: SaveState, node: UniversePlanetNo
   const claim = state.exploration?.contacts[node.id]?.claim;
   return !claim ? 'free' : claim.ownerId === state.profile.playerId ? 'self' : 'occupied';
 }
+
+import { explorationArtForCycle } from '../exploration-art.ts';
+import { explorationProfile } from '../domain/exploration/model.ts';
+import type { ExplorationContact, ExplorationReconRecord } from '../domain/exploration/ledger.ts';
+
+export type ExplorationOperationPresentation = {
+  node: UniversePlanetNode;
+  occupancy: 'free' | 'self' | 'occupied';
+  stage: 'available' | 'active' | 'completed';
+  contact?: ExplorationContact;
+  recon?: ExplorationReconRecord;
+};
+export function selectExplorationOperations(state: SaveState, nowMs: number, mode: RuntimeMode): ExplorationOperationPresentation[] {
+  const live = selectExplorationTargets(state, nowMs, mode);
+  const accepted = new Set(state.exploration?.acceptedContactIds ?? []);
+  const stored = state.exploration?.contacts ?? {};
+  const recon = state.exploration?.reconReports ?? [];
+  const report = (id: string) => [...recon].reverse().find(item => item.contactId === id && item.ownerId === state.profile.playerId);
+  const displayed: ExplorationOperationPresentation[] = live.map(node => {
+    const occupancy = explorationTargetStatus(state, node);
+    return {
+      node, occupancy, contact: stored[node.id], recon: report(node.id),
+      stage: accepted.has(node.id) || occupancy === 'self' ? 'active' : 'available',
+    };
+  });
+  const historical: ExplorationOperationPresentation[] = Object.values(stored).filter(contact =>
+    accepted.has(contact.id) && contact.expiresAt <= nowMs && !live.some(n => n.id === contact.id))
+    .map(contact => {
+      const cycleIndex = Number(contact.id.split(':')[3] ?? 0);
+      return {
+        node: {
+          id: contact.id, coordinate: contact.coordinate,
+          kind: contact.kind, name: explorationProfile(contact.kind, contact.variant).name,
+          art: explorationArtForCycle(contact.kind, contact.coordinate.system, cycleIndex),
+          description: 'Завершённый исследовательский контакт',
+          statusLabel: 'Контакт завершён',
+          special: {
+            startAt: contact.appearedAt, expiresAt: contact.expiresAt, cycleIndex,
+            contactCycleKey: contact.id, profileVariant: contact.variant,
+            respawnAt: contact.expiresAt, lifetimeMs: contact.expiresAt - contact.appearedAt, spawnChance: 0,
+          },
+        },
+        occupancy: 'free' as const, stage: 'completed' as const,
+        contact, recon: report(contact.id),
+      };
+    }).slice(-60);
+  return [...displayed, ...historical];
+}
