@@ -160,6 +160,7 @@ import { getOwnerShipUpgradeLevels, getPlanetResources, type PlanetId, type Save
 import { selectOwnedPlanet } from './application/owned-planets.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
 import { materializePirateProfiles, pirateContactOperation, pirateOperationId, selectOwnedPiratePresentations, selectOwnedPirateTargets, selectPirateContacts } from './application/pirate-presentation.ts';
+import { selectExplorationTargets, getExplorationTarget, explorationTargetStatus } from './application/exploration.ts';
 import type { PirateContactPresentation, PirateSystemSelection } from './pirate-ui.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
@@ -1191,6 +1192,30 @@ export function App() {
     setNotice('Сигнал просканирован. Классификация операции обновлена.');
   };
 
+  const openExpeditionLaunch = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
+    const live = getExplorationTarget(stateRef.current, node.id, Date.now(), RUNTIME_MODE);
+    if (!live || explorationTargetStatus(stateRef.current, live) !== 'free') {
+      setNotice('Экспедиция недоступна: объект исчез или занят. Проверь актуальные контакты.', 'error');
+      return;
+    }
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    setNotice('Экспедиция: выбери состав кораблей и подтверди перелёт.');
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, {
+        detail: {
+          missionId: 'expedition', contactCycleKey: live.id,
+          targetKind: live.kind,
+          targetPlanetName: live.name,
+          targetRelation: 'neutral',
+          destination: { kind: 'coordinate', coordinate: live.coordinate },
+        },
+      }));
+    }, 40);
+  };
+
   const openFleetRootFromOperations = () => {
     clearBuildingInterior();
     navigateTo('fleets');
@@ -1602,6 +1627,8 @@ export function App() {
           ) : activeRoute === 'operations' ? (
             <OperationsView
               pirateContacts={pirateContacts}
+              explorationContacts={selectExplorationTargets(state, now, RUNTIME_MODE).map(node => ({ node, occupancy: explorationTargetStatus(state, node) }))}
+              onExpedition={openExpeditionLaunch}
               pirateOwnerId={state.profile.playerId}
               pirateRaidRolls={state.pirate?.raidRolls}
               pirateAdaptiveDiagnostics={RUNTIME_MODE==='test'?(state.pirate?.ownerAdaptations?.[state.profile.playerId]??defaultPirateOwnerAdaptation()):undefined}
