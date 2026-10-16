@@ -1782,3 +1782,11 @@
 .operations-pirate-adaptive-test-v1>small{color:#8ba9b3}
 .operations-pirate-adaptive-metrics-v1{display:flex;flex-wrap:wrap;gap:8px 22px;color:#b3cfd9}
 .operations-pirate-adaptive-metrics-v1 b{color:#e4faff;font-variant-numeric:tabular-nums}
+
+/* Diagnostic archive download never renders in production mode. */
+.operations-pirate-adaptive-header-v1{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.operations-pirate-adaptive-header-v1>strong{color:#6fe1f3;font-size:.78rem;letter-spacing:.06em}
+.operations-pirate-export-button-v1{padding:8px 13px;border:1px solid rgba(84,208,231,.65);border-radius:9px;background:rgba(13,76,96,.6);color:#d5f9ff;font-size:.75rem;font-weight:800;cursor:pointer;letter-spacing:.03em;line-height:1.35}
+.operations-pirate-export-button-v1:hover,.operations-pirate-export-button-v1:focus-visible{background:rgba(31,119,143,.8);outline:2px solid rgba(92,217,240,.3);outline-offset:2px}
+.operations-pirate-export-button-v1>span{font-size:1rem;margin-right:5px}
+@media(max-width:650px){.operations-pirate-export-button-v1{width:100%;text-align:center}}

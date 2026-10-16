@@ -5,7 +5,6 @@ import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import { COMMANDER_COMBAT_CATALOG } from '../domain/combat/catalog.ts';
 import { PIRATE_CATALOG } from '../domain/pirates/catalog.ts';
 import { getRecyclingEfficiencyPercent } from '../domain/buildings/recycling.ts';
-import { getPirateShip } from '../domain/pirates/catalog.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 
 /**

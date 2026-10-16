@@ -30,6 +30,7 @@ type OperationsViewProps = {
   pirateThreatPercent?: number;
   /** Diagnostic only; NEVER pass in production runtime. */
   pirateAdaptiveDiagnostics?:PirateOwnerAdaptation;
+  onPirateBattleExport?: () => void;
   pirateRaidRolls?: Readonly<Record<string, Readonly<{checkAt:number;seed:string;flightId?:string}>>>;
   pirateOwnerId?: string;
   pirateCheckDelayMs?: number;
@@ -470,7 +471,7 @@ function OperationDossier({ operation, pirateContact, battleReportId, completed,
   );
 }
 
-export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
+export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
   const [tab, setTab] = useState<OperationsTab>('available');
   const [selectedId, setSelectedId] = useState<OperationId | null>(null);
 
@@ -561,7 +562,14 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
         const attempts=d.wins+d.draws+d.losses;
         const pct=(v:number)=>`${(v*100).toLocaleString('ru-RU',{minimumFractionDigits:1,maximumFractionDigits:1})}%`;
         return <section className="operations-pirate-adaptive-test-v1" aria-label="Диагностика пиратов Test Mode" data-qa-pirate-adaptive-test>
-          <strong>TEST MODE // СКРЫТАЯ АДАПТАЦИЯ ПИРАТОВ</strong>
+          <div className="operations-pirate-adaptive-header-v1">
+            <strong>TEST MODE // СКРЫТАЯ АДАПТАЦИЯ ПИРАТОВ</strong>
+            {onPirateBattleExport && <button type="button" className="operations-pirate-export-button-v1"
+              data-qa-pirate-export onClick={onPirateBattleExport}
+              title="Скачать все бои текущего игрока с пиратскими базами: составы флотов, потери, раунды и коэффициенты">
+              <span aria-hidden="true">↓</span> СКАЧАТЬ ВСЕ БОИ (.JSON)
+            </button>}
+          </div>
           <div className="operations-pirate-adaptive-metrics-v1">
             <span>Победы: <b data-qa-pirate-win-rate>{attempts?pct(d.wins/attempts):'—'}</b> ({d.wins}/{attempts})</span>
             <span>Взвешенный результат: <b data-qa-pirate-weighted-win>{d.weightedBattles>0?pct(d.weightedWins/d.weightedBattles):'—'}</b></span>

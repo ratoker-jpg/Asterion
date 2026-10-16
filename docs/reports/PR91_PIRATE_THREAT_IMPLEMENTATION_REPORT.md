@@ -209,3 +209,13 @@ Units of net are total metal+minerals+gas as resource-equivalent, not currency. 
 5. Unresolved prior issue: NPC-vs-pirate battle reports in the player's feed is outside this scoped adaptive balance task. Owner retains sole control of merge.
 
 **Do not merge. PR must remain Draft.**
+
+## Test Mode forensic JSON export
+
+The existing adaptive diagnostics panel now has **СКАЧАТЬ ВСЕ БОИ (.JSON)**, exclusively in Test Mode. It exports **all** persisted pirate-base attacks by the current player, including losses and draws, not just successful archived operations. NPC incoming pirate raids and unrelated demo/PvP reports are excluded. Battles are sorted oldest first; complete battle reports with round actions, technologies and available RNG evidence are included along with matched frozen launch snapshots, fleet counts, selected commander levels, salvage rewards, costs, debris and flight gas.
+
+`src/application/pirate-battle-export.ts` is a read-only export builder; `App.tsx` performs one browser download with no game-state updates. Tests verify a 15-battle archive with first defeat, missing flight snapshot, unrelated NPC filtering, serialization and zero-battle state. The Electron pirate UI QA asserts the button exists in Test Mode.
+
+The illustrative 120%-recycling net is **not actual realised profit**: the report alone cannot reconstruct collection flights, actual recycler output, gas on return or resource storage. Missing historical snapshots are `null`, not replaced by current technologies. The exporter intentionally excludes unrelated saves and credentials. No combat rules or balances change.
+
+Attach `asterion-pirate-battles-*.json` in the next chat for independent mathematics analysis. **Draft PR; no merge.**

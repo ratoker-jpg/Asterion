@@ -288,6 +288,13 @@ async function runViewport(width, height) {
       ||adaptiveTest.rate!=='—'||adaptiveTest.q!=='0,0%')
       throw new Error('Test Mode must display hidden initial win/adaptation diagnostics: '+JSON.stringify(adaptiveTest));
 
+    const exportButton = await win.webContents.executeJavaScript(`(() => {
+      const button = document.querySelector('[data-qa-pirate-export]');
+      return {exists:Boolean(button),enabled:Boolean(button&&!button.disabled),
+        label:button?.textContent?.trim()};
+    })()`);
+    if(!exportButton.enabled || !exportButton.label?.includes('JSON'))
+      throw new Error('Test Mode full combat export button missing: '+JSON.stringify(exportButton));
     await waitFor(win, `(() => { const art = document.querySelector('[data-qa-pirate-contact] .operation-feed-pirate-art-v2 img'); return Boolean(art?.complete && art.naturalWidth > 0); })()`);
     await win.webContents.executeJavaScript(`document.querySelector('[data-qa-pirate-contact]')?.click()`);
     await waitFor(win, `(() => { const block = document.querySelector('.operations-objective-v2'); return Boolean(block && parseFloat(getComputedStyle(block).borderTopLeftRadius) >= 9); })()`);
