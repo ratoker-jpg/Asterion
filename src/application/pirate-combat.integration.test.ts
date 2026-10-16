@@ -283,9 +283,14 @@ test('a defeated commander is removed once, contributes ordinary debris, and doe
   assertNoBattlePointAward(arrived.state, reportId);
   const corsairEntity = COMMANDER_COMBAT_CATALOG.find((entity) => entity.id === 'corsair')!;
   const corsairOrdinaryDebris = Math.floor(corsairEntity.cost.metal * 0.3) + Math.floor(corsairEntity.cost.minerals * 0.3);
-  const pirateDebris = calculatePirateForceDebris(report.defenderForce, report.attackerForce, report.missionType)
-    + calculatePirateForceDebris(report.attackerForce, report.defenderForce, report.missionType);
-  assert.ok((report.debris ?? 0) - pirateDebris >= corsairOrdinaryDebris);
+  const basePirateDebris = calculatePirateForceDebris(report.defenderForce, report.attackerForce, report.missionType);
+  const expectedMultiplier=report.winner==='draw'?0.75:0.5;
+  assert.equal(report.pirateReward?.multiplier,expectedMultiplier);
+  const ownDebris=calculateAttackDebris(report,launched.flight.attackSnapshot!.attackerFactionId,
+    launched.flight.attackSnapshot!.attackerFactionId)-basePirateDebris;
+  assert.ok(ownDebris>=corsairOrdinaryDebris,'own hull debris remains at standard 30%, even on pirate defeat');
+  assert.equal(report.debris,ownDebris+Math.floor(basePirateDebris*expectedMultiplier),
+    'only pirate wreckage receives x0.5 or x0.75; own wreckage is never penalized');
 
   const returning = arrived.state.flights.records.find((flight) => flight.id === launched.flight.id)!;
   const returned = arrive(arrived.state, returning.returnAt!);
