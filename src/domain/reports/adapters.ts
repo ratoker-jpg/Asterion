@@ -466,12 +466,12 @@ export function buildReportsFeed(
   const pirateReconItems = pirateReconReports.map(pirateReconReportToReportItem);
   // Keep the original event reports in System. The Flights mailbox additionally
   // tracks their actual arrival and collected amount instead of an empty placeholder.
-  const arrivalFlightItems: ReportItem[] = [...recyclerItems, ...gasExtractionItems].map(item => ({
+  const arrivalFlightItems: ReportItem[] = playerOwnerId ? [...recyclerItems, ...gasExtractionItems].map(item => ({
     ...item,
     id: 'flight-arrival:' + item.id,
     category: 'flights',
     typeLabel: 'Прибытие добывающего флота',
-  }));
+  })) : [];
 
   return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems, ...recyclerItems, ...gasExtractionItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights), ...explorationMailboxReports(exploration, pirateFlights, playerOwnerId), ...arrivalFlightItems].sort((a, b) => {
     if (a.timestamp && b.timestamp) return Date.parse(b.timestamp) - Date.parse(a.timestamp);
