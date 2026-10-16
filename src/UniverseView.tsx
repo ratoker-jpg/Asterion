@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom';
 import { EmblemGlyph } from './CommandView';
 import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
-import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 import { EXPLORATION_ARTS } from './exploration-art.ts';
 import { PIRATE_PLANET_ARTS } from './pirate-planet-art.ts';
 import asteroid01 from '../assets/source/universe-navigation/asteroids/asteroid.variant-01.png';
@@ -13,9 +12,6 @@ import asteroid05 from '../assets/source/universe-navigation/asteroids/asteroid.
 import asteroid06 from '../assets/source/universe-navigation/asteroids/asteroid.variant-06.png';
 import asteroid07 from '../assets/source/universe-navigation/asteroids/asteroid.variant-07.png';
 import asteroid08 from '../assets/source/universe-navigation/asteroids/asteroid.variant-08.png';
-import uniqueIslands from '../assets/source/planets/skins/planet-010.png';
-import uniqueVortex from '../assets/source/planets/skins/planet-013.png';
-import uniqueCrystal from '../assets/source/planets/skins/planet-021.png';
 import planet01 from '../assets/source/universe-navigation/planets/planet.variant-01.png';
 import planet02 from '../assets/source/universe-navigation/planets/planet.variant-02.png';
 import planet03 from '../assets/source/universe-navigation/planets/planet.variant-03.png';
