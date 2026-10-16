@@ -14,6 +14,10 @@ import { materializeExplorationAtDispatch } from './exploration-flight.ts';
 import { explorationRookieProtected } from '../domain/exploration/model.ts';
 import type { RuntimeMode } from '../domain/runtime/mode.ts';
 import { createBot01IncomingAttackSnapshot } from './attack.ts';
+import { getCappedDelivery, addDebris } from '../domain/flights/cargo.ts';
+import { getStorageCapacities } from '../domain/buildings/storage.ts';
+import { completeExplorationReturn } from '../domain/exploration/ledger.ts';
+import { updateExpeditionContact } from './exploration-flight.ts';
 
 /** Test-only Bot 01 expedition: reserves a finite snapshot from the existing NPC
  * planet, flies a real route, and resolves occupation on actual arrival. No
@@ -106,4 +110,28 @@ export function creditBot01ExplorationSurvivors(state:SaveState,flight:FlightRec
   }};
   return {...state,espionage:{...state.espionage!,targets,
     ...(state.espionage?.bot01Planets?{bot01Planets:targets}:{})}};
+}
+
+/** Exact-once NPC escrow payment at return: a real saved NPC colony receives
+ * only material actually mined, capped by its real storage. Wreckage is added
+ * to its own planetary debris field, not a duplicate player wallet. */
+export function creditNpcExplorationReturn(state:SaveState,flight:FlightRecord,at:number):SaveState{
+  if(flight.ownerSide!=='npc'&&flight.ownerSide!=='bot01')return state;
+  const contact=flight.operationId?state.exploration?.contacts[flight.operationId]:undefined;
+  const source=getEspionageTargets(state.espionage)[flight.originPlanetId];
+  if(!source||!contact||!contact.events.some(e=>e.id===flight.id+':release'))return state;
+  const receipt=completeExplorationReturn(contact,flight.id,at,true);
+  let next=updateExpeditionContact(state,receipt.contact);
+  if(!receipt.payout)return next;
+  const credited=getCappedDelivery(source.resources,getStorageCapacities(source.buildings),receipt.payout.cargo);
+  const creditedCargo={...credited.accepted,debris:receipt.payout.cargo.debris};
+  next=updateExpeditionContact(next,{...receipt.contact,events:receipt.contact.events.map(e=>
+    e.id===flight.id+':completed'?{...e,creditedCargo,burnedCargo:{...credited.burned,debris:0}}:e)});
+  const targets={...getEspionageTargets(next.espionage)};
+  targets[source.id]={...source,resources:{
+    ...source.resources,...credited.resources,
+    debris:addDebris(source.resources.debris,receipt.payout.cargo.debris),
+  }};
+  return {...next,espionage:{...next.espionage!,targets,
+    ...(next.espionage?.bot01Planets?{bot01Planets:targets}:{})}};
 }
