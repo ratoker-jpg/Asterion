@@ -1618,6 +1618,8 @@ export function App() {
               mode={RUNTIME_MODE}
               onColonize={openColonizationLaunch}
               onAsteroidRecycler={openAsteroidRecyclerLaunch}
+              onExpedition={openExpeditionLaunch}
+              explorationEligibility={Object.fromEntries(selectExplorationTargets(state, now, RUNTIME_MODE).map(node => [node.id, explorationTargetStatus(state, node)]))}
               onTransport={openTransportLaunch}
               onSpy={openSpyLaunch}
               onAttack={openAttackLaunch}
