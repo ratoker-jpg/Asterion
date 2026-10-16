@@ -451,7 +451,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
               </div>
               <strong>{riskRoman} / V · {profile.risk < 3 ? 'НИЗКИЙ' : profile.risk < 5 ? 'ПОВЫШЕННЫЙ' : 'ВЫСОКИЙ'}</strong>
             </> : <strong>Неизвестен до разведки</strong>}
-            <p>{known ? 'По проектной модели уровень ' + riskRoman + ' предполагает ' + Math.round(EXPLORATION_RULES.npcAttemptChance[profile.risk] * 100) + '% шанса попытки захвата конкурентом каждые 3 минуты. ' : 'До разведки класс опасности неизвестен. '}Важно: NPC-атаки и случайные опасности ещё НЕ ПОДКЛЮЧЕНЫ, поэтому сейчас рейтинг не приводит к бою или потере кораблей.</p>
+            <p>{known ? 'По проектной модели уровень ' + riskRoman + ' предполагает ' + Math.round(EXPLORATION_RULES.npcAttemptChance[profile.risk] * 100) + '% шанса попытки захвата конкурентом каждые 3 минуты. ' : 'До разведки класс опасности неизвестен. '}Аномалии могут реально сжигать до 10% накопленного груза при случайном всплеске раз в 3 минуты. NPC-атаки пока НЕ ПОДКЛЮЧЕНЫ; классы I–V не означают автоматическую потерю кораблей.</p>
           </div>
         </div>
         {mine && <section className="exploration-mining-status" data-qa-exploration-live-cargo>
