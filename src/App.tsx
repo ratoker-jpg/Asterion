@@ -1582,6 +1582,7 @@ export function App() {
               pirateContacts={pirateContacts}
               pirateOwnerId={state.profile.playerId}
               pirateRaidRolls={state.pirate?.raidRolls}
+              pirateAdaptiveDiagnostics={RUNTIME_MODE==='test'?state.pirate?.ownerAdaptations?.[state.profile.playerId]:undefined}
               pirateCheckDelayMs={scaleRuntimeDuration(15*60_000,RUNTIME_MODE,testTimeScale)}
               pirateThreatPercent={100*pirateRaidChance(
                 selectOwnerScores(state)[state.profile.playerId]?.resourcePoints??0,

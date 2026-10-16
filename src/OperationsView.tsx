@@ -16,6 +16,7 @@ import type { PirateContactPresentation } from './pirate-ui.ts';
 import { isPirateOperationId, pirateContactOperation, pirateCycleOperation, pirateOperationId } from './application/pirate-presentation.ts';
 import { getUniverseSlotPoint } from './domain/universe/runtime.ts';
 import { getPirateRaidCheckProgress } from './domain/pirates/contact-schedule.ts';
+import { pirateAdaptiveInterval, type PirateOwnerAdaptation } from './domain/pirates/adaptive.ts';
 import { getPiratePlanetArt } from './pirate-planet-art.ts';
 import './operations.css';
 
@@ -27,6 +28,8 @@ type OperationsViewProps = {
   onOpenFleets: () => void;
   pirateContacts?: readonly PirateContactPresentation[];
   pirateThreatPercent?: number;
+  /** Diagnostic only; NEVER pass in production runtime. */
+  pirateAdaptiveDiagnostics?:PirateOwnerAdaptation;
   pirateRaidRolls?: Readonly<Record<string, Readonly<{checkAt:number;seed:string;flightId?:string}>>>;
   pirateOwnerId?: string;
   pirateCheckDelayMs?: number;
@@ -467,7 +470,7 @@ function OperationDossier({ operation, pirateContact, battleReportId, completed,
   );
 }
 
-export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, pirateContacts = [], pirateThreatPercent = 2, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
+export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
   const [tab, setTab] = useState<OperationsTab>('available');
   const [selectedId, setSelectedId] = useState<OperationId | null>(null);
 
@@ -552,6 +555,23 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
             Полная победа над базой снижает её пропорционально отправленному боевому населению.</small>
         </div>
       </section>
+      {pirateAdaptiveDiagnostics && (() => {
+        const d=pirateAdaptiveDiagnostics;
+        const band=pirateAdaptiveInterval(d.q);
+        const attempts=d.wins+d.draws+d.losses;
+        const pct=(v:number)=>`${(v*100).toLocaleString('ru-RU',{minimumFractionDigits:1,maximumFractionDigits:1})}%`;
+        return <section className="operations-pirate-adaptive-test-v1" aria-label="Диагностика пиратов Test Mode" data-qa-pirate-adaptive-test>
+          <strong>TEST MODE // СКРЫТАЯ АДАПТАЦИЯ ПИРАТОВ</strong>
+          <div className="operations-pirate-adaptive-metrics-v1">
+            <span>Победы: <b data-qa-pirate-win-rate>{attempts?pct(d.wins/attempts):'—'}</b> ({d.wins}/{attempts})</span>
+            <span>Взвешенный результат: <b data-qa-pirate-weighted-win>{d.weightedBattles>0?pct(d.weightedWins/d.weightedBattles):'—'}</b></span>
+            <span>Адаптивный индекс Q: <b data-qa-pirate-q>{pct(d.q)}</b></span>
+            <span>Гарнизон следующей атаки: <b data-qa-pirate-next-band>{pct(band.min)}–{pct(band.max)}</b> от отправленного населения</span>
+            <span>Последний ролл: <b data-qa-pirate-last-roll>{d.lastRoll ? pct(d.lastRoll.coefficient) : '—'}</b>{d.lastRoll?' от '+d.lastRoll.sentPopulation.toLocaleString('ru-RU')+' населения':''}</span>
+          </div>
+          <small>Индекс влияет только на случайный размер гарнизона. Не назначает исход боя. Дешёвые незначимые бои не меняют его.</small>
+        </section>;
+      })()}
       <div className="operations-layout-v2">
         <section className="operations-feed-v2" aria-label={TAB_LABELS[tab]}>
           <header><div><small>КАНАЛ // {TAB_LABELS[tab]}</small><strong>{tab === 'available' ? 'ВХОДЯЩИЕ КОНТАКТЫ' : tab === 'active' ? 'ТЕКУЩИЕ ЗАДАЧИ' : 'АРХИВ ОПЕРАЦИЙ'}</strong></div><span>{visibleRows.length}</span></header>

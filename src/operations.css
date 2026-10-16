@@ -1775,3 +1775,10 @@
   .operations-pirate-threat-v2 > div:first-child {flex-direction:row;align-items:center;justify-content:space-between;}
   .operations-pirate-threat-v2 > div:first-child strong {font-size:22px;}
 }
+
+/* Read-only diagnostics for TEST runtime; never mounted in production. */
+.operations-pirate-adaptive-test-v1{border:1px dashed rgba(75,193,215,.52);border-radius:12px;padding:13px 16px;margin:10px 0 16px;background:rgba(4,29,42,.8);display:grid;gap:10px}
+.operations-pirate-adaptive-test-v1>strong{font-size:.78rem;letter-spacing:.06em;color:#6fe1f3}
+.operations-pirate-adaptive-test-v1>small{color:#8ba9b3}
+.operations-pirate-adaptive-metrics-v1{display:flex;flex-wrap:wrap;gap:8px 22px;color:#b3cfd9}
+.operations-pirate-adaptive-metrics-v1 b{color:#e4faff;font-variant-numeric:tabular-nums}
