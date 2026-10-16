@@ -130,6 +130,7 @@ import { migrateEspionageState } from '../domain/espionage/repository.ts';
 import { createDefaultEspionageState } from '../domain/espionage/runtime.ts';
 import { createDefaultTestEspionageState } from '../domain/espionage/fixtures.ts';
 import { createDefaultPirateState, normalizePirateState, isPirateMissionSnapshot, normalizePirateRaidSnapshot } from '../domain/pirates/mission.ts';
+import { createExplorationState, migrateExplorationState } from '../domain/exploration/ledger.ts';
 import { COMBAT_TECHNOLOGIES } from '../domain/combat/technologies.ts';
 import { getSpaceportUpgradeMaxLevel } from '../domain/buildings/spaceport-upgrades.ts';
 
@@ -1103,6 +1104,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     science,
     resourceClock: createResourceClock(now, ['helion-01']),
     flights: createDefaultFlightState(),
+    exploration: createExplorationState(),
     pirate: {
       ...createDefaultPirateState(),raidProcessedAt:now,
       ownerThreats:{[syncPlayerProfileWithAlliance(createDefaultPlayerProfileState(),command.alliance).playerId]:
@@ -1508,6 +1510,7 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       science,
       resourceClock: migrateResourceClock(parsed.resourceClock, timestamp, Object.keys(planets), currentPlanetId),
       flights: migratedFlights,
+      exploration: migrateExplorationState(parsed.exploration),
       pirate: migratedPirate,
       asteroidSimulation,
       asteroidDebrisBySpawnIndex: migrateAsteroidDebris(parsed.asteroidDebrisBySpawnIndex, activeAsteroidSpawnIndices),
