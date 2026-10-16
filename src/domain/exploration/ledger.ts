@@ -40,7 +40,7 @@ export type ExplorationClaim = {
 export type ExplorationEvent = {
   id: string;
   at: number;
-  kind: 'arrived' | 'recalled' | 'expired' | 'defended' | 'captured' | 'draw' | 'returned' | 'origin-destroyed';
+  kind: 'arrived' | 'recalled' | 'expired' | 'defended' | 'captured' | 'draw' | 'hazard' | 'returned' | 'origin-destroyed';
   ownerId: string;
   flightId: string;
   cargo?: TransportCargo;
@@ -185,8 +185,12 @@ export function reconcileExplorationContact(contact: ExplorationContact, nowMs: 
   let reserve = { ...contact.resourceReserve };
   let cursor = claim.lastAccruedAt;
   const boostedUntilAt = claim.boostedUntilAt ?? Number.NEGATIVE_INFINITY;
+  const hazardEvents: ExplorationEvent[] = [];
   while (cursor < end) {
-    const nextBoundary = boostedUntilAt > cursor ? Math.min(end, boostedUntilAt) : end;
+    const hazardSlot = Math.floor((cursor - claim.startedAt) / EXPLORATION_RULES.riskSlotMs) + 1;
+    const hazardAt = claim.startedAt + hazardSlot * EXPLORATION_RULES.riskSlotMs;
+    const boostBoundary = boostedUntilAt > cursor ? Math.min(end,boostedUntilAt) : end;
+    const nextBoundary = Math.min(boostBoundary,hazardAt);
     const rates = explorationMiningRates(claim.resourcePointsLaunch, profile, claim.capacity,
       claim.catchupMultiplier, cursor < boostedUntilAt);
     const accrued = accumulateExplorationCargo(nextClaim.cargo, reserve, rates,
@@ -195,12 +199,27 @@ export function reconcileExplorationContact(contact: ExplorationContact, nowMs: 
     nextClaim.fractionalMs = accrued.remainder;
     reserve = accrued.reserve;
     cursor = nextBoundary;
+    if (contact.kind === 'anomaly' && cursor === hazardAt && cursor < contact.expiresAt
+      && explorationSeedRoll(contact.id,claim.claimId,hazardSlot,'hazard')
+        < EXPLORATION_RULES.anomalyHazardChance[profile.risk]) {
+      // A bounded anomaly discharge burns at most 10% of material cargo,
+      // never re-mints destroyed stock and never secretly fabricates ship losses.
+      const lostCargo = emptyExplorationCargo();
+      for (const key of RESOURCES) {
+        const amount = nextClaim.cargo[key];
+        lostCargo[key] = amount > 0 ? Math.min(amount,Math.max(1,Math.floor(amount*.10))) : 0;
+        nextClaim.cargo[key] -= lostCargo[key];
+      }
+      hazardEvents.push({id:claim.flightId+':hazard:'+hazardSlot,
+        kind:'hazard',at:cursor,ownerId:claim.ownerId,flightId:claim.flightId,lostCargo});
+    }
   }
   nextClaim.lastAccruedAt = end;
   nextClaim.heldMs += end - claim.lastAccruedAt;
   const extracted = { ...contact.extractedByType };
   for (const key of RESOURCES) extracted[key] += contact.resourceReserve[key] - reserve[key];
-  return { ...contact, claim: nextClaim, resourceReserve: reserve, extractedByType: extracted };
+  return { ...contact, claim: nextClaim, resourceReserve: reserve, extractedByType: extracted,
+    events:hazardEvents.length ? [...contact.events,...hazardEvents].slice(-100) : contact.events };
 }
 
 export function prepareExplorationRecall(contact: ExplorationContact, ownerId: string, nowMs: number): ExplorationContact {
