@@ -4,6 +4,7 @@ import { createUniverseSystem, SYSTEM_COUNT } from '../domain/universe/runtime.t
 import type { UniverseCoordinate, UniversePlanetNode, UniversePersistedPlayerPlanet, UniverseRegisteredPlanet } from '../domain/universe/types.ts';
 import { explorationNodeId, visibleExplorationContacts } from '../domain/exploration/model.ts';
 import type { RuntimeMode } from '../domain/runtime/mode.ts';
+import { EXPLORATION_ARTS } from '../exploration-art.ts';
 
 /** The shared selector for Fleet and Operations: only actual local owned colonies grant visibility. */
 export function selectExplorationTargets(
@@ -36,6 +37,7 @@ export function selectExplorationTargets(
     mode, galaxy, system, nowMs, playerPlanets, registeredPlanets: targets,
     pirateContactDefeats: Object.values(state.pirate?.contact.defeatedCycles ?? {}),
     asteroidStates: state.asteroidSimulation?.asteroids ?? [],
+    assets: { uniqueArts: EXPLORATION_ARTS.unique, anomalyArts: EXPLORATION_ARTS.anomaly },
   }).positions.filter(node => explorationNodeId(node) !== null));
   return visibleExplorationContacts(nodes, owned, nowMs, limit);
 }
