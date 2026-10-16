@@ -12,6 +12,7 @@ export type MissionId =
   | 'pirate-recon'
   | 'pirate-elimination'
   | 'pirate-raid'
+  | 'expedition'
   | 'deployment'
   | 'colonize'
   | 'recycle'
@@ -52,6 +53,8 @@ export type FlightRecord = {
   ownerSide?: 'player' | 'bot01' | 'pirate';
   missionId: MissionId;
   operationId?: string;
+  /** Frozen resource-score snapshot at expedition departure. */
+  explorationLaunchResourcePoints?: number;
   /** Links a persisted espionage flight to its higher-level spy mission. */
   spyMissionId?: string;
   originPlanetId: string;
