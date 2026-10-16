@@ -783,7 +783,7 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
     && (item.missionId !== 'attack' || item.ownerSide === 'bot01'
       || destinationRecord.kind !== 'coordinate'
       || !isNonEmptyPersistedString(item.operationId)
-      || !/^(unique|anomaly):\\d+:/.test(item.operationId)
+      || !/^(unique|anomaly):\d+:/.test(item.operationId)
       || !isNonNegativeInteger(item.explorationLaunchResourcePoints)
       || (item.targetKind !== 'unique' && item.targetKind !== 'anomaly'))) return false;
 
