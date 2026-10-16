@@ -189,6 +189,13 @@ test('public elimination dispatch resolves a full wipe, applies the quiet window
   assert.equal(launched.ok, true);
   if (!launched.ok) return;
   assert.ok(launched.flight.arrivalAt < contact.expiresAt);
+  const adaptiveSnapshot=launched.flight.pirateSnapshot!;
+  assert.equal(adaptiveSnapshot.adaptiveQ,0);
+  assert.ok(adaptiveSnapshot.adaptiveWeight!==undefined);
+  assert.ok(adaptiveSnapshot.eliminationBudget!.coefficient!>=0.90
+    &&adaptiveSnapshot.eliminationBudget!.coefficient!<0.95);
+  assert.equal(adaptiveSnapshot.defeatMultiplier,0.5);
+  assert.equal(adaptiveSnapshot.drawMultiplier,0.75);
   const launchSnapshot = launched.flight.attackSnapshot!;
   const reportId = `battle-pirate-${launched.flight.id}`;
   const changedScience = Object.fromEntries(COMBAT_TECHNOLOGIES.map((technology) => [technology.sourceScienceId, 0]));
@@ -202,6 +209,13 @@ test('public elimination dispatch resolves a full wipe, applies the quiet window
   assert.ok(report, 'arrival must create the canonical combat report');
   assert.equal(report.winner, 'attacker');
   assert.equal(report.defenderForce.populationAfter, 0);
+  const adaptation=arrived.state.pirate?.ownerAdaptations?.[state.profile.playerId];
+  assert.ok(adaptation);
+  if(adaptiveSnapshot.adaptiveWeight!>=0.05){
+    assert.equal(adaptation.wins,1);
+    assert.ok(adaptation.q>0);
+    assert.equal(adaptation.weightedBattles,adaptiveSnapshot.adaptiveWeight);
+  }
   assert.equal(report.attacker.race, 'Астеры');
   assert.equal(report.defender.race, 'pirates');
   assert.deepEqual(report.attackerForce.technologyLevels, launchSnapshot.attackerTechnologies);
@@ -389,6 +403,8 @@ test('offline multi-day catch-up after reload resolves one launch snapshot and c
   const replay = arrive(completed.state, clock);
   assert.equal(replay.state.combat.reports.filter((candidate) => candidate.id === reportId).length, 1);
   assert.deepEqual(replay.state.pirate?.contact.defeatedCycles, completed.state.pirate?.contact.defeatedCycles);
+  assert.deepEqual(replay.state.pirate?.ownerAdaptations,completed.state.pirate?.ownerAdaptations,
+    'offline replay must not credit the same victory twice');
   assert.deepEqual(replay.state.planets[ORIGIN_ID]?.fleet, completed.state.planets[ORIGIN_ID]?.fleet);
   assert.equal(replay.state.flights.records.find((flight) => flight.id === launched.flight.id)?.phase, 'completed');
 });

@@ -278,6 +278,16 @@ async function runViewport(width, height) {
     console.log(`[pirate-operations-qa] viewport ${label} contact ${contact.cycleKey}`);
     await grantTargetSystemColony(win, contact);
     await clickPrimary(win, 'operations', `document.querySelector('.operations-layout-v2')`);
+    await waitFor(win,`document.querySelector('[data-qa-pirate-adaptive-test]')`);
+    const adaptiveTest=await win.webContents.executeJavaScript(`(() => ({
+      next:document.querySelector('[data-qa-pirate-next-band]')?.textContent,
+      rate:document.querySelector('[data-qa-pirate-win-rate]')?.textContent,
+      q:document.querySelector('[data-qa-pirate-q]')?.textContent,
+    }))()`);
+    if(!adaptiveTest.next?.includes('90,0%')||!adaptiveTest.next?.includes('95,0%')
+      ||adaptiveTest.rate!=='—'||adaptiveTest.q!=='0,0%')
+      throw new Error('Test Mode must display hidden initial win/adaptation diagnostics: '+JSON.stringify(adaptiveTest));
+
     await waitFor(win, `(() => { const art = document.querySelector('[data-qa-pirate-contact] .operation-feed-pirate-art-v2 img'); return Boolean(art?.complete && art.naturalWidth > 0); })()`);
     await win.webContents.executeJavaScript(`document.querySelector('[data-qa-pirate-contact]')?.click()`);
     await waitFor(win, `(() => { const block = document.querySelector('.operations-objective-v2'); return Boolean(block && parseFloat(getComputedStyle(block).borderTopLeftRadius) >= 9); })()`);
