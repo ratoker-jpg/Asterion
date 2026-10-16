@@ -67,6 +67,7 @@ export function resolveExplorationAttackAtTarget(state: SaveState, flight: Fligh
   const claimant = contact?.claim;
   const npcSource=(flight.ownerSide==='npc'||flight.ownerSide==='bot01')
     ? state.espionage?.targets?.[flight.originPlanetId] : undefined;
+  if((flight.ownerSide==='npc'||flight.ownerSide==='bot01')&&!npcSource)return null;
   const attackerOwnerId=npcSource?.ownerId??state.profile.playerId;
   if (!contact || !claimant || at >= contact.expiresAt || at < contact.appearedAt
       || claimant.ownerId === attackerOwnerId
