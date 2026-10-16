@@ -1489,7 +1489,12 @@ export function dispatchFlight(
   const baseFlight = scaledRecord(domainResult.flight, runtimeOptions);
   const flight: FlightRecord = command.missionId === 'expedition'
     ? { ...baseFlight, explorationLaunchResourcePoints: explorationResourceScore(state) }
-    : baseFlight;
+    : explorationAttackNode
+      ? { ...baseFlight, explorationAttack: true,
+          explorationLaunchResourcePoints: explorationResourceScore(state),
+          operationId: explorationAttackNode.id, targetKind: explorationAttackNode.kind,
+          targetRelation: 'neutral', targetPlanetName: explorationAttackNode.name }
+      : baseFlight;
   if (command.missionId === 'expedition' || command.missionId === 'exploration-recon' || flight.explorationAttack) {
     const node = getExplorationTarget(state, flight.operationId!, flight.departedAt, runtimeOptions.mode);
     if (!node || flight.arrivalAt >= node.special!.expiresAt) {
