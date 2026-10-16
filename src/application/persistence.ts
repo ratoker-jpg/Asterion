@@ -701,8 +701,9 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
     || item.gasCost < 0
     || (isSpaceFlight && item.gasCost !== 100)) return false;
 
-  if ((item.ownerSide !== undefined && item.ownerSide !== 'player' && item.ownerSide !== 'bot01' && item.ownerSide !== 'pirate')
+  if ((item.ownerSide !== undefined && item.ownerSide !== 'player' && item.ownerSide !== 'bot01' && item.ownerSide !== 'npc' && item.ownerSide !== 'pirate')
     || (item.ownerSide === 'bot01' && item.missionId !== 'attack' && !(mode === 'test' && item.missionId === 'expedition'))
+    || (item.ownerSide === 'npc' && item.missionId !== 'expedition' && !(item.missionId === 'attack' && item.explorationAttack === true))
     || (item.ownerSide === 'pirate' && item.missionId !== 'pirate-raid')
     || (item.missionId === 'pirate-raid' && item.ownerSide !== 'pirate')) return false;
 
@@ -711,6 +712,9 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
       mode !== 'test' || !String(item.requestId).startsWith('bot01-exploration:')
       || !['aegis','synod','veyra'].includes(String(item.explorationFactionId)) || item.targetRelation !== 'neutral'
       || item.gasCost !== 0)) return false;
+  if (item.ownerSide === 'npc' && (mode !== 'production' || !String(item.requestId).startsWith('npc-exploration:')
+    || !['aegis','synod','veyra'].includes(String(item.explorationFactionId))
+    || item.targetRelation !== 'neutral' || item.gasCost !== 0)) return false;
   if ((item.missionId === 'expedition' || item.missionId === 'exploration-recon')
     && (!isNonEmptyPersistedString(item.operationId) || !/^(unique|anomaly):\d+:/.test(item.operationId)
       || (item.missionId === 'expedition' && !isNonNegativeInteger(item.explorationLaunchResourcePoints)))) return false;
