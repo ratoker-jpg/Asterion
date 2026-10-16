@@ -56,6 +56,8 @@ export type FlightRecord = {
   operationId?: string;
   /** Frozen resource-score snapshot at expedition departure. */
   explorationLaunchResourcePoints?: number;
+  /** Canonical Attack against a persistent exploration contact, not a planet. */
+  explorationAttack?: boolean;
   /** Links a persisted espionage flight to its higher-level spy mission. */
   spyMissionId?: string;
   originPlanetId: string;
