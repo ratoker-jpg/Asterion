@@ -28,6 +28,7 @@ export type ExplorationOperationContact = ExplorationOperationPresentation;
 type OperationsViewProps = {
   explorationContacts?: readonly ExplorationOperationContact[];
   onExpedition?: (node: UniversePlanetNode) => void;
+  onExplorationAttack?: (node: UniversePlanetNode) => void;
   onExplorationAccept?: (node: UniversePlanetNode) => void;
   onExplorationCancel?: (contactId: string) => void;
   onExplorationRecon?: (node: UniversePlanetNode) => void;
@@ -321,11 +322,12 @@ function pirateRemainingLabel(expiresAt: number, nowMs: number) {
   return minutes ? `${minutes} мин ${String(remainder).padStart(2, '0')} с` : `${remainder} с`;
 }
 
-function OperationDossier({ operation, pirateContact, exploration, onExpedition, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, battleReportId, completed, nowMs, onAccept, onCancel, onReveal, onOpenFleets, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: {
+function OperationDossier({ operation, pirateContact, exploration, onExpedition, onExplorationAttack, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, battleReportId, completed, nowMs, onAccept, onCancel, onReveal, onOpenFleets, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: {
   operation: OperationInstance | null;
   pirateContact?: PirateContactPresentation;
   exploration?: ExplorationOperationContact;
   onExpedition?: (node: UniversePlanetNode) => void;
+  onExplorationAttack?: (node: UniversePlanetNode) => void;
   onExplorationAccept?: (node: UniversePlanetNode) => void;
   onExplorationCancel?: (contactId: string) => void;
   onExplorationRecon?: (node: UniversePlanetNode) => void;
@@ -493,7 +495,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
                   data-qa-operation-expedition={node.id} onClick={() => onExpedition?.(node)}>ПОДГОТОВИТЬ ЭКСПЕДИЦИЮ</button>
               : exploration.occupancy === 'self'
                 ? <button type="button" className="operations-secondary-v2" onClick={onOpenFleets}>К ФЛОТАМ · ОТОЗВАТЬ</button>
-                : <button type="button" className="operations-secondary-v2" disabled title="Боевой захват пока не подключён">ОБЪЕКТ ЗАНЯТ · НУЖНА АТАКА</button>}
+                : <button type="button" className="operations-primary-v2" data-qa-exploration-attack={node.id} disabled={!onExplorationAttack} onClick={() => onExplorationAttack?.(node)}>АТАКОВАТЬ ЗАНЯТЫЙ ОБЪЕКТ</button>}
             <button type="button" className="operations-pirate-cancel"
               onClick={() => onExplorationCancel?.(node.id)}>Отменить операцию</button>
           </> : null}
@@ -654,7 +656,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
   );
 }
 
-export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, explorationContacts = [], onExpedition, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
+export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, explorationContacts = [], onExpedition, onExplorationAttack, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
   const [tab, setTab] = useState<OperationsTab>('available');
   const [selectedId, setSelectedId] = useState<OperationId | null>(null);
 
@@ -808,6 +810,7 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
           pirateContact={selectedRow?.contact}
           exploration={selectedRow?.exploration}
           onExpedition={onExpedition}
+          onExplorationAttack={onExplorationAttack}
           onExplorationAccept={(node) => accept('explore:' + node.id)}
           onExplorationCancel={(id) => cancel('explore:' + id)}
           onExplorationRecon={onExplorationRecon}
