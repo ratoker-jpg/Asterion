@@ -19,17 +19,18 @@ import { getPirateRaidCheckProgress } from './domain/pirates/contact-schedule.ts
 import { pirateAdaptiveInterval, type PirateOwnerAdaptation } from './domain/pirates/adaptive.ts';
 import { getPiratePlanetArt } from './pirate-planet-art.ts';
 import { explorationProfile } from './domain/exploration/model.ts';
+import type { ExplorationOperationPresentation } from './application/exploration.ts';
 import type { UniversePlanetNode } from './domain/universe/types.ts';
 import missionExpeditionIcon from '../assets/source/mission-icons-v1/31_expedition.png';
 import './operations.css';
 
-export type ExplorationOperationContact = {
-  node: UniversePlanetNode;
-  occupancy: 'free' | 'self' | 'occupied';
-};
+export type ExplorationOperationContact = ExplorationOperationPresentation;
 type OperationsViewProps = {
   explorationContacts?: readonly ExplorationOperationContact[];
   onExpedition?: (node: UniversePlanetNode) => void;
+  onExplorationAccept?: (node: UniversePlanetNode) => void;
+  onExplorationCancel?: (contactId: string) => void;
+  onExplorationRecon?: (node: UniversePlanetNode) => void;
   state: OperationsState;
   onAccept: (operationId: OperationId) => void;
   onCancel: (operationId: OperationId) => void;
@@ -310,11 +311,14 @@ function pirateRemainingLabel(expiresAt: number, nowMs: number) {
   return minutes ? `${minutes} мин ${String(remainder).padStart(2, '0')} с` : `${remainder} с`;
 }
 
-function OperationDossier({ operation, pirateContact, exploration, onExpedition, battleReportId, completed, nowMs, onAccept, onCancel, onReveal, onOpenFleets, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: {
+function OperationDossier({ operation, pirateContact, exploration, onExpedition, onExplorationAccept, onExplorationCancel, onExplorationRecon, battleReportId, completed, nowMs, onAccept, onCancel, onReveal, onOpenFleets, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: {
   operation: OperationInstance | null;
   pirateContact?: PirateContactPresentation;
   exploration?: ExplorationOperationContact;
   onExpedition?: (node: UniversePlanetNode) => void;
+  onExplorationAccept?: (node: UniversePlanetNode) => void;
+  onExplorationCancel?: (contactId: string) => void;
+  onExplorationRecon?: (node: UniversePlanetNode) => void;
   battleReportId?: string;
   completed?: CompletedPirateOperation;
   nowMs: number;
@@ -517,7 +521,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
   );
 }
 
-export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, explorationContacts = [], onExpedition, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
+export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, explorationContacts = [], onExpedition, onExplorationAccept, onExplorationCancel, onExplorationRecon, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
   const [tab, setTab] = useState<OperationsTab>('available');
   const [selectedId, setSelectedId] = useState<OperationId | null>(null);
 
@@ -538,22 +542,25 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
       battleReportId: entry.reportId,
       completed: entry,
     }));
-    const exploration: OperationRow[] = explorationContacts.map(({node, occupancy}) => ({
-      exploration: {node, occupancy},
+    const exploration: OperationRow[] = explorationContacts.map((entry) => {
+      const {node, occupancy} = entry;
+      return {
+      exploration: entry,
       operation: {
         id: 'explore:' + node.id,
         archetype: node.kind === 'anomaly' ? 'anomaly_scan' : 'derelict_recovery',
         category: node.kind === 'anomaly' ? 'science' : 'exploration',
         title: node.name.toUpperCase(),
         briefing: node.description,
-        state: occupancy === 'self' ? 'active' : 'available',
+        state: entry.stage,
         threat: explorationProfile(node.kind as 'unique' | 'anomaly', node.special?.profileVariant ?? 1).risk,
-        intel: 2, source: 'deep_scan',
+        intel: entry.recon?.success ? 3 : 0, source: 'deep_scan',
         location: { kind: 'coordinates', coordinates: '[' + node.coordinate.galaxy + ':' + node.coordinate.system + ':' + node.coordinate.position + ']' },
         objective: { label: occupancy === 'free' ? 'Отправить экспедицию' : 'Объект уже занят' },
         modifiers: [], rewardPreview: {},
       },
-    }));
+      };
+    });
     return [...live, ...exploration, ...completed, ...normal];
   }, [state.items, pirateContacts, explorationContacts, completedPirateOperations]);
 
@@ -572,7 +579,8 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
 
   const accept = (operationId: OperationId) => {
     const row = operationRows.find(({ operation }) => operation.id === operationId);
-    if (row?.contact) onPirateAccept?.(row.contact);
+    if (row?.exploration) onExplorationAccept?.(row.exploration.node);
+    else if (row?.contact) onPirateAccept?.(row.contact);
     else onAccept(operationId);
     setTab('active');
     setSelectedId(operationId);
@@ -580,7 +588,8 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
 
   const cancel = (operationId: OperationId) => {
     const row = operationRows.find(({ operation }) => operation.id === operationId);
-    if (row?.contact) onPirateCancel?.(row.contact);
+    if (row?.exploration) onExplorationCancel?.(row.exploration.node.id);
+    else if (row?.contact) onPirateCancel?.(row.contact);
     else onCancel(operationId);
     setTab('available');
     setSelectedId(operationId);
@@ -666,6 +675,9 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
           pirateContact={selectedRow?.contact}
           exploration={selectedRow?.exploration}
           onExpedition={onExpedition}
+          onExplorationAccept={onExplorationAccept}
+          onExplorationCancel={onExplorationCancel}
+          onExplorationRecon={onExplorationRecon}
           battleReportId={selectedRow?.battleReportId}
           completed={selectedRow?.completed}
           nowMs={nowMs}
