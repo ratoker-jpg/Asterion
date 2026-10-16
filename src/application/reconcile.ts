@@ -25,6 +25,8 @@ import { getEspionageState, getEspionageTargets } from '../domain/espionage/runt
 import { collectOrbitalDebrisAtCoordinate, getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 import { advanceUniverseAsteroidSimulationAt, getNextUniverseAsteroidTransitionAt } from '../domain/universe/asteroid-simulation.ts';
 import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
+import { selectOwnerScores } from '../domain/rating/scoring.ts';
+import { createExplorationState, recordHighestExplorationScore } from '../domain/exploration/ledger.ts';
 
 export type RuntimeReconcileEvent =
   | { kind: 'science'; scienceIds: ScienceId[] }
@@ -303,6 +305,12 @@ export function reconcileRuntime(
     }
   }
   next = reconcileAllPlanetOverpopulation(next, context.now).state;
+  // Preserve the all-time resource high-water mark across losses, fleet launches
+  // and reloads. A later weak expedition must never erase an earlier real peak.
+  const currentScore = selectOwnerScores(next)[next.profile.playerId]?.resourcePoints ?? 0;
+  const previousLedger = next.exploration ?? createExplorationState();
+  const updatedLedger = recordHighestExplorationScore(previousLedger, next.profile.playerId, currentScore);
+  if (updatedLedger !== previousLedger) next = {...next, exploration: updatedLedger};
   const completedCursor = Math.max(pirateCursor, context.now);
   if (next.pirate?.raidProcessedAt !== completedCursor) {
     next = {...next, pirate: {...(next.pirate ?? createDefaultPirateState()),raidProcessedAt:completedCursor}};
