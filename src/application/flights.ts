@@ -1639,7 +1639,7 @@ export function recallFlight(
       notice: `Шпионский зонд отозван. Возврат через ${Math.ceil((nextFlight.returnAt! - now) / 1_000)} с.`,
     };
   }
-  if (flight.missionId === 'expedition' && flight.phase === 'arrived') {
+  if ((flight.missionId === 'expedition' || flight.explorationAttack) && flight.phase === 'arrived') {
     const contact = explorationContactForFlight(state, flight);
     if (!contact?.claim || contact.claim.flightId !== flight.id) return failure(state, 'flight-not-recallable', 'Экспедиция не удерживает объект.');
     if (contact.claim.pendingRecallAt !== undefined) return failure(state, 'flight-not-recallable', 'Экспедиция уже готовится к возвращению.');
