@@ -251,3 +251,22 @@ test('arrival after object expiry cannot occupy and contest closes exactly after
     'defender', { ...attacker, flightId: 'attack-30' }, 0,
     { all: 5000, transporters: 5000, recyclers: 0 }, false));
 });
+
+
+test('anomaly risk hazards are bounded material losses and replay/split deterministic', () => {
+  const node = makeNode('anomaly');
+  const contact = getOrMaterializeExplorationContact(createExplorationState(),node,100_000).contact;
+  const active = occupyExplorationContact(contact, arrival(start+minute));
+  const finalAt=start+15*minute;
+  const whole=reconcileExplorationContact(active,finalAt);
+  let split=active;
+  for(let time=start+minute+30_000;time<=finalAt;time+=30_000)
+    split=reconcileExplorationContact(split,time);
+  assert.deepEqual(split,whole,'offline catch-up and ticking must settle identical hazard slots');
+  assert.deepEqual(reconcileExplorationContact(whole,finalAt),whole,'same timestamp must not reroll hazards');
+  const events=whole.events.filter(e=>e.kind==='hazard');
+  assert.equal(new Set(events.map(e=>e.id)).size,events.length);
+  for(const e of events) assert.ok(Object.values(e.lostCargo ?? {}).every(n=>n>=0));
+  for(const key of ['metal','minerals','gas','debris'] as const)
+    assert.ok(whole.resourceReserve[key]>=0 && whole.resourceReserve[key]<=contact.initialReserve[key]);
+});
