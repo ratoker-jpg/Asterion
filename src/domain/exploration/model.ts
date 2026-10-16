@@ -235,24 +235,30 @@ export function explorationRareWon(profile: ExplorationProfile, heldMs: number, 
 /** 30% of actual material cargo only; no bonus rolls or negative/overflow quantities. */
 export function captureExplorationCargo(loser: TransportCargo, freeCapacity: number): { captured: TransportCargo; destroyed: TransportCargo } {
   const captured = emptyExplorationCargo(), destroyed = emptyExplorationCargo();
-  const total = keys.reduce((sum, key) => sum + Math.max(0, Math.floor(loser[key])), 0);
+  const available = keys.map(key => Math.max(0, Math.floor(loser[key])));
+  const total = available.reduce((sum, amount) => sum + amount, 0);
   const limit = Math.min(Math.floor(total * EXPLORATION_RULES.capturedCargoFraction), Math.max(0, Math.floor(freeCapacity)));
-  let free = limit;
-  for (const key of keys) {
-    const available = Math.max(0, Math.floor(loser[key]));
-    const target = Math.floor(available * EXPLORATION_RULES.capturedCargoFraction);
-    captured[key] = Math.min(free, target);
-    destroyed[key] = available - captured[key];
-    free -= captured[key];
+  if (total === 0 || limit === 0) {
+    keys.forEach((key, index) => { destroyed[key] = available[index]!; });
+    return { captured, destroyed };
   }
-  // Deterministic remaining fractional portions; never exceed per-resource 30% or total 30%.
-  for (const key of keys) {
-    const available = Math.max(0, Math.floor(loser[key]));
-    if (!free || captured[key] >= Math.ceil(available * .30)) continue;
-    captured[key] += 1;
-    destroyed[key] -= 1;
-    free -= 1;
+  const ideals = available.map(amount => amount * limit / total);
+  let remaining = limit;
+  keys.forEach((key, index) => {
+    captured[key] = Math.floor(ideals[index]!);
+    remaining -= captured[key];
+  });
+  // Largest remainder with canonical key tie-break; sum is exactly min(30%, free space).
+  const indices = [0, 1, 2, 3].sort((a, b) =>
+    (ideals[b]! - Math.floor(ideals[b]!)) - (ideals[a]! - Math.floor(ideals[a]!)) || a - b);
+  for (const index of indices) {
+    if (remaining <= 0) break;
+    if (captured[keys[index]!] < available[index]!) {
+      captured[keys[index]!] += 1;
+      remaining -= 1;
+    }
   }
+  keys.forEach((key, index) => { destroyed[key] = available[index]! - captured[key]; });
   return { captured, destroyed };
 }
 
