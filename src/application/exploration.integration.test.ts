@@ -228,6 +228,5 @@ test('accepted operation and real spy-probe research survive save/replay and rev
   const canceled = cancelLiveExploration(arrived.state,target.id);
   assert.equal(selectExplorationOperations(canceled,sent.flight.arrivalAt,'test').find(r=>r.node.id===target.id)?.stage,'available');
   const historical = selectExplorationOperations(arrived.state,target.special!.expiresAt+1,'test').find(r=>r.node.id===target.id);
-  assert.equal(historical?.stage,'completed');
-  assert.ok(historical?.node.art);
+  assert.equal(historical,undefined,'accepted-but-never-expeditioned cycle must not become a completed operation');
 });
