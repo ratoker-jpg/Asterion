@@ -228,11 +228,15 @@ export function calculatePirateEliminationPopulationBudget(
   shares: Readonly<Partial<Record<PirateShipId, number>>>,
   launchSeed?: string,
   specialContact?: Readonly<{ ownerId: string; cycleKey: string; totalPoints: number }>,
+  adaptiveQ?: number,
 ): PiratePopulationBudget {
   const sent = safePoints(sentCombatPopulation);
   // Keep the historical draw stream so equal launch seeds preserve their random quantile.
   // Only the seeded elimination population interval changes; persisted flights keep their snapshots.
-  const coefficient = launchSeed === undefined ? 0.9 : 0.85 + 0.20 * pirateSeededDraw(`pirate-garrison-v2:${launchSeed}`);
+  const coefficient=launchSeed===undefined?0.9:
+    adaptiveQ===undefined ? 0.85+0.20*pirateSeededDraw(`pirate-garrison-v2:${launchSeed}`)
+      : 0.90+0.15*Math.max(0,Math.min(1,adaptiveQ))
+        +0.05*pirateSeededDraw(`pirate-garrison-v2:${launchSeed}`);
   const targetPopulation = Math.round(sent * coefficient);
   const qualifiesForSpecial = Boolean(specialContact && specialContact.totalPoints >= 3_000_000
     && pirateSeededDraw(`pirate-special-v1:${specialContact.ownerId}:${specialContact.cycleKey}`) < 0.10);

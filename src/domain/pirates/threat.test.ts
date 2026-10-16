@@ -29,13 +29,13 @@ test('approved pirate threat anchors and no divide by zero', () => {
   assert.equal(pirateCounterFleetChance(0,0,0.30),0.10);
 });
 test('historical hangar fractions use exact integer manifest, not rounded percent', () => {
-  assert.equal(pirateDebrisRewardMultiplier(25_112,25_112),2.5);
-  assert.equal(pirateDebrisRewardMultiplier(25_111,25_112),2);
-  assert.equal(pirateDebrisRewardMultiplier(23_857,25_112),2);
-  assert.equal(pirateDebrisRewardMultiplier(18_834,25_112),1.5);
-  assert.equal(pirateDebrisRewardMultiplier(12_556,25_112),1.25);
-  assert.equal(pirateDebrisRewardMultiplier(100,25_112),1);
-  assert.equal(pirateDebrisRewardMultiplier(25_113,25_112),1);
+  assert.equal(pirateDebrisRewardMultiplier(25_112,25_112),1.5);
+  assert.equal(pirateDebrisRewardMultiplier(25_111,25_112),1.3);
+  assert.equal(pirateDebrisRewardMultiplier(23_857,25_112),1.3);
+  assert.equal(pirateDebrisRewardMultiplier(18_834,25_112),0.9);
+  assert.equal(pirateDebrisRewardMultiplier(12_556,25_112),0.9);
+  assert.equal(pirateDebrisRewardMultiplier(100,25_112),0.7);
+  assert.equal(pirateDebrisRewardMultiplier(25_113,25_112),0.7);
   assert.equal(pirateHangarFraction(25_113,25_112),0);
 });
 test('seeded rolls and virtual time survive repeated calls and full/partial reset', () => {

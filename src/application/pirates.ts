@@ -20,6 +20,7 @@ import { calculatePirateEliminationPopulationBudget } from '../domain/pirates/pr
 import { PIRATE_CATALOG } from '../domain/pirates/catalog.ts';
 import { getHangarCapacity } from '../domain/buildings/balance-v1.ts';
 import { pirateDebrisRewardMultiplier, pirateHangarFraction, reducePirateThreatAfterVictory } from '../domain/pirates/threat.ts';
+import {defaultPirateOwnerAdaptation,pirateAdaptiveFleetWeight,recordPirateAdaptiveOutcome} from '../domain/pirates/adaptive.ts';
 import type { PiratePopulationBudget } from '../domain/pirates/profile.ts';
 import { PIRATE_ELIMINATION_NO_TARGET_MESSAGE } from '../domain/pirates/encounter.ts';
 import {
@@ -369,11 +370,13 @@ export function dispatchPirateFlight(
     ...Object.values(ensured.state.planets).map((planet) => Math.max(0, Math.floor(planet.buildings.hangar ?? 0))),
   );
   const historicalHangarCapacity = getHangarCapacity(historicalHangarLevel);
+  const ownerAdaptation=statePirate(ensured.state).ownerAdaptations?.[ownerId]??defaultPirateOwnerAdaptation();
+  const adaptiveWeight=pirateAdaptiveFleetWeight(factionId,selectedShips,Math.round(populationReserved),historicalHangarCapacity);
   let eliminationBudget: PiratePopulationBudget | undefined;
   if (command.missionId === 'pirate-elimination') {
     eliminationBudget = calculatePirateEliminationPopulationBudget(Math.round(populationReserved), profile.shares,
       `pirate-elimination-v2:${ownerId}:${cycleKey}:${requestId}`,
-      { ownerId, cycleKey, totalPoints: profile.score.totalPoints });
+      { ownerId, cycleKey, totalPoints: profile.score.totalPoints },ownerAdaptation.q);
     if (eliminationBudget.actualPopulation <= 0) {
       return flightFailure(ensured.state, 'wrong-ship-composition', 'Выбранный флот слишком мал, чтобы сформировать гарнизон пиратов.');
     }
@@ -402,6 +405,8 @@ export function dispatchPirateFlight(
       sentCombatPopulation: Math.round(populationReserved),
       historicalHangarCapacity,
       rewardMultiplier: pirateDebrisRewardMultiplier(Math.round(populationReserved), historicalHangarCapacity),
+      defeatMultiplier:0.5 as const,drawMultiplier:0.75 as const,
+      adaptiveWeight,adaptiveQ:ownerAdaptation.q,
     } : {}),
     ...(reconMission ? { reconMission } : {}),
   });
@@ -451,6 +456,14 @@ export function dispatchPirateFlight(
     ...sourceResources,
     gas: Math.max(0, sourceResources.gas - flight.gasCost),
   });
+  if(eliminationBudget){
+    const pirate=statePirate(next);
+    const last=Object.freeze({flightId:flight.id,coefficient:eliminationBudget.coefficient??0.9,
+      sentPopulation:Math.round(populationReserved),at:departedAt});
+    next=withPirateState(next,Object.freeze({...pirate,ownerAdaptations:Object.freeze({
+      ...pirate.ownerAdaptations,[ownerId]:Object.freeze({...ownerAdaptation,lastRoll:last}),
+    })}));
+  }
   if (reconMission) {
     const pirate = statePirate(next);
     next = withPirateState(next, Object.freeze({
@@ -534,6 +547,15 @@ export function resolvePirateFlightAtTarget(
   const resolved = resolvePirateEliminationAtTarget(state, flight, arrivalAt);
   if (!resolved) return noTarget();
   let next = withFlightResolution(resolved.state, flight.id, resolved.resolution);
+  if(snapshot.adaptiveWeight!==undefined){
+    const pirate=statePirate(next);
+    const adaptive=pirate.ownerAdaptations?.[snapshot.ownerId]??defaultPirateOwnerAdaptation();
+    const outcome=hasFullPirateVictory(resolved.report)?'win':
+      resolved.report.winner==='draw'?'draw':'loss';
+    const updated=recordPirateAdaptiveOutcome(adaptive,flight.id,snapshot.adaptiveWeight,outcome);
+    if(updated!==adaptive)next=withPirateState(next,Object.freeze({...pirate,
+      ownerAdaptations:Object.freeze({...pirate.ownerAdaptations,[snapshot.ownerId]:updated})}));
+  }
   if (hasFullPirateVictory(resolved.report)) {
     const pirate = statePirate(next);
     const contactState = recordPirateContactDefeat(pirate.contact, {

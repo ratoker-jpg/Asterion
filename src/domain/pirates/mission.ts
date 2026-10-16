@@ -16,6 +16,7 @@ import {
 import { pirateReconCooldownKey, normalizePirateReconMissionSnapshot, type PirateReconMissionSnapshot } from './recon.ts';
 import type { PiratePopulationBudget, PirateProfile } from './profile.ts';
 import type { OwnerPirateThreat } from './threat.ts';
+import { normalizedPirateOwnerAdaptation, type PirateOwnerAdaptation } from './adaptive.ts';
 import { isFlightCoordinate } from '../flights/distance.ts';
 
 export type PirateMissionId = 'pirate-recon' | 'pirate-elimination';
@@ -49,6 +50,11 @@ export type PirateMissionSnapshot = Readonly<{
   sentCombatPopulation?: number;
   historicalHangarCapacity?: number;
   rewardMultiplier?: number;
+  /** New launch-only result modifiers; absent on historical flights. */
+  defeatMultiplier?: 0.5;
+  drawMultiplier?: 0.75;
+  adaptiveWeight?: number;
+  adaptiveQ?: number;
   reconMission?: PirateReconMissionSnapshot;
 }>;
 
@@ -62,6 +68,7 @@ export type PirateState = Readonly<{
   /** Owner-wide historical maxima survive downgrades and colony loss. */
   ownerMaxHangarLevel?: Readonly<Record<string, number>>;
   ownerThreats?: Readonly<Record<string, OwnerPirateThreat>>;
+  ownerAdaptations?: Readonly<Record<string,PirateOwnerAdaptation>>;
   /** Persisted checkpoint and one owner-cycle raid decision. */
   raidProcessedAt?: number;
   raidRolls?: Readonly<Record<string, Readonly<{ checkAt: number; seed: string; flightId?: string }>>>;
@@ -100,6 +107,7 @@ export function createDefaultPirateState(): PirateState {
     reconReports: Object.freeze([]),
     ownerMaxHangarLevel: Object.freeze({}),
     ownerThreats: Object.freeze({}),
+    ownerAdaptations: Object.freeze({}),
     raidRolls: Object.freeze({}),
   });
 }
@@ -161,10 +169,16 @@ export function normalizePirateMissionSnapshot(
       // Union of persisted pre-patch 75–90% and new seeded 85–105% budgets.
       // Do not recompute a launched garrison from today's coefficient.
       || !Number.isFinite(eliminationBudget.coefficient) || Number(eliminationBudget.coefficient) < 0.75
-      || Number(eliminationBudget.coefficient) > 1.05
+      || Number(eliminationBudget.coefficient) > 1.10
       || !validTimestamp(value.sentCombatPopulation)
       || !validTimestamp(value.historicalHangarCapacity)
-      || ![1,1.25,1.5,2,2.5].includes(value.rewardMultiplier as number)
+      || ![0.7,0.9,1,1.25,1.3,1.5,2,2.5].includes(value.rewardMultiplier as number)
+      || (value.defeatMultiplier!==undefined&&value.defeatMultiplier!==0.5)
+      || (value.drawMultiplier!==undefined&&value.drawMultiplier!==0.75)
+      || (value.adaptiveWeight!==undefined&&(typeof value.adaptiveWeight!=='number'
+        ||!Number.isFinite(value.adaptiveWeight)||value.adaptiveWeight<0||value.adaptiveWeight>1))
+      || (value.adaptiveQ!==undefined&&(typeof value.adaptiveQ!=='number'
+        ||!Number.isFinite(value.adaptiveQ)||value.adaptiveQ<0||value.adaptiveQ>1))
     ) return null;
   }
 
@@ -188,6 +202,10 @@ export function normalizePirateMissionSnapshot(
       sentCombatPopulation: Number(value.sentCombatPopulation),
       historicalHangarCapacity: Number(value.historicalHangarCapacity),
       rewardMultiplier: Number(value.rewardMultiplier),
+      ...(value.defeatMultiplier===0.5?{defeatMultiplier:0.5 as const}:{}),
+      ...(value.drawMultiplier===0.75?{drawMultiplier:0.75 as const}:{}),
+      ...(typeof value.adaptiveWeight==='number'?{adaptiveWeight:value.adaptiveWeight}:{}),
+      ...(typeof value.adaptiveQ==='number'?{adaptiveQ:value.adaptiveQ}:{}),
     } : {}),
     ...(reconMission ? { reconMission } : {}),
   });
@@ -276,6 +294,15 @@ export function normalizePirateState(value: unknown): PirateState {
           && !['__proto__','prototype','constructor'].includes(id)
           && validTimestamp(level) && Number(level) <= 20)
         .map(([id, level]) => [id,Number(level)]),
+    )),
+    ownerAdaptations:Object.freeze(Object.fromEntries(
+      Object.entries(isRecord(value.ownerAdaptations)?value.ownerAdaptations:{})
+        .filter(([id])=>id.trim().length>0&&id.length<=160
+          &&!['__proto__','constructor','prototype'].includes(id))
+        .flatMap(([id,item])=>{
+          const normalized=normalizedPirateOwnerAdaptation(item);
+          return normalized?[[id,normalized]]:[];
+        }),
     )),
     ownerThreats: Object.freeze(Object.fromEntries(
       Object.entries(isRecord(value.ownerThreats) ? value.ownerThreats : {})

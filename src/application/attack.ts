@@ -439,10 +439,12 @@ export function resolvePirateEliminationAtTarget(state: SaveState, flight: Fligh
   const baseDebris = calculateAttackDebris(encounter.report, launch.attackerFactionId, launch.attackerFactionId);
   const basePirateDebris = calculatePirateForceDebris(
     encounter.report.defenderForce, encounter.report.attackerForce, encounter.report.missionType);
-  const multiplier = encounter.victory && snapshot.eliminationBudget ? (snapshot.rewardMultiplier ?? 1) : 1;
-  // Only pirate hull debris is multiplied, and fractional salvage is floored once.
-  const bonusPirateDebris = Math.max(0, Math.floor(basePirateDebris * multiplier) - basePirateDebris);
-  const debris = addDebris(baseDebris, bonusPirateDebris);
+  // Modifiers are frozen at launch. Legacy defeats/draws retain x1.
+  const multiplier=encounter.victory&&snapshot.eliminationBudget ? (snapshot.rewardMultiplier??1)
+    : encounter.report.winner==='draw' ? (snapshot.drawMultiplier??1)
+    : (snapshot.defeatMultiplier??1);
+  const bonusPirateDebris=Math.floor(basePirateDebris*multiplier)-basePirateDebris;
+  const debris=Math.max(0,addDebris(baseDebris,bonusPirateDebris));
   const report: BattleReport = {
     ...encounter.report, debris, resources: { metal: 0, minerals: 0, gas: 0 },
     pirateReward: {
