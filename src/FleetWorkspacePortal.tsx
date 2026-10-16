@@ -55,6 +55,7 @@ import { getAttackCommanderSelection, isAttackCombatShip } from './application/a
 import { selectOwnedPirateTargets } from './application/pirate-presentation.ts';
 import { selectExplorationTargets, explorationTargetStatus } from './application/exploration.ts';
 import { explorationMiningRates, explorationProfile } from './domain/exploration/model.ts';
+import { expeditionMiningCapacity } from './application/exploration-flight.ts';
 import { reconcileExplorationContact } from './domain/exploration/ledger.ts';
 import type { FlightDestination, FlightRecord, MissionId, TargetRelation } from './domain/flights/types.ts';
 import type { UniverseAsteroidSimulationState, UniverseCoordinate, UniverseObjectKind } from './domain/universe/types.ts';
@@ -1512,7 +1513,7 @@ function FleetWorkspace({
         const claim = contact?.claim?.flightId === flight.id ? contact.claim : undefined;
         const release = contact?.events.find(e => e.id === flight.id + ':release');
         const profile = contact ? explorationProfile(contact.kind, contact.variant) : null;
-        const capacity = claim?.cargoCapacity ?? 0;
+        const capacity = claim?.cargoCapacity ?? expeditionMiningCapacity(runtime, flight).all;
         const cargo = claim?.cargo ?? release?.cargo ?? { metal: 0, minerals: 0, gas: 0, debris: 0 };
         const rates = claim && profile
           ? explorationMiningRates(claim.resourcePointsLaunch, profile, claim.capacity, claim.catchupMultiplier, Boolean(claim.boostedUntilAt && claim.boostedUntilAt > clockNow))
@@ -1538,7 +1539,7 @@ function FleetWorkspace({
               {claim?.capacity.transporters === 0 ? 'В составе нет транспортёров — добыча металла, минералов и газа ограничена. ' : ''}
               Итоговая добыча зависит от доступных запасов и свободного трюма. Весь груз поступит на планету отправления после возвращения.
             </p>
-            <div className="fleet-expedition-composition"><strong>ФЛОТ</strong><span>{Object.entries(flight.selectedShips).filter(([,n])=>Boolean(n)).map(([id,n])=>id + ' ×' + flightNumberLabel(n ?? 0)).join(' · ')}</span></div>
+            <div className="fleet-expedition-composition"><strong>ФЛОТ</strong><span>{Object.entries(flight.selectedShips).filter(([,n])=>Boolean(n)).map(([id,n])=>(shipDefinitions.find(ship=>ship.id === id)?.name ?? id) + ' ×' + flightNumberLabel(n ?? 0)).join(' · ')}</span></div>
             <button type="button" className="fleet-expedition-close" onClick={() => setSelectedExpeditionFlightId(null)}>ЗАКРЫТЬ</button>
           </section>
         </div>,document.body);
