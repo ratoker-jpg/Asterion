@@ -2,9 +2,10 @@ import type { SaveState } from './contracts.ts';
 import type { RuntimeMode } from '../domain/runtime/mode.ts';
 import {
   acceptExplorationOperation, cancelExplorationOperation, createExplorationState,
-  getOrMaterializeExplorationContact, resolveExplorationRecon,
+  getOrMaterializeExplorationContact, resolveExplorationRecon, recordHighestExplorationScore,
 } from '../domain/exploration/ledger.ts';
 import { explorationResourceScore } from './exploration-flight.ts';
+import { selectOwnerScores } from '../domain/rating/scoring.ts';
 import { getExplorationTarget } from './exploration.ts';
 import type { FlightRecord } from '../domain/flights/types.ts';
 
@@ -13,7 +14,8 @@ export function acceptLiveExploration(state: SaveState, id: string, nowMs: numbe
   const node = getExplorationTarget(state, id, nowMs, mode);
   if (!node) return null;
   const ledger = state.exploration ?? createExplorationState();
-  const materialized = getOrMaterializeExplorationContact(ledger, node, explorationResourceScore(state));
+  const remembered = recordHighestExplorationScore(ledger,state.profile.playerId,selectOwnerScores(state)[state.profile.playerId]?.resourcePoints ?? 0);
+  const materialized = getOrMaterializeExplorationContact(remembered, node, explorationResourceScore(state));
   return { ...state, exploration: acceptExplorationOperation(materialized.state, id) };
 }
 export function cancelLiveExploration(state: SaveState, id: string): SaveState {
