@@ -34,7 +34,7 @@ export function materializeExplorationAtDispatch(
 }
 
 /** Exact snapshot, no live hangar inventory when the fleet actually arrives. */
-function expeditionMiningCapacity(state: SaveState, flight: FlightRecord) {
+export function expeditionMiningCapacity(state: SaveState, flight: FlightRecord) {
   const fleet = getFactionShipCatalog(state.profile.factionId);
   const catalog = Object.fromEntries(fleet.map(ship => [ship.id, ship]));
   let all = 0, transporters = 0, recyclers = 0;
@@ -108,6 +108,14 @@ export function creditExpeditionReturn(state: SaveState, flight: FlightRecord, n
   if (!receipt.payout || !origin) return next;
   const before = getPlanetResources(next, flight.originPlanetId);
   const credited = getCappedDelivery(before, getStorageCapacities(origin.buildings), receipt.payout.cargo);
+  const creditedCargo = { ...credited.accepted, debris: receipt.payout.cargo.debris };
+  const burnedCargo = { ...credited.burned, debris: 0 };
+  // Persist actual destination credits (including storage overflow), not just mined amount.
+  next = updateExpeditionContact(next, {
+    ...receipt.contact,
+    events: receipt.contact.events.map(event => event.id === flight.id + ':completed'
+      ? { ...event, creditedCargo, burnedCargo } : event),
+  });
   next = replacePlanetResources(next, flight.originPlanetId, credited.resources);
   const updatedPlanet = next.planets[flight.originPlanetId];
   if (!updatedPlanet) return next;
