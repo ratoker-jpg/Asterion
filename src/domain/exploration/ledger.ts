@@ -101,11 +101,17 @@ export function launchExplorationScore(state: ExplorationState, ownerId: string,
 }
 
 /**
- * One immutable shared reserve per cycle. The caller must snapshot genuine world
- * scores when the object is first observed, never recompute on ownership change.
+ * One immutable shared reserve per cycle. No visitor-dependent resource score.
+ * Until an authoritative independent historic world-score scheduler exists,
+ * use the existing shared baseline, not the first visitor's wealth.
  * The existing universe schedule is the only authority for appearance/expiry.
  */
-export function materializeExplorationContact(node: UniversePlanetNode, worldScoreAtAppearance: number): ExplorationContact {
+export function materializeExplorationContact(node: UniversePlanetNode, _observerResourceScore: number): ExplorationContact {
+  // The runtime has no historical world-score authority for past spawn ticks.
+  // Use the EXISTING universe-wide resource-point baseline, never the first
+  // discoverer's personal score. Otherwise visits or captures mint different
+  // reserves for an identical canonical cycle across replays/saves.
+  const worldScoreAtAppearance = EXPLORATION_RULES.resourcePointsBase;
   const id = explorationNodeId(node);
   if (!id || (node.kind !== 'unique' && node.kind !== 'anomaly') || !node.special?.startAt) throw new Error('Not a canonical exploration contact');
   const variant = node.special.profileVariant
