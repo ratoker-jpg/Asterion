@@ -2521,7 +2521,7 @@ export function reconcileFlights(
           if (winning) {
             const arrived: FlightRecord = {...latest,phase:'arrived',arrivedAt:arrivalAt,
               completionReason:'arrived',attackResolution:{
-                reportId:resolved.report.id,resolvedAt:arrivalAt,debris:resolved.report.debris,
+                reportId:resolved.report.id,resolvedAt:arrivalAt,debris:resolved.report.debris ?? 0,
                 loot:resolved.captured,
               }};
             next = {...next,flights:updateFlight(next.flights,arrived)};
@@ -2530,7 +2530,7 @@ export function reconcileFlights(
             const returned = beginDomainFlightReturn(next.flights,current.id,arrivalAt,'normal-return');
             const retreat = returned.records.find(item=>item.id === current.id)!;
             const flight:FlightRecord={...retreat,arrivedAt:arrivalAt,attackResolution:{
-              reportId:resolved.report.id,resolvedAt:arrivalAt,debris:resolved.report.debris,
+              reportId:resolved.report.id,resolvedAt:arrivalAt,debris:resolved.report.debris ?? 0,
               loot:{metal:0,minerals:0,gas:0,debris:0},
             }};
             next={...next,flights:updateFlight(returned,flight)};
