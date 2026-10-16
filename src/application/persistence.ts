@@ -529,6 +529,7 @@ const PERSISTED_FLIGHT_MISSIONS = new Set<MissionId>([
   'pirate-elimination',
   'pirate-raid',
   'expedition',
+  'exploration-recon',
   'transport',
   'espionage',
   'attack',
@@ -706,9 +707,9 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
     || (item.missionId === 'pirate-raid' && item.ownerSide !== 'pirate')) return false;
 
   if (item.operationId !== undefined && !isNonEmptyPersistedString(item.operationId)) return false;
-  if (item.missionId === 'expedition'
+  if ((item.missionId === 'expedition' || item.missionId === 'exploration-recon')
     && (!isNonEmptyPersistedString(item.operationId) || !/^(unique|anomaly):\d+:/.test(item.operationId)
-      || !isNonNegativeInteger(item.explorationLaunchResourcePoints))) return false;
+      || (item.missionId === 'expedition' && !isNonNegativeInteger(item.explorationLaunchResourcePoints)))) return false;
   if (item.spyMissionId !== undefined && !isNonEmptyPersistedString(item.spyMissionId)) return false;
   if (item.destinationPlanetId !== undefined && !isNonEmptyPersistedString(item.destinationPlanetId)) return false;
   if (item.destinationOwnerId !== undefined && !isNonEmptyPersistedString(item.destinationOwnerId)) return false;
@@ -725,6 +726,12 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
     if (!cargo) return false;
     if (item.targetRelation === undefined || item.destinationPlanetId === undefined) return false;
     if (item.cargoState === undefined) return false;
+  }
+  if (item.missionId === 'exploration-recon') {
+    if (destinationRecord.kind !== 'coordinate'
+      || (item.targetKind !== 'unique' && item.targetKind !== 'anomaly')
+      || shipEntries.length !== 1 || shipEntries[0][0] !== 'spy-probe' || shipEntries[0][1] !== 1
+      || Object.values(item.selectedCommanders ?? {}).some(value => Number(value) > 0)) return false;
   }
   if (item.missionId === 'recycle') {
     const cargo = normalizePersistedTransportCargo(item.cargo);
