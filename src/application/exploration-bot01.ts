@@ -11,6 +11,7 @@ import { selectOwnerScores } from '../domain/rating/scoring.ts';
 import type { SaveState } from './contracts.ts';
 import { getExplorationTarget } from './exploration.ts';
 import { materializeExplorationAtDispatch } from './exploration-flight.ts';
+import { createBot01IncomingAttackSnapshot } from './attack.ts';
 
 /** Test-only Bot 01 expedition: reserves a finite snapshot from the existing NPC
  * planet, flies a real route, and resolves occupation on actual arrival. No
@@ -56,6 +57,7 @@ export function dispatchBot01Exploration(state: SaveState, selected: UniversePla
     targetKind:node.kind,targetRelation:'neutral',targetPlanetName:node.name,
     destinationOwnerId:state.profile.playerId,
     explorationFactionId:source.raceId,selectedShips,populationReserved:0,
+    ...(state.espionage?.bot01Profile ? {attackSnapshot:createBot01IncomingAttackSnapshot(source,state.espionage.bot01Profile)} : {}),
     routeDistance:distance,effectiveSpeed:speed,oneWayDurationMs:duration,
     departedAt:at,arrivalAt:at+duration,gasCost:0,phase:'outbound',
     explorationLaunchResourcePoints:selectOwnerScores(state)[source.ownerId]?.resourcePoints??1000,
