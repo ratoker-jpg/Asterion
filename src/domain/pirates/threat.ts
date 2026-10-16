@@ -74,7 +74,7 @@ export function pirateHangarFraction(sentPopulation: number, historicalCapacity:
 
 export function pirateDebrisRewardMultiplier(sentPopulation: number, historicalCapacity: number): number {
   const fraction = pirateHangarFraction(sentPopulation, historicalCapacity);
-  if (fraction === 0) return 1;
+  if (fraction === 0) return sentPopulation > 0 && historicalCapacity > 0 && sentPopulation < historicalCapacity ? 0.7 : 1;
   if(sentPopulation===historicalCapacity)return 1.5;
   if(fraction>=0.95)return 1.3;
   if(fraction>=0.85)return 1;
