@@ -13,6 +13,7 @@ export type MissionId =
   | 'pirate-elimination'
   | 'pirate-raid'
   | 'expedition'
+  | 'exploration-recon'
   | 'deployment'
   | 'colonize'
   | 'recycle'
