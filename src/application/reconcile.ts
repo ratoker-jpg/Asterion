@@ -156,6 +156,13 @@ export function reconcileRuntime(
         ? flight.arrivalAt
         : flight.phase === 'returning'
           ? flight.returnAt
+          : flight.phase === 'arrived' && flight.missionId === 'expedition'
+            ? (() => {
+              const contact = flight.operationId ? next.exploration?.contacts[flight.operationId] : undefined;
+              if (!contact?.claim || contact.claim.flightId !== flight.id) return flight.arrivalAt;
+              return Math.min(contact.expiresAt, contact.claim.pendingRecallAt === undefined
+                ? Number.POSITIVE_INFINITY : contact.claim.pendingRecallAt + 30_000);
+            })()
           : undefined;
       if (checkpoint === undefined || !Number.isFinite(checkpoint)
         || checkpoint > context.now || checkpoint <= after) continue;
