@@ -55,7 +55,7 @@ export function materializeExplorationAtDispatch(
 
 /** Exact snapshot, no live hangar inventory when the fleet actually arrives. */
 export function expeditionMiningCapacity(state: SaveState, flight: FlightRecord) {
-  const fleet = getFactionShipCatalog(state.profile.factionId);
+  const fleet = getFactionShipCatalog(flight.factionId ?? state.profile.factionId);
   const catalog = Object.fromEntries(fleet.map(ship => [ship.id, ship]));
   let all = 0, transporters = 0, recyclers = 0;
   for (const [id, count] of Object.entries(flight.selectedShips)) {
@@ -91,7 +91,7 @@ export function resolveExpeditionArrival(
   const capacity = expeditionMiningCapacity(state, flight);
   const entered = occupyExplorationContact(contact, {
     claimId: flight.id + ':claim',
-    flightId: flight.id, ownerId: state.profile.playerId,
+    flightId: flight.id, ownerId: flight.ownerSide === 'bot01' ? state.espionage?.targets?.[flight.originPlanetId]?.ownerId ?? 'bot-01' : state.profile.playerId,
     originPlanetId: flight.originPlanetId, arrivedAt: nowMs,
     capacity, resourcePointsLaunch: flight.explorationLaunchResourcePoints ?? 1000,
     catchupMultiplier: explorationCatchupForGalaxy(state, node.coordinate.galaxy).multiplier,
