@@ -20,6 +20,7 @@ import type {
   UniverseTimedObjectState,
 } from './types.ts';
 import { ASTEROID_GAS_CAP, initializeAsteroidGasState } from './asteroid-gas.ts';
+import { explorationContactId, explorationProfile, profileVariantForArt } from '../exploration/model.ts';
 import { getPositionCoefficientPercent, getSunEfficiencyPercent } from '../energy/runtime.ts';
 import type { RuntimeMode } from '../runtime/mode.ts';
 import { DEFAULT_ALLIANCE_MEMBERS, DEFAULT_ALLIANCE_PROFILE } from '../command/catalog.ts';
@@ -856,6 +857,7 @@ function activeTimedObjectSchedule(
 
 function timedState(schedule: TimedObjectSchedule): UniverseTimedObjectState {
   return {
+    startAt: schedule.startAt,
     cycleIndex: schedule.cycleIndex,
     expiresAt: schedule.expiresAt,
     respawnAt: schedule.respawnAt,
@@ -899,17 +901,30 @@ function injectTimedObject(
         }),
       } satisfies UniversePirateState,
     }
-    : {
-      id: `${kind}-${system.galaxy}-${system.system}`,
-      coordinate: target.coordinate,
-      kind,
-      name: kind === 'unique' ? ['Осколки Эдема', 'Сердце Бездны', 'Кристаллический разлом'][(system.system + schedule.cycleIndex) % 3] : 'Аномалия «Люмен»',
-      art: pickAsset(kind === 'unique' ? assets.uniqueArts : assets.anomalyArts, system.system + schedule.cycleIndex, `${kind}-default`),
-      statusLabel: KIND_LABELS[kind],
-      description: KIND_DESCRIPTIONS[kind],
-      known: true,
-      special: state,
-    };
+    : (() => {
+      const explorationKind = kind as 'unique' | 'anomaly';
+      const arts = explorationKind === 'unique' ? assets.uniqueArts : assets.anomalyArts;
+      const artIndex = (system.system + schedule.cycleIndex) % Math.max(1, arts.length);
+      const profileVariant = profileVariantForArt(explorationKind, artIndex);
+      const profile = explorationProfile(explorationKind, profileVariant);
+      const contactCycleKey = explorationContactId({
+        kind: explorationKind,
+        coordinate: target.coordinate,
+        cycleIndex: schedule.cycleIndex,
+        startAt: schedule.startAt,
+      });
+      return {
+        id: contactCycleKey,
+        coordinate: target.coordinate,
+        kind: explorationKind,
+        name: profile.name,
+        art: pickAsset(arts, artIndex, `${kind}-default`),
+        statusLabel: KIND_LABELS[kind],
+        description: KIND_DESCRIPTIONS[kind],
+        known: true,
+        special: { ...state, contactCycleKey, profileVariant },
+      };
+    })();
   return {
     ...system,
     positions: system.positions.map((item) => item.id === target.id ? node : item),
