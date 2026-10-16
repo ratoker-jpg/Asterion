@@ -18,7 +18,7 @@ import { getUniverseSlotPoint } from './domain/universe/runtime.ts';
 import { getPirateRaidCheckProgress } from './domain/pirates/contact-schedule.ts';
 import { pirateAdaptiveInterval, type PirateOwnerAdaptation } from './domain/pirates/adaptive.ts';
 import { getPiratePlanetArt } from './pirate-planet-art.ts';
-import { explorationProfile } from './domain/exploration/model.ts';
+import { explorationProfile, EXPLORATION_RULES } from './domain/exploration/model.ts';
 import { reconcileExplorationContact } from './domain/exploration/ledger.ts';
 import type { ExplorationOperationPresentation } from './application/exploration.ts';
 import type { UniversePlanetNode } from './domain/universe/types.ts';
@@ -449,7 +449,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
               </div>
               <strong>{riskRoman} / V · {profile.risk < 3 ? 'НИЗКИЙ' : profile.risk < 5 ? 'ПОВЫШЕННЫЙ' : 'ВЫСОКИЙ'}</strong>
             </> : <strong>Неизвестен до разведки</strong>}
-            <p>Риск — категория будущей конкуренции за объект, а не вероятность потерять корабли. NPC-конкуренция и опасные события в этом PR пока не подключены, поэтому сейчас эта шкала не наносит урон флоту.</p>
+            <p>{known ? 'По проектной модели уровень ' + riskRoman + ' предполагает ' + Math.round(EXPLORATION_RULES.npcAttemptChance[profile.risk] * 100) + '% шанса попытки захвата конкурентом каждые 3 минуты. ' : 'До разведки класс опасности неизвестен. '}Важно: NPC-атаки и случайные опасности ещё НЕ ПОДКЛЮЧЕНЫ, поэтому сейчас рейтинг не приводит к бою или потере кораблей.</p>
           </div>
         </div>
         {mine && <section className="exploration-mining-status" data-qa-exploration-live-cargo>
