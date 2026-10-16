@@ -464,16 +464,18 @@ export function buildReportsFeed(
   const recyclerItems = recyclerArrivalReports.map(recyclerArrivalReportToReportItem);
   const gasExtractionItems = gasExtractionArrivalReports.map(gasExtractionArrivalReportToReportItem);
   const pirateReconItems = pirateReconReports.map(pirateReconReportToReportItem);
-  // Keep the original event reports in System. The Flights mailbox additionally
-  // tracks their actual arrival and collected amount instead of an empty placeholder.
+  // Existing legacy consumers keep the historical System projection.
+  // In the live player mailbox MOVE these canonical single-event notifications to
+  // Flights instead of cloning them: no double unread count or duplicate messages.
+  // Preserve exact report ids so users' read/hidden metadata survives the move.
+  const extractionSystemItems = playerOwnerId ? [] : [...recyclerItems, ...gasExtractionItems];
   const arrivalFlightItems: ReportItem[] = playerOwnerId ? [...recyclerItems, ...gasExtractionItems].map(item => ({
     ...item,
-    id: 'flight-arrival:' + item.id,
     category: 'flights',
     typeLabel: 'Прибытие добывающего флота',
   })) : [];
 
-  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems, ...recyclerItems, ...gasExtractionItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights), ...explorationMailboxReports(exploration, pirateFlights, playerOwnerId), ...arrivalFlightItems].sort((a, b) => {
+  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems, ...extractionSystemItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights), ...explorationMailboxReports(exploration, pirateFlights, playerOwnerId), ...arrivalFlightItems].sort((a, b) => {
     if (a.timestamp && b.timestamp) return Date.parse(b.timestamp) - Date.parse(a.timestamp);
     if (!a.timestamp && b.timestamp) return -1;
     if (a.timestamp && !b.timestamp) return 1;
