@@ -88,8 +88,11 @@ export function selectExplorationOperations(state: SaveState, nowMs: number, mod
         : accepted.has(node.id) || occupancy === 'self' ? 'active' : 'available',
     };
   });
+  // An accepted but never executed contact is NOT a completed mission.
+  // Archive only cycles with an actual player expedition return receipt.
   const historical: ExplorationOperationPresentation[] = Object.values(stored).filter(contact =>
-    accepted.has(contact.id) && contact.expiresAt <= nowMs && !live.some(n => n.id === contact.id))
+    contact.expiresAt <= nowMs && !live.some(n => n.id === contact.id)
+    && contact.events.some(event => event.ownerId === state.profile.playerId && event.kind === 'returned'))
     .map(contact => {
       const cycleIndex = Number(contact.id.split(':')[3] ?? 0);
       return {
