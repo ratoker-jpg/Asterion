@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { EmblemGlyph } from './CommandView';
 import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
+import { EXPLORATION_ARTS } from './exploration-art.ts';
 import { PIRATE_PLANET_ARTS } from './pirate-planet-art.ts';
 import asteroid01 from '../assets/source/universe-navigation/asteroids/asteroid.variant-01.png';
 import asteroid02 from '../assets/source/universe-navigation/asteroids/asteroid.variant-02.png';
@@ -93,10 +94,10 @@ const planetArts = [
 const starArts = [star01, star02, star03, star04, star05, star06];
 const asteroidArts = [asteroid01, asteroid02, asteroid03, asteroid04, asteroid05, asteroid06, asteroid07, asteroid08];
 const pirateArts = PIRATE_PLANET_ARTS;
-const anomalyArts = [...asterionAssetIntegrationAssets.anomalyArts];
+const anomalyArts = EXPLORATION_ARTS.anomaly;
 const assets: UniverseAssetCatalog = {
   planetArts, starArts, asteroidArts, pirateArts, anomalyArts,
-  uniqueArts: [uniqueIslands, uniqueVortex, uniqueCrystal, ...asterionAssetIntegrationAssets.uniquePlanetArts],
+  uniqueArts: EXPLORATION_ARTS.unique,
 };
 
 type UniverseViewProps = {
