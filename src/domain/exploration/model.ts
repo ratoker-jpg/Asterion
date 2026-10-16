@@ -111,7 +111,7 @@ export function isExplorationContactId(id: unknown): id is string {
 export function explorationNodeId(node: UniversePlanetNode): string | null {
   if ((node.kind !== 'unique' && node.kind !== 'anomaly') || !node.special) return null;
   const startAt = node.special.startAt;
-  if (!Number.isSafeInteger(startAt)) return null;
+  if (typeof startAt !== 'number' || !Number.isSafeInteger(startAt)) return null;
   return explorationContactId({
     kind: node.kind,
     coordinate: node.coordinate,
