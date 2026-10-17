@@ -1408,3 +1408,12 @@
 .reports-view.reports-v2 .reports-v3-res small { white-space: normal !important; overflow: visible !important; line-height: 1.3; }
 /* aegis_general.png: figure+cape sit ~7% right of the canvas centre. */
 .reports-view.reports-v2 .reports-profile-avatar__portrait[data-faction="aegis"] img { transform: translateX(-7%) !important; }
+/* Long values wrap instead of ellipsis ("Достоверный состав найден"). */
+.reports-view.reports-v2 .reports-v3-fact b,
+.reports-view.reports-v2 .reports-v3-route-name { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; line-height: 1.3; }
+/* Head (not cape) on the vertical axis of the showcase. */
+.reports-view.reports-v2 .reports-profile-avatar__portrait[data-faction="aegis"] img { transform: translateX(-3%) !important; }
+/* Channel icons: +35% visually; the 30px layout box stays as reports QA requires. */
+.reports-view.reports-v2 .reports-v2-nav-art img { transform: scale(1.35); transform-origin: center; }
+.reports-view.reports-v2 .reports-v2-nav-art { margin-right: 6px; }
+.reports-view.reports-v2 .reports-profile-avatar__portrait[data-faction="aegis"] img { transform: translateX(2%) !important; }
