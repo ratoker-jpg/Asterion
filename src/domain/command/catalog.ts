@@ -3,8 +3,11 @@ import type { AllianceEmblem } from './types.ts';
 export const MAX_ALLIANCE_MEMBERS = 15;
 export const REAPPLY_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 export const LEADER_ABSENCE_MS = 24 * 60 * 60 * 1000;
-/** `touchMember` writes at most this often per member so a 1 s UI clock does not churn the save. */
-export const ACTIVITY_TOUCH_INTERVAL_MS = 60 * 1000;
+/**
+ * `touchMember` writes at most this often per member, so presence never churns the save
+ * (every write rewrites the whole save). Far below the 24 h absence threshold.
+ */
+export const ACTIVITY_TOUCH_INTERVAL_MS = 10 * 60 * 1000;
 export const MAX_RESOLVED_APPLICATIONS = 100;
 
 export const ALLIANCE_NAME_MIN = 3;

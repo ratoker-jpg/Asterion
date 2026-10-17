@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  ACTIVITY_TOUCH_INTERVAL_MS,
   LEADER_ABSENCE_MS,
   MAX_ALLIANCE_MEMBERS,
   REAPPLY_COOLDOWN_MS,
@@ -387,8 +388,9 @@ test('touching a member is throttled and keeps the display name current', () => 
   const state = created.state;
   assert.equal(touchMember(state, 'leader', T0 + 1000), state);
   assert.equal(touchMember(state, 'stranger', T0 + 10 * HOUR), state);
-  const later = touchMember(state, 'leader', T0 + 61_000);
-  assert.equal(selectOwnerMembership(later, 'leader')?.member.lastActiveAt, T0 + 61_000);
+  assert.equal(touchMember(state, 'leader', T0 + ACTIVITY_TOUCH_INTERVAL_MS - 1), state);
+  const later = touchMember(state, 'leader', T0 + ACTIVITY_TOUCH_INTERVAL_MS);
+  assert.equal(selectOwnerMembership(later, 'leader')?.member.lastActiveAt, T0 + ACTIVITY_TOUCH_INTERVAL_MS);
   const renamed = touchMember(state, 'leader', T0 + 1000, '  Новое   Имя ');
   assert.equal(selectOwnerMembership(renamed, 'leader')?.member.displayName, 'Новое Имя');
   assert.equal(selectOwnerMembership(renamed, 'leader')?.member.lastActiveAt, T0);
