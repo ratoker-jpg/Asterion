@@ -60,8 +60,41 @@ type OperationsViewProps = {
 };
 
 type OperationsTab = Extract<OperationState, 'available' | 'active' | 'completed'>;
+type ContactKind = 'pirate' | 'unique' | 'anomaly' | 'other';
+type ContactFilter = 'all' | Exclude<ContactKind, 'other'>;
 type CompletedPirateOperation = { cycleKey: string; coordinate: PirateContactPresentation['coordinate']; reportId: string; defeatedAt: number; rounds: number; debris: number; reward?: {sentCombatPopulation:number;historicalHangarCapacity:number;multiplier:number;basePirateDebris:number;bonusPirateDebris:number;ownDebris:number;threatReductionFraction:number} };
 type OperationRow = { operation: OperationInstance; contact?: PirateContactPresentation; exploration?: ExplorationOperationContact; completed?: CompletedPirateOperation; battleReportId?: string };
+
+const CONTACT_LABELS: Record<ContactKind, string> = {
+  pirate: 'БОЕВАЯ ОПЕРАЦИЯ',
+  unique: 'УНИКАЛЬНЫЙ ОБЪЕКТ',
+  anomaly: 'АНОМАЛИЯ',
+  other: 'ОПЕРАЦИЯ',
+};
+
+function contactKind(operation: OperationInstance, pirateContact?: PirateContactPresentation, exploration?: ExplorationOperationContact): ContactKind {
+  if (pirateContact || isPirateOperationId(operation.id)) return 'pirate';
+  if (exploration?.node.kind === 'anomaly') return 'anomaly';
+  if (exploration?.node.kind === 'unique') return 'unique';
+  return 'other';
+}
+
+function compactRemaining(expiresAt: number, nowMs: number) {
+  const seconds = Math.max(0, Math.ceil((expiresAt - nowMs) / 1_000));
+  const minutes = Math.floor(seconds / 60);
+  return minutes ? `${minutes}м` : `${seconds}с`;
+}
+
+function lifetimePercent(startAt: number | undefined, expiresAt: number | undefined, nowMs: number) {
+  if (!startAt || !expiresAt || expiresAt <= startAt) return undefined;
+  return Math.max(0, Math.min(100, ((expiresAt - nowMs) / (expiresAt - startAt)) * 100));
+}
+
+function explorationLifetimePercent(exploration: ExplorationOperationContact | undefined, nowMs: number) {
+  const startedAt = exploration?.node.special?.startAt;
+  const expiresAt = exploration?.node.special?.expiresAt;
+  return lifetimePercent(startedAt, expiresAt, nowMs);
+}
 
 const TAB_LABELS: Record<OperationsTab, string> = {
   available: 'ДОСТУПНЫЕ',
@@ -155,6 +188,28 @@ function RewardPreview({ operation, compact = false }: { operation: OperationIns
   );
 }
 
+type DossierMetric = { label: string; value: string; note?: string; tone?: 'good' | 'bad' | 'time' | 'token' };
+
+function DossierMetrics({ items }: { items: readonly DossierMetric[] }) {
+  if (!items.length) return null;
+  return <section className="operations-metrics-v-a" aria-label="Сводные данные операции">
+    {items.slice(0, 4).map((item) => <div className={`operations-metric-v-a ${item.tone ? `is-${item.tone}` : ''}`} key={item.label}>
+      <small>{item.label}</small><strong>{item.value}</strong>{item.note ? <span>{item.note}</span> : null}
+    </div>)}
+  </section>;
+}
+
+function OperationStageTimeline({ labels, currentIndex }: { labels: readonly string[]; currentIndex: number }) {
+  return <ol className="operations-stage-timeline-v-a" aria-label="Этапы операции">
+    {labels.map((label, index) => <li key={label} className={index < currentIndex ? 'is-complete' : index === currentIndex ? 'is-current' : 'is-future'}
+      aria-current={index === currentIndex ? 'step' : undefined}>
+      <span className="operations-stage-track-v-a" aria-hidden="true" />
+      <span className="operations-stage-dot-v-a" aria-hidden="true" />
+      <small>{label}</small>
+    </li>)}
+  </ol>;
+}
+
 function TacticalScope({ operation, contact }: { operation: OperationInstance; contact?: PirateContactPresentation }) {
   // Project the exact same orbital slot as UniverseView into the sensor SVG.
   // Both screens share getUniverseSlotPoint; no independent slot-angle formula.
@@ -244,45 +299,72 @@ function OperationCard({ operation, selected, onSelect, contact, exploration, no
 }) {
   const intelZero = operation.intel === 0;
   const firstReward = rewardEntries(operation)[0];
-  const pirate = isPirateOperationId(operation.id);
+  const kind = contactKind(operation, contact, exploration);
+  const pirate = kind === 'pirate';
   const pirateCycle = pirate ? (contact?.contactCycleKey ?? operation.id.slice('pirate:'.length)).split(':') : [];
   const pirateArt = pirate ? getPiratePlanetArt(Number(pirateCycle[2]), Number(pirateCycle[3])) : null;
   const raidCheck = contact ? getPirateRaidCheckProgress(Number(pirateCycle[4]), nowMs,pirateCheckDelayMs) : null;
+  const expiresAt = exploration?.node.special?.expiresAt ?? contact?.expiresAt;
+  const progress = operation.state === 'completed' ? 100
+    : operation.state === 'active' ? undefined
+      : pirate ? lifetimePercent(Number(pirateCycle[4]), expiresAt, nowMs)
+        : explorationLifetimePercent(exploration, nowMs);
+  const remaining = expiresAt ? compactRemaining(expiresAt, nowMs) : '';
+  const lastEvent = [...(exploration?.contact?.events ?? [])].reverse()
+    .find((event) => event.ownerId === exploration?.ownerId && (event.kind === 'returned' || event.kind === 'origin-destroyed'));
+  const completedResult = pirate ? 'success' : lastEvent?.kind === 'returned' ? 'success' : lastEvent?.kind === 'origin-destroyed' ? 'failure' : 'unknown';
+  const completionLabel = completedResult === 'success'
+    ? (exploration ? 'Исследовано' : 'Победа')
+    : completedResult === 'failure' ? 'Поражение' : 'Завершено';
+  const activeStage = exploration?.reconInFlight
+    ? exploration.reconInFlight.phase === 'outbound' ? 'Зонд в пути' : 'Зонд возвращается'
+    : exploration?.occupancy === 'self' ? 'Сбор ресурсов флотом'
+      : exploration ? 'Выполнение'
+        : pirate ? 'В работе' : 'Выполнение';
+  const statusText = operation.state === 'available'
+    ? expiresAt ? `Исчезнет через ${pirateRemainingLabel(expiresAt, nowMs)}` : intelZero ? 'Сигнатура требует классификации' : operation.objective.label
+    : operation.state === 'active'
+      ? activeStage
+      : completionLabel;
 
   return (
     <button
       type="button"
       className={`operation-feed-card-v2 operation-feed-card-v2--${operation.category} ${selected ? 'selected' : ''}`}
+      data-contact-kind={kind}
+      data-completion-result={operation.state === 'completed' ? completedResult : undefined}
       data-threat={operation.threat ?? 'unknown'}
       data-qa-pirate-contact={contact?.contactCycleKey}
+      aria-label={`${CONTACT_LABELS[kind]}: ${operation.title}. ${statusText}`}
       onClick={onSelect}
     >
-      {exploration
-        ? <span className="operation-feed-threat-v2 operation-feed-pirate-art-v2 exploration-feed-art"><img src={exploration.node.art} alt="" loading="lazy" draggable={false} /><small>{exploration.node.kind === 'anomaly' ? 'АНОМАЛИЯ' : 'ОБЪЕКТ'}</small></span>
-        : pirateArt
-        ? <span className="operation-feed-threat-v2 operation-feed-pirate-art-v2" aria-label="Пиратская планета">
-          <img src={pirateArt} alt="" loading="lazy" draggable={false} />
-          <small>{contact ? 'ПИРАТЫ' : 'АРХИВ'}</small>
-        </span>
-        : <span className="operation-feed-threat-v2"><b>{threatTier(operation)}</b><small>{intelZero ? 'UNKNOWN' : operation.category === 'combat' ? 'THREAT' : 'RISK'}</small></span>}
+      <span className={`operation-feed-art-v-a ${pirate ? 'operation-feed-pirate-art-v2' : ''}`}>
+        {exploration
+          ? <img src={exploration.node.art} alt="" loading="lazy" draggable={false} />
+          : pirateArt
+          ? <img src={pirateArt} alt="" loading="lazy" draggable={false} />
+          : <span className="operation-feed-glyph-v-a"><OperationGlyph category={operation.category} /></span>}
+      </span>
       <span className="operation-feed-copy-v2">
-        <small>{exploration ? exploration.node.kind === 'anomaly' ? 'АНОМАЛИЯ · ИССЛЕДОВАНИЕ' : 'УНИКАЛЬНЫЙ ОБЪЕКТ · ИССЛЕДОВАНИЕ' : CATEGORY_LABELS[operation.category]}</small>
-        <strong>{operation.title}</strong>
-        <em>{exploration ? exploration.stage === 'completed' ? 'Контакт завершён' : 'До исчезновения: ' + pirateRemainingLabel(exploration.node.special?.expiresAt ?? nowMs, nowMs) : contact ? `Пиратский контакт · осталось ${pirateRemainingLabel(contact.expiresAt, nowMs)}` : isPirateOperationId(operation.id) ? 'База уничтожена' : intelZero ? 'Сигнатура требует классификации' : operation.objective.label}</em>
-        <span className="operation-feed-meta-v2">
-          <i>{isPirateOperationId(operation.id) ? formatLocation(operation.location) : intelZero ? formatLocationClass(operation.location) : formatLocation(operation.location)}</i>
-          {exploration ? <>
-              {exploration.recon?.success && <b className="exploration-feed-risk" title="Категория риска объекта; опасные события в текущем PR не активны">РИСК {['I','II','III','IV','V'][(operation.threat ?? 1)-1]} / V</b>}
-              <span className={'exploration-feed-occupancy exploration-feed-occupancy--' + (exploration.stage === 'completed' ? 'ended' : exploration.occupancy)}
-              data-qa-exploration-feed-status={exploration.stage === 'completed' ? 'completed' : exploration.occupancy}>
-              <span className="exploration-occupancy-indicator" />
-              {exploration.stage === 'completed' ? 'ЗАВЕРШЕНО' : exploration.occupancy === 'free' ? 'СВОБОДНО' : exploration.occupancy === 'self' ? 'ВАШ ФЛОТ' : 'ЗАНЯТО'}
-              </span>
-            </>
-            : isPirateOperationId(operation.id)
-            ? <b className="operations-pirate-debris-label"><ResourceIcon kind="debris" /> ОБЛОМКИ · от 60%</b>
-            : <><IntelPips level={operation.intel} />{firstReward ? <b><ResourceIcon kind={firstReward[2]} /> {number.format(firstReward[1])}</b> : <b>НАГРАДА ?</b>}</>}
+        <span className="operation-feed-type-line-v-a">
+          <small className="operation-feed-kind-chip-v-a">{CONTACT_LABELS[kind]}</small>
+          {exploration ? <span className={'exploration-feed-occupancy exploration-feed-occupancy--' + (exploration.stage === 'completed' ? 'ended' : exploration.occupancy)}
+            data-qa-exploration-feed-status={exploration.stage === 'completed' ? 'completed' : exploration.occupancy}>
+            <span className="exploration-occupancy-indicator" />
+            {exploration.stage === 'completed' ? 'ЗАВЕРШЕНО' : exploration.occupancy === 'free' ? 'СВОБОДНО' : exploration.occupancy === 'self' ? 'ВАШ ФЛОТ' : 'ЗАНЯТО'}
+          </span> : null}
         </span>
+        <strong className="operation-feed-title-v-a" title={operation.title}>{operation.title}</strong>
+        <span className="operation-feed-subtitle-v-a">
+          <i>{formatLocation(operation.location)}</i><span aria-hidden="true">·</span>
+          <em className={operation.state === 'available' ? 'is-time' : operation.state === 'completed' ? `is-${completedResult}` : ''}>
+            {operation.state === 'available' && expiresAt ? <>Исчезнет через <b>{pirateRemainingLabel(expiresAt, nowMs)}</b></> : statusText}
+          </em>
+        </span>
+        {exploration && exploration.recon?.success && operation.state !== 'completed'
+          ? <b className="exploration-feed-risk" title="Категория риска подтверждена разведданными">РИСК {['I','II','III','IV','V'][(operation.threat ?? 1)-1]} / V</b> : null}
+        {!exploration && pirate ? <b className="operations-pirate-debris-label"><ResourceIcon kind="debris" /> ОБЛОМКИ · от 60%</b> : null}
+        {!exploration && !pirate ? <span className="operation-feed-meta-v2"><IntelPips level={operation.intel} />{firstReward ? <b><ResourceIcon kind={firstReward[2]} /> {number.format(firstReward[1])}</b> : <b>НАГРАДА ?</b>}</span> : null}
         {raidCheck ? <span className="operation-feed-raid-check-v2" data-qa-raid-check-interval="15m">
           <span className="operation-feed-raid-check-label-v2">
             <span>{pirateRaidRoll ? 'ПРОВЕРКА ЗАВЕРШЕНА' : 'ДО ПРОВЕРКИ НАПАДЕНИЯ'}</span>
@@ -293,10 +375,13 @@ function OperationCard({ operation, selected, onSelect, contact, exploration, no
             aria-valuemin={0} aria-valuemax={100} aria-valuenow={raidCheck.percent}>
             <span className="operations-pirate-cooldown-mask" style={{ width: `${100 - raidCheck.percent}%` }} />
           </span>
-          <span className="operation-feed-raid-check-note-v2">Одна проверка на владельца и цикл, независимо от числа колоний</span>
         </span> : null}
       </span>
-      <span className="operation-feed-arrow-v2">›</span>
+      <span className={`operation-feed-ring-v-a ${operation.state === 'completed' ? `is-${completedResult}` : ''} ${operation.state === 'active' ? 'is-indeterminate' : ''}`} aria-hidden="true">
+        <span style={progress === undefined ? undefined : { background: `conic-gradient(var(--contact-accent) ${progress}%, rgba(255,255,255,.08) 0)` }}>
+          <b>{operation.state === 'completed' ? completedResult === 'success' ? '✓' : completedResult === 'failure' ? '✕' : '·' : operation.state === 'active' ? '…' : remaining}</b>
+        </span>
+      </span>
     </button>
   );
 }
@@ -350,7 +435,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
 }) {
   if (!operation) {
     return (
-      <aside className="operations-dossier-v2 operations-dossier-v2--empty">
+      <aside className="operations-dossier-v2 operations-dossier-v2--empty operations-dossier-variant-a" data-contact-kind="other">
         <span>SELECT // OPERATION</span>
         <strong>ВЫБЕРИТЕ КОНТАКТ</strong>
         <p>Операционный брифинг появится здесь.</p>
@@ -358,6 +443,8 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
     );
   }
 
+  const kind = contactKind(operation, pirateContact, exploration);
+  const kindLabel = CONTACT_LABELS[kind];
 
   if (exploration) {
     const node = exploration.node;
@@ -389,7 +476,31 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
     const riskRoman = ['I','II','III','IV','V'][profile.risk - 1]!;
     const delivered = lastReturn?.creditedCargo ?? lastReturn?.cargo;
     const deliveredTotal = delivered ? Object.values(delivered).reduce((sum, value) => sum + value, 0) : 0;
-    return <aside className="operations-dossier-v2 operations-dossier-v2--exploration" data-qa-exploration-dossier={node.id}>
+    const currentStage = exploration.reconInFlight?.phase === 'returning' ? 3
+      : exploration.reconInFlight?.phase === 'outbound' ? 1
+        : exploration.occupancy === 'self' ? 2 : 1;
+    const hasObservedStage = Boolean(exploration.reconInFlight) || exploration.occupancy === 'self';
+    const stageLabels = hasObservedStage
+      ? kind === 'anomaly'
+        ? ['Принята', 'Сканирование', 'Сбор', 'Возврат']
+        : ['Принята', 'Экспедиция в пути', 'Исследование / добыча', 'Возврат']
+      : ['Принята', 'Выполнение', kind === 'anomaly' ? 'Анализ' : 'Исследование', 'Возврат'];
+    const explorationMetrics: DossierMetric[] = completed
+      ? [
+        { label: 'РЕЗУЛЬТАТ', value: lastReturn?.kind === 'returned' ? 'ИССЛЕДОВАНО' : lastReturn?.kind === 'origin-destroyed' ? 'ПОТЕРЯ ФЛОТА' : 'ЗАВЕРШЕНО', note: lastReturn ? new Date(lastReturn.at).toLocaleString('ru-RU') : undefined, tone: lastReturn?.kind === 'returned' ? 'good' : lastReturn?.kind === 'origin-destroyed' ? 'bad' : undefined },
+        ...(deliveredTotal > 0 ? [{ label: 'ДОСТАВЛЕНО', value: number.format(deliveredTotal), note: 'единиц по квитанции', tone: 'good' as const }] : []),
+        ...(lastReturn?.repairTokens ? [{ label: 'ЖЕТОНЫ РЕМОНТА', value: `+${lastReturn.repairTokens}`, note: 'по квитанции', tone: 'token' as const }] : []),
+        ...(liveCargo ? [{ label: 'ГРУЗ В ТРЮМЕ', value: number.format(Object.values(liveCargo).reduce((sum, value) => sum + value, 0)), note: 'фактический остаток' }] : []),
+      ]
+      : [
+        { label: 'ДО ИСЧЕЗНОВЕНИЯ', value: pirateRemainingLabel(node.special?.expiresAt ?? nowMs, nowMs), note: 'срок контакта', tone: 'time' },
+        { label: 'ЗАНЯТОСТЬ', value: exploration.occupancy === 'free' ? 'СВОБОДНО' : exploration.occupancy === 'self' ? 'ВАШ ФЛОТ' : 'ЗАНЯТО', note: 'состояние объекта' },
+        known ? { label: 'РИСК', value: `${riskRoman} / V`, note: 'данные разведки', tone: profile.risk < 3 ? 'good' : 'bad' }
+          : { label: 'РАЗВЕДКА', value: failed ? 'НЕ УДАЛАСЬ' : awaitingProbe ? 'ЗОНД В ПУТИ' : 'НЕТ ДАННЫХ', note: 'состав и риск скрыты' },
+        ...(liveCargo ? [{ label: 'ГРУЗ В ТРЮМЕ', value: number.format(Object.values(liveCargo).reduce((sum, value) => sum + value, 0)), note: `из ${number.format(mine?.cargoCapacity ?? 0)}` }] : []),
+      ];
+    return <aside className="operations-dossier-v2 operations-dossier-v2--exploration operations-dossier-variant-a"
+      data-contact-kind={kind} data-qa-exploration-dossier={node.id}>
       <header className="operations-dossier-head-v2">
         <div className="operations-dossier-title-v2">
           <span className="operations-dossier-glyph-v2"><OperationGlyph category="exploration" /></span>
@@ -418,10 +529,17 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
           </dl>
         </div>
       </section>
+      {accepted ? <>
+        <OperationStageTimeline labels={stageLabels} currentIndex={currentStage} />
+        {currentStage === 1 && !exploration.reconInFlight && exploration.occupancy !== 'self'
+          ? <small className="operations-stage-fallback-v-a">Фаза не определена: принятие завершено, следующий этап отмечен текущим.</small> : null}
+      </> : null}
       <div className="exploration-lifetime-panel" aria-label="Оставшийся срок существования">
         <div><small>ДО ИСЧЕЗНОВЕНИЯ</small><strong>{completed ? 'Завершено' : pirateRemainingLabel(node.special?.expiresAt ?? nowMs, nowMs)}</strong></div>
         <div className="exploration-lifetime-track" role="progressbar" aria-label="Оставшееся время объекта" aria-valuemin={0} aria-valuemax={100} aria-valuenow={remainingLife}><span style={{width: remainingLife + '%'}} /></div>
       </div>
+      <DossierMetrics items={explorationMetrics} />
+      <section className="operations-objective-v2 operations-objective-v-a"><small>ОСНОВНАЯ ЦЕЛЬ</small><strong>{operation.objective.label}</strong></section>
       <section className="exploration-dossier-intelligence">
         <div className="exploration-section-heading">
           <strong>ИССЛЕДОВАНИЕ ОБЪЕКТА</strong>
@@ -491,7 +609,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
             : accepted ? 'Можно исследовать объект зондом или отправить экспедицию.' : 'Сначала примите операцию, чтобы открыть подготовку.'}</span></div>
         <div className="operations-command-actions-v2 exploration-action-buttons">
           {!completed && exploration.occupancy === 'free' && onBot01Occupy ? <button
-            type="button" className="operations-secondary-v2" data-qa-bot01-exploration={node.id}
+            type="button" className="operations-secondary-v2" data-qa-bot={node.id} data-qa-bot01-exploration={node.id}
             onClick={() => onBot01Occupy(node)}>ТЕСТ: BOT 01 · ЗАНЯТЬ ОБЪЕКТ</button> : null}
                     {!completed && !accepted ? <button className="operations-primary-v2" type="button"
             data-qa-exploration-accept={node.id} onClick={() => onExplorationAccept?.(node)}>ПРИНЯТЬ ОПЕРАЦИЮ</button> : null}
@@ -514,7 +632,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
     </aside>;
   }
 
-  const pirate = isPirateOperationId(operation.id);
+  const pirate = kind === 'pirate';
   const intelZero = operation.intel === 0 && !pirate;
   const modifierLabels = operation.modifiers.map((modifier) => OPERATION_MODIFIER_LABELS[modifier]);
   const reconLabel = pirateContact?.latestReportOutcome === 'success' ? 'Разведданные получены'
@@ -522,8 +640,16 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
       : pirateContact?.statusLabel === 'Зонд в пути' ? 'Зонд в пути' : 'Нет разведданных';
 
   if (pirate && completed) {
+    const cycle = completed.cycleKey.split(':');
+    const completedMetrics: DossierMetric[] = [
+      { label: 'ИСХОД', value: 'ПОБЕДА', note: 'бой завершён', tone: 'good' },
+      { label: 'РАУНДОВ', value: String(completed.rounds), note: 'по боевому расчёту' },
+      { label: 'ОБЛОМКИ', value: number.format(completed.debris), note: 'на орбите' },
+      ...(completed.reward ? [{ label: 'СНИЖЕНИЕ УГРОЗЫ', value: `${(completed.reward.threatReductionFraction * 100).toFixed(1)}%`, note: 'по результату боя', tone: 'good' as const }] : []),
+    ];
     return (
-      <aside className="operations-dossier-v2 operations-dossier-v2--pirate operations-completed-report-v2" data-threat="unknown">
+      <aside className="operations-dossier-v2 operations-dossier-v2--pirate operations-completed-report-v2 operations-dossier-variant-a"
+        data-contact-kind="pirate" data-threat="unknown">
         <header className="operations-dossier-head-v2">
           <div className="operations-dossier-title-v2">
             <span className="operations-dossier-glyph-v2"><OperationGlyph category="combat" /></span>
@@ -531,6 +657,18 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
               <p>{formatLocation(operation.location)}</p></div>
           </div>
         </header>
+        <section className="operations-dossier-hero-v2 operations-completed-hero-v-a">
+          <div className="operations-hero-object-art" data-qa-pirate-hero-art>
+            <img src={getPiratePlanetArt(Number(cycle[2] ?? 1), Number(cycle[3] ?? 0))} alt="Пиратская база" loading="lazy" draggable={false} />
+          </div>
+          <div className="operations-briefing-v2">
+            <small>ИТОГ БОЕВОЙ ОПЕРАЦИИ</small>
+            <h3>ПОБЕДА</h3>
+            <p>Завершено {new Date(completed.defeatedAt).toLocaleString('ru-RU')} · отчёт сохранён в «Сообщениях».</p>
+          </div>
+        </section>
+        <DossierMetrics items={completedMetrics} />
+        <section className="operations-objective-v2 operations-objective-v-a"><small>ОСНОВНАЯ ЦЕЛЬ</small><strong>Пиратская база уничтожена.</strong></section>
         <section className="operations-completed-report-body-v2">
           <h3>БОЕВОЙ ОТЧЁТ</h3>
           <p>Победа подтверждена боевым расчётом. Результат сохранён в разделе «Доклады».</p>
@@ -547,14 +685,19 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
             <div><small>ОБЛОМКИ НА ОРБИТЕ</small><strong><ResourceIcon kind="debris" /> {number.format(completed.debris)}</strong></div>
             <div><small>ЗАВЕРШЕНО</small><strong>{new Date(completed.defeatedAt).toLocaleString('ru-RU')}</strong></div>
           </div>
-          <button type="button" className="operations-primary-v2" onClick={() => onPirateBattleReport?.(completed.reportId)}>ОТКРЫТЬ ПОЛНЫЙ БОЕВОЙ ОТЧЁТ</button>
         </section>
+        <footer className="operations-command-v2">
+          <div><small>СТАТУС</small><strong>ПОБЕДА ПОДТВЕРЖДЕНА</strong><span>Завершено {new Date(completed.defeatedAt).toLocaleString('ru-RU')} · доклад готов.</span></div>
+          <div className="operations-command-actions-v2"><button type="button" className="operations-primary-v2"
+            onClick={() => onPirateBattleReport?.(completed.reportId)}>ОТКРЫТЬ ПОЛНЫЙ БОЕВОЙ ОТЧЁТ</button></div>
+        </footer>
       </aside>
     );
   }
 
   return (
-    <aside className={`operations-dossier-v2 operations-dossier-v2--${operation.category} ${pirate ? 'operations-dossier-v2--pirate' : ''}`} data-threat={operation.threat ?? 'unknown'}>
+    <aside className={`operations-dossier-v2 operations-dossier-v2--${operation.category} ${pirate ? 'operations-dossier-v2--pirate' : ''} operations-dossier-variant-a`}
+      data-contact-kind={kind} data-threat={operation.threat ?? 'unknown'}>
       <header className="operations-dossier-head-v2">
         <div className="operations-dossier-title-v2">
           <span className="operations-dossier-glyph-v2"><OperationGlyph category={operation.category} /></span>
@@ -579,8 +722,9 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
           })())} alt="Пиратская база" loading="lazy" draggable={false} />
         </div> : <TacticalScope operation={operation} contact={pirateContact} />}
         <div className="operations-briefing-v2">
-          <small>ОПЕРАТИВНАЯ СВОДКА</small>
-          <h3>{pirate ? pirateContact ? 'ПИРАТСКАЯ БАЗА ОБНАРУЖЕНА' : 'КОНТАКТ ЗАВЕРШЁН' : intelZero ? 'ДАННЫХ НЕДОСТАТОЧНО' : 'КОНТАКТ КЛАССИФИЦИРОВАН'}</h3>
+          <div className="operations-briefing-tags-v-a"><span>{kindLabel}</span><span>{formatLocation(operation.location)}</span>
+            <span>{pirate ? pirateContact ? 'КОНТАКТ АКТИВЕН' : 'КОНТАКТ ЗАВЕРШЁН' : operation.state === 'active' ? 'ОПЕРАЦИЯ ПРИНЯТА' : operation.state === 'completed' ? 'ЗАВЕРШЕНО' : 'ДОСТУПНО'}</span></div>
+          <h3>{operation.title}</h3>
           <p>{pirate ? pirateContact ? `Действующая база в системе вашей колонии. Координаты: ${pirateCoordinateLabel(pirateContact)}.` : 'Цикл закончился или цель исчезла. На прежние координаты рейд не отправляется.' : intelZero ? 'Сенсоры фиксируют нестабильный источник неизвестного происхождения. До глубокого сканирования тип объекта, точная угроза и возможная награда скрыты.' : operation.briefing}</p>
           <div className="operations-intel-line-v2">
             <span>{pirate ? 'РАЗВЕДКА' : 'РАЗВЕДДАННЫЕ'}</span>
@@ -593,6 +737,23 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
         </div>
       </section>
 
+      {operation.state === 'active' ? <>
+        <OperationStageTimeline
+          labels={pirate ? ['Принята', 'В работе', 'Бой', 'Возврат'] : ['Принята', 'Выполнение', 'Завершение', 'Возврат']}
+          currentIndex={1} />
+        <small className="operations-stage-fallback-v-a">Фаза не определена: принятие завершено, следующий этап отмечен текущим.</small>
+      </> : null}
+      <DossierMetrics items={pirate ? [
+        ...(pirateContact ? [{ label: 'ДО ИСЧЕЗНОВЕНИЯ', value: pirateRemainingLabel(pirateContact.expiresAt, nowMs), note: 'срок контакта', tone: 'time' as const }] : []),
+        { label: 'РАЗВЕДКА', value: reconLabel.toUpperCase(), note: pirateContact?.latestReportId ? 'есть отчёт' : 'отчёт не получен' },
+        { label: 'ОБЛОМКИ', value: 'ОТ 60%', note: 'стоимости уничтоженных кораблей' },
+      ] : [
+        { label: 'РАЗВЕДДАННЫЕ', value: `${operation.intel} / 3`, note: 'подтверждённый уровень' },
+        ...(operation.threat ? [{ label: 'РИСК', value: threatText(operation), note: 'текущий источник данных' }] : []),
+        ...rewardEntries(operation).slice(0, 2).map(([label, value]) => ({ label, value: number.format(value), note: 'предпросмотр награды' })),
+      ]} />
+      <section className="operations-objective-v2 operations-objective-v-a"><small>ОСНОВНАЯ ЦЕЛЬ</small><strong>{operation.objective.label}</strong></section>
+
       {intelZero ? (
         <section className="operations-unknown-brief-v2">
           <div><small>КЛАСС КОНТАКТА</small><strong>НЕИЗВЕСТЕН</strong></div>
@@ -601,11 +762,6 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
         </section>
       ) : (
         <>
-          <section className="operations-objective-v2">
-            <small>ОСНОВНАЯ ЦЕЛЬ</small>
-            <strong>{operation.objective.label}</strong>
-          </section>
-
           <div className="operations-dossier-lower-v2">
             {pirate ? <>
               <section className="operations-conditions-v2">
@@ -669,6 +825,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
 export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, explorationContacts = [], onExpedition, onExplorationAttack, onBot01Occupy, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
   const [tab, setTab] = useState<OperationsTab>('available');
   const [selectedId, setSelectedId] = useState<OperationId | null>(null);
+  const [contactFilter, setContactFilter] = useState<ContactFilter>('all');
 
   const operationRows = useMemo((): OperationRow[] => {
     // Demo placeholders are not playable pirate targets. Keep them in Test save for
@@ -709,7 +866,9 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
     return [...live, ...exploration, ...completed, ...normal];
   }, [state.items, pirateContacts, explorationContacts, completedPirateOperations]);
 
-  const visibleRows = useMemo(() => operationRows.filter(({ operation }) => operation.state === tab), [operationRows, tab]);
+  const tabRows = useMemo(() => operationRows.filter(({ operation }) => operation.state === tab), [operationRows, tab]);
+  const visibleRows = useMemo(() => tabRows.filter((row) => contactFilter === 'all'
+    || contactKind(row.operation, row.contact, row.exploration) === contactFilter), [tabRows, contactFilter]);
   const selectedRow = visibleRows.find(({ operation }) => operation.id === selectedId) ?? null;
 
   useEffect(() => {
@@ -741,12 +900,20 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
   };
 
   return (
-    <main className="operations-shell-v2">
+    <main className="operations-shell-v2 operations-shell-v2--variant-a">
       <header className="operations-topbar-v2">
         <div className="operations-heading-v2">
           <small>ОПЕРАЦИОННЫЙ ЦЕНТР</small>
           <h1>ОПЕРАЦИИ</h1>
-          <p>Действующие PvE-цели в системах твоих колоний.</p>
+        </div>
+        <div className="operations-threat-summary-v-a" aria-label="Пиратская угроза">
+          <span className="operations-threat-ring-v-a" role="progressbar" aria-label="Пиратская угроза от 2% до 30%"
+            aria-valuemin={2} aria-valuemax={30} aria-valuenow={pirateThreatPercent}
+            title="Вероятность отправки рейда при проверке одной пиратской базы в одной системе. Каждая система проверяется отдельно — это не шанс победы пиратов или уничтожения планеты. Чем меньше боевых очков относительно ресурсных, тем быстрее растёт угроза. Полная победа над базой снижает её пропорционально отправленному боевому населению."
+            style={{ background: `conic-gradient(#ff7a3d 0 ${Math.max(0, Math.min(100, pirateThreatPercent))}%, rgba(255,255,255,.08) 0)` }}>
+            <span><b>{pirateThreatPercent.toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</b></span>
+          </span>
+          <span className="operations-threat-copy-v-a"><b>ПИРАТСКАЯ УГРОЗА</b><small>Рейд при проверке активной базы</small></span>
         </div>
         <nav className="operations-tabs-v2" role="tablist" aria-label="Состояние операций">
           {(Object.keys(TAB_LABELS) as OperationsTab[]).map((entry) => (
@@ -757,21 +924,6 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
         </nav>
         <div className="operations-slots-v2"><small>ПИРАТСКИЕ БАЗЫ</small><strong>{pirateContacts.length}</strong><span>активны</span></div>
       </header>
-      <section className="operations-pirate-threat-v2" aria-label="Пиратская угроза">
-        <div><small>ПИРАТСКАЯ УГРОЗА</small>
-          <strong>{pirateThreatPercent.toLocaleString('ru-RU',{minimumFractionDigits:1,maximumFractionDigits:1})}%</strong>
-        </div>
-        <div className="operations-pirate-threat-body-v2">
-          <div role="progressbar" aria-label="Пиратская угроза от 2% до 30%"
-            aria-valuemin={2} aria-valuemax={30} aria-valuenow={pirateThreatPercent}>
-            <span style={{width:`${Math.max(0,Math.min(100,(pirateThreatPercent-2)/28*100))}%`}}/>
-          </div>
-          <p>Вероятность отправки рейда при проверке одной пиратской базы в одной системе.
-            Каждая система проверяется отдельно — это не шанс победы пиратов или уничтожения планеты.</p>
-          <small>Чем меньше боевых очков относительно ресурсных, тем быстрее растёт угроза.
-            Полная победа над базой снижает её пропорционально отправленному боевому населению.</small>
-        </div>
-      </section>
       {pirateAdaptiveDiagnostics && (() => {
         const d=pirateAdaptiveDiagnostics;
         const band=pirateAdaptiveInterval(d.q);
@@ -798,7 +950,17 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
       })()}
       <div className="operations-layout-v2">
         <section className="operations-feed-v2" aria-label={TAB_LABELS[tab]}>
-          <header><div><small>КАНАЛ // {TAB_LABELS[tab]}</small><strong>{tab === 'available' ? 'ВХОДЯЩИЕ КОНТАКТЫ' : tab === 'active' ? 'ТЕКУЩИЕ ЗАДАЧИ' : 'АРХИВ ОПЕРАЦИЙ'}</strong></div><span>{visibleRows.length}</span></header>
+          <header><div><small>{tab === 'completed' ? 'АРХИВ // ЗАВЕРШЁННЫЕ' : tab === 'active' ? 'КАНАЛ // В РАБОТЕ' : 'КАНАЛ // ДОСТУПНЫЕ'}</small>
+            <strong>{tab === 'available' ? 'ВХОДЯЩИЕ КОНТАКТЫ' : tab === 'active' ? 'ПРИНЯТЫЕ ОПЕРАЦИИ' : 'ИТОГИ ОПЕРАЦИЙ'}</strong></div>
+            <span>{visibleRows.length}</span></header>
+          <nav className="operations-contact-filters-v-a" aria-label="Фильтр типа контакта">
+            {([
+              ['all', 'ВСЕ'], ['pirate', 'ПИРАТЫ'], ['unique', 'ОБЪЕКТЫ'], ['anomaly', 'АНОМАЛИИ'],
+            ] as const).map(([value, label]) => (
+              <button key={value} type="button" data-filter-kind={value} aria-pressed={contactFilter === value}
+                className={contactFilter === value ? 'active' : ''} onClick={() => setContactFilter(value)}>{label}</button>
+            ))}
+          </nav>
           <div className="operations-feed-scroll-v2">
             {visibleRows.length ? <div className="operations-feed-list-v2">
               {visibleRows.map((row) => <OperationCard
@@ -816,6 +978,7 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
           </div>
         </section>
         <OperationDossier
+          key={selectedRow?.operation.id ?? 'empty'}
           operation={selectedRow?.operation ?? null}
           pirateContact={selectedRow?.contact}
           exploration={selectedRow?.exploration}

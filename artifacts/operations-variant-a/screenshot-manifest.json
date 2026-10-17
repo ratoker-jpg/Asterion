@@ -1,0 +1,208 @@
+{
+  "results": [
+    {
+      "viewport": "1920x1080",
+      "captures": [
+        {
+          "file": "01-available-pirate.png",
+          "kind": "pirate",
+          "state": "ДОСТУПНЫЕ3",
+          "images": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "horizontalOverflow": false
+        },
+        {
+          "file": "02-available-unique.png",
+          "kind": "unique",
+          "state": "ДОСТУПНЫЕ3",
+          "images": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "horizontalOverflow": false
+        },
+        {
+          "file": "03-available-anomaly.png",
+          "kind": "anomaly",
+          "state": "ДОСТУПНЫЕ3",
+          "images": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "horizontalOverflow": false
+        },
+        {
+          "file": "04-active-pirate.png",
+          "kind": "pirate",
+          "state": "АКТИВНЫЕ3",
+          "images": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "horizontalOverflow": false
+        },
+        {
+          "file": "05-active-unique.png",
+          "kind": "unique",
+          "state": "АКТИВНЫЕ3",
+          "images": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "horizontalOverflow": false
+        },
+        {
+          "file": "06-active-anomaly.png",
+          "kind": "anomaly",
+          "state": "АКТИВНЫЕ3",
+          "images": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "horizontalOverflow": false
+        },
+        {
+          "file": "07-completed-pirate.png",
+          "kind": "pirate",
+          "state": "ЗАВЕРШЁННЫЕ3",
+          "images": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "horizontalOverflow": false
+        },
+        {
+          "file": "08-completed-unique.png",
+          "kind": "unique",
+          "state": "ЗАВЕРШЁННЫЕ3",
+          "images": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "horizontalOverflow": false
+        },
+        {
+          "file": "09-completed-anomaly.png",
+          "kind": "anomaly",
+          "state": "ЗАВЕРШЁННЫЕ3",
+          "images": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "horizontalOverflow": false
+        }
+      ],
+      "viewportMetrics": {
+        "width": 1920,
+        "height": 1080,
+        "horizontalOverflow": false,
+        "stageBounds": {
+          "left": 0,
+          "top": 0,
+          "right": 1920,
+          "bottom": 1080,
+          "width": 1920,
+          "height": 1080
+        },
+        "stageTransform": "matrix(1, 0, 0, 1, 0, 0)",
+        "stageTransformOrigin": "0px 0px"
+      }
+    },
+    {
+      "viewport": "1280x720",
+      "captures": [
+        {
+          "file": "01-available-pirate.png",
+          "kind": "pirate",
+          "state": "ДОСТУПНЫЕ3",
+          "images": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "horizontalOverflow": false
+        },
+        {
+          "file": "05-active-unique.png",
+          "kind": "unique",
+          "state": "АКТИВНЫЕ3",
+          "images": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "horizontalOverflow": false
+        },
+        {
+          "file": "09-completed-anomaly.png",
+          "kind": "anomaly",
+          "state": "ЗАВЕРШЁННЫЕ3",
+          "images": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "horizontalOverflow": false
+        }
+      ],
+      "viewportMetrics": {
+        "width": 1280,
+        "height": 720,
+        "horizontalOverflow": false,
+        "stageBounds": {
+          "left": 0,
+          "top": 0,
+          "right": 1280,
+          "bottom": 720,
+          "width": 1280,
+          "height": 720
+        },
+        "stageTransform": "matrix(0.666667, 0, 0, 0.666667, 0, 0)",
+        "stageTransformOrigin": "0px 0px"
+      }
+    }
+  ]
+}

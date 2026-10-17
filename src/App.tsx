@@ -5,6 +5,7 @@ import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
 import { OperationsView } from './OperationsView';
+import { createOperationsVariantAQaFixture, getOperationsVariantAQaStatus } from './operations-variant-a-qa-fixture.ts';
 import { rerollTestUniverseLayout } from './domain/universe/runtime.ts';
 import { CommandView } from './CommandView';
 import { ReportsView } from './ReportsView';
@@ -298,6 +299,8 @@ function AegisButton({ children, onClick, disabled = false }: { children: ReactN
 
 export function App() {
   const scale = useStageScale();
+  const stageLeft = Math.max(0, (window.innerWidth - 1920 * scale) / 2);
+  const stageTop = Math.max(0, (window.innerHeight - 1080 * scale) / 2);
   const { route: activeRoute, fleetSection: activeFleetSection, navigate } = useNavigation();
   const activeTab = APP_ROUTE_LABELS[activeRoute];
   const [planetViewMode, setPlanetViewMode] = useState<PlanetViewMode>('overview');
@@ -366,6 +369,12 @@ export function App() {
       ? selectOwnedPiratePresentations(state, now)
       : selectPirateContacts(state, now, pirateSystem);
   }, [activeRoute, state, now, pirateSystem]);
+  const operationsVariantAFixtureStatus = getOperationsVariantAQaStatus(RUNTIME_MODE);
+  const fixturePirateContact = pirateContacts[0];
+  const operationsVariantAFixture = useMemo(() => operationsVariantAFixtureStatus && fixturePirateContact
+    ? createOperationsVariantAQaFixture(fixturePirateContact, state.profile.playerId, operationsVariantAFixtureStatus)
+    : null,
+  [operationsVariantAFixtureStatus, fixturePirateContact?.contactCycleKey, state.profile.playerId]);
   const completedPirateOperations = useMemo(() => {
     if (activeRoute !== 'operations') return [];
     const reports = new Map(state.combat.reports.map((report) => [report.id, report]));
@@ -1594,7 +1603,15 @@ export function App() {
 
   return (
     <div className="viewport">
-      <div className="stage stage-shell-v3 stage-shell-v4" style={{ transform: `scale(${scale})`, '--space-bg': `url(${systemBackground})` } as CSSProperties}>
+      <div className="stage stage-shell-v3 stage-shell-v4" style={{
+        left: `${stageLeft}px`,
+        top: `${stageTop}px`,
+        justifySelf: 'start',
+        alignSelf: 'start',
+        transformOrigin: 'top left',
+        transform: `scale(${scale})`,
+        '--space-bg': `url(${systemBackground})`,
+      } as CSSProperties}>
         <AsterionHeader
           factionId={state.profile.factionId}
           currentPlanet={{
@@ -1731,8 +1748,8 @@ export function App() {
             />
           ) : activeRoute === 'operations' ? (
             <OperationsView
-              pirateContacts={pirateContacts}
-              explorationContacts={selectExplorationOperations(state, now, RUNTIME_MODE)}
+              pirateContacts={operationsVariantAFixture?.pirateContacts ?? pirateContacts}
+              explorationContacts={operationsVariantAFixture?.explorationContacts ?? selectExplorationOperations(state, now, RUNTIME_MODE)}
               onExpedition={openExpeditionLaunch}
               onExplorationAttack={openExplorationAttackLaunch}
               onBot01Occupy={RUNTIME_MODE === 'test' ? launchBot01Exploration : undefined}
@@ -1755,16 +1772,16 @@ export function App() {
                   now,
                 ).ageHours,
               )}
-              completedPirateOperations={completedPirateOperations}
+              completedPirateOperations={operationsVariantAFixture?.completedPirateOperations ?? completedPirateOperations}
               onPirateBattleReport={openPirateReport}
-              nowMs={now}
+              nowMs={operationsVariantAFixture?.nowMs ?? now}
               onPirateAccept={acceptPirateOperation}
               onPirateCancel={cancelPirateOperation}
               onPirateRecon={launchPirateRecon}
               onPirateAttack={openPirateAttack}
               onPirateReport={openPirateReport}
               onPirateUniverse={focusPirateUniverse}
-              state={state.operations}
+              state={operationsVariantAFixture?.state ?? state.operations}
               onAccept={acceptOperationsOperation}
               onCancel={cancelOperationsOperation}
               onReveal={revealOperationsOperation}
