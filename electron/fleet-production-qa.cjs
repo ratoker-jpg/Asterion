@@ -1195,6 +1195,96 @@ async function selectPlanet(win, planetId) {
   await settle(win);
 }
 
+async function runPlanetSwitchOnlyViewport(width, height) {
+  const label = `${width}x${height}`;
+  const win = new BrowserWindow({ width, height, show: false, webPreferences: { sandbox: false, partition: `fleet-planet-switch-qa-${label}` } });
+  try {
+    await loadTestMode(win);
+    await click(win, '[data-qa-test-speed="1"]');
+    await seedProductionSave(win, (save, homeworld) => {
+      const zeroFleet = (fleet, ships) => ({
+        ...fleet,
+        ships: Object.fromEntries(Object.keys(fleet.ships || {}).map((id) => [id, ships[id] || 0])),
+        commanders: Object.fromEntries(Object.keys(fleet.commanders || {}).map((id) => [id, 0])),
+      });
+      const colony = JSON.parse(JSON.stringify(homeworld));
+      homeworld.id = 'helion-01';
+      homeworld.name = 'Helion 01';
+      homeworld.buildings = { ...homeworld.buildings, shipyard: 15, hangar: 20, 'advanced-factory': 10 };
+      homeworld.fleet = zeroFleet(homeworld.fleet, { bomber: 1142 });
+      homeworld.fleetProduction = { shipQueue: [], defenseQueue: [], commanderQueue: [] };
+      homeworld.resources = { metal: 25_000_000, minerals: 25_000_000, gas: 25_000_000 };
+      colony.id = 'qa-colony-01';
+      colony.name = 'Колония QA';
+      colony.universeGalaxy = 1;
+      colony.universeSystem = 1;
+      colony.universePosition = 2;
+      colony.buildings = { ...colony.buildings, shipyard: 4, hangar: 4, 'advanced-factory': 0 };
+      colony.fleet = zeroFleet(colony.fleet, {});
+      colony.fleetProduction = { shipQueue: [], defenseQueue: [], commanderQueue: [] };
+      colony.resources = { metal: 777_000, minerals: 888_000, gas: 999_000 };
+      save.planets = { 'helion-01': homeworld, 'qa-colony-01': colony };
+      save.currentPlanetId = 'helion-01';
+      save.metal = homeworld.resources.metal;
+      save.minerals = homeworld.resources.minerals;
+      save.gas = homeworld.resources.gas;
+      save.queues = { 'helion-01': [], 'qa-colony-01': [] };
+      save.science = { ...save.science, levels: { ...save.science.levels, 4: 1 } };
+      save.flights = { records: [], requestIndex: {} };
+      save.espionage = { missions: [], reports: [], hunterNotices: [], orbitalDebris: {} };
+    });
+    await win.webContents.executeJavaScript(`(() => {
+      window.__qaOriginalStorageSetItem = Storage.prototype.setItem;
+      window.__qaRejectRuntimeSave = true;
+      Storage.prototype.setItem = function(key, value) {
+        if (window.__qaRejectRuntimeSave && key === ${JSON.stringify(TEST_KEY)}) {
+          throw new DOMException('Synthetic quota exhaustion', 'QuotaExceededError');
+        }
+        return window.__qaOriginalStorageSetItem.call(this, key, value);
+      };
+    })()`);
+
+    await selectPlanet(win, 'qa-colony-01');
+    const headerPopulation = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-resource-chip="population"] strong')?.textContent?.trim() || ''`);
+    await click(win, '[data-qa-route="fleets"]');
+    await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
+    const fleetRoster = await win.webContents.executeJavaScript(`(() => ({
+      population: document.querySelector('[data-qa-fleet-population]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      bomberCount: document.querySelector('[data-qa-fleet-ship="bomber"] [data-qa-fleet-owned]')?.textContent?.trim() || '0',
+    }))()`);
+    await click(win, '[data-qa-fleet-section="ships"]');
+    await waitFor(win, `document.querySelector('[data-qa-construction-mode="ships"]')`);
+    const scoutRequirements = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-fleet-production-item="scout"]')?.getAttribute('data-qa-production-requirements') ?? ''`);
+    if (scoutRequirements !== 'met') throw new Error(`${label}: colony scout requirements were not met in the fleet switch fixture`);
+    await click(win, '[data-qa-fleet-production-item="scout"] .shipyard-count-v1 button');
+    await waitFor(win, `document.querySelector('[data-qa-fleet-production-item="scout"] .shipyard-build-button-v1')?.disabled === false`);
+    const view = await win.webContents.executeJavaScript(`(() => ({
+      selectedPlanetId: document.querySelector('[data-qa-current-planet]')?.getAttribute('data-planet-id') || '',
+      fleetPopulation: document.querySelector('[data-qa-fleet-population]')?.getAttribute('data-qa-fleet-population') || '',
+      bomberCount: document.querySelector('[data-qa-fleet-ship="bomber"] [data-qa-fleet-owned]')?.textContent?.trim() || '0',
+      headerName: document.querySelector('[data-qa-current-planet]')?.getAttribute('data-planet-name') || '',
+      buildButtonDisabled: document.querySelector('[data-qa-fleet-production-item="scout"] .shipyard-build-button-v1')?.disabled ?? true,
+    }))()`);
+    const persistedPlanetId = (await readSave(win)).currentPlanetId;
+    await win.webContents.executeJavaScript(`(() => {
+      window.__qaRejectRuntimeSave = false;
+      Storage.prototype.setItem = window.__qaOriginalStorageSetItem;
+      delete window.__qaOriginalStorageSetItem;
+      delete window.__qaRejectRuntimeSave;
+    })()`);
+
+    if (persistedPlanetId !== 'helion-01') throw new Error(`${label}: synthetic storage failure did not preserve the old saved planet`);
+    if (view.selectedPlanetId !== 'qa-colony-01' || view.headerName !== 'Колония QA'
+      || view.fleetPopulation !== '0' || Number(fleetRoster.bomberCount) !== 0 || Number(headerPopulation.match(/^\d+/)?.[0]) !== 0
+      || view.buildButtonDisabled) {
+      throw new Error(`${label}: fleet UI diverged from the selected colony after a save write failure ${JSON.stringify({ headerPopulation, fleetRoster, persistedPlanetId, view })}`);
+    }
+    return { viewport: label, headerPopulation, persistedPlanetId, view };
+  } finally {
+    if (!win.isDestroyed()) await win.close();
+  }
+}
+
 async function runPlanetSwitchRegression(win, label) {
   await seedPlanetSwitchSave(win);
   await click(win, '[data-qa-test-speed="1"]');
@@ -1618,7 +1708,12 @@ async function main() {
   fs.mkdirSync(OUTPUT, { recursive: true });
   const results = [];
   try {
-    for (const [width, height] of VIEWPORTS) results.push(await runViewport(width, height));
+    if (process.env.ASTERION_FLEET_PLANET_SWITCH_ONLY === '1') {
+      for (const [width, height] of VIEWPORTS) results.push(await runPlanetSwitchOnlyViewport(width, height));
+    } else {
+      for (const [width, height] of VIEWPORTS) results.push(await runPlanetSwitchOnlyViewport(width, height));
+      for (const [width, height] of VIEWPORTS) results.push(await runViewport(width, height));
+    }
     console.log(JSON.stringify({ results }, null, 2));
   } finally {
     app.quit();
