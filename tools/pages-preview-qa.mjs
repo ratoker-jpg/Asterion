@@ -82,5 +82,8 @@ try {
 } finally {
   socket?.close();
   chrome.kill('SIGTERM');
-  await rm(profile, { recursive: true, force: true });
+  // The CI runner is ephemeral. Chrome can briefly recreate profile files while stopping.
+  // Cleanup must not turn successful rendering assertions into a failed deployment.
+  await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 })
+    .catch((error) => console.warn('Browser profile cleanup skipped:', error.message));
 }
