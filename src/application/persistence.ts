@@ -832,16 +832,24 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
   }
   if (shipEntries.length === 0) {
     const selectedCommanders = item.selectedCommanders as Record<string, unknown> | undefined;
+    const hasSelectedCommander = Object.values(selectedCommanders ?? {})
+      .some((quantity) => isNonNegativeInteger(quantity) && quantity > 0);
     const hasValidCommanderOnlyDeployment = item.missionId === 'deployment'
-      && Object.values(selectedCommanders ?? {}).some((quantity) => isNonNegativeInteger(quantity) && quantity > 0);
+      && hasSelectedCommander;
     const hasValidCommanderOnlySpaceFlight = isSpaceFlight
-      && Object.values(selectedCommanders ?? {}).some((quantity) => isNonNegativeInteger(quantity) && quantity > 0);
+      && hasSelectedCommander;
+    const hasValidCommanderOnlyExpedition = item.missionId === 'expedition'
+      && hasSelectedCommander;
+    const hasValidCommanderOnlyExplorationAttack = item.missionId === 'attack'
+      && item.explorationAttack === true
+      && hasSelectedCommander;
     // A resolved battle can destroy every ship in a flight. Keep that terminal
     // record for replay/history; it no longer reserves or returns any units.
     const terminalWreck = (item.phase === 'completed' || item.phase === 'failed')
       && item.completionReason === 'mission-failed'
       && (item.explorationAttack === true || item.missionId === 'expedition' && item.attackSnapshot !== undefined);
     if (!hasValidCommanderOnlyDeployment && !hasValidCommanderOnlySpaceFlight
+      && !hasValidCommanderOnlyExpedition && !hasValidCommanderOnlyExplorationAttack
       && item.missionId !== 'pirate-raid' && !terminalWreck) return false;
   }
   if (item.selectedCommanderLevels !== undefined) {

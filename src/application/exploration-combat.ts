@@ -1,6 +1,7 @@
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import { getCombatFactionName } from '../domain/combat/factions.ts';
 import { getFactionShipCatalog, getFactionCombatEntity } from '../domain/combat/faction-catalog.ts';
+import { COMMANDER_IDS, type CommanderId } from '../domain/combat/commanders.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 import { DEFAULT_COMBAT_PRIORITY } from '../domain/combat/priority.ts';
 import { createDefaultCombatTechnologies } from '../domain/combat/technologies.ts';
@@ -26,6 +27,25 @@ function surviving(ships: FlightRecord['selectedShips'], force: BattleForceSnaps
   }
   return Object.fromEntries(Object.entries(result).filter(([, count]) => validCount(count) > 0));
 }
+function survivingCommanders(
+  commanders: FlightRecord['selectedCommanders'],
+  force: BattleForceSnapshot,
+): FlightRecord['selectedCommanders'] {
+  const result: NonNullable<FlightRecord['selectedCommanders']> = {};
+  const losses = new Map(force.stacks.map(stack => [stack.entityId, validCount(stack.destroyed)]));
+  for (const commanderId of COMMANDER_IDS) {
+    const selected = Math.min(1, validCount(commanders?.[commanderId]));
+    const count = Math.max(0, selected - (losses.get(commanderId) ?? 0));
+    if (count > 0) result[commanderId] = count;
+  }
+  return result;
+}
+function hasSurvivingCombatants(
+  ships: FlightRecord['selectedShips'], commanders: FlightRecord['selectedCommanders'],
+): boolean {
+  return Object.values(ships).some(count => validCount(count) > 0)
+    || Object.values(commanders ?? {}).some(count => validCount(count) > 0);
+}
 function changeHomeFleet(state: SaveState, flight: FlightRecord, force: BattleForceSnapshot): SaveState {
   const planet = state.planets[flight.originPlanetId];
   if (!planet) return state;
@@ -46,6 +66,17 @@ function stacks(flight: FlightRecord, faction: CombatFactionId, levels: Partial<
     valid.has(id as ShipId) && id !== 'solar-satellite' && validCount(n) > 0
       ? [{ entityId: id as ShipId, count: validCount(n), level: Math.max(0,Math.floor(levels[id as ShipId] ?? 0)) }] : []);
 }
+function commanderStacks(
+  flight: FlightRecord,
+  levels: Partial<Record<CommanderId, number>> = {},
+): CombatStackInput[] {
+  return COMMANDER_IDS.flatMap(commanderId => {
+    const count = Math.min(1, validCount(flight.selectedCommanders?.[commanderId]));
+    return count > 0
+      ? [{ entityId: commanderId, count, level: Math.max(0, Math.floor(levels[commanderId] ?? 0)) }]
+      : [];
+  });
+}
 function fleetValues(flight: FlightRecord, faction: CombatFactionId): {population:number;cost:number} {
   let population=0,cost=0;
   for (const [id,count] of Object.entries(flight.selectedShips)) {
@@ -62,7 +93,7 @@ function fleetValues(flight: FlightRecord, faction: CombatFactionId): {populatio
  * A report ID and the ledger capture event make offline replays idempotent.
  */
 export function resolveExplorationAttackAtTarget(state: SaveState, flight: FlightRecord, at: number):
-  {state: SaveState; report: BattleReport; captured: ReturnType<typeof emptyExplorationCargo>} | null {
+  {state: SaveState; report: BattleReport; captured: ReturnType<typeof emptyExplorationCargo>; attackerOccupied: boolean} | null {
   if (!flight.explorationAttack || !flight.attackSnapshot || !flight.operationId) return null;
   const contact = state.exploration?.contacts[flight.operationId];
   const claimant = contact?.claim;
@@ -76,19 +107,26 @@ export function resolveExplorationAttackAtTarget(state: SaveState, flight: Fligh
   const defenderFlight = state.flights.records.find(item => item.id === claimant.flightId && item.phase === 'arrived');
   if (!defenderFlight || defenderFlight.missionId !== 'expedition' && !defenderFlight.explorationAttack) return null;
   const existingReport = state.combat.reports.find(item => item.id === 'battle-exploration-' + flight.id);
-  if (existingReport) return { state, report: existingReport, captured: contact.events.find(e=>e.id===flight.id+':capture')?.cargo ?? emptyExplorationCargo() };
+  if (existingReport) return {
+    state, report: existingReport,
+    captured: contact.events.find(e=>e.id===flight.id+':capture')?.cargo ?? emptyExplorationCargo(),
+    attackerOccupied: contact.events.some(event => event.id === flight.id + ':capture'),
+  };
   const attackerFaction = flight.attackSnapshot.attackerFactionId;
   const defenderSnapshot = defenderFlight.attackSnapshot;
   const defenderFaction = defenderSnapshot?.attackerFactionId ?? defenderFlight.explorationFactionId ?? state.profile.factionId as CombatFactionId;
+  const defenderCommanderLevels = defenderSnapshot?.attackerCommanderLevels
+    ?? defenderFlight.selectedCommanderLevels ?? {};
   const attackerStacks = stacks(flight, attackerFaction, flight.attackSnapshot.attackerShipLevels);
   const defenderStacks = stacks(defenderFlight, defenderFaction, defenderSnapshot?.attackerShipLevels);
-  if (attackerStacks.length === 0 || defenderStacks.length === 0) return null;
+  const attackerCommanders = commanderStacks(flight, flight.attackSnapshot.attackerCommanderLevels);
+  const defenderCommanders = commanderStacks(defenderFlight, defenderCommanderLevels);
+  if ((attackerStacks.length === 0 && attackerCommanders.length === 0)
+    || (defenderStacks.length === 0 && defenderCommanders.length === 0)) return null;
   // A legacy flight has no launch-time combat data. Keep it loadable and resolve
   // that one historical encounter at the old unupgraded baseline; never borrow
   // technologies or upgrades from the player's later live save.
   const legacyDefenderTechnologies = createDefaultCombatTechnologies();
-  const defenderCommanderLevels = defenderSnapshot?.attackerCommanderLevels
-    ?? defenderFlight.selectedCommanderLevels ?? {};
   const input: CombatInput = {
     scenarioId: 'exploration:' + flight.id,
     timestamp: new Date(at).toISOString(),
@@ -102,19 +140,14 @@ export function resolveExplorationAttackAtTarget(state: SaveState, flight: Fligh
     technologyMode: 'independent',
     executionMode: 'production',
     attacker: {
-      commanders:Object.entries(flight.selectedCommanders ?? {}).filter(([,n])=>validCount(n)>0)
-        .map(([id,n])=>({entityId:id as import('../domain/combat/ids.ts').CombatStackEntityId,
-          count:Math.min(1,validCount(n)),
-          level:flight.attackSnapshot!.attackerCommanderLevels[id as import('../domain/combat/commanders.ts').CommanderId] ?? 0})),
+      commanders:attackerCommanders,
       participant: {side:'attacker',playerId:attackerOwnerId,playerName:npcSource?.ownerName??state.profile.displayName,
         coordinates:'['+[flight.originCoordinate.galaxy,flight.originCoordinate.system,flight.originCoordinate.position].join(':')+']',
         race:getCombatFactionName(attackerFaction)},
       factionId:attackerFaction,ships:attackerStacks,
     },
     defender: {
-      commanders:Object.entries(defenderFlight.selectedCommanders ?? {}).filter(([,n])=>validCount(n)>0)
-        .map(([id,n])=>({entityId:id as import('../domain/combat/ids.ts').CombatStackEntityId,
-          count:Math.min(1,validCount(n)),level:defenderCommanderLevels[id as import('../domain/combat/commanders.ts').CommanderId] ?? 0})),
+      commanders:defenderCommanders,
       participant: {side:'defender',playerId:claimant.ownerId,playerName:claimant.ownerId === state.profile.playerId ? state.profile.displayName : claimant.ownerId === UNIVERSE_NPC_OWNER_ID ? 'Bot 01' : state.espionage?.targets?.[defenderFlight.originPlanetId]?.ownerName??claimant.ownerId,
         planetName:explorationProfile(contact.kind,contact.variant).name,coordinates:'['+[contact.coordinate.galaxy,contact.coordinate.system,contact.coordinate.position].join(':')+']',
         race:getCombatFactionName(defenderFaction)},
@@ -124,8 +157,14 @@ export function resolveExplorationAttackAtTarget(state: SaveState, flight: Fligh
   const raw = resolveCombat(input, {reportId:'battle-exploration-'+flight.id,missionType:'attack'});
   const newAttackerShips = surviving(flight.selectedShips,raw.attackerForce);
   const newDefenderShips = surviving(defenderFlight.selectedShips,raw.defenderForce);
-  const attackerSurvivor: FlightRecord = { ...flight,selectedShips:newAttackerShips };
-  const defenderSurvivor: FlightRecord = { ...defenderFlight,selectedShips:newDefenderShips };
+  const newAttackerCommanders = survivingCommanders(flight.selectedCommanders, raw.attackerForce);
+  const newDefenderCommanders = survivingCommanders(defenderFlight.selectedCommanders, raw.defenderForce);
+  const attackerSurvivor: FlightRecord = {
+    ...flight, selectedShips:newAttackerShips, selectedCommanders:newAttackerCommanders,
+  };
+  const defenderSurvivor: FlightRecord = {
+    ...defenderFlight, selectedShips:newDefenderShips, selectedCommanders:newDefenderCommanders,
+  };
   const attackerCapacity = expeditionMiningCapacity(state, attackerSurvivor);
   const defenderCapacity = expeditionMiningCapacity(state, defenderSurvivor);
   const attackerValues = fleetValues(flight,attackerFaction);
@@ -139,7 +178,10 @@ export function resolveExplorationAttackAtTarget(state: SaveState, flight: Fligh
     catchupMultiplier:1,
   };
   const outcome = settleExplorationContest(contact,at,raw.winner,arrival,
-    attackerCapacity.all,defenderCapacity,eligible);
+    attackerCapacity.all,defenderCapacity,eligible,{
+      attacker:hasSurvivingCombatants(newAttackerShips,newAttackerCommanders),
+      defender:hasSurvivingCombatants(newDefenderShips,newDefenderCommanders),
+    });
   const report: BattleReport = {...raw,
     debris:calculateAttackDebris(raw,attackerFaction,defenderFaction),
     resources:{metal:outcome.captured.metal,minerals:outcome.captured.minerals,gas:outcome.captured.gas}};
@@ -148,7 +190,8 @@ export function resolveExplorationAttackAtTarget(state: SaveState, flight: Fligh
   let settled = outcome.contact;
   // The displaced owner returns with surviving ships but ZERO escrow cargo:
   // precisely 30% may be captured; everything else was destroyed by contest.
-  if (raw.winner === 'attacker') {
+  const attackerOccupied = outcome.contact.claim?.flightId === flight.id;
+  if (attackerOccupied) {
     settled = {...settled,events:[...settled.events,{
       id:defenderFlight.id+':release',kind:'recalled' as const,at,
       ownerId:claimant.ownerId,flightId:defenderFlight.id,
@@ -186,14 +229,15 @@ export function resolveExplorationAttackAtTarget(state: SaveState, flight: Fligh
     flights:{...next.flights,records:next.flights.records.map(item => {
       if(item.id === flight.id) return attackerSurvivor;
       if(item.id === defenderFlight.id) {
-        if(raw.winner === 'attacker' && Object.keys(newDefenderShips).length > 0)
+        const defenderSurvives = hasSurvivingCombatants(newDefenderShips,newDefenderCommanders);
+        if(attackerOccupied && defenderSurvives)
           return {...defenderSurvivor,phase:'returning' as const,returnAt:at+defenderFlight.oneWayDurationMs,completionReason:'normal-return' as const};
-        if(Object.keys(newDefenderShips).length === 0)
+        if(!defenderSurvives)
           return {...defenderSurvivor,phase:'completed' as const,completedAt:at,completionReason:'mission-failed' as const};
         return defenderSurvivor;
       }
       return item;
     })},
   };
-  return {state:next,report,captured:outcome.captured};
+  return {state:next,report,captured:outcome.captured,attackerOccupied};
 }

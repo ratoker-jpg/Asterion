@@ -2528,7 +2528,7 @@ export function reconcileFlights(
           }
           next = resolved.state;
           const latest = next.flights.records.find(item=>item.id === current.id)!;
-          const winning = resolved.report.winner === 'attacker';
+          const winning = resolved.attackerOccupied;
           if (winning) {
             const arrived: FlightRecord = {...latest,phase:'arrived',arrivedAt:arrivalAt,
               completionReason:'arrived',attackResolution:{
@@ -2552,9 +2552,13 @@ export function reconcileFlights(
               loot:{metal:0,minerals:0,gas:0,debris:0},
             }};
             next={...next,flights:updateFlight(returned,flight)};
-            events.push({flight,status:'arrived',notice:resolved.report.winner === 'defender'
-              ? 'Защитник удержал объект, атакующий возвращается с потерями.'
-              : 'Ничья: объект остался у защитника, атакующий возвращается.'});
+            const holder = next.exploration?.contacts[current.operationId!]?.claim;
+            const notice = holder
+              ? resolved.report.winner === 'defender'
+                ? 'Защитник удержал объект, атакующий возвращается с потерями.'
+                : 'Ничья: выжившие силы защитника удержали объект, атакующий возвращается.'
+              : 'После боя у объекта не осталось удерживающих сил. Объект свободен.';
+            events.push({flight,status:'arrived',notice});
           }
           changed=true;
           continue;

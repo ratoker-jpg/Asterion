@@ -55,6 +55,11 @@ export type ExplorationEvent = {
   burnedCargo?: TransportCargo;
 };
 
+export type ExplorationContestSurvivors = Readonly<{
+  attacker: boolean;
+  defender: boolean;
+}>;
+
 export type ExplorationContact = {
   id: string;
   kind: ExplorationKind;
@@ -272,6 +277,7 @@ export function settleExplorationContest(
   attackerSurvivorCargoCapacity: number,
   defenderSurvivorCapacity: MiningCapacity,
   eligibleDefense: boolean,
+  survivors: ExplorationContestSurvivors,
 ): { contact: ExplorationContact; captured: TransportCargo; destroyed: TransportCargo } {
   if (!contact.claim || at >= contact.expiresAt || at < contact.appearedAt) throw new Error('No contestable live occupancy');
   if (contact.claim.pendingRecallAt !== undefined
@@ -282,7 +288,20 @@ export function settleExplorationContest(
   const defender = settled.claim!;
   if (defender.ownerId === attacker.ownerId) throw new Error('Cannot attack own contact');
   const nothing = emptyExplorationCargo();
-  if (winner === 'attacker') {
+  const attackerOccupies = winner === 'attacker' && survivors.attacker;
+  if (!attackerOccupies && !survivors.defender) {
+    const lostCargo = { ...defender.cargo };
+    const event: ExplorationEvent = {
+      id: attacker.flightId + ':contest', at, kind: 'draw',
+      ownerId: defender.ownerId, flightId: defender.flightId, lostCargo,
+    };
+    return {
+      contact: { ...settled, claim: undefined, events: [...settled.events, event].slice(-100) },
+      captured: nothing,
+      destroyed: lostCargo,
+    };
+  }
+  if (attackerOccupies) {
     const loss = captureExplorationCargo(defender.cargo, attackerSurvivorCargoCapacity);
     const fresh = occupyExplorationContact({ ...settled, claim: undefined }, attacker);
     const newClaim = fresh.claim!;

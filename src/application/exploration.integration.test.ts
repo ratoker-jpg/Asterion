@@ -9,12 +9,11 @@ import { getExplorationTarget, explorationTargetStatus, selectExplorationTargets
 import { acceptLiveExploration, cancelLiveExploration } from './exploration-operations.ts';
 import { explorationResourceScore } from './exploration-flight.ts';
 import { explorationMailboxReports } from '../domain/exploration/report-items.ts';
-import { reconcileExplorationContact } from '../domain/exploration/ledger.ts';
+import { createExplorationState, reconcileExplorationContact } from '../domain/exploration/ledger.ts';
 import { dispatchBot01Exploration } from './exploration-bot01.ts';
 import { resolveExplorationAttackAtTarget } from './exploration-combat.ts';
-import { getExplorationNpcCatchupWindow, selectDueExplorationNpcRolls } from './exploration-npc.ts';
+import { advanceExplorationNpcProgress, getExplorationNpcCatchupWindow, selectDueExplorationNpcRolls, type ExplorationNpcSourceProvider } from './exploration-npc.ts';
 import { getEspionageTargets } from '../domain/espionage/runtime.ts';
-import { explorationNpcAttempt, explorationProfile } from '../domain/exploration/model.ts';
 import { getOrbitalDebrisAtCoordinate, collectOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
 import type { FlightRecord } from '../domain/flights/types.ts';
@@ -41,21 +40,46 @@ function prepare(minimumRemainingMs = 6 * MINUTE) {
   throw new Error('No eligible timed exploration contact in the deterministic eight-hour fixture');
 }
 
-function productionWithRealNpcFixtures(): SaveState {
-  const production = createInitialSaveState('production', baseTime);
+const testOnlyNpcSourceProvider: ExplorationNpcSourceProvider = () => {
   const testFixture = createInitialSaveState('test', baseTime);
-  const ownerId = 'real-npc-fixture-owner';
-  const targets = Object.fromEntries(Object.values(getEspionageTargets(testFixture.espionage)).map(source => [source.id, {
-    ...source, ownerId, ownerName: 'Existing NPC fixture', ownerProfile: testFixture.espionage?.bot01Profile,
-  }]));
-  return {
-    ...production,
-    espionage: { ...production.espionage!, targets },
-    exploration: {
-      ...production.exploration!,
-      highestScoresByOwner: { [production.profile.playerId]: 100_000, [ownerId]: 100_000 },
-    },
+  return Object.values(getEspionageTargets(testFixture.espionage)).map(source => ({
+    ownerId: 'test-only-catchup-source', coordinate: source.coordinate,
+  }));
+};
+
+function withPendingPlayerFlights(state: SaveState, after: number, until: number): SaveState {
+  const fixture = prepare();
+  const command = {
+    missionId: 'expedition' as const,
+    contactCycleKey: fixture.target.id,
+    originPlanetId: 'helion-01',
+    destination: { kind: 'coordinate' as const, coordinate: fixture.target.coordinate },
+    targetKind: fixture.target.kind,
+    selectedShips: { transporter: 1 },
+    departedAt: fixture.now,
   };
+  const outbound = dispatchFlight(fixture.state, { ...command, requestId: 'pr92-offline-outbound' },
+    { now: fixture.now, mode: 'test', testTimeScale: 15 });
+  const returning = dispatchFlight(fixture.state, { ...command, requestId: 'pr92-offline-returning' },
+    { now: fixture.now, mode: 'test', testTimeScale: 15 });
+  if (!outbound.ok || !returning.ok) throw new Error('Could not construct active flight fixtures');
+  const outboundRecord: FlightRecord = {
+    ...outbound.flight,
+    departedAt: after + 1_000,
+    oneWayDurationMs: until - after + 10 * MINUTE,
+    arrivalAt: until + 10 * MINUTE,
+    phase: 'outbound',
+  };
+  const returningRecord: FlightRecord = {
+    ...returning.flight,
+    departedAt: after + 2_000,
+    oneWayDurationMs: 5 * MINUTE,
+    arrivalAt: after + 7 * MINUTE,
+    arrivedAt: after + 7 * MINUTE,
+    returnAt: until + 20 * MINUTE,
+    phase: 'returning',
+  };
+  return { ...state, flights: { ...state.flights, records: [outboundRecord, returningRecord] } };
 }
 
 test('expedition selector is canonically visible, bounded and does not invent occupied targets', () => {
@@ -69,14 +93,14 @@ test('expedition selector is canonically visible, bounded and does not invent oc
 });
 
 test('production NPC catch-up matches stepped ticks and includes a contact cycle that ended before login', () => {
-  const state = productionWithRealNpcFixtures();
+  const state = createInitialSaveState('production', baseTime);
   const after = baseTime + 5 * 60 * MINUTE;
   const until = after + 6 * 60 * MINUTE;
-  const caughtUp = selectDueExplorationNpcRolls(state, after, until, 'production');
+  const caughtUp = selectDueExplorationNpcRolls(state, after, until, 'production', testOnlyNpcSourceProvider);
   const stepped: ReturnType<typeof selectDueExplorationNpcRolls> = [];
   const step = 5 * MINUTE;
   for (let cursor = after; cursor < until; cursor += step) {
-    stepped.push(...selectDueExplorationNpcRolls(state, cursor, Math.min(until, cursor + step), 'production'));
+    stepped.push(...selectDueExplorationNpcRolls(state, cursor, Math.min(until, cursor + step), 'production', testOnlyNpcSourceProvider));
   }
   stepped.sort((left, right) => left.at - right.at || left.contactId.localeCompare(right.contactId) || left.slot - right.slot);
   assert.deepEqual(caughtUp, stepped, 'catch-up must replay exactly the opportunities produced by stepped reconciliation');
@@ -89,132 +113,90 @@ test('production NPC catch-up matches stepped ticks and includes a contact cycle
   assert.equal(getExplorationTarget(state, disappeared!.contactId, until, 'production'), undefined);
 });
 
-test('NPC catch-up replays only the latest 24 hours and persists the skipped interval', () => {
+test('NPC replay window is stable and capped at 24 hours for 1h, 24h, 7d and 30d gaps', () => {
   const state = createInitialSaveState('production', baseTime);
-  const after = baseTime;
-  const now = baseTime + 48 * 60 * MINUTE;
-  const window = getExplorationNpcCatchupWindow(after, now);
-  assert.equal(window.replayAfter, now - 24 * 60 * MINUTE);
-  assert.deepEqual(window.skippedInterval, { afterExclusive: after, throughInclusive: now - 24 * 60 * MINUTE });
-  const queued = {
-    ...state,
-    exploration: { ...state.exploration!, npcProcessedAt: after },
-    pirate: { ...state.pirate!, raidProcessedAt: now },
-  };
-  const context = { planetId: 'helion-01', now, mode: 'production' as const, testTimeScale: 15 as const };
-  const first = reconcileRuntime(queued, context);
-  assert.equal(first.state.exploration?.npcProcessedAt, now);
-  assert.deepEqual(first.state.exploration?.npcLastSkippedInterval, window.skippedInterval);
-  const second = reconcileRuntime(first.state, context);
-  assert.deepEqual(second.state.flights.records, first.state.flights.records);
-  assert.deepEqual(second.state.exploration, first.state.exploration);
+  const now = baseTime + 40 * 24 * 60 * MINUTE;
+  const day = 24 * 60 * MINUTE;
+  const intervals = [
+    { name: '1h', gap: 60 * MINUTE },
+    { name: '24h', gap: day },
+    { name: '7d', gap: 7 * day },
+    { name: '30d', gap: 30 * day },
+  ];
+  let hourRolls: ReturnType<typeof selectDueExplorationNpcRolls> = [];
+  let dayRolls: ReturnType<typeof selectDueExplorationNpcRolls> = [];
+  let weekRolls: ReturnType<typeof selectDueExplorationNpcRolls> = [];
+  let monthRolls: ReturnType<typeof selectDueExplorationNpcRolls> = [];
+  for (const interval of intervals) {
+    const after = now - interval.gap;
+    const window = getExplorationNpcCatchupWindow(after, now);
+    const expectedReplayAfter = Math.max(after, now - day);
+    assert.equal(window.replayAfter, expectedReplayAfter, `${interval.name} replay lower bound`);
+    if (interval.gap <= day) assert.equal(window.skippedInterval, undefined, `${interval.name} has no skipped time`);
+    else assert.deepEqual(window.skippedInterval, { afterExclusive: after, throughInclusive: expectedReplayAfter });
+
+    const rolls = selectDueExplorationNpcRolls(state, after, now, 'production', testOnlyNpcSourceProvider);
+    if (interval.gap >= day) assert.ok(rolls.length > 0, `${interval.name} has deterministic scheduled opportunities in the test-only source fixture`);
+    assert.ok(rolls.every(roll => roll.at > expectedReplayAfter && roll.at <= now), `${interval.name} contains only bounded historical rolls`);
+    assert.deepEqual(rolls, [...rolls].sort((left, right) => left.at - right.at
+      || left.contactId.localeCompare(right.contactId) || left.slot - right.slot), `${interval.name} cursor order is stable`);
+    if (interval.name === '1h') hourRolls = rolls;
+    if (interval.name === '24h') dayRolls = rolls;
+    if (interval.name === '7d') weekRolls = rolls;
+    if (interval.name === '30d') monthRolls = rolls;
+  }
+  assert.ok(hourRolls.every(roll => dayRolls.some(dayRoll => dayRoll.at === roll.at
+    && dayRoll.contactId === roll.contactId && dayRoll.slot === roll.slot)), '1h rolls are a subset of the full day');
+  assert.deepEqual(weekRolls, dayRolls, '7d replay performs exactly the same bounded work as 24h');
+  assert.deepEqual(monthRolls, dayRolls, '30d replay performs exactly the same bounded work as 24h');
+  assert.deepEqual(selectDueExplorationNpcRolls(state, now - day, now, 'production'), [],
+    'production currently has no automatic NPC source provider');
 });
 
-test('production NPC scheduler sends an existing settlement through real combat and return after save reload', () => {
-  let base = productionWithRealNpcFixtures();
-  const originalHome = base.planets['helion-01'];
-  base = replacePlanetState(base, 'helion-01', {
-    ...originalHome,
-    fleet: { ...originalHome.fleet, ships: { ...originalHome.fleet.ships, transporter: 10, recycler: 10 } },
-  });
-  base = replacePlanetResources(base, 'helion-01', { ...getPlanetResources(base, 'helion-01'), gas: 10_000_000 });
-  const rolls = selectDueExplorationNpcRolls(base, baseTime, baseTime + 24 * 60 * MINUTE, 'production');
-  let completedScenario: {
-    target: NonNullable<ReturnType<typeof getExplorationTarget>>;
-    playerFlight: FlightRecord;
-    npcFlight: FlightRecord;
-    battleState: typeof base;
-    report: typeof base.combat.reports[number];
-    rollAt: number;
-  } | undefined;
-  for (const roll of rolls) {
-    const node = getExplorationTarget(base, roll.contactId, roll.at, 'production');
-    if (!node?.special || roll.slot < 2) continue;
-    const risk = explorationProfile(node.kind as 'unique' | 'anomaly', node.special.profileVariant ?? 1).risk;
-    if (!explorationNpcAttempt(risk, node.id, roll.slot)) continue;
-    const sent = dispatchFlight(base, {
-      requestId: `pr92-production-player-${node.id}-${roll.slot}`,
-      missionId: 'expedition', contactCycleKey: node.id,
-      originPlanetId: 'helion-01', destination: { kind: 'coordinate', coordinate: node.coordinate },
-      targetKind: node.kind, selectedShips: { transporter: 1 }, departedAt: node.special.startAt,
-    }, { now: node.special.startAt, mode: 'production' });
-    if (!sent.ok || sent.flight.arrivalAt > roll.at) continue;
-    const reached = reconcileFlights(sent.state, sent.flight.arrivalAt, undefined, { mode: 'production' });
-    const cursorState = { ...reached.state, exploration: {
-      ...reached.state.exploration!, npcProcessedAt: roll.at - 1,
-    } };
-    const tick = reconcileRuntime(cursorState, {
-      planetId: 'helion-01', now: roll.at, mode: 'production', testTimeScale: 15,
-    });
-    const npcFlight = tick.state.flights.records.find(flight => flight.ownerSide === 'npc'
-      && flight.operationId === node.id && flight.departedAt === roll.at);
-    if (!npcFlight) continue;
-    const battle = reconcileFlights(tick.state, npcFlight.arrivalAt, undefined, { mode: 'production' });
-    const report = battle.state.combat.reports.find(item => item.id === 'battle-exploration-' + npcFlight.id);
-    if (!report) continue;
-    completedScenario = {
-      target: node,
-      playerFlight: sent.flight,
-      npcFlight,
-      battleState: battle.state,
-      report,
-      rollAt: roll.at,
-    };
-    break;
+test('production offline reconciliation stays NPC-free, records skipped time once and preserves active flights', () => {
+  const day = 24 * 60 * MINUTE;
+  const now = baseTime + 40 * day;
+  for (const gap of [60 * MINUTE, day, 7 * day, 30 * day]) {
+    const after = now - gap;
+    const initial = createInitialSaveState('production', after);
+    const exploration = { ...createExplorationState(), npcProcessedAt: after };
+    const queued: SaveState = withPendingPlayerFlights({
+      ...initial,
+      exploration,
+      pirate: { ...initial.pirate!, raidProcessedAt: now },
+    }, after, now);
+    const store = new Map<string, string>();
+    const persistence = createPersistenceFacade({ mode: 'production', now: () => now, storage: {
+      getItem: key => store.get(key) ?? null,
+      setItem: (key, value) => { store.set(key, value); },
+      removeItem: key => { store.delete(key); },
+    } });
+    assert.equal(persistence.write(queued).ok, true, 'save accepts existing in-flight records across the offline window');
+    const reloaded = persistence.read();
+    const originalFlightRecords = reloaded.flights.records;
+    const originalPlanets = reloaded.planets;
+    assert.deepEqual(selectDueExplorationNpcRolls(reloaded, after, now, 'production'), [],
+      `${gap / MINUTE} minute gap has no automatic production NPC sources`);
+    const firstExploration = advanceExplorationNpcProgress(reloaded.exploration!, after, now);
+    const first: SaveState = { ...reloaded, exploration: firstExploration };
+    assert.equal(first.exploration?.npcProcessedAt, now);
+    const expectedSkipped = gap > day
+      ? { afterExclusive: after, throughInclusive: now - day }
+      : undefined;
+    assert.deepEqual(first.exploration?.npcLastSkippedInterval, expectedSkipped);
+    assert.equal(first.flights.records.some(flight => flight.ownerSide === 'npc'), false,
+      'production must not create automatic NPC fleets before a real source is connected');
+    assert.deepEqual(first.flights.records, originalFlightRecords,
+      'catch-up progress preserves pre-existing outbound and returning player flights');
+    assert.deepEqual(first.planets, originalPlanets, 'NPC catch-up progress does not award resources');
+    assert.equal(persistence.write(first).ok, true, 'processed cursor survives persistence');
+    const reloadedProgress = persistence.read();
+    const secondExploration = advanceExplorationNpcProgress(reloadedProgress.exploration!, after, now);
+    assert.strictEqual(secondExploration, reloadedProgress.exploration,
+      'replaying the same wall clock records no duplicate progress or awards');
+    assert.deepEqual(reloadedProgress.flights.records, originalFlightRecords);
+    assert.deepEqual(reloadedProgress.planets, originalPlanets);
   }
-  assert.ok(completedScenario, 'an existing NPC fixture must produce a scheduled production battle in the deterministic window');
-  if (!completedScenario) return;
-  const { target, playerFlight, npcFlight, battleState, report } = completedScenario;
-  assert.ok(['attacker', 'defender', 'draw'].includes(report.winner));
-  assert.equal(npcFlight.ownerSide, 'npc');
-  assert.ok(npcFlight.attackSnapshot, 'production NPC combat must use the existing source owner snapshot');
-  assert.ok(battleState.exploration?.contacts[target.id]?.claim);
-  assert.ok(battleState.flights.records.some(flight => flight.id === playerFlight.id), JSON.stringify({
-    expected: playerFlight.id, records: battleState.flights.records.map(flight => ({
-      id: flight.id, missionId: flight.missionId, phase: flight.phase, selectedShips: flight.selectedShips,
-    })),
-  }));
-
-  const store = new Map<string, string>();
-  const persistence = createPersistenceFacade({ mode: 'production', now: () => completedScenario!.rollAt, storage: {
-    getItem: (key: string) => store.get(key) ?? null,
-    setItem: (key: string, value: string) => { store.set(key, value); },
-    removeItem: (key: string) => { store.delete(key); },
-  } });
-  assert.equal(persistence.write(battleState).ok, true);
-  const reloaded = persistence.read();
-  assert.ok(reloaded.flights.records.some(flight => flight.id === playerFlight.id), 'save reload preserves the player defender record even when combat destroyed its entire fleet');
-  assert.ok(reloaded.flights.records.some(flight => flight.id === npcFlight.id && flight.ownerSide === 'npc'));
-  const debrisAfterBattle = getOrbitalDebrisAtCoordinate(reloaded.espionage!, target.coordinate);
-  const replay = reconcileFlights(reloaded, npcFlight.arrivalAt, undefined, { mode: 'production' });
-  assert.equal(replay.state.combat.reports.filter(item => item.id === report.id).length, 1);
-  assert.deepEqual(getOrbitalDebrisAtCoordinate(replay.state.espionage!, target.coordinate), debrisAfterBattle);
-
-  const finalAt = target.special!.expiresAt + Math.max(npcFlight.oneWayDurationMs, playerFlight.oneWayDurationMs) + MINUTE;
-  const returned = reconcileFlights(replay.state, finalAt, undefined, { mode: 'production' });
-  for (const flightId of [npcFlight.id, playerFlight.id]) {
-    assert.equal(returned.state.flights.records.find(flight => flight.id === flightId)?.phase, 'completed',
-      JSON.stringify(returned.state.flights.records.filter(flight => flight.operationId === target.id).map(flight => ({ id: flight.id, side: flight.ownerSide, phase: flight.phase, arrivalAt: flight.arrivalAt, returnAt: flight.returnAt, completedAt: flight.completedAt, completionReason: flight.completionReason }))));
-  }
-  const savedNpcSource = getEspionageTargets(base.espionage)[npcFlight.originPlanetId]!;
-  const returnedNpcSource = getEspionageTargets(returned.state.espionage)[npcFlight.originPlanetId]!;
-  const battleLosses = new Map<string, number>(report.attackerForce.stacks.map(stack => [stack.entityId, stack.destroyed]));
-  for (const [shipId, count] of Object.entries(npcFlight.selectedShips)) {
-    assert.equal(returnedNpcSource.fleet.ships[shipId as keyof typeof returnedNpcSource.fleet.ships],
-      Math.max(0, (savedNpcSource.fleet.ships[shipId as keyof typeof savedNpcSource.fleet.ships] ?? 0)
-        - (battleLosses.get(shipId) ?? 0)), 'NPC hangar returns surviving ships exactly once');
-  }
-  const npcReceipt = returned.state.exploration?.contacts[target.id]?.events.find(event => event.id === npcFlight.id + ':completed');
-  if (npcReceipt) {
-    for (const key of ['metal', 'minerals', 'gas'] as const) {
-      assert.equal((npcReceipt.creditedCargo?.[key] ?? 0) + (npcReceipt.burnedCargo?.[key] ?? 0),
-        npcReceipt.cargo?.[key] ?? 0, 'NPC storage records accepted and overflowed material');
-    }
-  }
-  const replayReturn = reconcileFlights(returned.state, finalAt, undefined, { mode: 'production' });
-  assert.deepEqual(getEspionageTargets(replayReturn.state.espionage)[npcFlight.originPlanetId]!.fleet.ships,
-    returnedNpcSource.fleet.ships);
-  assert.equal(replayReturn.state.combat.reports.filter(item => item.id === report.id).length, 1);
 });
 
 test('one real flight arrives, reserves the contact, recalls from orbit and credits cargo only once', () => {
@@ -775,6 +757,184 @@ test('Test Mode Bot 01 occupies through a real finite flight and player Attack w
         getOrbitalDebrisAtCoordinate(atTarget.state.espionage!,fixture.target.coordinate));
     }
   }
+});
+
+test('surviving commander keeps a contested object through save reload and battle replay', () => {
+  const fixture = prepare(12 * MINUTE);
+  const npc = dispatchBot01Exploration(fixture.state, fixture.target, fixture.now, 15);
+  assert.equal(npc.ok, true, npc.notice);
+  if (!npc.ok) return;
+  const occupied = reconcileFlights(npc.state, npc.flight.arrivalAt, undefined,
+    { mode: 'test', testTimeScale: 15 });
+  const defender = occupied.state.flights.records.find(flight => flight.id === npc.flight.id)!;
+  const home = occupied.state.planets['helion-01']!;
+  const armed = replacePlanetState(occupied.state, 'helion-01', {
+    ...home,
+    fleet: { ...home.fleet, commanders: { ...home.fleet.commanders, corsair: 1 } },
+  });
+  const attackAt = npc.flight.arrivalAt + 1_000;
+  const attack = dispatchFlight(armed, {
+    requestId: 'pr92-commander-only-draw', missionId: 'attack',
+    contactCycleKey: fixture.target.id, operationId: fixture.target.id,
+    originPlanetId: 'helion-01', destination: { kind: 'coordinate', coordinate: fixture.target.coordinate },
+    targetKind: fixture.target.kind, targetRelation: 'neutral', selectedShips: { transporter: 1 },
+    selectedCommanders: { corsair: 1 }, maxRounds: 5, departedAt: attackAt,
+  }, { now: attackAt, mode: 'test', testTimeScale: 15 });
+  assert.equal(attack.ok, true, attack.ok ? '' : attack.error.message);
+  if (!attack.ok) return;
+  const commanderOnlyAttack: FlightRecord = {
+    ...attack.flight, selectedShips: {}, selectedCommanders: { corsair: 1 },
+  };
+  assert.deepEqual(commanderOnlyAttack.selectedShips, {}, 'the surviving attack force contains only its commander');
+
+  // Use the attacker's launch-time combat profile for both identical Corsairs;
+  // the five-round golden vector is a deterministic draw with both commanders alive.
+  const defenderWithCommander: FlightRecord = {
+    ...defender,
+    selectedShips: {},
+    selectedCommanders: { corsair: 1 },
+    attackSnapshot: attack.flight.attackSnapshot,
+  };
+  const battleState: SaveState = {
+    ...attack.state,
+    flights: {
+      ...attack.state.flights,
+      records: attack.state.flights.records.map(flight => flight.id === defender.id
+        ? defenderWithCommander : flight.id === attack.flight.id ? commanderOnlyAttack : flight),
+    },
+  };
+  const once = reconcileFlights(battleState, attack.flight.arrivalAt, undefined,
+    { mode: 'test', testTimeScale: 15 });
+  const report = once.state.combat.reports.find(item => item.id === 'battle-exploration-' + attack.flight.id);
+  assert.ok(report, 'commander-only attack resolves through the real combat resolver');
+  assert.equal(report!.winner, 'draw');
+  assert.ok(report!.attackerForce.stacks.some(stack => stack.entityId === 'corsair' && stack.countAfter > 0));
+  assert.ok(report!.defenderForce.stacks.some(stack => stack.entityId === 'corsair' && stack.countAfter > 0));
+  const contact = once.state.exploration!.contacts[fixture.target.id]!;
+  assert.equal(contact.claim?.flightId, defender.id, 'a living defending commander keeps the contact');
+  assert.deepEqual(contact.claim?.capacity, { all: 0, transporters: 0, recyclers: 0 });
+  assert.deepEqual(contact.claim?.cargo, { metal: 0, minerals: 0, gas: 0, debris: 0 });
+
+  const store = new Map<string, string>();
+  const persistence = createPersistenceFacade({ mode: 'test', now: () => attack.flight.arrivalAt, storage: {
+    getItem: key => store.get(key) ?? null,
+    setItem: (key, value) => { store.set(key, value); },
+    removeItem: key => { store.delete(key); },
+  } });
+  assert.equal(persistence.write(once.state).ok, true, 'commander-only arrived and returning flights remain save-compatible');
+  const reloaded = persistence.read();
+  assert.deepEqual(reloaded.exploration!.contacts[fixture.target.id]!.claim, contact.claim);
+  assert.ok(reloaded.flights.records.some(flight => flight.id === defender.id
+    && Object.keys(flight.selectedShips).length === 0 && flight.selectedCommanders?.corsair === 1));
+  const replay = reconcileFlights(reloaded, attack.flight.arrivalAt, undefined,
+    { mode: 'test', testTimeScale: 15 });
+  assert.equal(replay.state.combat.reports.filter(item => item.id === report!.id).length, 1);
+  assert.deepEqual(replay.state.exploration!.contacts[fixture.target.id]!.claim, contact.claim);
+  assert.deepEqual(replay.state.rating, once.state.rating, 'replaying the saved report cannot award battle score twice');
+});
+
+test('mutual destruction frees the contact and a later real flight can occupy it after save reload', () => {
+  const fixture = prepare(12 * MINUTE);
+  const npc = dispatchBot01Exploration(fixture.state, fixture.target, fixture.now, 15);
+  assert.equal(npc.ok, true, npc.notice);
+  if (!npc.ok) return;
+  const occupied = reconcileFlights(npc.state, npc.flight.arrivalAt, undefined,
+    { mode: 'test', testTimeScale: 15 });
+  const defender = occupied.state.flights.records.find(flight => flight.id === npc.flight.id)!;
+  const home = occupied.state.planets['helion-01']!;
+  const armed = replacePlanetState(occupied.state, 'helion-01', {
+    ...home,
+    fleet: { ...home.fleet, ships: { ...home.fleet.ships, scout: 1 } },
+  });
+  const attackAt = npc.flight.arrivalAt + 1_000;
+  let chosen: { state: SaveState; flight: FlightRecord; report: NonNullable<ReturnType<typeof resolveExplorationAttackAtTarget>>['report'] } | undefined;
+  for (let seed = 0; seed < 64 && !chosen; seed += 1) {
+    const attack = dispatchFlight(armed, {
+      requestId: `pr92-mutual-destruction-${seed}`, missionId: 'attack',
+      contactCycleKey: fixture.target.id, operationId: fixture.target.id,
+      originPlanetId: 'helion-01', destination: { kind: 'coordinate', coordinate: fixture.target.coordinate },
+      targetKind: fixture.target.kind, targetRelation: 'neutral', selectedShips: { scout: 1 },
+      selectedCommanders: {}, maxRounds: 5, departedAt: attackAt,
+    }, { now: attackAt, mode: 'test', testTimeScale: 15 });
+    if (!attack.ok) continue;
+    const defenderForTrial: FlightRecord = {
+      ...defender,
+      selectedShips: { scout: 1 },
+      selectedCommanders: {},
+      attackSnapshot: attack.flight.attackSnapshot,
+    };
+    const battleState: SaveState = {
+      ...attack.state,
+      flights: {
+        ...attack.state.flights,
+        records: attack.state.flights.records.map(flight => flight.id === defender.id
+          ? defenderForTrial : flight),
+      },
+    };
+    const resolved = resolveExplorationAttackAtTarget(battleState, attack.flight, attack.flight.arrivalAt);
+    const forcesDestroyed = (force: NonNullable<typeof resolved>['report']['attackerForce']) =>
+      force.stacks.every(stack => stack.countAfter === 0);
+    if (resolved?.report.winner === 'draw'
+      && forcesDestroyed(resolved.report.attackerForce)
+      && forcesDestroyed(resolved.report.defenderForce)) {
+      chosen = { state: battleState, flight: attack.flight, report: resolved.report };
+    }
+  }
+  assert.ok(chosen, 'a seeded equal-scout field battle must reach mutual annihilation');
+  if (!chosen) return;
+
+  const once = reconcileFlights(chosen.state, chosen.flight.arrivalAt, undefined,
+    { mode: 'test', testTimeScale: 15 });
+  const report = once.state.combat.reports.find(item => item.id === chosen!.report.id);
+  assert.ok(report);
+  assert.equal(report!.winner, 'draw');
+  assert.ok(report!.attackerForce.stacks.every(stack => stack.countAfter === 0));
+  assert.ok(report!.defenderForce.stacks.every(stack => stack.countAfter === 0));
+  const contact = once.state.exploration!.contacts[fixture.target.id]!;
+  assert.equal(contact.claim, undefined, 'no surviving ship or commander can retain physical occupancy');
+  assert.equal(contact.events.some(event => event.id === chosen!.flight.id + ':capture'), false,
+    'a draw never awards capture cargo');
+  assert.ok(contact.events.some(event => event.id === chosen!.flight.id + ':contest'
+    && event.kind === 'draw' && event.lostCargo), 'undelivered defender cargo is recorded as destroyed');
+  for (const id of [chosen.flight.id, npc.flight.id]) {
+    const destroyed = once.state.flights.records.find(flight => flight.id === id)!;
+    assert.equal(destroyed.phase, 'completed');
+    assert.equal(destroyed.completionReason, 'mission-failed');
+    assert.equal(Object.values(destroyed.selectedShips).some(count => count > 0), false);
+  }
+  const debris = getOrbitalDebrisAtCoordinate(once.state.espionage!, fixture.target.coordinate);
+  const scoutCount = once.state.planets['helion-01']!.fleet.ships.scout;
+
+  const store = new Map<string, string>();
+  const persistence = createPersistenceFacade({ mode: 'test', now: () => chosen!.flight.arrivalAt, storage: {
+    getItem: key => store.get(key) ?? null,
+    setItem: (key, value) => { store.set(key, value); },
+    removeItem: key => { store.delete(key); },
+  } });
+  assert.equal(persistence.write(once.state).ok, true, 'terminal wreck records remain compatible with existing saves');
+  const reloaded = persistence.read();
+  const replay = reconcileFlights(reloaded, chosen.flight.arrivalAt, undefined,
+    { mode: 'test', testTimeScale: 15 });
+  assert.equal(replay.state.combat.reports.filter(item => item.id === report!.id).length, 1);
+  assert.equal(getOrbitalDebrisAtCoordinate(replay.state.espionage!, fixture.target.coordinate), debris,
+    'battle replay after reload does not duplicate wreckage');
+  assert.equal(replay.state.planets['helion-01']!.fleet.ships.scout, scoutCount,
+    'destroyed attacker hulls are not restored on replay');
+  assert.deepEqual(replay.state.rating, once.state.rating, 'battle score is credited exactly once');
+
+  const contenderAt = chosen.flight.arrivalAt + 1;
+  const contender = dispatchFlight(reloaded, {
+    requestId: 'pr92-next-contender-after-mutual-destruction', missionId: 'expedition',
+    contactCycleKey: fixture.target.id, operationId: fixture.target.id,
+    originPlanetId: 'helion-01', destination: { kind: 'coordinate', coordinate: fixture.target.coordinate },
+    targetKind: fixture.target.kind, selectedShips: { transporter: 1 }, departedAt: contenderAt,
+  }, { now: contenderAt, mode: 'test', testTimeScale: 15 });
+  assert.equal(contender.ok, true, contender.ok ? '' : contender.error.message);
+  if (!contender.ok) return;
+  const thirdArrival = reconcileFlights(contender.state, contender.flight.arrivalAt, undefined,
+    { mode: 'test', testTimeScale: 15 });
+  assert.equal(thirdArrival.state.exploration!.contacts[fixture.target.id]!.claim?.flightId,
+    contender.flight.id, 'the next real fleet can occupy the newly freed contact before expiry');
 });
 
 test('Bot 01 ships and finite mined material return to existing source exactly once', () => {

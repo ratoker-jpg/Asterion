@@ -2,8 +2,8 @@ import type { RuntimeMode, TestTimeScale } from '../domain/runtime/mode.ts';
 import { EXPLORATION_RULES, explorationNpcAttempt, explorationProfile } from '../domain/exploration/model.ts';
 import { getUniverseTimedObjectCyclesBetween, SYSTEM_COUNT, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import type { UniverseCoordinate } from '../domain/universe/types.ts';
-import { getEspionageTargets } from '../domain/espionage/runtime.ts';
 import type { SaveState } from './contracts.ts';
+import type { ExplorationState } from '../domain/exploration/ledger.ts';
 import { selectExplorationTargetsInSystems, getExplorationTarget } from './exploration.ts';
 import { dispatchBot01Exploration } from './exploration-bot01.ts';
 
@@ -20,6 +20,16 @@ export type ExplorationNpcCatchupWindow = Readonly<{
 }>;
 
 export type ExplorationNpcRoll = Readonly<{at:number;contactId:string;slot:number}>;
+export type ExplorationNpcSource = Readonly<{ownerId:string;coordinate:UniverseCoordinate}>;
+export type ExplorationNpcSourceProvider = (state:SaveState)=>readonly ExplorationNpcSource[];
+
+/**
+ * Production competition is paused until persisted NPC settlements and fleets
+ * exist. Test Mode Bot 01 continues to use its explicit fixture and manual
+ * dispatch path. A future owner-backed source can be connected here without
+ * changing the calendar, combat resolver, or return settlement.
+ */
+export const noProductionExplorationNpcSources: ExplorationNpcSourceProvider = () => [];
 
 /** Replay at most the latest day. The omitted interval is persisted by the
  * reconcile layer so long offline gaps are an explicit, reviewable policy. */
@@ -29,6 +39,23 @@ export function getExplorationNpcCatchupWindow(after: number, until: number): Ex
   return replayAfter > after
     ? { replayAfter, skippedInterval: { afterExclusive: after, throughInclusive: replayAfter } }
     : { replayAfter };
+}
+
+/** Persist the production cursor and latest skipped interval exactly once. */
+export function advanceExplorationNpcProgress(
+  state: ExplorationState, after: number, until: number,
+): ExplorationState {
+  const skippedInterval = getExplorationNpcCatchupWindow(after, until).skippedInterval;
+  const processedAt = Math.max(state.npcProcessedAt ?? 0, until);
+  const changedSkippedInterval = skippedInterval !== undefined
+    && (state.npcLastSkippedInterval?.afterExclusive !== skippedInterval.afterExclusive
+      || state.npcLastSkippedInterval.throughInclusive !== skippedInterval.throughInclusive);
+  if (state.npcProcessedAt === processedAt && !changedSkippedInterval) return state;
+  return {
+    ...state,
+    npcProcessedAt: processedAt,
+    ...(skippedInterval ? { npcLastSkippedInterval: skippedInterval } : {}),
+  };
 }
 
 type ScheduledNpcCandidate = Readonly<{
@@ -45,9 +72,10 @@ type ScheduledNpcCandidate = Readonly<{
  * player's hidden ship count to set raid force or decide whether to attack. */
 export function selectDueExplorationNpcRolls(
   state:SaveState,after:number,until:number,mode:RuntimeMode,
+  sourceProvider:ExplorationNpcSourceProvider=noProductionExplorationNpcSources,
 ):ExplorationNpcRoll[]{
   if(mode!=='production'||until<=after)return [];
-  const sources=Object.values(getEspionageTargets(state.espionage))
+  const sources=sourceProvider(state)
     .filter(target=>target.ownerId!==state.profile.playerId&&target.ownerId!==UNIVERSE_NPC_OWNER_ID);
   if(!sources.length)return [];
 

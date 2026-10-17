@@ -128,7 +128,7 @@ test('one shared finite reserve survives ownership change and no later reissue o
   const attacker = { ...arrival(start + 5 * minute, 'enemy-flight'), ownerId: 'enemy' };
   const { contact: captured, captured: loot, destroyed } = settleExplorationContest(
     occupied, start + 5 * minute, 'attacker', attacker, 1200,
-    { all: 0, transporters: 0, recyclers: 0 }, false);
+    { all: 0, transporters: 0, recyclers: 0 }, false, { attacker: true, defender: true });
   assert.equal(captured.claim!.ownerId, 'enemy');
   assert.equal(captured.claim!.cargo.metal, loot.metal);
   assert.ok(loot.metal <= 1200);
@@ -163,14 +163,15 @@ test('defense boost only once; draws do not award a bonus', () => {
     createExplorationState(), makeNode('unique'), 100_000).contact, arrival());
   const attack = { ...arrival(start + 2 * minute, 'attacker-1'), ownerId: 'enemy' };
   const first = settleExplorationContest(contact, attack.arrivedAt, 'defender', attack, 0,
-    { all: 5000, transporters: 5000, recyclers: 0 }, true).contact;
+    { all: 5000, transporters: 5000, recyclers: 0 }, true, { attacker: true, defender: true }).contact;
   assert.equal(first.claim!.boostedUntilAt, start + 4 * minute);
   const second = settleExplorationContest(first, start + 3 * minute, 'defender',
-    { ...attack, flightId: 'attacker-2' }, 0, { all: 5000, transporters: 5000, recyclers: 0 }, true).contact;
+    { ...attack, flightId: 'attacker-2' }, 0, { all: 5000, transporters: 5000, recyclers: 0 }, true,
+    { attacker: true, defender: true }).contact;
   assert.equal(second.claim!.boostedUntilAt, first.claim!.boostedUntilAt);
   assert.equal(explorationDefenderBonusEligible(1, 9999, 300, 200), false);
   const draw = settleExplorationContest(contact, start + 2 * minute, 'draw', attack, 0,
-    { all: 5000, transporters: 5000, recyclers: 0 }, true).contact;
+    { all: 5000, transporters: 5000, recyclers: 0 }, true, { attacker: true, defender: true }).contact;
   assert.equal(draw.claim!.boostedUntilAt, undefined);
 });
 
@@ -289,10 +290,11 @@ test('arrival after object expiry cannot occupy and contest closes exactly after
   active = prepareExplorationRecall(active, 'player', start + 3 * minute);
   const attacker = { ...arrival(start + 3 * minute + 29_000, 'attack-29'), ownerId: 'enemy' };
   assert.doesNotThrow(() => settleExplorationContest(active, start + 3 * minute + 29_000,
-    'defender', attacker, 0, { all: 5000, transporters: 5000, recyclers: 0 }, false));
+    'defender', attacker, 0, { all: 5000, transporters: 5000, recyclers: 0 }, false,
+    { attacker: true, defender: true }));
   assert.throws(() => settleExplorationContest(active, start + 3 * minute + 30_000,
     'defender', { ...attacker, flightId: 'attack-30' }, 0,
-    { all: 5000, transporters: 5000, recyclers: 0 }, false));
+    { all: 5000, transporters: 5000, recyclers: 0 }, false, { attacker: true, defender: true }));
 });
 
 
@@ -325,7 +327,7 @@ test('finite shared world stock is identical for rich and poor first visitors an
   const occupied=occupyExplorationContact(poor,arrival());
   const taken=settleExplorationContest(occupied,start+2*minute,'attacker',
     {...arrival(start+2*minute,'other-flight'),ownerId:'other'},5000,
-    {all:5000,transporters:5000,recyclers:0},true).contact;
+    {all:5000,transporters:5000,recyclers:0},true,{attacker:true,defender:true}).contact;
   assert.deepEqual(taken.initialReserve,poor.initialReserve);
   assert.equal(taken.resourceReserve.metal+taken.extractedByType.metal,poor.initialReserve.metal);
 });
@@ -336,9 +338,9 @@ test('three deterministic territory outcomes: attacker capture, defender holds a
     getOrMaterializeExplorationContact(createExplorationState(),node,100_000).contact,arrival());
   const attack={...arrival(start+2*minute,'foreign-attack'),ownerId:'foreign'};
   const capacity={all:5000,transporters:5000,recyclers:0};
-  const win=settleExplorationContest(defender,start+2*minute,'attacker',attack,5000,capacity,true);
-  const hold=settleExplorationContest(defender,start+2*minute,'defender',attack,5000,capacity,true);
-  const draw=settleExplorationContest(defender,start+2*minute,'draw',attack,5000,capacity,true);
+  const win=settleExplorationContest(defender,start+2*minute,'attacker',attack,5000,capacity,true,{attacker:true,defender:true});
+  const hold=settleExplorationContest(defender,start+2*minute,'defender',attack,5000,capacity,true,{attacker:true,defender:true});
+  const draw=settleExplorationContest(defender,start+2*minute,'draw',attack,5000,capacity,true,{attacker:true,defender:true});
   assert.equal(win.contact.claim?.ownerId,'foreign');
   assert.equal(hold.contact.claim?.ownerId,'player');
   assert.equal(draw.contact.claim?.ownerId,'player');
@@ -349,4 +351,26 @@ test('three deterministic territory outcomes: attacker capture, defender holds a
   const captured=Object.values(win.captured).reduce((a,b)=>a+b,0);
   const enemy=reconcileExplorationContact(defender,start+2*minute).claim!.cargo;
   assert.equal(captured,Math.min(Math.floor(Object.values(enemy).reduce((a,b)=>a+b,0)*.30),5000));
+});
+
+test('zero surviving combatants release the contact while a surviving commander holds it without mining capacity', () => {
+  const node = makeNode('unique');
+  const occupied = occupyExplorationContact(
+    getOrMaterializeExplorationContact(createExplorationState(), node, 100_000).contact, arrival());
+  const attack = { ...arrival(start + 5 * minute, 'empty-field-attack'), ownerId: 'enemy' };
+  const zeroCapacity = { all: 0, transporters: 0, recyclers: 0 };
+  const accrued = reconcileExplorationContact(occupied, start + 5 * minute).claim!.cargo;
+
+  const cleared = settleExplorationContest(occupied, start + 5 * minute, 'draw', attack, 0,
+    zeroCapacity, false, { attacker: false, defender: false });
+  assert.equal(cleared.contact.claim, undefined, 'a field with no surviving ships or commanders becomes available');
+  assert.deepEqual(cleared.captured, { metal: 0, minerals: 0, gas: 0, debris: 0 });
+  assert.deepEqual(cleared.destroyed, accrued, 'all undelivered defender cargo is destroyed');
+  assert.deepEqual(cleared.contact.events.at(-1)?.lostCargo, accrued);
+
+  const held = settleExplorationContest(occupied, start + 5 * minute, 'draw', attack, 0,
+    zeroCapacity, false, { attacker: false, defender: true });
+  assert.equal(held.contact.claim?.ownerId, 'player', 'a surviving commander retains the claim');
+  assert.deepEqual(held.contact.claim?.capacity, zeroCapacity);
+  assert.deepEqual(held.contact.claim?.cargo, { metal: 0, minerals: 0, gas: 0, debris: 0 });
 });
