@@ -88,6 +88,38 @@ try {
   assert.ok(Array.isArray(assetResults), 'Missing image decode result');
   assert.ok(assetResults.every((item) => item.ok), 'Broken preview image assets: ' + JSON.stringify(assetResults));
   console.log('Public report icons, score medals and universe art load in deployed preview.');
+  // Exercise actual React navigation and all profile image elements, not just URLs.
+  const nav = await send('Runtime.evaluate', {
+    expression: "(() => { const button=document.querySelector('[data-qa-route=reports]'); if(!button)return false; button.click(); return true; })()",
+    returnByValue: true,
+  });
+  assert.equal(nav.result?.value, true, 'Reports navigation button missing');
+  let reportState;
+  const reportProbe = "(() => { const imgs=[...document.querySelectorAll('.reports-v2-art img, .reports-score-glyph')]; return {profile:!!document.querySelector('[data-qa-profile]'),metrics:document.querySelectorAll('[data-qa-profile-metric]').length,imageCount:imgs.length,pending:imgs.filter(i=>!i.complete).length,broken:imgs.filter(i=>i.complete && i.naturalWidth===0).map(i=>i.currentSrc || i.src),testNoteVisible:(()=>{const el=document.querySelector('.reports-fixture-note');return !!el && getComputedStyle(el).display!=='none';})()}; })()";
+  for (let retries = 0; retries < 40; retries += 1) {
+    await wait(350);
+    const r = await send('Runtime.evaluate', { expression: reportProbe, returnByValue: true });
+    reportState = r.result?.value;
+    if (reportState?.profile && reportState.metrics === 4 && reportState.imageCount >= 12 && reportState.pending === 0) break;
+  }
+  assert.ok(reportState?.profile && reportState.metrics === 4, 'Profile did not open: ' + JSON.stringify(reportState));
+  assert.ok(reportState.imageCount >= 12, 'Profile is missing image elements: ' + JSON.stringify(reportState));
+  assert.equal(reportState.pending, 0, 'Profile images still loading: ' + JSON.stringify(reportState));
+  assert.deepEqual(reportState.broken, [], 'Broken visual assets in Reports profile');
+  assert.equal(reportState.testNoteVisible, true, 'Test Mode profile note must be visible');
+  console.log('Reports profile: all channel icons and 4 score medals decoded; Test Mode note visible.');
+  const operations = await send('Runtime.evaluate', {
+    expression: "(() => { const b=document.querySelector('[data-qa-route=operations]'); if(!b)return false; b.click(); return true; })()",
+    returnByValue: true,
+  });
+  assert.equal(operations.result?.value, true, 'Operations navigation button missing');
+  await wait(1000);
+  const operationsReady = await send('Runtime.evaluate', {
+    expression: "!!document.querySelector('.operations-shell-v2--variant-a')",
+    returnByValue: true,
+  });
+  assert.equal(operationsReady.result?.value, true, 'Operations Variant A failed to render');
+  console.log('Operations Variant A opened in the live Test Mode preview.');
   assert.deepEqual(errors, [], 'Browser JavaScript exceptions');
   console.log('Preview multi-resolution browser QA passed.');
 } finally {
