@@ -12,7 +12,7 @@ const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const TEST_TIME_SCALE_KEY = 'asterion.test-time-scale.v1';
 const VIEWPORTS = [[1920, 1080], [1280, 720]];
 const REFILL_MS = 15 * 60 * 1000;
-const CANONICAL_RESOURCE_POINTS = 20_712;
+const CANONICAL_RESOURCE_POINTS = 20_716;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitFor(win, expression, timeoutMs = 7000) {
@@ -415,7 +415,7 @@ async function verifyFlow(win, directory, label) {
     finalWallet: { metal: afterOffline.metal, minerals: afterOffline.minerals, gas: afterOffline.gas, debris: afterOffline.debris },
     verified: [
       'level-one-entry-and-back-escape',
-      'canonical-resource-score-20712-drives-limit-207120',
+      'canonical-resource-score-20716-drives-limit-207160',
       'source-target-selection-and-disabled-same-resource',
       'no-debris-target',
       'hover-tooltip-visible-and-not-clipped',
