@@ -37,7 +37,11 @@ export function dispatchRuntimeReset(
 
 export function resolveRuntimeMode(search?: string): RuntimeMode {
   const source = search ?? (typeof window !== 'undefined' ? window.location.search : '');
-  return source === '?mode=test' ? 'test' : 'production';
+  // Extra preview/cache parameters must not silently switch Test Mode to Production.
+  // Keep test opt-in strict: exactly one explicit, case-sensitive mode=test.
+  if (!source.startsWith('?')) return 'production';
+  const modes = new URLSearchParams(source).getAll('mode');
+  return modes.length === 1 && modes[0] === 'test' ? 'test' : 'production';
 }
 
 export const ACTIVE_RUNTIME_MODE: RuntimeMode = resolveRuntimeMode();
