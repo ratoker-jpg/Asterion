@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { BattleCard, BattleReportModal } from './BattleReportsView';
-import { EmblemGlyph } from './CommandView';
 import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 import type { BattleReport } from './domain/combat/report.ts';
 import { createBattleReportViewModel } from './domain/combat/battle-report-view-model.ts';
+import type { BattleSideViewModel } from './domain/combat/battle-report-view-model.ts';
 import type { CommandState } from './domain/command/types.ts';
 import { selectCurrentAlliance } from './domain/command/selectors.ts';
 import type { OperationsState } from './domain/operations/types.ts';
@@ -154,7 +154,7 @@ function ReportListItem({ item, active, read, saved, selected, onOpen, onSelect 
         <span aria-hidden="true" />
       </label>
       <button type="button" className="reports-list-open" onClick={onOpen} aria-current={active ? 'true' : undefined} aria-label={`Открыть сообщение: ${item.title}`}>
-        <span className={`reports-list-icon reports-list-icon--${item.category} reports-v2-art`}><ReportGlyph kind={item.category} /></span>
+        <span className={`reports-list-icon reports-list-icon--${item.category} reports-v2-art`}>{item.spyReport ? <img src={getFactionCombatEntity(item.spyReport.targetRaceId, 'spy-probe').art} alt="" aria-hidden="true" draggable={false} /> : <ReportGlyph kind={item.category} />}</span>
         <span className="reports-list-copy"><small>{item.typeLabel}</small><strong>{item.title}</strong><em>{item.preview}</em></span>
         <span className="reports-list-meta"><time>{formatTime(item.timestamp)}</time>{saved ? <i className="reports-favorite-dot" aria-label="Бой сохранён" /> : null}{!read ? <b className="reports-unread-dot" aria-label="Непрочитано" /> : null}</span>
       </button>
@@ -290,13 +290,13 @@ function SpyDossier({ item, report, onOpenUniverseTarget }: {
     { kind: 'metal' as const, label: 'Металл', value: report.resources.metal },
     { kind: 'minerals' as const, label: 'Минералы', value: report.resources.minerals },
     { kind: 'gas' as const, label: 'Газ', value: report.resources.gas },
-    { kind: 'debris' as const, label: 'Обломки', value: report.resources.debris },
+    ...(report.resources.debris > 0 ? [{ kind: 'debris' as const, label: 'Обломки', value: report.resources.debris }] : []),
     { kind: 'energy' as const, label: 'Энергия', value: report.resources.developmentEnergy },
   ];
   return (
     <div className={`reports-dossier reports-dossier--spy reports-v2-tone-${item.statusTone}`} data-qa-spy-report={report.id}>
       <div className="reports-dossier-heading">
-        <div className="reports-dossier-heading__icon reports-v2-art"><ReportGlyph kind="system" /></div>
+        <div className="reports-dossier-heading__icon reports-v2-art"><img src={getFactionCombatEntity(report.targetRaceId, 'spy-probe').art} alt="" aria-hidden="true" draggable={false} /></div>
         <div><small>{item.typeLabel}</small><h2>{item.title}</h2><p>{item.preview}</p></div>
         <div className="reports-dossier-heading__status"><StatusBadge item={item} /><time>{formatDate(item.timestamp)}</time></div>
       </div>
@@ -320,10 +320,32 @@ function SpyDossier({ item, report, onOpenUniverseTarget }: {
   );
 }
 
+function BattleSideOverview({ side }: { side: BattleSideViewModel }) {
+  const sideLabel = side.participant.side === 'attacker' ? 'АТАКУЮЩИЙ' : 'ЗАЩИТНИК';
+  const knownLosses = side.ships.filter((ship) => ship.destroyed != null && ship.destroyed > 0);
+  const participantMeta = [side.participant.race, side.participant.coordinates].filter(Boolean).join(' · ');
+  return (
+    <article className={`reports-battle-side reports-battle-side--${side.participant.side}`}>
+      <div className="reports-v2-art reports-battle-general-art"><FactionGeneralPortrait factionId={side.factionId} /></div>
+      <div className="reports-battle-side-copy"><small>{sideLabel}</small><strong>{side.participant.playerName || side.participant.planetName || '—'}</strong><span>{participantMeta || side.participant.planetName || 'Данные участника не зафиксированы'}</span></div>
+      <div className="reports-battle-population"><small>НАСЕЛЕНИЕ</small><span><b>{side.populationBefore == null ? '—' : numberFormat.format(side.populationBefore)}</b><i aria-hidden="true">→</i><b>{side.populationAfter == null ? '—' : numberFormat.format(side.populationAfter)}</b></span></div>
+      <section className="reports-battle-losses" aria-label={`Потери: ${sideLabel.toLowerCase()}`}>
+        <header><strong>ПОТЕРИ КОРАБЛЕЙ</strong>{side.losses.ships != null ? <span>{numberFormat.format(side.losses.ships)}</span> : null}</header>
+        {knownLosses.length ? <div className="reports-battle-loss-grid">{knownLosses.map((ship) => <div className="reports-battle-loss" key={ship.key}><span className="reports-v2-art reports-battle-ship-art"><img src={ship.art} alt="" /></span><span><strong>{ship.name}</strong><small>{ship.destroyed == null ? '—' : numberFormat.format(ship.destroyed)} уничтожено</small></span></div>)}</div> : <p>{side.losses.ships === 0 ? 'Потери кораблей не зафиксированы.' : 'Состав потерь не зафиксирован.'}</p>}
+      </section>
+    </article>
+  );
+}
+
 function BattleDossier({ item, report, saved, rating, playerOwnerId, onToggleSaved, onOpen }: { item: ReportItem; report: BattleReport; saved: boolean; rating: RatingPrototypeState; playerOwnerId: string; onToggleSaved: () => void; onOpen: () => void }) {
   const viewModel = createBattleReportViewModel(report, {
     awardedBattlePoints: selectRecordedBattlePointAwards(rating, report, playerOwnerId),
   });
+  const result = viewModel.winner === 'draw'
+    ? { label: 'НИЧЬЯ', tone: 'draw' }
+    : viewModel.winner === 'attacker'
+      ? { label: 'ПОБЕДА АТАКУЮЩЕГО', tone: 'attacker' }
+      : { label: 'ПОБЕДА ЗАЩИТНИКА', tone: 'defender' };
   return (
     <div className={`reports-dossier reports-dossier--battle reports-v2-tone-${item.statusTone}`}>
       <div className="reports-dossier-heading">
@@ -331,6 +353,18 @@ function BattleDossier({ item, report, saved, rating, playerOwnerId, onToggleSav
         <div><small>{item.typeLabel}</small><h2>{item.title}</h2><p>{item.preview}</p></div>
         <div className="reports-dossier-heading__status"><StatusBadge item={item} /><time>{formatDate(item.timestamp)}</time></div>
       </div>
+      <section className={`reports-battle-overview reports-battle-overview--${result.tone}`} aria-label="Сводка боевого отчёта">
+        <BattleSideOverview side={viewModel.attacker} />
+        <div className="reports-battle-versus"><span>VS</span><strong>{result.label}</strong></div>
+        <BattleSideOverview side={viewModel.defender} />
+      </section>
+      {viewModel.debrisOnOrbit != null || viewModel.resources.length ? <section className="reports-battle-rewards" aria-label="Обломки и ресурсы после боя">
+        <header><strong>РЕСУРСЫ И ОБЛОМКИ</strong><span>Зафиксировано в отчёте</span></header>
+        <div className="reports-battle-reward-grid">
+          {viewModel.resources.map((resource) => <div className="reports-battle-reward" key={resource.kind}><span className="reports-v2-art reports-battle-resource-art"><ResourceIcon kind={resource.kind} /></span><span>{resource.label}</span><strong>{numberFormat.format(resource.value)}</strong></div>)}
+          {viewModel.debrisOnOrbit != null ? <div className="reports-battle-reward reports-battle-reward--debris"><span className="reports-v2-art reports-battle-resource-art"><ResourceIcon kind="debris" /></span><span>Обломки на орбите</span><strong>{numberFormat.format(viewModel.debrisOnOrbit)}</strong></div> : null}
+        </div>
+      </section> : null}
       <BattleCard viewModel={viewModel} saved={saved} onToggleSaved={onToggleSaved} onOpen={onOpen} />
     </div>
   );
@@ -347,13 +381,11 @@ function EmptyFolder({ folder }: { folder: MessageFolder }) {
   return <div className="reports-empty-dossier reports-empty-folder" data-qa-empty-folder><span className="reports-v2-art reports-v2-empty-art"><ReportGlyph kind={folder.glyph} /></span><strong>{title.toUpperCase()}</strong><span>{body}</span></div>;
 }
 
-const PROFILE_EMBLEM = { glyph: 'starforge', accent: 'cyan' } as const;
-
 function ProfileAvatar({ displayName, factionId }: { displayName: string; factionId: string }) {
   return (
     <div className="reports-profile-avatar">
       <div className="reports-profile-avatar__art"><FactionGeneralPortrait factionId={factionId} className="reports-profile-avatar__portrait faction-general-portrait--large" /></div>
-      <strong>{displayName}</strong>
+      <div className="reports-profile-avatar__caption"><small>{getCombatFactionName(factionId)} · ГЕНЕРАЛ</small><h3>{displayName}</h3></div>
     </div>
   );
 }
@@ -362,22 +394,30 @@ function MetricGlyph({ metric }: { metric: PlayerProfileMetricKey }) {
   return <img className="reports-score-glyph" src={asterionAssetIntegrationAssets.scoreIcons[metric]} alt="" aria-hidden="true" draggable={false} />;
 }
 
-function PlayerProfile({ profile, score, command, mode, onOpenCommand }: { profile: PlayerProfileState; score: OwnerScore | null; command: CommandState; mode: RuntimeMode; onOpenCommand: () => void }) {
+function ProfileRecentEvents({ items }: { items: readonly ReportItem[] }) {
+  return (
+    <section className="reports-profile-events" aria-label="Последние события">
+      <header>ПОСЛЕДНИЕ СОБЫТИЯ</header>
+      {items.length ? <ul>{items.map((item) => <li key={item.id}><span className="reports-v2-art reports-profile-event-art"><ReportGlyph kind={item.category} /></span><span>{item.title}</span><time>{formatTime(item.timestamp)}</time></li>)}</ul> : <p>Недавних сообщений пока нет.</p>}
+    </section>
+  );
+}
+
+function PlayerProfile({ profile, score, command, mode, recentItems, onOpenCommand }: { profile: PlayerProfileState; score: OwnerScore | null; command: CommandState; mode: RuntimeMode; recentItems: readonly ReportItem[]; onOpenCommand: () => void }) {
   const metrics = selectPlayerProfileMetrics(profile, score, mode);
   const alliance = selectCurrentAlliance(command);
   return (
     <section className="reports-profile-view" data-qa-profile aria-labelledby="reports-profile-title">
-      <header className="reports-profile-title-plate"><span className="reports-profile-title-plate__side">ПРОФИЛЬ ИГРОКА</span><h2 id="reports-profile-title">ПРОФИЛЬ ИГРОКА</h2><span className="reports-profile-title-plate__side reports-profile-title-plate__side--right">АСТЕРИОН // ЛИЧНОСТЬ</span></header>
-      <div className="reports-profile-name-plate"><h3>{profile.displayName}</h3></div>
+      <header className="reports-profile-title-plate"><span className="reports-profile-title-plate__side">ЦЕНТР СООБЩЕНИЙ</span><h2 id="reports-profile-title">ПРОФИЛЬ ИГРОКА</h2><span className="reports-profile-title-plate__side reports-profile-title-plate__side--right">ЛИЧНОСТЬ // РЕЙТИНГ</span></header>
       <div className="reports-profile-card">
-        <div className="reports-profile-asterion-mark" aria-hidden="true"><EmblemGlyph emblem={PROFILE_EMBLEM} /></div>
         <section className="reports-profile-identity" aria-label="Аватар игрока"><ProfileAvatar displayName={profile.displayName} factionId={profile.factionId} /></section>
         <section className="reports-profile-metrics" aria-label="Рейтинг игрока">
-          {metrics.map((metric) => <div key={metric.key} className="reports-profile-metric" data-qa-profile-metric={metric.key} tabIndex={0} role="img" title={metric.description} aria-label={`${metric.label}: ${metric.value == null ? 'нет данных' : numberFormat.format(metric.value)}. ${metric.description}`}><span className="reports-profile-metric__glyph"><MetricGlyph metric={metric.key} /></span><span><small>{metric.label}</small><strong>{metric.value == null ? '—' : numberFormat.format(metric.value)}</strong></span></div>)}
+          {metrics.map((metric) => <div key={metric.key} className="reports-profile-metric" data-qa-profile-metric={metric.key} tabIndex={0} role="img" title={metric.description} aria-label={`${metric.label}: ${metric.value == null ? 'нет данных' : numberFormat.format(metric.value)}. ${metric.description}`}><span className="reports-profile-metric__glyph"><MetricGlyph metric={metric.key} /></span><span><small>{metric.label}</small><strong>{metric.value == null ? '—' : numberFormat.format(metric.value)}</strong><em>{metric.description}</em></span></div>)}
         </section>
         <section className="reports-profile-alliance" aria-label="Состояние союза">
           <small>СОЮЗ</small>
-          {alliance ? <button type="button" className="reports-profile-alliance-link" onClick={onOpenCommand} aria-label={`Открыть Командование союза ${alliance.name}`}><EmblemGlyph compact emblem={alliance.emblem} /><span><strong>{alliance.name}</strong><small>[{alliance.tag}] · {alliance.id}</small></span><b>КОМАНДОВАНИЕ <i>→</i></b></button> : <div className="reports-profile-no-alliance"><span className="reports-profile-diamond" aria-hidden="true">?</span><span><strong>Без Союза</strong><small>Членство не задано в профиле</small></span></div>}
+          {alliance ? <button type="button" className="reports-profile-alliance-link" onClick={onOpenCommand} aria-label={`Открыть Командование союза ${alliance.name}`}><span className="reports-v2-art reports-profile-alliance-art"><ReportGlyph kind="alliances" /></span><span><strong>{alliance.name}</strong><small>[{alliance.tag}] · {numberFormat.format(command.members.length)} участников</small></span><b>КОМАНДОВАНИЕ <i>→</i></b></button> : <div className="reports-profile-no-alliance"><span className="reports-profile-diamond" aria-hidden="true">?</span><span><strong>Без Союза</strong><small>Членство не задано в профиле</small></span></div>}
+          <ProfileRecentEvents items={recentItems} />
         </section>
       </div>
       {profile.protectionMode ? <div className="reports-profile-protection"><i /> ЗАЩИТНЫЙ РЕЖИМ АКТИВЕН</div> : null}
@@ -437,6 +477,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
   const activeCategory = activeFolderMeta.category;
   const folderItems = useMemo(() => activeCategory ? getVisibleReportItems(items, state).filter((item) => item.category === activeCategory) : [], [activeCategory, items, state]);
   const visibleItems = useMemo(() => activeCategory ? filterReportItems(items, state, { category: activeCategory, filter, search }, savedBattleReportIds) : [], [activeCategory, items, state, filter, search, savedBattleReportIds]);
+  const recentProfileItems = getVisibleReportItems(items, state).slice(0, 3);
   const pageCount = Math.max(1, Math.ceil(visibleItems.length / PAGE_SIZE));
   const pagedItems = visibleItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const selectedItem = visibleItems.find((item) => item.id === selectedId) ?? null;
@@ -564,13 +605,13 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
         <button className="reports-mark-all" type="button" disabled={!markableItems.some((item) => !state.readIds.includes(item.id))} onClick={() => onStateChange(withOverpopulationReports(markAllReportsRead(state, markableItems.map((item) => item.id)), state))}><span>✓</span> ОТМЕТИТЬ ВСЕ ПРОЧИТАННЫМИ</button>
       </aside>
 
-      {activeFolder === 'profile' ? <PlayerProfile profile={profile} score={score} command={command} mode={mode} onOpenCommand={onOpenCommand} /> : <section className="reports-folder-workspace" data-qa-folder-view={activeFolder}>
+      {activeFolder === 'profile' ? <PlayerProfile profile={profile} score={score} command={command} mode={mode} recentItems={recentProfileItems} onOpenCommand={onOpenCommand} /> : <section className="reports-folder-workspace" data-qa-folder-view={activeFolder}>
         <section className="reports-feed reports-v2-panel" data-qa-message-folder-view={activeFolder}>
           <header className="reports-feed-head"><div><small>РАЗДЕЛ СООБЩЕНИЙ</small><h2>{activeFolderMeta.label.toUpperCase()}</h2></div>{activeCategory ? <div className="reports-feed-head-tools"><span className="reports-folder-count">{counts[activeCategory]} СООБЩ.</span><div className="reports-v2-filter-segments" role="group" aria-label="Фильтр сообщений">{availableFilters.map((key) => <button key={key} type="button" aria-pressed={filter === key} onClick={() => setFilter(key)}>{FILTER_LABELS[key]}</button>)}</div></div> : null}</header>
           {activeCategory ? <FolderActions folder={activeFolderMeta} items={folderItems} selectedIds={selectedIds} onSelectAll={selectAll} onDeleteAll={deleteAll} onDeleteSelected={deleteSelected} /> : null}
           {activeCategory ? <label className="reports-search"><span aria-hidden="true"><SearchGlyph /></span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск в разделе..." aria-label="Поиск в разделе сообщений" /></label> : null}
           <div className="reports-list" data-qa-message-list>
-            {activeCategory ? pagedItems.length ? pagedItems.map((item) => <ReportListItem key={item.id} item={item} active={item.id === selectedId} read={state.readIds.includes(item.id)} selected={selectedIds.has(item.id)} saved={Boolean(item.battleReportId && savedBattleReportIds.includes(item.battleReportId))} onOpen={() => openItem(item)} onSelect={(checked) => toggleSelected(item.id, checked)} />) : <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} /> : <EmptyFolder folder={activeFolderMeta} />}
+            {activeCategory ? pagedItems.length ? pagedItems.map((item) => <ReportListItem key={item.id} item={item} active={item.id === selectedId} read={state.readIds.includes(item.id)} selected={selectedIds.has(item.id)} saved={Boolean(item.battleReportId && savedBattleReportIds.includes(item.battleReportId))} onOpen={() => openItem(item)} onSelect={(checked) => toggleSelected(item.id, checked)} />) : <p className="reports-list-empty-status" role="status">Сообщений в этом разделе пока нет.</p> : <EmptyFolder folder={activeFolderMeta} />}
           </div>
           {activeCategory ? <footer className="reports-pagination"><button type="button" aria-label="Предыдущая страница" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}><ActionGlyph kind="prev" /></button><span><b>{page}</b> / {pageCount}<small>{visibleItems.length} сообщений</small></span><button type="button" aria-label="Следующая страница" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}><ActionGlyph kind="next" /></button></footer> : null}
         </section>

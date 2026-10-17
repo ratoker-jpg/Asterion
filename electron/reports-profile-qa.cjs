@@ -434,7 +434,7 @@ async function runViewport(win, width, height) {
     || profile.profileIcon.cssWidth !== '30px' || profile.profileIcon.cssHeight !== '30px'
     || profile.profileIcon.label !== 'Профиль' || profile.profileIcon.accessibleLabel !== 'Открыть профиль'
     || profile.scoreIcons.length !== expectedScoreIconSuffixes.length
-    || profile.scoreIcons.some((icon, index) => !icon.loaded || !icon.decorative || !icon.src.endsWith(expectedScoreIconSuffixes[index]) || icon.cssWidth !== '46px' || icon.cssHeight !== '46px')) {
+    || profile.scoreIcons.some((icon, index) => !icon.loaded || !icon.decorative || !icon.src.endsWith(expectedScoreIconSuffixes[index]) || icon.cssWidth !== '96px' || icon.cssHeight !== '96px')) {
     throw new Error(`Reports/profile asset contract failed at ${label}: ${JSON.stringify({ folderIcons: profile.folderIcons, profileIcon: profile.profileIcon, scoreIcons: profile.scoreIcons })}`);
   }
   if (profile.metricValues.length !== 4 || profile.focusableMetrics !== 4 || profile.horizontalOverflow || profile.bodyHorizontalOverflow) throw new Error(`Profile geometry/metrics contract failed at ${label}: ${JSON.stringify(profile)}`);
@@ -446,7 +446,7 @@ async function runViewport(win, width, height) {
     throw new Error(`Reports folder icon sizing/overlap contract failed at ${label}: ${JSON.stringify(profile.folderGeometry)}`);
   }
   if (profile.metricGeometry.length !== 4
-    || profile.metricGeometry.some((metric) => Number.parseFloat(metric.cardBorderWidth) <= 0 || Number.parseFloat(metric.wrapperBorderWidth) !== 0 || metric.wrapperTransform !== 'none' || metric.imageTransform !== 'none' || metric.imageCssWidth !== '46px' || metric.imageCssHeight !== '46px' || metric.labelFontSize !== '18px' || metric.valueFontSize !== '16px' || !contains(metric.wrapper, metric.image))) {
+    || profile.metricGeometry.some((metric) => Number.parseFloat(metric.cardBorderWidth) <= 0 || Number.parseFloat(metric.wrapperBorderWidth) !== 0 || metric.wrapperTransform !== 'none' || metric.imageTransform !== 'none' || metric.imageCssWidth !== '96px' || metric.imageCssHeight !== '96px' || metric.labelFontSize !== '11px' || metric.valueFontSize !== '30px' || !contains(metric.wrapper, metric.image))) {
     throw new Error(`Profile score icon frame/transform contract failed at ${label}: ${JSON.stringify(profile.metricGeometry)}`);
   }
   await win.webContents.executeJavaScript(`document.querySelector('[data-qa-profile-metric="resourcePoints"]')?.focus()`);
