@@ -241,7 +241,9 @@ async function testModeScenario(win, label) {
 
 async function runViewport(width, height) {
   const label = `${width}x${height}`;
-  const win = new BrowserWindow({ width, height, show: false, webPreferences: { sandbox: false } });
+  // A non-persistent session partition (no `persist:` prefix) keeps this scenario's localStorage
+  // (extra colony, alliances) out of every other Electron QA that shares the default profile in CI.
+  const win = new BrowserWindow({ width, height, show: false, webPreferences: { sandbox: false, partition: 'command-qa-isolated' } });
   win.webContents.on('console-message', (_event, _level, message) => {
     if (/error/i.test(message)) console.warn(`[${label}] renderer: ${message}`);
   });
