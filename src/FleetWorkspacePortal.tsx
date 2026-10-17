@@ -93,6 +93,8 @@ type MissionDefinition = {
   label: string;
   description: string;
   icon: string;
+  /** `false` keeps a registered mission visible but not selectable until its runtime exists. */
+  enabled?: boolean;
 };
 
 type ConstructionView = 'ships' | ConstructionCatalogMode | null;
@@ -110,6 +112,8 @@ import missionSunSupportIcon from '../assets/source/mission-icons-v1/08_sun_supp
 import missionSpaceFlightIcon from '../assets/source/mission-icons-v1/09_space_flight.png';
 import missionPirateEliminationIcon from '../assets/source/mission-icons-v1/10_pirate_elimination.png';
 import missionExpeditionIcon from '../assets/source/mission-icons-v1/31_expedition.png';
+import missionAidIcon from '../assets/source/mission-icons-v1/33_trade_convoy.png';
+import { AID_MISSION_DESCRIPTION, AID_MISSION_ENABLED } from './domain/flights/aid-mission.ts';
 
 function queueKindForConstructionView(view: ConstructionView): FleetProductionQueueKind | null {
   if (view === 'ships') return 'ships';
@@ -129,6 +133,7 @@ const missions: MissionDefinition[] = [
   { id: 'recycle', label: 'Переработка', description: 'Сбор и переработка обломков в космосе.', icon: missionRecycleIcon },
   { id: 'gas', label: 'Добыча газа', description: 'Специализированная экспедиция за газом.', icon: missionGasIcon },
   { id: 'sun-support', label: 'Поддержка солнца', description: 'Отправка флота для специальной солнечной операции.', icon: missionSunSupportIcon },
+  { id: 'aid', label: 'Помощь союзнику', description: AID_MISSION_DESCRIPTION, icon: missionAidIcon, enabled: AID_MISSION_ENABLED },
   { id: 'space-flight', label: 'Космический рейс', description: 'Дальний автономный рейс с заданной продолжительностью.', icon: missionSpaceFlightIcon },
 ];
 
@@ -1418,7 +1423,7 @@ function FleetWorkspace({
                 <div className="fleet-mission-select-v1">
                   <label htmlFor="fleet-mission">МИССИЯ</label>
                   <select id="fleet-mission" value={missionId} onChange={(event) => chooseMission(event.target.value as MissionId)}>
-                    {missions.map((mission) => <option key={mission.id} value={mission.id}>{mission.label}</option>)}
+                    {missions.map((mission) => <option key={mission.id} value={mission.id} disabled={mission.enabled === false}>{mission.label}</option>)}
                   </select>
                 </div>
 
@@ -1429,7 +1434,9 @@ function FleetWorkspace({
                       type="button"
                       className={mission.id === missionId ? 'active' : ''}
                       aria-label={mission.label}
-                      title={mission.label}
+                      title={mission.enabled === false ? `${mission.label} — пока недоступно` : mission.label}
+                      disabled={mission.enabled === false}
+                      data-qa-mission-id={mission.id}
                       onMouseEnter={() => setHoveredMissionId(mission.id)}
                       onMouseLeave={() => setHoveredMissionId(null)}
                       onFocus={() => setHoveredMissionId(mission.id)}

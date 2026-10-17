@@ -16,6 +16,7 @@ import {
   kickMember,
   leaveAlliance,
   pickLeaderSuccessor,
+  refreshPresence,
   rejectApplication,
   setDeputy,
   settleLeadership,
@@ -572,4 +573,71 @@ test('profile mirrors the real membership and clears it when the owner has none'
   assert.equal(cleared.allianceId, null);
   assert.equal(cleared.alliance, null);
   assert.equal(syncPlayerProfileWithCommand(profile, createDefaultCommandState('production')), profile);
+});
+
+test('audit P0-1: founding is blocked by the global delay after leaving or being kicked, in the domain', () => {
+  const base = found(createDefaultCommandState('production')).state;
+  const withMember = join(base, 'alliance-1', 'leaver');
+  const left = ok(leaveAlliance(withMember, 'leaver', T0 + HOUR)).state;
+  const attempt = createAlliance(left, { ownerId: 'leaver', displayName: 'L', settings: settings('Новый союз', 'NEW') }, { now: T0 + HOUR + REAPPLY_COOLDOWN_MS - 1, random });
+  failure(attempt, 'cooldown');
+  assert.equal(attempt.state, left, 'a refused founding leaves the state untouched');
+  assert.equal(!attempt.ok && attempt.retryAt, T0 + HOUR + REAPPLY_COOLDOWN_MS);
+  assert.equal(createAlliance(left, { ownerId: 'leaver', displayName: 'L', settings: settings('Новый союз', 'NEW') }, { now: T0 + HOUR + REAPPLY_COOLDOWN_MS, random }).ok, true);
+
+  const kicked = ok(kickMember(withMember, 'leader', 'leaver', T0 + HOUR)).state;
+  failure(createAlliance(kicked, { ownerId: 'leaver', displayName: 'L', settings: settings('Новый союз', 'NEW') }, { now: T0 + HOUR + 1, random }), 'cooldown');
+
+  // A refusal from one alliance is scoped to it and does not stop founding a new one.
+  const applied = ok(applyToAlliance(base, { ownerId: 'applicant', displayName: 'A', allianceId: 'alliance-1' }, { now: T0 }));
+  const refused = ok(rejectApplication(applied.state, 'leader', selectPendingApplication(applied.state, 'applicant')!.id, T0)).state;
+  assert.equal(createAlliance(refused, { ownerId: 'applicant', displayName: 'A', settings: settings('Свой союз', 'OWN') }, { now: T0 + 1, random }).ok, true);
+});
+
+test('audit P0-2: leadership is settled against the stored activity stamp before it is refreshed', () => {
+  const created = found(createDefaultCommandState('production'), 'leader', 'Звёздный Дозор', 'DOZ', T0);
+  let state = join(created.state, created.allianceId, 'deputy', 'leader', T0);
+  state = ok(setDeputy(state, 'leader', 'deputy')).state;
+  const stale = (now: number) => refreshPresence(state, 'leader', now);
+
+  // Returning after more than 24 h of a closed game: the stored stamp decides, then the stamp refreshes.
+  const returned = stale(T0 + LEADER_ABSENCE_MS + 1);
+  assert.equal(returned.alliances[0].leaderOwnerId, 'deputy');
+  assert.equal(returned.alliances[0].leaderSince, T0 + LEADER_ABSENCE_MS + 1);
+  assert.equal(selectOwnerMembership(returned, 'leader')?.member.lastActiveAt, T0 + LEADER_ABSENCE_MS + 1);
+
+  // Reloading again does not re-elect or ping-pong.
+  const again = refreshPresence(returned, 'leader', T0 + LEADER_ABSENCE_MS + 2);
+  assert.equal(again.alliances[0].leaderOwnerId, 'deputy');
+  assert.equal(again.alliances[0].leaderSince, T0 + LEADER_ABSENCE_MS + 1);
+
+  // Under 24 h nothing moves; exactly 24 h is still fine.
+  assert.equal(stale(T0 + LEADER_ABSENCE_MS).alliances[0].leaderOwnerId, 'leader');
+  assert.equal(stale(T0 + HOUR).alliances[0].leaderOwnerId, 'leader');
+
+  // A game kept open for 30 hours (a heartbeat every minute) never hands over leadership.
+  let running = state;
+  for (let at = T0; at <= T0 + 30 * HOUR; at += 60_000) running = refreshPresence(running, 'leader', at);
+  assert.equal(running.alliances[0].leaderOwnerId, 'leader');
+});
+
+test('audit P1-4: finished applications to a vanished alliance survive a reload; pending ones do not', () => {
+  const solo = found(createDefaultCommandState('production'));
+  const withApplicant = ok(applyToAlliance(solo.state, { ownerId: 'hopeful', displayName: 'H', allianceId: solo.allianceId }, { now: T0 })).state;
+  assert.equal(withApplicant.applications[0].allianceName, 'Звёздный Дозор');
+  const disbanded = ok(leaveAlliance(withApplicant, 'leader', T0 + 10)).state;
+  assert.deepEqual(disbanded.alliances, []);
+
+  const reloaded = migrateCommandState(JSON.parse(JSON.stringify(disbanded)), 'production');
+  assert.equal(reloaded.applications.length, 1);
+  assert.equal(reloaded.applications[0].status, 'auto_rejected');
+  assert.equal(reloaded.applications[0].reason, 'disbanded');
+  assert.equal(reloaded.applications[0].allianceName, 'Звёздный Дозор');
+  assert.equal(reloaded.nextSerial, disbanded.nextSerial, 'ids stay unique and are not reused');
+
+  const tampered = JSON.parse(JSON.stringify(disbanded)) as CommandState;
+  tampered.applications.push({ ...tampered.applications[0], id: 'application-77', ownerId: 'ghost', status: 'pending', reason: null, resolvedAt: null, resolvedByOwnerId: null });
+  const cleaned = migrateCommandState(tampered, 'production');
+  assert.equal(cleaned.applications.some((entry) => entry.status === 'pending'), false);
+  assert.ok(cleaned.nextSerial > 77);
 });

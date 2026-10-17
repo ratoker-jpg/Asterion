@@ -1021,7 +1021,7 @@ export function getUniverseActionState(
       reason: action === 'attack' ? 'Атака запрещена против своей планеты.' : 'Это ваша планета.',
     };
   }
-  if (action === 'fleet' && node.fixture?.id === TEST_MODE_ALLY_PLANET_FIXTURE.marker.id) {
+  if (action === 'fleet' && node.fixture?.id === TEST_MODE_ALLY_PLANET_FIXTURE.marker.id && relation === 'ally') {
     return {
       action,
       enabled: true,

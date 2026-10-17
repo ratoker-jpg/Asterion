@@ -1,3 +1,4 @@
+import { selectOwnerAlliance } from '../domain/command/selectors.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import { COMMANDER_IDS, type CommanderId } from '../domain/combat/commanders.ts';
 import type { SimulatorMaxRounds } from '../domain/combat/simulator.ts';
@@ -303,6 +304,12 @@ function emptyTransportTarget(destination?: FlightDestination): ResolvedTranspor
   };
 }
 
+/** Ordinary ally transport needs the sender and the target owner in the same real alliance right now. */
+function isCurrentAllyOwner(state: SaveState, ownerId: string): boolean {
+  const own = selectOwnerAlliance(state.command, state.profile.playerId);
+  return Boolean(own && selectOwnerAlliance(state.command, ownerId)?.id === own.id);
+}
+
 /** Resolves only authoritative SaveState targets; Universe paint cannot grant access. */
 export function resolveTransportTarget(
   state: SaveState,
@@ -311,12 +318,12 @@ export function resolveTransportTarget(
   if (!destination || !isFlightCoordinate(destination.coordinate)) return emptyTransportTarget(destination);
   const coordinate = destination.coordinate;
   const ownEntry = Object.entries(state.planets).find(([, planet]) => coordinatesEqual(targetCoordinateFromPlanet(planet), coordinate));
-  const allyEntry = Object.entries(state.alliedPlanets ?? {}).find(([, planet]) => coordinatesEqual(targetCoordinateFromPlanet(planet), coordinate));
+  const allyEntry = Object.entries(state.alliedPlanets ?? {}).find(([, planet]) => coordinatesEqual(targetCoordinateFromPlanet(planet), coordinate) && isCurrentAllyOwner(state, planet.ownerId));
   const byCoordinate = ownEntry ?? allyEntry;
   const byId = destination.kind === 'planet'
     ? state.planets[destination.planetId]
       ? { id: destination.planetId, planet: state.planets[destination.planetId], relation: 'self' as const }
-      : state.alliedPlanets?.[destination.planetId]
+      : state.alliedPlanets?.[destination.planetId] && isCurrentAllyOwner(state, state.alliedPlanets[destination.planetId].ownerId)
         ? { id: destination.planetId, planet: state.alliedPlanets[destination.planetId], relation: 'ally' as const }
         : undefined
     : undefined;

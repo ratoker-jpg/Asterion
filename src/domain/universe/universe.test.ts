@@ -501,7 +501,10 @@ test('spy and fleet actions follow the owner relation contract', () => {
   assert.equal(getUniverseActionState('attack', ally, 'player-current', 'ally').enabled, false);
   assert.equal(getUniverseActionState('attack', homeworld, 'player-current', 'self').enabled, false);
   assert.equal(getUniverseActionState('fleet', foreign, 'player-current').enabled, false);
-  assert.equal(getUniverseActionState('fleet', ally, 'player-current').status, 'supported');
-  assert.equal(getUniverseActionState('fleet', ally, 'player-current').enabled, true);
+  assert.equal(getUniverseActionState('fleet', ally, 'player-current', 'ally').status, 'supported');
+  assert.equal(getUniverseActionState('fleet', ally, 'player-current', 'ally').enabled, true);
+  // The fixture alone grants nothing: without a current alliance relation the route is closed.
+  assert.equal(getUniverseActionState('fleet', ally, 'player-current', 'neutral').enabled, false);
+  assert.equal(getUniverseActionState('fleet', ally, 'player-current').enabled, false);
   assert.equal(getUniverseActionState('spy', empty, 'player-current').status, 'disabled');
 });

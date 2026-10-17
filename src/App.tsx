@@ -57,9 +57,8 @@ import {
   kickMember,
   leaveAlliance,
   rejectApplication,
+  refreshPresence,
   setDeputy,
-  settleLeadership,
-  touchMember,
   transferLeadership,
   updateAllianceSettings,
   withdrawApplication,
@@ -756,8 +755,7 @@ export function App() {
     setState((current) => {
       const at = Date.now();
       const playerId = current.profile.playerId;
-      let command = touchMember(current.command, playerId, at, current.profile.displayName);
-      command = settleLeadership(command, at, [playerId]);
+      const command = refreshPresence(current.command, playerId, at, current.profile.displayName);
       if (command === current.command) return current;
       return { ...current, command, profile: syncPlayerProfileWithCommand(current.profile, command) };
     });

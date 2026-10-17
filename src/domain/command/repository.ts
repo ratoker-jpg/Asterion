@@ -217,6 +217,7 @@ function parseApplication(value: unknown): AllianceApplication | null {
   return {
     id,
     allianceId,
+    allianceName: text(value.allianceName, '', 42),
     ownerId,
     displayName: text(value.displayName, ownerId, 48, 1),
     status,
@@ -283,10 +284,14 @@ function migrateV2(value: Record<string, unknown>, mode: RuntimeMode): CommandSt
   const seenApplicationIds = new Set<string>();
   const pendingOwners = new Set<string>();
   const applications: AllianceApplication[] = [];
+  let highestDroppedSerial = 0;
   for (const raw of Array.isArray(value.applications) ? value.applications : []) {
     const application = parseApplication(raw);
-    if (!application || seenApplicationIds.has(application.id) || !allianceIds.has(application.allianceId)) continue;
+    if (application) highestDroppedSerial = Math.max(highestDroppedSerial, serialOf(application.id));
+    if (!application || seenApplicationIds.has(application.id)) continue;
+    // Finished outcomes may reference an alliance that no longer exists; a pending one may not.
     if (application.status === 'pending') {
+      if (!allianceIds.has(application.allianceId)) continue;
       if (seenOwners.has(application.ownerId) || pendingOwners.has(application.ownerId)) continue;
       pendingOwners.add(application.ownerId);
     }
@@ -308,6 +313,7 @@ function migrateV2(value: Record<string, unknown>, mode: RuntimeMode): CommandSt
     0,
     ...alliances.map((alliance) => serialOf(alliance.id)),
     ...applications.map((application) => serialOf(application.id)),
+    highestDroppedSerial,
   );
   return {
     version: 2,

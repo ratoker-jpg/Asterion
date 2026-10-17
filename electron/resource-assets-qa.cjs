@@ -391,9 +391,13 @@ async function verifyViewport(width, height) {
 
     await activateRoute(win, 'command', '.command-view');
     await clickText(win, '.command-tabs button', 'ЗАПРОСЫ РЕСУРСОВ');
-    await waitFor(win, `document.querySelector('.command-request-stack--full')`);
-    await waitForResourceImages(win, '.command-view');
-    assertResourceImages('command', await readResourceImages(win, '.command-view'), ['metal', 'minerals', 'gas', 'energy']);
+    // Resource requests are an honest stub until PR 2: no invented requests or resource icons are rendered.
+    // The real supply icons are verified again together with the requests implementation.
+    await waitFor(win, `document.querySelector('[data-qa-command-stub]')`);
+    const commandImages = await readResourceImages(win, '.command-view');
+    if (commandImages && commandImages.length) throw new Error(`command: the requests stub must not render resource icons: ${JSON.stringify(commandImages.map((image) => image.kind))}`);
+    const stubText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-command-stub]')?.textContent || ''`);
+    if (!/Запросы ресурсов/.test(stubText)) throw new Error(`command: unexpected requests stub ${stubText}`);
 
     await activateRoute(win, 'reports', '.reports-view');
     await click(win, '[data-message-folder="battle"]');

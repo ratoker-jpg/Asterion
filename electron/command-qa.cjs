@@ -228,7 +228,9 @@ async function testModeScenario(win, label) {
   await click(win, '[data-qa-confirm]');
   await waitFor(win, `document.querySelector('[data-qa-command-empty]')`);
   view = await snapshot(win);
-  assert(view.state === 'none' && /Подача заявок закрыта ещё/.test(view.cooldown) && view.catalogItems === 1, `${label}: left the alliance, delay is visible, the alliance still exists`, view);
+  assert(view.state === 'none' && /закрыты ещё/.test(view.cooldown) && view.catalogItems === 1, `${label}: left the alliance, delay is visible, the alliance still exists`, view);
+  const createDisabled = await run(win, `document.querySelector('[data-qa-create-alliance]')?.disabled === true`);
+  assert(createDisabled, `${label}: founding is blocked by the delay in the UI too`);
   const catalogApply = await run(win, `Boolean(document.querySelector('[data-qa-apply]'))`);
   assert(!catalogApply, `${label}: applying is blocked by the delay`);
   await capture(win, label, 'test-after-leave');

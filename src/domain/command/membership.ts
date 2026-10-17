@@ -185,6 +185,10 @@ export function createAlliance(
   if (selectOwnerMembership(state, input.ownerId)) {
     return fail(state, 'already_member', 'Вы уже состоите в союзе. Сначала покиньте его.');
   }
+  // Founding makes the owner a member, so the global delay after leaving/being kicked applies too.
+  // A refusal from one alliance is scoped to that alliance and does not block founding.
+  const block = selectReapplyBlock(state, input.ownerId, null, options.now);
+  if (block) return fail(state, 'cooldown', 'После выхода из союза создавать и вступать в союзы временно нельзя.', block.until);
   const settings = validateAllianceSettings(state, input.settings);
   if (!settings.ok) return fail(state, settings.code, settings.message);
 
@@ -251,6 +255,7 @@ export function applyToAlliance(
   const application: AllianceApplication = {
     id,
     allianceId: alliance.id,
+    allianceName: alliance.name,
     ownerId: input.ownerId,
     displayName: normalizeAllianceText(input.displayName).slice(0, 48) || input.ownerId,
     status: 'pending',
@@ -499,6 +504,16 @@ export function settleLeadership(state: CommandState, now: number, presentOwnerI
     next = replaceAlliance(next, promote(alliance, successor.ownerId, now));
   }
   return next;
+}
+
+/**
+ * Presence heartbeat for the local owner. Leadership is settled against the
+ * *stored* last-activity stamps first, so a long closed-game gap is never
+ * mistaken for continuous presence; only then is the owner's own stamp refreshed.
+ * While the game runs the stamp is at most a minute old, so it never triggers.
+ */
+export function refreshPresence(state: CommandState, ownerId: string, now: number, displayName?: string): CommandState {
+  return touchMember(settleLeadership(state, now), ownerId, now, displayName);
 }
 
 /** Credits actually delivered units (PR 2 calls this from the arrival settlement). */

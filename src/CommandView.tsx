@@ -613,7 +613,9 @@ function NoAlliance({ command, ownerId, ownerScores, now, actions, onFeedback, t
         <small>БЕЗ СОЮЗА</small>
         <h2>Вы пока не состоите в союзе</h2>
         <p>Создайте свой союз бесплатно или подайте заявку в существующий. Вступление происходит только после решения руководства союза.</p>
-        <button type="button" className="primary" onClick={() => setCreating(true)} data-qa-create-alliance>СОЗДАТЬ СОЮЗ</button>
+        <button type="button" className="primary" disabled={Boolean(globalBlock)} title={globalBlock ? 'После выхода из союза создавать и вступать в союзы пока нельзя' : undefined} onClick={() => setCreating(true)} data-qa-create-alliance>
+          {globalBlock ? `СОЗДАТЬ СОЮЗ · ЧЕРЕЗ ${formatCountdown(globalBlock.until - now)}` : 'СОЗДАТЬ СОЮЗ'}
+        </button>
         {pending ? (
           <div className="command-banner is-pending" role="status" data-qa-pending>
             Заявка в «{pendingAlliance?.name ?? 'союз'}» ожидает решения.
@@ -622,13 +624,13 @@ function NoAlliance({ command, ownerId, ownerScores, now, actions, onFeedback, t
         ) : null}
         {showLastResult ? (
           <div className={`command-banner is-${lastResult.status}`} role="status">
-            Заявка в «{lastAlliance?.name ?? 'союз'}»: {APPLICATION_OUTCOME[lastResult.status].toLowerCase()}
+            Заявка в «{lastAlliance?.name ?? lastResult.allianceName ?? 'союз'}»: {APPLICATION_OUTCOME[lastResult.status].toLowerCase()}
             {lastResult.reason && APPLICATION_REASON[lastResult.reason] ? ` — ${APPLICATION_REASON[lastResult.reason].toLowerCase()}` : ''}.
           </div>
         ) : null}
         {globalBlock ? (
           <div className="command-banner is-cooldown" role="status" data-qa-cooldown>
-            Подача заявок закрыта ещё {formatCountdown(globalBlock.until - now)}.
+            Заявки и создание союза закрыты ещё {formatCountdown(globalBlock.until - now)}.
           </div>
         ) : null}
       </section>

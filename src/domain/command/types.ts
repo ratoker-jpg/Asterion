@@ -80,6 +80,8 @@ export type ApplicationReason = 'declined' | 'full' | 'already_member' | 'disban
 export type AllianceApplication = {
   id: string;
   allianceId: string;
+  /** Name of the alliance at application time, so history stays readable after the alliance is gone. */
+  allianceName: string;
   ownerId: string;
   displayName: string;
   status: ApplicationStatus;

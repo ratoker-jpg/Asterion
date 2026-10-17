@@ -19,7 +19,9 @@ export type MissionId =
   | 'recycle'
   | 'gas'
   | 'sun-support'
-  | 'space-flight';
+  | 'space-flight'
+  /** Alliance aid. Reserved: registered for UI/metadata, not yet connected to the flight runtime. */
+  | 'aid';
 
 export type FlightPhase = 'outbound' | 'returning' | 'arrived' | 'completed' | 'failed';
 
