@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { BattleCard, BattleReportModal } from './BattleReportsView';
+import { BattleReportModal } from './BattleReportsView';
 import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
 import pirateWarlordArt from '../assets/source/characters/pirates/pirate_warlord.png';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
@@ -42,6 +42,8 @@ import type { UniverseCoordinate } from './domain/universe/types.ts';
 import type { PirateReconReport } from './domain/pirates/recon-report.ts';
 import { PIRATE_BASE_SHIPS } from './domain/pirates/catalog.ts';
 import { getPiratePlanetArt } from './pirate-planet-art.ts';
+import { EXPLORATION_ARTS } from './exploration-art.ts';
+import type { ExplorationState } from './domain/exploration/ledger.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon.tsx';
 import './reports.css';
 import './reports-v2.css';
@@ -148,9 +150,9 @@ function ReportArtwork({ item }: { item: ReportItem }) {
   return <ReportGlyph kind={item.category} />;
 }
 
-function DossierHeading({ item }: { item: ReportItem }) {
+function DossierHeading({ item, art }: { item: ReportItem; art?: ReactNode }) {
   return <div className="reports-dossier-heading">
-    <div className="reports-dossier-heading__icon reports-v2-art"><ReportArtwork item={item} /></div>
+    <div className="reports-dossier-heading__icon reports-v2-art">{art ?? <ReportArtwork item={item} />}</div>
     <div className="reports-dossier-heading__copy"><div className="reports-dossier-badges"><small>{item.typeLabel}</small><StatusBadge item={item} /></div><h2>{item.title}</h2><p>{item.preview}</p></div>
     <div className="reports-dossier-heading__status"><small>ПОЛУЧЕНО</small><time>{formatDate(item.timestamp)}</time></div>
   </div>;
@@ -180,12 +182,128 @@ function ReportListItem({ item, active, read, saved, selected, onOpen, onSelect 
   );
 }
 
-function GenericDossier({ item }: { item: ReportItem }) {
+type ResourceKind = 'metal' | 'minerals' | 'gas' | 'debris' | 'energy';
+const RESOURCE_WORDS: readonly [RegExp, ResourceKind][] = [
+  [/металл/i, 'metal'], [/минерал/i, 'minerals'], [/газ/i, 'gas'], [/облом/i, 'debris'], [/энерг/i, 'energy'],
+];
+const COORDINATE_PATTERN = /\[(\d+):(\d+):(\d+)\]|planet-(\d+)-(\d+)-(\d+)/i;
+// Internal identifiers (flight ids, contact keys, epoch stamps) are never player-facing.
+const TECHNICAL_VALUE = /flight-|recon:|unique:|anomaly:|contact-|\d{9,}/i;
+const TECHNICAL_LABEL = /вылет зонда|идентификатор|^id\b|остатки зависят/i;
+
+function parseCoordinate(value: string): UniverseCoordinate | null {
+  const match = COORDINATE_PATTERN.exec(value);
+  if (!match) return null;
+  const [galaxy, system, position] = (match[1] ? match.slice(1, 4) : match.slice(4, 7)).map(Number);
+  return { galaxy: galaxy!, system: system!, position: position! };
+}
+
+function resourceKindOf(label: string): ResourceKind | null {
+  return RESOURCE_WORDS.find(([pattern]) => pattern.test(label))?.[1] ?? null;
+}
+
+function numericValue(value: string): number | null {
+  const digits = value.replace(/[\s ]/g, '').match(/^[+−-]?\d+([.,]\d+)?$/);
+  return digits ? Number(digits[0].replace('−', '-').replace(',', '.')) : null;
+}
+
+function romanRisk(value: string): number | null {
+  const roman = ['I', 'II', 'III', 'IV', 'V'].indexOf(value.trim().split(/\s|\//)[0]!.toUpperCase());
+  if (roman >= 0) return roman + 1;
+  const n = Number.parseInt(value, 10);
+  return n >= 1 && n <= 5 ? n : null;
+}
+
+/** Same deterministic variant→art mapping as the Universe and Operations screens. */
+function explorationArtFor(item: ReportItem, exploration?: ExplorationState): string | null {
+  if (!exploration || (item.source !== 'exploration' && !/исследован|экспедиц|аномал/i.test(item.typeLabel))) return null;
+  const coordinate = item.coordinates.map(parseCoordinate).find(Boolean)
+    ?? item.details.map((detail) => parseCoordinate(detail.value)).find(Boolean);
+  if (!coordinate) return null;
+  const contact = Object.values(exploration.contacts)
+    .filter((entry) => entry.coordinate.galaxy === coordinate.galaxy && entry.coordinate.system === coordinate.system && entry.coordinate.position === coordinate.position)
+    .sort((a, b) => b.appearedAt - a.appearedAt)[0];
+  if (!contact) return null;
+  const arts = EXPLORATION_ARTS[contact.kind];
+  return arts[contact.kind === 'anomaly' ? contact.variant - 1 : contact.variant + 2] ?? arts[0] ?? null;
+}
+
+function CoordinateLink({ value, onOpen }: { value: string; onOpen?: (coordinate: UniverseCoordinate) => void }) {
+  const coordinate = parseCoordinate(value);
+  if (!coordinate) return <>{value}</>;
+  const text = `[${coordinate.galaxy}:${coordinate.system}:${coordinate.position}]`;
+  const name = value.replace(COORDINATE_PATTERN, '').trim();
+  return <>
+    {name ? <span className="reports-v3-route-name">{name}</span> : null}
+    <button type="button" className="reports-v3-coord" disabled={!onOpen} title="Открыть во Вселенной" onClick={() => onOpen?.(coordinate)}>{text} ↗</button>
+  </>;
+}
+
+function GenericDossier({ item, exploration, onOpenUniverseTarget }: {
+  item: ReportItem;
+  exploration?: ExplorationState;
+  onOpenUniverseTarget?: (target: { coordinate: UniverseCoordinate }) => void;
+}) {
+  const openCoordinate = onOpenUniverseTarget ? (coordinate: UniverseCoordinate) => onOpenUniverseTarget({ coordinate }) : undefined;
+  const route: { label: string; value: string }[] = [];
+  const resources: { kind: ResourceKind; label: string; value: string }[] = [];
+  const losses: { kind: ResourceKind; label: string; value: string }[] = [];
+  const facts: { label: string; value: string }[] = [];
+  const notes: string[] = [];
+  let risk: number | null = null;
+  let tokens: string | null = null;
+
+  for (const detail of item.details) {
+    const { label, value } = detail;
+    if (!value || TECHNICAL_LABEL.test(label) || TECHNICAL_VALUE.test(value)) continue;
+    if (/риск/i.test(label)) { risk = romanRisk(value); if (risk) continue; }
+    if (/жетон/i.test(label)) { tokens = value; continue; }
+    if (parseCoordinate(value) || /^(цель|координаты|локация|планета|источник)/i.test(label)) { route.push(detail); continue; }
+    const kind = resourceKindOf(label);
+    const amount = numericValue(value);
+    if (kind && amount !== null) {
+      const caption = label.replace(/^[^·]*·\s*/, '').trim();
+      if (/сгорел|потерян|сожжен/i.test(label)) { if (amount !== 0) losses.push({ kind, label: caption, value }); continue; }
+      resources.push({ kind, label: caption === label ? label : caption, value });
+      continue;
+    }
+    if (value.length > 34) { notes.push(`${label}: ${value}`); continue; }
+    facts.push(detail);
+  }
+
+  const art = explorationArtFor(item, exploration);
   return (
-    <div className={`reports-dossier reports-dossier--generic reports-v2-tone-${item.statusTone}`}>
-      <DossierHeading item={item} />
-      <section className="reports-generic-details"><header>ДЕТАЛИ</header><dl>{item.details.map((detail) => <div key={`${detail.label}-${detail.value}`}><dt>{detail.label}</dt><dd>{detail.value}</dd></div>)}</dl></section>
-      <section className="reports-generic-body"><small>СВОДКА</small><p>{item.body}</p></section>
+    <div className={`reports-dossier reports-dossier--generic reports-v3 reports-v2-tone-${item.statusTone}`}>
+      <DossierHeading item={item} art={art ? <img src={art} alt="" aria-hidden="true" draggable={false} /> : undefined} />
+      {route.length ? <section className="reports-v3-route" aria-label="Маршрут">
+        {route.map((entry, index) => <div className="reports-v3-route-step" key={`${entry.label}-${index}`}>
+          <small>{entry.label}</small><strong><CoordinateLink value={entry.value} onOpen={openCoordinate} /></strong>
+        </div>)}
+      </section> : null}
+      {resources.length ? <section className="reports-v3-section">
+        <header><strong>РЕСУРСЫ</strong></header>
+        <div className="reports-v3-resources">
+          {resources.map((entry) => <div className={`reports-v3-res reports-v3-res--${entry.kind}`} key={`${entry.kind}-${entry.label}`}>
+            <ResourceIcon kind={entry.kind} /><span><small>{entry.label}</small><b>{entry.value}</b></span>
+          </div>)}
+        </div>
+      </section> : null}
+      {losses.length ? <section className="reports-v3-section reports-v3-section--loss">
+        <header><strong>ПОТЕРЯНО ПРИ ПЕРЕПОЛНЕНИИ ТРЮМА</strong></header>
+        <div className="reports-v3-resources">
+          {losses.map((entry) => <div className={`reports-v3-res reports-v3-res--${entry.kind}`} key={`loss-${entry.kind}`}>
+            <ResourceIcon kind={entry.kind} /><span><small>{entry.label}</small><b>−{entry.value.replace(/^[+−-]/, '')}</b></span>
+          </div>)}
+        </div>
+      </section> : null}
+      {risk || tokens || facts.length ? <section className="reports-v3-facts">
+        {risk ? <div className="reports-v3-fact"><small>КАТЕГОРИЯ РИСКА</small>
+          <span className="reports-v3-risk" aria-label={`Риск ${risk} из 5`}>{[1, 2, 3, 4, 5].map((level) => <i key={level} className={level <= risk! ? `on lvl-${risk}` : ''}>{['I', 'II', 'III', 'IV', 'V'][level - 1]}</i>)}</span>
+        </div> : null}
+        {tokens ? <div className="reports-v3-fact reports-v3-fact--token"><small>ЖЕТОНЫ РЕМОНТА</small><b>{tokens === '0' ? 'Не найдены' : `+${tokens.replace(/^\+/, '')}`}</b></div> : null}
+        {facts.map((entry) => <div className="reports-v3-fact" key={`${entry.label}-${entry.value}`}><small>{entry.label}</small><b>{entry.value}</b></div>)}
+      </section> : null}
+      <section className="reports-v3-summary"><p>{item.body}</p>{notes.map((note) => <p className="reports-v3-note" key={note}>{note}</p>)}</section>
     </div>
   );
 }
@@ -320,7 +438,7 @@ function isPirateSide(side: BattleSideViewModel) {
 
 function BattleSideOverview({ side }: { side: BattleSideViewModel }) {
   const sideLabel = side.participant.side === 'attacker' ? 'АТАКУЮЩИЙ' : 'ЗАЩИТНИК';
-  const participantMeta = [side.participant.race, side.participant.coordinates].filter(Boolean).join(' · ');
+  const participantMeta = [isPirateSide(side) ? 'Пираты' : side.participant.race, side.participant.coordinates].filter(Boolean).join(' · ');
   return (
     <article className={`reports-battle-side reports-battle-side--${side.participant.side}`}>
       <div className="reports-v2-art reports-battle-general-art">{isPirateSide(side) ? <span className="faction-general-portrait" data-faction="pirates"><img src={pirateWarlordArt} alt="" /></span> : <FactionGeneralPortrait factionId={side.factionId} />}</div>
@@ -357,7 +475,17 @@ function BattleDossier({ item, report, saved, rating, playerOwnerId, onToggleSav
         <div className="reports-battle-versus" aria-label={result.label}><span>VS</span></div>
         <BattleSideOverview side={viewModel.defender} />
       </section>
-      <BattleLosses side={viewModel.attacker} />
+      <section className={`reports-v3-verdict reports-v2-tone-${item.statusTone}`} aria-label="Итог боя">
+        <div><small>ИТОГ БОЯ</small><strong>{item.statusLabel}</strong><span>{viewModel.roundCount ? `${viewModel.roundCount} ${viewModel.roundCount === 1 ? 'раунд' : viewModel.roundCount < 5 ? 'раунда' : 'раундов'}` : 'Бой не состоялся: у одной из сторон не было сил'}</span></div>
+        <div className="reports-v3-verdict-actions">
+          <button type="button" className={`reports-v3-star ${saved ? 'active' : ''}`} aria-pressed={saved} aria-label={saved ? 'Убрать бой из сохранённых' : 'Сохранить бой'} onClick={onToggleSaved}><ActionGlyph kind="save" /></button>
+          <button type="button" className="reports-primary-action" onClick={onOpen}>ПОЛНЫЙ БОЕВОЙ ОТЧЁТ</button>
+        </div>
+      </section>
+      <div className="reports-v3-losses">
+        <BattleLosses side={viewModel.attacker} />
+        <BattleLosses side={viewModel.defender} />
+      </div>
       {viewModel.debrisOnOrbit != null || viewModel.resources.length ? <section className="reports-battle-rewards" aria-label="Обломки и ресурсы после боя">
         <header><strong>РЕСУРСЫ И ОБЛОМКИ</strong><span>Зафиксировано в отчёте</span></header>
         <div className="reports-battle-reward-grid">
@@ -365,7 +493,6 @@ function BattleDossier({ item, report, saved, rating, playerOwnerId, onToggleSav
           {viewModel.debrisOnOrbit != null ? <div className="reports-battle-reward reports-battle-reward--debris"><span className="reports-v2-art reports-battle-resource-art"><ResourceIcon kind="debris" /></span><span>Обломки на орбите</span><strong>{numberFormat.format(viewModel.debrisOnOrbit)}</strong></div> : null}
         </div>
       </section> : null}
-      <BattleCard viewModel={viewModel} saved={saved} onToggleSaved={onToggleSaved} onOpen={onOpen} />
     </div>
   );
 }
@@ -624,7 +751,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
 
         <section className="reports-preview reports-v2-panel">
           <header className="reports-preview-head"><div><small>ДОСЬЕ СООБЩЕНИЯ</small><h2>ПРОСМОТР СООБЩЕНИЯ</h2></div>{activeCategory ? <div className="reports-preview-actions"><button type="button" aria-label={selectedBattleSaved ? 'Убрать бой из сохранённых' : 'Сохранить бой'} aria-pressed={selectedBattleSaved} disabled={!selectedItem?.battleReportId} className={selectedBattleSaved ? 'active' : ''} onClick={() => selectedItem?.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)}><ActionGlyph kind="save" /></button><span /><button type="button" aria-label="Предыдущее сообщение" disabled={selectedIndex <= 0} onClick={() => navigateSelected(-1)}><ActionGlyph kind="prev" /></button><button type="button" aria-label="Следующее сообщение" disabled={selectedIndex < 0 || selectedIndex >= visibleItems.length - 1} onClick={() => navigateSelected(1)}><ActionGlyph kind="next" /></button></div> : null}</header>
-          <div className="reports-preview-scroll">{activeCategory ? selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} saved={selectedBattleSaved} rating={rating} playerOwnerId={profile.playerId} onToggleSaved={() => selectedItem.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)} onOpen={() => selectedBattle && setOpenBattleReportId(selectedBattle.id)} /> : selectedItem.overpopulationReport ? <OverpopulationDossier item={selectedItem} /> : selectedItem.pirateReconReport ? <PirateReconDossier item={selectedItem} onOpenPirateUniverse={onOpenPirateUniverse} /> : selectedItem.spyReport ? <SpyDossier item={selectedItem} report={selectedItem.spyReport} onOpenUniverseTarget={onOpenUniverseTarget} /> : <GenericDossier item={selectedItem} />) : <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} /> : <EmptyFolder folder={activeFolderMeta} />}</div>
+          <div className="reports-preview-scroll">{activeCategory ? selectedItem ? (selectedBattle ? <BattleDossier item={selectedItem} report={selectedBattle} saved={selectedBattleSaved} rating={rating} playerOwnerId={profile.playerId} onToggleSaved={() => selectedItem.battleReportId && onToggleBattleSaved(selectedItem.battleReportId, !selectedBattleSaved)} onOpen={() => selectedBattle && setOpenBattleReportId(selectedBattle.id)} /> : selectedItem.overpopulationReport ? <OverpopulationDossier item={selectedItem} /> : selectedItem.pirateReconReport ? <PirateReconDossier item={selectedItem} onOpenPirateUniverse={onOpenPirateUniverse} /> : selectedItem.spyReport ? <SpyDossier item={selectedItem} report={selectedItem.spyReport} onOpenUniverseTarget={onOpenUniverseTarget} /> : <GenericDossier item={selectedItem} exploration={exploration} onOpenUniverseTarget={onOpenUniverseTarget} />) : <EmptyDossier category={activeCategory} savedOnly={filter === 'saved'} /> : <EmptyFolder folder={activeFolderMeta} />}</div>
           {activeCategory && selectedItem ? <footer className="reports-preview-footer">
             <div className="reports-preview-footer-actions">
               {selectedItem.battleReportId ? <button type="button" className={selectedBattleSaved ? 'restore' : ''} onClick={() => onToggleBattleSaved(selectedItem.battleReportId!, !selectedBattleSaved)}>{selectedBattleSaved ? 'УБРАТЬ ИЗ СОХРАНЁННЫХ' : 'СОХРАНИТЬ БОЙ'}</button> : null}

@@ -279,8 +279,8 @@
             "transform": "matrix(1, 0, 0, 1, 0, 0)",
             "transformOrigin": "960px 540px"
           },
-          "imageCount": 45,
-          "loadedImageCount": 45,
+          "imageCount": 43,
+          "loadedImageCount": 43,
           "fontStatus": "loaded"
         },
         {
@@ -335,8 +335,8 @@
             "transform": "matrix(1, 0, 0, 1, 0, 0)",
             "transformOrigin": "960px 540px"
           },
-          "imageCount": 31,
-          "loadedImageCount": 31,
+          "imageCount": 33,
+          "loadedImageCount": 33,
           "fontStatus": "loaded"
         },
         {
