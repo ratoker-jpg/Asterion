@@ -299,8 +299,6 @@ function AegisButton({ children, onClick, disabled = false }: { children: ReactN
 
 export function App() {
   const scale = useStageScale();
-  const stageLeft = Math.max(0, (window.innerWidth - 1920 * scale) / 2);
-  const stageTop = Math.max(0, (window.innerHeight - 1080 * scale) / 2);
   const { route: activeRoute, fleetSection: activeFleetSection, navigate } = useNavigation();
   const activeTab = APP_ROUTE_LABELS[activeRoute];
   const [planetViewMode, setPlanetViewMode] = useState<PlanetViewMode>('overview');
@@ -1603,15 +1601,7 @@ export function App() {
 
   return (
     <div className="viewport">
-      <div className="stage stage-shell-v3 stage-shell-v4" style={{
-        left: `${stageLeft}px`,
-        top: `${stageTop}px`,
-        justifySelf: 'start',
-        alignSelf: 'start',
-        transformOrigin: 'top left',
-        transform: `scale(${scale})`,
-        '--space-bg': `url(${systemBackground})`,
-      } as CSSProperties}>
+      <div className="stage stage-shell-v3 stage-shell-v4" style={{ transform: `scale(${scale})`, '--space-bg': `url(${systemBackground})` } as CSSProperties}>
         <AsterionHeader
           factionId={state.profile.factionId}
           currentPlanet={{
