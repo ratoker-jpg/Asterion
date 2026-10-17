@@ -1352,4 +1352,4 @@
 .reports-view.reports-v2 .reports-profile-avatar__portrait img { position: static !important; width: 100% !important; height: 100% !important; object-fit: contain !important; object-position: center top !important; transform: none !important; }
 .reports-view.reports-v2 .reports-profile-avatar__portrait { inset: 24px 36px 120px !important; }
 .reports-view.reports-v2 .reports-v2-nav-art { width: 40px !important; height: 40px !important; }
-.reports-view.reports-v2 .reports-v2-nav-art img { width: 100% !important; height: 100% !important; object-fit: contain; }
+.reports-view.reports-v2 .reports-v2-nav-art img { width: 30px !important; height: 30px !important; inset: 5px !important; object-fit: contain; }
