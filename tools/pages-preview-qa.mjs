@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const [url, chromeBin = 'google-chrome'] = process.argv.slice(2);
 assert.ok(url, 'Preview URL required');
+const savedFixture = process.env.ASTERION_PREVIEW_SAVE_FIXTURE
+  ? JSON.parse(await readFile(process.env.ASTERION_PREVIEW_SAVE_FIXTURE, 'utf8')) : null;
 const wait = (ms) => new Promise((done) => setTimeout(done, ms));
 const profile = await mkdtemp(join(tmpdir(), 'asterion-preview-'));
 const chrome = spawn(chromeBin, [
@@ -38,7 +40,7 @@ try {
   socket.addEventListener('message', (e) => {
     const msg = JSON.parse(e.data);
     if (msg.method === 'Runtime.exceptionThrown') {
-      errors.push(msg.params.exceptionDetails?.text || 'Uncaught exception');
+      errors.push(msg.params.exceptionDetails?.exception?.description || msg.params.exceptionDetails?.text || 'Uncaught exception');
     }
     const promise = pending.get(msg.id);
     if (promise) {
@@ -53,12 +55,17 @@ try {
   });
   await send('Page.enable');
   await send('Runtime.enable');
+  if (savedFixture) {
+    assert.equal(new URL(url).searchParams.get('mode'), 'test', 'Saved regression fixture is Test Mode only');
+    await send('Page.addScriptToEvaluateOnNewDocument', { source:
+      `if (location.origin === ${JSON.stringify(new URL(url).origin)}) { localStorage.setItem('asterion.vertical-slice.test.v1', ${JSON.stringify(JSON.stringify(savedFixture))}); localStorage.setItem('asterion.test-time-scale.v1', '1'); }` });
+  }
   const readStage = async () => {
     const code = "(() => { const el=document.querySelector('.stage'); const view=document.querySelector('.viewport'); if(!el || !view) return {found:false,location:location.href}; const r=el.getBoundingClientRect(); return {found:true,x:r.x,y:r.y,w:r.width,h:r.height,iw:innerWidth,ih:innerHeight,preview:document.documentElement.classList.contains('web-preview'),mode:document.querySelector('[data-qa-runtime-mode]')?.getAttribute('data-qa-runtime-mode')}; })()";
     const out = await send('Runtime.evaluate', { expression: code, returnByValue: true });
     return out.result?.value;
   };
-  for (const [width, height] of [[1280,720],[1204,650],[1600,900],[1920,1080]]) {
+  for (const [width, height] of [[1280,720],[1204,650],[1600,900],[1920,1080],[1919,936]]) {
     await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
     await send('Page.navigate', { url });
     let s;
@@ -67,16 +74,32 @@ try {
       if (s?.found) break;
       await wait(250);
     }
-    assert.ok(s?.found, 'Missing stage: ' + width + 'x' + height + ' ' + JSON.stringify(s));
+    assert.ok(s?.found, 'Missing stage: ' + width + 'x' + height + ' ' + JSON.stringify(s) + '\n' + errors.join('\n'));
     await wait(width === 1280 ? 15000 : 3000);
     s = await readStage();
-    assert.ok(s?.found && s.preview, 'Stage disappeared after load: ' + width + 'x' + height);
+    assert.ok(s?.found && s.preview, 'Stage disappeared after load: ' + width + 'x' + height + '\n' + errors.join('\n'));
     assert.equal(s.mode, 'test', 'Preview must stay in Test Mode even with &sha or &v parameters');
     const dx = Math.abs(s.x + s.w / 2 - s.iw / 2);
     const dy = Math.abs(s.y + s.h / 2 - s.ih / 2);
     assert.ok(dx < 3 && dy < 3, 'Stage not centered: ' + width + 'x' + height + ' ' + JSON.stringify(s));
     assert.ok(s.w > width * 0.84 && s.h > height * 0.84, 'Stage undersized: ' + JSON.stringify(s));
+    const rendered = await send('Runtime.evaluate', { expression: "document.querySelectorAll('[data-qa-navigation=primary] [data-qa-route]').length", returnByValue: true });
+    assert.equal(rendered.result?.value, 6, 'Game content must remain mounted after runtime reconciliation');
     console.log('OK ' + width + 'x' + height + ': centered and still rendered after delay');
+  }
+  if (savedFixture) {
+    const raid = savedFixture.flights.records.find((flight) => flight.missionId === 'pirate-raid');
+    assert.ok(raid, 'Regression fixture must contain an incoming pirate raid');
+    const reportId = `battle-pirate-raid-${raid.id}`;
+    const resolution = await send('Runtime.evaluate', { expression:
+      `(() => { const save = JSON.parse(localStorage.getItem('asterion.vertical-slice.test.v1') || '{}'); const reports = (save.combat?.reports || []).filter(r => r.id === ${JSON.stringify(reportId)}); return { count: reports.length, population: reports[0]?.attackerForce?.populationBefore }; })()`, returnByValue: true });
+    assert.equal(resolution.result?.value?.count, 1, 'Saved raid must resolve once during startup');
+    assert.equal(resolution.result?.value?.population, raid.populationReserved, 'Saved raid must retain its real population');
+    console.log('Persisted incoming raid resolved without truncation: population ' + raid.populationReserved);
+  }
+  if (process.env.ASTERION_PREVIEW_QA_SCREENSHOT) {
+    const capture = await send('Page.captureScreenshot', { format: 'png' });
+    await writeFile(process.env.ASTERION_PREVIEW_QA_SCREENSHOT, Buffer.from(capture.data, 'base64'));
   }
   // The build's public asset manifest uses document-relative URLs, not hashed JS imports.
   // Check files that previously rendered as broken-image placeholders in PR previews.

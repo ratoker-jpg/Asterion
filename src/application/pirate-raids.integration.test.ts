@@ -288,3 +288,52 @@ test('seven owned systems retain distinct once-only raid decisions across a shor
   assert.ok(keys.length>0,'Expected at least one pirate check in seven systems');
   assert.deepEqual(reconcileRuntime(offline,context).state.pirate?.raidRolls,offline.pirate?.raidRolls);
 });
+
+test('a persisted raid against a full legal fleet and defense survives startup above the simulator cap', () => {
+  let launched: ReturnType<typeof createInitialSaveState> | undefined;
+  for (let index = 0; index < 100 && !launched; index++) {
+    const cycle = getUniverseTimedObjectSchedule('pirate', 1, 1, index);
+    if (!cycle.present) continue;
+    const baseline = createInitialSaveState('production', cycle.startAt);
+    const planet = baseline.planets['helion-01']!;
+    const fleet = createEmptyFleetState();
+    fleet.ships.scout = 12_500;
+    const defense = { defenses: { ...planet.defense.defenses, 'ballistic-turret': 12_500 } };
+    const prepared = {
+      ...baseline,
+      planets: { ...baseline.planets, 'helion-01': {
+        ...planet, buildings: { ...planet.buildings, hangar: 20 }, fleet, defense,
+      } },
+      pirate: { ...baseline.pirate!, raidProcessedAt: cycle.startAt,
+        ownerThreats: { ...baseline.pirate!.ownerThreats,
+          [baseline.profile.playerId]: { version: 1 as const, ageHours: 10_000, integratedAt: cycle.startAt } },
+        ownerMaxHangarLevel: { ...baseline.pirate!.ownerMaxHangarLevel, [baseline.profile.playerId]: 20 },
+      },
+    };
+    assert.equal(calculateFleetPopulation(fleet), 25_000);
+    assert.equal(calculateDefensePopulation(defense, 'aegis'), 25_000);
+    const at = cycle.startAt + 900_000;
+    const event = selectDuePirateRolls(prepared, cycle.startAt, at, 'production')
+      .find((roll) => roll.ownerId === baseline.profile.playerId);
+    if (!event) continue;
+    const candidate = resolveDuePirateRoll(prepared, event, 'production');
+    if (candidate.flights.records.some((flight) => flight.missionId === 'pirate-raid')) launched = candidate;
+  }
+  assert.ok(launched, 'A deterministic legal high-population raid must be generated');
+  const flight = launched.flights.records.find((record) => record.missionId === 'pirate-raid')!;
+  assert.ok(flight.populationReserved > 35_000, 'This must reproduce the reported attacker overflow');
+  const storage = new MemoryStorage();
+  const facade = createPersistenceFacade({ mode: 'production', storage, now: () => flight.arrivalAt });
+  assert.equal(facade.write(launched).ok, true);
+  const reloaded = facade.read();
+  assert.deepEqual(reloaded.flights.records.find((record) => record.id === flight.id)?.pirateRaidSnapshot?.composition,
+    flight.pirateRaidSnapshot!.composition, 'Reload preserves the original fleet without truncation');
+  const context = { planetId: 'helion-01', now: flight.arrivalAt, mode: 'production' as const, testTimeScale: 15 as const };
+  const reconciled = reconcileRuntime(reloaded, context);
+  const reportId = `battle-pirate-raid-${flight.id}`;
+  const report = reconciled.state.combat.reports.find((record) => record.id === reportId);
+  assert.ok(report, 'The due saved raid resolves instead of throwing out of the startup effect');
+  assert.equal(report.attackerForce.populationBefore, flight.populationReserved);
+  const repeated = reconcileRuntime(reconciled.state, context);
+  assert.equal(repeated.state.combat.reports.filter((record) => record.id === reportId).length, 1);
+});

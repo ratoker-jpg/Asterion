@@ -144,3 +144,7 @@ jobs:
           fi
           echo "Published PR preview responds, assets load, and React viewport renders."
           timeout 120s node tools/pages-preview-qa.mjs "${PREVIEW}/?mode=test&sha=${PR_SHA}" "${CHROME}"
+          node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs \
+            tools/generate-preview-raid-fixture.mjs "${RUNNER_TEMP}/preview-large-raid.json"
+          ASTERION_PREVIEW_SAVE_FIXTURE="${RUNNER_TEMP}/preview-large-raid.json" \
+            timeout 120s node tools/pages-preview-qa.mjs "${PREVIEW}/?mode=test" "${CHROME}"
