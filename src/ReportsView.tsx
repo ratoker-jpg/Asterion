@@ -148,7 +148,7 @@ function ReportListItem({ item, active, read, saved, selected, onOpen, onSelect 
   onSelect: (checked: boolean) => void;
 }) {
   return (
-    <article className={`reports-list-item ${active ? 'active' : ''} ${read ? 'read' : 'unread'} ${selected ? 'selected' : ''}`} data-report-item-id={item.id} data-pirate-recon-outcome={item.pirateReconReport?.outcome}>
+    <article className={`reports-list-item reports-v2-tone-${item.statusTone} ${active ? 'active' : ''} ${read ? 'read' : 'unread'} ${selected ? 'selected' : ''}`} data-report-item-id={item.id} data-pirate-recon-outcome={item.pirateReconReport?.outcome}>
       <label className="reports-list-check">
         <input type="checkbox" checked={selected} onChange={(event) => onSelect(event.target.checked)} aria-label={`Выбрать сообщение: ${item.title}`} />
         <span aria-hidden="true" />
@@ -566,7 +566,7 @@ export function ReportsView({ battleReports, savedBattleReportIds, operations, c
 
       {activeFolder === 'profile' ? <PlayerProfile profile={profile} score={score} command={command} mode={mode} onOpenCommand={onOpenCommand} /> : <section className="reports-folder-workspace" data-qa-folder-view={activeFolder}>
         <section className="reports-feed reports-v2-panel" data-qa-message-folder-view={activeFolder}>
-          <header className="reports-feed-head"><div><small>РАЗДЕЛ СООБЩЕНИЙ</small><h2>{activeFolderMeta.label.toUpperCase()}</h2></div>{activeCategory ? <div className="reports-feed-head-tools"><span className="reports-folder-count">{counts[activeCategory]} СООБЩЕНИЙ</span><select value={filter} onChange={(event) => setFilter(event.target.value as ReportFilter)} aria-label="Фильтр сообщений">{availableFilters.map((key) => <option key={key} value={key}>{FILTER_LABELS[key]}</option>)}</select></div> : null}</header>
+          <header className="reports-feed-head"><div><small>РАЗДЕЛ СООБЩЕНИЙ</small><h2>{activeFolderMeta.label.toUpperCase()}</h2></div>{activeCategory ? <div className="reports-feed-head-tools"><span className="reports-folder-count">{counts[activeCategory]} СООБЩ.</span><div className="reports-v2-filter-segments" role="group" aria-label="Фильтр сообщений">{availableFilters.map((key) => <button key={key} type="button" aria-pressed={filter === key} onClick={() => setFilter(key)}>{FILTER_LABELS[key]}</button>)}</div></div> : null}</header>
           {activeCategory ? <FolderActions folder={activeFolderMeta} items={folderItems} selectedIds={selectedIds} onSelectAll={selectAll} onDeleteAll={deleteAll} onDeleteSelected={deleteSelected} /> : null}
           {activeCategory ? <label className="reports-search"><span aria-hidden="true"><SearchGlyph /></span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск в разделе..." aria-label="Поиск в разделе сообщений" /></label> : null}
           <div className="reports-list" data-qa-message-list>
