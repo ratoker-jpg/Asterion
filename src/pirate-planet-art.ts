@@ -10,9 +10,22 @@ export const PIRATE_PLANET_ARTS = [
   ...asterionAssetIntegrationAssets.piratePlanetArts,
 ];
 
-export function getPiratePlanetArt(system: number, cycleIndex: number): string {
-  const index = Number.isSafeInteger(system) && Number.isSafeInteger(cycleIndex)
+const PIRATE_PLANET_OPERATION_DETAIL_ARTS = [
+  pirateSkull, pirate01, pirate02, pirate03,
+  ...asterionAssetIntegrationAssets.operationsPiratePlanetArts,
+];
+
+function piratePlanetArtIndex(system: number, cycleIndex: number): number {
+  return Number.isSafeInteger(system) && Number.isSafeInteger(cycleIndex)
     ? Math.abs(system + cycleIndex) % PIRATE_PLANET_ARTS.length
     : 0;
-  return PIRATE_PLANET_ARTS[index];
+}
+
+export function getPiratePlanetArt(system: number, cycleIndex: number): string {
+  return PIRATE_PLANET_ARTS[piratePlanetArtIndex(system, cycleIndex)];
+}
+
+export function getPiratePlanetOperationDetailArt(system: number, cycleIndex: number): string {
+  return PIRATE_PLANET_OPERATION_DETAIL_ARTS[piratePlanetArtIndex(system, cycleIndex)]
+    ?? getPiratePlanetArt(system, cycleIndex);
 }

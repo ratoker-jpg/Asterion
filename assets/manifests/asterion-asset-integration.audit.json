@@ -6,9 +6,9 @@
     "intakeCount": 72,
     "copiedSourceCount": 69,
     "reusedSourceCount": 3,
-    "runtimeTextureCount": 70,
-    "transferBytes": 4794656,
-    "decodedBytes": 45432832,
+    "runtimeTextureCount": 106,
+    "transferBytes": 7354722,
+    "decodedBytes": 66666496,
     "sourceCounts": {
       "reportIcons": 8,
       "scoreIcons": 4,
@@ -24,7 +24,7 @@
   },
   "budgets": {
     "generatedRuntimeTotalBytes": 50331648,
-    "generatedRuntimeDecodedBytes": 201326592,
+    "generatedRuntimeDecodedBytes": 209715200,
     "generatedRuntimeTextureCount": 512,
     "singleRuntimeTexturePixels": 4194304,
     "spaceMapTransferBytes": 16777216,
@@ -58,6 +58,7 @@
         "bytes": 5174,
         "sha256": "211427f44c0fecf0bbb993b734ab04e17e952eb302ac5f2368afd36177a458da"
       },
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -85,6 +86,7 @@
         "bytes": 2658,
         "sha256": "37b0488626f081b368fe8a5a052e1de52088c0a096258e4853826f3cac142828"
       },
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -112,6 +114,7 @@
         "bytes": 3740,
         "sha256": "b35ff0fb2da81347501d305002de0254badead4babf5741a5f501fe66a51e8bd"
       },
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -139,6 +142,7 @@
         "bytes": 6530,
         "sha256": "d1b06e0137fdd0c1deae8cedb56971d198bb10b8311cd02a4747eb0d67a819e8"
       },
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -166,6 +170,7 @@
         "bytes": 4918,
         "sha256": "185175bad9ea9749f205a72d80e67697cfb11289aa255379e7a21f587db68497"
       },
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -193,6 +198,7 @@
         "bytes": 3874,
         "sha256": "d6b24b07601b5ae7909fd3116370f0fc95ccffc76635061193a1396f40a245a6"
       },
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -220,6 +226,7 @@
         "bytes": 4906,
         "sha256": "abd72097cbbd12f6310f6adc8fab7c65a82d5ca7c226b1cb2d457f7fba7e03f3"
       },
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -247,6 +254,7 @@
         "bytes": 3662,
         "sha256": "73bddd6bb07e1cd969ba189a8a2f78dc6f449bbf45c2d74525df26dda235d0a4"
       },
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -274,6 +282,7 @@
         "bytes": 6310,
         "sha256": "5249b35e674a878631ae8a68780dd8dde5be9c77ef3ed1fd2a4fd1418655b4fe"
       },
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -301,6 +310,7 @@
         "bytes": 7446,
         "sha256": "1d95e74883378747a555af6c3a8d87aee4cbc4b9ae5e8410c30cab7cc0730d29"
       },
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -328,6 +338,7 @@
         "bytes": 6510,
         "sha256": "c328ea8484e031952963ae468852d66b7ff52f358aceea13523b7413c765b547"
       },
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -355,6 +366,7 @@
         "bytes": 7108,
         "sha256": "a24f9885fdbdad4ee13c88c723b6e9c275bb78b363466e5507ed41095312a9b8"
       },
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -372,6 +384,7 @@
         "sha256": "a2d1f807672aff9f4a182f304aba3f0818d683c3a34ece1150fc0930917b04c8"
       },
       "runtime": null,
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -389,6 +402,7 @@
         "sha256": "5f447349c4a9610d616e5ae22147040c0bbc672f379f7504454415191a79911e"
       },
       "runtime": null,
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -406,6 +420,7 @@
         "sha256": "94f1061b2b78f707638f322b79ca8d7c722bf114db8425fbcf8a2c3acac024ac"
       },
       "runtime": null,
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -423,6 +438,7 @@
         "sha256": "3af6ca6d213d634016a7ac71570076619114910f080e11b3d104c99147fbc3dc"
       },
       "runtime": null,
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -440,6 +456,7 @@
         "sha256": "c47ef172755969e330d8d6d06979a071fc19c51973c0f06f60595bffd906c784"
       },
       "runtime": null,
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -457,6 +474,7 @@
         "sha256": "87549ca99279b2da2c21bbf3035603895a82ddb24cb28e5b55deb825faedcf95"
       },
       "runtime": null,
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -474,6 +492,7 @@
         "sha256": "4b4a9b0c6819f85295cc7b6da23354b9794f881408f6c3e0442c5cc6bf93348a"
       },
       "runtime": null,
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -491,6 +510,7 @@
         "sha256": "e5045c12fb4e620941fe70433b3c6a91d14e3ff8f94f5afcd051f6f81837f65c"
       },
       "runtime": null,
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -508,6 +528,7 @@
         "sha256": "73d17d909133a1517d01174fe1266267fbdd3da2aea290663767933acf2cde5d"
       },
       "runtime": null,
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -525,6 +546,7 @@
         "sha256": "facf2635000ce1cb3fc8605133019708d6080c783c7724b20d0662a81330cbf3"
       },
       "runtime": null,
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -542,6 +564,7 @@
         "sha256": "503c9fd284f193870f71df74d83fc4f1f01794c97dc9aaa0e70aa9ebc99731bb"
       },
       "runtime": null,
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -569,6 +592,7 @@
         "bytes": 381406,
         "sha256": "e662ac17942c9f2c5f159670664c58db969056b9721ceb9fea0873ca65b62c8b"
       },
+      "operationsArt": null,
       "mapPreview": {
         "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-01.webp",
         "width": 128,
@@ -606,6 +630,7 @@
         "bytes": 370178,
         "sha256": "08e3c522306baac40b3807ae658d7267dd7cea3185f6499fef2176540046b8ff"
       },
+      "operationsArt": null,
       "mapPreview": {
         "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-02.webp",
         "width": 128,
@@ -643,6 +668,7 @@
         "bytes": 458708,
         "sha256": "2618a67a0d1729355de9b1f10edf7a79e7a94f1a1e3db924ccedfe686b2b6c9a"
       },
+      "operationsArt": null,
       "mapPreview": {
         "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-03.webp",
         "width": 128,
@@ -680,6 +706,7 @@
         "bytes": 437652,
         "sha256": "d59eae4955f5b48e8634e3ec695416707b2b48c30e403c493d010cf92e2e5e9d"
       },
+      "operationsArt": null,
       "mapPreview": {
         "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-04.webp",
         "width": 128,
@@ -717,6 +744,7 @@
         "bytes": 476122,
         "sha256": "cc776b89d55efe81fe550a3df1e1eb36c06d5a0fcd46287eecb687fa090045b9"
       },
+      "operationsArt": null,
       "mapPreview": {
         "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-05.webp",
         "width": 128,
@@ -754,6 +782,7 @@
         "bytes": 332524,
         "sha256": "db9794fee4f586883ccc99554f90b0ae6c5ec7e8450acdc771ce103d724e4252"
       },
+      "operationsArt": null,
       "mapPreview": {
         "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-06.webp",
         "width": 128,
@@ -791,6 +820,7 @@
         "bytes": 424394,
         "sha256": "e19afb852af5319372008517f7a57635ef0ff3ed0bce666bddec2f3887e9fa77"
       },
+      "operationsArt": null,
       "mapPreview": {
         "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-07.webp",
         "width": 128,
@@ -828,6 +858,7 @@
         "bytes": 398212,
         "sha256": "447f777f54871b1dbbda52d6863a6d45f60dcfca3e0e04c8985876b2580f3fd6"
       },
+      "operationsArt": null,
       "mapPreview": {
         "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-08.webp",
         "width": 128,
@@ -865,6 +896,7 @@
         "bytes": 428660,
         "sha256": "d56f6287bb58e55a8222d68b5735de110c6b7a948dc6e5bbac80568cac1f7138"
       },
+      "operationsArt": null,
       "mapPreview": {
         "outputPath": "public/assets/generated/asterion/universe/planet-previews/skin-asterion-09.webp",
         "width": 128,
@@ -902,6 +934,17 @@
         "bytes": 36612,
         "sha256": "71d4313653ecfe72f4cee240128fd8294b5320ea684db3c71841d88c937fef66"
       },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/pirate-planets/pirate-planet-01.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 74428,
+        "sha256": "b9972eb7f752103b9754a3d13dde8ad357ba367eb495cc7e9227db7f2e387bd1"
+      },
       "mapPreview": null
     },
     {
@@ -928,6 +971,17 @@
         "withoutEnlargement": true,
         "bytes": 36494,
         "sha256": "9f3e2ece58609c90fe87ce772e6047314e001d140c81fcf7da0df6f4f53b2683"
+      },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/pirate-planets/pirate-planet-02.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 75176,
+        "sha256": "9f850b5292e1d7dfaadfc8ffaf6cc737800e4e55171cfcee8756cac3934528bf"
       },
       "mapPreview": null
     },
@@ -956,6 +1010,17 @@
         "bytes": 34132,
         "sha256": "b3c04a3a0dc87d452eae5eedc36c33b6aee8f7e58601172c23102d44e7257204"
       },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/pirate-planets/pirate-planet-03.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 69604,
+        "sha256": "20fcec310ff8ef85a4317ccb65811ef204754d3f1a7c7b2d8af5bf35ddeaff2f"
+      },
       "mapPreview": null
     },
     {
@@ -982,6 +1047,17 @@
         "withoutEnlargement": true,
         "bytes": 39462,
         "sha256": "ddce2290b957da7fd1e531afc81624141fdf42801c2e9094235fa0b6878613ee"
+      },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/pirate-planets/pirate-planet-04.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 80474,
+        "sha256": "fcd03d1e49bddc6378259b89201f03c6809409abc6bfc48fc3f19444469fcb74"
       },
       "mapPreview": null
     },
@@ -1010,6 +1086,17 @@
         "bytes": 35390,
         "sha256": "db8ea6f5c8cae71c6ac40758a54a7651f0dae666bcbc5a368dfb432d1487af66"
       },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/pirate-planets/pirate-planet-05.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 73892,
+        "sha256": "210d35b1cc959d64664282bd3a2d8c58c4fd6d25837af72c6e2acb082c304d1c"
+      },
       "mapPreview": null
     },
     {
@@ -1036,6 +1123,17 @@
         "withoutEnlargement": true,
         "bytes": 35322,
         "sha256": "dd32976e6d0e594400c2398943c8b8486ca3c6de22ee7f407c4ff11e1bc6492d"
+      },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/pirate-planets/pirate-planet-06.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 72528,
+        "sha256": "22e158ff29137977b1ede31caf855030a7305730f98c9c85b439714e5604846d"
       },
       "mapPreview": null
     },
@@ -1064,6 +1162,17 @@
         "bytes": 30276,
         "sha256": "2855aa7ce997c63bf4284aa6a9434db19b097e7d76fc9a75ebc9b73d3937450d"
       },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/pirate-planets/pirate-planet-07.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 62430,
+        "sha256": "811587ca5ba296701717892915f820390ad3b5f2499468c1460da53a8a1b384e"
+      },
       "mapPreview": null
     },
     {
@@ -1090,6 +1199,17 @@
         "withoutEnlargement": true,
         "bytes": 44034,
         "sha256": "27b31dd08333ee3552588b52dcd2b109d0b4df323f980a64dfaaab6df2680100"
+      },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/pirate-planets/pirate-planet-08.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 88700,
+        "sha256": "3147d0c23d32fed16385d997f5863546e762ea206e5c44920c6be9ce60d0ccd9"
       },
       "mapPreview": null
     },
@@ -1118,6 +1238,17 @@
         "bytes": 38746,
         "sha256": "badb3af3e546e5a4d3c0c992273691be7b4cbaf4bd53766401754233dc4fe537"
       },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/pirate-planets/pirate-planet-09.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 79654,
+        "sha256": "072934cab0c19612a4e912de9ada0ccc5a7f820687c78333247d13912baa39ed"
+      },
       "mapPreview": null
     },
     {
@@ -1144,6 +1275,17 @@
         "withoutEnlargement": true,
         "bytes": 34226,
         "sha256": "56f3e43329861abbbdc27e149ee50c9ebde1eda97d76bd5b98c620cd2800b499"
+      },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/pirate-planets/pirate-planet-10.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 69148,
+        "sha256": "a51e4f06ec640d0ba2bbb52c39803e0cf9058fdd9dec9455698abad6142c8cdf"
       },
       "mapPreview": null
     },
@@ -1172,6 +1314,17 @@
         "bytes": 25734,
         "sha256": "5b372238b60314c1565150302679b4c4efe395e48897a42f1ec0ed45fa3a9693"
       },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/unique-objects/unique-variant-01.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 90982,
+        "sha256": "8e71162785c59dbad4675a92d725415c5a280af2301cadd538177f25b64514a0"
+      },
       "mapPreview": null
     },
     {
@@ -1198,6 +1351,17 @@
         "withoutEnlargement": true,
         "bytes": 28466,
         "sha256": "4545f68c14fa7a6f3997d9d89afcb4fb196a6f74ae973907d2da61ac3cecdac8"
+      },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/unique-objects/unique-variant-02.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 98716,
+        "sha256": "ecf4aa263e57b2b3777384d392b553ea078ed2bbebb6b6b9e9553b87eec9fb61"
       },
       "mapPreview": null
     },
@@ -1226,6 +1390,17 @@
         "bytes": 22812,
         "sha256": "caccfdb6cc7981092d338a3cf90d825c3a552367620f5bf049db8ef917cf989e"
       },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/unique-objects/unique-variant-03.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 79674,
+        "sha256": "13241c5a8f8ae91e00bd5d92a712d845bc9d17f3cba3c1e4fdd57ed6bd285be7"
+      },
       "mapPreview": null
     },
     {
@@ -1252,6 +1427,17 @@
         "withoutEnlargement": true,
         "bytes": 18960,
         "sha256": "acb73e5907d7e0f53da80bc15a4376a528912d946f31a52617834c2b0daf8c54"
+      },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/unique-objects/unique-variant-04.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 65870,
+        "sha256": "77a452d6fc21077dfb67f6a308b6bb2512e8486ff79d54df62d413fe825a64f8"
       },
       "mapPreview": null
     },
@@ -1280,6 +1466,17 @@
         "bytes": 26838,
         "sha256": "b314e416ae232f0c6cd8c4a91644fbc03a0a8d65d565db216a6c974613b43053"
       },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/unique-objects/unique-variant-05.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 93932,
+        "sha256": "21947376b934fd6e9a02df29e6a42e4d403f46c7a89731906c16731150cc9fa9"
+      },
       "mapPreview": null
     },
     {
@@ -1306,6 +1503,17 @@
         "withoutEnlargement": true,
         "bytes": 23306,
         "sha256": "98900dd477b5807ad153a3cfb8afe00c413d2575cd7312a916deeaecc46d81c3"
+      },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/unique-objects/unique-variant-06.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 82372,
+        "sha256": "bc111fb37ffbdd91472ab4543f1ace64b7e1cddb7d67d442122ea03fc2bb83af"
       },
       "mapPreview": null
     },
@@ -1334,6 +1542,17 @@
         "bytes": 25484,
         "sha256": "3e07a99f00a77f331dbc9cef096200f9ed6d7b066ff3889c417d77ce0d9acc03"
       },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/unique-objects/unique-variant-07.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 89914,
+        "sha256": "8e4ef1913cf2264c89fcf94a346fed084454f8cdc253f9af794633460a41feed"
+      },
       "mapPreview": null
     },
     {
@@ -1360,6 +1579,17 @@
         "withoutEnlargement": true,
         "bytes": 26612,
         "sha256": "be4818a6c85c0be010bfeff513c79d592e926e726f7086525c649e516a03fc01"
+      },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/unique-objects/unique-variant-08.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 93978,
+        "sha256": "98655579410f6e5fc2c9ebd2da291a60c747df24882b4209ff4f398812caec0d"
       },
       "mapPreview": null
     },
@@ -1388,6 +1618,17 @@
         "bytes": 26820,
         "sha256": "ce053e11a4d2ec3977b5f239938254b4de60ab69f19514bcab67cda9415809b6"
       },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/unique-objects/unique-variant-09.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 95940,
+        "sha256": "0bd6aa081d109dea2b0e67b7bcb1b38add82621f3bbe2a9960e709e16c5fcd0d"
+      },
       "mapPreview": null
     },
     {
@@ -1414,6 +1655,17 @@
         "withoutEnlargement": true,
         "bytes": 25542,
         "sha256": "1e96124c821ed29bf5db6fe004ef6451cc05562d60653de8d2d79b59c046cfda"
+      },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/unique-objects/unique-variant-10.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 88968,
+        "sha256": "9c067105b9b8b00764d1815478c043523f6cc58dbdeada6172162d7a4db2a119"
       },
       "mapPreview": null
     },
@@ -1442,6 +1694,17 @@
         "bytes": 24332,
         "sha256": "5494073b3efcc85cfbbce508fc6e9bd420b2d278fa06b3372e1e419be0bb805e"
       },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/unique-objects/unique-variant-11.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 86612,
+        "sha256": "06c8d5f12a8ed67b1c9b149bf7fb1b710852a214f3d64f86f45a12c32c2be2c9"
+      },
       "mapPreview": null
     },
     {
@@ -1468,6 +1731,17 @@
         "withoutEnlargement": true,
         "bytes": 25466,
         "sha256": "cf2f05a85672096e60711dec1ae66bec05cca4f981728141c75a715975e0c946"
+      },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/unique-objects/unique-variant-12.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 87610,
+        "sha256": "31ac7291564abd17da3aca6dbdb5cfed7111fa902feb98af63c5408d18fcf7fc"
       },
       "mapPreview": null
     },
@@ -1496,6 +1770,17 @@
         "bytes": 24840,
         "sha256": "59ef132f35f4e15d2f08739151475841fb09e7dcc410aeec823dc9280b7b3c58"
       },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/unique-objects/unique-variant-13.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 87912,
+        "sha256": "c95663ab135109b202571f106e864d72c528a6b4b702fe5845bcce89e38fbca4"
+      },
       "mapPreview": null
     },
     {
@@ -1522,6 +1807,17 @@
         "withoutEnlargement": true,
         "bytes": 17392,
         "sha256": "4eea981a6633143f9978dfa3b8b84381392ebf498a1b91de2437079b7a551d97"
+      },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/unique-objects/unique-variant-14.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 58800,
+        "sha256": "e53923f355ab6e5cd284e75c3892dc4201041885c26f7d7983cc716e4c85bff2"
       },
       "mapPreview": null
     },
@@ -1550,6 +1846,17 @@
         "bytes": 19164,
         "sha256": "a5e6e0732538c7c7bb1ceb8642089c2c3ee56eb120af5be8a65e667b6dc5c0ec"
       },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/unique-objects/unique-variant-15.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 64700,
+        "sha256": "8506141eb8cdf79e8d3bd762b295a15e892e741af678853ef6474719f41384cf"
+      },
       "mapPreview": null
     },
     {
@@ -1576,6 +1883,17 @@
         "withoutEnlargement": true,
         "bytes": 19846,
         "sha256": "b814064cc199fb7089ddfe5f45e22f18a96494493381f4f4a6a186b6a5ea0c4d"
+      },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/unique-objects/unique-variant-16.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 69072,
+        "sha256": "53ddc28b34247b6a7f668dc780d42174bae759909f3877e4476275d9b7f149c1"
       },
       "mapPreview": null
     },
@@ -1604,6 +1922,17 @@
         "bytes": 14896,
         "sha256": "55117cf4586e5470a6bd6fb90352c27593fa45d606f49309fdf6848f03cc1dc2"
       },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/anomalies/asterion-anomaly-01.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 49564,
+        "sha256": "b5913dc4b6401ca9c6714ea43a931d6af6fb7d04175ad7328827f31163afb103"
+      },
       "mapPreview": null
     },
     {
@@ -1630,6 +1959,17 @@
         "withoutEnlargement": true,
         "bytes": 11936,
         "sha256": "fe7b9af70e43e7f78f918d7cba25597e557536456c82109b04e8b2c5486c4a96"
+      },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/anomalies/asterion-anomaly-02.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 37126,
+        "sha256": "d7caaf1b4dd3499e41feb8abd975dd07955a21f001eb483f0290be604973016e"
       },
       "mapPreview": null
     },
@@ -1658,6 +1998,17 @@
         "bytes": 12000,
         "sha256": "a8f90d77668aeb07085e98bfd83e2da20391fc188f415e2134de0d82733468a5"
       },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/anomalies/asterion-anomaly-03.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 35496,
+        "sha256": "11e5049b2c22d91656bae14eb588a2e76820d02f1b2c6f636da58d9f85a5dd6f"
+      },
       "mapPreview": null
     },
     {
@@ -1684,6 +2035,17 @@
         "withoutEnlargement": true,
         "bytes": 17706,
         "sha256": "1151ef0619e70dd3ba87e655c9ba76de66c33394bb107eca884bbb91a78beea1"
+      },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/anomalies/asterion-anomaly-04.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 57316,
+        "sha256": "1bfa673467af4f42930e870f7993acb2c173d5e3d5bfc1c6c09bfcd9988a0ccb"
       },
       "mapPreview": null
     },
@@ -1712,6 +2074,17 @@
         "bytes": 13318,
         "sha256": "03b81d175ade09997fb34de85793ebea9ef2ec19feda89483656e22f4dcc5120"
       },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/anomalies/asterion-anomaly-05.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 41084,
+        "sha256": "37d2ea7d4758e2f6b953950e2657e330570a01ff5d49de68106fc4638dedb176"
+      },
       "mapPreview": null
     },
     {
@@ -1738,6 +2111,17 @@
         "withoutEnlargement": true,
         "bytes": 14658,
         "sha256": "aff65e2c546207c162b15089dbf240ab3858c7883358619b2c9311c93e1eb972"
+      },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/anomalies/asterion-anomaly-06.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 45188,
+        "sha256": "a2273687e6c56bceee1c392ebd18016e9c2834c80fb19860d635d8df89edf3e9"
       },
       "mapPreview": null
     },
@@ -1766,6 +2150,17 @@
         "bytes": 18160,
         "sha256": "a95d870eb8defca413f2bc28288be20489471be8229cba5146d3ab884f914292"
       },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/anomalies/asterion-anomaly-07.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 59600,
+        "sha256": "2e25de9919b6fdf781275da4a7ab0a10f7e3992a4f0a9070c248bf1a1e52b621"
+      },
       "mapPreview": null
     },
     {
@@ -1792,6 +2187,17 @@
         "withoutEnlargement": true,
         "bytes": 13058,
         "sha256": "5c6da7c2a10ea4ad4a80cf001b9d4616bcaefbff79cdd82fbc18b126f029a4df"
+      },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/anomalies/asterion-anomaly-08.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 41836,
+        "sha256": "cc2420630fa6409fa0f2caaa71e57358b51db1aef36d5c218c4d1444aa953d23"
       },
       "mapPreview": null
     },
@@ -1820,6 +2226,17 @@
         "bytes": 18592,
         "sha256": "2d6315a730325a711b18d47cc8169ab10a12003431648556e674a8b60acadd7b"
       },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/anomalies/asterion-anomaly-09.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 63528,
+        "sha256": "5d95ad3b6cbeb7332a8f52b5af17fa095cc86ec0c1b79a6d064ce0980cfda128"
+      },
       "mapPreview": null
     },
     {
@@ -1846,6 +2263,17 @@
         "withoutEnlargement": true,
         "bytes": 14496,
         "sha256": "8f5bd4b833d2df1566994601c243e637a75c34b661fb9981e148a433d8903fb7"
+      },
+      "operationsArt": {
+        "outputPath": "public/assets/generated/asterion/operations/anomalies/asterion-anomaly-10.webp",
+        "width": 384,
+        "height": 384,
+        "format": "webp",
+        "quality": 90,
+        "fit": "contain",
+        "withoutEnlargement": true,
+        "bytes": 48242,
+        "sha256": "ae8f9bcf8f096d73d8ff29b448a17686ebdf455d3f12e293366bf193b7046eb3"
       },
       "mapPreview": null
     },
@@ -1874,6 +2302,7 @@
         "bytes": 7638,
         "sha256": "ffb1aa3a7d541ef790947ac9b3316a2ebc63f6f02fa19d7cced9170320b5ab5f"
       },
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -1901,6 +2330,7 @@
         "bytes": 9242,
         "sha256": "8ae55a5d5052d1c7270f35cf917bd682f4b7cbc4f54a2c02efa40ea0e2831eca"
       },
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -1928,6 +2358,7 @@
         "bytes": 7080,
         "sha256": "2746ed7b8dadadb6543318858f3629e7f46ba26d96444abef2cb05b3b0d23bd6"
       },
+      "operationsArt": null,
       "mapPreview": null
     },
     {
@@ -1955,6 +2386,7 @@
         "bytes": 8528,
         "sha256": "37c25fb39dd8ac52a89c73da9fec779b75075733d8f16f15cc455ff531e71e4a"
       },
+      "operationsArt": null,
       "mapPreview": null
     }
   ]

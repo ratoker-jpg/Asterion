@@ -12,6 +12,14 @@
             true,
             true
           ],
+          "cardTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 76
+          },
+          "heroTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 370
+          },
           "horizontalOverflow": false,
           "geometry": {
             "card": {
@@ -76,6 +84,14 @@
             true,
             true
           ],
+          "cardTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 76
+          },
+          "heroTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 370
+          },
           "horizontalOverflow": false,
           "geometry": {
             "card": {
@@ -140,6 +156,14 @@
             true,
             true
           ],
+          "cardTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 76
+          },
+          "heroTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 370
+          },
           "horizontalOverflow": false,
           "geometry": {
             "card": {
@@ -201,6 +225,14 @@
             true,
             true
           ],
+          "cardTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 76
+          },
+          "heroTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 370
+          },
           "horizontalOverflow": false,
           "geometry": {
             "card": {
@@ -265,6 +297,14 @@
             true,
             true
           ],
+          "cardTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 76
+          },
+          "heroTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 370
+          },
           "horizontalOverflow": false,
           "geometry": {
             "card": {
@@ -277,17 +317,17 @@
             },
             "dossier": {
               "left": 494,
-              "top": 330.0574035644531,
+              "top": 330,
               "right": 1882,
-              "bottom": 1062.0574035644531,
+              "bottom": 1062,
               "width": 1388,
               "height": 732
             },
             "title": {
               "left": 979.6875,
-              "top": 459.7449035644531,
+              "top": 459.6875,
               "right": 1835,
-              "bottom": 489.6355285644531,
+              "bottom": 489.578125,
               "width": 855.3125,
               "height": 29.890625
             },
@@ -305,7 +345,7 @@
               "letterSpacing": "normal",
               "padding": "0px",
               "gap": "normal",
-              "transform": "matrix(1, 0, 0, 1, 0, 0.0574108)"
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
             },
             "titleComputed": {
               "fontSize": "26px",
@@ -329,6 +369,14 @@
             true,
             true
           ],
+          "cardTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 76
+          },
+          "heroTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 370
+          },
           "horizontalOverflow": false,
           "geometry": {
             "card": {
@@ -341,17 +389,17 @@
             },
             "dossier": {
               "left": 494,
-              "top": 330.0577392578125,
+              "top": 330.0575866699219,
               "right": 1882,
-              "bottom": 1062.0577392578125,
+              "bottom": 1062.0575866699219,
               "width": 1388,
               "height": 732
             },
             "title": {
               "left": 979.6875,
-              "top": 459.7452392578125,
+              "top": 459.7450866699219,
               "right": 1835,
-              "bottom": 489.6358642578125,
+              "bottom": 489.6357116699219,
               "width": 855.3125,
               "height": 29.890625
             },
@@ -369,7 +417,7 @@
               "letterSpacing": "normal",
               "padding": "0px",
               "gap": "normal",
-              "transform": "matrix(1, 0, 0, 1, 0, 0.0577433)"
+              "transform": "matrix(1, 0, 0, 1, 0, 0.0575936)"
             },
             "titleComputed": {
               "fontSize": "26px",
@@ -390,6 +438,14 @@
             true,
             true
           ],
+          "cardTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 76
+          },
+          "heroTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 370
+          },
           "horizontalOverflow": false,
           "geometry": {
             "card": {
@@ -458,6 +514,14 @@
             true,
             true
           ],
+          "cardTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 76
+          },
+          "heroTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 370
+          },
           "horizontalOverflow": false,
           "geometry": {
             "card": {
@@ -522,6 +586,14 @@
             true,
             true
           ],
+          "cardTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 76
+          },
+          "heroTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 370
+          },
           "horizontalOverflow": false,
           "geometry": {
             "card": {
@@ -603,6 +675,14 @@
             true,
             true
           ],
+          "cardTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 50.66666793823242
+          },
+          "heroTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 246.66668701171875
+          },
           "horizontalOverflow": false,
           "geometry": {
             "card": {
@@ -667,6 +747,14 @@
             true,
             true
           ],
+          "cardTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 50.66666793823242
+          },
+          "heroTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 246.66668701171875
+          },
           "horizontalOverflow": false,
           "geometry": {
             "card": {
@@ -731,6 +819,14 @@
             true,
             true
           ],
+          "cardTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 50.66666793823242
+          },
+          "heroTexture": {
+            "naturalWidth": 384,
+            "renderedWidth": 246.66668701171875
+          },
           "horizontalOverflow": false,
           "geometry": {
             "card": {

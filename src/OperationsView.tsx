@@ -17,7 +17,8 @@ import { isPirateOperationId, pirateContactOperation, pirateCycleOperation, pira
 import { getUniverseSlotPoint } from './domain/universe/runtime.ts';
 import { getPirateRaidCheckProgress } from './domain/pirates/contact-schedule.ts';
 import { pirateAdaptiveInterval, type PirateOwnerAdaptation } from './domain/pirates/adaptive.ts';
-import { getPiratePlanetArt } from './pirate-planet-art.ts';
+import { getPiratePlanetArt, getPiratePlanetOperationDetailArt } from './pirate-planet-art.ts';
+import { explorationOperationDetailArt } from './exploration-art.ts';
 import { explorationProfile, EXPLORATION_RULES } from './domain/exploration/model.ts';
 import { reconcileExplorationContact } from './domain/exploration/ledger.ts';
 import type { ExplorationOperationPresentation } from './application/exploration.ts';
@@ -397,9 +398,9 @@ function OperationCard({ operation, selected, onSelect, contact, exploration, no
     >
       <span className={`opsA-card-art ${pirate ? 'operation-feed-pirate-art-v2' : ''}`}>
         {exploration
-          ? <img src={exploration.node.art} alt="" loading="lazy" draggable={false} />
+          ? <img src={explorationOperationDetailArt(exploration.node.kind, exploration.node.art)} alt="" loading="lazy" draggable={false} />
           : pirateArt
-          ? <img src={pirateArt} alt="" loading="lazy" draggable={false} />
+          ? <img src={getPiratePlanetOperationDetailArt(Number(pirateCycle[2]), Number(pirateCycle[3]))} alt="" loading="lazy" draggable={false} />
           : <span className="opsA-card-glyph"><OperationGlyph category={operation.category} /></span>}
       </span>
       <span className="opsA-card-copy">
@@ -590,7 +591,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
       kind={kind}
       completed={completed}
       dataAttrs={{ 'data-qa-exploration-dossier': node.id }}
-      art={<img src={node.art} alt="" loading="lazy" draggable={false} />}
+      art={<img src={explorationOperationDetailArt(node.kind, node.art)} alt="" loading="lazy" draggable={false} />}
       chips={<>
         <KindChip kind={kind} />
         <button type="button" className="opsA-chip opsA-chip--link" onClick={() => onExplorationUniverse?.(node)} title="Открыть во Вселенной">{formatLocation(operation.location)} · {node.kind === 'anomaly' ? 'Сигнал аномалии' : 'Дальнее сканирование'} ↗</button>
@@ -718,7 +719,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
         completed
         className="operations-completed-report-v2"
         art={<div className="opsA-art-wrap" data-qa-pirate-hero-art>
-          <img src={getPiratePlanetArt(Number(cycle[2] ?? 1), Number(cycle[3] ?? 0))} alt="Пиратская база" loading="lazy" draggable={false} />
+          <img src={getPiratePlanetOperationDetailArt(Number(cycle[2] ?? 1), Number(cycle[3] ?? 0))} alt="Пиратская база" loading="lazy" draggable={false} />
         </div>}
         chips={<><KindChip kind="pirate" /><span className="opsA-chip">{formatLocation(operation.location)}</span><span className="opsA-chip opsA-chip--state is-good">● УСПЕХ</span></>}
         title="Пиратская база"
@@ -753,10 +754,12 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
     );
   }
 
-  const pirateArt = pirate ? getPiratePlanetArt(...((): [number,number] => {
+  const pirateArtCoordinates = (() : [number, number] => {
     const parts = (pirateContact?.contactCycleKey ?? operation.id.replace(/^pirate:/,'')).split(':');
     return [Number(parts[2] ?? 1), Number(parts[3] ?? 0)];
-  })()) : null;
+  })();
+  const pirateArt = pirate ? getPiratePlanetArt(...pirateArtCoordinates) : null;
+  const pirateHeroArt = pirate ? getPiratePlanetOperationDetailArt(...pirateArtCoordinates) : null;
   const pirateStartAt = pirateContact ? Number(pirateContact.contactCycleKey.split(':')[4]) : undefined;
   const isActive = operation.state === 'active';
   const isCompleted = operation.state === 'completed';
@@ -787,7 +790,7 @@ function OperationDossier({ operation, pirateContact, exploration, onExpedition,
       completed={isCompleted}
       dataAttrs={{ 'data-threat': String(operation.threat ?? 'unknown') }}
       art={pirateArt
-        ? <div className="opsA-art-wrap" data-qa-pirate-hero-art><img src={pirateArt} alt="Пиратская база" loading="lazy" draggable={false} /></div>
+        ? <div className="opsA-art-wrap" data-qa-pirate-hero-art><img src={pirateHeroArt ?? pirateArt} alt="Пиратская база" loading="lazy" draggable={false} /></div>
         : <TacticalScope operation={operation} contact={pirateContact} />}
       chips={<>
         <KindChip kind={kind} />

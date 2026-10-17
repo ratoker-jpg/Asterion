@@ -152,10 +152,17 @@ async function selectKindAndCapture(win, output, state, kind, number) {
       return value ? { fontSize: value.fontSize, lineHeight: value.lineHeight, letterSpacing: value.letterSpacing, padding: value.padding, gap: value.gap, transform: value.transform } : null;
     };
     const dossier = document.querySelector('.operations-dossier-variant-a');
+    const heroImage = dossier?.querySelector('.opsA-hero-art img');
+    const heroImageBounds = heroImage?.getBoundingClientRect();
+    const cardImage = card?.querySelector('.opsA-card-art img');
+    const cardImageBounds = cardImage?.getBoundingClientRect();
     const title = dossier?.querySelector('h2, h3');
-    return { kind: card?.getAttribute('data-contact-kind'), state: document.querySelector('.operations-tabs-v2 [role="tab"][aria-selected="true"]')?.textContent?.trim(), images: images.map((image) => Boolean(image.complete && image.naturalWidth > 0)), horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 2, geometry: { card: rect(card), dossier: rect(dossier), title: rect(title), cardComputed: styles(card), dossierComputed: styles(dossier), titleComputed: styles(title) } };
+    return { kind: card?.getAttribute('data-contact-kind'), state: document.querySelector('.operations-tabs-v2 [role="tab"][aria-selected="true"]')?.textContent?.trim(), images: images.map((image) => Boolean(image.complete && image.naturalWidth > 0)), cardTexture: cardImage && cardImageBounds ? { naturalWidth: cardImage.naturalWidth, renderedWidth: cardImageBounds.width } : null, heroTexture: heroImage && heroImageBounds ? { naturalWidth: heroImage.naturalWidth, renderedWidth: heroImageBounds.width } : null, horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 2, geometry: { card: rect(card), dossier: rect(dossier), title: rect(title), cardComputed: styles(card), dossierComputed: styles(dossier), titleComputed: styles(title) } };
   })()`);
-  if (stateProof.kind !== kind || !stateProof.state?.includes(state.label) || stateProof.images.includes(false) || stateProof.horizontalOverflow) {
+  if (stateProof.kind !== kind || !stateProof.state?.includes(state.label) || stateProof.images.includes(false)
+    || !stateProof.cardTexture || stateProof.cardTexture.naturalWidth < Math.ceil(stateProof.cardTexture.renderedWidth * 2)
+    || !stateProof.heroTexture || stateProof.heroTexture.naturalWidth < Math.ceil(stateProof.heroTexture.renderedWidth)
+    || stateProof.horizontalOverflow) {
     throw new Error(`Variant A screenshot state mismatch: ${JSON.stringify(stateProof)}`);
   }
   const file = `${String(number).padStart(2, '0')}-${state.key}-${kind}.png`;
