@@ -903,7 +903,9 @@ async function runViewport(width, height) {
         const snapshot = await inspectorSnapshot(win);
         checkCopy(snapshot);
         await checkModal(win);
-        if (snapshot.kind !== 'anomaly' || !snapshot.text.includes('Аномалия') || !snapshot.text.includes('исчезнет через') || !snapshot.specialActionDisabled
+        if (snapshot.kind !== 'anomaly' || !snapshot.text.includes('Аномалия') || !snapshot.text.includes('исчезнет через')
+          || !snapshot.specialActions.some(action => action.action === 'exploration-recon' && !action.disabled)
+          || !snapshot.specialActions.some(action => action.action === 'expedition' && !action.disabled)
           || !snapshot.specialArt.loaded || !hasBundledImageAsset(snapshot.specialArt.src, ['anomaly-'])) throw new Error(`${label}: anomaly inspector contract failed ${JSON.stringify(snapshot)}`);
         await capture(win, directory, 'anomaly-inspector');
         await dismissInspector(win);
@@ -919,7 +921,10 @@ async function runViewport(width, height) {
       const special = await inspectorSnapshot(win);
       checkCopy(special);
       await checkModal(win);
-      if (special.kind !== kind || !special.text.includes('Владелец отсутствует') || !special.specialActionDisabled
+      if (special.kind !== kind || !special.text.includes('исчезнет через')
+        || !special.text.includes('Объект свободен')
+        || !special.specialActions.some(action => action.action === 'exploration-recon' && !action.disabled)
+        || !special.specialActions.some(action => action.action === 'expedition' && !action.disabled)
         || (kind === 'unique' && (!special.specialArt.loaded || !hasBundledImageAsset(special.specialArt.src, ['unique-variant-', 'planet-010-', 'planet-013-', 'planet-021-'])))) throw new Error(`${label}: ${kind} inspector contract failed ${JSON.stringify(special)}`);
       await capture(win, directory, `${kind}-inspector`);
       await dismissInspector(win);
