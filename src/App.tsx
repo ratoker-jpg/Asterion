@@ -5,6 +5,7 @@ import './planet-skins.css';
 import './universe.css';
 import { UniverseView } from './UniverseView';
 import { OperationsView } from './OperationsView';
+import { createOperationsVariantAQaFixture, getOperationsVariantAQaStatus } from './operations-variant-a-qa-fixture.ts';
 import { rerollTestUniverseLayout } from './domain/universe/runtime.ts';
 import { CommandView } from './CommandView';
 import { ReportsView } from './ReportsView';
@@ -310,6 +311,7 @@ export function App() {
   const [toasts, setToasts] = useState<RuntimeToast[]>([]);
   const [lastNotice, setLastNotice] = useState('Система готова. Локальное сохранение активно.');
   const noticeSeq = useRef(0);
+  const persistenceFailureNotified = useRef(false);
 
   /**
    * Keeps the QA notice layer in sync and emits a bottom-left toast. Silent
@@ -366,6 +368,12 @@ export function App() {
       ? selectOwnedPiratePresentations(state, now)
       : selectPirateContacts(state, now, pirateSystem);
   }, [activeRoute, state, now, pirateSystem]);
+  const operationsVariantAFixtureStatus = getOperationsVariantAQaStatus(RUNTIME_MODE);
+  const fixturePirateContact = pirateContacts[0];
+  const operationsVariantAFixture = useMemo(() => operationsVariantAFixtureStatus && fixturePirateContact
+    ? createOperationsVariantAQaFixture(fixturePirateContact, state.profile.playerId, operationsVariantAFixtureStatus)
+    : null,
+  [operationsVariantAFixtureStatus, fixturePirateContact?.contactCycleKey, state.profile.playerId]);
   const completedPirateOperations = useMemo(() => {
     if (activeRoute !== 'operations') return [];
     const reports = new Map(state.combat.reports.map((report) => [report.id, report]));
@@ -733,8 +741,17 @@ export function App() {
     onNotice: setNotice,
   }), []);
   useEffect(() => {
-    persistence.write(state);
-  }, [persistence, state]);
+    const result = persistence.write(state);
+    if (!result.ok) {
+      if (!persistenceFailureNotified.current) {
+        persistenceFailureNotified.current = true;
+        const reason = result.error.trim().slice(0, 160);
+        setNotice(reason ? `Не удалось сохранить игру: ${reason}` : 'Не удалось сохранить игру в браузере.', 'error');
+      }
+      return;
+    }
+    persistenceFailureNotified.current = false;
+  }, [persistence, setNotice, state]);
   useEffect(() => {
     publishApplicationRuntimeSnapshot(
       state,
@@ -1731,8 +1748,8 @@ export function App() {
             />
           ) : activeRoute === 'operations' ? (
             <OperationsView
-              pirateContacts={pirateContacts}
-              explorationContacts={selectExplorationOperations(state, now, RUNTIME_MODE)}
+              pirateContacts={operationsVariantAFixture?.pirateContacts ?? pirateContacts}
+              explorationContacts={operationsVariantAFixture?.explorationContacts ?? selectExplorationOperations(state, now, RUNTIME_MODE)}
               onExpedition={openExpeditionLaunch}
               onExplorationAttack={openExplorationAttackLaunch}
               onBot01Occupy={RUNTIME_MODE === 'test' ? launchBot01Exploration : undefined}
@@ -1755,16 +1772,16 @@ export function App() {
                   now,
                 ).ageHours,
               )}
-              completedPirateOperations={completedPirateOperations}
+              completedPirateOperations={operationsVariantAFixture?.completedPirateOperations ?? completedPirateOperations}
               onPirateBattleReport={openPirateReport}
-              nowMs={now}
+              nowMs={operationsVariantAFixture?.nowMs ?? now}
               onPirateAccept={acceptPirateOperation}
               onPirateCancel={cancelPirateOperation}
               onPirateRecon={launchPirateRecon}
               onPirateAttack={openPirateAttack}
               onPirateReport={openPirateReport}
               onPirateUniverse={focusPirateUniverse}
-              state={state.operations}
+              state={operationsVariantAFixture?.state ?? state.operations}
               onAccept={acceptOperationsOperation}
               onCancel={cancelOperationsOperation}
               onReveal={revealOperationsOperation}

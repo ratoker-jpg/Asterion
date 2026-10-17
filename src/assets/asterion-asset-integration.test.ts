@@ -14,15 +14,25 @@ test('task asset manifest maps every requested visual family to optimized runtim
   assert.equal(assets.piratePlanetArts.length, 10);
   assert.equal(assets.uniquePlanetArts.length, 16);
   assert.equal(assets.anomalyArts.length, 10);
+  assert.equal(assets.operationsPiratePlanetArts.length, 10);
+  assert.equal(assets.operationsUniquePlanetArts.length, 16);
+  assert.equal(assets.operationsAnomalyArts.length, 10);
   assert.deepEqual(Object.keys(assets.battleFactionIcons).sort(), ['aegis', 'pirates', 'synod', 'veyra']);
   assert.notEqual(assets.regularPlanetSkins[0].art, assets.piratePlanetArts[6]);
   assert.ok(assets.regularPlanetSkins.every((skin) => skin.art.includes('/planet-skins/') && skin.mapArt.includes('/planet-previews/')));
   for (const url of [
     ...Object.values(assets.reportIcons), ...Object.values(assets.scoreIcons),
     ...assets.regularPlanetSkins.flatMap((skin) => [skin.art, skin.mapArt]), ...assets.piratePlanetArts,
-    ...assets.uniquePlanetArts, ...assets.anomalyArts, ...Object.values(assets.battleFactionIcons),
+    ...assets.uniquePlanetArts, ...assets.anomalyArts,
+    ...assets.operationsPiratePlanetArts, ...assets.operationsUniquePlanetArts, ...assets.operationsAnomalyArts,
+    ...Object.values(assets.battleFactionIcons),
   ]) {
     assert.match(url, /^\.\/assets\/generated\/asterion\//);
     assert.match(url, /\.webp$/);
   }
+  assert.ok([
+    ...assets.operationsPiratePlanetArts,
+    ...assets.operationsUniquePlanetArts,
+    ...assets.operationsAnomalyArts,
+  ].every((url) => url.startsWith('./assets/generated/asterion/operations/')));
 });

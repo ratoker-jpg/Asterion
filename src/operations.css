@@ -1973,3 +1973,4 @@
   .operation-feed-card-v2, .operation-feed-card-v2[data-qa-pirate-contact] { grid-template-columns:80px minmax(0,1fr) 12px; min-height:115px; }
   .operation-feed-pirate-art-v2 img,.operation-feed-pirate-art-v2.exploration-feed-art img {height:105px;}
 }
+

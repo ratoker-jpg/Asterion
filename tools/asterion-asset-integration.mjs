@@ -22,11 +22,14 @@ const obsoleteOutputs = [
   'public/assets/generated/universe/suns/thumb/collapsed-02.webp',
 ];
 
-function defineGroup({ group, semanticPrefix, sourceDirectory, archiveDirectory, family, mode = 'runtime', runtime = null, items }) {
+function defineGroup({ group, semanticPrefix, sourceDirectory, archiveDirectory, family, mode = 'runtime', runtime = null, operationsArt = null, items }) {
   return items.map((item) => {
     const sourcePath = item.sourcePath ?? `${sourceDirectory}/${item.sourceFile ?? item.file}`;
     const outputPath = item.outputFile && runtime
       ? path.posix.normalize(`public/assets/generated/${runtime.directory}/${item.outputFile}`)
+      : null;
+    const operationsArtPath = operationsArt
+      ? path.posix.normalize(`public/assets/generated/${operationsArt.directory}/${item.key}.webp`)
       : null;
     return {
       group,
@@ -44,6 +47,15 @@ function defineGroup({ group, semanticPrefix, sourceDirectory, archiveDirectory,
         height: runtime.height,
         format: 'webp',
         quality: runtime.quality,
+        fit: 'contain',
+        withoutEnlargement: true,
+      } : null,
+      operationsArt: operationsArtPath ? {
+        outputPath: operationsArtPath,
+        width: operationsArt.width,
+        height: operationsArt.height,
+        format: 'webp',
+        quality: operationsArt.quality,
         fit: 'contain',
         withoutEnlargement: true,
       } : null,
@@ -143,6 +155,7 @@ const definitions = [
     sourceDirectory: 'assets/source/planets/pirate', archiveDirectory: '04_planets/pirate',
     family: 'universe-object',
     runtime: { directory: 'asterion/universe/pirate-planets', width: 256, height: 256, quality: 90 },
+    operationsArt: { directory: 'asterion/operations/pirate-planets', width: 384, height: 384, quality: 90 },
     items: [
       { key: 'pirate-planet-01', id: 'variant-01', file: 'pirate-planet-01.png', archiveFile: '9298830f-2107-4e9f-919a-18e6c7b684fb.png', outputFile: 'pirate-planet-01.webp' },
       { key: 'pirate-planet-02', id: 'variant-02', file: 'pirate-planet-02.png', archiveFile: 'pirate_debris_fortress_world.png', outputFile: 'pirate-planet-02.webp' },
@@ -161,6 +174,7 @@ const definitions = [
     sourceDirectory: 'assets/source/planets/unique', archiveDirectory: '04_planets/unique',
     family: 'universe-object',
     runtime: { directory: 'asterion/universe/unique-objects', width: 192, height: 192, quality: 88 },
+    operationsArt: { directory: 'asterion/operations/unique-objects', width: 384, height: 384, quality: 90 },
     items: [
       { key: 'unique-variant-01', id: 'variant-01', file: 'unique-variant-01.png', archiveFile: 'a_detailed_high_resolution_sci_fi_fantasy_concept_10_batch_4.png', outputFile: 'unique-variant-01.webp' },
       { key: 'unique-variant-02', id: 'variant-02', file: 'unique-variant-02.png', archiveFile: 'a_dramatic_high_detail_sci_fi_fantasy_concept_art_4_batch_3.png', outputFile: 'unique-variant-02.webp' },
@@ -185,6 +199,7 @@ const definitions = [
     sourceDirectory: 'assets/source/universe-navigation/stellar-remnants', archiveDirectory: '05_space/anomalies',
     family: 'universe-object',
     runtime: { directory: 'asterion/universe/anomalies', width: 192, height: 192, quality: 88 },
+    operationsArt: { directory: 'asterion/operations/anomalies', width: 384, height: 384, quality: 90 },
     items: [
       { key: 'asterion-anomaly-01', id: 'asterion-01', file: 'asterion-anomaly-01.png', archiveFile: 'bipolar_butterfly_nebula.png', outputFile: 'anomaly-01.webp' },
       { key: 'asterion-anomaly-02', id: 'asterion-02', file: 'asterion-anomaly-02.png', archiveFile: 'black_hole_abyss.png', outputFile: 'anomaly-02.webp' },
@@ -225,6 +240,7 @@ const expectedCounts = {
 function runtimeOutputs(entry) {
   return [
     ...(entry.runtime ? [{ entry, runtime: entry.runtime, semanticId: entry.semanticId }] : []),
+    ...(entry.operationsArt ? [{ entry, runtime: entry.operationsArt, semanticId: `${entry.semanticId}.operations` }] : []),
     ...(entry.mapPreview ? [{ entry, runtime: entry.mapPreview, semanticId: `${entry.semanticId}.map-preview` }] : []),
   ];
 }
@@ -372,6 +388,9 @@ function renderTypeScript(entries) {
       piratePlanetArts: byGroup('piratePlanetArts').map((entry) => url(entry.runtime)),
       uniquePlanetArts: byGroup('uniquePlanetArts').map((entry) => url(entry.runtime)),
       anomalyArts: byGroup('anomalyArts').map((entry) => url(entry.runtime)),
+      operationsPiratePlanetArts: byGroup('piratePlanetArts').map((entry) => url(entry.operationsArt)),
+      operationsUniquePlanetArts: byGroup('uniquePlanetArts').map((entry) => url(entry.operationsArt)),
+      operationsAnomalyArts: byGroup('anomalyArts').map((entry) => url(entry.operationsArt)),
       battleFactionIcons: object('battleFactionIcons'),
     })} as const;`,
     '',
@@ -527,6 +546,7 @@ async function writeAuditReport(manifest, sourceInfos, runtimeRecords, config, s
       sourcePath: entry.sourcePath,
       source: sourceInfos.has(entry.sourcePath) ? sourceInfos.get(entry.sourcePath) : null,
       runtime: runtimeRecord(entry.runtime),
+      operationsArt: runtimeRecord(entry.operationsArt),
       mapPreview: runtimeRecord(entry.mapPreview),
     });
     }),
@@ -719,6 +739,7 @@ async function generate({ allowedSourceHashChanges = new Set() } = {}) {
     ...entry,
     source: sourceInfos.get(entry.sourcePath),
     runtimeUrl: entry.runtime ? `./${entry.runtime.outputPath.slice('public/'.length)}` : null,
+    operationsArtUrl: entry.operationsArt ? `./${entry.operationsArt.outputPath.slice('public/'.length)}` : null,
     mapPreviewUrl: entry.mapPreview ? `./${entry.mapPreview.outputPath.slice('public/'.length)}` : null,
   }));
   const manifest = taskSourceManifest(manifestEntries);

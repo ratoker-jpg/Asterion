@@ -114,6 +114,48 @@ export const asterionAssetIntegrationAssets = {
     "./assets/generated/asterion/universe/anomalies/anomaly-09.webp",
     "./assets/generated/asterion/universe/anomalies/anomaly-10.webp"
   ],
+  "operationsPiratePlanetArts": [
+    "./assets/generated/asterion/operations/pirate-planets/pirate-planet-01.webp",
+    "./assets/generated/asterion/operations/pirate-planets/pirate-planet-02.webp",
+    "./assets/generated/asterion/operations/pirate-planets/pirate-planet-03.webp",
+    "./assets/generated/asterion/operations/pirate-planets/pirate-planet-04.webp",
+    "./assets/generated/asterion/operations/pirate-planets/pirate-planet-05.webp",
+    "./assets/generated/asterion/operations/pirate-planets/pirate-planet-06.webp",
+    "./assets/generated/asterion/operations/pirate-planets/pirate-planet-07.webp",
+    "./assets/generated/asterion/operations/pirate-planets/pirate-planet-08.webp",
+    "./assets/generated/asterion/operations/pirate-planets/pirate-planet-09.webp",
+    "./assets/generated/asterion/operations/pirate-planets/pirate-planet-10.webp"
+  ],
+  "operationsUniquePlanetArts": [
+    "./assets/generated/asterion/operations/unique-objects/unique-variant-01.webp",
+    "./assets/generated/asterion/operations/unique-objects/unique-variant-02.webp",
+    "./assets/generated/asterion/operations/unique-objects/unique-variant-03.webp",
+    "./assets/generated/asterion/operations/unique-objects/unique-variant-04.webp",
+    "./assets/generated/asterion/operations/unique-objects/unique-variant-05.webp",
+    "./assets/generated/asterion/operations/unique-objects/unique-variant-06.webp",
+    "./assets/generated/asterion/operations/unique-objects/unique-variant-07.webp",
+    "./assets/generated/asterion/operations/unique-objects/unique-variant-08.webp",
+    "./assets/generated/asterion/operations/unique-objects/unique-variant-09.webp",
+    "./assets/generated/asterion/operations/unique-objects/unique-variant-10.webp",
+    "./assets/generated/asterion/operations/unique-objects/unique-variant-11.webp",
+    "./assets/generated/asterion/operations/unique-objects/unique-variant-12.webp",
+    "./assets/generated/asterion/operations/unique-objects/unique-variant-13.webp",
+    "./assets/generated/asterion/operations/unique-objects/unique-variant-14.webp",
+    "./assets/generated/asterion/operations/unique-objects/unique-variant-15.webp",
+    "./assets/generated/asterion/operations/unique-objects/unique-variant-16.webp"
+  ],
+  "operationsAnomalyArts": [
+    "./assets/generated/asterion/operations/anomalies/asterion-anomaly-01.webp",
+    "./assets/generated/asterion/operations/anomalies/asterion-anomaly-02.webp",
+    "./assets/generated/asterion/operations/anomalies/asterion-anomaly-03.webp",
+    "./assets/generated/asterion/operations/anomalies/asterion-anomaly-04.webp",
+    "./assets/generated/asterion/operations/anomalies/asterion-anomaly-05.webp",
+    "./assets/generated/asterion/operations/anomalies/asterion-anomaly-06.webp",
+    "./assets/generated/asterion/operations/anomalies/asterion-anomaly-07.webp",
+    "./assets/generated/asterion/operations/anomalies/asterion-anomaly-08.webp",
+    "./assets/generated/asterion/operations/anomalies/asterion-anomaly-09.webp",
+    "./assets/generated/asterion/operations/anomalies/asterion-anomaly-10.webp"
+  ],
   "battleFactionIcons": {
     "aegis": "./assets/generated/asterion/factions/battle-icons/aegis.webp",
     "synod": "./assets/generated/asterion/factions/battle-icons/synod.webp",

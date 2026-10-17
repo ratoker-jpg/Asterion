@@ -39,7 +39,7 @@
   },
   "budgets": {
     "generatedRuntimeTotalBytes": 50331648,
-    "generatedRuntimeDecodedBytes": 201326592,
+    "generatedRuntimeDecodedBytes": 218103808,
     "generatedRuntimeTextureCount": 512,
     "singleRuntimeTexturePixels": 4194304
   },
@@ -175,6 +175,6 @@
     "scope": "asterion-asset-integration-2026-09-25",
     "copiedSourceCount": 69,
     "reusedSourceCount": 3,
-    "runtimeTextureCount": 70
+    "runtimeTextureCount": 106
   }
 }
