@@ -6,8 +6,8 @@ import './universe.css';
 import { UniverseView } from './UniverseView';
 import { OperationsView } from './OperationsView';
 import { createOperationsVariantAQaFixture, getOperationsVariantAQaStatus } from './operations-variant-a-qa-fixture.ts';
-import { rerollTestUniverseLayout } from './domain/universe/runtime.ts';
-import { CommandView } from './CommandView';
+import { rerollTestUniverseLayout, UNIVERSE_NPC_OWNER_ID } from './domain/universe/runtime.ts';
+import { CommandView, type CommandActionResult, type CommandActions } from './CommandView';
 import { ReportsView } from './ReportsView';
 import { buildReportsFeed, getReportUnreadCounts } from './domain/reports/adapters.ts';
 import { ZoneView } from './ZoneView';
@@ -51,12 +51,23 @@ import {
 } from './domain/operations/repository.ts';
 import type { OperationId } from './domain/operations/types.ts';
 import {
-  joinJointOperation,
-  markResourceRequestReviewing,
+  acceptApplication,
+  applyToAlliance,
+  createAlliance,
+  kickMember,
+  leaveAlliance,
+  rejectApplication,
+  setDeputy,
+  settleLeadership,
+  touchMember,
+  transferLeadership,
   updateAllianceSettings,
-} from './domain/command/repository.ts';
-import type { AllianceSettingsInput } from './domain/command/types.ts';
-import { syncPlayerProfileWithAlliance } from './domain/profile/repository.ts';
+  withdrawApplication,
+} from './domain/command/membership.ts';
+import { selectCommandHallLevel } from './domain/command/selectors.ts';
+import type { AllianceSettingsInput, CommandResult, CommandState } from './domain/command/types.ts';
+import { syncPlayerProfileWithCommand } from './domain/profile/repository.ts';
+import { withTestOwnerScoreFixtures } from './domain/rating/fixtures.ts';
 import { SCIENCE_CATALOG } from './domain/science/catalog.ts';
 import {
   ACTIVE_RUNTIME_MODE,
@@ -740,6 +751,17 @@ export function App() {
     },
     onNotice: setNotice,
   }), []);
+  const presenceMinute = Math.floor(now / 60_000);
+  useEffect(() => {
+    setState((current) => {
+      const at = Date.now();
+      const playerId = current.profile.playerId;
+      let command = touchMember(current.command, playerId, at, current.profile.displayName);
+      command = settleLeadership(command, at, [playerId]);
+      if (command === current.command) return current;
+      return { ...current, command, profile: syncPlayerProfileWithCommand(current.profile, command) };
+    });
+  }, [presenceMinute]);
   useEffect(() => {
     const result = persistence.write(state);
     if (!result.ok) {
@@ -899,6 +921,8 @@ export function App() {
     const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.pirate?.reconReports, state.flights.records, state.exploration, state.profile.playerId);
     return Object.values(getReportUnreadCounts(items, state.reports)).reduce((total, count) => total + count, 0);
   }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports, state.pirate, state.flights, state.exploration]);
+  const commandHallLevel = useMemo(() => selectCommandHallLevel(state.planets), [state.planets]);
+  const commandHallDefinition = getBuildingDefinition('planetary-government', state.profile.factionId);
   const buildingInteriorTarget = buildingInterior
     ? getBuildingInteriorTarget(buildingInterior.buildingRole)
     : null;
@@ -1344,23 +1368,99 @@ export function App() {
     setNotice('Флоты: подготовьте состав для принятой операции.');
   };
 
-  const joinCommandOperation = (operationId: string) => {
-    setState((current) => ({ ...current, command: joinJointOperation(current.command, operationId, RUNTIME_MODE) }));
-    setNotice('Совместная операция добавлена в ваш союзный контур. Подготовка флота выполняется через раздел «Флоты».');
-  };
-
-  const reviewCommandRequest = (requestId: string) => {
-    setState((current) => ({ ...current, command: markResourceRequestReviewing(current.command, requestId, RUNTIME_MODE) }));
-    setNotice('Запрос ресурсов принят к рассмотрению. Реальная транспортировка выполняется через раздел «Флоты».');
-  };
-
-  const saveCommandSettings = (input: AllianceSettingsInput) => {
+  /**
+   * Applies one Command-domain action to the authoritative state. The Hall is
+   * rechecked here (not only in the locked UI) so a stale screen cannot act.
+   */
+  const runCommandAction = (
+    action: (command: CommandState, at: number, ownerId: string, ownerName: string) => CommandResult<object>,
+    success?: string,
+  ): CommandActionResult => {
     const current = stateRef.current;
-    const command = updateAllianceSettings(current.command, input, RUNTIME_MODE);
-    const nextState = { ...current, command, profile: syncPlayerProfileWithAlliance(current.profile, command.alliance) };
-    stateRef.current = nextState;
-    setState(nextState);
-    setNotice('Настройки союза сохранены в локальном прототипе.');
+    if (selectCommandHallLevel(current.planets) <= 0) {
+      return { ok: false, message: 'Командование недоступно: на планетах нет здания «Палата управления».' };
+    }
+    const at = Date.now();
+    const result = action(current.command, at, current.profile.playerId, current.profile.displayName);
+    if (result.state !== current.command) {
+      const nextState = {
+        ...current,
+        command: result.state,
+        profile: syncPlayerProfileWithCommand(current.profile, result.state),
+      };
+      stateRef.current = nextState;
+      setState(nextState);
+    }
+    if (!result.ok) return { ok: false, message: result.message };
+    if (success) setNotice(success);
+    return success ? { ok: true, message: success } : { ok: true };
+  };
+
+  const commandActions: CommandActions = {
+    createAlliance: (settings: AllianceSettingsInput) => runCommandAction(
+      (command, at, ownerId, ownerName) => createAlliance(command, { ownerId, displayName: ownerName, settings }, { now: at }),
+      'Союз создан.',
+    ),
+    updateSettings: (settings: AllianceSettingsInput) => runCommandAction(
+      (command, _at, ownerId) => updateAllianceSettings(command, ownerId, settings),
+      'Настройки союза сохранены.',
+    ),
+    apply: (allianceId: string) => runCommandAction(
+      (command, at, ownerId, ownerName) => applyToAlliance(command, { ownerId, displayName: ownerName, allianceId }, { now: at }),
+      'Заявка отправлена. Дождитесь решения руководства союза.',
+    ),
+    withdraw: () => runCommandAction((command, at, ownerId) => withdrawApplication(command, ownerId, at), 'Заявка отозвана.'),
+    accept: (applicationId: string) => runCommandAction(
+      (command, at, ownerId) => acceptApplication(command, ownerId, applicationId, { now: at }),
+      'Заявка принята.',
+    ),
+    reject: (applicationId: string) => runCommandAction(
+      (command, at, ownerId) => rejectApplication(command, ownerId, applicationId, at),
+      'Заявка отклонена.',
+    ),
+    leave: (successorOwnerId?: string) => runCommandAction(
+      (command, at, ownerId) => leaveAlliance(command, ownerId, at, { successorOwnerId }),
+      'Вы покинули союз.',
+    ),
+    kick: (targetOwnerId: string) => runCommandAction(
+      (command, at, ownerId) => kickMember(command, ownerId, targetOwnerId, at),
+      'Участник исключён.',
+    ),
+    setDeputy: (targetOwnerId: string | null) => runCommandAction(
+      (command, _at, ownerId) => setDeputy(command, ownerId, targetOwnerId),
+      targetOwnerId ? 'Заместитель назначен.' : 'Заместитель снят.',
+    ),
+    transferLeadership: (targetOwnerId: string) => runCommandAction(
+      (command, at, ownerId) => transferLeadership(command, ownerId, targetOwnerId, at),
+      'Лидерство передано.',
+    ),
+    openHallConstruction: () => {
+      clearBuildingInterior();
+      navigateTo('planet');
+      setPlanetViewMode('military');
+      setSelectedBuildingRole('planetary-government');
+      setPlanetMenuOpen(false);
+      closePlanetEditor();
+      setNotice('Постройте «Палату управления», чтобы открыть Командование.');
+    },
+    ...(RUNTIME_MODE === 'test' ? {
+      testBotApply: () => runCommandAction(
+        (command, at, ownerId) => {
+          const own = command.alliances.find((alliance) => alliance.members.some((member) => member.ownerId === ownerId));
+          if (!own) return { ok: false, state: command, code: 'not_member', message: 'Сначала вступите в союз или создайте его.' };
+          return applyToAlliance(command, { ownerId: UNIVERSE_NPC_OWNER_ID, displayName: 'Бот 01', allianceId: own.id }, { now: at });
+        },
+        'Тест: Бот 01 подал заявку в ваш союз.',
+      ),
+      testBotCreateAlliance: () => runCommandAction(
+        (command, at) => createAlliance(command, {
+          ownerId: UNIVERSE_NPC_OWNER_ID,
+          displayName: 'Бот 01',
+          settings: { name: 'Орден Бота 01', tag: 'BOT', motto: 'Тестовый союз NPC.', description: 'Управляемый тестовый союз для проверки заявок.', emblem: { glyph: 'vanguard', accent: 'amber' } },
+        }, { now: at }),
+        'Тест: Бот 01 создал союз.',
+      ),
+    } : {}),
   };
 
   const openTransportLaunch = (target: { planetId: string; coordinate: { galaxy: number; system: number; position: number }; relation: TargetRelation }) => {
@@ -1463,19 +1563,6 @@ export function App() {
       return;
     }
     window.dispatchEvent(new CustomEvent(FLIGHT_RECALL_REQUEST_EVENT, { detail: { flightId: flight.id, now: Date.now() } }));
-  };
-
-  const createAlliancePlaceholder = () => {
-    setNotice('Создание союза пока недоступно в прототипе.');
-  };
-
-  const openFleetRootFromCommand = () => {
-    clearBuildingInterior();
-    navigateTo('fleets');
-    setPlanetViewMode('overview');
-    setPlanetMenuOpen(false);
-    closePlanetEditor();
-    setNotice('Флоты: подготовьте состав для союзной задачи. Отправка не запускается автоматически.');
   };
 
   const openFleetRootFromReports = () => {
@@ -1789,12 +1876,17 @@ export function App() {
             />
           ) : activeRoute === 'command' ? (
             <CommandView
-              state={state.command}
-              onJoinOperation={joinCommandOperation}
-              onReviewRequest={reviewCommandRequest}
-              onSaveSettings={saveCommandSettings}
-              onOpenFleets={openFleetRootFromCommand}
-              onCreateAlliance={createAlliancePlaceholder}
+              mode={RUNTIME_MODE}
+              command={state.command}
+              ownerId={state.profile.playerId}
+              hall={{
+                level: commandHallLevel,
+                name: commandHallDefinition.name,
+                art: commandHallDefinition.art,
+              }}
+              ownerScores={withTestOwnerScoreFixtures(selectOwnerScores(state), RUNTIME_MODE)}
+              now={now}
+              actions={commandActions}
             />
           ) : activeRoute === 'reports' ? (
             <ReportsView

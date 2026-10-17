@@ -471,7 +471,8 @@ async function runViewport(width, height) {
     if (initial.populationChips.length !== 1 || initial.populationChips[0] !== '58' || initial.populationTooltips.length !== 1 || !initial.populationTooltips[0].includes('58 / 120')) {
       throw new Error(`${label}: population must show current value in the chip and capacity in its tooltip ${JSON.stringify({ chips: initial.populationChips, tooltips: initial.populationTooltips })}`);
     }
-    const canonicalBuildingLevelOne = new Set(['metal-production-1', 'mineral-production-1', 'gas-production-1', 'basic-energy', 'hangar']);
+    // Test Mode (only) also starts with the Hall at level 1 so the Command screen is reachable; Production starts at 0.
+    const canonicalBuildingLevelOne = new Set(['metal-production-1', 'mineral-production-1', 'gas-production-1', 'basic-energy', 'hangar', 'planetary-government']);
     const canonicalStorageLevelTwenty = new Set(['metal-storage', 'mineral-storage', 'gas-storage']);
     const canonicalBuildingsOnly = canonicalBuildingLevelOne.size === Object.values(initial.buildings || {}).filter((level) => level === 1).length
       && [...canonicalBuildingLevelOne].every((id) => initial.buildings?.[id] === 1)

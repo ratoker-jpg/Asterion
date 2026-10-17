@@ -13,7 +13,7 @@ import { createEnergyLedger } from '../domain/energy/runtime.ts';
 import { createDefaultBuildingLevels } from '../domain/buildings/resource-zone.ts';
 import { getAvailableProductionBots, getProductionBotBonusPercent } from '../domain/buildings/production-bots.ts';
 import { getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
-import { selectCurrentAlliance } from '../domain/command/selectors.ts';
+import { stageOwnerRelation } from '../domain/command/test-helpers.ts';
 import { calculateAttackDebris, calculateAttackLoot, resolveAttackAtTarget, resolveBot01IncomingAttack, technologiesFromScience, normalizeAttackRounds, createAttackLaunchSnapshot, createBot01IncomingAttackSnapshot } from './attack.ts';
 import { getFactionCombatEntity } from '../domain/combat/faction-catalog.ts';
 import { calculateBattlePoints } from '../domain/combat/battle-points.ts';
@@ -107,14 +107,8 @@ function emptyTarget(state: ReturnType<typeof createInitialSaveState>, targetId:
 
 function enemyTargetState(state: ReturnType<typeof createInitialSaveState>, targetId: string) {
   const target = state.espionage!.targets![targetId];
-  const enemyAlliance = {
-    id: 'relation-void-hand',
-    name: 'Рука Пустоты',
-    tag: 'VHD',
-    emblem: { glyph: 'orbit', accent: 'violet' },
-    glyph: 'orbit',
-  } as NonNullable<typeof target.alliance>;
-  return replaceTarget(state, targetId, { ...target, alliance: enemyAlliance });
+  // Alliance membership is authoritative in the Command registry.
+  return { ...state, command: stageOwnerRelation(state.command, state.profile.playerId, target.ownerId, 'war') };
 }
 
 function sumDestroyed(report: BattleReport, side: 'attacker' | 'defender') {
@@ -344,16 +338,10 @@ test('attack arrival re-checks diplomacy and returns without combat after a targ
   const sent = dispatchFlight(state, attackCommand(state, 'attack-diplomacy-1', targetId), { now: 1_000, mode: 'test', testTimeScale: 15 });
   assert.equal(sent.ok, true);
   if (!sent.ok) return;
-  const alliance = selectCurrentAlliance(state.command);
   const target = sent.state.espionage!.targets![targetId];
-  const alliedTarget = { ...target, alliance };
   const changedDiplomacy = {
     ...sent.state,
-    espionage: {
-      ...sent.state.espionage!,
-      targets: { ...sent.state.espionage!.targets, [targetId]: alliedTarget },
-      bot01Planets: { ...sent.state.espionage!.bot01Planets, [targetId]: alliedTarget },
-    },
+    command: stageOwnerRelation(sent.state.command, sent.state.profile.playerId, target.ownerId, 'ally'),
   };
   const arrival = reconcileFlights(changedDiplomacy, sent.flight.arrivalAt, undefined, { mode: 'test', testTimeScale: 15 });
   assert.equal(arrival.events[0]?.status, 'target-unavailable');
@@ -449,7 +437,7 @@ test('an enemy target that becomes neutral before arrival still resolves with th
   const sent = dispatchFlight(base, attackCommand(base, 'attack-enemy-neutral-1', targetId, { targetRelation: 'enemy' }), { now: 1_000, mode: 'test', testTimeScale: 15 });
   assert.equal(sent.ok, true);
   if (!sent.ok) return;
-  const neutral = replaceTarget(sent.state, targetId, { ...sent.state.espionage!.targets![targetId], alliance: null });
+  const neutral = { ...sent.state, command: stageOwnerRelation(sent.state.command, sent.state.profile.playerId, sent.state.espionage!.targets![targetId].ownerId, 'neutral') };
   const arrival = reconcileFlights(neutral, sent.flight.arrivalAt, undefined, { mode: 'test', testTimeScale: 15 });
   assert.equal(arrival.events[0]?.status, 'arrived');
   assert.equal(arrival.state.combat.reports.length, base.combat.reports.length + 1);

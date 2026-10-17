@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { EmblemGlyph } from './CommandView';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
-import { CURRENT_PLAYER_ID, createAllianceRatingEntries, createPlayerRatingEntries } from './domain/rating/fixtures.ts';
-import { selectCurrentAlliance } from './domain/command/selectors.ts';
+import { CURRENT_PLAYER_ID, createPlayerRatingEntries, withTestOwnerScoreFixtures } from './domain/rating/fixtures.ts';
+import { createAllianceRatingEntries } from './domain/rating/alliances.ts';
+import { selectOwnerAlliance } from './domain/command/selectors.ts';
 import type { CommandState } from './domain/command/types.ts';
 import type { RuntimeMode } from './domain/runtime/mode.ts';
 import {
@@ -28,11 +29,13 @@ const PAGE_SIZE = 12;
 export function RatingView({
   mode: runtimeMode = 'test',
   command,
+  ownerScores = {},
   currentPlayerScore,
   currentPlayerId = CURRENT_PLAYER_ID,
 }: {
   mode?: RuntimeMode;
   command: CommandState;
+  ownerScores?: Readonly<Record<string, OwnerScore>>;
   currentPlayerScore?: OwnerScore;
   currentPlayerId?: string;
 }) {
@@ -40,13 +43,21 @@ export function RatingView({
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [playerSort, setPlayerSort] = useState<PlayerScoreKey>('totalPoints');
-  const [allianceSort, setAllianceSort] = useState<AllianceScoreKey>('alliancePoints');
+  const [allianceSort, setAllianceSort] = useState<AllianceScoreKey>('totalPoints');
   const [direction, setDirection] = useState<SortDirection>('desc');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const currentAlliance = useMemo(() => selectCurrentAlliance(command), [command]);
-  const players = useMemo(() => createPlayerRatingEntries(currentPlayerScore, runtimeMode, currentPlayerId), [currentPlayerScore, currentPlayerId, runtimeMode]);
-  const alliances = useMemo(() => createAllianceRatingEntries(currentAlliance, runtimeMode), [currentAlliance, runtimeMode]);
+  const currentAlliance = useMemo(() => selectOwnerAlliance(command, currentPlayerId), [command, currentPlayerId]);
+  const players = useMemo(
+    () => createPlayerRatingEntries(currentPlayerScore, runtimeMode, currentPlayerId)
+      .map((entry) => entry.isCurrentPlayer ? { ...entry, allianceTag: currentAlliance?.tag ?? null } : entry),
+    [currentPlayerScore, currentPlayerId, currentAlliance, runtimeMode],
+  );
+  const scoresWithFixtures = useMemo(() => withTestOwnerScoreFixtures(ownerScores, runtimeMode), [ownerScores, runtimeMode]);
+  const alliances = useMemo(
+    () => createAllianceRatingEntries(command, scoresWithFixtures, currentPlayerId),
+    [command, scoresWithFixtures, currentPlayerId],
+  );
   const currentPlayer = useMemo(() => players.find((entry) => entry.isCurrentPlayer) ?? null, [players]);
 
   const playerResults = useMemo(
@@ -158,7 +169,7 @@ export function RatingView({
         ) : alliances.length === 0 ? (
           <div className="rating-empty-v2" data-qa-rating-empty role="status">
             <strong>Союзов пока нет.</strong>
-            <span>Создайте союз, чтобы здесь появилась его позиция в рейтинге.</span>
+            <span>Создайте союз в разделе «Командование», чтобы здесь появилась его позиция.</span>
           </div>
         ) : (
           <AllianceTable
@@ -276,9 +287,10 @@ function AllianceTable({
   return (
     <div className="rating-table-v2 rating-table-v2--alliances" role="table" aria-label="Рейтинг альянсов">
       <div className="rating-row-v2 rating-head-v2" role="row">
-        <span>МЕСТО</span><span>АЛЬЯНС</span><span>ТЕГ</span><span>УРОВЕНЬ</span>
-        <ScoreHead label="ОЧКИ АЛЬЯНСА" scoreKey="alliancePoints" selected={sortKey === 'alliancePoints'} direction={direction} onSort={onSort} />
-        <ScoreHead label="ОБЩИЕ ОЧКИ" scoreKey="totalPoints" selected={sortKey === 'totalPoints'} direction={direction} onSort={onSort} />
+        <span>МЕСТО</span><span>АЛЬЯНС</span><span>ТЕГ</span><span>УЧАСТНИКИ</span>
+        <ScoreHead label="ОБЩИЕ (СРЕДН.)" scoreKey="totalPoints" selected={sortKey === 'totalPoints'} direction={direction} onSort={onSort} />
+        <ScoreHead label="РЕСУРС. (СРЕДН.)" scoreKey="resourcePoints" selected={sortKey === 'resourcePoints'} direction={direction} onSort={onSort} />
+        <ScoreHead label="БОЕВЫЕ (СРЕДН.)" scoreKey="battlePoints" selected={sortKey === 'battlePoints'} direction={direction} onSort={onSort} />
       </div>
       {entries.map((entry) => (
         <button
@@ -296,9 +308,10 @@ function AllianceTable({
           <span className="rank-v2"><b>{entry.rank}</b></span>
           <span className="identity-v2"><span className="alliance-emblem-v2">{entry.emblem ? <EmblemGlyph compact emblem={entry.emblem} /> : entry.tag.slice(0, 1)}</span><strong className="utility-data-text">{entry.name}</strong></span>
           <span className="alliance-tag-v2">[{entry.tag}]</span>
-          <span className="utility-data-text">{entry.level}</span>
-          <Value value={entry.alliancePoints} />
+          <span className="utility-data-text">{entry.memberCount}/15</span>
           <Value value={entry.totalPoints} />
+          <Value value={entry.resourcePoints} />
+          <Value value={entry.battlePoints} />
         </button>
       ))}
     </div>
@@ -357,7 +370,7 @@ function SelectionStrip({ selected }: { selected: PlayerRatingEntry | AllianceRa
     <div className="rating-selection-v2">
       <strong className="utility-section-title">{selected.name}</strong>
       <span className="utility-secondary">[{selected.tag}] · #{selected.rank}</span>
-      <span className="utility-data-text">Очки альянса: {new Intl.NumberFormat('ru-RU').format(selected.alliancePoints)}</span>
+      <span className="utility-data-text">Средние общие очки: {new Intl.NumberFormat('ru-RU').format(selected.totalPoints)}</span>
     </div>
   );
 }

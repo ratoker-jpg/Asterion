@@ -3,14 +3,14 @@ import test from 'node:test';
 import {
   CURRENT_PLAYER_ID,
   CURRENT_PLAYER_DISPLAY_NAME,
-  createAllianceRatingEntries,
   createDefaultRatingPrototypeState,
   createPlayerRatingEntries,
   migrateRatingPrototypeState,
 } from './fixtures.ts';
-import { clampPage, filterAlliances, filterPlayers, pageForEntry, paginate, sortPlayers } from './selectors.ts';
-import { createDefaultCommandState, updateAllianceSettings } from '../command/repository.ts';
-import { selectCurrentAlliance } from '../command/selectors.ts';
+import { clampPage, filterAlliances, filterPlayers, pageForEntry, paginate, sortAlliances, sortPlayers } from './selectors.ts';
+import { createAllianceRatingEntries } from './alliances.ts';
+import { createDefaultCommandState } from '../command/repository.ts';
+import { createAlliance } from '../command/membership.ts';
 
 test('player display provider is deterministic with unique ids and ranks', () => {
   const a = createPlayerRatingEntries();
@@ -77,27 +77,39 @@ test('pagination clamps and show-current resolves the correct page', () => {
   assert.equal(page, 4);
 });
 
-test('alliance mode is deterministic and can reuse current Command alliance identity', () => {
-  const command = updateAllianceSettings(createDefaultCommandState(), {
-    name: '  Asterion Guard  ',
-    tag: ' ast ',
-    motto: 'Маяк.',
-    description: 'Контур.',
-    emblem: { glyph: 'orbit', accent: 'violet' },
-  });
-  const currentAlliance = selectCurrentAlliance(command);
-  const first = createAllianceRatingEntries(currentAlliance);
-  const second = createAllianceRatingEntries(currentAlliance);
-  assert.deepEqual(first, second);
+test('alliance rating lists only real alliances, ranked by member average, without invented rows', () => {
+  let command = createDefaultCommandState('production');
+  assert.deepEqual(createAllianceRatingEntries(command, {}, CURRENT_PLAYER_ID), []);
+
+  const created = (ownerId: string, name: string, tag: string) => {
+    const result = createAlliance(command, { ownerId, displayName: ownerId, settings: { name, tag, motto: '', description: '', emblem: { glyph: 'orbit', accent: 'violet' } } }, { now: 1, random: () => 0.5 });
+    assert.equal(result.ok, true);
+    command = result.state;
+  };
+  created(CURRENT_PLAYER_ID, '  Asterion Guard  ', ' ast ');
+  created('rival-owner', 'Ржавый Орден', 'RUS');
+
+  const scores = {
+    [CURRENT_PLAYER_ID]: { ownerId: CURRENT_PLAYER_ID, resourcePoints: 40, battlePoints: 10, totalPoints: 50, achievementPoints: 0 as const },
+    'rival-owner': { ownerId: 'rival-owner', resourcePoints: 90, battlePoints: 10, totalPoints: 100, achievementPoints: 0 as const },
+  };
+  const first = createAllianceRatingEntries(command, scores, CURRENT_PLAYER_ID);
+  assert.deepEqual(first, createAllianceRatingEntries(command, scores, CURRENT_PLAYER_ID));
+  assert.deepEqual(first.map((entry) => [entry.name, entry.rank, entry.totalPoints, entry.memberCount]), [['Ржавый Орден', 1, 100, 1], ['Asterion Guard', 2, 50, 1]]);
+
   const current = first.find((entry) => entry.isCurrentAlliance);
   assert.equal(current?.name, 'Asterion Guard');
   assert.equal(current?.tag, 'AST');
+  assert.equal(current?.resourcePoints, 40);
+  assert.equal(current?.battlePoints, 10);
   assert.equal(filterAlliances(first, 'ast').some((entry) => entry.isCurrentAlliance), true);
+  assert.deepEqual(sortAlliances(first, 'totalPoints', 'asc').map((entry) => entry.name), ['Asterion Guard', 'Ржавый Орден']);
+  assert.deepEqual(sortAlliances(first, 'resourcePoints', 'desc').map((entry) => entry.name), ['Ржавый Орден', 'Asterion Guard']);
 });
 
 test('production rating exposes only the current player and no alliance rows', () => {
   const players = createPlayerRatingEntries(900_001, 'production');
-  const alliances = createAllianceRatingEntries(null, 'production');
+  const alliances = createAllianceRatingEntries(createDefaultCommandState('production'), {}, CURRENT_PLAYER_ID);
 
   assert.equal(players.length, 1);
   assert.equal(players[0].isCurrentPlayer, true);

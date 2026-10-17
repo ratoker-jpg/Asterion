@@ -1,99 +1,148 @@
 export type AllianceEmblemGlyph = 'starforge' | 'orbit' | 'vanguard';
 export type AllianceAccent = 'cyan' | 'amber' | 'violet';
 
-export type MemberRole = 'leader' | 'officer' | 'veteran' | 'member';
-export type MemberActivity = 'online' | 'active' | 'away';
-
-export type ResourceType = 'metal' | 'minerals' | 'gas' | 'energy';
-export type RequestPriority = 'standard' | 'high' | 'critical';
-export type ResourceRequestState = 'open' | 'reviewing';
-
-export type RelationStatus = 'ally' | 'trade_pact' | 'neutral' | 'tense' | 'hostile' | 'war';
-
-export type JointOperationKind = 'sun_raid' | 'assault' | 'defense' | 'logistics';
-export type JointOperationState = 'preparing' | 'mustering' | 'active' | 'awaiting';
-
-export type AllianceEventKind = 'operation' | 'request' | 'diplomacy' | 'settings' | 'member';
-
 export type AllianceEmblem = {
   glyph: AllianceEmblemGlyph;
   accent: AllianceAccent;
 };
 
-export type AllianceFixtureId = 'test-command-default-v1';
-
-export type AllianceProfile = {
+/** Reusable public identity of an alliance: what outsiders, the galaxy and profiles may see. */
+export type AllianceIdentity = {
+  id: string;
   name: string;
   tag: string;
-  fixtureId?: AllianceFixtureId;
-  leaderMemberId: string;
-  motto: string;
-  description: string;
-  status: 'active';
-  foundedLabel: string;
   emblem: AllianceEmblem;
+  glyph: AllianceEmblem['glyph'];
 };
 
-export type AllianceMember = {
-  id: string;
-  callsign: string;
-  role: MemberRole;
-  homeSector: string;
-  specialization: string;
-  activity: MemberActivity;
-  contribution: number;
-  currentOperationId: string | null;
-  note: string;
-};
+export type RelationStatus = 'ally' | 'trade_pact' | 'neutral' | 'tense' | 'hostile' | 'war';
 
-export type ResourceRequest = {
-  id: string;
-  memberId: string;
-  resource: ResourceType;
-  amount: number;
-  fulfilledAmount: number;
-  purpose: string;
-  priority: RequestPriority;
-  state: ResourceRequestState;
-};
-
+/**
+ * Reserved for the future diplomacy stage. Nothing creates, edits or shows
+ * relations yet (war/truce are not active); the list stays empty and exists so
+ * the galaxy's relation resolver keeps its contract.
+ */
 export type DiplomaticRelation = {
   id: string;
   allianceName: string;
   tag: string;
   status: RelationStatus;
-  note: string;
-  meaning: string;
-  history: string[];
 };
 
-export type JointOperation = {
+export type AllianceFixtureId = 'test-command-default-v1';
+
+export type AllianceRole = 'leader' | 'deputy' | 'member';
+
+/**
+ * One owner's membership in one alliance. `ownerId` is the stable owner
+ * identity shared with the universe/rating/flight layers; one owner is one
+ * member no matter how many planets they own.
+ */
+export type AllianceMember = {
+  ownerId: string;
+  /** Display snapshot; refreshed by `touchMember` for the local player. */
+  displayName: string;
+  joinedAt: number;
+  lastActiveAt: number;
+  /**
+   * Contribution aggregate for leadership succession: total units of all four
+   * resource types actually delivered to allies during this membership.
+   * PR 1 persists the field; the aid-flight pipeline credits it later.
+   */
+  deliveredUnits: number;
+  /** Participation in joint operations; reserved for the future joint-operation stage. */
+  jointOperationCount: number;
+  /** Random value drawn once at join and persisted, so ties never re-roll. */
+  tieBreaker: number;
+};
+
+export type AllianceRecord = {
   id: string;
-  title: string;
-  kind: JointOperationKind;
-  objective: string;
-  state: JointOperationState;
-  participants: number;
-  recommendedParticipants: number;
-  windowLabel: string;
+  name: string;
+  tag: string;
+  motto: string;
   description: string;
-  joinedByPlayer: boolean;
+  emblem: AllianceEmblem;
+  createdAt: number;
+  leaderOwnerId: string;
+  /** At most one deputy; always a member who is not the leader. */
+  deputyOwnerId: string | null;
+  /** When the current leader took the role; absence is measured from the later of this and their last activity. */
+  leaderSince: number;
+  members: AllianceMember[];
+  /** Marks the Test Mode seed alliance; such records never survive in production saves. */
+  fixtureId?: AllianceFixtureId;
 };
 
-export type AllianceEvent = {
+export type ApplicationStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'auto_rejected';
+export type ApplicationReason = 'declined' | 'full' | 'already_member' | 'disbanded';
+
+export type AllianceApplication = {
   id: string;
-  kind: AllianceEventKind;
-  timestampLabel: string;
-  text: string;
+  allianceId: string;
+  ownerId: string;
+  displayName: string;
+  status: ApplicationStatus;
+  reason: ApplicationReason | null;
+  createdAt: number;
+  resolvedAt: number | null;
+  resolvedByOwnerId: string | null;
+};
+
+export type CooldownCause = 'rejected' | 'left' | 'kicked';
+
+/** `allianceId: null` blocks applying to every alliance; otherwise only to that one. */
+export type AllianceCooldown = {
+  ownerId: string;
+  allianceId: string | null;
+  until: number;
+  cause: CooldownCause;
 };
 
 export type CommandState = {
-  alliance: AllianceProfile;
-  members: AllianceMember[];
-  resourceRequests: ResourceRequest[];
+  version: 2;
+  alliances: AllianceRecord[];
+  applications: AllianceApplication[];
+  cooldowns: AllianceCooldown[];
+  /** Reserved contract for the future diplomacy stage; always empty today. */
   diplomacy: DiplomaticRelation[];
-  jointOperations: JointOperation[];
-  events: AllianceEvent[];
+  /** Monotonic counter for stable alliance/application ids; ids are never reused. */
+  nextSerial: number;
 };
 
-export type AllianceSettingsInput = Pick<AllianceProfile, 'name' | 'tag' | 'motto' | 'description' | 'emblem'>;
+export type AllianceSettingsInput = Pick<AllianceRecord, 'name' | 'tag' | 'motto' | 'description' | 'emblem'>;
+
+export type CommandErrorCode =
+  | 'invalid_name'
+  | 'invalid_tag'
+  | 'invalid_text'
+  | 'duplicate_name'
+  | 'duplicate_tag'
+  | 'already_member'
+  | 'not_member'
+  | 'alliance_not_found'
+  | 'application_not_found'
+  | 'application_not_pending'
+  | 'pending_exists'
+  | 'cooldown'
+  | 'alliance_full'
+  | 'not_allowed'
+  | 'target_not_member'
+  | 'self_target'
+  | 'deputy_exists'
+  | 'leader_must_transfer';
+
+export type CommandResult<Extra extends object = Record<never, never>> =
+  | ({ ok: true; state: CommandState } & Extra)
+  /**
+   * `state` is always the authoritative state after the attempt. It differs from
+   * the input only when the attempt exposed stale data that had to be cleaned up
+   * (for example an application whose alliance became full).
+   */
+  | { ok: false; state: CommandState; code: CommandErrorCode; message: string; retryAt?: number };
+
+export type OwnerMembership = {
+  alliance: AllianceRecord;
+  member: AllianceMember;
+  role: AllianceRole;
+};

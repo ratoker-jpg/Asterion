@@ -1,4 +1,4 @@
-import { selectCurrentAlliance } from '../domain/command/selectors.ts';
+import { selectOwnerAlliance } from '../domain/command/selectors.ts';
 import type { DiplomaticRelation } from '../domain/command/types.ts';
 import { getEspionageTargets } from '../domain/espionage/runtime.ts';
 import type { SpyTargetState } from '../domain/espionage/types.ts';
@@ -42,12 +42,22 @@ function targetNode(target: SpyTargetState, currentOwnerId: string): UniversePla
   };
 }
 
+/**
+ * A stored target keeps a legacy alliance snapshot. Alliance membership is
+ * authoritative in the Command registry, so it is resolved live and the stale
+ * snapshot is never used for relations or for the alliance recorded on missions.
+ */
+function withLiveAlliance(state: SaveState, target: SpyTargetState): SpyTargetState {
+  return { ...target, alliance: selectOwnerAlliance(state.command, target.ownerId) };
+}
+
 export function resolveSpyTarget(
   state: SaveState,
   targetPlanetId: string,
   expected?: { ownerId?: string; coordinate?: SpyTargetState['coordinate'] },
 ): ResolvedSpyTarget | null {
-  const target = getEspionageTargets(state.espionage)[targetPlanetId];
+  const stored = getEspionageTargets(state.espionage)[targetPlanetId];
+  const target = stored ? withLiveAlliance(state, stored) : undefined;
   if (!target || (target.kind !== undefined && target.kind !== 'player' && target.kind !== 'npc')) return null;
   if (expected?.ownerId !== undefined && target.ownerId !== expected.ownerId) return null;
   if (expected?.coordinate
@@ -60,7 +70,7 @@ export function resolveSpyTarget(
     .map((candidate) => candidate.id)
     .sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
   const owner = createSpyTargetOwnerProfile(target, ownerPlanetIds.length ? ownerPlanetIds : [target.id]);
-  const currentAlliance = selectCurrentAlliance(state.command);
+  const currentAlliance = selectOwnerAlliance(state.command, state.profile.playerId);
   const relation = getUniverseOwnerRelation(
     targetNode(target, state.profile.playerId),
     state.profile.playerId,

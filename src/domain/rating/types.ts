@@ -1,9 +1,8 @@
-import type { CurrentAllianceIdentity } from '../command/selectors.ts';
-import type { AllianceEmblem } from '../command/types.ts';
+import type { AllianceEmblem, AllianceIdentity } from '../command/types.ts';
 
 export type RatingMode = 'players' | 'alliances';
 export type PlayerScoreKey = 'achievementPoints' | 'totalPoints' | 'resourcePoints' | 'battlePoints';
-export type AllianceScoreKey = 'alliancePoints' | 'totalPoints';
+export type AllianceScoreKey = 'totalPoints' | 'resourcePoints' | 'battlePoints';
 export type SortDirection = 'desc' | 'asc';
 
 export type OwnerScore = {
@@ -27,16 +26,18 @@ export type PlayerRatingEntry = {
   isCurrentPlayer: boolean;
 };
 
-export type AllianceIdentity = CurrentAllianceIdentity;
+export type { AllianceIdentity };
 
+/** One real alliance. Point fields are member averages; the total is not the sum of the other two. */
 export type AllianceRatingEntry = {
   id: string;
   rank: number;
   name: string;
   tag: string;
-  emblem?: AllianceEmblem;
-  level: number;
-  alliancePoints: number;
+  emblem: AllianceEmblem;
+  memberCount: number;
   totalPoints: number;
+  resourcePoints: number;
+  battlePoints: number;
   isCurrentAlliance: boolean;
 };

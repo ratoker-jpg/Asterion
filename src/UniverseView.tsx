@@ -46,7 +46,7 @@ import star04 from '../assets/source/universe-navigation/system-stars/system-sta
 import star05 from '../assets/source/universe-navigation/system-stars/system-star.variant-05.png';
 import star06 from '../assets/source/universe-navigation/system-stars/system-star.variant-06.png';
 
-import { selectCurrentAlliance } from './domain/command/selectors.ts';
+import { selectOwnerAlliance } from './domain/command/selectors.ts';
 import type { CommandState } from './domain/command/types.ts';
 import { playerFactionLabel } from './domain/profile/repository.ts';
 import type { PlayerProfileState } from './domain/profile/types.ts';
@@ -586,9 +586,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
     return () => window.clearInterval(timer);
   }, []);
 
-  const alliance = useMemo(() => {
-    return selectCurrentAlliance(command);
-  }, [command]);
+  const alliance = useMemo(() => selectOwnerAlliance(command, profile.playerId), [command, profile.playerId]);
   const owner = useMemo(() => normalizeUniverseOwnerProfile({
     id: profile.playerId,
     displayName: profile.displayName,
@@ -605,7 +603,11 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
         .map((target) => target.id);
       const npc = createUniverseNpcOwnerProfile(ownerPoints(ownerScores[UNIVERSE_NPC_OWNER_ID]), registeredBotPlanetIds);
       next.set(npc.id, npc);
-      next.set(TEST_MODE_ALLY_PLANET_FIXTURE.owner.id, normalizeUniverseOwnerProfile(TEST_MODE_ALLY_PLANET_FIXTURE.owner));
+      next.set(TEST_MODE_ALLY_PLANET_FIXTURE.owner.id, normalizeUniverseOwnerProfile({
+        ...TEST_MODE_ALLY_PLANET_FIXTURE.owner,
+        alliance: selectOwnerAlliance(command, TEST_MODE_ALLY_PLANET_FIXTURE.owner.id),
+        ...(ownerScores[TEST_MODE_ALLY_PLANET_FIXTURE.owner.id] ? { points: ownerPoints(ownerScores[TEST_MODE_ALLY_PLANET_FIXTURE.owner.id]) } : {}),
+      }));
     }
     for (const target of spyTargets) {
       const previous = next.get(target.ownerId);
@@ -614,13 +616,13 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
         id: target.ownerId,
         displayName: target.ownerName,
         raceId: target.raceId,
-        alliance: target.alliance,
+        alliance: selectOwnerAlliance(command, target.ownerId),
         points: ownerScores[target.ownerId] ? ownerPoints(ownerScores[target.ownerId]) : previous?.points,
         planetIds: [...new Set([...(previous?.planetIds ?? []), target.id])],
       }));
     }
     return next;
-  }, [mode, owner, spyTargets]);
+  }, [command, mode, owner, ownerScores, spyTargets]);
   const galaxyData = useMemo(() => createUniverseMap({
     galaxy: GALAXY,
     currentOwnerId: owner.id,

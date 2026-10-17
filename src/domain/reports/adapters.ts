@@ -5,7 +5,7 @@ import {
   type BattleReport,
   type BattleSide,
 } from '../combat/report.ts';
-import type { CommandState, JointOperation } from '../command/types.ts';
+import type { CommandState } from '../command/types.ts';
 import type { FlightRecord } from '../flights/types.ts';
 import { explorationMailboxReports } from '../exploration/report-items.ts';
 import type { ExplorationState } from '../exploration/ledger.ts';
@@ -153,38 +153,6 @@ export function operationIntelToReportItem(operation: OperationInstance): Report
       { label: 'Источник сигнала', value: operation.originSignalId },
     ],
     operationId: operation.id,
-  };
-}
-
-function allianceStatus(operation: JointOperation) {
-  if (operation.state === 'mustering') return { label: 'СБОР СИЛ', tone: 'warning' as const };
-  if (operation.state === 'awaiting') return { label: 'ОЖИДАЕТ УЧАСТНИКОВ', tone: 'info' as const };
-  return { label: 'ПОДГОТОВКА', tone: 'info' as const };
-}
-
-export function allianceOperationToReportItem(operation: JointOperation): ReportItem | null {
-  if (operation.joinedByPlayer || !['preparing', 'mustering', 'awaiting'].includes(operation.state)) return null;
-  const status = allianceStatus(operation);
-  return {
-    id: `alliance:operation:${operation.id}`,
-    source: 'command',
-    category: 'alliances',
-    typeLabel: operation.kind === 'sun_raid' ? 'Совместная атака на Солнце' : 'Совместная операция',
-    title: `Присоединиться: ${operation.title}`,
-    preview: `${operation.windowLabel} · ${operation.participants}/${operation.recommendedParticipants} участников.`,
-    body: operation.description,
-    statusLabel: status.label,
-    statusTone: status.tone,
-    participantNames: [],
-    planetNames: [],
-    coordinates: [],
-    details: [
-      { label: 'Цель', value: operation.objective },
-      { label: 'Участники', value: `${operation.participants} / ${operation.recommendedParticipants}` },
-      { label: 'Окно', value: operation.windowLabel },
-    ],
-    commandOperationId: operation.id,
-    action: { kind: 'open_fleets', label: 'ПЕРЕЙТИ К ФЛОТАМ' },
   };
 }
 
@@ -452,10 +420,6 @@ export function buildReportsFeed(
     .map(operationIntelToReportItem)
     .filter((item): item is ReportItem => Boolean(item));
 
-  const allianceItems = command.jointOperations
-    .map(allianceOperationToReportItem)
-    .filter((item): item is ReportItem => Boolean(item));
-
   const espionageItems = [
     ...(espionage?.reports ?? []).map((report) => spyReportToReportItem(report, espionage)),
     ...(espionage?.hunterNotices ?? []).map(spyHunterNoticeToReportItem),
@@ -475,7 +439,7 @@ export function buildReportsFeed(
     typeLabel: 'Прибытие добывающего флота',
   })) : [];
 
-  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems, ...extractionSystemItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights), ...explorationMailboxReports(exploration, pirateFlights, playerOwnerId), ...arrivalFlightItems].sort((a, b) => {
+  return [...battleItems, ...systemItems, ...espionageItems, ...overpopulationItems, ...extractionSystemItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights), ...explorationMailboxReports(exploration, pirateFlights, playerOwnerId), ...arrivalFlightItems].sort((a, b) => {
     if (a.timestamp && b.timestamp) return Date.parse(b.timestamp) - Date.parse(a.timestamp);
     if (!a.timestamp && b.timestamp) return -1;
     if (a.timestamp && !b.timestamp) return 1;
