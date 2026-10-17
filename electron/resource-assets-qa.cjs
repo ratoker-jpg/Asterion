@@ -112,7 +112,7 @@ async function waitForResourceImages(win, scopeSelector, { allowEmpty = false } 
   await waitFor(win, `(() => {
     const root = document.querySelector(${encoded});
     const images = root ? [...root.querySelectorAll('img[data-qa-resource-kind]')] : [];
-    return Boolean(root && (allowEmpty || images.length > 0) && images.every((image) => image.complete && image.naturalWidth > 0));
+    return Boolean(root && (${allowEmpty} || images.length > 0) && images.every((image) => image.complete && image.naturalWidth > 0));
   })()`);
 }
 
