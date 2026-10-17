@@ -337,3 +337,95 @@ test('a persisted raid against a full legal fleet and defense survives startup a
   const repeated = reconcileRuntime(reconciled.state, context);
   assert.equal(repeated.state.combat.reports.filter((record) => record.id === reportId).length, 1);
 });
+
+test('owned pirate raid losses update and persist the attacked planet while another colony is selected', () => {
+  let verified = false;
+  for (let index = 0; index < 120 && !verified; index++) {
+    const cycle = getUniverseTimedObjectSchedule('pirate', 1, 1, index);
+    if (!cycle.present) continue;
+    const baseline = createInitialSaveState('test', cycle.startAt);
+    const home = baseline.planets['helion-01']!;
+    const homeFleet = createEmptyFleetState();
+    homeFleet.ships.scout = 1;
+    const emptyDefense = {
+      defenses: Object.fromEntries(Object.keys(home.defense.defenses).map((id) => [id, 0])) as typeof home.defense.defenses,
+    };
+    const target = {
+      ...home,
+      buildings: { ...home.buildings, hangar: 10 },
+      fleet: homeFleet,
+      defense: emptyDefense,
+      resources: { metal: 500_000, minerals: 500_000, gas: 500_000 },
+    };
+    const selectedColony = {
+      ...home,
+      id: 'qa-selected-colony',
+      name: 'Selected Colony',
+      universeSystem: 2,
+      universePosition: 1,
+      fleet: createEmptyFleetState(),
+      defense: emptyDefense,
+      resources: { metal: 50_000, minerals: 60_000, gas: 70_000 },
+    };
+    const clock = baseline.resourceClock.byPlanet?.['helion-01'];
+    if (!clock) continue;
+    const seeded = {
+      ...baseline,
+      currentPlanetId: 'qa-selected-colony',
+      planets: { ...baseline.planets, 'helion-01': target, 'qa-selected-colony': selectedColony },
+      queues: { ...baseline.queues, 'qa-selected-colony': [] },
+      resourceClock: {
+        ...baseline.resourceClock,
+        byPlanet: { ...baseline.resourceClock.byPlanet, 'qa-selected-colony': clock },
+      },
+      metal: selectedColony.resources.metal,
+      minerals: selectedColony.resources.minerals,
+      gas: selectedColony.resources.gas,
+      pirate: {
+        ...baseline.pirate!,
+        raidProcessedAt: cycle.startAt,
+        ownerThreats: {
+          ...baseline.pirate!.ownerThreats,
+          [baseline.profile.playerId]: {
+            version: 1 as const, ageHours: 10_000, integratedAt: cycle.startAt,
+          },
+        },
+        ownerMaxHangarLevel: {
+          ...baseline.pirate!.ownerMaxHangarLevel,
+          [baseline.profile.playerId]: 10,
+        },
+      },
+    };
+    const at = cycle.startAt + 900_000;
+    const contact = getCurrentPirateContact(seeded, { galaxy: 1, system: 1, position: 1 }, at, 'test');
+    if (!contact || pirateSeededDraw(`pirate-raid-v1:${baseline.profile.playerId}:${contact.contactCycleKey}`) >= 0.30) continue;
+    const event = selectDuePirateRolls(seeded, cycle.startAt, at, 'test', 1)
+      .find((roll) => roll.ownerId === baseline.profile.playerId && roll.contactCycleKey === contact.contactCycleKey);
+    if (!event) continue;
+    const launched = resolveDuePirateRoll(seeded, event, 'test', 1);
+    const flight = launched.flights.records.find((record) => record.ownerSide === 'pirate'
+      && record.missionId === 'pirate-raid' && record.destinationPlanetId === 'helion-01');
+    if (!flight) continue;
+
+    const completed = reconcileFlights(launched, flight.arrivalAt, undefined, { mode: 'test', testTimeScale: 1 });
+    const report = completed.state.combat.reports.find((record) => record.id === `battle-pirate-raid-${flight.id}`);
+    if (!report?.defenderForce.stacks.some((stack) => stack.destroyed > 0)) continue;
+    const attackedPlanet = completed.state.planets['helion-01']!;
+    assert.equal(attackedPlanet.fleet.ships.scout, 0, 'The pirate loss must be applied to the attack destination');
+    assert.equal(completed.state.currentPlanetId, 'qa-selected-colony', 'Combat must preserve the selected colony');
+    assert.equal(completed.state.planets['qa-selected-colony']?.fleet.ships.scout, 0,
+      'The selected colony must not receive losses from a raid on Helion');
+
+    const storage = new MemoryStorage();
+    const facade = createPersistenceFacade({ mode: 'test', storage, now: () => flight.arrivalAt });
+    assert.equal(facade.write(completed.state).ok, true);
+    const reloaded = facade.read();
+    assert.equal(reloaded.currentPlanetId, 'qa-selected-colony');
+    assert.equal(reloaded.planets['helion-01']?.fleet.ships.scout, 0,
+      'Reload must preserve the loss on the attacked planet');
+    assert.equal(reloaded.planets['qa-selected-colony']?.fleet.ships.scout, 0,
+      'Reload must preserve the other planet without cross-applying losses');
+    verified = true;
+  }
+  assert.equal(verified, true, 'Expected a real owned-player pirate fight with fleet losses and a second selected planet');
+});

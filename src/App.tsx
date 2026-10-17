@@ -311,6 +311,7 @@ export function App() {
   const [toasts, setToasts] = useState<RuntimeToast[]>([]);
   const [lastNotice, setLastNotice] = useState('Система готова. Локальное сохранение активно.');
   const noticeSeq = useRef(0);
+  const persistenceFailureNotified = useRef(false);
 
   /**
    * Keeps the QA notice layer in sync and emits a bottom-left toast. Silent
@@ -740,8 +741,16 @@ export function App() {
     onNotice: setNotice,
   }), []);
   useEffect(() => {
-    persistence.write(state);
-  }, [persistence, state]);
+    const result = persistence.write(state);
+    if (!result.ok) {
+      if (!persistenceFailureNotified.current) {
+        persistenceFailureNotified.current = true;
+        setNotice('Не удалось сохранить игру в браузере. Проверьте доступность локального хранилища.', 'error');
+      }
+      return;
+    }
+    persistenceFailureNotified.current = false;
+  }, [persistence, setNotice, state]);
   useEffect(() => {
     publishApplicationRuntimeSnapshot(
       state,
