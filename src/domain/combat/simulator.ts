@@ -542,7 +542,15 @@ export function validateCombatInput(input: CombatInput, options: CombatValidatio
   const defenderFleetPopulation = calculateStacksPopulation([...normalized.defender.ships, ...getSideCommanders(normalized.defender)], normalized.defender.factionId, normalized.defender.combatProfile);
   const defenderDefensePopulation = calculateStacksPopulation(normalized.defender.defenses ?? [], normalized.defender.factionId, normalized.defender.combatProfile);
 
-  if (options.allowPopulationOverflow !== true && attackerPopulation > SIMULATOR_POPULATION_LIMITS.attackerFleet) {
+  // Incoming raids are generated from fleet + defense population, two
+  // independent capacity pools. Their valid frozen fleet can exceed the
+  // simulator's single-fleet cap; retain its actual composition on arrival.
+  const approvedPirateRaidOverflow = options.missionType === 'pirate-raid'
+    && normalized.attacker.combatProfile?.kind === 'pirate'
+    && normalized.defender.combatProfile?.kind !== 'pirate'
+    && Number.isSafeInteger(attackerPopulation);
+  if (options.allowPopulationOverflow !== true && !approvedPirateRaidOverflow
+    && attackerPopulation > SIMULATOR_POPULATION_LIMITS.attackerFleet) {
     errors.push({
       code: 'population-overflow',
       path: 'attacker',

@@ -67,10 +67,26 @@ jobs:
         if: github.event_name == 'pull_request' && github.event.action != 'closed'
         shell: bash
         run: |
-          PREVIEW_DIR="${RUNNER_TEMP}/pages-site/pr/${{ github.event.pull_request.number }}"
-          mkdir -p "${PREVIEW_DIR}"
-          cp -a dist/. "${PREVIEW_DIR}/"
+          SITE_DIR="${RUNNER_TEMP}/pages-site"
+          PREVIEW_DIR="${SITE_DIR}/pr/${{ github.event.pull_request.number }}"
+          mkdir -p "${PREVIEW_DIR}" "${SITE_DIR}/assets"
+          # Vite emits content-hashed assets; share unchanged files between main and PR.
+          # This avoids duplicating the entire game and exceeding the Pages size cap.
+          rsync -a --ignore-existing dist/assets/ "${SITE_DIR}/assets/"
+          rsync -a --ignore-existing --exclude="index.html" --exclude="assets/" dist/ "${SITE_DIR}/"
+          # Asset integration manifests use document-relative ./assets/generated/... URLs.
+          # The preview HTML is served from /pr/N/, so preserve its public assets there.
+          # These small unbundled WEBP files are distinct from the shared hashed Vite assets.
+          if [[ -d dist/assets/generated ]]; then
+            mkdir -p "${PREVIEW_DIR}/assets/generated"
+            rsync -a dist/assets/generated/ "${PREVIEW_DIR}/assets/generated/"
+          fi
+          cp dist/index.html "${PREVIEW_DIR}/index.html"
+          # Scripts and styles are hosted at /Asterion/assets/, not below /pr/N/.
+          sed -i 's#\./assets/#/Asterion/assets/#g' "${PREVIEW_DIR}/index.html"
+          grep -q '/Asterion/assets/' "${PREVIEW_DIR}/index.html"
           printf '%s\n' '${{ github.event.pull_request.head.sha }}' > "${PREVIEW_DIR}/preview-sha.txt"
+          du -sh "${SITE_DIR}"
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -86,3 +102,49 @@ jobs:
         uses: actions/deploy-pages@v4
         with:
           artifact_name: github-pages-${{ github.run_attempt }}
+      - name: Smoke-check deployed pull request preview
+        if: github.event_name == 'pull_request' && github.event.action != 'closed'
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          BASE="https://ratoker-jpg.github.io/Asterion"
+          PREVIEW="${BASE}/pr/${PR_NUMBER}"
+          DEPLOYED=""
+          for attempt in {1..12}; do
+            DEPLOYED="$(curl -fsSL --max-time 20 "${PREVIEW}/preview-sha.txt?sha=${PR_SHA}" || true)"
+            if [[ "${DEPLOYED}" == "${PR_SHA}" ]]; then break; fi
+            sleep 5
+          done
+          if [[ "${DEPLOYED}" != "${PR_SHA}" ]]; then
+            echo "Preview version mismatch: expected ${PR_SHA}, got ${DEPLOYED}" >&2
+            exit 1
+          fi
+          HTML="$(curl -fsSL --max-time 30 "${PREVIEW}/?mode=test&sha=${PR_SHA}")"
+          printf "%s" "${HTML}" | grep -q "/Asterion/assets/"
+          JS_PATH="$(printf "%s" "${HTML}" | grep -oE '/Asterion/assets/[^"]+\.js' | head -n1)"
+          CSS_PATH="$(printf "%s" "${HTML}" | grep -oE '/Asterion/assets/[^"]+\.css' | head -n1)"
+          test -n "${JS_PATH}" && test -n "${CSS_PATH}"
+          curl -fsSI --max-time 30 "${BASE%/Asterion}${JS_PATH}" > /dev/null
+          curl -fsSI --max-time 30 "${BASE%/Asterion}${CSS_PATH}" > /dev/null
+          CHROME="$(command -v google-chrome || command -v chromium || true)"
+          if [[ -z "${CHROME}" ]]; then echo "Headless Chrome unavailable" >&2; exit 1; fi
+          timeout 75s "${CHROME}" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \
+            --virtual-time-budget=10000 --dump-dom "${PREVIEW}/?mode=test&sha=${PR_SHA}" \
+            > "${RUNNER_TEMP}/pages-preview-dom.html" 2> "${RUNNER_TEMP}/pages-preview-chrome.log" || {
+              tail -n 60 "${RUNNER_TEMP}/pages-preview-chrome.log"
+              exit 1
+            }
+          if ! grep -q 'class="viewport"' "${RUNNER_TEMP}/pages-preview-dom.html"; then
+            echo "Preview loaded but React game viewport was not rendered" >&2
+            tail -n 60 "${RUNNER_TEMP}/pages-preview-chrome.log"
+            exit 1
+          fi
+          echo "Published PR preview responds, assets load, and React viewport renders."
+          timeout 120s node tools/pages-preview-qa.mjs "${PREVIEW}/?mode=test&sha=${PR_SHA}" "${CHROME}"
+          node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs \
+            tools/generate-preview-raid-fixture.mjs "${RUNNER_TEMP}/preview-large-raid.json"
+          ASTERION_PREVIEW_SAVE_FIXTURE="${RUNNER_TEMP}/preview-large-raid.json" \
+            timeout 120s node tools/pages-preview-qa.mjs "${PREVIEW}/?mode=test" "${CHROME}"

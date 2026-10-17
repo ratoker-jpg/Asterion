@@ -6,6 +6,8 @@ import { createDefaultCombatPriority } from './priority.ts';
 import { COMBAT_ENGINE_VERSION, normalizeBattleReport } from './report.ts';
 import { createSeededCombatRng, resolveCombat, selectCombatTarget } from './resolver.ts';
 import { PLANET_HANGAR_CAPACITY } from './config.ts';
+import { createPirateProfile } from '../pirates/profile.ts';
+import { PIRATE_BASE_SHIPS } from '../pirates/catalog.ts';
 import {
   SIMULATOR_POPULATION_LIMIT,
   scenarioToCombatInput,
@@ -379,4 +381,33 @@ test('golden victory, defeat, and draw fixtures preserve provenance and structur
         .forEach((stack) => assert.equal(stack.countAfter + stack.destroyed, stack.countBefore));
     });
   });
+});
+
+
+test('only an incoming pirate attacker may exceed the simulator fleet cap', () => {
+  const profile = createPirateProfile({ ownerId: 'd', contactCycleKey: 'pirate-cycle-v1:1:1:1:1000',
+    score: { resourcePoints: 1_000, battlePoints: 0, totalPoints: 1_000 } });
+  const ship = PIRATE_BASE_SHIPS[0]!;
+  const raid = input({
+    attacker: { participant: { ...attackerParticipant, race: 'pirates' },
+      combatProfile: { kind: 'pirate', snapshot: profile },
+      ships: [{ entityId: ship.id, count: Math.floor(35_000 / ship.population) + 1, level: profile.shipLevel }], commanders: [] },
+    defender: { participant: { ...defenderParticipant, race: 'Астеры' }, factionId: 'aegis',
+      ships: [{ entityId: 'scout', count: 1 }], commanders: [], defenses: [] },
+    attackerTechnologies: profile.technologies,
+  });
+  assert.equal(validateCombatInput(raid, { missionType: 'pirate-raid' }).ok, true);
+  assert.ok(validateCombatInput(raid).errors.some((error) => error.code === 'population-overflow' && error.path === 'attacker'));
+  assert.ok(validateCombatInput(raid, { missionType: 'attack' }).errors.some((error) => error.code === 'population-overflow' && error.path === 'attacker'));
+  for (const defender of [
+    { ...raid.defender, ships: [{ entityId: 'scout' as const, count: 17_501 }] },
+    { ...raid.defender, defenses: [{ entityId: 'ballistic-turret' as const, count: 17_501 }] },
+  ]) {
+    assert.ok(validateCombatInput({ ...raid, defender }, { missionType: 'pirate-raid' }).errors
+      .some((error) => error.code === 'population-overflow' && error.path.startsWith('defender')));
+  }
+  const player = input({ attacker: { participant: { ...attackerParticipant, race: 'Астеры' }, factionId: 'aegis',
+    ships: [{ entityId: 'scout', count: 17_501 }], commanders: [] } });
+  assert.ok(validateCombatInput(player, { missionType: 'pirate-raid' }).errors
+    .some((error) => error.code === 'population-overflow' && error.path === 'attacker'));
 });
