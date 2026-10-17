@@ -745,7 +745,8 @@ export function App() {
     if (!result.ok) {
       if (!persistenceFailureNotified.current) {
         persistenceFailureNotified.current = true;
-        setNotice('Не удалось сохранить игру в браузере. Проверьте доступность локального хранилища.', 'error');
+        const reason = result.error.trim().slice(0, 160);
+        setNotice(reason ? `Не удалось сохранить игру: ${reason}` : 'Не удалось сохранить игру в браузере.', 'error');
       }
       return;
     }
