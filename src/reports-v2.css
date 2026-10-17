@@ -1138,8 +1138,17 @@
 .reports-view.ops6 .reports-profile-events > p { padding-top: 14px; color: var(--reports-v2-muted); font-size: 11px; }
 
 .reports-view.ops6 .reports-profile-protection { min-height: 34px; border-radius: 8px; font-size: 10px; }
-.reports-view.ops6 .reports-fixture-note { padding: 8px 10px; border-radius: 7px; font-size: 10px; }
-.reports-view.ops6 .reports-fixture-note { display: none; }
+.reports-view.ops6 .reports-fixture-note {
+  flex: none;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(86,217,242,.22);
+  border-radius: 7px;
+  background: rgba(86,217,242,.065);
+  color: var(--reports-v2-label);
+  font-size: 11px;
+  line-height: 1.4;
+}
 .reports-view.ops6 .reports-list-empty-status { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 
 @media (max-width: 1500px) {
