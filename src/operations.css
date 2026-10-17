@@ -2317,7 +2317,7 @@
 .operations-feed-ring-v-a.is-failure b { color:#ff8c9c; }
 .operations-feed-ring-v-a.is-indeterminate {
   background:conic-gradient(var(--contact-accent) 0 28deg,rgba(255,255,255,.08) 28deg 360deg);
-  animation:operations-ring-spin-v-a 1.8s linear infinite;
+  /* Passive briefing indicators must remain static (approved Variant A motion spec). */
 }
 .operations-feed-ring-v-a.is-indeterminate > span { background:var(--ut-surface-2); }
 .operations-feed-ring-v-a.is-indeterminate b { color:var(--contact-accent); }
@@ -2580,7 +2580,6 @@
   from { opacity:0; transform:translateY(6px); }
   to { opacity:1; transform:translateY(0); }
 }
-@keyframes operations-ring-spin-v-a { to { transform:rotate(360deg); } }
 @media (max-width: 1450px) {
   .operations-shell-v2--variant-a .operations-topbar-v2 { grid-template-columns:minmax(145px,.6fr) minmax(215px,.8fr) auto 128px; gap:10px; padding-right:12px; padding-left:12px; }
   .operations-shell-v2--variant-a .operations-threat-summary-v-a { gap:9px; padding-left:12px; }
