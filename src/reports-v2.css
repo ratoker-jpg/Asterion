@@ -809,10 +809,10 @@
   text-align: center;
 }
 
-.reports-view.reports-v2 .reports-v2-empty-art { width: 86px; height: 86px; border-radius: 18px; }
+.reports-view.reports-v2 .reports-v2-empty-art { width: 160px; height: 160px; border-radius: 28px; }
 .reports-view.reports-v2 .reports-v2-empty-art > svg,
-.reports-view.reports-v2 .reports-v2-empty-art > .reports-glyph-image { position: relative; inset: auto; width: 46px; height: 46px; margin: 19px; padding: 0; }
-.reports-view.reports-v2 .reports-empty-dossier > strong { color: #e7f4f7; font-size: 14px; letter-spacing: .1em; }
+.reports-view.reports-v2 .reports-v2-empty-art > .reports-glyph-image { position: relative; inset: auto; width: 100px; height: 100px; margin: 29px; padding: 0; }
+.reports-view.reports-v2 .reports-empty-dossier > strong { color: #e7f4f7; font-size: 18px !important; letter-spacing: .1em; }
 .reports-view.reports-v2 .reports-empty-dossier > span:last-child { max-width: 430px; color: var(--reports-v2-muted); font-size: 12px; line-height: 1.55; }
 
 /* Report and recon artwork */
