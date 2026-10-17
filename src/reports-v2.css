@@ -1327,3 +1327,29 @@
 
 .reports-view.reports-v2 .reports-preview-scroll:has(> .reports-empty-dossier) { display: flex; }
 .reports-view.reports-v2 .reports-preview-scroll > .reports-empty-dossier { flex: 1; align-self: stretch; min-height: 100%; justify-content: center; border: 0; background: none; }
+
+/* === Frameless artwork (approved direction: art floats like in Operations) ===
+   Icons and portraits are no longer boxed; only ship cards keep their card. */
+.reports-view.reports-v2 .reports-v2-art:not(.reports-v2-entity-art):not(.reports-v2-pirate-art) {
+  overflow: visible !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+}
+.reports-view.reports-v2 .reports-v2-art:not(.reports-v2-entity-art):not(.reports-v2-pirate-art)::after { content: none !important; }
+.reports-view.reports-v2 .reports-v2-art:not(.reports-v2-entity-art):not(.reports-v2-pirate-art) > img,
+.reports-view.reports-v2 .reports-v2-art:not(.reports-v2-entity-art):not(.reports-v2-pirate-art) img {
+  padding: 0 !important;
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, .65));
+}
+.reports-view.reports-v2 .reports-v2-art:not(.reports-v2-entity-art):not(.reports-v2-pirate-art) .faction-general-portrait { background: none !important; border: 0 !important; box-shadow: none !important; }
+.reports-view.reports-v2 .reports-v2-nav-art img { filter: drop-shadow(0 0 8px color-mix(in srgb, var(--reports-v2-art-tone, #56d9f2) 35%, transparent)); }
+
+/* General portrait: show the whole figure, head included. */
+.reports-view.reports-v2 .reports-profile-avatar__art { overflow: visible; }
+.reports-view.reports-v2 .reports-profile-avatar__portrait { inset: 24px 16px 120px !important; height: auto !important; background: none !important; }
+.reports-view.reports-v2 .reports-profile-avatar__portrait img { position: static !important; width: 100% !important; height: 100% !important; object-fit: contain !important; object-position: center top !important; transform: none !important; }
+.reports-view.reports-v2 .reports-profile-avatar__portrait { inset: 24px 36px 120px !important; }
+.reports-view.reports-v2 .reports-v2-nav-art { width: 40px !important; height: 40px !important; }
+.reports-view.reports-v2 .reports-v2-nav-art img { width: 100% !important; height: 100% !important; object-fit: contain; }

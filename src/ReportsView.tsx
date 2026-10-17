@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { BattleCard, BattleReportModal } from './BattleReportsView';
 import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
+import pirateWarlordArt from '../assets/source/characters/pirates/pirate_warlord.png';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 import type { BattleReport } from './domain/combat/report.ts';
 import { createBattleReportViewModel } from './domain/combat/battle-report-view-model.ts';
@@ -310,12 +311,19 @@ function SpyDossier({ item, report, onOpenUniverseTarget }: {
   );
 }
 
+// The combat view model has no pirate faction id and falls back to Aegis;
+// detect pirates from the participant record instead.
+function isPirateSide(side: BattleSideViewModel) {
+  const p = side.participant as { race?: string; playerName?: string; playerId?: string };
+  return /pirat|пират/i.test([p.race, p.playerId, p.playerName, String(side.factionId)].join(' '));
+}
+
 function BattleSideOverview({ side }: { side: BattleSideViewModel }) {
   const sideLabel = side.participant.side === 'attacker' ? 'АТАКУЮЩИЙ' : 'ЗАЩИТНИК';
   const participantMeta = [side.participant.race, side.participant.coordinates].filter(Boolean).join(' · ');
   return (
     <article className={`reports-battle-side reports-battle-side--${side.participant.side}`}>
-      <div className="reports-v2-art reports-battle-general-art"><FactionGeneralPortrait factionId={side.factionId} /></div>
+      <div className="reports-v2-art reports-battle-general-art">{isPirateSide(side) ? <span className="faction-general-portrait" data-faction="pirates"><img src={pirateWarlordArt} alt="" /></span> : <FactionGeneralPortrait factionId={side.factionId} />}</div>
       <div className="reports-battle-side-copy"><small>{sideLabel}</small><strong>{side.participant.playerName || side.participant.planetName || '—'}</strong><span>{participantMeta || side.participant.planetName || 'Данные участника не зафиксированы'}</span></div>
       <div className="reports-battle-population"><small>НАСЕЛЕНИЕ</small><span><b>{side.populationBefore == null ? '—' : numberFormat.format(side.populationBefore)}</b><i aria-hidden="true">→</i><b>{side.populationAfter == null ? '—' : numberFormat.format(side.populationAfter)}</b></span></div>
       {side.populationBefore != null && side.populationBefore > 0 && side.populationAfter != null ? <div className="reports-battle-population-bar" role="meter" aria-label="Оставшееся население" aria-valuemin={0} aria-valuemax={side.populationBefore} aria-valuenow={Math.max(0, Math.min(side.populationBefore, side.populationAfter))}><i style={{ width: `${Math.max(0, Math.min(100, side.populationAfter / side.populationBefore * 100))}%` }} /></div> : null}
