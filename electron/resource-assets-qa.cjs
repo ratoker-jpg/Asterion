@@ -107,12 +107,12 @@ async function closeBuildingDialog(win) {
   await waitFor(win, `!document.querySelector('[data-qa-building-dialog]')`);
 }
 
-async function waitForResourceImages(win, scopeSelector) {
+async function waitForResourceImages(win, scopeSelector, { allowEmpty = false } = {}) {
   const encoded = JSON.stringify(scopeSelector);
   await waitFor(win, `(() => {
     const root = document.querySelector(${encoded});
     const images = root ? [...root.querySelectorAll('img[data-qa-resource-kind]')] : [];
-    return Boolean(root && images.length && images.every((image) => image.complete && image.naturalWidth > 0));
+    return Boolean(root && (allowEmpty || images.length > 0) && images.every((image) => image.complete && image.naturalWidth > 0));
   })()`);
 }
 
@@ -380,7 +380,7 @@ async function verifyViewport(width, height) {
     assertResourceImages('repair workshop', await readResourceImages(win, '.repair-workshop-v1'), ['metal', 'minerals', 'gas', 'population']);
 
     await activateRoute(win, 'operations', '.operations-shell-v2');
-    await waitForResourceImages(win, '.operations-shell-v2');
+    await waitForResourceImages(win, '.operations-shell-v2', { allowEmpty: true });
     // Operations now displays actual pirate debris instead of invented demo resources.
     // Validate every currently rendered resource asset, without requiring fake rewards.
     const operationImages = await readResourceImages(win, '.operations-shell-v2');
