@@ -74,6 +74,13 @@ jobs:
           # This avoids duplicating the entire game and exceeding the Pages size cap.
           rsync -a --ignore-existing dist/assets/ "${SITE_DIR}/assets/"
           rsync -a --ignore-existing --exclude="index.html" --exclude="assets/" dist/ "${SITE_DIR}/"
+          # Asset integration manifests use document-relative ./assets/generated/... URLs.
+          # The preview HTML is served from /pr/N/, so preserve its public assets there.
+          # These small unbundled WEBP files are distinct from the shared hashed Vite assets.
+          if [[ -d dist/assets/generated ]]; then
+            mkdir -p "${PREVIEW_DIR}/assets/generated"
+            rsync -a dist/assets/generated/ "${PREVIEW_DIR}/assets/generated/"
+          fi
           cp dist/index.html "${PREVIEW_DIR}/index.html"
           # Scripts and styles are hosted at /Asterion/assets/, not below /pr/N/.
           sed -i 's#\./assets/#/Asterion/assets/#g' "${PREVIEW_DIR}/index.html"
