@@ -579,3 +579,10 @@
   .workspace .opsA .opsA-card,
   .workspace .opsA .opsA-card:hover { transition: none; transform: none; }
 }
+
+/* Center the scaled native canvas as the web preview does. Grid's intrinsic
+   track otherwise keeps the unscaled 1920px width at narrow window sizes. */
+@media (max-width: 1919px) {
+  html:not(.web-preview):not(.asterion-long-page) .viewport:has(.workspace--operations) { position: relative; display: block; }
+  html:not(.web-preview):not(.asterion-long-page) .viewport:has(.workspace--operations) > .stage { position: absolute; left: 50%; top: 50%; margin-left: -960px; margin-top: -540px; transform-origin: center center; }
+}
