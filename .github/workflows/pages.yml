@@ -67,10 +67,19 @@ jobs:
         if: github.event_name == 'pull_request' && github.event.action != 'closed'
         shell: bash
         run: |
-          PREVIEW_DIR="${RUNNER_TEMP}/pages-site/pr/${{ github.event.pull_request.number }}"
-          mkdir -p "${PREVIEW_DIR}"
-          cp -a dist/. "${PREVIEW_DIR}/"
+          SITE_DIR="${RUNNER_TEMP}/pages-site"
+          PREVIEW_DIR="${SITE_DIR}/pr/${{ github.event.pull_request.number }}"
+          mkdir -p "${PREVIEW_DIR}" "${SITE_DIR}/assets"
+          # Vite emits content-hashed assets; share unchanged files between main and PR.
+          # This avoids duplicating the entire game and exceeding the Pages size cap.
+          rsync -a --ignore-existing dist/assets/ "${SITE_DIR}/assets/"
+          rsync -a --ignore-existing --exclude="index.html" --exclude="assets/" dist/ "${SITE_DIR}/"
+          cp dist/index.html "${PREVIEW_DIR}/index.html"
+          # Scripts and styles are hosted at /Asterion/assets/, not below /pr/N/.
+          sed -i 's#\./assets/#/Asterion/assets/#g' "${PREVIEW_DIR}/index.html"
+          grep -q '/Asterion/assets/' "${PREVIEW_DIR}/index.html"
           printf '%s\n' '${{ github.event.pull_request.head.sha }}' > "${PREVIEW_DIR}/preview-sha.txt"
+          du -sh "${SITE_DIR}"
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
