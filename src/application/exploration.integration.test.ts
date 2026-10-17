@@ -361,6 +361,28 @@ test('Test Mode Bot 01 occupies through a real finite flight and player Attack w
   assert.equal(replay.state.combat.reports.filter(r=>r.id===report!.id).length,1);
   assert.equal(getOrbitalDebrisAtCoordinate(replay.state.espionage!,fixture.target.coordinate),orbitalBefore,
     'replaying resolution cannot mint duplicate wreckage');
+  if(orbitalBefore>0){
+    const recycled=dispatchFlight(replay.state,{
+      requestId:'pr92-recycler-at-battle-field',missionId:'recycle',
+      originPlanetId:'helion-01',selectedShips:{recycler:10},
+      destination:{kind:'coordinate',coordinate:fixture.target.coordinate},
+      targetKind:fixture.target.kind,departedAt:attack.flight.arrivalAt+1,
+    },{now:attack.flight.arrivalAt+1,mode:'test',testTimeScale:15});
+    assert.equal(recycled.ok,true,recycled.ok?'':recycled.error.message);
+    if(recycled.ok){
+      const atTarget=reconcileFlights(recycled.state,recycled.flight.arrivalAt,undefined,{mode:'test',testTimeScale:15});
+      const event=atTarget.state.reports.recyclerArrivalReports?.find(item=>item.flightId===recycled.flight.id);
+      assert.ok(event,'real recycler flight must generate canonical arrival report');
+      assert.ok(event!.collectedDebris>0,'the recycler must physically collect fresh combat wreckage');
+      assert.equal(event!.collectedDebris+
+        getOrbitalDebrisAtCoordinate(atTarget.state.espionage!,fixture.target.coordinate),orbitalBefore,
+        'flight collection cannot create or lose orbital scrap');
+      const twice=reconcileFlights(atTarget.state,recycled.flight.arrivalAt,undefined,{mode:'test',testTimeScale:15});
+      assert.equal(twice.state.reports.recyclerArrivalReports?.filter(item=>item.flightId===recycled.flight.id).length,1);
+      assert.equal(getOrbitalDebrisAtCoordinate(twice.state.espionage!,fixture.target.coordinate),
+        getOrbitalDebrisAtCoordinate(atTarget.state.espionage!,fixture.target.coordinate));
+    }
+  }
 });
 
 test('Bot 01 ships and finite mined material return to existing source exactly once', () => {
