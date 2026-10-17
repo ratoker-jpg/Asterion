@@ -1,0 +1,574 @@
+{
+  "results": [
+    {
+      "viewport": "1920x1080",
+      "captures": [
+        {
+          "file": "01-profile.png",
+          "width": 1920,
+          "height": 1080,
+          "horizontalOverflow": false,
+          "shell": {
+            "left": 346,
+            "top": 254,
+            "right": 1874,
+            "bottom": 1054,
+            "width": 1528,
+            "height": 800
+          },
+          "dossier": {
+            "left": 346,
+            "top": 254,
+            "right": 1874,
+            "bottom": 1054,
+            "width": 1528,
+            "height": 800
+          },
+          "shellComputed": {
+            "fontSize": "16px",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "padding": "14px 18px 12px",
+            "gap": "12px",
+            "transform": "none"
+          },
+          "dossierComputed": {
+            "fontSize": "16px",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "padding": "14px 18px 12px",
+            "gap": "12px",
+            "transform": "none"
+          },
+          "stage": {
+            "left": 0,
+            "top": 0,
+            "right": 1920,
+            "bottom": 1080,
+            "width": 1920,
+            "height": 1080
+          },
+          "stageComputed": {
+            "position": "relative",
+            "marginLeft": "0px",
+            "marginTop": "0px",
+            "transform": "matrix(1, 0, 0, 1, 0, 0)",
+            "transformOrigin": "960px 540px"
+          },
+          "imageCount": 38,
+          "loadedImageCount": 38,
+          "fontStatus": "loaded"
+        },
+        {
+          "file": "02-system-spy-report.png",
+          "width": 1920,
+          "height": 1080,
+          "horizontalOverflow": false,
+          "shell": {
+            "left": 346,
+            "top": 254,
+            "right": 798,
+            "bottom": 1054,
+            "width": 452,
+            "height": 800
+          },
+          "dossier": {
+            "left": 812,
+            "top": 254,
+            "right": 1874,
+            "bottom": 1054,
+            "width": 1062,
+            "height": 800
+          },
+          "shellComputed": {
+            "fontSize": "16px",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "padding": "18px 16px",
+            "gap": "8px",
+            "transform": "none"
+          },
+          "dossierComputed": {
+            "fontSize": "16px",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "padding": "0px",
+            "gap": "normal",
+            "transform": "none"
+          },
+          "stage": {
+            "left": 0,
+            "top": 0,
+            "right": 1920,
+            "bottom": 1080,
+            "width": 1920,
+            "height": 1080
+          },
+          "stageComputed": {
+            "position": "relative",
+            "marginLeft": "0px",
+            "marginTop": "0px",
+            "transform": "matrix(1, 0, 0, 1, 0, 0)",
+            "transformOrigin": "960px 540px"
+          },
+          "imageCount": 45,
+          "loadedImageCount": 45,
+          "fontStatus": "loaded"
+        },
+        {
+          "file": "03-system-pirate-recon.png",
+          "width": 1920,
+          "height": 1080,
+          "horizontalOverflow": false,
+          "shell": {
+            "left": 346,
+            "top": 254,
+            "right": 798,
+            "bottom": 1054,
+            "width": 452,
+            "height": 800
+          },
+          "dossier": {
+            "left": 812,
+            "top": 254,
+            "right": 1874,
+            "bottom": 1054,
+            "width": 1062,
+            "height": 800
+          },
+          "shellComputed": {
+            "fontSize": "16px",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "padding": "18px 16px",
+            "gap": "8px",
+            "transform": "none"
+          },
+          "dossierComputed": {
+            "fontSize": "16px",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "padding": "0px",
+            "gap": "normal",
+            "transform": "none"
+          },
+          "stage": {
+            "left": 0,
+            "top": 0,
+            "right": 1920,
+            "bottom": 1080,
+            "width": 1920,
+            "height": 1080
+          },
+          "stageComputed": {
+            "position": "relative",
+            "marginLeft": "0px",
+            "marginTop": "0px",
+            "transform": "matrix(1, 0, 0, 1, 0, 0)",
+            "transformOrigin": "960px 540px"
+          },
+          "imageCount": 39,
+          "loadedImageCount": 39,
+          "fontStatus": "loaded"
+        },
+        {
+          "file": "04-system-overpopulation.png",
+          "width": 1920,
+          "height": 1080,
+          "horizontalOverflow": false,
+          "shell": {
+            "left": 346,
+            "top": 254,
+            "right": 798,
+            "bottom": 1054,
+            "width": 452,
+            "height": 800
+          },
+          "dossier": {
+            "left": 812,
+            "top": 254,
+            "right": 1874,
+            "bottom": 1054,
+            "width": 1062,
+            "height": 800
+          },
+          "shellComputed": {
+            "fontSize": "16px",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "padding": "18px 16px",
+            "gap": "8px",
+            "transform": "none"
+          },
+          "dossierComputed": {
+            "fontSize": "16px",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "padding": "0px",
+            "gap": "normal",
+            "transform": "none"
+          },
+          "stage": {
+            "left": 0,
+            "top": 0,
+            "right": 1920,
+            "bottom": 1080,
+            "width": 1920,
+            "height": 1080
+          },
+          "stageComputed": {
+            "position": "relative",
+            "marginLeft": "0px",
+            "marginTop": "0px",
+            "transform": "matrix(1, 0, 0, 1, 0, 0)",
+            "transformOrigin": "960px 540px"
+          },
+          "imageCount": 35,
+          "loadedImageCount": 35,
+          "fontStatus": "loaded"
+        },
+        {
+          "file": "05-battle-report.png",
+          "width": 1920,
+          "height": 1080,
+          "horizontalOverflow": false,
+          "shell": {
+            "left": 346,
+            "top": 254,
+            "right": 798,
+            "bottom": 1054,
+            "width": 452,
+            "height": 800
+          },
+          "dossier": {
+            "left": 812,
+            "top": 254,
+            "right": 1874,
+            "bottom": 1054,
+            "width": 1062,
+            "height": 800
+          },
+          "shellComputed": {
+            "fontSize": "16px",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "padding": "18px 16px",
+            "gap": "8px",
+            "transform": "none"
+          },
+          "dossierComputed": {
+            "fontSize": "16px",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "padding": "0px",
+            "gap": "normal",
+            "transform": "none"
+          },
+          "stage": {
+            "left": 0,
+            "top": 0,
+            "right": 1920,
+            "bottom": 1080,
+            "width": 1920,
+            "height": 1080
+          },
+          "stageComputed": {
+            "position": "relative",
+            "marginLeft": "0px",
+            "marginTop": "0px",
+            "transform": "matrix(1, 0, 0, 1, 0, 0)",
+            "transformOrigin": "960px 540px"
+          },
+          "imageCount": 47,
+          "loadedImageCount": 47,
+          "fontStatus": "loaded"
+        },
+        {
+          "file": "06-flights-recycler.png",
+          "width": 1920,
+          "height": 1080,
+          "horizontalOverflow": false,
+          "shell": {
+            "left": 346,
+            "top": 254,
+            "right": 798,
+            "bottom": 1054,
+            "width": 452,
+            "height": 800
+          },
+          "dossier": {
+            "left": 812,
+            "top": 254,
+            "right": 1874,
+            "bottom": 1054,
+            "width": 1062,
+            "height": 800
+          },
+          "shellComputed": {
+            "fontSize": "16px",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "padding": "18px 16px",
+            "gap": "8px",
+            "transform": "none"
+          },
+          "dossierComputed": {
+            "fontSize": "16px",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "padding": "0px",
+            "gap": "normal",
+            "transform": "none"
+          },
+          "stage": {
+            "left": 0,
+            "top": 0,
+            "right": 1920,
+            "bottom": 1080,
+            "width": 1920,
+            "height": 1080
+          },
+          "stageComputed": {
+            "position": "relative",
+            "marginLeft": "0px",
+            "marginTop": "0px",
+            "transform": "matrix(1, 0, 0, 1, 0, 0)",
+            "transformOrigin": "960px 540px"
+          },
+          "imageCount": 31,
+          "loadedImageCount": 31,
+          "fontStatus": "loaded"
+        },
+        {
+          "file": "07-alliances-joint-op.png",
+          "width": 1920,
+          "height": 1080,
+          "horizontalOverflow": false,
+          "shell": {
+            "left": 346,
+            "top": 254,
+            "right": 798,
+            "bottom": 1054,
+            "width": 452,
+            "height": 800
+          },
+          "dossier": {
+            "left": 812,
+            "top": 254,
+            "right": 1874,
+            "bottom": 1054,
+            "width": 1062,
+            "height": 800
+          },
+          "shellComputed": {
+            "fontSize": "16px",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "padding": "18px 16px",
+            "gap": "8px",
+            "transform": "none"
+          },
+          "dossierComputed": {
+            "fontSize": "16px",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "padding": "0px",
+            "gap": "normal",
+            "transform": "none"
+          },
+          "stage": {
+            "left": 0,
+            "top": 0,
+            "right": 1920,
+            "bottom": 1080,
+            "width": 1920,
+            "height": 1080
+          },
+          "stageComputed": {
+            "position": "relative",
+            "marginLeft": "0px",
+            "marginTop": "0px",
+            "transform": "matrix(1, 0, 0, 1, 0, 0)",
+            "transformOrigin": "960px 540px"
+          },
+          "imageCount": 32,
+          "loadedImageCount": 32,
+          "fontStatus": "loaded"
+        },
+        {
+          "file": "08-command-empty.png",
+          "width": 1920,
+          "height": 1080,
+          "horizontalOverflow": false,
+          "shell": {
+            "left": 346,
+            "top": 254,
+            "right": 798,
+            "bottom": 1054,
+            "width": 452,
+            "height": 800
+          },
+          "dossier": {
+            "left": 812,
+            "top": 254,
+            "right": 1874,
+            "bottom": 1054,
+            "width": 1062,
+            "height": 800
+          },
+          "shellComputed": {
+            "fontSize": "16px",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "padding": "18px 16px",
+            "gap": "8px",
+            "transform": "none"
+          },
+          "dossierComputed": {
+            "fontSize": "16px",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "padding": "0px",
+            "gap": "normal",
+            "transform": "none"
+          },
+          "stage": {
+            "left": 0,
+            "top": 0,
+            "right": 1920,
+            "bottom": 1080,
+            "width": 1920,
+            "height": 1080
+          },
+          "stageComputed": {
+            "position": "relative",
+            "marginLeft": "0px",
+            "marginTop": "0px",
+            "transform": "matrix(1, 0, 0, 1, 0, 0)",
+            "transformOrigin": "960px 540px"
+          },
+          "imageCount": 30,
+          "loadedImageCount": 30,
+          "fontStatus": "loaded"
+        }
+      ]
+    },
+    {
+      "viewport": "1280x720",
+      "captures": [
+        {
+          "file": "01-profile.png",
+          "width": 1280,
+          "height": 720,
+          "horizontalOverflow": false,
+          "shell": {
+            "left": 206.6666717529297,
+            "top": 169.33334350585938,
+            "right": 1249.3334197998047,
+            "bottom": 702.6667175292969,
+            "width": 1042.666748046875,
+            "height": 533.3333740234375
+          },
+          "dossier": {
+            "left": 206.6666717529297,
+            "top": 169.33334350585938,
+            "right": 1249.3334197998047,
+            "bottom": 702.6667175292969,
+            "width": 1042.666748046875,
+            "height": 533.3333740234375
+          },
+          "shellComputed": {
+            "fontSize": "16px",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "padding": "14px 18px 12px",
+            "gap": "12px",
+            "transform": "none"
+          },
+          "dossierComputed": {
+            "fontSize": "16px",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "padding": "14px 18px 12px",
+            "gap": "12px",
+            "transform": "none"
+          },
+          "stage": {
+            "left": 0,
+            "top": 0,
+            "right": 1280,
+            "bottom": 720,
+            "width": 1280,
+            "height": 720
+          },
+          "stageComputed": {
+            "position": "absolute",
+            "marginLeft": "-960px",
+            "marginTop": "-540px",
+            "transform": "matrix(0.666667, 0, 0, 0.666667, 0, 0)",
+            "transformOrigin": "960px 540px"
+          },
+          "imageCount": 38,
+          "loadedImageCount": 38,
+          "fontStatus": "loaded"
+        },
+        {
+          "file": "02-system-spy-report.png",
+          "width": 1280,
+          "height": 720,
+          "horizontalOverflow": false,
+          "shell": {
+            "left": 206.6666717529297,
+            "top": 169.33334350585938,
+            "right": 650.9999847412109,
+            "bottom": 702.6667175292969,
+            "width": 444.33331298828125,
+            "height": 533.3333740234375
+          },
+          "dossier": {
+            "left": 660.3333740234375,
+            "top": 169.33334350585938,
+            "right": 1249.3333740234375,
+            "bottom": 702.6667175292969,
+            "width": 589,
+            "height": 533.3333740234375
+          },
+          "shellComputed": {
+            "fontSize": "16px",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "padding": "18px 16px",
+            "gap": "8px",
+            "transform": "none"
+          },
+          "dossierComputed": {
+            "fontSize": "16px",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "padding": "0px",
+            "gap": "normal",
+            "transform": "none"
+          },
+          "stage": {
+            "left": 0,
+            "top": 0,
+            "right": 1280,
+            "bottom": 720,
+            "width": 1280,
+            "height": 720
+          },
+          "stageComputed": {
+            "position": "absolute",
+            "marginLeft": "-960px",
+            "marginTop": "-540px",
+            "transform": "matrix(0.666667, 0, 0, 0.666667, 0, 0)",
+            "transformOrigin": "960px 540px"
+          },
+          "imageCount": 45,
+          "loadedImageCount": 45,
+          "fontStatus": "loaded"
+        }
+      ]
+    }
+  ]
+}

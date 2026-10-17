@@ -8,6 +8,7 @@ app.on('window-all-closed', () => {});
 
 const ROOT = path.join(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'artifacts', 'operations-variant-a');
+const SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const TYPES = ['pirate', 'unique', 'anomaly'];
 const STATES = [
   { key: 'available', label: 'ДОСТУПНЫЕ' },
@@ -23,6 +24,20 @@ async function waitFor(win, expression, timeoutMs = 20_000) {
     await sleep(60);
   }
   throw new Error(`Timed out waiting for: ${expression}`);
+}
+
+async function settle(win) {
+  await win.webContents.executeJavaScript('document.fonts?.ready');
+  await win.webContents.executeJavaScript('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+  await sleep(80);
+}
+
+async function reload(win) {
+  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+  win.webContents.reload();
+  await loaded;
+  await waitFor(win, `document.querySelector('[data-qa-navigation="primary"]')`);
+  await settle(win);
 }
 
 async function click(win, selector) {
@@ -62,6 +77,10 @@ async function openWindow(width, height, fixtureStatus) {
   await loaded;
   await waitFor(win, `document.querySelector('[data-qa-navigation="primary"]')`);
   await waitFor(win, `innerWidth === ${width} && innerHeight === ${height}`);
+  await waitFor(win, `localStorage.getItem(${JSON.stringify(SAVE_KEY)})`);
+  await settle(win);
+  const pirateSystem = await findOwnedSystemWithActivePirate(win, fixtureStatus);
+  console.log(`[operations-variant-a-screenshots] ${width}x${height} seeded owned pirate system ${pirateSystem} using persisted Test Mode planet state`);
   await click(win, '[data-qa-navigation="primary"] [data-qa-route="operations"]');
   await waitFor(win, `document.querySelector('.operations-shell-v2--variant-a')`);
   const routeState = await win.webContents.executeJavaScript(`({ search: location.search, hash: location.hash, cards: document.querySelectorAll('.operation-feed-card-v2').length, kinds: [...document.querySelectorAll('.operation-feed-card-v2')].map((card) => card.getAttribute('data-contact-kind')), counts: [...document.querySelectorAll('.operations-tabs-v2 [role="tab"]')].map((tab) => tab.textContent.trim()) })`);
@@ -78,6 +97,28 @@ async function openWindow(width, height, fixtureStatus) {
     document.head.appendChild(style);
   })()`);
   return win;
+}
+
+// The fixture builder needs a real contact as its input. Test Mode does not
+// guarantee one in the starting system at the wall-clock capture time, so try
+// each valid system through the persisted planet state the app normally reads.
+async function findOwnedSystemWithActivePirate(win, fixtureStatus) {
+  for (let system = 1; system <= 40; system += 1) {
+    await win.webContents.executeJavaScript(`(() => {
+      const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+      const planet = save.planets?.['helion-01'];
+      if (!planet) throw new Error('Test Mode homeworld was not persisted');
+      planet.universeGalaxy = 1;
+      planet.universeSystem = ${system};
+      localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    })()`);
+    await reload(win);
+    await click(win, '[data-qa-navigation="primary"] [data-qa-route="operations"]');
+    await selectState(win, STATES.find((state) => state.key === fixtureStatus) ?? STATES[0]);
+    const result = await win.webContents.executeJavaScript(`({ pirateContacts: document.querySelectorAll('.operation-feed-card-v2[data-contact-kind="pirate"]').length })`);
+    if (result.pirateContacts > 0) return system;
+  }
+  throw new Error('No active scheduled pirate contact found in owned Test Mode systems 1–40.');
 }
 
 async function selectState(win, state) {
@@ -98,10 +139,21 @@ async function selectKindAndCapture(win, output, state, kind, number) {
   await waitFor(win, `document.querySelector('.operations-feed-scroll-v2 .operation-feed-card-v2.selected[data-contact-kind="${kind}"]')`);
   await waitFor(win, `document.querySelector('.operations-dossier-variant-a')`);
   await waitFor(win, `(() => [...document.querySelectorAll('.operations-feed-scroll-v2 .operation-feed-card-v2.selected img, .operations-dossier-variant-a img')].every((image) => image.complete && image.naturalWidth > 0))()`);
+  await settle(win);
   const stateProof = await win.webContents.executeJavaScript(`(() => {
     const card = document.querySelector('.operations-feed-scroll-v2 .operation-feed-card-v2.selected');
     const images = [...document.querySelectorAll('.operations-feed-scroll-v2 .operation-feed-card-v2.selected img, .operations-dossier-variant-a img')];
-    return { kind: card?.getAttribute('data-contact-kind'), state: document.querySelector('.operations-tabs-v2 [role="tab"][aria-selected="true"]')?.textContent?.trim(), images: images.map((image) => Boolean(image.complete && image.naturalWidth > 0)), horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 2 };
+    const rect = (node) => {
+      const value = node?.getBoundingClientRect();
+      return value ? { left: value.left, top: value.top, right: value.right, bottom: value.bottom, width: value.width, height: value.height } : null;
+    };
+    const styles = (node) => {
+      const value = node ? getComputedStyle(node) : null;
+      return value ? { fontSize: value.fontSize, lineHeight: value.lineHeight, letterSpacing: value.letterSpacing, padding: value.padding, gap: value.gap, transform: value.transform } : null;
+    };
+    const dossier = document.querySelector('.operations-dossier-variant-a');
+    const title = dossier?.querySelector('h2, h3');
+    return { kind: card?.getAttribute('data-contact-kind'), state: document.querySelector('.operations-tabs-v2 [role="tab"][aria-selected="true"]')?.textContent?.trim(), images: images.map((image) => Boolean(image.complete && image.naturalWidth > 0)), horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 2, geometry: { card: rect(card), dossier: rect(dossier), title: rect(title), cardComputed: styles(card), dossierComputed: styles(dossier), titleComputed: styles(title) } };
   })()`);
   if (stateProof.kind !== kind || !stateProof.state?.includes(state.label) || stateProof.images.includes(false) || stateProof.horizontalOverflow) {
     throw new Error(`Variant A screenshot state mismatch: ${JSON.stringify(stateProof)}`);
@@ -161,7 +213,12 @@ app.whenReady().then(async () => {
       await runViewport(1280, 720, false),
     ];
     fs.writeFileSync(path.join(OUTPUT, 'screenshot-manifest.json'), JSON.stringify({ results }, null, 2));
-    console.log(JSON.stringify({ results }, null, 2));
+    console.log(JSON.stringify(results.map((result) => ({
+      viewport: result.viewport,
+      captureCount: result.captures.length,
+      captures: result.captures.map(({ file, kind, state, horizontalOverflow }) => ({ file, kind, state, horizontalOverflow })),
+      viewportMetrics: result.viewportMetrics,
+    }))));
     app.exit(0);
   } catch (error) {
     console.error(error);

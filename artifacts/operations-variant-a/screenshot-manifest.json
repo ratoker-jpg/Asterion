@@ -10,10 +10,59 @@
           "images": [
             true,
             true,
-            true,
             true
           ],
-          "horizontalOverflow": false
+          "horizontalOverflow": false,
+          "geometry": {
+            "card": {
+              "left": 55,
+              "top": 451,
+              "right": 461,
+              "bottom": 595,
+              "width": 406,
+              "height": 144
+            },
+            "dossier": {
+              "left": 494,
+              "top": 330,
+              "right": 1882,
+              "bottom": 1062,
+              "width": 1388,
+              "height": 732
+            },
+            "title": {
+              "left": 979.90625,
+              "top": 467.65625,
+              "right": 1845,
+              "bottom": 497.546875,
+              "width": 865.09375,
+              "height": 29.890625
+            },
+            "cardComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "12px 14px",
+              "gap": "14px",
+              "transform": "none"
+            },
+            "dossierComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "titleComputed": {
+              "fontSize": "26px",
+              "lineHeight": "29.9px",
+              "letterSpacing": "2.6px",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "none"
+            }
+          }
         },
         {
           "file": "02-available-unique.png",
@@ -27,7 +76,57 @@
             true,
             true
           ],
-          "horizontalOverflow": false
+          "horizontalOverflow": false,
+          "geometry": {
+            "card": {
+              "left": 55,
+              "top": 451,
+              "right": 461,
+              "bottom": 562,
+              "width": 406,
+              "height": 111
+            },
+            "dossier": {
+              "left": 494,
+              "top": 330,
+              "right": 1882,
+              "bottom": 1062,
+              "width": 1388,
+              "height": 732
+            },
+            "title": {
+              "left": 979.6875,
+              "top": 467.65625,
+              "right": 1835,
+              "bottom": 497.546875,
+              "width": 855.3125,
+              "height": 29.890625
+            },
+            "cardComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "12px 14px",
+              "gap": "14px",
+              "transform": "none"
+            },
+            "dossierComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "titleComputed": {
+              "fontSize": "26px",
+              "lineHeight": "29.9px",
+              "letterSpacing": "2.6px",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "none"
+            }
+          }
         },
         {
           "file": "03-available-anomaly.png",
@@ -41,7 +140,57 @@
             true,
             true
           ],
-          "horizontalOverflow": false
+          "horizontalOverflow": false,
+          "geometry": {
+            "card": {
+              "left": 55,
+              "top": 451,
+              "right": 461,
+              "bottom": 562,
+              "width": 406,
+              "height": 111
+            },
+            "dossier": {
+              "left": 494,
+              "top": 330,
+              "right": 1882,
+              "bottom": 1062,
+              "width": 1388,
+              "height": 732
+            },
+            "title": {
+              "left": 979.6875,
+              "top": 467.65625,
+              "right": 1835,
+              "bottom": 497.546875,
+              "width": 855.3125,
+              "height": 29.890625
+            },
+            "cardComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "12px 14px",
+              "gap": "14px",
+              "transform": "none"
+            },
+            "dossierComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "titleComputed": {
+              "fontSize": "26px",
+              "lineHeight": "29.9px",
+              "letterSpacing": "2.6px",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "none"
+            }
+          }
         },
         {
           "file": "04-active-pirate.png",
@@ -50,10 +199,59 @@
           "images": [
             true,
             true,
-            true,
             true
           ],
-          "horizontalOverflow": false
+          "horizontalOverflow": false,
+          "geometry": {
+            "card": {
+              "left": 55,
+              "top": 451,
+              "right": 461,
+              "bottom": 595,
+              "width": 406,
+              "height": 144
+            },
+            "dossier": {
+              "left": 494,
+              "top": 330,
+              "right": 1882,
+              "bottom": 1062,
+              "width": 1388,
+              "height": 732
+            },
+            "title": {
+              "left": 979.90625,
+              "top": 459.6875,
+              "right": 1845,
+              "bottom": 489.578125,
+              "width": 865.09375,
+              "height": 29.890625
+            },
+            "cardComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "12px 14px",
+              "gap": "14px",
+              "transform": "none"
+            },
+            "dossierComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "titleComputed": {
+              "fontSize": "26px",
+              "lineHeight": "29.9px",
+              "letterSpacing": "2.6px",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "none"
+            }
+          }
         },
         {
           "file": "05-active-unique.png",
@@ -67,7 +265,57 @@
             true,
             true
           ],
-          "horizontalOverflow": false
+          "horizontalOverflow": false,
+          "geometry": {
+            "card": {
+              "left": 55,
+              "top": 451,
+              "right": 461,
+              "bottom": 562,
+              "width": 406,
+              "height": 111
+            },
+            "dossier": {
+              "left": 494,
+              "top": 330.0574035644531,
+              "right": 1882,
+              "bottom": 1062.0574035644531,
+              "width": 1388,
+              "height": 732
+            },
+            "title": {
+              "left": 979.6875,
+              "top": 459.7449035644531,
+              "right": 1835,
+              "bottom": 489.6355285644531,
+              "width": 855.3125,
+              "height": 29.890625
+            },
+            "cardComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "12px 14px",
+              "gap": "14px",
+              "transform": "none"
+            },
+            "dossierComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "matrix(1, 0, 0, 1, 0, 0.0574108)"
+            },
+            "titleComputed": {
+              "fontSize": "26px",
+              "lineHeight": "29.9px",
+              "letterSpacing": "2.6px",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "none"
+            }
+          }
         },
         {
           "file": "06-active-anomaly.png",
@@ -81,7 +329,57 @@
             true,
             true
           ],
-          "horizontalOverflow": false
+          "horizontalOverflow": false,
+          "geometry": {
+            "card": {
+              "left": 55,
+              "top": 451,
+              "right": 461,
+              "bottom": 562,
+              "width": 406,
+              "height": 111
+            },
+            "dossier": {
+              "left": 494,
+              "top": 330.0577392578125,
+              "right": 1882,
+              "bottom": 1062.0577392578125,
+              "width": 1388,
+              "height": 732
+            },
+            "title": {
+              "left": 979.6875,
+              "top": 459.7452392578125,
+              "right": 1835,
+              "bottom": 489.6358642578125,
+              "width": 855.3125,
+              "height": 29.890625
+            },
+            "cardComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "12px 14px",
+              "gap": "14px",
+              "transform": "none"
+            },
+            "dossierComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "matrix(1, 0, 0, 1, 0, 0.0577433)"
+            },
+            "titleComputed": {
+              "fontSize": "26px",
+              "lineHeight": "29.9px",
+              "letterSpacing": "2.6px",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "none"
+            }
+          }
         },
         {
           "file": "07-completed-pirate.png",
@@ -90,10 +388,59 @@
           "images": [
             true,
             true,
-            true,
             true
           ],
-          "horizontalOverflow": false
+          "horizontalOverflow": false,
+          "geometry": {
+            "card": {
+              "left": 55,
+              "top": 451,
+              "right": 461,
+              "bottom": 553,
+              "width": 406,
+              "height": 102
+            },
+            "dossier": {
+              "left": 494,
+              "top": 330,
+              "right": 1882,
+              "bottom": 1062,
+              "width": 1388,
+              "height": 732
+            },
+            "title": {
+              "left": 979.6875,
+              "top": 454.25,
+              "right": 1835,
+              "bottom": 484.140625,
+              "width": 855.3125,
+              "height": 29.890625
+            },
+            "cardComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "12px 14px",
+              "gap": "14px",
+              "transform": "none"
+            },
+            "dossierComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "titleComputed": {
+              "fontSize": "26px",
+              "lineHeight": "29.9px",
+              "letterSpacing": "2.6px",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "none"
+            }
+          }
         },
         {
           "file": "08-completed-unique.png",
@@ -111,7 +458,57 @@
             true,
             true
           ],
-          "horizontalOverflow": false
+          "horizontalOverflow": false,
+          "geometry": {
+            "card": {
+              "left": 55,
+              "top": 451,
+              "right": 461,
+              "bottom": 553,
+              "width": 406,
+              "height": 102
+            },
+            "dossier": {
+              "left": 494,
+              "top": 330,
+              "right": 1882,
+              "bottom": 1062,
+              "width": 1388,
+              "height": 732
+            },
+            "title": {
+              "left": 979.6875,
+              "top": 464.65625,
+              "right": 1835,
+              "bottom": 494.546875,
+              "width": 855.3125,
+              "height": 29.890625
+            },
+            "cardComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "12px 14px",
+              "gap": "14px",
+              "transform": "none"
+            },
+            "dossierComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "titleComputed": {
+              "fontSize": "26px",
+              "lineHeight": "29.9px",
+              "letterSpacing": "2.6px",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "none"
+            }
+          }
         },
         {
           "file": "09-completed-anomaly.png",
@@ -125,7 +522,57 @@
             true,
             true
           ],
-          "horizontalOverflow": false
+          "horizontalOverflow": false,
+          "geometry": {
+            "card": {
+              "left": 55,
+              "top": 451,
+              "right": 461,
+              "bottom": 553,
+              "width": 406,
+              "height": 102
+            },
+            "dossier": {
+              "left": 494,
+              "top": 330,
+              "right": 1882,
+              "bottom": 1062,
+              "width": 1388,
+              "height": 732
+            },
+            "title": {
+              "left": 979.6875,
+              "top": 464.65625,
+              "right": 1835,
+              "bottom": 494.546875,
+              "width": 855.3125,
+              "height": 29.890625
+            },
+            "cardComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "12px 14px",
+              "gap": "14px",
+              "transform": "none"
+            },
+            "dossierComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "titleComputed": {
+              "fontSize": "26px",
+              "lineHeight": "29.9px",
+              "letterSpacing": "2.6px",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "none"
+            }
+          }
         }
       ],
       "viewportMetrics": {
@@ -141,7 +588,7 @@
           "height": 1080
         },
         "stageTransform": "matrix(1, 0, 0, 1, 0, 0)",
-        "stageTransformOrigin": "0px 0px"
+        "stageTransformOrigin": "960px 540px"
       }
     },
     {
@@ -154,10 +601,59 @@
           "images": [
             true,
             true,
-            true,
             true
           ],
-          "horizontalOverflow": false
+          "horizontalOverflow": false,
+          "geometry": {
+            "card": {
+              "left": 36.66666793823242,
+              "top": 300.66668701171875,
+              "right": 307.3333549499512,
+              "bottom": 396.66668701171875,
+              "width": 270.66668701171875,
+              "height": 96
+            },
+            "dossier": {
+              "left": 329.3333435058594,
+              "top": 220,
+              "right": 1254.6667175292969,
+              "bottom": 708,
+              "width": 925.3333740234375,
+              "height": 488
+            },
+            "title": {
+              "left": 653.2708740234375,
+              "top": 311.7708435058594,
+              "right": 1230,
+              "bottom": 331.69793701171875,
+              "width": 576.7291259765625,
+              "height": 19.927093505859375
+            },
+            "cardComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "12px 14px",
+              "gap": "14px",
+              "transform": "none"
+            },
+            "dossierComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "titleComputed": {
+              "fontSize": "26px",
+              "lineHeight": "29.9px",
+              "letterSpacing": "2.6px",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "none"
+            }
+          }
         },
         {
           "file": "05-active-unique.png",
@@ -171,7 +667,57 @@
             true,
             true
           ],
-          "horizontalOverflow": false
+          "horizontalOverflow": false,
+          "geometry": {
+            "card": {
+              "left": 36.66666793823242,
+              "top": 300.66668701171875,
+              "right": 307.3333549499512,
+              "bottom": 374.66668701171875,
+              "width": 270.66668701171875,
+              "height": 74
+            },
+            "dossier": {
+              "left": 329.3333435058594,
+              "top": 220,
+              "right": 1254.6667175292969,
+              "bottom": 708,
+              "width": 925.3333740234375,
+              "height": 488
+            },
+            "title": {
+              "left": 653.125,
+              "top": 306.4583435058594,
+              "right": 1223.3333740234375,
+              "bottom": 326.38543701171875,
+              "width": 570.2083740234375,
+              "height": 19.927093505859375
+            },
+            "cardComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "12px 14px",
+              "gap": "14px",
+              "transform": "none"
+            },
+            "dossierComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "titleComputed": {
+              "fontSize": "26px",
+              "lineHeight": "29.9px",
+              "letterSpacing": "2.6px",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "none"
+            }
+          }
         },
         {
           "file": "09-completed-anomaly.png",
@@ -185,7 +731,57 @@
             true,
             true
           ],
-          "horizontalOverflow": false
+          "horizontalOverflow": false,
+          "geometry": {
+            "card": {
+              "left": 36.66666793823242,
+              "top": 300.66668701171875,
+              "right": 307.3333549499512,
+              "bottom": 368.66668701171875,
+              "width": 270.66668701171875,
+              "height": 68
+            },
+            "dossier": {
+              "left": 329.3333435058594,
+              "top": 220,
+              "right": 1254.6667175292969,
+              "bottom": 708,
+              "width": 925.3333740234375,
+              "height": 488
+            },
+            "title": {
+              "left": 653.125,
+              "top": 309.7708435058594,
+              "right": 1223.3333740234375,
+              "bottom": 329.69793701171875,
+              "width": 570.2083740234375,
+              "height": 19.927093505859375
+            },
+            "cardComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "12px 14px",
+              "gap": "14px",
+              "transform": "none"
+            },
+            "dossierComputed": {
+              "fontSize": "16px",
+              "lineHeight": "normal",
+              "letterSpacing": "normal",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "titleComputed": {
+              "fontSize": "26px",
+              "lineHeight": "29.9px",
+              "letterSpacing": "2.6px",
+              "padding": "0px",
+              "gap": "normal",
+              "transform": "none"
+            }
+          }
         }
       ],
       "viewportMetrics": {
@@ -201,7 +797,7 @@
           "height": 720
         },
         "stageTransform": "matrix(0.666667, 0, 0, 0.666667, 0, 0)",
-        "stageTransformOrigin": "0px 0px"
+        "stageTransformOrigin": "960px 540px"
       }
     }
   ]

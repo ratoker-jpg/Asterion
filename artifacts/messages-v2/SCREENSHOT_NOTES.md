@@ -1,9 +1,13 @@
-# Messages V2 screenshot notes
+# Messages V2 — screenshot notes
 
-Captures use the current Test Mode build at 1920×1080 and 1280×720. The System spy dossier uses a synthetic `Станция Керн` snapshot strictly to show the full dossier layout. The remaining screenshots use the app's existing Test Mode state and the QA harness fixtures.
+Captures show the final V2 surface at 1920×1080 and 1280×720. `electron/messages-v2-screenshots.cjs` uses isolated Test Mode storage. Spy, pirate recon, overpopulation and recycler records are explicitly synthetic visual QA input; battles, alliance operations, identity and scores use existing Test Mode state. No screenshot record is part of production gameplay.
 
-The profile now has no watermark behind the score cards. Score medals render at 96×96 with 30px values and 11px labels; rows are compact, the alliance uses a circular group icon, and recent events use the current report feed. The test harness assertion sizes match the approved mockup values.
+The profile has no crest watermark. Medals render at 96×96, values at 30px, labels at 11px; four rows use the available panel height. The alliance uses the channel group icon and its actual member count (8 in this fixture; the reference says 12).
 
-The profile mockup says `[HLN] · 12 участников`; the current Command fixture contains 8 members, so the UI displays the live count instead of a fixed mockup number. Profile ranking, wins, achievement totals, and identity metadata are also kept to fields present in the current model.
+The dossier matches the reference hierarchy: framed hero, resources, ship art cards, split defense/commander sections, and pinned actions. Extra factual metadata remains below the primary composition. Generic flight/alliance messages show only available ReportItem details; no invented mission fleet, route, participant portraits or sample KPI values.
 
-`08-command-empty.png` keeps the empty explanation in the dossier preview and exposes a screen-reader status in the otherwise empty message list. Battle-side colors and the System dossier section headings now match the reference palette and treatment.
+Channel badges show unread counts; total counts remain in accessible labels and list headers. Legacy comic styles and opacity entrance animations no longer affect the V2 surface. Shared battle modals retain their own existing styles.
+
+`03-system-pirate-recon.png` covers successful recon and loaded pirate ship art. `04-system-overpopulation.png` is the current overpopulation capture. The older `03-system-overpopulation.png` filename is superseded.
+
+Full completion evidence and check results: ../PR93_COMPLETION.md.
