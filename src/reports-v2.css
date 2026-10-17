@@ -1324,3 +1324,6 @@
 .reports-view.reports-v2 .reports-generic-details dd { margin: 0; }
 .reports-view.reports-v2 .reports-list-icon > .reports-glyph-image { width: 100%; height: 100%; padding: 8px; transform: none; }
 .reports-view.reports-v2 .reports-battle-versus { min-width: 0; }
+
+.reports-view.reports-v2 .reports-preview-scroll:has(> .reports-empty-dossier) { display: flex; }
+.reports-view.reports-v2 .reports-preview-scroll > .reports-empty-dossier { flex: 1; align-self: stretch; min-height: 100%; justify-content: center; border: 0; background: none; }

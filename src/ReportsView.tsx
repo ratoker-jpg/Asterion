@@ -350,7 +350,6 @@ function BattleDossier({ item, report, saved, rating, playerOwnerId, onToggleSav
         <BattleSideOverview side={viewModel.defender} />
       </section>
       <BattleLosses side={viewModel.attacker} />
-      <BattleLosses side={viewModel.defender} />
       {viewModel.debrisOnOrbit != null || viewModel.resources.length ? <section className="reports-battle-rewards" aria-label="Обломки и ресурсы после боя">
         <header><strong>РЕСУРСЫ И ОБЛОМКИ</strong><span>Зафиксировано в отчёте</span></header>
         <div className="reports-battle-reward-grid">
