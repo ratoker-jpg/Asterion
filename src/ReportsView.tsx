@@ -346,7 +346,7 @@ function BattleDossier({ item, report, saved, rating, playerOwnerId, onToggleSav
       <DossierHeading item={item} />
       <section className={`reports-battle-overview reports-battle-overview--${result.tone}`} aria-label="Сводка боевого отчёта">
         <BattleSideOverview side={viewModel.attacker} />
-        <div className="reports-battle-versus"><span>VS</span><strong>{result.label}</strong></div>
+        <div className="reports-battle-versus" aria-label={result.label}><span>VS</span></div>
         <BattleSideOverview side={viewModel.defender} />
       </section>
       <BattleLosses side={viewModel.attacker} />

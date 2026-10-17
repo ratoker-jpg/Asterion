@@ -1169,12 +1169,12 @@
   .reports-view.reports-v2 .reports-profile-alliance { min-height: 300px; }
 }
 
-/* The app positions and scales its fixed canvas inline. Remove legacy margins
-   that shifted the reports stage off-screen in 1280×720 Electron captures. */
+/* Native windows center the unscaled 1920x1080 canvas before applying scale.
+   Keep the same negative half-size margins used by the web preview. */
 @media (max-width: 1919px) {
   html:not(.web-preview):not(.asterion-long-page) .viewport:has(.reports-view) > .stage {
-    margin-left: 0;
-    margin-top: 0;
+    margin-left: -960px;
+    margin-top: -540px;
   }
 }
 
@@ -1319,3 +1319,8 @@
 .reports-view.reports-v2 .overpopulation-report-losses .spy-report-entity-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
 
 .reports-view.reports-v2 .reports-categories { height: 100%; align-self: stretch; }
+
+.reports-view.reports-v2 .reports-generic-details dl > div { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 6px; }
+.reports-view.reports-v2 .reports-generic-details dd { margin: 0; }
+.reports-view.reports-v2 .reports-list-icon > .reports-glyph-image { width: 100%; height: 100%; padding: 8px; transform: none; }
+.reports-view.reports-v2 .reports-battle-versus { min-width: 0; }
