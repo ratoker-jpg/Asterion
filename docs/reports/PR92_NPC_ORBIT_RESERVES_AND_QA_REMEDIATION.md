@@ -67,3 +67,13 @@
 No adjustments to `EXPLORATION_RULES`: capture 0.30; defense mining multiplier 1.10, 120,000ms and one use; recall 30,000ms; recon success 0.70 and cooldown 120,000ms; lifespan still assigned by existing universe schedule (15–20 minutes); risk and hazard probabilities unchanged. No code outside the existing PR branch was modified.
 
 **Merge decision remains exclusively with the owner.**
+
+## Follow-up after resume (17 Oct 2026)
+
+The branch was verified again after an interrupted step. Actual repository HEAD had advanced to `d05dcbcd`; that complete CI failed **only** at `Universe planet interaction Electron QA`, while `PR92 exploration domain tests`, `Reports domain tests`, `Build renderer`, `Reports Electron QA` and `Test Mode Electron QA` all passed.
+
+**Fixed the inspector QA regression** (`electron/universe-planet-qa.cjs`): an older assertion still demanded disabled exploration controls and the retired copy `Владелец отсутствует`. The game now correctly exposes clickable reconnaissance and expedition actions on free unique/anomaly objects. The new assertions check both enabled actions, real object/art rendering and expiry text; they do NOT disable UI just to pass CI. The old controls count/layout check remains active in `electron/test-mode-qa.cjs` at 1920×1080 and 1280×720.
+
+**Extended the recycler regression** (`src/application/exploration.integration.test.ts`): not only the existing orbit-stock collector API, but the full actual `dispatchFlight(missionId='recycle')` path on a freshly contested object, real arrival report, exact orbital decrease and no duplicate report/collection on replay. This case is guarded on positive generated battle debris, and verifies the original report's amount.
+
+Latest CI/Pages runs for the final HEAD must be looked up on the PR; a successful earlier Pages deploy alone does not certify the final change. Outstanding product design limitation still holds: autonomous competition requires already registered real production NPC colonies, and dynamic world score at the exact historic spawn moment is not available. Do not claim these are solved by test fixtures or the shared baseline. **No merge or Ready for review.**
