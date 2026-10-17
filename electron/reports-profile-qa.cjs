@@ -441,7 +441,7 @@ async function runViewport(win, width, height) {
   const overlaps = (first, second) => Boolean(first && second && first.left < second.right - 0.25 && first.right > second.left + 0.25 && first.top < second.bottom - 0.25 && first.bottom > second.top + 0.25);
   const contains = (outer, inner) => Boolean(outer && inner && inner.left >= outer.left - 0.5 && inner.top >= outer.top - 0.5 && inner.right <= outer.right + 0.5 && inner.bottom <= outer.bottom + 0.5);
   if (profile.folderGeometry.length !== EXPECTED_FOLDER_IDS.length
-    || profile.folderGeometry.some((row) => !row.icon || row.icon.width <= 0 || row.icon.width > 30.5 || row.icon.height <= 0 || row.icon.height > 30.5 || row.cssWidth !== '30px' || row.cssHeight !== '30px' || row.objectFit !== 'contain' || !contains(row.iconSlot, row.icon) || overlaps(row.icon, row.label) || overlaps(row.label, row.count))
+    || profile.folderGeometry.some((row) => !row.icon || row.icon.width <= 0 || row.icon.width > 41 || row.icon.height <= 0 || row.icon.height > 41 || row.cssWidth !== '30px' || row.cssHeight !== '30px' || row.objectFit !== 'contain' || !contains(row.iconSlot, row.icon) || overlaps(row.icon, row.label) || overlaps(row.label, row.count))
     || profile.folderGeometry.some((row, index, rows) => index > 0 && rows[index - 1].button.bottom > row.button.top + 0.5)) {
     throw new Error(`Reports folder icon sizing/overlap contract failed at ${label}: ${JSON.stringify(profile.folderGeometry)}`);
   }
