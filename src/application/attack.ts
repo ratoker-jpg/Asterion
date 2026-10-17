@@ -89,6 +89,7 @@ export function createAttackLaunchSnapshot(
     attackerShipLevels: shipLevels,
     attackerCommanderLevels: commanderLevelsFromPlanet(state, originPlanetId, Object.fromEntries(selectedCommanderIds.map((id) => [id, 1]))),
     attackerPriority: [...(state.combatPriority?.attack ?? DEFAULT_PRIORITY.attack)],
+    defenderPriority: [...(state.combatPriority?.defense ?? DEFAULT_PRIORITY.defense)],
   };
 }
 
@@ -568,6 +569,7 @@ export function createBot01IncomingAttackSnapshot(
     attackerShipLevels: Object.fromEntries(Object.entries(profile.shipLevels).map(([id, level]) => [id, safeLevel(level)])),
     attackerCommanderLevels: Object.fromEntries(Object.entries(profile.commanderLevels).map(([id, level]) => [id, safeLevel(level)])),
     attackerPriority: [...DEFAULT_PRIORITY.attack],
+    defenderPriority: [...DEFAULT_PRIORITY.defense],
   };
 }
 

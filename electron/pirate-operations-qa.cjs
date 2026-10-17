@@ -306,12 +306,17 @@ async function runViewport(width, height) {
       const radius = objective ? parseFloat(getComputedStyle(objective).borderTopLeftRadius) : 0;
       const scroll = document.querySelector('.operations-feed-scroll-v2');
       const layout = document.querySelector('.operations-layout-v2');
+      const feed = document.querySelector('.operations-feed-v2');
+      const feedHeight = feed?.getBoundingClientRect().height || 0;
+      const scrollOverflowY = scroll ? getComputedStyle(scroll).overflowY : '';
       return { systems, artLoaded: Boolean(art?.complete && art.naturalWidth > 0),
-        radius, bounded: Boolean(scroll && layout && layout.getBoundingClientRect().height < 780) };
+        radius, layoutHeight: layout?.getBoundingClientRect().height || 0, feedHeight,
+        scrollOverflowY,
+        bounded: Boolean(scroll && layout && feed && feedHeight < 780 && scrollOverflowY === 'auto') };
     })()`);
     if (!operationCheck.systems.length || operationCheck.systems.some((system) => !Number.isInteger(system) || (system !== 1 && system !== contact.system))
       || !operationCheck.artLoaded || operationCheck.radius < 9 || !operationCheck.bounded) {
-      throw new Error(`Operations leaked foreign systems, missing planet art/rounded objective or unbounded layout: ${JSON.stringify(operationCheck)}`);
+      throw new Error(`Operations leaked foreign systems, missing planet art/rounded objective or unbounded feed: ${JSON.stringify(operationCheck)}`);
     }
     await capture(win, directory, 'operations-owned-pirate-contacts');
     await clickPrimary(win, 'universe', `document.querySelector('[data-qa-universe]')`);

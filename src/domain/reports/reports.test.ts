@@ -598,3 +598,33 @@ test('hidden reports disappear from counts and regenerated feed without hiding f
   assert.equal(filterReportItems(feed, state, { category: 'battle', filter: 'all', search: '' }).length, 1);
   assert.equal(filterReportItems(feed, state, { category: 'battle', filter: 'all', search: '' })[0].id, second.id);
 });
+
+test('live player Moves canonical gas and recycler arrivals to Flights without doubling unread messages', () => {
+  const recycler = {
+    id: 'recycler-arrival:flight:pr92-unique',
+    flightId: 'flight:pr92-unique',
+    coordinate: { galaxy: 1, system: 3, position: 2 },
+    arrivedAtMs: 987_000,
+    collectedDebris: 42,
+    remainingOrbitalDebris: 8,
+  } as const;
+  const gas: GasExtractionArrivalReport = {
+    id: 'gas-extraction-arrival:flight:pr92-unique',
+    flightId: 'flight:pr92-unique',
+    coordinate: { galaxy: 1, system: 4, position: 3 },
+    arrivalAt: 999_000,
+    outcome: 'found',
+    gasCollected: 60,
+    scrapCollected: 12,
+  };
+  const feed = buildReportsFeed([],createDefaultOperationsState(),commandWithoutJointOperations(),
+    undefined, [], [recycler], [gas], [], [], undefined, 'player:test');
+  assert.deepEqual(feed.filter(item=>item.id === recycler.id).map(item=>item.category),['flights']);
+  assert.deepEqual(feed.filter(item=>item.id === gas.id).map(item=>item.category),['flights']);
+  assert.equal(getReportCategoryCounts(feed).flights,2);
+  assert.equal(getReportCategoryCounts(feed).system,0);
+  const unread = getReportUnreadCounts(feed,createDefaultReportsState());
+  assert.equal(unread.flights,2);
+  const bothRead = markAllReportsRead(createDefaultReportsState(),[recycler.id,gas.id]);
+  assert.equal(getReportUnreadCounts(feed,bothRead).flights,0);
+});

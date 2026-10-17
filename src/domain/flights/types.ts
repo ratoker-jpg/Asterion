@@ -12,6 +12,8 @@ export type MissionId =
   | 'pirate-recon'
   | 'pirate-elimination'
   | 'pirate-raid'
+  | 'expedition'
+  | 'exploration-recon'
   | 'deployment'
   | 'colonize'
   | 'recycle'
@@ -49,9 +51,15 @@ export type FlightRecord = {
   id: string;
   requestId: string;
   /** Older records omit this and are treated as player-owned. */
-  ownerSide?: 'player' | 'bot01' | 'pirate';
+  ownerSide?: 'player' | 'bot01' | 'npc' | 'pirate';
   missionId: MissionId;
   operationId?: string;
+  /** Frozen resource-score snapshot at expedition departure. */
+  explorationLaunchResourcePoints?: number;
+  /** Canonical Attack against a persistent exploration contact, not a planet. */
+  explorationAttack?: boolean;
+  /** Owner race at launch; needed for real nonplayer contested fleets. */
+  explorationFactionId?: import('../combat/factions.ts').CombatFactionId;
   /** Links a persisted espionage flight to its higher-level spy mission. */
   spyMissionId?: string;
   originPlanetId: string;

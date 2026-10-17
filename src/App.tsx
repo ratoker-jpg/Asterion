@@ -1,3 +1,4 @@
+import { dispatchBot01Exploration } from './application/exploration-bot01.ts';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { flushSync, createPortal } from 'react-dom';
 import './planet-skins.css';
@@ -139,6 +140,7 @@ import {
   FLIGHT_LAUNCH_CONTEXT_EVENT,
   FLIGHT_RECALL_REQUEST_EVENT,
   BOT01_INCOMING_SCENARIO_REQUEST_EVENT,
+  BOT01_EXPLORATION_SCENARIO_REQUEST_EVENT,
   SPY_REPORT_ALL_REQUEST_EVENT,
   SPY_REPORT_REQUEST_EVENT,
   SPY_REPORT_RESULT_EVENT,
@@ -160,6 +162,8 @@ import { getOwnerShipUpgradeLevels, getPlanetResources, type PlanetId, type Save
 import { selectOwnedPlanet } from './application/owned-planets.ts';
 import type { TargetRelation } from './domain/flights/types.ts';
 import { materializePirateProfiles, pirateContactOperation, pirateOperationId, selectOwnedPiratePresentations, selectOwnedPirateTargets, selectPirateContacts } from './application/pirate-presentation.ts';
+import { selectExplorationTargets, getExplorationTarget, explorationTargetStatus, selectExplorationOperations } from './application/exploration.ts';
+import { acceptLiveExploration, cancelLiveExploration } from './application/exploration-operations.ts';
 import type { PirateContactPresentation, PirateSystemSelection } from './pirate-ui.ts';
 
 import systemBackground from '../assets/source/starter/backgrounds/system_background.png';
@@ -553,7 +557,25 @@ export function App() {
       }
       window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
     };
-    const onEditTargetRequest = () => {
+    const onBot01ExplorationScenarioRequest = (event: Event) => {
+      if(RUNTIME_MODE !== 'test') return;
+      const detail=(event as CustomEvent<{now?:number}>).detail;
+      const now=detail?.now ?? Date.now();
+      const candidates=selectExplorationTargets(stateRef.current,now,'test',25);
+      const node=candidates.find(item=>explorationTargetStatus(stateRef.current,item)==='free'
+        && (item.special?.expiresAt ?? 0)-now>180_000);
+      if(!node){
+        setNotice('Нет свободного исследовательского объекта с достаточным временем для перелёта Bot 01.','error');
+        return;
+      }
+      const result=dispatchBot01Exploration(stateRef.current,node,now,testTimeScale);
+      if(!result.ok){setNotice(result.notice,'error');return;}
+      stateRef.current=result.state;
+      setState(result.state);
+      setNotice('Bot 01 вылетел к '+node.name+'. После прибытия открой «Операции», прими объект и нажми «Атаковать».');
+      navigateTo('operations');
+    };
+        const onEditTargetRequest = () => {
       clearBuildingInterior();
       navigateTo('universe');
       setNotice('Выберите новую свободную координату для колонизации.');
@@ -593,6 +615,7 @@ export function App() {
     window.addEventListener(FLIGHT_DISPATCH_REQUEST_EVENT, onDispatchRequest);
     window.addEventListener(FLIGHT_RECALL_REQUEST_EVENT, onRecallRequest);
     window.addEventListener(BOT01_INCOMING_SCENARIO_REQUEST_EVENT, onBot01ScenarioRequest);
+    window.addEventListener(BOT01_EXPLORATION_SCENARIO_REQUEST_EVENT,onBot01ExplorationScenarioRequest);
     window.addEventListener(FLIGHT_EDIT_TARGET_REQUEST_EVENT, onEditTargetRequest);
     window.addEventListener(SPY_REPORT_REQUEST_EVENT, onSpyReportRequest);
     window.addEventListener(SPY_REPORT_ALL_REQUEST_EVENT, onSpyReportAllRequest);
@@ -600,6 +623,7 @@ export function App() {
       window.removeEventListener(FLIGHT_DISPATCH_REQUEST_EVENT, onDispatchRequest);
       window.removeEventListener(FLIGHT_RECALL_REQUEST_EVENT, onRecallRequest);
       window.removeEventListener(BOT01_INCOMING_SCENARIO_REQUEST_EVENT, onBot01ScenarioRequest);
+      window.removeEventListener(BOT01_EXPLORATION_SCENARIO_REQUEST_EVENT,onBot01ExplorationScenarioRequest);
       window.removeEventListener(FLIGHT_EDIT_TARGET_REQUEST_EVENT, onEditTargetRequest);
       window.removeEventListener(SPY_REPORT_REQUEST_EVENT, onSpyReportRequest);
       window.removeEventListener(SPY_REPORT_ALL_REQUEST_EVENT, onSpyReportAllRequest);
@@ -855,9 +879,9 @@ export function App() {
     [currentPlanetState.buildings],
   );
   const reportsUnreadCount = useMemo(() => {
-    const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.pirate?.reconReports, state.flights.records);
+    const items = buildReportsFeed(state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.pirate?.reconReports, state.flights.records, state.exploration, state.profile.playerId);
     return Object.values(getReportUnreadCounts(items, state.reports)).reduce((total, count) => total + count, 0);
-  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports, state.pirate, state.flights]);
+  }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports, state.pirate, state.flights, state.exploration]);
   const buildingInteriorTarget = buildingInterior
     ? getBuildingInteriorTarget(buildingInterior.buildingRole)
     : null;
@@ -1189,6 +1213,109 @@ export function App() {
   const revealOperationsOperation = (operationId: OperationId) => {
     setState((current) => ({ ...current, operations: revealOperation(current.operations, operationId, RUNTIME_MODE) }));
     setNotice('Сигнал просканирован. Классификация операции обновлена.');
+  };
+
+  const acceptExplorationContact = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
+    const current = stateRef.current;
+    const next = acceptLiveExploration(current, node.id, Date.now(), RUNTIME_MODE);
+    if (!next) { setNotice('Контакт уже исчез. Принять операцию нельзя.', 'error'); return; }
+    stateRef.current = next;
+    setState(next);
+    setNotice('Операция принята. Можно отправить разведзонд или экспедицию.');
+  };
+
+  const cancelExplorationContact = (id: string) => {
+    const next = cancelLiveExploration(stateRef.current, id);
+    stateRef.current = next;
+    setState(next);
+    setNotice('Исследовательская операция отменена.');
+  };
+
+  const launchExplorationRecon = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
+    const current = stateRef.current;
+    const nowMs = Date.now();
+    const live = getExplorationTarget(current, node.id, nowMs, RUNTIME_MODE);
+    if (!live) { setNotice('Объект исчез. Исследование невозможно.', 'error'); return; }
+    // From the Universe inspector, accepting the contact and launching the probe is one operation.
+    const acceptedState = current.exploration?.acceptedContactIds?.includes(node.id)
+      ? current
+      : acceptLiveExploration(current, node.id, nowMs, RUNTIME_MODE);
+    if (!acceptedState) { setNotice('Контакт исчез до исследования.', 'error'); return; }
+    const result = dispatchFlight(acceptedState, {
+      requestId: 'exploration-recon:' + node.id + ':' + nowMs,
+      missionId: 'exploration-recon',
+      contactCycleKey: node.id,
+      operationId: node.id,
+      originPlanetId: current.currentPlanetId,
+      destination: { kind: 'coordinate', coordinate: live.coordinate },
+      targetKind: live.kind,
+      selectedShips: { 'spy-probe': 1 },
+      departedAt: nowMs,
+    }, { now: nowMs, mode: RUNTIME_MODE, testTimeScale });
+    if (!result.ok) {
+      if (acceptedState !== current) { stateRef.current = acceptedState; setState(acceptedState); }
+      setNotice((acceptedState !== current ? 'Операция принята, но зонд не отправлен: ' : '') + result.error.message, 'error');
+      return;
+    }
+    stateRef.current = result.state;
+    setState(result.state);
+    setNotice('Зонд отправлен. Отчёт о результатах исследования появится после прибытия.');
+    window.dispatchEvent(new CustomEvent(FLIGHT_COMMAND_RESULT_EVENT, { detail: result }));
+  };
+
+  const openExpeditionLaunch = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
+    const live = getExplorationTarget(stateRef.current, node.id, Date.now(), RUNTIME_MODE);
+    if (!live || explorationTargetStatus(stateRef.current, live) !== 'free') {
+      setNotice('Экспедиция недоступна: объект исчез или занят. Проверь актуальные контакты.', 'error');
+      return;
+    }
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    setNotice('Экспедиция: выбери состав кораблей и подтверди перелёт.');
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, {
+        detail: {
+          missionId: 'expedition', contactCycleKey: live.id,
+          targetKind: live.kind,
+          targetPlanetName: live.name,
+          targetRelation: 'neutral',
+          destination: { kind: 'coordinate', coordinate: live.coordinate },
+        },
+      }));
+    }, 40);
+  };
+
+  const launchBot01Exploration = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
+    if (RUNTIME_MODE !== 'test')return;
+    const at=Date.now();
+    const result=dispatchBot01Exploration(stateRef.current,node,at,testTimeScale);
+    if(!result.ok){setNotice(result.notice,'error');return;}
+    stateRef.current=result.state;
+    setState(result.state);
+    setNotice(result.notice);
+  };
+
+  const openExplorationAttackLaunch = (node: import('./domain/universe/types.ts').UniversePlanetNode) => {
+    const live = getExplorationTarget(stateRef.current,node.id,Date.now(),RUNTIME_MODE);
+    const claim = live && stateRef.current.exploration?.contacts[live.id]?.claim;
+    if (!live || !claim || claim.ownerId === stateRef.current.profile.playerId) {
+      setNotice('Для атаки нужен объект, занятый чужим реальным флотом.','error');
+      return;
+    }
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    setNotice('Боевой захват объекта: выберите флот, проверьте маршрут и подтвердите атаку.');
+    window.setTimeout(() => window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT,{
+      detail:{
+        missionId:'attack',contactCycleKey:live.id,operationId:live.id,
+        targetKind:live.kind,targetRelation:'neutral',targetPlanetName:live.name,
+        destination:{kind:'coordinate',coordinate:live.coordinate},
+      },
+    })),40);
   };
 
   const openFleetRootFromOperations = () => {
@@ -1593,6 +1720,9 @@ export function App() {
               mode={RUNTIME_MODE}
               onColonize={openColonizationLaunch}
               onAsteroidRecycler={openAsteroidRecyclerLaunch}
+              onExpedition={openExpeditionLaunch}
+              onExplorationRecon={launchExplorationRecon}
+              explorationEligibility={Object.fromEntries(selectExplorationTargets(state, now, RUNTIME_MODE).map(node => [node.id, explorationTargetStatus(state, node)]))}
               onTransport={openTransportLaunch}
               onSpy={openSpyLaunch}
               onAttack={openAttackLaunch}
@@ -1602,6 +1732,15 @@ export function App() {
           ) : activeRoute === 'operations' ? (
             <OperationsView
               pirateContacts={pirateContacts}
+              explorationContacts={selectExplorationOperations(state, now, RUNTIME_MODE)}
+              onExpedition={openExpeditionLaunch}
+              onExplorationAttack={openExplorationAttackLaunch}
+              onBot01Occupy={RUNTIME_MODE === 'test' ? launchBot01Exploration : undefined}
+              onExplorationAccept={acceptExplorationContact}
+              onExplorationCancel={cancelExplorationContact}
+              onExplorationRecon={launchExplorationRecon}
+              onExplorationUniverse={(node) => openUniverseTarget({ coordinate: node.coordinate, planetId: node.id })}
+              onExplorationReport={openPirateReport}
               pirateOwnerId={state.profile.playerId}
               pirateRaidRolls={state.pirate?.raidRolls}
               pirateAdaptiveDiagnostics={RUNTIME_MODE==='test'?(state.pirate?.ownerAdaptations?.[state.profile.playerId]??defaultPirateOwnerAdaptation()):undefined}
@@ -1644,6 +1783,7 @@ export function App() {
             <ReportsView
               pirateReconReports={state.pirate?.reconReports}
               pirateFlights={state.flights.records}
+              exploration={state.exploration}
               initialSelectedReportId={pirateReportId}
               battleReports={state.combat.reports}
               savedBattleReportIds={state.combat.savedReportIds}

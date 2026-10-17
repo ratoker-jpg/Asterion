@@ -18,9 +18,23 @@ import { getUniverseSlotPoint } from './domain/universe/runtime.ts';
 import { getPirateRaidCheckProgress } from './domain/pirates/contact-schedule.ts';
 import { pirateAdaptiveInterval, type PirateOwnerAdaptation } from './domain/pirates/adaptive.ts';
 import { getPiratePlanetArt } from './pirate-planet-art.ts';
+import { explorationProfile, EXPLORATION_RULES } from './domain/exploration/model.ts';
+import { reconcileExplorationContact } from './domain/exploration/ledger.ts';
+import type { ExplorationOperationPresentation } from './application/exploration.ts';
+import type { UniversePlanetNode } from './domain/universe/types.ts';
 import './operations.css';
 
+export type ExplorationOperationContact = ExplorationOperationPresentation;
 type OperationsViewProps = {
+  explorationContacts?: readonly ExplorationOperationContact[];
+  onExpedition?: (node: UniversePlanetNode) => void;
+  onExplorationAttack?: (node: UniversePlanetNode) => void;
+  onBot01Occupy?: (node: UniversePlanetNode) => void;
+  onExplorationAccept?: (node: UniversePlanetNode) => void;
+  onExplorationCancel?: (contactId: string) => void;
+  onExplorationRecon?: (node: UniversePlanetNode) => void;
+  onExplorationUniverse?: (node: UniversePlanetNode) => void;
+  onExplorationReport?: (reportId: string) => void;
   state: OperationsState;
   onAccept: (operationId: OperationId) => void;
   onCancel: (operationId: OperationId) => void;
@@ -47,7 +61,7 @@ type OperationsViewProps = {
 
 type OperationsTab = Extract<OperationState, 'available' | 'active' | 'completed'>;
 type CompletedPirateOperation = { cycleKey: string; coordinate: PirateContactPresentation['coordinate']; reportId: string; defeatedAt: number; rounds: number; debris: number; reward?: {sentCombatPopulation:number;historicalHangarCapacity:number;multiplier:number;basePirateDebris:number;bonusPirateDebris:number;ownDebris:number;threatReductionFraction:number} };
-type OperationRow = { operation: OperationInstance; contact?: PirateContactPresentation; completed?: CompletedPirateOperation; battleReportId?: string };
+type OperationRow = { operation: OperationInstance; contact?: PirateContactPresentation; exploration?: ExplorationOperationContact; completed?: CompletedPirateOperation; battleReportId?: string };
 
 const TAB_LABELS: Record<OperationsTab, string> = {
   available: 'ДОСТУПНЫЕ',
@@ -218,11 +232,12 @@ function TacticalScope({ operation, contact }: { operation: OperationInstance; c
   );
 }
 
-function OperationCard({ operation, selected, onSelect, contact, nowMs, pirateRaidRoll, pirateCheckDelayMs }: {
+function OperationCard({ operation, selected, onSelect, contact, exploration, nowMs, pirateRaidRoll, pirateCheckDelayMs }: {
   operation: OperationInstance;
   selected: boolean;
   onSelect: () => void;
   contact?: PirateContactPresentation;
+  exploration?: ExplorationOperationContact;
   nowMs: number;
   pirateRaidRoll?: Readonly<{checkAt:number;seed:string;flightId?:string}>;
   pirateCheckDelayMs?: number;
@@ -242,19 +257,29 @@ function OperationCard({ operation, selected, onSelect, contact, nowMs, pirateRa
       data-qa-pirate-contact={contact?.contactCycleKey}
       onClick={onSelect}
     >
-      {pirateArt
+      {exploration
+        ? <span className="operation-feed-threat-v2 operation-feed-pirate-art-v2 exploration-feed-art"><img src={exploration.node.art} alt="" loading="lazy" draggable={false} /><small>{exploration.node.kind === 'anomaly' ? 'АНОМАЛИЯ' : 'ОБЪЕКТ'}</small></span>
+        : pirateArt
         ? <span className="operation-feed-threat-v2 operation-feed-pirate-art-v2" aria-label="Пиратская планета">
           <img src={pirateArt} alt="" loading="lazy" draggable={false} />
           <small>{contact ? 'ПИРАТЫ' : 'АРХИВ'}</small>
         </span>
         : <span className="operation-feed-threat-v2"><b>{threatTier(operation)}</b><small>{intelZero ? 'UNKNOWN' : operation.category === 'combat' ? 'THREAT' : 'RISK'}</small></span>}
       <span className="operation-feed-copy-v2">
-        <small>{CATEGORY_LABELS[operation.category]}</small>
+        <small>{exploration ? exploration.node.kind === 'anomaly' ? 'АНОМАЛИЯ · ИССЛЕДОВАНИЕ' : 'УНИКАЛЬНЫЙ ОБЪЕКТ · ИССЛЕДОВАНИЕ' : CATEGORY_LABELS[operation.category]}</small>
         <strong>{operation.title}</strong>
-        <em>{contact ? `Пиратский контакт · осталось ${pirateRemainingLabel(contact.expiresAt, nowMs)}` : isPirateOperationId(operation.id) ? 'База уничтожена' : intelZero ? 'Сигнатура требует классификации' : operation.objective.label}</em>
+        <em>{exploration ? exploration.stage === 'completed' ? 'Контакт завершён' : 'До исчезновения: ' + pirateRemainingLabel(exploration.node.special?.expiresAt ?? nowMs, nowMs) : contact ? `Пиратский контакт · осталось ${pirateRemainingLabel(contact.expiresAt, nowMs)}` : isPirateOperationId(operation.id) ? 'База уничтожена' : intelZero ? 'Сигнатура требует классификации' : operation.objective.label}</em>
         <span className="operation-feed-meta-v2">
           <i>{isPirateOperationId(operation.id) ? formatLocation(operation.location) : intelZero ? formatLocationClass(operation.location) : formatLocation(operation.location)}</i>
-          {isPirateOperationId(operation.id)
+          {exploration ? <>
+              {exploration.recon?.success && <b className="exploration-feed-risk" title="Категория риска объекта; опасные события в текущем PR не активны">РИСК {['I','II','III','IV','V'][(operation.threat ?? 1)-1]} / V</b>}
+              <span className={'exploration-feed-occupancy exploration-feed-occupancy--' + (exploration.stage === 'completed' ? 'ended' : exploration.occupancy)}
+              data-qa-exploration-feed-status={exploration.stage === 'completed' ? 'completed' : exploration.occupancy}>
+              <span className="exploration-occupancy-indicator" />
+              {exploration.stage === 'completed' ? 'ЗАВЕРШЕНО' : exploration.occupancy === 'free' ? 'СВОБОДНО' : exploration.occupancy === 'self' ? 'ВАШ ФЛОТ' : 'ЗАНЯТО'}
+              </span>
+            </>
+            : isPirateOperationId(operation.id)
             ? <b className="operations-pirate-debris-label"><ResourceIcon kind="debris" /> ОБЛОМКИ · от 60%</b>
             : <><IntelPips level={operation.intel} />{firstReward ? <b><ResourceIcon kind={firstReward[2]} /> {number.format(firstReward[1])}</b> : <b>НАГРАДА ?</b>}</>}
         </span>
@@ -280,7 +305,7 @@ function EmptyState({ tab }: { tab: OperationsTab }) {
   const copy = tab === 'active'
     ? ['АКТИВНЫХ ОПЕРАЦИЙ НЕТ', 'Примите операцию из списка доступных.']
     : tab === 'completed'
-      ? ['ВЫПОЛНЕННЫХ ОПЕРАЦИЙ НЕТ', 'Здесь появляются только операции с подтверждённым результатом боя.']
+      ? ['ЗАВЕРШЁННЫХ ОПЕРАЦИЙ НЕТ', 'Здесь появляются операции с реальным результатом: вернувшиеся экспедиции и завершённые бои.']
       : ['КОНТАКТОВ НЕТ', 'Новых операций сейчас не обнаружено.'];
 
   return <div className="operations-empty-v2"><span>◇</span><strong>{copy[0]}</strong><p>{copy[1]}</p></div>;
@@ -298,9 +323,18 @@ function pirateRemainingLabel(expiresAt: number, nowMs: number) {
   return minutes ? `${minutes} мин ${String(remainder).padStart(2, '0')} с` : `${remainder} с`;
 }
 
-function OperationDossier({ operation, pirateContact, battleReportId, completed, nowMs, onAccept, onCancel, onReveal, onOpenFleets, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: {
+function OperationDossier({ operation, pirateContact, exploration, onExpedition, onExplorationAttack, onBot01Occupy, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, battleReportId, completed, nowMs, onAccept, onCancel, onReveal, onOpenFleets, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: {
   operation: OperationInstance | null;
   pirateContact?: PirateContactPresentation;
+  exploration?: ExplorationOperationContact;
+  onExpedition?: (node: UniversePlanetNode) => void;
+  onExplorationAttack?: (node: UniversePlanetNode) => void;
+  onBot01Occupy?: (node: UniversePlanetNode) => void;
+  onExplorationAccept?: (node: UniversePlanetNode) => void;
+  onExplorationCancel?: (contactId: string) => void;
+  onExplorationRecon?: (node: UniversePlanetNode) => void;
+  onExplorationUniverse?: (node: UniversePlanetNode) => void;
+  onExplorationReport?: (reportId: string) => void;
   battleReportId?: string;
   completed?: CompletedPirateOperation;
   nowMs: number;
@@ -322,6 +356,162 @@ function OperationDossier({ operation, pirateContact, battleReportId, completed,
         <p>Операционный брифинг появится здесь.</p>
       </aside>
     );
+  }
+
+
+  if (exploration) {
+    const node = exploration.node;
+    const known = exploration.recon?.success === true;
+    const failed = exploration.recon?.success === false;
+    const profile = explorationProfile(node.kind as 'unique' | 'anomaly', node.special?.profileVariant ?? 1);
+    const occupied = exploration.occupancy !== 'free';
+    const completed = exploration.stage === 'completed';
+    const accepted = exploration.stage === 'active';
+    const resourceLabels: Record<ResourceIconKind, string> = {
+      metal: 'Металл', minerals: 'Минералы', gas: 'Газ', debris: 'Обломки',
+      energy: 'Энергия', population: 'Население',
+    };
+    const resourceRows = Object.entries(profile.weights).filter((entry) => (entry[1] ?? 0) > 0);
+    const lastReturn = [...(exploration.contact?.events ?? [])].reverse().find(e =>
+      (e.kind === 'returned' || e.kind === 'origin-destroyed') && e.ownerId === exploration.ownerId);
+    const battleEvent=[...(exploration.contact?.events ?? [])].reverse()
+      .find(event=>/:(capture|contest)$/.test(event.id));
+    const combatReportId=battleEvent ? 'battle:battle-exploration-'+battleEvent.id.replace(/:(capture|contest)$/,'') : null;
+    const cooldownAt = (exploration.recon?.resolvedAt ?? 0) + 120_000;
+    const inCooldown = exploration.recon && cooldownAt > nowMs;
+    const awaitingProbe = exploration.reconInFlight?.phase === 'outbound';
+    const projected = exploration.contact?.claim ? reconcileExplorationContact(exploration.contact, nowMs) : exploration.contact;
+    const mine = projected?.claim?.ownerId === exploration.ownerId ? projected.claim : undefined;
+    const liveCargo = mine?.cargo;
+    const remainingLife = node.special?.expiresAt && node.special?.startAt
+      ? Math.max(0, Math.min(100, Math.round((node.special.expiresAt - nowMs) / (node.special.expiresAt - node.special.startAt) * 100)))
+      : 0;
+    const riskRoman = ['I','II','III','IV','V'][profile.risk - 1]!;
+    const delivered = lastReturn?.creditedCargo ?? lastReturn?.cargo;
+    const deliveredTotal = delivered ? Object.values(delivered).reduce((sum, value) => sum + value, 0) : 0;
+    return <aside className="operations-dossier-v2 operations-dossier-v2--exploration" data-qa-exploration-dossier={node.id}>
+      <header className="operations-dossier-head-v2">
+        <div className="operations-dossier-title-v2">
+          <span className="operations-dossier-glyph-v2"><OperationGlyph category="exploration" /></span>
+          <div>
+            <small>{node.kind === 'anomaly' ? 'НАУЧНАЯ ОПЕРАЦИЯ' : 'ИССЛЕДОВАТЕЛЬСКАЯ ОПЕРАЦИЯ'}</small>
+            <h2>{node.name.toUpperCase()}</h2>
+            <p><button type="button" className="exploration-coordinates-link" onClick={() => onExplorationUniverse?.(node)} title="Открыть во Вселенной">{formatLocation(operation.location)} ↗</button></p>
+          </div>
+        </div>
+        <span className={'exploration-state-pill exploration-state-pill--' + (completed ? 'ended' : exploration.occupancy)}
+          data-qa-exploration-status={completed ? 'completed' : exploration.occupancy}>
+          {completed ? 'ЗАВЕРШЕНО' : exploration.occupancy === 'free' ? 'СВОБОДНО' : exploration.occupancy === 'self' ? 'ВАШ ФЛОТ' : 'ЗАНЯТО'}
+        </span>
+      </header>
+      <section className="exploration-dossier-hero">
+        <div className="exploration-dossier-art"><img src={node.art} alt="" loading="lazy" draggable={false} /></div>
+        <div className="exploration-dossier-intro">
+          <small>{node.kind === 'anomaly' ? 'АНОМАЛИЯ' : 'УНИКАЛЬНЫЙ ОБЪЕКТ'}</small>
+          <strong>{node.name}</strong>
+          <p>{node.description}</p>
+          <dl>
+            <div><dt>КООРДИНАТЫ</dt><dd><button type="button" className="exploration-coordinates-link" onClick={() => onExplorationUniverse?.(node)}>{formatLocation(operation.location)} ↗</button></dd></div>
+            <div><dt>ДО ИСЧЕЗНОВЕНИЯ</dt><dd>{completed ? 'Объект исчез' : pirateRemainingLabel(node.special?.expiresAt ?? nowMs, nowMs)}</dd></div>
+            <div><dt>СОСТОЯНИЕ</dt><dd>{completed ? 'Цикл завершён' : exploration.occupancy === 'free' ? 'Никем не занят' : exploration.occupancy === 'self' ? 'Ваш флот добывает' : 'Занят чужим флотом'}</dd></div>
+            <div><dt>ОПЕРАЦИЯ</dt><dd>{completed ? 'В архиве' : accepted ? 'Принята' : 'Не принята'}</dd></div>
+          </dl>
+        </div>
+      </section>
+      <div className="exploration-lifetime-panel" aria-label="Оставшийся срок существования">
+        <div><small>ДО ИСЧЕЗНОВЕНИЯ</small><strong>{completed ? 'Завершено' : pirateRemainingLabel(node.special?.expiresAt ?? nowMs, nowMs)}</strong></div>
+        <div className="exploration-lifetime-track" role="progressbar" aria-label="Оставшееся время объекта" aria-valuemin={0} aria-valuemax={100} aria-valuenow={remainingLife}><span style={{width: remainingLife + '%'}} /></div>
+      </div>
+      <section className="exploration-dossier-intelligence">
+        <div className="exploration-section-heading">
+          <strong>ИССЛЕДОВАНИЕ ОБЪЕКТА</strong>
+          <span>{known ? 'ДАННЫЕ ПОЛУЧЕНЫ' : awaitingProbe ? 'ЗОНД В ПУТИ' : failed ? 'ЗОНД НЕ ПОЛУЧИЛ ДАННЫЕ' : 'НЕТ РАЗВЕДДАННЫХ'}</span>
+        </div>
+        <p>{awaitingProbe ? 'Зонд направляется к объекту. Отчёт появится после прибытия.' : known
+          ? 'Зонд успешно исследовал объект. Ниже показан подтверждённый профиль добычи.'
+          : failed
+            ? 'Попытка исследования оказалась неудачной. Сведения о составе ресурсов пока скрыты.'
+            : 'Отправьте один шпионский зонд. Результат станет известен после его прибытия; шанс успешного исследования — 70%.'}</p>
+        <div className="exploration-reward-grid">
+          <div className="exploration-reward-cell">
+            <small>РАЗВЕДАННЫЕ ЗАПАСЫ · ОСТАТОК / ИСХОДНОЕ</small>
+            {known ? <div className="exploration-resource-chips">
+              {resourceRows.map(([key, weight]) =>
+                <span key={key} className="exploration-resource-chip">
+                  <ResourceIcon kind={key as ResourceIconKind} />
+                  <b>{resourceLabels[key as ResourceIconKind]}</b>
+                  <em>{number.format(exploration.contact?.resourceReserve[key as 'metal' | 'minerals' | 'gas' | 'debris'] ?? 0)} / {number.format(exploration.contact?.initialReserve[key as 'metal' | 'minerals' | 'gas' | 'debris'] ?? 0)} · {weight}%</em>
+                </span>)}
+            </div> : <div className="exploration-resource-unknown">
+              {(['metal', 'minerals', 'gas', 'debris'] as const).map(kind =>
+                <ResourceIcon key={kind} kind={kind} />)}
+              <span>Состав скрыт до успешного исследования</span>
+            </div>}
+          </div>
+          <div className="exploration-reward-cell">
+            <small>КАТЕГОРИЯ РИСКА</small>
+            {known ? <>
+              <div className="exploration-risk-meter" aria-label={'Категория риска ' + riskRoman + ' из V'}>
+                {([1,2,3,4,5] as const).map(level => <span className={level <= profile.risk ? 'active' : ''} key={level}>{['I','II','III','IV','V'][level-1]}</span>)}
+              </div>
+              <strong>{riskRoman} / V · {profile.risk < 3 ? 'НИЗКИЙ' : profile.risk < 5 ? 'ПОВЫШЕННЫЙ' : 'ВЫСОКИЙ'}</strong>
+            </> : <strong>Неизвестен до разведки</strong>}
+            <p>{known ? 'По проектной модели уровень ' + riskRoman + ' предполагает ' + Math.round(EXPLORATION_RULES.npcAttemptChance[profile.risk] * 100) + '% шанса попытки захвата конкурентом каждые 3 минуты. ' : 'До разведки класс опасности неизвестен. '}Аномалии могут сжигать до 10% накопленного груза при всплеске раз в 3 минуты. В обычной игре NPC при успешной проверке риска отправляет настоящий флот только со своей существующей планеты; при отсутствии таких планет рейса не будет. В Test Mode NPC-рейс запускается вручную.</p>
+          </div>
+        </div>
+        {mine && <section className="exploration-mining-status" data-qa-exploration-live-cargo>
+          <div><strong>ТЕКУЩАЯ ДОБЫЧА ВАШЕГО ФЛОТА</strong><span>Трюм: {number.format(Object.values(liveCargo ?? {}).reduce((sum, value) => sum + value, 0))} / {number.format(mine.cargoCapacity)}</span></div>
+          <div className="exploration-lifetime-track"><span style={{width: Math.min(100, (Object.values(liveCargo ?? {}).reduce((sum, value) => sum + value, 0) / Math.max(1, mine.cargoCapacity)) * 100) + '%'}} /></div>
+          <div className="exploration-resource-chips">{(['metal','minerals','gas','debris'] as const).map(key =>
+            <span key={key} className="exploration-resource-chip"><ResourceIcon kind={key} /><b>{resourceLabels[key]}</b><em>{number.format(liveCargo?.[key] ?? 0)}</em></span>)}</div>
+          <small>Обломки добывают только переработчики. Всё добытое попадёт на исходную планету только после возвращения.</small>
+        </section>}
+        {combatReportId && onExplorationReport ? <button type="button" data-qa-exploration-battle-report={combatReportId} className="operations-intel-report-button-v2"
+          onClick={() => onExplorationReport(combatReportId)}>БОЕВОЙ ДОКЛАД · ОТКРЫТЬ В «СООБЩЕНИЯХ» ↗</button> : null}
+        {exploration.recon && onExplorationReport ? <button type="button" className="operations-intel-report-button-v2" onClick={() => onExplorationReport('exploration-recon:' + exploration.recon!.flightId)}>ОТКРЫТЬ РАЗВЕДОТЧЁТ В «СИСТЕМЕ» ↗</button> : null}
+        {exploration.recon ? <small className="exploration-recon-timestamp">Последний разведотчёт: {new Date(exploration.recon.resolvedAt).toLocaleString('ru-RU')}
+          {inCooldown ? ' · повтор через ' + Math.ceil((cooldownAt - nowMs) / 1000) + ' с' : ''}</small> : null}
+      </section>
+      {completed ? <section className="exploration-dossier-result">
+        <strong>ИТОГ ОПЕРАЦИИ</strong>
+        {lastReturn?.kind === 'returned' ? <>
+          <p>{deliveredTotal > 0 ? 'Доставка подтверждена на планету ' + lastReturn.originPlanetId + '. Обломки находятся в запасе переработки, не на обычных складах.' : 'Экспедиция вернулась без добычи. Для сбора обломков нужны переработчики, транспортёры их не добывают.'}</p>
+          <div className="exploration-resource-chips">
+            {(['metal','minerals','gas','debris'] as const).map(key =>
+              <span key={key} className="exploration-resource-chip"><ResourceIcon kind={key} /><b>{resourceLabels[key]}</b><em>{number.format(delivered?.[key] ?? 0)}</em></span>)}
+          </div>
+          {onExplorationReport ? <button type="button" className="operations-intel-report-button-v2" onClick={() => onExplorationReport('exploration-return:' + lastReturn.flightId)}>ОТЧЁТ О ДОСТАВКЕ В «ПОЛЁТАХ» ↗</button> : null}
+          {lastReturn.repairTokens ? <p>Редкие жетоны ремонта: +{lastReturn.repairTokens}</p> : null}
+        </> : <p>Время контакта истекло. Подтверждённой доставки ресурсов по этому циклу нет.</p>}
+      </section> : null}
+      <footer className="operations-command-v2 exploration-command-panel">
+        <div><strong>{completed ? 'КОНТАКТ ЗАВЕРШЁН' : accepted ? 'ОПЕРАЦИЯ ПРИНЯТА' : 'ДОСТУПНАЯ ОПЕРАЦИЯ'}</strong>
+          <span>{completed ? 'Это история прошедшего цикла объекта.' : occupied && exploration.occupancy === 'occupied'
+            ? 'Экспедиция заблокирована: объект удерживает другой флот.'
+            : accepted ? 'Можно исследовать объект зондом или отправить экспедицию.' : 'Сначала примите операцию, чтобы открыть подготовку.'}</span></div>
+        <div className="operations-command-actions-v2 exploration-action-buttons">
+          {!completed && exploration.occupancy === 'free' && onBot01Occupy ? <button
+            type="button" className="operations-secondary-v2" data-qa-bot01-exploration={node.id}
+            onClick={() => onBot01Occupy(node)}>ТЕСТ: BOT 01 · ЗАНЯТЬ ОБЪЕКТ</button> : null}
+                    {!completed && !accepted ? <button className="operations-primary-v2" type="button"
+            data-qa-exploration-accept={node.id} onClick={() => onExplorationAccept?.(node)}>ПРИНЯТЬ ОПЕРАЦИЮ</button> : null}
+          {!completed && accepted ? <>
+            <button type="button" className="operations-primary-v2" data-qa-exploration-recon={node.id}
+              disabled={!onExplorationRecon || Boolean(inCooldown) || Boolean(exploration.reconInFlight)}
+              title={inCooldown ? 'Повторное исследование доступно после паузы' : 'Отправить один шпионский зонд с текущей планеты'}
+              onClick={() => onExplorationRecon?.(node)}>{exploration.reconInFlight ? 'ЗОНД В ПУТИ / ВОЗВРАЩАЕТСЯ' : 'ИССЛЕДОВАТЬ ОБЪЕКТ'}</button>
+            {exploration.occupancy === 'free'
+              ? <button type="button" className="operations-secondary-v2" disabled={!onExpedition}
+                  data-qa-operation-expedition={node.id} onClick={() => onExpedition?.(node)}>ПОДГОТОВИТЬ ЭКСПЕДИЦИЮ</button>
+              : exploration.occupancy === 'self'
+                ? <button type="button" className="operations-secondary-v2" onClick={onOpenFleets}>К ФЛОТАМ · ОТОЗВАТЬ</button>
+                : <button type="button" className="operations-primary-v2" data-qa-exploration-attack={node.id} disabled={!onExplorationAttack} onClick={() => onExplorationAttack?.(node)}>АТАКОВАТЬ ЗАНЯТЫЙ ОБЪЕКТ</button>}
+            <button type="button" className="operations-pirate-cancel"
+              onClick={() => onExplorationCancel?.(node.id)}>Отменить операцию</button>
+          </> : null}
+        </div>
+      </footer>
+    </aside>;
   }
 
   const pirate = isPirateOperationId(operation.id);
@@ -382,7 +572,12 @@ function OperationDossier({ operation, pirateContact, battleReportId, completed,
       </header>
 
       <section className="operations-dossier-hero-v2">
-        <TacticalScope operation={operation} contact={pirateContact} />
+        {pirate ? <div className="operations-hero-object-art" data-qa-pirate-hero-art>
+          <img src={getPiratePlanetArt(...((): [number,number] => {
+            const parts = (pirateContact?.contactCycleKey ?? operation.id.replace(/^pirate:/,'')).split(':');
+            return [Number(parts[2] ?? 1), Number(parts[3] ?? 0)];
+          })())} alt="Пиратская база" loading="lazy" draggable={false} />
+        </div> : <TacticalScope operation={operation} contact={pirateContact} />}
         <div className="operations-briefing-v2">
           <small>ОПЕРАТИВНАЯ СВОДКА</small>
           <h3>{pirate ? pirateContact ? 'ПИРАТСКАЯ БАЗА ОБНАРУЖЕНА' : 'КОНТАКТ ЗАВЕРШЁН' : intelZero ? 'ДАННЫХ НЕДОСТАТОЧНО' : 'КОНТАКТ КЛАССИФИЦИРОВАН'}</h3>
@@ -471,14 +666,14 @@ function OperationDossier({ operation, pirateContact, battleReportId, completed,
   );
 }
 
-export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
+export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFleets, explorationContacts = [], onExpedition, onExplorationAttack, onBot01Occupy, onExplorationAccept, onExplorationCancel, onExplorationRecon, onExplorationUniverse, onExplorationReport, pirateContacts = [], pirateThreatPercent = 2, pirateAdaptiveDiagnostics, onPirateBattleExport, pirateRaidRolls = {}, pirateOwnerId = '', pirateCheckDelayMs, completedPirateOperations = [], nowMs = Date.now(), onPirateAccept, onPirateCancel, onPirateRecon, onPirateAttack, onPirateReport, onPirateBattleReport, onPirateUniverse }: OperationsViewProps) {
   const [tab, setTab] = useState<OperationsTab>('available');
   const [selectedId, setSelectedId] = useState<OperationId | null>(null);
 
   const operationRows = useMemo((): OperationRow[] => {
     // Demo placeholders are not playable pirate targets. Keep them in Test save for
     // backwards compatibility, but render only authoritative live contacts.
-    const demoIds = new Set(['op-pirate-patrol-01', 'op-pirate-outpost-01']);
+    const demoIds = new Set(['op-pirate-patrol-01', 'op-pirate-outpost-01', 'op-signal-derelict-01', 'op-anomaly-01']);
     const normal: OperationRow[] = state.items
       .filter((item) => !demoIds.has(item.id) && !isPirateOperationId(item.id))
       .map((operation) => ({ operation }));
@@ -492,8 +687,27 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
       battleReportId: entry.reportId,
       completed: entry,
     }));
-    return [...live, ...completed, ...normal];
-  }, [state.items, pirateContacts, completedPirateOperations]);
+    const exploration: OperationRow[] = explorationContacts.map((entry) => {
+      const {node, occupancy} = entry;
+      return {
+      exploration: entry,
+      operation: {
+        id: 'explore:' + node.id,
+        archetype: node.kind === 'anomaly' ? 'anomaly_scan' : 'derelict_recovery',
+        category: node.kind === 'anomaly' ? 'science' : 'exploration',
+        title: node.name.toUpperCase(),
+        briefing: node.description,
+        state: entry.stage,
+        threat: explorationProfile(node.kind as 'unique' | 'anomaly', node.special?.profileVariant ?? 1).risk,
+        intel: entry.recon?.success ? 3 : 0, source: 'deep_scan',
+        location: { kind: 'coordinates', coordinates: '[' + node.coordinate.galaxy + ':' + node.coordinate.system + ':' + node.coordinate.position + ']' },
+        objective: { label: occupancy === 'free' ? 'Отправить экспедицию' : 'Объект уже занят' },
+        modifiers: [], rewardPreview: {},
+      },
+      };
+    });
+    return [...live, ...exploration, ...completed, ...normal];
+  }, [state.items, pirateContacts, explorationContacts, completedPirateOperations]);
 
   const visibleRows = useMemo(() => operationRows.filter(({ operation }) => operation.state === tab), [operationRows, tab]);
   const selectedRow = visibleRows.find(({ operation }) => operation.id === selectedId) ?? null;
@@ -510,7 +724,8 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
 
   const accept = (operationId: OperationId) => {
     const row = operationRows.find(({ operation }) => operation.id === operationId);
-    if (row?.contact) onPirateAccept?.(row.contact);
+    if (row?.exploration) onExplorationAccept?.(row.exploration.node);
+    else if (row?.contact) onPirateAccept?.(row.contact);
     else onAccept(operationId);
     setTab('active');
     setSelectedId(operationId);
@@ -518,7 +733,8 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
 
   const cancel = (operationId: OperationId) => {
     const row = operationRows.find(({ operation }) => operation.id === operationId);
-    if (row?.contact) onPirateCancel?.(row.contact);
+    if (row?.exploration) onExplorationCancel?.(row.exploration.node.id);
+    else if (row?.contact) onPirateCancel?.(row.contact);
     else onCancel(operationId);
     setTab('available');
     setSelectedId(operationId);
@@ -589,6 +805,7 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
                 key={row.operation.id}
                 operation={row.operation}
                 contact={row.contact}
+                exploration={row.exploration}
                 nowMs={nowMs}
                 pirateCheckDelayMs={pirateCheckDelayMs}
                 pirateRaidRoll={row.contact ? pirateRaidRolls[JSON.stringify([pirateOwnerId,row.contact.contactCycleKey])] : undefined}
@@ -601,6 +818,15 @@ export function OperationsView({ state, onAccept, onCancel, onReveal, onOpenFlee
         <OperationDossier
           operation={selectedRow?.operation ?? null}
           pirateContact={selectedRow?.contact}
+          exploration={selectedRow?.exploration}
+          onExpedition={onExpedition}
+          onExplorationAttack={onExplorationAttack}
+          onBot01Occupy={onBot01Occupy}
+          onExplorationAccept={(node) => accept('explore:' + node.id)}
+          onExplorationCancel={(id) => cancel('explore:' + id)}
+          onExplorationRecon={onExplorationRecon}
+          onExplorationUniverse={onExplorationUniverse}
+          onExplorationReport={onExplorationReport}
           battleReportId={selectedRow?.battleReportId}
           completed={selectedRow?.completed}
           nowMs={nowMs}

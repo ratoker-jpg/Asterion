@@ -40,6 +40,8 @@ jobs:
         run: npm run test:flights
       - name: Operations domain tests
         run: npm run test:operations
+      - name: PR92 exploration domain tests
+        run: npm run test:exploration
       - name: Command domain tests
         run: npm run test:command
       - name: Reports domain tests

@@ -387,8 +387,14 @@ async function readQaState(win) {
         text: node.textContent?.replace(/\s+/g, ' ').trim() ?? '',
         top: node.getBoundingClientRect().top,
         bottom: node.getBoundingClientRect().bottom,
+        left: node.getBoundingClientRect().left,
+        right: node.getBoundingClientRect().right,
+        scrollWidth: node.scrollWidth,
+        clientWidth: node.clientWidth,
       })),
       fleetFlightPanelBottom: document.querySelector('.fleet-flights-v1')?.getBoundingClientRect().bottom ?? -1,
+      fleetFlightPanelLeft: document.querySelector('.fleet-flights-v1')?.getBoundingClientRect().left ?? -1,
+      fleetFlightPanelRight: document.querySelector('.fleet-flights-v1')?.getBoundingClientRect().right ?? -1,
       fleetRosterOverflow: (() => {
         const node = document.querySelector('[data-qa-fleet-roster]');
         return node ? node.scrollHeight > node.clientHeight + 2 : false;
@@ -662,8 +668,16 @@ async function runViewport(width, height) {
     if (JSON.stringify(fleetRoot.fleetRoster) !== JSON.stringify(expectedFleetRoster)) throw new Error(`${label}: current fleet roster UI mismatch ${JSON.stringify(fleetRoot.fleetRoster)}`);
     if (fleetRoot.fleetBaseCardTag === 'BUTTON') throw new Error(`${label}: fleet base card must be informational, not a button`);
     if (fleetRoot.fleetRosterOverflow || fleetRoot.fleetRosterOverflowY !== 'visible') throw new Error(`${label}: fleet roster still owns an internal scrollbar ${JSON.stringify(fleetRoot)}`);
-    const expectedFleetFlightActions = ['ШПИОНСКИЕ ОТЧЁТЫ', 'ЗАПУСТИТЬ АТАКУ BOT 01'];
-    if (JSON.stringify(fleetRoot.fleetFlightActions.map((action) => action.text)) !== JSON.stringify(expectedFleetFlightActions) || fleetRoot.fleetFlightActions.some((action) => action.bottom > fleetRoot.fleetFlightPanelBottom + 2 || action.bottom <= action.top)) {
+    const expectedFleetFlightActions = ['ШПИОНСКИЕ ОТЧЁТЫ', 'ЗАПУСТИТЬ АТАКУ BOT 01', 'BOT 01 · ЗАХВАТИТЬ ОБЪЕКТ (ТЕСТ)'];
+    const actions = fleetRoot.fleetFlightActions;
+    const clipped = actions.some((action) => action.bottom > fleetRoot.fleetFlightPanelBottom + 2
+      || action.top < 0 || action.bottom <= action.top
+      || action.left < fleetRoot.fleetFlightPanelLeft - 2 || action.right > fleetRoot.fleetFlightPanelRight + 2
+      || action.clientWidth < action.scrollWidth - 2);
+    const overlapping = actions.some((action, index) => actions.some((other, otherIndex) => otherIndex > index
+      && action.left < other.right - 1 && action.right > other.left + 1
+      && action.top < other.bottom - 1 && action.bottom > other.top + 1));
+    if (JSON.stringify(actions.map((action) => action.text)) !== JSON.stringify(expectedFleetFlightActions) || clipped || overlapping) {
       throw new Error(`${label}: fleet flight action buttons are clipped or missing ${JSON.stringify(fleetRoot)}`);
     }
     await capture(win, directory, 'test-fleet-roster');

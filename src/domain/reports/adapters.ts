@@ -7,6 +7,8 @@ import {
 } from '../combat/report.ts';
 import type { CommandState, JointOperation } from '../command/types.ts';
 import type { FlightRecord } from '../flights/types.ts';
+import { explorationMailboxReports } from '../exploration/report-items.ts';
+import type { ExplorationState } from '../exploration/ledger.ts';
 import { pirateFlightAbsenceReports } from '../pirates/flight-report.ts';
 import type { OperationInstance, OperationsState } from '../operations/types.ts';
 import type {
@@ -433,6 +435,8 @@ export function buildReportsFeed(
   gasExtractionArrivalReports: readonly GasExtractionArrivalReport[] = [],
   pirateReconReports: readonly PirateReconReport[] = [],
   pirateFlights: readonly FlightRecord[] = [],
+  exploration?: ExplorationState,
+  playerOwnerId?: string,
 ): ReportItem[] {
   const operationByBattleId = new Map(
     operations.items
@@ -460,8 +464,18 @@ export function buildReportsFeed(
   const recyclerItems = recyclerArrivalReports.map(recyclerArrivalReportToReportItem);
   const gasExtractionItems = gasExtractionArrivalReports.map(gasExtractionArrivalReportToReportItem);
   const pirateReconItems = pirateReconReports.map(pirateReconReportToReportItem);
+  // Existing legacy consumers keep the historical System projection.
+  // In the live player mailbox MOVE these canonical single-event notifications to
+  // Flights instead of cloning them: no double unread count or duplicate messages.
+  // Preserve exact report ids so users' read/hidden metadata survives the move.
+  const extractionSystemItems = playerOwnerId ? [] : [...recyclerItems, ...gasExtractionItems];
+  const arrivalFlightItems: ReportItem[] = playerOwnerId ? [...recyclerItems, ...gasExtractionItems].map(item => ({
+    ...item,
+    category: 'flights',
+    typeLabel: 'Прибытие добывающего флота',
+  })) : [];
 
-  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems, ...recyclerItems, ...gasExtractionItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights)].sort((a, b) => {
+  return [...battleItems, ...systemItems, ...allianceItems, ...espionageItems, ...overpopulationItems, ...extractionSystemItems, ...pirateReconItems, ...pirateFlightAbsenceReports(pirateFlights), ...explorationMailboxReports(exploration, pirateFlights, playerOwnerId), ...arrivalFlightItems].sort((a, b) => {
     if (a.timestamp && b.timestamp) return Date.parse(b.timestamp) - Date.parse(a.timestamp);
     if (!a.timestamp && b.timestamp) return -1;
     if (a.timestamp && !b.timestamp) return 1;

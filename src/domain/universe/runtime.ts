@@ -20,6 +20,7 @@ import type {
   UniverseTimedObjectState,
 } from './types.ts';
 import { ASTEROID_GAS_CAP, initializeAsteroidGasState } from './asteroid-gas.ts';
+import { explorationContactId, explorationProfile, profileVariantForArt } from '../exploration/model.ts';
 import { getPositionCoefficientPercent, getSunEfficiencyPercent } from '../energy/runtime.ts';
 import type { RuntimeMode } from '../runtime/mode.ts';
 import { DEFAULT_ALLIANCE_MEMBERS, DEFAULT_ALLIANCE_PROFILE } from '../command/catalog.ts';
@@ -773,6 +774,36 @@ function ensureTimedCycles(kind: TimedObjectKind, galaxy: number, system: number
 
 export type UniverseTimedObjectSchedule = TimedObjectSchedule;
 
+/** Canonical timed-object cycles that could have generated risk rolls during an interval.
+ * A cycle beginning before `afterMs` is included only while its contact could
+ * still be active; callers should apply their own per-cycle event schedule. */
+export function getUniverseTimedObjectCyclesBetween(
+  kind: 'unique' | 'anomaly',
+  galaxy: number,
+  system: number,
+  afterMs: number,
+  throughMs: number,
+): readonly UniverseTimedObjectSchedule[] {
+  if (!Number.isSafeInteger(afterMs) || !Number.isSafeInteger(throughMs) || throughMs <= afterMs) return [];
+  const config = timedObjectConfig(kind);
+  const cycles = ensureTimedCycles(kind, galaxy, system, throughMs);
+  const earliestRelevantStart = afterMs - config.maxLifetimeMs;
+  let lo = 0;
+  let hi = cycles.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (cycles[mid]!.startAt < earliestRelevantStart) lo = mid + 1;
+    else hi = mid;
+  }
+  const result: UniverseTimedObjectSchedule[] = [];
+  for (let index = lo; index < cycles.length; index += 1) {
+    const cycle = cycles[index]!;
+    if (cycle.startAt > throughMs) break;
+    if (cycle.present && cycle.expiresAt > afterMs) result.push(cycle);
+  }
+  return result;
+}
+
 export function getUniverseTimedObjectSchedule(
   kind: TimedObjectKind,
   galaxy: number,
@@ -856,6 +887,7 @@ function activeTimedObjectSchedule(
 
 function timedState(schedule: TimedObjectSchedule): UniverseTimedObjectState {
   return {
+    startAt: schedule.startAt,
     cycleIndex: schedule.cycleIndex,
     expiresAt: schedule.expiresAt,
     respawnAt: schedule.respawnAt,
@@ -899,17 +931,31 @@ function injectTimedObject(
         }),
       } satisfies UniversePirateState,
     }
-    : {
-      id: `${kind}-${system.galaxy}-${system.system}`,
-      coordinate: target.coordinate,
-      kind,
-      name: kind === 'unique' ? ['Осколки Эдема', 'Сердце Бездны', 'Кристаллический разлом'][(system.system + schedule.cycleIndex) % 3] : 'Аномалия «Люмен»',
-      art: pickAsset(kind === 'unique' ? assets.uniqueArts : assets.anomalyArts, system.system + schedule.cycleIndex, `${kind}-default`),
-      statusLabel: KIND_LABELS[kind],
-      description: KIND_DESCRIPTIONS[kind],
-      known: true,
-      special: state,
-    };
+    : (() => {
+      const explorationKind = kind as 'unique' | 'anomaly';
+      const arts = explorationKind === 'unique' ? assets.uniqueArts : assets.anomalyArts;
+      // Gameplay profile must not depend on the caller supplying browser image assets.
+      const artIndex = (system.system + schedule.cycleIndex) % (explorationKind === 'unique' ? 19 : 10);
+      const profileVariant = profileVariantForArt(explorationKind, artIndex);
+      const profile = explorationProfile(explorationKind, profileVariant);
+      const contactCycleKey = explorationContactId({
+        kind: explorationKind,
+        coordinate: target.coordinate,
+        cycleIndex: schedule.cycleIndex,
+        startAt: schedule.startAt,
+      });
+      return {
+        id: contactCycleKey,
+        coordinate: target.coordinate,
+        kind: explorationKind,
+        name: profile.name,
+        art: pickAsset(arts, artIndex, `${kind}-default`),
+        statusLabel: KIND_LABELS[kind],
+        description: KIND_DESCRIPTIONS[kind],
+        known: true,
+        special: { ...state, contactCycleKey, profileVariant },
+      };
+    })();
   return {
     ...system,
     positions: system.positions.map((item) => item.id === target.id ? node : item),

@@ -16,6 +16,7 @@ import type { ResourceCreditResult } from '../domain/resources/credit.ts';
 import type { FleetProductionCompletion } from '../domain/fleet/production.ts';
 import { reconcileFlights, type FlightReconcileEvent } from './flights.ts';
 import { selectDuePirateRolls, resolveDuePirateRoll } from './pirate-raids.ts';
+import { advanceExplorationNpcProgress, selectDueExplorationNpcRolls, resolveDueExplorationNpcRoll } from './exploration-npc.ts';
 import { createDefaultPirateState } from '../domain/pirates/mission.ts';
 import {
   reconcileAllPlanetOverpopulation,
@@ -25,6 +26,8 @@ import { getEspionageState, getEspionageTargets } from '../domain/espionage/runt
 import { collectOrbitalDebrisAtCoordinate, getOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
 import { advanceUniverseAsteroidSimulationAt, getNextUniverseAsteroidTransitionAt } from '../domain/universe/asteroid-simulation.ts';
 import { advanceAsteroidGasAt } from '../domain/universe/asteroid-gas.ts';
+import { selectOwnerScores } from '../domain/rating/scoring.ts';
+import { createExplorationState, recordHighestExplorationScore } from '../domain/exploration/ledger.ts';
 
 export type RuntimeReconcileEvent =
   | { kind: 'science'; scienceIds: ScienceId[] }
@@ -58,6 +61,9 @@ export function reconcileRuntime(
   if (!Number.isSafeInteger(pirateCursor) || pirateCursor < 0) pirateCursor = context.now;
   let raidDueEvents = selectDuePirateRolls(next, pirateCursor, context.now, context.mode, context.testTimeScale);
   let raidIndex = 0;
+  const npcCursor = next.exploration?.npcProcessedAt ?? Math.max(0,context.now - 20*60_000);
+  const npcDueEvents = selectDueExplorationNpcRolls(next,npcCursor,context.now,context.mode);
+  let npcIndex = 0;
   let selectedCredit: ResourceCreditResult | null = null;
   const emptyCredit = (): ResourceCreditResult => ({
     wallet: { metal: 0, minerals: 0, gas: 0, energy: 0 },
@@ -156,6 +162,13 @@ export function reconcileRuntime(
         ? flight.arrivalAt
         : flight.phase === 'returning'
           ? flight.returnAt
+          : flight.phase === 'arrived' && flight.missionId === 'expedition'
+            ? (() => {
+              const contact = flight.operationId ? next.exploration?.contacts[flight.operationId] : undefined;
+              if (!contact?.claim || contact.claim.flightId !== flight.id) return flight.arrivalAt;
+              return Math.min(contact.expiresAt, contact.claim.pendingRecallAt === undefined
+                ? Number.POSITIVE_INFINITY : contact.claim.pendingRecallAt + 30_000);
+            })()
           : undefined;
       if (checkpoint === undefined || !Number.isFinite(checkpoint)
         || checkpoint > context.now || checkpoint <= after) continue;
@@ -231,18 +244,21 @@ export function reconcileRuntime(
   while (true) {
     const flightCheckpoint = nextDueFlightCheckpoint(processedThrough);
     while (raidIndex < raidDueEvents.length && raidDueEvents[raidIndex]!.at <= processedThrough) raidIndex++;
+    while (npcIndex < npcDueEvents.length && npcDueEvents[npcIndex]!.at <= processedThrough) npcIndex++;
     const pirateCheckpoint = raidDueEvents[raidIndex]?.at;
+    const npcCheckpoint = npcDueEvents[npcIndex]?.at;
     const nextAsteroidCheckpoint = next.asteroidSimulation
       ? getNextUniverseAsteroidTransitionAt(next.asteroidSimulation, context.now)
       : null;
     const asteroidCheckpoint = nextAsteroidCheckpoint ?? undefined;
-    const checkpoint = [flightCheckpoint, asteroidCheckpoint, pirateCheckpoint]
+    const checkpoint = [flightCheckpoint, asteroidCheckpoint, pirateCheckpoint, npcCheckpoint]
       .filter((point): point is number => point !== undefined)
       .reduce<number | undefined>((min, point) => min === undefined ? point : Math.min(min,point), undefined);
     if (checkpoint === undefined) break;
     const asteroidIsDue = asteroidCheckpoint === checkpoint;
     const flightIsDue = flightCheckpoint === checkpoint;
     const pirateIsDue = pirateCheckpoint === checkpoint;
+    const npcIsDue = npcCheckpoint === checkpoint;
     // Advancing the cursor before processing prevents a due-but-unmodified
     // record at this timestamp from creating a zero-progress loop. Flights
     // created by this checkpoint can still contribute a later return time.
@@ -251,7 +267,7 @@ export function reconcileRuntime(
     // first; flight arrivals and battles then observe the post-transition
     // free-orbit state. Flight ties retain reconcileFlights' stable ID order.
     if (asteroidIsDue) applyAsteroidTransitionsAt(checkpoint);
-    if (flightIsDue || pirateIsDue) {
+    if (flightIsDue || pirateIsDue || npcIsDue) {
       advanceAsteroidGasForSimulationAt(checkpoint);
       const overpopulation = reconcileAllPlanetOverpopulation(next, checkpoint);
       next = overpopulation.state;
@@ -272,6 +288,14 @@ export function reconcileRuntime(
           const roll = next.pirate?.raidRolls?.[JSON.stringify([event.ownerId,event.contactCycleKey])];
           events.push({kind:'pirate-raid-check', ownerId:event.ownerId,
             contactCycleKey:event.contactCycleKey,...(roll?.flightId?{flightId:roll.flightId}:{})});
+        }
+      }
+      if (npcIsDue) {
+        // At a tie, all arriving flights resolve FIRST. NPC competition uses
+        // only the resulting real contact owner and NPC's own hangar.
+        while(npcIndex<npcDueEvents.length && npcDueEvents[npcIndex]!.at===checkpoint){
+          const due=npcDueEvents[npcIndex++]!;
+          next=resolveDueExplorationNpcRoll(next,due,context.testTimeScale);
         }
       }
       if (next.pirate?.contact.defeatedCycles !== defeatedBefore) {
@@ -296,6 +320,15 @@ export function reconcileRuntime(
     }
   }
   next = reconcileAllPlanetOverpopulation(next, context.now).state;
+  // Preserve the all-time resource high-water mark across losses, fleet launches
+  // and reloads. A later weak expedition must never erase an earlier real peak.
+  const currentScore = selectOwnerScores(next)[next.profile.playerId]?.resourcePoints ?? 0;
+  const previousLedger = next.exploration ?? createExplorationState();
+  const scoredLedger = recordHighestExplorationScore(previousLedger, next.profile.playerId, currentScore);
+  const updatedLedger = context.mode === 'production'
+    ? advanceExplorationNpcProgress(scoredLedger,npcCursor,context.now)
+    : scoredLedger;
+  if (updatedLedger !== previousLedger) next = {...next, exploration: updatedLedger};
   const completedCursor = Math.max(pirateCursor, context.now);
   if (next.pirate?.raidProcessedAt !== completedCursor) {
     next = {...next, pirate: {...(next.pirate ?? createDefaultPirateState()),raidProcessedAt:completedCursor}};

@@ -13,6 +13,8 @@ export type AttackLaunchSnapshot = {
   attackerShipLevels: Partial<Record<ShipId, number>>;
   attackerCommanderLevels: Partial<Record<CommanderId, number>>;
   attackerPriority: CommanderId[];
+  /** Defense commander order captured with an exploration expedition. Absent on legacy attacks. */
+  defenderPriority?: CommanderId[];
 };
 
 export type AttackLoot = {

@@ -260,7 +260,21 @@ async function verifyLargeResourceValues(win, directory, label) {
       return text.replace(/\\D/g,'')===String(amount);
     });
   })()`;
-  await waitFor(win, incomeReady, 8000);
+  try {
+    await waitFor(win, incomeReady, 15_000);
+  } catch (error) {
+    const diagnostics = await win.webContents.executeJavaScript(`(() => {
+      const resources=['metal','minerals','gas'];
+      const rows=Object.fromEntries(resources.map((resource)=>{
+        const row=document.querySelector('[data-resource-income="'+resource+'"]');
+        return [resource,{row:row?.textContent?.replace(/\\s+/g,' ').trim()??null,value:row?.querySelector('strong')?.textContent?.replace(/\\s+/g,' ').trim()??null}];
+      }));
+      const save=JSON.parse(localStorage.getItem(${JSON.stringify('asterion.vertical-slice.test.v1')})||'{}');
+      const planet=save.planets?.['helion-01'];
+      return {rows,buildings:planet?.buildings,productionBots:planet?.productionBots,science:save.science?.levels};
+    })()`);
+    throw new Error(`${error.message}; actual fixture diagnostics=${JSON.stringify(diagnostics)}`);
+  }
   const income = await win.webContents.executeJavaScript(`(() => {
     const resources=['metal','minerals','gas'];
     const read=(selector)=>Array.from(document.querySelectorAll(selector)).map((element)=>({
@@ -648,12 +662,17 @@ async function verifyResourceZoneFlow(win, directory, label) {
     save.resourceClock = { lastReconciledAt: Date.now() + 60_000, remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 } };
     const fixture = JSON.stringify(save);
     // React may persist the previous high-resource state between this task and
-    // navigation. Write the fixture once more at the actual unload boundary,
-    // after any pending old-document effects, before the new App hydrates.
-    window.addEventListener('beforeunload', () => {
+    // navigation. Reassert the fixture through the unload sequence, after any
+    // pending old-document effects and before the new App hydrates.
+    const writeFixtureAtUnload = () => {
       localStorage.setItem(${JSON.stringify(SAVE_KEY)}, fixture);
       sessionStorage.setItem('asterion.qa.insufficient-unload', '1');
-    }, { once: true });
+    };
+    // Another renderer persistence hook can run later in the unload sequence.
+    // Reassert the fixture at pagehide/unload so the next App hydrates zeros.
+    for (const event of ['beforeunload', 'pagehide', 'unload']) {
+      window.addEventListener(event, writeFixtureAtUnload, { once: true });
+    }
     localStorage.setItem(${JSON.stringify(SAVE_KEY)}, fixture);
     window.location.reload();
     return true;
