@@ -136,3 +136,4 @@ jobs:
             exit 1
           fi
           echo "Published PR preview responds, assets load, and React viewport renders."
+          timeout 120s node tools/pages-preview-qa.mjs "${PREVIEW}/?mode=test&sha=${PR_SHA}" "${CHROME}"
