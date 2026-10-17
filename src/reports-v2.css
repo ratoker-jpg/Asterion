@@ -843,6 +843,35 @@
 .reports-view.ops6 .pirate-recon-ship-identity > span:last-child { color: #e6edf0; font-size: 12px; }
 .reports-view.ops6 .pirate-recon-ship > strong { color: var(--reports-v2-tone); font-size: 14px; }
 
+/* High signal summaries for existing system and pirate records */
+.reports-view.ops6 .overpopulation-report-summary,
+.reports-view.ops6 .pirate-recon-report-card {
+  border-color: color-mix(in srgb, var(--reports-v2-tone) 24%, rgba(126, 200, 220, .12));
+}
+
+.reports-view.ops6 .overpopulation-report-summary .spy-report-summary-grid > div:first-child,
+.reports-view.ops6 .pirate-recon-report-card:first-of-type .spy-report-summary-grid > div:nth-child(2) {
+  background: color-mix(in srgb, var(--reports-v2-tone) 7%, rgba(0, 0, 0, .18));
+}
+
+.reports-view.ops6 .overpopulation-report-summary .spy-report-summary-grid > div:first-child dd strong {
+  color: var(--reports-v2-tone);
+  font-size: 18px;
+}
+
+.reports-view.ops6 .overpopulation-report-losses .spy-report-entity > b { color: var(--reports-v2-red); }
+.reports-view.ops6 .pirate-recon-report-card header strong { color: var(--reports-v2-tone); }
+.reports-view.ops6 .reports-dossier--pirate-recon-failure { --reports-v2-tone: var(--reports-v2-red); }
+.reports-view.ops6 .reports-dossier--pirate-recon-no-target { --reports-v2-tone: var(--reports-v2-amber); }
+.reports-view.ops6 .reports-dossier--pirate-recon-success { --reports-v2-tone: var(--reports-v2-green); }
+.reports-view.ops6 .pirate-recon-report-list { border-top: 0; }
+.reports-view.ops6 .pirate-recon-ship { border-bottom-color: rgba(126, 200, 220, .12); }
+.reports-view.ops6 .pirate-recon-ship-identity > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reports-view.ops6 .spy-report-link { color: var(--reports-v2-cyan); }
+.reports-view.ops6 .spy-report-link:hover,
+.reports-view.ops6 .spy-report-link:focus-visible { color: #fff; }
+.reports-view.ops6 .spy-report-empty { color: var(--reports-v2-muted); font-size: 12px; }
+
 @media (max-width: 1500px) {
   .reports-view.ops6 .spy-report-entity-grid { grid-template-columns: 1fr; }
   .reports-view.ops6 .spy-report-resource-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
