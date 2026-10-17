@@ -774,6 +774,36 @@ function ensureTimedCycles(kind: TimedObjectKind, galaxy: number, system: number
 
 export type UniverseTimedObjectSchedule = TimedObjectSchedule;
 
+/** Canonical timed-object cycles that could have generated risk rolls during an interval.
+ * A cycle beginning before `afterMs` is included only while its contact could
+ * still be active; callers should apply their own per-cycle event schedule. */
+export function getUniverseTimedObjectCyclesBetween(
+  kind: 'unique' | 'anomaly',
+  galaxy: number,
+  system: number,
+  afterMs: number,
+  throughMs: number,
+): readonly UniverseTimedObjectSchedule[] {
+  if (!Number.isSafeInteger(afterMs) || !Number.isSafeInteger(throughMs) || throughMs <= afterMs) return [];
+  const config = timedObjectConfig(kind);
+  const cycles = ensureTimedCycles(kind, galaxy, system, throughMs);
+  const earliestRelevantStart = afterMs - config.maxLifetimeMs;
+  let lo = 0;
+  let hi = cycles.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (cycles[mid]!.startAt < earliestRelevantStart) lo = mid + 1;
+    else hi = mid;
+  }
+  const result: UniverseTimedObjectSchedule[] = [];
+  for (let index = lo; index < cycles.length; index += 1) {
+    const cycle = cycles[index]!;
+    if (cycle.startAt > throughMs) break;
+    if (cycle.present && cycle.expiresAt > afterMs) result.push(cycle);
+  }
+  return result;
+}
+
 export function getUniverseTimedObjectSchedule(
   kind: TimedObjectKind,
   galaxy: number,

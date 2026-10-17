@@ -1410,6 +1410,9 @@ export function dispatchFlight(
   }
 
   const science = state.science.levels;
+  const explorationDefenseSnapshot = command.missionId === 'expedition'
+    ? createAttackLaunchSnapshot(state, originPlanetId, 12, {})
+    : undefined;
   const domainResult = dispatchDomainFlight(flights, {
     requestId,
     missionId: command.missionId,
@@ -1479,6 +1482,7 @@ export function dispatchFlight(
       selectedCommanders: attackCommanders,
       attackSnapshot,
     } : {}),
+    ...(explorationDefenseSnapshot ? { attackSnapshot: explorationDefenseSnapshot } : {}),
     ...(command.missionId === 'deployment' && deploymentTarget ? {
       destinationPlanetId: deploymentTarget.planetId,
       targetPlanetName: deploymentTarget.runtime?.name,
@@ -2534,8 +2538,15 @@ export function reconcileFlights(
             next = {...next,flights:updateFlight(next.flights,arrived)};
             events.push({flight:arrived,status:'arrived',notice:'Победа в бою за объект. Захвачено 30% накопленного груза в пределах уцелевшего трюма. Добыча продолжается.'});
           } else {
-            const returned = beginDomainFlightReturn(next.flights,current.id,arrivalAt,'normal-return');
-            const retreat = returned.records.find(item=>item.id === current.id)!;
+            const latest = next.flights.records.find(item=>item.id === current.id)!;
+            const noSurvivors = Object.keys(latest.selectedShips).length === 0
+              && !Object.values(latest.selectedCommanders ?? {}).some(count => Number.isSafeInteger(count) && count > 0);
+            const returned = noSurvivors
+              ? next.flights
+              : beginDomainFlightReturn(next.flights,current.id,arrivalAt,'normal-return');
+            const retreat = noSurvivors
+              ? {...latest,phase:'completed' as const,arrivedAt:arrivalAt,completedAt:arrivalAt,completionReason:'mission-failed' as const}
+              : returned.records.find(item=>item.id === current.id)!;
             const flight:FlightRecord={...retreat,arrivedAt:arrivalAt,attackResolution:{
               reportId:resolved.report.id,resolvedAt:arrivalAt,debris:resolved.report.debris ?? 0,
               loot:{metal:0,minerals:0,gas:0,debris:0},

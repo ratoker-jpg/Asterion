@@ -50,6 +50,129 @@ async function reload(win) {
   await settle(win);
 }
 
+async function readOwnedPlanetLocations(win) {
+  return win.webContents.executeJavaScript(`(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+    return Object.fromEntries(Object.entries(save.planets || {}).map(([id, planet]) => [id, {
+      galaxy: planet.universeGalaxy || 1,
+      system: planet.universeSystem || 1,
+      position: planet.universePosition || 1,
+    }]));
+  })()`);
+}
+
+async function setOwnedPlanetLocations(win, locations) {
+  const changed = await win.webContents.executeJavaScript(`(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}');
+    if (!save.planets?.['helion-01']) return false;
+    const locations = ${JSON.stringify(locations)};
+    for (const [id, location] of Object.entries(locations)) {
+      const planet = save.planets?.[id];
+      if (!planet) continue;
+      planet.universeGalaxy = location.galaxy;
+      planet.universeSystem = location.system;
+      planet.universePosition = location.position;
+    }
+    localStorage.setItem(${JSON.stringify(SAVE_KEY)}, JSON.stringify(save));
+    return true;
+  })()`);
+  if (!changed) throw new Error('Could not move the QA colonies for the reachability fixture.');
+  await reload(win);
+  await win.webContents.executeJavaScript(`void (Date.now = () => ${QA_UNIVERSE_NOW});`);
+  await clickPrimary(win, 'universe');
+}
+
+async function readHomeworldLocation(win) {
+  return win.webContents.executeJavaScript(`(() => { const home = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').planets?.['helion-01'] || {}; return { galaxy: home.universeGalaxy || 1, system: home.universeSystem || 1, position: home.universePosition || 1 }; })()`);
+}
+
+async function firstEmptyPosition(win, system) {
+  await selectSystem(win, system);
+  const position = await win.webContents.executeJavaScript(`(() => {
+    const label = document.querySelector('[data-qa-universe-kind="empty"]')?.getAttribute('aria-label') || '';
+    const match = label.match(/\\[(\\d+):(\\d+):(\\d+)\\]/);
+    return match ? Number(match[3]) : 0;
+  })()`);
+  if (!position) throw new Error(`Could not find an empty homeworld slot in system ${system}.`);
+  return position;
+}
+
+async function verifyExplorationReachability(win, directory, label, kind, selector, system, artPrefixes) {
+  const originalLocations = await readOwnedPlanetLocations(win);
+  const outsideSystem = system + 6 <= 40 ? system + 6 : system - 6;
+  if (Math.abs(outsideSystem - system) <= 5) throw new Error(`${label}: could not build an out-of-radius QA location for ${kind}`);
+
+  const outsidePosition = await firstEmptyPosition(win, outsideSystem);
+  const isolatedLocations = {
+    ...originalLocations,
+    'helion-01': { galaxy: 1, system: outsideSystem, position: outsidePosition },
+  };
+  const safeSystems = system <= 20
+    ? Array.from({ length: 40 - (system + 5) }, (_, index) => 40 - index)
+    : Array.from({ length: system - 6 }, (_, index) => index + 1);
+  const reservedSystems = new Set([outsideSystem]);
+  for (const planetId of Object.keys(originalLocations).filter(id => id !== 'helion-01')) {
+    let relocated = false;
+    for (const safeSystem of safeSystems) {
+      if (reservedSystems.has(safeSystem)) continue;
+      const safePosition = await firstEmptyPosition(win, safeSystem);
+      isolatedLocations[planetId] = { galaxy: 1, system: safeSystem, position: safePosition };
+      reservedSystems.add(safeSystem);
+      relocated = true;
+      break;
+    }
+    if (!relocated) throw new Error(`${label}: could not isolate all owned colonies from ${kind} at system ${system}`);
+  }
+  await setOwnedPlanetLocations(win, isolatedLocations);
+  const persistedHomeworld = await readHomeworldLocation(win);
+  const persistedOwnedCoordinates = await readOwnedPlanetLocations(win);
+  if (persistedHomeworld.system !== outsideSystem || persistedHomeworld.position !== outsidePosition) {
+    throw new Error(`${label}: reachability fixture homeworld location did not survive reload ${JSON.stringify({ expected: { galaxy: 1, system: outsideSystem, position: outsidePosition }, persistedHomeworld, persistedOwnedCoordinates })}`);
+  }
+  if (Object.values(persistedOwnedCoordinates).some(location => location.galaxy === 1 && Math.abs(location.system - system) <= 5)) {
+    throw new Error(`${label}: out-of-radius fixture still has an owned colony within five systems ${JSON.stringify({ system, persistedOwnedCoordinates })}`);
+  }
+  await selectSystem(win, system);
+  await clickObject(win, selector);
+  const outside = await inspectorSnapshot(win);
+  const outsideRecon = outside.specialActions.find(action => action.action === 'exploration-recon');
+  const outsideExpedition = outside.specialActions.find(action => action.action === 'expedition');
+  checkCopy(outside);
+  await checkModal(win);
+  if (outside.kind !== kind || !outside.text.includes('ВНЕ РАДИУСА ЭКСПЕДИЦИИ')
+    || !outsideRecon?.disabled || !outsideExpedition?.disabled
+    || !outsideExpedition.title.includes('пяти систем')
+    || !outside.specialArt.loaded || !hasBundledImageAsset(outside.specialArt.src, artPrefixes)) {
+    throw new Error(`${label}: ${kind} out-of-radius contract failed ${JSON.stringify({ outside, persistedHomeworld, persistedOwnedCoordinates })}`);
+  }
+  await capture(win, directory, `${kind}-inspector-out-of-radius`);
+  await dismissInspector(win);
+
+  const insidePosition = await firstEmptyPosition(win, system);
+  await setOwnedPlanetLocations(win, {
+    ...isolatedLocations,
+    'helion-01': { galaxy: 1, system, position: insidePosition },
+  });
+  await selectSystem(win, system);
+  await clickObject(win, selector);
+  const inside = await inspectorSnapshot(win);
+  const insideRecon = inside.specialActions.find(action => action.action === 'exploration-recon');
+  const insideExpedition = inside.specialActions.find(action => action.action === 'expedition');
+  checkCopy(inside);
+  await checkModal(win);
+  if (inside.kind !== kind || !inside.text.includes('Объект свободен')
+    || insideRecon?.disabled || insideExpedition?.disabled
+    || !inside.specialArt.loaded || inside.specialArt.src !== outside.specialArt.src
+    || !hasBundledImageAsset(inside.specialArt.src, artPrefixes)) {
+    throw new Error(`${label}: ${kind} in-radius contract failed ${JSON.stringify(inside)}`);
+  }
+  await capture(win, directory, `${kind}-inspector-in-radius`);
+  await dismissInspector(win);
+
+  await setOwnedPlanetLocations(win, originalLocations);
+  return inside;
+}
+
 async function clickPrimary(win, route) {
   const clicked = await win.webContents.executeJavaScript(`(() => {
     const button = document.querySelector('[data-qa-route="${route}"]');
@@ -898,37 +1021,25 @@ async function runViewport(width, height) {
     // UI gate.
     const anomalySystem = await findObject(win, '[data-qa-universe-kind="anomaly"]', { required: false });
     const anomaly = anomalySystem
-      ? await (async () => {
-        await clickObject(win, '[data-qa-universe-kind="anomaly"]');
-        const snapshot = await inspectorSnapshot(win);
-        checkCopy(snapshot);
-        await checkModal(win);
-        if (snapshot.kind !== 'anomaly' || !snapshot.text.includes('Аномалия') || !snapshot.text.includes('исчезнет через')
-          || !snapshot.specialActions.some(action => action.action === 'exploration-recon' && !action.disabled)
-          || !snapshot.specialActions.some(action => action.action === 'expedition' && !action.disabled)
-          || !snapshot.specialArt.loaded || !hasBundledImageAsset(snapshot.specialArt.src, ['anomaly-'])) throw new Error(`${label}: anomaly inspector contract failed ${JSON.stringify(snapshot)}`);
-        await capture(win, directory, 'anomaly-inspector');
-        await dismissInspector(win);
-        return snapshot;
-      })()
+      ? await verifyExplorationReachability(win, directory, label, 'anomaly', '[data-qa-universe-kind="anomaly"]', anomalySystem, ['anomaly-'])
       : { kind: 'not-spawned' };
 
     let uniqueSystem = 1;
-    for (const kind of ['uninhabited', 'unique']) {
-      const foundSystem = await findObject(win, `[data-qa-universe-kind="${kind}"]`);
-      if (kind === 'unique') uniqueSystem = foundSystem;
-      await clickObject(win, `[data-qa-universe-kind="${kind}"]`);
-      const special = await inspectorSnapshot(win);
-      checkCopy(special);
-      await checkModal(win);
-      if (special.kind !== kind || !special.text.includes('исчезнет через')
-        || !special.text.includes('Объект свободен')
-        || !special.specialActions.some(action => action.action === 'exploration-recon' && !action.disabled)
-        || !special.specialActions.some(action => action.action === 'expedition' && !action.disabled)
-        || (kind === 'unique' && (!special.specialArt.loaded || !hasBundledImageAsset(special.specialArt.src, ['unique-variant-', 'planet-010-', 'planet-013-', 'planet-021-'])))) throw new Error(`${label}: ${kind} inspector contract failed ${JSON.stringify(special)}`);
-      await capture(win, directory, `${kind}-inspector`);
-      await dismissInspector(win);
+    const uninhabitedSystem = await findObject(win, '[data-qa-universe-kind="uninhabited"]');
+    await clickObject(win, '[data-qa-universe-kind="uninhabited"]');
+    const uninhabited = await inspectorSnapshot(win);
+    checkCopy(uninhabited);
+    await checkModal(win);
+    if (uninhabited.kind !== 'uninhabited' || !uninhabited.specialArt.loaded
+      || !uninhabited.specialActions.some(action => action.action === 'disabled' && action.disabled)) {
+      throw new Error(`${label}: uninhabited inspector contract failed ${JSON.stringify(uninhabited)}`);
     }
+    await capture(win, directory, 'uninhabited-inspector');
+    await dismissInspector(win);
+
+    uniqueSystem = await findObject(win, '[data-qa-universe-kind="unique"]');
+    const unique = await verifyExplorationReachability(win, directory, label, 'unique', '[data-qa-universe-kind="unique"]', uniqueSystem,
+      ['unique-variant-', 'planet-010-', 'planet-013-', 'planet-021-']);
     await selectSystem(win, 1);
 
     const toggle = '[data-qa-universe-asteroids-toggle]';

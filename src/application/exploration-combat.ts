@@ -3,6 +3,7 @@ import { getCombatFactionName } from '../domain/combat/factions.ts';
 import { getFactionShipCatalog, getFactionCombatEntity } from '../domain/combat/faction-catalog.ts';
 import type { ShipId } from '../domain/combat/ids.ts';
 import { DEFAULT_COMBAT_PRIORITY } from '../domain/combat/priority.ts';
+import { createDefaultCombatTechnologies } from '../domain/combat/technologies.ts';
 import { resolveCombat } from '../domain/combat/resolver.ts';
 import type { CombatInput, CombatStackInput } from '../domain/combat/simulator.ts';
 import type { BattleReport, BattleForceSnapshot } from '../domain/combat/report.ts';
@@ -12,7 +13,7 @@ import { UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
 import { settleExplorationContest, type ExplorationArrival } from '../domain/exploration/ledger.ts';
 import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 import { getOwnerShipUpgradeLevels, replacePlanetState, type SaveState } from './contracts.ts';
-import { technologiesFromScience, calculateAttackDebris } from './attack.ts';
+import { calculateAttackDebris } from './attack.ts';
 import { expeditionMiningCapacity, updateExpeditionContact } from './exploration-flight.ts';
 import { addDebris } from '../domain/flights/cargo.ts';
 
@@ -23,7 +24,7 @@ function surviving(ships: FlightRecord['selectedShips'], force: BattleForceSnaps
     const id = stack.entityId as ShipId;
     if (id in result) result[id] = Math.max(0, validCount(result[id]) - validCount(stack.destroyed));
   }
-  return result;
+  return Object.fromEntries(Object.entries(result).filter(([, count]) => validCount(count) > 0));
 }
 function changeHomeFleet(state: SaveState, flight: FlightRecord, force: BattleForceSnapshot): SaveState {
   const planet = state.planets[flight.originPlanetId];
@@ -77,21 +78,27 @@ export function resolveExplorationAttackAtTarget(state: SaveState, flight: Fligh
   const existingReport = state.combat.reports.find(item => item.id === 'battle-exploration-' + flight.id);
   if (existingReport) return { state, report: existingReport, captured: contact.events.find(e=>e.id===flight.id+':capture')?.cargo ?? emptyExplorationCargo() };
   const attackerFaction = flight.attackSnapshot.attackerFactionId;
-  const defenderFaction = defenderFlight.attackSnapshot?.attackerFactionId ?? defenderFlight.explorationFactionId ?? state.profile.factionId as CombatFactionId;
+  const defenderSnapshot = defenderFlight.attackSnapshot;
+  const defenderFaction = defenderSnapshot?.attackerFactionId ?? defenderFlight.explorationFactionId ?? state.profile.factionId as CombatFactionId;
   const attackerStacks = stacks(flight, attackerFaction, flight.attackSnapshot.attackerShipLevels);
-  const defenderStacks = stacks(defenderFlight, defenderFaction,defenderFlight.attackSnapshot?.attackerShipLevels);
+  const defenderStacks = stacks(defenderFlight, defenderFaction, defenderSnapshot?.attackerShipLevels);
   if (attackerStacks.length === 0 || defenderStacks.length === 0) return null;
+  // A legacy flight has no launch-time combat data. Keep it loadable and resolve
+  // that one historical encounter at the old unupgraded baseline; never borrow
+  // technologies or upgrades from the player's later live save.
+  const legacyDefenderTechnologies = createDefaultCombatTechnologies();
+  const defenderCommanderLevels = defenderSnapshot?.attackerCommanderLevels
+    ?? defenderFlight.selectedCommanderLevels ?? {};
   const input: CombatInput = {
     scenarioId: 'exploration:' + flight.id,
     timestamp: new Date(at).toISOString(),
     seed: 'exploration-contest:' + flight.id + ':' + claimant.claimId,
     profileId: 'asterion-attack-v1',
     maxRounds: flight.attackSnapshot.maxRounds,
-    attackerPriority: [...DEFAULT_COMBAT_PRIORITY.attack],
-    defenderPriority: [...DEFAULT_COMBAT_PRIORITY.defense],
+    attackerPriority: [...flight.attackSnapshot.attackerPriority],
+    defenderPriority: [...(defenderSnapshot?.defenderPriority ?? DEFAULT_COMBAT_PRIORITY.defense)],
     attackerTechnologies: flight.attackSnapshot.attackerTechnologies,
-    defenderTechnologies: defenderFlight.attackSnapshot?.attackerTechnologies
-      ?? (claimant.ownerId === state.profile.playerId ? technologiesFromScience(state.science.levels) : undefined),
+    defenderTechnologies: defenderSnapshot?.attackerTechnologies ?? legacyDefenderTechnologies,
     technologyMode: 'independent',
     executionMode: 'production',
     attacker: {
@@ -105,6 +112,9 @@ export function resolveExplorationAttackAtTarget(state: SaveState, flight: Fligh
       factionId:attackerFaction,ships:attackerStacks,
     },
     defender: {
+      commanders:Object.entries(defenderFlight.selectedCommanders ?? {}).filter(([,n])=>validCount(n)>0)
+        .map(([id,n])=>({entityId:id as import('../domain/combat/ids.ts').CombatStackEntityId,
+          count:Math.min(1,validCount(n)),level:defenderCommanderLevels[id as import('../domain/combat/commanders.ts').CommanderId] ?? 0})),
       participant: {side:'defender',playerId:claimant.ownerId,playerName:claimant.ownerId === state.profile.playerId ? state.profile.displayName : claimant.ownerId === UNIVERSE_NPC_OWNER_ID ? 'Bot 01' : state.espionage?.targets?.[defenderFlight.originPlanetId]?.ownerName??claimant.ownerId,
         planetName:explorationProfile(contact.kind,contact.variant).name,coordinates:'['+[contact.coordinate.galaxy,contact.coordinate.system,contact.coordinate.position].join(':')+']',
         race:getCombatFactionName(defenderFaction)},
@@ -175,9 +185,13 @@ export function resolveExplorationAttackAtTarget(state: SaveState, flight: Fligh
     rating:recordBattleScoreAward(next.rating,report,state.profile.playerId),
     flights:{...next.flights,records:next.flights.records.map(item => {
       if(item.id === flight.id) return attackerSurvivor;
-      if(item.id === defenderFlight.id) return raw.winner === 'attacker'
-        ? {...defenderSurvivor,phase:'returning' as const,returnAt:at+defenderFlight.oneWayDurationMs,completionReason:'normal-return' as const}
-        : defenderSurvivor;
+      if(item.id === defenderFlight.id) {
+        if(raw.winner === 'attacker' && Object.keys(newDefenderShips).length > 0)
+          return {...defenderSurvivor,phase:'returning' as const,returnAt:at+defenderFlight.oneWayDurationMs,completionReason:'normal-return' as const};
+        if(Object.keys(newDefenderShips).length === 0)
+          return {...defenderSurvivor,phase:'completed' as const,completedAt:at,completionReason:'mission-failed' as const};
+        return defenderSurvivor;
+      }
       return item;
     })},
   };

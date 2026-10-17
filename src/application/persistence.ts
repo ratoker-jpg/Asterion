@@ -836,7 +836,13 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
       && Object.values(selectedCommanders ?? {}).some((quantity) => isNonNegativeInteger(quantity) && quantity > 0);
     const hasValidCommanderOnlySpaceFlight = isSpaceFlight
       && Object.values(selectedCommanders ?? {}).some((quantity) => isNonNegativeInteger(quantity) && quantity > 0);
-    if (!hasValidCommanderOnlyDeployment && !hasValidCommanderOnlySpaceFlight && item.missionId !== 'pirate-raid') return false;
+    // A resolved battle can destroy every ship in a flight. Keep that terminal
+    // record for replay/history; it no longer reserves or returns any units.
+    const terminalWreck = (item.phase === 'completed' || item.phase === 'failed')
+      && item.completionReason === 'mission-failed'
+      && (item.explorationAttack === true || item.missionId === 'expedition' && item.attackSnapshot !== undefined);
+    if (!hasValidCommanderOnlyDeployment && !hasValidCommanderOnlySpaceFlight
+      && item.missionId !== 'pirate-raid' && !terminalWreck) return false;
   }
   if (item.selectedCommanderLevels !== undefined) {
     if (!item.selectedCommanderLevels || typeof item.selectedCommanderLevels !== 'object' || Array.isArray(item.selectedCommanderLevels)) return false;
@@ -907,7 +913,8 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
         !isNonNegativeInteger((resolved.loot as Record<string, unknown>)[key])))
       return false;
   }
-  if (item.missionId === 'attack' || item.missionId === 'pirate-elimination') {
+  if (item.missionId === 'attack' || item.missionId === 'pirate-elimination'
+    || item.missionId === 'expedition' && item.attackSnapshot !== undefined) {
     const bot01Incoming = item.ownerSide === 'bot01';
     if (item.missionId === 'attack' && item.explorationAttack !== true && (destinationRecord.kind !== 'planet'
       || !isNonEmptyPersistedString(item.destinationPlanetId)
@@ -926,7 +933,10 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
     if (attackSnapshot.version !== 1
       || ![5, 8, 12].includes(attackSnapshot.maxRounds as number)
       || !['aegis', 'synod', 'veyra'].includes(String(attackSnapshot.attackerFactionId))
-      || !Array.isArray(attackSnapshot.attackerPriority)) return false;
+      || !Array.isArray(attackSnapshot.attackerPriority)
+      || attackSnapshot.defenderPriority !== undefined && (!Array.isArray(attackSnapshot.defenderPriority)
+        || attackSnapshot.defenderPriority.some((id) => !COMMANDER_IDS.includes(id as typeof COMMANDER_IDS[number]))
+        || new Set(attackSnapshot.defenderPriority).size !== attackSnapshot.defenderPriority.length)) return false;
     if (item.missionId === 'pirate-elimination') {
       const technologies = objectRecord(attackSnapshot.attackerTechnologies);
       const shipLevels = objectRecord(attackSnapshot.attackerShipLevels);

@@ -16,7 +16,7 @@ import type { ResourceCreditResult } from '../domain/resources/credit.ts';
 import type { FleetProductionCompletion } from '../domain/fleet/production.ts';
 import { reconcileFlights, type FlightReconcileEvent } from './flights.ts';
 import { selectDuePirateRolls, resolveDuePirateRoll } from './pirate-raids.ts';
-import { selectDueExplorationNpcRolls, resolveDueExplorationNpcRoll } from './exploration-npc.ts';
+import { getExplorationNpcCatchupWindow, selectDueExplorationNpcRolls, resolveDueExplorationNpcRoll } from './exploration-npc.ts';
 import { createDefaultPirateState } from '../domain/pirates/mission.ts';
 import {
   reconcileAllPlanetOverpopulation,
@@ -62,6 +62,7 @@ export function reconcileRuntime(
   let raidDueEvents = selectDuePirateRolls(next, pirateCursor, context.now, context.mode, context.testTimeScale);
   let raidIndex = 0;
   const npcCursor = next.exploration?.npcProcessedAt ?? Math.max(0,context.now - 20*60_000);
+  const npcCatchupWindow = getExplorationNpcCatchupWindow(npcCursor,context.now);
   const npcDueEvents = selectDueExplorationNpcRolls(next,npcCursor,context.now,context.mode);
   let npcIndex = 0;
   let selectedCredit: ResourceCreditResult | null = null;
@@ -326,11 +327,16 @@ export function reconcileRuntime(
   const previousLedger = next.exploration ?? createExplorationState();
   const scoredLedger = recordHighestExplorationScore(previousLedger, next.profile.playerId, currentScore);
   const currentNpcCursor=Math.max(scoredLedger.npcProcessedAt??0,context.now);
-  const hasRealNpcSource=Object.values(getEspionageTargets(next.espionage))
-    .some(owner=>owner.ownerId!==next.profile.playerId);
-  const updatedLedger = context.mode==='production' && hasRealNpcSource
-    && scoredLedger.npcProcessedAt!==currentNpcCursor
-    ? {...scoredLedger,npcProcessedAt:currentNpcCursor}:scoredLedger;
+  const skippedInterval = npcCatchupWindow.skippedInterval;
+  const changedSkippedInterval = skippedInterval !== undefined
+    && (scoredLedger.npcLastSkippedInterval?.afterExclusive !== skippedInterval.afterExclusive
+      || scoredLedger.npcLastSkippedInterval.throughInclusive !== skippedInterval.throughInclusive);
+  const npcLedgerChanged = context.mode === 'production'
+    && (scoredLedger.npcProcessedAt !== currentNpcCursor || changedSkippedInterval);
+  const updatedLedger = npcLedgerChanged
+    ? {...scoredLedger,npcProcessedAt:currentNpcCursor,
+      ...(skippedInterval ? {npcLastSkippedInterval:skippedInterval} : {})}
+    : scoredLedger;
   if (updatedLedger !== previousLedger) next = {...next, exploration: updatedLedger};
   const completedCursor = Math.max(pirateCursor, context.now);
   if (next.pirate?.raidProcessedAt !== completedCursor) {

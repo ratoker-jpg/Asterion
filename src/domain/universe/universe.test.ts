@@ -37,6 +37,7 @@ import {
   getUniverseNodeCaption,
   getUniverseOwnerRelation,
   getUniverseSlotPoint,
+  getUniverseTimedObjectCyclesBetween,
   getUniverseTimedObjectSchedule,
   BOT_01_PLANET_FIXTURES,
   resolveUniverseAsteroidCollisions,
@@ -408,6 +409,22 @@ test('timed object schedules use the confirmed lifetime, quiet period, and chanc
     if (!first.present) {
       assert.equal(second.spawnChance, Math.min(1, expected.chance + expected.step));
     }
+  }
+});
+
+test('timed-object range query returns canonical active cycles intersecting the requested interval', () => {
+  const after = Date.UTC(2026, 0, 2);
+  const through = Date.UTC(2026, 0, 3);
+  for (const kind of ['unique', 'anomaly'] as const) {
+    const expected = [];
+    for (let cycleIndex = 0; cycleIndex < 200; cycleIndex += 1) {
+      const cycle = getUniverseTimedObjectSchedule(kind, 1, 17, cycleIndex);
+      if (cycle.startAt > through) break;
+      if (cycle.present && cycle.expiresAt > after) expected.push(cycle);
+    }
+    const actual = getUniverseTimedObjectCyclesBetween(kind, 1, 17, after, through);
+    assert.deepEqual(actual, expected);
+    assert.ok(actual.every(cycle => cycle.startAt <= through && cycle.expiresAt > after));
   }
 });
 

@@ -4,19 +4,28 @@ import { createInitialSaveState, createPersistenceFacade } from './persistence.t
 import { dispatchFlight, reconcileFlights, recallFlight } from './flights.ts';
 import { reconcileRuntime } from './reconcile.ts';
 import { getPlanetResources, replacePlanetState, replacePlanetResources } from './contracts.ts';
+import type { SaveState } from './contracts.ts';
 import { getExplorationTarget, explorationTargetStatus, selectExplorationTargets, selectExplorationOperations } from './exploration.ts';
 import { acceptLiveExploration, cancelLiveExploration } from './exploration-operations.ts';
 import { explorationResourceScore } from './exploration-flight.ts';
 import { explorationMailboxReports } from '../domain/exploration/report-items.ts';
 import { reconcileExplorationContact } from '../domain/exploration/ledger.ts';
 import { dispatchBot01Exploration } from './exploration-bot01.ts';
+import { resolveExplorationAttackAtTarget } from './exploration-combat.ts';
+import { getExplorationNpcCatchupWindow, selectDueExplorationNpcRolls } from './exploration-npc.ts';
 import { getEspionageTargets } from '../domain/espionage/runtime.ts';
+import { explorationNpcAttempt, explorationProfile } from '../domain/exploration/model.ts';
 import { getOrbitalDebrisAtCoordinate, collectOrbitalDebrisAtCoordinate } from '../domain/espionage/orbital-debris.ts';
+import { getFactionShipCatalog } from '../domain/combat/faction-catalog.ts';
+import type { FlightRecord } from '../domain/flights/types.ts';
+import { getCombatFactionName } from '../domain/combat/factions.ts';
+import { resolveCombat } from '../domain/combat/resolver.ts';
+import type { CombatInput, CombatStackInput } from '../domain/combat/simulator.ts';
 
 const MINUTE = 60_000;
 const baseTime = 1_790_000_000_000;
 
-function prepare() {
+function prepare(minimumRemainingMs = 6 * MINUTE) {
   let state = createInitialSaveState('test', baseTime);
   const planet = state.planets['helion-01'];
   state = replacePlanetState(state, 'helion-01', {
@@ -26,10 +35,27 @@ function prepare() {
   for (let offset = 0; offset < 480; offset++) {
     const now = baseTime + offset * MINUTE;
     const targets = selectExplorationTargets(state, now, 'test');
-    const target = targets.find(node => node.special && node.special.expiresAt - now > 6 * MINUTE);
+    const target = targets.find(node => node.special && node.special.expiresAt - now > minimumRemainingMs);
     if (target) return { state, now, target };
   }
   throw new Error('No eligible timed exploration contact in the deterministic eight-hour fixture');
+}
+
+function productionWithRealNpcFixtures(): SaveState {
+  const production = createInitialSaveState('production', baseTime);
+  const testFixture = createInitialSaveState('test', baseTime);
+  const ownerId = 'real-npc-fixture-owner';
+  const targets = Object.fromEntries(Object.values(getEspionageTargets(testFixture.espionage)).map(source => [source.id, {
+    ...source, ownerId, ownerName: 'Existing NPC fixture', ownerProfile: testFixture.espionage?.bot01Profile,
+  }]));
+  return {
+    ...production,
+    espionage: { ...production.espionage!, targets },
+    exploration: {
+      ...production.exploration!,
+      highestScoresByOwner: { [production.profile.playerId]: 100_000, [ownerId]: 100_000 },
+    },
+  };
 }
 
 test('expedition selector is canonically visible, bounded and does not invent occupied targets', () => {
@@ -40,6 +66,155 @@ test('expedition selector is canonically visible, bounded and does not invent oc
   assert.ok(Math.abs(target.coordinate.system - 1) <= 5);
   assert.ok(explorationResourceScore(state) >= 0);
   assert.equal(getExplorationTarget(state, target.id, target.special!.expiresAt, 'test'), undefined);
+});
+
+test('production NPC catch-up matches stepped ticks and includes a contact cycle that ended before login', () => {
+  const state = productionWithRealNpcFixtures();
+  const after = baseTime + 5 * 60 * MINUTE;
+  const until = after + 6 * 60 * MINUTE;
+  const caughtUp = selectDueExplorationNpcRolls(state, after, until, 'production');
+  const stepped: ReturnType<typeof selectDueExplorationNpcRolls> = [];
+  const step = 5 * MINUTE;
+  for (let cursor = after; cursor < until; cursor += step) {
+    stepped.push(...selectDueExplorationNpcRolls(state, cursor, Math.min(until, cursor + step), 'production'));
+  }
+  stepped.sort((left, right) => left.at - right.at || left.contactId.localeCompare(right.contactId) || left.slot - right.slot);
+  assert.deepEqual(caughtUp, stepped, 'catch-up must replay exactly the opportunities produced by stepped reconciliation');
+  assert.ok(caughtUp.length > 0, 'the seeded existing NPC fixture should have scheduled opportunities');
+  const disappeared = caughtUp.find(roll => !getExplorationTarget(state, roll.contactId, until, 'production'));
+  assert.ok(disappeared, 'catch-up must retain risk rolls for a cycle no longer active at login');
+  const historical = getExplorationTarget(state, disappeared!.contactId, disappeared!.at, 'production');
+  assert.ok(historical?.special);
+  assert.ok(historical!.special!.expiresAt <= until);
+  assert.equal(getExplorationTarget(state, disappeared!.contactId, until, 'production'), undefined);
+});
+
+test('NPC catch-up replays only the latest 24 hours and persists the skipped interval', () => {
+  const state = createInitialSaveState('production', baseTime);
+  const after = baseTime;
+  const now = baseTime + 48 * 60 * MINUTE;
+  const window = getExplorationNpcCatchupWindow(after, now);
+  assert.equal(window.replayAfter, now - 24 * 60 * MINUTE);
+  assert.deepEqual(window.skippedInterval, { afterExclusive: after, throughInclusive: now - 24 * 60 * MINUTE });
+  const queued = {
+    ...state,
+    exploration: { ...state.exploration!, npcProcessedAt: after },
+    pirate: { ...state.pirate!, raidProcessedAt: now },
+  };
+  const context = { planetId: 'helion-01', now, mode: 'production' as const, testTimeScale: 15 as const };
+  const first = reconcileRuntime(queued, context);
+  assert.equal(first.state.exploration?.npcProcessedAt, now);
+  assert.deepEqual(first.state.exploration?.npcLastSkippedInterval, window.skippedInterval);
+  const second = reconcileRuntime(first.state, context);
+  assert.deepEqual(second.state.flights.records, first.state.flights.records);
+  assert.deepEqual(second.state.exploration, first.state.exploration);
+});
+
+test('production NPC scheduler sends an existing settlement through real combat and return after save reload', () => {
+  let base = productionWithRealNpcFixtures();
+  const originalHome = base.planets['helion-01'];
+  base = replacePlanetState(base, 'helion-01', {
+    ...originalHome,
+    fleet: { ...originalHome.fleet, ships: { ...originalHome.fleet.ships, transporter: 10, recycler: 10 } },
+  });
+  base = replacePlanetResources(base, 'helion-01', { ...getPlanetResources(base, 'helion-01'), gas: 10_000_000 });
+  const rolls = selectDueExplorationNpcRolls(base, baseTime, baseTime + 24 * 60 * MINUTE, 'production');
+  let completedScenario: {
+    target: NonNullable<ReturnType<typeof getExplorationTarget>>;
+    playerFlight: FlightRecord;
+    npcFlight: FlightRecord;
+    battleState: typeof base;
+    report: typeof base.combat.reports[number];
+    rollAt: number;
+  } | undefined;
+  for (const roll of rolls) {
+    const node = getExplorationTarget(base, roll.contactId, roll.at, 'production');
+    if (!node?.special || roll.slot < 2) continue;
+    const risk = explorationProfile(node.kind as 'unique' | 'anomaly', node.special.profileVariant ?? 1).risk;
+    if (!explorationNpcAttempt(risk, node.id, roll.slot)) continue;
+    const sent = dispatchFlight(base, {
+      requestId: `pr92-production-player-${node.id}-${roll.slot}`,
+      missionId: 'expedition', contactCycleKey: node.id,
+      originPlanetId: 'helion-01', destination: { kind: 'coordinate', coordinate: node.coordinate },
+      targetKind: node.kind, selectedShips: { transporter: 1 }, departedAt: node.special.startAt,
+    }, { now: node.special.startAt, mode: 'production' });
+    if (!sent.ok || sent.flight.arrivalAt > roll.at) continue;
+    const reached = reconcileFlights(sent.state, sent.flight.arrivalAt, undefined, { mode: 'production' });
+    const cursorState = { ...reached.state, exploration: {
+      ...reached.state.exploration!, npcProcessedAt: roll.at - 1,
+    } };
+    const tick = reconcileRuntime(cursorState, {
+      planetId: 'helion-01', now: roll.at, mode: 'production', testTimeScale: 15,
+    });
+    const npcFlight = tick.state.flights.records.find(flight => flight.ownerSide === 'npc'
+      && flight.operationId === node.id && flight.departedAt === roll.at);
+    if (!npcFlight) continue;
+    const battle = reconcileFlights(tick.state, npcFlight.arrivalAt, undefined, { mode: 'production' });
+    const report = battle.state.combat.reports.find(item => item.id === 'battle-exploration-' + npcFlight.id);
+    if (!report) continue;
+    completedScenario = {
+      target: node,
+      playerFlight: sent.flight,
+      npcFlight,
+      battleState: battle.state,
+      report,
+      rollAt: roll.at,
+    };
+    break;
+  }
+  assert.ok(completedScenario, 'an existing NPC fixture must produce a scheduled production battle in the deterministic window');
+  if (!completedScenario) return;
+  const { target, playerFlight, npcFlight, battleState, report } = completedScenario;
+  assert.ok(['attacker', 'defender', 'draw'].includes(report.winner));
+  assert.equal(npcFlight.ownerSide, 'npc');
+  assert.ok(npcFlight.attackSnapshot, 'production NPC combat must use the existing source owner snapshot');
+  assert.ok(battleState.exploration?.contacts[target.id]?.claim);
+  assert.ok(battleState.flights.records.some(flight => flight.id === playerFlight.id), JSON.stringify({
+    expected: playerFlight.id, records: battleState.flights.records.map(flight => ({
+      id: flight.id, missionId: flight.missionId, phase: flight.phase, selectedShips: flight.selectedShips,
+    })),
+  }));
+
+  const store = new Map<string, string>();
+  const persistence = createPersistenceFacade({ mode: 'production', now: () => completedScenario!.rollAt, storage: {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => { store.set(key, value); },
+    removeItem: (key: string) => { store.delete(key); },
+  } });
+  assert.equal(persistence.write(battleState).ok, true);
+  const reloaded = persistence.read();
+  assert.ok(reloaded.flights.records.some(flight => flight.id === playerFlight.id), 'save reload preserves the player defender record even when combat destroyed its entire fleet');
+  assert.ok(reloaded.flights.records.some(flight => flight.id === npcFlight.id && flight.ownerSide === 'npc'));
+  const debrisAfterBattle = getOrbitalDebrisAtCoordinate(reloaded.espionage!, target.coordinate);
+  const replay = reconcileFlights(reloaded, npcFlight.arrivalAt, undefined, { mode: 'production' });
+  assert.equal(replay.state.combat.reports.filter(item => item.id === report.id).length, 1);
+  assert.deepEqual(getOrbitalDebrisAtCoordinate(replay.state.espionage!, target.coordinate), debrisAfterBattle);
+
+  const finalAt = target.special!.expiresAt + Math.max(npcFlight.oneWayDurationMs, playerFlight.oneWayDurationMs) + MINUTE;
+  const returned = reconcileFlights(replay.state, finalAt, undefined, { mode: 'production' });
+  for (const flightId of [npcFlight.id, playerFlight.id]) {
+    assert.equal(returned.state.flights.records.find(flight => flight.id === flightId)?.phase, 'completed',
+      JSON.stringify(returned.state.flights.records.filter(flight => flight.operationId === target.id).map(flight => ({ id: flight.id, side: flight.ownerSide, phase: flight.phase, arrivalAt: flight.arrivalAt, returnAt: flight.returnAt, completedAt: flight.completedAt, completionReason: flight.completionReason }))));
+  }
+  const savedNpcSource = getEspionageTargets(base.espionage)[npcFlight.originPlanetId]!;
+  const returnedNpcSource = getEspionageTargets(returned.state.espionage)[npcFlight.originPlanetId]!;
+  const battleLosses = new Map<string, number>(report.attackerForce.stacks.map(stack => [stack.entityId, stack.destroyed]));
+  for (const [shipId, count] of Object.entries(npcFlight.selectedShips)) {
+    assert.equal(returnedNpcSource.fleet.ships[shipId as keyof typeof returnedNpcSource.fleet.ships],
+      Math.max(0, (savedNpcSource.fleet.ships[shipId as keyof typeof savedNpcSource.fleet.ships] ?? 0)
+        - (battleLosses.get(shipId) ?? 0)), 'NPC hangar returns surviving ships exactly once');
+  }
+  const npcReceipt = returned.state.exploration?.contacts[target.id]?.events.find(event => event.id === npcFlight.id + ':completed');
+  if (npcReceipt) {
+    for (const key of ['metal', 'minerals', 'gas'] as const) {
+      assert.equal((npcReceipt.creditedCargo?.[key] ?? 0) + (npcReceipt.burnedCargo?.[key] ?? 0),
+        npcReceipt.cargo?.[key] ?? 0, 'NPC storage records accepted and overflowed material');
+    }
+  }
+  const replayReturn = reconcileFlights(returned.state, finalAt, undefined, { mode: 'production' });
+  assert.deepEqual(getEspionageTargets(replayReturn.state.espionage)[npcFlight.originPlanetId]!.fleet.ships,
+    returnedNpcSource.fleet.ships);
+  assert.equal(replayReturn.state.combat.reports.filter(item => item.id === report.id).length, 1);
 });
 
 test('one real flight arrives, reserves the contact, recalls from orbit and credits cargo only once', () => {
@@ -308,6 +483,223 @@ test('canonical Attack on occupied field calls real combat, preserves fleet casu
   }
   const replay=reconcileFlights(arrived.state,attack.flight.arrivalAt,undefined,{mode:'test',testTimeScale:15});
   assert.equal(replay.state.combat.reports.filter(report=>report.id==='battle-exploration-'+attack.flight.id).length,1);
+});
+
+test('defending expedition keeps launch technologies and ship upgrades through save reload and matches resolveCombat', () => {
+  const fixture = prepare();
+  const launchScience = { ...fixture.state.science.levels, 7: 4, 10: 5 };
+  let state = {
+    ...fixture.state,
+    science: { ...fixture.state.science, levels: launchScience },
+    shipUpgradeLevels: { transporter: 5, recycler: 3, destroyer: 4 },
+  };
+  const ships = { transporter: 5, recycler: 5 };
+  const dispatched = dispatchFlight(state, {
+    requestId: 'pr92-defender-snapshot',
+    missionId: 'expedition', contactCycleKey: fixture.target.id,
+    originPlanetId: 'helion-01',
+    destination: { kind: 'coordinate', coordinate: fixture.target.coordinate },
+    targetKind: fixture.target.kind, selectedShips: ships, departedAt: fixture.now,
+  }, { now: fixture.now, mode: 'test', testTimeScale: 15 });
+  assert.equal(dispatched.ok, true, dispatched.ok ? '' : dispatched.error.message);
+  if (!dispatched.ok) return;
+  const launchSnapshot = dispatched.flight.attackSnapshot;
+  assert.ok(launchSnapshot, 'new expeditions need a persisted defender combat snapshot');
+  assert.equal(launchSnapshot.attackerFactionId, state.profile.factionId);
+  assert.equal(launchSnapshot.attackerShipLevels.transporter, 5);
+  assert.equal(launchSnapshot.attackerShipLevels.recycler, 3);
+  assert.equal(launchSnapshot.attackerTechnologies.shipArmor, 4);
+  assert.equal(launchSnapshot.attackerTechnologies.laserScience, 5);
+  assert.deepEqual(launchSnapshot.defenderPriority, state.combatPriority.defense);
+
+  const reached = reconcileFlights(dispatched.state, dispatched.flight.arrivalAt, undefined, { mode: 'test', testTimeScale: 15 });
+  const occupiedContact = reached.state.exploration!.contacts[fixture.target.id]!;
+  assert.ok(occupiedContact.claim);
+  state = {
+    ...reached.state,
+    science: { ...reached.state.science, levels: { ...reached.state.science.levels, 7: 0, 10: 0 } },
+    shipUpgradeLevels: { transporter: 0, recycler: 0, destroyer: 0 },
+    exploration: { ...reached.state.exploration!, contacts: {
+      ...reached.state.exploration!.contacts,
+      [fixture.target.id]: { ...occupiedContact, claim: { ...occupiedContact.claim!, ownerId: 'qa-foreign-owner' } },
+    } },
+  };
+
+  const store = new Map<string, string>();
+  const persistence = createPersistenceFacade({ mode: 'test', now: () => fixture.now, storage: {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => { store.set(key, value); },
+    removeItem: (key: string) => { store.delete(key); },
+  } });
+  assert.equal(persistence.write(state).ok, true);
+  const reloaded = persistence.read();
+  const savedDefender = reloaded.flights.records.find(flight => flight.id === dispatched.flight.id)!;
+  assert.deepEqual(savedDefender.attackSnapshot, launchSnapshot, 'science changes and reload must not rewrite the dispatched combat snapshot');
+  assert.equal(reloaded.science.levels[10], 0);
+
+  const attackAt = dispatched.flight.arrivalAt + MINUTE;
+  const attack = dispatchFlight(reloaded, {
+    requestId: 'pr92-attacker-upgraded-after-defender-launch', missionId: 'attack',
+    contactCycleKey: fixture.target.id, operationId: fixture.target.id,
+    originPlanetId: 'helion-01', destination: { kind: 'coordinate', coordinate: fixture.target.coordinate },
+    targetKind: fixture.target.kind, targetRelation: 'neutral', selectedShips: ships,
+    selectedCommanders: {}, departedAt: attackAt,
+  }, { now: attackAt, mode: 'test', testTimeScale: 15 });
+  assert.equal(attack.ok, true, attack.ok ? '' : attack.error.message);
+  if (!attack.ok) return;
+  const resolved = reconcileFlights(attack.state, attack.flight.arrivalAt, undefined, { mode: 'test', testTimeScale: 15 });
+  const report = resolved.state.combat.reports.find(item => item.id === 'battle-exploration-' + attack.flight.id);
+  assert.ok(report, 'a real contested flight must reach the canonical combat resolver');
+  assert.equal(report!.defenderForce.technologies?.shipArmor, 4);
+  assert.equal(report!.defenderForce.technologies?.laserScience, 5);
+  assert.equal(report!.defenderForce.stacks.find(stack => stack.entityId === 'transporter')?.level, 5);
+  assert.equal(report!.defenderForce.stacks.find(stack => stack.entityId === 'recycler')?.level, 3);
+  assert.equal(report!.attackerForce.stacks.find(stack => stack.entityId === 'transporter')?.level, 0);
+  assert.equal(report!.attackerForce.technologies?.shipArmor, 0);
+
+  const stacksFor = (flight: typeof attack.flight, faction: typeof state.profile.factionId,
+    levels: Partial<Record<string, number>>): CombatStackInput[] => {
+    const catalog = new Set(getFactionShipCatalog(faction as 'aegis' | 'synod' | 'veyra').map(ship => ship.id));
+    return Object.entries(flight.selectedShips).flatMap(([id, count]) =>
+      catalog.has(id as never) && id !== 'solar-satellite' && typeof count === 'number' && count > 0
+        ? [{ entityId: id as never, count, level: levels[id] ?? 0 }]
+        : []);
+  };
+  const attackerSnapshot = attack.flight.attackSnapshot!;
+  const defenderSnapshot = savedDefender.attackSnapshot!;
+  const coordinateText = (coordinate: { galaxy: number; system: number; position: number }) =>
+    `[${coordinate.galaxy}:${coordinate.system}:${coordinate.position}]`;
+  const expectedInput: CombatInput = {
+    scenarioId: 'exploration:' + attack.flight.id,
+    timestamp: new Date(attack.flight.arrivalAt).toISOString(),
+    seed: 'exploration-contest:' + attack.flight.id + ':' + occupiedContact.claim!.claimId,
+    profileId: 'asterion-attack-v1', maxRounds: attackerSnapshot.maxRounds,
+    attackerPriority: [...attackerSnapshot.attackerPriority],
+    defenderPriority: [...(defenderSnapshot.defenderPriority ?? reloaded.combatPriority.defense)],
+    attackerTechnologies: attackerSnapshot.attackerTechnologies,
+    defenderTechnologies: defenderSnapshot.attackerTechnologies,
+    technologyMode: 'independent', executionMode: 'production',
+    attacker: {
+      participant: { side: 'attacker', playerId: reloaded.profile.playerId, playerName: reloaded.profile.displayName,
+        coordinates: coordinateText(attack.flight.originCoordinate), race: getCombatFactionName(attackerSnapshot.attackerFactionId) },
+      factionId: attackerSnapshot.attackerFactionId,
+      ships: stacksFor(attack.flight, attackerSnapshot.attackerFactionId, attackerSnapshot.attackerShipLevels),
+    },
+    defender: {
+      participant: { side: 'defender', playerId: 'qa-foreign-owner', playerName: 'qa-foreign-owner',
+        planetName: fixture.target.name, coordinates: coordinateText(fixture.target.coordinate),
+        race: getCombatFactionName(defenderSnapshot.attackerFactionId) },
+      factionId: defenderSnapshot.attackerFactionId,
+      ships: stacksFor(savedDefender, defenderSnapshot.attackerFactionId, defenderSnapshot.attackerShipLevels),
+    },
+  };
+  const expected = resolveCombat(expectedInput, { reportId: report!.id, missionType: 'attack' });
+  assert.equal(report!.winner, expected.winner);
+  assert.deepEqual(report!.attackerForce, expected.attackerForce);
+  assert.deepEqual(report!.defenderForce, expected.defenderForce);
+});
+
+test('real NPC field combat covers attacker, defender and draw outcomes with replay-safe losses and returns', () => {
+  const fixture = prepare(12 * MINUTE);
+  const npcLaunch = dispatchBot01Exploration(fixture.state, fixture.target, fixture.now, 15);
+  assert.equal(npcLaunch.ok, true, npcLaunch.notice);
+  if (!npcLaunch.ok) return;
+  const occupied = reconcileFlights(npcLaunch.state, npcLaunch.flight.arrivalAt, undefined,
+    { mode: 'test', testTimeScale: 15 });
+  const npcSource = getEspionageTargets(occupied.state.espionage)[npcLaunch.flight.originPlanetId]!;
+  const npcProfile = npcSource.ownerProfile ?? occupied.state.espionage?.bot01Profile;
+  assert.ok(npcProfile, 'the real NPC settlement supplies its owner technology and upgrade profile');
+  let base: SaveState = {
+    ...occupied.state,
+    profile: { ...occupied.state.profile, factionId: npcSource.raceId },
+    science: { ...occupied.state.science, levels: npcProfile!.scienceLevels },
+    shipUpgradeLevels: { ...npcProfile!.shipLevels },
+  };
+  const home = base.planets['helion-01']!;
+  base = replacePlanetState(base, 'helion-01', {
+    ...home,
+    buildings: { ...home.buildings, hangar: 20 },
+    fleet: { ...home.fleet, ships: { ...home.fleet.ships, destroyer: 300, scout: 50 } },
+  });
+  base = replacePlanetResources(base, 'helion-01', { ...getPlanetResources(base, 'helion-01'), gas: 100_000_000 });
+  const initialPlayerShips = { ...base.planets['helion-01']!.fleet.ships };
+  const initialNpcShips = { ...getEspionageTargets(fixture.state.espionage)[npcLaunch.flight.originPlanetId]!.fleet.ships };
+  const attackAt = npcLaunch.flight.arrivalAt + 1_000;
+  const plans: { winner: 'attacker' | 'defender' | 'draw'; compositions: FlightRecord['selectedShips'][]; seeds: number }[] = [
+    { winner: 'attacker', compositions: [{ destroyer: 300 }], seeds: 1 },
+    { winner: 'defender', compositions: [{ scout: 1 }], seeds: 1 },
+    { winner: 'draw', compositions: [{ destroyer: 6 }, { destroyer: 5 }, { destroyer: 7 }, { scout: 6 }], seeds: 32 },
+  ];
+  const seen = new Set<string>();
+  for (const plan of plans) {
+    let chosen: { state: typeof base; flight: FlightRecord; report: NonNullable<ReturnType<typeof resolveExplorationAttackAtTarget>>['report'] } | undefined;
+    for (const composition of plan.compositions) {
+      for (let seed = 0; seed < plan.seeds && !chosen; seed += 1) {
+        const requestId = `pr92-real-outcome-${plan.winner}-${Object.values(composition).join('-')}-${seed}`;
+        const attack = dispatchFlight(base, {
+          requestId, missionId: 'attack', contactCycleKey: fixture.target.id, operationId: fixture.target.id,
+          originPlanetId: 'helion-01', destination: { kind: 'coordinate', coordinate: fixture.target.coordinate },
+          targetKind: fixture.target.kind, targetRelation: 'neutral', selectedShips: composition,
+          selectedCommanders: {}, departedAt: attackAt,
+        }, { now: attackAt, mode: 'test', testTimeScale: 15 });
+        if (!attack.ok) continue;
+        const direct = resolveExplorationAttackAtTarget(attack.state, attack.flight, attack.flight.arrivalAt);
+        if (!direct) continue;
+        seen.add(direct.report.winner);
+        if (direct.report.winner === plan.winner) chosen = { state: attack.state, flight: attack.flight, report: direct.report };
+      }
+    }
+    assert.ok(chosen, `real resolver must produce ${plan.winner}; observed ${[...seen].join(', ')}`);
+    if (!chosen) continue;
+    const arrival = reconcileFlights(chosen.state, chosen.flight.arrivalAt, undefined, { mode: 'test', testTimeScale: 15 });
+    const report = arrival.state.combat.reports.find(item => item.id === chosen!.report.id);
+    assert.ok(report, 'real dispatched attack must produce a persisted combat report');
+    assert.equal(report!.winner, plan.winner);
+    assert.deepEqual(report!.attackerForce, chosen.report.attackerForce);
+    assert.deepEqual(report!.defenderForce, chosen.report.defenderForce);
+    const debris = getOrbitalDebrisAtCoordinate(arrival.state.espionage!, fixture.target.coordinate);
+    assert.equal(debris, report!.debris ?? 0, 'combat report debris is backed by the canonical orbital ledger');
+
+    const store = new Map<string, string>();
+    const persistence = createPersistenceFacade({ mode: 'test', now: () => attackAt, storage: {
+      getItem: key => store.get(key) ?? null,
+      setItem: (key, value) => { store.set(key, value); },
+      removeItem: key => { store.delete(key); },
+    } });
+    assert.equal(persistence.write(arrival.state).ok, true);
+    const reloaded = persistence.read();
+    assert.ok(reloaded.flights.records.some(flight => flight.id === chosen!.flight.id), 'save reload keeps the resolved attack flight');
+    assert.ok(reloaded.flights.records.some(flight => flight.id === npcLaunch.flight.id), JSON.stringify({
+      expectedNpc: npcLaunch.flight.id, records: reloaded.flights.records.map(flight => ({ id: flight.id, missionId: flight.missionId, ownerSide: flight.ownerSide, phase: flight.phase })),
+    }));
+    const replay = reconcileFlights(reloaded, chosen.flight.arrivalAt, undefined, { mode: 'test', testTimeScale: 15 });
+    assert.equal(replay.state.combat.reports.filter(item => item.id === report!.id).length, 1);
+    assert.equal(getOrbitalDebrisAtCoordinate(replay.state.espionage!, fixture.target.coordinate), debris,
+      'replaying the saved battle does not mint debris a second time');
+
+    const finalAt = fixture.target.special!.expiresAt
+      + Math.max(npcLaunch.flight.oneWayDurationMs, chosen.flight.oneWayDurationMs) + MINUTE;
+    const returned = reconcileFlights(replay.state, finalAt, undefined, { mode: 'test', testTimeScale: 15 });
+    assert.equal(returned.state.flights.records.find(flight => flight.id === chosen!.flight.id)?.phase, 'completed');
+    assert.equal(returned.state.flights.records.find(flight => flight.id === npcLaunch.flight.id)?.phase, 'completed');
+    for (const stack of report!.attackerForce.stacks) {
+      const remaining = returned.state.planets['helion-01']!.fleet.ships[stack.entityId as keyof typeof initialPlayerShips] ?? 0;
+      assert.equal(remaining, Math.max(0, (initialPlayerShips[stack.entityId as keyof typeof initialPlayerShips] ?? 0) - stack.destroyed),
+        'player hangar ends with its real launch inventory minus battle losses');
+    }
+    const returnedNpc: ReturnType<typeof getEspionageTargets>[string] =
+      getEspionageTargets(returned.state.espionage)[npcLaunch.flight.originPlanetId]!;
+    for (const stack of report!.defenderForce.stacks) {
+      assert.equal(returnedNpc.fleet.ships[stack.entityId as keyof typeof initialNpcShips],
+        Math.max(0, (initialNpcShips[stack.entityId as keyof typeof initialNpcShips] ?? 0) - stack.destroyed),
+        'NPC hangar returns real survivors once and retains actual losses');
+    }
+    const finalReplay = reconcileFlights(returned.state, finalAt, undefined, { mode: 'test', testTimeScale: 15 });
+    assert.deepEqual(finalReplay.state.planets['helion-01']!.fleet.ships, returned.state.planets['helion-01']!.fleet.ships);
+    assert.deepEqual(getEspionageTargets(finalReplay.state.espionage)[npcLaunch.flight.originPlanetId]!.fleet.ships, returnedNpc.fleet.ships);
+    assert.equal(finalReplay.state.combat.reports.filter(item => item.id === report!.id).length, 1);
+  }
+  assert.deepEqual([...seen].sort(), ['attacker', 'defender', 'draw'], 'all three outcomes must be observed through resolveCombat');
 });
 
 

@@ -79,6 +79,8 @@ export type ExplorationState = {
   completed: ExplorationEvent[];
   /** Last processed autonomous NPC opportunity; stable across save/load. */
   npcProcessedAt?: number;
+  /** Latest offline interval omitted by the 24-hour NPC catch-up limit. */
+  npcLastSkippedInterval?: { afterExclusive: number; throughInclusive: number };
   /** Player accepted contacts; not a separate localStorage or demo Operations row. */
   acceptedContactIds?: string[];
   /** Immutable outcomes of real spy-probe flights, including unsuccessful reconnaissance. */
@@ -450,8 +452,16 @@ export function migrateExplorationState(value: unknown): ExplorationState {
         && typeof record.flightId === 'string' && validNumber(record.resolvedAt)
         && typeof record.success === 'boolean' && record.id === record.flightId + ':recon')).slice(-256)
     : [];
+  const npcLastSkippedInterval = source.npcLastSkippedInterval
+    && validNumber(source.npcLastSkippedInterval.afterExclusive)
+    && validNumber(source.npcLastSkippedInterval.throughInclusive)
+    && source.npcLastSkippedInterval.throughInclusive >= source.npcLastSkippedInterval.afterExclusive
+    ? { afterExclusive: source.npcLastSkippedInterval.afterExclusive,
+      throughInclusive: source.npcLastSkippedInterval.throughInclusive }
+    : undefined;
   return { version: 1, contacts, highestScoresByOwner,
     ...(validNumber(source.npcProcessedAt) ? {npcProcessedAt:source.npcProcessedAt} : {}),
+    ...(npcLastSkippedInterval ? {npcLastSkippedInterval} : {}),
     acceptedContactIds, reconReports,
     completed: Array.isArray(source.completed) ? source.completed.slice(-200) : [] };
 }

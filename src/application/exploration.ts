@@ -42,6 +42,49 @@ export function selectExplorationTargets(
   return visibleExplorationContacts(nodes, owned, nowMs, limit);
 }
 
+/** Reconstruct canonical timed objects at selected historical systems without
+ * rebuilding every currently visible system for each offline risk timestamp. */
+export function selectExplorationTargetsInSystems(
+  state: SaveState,
+  nowMs: number,
+  requestedSystems: readonly Pick<UniverseCoordinate, 'galaxy' | 'system'>[],
+  mode: RuntimeMode = Object.keys(state.alliedPlanets ?? {}).length ? 'test' : 'production',
+): UniversePlanetNode[] {
+  const playerPlanets: UniversePersistedPlayerPlanet[] = Object.entries(state.planets)
+    .map(([id, planet]) => ({
+      id, name: planet.name, isHomeworld: id === 'helion-01',
+      coordinate: {
+        galaxy: planet.universeGalaxy ?? 1, system: planet.universeSystem ?? 1,
+        position: planet.universePosition ?? 1,
+      },
+    }));
+  const owned: UniverseCoordinate[] = playerPlanets.map(planet => planet.coordinate)
+    .filter(coordinate => Number.isInteger(coordinate.galaxy) && coordinate.galaxy >= 1
+      && Number.isInteger(coordinate.system) && coordinate.system >= 1 && coordinate.system <= SYSTEM_COUNT);
+  if (!owned.length) return [];
+  const targets: UniverseRegisteredPlanet[] = Object.values(getEspionageTargets(state.espionage)).map(planet => ({
+    id: planet.id, name: planet.name, coordinate: { ...planet.coordinate },
+    kind: planet.kind ?? 'npc', ownerId: planet.ownerId,
+  }));
+  const visibleSystems = new Map<string, { galaxy: number; system: number }>();
+  for (const requested of requestedSystems) {
+    if (!Number.isInteger(requested.galaxy) || requested.galaxy < 1
+      || !Number.isInteger(requested.system) || requested.system < 1 || requested.system > SYSTEM_COUNT
+      || !owned.some(colony => colony.galaxy === requested.galaxy
+        && Math.abs(colony.system - requested.system) <= 5)) continue;
+    visibleSystems.set(`${requested.galaxy}:${requested.system}`, {
+      galaxy: requested.galaxy, system: requested.system,
+    });
+  }
+  const nodes = [...visibleSystems.values()].flatMap(({ galaxy, system }) => createUniverseSystem({
+    mode, galaxy, system, nowMs, playerPlanets, registeredPlanets: targets,
+    pirateContactDefeats: Object.values(state.pirate?.contact.defeatedCycles ?? {}),
+    asteroidStates: state.asteroidSimulation?.asteroids ?? [],
+    assets: { uniqueArts: EXPLORATION_ARTS.unique, anomalyArts: EXPLORATION_ARTS.anomaly },
+  }).positions.filter(node => explorationNodeId(node) !== null));
+  return visibleExplorationContacts(nodes, owned, nowMs, 500);
+}
+
 export function getExplorationTarget(
   state: SaveState,
   id: string,

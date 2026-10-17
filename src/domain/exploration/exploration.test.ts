@@ -185,6 +185,38 @@ test('rare roll scales with time, deterministic, no payout at under one minute',
   assert.equal(EXPLORATION_RULES.reconCooldownMs, 120_000);
 });
 
+test('completed return persists deterministic token and empty-token rewards exactly once', () => {
+  const node = makeNode('anomaly');
+  node.special!.profileVariant = 10;
+  const baseline = getOrMaterializeExplorationContact(createExplorationState(), node, 100_000).contact;
+  const profile = explorationProfile('anomaly', 10);
+  const heldMs = 12 * minute + 30_000;
+  const findClaim = (won: boolean) => {
+    for (let index = 0; index < 2_000; index += 1) {
+      const flightId = `rare-return-${index}`;
+      const claimId = `${flightId}:claim`;
+      if (explorationRareWon(profile, heldMs, baseline.id, 'player', claimId) === won) return flightId;
+    }
+    throw new Error(`Could not find a deterministic ${won ? 'token' : 'empty-token'} return seed`);
+  };
+  const finishReturn = (flightId: string) => {
+    const occupied = occupyExplorationContact(baseline, { ...arrival(start + minute, flightId), claimId: flightId + ':claim' });
+    const prepared = prepareExplorationRecall(occupied, 'player', start + 13 * minute);
+    const released = releaseExplorationClaim(prepared, start + 13 * minute + 30_000);
+    return completeExplorationReturn(released, flightId, start + 13 * minute + 31_000, true);
+  };
+  const awarded = finishReturn(findClaim(true));
+  assert.equal(awarded.payout?.repairTokens, 1);
+  assert.equal(awarded.contact.events.at(-1)?.repairTokens, 1);
+  const empty = finishReturn(findClaim(false));
+  assert.equal(empty.payout?.repairTokens, 0);
+  assert.equal(empty.contact.events.at(-1)?.repairTokens, 0);
+  const completedId = empty.contact.events.at(-1)!.id;
+  const flightId = completedId.slice(0, -':completed'.length);
+  assert.equal(completeExplorationReturn(empty.contact, flightId, start + 14 * minute, true).payout, null,
+    'replaying the return cannot award a second token or cargo credit');
+});
+
 test('recon seeded, cooldown persists if caller stores reports, cannot inspect foreign ship counts', () => {
   const contact = getOrMaterializeExplorationContact(createExplorationState(), makeNode('unique'), 100_000).contact;
   const first = resolveExplorationRecon(contact, 'player', 'probe-1', start + 2 * minute, []);
@@ -221,6 +253,17 @@ test('save migration accepts legitimate contact; rejects forged stockpiles and k
   const forged = structuredClone(state);
   forged.contacts[id]!.resourceReserve.metal += 100_000;
   assert.equal(Object.keys(migrateExplorationState(forged).contacts).length, 0);
+  const npcCursor = 1_800_000_000_000;
+  const npcOverflow = migrateExplorationState({
+    ...createExplorationState(), npcProcessedAt: npcCursor,
+    npcLastSkippedInterval: { afterExclusive: npcCursor - 48 * 60 * 60_000, throughInclusive: npcCursor - 24 * 60 * 60_000 },
+  });
+  assert.equal(npcOverflow.npcProcessedAt, npcCursor);
+  assert.deepEqual(npcOverflow.npcLastSkippedInterval, {
+    afterExclusive: npcCursor - 48 * 60 * 60_000, throughInclusive: npcCursor - 24 * 60 * 60_000,
+  });
+  assert.equal(migrateExplorationState({ ...npcOverflow, npcLastSkippedInterval: { afterExclusive: 8, throughInclusive: 7 } })
+    .npcLastSkippedInterval, undefined);
 });
 
 test('successful return pays once from origin, never on cancelled/missing origin or repeated reload', () => {
