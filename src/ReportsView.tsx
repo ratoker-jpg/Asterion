@@ -164,9 +164,9 @@ function ReportListItem({ item, active, read, saved, selected, onOpen, onSelect 
 
 function GenericDossier({ item }: { item: ReportItem }) {
   return (
-    <div className="reports-dossier reports-dossier--generic">
+    <div className={`reports-dossier reports-dossier--generic reports-v2-tone-${item.statusTone}`}>
       <div className="reports-dossier-heading">
-        <div className="reports-dossier-heading__icon"><ReportGlyph kind={item.category} /></div>
+        <div className="reports-dossier-heading__icon reports-v2-art"><ReportGlyph kind={item.category} /></div>
         <div><small>{item.typeLabel}</small><h2>{item.title}</h2><p>{item.preview}</p></div>
         <div className="reports-dossier-heading__status"><StatusBadge item={item} /><time>{formatDate(item.timestamp)}</time></div>
       </div>
@@ -185,9 +185,9 @@ function OverpopulationDossier({ item }: { item: ReportItem }) {
   const report = item.overpopulationReport;
   if (!report) return <GenericDossier item={item} />;
   return (
-    <div className="reports-dossier reports-dossier--overpopulation" data-qa-overpopulation-report={report.id}>
+    <div className={`reports-dossier reports-dossier--overpopulation reports-v2-tone-${item.statusTone}`} data-qa-overpopulation-report={report.id}>
       <div className="reports-dossier-heading">
-        <div className="reports-dossier-heading__icon"><ReportGlyph kind="system" /></div>
+        <div className="reports-dossier-heading__icon reports-v2-art"><ReportGlyph kind="system" /></div>
         <div><small>{item.typeLabel}</small><h2>{item.title}</h2><p>{item.preview}</p></div>
         <div className="reports-dossier-heading__status"><StatusBadge item={item} /><time>{formatDate(item.timestamp)}</time></div>
       </div>
@@ -225,9 +225,9 @@ function PirateReconDossier({ item, onOpenPirateUniverse }: {
   const formatTimestamp = (timestamp: number) => formatDate(new Date(timestamp).toISOString());
 
   return (
-    <div className={`reports-dossier reports-dossier--pirate-recon reports-dossier--pirate-recon-${report.outcome}`} data-qa-pirate-recon-report={report.id}>
+    <div className={`reports-dossier reports-dossier--pirate-recon reports-dossier--pirate-recon-${report.outcome} reports-v2-tone-${item.statusTone}`} data-qa-pirate-recon-report={report.id}>
       <div className="reports-dossier-heading">
-        <div className="reports-dossier-heading__icon"><ReportGlyph kind="system" /></div>
+        <div className="reports-dossier-heading__icon reports-v2-art"><ReportGlyph kind="system" /></div>
         <div><small>{item.typeLabel}</small><h2>{item.title}</h2><p><button type="button" className="spy-report-link" onClick={() => onOpenPirateUniverse(report.coordinate, report.contactCycleKey)}>{coordinate} ↗</button> · контакт {report.contactCycleKey}</p></div>
         <div className="reports-dossier-heading__status"><StatusBadge item={item} /><time>{formatDate(item.timestamp)}</time></div>
       </div>
@@ -294,9 +294,9 @@ function SpyDossier({ item, report, onOpenUniverseTarget }: {
     { kind: 'energy' as const, label: 'Энергия', value: report.resources.developmentEnergy },
   ];
   return (
-    <div className="reports-dossier reports-dossier--spy" data-qa-spy-report={report.id}>
+    <div className={`reports-dossier reports-dossier--spy reports-v2-tone-${item.statusTone}`} data-qa-spy-report={report.id}>
       <div className="reports-dossier-heading">
-        <div className="reports-dossier-heading__icon"><ReportGlyph kind="system" /></div>
+        <div className="reports-dossier-heading__icon reports-v2-art"><ReportGlyph kind="system" /></div>
         <div><small>{item.typeLabel}</small><h2>{item.title}</h2><p>{item.preview}</p></div>
         <div className="reports-dossier-heading__status"><StatusBadge item={item} /><time>{formatDate(item.timestamp)}</time></div>
       </div>
@@ -325,9 +325,9 @@ function BattleDossier({ item, report, saved, rating, playerOwnerId, onToggleSav
     awardedBattlePoints: selectRecordedBattlePointAwards(rating, report, playerOwnerId),
   });
   return (
-    <div className="reports-dossier reports-dossier--battle">
+    <div className={`reports-dossier reports-dossier--battle reports-v2-tone-${item.statusTone}`}>
       <div className="reports-dossier-heading">
-        <div className="reports-dossier-heading__icon"><ReportGlyph kind="battle" /></div>
+        <div className="reports-dossier-heading__icon reports-v2-art"><ReportGlyph kind="battle" /></div>
         <div><small>{item.typeLabel}</small><h2>{item.title}</h2><p>{item.preview}</p></div>
         <div className="reports-dossier-heading__status"><StatusBadge item={item} /><time>{formatDate(item.timestamp)}</time></div>
       </div>
@@ -338,13 +338,13 @@ function BattleDossier({ item, report, saved, rating, playerOwnerId, onToggleSav
 
 function EmptyDossier({ category, savedOnly }: { category: ReportCategory; savedOnly: boolean }) {
   const copy = EMPTY_COPY[category];
-  return <div className="reports-empty-dossier"><ReportGlyph kind={category} /><strong>{savedOnly ? 'СОХРАНЁННЫХ БОЁВ НЕТ' : copy.title.toUpperCase()}</strong><span>{savedOnly ? 'Сохрани нужный бой звездой в «Докладах» или во вкладке Флоты → Битвы.' : copy.body}</span></div>;
+  return <div className="reports-empty-dossier"><span className="reports-v2-art reports-v2-empty-art"><ReportGlyph kind={category} /></span><strong>{savedOnly ? 'СОХРАНЁННЫХ БОЁВ НЕТ' : copy.title.toUpperCase()}</strong><span>{savedOnly ? 'Сохрани нужный бой звездой в «Докладах» или во вкладке Флоты → Битвы.' : copy.body}</span></div>;
 }
 
 function EmptyFolder({ folder }: { folder: MessageFolder }) {
   const title = folder.category ? EMPTY_COPY[folder.category].title : folder.emptyTitle ?? 'Раздел пока пуст';
   const body = folder.category ? EMPTY_COPY[folder.category].body : folder.emptyBody ?? 'Для этого раздела пока нет подключённого источника данных.';
-  return <div className="reports-empty-dossier reports-empty-folder" data-qa-empty-folder><ReportGlyph kind={folder.glyph} /><strong>{title.toUpperCase()}</strong><span>{body}</span></div>;
+  return <div className="reports-empty-dossier reports-empty-folder" data-qa-empty-folder><span className="reports-v2-art reports-v2-empty-art"><ReportGlyph kind={folder.glyph} /></span><strong>{title.toUpperCase()}</strong><span>{body}</span></div>;
 }
 
 const PROFILE_EMBLEM = { glyph: 'starforge', accent: 'cyan' } as const;
