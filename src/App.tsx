@@ -114,6 +114,7 @@ import {
   createPersistenceFacade,
   DEFAULT_PLANET_NAME,
   SAVE_SCHEMA_VERSION,
+  isCurrentBuildSave,
 } from './application/persistence.ts';
 import {
   applyProductionBots as applyProductionBotsAction,
@@ -777,13 +778,22 @@ export function App() {
       return { ...current, command, profile: syncPlayerProfileWithCommand(current.profile, command) };
     });
   }, [presenceMinute]);
-  // Another window of the game writes the same save on every tick. Without this, a second, stale
-  // window kept overwriting fresh progress (e.g. a just-built «Палата управления» reverted to 0).
-  // Adopt the other window's save and skip writing that adopted state back.
+  // Another window of the game writes the same save on every tick. A save written by this build
+  // carries a writer marker (see `isCurrentBuildSave`): such a write is adopted and not written
+  // back. A write without it comes from an older build still open on the same origin (e.g. another
+  // GitHub Pages preview); it never stops overwriting the save every second (a just-built «Палата
+  // управления» kept reverting to 0), so this window restores its own state and asks the player to
+  // close the other window.
   const adoptedFromOtherWindow = useRef<SaveState | null>(null);
+  const [foreignWriterAt, setForeignWriterAt] = useState<number | null>(null);
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
       if (event.storageArea !== window.localStorage || event.key !== persistence.saveKey) return;
+      if (event.newValue !== null && !isCurrentBuildSave(event.newValue)) {
+        setForeignWriterAt(Date.now());
+        persistence.write(stateRef.current);
+        return;
+      }
       const next = persistence.read();
       adoptedFromOtherWindow.current = next;
       setState(next);
@@ -2216,6 +2226,13 @@ export function App() {
           )}
         </section>
 
+        {foreignWriterAt ? (
+          <div className="save-conflict-banner" role="alert" data-qa-save-conflict>
+            <strong>Игра открыта в другой вкладке со старой версией</strong>
+            <span>Она каждую секунду перезаписывает сохранение (так пропадала построенная Палата управления). Закройте другие вкладки Asterion этого сайта — эта вкладка сохранит ваш прогресс.</span>
+            <button type="button" onClick={() => { persistence.write(stateRef.current); setForeignWriterAt(null); }}>ЗАКРЫЛ — СОХРАНИТЬ ЗДЕСЬ</button>
+          </div>
+        ) : null}
         <div className="shell-notice shell-notice-live" data-qa-runtime-mode={RUNTIME_MODE} data-qa-runtime-notice role="status" aria-live="polite">
           <span>{lastNotice}</span>
         </div>
