@@ -72,6 +72,10 @@ jobs:
         env:
           ASTERION_SKIP_SCREENSHOTS: '1'
         run: npm run test:command-aid-ui
+      - name: Command journal Electron QA
+        env:
+          ASTERION_SKIP_SCREENSHOTS: '1'
+        run: npm run test:command-journal-ui
       - name: Science Electron QA
         env:
           ASTERION_SKIP_SCREENSHOTS: '1'
