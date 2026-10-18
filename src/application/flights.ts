@@ -1,4 +1,20 @@
-import { selectOwnerAlliance } from '../domain/command/selectors.ts';
+import { selectOwnerAlliance, selectOwnerMembership } from '../domain/command/selectors.ts';
+import {
+  appendAidEvent,
+  creditAidDelivery,
+  isAidPairValid,
+  isRequestOpen,
+  markRequestHelpStarted,
+  requestOpenRemainder,
+  selectRequestById,
+} from '../domain/command/aid.ts';
+import type { ResourceRequest } from '../domain/command/types.ts';
+import {
+  AID_MISSION_ENABLED,
+  aidInFlightUnits,
+  isAidTransportComposition,
+  validateAidCargo,
+} from '../domain/flights/aid-mission.ts';
 import type { CombatFactionId } from '../domain/combat/factions.ts';
 import { COMMANDER_IDS, type CommanderId } from '../domain/combat/commanders.ts';
 import type { SimulatorMaxRounds } from '../domain/combat/simulator.ts';
@@ -51,6 +67,7 @@ import {
 import { SHIP_IDS, SOLAR_SATELLITE_ID, type ShipId } from '../domain/combat/ids.ts';
 import { scaleRuntimeDuration, type RuntimeMode, type TestTimeScale } from '../domain/runtime/mode.ts';
 import type {
+  AidFlightSnapshot,
   FlightDestination,
   FlightRecord,
   FlightState,
@@ -141,6 +158,8 @@ export type FlightLaunchContext = {
   targetOwnerName?: string;
   targetRaceId?: 'aegis' | 'synod' | 'veyra';
   targetAlliance?: import('../domain/universe/types.ts').UniverseOwnerAlliance | null;
+  /** Alliance aid: the open request the fleet is being prepared for. */
+  aidRequestId?: string;
 };
 
 export type FlightErrorCode =
@@ -181,6 +200,8 @@ export type DispatchFlightCommand = {
   destination?: FlightDestination;
   targetRelation?: TargetRelation;
   cargo?: TransportCargo;
+  /** Required for the `aid` mission: the open resource request being served. */
+  aidRequestId?: string;
   targetKind?: UniverseObjectKind;
   selectedShips: Partial<Record<ShipId, number>>;
   operationId?: string;
@@ -1041,6 +1062,110 @@ export function startBot01IncomingScenario(
   };
 }
 
+type AidLaunchPlan =
+  | {
+    ok: true;
+    request: ResourceRequest;
+    target: ResolvedTransportTarget;
+    cargo: TransportCargo;
+    units: number;
+    overflowWarning: boolean;
+    snapshot: AidFlightSnapshot;
+  }
+  | { ok: false; code: FlightErrorCode; message: string };
+
+/**
+ * Validates one alliance-aid launch by the local player against the request.
+ * Everything the cargo may do is decided here, before any ship or resource is
+ * touched: the sender must be another member of the request's alliance, the
+ * target is forced to the request's planet, the cargo is exactly the requested
+ * resource and never more than what is still free (not delivered, not already
+ * reserved by flights that are in the air).
+ */
+function planPlayerAidLaunch(
+  state: SaveState,
+  input: {
+    aidRequestId?: string;
+    originPlanetId: PlanetId;
+    destination?: FlightDestination;
+    selectedShips: Partial<Record<ShipId, number>>;
+    selectedCommanders: Partial<Record<CommanderId, number>>;
+    cargo?: TransportCargo;
+  },
+): AidLaunchPlan {
+  if (!AID_MISSION_ENABLED) return { ok: false, code: 'mission-not-supported', message: 'Помощь союзу пока недоступна.' };
+  const request = input.aidRequestId ? selectRequestById(state.command, input.aidRequestId) : null;
+  if (!request || !isRequestOpen(request)) {
+    return { ok: false, code: 'target-not-available', message: 'Запрос помощи закрыт или не найден.' };
+  }
+  const senderOwnerId = state.profile.playerId;
+  const membership = selectOwnerMembership(state.command, senderOwnerId);
+  if (!membership || membership.alliance.id !== request.allianceId) {
+    return { ok: false, code: 'target-not-available', message: 'Помогать можно только участникам своего союза.' };
+  }
+  if (request.authorOwnerId === senderOwnerId) {
+    return { ok: false, code: 'target-not-available', message: 'Нельзя отправлять помощь по собственному запросу.' };
+  }
+  if (!isAidPairValid(state.command, { allianceId: request.allianceId, senderOwnerId, recipientOwnerId: request.authorOwnerId })) {
+    return { ok: false, code: 'target-not-available', message: 'Автор запроса больше не состоит в вашем союзе.' };
+  }
+  if (Object.keys(input.selectedCommanders).length > 0 || !isAidTransportComposition(input.selectedShips)) {
+    return { ok: false, code: 'wrong-ship-composition', message: 'Для помощи союзу нужны только транспортёры или мега-транспортёры.' };
+  }
+  const destination: FlightDestination = { kind: 'planet', planetId: request.planetId, coordinate: { ...request.coordinate } };
+  if (input.destination
+    && (input.destination.kind !== 'planet'
+      || input.destination.planetId !== request.planetId
+      || !coordinatesEqual(input.destination.coordinate, request.coordinate))) {
+    return { ok: false, code: 'target-not-available', message: 'Цель не совпадает с планетой, указанной в запросе.' };
+  }
+  const target = resolveTransportTarget(state, destination);
+  if (!target.acceptsTransport || !target.runtime || target.relation !== 'ally' || target.ownerId !== request.authorOwnerId) {
+    return { ok: false, code: 'target-not-available', message: 'Планета назначения запроса недоступна.' };
+  }
+  if (target.planetId === input.originPlanetId) {
+    return { ok: false, code: 'target-is-origin', message: 'Нельзя отправлять помощь на планету-источник.' };
+  }
+  const summary = getTransportCargoSummary(state, input.originPlanetId, input.selectedShips, input.cargo, destination);
+  const submitted = normalizeTransportCargo(input.cargo);
+  const checked = validateAidCargo(summary.cargo, request.resource);
+  if (!checked.ok) {
+    return checked.reason === 'wrong-resource'
+      ? { ok: false, code: 'invalid-cargo', message: 'В грузе можно везти только ресурс, указанный в запросе.' }
+      : { ok: false, code: 'invalid-cargo', message: 'Загрузите запрошенный ресурс.' };
+  }
+  if (JSON.stringify(summary.cargo) !== JSON.stringify(submitted)) {
+    return getCargoUsed(submitted) > summary.capacity.total
+      ? { ok: false, code: 'insufficient-cargo-capacity', message: 'Груз превышает вместимость выбранного флота.' }
+      : { ok: false, code: 'invalid-cargo', message: 'Груз превышает доступные запасы исходной планеты.' };
+  }
+  const free = requestOpenRemainder(request, aidInFlightUnits(state.flights.records, request.id));
+  if (checked.units > free) {
+    return {
+      ok: false,
+      code: 'invalid-cargo',
+      message: free > 0
+        ? `По запросу осталось принять не более ${free.toLocaleString('ru-RU')}: остальное уже в пути или доставлено.`
+        : 'Весь остаток запроса уже в пути или доставлен.',
+    };
+  }
+  return {
+    ok: true,
+    request,
+    target,
+    cargo: checked.cargo,
+    units: checked.units,
+    overflowWarning: summary.overflowWarning,
+    snapshot: {
+      requestId: request.id,
+      allianceId: request.allianceId,
+      senderOwnerId,
+      recipientOwnerId: request.authorOwnerId,
+      resource: request.resource,
+    },
+  };
+}
+
 function noticeForDispatch(flight: FlightRecord): string {
   return `Рейс ${flight.missionId} отправлен: прибытие ${new Date(flight.arrivalAt).toLocaleString('ru-RU')} · газ ${flight.gasCost}.`;
 }
@@ -1061,7 +1186,7 @@ export function dispatchFlight(
   if (command.missionId === 'pirate-recon' || command.missionId === 'pirate-elimination') {
     return dispatchPirateFlight(state, command, runtimeOptions);
   }
-  if (command.missionId !== 'expedition' && command.missionId !== 'exploration-recon' && command.missionId !== 'colonize' && command.missionId !== 'transport' && command.missionId !== 'espionage' && command.missionId !== 'attack' && command.missionId !== 'deployment' && command.missionId !== 'recycle' && command.missionId !== 'gas' && command.missionId !== 'space-flight') {
+  if (command.missionId !== 'expedition' && command.missionId !== 'exploration-recon' && command.missionId !== 'colonize' && command.missionId !== 'transport' && command.missionId !== 'aid' && command.missionId !== 'espionage' && command.missionId !== 'attack' && command.missionId !== 'deployment' && command.missionId !== 'recycle' && command.missionId !== 'gas' && command.missionId !== 'space-flight') {
     return failure(state, 'mission-not-supported', 'Эта миссия пока не подключена к flight runtime.');
   }
   const departedAt = Number.isFinite(command.departedAt) ? command.departedAt! : (runtimeOptions.now ?? Date.now());
@@ -1416,6 +1541,23 @@ export function dispatchFlight(
     transportOverflowWarning = summary.overflowWarning;
   }
 
+  let aidPlan: Extract<AidLaunchPlan, { ok: true }> | undefined;
+  if (command.missionId === 'aid') {
+    const planned = planPlayerAidLaunch(state, {
+      aidRequestId: command.aidRequestId,
+      originPlanetId,
+      destination: command.destination,
+      selectedShips,
+      selectedCommanders,
+      cargo: command.cargo,
+    });
+    if (!planned.ok) return failure(state, planned.code, planned.message);
+    aidPlan = planned;
+    transportTarget = planned.target;
+    transportCargo = planned.cargo;
+    transportOverflowWarning = planned.overflowWarning;
+  }
+
   const science = state.science.levels;
   const explorationDefenseSnapshot = command.missionId === 'expedition'
     ? createAttackLaunchSnapshot(state, originPlanetId, 12, {})
@@ -1431,7 +1573,9 @@ export function dispatchFlight(
         ? { kind: 'planet', planetId: deploymentTarget.planetId, coordinate: { ...deploymentTarget.coordinate } }
         : command.missionId === 'space-flight'
           ? { kind: 'space', coordinate: coordinateOfPlanet(originPlanet) }
-          : command.destination!,
+          : aidPlan
+            ? { kind: 'planet', planetId: aidPlan.target.planetId, coordinate: { ...aidPlan.target.coordinate } }
+            : command.destination!,
     targetKind: command.missionId === 'attack'
       ? attackTarget?.target.kind ?? explorationAttackNode?.kind
       : command.missionId === 'recycle' ? recycleTargetKind
@@ -1465,6 +1609,7 @@ export function dispatchFlight(
       cargo: transportCargo,
       overflowWarning: transportOverflowWarning,
     } : {}),
+    ...(aidPlan ? { aid: aidPlan.snapshot } : {}),
     ...(command.missionId === 'recycle' ? {
       cargo: emptyTransportCargo(),
       recycleCapacity,
@@ -1532,13 +1677,18 @@ export function dispatchFlight(
   }
   const gas = getPlanetResources(state, originPlanetId);
   if (gas.gas < flight.gasCost) return failure(state, 'insufficient-gas', 'Недостаточно газа для исходящего участка.');
+  // Gas aid must pay for the trip out of what is left after the cargo is taken; otherwise the cargo
+  // and the fuel would be drawn from the same stock twice.
+  if (aidPlan && aidPlan.cargo.gas > 0 && gas.gas < flight.gasCost + aidPlan.cargo.gas) {
+    return failure(state, 'insufficient-gas', 'Недостаточно газа: нужен и груз помощи, и топливо на путь.');
+  }
 
   const nextFlights = domainResult.created ? updateFlight(domainResult.state, flight) : domainResult.state;
   let nextState = replacePlanetResources({ ...state, flights: nextFlights }, originPlanetId, {
     ...gas,
     gas: gas.gas - flight.gasCost,
   });
-  if (command.missionId === 'transport' && transportCargo) {
+  if ((command.missionId === 'transport' || command.missionId === 'aid') && transportCargo) {
     const nextOrigin = nextState.planets[originPlanetId];
     if (!nextOrigin) return failure(state, 'invalid-command', 'Исходная планета не найдена.');
     nextState = replacePlanetState(nextState, originPlanetId, {
@@ -1613,7 +1763,158 @@ export function dispatchFlight(
       missions: [...currentEspionageState(nextState).missions, mission],
     });
   }
+  if (aidPlan && domainResult.created) {
+    nextState = {
+      ...nextState,
+      command: markRequestHelpStarted(
+        nextState.command,
+        aidPlan.request.id,
+        flight.id,
+        aidPlan.snapshot.senderOwnerId,
+        aidPlan.units,
+        flight.departedAt,
+      ),
+    };
+  }
   return { ok: true, state: nextState, flight, created: true, notice: noticeForDispatch(flight) };
+}
+
+export type NpcAidDispatchCommand = {
+  /** Idempotency key of the flight; must start with `aid-npc:`. */
+  requestId: string;
+  aidRequestId: string;
+  senderOwnerId: string;
+  /** Units to ship; defaults to everything still free on the request. */
+  units?: number;
+  departedAt?: number;
+};
+
+/** Ships of an allied NPC planet that are already committed to its active aid flights. */
+function reservedNpcAidShips(state: SaveState, originPlanetId: PlanetId): Partial<Record<ShipId, number>> {
+  const reserved: Partial<Record<ShipId, number>> = {};
+  for (const flight of activeFlights(state)) {
+    if (flight.ownerSide !== 'npc' || flight.missionId !== 'aid' || flight.originPlanetId !== originPlanetId) continue;
+    for (const [shipId, quantity] of Object.entries(flight.selectedShips) as [ShipId, number][]) {
+      reserved[shipId] = (reserved[shipId] ?? 0) + Math.floor(quantity);
+    }
+  }
+  return reserved;
+}
+
+/**
+ * Test Mode QA only: an allied NPC (Ira Vel) serves a request of the player.
+ * It is the same physical flight as the player's: real ships taken from the
+ * NPC planet's fleet, real cargo debited from its stock, the shared route,
+ * fuel, reservation, arrival and return code. There is no autonomous decision
+ * here; a person triggers it explicitly. Refused outside Test Mode.
+ */
+export function dispatchNpcAidFlight(
+  state: SaveState,
+  command: NpcAidDispatchCommand,
+  options: FlightRuntimeOptions | number = {},
+): FlightCommandResult {
+  const runtimeOptions: FlightRuntimeOptions = typeof options === 'number' ? { now: options } : options;
+  const flights = currentFlightState(state);
+  const existing = getFlightByRequestId(flights, command.requestId);
+  if (existing) return { ok: true, state, flight: existing, created: false, notice: noticeForDispatch(existing) };
+  if (runtimeOptions.mode !== 'test' || !command.requestId.startsWith('aid-npc:')) {
+    return failure(state, 'mission-not-supported', 'Помощь от NPC доступна только в сценарии Test Mode.');
+  }
+  const request = selectRequestById(state.command, command.aidRequestId);
+  if (!request || !isRequestOpen(request)) return failure(state, 'target-not-available', 'Запрос помощи закрыт или не найден.');
+  const recipientOwnerId = state.profile.playerId;
+  if (request.authorOwnerId !== recipientOwnerId
+    || !isAidPairValid(state.command, { allianceId: request.allianceId, senderOwnerId: command.senderOwnerId, recipientOwnerId })) {
+    return failure(state, 'target-not-available', 'Отправитель и автор запроса должны состоять в одном союзе.');
+  }
+  const origin = Object.values(state.alliedPlanets ?? {}).find((planet) => planet.ownerId === command.senderOwnerId);
+  const targetPlanet = state.planets[request.planetId];
+  if (!origin || !targetPlanet || !coordinatesEqual(coordinateOfPlanet(targetPlanet), request.coordinate)) {
+    return failure(state, 'target-not-available', 'Планета назначения запроса недоступна.');
+  }
+  const factionId = origin.raceId as CombatFactionId;
+  const cargoPerShip = new Map(getFactionShipCatalog(factionId).map((entity) => [entity.id as ShipId, entity.ship?.cargo ?? 0]));
+  const reserved = reservedNpcAidShips(state, origin.id);
+  const free = (shipId: ShipId) => Math.max(0, (origin.fleet.ships[shipId] ?? 0) - (reserved[shipId] ?? 0));
+
+  const remainder = requestOpenRemainder(request, aidInFlightUnits(flights.records, request.id));
+  const stock = request.resource === 'debris'
+    ? origin.recycling.availableDebris
+    : (origin.resources ?? { metal: 0, minerals: 0, gas: 0 })[request.resource];
+  const wanted = Math.min(command.units ?? remainder, remainder, stock);
+  if (!Number.isSafeInteger(wanted) || wanted <= 0) {
+    return failure(state, 'invalid-cargo', 'Нечего отправлять: остаток запроса занят или на планете нет ресурса.');
+  }
+  const selectedShips: Partial<Record<ShipId, number>> = {};
+  let capacity = 0;
+  for (const shipId of ['mega-transporter', 'transporter'] as ShipId[]) {
+    const per = cargoPerShip.get(shipId) ?? 0;
+    if (per <= 0) continue;
+    const need = Math.min(free(shipId), Math.ceil(Math.max(0, wanted - capacity) / per));
+    if (need <= 0) continue;
+    selectedShips[shipId] = need;
+    capacity += need * per;
+  }
+  if (capacity <= 0) return failure(state, 'insufficient-ships', 'На планете союзника нет свободных транспортёров.');
+  const units = Math.min(wanted, capacity);
+  const cargo: TransportCargo = { ...emptyTransportCargo(), [request.resource]: units };
+
+  const departedAt = Number.isFinite(command.departedAt) ? command.departedAt! : (runtimeOptions.now ?? Date.now());
+  const originCoordinate = coordinateOfPlanet(origin);
+  const target = resolveTransportTarget(state, {
+    kind: 'planet', planetId: request.planetId, coordinate: { ...request.coordinate },
+  });
+  const overflowWarning = getOverflowWarning(
+    cargo,
+    targetPlanet.resources ?? getPlanetResources(state, request.planetId),
+    targetPlanet.recycling.availableDebris,
+    getStorageCapacities(targetPlanet.buildings),
+  );
+  const domainResult = dispatchDomainFlight(flights, {
+    requestId: command.requestId,
+    missionId: 'aid',
+    ownerSide: 'npc',
+    originPlanetId: origin.id,
+    originCoordinate,
+    destination: { kind: 'planet', planetId: request.planetId, coordinate: { ...request.coordinate } },
+    selectedShips,
+    departedAt,
+    factionId,
+    destinationPlanetId: request.planetId,
+    targetPlanetName: targetPlanet.name,
+    destinationOwnerId: recipientOwnerId,
+    targetRelation: 'self',
+    cargo,
+    overflowWarning,
+    aid: {
+      requestId: request.id,
+      allianceId: request.allianceId,
+      senderOwnerId: command.senderOwnerId,
+      recipientOwnerId,
+      resource: request.resource,
+    },
+  });
+  const flight = scaledRecord(domainResult.flight, runtimeOptions);
+  const resources = origin.resources ?? { metal: 0, minerals: 0, gas: 0 };
+  const gasNeeded = flight.gasCost + (request.resource === 'gas' ? units : 0);
+  if (resources.gas < gasNeeded) return failure(state, 'insufficient-gas', 'На планете союзника недостаточно газа для рейса.');
+  if (!target.runtime) return failure(state, 'target-not-available', 'Планета назначения запроса недоступна.');
+
+  const debited: AlliedPlanetState = {
+    ...origin,
+    resources: {
+      metal: resources.metal - cargo.metal,
+      minerals: resources.minerals - cargo.minerals,
+      gas: resources.gas - cargo.gas - flight.gasCost,
+    },
+    recycling: { ...origin.recycling, availableDebris: Math.max(0, origin.recycling.availableDebris - cargo.debris) },
+  };
+  let next = replaceAlliedPlanetState({ ...state, flights: updateFlight(domainResult.state, flight) }, origin.id, debited);
+  next = {
+    ...next,
+    command: markRequestHelpStarted(next.command, request.id, flight.id, command.senderOwnerId, units, flight.departedAt),
+  };
+  return { ok: true, state: next, flight, created: true, notice: noticeForDispatch(flight) };
 }
 
 /** Read-only preview using the same application validation and calculator path as dispatch. */
@@ -1718,6 +2019,27 @@ function updatePlanetCargoState(
   });
 }
 
+/** An allied (Test Mode NPC) aid flight brings undelivered cargo back to the NPC's own planet. */
+function returnNpcAidCargo(
+  state: SaveState,
+  flight: FlightRecord,
+  cargo: TransportCargo,
+  now: number,
+): { state: SaveState; flight: FlightRecord } {
+  const origin = state.alliedPlanets?.[flight.originPlanetId];
+  const settled: FlightRecord = { ...flight, cargoState: 'returned', cargoResolvedAt: now };
+  if (!origin) return { state, flight: settled };
+  const credit = getCappedDelivery(origin.resources ?? { metal: 0, minerals: 0, gas: 0 }, getStorageCapacities(origin.buildings), cargo);
+  return {
+    state: replaceAlliedPlanetState(state, flight.originPlanetId, {
+      ...origin,
+      resources: credit.resources,
+      recycling: { ...origin.recycling, availableDebris: addDebris(origin.recycling.availableDebris, cargo.debris) },
+    }),
+    flight: settled,
+  };
+}
+
 function returnTransportCargo(
   state: SaveState,
   flight: FlightRecord,
@@ -1725,8 +2047,9 @@ function returnTransportCargo(
 ): { state: SaveState; flight: FlightRecord } {
   if (flight.cargoState === 'returned'
     || flight.cargoState === 'voided'
-    || (flight.missionId === 'transport' && flight.cargoState === 'delivered')) return { state, flight };
+    || ((flight.missionId === 'transport' || flight.missionId === 'aid') && flight.cargoState === 'delivered')) return { state, flight };
   const cargo = normalizeTransportCargo(flight.cargo);
+  if (flight.ownerSide === 'npc' && flight.missionId === 'aid') return returnNpcAidCargo(state, flight, cargo, now);
   const origin = state.planets[flight.originPlanetId];
   if (!origin) {
     return {
@@ -1750,6 +2073,26 @@ function returnTransportCargo(
   return {
     state: next,
     flight: { ...flight, cargoState: 'returned', cargoResolvedAt: now },
+  };
+}
+
+/** Where an aid flight must unload: the request's planet, owned by the recipient, at the frozen coordinate. */
+function aidArrivalTarget(state: SaveState, flight: FlightRecord): ResolvedTransportTarget {
+  const aid = flight.aid;
+  const planetId = flight.destinationPlanetId;
+  if (!aid || !planetId) return emptyTransportTarget(flight.destination);
+  const toPlayer = aid.recipientOwnerId === state.profile.playerId;
+  const planet = toPlayer ? state.planets[planetId] : state.alliedPlanets?.[planetId];
+  if (!planet) return emptyTransportTarget(flight.destination);
+  if (!toPlayer && (planet as AlliedPlanetState).ownerId !== aid.recipientOwnerId) return emptyTransportTarget(flight.destination);
+  if (!coordinatesEqual(coordinateOfPlanet(planet), flight.destinationCoordinate)) return emptyTransportTarget(flight.destination);
+  return {
+    planetId,
+    coordinate: { ...flight.destinationCoordinate },
+    ownerId: aid.recipientOwnerId,
+    relation: toPlayer ? 'self' : 'ally',
+    runtime: planet,
+    acceptsTransport: true,
   };
 }
 
@@ -2340,6 +2683,78 @@ export function reconcileFlights(
         });
         continue;
       }
+      if (current.missionId === 'aid') {
+        const aid = current.aid;
+        const request = aid ? selectRequestById(next.command, aid.requestId) : null;
+        const standing = Boolean(aid && request && isRequestOpen(request)
+          && request.allianceId === aid.allianceId
+          && request.authorOwnerId === aid.recipientOwnerId
+          && request.planetId === current.destinationPlanetId
+          && isAidPairValid(next.command, aid));
+        if (!aid || current.cargoState !== 'loaded' || aid.creditedUnits !== undefined) {
+          // Already settled (reload / repeated handler): only the return leg is left.
+          const returning = beginTransportReturn(next, current, now, current.cargoState === 'returned' ? 'recalled' : 'normal-return');
+          next = { ...next, flights: updateFlight(next.flights, returning) };
+          changed = true;
+          continue;
+        }
+        if (!standing) {
+          // Membership or request changed: turn back with the cargo still aboard.
+          const turned = beginTransportReturn(next, { ...current, arrivedAt: arrivalAt }, now, 'recalled');
+          next = { ...next, flights: updateFlight(next.flights, turned) };
+          changed = true;
+          events.push({ flight: turned, status: 'target-unavailable', notice: 'Помощь союзу: запрос закрыт или состав союза изменился; корабли возвращаются с грузом.' });
+          continue;
+        }
+        const target = aidArrivalTarget(next, current);
+        if (!target.acceptsTransport || !target.runtime) {
+          // Independent loss of the destination keeps the standing rule: ships return, cargo is lost.
+          const voided: FlightRecord = { ...current, arrivedAt: arrivalAt, cargoState: 'voided', cargoResolvedAt: now };
+          const returning = beginTransportReturn(next, voided, now, 'target-unavailable');
+          next = { ...next, flights: updateFlight(next.flights, returning) };
+          changed = true;
+          events.push({ flight: returning, status: 'target-unavailable', notice: 'Помощь союзу: планета назначения недоступна; груз потерян, корабли возвращаются.' });
+          continue;
+        }
+        const cargo = normalizeTransportCargo(current.cargo);
+        const delivery = getCappedDelivery(
+          target.runtime.resources ?? { metal: 0, minerals: 0, gas: 0 },
+          getStorageCapacities(target.runtime.buildings),
+          cargo,
+        );
+        // Only what the planet really took counts: the burned share of metal/minerals/gas is lost,
+        // debris has no storage limit.
+        const accepted = aid.resource === 'debris' ? cargo.debris : delivery.accepted[aid.resource];
+        next = updatePlanetCargoState(next, target, delivery.resources, cargo.debris);
+        next = {
+          ...next,
+          command: creditAidDelivery(next.command, {
+            requestId: aid.requestId,
+            flightId: current.id,
+            senderOwnerId: aid.senderOwnerId,
+            units: accepted,
+          }, now),
+        };
+        const delivered: FlightRecord = {
+          ...current,
+          aid: { ...aid, creditedUnits: accepted },
+          arrivedAt: arrivalAt,
+          cargoState: 'delivered',
+          deliveredAt: now,
+          cargoResolvedAt: now,
+        };
+        const returning = beginTransportReturn(next, delivered, now, 'normal-return');
+        next = { ...next, flights: updateFlight(next.flights, returning) };
+        changed = true;
+        events.push({
+          flight: returning,
+          status: 'delivered',
+          notice: accepted < cargo[aid.resource]
+            ? `Помощь союзу доставлена частично: принято ${accepted}, остальное не поместилось.`
+            : 'Помощь союзу доставлена. Корабли возвращаются.',
+        });
+        continue;
+      }
       if (current.missionId === 'transport') {
         const target = transportArrivalTarget(next, current);
         const cargo = normalizeTransportCargo(current.cargo);
@@ -2717,7 +3132,7 @@ export function reconcileFlights(
       } else if (refreshed.missionId === 'expedition' || refreshed.explorationAttack) {
         next = creditExpeditionReturn(next, refreshed, refreshed.returnAt);
       }
-      if (refreshed.missionId === 'transport' || refreshed.missionId === 'recycle' || refreshed.missionId === 'gas' || refreshed.missionId === 'space-flight') {
+      if (refreshed.missionId === 'transport' || refreshed.missionId === 'aid' || refreshed.missionId === 'recycle' || refreshed.missionId === 'gas' || refreshed.missionId === 'space-flight') {
         const returned = returnTransportCargo(next, refreshed, refreshed.returnAt);
         next = returned.state;
         returnedFlight = returned.flight;
@@ -2734,7 +3149,7 @@ export function reconcileFlights(
         ...returnedFlight,
         phase: 'completed',
         completedAt: refreshed.returnAt,
-        completionReason: returnedFlight.missionId === 'transport' || returnedFlight.missionId === 'recycle' || returnedFlight.missionId === 'gas'
+        completionReason: returnedFlight.missionId === 'transport' || returnedFlight.missionId === 'aid' || returnedFlight.missionId === 'recycle' || returnedFlight.missionId === 'gas'
           ? returnedFlight.completionReason ?? 'recalled'
           : returnedFlight.completionReason === 'target-unavailable'
             ? 'target-unavailable'
@@ -2749,6 +3164,19 @@ export function reconcileFlights(
                 : 'recalled',
       };
       next = completeFlight(next, returnedFlight, completed);
+      if (completed.missionId === 'aid' && completed.aid && completed.cargoState === 'returned') {
+        const request = selectRequestById(next.command, completed.aid.requestId);
+        if (request) {
+          next = {
+            ...next,
+            command: appendAidEvent(next.command, 'aid_returned', completed.id, {
+              at: refreshed.returnAt, allianceId: completed.aid.allianceId, requestId: request.id,
+              actorOwnerId: completed.aid.senderOwnerId, flightId: completed.id,
+              units: normalizeTransportCargo(completed.cargo)[completed.aid.resource],
+            }),
+          };
+        }
+      }
       if (spyMission && spyMission.status === 'returning') {
         next = withEspionageState(next, updateSpyMission(currentEspionageState(next), {
           ...spyMission,
@@ -2775,6 +3203,12 @@ export function reconcileFlights(
             ? 'Пиратский флот завершил возвращение; добыча не начисляется другим владельцам.'
           : completed.ownerSide === 'bot01'
             ? 'Флот Bot 01 вернулся к источнику; выжившие корабли и захваченные ресурсы зачислены.'
+        : completed.missionId === 'aid'
+          ? completed.cargoState === 'delivered'
+            ? 'Корабли помощи союзу вернулись после доставки.'
+            : completed.cargoState === 'voided'
+              ? 'Корабли помощи союзу вернулись: планета назначения недоступна, груз потерян.'
+              : 'Корабли помощи союзу вернулись с грузом.'
         : completed.missionId === 'transport' || completed.missionId === 'recycle' || completed.missionId === 'gas'
           ? completed.completionReason === 'target-unavailable'
             ? completed.missionId === 'recycle' || completed.missionId === 'gas'

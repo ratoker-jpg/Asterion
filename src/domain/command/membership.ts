@@ -12,6 +12,11 @@ import {
   REAPPLY_COOLDOWN_MS,
 } from './catalog.ts';
 import {
+  closeRequestsOfAlliance,
+  closeRequestsOfAuthor,
+  registerAidMembership,
+} from './aid.ts';
+import {
   canManageAlliance,
   isAllianceFull,
   selectAllianceById,
@@ -204,11 +209,8 @@ export function createAlliance(
     members: [createMember(input.ownerId, input.displayName, options.now, random)],
   };
   const withPending = withdrawPending(state, input.ownerId, options.now);
-  return {
-    ok: true,
-    allianceId: id,
-    state: { ...withPending, alliances: [...withPending.alliances, alliance], nextSerial: state.nextSerial + 1 },
-  };
+  const created: CommandState = { ...withPending, alliances: [...withPending.alliances, alliance], nextSerial: state.nextSerial + 1 };
+  return { ok: true, allianceId: id, state: registerAidMembership(created, input.ownerId, id, options.now) };
 }
 
 export function updateAllianceSettings(
@@ -329,6 +331,7 @@ export function acceptApplication(
       : candidate)),
   };
   if (grown.members.length >= MAX_ALLIANCE_MEMBERS) next = autoRejectPending(next, alliance.id, 'full', now);
+  next = registerAidMembership(next, application.ownerId, alliance.id, now);
   return { ok: true, state: next, allianceId: alliance.id, ownerId: application.ownerId };
 }
 
@@ -391,7 +394,8 @@ export function leaveAlliance(
   const others = alliance.members.filter((member) => member.ownerId !== ownerId);
 
   if (!others.length) {
-    return { ok: true, disbanded: true, state: leaveCooldown(disband(state, alliance.id, now), ownerId, 'left', now) };
+    const closed = closeRequestsOfAlliance(state, alliance.id, now);
+    return { ok: true, disbanded: true, state: leaveCooldown(disband(closed, alliance.id, now), ownerId, 'left', now) };
   }
 
   let next: AllianceRecord = alliance;
@@ -404,7 +408,8 @@ export function leaveAlliance(
     next = promote(alliance, successorId, now);
   }
   next = removeMemberFromAlliance(next, ownerId);
-  return { ok: true, disbanded: false, state: leaveCooldown(replaceAlliance(state, next), ownerId, 'left', now) };
+  const left = closeRequestsOfAuthor(replaceAlliance(state, next), ownerId, alliance.id, 'author_left', now);
+  return { ok: true, disbanded: false, state: leaveCooldown(left, ownerId, 'left', now) };
 }
 
 /** Leader may remove anyone; the deputy may remove ordinary members only. Nobody removes themselves this way. */
@@ -418,7 +423,8 @@ export function kickMember(state: CommandState, actorOwnerId: string, targetOwne
   if (!targetRole) return fail(state, 'target_not_member', 'Этот игрок не состоит в вашем союзе.');
   if (targetRole === 'leader') return fail(state, 'not_allowed', 'Лидера исключить нельзя.');
   if (targetRole === 'deputy' && membership.role !== 'leader') return fail(state, 'not_allowed', 'Заместителя может исключить только лидер.');
-  const next = replaceAlliance(state, removeMemberFromAlliance(alliance, targetOwnerId));
+  const removed = replaceAlliance(state, removeMemberFromAlliance(alliance, targetOwnerId));
+  const next = closeRequestsOfAuthor(removed, targetOwnerId, alliance.id, 'author_left', now);
   return { ok: true, state: leaveCooldown(next, targetOwnerId, 'kicked', now) };
 }
 
@@ -516,16 +522,4 @@ export function refreshPresence(state: CommandState, ownerId: string, now: numbe
   return touchMember(settleLeadership(state, now), ownerId, now, displayName);
 }
 
-/** Credits actually delivered units (PR 2 calls this from the arrival settlement). */
-export function creditDeliveredUnits(state: CommandState, ownerId: string, units: number): CommandState {
-  const amount = Number.isFinite(units) ? Math.max(0, Math.floor(units)) : 0;
-  if (!amount) return state;
-  const membership = selectOwnerMembership(state, ownerId);
-  if (!membership) return state;
-  return replaceAlliance(state, {
-    ...membership.alliance,
-    members: membership.alliance.members.map((member) => member.ownerId === ownerId
-      ? { ...member, deliveredUnits: member.deliveredUnits + amount }
-      : member),
-  });
-}
+export { creditDeliveredUnits } from './aid.ts';

@@ -61,6 +61,7 @@ import {
 import {
   createCanonicalStartingFleet,
   createEmptyFleetState,
+  migrateFleetState,
   normalizeFleetStateForCapacity,
   removeSolarSatellitesFromFleet,
   resolveSavedFleetState,
@@ -109,6 +110,7 @@ import type { EnergyLedger } from '../domain/energy/runtime.ts';
 import type { PlanetQueueRecord, PlanetResources, PlanetStateRecord, ResourceClock, ResourceClockEntry, SaveState, PlanetRuntime } from './contracts.ts';
 import type { AlliedPlanetState } from './contracts.ts';
 import { COMMANDER_IDS } from '../domain/combat/commanders.ts';
+import { TEST_ALLY_OWNER_ID } from '../domain/command/catalog.ts';
 import { isFlightCoordinate } from '../domain/flights/distance.ts';
 import type {
   FlightCompletionReason,
@@ -531,6 +533,7 @@ const PERSISTED_FLIGHT_MISSIONS = new Set<MissionId>([
   'expedition',
   'exploration-recon',
   'transport',
+  'aid',
   'espionage',
   'attack',
   'deployment',
@@ -670,6 +673,45 @@ function isValidPersistedSpaceFlightDuration(durationMs: number, mode: RuntimeMo
   });
 }
 
+const PERSISTED_AID_RESOURCES = new Set(['metal', 'minerals', 'gas', 'debris']);
+const PERSISTED_AID_SHIPS = new Set(['transporter', 'mega-transporter']);
+
+/** Alliance aid flights: bound to a request, one resource, cargo ships only; NPC senders exist in Test Mode only. */
+function isPersistedAidFlight(
+  item: Record<string, unknown>,
+  mode: RuntimeMode,
+  shipEntries: Array<[string, unknown]>,
+): boolean {
+  const aid = item.aid;
+  if (!aid || typeof aid !== 'object' || Array.isArray(aid)) return false;
+  const snapshot = aid as Record<string, unknown>;
+  if (!isNonEmptyPersistedString(snapshot.requestId)
+    || !isNonEmptyPersistedString(snapshot.allianceId)
+    || !isNonEmptyPersistedString(snapshot.senderOwnerId)
+    || !isNonEmptyPersistedString(snapshot.recipientOwnerId)
+    || snapshot.senderOwnerId === snapshot.recipientOwnerId
+    || !PERSISTED_AID_RESOURCES.has(String(snapshot.resource))) return false;
+  const cargo = normalizePersistedTransportCargo(item.cargo);
+  if (!cargo || item.cargoState === undefined) return false;
+  const resource = snapshot.resource as keyof typeof cargo;
+  if ((Object.keys(cargo) as Array<keyof typeof cargo>).some((key) => key !== resource && cargo[key] > 0)) return false;
+  if (snapshot.creditedUnits !== undefined
+    && (!isNonNegativeInteger(snapshot.creditedUnits) || snapshot.creditedUnits > cargo[resource])) return false;
+  if (shipEntries.length === 0 || shipEntries.some(([shipId]) => !PERSISTED_AID_SHIPS.has(shipId))) return false;
+  if (Object.keys((item.selectedCommanders ?? {}) as Record<string, unknown>).length > 0) return false;
+  const destination = item.destination as Record<string, unknown> | undefined;
+  if (!destination || destination.kind !== 'planet'
+    || !isNonEmptyPersistedString(item.destinationPlanetId)
+    || (item.targetRelation !== 'ally' && item.targetRelation !== 'self')) return false;
+  if (item.ownerSide === 'npc') {
+    return mode === 'test'
+      && snapshot.senderOwnerId === TEST_ALLY_OWNER_ID
+      && String(item.requestId).startsWith('aid-npc:')
+      && item.targetRelation === 'self';
+  }
+  return item.ownerSide === undefined || item.ownerSide === 'player';
+}
+
 /**
  * Flight records are consumed by reconciliation as executable state, not as
  * optional UI history. Reject incomplete nested records at the persistence
@@ -703,7 +745,7 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
 
   if ((item.ownerSide !== undefined && item.ownerSide !== 'player' && item.ownerSide !== 'bot01' && item.ownerSide !== 'npc' && item.ownerSide !== 'pirate')
     || (item.ownerSide === 'bot01' && item.missionId !== 'attack' && !(mode === 'test' && item.missionId === 'expedition'))
-    || (item.ownerSide === 'npc' && item.missionId !== 'expedition' && !(item.missionId === 'attack' && item.explorationAttack === true))
+    || (item.ownerSide === 'npc' && item.missionId !== 'expedition' && item.missionId !== 'aid' && !(item.missionId === 'attack' && item.explorationAttack === true))
     || (item.ownerSide === 'pirate' && item.missionId !== 'pirate-raid')
     || (item.missionId === 'pirate-raid' && item.ownerSide !== 'pirate')) return false;
 
@@ -712,7 +754,7 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
       mode !== 'test' || !String(item.requestId).startsWith('bot01-exploration:')
       || !['aegis','synod','veyra'].includes(String(item.explorationFactionId)) || item.targetRelation !== 'neutral'
       || item.gasCost !== 0)) return false;
-  if (item.ownerSide === 'npc' && (mode !== 'production' || !String(item.requestId).startsWith('npc-exploration:')
+  if (item.ownerSide === 'npc' && item.missionId !== 'aid' && (mode !== 'production' || !String(item.requestId).startsWith('npc-exploration:')
     || !['aegis','synod','veyra'].includes(String(item.explorationFactionId))
     || item.targetRelation !== 'neutral' || item.gasCost !== 0)) return false;
   if ((item.missionId === 'expedition' || item.missionId === 'exploration-recon')
@@ -735,6 +777,8 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
     if (item.targetRelation === undefined || item.destinationPlanetId === undefined) return false;
     if (item.cargoState === undefined) return false;
   }
+  if (item.missionId === 'aid' && !isPersistedAidFlight(item, mode, shipEntries)) return false;
+  if (item.aid !== undefined && item.missionId !== 'aid') return false;
   if (item.missionId === 'recycle') {
     const cargo = normalizePersistedTransportCargo(item.cargo);
     if (!cargo
@@ -1090,6 +1134,11 @@ function migrateAlliedPlanets(
       buildings,
       resources,
       recycling,
+      // The aid QA scenario puts real transporters on this planet; they must survive a reload.
+      fleet: source?.fleet !== undefined ? migrateFleetState(source.fleet) : fallback.fleet,
+      ...(isNonNegativeInteger((raw as { aidQaFixtureAt?: unknown } | undefined)?.aidQaFixtureAt)
+        ? { aidQaFixtureAt: (raw as { aidQaFixtureAt: number }).aidQaFixtureAt }
+        : {}),
       energy: numberOr(source?.energy, fallback.energy),
       stability: numberOr(source?.stability, fallback.stability),
     },

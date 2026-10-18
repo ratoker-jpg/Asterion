@@ -13,6 +13,6 @@ test('aid mission requires an ally target and at least one free transporter', ()
   }
 });
 
-test('aid mission is registered but not connected to the flight runtime in PR 1', () => {
-  assert.equal(AID_MISSION_ENABLED, false);
+test('aid mission is enabled in PR 2', () => {
+  assert.equal(AID_MISSION_ENABLED, true);
 });

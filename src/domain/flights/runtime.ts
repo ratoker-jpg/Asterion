@@ -5,7 +5,7 @@ import { calculateFlightFuel } from './fuel.ts';
 import { calculateEffectiveFleetSpeed, calculateOneWayDurationMs } from './speed.ts';
 import { normalizeTransportCargo } from './cargo.ts';
 import type { TransportCargo } from './cargo.ts';
-import type { TargetRelation } from './types.ts';
+import type { AidFlightSnapshot, TargetRelation } from './types.ts';
 import type { CommanderId } from '../combat/commanders.ts';
 import type { AttackLaunchSnapshot, AttackResolution } from '../attack/types.ts';
 import type { FlightCompletionReason, FlightDestination, FlightRecord, FlightScienceLevels, FlightState, MissionId } from './types.ts';
@@ -39,6 +39,8 @@ export type DispatchFlightInput = {
   destinationOwnerId?: string;
   targetRelation?: TargetRelation;
   cargo?: TransportCargo;
+  /** Alliance aid binding; required for the `aid` mission. */
+  aid?: AidFlightSnapshot;
   overflowWarning?: boolean;
   /** Explicit one-way duration for destinationless Space Flight. */
   durationMs?: number;
@@ -85,6 +87,9 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
   if (input.missionId === 'transport' && input.cargo === undefined) {
     throw new Error('Transport flights require a cargo snapshot.');
   }
+  if (input.missionId === 'aid' && (input.cargo === undefined || input.aid === undefined)) {
+    throw new Error('Aid flights require a cargo snapshot and a request binding.');
+  }
   if (isSpaceFlight && input.cargo === undefined) {
     throw new Error('Space Flights require a cargo snapshot.');
   }
@@ -100,7 +105,7 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
   if (input.missionId === 'gas' && (!Number.isSafeInteger(input.gasCapacity) || (input.gasCapacity ?? 0) <= 0)) {
     throw new Error('Gas extraction flights require a positive capacity snapshot.');
   }
-  const cargo = input.missionId === 'transport' || input.missionId === 'space-flight' || input.missionId === 'recycle' || input.missionId === 'gas'
+  const cargo = input.missionId === 'transport' || input.missionId === 'aid' || input.missionId === 'space-flight' || input.missionId === 'recycle' || input.missionId === 'gas'
     ? normalizeTransportCargo(input.cargo)
     : undefined;
   return {
@@ -141,6 +146,7 @@ export function createFlightRecord(input: DispatchFlightInput): FlightRecord {
     departedAt: input.departedAt,
     arrivalAt: input.departedAt + oneWayDurationMs,
     gasCost: isSpaceFlight ? 100 : calculateFlightFuel(input.factionId, input.selectedShips, routeDistance, input.science, selectedCommanders),
+    ...(input.missionId === 'aid' && input.aid ? { aid: { ...input.aid } } : {}),
     cargo,
     cargoState: cargo ? 'loaded' : undefined,
     overflowWarning: cargo ? Boolean(input.overflowWarning) : undefined,

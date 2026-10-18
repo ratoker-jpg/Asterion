@@ -23,7 +23,10 @@ import {
   type AllianceCatalogEntry,
   type MemberScore,
 } from './domain/command/selectors.ts';
+import { AID_RESOURCES, AID_RESOURCE_LABELS } from './domain/command/aid.ts';
+import type { AidOverview, AidRequestRow } from './application/alliance-aid.ts';
 import type {
+  AidResource,
   AllianceAccent,
   AllianceApplication,
   AllianceEmblem,
@@ -49,6 +52,19 @@ export type CommandActions = {
   setDeputy: (ownerId: string | null) => CommandActionResult;
   transferLeadership: (ownerId: string) => CommandActionResult;
   openHallConstruction: () => void;
+  /** One resource, one of the player's own planets, an amount within the limit. */
+  createRequest: (planetId: string, resource: AidResource, amount: number) => CommandActionResult;
+  cancelRequest: (requestId: string) => CommandActionResult;
+  /** Opens the real fleet window prepared for the "Помощь союзу" mission of this request. */
+  startHelp: (requestId: string) => CommandActionResult;
+  /** How much of the requested amount a full warehouse would burn on arrival. */
+  previewOverflow: (planetId: string, resource: AidResource, amount: number) => { lost: number; free: number };
+  /** Test Mode only: puts real transporters and stock on Ira Vel's planet. */
+  testIraPrepare?: () => CommandActionResult;
+  /** Test Mode only: Ira Vel files a request through the normal rules. */
+  testIraRequest?: (resource: AidResource, amount: number) => CommandActionResult;
+  /** Test Mode only: Ira Vel serves the player's request with a real flight. */
+  testIraHelp?: () => CommandActionResult;
   /** Test Mode only: a controlled NPC applies to the player's alliance. */
   testBotApply?: () => CommandActionResult;
   /** Test Mode only: a controlled NPC founds an alliance of its own. */
@@ -63,6 +79,7 @@ type CommandViewProps = {
   ownerId: string;
   hall: CommandHallInfo;
   ownerScores: Readonly<Record<string, MemberScore | undefined>>;
+  aid: AidOverview;
   /** Wall-clock milliseconds; drives the re-application countdowns. */
   now: number;
   actions: CommandActions;
@@ -648,7 +665,167 @@ function NoAlliance({ command, ownerId, ownerScores, now, actions, onFeedback, t
   );
 }
 
-export function CommandView({ mode, command, ownerId, hall, ownerScores, now, actions }: CommandViewProps) {
+function RequestProgressBar({ row }: { row: AidRequestRow }) {
+  const { requested, delivered, inFlight } = row.progress;
+  const deliveredPct = requested > 0 ? Math.min(100, (delivered / requested) * 100) : 0;
+  const flightPct = requested > 0 ? Math.min(100 - deliveredPct, (inFlight / requested) * 100) : 0;
+  return (
+    <div className="command-request-bar" role="progressbar" aria-valuemin={0} aria-valuemax={requested} aria-valuenow={delivered} aria-label="Доставлено по запросу" data-qa-request-bar>
+      <i className="is-delivered" style={{ width: `${deliveredPct}%` }} />
+      <i className="is-flight" style={{ width: `${flightPct}%` }} />
+    </div>
+  );
+}
+
+function RequestFigures({ row }: { row: AidRequestRow }) {
+  return (
+    <dl className="command-request-figures">
+      <div><dt>Запрошено</dt><dd data-qa-request-requested>{number.format(row.progress.requested)}</dd></div>
+      <div><dt>В пути</dt><dd data-qa-request-inflight>{number.format(row.progress.inFlight)}</dd></div>
+      <div><dt>Доставлено</dt><dd data-qa-request-delivered>{number.format(row.progress.delivered)}</dd></div>
+    </dl>
+  );
+}
+
+const CLOSE_REASON_LABELS: Record<string, string> = {
+  completed: 'Выполнен',
+  cancelled: 'Отменён',
+  author_left: 'Закрыт: автор покинул союз',
+  alliance_disbanded: 'Закрыт: союз расформирован',
+};
+
+function RequestsTab({ aid, now, actions, onFeedback, testControls }: {
+  aid: AidOverview;
+  now: number;
+  actions: CommandActions;
+  onFeedback: (result: CommandActionResult) => void;
+  testControls: boolean;
+}) {
+  const [planetId, setPlanetId] = useState('');
+  const [resource, setResource] = useState<AidResource>('metal');
+  const [amountText, setAmountText] = useState(String(aid.minAmount));
+  const selectedPlanet = aid.planets.find((planet) => planet.id === planetId) ?? aid.planets[0] ?? null;
+  const amount = Number(amountText);
+  const amountValid = Number.isSafeInteger(amount) && amount >= aid.minAmount && amount <= aid.maxAmount;
+  const charges = aid.charges;
+  const noCharge = !charges || charges.charges < 1;
+  const atLimit = aid.openCount >= aid.maxOpen;
+  const overflow = selectedPlanet && amountValid ? actions.previewOverflow(selectedPlanet.id, resource, amount) : null;
+  const blocker = atLimit
+    ? `Открыто ${aid.openCount} из ${aid.maxOpen} запросов — закройте один, чтобы создать новый.`
+    : noCharge
+      ? charges?.paused ? 'Восстановление зарядов остановлено: нет здания Палаты.' : 'Нет свободных зарядов — дождитесь восстановления.'
+      : !selectedPlanet ? 'Выберите планету назначения.'
+        : !amountValid ? `Допустимое количество — от ${number.format(aid.minAmount)} до ${number.format(aid.maxAmount)}.` : '';
+
+  const chargeLine = !charges
+    ? 'Заряды появятся после вступления в союз.'
+    : charges.charges >= aid.maxCharges
+      ? 'Запас полон.'
+      : charges.paused
+        ? 'Восстановление приостановлено: прогресс сохранён.'
+        : charges.nextChargeAt !== null
+          ? `${charges.intro ? 'Первый заряд союза' : 'Следующий заряд'} через ${formatCountdown(charges.nextChargeAt - now)}`
+          : '';
+
+  const submit = () => {
+    if (!selectedPlanet || blocker) return;
+    const result = actions.createRequest(selectedPlanet.id, resource, amount);
+    onFeedback(result);
+  };
+
+  return (
+    <div className="command-requests" data-qa-requests>
+      <Panel title="МОИ ЗАПРОСЫ" kicker="РЕСУРСЫ ДЛЯ СВОЕЙ ПЛАНЕТЫ" aside={<span className="command-count" data-qa-request-charges>{charges ? `${charges.charges}/${aid.maxCharges}` : '—'} ЗАРЯДА</span>}>
+        <p className="command-note" data-qa-charge-line>{chargeLine}</p>
+        <div className="command-request-form" data-qa-request-form>
+          <label className="command-select"><span>ПЛАНЕТА НАЗНАЧЕНИЯ</span>
+            <select value={selectedPlanet?.id ?? ''} onChange={(event) => setPlanetId(event.target.value)} data-qa-request-planet>
+              {aid.planets.map((planet) => <option key={planet.id} value={planet.id}>{planet.name} [{planet.coordinate.galaxy}:{planet.coordinate.system}:{planet.coordinate.position}]</option>)}
+            </select>
+          </label>
+          <label className="command-select"><span>РЕСУРС</span>
+            <select value={resource} onChange={(event) => setResource(event.target.value as AidResource)} data-qa-request-resource>
+              {AID_RESOURCES.map((key) => <option key={key} value={key}>{AID_RESOURCE_LABELS[key]}</option>)}
+            </select>
+          </label>
+          <label className="command-select"><span>КОЛИЧЕСТВО · {number.format(aid.minAmount)}–{number.format(aid.maxAmount)}</span>
+            <input type="number" inputMode="numeric" min={aid.minAmount} max={aid.maxAmount} step={1} value={amountText} onChange={(event) => setAmountText(event.target.value)} data-qa-request-amount />
+          </label>
+          <button type="button" className="primary" disabled={Boolean(blocker)} onClick={submit} data-qa-request-create>СОЗДАТЬ ЗАПРОС</button>
+        </div>
+        <p className="command-note" data-qa-request-limit>Максимум зависит от ресурсных очков ({number.format(aid.resourcePoints)}), а не от уровня Палаты. Открыто запросов: {aid.openCount} из {aid.maxOpen}. Запрос нельзя изменить; отмена возможна, пока никто не отправил помощь.</p>
+        {blocker ? <p className="command-note is-warning" role="status" data-qa-request-blocker>{blocker}</p> : null}
+        {overflow && overflow.lost > 0 ? (
+          <p className="command-note is-warning" role="alert" data-qa-request-overflow>
+            Склад планеты вмещает ещё {number.format(overflow.free)}. Если доставить {number.format(amount)}, {number.format(overflow.lost)} сгорит и не будет засчитано — запрос останется открытым на недостающее.
+          </p>
+        ) : null}
+        {aid.mine.length === 0 ? <div className="command-empty" data-qa-requests-empty>У вас нет открытых запросов.</div> : (
+          <ul className="command-request-list" data-qa-my-requests>
+            {aid.mine.map((row) => (
+              <li key={row.request.id} data-qa-request-id={row.request.id} data-qa-request-status={row.request.status}>
+                <div className="command-request-head">
+                  <strong>{AID_RESOURCE_LABELS[row.request.resource]} → {row.request.planetName}</strong>
+                  <small>[{row.request.coordinate.galaxy}:{row.request.coordinate.system}:{row.request.coordinate.position}]</small>
+                </div>
+                <RequestProgressBar row={row} />
+                <RequestFigures row={row} />
+                <div className="command-request-actions">
+                  <button type="button" className="danger" disabled={!row.canCancel} title={row.canCancel ? 'Вернёт заряд' : 'Помощь уже отправлена — отменить нельзя'} onClick={() => onFeedback(actions.cancelRequest(row.request.id))} data-qa-request-cancel>ОТМЕНИТЬ</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {aid.closed.length ? (
+          <ul className="command-history" aria-label="Недавно закрытые запросы" data-qa-closed-requests>
+            {aid.closed.map((request) => (
+              <li key={request.id}><strong>{AID_RESOURCE_LABELS[request.resource]} → {request.planetName}</strong><small>{CLOSE_REASON_LABELS[request.closeReason ?? 'cancelled'] ?? 'Закрыт'} · {number.format(request.delivered)} из {number.format(request.requested)}</small></li>
+            ))}
+          </ul>
+        ) : null}
+      </Panel>
+
+      <Panel title="ЗАПРОСЫ СОЮЗНИКОВ" kicker="ОТПРАВИТЬ ПОМОЩЬ" aside={<span className="command-count">{aid.incoming.length}</span>}>
+        {aid.incoming.length === 0 ? <div className="command-empty" data-qa-incoming-empty>Союзники пока ничего не просили.</div> : (
+          <ul className="command-request-list" data-qa-incoming-requests>
+            {aid.incoming.map((row) => {
+              const full = row.progress.remainder <= 0;
+              const reason = full ? 'Весь остаток уже в пути или доставлен' : !aid.hasFreeTransporters ? 'Нужен свободный транспортёр или мега-транспортёр' : '';
+              return (
+                <li key={row.request.id} data-qa-request-id={row.request.id}>
+                  <div className="command-request-head">
+                    <strong>{row.request.authorName}</strong>
+                    <small>{AID_RESOURCE_LABELS[row.request.resource]} → {row.request.planetName} [{row.request.coordinate.galaxy}:{row.request.coordinate.system}:{row.request.coordinate.position}]</small>
+                  </div>
+                  <RequestProgressBar row={row} />
+                  <RequestFigures row={row} />
+                  <div className="command-request-actions">
+                    <small>Можно отправить: {number.format(row.progress.remainder)}</small>
+                    <button type="button" className="primary" disabled={Boolean(reason)} title={reason || undefined} onClick={() => onFeedback(actions.startHelp(row.request.id))} data-qa-request-help>ПОМОЧЬ</button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Panel>
+
+      {testControls && actions.testIraPrepare ? (
+        <div className="command-test-box command-test-box--wide" data-qa-aid-test-box>
+          <small>ТЕСТ · ИРА ВЕЛЬ</small>
+          <span>Ручной сценарий проверки помощи в обе стороны тем же полётным движком. Ира сама ничего не решает.</span>
+          <button type="button" onClick={() => onFeedback(actions.testIraPrepare!())} data-qa-test-ira-prepare>ПОДГОТОВИТЬ ФЛОТ ИРЫ</button>
+          <button type="button" onClick={() => onFeedback(actions.testIraRequest!('metal', 60_000))} data-qa-test-ira-request>ЗАПРОС ИРЫ: 60 000 МЕТАЛЛА</button>
+          <button type="button" onClick={() => onFeedback(actions.testIraHelp!())} data-qa-test-ira-help>ИРА ПОМОГАЕТ ИГРОКУ</button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function CommandView({ mode, command, ownerId, hall, ownerScores, aid, now, actions }: CommandViewProps) {
   const [tab, setTab] = useState<CommandTab>('overview');
   const [feedback, setFeedback] = useState<CommandActionResult | null>(null);
   const testControls = mode === 'test';
@@ -712,7 +889,7 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, now, ac
             ) : activeTab === 'alliances' ? (
               <CatalogList command={command} ownerId={ownerId} ownerScores={ownerScores} now={now} actions={actions} onFeedback={onFeedback} testControls={testControls} />
             ) : activeTab === 'requests' ? (
-              <Stub title="Запросы ресурсов">Запросы помощи между участниками союза появятся в следующем обновлении. Сейчас их нельзя создавать и выполнять.</Stub>
+              <RequestsTab aid={aid} now={now} actions={actions} onFeedback={onFeedback} testControls={testControls} />
             ) : activeTab === 'diplomacy' ? (
               <Stub title="Дипломатия">Объявление войны и перемирие появятся в будущей версии. Сейчас отношения между союзами не меняются.</Stub>
             ) : (
