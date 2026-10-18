@@ -373,12 +373,14 @@ async function readQaState(win) {
           return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width, height: box.height };
         };
         const banner = document.querySelector('[data-qa-test-mode-banner]');
-        const picker = document.querySelector('.asterion-header__test-mode-speed-picker');
+        const picker = document.querySelector('.hdr-test');
         return {
           banner: rect(banner),
           picker: rect(picker),
           campaign: rect(document.querySelector('[data-qa-campaign]')),
           header: rect(document.querySelector('.asterion-header')),
+          stage: rect(document.querySelector('.stage')),
+          viewport: { width: window.innerWidth, height: window.innerHeight },
           buttons: Array.from(document.querySelectorAll('[data-qa-test-speed]')).map(rect),
         };
       })(),
@@ -459,6 +461,11 @@ async function runViewport(width, height) {
     if (!banner || !campaignBox || banner.left < campaignBox.left - 1 || banner.right > campaignBox.right + 1 || banner.top < campaignBox.top - 1 || banner.bottom > campaignBox.bottom + 1) {
       throw new Error(`${label}: Test Mode pill is not laid out inside the campaign clock ${JSON.stringify(initial.testSpeedLayout)}`);
     }
+    const stageBox = initial.testSpeedLayout?.stage;
+    const viewport = initial.testSpeedLayout?.viewport;
+    if (!stageBox || !viewport || stageBox.left < -1 || stageBox.top < -1 || stageBox.right > viewport.width + 1 || stageBox.bottom > viewport.height + 1) {
+      throw new Error(`${label}: scaled game stage is outside the viewport ${JSON.stringify(initial.testSpeedLayout)}`);
+    }
     await click(win, '.hdr-test__toggle');
     const speedMenu = await win.webContents.executeJavaScript(`(() => {
       const rect = (node) => {
@@ -472,7 +479,7 @@ async function runViewport(width, height) {
         viewport: { width: window.innerWidth, height: window.innerHeight },
       };
     })()`);
-    if (!speedMenu.menu || speedMenu.buttons.length !== 7 || speedMenu.buttons.some((box) => !box || box.width <= 0 || box.left < speedMenu.menu.left - 1 || box.right > speedMenu.menu.right + 1 || box.bottom > speedMenu.menu.bottom + 1 || box.right > speedMenu.viewport.width)) {
+    if (!speedMenu.menu || speedMenu.buttons.length !== 7 || speedMenu.menu.left < 0 || speedMenu.menu.top < 0 || speedMenu.menu.right > speedMenu.viewport.width || speedMenu.menu.bottom > speedMenu.viewport.height || speedMenu.buttons.some((box) => !box || box.width <= 0 || box.left < speedMenu.menu.left - 1 || box.right > speedMenu.menu.right + 1 || box.bottom > speedMenu.menu.bottom + 1 || box.left < 0 || box.top < 0 || box.right > speedMenu.viewport.width || box.bottom > speedMenu.viewport.height)) {
       throw new Error(`${label}: Test Mode speed menu is clipped ${JSON.stringify(speedMenu)}`);
     }
     await click(win, '[data-qa-test-speed="500"]');

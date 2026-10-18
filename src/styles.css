@@ -22,3 +22,19 @@
 .save-conflict-banner strong { flex: none; color: #fff; font-size: 13px !important; font-weight: 800; }
 .save-conflict-banner span { flex: 1 1 auto; font-size: 12px; line-height: 1.45; }
 .save-conflict-banner button { flex: none; height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid rgba(240, 68, 94, .7); background: rgba(240, 68, 94, .16); color: #fff; font-weight: 800; font-size: 11px !important; letter-spacing: .08em; cursor: pointer; }
+
+/* Center the fixed canvas before scaling it on native windows narrower than 1920px. */
+@media (max-width: 1919px) {
+  html:not(.web-preview):not(.asterion-long-page) .viewport:not(:has(.resource-zone-view)) {
+    position: relative;
+    display: block;
+  }
+
+  html:not(.web-preview):not(.asterion-long-page) .viewport:not(:has(.resource-zone-view)) > .stage {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    margin-left: -960px;
+    margin-top: -540px;
+  }
+}
