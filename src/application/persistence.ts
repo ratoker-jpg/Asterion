@@ -1629,6 +1629,20 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
   }
 }
 
+/**
+ * Marker written into every full save by this build. Partial repository writes spread the
+ * existing envelope, so they keep it; older builds replace the whole save without it. Another
+ * window can therefore tell a save of a current build from one written by an older build still
+ * open on the same origin (e.g. another GitHub Pages preview).
+ */
+export const SAVE_WRITER_FIELD = 'saveWriter';
+export const SAVE_WRITER_VERSION = 1;
+
+/** True when a raw save string was written by a build that knows the writer marker. */
+export function isCurrentBuildSave(raw: string | null): boolean {
+  return typeof raw === 'string' && raw.includes(`"${SAVE_WRITER_FIELD}":`);
+}
+
 export function createPersistenceFacade(options: PersistenceOptions = {}) {
   const mode = options.mode ?? ACTIVE_RUNTIME_MODE;
   const storage = resolveStorage(options.storage);
@@ -1652,7 +1666,7 @@ export function createPersistenceFacade(options: PersistenceOptions = {}) {
               bot01IncomingScenario: undefined,
             },
           };
-        storage.setItem(saveKey, JSON.stringify(persistedState));
+        storage.setItem(saveKey, JSON.stringify({ ...persistedState, [SAVE_WRITER_FIELD]: SAVE_WRITER_VERSION }));
         return { ok: true };
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : String(error) };

@@ -25,12 +25,11 @@ import {
   selectReapplyBlock,
   selectRole,
 } from './selectors.ts';
+import { normalizeEmblem } from './emblem.ts';
 import type {
-  AllianceAccent,
   AllianceApplication,
   AllianceCooldown,
   AllianceEmblem,
-  AllianceEmblemGlyph,
   AllianceMember,
   AllianceRecord,
   AllianceSettingsInput,
@@ -41,8 +40,6 @@ import type {
   CooldownCause,
 } from './types.ts';
 
-const EMBLEM_GLYPHS: readonly AllianceEmblemGlyph[] = ['starforge', 'orbit', 'vanguard'];
-const EMBLEM_ACCENTS: readonly AllianceAccent[] = ['cyan', 'amber', 'violet'];
 const TAG_PATTERN = /^[\p{L}\p{N}]+$/u;
 
 export type MembershipOptions = {
@@ -68,9 +65,7 @@ function nameKey(value: string): string {
 }
 
 function emblemOrDefault(value: AllianceEmblem | undefined): AllianceEmblem {
-  const glyph = value && EMBLEM_GLYPHS.includes(value.glyph) ? value.glyph : 'starforge';
-  const accent = value && EMBLEM_ACCENTS.includes(value.accent) ? value.accent : 'cyan';
-  return { glyph, accent };
+  return normalizeEmblem(value);
 }
 
 type ValidatedSettings = { ok: true; value: AllianceSettingsInput } | { ok: false; code: CommandErrorCode; message: string };

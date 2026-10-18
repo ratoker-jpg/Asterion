@@ -473,7 +473,8 @@ async function runViewport(win, width, height) {
   if (!updatedRating.visible || updatedRating.name !== 'Содружество Север' || updatedRating.tag !== '[NORTH]' || !updatedRating.emblem.includes('vanguard')) throw new Error(`Updated alliance rating contract failed at ${label}: ${JSON.stringify(updatedRating)}`);
   const updatedState = await savedState(win);
   const updatedAlliance = updatedState.command?.alliances?.[0];
-  if (updatedState.command?.alliances?.length !== 1 || updatedAlliance?.id !== 'alliance-test-helion-v1' || updatedAlliance?.name !== 'Содружество Север' || updatedAlliance?.tag !== 'NORTH' || updatedAlliance?.emblem?.glyph !== 'vanguard' || updatedAlliance?.emblem?.accent !== 'amber') throw new Error(`Updated command save contract failed at ${label}: ${JSON.stringify(updatedState.command?.alliances)}`);
+  // Test Mode also seeds Bot 01's own alliance (diplomacy fixture); the player's alliance stays the single editable one.
+  if (updatedState.command?.alliances?.filter((alliance) => alliance.fixtureId !== 'test-command-bot01-v1').length !== 1 || updatedAlliance?.id !== 'alliance-test-helion-v1' || updatedAlliance?.name !== 'Содружество Север' || updatedAlliance?.tag !== 'NORTH' || updatedAlliance?.emblem?.glyph !== 'vanguard' || updatedAlliance?.emblem?.accent !== 'amber') throw new Error(`Updated command save contract failed at ${label}: ${JSON.stringify(updatedState.command?.alliances)}`);
 
   const beforeActiveAlliance = await savedState(win);
   await win.webContents.executeJavaScript(`(() => {

@@ -6,7 +6,7 @@ import './universe.css';
 import { UniverseView } from './UniverseView';
 import { OperationsView } from './OperationsView';
 import { createOperationsVariantAQaFixture, getOperationsVariantAQaStatus } from './operations-variant-a-qa-fixture.ts';
-import { rerollTestUniverseLayout, UNIVERSE_NPC_OWNER_ID } from './domain/universe/runtime.ts';
+import { createUniverseNpcOwnerProfile, rerollTestUniverseLayout, TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_NPC_OWNER_ID } from './domain/universe/runtime.ts';
 import { CommandView, type CommandActionResult, type CommandActions } from './CommandView';
 import { ReportsView } from './ReportsView';
 import { buildReportsFeed, getReportUnreadCounts } from './domain/reports/adapters.ts';
@@ -64,6 +64,8 @@ import {
   withdrawApplication,
 } from './domain/command/membership.ts';
 import { selectCommandHallLevel } from './domain/command/selectors.ts';
+import { declareWar, proposeTruce, respondTruce } from './domain/command/diplomacy.ts';
+import { releaseTestBotFromOwnAlliance } from './domain/command/repository.ts';
 import type { AllianceSettingsInput, CommandResult, CommandState } from './domain/command/types.ts';
 import { syncPlayerProfileWithCommand } from './domain/profile/repository.ts';
 import { withTestOwnerScoreFixtures } from './domain/rating/fixtures.ts';
@@ -112,6 +114,7 @@ import {
   createPersistenceFacade,
   DEFAULT_PLANET_NAME,
   SAVE_SCHEMA_VERSION,
+  isCurrentBuildSave,
 } from './application/persistence.ts';
 import {
   applyProductionBots as applyProductionBotsAction,
@@ -151,7 +154,7 @@ import {
   syncAidState,
   type AidActionResult,
 } from './application/alliance-aid.ts';
-import { TEST_ALLY_OWNER_ID } from './domain/command/catalog.ts';
+import { TEST_ALLY_OWNER_ID, TEST_BOT_ALLIANCE_ID } from './domain/command/catalog.ts';
 import type { AidResource } from './domain/command/types.ts';
 import { getPlanetOverpopulationSummary } from './application/overpopulation.ts';
 import { energySummaryForPlanet, getPlanetEnergyCoordinates } from './application/energy.ts';
@@ -775,7 +778,34 @@ export function App() {
       return { ...current, command, profile: syncPlayerProfileWithCommand(current.profile, command) };
     });
   }, [presenceMinute]);
+  // Another window of the game writes the same save on every tick. A save written by this build
+  // carries a writer marker (see `isCurrentBuildSave`): such a write is adopted and not written
+  // back. A write without it comes from an older build still open on the same origin (e.g. another
+  // GitHub Pages preview); it never stops overwriting the save every second (a just-built «Палата
+  // управления» kept reverting to 0), so this window restores its own state and asks the player to
+  // close the other window.
+  const adoptedFromOtherWindow = useRef<SaveState | null>(null);
+  const [foreignWriterAt, setForeignWriterAt] = useState<number | null>(null);
   useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.storageArea !== window.localStorage || event.key !== persistence.saveKey) return;
+      if (event.newValue !== null && !isCurrentBuildSave(event.newValue)) {
+        setForeignWriterAt(Date.now());
+        persistence.write(stateRef.current);
+        return;
+      }
+      const next = persistence.read();
+      adoptedFromOtherWindow.current = next;
+      setState(next);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [persistence]);
+  useEffect(() => {
+    if (adoptedFromOtherWindow.current === state) {
+      adoptedFromOtherWindow.current = null;
+      return;
+    }
     const result = persistence.write(state);
     if (!result.ok) {
       if (!persistenceFailureNotified.current) {
@@ -936,6 +966,13 @@ export function App() {
   }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports, state.pirate, state.flights, state.exploration]);
   const commandHallLevel = useMemo(() => selectCommandHallLevel(state.planets), [state.planets]);
   const commandHallDefinition = getBuildingDefinition('planetary-government', state.profile.factionId);
+  // Races of the owners the Command screen can show: the player, Bot 01 (universe NPC) and,
+  // in Test Mode, Ira Vel — taken from the same owner profiles the Universe uses.
+  const commandOwnerFactions = useMemo<Record<string, string | undefined>>(() => ({
+    [UNIVERSE_NPC_OWNER_ID]: createUniverseNpcOwnerProfile().raceId,
+    ...(RUNTIME_MODE === 'test' ? { [TEST_MODE_ALLY_PLANET_FIXTURE.owner.id]: TEST_MODE_ALLY_PLANET_FIXTURE.owner.raceId } : {}),
+    [state.profile.playerId]: state.profile.factionId,
+  }), [state.profile.playerId, state.profile.factionId]);
   const buildingInteriorTarget = buildingInterior
     ? getBuildingInteriorTarget(buildingInterior.buildingRole)
     : null;
@@ -1456,7 +1493,40 @@ export function App() {
     return { ok: true };
   };
 
+  // Test Mode runs the 3-hour truce timers on the same accelerated clock as the aid charges.
+  const diplomacyOptions = (at: number) => ({ now: at, elapsedScale: RUNTIME_MODE === 'test' ? testTimeScale : 1 });
+
+  /** Allied planets of a member known to this save (Test Mode ally planets today). Never shown on the Command screen. */
+  const memberPlanetsOf = (current: SaveState, ownerId: string) => Object.values(current.alliedPlanets ?? {})
+    .filter((planet) => planet.ownerId === ownerId)
+    .map((planet) => ({
+      planetId: planet.id,
+      coordinate: { galaxy: planet.universeGalaxy ?? 1, system: planet.universeSystem ?? 1, position: planet.universePosition ?? 1 },
+    }));
+
+  const sendFleetToMember = (ownerId: string): CommandActionResult => {
+    const current = stateRef.current;
+    const target = memberPlanetsOf(current, ownerId)[0];
+    if (!target) return { ok: false, message: 'Планета участника неизвестна: найдите её во «Вселенной».' };
+    openTransportLaunch({ planetId: target.planetId, coordinate: target.coordinate, relation: 'ally' });
+    return { ok: true };
+  };
+
   const commandActions: CommandActions = {
+    declareWar: (targetAllianceId: string) => runCommandAction(
+      (command, at, ownerId) => declareWar(command, ownerId, targetAllianceId, diplomacyOptions(at)),
+      'Война объявлена.',
+    ),
+    proposeTruce: (targetAllianceId: string) => runCommandAction(
+      (command, at, ownerId) => proposeTruce(command, ownerId, targetAllianceId, diplomacyOptions(at)),
+      'Предложение перемирия отправлено.',
+    ),
+    respondTruce: (fromAllianceId: string, accept: boolean) => runCommandAction(
+      (command, at, ownerId) => respondTruce(command, ownerId, fromAllianceId, accept, diplomacyOptions(at)),
+      accept ? 'Перемирие заключено. Война окончена.' : 'Предложение перемирия отклонено.',
+    ),
+    sendFleetToMember,
+    canSendFleetToMember: (ownerId: string) => memberPlanetsOf(stateRef.current, ownerId).length > 0,
     createRequest: (planetId: string, resource: AidResource, amount: number) => runAidAction(
       (current, at) => createAidRequest(current, { planetId, resource, amount }, aidContext(at)),
     ),
@@ -1544,17 +1614,35 @@ export function App() {
         (command, at, ownerId) => {
           const own = command.alliances.find((alliance) => alliance.members.some((member) => member.ownerId === ownerId));
           if (!own) return { ok: false, state: command, code: 'not_member', message: 'Сначала вступите в союз или создайте его.' };
-          return applyToAlliance(command, { ownerId: UNIVERSE_NPC_OWNER_ID, displayName: 'Бот 01', allianceId: own.id }, { now: at });
+          // The managed bot leaves its own fixture alliance first (it comes back once the bot is free again).
+          return applyToAlliance(releaseTestBotFromOwnAlliance(command), { ownerId: UNIVERSE_NPC_OWNER_ID, displayName: 'Бот 01', allianceId: own.id }, { now: at });
         },
         'Тест: Бот 01 подал заявку в ваш союз.',
       ),
-      testBotCreateAlliance: () => runCommandAction(
-        (command, at) => createAlliance(command, {
-          ownerId: UNIVERSE_NPC_OWNER_ID,
-          displayName: 'Бот 01',
-          settings: { name: 'Орден Бота 01', tag: 'BOT', motto: 'Тестовый союз NPC.', description: 'Управляемый тестовый союз для проверки заявок.', emblem: { glyph: 'vanguard', accent: 'amber' } },
-        }, { now: at }),
-        'Тест: Бот 01 создал союз.',
+      testBotRespondTruce: (accept: boolean) => runCommandAction(
+        (command, at, ownerId) => {
+          const own = command.alliances.find((alliance) => alliance.members.some((member) => member.ownerId === ownerId));
+          if (!own) return { ok: false, state: command, code: 'not_member', message: 'Сначала вступите в союз.' };
+          return respondTruce(command, UNIVERSE_NPC_OWNER_ID, own.id, accept, diplomacyOptions(at));
+        },
+        accept ? 'Тест: Бот 01 принял перемирие.' : 'Тест: Бот 01 отклонил перемирие.',
+      ),
+      testBotProposeTruce: () => runCommandAction(
+        (command, at, ownerId) => {
+          const own = command.alliances.find((alliance) => alliance.members.some((member) => member.ownerId === ownerId));
+          if (!own) return { ok: false, state: command, code: 'not_member', message: 'Сначала вступите в союз.' };
+          return proposeTruce(command, UNIVERSE_NPC_OWNER_ID, own.id, diplomacyOptions(at));
+        },
+        'Тест: Бот 01 предложил перемирие.',
+      ),
+      testBotDeclareWar: () => runCommandAction(
+        (command, at, ownerId) => {
+          const own = command.alliances.find((alliance) => alliance.members.some((member) => member.ownerId === ownerId));
+          if (!own) return { ok: false, state: command, code: 'not_member', message: 'Сначала вступите в союз.' };
+          if (!command.alliances.some((alliance) => alliance.id === TEST_BOT_ALLIANCE_ID)) return { ok: false, state: command, code: 'alliance_not_found', message: 'Союза Бота 01 сейчас нет.' };
+          return declareWar(command, UNIVERSE_NPC_OWNER_ID, own.id, diplomacyOptions(at));
+        },
+        'Тест: Бот 01 объявил вам войну.',
       ),
     } : {}),
   };
@@ -1860,7 +1948,8 @@ export function App() {
         </button>
 
         <section className={`workspace workspace-v4 workspace--${workspaceKind}`}>
-          {buildingInterior && buildingInteriorTarget && buildingInteriorTarget.kind !== 'host' && buildingInteriorTarget.kind !== 'fleet-construction' && buildingInteriorDefinition ? (
+          {/* Command shows its own «Назад» inside its top bar instead of this overlay (it would cover the tabs). */}
+          {buildingInterior && buildingInteriorTarget && buildingInteriorTarget.kind !== 'host' && buildingInteriorTarget.kind !== 'fleet-construction' && buildingInteriorTarget.kind !== 'command' && buildingInteriorDefinition ? (
             <button
               className="building-interior-return-overlay"
               type="button"
@@ -1981,6 +2070,12 @@ export function App() {
                 art: commandHallDefinition.art,
               }}
               ownerScores={withTestOwnerScoreFixtures(selectOwnerScores(state), RUNTIME_MODE)}
+              ownerFactions={commandOwnerFactions}
+              playerFactionId={state.profile.factionId}
+              returnToBuilding={buildingInterior && buildingInteriorTarget?.kind === 'command' && buildingInteriorDefinition
+                ? { label: `Назад в ${buildingInteriorDefinition.name}`, onBack: returnToBuilding }
+                : undefined}
+              testTimeScale={RUNTIME_MODE === 'test' ? testTimeScale : 1}
               aid={selectAidOverview(state, { now, mode: RUNTIME_MODE, testTimeScale })}
               now={now}
               actions={commandActions}
@@ -2131,6 +2226,13 @@ export function App() {
           )}
         </section>
 
+        {foreignWriterAt ? (
+          <div className="save-conflict-banner" role="alert" data-qa-save-conflict>
+            <strong>Игра открыта в другой вкладке со старой версией</strong>
+            <span>Она каждую секунду перезаписывает сохранение (так пропадала построенная Палата управления). Закройте другие вкладки Asterion этого сайта — эта вкладка сохранит ваш прогресс.</span>
+            <button type="button" onClick={() => { persistence.write(stateRef.current); setForeignWriterAt(null); }}>ЗАКРЫЛ — СОХРАНИТЬ ЗДЕСЬ</button>
+          </div>
+        ) : null}
         <div className="shell-notice shell-notice-live" data-qa-runtime-mode={RUNTIME_MODE} data-qa-runtime-notice role="status" aria-live="polite">
           <span>{lastNotice}</span>
         </div>

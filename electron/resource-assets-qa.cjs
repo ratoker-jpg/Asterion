@@ -390,7 +390,7 @@ async function verifyViewport(width, height) {
     if (pirateFixturesVisible) throw new Error('operations: obsolete demo pirate cards are still visible');
 
     await activateRoute(win, 'command', '.command-view');
-    await clickText(win, '.command-tabs button', 'ЗАПРОСЫ РЕСУРСОВ');
+    await click(win, '[data-qa-command-tab="requests"]');
     // The requests tab is a real screen now: form, four requestable resources, no invented requests.
     await waitFor(win, `document.querySelector('[data-qa-requests]') && document.querySelector('[data-qa-request-form]')`);
     const requestResources = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-request-resource] option')).map((option) => option.value)`);

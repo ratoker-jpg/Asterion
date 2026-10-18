@@ -401,9 +401,9 @@ test('persistence: v2 saves migrate, ledgers/requests round-trip, damaged data n
   assert.ok(hostile.nextSerial > 6, 'ids of dropped requests are never reused');
 });
 
-test('Test Mode seed gives the player and Ira first-join ledgers; production has none', () => {
+test('Test Mode seed gives the player, Ira and Bot 01 first-join ledgers; production has none', () => {
   const test = createDefaultCommandState('test', { playerId: 'player-current', playerDisplayName: 'Д', now: 1000 });
-  assert.equal(test.aidLedgers.length, 2);
+  assert.equal(test.aidLedgers.length, 3);
   assert.ok(test.aidLedgers.every((ledger) => ledger.intro && ledger.settledAt === 1000 && ledger.hallLevel === 0));
   assert.deepEqual(createDefaultCommandState('production').aidLedgers, []);
 });
