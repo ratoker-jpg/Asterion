@@ -2987,10 +2987,10 @@ test('audit P1-3: ally transport follows current alliance membership at the send
   assert.equal(resolveTransportTarget(afterKick, own).relation, 'self');
 });
 
-test('the registered aid mission is not yet connected to the flight runtime', () => {
+test('the aid mission is connected to the runtime but always needs an open request', () => {
   const initial = createInitialSaveState('test', 1_000);
   const result = dispatchFlight(initial, {
-    requestId: 'aid-not-connected',
+    requestId: 'aid-without-request',
     missionId: 'aid',
     originPlanetId: 'helion-01',
     destination: { kind: 'planet', planetId: 'test-mode-ally-ira-vel-v1', coordinate: { galaxy: 1, system: 1, position: 2 } },
@@ -2999,5 +2999,5 @@ test('the registered aid mission is not yet connected to the flight runtime', ()
     departedAt: 1_000,
   }, { now: 1_000, mode: 'test' });
   assert.equal(result.ok, false);
-  if (!result.ok) assert.equal(result.error.code, 'mission-not-supported');
+  if (!result.ok) assert.equal(result.error.code, 'target-not-available');
 });

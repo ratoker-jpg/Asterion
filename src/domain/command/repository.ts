@@ -9,7 +9,18 @@ import {
   TEST_FIXTURE_ALLIANCE_PROFILE,
 } from './catalog.ts';
 import { normalizeAllianceTag, normalizeAllianceText } from './membership.ts';
+import {
+  AID_HALL_MAX_LEVEL,
+  MAX_AID_CHARGES,
+  MAX_AID_EVENTS,
+  MAX_CLOSED_REQUESTS,
+  createAidLedger,
+  isAidResource,
+} from './aid.ts';
 import type {
+  AidEvent,
+  AidEventKind,
+  AidLedger,
   AllianceAccent,
   AllianceApplication,
   AllianceCooldown,
@@ -23,6 +34,9 @@ import type {
   CooldownCause,
   DiplomaticRelation,
   RelationStatus,
+  RequestCloseReason,
+  RequestStatus,
+  ResourceRequest,
 } from './types.ts';
 import { CURRENT_PLAYER_DISPLAY_NAME, CURRENT_PLAYER_ID } from '../rating/fixtures.ts';
 import { getRuntimeSaveKey, type RuntimeMode } from '../runtime/mode.ts';
@@ -35,6 +49,9 @@ const APPLICATION_REASONS: readonly ApplicationReason[] = ['declined', 'full', '
 const COOLDOWN_CAUSES: readonly CooldownCause[] = ['rejected', 'left', 'kicked'];
 const RELATION_STATUSES: readonly RelationStatus[] = ['ally', 'trade_pact', 'neutral', 'tense', 'hostile', 'war'];
 const MAX_COOLDOWNS = 200;
+const REQUEST_STATUSES: readonly RequestStatus[] = ['open', 'completed', 'cancelled', 'closed'];
+const REQUEST_CLOSE_REASONS: readonly RequestCloseReason[] = ['completed', 'cancelled', 'author_left', 'alliance_disbanded', 'planet_destroyed'];
+const AID_EVENT_KINDS: readonly AidEventKind[] = ['request_created', 'request_cancelled', 'request_closed', 'aid_launched', 'aid_delivered', 'aid_returned'];
 
 /** Identity of the local human owner, needed to seed and to migrate legacy saves. */
 export type CommandOwnerContext = {
@@ -92,7 +109,7 @@ function hashTieBreaker(ownerId: string): number {
 }
 
 function emptyState(): CommandState {
-  return { version: 2, alliances: [], applications: [], cooldowns: [], diplomacy: [], nextSerial: 1 };
+  return { version: 3, alliances: [], applications: [], cooldowns: [], diplomacy: [], requests: [], aidLedgers: [], aidEvents: [], nextSerial: 1 };
 }
 
 function seedMember(ownerId: string, displayName: string, now: number, tieBreaker: number): AllianceMember {
@@ -120,7 +137,14 @@ function createTestFixtureAlliance(context: Required<CommandOwnerContext>): Alli
 export function createDefaultCommandState(mode: RuntimeMode = 'test', context?: Partial<CommandOwnerContext>): CommandState {
   const state = emptyState();
   if (mode !== 'test') return state;
-  return { ...state, alliances: [createTestFixtureAlliance(resolveContext(context))] };
+  const resolved = resolveContext(context);
+  const alliance = createTestFixtureAlliance(resolved);
+  return {
+    ...state,
+    alliances: [alliance],
+    // Every seeded member starts like a first-time joiner: empty stock, one-time 15-minute charge.
+    aidLedgers: alliance.members.map((member) => createAidLedger(member.ownerId, alliance.id, resolved.now, true)),
+  };
 }
 
 export function resetCommandState(mode: RuntimeMode = 'test', context?: Partial<CommandOwnerContext>): CommandState {
@@ -253,6 +277,89 @@ function parseDiplomacy(value: unknown): DiplomaticRelation[] {
   return relations;
 }
 
+function parseRequest(value: unknown): ResourceRequest | null {
+  if (!isRecord(value)) return null;
+  const id = text(value.id, '', 96, 1);
+  const allianceId = text(value.allianceId, '', 96, 1);
+  const authorOwnerId = text(value.authorOwnerId, '', 96, 1);
+  const planetId = text(value.planetId, '', 96, 1);
+  if (!id || !allianceId || !authorOwnerId || !planetId || !isAidResource(value.resource)) return null;
+  const requested = nonNegativeInteger(value.requested, 0);
+  if (requested <= 0) return null;
+  const coordinate = isRecord(value.coordinate) ? value.coordinate : {};
+  const status = REQUEST_STATUSES.includes(value.status as RequestStatus) ? value.status as RequestStatus : 'closed';
+  const createdAt = nonNegativeNumber(value.createdAt, 0);
+  const delivered = Math.min(requested, nonNegativeInteger(value.delivered, 0));
+  // `completed` is derived from the amounts, so a damaged status cannot leave a satisfied request open.
+  const normalizedStatus: RequestStatus = status === 'open' && delivered >= requested ? 'completed' : status;
+  const reason = REQUEST_CLOSE_REASONS.includes(value.closeReason as RequestCloseReason)
+    ? value.closeReason as RequestCloseReason
+    : null;
+  return {
+    id,
+    allianceId,
+    authorOwnerId,
+    authorName: text(value.authorName, authorOwnerId, 48, 1),
+    planetId,
+    planetName: text(value.planetName, planetId, 48, 1),
+    coordinate: {
+      galaxy: Math.max(1, nonNegativeInteger(coordinate.galaxy, 1)),
+      system: Math.max(1, nonNegativeInteger(coordinate.system, 1)),
+      position: Math.max(1, nonNegativeInteger(coordinate.position, 1)),
+    },
+    resource: value.resource,
+    requested,
+    delivered,
+    helpStarted: value.helpStarted === true || delivered > 0,
+    status: normalizedStatus,
+    closeReason: normalizedStatus === 'open'
+      ? null
+      : (reason ?? (normalizedStatus === 'completed' ? 'completed' : normalizedStatus === 'cancelled' ? 'cancelled' : 'author_left')),
+    createdAt,
+    closedAt: normalizedStatus === 'open' ? null : nonNegativeNumber(value.closedAt, createdAt),
+  };
+}
+
+function parseLedger(value: unknown): AidLedger | null {
+  if (!isRecord(value)) return null;
+  const ownerId = text(value.ownerId, '', 96, 1);
+  const allianceId = text(value.allianceId, '', 96, 1);
+  if (!ownerId || !allianceId) return null;
+  const charges = Math.min(MAX_AID_CHARGES, nonNegativeInteger(value.charges, 0));
+  const rawProgress = typeof value.progress === 'number' && Number.isFinite(value.progress) ? value.progress : 0;
+  return {
+    ownerId,
+    allianceId,
+    charges,
+    progress: charges >= MAX_AID_CHARGES ? 0 : Math.min(0.999999, Math.max(0, rawProgress)),
+    settledAt: nonNegativeNumber(value.settledAt, 0),
+    hallLevel: Math.min(AID_HALL_MAX_LEVEL, nonNegativeInteger(value.hallLevel, 0)),
+    timeScale: Math.max(1, nonNegativeNumber(value.timeScale, 1)),
+    intro: value.intro !== false,
+  };
+}
+
+function parseAidEvent(value: unknown): AidEvent | null {
+  if (!isRecord(value) || !AID_EVENT_KINDS.includes(value.kind as AidEventKind)) return null;
+  const id = text(value.id, '', 160, 1);
+  const allianceId = text(value.allianceId, '', 96, 1);
+  const requestId = text(value.requestId, '', 96, 1);
+  const actorOwnerId = text(value.actorOwnerId, '', 96, 1);
+  if (!id || !allianceId || !requestId || !actorOwnerId) return null;
+  return {
+    id,
+    kind: value.kind as AidEventKind,
+    at: nonNegativeNumber(value.at, 0),
+    allianceId,
+    requestId,
+    actorOwnerId,
+    audience: 'alliance',
+    ...(typeof value.flightId === 'string' && value.flightId ? { flightId: value.flightId } : {}),
+    ...(typeof value.units === 'number' && Number.isFinite(value.units) && value.units >= 0 ? { units: Math.floor(value.units) } : {}),
+    ...(typeof value.reason === 'string' && value.reason ? { reason: value.reason.slice(0, 48) } : {}),
+  };
+}
+
 function serialOf(id: string): number {
   const match = /-(\d+)$/.exec(id);
   return match ? Number(match[1]) : 0;
@@ -309,18 +416,74 @@ function migrateV2(value: Record<string, unknown>, mode: RuntimeMode): CommandSt
     .filter((cooldown): cooldown is AllianceCooldown => cooldown !== null)
     .slice(-MAX_COOLDOWNS);
 
+  // Requests: only for alliances that still exist and whose author still belongs to them stay open.
+  const seenRequestIds = new Set<string>();
+  const requests: ResourceRequest[] = [];
+  let highestDroppedRequestSerial = 0;
+  for (const raw of Array.isArray(value.requests) ? value.requests : []) {
+    const parsed = parseRequest(raw);
+    if (parsed) highestDroppedRequestSerial = Math.max(highestDroppedRequestSerial, serialOf(parsed.id));
+    if (!parsed || seenRequestIds.has(parsed.id)) continue;
+    const alliance = alliances.find((candidate) => candidate.id === parsed.allianceId);
+    const authorStays = alliance?.members.some((member) => member.ownerId === parsed.authorOwnerId) ?? false;
+    const request: ResourceRequest = parsed.status === 'open' && !authorStays
+      ? { ...parsed, status: 'closed', closeReason: alliance ? 'author_left' : 'alliance_disbanded', closedAt: parsed.createdAt }
+      : parsed;
+    seenRequestIds.add(request.id);
+    requests.push(request);
+  }
+  const keepClosed = new Set(requests
+    .filter((request) => request.status !== 'open')
+    .sort((left, right) => (right.closedAt ?? 0) - (left.closedAt ?? 0))
+    .slice(0, MAX_CLOSED_REQUESTS)
+    .map((request) => request.id));
+
+  // Ledgers: one per (owner, alliance); an alliance that is gone takes its ledgers with it.
+  const seenLedgers = new Set<string>();
+  const aidLedgers: AidLedger[] = [];
+  for (const raw of Array.isArray(value.aidLedgers) ? value.aidLedgers : []) {
+    const ledger = parseLedger(raw);
+    if (!ledger || !allianceIds.has(ledger.allianceId)) continue;
+    const key = `${ledger.ownerId}\u0000${ledger.allianceId}`;
+    if (seenLedgers.has(key)) continue;
+    seenLedgers.add(key);
+    aidLedgers.push(ledger);
+  }
+  // Members that predate ledgers (saves from before this stage) start like first-time joiners. The
+  // Hall regime is applied later, so no restoration is ever credited retroactively.
+  for (const alliance of alliances) {
+    for (const member of alliance.members) {
+      const key = `${member.ownerId}\u0000${alliance.id}`;
+      if (seenLedgers.has(key)) continue;
+      seenLedgers.add(key);
+      aidLedgers.push(createAidLedger(member.ownerId, alliance.id, member.joinedAt, true));
+    }
+  }
+  const seenEvents = new Set<string>();
+  const aidEvents: AidEvent[] = [];
+  for (const raw of Array.isArray(value.aidEvents) ? value.aidEvents : []) {
+    const event = parseAidEvent(raw);
+    if (!event || seenEvents.has(event.id)) continue;
+    seenEvents.add(event.id);
+    aidEvents.push(event);
+  }
+
   const highestSerial = Math.max(
     0,
     ...alliances.map((alliance) => serialOf(alliance.id)),
     ...applications.map((application) => serialOf(application.id)),
     highestDroppedSerial,
+    highestDroppedRequestSerial,
   );
   return {
-    version: 2,
+    version: 3,
     alliances,
     applications: applications.filter((application) => application.status === 'pending' || keepResolved.has(application.id)),
     cooldowns,
     diplomacy: parseDiplomacy(value.diplomacy),
+    requests: requests.filter((request) => request.status === 'open' || keepClosed.has(request.id)),
+    aidLedgers,
+    aidEvents: aidEvents.slice(-MAX_AID_EVENTS),
     nextSerial: Math.max(nonNegativeInteger(value.nextSerial, 1), highestSerial + 1, 1),
   };
 }
@@ -370,7 +533,12 @@ function migrateLegacy(value: Record<string, unknown>, mode: RuntimeMode, contex
     leaderSince: context.now,
     members: [seedMember(context.playerId, context.playerDisplayName, context.now, hashTieBreaker(context.playerId))],
   };
-  return { ...base, alliances: [alliance], nextSerial: base.nextSerial + 1 };
+  return {
+    ...base,
+    alliances: [alliance],
+    aidLedgers: [createAidLedger(context.playerId, alliance.id, context.now, true)],
+    nextSerial: base.nextSerial + 1,
+  };
 }
 
 export function migrateCommandState(
@@ -380,7 +548,7 @@ export function migrateCommandState(
 ): CommandState {
   const resolved = resolveContext(context);
   if (!isRecord(value)) return createDefaultCommandState(mode, resolved);
-  if (value.version === 2 && Array.isArray(value.alliances)) return migrateV2(value, mode);
+  if ((value.version === 2 || value.version === 3) && Array.isArray(value.alliances)) return migrateV2(value, mode);
   return migrateLegacy(value, mode, resolved);
 }
 

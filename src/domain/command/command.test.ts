@@ -94,7 +94,7 @@ function fill(state: CommandState, allianceId: string, count: number, at = T0) {
 
 test('production starts without any alliance; Test Mode seeds only the player and Ira Vel', () => {
   const production = createDefaultCommandState('production');
-  assert.deepEqual(production, { version: 2, alliances: [], applications: [], cooldowns: [], diplomacy: [], nextSerial: 1 });
+  assert.deepEqual(production, { version: 3, alliances: [], applications: [], cooldowns: [], diplomacy: [], requests: [], aidLedgers: [], aidEvents: [], nextSerial: 1 });
 
   const test = createDefaultCommandState('test', { playerId: 'player-current', playerDisplayName: 'Dendrilion' });
   assert.equal(test.alliances.length, 1);
@@ -465,7 +465,7 @@ test('legacy v1 saves: Test Mode rebuilds the managed seed and keeps player edit
     events: [{ id: 'event-01' }],
   };
   const migrated = migrateCommandState(legacy, 'test', { playerId: 'player-current', playerDisplayName: 'Dendrilion' });
-  assert.equal(migrated.version, 2);
+  assert.equal(migrated.version, 3);
   assert.equal(migrated.alliances.length, 1);
   const [alliance] = migrated.alliances;
   assert.equal(alliance.name, 'Мой Контур');
@@ -473,7 +473,7 @@ test('legacy v1 saves: Test Mode rebuilds the managed seed and keeps player edit
   assert.deepEqual(alliance.emblem, { glyph: 'vanguard', accent: 'violet' });
   assert.deepEqual(alliance.members.map((member) => member.ownerId), ['player-current', TEST_ALLY_OWNER_ID]);
   assert.equal(alliance.leaderOwnerId, 'player-current');
-  assert.equal(Object.keys(migrated).sort().join(), 'alliances,applications,cooldowns,diplomacy,nextSerial,version');
+  assert.equal(Object.keys(migrated).sort().join(), 'aidEvents,aidLedgers,alliances,applications,cooldowns,diplomacy,nextSerial,requests,version');
 });
 
 test('legacy v1 saves in production: fixture dropped, a real alliance becomes a one-member alliance of the player', () => {

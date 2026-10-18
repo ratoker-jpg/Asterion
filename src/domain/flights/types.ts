@@ -4,6 +4,7 @@ import type { UniverseCoordinate, UniverseObjectKind } from '../universe/types.t
 import type { TransportCargo } from './cargo.ts';
 import type { AttackLaunchSnapshot, AttackResolution } from '../attack/types.ts';
 import type { PirateMissionSnapshot, PirateRaidSnapshot } from '../pirates/mission.ts';
+import type { AidResource } from '../command/types.ts';
 
 export type MissionId =
   | 'transport'
@@ -20,8 +21,22 @@ export type MissionId =
   | 'gas'
   | 'sun-support'
   | 'space-flight'
-  /** Alliance aid. Reserved: registered for UI/metadata, not yet connected to the flight runtime. */
+  /** Alliance aid: a real transport flight bound to one open resource request. */
   | 'aid';
+
+/**
+ * Binds an aid flight to its resource request. Ids are stable; `creditedUnits`
+ * is written exactly once on arrival and is the guard against double credit.
+ */
+export type AidFlightSnapshot = {
+  requestId: string;
+  allianceId: string;
+  senderOwnerId: string;
+  recipientOwnerId: string;
+  resource: AidResource;
+  /** Units the planet actually accepted; set once, together with `cargoState: 'delivered'`. */
+  creditedUnits?: number;
+};
 
 export type FlightPhase = 'outbound' | 'returning' | 'arrived' | 'completed' | 'failed';
 
@@ -100,7 +115,9 @@ export type FlightRecord = {
   arrivalAt: number;
   returnAt?: number;
   gasCost: number;
-  /** Cargo snapshot for transport, recycle, and gas extraction flights. */
+  /** Present on alliance aid flights only. */
+  aid?: AidFlightSnapshot;
+  /** Cargo snapshot for transport, aid, recycle, and gas extraction flights. */
   cargo?: TransportCargo;
   cargoState?: TransportCargoState;
   /** Gas extraction capacity is fixed at dispatch and survives catalog changes. */

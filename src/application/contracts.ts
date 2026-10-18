@@ -84,6 +84,8 @@ export type AlliedPlanetState = PlanetRuntime & {
   raceId: string;
   alliance: UniverseOwnerAlliance | null;
   fixtureId?: string;
+  /** Test Mode only: set by the explicit aid QA preparation; marks the isolated fleet/resource fixture. */
+  aidQaFixtureAt?: number;
 };
 
 export type ResourceClockEntry = {

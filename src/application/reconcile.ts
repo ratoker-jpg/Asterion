@@ -15,6 +15,7 @@ import { reconcileResourceIncome } from './resource-clock.ts';
 import type { ResourceCreditResult } from '../domain/resources/credit.ts';
 import type { FleetProductionCompletion } from '../domain/fleet/production.ts';
 import { reconcileFlights, type FlightReconcileEvent } from './flights.ts';
+import { reconcileAidMembership, syncAidState } from './alliance-aid.ts';
 import { selectDuePirateRolls, resolveDuePirateRoll } from './pirate-raids.ts';
 import { advanceExplorationNpcProgress, selectDueExplorationNpcRolls, resolveDueExplorationNpcRoll } from './exploration-npc.ts';
 import { createDefaultPirateState } from '../domain/pirates/mission.ts';
@@ -54,7 +55,8 @@ export function reconcileRuntime(
   state: SaveState,
   context: BuildingApplicationContext,
 ): RuntimeReconcileResult {
-  let next = state;
+  // Aid flights whose sender, recipient or request no longer stand turn back before anything else settles.
+  let next = reconcileAidMembership(state, context.now);
   const events: RuntimeReconcileEvent[] = [];
   const startingPirate = next.pirate ?? createDefaultPirateState();
   let pirateCursor = startingPirate.raidProcessedAt ?? context.now;
@@ -302,6 +304,8 @@ export function reconcileRuntime(
         raidDueEvents = selectDuePirateRolls(next, checkpoint, context.now, context.mode, context.testTimeScale);
         raidIndex = 0;
       }
+      // A Hall lost to an arrival at this checkpoint must stop the charge clock from here on, not from `now`.
+      next = syncAidState(next, { now: checkpoint, mode: context.mode, testTimeScale: context.testTimeScale });
     }
   }
 
@@ -320,6 +324,8 @@ export function reconcileRuntime(
     }
   }
   next = reconcileAllPlanetOverpopulation(next, context.now).state;
+  next = reconcileAidMembership(next, context.now);
+  next = syncAidState(next, { now: context.now, mode: context.mode, testTimeScale: context.testTimeScale });
   // Preserve the all-time resource high-water mark across losses, fleet launches
   // and reloads. A later weak expedition must never erase an earlier real peak.
   const currentScore = selectOwnerScores(next)[next.profile.playerId]?.resourcePoints ?? 0;

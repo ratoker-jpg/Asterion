@@ -139,6 +139,20 @@ import { bindCombatResolutionEventBridge } from './application/combat.ts';
 import { getFleetProductionEntity } from './domain/fleet/production.ts';
 import { getFleetBuildBudget, getFleetSummaryForState, getOutgoingFleetSummaryForState, getPlanetPopulationForState } from './application/fleet.ts';
 import { getPendingInboundPopulation } from './application/flights.ts';
+import {
+  cancelAidRequest,
+  createAidRequest,
+  createIraAidRequest,
+  prepareIraAidFixture,
+  previewRequestOverflow,
+  reconcileAidMembership,
+  selectAidOverview,
+  selectRequestProgress,
+  syncAidState,
+  type AidActionResult,
+} from './application/alliance-aid.ts';
+import { TEST_ALLY_OWNER_ID } from './domain/command/catalog.ts';
+import type { AidResource } from './domain/command/types.ts';
 import { getPlanetOverpopulationSummary } from './application/overpopulation.ts';
 import { energySummaryForPlanet, getPlanetEnergyCoordinates } from './application/energy.ts';
 import { getEffectiveResourceIncomePerHour } from './application/resource-clock.ts';
@@ -156,6 +170,7 @@ import {
   SPY_REPORT_REQUEST_EVENT,
   SPY_REPORT_RESULT_EVENT,
   dispatchFlight,
+  dispatchNpcAidFlight,
   startBot01IncomingScenario,
   requestAllSpyReports,
   requestSpyReport,
@@ -1381,11 +1396,14 @@ export function App() {
     const at = Date.now();
     const result = action(current.command, at, current.profile.playerId, current.profile.displayName);
     if (result.state !== current.command) {
-      const nextState = {
+      const applied = {
         ...current,
         command: result.state,
         profile: syncPlayerProfileWithCommand(current.profile, result.state),
       };
+      // A membership change turns back any aid fleet that lost its sender, recipient or request at once,
+      // and a new member's charge clock is pointed at the current Hall right away.
+      const nextState = syncAidState(reconcileAidMembership(applied, at), { now: at, mode: RUNTIME_MODE, testTimeScale });
       stateRef.current = nextState;
       setState(nextState);
     }
@@ -1394,7 +1412,60 @@ export function App() {
     return success ? { ok: true, message: success } : { ok: true };
   };
 
+  /** Applies one resource-request action to the whole save (planets, scores and flights are involved). */
+  const runAidAction = (action: (current: SaveState, at: number) => AidActionResult): CommandActionResult => {
+    const current = stateRef.current;
+    if (selectCommandHallLevel(current.planets) <= 0) {
+      return { ok: false, message: 'Командование недоступно: на планетах нет здания «Палата управления».' };
+    }
+    const result = action(current, Date.now());
+    if (result.state !== current) {
+      stateRef.current = result.state;
+      setState(result.state);
+    }
+    if (!result.ok) return { ok: false, message: result.message };
+    setNotice(result.message);
+    return { ok: true, message: result.message };
+  };
+  const aidContext = (at: number) => ({ now: at, mode: RUNTIME_MODE, testTimeScale });
+
+  const openAidLaunch = (requestId: string): CommandActionResult => {
+    const current = stateRef.current;
+    const request = current.command.requests.find((item) => item.id === requestId);
+    if (!request || request.status !== 'open') return { ok: false, message: 'Запрос закрыт или не найден.' };
+    if (selectRequestProgress(current, request).remainder <= 0) {
+      return { ok: false, message: 'Весь остаток запроса уже в пути или доставлен.' };
+    }
+    clearBuildingInterior();
+    navigateTo('fleets');
+    setPlanetViewMode('overview');
+    setPlanetMenuOpen(false);
+    setNotice(`Помощь союзу: ${request.planetName} [${request.coordinate.galaxy}:${request.coordinate.system}:${request.coordinate.position}] — подготовьте транспортёры.`);
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent<FlightLaunchContext>(FLIGHT_LAUNCH_CONTEXT_EVENT, {
+        detail: {
+          missionId: 'aid',
+          aidRequestId: request.id,
+          targetRelation: 'ally',
+          targetPlanetName: request.planetName,
+          targetOwnerName: request.authorName,
+          destination: { kind: 'planet', planetId: request.planetId, coordinate: { ...request.coordinate } },
+        },
+      }));
+    }, 40);
+    return { ok: true };
+  };
+
   const commandActions: CommandActions = {
+    createRequest: (planetId: string, resource: AidResource, amount: number) => runAidAction(
+      (current, at) => createAidRequest(current, { planetId, resource, amount }, aidContext(at)),
+    ),
+    cancelRequest: (requestId: string) => runAidAction(
+      (current, at) => cancelAidRequest(current, requestId, aidContext(at)),
+    ),
+    startHelp: openAidLaunch,
+    previewOverflow: (planetId: string, resource: AidResource, amount: number) =>
+      previewRequestOverflow(stateRef.current, planetId, resource, amount),
     createAlliance: (settings: AllianceSettingsInput) => runCommandAction(
       (command, at, ownerId, ownerName) => createAlliance(command, { ownerId, displayName: ownerName, settings }, { now: at }),
       'Союз создан.',
@@ -1442,6 +1513,33 @@ export function App() {
       setNotice('Постройте «Палату управления», чтобы открыть Командование.');
     },
     ...(RUNTIME_MODE === 'test' ? {
+      testIraPrepare: () => runAidAction((current, at) => {
+        const prepared = prepareIraAidFixture(current, aidContext(at));
+        return prepared.ok
+          ? { ok: true, state: prepared.state, message: prepared.message }
+          : { ok: false, state: current, code: 'not_allowed', message: prepared.message };
+      }),
+      testIraRequest: (resource: AidResource, amount: number) => runAidAction(
+        (current, at) => createIraAidRequest(current, { resource, amount }, aidContext(at)),
+      ),
+      testIraHelp: () => runAidAction((current, at) => {
+        const request = current.command.requests.find((item) => item.status === 'open'
+          && item.authorOwnerId === current.profile.playerId
+          && selectRequestProgress(current, item).remainder > 0);
+        if (!request) {
+          return { ok: false, state: current, code: 'request_not_found', message: 'Нет вашего открытого запроса с непокрытым остатком.' };
+        }
+        const sequence = current.flights.records.filter((flight) => flight.requestId.startsWith(`aid-npc:${request.id}:`)).length + 1;
+        const sent = dispatchNpcAidFlight(current, {
+          requestId: `aid-npc:${request.id}:${sequence}`,
+          aidRequestId: request.id,
+          senderOwnerId: TEST_ALLY_OWNER_ID,
+          departedAt: at,
+        }, { now: at, mode: RUNTIME_MODE, testTimeScale });
+        return sent.ok
+          ? { ok: true, state: sent.state, message: 'Тест: Ира Вель отправила помощь реальным флотом. Следите за ним в «Флотах».' }
+          : { ok: false, state: current, code: 'request_not_open', message: sent.error.message };
+      }),
       testBotApply: () => runCommandAction(
         (command, at, ownerId) => {
           const own = command.alliances.find((alliance) => alliance.members.some((member) => member.ownerId === ownerId));
@@ -1883,6 +1981,7 @@ export function App() {
                 art: commandHallDefinition.art,
               }}
               ownerScores={withTestOwnerScoreFixtures(selectOwnerScores(state), RUNTIME_MODE)}
+              aid={selectAidOverview(state, { now, mode: RUNTIME_MODE, testTimeScale })}
               now={now}
               actions={commandActions}
             />

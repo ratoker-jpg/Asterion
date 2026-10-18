@@ -163,7 +163,7 @@ async function productionScenario(win, label) {
   view = await snapshot(win);
   assert(view.headline === 'Дозор QA Два [QA]', `${label}: alliance survives reload`, view);
   const saved = await readSave(win, PRODUCTION_KEY);
-  assert(saved.command.version === 2 && saved.command.alliances.length === 1 && saved.command.alliances[0].members.length === 1, `${label}: persisted registry shape`, saved.command);
+  assert(saved.command.version === 3 && saved.command.alliances.length === 1 && saved.command.alliances[0].members.length === 1, `${label}: persisted registry shape`, saved.command);
   const allianceId = saved.command.alliances[0].id;
   assert(/^alliance-\d+$/.test(allianceId) && saved.profile.allianceId === allianceId, `${label}: stable id mirrored into the profile`, { allianceId, profile: saved.profile.allianceId });
 

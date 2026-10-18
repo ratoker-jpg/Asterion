@@ -101,14 +101,99 @@ export type AllianceCooldown = {
   cause: CooldownCause;
 };
 
+/** Resources an ally may request; energy is never transferable. */
+export type AidResource = 'metal' | 'minerals' | 'gas' | 'debris';
+
+export type RequestStatus = 'open' | 'completed' | 'cancelled' | 'closed';
+export type RequestCloseReason = 'completed' | 'cancelled' | 'author_left' | 'alliance_disbanded' | 'planet_destroyed';
+
+export type RequestCoordinate = { galaxy: number; system: number; position: number };
+
+/**
+ * One resource request: one resource, one concrete planet of the author.
+ * `delivered` is only what the planet actually accepted on arrival. The amount
+ * currently in flight is derived from live aid flights (never stored), so it
+ * cannot drift from the flight records.
+ */
+export type ResourceRequest = {
+  id: string;
+  allianceId: string;
+  authorOwnerId: string;
+  /** Display snapshot, kept so closed requests stay readable. */
+  authorName: string;
+  planetId: string;
+  planetName: string;
+  coordinate: RequestCoordinate;
+  resource: AidResource;
+  requested: number;
+  delivered: number;
+  /** Set when the first aid flight is actually launched; cancelling is impossible afterwards. */
+  helpStarted: boolean;
+  status: RequestStatus;
+  closeReason: RequestCloseReason | null;
+  createdAt: number;
+  closedAt: number | null;
+};
+
+/**
+ * Charge stock of one owner in one alliance. The record outlives membership so
+ * a later return to the same alliance can never grant the one-time start
+ * bonus again. Progress is stored as a fraction of the current charge, so a
+ * change of Hall level or time scale keeps the part that is already done.
+ */
+export type AidLedger = {
+  ownerId: string;
+  allianceId: string;
+  charges: number;
+  /** Fraction (0..1) of the next charge already restored. */
+  progress: number;
+  /** Instant up to which `charges`/`progress` are settled. */
+  settledAt: number;
+  /** Hall level in force since `settledAt`; 0 pauses restoration. */
+  hallLevel: number;
+  /** Test Mode time scale in force since `settledAt` (1 in production). */
+  timeScale: number;
+  /** True until the one-time 15-minute first charge of this alliance has been granted. */
+  intro: boolean;
+};
+
+export type AidEventKind =
+  | 'request_created'
+  | 'request_cancelled'
+  | 'request_closed'
+  | 'aid_launched'
+  | 'aid_delivered'
+  | 'aid_returned';
+
+/**
+ * Domain event for the future alliance journal (PR 3). The id is derived from
+ * the subject, so recording the same fact twice is a no-op. Only alliance
+ * members may ever see it.
+ */
+export type AidEvent = {
+  id: string;
+  kind: AidEventKind;
+  at: number;
+  allianceId: string;
+  requestId: string;
+  actorOwnerId: string;
+  audience: 'alliance';
+  flightId?: string;
+  units?: number;
+  reason?: string;
+};
+
 export type CommandState = {
-  version: 2;
+  version: 3;
   alliances: AllianceRecord[];
   applications: AllianceApplication[];
   cooldowns: AllianceCooldown[];
   /** Reserved contract for the future diplomacy stage; always empty today. */
   diplomacy: DiplomaticRelation[];
-  /** Monotonic counter for stable alliance/application ids; ids are never reused. */
+  requests: ResourceRequest[];
+  aidLedgers: AidLedger[];
+  aidEvents: AidEvent[];
+  /** Monotonic counter for stable alliance/application/request ids; ids are never reused. */
   nextSerial: number;
 };
 
@@ -132,7 +217,16 @@ export type CommandErrorCode =
   | 'target_not_member'
   | 'self_target'
   | 'deputy_exists'
-  | 'leader_must_transfer';
+  | 'leader_must_transfer'
+  | 'hall_required'
+  | 'invalid_resource'
+  | 'invalid_amount'
+  | 'invalid_planet'
+  | 'request_limit'
+  | 'no_charges'
+  | 'request_not_found'
+  | 'request_not_open'
+  | 'cancel_locked';
 
 export type CommandResult<Extra extends object = Record<never, never>> =
   | ({ ok: true; state: CommandState } & Extra)
