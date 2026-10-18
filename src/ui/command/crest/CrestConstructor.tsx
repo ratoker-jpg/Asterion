@@ -108,16 +108,19 @@ export function CrestConstructor({ initial, onApply, onBack }: { initial: Allian
   const setPattern = (pattern: AllianceCrest['pattern']) => set({ pattern, patternOpacity: defaultPatternOpacity(pattern) });
   const setOffset = (offsetX: number, offsetY: number) => set(clampCrestOffset(offsetX, offsetY));
 
+  // Option tiles always show the sign upright and centred, so the choice reads
+  // the same whatever size, rotation or offset the main crest has.
+  const base = useMemo(() => ({ ...crest, ...TRANSFORM_DEFAULTS }), [crest]);
   // Variants shown in the active tab: decode only what this tab needs.
   const variants = useMemo(() => {
     switch (tab) {
-      case 'glyph': return [...CREST_GLYPHS.map((glyph) => ({ ...crest, glyph })), ...CREST_COLORS.map((color) => ({ ...crest, color }))];
-      case 'frame': return CREST_FRAMES.map((frame) => ({ ...crest, frame }));
-      case 'field': return CREST_FIELDS.map((field) => ({ ...crest, field }));
-      case 'pattern': return (['none', ...CREST_PATTERNS] as const).map((pattern) => ({ ...crest, pattern, patternOpacity: defaultPatternOpacity(pattern) }));
+      case 'glyph': return [...CREST_GLYPHS.map((glyph) => ({ ...base, glyph })), ...CREST_COLORS.map((color) => ({ ...base, color }))];
+      case 'frame': return CREST_FRAMES.map((frame) => ({ ...base, frame }));
+      case 'field': return CREST_FIELDS.map((field) => ({ ...base, field }));
+      case 'pattern': return (['none', ...CREST_PATTERNS] as const).map((pattern) => ({ ...base, pattern, patternOpacity: defaultPatternOpacity(pattern) }));
       default: return [];
     }
-  }, [tab, crest]);
+  }, [tab, base]);
   useEffect(() => { warmCrestModules(variants); }, [variants]);
 
   const safe = crestSafeCircle(crest.frame);
@@ -220,7 +223,7 @@ export function CrestConstructor({ initial, onApply, onBack }: { initial: Allian
               <div className="crest-grid crest-grid--glyphs">
                 {CREST_GLYPHS.map((glyph) => (
                   <Tile key={glyph} selected={crest.glyph === glyph} label={crestLabel('glyphs', glyph)} onSelect={() => set({ glyph })} qa={`glyph-${glyph}`}>
-                    <OrbitalCrest crest={{ ...crest, glyph }} />
+                    <OrbitalCrest crest={{ ...base, glyph }} />
                   </Tile>
                 ))}
               </div>
@@ -228,7 +231,7 @@ export function CrestConstructor({ initial, onApply, onBack }: { initial: Allian
               <div className="crest-grid crest-grid--colors">
                 {CREST_COLORS.map((color) => (
                   <Tile key={color} selected={crest.color === color} label={crestLabel('colors', color)} onSelect={() => set({ color })} qa={`color-${color}`} className="crest-tile--color">
-                    <OrbitalCrest crest={{ ...crest, color }} />
+                    <OrbitalCrest crest={{ ...base, color }} />
                     <i style={{ background: COLOR_HEX[color] }} aria-hidden="true" />
                   </Tile>
                 ))}
@@ -242,7 +245,7 @@ export function CrestConstructor({ initial, onApply, onBack }: { initial: Allian
               <div className="crest-grid crest-grid--large">
                 {CREST_FRAMES.map((frame) => (
                   <Tile key={frame} selected={crest.frame === frame} label={crestLabel('frames', frame)} onSelect={() => set({ frame })} qa={`frame-${frame}`}>
-                    <OrbitalCrest crest={{ ...crest, frame }} />
+                    <OrbitalCrest crest={{ ...base, frame }} />
                   </Tile>
                 ))}
               </div>
@@ -255,7 +258,7 @@ export function CrestConstructor({ initial, onApply, onBack }: { initial: Allian
               <div className="crest-grid crest-grid--large">
                 {CREST_FIELDS.map((field) => (
                   <Tile key={field} selected={crest.field === field} label={crestLabel('fields', field)} onSelect={() => set({ field })} qa={`field-${field}`} className="crest-tile--color">
-                    <OrbitalCrest crest={{ ...crest, field }} />
+                    <OrbitalCrest crest={{ ...base, field }} />
                     <i style={{ background: FIELD_HEX[field] }} aria-hidden="true" />
                   </Tile>
                 ))}
@@ -269,7 +272,7 @@ export function CrestConstructor({ initial, onApply, onBack }: { initial: Allian
               <div className="crest-grid crest-grid--patterns">
                 {(['none', ...CREST_PATTERNS] as const).map((pattern) => (
                   <Tile key={pattern} selected={crest.pattern === pattern} label={crestLabel('patterns', pattern)} onSelect={() => setPattern(pattern)} qa={`pattern-${pattern}`}>
-                    <OrbitalCrest crest={{ ...crest, pattern, patternOpacity: defaultPatternOpacity(pattern) }} />
+                    <OrbitalCrest crest={{ ...base, pattern, patternOpacity: defaultPatternOpacity(pattern) }} />
                   </Tile>
                 ))}
               </div>
