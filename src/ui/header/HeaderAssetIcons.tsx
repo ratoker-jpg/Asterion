@@ -1,7 +1,6 @@
 import type { NavigationIconKind } from '../navigation.tsx';
 import type { PlayerFactionId } from '../../domain/profile/types.ts';
 import type { HeaderIconKind, HeaderZoneId } from './types.ts';
-import { NavigationIcon as LegacyNavigationIcon } from './HeaderIcons';
 import {
   RESOURCE_ICON_ASSETS,
   RESOURCE_ICON_OPTICAL_SCALES,
@@ -44,6 +43,10 @@ const AEGIS_NAVIGATION_ICON_ASSETS = {
   science: scienceIcon,
 } satisfies Record<NavigationIconKind, string>;
 
+const NAVIGATION_ICON_ASSETS: Partial<Record<PlayerFactionId, Record<NavigationIconKind, string>>> = {
+  aegis: AEGIS_NAVIGATION_ICON_ASSETS,
+};
+
 function AssetIcon({ src, resourceKind }: { src: string; resourceKind?: ResourceIconKind }) {
   const resourceClasses = resourceKind
     ? ['asterion-resource-icon', `asterion-resource-icon--${resourceKind}`]
@@ -74,8 +77,10 @@ export function ApprovedZoneIcon({ kind }: { kind: HeaderZoneId }) {
   return <img className="asterion-zone-icon" src={GLOBAL_GAME_ICON_ASSETS[kind]} alt="" aria-hidden="true" draggable={false} />;
 }
 
-/** Aegis header pack; other factions keep their existing vector icons for now. */
+/**
+ * Header navigation icons. Every faction uses the painted pack until faction-specific packs exist;
+ * the faction colour comes from the header theme (docs/ui/race-accent.md), not from the icon.
+ */
 export function HeaderNavigationIcon({ kind, factionId = 'aegis' }: { kind: NavigationIconKind; factionId?: PlayerFactionId }) {
-  if (factionId === 'aegis') return <AssetIcon src={AEGIS_NAVIGATION_ICON_ASSETS[kind]} />;
-  return <LegacyNavigationIcon kind={kind} />;
+  return <AssetIcon src={NAVIGATION_ICON_ASSETS[factionId]?.[kind] ?? AEGIS_NAVIGATION_ICON_ASSETS[kind]} />;
 }

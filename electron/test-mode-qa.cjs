@@ -453,13 +453,27 @@ async function runViewport(width, height) {
     if (JSON.stringify(speedButtons) !== JSON.stringify(['1', '10', '15', '100', '200', '300', '500'])) {
       throw new Error(`${label}: Test Mode speed selector mismatch ${JSON.stringify(speedButtons)}`);
     }
-    const speedLayout = initial.testSpeedLayout;
-    const campaignBox = speedLayout?.campaign;
-    if (!speedLayout?.banner || !speedLayout.picker || !campaignBox || speedLayout.picker.width <= 0 || speedLayout.picker.left < campaignBox.left - 1 || speedLayout.picker.right > campaignBox.right + 1) {
-      throw new Error(`${label}: Test Mode speed controls are not laid out inside the campaign card ${JSON.stringify(speedLayout)}`);
+    // «Ядро» header: the Test Mode pill lives inside the campaign clock and opens a speed menu below it.
+    const banner = initial.testSpeedLayout?.banner;
+    const campaignBox = initial.testSpeedLayout?.campaign;
+    if (!banner || !campaignBox || banner.left < campaignBox.left - 1 || banner.right > campaignBox.right + 1 || banner.top < campaignBox.top - 1 || banner.bottom > campaignBox.bottom + 1) {
+      throw new Error(`${label}: Test Mode pill is not laid out inside the campaign clock ${JSON.stringify(initial.testSpeedLayout)}`);
     }
-    if (speedLayout.buttons.length !== 7 || speedLayout.buttons.some((box) => !box || box.width <= 0 || box.left < campaignBox.left - 1 || box.right > campaignBox.right + 1)) {
-      throw new Error(`${label}: Test Mode speed button is clipped ${JSON.stringify(speedLayout)}`);
+    await click(win, '.hdr-test__toggle');
+    const speedMenu = await win.webContents.executeJavaScript(`(() => {
+      const rect = (node) => {
+        if (!node) return null;
+        const box = node.getBoundingClientRect();
+        return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width, height: box.height };
+      };
+      return {
+        menu: rect(document.querySelector('.hdr-test__menu:not([hidden])')),
+        buttons: Array.from(document.querySelectorAll('[data-qa-test-speed]')).map(rect),
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+      };
+    })()`);
+    if (!speedMenu.menu || speedMenu.buttons.length !== 7 || speedMenu.buttons.some((box) => !box || box.width <= 0 || box.left < speedMenu.menu.left - 1 || box.right > speedMenu.menu.right + 1 || box.bottom > speedMenu.menu.bottom + 1 || box.right > speedMenu.viewport.width)) {
+      throw new Error(`${label}: Test Mode speed menu is clipped ${JSON.stringify(speedMenu)}`);
     }
     await click(win, '[data-qa-test-speed="500"]');
     await waitFor(win, `document.querySelector('[data-qa-test-time-scale]')?.textContent?.includes('×500')`);

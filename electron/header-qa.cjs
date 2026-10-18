@@ -16,10 +16,11 @@ const PRIMARY_ROUTES = [
   ['reports', '.reports-view'],
 ];
 const UTILITY_ROUTES = ['settings', 'rating', 'science'];
+// «Ядро» header: zones sit around the planet dial (military on top, resource left, industry right).
 const EXPECTED_ZONE_POSITIONS = {
-  resource: ['4px', '59px'],
-  industry: ['173px', '49px'],
-  military: ['87px', '161px'],
+  resource: ['-33px', '56px'],
+  industry: ['145px', '56px'],
+  military: ['57px', '-18px'],
 };
 const TEST_SAVE_KEY = 'asterion.vertical-slice.test.v1';
 const TEST_RESOURCE_CAPACITIES = {
@@ -123,7 +124,7 @@ async function readHeaderContract(win) {
       campaignRects: {
         campaign: rect(document.querySelector('[data-qa-campaign]')),
         status: rect(document.querySelector('.asterion-header__campaign-status')),
-        time: rect(document.querySelector('.asterion-header__campaign time')),
+        time: rect(document.querySelector('[data-qa-campaign] time')),
         utility: rect(document.querySelector('[data-qa-navigation="utility"]')),
       },
       headerStyle: {
@@ -428,10 +429,10 @@ function assertContract(label, header, tooltip, planetMenu, planetMenuFocus, the
   }
   if (header.genericHeaderClasses.length) throw new Error(`${label}: generic header classes are still visual owners`);
   if (header.horizontalOverflow) throw new Error(`${label}: horizontal overflow detected`);
-  if (header.headerStyle.top !== '20px' || header.headerStyle.height !== '220px') {
+  if (header.headerStyle.top !== '0px' || header.headerStyle.height !== '184px') {
     throw new Error(`${label}: canonical header geometry drifted`);
   }
-  if (!header.workspace || header.workspaceStyle.top !== '246px') throw new Error(`${label}: workspace top is not tied to header geometry`);
+  if (!header.workspace || header.workspaceStyle.top !== '190px') throw new Error(`${label}: workspace top is not tied to header geometry`);
 
   for (const [zone, [left, top]] of Object.entries(EXPECTED_ZONE_POSITIONS)) {
     const item = header.zones[zone];
@@ -474,7 +475,7 @@ function assertContract(label, header, tooltip, planetMenu, planetMenuFocus, the
     const pulseContract = shouldPulse
       ? (hasPulseAnimation || (header.reducedMotion && reducedMotionPulse))
       : !hasPulseAnimation;
-    if (item.fill !== shouldHaveFill || item.pulse !== shouldPulse || !pulseContract || (item.fill && item.fillHeight !== '7px') || (item.fill && normalizedColor !== expectedColors[item.tone]) || (item.kind === 'population' && item.value.includes('/'))) {
+    if (item.fill !== shouldHaveFill || item.pulse !== shouldPulse || !pulseContract || (item.fill && item.fillHeight !== '4px') || (item.fill && normalizedColor !== expectedColors[item.tone]) || (item.kind === 'population' && item.value.includes('/'))) {
       throw new Error(`${label}: resource presentation contract failed: ${JSON.stringify({ ...item, reducedMotion: header.reducedMotion })}`);
     }
   }
@@ -488,7 +489,7 @@ function assertContract(label, header, tooltip, planetMenu, planetMenuFocus, the
       if (overlaps(resourceRects[index], resourceRects[other])) throw new Error(`${label}: resource cards overlap`);
     }
   }
-  const campaignChildren = [header.campaignRects.status, header.campaignRects.time, header.campaignRects.utility].filter(Boolean);
+  const campaignChildren = [header.campaignRects.status, header.campaignRects.time].filter(Boolean);
   const campaign = header.campaignRects.campaign;
   if (!campaign || campaignChildren.some((item) => item.x < campaign.x - 0.5 || item.y < campaign.y - 0.5 || item.x + item.width > campaign.x + campaign.width + 0.5 || item.y + item.height > campaign.y + campaign.height + 0.5)) {
     throw new Error(`${label}: campaign content escapes its frame`);
