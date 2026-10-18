@@ -126,7 +126,7 @@ const ACCENT_COLORS: Record<AllianceAccent, string> = {
   violet: '#a98cff',
 };
 
-const FACTION_LABELS: Record<string, string> = { aegis: 'Аэгис', synod: 'Синод', veyra: 'Вейра' };
+const FACTION_LABELS: Record<string, string> = { aegis: 'Астеры', synod: 'Илары', veyra: 'Рой' };
 
 const GLYPHS: readonly AllianceEmblemGlyph[] = ['starforge', 'orbit', 'vanguard'];
 const ACCENTS: readonly AllianceAccent[] = ['cyan', 'amber', 'violet'];
@@ -543,6 +543,7 @@ type CatalogProps = {
   actions: CommandActions;
   onFeedback: (result: CommandActionResult) => void;
   testControls: boolean;
+  ownerFactions?: Readonly<Record<string, string | undefined>>;
 };
 
 function useCatalog(command: CommandState, ownerScores: CatalogProps['ownerScores'], query: string) {
@@ -615,7 +616,7 @@ function CatalogList({ command, ownerId, now, actions, onFeedback, testControls,
   );
 }
 
-function CatalogDossier({ entry }: { entry: AllianceCatalogEntry | null }) {
+function CatalogDossier({ entry, ownerFactions = {} }: { entry: AllianceCatalogEntry | null; ownerFactions?: Readonly<Record<string, string | undefined>> }) {
   if (!entry) {
     return <Dossier className="cmdA-dossier--empty"><div className="cmdA-placeholder"><Img src={REPORT_ICONS.alliances} /><p>Выберите союз в каталоге.</p></div></Dossier>;
   }
@@ -630,7 +631,7 @@ function CatalogDossier({ entry }: { entry: AllianceCatalogEntry | null }) {
         >
           {alliance.motto ? <p className="cmdA-motto">«{alliance.motto}»</p> : null}
           {alliance.description ? <p className="cmdA-desc">{alliance.description}</p> : null}
-          <div className="cmdA-people"><div className="cmdA-person"><Avatar name={entry.leaderName} role="leader" /><div><small>ЛИДЕР</small><strong>{entry.leaderName}</strong></div></div></div>
+          <div className="cmdA-people"><div className="cmdA-person"><Avatar name={entry.leaderName} role="leader" factionId={ownerFactions[alliance.leaderOwnerId]} /><div><small>ЛИДЕР</small><strong>{entry.leaderName}</strong></div></div></div>
           <MembersBar count={rating.memberCount} />
         </HeroTitle>
       </Hero>
@@ -662,7 +663,7 @@ function AlliancesTab(props: CatalogProps) {
   return (
     <div className="cmdA-grid">
       <CatalogList {...props} entries={entries} query={query} setQuery={setQuery} selectedId={selected?.alliance.id ?? null} onSelect={setSelectedId} />
-      <CatalogDossier entry={selected} />
+      <CatalogDossier entry={selected} ownerFactions={props.ownerFactions} />
     </div>
   );
 }
@@ -1342,7 +1343,7 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
     requests: aid.incoming.length ? { value: String(aid.incoming.length) } : undefined,
     alliances: { value: String(command.alliances.length) },
   } : {};
-  const catalogProps: CatalogProps = { command, ownerId, ownerScores, now, actions, onFeedback, testControls };
+  const catalogProps: CatalogProps = { command, ownerId, ownerScores, now, actions, onFeedback, testControls, ownerFactions };
 
   return (
     <main className="command-view cmdA" aria-label="Командование союза" data-qa-command-state={status.key}>

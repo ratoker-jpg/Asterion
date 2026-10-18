@@ -6,7 +6,7 @@ import './universe.css';
 import { UniverseView } from './UniverseView';
 import { OperationsView } from './OperationsView';
 import { createOperationsVariantAQaFixture, getOperationsVariantAQaStatus } from './operations-variant-a-qa-fixture.ts';
-import { rerollTestUniverseLayout, UNIVERSE_NPC_OWNER_ID } from './domain/universe/runtime.ts';
+import { createUniverseNpcOwnerProfile, rerollTestUniverseLayout, TEST_MODE_ALLY_PLANET_FIXTURE, UNIVERSE_NPC_OWNER_ID } from './domain/universe/runtime.ts';
 import { CommandView, type CommandActionResult, type CommandActions } from './CommandView';
 import { ReportsView } from './ReportsView';
 import { buildReportsFeed, getReportUnreadCounts } from './domain/reports/adapters.ts';
@@ -775,7 +775,25 @@ export function App() {
       return { ...current, command, profile: syncPlayerProfileWithCommand(current.profile, command) };
     });
   }, [presenceMinute]);
+  // Another window of the game writes the same save on every tick. Without this, a second, stale
+  // window kept overwriting fresh progress (e.g. a just-built «Палата управления» reverted to 0).
+  // Adopt the other window's save and skip writing that adopted state back.
+  const adoptedFromOtherWindow = useRef<SaveState | null>(null);
   useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.storageArea !== window.localStorage || event.key !== persistence.saveKey) return;
+      const next = persistence.read();
+      adoptedFromOtherWindow.current = next;
+      setState(next);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [persistence]);
+  useEffect(() => {
+    if (adoptedFromOtherWindow.current === state) {
+      adoptedFromOtherWindow.current = null;
+      return;
+    }
     const result = persistence.write(state);
     if (!result.ok) {
       if (!persistenceFailureNotified.current) {
@@ -936,6 +954,13 @@ export function App() {
   }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports, state.pirate, state.flights, state.exploration]);
   const commandHallLevel = useMemo(() => selectCommandHallLevel(state.planets), [state.planets]);
   const commandHallDefinition = getBuildingDefinition('planetary-government', state.profile.factionId);
+  // Races of the owners the Command screen can show: the player, Bot 01 (universe NPC) and,
+  // in Test Mode, Ira Vel — taken from the same owner profiles the Universe uses.
+  const commandOwnerFactions = useMemo<Record<string, string | undefined>>(() => ({
+    [UNIVERSE_NPC_OWNER_ID]: createUniverseNpcOwnerProfile().raceId,
+    ...(RUNTIME_MODE === 'test' ? { [TEST_MODE_ALLY_PLANET_FIXTURE.owner.id]: TEST_MODE_ALLY_PLANET_FIXTURE.owner.raceId } : {}),
+    [state.profile.playerId]: state.profile.factionId,
+  }), [state.profile.playerId, state.profile.factionId]);
   const buildingInteriorTarget = buildingInterior
     ? getBuildingInteriorTarget(buildingInterior.buildingRole)
     : null;
@@ -1981,7 +2006,7 @@ export function App() {
                 art: commandHallDefinition.art,
               }}
               ownerScores={withTestOwnerScoreFixtures(selectOwnerScores(state), RUNTIME_MODE)}
-              ownerFactions={{ [state.profile.playerId]: state.profile.factionId }}
+              ownerFactions={commandOwnerFactions}
               aid={selectAidOverview(state, { now, mode: RUNTIME_MODE, testTimeScale })}
               now={now}
               actions={commandActions}
