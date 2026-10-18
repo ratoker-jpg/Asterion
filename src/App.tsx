@@ -1981,6 +1981,7 @@ export function App() {
                 art: commandHallDefinition.art,
               }}
               ownerScores={withTestOwnerScoreFixtures(selectOwnerScores(state), RUNTIME_MODE)}
+              ownerFactions={{ [state.profile.playerId]: state.profile.factionId }}
               aid={selectAidOverview(state, { now, mode: RUNTIME_MODE, testTimeScale })}
               now={now}
               actions={commandActions}

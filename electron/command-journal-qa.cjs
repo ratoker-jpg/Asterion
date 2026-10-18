@@ -112,11 +112,13 @@ const journal = (win) => run(win, `(() => ({
   contentOverflow: (() => { const c = document.querySelector('.command-content'); return c ? c.scrollWidth > c.clientWidth + 1 : false; })(),
 }))()`);
 
-async function openOperations(win) {
+// The alliance journal lives on «Штаб» (overview), the first tab a member sees.
+async function openJournal(win) {
   await openRoute(win, 'command', '.command-view');
-  await click(win, '[data-qa-command-tab="operations"]');
-  await waitFor(win, `document.querySelector('[data-qa-operations]')`);
+  await click(win, '[data-qa-command-tab="overview"]');
+  await waitFor(win, `document.querySelector('[data-qa-journal-state]')`);
 }
+
 
 // Moves the player's join time and replaces the alliance events with two sentinel events (before / after the join).
 const seedJoin = (win, key, joinedAgoMs, oldAgoMs, newAgoMs) => patchSave(win, key, `(save) => {
@@ -137,19 +139,23 @@ async function testModeScenario(win, label) {
   // 1. Fresh member (30 min): hidden sentinel events must leave no trace in the DOM.
   await seedJoin(win, TEST_KEY, 30 * MIN, 40 * MIN, 10 * MIN);
   await reload(win, 'test');
-  await openOperations(win);
+  await openJournal(win);
   let state = await journal(win);
   assert(state.state === 'locked', `${label}: a 30-minute member sees the locked journal`, state.state);
   assert(!/SENTINEL|987654|876543|987 654|876 543/.test(state.html), `${label}: locked DOM holds no hidden event data`);
   assert(/через/.test(state.text) && state.entries.length === 0, `${label}: only the unlock countdown is shown`, state.text);
-  assert(state.sun && /Рейд на Солнце/.test(state.sunText) && /Появится в будущей версии/.test(state.sunText) && state.sunControls === 0, `${label}: Sun raid is an honest stub with no controls`, state.sunText);
   assert(!state.overflowX && !state.contentOverflow, `${label}: no overflow (locked)`, state);
   await capture(win, label, 'journal-locked');
+  await click(win, '[data-qa-command-tab="operations"]');
+  await waitFor(win, `document.querySelector('[data-qa-operations]')`);
+  const operations = await journal(win);
+  assert(operations.sun && /Рейд на Солнце/.test(operations.sunText) && /Появится в будущей версии/.test(operations.sunText) && operations.sunControls === 0, `${label}: Sun raid is an honest stub with no controls`, operations.sunText);
+  assert(!/SENTINEL|987654|876543|987 654|876 543/.test(operations.html), `${label}: operations DOM holds no hidden event data`);
 
   // 2. Three hours in: only events after the join are readable.
   await seedJoin(win, TEST_KEY, 3 * HOUR, 4 * HOUR, HOUR);
   await reload(win, 'test');
-  await openOperations(win);
+  await openJournal(win);
   state = await journal(win);
   assert(state.state === 'open' && state.entries.length === 1, `${label}: after 2 h exactly the post-join event is shown`, state);
   assert(/876\s?543/.test(state.text) && !/987\s?654/.test(state.text) && !/555\s?555/.test(state.text), `${label}: pre-join and corrupted-time events stay hidden and the journal still renders`, state.text);
@@ -160,7 +166,7 @@ async function testModeScenario(win, label) {
   // 3. Re-join: a fresh joinedAt locks the journal and hides the earlier stay again.
   await seedJoin(win, TEST_KEY, 5 * MIN, 4 * HOUR, HOUR);
   await reload(win, 'test');
-  await openOperations(win);
+  await openJournal(win);
   state = await journal(win);
   assert(state.state === 'locked' && !/SENTINEL|876543|876 543/.test(state.html), `${label}: a fresh join locks the journal`, state.state);
 
@@ -185,7 +191,7 @@ async function testModeScenario(win, label) {
   await click(win, '[data-qa-test-ira-prepare]');
   await click(win, '[data-qa-test-ira-help]');
   await waitFor(win, `JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || '{}')?.command?.requests?.[0]?.delivered === 50000`);
-  await click(win, '[data-qa-command-tab="operations"]');
+  await click(win, '[data-qa-command-tab="overview"]');
   await waitFor(win, `document.querySelector('[data-qa-journal-state="open"]')`);
   state = await journal(win);
   const kinds = state.entries.slice().sort();
@@ -193,16 +199,16 @@ async function testModeScenario(win, label) {
   await capture(win, label, 'journal-real-aid');
   await reload(win, 'test');
   await sleep(1500);
-  await openOperations(win);
+  await openJournal(win);
   const again = await journal(win);
   assert(again.entries.length === kinds.length, `${label}: reload does not duplicate rows`, again.entries);
   const save = await readSave(win, TEST_KEY);
   assert(new Set(save.command.aidEvents.map((e) => e.id)).size === save.command.aidEvents.length, `${label}: event ids stay unique`);
 
   // 5. Diplomacy remains an honest stub.
-  await click(win, '[data-qa-command-tab="diplomacy"]');
-  await waitFor(win, `document.querySelector('[data-qa-command-stub]')`);
-  const dip = await run(win, `({ text: document.querySelector('[data-qa-command-stub]').innerText, controls: document.querySelectorAll('[data-qa-command-stub] button, [data-qa-command-stub] input').length })`);
+  await click(win, '[data-qa-command-tab="operations"]');
+  await waitFor(win, `document.querySelector('[data-qa-diplomacy]')`);
+  const dip = await run(win, `({ text: document.querySelector('[data-qa-diplomacy]').innerText, controls: document.querySelectorAll('[data-qa-command-stub] button, [data-qa-command-stub] input').length })`);
   assert(/Дипломатия/.test(dip.text) && dip.controls === 0, `${label}: diplomacy is still a stub`, dip);
 }
 
@@ -218,14 +224,14 @@ async function productionScenario(win, label) {
   await setField(win, '[data-qa-alliance-tag]', 'JRN');
   await click(win, '[data-qa-alliance-submit]');
   await waitFor(win, `document.querySelector('.command-view')?.getAttribute('data-qa-command-state') === 'leader'`);
-  await click(win, '[data-qa-command-tab="operations"]');
+  await click(win, '[data-qa-command-tab="overview"]');
   await waitFor(win, `document.querySelector('[data-qa-journal-state="locked"]')`);
   let state = await journal(win);
   assert(state.entries.length === 0 && !state.overflowX && !state.contentOverflow, `${label}: production journal is locked and fits`, state);
   await capture(win, label, 'production-journal-locked');
   await patchSave(win, PRODUCTION_KEY, `(save) => { save.command.alliances[0].members[0].joinedAt = Date.now() - 3 * 3600000; }`);
   await reload(win, 'production');
-  await openOperations(win);
+  await openJournal(win);
   state = await journal(win);
   assert(state.state === 'empty' && /пока нет/.test(state.text), `${label}: production journal is empty and invents nothing`, state);
   const save = await readSave(win, PRODUCTION_KEY);
