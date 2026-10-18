@@ -8,7 +8,7 @@
 
 ## Схема видимости (`src/domain/command/journal.ts`)
 
-`selectAllianceJournal(command, viewerOwnerId, now)` — чистый селектор. Компонент никогда не получает сырой `aidEvents`.
+`selectAllianceJournal(command, viewerOwnerId, now)` — чистый селектор. `OperationsTab` вычисляет `JournalView`, а `JournalPanel` получает только его — сырой `aidEvents` панель не видит (в `CommandView` полный `CommandState` по-прежнему приходит как prop, это граница компонентов, не защита хранилища). События с некорректной меткой времени (NaN, Infinity, за пределами диапазона `Date`) селектор отбрасывает.
 
 | Условие | Результат |
 |---|---|
@@ -28,7 +28,7 @@
 |---|---|---|
 | `request_created` | `createResourceRequest` | «Создан запрос ресурсов» |
 | `request_cancelled` | `cancelResourceRequest` | «Запрос отменён автором» |
-| `request_closed` | `closeRequest` (причина) | выполнен / автор покинул союз / союз расформирован / планета назначения утрачена |
+| `request_closed` | `closeRequest` (причина) | автор покинул союз / союз расформирован / планета назначения утрачена. Выполненный запрос отдельного `request_closed` не пишет: его подтверждают `aid_delivered` и статус запроса; подпись «Запрос выполнен» оставлена только для совместимости со старыми записями |
 | `aid_launched` | `markRequestHelpStarted` | «Отправлена помощь» + единицы |
 | `aid_delivered` | `creditAidDelivery` | фактически принятые единицы; 0 → «Груз не принят планетой» |
 | `aid_returned` | возврат рейса с грузом | «Помощь вернулась» |

@@ -24,7 +24,7 @@ import {
   type MemberScore,
 } from './domain/command/selectors.ts';
 import { AID_RESOURCES, AID_RESOURCE_LABELS } from './domain/command/aid.ts';
-import { selectAllianceJournal, type JournalEntry } from './domain/command/journal.ts';
+import { selectAllianceJournal, type JournalEntry, type JournalView } from './domain/command/journal.ts';
 import type { AidOverview, AidRequestRow } from './application/alliance-aid.ts';
 import type {
   AidResource,
@@ -207,9 +207,8 @@ function journalDetail(entry: JournalEntry) {
   return parts.join(' · ');
 }
 
-function JournalPanel({ command, ownerId, now }: { command: CommandState; ownerId: string; now: number }) {
-  // The view is filtered in the domain layer; a locked journal never receives any event data.
-  const view = useMemo(() => selectAllianceJournal(command, ownerId, now), [command, ownerId, now]);
+function JournalPanel({ view, now }: { view: JournalView; now: number }) {
+  // The panel only ever receives the already filtered view; a locked journal carries no event data.
   if (view.state === 'no_membership') return null;
   return (
     <Panel title="Журнал союза" kicker="ИСТОРИЯ СОБЫТИЙ" className="command-journal">
@@ -246,9 +245,10 @@ function SunRaidCard() {
 }
 
 function OperationsTab({ command, ownerId, now }: { command: CommandState; ownerId: string; now: number }) {
+  const view = useMemo(() => selectAllianceJournal(command, ownerId, now), [command, ownerId, now]);
   return (
     <div className="command-operations" data-qa-operations>
-      <JournalPanel command={command} ownerId={ownerId} now={now} />
+      <JournalPanel view={view} now={now} />
       <SunRaidCard />
     </div>
   );

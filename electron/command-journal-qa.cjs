@@ -124,7 +124,7 @@ const seedJoin = (win, key, joinedAgoMs, oldAgoMs, newAgoMs) => patchSave(win, k
   const now = Date.now();
   alliance.members.find((m) => m.ownerId === save.profile.playerId).joinedAt = now - ${joinedAgoMs};
   const make = (tag, at, units) => ({ id: 'aid_delivered:SENTINEL-' + tag, kind: 'aid_delivered', at, allianceId: alliance.id, requestId: 'SENTINEL-REQ-' + tag, actorOwnerId: 'member-ira-vel', audience: 'alliance', flightId: 'SENTINEL-' + tag, units });
-  save.command.aidEvents = [make('OLD', now - ${oldAgoMs}, 987654), make('NEW', now - ${newAgoMs}, 876543)];
+  save.command.aidEvents = [make('OLD', now - ${oldAgoMs}, 987654), make('NEW', now - ${newAgoMs}, 876543), make('BADTIME', 1e20, 555555)];
 }`);
 
 async function testModeScenario(win, label) {
@@ -152,7 +152,7 @@ async function testModeScenario(win, label) {
   await openOperations(win);
   state = await journal(win);
   assert(state.state === 'open' && state.entries.length === 1, `${label}: after 2 h exactly the post-join event is shown`, state);
-  assert(/876\s?543/.test(state.text) && !/987\s?654/.test(state.text), `${label}: pre-join event stays hidden`, state.text);
+  assert(/876\s?543/.test(state.text) && !/987\s?654/.test(state.text) && !/555\s?555/.test(state.text), `${label}: pre-join and corrupted-time events stay hidden and the journal still renders`, state.text);
   assert(!/SENTINEL/.test(state.html), `${label}: raw event ids never reach the DOM`);
   assert(!state.overflowX && !state.contentOverflow, `${label}: no overflow (open)`, state);
   await capture(win, label, 'journal-open');

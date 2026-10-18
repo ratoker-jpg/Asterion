@@ -177,3 +177,14 @@ test('save round trip and v2 migration keep the journal readable and bounded', (
   assert.deepEqual(entries(selectAllianceJournal(migrated, 'bob', JOIN + 3 * HOUR)), []);
   assert.doesNotThrow(() => selectAllianceJournal({ ...s, aidEvents: [] }, 'bob', JOIN + 3 * HOUR));
 });
+
+test('corrupted timestamps are dropped and never reach a Date', () => {
+  const { state, allianceId } = scene();
+  let s = ev(state, allianceId, 'request_created', 'good', JOIN + MIN);
+  for (const [name, at] of [['huge', 1e20], ['edge', 8.64e15 + 1], ['inf', Number.POSITIVE_INFINITY], ['nan', Number.NaN], ['neg', -5]] as const) {
+    s = ev(s, allianceId, 'request_created', name, at);
+  }
+  const rows = entries(selectAllianceJournal(s, 'bob', JOIN + 3 * HOUR));
+  assert.deepEqual(rows.map((row) => row.id), [journalEntryKey('request_created:good')]);
+  for (const row of rows) assert.doesNotThrow(() => new Date(row.at).toISOString());
+});

@@ -4,6 +4,9 @@ import type { AidEventKind, AidResource, CommandState } from './types.ts';
 
 /** New members cannot read the journal for this long after joining. */
 export const JOURNAL_DELAY_MS = 2 * 60 * 60 * 1000;
+/** Largest timestamp a JS Date can represent; anything beyond cannot be shown honestly. */
+const MAX_DATE_MS = 8.64e15;
+
 /** Upper bound of rows handed to the UI; the domain keeps at most 300 events anyway. */
 export const JOURNAL_MAX_ROWS = 100;
 
@@ -61,6 +64,8 @@ export function selectAllianceJournal(command: CommandState, viewerOwnerId: stri
   const seen = new Set<string>();
   for (const event of command.aidEvents) {
     if (event.allianceId !== alliance.id || event.audience !== 'alliance') continue;
+    // Corrupted timestamps (NaN, Infinity, beyond the Date range) are dropped instead of shown with an invented date.
+    if (!Number.isFinite(event.at) || event.at > MAX_DATE_MS) continue;
     if (!(event.at > member.joinedAt) || seen.has(event.id)) continue;
     seen.add(event.id);
     const request = command.requests.find((candidate) => candidate.id === event.requestId && candidate.allianceId === alliance.id);
