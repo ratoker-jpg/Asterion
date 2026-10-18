@@ -299,10 +299,14 @@ type PlanetDefinition = {
 
 const RUNTIME_MODE: RuntimeMode = ACTIVE_RUNTIME_MODE;
 
-/** Test Mode only: `?headerFaction=synod|veyra` previews another faction's header theme. Presentation only, never saved. */
+/**
+ * Test Mode only: `?faction=synod|veyra` (or the older `?headerFaction=`) previews
+ * another race's interface theme. Presentation only, never saved.
+ */
 const HEADER_FACTION_PREVIEW = (() => {
   if (RUNTIME_MODE !== 'test' || typeof window === 'undefined') return null;
-  const value = new URLSearchParams(window.location.search).get('headerFaction');
+  const params = new URLSearchParams(window.location.search);
+  const value = params.get('faction') ?? params.get('headerFaction');
   return value === 'aegis' || value === 'synod' || value === 'veyra' ? value : null;
 })();
 
@@ -973,6 +977,11 @@ export function App() {
   }, [state.combat.reports, state.operations, state.command, state.espionage, state.reports.overpopulationReports, state.reports.recyclerArrivalReports, state.reports.gasExtractionArrivalReports, state.reports, state.pirate, state.flights, state.exploration]);
   const commandHallLevel = useMemo(() => selectCommandHallLevel(state.planets), [state.planets]);
   const commandHallDefinition = getBuildingDefinition('planetary-government', state.profile.factionId);
+  // The race theme lives on <html> so portals and dialogs outside the stage get it too.
+  const uiFactionId = HEADER_FACTION_PREVIEW ?? state.profile.factionId;
+  useEffect(() => {
+    document.documentElement.dataset.faction = uiFactionId;
+  }, [uiFactionId]);
   // Races of the owners the Command screen can show: the player, Bot 01 (universe NPC) and,
   // in Test Mode, Ira Vel — taken from the same owner profiles the Universe uses.
   const commandOwnerFactions = useMemo<Record<string, string | undefined>>(() => ({
@@ -1889,9 +1898,9 @@ export function App() {
 
   return (
     <div className="viewport">
-      <div className="stage stage-shell-v3 stage-shell-v4" style={{ transform: `scale(${scale})`, '--space-bg': `url(${systemBackground})` } as CSSProperties}>
+      <div className="stage stage-shell-v3 stage-shell-v4" data-faction={uiFactionId} style={{ transform: `scale(${scale})`, '--space-bg': `url(${systemBackground})` } as CSSProperties}>
         <AsterionHeader
-          factionId={HEADER_FACTION_PREVIEW ?? state.profile.factionId}
+          factionId={uiFactionId}
           currentPlanet={{
             id: currentPlanet.id,
             name: currentPlanetName,
