@@ -391,13 +391,17 @@ async function verifyViewport(width, height) {
 
     await activateRoute(win, 'command', '.command-view');
     await clickText(win, '.command-tabs button', 'ЗАПРОСЫ РЕСУРСОВ');
-    // Resource requests are an honest stub until PR 2: no invented requests or resource icons are rendered.
-    // The real supply icons are verified again together with the requests implementation.
-    await waitFor(win, `document.querySelector('[data-qa-command-stub]')`);
+    // The requests tab is a real screen now: form, four requestable resources, no invented requests.
+    await waitFor(win, `document.querySelector('[data-qa-requests]') && document.querySelector('[data-qa-request-form]')`);
+    const requestResources = await win.webContents.executeJavaScript(`Array.from(document.querySelectorAll('[data-qa-request-resource] option')).map((option) => option.value)`);
+    if (JSON.stringify(requestResources) !== JSON.stringify(['metal', 'minerals', 'gas', 'debris'])) throw new Error(`command: unexpected requestable resources ${JSON.stringify(requestResources)}`);
+    const stubStillShown = await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-qa-command-stub]'))`);
+    if (stubStillShown) throw new Error('command: the requests tab still renders the obsolete stub');
+    const fabricated = await win.webContents.executeJavaScript(`document.querySelectorAll('[data-qa-my-requests] > li, [data-qa-incoming-requests] > li').length`);
+    if (fabricated !== 0) throw new Error(`command: production start must not show invented requests (${fabricated})`);
+    // The tab currently renders text only; validate whatever resource assets are actually rendered.
     const commandImages = await readResourceImages(win, '.command-view');
-    if (commandImages && commandImages.length) throw new Error(`command: the requests stub must not render resource icons: ${JSON.stringify(commandImages.map((image) => image.kind))}`);
-    const stubText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-command-stub]')?.textContent || ''`);
-    if (!/Запросы ресурсов/.test(stubText)) throw new Error(`command: unexpected requests stub ${stubText}`);
+    if (commandImages && commandImages.length) assertResourceImages('command requests', commandImages, [...new Set(commandImages.map((image) => image.kind))]);
 
     await activateRoute(win, 'reports', '.reports-view');
     await click(win, '[data-message-folder="battle"]');
