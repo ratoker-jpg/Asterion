@@ -564,7 +564,7 @@ test('persisting command keeps unrelated save fields and reads back identically'
   const envelope = JSON.parse(storage.getItem(SAVE_KEY)!);
   assert.equal(envelope.metal, 777);
   assert.deepEqual(envelope.operations, { items: [] });
-  assert.deepEqual(readCommandState(storage), migrateCommandState(state, 'test'));
+  assert.deepEqual(readCommandState(storage), persisted.value);
 });
 
 test('profile mirrors the real membership and clears it when the owner has none', () => {
