@@ -92,13 +92,16 @@ function fill(state: CommandState, allianceId: string, count: number, at = T0) {
   return next;
 }
 
-test('production starts without any alliance; Test Mode seeds only the player and Ira Vel', () => {
+test('production starts without any alliance; Test Mode seeds the player with Ira Vel and Bot 01 with its own alliance', () => {
   const production = createDefaultCommandState('production');
   assert.deepEqual(production, { version: 3, alliances: [], applications: [], cooldowns: [], diplomacy: [], requests: [], aidLedgers: [], aidEvents: [], nextSerial: 1 });
 
   const test = createDefaultCommandState('test', { playerId: 'player-current', playerDisplayName: 'Dendrilion' });
-  assert.equal(test.alliances.length, 1);
-  const [alliance] = test.alliances;
+  assert.equal(test.alliances.length, 2);
+  const [alliance, bot] = test.alliances;
+  assert.equal(bot.fixtureId, 'test-command-bot01-v1');
+  assert.equal(bot.leaderOwnerId, 'npc-bot-01');
+  assert.deepEqual(bot.members.map((member) => member.ownerId), ['npc-bot-01']);
   assert.equal(alliance.id, TEST_FIXTURE_ALLIANCE_ID);
   assert.equal(alliance.fixtureId, 'test-command-default-v1');
   assert.equal(alliance.leaderOwnerId, 'player-current');

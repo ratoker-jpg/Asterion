@@ -34,3 +34,24 @@ export const TEST_FIXTURE_ALLIANCE_PROFILE = {
   description: 'Тестовый союз для проверки Командования. Состав: игрок и Ира Вель.',
   emblem: DEFAULT_ALLIANCE_EMBLEM,
 } as const;
+
+/**
+ * Test Mode only: Bot 01 (the universe NPC, race Рой) leads its own alliance so
+ * diplomacy can be checked against a real second alliance. It is a managed
+ * fixture — the bot takes no decisions; Test Mode buttons act for it.
+ */
+export const TEST_BOT_FIXTURE_ID = 'test-command-bot01-v1' as const;
+export const TEST_BOT_ALLIANCE_ID = 'alliance-test-bot01-v1';
+/** Same id as the universe NPC owner (`UNIVERSE_NPC_OWNER_ID`). */
+export const TEST_BOT_OWNER_ID = 'npc-bot-01';
+export const TEST_BOT_DISPLAY_NAME = 'Бот 01';
+export const TEST_BOT_ALLIANCE_PROFILE = {
+  name: 'Рой Ноктиса',
+  tag: 'NOX',
+  motto: 'Улей помнит каждого.',
+  description: 'Тестовый союз Бота 01 для проверки **дипломатии**: объявления войны и __перемирия__.',
+  emblem: { glyph: 'blades', accent: 'crimson', shape: 'hex', field: 'rays', fieldColor: 'crimson' },
+} as const;
+
+/** War and truce timing (concept §8): a truce may be offered 3 h after the war began and 3 h after a rejection. */
+export const TRUCE_OFFER_DELAY_MS = 3 * 60 * 60 * 1000;

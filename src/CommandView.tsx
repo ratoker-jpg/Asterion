@@ -1,12 +1,6 @@
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 
-import {
-  ALLIANCE_DESCRIPTION_MAX,
-  ALLIANCE_MOTTO_MAX,
-  ALLIANCE_NAME_MAX,
-  ALLIANCE_TAG_MAX,
-  MAX_ALLIANCE_MEMBERS,
-} from './domain/command/catalog.ts';
+import { MAX_ALLIANCE_MEMBERS, TEST_BOT_ALLIANCE_ID } from './domain/command/catalog.ts';
 import {
   canManageAlliance,
   filterAllianceCatalog,
@@ -26,14 +20,13 @@ import {
 import { AID_RESOURCES, AID_RESOURCE_LABELS } from './domain/command/aid.ts';
 import { selectAllianceJournal, type JournalEntry, type JournalView } from './domain/command/journal.ts';
 import { getCombatEntity } from './domain/combat/catalog.ts';
+import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
+import { selectAllianceRelations, selectTruceAvailability } from './domain/command/diplomacy.ts';
 import { getFactionGeneralAsset } from './domain/profile/faction-assets.ts';
 import type { AidOverview, AidRequestRow } from './application/alliance-aid.ts';
 import type {
   AidResource,
-  AllianceAccent,
   AllianceApplication,
-  AllianceEmblem,
-  AllianceEmblemGlyph,
   AllianceMember,
   AllianceRole,
   AllianceSettingsInput,
@@ -42,6 +35,10 @@ import type {
 import type { RuntimeMode } from './domain/runtime/mode.ts';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
+import { ACCENT_COLORS, EmblemGlyph } from './ui/command/EmblemGlyph';
+import { AllianceEditor } from './ui/command/AllianceEditor';
+import { Dialog } from './ui/command/Dialog';
+import { renderRichText } from './ui/command/rich-text';
 import commandHeaderIcon from './assets/ui/header-icons/command.png';
 import aidMissionIcon from '../assets/source/mission-icons-v1/33_trade_convoy.png';
 import sunMissionIcon from '../assets/source/mission-icons-v1/08_sun_support.png';
@@ -75,10 +72,23 @@ export type CommandActions = {
   testIraRequest?: (resource: AidResource, amount: number) => CommandActionResult;
   /** Test Mode only: Ira Vel serves the player's request with a real flight. */
   testIraHelp?: () => CommandActionResult;
+  /** Leader or deputy: war is declared at once, without the other side's consent. */
+  declareWar: (targetAllianceId: string) => CommandActionResult;
+  /** Offer a truce (3 h after the war began / after a rejection). */
+  proposeTruce: (targetAllianceId: string) => CommandActionResult;
+  /** Answer the other side's truce offer. */
+  respondTruce: (fromAllianceId: string, accept: boolean) => CommandActionResult;
+  /** Opens the fleet window with a transport to a member's known planet (the planet is never shown here). */
+  sendFleetToMember: (ownerId: string) => CommandActionResult;
+  canSendFleetToMember: (ownerId: string) => boolean;
   /** Test Mode only: a controlled NPC applies to the player's alliance. */
   testBotApply?: () => CommandActionResult;
-  /** Test Mode only: a controlled NPC founds an alliance of its own. */
-  testBotCreateAlliance?: () => CommandActionResult;
+  /** Test Mode only: Bot 01 answers the player's truce offer. */
+  testBotRespondTruce?: (accept: boolean) => CommandActionResult;
+  /** Test Mode only: Bot 01 offers the player's alliance a truce. */
+  testBotProposeTruce?: () => CommandActionResult;
+  /** Test Mode only: Bot 01 declares war on the player's alliance. */
+  testBotDeclareWar?: () => CommandActionResult;
 };
 
 export type CommandHallInfo = { level: number; name: string; art: string };
@@ -91,13 +101,17 @@ type CommandViewProps = {
   ownerScores: Readonly<Record<string, MemberScore | undefined>>;
   /** Known factions by owner id. Only real data: an unknown owner gets initials, never an invented race. */
   ownerFactions?: Readonly<Record<string, string | undefined>>;
+  /** The player's race: ship art (transporters, the Sun raid fleet) follows it. */
+  playerFactionId?: string;
+  /** Test Mode clock acceleration for the 3-hour diplomacy timers; 1 in production. */
+  testTimeScale?: number;
   aid: AidOverview;
   /** Wall-clock milliseconds; drives the re-application countdowns. */
   now: number;
   actions: CommandActions;
 };
 
-type CommandTab = 'overview' | 'members' | 'applications' | 'requests' | 'alliances' | 'operations';
+type CommandTab = 'overview' | 'members' | 'applications' | 'requests' | 'alliances' | 'diplomacy' | 'operations';
 
 const TAB_LABELS: Record<CommandTab, string> = {
   overview: 'ШТАБ',
@@ -105,6 +119,7 @@ const TAB_LABELS: Record<CommandTab, string> = {
   applications: 'ЗАЯВКИ',
   requests: 'ПОМОЩЬ',
   alliances: 'СОЮЗЫ',
+  diplomacy: 'ДИПЛОМАТИЯ',
   operations: 'ОПЕРАЦИИ',
 };
 
@@ -120,24 +135,23 @@ const ROLE_COLORS: Record<AllianceRole, string> = {
   member: '#8fb6c0',
 };
 
-const ACCENT_COLORS: Record<AllianceAccent, string> = {
-  cyan: '#56d9f2',
-  amber: '#e6ad50',
-  violet: '#a98cff',
-};
-
 const FACTION_LABELS: Record<string, string> = { aegis: 'Астеры', synod: 'Илары', veyra: 'Рой' };
-
-const GLYPHS: readonly AllianceEmblemGlyph[] = ['starforge', 'orbit', 'vanguard'];
-const ACCENTS: readonly AllianceAccent[] = ['cyan', 'amber', 'violet'];
-const ACCENT_LABELS: Record<AllianceAccent, string> = { cyan: 'Голубой', amber: 'Янтарный', violet: 'Фиолетовый' };
 
 const SCORE_ICONS = asterionAssetIntegrationAssets.scoreIcons;
 const REPORT_ICONS = asterionAssetIntegrationAssets.reportIcons;
 const FACTION_FACES: Readonly<Record<string, string>> = asterionAssetIntegrationAssets.battleFactionIcons;
-const TRANSPORTER_ART = getCombatEntity('transporter').art;
-const MEGA_TRANSPORTER_ART = getCombatEntity('mega-transporter').art;
-const SUN_RAID_SHIPS = (['death-star', 'battleship', 'destroyer', 'cruiser'] as const).map((id) => getCombatEntity(id));
+const SUN_RAID_SHIP_IDS = ['death-star', 'battleship', 'destroyer', 'cruiser'] as const;
+
+/** Ship art of the player's race (Астеры / Илары / Рой); falls back to the base catalog. */
+function shipArtOf(factionId: string | undefined, shipId: Parameters<typeof getCombatEntity>[0]): string {
+  const catalog = factionId === 'aegis' || factionId === 'synod' || factionId === 'veyra' ? getFactionShipCatalog(factionId) : null;
+  return catalog?.find((ship) => ship.id === shipId)?.art ?? getCombatEntity(shipId).art;
+}
+
+function shipNameOf(factionId: string | undefined, shipId: Parameters<typeof getCombatEntity>[0]): string {
+  const catalog = factionId === 'aegis' || factionId === 'synod' || factionId === 'veyra' ? getFactionShipCatalog(factionId) : null;
+  return catalog?.find((ship) => ship.id === shipId)?.name ?? getCombatEntity(shipId).name;
+}
 
 const number = new Intl.NumberFormat('ru-RU');
 
@@ -161,24 +175,7 @@ function formatCoordinate(coordinate: { galaxy: number; system: number; position
   return `${coordinate.galaxy}:${coordinate.system}:${coordinate.position}`;
 }
 
-export function EmblemGlyph({ emblem, compact = false }: { emblem: AllianceEmblem; compact?: boolean }) {
-  const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.55, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
-  const style = { '--command-emblem': ACCENT_COLORS[emblem.accent] } as CSSProperties;
-  return (
-    <span className={`command-emblem command-emblem--${emblem.glyph} ${compact ? 'command-emblem--compact' : ''}`} style={style}>
-      <svg viewBox="0 0 80 96" aria-hidden="true">
-        <path className="command-emblem-shield" d="M40 4 70 16v29c0 22-12 36-30 47C22 81 10 67 10 45V16L40 4Z" />
-        {emblem.glyph === 'starforge' ? (
-          <g><path {...common} d="m40 22 7 14 16 2-12 11 3 16-14-8-14 8 3-16-12-11 16-2 7-14Z" /><circle {...common} cx="40" cy="45" r="8" /></g>
-        ) : emblem.glyph === 'orbit' ? (
-          <g><circle {...common} cx="40" cy="45" r="10" /><ellipse {...common} cx="40" cy="45" rx="25" ry="11" transform="rotate(24 40 45)" /><ellipse {...common} cx="40" cy="45" rx="25" ry="11" transform="rotate(-32 40 45)" /></g>
-        ) : (
-          <g><path {...common} d="m40 18 10 23-10 9-10-9 10-23Z" /><path {...common} d="M18 58 40 46l22 12M23 68l17-10 17 10" /></g>
-        )}
-      </svg>
-    </span>
-  );
-}
+export { EmblemGlyph };
 
 // ---- shared presentation pieces ------------------------------------------------
 
@@ -305,12 +302,12 @@ function ScoreGrid({ score }: { score: MemberScore }) {
   );
 }
 
-function Stub({ title, children, qa, icon }: { title: string; children: string; qa: 'sun' | 'diplomacy'; icon: ReactNode }) {
+function Stub({ title, children, qa, icon }: { title: string; children: string; qa: 'sun'; icon: ReactNode }) {
   return (
-    <div className={`command-stub cmdA-stub cmdA-stub--${qa}`} data-qa-command-stub data-qa-sun-raid={qa === 'sun' ? '' : undefined} data-qa-diplomacy={qa === 'diplomacy' ? '' : undefined} role="status">
+    <div className={`command-stub cmdA-stub cmdA-stub--${qa}`} data-qa-command-stub data-qa-sun-raid="" role="status">
       {icon}
       <div>
-        <small>{qa === 'sun' ? 'СОВМЕСТНАЯ ОПЕРАЦИЯ' : 'ОТНОШЕНИЯ СОЮЗОВ'}</small>
+        <small>СОВМЕСТНАЯ ОПЕРАЦИЯ</small>
         <h2>{title}</h2>
         <p>{children}</p>
       </div>
@@ -401,71 +398,6 @@ function JournalPanel({ view, now }: { view: JournalView; now: number }) {
 
 // ---- dialogs -------------------------------------------------------------------
 
-function Dialog({ title, onClose, children, wide = false }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
-  return (
-    <div className="command-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className={`command-dialog ${wide ? 'command-dialog--wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
-        <header><div><small>КОМАНДОВАНИЕ</small><h3>{title}</h3></div><button type="button" className="command-close" aria-label="Закрыть" title="Закрыть" onClick={onClose}>✕</button></header>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-/** The single editor used both to found an alliance and to edit it from the overview. */
-function AllianceEditor({ title, submitLabel, initial, onSubmit, onClose }: {
-  title: string;
-  submitLabel: string;
-  initial: AllianceSettingsInput;
-  onSubmit: (settings: AllianceSettingsInput) => CommandActionResult;
-  onClose: () => void;
-}) {
-  const [draft, setDraft] = useState<AllianceSettingsInput>({ ...initial, emblem: { ...initial.emblem } });
-  const [error, setError] = useState('');
-  const submit = () => {
-    const result = onSubmit(draft);
-    if (result.ok) onClose();
-    else setError(result.message);
-  };
-  const set = (patch: Partial<AllianceSettingsInput>) => { setDraft((current) => ({ ...current, ...patch })); setError(''); };
-
-  return (
-    <Dialog title={title} onClose={onClose} wide>
-      <div className="command-editor">
-        <div className="command-editor-preview" style={{ '--command-emblem': ACCENT_COLORS[draft.emblem.accent] } as CSSProperties}>
-          <EmblemGlyph emblem={draft.emblem} />
-          <strong>{draft.name.trim() || 'Название союза'}</strong>
-          <span>[{draft.tag.trim().toUpperCase() || 'TAG'}]</span>
-          <p>{draft.motto.trim() || 'Девиз союза'}</p>
-        </div>
-        <div className="command-editor-form">
-          <label><span>НАЗВАНИЕ · 3–{ALLIANCE_NAME_MAX}</span><input value={draft.name} maxLength={ALLIANCE_NAME_MAX} onChange={(event) => set({ name: event.target.value })} data-qa-alliance-name /></label>
-          <label><span>ТЕГ · 2–{ALLIANCE_TAG_MAX}</span><input value={draft.tag} maxLength={ALLIANCE_TAG_MAX} onChange={(event) => set({ tag: event.target.value })} data-qa-alliance-tag /></label>
-          <label className="wide"><span>ДЕВИЗ · ДО {ALLIANCE_MOTTO_MAX}</span><input value={draft.motto} maxLength={ALLIANCE_MOTTO_MAX} onChange={(event) => set({ motto: event.target.value })} /></label>
-          <label className="wide"><span>ОПИСАНИЕ · ДО {ALLIANCE_DESCRIPTION_MAX}</span><textarea value={draft.description} maxLength={ALLIANCE_DESCRIPTION_MAX} rows={3} onChange={(event) => set({ description: event.target.value })} /></label>
-          <div className="command-emblem-row">
-            <div><small>ЗНАК</small><div className="command-chip-row">
-              {GLYPHS.map((glyph) => (
-                <button key={glyph} type="button" aria-label={`Знак ${glyph}`} className={draft.emblem.glyph === glyph ? 'selected' : ''} onClick={() => set({ emblem: { ...draft.emblem, glyph } })}><EmblemGlyph compact emblem={{ ...draft.emblem, glyph }} /></button>
-              ))}
-            </div></div>
-            <div><small>АКЦЕНТ</small><div className="command-chip-row command-chip-row--accents">
-              {ACCENTS.map((accent) => (
-                <button key={accent} type="button" aria-label={ACCENT_LABELS[accent]} title={ACCENT_LABELS[accent]} className={`command-accent-dot ${draft.emblem.accent === accent ? 'selected' : ''}`} style={{ '--command-accent-dot': ACCENT_COLORS[accent] } as CSSProperties} onClick={() => set({ emblem: { ...draft.emblem, accent } })} />
-              ))}
-            </div></div>
-          </div>
-          {error ? <div className="command-error" role="alert" data-qa-command-error>{error}</div> : null}
-          <div className="command-actions">
-            <button type="button" className="danger" onClick={onClose}>ОТМЕНА</button>
-            <button type="button" className="primary" onClick={submit} data-qa-alliance-submit>{submitLabel}</button>
-          </div>
-        </div>
-      </div>
-    </Dialog>
-  );
-}
-
 function ConfirmDialog({ title, body, confirmLabel, onConfirm, onClose }: { title: string; body: string; confirmLabel: string; onConfirm: () => void; onClose: () => void }) {
   return (
     <Dialog title={title} onClose={onClose}>
@@ -550,7 +482,7 @@ function useCatalog(command: CommandState, ownerScores: CatalogProps['ownerScore
   return useMemo(() => filterAllianceCatalog(selectAllianceCatalog(command, ownerScores), query), [command, ownerScores, query]);
 }
 
-function CatalogList({ command, ownerId, now, actions, onFeedback, testControls, entries, query, setQuery, selectedId, onSelect }: CatalogProps & {
+function CatalogList({ command, ownerId, now, actions, onFeedback, entries, query, setQuery, selectedId, onSelect }: CatalogProps & {
   entries: AllianceCatalogEntry[];
   query: string;
   setQuery: (value: string) => void;
@@ -580,9 +512,6 @@ function CatalogList({ command, ownerId, now, actions, onFeedback, testControls,
       count={entries.length}
       className="command-catalog"
       tools={<input type="search" className="cmdA-search" value={query} placeholder="Название или тег" aria-label="Поиск союза" onChange={(event) => setQuery(event.target.value)} data-qa-catalog-search />}
-      footer={testControls && actions.testBotCreateAlliance ? (
-        <div className="command-test-box"><small>TEST MODE</small><button type="button" onClick={() => onFeedback(actions.testBotCreateAlliance!())} data-qa-test-bot-create>ТЕСТ: СОЮЗ БОТА 01</button></div>
-      ) : undefined}
     >
       {entries.length ? (
         <ul className="command-catalog-list cmdA-items" data-qa-catalog-list>
@@ -630,7 +559,7 @@ function CatalogDossier({ entry, ownerFactions = {} }: { entry: AllianceCatalogE
           chips={<><Chip tone="am">МЕСТО #{entry.rank}</Chip><Chip tone="cy">[{alliance.tag}]</Chip>{free > 0 ? <Chip tone="ok">СВОБОДНО МЕСТ: {free}</Chip> : <Chip tone="bad">СОЮЗ ПОЛОН</Chip>}</>}
         >
           {alliance.motto ? <p className="cmdA-motto">«{alliance.motto}»</p> : null}
-          {alliance.description ? <p className="cmdA-desc">{alliance.description}</p> : null}
+          {alliance.description ? <p className="cmdA-desc">{renderRichText(alliance.description)}</p> : null}
           <div className="cmdA-people"><div className="cmdA-person"><Avatar name={entry.leaderName} role="leader" factionId={ownerFactions[alliance.leaderOwnerId]} /><div><small>ЛИДЕР</small><strong>{entry.leaderName}</strong></div></div></div>
           <MembersBar count={rating.memberCount} />
         </HeroTitle>
@@ -881,6 +810,15 @@ function MembersTab({ command, allianceId, ownerId, role, ownerScores, ownerFact
               {isLeader && selected.role === 'deputy' ? (
                 <button type="button" onClick={() => onFeedback(actions.setDeputy(null))} data-qa-clear-deputy>СНЯТЬ С ДОЛЖНОСТИ</button>
               ) : null}
+              {selected.ownerId !== ownerId ? (
+                <button
+                  type="button"
+                  disabled={!actions.canSendFleetToMember(selected.ownerId)}
+                  title={actions.canSendFleetToMember(selected.ownerId) ? 'Откроется окно «Флоты» с транспортом к планете участника' : 'Планета участника неизвестна — найдите её во «Вселенной»'}
+                  onClick={() => onFeedback(actions.sendFleetToMember(selected.ownerId))}
+                  data-qa-member-send-fleet
+                >ОТПРАВИТЬ ФЛОТ</button>
+              ) : null}
               {isLeader && selected.ownerId !== ownerId ? (
                 <button type="button" className="amber" onClick={() => setConfirm({ kind: 'transfer', ownerId: selected.ownerId, name: selected.displayName })} data-qa-transfer>ПЕРЕДАТЬ ЛИДЕРСТВО</button>
               ) : null}
@@ -955,8 +893,7 @@ function Overview({ command, allianceId, ownerId, role, ownerScores, ownerFactio
   const awaiting = [manage && pendingCount ? `${pendingCount} заяв${pendingCount === 1 ? 'ка' : pendingCount < 5 ? 'ки' : 'ок'} на вступление` : '', aid.incoming.length ? `${aid.incoming.length} запрос${aid.incoming.length === 1 ? '' : aid.incoming.length < 5 ? 'а' : 'ов'} союзников` : ''].filter(Boolean);
 
   return (
-    <div className="cmdA-grid command-overview">
-      <JournalPanel view={journal} now={now} />
+    <div className="cmdA-grid cmdA-grid--aside-right command-overview">
       <Dossier
         footer={<>
           <FootStatus label="Ваша роль" value={`${ROLE_LABELS[role].charAt(0)}${ROLE_LABELS[role].slice(1).toLowerCase()}${manage ? ' · можно управлять союзом' : ''}`} />
@@ -973,7 +910,7 @@ function Overview({ command, allianceId, ownerId, role, ownerScores, ownerFactio
             chips={<>{rank ? <Chip tone="am">МЕСТО #{rank}</Chip> : null}<Chip tone="cy">[{alliance.tag}]</Chip><Chip>ОСНОВАН {formatDate(alliance.createdAt)}</Chip>{isAllianceFull(alliance) ? <Chip tone="bad">СОЮЗ ПОЛОН</Chip> : null}</>}
           >
             {alliance.motto ? <p className="cmdA-motto command-motto">«{alliance.motto}»</p> : null}
-            {alliance.description ? <p className="cmdA-desc">{alliance.description}</p> : null}
+            {alliance.description ? <p className="cmdA-desc">{renderRichText(alliance.description)}</p> : null}
             <div className="cmdA-people">
               <div className="cmdA-person"><Avatar name={leader?.displayName ?? '—'} role="leader" factionId={leader ? ownerFactions[leader.ownerId] : undefined} /><div><small>ЛИДЕР</small><strong>{leader?.displayName ?? '—'}</strong></div></div>
               <div className="cmdA-person"><Avatar name={deputy?.displayName ?? '—'} role="deputy" factionId={deputy ? ownerFactions[deputy.ownerId] : undefined} /><div><small>ЗАМЕСТИТЕЛЬ</small><strong>{deputy?.displayName ?? 'не назначен'}</strong></div></div>
@@ -997,6 +934,7 @@ function Overview({ command, allianceId, ownerId, role, ownerScores, ownerFactio
           </div>
         ) : null}
       </Dossier>
+      <JournalPanel view={journal} now={now} />
 
       {editing ? (
         <AllianceEditor
@@ -1133,7 +1071,8 @@ function chargeLineFor(aid: AidOverview, now: number) {
   return '';
 }
 
-function RequestsTab({ aid, now, actions, onFeedback, testControls }: {
+function RequestsTab({ aid, now, actions, onFeedback, testControls, playerFactionId }: {
+  playerFactionId?: string;
   aid: AidOverview;
   now: number;
   actions: CommandActions;
@@ -1146,6 +1085,14 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls }: {
   const selectedPlanet = aid.planets.find((planet) => planet.id === planetId) ?? aid.planets[0] ?? null;
   const amount = Number(amountText);
   const amountValid = Number.isSafeInteger(amount) && amount >= aid.minAmount && amount <= aid.maxAmount;
+  // The slider moves in 1 000-unit steps; the field accepts any exact amount.
+  const sliderStep = aid.maxAmount - aid.minAmount >= 100_000 ? 1_000 : 1;
+  const sliderValue = Math.min(aid.maxAmount, Math.max(aid.minAmount, Number.isFinite(amount) ? amount : aid.minAmount));
+  const sliderPct = aid.maxAmount > aid.minAmount ? ((sliderValue - aid.minAmount) / (aid.maxAmount - aid.minAmount)) * 100 : 100;
+  const transporterArt = shipArtOf(playerFactionId, 'transporter');
+  const megaTransporterArt = shipArtOf(playerFactionId, 'mega-transporter');
+  const transporterCount = aid.freeTransporters.transporter ?? 0;
+  const megaCount = aid.freeTransporters['mega-transporter'] ?? 0;
   const charges = aid.charges;
   const noCharge = !charges || charges.charges < 1;
   const atLimit = aid.openCount >= aid.maxOpen;
@@ -1171,7 +1118,7 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls }: {
           <ul className="command-request-list cmdA-items" data-qa-incoming-requests>
             {aid.incoming.map((row) => {
               const full = row.progress.remainder <= 0;
-              const reason = full ? 'Весь остаток уже в пути или доставлен' : !aid.hasFreeTransporters ? 'Нужен свободный транспортёр или мега-транспортёр' : '';
+              const reason = full ? 'Весь остаток уже в пути или доставлен' : !aid.hasFreeTransporters ? `На планете ${aid.sourcePlanetName || 'выбранной'} нет свободного транспорта — выберите другую планету в шапке` : '';
               return (
                 <li key={row.request.id} className="cmdA-item cmdA-request" style={{ '--k': RESOURCE_TONES[row.request.resource] } as CSSProperties} data-qa-request-id={row.request.id}>
                   <div className="cmdA-request-head">
@@ -1181,7 +1128,7 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls }: {
                   <RequestProgressBar row={row} />
                   <RequestFigures row={row} />
                   <div className="command-request-actions">
-                    <small>Можно отправить: {number.format(row.progress.remainder)}</small>
+                    <small>{aid.hasFreeTransporters || full ? `Можно отправить: ${number.format(row.progress.remainder)}` : `Нет транспорта на ${aid.sourcePlanetName || 'планете'}`}</small>
                     <button type="button" className="primary" disabled={Boolean(reason)} title={reason || undefined} onClick={() => onFeedback(actions.startHelp(row.request.id))} data-qa-request-help>ПОМОЧЬ</button>
                   </div>
                 </li>
@@ -1227,7 +1174,7 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls }: {
           <button type="button" className="primary cmdA-lg" disabled={Boolean(blocker)} onClick={submit} data-qa-request-create>СОЗДАТЬ ЗАПРОС</button>
         </>}
       >
-        <Hero art={<div className="cmdA-art cmdA-art--resource"><ResourceIcon kind={resource} className="cmdA-art-resource" /><Img src={MEGA_TRANSPORTER_ART} className="cmdA-art-ship" /></div>}>
+        <Hero art={<div className="cmdA-art cmdA-art--resource"><ResourceIcon kind={resource} className="cmdA-art-resource" /><Img src={megaTransporterArt} className="cmdA-art-ship" /></div>}>
           <HeroTitle title="Новый запрос ресурсов" chips={<><Chip tone="ok"><span data-qa-request-charges>{charges ? `${charges.charges}/${aid.maxCharges}` : '—'} ЗАРЯДА</span></Chip><Chip>ОТКРЫТО {aid.openCount} / {aid.maxOpen}</Chip></>}>
             <p className="cmdA-sub" data-qa-charge-line>{chargeLine}</p>
             <div className="command-request-form cmdA-form" data-qa-request-form>
@@ -1241,9 +1188,28 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls }: {
                   {AID_RESOURCES.map((key) => <option key={key} value={key}>{AID_RESOURCE_LABELS[key]}</option>)}
                 </select>
               </label>
-              <label className="command-select"><span>КОЛИЧЕСТВО · {number.format(aid.minAmount)}–{number.format(aid.maxAmount)}</span>
+              <label className="command-select"><span>КОЛИЧЕСТВО</span>
                 <input type="number" inputMode="numeric" min={aid.minAmount} max={aid.maxAmount} step={1} value={amountText} onChange={(event) => setAmountText(event.target.value)} data-qa-request-amount />
               </label>
+              <div className="cmdA-amount wide">
+                <button type="button" aria-label="Минимум" onClick={() => setAmountText(String(aid.minAmount))}>МИН.</button>
+                <button type="button" aria-label="Уменьшить" onClick={() => setAmountText(String(Math.max(aid.minAmount, sliderValue - Math.max(sliderStep, 10_000))))}>−</button>
+                <input
+                  type="range"
+                  className="cmdA-range"
+                  min={aid.minAmount}
+                  max={aid.maxAmount}
+                  step={sliderStep}
+                  value={sliderValue}
+                  style={{ '--cmdA-range': `${sliderPct}%` } as CSSProperties}
+                  aria-label="Количество ресурса"
+                  onChange={(event) => setAmountText(event.target.value)}
+                  data-qa-request-slider
+                />
+                <button type="button" aria-label="Увеличить" onClick={() => setAmountText(String(Math.min(aid.maxAmount, sliderValue + Math.max(sliderStep, 10_000))))}>+</button>
+                <button type="button" aria-label="Максимум" onClick={() => setAmountText(String(aid.maxAmount))}>МАКС.</button>
+                <div className="cmdA-amount-scale"><span>{number.format(aid.minAmount)}</span><b>{amountValid ? number.format(amount) : '—'}</b><span>{number.format(aid.maxAmount)}</span></div>
+              </div>
             </div>
             {blocker ? <p className="cmdA-note is-warning" role="status" data-qa-request-blocker>{blocker}</p> : null}
             {overflow && overflow.lost > 0 ? (
@@ -1258,7 +1224,7 @@ function RequestsTab({ aid, now, actions, onFeedback, testControls }: {
           { icon: <MissionTile src={aidMissionIcon} />, label: 'Заряды', value: charges ? `${charges.charges} / ${aid.maxCharges}` : '—', tone: 'ok' },
           { icon: <Img src={REPORT_ICONS.flights} />, label: 'Открыто запросов', value: `${aid.openCount} / ${aid.maxOpen}` },
           { icon: <Medal kind="resource" />, label: 'Лимит запроса', value: number.format(aid.maxAmount), sub: `от ${number.format(aid.minAmount)}` },
-          { icon: <Img src={TRANSPORTER_ART} className="cmdA-tile-ship" />, label: 'Для помощи', value: aid.hasFreeTransporters ? 'Транспорт есть' : 'Нет транспорта', sub: 'транспортёр / мега', tone: aid.hasFreeTransporters ? 'cy' : 'am' },
+          { icon: <Img src={transporterArt} className="cmdA-tile-ship" />, label: `Транспорт · ${aid.sourcePlanetName || 'планета'}`, value: aid.hasFreeTransporters ? `${number.format(transporterCount)} + ${number.format(megaCount)}` : 'Нет транспорта', sub: aid.hasFreeTransporters ? `${shipNameOf(playerFactionId, 'transporter')} / ${shipNameOf(playerFactionId, 'mega-transporter')}` : 'на выбранной планете', tone: aid.hasFreeTransporters ? 'cy' : 'am' },
         ]} />
         {testControls && actions.testIraPrepare ? (
           <div className="command-test-box command-test-box--wide" data-qa-aid-test-box>
@@ -1278,45 +1244,167 @@ const RESOURCE_TONES: Record<AidResource, string> = { metal: '#c9d6de', minerals
 
 // ---- operations ----------------------------------------------------------------
 
-const DIPLOMACY_STATUSES: Array<[string, '' | 'ok' | 'cy' | 'am' | 'bad']> = [
-  ['Союзник', 'ok'], ['Торговый пакт', 'cy'], ['Нейтралитет', ''], ['Напряжённость', 'am'], ['Враждебность', 'bad'], ['Война', 'bad'],
-];
 
-function OperationsTab() {
+function OperationsTab({ playerFactionId }: { playerFactionId?: string }) {
   return (
     <div className="cmdA-grid command-operations" data-qa-operations>
-      <ListPanel kicker="СОВМЕСТНЫЕ ДЕЙСТВИЯ" title="Операции союза" count={2}>
+      <ListPanel kicker="СОВМЕСТНЫЕ ДЕЙСТВИЯ" title="Операции союза" count={1}>
         <ul className="cmdA-items">
           <li className="cmdA-item is-selected" style={{ '--k': '#e6ad50' } as CSSProperties}>
             <MissionTile src={sunMissionIcon} className="cmdA-item-icon" />
             <div className="cmdA-item-main"><strong>Рейд на Солнце</strong><span>Совместная операция</span></div>
             <Chip tone="am">СКОРО</Chip>
           </li>
-          <li className="cmdA-item" style={{ '--k': '#a98bff' } as CSSProperties}>
-            <span className="cmdA-res-box cmdA-item-icon"><Img src={REPORT_ICONS.arena} /></span>
-            <div className="cmdA-item-main"><strong>Дипломатия</strong><span>Война и перемирие между союзами</span></div>
-            <Chip>СКОРО</Chip>
-          </li>
         </ul>
-        <p className="cmdA-note">Журнал союза — во вкладке «Штаб».</p>
+        <p className="cmdA-note">Журнал союза — во вкладке «Штаб», война и перемирие — в «Дипломатии».</p>
       </ListPanel>
       <Dossier className="cmdA-operations-dossier" footer={<FootStatus label="Статус" value="Появится в будущей версии" />}>
         <Hero art={<div className="cmdA-art cmdA-art--sun"><Img src={sunArt} /></div>}>
           <Stub qa="sun" title="Рейд на Солнце" icon={<MissionTile src={sunMissionIcon} className="cmdA-stub-icon" />}>Появится в будущей версии. Сейчас союз не может собрать совместный флот — механика не меняется.</Stub>
           <div className="cmdA-ghost-fleet" aria-hidden="true">
-            {SUN_RAID_SHIPS.map((ship) => <span key={ship.id}><Img src={ship.art} /></span>)}
+            {SUN_RAID_SHIP_IDS.map((shipId) => <span key={shipId} title={shipNameOf(playerFactionId, shipId)}><Img src={shipArtOf(playerFactionId, shipId)} /></span>)}
           </div>
-          <Stub qa="diplomacy" title="Дипломатия" icon={<span className="cmdA-res-box cmdA-stub-icon"><Img src={REPORT_ICONS.arena} /></span>}>Объявление войны и перемирие появятся в будущей версии. Сейчас отношения между союзами не меняются.</Stub>
-          <div className="cmdA-chips cmdA-chips--muted" aria-hidden="true">{DIPLOMACY_STATUSES.map(([label, tone]) => <Chip key={label} tone={tone}>{label}</Chip>)}</div>
         </Hero>
       </Dossier>
     </div>
   );
 }
 
+// ---- diplomacy -----------------------------------------------------------------
+
+function DiplomacyTab({ command, allianceId, role, ownerScores, now, timeScale, actions, onFeedback, testControls }: {
+  command: CommandState;
+  allianceId: string;
+  role: AllianceRole;
+  ownerScores: Readonly<Record<string, MemberScore | undefined>>;
+  now: number;
+  timeScale: number;
+  actions: CommandActions;
+  onFeedback: (result: CommandActionResult) => void;
+  testControls: boolean;
+}) {
+  const manage = canManageAlliance(role);
+  const others = useMemo(() => selectAllianceCatalog(command, ownerScores).filter((entry) => entry.alliance.id !== allianceId), [allianceId, command, ownerScores]);
+  const relations = useMemo(() => selectAllianceRelations(command, allianceId), [allianceId, command]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [confirmWar, setConfirmWar] = useState(false);
+  const selected = others.find((entry) => entry.alliance.id === selectedId) ?? others.find((entry) => relations.some((relation) => relation.id === entry.alliance.id)) ?? others[0] ?? null;
+  const relation = selected ? relations.find((item) => item.id === selected.alliance.id) ?? null : null;
+  const atWar = relation?.status === 'war';
+  const truce = selected ? selectTruceAvailability(command, allianceId, selected.alliance.id, { now, elapsedScale: timeScale }) : { state: 'none' as const };
+  const isBot = selected?.alliance.id === TEST_BOT_ALLIANCE_ID;
+  const wars = relations.filter((item) => item.status === 'war').length;
+
+  const footer = selected ? (
+    <>
+      <FootStatus
+        label={atWar ? 'Война' : 'Отношения'}
+        value={atWar
+          ? truce.state === 'wait' ? `Перемирие можно предложить через ${formatCountdown(truce.until - now)}`
+            : truce.state === 'sent' ? 'Перемирие предложено — ждём ответа'
+              : truce.state === 'received' ? `«${selected.alliance.name}» предлагает перемирие`
+                : 'Можно предложить перемирие'
+          : manage ? 'Нейтралитет · можно объявить войну' : 'Нейтралитет · решения принимает руководство'}
+      />
+      {manage ? (
+        <div className="command-actions">
+          {!atWar ? <button type="button" className="danger" onClick={() => setConfirmWar(true)} data-qa-declare-war>ОБЪЯВИТЬ ВОЙНУ</button> : null}
+          {atWar && truce.state === 'received' ? (
+            <>
+              <button type="button" className="danger" onClick={() => onFeedback(actions.respondTruce(selected.alliance.id, false))} data-qa-truce-reject>ОТКЛОНИТЬ</button>
+              <button type="button" className="primary" onClick={() => onFeedback(actions.respondTruce(selected.alliance.id, true))} data-qa-truce-accept>ПРИНЯТЬ ПЕРЕМИРИЕ</button>
+            </>
+          ) : null}
+          {atWar && truce.state !== 'received' ? (
+            <button type="button" className="primary" disabled={truce.state !== 'ready'} onClick={() => onFeedback(actions.proposeTruce(selected.alliance.id))} data-qa-truce-propose>ПРЕДЛОЖИТЬ ПЕРЕМИРИЕ</button>
+          ) : null}
+        </div>
+      ) : null}
+    </>
+  ) : undefined;
+
+  return (
+    <div className="cmdA-grid command-diplomacy" data-qa-diplomacy>
+      <ListPanel kicker="ОТНОШЕНИЯ СОЮЗОВ" title="Дипломатия" count={wars ? `${wars} · ВОЙНА` : others.length}>
+        {others.length ? (
+          <ul className="cmdA-items" data-qa-diplomacy-list>
+            {others.map((entry) => {
+              const item = relations.find((candidate) => candidate.id === entry.alliance.id);
+              const war = item?.status === 'war';
+              return (
+                <li
+                  key={entry.alliance.id}
+                  className={`cmdA-item is-clickable ${selected?.alliance.id === entry.alliance.id ? 'is-selected' : ''}`}
+                  style={{ '--k': war ? '#ff5f6f' : ACCENT_COLORS[entry.alliance.emblem.accent] } as CSSProperties}
+                  onClick={() => setSelectedId(entry.alliance.id)}
+                  data-qa-diplomacy-item={entry.alliance.id}
+                  data-qa-relation-status={war ? 'war' : 'neutral'}
+                >
+                  <EmblemGlyph compact emblem={entry.alliance.emblem} />
+                  <div className="cmdA-item-main"><strong>{entry.alliance.name} <em>[{entry.alliance.tag}]</em></strong><span>Лидер: {entry.leaderName} · {entry.rating.memberCount}/{MAX_ALLIANCE_MEMBERS}</span></div>
+                  {war ? <Chip tone="bad">ВОЙНА</Chip> : <Chip>НЕЙТРАЛИТЕТ</Chip>}
+                </li>
+              );
+            })}
+          </ul>
+        ) : <div className="cmdA-empty" role="status">Других союзов пока нет — объявить войну некому.</div>}
+        <p className="cmdA-note">Война не даёт боевых бонусов: планеты противника во «Вселенной» помечаются как вражеские. Перемирие — через 3 часа после начала войны, повторное предложение — через 3 часа после отказа.</p>
+      </ListPanel>
+
+      {selected ? (
+        <Dossier className={atWar ? 'cmdA-dossier--war' : ''} footer={footer}>
+          <Hero art={<div className="cmdA-art cmdA-art--emblem cmdA-art--versus"><EmblemGlyph emblem={selected.alliance.emblem} />{atWar ? <span className="cmdA-war-mark" aria-hidden="true">⚔</span> : null}</div>}>
+            <HeroTitle
+              title={selected.alliance.name}
+              chips={<>{atWar ? <Chip tone="bad">ВОЙНА</Chip> : <Chip>НЕЙТРАЛИТЕТ</Chip>}<Chip tone="cy">[{selected.alliance.tag}]</Chip><Chip tone="am">МЕСТО #{selected.rank}</Chip>{isBot && testControls ? <Chip tone="vi">ТЕСТ · БОТ 01</Chip> : null}</>}
+            >
+              {selected.alliance.description ? <p className="cmdA-desc">{renderRichText(selected.alliance.description)}</p> : null}
+              <div className="cmdA-people"><div className="cmdA-person"><Avatar name={selected.leaderName} role="leader" /><div><small>ЛИДЕР</small><strong>{selected.leaderName}</strong></div></div></div>
+              {atWar && relation ? (
+                <div className="cmdA-war-line" data-qa-war-since>
+                  <Img src={REPORT_ICONS.arena} />
+                  <span>Война идёт с {new Date(relation.since ?? 0).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })} · объявил «{relation.declaredByAllianceId === allianceId ? 'ваш союз' : selected.alliance.name}»</span>
+                </div>
+              ) : null}
+            </HeroTitle>
+          </Hero>
+          <Tiles items={[
+            { icon: <Medal kind="total" />, label: 'Средние общие', value: number.format(selected.rating.averageTotalPoints) },
+            { icon: <Medal kind="battle" />, label: 'Боевые', value: number.format(selected.rating.averageBattlePoints), sub: 'среднее' },
+            { icon: <Img src={REPORT_ICONS.alliances} />, label: 'Участники', value: `${selected.rating.memberCount} / ${MAX_ALLIANCE_MEMBERS}` },
+            { icon: <Img src={REPORT_ICONS.arena} />, label: 'Статус', value: atWar ? 'Война' : 'Нейтралитет', tone: atWar ? 'am' : undefined },
+          ]} />
+          {!manage ? <p className="cmdA-note">Объявлять войну и заключать перемирие могут лидер и заместитель.</p> : null}
+          {testControls && isBot && actions.testBotRespondTruce ? (
+            <div className="command-test-box command-test-box--wide" data-qa-diplomacy-test-box>
+              <small>ТЕСТ · БОТ 01</small>
+              <span>Бот 01 сам не принимает решений — эти кнопки отвечают за него по тем же правилам.</span>
+              <button type="button" onClick={() => onFeedback(actions.testBotDeclareWar!())} data-qa-test-bot-war>БОТ 01 ОБЪЯВЛЯЕТ ВОЙНУ</button>
+              <button type="button" onClick={() => onFeedback(actions.testBotProposeTruce!())} data-qa-test-bot-truce>БОТ 01 ПРЕДЛАГАЕТ ПЕРЕМИРИЕ</button>
+              <button type="button" onClick={() => onFeedback(actions.testBotRespondTruce!(true))} data-qa-test-bot-accept>БОТ 01 ПРИНИМАЕТ</button>
+              <button type="button" onClick={() => onFeedback(actions.testBotRespondTruce!(false))} data-qa-test-bot-reject>БОТ 01 ОТКЛОНЯЕТ</button>
+            </div>
+          ) : null}
+        </Dossier>
+      ) : (
+        <Dossier className="cmdA-dossier--empty"><div className="cmdA-placeholder"><Img src={REPORT_ICONS.arena} /><p>Других союзов пока нет.</p></div></Dossier>
+      )}
+      {confirmWar && selected ? (
+        <ConfirmDialog
+          title="Объявить войну?"
+          body={`«${selected.alliance.name}» станет противником сразу, согласие не требуется. Перемирие можно будет предложить через 3 часа.`}
+          confirmLabel="ОБЪЯВИТЬ ВОЙНУ"
+          onConfirm={() => onFeedback(actions.declareWar(selected.alliance.id))}
+          onClose={() => setConfirmWar(false)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 // ---- root ----------------------------------------------------------------------
 
-export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFactions = {}, aid, now, actions }: CommandViewProps) {
+export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFactions = {}, playerFactionId, testTimeScale = 1, aid, now, actions }: CommandViewProps) {
   const [tab, setTab] = useState<CommandTab>('overview');
   const [feedback, setFeedback] = useState<CommandActionResult | null>(null);
   const testControls = mode === 'test';
@@ -1342,6 +1430,10 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
     applications: pendingCount ? { value: String(pendingCount), hot: canManageAlliance(membership.role) } : undefined,
     requests: aid.incoming.length ? { value: String(aid.incoming.length) } : undefined,
     alliances: { value: String(command.alliances.length) },
+    diplomacy: (() => {
+      const wars = selectAllianceRelations(command, membership.alliance.id).filter((relation) => relation.status === 'war').length;
+      return wars ? { value: `⚔ ${wars}`, hot: true } : undefined;
+    })(),
   } : {};
   const catalogProps: CatalogProps = { command, ownerId, ownerScores, now, actions, onFeedback, testControls, ownerFactions };
 
@@ -1391,9 +1483,11 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
         ) : activeTab === 'alliances' ? (
           <AlliancesTab {...catalogProps} />
         ) : activeTab === 'requests' ? (
-          <RequestsTab aid={aid} now={now} actions={actions} onFeedback={onFeedback} testControls={testControls} />
+          <RequestsTab aid={aid} now={now} actions={actions} onFeedback={onFeedback} testControls={testControls} playerFactionId={playerFactionId} />
+        ) : activeTab === 'diplomacy' ? (
+          <DiplomacyTab command={command} allianceId={membership.alliance.id} role={membership.role} ownerScores={ownerScores} now={now} timeScale={testTimeScale} actions={actions} onFeedback={onFeedback} testControls={testControls} />
         ) : (
-          <OperationsTab />
+          <OperationsTab playerFactionId={playerFactionId} />
         )}
       </section>
     </main>

@@ -118,7 +118,9 @@ test('production and test persistence seeds stay isolated at every fixture bound
   assert.equal(createPlayerRatingEntries(0, 'production').length, 1);
   assert.equal(createAllianceRatingEntries(production.command, {}, production.profile.playerId).length, 0);
 
-  assert.equal(testMode.command.alliances.length, 1);
+  // Test Mode world: the player's alliance with Ira Vel, plus Bot 01's own alliance for diplomacy checks.
+  assert.equal(testMode.command.alliances.length, 2);
+  assert.deepEqual(testMode.command.alliances[1].members.map((member) => member.ownerId), ['npc-bot-01']);
   assert.equal(testMode.command.alliances[0].name, 'Содружество Гелион');
   assert.deepEqual(testMode.command.alliances[0].members.map((member) => member.ownerId), [testMode.profile.playerId, 'member-ira-vel']);
   assert.equal(testMode.profile.allianceId, testMode.command.alliances[0].id);
@@ -128,7 +130,7 @@ test('production and test persistence seeds stay isolated at every fixture bound
   assert.equal(createUniverseMap({ mode: 'test' }).systems.flatMap((system) => system.positions).filter((node) => node.kind === 'npc').length, 8);
   assert.equal(Object.keys(testMode.alliedPlanets ?? {}).length, 1);
   assert.equal(createPlayerRatingEntries(0, 'test').length, 84);
-  assert.equal(createAllianceRatingEntries(testMode.command, {}, testMode.profile.playerId).length, 1);
+  assert.equal(createAllianceRatingEntries(testMode.command, {}, testMode.profile.playerId).length, 2);
 });
 
 test('legacy fake rating migration resets battle accumulation and preserves campaign state', () => {

@@ -64,6 +64,8 @@ import {
   withdrawApplication,
 } from './domain/command/membership.ts';
 import { selectCommandHallLevel } from './domain/command/selectors.ts';
+import { declareWar, proposeTruce, respondTruce } from './domain/command/diplomacy.ts';
+import { releaseTestBotFromOwnAlliance } from './domain/command/repository.ts';
 import type { AllianceSettingsInput, CommandResult, CommandState } from './domain/command/types.ts';
 import { syncPlayerProfileWithCommand } from './domain/profile/repository.ts';
 import { withTestOwnerScoreFixtures } from './domain/rating/fixtures.ts';
@@ -151,7 +153,7 @@ import {
   syncAidState,
   type AidActionResult,
 } from './application/alliance-aid.ts';
-import { TEST_ALLY_OWNER_ID } from './domain/command/catalog.ts';
+import { TEST_ALLY_OWNER_ID, TEST_BOT_ALLIANCE_ID } from './domain/command/catalog.ts';
 import type { AidResource } from './domain/command/types.ts';
 import { getPlanetOverpopulationSummary } from './application/overpopulation.ts';
 import { energySummaryForPlanet, getPlanetEnergyCoordinates } from './application/energy.ts';
@@ -1481,7 +1483,40 @@ export function App() {
     return { ok: true };
   };
 
+  // Test Mode runs the 3-hour truce timers on the same accelerated clock as the aid charges.
+  const diplomacyOptions = (at: number) => ({ now: at, elapsedScale: RUNTIME_MODE === 'test' ? testTimeScale : 1 });
+
+  /** Allied planets of a member known to this save (Test Mode ally planets today). Never shown on the Command screen. */
+  const memberPlanetsOf = (current: SaveState, ownerId: string) => Object.values(current.alliedPlanets ?? {})
+    .filter((planet) => planet.ownerId === ownerId)
+    .map((planet) => ({
+      planetId: planet.id,
+      coordinate: { galaxy: planet.universeGalaxy ?? 1, system: planet.universeSystem ?? 1, position: planet.universePosition ?? 1 },
+    }));
+
+  const sendFleetToMember = (ownerId: string): CommandActionResult => {
+    const current = stateRef.current;
+    const target = memberPlanetsOf(current, ownerId)[0];
+    if (!target) return { ok: false, message: 'Планета участника неизвестна: найдите её во «Вселенной».' };
+    openTransportLaunch({ planetId: target.planetId, coordinate: target.coordinate, relation: 'ally' });
+    return { ok: true };
+  };
+
   const commandActions: CommandActions = {
+    declareWar: (targetAllianceId: string) => runCommandAction(
+      (command, at, ownerId) => declareWar(command, ownerId, targetAllianceId, diplomacyOptions(at)),
+      'Война объявлена.',
+    ),
+    proposeTruce: (targetAllianceId: string) => runCommandAction(
+      (command, at, ownerId) => proposeTruce(command, ownerId, targetAllianceId, diplomacyOptions(at)),
+      'Предложение перемирия отправлено.',
+    ),
+    respondTruce: (fromAllianceId: string, accept: boolean) => runCommandAction(
+      (command, at, ownerId) => respondTruce(command, ownerId, fromAllianceId, accept, diplomacyOptions(at)),
+      accept ? 'Перемирие заключено. Война окончена.' : 'Предложение перемирия отклонено.',
+    ),
+    sendFleetToMember,
+    canSendFleetToMember: (ownerId: string) => memberPlanetsOf(stateRef.current, ownerId).length > 0,
     createRequest: (planetId: string, resource: AidResource, amount: number) => runAidAction(
       (current, at) => createAidRequest(current, { planetId, resource, amount }, aidContext(at)),
     ),
@@ -1569,17 +1604,35 @@ export function App() {
         (command, at, ownerId) => {
           const own = command.alliances.find((alliance) => alliance.members.some((member) => member.ownerId === ownerId));
           if (!own) return { ok: false, state: command, code: 'not_member', message: 'Сначала вступите в союз или создайте его.' };
-          return applyToAlliance(command, { ownerId: UNIVERSE_NPC_OWNER_ID, displayName: 'Бот 01', allianceId: own.id }, { now: at });
+          // The managed bot leaves its own fixture alliance first (it comes back once the bot is free again).
+          return applyToAlliance(releaseTestBotFromOwnAlliance(command), { ownerId: UNIVERSE_NPC_OWNER_ID, displayName: 'Бот 01', allianceId: own.id }, { now: at });
         },
         'Тест: Бот 01 подал заявку в ваш союз.',
       ),
-      testBotCreateAlliance: () => runCommandAction(
-        (command, at) => createAlliance(command, {
-          ownerId: UNIVERSE_NPC_OWNER_ID,
-          displayName: 'Бот 01',
-          settings: { name: 'Орден Бота 01', tag: 'BOT', motto: 'Тестовый союз NPC.', description: 'Управляемый тестовый союз для проверки заявок.', emblem: { glyph: 'vanguard', accent: 'amber' } },
-        }, { now: at }),
-        'Тест: Бот 01 создал союз.',
+      testBotRespondTruce: (accept: boolean) => runCommandAction(
+        (command, at, ownerId) => {
+          const own = command.alliances.find((alliance) => alliance.members.some((member) => member.ownerId === ownerId));
+          if (!own) return { ok: false, state: command, code: 'not_member', message: 'Сначала вступите в союз.' };
+          return respondTruce(command, UNIVERSE_NPC_OWNER_ID, own.id, accept, diplomacyOptions(at));
+        },
+        accept ? 'Тест: Бот 01 принял перемирие.' : 'Тест: Бот 01 отклонил перемирие.',
+      ),
+      testBotProposeTruce: () => runCommandAction(
+        (command, at, ownerId) => {
+          const own = command.alliances.find((alliance) => alliance.members.some((member) => member.ownerId === ownerId));
+          if (!own) return { ok: false, state: command, code: 'not_member', message: 'Сначала вступите в союз.' };
+          return proposeTruce(command, UNIVERSE_NPC_OWNER_ID, own.id, diplomacyOptions(at));
+        },
+        'Тест: Бот 01 предложил перемирие.',
+      ),
+      testBotDeclareWar: () => runCommandAction(
+        (command, at, ownerId) => {
+          const own = command.alliances.find((alliance) => alliance.members.some((member) => member.ownerId === ownerId));
+          if (!own) return { ok: false, state: command, code: 'not_member', message: 'Сначала вступите в союз.' };
+          if (!command.alliances.some((alliance) => alliance.id === TEST_BOT_ALLIANCE_ID)) return { ok: false, state: command, code: 'alliance_not_found', message: 'Союза Бота 01 сейчас нет.' };
+          return declareWar(command, UNIVERSE_NPC_OWNER_ID, own.id, diplomacyOptions(at));
+        },
+        'Тест: Бот 01 объявил вам войну.',
       ),
     } : {}),
   };
@@ -2007,6 +2060,8 @@ export function App() {
               }}
               ownerScores={withTestOwnerScoreFixtures(selectOwnerScores(state), RUNTIME_MODE)}
               ownerFactions={commandOwnerFactions}
+              playerFactionId={state.profile.factionId}
+              testTimeScale={RUNTIME_MODE === 'test' ? testTimeScale : 1}
               aid={selectAidOverview(state, { now, mode: RUNTIME_MODE, testTimeScale })}
               now={now}
               actions={commandActions}

@@ -273,15 +273,20 @@ export type AidOverview = {
   mine: AidRequestRow[];
   closed: ResourceRequest[];
   incoming: AidRequestRow[];
-  /** The player owns at least one free transporter or mega-transporter somewhere. */
+  /**
+   * The currently selected planet has at least one free transporter or mega-transporter.
+   * The fleet window launches from the selected planet, so ships elsewhere do not count.
+   */
   hasFreeTransporters: boolean;
+  /** Free cargo hulls on the selected planet, by ship id. */
+  freeTransporters: Readonly<Record<string, number>>;
+  /** Name of the selected planet the aid flight would start from. */
+  sourcePlanetName: string;
 };
 
-function hasFreeTransporters(state: SaveState): boolean {
-  return Object.keys(state.planets).some((planetId) => {
-    const ships = getAvailableFleetForPlanet(state, planetId).ships;
-    return (AID_TRANSPORT_SHIP_IDS as readonly string[]).some((shipId) => (ships[shipId as keyof typeof ships] ?? 0) > 0);
-  });
+function freeTransportersOnCurrentPlanet(state: SaveState): Record<string, number> {
+  const ships = state.planets[state.currentPlanetId] ? getAvailableFleetForPlanet(state, state.currentPlanetId).ships : {};
+  return Object.fromEntries((AID_TRANSPORT_SHIP_IDS as readonly string[]).map((shipId) => [shipId, Math.max(0, ships[shipId as keyof typeof ships] ?? 0)]));
 }
 
 /** Everything the Requests screen shows, derived from the authoritative state at one instant. */
@@ -296,6 +301,7 @@ export function selectAidOverview(state: SaveState, context: AidContext): AidOve
     canCancel: request.authorOwnerId === ownerId && request.status === 'open' && !request.helpStarted,
   });
   const own = state.command.requests.filter((request) => request.authorOwnerId === ownerId);
+  const transporters = freeTransportersOnCurrentPlanet(state);
   return {
     hallOpen: selectCommandHallLevel(state.planets) > 0,
     inAlliance: Boolean(membership),
@@ -310,7 +316,9 @@ export function selectAidOverview(state: SaveState, context: AidContext): AidOve
     mine: own.filter((request) => request.status === 'open').map(row),
     closed: own.filter((request) => request.status !== 'open').sort((left, right) => (right.closedAt ?? 0) - (left.closedAt ?? 0)).slice(0, 5),
     incoming: selectFulfillableRequests(state.command, ownerId).map(row),
-    hasFreeTransporters: hasFreeTransporters(state),
+    freeTransporters: transporters,
+    hasFreeTransporters: Object.values(transporters).some((count) => count > 0),
+    sourcePlanetName: state.planets[state.currentPlanetId]?.name ?? '',
   };
 }
 

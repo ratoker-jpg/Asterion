@@ -205,11 +205,30 @@ async function testModeScenario(win, label) {
   const save = await readSave(win, TEST_KEY);
   assert(new Set(save.command.aidEvents.map((e) => e.id)).size === save.command.aidEvents.length, `${label}: event ids stay unique`);
 
-  // 5. Diplomacy remains an honest stub.
-  await click(win, '[data-qa-command-tab="operations"]');
-  await waitFor(win, `document.querySelector('[data-qa-diplomacy]')`);
-  const dip = await run(win, `({ text: document.querySelector('[data-qa-diplomacy]').innerText, controls: document.querySelectorAll('[data-qa-command-stub] button, [data-qa-command-stub] input').length })`);
-  assert(/Дипломатия/.test(dip.text) && dip.controls === 0, `${label}: diplomacy is still a stub`, dip);
+  // 5. Diplomacy: a real second alliance (Bot 01, Test Mode fixture), war at once, truce after 3 h (Test Mode clock), accepted by the bot's test control.
+  await click(win, '[data-qa-command-tab="diplomacy"]');
+  await waitFor(win, `document.querySelector('[data-qa-diplomacy-item="alliance-test-bot01-v1"]')`);
+  await run(win, `document.querySelector('[data-qa-diplomacy-item="alliance-test-bot01-v1"]').click()`);
+  assert(await run(win, `document.querySelector('[data-qa-diplomacy-item="alliance-test-bot01-v1"]').getAttribute('data-qa-relation-status') === 'neutral'`), `${label}: Bot 01 alliance starts neutral`);
+  await click(win, '[data-qa-declare-war]');
+  await click(win, '[data-qa-confirm]');
+  await waitFor(win, `document.querySelector('[data-qa-diplomacy-item="alliance-test-bot01-v1"]')?.getAttribute('data-qa-relation-status') === 'war'`);
+  assert(await run(win, `document.querySelector('[data-qa-truce-propose]')?.disabled === true`), `${label}: a truce cannot be offered right after the declaration`);
+  let saveWar = await readSave(win, TEST_KEY);
+  assert(saveWar.command.diplomacy.filter((relation) => relation.status === 'war').length === 2, `${label}: war persisted for both sides`, saveWar.command.diplomacy);
+  await capture(win, label, 'diplomacy-war');
+  // Move the war start 4 h back (the time is moved in the save, not accelerated) so a truce may be offered.
+  await patchSave(win, TEST_KEY, `(save) => { for (const relation of save.command.diplomacy) relation.since = Date.now() - 4 * 3600000; }`);
+  await reload(win, 'test');
+  await openRoute(win, 'command', '.command-view');
+  await click(win, '[data-qa-command-tab="diplomacy"]');
+  await waitFor(win, `document.querySelector('[data-qa-test-bot-truce]')`);
+  await click(win, '[data-qa-test-bot-truce]');
+  await waitFor(win, `document.querySelector('[data-qa-truce-accept]')`);
+  await click(win, '[data-qa-truce-accept]');
+  await waitFor(win, `document.querySelector('[data-qa-diplomacy-item="alliance-test-bot01-v1"]')?.getAttribute('data-qa-relation-status') === 'neutral'`);
+  saveWar = await readSave(win, TEST_KEY);
+  assert(saveWar.command.diplomacy.length === 0, `${label}: an accepted truce ends the war`, saveWar.command.diplomacy);
 }
 
 async function productionScenario(win, label) {

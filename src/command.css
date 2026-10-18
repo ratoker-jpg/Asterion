@@ -334,7 +334,7 @@
 
 /* ---------- dossier ---------- */
 .cmdA .cmdA-dossier { display: grid; grid-template-rows: minmax(0, 1fr) auto; overflow: hidden; animation: cmdA-enter 180ms ease-out both; }
-.cmdA .cmdA-dossier--empty { display: flex; align-items: center; justify-content: center; }
+.cmdA .cmdA-dossier--empty .cmdA-dossier-body { align-items: center; justify-content: center; border-radius: inherit; }
 @keyframes cmdA-enter { from { transform: translateY(6px); } to { transform: none; } }
 .cmdA .cmdA-dossier-body {
   display: flex;
@@ -591,3 +591,123 @@
   html:not(.web-preview):not(.asterion-long-page) .viewport:has(.workspace--command) { position: relative; display: block; }
   html:not(.web-preview):not(.asterion-long-page) .viewport:has(.workspace--command) > .stage { position: absolute; left: 50%; top: 50%; margin-left: -960px; margin-top: -540px; transform-origin: center center; }
 }
+
+/* ---------- overview: dossier left, journal right ---------- */
+.cmdA .cmdA-grid--aside-right { grid-template-columns: minmax(0, 1fr) clamp(320px, 25%, 440px); }
+
+/* ---------- requests: amount slider (same idea as the Trade Center) ---------- */
+.cmdA .cmdA-amount {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 12px 14px;
+  border-radius: var(--ut-r-card);
+  border: 1px solid var(--ut-border);
+  background: rgba(0,0,0,.25);
+}
+.command-view.cmdA .cmdA-amount > button { height: 34px; padding: 0 12px; font-size: 11px !important; }
+.cmdA .cmdA-amount-scale { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; color: var(--cmdA-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.cmdA .cmdA-amount-scale b { color: #7ee8ff; font-size: 16px !important; font-weight: 800; }
+.cmdA .cmdA-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  margin: 0;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #2bb6d6 0, #56d9f2 var(--cmdA-range, 0%), rgba(255,255,255,.08) var(--cmdA-range, 0%));
+  outline: none;
+  cursor: pointer;
+}
+.cmdA .cmdA-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 3px solid #56d9f2;
+  background: #e8f4f7;
+  box-shadow: 0 0 12px rgba(86,217,242,.6);
+  cursor: grab;
+}
+.cmdA .cmdA-range:active::-webkit-slider-thumb { cursor: grabbing; }
+.cmdA .cmdA-range:focus-visible { outline: var(--ut-focus); outline-offset: 4px; }
+
+/* ---------- diplomacy ---------- */
+.cmdA .cmdA-dossier--war { border-color: rgba(240,68,94,.4); }
+.cmdA .cmdA-dossier--war .cmdA-dossier-body { background: radial-gradient(640px 400px at 210px 200px, rgba(240,68,94,.12), transparent 70%); }
+.cmdA .cmdA-art--versus { position: relative; }
+.cmdA .cmdA-war-mark { position: absolute; right: 24px; bottom: 24px; display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; border: 2px solid rgba(240,68,94,.6); background: rgba(40,8,14,.9); color: #ff8c9c; font-size: 30px !important; box-shadow: 0 0 24px rgba(240,68,94,.35); }
+.cmdA .cmdA-war-line { display: flex; align-items: center; gap: 12px; max-width: 640px; padding: 10px 14px; border-radius: 12px; border: 1px solid rgba(240,68,94,.45); background: rgba(240,68,94,.07); color: #ffc2cb; }
+.cmdA .cmdA-war-line img { width: 30px; height: 30px; flex: none; }
+.cmdA .cmdA-desc strong, .command-dialog .cmdA-studio-desc strong { color: #fff; font-weight: 800; }
+.cmdA .cmdA-desc u, .command-dialog .cmdA-studio-desc u { text-decoration-color: var(--ut-accent); text-underline-offset: 3px; }
+
+/* ---------- alliance studio (settings / creation) ---------- */
+.command-dialog--studio { width: min(1180px, calc(100vw - 48px)); max-height: calc(100vh - 48px); display: flex; flex-direction: column; }
+.command-dialog--studio .cmdA-studio { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 22px; }
+.command-dialog .cmdA-studio-preview { justify-content: flex-start; gap: 10px; padding: 24px 20px; overflow: hidden; }
+.command-dialog .cmdA-studio-preview > small { align-self: flex-start; color: var(--ut-label); font-size: 11px; font-weight: 700; letter-spacing: .14em; }
+.command-dialog .cmdA-studio-preview .command-emblem { width: 170px; height: 204px; margin: 4px 0; }
+.command-dialog .cmdA-studio-motto { color: var(--command-emblem, #56d9f2) !important; font-weight: 700; }
+.command-dialog .cmdA-studio-desc { width: 100%; padding: 12px 14px; border-radius: var(--ut-r-card); background: rgba(0,0,0,.25); color: #b9cdd3; font-size: 12px; line-height: 1.55; text-align: left; overflow-wrap: anywhere; }
+.command-dialog .cmdA-studio-desc em { color: #7f98a0; }
+.command-dialog .cmdA-studio-row { display: flex; align-items: center; gap: 12px; width: 100%; margin-top: auto; padding: 10px 12px; border-radius: var(--ut-r-card); border: 1px solid var(--ut-border); background: rgba(16,26,31,.82); text-align: left; }
+.command-dialog .cmdA-studio-row .command-emblem { width: 34px; height: 41px; margin: 0; }
+.command-dialog .cmdA-studio-row b { display: block; font-size: 12.5px !important; }
+.command-dialog .cmdA-studio-row b i { font-style: normal; color: var(--ut-accent); }
+.command-dialog .cmdA-studio-row small { color: #7f98a0; font-size: 11px; }
+.command-dialog .cmdA-studio-form { display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow-y: auto; padding-right: 6px; scrollbar-width: thin; }
+.command-dialog .cmdA-studio-section { padding: 14px 16px; border-radius: var(--ut-r-card); border: 1px solid var(--ut-border); background: rgba(16,26,31,.6); }
+.command-dialog .cmdA-studio-section > h4 { display: flex; justify-content: space-between; align-items: baseline; margin: 0 0 10px; font-size: 13px !important; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.command-dialog .cmdA-studio-section > h4 small { color: #7f98a0; font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+.command-dialog .cmdA-studio-grid { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 12px; }
+.command-dialog .cmdA-studio-grid .wide { grid-column: 1 / -1; }
+.command-dialog .cmdA-tag-field > div { display: flex; gap: 8px; }
+.command-dialog .cmdA-tag-field input { min-width: 0; flex: 1 1 auto; }
+.command-dialog .cmdA-tag-field button { height: 40px; padding: 0 12px; font-size: 11px !important; }
+.command-dialog .cmdA-tag-field button.is-on { border-color: var(--ut-accent); background: rgba(86,217,242,.16); color: #fff; }
+.command-dialog .cmdA-format-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.command-dialog .cmdA-format-bar button { width: 36px; height: 32px; padding: 0 !important; font-size: 14px !important; text-transform: none; letter-spacing: 0; }
+.command-dialog .cmdA-format-bar span { margin-left: 8px; color: #7f98a0; font-size: 11px; }
+.command-dialog .cmdA-studio-section textarea { width: 100%; min-height: 76px; }
+.command-dialog .cmdA-crest-rows { display: flex; flex-direction: column; gap: 14px; }
+.command-dialog .cmdA-crest-rows .command-chip-row { flex-wrap: wrap; }
+.command-dialog .cmdA-option-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 7px; }
+.command-dialog .cmdA-option-row button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 92px; height: 92px; padding: 6px !important; text-transform: none; letter-spacing: .02em; font-size: 11px !important; font-weight: 700; }
+.command-dialog .cmdA-option-row button.selected { border-color: var(--ut-amber); background: rgba(230,173,80,.1); box-shadow: 0 0 12px rgba(230,173,80,.3); }
+.command-dialog .cmdA-swatch-svg { width: 46px; height: 56px; }
+.command-dialog .cmdA-crest-colors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.command-dialog .cmdA-dot-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 9px; }
+.command-dialog .cmdA-field-dot { width: 32px !important; height: 32px !important; padding: 0 !important; border-radius: 50% !important; border: 2px solid rgba(255,255,255,.18) !important; background: var(--cmdA-dot) !important; }
+.command-dialog .cmdA-field-dot.selected { box-shadow: 0 0 0 3px #071015, 0 0 0 5px #fff !important; }
+.command-dialog .command-chip-row--accents { gap: 10px; margin-top: 9px; }
+/* studio: compact two-column crest constructor so the whole window fits 1280×720 and 1920×1080 */
+.command-dialog--studio { max-height: min(920px, calc(100vh - 32px)); padding: 18px 22px; }
+.command-dialog--studio header { margin-bottom: 12px; }
+.command-dialog--studio .cmdA-studio { grid-template-columns: 300px minmax(0, 1fr); gap: 18px; }
+.command-dialog .cmdA-studio-preview .command-emblem { width: 140px; height: 168px; }
+.command-dialog .cmdA-studio-form { gap: 10px; }
+.command-dialog .cmdA-studio-section { padding: 12px 14px; }
+.command-dialog .cmdA-studio-section > h4 { margin-bottom: 8px; }
+.command-dialog .cmdA-studio-section textarea { min-height: 58px; }
+.command-dialog .cmdA-crest-rows { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 18px; }
+.command-dialog .command-chip-row button { width: 46px; height: 50px; }
+.command-dialog .cmdA-option-row button { width: 70px; height: 70px; padding: 4px !important; font-size: 10.5px !important; }
+.command-dialog .cmdA-swatch-svg { width: 32px; height: 38px; }
+.command-dialog .cmdA-crest-colors { grid-template-columns: 1fr; gap: 10px; }
+.command-dialog .cmdA-dot-row, .command-dialog .command-chip-row--accents { margin-top: 6px; }
+.command-dialog--studio .command-actions { margin-top: 2px; }
+/* Dialogs live inside the scaled 1920×1080 stage: keep them in the workspace, below the game header. */
+.command-dialog-backdrop { place-items: start center; padding: 250px 24px 16px; overflow-y: auto; }
+.command-dialog--studio { max-height: 812px; }
+.command-dialog .command-chip-row { gap: 6px; }
+.command-dialog .command-chip-row button { width: 42px; height: 46px; }
+.command-dialog .command-chip-row .command-emblem { width: 26px; height: 31px; }
+.command-dialog .cmdA-option-row { gap: 6px; }
+.command-dialog .cmdA-option-row button { width: 64px; height: 64px; }
+.command-dialog .cmdA-option-row button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.command-dialog .cmdA-studio-preview { gap: 8px; padding: 18px 16px; }
+.command-dialog .cmdA-studio-preview .command-emblem { width: 120px; height: 144px; }
+.command-dialog .cmdA-studio-preview .cmdA-studio-row .command-emblem { width: 34px; height: 41px; margin: 0; }

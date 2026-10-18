@@ -1,9 +1,16 @@
-export type AllianceEmblemGlyph = 'starforge' | 'orbit' | 'vanguard';
-export type AllianceAccent = 'cyan' | 'amber' | 'violet';
+export type AllianceEmblemGlyph = 'starforge' | 'orbit' | 'vanguard' | 'crown' | 'wings' | 'planet' | 'blades' | 'comet';
+export type AllianceAccent = 'cyan' | 'amber' | 'violet' | 'crimson' | 'emerald' | 'silver';
+export type AllianceEmblemShape = 'shield' | 'round' | 'hex' | 'banner';
+export type AllianceEmblemField = 'solid' | 'split' | 'chevron' | 'rays' | 'stars';
+export type AllianceEmblemFieldColor = 'abyss' | 'navy' | 'crimson' | 'forest' | 'royal' | 'bronze';
 
 export type AllianceEmblem = {
   glyph: AllianceEmblemGlyph;
   accent: AllianceAccent;
+  /** Constructor parts (optional; absent = the original shield on a dark solid field). */
+  shape?: AllianceEmblemShape;
+  field?: AllianceEmblemField;
+  fieldColor?: AllianceEmblemFieldColor;
 };
 
 /** Reusable public identity of an alliance: what outsiders, the galaxy and profiles may see. */
@@ -17,19 +24,36 @@ export type AllianceIdentity = {
 
 export type RelationStatus = 'ally' | 'trade_pact' | 'neutral' | 'tense' | 'hostile' | 'war';
 
+/** A pending truce offer inside a war. */
+export type TruceProposal = {
+  /** Alliance that offered the truce. */
+  byAllianceId: string;
+  at: number;
+};
+
 /**
- * Reserved for the future diplomacy stage. Nothing creates, edits or shows
- * relations yet (war/truce are not active); the list stays empty and exists so
- * the galaxy's relation resolver keeps its contract.
+ * One alliance's view of its relation to another alliance. A war is stored as
+ * two mirrored views (one per side) so each alliance reads only its own list
+ * and the galaxy's relation resolver keeps its `id`/`tag`/`status` contract.
+ * Views without `ownerAllianceId` come from older saves and are never shown.
  */
 export type DiplomaticRelation = {
+  /** The other alliance. */
   id: string;
   allianceName: string;
   tag: string;
   status: RelationStatus;
+  /** Alliance whose view this is. */
+  ownerAllianceId?: string;
+  /** War start (wall clock). */
+  since?: number;
+  declaredByAllianceId?: string;
+  truce?: TruceProposal | null;
+  /** When the last truce offer was rejected; a new offer is allowed 3 h later. */
+  truceRejectedAt?: number | null;
 };
 
-export type AllianceFixtureId = 'test-command-default-v1';
+export type AllianceFixtureId = 'test-command-default-v1' | 'test-command-bot01-v1';
 
 export type AllianceRole = 'leader' | 'deputy' | 'member';
 

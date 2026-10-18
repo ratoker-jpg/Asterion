@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { EmblemGlyph } from './CommandView';
+import { selectAllianceRelations } from './domain/command/diplomacy.ts';
 import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
 import { EXPLORATION_ARTS } from './exploration-art.ts';
 import { PIRATE_PLANET_ARTS } from './pirate-planet-art.ts';
@@ -587,6 +588,8 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
   }, []);
 
   const alliance = useMemo(() => selectOwnerAlliance(command, profile.playerId), [command, profile.playerId]);
+  // Only the player's own alliance's wars mark other owners as enemies.
+  const allianceDiplomacy = useMemo(() => (alliance ? selectAllianceRelations(command, alliance.id) : []), [alliance, command]);
   const owner = useMemo(() => normalizeUniverseOwnerProfile({
     id: profile.playerId,
     displayName: profile.displayName,
@@ -760,7 +763,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
 
   const handleAction = (action: UniverseAction, node: UniversePlanetNode) => {
     const targetOwner = owners.get(node.ownerId ?? '');
-    const relation = getUniverseOwnerRelation(node, owner.id, owner.alliance, targetOwner, command.diplomacy);
+    const relation = getUniverseOwnerRelation(node, owner.id, owner.alliance, targetOwner, allianceDiplomacy);
     const actionState = getUniverseActionState(action, node, owner.id, relation);
     if (action === 'fleet' && actionState.enabled) {
       onTransport({
@@ -783,7 +786,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
     ? owners.get(selectedNode.ownerId ?? '') ?? null
     : null;
   const inspectorRelationTone = selectedNode && selectedOwner
-    ? RELATION_TONE[getUniverseOwnerRelation(selectedNode, owner.id, owner.alliance, selectedOwner, command.diplomacy)]
+    ? RELATION_TONE[getUniverseOwnerRelation(selectedNode, owner.id, owner.alliance, selectedOwner, allianceDiplomacy)]
     : undefined;
 
   return (
@@ -836,7 +839,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
           const debrisDescription = orbitalDebris > 0 ? ` · Обломки на орбите: ${numberFormat.format(orbitalDebris)}` : '';
           const caption = getUniverseNodeCaption(node, profile.displayName, owners.get(node.ownerId ?? '')?.displayName);
           const relation = node.kind === 'player' || node.kind === 'npc'
-            ? getUniverseOwnerRelation(node, owner.id, owner.alliance, owners.get(node.ownerId ?? ''), command.diplomacy)
+            ? getUniverseOwnerRelation(node, owner.id, owner.alliance, owners.get(node.ownerId ?? ''), allianceDiplomacy)
             : null;
           const ariaLabel = `${caption} · ${getUniverseObjectKindLabel(node.kind)} · ${coordinate}`;
           if (node.kind === 'empty') {
@@ -910,7 +913,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
             <button ref={closeButtonRef} type="button" className="universe-inspector-close uw-close" data-asterion-close aria-label="Закрыть инспектор" title="Закрыть инспектор" onClick={() => setSelectedNodeId(null)}>✕</button>
           </header>
           <div className="universe-inspector-body uw-body">
-          {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} planets={ownerPlanets} currentOwnerId={owner.id} currentAlliance={owner.alliance} diplomacy={command.diplomacy} debrisAt={(coordinate) => orbitalDebrisByKey.get(`${coordinate.galaxy}:${coordinate.system}:${coordinate.position}`) ?? 0} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} underlyingNode={selectedUnderlyingNode} nowMs={nowMs} asteroidHasDebris={Boolean(selectedNode.kind === 'asteroid' && selectedNode.asteroid && asteroidDebrisPresenceBySpawnIndex?.[String(selectedNode.asteroid.spawnIndex)])} pirateContact={selectedNode.kind === 'pirate' ? pirateContacts.find((contact) => contact.contactCycleKey === selectedNode.pirate?.contactCycleKey) : undefined} onColonize={onColonize} onAsteroidRecycler={onAsteroidRecycler} onExpedition={onExpedition} onExplorationRecon={onExplorationRecon} explorationStatus={explorationEligibility[selectedNode.id]} onPirateRecon={onPirateRecon} onPirateAttack={onPirateAttack} onPirateReport={onPirateReport} />}
+          {selectedOwner ? <OwnerInspector node={selectedNode} owner={selectedOwner} planets={ownerPlanets} currentOwnerId={owner.id} currentAlliance={owner.alliance} diplomacy={allianceDiplomacy} debrisAt={(coordinate) => orbitalDebrisByKey.get(`${coordinate.galaxy}:${coordinate.system}:${coordinate.position}`) ?? 0} onAction={handleAction} onVisit={(planet) => { goSystem(planet.coordinate.system); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-qa-universe-object="${planet.id}"]`)?.focus()); }} /> : <SpecialInspector node={selectedNode} underlyingNode={selectedUnderlyingNode} nowMs={nowMs} asteroidHasDebris={Boolean(selectedNode.kind === 'asteroid' && selectedNode.asteroid && asteroidDebrisPresenceBySpawnIndex?.[String(selectedNode.asteroid.spawnIndex)])} pirateContact={selectedNode.kind === 'pirate' ? pirateContacts.find((contact) => contact.contactCycleKey === selectedNode.pirate?.contactCycleKey) : undefined} onColonize={onColonize} onAsteroidRecycler={onAsteroidRecycler} onExpedition={onExpedition} onExplorationRecon={onExplorationRecon} explorationStatus={explorationEligibility[selectedNode.id]} onPirateRecon={onPirateRecon} onPirateAttack={onPirateAttack} onPirateReport={onPirateReport} />}
           </div>
         </aside>
         </div>, document.body) : null}

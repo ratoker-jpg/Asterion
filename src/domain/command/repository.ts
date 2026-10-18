@@ -7,7 +7,14 @@ import {
   TEST_COMMAND_DEFAULT_FIXTURE_ID,
   TEST_FIXTURE_ALLIANCE_ID,
   TEST_FIXTURE_ALLIANCE_PROFILE,
+  TEST_BOT_ALLIANCE_ID,
+  TEST_BOT_ALLIANCE_PROFILE,
+  TEST_BOT_DISPLAY_NAME,
+  TEST_BOT_FIXTURE_ID,
+  TEST_BOT_OWNER_ID,
 } from './catalog.ts';
+import { normalizeEmblem } from './emblem.ts';
+import { pruneDiplomacy } from './diplomacy.ts';
 import { normalizeAllianceTag, normalizeAllianceText } from './membership.ts';
 import {
   AID_HALL_MAX_LEVEL,
@@ -21,11 +28,10 @@ import type {
   AidEvent,
   AidEventKind,
   AidLedger,
-  AllianceAccent,
   AllianceApplication,
   AllianceCooldown,
   AllianceEmblem,
-  AllianceEmblemGlyph,
+  AllianceFixtureId,
   AllianceMember,
   AllianceRecord,
   ApplicationReason,
@@ -42,8 +48,7 @@ import { CURRENT_PLAYER_DISPLAY_NAME, CURRENT_PLAYER_ID } from '../rating/fixtur
 import { getRuntimeSaveKey, type RuntimeMode } from '../runtime/mode.ts';
 
 const LEGACY_SAVE_KEY = getRuntimeSaveKey();
-const EMBLEM_GLYPHS: readonly AllianceEmblemGlyph[] = ['starforge', 'orbit', 'vanguard'];
-const EMBLEM_ACCENTS: readonly AllianceAccent[] = ['cyan', 'amber', 'violet'];
+const FIXTURE_IDS = [TEST_COMMAND_DEFAULT_FIXTURE_ID, TEST_BOT_FIXTURE_ID] as const;
 const APPLICATION_STATUSES: readonly ApplicationStatus[] = ['pending', 'accepted', 'rejected', 'withdrawn', 'auto_rejected'];
 const APPLICATION_REASONS: readonly ApplicationReason[] = ['declined', 'full', 'already_member', 'disbanded'];
 const COOLDOWN_CAUSES: readonly CooldownCause[] = ['rejected', 'left', 'kicked'];
@@ -91,11 +96,7 @@ function nonNegativeInteger(value: unknown, fallback: number): number {
 }
 
 function parseEmblem(value: unknown, fallback: AllianceEmblem = DEFAULT_ALLIANCE_EMBLEM): AllianceEmblem {
-  if (!isRecord(value)) return { ...fallback };
-  return {
-    glyph: EMBLEM_GLYPHS.includes(value.glyph as AllianceEmblemGlyph) ? value.glyph as AllianceEmblemGlyph : fallback.glyph,
-    accent: EMBLEM_ACCENTS.includes(value.accent as AllianceAccent) ? value.accent as AllianceAccent : fallback.accent,
-  };
+  return normalizeEmblem(value, fallback);
 }
 
 /** Stable pseudo-random fallback for members whose persisted tie-break value is missing. */
@@ -134,17 +135,55 @@ function createTestFixtureAlliance(context: Required<CommandOwnerContext>): Alli
   };
 }
 
+function createTestBotAlliance(now: number): AllianceRecord {
+  return {
+    id: TEST_BOT_ALLIANCE_ID,
+    ...TEST_BOT_ALLIANCE_PROFILE,
+    emblem: { ...TEST_BOT_ALLIANCE_PROFILE.emblem },
+    createdAt: now,
+    leaderOwnerId: TEST_BOT_OWNER_ID,
+    deputyOwnerId: null,
+    leaderSince: now,
+    members: [seedMember(TEST_BOT_OWNER_ID, TEST_BOT_DISPLAY_NAME, now, 0.75)],
+    fixtureId: TEST_BOT_FIXTURE_ID,
+  };
+}
+
+/**
+ * Test Mode: keeps Bot 01's own alliance in the world. It is added when the bot
+ * belongs to no alliance and has no pending application (e.g. older Test Mode
+ * saves, or after the bot was removed from the player's alliance), and only if
+ * its name and tag are still free.
+ */
+export function ensureTestBotAlliance(state: CommandState, now: number): CommandState {
+  if (state.alliances.some((alliance) => alliance.members.some((member) => member.ownerId === TEST_BOT_OWNER_ID))) return state;
+  if (state.applications.some((application) => application.ownerId === TEST_BOT_OWNER_ID && application.status === 'pending')) return state;
+  const nameKey = TEST_BOT_ALLIANCE_PROFILE.name.toLocaleLowerCase('ru-RU');
+  if (state.alliances.some((alliance) => alliance.id === TEST_BOT_ALLIANCE_ID
+    || alliance.tag === TEST_BOT_ALLIANCE_PROFILE.tag
+    || alliance.name.toLocaleLowerCase('ru-RU') === nameKey)) return state;
+  const alliance = createTestBotAlliance(now);
+  return {
+    ...state,
+    alliances: [...state.alliances, alliance],
+    aidLedgers: [
+      ...state.aidLedgers.filter((ledger) => !(ledger.ownerId === TEST_BOT_OWNER_ID && ledger.allianceId === alliance.id)),
+      createAidLedger(TEST_BOT_OWNER_ID, alliance.id, now, true),
+    ],
+  };
+}
+
 export function createDefaultCommandState(mode: RuntimeMode = 'test', context?: Partial<CommandOwnerContext>): CommandState {
   const state = emptyState();
   if (mode !== 'test') return state;
   const resolved = resolveContext(context);
   const alliance = createTestFixtureAlliance(resolved);
-  return {
+  return ensureTestBotAlliance({
     ...state,
     alliances: [alliance],
     // Every seeded member starts like a first-time joiner: empty stock, one-time 15-minute charge.
     aidLedgers: alliance.members.map((member) => createAidLedger(member.ownerId, alliance.id, resolved.now, true)),
-  };
+  }, resolved.now);
 }
 
 export function resetCommandState(mode: RuntimeMode = 'test', context?: Partial<CommandOwnerContext>): CommandState {
@@ -176,7 +215,8 @@ function parseAlliance(value: unknown, mode: RuntimeMode): AllianceRecord | null
   const name = text(value.name, '', 42, 1);
   const tag = normalizeAllianceTag(typeof value.tag === 'string' ? value.tag : '').slice(0, 8);
   if (!id || !name || !tag) return null;
-  const isFixture = value.fixtureId === TEST_COMMAND_DEFAULT_FIXTURE_ID;
+  const fixtureId = FIXTURE_IDS.find((id) => id === value.fixtureId) as AllianceFixtureId | undefined;
+  const isFixture = Boolean(fixtureId);
   if (isFixture && mode !== 'test') return null;
 
   const members = (Array.isArray(value.members) ? value.members : [])
@@ -199,7 +239,7 @@ function parseAlliance(value: unknown, mode: RuntimeMode): AllianceRecord | null
     deputyOwnerId: requestedDeputy,
     leaderSince: nonNegativeNumber(value.leaderSince, createdAt),
     members,
-    ...(isFixture ? { fixtureId: TEST_COMMAND_DEFAULT_FIXTURE_ID } : {}),
+    ...(fixtureId ? { fixtureId } : {}),
   };
   return record;
 }
@@ -272,7 +312,19 @@ function parseDiplomacy(value: unknown): DiplomaticRelation[] {
     const id = text(raw.id, '', 96, 1);
     const tag = normalizeAllianceTag(typeof raw.tag === 'string' ? raw.tag : '').slice(0, 8);
     if (!id || !tag) continue;
-    relations.push({ id, tag, allianceName: text(raw.allianceName, tag, 42, 1), status: raw.status as RelationStatus });
+    const relation: DiplomaticRelation = { id, tag, allianceName: text(raw.allianceName, tag, 42, 1), status: raw.status as RelationStatus };
+    const ownerAllianceId = text(raw.ownerAllianceId, '', 96, 1);
+    if (ownerAllianceId) {
+      relation.ownerAllianceId = ownerAllianceId;
+      if (typeof raw.since === 'number' && Number.isFinite(raw.since)) relation.since = Math.max(0, raw.since);
+      const declaredBy = text(raw.declaredByAllianceId, '', 96, 1);
+      if (declaredBy) relation.declaredByAllianceId = declaredBy;
+      const truce = isRecord(raw.truce) ? raw.truce : null;
+      const truceBy = truce ? text(truce.byAllianceId, '', 96, 1) : '';
+      relation.truce = truce && truceBy && typeof truce.at === 'number' && Number.isFinite(truce.at) ? { byAllianceId: truceBy, at: truce.at } : null;
+      relation.truceRejectedAt = typeof raw.truceRejectedAt === 'number' && Number.isFinite(raw.truceRejectedAt) ? raw.truceRejectedAt : null;
+    }
+    relations.push(relation);
   }
   return relations;
 }
@@ -480,7 +532,7 @@ function migrateV2(value: Record<string, unknown>, mode: RuntimeMode): CommandSt
     alliances,
     applications: applications.filter((application) => application.status === 'pending' || keepResolved.has(application.id)),
     cooldowns,
-    diplomacy: parseDiplomacy(value.diplomacy),
+    diplomacy: pruneDiplomacy(parseDiplomacy(value.diplomacy), allianceIds),
     requests: requests.filter((request) => request.status === 'open' || keepClosed.has(request.id)),
     aidLedgers,
     aidEvents: aidEvents.slice(-MAX_AID_EVENTS),
@@ -548,7 +600,10 @@ export function migrateCommandState(
 ): CommandState {
   const resolved = resolveContext(context);
   if (!isRecord(value)) return createDefaultCommandState(mode, resolved);
-  if ((value.version === 2 || value.version === 3) && Array.isArray(value.alliances)) return migrateV2(value, mode);
+  if ((value.version === 2 || value.version === 3) && Array.isArray(value.alliances)) {
+    const migrated = migrateV2(value, mode);
+    return mode === 'test' ? ensureTestBotAlliance(migrated, resolved.now || Date.now()) : migrated;
+  }
   return migrateLegacy(value, mode, resolved);
 }
 
@@ -602,4 +657,20 @@ export function persistCommandState(
       error: error instanceof Error ? error.message : 'Не удалось сохранить Командование.',
     };
   }
+}
+
+/**
+ * Test Mode only: dissolves Bot 01's own fixture alliance (it is its only member)
+ * so the managed bot can apply to the player's alliance. The alliance's wars end
+ * with it; `ensureTestBotAlliance` brings it back once the bot is free again.
+ */
+export function releaseTestBotFromOwnAlliance(state: CommandState): CommandState {
+  const own = state.alliances.find((alliance) => alliance.fixtureId === TEST_BOT_FIXTURE_ID);
+  if (!own || own.members.some((member) => member.ownerId !== TEST_BOT_OWNER_ID)) return state;
+  return {
+    ...state,
+    alliances: state.alliances.filter((alliance) => alliance.id !== own.id),
+    aidLedgers: state.aidLedgers.filter((ledger) => ledger.allianceId !== own.id),
+    diplomacy: state.diplomacy.filter((relation) => relation.ownerAllianceId !== own.id && relation.id !== own.id),
+  };
 }
