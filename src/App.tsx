@@ -299,6 +299,13 @@ type PlanetDefinition = {
 
 const RUNTIME_MODE: RuntimeMode = ACTIVE_RUNTIME_MODE;
 
+/** Test Mode only: `?headerFaction=synod|veyra` previews another faction's header theme. Presentation only, never saved. */
+const HEADER_FACTION_PREVIEW = (() => {
+  if (RUNTIME_MODE !== 'test' || typeof window === 'undefined') return null;
+  const value = new URLSearchParams(window.location.search).get('headerFaction');
+  return value === 'aegis' || value === 'synod' || value === 'veyra' ? value : null;
+})();
+
 const zoneMeta: Record<Zone, { title: string; subtitle: string; accent: string }> = {
   resource: { title: 'РЕСУРСНАЯ ЗОНА', subtitle: 'Добыча и энергия', accent: '#38c8ff' },
   industry: { title: 'ПРОМЫШЛЕННАЯ ЗОНА', subtitle: 'Производство', accent: '#f0ad38' },
@@ -1884,7 +1891,7 @@ export function App() {
     <div className="viewport">
       <div className="stage stage-shell-v3 stage-shell-v4" style={{ transform: `scale(${scale})`, '--space-bg': `url(${systemBackground})` } as CSSProperties}>
         <AsterionHeader
-          factionId={state.profile.factionId}
+          factionId={HEADER_FACTION_PREVIEW ?? state.profile.factionId}
           currentPlanet={{
             id: currentPlanet.id,
             name: currentPlanetName,

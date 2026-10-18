@@ -7,6 +7,14 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat('ru-RU').format(value);
 }
 
+/** Header cells are sized for «999 999 999»; larger values switch to «1,25 млрд». The tooltip keeps the exact number. */
+export function formatHeaderNumber(value: number) {
+  const short = (divider: number, unit: string) => `${(value / divider).toLocaleString('ru-RU', { maximumFractionDigits: value / divider >= 100 ? 0 : 2 })} ${unit}`;
+  if (Math.abs(value) >= 1e12) return short(1e12, 'трлн');
+  if (Math.abs(value) >= 1e9) return short(1e9, 'млрд');
+  return formatNumber(value);
+}
+
 function formatStorageEta(current: number, capacity: number, hourlyGain: number) {
   if (current >= capacity) return 'склад заполнен';
   if (hourlyGain <= 0) return 'нет добычи';
@@ -21,6 +29,14 @@ function formatStorageEta(current: number, capacity: number, hourlyGain: number)
   if (!days && !hours) parts.push(`${remainingMinutes} мин`);
   return parts.join(' ');
 }
+
+const LABELS: Record<string, string> = {
+  metal: 'Металл',
+  mineral: 'Минералы',
+  gas: 'Газ',
+  energy: 'Энергия',
+  population: 'Население',
+};
 
 export function ResourceChip({ kind, label, value, capacity, showCapacity = false, hourlyGain, description, debris, populationBreakdown }: HeaderResourceModel) {
   const fill = capacity ? Math.min(100, Math.max(0, (value / capacity) * 100)) : 0;
@@ -38,6 +54,7 @@ export function ResourceChip({ kind, label, value, capacity, showCapacity = fals
   const hasFill = kind !== 'energy' && kind !== 'debris' && Boolean(capacity);
   const shouldPulse = (kind === 'metal' || kind === 'mineral' || kind === 'gas') && fill > 85;
   const tooltipId = `asterion-header-resource-tooltip-${kind}`;
+  const shownLabel = kind === 'population' && label !== 'НАСЕЛЕНИЕ' ? 'Население обороны' : LABELS[kind] ?? label;
 
   return (
     <div
@@ -50,34 +67,39 @@ export function ResourceChip({ kind, label, value, capacity, showCapacity = fals
       data-qa-resource-pulse={shouldPulse}
       aria-describedby={tooltipId}
     >
-      {kind === 'energy' && debris !== undefined ? <span className="asterion-header__resource-energy-split">
-        <span className="asterion-header__resource-energy-half" data-qa-energy-header>
-          <span className="asterion-header__resource-half-icon"><HeaderGameIcon kind="energy" /></span>
-          <span className="asterion-header__resource-half-copy"><small>{label}</small><strong>{formatNumber(value)}</strong></span>
+      {kind === 'energy' && debris !== undefined ? <>
+        <span className="hdr-cell" data-qa-energy-header>
+          <span className="hdr-cell__icon"><HeaderGameIcon kind="energy" /></span>
+          <span className="hdr-cell__copy"><small>{shownLabel}</small><strong>{formatHeaderNumber(value)}</strong></span>
         </span>
-        <span className="asterion-header__resource-energy-half asterion-header__resource-debris-half" data-qa-debris-header>
-          <span className="asterion-header__resource-half-icon"><GameIcon kind="debris" /></span>
-          <span className="asterion-header__resource-half-copy"><small>ОБЛОМКИ</small><strong data-qa-debris-header-value>{formatNumber(debris)}</strong></span>
+        <span className="hdr-cell hdr-cell--debris" data-qa-debris-header>
+          <span className="hdr-cell__icon"><GameIcon kind="debris" /></span>
+          <span className="hdr-cell__copy"><small>Обломки</small><strong data-qa-debris-header-value>{formatHeaderNumber(debris)}</strong></span>
         </span>
-      </span> : <>
-        <span className="asterion-header__resource-icon"><HeaderGameIcon kind={kind === 'debris' ? 'energy' : kind} /></span>
-        <span className="asterion-header__resource-text">
-          <small>{label}</small>
-          <strong>{showCapacity && capacity ? `${formatNumber(value)} / ${formatNumber(capacity)}` : formatNumber(value)}{kind === 'population' && populationBreakdown?.pendingInbound ? <span className="asterion-header__resource-pending-inbound" data-qa-pending-inbound-population> +{formatNumber(populationBreakdown.pendingInbound)}</span> : null}</strong>
-          {hasFill ? (
-            <span
-              className={`asterion-header__resource-fill asterion-header__resource-fill--${fillTone}${shouldPulse ? ' is-pulsing' : ''}`}
-              data-qa-resource-fill={kind}
-              data-qa-resource-kind={kind}
-              data-qa-resource-ratio={fill}
-              data-qa-resource-tone={fillTone}
-              data-qa-resource-pulse={shouldPulse}
-            >
-              <i style={{ '--fill': `${fill}%` } as CSSProperties} />
-            </span>
-          ) : null}
+      </> : (
+        <span className="hdr-cell">
+          <span className="hdr-cell__icon"><HeaderGameIcon kind={kind === 'debris' ? 'energy' : kind} /></span>
+          <span className="hdr-cell__copy">
+            <small>{shownLabel}</small>
+            <strong>
+              {showCapacity && capacity ? <>{formatHeaderNumber(value)}<em> / {formatHeaderNumber(capacity)}</em></> : formatHeaderNumber(value)}
+              {kind === 'population' && populationBreakdown?.pendingInbound ? <span className="asterion-header__resource-pending-inbound" data-qa-pending-inbound-population> +{formatNumber(populationBreakdown.pendingInbound)}</span> : null}
+            </strong>
+            {hasFill ? (
+              <span
+                className={`asterion-header__resource-fill asterion-header__resource-fill--${fillTone}${shouldPulse ? ' is-pulsing' : ''}`}
+                data-qa-resource-fill={kind}
+                data-qa-resource-kind={kind}
+                data-qa-resource-ratio={fill}
+                data-qa-resource-tone={fillTone}
+                data-qa-resource-pulse={shouldPulse}
+              >
+                <i style={{ '--fill': `${fill}%` } as CSSProperties} />
+              </span>
+            ) : null}
+          </span>
         </span>
-      </>}
+      )}
       <span id={tooltipId} className="asterion-header__resource-tooltip" data-qa-resource-tooltip={kind} role="tooltip">
         <strong>{label}</strong>
         {capacity ? <span>{formatNumber(value)} / {formatNumber(capacity)}</span> : <span>{formatNumber(value)}</span>}
@@ -98,4 +120,3 @@ export function ResourceChip({ kind, label, value, capacity, showCapacity = fals
     </div>
   );
 }
-

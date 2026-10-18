@@ -1,9 +1,9 @@
 :root {
   --hud-canvas-width: 1920px;
   --hud-canvas-height: 1080px;
-  --hud-header-top: 20px;
-  --hud-header-side: 24px;
-  --hud-header-height: 220px;
+  --hud-header-top: 0px;
+  --hud-header-side: 0px;
+  --hud-header-height: 184px; /* the faction emblem may overhang below */
   --hud-header-top-row-height: 92px;
   --hud-planet-module-width: 470px;
   --hud-planet-orbit-width: 230px;
