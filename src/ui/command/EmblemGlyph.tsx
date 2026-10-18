@@ -8,6 +8,7 @@ import type {
   AllianceEmblemGlyph,
   AllianceEmblemShape,
 } from '../../domain/command/types.ts';
+import { OrbitalCrest } from './crest/OrbitalCrest';
 
 export const ACCENT_COLORS: Record<AllianceAccent, string> = {
   cyan: '#56d9f2',
@@ -93,7 +94,8 @@ function Field({ field, accent }: { field: AllianceEmblemField; accent: string }
 }
 
 /**
- * Alliance coat of arms. An emblem without constructor parts renders exactly
+ * Alliance coat of arms. An Orbital Houses crest wins when present; otherwise
+ * the legacy SVG renders, and an emblem without constructor parts looks exactly
  * like the original PR 1 shield (Rating, Universe and Reports depend on it).
  */
 export function EmblemGlyph({ emblem, compact = false }: { emblem: AllianceEmblem; compact?: boolean }) {
@@ -102,6 +104,13 @@ export function EmblemGlyph({ emblem, compact = false }: { emblem: AllianceEmble
   const style = { '--command-emblem': accent } as CSSProperties;
   const constructed = Boolean(emblem.shape || emblem.field || emblem.fieldColor);
   const shapePath = SHAPE_PATHS[emblem.shape ?? 'shield'];
+  if (emblem.crest) {
+    return (
+      <span className={`command-emblem command-emblem--crest ${compact ? 'command-emblem--compact' : ''}`} style={{ '--command-emblem': ACCENT_COLORS[emblem.crest.color] ?? accent } as CSSProperties}>
+        <OrbitalCrest crest={emblem.crest} />
+      </span>
+    );
+  }
   return (
     <span className={`command-emblem command-emblem--${emblem.glyph} ${compact ? 'command-emblem--compact' : ''}`} style={style}>
       <svg viewBox="0 0 80 96" aria-hidden="true">

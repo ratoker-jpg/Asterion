@@ -1,5 +1,6 @@
 import { CURRENT_PLAYER_DISPLAY_NAME, CURRENT_PLAYER_ID } from '../rating/fixtures.ts';
 import { selectOwnerAlliance } from '../command/selectors.ts';
+import { parseCrest } from '../command/crest.ts';
 import type { AllianceAccent, AllianceEmblemGlyph, CommandState } from '../command/types.ts';
 import type { PlayerFactionId, PlayerProfileAlliance, PlayerProfileState } from './types.ts';
 
@@ -30,7 +31,8 @@ function parseEmblem(value: unknown) {
   const glyph = value.glyph;
   const accent = value.accent;
   if (!EMBLEM_GLYPHS.includes(glyph as AllianceEmblemGlyph) || !EMBLEM_ACCENTS.includes(accent as AllianceAccent)) return null;
-  return { glyph: glyph as AllianceEmblemGlyph, accent: accent as AllianceAccent };
+  const crest = parseCrest(value.crest);
+  return { glyph: glyph as AllianceEmblemGlyph, accent: accent as AllianceAccent, ...(crest ? { crest } : {}) };
 }
 
 function parseAlliance(value: unknown, allianceId: string): PlayerProfileAlliance | null {
@@ -94,6 +96,6 @@ export function syncPlayerProfileWithCommand(
   return {
     ...profile,
     allianceId: alliance.id,
-    alliance: { id: alliance.id, name: alliance.name, tag: alliance.tag, emblem: { glyph: alliance.emblem.glyph, accent: alliance.emblem.accent } },
+    alliance: { id: alliance.id, name: alliance.name, tag: alliance.tag, emblem: { glyph: alliance.emblem.glyph, accent: alliance.emblem.accent, ...(alliance.emblem.crest ? { crest: { ...alliance.emblem.crest } } : {}) } },
   };
 }

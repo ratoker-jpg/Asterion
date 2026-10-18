@@ -25,6 +25,7 @@ import {
   selectReapplyBlock,
   selectRole,
 } from './selectors.ts';
+import { parseCrest } from './crest.ts';
 import { normalizeEmblem } from './emblem.ts';
 import type {
   AllianceApplication,
@@ -92,6 +93,11 @@ export function validateAllianceSettings(
   }
   if (description.length > ALLIANCE_DESCRIPTION_MAX) {
     return { ok: false, code: 'invalid_text', message: `Описание — максимум ${ALLIANCE_DESCRIPTION_MAX} символов.` };
+  }
+
+  const rawCrest = (input.emblem as { crest?: unknown } | undefined)?.crest;
+  if (rawCrest !== undefined && !parseCrest(rawCrest)) {
+    return { ok: false, code: 'invalid_emblem', message: 'Герб содержит недопустимые параметры.' };
   }
 
   for (const other of state.alliances) {

@@ -6,21 +6,12 @@ import {
   ALLIANCE_NAME_MAX,
   ALLIANCE_TAG_MAX,
 } from '../../domain/command/catalog.ts';
-import { EMBLEM_ACCENTS, EMBLEM_FIELD_COLORS, EMBLEM_FIELDS, EMBLEM_GLYPHS, EMBLEM_SHAPES, suggestAllianceTag } from '../../domain/command/emblem.ts';
-import type { AllianceEmblem, AllianceSettingsInput } from '../../domain/command/types.ts';
+import { crestLabel, DEFAULT_ALLIANCE_CREST } from '../../domain/command/crest.ts';
+import { cloneEmblem, suggestAllianceTag } from '../../domain/command/emblem.ts';
+import type { AllianceCrest, AllianceSettingsInput } from '../../domain/command/types.ts';
+import { CrestConstructor } from './crest/CrestConstructor';
 import { Dialog } from './Dialog';
-import {
-  ACCENT_COLORS,
-  ACCENT_LABELS,
-  EmblemGlyph,
-  FIELD_COLOR_LABELS,
-  FIELD_COLORS,
-  FIELD_LABELS,
-  FieldSwatch,
-  GLYPH_LABELS,
-  SHAPE_LABELS,
-  ShapeSwatch,
-} from './EmblemGlyph';
+import { ACCENT_COLORS, EmblemGlyph } from './EmblemGlyph';
 import { applyRichMark, renderRichText, type RichMark } from './rich-text';
 
 type Result = { ok: true; message?: string } | { ok: false; message: string };
@@ -29,7 +20,7 @@ type Result = { ok: true; message?: string } | { ok: false; message: string };
  * «Студия союза»: the single editor used to found an alliance and to edit it.
  * Left — a live preview (crest, name, tag, motto, formatted description, the
  * catalog row); right — the basics, the description with formatting, and the
- * coat-of-arms constructor (shape, field pattern, field colour, sign, sign colour).
+ * crest card that opens the full-window «Конструктор герба» (Orbital Houses).
  */
 export function AllianceEditor({ title, submitLabel, initial, onSubmit, onClose }: {
   title: string;
@@ -38,14 +29,17 @@ export function AllianceEditor({ title, submitLabel, initial, onSubmit, onClose 
   onSubmit: (settings: AllianceSettingsInput) => Result;
   onClose: () => void;
 }) {
-  const [draft, setDraft] = useState<AllianceSettingsInput>({ ...initial, emblem: { ...initial.emblem } });
+  const [draft, setDraft] = useState<AllianceSettingsInput>({ ...initial, emblem: cloneEmblem(initial.emblem) });
+  const [crestOpen, setCrestOpen] = useState(false);
   // A new alliance follows its name until the player edits the tag by hand.
   const [tagAuto, setTagAuto] = useState(!initial.tag);
   const [error, setError] = useState('');
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
   const set = (patch: Partial<AllianceSettingsInput>) => { setDraft((current) => ({ ...current, ...patch })); setError(''); };
-  const setEmblem = (patch: Partial<AllianceEmblem>) => set({ emblem: { ...draft.emblem, ...patch } });
+  // Applying a crest keeps the legacy fields untouched and mirrors the colour into
+  // `accent`, which still tints the alliance UI (motto, glow).
+  const applyCrest = (crest: AllianceCrest) => { set({ emblem: { ...draft.emblem, accent: crest.color, crest } }); setCrestOpen(false); };
   const setName = (name: string) => set(tagAuto ? { name, tag: suggestAllianceTag(name).slice(0, ALLIANCE_TAG_MAX) } : { name });
   const submit = () => {
     const result = onSubmit(draft);
@@ -63,8 +57,16 @@ export function AllianceEditor({ title, submitLabel, initial, onSubmit, onClose 
   };
 
   const accent = ACCENT_COLORS[draft.emblem.accent];
-  const fieldColor = FIELD_COLORS[draft.emblem.fieldColor ?? 'abyss'];
+  const crest = draft.emblem.crest;
   const tagText = draft.tag.trim().toUpperCase() || 'TAG';
+
+  if (crestOpen) {
+    return (
+      <Dialog title="Конструктор герба" onClose={() => setCrestOpen(false)} size="crest">
+        <CrestConstructor initial={crest ?? { ...DEFAULT_ALLIANCE_CREST, color: draft.emblem.accent }} onApply={applyCrest} onBack={() => setCrestOpen(false)} />
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog title={title} onClose={onClose} size="studio">
@@ -109,36 +111,29 @@ export function AllianceEditor({ title, submitLabel, initial, onSubmit, onClose 
             <textarea ref={descriptionRef} value={draft.description} maxLength={ALLIANCE_DESCRIPTION_MAX} rows={3} onChange={(event) => set({ description: event.target.value })} data-qa-alliance-description />
           </section>
 
-          <section className="cmdA-studio-section">
-            <h4>Конструктор герба</h4>
-            <div className="command-emblem-row cmdA-crest-rows">
-              <div><small>ЗНАК</small><div className="command-chip-row">
-                {EMBLEM_GLYPHS.map((glyph) => (
-                  <button key={glyph} type="button" aria-label={`Знак ${glyph}`} title={GLYPH_LABELS[glyph]} className={draft.emblem.glyph === glyph ? 'selected' : ''} onClick={() => setEmblem({ glyph })}><EmblemGlyph compact emblem={{ glyph, accent: draft.emblem.accent }} /></button>
-                ))}
-              </div></div>
-              <div><small>ФОРМА</small><div className="cmdA-option-row">
-                {EMBLEM_SHAPES.map((shape) => (
-                  <button key={shape} type="button" title={SHAPE_LABELS[shape]} aria-label={`Форма: ${SHAPE_LABELS[shape]}`} className={(draft.emblem.shape ?? 'shield') === shape ? 'selected' : ''} onClick={() => setEmblem({ shape })} data-qa-emblem-shape={shape}><ShapeSwatch shape={shape} accent={accent} fieldColor={fieldColor} /><span>{SHAPE_LABELS[shape]}</span></button>
-                ))}
-              </div></div>
-              <div><small>УЗОР ФОНА</small><div className="cmdA-option-row">
-                {EMBLEM_FIELDS.map((field) => (
-                  <button key={field} type="button" title={FIELD_LABELS[field]} aria-label={`Узор: ${FIELD_LABELS[field]}`} className={(draft.emblem.field ?? 'solid') === field ? 'selected' : ''} onClick={() => setEmblem({ field })} data-qa-emblem-field={field}><FieldSwatch field={field} accent={accent} fieldColor={fieldColor} /><span>{FIELD_LABELS[field]}</span></button>
-                ))}
-              </div></div>
-              <div className="cmdA-crest-colors">
-                <div><small>ЦВЕТ ФОНА</small><div className="cmdA-dot-row">
-                  {EMBLEM_FIELD_COLORS.map((color) => (
-                    <button key={color} type="button" aria-label={`Фон: ${FIELD_COLOR_LABELS[color]}`} title={FIELD_COLOR_LABELS[color]} className={`cmdA-field-dot ${(draft.emblem.fieldColor ?? 'abyss') === color ? 'selected' : ''}`} style={{ '--cmdA-dot': FIELD_COLORS[color] } as CSSProperties} onClick={() => setEmblem({ fieldColor: color })} data-qa-emblem-field-color={color} />
-                  ))}
-                </div></div>
-                <div><small>ЦВЕТ ЗНАКА</small><div className="command-chip-row command-chip-row--accents">
-                  {EMBLEM_ACCENTS.map((accentKey) => (
-                    <button key={accentKey} type="button" aria-label={ACCENT_LABELS[accentKey]} title={ACCENT_LABELS[accentKey]} className={`command-accent-dot ${draft.emblem.accent === accentKey ? 'selected' : ''}`} style={{ '--command-accent-dot': ACCENT_COLORS[accentKey] } as CSSProperties} onClick={() => setEmblem({ accent: accentKey })} />
-                  ))}
-                </div></div>
+          <section className="cmdA-studio-section cmdA-crest-card">
+            <h4>Герб союза</h4>
+            <div className="cmdA-crest-card-body">
+              <button type="button" className="cmdA-crest-card-preview" onClick={() => setCrestOpen(true)} aria-label="Открыть конструктор герба"><EmblemGlyph emblem={draft.emblem} /></button>
+              <div className="cmdA-crest-card-text">
+                {crest ? (
+                  <>
+                    <b>{crestLabel('glyphs', crest.glyph)}</b>
+                    <dl>
+                      <div><dt>Цвет</dt><dd>{crestLabel('colors', crest.color)}</dd></div>
+                      <div><dt>Рамка</dt><dd>{crestLabel('frames', crest.frame)}</dd></div>
+                      <div><dt>Эмаль</dt><dd>{crestLabel('fields', crest.field)}</dd></div>
+                      <div><dt>Узор</dt><dd>{crestLabel('patterns', crest.pattern)}</dd></div>
+                    </dl>
+                  </>
+                ) : (
+                  <>
+                    <b>Прежний герб</b>
+                    <p>Он остаётся без изменений, пока вы не соберёте новый герб «Орбитальных домов» в конструкторе.</p>
+                  </>
+                )}
               </div>
+              <button type="button" className="primary cmdA-crest-card-open" onClick={() => setCrestOpen(true)} data-qa-crest-open>КОНСТРУКТОР ГЕРБА</button>
             </div>
           </section>
 
