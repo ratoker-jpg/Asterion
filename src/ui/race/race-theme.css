@@ -120,3 +120,44 @@
 :root[data-faction] .workspace--universe .universe-view-v3 .system-planet--self img { filter: drop-shadow(0 0 12px var(--race-glow)) drop-shadow(0 0 22px color-mix(in srgb, var(--race-glow) 40%, transparent)); }
 :root[data-faction] .workspace--universe .universe-view-v3 .system-planet--self::after { border: 1px dashed var(--race-accent-strong); box-shadow: 0 0 18px var(--race-glow); }
 :root[data-faction] .workspace--universe .universe-view-v3 .system-planet--self .planet-name { color: var(--race-accent); border-color: var(--race-border); background: color-mix(in srgb, var(--race-accent-strong) 16%, #06141bcc); }
+
+/* ---------- 8. Command lists: the selection is the race, the left marker keeps the row's own kind colour ---------- */
+:root[data-faction] .cmdA .cmdA-item.is-selected,
+:root[data-faction] .command-view.cmdA button.cmdA-item.is-selected {
+  background: linear-gradient(90deg, var(--race-fill), rgba(16, 26, 31, .82) 70%);
+  border-color: var(--race-outline);
+  border-left-color: var(--k);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--race-glow) 45%, transparent);
+}
+
+/* ---------- 9. Bulk selection: checked boxes and the rows they mark ---------- */
+:root[data-faction] input[type='checkbox'],
+:root[data-faction] input[type='radio'] { accent-color: var(--race-accent-strong); }
+:root[data-faction] .reports-view.reports-v2 .reports-list-item.selected { outline-color: var(--race-outline); }
+:root[data-faction] .reports-list-item.selected { border-color: var(--race-border); }
+:root[data-faction] .combat-priority-list-v1 > li.dragging { border-color: var(--race-accent-strong); box-shadow: 0 0 14px var(--race-glow); }
+
+/* ---------- 10. Fleet «Битвы» (comic battle skin): the chosen tab keeps the solid plate, in the race colour ---------- */
+:root[data-faction] .ops6 .battle-tabs-v1 button.active { background: var(--race-accent-strong); color: #061016; }
+:root[data-faction] .ops6 .battle-tabs-v1 button.active b { color: #061016; }
+
+/* ---------- 11. Own research / ship upgrade levels (queued levels keep their amber «ordered» hatch) ---------- */
+:root[data-faction] .science-level-segments-v2 i.is-complete,
+:root[data-faction] .spaceport-level-segments-v2 i.is-complete {
+  border-color: var(--race-outline);
+  background: linear-gradient(180deg, var(--race-accent), var(--race-accent-strong));
+  box-shadow: 0 0 5px var(--race-glow);
+}
+:root[data-faction] .uw .uw-alliance-crest .command-emblem--crest { width: 64px; height: 64px; }
+
+/* ---------- 12. «Yours» markers: you, your alliance ---------- */
+:root[data-faction] .cmdA .cmdA-chip.is-own { color: var(--race-accent); border-color: var(--race-border); background: var(--race-fill-soft); }
+:root[data-faction] .cmdA .cmdA-item.is-own { border-left-color: var(--race-accent-strong); }
+
+/* ---------- 13. Planet editor: the planet's current look ---------- */
+:root[data-faction] .skin-picker-grid button.active {
+  border-color: var(--race-accent);
+  background: linear-gradient(180deg, var(--race-fill), rgba(4, 30, 40, .82));
+  box-shadow: inset 0 0 0 1px var(--race-outline), 0 0 16px var(--race-glow);
+}
+:root[data-faction] .skin-picker-grid button.active small { color: var(--race-accent); }

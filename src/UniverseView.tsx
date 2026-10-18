@@ -244,7 +244,8 @@ const SHORT_POINT_LABELS: Record<keyof UniverseOwnerPoints, string> = {
   resource: 'Ресурсные', battle: 'Боевые', total: 'Общие', achievements: 'Достижения',
 };
 const RELATION_TONE: Record<ReturnType<typeof getUniverseOwnerRelation>, string> = {
-  self: '#56d9f2', ally: '#35e58a', enemy: '#f0445e', neutral: '#f0445e',
+  // The player's own world uses the race accent (docs/ui/race-accent.md); ally/enemy keep their meaning.
+  self: 'var(--race-accent-strong)', ally: '#35e58a', enemy: '#f0445e', neutral: '#f0445e',
 };
 const RELATION_COPY: Record<ReturnType<typeof getUniverseOwnerRelation>, string> = {
   self: 'Ваш мир · принимает транспорт',
