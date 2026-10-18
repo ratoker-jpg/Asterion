@@ -105,7 +105,7 @@ export type AllianceCooldown = {
 export type AidResource = 'metal' | 'minerals' | 'gas' | 'debris';
 
 export type RequestStatus = 'open' | 'completed' | 'cancelled' | 'closed';
-export type RequestCloseReason = 'completed' | 'cancelled' | 'author_left' | 'alliance_disbanded';
+export type RequestCloseReason = 'completed' | 'cancelled' | 'author_left' | 'alliance_disbanded' | 'planet_destroyed';
 
 export type RequestCoordinate = { galaxy: number; system: number; position: number };
 

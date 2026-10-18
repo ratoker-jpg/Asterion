@@ -573,3 +573,71 @@ test('gas aid pays fuel on top of the cargo and never mints gas out of a shared 
   assert.ok(sent.ok);
   if (sent.ok) assert.equal(getPlanetResources(sent.state, 'helion-01').gas, 0);
 });
+
+test('a destroyed destination planet closes the request, frees the slot and returns ships empty (two flights, reload)', () => {
+  const colonyCoordinate = { galaxy: 1, system: 2, position: 1 };
+  const colonyId = createPlanetIdForCoordinate(colonyCoordinate);
+  const base = world();
+  const withColony: SaveState = {
+    ...base,
+    planets: { ...base.planets, [colonyId]: { ...createColonyPlanetRuntime(base, colonyCoordinate), resources: { metal: 0, minerals: 0, gas: 0 } } },
+  };
+  const now = T0 + 2 * MIN;
+  const created = createAidRequest(syncAidState(withColony, ctx(now)), { planetId: colonyId, resource: 'gas', amount: 50_000 }, ctx(now));
+  assert.ok(created.ok);
+  const requestId = created.requestId!;
+  const chargesBefore = projectAidLedger(selectActiveAidLedger(created.state.command, created.state.profile.playerId)!, now).charges;
+  const one = dispatchNpcAidFlight(created.state, { requestId: 'aid-npc:d-1', aidRequestId: requestId, senderOwnerId: TEST_ALLY_OWNER_ID, units: 20_000, departedAt: now }, options(now));
+  assert.ok(one.ok);
+  if (!one.ok) return;
+  const two = dispatchNpcAidFlight(one.state, { requestId: 'aid-npc:d-2', aidRequestId: requestId, senderOwnerId: TEST_ALLY_OWNER_ID, units: 30_000, departedAt: now }, options(now));
+  assert.ok(two.ok);
+  if (!two.ok) return;
+  const iraAfterLaunch = two.state.alliedPlanets![IRA_PLANET].resources!;
+  assert.equal(aidInFlightUnits(two.state.flights.records, requestId), 50_000);
+
+  // the colony is destroyed while both fleets are in the air
+  const { [colonyId]: _lost, ...rest } = two.state.planets;
+  const destroyed: SaveState = { ...two.state, planets: rest };
+  const swept = reconcileAidMembership(destroyed, now + 1_000);
+  const request = selectRequestById(swept.command, requestId)!;
+  assert.equal(request.status, 'closed');
+  assert.equal(request.closeReason, 'planet_destroyed');
+  assert.equal(request.delivered, 0);
+  assert.equal(projectAidLedger(selectActiveAidLedger(swept.command, swept.profile.playerId)!, now + 1_000).charges, chargesBefore, 'no charge is returned');
+  assert.equal(swept.command.requests.filter((r) => r.status === 'open').length, 0, 'the slot is free again');
+  const flights = swept.flights.records.filter((f) => f.missionId === 'aid');
+  assert.ok(flights.every((f) => f.phase === 'returning' && f.cargoState === 'voided'));
+  assert.equal(aidInFlightUnits(swept.flights.records, requestId), 0);
+  assert.equal(reconcileAidMembership(swept, now + 2_000), swept, 'idempotent');
+
+  // survive a reload, then the ships come home: no cargo returns, nothing is minted or duplicated
+  const values = new Map<string, string>();
+  const storage = { getItem: (k: string) => values.get(k) ?? null, setItem: (k: string, v: string) => { values.set(k, v); }, removeItem: (k: string) => { values.delete(k); } };
+  const facade = createPersistenceFacade({ mode: 'test', storage, now: () => now });
+  assert.ok(facade.write(swept).ok);
+  const reloaded = facade.read();
+  assert.equal(selectRequestById(reloaded.command, requestId)?.closeReason, 'planet_destroyed');
+  const lastReturn = Math.max(...reloaded.flights.records.map((f) => f.returnAt!));
+  const home = reconcileFlights(reloaded, lastReturn, undefined, { mode: 'test' });
+  assert.ok(home.state.flights.records.every((f) => f.phase === 'completed' && f.cargoState === 'voided'));
+  const iraEnd = home.state.alliedPlanets![IRA_PLANET].resources!;
+  assert.equal(iraEnd.gas, iraAfterLaunch.gas, 'voided cargo is not refunded');
+  assert.equal(selectRequestById(home.state.command, requestId)?.delivered, 0);
+  assert.equal(reconcileFlights(home.state, lastReturn + MIN, undefined, { mode: 'test' }).changed, false);
+});
+
+test('arriving after the planet is gone voids the cargo even without a prior sweep; leaving the alliance still returns the cargo', () => {
+  const { state, requestId } = iraRequest(world(), 120_000);
+  const sent = launch(state, 'dest-gone', requestId, 3, { metal: 60_000 });
+  const gone = reconcileFlights({ ...sent.state, alliedPlanets: {} }, sent.flight.arrivalAt, undefined, { mode: 'test' });
+  assert.equal(gone.state.flights.records[0].cargoState, 'voided');
+  const swept = reconcileAidMembership({ ...sent.state, alliedPlanets: {} }, T0 + 1_000);
+  assert.equal(swept.flights.records[0].cargoState, 'voided');
+  assert.equal(selectRequestById(swept.command, requestId)?.closeReason, 'planet_destroyed');
+  // contrast: the member merely left, the planet still exists -> cargo returns home
+  const left = kickMember(sent.state.command, sent.state.profile.playerId, TEST_ALLY_OWNER_ID, T0 + 1_000);
+  assert.ok(left.ok);
+  const cut = reconcileAidMembership({ ...sent.state, command: left.state }, T0 + 1_000);
+  assert.equal(cut.flights.records[0].cargoState, 'loaded');
+});

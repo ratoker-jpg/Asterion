@@ -50,7 +50,7 @@ const COOLDOWN_CAUSES: readonly CooldownCause[] = ['rejected', 'left', 'kicked']
 const RELATION_STATUSES: readonly RelationStatus[] = ['ally', 'trade_pact', 'neutral', 'tense', 'hostile', 'war'];
 const MAX_COOLDOWNS = 200;
 const REQUEST_STATUSES: readonly RequestStatus[] = ['open', 'completed', 'cancelled', 'closed'];
-const REQUEST_CLOSE_REASONS: readonly RequestCloseReason[] = ['completed', 'cancelled', 'author_left', 'alliance_disbanded'];
+const REQUEST_CLOSE_REASONS: readonly RequestCloseReason[] = ['completed', 'cancelled', 'author_left', 'alliance_disbanded', 'planet_destroyed'];
 const AID_EVENT_KINDS: readonly AidEventKind[] = ['request_created', 'request_cancelled', 'request_closed', 'aid_launched', 'aid_delivered', 'aid_returned'];
 
 /** Identity of the local human owner, needed to seed and to migrate legacy saves. */

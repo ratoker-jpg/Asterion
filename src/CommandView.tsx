@@ -692,6 +692,7 @@ const CLOSE_REASON_LABELS: Record<string, string> = {
   cancelled: 'Отменён',
   author_left: 'Закрыт: автор покинул союз',
   alliance_disbanded: 'Закрыт: союз расформирован',
+  planet_destroyed: 'Закрыт: планета назначения уничтожена',
 };
 
 function RequestsTab({ aid, now, actions, onFeedback, testControls }: {

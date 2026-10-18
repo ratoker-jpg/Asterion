@@ -9,6 +9,7 @@ import {
   applyAidRegime,
   cancelResourceRequest,
   closeOrphanedRequests,
+  closeRequestPlanetLost,
   createResourceRequest,
   grantAidChargesForTest,
   isAidPairValid,
@@ -84,6 +85,17 @@ export function syncAidState(state: SaveState, context: AidContext): SaveState {
 
 // ------------------------------------------------------------- membership
 
+/** The request's planet still exists and still belongs to the request's author. */
+export function isRequestPlanetAlive(state: SaveState, request: ResourceRequest): boolean {
+  const planet = request.authorOwnerId === state.profile.playerId
+    ? state.planets[request.planetId]
+    : state.alliedPlanets?.[request.planetId];
+  if (!planet) return false;
+  if (request.authorOwnerId !== state.profile.playerId && (planet as { ownerId?: string }).ownerId !== request.authorOwnerId) return false;
+  const at = coordinateOfPlanet(planet);
+  return at.galaxy === request.coordinate.galaxy && at.system === request.coordinate.system && at.position === request.coordinate.position;
+}
+
 function isAidFlightStillValid(command: CommandState, flight: FlightRecord): boolean {
   const aid = flight.aid;
   if (!aid) return false;
@@ -103,19 +115,32 @@ function isAidFlightStillValid(command: CommandState, flight: FlightRecord): boo
  * the origin planet. Idempotent: a flight already returning is left alone.
  */
 export function reconcileAidMembership(state: SaveState, now: number): SaveState {
-  const settledCommand = closeOrphanedRequests(state.command, now);
+  let settledCommand = closeOrphanedRequests(state.command, now);
+  // A destroyed destination planet closes the request for good (no charge back); see the flight handling below.
+  for (const request of settledCommand.requests) {
+    if (request.status === 'open' && !isRequestPlanetAlive(state, request)) {
+      settledCommand = closeRequestPlanetLost(settledCommand, request.id, now);
+    }
+  }
   let next = withCommand(state, settledCommand);
   let flights: FlightState = next.flights;
   let changed = false;
   for (const flight of next.flights.records) {
     if (flight.missionId !== 'aid' || flight.cargoState !== 'loaded') continue;
     if (flight.phase !== 'outbound' && flight.phase !== 'arrived') continue;
-    if (isAidFlightStillValid(next.command, flight)) continue;
+    const request = flight.aid ? selectRequestById(next.command, flight.aid.requestId) : null;
+    const planetLost = Boolean(request && !isRequestPlanetAlive(next, request));
+    if (!planetLost && isAidFlightStillValid(next.command, flight)) continue;
     const turned = flight.phase === 'outbound' && now < flight.arrivalAt
       ? recallDomainFlight(flights, flight.id, now)
       : beginFlightReturn(flights, flight.id, now, 'recalled');
     if (turned !== flights) {
-      flights = turned;
+      // Ships that were sent to a planet that no longer exists come back empty: the cargo is lost.
+      flights = planetLost
+        ? { ...turned, records: turned.records.map((record) => record.id === flight.id
+          ? { ...record, cargoState: 'voided' as const, cargoResolvedAt: now }
+          : record) }
+        : turned;
       changed = true;
     }
   }

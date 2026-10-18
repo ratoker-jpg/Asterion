@@ -324,6 +324,7 @@ export function reconcileRuntime(
     }
   }
   next = reconcileAllPlanetOverpopulation(next, context.now).state;
+  next = reconcileAidMembership(next, context.now);
   next = syncAidState(next, { now: context.now, mode: context.mode, testTimeScale: context.testTimeScale });
   // Preserve the all-time resource high-water mark across losses, fleet launches
   // and reloads. A later weak expedition must never erase an earlier real peak.

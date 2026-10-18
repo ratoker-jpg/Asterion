@@ -2686,6 +2686,7 @@ export function reconcileFlights(
       if (current.missionId === 'aid') {
         const aid = current.aid;
         const request = aid ? selectRequestById(next.command, aid.requestId) : null;
+        const target = aidArrivalTarget(next, current);
         const standing = Boolean(aid && request && isRequestOpen(request)
           && request.allianceId === aid.allianceId
           && request.authorOwnerId === aid.recipientOwnerId
@@ -2698,22 +2699,21 @@ export function reconcileFlights(
           changed = true;
           continue;
         }
+        if (!target.acceptsTransport || !target.runtime) {
+          // The destination planet is gone (even if the request closed because of it): ships return, cargo is lost.
+          const voided: FlightRecord = { ...current, arrivedAt: arrivalAt, cargoState: 'voided', cargoResolvedAt: now };
+          const returning = beginTransportReturn(next, voided, now, 'target-unavailable');
+          next = { ...next, flights: updateFlight(next.flights, returning) };
+          changed = true;
+          events.push({ flight: returning, status: 'target-unavailable', notice: 'Помощь союзу: планета назначения недоступна; груз потерян, корабли возвращаются.' });
+          continue;
+        }
         if (!standing) {
           // Membership or request changed: turn back with the cargo still aboard.
           const turned = beginTransportReturn(next, { ...current, arrivedAt: arrivalAt }, now, 'recalled');
           next = { ...next, flights: updateFlight(next.flights, turned) };
           changed = true;
           events.push({ flight: turned, status: 'target-unavailable', notice: 'Помощь союзу: запрос закрыт или состав союза изменился; корабли возвращаются с грузом.' });
-          continue;
-        }
-        const target = aidArrivalTarget(next, current);
-        if (!target.acceptsTransport || !target.runtime) {
-          // Independent loss of the destination keeps the standing rule: ships return, cargo is lost.
-          const voided: FlightRecord = { ...current, arrivedAt: arrivalAt, cargoState: 'voided', cargoResolvedAt: now };
-          const returning = beginTransportReturn(next, voided, now, 'target-unavailable');
-          next = { ...next, flights: updateFlight(next.flights, returning) };
-          changed = true;
-          events.push({ flight: returning, status: 'target-unavailable', notice: 'Помощь союзу: планета назначения недоступна; груз потерян, корабли возвращаются.' });
           continue;
         }
         const cargo = normalizeTransportCargo(current.cargo);

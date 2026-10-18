@@ -431,6 +431,14 @@ function closeRequest(state: CommandState, request: ResourceRequest, reason: Req
   return next;
 }
 
+/** Closes one open request whose destination planet is gone. No charge is returned. */
+export function closeRequestPlanetLost(state: CommandState, requestId: string, now: number): CommandState {
+  const request = selectRequestById(state, requestId);
+  if (!request || request.status !== 'open') return state;
+  const next = closeRequest(state, request, 'planet_destroyed', now);
+  return { ...next, requests: trimClosedRequests(next.requests) };
+}
+
 /** Closes every open request of an author in one alliance. The charge is not returned. */
 export function closeRequestsOfAuthor(
   state: CommandState,
