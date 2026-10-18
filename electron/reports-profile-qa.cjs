@@ -108,13 +108,10 @@ async function showCurrentAllianceRating(win) {
 
 async function updateAllianceThroughCommand(win) {
   await clickPrimary(win, 'command', `document.querySelector('.command-view')`);
-  const opened = await win.webContents.executeJavaScript(`(() => {
-    const button = Array.from(document.querySelectorAll('.command-tabs button')).find((item) => item.textContent?.trim() === 'НАСТРОЙКИ СОЮЗА');
-    button?.click();
-    return Boolean(button);
-  })()`);
-  if (!opened) throw new Error('Command settings tab not found');
-  await waitFor(win, `document.querySelector('.command-settings-form')`);
+  await win.webContents.executeJavaScript(`document.querySelector('[data-qa-command-tab="overview"]')?.click()`);
+  await waitFor(win, `document.querySelector('[data-qa-edit-alliance]')`);
+  await win.webContents.executeJavaScript(`document.querySelector('[data-qa-edit-alliance]')?.click()`);
+  await waitFor(win, `document.querySelector('.command-editor-form')`);
   await win.webContents.executeJavaScript(`(() => {
     const setValue = (selector, value) => {
       const element = document.querySelector(selector);
@@ -126,15 +123,15 @@ async function updateAllianceThroughCommand(win) {
       element.dispatchEvent(new Event('change', { bubbles: true }));
       return true;
     };
-    setValue('.command-settings-form input', 'Содружество Север');
-    setValue('.command-settings-form label:nth-child(2) input', 'NORTH');
+    setValue('[data-qa-alliance-name]', 'Содружество Север');
+    setValue('[data-qa-alliance-tag]', 'NORTH');
   })()`);
   await settle(win);
-  await win.webContents.executeJavaScript(`document.querySelector('.command-emblem-options button:nth-child(3)')?.click()`);
+  await win.webContents.executeJavaScript(`document.querySelector('.command-chip-row button:nth-child(3)')?.click()`);
   await settle(win);
-  await win.webContents.executeJavaScript(`document.querySelector('.command-accent-options button[aria-label="amber"]')?.click()`);
+  await win.webContents.executeJavaScript(`document.querySelector('.command-accent-dot[aria-label="Янтарный"]')?.click()`);
   await settle(win);
-  await win.webContents.executeJavaScript(`document.querySelector('.command-settings-form button.primary')?.click()`);
+  await win.webContents.executeJavaScript(`document.querySelector('[data-qa-alliance-submit]')?.click()`);
   await waitFor(win, `document.querySelector('.command-view__status strong')?.textContent?.includes('Содружество Север')`);
   await settle(win);
 }
@@ -475,7 +472,8 @@ async function runViewport(win, width, height) {
   const updatedRating = await ratingAllianceSnapshot(win);
   if (!updatedRating.visible || updatedRating.name !== 'Содружество Север' || updatedRating.tag !== '[NORTH]' || !updatedRating.emblem.includes('vanguard')) throw new Error(`Updated alliance rating contract failed at ${label}: ${JSON.stringify(updatedRating)}`);
   const updatedState = await savedState(win);
-  if (updatedState.command?.alliance?.name !== 'Содружество Север' || updatedState.command?.alliance?.tag !== 'NORTH' || updatedState.command?.alliance?.emblem?.glyph !== 'vanguard' || updatedState.command?.alliance?.emblem?.accent !== 'amber') throw new Error(`Updated command save contract failed at ${label}: ${JSON.stringify(updatedState.command?.alliance)}`);
+  const updatedAlliance = updatedState.command?.alliances?.[0];
+  if (updatedState.command?.alliances?.length !== 1 || updatedAlliance?.id !== 'alliance-test-helion-v1' || updatedAlliance?.name !== 'Содружество Север' || updatedAlliance?.tag !== 'NORTH' || updatedAlliance?.emblem?.glyph !== 'vanguard' || updatedAlliance?.emblem?.accent !== 'amber') throw new Error(`Updated command save contract failed at ${label}: ${JSON.stringify(updatedState.command?.alliances)}`);
 
   const beforeActiveAlliance = await savedState(win);
   await win.webContents.executeJavaScript(`(() => {
@@ -502,17 +500,13 @@ async function runViewport(win, width, height) {
   await reload(win);
   await clickPrimary(win, 'reports');
   await clickFolder(win, 'alliances');
+  // No joint operation is fabricated into the mailbox any more: the folder is honestly empty.
   const allianceBefore = await win.webContents.executeJavaScript(`(() => ({
     total: document.querySelectorAll('[data-qa-message-list] .reports-list-item').length,
     deleteAllDisabled: Boolean(document.querySelector('[data-qa-delete-all]')?.disabled),
-    deleteSelectedDisabled: Boolean(document.querySelector('[data-qa-delete-selected]')?.disabled),
   }))()`);
-  if (allianceBefore.total < 1 || allianceBefore.deleteAllDisabled) throw new Error(`Alliance deletion controls failed at ${label}: ${JSON.stringify(allianceBefore)}`);
-  await win.webContents.executeJavaScript(`window.confirm = () => true; document.querySelector('[data-qa-message-list] input[type="checkbox"]')?.click(); document.querySelector('[data-qa-delete-selected]')?.click();`);
-  await waitFor(win, `document.querySelector('[data-qa-delete-selected]')?.disabled === true`);
-  const afterAllianceDelete = await savedState(win);
-  if (!afterAllianceDelete.reports?.hiddenIds?.some((id) => id.startsWith('alliance:operation:'))) throw new Error(`Alliance tombstone missing at ${label}: ${JSON.stringify(afterAllianceDelete.reports)}`);
-  await capture(win, directory, 'alliances-after-delete');
+  if (allianceBefore.total !== 0) throw new Error(`Alliance mailbox must not contain fabricated operations at ${label}: ${JSON.stringify(allianceBefore)}`);
+  await capture(win, directory, 'alliances-empty');
 
   const battleBefore = await savedState(win);
   if (!Array.isArray(battleBefore.combat?.reports) || battleBefore.combat.reports.length < 1) throw new Error(`Canonical battle fixture missing at ${label}`);
@@ -567,7 +561,7 @@ async function runViewport(win, width, height) {
   })()`);
   if (!persisted || !reloaded.reports?.hiddenIds?.includes(`battle:${canonicalBattleId}`)) throw new Error(`Tombstone reload failed at ${label}: ${JSON.stringify({ persisted, reports: reloaded.reports })}`);
 
-  return { viewport: label, profile, overpopulationDossier, initialRating, updatedProfile, updatedRating, reloadedProfile, reloadedRating, metricFocus, allianceBefore, canonicalBattleId, horizontalOverflow: profile.horizontalOverflow || profile.bodyHorizontalOverflow, persistedTombstone: true };
+  return { viewport: label, profile, overpopulationDossier, initialRating, updatedProfile, updatedRating, reloadedProfile, reloadedRating, metricFocus, allianceBefore, canonicalBattleId, horizontalOverflow: profile.horizontalOverflow || profile.bodyHorizontalOverflow };
 }
 
 app.whenReady().then(async () => {
@@ -579,7 +573,7 @@ app.whenReady().then(async () => {
     const results = [];
     for (const [width, height] of VIEWPORTS) results.push(await runViewport(win, width, height));
     fs.writeFileSync(path.join(OUTPUT, 'results.json'), JSON.stringify({ results }, null, 2));
-    console.log('Reports/profile QA passed: overpopulation unlock dossier and ship art, profile/rating alliance sync, command update, reload persistence, deletion tombstones and canonical battle preservation at both viewports.');
+    console.log('Reports/profile QA passed: overpopulation unlock dossier and ship art, profile/rating alliance sync, command update, reload persistence, empty alliance mailbox and canonical battle preservation at both viewports.');
     win.destroy();
     app.exit(0);
   } catch (error) {

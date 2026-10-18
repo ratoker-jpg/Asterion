@@ -17,7 +17,7 @@ import { resolveSpyTarget } from './espionage-targets.ts';
 import { calculateOneWayDurationMs } from '../domain/flights/speed.ts';
 import { scaleRuntimeDuration } from '../domain/runtime/mode.ts';
 import type { SpyReportSnapshot, SpyTargetState } from '../domain/espionage/types.ts';
-import type { UniverseOwnerAlliance } from '../domain/universe/types.ts';
+import { stageOwnerRelation } from '../domain/command/test-helpers.ts';
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -45,16 +45,6 @@ function spyCommand(state: ReturnType<typeof createInitialSaveState>, requestId:
   };
 }
 
-function otherAlliance(): UniverseOwnerAlliance {
-  return {
-    id: 'alliance-other',
-    name: 'Другой союз',
-    tag: 'OTH',
-    emblem: { glyph: 'orbit', accent: 'violet' },
-    glyph: 'orbit',
-  };
-}
-
 function withOtherAllianceStatus(
   state: ReturnType<typeof createInitialSaveState>,
   targetId: string,
@@ -63,25 +53,11 @@ function withOtherAllianceStatus(
   const targets = getEspionageTargets(state.espionage);
   const target = targets[targetId];
   if (!target) throw new Error(`Missing target ${targetId}`);
-  const alliance = status === 'ally'
-    ? {
-      id: 'alliance-current',
-      name: state.command.alliance.name,
-      tag: state.command.alliance.tag,
-      emblem: { ...state.command.alliance.emblem },
-      glyph: state.command.alliance.emblem.glyph,
-    }
-    : otherAlliance();
-  const diplomacy = state.command.diplomacy.map((relation, index) => index === 0
-    ? { ...relation, id: 'relation-other', allianceName: alliance.name, tag: alliance.tag, status }
-    : relation);
+  // Alliance membership is authoritative in the Command registry, so the owner is moved there.
+  const relation = status === 'neutral' ? 'other' : status;
   return {
     ...state,
-    command: { ...state.command, diplomacy },
-    espionage: {
-      ...state.espionage!,
-      targets: { ...targets, [targetId]: { ...target, alliance } },
-    },
+    command: stageOwnerRelation(state.command, state.profile.playerId, target.ownerId, relation),
   };
 }
 
@@ -631,20 +607,19 @@ test('the authoritative spy resolver derives self, ally, neutral and war enemy r
   const initial = createInitialSaveState('test', 1_000);
   const source = Object.values(getEspionageTargets(initial.espionage))[1];
   assert.ok(source);
-  const currentAlliance: UniverseOwnerAlliance = {
-    id: 'alliance-current',
-    name: initial.command.alliance.name,
-    tag: initial.command.alliance.tag,
-    emblem: { ...initial.command.alliance.emblem },
-    glyph: initial.command.alliance.emblem.glyph,
-  };
   const targets = {
     self: { ...source, id: 'spy-self', ownerId: initial.profile.playerId, ownerName: initial.profile.displayName, alliance: null },
-    ally: { ...source, id: 'spy-ally', ownerId: 'owner-ally', ownerName: 'Союзник', alliance: currentAlliance },
+    ally: { ...source, id: 'spy-ally', ownerId: 'owner-ally', ownerName: 'Союзник', alliance: null },
     neutral: { ...source, id: 'spy-neutral', ownerId: 'owner-neutral', ownerName: 'Нейтральный', alliance: null },
-    other: { ...source, id: 'spy-other', ownerId: 'owner-other', ownerName: 'Другой союз', alliance: otherAlliance() },
+    other: { ...source, id: 'spy-other', ownerId: 'owner-other', ownerName: 'Другой союз', alliance: null },
   } satisfies Record<string, SpyTargetState>;
-  const state = withTargets(initial, targets);
+  const staged = stageOwnerRelation(
+    stageOwnerRelation(initial.command, initial.profile.playerId, 'owner-ally', 'ally'),
+    initial.profile.playerId,
+    'owner-other',
+    'other',
+  );
+  const state = { ...withTargets(initial, targets), command: staged };
 
   assert.equal(resolveSpyTarget(state, 'self')?.relation, 'self');
   assert.equal(resolveSpyTarget(state, 'ally')?.relation, 'ally');

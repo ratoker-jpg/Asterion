@@ -107,12 +107,12 @@ async function closeBuildingDialog(win) {
   await waitFor(win, `!document.querySelector('[data-qa-building-dialog]')`);
 }
 
-async function waitForResourceImages(win, scopeSelector) {
+async function waitForResourceImages(win, scopeSelector, { allowEmpty = false } = {}) {
   const encoded = JSON.stringify(scopeSelector);
   await waitFor(win, `(() => {
     const root = document.querySelector(${encoded});
     const images = root ? [...root.querySelectorAll('img[data-qa-resource-kind]')] : [];
-    return Boolean(root && images.length && images.every((image) => image.complete && image.naturalWidth > 0));
+    return Boolean(root && (${allowEmpty} || images.length > 0) && images.every((image) => image.complete && image.naturalWidth > 0));
   })()`);
 }
 
@@ -380,7 +380,7 @@ async function verifyViewport(width, height) {
     assertResourceImages('repair workshop', await readResourceImages(win, '.repair-workshop-v1'), ['metal', 'minerals', 'gas', 'population']);
 
     await activateRoute(win, 'operations', '.operations-shell-v2');
-    await waitForResourceImages(win, '.operations-shell-v2');
+    await waitForResourceImages(win, '.operations-shell-v2', { allowEmpty: true });
     // Operations now displays actual pirate debris instead of invented demo resources.
     // Validate every currently rendered resource asset, without requiring fake rewards.
     const operationImages = await readResourceImages(win, '.operations-shell-v2');
@@ -391,9 +391,13 @@ async function verifyViewport(width, height) {
 
     await activateRoute(win, 'command', '.command-view');
     await clickText(win, '.command-tabs button', 'ЗАПРОСЫ РЕСУРСОВ');
-    await waitFor(win, `document.querySelector('.command-request-stack--full')`);
-    await waitForResourceImages(win, '.command-view');
-    assertResourceImages('command', await readResourceImages(win, '.command-view'), ['metal', 'minerals', 'gas', 'energy']);
+    // Resource requests are an honest stub until PR 2: no invented requests or resource icons are rendered.
+    // The real supply icons are verified again together with the requests implementation.
+    await waitFor(win, `document.querySelector('[data-qa-command-stub]')`);
+    const commandImages = await readResourceImages(win, '.command-view');
+    if (commandImages && commandImages.length) throw new Error(`command: the requests stub must not render resource icons: ${JSON.stringify(commandImages.map((image) => image.kind))}`);
+    const stubText = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-command-stub]')?.textContent || ''`);
+    if (!/Запросы ресурсов/.test(stubText)) throw new Error(`command: unexpected requests stub ${stubText}`);
 
     await activateRoute(win, 'reports', '.reports-view');
     await click(win, '[data-message-folder="battle"]');

@@ -3,12 +3,13 @@ import test from 'node:test';
 
 import { CURRENT_PLAYER_DISPLAY_NAME, createPlayerRatingEntries } from '../rating/fixtures.ts';
 import type { OwnerScore } from '../rating/types.ts';
+import { createDefaultCommandState } from '../command/repository.ts';
 import {
   createDefaultPlayerProfileState,
   CURRENT_PLAYER_FACTION_ID,
   migratePlayerProfileState,
   playerFactionLabel,
-  syncPlayerProfileWithAlliance,
+  syncPlayerProfileWithCommand,
   syncPlayerProfileWithFaction,
 } from './repository.ts';
 import { selectPlayerProfileMetrics, selectPlayerRatingEntry } from './selectors.ts';
@@ -62,15 +63,12 @@ test('compatibility faction ids use visible Russian labels', () => {
 });
 
 test('profile alliance identity syncs from the existing Command alliance', () => {
-  const profile = syncPlayerProfileWithAlliance(createDefaultPlayerProfileState(), {
-    name: 'Содружество Гелион',
-    tag: 'HLN',
-    emblem: { glyph: 'starforge', accent: 'cyan' },
-  });
+  const command = createDefaultCommandState('test', { playerId: createDefaultPlayerProfileState().playerId });
+  const profile = syncPlayerProfileWithCommand(createDefaultPlayerProfileState(), command);
 
-  assert.equal(profile.allianceId, 'alliance-current');
+  assert.equal(profile.allianceId, 'alliance-test-helion-v1');
   assert.deepEqual(profile.alliance, {
-    id: 'alliance-current',
+    id: 'alliance-test-helion-v1',
     name: 'Содружество Гелион',
     tag: 'HLN',
     emblem: { glyph: 'starforge', accent: 'cyan' },

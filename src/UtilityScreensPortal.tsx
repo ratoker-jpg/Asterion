@@ -100,6 +100,7 @@ export function UtilityScreensPortal() {
           <RatingView
             mode={runtimeState.mode}
             command={runtimeState.command}
+            ownerScores={runtimeState.ownerScores}
             currentPlayerScore={runtimeState.ownerScores[runtimeState.currentPlayerId]}
             currentPlayerId={runtimeState.currentPlayerId}
           />

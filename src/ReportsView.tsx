@@ -8,7 +8,7 @@ import { isAsterionLocalPlayerId, type BattleReport } from './domain/combat/repo
 import { createBattleReportViewModel } from './domain/combat/battle-report-view-model.ts';
 import type { BattleSideViewModel } from './domain/combat/battle-report-view-model.ts';
 import type { CommandState } from './domain/command/types.ts';
-import { selectCurrentAlliance } from './domain/command/selectors.ts';
+import { selectOwnerMembership, toAllianceIdentity } from './domain/command/selectors.ts';
 import type { OperationsState } from './domain/operations/types.ts';
 import {
   buildReportsFeed,
@@ -532,7 +532,8 @@ function ProfileRecentEvents({ items }: { items: readonly ReportItem[] }) {
 
 function PlayerProfile({ profile, score, command, mode, recentItems, onOpenCommand }: { profile: PlayerProfileState; score: OwnerScore | null; command: CommandState; mode: RuntimeMode; recentItems: readonly ReportItem[]; onOpenCommand: () => void }) {
   const metrics = selectPlayerProfileMetrics(profile, score, mode);
-  const alliance = selectCurrentAlliance(command);
+  const membership = selectOwnerMembership(command, profile.playerId);
+  const alliance = membership ? toAllianceIdentity(membership.alliance) : null;
   return (
     <section className="reports-profile-view" data-qa-profile aria-labelledby="reports-profile-title">
       <header className="reports-profile-title-plate"><span className="reports-profile-title-plate__side">ЦЕНТР СООБЩЕНИЙ</span><h2 id="reports-profile-title">ПРОФИЛЬ ИГРОКА</h2><span className="reports-profile-title-plate__side reports-profile-title-plate__side--right">ЛИЧНОСТЬ // РЕЙТИНГ</span></header>
@@ -543,7 +544,7 @@ function PlayerProfile({ profile, score, command, mode, recentItems, onOpenComma
         </section>
         <section className="reports-profile-alliance" aria-label="Состояние союза">
           <small>СОЮЗ</small>
-          {alliance ? <button type="button" className="reports-profile-alliance-link" onClick={onOpenCommand} aria-label={`Открыть Командование союза ${alliance.name}`}><span className="reports-v2-art reports-profile-alliance-art"><ReportGlyph kind="alliances" /></span><span><strong>{alliance.name}</strong><small>[{alliance.tag}] · {numberFormat.format(command.members.length)} участников</small></span><b>КОМАНДОВАНИЕ <i>→</i></b></button> : <div className="reports-profile-no-alliance"><span className="reports-profile-diamond" aria-hidden="true">?</span><span><strong>Без Союза</strong><small>Членство не задано в профиле</small></span></div>}
+          {alliance ? <button type="button" className="reports-profile-alliance-link" onClick={onOpenCommand} aria-label={`Открыть Командование союза ${alliance.name}`}><span className="reports-v2-art reports-profile-alliance-art"><ReportGlyph kind="alliances" /></span><span><strong>{alliance.name}</strong><small>[{alliance.tag}] · {numberFormat.format(membership?.alliance.members.length ?? 0)} участников</small></span><b>КОМАНДОВАНИЕ <i>→</i></b></button> : <div className="reports-profile-no-alliance"><span className="reports-profile-diamond" aria-hidden="true">?</span><span><strong>Без Союза</strong><small>Членство не задано в профиле</small></span></div>}
           <ProfileRecentEvents items={recentItems} />
         </section>
       </div>

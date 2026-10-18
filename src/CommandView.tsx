@@ -1,99 +1,117 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 
+import {
+  ALLIANCE_DESCRIPTION_MAX,
+  ALLIANCE_MOTTO_MAX,
+  ALLIANCE_NAME_MAX,
+  ALLIANCE_TAG_MAX,
+  MAX_ALLIANCE_MEMBERS,
+} from './domain/command/catalog.ts';
+import {
+  canManageAlliance,
+  filterAllianceCatalog,
+  isAllianceFull,
+  memberScore,
+  selectAllianceCatalog,
+  selectLastResolvedApplication,
+  selectOrderedMembers,
+  selectOwnerMembership,
+  selectPendingApplication,
+  selectPendingApplicationsFor,
+  selectReapplyBlock,
+  selectAllianceRating,
+  type AllianceCatalogEntry,
+  type MemberScore,
+} from './domain/command/selectors.ts';
 import type {
   AllianceAccent,
+  AllianceApplication,
   AllianceEmblem,
   AllianceEmblemGlyph,
-  AllianceMember,
+  AllianceRole,
   AllianceSettingsInput,
   CommandState,
-  DiplomaticRelation,
-  JointOperation,
-  RelationStatus,
-  ResourceRequest,
-  ResourceType,
 } from './domain/command/types.ts';
-import { ResourceIcon } from './ui/resources/ResourceIcon';
+import type { RuntimeMode } from './domain/runtime/mode.ts';
 import './command.css';
 
-type CommandViewProps = {
-  state: CommandState;
-  onJoinOperation: (operationId: string) => void;
-  onReviewRequest: (requestId: string) => void;
-  onSaveSettings: (input: AllianceSettingsInput) => void;
-  onOpenFleets: () => void;
-  onCreateAlliance: () => void;
+export type CommandActionResult = { ok: true; message?: string } | { ok: false; message: string };
+
+export type CommandActions = {
+  createAlliance: (settings: AllianceSettingsInput) => CommandActionResult;
+  updateSettings: (settings: AllianceSettingsInput) => CommandActionResult;
+  apply: (allianceId: string) => CommandActionResult;
+  withdraw: () => CommandActionResult;
+  accept: (applicationId: string) => CommandActionResult;
+  reject: (applicationId: string) => CommandActionResult;
+  leave: (successorOwnerId?: string) => CommandActionResult;
+  kick: (ownerId: string) => CommandActionResult;
+  setDeputy: (ownerId: string | null) => CommandActionResult;
+  transferLeadership: (ownerId: string) => CommandActionResult;
+  openHallConstruction: () => void;
+  /** Test Mode only: a controlled NPC applies to the player's alliance. */
+  testBotApply?: () => CommandActionResult;
+  /** Test Mode only: a controlled NPC founds an alliance of its own. */
+  testBotCreateAlliance?: () => CommandActionResult;
 };
 
-type CommandTab = 'overview' | 'members' | 'requests' | 'diplomacy' | 'operations' | 'settings';
+export type CommandHallInfo = { level: number; name: string; art: string };
+
+type CommandViewProps = {
+  mode: RuntimeMode;
+  command: CommandState;
+  ownerId: string;
+  hall: CommandHallInfo;
+  ownerScores: Readonly<Record<string, MemberScore | undefined>>;
+  /** Wall-clock milliseconds; drives the re-application countdowns. */
+  now: number;
+  actions: CommandActions;
+};
+
+type CommandTab = 'overview' | 'members' | 'applications' | 'alliances' | 'requests' | 'diplomacy' | 'operations';
 
 const TAB_LABELS: Record<CommandTab, string> = {
   overview: 'ОБЗОР СОЮЗА',
   members: 'УЧАСТНИКИ',
+  applications: 'ЗАЯВКИ',
+  alliances: 'СОЮЗЫ',
   requests: 'ЗАПРОСЫ РЕСУРСОВ',
   diplomacy: 'ДИПЛОМАТИЯ',
   operations: 'СОВМЕСТНЫЕ ОПЕРАЦИИ',
-  settings: 'НАСТРОЙКИ СОЮЗА',
 };
 
-const ROLE_LABELS: Record<AllianceMember['role'], string> = {
-  leader: 'ГЛАВА СОЮЗА',
-  officer: 'ОФИЦЕР',
-  veteran: 'ВЕТЕРАН',
+const ROLE_LABELS: Record<AllianceRole, string> = {
+  leader: 'ЛИДЕР',
+  deputy: 'ЗАМЕСТИТЕЛЬ',
   member: 'УЧАСТНИК',
 };
 
-const ACTIVITY_LABELS: Record<AllianceMember['activity'], string> = {
-  online: 'ONLINE',
-  active: 'АКТИВЕН',
-  away: 'НЕ В СЕТИ',
-};
-
-const RESOURCE_LABELS: Record<ResourceType, string> = {
-  metal: 'МЕТАЛЛ',
-  minerals: 'МИНЕРАЛЫ',
-  gas: 'ГАЗ',
-  energy: 'ЭНЕРГИЯ',
-};
-
-const RELATION_LABELS: Record<RelationStatus, string> = {
-  ally: 'СОЮЗНИК',
-  trade_pact: 'ТОРГОВЫЙ ПАКТ',
-  neutral: 'НЕЙТРАЛИТЕТ',
-  tense: 'НАПРЯЖЁННОСТЬ',
-  hostile: 'ВРАЖДЕБНОСТЬ',
-  war: 'ВОЙНА',
-};
-
-const OPERATION_STATE_LABELS: Record<JointOperation['state'], string> = {
-  preparing: 'ПОДГОТОВКА',
-  mustering: 'СБОР СИЛ',
-  active: 'АКТИВНАЯ ФАЗА',
-  awaiting: 'ОЖИДАЕТ УЧАСТНИКОВ',
-};
-
-const OPERATION_KIND_LABELS: Record<JointOperation['kind'], string> = {
-  sun_raid: 'ФЛАГМАНСКАЯ ОПЕРАЦИЯ',
-  assault: 'СОВМЕСТНАЯ ОПЕРАЦИЯ',
-  defense: 'ОБОРОНИТЕЛЬНАЯ ОПЕРАЦИЯ',
-  logistics: 'КООПЕРАТИВНАЯ ЛОГИСТИКА',
-};
-
 const ACCENT_COLORS: Record<AllianceAccent, string> = {
-  cyan: '#26d9ff',
-  amber: '#f5b84e',
+  cyan: '#56d9f2',
+  amber: '#e6ad50',
   violet: '#a98cff',
 };
 
+const GLYPHS: readonly AllianceEmblemGlyph[] = ['starforge', 'orbit', 'vanguard'];
+const ACCENTS: readonly AllianceAccent[] = ['cyan', 'amber', 'violet'];
+const ACCENT_LABELS: Record<AllianceAccent, string> = { cyan: 'Голубой', amber: 'Янтарный', violet: 'Фиолетовый' };
+
 const number = new Intl.NumberFormat('ru-RU');
 
-function memberById(state: CommandState, memberId: string) {
-  return state.members.find((member) => member.id === memberId) ?? null;
+function formatCountdown(ms: number) {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
-function operationById(state: CommandState, operationId: string | null) {
-  if (!operationId) return null;
-  return state.jointOperations.find((operation) => operation.id === operationId) ?? null;
+function formatDate(timestamp: number) {
+  return timestamp > 0 ? new Date(timestamp).toLocaleDateString('ru-RU') : '—';
+}
+
+function initials(name: string) {
+  return name.split(' ').map((part) => part[0] ?? '').join('').slice(0, 2).toUpperCase() || '?';
 }
 
 export function EmblemGlyph({ emblem, compact = false }: { emblem: AllianceEmblem; compact?: boolean }) {
@@ -104,444 +122,605 @@ export function EmblemGlyph({ emblem, compact = false }: { emblem: AllianceEmble
       <svg viewBox="0 0 80 96" aria-hidden="true">
         <path className="command-emblem-shield" d="M40 4 70 16v29c0 22-12 36-30 47C22 81 10 67 10 45V16L40 4Z" />
         {emblem.glyph === 'starforge' ? (
-          <g><path {...common} d="m40 22 7 14 16 2-12 11 3 16-14-8-14 8 3-16-12-11 16-2 7-14Z"/><circle {...common} cx="40" cy="45" r="8"/></g>
+          <g><path {...common} d="m40 22 7 14 16 2-12 11 3 16-14-8-14 8 3-16-12-11 16-2 7-14Z" /><circle {...common} cx="40" cy="45" r="8" /></g>
         ) : emblem.glyph === 'orbit' ? (
-          <g><circle {...common} cx="40" cy="45" r="10"/><ellipse {...common} cx="40" cy="45" rx="25" ry="11" transform="rotate(24 40 45)"/><ellipse {...common} cx="40" cy="45" rx="25" ry="11" transform="rotate(-32 40 45)"/></g>
+          <g><circle {...common} cx="40" cy="45" r="10" /><ellipse {...common} cx="40" cy="45" rx="25" ry="11" transform="rotate(24 40 45)" /><ellipse {...common} cx="40" cy="45" rx="25" ry="11" transform="rotate(-32 40 45)" /></g>
         ) : (
-          <g><path {...common} d="m40 18 10 23-10 9-10-9 10-23Z"/><path {...common} d="M18 58 40 46l22 12M23 68l17-10 17 10"/></g>
+          <g><path {...common} d="m40 18 10 23-10 9-10-9 10-23Z" /><path {...common} d="M18 58 40 46l22 12M23 68l17-10 17 10" /></g>
         )}
       </svg>
     </span>
   );
 }
 
-function OperationGlyph({ operation }: { operation: JointOperation }) {
-  if (operation.kind === 'sun_raid') return <span className="command-operation-glyph command-operation-glyph--sun">☼</span>;
-  if (operation.kind === 'assault') return <span className="command-operation-glyph">⌖</span>;
-  if (operation.kind === 'defense') return <span className="command-operation-glyph">⬡</span>;
-  return <span className="command-operation-glyph">⇄</span>;
+function Panel({ title, kicker, aside, children, className = '' }: { title: string; kicker?: string; aside?: ReactNode; children: ReactNode; className?: string }) {
+  return (
+    <section className={`command-panel ${className}`}>
+      <header className="command-panel-heading">
+        <div>{kicker ? <small>{kicker}</small> : null}<h3>{title}</h3></div>
+        {aside}
+      </header>
+      {children}
+    </section>
+  );
 }
 
-function CommandResourceIcon({ resource }: { resource: ResourceType }) {
-  return <span className={`command-resource-glyph command-resource-glyph--${resource}`}><ResourceIcon kind={resource} /></span>;
+function Stub({ title, children }: { title: string; children: string }) {
+  return (
+    <div className="command-stub" data-qa-command-stub role="status">
+      <small>НЕ ПОДКЛЮЧЕНО</small>
+      <h2>{title}</h2>
+      <p>{children}</p>
+    </div>
+  );
 }
 
-function RelationBadge({ relation }: { relation: DiplomaticRelation }) {
-  return <span className={`command-relation-badge command-relation-badge--${relation.status}`}>{RELATION_LABELS[relation.status]}</span>;
+function ScoreGrid({ score }: { score: MemberScore }) {
+  return (
+    <dl className="command-score-grid">
+      <div><dt>Общие</dt><dd>{number.format(score.totalPoints)}</dd></div>
+      <div><dt>Ресурсные</dt><dd>{number.format(score.resourcePoints)}</dd></div>
+      <div><dt>Боевые</dt><dd>{number.format(score.battlePoints)}</dd></div>
+      <div><dt>Достижения</dt><dd>{number.format(score.achievementPoints)}</dd></div>
+    </dl>
+  );
 }
 
-function OperationCard({ operation, onOpen, onJoin, compact = false }: {
-  operation: JointOperation;
-  onOpen: () => void;
-  onJoin: () => void;
-  compact?: boolean;
+function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  return (
+    <div className="command-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div className="command-dialog" role="dialog" aria-modal="true" aria-label={title}>
+        <header><h3>{title}</h3><button type="button" className="command-close" aria-label="Закрыть" title="Закрыть" onClick={onClose}>✕</button></header>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** The single editor used both to found an alliance and to edit it from the overview. */
+function AllianceEditor({ title, submitLabel, initial, onSubmit, onClose }: {
+  title: string;
+  submitLabel: string;
+  initial: AllianceSettingsInput;
+  onSubmit: (settings: AllianceSettingsInput) => CommandActionResult;
+  onClose: () => void;
 }) {
-  const fill = Math.min(100, Math.round((operation.participants / Math.max(1, operation.recommendedParticipants)) * 100));
+  const [draft, setDraft] = useState<AllianceSettingsInput>({ ...initial, emblem: { ...initial.emblem } });
+  const [error, setError] = useState('');
+  const submit = () => {
+    const result = onSubmit(draft);
+    if (result.ok) onClose();
+    else setError(result.message);
+  };
+  const set = (patch: Partial<AllianceSettingsInput>) => { setDraft((current) => ({ ...current, ...patch })); setError(''); };
+
   return (
-    <article className={`command-operation-card command-operation-card--${operation.kind} ${compact ? 'command-operation-card--compact' : ''}`}>
-      <div className="command-operation-card__head">
-        <OperationGlyph operation={operation} />
-        <div><small>{OPERATION_KIND_LABELS[operation.kind]}</small><strong>{operation.title}</strong></div>
-        <span className={`command-state command-state--${operation.state}`}>{OPERATION_STATE_LABELS[operation.state]}</span>
+    <Dialog title={title} onClose={onClose}>
+      <div className="command-editor">
+        <div className="command-editor-preview">
+          <EmblemGlyph emblem={draft.emblem} />
+          <strong>{draft.name.trim() || 'Название союза'}</strong>
+          <span>[{draft.tag.trim().toUpperCase() || 'TAG'}]</span>
+          <p>{draft.motto.trim() || 'Девиз союза'}</p>
+        </div>
+        <div className="command-editor-form">
+          <label><span>НАЗВАНИЕ</span><input value={draft.name} maxLength={ALLIANCE_NAME_MAX} onChange={(event) => set({ name: event.target.value })} data-qa-alliance-name /></label>
+          <label><span>ТЕГ</span><input value={draft.tag} maxLength={ALLIANCE_TAG_MAX} onChange={(event) => set({ tag: event.target.value })} data-qa-alliance-tag /></label>
+          <label className="wide"><span>ДЕВИЗ</span><input value={draft.motto} maxLength={ALLIANCE_MOTTO_MAX} onChange={(event) => set({ motto: event.target.value })} /></label>
+          <label className="wide"><span>ОПИСАНИЕ</span><textarea value={draft.description} maxLength={ALLIANCE_DESCRIPTION_MAX} rows={3} onChange={(event) => set({ description: event.target.value })} /></label>
+          <div className="command-emblem-row">
+            <div><small>ЗНАК</small><div className="command-chip-row">
+              {GLYPHS.map((glyph) => (
+                <button key={glyph} type="button" aria-label={`Знак ${glyph}`} className={draft.emblem.glyph === glyph ? 'selected' : ''} onClick={() => set({ emblem: { ...draft.emblem, glyph } })}><EmblemGlyph compact emblem={{ ...draft.emblem, glyph }} /></button>
+              ))}
+            </div></div>
+            <div><small>АКЦЕНТ</small><div className="command-chip-row">
+              {ACCENTS.map((accent) => (
+                <button key={accent} type="button" aria-label={ACCENT_LABELS[accent]} title={ACCENT_LABELS[accent]} className={`command-accent-dot ${draft.emblem.accent === accent ? 'selected' : ''}`} style={{ '--command-accent-dot': ACCENT_COLORS[accent] } as CSSProperties} onClick={() => set({ emblem: { ...draft.emblem, accent } })} />
+              ))}
+            </div></div>
+          </div>
+          {error ? <div className="command-error" role="alert" data-qa-command-error>{error}</div> : null}
+          <div className="command-actions">
+            <button type="button" className="primary" onClick={submit} data-qa-alliance-submit>{submitLabel}</button>
+            <button type="button" className="danger" onClick={onClose}>ОТМЕНА</button>
+          </div>
+        </div>
       </div>
-      <p>{operation.objective}</p>
-      <div className="command-operation-card__progress"><i style={{ width: `${fill}%` }} /></div>
-      <div className="command-operation-card__meta">
-        <span>Участники <b>{operation.participants} / {operation.recommendedParticipants}</b></span>
-        <span>{operation.windowLabel}</span>
-      </div>
-      <div className="command-card-actions">
-        <button type="button" onClick={onOpen}>ПОДРОБНЕЕ</button>
-        <button type="button" className="primary" disabled={operation.joinedByPlayer} onClick={onJoin}>
-          {operation.joinedByPlayer ? 'ВЫ УЧАСТВУЕТЕ' : 'ПРИСОЕДИНИТЬСЯ'}
-        </button>
-      </div>
-    </article>
+    </Dialog>
   );
 }
 
-function RequestRow({ state, request, onOpen }: { state: CommandState; request: ResourceRequest; onOpen: () => void }) {
-  const member = memberById(state, request.memberId);
-  const progress = Math.min(100, Math.round((request.fulfilledAmount / Math.max(1, request.amount)) * 100));
+function ConfirmDialog({ title, body, confirmLabel, onConfirm, onClose }: { title: string; body: string; confirmLabel: string; onConfirm: () => void; onClose: () => void }) {
   return (
-    <button type="button" className={`command-request-row command-request-row--${request.priority}`} onClick={onOpen}>
-      <CommandResourceIcon resource={request.resource} />
-      <span><strong>{member?.callsign ?? 'Неизвестный участник'}</strong><small>{request.purpose}</small></span>
-      <span className="command-request-amount"><b>{number.format(request.amount)}</b><small>{RESOURCE_LABELS[request.resource]}</small></span>
-      <span className="command-request-progress"><i style={{ width: `${progress}%` }} /></span>
-      <em>{request.state === 'reviewing' ? 'НА РАССМОТРЕНИИ' : 'ОТКРЫТЬ'}</em>
-    </button>
+    <Dialog title={title} onClose={onClose}>
+      <p className="command-dialog-body">{body}</p>
+      <div className="command-actions">
+        <button type="button" className="danger" onClick={() => { onConfirm(); onClose(); }} data-qa-confirm>{confirmLabel}</button>
+        <button type="button" onClick={onClose}>ОТМЕНА</button>
+      </div>
+    </Dialog>
   );
 }
 
-function Overview({ state, setTab, openRequest, openOperation, onJoinOperation }: {
-  state: CommandState;
+function LockedHall({ hall, onBuild }: { hall: CommandHallInfo; onBuild: () => void }) {
+  return (
+    <div className="command-locked" data-qa-command-locked role="status">
+      <div className="command-locked-art"><img src={hall.art} alt="" draggable={false} /></div>
+      <div className="command-locked-copy">
+        <small>ДОСТУП ЗАКРЫТ</small>
+        <h2>Нужно здание «{hall.name}»</h2>
+        <p>«Командование» открывается, когда на любой вашей планете построено здание «{hall.name}» (уровень 1 и выше). Достаточно одной планеты, а уровни разных планет не суммируются.</p>
+        <p>Ваш союз, заявки и состав не потеряны: после постройки доступ вернётся автоматически.</p>
+        <button type="button" className="primary" onClick={onBuild} data-qa-command-build>ПЕРЕЙТИ К СТРОИТЕЛЬСТВУ</button>
+      </div>
+    </div>
+  );
+}
+
+type CatalogProps = {
+  command: CommandState;
+  ownerId: string;
+  ownerScores: Readonly<Record<string, MemberScore | undefined>>;
+  now: number;
+  actions: CommandActions;
+  onFeedback: (result: CommandActionResult) => void;
+  testControls: boolean;
+};
+
+function CatalogList({ command, ownerId, ownerScores, now, actions, onFeedback, testControls }: CatalogProps) {
+  const [query, setQuery] = useState('');
+  const entries = useMemo(
+    () => filterAllianceCatalog(selectAllianceCatalog(command, ownerScores), query),
+    [command, ownerScores, query],
+  );
+  const membership = selectOwnerMembership(command, ownerId);
+  const pending = selectPendingApplication(command, ownerId);
+
+  const actionFor = (entry: AllianceCatalogEntry) => {
+    if (membership?.alliance.id === entry.alliance.id) return <span className="command-chip is-own">ВАШ СОЮЗ</span>;
+    if (membership) return null;
+    if (pending?.allianceId === entry.alliance.id) {
+      return <button type="button" onClick={() => onFeedback(actions.withdraw())} data-qa-withdraw>ОТОЗВАТЬ ЗАЯВКУ</button>;
+    }
+    if (pending) return <button type="button" disabled title="Сначала отзовите текущую заявку">ЗАЯВКА ПОДАНА</button>;
+    const block = selectReapplyBlock(command, ownerId, entry.alliance.id, now);
+    if (block) return <button type="button" disabled>ЧЕРЕЗ {formatCountdown(block.until - now)}</button>;
+    if (entry.isFull) return <button type="button" disabled>НЕТ МЕСТ</button>;
+    return <button type="button" className="primary" onClick={() => onFeedback(actions.apply(entry.alliance.id))} data-qa-apply={entry.alliance.id}>ПОДАТЬ ЗАЯВКУ</button>;
+  };
+
+  return (
+    <Panel
+      title="КАТАЛОГ СОЮЗОВ"
+      kicker="ВСЕ СУЩЕСТВУЮЩИЕ СОЮЗЫ"
+      aside={<span className="command-count">{entries.length}</span>}
+      className="command-catalog"
+    >
+      <div className="command-catalog-tools">
+        <input type="search" value={query} placeholder="Название или тег" aria-label="Поиск союза" onChange={(event) => setQuery(event.target.value)} data-qa-catalog-search />
+        {testControls && actions.testBotCreateAlliance ? (
+          <button type="button" onClick={() => onFeedback(actions.testBotCreateAlliance!())} data-qa-test-bot-create>ТЕСТ: СОЮЗ БОТА 01</button>
+        ) : null}
+      </div>
+      {entries.length ? (
+        <ul className="command-catalog-list" data-qa-catalog-list>
+          {entries.map((entry) => (
+            <li key={entry.alliance.id} className={membership?.alliance.id === entry.alliance.id ? 'is-own' : ''} data-qa-catalog-item={entry.alliance.id}>
+              <EmblemGlyph compact emblem={entry.alliance.emblem} />
+              <div className="command-catalog-main">
+                <strong title={entry.alliance.name}>{entry.alliance.name} <em>[{entry.alliance.tag}]</em></strong>
+                <small>Лидер: {entry.leaderName}</small>
+                {entry.alliance.description ? <p>{entry.alliance.description}</p> : null}
+              </div>
+              <dl className="command-catalog-stats">
+                <div><dt>Место</dt><dd>#{entry.rank}</dd></div>
+                <div><dt>Рейтинг</dt><dd>{number.format(entry.rating.averageTotalPoints)}</dd></div>
+                <div><dt>Участники</dt><dd>{entry.rating.memberCount}/{MAX_ALLIANCE_MEMBERS}</dd></div>
+              </dl>
+              <div className="command-catalog-action">{actionFor(entry)}</div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="command-empty" data-qa-catalog-empty role="status">
+          {command.alliances.length ? 'Ничего не найдено.' : 'Союзов пока нет. Создайте первый.'}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function ApplicationRow({ application, score, actions, onFeedback, canDecide }: {
+  application: AllianceApplication;
+  score: MemberScore;
+  actions: CommandActions;
+  onFeedback: (result: CommandActionResult) => void;
+  canDecide: boolean;
+}) {
+  return (
+    <li className="command-application" data-qa-application={application.id}>
+      <span className="command-avatar">{initials(application.displayName)}</span>
+      <div className="command-application-main"><strong>{application.displayName}</strong><ScoreGrid score={score} /></div>
+      {canDecide ? (
+        <div className="command-actions">
+          <button type="button" className="primary" onClick={() => onFeedback(actions.accept(application.id))} data-qa-accept>ПРИНЯТЬ</button>
+          <button type="button" className="danger" onClick={() => onFeedback(actions.reject(application.id))} data-qa-reject>ОТКЛОНИТЬ</button>
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+const APPLICATION_OUTCOME: Record<string, string> = {
+  accepted: 'ПРИНЯТА',
+  rejected: 'ОТКЛОНЕНА',
+  withdrawn: 'ОТОЗВАНА',
+  auto_rejected: 'ОТКЛОНЕНА АВТОМАТИЧЕСКИ',
+};
+const APPLICATION_REASON: Record<string, string> = {
+  full: 'Нет мест',
+  already_member: 'Уже состоит в союзе',
+  disbanded: 'Союз расформирован',
+};
+
+function ApplicationsTab({ command, allianceId, role, ownerScores, actions, onFeedback, testControls }: {
+  command: CommandState;
+  allianceId: string;
+  role: AllianceRole;
+  ownerScores: Readonly<Record<string, MemberScore | undefined>>;
+  actions: CommandActions;
+  onFeedback: (result: CommandActionResult) => void;
+  testControls: boolean;
+}) {
+  const canDecide = canManageAlliance(role);
+  const pending = selectPendingApplicationsFor(command, allianceId);
+  const history = command.applications
+    .filter((application) => application.allianceId === allianceId && application.status !== 'pending')
+    .sort((left, right) => (right.resolvedAt ?? 0) - (left.resolvedAt ?? 0))
+    .slice(0, 12);
+  return (
+    <div className="command-two-column">
+      <Panel title="ВХОДЯЩИЕ ЗАЯВКИ" kicker="ОЖИДАЮТ РЕШЕНИЯ" aside={<span className="command-count">{pending.length}</span>}>
+        {!canDecide ? <p className="command-note">Заявки рассматривают лидер и заместитель.</p> : null}
+        {pending.length ? (
+          <ul className="command-application-list" data-qa-application-list>
+            {pending.map((application) => (
+              <ApplicationRow key={application.id} application={application} score={memberScore(ownerScores, application.ownerId)} actions={actions} onFeedback={onFeedback} canDecide={canDecide} />
+            ))}
+          </ul>
+        ) : <div className="command-empty" role="status">Новых заявок нет.</div>}
+        {testControls && canDecide && actions.testBotApply ? (
+          <div className="command-test-box"><small>TEST MODE</small><button type="button" onClick={() => onFeedback(actions.testBotApply!())} data-qa-test-bot-apply>ТЕСТ: ЗАЯВКА ОТ БОТА 01</button></div>
+        ) : null}
+      </Panel>
+      <Panel title="РЕШЕНИЯ ПО ЗАЯВКАМ" kicker="ИСТОРИЯ">
+        {history.length ? (
+          <ul className="command-history">
+            {history.map((application) => (
+              <li key={application.id}>
+                <strong>{application.displayName}</strong>
+                <span className={`command-chip is-${application.status}`}>{APPLICATION_OUTCOME[application.status]}</span>
+                {application.reason && APPLICATION_REASON[application.reason] ? <small>{APPLICATION_REASON[application.reason]}</small> : null}
+                <time>{formatDate(application.resolvedAt ?? application.createdAt)}</time>
+              </li>
+            ))}
+          </ul>
+        ) : <div className="command-empty" role="status">Решений пока нет.</div>}
+      </Panel>
+    </div>
+  );
+}
+
+function MembersTab({ command, allianceId, ownerId, role, ownerScores, actions, onFeedback }: {
+  command: CommandState;
+  allianceId: string;
+  ownerId: string;
+  role: AllianceRole;
+  ownerScores: Readonly<Record<string, MemberScore | undefined>>;
+  actions: CommandActions;
+  onFeedback: (result: CommandActionResult) => void;
+}) {
+  const alliance = command.alliances.find((candidate) => candidate.id === allianceId);
+  const members = useMemo(() => alliance ? selectOrderedMembers(alliance) : [], [alliance]);
+  const [selectedId, setSelectedId] = useState<string>(ownerId);
+  const [confirm, setConfirm] = useState<null | { kind: 'kick' | 'transfer'; ownerId: string; name: string }>(null);
+  if (!alliance) return null;
+  const selected = members.find((member) => member.ownerId === selectedId) ?? members[0] ?? null;
+  const selectedScore = selected ? memberScore(ownerScores, selected.ownerId) : null;
+  const isLeader = role === 'leader';
+  const canKick = Boolean(selected && selected.ownerId !== ownerId && selected.role !== 'leader' && (isLeader || (role === 'deputy' && selected.role === 'member')));
+
+  return (
+    <div className="command-two-column command-two-column--members">
+      <Panel title="СОСТАВ СОЮЗА" kicker="УЧАСТНИКИ" aside={<span className="command-count">{members.length}/{MAX_ALLIANCE_MEMBERS}</span>}>
+        <ul className="command-member-list" data-qa-member-list>
+          {members.map((member) => (
+            <li key={member.ownerId}>
+              <button type="button" className={selected?.ownerId === member.ownerId ? 'selected' : ''} onClick={() => setSelectedId(member.ownerId)}>
+                <span className={`command-avatar is-${member.role}`}>{initials(member.displayName)}</span>
+                <span className="command-member-name"><strong>{member.displayName}</strong><small>{ROLE_LABELS[member.role]}</small></span>
+                <b>{number.format(memberScore(ownerScores, member.ownerId).totalPoints)}</b>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Panel>
+      <Panel title={selected?.displayName ?? 'УЧАСТНИК'} kicker={selected ? ROLE_LABELS[selected.role] : 'ПРОФИЛЬ'}>
+        {selected && selectedScore ? (
+          <div className="command-detail">
+            <ScoreGrid score={selectedScore} />
+            <dl className="command-facts"><div><dt>В союзе с</dt><dd>{formatDate(selected.joinedAt)}</dd></div></dl>
+            <p className="command-note">Планеты, флоты и активность участников скрыты от всех участников союза.</p>
+            <div className="command-actions">
+              {isLeader && selected.role === 'member' ? (
+                <button type="button" onClick={() => onFeedback(actions.setDeputy(selected.ownerId))} data-qa-set-deputy>НАЗНАЧИТЬ ЗАМЕСТИТЕЛЕМ</button>
+              ) : null}
+              {isLeader && selected.role === 'deputy' ? (
+                <button type="button" onClick={() => onFeedback(actions.setDeputy(null))} data-qa-clear-deputy>СНЯТЬ С ДОЛЖНОСТИ</button>
+              ) : null}
+              {isLeader && selected.ownerId !== ownerId ? (
+                <button type="button" onClick={() => setConfirm({ kind: 'transfer', ownerId: selected.ownerId, name: selected.displayName })} data-qa-transfer>ПЕРЕДАТЬ ЛИДЕРСТВО</button>
+              ) : null}
+              {canKick ? (
+                <button type="button" className="danger" onClick={() => setConfirm({ kind: 'kick', ownerId: selected.ownerId, name: selected.displayName })} data-qa-kick>ИСКЛЮЧИТЬ</button>
+              ) : null}
+            </div>
+          </div>
+        ) : <div className="command-empty" role="status">Выберите участника.</div>}
+      </Panel>
+      {confirm ? (
+        <ConfirmDialog
+          title={confirm.kind === 'kick' ? 'Исключить участника?' : 'Передать лидерство?'}
+          body={confirm.kind === 'kick'
+            ? `${confirm.name} будет исключён. Ему на 2 часа закроется подача заявок в любые союзы.`
+            : `${confirm.name} станет лидером союза, а вы — обычным участником.`}
+          confirmLabel={confirm.kind === 'kick' ? 'ИСКЛЮЧИТЬ' : 'ПЕРЕДАТЬ'}
+          onConfirm={() => onFeedback(confirm.kind === 'kick' ? actions.kick(confirm.ownerId) : actions.transferLeadership(confirm.ownerId))}
+          onClose={() => setConfirm(null)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function Overview({ command, allianceId, ownerId, role, ownerScores, actions, onFeedback, setTab }: {
+  command: CommandState;
+  allianceId: string;
+  ownerId: string;
+  role: AllianceRole;
+  ownerScores: Readonly<Record<string, MemberScore | undefined>>;
+  actions: CommandActions;
+  onFeedback: (result: CommandActionResult) => void;
   setTab: (tab: CommandTab) => void;
-  openRequest: (requestId: string) => void;
-  openOperation: (operationId: string) => void;
-  onJoinOperation: (operationId: string) => void;
 }) {
-  const leader = memberById(state, state.alliance.leaderMemberId);
-  const sunRaid = state.jointOperations.find((operation) => operation.kind === 'sun_raid') ?? state.jointOperations[0];
-  const secondaryOperations = state.jointOperations.filter((operation) => operation.id !== sunRaid?.id).slice(0, 2);
-  const openRequests = state.resourceRequests.slice(0, 3);
+  const alliance = command.alliances.find((candidate) => candidate.id === allianceId);
+  const [editing, setEditing] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  if (!alliance) return null;
+  const rating = selectAllianceRating(alliance, ownerScores);
+  const leader = alliance.members.find((member) => member.ownerId === alliance.leaderOwnerId);
+  const deputy = alliance.members.find((member) => member.ownerId === alliance.deputyOwnerId);
+  const pendingCount = selectPendingApplicationsFor(command, alliance.id).length;
+  const others = alliance.members.filter((member) => member.ownerId !== ownerId);
+  const manage = canManageAlliance(role);
 
   return (
     <div className="command-overview">
-      <section className="command-panel command-alliance-summary">
-        <div className="command-alliance-summary__crest"><EmblemGlyph emblem={state.alliance.emblem} /></div>
-        <div className="command-alliance-summary__copy">
-          <small>СОЮЗ // АКТИВЕН</small>
-          <h2>{state.alliance.name}</h2>
-          <span>[{state.alliance.tag}]</span>
-          <p>{state.alliance.motto}</p>
+      <section className="command-panel command-summary">
+        <div className="command-summary-crest"><EmblemGlyph emblem={alliance.emblem} /></div>
+        <div className="command-summary-copy">
+          <small>{ROLE_LABELS[role]}</small>
+          <h2 title={alliance.name}>{alliance.name}</h2>
+          <span className="command-tag">[{alliance.tag}]</span>
+          {alliance.motto ? <p className="command-motto">{alliance.motto}</p> : null}
+          {alliance.description ? <p>{alliance.description}</p> : null}
         </div>
-        <dl>
-          <div><dt>Лидер</dt><dd>{leader?.callsign ?? '—'}</dd></div>
-          <div><dt>Участники</dt><dd>{state.members.length}</dd></div>
-          <div><dt>Основан</dt><dd>{state.alliance.foundedLabel}</dd></div>
-          <div><dt>Активность</dt><dd className="positive">СТАБИЛЬНАЯ</dd></div>
+        {manage ? (
+          <button type="button" className="command-icon-button" aria-label="Редактировать союз" title="Редактировать союз" onClick={() => setEditing(true)} data-qa-edit-alliance>✎</button>
+        ) : null}
+      </section>
+
+      <Panel title="РЕЙТИНГ СОЮЗА" kicker="СРЕДНЕЕ ПО УЧАСТНИКАМ">
+        <div className="command-rating-hero"><strong>{number.format(rating.averageTotalPoints)}</strong><small>средние общие очки</small></div>
+        <dl className="command-facts">
+          <div><dt>Ресурсные (среднее)</dt><dd>{number.format(rating.averageResourcePoints)}</dd></div>
+          <div><dt>Боевые (среднее)</dt><dd>{number.format(rating.averageBattlePoints)}</dd></div>
         </dl>
-        <button type="button" className="command-link-button" onClick={() => setTab('members')}>ОТКРЫТЬ СОСТАВ →</button>
-      </section>
+      </Panel>
 
-      <section className="command-panel command-overview-operations">
-        <header className="command-panel-heading"><div><small>КОМАНДНЫЙ КОНТУР</small><h3>АКТИВНЫЕ СОВМЕСТНЫЕ ОПЕРАЦИИ</h3></div><button type="button" onClick={() => setTab('operations')}>ВСЕ ОПЕРАЦИИ</button></header>
-        {sunRaid ? <OperationCard operation={sunRaid} onOpen={() => openOperation(sunRaid.id)} onJoin={() => onJoinOperation(sunRaid.id)} /> : null}
-        <div className="command-operation-mini-grid">
-          {secondaryOperations.map((operation) => (
-            <OperationCard key={operation.id} operation={operation} compact onOpen={() => openOperation(operation.id)} onJoin={() => onJoinOperation(operation.id)} />
-          ))}
+      <Panel title="СОСТАВ" kicker="РУКОВОДСТВО">
+        <dl className="command-facts">
+          <div><dt>Участники</dt><dd>{alliance.members.length}/{MAX_ALLIANCE_MEMBERS}{isAllianceFull(alliance) ? ' · союз полон' : ''}</dd></div>
+          <div><dt>Лидер</dt><dd>{leader?.displayName ?? '—'}</dd></div>
+          <div><dt>Заместитель</dt><dd>{deputy?.displayName ?? 'не назначен'}</dd></div>
+          <div><dt>Основан</dt><dd>{formatDate(alliance.createdAt)}</dd></div>
+        </dl>
+        <div className="command-actions">
+          <button type="button" onClick={() => setTab('members')}>ОТКРЫТЬ СОСТАВ</button>
+          {manage ? <button type="button" onClick={() => setTab('applications')}>ЗАЯВКИ{pendingCount ? ` · ${pendingCount}` : ''}</button> : null}
+          <button type="button" className="danger" onClick={() => setLeaving(true)} data-qa-leave>ПОКИНУТЬ СОЮЗ</button>
         </div>
-      </section>
+      </Panel>
 
-      <section className="command-panel command-diplomacy-summary">
-        <header className="command-panel-heading"><div><small>ВНЕШНИЙ КОНТУР</small><h3>ДИПЛОМАТИЧЕСКАЯ СВОДКА</h3></div><button type="button" onClick={() => setTab('diplomacy')}>ПОДРОБНЕЕ</button></header>
-        <div className="command-diplomacy-stack">
-          {state.diplomacy.slice(0, 5).map((relation) => (
-            <div key={relation.id} className={`command-diplomacy-row command-diplomacy-row--${relation.status}`}>
-              <span className="command-diplomacy-mark">{relation.tag.slice(0, 2)}</span>
-              <span><strong>{relation.allianceName}</strong><small>[{relation.tag}]</small></span>
-              <RelationBadge relation={relation} />
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="command-panel command-overview-requests">
-        <header className="command-panel-heading"><div><small>СНАБЖЕНИЕ</small><h3>ЗАПРОСЫ УЧАСТНИКОВ</h3></div><button type="button" onClick={() => setTab('requests')}>ВСЕ ЗАПРОСЫ</button></header>
-        <div className="command-request-stack">
-          {openRequests.length ? openRequests.map((request) => <RequestRow key={request.id} state={state} request={request} onOpen={() => openRequest(request.id)} />) : <div className="command-empty">Нет активных запросов ресурсов.</div>}
-        </div>
-      </section>
-
-      <section className="command-panel command-news-feed">
-        <header className="command-panel-heading"><div><small>ЖУРНАЛ СОЮЗА</small><h3>ПОСЛЕДНИЕ СОБЫТИЯ</h3></div></header>
-        <div className="command-news-list">
-          {state.events.length ? state.events.slice(0, 5).map((event) => (
-            <div key={event.id} className={`command-news-item command-news-item--${event.kind}`}><time>{event.timestampLabel}</time><span>{event.text}</span></div>
-          )) : <div className="command-empty">Событий пока нет.</div>}
-        </div>
-      </section>
+      {editing ? (
+        <AllianceEditor
+          title="Настройки союза"
+          submitLabel="СОХРАНИТЬ"
+          initial={{ name: alliance.name, tag: alliance.tag, motto: alliance.motto, description: alliance.description, emblem: alliance.emblem }}
+          onSubmit={actions.updateSettings}
+          onClose={() => setEditing(false)}
+        />
+      ) : null}
+      {leaving ? (
+        <LeaveDialog
+          isLeader={role === 'leader'}
+          defaultSuccessorId={alliance.deputyOwnerId}
+          others={others.map((member) => ({ ownerId: member.ownerId, name: member.displayName }))}
+          onLeave={(successorId) => onFeedback(actions.leave(successorId))}
+          onClose={() => setLeaving(false)}
+        />
+      ) : null}
     </div>
   );
 }
 
-function MembersTab({ state, selectedId, onSelect, openRequest }: {
-  state: CommandState;
-  selectedId: string;
-  onSelect: (id: string) => void;
-  openRequest: (requestId: string) => void;
+function LeaveDialog({ isLeader, defaultSuccessorId, others, onLeave, onClose }: {
+  isLeader: boolean;
+  defaultSuccessorId: string | null;
+  others: Array<{ ownerId: string; name: string }>;
+  onLeave: (successorId?: string) => void;
+  onClose: () => void;
 }) {
-  const selected = memberById(state, selectedId) ?? state.members[0] ?? null;
-  const selectedOperation = selected ? operationById(state, selected.currentOperationId) : null;
-  const selectedRequests = selected ? state.resourceRequests.filter((request) => request.memberId === selected.id) : [];
+  const needsSuccessor = isLeader && others.length > 0;
+  const [successor, setSuccessor] = useState<string>(defaultSuccessorId ?? others[0]?.ownerId ?? '');
+  const soleMember = others.length === 0;
   return (
-    <div className="command-list-detail">
-      <section className="command-panel command-list-panel">
-        <header className="command-panel-heading"><div><small>СОСТАВ СОЮЗА</small><h3>УЧАСТНИКИ</h3></div><span>{state.members.length} АКТИВНЫХ ПРОФИЛЕЙ</span></header>
-        <div className="command-member-list">
-          {state.members.map((member) => (
-            <button key={member.id} type="button" className={selected?.id === member.id ? 'selected' : ''} onClick={() => onSelect(member.id)}>
-              <span className={`command-member-avatar command-member-avatar--${member.role}`}>{member.callsign.split(' ').map((part) => part[0]).join('').slice(0, 2)}</span>
-              <span><strong>{member.callsign}</strong><small>{ROLE_LABELS[member.role]} · {member.specialization}</small></span>
-              <span className={`command-activity command-activity--${member.activity}`}>{ACTIVITY_LABELS[member.activity]}</span>
-              <b>{number.format(member.contribution)}</b>
-            </button>
-          ))}
-        </div>
+    <Dialog title="Покинуть союз?" onClose={onClose}>
+      <div className="command-dialog-body">
+        <p>{soleMember
+          ? 'Вы единственный участник: союз будет расформирован и удалён.'
+          : 'После выхода 2 часа нельзя подавать заявки в любые союзы.'}</p>
+        {needsSuccessor ? (
+          <label className="command-select">
+            <span>НОВЫЙ ЛИДЕР</span>
+            <select value={successor} onChange={(event) => setSuccessor(event.target.value)} data-qa-successor>
+              {others.map((member) => <option key={member.ownerId} value={member.ownerId}>{member.name}</option>)}
+            </select>
+          </label>
+        ) : null}
+      </div>
+      <div className="command-actions">
+        <button type="button" className="danger" onClick={() => { onLeave(needsSuccessor ? successor : undefined); onClose(); }} data-qa-confirm>{soleMember ? 'РАСФОРМИРОВАТЬ' : 'ПОКИНУТЬ'}</button>
+        <button type="button" onClick={onClose}>ОТМЕНА</button>
+      </div>
+    </Dialog>
+  );
+}
+
+function NoAlliance({ command, ownerId, ownerScores, now, actions, onFeedback, testControls }: CatalogProps) {
+  const [creating, setCreating] = useState(false);
+  const pending = selectPendingApplication(command, ownerId);
+  const pendingAlliance = pending ? command.alliances.find((alliance) => alliance.id === pending.allianceId) : null;
+  const lastResult = selectLastResolvedApplication(command, ownerId);
+  const lastAlliance = lastResult ? command.alliances.find((alliance) => alliance.id === lastResult.allianceId) : null;
+  const globalBlock = selectReapplyBlock(command, ownerId, null, now);
+  const showLastResult = lastResult && !pending && lastResult.status !== 'withdrawn';
+
+  return (
+    <div className="command-no-alliance">
+      <section className="command-panel command-cta" data-qa-command-empty>
+        <small>БЕЗ СОЮЗА</small>
+        <h2>Вы пока не состоите в союзе</h2>
+        <p>Создайте свой союз бесплатно или подайте заявку в существующий. Вступление происходит только после решения руководства союза.</p>
+        <button type="button" className="primary" disabled={Boolean(globalBlock)} title={globalBlock ? 'После выхода из союза создавать и вступать в союзы пока нельзя' : undefined} onClick={() => setCreating(true)} data-qa-create-alliance>
+          {globalBlock ? `СОЗДАТЬ СОЮЗ · ЧЕРЕЗ ${formatCountdown(globalBlock.until - now)}` : 'СОЗДАТЬ СОЮЗ'}
+        </button>
+        {pending ? (
+          <div className="command-banner is-pending" role="status" data-qa-pending>
+            Заявка в «{pendingAlliance?.name ?? 'союз'}» ожидает решения.
+            <button type="button" onClick={() => onFeedback(actions.withdraw())}>ОТОЗВАТЬ</button>
+          </div>
+        ) : null}
+        {showLastResult ? (
+          <div className={`command-banner is-${lastResult.status}`} role="status">
+            Заявка в «{lastAlliance?.name ?? lastResult.allianceName ?? 'союз'}»: {APPLICATION_OUTCOME[lastResult.status].toLowerCase()}
+            {lastResult.reason && APPLICATION_REASON[lastResult.reason] ? ` — ${APPLICATION_REASON[lastResult.reason].toLowerCase()}` : ''}.
+          </div>
+        ) : null}
+        {globalBlock ? (
+          <div className="command-banner is-cooldown" role="status" data-qa-cooldown>
+            Заявки и создание союза закрыты ещё {formatCountdown(globalBlock.until - now)}.
+          </div>
+        ) : null}
       </section>
-      <aside className="command-panel command-detail-panel">
-        {selected ? (
-          <>
-            <div className="command-profile-head">
-              <span className={`command-member-avatar command-member-avatar--${selected.role}`}>{selected.callsign.split(' ').map((part) => part[0]).join('').slice(0, 2)}</span>
-              <div><small>{ROLE_LABELS[selected.role]}</small><h2>{selected.callsign}</h2><p>{selected.homeSector}</p></div>
-              <span className={`command-activity command-activity--${selected.activity}`}>{ACTIVITY_LABELS[selected.activity]}</span>
-            </div>
-            <dl className="command-detail-grid">
-              <div><dt>Специализация</dt><dd>{selected.specialization}</dd></div>
-              <div><dt>Вклад в союз</dt><dd>{number.format(selected.contribution)}</dd></div>
-              <div><dt>Текущая операция</dt><dd>{selectedOperation?.title ?? 'Нет активной операции'}</dd></div>
-              <div><dt>Домашний сектор</dt><dd>{selected.homeSector}</dd></div>
-            </dl>
-            <section className="command-detail-note"><small>ПРОФИЛЬ</small><p>{selected.note}</p></section>
-            <section className="command-member-requests">
-              <small>ЗАПРОСЫ УЧАСТНИКА</small>
-              {selectedRequests.length ? selectedRequests.map((request) => (
-                <button key={request.id} type="button" onClick={() => openRequest(request.id)}><CommandResourceIcon resource={request.resource} /><span>{RESOURCE_LABELS[request.resource]} · {number.format(request.amount)}</span><b>ОТКРЫТЬ →</b></button>
-              )) : <p>Открытых запросов нет.</p>}
-            </section>
-          </>
-        ) : <div className="command-empty command-empty--large">Выбери участника, чтобы открыть профиль.</div>}
-      </aside>
+      <CatalogList command={command} ownerId={ownerId} ownerScores={ownerScores} now={now} actions={actions} onFeedback={onFeedback} testControls={testControls} />
+      {creating ? (
+        <AllianceEditor
+          title="Создание союза"
+          submitLabel="СОЗДАТЬ"
+          initial={{ name: '', tag: '', motto: '', description: '', emblem: { glyph: 'starforge', accent: 'cyan' } }}
+          onSubmit={actions.createAlliance}
+          onClose={() => setCreating(false)}
+        />
+      ) : null}
     </div>
   );
 }
 
-function RequestsTab({ state, selectedId, onSelect, onReviewRequest, onOpenFleets }: {
-  state: CommandState;
-  selectedId: string;
-  onSelect: (id: string) => void;
-  onReviewRequest: (id: string) => void;
-  onOpenFleets: () => void;
-}) {
-  const selected = state.resourceRequests.find((request) => request.id === selectedId) ?? state.resourceRequests[0] ?? null;
-  const member = selected ? memberById(state, selected.memberId) : null;
-  const progress = selected ? Math.min(100, Math.round((selected.fulfilledAmount / Math.max(1, selected.amount)) * 100)) : 0;
-  return (
-    <div className="command-list-detail">
-      <section className="command-panel command-list-panel">
-        <header className="command-panel-heading"><div><small>КООПЕРАТИВНОЕ СНАБЖЕНИЕ</small><h3>ЗАПРОСЫ РЕСУРСОВ</h3></div><span>{state.resourceRequests.filter((request) => request.state === 'open').length} ОТКРЫТО</span></header>
-        <div className="command-request-stack command-request-stack--full">
-          {state.resourceRequests.length ? state.resourceRequests.map((request) => <RequestRow key={request.id} state={state} request={request} onOpen={() => onSelect(request.id)} />) : <div className="command-empty">Запросов ресурсов нет.</div>}
-        </div>
-      </section>
-      <aside className="command-panel command-detail-panel">
-        {selected ? (
-          <>
-            <div className="command-request-detail-head"><CommandResourceIcon resource={selected.resource} /><div><small>{RESOURCE_LABELS[selected.resource]} · {selected.priority.toUpperCase()}</small><h2>{number.format(selected.amount)}</h2><p>Запрос: {member?.callsign ?? 'Неизвестный участник'}</p></div></div>
-            <section className="command-request-purpose"><small>НАЗНАЧЕНИЕ</small><p>{selected.purpose}</p></section>
-            <div className="command-request-meter"><span><b>{number.format(selected.fulfilledAmount)}</b> подтверждено из {number.format(selected.amount)}</span><em>{progress}%</em><div><i style={{ width: `${progress}%` }} /></div></div>
-            <dl className="command-detail-grid">
-              <div><dt>Статус</dt><dd>{selected.state === 'reviewing' ? 'НА РАССМОТРЕНИИ' : 'ОТКРЫТ'}</dd></div>
-              <div><dt>Приоритет</dt><dd>{selected.priority === 'critical' ? 'КРИТИЧЕСКИЙ' : selected.priority === 'high' ? 'ВЫСОКИЙ' : 'СТАНДАРТНЫЙ'}</dd></div>
-            </dl>
-            <div className="command-detail-actions">
-              <button type="button" className="primary" disabled={selected.state === 'reviewing'} onClick={() => onReviewRequest(selected.id)}>{selected.state === 'reviewing' ? 'ПРИНЯТО К РАССМОТРЕНИЮ' : 'ПОМОЧЬ'}</button>
-              <button type="button" onClick={onOpenFleets}>ПОДГОТОВИТЬ ОТПРАВКУ</button>
-            </div>
-            <p className="command-foundation-note">Фактическое списание ресурсов и транспортировка не выполняются здесь. Подготовка отправки переносит в раздел «Флоты».</p>
-          </>
-        ) : <div className="command-empty command-empty--large">Нет выбранного запроса.</div>}
-      </aside>
-    </div>
-  );
-}
-
-function DiplomacyTab({ state, selectedId, onSelect }: { state: CommandState; selectedId: string; onSelect: (id: string) => void }) {
-  const selected = state.diplomacy.find((relation) => relation.id === selectedId) ?? state.diplomacy[0] ?? null;
-  return (
-    <div className="command-list-detail">
-      <section className="command-panel command-list-panel">
-        <header className="command-panel-heading"><div><small>ВНЕШНИЕ СОЮЗЫ</small><h3>ДИПЛОМАТИЯ</h3></div><span>FOUNDATION V1</span></header>
-        <div className="command-diplomacy-list">
-          {state.diplomacy.map((relation) => (
-            <button key={relation.id} type="button" className={`${selected?.id === relation.id ? 'selected' : ''} command-diplomacy-list__item--${relation.status}`} onClick={() => onSelect(relation.id)}>
-              <span className="command-diplomacy-mark">{relation.tag.slice(0, 2)}</span>
-              <span><strong>{relation.allianceName}</strong><small>[{relation.tag}] · {relation.note}</small></span>
-              <RelationBadge relation={relation} />
-              <b>›</b>
-            </button>
-          ))}
-        </div>
-      </section>
-      <aside className="command-panel command-detail-panel">
-        {selected ? (
-          <>
-            <div className="command-relation-head"><span className="command-diplomacy-mark command-diplomacy-mark--large">{selected.tag.slice(0, 2)}</span><div><small>ВНЕШНИЙ СОЮЗ [{selected.tag}]</small><h2>{selected.allianceName}</h2><RelationBadge relation={selected} /></div></div>
-            <section className="command-detail-note"><small>ТЕКУЩАЯ ОЦЕНКА</small><p>{selected.note}</p></section>
-            <section className="command-detail-note command-detail-note--accent"><small>СМЫСЛ СТАТУСА</small><p>{selected.meaning}</p></section>
-            <section className="command-relation-history"><small>ПОСЛЕДНИЕ СОБЫТИЯ</small>{selected.history.map((item, index) => <div key={`${selected.id}-${index}`}><span>{String(index + 1).padStart(2, '0')}</span><p>{item}</p></div>)}</section>
-            <p className="command-foundation-note">Реальные дипломатические бафы, войны, права доступа и сетевые соглашения отложены.</p>
-          </>
-        ) : <div className="command-empty command-empty--large">Выбери союз для просмотра досье.</div>}
-      </aside>
-    </div>
-  );
-}
-
-function SunScope({ operation }: { operation: JointOperation }) {
-  const fill = Math.min(100, Math.round((operation.participants / Math.max(1, operation.recommendedParticipants)) * 100));
-  return (
-    <div className="command-sun-scope">
-      <div className="command-sun-scope__rings"><i /><i /><i /><span /></div>
-      <div className="command-sun-scope__caption"><small>ТЕКУЩАЯ ЦЕЛЬ</small><strong>КОРОНАЛЬНЫЙ УЗЕЛ КОРОН-7</strong><span>Готовность союзной группы: {fill}%</span></div>
-    </div>
-  );
-}
-
-function OperationsTab({ state, selectedId, onSelect, onJoinOperation, onOpenFleets }: {
-  state: CommandState;
-  selectedId: string;
-  onSelect: (id: string) => void;
-  onJoinOperation: (id: string) => void;
-  onOpenFleets: () => void;
-}) {
-  const selected = state.jointOperations.find((operation) => operation.id === selectedId) ?? state.jointOperations[0] ?? null;
-  const fill = selected ? Math.min(100, Math.round((selected.participants / Math.max(1, selected.recommendedParticipants)) * 100)) : 0;
-  return (
-    <div className="command-operations-layout">
-      <section className="command-panel command-operations-catalog">
-        <header className="command-panel-heading"><div><small>СОЮЗНЫЙ КОНТУР</small><h3>СОВМЕСТНЫЕ ОПЕРАЦИИ</h3></div><span>{state.jointOperations.filter((operation) => operation.joinedByPlayer).length} В ВАШЕМ КОНТУРЕ</span></header>
-        <div className="command-operation-catalog-grid">
-          {state.jointOperations.length ? state.jointOperations.map((operation) => (
-            <button key={operation.id} type="button" className={`${selected?.id === operation.id ? 'selected' : ''} command-operation-catalog-card--${operation.kind}`} onClick={() => onSelect(operation.id)}>
-              <OperationGlyph operation={operation} /><span><small>{OPERATION_KIND_LABELS[operation.kind]}</small><strong>{operation.title}</strong><em>{OPERATION_STATE_LABELS[operation.state]}</em></span><b>{operation.participants}/{operation.recommendedParticipants}</b>
-            </button>
-          )) : <div className="command-empty">Совместных операций сейчас нет.</div>}
-        </div>
-      </section>
-      <aside className={`command-panel command-operation-dossier ${selected?.kind === 'sun_raid' ? 'command-operation-dossier--sun' : ''}`}>
-        {selected ? (
-          <>
-            <div className="command-operation-dossier__head"><OperationGlyph operation={selected} /><div><small>{OPERATION_KIND_LABELS[selected.kind]}</small><h2>{selected.title}</h2><span className={`command-state command-state--${selected.state}`}>{OPERATION_STATE_LABELS[selected.state]}</span></div></div>
-            {selected.kind === 'sun_raid' ? <SunScope operation={selected} /> : <div className="command-tactical-grid"><span>TACTICAL LINK</span><i /><i /><i /></div>}
-            <section className="command-detail-note"><small>ЦЕЛЬ</small><p>{selected.objective}</p></section>
-            <section className="command-detail-note"><small>БРИФИНГ</small><p>{selected.description}</p></section>
-            <div className="command-operation-readiness"><span><b>{selected.participants}</b> участников из рекомендуемых {selected.recommendedParticipants}</span><em>{fill}%</em><div><i style={{ width: `${fill}%` }} /></div><small>{selected.windowLabel}</small></div>
-            <div className="command-detail-actions">
-              <button type="button" className="primary" disabled={selected.joinedByPlayer} onClick={() => onJoinOperation(selected.id)}>{selected.joinedByPlayer ? 'ВЫ УЧАСТВУЕТЕ' : 'ПРИСОЕДИНИТЬСЯ'}</button>
-              <button type="button" onClick={onOpenFleets}>ПОДГОТОВИТЬ ФЛОТ</button>
-            </div>
-            <p className="command-foundation-note">Присоединение сохраняется локально. Реальный совместный бой и dispatch флота не запускаются в этом vertical slice.</p>
-          </>
-        ) : <div className="command-empty command-empty--large">Выбери совместную операцию.</div>}
-      </aside>
-    </div>
-  );
-}
-
-function SettingsTab({ state, onSaveSettings }: { state: CommandState; onSaveSettings: (input: AllianceSettingsInput) => void }) {
-  const [draft, setDraft] = useState<AllianceSettingsInput>({
-    name: state.alliance.name,
-    tag: state.alliance.tag,
-    motto: state.alliance.motto,
-    description: state.alliance.description,
-    emblem: { ...state.alliance.emblem },
-  });
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    setDraft({
-      name: state.alliance.name,
-      tag: state.alliance.tag,
-      motto: state.alliance.motto,
-      description: state.alliance.description,
-      emblem: { ...state.alliance.emblem },
-    });
-    setError('');
-  }, [state.alliance.name, state.alliance.tag, state.alliance.motto, state.alliance.description, state.alliance.emblem.glyph, state.alliance.emblem.accent]);
-
-  const resetDraft = () => {
-    setDraft({ name: state.alliance.name, tag: state.alliance.tag, motto: state.alliance.motto, description: state.alliance.description, emblem: { ...state.alliance.emblem } });
-    setError('');
-  };
-
-  const submit = () => {
-    const name = draft.name.trim().replace(/\s+/g, ' ');
-    const tag = draft.tag.trim().replace(/\s+/g, '').toUpperCase();
-    const motto = draft.motto.trim().replace(/\s+/g, ' ');
-    const description = draft.description.trim().replace(/\s+/g, ' ');
-    if (!name || !tag || !motto || !description) return setError('Заполни название, тег, девиз и описание.');
-    if (name.length > 42) return setError('Название — максимум 42 символа.');
-    if (tag.length > 8) return setError('Тег — максимум 8 символов.');
-    if (motto.length > 72) return setError('Девиз — максимум 72 символа.');
-    if (description.length > 220) return setError('Описание — максимум 220 символов.');
-    onSaveSettings({ name, tag, motto, description, emblem: { ...draft.emblem } });
-    setError('');
-  };
-
-  const glyphs: AllianceEmblemGlyph[] = ['starforge', 'orbit', 'vanguard'];
-  const accents: AllianceAccent[] = ['cyan', 'amber', 'violet'];
-
-  return (
-    <div className="command-settings-layout">
-      <section className="command-panel command-settings-preview">
-        <small>ПРЕДПРОСМОТР СОЮЗА</small>
-        <EmblemGlyph emblem={draft.emblem} />
-        <h2>{draft.name || 'Название союза'}</h2>
-        <span>[{draft.tag || 'TAG'}]</span>
-        <p>{draft.motto || 'Девиз союза'}</p>
-        <div className="command-settings-preview__status">● АКТИВНЫЙ СОЮЗ</div>
-      </section>
-      <section className="command-panel command-settings-form">
-        <header className="command-panel-heading"><div><small>ЛОКАЛЬНАЯ КОНФИГУРАЦИЯ</small><h3>НАСТРОЙКИ СОЮЗА</h3></div></header>
-        <div className="command-form-grid">
-          <label><span>НАЗВАНИЕ СОЮЗА</span><input value={draft.name} maxLength={42} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /></label>
-          <label><span>ТЕГ</span><input value={draft.tag} maxLength={8} onChange={(event) => setDraft((current) => ({ ...current, tag: event.target.value }))} /></label>
-          <label className="command-form-wide"><span>ДЕВИЗ</span><input value={draft.motto} maxLength={72} onChange={(event) => setDraft((current) => ({ ...current, motto: event.target.value }))} /></label>
-          <label className="command-form-wide"><span>КРАТКОЕ ОПИСАНИЕ</span><textarea value={draft.description} maxLength={220} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} /></label>
-        </div>
-        <div className="command-emblem-editor">
-          <div><small>ЗНАК СОЮЗА</small><div className="command-emblem-options">{glyphs.map((glyph) => <button key={glyph} type="button" className={draft.emblem.glyph === glyph ? 'selected' : ''} onClick={() => setDraft((current) => ({ ...current, emblem: { ...current.emblem, glyph } }))}><EmblemGlyph compact emblem={{ ...draft.emblem, glyph }} /></button>)}</div></div>
-          <div><small>АКЦЕНТ</small><div className="command-accent-options">{accents.map((accent) => <button key={accent} type="button" aria-label={accent} className={draft.emblem.accent === accent ? 'selected' : ''} style={{ '--command-accent-dot': ACCENT_COLORS[accent] } as CSSProperties} onClick={() => setDraft((current) => ({ ...current, emblem: { ...current.emblem, accent } }))} />)}</div></div>
-        </div>
-        {error ? <div className="command-form-error">{error}</div> : null}
-        <div className="command-detail-actions"><button type="button" className="primary" onClick={submit}>СОХРАНИТЬ</button><button type="button" onClick={resetDraft}>ОТМЕНИТЬ</button></div>
-        <p className="command-foundation-note">Настройки сохраняются внутри активного versioned save и сбрасываются общим Prototype Reset.</p>
-      </section>
-    </div>
-  );
-}
-
-export function CommandView({ state, onJoinOperation, onReviewRequest, onSaveSettings, onOpenFleets, onCreateAlliance }: CommandViewProps) {
+export function CommandView({ mode, command, ownerId, hall, ownerScores, now, actions }: CommandViewProps) {
   const [tab, setTab] = useState<CommandTab>('overview');
-  const [selectedMemberId, setSelectedMemberId] = useState(state.members[0]?.id ?? '');
-  const [selectedRequestId, setSelectedRequestId] = useState(state.resourceRequests[0]?.id ?? '');
-  const [selectedRelationId, setSelectedRelationId] = useState(state.diplomacy[0]?.id ?? '');
-  const [selectedOperationId, setSelectedOperationId] = useState(state.jointOperations.find((operation) => operation.kind === 'sun_raid')?.id ?? state.jointOperations[0]?.id ?? '');
+  const [feedback, setFeedback] = useState<CommandActionResult | null>(null);
+  const testControls = mode === 'test';
 
-  const hasAlliance = Boolean(state.alliance.name.trim() && state.alliance.tag.trim());
-  const joinedCount = useMemo(() => state.jointOperations.filter((operation) => operation.joinedByPlayer).length, [state.jointOperations]);
+  const membership = selectOwnerMembership(command, ownerId);
+  const pending = selectPendingApplication(command, ownerId);
+  const locked = hall.level <= 0;
+  const onFeedback = (result: CommandActionResult) => setFeedback(result.ok ? null : result);
 
-  const openRequest = (requestId: string) => { setSelectedRequestId(requestId); setTab('requests'); };
-  const openOperation = (operationId: string) => { setSelectedOperationId(operationId); setTab('operations'); };
+  const status = locked
+    ? { key: 'locked', label: 'НЕТ ЗДАНИЯ' }
+    : membership
+      ? { key: membership.role, label: isAllianceFull(membership.alliance) ? `${ROLE_LABELS[membership.role]} · СОЮЗ ПОЛОН` : ROLE_LABELS[membership.role] }
+      : pending
+        ? { key: 'pending', label: 'ЗАЯВКА ОЖИДАЕТ' }
+        : { key: 'none', label: 'БЕЗ СОЮЗА' };
+
+  const visibleTabs = (Object.keys(TAB_LABELS) as CommandTab[]).filter((key) => key !== 'applications' || membership);
+  const activeTab = visibleTabs.includes(tab) ? tab : 'overview';
+  const pendingCount = membership ? selectPendingApplicationsFor(command, membership.alliance.id).length : 0;
 
   return (
-    <main className="command-view" aria-label="Командование союза">
+    <main className="command-view" aria-label="Командование союза" data-qa-command-state={status.key}>
       <header className="command-view__header">
-        <div><small>ALLIANCE COMMAND // FOUNDATION V1</small><h1>КОМАНДОВАНИЕ</h1></div>
+        <div><small>ALLIANCE COMMAND</small><h1>КОМАНДОВАНИЕ</h1></div>
         <div className="command-view__status">
-          <span>{hasAlliance ? '● СВЯЗЬ С СОЮЗОМ' : '● КОНТУР ДОСТУПЕН'}</span>
-          <strong>{hasAlliance ? `${state.alliance.name} [${state.alliance.tag}]` : 'СОЮЗ НЕ СОЗДАН'}</strong>
-          <small>{hasAlliance ? `${joinedCount} совместн. задач в вашем контуре` : 'Создайте союз, чтобы открыть командные функции'}</small>
+          <span className={`command-status-chip is-${status.key}`} data-qa-command-status>{status.label}</span>
+          <strong>{membership ? `${membership.alliance.name} [${membership.alliance.tag}]` : locked ? hall.name : 'СОЮЗ НЕ ВЫБРАН'}</strong>
         </div>
       </header>
 
-      <nav className="command-tabs" aria-label="Разделы Командования">
-        {(Object.keys(TAB_LABELS) as CommandTab[]).map((key) => <button key={key} type="button" className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>{TAB_LABELS[key]}</button>)}
-      </nav>
+      {locked ? (
+        <LockedHall hall={hall} onBuild={actions.openHallConstruction} />
+      ) : (
+        <>
+          {membership ? (
+            <nav className="command-tabs" aria-label="Разделы Командования">
+              {visibleTabs.map((key) => (
+                <button key={key} type="button" className={activeTab === key ? 'active' : ''} aria-current={activeTab === key ? 'page' : undefined} onClick={() => setTab(key)} data-qa-command-tab={key}>
+                  {TAB_LABELS[key]}{key === 'applications' && pendingCount ? <b className="command-badge">{pendingCount}</b> : null}
+                </button>
+              ))}
+            </nav>
+          ) : null}
+          {feedback ? (
+            <div className={`command-feedback ${feedback.ok ? 'is-ok' : 'is-error'}`} role={feedback.ok ? 'status' : 'alert'} data-qa-command-feedback>
+              <span>{feedback.message}</span>
+              <button type="button" aria-label="Скрыть сообщение" onClick={() => setFeedback(null)}>✕</button>
+            </div>
+          ) : null}
 
-      <section className="command-content">
-        {!hasAlliance ? (
-          <div className="command-empty-state" data-qa-command-empty>
-            <small>ПАЛАТА УПРАВЛЕНИЯ</small>
-            <h2>Вы пока не состоите в союзе.</h2>
-            <p>Здесь появятся участники, дипломатия и совместные операции после создания союза.</p>
-            <button type="button" data-qa-create-alliance onClick={onCreateAlliance}>СОЗДАТЬ СОЮЗ</button>
-          </div>
-        ) : (
-          <>
-            {tab === 'overview' ? <Overview state={state} setTab={setTab} openRequest={openRequest} openOperation={openOperation} onJoinOperation={onJoinOperation} /> : null}
-            {tab === 'members' ? <MembersTab state={state} selectedId={selectedMemberId} onSelect={setSelectedMemberId} openRequest={openRequest} /> : null}
-            {tab === 'requests' ? <RequestsTab state={state} selectedId={selectedRequestId} onSelect={setSelectedRequestId} onReviewRequest={onReviewRequest} onOpenFleets={onOpenFleets} /> : null}
-            {tab === 'diplomacy' ? <DiplomacyTab state={state} selectedId={selectedRelationId} onSelect={setSelectedRelationId} /> : null}
-            {tab === 'operations' ? <OperationsTab state={state} selectedId={selectedOperationId} onSelect={setSelectedOperationId} onJoinOperation={onJoinOperation} onOpenFleets={onOpenFleets} /> : null}
-            {tab === 'settings' ? <SettingsTab state={state} onSaveSettings={onSaveSettings} /> : null}
-          </>
-        )}
-      </section>
+          <section className="command-content">
+            {!membership ? (
+              <NoAlliance command={command} ownerId={ownerId} ownerScores={ownerScores} now={now} actions={actions} onFeedback={onFeedback} testControls={testControls} />
+            ) : activeTab === 'overview' ? (
+              <Overview command={command} allianceId={membership.alliance.id} ownerId={ownerId} role={membership.role} ownerScores={ownerScores} actions={actions} onFeedback={onFeedback} setTab={setTab} />
+            ) : activeTab === 'members' ? (
+              <MembersTab command={command} allianceId={membership.alliance.id} ownerId={ownerId} role={membership.role} ownerScores={ownerScores} actions={actions} onFeedback={onFeedback} />
+            ) : activeTab === 'applications' ? (
+              <ApplicationsTab command={command} allianceId={membership.alliance.id} role={membership.role} ownerScores={ownerScores} actions={actions} onFeedback={onFeedback} testControls={testControls} />
+            ) : activeTab === 'alliances' ? (
+              <CatalogList command={command} ownerId={ownerId} ownerScores={ownerScores} now={now} actions={actions} onFeedback={onFeedback} testControls={testControls} />
+            ) : activeTab === 'requests' ? (
+              <Stub title="Запросы ресурсов">Запросы помощи между участниками союза появятся в следующем обновлении. Сейчас их нельзя создавать и выполнять.</Stub>
+            ) : activeTab === 'diplomacy' ? (
+              <Stub title="Дипломатия">Объявление войны и перемирие появятся в будущей версии. Сейчас отношения между союзами не меняются.</Stub>
+            ) : (
+              <Stub title="Рейд на Солнце">Совместные операции появятся в будущей версии. Присоединиться к рейду пока нельзя.</Stub>
+            )}
+          </section>
+        </>
+      )}
     </main>
   );
 }

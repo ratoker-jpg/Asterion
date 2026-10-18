@@ -27,7 +27,7 @@
   border:0;border-bottom:1px solid rgba(64,179,207,.12);background:rgba(3,21,32,.36);color:#a8c1c8;text-align:left
 }
 .rating-table-v2--players .rating-row-v2{grid-template-columns:88px minmax(210px,1.45fr) 150px repeat(4,minmax(120px,.8fr))}
-.rating-table-v2--alliances .rating-row-v2{grid-template-columns:88px minmax(260px,1.7fr) 120px 120px repeat(2,minmax(170px,1fr))}
+.rating-table-v2--alliances .rating-row-v2{grid-template-columns:88px minmax(220px,1.7fr) 100px 110px repeat(3,minmax(130px,1fr))}
 .rating-row-v2>*{min-width:0;padding:0 14px}
 .rating-head-v2{height:calc(100% / 13);min-height:43px;background:linear-gradient(180deg,rgba(7,50,65,.92),rgba(4,31,43,.92));color:#7ca8b4;font-weight:800;letter-spacing:.7px}
 .rating-head-v2>span{font-size:calc(9px * var(--text-scale-secondary))}

@@ -230,9 +230,8 @@ async function runViewport(width, height, allStates) {
       captures.push(await capture(win, `${folder}/06-flights-recycler.png`));
       await clickFolder(win, 'alliances');
       const allianceId = await win.webContents.executeJavaScript(`document.querySelector('[data-qa-message-list] [data-report-item-id]')?.getAttribute('data-report-item-id') || ''`);
-      if (!allianceId) throw new Error('Test Mode alliance report fixture is missing');
-      await selectReport(win, allianceId);
-      captures.push(await capture(win, `${folder}/07-alliances-joint-op.png`));
+      if (allianceId) throw new Error('Alliance folder must stay empty: joint operations are no longer fabricated');
+      captures.push(await capture(win, `${folder}/07-alliances-empty.png`));
       await clickFolder(win, 'command');
       await waitFor(win, `document.querySelector('[data-qa-message-list] .reports-list-empty-status')`);
       captures.push(await capture(win, `${folder}/08-command-empty.png`));

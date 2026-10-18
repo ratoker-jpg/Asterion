@@ -1,5 +1,5 @@
-import type { AllianceIdentity, AllianceRatingEntry, PlayerRatingEntry } from './types.ts';
-import { CURRENT_COMMAND_ALLIANCE_ID } from '../command/selectors.ts';
+import type { OwnerScore, PlayerRatingEntry } from './types.ts';
+import { TEST_ALLY_OWNER_ID } from '../command/catalog.ts';
 import type { RuntimeMode } from '../runtime/mode.ts';
 
 const CALLSIGNS = ['Vega', 'Orion', 'Helios', 'Nyx', 'Astra', 'Kepler', 'Titan', 'Nova', 'Cygnus', 'Draco', 'Altair', 'Rigel'];
@@ -97,31 +97,29 @@ export function createPlayerRatingEntries(
   });
 }
 
-export function createAllianceRatingEntries(
-  currentAlliance?: AllianceIdentity | null,
-  mode: RuntimeMode = 'test',
-): AllianceRatingEntry[] {
-  if (mode === 'production') return [];
+/**
+ * Managed Test Mode scores for owners the scoring pipeline cannot derive from
+ * planets (the Ira Vel ally fixture). They are never applied in production.
+ */
+export const TEST_OWNER_SCORE_FIXTURES: Readonly<Record<string, OwnerScore>> = {
+  [TEST_ALLY_OWNER_ID]: {
+    ownerId: TEST_ALLY_OWNER_ID,
+    resourcePoints: 1_000_000,
+    battlePoints: 0,
+    totalPoints: 1_000_000,
+    achievementPoints: 0,
+  },
+};
 
-  const base = Array.from({ length: 42 }, (_, index): AllianceRatingEntry => {
-    const standing = index + 1;
-    const alliancePoints = 420_000 - index * 6_270;
-    const totalPoints = 9_800_000 - index * 122_500;
-    return {
-      id: `alliance-${String(standing).padStart(3, '0')}`,
-      rank: standing,
-      name: `${['Astral Concord', 'Void Assembly', 'Ion Pact', 'Helix Union', 'Solar Guard', 'Nexus Ring'][index % 6]} ${standing}`,
-      tag: ALLIANCE_TAGS[index % ALLIANCE_TAGS.length],
-      level: Math.max(1, 18 - Math.floor(index / 3)),
-      alliancePoints,
-      totalPoints,
-      isCurrentAlliance: false,
-    };
-  });
-
-  if (!currentAlliance?.name?.trim() || !currentAlliance.tag?.trim()) return base;
-  const slot = 15;
-  return base.map((entry, index) => index === slot
-    ? { ...entry, id: currentAlliance.id || CURRENT_COMMAND_ALLIANCE_ID, name: currentAlliance.name, tag: currentAlliance.tag, emblem: { ...currentAlliance.emblem }, isCurrentAlliance: true }
-    : entry);
+/** Adds the managed fixture scores in Test Mode; a score computed from real data always wins. */
+export function withTestOwnerScoreFixtures(
+  scores: Readonly<Record<string, OwnerScore>>,
+  mode: RuntimeMode,
+): Record<string, OwnerScore> {
+  if (mode !== 'test') return { ...scores };
+  const merged: Record<string, OwnerScore> = { ...scores };
+  for (const [ownerId, fixture] of Object.entries(TEST_OWNER_SCORE_FIXTURES)) {
+    if (!merged[ownerId]) merged[ownerId] = { ...fixture };
+  }
+  return merged;
 }

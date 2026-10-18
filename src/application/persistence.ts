@@ -39,7 +39,7 @@ import {
   createDefaultPlayerProfileState,
   CURRENT_PLAYER_FACTION_ID,
   migratePlayerProfileState,
-  syncPlayerProfileWithAlliance,
+  syncPlayerProfileWithCommand,
   syncPlayerProfileWithFaction,
 } from '../domain/profile/repository.ts';
 import {
@@ -1053,7 +1053,8 @@ function createDefaultAlliedPlanetState(
     ownerId: fixture.owner.id,
     displayName: fixture.owner.displayName,
     raceId: fixture.owner.raceId ?? CURRENT_PLAYER_FACTION_ID,
-    alliance: fixture.owner.alliance ?? null,
+    // Legacy field kept for save compatibility; membership is resolved live.
+    alliance: null,
     fixtureId: fixture.marker.id,
   };
 }
@@ -1096,13 +1097,21 @@ function migrateAlliedPlanets(
 }
 
 function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.now()): SaveState {
-  const command = createDefaultCommandState(mode);
+  const defaultProfile = createDefaultPlayerProfileState();
+  const command = createDefaultCommandState(mode, {
+    playerId: defaultProfile.playerId,
+    playerDisplayName: defaultProfile.displayName,
+    now,
+  });
   const science = createDefaultScienceState();
   const buildings = createCanonicalStartingBuildingLevels();
   if (mode === 'test') {
     buildings['metal-storage'] = 20;
     buildings['mineral-storage'] = 20;
     buildings['gas-storage'] = 20;
+    // Test Mode only: start with the Hall so the Command screen is reachable.
+    // Production starts at 0, and nothing re-grants it after destruction or load.
+    buildings['planetary-government'] = 1;
   }
   const storageCapacities = getStorageCapacities(buildings);
   const initialResources: PlanetResources = {
@@ -1141,7 +1150,7 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     queues: { 'helion-01': [] },
     shipUpgradeLevels: { ...initialSpaceportUpgrades.shipLevels },
     rating: createDefaultRatingPrototypeState(),
-    profile: syncPlayerProfileWithAlliance(createDefaultPlayerProfileState(), command.alliance),
+    profile: syncPlayerProfileWithCommand(defaultProfile, command),
     combatPriority: createDefaultCombatPriority(),
     combat: createDefaultBattleHistory(mode),
     combatSimulator: createDefaultSimulatorState(),
@@ -1154,10 +1163,10 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     exploration: createExplorationState(),
     pirate: {
       ...createDefaultPirateState(),raidProcessedAt:now,
-      ownerThreats:{[syncPlayerProfileWithAlliance(createDefaultPlayerProfileState(),command.alliance).playerId]:
+      ownerThreats:{[defaultProfile.playerId]:
         {version:1,ageHours:0,integratedAt:now}},
       ownerMaxHangarLevel:{
-        [syncPlayerProfileWithAlliance(createDefaultPlayerProfileState(),command.alliance).playerId]:
+        [defaultProfile.playerId]:
           buildings.hangar,
       },
     },
@@ -1216,11 +1225,13 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
     });
     const combat = migrateBattleHistory(parsed.combat, mode);
     const operations = migrateOperationsState(parsed.operations, mode);
-    const command = migrateCommandState(parsed.command, mode);
-    const profile = syncPlayerProfileWithAlliance(
-      syncPlayerProfileWithFaction(migratePlayerProfileState(parsed.profile), CURRENT_PLAYER_FACTION_ID),
-      command.alliance,
-    );
+    const storedProfile = syncPlayerProfileWithFaction(migratePlayerProfileState(parsed.profile), CURRENT_PLAYER_FACTION_ID);
+    const command = migrateCommandState(parsed.command, mode, {
+      playerId: storedProfile.playerId,
+      playerDisplayName: storedProfile.displayName,
+      now: timestamp,
+    });
+    const profile = syncPlayerProfileWithCommand(storedProfile, command);
     const overpopulationReports = migrateOverpopulationEpisodeReports(
       objectRecord(parsed.reports)?.overpopulationReports,
     );

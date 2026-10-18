@@ -23,8 +23,7 @@ import { ASTEROID_GAS_CAP, initializeAsteroidGasState } from './asteroid-gas.ts'
 import { explorationContactId, explorationProfile, profileVariantForArt } from '../exploration/model.ts';
 import { getPositionCoefficientPercent, getSunEfficiencyPercent } from '../energy/runtime.ts';
 import type { RuntimeMode } from '../runtime/mode.ts';
-import { DEFAULT_ALLIANCE_MEMBERS, DEFAULT_ALLIANCE_PROFILE } from '../command/catalog.ts';
-import { CURRENT_COMMAND_ALLIANCE_ID } from '../command/selectors.ts';
+import { TEST_ALLY_DISPLAY_NAME, TEST_ALLY_OWNER_ID } from '../command/catalog.ts';
 import type { DiplomaticRelation } from '../command/types.ts';
 import { CURRENT_PLAYER_FACTION_ID } from '../profile/repository.ts';
 import {
@@ -78,10 +77,6 @@ const DEFAULT_ASSETS: UniverseAssetCatalog = {
 
 const NPC_OWNER_ID = 'npc-bot-01';
 const TEST_MODE_ALLY_FIXTURE_MARKER: UniverseFixtureMarker = { id: 'test-mode-ally-ira-vel-v1', version: 1 };
-const TEST_MODE_ALLY_PARTICIPANT = DEFAULT_ALLIANCE_MEMBERS.find((member) => member.id === 'member-ira-vel');
-
-if (!TEST_MODE_ALLY_PARTICIPANT) throw new Error('Command fixture participant member-ira-vel is required for the universe ally fixture.');
-
 export const TEST_MODE_ALLY_PLANET_FIXTURE: UniverseFixtureDescriptor = {
   marker: TEST_MODE_ALLY_FIXTURE_MARKER,
   // Position 2 is empty in the existing system-1 Test Mode atlas; position 4
@@ -89,16 +84,13 @@ export const TEST_MODE_ALLY_PLANET_FIXTURE: UniverseFixtureDescriptor = {
   coordinate: { galaxy: GALAXY, system: 1, position: 2 },
   planet: { id: 'test-mode-ally-ira-vel-v1', name: 'Aster', art: 'planet-default' },
   owner: {
-    id: TEST_MODE_ALLY_PARTICIPANT.id,
-    displayName: TEST_MODE_ALLY_PARTICIPANT.callsign,
+    id: TEST_ALLY_OWNER_ID,
+    displayName: TEST_ALLY_DISPLAY_NAME,
     raceId: CURRENT_PLAYER_FACTION_ID,
-    alliance: {
-      id: CURRENT_COMMAND_ALLIANCE_ID,
-      name: DEFAULT_ALLIANCE_PROFILE.name,
-      tag: DEFAULT_ALLIANCE_PROFILE.tag,
-      emblem: { ...DEFAULT_ALLIANCE_PROFILE.emblem },
-      glyph: DEFAULT_ALLIANCE_PROFILE.emblem.glyph,
-    },
+    // Membership is not baked into the fixture: the alliance of every owner is
+    // resolved from the saved Command registry, so leaving or being kicked
+    // changes the galaxy relation immediately.
+    alliance: null,
     planetIds: ['test-mode-ally-ira-vel-v1'],
   },
 };
@@ -1029,7 +1021,7 @@ export function getUniverseActionState(
       reason: action === 'attack' ? 'Атака запрещена против своей планеты.' : 'Это ваша планета.',
     };
   }
-  if (action === 'fleet' && node.fixture?.id === TEST_MODE_ALLY_PLANET_FIXTURE.marker.id) {
+  if (action === 'fleet' && node.fixture?.id === TEST_MODE_ALLY_PLANET_FIXTURE.marker.id && relation === 'ally') {
     return {
       action,
       enabled: true,

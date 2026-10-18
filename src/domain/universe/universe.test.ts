@@ -1,3 +1,5 @@
+import { createDefaultCommandState } from '../command/repository.ts';
+import { selectOwnerAlliance } from '../command/selectors.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -284,11 +286,16 @@ test('Test Mode adds exactly one explicit Command ally fixture and Production om
   assert.deepEqual(ally.fixture, TEST_MODE_ALLY_PLANET_FIXTURE.marker);
   assert.equal(ally.ownerId, TEST_MODE_ALLY_PLANET_FIXTURE.owner.id);
 
-  const currentAlliance = TEST_MODE_ALLY_PLANET_FIXTURE.owner.alliance!;
+  // Membership is not baked into the fixture: it comes from the Command registry.
+  assert.equal(TEST_MODE_ALLY_PLANET_FIXTURE.owner.alliance, null);
+  const command = createDefaultCommandState('test');
+  const currentAlliance = selectOwnerAlliance(command, 'player-current')!;
+  const allyOwner = { ...TEST_MODE_ALLY_PLANET_FIXTURE.owner, alliance: selectOwnerAlliance(command, TEST_MODE_ALLY_PLANET_FIXTURE.owner.id) };
+  assert.deepEqual(allyOwner.alliance, currentAlliance);
   const ordinaryNpc = createUniverseMap({ mode: 'test', nowMs: 0 }).systems
     .flatMap((system) => system.positions)
     .find((node) => node.id === 'npc-bot-01-prime')!;
-  assert.equal(getUniverseOwnerRelation(ally, 'player-current', currentAlliance, TEST_MODE_ALLY_PLANET_FIXTURE.owner), 'ally');
+  assert.equal(getUniverseOwnerRelation(ally, 'player-current', currentAlliance, allyOwner), 'ally');
   assert.equal(getUniverseOwnerRelation(ordinaryNpc, 'player-current', currentAlliance, createUniverseNpcOwnerProfile()), 'neutral');
 
   const productionSystem = createUniverseSystem({ mode: 'production', system: 1, nowMs: 0 });
@@ -494,7 +501,10 @@ test('spy and fleet actions follow the owner relation contract', () => {
   assert.equal(getUniverseActionState('attack', ally, 'player-current', 'ally').enabled, false);
   assert.equal(getUniverseActionState('attack', homeworld, 'player-current', 'self').enabled, false);
   assert.equal(getUniverseActionState('fleet', foreign, 'player-current').enabled, false);
-  assert.equal(getUniverseActionState('fleet', ally, 'player-current').status, 'supported');
-  assert.equal(getUniverseActionState('fleet', ally, 'player-current').enabled, true);
+  assert.equal(getUniverseActionState('fleet', ally, 'player-current', 'ally').status, 'supported');
+  assert.equal(getUniverseActionState('fleet', ally, 'player-current', 'ally').enabled, true);
+  // The fixture alone grants nothing: without a current alliance relation the route is closed.
+  assert.equal(getUniverseActionState('fleet', ally, 'player-current', 'neutral').enabled, false);
+  assert.equal(getUniverseActionState('fleet', ally, 'player-current').enabled, false);
   assert.equal(getUniverseActionState('spy', empty, 'player-current').status, 'disabled');
 });

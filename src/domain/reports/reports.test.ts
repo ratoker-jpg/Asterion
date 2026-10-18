@@ -6,7 +6,7 @@ import { DEMO_BATTLE_REPORTS } from '../combat/battle-fixtures.ts';
 import { ASTERION_SAVE_KEY } from '../combat/priority.ts';
 import { getBattleResultForPlayer } from '../combat/report.ts';
 import type { BattleReport } from '../combat/report.ts';
-import { createDefaultCommandState, joinJointOperation } from '../command/repository.ts';
+import { createDefaultCommandState } from '../command/repository.ts';
 import { createDefaultOperationsState, revealOperation } from '../operations/repository.ts';
 import {
   battleReportToReportItem,
@@ -447,15 +447,13 @@ test('Reports feed follows the OperationsState passed by App without a remount',
   assert.equal(after.some((item) => item.category === 'system' && item.source === 'operations'), true);
 });
 
-test('Reports feed follows CommandState changes without a remount', () => {
+test('Reports feed never fabricates alliance invitations or joint operations from Command state', () => {
   const operations = createDefaultOperationsState();
-  const initialCommand = createDefaultCommandState();
-  const before = buildReportsFeed([], operations, initialCommand);
-  assert.ok(before.some((item) => item.commandOperationId === 'joint-sun-raid'));
-
-  const joinedCommand = joinJointOperation(initialCommand, 'joint-sun-raid');
-  const after = buildReportsFeed([], operations, joinedCommand);
-  assert.equal(after.some((item) => item.commandOperationId === 'joint-sun-raid'), false);
+  for (const command of [createDefaultCommandState('production'), createDefaultCommandState('test')]) {
+    const feed = buildReportsFeed([], operations, command);
+    assert.equal(feed.some((item) => item.category === 'alliances'), false);
+    assert.equal(feed.some((item) => item.commandOperationId !== undefined), false);
+  }
 });
 
 test('default/reset cross-domain state does not preserve stale Reports data', () => {
@@ -463,27 +461,12 @@ test('default/reset cross-domain state does not preserve stale Reports data', ()
   const signal = initialOperations.items.find((item) => item.archetype === 'unknown_signal');
   assert.ok(signal);
   const revealedOperations = revealOperation(initialOperations, signal.id);
-  const joinedCommand = joinJointOperation(createDefaultCommandState(), 'joint-sun-raid');
 
-  const mutatedFeed = buildReportsFeed([], revealedOperations, joinedCommand);
+  const mutatedFeed = buildReportsFeed([], revealedOperations, createDefaultCommandState());
   assert.equal(mutatedFeed.some((item) => item.source === 'operations'), true);
-  assert.equal(mutatedFeed.some((item) => item.commandOperationId === 'joint-sun-raid'), false);
 
   const resetFeed = buildReportsFeed([], createDefaultOperationsState(), createDefaultCommandState());
   assert.equal(resetFeed.some((item) => item.source === 'operations'), false);
-  assert.equal(resetFeed.some((item) => item.commandOperationId === 'joint-sun-raid'), true);
-});
-
-test('current Command joint operation produces an Alliances invitation with Fleets action', () => {
-  const command = createDefaultCommandState();
-  const feed = buildReportsFeed([], createDefaultOperationsState(), command);
-  const sunInvite = feed.find((item) => item.commandOperationId === 'joint-sun-raid');
-
-  assert.ok(sunInvite);
-  assert.equal(sunInvite.category, 'alliances');
-  assert.equal(sunInvite.action?.kind, 'open_fleets');
-  assert.match(sunInvite.title, /Рейд на Солнце/);
-  assert.equal(sunInvite.timestamp, undefined);
 });
 
 test('saved filter uses canonical BattleHistory saved ids, not Reports metadata', () => {

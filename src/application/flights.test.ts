@@ -1,3 +1,4 @@
+import { kickMember, leaveAlliance } from '../domain/command/membership.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -10,6 +11,7 @@ import {
   getPendingInboundPopulation,
   getTransportCargoSummary,
   previewFlight,
+  resolveTransportTarget,
   resolveRecycleTargetKindAtCoordinate,
   reconcileFlights,
   recallFlight,
@@ -2950,4 +2952,52 @@ test('reconcileRuntime catches up multiple asteroid moves equivalently and does 
   assert.equal(replay.changed, false);
   assert.deepEqual(replay.state.asteroidSimulation, catchUp.state.asteroidSimulation);
   assert.deepEqual(replay.state.asteroidDebrisBySpawnIndex, catchUp.state.asteroidDebrisBySpawnIndex);
+});
+
+test('audit P1-3: ally transport follows current alliance membership at the send boundary', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const destination = { kind: 'planet' as const, planetId: 'test-mode-ally-ira-vel-v1', coordinate: { galaxy: 1, system: 1, position: 2 } };
+  const command = (requestId: string) => ({
+    requestId,
+    missionId: 'transport' as const,
+    originPlanetId: 'helion-01',
+    destination,
+    targetRelation: 'ally' as const,
+    selectedShips: { scout: 1 },
+    cargo: { metal: 10, minerals: 0, gas: 0, debris: 0 },
+    departedAt: 1_000,
+  });
+
+  assert.equal(resolveTransportTarget(initial, destination).relation, 'ally');
+  assert.equal(dispatchFlight(initial, command('ira-in-alliance'), { now: 1_000, mode: 'test' }).ok, true);
+
+  const kicked = kickMember(initial.command, initial.profile.playerId, 'member-ira-vel', 1_000);
+  assert.equal(kicked.ok, true);
+  const afterKick = { ...initial, command: kicked.state };
+  assert.equal(resolveTransportTarget(afterKick, destination).acceptsTransport, false);
+  assert.equal(resolveTransportTarget(afterKick, { kind: 'coordinate', coordinate: destination.coordinate }).acceptsTransport, false);
+  assert.equal(dispatchFlight(afterKick, command('ira-kicked'), { now: 1_000, mode: 'test' }).ok, false);
+
+  const playerLeft = leaveAlliance(initial.command, initial.profile.playerId, 1_000, { successorOwnerId: 'member-ira-vel' });
+  assert.equal(playerLeft.ok, true);
+  assert.equal(resolveTransportTarget({ ...initial, command: playerLeft.state }, destination).acceptsTransport, false);
+
+  // Own planets never depend on alliances.
+  const own = { kind: 'planet' as const, planetId: 'helion-01', coordinate: origin };
+  assert.equal(resolveTransportTarget(afterKick, own).relation, 'self');
+});
+
+test('the registered aid mission is not yet connected to the flight runtime', () => {
+  const initial = createInitialSaveState('test', 1_000);
+  const result = dispatchFlight(initial, {
+    requestId: 'aid-not-connected',
+    missionId: 'aid',
+    originPlanetId: 'helion-01',
+    destination: { kind: 'planet', planetId: 'test-mode-ally-ira-vel-v1', coordinate: { galaxy: 1, system: 1, position: 2 } },
+    targetRelation: 'ally',
+    selectedShips: { scout: 1 },
+    departedAt: 1_000,
+  }, { now: 1_000, mode: 'test' });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.code, 'mission-not-supported');
 });

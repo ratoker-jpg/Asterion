@@ -70,7 +70,8 @@ import {
   reconcileAllPlanetOverpopulation,
   reconcilePlanetOverpopulation,
 } from './overpopulation.ts';
-import { createAllianceRatingEntries, createPlayerRatingEntries } from '../domain/rating/fixtures.ts';
+import { createPlayerRatingEntries } from '../domain/rating/fixtures.ts';
+import { createAllianceRatingEntries } from '../domain/rating/alliances.ts';
 import { calculateResourceScore, selectOwnerScores } from '../domain/rating/scoring.ts';
 import { selectPlayerProfileMetrics, selectPlayerRatingEntry } from '../domain/profile/selectors.ts';
 import { createUniverseMap, UNIVERSE_NPC_OWNER_ID } from '../domain/universe/runtime.ts';
@@ -107,24 +108,27 @@ test('production and test persistence seeds stay isolated at every fixture bound
   const production = createInitialSaveState('production', 1_000);
   const testMode = createInitialSaveState('test', 1_000);
 
-  assert.equal(production.command.alliance.name, '');
-  assert.equal(production.command.members.length, 0);
-  assert.equal(production.command.jointOperations.length, 0);
+  assert.deepEqual(production.command.alliances, []);
+  assert.deepEqual(production.command.applications, []);
+  assert.equal(production.profile.allianceId, null);
+  assert.equal(production.planets['helion-01'].buildings['planetary-government'], 0);
   assert.equal(production.operations.items.length, 0);
   assert.equal(production.combat.reports.length, 0);
   assert.equal(createUniverseMap({ mode: 'production' }).systems.flatMap((system) => system.positions).filter((node) => node.kind === 'npc').length, 0);
   assert.equal(createPlayerRatingEntries(0, 'production').length, 1);
-  assert.equal(createAllianceRatingEntries(null, 'production').length, 0);
+  assert.equal(createAllianceRatingEntries(production.command, {}, production.profile.playerId).length, 0);
 
-  assert.equal(testMode.command.alliance.name, 'Содружество Гелион');
-  assert.ok(testMode.command.members.length > 0);
-  assert.ok(testMode.command.jointOperations.length > 0);
+  assert.equal(testMode.command.alliances.length, 1);
+  assert.equal(testMode.command.alliances[0].name, 'Содружество Гелион');
+  assert.deepEqual(testMode.command.alliances[0].members.map((member) => member.ownerId), [testMode.profile.playerId, 'member-ira-vel']);
+  assert.equal(testMode.profile.allianceId, testMode.command.alliances[0].id);
+  assert.equal(testMode.planets['helion-01'].buildings['planetary-government'], 1);
   assert.equal(testMode.operations.items.length, 4);
   assert.ok(testMode.combat.reports.length > 0);
   assert.equal(createUniverseMap({ mode: 'test' }).systems.flatMap((system) => system.positions).filter((node) => node.kind === 'npc').length, 8);
   assert.equal(Object.keys(testMode.alliedPlanets ?? {}).length, 1);
   assert.equal(createPlayerRatingEntries(0, 'test').length, 84);
-  assert.equal(createAllianceRatingEntries(null, 'test').length, 42);
+  assert.equal(createAllianceRatingEntries(testMode.command, {}, testMode.profile.playerId).length, 1);
 });
 
 test('legacy fake rating migration resets battle accumulation and preserves campaign state', () => {
@@ -177,7 +181,7 @@ test('Test Mode scores the player and Bot 001 from their separate asset pools an
   const scores = selectOwnerScores(state);
   const player = scores[state.profile.playerId];
   const bot = scores[UNIVERSE_NPC_OWNER_ID];
-  assert.deepEqual(player && [player.resourcePoints, player.battlePoints, player.totalPoints, player.achievementPoints], [20_703, 0, 20_703, 0]);
+  assert.deepEqual(player && [player.resourcePoints, player.battlePoints, player.totalPoints, player.achievementPoints], [20_708, 0, 20_708, 0]);
   assert.deepEqual(bot && [bot.resourcePoints, bot.battlePoints, bot.totalPoints, bot.achievementPoints], [1_003_344, 0, 1_003_344, 0]);
 
   const targets = Object.values(state.espionage?.targets ?? {}).filter((target) => target.ownerId === UNIVERSE_NPC_OWNER_ID);
@@ -236,7 +240,7 @@ test('Test Mode scores the player and Bot 001 from their separate asset pools an
     shipUpgradeLevels: state.shipUpgradeLevels,
     queuedScience: state.science.queue,
   });
-  assert.equal(playerScore.resourceTotal, 20_703_450);
+  assert.equal(playerScore.resourceTotal, 20_707_600);
   assert.equal(playerScore.resourcePoints, player?.resourcePoints);
 });
 

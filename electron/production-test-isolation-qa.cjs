@@ -87,13 +87,16 @@ async function inspectMode(win, mode, label) {
   await clickRoute(win, 'primary', 'command', `document.querySelector('.command-view')`);
   const command = await win.webContents.executeJavaScript(`(() => ({
     empty: Boolean(document.querySelector('[data-qa-command-empty]')),
+    locked: Boolean(document.querySelector('[data-qa-command-locked]')),
+    state: document.querySelector('.command-view')?.getAttribute('data-qa-command-state') || '',
     createAlliance: document.querySelector('[data-qa-create-alliance]')?.textContent?.trim() || '',
     status: document.querySelector('.command-view__status strong')?.textContent?.trim() || '',
   }))()`);
-  if (mode === 'production' && (!command.empty || command.createAlliance !== 'СОЗДАТЬ СОЮЗ' || command.status !== 'СОЮЗ НЕ СОЗДАН')) {
-    throw new Error(`${label}: production command empty state mismatch ${JSON.stringify(command)}`);
+  // Production starts without a Hall, so the Command screen is locked and no alliance is invented.
+  if (mode === 'production' && (!command.locked || command.state !== 'locked' || command.empty || command.status !== 'Палата управления')) {
+    throw new Error(`${label}: production command locked state mismatch ${JSON.stringify(command)}`);
   }
-  if (mode === 'test' && (command.empty || !command.status.includes('Содружество Гелион'))) {
+  if (mode === 'test' && (command.empty || command.locked || !command.status.includes('Содружество Гелион'))) {
     throw new Error(`${label}: test command fixture mismatch ${JSON.stringify(command)}`);
   }
   await capture(win, path.join(OUTPUT, label), `${mode}-command`);
@@ -174,11 +177,11 @@ async function runViewport(width, height) {
     const testEnvelope = await inspectMode(win, 'test', label);
     await reload(win, 'test');
     const testReloaded = await readEnvelope(win, TEST_KEY);
-    if (testReloaded?.combat?.reports?.length !== testEnvelope?.combat?.reports?.length || testReloaded?.command?.alliance?.name !== 'Содружество Гелион') {
+    if (testReloaded?.combat?.reports?.length !== testEnvelope?.combat?.reports?.length || testReloaded?.command?.alliances?.[0]?.name !== 'Содружество Гелион') {
       throw new Error(`${label}: Test Mode reload lost fixtures`);
     }
     const productionAfterTest = await readEnvelope(win, PRODUCTION_KEY);
-    if (productionAfterTest?.command?.alliance?.name !== productionBefore?.command?.alliance?.name || productionAfterTest?.combat?.reports?.length !== productionBefore?.combat?.reports?.length) {
+    if (JSON.stringify(productionAfterTest?.command?.alliances) !== JSON.stringify(productionBefore?.command?.alliances) || productionAfterTest?.combat?.reports?.length !== productionBefore?.combat?.reports?.length) {
       throw new Error(`${label}: Test Mode mutated Production save`);
     }
   } finally {
