@@ -711,3 +711,8 @@
 .command-dialog .cmdA-studio-preview { gap: 8px; padding: 18px 16px; }
 .command-dialog .cmdA-studio-preview .command-emblem { width: 120px; height: 144px; }
 .command-dialog .cmdA-studio-preview .cmdA-studio-row .command-emblem { width: 34px; height: 41px; margin: 0; }
+
+/* «Назад в Палата управления» — part of the top bar when Command was opened from the building */
+.command-view.cmdA .cmdA-back { flex: 0 1 auto; min-width: 0; height: 36px; padding: 0 14px; gap: 10px; font-size: 11px !important; letter-spacing: .06em; text-transform: none; overflow: hidden; text-overflow: ellipsis; }
+.command-view.cmdA .cmdA-back span { color: var(--ut-accent); font-size: 14px !important; }
+.cmdA .cmdA-top-status { flex: 0 1 auto; }

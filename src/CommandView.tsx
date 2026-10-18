@@ -105,6 +105,8 @@ type CommandViewProps = {
   playerFactionId?: string;
   /** Test Mode clock acceleration for the 3-hour diplomacy timers; 1 in production. */
   testTimeScale?: number;
+  /** Set when Command was opened from the Палата управления interior: the way back to the building. */
+  returnToBuilding?: { label: string; onBack: () => void };
   aid: AidOverview;
   /** Wall-clock milliseconds; drives the re-application countdowns. */
   now: number;
@@ -1404,7 +1406,7 @@ function DiplomacyTab({ command, allianceId, role, ownerScores, now, timeScale, 
 
 // ---- root ----------------------------------------------------------------------
 
-export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFactions = {}, playerFactionId, testTimeScale = 1, aid, now, actions }: CommandViewProps) {
+export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFactions = {}, playerFactionId, testTimeScale = 1, returnToBuilding, aid, now, actions }: CommandViewProps) {
   const [tab, setTab] = useState<CommandTab>('overview');
   const [feedback, setFeedback] = useState<CommandActionResult | null>(null);
   const testControls = mode === 'test';
@@ -1451,6 +1453,11 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
             <span className={`command-status-chip cmdA-chip is-status-${status.key}`} data-qa-command-status>{status.label}</span>
           </div>
         </div>
+        {returnToBuilding ? (
+          <button type="button" className="cmdA-back" onClick={returnToBuilding.onBack} data-qa-building-interior-back>
+            <span aria-hidden="true">←</span>{returnToBuilding.label}
+          </button>
+        ) : null}
         {!locked && membership ? (
           <nav className="command-tabs cmdA-tabs" aria-label="Разделы Командования">
             {visibleTabs.map((key) => (

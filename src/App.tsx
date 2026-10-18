@@ -1938,7 +1938,8 @@ export function App() {
         </button>
 
         <section className={`workspace workspace-v4 workspace--${workspaceKind}`}>
-          {buildingInterior && buildingInteriorTarget && buildingInteriorTarget.kind !== 'host' && buildingInteriorTarget.kind !== 'fleet-construction' && buildingInteriorDefinition ? (
+          {/* Command shows its own «Назад» inside its top bar instead of this overlay (it would cover the tabs). */}
+          {buildingInterior && buildingInteriorTarget && buildingInteriorTarget.kind !== 'host' && buildingInteriorTarget.kind !== 'fleet-construction' && buildingInteriorTarget.kind !== 'command' && buildingInteriorDefinition ? (
             <button
               className="building-interior-return-overlay"
               type="button"
@@ -2061,6 +2062,9 @@ export function App() {
               ownerScores={withTestOwnerScoreFixtures(selectOwnerScores(state), RUNTIME_MODE)}
               ownerFactions={commandOwnerFactions}
               playerFactionId={state.profile.factionId}
+              returnToBuilding={buildingInterior && buildingInteriorTarget?.kind === 'command' && buildingInteriorDefinition
+                ? { label: `Назад в ${buildingInteriorDefinition.name}`, onBack: returnToBuilding }
+                : undefined}
               testTimeScale={RUNTIME_MODE === 'test' ? testTimeScale : 1}
               aid={selectAidOverview(state, { now, mode: RUNTIME_MODE, testTimeScale })}
               now={now}
