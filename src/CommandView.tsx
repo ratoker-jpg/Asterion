@@ -24,6 +24,7 @@ import {
   type MemberScore,
 } from './domain/command/selectors.ts';
 import { AID_RESOURCES, AID_RESOURCE_LABELS } from './domain/command/aid.ts';
+import { selectAllianceJournal, type JournalEntry, type JournalView } from './domain/command/journal.ts';
 import type { AidOverview, AidRequestRow } from './application/alliance-aid.ts';
 import type {
   AidResource,
@@ -168,6 +169,87 @@ function Stub({ title, children }: { title: string; children: string }) {
       <small>НЕ ПОДКЛЮЧЕНО</small>
       <h2>{title}</h2>
       <p>{children}</p>
+    </div>
+  );
+}
+
+const JOURNAL_KIND_LABELS: Record<JournalEntry['kind'], string> = {
+  request_created: 'Создан запрос ресурсов',
+  request_cancelled: 'Запрос отменён автором',
+  request_closed: 'Запрос закрыт',
+  aid_launched: 'Отправлена помощь',
+  aid_delivered: 'Помощь доставлена',
+  aid_returned: 'Помощь вернулась',
+};
+
+const JOURNAL_CLOSE_LABELS: Record<NonNullable<JournalEntry['closeReason']>, string> = {
+  completed: 'Запрос выполнен',
+  cancelled: 'Запрос отменён автором',
+  author_left: 'Запрос закрыт: автор покинул союз',
+  alliance_disbanded: 'Запрос закрыт: союз расформирован',
+  planet_destroyed: 'Запрос закрыт: планета назначения утрачена',
+};
+
+function journalTitle(entry: JournalEntry) {
+  if (entry.kind === 'request_closed' && entry.closeReason) return JOURNAL_CLOSE_LABELS[entry.closeReason];
+  if (entry.kind === 'aid_delivered' && entry.units === 0) return 'Груз не принят планетой';
+  return JOURNAL_KIND_LABELS[entry.kind];
+}
+
+function journalDetail(entry: JournalEntry) {
+  const parts: string[] = [];
+  if (entry.actorName) parts.push(entry.actorName);
+  if (entry.units && entry.kind !== 'request_closed' && entry.kind !== 'request_created') {
+    parts.push(`${number.format(entry.units)}${entry.resource ? ` · ${AID_RESOURCE_LABELS[entry.resource]}` : ' ед.'}`);
+  } else if (entry.resource && entry.kind === 'request_created') {
+    parts.push(AID_RESOURCE_LABELS[entry.resource]);
+  }
+  return parts.join(' · ');
+}
+
+function JournalPanel({ view, now }: { view: JournalView; now: number }) {
+  // The panel only ever receives the already filtered view; a locked journal carries no event data.
+  if (view.state === 'no_membership') return null;
+  return (
+    <Panel title="Журнал союза" kicker="ИСТОРИЯ СОБЫТИЙ" className="command-journal">
+      {view.state === 'locked' ? (
+        <div className="command-journal__locked" data-qa-journal-state="locked">
+          <div className="command-journal__skeleton" aria-hidden="true"><i /><i /><i /><i /></div>
+          <p role="status">История станет доступна через <strong data-qa-journal-countdown>{formatCountdown(view.unlocksAt - now)}</strong>. Новый участник читает журнал не раньше чем через 2 часа после вступления.</p>
+        </div>
+      ) : view.entries.length === 0 ? (
+        <p className="command-empty" data-qa-journal-state="empty">С момента вступления событий пока нет.</p>
+      ) : (
+        <ol className="command-journal__list" data-qa-journal-state="open" data-qa-journal-count={view.entries.length}>
+          {view.entries.map((entry) => (
+            <li key={entry.id} data-qa-journal-entry={entry.kind}>
+              <time dateTime={new Date(entry.at).toISOString()}>{new Date(entry.at).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}</time>
+              <strong>{journalTitle(entry)}</strong>
+              {journalDetail(entry) ? <span>{journalDetail(entry)}</span> : null}
+            </li>
+          ))}
+        </ol>
+      )}
+    </Panel>
+  );
+}
+
+function SunRaidCard() {
+  return (
+    <div className="command-stub command-sun-raid" data-qa-command-stub data-qa-sun-raid role="status">
+      <small>СОВМЕСТНАЯ ОПЕРАЦИЯ</small>
+      <h2>Рейд на Солнце</h2>
+      <p>Появится в будущей версии.</p>
+    </div>
+  );
+}
+
+function OperationsTab({ command, ownerId, now }: { command: CommandState; ownerId: string; now: number }) {
+  const view = useMemo(() => selectAllianceJournal(command, ownerId, now), [command, ownerId, now]);
+  return (
+    <div className="command-operations" data-qa-operations>
+      <JournalPanel view={view} now={now} />
+      <SunRaidCard />
     </div>
   );
 }
@@ -894,7 +976,7 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, aid, no
             ) : activeTab === 'diplomacy' ? (
               <Stub title="Дипломатия">Объявление войны и перемирие появятся в будущей версии. Сейчас отношения между союзами не меняются.</Stub>
             ) : (
-              <Stub title="Рейд на Солнце">Совместные операции появятся в будущей версии. Присоединиться к рейду пока нельзя.</Stub>
+              <OperationsTab command={command} ownerId={ownerId} now={now} />
             )}
           </section>
         </>
