@@ -129,7 +129,7 @@ export function GlobalPageScrollController() {
       // feeding their absolute geometry into the document-level long-page
       // measurement creates a feedback loop: the workspace grows, the scene
       // grows with it, and the terrain's cover crop looks like an endless zoom.
-      const isFixedZonePage = Boolean(workspace.querySelector('.resource-zone-view'));
+      const isFixedZonePage = Boolean(workspace.querySelector('.resource-zone-view, .planet-orbit, .fleet-root-v2'));
       if (isFixedZonePage) {
         observeCurrentPage(pageRoots);
         if (root.classList.contains('asterion-long-page')) {

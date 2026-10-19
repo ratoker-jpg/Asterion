@@ -716,7 +716,21 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
       ?? planetNodes.find((node) => node.coordinate.galaxy === focusTarget.coordinate.galaxy
         && node.coordinate.system === focusTarget.coordinate.system
         && node.coordinate.position === focusTarget.coordinate.position);
-    if (!target || (target.kind !== 'player' && target.kind !== 'npc')) return;
+    if (!target || (target.kind !== 'player' && target.kind !== 'npc')) {
+      // Any other coordinate (a fleet route, an empty slot, an object): open its
+      // system and pulse whatever sits at that position.
+      const { galaxy, system: targetSystem, position } = focusTarget.coordinate;
+      setSystem(targetSystem);
+      const atPosition = [...nodesById.values()].find((node) => node.coordinate.galaxy === galaxy && node.coordinate.system === targetSystem && node.coordinate.position === position);
+      setSelectedNodeId(null);
+      if (atPosition) {
+        setHighlightedNodeId(atPosition.id);
+        window.clearTimeout(highlightTimerRef.current);
+        highlightTimerRef.current = window.setTimeout(() => setHighlightedNodeId(null), 3_000);
+      }
+      onFocusHandled?.();
+      return;
+    }
     setSystem(target.coordinate.system);
     if (focusTarget.mode === 'highlight') {
       // Coordinate links from spy reports only pinpoint the planet: pulse it

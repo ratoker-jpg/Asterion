@@ -38,6 +38,7 @@ import {
   FLIGHT_LAUNCH_CONTEXT_CLEAR_EVENT,
   FLIGHT_LAUNCH_CONTEXT_EVENT,
   FLIGHT_RECALL_REQUEST_EVENT,
+  UNIVERSE_COORDINATE_OPEN_EVENT,
   SPY_REPORT_ALL_REQUEST_EVENT,
   SPY_REPORT_REQUEST_EVENT,
   SPY_REPORT_RESULT_EVENT,
@@ -77,6 +78,7 @@ import {
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 import './building-card.css';
 import './fleet-workspace.css';
+import './ui/fleet/fleet-root-v2.css';
 
 const FLEET_ROOT_STATUS = 'Выберите корабли и миссию. Для колонизации сначала выберите свободную координату во Вселенной.';
 const GAS_PREVIEW_FRESHNESS_WINDOW_MS = 10_000;
@@ -152,6 +154,21 @@ function MissionIcon({ mission }: { mission: MissionDefinition }) {
 
 function flightCoordinateLabel(coordinate: { galaxy: number; system: number; position: number }) {
   return `[${coordinate.galaxy}:${coordinate.system}:${coordinate.position}]`;
+}
+
+/** Civil hulls for the «Гражданские» roster filter; everything else counts as combat. */
+const CIVIL_SHIP_IDS = new Set<string>(['transporter', 'mega-transporter', 'recycler', 'spy-probe', 'colonizer', 'solar-satellite']);
+
+/** A coordinate that opens the system map at that position. */
+function CoordinateLink({ coordinate }: { coordinate: { galaxy: number; system: number; position: number } }) {
+  return (
+    <button
+      type="button"
+      className="fleet-coordinate-link-v2"
+      title="Открыть во Вселенной"
+      onClick={(event) => { event.stopPropagation(); window.dispatchEvent(new CustomEvent(UNIVERSE_COORDINATE_OPEN_EVENT, { detail: { coordinate } })); }}
+    >{flightCoordinateLabel(coordinate)}</button>
+  );
 }
 
 type FlightCoordinateDraft = {
@@ -384,6 +401,8 @@ function FleetWorkspace({
   const [pendingSatelliteDismantle, setPendingSatelliteDismantle] = useState<number | null>(null);
   const [simulatorHandoff, setSimulatorHandoff] = useState<SimulatorScenario | null>(() => consumeSimulatorHandoff());
   const [spyOperationsOpen, setSpyOperationsOpen] = useState(false);
+  const [flightsOpen, setFlightsOpen] = useState(false);
+  const [shipFilter, setShipFilter] = useState<'all' | 'combat' | 'civil'>('all');
   const [selectedSpyMissionIds, setSelectedSpyMissionIds] = useState<Set<string>>(() => new Set());
   const satelliteConfirmYesRef = useRef<HTMLButtonElement>(null);
   const satelliteConfirmNoRef = useRef<HTMLButtonElement>(null);
@@ -467,6 +486,28 @@ function FleetWorkspace({
       }),
     [flightRecords],
   );
+  // Hostile flights heading to the player light up the whole Fleet screen.
+  const hostileIncomingFlights = useMemo(() => activeFlightRecords
+    .filter((flight) => flight.phase === 'outbound' && ((flight.ownerSide === 'bot01' && flight.missionId === 'attack') || (flight.ownerSide === 'pirate' && flight.missionId === 'pirate-raid')))
+    .map((flight) => ({ flight, originLabel: flight.ownerSide === 'pirate' ? 'Пираты' : 'Bot 01' })), [activeFlightRecords]);
+  const ownFlightGroups = useMemo(() => {
+    const counts = new Map<FlightRecord["missionId"], number>();
+    for (const flight of activeFlightRecords) {
+      if (flight.ownerSide && flight.ownerSide !== 'player') continue;
+      counts.set(flight.missionId, (counts.get(flight.missionId) ?? 0) + 1);
+    }
+    return [...counts].map(([missionId, count]) => ({ missionId, count }));
+  }, [activeFlightRecords]);
+  const nextFlightEvent = useMemo(() => {
+    let next: { at: number; label: string } | null = null;
+    for (const flight of activeFlightRecords) {
+      const at = flight.phase === 'outbound' ? flight.arrivalAt : flight.phase === 'returning' ? flight.returnAt : null;
+      if (!at || at < clockNow) continue;
+      const label = `${flightMissionLabel(flight.missionId)} · ${flight.phase === 'outbound' ? 'прибытие' : 'возврат'}`;
+      if (!next || at < next.at) next = { at, label };
+    }
+    return next;
+  }, [activeFlightRecords, clockNow]);
   const attackOrderByFlightId = useMemo(() => {
     let order = 0;
     return new Map(activeFlightRecords.filter((flight) => flight.missionId === 'attack').map((flight) => [flight.id, ++order]));
@@ -1341,12 +1382,23 @@ function FleetWorkspace({
           <SimulatorView planetName={planetName} coords={coords} onBack={openFleetRoot} initialScenario={simulatorHandoff} />
         ) : (
           <>
-            <section className="fleet-panel-v1 fleet-flights-v1">
-              <header className="fleet-panel-header-v1">
-                <div><small>ОПЕРАЦИОННЫЙ ЦЕНТР</small><h2>ФЛОТЫ</h2></div>
-                <span>{planetName} {coords}</span>
-              </header>
-
+            <div className={`fleet-root-v2${hostileIncomingFlights.length ? ' has-incoming' : ''}`} data-qa-fleet-root>
+            {hostileIncomingFlights.length ? <div className="fleet-incoming-alert-v2" role="alert" data-qa-fleet-incoming-alert>
+              <b aria-hidden="true">⚠</b>
+              <div><strong>{hostileIncomingFlights.length > 1 ? `ВХОДЯЩИЕ АТАКИ · ${hostileIncomingFlights.length}` : 'ВХОДЯЩАЯ АТАКА'}</strong><span>{hostileIncomingFlights[0].originLabel} → {flightCoordinateLabel(hostileIncomingFlights[0].flight.destinationCoordinate)} · прибытие через {flightCountdown(hostileIncomingFlights[0].flight.arrivalAt, clockNow)}</span></div>
+              <button type="button" onClick={() => setFlightsOpen(true)}>ПОКАЗАТЬ РЕЙС</button>
+            </div> : null}
+            <section className="fleet-panel-v1 fleet-flights-v1 fleet-flights-v2">
+              <small className="fleet-flights-v2__label">В ПУТИ · {activeFlightRecords.length}</small>
+              {activeFlightRecords.length === 0 ? <span className="fleet-flights-v2__empty">Флотов в пути нет</span> : null}
+              {ownFlightGroups.map((group) => <span className="fleet-flights-v2__count" key={group.missionId} title={flightMissionLabel(group.missionId)}><img src={flightMissionIcon(group.missionId)} alt="" />{flightMissionLabel(group.missionId)}<b>{group.count}</b></span>)}
+              {nextFlightEvent ? <span className="fleet-flights-v2__next"><small>БЛИЖАЙШЕЕ СОБЫТИЕ</small><strong>{nextFlightEvent.label} · {flightCountdown(nextFlightEvent.at, clockNow)}</strong></span> : null}
+              <span className="fleet-flights-v2__spacer" />
+              <button type="button" onClick={() => setSpyOperationsOpen(true)} aria-haspopup="dialog">ШПИОНСКИЕ ОТЧЁТЫ</button>
+              <button type="button" className={flightsOpen ? 'is-on' : ''} aria-expanded={flightsOpen} onClick={() => setFlightsOpen((open) => !open)} data-qa-flights-toggle>{flightsOpen ? 'СВЕРНУТЬ ▴' : `ВСЕ РЕЙСЫ · ${activeFlightRecords.length} ▾`}</button>
+            </section>
+            <div className={`fleet-flights-drop-v2${flightsOpen ? ' is-open' : ''}`} data-qa-flights-drop>
+            <div className="fleet-flights-drop-v2__panel">
               <div className="fleet-flight-table-v1">
                 <div className="fleet-flight-row-v1 fleet-flight-head-v1">
                   <span>ОТКУДА</span><span>ЦЕЛЬ</span><span>ПРИБЫТИЕ</span><span>СТАТУС</span><span>ВОЗВРАТ</span><span>МИССИЯ · ПОРЯДОК</span><span>ДЕЙСТВИЯ</span>
@@ -1380,8 +1432,8 @@ function FleetWorkspace({
                         : 'ПРИБЫЛ';
                   const attackOrder = attackOrderByFlightId.get(flight.id);
                   return <div className={`fleet-flight-row-v1${isHostileIncoming ? ' fleet-flight-row-v1--incoming-attack' : ''}`} key={flight.id} data-qa-flight-row={flight.id} data-qa-flight-phase={flight.phase} data-qa-flight-owner-side={flight.ownerSide ?? 'player'} data-qa-flight-incoming-attack={isHostileIncoming || undefined} data-qa-flight-pirate-raid={isIncomingPirateRaid || undefined}>
-                  <span data-qa-flight-origin>{flight.ownerSide === 'npc' && flight.missionId === 'aid' ? <><strong>СОЮЗНИК</strong><small>помощь по запросу</small></> : isIncomingBotAttack ? <><strong>Bot 01</strong><small>{flightCoordinateLabel(flight.originCoordinate)}</small></> : isIncomingPirateRaid ? <><strong>ПИРАТЫ · ИСТОЧНИК</strong><small>{flightCoordinateLabel(flight.originCoordinate)}</small></> : flightCoordinateLabel(flight.originCoordinate)}</span>
-                  <span data-qa-flight-target><strong data-qa-space-flight-targetless={flight.missionId === 'space-flight' || undefined}>{flight.missionId === 'space-flight' ? 'Без планетарной цели' : flight.targetPlanetName ?? flightCoordinateLabel(flight.destinationCoordinate)}</strong>{flight.targetOwnerName ? <small>{flight.targetOwnerName}</small> : null}{flight.targetRelation === 'ally' ? '· СОЮЗНИК' : flight.targetRelation === 'self' ? '· СВОЯ' : ''}{targetUnavailable ? <b data-qa-flight-target-unavailable> · ЦЕЛЬ НЕДОСТУПНА</b> : null}</span>
+                  <span data-qa-flight-origin>{flight.ownerSide === 'npc' && flight.missionId === 'aid' ? <><strong>СОЮЗНИК</strong><small>помощь по запросу</small></> : isIncomingBotAttack ? <><strong>Bot 01</strong><CoordinateLink coordinate={flight.originCoordinate} /></> : isIncomingPirateRaid ? <><strong>ПИРАТЫ · ИСТОЧНИК</strong><CoordinateLink coordinate={flight.originCoordinate} /></> : <CoordinateLink coordinate={flight.originCoordinate} />}</span>
+                  <span data-qa-flight-target><strong data-qa-space-flight-targetless={flight.missionId === 'space-flight' || undefined}>{flight.missionId === 'space-flight' ? 'Без планетарной цели' : flight.targetPlanetName ?? flightCoordinateLabel(flight.destinationCoordinate)}</strong>{flight.missionId !== 'space-flight' && flight.destinationCoordinate ? <CoordinateLink coordinate={flight.destinationCoordinate} /> : null}{flight.targetOwnerName ? <small>{flight.targetOwnerName}</small> : null}{flight.targetRelation === 'ally' ? '· СОЮЗНИК' : flight.targetRelation === 'self' ? '· СВОЯ' : ''}{targetUnavailable ? <b data-qa-flight-target-unavailable> · ЦЕЛЬ НЕДОСТУПНА</b> : null}</span>
                   <span data-qa-flight-arrival data-qa-flight-arrival-at={flight.arrivalAt}>{flight.phase === 'outbound' ? flightCountdown(flight.arrivalAt, clockNow) : '—'}</span>
                   <span data-qa-flight-status>{statusLabel}</span>
                   <span data-qa-flight-return>{flight.phase === 'returning' ? flightCountdown(flight.returnAt, clockNow) : '—'}</span>
@@ -1392,8 +1444,7 @@ function FleetWorkspace({
               </div>
 
               <div className="fleet-flight-actions-v1">
-                <button type="button" onClick={() => setSpyOperationsOpen(true)} aria-haspopup="dialog">ШПИОНСКИЕ ОТЧЁТЫ</button>
-                {ACTIVE_RUNTIME_MODE === 'test' ? <button
+                                {ACTIVE_RUNTIME_MODE === 'test' ? <button
                   type="button"
                   data-qa-bot01-scenario
                   disabled={Boolean(espionageState.bot01IncomingScenario)}
@@ -1405,13 +1456,18 @@ function FleetWorkspace({
                   title="Выбрать действующий свободный объект и направить туда реальный флот Bot 01"
                 >BOT 01 · ЗАХВАТИТЬ ОБЪЕКТ (ТЕСТ)</button> : null}
               </div>
-            </section>
+            </div>
+            </div>
 
-            <section className="fleet-panel-v1 fleet-compose-v1">
+            <div className="fleet-root-v2__row">
+            <section className="fleet-panel-v1 fleet-compose-v1 fleet-compose-v2">
               <header className="fleet-panel-header-v1 compact">
-                <div><small>ФОРМИРОВАНИЕ</small><h2>ВЫБЕРИ КОРАБЛИ</h2></div>
-                <span data-qa-fleet-population>ФЛОТ: {fleetSummary.population} / {fleetSummary.capacity} · В НАЛИЧИИ {availableShipCount} КОРАБЛЯ · СПУТНИКИ {fleetSnapshot.solarSatellites}</span>
+                <div><small>ФОРМИРОВАНИЕ · ФЛОТ {fleetSummary.population} / {fleetSummary.capacity}</small><h2>ВЫБЕРИТЕ КОРАБЛИ</h2></div>
+                <div className="fleet-ship-filter-v2" role="group" aria-label="Фильтр кораблей">
+                  {(['all', 'combat', 'civil'] as const).map((filter) => <button key={filter} type="button" className={shipFilter === filter ? 'is-on' : ''} aria-pressed={shipFilter === filter} onClick={() => setShipFilter(filter)}>{filter === 'all' ? 'ВСЕ' : filter === 'combat' ? 'БОЕВЫЕ' : 'ГРАЖДАНСКИЕ'}</button>)}
+                </div>
               </header>
+              <span className="fleet-compose-v2__meta" data-qa-fleet-population>ФЛОТ: {fleetSummary.population} / {fleetSummary.capacity} · В НАЛИЧИИ {availableShipCount} КОРАБЛЯ · СПУТНИКИ {fleetSnapshot.solarSatellites}</span>
 
               <div className="fleet-satellite-presence-v1" data-qa-fleet-satellites>
                 <div className="fleet-satellite-art-v1">
@@ -1435,29 +1491,23 @@ function FleetWorkspace({
                 >X</button>
               </div>
 
-              <div className="fleet-ship-roster-v1" data-qa-fleet-roster>
-                {visibleShipDefinitions.map((ship) => {
+              <div className="fleet-ship-roster-v1 fleet-ship-grid-v2" data-qa-fleet-roster>
+                {visibleShipDefinitions.filter((ship) => shipFilter === 'all' || (shipFilter === 'civil') === CIVIL_SHIP_IDS.has(ship.id)).map((ship) => {
                   const available = fleetSnapshot.fleet.ships[ship.id] ?? 0;
                   const selected = selectedQuantities[ship.id] ?? 0;
                   return (
-                    <div className="fleet-ship-line-v1" key={ship.id} data-qa-fleet-ship={ship.id}>
+                    <div className={`fleet-ship-line-v1 fleet-ship-tile-v2${selected > 0 ? ' is-selected' : ''}`} key={ship.id} data-qa-fleet-ship={ship.id}>
                       <div className="fleet-ship-art-v1"><img src={ship.art} alt={ship.name} draggable={false} /></div>
-                      <div className="fleet-ship-info-v1">
-                        <small>{ship.role.toUpperCase()}</small>
-                        <h3>{ship.name}</h3>
-                        <div className="fleet-ship-meta-v1">
-                          <span>В наличии <b data-qa-fleet-owned>{available}</b></span>
-                          <span>Население / ед. <b data-qa-fleet-unit-population>{ship.population}</b></span>
-                          <span>Выбрано <b>{selected}</b></span>
-                        </div>
-                      </div>
-                      <div className="fleet-quantity-v1">
-                        <span>КОЛИЧЕСТВО</span>
+                      <h3>{ship.name}</h3>
+                      <small>в наличии <b data-qa-fleet-owned>{available}</b> · нас. <b data-qa-fleet-unit-population>{ship.population}</b></small>
+                      <div className="fleet-ship-tile-v2__qty">
+                        <button type="button" aria-label={`Меньше: ${ship.name}`} disabled={selected <= 0} onClick={() => setShipQuantity(ship.id, selected - 1)}>−</button>
                         <input aria-label={`Количество ${ship.name}`} type="number" min="0" max={available} value={selected} onChange={(event) => setShipQuantity(ship.id, Number(event.target.value))} />
-                        <div className="fleet-quantity-shortcuts-v1">
-                          <button type="button" onClick={() => setShipQuantity(ship.id, available)}>МАКС.</button>
-                          <button type="button" onClick={() => setShipQuantity(ship.id, 0)}>МИН.</button>
-                        </div>
+                        <button type="button" aria-label={`Больше: ${ship.name}`} disabled={selected >= available} onClick={() => setShipQuantity(ship.id, selected + 1)}>+</button>
+                      </div>
+                      <div className="fleet-quantity-shortcuts-v1">
+                        <button type="button" onClick={() => setShipQuantity(ship.id, 0)}>МИН.</button>
+                        <button type="button" onClick={() => setShipQuantity(ship.id, available)}>МАКС.</button>
                       </div>
                     </div>
                   );
@@ -1477,7 +1527,9 @@ function FleetWorkspace({
                 <i />
                 <span>Выбрано населения</span><strong className="accent">{selectedPopulation}</strong>
               </div>
+            </section>
 
+            <section className="fleet-panel-v1 fleet-order-v2">
               <div className="fleet-mission-picker-v1">
                 <div className="fleet-mission-select-v1">
                   <label htmlFor="fleet-mission">МИССИЯ</label>
@@ -1508,6 +1560,12 @@ function FleetWorkspace({
                   ))}
                 </div>
                 <p className="fleet-mission-description-v1"><strong>{describedMission.label}.</strong> {describedMission.description}</p>
+              </div>
+
+              <div className="fleet-order-v2__summary">
+                <div><small>КОРАБЛЕЙ</small><b>{selectedShipCount}</b></div>
+                <div><small>НАСЕЛЕНИЕ</small><b>{selectedPopulation}</b></div>
+                <div><small>ФЛОТ</small><b>{fleetSummary.population} / {fleetSummary.capacity}</b></div>
               </div>
 
               {missionId === 'attack' || missionId === 'pirate-elimination' || missionId === 'deployment' || missionId === 'space-flight' ? <section className={`fleet-attack-prep-v1${missionId === 'space-flight' ? ' fleet-space-flight-prep-v1' : ''}`} data-qa-attack-prep={missionId === 'attack' || missionId === 'pirate-elimination' ? true : undefined} data-qa-deployment-commanders={missionId === 'deployment' ? true : undefined} data-qa-space-flight-prep={missionId === 'space-flight' ? true : undefined}>
@@ -1548,9 +1606,11 @@ function FleetWorkspace({
 
               <footer className="fleet-compose-footer-v1">
                 <span>{status}</span>
-                <button type="button" data-qa-flight-preview-open disabled={!hasLaunchableComposition} onClick={openFlightPreview}>ПРОДОЛЖИТЬ</button>
+                <button type="button" data-qa-flight-preview-open disabled={!hasLaunchableComposition} onClick={openFlightPreview}>ПРОДОЛЖИТЬ · ПЛАН ПЕРЕЛЁТА</button>
               </footer>
             </section>
+            </div>
+            </div>
           </>
         )}
       </main>

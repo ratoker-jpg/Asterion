@@ -1,0 +1,121 @@
+/* ---------- Fleets root: collapsible «В пути», ship grid, mission panel (designs/pu-fleets-2026-10-19) ---------- */
+.fleet-main-v1:has(> .fleet-root-v2) { grid-template-rows: minmax(0, 1fr); height: 100%; }
+.fleet-root-v2 { position: relative; display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; }
+.fleet-root-v2 .fleet-panel-v1 { clip-path: none; border-radius: 16px; cursor: default; }
+
+/* incoming attack: the whole screen says so */
+.fleet-root-v2.has-incoming::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: 20px;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px rgba(240, 68, 94, .55), inset 0 0 60px rgba(240, 68, 94, .16);
+  animation: fleet-incoming-glow 1.6s ease-in-out infinite;
+}
+@keyframes fleet-incoming-glow { 50% { box-shadow: inset 0 0 0 2px rgba(240, 68, 94, .85), inset 0 0 90px rgba(240, 68, 94, .26); } }
+.fleet-incoming-alert-v2 {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(240, 68, 94, .7);
+  background: linear-gradient(90deg, rgba(240, 68, 94, .28), rgba(60, 10, 18, .9));
+  box-shadow: 0 0 30px rgba(240, 68, 94, .25);
+}
+.fleet-incoming-alert-v2 > b { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: #f0445e; color: #fff; font-size: 18px; animation: fleet-incoming-pulse 1s ease-in-out infinite; }
+@keyframes fleet-incoming-pulse { 50% { transform: scale(1.12); box-shadow: 0 0 18px rgba(240, 68, 94, .9); } }
+.fleet-incoming-alert-v2 strong { display: block; color: #fff; font-size: 13px !important; font-weight: 800; letter-spacing: .14em; }
+.fleet-incoming-alert-v2 span { color: #ffc2cb; font-size: 12px !important; }
+.fleet-incoming-alert-v2 button { margin-left: auto; height: 34px; padding: 0 14px; border-radius: 9px; border: 1px solid rgba(255, 194, 203, .6); background: rgba(240, 68, 94, .2); color: #fff; font-size: 11px !important; font-weight: 800; letter-spacing: .1em; cursor: pointer; }
+
+/* «В пути» summary bar + dropdown */
+.fleet-root-v2 .fleet-flights-v2 { position: relative; z-index: 2; display: flex; align-items: center; gap: 10px; min-height: 60px; padding: 8px 14px; }
+.fleet-flights-v2__label { color: var(--ut-label, #8fb6c0); font-size: 11px !important; font-weight: 800; letter-spacing: .14em; white-space: nowrap; }
+.fleet-flights-v2__empty { color: #7f98a0; font-size: 12px !important; }
+.fleet-flights-v2__count { display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 12px 0 5px; border-radius: 10px; border: 1px solid rgba(126, 200, 220, .16); background: rgba(16, 26, 31, .7); font-size: 12px !important; font-weight: 800; white-space: nowrap; }
+.fleet-flights-v2__count img { width: 28px; height: 28px; border-radius: 7px; object-fit: cover; }
+.fleet-flights-v2__count b { color: var(--ut-label, #8fb6c0); }
+.fleet-flights-v2__next { display: flex; flex-direction: column; margin-left: 6px; }
+.fleet-flights-v2__next small { color: var(--ut-label, #8fb6c0); font-size: 10px !important; font-weight: 800; letter-spacing: .12em; }
+.fleet-flights-v2__next strong { color: #fff; font-size: 12.5px !important; }
+.fleet-flights-v2__spacer { flex: 1; }
+.fleet-root-v2 .fleet-flights-v2 > button { height: 36px; padding: 0 14px; font-size: 11px !important; letter-spacing: .08em; white-space: nowrap; }
+.fleet-root-v2.has-incoming .fleet-flights-v2 { border-color: rgba(240, 68, 94, .55); }
+
+.fleet-flights-drop-v2 { position: relative; z-index: 30; height: 0; margin-top: -6px; }
+.fleet-flights-drop-v2__panel { display: none; position: absolute; left: 0; right: 0; top: 0; max-height: 430px; overflow-y: auto; padding: 12px; border-radius: 16px; border: 1px solid rgba(126, 200, 220, .3); background: rgba(6, 14, 20, .98); box-shadow: 0 24px 60px rgba(0, 0, 0, .7); scrollbar-width: thin; }
+.fleet-flights-drop-v2.is-open .fleet-flights-drop-v2__panel { display: block; }
+.fleet-coordinate-link-v2 { display: inline; height: auto; margin: 0 0 0 4px; padding: 0; border: 0; background: none; color: var(--ut-accent, #56d9f2); font: inherit; font-size: 11.5px !important; text-decoration: underline; text-decoration-color: rgba(86, 217, 242, .4); text-underline-offset: 3px; cursor: pointer; }
+.fleet-coordinate-link-v2:hover { color: #fff; text-decoration-color: currentColor; }
+
+/* ships + mission */
+.fleet-root-v2__row { position: relative; z-index: 1; flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 480px; gap: 14px; }
+.fleet-root-v2 .fleet-compose-v2 { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: hidden; }
+.fleet-root-v2 .fleet-compose-v2 > header { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
+.fleet-compose-v2__meta { color: var(--ut-label, #8fb6c0); font-size: 10.5px !important; font-weight: 700; letter-spacing: .08em; }
+.fleet-ship-filter-v2 { display: flex; gap: 5px; }
+.fleet-root-v2 .fleet-ship-filter-v2 button { height: 28px; padding: 0 10px; font-size: 10.5px !important; letter-spacing: .08em; }
+.fleet-root-v2 .fleet-satellite-presence-v1 { flex: none; }
+.fleet-root-v2 .fleet-ship-grid-v2 { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); align-content: start; gap: 8px; padding-right: 4px; scrollbar-width: thin; }
+.fleet-root-v2 .fleet-ship-line-v1.fleet-ship-tile-v2 {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 4px;
+  min-height: 0;
+  height: auto;
+  min-width: 0;
+  padding: 8px 10px 10px;
+  border-radius: 13px;
+  border: 1px solid rgba(126, 200, 220, .16);
+  background: linear-gradient(180deg, rgba(20, 34, 40, .7), rgba(8, 14, 18, .85));
+  clip-path: none;
+}
+.fleet-root-v2 .fleet-ship-tile-v2.is-selected { border-color: color-mix(in srgb, var(--race-accent, #b4ceff) 60%, transparent); background: linear-gradient(180deg, color-mix(in srgb, var(--race-accent-strong, #5f9bff) 18%, transparent), rgba(8, 14, 18, .9)); box-shadow: 0 0 14px color-mix(in srgb, var(--race-glow, rgba(95, 155, 255, .45)) 50%, transparent); }
+.fleet-root-v2 .fleet-ship-tile-v2 .fleet-ship-art-v1 { width: 100%; height: 66px; margin: 0; border: 0; background: none; }
+.fleet-root-v2 .fleet-ship-tile-v2 .fleet-ship-art-v1 img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(-12px -9px 10px rgba(0, 0, 0, .55)); }
+.fleet-root-v2 .fleet-ship-tile-v2 h3 { margin: 0; font-size: 13px !important; font-weight: 800; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fleet-root-v2 .fleet-ship-tile-v2 > small { color: #7f98a0; font-size: 11px !important; }
+.fleet-root-v2 .fleet-ship-tile-v2 > small b { color: #cfe; }
+.fleet-ship-tile-v2__qty { display: grid; grid-template-columns: 28px minmax(0, 1fr) 28px; gap: 4px; margin-top: 2px; }
+.fleet-root-v2 .fleet-ship-tile-v2__qty button { height: 30px; padding: 0; border-radius: 8px; font-size: 14px !important; }
+.fleet-root-v2 .fleet-ship-tile-v2__qty input { width: 100%; min-width: 0; height: 30px; padding: 0 6px; border-radius: 8px; border: 1px solid rgba(126, 200, 220, .25); background: rgba(0, 0, 0, .35); color: #fff; text-align: center; font-weight: 800; font-size: 13px !important; }
+.fleet-root-v2 .fleet-ship-tile-v2.is-selected .fleet-ship-tile-v2__qty input { border-color: color-mix(in srgb, var(--race-accent, #b4ceff) 70%, transparent); }
+.fleet-root-v2 .fleet-ship-tile-v2 .fleet-quantity-shortcuts-v1 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 0; }
+.fleet-root-v2 .fleet-ship-tile-v2 .fleet-quantity-shortcuts-v1 button { height: 24px; padding: 0; border-radius: 6px; font-size: 10px !important; letter-spacing: .08em; }
+.fleet-root-v2 .fleet-compose-v2 .fleet-selection-line-v1 { flex: none; }
+
+.fleet-root-v2 .fleet-order-v2 { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-picker-v1 { display: flex; flex-direction: column; gap: 10px; }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-select-v1 { display: flex; align-items: center; gap: 10px; }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-select-v1 select { flex: 1; }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-icons-v1 { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-icons-v1 button { display: flex; flex-direction: column; align-items: center; gap: 4px; width: auto; height: auto; min-height: 76px; padding: 6px 2px; border-radius: 11px; }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-icons-v1 button img { width: 42px; height: 42px; border-radius: 9px; object-fit: cover; }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-icons-v1 button span { display: block; position: static; width: auto; height: auto; overflow: visible; clip: auto; font-size: 9.5px !important; line-height: 1.15; text-align: center; white-space: normal; }
+.fleet-order-v2__summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.fleet-order-v2__summary div { padding: 8px 12px; border-radius: 11px; border: 1px solid rgba(126, 200, 220, .16); background: rgba(0, 0, 0, .25); }
+.fleet-order-v2__summary small { display: block; color: var(--ut-label, #8fb6c0); font-size: 10px !important; font-weight: 800; letter-spacing: .12em; }
+.fleet-order-v2__summary b { color: #fff; font-size: 15px !important; }
+.fleet-root-v2 .fleet-order-v2 .fleet-compose-footer-v1 { margin-top: auto; display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+.fleet-root-v2 .fleet-order-v2 .fleet-compose-footer-v1 button { height: 46px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fleet-root-v2.has-incoming::before, .fleet-incoming-alert-v2 > b { animation: none; }
+}
+.fleet-root-v2 .fleet-ship-tile-v2 > * { align-self: stretch; width: auto; max-width: none; margin-left: 0; margin-right: 0; text-align: left; }
+.fleet-root-v2 .fleet-ship-tile-v2 > .fleet-ship-art-v1 { width: 100%; }
+.fleet-root-v2 .fleet-ship-tile-v2 .fleet-ship-art-v1 { overflow: hidden; }
+.fleet-root-v2 .fleet-ship-tile-v2 .fleet-ship-art-v1 img { height: 66px !important; max-height: 66px; width: 100% !important; }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-icons-v1 button span { width: 100% !important; max-width: 100%; margin: 0; overflow-wrap: anywhere; }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-icons-v1 { width: 100%; }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-description-v1 { width: auto; max-width: none; margin: 0; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(126, 200, 220, .16); background: rgba(0, 0, 0, .25); font-size: 12px !important; line-height: 1.45; }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-select-v1 { width: 100%; }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-icons-v1 button span { opacity: 1 !important; transform: none !important; height: auto !important; background: none; border: 0; box-shadow: none; padding: 0; color: #c6d9de; }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-icons-v1 button:disabled { opacity: .38; }

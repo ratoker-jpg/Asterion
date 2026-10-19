@@ -29,6 +29,8 @@ export type AsterionHeaderProps = {
   activeRoute: AppRoute;
   activeZone: HeaderZoneId | null;
   reportsUnreadCount: number;
+  /** Hostile fleets heading to the player; shown as a red badge on «Флоты». */
+  incomingAttackCount?: number;
   planetMenuOpen: boolean;
   campaign: HeaderCampaignModel;
   onRouteChange: (route: AppRoute) => void;
@@ -63,6 +65,7 @@ export function AsterionHeader({
   activeRoute,
   activeZone,
   reportsUnreadCount,
+  incomingAttackCount = 0,
   planetMenuOpen,
   campaign,
   onRouteChange,
@@ -120,13 +123,14 @@ export function AsterionHeader({
     const reportsBadge = id === 'reports' && reportsUnreadCount > 0
       ? reportsUnreadCount > 99 ? '99+' : String(reportsUnreadCount)
       : null;
+    const fleetsBadge = id === 'fleets' && incomingAttackCount > 0 ? String(incomingAttackCount) : null;
     return (
       <button
         key={id}
         type="button"
-        className={`hdr-route${isActive ? ' active' : ''}`}
+        className={`hdr-route${isActive ? ' active' : ''}${fleetsBadge ? ' hdr-route--alert' : ''}`}
         aria-current={isActive ? 'page' : undefined}
-        aria-label={id === 'reports' && reportsUnreadCount > 0 ? `${label}, ${reportsUnreadCount} непрочитанных сообщений` : label}
+        aria-label={id === 'reports' && reportsUnreadCount > 0 ? `${label}, ${reportsUnreadCount} непрочитанных сообщений` : fleetsBadge ? `${label}, входящих атак: ${incomingAttackCount}` : label}
         data-route={id}
         data-qa-route={id}
         onClick={() => {
@@ -137,6 +141,7 @@ export function AsterionHeader({
         <span className="hdr-route__icon">
           <HeaderNavigationIcon kind={icon} factionId={factionId} />
           {reportsBadge ? <b className="asterion-header__nav-badge" aria-hidden="true">{reportsBadge}</b> : null}
+          {fleetsBadge ? <b className="asterion-header__nav-badge asterion-header__nav-badge--alert" aria-hidden="true" data-qa-fleets-incoming-badge>{fleetsBadge}</b> : null}
         </span>
         <span className="hdr-route__label">{label}</span>
       </button>

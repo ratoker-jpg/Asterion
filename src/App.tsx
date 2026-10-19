@@ -173,6 +173,7 @@ import {
   BOT01_EXPLORATION_SCENARIO_REQUEST_EVENT,
   SPY_REPORT_ALL_REQUEST_EVENT,
   SPY_REPORT_REQUEST_EVENT,
+  UNIVERSE_COORDINATE_OPEN_EVENT,
   SPY_REPORT_RESULT_EVENT,
   dispatchFlight,
   dispatchNpcAidFlight,
@@ -983,6 +984,9 @@ export function App() {
   const commandHallLevel = useMemo(() => selectCommandHallLevel(state.planets), [state.planets]);
   const commandHallDefinition = getBuildingDefinition('planetary-government', state.profile.factionId);
   // The race theme lives on <html> so portals and dialogs outside the stage get it too.
+  // Same rule as the Fleet screen alert: hostile fleets still on their way in.
+  const incomingAttackCount = state.flights.records.filter((flight) => flight.phase === 'outbound'
+    && ((flight.ownerSide === 'bot01' && flight.missionId === 'attack') || (flight.ownerSide === 'pirate' && flight.missionId === 'pirate-raid'))).length;
   const uiFactionId = HEADER_FACTION_PREVIEW ?? state.profile.factionId;
   useEffect(() => {
     document.documentElement.dataset.faction = uiFactionId;
@@ -1748,6 +1752,17 @@ export function App() {
     setPlanetMenuOpen(false);
     setNotice(`Вселенная: открыта координата [${target.coordinate.galaxy}:${target.coordinate.system}:${target.coordinate.position}].`);
   };
+  const openUniverseTargetRef = useRef(openUniverseTarget);
+  openUniverseTargetRef.current = openUniverseTarget;
+  useEffect(() => {
+    const onOpenCoordinate = (event: Event) => {
+      const coordinate = (event as CustomEvent<{ coordinate?: UniverseCoordinate }>).detail?.coordinate;
+      if (coordinate) openUniverseTargetRef.current({ coordinate });
+    };
+    window.addEventListener(UNIVERSE_COORDINATE_OPEN_EVENT, onOpenCoordinate);
+    return () => window.removeEventListener(UNIVERSE_COORDINATE_OPEN_EVENT, onOpenCoordinate);
+  }, []);
+
 
   const openSpySimulator = (report: SpyReportSnapshot) => {
     clearBuildingInterior();
@@ -1905,6 +1920,7 @@ export function App() {
     <div className="viewport">
       <div className="stage stage-shell-v3 stage-shell-v4" data-faction={uiFactionId} style={{ transform: `scale(${scale})`, '--space-bg': `url(${systemBackground})` } as CSSProperties}>
         <AsterionHeader
+          incomingAttackCount={incomingAttackCount}
           factionId={uiFactionId}
           currentPlanet={{
             id: currentPlanet.id,
