@@ -127,9 +127,20 @@ async function updateAllianceThroughCommand(win) {
     setValue('[data-qa-alliance-tag]', 'NORTH');
   })()`);
   await settle(win);
-  await win.webContents.executeJavaScript(`document.querySelector('.command-chip-row button:nth-child(3)')?.click()`);
+  await win.webContents.executeJavaScript(`document.querySelector('[data-qa-crest-open]')?.click()`);
+  await waitFor(win, `document.querySelector('[data-qa-crest-constructor]')`);
+  const crestOptionsSelected = await win.webContents.executeJavaScript(`(() => {
+    const glyph = document.querySelector('[data-qa-crest-option="glyph-phoenix"]');
+    const color = document.querySelector('[data-qa-crest-option="color-amber"]');
+    if (!glyph || !color) return false;
+    glyph.click();
+    color.click();
+    return true;
+  })()`);
+  if (!crestOptionsSelected) throw new Error('Alliance crest QA options not found');
   await settle(win);
-  await win.webContents.executeJavaScript(`document.querySelector('.command-accent-dot[aria-label="Янтарный"]')?.click()`);
+  await win.webContents.executeJavaScript(`document.querySelector('[data-qa-crest-apply]')?.click()`);
+  await waitFor(win, `!document.querySelector('[data-qa-crest-constructor]')`);
   await settle(win);
   await win.webContents.executeJavaScript(`document.querySelector('[data-qa-alliance-submit]')?.click()`);
   await waitFor(win, `document.querySelector('.command-view__status strong')?.textContent?.includes('Содружество Север')`);
@@ -470,11 +481,11 @@ async function runViewport(win, width, height) {
   await clickUtility(win, 'rating');
   await showCurrentAllianceRating(win);
   const updatedRating = await ratingAllianceSnapshot(win);
-  if (!updatedRating.visible || updatedRating.name !== 'Содружество Север' || updatedRating.tag !== '[NORTH]' || !updatedRating.emblem.includes('vanguard')) throw new Error(`Updated alliance rating contract failed at ${label}: ${JSON.stringify(updatedRating)}`);
+  if (!updatedRating.visible || updatedRating.name !== 'Содружество Север' || updatedRating.tag !== '[NORTH]' || !updatedRating.emblem.includes('command-emblem--crest')) throw new Error(`Updated alliance rating contract failed at ${label}: ${JSON.stringify(updatedRating)}`);
   const updatedState = await savedState(win);
   const updatedAlliance = updatedState.command?.alliances?.[0];
   // Test Mode also seeds Bot 01's own alliance (diplomacy fixture); the player's alliance stays the single editable one.
-  if (updatedState.command?.alliances?.filter((alliance) => alliance.fixtureId !== 'test-command-bot01-v1').length !== 1 || updatedAlliance?.id !== 'alliance-test-helion-v1' || updatedAlliance?.name !== 'Содружество Север' || updatedAlliance?.tag !== 'NORTH' || updatedAlliance?.emblem?.glyph !== 'vanguard' || updatedAlliance?.emblem?.accent !== 'amber') throw new Error(`Updated command save contract failed at ${label}: ${JSON.stringify(updatedState.command?.alliances)}`);
+  if (updatedState.command?.alliances?.filter((alliance) => alliance.fixtureId !== 'test-command-bot01-v1').length !== 1 || updatedAlliance?.id !== 'alliance-test-helion-v1' || updatedAlliance?.name !== 'Содружество Север' || updatedAlliance?.tag !== 'NORTH' || updatedAlliance?.emblem?.glyph !== 'starforge' || updatedAlliance?.emblem?.accent !== 'amber' || updatedAlliance?.emblem?.crest?.glyph !== 'phoenix' || updatedAlliance?.emblem?.crest?.color !== 'amber') throw new Error(`Updated command save contract failed at ${label}: ${JSON.stringify(updatedState.command?.alliances)}`);
 
   const beforeActiveAlliance = await savedState(win);
   await win.webContents.executeJavaScript(`(() => {
@@ -489,7 +500,7 @@ async function runViewport(win, width, height) {
   await clickUtility(win, 'rating');
   await showCurrentAllianceRating(win);
   const reloadedRating = await ratingAllianceSnapshot(win);
-  if (!reloadedRating.visible || reloadedRating.name !== 'Содружество Север' || reloadedRating.tag !== '[NORTH]' || !reloadedRating.emblem.includes('vanguard')) throw new Error(`Reloaded alliance rating contract failed at ${label}: ${JSON.stringify(reloadedRating)}`);
+  if (!reloadedRating.visible || reloadedRating.name !== 'Содружество Север' || reloadedRating.tag !== '[NORTH]' || !reloadedRating.emblem.includes('command-emblem--crest')) throw new Error(`Reloaded alliance rating contract failed at ${label}: ${JSON.stringify(reloadedRating)}`);
   await clickPrimary(win, 'reports');
   await waitFor(win, `document.querySelector('.reports-profile-alliance-link')`);
   await win.webContents.executeJavaScript(`document.querySelector('.reports-profile-alliance-link')?.click()`);

@@ -113,8 +113,10 @@ jobs:
           BASE="https://ratoker-jpg.github.io/Asterion"
           PREVIEW="${BASE}/pr/${PR_NUMBER}"
           DEPLOYED=""
-          for attempt in {1..12}; do
-            DEPLOYED="$(curl -fsSL --max-time 20 "${PREVIEW}/preview-sha.txt?sha=${PR_SHA}" || true)"
+          for attempt in {1..24}; do
+            # Use a distinct cache key for each retry so an early edge 404 cannot
+            # keep hiding a preview that has finished propagating.
+            DEPLOYED="$(curl -fsSL --max-time 20 "${PREVIEW}/preview-sha.txt?sha=${PR_SHA}&attempt=${attempt}" || true)"
             if [[ "${DEPLOYED}" == "${PR_SHA}" ]]; then break; fi
             sleep 5
           done
