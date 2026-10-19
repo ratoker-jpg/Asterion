@@ -1,0 +1,102 @@
+/* ---------- Universe «Радар-док» (designs/pu-fleets-2026-10-19, universe variant C) ---------- */
+.workspace--universe .universe-view-v3.universe-radar .system-scene { inset: 0 0 64px 0; }
+.universe-radar .is-filtered { opacity: .22; filter: grayscale(.6); }
+.universe-radar .universe-debris-marker__badge img { display: block; width: 18px; height: 18px; object-fit: contain; }
+
+.universe-radar .universe-radar__crumb,
+.universe-radar .universe-radar__list,
+.universe-radar .universe-radar__minimap,
+.universe-radar .universe-radar__dock {
+  position: absolute;
+  z-index: 20;
+  border-radius: 16px;
+  border: 1px solid rgba(126, 200, 220, .3);
+  background: rgba(6, 14, 20, .94);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .5);
+}
+.universe-radar small { color: var(--ut-label, #8fb6c0); font-size: 10.5px !important; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.universe-radar .universe-radar__head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+
+.universe-radar .universe-radar__crumb { left: 20px; top: 18px; padding: 12px 18px; display: flex; flex-direction: column; gap: 2px; }
+.universe-radar .universe-radar__crumb strong { color: #fff; font-size: 17px !important; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.universe-radar .universe-radar__crumb span { color: #7f98a0; font-size: 11.5px !important; }
+
+.universe-radar .universe-radar__list { left: 20px; top: 118px; width: 300px; max-height: calc(100% - 210px); overflow-y: auto; padding: 12px; scrollbar-width: thin; }
+.universe-radar .universe-radar__row {
+  display: grid;
+  grid-template-columns: 24px 34px minmax(0, 1fr) 10px;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  height: 42px;
+  padding: 0 8px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #dbe9ee;
+  text-align: left;
+  cursor: pointer;
+}
+.universe-radar .universe-radar__row:hover { background: rgba(86, 217, 242, .06); }
+.universe-radar .universe-radar__row.is-selected { border-color: color-mix(in srgb, var(--race-accent, #b4ceff) 60%, transparent); background: linear-gradient(90deg, color-mix(in srgb, var(--race-accent-strong, #5f9bff) 20%, transparent), transparent); }
+.universe-radar .universe-radar__pos { color: #5f7f89; font-size: 11px !important; font-weight: 800; }
+.universe-radar .universe-radar__row img { width: 32px; height: 32px; object-fit: contain; }
+.universe-radar .universe-radar__row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px !important; font-weight: 700; }
+.universe-radar .universe-radar__row > i { width: 8px; height: 8px; border-radius: 50%; background: var(--legend-k, #8fb6c0); box-shadow: 0 0 8px var(--legend-k, #8fb6c0); }
+.universe-radar .universe-radar__list p { margin: 8px 6px 0; color: #7f98a0; font-size: 11.5px !important; line-height: 1.4; }
+
+.universe-radar .universe-radar__minimap { right: 20px; top: 18px; width: 300px; padding: 12px 14px; }
+.universe-radar .universe-radar__grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; }
+.universe-radar .universe-radar__grid button { position: relative; height: 26px; padding: 0; border-radius: 5px; border: 1px solid rgba(126, 200, 220, .12); background: rgba(255, 255, 255, .03); cursor: pointer; }
+.universe-radar .universe-radar__grid button:hover { border-color: rgba(86, 217, 242, .45); }
+.universe-radar .universe-radar__grid button.is-current { border-color: var(--race-accent, #b4ceff); background: color-mix(in srgb, var(--race-accent-strong, #5f9bff) 30%, transparent); box-shadow: 0 0 10px var(--race-glow, rgba(95, 155, 255, .45)); }
+.universe-radar .universe-radar__grid button.has-own::after,
+.universe-radar .universe-radar__grid button.has-pirate::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; }
+.universe-radar .universe-radar__grid button.has-own::after { background: var(--race-accent-strong, #5f9bff); }
+.universe-radar .universe-radar__grid button.has-pirate::after { background: var(--universe-renegade, #f39a57); }
+
+.universe-radar .universe-radar__dock { left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 7px 10px; white-space: nowrap; max-width: calc(100% - 24px); }
+.universe-radar .universe-radar__seg { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 11px; background: rgba(0, 0, 0, .35); }
+.universe-radar .universe-radar__seg .universe-map-legend { display: flex; gap: 3px; }
+.universe-radar .universe-radar__seg button,
+.universe-radar .universe-radar__seg label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 7px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #8fb6c0;
+  font-size: 11px !important;
+  font-weight: 800;
+  letter-spacing: .02em;
+  cursor: pointer;
+}
+.universe-radar .universe-radar__seg button:hover { color: #fff; background: rgba(86, 217, 242, .06); }
+.universe-radar .universe-radar__seg button.is-on { color: #fff; border-color: color-mix(in srgb, var(--race-accent, #b4ceff) 55%, transparent); background: linear-gradient(180deg, color-mix(in srgb, var(--race-accent-strong, #5f9bff) 26%, transparent), transparent); }
+.universe-radar .universe-radar__seg button:disabled { opacity: .35; cursor: default; }
+.universe-radar .universe-map-legend button i { width: 8px; height: 8px; border-radius: 50%; background: var(--legend-k); }
+.universe-radar .universe-map-legend button:not(.is-on) i { opacity: .3; }
+.universe-radar .universe-map-legend button:not(.is-on) span { color: #5f7f89; }
+.universe-radar .universe-radar__sep { width: 1px; height: 34px; background: rgba(126, 200, 220, .25); }
+.universe-radar .universe-jump select { height: 28px; padding: 0 6px; border-radius: 7px; border: 1px solid rgba(126, 200, 220, .3); background: #0b1820; color: #fff; font-weight: 800; }
+.universe-radar .universe-jump label span { color: #7f98a0; }
+
+.universe-radar .legend-self { --legend-k: var(--race-accent-strong, #5f9bff); }
+.universe-radar .legend-ally { --legend-k: var(--universe-ally, #63d48b); }
+.universe-radar .legend-enemy { --legend-k: var(--universe-enemy, #f0646e); }
+.universe-radar .legend-neutral { --legend-k: var(--universe-neutral, #718896); }
+.universe-radar .legend-wild { --legend-k: #8fb6c0; }
+.universe-radar .legend-unique { --legend-k: var(--universe-unique, #e7c66c); }
+.universe-radar .legend-pirate { --legend-k: var(--universe-renegade, #f39a57); }
+.universe-radar .legend-anomaly { --legend-k: var(--universe-anomaly, #af8bff); }
+.universe-radar .universe-radar__seg .universe-map-legend { position: static; top: auto; right: auto; gap: 3px; }
+.universe-radar .universe-radar__seg .universe-map-legend span::before { display: none; }
+.universe-radar .universe-radar__grid button.has-ally::after,
+.universe-radar .universe-radar__grid button.has-enemy::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; }
+.universe-radar .universe-radar__grid button.has-ally::after { background: var(--universe-ally, #63d48b); }
+.universe-radar .universe-radar__grid button.has-enemy::after { background: var(--universe-enemy, #f0646e); }
+
+.universe-radar .universe-radar__dock > small { font-size: 9.5px !important; letter-spacing: .12em; }

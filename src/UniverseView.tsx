@@ -8,6 +8,8 @@ import { PIRATE_PLANET_ARTS } from './pirate-planet-art.ts';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon.tsx';
 import pirateWarlordArt from '../assets/source/characters/pirates/pirate_warlord.png';
+import debrisIcon from './assets/ui/header-icons/debris.png';
+import './ui/universe/universe-radar.css';
 import asteroid01 from '../assets/source/universe-navigation/asteroids/asteroid.variant-01.png';
 import asteroid02 from '../assets/source/universe-navigation/asteroids/asteroid.variant-02.png';
 import asteroid03 from '../assets/source/universe-navigation/asteroids/asteroid.variant-03.png';
@@ -68,6 +70,7 @@ import {
   getUniverseSlotPoint,
   getUniverseAsteroidPoint,
   getUniverseOwnerRelation,
+  type UniverseOwnerRelation,
   normalizeUniverseOwnerProfile,
 } from './domain/universe/runtime.ts';
 import type {
@@ -140,6 +143,22 @@ const POINT_LABELS: ReadonlyArray<{ key: keyof UniverseOwnerPoints; label: strin
 ];
 
 const numberFormat = new Intl.NumberFormat('ru-RU');
+
+/** Map filter keys; the labels are the map legend (Electron QA reads them in this order). */
+type LegendKey = 'self' | 'ally' | 'enemy' | 'neutral' | 'wild' | 'unique' | 'pirate' | 'anomaly';
+const LEGEND: readonly (readonly [LegendKey, string])[] = [
+  ['self', 'Ваш мир'], ['ally', 'Союзная'], ['enemy', 'Вражеская'], ['neutral', 'Нейтральная'],
+  ['wild', 'Необитаемые'], ['unique', 'Уникальные'], ['pirate', 'Отступники'], ['anomaly', 'Аномалии'],
+];
+const LISTED_KINDS = new Set<UniversePlanetNode['kind']>(['player', 'npc', 'pirate', 'unique', 'anomaly']);
+
+function legendKeyOf(node: UniversePlanetNode, relation: UniverseOwnerRelation | null): LegendKey {
+  if (relation) return relation;
+  if (node.kind === 'unique') return 'unique';
+  if (node.kind === 'pirate') return 'pirate';
+  if (node.kind === 'anomaly') return 'anomaly';
+  return 'wild';
+}
 
 function ownerPoints(score: OwnerScore | undefined): UniverseOwnerPoints {
   return {
@@ -563,7 +582,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, hasDebris, occupiedNodes,
     data-qa-universe-asteroid-debris={hasDebris ? 'present' : 'absent'}
     data-qa-universe-object={node.id} data-qa-universe-kind="asteroid" data-qa-universe-underlying-kind={underlyingKind ?? ''} onClick={() => onSelect(node)}>
     <img src={node.art} alt="" draggable={false} /><span>АСТЕРОИД · {node.coordinate.position}</span>
-    {hasDebris ? <span className="universe-asteroid-debris-marker"><span className="universe-debris-marker__badge" role="img" aria-label="Обломки на астероиде: есть">R</span><span className="universe-debris-tooltip universe-asteroid-debris-tooltip" id={`universe-asteroid-debris-tooltip-${node.asteroid?.spawnIndex}`} role="tooltip">На астероиде есть обломки</span></span> : null}
+    {hasDebris ? <span className="universe-asteroid-debris-marker"><span className="universe-debris-marker__badge" role="img" aria-label="Обломки на астероиде: есть"><img src={debrisIcon} alt="" draggable={false} /></span><span className="universe-debris-tooltip universe-asteroid-debris-tooltip" id={`universe-asteroid-debris-tooltip-${node.asteroid?.spawnIndex}`} role="tooltip">На астероиде есть обломки</span></span> : null}
   </button>;
 }
 
@@ -572,6 +591,8 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
   const [focusEmpty, setFocusEmpty] = useState(false);
   const [showSlotLabels, setShowSlotLabels] = useState(true);
   const [showAsteroids, setShowAsteroids] = useState(true);
+  const [showDebris, setShowDebris] = useState(true);
+  const [hiddenLegend, setHiddenLegend] = useState<ReadonlySet<LegendKey>>(() => new Set());
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
   const highlightTimerRef = useRef(0);
@@ -792,28 +813,12 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
 
   return (
     <main
-      className="universe-view universe-view-v3"
+      className="universe-view universe-view-v3 universe-radar"
       data-qa-universe
       data-qa-universe-system={system}
       data-qa-universe-npc-count={galaxyData.systems.reduce((total, item) => total + item.positions.filter((node) => node.kind === 'npc').length, 0)}
     >
-      <div className="universe-nav universe-nav-v3">
-        <div className="universe-breadcrumb">
-          <span>ВСЕЛЕННАЯ</span><b>›</b><strong>Галактика {GALAXY}</strong><b>›</b><strong>Солнечная система {system}</strong>
-        </div>
-
-        <div className="universe-jump nav-coordinate nav-coordinate--system">
-          <span>ГАЛАКТИКА</span><strong>01</strong>
-          <button type="button" className="step" onClick={() => goSystem(system - 1)} disabled={system === 1} aria-label="Предыдущая система">‹</button>
-          <label><span>СИСТЕМА</span><select value={system} onChange={(event) => goSystem(Number(event.target.value))} aria-label="Солнечная система">{galaxyData.systems.map((item) => <option key={item.system} value={item.system}>{String(item.system).padStart(2, '0')}</option>)}</select></label>
-          <small>/ {SYSTEM_COUNT}</small>
-          <button type="button" className="step" onClick={() => goSystem(system + 1)} disabled={system === SYSTEM_COUNT} aria-label="Следующая система">›</button>
-        </div>
-      </div>
-
       <div className="system-scene" data-qa-universe-scene>
-        <div className="system-caption"><span>ГАЛАКТИКА {String(GALAXY).padStart(2, '0')} / ЗВЁЗДНЫЙ АТЛАС</span><strong>Система {String(system).padStart(2, '0')}</strong><small>24 позиции · 4 орбиты</small></div>
-        <div className="universe-map-legend" aria-label="Обозначения карты"><span className="legend-self">Ваш мир</span><span className="legend-ally">Союзная</span><span className="legend-enemy">Вражеская</span><span className="legend-neutral">Нейтральная</span><span className="legend-wild">Необитаемые</span><span className="legend-unique">Уникальные</span><span className="legend-pirate">Отступники</span><span className="legend-anomaly">Аномалии</span></div>
 
         {[0, 1, 2, 3].map((ring) => <div key={ring} className={`system-orbit ring-${ring + 1}`} />)}
 
@@ -858,7 +863,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
                 onClick={() => selectNode(node)}
               >
                 {showSlotLabels ? <span>{node.coordinate.position}</span> : null}
-                {orbitalDebris > 0 ? <span className="universe-debris-marker"><span className="universe-debris-marker__badge" aria-hidden="true">R</span><span className="universe-debris-tooltip" id={`universe-debris-tooltip-${node.id}`} role="tooltip">Обломки на орбите: {numberFormat.format(orbitalDebris)}</span></span> : null}
+                {orbitalDebris > 0 && showDebris ? <span className="universe-debris-marker"><span className="universe-debris-marker__badge" aria-hidden="true"><img src={debrisIcon} alt="" draggable={false} /></span><span className="universe-debris-tooltip" id={`universe-debris-tooltip-${node.id}`} role="tooltip">Обломки на орбите: {numberFormat.format(orbitalDebris)}</span></span> : null}
               </button>
             );
           }
@@ -866,7 +871,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
             <button
               type="button"
               key={node.id}
-              className={`system-planet system-planet--${node.kind} ${relation ? `system-planet--${relation}` : ''} ${node.isHomeworld ? 'owned' : ''} ${highlightedNodeId === node.id ? 'system-planet--highlight' : ''} ${orbitalDebris > 0 ? 'system-planet--with-debris' : ''}`}
+              className={`system-planet system-planet--${node.kind} ${relation ? `system-planet--${relation}` : ''} ${node.isHomeworld ? 'owned' : ''} ${highlightedNodeId === node.id ? 'system-planet--highlight' : ''} ${orbitalDebris > 0 ? 'system-planet--with-debris' : ''} ${hiddenLegend.has(legendKeyOf(node, relation)) ? 'is-filtered' : ''}`}
               style={toStyle(point)}
               title={`${node.name} · ${node.statusLabel} · ${coordinate}`}
               aria-label={`${ariaLabel}${debrisDescription}`}
@@ -885,20 +890,93 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
                   </span> : null}
               {showSlotLabels ? <span className="planet-slot">{node.coordinate.position}</span> : null}
               <span className="planet-name" data-qa-map-caption>{caption}</span>
-              {orbitalDebris > 0 ? <span className="universe-debris-marker"><span className="universe-debris-marker__badge" aria-hidden="true">R</span><span className="universe-debris-tooltip" id={`universe-debris-tooltip-${node.id}`} role="tooltip">Обломки на орбите: {numberFormat.format(orbitalDebris)}</span></span> : null}
+              {orbitalDebris > 0 && showDebris ? <span className="universe-debris-marker"><span className="universe-debris-marker__badge" aria-hidden="true"><img src={debrisIcon} alt="" draggable={false} /></span><span className="universe-debris-tooltip" id={`universe-debris-tooltip-${node.id}`} role="tooltip">Обломки на орбите: {numberFormat.format(orbitalDebris)}</span></span> : null}
             </button>
           );
         })}
 
         {showAsteroids ? systemData.asteroids.map((asteroid) => <MovingAsteroid key={asteroid.id} node={asteroid} underlyingKind={systemData.positions.find((node) => node.coordinate.position === asteroid.coordinate.position)?.kind} nowMs={nowMs} hasDebris={Boolean(asteroid.asteroid && asteroidDebrisPresenceBySpawnIndex?.[String(asteroid.asteroid.spawnIndex)])} occupiedNodes={asteroidAttachmentNodes} onSelect={selectNode} />) : null}
-        <div className="universe-map-hint">Выберите мир, чтобы открыть сведения <span>Астероиды стоят 15–30 мин и переходят к следующей позиции</span></div>
       </div>
 
-      <aside className="universe-tools" aria-label="Инструменты карты">
-        <button type="button" className={focusEmpty ? 'active' : ''} aria-pressed={focusEmpty} title="Подсветить свободные позиции" onClick={() => setFocusEmpty((value) => !value)}><b>▽</b><span>Фильтры</span><small>{focusEmpty ? 'Позиции выделены' : 'Свободные позиции'}</small></button>
-        <button type="button" className={showSlotLabels ? 'active' : ''} aria-pressed={showSlotLabels} title="Показывать номера слотов" onClick={() => setShowSlotLabels((value) => !value)}><b>⌖</b><span>Метки</span><small>{showSlotLabels ? 'Номера слотов' : 'Скрыты'}</small></button>
-        <button type="button" className={showAsteroids ? 'active' : ''} aria-pressed={showAsteroids} data-qa-universe-asteroids-toggle title="Показать или скрыть астероиды" onClick={() => setShowAsteroids((value) => !value)}><b>◌</b><span>Астероиды</span><small>{showAsteroids ? 'Слой включён' : 'Скрыты'}</small></button>
+      <div className="universe-radar__crumb">
+        <small>ВСЕЛЕННАЯ · ГАЛАКТИКА {String(GALAXY).padStart(2, '0')}</small>
+        <strong>Солнечная система {String(system).padStart(2, '0')}</strong>
+        <span>Эффективность солнца {systemData.sunEfficiencyPercent}% · 24 позиции</span>
+      </div>
+
+      <aside className="universe-radar__list" aria-label="Объекты системы">
+        <div className="universe-radar__head"><small>В СИСТЕМЕ</small><small>24 ПОЗИЦИИ</small></div>
+        {systemData.positions.filter((node) => LISTED_KINDS.has(node.kind)).map((node) => {
+          const relation = node.kind === 'player' || node.kind === 'npc'
+            ? getUniverseOwnerRelation(node, owner.id, owner.alliance, owners.get(node.ownerId ?? ''), allianceDiplomacy)
+            : null;
+          return (
+            <button type="button" key={node.id} className={`universe-radar__row legend-${legendKeyOf(node, relation)} ${selectedNodeId === node.id ? 'is-selected' : ''}`} onClick={() => selectNode(node)}>
+              <span className="universe-radar__pos">{node.coordinate.position}</span>
+              <img src={node.art} alt="" draggable={false} />
+              <strong>{getUniverseNodeCaption(node, profile.displayName, owners.get(node.ownerId ?? '')?.displayName)}</strong>
+              <i aria-hidden="true" />
+            </button>
+          );
+        })}
+        <p>+ {systemData.positions.filter((node) => node.kind === 'uninhabited').length} необитаемых · {systemData.asteroids.length} астероидов · {systemData.positions.filter((node) => node.kind === 'empty').length} свободных</p>
       </aside>
+
+      <aside className="universe-radar__minimap" aria-label="Системы галактики">
+        <div className="universe-radar__head"><small>ГАЛАКТИКА {String(GALAXY).padStart(2, '0')} · {SYSTEM_COUNT} СИСТЕМ</small></div>
+        <div className="universe-radar__grid">
+          {galaxyData.systems.map((item) => {
+            const relations = item.positions
+              .filter((node) => node.kind === 'player' || node.kind === 'npc')
+              .map((node) => getUniverseOwnerRelation(node, owner.id, owner.alliance, owners.get(node.ownerId ?? ''), allianceDiplomacy));
+            const own = relations.includes('self');
+            const marker = own ? 'has-own' : relations.includes('enemy') ? 'has-enemy' : relations.includes('ally') ? 'has-ally' : '';
+            return (
+              <button
+                type="button"
+                key={item.system}
+                className={`${item.system === system ? 'is-current' : ''} ${marker}`}
+                title={`Система ${String(item.system).padStart(2, '0')}${own ? ' · ваш мир' : marker === 'has-enemy' ? ' · враг' : marker === 'has-ally' ? ' · союзник' : ''}`}
+                aria-label={`Система ${item.system}`}
+                onClick={() => goSystem(item.system)}
+              />
+            );
+          })}
+        </div>
+      </aside>
+
+      <div className="universe-radar__dock" aria-label="Фильтры и слои карты">
+        <small>ФИЛЬТР</small>
+        <div className="universe-radar__seg">
+          <button type="button" className={hiddenLegend.size === 0 ? 'is-on' : ''} onClick={() => setHiddenLegend(new Set())}>Все</button>
+          <div className="universe-map-legend" aria-label="Обозначения карты">
+            {LEGEND.map(([key, label]) => (
+              <button
+                type="button"
+                key={key}
+                className={`legend-${key} ${hiddenLegend.has(key) ? '' : 'is-on'}`}
+                aria-pressed={!hiddenLegend.has(key)}
+                onClick={() => setHiddenLegend((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; })}
+              ><i aria-hidden="true" /><span>{label}</span></button>
+            ))}
+          </div>
+        </div>
+        <i className="universe-radar__sep" aria-hidden="true" />
+        <small>СЛОИ</small>
+        <div className="universe-radar__seg">
+          <button type="button" className={showSlotLabels ? 'is-on' : ''} aria-pressed={showSlotLabels} title="Показывать номера позиций" onClick={() => setShowSlotLabels((value) => !value)}>⌖ Метки</button>
+          <button type="button" className={showAsteroids ? 'is-on' : ''} aria-pressed={showAsteroids} data-qa-universe-asteroids-toggle title="Показать или скрыть астероиды" onClick={() => setShowAsteroids((value) => !value)}>◌ Астероиды</button>
+          <button type="button" className={showDebris ? 'is-on' : ''} aria-pressed={showDebris} title="Показать или скрыть обломки" onClick={() => setShowDebris((value) => !value)}>✦ Обломки</button>
+          <button type="button" className={focusEmpty ? 'is-on' : ''} aria-pressed={focusEmpty} title="Подсветить свободные позиции" onClick={() => setFocusEmpty((value) => !value)}>▽ Свободные</button>
+        </div>
+        <i className="universe-radar__sep" aria-hidden="true" />
+        <small>СИСТЕМА</small>
+        <div className="universe-jump universe-radar__seg">
+          <button type="button" className="step" onClick={() => goSystem(system - 1)} disabled={system === 1} aria-label="Предыдущая система">‹</button>
+          <label><select value={system} onChange={(event) => goSystem(Number(event.target.value))} aria-label="Солнечная система">{galaxyData.systems.map((item) => <option key={item.system} value={item.system}>{String(item.system).padStart(2, '0')}</option>)}</select><span>/ {SYSTEM_COUNT}</span></label>
+          <button type="button" className="step" onClick={() => goSystem(system + 1)} disabled={system === SYSTEM_COUNT} aria-label="Следующая система">›</button>
+        </div>
+      </div>
 
       {selectedNode ? createPortal(
         <div className="universe-modal-backdrop" onClick={(event) => { if (event.target === event.currentTarget) setSelectedNodeId(null); }}>
