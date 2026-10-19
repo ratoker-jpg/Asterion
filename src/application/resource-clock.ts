@@ -25,6 +25,9 @@ import { isPlanetBlocked } from './overpopulation.ts';
 const RESOURCE_KEYS = ['metal', 'minerals', 'gas'] as const satisfies readonly ProductionResource[];
 const CAPPED_RESOURCE_KEYS = ['metal', 'minerals', 'gas'] as const;
 const HOUR_MS = 60 * 60 * 1000;
+const RESOURCE_RATE_SCALE = 100;
+const RESOURCE_CREDIT_DENOMINATOR = BigInt(HOUR_MS * RESOURCE_RATE_SCALE);
+const RESOURCE_CREDIT_DENOMINATOR_NUMBER = Number(RESOURCE_CREDIT_DENOMINATOR);
 
 export type ResourceClockContext = {
   planetId: SaveState['currentPlanetId'];
@@ -47,6 +50,39 @@ export type TestTargetResourceReconcileContext = {
 
 function finiteNonNegative(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : fallback;
+}
+
+/**
+ * Accrues resource units using integer rate and time numerators so splitting
+ * one interval across many runtime ticks cannot lose credits to float drift.
+ * The persisted remainder stays a resource-unit fraction for save compatibility.
+ */
+function accrueResourceCredits(
+  hourlyRate: number,
+  elapsedMs: number,
+  previousRemainder: number,
+): { wholeCredits: number; remainder: number } {
+  if (!Number.isFinite(hourlyRate) || !Number.isFinite(elapsedMs)) {
+    return { wholeCredits: 0, remainder: 0 };
+  }
+
+  const rateUnits = Math.round(Math.max(0, hourlyRate) * RESOURCE_RATE_SCALE);
+  if (!Number.isFinite(rateUnits)) return { wholeCredits: 0, remainder: 0 };
+
+  const durationMs = BigInt(Math.max(0, Math.trunc(elapsedMs)));
+  const normalizedRemainder = Math.min(0.999_999_999, finiteNonNegative(previousRemainder));
+  const remainderUnits = Math.min(
+    RESOURCE_CREDIT_DENOMINATOR_NUMBER - 1,
+    Math.max(0, Math.round(normalizedRemainder * RESOURCE_CREDIT_DENOMINATOR_NUMBER)),
+  );
+  const totalUnits = BigInt(Math.trunc(rateUnits)) * durationMs + BigInt(remainderUnits);
+  const wholeCredits = Number(totalUnits / RESOURCE_CREDIT_DENOMINATOR);
+  if (!Number.isFinite(wholeCredits)) return { wholeCredits: 0, remainder: 0 };
+
+  return {
+    wholeCredits,
+    remainder: Number(totalUnits % RESOURCE_CREDIT_DENOMINATOR) / RESOURCE_CREDIT_DENOMINATOR_NUMBER,
+  };
 }
 
 /**
@@ -182,37 +218,28 @@ export function reconcileResourceIncome(
   }
 
   const elapsedMs = now - clock.lastReconciledAt;
-  const elapsedHours = elapsedMs / HOUR_MS;
   const baseIncome = getBuildingResourceIncomePerHour(planet.buildings, state.science.levels);
   const income = getProductionBotIncomePerHour(baseIncome, planet.productionBots);
   const hourly = getEffectiveResourceIncomePerHour(income, context.mode, context.testTimeScale);
   const capacities = getStorageCapacities(planet.buildings);
-  const rawCredits = {
-    metal: hourly.metal * elapsedHours + clock.remainder.metal,
-    minerals: hourly.minerals * elapsedHours + clock.remainder.minerals,
-    gas: hourly.gas * elapsedHours + clock.remainder.gas,
-  };
+  const accrued = Object.fromEntries(
+    RESOURCE_KEYS.map((key) => [key, accrueResourceCredits(hourly[key], elapsedMs, clock.remainder[key])]),
+  ) as Record<ProductionResource, { wholeCredits: number; remainder: number }>;
   const wholeCredits = Object.fromEntries(
-    RESOURCE_KEYS.map((key) => [key, Number.isFinite(rawCredits[key]) ? Math.floor(Math.max(0, rawCredits[key])) : 0]),
+    RESOURCE_KEYS.map((key) => [key, accrued[key].wholeCredits]),
   ) as Record<ProductionResource, number>;
   const wallet = { ...getPlanetResources(state, context.planetId), energy: planet.energy };
   const credit = creditResources(wallet, capacities, wholeCredits);
   const remainder = { ...clock.remainder };
 
   for (const key of RESOURCE_KEYS) {
-    const raw = rawCredits[key];
-    const whole = wholeCredits[key];
-    if (!Number.isFinite(raw)) {
-      remainder[key] = 0;
-      continue;
-    }
     if ((CAPPED_RESOURCE_KEYS as readonly string[]).includes(key)) {
       const capacity = capacities[key as keyof typeof capacities];
       const wasFull = finiteNonNegative(wallet[key]) >= finiteNonNegative(capacity);
       const isFull = credit.wallet[key] >= finiteNonNegative(capacity);
-      remainder[key] = wasFull || isFull ? 0 : Math.max(0, raw - whole);
+      remainder[key] = wasFull || isFull ? 0 : accrued[key].remainder;
     } else {
-      remainder[key] = Math.max(0, raw - whole);
+      remainder[key] = accrued[key].remainder;
     }
   }
 
@@ -290,7 +317,7 @@ export function reconcileTestEspionageTargetResources(
       changed = true;
       continue;
     }
-    const elapsedHours = (now - clock.lastReconciledAt) / HOUR_MS;
+    const elapsedMs = now - clock.lastReconciledAt;
     const baseIncome = getBuildingResourceIncomePerHour(
       targetBuildings(target),
       profile?.scienceLevels ?? target.ownerProfile?.scienceLevels,
@@ -299,10 +326,9 @@ export function reconcileTestEspionageTargetResources(
     const remainder = { ...clock.remainder };
     const resources = { ...target.resources };
     for (const key of RESOURCE_KEYS) {
-      const raw = hourly[key] * elapsedHours + clock.remainder[key];
-      const whole = Number.isFinite(raw) ? Math.floor(Math.max(0, raw)) : 0;
-      resources[key] = finiteNonNegative(resources[key]) + whole;
-      remainder[key] = Number.isFinite(raw) ? Math.max(0, raw - whole) : 0;
+      const accrued = accrueResourceCredits(hourly[key], elapsedMs, clock.remainder[key]);
+      resources[key] = finiteNonNegative(resources[key]) + accrued.wholeCredits;
+      remainder[key] = accrued.remainder;
     }
     const nextTarget: SpyTargetState = {
       ...target,

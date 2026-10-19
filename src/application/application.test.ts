@@ -51,7 +51,7 @@ import {
 } from './energy.ts';
 import { createEnergyLedger } from '../domain/energy/runtime.ts';
 import { reconcileRuntime } from './reconcile.ts';
-import { getEffectiveResourceIncomePerHour } from './resource-clock.ts';
+import { getEffectiveResourceIncomePerHour, reconcileResourceIncome } from './resource-clock.ts';
 import { dispatchFlight, reconcileFlights } from './flights.ts';
 import { publishApplicationRuntimeSnapshot } from './runtime.ts';
 import { enqueueApplicationStateUpdate } from './state.ts';
@@ -2107,6 +2107,59 @@ test('resource clock accrues canonical income once, scales only Test Mode, and p
   assert.equal(twoTicks.state.metal, production.state.metal);
   assert.equal(twoTicks.state.minerals, production.state.minerals);
   assert.equal(twoTicks.state.gas, production.state.gas);
+});
+
+test('resource clock preserves whole credits across irregular reconciliation intervals', () => {
+  const start = 1_800_000_000_000;
+  const totalDurationMs = 48 * 60 * 60 * 1000;
+  const base = createInitialSaveState('production', start);
+  const zeroResources = { metal: 0, minerals: 0, gas: 0 };
+  const zeroClock = {
+    lastReconciledAt: start,
+    remainder: { metal: 0, minerals: 0, gas: 0, energy: 0 },
+  };
+  const initial: SaveState = {
+    ...base,
+    metal: 0,
+    minerals: 0,
+    gas: 0,
+    planets: {
+      ...base.planets,
+      'helion-01': { ...base.planets['helion-01'], resources: zeroResources },
+    },
+    resourceClock: {
+      ...base.resourceClock,
+      ...zeroClock,
+      byPlanet: { ...base.resourceClock.byPlanet, 'helion-01': zeroClock },
+    },
+  };
+  const context = (now: number) => ({
+    planetId: 'helion-01' as const,
+    now,
+    mode: 'production' as const,
+    testTimeScale: 1 as const,
+  });
+  const singlePass = reconcileResourceIncome(initial, context(start + totalDurationMs)).state;
+
+  let seed = 1_234_567;
+  let elapsedMs = 0;
+  let incremental = initial;
+  for (let index = 0; index < 999; index += 1) {
+    seed = (seed * 48_271) % 2_147_483_647;
+    const remainingIntervals = 999 - index;
+    const remainingMs = totalDurationMs - elapsedMs;
+    const maxIntervalMs = Math.min(800_000, remainingMs - remainingIntervals);
+    const intervalMs = Math.max(1, Math.floor((seed / 2_147_483_647) * maxIntervalMs));
+    elapsedMs += intervalMs;
+    incremental = reconcileResourceIncome(incremental, context(start + elapsedMs)).state;
+  }
+  incremental = reconcileResourceIncome(incremental, context(start + totalDurationMs)).state;
+
+  assert.deepEqual(getPlanetResources(incremental, 'helion-01'), getPlanetResources(singlePass, 'helion-01'));
+  assert.deepEqual(
+    incremental.resourceClock.byPlanet?.['helion-01'],
+    singlePass.resourceClock.byPlanet?.['helion-01'],
+  );
 });
 
 test('resource income uses an independent persisted clock per planet and reconciles repeatedly without duplication', () => {
