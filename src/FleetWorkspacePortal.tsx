@@ -1685,16 +1685,24 @@ function FleetWorkspace({
       ) : null}
       {previewOpen ? createPortal(
         <div className="resource-building-action-confirm-backdrop" data-qa-flight-preview-backdrop onMouseDown={closeFlightPreview}>
-          <section className="resource-building-action-confirm flight-preview-modal flight-timeline-modal" role="dialog" aria-modal="true" aria-labelledby="flight-preview-title" onMouseDown={(event) => event.stopPropagation()}>
+          <section className="resource-building-action-confirm flight-preview-modal flight-timeline-modal flight-briefing-v2" role="dialog" aria-modal="true" aria-labelledby="flight-preview-title" onMouseDown={(event) => event.stopPropagation()}>
             <header className="flight-timeline-head">
               <div>
-                <small>FLIGHT PLAN / ОПЕРАТИВНЫЙ МАРШРУТ</small>
+                <small>ПЛАН ПЕРЕЛЁТА · {selectedMission.label.toUpperCase()}</small>
                 <h3 id="flight-preview-title">ПЛАН ПЕРЕЛЁТА</h3>
                 <p>Последовательность подготовки: источник → цель → состав флота → подтверждение.</p>
               </div>
               <button type="button" className="flight-timeline-close" data-asterion-close aria-label="Закрыть план перелёта" onClick={closeFlightPreview}>×</button>
               </header>
             <div className="flight-timeline-body">
+              <section className="flight-briefing-v2__hero" aria-label="Миссия">
+                <MissionIcon mission={selectedMission} />
+                <div>
+                  <small>МИССИЯ</small>
+                  <strong>{selectedMission.label}</strong>
+                  <p>{selectedMission.description}</p>
+                </div>
+              </section>
               <ol className="flight-timeline-steps" aria-label="Шаги подготовки рейса">
                 <li className="flight-timeline-step is-complete" data-qa-flight-source-step>
                   <span aria-hidden="true">01</span>
@@ -1790,6 +1798,12 @@ function FleetWorkspace({
                 </div>
                 {missionId === 'gas' && gasPreviewNeedsReconfirmation ? <div className="flight-timeline-notes"><p role="status" className="flight-timeline-note-warning" data-qa-gas-preview-reconfirmation>Прогноз обновлён. Проверьте ETA и положение астероида, затем подтвердите отправку ещё раз.</p></div> : null}
                 {previewResult?.ok ? <>
+                  <div className="flight-briefing-v2__axis" aria-hidden="true">
+                    <i />
+                    <span style={{ left: '8%' }}><b />ВЫЛЕТ · <em>сейчас</em></span>
+                    <span style={{ left: '50%' }}><b />{missionId === 'space-flight' ? 'РАЗВОРОТ' : 'ПРИБЫТИЕ'} · <em>через {flightDurationLabel(previewResult.flight.oneWayDurationMs)}</em></span>
+                    <span style={{ left: '90%' }}><b />{missionId === 'deployment' || missionId === 'colonize' ? 'БЕЗ ВОЗВРАТА' : <>ВОЗВРАТ · <em>через {flightDurationLabel(previewResult.flight.oneWayDurationMs * 2)}</em></>}</span>
+                  </div>
                   <div className="flight-timeline-metrics" data-qa-flight-preview data-qa-flight-preview-departed-at={previewResult.flight.departedAt} data-qa-flight-preview-arrival-at={previewResult.flight.arrivalAt} data-qa-flight-preview-speed={previewResult.flight.effectiveSpeed} data-qa-flight-preview-duration={previewResult.flight.oneWayDurationMs}>
                     <div><small>{missionId === 'space-flight' ? 'ЦЕЛЬ' : 'РАССТОЯНИЕ'}</small><strong>{missionId === 'space-flight' ? 'нет' : `${flightNumberLabel(previewResult.flight.routeDistance)} ед.`}</strong></div>
                     <div><small>{missionId === 'space-flight' ? 'СКОРОСТЬ' : 'ЭФФ. СКОРОСТЬ'}</small><strong>{missionId === 'space-flight' ? 'не применяется' : flightNumberLabel(previewResult.flight.effectiveSpeed)}</strong></div>
