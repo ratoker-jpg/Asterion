@@ -936,29 +936,6 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
         <p>+ {systemData.positions.filter((node) => node.kind === 'uninhabited').length} необитаемых · {systemData.asteroids.length} астероидов · {systemData.positions.filter((node) => node.kind === 'empty').length} свободных</p>
       </aside>
 
-      <aside className="universe-radar__minimap" aria-label="Системы галактики">
-        <div className="universe-radar__head"><small>ГАЛАКТИКА {String(GALAXY).padStart(2, '0')} · {SYSTEM_COUNT} СИСТЕМ</small></div>
-        <div className="universe-radar__grid">
-          {galaxyData.systems.map((item) => {
-            const relations = item.positions
-              .filter((node) => node.kind === 'player' || node.kind === 'npc')
-              .map((node) => getUniverseOwnerRelation(node, owner.id, owner.alliance, owners.get(node.ownerId ?? ''), allianceDiplomacy));
-            const own = relations.includes('self');
-            const marker = own ? 'has-own' : relations.includes('enemy') ? 'has-enemy' : relations.includes('ally') ? 'has-ally' : '';
-            return (
-              <button
-                type="button"
-                key={item.system}
-                className={`${item.system === system ? 'is-current' : ''} ${marker}`}
-                title={`Система ${String(item.system).padStart(2, '0')}${own ? ' · ваш мир' : marker === 'has-enemy' ? ' · враг' : marker === 'has-ally' ? ' · союзник' : ''}`}
-                aria-label={`Система ${item.system}`}
-                onClick={() => goSystem(item.system)}
-              />
-            );
-          })}
-        </div>
-      </aside>
-
       <div className="universe-radar__dock" aria-label="Фильтры и слои карты">
         <small>ФИЛЬТР</small>
         <div className="universe-radar__seg">
