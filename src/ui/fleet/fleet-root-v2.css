@@ -146,3 +146,32 @@
 .flight-briefing-v2 .flight-timeline-cargo-grid { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 6px 14px !important; }
 .flight-briefing-v2 .flight-timeline-cargo-head { margin-bottom: 6px; }
 .flight-briefing-v2 .flight-timeline-summary { min-height: 220px; }
+
+/* ---------- «Разведданные»: probes on orbit with their latest snapshot ---------- */
+.resource-building-action-confirm.spy-operations-modal.spy-intel-modal-v2 { width: min(1560px, calc(100vw - 120px)); max-width: none; }
+.spy-intel-v2 { display: flex; flex-direction: column; gap: 8px; max-height: min(640px, calc(100vh - 300px)); overflow-y: auto; padding: 4px 2px; scrollbar-width: thin; text-align: left; }
+.spy-intel-v2__row { display: grid; grid-template-columns: 26px 230px minmax(0, 1fr) 210px; gap: 14px; align-items: center; padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(126, 200, 220, .16); background: rgba(16, 26, 31, .6); }
+.spy-intel-v2__row.is-selected { border-color: color-mix(in srgb, var(--race-accent, #b4ceff) 60%, transparent); background: linear-gradient(90deg, color-mix(in srgb, var(--race-accent-strong, #5f9bff) 14%, transparent), rgba(16, 26, 31, .7)); }
+.spy-intel-v2__target { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.spy-intel-v2__target strong { color: #fff; font-size: 14px !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spy-intel-v2__target small { color: #7f98a0; font-size: 11px !important; }
+.spy-intel-v2__rel { align-self: flex-start; margin-top: 3px; padding: 2px 8px; border-radius: 6px; font-style: normal; font-size: 10px !important; font-weight: 800; letter-spacing: .08em; color: #35e58a; border: 1px solid rgba(53, 229, 138, .4); background: rgba(53, 229, 138, .08); }
+.spy-intel-v2__rel.is-enemy { color: #ff8c9c; border-color: rgba(240, 68, 94, .45); background: rgba(240, 68, 94, .1); }
+.spy-intel-v2__cells { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.spy-intel-v2__cells div { padding: 6px 9px; border-radius: 9px; border: 1px solid rgba(126, 200, 220, .14); background: rgba(0, 0, 0, .28); min-width: 0; }
+.spy-intel-v2__cells small { display: block; color: var(--ut-label, #8fb6c0); font-size: 9.5px !important; font-weight: 800; letter-spacing: .1em; white-space: nowrap; }
+.spy-intel-v2__cells b { color: #fff; font-size: 13px !important; font-variant-numeric: tabular-nums; }
+.spy-intel-v2__cells i { margin-left: 5px; font-style: normal; font-size: 10.5px !important; font-weight: 800; }
+.spy-intel-v2__cells i.is-up { color: #35e58a; }
+.spy-intel-v2__cells i.is-down { color: #ff8c9c; }
+.spy-intel-v2__times { display: block; margin-top: 6px; color: #7f98a0; font-size: 11px !important; }
+.spy-intel-v2__snap.is-empty { color: #7f98a0; font-size: 12px !important; }
+.spy-intel-v2__actions { display: flex; flex-direction: column; gap: 6px; }
+.spy-intel-v2__actions button { height: 34px; border-radius: 9px; font-size: 11px !important; font-weight: 800; letter-spacing: .08em; }
+.spy-intel-v2__actions button.is-primary:not(:disabled) { background: linear-gradient(180deg, #5fe2f8, #2bb6d6); color: #03222b; border-color: #8cefff; }
+.spy-intel-v2__actions button.is-danger { border-color: rgba(240, 68, 94, .5); color: #ff8c9c; background: rgba(240, 68, 94, .08); }
+.spy-intel-v2__transit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; border: 1px dashed rgba(126, 200, 220, .25); color: #9fb7be; font-size: 12px !important; }
+.spy-intel-v2__transit small { color: var(--ut-label, #8fb6c0); font-size: 10px !important; font-weight: 800; letter-spacing: .12em; }
+.spy-intel-v2__transit span { display: inline-flex; align-items: center; gap: 8px; }
+.spy-intel-v2__transit button { height: 26px; padding: 0 10px; font-size: 10px !important; }
+.resource-building-action-confirm.spy-operations-modal.spy-intel-modal-v2 { height: auto; max-height: calc(100vh - 120px); }

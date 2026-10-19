@@ -1900,35 +1900,54 @@ function FleetWorkspace({
       ) : null}
       {spyOperationsOpen ? createPortal(
         <div className="resource-building-action-confirm-backdrop spy-operations-backdrop" data-qa-spy-operations-backdrop onMouseDown={() => setSpyOperationsOpen(false)}>
-          <section className="resource-building-action-confirm spy-operations-modal" role="dialog" aria-modal="true" aria-labelledby="spy-operations-title" onMouseDown={(event) => event.stopPropagation()}>
+          <section className="resource-building-action-confirm spy-operations-modal spy-intel-modal-v2" role="dialog" aria-modal="true" aria-labelledby="spy-operations-title" onMouseDown={(event) => event.stopPropagation()}>
             <header className="spy-operations-modal__head">
               <div>
                 <small>УПРАВЛЕНИЕ ФЛОТОМ / ШПИОНАЖ</small>
-                <h3 id="spy-operations-title">ШПИОНСКИЕ ОТЧЁТЫ</h3>
-                <p>Активные зонды и управление готовыми снимками цели.</p>
+                <h3 id="spy-operations-title">РАЗВЕДДАННЫЕ</h3>
+                <p>Зонды на орбитах целей: последний снимок и изменения с прошлого.</p>
               </div>
               <button type="button" className="spy-operations-modal__close" data-asterion-close aria-label="Закрыть шпионские отчёты" onClick={() => setSpyOperationsOpen(false)}>×</button>
             </header>
-            <div className="spy-operations-table-shell" role="table" aria-label="Активные шпионские зонды">
-              <div className="spy-operations-row spy-operations-row--head" role="row">
-                <span role="columnheader">ВЫБОР</span><span role="columnheader">ОТКУДА</span><span role="columnheader">КУДА</span><span role="columnheader">ПРИБЫТИЕ</span><span role="columnheader">ВОЗВРАЩЕНИЕ</span><span role="columnheader">МИССИЯ</span><span role="columnheader">ДЕЙСТВИЯ</span>
-              </div>
-              {spyRows.length ? spyRows.map(({ mission, flight }) => {
+            <div className="spy-intel-v2" aria-label="Разведданные зондов на орбите">
+              {spyRows.filter(({ mission }) => mission.status === 'orbiting').map(({ mission, flight }) => {
                 const selected = selectedSpyMissionIds.has(mission.id);
-                const reportReady = mission.status === 'orbiting' && (mission.nextReportAt === undefined || clockNow >= mission.nextReportAt);
-                return <div className="spy-operations-row" key={mission.id} data-qa-spy-mission={mission.id} data-qa-spy-status={mission.status} role="row">
-                  <label className="spy-operations-select" role="cell"><input type="checkbox" checked={selected} onChange={(event) => { const checked = event.currentTarget.checked; setSelectedSpyMissionIds((current) => { const next = new Set(current); if (checked) next.add(mission.id); else next.delete(mission.id); return next; }); }} aria-label={`Выбрать зонд у ${mission.targetPlanetName}`} /><span aria-hidden="true" /></label>
-                  <span role="cell"><strong>{planetName}</strong><small>{flightCoordinateLabel(flight.originCoordinate)}</small></span>
-                  <span role="cell"><strong>{mission.targetPlanetName}</strong><small>{flightCoordinateLabel(mission.targetCoordinate)} · {mission.targetOwnerName}</small></span>
-                  <span className="fleet-spy-status-v1" role="cell">{mission.status === 'transit' ? flightCountdown(flight.arrivalAt, clockNow) : mission.status === 'orbiting' ? 'НА ОРБИТЕ' : '—'}</span>
-                  <span className="fleet-spy-status-v1" role="cell">{mission.status === 'returning' ? flightCountdown(flight.returnAt, clockNow) : '—'}</span>
-                  <span role="cell"><strong>ШПИОНАЖ</strong><small>{spyStatusLabel(mission, flight, clockNow)} · {espionageState.reports.filter((report) => report.missionId === mission.id).length} отч.</small></span>
-                  <span className="fleet-spy-row-actions-v1" role="cell">
-                    <button type="button" disabled={!reportReady} onClick={() => window.dispatchEvent(new CustomEvent(SPY_REPORT_REQUEST_EVENT, { detail: { missionId: mission.id, now: Date.now() } }))}>ПОЛУЧИТЬ ОТЧЁТ</button>
-                    <button type="button" disabled={mission.status === 'returning'} onClick={() => { if (mission.status === 'transit' || mission.status === 'orbiting') window.dispatchEvent(new CustomEvent(FLIGHT_RECALL_REQUEST_EVENT, { detail: { flightId: flight.id, now: Date.now() } })); }}>ВЕРНУТЬ</button>
-                  </span>
+                const reportReady = mission.nextReportAt === undefined || clockNow >= mission.nextReportAt;
+                const reports = espionageState.reports.filter((report) => report.missionId === mission.id).sort((left, right) => right.createdAt - left.createdAt);
+                const [latest, previous] = reports;
+                const cells: { label: string; value: number | undefined; before: number | undefined }[] = latest ? [
+                  { label: 'МЕТАЛЛ', value: latest.resources.metal, before: previous?.resources.metal },
+                  { label: 'МИНЕРАЛЫ', value: latest.resources.minerals, before: previous?.resources.minerals },
+                  { label: 'ГАЗ', value: latest.resources.gas, before: previous?.resources.gas },
+                  { label: 'ОБЛОМКИ', value: latest.resources.debris, before: previous?.resources.debris },
+                  { label: 'ФЛОТ · НАС.', value: latest.population?.fleet, before: previous?.population?.fleet },
+                  { label: 'ОБОРОНА · НАС.', value: latest.population?.defense, before: previous?.population?.defense },
+                ] : [];
+                return <div className={`spy-intel-v2__row${selected ? ' is-selected' : ''}`} key={mission.id} data-qa-spy-mission={mission.id} data-qa-spy-status={mission.status}>
+                  <label className="spy-operations-select"><input type="checkbox" checked={selected} onChange={(event) => { const checked = event.currentTarget.checked; setSelectedSpyMissionIds((current) => { const next = new Set(current); if (checked) next.add(mission.id); else next.delete(mission.id); return next; }); }} aria-label={`Выбрать зонд у ${mission.targetPlanetName}`} /><span aria-hidden="true" /></label>
+                  <div className="spy-intel-v2__target">
+                    <strong>{mission.targetPlanetName}</strong>
+                    <small><CoordinateLink coordinate={mission.targetCoordinate} /> · {mission.targetOwnerName}</small>
+                    <em className={`spy-intel-v2__rel is-${mission.targetRelation}`}>{mission.targetRelation === 'enemy' ? 'ВРАГ' : mission.targetRelation === 'ally' ? 'СОЮЗНИК' : 'НЕЙТРАЛ'} · НА ОРБИТЕ</em>
+                  </div>
+                  {latest ? <div className="spy-intel-v2__snap">
+                    <div className="spy-intel-v2__cells">{cells.map((cell) => {
+                      const delta = cell.value !== undefined && cell.before !== undefined ? cell.value - cell.before : 0;
+                      return <div key={cell.label}><small>{cell.label}</small><b>{cell.value === undefined ? '—' : flightNumberLabel(cell.value)}</b>{delta ? <i className={delta > 0 ? 'is-up' : 'is-down'}>{delta > 0 ? '+' : '−'}{flightNumberLabel(Math.abs(delta))}</i> : null}</div>;
+                    })}</div>
+                    <span className="spy-intel-v2__times">снимок {flightArrivalLabel(latest.createdAt)} · всего {reports.length}{previous ? ' · изменения к прошлому снимку' : ''}</span>
+                  </div> : <div className="spy-intel-v2__snap is-empty">Снимков ещё нет · {spyStatusLabel(mission, flight, clockNow)}</div>}
+                  <div className="spy-intel-v2__actions">
+                    <button type="button" className="is-primary" disabled={!reportReady} onClick={() => window.dispatchEvent(new CustomEvent(SPY_REPORT_REQUEST_EVENT, { detail: { missionId: mission.id, now: Date.now() } }))}>{reportReady ? 'НОВЫЙ СНИМОК' : spyStatusLabel(mission, flight, clockNow)}</button>
+                    <button type="button" className="is-danger" onClick={() => window.dispatchEvent(new CustomEvent(FLIGHT_RECALL_REQUEST_EVENT, { detail: { flightId: flight.id, now: Date.now() } }))}>ОТОЗВАТЬ</button>
+                  </div>
                 </div>;
-              }) : <p className="fleet-spy-empty-v1">Активных зондов нет. Отправьте один зонд на вражескую или нейтральную планету.</p>}
+              })}
+              {spyRows.some(({ mission }) => mission.status === 'orbiting') ? null : <p className="fleet-spy-empty-v1">На орбитах нет зондов. Отправьте один зонд на вражескую или нейтральную планету — он останется на орбите и будет присылать снимки.</p>}
+              {spyRows.some(({ mission }) => mission.status !== 'orbiting') ? <div className="spy-intel-v2__transit">
+                <small>ЕЩЁ НЕ НА ОРБИТЕ</small>
+                {spyRows.filter(({ mission }) => mission.status !== 'orbiting').map(({ mission, flight }) => <span key={mission.id} data-qa-spy-mission={mission.id} data-qa-spy-status={mission.status}>{mission.targetPlanetName} · {mission.status === 'transit' ? `прибытие через ${flightCountdown(flight.arrivalAt, clockNow)}` : `возврат через ${flightCountdown(flight.returnAt, clockNow)}`}{mission.status === 'transit' ? <button type="button" onClick={() => window.dispatchEvent(new CustomEvent(FLIGHT_RECALL_REQUEST_EVENT, { detail: { flightId: flight.id, now: Date.now() } }))}>ОТОЗВАТЬ</button> : null}</span>)}
+              </div> : null}
             </div>
             <footer className="spy-operations-modal__footer">
               <span>{spyRows.length} активных зондов</span>
