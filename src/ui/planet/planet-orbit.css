@@ -119,3 +119,8 @@
 @media (prefers-reduced-motion: reduce) {
   .planet-page-v3.planet-orbit .zone-hotspot.planet-orbit__zone:hover { transform: none; }
 }
+
+/* Hourly income reads at a glance: big icon, big number (was 13px). */
+.planet-orbit .planet-orbit__income span { grid-template-columns: 40px minmax(0, 1fr); column-gap: 12px; padding: 10px 14px; color: var(--ut-label, #8fb6c0); font-size: 11px !important; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.planet-orbit .planet-orbit__income span > :first-child { width: 40px; height: 40px; }
+.planet-orbit .planet-orbit__income b { font-size: 21px !important; font-weight: 800; letter-spacing: .01em; line-height: 1.1; text-transform: none; white-space: nowrap; }

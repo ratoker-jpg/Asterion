@@ -1417,3 +1417,19 @@
 .reports-view.reports-v2 .reports-v2-nav-art img { transform: scale(1.35); transform-origin: center; }
 .reports-view.reports-v2 .reports-v2-nav-art { margin-right: 6px; }
 .reports-view.reports-v2 .reports-profile-avatar__portrait[data-faction="aegis"] img { transform: translateX(2%) !important; }
+
+/* Battle sides: colour follows the outcome (winner green, loser red, draw amber), not attacker/defender. */
+.reports-view.reports-v2 .reports-battle-side.reports-battle-side--winner .reports-battle-general-art { --reports-v2-art-tone: #35e58a; }
+.reports-view.reports-v2 .reports-battle-side.reports-battle-side--loser .reports-battle-general-art { --reports-v2-art-tone: #ff626f; }
+.reports-view.reports-v2 .reports-battle-side.reports-battle-side--draw .reports-battle-general-art { --reports-v2-art-tone: #e6ad50; }
+.reports-view.reports-v2 .reports-battle-side.reports-battle-side--winner .reports-battle-side-copy small { color: #35e58a; }
+.reports-view.reports-v2 .reports-battle-side.reports-battle-side--loser .reports-battle-side-copy small { color: var(--reports-v2-red); }
+.reports-view.reports-v2 .reports-battle-side.reports-battle-side--draw .reports-battle-side-copy small { color: var(--reports-v2-amber); }
+.reports-view.reports-v2 .reports-battle-side.reports-battle-side--winner .reports-battle-population-bar > i { background: #35e58a; }
+.reports-view.reports-v2 .reports-battle-side.reports-battle-side--loser .reports-battle-population-bar > i { background: var(--reports-v2-red); }
+.reports-view.reports-v2 .reports-battle-side.reports-battle-side--draw .reports-battle-population-bar > i { background: var(--reports-v2-amber); }
+
+/* Profile: the alliance shows its own crest, not the generic «Союзы» icon. */
+.reports-view.reports-v2 .reports-profile-alliance-crest { display: grid; place-items: center; width: 96px; height: 96px; }
+.reports-view.reports-v2 .reports-profile-alliance-crest .command-emblem { width: 96px; height: 96px; }
+.reports-view.reports-v2 .reports-profile-alliance-crest .command-emblem svg { width: 100%; height: 100%; }

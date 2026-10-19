@@ -929,6 +929,12 @@ export function App() {
     () => planetSkins.find((skin) => skin.id === currentPlanetState.skin) ?? planetSkins[0],
     [currentPlanetState.skin],
   );
+  // Exploration contacts rebuild up to 11 systems; on a 1 s clock that stalled
+  // the universe map. Status changes are coarse, a 5 s bucket is enough.
+  const explorationClock = Math.floor(now / 5_000) * 5_000;
+  const universeExplorationEligibility = useMemo(() => (activeRoute === 'universe'
+    ? Object.fromEntries(selectExplorationTargets(state, explorationClock, RUNTIME_MODE).map(node => [node.id, explorationTargetStatus(state, node)]))
+    : {}), [activeRoute, explorationClock, state]);
   const universePlayerPlanets = useMemo(() => ownedPlanets.map((planet) => {
     const runtimePlanet = state.planets[planet.id];
     const skin = planetSkins.find((candidate) => candidate.id === runtimePlanet.skin) ?? planetSkins[0];
@@ -2048,7 +2054,7 @@ export function App() {
               onAsteroidRecycler={openAsteroidRecyclerLaunch}
               onExpedition={openExpeditionLaunch}
               onExplorationRecon={launchExplorationRecon}
-              explorationEligibility={Object.fromEntries(selectExplorationTargets(state, now, RUNTIME_MODE).map(node => [node.id, explorationTargetStatus(state, node)]))}
+              explorationEligibility={universeExplorationEligibility}
               onTransport={openTransportLaunch}
               onSpy={openSpyLaunch}
               onAttack={openAttackLaunch}

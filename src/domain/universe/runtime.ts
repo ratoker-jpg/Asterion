@@ -36,6 +36,8 @@ import {
 import type { PirateContactDefeatRecord } from '../pirates/contact-schedule.ts';
 
 export const GALAXY = 1;
+/** Galaxies that exist today; the map navigator already steps through galaxies. */
+export const GALAXY_COUNT = 1;
 export const SYSTEM_COUNT = 40;
 export const POSITION_COUNT = 24;
 export const MAX_PLANETS_PER_OWNER = 7;

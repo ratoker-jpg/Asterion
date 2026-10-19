@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { BattleReportModal } from './BattleReportsView';
 import { FactionGeneralPortrait } from './ui/FactionGeneralPortrait.tsx';
+import { EmblemGlyph } from './ui/command/EmblemGlyph.tsx';
 import pirateWarlordArt from '../assets/source/characters/pirates/pirate_warlord.png';
 import { asterionAssetIntegrationAssets } from './assets/generated/asterionAssetIntegrationManifest.generated.ts';
 import { isAsterionLocalPlayerId, type BattleReport } from './domain/combat/report.ts';
@@ -436,11 +437,11 @@ function isPirateSide(side: BattleSideViewModel) {
   return /pirat|пират/i.test([p.race, p.playerId, p.playerName, String(side.factionId)].join(' '));
 }
 
-function BattleSideOverview({ side }: { side: BattleSideViewModel }) {
+function BattleSideOverview({ side, outcome }: { side: BattleSideViewModel; outcome: 'winner' | 'loser' | 'draw' }) {
   const sideLabel = side.participant.side === 'attacker' ? 'АТАКУЮЩИЙ' : 'ЗАЩИТНИК';
   const participantMeta = [isPirateSide(side) ? 'Пираты' : side.participant.race, side.participant.coordinates].filter(Boolean).join(' · ');
   return (
-    <article className={`reports-battle-side reports-battle-side--${side.participant.side}`}>
+    <article className={`reports-battle-side reports-battle-side--${side.participant.side} reports-battle-side--${outcome}`}>
       <div className="reports-v2-art reports-battle-general-art">{isPirateSide(side) ? <span className="faction-general-portrait" data-faction="pirates"><img src={pirateWarlordArt} alt="" /></span> : <FactionGeneralPortrait factionId={side.factionId} />}</div>
       <div className="reports-battle-side-copy"><small>{sideLabel}</small><strong>{side.participant.playerName || side.participant.planetName || '—'}</strong><span>{participantMeta || side.participant.planetName || 'Данные участника не зафиксированы'}</span></div>
       <div className="reports-battle-population"><small>НАСЕЛЕНИЕ</small><span><b>{side.populationBefore == null ? '—' : numberFormat.format(side.populationBefore)}</b><i aria-hidden="true">→</i><b>{side.populationAfter == null ? '—' : numberFormat.format(side.populationAfter)}</b></span></div>
@@ -471,9 +472,9 @@ function BattleDossier({ item, report, saved, rating, playerOwnerId, onToggleSav
     <div className={`reports-dossier reports-dossier--battle reports-v2-tone-${item.statusTone}`}>
       <DossierHeading item={item} />
       <section className={`reports-battle-overview reports-battle-overview--${result.tone}`} aria-label="Сводка боевого отчёта">
-        <BattleSideOverview side={viewModel.attacker} />
+        <BattleSideOverview side={viewModel.attacker} outcome={viewModel.winner === 'draw' ? 'draw' : viewModel.winner === 'attacker' ? 'winner' : 'loser'} />
         <div className="reports-battle-versus" aria-label={result.label}><span>VS</span></div>
-        <BattleSideOverview side={viewModel.defender} />
+        <BattleSideOverview side={viewModel.defender} outcome={viewModel.winner === 'draw' ? 'draw' : viewModel.winner === 'defender' ? 'winner' : 'loser'} />
       </section>
       <section className={`reports-v3-verdict reports-v2-tone-${item.statusTone}`} aria-label="Итог боя">
         <div><small>ИТОГ БОЯ</small><strong>{item.statusLabel}</strong><span>{viewModel.roundCount ? `${viewModel.roundCount} ${viewModel.roundCount === 1 ? 'раунд' : viewModel.roundCount < 5 ? 'раунда' : 'раундов'}` : 'Бой не состоялся: у одной из сторон не было сил'}</span></div>
@@ -544,7 +545,7 @@ function PlayerProfile({ profile, score, command, mode, recentItems, onOpenComma
         </section>
         <section className="reports-profile-alliance" aria-label="Состояние союза">
           <small>СОЮЗ</small>
-          {alliance ? <button type="button" className="reports-profile-alliance-link" onClick={onOpenCommand} aria-label={`Открыть Командование союза ${alliance.name}`}><span className="reports-v2-art reports-profile-alliance-art"><ReportGlyph kind="alliances" /></span><span><strong>{alliance.name}</strong><small>[{alliance.tag}] · {numberFormat.format(membership?.alliance.members.length ?? 0)} участников</small></span><b>КОМАНДОВАНИЕ <i>→</i></b></button> : <div className="reports-profile-no-alliance"><span className="reports-profile-diamond" aria-hidden="true">?</span><span><strong>Без Союза</strong><small>Членство не задано в профиле</small></span></div>}
+          {alliance ? <button type="button" className="reports-profile-alliance-link" onClick={onOpenCommand} aria-label={`Открыть Командование союза ${alliance.name}`}><span className="reports-v2-art reports-profile-alliance-art reports-profile-alliance-crest">{membership ? <EmblemGlyph emblem={membership.alliance.emblem} /> : <ReportGlyph kind="alliances" />}</span><span><strong>{alliance.name}</strong><small>[{alliance.tag}] · {numberFormat.format(membership?.alliance.members.length ?? 0)} участников</small></span><b>КОМАНДОВАНИЕ <i>→</i></b></button> : <div className="reports-profile-no-alliance"><span className="reports-profile-diamond" aria-hidden="true">?</span><span><strong>Без Союза</strong><small>Членство не задано в профиле</small></span></div>}
           <ProfileRecentEvents items={recentItems} />
         </section>
       </div>

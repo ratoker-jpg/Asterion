@@ -1,32 +1,64 @@
-/* ---------- Universe «Радар-док» (designs/pu-fleets-2026-10-19, universe variant C) ---------- */
-.workspace--universe .universe-view-v3.universe-radar .system-scene { inset: 0 10px 64px 310px; }
+/* ---------- Universe «Радар-док» (designs/pu-fleets-2026-10-19, universe variant C) ----------
+   One frame only: the map fills the whole window, every panel floats over it.
+   The system list is a collapsed drawer (hover / focus / pin opens it), the
+   galaxy + system navigator sits top right, filters and layers dock at the bottom. */
+.workspace--universe .universe-view-v3.universe-radar .system-scene { inset: 0 108px 58px 108px; background: radial-gradient(ellipse 60% 55% at 50% 52%, rgba(16, 70, 90, .16), transparent 70%); }
+/* The vignette drew a second frame at the scene edge — the main frame already carries the edge shadow. */
+.workspace--universe .universe-view-v3.universe-radar .system-scene::after { display: none; }
 .universe-radar .is-filtered { opacity: .22; filter: grayscale(.6); }
-.universe-radar .universe-debris-marker__badge img { display: block; width: 18px; height: 18px; object-fit: contain; }
 
 .universe-radar .universe-radar__crumb,
 .universe-radar .universe-radar__list,
-.universe-radar .universe-radar__minimap,
+.universe-radar .universe-radar__nav,
 .universe-radar .universe-radar__dock {
   position: absolute;
   z-index: 20;
-  border-radius: 16px;
-  border: 1px solid rgba(126, 200, 220, .3);
-  background: rgba(6, 14, 20, .94);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, .5);
+  border-radius: 14px;
+  border: 1px solid rgba(126, 200, 220, .26);
+  background: rgba(6, 14, 20, .9);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .45);
 }
 .universe-radar small { color: var(--ut-label, #8fb6c0); font-size: 10.5px !important; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
-.universe-radar .universe-radar__head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
 
-.universe-radar .universe-radar__crumb { left: 20px; top: 18px; padding: 12px 18px; display: flex; flex-direction: column; gap: 2px; }
-.universe-radar .universe-radar__crumb strong { color: #fff; font-size: 17px !important; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
-.universe-radar .universe-radar__crumb span { color: #7f98a0; font-size: 11.5px !important; }
+.universe-radar .universe-radar__crumb { left: 18px; top: 16px; padding: 10px 16px; display: flex; flex-direction: column; gap: 2px; }
+.universe-radar .universe-radar__crumb strong { color: #fff; font-size: 17px !important; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
+.universe-radar .universe-radar__crumb span { color: #7f98a0; font-size: 11.5px !important; white-space: nowrap; }
 
-.universe-radar .universe-radar__list { left: 20px; top: 118px; width: 280px; max-height: calc(100% - 210px); overflow-y: auto; padding: 12px; scrollbar-width: thin; }
+/* ---- system list drawer ---- */
+.universe-radar .universe-radar__list { left: 18px; top: 104px; width: 272px; padding: 6px; overflow: hidden; }
+.universe-radar .universe-radar__list-toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto 18px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+.universe-radar .universe-radar__list-toggle:hover { background: rgba(86, 217, 242, .06); }
+.universe-radar .universe-radar__list-toggle b { font-size: 13px !important; font-weight: 800; }
+.universe-radar .universe-radar__list-toggle em { color: #8fb6c0; font-style: normal; font-size: 16px !important; font-weight: 700; text-align: center; }
+.universe-radar .universe-radar__list-dots { display: flex; gap: 4px; min-width: 0; overflow: hidden; }
+.universe-radar .universe-radar__list-dots i { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--legend-k, #8fb6c0); box-shadow: 0 0 6px var(--legend-k, #8fb6c0); }
+.universe-radar .universe-radar__list-body { display: flex; flex-direction: column; max-height: 0; opacity: 0; overflow: hidden; transition: max-height .22s ease, opacity .16s ease; }
+.universe-radar .universe-radar__list:hover .universe-radar__list-body,
+.universe-radar .universe-radar__list:focus-within .universe-radar__list-body,
+.universe-radar .universe-radar__list.is-pinned .universe-radar__list-body { max-height: 420px; opacity: 1; overflow-y: auto; scrollbar-width: thin; }
+.universe-radar .universe-radar__list:hover,
+.universe-radar .universe-radar__list.is-pinned { border-color: rgba(126, 200, 220, .38); }
+.universe-radar .universe-radar__list.is-pinned .universe-radar__list-toggle em { color: var(--race-accent, #b4ceff); }
 .universe-radar .universe-radar__row {
   display: grid;
   grid-template-columns: 24px 34px minmax(0, 1fr) 10px;
   gap: 8px;
   align-items: center;
+  flex: 0 0 auto;
   width: 100%;
   height: 42px;
   padding: 0 8px;
@@ -43,19 +75,66 @@
 .universe-radar .universe-radar__row img { width: 32px; height: 32px; object-fit: contain; }
 .universe-radar .universe-radar__row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px !important; font-weight: 700; }
 .universe-radar .universe-radar__row > i { width: 8px; height: 8px; border-radius: 50%; background: var(--legend-k, #8fb6c0); box-shadow: 0 0 8px var(--legend-k, #8fb6c0); }
-.universe-radar .universe-radar__list p { margin: 8px 6px 0; color: #7f98a0; font-size: 11.5px !important; line-height: 1.4; }
+.universe-radar .universe-radar__list-body p { flex: 0 0 auto; margin: 6px 8px 4px; color: #7f98a0; font-size: 11.5px !important; line-height: 1.4; }
 
-.universe-radar .universe-radar__minimap { right: 20px; top: 18px; width: 300px; padding: 12px 14px; }
-.universe-radar .universe-radar__grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; }
-.universe-radar .universe-radar__grid button { position: relative; height: 26px; padding: 0; border-radius: 5px; border: 1px solid rgba(126, 200, 220, .12); background: rgba(255, 255, 255, .03); cursor: pointer; }
-.universe-radar .universe-radar__grid button:hover { border-color: rgba(86, 217, 242, .45); }
-.universe-radar .universe-radar__grid button.is-current { border-color: var(--race-accent, #b4ceff); background: color-mix(in srgb, var(--race-accent-strong, #5f9bff) 30%, transparent); box-shadow: 0 0 10px var(--race-glow, rgba(95, 155, 255, .45)); }
-.universe-radar .universe-radar__grid button.has-own::after,
-.universe-radar .universe-radar__grid button.has-pirate::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; }
-.universe-radar .universe-radar__grid button.has-own::after { background: var(--race-accent-strong, #5f9bff); }
-.universe-radar .universe-radar__grid button.has-pirate::after { background: var(--universe-renegade, #f39a57); }
+/* ---- galaxy chip (top right) + vertical system rail (right edge) ---- */
+.workspace--universe .universe-view-v3.universe-radar .universe-radar__nav { left: auto; right: 18px; top: 16px; display: flex; align-items: center; gap: 8px; padding: 8px; }
+.workspace--universe .universe-radar .universe-radar__galaxy { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 4px 0 10px; border-radius: 9px; background: rgba(0, 0, 0, .35); }
+.workspace--universe .universe-radar .universe-radar__galaxy select { height: 26px; padding: 0 4px; border: 0; border-radius: 6px; background: transparent; color: #fff; font-size: 14px !important; font-weight: 800; cursor: pointer; }
+.workspace--universe .universe-radar .universe-radar__galaxy select option,
+.workspace--universe .universe-radar .universe-radar__rail-select option { background: #0b1820; }
+.workspace--universe .universe-radar .universe-radar__home { height: 32px; padding: 0 12px; border: 1px solid rgba(126, 200, 220, .22); border-radius: 9px; background: transparent; color: #cfe6ec; font-size: 11.5px !important; font-weight: 800; letter-spacing: .04em; cursor: pointer; white-space: nowrap; }
+.workspace--universe .universe-radar .universe-radar__home:hover:not(:disabled) { border-color: var(--race-accent, #b4ceff); color: #fff; }
+.workspace--universe .universe-radar .universe-radar__home:disabled { opacity: .4; cursor: default; }
 
-.universe-radar .universe-radar__dock { left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 7px 10px; white-space: nowrap; max-width: calc(100% - 24px); }
+.workspace--universe .universe-view-v3.universe-radar .universe-radar__rail {
+  position: absolute;
+  z-index: 20;
+  left: auto;
+  right: 22px;
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
+  width: 76px;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 0;
+  border-radius: 16px;
+  border: 1px solid rgba(126, 200, 220, .26);
+  background: linear-gradient(180deg, rgba(6, 14, 20, .55), color-mix(in srgb, var(--race-accent-strong, #5f9bff) 10%, rgba(6, 14, 20, .92)) 50%, rgba(6, 14, 20, .55));
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .45);
+}
+.workspace--universe .universe-radar .universe-radar__rail .step {
+  width: 36px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid rgba(126, 200, 220, .3);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .03);
+  color: var(--race-accent, #b4ceff);
+  font-size: 11px !important;
+  line-height: 1;
+  cursor: pointer;
+}
+.workspace--universe .universe-radar .universe-radar__rail .step:hover:not(:disabled) { border-color: var(--race-accent, #b4ceff); background: color-mix(in srgb, var(--race-accent-strong, #5f9bff) 20%, transparent); color: #fff; }
+.workspace--universe .universe-radar .universe-radar__rail .step:disabled { opacity: .3; cursor: default; }
+.workspace--universe .universe-radar .universe-radar__rail .step svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.universe-radar .universe-radar__rail-list { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; }
+.universe-radar .universe-radar__rail-gap { height: 26px; }
+.workspace--universe .universe-radar .universe-radar__rail-item { width: 60px; height: 26px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: #8fb6c0; font-size: 13px !important; font-weight: 800; letter-spacing: .06em; font-variant-numeric: tabular-nums; cursor: pointer; transition: color .12s ease, background .12s ease; }
+.workspace--universe .universe-radar .universe-radar__rail-item:hover { color: #fff; background: rgba(86, 217, 242, .08); }
+.workspace--universe .universe-radar .universe-radar__rail-item.is-d2 { opacity: .35; }
+.workspace--universe .universe-radar .universe-radar__rail-item.is-d1 { opacity: .7; }
+.workspace--universe .universe-radar .universe-radar__rail-item.is-d0 { height: 42px; color: #fff; font-size: 24px !important; cursor: default; text-shadow: 0 0 14px var(--race-glow, rgba(95, 155, 255, .6)); background: none; }
+.universe-radar .universe-radar__rail-total { font-size: 10.5px !important; letter-spacing: .08em; }
+/* Hidden native select keeps keyboard jump-to-system and the QA hooks. */
+.universe-radar .universe-radar__rail-select { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
+
+/* ---- filters + layers dock (bottom) ---- */
+.universe-radar .universe-radar__dock { left: 50%; bottom: 10px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 10px; white-space: nowrap; max-width: calc(100% - 24px); }
 .universe-radar .universe-radar__seg { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 11px; background: rgba(0, 0, 0, .35); }
 .universe-radar .universe-radar__seg .universe-map-legend { display: flex; gap: 3px; }
 .universe-radar .universe-radar__seg button,
@@ -63,8 +142,8 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 32px;
-  padding: 0 7px;
+  height: 30px;
+  padding: 0 8px;
   border-radius: 8px;
   border: 1px solid transparent;
   background: transparent;
@@ -80,9 +159,8 @@
 .universe-radar .universe-map-legend button i { width: 8px; height: 8px; border-radius: 50%; background: var(--legend-k); }
 .universe-radar .universe-map-legend button:not(.is-on) i { opacity: .3; }
 .universe-radar .universe-map-legend button:not(.is-on) span { color: #5f7f89; }
-.universe-radar .universe-radar__sep { width: 1px; height: 34px; background: rgba(126, 200, 220, .25); }
-.universe-radar .universe-jump select { height: 28px; padding: 0 6px; border-radius: 7px; border: 1px solid rgba(126, 200, 220, .3); background: #0b1820; color: #fff; font-weight: 800; }
-.universe-radar .universe-jump label span { color: #7f98a0; }
+.universe-radar .universe-radar__sep { width: 1px; height: 30px; background: rgba(126, 200, 220, .25); }
+.universe-radar .universe-radar__dock > small { font-size: 9.5px !important; letter-spacing: .12em; }
 
 .universe-radar .legend-self { --legend-k: var(--race-accent-strong, #5f9bff); }
 .universe-radar .legend-ally { --legend-k: var(--universe-ally, #63d48b); }
@@ -94,9 +172,91 @@
 .universe-radar .legend-anomaly { --legend-k: var(--universe-anomaly, #af8bff); }
 .universe-radar .universe-radar__seg .universe-map-legend { position: static; top: auto; right: auto; gap: 3px; }
 .universe-radar .universe-radar__seg .universe-map-legend span::before { display: none; }
-.universe-radar .universe-radar__grid button.has-ally::after,
-.universe-radar .universe-radar__grid button.has-enemy::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; }
-.universe-radar .universe-radar__grid button.has-ally::after { background: var(--universe-ally, #63d48b); }
-.universe-radar .universe-radar__grid button.has-enemy::after { background: var(--universe-enemy, #f0646e); }
 
-.universe-radar .universe-radar__dock > small { font-size: 9.5px !important; letter-spacing: .12em; }
+/* ---- debris: one readable chip (icon + amount) on the object's lower right ---- */
+.workspace--universe .universe-view-v3.universe-radar .universe-debris-marker,
+.workspace--universe .universe-view-v3.universe-radar .system-asteroid .universe-asteroid-debris-marker {
+  top: auto;
+  right: auto;
+  left: calc(50% + 14px);
+  bottom: auto;
+  width: auto;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  display: block;
+  pointer-events: none;
+}
+.workspace--universe .universe-view-v3.universe-radar .system-planet .universe-debris-marker { top: 58px; }
+.workspace--universe .universe-view-v3.universe-radar .empty-slot .universe-debris-marker { top: 14px; left: 14px; }
+.workspace--universe .universe-view-v3.universe-radar .system-asteroid .universe-asteroid-debris-marker { top: 22px; left: 26px; }
+.workspace--universe .universe-view-v3.universe-radar .uv-debris-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px 0 3px;
+  border: 1px solid rgba(255, 114, 124, .7);
+  border-radius: 10px;
+  background: rgba(36, 12, 18, .92);
+  box-shadow: 0 0 10px rgba(255, 90, 100, .28);
+  color: #ffd0d4;
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+.workspace--universe .universe-view-v3.universe-radar .uv-debris-chip img { position: static; left: auto; top: auto; width: 15px; height: 15px; margin: 0; transform: none; filter: none; animation: none; object-fit: contain; }
+.workspace--universe .universe-view-v3.universe-radar .uv-debris-chip b { font-size: 10.5px !important; font-weight: 800; line-height: 1; }
+.workspace--universe .universe-view-v3.universe-radar .universe-debris-tooltip { top: 24px; right: auto; left: 0; }
+
+/* ---- asteroids parked on a planet: no own caption, it would collide with the planet's ---- */
+.workspace--universe .universe-view-v3.universe-radar .system-asteroid.is-attached .system-asteroid__label { display: none; }
+.workspace--universe .universe-view-v3.universe-radar .system-asteroid.is-attached { z-index: 8; }
+
+/* ---- unique / anomaly: free vs occupied reads from the map ---- */
+.workspace--universe .universe-view-v3.universe-radar .system-planet.has-claim { --claim-k: #8fb6c0; }
+.workspace--universe .universe-view-v3.universe-radar .system-planet.has-claim--free { --claim-k: #54e39a; }
+.workspace--universe .universe-view-v3.universe-radar .system-planet.has-claim--self { --claim-k: var(--race-accent, #7fc0ff); }
+.workspace--universe .universe-view-v3.universe-radar .system-planet.has-claim--occupied { --claim-k: #ff5f6d; }
+.workspace--universe .universe-view-v3.universe-radar .uv-claim-ring {
+  position: absolute;
+  z-index: 0;
+  left: 50%;
+  top: -6px;
+  width: 100px;
+  height: 100px;
+  margin-left: -50px;
+  border-radius: 50%;
+  border: 2px dashed var(--claim-k);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--claim-k) 45%, transparent), inset 0 0 14px color-mix(in srgb, var(--claim-k) 25%, transparent);
+  pointer-events: none;
+}
+.workspace--universe .universe-view-v3.universe-radar .uv-claim-ring--out { border-style: dotted; border-width: 1px; box-shadow: none; opacity: .6; }
+.workspace--universe .universe-view-v3.universe-radar .system-planet .universe-map-occupancy {
+  top: -18px;
+  bottom: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--claim-k);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--claim-k) 18%, #061016);
+  color: #fff;
+  font-size: 9.5px !important;
+  letter-spacing: .08em;
+}
+.workspace--universe .universe-view-v3.universe-radar .system-planet .universe-map-occupancy i { width: 6px; height: 6px; border-radius: 50%; background: var(--claim-k); box-shadow: 0 0 6px var(--claim-k); }
+.workspace--universe .universe-view-v3.universe-radar .system-planet .universe-map-occupancy--out { color: #a9bec5; }
+
+
+/* Uninhabited worlds and drifting asteroids are scenery: captions show on hover/focus only, so captions never stack. */
+.workspace--universe .universe-view-v3.universe-radar .system-asteroid .system-asteroid__label { opacity: 0; transition: opacity .12s ease; }
+.workspace--universe .universe-view-v3.universe-radar .system-asteroid:hover .system-asteroid__label,
+.workspace--universe .universe-view-v3.universe-radar .system-asteroid:focus-visible .system-asteroid__label { opacity: 1; }
+.workspace--universe .universe-view-v3.universe-radar .system-planet--uninhabited .planet-name { opacity: 0; transition: opacity .12s ease; }
+.workspace--universe .universe-view-v3.universe-radar .system-planet--uninhabited:hover .planet-name,
+.workspace--universe .universe-view-v3.universe-radar .system-planet--uninhabited:focus-visible .planet-name { opacity: 1; }

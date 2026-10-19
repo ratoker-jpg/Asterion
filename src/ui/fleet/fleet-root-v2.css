@@ -205,3 +205,63 @@
 .flight-briefing-v2 .flight-timeline-ship-list { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)) !important; width: 100%; }
 .flight-briefing-v2 .flight-timeline-ship-card div small { color: #7f98a0; }
 .flight-briefing-v2 .flight-timeline-ship-card > b small { display: none; }
+
+/* ---------- 2026-10-19 polish: mission grid, game-styled buttons, selection bar ---------- */
+/* Legacy rules forced 50px grid rows under 76px tiles, so the two rows overlapped. */
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-icons-v1 { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: none; grid-auto-rows: auto; height: auto; gap: 6px; }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-icons-v1 button { min-height: 78px; padding: 8px 4px 7px; justify-content: flex-start; border: 1px solid rgba(126, 200, 220, .16); background: rgba(0, 0, 0, .25); color: #c6d9de; cursor: pointer; }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-icons-v1 button:hover:not(:disabled) { border-color: rgba(126, 200, 220, .4); background: rgba(86, 217, 242, .06); }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-icons-v1 button.active { border-color: var(--race-accent, #b4ceff); background: linear-gradient(180deg, color-mix(in srgb, var(--race-accent-strong, #5f9bff) 24%, transparent), rgba(0, 0, 0, .25)); box-shadow: 0 0 14px color-mix(in srgb, var(--race-glow, rgba(95, 155, 255, .45)) 50%, transparent); }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-icons-v1 button.active span { color: #fff; }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-icons-v1 button img { width: 38px; height: 38px; flex: none; }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-icons-v1 button span { font-size: 10.5px !important; font-weight: 700; line-height: 1.2; overflow-wrap: normal; word-break: normal; hyphens: none; }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-select-v1 label { color: var(--ut-label, #8fb6c0); font-size: 10.5px !important; font-weight: 800; letter-spacing: .14em; }
+.fleet-root-v2 .fleet-order-v2 .fleet-mission-select-v1 select { height: 34px; padding: 0 10px; border-radius: 9px; border: 1px solid rgba(126, 200, 220, .3); background: rgba(0, 0, 0, .35); color: #fff; font-size: 13px !important; font-weight: 700; }
+
+/* Buttons that fell back to browser defaults (white pill, system font) get the game style. */
+.fleet-root-v2 .fleet-flights-v2 > button,
+.fleet-root-v2 .fleet-ship-filter-v2 button,
+.fleet-root-v2 .fleet-selection-line-v1 button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(126, 200, 220, .28);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .03);
+  color: #cfe6ec;
+  font-family: Montserrat, "Segoe UI", Arial, sans-serif;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color .12s ease, background .12s ease, color .12s ease;
+}
+.fleet-root-v2 .fleet-flights-v2 > button:hover,
+.fleet-root-v2 .fleet-ship-filter-v2 button:hover,
+.fleet-root-v2 .fleet-selection-line-v1 button:hover { border-color: var(--race-accent, #b4ceff); color: #fff; background: color-mix(in srgb, var(--race-accent-strong, #5f9bff) 14%, transparent); }
+.fleet-root-v2 .fleet-flights-v2 > button.is-on,
+.fleet-root-v2 .fleet-ship-filter-v2 button.is-on { border-color: var(--race-accent, #b4ceff); color: #fff; background: linear-gradient(180deg, color-mix(in srgb, var(--race-accent-strong, #5f9bff) 28%, transparent), transparent); }
+.fleet-root-v2 .fleet-ship-filter-v2 { padding: 3px; border-radius: 11px; background: rgba(0, 0, 0, .35); gap: 2px; }
+.fleet-root-v2 .fleet-ship-filter-v2 button { border-color: transparent; background: transparent; color: #8fb6c0; }
+
+/* Selection bar: a real footer inside the panel, not loose underlined links. */
+.fleet-root-v2 .fleet-compose-v2 .fleet-selection-line-v1 {
+  position: static;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: auto;
+  height: 46px;
+  margin: 0;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(126, 200, 220, .16);
+  background: rgba(0, 0, 0, .3);
+  color: #8fb6c0;
+  font-size: 12px !important;
+}
+.fleet-root-v2 .fleet-compose-v2 .fleet-selection-line-v1 > span { color: #8fb6c0; font-size: 11px !important; font-weight: 700; letter-spacing: .06em; white-space: nowrap; }
+.fleet-root-v2 .fleet-compose-v2 .fleet-selection-line-v1 > span:nth-of-type(2) { display: none; }
+.fleet-root-v2 .fleet-compose-v2 .fleet-selection-line-v1 button { height: 28px; padding: 0 12px; font-size: 10.5px !important; letter-spacing: .08em; text-transform: uppercase; }
+.fleet-root-v2 .fleet-compose-v2 .fleet-selection-line-v1 > i { flex: 1; height: auto; border: 0; background: none; }
+.fleet-root-v2 .fleet-compose-v2 .fleet-selection-line-v1 strong { min-width: 24px; color: #fff; font-size: 15px !important; font-weight: 800; }
+.fleet-root-v2 .fleet-compose-v2 .fleet-selection-line-v1 strong.accent { color: var(--race-accent, #b4ceff); }

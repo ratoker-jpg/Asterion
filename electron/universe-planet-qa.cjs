@@ -429,10 +429,12 @@ async function verifyDebrisMarkerInteraction(win, selector, expectedAmount) {
   const initial = await debrisMarkerSnapshot(win, selector);
   if (initial.tagName !== 'BUTTON' || initial.tabIndex < 0 || !initial.ariaLabel.replace(/\D/g, '').includes(expectedAmount)
     || !initial.describedBy.split(/\s+/).includes(initial.tooltipId) || !initial.tooltipText.replace(/\D/g, '').includes(expectedAmount)
+    // The debris chip (icon + amount) is wider than a 30px slot: it must touch
+    // its object, it does not have to fit inside it.
     || !initial.rect || !initial.markerRect
-    || initial.markerRect.x < initial.rect.x || initial.markerRect.y < initial.rect.y
-    || initial.markerRect.x + initial.markerRect.width > initial.rect.x + initial.rect.width
-    || initial.markerRect.y + initial.markerRect.height > initial.rect.y + initial.rect.height) {
+    || initial.markerRect.x > initial.rect.x + initial.rect.width || initial.markerRect.y > initial.rect.y + initial.rect.height
+    || initial.markerRect.x + initial.markerRect.width < initial.rect.x
+    || initial.markerRect.y + initial.markerRect.height < initial.rect.y) {
     throw new Error(`Debris marker accessible-name contract failed: ${JSON.stringify(initial)}`);
   }
 
