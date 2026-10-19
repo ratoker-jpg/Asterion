@@ -385,6 +385,24 @@ async function readQaState(win) {
         };
       })(),
       fleetPopulation: document.querySelector('[data-qa-fleet-population]')?.textContent?.trim() ?? '',
+      fleetSpyAction: (() => {
+        const node = document.querySelector('.fleet-flights-v2 > button[aria-haspopup="dialog"]');
+        if (!node) return null;
+        const rect = node.getBoundingClientRect();
+        return {
+          text: node.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+          top: rect.top,
+          bottom: rect.bottom,
+          left: rect.left,
+          right: rect.right,
+          scrollWidth: node.scrollWidth,
+          clientWidth: node.clientWidth,
+          panel: (() => {
+            const panel = node.closest('.fleet-flights-v2')?.getBoundingClientRect();
+            return panel ? { left: panel.left, right: panel.right, top: panel.top, bottom: panel.bottom } : null;
+          })(),
+        };
+      })(),
       fleetFlightActions: Array.from(document.querySelectorAll('.fleet-flight-actions-v1 button')).map((node) => ({
         text: node.textContent?.replace(/\s+/g, ' ').trim() ?? '',
         top: node.getBoundingClientRect().top,
@@ -394,9 +412,9 @@ async function readQaState(win) {
         scrollWidth: node.scrollWidth,
         clientWidth: node.clientWidth,
       })),
-      fleetFlightPanelBottom: document.querySelector('.fleet-flights-v1')?.getBoundingClientRect().bottom ?? -1,
-      fleetFlightPanelLeft: document.querySelector('.fleet-flights-v1')?.getBoundingClientRect().left ?? -1,
-      fleetFlightPanelRight: document.querySelector('.fleet-flights-v1')?.getBoundingClientRect().right ?? -1,
+      fleetFlightPanelBottom: document.querySelector('.fleet-flights-drop-v2__panel')?.getBoundingClientRect().bottom ?? -1,
+      fleetFlightPanelLeft: document.querySelector('.fleet-flights-drop-v2__panel')?.getBoundingClientRect().left ?? -1,
+      fleetFlightPanelRight: document.querySelector('.fleet-flights-drop-v2__panel')?.getBoundingClientRect().right ?? -1,
       fleetRosterOverflow: (() => {
         const node = document.querySelector('[data-qa-fleet-roster]');
         return node ? node.scrollHeight > node.clientHeight + 2 : false;
@@ -679,6 +697,8 @@ async function runViewport(width, height) {
     if (maxShip.current !== '10' || maxShip.max !== '10' || !maxShip.disabled || maxCommander.current !== '40' || maxCommander.max !== '40' || !maxCommander.disabled) throw new Error(`${label}: max levels mismatch ${JSON.stringify({ maxShip, maxCommander })}`);
 
     await openFleet(win);
+    await click(win, '[data-qa-flights-toggle]');
+    await waitFor(win, `document.querySelector('[data-qa-flights-toggle]')?.getAttribute('aria-expanded') === 'true' && document.querySelector('.fleet-flights-drop-v2__panel .fleet-flight-actions-v1 button')`);
     const fleetRoot = await readQaState(win);
     if (!fleetRoot.fleetPopulation.includes('58 / 120')) throw new Error(`${label}: fleet population resolver UI mismatch ${JSON.stringify(fleetRoot)}`);
     const expectedFleetRoster = [
@@ -689,9 +709,15 @@ async function runViewport(width, height) {
     ];
     if (JSON.stringify(fleetRoot.fleetRoster) !== JSON.stringify(expectedFleetRoster)) throw new Error(`${label}: current fleet roster UI mismatch ${JSON.stringify(fleetRoot.fleetRoster)}`);
     if (fleetRoot.fleetBaseCardTag === 'BUTTON') throw new Error(`${label}: fleet base card must be informational, not a button`);
-    if (fleetRoot.fleetRosterOverflow || fleetRoot.fleetRosterOverflowY !== 'visible') throw new Error(`${label}: fleet roster still owns an internal scrollbar ${JSON.stringify(fleetRoot)}`);
-    const expectedFleetFlightActions = ['ШПИОНСКИЕ ОТЧЁТЫ', 'ЗАПУСТИТЬ АТАКУ BOT 01', 'BOT 01 · ЗАХВАТИТЬ ОБЪЕКТ (ТЕСТ)'];
+    if (fleetRoot.fleetRosterOverflow || fleetRoot.fleetRosterOverflowY !== 'auto') throw new Error(`${label}: compact fleet roster scroll contract failed ${JSON.stringify(fleetRoot)}`);
+    const expectedFleetFlightActions = ['ЗАПУСТИТЬ АТАКУ BOT 01', 'BOT 01 · ЗАХВАТИТЬ ОБЪЕКТ (ТЕСТ)'];
     const actions = fleetRoot.fleetFlightActions;
+    const spyAction = fleetRoot.fleetSpyAction;
+    const spyPanel = spyAction?.panel;
+    const spyClipped = !spyAction || spyAction.text !== 'ШПИОНСКИЕ ОТЧЁТЫ'
+      || !spyPanel || spyAction.top < spyPanel.top - 2 || spyAction.bottom > spyPanel.bottom + 2
+      || spyAction.left < spyPanel.left - 2 || spyAction.right > spyPanel.right + 2
+      || spyAction.clientWidth < spyAction.scrollWidth - 2;
     const clipped = actions.some((action) => action.bottom > fleetRoot.fleetFlightPanelBottom + 2
       || action.top < 0 || action.bottom <= action.top
       || action.left < fleetRoot.fleetFlightPanelLeft - 2 || action.right > fleetRoot.fleetFlightPanelRight + 2
@@ -699,7 +725,7 @@ async function runViewport(width, height) {
     const overlapping = actions.some((action, index) => actions.some((other, otherIndex) => otherIndex > index
       && action.left < other.right - 1 && action.right > other.left + 1
       && action.top < other.bottom - 1 && action.bottom > other.top + 1));
-    if (JSON.stringify(actions.map((action) => action.text)) !== JSON.stringify(expectedFleetFlightActions) || clipped || overlapping) {
+    if (JSON.stringify(actions.map((action) => action.text)) !== JSON.stringify(expectedFleetFlightActions) || spyClipped || clipped || overlapping) {
       throw new Error(`${label}: fleet flight action buttons are clipped or missing ${JSON.stringify(fleetRoot)}`);
     }
     await capture(win, directory, 'test-fleet-roster');
@@ -717,8 +743,8 @@ async function runViewport(width, height) {
     await reload(win, 'test');
     await openFleet(win);
     const expandedFleet = await readQaState(win);
-    if (!expandedFleet.fleetPageLong || expandedFleet.fleetRoster.length < 8 || expandedFleet.fleetRosterOverflow || expandedFleet.fleetRosterOverflowY !== 'visible') {
-      throw new Error(`${label}: expanded fleet did not use the global page scroll ${JSON.stringify(expandedFleet)}`);
+    if (expandedFleet.fleetPageLong || expandedFleet.fleetRoster.length < 8 || expandedFleet.fleetRosterOverflowY !== 'auto') {
+      throw new Error(`${label}: expanded fleet roster scroll contract failed ${JSON.stringify(expandedFleet)}`);
     }
     await capture(win, directory, 'test-fleet-roster-expanded');
 
@@ -734,8 +760,8 @@ async function runViewport(width, height) {
     await reload(win, 'test');
     await openFleet(win);
     const restoredFleet = await readQaState(win);
-    if (!restoredFleet.fleetPageLong || restoredFleet.fleetRosterOverflow || restoredFleet.fleetRosterOverflowY !== 'visible' || !restoredFleet.fleetPopulation.includes('58 / 120')) {
-      throw new Error(`${label}: canonical fleet restore after global-scroll QA failed ${JSON.stringify(restoredFleet)}`);
+    if (restoredFleet.fleetPageLong || restoredFleet.fleetRosterOverflowY !== 'auto' || !restoredFleet.fleetPopulation.includes('58 / 120')) {
+      throw new Error(`${label}: canonical fleet restore after roster-scroll QA failed ${JSON.stringify(restoredFleet)}`);
     }
     await clickText(win, '.fleet-sidebar-v1 button', 'Корабли');
     await waitFor(win, `document.querySelector('[data-qa-construction-mode="ships"]')`);
