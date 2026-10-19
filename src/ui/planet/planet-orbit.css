@@ -1,0 +1,121 @@
+/* ---------- Planet overview «Орбита» (designs/pu-fleets-2026-10-19, planet variant C) ---------- */
+.planet-page-v3.planet-orbit {
+  --orbit-cy: 350px;
+  --orbit-size: 760px;
+  display: block;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.planet-orbit .planet-orbit__ring {
+  position: absolute;
+  left: 50%;
+  top: var(--orbit-cy);
+  width: 900px;
+  height: 900px;
+  border-radius: 50%;
+  border: 1px solid rgba(126, 200, 220, .12);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.planet-orbit .planet-orbit__ring--outer { width: 1080px; height: 1080px; border-style: dashed; border-color: rgba(126, 200, 220, .08); }
+.planet-page-v3.planet-orbit .planet-image-v3.planet-orbit__planet {
+  left: 50%;
+  top: var(--orbit-cy);
+  width: var(--orbit-size);
+  height: var(--orbit-size);
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(-34px -24px 60px rgba(0, 0, 0, .62)) drop-shadow(0 0 70px rgba(86, 217, 242, .18));
+}
+
+/* name + vitals */
+.planet-orbit .planet-orbit__name { position: absolute; left: 24px; top: 20px; z-index: 3; margin: 0; text-align: left; }
+.planet-orbit .planet-orbit__name small,
+.planet-orbit .planet-orbit__kicker { display: block; color: var(--ut-label, #8fb6c0); font-size: 11px !important; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.planet-orbit .planet-orbit__name h1 { margin: 6px 0 0; font-size: 44px !important; font-weight: 800; letter-spacing: .12em; line-height: 1; color: #fff; }
+.planet-orbit .planet-orbit__name p { margin: 8px 0 0; color: var(--ut-label, #8fb6c0); font-size: 14px !important; letter-spacing: .12em; text-transform: uppercase; }
+.planet-orbit .planet-orbit__vitals { position: absolute; left: 24px; top: 150px; z-index: 3; width: 280px; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.planet-orbit .planet-orbit__vitals div { display: flex; justify-content: space-between; align-items: center; height: 40px; padding: 0 14px; border-radius: 12px; border: 1px solid rgba(126, 200, 220, .16); background: rgba(6, 12, 16, .72); }
+.planet-orbit .planet-orbit__vitals dt { color: var(--ut-label, #8fb6c0); font-size: 10.5px !important; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.planet-orbit .planet-orbit__vitals dd { margin: 0; color: #fff; font-size: 14px !important; font-weight: 800; font-variant-numeric: tabular-nums; }
+.planet-orbit .planet-orbit__vitals dd.is-ok { color: var(--ut-positive, #35e58a); }
+.planet-orbit .planet-orbit__banner { position: absolute; left: 24px; top: 390px; z-index: 3; width: 280px; }
+.planet-orbit .planet-orbit__banner .planet-overpopulation-banner-v3 { position: static; width: auto; transform: none; margin: 0; }
+
+/* own worlds */
+.planet-page-v3.planet-orbit .planet-orbit__worlds { position: absolute; right: 24px; top: 20px; z-index: 3; width: 280px; max-height: 340px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; scrollbar-width: thin; }
+.planet-orbit .planet-orbit__worlds .owned-planet-row-v4 { margin: 0; }
+.planet-orbit .planet-orbit__colonize { display: flex; align-items: center; gap: 12px; height: 46px; padding: 0 12px; border-radius: 13px; border: 1px dashed rgba(126, 200, 220, .3); background: transparent; color: #7f98a0; font-size: 12px !important; font-weight: 600; cursor: pointer; text-align: left; }
+.planet-orbit .planet-orbit__colonize span { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(126, 200, 220, .3); color: var(--ut-label, #8fb6c0); font-weight: 800; }
+.planet-orbit .planet-orbit__colonize:hover { border-color: rgba(86, 217, 242, .55); color: #e8f4f7; }
+
+/* zone hotspots on the rim */
+.planet-page-v3.planet-orbit .zone-hotspot.planet-orbit__zone {
+  position: absolute;
+  z-index: 4;
+  width: auto;
+  height: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 18px 8px 8px;
+  border-radius: 40px !important;
+  border: 1px solid color-mix(in srgb, var(--zone-accent) 60%, transparent);
+  background: rgba(6, 12, 16, .88);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--zone-accent) 22%, transparent);
+  transform: none;
+  text-align: left;
+}
+.planet-page-v3.planet-orbit .zone-hotspot.planet-orbit__zone:hover { transform: translateY(-2px); box-shadow: 0 0 30px color-mix(in srgb, var(--zone-accent) 36%, transparent); }
+.planet-page-v3.planet-orbit .zone-hotspot.planet-orbit__zone:focus-visible { outline: 2px solid var(--zone-accent); outline-offset: 3px; }
+.planet-orbit .planet-orbit__zone img { width: 56px; height: 56px; flex: none; object-fit: contain; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--zone-accent) 26%, #0a171c), #0a171c 70%); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--zone-accent) 70%, transparent); }
+.planet-orbit .planet-orbit__zone strong { display: block; color: var(--zone-accent); font-size: 13px !important; font-weight: 800; letter-spacing: .12em; }
+.planet-orbit .planet-orbit__zone small { display: block; margin-top: 2px; color: #b9cdd3; font-size: 11.5px !important; white-space: nowrap; }
+.planet-orbit .planet-orbit__zone::after { content: ""; position: absolute; top: 50%; width: 10px; height: 10px; margin-top: -5px; border-radius: 50%; background: var(--zone-accent); box-shadow: 0 0 14px var(--zone-accent); }
+.planet-orbit .planet-orbit__zone { left: auto; right: auto; bottom: auto; }
+.planet-page-v3.planet-orbit .planet-orbit__zone--left-top { right: calc(50% + 230px); }
+.planet-page-v3.planet-orbit .planet-orbit__zone--left-bottom { right: calc(50% + 250px); }
+.planet-orbit .planet-orbit__zone--left-top::after,
+.planet-orbit .planet-orbit__zone--left-bottom::after { right: -26px; }
+.planet-page-v3.planet-orbit .planet-orbit__zone--left-top { top: 130px; }
+.planet-page-v3.planet-orbit .planet-orbit__zone--left-bottom { top: 480px; }
+.planet-page-v3.planet-orbit .planet-orbit__zone--right { left: calc(50% + 300px); top: 250px; }
+.planet-orbit .planet-orbit__zone--right::after { left: -26px; }
+
+/* bottom dock */
+.planet-orbit .planet-orbit__dock {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 14px;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+  gap: 24px;
+  padding: 16px 20px;
+  border-radius: 18px;
+  border: 1px solid rgba(126, 200, 220, .16);
+  background: linear-gradient(180deg, rgba(13, 22, 28, .94), rgba(7, 12, 16, .96));
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .45);
+}
+.planet-orbit .planet-orbit__slots { display: grid; grid-template-columns: repeat(var(--slots, 3), minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
+.planet-orbit .planet-orbit__slot { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 10px; align-items: center; min-height: 82px; padding: 10px 12px; border-radius: 13px; border: 1px solid rgba(126, 200, 220, .16); background: rgba(16, 26, 31, .6); }
+.planet-orbit .planet-orbit__slot img { width: 56px; height: 56px; object-fit: contain; }
+.planet-orbit .planet-orbit__slot span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.planet-orbit .planet-orbit__slot small { color: var(--ut-label, #8fb6c0); font-size: 10px !important; font-weight: 800; letter-spacing: .12em; }
+.planet-orbit .planet-orbit__slot strong { color: #fff; font-size: 13.5px !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.planet-orbit .planet-orbit__slot em { color: #7f98a0; font-size: 11.5px !important; font-style: normal; }
+.planet-orbit .planet-orbit__slot .queue-progress-v2 { position: static; display: block; height: 5px; margin-top: 6px; border-radius: 3px; overflow: hidden; background: rgba(255, 255, 255, .08); }
+.planet-orbit .planet-orbit__slot .queue-progress-v2 > i { display: block; height: 100%; border-radius: 3px; }
+.planet-orbit .planet-orbit__slot.is-active { border-color: color-mix(in srgb, var(--race-accent, #b4ceff) 60%, transparent); background: linear-gradient(90deg, color-mix(in srgb, var(--race-accent-strong, #5f9bff) 16%, transparent), rgba(16, 26, 31, .8)); }
+.planet-orbit .planet-orbit__slot.is-active small { color: var(--race-accent, #b4ceff); }
+.planet-orbit .planet-orbit__slot.is-free { border-style: dashed; background: transparent; }
+.planet-orbit .planet-orbit__slot.is-free b { display: grid; place-items: center; width: 34px; height: 34px; margin: 0 auto; border-radius: 50%; border: 1px solid rgba(126, 200, 220, .3); color: var(--ut-label, #8fb6c0); font-size: 12px !important; }
+.planet-orbit .planet-orbit__income > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.planet-orbit .planet-orbit__income span { display: grid; grid-template-columns: 24px 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: center; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(126, 200, 220, .16); background: rgba(0, 0, 0, .22); color: #c6d9de; font-size: 12px !important; font-weight: 700; }
+.planet-orbit .planet-orbit__income span > :first-child { grid-row: span 2; width: 24px; height: 24px; }
+.planet-orbit .planet-orbit__income b { color: var(--ut-positive, #35e58a); font-size: 13px !important; font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  .planet-page-v3.planet-orbit .zone-hotspot.planet-orbit__zone:hover { transform: none; }
+}

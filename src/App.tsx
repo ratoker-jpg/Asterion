@@ -10,7 +10,8 @@ import { createUniverseNpcOwnerProfile, rerollTestUniverseLayout, TEST_MODE_ALLY
 import { CommandView, type CommandActionResult, type CommandActions } from './CommandView';
 import { ReportsView } from './ReportsView';
 import { buildReportsFeed, getReportUnreadCounts } from './domain/reports/adapters.ts';
-import { ZoneView } from './ZoneView';
+import { ZONE_VIEW_META, ZoneView } from './ZoneView';
+import { PlanetOrbitView } from './ui/planet/PlanetOrbitView';
 import { BuildingInteriorHost } from './BuildingInteriorHost';
 import { FLEET_ROOT_REQUEST_EVENT } from './FleetRootNavigationController';
 import {
@@ -83,6 +84,7 @@ import {
   BUILDING_QUEUE_CAPACITY,
   RESOURCE_BUILDING_ROLES,
   getBuildingDefinition,
+  getBuildingsForZone,
   getBuildingResourceIncomePerHour,
   getStorageCapacities,
   type BuildingRole,
@@ -315,6 +317,9 @@ const zoneMeta: Record<Zone, { title: string; subtitle: string; accent: string }
   industry: { title: 'ПРОМЫШЛЕННАЯ ЗОНА', subtitle: 'Производство', accent: '#f0ad38' },
   military: { title: 'ВОЕННАЯ ЗОНА', subtitle: 'Оборона и флот', accent: '#ee665d' },
 };
+
+/** Building that represents each zone on the planet overview hotspots. */
+const PLANET_ZONE_EMBLEM_ROLE = { resource: 'metal-production-1', industry: 'construction', military: 'shipyard' } as const;
 
 function formatCountdown(ms: number) {
   const total = Math.max(0, Math.ceil(ms / 1000));
@@ -2147,92 +2152,71 @@ export function App() {
               onEnterBuilding={enterBuilding}
             />
           ) : activeRoute === 'planet' ? (
-            <div className="planet-page-v3 planet-page-v4">
-              <aside className="planet-summary-v3 planet-list-panel-v4">
-                <div className="page-panel-title"><strong>ПЛАНЕТЫ</strong><small>{ownedPlanets.length} {ownedPlanets.length === 1 ? 'ПЛАНЕТА' : 'ПЛАНЕТЫ'}</small></div>
-
-                <div className="owned-planets-v4">
-                  {ownedPlanets.map((planet) => {
-                    const planetState = state.planets[planet.id];
-                    const art = planetSkins.find((skin) => skin.id === planetState.skin)?.art ?? planetSkins[0].art;
-                    return <div className={`owned-planet-row-v4 ${planet.id === currentPlanet.id ? 'active' : ''}`} key={planet.id}>
-                      <button className="owned-planet-main-v4" type="button" onClick={() => selectPlanet(planet.id)}>
-                        <img src={art} alt="" />
-                        <span><strong>{planetState.name}</strong><small>{planet.coords} · {planet.status}</small></span>
-                      </button>
-                      <button className="owned-planet-edit-v4" type="button" title={`Редактировать ${planetState.name}`} onClick={() => openPlanetEditor(planet.id)}>✎</button>
-                    </div>;
-                  })}
-                </div>
-
-                <button className={`planet-details-toggle-v4 ${detailsOpen ? 'open' : ''}`} type="button" onClick={() => setDetailsOpen((open) => !open)}>
-                  <span>ПОДРОБНЕЕ О {currentPlanetName.toUpperCase()}</span><b>{detailsOpen ? '⌃' : '⌄'}</b>
-                </button>
-
-                {detailsOpen ? (
-                  <div className="planet-details-v4">
-                    <dl>
-                      <div><dt>Статус</dt><dd>★ {currentPlanet.status}</dd></div>
-                      <div><dt>Фракция</dt><dd>{PLAYER_FACTION_LABELS[state.profile.factionId]}</dd></div>
-                      <div><dt>Координаты</dt><dd>{currentPlanet.coords}</dd></div>
-                      <div><dt>Население</dt><dd>{planetPopulation} / {fleetSummary.capacity}</dd></div>
-                      <div><dt>Энергия</dt><dd>{currentEnergyLedger.availableEnergy}</dd></div>
-                      <div><dt>Ресурсные здания</dt><dd>{resourceBuildingCount} / 10</dd></div>
-                      <div><dt>Стабильность</dt><dd className="summary-stable">{currentPlanetState.stability}%</dd></div>
-                    </dl>
-                  </div>
-                ) : null}
-              </aside>
-
-              <main className="planet-canvas-v3">
-                <div className="scene-title scene-title-v3">
-                  <small>ОБЗОР ПЛАНЕТЫ</small>
-                  <h1>{currentPlanetName.toUpperCase()}</h1>
-                  <p>{currentPlanet.coords} • РОДНОЙ МИР АСТЕРОВ</p>
-                </div>
-                {currentOverpopulation.blocked ? <section className="planet-overpopulation-banner-v3" data-qa-overpopulation-banner role="status">
-                  <strong>ПЛАНЕТА ПЕРЕНАСЕЛЕНА</strong>
-                  <span>{currentOverpopulation.actualPopulation} / {currentOverpopulation.capacity} · избыток {currentOverpopulation.excess}</span>
-                  <small>{currentOverpopulation.episode?.lastResolutionReason === 'no-eligible-units'
-                    ? 'Нет кораблей, подходящих для сгорания; планета остаётся заблокированной.'
-                    : currentOverpopulation.episode
-                      ? `Линейное сжигание флота: ${Math.round(currentOverpopulation.burnProgress * 100)}% за 10 минут.`
-                      : 'Запущено линейное сжигание флота на 10 минут.'}</small>
-                </section> : null}
-                <div className="planet-stage-v3">
-                  <div className="planet-atmosphere" />
-                  <img className="planet-image-v3" data-qa-planet-skin-art src={currentSkin.art} alt={currentPlanetName} draggable={false} />
-                  {(['resource', 'industry', 'military'] as Zone[]).map((item) => (
-                    <button
-                      key={item}
-                      type="button"
-                      className={`zone-hotspot zone-hotspot--${item}`}
-                      style={{ '--zone-accent': zoneMeta[item].accent } as CSSProperties}
-                      onClick={() => chooseZone(item)}
-                    >
-                      <span className="zone-hotspot__icon"><ApprovedZoneIcon kind={item} /></span>
-                      <span className="zone-hotspot__label"><strong>{zoneMeta[item].title.replace(' ЗОНА', '')}</strong><small>ЗОНА</small></span>
-                    </button>
-                  ))}
-                </div>
-                <div className="planet-status planet-status-v2"><span>●</span> СТАБИЛЬНО <i /> ONLINE</div>
-              </main>
-
-              <aside className="queue-panel-v3">
-                <div className="page-panel-title"><strong>ОЧЕРЕДЬ СТРОИТЕЛЬСТВА</strong><small>{currentQueue.length} / {BUILDING_QUEUE_CAPACITY}</small></div>
-                <div className={`queue-card-v2 ${currentActiveQueueItem ? 'busy' : ''}`}>
-                  {currentQueueDefinition ? <img src={currentQueueDefinition.art} alt="" style={{ width: 44, height: 44, objectFit: 'contain' }} /> : <span className="queue-card-v2__icon"><GameIcon kind="resource" /></span>}
-                  <span><strong>{currentQueueDefinition?.name ?? 'Свободный слот'}</strong><small>{currentActiveQueueItem ? `Осталось ${formatCountdown(remaining)}` : 'Готов к строительству'}</small></span>
-                  <b>{currentActiveQueueItem ? 'I' : '+'}</b>
-                  {currentActiveQueueItem ? <div className="queue-progress-v2"><i style={{ width: `${progress}%` }} /></div> : null}
-                </div>
-                <div className="build-preview-v2">
-                  <span className="build-preview-v2__icon"><GameIcon kind="resource" /></span>
-                  <div><strong>Ресурсная зона</strong><small>Добыча и энергетика планеты</small></div>
-                </div>
-                <AegisButton onClick={() => chooseZone('resource')}>ОТКРЫТЬ РЕСУРСНУЮ ЗОНУ</AegisButton>
-              </aside>
-            </div>
+            <PlanetOrbitView
+              name={currentPlanetName}
+              kicker={`ОБЗОР ПЛАНЕТЫ · ${PLAYER_FACTION_LABELS[state.profile.factionId].toUpperCase()}`}
+              subtitle={`${currentPlanet.coords} · ${currentPlanet.status}`}
+              skinArt={currentSkin.art}
+              vitals={[
+                { label: 'Население', value: `${planetPopulation} / ${fleetSummary.capacity}` },
+                { label: 'Энергия', value: Number(currentEnergyLedger.availableEnergy).toLocaleString('ru-RU') },
+                { label: 'Ресурсные здания', value: `${resourceBuildingCount} / 10` },
+                { label: 'Стабильность', value: `${currentPlanetState.stability}%`, tone: 'ok' },
+              ]}
+              worlds={ownedPlanets.map((planet) => {
+                const planetState = state.planets[planet.id];
+                return {
+                  id: planet.id,
+                  name: planetState.name,
+                  coords: planet.coords,
+                  status: planet.status,
+                  art: planetSkins.find((skin) => skin.id === planetState.skin)?.art ?? planetSkins[0].art,
+                  active: planet.id === currentPlanet.id,
+                };
+              })}
+              zones={(['resource', 'industry', 'military'] as Zone[]).map((zone) => {
+                const roles = getBuildingsForZone(zone, state.profile.factionId);
+                const building = currentQueue.find((item) => getBuildingDefinition(item.assetRole, state.profile.factionId).zone === zone);
+                return {
+                  zone,
+                  title: zoneMeta[zone].title.replace(' ЗОНА', ''),
+                  accent: zoneMeta[zone].accent,
+                  art: getBuildingDefinition(PLANET_ZONE_EMBLEM_ROLE[zone], state.profile.factionId).art,
+                  built: roles.filter((item) => (currentPlanetState.buildings[item.assetRole] ?? 0) > 0).length,
+                  total: roles.length,
+                  building: building ? getBuildingDefinition(building.assetRole, state.profile.factionId).name : null,
+                };
+              })}
+              queue={currentQueue.map((item, index) => {
+                const definition = getBuildingDefinition(item.assetRole, state.profile.factionId);
+                return {
+                  id: item.id,
+                  zoneLabel: ZONE_VIEW_META[definition.zone].queueLabel,
+                  name: definition.name,
+                  art: definition.art,
+                  fromLevel: Math.max(0, item.targetLevel - 1),
+                  toLevel: item.targetLevel,
+                  active: index === 0,
+                  remaining: index === 0 ? formatCountdown(item.finishAt - now) : null,
+                  progress: index === 0 ? progress : 0,
+                };
+              })}
+              queueCapacity={BUILDING_QUEUE_CAPACITY}
+              income={effectiveResourceIncomePerHour}
+              banner={currentOverpopulation.blocked ? <section className="planet-overpopulation-banner-v3" data-qa-overpopulation-banner role="status">
+                <strong>ПЛАНЕТА ПЕРЕНАСЕЛЕНА</strong>
+                <span>{currentOverpopulation.actualPopulation} / {currentOverpopulation.capacity} · избыток {currentOverpopulation.excess}</span>
+                <small>{currentOverpopulation.episode?.lastResolutionReason === 'no-eligible-units'
+                  ? 'Нет кораблей, подходящих для сгорания; планета остаётся заблокированной.'
+                  : currentOverpopulation.episode
+                    ? `Линейное сжигание флота: ${Math.round(currentOverpopulation.burnProgress * 100)}% за 10 минут.`
+                    : 'Запущено линейное сжигание флота на 10 минут.'}</small>
+              </section> : null}
+              onSelectWorld={(id) => selectPlanet(id as PlanetId)}
+              onEditWorld={(id) => openPlanetEditor(id as PlanetId)}
+              onChooseZone={chooseZone}
+              onColonize={() => navigateTo('universe')}
+            />
           ) : (
             <main className="module-placeholder-v3">
               <span>ASTERION COMMAND MODULE</span>
