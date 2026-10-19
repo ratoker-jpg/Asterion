@@ -75,6 +75,7 @@ import {
   type FleetSectionId,
   type FleetSectionItem,
 } from './ui/navigation.tsx';
+import { AmountSlider } from './ui/AmountSlider';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
 import './building-card.css';
 import './fleet-workspace.css';
@@ -987,6 +988,11 @@ function FleetWorkspace({
     refreshFlightPreview(previewOriginPlanetId ?? runtimeState.currentPlanetId, destination, target.relation);
   };
 
+  const cargoMax = (key: TransportCargoKey) => {
+    if (!transportSummary) return 0;
+    const fieldMax = getCargoFieldMaximum(key, transportSummary.cargo, transportSourceResources, transportSourceDebris, transportSummary.capacity.total);
+    return missionId === 'aid' ? Math.min(aidRemainder, fieldMax) : fieldMax;
+  };
   const changeTransportCargo = (key: TransportCargoKey, rawValue: string) => {
     const requested = Number(rawValue);
     let amount = Number.isFinite(requested) && requested > 0 ? Math.floor(requested) : 0;
@@ -1433,7 +1439,7 @@ function FleetWorkspace({
                   const attackOrder = attackOrderByFlightId.get(flight.id);
                   return <div className={`fleet-flight-row-v1${isHostileIncoming ? ' fleet-flight-row-v1--incoming-attack' : ''}`} key={flight.id} data-qa-flight-row={flight.id} data-qa-flight-phase={flight.phase} data-qa-flight-owner-side={flight.ownerSide ?? 'player'} data-qa-flight-incoming-attack={isHostileIncoming || undefined} data-qa-flight-pirate-raid={isIncomingPirateRaid || undefined}>
                   <span data-qa-flight-origin>{flight.ownerSide === 'npc' && flight.missionId === 'aid' ? <><strong>СОЮЗНИК</strong><small>помощь по запросу</small></> : isIncomingBotAttack ? <><strong>Bot 01</strong><CoordinateLink coordinate={flight.originCoordinate} /></> : isIncomingPirateRaid ? <><strong>ПИРАТЫ · ИСТОЧНИК</strong><CoordinateLink coordinate={flight.originCoordinate} /></> : <CoordinateLink coordinate={flight.originCoordinate} />}</span>
-                  <span data-qa-flight-target><strong data-qa-space-flight-targetless={flight.missionId === 'space-flight' || undefined}>{flight.missionId === 'space-flight' ? 'Без планетарной цели' : flight.targetPlanetName ?? flightCoordinateLabel(flight.destinationCoordinate)}</strong>{flight.missionId !== 'space-flight' && flight.destinationCoordinate ? <CoordinateLink coordinate={flight.destinationCoordinate} /> : null}{flight.targetOwnerName ? <small>{flight.targetOwnerName}</small> : null}{flight.targetRelation === 'ally' ? '· СОЮЗНИК' : flight.targetRelation === 'self' ? '· СВОЯ' : ''}{targetUnavailable ? <b data-qa-flight-target-unavailable> · ЦЕЛЬ НЕДОСТУПНА</b> : null}</span>
+                  <span data-qa-flight-target><strong data-qa-space-flight-targetless={flight.missionId === 'space-flight' || undefined}>{flight.missionId === 'space-flight' ? 'Без планетарной цели' : flight.targetPlanetName ?? <CoordinateLink coordinate={flight.destinationCoordinate} />}</strong>{flight.missionId !== 'space-flight' && flight.targetPlanetName && flight.destinationCoordinate ? <CoordinateLink coordinate={flight.destinationCoordinate} /> : null}{flight.targetOwnerName ? <small>{flight.targetOwnerName}</small> : null}{flight.targetRelation === 'ally' ? '· СОЮЗНИК' : flight.targetRelation === 'self' ? '· СВОЯ' : ''}{targetUnavailable ? <b data-qa-flight-target-unavailable> · ЦЕЛЬ НЕДОСТУПНА</b> : null}</span>
                   <span data-qa-flight-arrival data-qa-flight-arrival-at={flight.arrivalAt}>{flight.phase === 'outbound' ? flightCountdown(flight.arrivalAt, clockNow) : '—'}</span>
                   <span data-qa-flight-status>{statusLabel}</span>
                   <span data-qa-flight-return>{flight.phase === 'returning' ? flightCountdown(flight.returnAt, clockNow) : '—'}</span>
@@ -1500,11 +1506,8 @@ function FleetWorkspace({
                       <div className="fleet-ship-art-v1"><img src={ship.art} alt={ship.name} draggable={false} /></div>
                       <h3>{ship.name}</h3>
                       <small>в наличии <b data-qa-fleet-owned>{available}</b> · нас. <b data-qa-fleet-unit-population>{ship.population}</b></small>
-                      <div className="fleet-ship-tile-v2__qty">
-                        <button type="button" aria-label={`Меньше: ${ship.name}`} disabled={selected <= 0} onClick={() => setShipQuantity(ship.id, selected - 1)}>−</button>
-                        <input aria-label={`Количество ${ship.name}`} type="number" min="0" max={available} value={selected} onChange={(event) => setShipQuantity(ship.id, Number(event.target.value))} />
-                        <button type="button" aria-label={`Больше: ${ship.name}`} disabled={selected >= available} onClick={() => setShipQuantity(ship.id, selected + 1)}>+</button>
-                      </div>
+                      <input className="fleet-ship-tile-v2__input" aria-label={`Количество ${ship.name}`} type="number" min="0" max={available} value={selected} onChange={(event) => setShipQuantity(ship.id, Number(event.target.value))} />
+                      <AmountSlider compact value={selected} max={available} label={`Количество: ${ship.name}`} onChange={(value) => setShipQuantity(ship.id, value)} qa={ship.id} />
                       <div className="fleet-quantity-shortcuts-v1">
                         <button type="button" onClick={() => setShipQuantity(ship.id, 0)}>МИН.</button>
                         <button type="button" onClick={() => setShipQuantity(ship.id, available)}>МАКС.</button>
@@ -1695,6 +1698,7 @@ function FleetWorkspace({
               <button type="button" className="flight-timeline-close" data-asterion-close aria-label="Закрыть план перелёта" onClick={closeFlightPreview}>×</button>
               </header>
             <div className="flight-timeline-body">
+              <div className="flight-briefing-v2__left">
               <section className="flight-briefing-v2__hero" aria-label="Миссия">
                 <MissionIcon mission={selectedMission} />
                 <div>
@@ -1791,6 +1795,8 @@ function FleetWorkspace({
                   </div>
                 </li>
               </ol>
+              </div>
+              <div className="flight-briefing-v2__right">
               <section className="flight-timeline-summary" aria-live="polite">
                 <div className="flight-timeline-summary-head">
                   <small>ПАРАМЕТРЫ ПЕРЕЛЁТА</small>
@@ -1872,7 +1878,7 @@ function FleetWorkspace({
                     <em>СВОБОДНО: {flightNumberLabel(transportSummary.capacity.free)}</em>
                   </span>
                 </div>
-                <div className="flight-timeline-cargo-grid">
+                <div className="flight-timeline-cargo-grid flight-cargo-sliders-v2">
                   {flightCargoResources.filter((resource) => missionId !== 'aid' || resource.kind === aidRequest?.resource).map((resource) => (
                     <label key={resource.kind} className="flight-timeline-cargo-field">
                       <span className="flight-timeline-cargo-resource">
@@ -1880,14 +1886,16 @@ function FleetWorkspace({
                         <b>{resource.label}</b>
                       </span>
                       <span className="flight-timeline-cargo-input">
-                        <input type="number" min="0" step="1" value={transportSummary.cargo[resource.kind]} max={missionId === 'aid' ? Math.min(aidRemainder, getCargoFieldMaximum(resource.kind, transportSummary.cargo, transportSourceResources, transportSourceDebris, transportSummary.capacity.total)) : getCargoFieldMaximum(resource.kind, transportSummary.cargo, transportSourceResources, transportSourceDebris, transportSummary.capacity.total)} aria-label={resource.label} data-qa-cargo={resource.kind} onChange={(event) => changeTransportCargo(resource.kind, event.target.value)} />
-                        <em>МАКС. {flightNumberLabel(missionId === 'aid' ? Math.min(aidRemainder, getCargoFieldMaximum(resource.kind, transportSummary.cargo, transportSourceResources, transportSourceDebris, transportSummary.capacity.total)) : getCargoFieldMaximum(resource.kind, transportSummary.cargo, transportSourceResources, transportSourceDebris, transportSummary.capacity.total))}</em>
+                        <input type="number" min="0" step="1" value={transportSummary.cargo[resource.kind]} max={cargoMax(resource.kind)} aria-label={resource.label} data-qa-cargo={resource.kind} onChange={(event) => changeTransportCargo(resource.kind, event.target.value)} />
+                        <em>МАКС. {flightNumberLabel(cargoMax(resource.kind))}</em>
                       </span>
+                      <AmountSlider value={transportSummary.cargo[resource.kind]} max={cargoMax(resource.kind)} label={`Груз: ${resource.label}`} onChange={(value) => changeTransportCargo(resource.kind, String(value))} qa={`cargo-${resource.kind}`} />
                     </label>
                   ))}
                 </div>
                 {transportSummary.overflowWarning ? <p role="alert" data-qa-transport-overflow-warning>Часть груза может сгореть: склады цели заполнены.</p> : <p>{missionId === 'space-flight' ? 'Груз ограничен запасами источника и вместимостью кораблей; 100 газа для отправки зарезервированы отдельно.' : missionId === 'aid' ? 'Можно везти только запрошенный ресурс и не больше свободного остатка запроса. Засчитывается только то, что планета реально примет.' : 'Загрузка ограничена запасом источника и свободной грузоподъёмностью.'}</p>}
               </section> : null}
+              </div>
             </div>
             <div className="flight-timeline-meta">{previewResult?.ok && previewFlightRecord ? <>РАСЧЁТ · PERSISTED FLIGHT RUNTIME · ПРИБЫТИЕ: {flightArrivalLabel(previewFlightRecord.arrivalAt)} · МОСКОВСКОЕ ВРЕМЯ · {flightMissionLabel(missionId).toUpperCase()}</> : 'РАСЧЁТ БУДЕТ ВЫПОЛНЕН ПРИ ОТПРАВКЕ'}</div>
             <div className="resource-building-action-confirm-actions flight-timeline-actions">
