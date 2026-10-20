@@ -75,6 +75,7 @@ import {
   ACTIVE_RUNTIME_MODE,
   scaleRuntimeDuration,
   dispatchRuntimeReset,
+  getRuntimeElapsedScale,
   resolveTestTimeScale,
   TEST_TIME_SCALE_OPTIONS,
   type TestTimeScale,
@@ -900,7 +901,7 @@ export function App() {
   );
   const currentEnergyCoordinates = useMemo(
     () => getPlanetEnergyCoordinates(currentPlanetState),
-    [currentPlanetState.universePosition, currentPlanetState.universeSystem],
+    [currentPlanetState.universeGalaxy, currentPlanetState.universePosition, currentPlanetState.universeSystem, state.sunRaid],
   );
   const fleetSummary = useMemo(
     () => getFleetSummaryForState(state),
@@ -1525,7 +1526,7 @@ export function App() {
   };
 
   // Test Mode runs the 3-hour truce timers on the same accelerated clock as the aid charges.
-  const diplomacyOptions = (at: number) => ({ now: at, elapsedScale: RUNTIME_MODE === 'test' ? testTimeScale : 1 });
+  const diplomacyOptions = (at: number) => ({ now: at, elapsedScale: getRuntimeElapsedScale(RUNTIME_MODE, testTimeScale) });
 
   /** Allied planets of a member known to this save (Test Mode ally planets today). Never shown on the Command screen. */
   const memberPlanetsOf = (current: SaveState, ownerId: string) => Object.values(current.alliedPlanets ?? {})

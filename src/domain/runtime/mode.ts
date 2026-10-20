@@ -46,8 +46,44 @@ export function resolveRuntimeMode(search?: string): RuntimeMode {
 
 export const ACTIVE_RUNTIME_MODE: RuntimeMode = resolveRuntimeMode();
 
+/**
+ * Production saves live in save slots (see `application/slots.ts`). The session
+ * layer points this at the active slot's storage key before the game mounts,
+ * so every repository that reads/writes "the save" uses the active slot.
+ * Test Mode keeps its single isolated key.
+ */
+let activeProductionSaveKey: string | null = null;
+
+export function setActiveProductionSaveKey(key: string | null): void {
+  activeProductionSaveKey = typeof key === 'string' && key.trim() ? key : null;
+}
+
 export function getRuntimeSaveKey(mode: RuntimeMode = ACTIVE_RUNTIME_MODE): string {
-  return mode === 'test' ? TEST_SAVE_KEY : PRODUCTION_SAVE_KEY;
+  return mode === 'test' ? TEST_SAVE_KEY : activeProductionSaveKey ?? PRODUCTION_SAVE_KEY;
+}
+
+/** Campaign speed chosen at «Новая игра»; fixed for the whole campaign. */
+export type CampaignSpeed = 'slow' | 'standard' | 'fast';
+export const CAMPAIGN_SPEED_SCALE: Readonly<Record<CampaignSpeed, number>> = Object.freeze({
+  slow: 0.5,
+  standard: 1,
+  fast: 2,
+});
+
+let campaignTimeScale = 1;
+
+/** Production time scale of the loaded campaign. Standard (×1) is the legacy behaviour bit-for-bit. */
+export function setCampaignTimeScale(value: number): void {
+  campaignTimeScale = Number.isFinite(value) && value > 0 ? value : 1;
+}
+
+export function getCampaignTimeScale(): number {
+  return campaignTimeScale;
+}
+
+/** Elapsed-time multiplier: Test Mode uses its selector, production the campaign speed. */
+export function getRuntimeElapsedScale(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, testTimeScale: unknown = TEST_TIME_SCALE): number {
+  return mode === 'test' ? normalizeTestTimeScale(testTimeScale) : campaignTimeScale;
 }
 
 export function normalizeTestTimeScale(value: unknown): TestTimeScale {
@@ -69,5 +105,6 @@ export function scaleRuntimeDuration(
   testTimeScale: number = TEST_TIME_SCALE,
 ): number {
   const safeDuration = Math.max(1, Math.round(durationMs));
-  return mode === 'test' ? Math.max(1, Math.round(safeDuration / normalizeTestTimeScale(testTimeScale))) : safeDuration;
+  if (mode === 'test') return Math.max(1, Math.round(safeDuration / normalizeTestTimeScale(testTimeScale)));
+  return campaignTimeScale === 1 ? safeDuration : Math.max(1, Math.round(safeDuration / campaignTimeScale));
 }

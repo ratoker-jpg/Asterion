@@ -3,7 +3,6 @@ import { COMBAT_SAVE_SCHEMA_VERSION } from './priority.ts';
 import { normalizeBattleReport, type BattleReport } from './report.ts';
 import { getRuntimeSaveKey, type RuntimeMode } from '../runtime/mode.ts';
 
-const LEGACY_SAVE_KEY = getRuntimeSaveKey();
 export const BATTLE_HISTORY_CHANGED_EVENT = 'asterion:battle-history-changed';
 
 export type BattleHistoryState = {
@@ -65,7 +64,7 @@ export function migrateBattleHistory(value: unknown, mode: RuntimeMode = 'test')
 
 export function readBattleHistory(storage?: StorageLike, mode?: RuntimeMode): BattleHistoryState {
   const runtimeMode = mode ?? 'test';
-  const saveKey = mode === undefined ? LEGACY_SAVE_KEY : getRuntimeSaveKey(runtimeMode);
+  const saveKey = mode === undefined ? getRuntimeSaveKey() : getRuntimeSaveKey(runtimeMode);
   const target = resolveStorage(storage);
   if (!target) return createDefaultBattleHistory(runtimeMode);
 
@@ -89,7 +88,7 @@ export function persistBattleHistory(
   mode?: RuntimeMode,
 ): PersistBattleHistoryResult {
   const runtimeMode = mode ?? 'test';
-  const saveKey = mode === undefined ? LEGACY_SAVE_KEY : getRuntimeSaveKey(runtimeMode);
+  const saveKey = mode === undefined ? getRuntimeSaveKey() : getRuntimeSaveKey(runtimeMode);
   const normalized = migrateBattleHistory(value, runtimeMode);
   const target = resolveStorage(storage);
   if (!target) return { ok: false, value: normalized, error: 'Локальное сохранение недоступно.' };

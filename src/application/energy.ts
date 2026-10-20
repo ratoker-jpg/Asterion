@@ -15,6 +15,7 @@ import type { ScienceLevels } from '../domain/science/runtime.ts';
 import type { PlanetRuntime } from './contracts.ts';
 
 export type PlanetEnergyCoordinates = {
+  galaxy: number;
   system: number;
   position: number;
 };
@@ -35,15 +36,16 @@ function safeCoordinate(value: unknown, fallback: number, max: number): number {
   return numeric >= 1 && numeric <= max ? numeric : fallback;
 }
 
-export function getPlanetEnergyCoordinates(planet: Pick<PlanetRuntime, 'universeSystem' | 'universePosition'>): PlanetEnergyCoordinates {
+export function getPlanetEnergyCoordinates(planet: Pick<PlanetRuntime, 'universeSystem' | 'universePosition'> & Partial<Pick<PlanetRuntime, 'universeGalaxy'>>): PlanetEnergyCoordinates {
   return {
+    galaxy: safeCoordinate(planet.universeGalaxy, 1, 10),
     system: safeCoordinate(planet.universeSystem, 1, 40),
     position: safeCoordinate(planet.universePosition, 1, 24),
   };
 }
 
 export function getPlanetEnergySources(
-  planet: Pick<PlanetRuntime, 'buildings' | 'solarSatellites' | 'universeSystem' | 'universePosition'>,
+  planet: Pick<PlanetRuntime, 'buildings' | 'solarSatellites' | 'universeSystem' | 'universePosition'> & Partial<Pick<PlanetRuntime, 'universeGalaxy'>>,
   scienceLevels: ScienceLevels | Readonly<Partial<Record<number, number>>> = {},
 ): EnergySourceSnapshot[] {
   const coordinates = getPlanetEnergyCoordinates(planet);
@@ -51,6 +53,7 @@ export function getPlanetEnergySources(
     buildings: planet.buildings,
     scienceLevels,
     solarSatellites: planet.solarSatellites ?? 0,
+    galaxy: coordinates.galaxy,
     system: coordinates.system,
     position: coordinates.position,
   });

@@ -40,7 +40,6 @@ import {
   CURRENT_PLAYER_FACTION_ID,
   migratePlayerProfileState,
   syncPlayerProfileWithCommand,
-  syncPlayerProfileWithFaction,
 } from '../domain/profile/repository.ts';
 import {
   createDefaultScienceState,
@@ -135,9 +134,17 @@ import { createDefaultPirateState, normalizePirateState, isPirateMissionSnapshot
 import { createExplorationState, migrateExplorationState } from '../domain/exploration/ledger.ts';
 import { COMBAT_TECHNOLOGIES } from '../domain/combat/technologies.ts';
 import { getSpaceportUpgradeMaxLevel } from '../domain/buildings/spaceport-upgrades.ts';
+import { createLegacyWorldConfig, normalizeNewGameConfig, type NewGameConfig } from '../domain/world/config.ts';
+import { generateWorld } from '../domain/world/generator.ts';
+import { createDefaultSunRaidState } from '../domain/sun-raid/rules.ts';
+import { migrateSunRaidState } from '../domain/sun-raid/repository.ts';
+import { isCombatFactionId } from '../domain/combat/factions.ts';
+
+/** Schema 24: save slots, `worldConfig`, the saved race is authoritative, Sun raid state. */
+export const WORLD_CONFIG_SCHEMA_VERSION = 24;
 
 export const SAVE_SCHEMA_VERSION = Math.max(
-  23,
+  WORLD_CONFIG_SCHEMA_VERSION,
   COMBAT_SAVE_SCHEMA_VERSION,
   SCIENCE_SAVE_SCHEMA_VERSION,
   RUNTIME_SAVE_SCHEMA_VERSION,
@@ -221,6 +228,9 @@ type StoredSave = {
   flights?: unknown;
   espionage?: unknown;
   alliedPlanets?: Record<string, unknown>;
+  worldConfig?: unknown;
+  sunRaid?: unknown;
+  playTimeMs?: unknown;
 };
 
 export type PersistenceWriteResult =
@@ -541,6 +551,7 @@ const PERSISTED_FLIGHT_MISSIONS = new Set<MissionId>([
   'recycle',
   'gas',
   'sun-support',
+  'sun-attack',
   'space-flight',
 ]);
 const PERSISTED_FLIGHT_PHASES = new Set<FlightPhase>([
@@ -742,6 +753,8 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
     || !isFinitePersistedNumber(item.gasCost)
     || item.gasCost < 0
     || (isSpaceFlight && item.gasCost !== 100)) return false;
+
+  if (item.missionId === 'sun-attack' || item.missionId === 'sun-support') return isPersistedSunFlight(item, mode);
 
   if ((item.ownerSide !== undefined && item.ownerSide !== 'player' && item.ownerSide !== 'bot01' && item.ownerSide !== 'npc' && item.ownerSide !== 'pirate')
     || (item.ownerSide === 'bot01' && item.missionId !== 'attack' && !(mode === 'test' && item.missionId === 'expedition'))
@@ -1027,6 +1040,37 @@ function isPersistedFlightRecord(value: unknown, mode: RuntimeMode): value is Fl
   return true;
 }
 
+/**
+ * Sun raid flights: a fixed-duration trip to a Sun (`operation` destination
+ * `sun:G:S`) with a frozen side snapshot. NPC participants exist in Test Mode only.
+ */
+function isPersistedSunFlight(item: Record<string, unknown>, mode: RuntimeMode): boolean {
+  if (item.ownerSide !== undefined && item.ownerSide !== 'player'
+    && !(mode === 'test' && (item.ownerSide === 'bot01' || item.ownerSide === 'npc'))) return false;
+  const destination = objectRecord(item.destination);
+  if (!destination || destination.kind !== 'operation' || typeof destination.operationId !== 'string'
+    || !/^sun:\d+:\d+$/.test(destination.operationId) || item.operationId !== destination.operationId
+    || !coordinatesMatch(destination.coordinate, item.destinationCoordinate)) return false;
+  const snapshot = objectRecord(item.sunRaid);
+  if (!snapshot || snapshot.version !== 1 || !isNonEmptyPersistedString(snapshot.raidId)
+    || !isNonEmptyPersistedString(snapshot.ownerId) || !isCombatFactionId(snapshot.factionId)
+    || snapshot.side !== (item.missionId === 'sun-attack' ? 'attacker' : 'defender')
+    || !isNonNegativeInteger(snapshot.population)
+    || !objectRecord(snapshot.technologies) || !objectRecord(snapshot.shipLevels)) return false;
+  const ships = objectRecord(item.selectedShips);
+  if (!ships) return false;
+  for (const [shipId, quantity] of Object.entries(ships)) {
+    if (!SHIP_IDS.includes(shipId as (typeof SHIP_IDS)[number]) || shipId === 'solar-satellite'
+      || !isNonNegativeInteger(quantity)) return false;
+  }
+  if (Object.keys(objectRecord(item.selectedCommanders) ?? {}).length > 0) return false;
+  const phase = item.phase as FlightPhase;
+  if (phase === 'returning' && (!isFinitePersistedNumber(item.returnAt) || item.returnAt < (item.departedAt as number))) return false;
+  if (phase === 'arrived' && !isFinitePersistedNumber(item.arrivedAt)) return false;
+  if ((phase === 'completed' || phase === 'failed') && !isFinitePersistedNumber(item.completedAt)) return false;
+  return true;
+}
+
 function normalizePersistedFlightRecord(value: unknown): unknown {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
   const source = value as Record<string, unknown>;
@@ -1145,8 +1189,19 @@ function migrateAlliedPlanets(
   };
 }
 
-function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.now()): SaveState {
-  const defaultProfile = createDefaultPlayerProfileState();
+function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.now(), setup?: NewGameConfig): SaveState {
+  const baseProfile = createDefaultPlayerProfileState();
+  // Test Mode keeps its fixed fixtures world; the wizard config applies to production campaigns.
+  const worldConfig = setup && mode === 'production'
+    ? setup
+    : createLegacyWorldConfig(setup?.factionId ?? baseProfile.factionId, setup?.playerName ?? baseProfile.displayName);
+  const defaultProfile = {
+    ...baseProfile,
+    factionId: worldConfig.factionId,
+    displayName: worldConfig.playerName.trim() || baseProfile.displayName,
+  };
+  const generatedWorld = setup && mode === 'production' ? generateWorld(worldConfig, now) : null;
+  const home = generatedWorld?.playerStart ?? { galaxy: 1, system: 1, position: 1 };
   const command = createDefaultCommandState(mode, {
     playerId: defaultProfile.playerId,
     playerDisplayName: defaultProfile.displayName,
@@ -1172,14 +1227,14 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
   const initialPlanet: PlanetRuntime = {
     name: DEFAULT_PLANET_NAME,
     skin: 'colonized',
-    fleet: createCanonicalStartingFleet(),
+    fleet: createCanonicalStartingFleet(defaultProfile.factionId),
     defense: createEmptyDefenseState(),
     fleetProduction: createDefaultFleetProductionState(),
     energy: mode === 'test' ? TEST_MODE_RESOURCE_AMOUNT : 140,
     solarSatellites: 0,
-    universeSystem: 1,
-    universeGalaxy: 1,
-    universePosition: 1,
+    universeSystem: home.system,
+    universeGalaxy: home.galaxy,
+    universePosition: home.position,
     buildings,
     productionBots: createEmptyBotAssignment(),
     recycling: createDefaultRecyclingState({ mode, fixture: resolveRecyclingFixture(mode) }),
@@ -1221,15 +1276,28 @@ function createInitialState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.
     },
     asteroidSimulation: createUniverseAsteroidSimulationState(now),
     asteroidDebrisBySpawnIndex: {},
-    espionage: mode === 'test' ? createDefaultTestEspionageState(now) : createDefaultEspionageState(),
+    espionage: mode === 'test'
+      ? createDefaultTestEspionageState(now)
+      : {
+        ...createDefaultEspionageState(),
+        targets: Object.fromEntries((generatedWorld?.npcPlanets ?? []).map((planet) => [planet.id, planet])),
+      },
     alliedPlanets: mode === 'test'
       ? { [TEST_MODE_ALLY_PLANET_FIXTURE.planet.id]: createDefaultAlliedPlanetState(mode, now, science.levels) }
       : {},
+    worldConfig,
+    sunRaid: createDefaultSunRaidState(),
+    playTimeMs: 0,
   };
 }
 
-export function createInitialSaveState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.now()): SaveState {
-  return createInitialState(mode, now);
+/**
+ * The single faction-aware entry for a fresh campaign. `setup` comes from the
+ * «Новая игра» wizard; without it the legacy world (Астеры, [1:1:1]) is created.
+ * Starting resources, buildings and fleet sizes are unchanged by design.
+ */
+export function createInitialSaveState(mode: RuntimeMode = ACTIVE_RUNTIME_MODE, now = Date.now(), setup?: NewGameConfig): SaveState {
+  return createInitialState(mode, now, setup);
 }
 
 function readSavedState(options: PersistenceOptions = {}): SaveState {
@@ -1274,7 +1342,8 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
     });
     const combat = migrateBattleHistory(parsed.combat, mode);
     const operations = migrateOperationsState(parsed.operations, mode);
-    const storedProfile = syncPlayerProfileWithFaction(migratePlayerProfileState(parsed.profile), CURRENT_PLAYER_FACTION_ID);
+    // The saved race is the source of truth (it used to be forced back to Астеры on every load).
+    const storedProfile = migratePlayerProfileState(parsed.profile);
     const command = migrateCommandState(parsed.command, mode, {
       playerId: storedProfile.playerId,
       playerDisplayName: storedProfile.displayName,
@@ -1623,6 +1692,9 @@ function readSavedState(options: PersistenceOptions = {}): SaveState {
       asteroidDebrisBySpawnIndex: migrateAsteroidDebris(parsed.asteroidDebrisBySpawnIndex, activeAsteroidSpawnIndices),
       espionage,
       alliedPlanets,
+      worldConfig: normalizeNewGameConfig(parsed.worldConfig, createLegacyWorldConfig(profile.factionId, profile.displayName)),
+      sunRaid: migrateSunRaidState(parsed.sunRaid),
+      playTimeMs: Math.max(0, numberOr(parsed.playTimeMs, 0)),
     };
   } catch {
     return initialState;

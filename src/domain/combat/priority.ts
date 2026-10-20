@@ -1,6 +1,7 @@
 import { COMMANDER_IDS, isCommanderId, type CommanderId } from './commanders.ts';
 import { getRuntimeSaveKey, type RuntimeMode } from '../runtime/mode.ts';
 
+/** Legacy production key; live reads resolve the active slot through `getRuntimeSaveKey()`. */
 export const ASTERION_SAVE_KEY = getRuntimeSaveKey();
 export const COMBAT_SAVE_SCHEMA_VERSION = 6;
 export const COMBAT_PRIORITY_CHANGED_EVENT = 'asterion:combat-priority-changed';
@@ -122,7 +123,7 @@ export function readCombatPriority(storage?: StorageLike, mode?: RuntimeMode): C
   if (!target) return createDefaultCombatPriority();
 
   try {
-    const raw = target.getItem(mode === undefined ? ASTERION_SAVE_KEY : getRuntimeSaveKey(mode));
+    const raw = target.getItem(getRuntimeSaveKey(mode));
     if (!raw) return createDefaultCombatPriority();
     const parsed = JSON.parse(raw) as SaveEnvelope;
     return migrateCombatPriority(parsed.combatPriority);
@@ -145,7 +146,7 @@ export function persistCombatPriority(
   if (!target) return { ok: false, value: normalized, error: 'Локальное сохранение недоступно.' };
 
   try {
-    const saveKey = mode === undefined ? ASTERION_SAVE_KEY : getRuntimeSaveKey(mode);
+    const saveKey = getRuntimeSaveKey(mode);
     const raw = target.getItem(saveKey);
     let parsed: SaveEnvelope = {};
     if (raw) parsed = JSON.parse(raw) as SaveEnvelope;

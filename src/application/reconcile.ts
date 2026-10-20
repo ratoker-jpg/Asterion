@@ -15,6 +15,7 @@ import { reconcileResourceIncome } from './resource-clock.ts';
 import type { ResourceCreditResult } from '../domain/resources/credit.ts';
 import type { FleetProductionCompletion } from '../domain/fleet/production.ts';
 import { reconcileFlights, type FlightReconcileEvent } from './flights.ts';
+import { reconcileSunRaids, type SunRaidNotice } from './sun-raid.ts';
 import { reconcileAidMembership, syncAidState } from './alliance-aid.ts';
 import { selectDuePirateRolls, resolveDuePirateRoll } from './pirate-raids.ts';
 import { advanceExplorationNpcProgress, selectDueExplorationNpcRolls, resolveDueExplorationNpcRoll } from './exploration-npc.ts';
@@ -37,6 +38,7 @@ export type RuntimeReconcileEvent =
   | { kind: 'spaceport'; planetId: string; tasks: Array<{ track: SpaceportUpgradeTrack; shipId: string }> }
   | { kind: 'fleet-production'; planetId: string; completed: FleetProductionCompletion[] }
   | { kind: 'flight'; events: FlightReconcileEvent[] }
+  | { kind: 'sun-raid'; notices: SunRaidNotice[] }
   | { kind: 'pirate-raid-check'; ownerId: string; contactCycleKey: string; flightId?: string };
 
 export type RuntimeReconcileResult = {
@@ -239,7 +241,12 @@ export function reconcileRuntime(
       next = flights.state;
       if (flights.events.length > 0) events.push({ kind: 'flight', events: flights.events });
     }
-    return flights.changed && beforeSystems !== raidSystemFootprint(next);
+    // Sun raids run after ordinary arrivals: a Bot 01 assault resolved at this
+    // checkpoint can already destroy a Gate, and Sun battles see the same clock.
+    const sun = reconcileSunRaids(next, { now: at, mode: context.mode, testTimeScale: context.testTimeScale });
+    if (sun.changed) next = sun.state;
+    if (sun.notices.length) events.push({ kind: 'sun-raid', notices: sun.notices });
+    return (flights.changed || sun.changed) && beforeSystems !== raidSystemFootprint(next);
   };
 
   let processedThrough = Number.NEGATIVE_INFINITY;

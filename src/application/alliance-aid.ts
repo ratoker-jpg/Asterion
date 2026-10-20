@@ -30,7 +30,7 @@ import { beginFlightReturn, recallFlight as recallDomainFlight } from '../domain
 import type { FlightRecord, FlightState } from '../domain/flights/types.ts';
 import { withTestOwnerScoreFixtures } from '../domain/rating/fixtures.ts';
 import { selectOwnerScores } from '../domain/rating/scoring.ts';
-import { normalizeTestTimeScale, type RuntimeMode, type TestTimeScale } from '../domain/runtime/mode.ts';
+import { getCampaignTimeScale, normalizeTestTimeScale, type RuntimeMode, type TestTimeScale } from '../domain/runtime/mode.ts';
 import { TEST_MODE_ALLY_PLANET_FIXTURE } from '../domain/universe/runtime.ts';
 import type { PlanetRuntime, SaveState } from './contracts.ts';
 import { getAvailableFleetForPlanet } from './flights.ts';
@@ -52,7 +52,7 @@ export type AidActionResult =
   | { ok: false; state: SaveState; code: CommandErrorCode; message: string };
 
 export function aidTimeScale(context: Pick<AidContext, 'mode' | 'testTimeScale'>): number {
-  return context.mode === 'test' ? normalizeTestTimeScale(context.testTimeScale) : 1;
+  return context.mode === 'test' ? normalizeTestTimeScale(context.testTimeScale) : getCampaignTimeScale();
 }
 
 function withCommand(state: SaveState, command: CommandState): SaveState {

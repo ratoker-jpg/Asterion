@@ -1,3 +1,5 @@
+import type { NewGameConfig } from '../domain/world/config.ts';
+import type { SunRaidState } from '../domain/sun-raid/types.ts';
 import type { ExplorationState } from '../domain/exploration/ledger.ts';
 import type { BattleHistoryState } from '../domain/combat/battle-repository.ts';
 import type { CombatPriorityState } from '../domain/combat/priority.ts';
@@ -144,6 +146,12 @@ export type SaveState = {
   espionage?: EspionageState;
   /** Optional for backwards compatibility; fresh states always materialize it. */
   alliedPlanets?: Record<PlanetId, AlliedPlanetState>;
+  /** «Новая игра» settings; absent only in saves older than the wizard (migrated to the legacy world). */
+  worldConfig?: NewGameConfig;
+  /** Suns, crystals, command raids, Gates and the campaign result. */
+  sunRaid?: SunRaidState;
+  /** Accumulated play time of this campaign, shown on save slots. */
+  playTimeMs?: number;
 };
 
 export function getPlanetState(state: SaveState, planetId: PlanetId): PlanetRuntime {

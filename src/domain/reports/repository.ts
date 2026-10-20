@@ -1,4 +1,3 @@
-import { ASTERION_SAVE_KEY } from '../combat/priority.ts';
 import { getRuntimeSaveKey, type RuntimeMode } from '../runtime/mode.ts';
 import type { ReportCategory, ReportItem, ReportsState } from './types.ts';
 
@@ -104,7 +103,7 @@ export function readReportsState(storage?: StorageLike, mode?: RuntimeMode): Rep
   const target = resolveStorage(storage);
   if (!target) return createDefaultReportsState();
   try {
-    const raw = target.getItem(mode === undefined ? ASTERION_SAVE_KEY : getRuntimeSaveKey(mode));
+    const raw = target.getItem(getRuntimeSaveKey(mode));
     if (!raw) return createDefaultReportsState();
     const parsed = JSON.parse(raw) as SaveEnvelope;
     return migrateReportsState(parsed.reports);
@@ -122,7 +121,7 @@ export function persistReportsState(value: ReportsState, storage?: StorageLike, 
   const target = resolveStorage(storage);
   if (!target) return { ok: false, value: normalized, error: 'Локальное сохранение недоступно.' };
   try {
-    const saveKey = mode === undefined ? ASTERION_SAVE_KEY : getRuntimeSaveKey(mode);
+    const saveKey = getRuntimeSaveKey(mode);
     const raw = target.getItem(saveKey);
     const envelope = raw ? JSON.parse(raw) as SaveEnvelope : {};
     target.setItem(saveKey, JSON.stringify({ ...envelope, reports: normalized }));

@@ -20,6 +20,8 @@ export type MissionId =
   | 'recycle'
   | 'gas'
   | 'sun-support'
+  /** Command raid on a Sun: alliance mission launched from «Операции». */
+  | 'sun-attack'
   | 'space-flight'
   /** Alliance aid: a real transport flight bound to one open resource request. */
   | 'aid';
@@ -115,6 +117,8 @@ export type FlightRecord = {
   arrivalAt: number;
   returnAt?: number;
   gasCost: number;
+  /** Sun raid participation snapshot (attack or defence of one raid). */
+  sunRaid?: import('../sun-raid/types.ts').SunFlightSnapshot;
   /** Present on alliance aid flights only. */
   aid?: AidFlightSnapshot;
   /** Cargo snapshot for transport, aid, recycle, and gas extraction flights. */

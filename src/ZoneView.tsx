@@ -102,13 +102,13 @@ function playerEffectForLevel(
     const physicsLevel = scienceLevels[1] ?? 0;
     const base = getBuildingEnergyBaseContribution(role, level);
     const value = role === 'basic-energy'
-      ? calculateSolarStationContribution(level, physicsLevel, energyCoordinates.system, energyCoordinates.position)
+      ? calculateSolarStationContribution(level, physicsLevel, energyCoordinates.system, energyCoordinates.position, energyCoordinates.galaxy)
       : calculateNuclearReactorContribution(level, physicsLevel);
     const factors = [
       `База ${formatNumber(base)}`,
       `Физика ×${getPhysicsMultiplier(physicsLevel).toFixed(2)}`,
       ...(role === 'basic-energy'
-        ? [`Солнце ×${getSunMultiplier(energyCoordinates.system).toFixed(2)}`, `Позиция ×${getPositionMultiplier(energyCoordinates.position).toFixed(2)}`]
+        ? [`Солнце ×${getSunMultiplier(energyCoordinates.system, energyCoordinates.galaxy).toFixed(2)}`, `Позиция ×${getPositionMultiplier(energyCoordinates.position).toFixed(2)}`]
         : []),
     ];
     return {

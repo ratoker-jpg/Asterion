@@ -9,7 +9,7 @@ import {
   type ProductionResourceIncome,
 } from '../domain/buildings/production-bots.ts';
 import { creditResources, type ResourceCreditResult } from '../domain/resources/credit.ts';
-import { normalizeTestTimeScale, type RuntimeMode, type TestTimeScale } from '../domain/runtime/mode.ts';
+import { getCampaignTimeScale, normalizeTestTimeScale, type RuntimeMode, type TestTimeScale } from '../domain/runtime/mode.ts';
 import {
   getPlanetResources,
   replacePlanetResources,
@@ -95,7 +95,7 @@ export function getEffectiveResourceIncomePerHour(
   mode: RuntimeMode,
   testTimeScale: TestTimeScale,
 ): ProductionResourceIncome {
-  const multiplier = mode === 'test' ? normalizeTestTimeScale(testTimeScale) : 1;
+  const multiplier = mode === 'test' ? normalizeTestTimeScale(testTimeScale) : getCampaignTimeScale();
   return {
     metal: finiteNonNegative(income.metal) * multiplier,
     minerals: finiteNonNegative(income.minerals) * multiplier,
