@@ -1,0 +1,39 @@
+/* Race (faction) accent tokens for the whole interface. The faction is set as
+   `data-faction` on <html> and on the stage (any element with the attribute can
+   override it, e.g. the header in QA); values come from the race emblems.
+   Rules for what may use them: docs/ui/race-accent.md. */
+:root,
+[data-faction="aegis"] {
+  --race-accent: #b4ceff;          /* light: active outline, chevrons, underline start */
+  --race-accent-strong: #5f9bff;   /* main: owned bars, bezels, active fill tint, underline end */
+  --race-glow: rgba(95, 155, 255, .45);
+  --race-bezel-dash: 46 6;         /* angular plates */
+  --race-border: rgba(95, 155, 255, .4);
+  --race-border-soft: rgba(95, 155, 255, .3);
+}
+
+[data-faction="synod"] {
+  --race-accent: #b5ffd6;
+  --race-accent-strong: #3fdc86;
+  --race-glow: rgba(63, 220, 134, .42);
+  --race-bezel-dash: 2 5;          /* fine ring of nodes */
+  --race-border: rgba(63, 220, 134, .4);
+  --race-border-soft: rgba(63, 220, 134, .3);
+}
+
+[data-faction="veyra"] {
+  --race-accent: #ffb7b0;
+  --race-accent-strong: #ff5468;
+  --race-glow: rgba(255, 84, 104, .42);
+  --race-bezel-dash: 18 4 6 4;     /* organic segments */
+  --race-border: rgba(255, 84, 104, .4);
+  --race-border-soft: rgba(255, 84, 104, .3);
+}
+
+:root {
+  /* Derived shades used by the race recipe (selected tab / tile / row). */
+  --race-fill: color-mix(in srgb, var(--race-accent-strong) 22%, transparent);
+  --race-fill-soft: color-mix(in srgb, var(--race-accent-strong) 12%, transparent);
+  --race-outline: color-mix(in srgb, var(--race-accent) 60%, transparent);
+  --race-underline: linear-gradient(90deg, var(--race-accent), var(--race-accent-strong));
+}

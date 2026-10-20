@@ -1,29 +1,11 @@
 /* Faction themes only change presentation tokens. Runtime/save mechanics stay in the domain layer.
-   The palette and how to apply it elsewhere: docs/ui/race-accent.md. */
-.asterion-header,
-.asterion-header[data-faction="aegis"] {
-  --header-accent: #b4ceff;          /* light: active outline, chevrons, underline start */
-  --header-accent-strong: #5f9bff;   /* main: gauge, bezel, active fill tint, underline end */
-  --header-glow: rgba(95, 155, 255, .45);
-  --header-bezel-dash: 46 6;         /* angular plates */
-  --header-border: rgba(95, 155, 255, .4);
-  --header-rail-border: rgba(95, 155, 255, .3);
-}
-
-.asterion-header[data-faction="synod"] {
-  --header-accent: #b5ffd6;
-  --header-accent-strong: #3fdc86;
-  --header-glow: rgba(63, 220, 134, .42);
-  --header-bezel-dash: 2 5;          /* fine ring of nodes */
-  --header-border: rgba(63, 220, 134, .4);
-  --header-rail-border: rgba(63, 220, 134, .3);
-}
-
-.asterion-header[data-faction="veyra"] {
-  --header-accent: #ffb7b0;
-  --header-accent-strong: #ff5468;
-  --header-glow: rgba(255, 84, 104, .42);
-  --header-bezel-dash: 18 4 6 4;     /* organic segments */
-  --header-border: rgba(255, 84, 104, .4);
-  --header-rail-border: rgba(255, 84, 104, .3);
+   The header keeps its own token names but reads the shared race tokens
+   (src/ui/race/race-tokens.css); the palette and rules: docs/ui/race-accent.md. */
+.asterion-header {
+  --header-accent: var(--race-accent);
+  --header-accent-strong: var(--race-accent-strong);
+  --header-glow: var(--race-glow);
+  --header-bezel-dash: var(--race-bezel-dash);
+  --header-border: var(--race-border);
+  --header-rail-border: var(--race-border-soft);
 }

@@ -256,6 +256,18 @@ async function assertRepresentativeRatios(win, file, label) {
       await win.webContents.executeJavaScript(`localStorage.setItem(${JSON.stringify(TEST_SAVE_KEY)}, ${JSON.stringify(JSON.stringify(seeded))})`);
       await win.reload();
       await waitFor(win, `document.querySelector('[data-qa-header]')`);
+      const expectedRatios = [
+        ['metal', (seeded.metal / TEST_RESOURCE_CAPACITIES.metal) * 100],
+        ['mineral', (seeded.minerals / TEST_RESOURCE_CAPACITIES.minerals) * 100],
+        ['gas', (seeded.gas / TEST_RESOURCE_CAPACITIES.gas) * 100],
+      ];
+      await waitFor(win, `(() => {
+        const expected = ${JSON.stringify(expectedRatios)};
+        return expected.every(([kind, ratio]) => {
+          const value = Number(document.querySelector('[data-qa-resource-chip="' + kind + '"]')?.getAttribute('data-qa-resource-ratio'));
+          return Number.isFinite(value) && Math.abs(value - ratio) < 0.0001;
+        });
+      })()`);
       await settle(win);
 
       const resources = await readResourceContract(win);

@@ -1235,3 +1235,97 @@
   .battle-siege-table-head-v1,
   .battle-siege-table-row-v1 { min-width: 460px; }
 }
+
+/* ---------- Battle card synced with the «Сообщения» battle dossier (2026-10-19) ---------- */
+.battle-view-v1 .battle-tabs-v1 { align-items: center; }
+.battle-view-v1 .battle-tabs-v1__note { margin-left: auto; color: #7f98a0; font-size: 11.5px !important; font-weight: 600; letter-spacing: .02em; }
+.battle-view-v1 .bcard-keep { flex: none; padding: 3px 9px; border-radius: 8px; border: 1px solid rgba(126, 200, 220, .18); background: rgba(0, 0, 0, .3); color: #9fb7be; font-size: 11px !important; font-weight: 700; white-space: nowrap; }
+.battle-view-v1 .bcard-keep.is-saved { color: #ffd479; border-color: rgba(255, 212, 121, .35); }
+
+.ops6 .battle-card-v1 .battle-card-body-v1.bcard { display: flex; flex-direction: column; gap: 12px; padding: 14px; }
+.ops6 .battle-card-v1 .bcard-versus { display: grid; grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr); align-items: stretch; gap: 10px; }
+.ops6 .battle-card-v1 .bcard-versus > .battle-card-versus-column-v1 { min-width: 0; display: block; padding: 0; border: 0; background: none; box-shadow: none; }
+.ops6 .battle-card-v1 .bcard-versus__vs { position: static; min-width: 0; display: grid; place-items: center; padding: 0; border: 0; background: none; }
+.ops6 .battle-card-v1 .bcard-versus__vs b { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; border: 1px solid rgba(126, 200, 220, .35); background: rgba(6, 14, 20, .9); color: #cfe6ec; font-size: 14px !important; font-weight: 800; letter-spacing: .06em; }
+
+.ops6 .battle-card-v1 .bcard-side { display: grid; grid-template-columns: 84px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 14px; row-gap: 8px; align-items: center; height: 100%; padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(126, 200, 220, .16); background: linear-gradient(180deg, rgba(20, 34, 40, .6), rgba(8, 14, 18, .85)); }
+/* Colour carries the outcome, not the role: winner green, loser red, draw neutral. */
+.ops6 .battle-card-v1 .bcard-side { --side-k: #8fb6c0; }
+.ops6 .battle-card-v1 .bcard-side.is-winner { --side-k: #35e58a; }
+.ops6 .battle-card-v1 .bcard-side.is-loser { --side-k: #ff6d7d; }
+.ops6 .battle-card-v1 .bcard-side.is-draw { --side-k: #e6ad50; }
+.ops6 .battle-card-v1 .bcard-side.is-winner, .ops6 .battle-card-v1 .bcard-side.is-loser { border-color: color-mix(in srgb, var(--side-k) 55%, transparent); box-shadow: inset 0 0 30px color-mix(in srgb, var(--side-k) 10%, transparent); }
+.ops6 .battle-card-v1 .bcard-side__art { grid-row: span 2; width: 84px; height: 96px; overflow: hidden; border-radius: 12px; background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--side-k) 22%, transparent), transparent 70%); }
+.ops6 .battle-card-v1 .bcard-side__art .faction-general-portrait,
+.ops6 .battle-card-v1 .bcard-side__art img { width: 100%; height: 100%; object-fit: cover; object-position: top center; }
+.ops6 .battle-card-v1 .bcard-side__copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ops6 .battle-card-v1 .bcard-side__copy small { display: flex; align-items: center; gap: 8px; color: var(--side-k); font-size: 10.5px !important; font-weight: 800; letter-spacing: .14em; }
+.ops6 .battle-card-v1 .bcard-side__copy small em { padding: 1px 6px; border-radius: 5px; background: color-mix(in srgb, var(--side-k) 20%, transparent); color: #fff; font-style: normal; font-size: 9.5px !important; letter-spacing: .1em; }
+.ops6 .battle-card-v1 .bcard-side__copy strong { overflow: hidden; color: #fff; font-size: 17px !important; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.ops6 .battle-card-v1 .bcard-side__copy span { overflow: hidden; color: #7f98a0; font-size: 12px !important; text-overflow: ellipsis; white-space: nowrap; }
+.ops6 .battle-card-v1 .bcard-side__pop { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 12px; }
+.ops6 .battle-card-v1 .bcard-side__pop small { color: var(--ut-label, #8fb6c0); font-size: 10px !important; font-weight: 800; letter-spacing: .14em; }
+.ops6 .battle-card-v1 .bcard-side__pop > span { display: flex; align-items: baseline; justify-content: flex-end; gap: 8px; color: #fff; font-size: 16px !important; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ops6 .battle-card-v1 .bcard-side__pop > span i { color: #6f8f99; font-style: normal; font-size: 13px !important; }
+.ops6 .battle-card-v1 .bcard-side__pop > span b.is-zero { color: #ff6d7d; }
+.ops6 .battle-card-v1 .bcard-side__bar { grid-column: 1 / -1; display: block; height: 6px; overflow: hidden; border-radius: 3px; background: rgba(255, 255, 255, .07); }
+.ops6 .battle-card-v1 .bcard-side__bar > i { display: block; height: 100%; border-radius: 3px; background: var(--side-k); box-shadow: 0 0 8px var(--side-k); }
+
+.ops6 .battle-card-v1 .bcard-verdict { --verdict-k: #8fb6c0; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px; border-radius: 14px; border: 1px solid color-mix(in srgb, var(--verdict-k) 45%, transparent); background: linear-gradient(90deg, color-mix(in srgb, var(--verdict-k) 14%, transparent), rgba(0, 0, 0, .3) 60%); }
+.ops6 .battle-card-v1 .bcard-verdict.victory { --verdict-k: #35e58a; }
+.ops6 .battle-card-v1 .bcard-verdict.defeat { --verdict-k: #ff5f6d; }
+.ops6 .battle-card-v1 .bcard-verdict.draw { --verdict-k: #e6ad50; }
+.ops6 .battle-card-v1 .bcard-verdict > div:first-child { display: flex; flex-direction: column; gap: 2px; }
+.ops6 .battle-card-v1 .bcard-verdict small { color: var(--ut-label, #8fb6c0); font-size: 10.5px !important; font-weight: 800; letter-spacing: .14em; }
+.ops6 .battle-card-v1 .bcard-verdict strong { color: var(--verdict-k); font-size: 24px !important; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.ops6 .battle-card-v1 .bcard-verdict span { color: #9fb7be; font-size: 12px !important; }
+.ops6 .battle-card-v1 .bcard-verdict__actions { display: flex; align-items: center; gap: 10px; }
+.ops6 .battle-card-v1 .bcard-verdict__actions .battle-open-v1 { height: 40px; padding: 0 20px; border-radius: 10px; border: 1px solid #8cefff; background: linear-gradient(180deg, #5fe2f8, #2bb6d6); color: #03222b; font-size: 12px !important; font-weight: 800; letter-spacing: .1em; cursor: pointer; }
+
+.ops6 .battle-card-v1 .bcard-ledgers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ops6 .battle-card-v1 .bcard-ledger { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(126, 200, 220, .14); background: rgba(8, 14, 18, .7); }
+.ops6 .battle-card-v1 .bcard-ledger > header { display: flex; align-items: baseline; gap: 10px; }
+.ops6 .battle-card-v1 .bcard-ledger > header small { color: var(--ut-label, #8fb6c0); font-size: 10.5px !important; font-weight: 800; letter-spacing: .14em; }
+.ops6 .battle-card-v1 .bcard-ledger > header strong { overflow: hidden; color: #fff; font-size: 13px !important; text-overflow: ellipsis; white-space: nowrap; }
+.ops6 .battle-card-v1 .bcard-ledger__losses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; border: 0; background: none; }
+.ops6 .battle-card-v1 .bcard-ledger__losses > span { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(126, 200, 220, .12); background: rgba(0, 0, 0, .3); }
+.ops6 .battle-card-v1 .bcard-ledger__losses small { color: var(--ut-label, #8fb6c0); font-size: 10px !important; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.ops6 .battle-card-v1 .bcard-ledger__losses b { color: #dfeaee; font-size: 17px !important; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ops6 .battle-card-v1 .bcard-ledger__losses .is-loss { border-color: rgba(255, 95, 109, .35); background: rgba(255, 95, 109, .07); }
+.ops6 .battle-card-v1 .bcard-ledger__losses .is-loss b { color: #ff7d8a; }
+.ops6 .battle-card-v1 .bcard-ledger__losses em { color: #7f98a0; font-style: normal; font-size: 11px !important; }
+.ops6 .battle-card-v1 .bcard-ledger__points { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; border: 0; background: none; }
+.ops6 .battle-card-v1 .bcard-ledger__points > span { display: grid; grid-template-columns: 40px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 10px; align-items: center; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(126, 200, 220, .12); background: rgba(0, 0, 0, .3); }
+.ops6 .battle-card-v1 .bcard-ledger__points img { grid-row: span 2; width: 40px; height: 40px; object-fit: contain; }
+.ops6 .battle-card-v1 .bcard-ledger__points small { color: var(--ut-label, #8fb6c0); font-size: 10px !important; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.ops6 .battle-card-v1 .bcard-ledger__points b { color: #fff; font-size: 16px !important; font-weight: 800; }
+.ops6 .battle-card-v1 .bcard-ledger__points .is-good b { color: #35e58a; }
+.ops6 .battle-card-v1 .bcard-ledger__points .is-bad b { color: #ff7d8a; }
+.ops6 .battle-card-v1 .bcard-ledger__points .is-off b { color: #7f98a0; font-size: 13px !important; }
+
+.ops6 .battle-card-v1 .bcard-loot { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 14px; border: 1px solid rgba(126, 200, 220, .14); background: rgba(8, 14, 18, .7); }
+.ops6 .battle-card-v1 .bcard-loot > small { color: var(--ut-label, #8fb6c0); font-size: 10.5px !important; font-weight: 800; letter-spacing: .14em; white-space: nowrap; }
+.ops6 .battle-card-v1 .bcard-loot > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.ops6 .battle-card-v1 .bcard-loot .battle-card-reward-item-v1 { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px 0 6px; border-radius: 10px; border: 1px solid rgba(53, 229, 138, .3); background: rgba(53, 229, 138, .06); }
+.ops6 .battle-card-v1 .bcard-loot .battle-card-reward-item-v1.is-debris { border-color: rgba(255, 114, 124, .35); background: rgba(255, 114, 124, .06); }
+.ops6 .battle-card-v1 .bcard-loot .battle-card-reward-item-v1 > :first-child { width: 28px; height: 28px; }
+.ops6 .battle-card-v1 .bcard-loot .battle-card-reward-item-v1 b { color: #fff; font-size: 16px !important; font-weight: 800; }
+.ops6 .battle-card-v1 .bcard-loot .battle-card-reward-item-v1 em { color: #9fb7be; font-style: normal; font-size: 11.5px !important; }
+
+/* One report per row: an opened card needs the full width for both sides. */
+.battle-view-v1 .battle-list-v1 { grid-template-columns: minmax(0, 1fr); }
+/* Legacy rules re-ordered the columns; pin attacker | VS | defender explicitly. */
+.ops6 .battle-card-v1 .bcard-versus > .battle-card-versus-column-v1:first-child { grid-column: 1; grid-row: 1; }
+.ops6 .battle-card-v1 .bcard-versus > .bcard-versus__vs { grid-column: 2; grid-row: 1; }
+.ops6 .battle-card-v1 .bcard-versus > .battle-card-versus-column-v1:last-child { grid-column: 3; grid-row: 1; }
+.ops6 .battle-card-v1 .battle-card-summary-route-v1 { justify-content: flex-start; gap: 10px; }
+.ops6 .battle-card-v1 .bcard-verdict__actions .battle-save-v1 { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border-radius: 10px; border: 1px solid rgba(255, 212, 121, .4); background: rgba(0, 0, 0, .35); color: #ffd479; font-size: 18px !important; cursor: pointer; }
+.ops6 .battle-card-v1 .bcard-verdict__actions .battle-save-v1.saved { background: rgba(255, 212, 121, .16); border-color: #ffd479; }
+@media (max-width: 760px) {
+  .ops6 .battle-card-v1 .bcard-versus { grid-template-columns: minmax(0, 1fr); }
+  .ops6 .battle-card-v1 .bcard-versus > .battle-card-versus-column-v1:first-child { grid-column: 1; grid-row: 1; }
+  .ops6 .battle-card-v1 .bcard-versus > .bcard-versus__vs { grid-column: 1; grid-row: 2; }
+  .ops6 .battle-card-v1 .bcard-versus > .battle-card-versus-column-v1:last-child { grid-column: 1; grid-row: 3; }
+  .ops6 .battle-card-v1 .bcard-ledgers { grid-template-columns: minmax(0, 1fr); }
+  .ops6 .battle-card-v1 .bcard-verdict { flex-wrap: wrap; }
+}

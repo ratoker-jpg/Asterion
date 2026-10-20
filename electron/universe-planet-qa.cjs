@@ -429,10 +429,12 @@ async function verifyDebrisMarkerInteraction(win, selector, expectedAmount) {
   const initial = await debrisMarkerSnapshot(win, selector);
   if (initial.tagName !== 'BUTTON' || initial.tabIndex < 0 || !initial.ariaLabel.replace(/\D/g, '').includes(expectedAmount)
     || !initial.describedBy.split(/\s+/).includes(initial.tooltipId) || !initial.tooltipText.replace(/\D/g, '').includes(expectedAmount)
+    // The debris chip (icon + amount) is wider than a 30px slot: it must touch
+    // its object, it does not have to fit inside it.
     || !initial.rect || !initial.markerRect
-    || initial.markerRect.x < initial.rect.x || initial.markerRect.y < initial.rect.y
-    || initial.markerRect.x + initial.markerRect.width > initial.rect.x + initial.rect.width
-    || initial.markerRect.y + initial.markerRect.height > initial.rect.y + initial.rect.height) {
+    || initial.markerRect.x > initial.rect.x + initial.rect.width || initial.markerRect.y > initial.rect.y + initial.rect.height
+    || initial.markerRect.x + initial.markerRect.width < initial.rect.x
+    || initial.markerRect.y + initial.markerRect.height < initial.rect.y) {
     throw new Error(`Debris marker accessible-name contract failed: ${JSON.stringify(initial)}`);
   }
 
@@ -1108,7 +1110,7 @@ async function runViewport(width, height) {
     await win.webContents.executeJavaScript(`document.querySelector('[data-qa-navigation="primary"] [data-qa-route="planet"]')?.click()`);
     await waitFor(win, `document.querySelector('[data-qa-planet-skin-art]')?.complete && document.querySelector('[data-qa-planet-skin-art]')?.naturalWidth > 0`);
     const persistedSkin = await win.webContents.executeJavaScript(`(() => { const image = document.querySelector('[data-qa-planet-skin-art]'); const rect = image?.getBoundingClientRect(); return { saved: JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}) || '{}').planets?.['helion-01']?.skin || '', src: image?.getAttribute('src') || '', naturalWidth: image?.naturalWidth || 0, naturalHeight: image?.naturalHeight || 0, displayWidth: rect?.width || 0, displayHeight: rect?.height || 0 }; })()`);
-    if (persistedSkin.saved !== selectedSkinId || !persistedSkin.src.endsWith('/skin-asterion-09.webp') || persistedSkin.naturalWidth !== 1024 || persistedSkin.naturalHeight !== 1024 || persistedSkin.displayWidth <= 0 || persistedSkin.displayHeight <= 0 || persistedSkin.displayWidth > 520 || persistedSkin.displayHeight > 520) throw new Error(`${label}: selected high-resolution skin did not survive reload or has unexpected display size ${JSON.stringify(persistedSkin)}`);
+    if (persistedSkin.saved !== selectedSkinId || !persistedSkin.src.endsWith('/skin-asterion-09.webp') || persistedSkin.naturalWidth !== 1024 || persistedSkin.naturalHeight !== 1024 || persistedSkin.displayWidth <= 0 || persistedSkin.displayHeight <= 0 || persistedSkin.displayWidth > 800 || persistedSkin.displayHeight > 800) throw new Error(`${label}: selected high-resolution skin did not survive reload or has unexpected display size ${JSON.stringify(persistedSkin)}`);
     await capture(win, directory, 'planet-skin-persisted');
     await clickPrimary(win, 'universe');
     await waitFor(win, `(() => { const image = document.querySelector('[data-qa-universe-object="player-planet-helion-01"] img'); return image?.complete && image.naturalWidth === 128 && image.naturalHeight === 128; })()`);

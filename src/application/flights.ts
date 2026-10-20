@@ -142,6 +142,8 @@ export const FLIGHT_COMMAND_RESULT_EVENT = 'asterion:flight-command-result';
 export const BOT01_INCOMING_SCENARIO_REQUEST_EVENT = 'asterion:bot01-incoming-scenario-request';
 export const BOT01_EXPLORATION_SCENARIO_REQUEST_EVENT = 'asterion:bot01-exploration-scenario-request';
 export const SPY_REPORT_REQUEST_EVENT = 'asterion:spy-report-request';
+/** Detail `{ coordinate }`: open the universe map focused on that coordinate. */
+export const UNIVERSE_COORDINATE_OPEN_EVENT = 'asterion:universe-coordinate-open';
 export const SPY_REPORT_ALL_REQUEST_EVENT = 'asterion:spy-report-all-request';
 export const SPY_REPORT_RESULT_EVENT = 'asterion:spy-report-result';
 

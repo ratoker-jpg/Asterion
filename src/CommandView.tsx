@@ -194,7 +194,8 @@ function MissionTile({ src, className = '' }: { src: string; className?: string 
   return <span className={`cmdA-mtile ${className}`}><Img src={src} /></span>;
 }
 
-function Chip({ tone = '', children }: { tone?: '' | 'cy' | 'am' | 'ok' | 'bad' | 'vi' | 'solid'; children: ReactNode }) {
+/** `own` marks the player's own things (you, your alliance) and takes the race colour. */
+function Chip({ tone = '', children }: { tone?: '' | 'cy' | 'am' | 'ok' | 'bad' | 'vi' | 'solid' | 'own'; children: ReactNode }) {
   return <span className={`cmdA-chip ${tone ? `is-${tone}` : ''}`}>{children}</span>;
 }
 
@@ -495,7 +496,7 @@ function CatalogList({ command, ownerId, now, actions, onFeedback, entries, quer
   const pending = selectPendingApplication(command, ownerId);
 
   const actionFor = (entry: AllianceCatalogEntry) => {
-    if (membership?.alliance.id === entry.alliance.id) return <Chip tone="ok">ВАШ СОЮЗ</Chip>;
+    if (membership?.alliance.id === entry.alliance.id) return <Chip tone="own">ВАШ СОЮЗ</Chip>;
     if (membership) return entry.isFull ? <Chip tone="bad">ПОЛОН</Chip> : null;
     if (pending?.allianceId === entry.alliance.id) {
       return <button type="button" className="danger" onClick={() => onFeedback(actions.withdraw())} data-qa-withdraw>ОТОЗВАТЬ</button>;
@@ -788,7 +789,7 @@ function MembersTab({ command, allianceId, ownerId, role, ownerScores, ownerFact
             <li key={member.ownerId}>
               <button type="button" className={`cmdA-item ${selected?.ownerId === member.ownerId ? 'is-selected' : ''}`} style={{ '--k': ROLE_COLORS[member.role] } as CSSProperties} onClick={() => setSelectedId(member.ownerId)}>
                 <Avatar name={member.displayName} role={member.role} factionId={ownerFactions[member.ownerId]} />
-                <span className="cmdA-item-main"><strong>{member.displayName}{member.ownerId === ownerId ? <Chip tone="cy">ВЫ</Chip> : null}</strong><small className="cmdA-role" style={{ color: ROLE_COLORS[member.role] }}>{ROLE_LABELS[member.role]}</small></span>
+                <span className="cmdA-item-main"><strong>{member.displayName}{member.ownerId === ownerId ? <Chip tone="own">ВЫ</Chip> : null}</strong><small className="cmdA-role" style={{ color: ROLE_COLORS[member.role] }}>{ROLE_LABELS[member.role]}</small></span>
                 <span className="cmdA-item-score"><Medal kind="total" /><b>{number.format(memberScore(ownerScores, member.ownerId).totalPoints)}</b></span>
               </button>
             </li>
@@ -830,7 +831,7 @@ function MembersTab({ command, allianceId, ownerId, role, ownerScores, ownerFact
           <Hero art={<PersonArt name={selected.displayName} factionId={ownerFactions[selected.ownerId]} />}>
             <HeroTitle
               title={selected.displayName}
-              chips={<><Chip tone={selected.role === 'leader' ? 'am' : selected.role === 'deputy' ? 'cy' : ''}>{ROLE_LABELS[selected.role]}</Chip>{selected.ownerId === ownerId ? <Chip tone="cy">ЭТО ВЫ</Chip> : null}{ownerFactions[selected.ownerId] && FACTION_LABELS[ownerFactions[selected.ownerId]!] ? <Chip>РАСА · {FACTION_LABELS[ownerFactions[selected.ownerId]!].toUpperCase()}</Chip> : null}</>}
+              chips={<><Chip tone={selected.role === 'leader' ? 'am' : selected.role === 'deputy' ? 'cy' : ''}>{ROLE_LABELS[selected.role]}</Chip>{selected.ownerId === ownerId ? <Chip tone="own">ЭТО ВЫ</Chip> : null}{ownerFactions[selected.ownerId] && FACTION_LABELS[ownerFactions[selected.ownerId]!] ? <Chip>РАСА · {FACTION_LABELS[ownerFactions[selected.ownerId]!].toUpperCase()}</Chip> : null}</>}
             >
               <p className="cmdA-sub">В союзе с {formatDate(selected.joinedAt)}</p>
               <ScoreGrid score={selectedScore} />

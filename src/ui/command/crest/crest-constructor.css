@@ -1,0 +1,234 @@
+/* ---------- Orbital Houses crest (shared by every emblem slot) ---------- */
+.orbital-crest { display: grid; place-items: center; width: 100%; height: 100%; min-width: 0; min-height: 0; }
+.orbital-crest canvas { display: block; max-width: 100%; max-height: 100%; }
+.command-emblem--crest { filter: drop-shadow(0 6px 14px rgba(0,0,0,.45)); }
+.command-emblem--crest.command-emblem--compact { filter: none; }
+
+/* ---------- «Конструктор герба» window ---------- */
+.command-dialog.command-dialog--crest {
+  width: min(1480px, calc(100vw - 48px));
+  height: 812px;
+  max-height: 812px;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+}
+.command-dialog.command-dialog--crest header { margin-bottom: 12px; }
+
+.crest-constructor {
+  --crest-color: #56d9f2;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: clamp(330px, 30%, 420px) minmax(0, 1fr);
+  gap: 18px;
+}
+.command-dialog.command-dialog--crest .crest-constructor small,
+.command-dialog.command-dialog--crest .crest-constructor h5 small { font-size: 11px !important; }
+
+/* left: stage */
+.crest-stage-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 16px;
+  border-radius: var(--ut-r-card);
+  border: 1px solid var(--ut-border);
+  background:
+    radial-gradient(circle at 50% 34%, color-mix(in srgb, var(--crest-color) 20%, transparent), transparent 62%),
+    rgba(6,12,16,.9);
+}
+.crest-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 220px;
+  max-height: 380px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--ut-r-card);
+  cursor: grab;
+  touch-action: none;
+  outline: none;
+}
+.crest-stage:active { cursor: grabbing; }
+.crest-stage:focus-visible { box-shadow: 0 0 0 2px var(--ut-accent); }
+.crest-stage .orbital-crest { filter: drop-shadow(0 18px 30px rgba(0,0,0,.55)) drop-shadow(0 0 26px color-mix(in srgb, var(--crest-color) 22%, transparent)); }
+.crest-safe { position: absolute; inset: 0; margin: auto; width: min(100%, 100%); aspect-ratio: 1; max-height: 100%; pointer-events: none; }
+.crest-safe circle { fill: none; stroke: rgba(86,217,242,.85); stroke-width: .004; stroke-dasharray: .014 .01; }
+.crest-safe .crest-safe-offset { stroke: rgba(230,173,80,.9); stroke-dasharray: none; }
+
+.crest-stage-tools { display: flex; gap: 8px; }
+.command-dialog.command-dialog--crest .crest-stage-tools button { flex: 1 1 0; min-width: 0; height: 34px; padding: 0 8px; font-size: 10.5px !important; letter-spacing: .06em; }
+.command-dialog.command-dialog--crest .crest-stage-tools button.is-on { border-color: var(--ut-accent); background: rgba(86,217,242,.16); color: #fff; }
+
+.crest-sizes {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  padding: 10px 12px 8px;
+  border-radius: var(--ut-r-card);
+  border: 1px solid var(--ut-border);
+  background: rgba(0,0,0,.28);
+}
+.crest-sizes figure { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 0; }
+.crest-sizes figure .orbital-crest { width: auto; height: auto; }
+.command-dialog.command-dialog--crest .crest-sizes figcaption { color: #7f98a0; font-size: 10.5px !important; font-weight: 700; letter-spacing: .08em; }
+
+.crest-presets > small { display: block; margin-bottom: 7px; color: var(--ut-label); font-weight: 700; letter-spacing: .14em; }
+.crest-presets > div { display: flex; justify-content: space-between; gap: 6px; }
+.command-dialog.command-dialog--crest .crest-presets button { width: 58px; height: 58px; padding: 0; border-radius: var(--ut-r-card); background: rgba(16,26,31,.7); }
+.crest-presets .orbital-crest { width: auto; height: auto; }
+
+/* right: workbench */
+.crest-workbench { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; }
+.crest-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; padding: 5px; border-radius: var(--ut-r-card); border: 1px solid var(--ut-border); background: rgba(0,0,0,.3); }
+.command-dialog.command-dialog--crest .crest-tabs button {
+  height: 52px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 14px;
+  min-width: 0;
+  border-color: transparent;
+  background: transparent;
+  font-size: 12px !important;
+  letter-spacing: .12em;
+}
+.command-dialog.command-dialog--crest .crest-tabs button small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; color: #7f98a0; font-size: 10.5px !important; font-weight: 600; letter-spacing: .02em; text-transform: none; }
+.command-dialog.command-dialog--crest .crest-tabs button.is-active { border-color: color-mix(in srgb, var(--crest-color) 55%, transparent); background: color-mix(in srgb, var(--crest-color) 12%, rgba(16,26,31,.9)); box-shadow: inset 0 -2px 0 var(--crest-color); }
+.command-dialog.command-dialog--crest .crest-tabs button.is-active small { color: #d4e6eb; }
+
+.crest-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px;
+  border-radius: var(--ut-r-card);
+  border: 1px solid var(--ut-border);
+  background: rgba(16,26,31,.6);
+  scrollbar-width: thin;
+}
+.command-dialog.command-dialog--crest .crest-panel h5 { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 0 0 10px; font-size: 12px !important; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #e8f4f7; }
+.crest-panel h5 small { color: #7f98a0; font-weight: 600; letter-spacing: .02em; text-transform: none; }
+.crest-panel h5:not(:first-child) { margin-top: 16px; }
+
+.crest-grid { --crest-tile: 92px; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.crest-grid--glyphs { --crest-tile: 104px; }
+.crest-grid--colors { --crest-tile: 72px; }
+.crest-grid--large { --crest-tile: 150px; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.crest-grid--patterns { --crest-tile: 104px; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+
+.command-dialog.command-dialog--crest .crest-tile {
+  position: relative;
+  height: auto;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 6px 7px;
+  min-width: 0;
+  border-radius: var(--ut-r-card);
+  border-color: var(--ut-border);
+  background: rgba(6,12,16,.55);
+  text-transform: none;
+  letter-spacing: .02em;
+  font-size: 11px !important;
+  font-weight: 700;
+  transition: border-color var(--ut-motion-fast) ease, background var(--ut-motion-fast) ease, transform var(--ut-motion-fast) ease;
+}
+.command-dialog.command-dialog--crest .crest-tile:hover:not(:disabled) { transform: translateY(-1px); }
+.command-dialog.command-dialog--crest .crest-tile:active:not(:disabled) { transform: scale(.98); }
+.crest-tile .orbital-crest { height: var(--crest-tile); }
+.crest-tile > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #b9cdd3; }
+.command-dialog.command-dialog--crest .crest-tile.is-selected { border-color: var(--ut-amber); background: rgba(230,173,80,.1); box-shadow: 0 0 14px rgba(230,173,80,.28); }
+.crest-tile.is-selected > span { color: #fff; }
+.crest-tile--color > i { position: absolute; top: 7px; right: 7px; width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 2px rgba(0,0,0,.6), 0 0 0 3px rgba(255,255,255,.25); }
+
+/* sliders */
+.crest-controls { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
+.crest-layout .crest-controls { margin-top: 0; }
+.crest-slider { display: flex; flex-direction: column; gap: 7px; }
+.crest-slider > span { display: flex; justify-content: space-between; align-items: baseline; }
+.command-dialog.command-dialog--crest .crest-slider b { color: var(--ut-label); font-size: 11px !important; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.command-dialog.command-dialog--crest .crest-slider output { color: #fff; font-size: 12px !important; font-weight: 800; font-variant-numeric: tabular-nums; }
+.crest-slider input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  margin: 6px 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--crest-color) var(--crest-fill, 50%), rgba(126,200,220,.18) var(--crest-fill, 50%));
+  outline: none;
+  cursor: pointer;
+}
+.crest-slider input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #071015;
+  background: #fff;
+  box-shadow: 0 0 0 2px var(--crest-color), 0 0 12px color-mix(in srgb, var(--crest-color) 50%, transparent);
+}
+.crest-slider input[type='range']:focus-visible { box-shadow: 0 0 0 2px var(--ut-accent); }
+.crest-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -4px; }
+.command-dialog.command-dialog--crest .crest-chips button { height: 30px; padding: 0 12px; font-size: 11px !important; letter-spacing: .04em; }
+.command-dialog.command-dialog--crest .crest-chips button.is-on { border-color: var(--ut-amber); background: rgba(230,173,80,.12); color: #fff; }
+.crest-layout { display: grid; grid-template-columns: minmax(0, 1fr) 230px; gap: 22px; }
+.crest-layout-side { display: flex; flex-direction: column; gap: 10px; }
+.command-dialog.command-dialog--crest .crest-toggle { justify-content: flex-start; height: 48px; padding: 0 14px; text-transform: none; letter-spacing: .02em; font-size: 12px !important; }
+.crest-toggle > span { width: 22px; color: var(--crest-color); font-size: 18px; text-align: center; }
+.command-dialog.command-dialog--crest .crest-toggle.is-on { border-color: var(--ut-amber); background: rgba(230,173,80,.12); color: #fff; }
+.command-dialog.command-dialog--crest .crest-hint { margin: 4px 0 0; color: #7f98a0; font-size: 11px !important; line-height: 1.5; }
+
+.crest-pad {
+  position: relative;
+  align-self: center;
+  width: 168px;
+  aspect-ratio: 1;
+  margin-top: 6px;
+  border-radius: 50%;
+  border: 1px solid var(--ut-border-strong);
+  background:
+    linear-gradient(rgba(126,200,220,.16), rgba(126,200,220,.16)) center / 1px 100% no-repeat,
+    linear-gradient(rgba(126,200,220,.16), rgba(126,200,220,.16)) center / 100% 1px no-repeat,
+    radial-gradient(circle, color-mix(in srgb, var(--crest-color) 12%, transparent), rgba(0,0,0,.35) 70%);
+  cursor: crosshair;
+  touch-action: none;
+}
+.crest-pad i { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; border: 2px solid #071015; background: #fff; box-shadow: 0 0 0 2px var(--crest-color), 0 0 14px color-mix(in srgb, var(--crest-color) 60%, transparent); pointer-events: none; }
+
+.crest-footer { display: flex; align-items: center; gap: 10px; }
+.command-dialog.command-dialog--crest .crest-footer p { flex: 1 1 auto; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #9fb7be; font-size: 12px !important; font-weight: 600; }
+.command-dialog.command-dialog--crest .crest-footer button { height: 42px; }
+
+/* narrow windows: the constructor stacks, the stage shrinks */
+@media (max-width: 1100px) {
+  .crest-constructor { grid-template-columns: 1fr; overflow-y: auto; }
+  .crest-stage-panel { display: grid; grid-template-columns: 200px minmax(0, 1fr); align-items: start; }
+  .crest-stage { grid-row: span 3; height: 200px; min-height: 0; }
+  .crest-grid, .crest-grid--patterns { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .crest-grid--large { grid-template-columns: repeat(3, minmax(0, 1fr)); --crest-tile: 110px; }
+  .crest-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .crest-layout { grid-template-columns: 1fr; }
+}
+
+/* ---------- crest card in the alliance studio ---------- */
+.command-dialog.command-dialog--studio .cmdA-crest-card-body { display: grid; grid-template-columns: 112px minmax(0, 1fr) auto; align-items: center; gap: 16px; }
+.command-dialog.command-dialog--studio .cmdA-crest-card-preview { width: 112px; height: 112px; padding: 4px; border-radius: var(--ut-r-card); background: rgba(6,12,16,.6); }
+.command-dialog.command-dialog--studio .cmdA-crest-card-preview .command-emblem { width: 100%; height: 100%; }
+.cmdA-crest-card-text { min-width: 0; }
+.command-dialog.command-dialog--studio .cmdA-crest-card-text b { display: block; margin-bottom: 8px; color: #fff; font-size: 14px !important; font-weight: 800; letter-spacing: .04em; }
+.cmdA-crest-card-text dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 16px; margin: 0; }
+.cmdA-crest-card-text dl div { display: flex; gap: 8px; min-width: 0; }
+.command-dialog.command-dialog--studio .cmdA-crest-card-text dt { color: var(--ut-label); font-size: 11px !important; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.command-dialog.command-dialog--studio .cmdA-crest-card-text dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #d4e6eb; font-size: 12px !important; font-weight: 600; }
+.command-dialog.command-dialog--studio .cmdA-crest-card-text p { margin: 0; color: #9fb7be; font-size: 12px !important; line-height: 1.5; }
+.command-dialog.command-dialog--studio .cmdA-crest-card-open { height: 48px; padding: 0 22px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .command-dialog.command-dialog--crest .crest-tile { transition: none; }
+  .command-dialog.command-dialog--crest .crest-tile:hover:not(:disabled), .command-dialog.command-dialog--crest .crest-tile:active:not(:disabled) { transform: none; }
+}
+.command-dialog.command-dialog--studio .cmdA-studio-preview > .command-emblem--crest { width: 176px; height: 176px; margin: 2px 0; }

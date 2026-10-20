@@ -4,6 +4,35 @@ export type AllianceEmblemShape = 'shield' | 'round' | 'hex' | 'banner';
 export type AllianceEmblemField = 'solid' | 'split' | 'chevron' | 'rays' | 'stars';
 export type AllianceEmblemFieldColor = 'abyss' | 'navy' | 'crimson' | 'forest' | 'royal' | 'bronze';
 
+type OrbitalCatalog = typeof import('./orbital-crest-catalog.generated.ts').ORBITAL_CREST_CATALOG;
+export type AllianceCrestFrame = OrbitalCatalog['frames'][number]['id'];
+export type AllianceCrestField = OrbitalCatalog['fields'][number]['id'];
+export type AllianceCrestPattern = OrbitalCatalog['patterns'][number]['id'];
+export type AllianceCrestGlyph = OrbitalCatalog['glyphs'][number]['id'];
+
+/**
+ * «Орбитальные дома» crest (v2): a saved configuration, never a flattened image.
+ * Glyph size and offset are fractions of the frame's safe radius R.
+ */
+export type AllianceCrest = {
+  version: 2;
+  frame: AllianceCrestFrame;
+  field: AllianceCrestField;
+  pattern: AllianceCrestPattern | 'none';
+  /** 0..1; defaults 0.6 for the halo pattern and 0.24 for field patterns. */
+  patternOpacity: number;
+  glyph: AllianceCrestGlyph;
+  color: AllianceAccent;
+  /** 0.4R..0.85R, default 0.64R. */
+  glyphScale: number;
+  /** Degrees, -180..180. */
+  rotation: number;
+  mirrorX: boolean;
+  /** Normalized glyph offset; the vector length is at most 0.12R. */
+  offsetX: number;
+  offsetY: number;
+};
+
 export type AllianceEmblem = {
   glyph: AllianceEmblemGlyph;
   accent: AllianceAccent;
@@ -11,6 +40,11 @@ export type AllianceEmblem = {
   shape?: AllianceEmblemShape;
   field?: AllianceEmblemField;
   fieldColor?: AllianceEmblemFieldColor;
+  /**
+   * Orbital Houses crest. When present it replaces the legacy SVG emblem; old
+   * saves keep their SVG until the player picks new modules in the constructor.
+   */
+  crest?: AllianceCrest;
 };
 
 /** Reusable public identity of an alliance: what outsiders, the galaxy and profiles may see. */
@@ -227,6 +261,7 @@ export type CommandErrorCode =
   | 'invalid_name'
   | 'invalid_tag'
   | 'invalid_text'
+  | 'invalid_emblem'
   | 'duplicate_name'
   | 'duplicate_tag'
   | 'already_member'

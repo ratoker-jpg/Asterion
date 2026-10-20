@@ -223,3 +223,10 @@
   .asterion-header__resource.is-pulsing .asterion-header__resource-fill i{animation:none}
   .hdr-zone,.hdr-core__planet,.hdr-route{transition:none}
 }
+
+/* «Флоты» while hostile fleets are on their way: red counter + red ring on the icon */
+.asterion-header .hdr-route.hdr-route--alert .hdr-route__icon { box-shadow: 0 0 0 2px rgba(240, 68, 94, .85), 0 0 18px rgba(240, 68, 94, .55); animation: hdr-route-alert 1.4s ease-in-out infinite; }
+.asterion-header .hdr-route.hdr-route--alert .hdr-route__label { color: #ffb3bd; }
+.asterion-header__nav-badge--alert { background: #f0445e !important; color: #fff !important; }
+@keyframes hdr-route-alert { 50% { box-shadow: 0 0 0 2px rgba(240, 68, 94, 1), 0 0 26px rgba(240, 68, 94, .8); } }
+@media (prefers-reduced-motion: reduce) { .asterion-header .hdr-route.hdr-route--alert .hdr-route__icon { animation: none; } }

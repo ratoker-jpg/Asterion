@@ -37,7 +37,7 @@ export type AllianceCatalogEntry = {
 const ZERO_SCORE: MemberScore = { resourcePoints: 0, battlePoints: 0, totalPoints: 0, achievementPoints: 0 };
 
 export function toAllianceIdentity(alliance: AllianceRecord): AllianceIdentity {
-  const emblem = { glyph: alliance.emblem.glyph, accent: alliance.emblem.accent };
+  const emblem = { glyph: alliance.emblem.glyph, accent: alliance.emblem.accent, ...(alliance.emblem.crest ? { crest: { ...alliance.emblem.crest } } : {}) };
   return { id: alliance.id, name: alliance.name, tag: alliance.tag, emblem, glyph: emblem.glyph };
 }
 

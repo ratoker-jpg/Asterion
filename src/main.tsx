@@ -10,6 +10,7 @@ import { ShipInfoController } from './ShipInfoController';
 import { DefenseInfoController } from './DefenseInfoController';
 import { UtilityScreensPortal } from './UtilityScreensPortal';
 import { NavigationProvider } from './ui/navigation.tsx';
+import './ui/race/race-tokens.css';
 import './styles.css';
 import './universe-nav.css';
 import './universe-polish-v2.css';
@@ -38,6 +39,7 @@ import './utility-source-rebuild-polish.css';
 import './universe-interaction.css';
 import './universe-window.css';
 import './asterion-unified-theme.css';
+import './ui/race/race-theme.css';
 
 const isElectron = navigator.userAgent.includes('Electron');
 

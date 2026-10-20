@@ -153,6 +153,9 @@
 .opsA .opsA-threat-copy small { max-width: 330px; color: var(--opsA-muted); line-height: 1.35; }
 .workspace .opsA .opsA-tabs {
   display: flex;
+  /* legacy .operations-tabs-v2 fixed 38px height; with 5px padding the 34px tabs overflowed the bottom edge */
+  height: auto;
+  align-items: center;
   gap: 6px;
   flex: none;
   margin-left: auto;

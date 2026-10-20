@@ -7,6 +7,7 @@ import type {
   AllianceEmblemShape,
 } from './types.ts';
 import { DEFAULT_ALLIANCE_EMBLEM } from './catalog.ts';
+import { parseCrest } from './crest.ts';
 
 /**
  * Coat-of-arms constructor catalog. The first three glyphs and accents are the
@@ -25,20 +26,30 @@ function pick<T extends string>(list: readonly T[], value: unknown): T | undefin
   return list.includes(value as T) ? value as T : undefined;
 }
 
-/** Validates every field; optional constructor parts are kept only when valid and present. */
+/**
+ * Validates every field; optional constructor parts are kept only when valid and present.
+ * An invalid Orbital crest is dropped, so the alliance falls back to its legacy SVG emblem.
+ */
 export function normalizeEmblem(value: unknown, fallback: AllianceEmblem = DEFAULT_ALLIANCE_EMBLEM): AllianceEmblem {
   const source = value && typeof value === 'object' ? value as Record<string, unknown> : null;
   if (!source) return { ...fallback };
   const shape = pick(EMBLEM_SHAPES, source.shape);
   const field = pick(EMBLEM_FIELDS, source.field);
   const fieldColor = pick(EMBLEM_FIELD_COLORS, source.fieldColor);
+  const crest = parseCrest(source.crest);
   return {
     glyph: pick(EMBLEM_GLYPHS, source.glyph) ?? fallback.glyph,
     accent: pick(EMBLEM_ACCENTS, source.accent) ?? fallback.accent,
     ...(shape ? { shape } : {}),
     ...(field ? { field } : {}),
     ...(fieldColor ? { fieldColor } : {}),
+    ...(crest ? { crest } : {}),
   };
+}
+
+/** Copy with no shared nested objects (the crest is the only nested part). */
+export function cloneEmblem(emblem: AllianceEmblem): AllianceEmblem {
+  return emblem.crest ? { ...emblem, crest: { ...emblem.crest } } : { ...emblem };
 }
 
 const TRANSLIT: Record<string, string> = {
