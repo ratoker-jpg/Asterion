@@ -1,0 +1,146 @@
+/* Procedural Sun raid art: crystals, Suns, Gates. Tokens: --ut-*, --race-*. */
+
+.sr-gem {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.sr-gem svg { width: 100%; height: 100%; overflow: visible; }
+.sr-gem.is-owned svg { filter: drop-shadow(0 0 6px var(--gem-glow)) drop-shadow(0 0 14px color-mix(in srgb, var(--gem-glow) 45%, transparent)); }
+.sr-gem.is-owned::after {
+  content: '';
+  position: absolute;
+  inset: 22% 18%;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--gem-color) 55%, transparent), transparent 70%);
+  filter: blur(6px);
+  z-index: -1;
+  animation: sr-gem-breathe 3.6s ease-in-out infinite;
+}
+.sr-gem.is-locked svg { filter: drop-shadow(0 0 4px var(--gem-glow)) grayscale(.25); }
+.sr-gem-set { display: inline-flex; gap: 10px; align-items: center; }
+
+@keyframes sr-gem-breathe { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+
+.sr-sun {
+  --sun-size: 220px;
+  position: relative;
+  display: inline-block;
+  width: var(--sun-size);
+  height: var(--sun-size);
+  flex: 0 0 auto;
+}
+.sr-sun > span { position: absolute; border-radius: 50%; }
+.sr-sun__halo {
+  inset: -18%;
+  background: radial-gradient(circle, rgba(255, 196, 92, calc(.42 * var(--sun-intensity))) 0%, rgba(255, 120, 40, calc(.16 * var(--sun-intensity))) 45%, transparent 70%);
+}
+.sr-sun__corona {
+  inset: 2%;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 214, 120, calc(.55 * var(--sun-intensity))) 0deg 4deg, transparent 4deg 13deg);
+  mask: radial-gradient(circle, transparent 46%, #000 49%, #000 60%, transparent 71%);
+  -webkit-mask: radial-gradient(circle, transparent 46%, #000 49%, #000 60%, transparent 71%);
+  animation: sr-sun-spin 60s linear infinite;
+}
+.sr-sun__core {
+  inset: 22%;
+  background:
+    radial-gradient(circle at 38% 34%, #fffbe8 0%, #ffe28a 18%, #ffb238 46%, #e96a1a 78%, #8a2f0d 100%);
+  box-shadow:
+    0 0 calc(var(--sun-size) * .12) rgba(255, 170, 60, calc(.85 * var(--sun-intensity))),
+    0 0 calc(var(--sun-size) * .3) rgba(255, 120, 30, calc(.45 * var(--sun-intensity))),
+    inset 0 0 calc(var(--sun-size) * .08) rgba(120, 30, 0, .55);
+  filter: saturate(calc(1 - .55 * var(--sun-dim))) brightness(calc(.62 + .48 * var(--sun-intensity)));
+}
+.sr-sun__core::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  /* Granulation: soft darker cells drifting over the photosphere. */
+  background:
+    radial-gradient(circle at 30% 60%, rgba(140, 40, 0, .28) 0 6%, transparent 13%),
+    radial-gradient(circle at 64% 30%, rgba(140, 40, 0, .22) 0 5%, transparent 12%),
+    radial-gradient(circle at 70% 70%, rgba(140, 40, 0, .26) 0 7%, transparent 15%),
+    radial-gradient(circle at 45% 42%, rgba(255, 240, 200, .25) 0 8%, transparent 18%),
+    radial-gradient(circle at 22% 32%, rgba(140, 40, 0, .18) 0 4%, transparent 10%),
+    radial-gradient(circle at 52% 80%, rgba(140, 40, 0, .2) 0 5%, transparent 12%);
+  filter: blur(2px);
+  mix-blend-mode: multiply;
+  animation: sr-sun-spin 90s linear infinite reverse;
+}
+.sr-sun.is-frozen .sr-sun__core { filter: hue-rotate(170deg) saturate(.55) brightness(.92); }
+.sr-sun.is-frozen .sr-sun__halo { background: radial-gradient(circle, rgba(140, 220, 255, .32) 0%, rgba(80, 160, 255, .12) 45%, transparent 70%); }
+.sr-sun.is-frozen .sr-sun__corona { animation-play-state: paused; filter: hue-rotate(170deg) saturate(.4); }
+.sr-sun__frost {
+  inset: 18%;
+  border: 2px solid rgba(190, 240, 255, .7);
+  background:
+    repeating-conic-gradient(from 15deg, rgba(220, 248, 255, .32) 0deg 2deg, transparent 2deg 30deg);
+  box-shadow: 0 0 22px rgba(150, 225, 255, .55), inset 0 0 26px rgba(170, 235, 255, .45);
+}
+
+@keyframes sr-sun-spin { to { transform: rotate(360deg); } }
+
+.sr-gate {
+  --gate-size: 240px;
+  display: inline-block;
+  width: var(--gate-size);
+  height: var(--gate-size);
+  flex: 0 0 auto;
+}
+.sr-gate svg { width: 100%; height: 100%; overflow: visible; }
+.sr-gate__plate { fill: rgba(6, 12, 16, .85); stroke: var(--race-border-soft); stroke-width: 1; }
+.sr-gate__ring { fill: none; stroke: color-mix(in srgb, var(--race-accent-strong) 40%, #0b141a); stroke-width: 14; }
+.sr-gate__ticks { fill: none; stroke: var(--race-accent); stroke-opacity: .55; stroke-width: 14; stroke-dasharray: 2 14; }
+.sr-gate__progress { fill: none; stroke: var(--race-accent-strong); stroke-width: 5; stroke-linecap: round; filter: drop-shadow(0 0 6px var(--race-glow)); transition: stroke-dasharray .6s ease; }
+.sr-gate__vortex { transform-origin: 120px 120px; opacity: .18; }
+.sr-gate--building .sr-gate__vortex { opacity: .85; animation: sr-sun-spin 14s linear infinite; }
+.sr-gate--completed .sr-gate__vortex { opacity: 1; animation: sr-sun-spin 6s linear infinite; filter: drop-shadow(0 0 18px var(--race-glow)); }
+.sr-gate--destroyed svg { filter: grayscale(.85) brightness(.6); }
+.sr-gate__socket.is-lit polygon { filter: drop-shadow(0 0 5px currentColor); }
+
+.sr-bright { display: grid; gap: 6px; }
+.sr-bright__track {
+  position: relative;
+  height: 16px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(120, 200, 255, .16), rgba(255, 170, 60, .12));
+  border: 1px solid var(--ut-border);
+  overflow: hidden;
+}
+.sr-bright__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, #6fd3ff 0%, #ffd36b 55%, #ff8a2a 100%);
+  box-shadow: 0 0 14px rgba(255, 170, 60, .45);
+  transition: width .6s ease;
+}
+.sr-bright__track i {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  width: 1px;
+  background: rgba(0, 0, 0, .45);
+}
+.sr-bright__cap {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 3px;
+  margin-left: -1px;
+  background: #fff;
+  box-shadow: 0 0 8px #fff;
+  z-index: 2;
+}
+.sr-bright__scale { display: flex; justify-content: space-between; color: var(--ut-label); font-size: var(--ut-font-secondary); }
+
+@media (prefers-reduced-motion: reduce) {
+  .sr-sun__corona, .sr-sun__core::after, .sr-gate__vortex, .sr-gem.is-owned::after { animation: none !important; }
+}
+
+.sun-report-strip { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 16px; margin: 0 24px 12px; padding: 12px 18px; border-radius: var(--ut-r-card); border: 1px solid rgba(255, 184, 74, .35); background: rgba(255, 160, 60, .07); }
+.sun-report-strip small { display: block; color: #ffc98a; font-size: 11px; font-weight: 700; letter-spacing: .12em; }
+.sun-report-strip b { display: block; margin-top: 4px; font-size: 14px; }
+.sun-report-strip span { display: block; margin-top: 3px; color: #d7c7a8; font-size: 12px; }

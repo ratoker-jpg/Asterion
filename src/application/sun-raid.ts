@@ -50,6 +50,7 @@ import type {
 } from '../domain/sun-raid/types.ts';
 import type { UniverseCoordinate } from '../domain/universe/types.ts';
 import { technologiesFromScience } from './attack.ts';
+import { recordBattleScoreAward } from '../domain/rating/scoring.ts';
 import {
   getOwnerShipUpgradeLevels,
   getPlanetResources,
@@ -60,6 +61,9 @@ import {
 } from './contracts.ts';
 import { syncPlanetEnergySources } from './energy.ts';
 import { getAvailableFleetForPlanet } from './flights.ts';
+
+/** UI event: open «Операции → Солнца» (from the fleet mission tile). */
+export const OPEN_SUN_OPERATIONS_EVENT = 'asterion:open-sun-operations';
 
 export type SunRuntimeOptions = { now: number; mode: RuntimeMode; testTimeScale?: number };
 
@@ -603,6 +607,9 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
 
   const attack = sideInput(attackers);
   const defense = sideInput(defenders);
+  // The local player represents their side in the report (mail, battle points, «my battle» filters).
+  const playerAttacks = attackers.some((item) => item.snapshot.ownerId === playerId) || allianceOf(state, playerId)?.alliance.id === raid.allianceId;
+  const playerDefends = defenders.some((item) => item.snapshot.ownerId === playerId);
   const input: CombatInput = {
     scenarioId: `sun-raid:${raid.id}`,
     timestamp: new Date(at).toISOString(),
@@ -617,7 +624,7 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
     executionMode: 'production',
     attacker: {
       participant: {
-        side: 'attacker', playerId: raid.initiatorOwnerId,
+        side: 'attacker', playerId: playerAttacks ? playerId : raid.initiatorOwnerId,
         playerName: `[${raid.allianceTag}] ${participantLabel(attackers, raid.initiatorName)}`,
         planetName: `Рейд на Солнце ${sunLabel}`,
         coordinates: sunLabel, race: getCombatFactionName(attack.factionId),
@@ -626,7 +633,7 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
     },
     defender: {
       participant: {
-        side: 'defender', playerId: defense.lead?.snapshot.ownerId ?? `sun:${raid.galaxy}:${raid.system}`,
+        side: 'defender', playerId: playerDefends ? playerId : defense.lead?.snapshot.ownerId ?? `sun:${raid.galaxy}:${raid.system}`,
         playerName: participantLabel(defenders, 'Солнце без защиты'),
         planetName: `Солнце ${sunLabel}`,
         coordinates: sunLabel, race: getCombatFactionName(defense.factionId),
@@ -700,7 +707,11 @@ function resolveRaid(state: SaveState, raid: SunRaidRecord, at: number, options:
         defenders: defenders.length,
       },
     };
-    next = { ...next, combat: { ...next.combat, reports: [...next.combat.reports.filter((item) => item.id !== reportId), enriched] } };
+    next = {
+      ...next,
+      combat: { ...next.combat, reports: [...next.combat.reports.filter((item) => item.id !== reportId), enriched] },
+      rating: recordBattleScoreAward(next.rating, enriched, playerId),
+    };
   }
   const playerSide = playerInvolved
     ? (allianceOf(state, playerId)?.alliance.id === raid.allianceId || attackers.some((item) => item.snapshot.ownerId === playerId) ? 'attacker' : 'defender')

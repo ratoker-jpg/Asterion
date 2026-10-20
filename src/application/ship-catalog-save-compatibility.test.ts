@@ -75,8 +75,8 @@ test('old Veyra ship IDs survive save reload and resolve with the selected Veyra
   };
   const oldSave = {
     ...initial,
-    // This reflects the faction stored by an old Veyra save. The production
-    // loader currently pins the active player profile to Aegis; see assertion below.
+    // This reflects the faction stored by an old Veyra save. Since schema 24 the
+    // saved race is authoritative and survives the reload (see assertion below).
     profile: { ...initial.profile, factionId: 'veyra' as const },
     planets: {
       ...initial.planets,
@@ -143,7 +143,7 @@ test('old Veyra ship IDs survive save reload and resolve with the selected Veyra
   );
   assert.equal(loadedPlanet.repair.ships.cruiser, 4);
   assert.equal(loadedPlanet.repair.ships.defender, 3);
-  assert.equal(loaded.profile.factionId, 'aegis');
+  assert.equal(loaded.profile.factionId, 'veyra');
 
   const loadedFlight = loaded.flights.records.find(({ id }) => id === oldFlight.id);
   assert.ok(loadedFlight, 'the in-flight record remains present after reload');

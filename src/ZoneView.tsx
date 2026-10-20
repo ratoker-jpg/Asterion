@@ -35,6 +35,12 @@ import type { PlanetEnergyCoordinates } from './application/energy.ts';
 import { getProductionBotBonusPercent, type BotAssignment, type ProductionResourceIncome } from './domain/buildings/production-bots.ts';
 import { RUNTIME_RESET_EVENT } from './domain/runtime/mode.ts';
 import { ResourceIcon } from './ui/resources/ResourceIcon';
+import { GATE_BUILDING_ART } from './ui/sun-raid/gate-art.ts';
+import { SOLAR_CRYSTALS, SOLAR_CRYSTAL_IDS } from './domain/sun-raid/config.ts';
+import './ui/sun-raid/gate.css';
+import type { SolarCrystalId } from './domain/sun-raid/config.ts';
+import { PLAYER_FACTION_LABELS } from './domain/profile/repository.ts';
+import type { PlayerFactionId } from './domain/profile/types.ts';
 
 export const ZONE_VIEW_META: Readonly<Record<BuildingZone, {
   title: string;
@@ -208,6 +214,18 @@ export type ZoneViewProps = {
   onCancelBuilding: (queueId: string) => boolean;
   onDestroyBuilding: (assetRole: BuildingRole) => boolean;
   onEnterBuilding: (assetRole: BuildingRole) => void;
+  /** Player race: building names and art follow it (they used to always be Астеры). */
+  factionId?: PlayerFactionId;
+  /** Military zone only: the «Звёздные Врата» slot in the free bottom-right spot. */
+  gate?: ZoneGateSlot;
+};
+
+export type ZoneGateSlot = {
+  status: 'idle' | 'building' | 'completed' | 'destroyed';
+  progress: number;
+  crystals: readonly SolarCrystalId[];
+  caption: string;
+  onOpen: () => void;
 };
 
 type PendingBuildingAction =
@@ -233,14 +251,16 @@ export function ZoneView({
   onCancelBuilding,
   onDestroyBuilding,
   onEnterBuilding,
+  factionId = 'aegis',
+  gate,
 }: ZoneViewProps) {
   const economy = useMemo<BuildingEconomyState>(
     () => ({ resources, buildings, queue, scienceLevels }),
     [resources, buildings, queue, scienceLevels],
   );
-  const zoneBuildings = getBuildingsForZone(zone);
+  const zoneBuildings = getBuildingsForZone(zone, factionId);
   const meta = ZONE_VIEW_META[zone];
-  const selected = selectedRole ? getBuildingDefinition(selectedRole) : null;
+  const selected = selectedRole ? getBuildingDefinition(selectedRole, factionId) : null;
   const availability = selectedRole ? evaluateBuildingBuild(economy, selectedRole) : null;
   const selectedHasQueue = selectedRole ? queue.some((item) => item.assetRole === selectedRole) : false;
   const [pendingAction, setPendingAction] = useState<PendingBuildingAction | null>(null);
@@ -435,7 +455,7 @@ export function ZoneView({
         />
         <div className="resource-zone-scene-shade" aria-hidden="true" />
         <div className="resource-zone-scene-copy">
-          <small>АСТЕРЫ · {planetCoords}</small>
+          <small>{PLAYER_FACTION_LABELS[factionId].toUpperCase()} · {planetCoords}</small>
           <h1>{meta.title}</h1>
           <p>{meta.subtitle}</p>
         </div>
@@ -470,6 +490,27 @@ export function ZoneView({
               </button>
             );
           })}
+          {zone === 'military' && gate ? (
+            <button
+              type="button"
+              className={`resource-building-node gate-node is-${gate.status}${gate.status === 'idle' ? ' is-empty' : ''}`}
+              style={{ left: '64%', top: '66%', '--building-width': '196px', '--ground-shadow-width': '140px' } as CSSProperties}
+              aria-label={`Звёздные Врата. ${gate.caption}`}
+              onClick={gate.onOpen}
+              data-qa-gate-slot={gate.status}
+            >
+              <span className="resource-building-ground-shadow" aria-hidden="true" />
+              <span className="resource-building-art"><img src={GATE_BUILDING_ART[factionId]} alt="" draggable={false} /></span>
+              <span className="gate-node__crystals" aria-hidden="true">
+                {SOLAR_CRYSTAL_IDS.map((id) => <i key={id} className={gate.crystals.includes(id) ? 'is-on' : ''} style={{ '--gem': SOLAR_CRYSTALS[id].color } as CSSProperties} />)}
+              </span>
+              {gate.status === 'building' ? <span className="gate-node__bar" aria-hidden="true"><i style={{ width: `${gate.progress}%` }} /></span> : null}
+              <span className="resource-building-caption">
+                <strong>Звёздные Врата</strong>
+                <small>{gate.caption}</small>
+              </span>
+            </button>
+          ) : null}
         </div>
       </main>
 
@@ -491,7 +532,7 @@ export function ZoneView({
               );
             }
 
-            const queueDefinition = getBuildingDefinition(item.assetRole);
+            const queueDefinition = getBuildingDefinition(item.assetRole, factionId);
             const isActive = index === 0;
             const remaining = Math.max(0, item.finishAt - now);
             const duration = Math.max(1, item.finishAt - item.startedAt);
@@ -569,7 +610,7 @@ export function ZoneView({
             ) : null}
             <div className="resource-building-dialog-art"><img src={selected.art} alt={selected.name} draggable={false} /></div>
             <div className="resource-building-dialog-copy">
-              <small>{ZONE_VIEW_META[selected.zone].title} · АСТЕРЫ</small>
+              <small>{ZONE_VIEW_META[selected.zone].title} · {PLAYER_FACTION_LABELS[factionId].toUpperCase()}</small>
               <h2 id="resource-building-dialog-title">{selected.name}</h2>
               <p>{selected.purpose}</p>
 
@@ -740,8 +781,8 @@ export function ZoneView({
             </h3>
             <p>
               {pendingAction.kind === 'cancel'
-                ? `Вы уверены, что хотите отменить строительство «${getBuildingDefinition(pendingAction.assetRole).name}», ур. ${pendingAction.targetLevel}? 90% затраченных ресурсов будут возвращены.`
-                : `Вы уверены, что хотите разрушить 1 уровень здания «${getBuildingDefinition(pendingAction.assetRole).name}»? 50–80% из затраченных ресурсов будут возвращены, остальные ресурсы за этот уровень будут потеряны.`}
+                ? `Вы уверены, что хотите отменить строительство «${getBuildingDefinition(pendingAction.assetRole, factionId).name}», ур. ${pendingAction.targetLevel}? 90% затраченных ресурсов будут возвращены.`
+                : `Вы уверены, что хотите разрушить 1 уровень здания «${getBuildingDefinition(pendingAction.assetRole, factionId).name}»? 50–80% из затраченных ресурсов будут возвращены, остальные ресурсы за этот уровень будут потеряны.`}
             </p>
             <div className="resource-building-action-confirm-actions">
               <button ref={confirmYesRef} type="button" data-qa-action-confirm-yes onClick={confirmPendingAction}>ДА</button>

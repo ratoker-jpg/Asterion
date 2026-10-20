@@ -1,0 +1,19 @@
+/* Universe map: the system Sun is the entry to command raids. */
+.universe-radar .system-star-wrap .system-star-button { cursor: pointer; pointer-events: auto; }
+.universe-radar .system-star-button:focus-visible { outline: var(--ut-focus); outline-offset: 6px; border-radius: 50%; }
+.universe-radar .system-star-button.is-under-attack::after {
+  content: '';
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  border: 2px solid var(--ut-danger);
+  box-shadow: 0 0 24px rgba(240, 68, 94, .55);
+  animation: universe-sun-alarm 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
+.universe-radar .system-star-alert { color: #ff9fae !important; font-weight: 700; }
+@keyframes universe-sun-alarm { 50% { transform: scale(1.08); opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .universe-radar .system-star-button.is-under-attack::after { animation: none; } }
+
+/* In a save slot the old «↻» reset is the game menu. */
+.stage .shell-pause-control span { font-size: 22px; line-height: 1; }

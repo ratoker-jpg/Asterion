@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { OPEN_SUN_OPERATIONS_EVENT } from './application/sun-raid.ts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getFactionShipCatalog } from './domain/combat/faction-catalog.ts';
@@ -137,7 +138,7 @@ const missions: MissionDefinition[] = [
   { id: 'colonize', label: 'Колонизация', description: 'Основание новой колонии на свободной планете.', icon: missionColonizeIcon },
   { id: 'recycle', label: 'Переработка', description: 'Сбор и переработка обломков в космосе.', icon: missionRecycleIcon },
   { id: 'gas', label: 'Добыча газа', description: 'Специализированная экспедиция за газом.', icon: missionGasIcon },
-  { id: 'sun-support', label: 'Поддержка солнца', description: 'Отправка флота для специальной солнечной операции.', icon: missionSunSupportIcon },
+  { id: 'sun-support', label: 'Поддержка солнца', description: 'Защита Солнца от командного рейда. Флот отправляется из «Операции → Солнца».', icon: missionSunSupportIcon },
   { id: 'aid', label: 'Помощь союзу', description: AID_MISSION_DESCRIPTION, icon: missionAidIcon, enabled: AID_MISSION_ENABLED },
   { id: 'space-flight', label: 'Космический рейс', description: 'Дальний автономный рейс с заданной продолжительностью.', icon: missionSpaceFlightIcon },
 ];
@@ -1555,7 +1556,11 @@ function FleetWorkspace({
                       onMouseLeave={() => setHoveredMissionId(null)}
                       onFocus={() => setHoveredMissionId(mission.id)}
                       onBlur={() => setHoveredMissionId(null)}
-                      onClick={() => chooseMission(mission.id)}
+                      onClick={() => {
+                        // Sun missions live in «Операции → Солнца» (population cap, side, alerts).
+                        if (mission.id === 'sun-support') { window.dispatchEvent(new Event(OPEN_SUN_OPERATIONS_EVENT)); return; }
+                        chooseMission(mission.id);
+                      }}
                     >
                       <MissionIcon mission={mission} />
                       <span>{mission.label}</span>

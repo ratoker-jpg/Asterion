@@ -10,6 +10,7 @@ import { ResourceIcon } from './ui/resources/ResourceIcon.tsx';
 import pirateWarlordArt from '../assets/source/characters/pirates/pirate_warlord.png';
 import debrisIcon from './assets/ui/header-icons/debris.png';
 import './ui/universe/universe-radar.css';
+import './ui/sun-raid/universe-sun.css';
 import asteroid01 from '../assets/source/universe-navigation/asteroids/asteroid.variant-01.png';
 import asteroid02 from '../assets/source/universe-navigation/asteroids/asteroid.variant-02.png';
 import asteroid03 from '../assets/source/universe-navigation/asteroids/asteroid.variant-03.png';
@@ -57,7 +58,7 @@ import type { OwnerScore } from './domain/rating/types.ts';
 import type { RuntimeMode } from './domain/runtime/mode.ts';
 import {
   GALAXY,
-  GALAXY_COUNT,
+  getActiveGalaxyCount,
   MAX_PLANETS_PER_OWNER,
   SYSTEM_COUNT,
   UNIVERSE_NPC_OWNER_ID,
@@ -135,6 +136,12 @@ type UniverseViewProps = {
   onPirateSystemChange?: (selection: PirateSystemSelection) => void;
   focusTarget?: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string; mode?: 'inspect' | 'highlight' } | null;
   onFocusHandled?: () => void;
+  /** Click on the system's Sun: opens «Операции → Солнца» for it. */
+  onSunSelect?: (galaxy: number, system: number) => void;
+  /** Suns of the player's galaxies with an incoming raid. */
+  sunAlerts?: readonly { galaxy: number; system: number }[];
+  /** The map opens on the home system (random starts are no longer [1:1]). */
+  homeCoordinate?: { galaxy: number; system: number };
 };
 
 const POINT_LABELS: ReadonlyArray<{ key: keyof UniverseOwnerPoints; label: string }> = [
@@ -443,7 +450,7 @@ function SpecialInspector({ node, underlyingNode, nowMs, asteroidHasDebris, pira
       ? `Активен · исчезнет через ${countdownLabel(nowMs, timedState.expiresAt)}`
       : node.statusLabel;
   const explorationLabel = explorationStatus === 'occupied' ? 'ЗАНЯТО · необходима атака' : explorationStatus === 'self' ? 'ЗАНЯТО · ваш флот' : explorationStatus === 'free' ? 'СВОБОДНО · доступно исследование' : 'Вне зоны видимости колоний';
-  const subtitle = node.known === false ? 'Неизученный сигнал' : isAsteroid ? 'Траектория наблюдается · содержание неизвестно' : node.kind === 'uninhabited' ? 'Владелец отсутствует' : isExploration ? explorationStatus === 'occupied' ? 'Объект занят чужим флотом' : explorationStatus === 'self' ? 'Ваш флот добывает ресурсы' : 'Объект свободен' : 'Галактика 01 · Система ' + String(node.coordinate.system).padStart(2, '0');
+  const subtitle = node.known === false ? 'Неизученный сигнал' : isAsteroid ? 'Траектория наблюдается · содержание неизвестно' : node.kind === 'uninhabited' ? 'Владелец отсутствует' : isExploration ? explorationStatus === 'occupied' ? 'Объект занят чужим флотом' : explorationStatus === 'self' ? 'Ваш флот добывает ресурсы' : 'Объект свободен' : 'Галактика ' + String(node.coordinate.galaxy).padStart(2, '0') + ' · Система ' + String(node.coordinate.system).padStart(2, '0');
   const timedTotal = timedState?.expiresAt && timedState?.startAt ? timedState.expiresAt - timedState.startAt : 0;
   const timedProgress = timedTotal > 0 && timedState?.expiresAt ? ((timedState.expiresAt - nowMs) / timedTotal) * 100 : undefined;
   const reconOutcome = pirateContact?.latestReportOutcome;
@@ -462,15 +469,15 @@ function SpecialInspector({ node, underlyingNode, nowMs, asteroidHasDebris, pira
     { label: 'ИСЧЕЗНЕТ', value: countdownLabel(nowMs, timedState?.expiresAt), note: 'активен', tone: 'time', progress: timedProgress },
     { label: 'ЗАНЯТОСТЬ', value: explorationStatus === 'free' ? 'Свободно' : explorationStatus === 'self' ? 'Ваш флот' : explorationStatus === 'occupied' ? 'Занято' : 'Свободно', note: explorationStatus === 'occupied' ? 'нужна атака' : explorationStatus === 'self' ? 'добывает ресурсы' : 'никем не занят', tone: explorationStatus === 'occupied' ? 'bad' : 'good' },
     { label: 'ЭКСПЕДИЦИЯ', value: explorationStatus ? 'В радиусе' : 'Вне радиуса', note: 'до 5 систем от колоний', tone: explorationStatus ? 'good' : 'bad', attrs: { 'data-qa-universe-exploration-status': explorationStatus ?? 'out' } },
-    { label: 'СИСТЕМА', value: String(node.coordinate.system).padStart(2, '0'), note: 'Галактика 01' },
+    { label: 'СИСТЕМА', value: String(node.coordinate.system).padStart(2, '0'), note: `Галактика ${String(node.coordinate.galaxy).padStart(2, '0')}` },
   ] : node.kind === 'uninhabited' ? [
     { label: 'ВЛАДЕЛЕЦ', value: 'Нет', note: 'владелец отсутствует', tone: 'off' },
-    { label: 'СИСТЕМА', value: String(node.coordinate.system).padStart(2, '0'), note: 'Галактика 01' },
+    { label: 'СИСТЕМА', value: String(node.coordinate.system).padStart(2, '0'), note: `Галактика ${String(node.coordinate.galaxy).padStart(2, '0')}` },
     { label: 'ПОЗИЦИЯ', value: `${node.coordinate.position} / 24`, note: `кольцо ${Math.ceil(node.coordinate.position / 6)}` },
     { label: 'КОЛОНИЗАЦИЯ', value: 'Скоро', note: 'механика в разработке', tone: 'time' },
   ] : [
     { label: 'СТАТУС', value: 'Свободно', note: 'орбита пуста', tone: 'good' },
-    { label: 'СИСТЕМА', value: String(node.coordinate.system).padStart(2, '0'), note: 'Галактика 01' },
+    { label: 'СИСТЕМА', value: String(node.coordinate.system).padStart(2, '0'), note: `Галактика ${String(node.coordinate.galaxy).padStart(2, '0')}` },
     { label: 'ПОЗИЦИЯ', value: `${node.coordinate.position} / 24`, note: `кольцо ${Math.ceil(node.coordinate.position / 6)}` },
     { label: 'ВЛАДЕЛЕЦ', value: 'Нет', note: 'можно основать колонию', tone: 'off' },
   ];
@@ -610,9 +617,10 @@ function MovingAsteroid({ node, underlyingKind, nowMs, hasDebris, occupiedNodes,
   </button>;
 }
 
-export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, ownerScores, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, explorationEligibility = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled }: UniverseViewProps) {
-  const [galaxy, setGalaxy] = useState(GALAXY);
-  const [system, setSystem] = useState(1);
+export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, ownerScores, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, explorationEligibility = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], homeCoordinate }: UniverseViewProps) {
+  const galaxyCount = getActiveGalaxyCount();
+  const [galaxy, setGalaxy] = useState(homeCoordinate?.galaxy ?? GALAXY);
+  const [system, setSystem] = useState(homeCoordinate?.system ?? 1);
   const [listPinned, setListPinned] = useState(false);
   const [focusEmpty, setFocusEmpty] = useState(false);
   const [showSlotLabels, setShowSlotLabels] = useState(true);
@@ -685,7 +693,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
     currentPlanetArt: ownedPlanetArt,
     assets,
     mode,
-    galaxyCount: GALAXY_COUNT,
+    galaxyCount,
     asteroidStates,
     pirateContactDefeats: Object.values(pirateContactState?.defeatedCycles ?? {}),
     playerPlanets,
@@ -696,7 +704,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
       kind: target.kind ?? 'npc',
       ownerId: target.ownerId,
     })),
-  }), [asteroidStates, mode, ownedPlanetArt, ownedPlanetName, owner.id, pirateContactState?.defeatedCycles, playerPlanets, spyTargets]);
+  }), [asteroidStates, galaxyCount, mode, ownedPlanetArt, ownedPlanetName, owner.id, pirateContactState?.defeatedCycles, playerPlanets, spyTargets]);
   // Only the open system follows the 1 s clock. The whole galaxy (40 systems)
   // is rebuilt once a minute: it only resolves focus targets and owner lists.
   const galaxyClock = Math.floor(nowMs / 60_000) * 60_000;
@@ -827,7 +835,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
   }, [selectedNodeId]);
 
   const goSystem = (next: number, nextGalaxy = galaxy) => {
-    const boundedGalaxy = Math.min(GALAXY_COUNT, Math.max(1, nextGalaxy));
+    const boundedGalaxy = Math.min(galaxyCount, Math.max(1, nextGalaxy));
     const bounded = Math.min(SYSTEM_COUNT, Math.max(1, next));
     setGalaxy(boundedGalaxy);
     setSystem(bounded);
@@ -840,7 +848,8 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
       ? getUniverseOwnerRelation(node, owner.id, owner.alliance, owners.get(node.ownerId ?? ''), allianceDiplomacy)
       : null),
   }));
-  const homeCoordinate = playerPlanets.find((planet) => planet.isHomeworld)?.coordinate ?? playerPlanets[0]?.coordinate;
+  const homeWorld = playerPlanets.find((planet) => planet.isHomeworld)?.coordinate ?? playerPlanets[0]?.coordinate;
+  const sunUnderAttack = sunAlerts.some((alert) => alert.galaxy === galaxy && alert.system === system);
   const pad2 = (value: number) => String(value).padStart(2, '0');
 
   const selectNode = (node: UniversePlanetNode) => setSelectedNodeId(node.id);
@@ -887,15 +896,18 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
         <div className="system-star-wrap">
           <button
             type="button"
-            className="system-star-button"
-            aria-label={`Система ${system}. Эффективность солнца: ${systemData.sunEfficiencyPercent}%`}
+            className={`system-star-button ${sunUnderAttack ? 'is-under-attack' : ''}`}
+            aria-label={`Солнце системы ${system}. Эффективность: ${systemData.sunEfficiencyPercent}%. Открыть командный рейд`}
             aria-describedby="universe-star-efficiency"
             data-qa-universe-sun-efficiency={systemData.sunEfficiencyPercent}
+            onClick={() => onSunSelect?.(galaxy, system)}
           >
             <img className="system-star" src={systemData.starArt} alt="" draggable={false} />
             <span className="system-star-tooltip" id="universe-star-efficiency" role="tooltip">
               <strong>СИСТЕМА {String(system).padStart(2, '0')}</strong>
               <small>Эффективность солнца: {systemData.sunEfficiencyPercent}%</small>
+              {sunUnderAttack ? <small className="system-star-alert">Входящий рейд на Солнце</small> : null}
+              {onSunSelect ? <small>Нажмите: рейд или защита Солнца</small> : null}
             </span>
           </button>
         </div>
@@ -994,13 +1006,13 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
         <label className="universe-radar__galaxy">
           <small>ГАЛАКТИКА</small>
           <select value={galaxy} onChange={(event) => goSystem(1, Number(event.target.value))} aria-label="Галактика">
-            {Array.from({ length: GALAXY_COUNT }, (_, index) => <option key={index + 1} value={index + 1}>{pad2(index + 1)}</option>)}
+            {Array.from({ length: galaxyCount }, (_, index) => <option key={index + 1} value={index + 1}>{pad2(index + 1)}</option>)}
           </select>
         </label>
-        {homeCoordinate ? (
-          <button type="button" className="universe-radar__home" disabled={homeCoordinate.galaxy === galaxy && homeCoordinate.system === system}
-            title={`К родной системе ${formatUniverseCoordinate(homeCoordinate)}`}
-            onClick={() => goSystem(homeCoordinate.system, homeCoordinate.galaxy)}>⌂ Домой</button>
+        {homeWorld ? (
+          <button type="button" className="universe-radar__home" disabled={homeWorld.galaxy === galaxy && homeWorld.system === system}
+            title={`К родной системе ${formatUniverseCoordinate(homeWorld)}`}
+            onClick={() => goSystem(homeWorld.system, homeWorld.galaxy)}>⌂ Домой</button>
         ) : null}
       </div>
 

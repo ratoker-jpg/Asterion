@@ -27,7 +27,7 @@ async function waitFor(win, expression, timeoutMs = 10_000) {
 
 async function load(win, mode) {
   const done = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-  await win.loadFile(path.join(ROOT, 'dist', 'index.html'), mode === 'test' ? { search: '?mode=test' } : undefined);
+  await win.loadFile(path.join(ROOT, 'dist', 'index.html'), { search: mode === 'test' ? '?mode=test' : '?autostart=continue' });
   await done;
   await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
   await waitFor(win, `localStorage.getItem(${JSON.stringify(mode === 'test' ? TEST_KEY : PRODUCTION_KEY)})`);

@@ -61,7 +61,8 @@
     "test:exploration": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/exploration/exploration.test.ts src/application/exploration.integration.test.ts",
     "balance:exploration:pr92": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs tools/generate-exploration-pr92-balance.mjs",
     "test:sun-raid": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/sun-raid/sun-raid.test.ts src/application/sun-raid.integration.test.ts",
-    "test:new-game": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/world/world.test.ts src/domain/session/slots.test.ts src/application/new-game.test.ts"
+    "test:new-game": "node --experimental-strip-types --experimental-loader ./src/domain/combat/test-asset-loader.mjs --test src/domain/world/world.test.ts src/domain/session/slots.test.ts src/application/new-game.test.ts",
+    "test:new-game-ui": "electron electron/new-game-sun-raid-qa.cjs"
   },
   "dependencies": {
     "react": "19.2.8",
