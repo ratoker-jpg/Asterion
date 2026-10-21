@@ -60,6 +60,13 @@
 - Победа: `A colossal star gate activating in deep space, four solar crystals blazing in its sockets (gold, cyan, violet, crimson), a blinding white vortex in the center, fleets of ships silhouetted in front, triumphant cinematic composition, left half darker for overlay text`.
 - Поражение: `The same star gate seen from afar belonging to an enemy, cold red light, our damaged fleet drifting in the foreground, somber cinematic mood, left half darker for overlay text`.
 
+## 7. Обломки: «Найти обломки» и обломки у Солнца (по желанию)
+
+Путь: `assets/source/debris/` · PNG RGBA.
+
+- `debris-finder.png` (256×256): иконка кнопки «Найти обломки» во Вселенной. `Small square game UI icon, dark navy sci-fi tile with thin cyan frame, centered: a radar sweep arc over a scattered cluster of glowing metal ship fragments, cyan scan line, warm amber highlights on the fragments, clean bold silhouette readable at 24px, no text`.
+- `sun-debris.png` (512×512): обломки, дрейфующие у Солнца (строка «Обломки у Солнца» в панели и список «Найти обломки»). `A drifting field of wrecked starship fragments and twisted hull plates silhouetted against the edge of a blazing golden star, embers and molten metal glints, debris lit from behind with orange rim light, centered composition, transparent background, dark sci-fi painterly style`.
+
 ---
 
 ## Куда это подключится
@@ -67,8 +74,10 @@
 | Ассет | Где сейчас заглушка | Компонент |
 |---|---|---|
 | Кристаллы | процедурный SVG `CrystalGem` | `src/ui/sun-raid/SunRaidArt.tsx` |
-| Иконка рейда | `20_bombardment.png` | `src/ui/sun-raid/SunRaidPanel.tsx` |
+| Иконка рейда | `20_bombardment.png` | `src/ui/sun-raid/SunRaidPanel.tsx`, лента рейсов `src/FleetWorkspacePortal.tsx` |
 | Солнце | процедурный CSS `SunOrb` | `src/ui/sun-raid/SunRaidArt.tsx` |
 | Стадии Врат | фильтры CSS поверх готовых Врат | `src/ZoneView.tsx`, `src/ui/sun-raid/GateDialog.tsx` |
 | Фон меню | `starter/backgrounds/system_background.png` + CSS-горизонт | `src/ui/menu/MenuApp.tsx` |
 | Итог кампании | CSS-лучи + Врата | `src/ui/menu/InGameOverlays.tsx` |
+| «Найти обломки» | текстовый глиф ✦ | `src/UniverseView.tsx` |
+| Обломки у Солнца | без картинки | `src/ui/sun-raid/SunRaidPanel.tsx`, `src/UniverseView.tsx` |
