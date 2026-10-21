@@ -5,7 +5,6 @@ import astronomyArt from '../assets/source/New assets/technologies/technology.sh
 import chemistryArt from '../assets/source/New assets/technologies/technology.shared.chemistry.png';
 import computerSystemsArt from '../assets/source/New assets/technologies/technology.shared.computer-systems.png';
 import criticalHitArt from '../assets/source/New assets/technologies/technology.shared.critical-hit.png';
-import ecologyArt from '../assets/source/New assets/technologies/technology.shared.ecology.png';
 import espionageArt from '../assets/source/New assets/technologies/technology.shared.espionage.png';
 import fuelCellsArt from '../assets/source/New assets/technologies/technology.shared.fuel-cells.png';
 import heavyArmorArt from '../assets/source/New assets/technologies/technology.shared.heavy-armor.png';
@@ -54,7 +53,6 @@ const SCIENCE_ARTS: Record<string, string> = {
   'technology.shared.chemistry.png': chemistryArt,
   'technology.shared.computer-systems.png': computerSystemsArt,
   'technology.shared.critical-hit.png': criticalHitArt,
-  'technology.shared.ecology.png': ecologyArt,
   'technology.shared.espionage.png': espionageArt,
   'technology.shared.fuel-cells.png': fuelCellsArt,
   'technology.shared.heavy-armor.png': heavyArmorArt,

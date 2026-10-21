@@ -1,7 +1,8 @@
 import type { CombatTechnologyId } from '../combat/technologies.ts';
 
 export type ScienceSectionId = 'basic' | 'advanced' | 'expert' | 'additional';
-export type ScienceId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 17 | 18 | 19 | 20 | 21 | 22 | 23;
+/** Id 13 («Экология») was removed and must not be reused. */
+export type ScienceId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 14 | 15 | 17 | 18 | 19 | 20 | 21 | 22 | 23;
 
 export type ScienceResourceCost = {
   metal: number;
