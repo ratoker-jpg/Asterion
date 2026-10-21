@@ -81,3 +81,18 @@ test('C: saved owner stats round-trip and isolate malformed or forged fields',()
     ownerAdaptations:{alice:{...alice,q:2},bob:saved.ownerAdaptations.bob}})
     .ownerAdaptations?.bob,defaultPirateOwnerAdaptation());
 });
+
+test('more than 20 000 processed flights trims the oldest ids instead of wiping the adaptation',()=>{
+  const processedFlights=Object.fromEntries(Array.from({length:20_005},(_,i)=>['flight-old-'+i,1]));
+  const saved={...defaultPirateOwnerAdaptation(),q:0.42,wins:7,weightedWins:7,weightedBattles:9,processedFlights};
+  const restored=normalizedPirateOwnerAdaptation(saved);
+  assert.ok(restored,'the owner adaptation survives');
+  assert.equal(restored.q,0.42);
+  assert.equal(Object.keys(restored.processedFlights).length,20_000);
+  assert.equal(restored.processedFlights['flight-old-0'],undefined,'oldest id dropped');
+  assert.equal(restored.processedFlights['flight-old-20004'],1,'newest id kept');
+  const next=recordPirateAdaptiveOutcome(restored,'flight-new',1,'win');
+  assert.equal(Object.keys(next.processedFlights).length,20_000);
+  assert.equal(next.processedFlights['flight-new'],1);
+  assert.equal(next.processedFlights['flight-old-5'],undefined);
+});

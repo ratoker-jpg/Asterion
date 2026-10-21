@@ -149,8 +149,8 @@ for(const faction of COMBAT_FACTION_IDS){
   const ownCatalog=[...getFactionShipCatalog(faction),...getFactionDefenseCatalog(faction)];
   for(const band of SCORE_BANDS)for(const level of [0,5,10])for(let index=0;index<CASES_PER_COMBINATION;index++){
     const profile=techFactorProfile(band,index);
-    // Span the approved full-hangar bonus boundaries with real fleets:
-    // x1 (<50%), x1.25 (50%), x1.5 (75%), x2 (>=95%), x2.5 (full).
+    // Span the hangar-share reward boundaries of pirateDebrisRewardMultiplier
+    // (x0.7 <50%, x0.9 50-85%, x1.0 85-95%, x1.3 >=95%, x1.5 full hangar).
     // The +16-pop safety margin for the 95% case accounts for integer
     // per-class formation without changing any game multiplier.
     const highTierPopulation=[Math.floor(H*.25),Math.ceil(H*.5)+16,
@@ -170,8 +170,12 @@ for(const faction of COMBAT_FACTION_IDS){
     const debrisRoll=battleDebrisRoll(report.id);
     const basePirateDebris=calculatePirateForceDebris(report.defenderForce,report.attackerForce,report.missionType,debrisRoll);
     const baselineDebris=calculateAttackDebris(report,faction,faction,debrisRoll);
-    const multiplier=fullWin?pirateDebrisRewardMultiplier(ownFleet.population,H):1;
-    const extraDebris=Math.max(0,Math.floor(basePirateDebris*multiplier)-basePirateDebris);
+    // Production (resolvePirateEliminationAtTarget): full win -> hangar reward,
+    // draw -> x0.75, defeat -> x0.5, applied to pirate wreckage only. Penalties
+    // are kept: extraDebris may be negative.
+    const multiplier=fullWin?pirateDebrisRewardMultiplier(ownFleet.population,H)
+      :report.winner==='draw'?0.75:0.5;
+    const extraDebris=Math.floor(basePirateDebris*multiplier)-basePirateDebris;
     const ownDebris=Math.max(0,baselineDebris-basePirateDebris);
     const producedDebris=baselineDebris+extraDebris;
     const collected=collectModel(faction,producedDebris,level);

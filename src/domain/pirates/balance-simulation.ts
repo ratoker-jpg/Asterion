@@ -187,8 +187,18 @@ function profileFor(faction: CombatFactionId, band: typeof PIRATE_BALANCE_SCORE_
     score: band,
   });
 }
+/**
+ * Same inputs as production (application/pirates.ts): a launch seed, the
+ * special-contact roll and the owner's adaptive Q (a fresh owner has Q = 0).
+ */
+export function pirateBalanceGarrisonBudget(profile: PirateProfile) {
+  return calculatePirateEliminationPopulationBudget(PIRATE_BALANCE_POPULATION, profile.shares,
+    `pirate-elimination-v2:${profile.ownerId}:${profile.contactCycleKey}:balance`,
+    { ownerId: profile.ownerId, cycleKey: profile.contactCycleKey, totalPoints: profile.score.totalPoints }, 0);
+}
+
 function pirateStacks(profile: PirateProfile): { ships: CombatStackInput[]; actualPopulation: number; absoluteError: number } {
-  const budget = calculatePirateEliminationPopulationBudget(PIRATE_BALANCE_POPULATION, profile.shares);
+  const budget = pirateBalanceGarrisonBudget(profile);
   return {
     ships: Object.entries(budget.ships).flatMap(([rawId, count]) => {
       if (!count) return [];
