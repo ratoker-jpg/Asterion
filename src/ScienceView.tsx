@@ -149,7 +149,8 @@ export function ScienceView() {
     return () => {
       window.cancelAnimationFrame(focusFrame);
       window.removeEventListener('keydown', onKeyDown);
-      window.requestAnimationFrame(() => window.requestAnimationFrame(restoreFocus));
+      // After React removed the dialog; a task (not a frame) so focus returns even while the window does not paint.
+      window.setTimeout(restoreFocus, 0);
     };
   }, [pendingCancellation]);
 

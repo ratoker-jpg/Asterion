@@ -1876,9 +1876,9 @@ function FleetWorkspace({
                 {previewResult?.ok ? <>
                   <div className="flight-briefing-v2__axis" aria-hidden="true">
                     <i />
-                    <span style={{ left: '8%' }}><b />ВЫЛЕТ · <em>сейчас</em></span>
-                    <span style={{ left: '50%' }}><b />{missionId === 'space-flight' ? 'РАЗВОРОТ' : 'ПРИБЫТИЕ'} · <em>через {flightDurationLabel(previewResult.flight.oneWayDurationMs)}</em></span>
-                    <span style={{ left: '90%' }}><b />{missionId === 'deployment' || missionId === 'colonize' ? 'БЕЗ ВОЗВРАТА' : <>ВОЗВРАТ · <em>через {flightDurationLabel(previewResult.flight.oneWayDurationMs * 2)}</em></>}</span>
+                    <span style={{ left: '8%' }}><b /><small>ВЫЛЕТ · <em>сейчас</em></small></span>
+                    <span style={{ left: '50%' }}><b /><small>{missionId === 'space-flight' ? 'РАЗВОРОТ' : 'ПРИБЫТИЕ'} · <em>через {flightDurationLabel(previewResult.flight.oneWayDurationMs)}</em></small></span>
+                    <span style={{ left: '90%' }}><b /><small>{missionId === 'deployment' || missionId === 'colonize' ? 'БЕЗ ВОЗВРАТА' : <>ВОЗВРАТ · <em>через {flightDurationLabel(previewResult.flight.oneWayDurationMs * 2)}</em></>}</small></span>
                   </div>
                   <div className="flight-timeline-metrics" data-qa-flight-preview data-qa-flight-preview-departed-at={previewResult.flight.departedAt} data-qa-flight-preview-arrival-at={previewResult.flight.arrivalAt} data-qa-flight-preview-speed={previewResult.flight.effectiveSpeed} data-qa-flight-preview-duration={previewResult.flight.oneWayDurationMs}>
                     <div><small>{missionId === 'space-flight' ? 'ЦЕЛЬ' : 'РАССТОЯНИЕ'}</small><strong>{missionId === 'space-flight' ? 'нет' : `${flightNumberLabel(previewResult.flight.routeDistance)} ед.`}</strong></div>
@@ -1967,7 +1967,7 @@ function FleetWorkspace({
               </section> : null}
               </div>
             </div>
-            <div className="flight-timeline-meta">{previewResult?.ok && previewFlightRecord ? <>РАСЧЁТ · PERSISTED FLIGHT RUNTIME · ПРИБЫТИЕ: {flightArrivalLabel(previewFlightRecord.arrivalAt)} · МОСКОВСКОЕ ВРЕМЯ · {flightMissionLabel(missionId).toUpperCase()}</> : 'РАСЧЁТ БУДЕТ ВЫПОЛНЕН ПРИ ОТПРАВКЕ'}</div>
+            <div className="flight-timeline-meta">{previewResult?.ok && previewFlightRecord ? <>РАСЧЁТ РЕЙСА · ПРИБЫТИЕ: {flightArrivalLabel(previewFlightRecord.arrivalAt)} · МОСКОВСКОЕ ВРЕМЯ · {flightMissionLabel(missionId).toUpperCase()}</> : 'РАСЧЁТ БУДЕТ ВЫПОЛНЕН ПРИ ОТПРАВКЕ'}</div>
             <div className="resource-building-action-confirm-actions flight-timeline-actions">
               <button type="button" data-qa-flight-preview-cancel onClick={closeFlightPreview}>ОТМЕНА</button>
               <button type="button" data-qa-flight-dispatch-confirm disabled={!canDispatchPreview} onClick={confirmFlightDispatch}>ОТПРАВИТЬ</button>

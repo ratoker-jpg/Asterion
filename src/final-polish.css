@@ -52,3 +52,10 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal;
 }
 .spaceport-status-slot-v2 > .spaceport-state-strip-v2.blocked { flex: 1 1 auto; }
+
+/* Flight plan axis: each stop is a dot + one label line, inside the rail box. */
+.flight-briefing-v2 .flight-briefing-v2__axis span { top: 18px; gap: 7px; }
+.flight-briefing-v2 .flight-briefing-v2__axis span small { display: block; font: inherit; letter-spacing: inherit; white-space: nowrap; }
+
+/* Flight plan → fleet composition: the 42px ship art and two text lines fit the card. */
+.flight-briefing-v2 .flight-timeline-ship-card { min-height: 56px !important; padding: 8px 10px !important; }

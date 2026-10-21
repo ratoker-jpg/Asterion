@@ -331,7 +331,9 @@ async function runViewport(width, height) {
   }, { min: {}, max: {} });
   const validRefund = ['metal', 'minerals', 'gas'].every((key) => {
     const delta = afterCancel.wallet[key] - beforeCancel.wallet[key];
-    return delta >= refundBounds.min[key] && delta <= refundBounds.max[key];
+    // Passive income keeps ticking (Test Mode ×15) while the cancel resolves.
+    const PASSIVE_INCOME_TOLERANCE = 50;
+    return delta >= refundBounds.min[key] && delta <= refundBounds.max[key] + PASSIVE_INCOME_TOLERANCE;
   });
   if (!validRefund || afterCancel.scienceQueueLength !== 0 || afterCancel.queueIds.length !== 0 || !afterCancel.activeScienceAction || afterCancel.nestedVerticalScroll || !afterCancel.documentScroll) throw new Error(`${label}: science cascade refund/focus/scroll mismatch ${JSON.stringify({ beforeCancel, afterCancel, refundBounds })}`);
   await capture(win, directory, 'science-cancelled-queue', '[data-qa-science-queue]');

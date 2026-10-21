@@ -2056,7 +2056,16 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   }, [foldPlayTime, presenceMinute, session]);
   useEffect(() => {
     if (!session) return;
-    const onUnload = () => { const latest = foldPlayTime(false); persistence.write(latest); refreshSlotMeta(session.slotId, latest); };
+    // Only the play time is added on exit, onto the save as stored: the game state is
+    // already persisted by every action, and a full write here would overwrite a
+    // newer save (another window, an import, a QA patch).
+    const onUnload = () => {
+      const latest = foldPlayTime(false);
+      const stored = persistence.read();
+      const next = { ...stored, playTimeMs: Math.max(stored.playTimeMs ?? 0, latest.playTimeMs ?? 0) };
+      persistence.write(next);
+      refreshSlotMeta(session.slotId, next);
+    };
     window.addEventListener('beforeunload', onUnload);
     return () => window.removeEventListener('beforeunload', onUnload);
   }, [foldPlayTime, persistence, session]);
@@ -2136,6 +2145,7 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
   return (
     <div className="viewport">
       <div className="stage stage-shell-v3 stage-shell-v4" data-faction={uiFactionId} style={{ transform: `scale(${scale})`, '--space-bg': `url(${systemBackground})` } as CSSProperties}>
+        <div className="stage-ambient" aria-hidden="true"><i /><i /></div>
         <AsterionHeader
           incomingAttackCount={incomingAttackCount + sunAlerts.length}
           factionId={uiFactionId}

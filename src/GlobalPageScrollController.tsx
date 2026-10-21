@@ -193,6 +193,8 @@ export function GlobalPageScrollController() {
     });
 
     window.addEventListener('resize', schedule);
+    // Entrances (src/motion.css) translate a screen for ~300 ms: re-measure once they settle.
+    document.addEventListener('animationend', schedule);
     schedule();
 
     return () => {
@@ -201,6 +203,7 @@ export function GlobalPageScrollController() {
       window.cancelAnimationFrame(frame);
       window.clearTimeout(delayed);
       window.removeEventListener('resize', schedule);
+      document.removeEventListener('animationend', schedule);
       root.classList.remove('asterion-long-page');
       clearGeometry();
     };

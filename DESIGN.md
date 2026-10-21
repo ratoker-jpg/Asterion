@@ -47,6 +47,10 @@ Do not add a flat opaque rectangle behind an already rounded panel. Prefer a res
 
 Buttons and inputs use the shared radius tokens and 12px control text, with 14px reserved for a heading-like action that needs extra emphasis. Every interactive control has visible hover, keyboard focus, pressed, and disabled states. Focus uses the shared cyan outline. Primary actions use the cyan treatment; cancel, close, delete, and other destructive actions use the danger treatment. A close control is a red 18px icon inside a 40px hit area with an accessible label/title, not a tiny text label.
 
+## Motion
+
+All motion follows `docs/ui/motion-system.md` (tokens `--ut-ease-*` / `--ut-motion-*`, recipes in `src/motion.css`): opacity plus the individual `translate`/`scale` properties only, `--ut-ease-out` entrances under 300 ms in game, mount-only entrances with `backwards` fill, press feedback at 97%, mouse-only hover lift for primary actions, and a reduced-motion variant for everything. Frequently updated values (resources, timers) never animate.
+
 ## Layout and overflow
 
 Every grid/flex child that contains user-facing copy starts with `min-width: 0`. Long names and metadata either wrap at a deliberate copy boundary or use ellipsis inside their own surface. Text must not paint over a neighbouring panel, and a child panel must not create a second nested scrollbar unless it is the intentional owner of scrolling.
