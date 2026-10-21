@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { NEARBY_DEBRIS_SYSTEM_SPAN, findDebrisNearSystem, nearbySystemWindow } from './domain/espionage/orbital-debris.ts';
 import { createPortal } from 'react-dom';
 import { EmblemGlyph } from './CommandView';
 import { selectAllianceRelations } from './domain/command/diplomacy.ts';
@@ -135,6 +136,10 @@ type UniverseViewProps = {
   onPirateReport?: (reportId: string) => void;
   onPirateSystemChange?: (selection: PirateSystemSelection) => void;
   focusTarget?: { coordinate: UniverseCoordinate; planetId?: string; ownerId?: string; mode?: 'inspect' | 'highlight' } | null;
+  /** «Найти обломки» scans the systems around this planet (the one selected in the header). */
+  debrisOrigin?: { planetName: string; coordinate: UniverseCoordinate } | null;
+  /** «Отправить»: opens «Флоты → Переработка» aimed at the coordinate (position 0 = the Sun). */
+  onRecycleDebris?: (coordinate: UniverseCoordinate) => void;
   onFocusHandled?: () => void;
   /** Click on the system's Sun: opens «Командование → Операции» for it. */
   onSunSelect?: (galaxy: number, system: number) => void;
@@ -617,7 +622,7 @@ function MovingAsteroid({ node, underlyingKind, nowMs, hasDebris, occupiedNodes,
   </button>;
 }
 
-export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, ownerScores, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, explorationEligibility = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], homeCoordinate }: UniverseViewProps) {
+export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profile, ownerScores, command, playerPlanets: playerPlanetsProp, spyTargets: spyTargetsProp, orbitalDebrisByCoordinate, asteroidDebrisPresenceBySpawnIndex, asteroidStates, pirateContactState, pirateContacts = [], pirateFocusTarget, mode, onColonize, onAsteroidRecycler, onExpedition, onExplorationRecon, explorationEligibility = {}, onTransport, onSpy, onAttack, onPirateRecon, onPirateAttack, onPirateReport, onPirateSystemChange, focusTarget, onFocusHandled, onSunSelect, sunAlerts = [], homeCoordinate, debrisOrigin, onRecycleDebris }: UniverseViewProps) {
   const galaxyCount = getActiveGalaxyCount();
   const [galaxy, setGalaxy] = useState(homeCoordinate?.galaxy ?? GALAXY);
   const [system, setSystem] = useState(homeCoordinate?.system ?? 1);
@@ -628,6 +633,7 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
   const [showDebris, setShowDebris] = useState(true);
   const [hiddenLegend, setHiddenLegend] = useState<ReadonlySet<LegendKey>>(() => new Set());
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [debrisSearch, setDebrisSearch] = useState<null | { origin: { planetName: string; coordinate: UniverseCoordinate }; from: number; to: number; results: Array<{ coordinate: UniverseCoordinate; debris: number }> }>(null);
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
   const highlightTimerRef = useRef(0);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -842,6 +848,24 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
     setSelectedNodeId(null);
     onNotice(`Галактика ${boundedGalaxy} · Солнечная система ${bounded}.`);
   };
+  const openDebrisSearch = () => {
+    if (!debrisOrigin) return;
+    const range = nearbySystemWindow(debrisOrigin.coordinate.system, SYSTEM_COUNT);
+    setDebrisSearch({ origin: debrisOrigin, ...range, results: findDebrisNearSystem(orbitalDebrisByCoordinate, debrisOrigin.coordinate, SYSTEM_COUNT) });
+  };
+  /** Opens the coordinate's system and pulses whatever sits there (position 0 is the Sun itself). */
+  const pinpointCoordinate = (coordinate: UniverseCoordinate) => {
+    setDebrisSearch(null);
+    setGalaxy(coordinate.galaxy);
+    setSystem(coordinate.system);
+    setSelectedNodeId(null);
+    const atPosition = [...nodesById.values()].find((node) => node.coordinate.galaxy === coordinate.galaxy && node.coordinate.system === coordinate.system && node.coordinate.position === coordinate.position);
+    if (atPosition) {
+      setHighlightedNodeId(atPosition.id);
+      window.clearTimeout(highlightTimerRef.current);
+      highlightTimerRef.current = window.setTimeout(() => setHighlightedNodeId(null), 3_000);
+    }
+  };
   const listedNodes = systemData.positions.filter((node) => LISTED_KINDS.has(node.kind)).map((node) => ({
     node,
     legend: legendKeyOf(node, node.kind === 'player' || node.kind === 'npc'
@@ -1014,6 +1038,11 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
             title={`К родной системе ${formatUniverseCoordinate(homeWorld)}`}
             onClick={() => goSystem(homeWorld.system, homeWorld.galaxy)}>⌂ Домой</button>
         ) : null}
+        {debrisOrigin ? (
+          <button type="button" className="universe-radar__home universe-radar__debris" data-qa-universe-find-debris
+            title={`Свободные обломки в ${NEARBY_DEBRIS_SYSTEM_SPAN} солнечных системах вокруг ${debrisOrigin.planetName} ${formatUniverseCoordinate(debrisOrigin.coordinate)}`}
+            onClick={openDebrisSearch}>✦ Найти обломки</button>
+        ) : null}
       </div>
 
       <nav className="universe-radar__rail universe-jump" aria-label="Солнечные системы"
@@ -1061,6 +1090,47 @@ export function UniverseView({ onNotice, ownedPlanetArt, ownedPlanetName, profil
           <button type="button" className={focusEmpty ? 'is-on' : ''} aria-pressed={focusEmpty} title="Подсветить свободные позиции" onClick={() => setFocusEmpty((value) => !value)}>▽ Свободные</button>
         </div>
       </div>
+
+      {debrisSearch ? createPortal(
+        <div className="universe-modal-backdrop" onClick={(event) => { if (event.target === event.currentTarget) setDebrisSearch(null); }}>
+          <section className="universe-debris-finder uw" role="dialog" aria-modal="true" aria-label="Обломки в ближайших системах" data-qa-debris-finder={debrisSearch.results.length}>
+            <header className="universe-debris-finder__head">
+              <div>
+                <small>ОБЛОМКИ · СИСТЕМЫ {pad2(debrisSearch.from)}–{pad2(debrisSearch.to)} · ГАЛАКТИКА {pad2(debrisSearch.origin.coordinate.galaxy)}</small>
+                <h2>Рядом с {debrisSearch.origin.planetName} {formatUniverseCoordinate(debrisSearch.origin.coordinate)}</h2>
+              </div>
+              <button type="button" className="uw-close" data-asterion-close aria-label="Закрыть" onClick={() => setDebrisSearch(null)}>✕</button>
+            </header>
+            {debrisSearch.results.length === 0 ? (
+              <div className="universe-debris-finder__empty" data-qa-debris-finder-empty>
+                <p>В ближайших {NEARBY_DEBRIS_SYSTEM_SPAN} солнечных системах нет планет с обломками.</p>
+                <button type="button" className="uw-btn uw-btn--primary" autoFocus onClick={() => setDebrisSearch(null)}>ОК</button>
+              </div>
+            ) : (
+              <>
+                <ul className="universe-debris-finder__list">
+                  {debrisSearch.results.map((entry) => {
+                    const key = formatUniverseCoordinate(entry.coordinate);
+                    const isSun = entry.coordinate.position === 0;
+                    return (
+                      <li key={key} data-qa-debris-row={key}>
+                        <button type="button" className="universe-debris-finder__coord" title="Показать на карте" onClick={() => pinpointCoordinate(entry.coordinate)}>
+                          <b>{key}</b><small>{isSun ? 'Солнце системы' : `Система ${pad2(entry.coordinate.system)} · позиция ${entry.coordinate.position}`}</small>
+                        </button>
+                        <span className="universe-debris-finder__amount"><small>ОБЛОМКИ</small><b>{entry.debris.toLocaleString('ru-RU')}</b></span>
+                        <button type="button" className="uw-btn uw-btn--primary" disabled={!onRecycleDebris} data-qa-debris-send={key}
+                          onClick={() => { setDebrisSearch(null); onRecycleDebris?.(entry.coordinate); }}>ОТПРАВИТЬ</button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="universe-debris-finder__note">Только свободные обломки у планет и Солнц. Обломки на астероидах здесь не показываются — ищите астероиды на карте.</p>
+              </>
+            )}
+          </section>
+        </div>,
+        document.body,
+      ) : null}
 
       {selectedNode ? createPortal(
         <div className="universe-modal-backdrop" onClick={(event) => { if (event.target === event.currentTarget) setSelectedNodeId(null); }}>

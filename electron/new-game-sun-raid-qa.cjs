@@ -95,10 +95,17 @@ async function production(win, label) {
   if (save.save.worldConfig.world.galaxyCount !== 3) throw new Error('World config not stored');
   if (save.index.slots.length !== 1 || save.index.activeSlotId !== save.index.slots[0].id) throw new Error('Slot index mismatch');
 
+  // Solo, no Hall: «Операции» (Sun raids) are an alliance feature and stay hidden.
   await clickText(win, 'Командование');
-  await click(win, '[data-qa-command-tab="operations"]');
-  await waitFor(win, `document.querySelector('[data-qa-sun-raid-panel]')`);
-  await capture(win, label, '07-command-operations-solo');
+  if (await run(win, `Boolean(document.querySelector('[data-qa-command-tab="operations"]'))`)) throw new Error('Operations tab must be hidden without an alliance');
+  await capture(win, label, '07-command-solo');
+  // «Найти обломки» on a fresh world: nothing around the selected planet.
+  await clickText(win, 'Вселенная');
+  await waitFor(win, `document.querySelector('[data-qa-universe-find-debris]')`);
+  await click(win, '[data-qa-universe-find-debris]');
+  await waitFor(win, `document.querySelector('[data-qa-debris-finder-empty]')`);
+  await capture(win, label, '07b-debris-finder-empty');
+  await clickText(win, 'ОК');
 
   await click(win, '[data-qa-pause-open]');
   await waitFor(win, `document.querySelector('[data-qa-pause-menu]')`);
@@ -146,6 +153,17 @@ async function testMode(win, label) {
   await waitFor(win, `document.querySelector('[data-qa-sun-result]')`);
   await capture(win, label, '12-test-raid-resolved');
   // The battle left debris at [G:S:0]: recyclers fly to the Sun from «Флоты».
+  // «Найти обломки» lists the Sun's debris at [1:1:0]; «Отправить» opens «Флоты → Переработка».
+  await clickText(win, 'Вселенная');
+  await waitFor(win, `document.querySelector('[data-qa-universe-find-debris]')`);
+  await click(win, '[data-qa-universe-find-debris]');
+  await waitFor(win, `document.querySelector('[data-qa-debris-row="[1:1:0]"]')`);
+  await capture(win, label, '12a-debris-finder');
+  await click(win, '[data-qa-debris-send="[1:1:0]"]');
+  await waitFor(win, `document.querySelector('[data-qa-mission-id="recycle"].active')`);
+  await clickText(win, 'Командование');
+  await click(win, '[data-qa-command-tab="operations"]');
+  await waitFor(win, `document.querySelector('[data-qa-sun-raid-panel]')`);
   if (await run(win, `Number(document.querySelector('[data-qa-sun-debris]')?.getAttribute('data-qa-sun-debris') ?? 0) > 0`)) {
     await click(win, '[data-qa-sun-recycle]');
     await waitFor(win, `document.querySelector('[data-qa-mission-id="recycle"].active')`);

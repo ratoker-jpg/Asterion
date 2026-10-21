@@ -1432,11 +1432,11 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
         ? { key: 'pending', label: 'ЗАЯВКА ОЖИДАЕТ' }
         : { key: 'none', label: 'БЕЗ СОЮЗА' };
 
-  // Without an alliance the Hall still opens «Операции»: any owner may defend a Sun of their galaxy.
-  // Suns stay reachable even before the Hall is built: support and Sun debris need no building.
+  // «Операции» (Sun raids) belong to an alliance with a built Hall. Sun support and Sun
+  // debris live in «Флоты» and need neither.
   const visibleTabs = membership && !locked
     ? (Object.keys(TAB_LABELS) as CommandTab[])
-    : (['overview', 'operations'] as CommandTab[]);
+    : (['overview'] as CommandTab[]);
   const activeTab = visibleTabs.includes(tab) ? tab : 'overview';
   const pendingCount = membership ? selectPendingApplicationsFor(command, membership.alliance.id).length : 0;
   const badges: Partial<Record<CommandTab, { value: string; hot?: boolean }>> = membership ? {
@@ -1471,11 +1471,11 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
             <span aria-hidden="true">←</span>{returnToBuilding.label}
           </button>
         ) : null}
-        {(!locked && membership) || operationsPanel ? (
+        {!locked && membership ? (
           <nav className="command-tabs cmdA-tabs" aria-label="Разделы Командования">
             {visibleTabs.map((key) => (
               <button key={key} type="button" className={activeTab === key ? 'active' : ''} aria-current={activeTab === key ? 'page' : undefined} onClick={() => setTab(key)} data-qa-command-tab={key}>
-                {locked && key === 'overview' ? 'ЗДАНИЕ' : !membership && key === 'overview' ? 'СОЮЗ' : TAB_LABELS[key]}{badges[key] ? <b className={`command-badge ${badges[key]!.hot ? 'is-hot' : ''}`}>{badges[key]!.value}</b> : null}
+                {TAB_LABELS[key]}{badges[key] ? <b className={`command-badge ${badges[key]!.hot ? 'is-hot' : ''}`}>{badges[key]!.value}</b> : null}
               </button>
             ))}
           </nav>
@@ -1490,12 +1490,8 @@ export function CommandView({ mode, command, ownerId, hall, ownerScores, ownerFa
       ) : null}
 
       <section className="command-content cmdA-content">
-        {(locked || !membership) && activeTab === 'operations' && operationsPanel ? (
-          <div className="opsA srp-host" data-qa-command-operations>{operationsPanel}</div>
-        ) : locked ? (
+        {locked ? (
           <LockedHall hall={hall} onBuild={actions.openHallConstruction} />
-        ) : !membership && activeTab === 'operations' && operationsPanel ? (
-          <div className="opsA srp-host" data-qa-command-operations>{operationsPanel}</div>
         ) : !membership ? (
           <NoAlliance {...catalogProps} hall={hall} />
         ) : activeTab === 'overview' ? (

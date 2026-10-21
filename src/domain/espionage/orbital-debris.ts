@@ -147,3 +147,33 @@ export function collectOrbitalDebrisAtCoordinate(
   if (updatedOrbitalDebris) next.orbitalDebris = updatedOrbitalDebris;
   return { espionage: next, collected };
 }
+
+/** «Найти обломки»: how many solar systems around the selected planet are scanned (its own included). */
+export const NEARBY_DEBRIS_SYSTEM_SPAN = 20;
+
+/** The window of `span` systems centred on `system`, shifted inward at the galaxy edges. */
+export function nearbySystemWindow(system: number, systemCount = 40, span = NEARBY_DEBRIS_SYSTEM_SPAN): { from: number; to: number } {
+  const size = Math.max(1, Math.min(span, systemCount));
+  const from = Math.min(Math.max(1, system - Math.floor(size / 2)), systemCount - size + 1);
+  return { from, to: from + size - 1 };
+}
+
+/**
+ * Free debris (planet orbits and Suns, position 0) in the systems around a
+ * planet, same galaxy only. Asteroid cargo is not free debris and never listed.
+ * Nearest systems first.
+ */
+export function findDebrisNearSystem(
+  entries: readonly { coordinate: UniverseCoordinate; debris: number }[],
+  origin: Pick<UniverseCoordinate, 'galaxy' | 'system'>,
+  systemCount = 40,
+): Array<{ coordinate: UniverseCoordinate; debris: number }> {
+  const { from, to } = nearbySystemWindow(origin.system, systemCount);
+  return entries
+    .filter((entry) => entry.debris > 0 && entry.coordinate.galaxy === origin.galaxy
+      && entry.coordinate.system >= from && entry.coordinate.system <= to)
+    .map((entry) => ({ coordinate: { ...entry.coordinate }, debris: entry.debris }))
+    .sort((left, right) => Math.abs(left.coordinate.system - origin.system) - Math.abs(right.coordinate.system - origin.system)
+      || left.coordinate.system - right.coordinate.system
+      || left.coordinate.position - right.coordinate.position);
+}

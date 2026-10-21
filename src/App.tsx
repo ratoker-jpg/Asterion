@@ -64,7 +64,7 @@ import {
   updateAllianceSettings,
   withdrawApplication,
 } from './domain/command/membership.ts';
-import { selectCommandHallLevel } from './domain/command/selectors.ts';
+import { selectCommandHallLevel, selectOwnerMembership } from './domain/command/selectors.ts';
 import { declareWar, proposeTruce, respondTruce } from './domain/command/diplomacy.ts';
 import { releaseTestBotFromOwnAlliance } from './domain/command/repository.ts';
 import type { AllianceSettingsInput, CommandResult, CommandState } from './domain/command/types.ts';
@@ -1961,6 +1961,14 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     }
   };
   const openSunsPanel = (sun?: SunSelection) => {
+    // Without an alliance there are no Sun operations: a Sun under attack opens «Поддержка солнца» in «Флоты».
+    if (!selectOwnerMembership(stateRef.current.command, stateRef.current.profile.playerId) || selectCommandHallLevel(stateRef.current.planets) <= 0) {
+      const target = sun ?? selectedSun;
+      const raid = selectIncomingSunAlerts(stateRef.current, Date.now()).find((alert) => alert.raid.galaxy === target.galaxy && alert.raid.system === target.system);
+      if (raid) openSunSupportInFleets(raid.raid);
+      else setNotice(`Солнце ${target.galaxy}:${target.system}. Рейды на Солнца — операция союза («Командование → Операции»).`);
+      return;
+    }
     clearBuildingInterior();
     if (sun) setSelectedSun(sun);
     setCommandFocus({ tab: 'operations', nonce: Date.now() });
@@ -1986,6 +1994,12 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
     missionId: 'recycle', operationId: `sun:${sun.galaxy}:${sun.system}`, targetKind: 'empty',
     destination: sunLaunchDestination(sun.galaxy, sun.system), targetPlanetName: `Обломки Солнца ${sun.galaxy}:${sun.system}`,
   });
+  /** «Найти обломки» → «Отправить»: recyclers to a planet orbit or, at position 0, to the Sun. */
+  const openDebrisRecycleLaunch = (coordinate: UniverseCoordinate) => {
+    if (coordinate.position === 0) { openSunRecycleInFleets({ galaxy: coordinate.galaxy, system: coordinate.system }); return; }
+    setNotice(`Переработка обломков: [${coordinate.galaxy}:${coordinate.system}:${coordinate.position}].`);
+    openSunFleetLaunch({ missionId: 'recycle', destination: { kind: 'coordinate', coordinate: { ...coordinate } } });
+  };
   const startGate = () => {
     if (!gateDialogPlanetId) return;
     commitSunAction(startGateConstruction(stateRef.current, gateDialogPlanetId, { now: Date.now(), mode: RUNTIME_MODE, testTimeScale }));
@@ -2254,6 +2268,15 @@ export function App({ session = null }: { session?: ActiveSession | null } = {})
               onSunSelect={(galaxy, system) => openSunsPanel({ galaxy, system })}
               sunAlerts={sunAlerts.map((alert) => ({ galaxy: alert.raid.galaxy, system: alert.raid.system }))}
               homeCoordinate={{ galaxy: homePlanet?.universeGalaxy ?? 1, system: homePlanet?.universeSystem ?? 1 }}
+              debrisOrigin={state.planets[state.currentPlanetId] ? {
+                planetName: state.planets[state.currentPlanetId]!.name,
+                coordinate: {
+                  galaxy: state.planets[state.currentPlanetId]!.universeGalaxy ?? 1,
+                  system: state.planets[state.currentPlanetId]!.universeSystem ?? 1,
+                  position: state.planets[state.currentPlanetId]!.universePosition ?? 1,
+                },
+              } : null}
+              onRecycleDebris={openDebrisRecycleLaunch}
               focusTarget={universeFocusTarget}
               onFocusHandled={() => { setUniverseFocusTarget(null); setPirateFocusTarget(null); }}
             />
