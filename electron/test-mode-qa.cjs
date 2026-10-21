@@ -340,6 +340,28 @@ async function openFleet(win) {
   await waitFor(win, `document.querySelector('.fleet-workspace-v1')`);
 }
 
+async function seedTestFleet(win, ships, reset = false) {
+  // The game persists every tick, so write the fixture and reload in the same
+  // renderer task to prevent the running state from overwriting it.
+  const loaded = new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+  const ok = await win.webContents.executeJavaScript(`(() => {
+    const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
+    const fleet = save?.planets?.['helion-01']?.fleet;
+    if (!save || !fleet) return false;
+    if (${reset ? 'true' : 'false'}) {
+      for (const id of Object.keys(fleet.ships || {})) fleet.ships[id] = 0;
+    }
+    Object.assign(fleet.ships, ${JSON.stringify(ships)});
+    localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
+    window.location.reload();
+    return true;
+  })()`);
+  if (!ok) throw new Error('Could not seed Test Mode fleet');
+  await loaded;
+  await waitFor(win, `document.querySelector('[data-qa-navigation="utility"]')`);
+  await settle(win);
+}
+
 async function readQaState(win) {
   return win.webContents.executeJavaScript(`(() => {
     const test = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
@@ -743,17 +765,7 @@ async function runViewport(width, height) {
     }
     await capture(win, directory, 'test-fleet-roster');
 
-    await win.webContents.executeJavaScript(`(() => {
-      const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
-      const fleet = save?.planets?.['helion-01']?.fleet;
-      if (!fleet) return false;
-      for (const id of Object.keys(fleet.ships || {})) {
-        if (id !== 'death-star') fleet.ships[id] = Math.max(1, Number(fleet.ships[id] || 0));
-      }
-      localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
-      return true;
-    })()`);
-    await reload(win, 'test');
+    await seedTestFleet(win, { transporter: 1, 'mega-transporter': 1, cruiser: 1, defender: 1 });
     await openFleet(win);
     const expandedFleet = await readQaState(win);
     if (expandedFleet.fleetPageLong || expandedFleet.fleetRoster.length < 8 || expandedFleet.fleetRosterOverflowY !== 'auto') {
@@ -761,16 +773,7 @@ async function runViewport(width, height) {
     }
     await capture(win, directory, 'test-fleet-roster-expanded');
 
-    await win.webContents.executeJavaScript(`(() => {
-      const save = JSON.parse(localStorage.getItem(${JSON.stringify(TEST_KEY)}) || 'null');
-      const fleet = save?.planets?.['helion-01']?.fleet;
-      if (!fleet) return false;
-      for (const id of Object.keys(fleet.ships || {})) fleet.ships[id] = 0;
-      Object.assign(fleet.ships, { scout: 20, transporter: 0, recycler: 1, colonizer: 1, 'spy-probe': 1 });
-      localStorage.setItem(${JSON.stringify(TEST_KEY)}, JSON.stringify(save));
-      return true;
-    })()`);
-    await reload(win, 'test');
+    await seedTestFleet(win, { scout: 20, transporter: 0, recycler: 1, colonizer: 1, 'spy-probe': 1 }, true);
     await openFleet(win);
     const restoredFleet = await readQaState(win);
     if (restoredFleet.fleetPageLong || restoredFleet.fleetRosterOverflowY !== 'auto' || !restoredFleet.fleetPopulation.includes('58 / 120')) {
