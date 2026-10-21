@@ -1690,6 +1690,7 @@ export function dispatchFlight(
       ? spaceFlightCommanderLevels
       : command.missionId === 'deployment' ? deploymentCommanderLevels : undefined,
     populationReserved: command.missionId === 'colonize' ? 12 : deploymentPopulation,
+    speedCommanderLevels: { typhoon: getOwnerShipUpgradeLevel(state, 'typhoon') },
     departedAt,
     factionId: state.profile.factionId as CombatFactionId,
     science,

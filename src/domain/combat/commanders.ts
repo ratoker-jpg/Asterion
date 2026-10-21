@@ -49,16 +49,16 @@ export const COMMANDER_ABILITIES: Readonly<Record<CommanderId, CommanderAbilityD
     ability: 'Форсированное разрушение',
     description: 'Увеличивает шанс уничтожить здание противника.',
     ratePerLevel: '+0,5% за уровень',
-    implementationStatus: 'catalog-only',
+    implementationStatus: 'implemented',
   },
   corsair: {
     commanderId: 'corsair',
     commanderName: 'Корсар',
     ability: 'Форсированное пиратство',
-    description: 'Увеличивает возможный процент украденных ресурсов за Пиратский рейд.',
-    ratePerLevel: '+1,25% за уровень',
-    implementationStatus: 'catalog-only',
-    note: 'В боях с пиратами также увеличивает долю обломков от уничтоженных пиратских кораблей на 0,5 процентного пункта за уровень; Корсар должен участвовать в бою и выжить, но не обязан быть ведущим командиром.',
+    description: 'Увеличивает долю обломков от уничтоженных пиратских кораблей, если Корсар участвовал в бою и выжил.',
+    ratePerLevel: '+0,5 п.п. обломков за уровень',
+    implementationStatus: 'implemented',
+    note: 'Корсар не обязан быть ведущим командиром. Кража ресурсов в Пиратском рейде (+1,25% за уровень в Nemexia) в Asterion не реализована.',
   },
   reanimator: {
     commanderId: 'reanimator',
@@ -99,7 +99,7 @@ export const COMMANDER_ABILITIES: Readonly<Record<CommanderId, CommanderAbilityD
     ability: 'Охота',
     description: 'Увеличивает шанс обнаружить вражеских шпионов.',
     ratePerLevel: '+1,75% за уровень',
-    implementationStatus: 'catalog-only',
+    implementationStatus: 'implemented',
   },
   typhoon: {
     commanderId: 'typhoon',
@@ -107,7 +107,7 @@ export const COMMANDER_ABILITIES: Readonly<Record<CommanderId, CommanderAbilityD
     ability: 'Форсаж',
     description: 'Увеличивает скорость полёта.',
     ratePerLevel: '+0,1% за уровень',
-    implementationStatus: 'catalog-only',
+    implementationStatus: 'implemented',
   },
   executioner: {
     commanderId: 'executioner',
@@ -132,6 +132,7 @@ export const COMMANDER_ABILITIES: Readonly<Record<CommanderId, CommanderAbilityD
     description: 'Даёт дополнительные очки усовершенствования в боях с Отступниками и увеличивает грузоподъёмность кораблей.',
     ratePerLevel: '+1% за уровень',
     implementationStatus: 'catalog-only',
+    note: 'Скоро: способность ещё не действует в Asterion.',
   },
   judge: {
     commanderId: 'judge',
@@ -147,7 +148,7 @@ export const COMMANDER_ABILITIES: Readonly<Record<CommanderId, CommanderAbilityD
     ability: 'Patronage',
     description: 'Снижает вероятность разрушения защищаемой планеты.',
     ratePerLevel: '−0,25% вероятности разрушения планеты за уровень',
-    implementationStatus: 'catalog-only',
+    implementationStatus: 'implemented',
     note: 'В исходном названии Nemexia используется Polias; в Asterion отображается «Полиас».',
   },
 };
@@ -173,6 +174,9 @@ export const COMMANDER_LIST = COMMANDER_IDS.map((id) => COMMANDER_ABILITIES[id])
  * immutable Nemexia parity fixture; no theft resource mechanic is active.
  */
 export function getCommanderPresentedAbility(id: CommanderId): CommanderAbilityDefinition {
+  if (COMMANDER_ABILITIES[id].implementationStatus === 'catalog-only') {
+    return { ...COMMANDER_ABILITIES[id], ratePerLevel: `${COMMANDER_ABILITIES[id].ratePerLevel} · скоро` };
+  }
   if (id !== 'corsair') return COMMANDER_ABILITIES[id];
   return {
     ...COMMANDER_ABILITIES.corsair,
@@ -227,6 +231,7 @@ function signedPercent(value: number): string {
  * keep their sign in both the rate and the total.
  */
 export function formatCommanderAbilityEffect(id: CommanderId, level: number): string {
+  if (COMMANDER_ABILITIES[id]?.implementationStatus === 'catalog-only') return 'скоро — пока не действует';
   const rate = COMMANDER_ABILITY_NUMERIC_RATES[id] ?? 0;
   const safeLevel = Math.max(0, Math.floor(Number.isFinite(level) ? level : 0));
   return `${signedPercent(rate * safeLevel)} (${signedPercent(rate)} × ${safeLevel})`;

@@ -313,6 +313,7 @@ function createSunFlight(
     destination,
     selectedShips: input.ships,
     ...(Object.keys(commanders).length ? { selectedCommanders: commanders } : {}),
+    speedCommanderLevels: { typhoon: owner.commanderLevels.typhoon ?? 0 },
     departedAt: input.departedAt,
     factionId: owner.factionId,
     science: owner.scienceLevels as import('../domain/flights/types.ts').FlightScienceLevels,

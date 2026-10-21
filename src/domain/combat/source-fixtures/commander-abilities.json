@@ -11,12 +11,12 @@
   "records": [
     {
       "commanderId": "annihilator",
-      "expectedCatalog": { "commanderName": "Аннигилятор", "ability": "Форсированное разрушение", "description": "Увеличивает шанс уничтожить здание противника.", "ratePerLevel": "+0,5% за уровень", "implementationStatus": "catalog-only" },
+      "expectedCatalog": { "commanderName": "Аннигилятор", "ability": "Форсированное разрушение", "description": "Увеличивает шанс уничтожить здание противника.", "ratePerLevel": "+0,5% за уровень", "implementationStatus": "implemented" },
       "sourceEvidence": [{ "text": "увеличивает показатель Детонации на 0.5% за уровень", "normalizedEffect": "building-destruction chance", "ratePerLevel": 0.5 }]
     },
     {
       "commanderId": "corsair",
-      "expectedCatalog": { "commanderName": "Корсар", "ability": "Форсированное пиратство", "description": "Увеличивает возможный процент украденных ресурсов за Пиратский рейд.", "ratePerLevel": "+1,25% за уровень", "implementationStatus": "catalog-only" },
+      "expectedCatalog": { "commanderName": "Корсар", "ability": "Форсированное пиратство", "description": "Увеличивает долю обломков от уничтоженных пиратских кораблей, если Корсар участвовал в бою и выжил.", "ratePerLevel": "+0,5 п.п. обломков за уровень", "implementationStatus": "implemented" },
       "sourceEvidence": [
         { "text": "имеет возможность совершать пиратские вылеты", "normalizedEffect": "pirate-raid capability", "ratePerLevel": null },
         { "text": "увеличивает процент украденых ресурсов на  1.25% за уровень", "normalizedEffect": "pirate-raid resource theft", "ratePerLevel": 1.25 }
@@ -53,7 +53,7 @@
     },
     {
       "commanderId": "hunter",
-      "expectedCatalog": { "commanderName": "Охотник", "ability": "Охота", "description": "Увеличивает шанс обнаружить вражеских шпионов.", "ratePerLevel": "+1,75% за уровень", "implementationStatus": "catalog-only" },
+      "expectedCatalog": { "commanderName": "Охотник", "ability": "Охота", "description": "Увеличивает шанс обнаружить вражеских шпионов.", "ratePerLevel": "+1,75% за уровень", "implementationStatus": "implemented" },
       "sourceEvidence": [
         { "text": "обнаружить вражеские шпионские зонды как только они входят в атмосферу вашей планеты", "normalizedEffect": "incoming-spy-probe detection", "ratePerLevel": null },
         { "text": "Шанс на обнаружение увеличивается на 1.75% за каждый уровень", "normalizedEffect": "spy-probe detection chance", "ratePerLevel": 1.75 }
@@ -61,7 +61,7 @@
     },
     {
       "commanderId": "typhoon",
-      "expectedCatalog": { "commanderName": "Тайфун", "ability": "Форсаж", "description": "Увеличивает скорость полёта.", "ratePerLevel": "+0,1% за уровень", "implementationStatus": "catalog-only" },
+      "expectedCatalog": { "commanderName": "Тайфун", "ability": "Форсаж", "description": "Увеличивает скорость полёта.", "ratePerLevel": "+0,1% за уровень", "implementationStatus": "implemented" },
       "sourceEvidence": [{ "text": "способен увеличить скорость ваших кораблей на 0.1% за уровень", "normalizedEffect": "fleet flight speed", "ratePerLevel": 0.1 }]
     },
     {
@@ -89,7 +89,7 @@
     },
     {
       "commanderId": "polias",
-      "expectedCatalog": { "commanderName": "Полиас", "ability": "Patronage", "description": "Снижает вероятность разрушения защищаемой планеты.", "ratePerLevel": "−0,25% вероятности разрушения планеты за уровень", "implementationStatus": "catalog-only" },
+      "expectedCatalog": { "commanderName": "Полиас", "ability": "Patronage", "description": "Снижает вероятность разрушения защищаемой планеты.", "ratePerLevel": "−0,25% вероятности разрушения планеты за уровень", "implementationStatus": "implemented" },
       "sourceEvidence": [
         { "text": "это пассивное умение, которое доступно в течение всего боя, даже если ваш командирский корабль будет уничтожен до окончания боя", "normalizedEffect": "passive protection persists after commander destruction", "ratePerLevel": null },
         { "text": "Вероятность уничтожения планеты снижается на 0.25% за уровень корабля", "normalizedEffect": "protected-planet destruction chance reduction", "ratePerLevel": -0.25 }
